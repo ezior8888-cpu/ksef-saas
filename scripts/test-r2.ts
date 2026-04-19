@@ -1,30 +1,32 @@
 /**
- * Smoke test: Cloudflare R2 archiwizacja faktur.
+ * Smoke test: Cloudflare R2 storage dla xml_documents.
  *
- * Wykonuje pełny cykl: upload → head → list → get → signed URL → delete.
- * Wszystko w przestrzeni tenantId='__smoke__' + wygenerowane timestampem nazwy,
+ * Pełny cykl: upload XML → upload UPO → head → get+verify hash → signed URL →
+ * list → IfNoneMatch immutability → hash mismatch error path → cleanup.
+ *
+ * Wszystko w przestrzeni tenantId='__smoke__' + invoiceId z timestampem,
  * więc można odpalać wielokrotnie bez kolizji.
  *
- * Wymaga w .env.local wypełnionych:
- *   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME
+ * Wymaga w .env.local: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+ * R2_BUCKET_NAME, R2_JURISDICTION (eu/default/fedramp).
  *
- * Uruchom:
- *   pnpm r2:smoke
+ * Uruchom:  pnpm r2:smoke
  */
 
+import { randomUUID } from 'node:crypto';
+import { ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { config } from 'dotenv';
+
 import { getR2Client, getR2Config } from '../lib/storage/r2-client';
 import {
-  archiveInvoice,
-  deleteInvoice,
-  getInvoiceXml,
+  deleteInvoiceXml,
+  downloadInvoiceXml,
   getSignedInvoiceUrl,
-  getUpoXml,
-  invoiceExists,
-  listInvoices,
-  type ArchiveKey,
-} from '../lib/storage/invoice-archive';
-import { ListObjectsV2Command } from '@aws-sdk/client-s3';
+  invoiceXmlExists,
+  listInvoiceDocuments,
+  uploadInvoiceUpo,
+  uploadInvoiceXml,
+} from '../lib/storage/r2';
 
 config({ path: '.env.local' });
 
@@ -50,108 +52,146 @@ async function main() {
   info(`endpoint:  ${cfg.endpoint}`);
   info(`accessKey: ${cfg.accessKeyId.slice(0, 8)}...${cfg.accessKeyId.slice(-4)}\n`);
 
-  const client = getR2Client();
-
-  // Preflight: używamy ListObjectsV2 zamiast HeadBucket, bo tokens scoped
-  // "Object Read & Write" nie mają uprawnień do account-level HeadBucket.
+  // Preflight: ListObjectsV2 z MaxKeys=1 to najlżejsza operacja object-level
+  // którą scoped tokens mogą wykonać (HeadBucket wymaga account-level).
   try {
-    await client.send(
+    await getR2Client().send(
       new ListObjectsV2Command({ Bucket: cfg.bucketName, MaxKeys: 1 }),
     );
-    ok(`bucket "${cfg.bucketName}" dostępny dla tokena (ListObjectsV2 OK)`);
+    ok(`bucket "${cfg.bucketName}" dostępny dla tokena`);
   } catch (err) {
     const e = err as {
       name?: string;
       message?: string;
       $metadata?: { httpStatusCode?: number };
-      $response?: { statusCode?: number; body?: unknown };
     };
-    const status = e.$metadata?.httpStatusCode ?? e.$response?.statusCode;
-    console.error(`${RED}preflight failed:${RESET}`);
-    console.error(`  name:   ${e.name}`);
-    console.error(`  status: ${status}`);
-    console.error(`  msg:    ${e.message}`);
-    if (e.$response?.body) {
-      try {
-        const body =
-          typeof (e.$response.body as { transformToString?: () => Promise<string> })
-            .transformToString === 'function'
-            ? await (
-                e.$response.body as { transformToString: () => Promise<string> }
-              ).transformToString()
-            : String(e.$response.body);
-        console.error(`  body:   ${body.slice(0, 500)}`);
-      } catch {}
-    }
-    fail(`nie mogę połączyć się z bucketem`);
+    fail(
+      `preflight FAIL: ${e.name ?? 'Unknown'} ${e.$metadata?.httpStatusCode ?? '?'} ${e.message ?? ''}`,
+    );
   }
 
-  const key: ArchiveKey = {
-    tenantId: '__smoke__',
-    ksefNumber: `2026040119000000-TEST-${Date.now()}`,
-    issueDate: new Date(),
-  };
-
-  const invoiceXml = '<?xml version="1.0" encoding="UTF-8"?><Faktura><TEST>1</TEST></Faktura>';
+  const tenantId = '__smoke__';
+  const invoiceId = `${randomUUID()}`;
+  const issueDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const invoiceXml =
+    '<?xml version="1.0" encoding="UTF-8"?><Faktura><TEST>1</TEST></Faktura>';
   const upoXml = '<?xml version="1.0" encoding="UTF-8"?><UPO><TEST>1</TEST></UPO>';
 
+  let invoicePath = '';
+  let upoPath = '';
+
   try {
-    const archived = await archiveInvoice({
-      key,
+    // ─── upload XML ─────────────────────────────────────────────
+    const invoiceResult = await uploadInvoiceXml(
+      tenantId,
+      invoiceId,
+      issueDate,
       invoiceXml,
-      upoXml,
-      metadata: { 'smoke-test': '1', 'generated-at': new Date().toISOString() },
-    });
+      { metadata: { 'smoke-test': '1' } },
+    );
+    invoicePath = invoiceResult.storagePath;
     ok(
-      `archiveInvoice: ETag invoice=${archived.etag.invoice}, ` +
-        `${archived.sizeBytes.invoice}B / UPO ${archived.sizeBytes.upo}B`,
+      `uploadInvoiceXml: ${invoicePath} (${invoiceResult.sizeBytes}B, ` +
+        `sha256=${invoiceResult.sha256Hash.slice(0, 12)}…, etag=${invoiceResult.etag})`,
     );
 
-    const exists = await invoiceExists(key);
-    if (!exists) fail('invoiceExists zwróciło false tuż po uploadzie');
-    ok('invoiceExists: true');
+    // ─── upload UPO ─────────────────────────────────────────────
+    const upoResult = await uploadInvoiceUpo(
+      tenantId,
+      invoiceId,
+      issueDate,
+      upoXml,
+    );
+    upoPath = upoResult.storagePath;
+    ok(`uploadInvoiceUpo: ${upoPath} (${upoResult.sizeBytes}B)`);
 
-    const [fetchedInvoice, fetchedUpo] = await Promise.all([
-      getInvoiceXml(key),
-      getUpoXml(key),
-    ]);
-    if (fetchedInvoice !== invoiceXml) fail('fetched invoice != uploaded invoice');
-    if (fetchedUpo !== upoXml) fail('fetched upo != uploaded upo');
-    ok('getInvoiceXml + getUpoXml: zawartość bit-exact');
+    // ─── exists ──────────────────────────────────────────────────
+    if (!(await invoiceXmlExists(invoicePath))) {
+      fail('invoiceXmlExists: false po uploadzie');
+    }
+    ok('invoiceXmlExists: true');
 
-    const signedUrl = await getSignedInvoiceUrl(key, { expiresInSeconds: 60 });
-    if (!signedUrl.startsWith('https://')) fail(`signed URL nie wygląda OK: ${signedUrl}`);
-    ok(`getSignedInvoiceUrl: ${signedUrl.slice(0, 80)}...`);
+    // ─── download + verify hash ─────────────────────────────────
+    const downloaded = await downloadInvoiceXml(
+      invoicePath,
+      invoiceResult.sha256Hash,
+    );
+    if (downloaded !== invoiceXml) {
+      fail(`download mismatch: got ${downloaded.length}B, expected ${invoiceXml.length}B`);
+    }
+    ok('downloadInvoiceXml: bit-exact + SHA-256 match');
 
-    const { invoices } = await listInvoices({
-      tenantId: key.tenantId,
-      year: (key.issueDate ?? new Date()).getUTCFullYear(),
-      month: (key.issueDate ?? new Date()).getUTCMonth() + 1,
+    // ─── download z ZŁYM hashem → musi rzucić ───────────────────
+    try {
+      await downloadInvoiceXml(invoicePath, '0'.repeat(64));
+      fail('downloadInvoiceXml powinno rzucić przy złym hashu');
+    } catch (err) {
+      if (!(err instanceof Error) || !err.message.includes('hash mismatch')) {
+        fail(`oczekiwałem hash mismatch error, dostałem: ${err}`);
+      }
+      ok('downloadInvoiceXml: wykrywa korupcję danych (hash mismatch)');
+    }
+
+    // ─── signed URL ─────────────────────────────────────────────
+    const signedUrl = await getSignedInvoiceUrl(invoicePath, 60);
+    if (!signedUrl.startsWith('https://') || !signedUrl.includes(invoiceId)) {
+      fail(`signed URL wygląda źle: ${signedUrl.slice(0, 120)}`);
+    }
+    ok(`getSignedInvoiceUrl: ${signedUrl.slice(0, 80)}…`);
+
+    // ─── list ────────────────────────────────────────────────────
+    const [year, month] = issueDate.split('-');
+    const listing = await listInvoiceDocuments({
+      tenantId,
+      year: Number(year),
+      month: Number(month),
       pageSize: 50,
     });
-    const found = invoices.find((inv) => inv.ksefNumber === key.ksefNumber);
-    if (!found) fail(`listInvoices: nie znaleziono wgranego ${key.ksefNumber}`);
-    ok(`listInvoices: znaleziono (łącznie ${invoices.length} w tym folderze)`);
+    const foundInvoice = listing.documents.find(
+      (d) => d.storagePath === invoicePath && d.documentType === 'invoice',
+    );
+    const foundUpo = listing.documents.find(
+      (d) => d.storagePath === upoPath && d.documentType === 'upo',
+    );
+    if (!foundInvoice) fail('listInvoiceDocuments: nie ma XML-a faktury');
+    if (!foundUpo) fail('listInvoiceDocuments: nie ma UPO');
+    ok(
+      `listInvoiceDocuments: znaleziono invoice + UPO ` +
+        `(łącznie ${listing.documents.length} w ${year}-${month})`,
+    );
 
+    // ─── immutability (IfNoneMatch=*) ───────────────────────────
     try {
-      await archiveInvoice({ key, invoiceXml, upoXml });
-      fail('drugi archiveInvoice na tym samym kluczu powinien rzucić PreconditionFailed');
+      await uploadInvoiceXml(tenantId, invoiceId, issueDate, invoiceXml);
+      fail('drugi upload na ten sam klucz powinien rzucić PreconditionFailed');
     } catch (err) {
       const name = (err as { name?: string }).name;
       if (name !== 'PreconditionFailed') {
         fail(`oczekiwałem PreconditionFailed, dostałem: ${name ?? err}`);
       }
-      ok('ponowny PUT zablokowany przez IfNoneMatch=* (immutability)');
+      ok('drugi upload zablokowany przez IfNoneMatch=* (immutability)');
     }
+
+    // ─── override (immutable=false) działa ──────────────────────
+    const overridden = await uploadInvoiceXml(
+      tenantId,
+      invoiceId,
+      issueDate,
+      invoiceXml,
+      { immutable: false },
+    );
+    if (overridden.storagePath !== invoicePath) {
+      fail('immutable=false powinno nadpisać ten sam klucz');
+    }
+    ok('uploadInvoiceXml({ immutable: false }): nadpisanie działa (retry-path)');
   } finally {
+    // ─── cleanup ────────────────────────────────────────────────
     try {
-      await deleteInvoice(key);
-      ok(`cleanup: deleteInvoice ${key.ksefNumber}`);
+      if (invoicePath) await deleteInvoiceXml(invoicePath);
+      if (upoPath) await deleteInvoiceXml(upoPath);
+      ok(`cleanup: deleteInvoiceXml × 2`);
     } catch (err) {
-      console.warn(
-        `${RED}cleanup failed (możesz ręcznie usunąć ${key.tenantId}/...):${RESET}`,
-        err,
-      );
+      console.warn(`${RED}cleanup FAIL (usuń ręcznie):${RESET}`, err);
     }
   }
 
