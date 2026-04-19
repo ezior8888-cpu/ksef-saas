@@ -9,7 +9,7 @@
     "lint": "eslint",
     "ksef:test-auth": "tsx scripts/test-ksef-auth.ts",
     "ksef:test-token": "tsx scripts/test-ksef-token.ts",
-    "test": "tsx --test lib/xml/invoice-calculator.test.ts"
+    "test": "tsx --test lib/xml/invoice-calculator.test.ts lib/xml/fa3-generator.test.ts"
   },
   "dependencies": {
     "@peculiar/webcrypto": "^1.5.0",

@@ -132,7 +132,28 @@ export type InvoiceType =
   | 'VAT' // faktura podstawowa
   | 'KOR' // korygująca
   | 'ZAL' // zaliczkowa
-  | 'ROZ'; // rozliczeniowa
+  | 'ROZ' // rozliczeniowa
+  | 'UPR' // uproszczona
+  | 'KOR_ZAL'
+  | 'KOR_ROZ';
+
+/**
+ * Adnotacje FA(3) - sekcja obligatoryjna pod <Fa>.
+ * Wszystkie flagi to XSD etd:TWybor1_2 (1 = tak, 2 = nie).
+ * Domyślne wartości w generatorze to 2 (żaden marker nie jest ustawiony).
+ */
+export interface InvoiceAnnotations {
+  /** P_16 - metoda kasowa (art. 19a ust. 5 pkt 1 lub art. 21 ust. 1) */
+  cashMethod?: 1 | 2;
+  /** P_17 - samofakturowanie (art. 106d ust. 1) */
+  selfInvoicing?: 1 | 2;
+  /** P_18 - odwrotne obciążenie. Gdy występuje linia z vatRate='oo', generator wymusi 1. */
+  reverseCharge?: 1 | 2;
+  /** P_18A - mechanizm podzielonej płatności (MPP, >= 15k z zał. nr 15) */
+  splitPayment?: 1 | 2;
+  /** P_23 - procedura uproszczona (drugi w kolejności podatnik, art. 135) */
+  simplifiedProcedure?: 1 | 2;
+}
 
 export interface Invoice {
   /** Wewnętrzny numer faktury (np. FV 2026/04/001) */
@@ -158,6 +179,9 @@ export interface Invoice {
   grossTotal: number;
 
   payment: PaymentInfo;
+
+  /** Adnotacje (P_16, P_17, P_18, P_18A, P_23). Brakujące pola = 2 (nie dotyczy). */
+  annotations?: InvoiceAnnotations;
 
   /** Uwagi dodatkowe - pole Stopka */
   notes?: string;
