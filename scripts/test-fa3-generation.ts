@@ -98,12 +98,9 @@ async function main() {
   };
 
   // ─── 1. Generowanie XML ───────────────────────────────────────
-  let xml: string;
-  try {
-    xml = generateFA3Xml(invoice, { prettyPrint: true });
-  } catch (err) {
-    fail(`generateFA3Xml: ${err instanceof Error ? err.message : String(err)}`);
-  }
+  // Błędy walidacji biznesowej (NIP/IBAN/arytmetyka) rzuca generator,
+  // outer main().catch() je złapie i wypisze z pełnym stack trace.
+  const xml = generateFA3Xml(invoice, { prettyPrint: true });
   const xmlPath = '/tmp/test-invoice.xml';
   writeFileSync(xmlPath, xml, 'utf8');
   ok(`generateFA3Xml: ${xml.length} B → ${xmlPath}`);
