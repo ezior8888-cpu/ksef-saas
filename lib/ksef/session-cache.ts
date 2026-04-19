@@ -1,13 +1,18 @@
-import type { KsefAuthSession, KsefCredentials } from './auth';
+import type { KsefAuth, KsefAuthSession } from './auth';
 import { authenticateWithXades } from './auth';
+import { authenticateWithToken } from './auth-token';
 import type { KsefEnvironment } from '@/types/ksef';
 
 /**
- * In-memory cache sesji KSeF per NIP.
+ * In-memory cache sesji KSeF per (environment, NIP).
  * Refreshuje sesję 5 minut przed wygaśnięciem accessToken.
  *
  * UWAGA: in-memory - nie współdzielone między instancjami Vercel.
  * Dla produkcji zastąp Upstash Redis / tabelą ksef_sessions w Supabase.
+ *
+ * Wspiera oba typy auth z `KsefAuth` (XAdES-BES cert + token KSeF).
+ * Consumer dostarcza credentials, cache dispatcha na odpowiedni flow wg
+ * `auth.type`.
  */
 class SessionCache {
   private sessions = new Map<string, KsefAuthSession>();
@@ -30,25 +35,22 @@ class SessionCache {
    * auth flow, drugie czeka na wynik.
    */
   async getSession(
-    credentials: KsefCredentials,
-    env?: KsefEnvironment
+    auth: KsefAuth,
+    env?: KsefEnvironment,
   ): Promise<KsefAuthSession> {
-    const cacheKey = `${env ?? 'test'}:${credentials.nip}`;
+    const cacheKey = `${env ?? 'test'}:${auth.nip}`;
 
-    // 1. Sprawdź cache
     const cached = this.sessions.get(cacheKey);
     if (cached && !this.isExpired(cached)) {
       return cached;
     }
 
-    // 2. Sprawdź lock (ktoś już robi auth flow)
     const existingLock = this.locks.get(cacheKey);
     if (existingLock) {
       return existingLock;
     }
 
-    // 3. Rozpocznij nowy auth flow pod lockiem
-    const authPromise = this.doAuth(cacheKey, credentials, env);
+    const authPromise = this.doAuth(cacheKey, auth, env);
     this.locks.set(cacheKey, authPromise);
 
     try {
@@ -60,10 +62,24 @@ class SessionCache {
 
   private async doAuth(
     cacheKey: string,
-    credentials: KsefCredentials,
-    env?: KsefEnvironment
+    auth: KsefAuth,
+    env?: KsefEnvironment,
   ): Promise<KsefAuthSession> {
-    const session = await authenticateWithXades(credentials, env);
+    // Dispatch po discriminatorze. Exhaustiveness check przez `satisfies never`
+    // w default - kompilator złapie brakujący case, gdy dojdzie trzeci typ auth.
+    let session: KsefAuthSession;
+    switch (auth.type) {
+      case 'xades':
+        session = await authenticateWithXades(auth, env);
+        break;
+      case 'token':
+        session = await authenticateWithToken(auth, env);
+        break;
+      default: {
+        const _exhaustive: never = auth;
+        throw new Error(`Unknown KsefAuth type: ${JSON.stringify(_exhaustive)}`);
+      }
+    }
     this.sessions.set(cacheKey, session);
     return session;
   }

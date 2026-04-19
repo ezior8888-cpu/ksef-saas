@@ -3,7 +3,7 @@ import { generateFA3Xml } from '@/lib/xml/fa3-generator';
 import { validateInvoiceXml } from '@/lib/xml/validator';
 import { uploadInvoiceXml } from '@/lib/storage/r2';
 
-import type { KsefCredentials } from './auth';
+import type { KsefAuth } from './auth';
 import { submitInvoice } from './submit';
 
 /**
@@ -31,7 +31,7 @@ export async function submitInvoiceFullFlow(
   tenantId: string,
   invoiceId: string,
   invoice: Invoice,
-  credentials: KsefCredentials,
+  auth: KsefAuth,
   env?: 'test' | 'demo' | 'production',
 ): Promise<FullSubmitResult> {
   // 1. Generuj XML (z walidacją biznesową wewnątrz generatora).
@@ -63,7 +63,7 @@ export async function submitInvoiceFullFlow(
   );
 
   // 4. Wysyłka do KSeF (rate-limited, z enkrypcją i auto-close sesji).
-  const submitResult = await submitInvoice(xml, credentials, env);
+  const submitResult = await submitInvoice(xml, auth, env);
 
   return {
     ksefNumber: submitResult.ksefNumber,

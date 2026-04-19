@@ -113,11 +113,28 @@ export interface OpenOnlineSessionResponse {
 // Wysłanie faktury
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * Payload dla POST /sessions/online/{ref}/invoices w KSeF 2.0.
+ * Źródło schemy: https://github.com/CIRFMF/ksef-docs/blob/main/sesja-interaktywna.md
+ *
+ * KSeF wymaga hash + size dla BYTES dwóch wariantów dokumentu:
+ *   (a) oryginalny XML (niezaszyfrowany UTF-8) - do weryfikacji po dekryptacji
+ *   (b) zaszyfrowane body (raw bytes PRZED Base64) - do weryfikacji transportu
+ *
+ * `encryptedInvoiceContent` to base64 szyfrogramu AES-256-CBC (bez IV w prefixie -
+ * IV jest przekazywany osobno przy otwarciu sesji).
+ */
 export interface SendInvoiceRequest {
-  /** Zaszyfrowana treść XML FA(3), Base64 */
-  invoiceBody: string;
-  /** SHA-256 hash NIEZASZYFROWANEGO XML-a, Base64 */
+  /** SHA-256 hash oryginalnego XML (niezaszyfrowanego), Base64. */
   invoiceHash: string;
+  /** Rozmiar oryginalnego XML w bajtach UTF-8. */
+  invoiceSize: number;
+  /** SHA-256 hash zaszyfrowanego body (bytes przed Base64), Base64. */
+  encryptedInvoiceHash: string;
+  /** Rozmiar zaszyfrowanego body w bajtach (przed Base64). */
+  encryptedInvoiceSize: number;
+  /** Zaszyfrowana treść XML FA(3) (AES-256-CBC + PKCS#7), Base64. */
+  encryptedInvoiceContent: string;
 }
 
 export interface SendInvoiceResponse {

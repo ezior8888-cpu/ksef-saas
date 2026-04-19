@@ -120,23 +120,40 @@ export async function generateSessionEncryption(): Promise<SessionEncryption> {
  * Szyfruje XML faktury kluczem sesji (AES-256-CBC).
  * Zwraca zaszyfrowany ciało (Base64) i SHA-256 hash nieszyfrowanego XML-a.
  */
+export interface EncryptedInvoicePayload {
+  /** SHA-256 hash oryginalnego XML (niezaszyfrowanego), Base64. */
+  invoiceHash: string;
+  /** Rozmiar oryginalnego XML w bajtach UTF-8. */
+  invoiceSize: number;
+  /** SHA-256 hash zaszyfrowanego body (bytes przed Base64), Base64. */
+  encryptedInvoiceHash: string;
+  /** Rozmiar zaszyfrowanego body w bajtach (bytes przed Base64). */
+  encryptedInvoiceSize: number;
+  /** Zaszyfrowana treść XML FA(3), Base64. */
+  encryptedInvoiceContent: string;
+}
+
 export function encryptInvoiceXml(
   xmlContent: string,
-  encryption: SessionEncryption
-): { encryptedBody: string; hashBase64: string } {
-  // Hash ORYGINALNEGO XML (tak wymaga KSeF)
-  const hash = createHash('sha256').update(xmlContent, 'utf8').digest();
-  const hashBase64 = hash.toString('base64');
+  encryption: SessionEncryption,
+): EncryptedInvoicePayload {
+  // Hash + rozmiar ORYGINALNEGO XML (bytes UTF-8, nie znaki).
+  const xmlBytes = Buffer.from(xmlContent, 'utf8');
+  const invoiceHash = createHash('sha256').update(xmlBytes).digest('base64');
 
-  // Szyfrowanie AES-256-CBC z PKCS7 padding (domyślne w Node.js)
+  // Szyfrowanie AES-256-CBC z PKCS7 padding (domyślne w Node.js).
   const cipher = createCipheriv('aes-256-cbc', encryption.symmetricKey, encryption.iv);
-  const encrypted = Buffer.concat([
-    cipher.update(xmlContent, 'utf8'),
-    cipher.final(),
-  ]);
+  const encryptedBytes = Buffer.concat([cipher.update(xmlBytes), cipher.final()]);
+
+  // KSeF wymaga hash + size zaszyfrowanego body wg RAW BYTES (przed base64),
+  // żeby po stronie serwera móc zweryfikować integralność przed dekryptacją.
+  const encryptedInvoiceHash = createHash('sha256').update(encryptedBytes).digest('base64');
 
   return {
-    encryptedBody: encrypted.toString('base64'),
-    hashBase64,
+    invoiceHash,
+    invoiceSize: xmlBytes.length,
+    encryptedInvoiceHash,
+    encryptedInvoiceSize: encryptedBytes.length,
+    encryptedInvoiceContent: encryptedBytes.toString('base64'),
   };
 }

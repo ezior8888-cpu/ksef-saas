@@ -24,7 +24,9 @@ xadesjs.Application.setEngine('NodeJS', new Crypto());
   DOMImplementation: new DOMImplementation(),
 });
 
-export interface KsefCredentials {
+export interface KsefXadesCredentials {
+  /** Discriminator dla KsefAuth union. */
+  type: 'xades';
   /** NIP kontekstu (firmy, dla której robimy operacje) */
   nip: string;
   /** PEM-encoded certyfikat (np. odczytany z test-cert.pem) */
@@ -32,6 +34,20 @@ export interface KsefCredentials {
   /** PEM-encoded klucz prywatny (np. odczytany z test-key.pem) */
   privateKeyPem: string;
 }
+
+/**
+ * @deprecated Używaj `KsefXadesCredentials` (nazwa wprowadza discriminator)
+ * lub `KsefAuth` (union token+cert). Alias zachowany dla backward compat.
+ */
+export type KsefCredentials = KsefXadesCredentials;
+
+/**
+ * Unia wszystkich sposobów uwierzytelnienia do KSeF 2.0.
+ * Zaimportuj też `KsefTokenCredentials` z `./auth-token` dla wariantu tokenowego.
+ *
+ * Discriminator `type` jest obowiązkowy - TS wymusi explicit wybór sposobu auth.
+ */
+export type KsefAuth = KsefXadesCredentials | import('./auth-token').KsefTokenCredentials;
 
 export interface KsefAuthSession {
   /** Access token do wywołań API (bearer) */
@@ -271,8 +287,9 @@ export function loadCredentialsFromFiles(
   nip: string,
   certPath: string,
   keyPath: string
-): KsefCredentials {
+): KsefXadesCredentials {
   return {
+    type: 'xades',
     nip,
     certificatePem: readFileSync(certPath, 'utf8'),
     privateKeyPem: readFileSync(keyPath, 'utf8'),

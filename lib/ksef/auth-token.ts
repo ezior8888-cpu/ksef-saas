@@ -21,6 +21,8 @@ interface AuthenticationInitResponse {
 }
 
 export interface KsefTokenCredentials {
+  /** Discriminator dla KsefAuth union. */
+  type: 'token';
   /** NIP kontekstu - musi pasować do kontekstu, w którym wygenerowano token */
   nip: string;
   /** Długi string tokena wygenerowany w portalu ap-test.ksef.mf.gov.pl */

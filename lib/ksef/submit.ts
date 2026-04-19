@@ -2,7 +2,7 @@ import { ksefFetch } from './client';
 import { generateSessionEncryption, encryptInvoiceXml } from './encryption';
 import { ksefSessionCache } from './session-cache';
 import { ksefRateLimiter } from './rate-limiter';
-import type { KsefCredentials } from './auth';
+import type { KsefAuth } from './auth';
 import type {
   OpenOnlineSessionRequest,
   OpenOnlineSessionResponse,
@@ -39,12 +39,12 @@ export interface SubmitInvoiceResult {
  */
 export async function submitInvoice(
   invoiceXml: string,
-  credentials: KsefCredentials,
-  env?: KsefEnvironment
+  auth: KsefAuth,
+  env?: KsefEnvironment,
 ): Promise<SubmitInvoiceResult> {
-  return ksefRateLimiter.enqueue(credentials.nip, async () => {
-    // 1. Sesja auth
-    const authSession = await ksefSessionCache.getSession(credentials, env);
+  return ksefRateLimiter.enqueue(auth.nip, async () => {
+    // 1. Sesja auth (cache dispatcha na XAdES albo token wg auth.type).
+    const authSession = await ksefSessionCache.getSession(auth, env);
     const accessToken = authSession.accessToken;
 
     // 2. Klucze szyfrowania sesji
@@ -71,13 +71,17 @@ export async function submitInvoice(
     });
 
     try {
-      // 4. Szyfrowanie XML
-      const { encryptedBody, hashBase64 } = encryptInvoiceXml(invoiceXml, encryption);
+      // 4. Szyfrowanie XML (zwraca komplet: hash+size niezaszyfrowanego
+      //    i zaszyfrowanego body zgodnie z wymogami KSeF 2.0).
+      const payload = encryptInvoiceXml(invoiceXml, encryption);
 
       // 5. Wyślij fakturę
       const sendReq: SendInvoiceRequest = {
-        invoiceBody: encryptedBody,
-        invoiceHash: hashBase64,
+        invoiceHash: payload.invoiceHash,
+        invoiceSize: payload.invoiceSize,
+        encryptedInvoiceHash: payload.encryptedInvoiceHash,
+        encryptedInvoiceSize: payload.encryptedInvoiceSize,
+        encryptedInvoiceContent: payload.encryptedInvoiceContent,
       };
 
       const sendResult = await ksefFetch<SendInvoiceResponse>(

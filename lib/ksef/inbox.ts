@@ -1,7 +1,7 @@
 import { ksefFetch } from './client';
 import { ksefSessionCache } from './session-cache';
 import { ksefRateLimiter } from './rate-limiter';
-import type { KsefCredentials } from './auth';
+import type { KsefAuth } from './auth';
 import type {
   QueryInvoicesRequest,
   QueryInvoicesResponse,
@@ -14,13 +14,13 @@ import type {
  * Obsługuje paginację automatycznie.
  */
 export async function queryReceivedInvoices(
-  credentials: KsefCredentials,
+  auth: KsefAuth,
   dateFrom: Date,
   dateTo: Date,
-  env?: KsefEnvironment
+  env?: KsefEnvironment,
 ): Promise<InvoiceMetadata[]> {
-  return ksefRateLimiter.enqueue(credentials.nip, async () => {
-    const authSession = await ksefSessionCache.getSession(credentials, env);
+  return ksefRateLimiter.enqueue(auth.nip, async () => {
+    const authSession = await ksefSessionCache.getSession(auth, env);
     const accessToken = authSession.accessToken;
 
     const allInvoices: InvoiceMetadata[] = [];
@@ -65,11 +65,11 @@ export async function queryReceivedInvoices(
  */
 export async function downloadInvoiceXml(
   ksefNumber: string,
-  credentials: KsefCredentials,
-  env?: KsefEnvironment
+  auth: KsefAuth,
+  env?: KsefEnvironment,
 ): Promise<string> {
-  return ksefRateLimiter.enqueue(credentials.nip, async () => {
-    const authSession = await ksefSessionCache.getSession(credentials, env);
+  return ksefRateLimiter.enqueue(auth.nip, async () => {
+    const authSession = await ksefSessionCache.getSession(auth, env);
     const accessToken = authSession.accessToken;
 
     // Endpoint zwraca XML bezpośrednio, nie JSON

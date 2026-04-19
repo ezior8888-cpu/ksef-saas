@@ -36,7 +36,7 @@ async function main() {
   console.log('→ Flow: challenge → encrypt(token|ts) → /auth/ksef-token → poll → redeem');
 
   try {
-    const session = await authenticateWithToken({ nip, token });
+    const session = await authenticateWithToken({ type: 'token', nip, token });
 
     console.log('\n✓ SUKCES!\n');
     console.log('Access token:        ', session.accessToken.slice(0, 40) + '...');
