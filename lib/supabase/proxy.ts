@@ -43,8 +43,17 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
-  // Lista ścieżek publicznych (bez auth)
-  const publicPaths = ['/login', '/register', '/forgot-password', '/auth'];
+  // Lista ścieżek publicznych (bez auth).
+  // /api/inngest: webhook dla Inngest Cloud/Dev Server - Inngest SDK sam
+  //   weryfikuje podpis przez INNGEST_SIGNING_KEY, więc Supabase auth
+  //   musi się odsunąć, inaczej `inngest-cli dev` dostaje redirect na /login.
+  const publicPaths = [
+    '/login',
+    '/register',
+    '/forgot-password',
+    '/auth',
+    '/api/inngest',
+  ];
   const isPublicPath =
     publicPaths.some((p) => path.startsWith(p)) || path === '/';
 

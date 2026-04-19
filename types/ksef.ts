@@ -205,43 +205,80 @@ export type PublicKeyCertificatesResponse = PublicKeyCertificate[];
 // Wyszukanie otrzymanych faktur
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * Kryterium filtrowania po dacie w query metadata.
+ *
+ * KSeF 2.0 akceptuje TYLKO dwa pola:
+ *   - `Invoicing` - data wystawienia (`P_1` z FA(3))
+ *   - `Issue`     - data wystawienia (alias `Invoicing`, API honoruje oba)
+ *
+ * UWAGA: KSeF 2.0 **nie** udostępnia filtru po dacie nadania/akceptacji
+ * (`Acquisition`), mimo że to pole występuje w response (`acquisitionDate`).
+ * Polling skrzynki musi używać `Invoicing` i akceptować opóźnienie między
+ * wystawieniem a wpłynięciem (zwykle sekundy, w wyjątkach godziny).
+ */
+export type InvoiceQueryDateType = 'Invoicing' | 'Issue';
+
 export interface QueryInvoicesRequest {
-  subjectType: 'subject1' | 'subject2'; // sprzedawca / nabywca
+  /** `subject1` = sprzedawca, `subject2` = nabywca. */
+  subjectType: 'subject1' | 'subject2';
   dateRange: {
-    dateType: 'Invoicing' | 'Acquisition';
-    from: string; // ISO 8601
+    dateType: InvoiceQueryDateType;
+    from: string;
     to: string;
   };
 }
 
+/**
+ * Pojedynczy wiersz odpowiedzi `/invoices/query/metadata` (KSeF 2.0).
+ *
+ * Zweryfikowane przez bezpośrednie wywołanie API test-ksef (04/2026):
+ *   - `seller` ma płaski `{ nip, name }` (zakładamy polski NIP sprzedawcy).
+ *   - `buyer` ma `{ identifier: { type, value }, name }` (wspiera NIP/VatUe/Other).
+ *   - `formCode` jest OBIEKTEM (w v1 był stringiem) - trzyma tryplet systemu FA(3).
+ *   - `acquisitionDate` (nie `acquisitionTimestamp` z v1).
+ *   - `grossAmount`/`netAmount`/`vatAmount` (nie `gross`).
+ */
 export interface InvoiceMetadata {
   ksefNumber: string;
+  invoiceNumber: string;
+  issueDate: string;
+  /** ISO 8601 z timezone, np. `2026-04-02T10:25:49.746565+00:00`. */
   invoicingDate: string;
-  acquisitionTimestamp: string;
+  acquisitionDate: string;
+  permanentStorageDate: string;
   invoicingMode: 'Online' | 'Offline' | 'Offline24';
-  subjectBy: {
+  invoiceType: 'Vat' | 'VatCorrective' | 'VatSimplified' | string;
+  seller: {
+    nip: string;
+    name: string;
+  };
+  buyer: {
     identifier: {
       type: 'Nip' | 'VatUe' | 'Other';
       value: string;
     };
     name: string;
   };
-  subjectTo: {
-    identifier: {
-      type: 'Nip' | 'VatUe' | 'Other';
-      value: string;
-    };
-    name: string;
-  };
-  gross: number;
+  netAmount: number;
+  grossAmount: number;
+  vatAmount: number;
   currency: string;
   invoiceHash: string;
-  formCode: string;
+  formCode: {
+    systemCode: string;
+    schemaVersion: string;
+    value: string;
+  };
+  isSelfInvoicing: boolean;
+  hasAttachment: boolean;
 }
 
 export interface QueryInvoicesResponse {
   invoices: InvoiceMetadata[];
-  /** Token paginacji - przekaż w następnym request, jeśli niepusty */
+  /** Token paginacji - przekaż w następnym request, jeśli niepusty. */
   continuationToken?: string;
   hasMore: boolean;
+  /** `true` gdy API ucięło wynik przy pierwszym page'u (soft limit MF). */
+  isTruncated?: boolean;
 }

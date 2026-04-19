@@ -24,7 +24,8 @@ export interface FullSubmitResult {
   ksefNumber: string;
   xmlStoragePath: string;
   xmlSha256Hash: string;
-  acquisitionTimestamp: string;
+  /** ISO 8601 timestamp akceptacji; `undefined` jeśli KSeF nie zwrócił go w statusie. */
+  acquisitionTimestamp?: string;
 }
 
 export async function submitInvoiceFullFlow(

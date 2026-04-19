@@ -20,8 +20,15 @@ export interface SubmitInvoiceResult {
   sessionReferenceNumber: string;
   /** Numer referencyjny faktury w sesji */
   invoiceReferenceNumber: string;
-  /** Timestamp akceptacji */
-  acquisitionTimestamp: string;
+  /**
+   * Timestamp akceptacji faktury przez KSeF (ISO 8601).
+   *
+   * `undefined` w rzadkim scenariuszu: status przeszedł polling jako zakończony,
+   * ale odpowiedź nie zawiera `acquisitionTimestamp` (spotykane głównie w test/demo
+   * KSeF przy race-condition na stronie serwera). Konsumenci muszą pominąć to pole
+   * przy zapisie - Postgres `TIMESTAMPTZ` odrzuca pusty string.
+   */
+  acquisitionTimestamp?: string;
   /** URL do pobrania UPO (ważny ograniczony czas) */
   upoDownloadUrl?: string;
 }
@@ -112,7 +119,7 @@ export async function submitInvoice(
         ksefNumber: invoiceStatus.ksefNumber,
         sessionReferenceNumber: session.referenceNumber,
         invoiceReferenceNumber: sendResult.referenceNumber,
-        acquisitionTimestamp: invoiceStatus.acquisitionTimestamp ?? '',
+        acquisitionTimestamp: invoiceStatus.acquisitionTimestamp,
         upoDownloadUrl: invoiceStatus.upoDownloadUrl,
       };
     } finally {

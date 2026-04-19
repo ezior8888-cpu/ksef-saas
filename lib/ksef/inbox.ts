@@ -27,10 +27,14 @@ export async function queryReceivedInvoices(
     let continuationToken: string | undefined = undefined;
 
     do {
+      // UWAGA: KSeF 2.0 nie ma już filtru `Acquisition` (date-of-receipt) -
+      // API `/invoices/query/metadata` akceptuje tylko `Invoicing`/`Issue`.
+      // Polling pracuje z pewnym poślizgiem vs rzeczywiste nadanie w KSeF,
+      // ale w praktyce invoicingDate ≈ acquisitionDate (opóźnienie sekund).
       const req: QueryInvoicesRequest = {
         subjectType: 'subject2',
         dateRange: {
-          dateType: 'Acquisition',
+          dateType: 'Invoicing',
           from: dateFrom.toISOString(),
           to: dateTo.toISOString(),
         },
