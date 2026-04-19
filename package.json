@@ -10,6 +10,7 @@
     "ksef:test-auth": "tsx scripts/test-ksef-auth.ts",
     "ksef:test-token": "tsx scripts/test-ksef-token.ts",
     "r2:smoke": "tsx scripts/test-r2.ts",
+    "fa3:test": "tsx scripts/test-fa3-generation.ts",
     "test": "tsx --test lib/xml/invoice-calculator.test.ts lib/xml/fa3-generator.test.ts lib/xml/validator.test.ts"
   },
   "dependencies": {
