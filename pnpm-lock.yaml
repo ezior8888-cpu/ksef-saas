@@ -71,6 +71,9 @@ importers:
       xmlbuilder2:
         specifier: ^4.0.3
         version: 4.0.3
+      xmllint-wasm:
+        specifier: ^5.2.0
+        version: 5.2.0(@types/node@20.19.39)
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4
@@ -4065,6 +4068,12 @@ packages:
   xmldsigjs@2.8.7:
     resolution: {integrity: sha512-Ia9g1zEBnmfgTLdxcCFCU0PxG68ADdKDGh9CdjFd6KhB5bmKInDkecBfzxGZUjkRN3Gwk08cI/cvBfwreiqMtg==}
     engines: {node: '>=16.0.0'}
+
+  xmllint-wasm@5.2.0:
+    resolution: {integrity: sha512-GVMuR3ViU8R7sakcVm/4GClMtCV8p7xgjXZlc6GmvPpInIz4V41lmRnjSd4uKhVkf5MZj97wEZkPM4RMAhojuQ==}
+    engines: {node: '>=16'}
+    peerDependencies:
+      '@types/node': '>=16'
 
   xpath@0.0.27:
     resolution: {integrity: sha512-fg03WRxtkCV6ohClePNAECYsmpKKTv5L8y/X3Dn1hQrec3POx2jHZ/0P2qQ6HvsrU1BmeqXcof3NGGueG6LxwQ==}
@@ -8391,6 +8400,10 @@ snapshots:
       xpath: 0.0.34
     transitivePeerDependencies:
       - '@xmldom/xmldom'
+
+  xmllint-wasm@5.2.0(@types/node@20.19.39):
+    dependencies:
+      '@types/node': 20.19.39
 
   xpath@0.0.27: {}
 

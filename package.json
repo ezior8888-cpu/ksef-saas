@@ -9,7 +9,7 @@
     "lint": "eslint",
     "ksef:test-auth": "tsx scripts/test-ksef-auth.ts",
     "ksef:test-token": "tsx scripts/test-ksef-token.ts",
-    "test": "tsx --test lib/xml/invoice-calculator.test.ts lib/xml/fa3-generator.test.ts"
+    "test": "tsx --test lib/xml/invoice-calculator.test.ts lib/xml/fa3-generator.test.ts lib/xml/validator.test.ts"
   },
   "dependencies": {
     "@peculiar/webcrypto": "^1.5.0",
@@ -32,7 +32,8 @@
     "xadesjs": "^2.6.7",
     "xml-core": "^1.2.5",
     "xml-crypto": "^6.1.2",
-    "xmlbuilder2": "^4.0.3"
+    "xmlbuilder2": "^4.0.3",
+    "xmllint-wasm": "^5.2.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
