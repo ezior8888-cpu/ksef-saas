@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 /**
@@ -36,23 +37,25 @@ export async function createClient() {
 }
 
 /**
- * Server client z service_role - OBCHODZI RLS!
- * Używaj WYŁĄCZNIE w Inngest jobs i admin endpointach.
+ * Server client z service_role - OBCHODZI RLS.
+ * Używaj WYŁĄCZNIE w Inngest jobs i Server Actions, które świadomie
+ * chcą ominąć RLS (po uprzedniej weryfikacji auth.getUser()).
+ *
+ * DLACZEGO nie `@supabase/ssr` z cookies:
+ * `createServerClient` z `@supabase/ssr` dokleja Bearer token z cookie
+ * użytkownika, który w Supabase ma PIERWSZEŃSTWO przed apiKey. W efekcie
+ * service_role jest "nadpisywany" rolą `authenticated` i RLS znów łapie
+ * operacje. Dlatego używamy czystego `supabase-js` z wyłączonym persist
+ * session - to prawdziwy admin bez kontekstu usera.
  */
-export async function createAdminClient() {
-  const cookieStore = await cookies();
-
-  return createServerClient(
+export function createAdminClient() {
+  return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll() {
-          // Admin client nie zarządza sesją
-        },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
       },
     }
   );

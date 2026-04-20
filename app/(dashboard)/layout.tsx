@@ -1,7 +1,10 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
+import { LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { Button } from '@/components/ui/button';
 import { signOut } from '../(auth)/login/actions';
+import { Sidebar } from '@/components/dashboard/sidebar';
+import { Button } from '@/components/ui/button';
 
 export default async function DashboardLayout({
   children,
@@ -10,49 +13,67 @@ export default async function DashboardLayout({
 }) {
   const supabase = await createClient();
 
-  // Defense-in-depth: proxy powinien był przekierować,
-  // ale sprawdzamy jeszcze raz na poziomie layoutu.
+  // Defense-in-depth: middleware powinien był przekierować niezalogowanych,
+  // ale dublujemy check tutaj (layout to drugi bastion).
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect('/login');
+  if (!user) redirect('/login');
+
+  // Dociągamy tenanta w jednym query (join po FK users.tenant_id -> tenants.id).
+  const { data: userData } = await supabase
+    .from('users')
+    .select('tenant_id, tenants(name, nip)')
+    .eq('id', user.id)
+    .single();
+
+  // Brak tenanta = user nie przeszedł onboardingu (Faza 6.3 doda ten ekran).
+  if (!userData?.tenant_id) {
+    redirect('/onboarding');
   }
 
+  // Supabase PostgREST zwraca `tenants` jako obiekt przy 1:1 join,
+  // ale typy z generatora czasem dają array. Normalizujemy defensywnie.
+  const tenant = Array.isArray(userData.tenants)
+    ? userData.tenants[0]
+    : userData.tenants;
+
+  const { data: sampleInvoice } = await supabase
+    .from('invoices')
+    .select('id')
+    .eq('direction', 'outgoing')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b bg-card px-6 py-4">
-        <div className="flex items-center gap-6">
-          <h1 className="text-xl font-bold">KSeF SaaS</h1>
-          <nav className="flex gap-4">
-            <a href="/invoices" className="text-sm hover:underline">
-              Faktury
-            </a>
-            <a href="/inbox" className="text-sm hover:underline">
-              Skrzynka
-            </a>
-            <a href="/contractors" className="text-sm hover:underline">
-              Kontrahenci
-            </a>
-            <a href="/reports" className="text-sm hover:underline">
-              Raporty
-            </a>
-            <a href="/settings" className="text-sm hover:underline">
-              Ustawienia
-            </a>
-          </nav>
-        </div>
+    <div className="flex h-screen flex-col">
+      <header className="flex items-center justify-between border-b bg-white px-6 py-3">
+        <Link href="/invoices" className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded bg-black text-white flex items-center justify-center font-bold text-sm">
+            K
+          </div>
+          <span className="font-semibold">KSeF SaaS</span>
+        </Link>
+
         <div className="flex items-center gap-4">
-          <span className="text-sm text-muted-foreground">{user.email}</span>
+          <div className="text-right">
+            <p className="text-sm font-medium">{tenant?.name ?? 'Bez nazwy'}</p>
+            <p className="text-xs text-gray-500">NIP: {tenant?.nip}</p>
+          </div>
           <form action={signOut}>
-            <Button type="submit" variant="ghost" size="sm">
-              Wyloguj
+            <Button variant="ghost" size="icon" type="submit" aria-label="Wyloguj">
+              <LogOut className="h-4 w-4" />
             </Button>
           </form>
         </div>
       </header>
-      <main className="flex-1 p-6">{children}</main>
+
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar sampleInvoiceId={sampleInvoice?.id ?? null} />
+        <main className="flex-1 overflow-auto bg-white p-6">{children}</main>
+      </div>
     </div>
   );
 }

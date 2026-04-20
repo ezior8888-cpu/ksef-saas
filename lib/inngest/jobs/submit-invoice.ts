@@ -110,8 +110,22 @@ export const submitInvoiceJob = inngest.createFunction(
       internalNumber: invoice.internalNumber,
     });
 
-    // Krok 1: status 'sending' + timestamp momentu rozpoczęcia wysyłki,
-    // żeby UI mogło pokazać spinner i znać last attempt.
+    // Krok 1: credentials PRZED `sending` — jeśli brak certyfikatu / decrypt
+    // padnie, faktura zostaje `draft` zamiast iść w `failed` po retry Inngest.
+    const credentials = await step.run('load-credentials', async () => {
+      try {
+        return await getTenantKsefCredentials(tenantId);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new NonRetriableError(
+          `Nie można użyć credentials KSeF: ${msg}`,
+          { cause: e },
+        );
+      }
+    });
+
+    // Krok 2: status 'sending' + timestamp — dopiero gdy wiemy, że job może
+    // realnie pogadać z KSeF.
     await step.run('mark-as-sending', async () => {
       const now = new Date().toISOString();
       await updateInvoiceStatus(invoiceId, {
@@ -119,11 +133,6 @@ export const submitInvoiceJob = inngest.createFunction(
         submitted_to_ksef_at: now,
         last_attempt_at: now,
       });
-    });
-
-    // Krok 2: załaduj credentials tenanta (BYTEA → decrypt AES-256-GCM).
-    const credentials = await step.run('load-credentials', async () => {
-      return getTenantKsefCredentials(tenantId);
     });
 
     // Krok 3: pełny flow (generuj XML → waliduj XSD → R2 → KSeF).

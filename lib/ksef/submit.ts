@@ -1,4 +1,5 @@
 import { ksefFetch } from './client';
+import { ksefNumericStatusCode } from './normalize-status-code';
 import { generateSessionEncryption, encryptInvoiceXml } from './encryption';
 import { ksefSessionCache } from './session-cache';
 import { ksefRateLimiter } from './rate-limiter';
@@ -154,17 +155,18 @@ async function pollInvoiceStatus(
       { accessToken, env }
     );
 
-    if (status.status.code === INVOICE_STATUS.ACCEPTED) {
+    const code = ksefNumericStatusCode(status.status?.code);
+    if (code === INVOICE_STATUS.ACCEPTED) {
       return status;
     }
-    if (status.status.code >= INVOICE_STATUS.REJECTED) {
+    if (Number.isFinite(code) && code >= INVOICE_STATUS.REJECTED) {
       const details = status.status.details?.join('; ') ?? '';
       throw new Error(
         `KSeF odrzucił fakturę: ${status.status.description}. Szczegóły: ${details}`
       );
     }
 
-    // Status 150 (QUEUED) - czekamy
+    // Status 150 (QUEUED) lub nieznany kod < 400 — czekamy
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 

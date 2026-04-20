@@ -4,6 +4,7 @@ import * as xadesjs from 'xadesjs';
 import * as XmlCore from 'xml-core';
 import { DOMParser, XMLSerializer, DOMImplementation } from '@xmldom/xmldom';
 import { ksefFetch } from './client';
+import { ksefNumericStatusCode } from './normalize-status-code';
 import type {
   AuthChallengeResponse,
   AuthTokenResponse,
@@ -217,8 +218,9 @@ async function pollAuthStatus(
     // 100 - w trakcie
     // 200 - zaakceptowane
     // 400 - odrzucone
-    if (status.status.code === 200) return status;
-    if (status.status.code >= 400) {
+    const code = ksefNumericStatusCode(status.status?.code);
+    if (code === 200) return status;
+    if (Number.isFinite(code) && code >= 400) {
       throw new Error(`KSeF auth failed: ${status.status.description}`);
     }
 

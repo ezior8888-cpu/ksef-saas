@@ -21,12 +21,4 @@ export function createScriptAdminClient(): SupabaseClient {
   });
 }
 
-/**
- * Konwertuje Buffer na Postgres bytea literal (`\x<hex>`).
- * Niezbędne, bo supabase-js serializuje Buffer różnie zależnie od wersji.
- * Format `\x<hex>` jest natywnym literalem Postgresa i parsowany identycznie
- * przez `parseBytea` w `lib/supabase/admin-queries.ts`.
- */
-export function bufferToByteaLiteral(buf: Buffer): string {
-  return `\\x${buf.toString('hex')}`;
-}
+export { bufferToByteaLiteral } from '../lib/supabase/bytea';

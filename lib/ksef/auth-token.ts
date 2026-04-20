@@ -1,4 +1,5 @@
 import { ksefFetch } from './client';
+import { ksefNumericStatusCode } from './normalize-status-code';
 import { encryptKsefToken } from './encryption';
 import type {
   AuthChallengeResponse,
@@ -71,8 +72,9 @@ async function pollAuthStatus(
       env,
     });
 
-    if (status.status.code === 200) return status;
-    if (status.status.code >= 400) {
+    const code = ksefNumericStatusCode(status.status?.code);
+    if (code === 200) return status;
+    if (Number.isFinite(code) && code >= 400) {
       throw new Error(`KSeF auth failed: ${status.status.description}`);
     }
 
