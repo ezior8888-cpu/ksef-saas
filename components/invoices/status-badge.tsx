@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 const STATUS_MAP: Record<string, { label: string; className: string }> = {
   draft: { label: 'Szkic', className: 'bg-gray-100 text-gray-700 border-gray-200' },
   queued: {
-    label: 'W kolejce',
+    label: 'Oczekuje na wysyłkę',
     className: 'bg-yellow-100 text-yellow-900 border-yellow-200',
   },
   sending: {

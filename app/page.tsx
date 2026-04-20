@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,7 +17,9 @@ export default function Home() {
           <CardDescription>Fakturowanie zgodne z KSeF 2.0</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button className="w-full">Zaloguj się</Button>
+          <Button asChild className="w-full">
+            <Link href="/login">Zaloguj się</Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

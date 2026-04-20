@@ -1,4 +1,5 @@
 import { NonRetriableError } from 'inngest';
+import { logAuditSystem } from '@/lib/audit/log-system';
 import { inngest, invoiceSubmitRequested } from '../client';
 import { submitInvoiceFullFlow } from '@/lib/ksef/submit-invoice-full';
 import {
@@ -86,6 +87,21 @@ export const submitInvoiceJob = inngest.createFunction(
         });
       });
 
+      await step.run('audit-submit-failed', async () => {
+        await logAuditSystem({
+          action: 'invoice.submit_failed',
+          tenantId,
+          userId: null,
+          entityType: 'invoice',
+          entityId: invoiceId,
+          metadata: {
+            internalNumber: invoice.internalNumber,
+            finalStatus,
+            error: `${error.name}: ${error.message}`,
+          },
+        });
+      });
+
       // Publikujemy event żeby notify-submit-failed mógł wysłać emaila / Slacka.
       // Osobny job trzyma handler od DB update - separation of concerns.
       await step.sendEvent('publish-failure', {
@@ -111,7 +127,8 @@ export const submitInvoiceJob = inngest.createFunction(
     });
 
     // Krok 1: credentials PRZED `sending` — jeśli brak certyfikatu / decrypt
-    // padnie, faktura zostaje `draft` zamiast iść w `failed` po retry Inngest.
+    // padnie (NonRetriableError), `onFailure` oznaczy fakturę jako `rejected`
+    // zanim status przejdzie na `sending`. Wcześniej UI ma zwykle `queued`.
     const credentials = await step.run('load-credentials', async () => {
       try {
         return await getTenantKsefCredentials(tenantId);
@@ -132,6 +149,16 @@ export const submitInvoiceJob = inngest.createFunction(
         ksef_status: 'sending',
         submitted_to_ksef_at: now,
         last_attempt_at: now,
+      });
+    });
+
+    await step.run('audit-start', async () => {
+      await logAuditSystem({
+        action: 'invoice.submit_requested',
+        tenantId,
+        entityType: 'invoice',
+        entityId: invoiceId,
+        metadata: { attempt: 1 },
       });
     });
 
@@ -175,6 +202,16 @@ export const submitInvoiceJob = inngest.createFunction(
         ksef_accepted_at: result.acquisitionTimestamp,
         xml_storage_path: result.xmlStoragePath,
         last_error: null,
+      });
+    });
+
+    await step.run('audit-success', async () => {
+      await logAuditSystem({
+        action: 'invoice.submit_succeeded',
+        tenantId,
+        entityType: 'invoice',
+        entityId: invoiceId,
+        metadata: { ksefNumber: result.ksefNumber },
       });
     });
 

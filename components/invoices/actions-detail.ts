@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { logAudit } from '@/lib/audit/log';
 import { createClient } from '@/lib/supabase/server';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
 import { inngest } from '@/lib/inngest/client';
@@ -43,7 +44,7 @@ export async function downloadInvoiceXmlAction(
 
     const { data: inv, error: invErr } = await supabase
       .from('invoices')
-      .select('internal_number, xml_storage_path')
+      .select('internal_number, xml_storage_path, tenant_id')
       .eq('id', invoiceId)
       .maybeSingle();
 
@@ -78,6 +79,21 @@ export async function downloadInvoiceXmlAction(
       /[^a-zA-Z0-9_-]+/g,
       '-'
     );
+
+    const {
+      data: { user: dlUser },
+    } = await supabase.auth.getUser();
+    const tenantId = inv.tenant_id as string | null | undefined;
+    if (dlUser && tenantId) {
+      await logAudit({
+        action: 'invoice.xml_downloaded',
+        tenantId,
+        userId: dlUser.id,
+        entityType: 'invoice',
+        entityId: invoiceId,
+        metadata: { internalNumber: inv.internal_number },
+      });
+    }
 
     return {
       success: true,
@@ -257,21 +273,6 @@ export async function resendInvoiceAction(
       notes: (inv.notes as string | null) ?? snapshot?.notes ?? undefined,
     };
 
-    // Wyczyść ostatni błąd. Status zostaje rejected/failed do startu joba —
-    // nie ustawiamy `queued` (patrz komentarz w saveAndSendInvoiceAction:
-    // niektóre CHECK w DB nie zawierają `queued`). Job i tak przełączy na
-    // `sending` w pierwszym kroku.
-    const { error: updErr } = await supabase
-      .from('invoices')
-      .update({
-        last_error: null,
-      })
-      .eq('id', invoiceId);
-
-    if (updErr) {
-      return { success: false, error: updErr.message };
-    }
-
     await inngest.send({
       name: 'invoice/submit.requested',
       data: {
@@ -282,8 +283,29 @@ export async function resendInvoiceAction(
       },
     });
 
+    const { error: updErr } = await supabase
+      .from('invoices')
+      .update({
+        ksef_status: 'queued',
+        last_error: null,
+      })
+      .eq('id', invoiceId);
+
+    if (updErr) {
+      console.error('[resendInvoiceAction] queued update failed', updErr);
+    }
+
     revalidatePath('/invoices');
     revalidatePath(`/invoices/${invoiceId}`);
+
+    await logAudit({
+      action: 'invoice.resubmit_requested',
+      tenantId: inv.tenant_id as string,
+      userId: user.id,
+      entityType: 'invoice',
+      entityId: invoiceId,
+      metadata: { internalNumber: inv.internal_number },
+    });
 
     return { success: true };
   } catch (err) {

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
+import { logAudit } from '@/lib/audit/log';
 import { createClient } from '@/lib/supabase/server';
 
 /**
@@ -26,6 +27,23 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
 
   if (error) {
     redirect('/login?error=invalid_credentials');
+  }
+
+  const {
+    data: { user: signedIn },
+  } = await supabase.auth.getUser();
+  if (signedIn) {
+    const { data: row } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', signedIn.id)
+      .maybeSingle();
+    await logAudit({
+      action: 'auth.login',
+      tenantId: row?.tenant_id ?? null,
+      userId: signedIn.id,
+      metadata: { method: 'password' },
+    });
   }
 
   revalidatePath('/', 'layout');
@@ -68,6 +86,21 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
     redirect('/login?success=check_email');
   }
 
+  const uid = data.user?.id;
+  if (uid) {
+    const { data: row } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', uid)
+      .maybeSingle();
+    await logAudit({
+      action: 'auth.signup',
+      tenantId: row?.tenant_id ?? null,
+      userId: uid,
+      metadata: { flow: 'session_immediate' },
+    });
+  }
+
   revalidatePath('/', 'layout');
   redirect('/invoices');
 }
@@ -100,6 +133,21 @@ export async function loginWithGoogle(): Promise<void> {
  */
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const { data: row } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', user.id)
+      .maybeSingle();
+    await logAudit({
+      action: 'auth.logout',
+      tenantId: row?.tenant_id ?? null,
+      userId: user.id,
+    });
+  }
   await supabase.auth.signOut();
   revalidatePath('/', 'layout');
   redirect('/login');

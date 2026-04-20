@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { logAudit } from '@/lib/audit/log';
 import { createClient } from '@/lib/supabase/server';
 import { lookupCompanyByNip } from '@/lib/gus/client';
 import { inngest } from '@/lib/inngest/client';
@@ -372,11 +373,22 @@ export async function saveDraftAction(
   values: InvoiceFormValues
 ): Promise<InvoiceActionResult> {
   try {
-    const { supabase, tenant } = await getTenantContext();
+    const { supabase, tenant, userId } = await getTenantContext();
     const invoice = buildInvoiceFromForm(values, tenant);
 
     const result = await insertInvoiceAndLines(supabase, tenant.id, invoice);
-    if (result.success) {
+    if (result.success && result.invoiceId) {
+      await logAudit({
+        action: 'invoice.draft_created',
+        tenantId: tenant.id,
+        userId,
+        entityType: 'invoice',
+        entityId: result.invoiceId,
+        metadata: {
+          internalNumber: invoice.internalNumber,
+          grossTotal: invoice.grossTotal,
+        },
+      });
       revalidatePath('/invoices');
     }
     return result;
@@ -392,7 +404,7 @@ export async function saveAndSendInvoiceAction(
   values: InvoiceFormValues
 ): Promise<InvoiceActionResult> {
   try {
-    const { supabase, tenant } = await getTenantContext();
+    const { supabase, tenant, userId } = await getTenantContext();
     const invoice = buildInvoiceFromForm(values, tenant);
 
     // 1) Najpierw draft - jeśli DB padnie, nie publikujemy eventu-sieroty.
@@ -406,6 +418,19 @@ export async function saveAndSendInvoiceAction(
       .single();
 
     if (tenantErr) {
+      if (saved.invoiceId) {
+        await logAudit({
+          action: 'invoice.draft_created',
+          tenantId: tenant.id,
+          userId,
+          entityType: 'invoice',
+          entityId: saved.invoiceId,
+          metadata: {
+            internalNumber: invoice.internalNumber,
+            note: 'submit_aborted_tenant_read_error',
+          },
+        });
+      }
       return {
         success: false,
         error: `Nie można sprawdzić ustawień KSeF: ${tenantErr.message}`,
@@ -414,6 +439,19 @@ export async function saveAndSendInvoiceAction(
     }
 
     if (!tenantKsef?.ksef_credentials_encrypted) {
+      if (saved.invoiceId) {
+        await logAudit({
+          action: 'invoice.draft_created',
+          tenantId: tenant.id,
+          userId,
+          entityType: 'invoice',
+          entityId: saved.invoiceId,
+          metadata: {
+            internalNumber: invoice.internalNumber,
+            note: 'submit_blocked_no_ksef_cert',
+          },
+        });
+      }
       return {
         success: false,
         error:
@@ -422,13 +460,7 @@ export async function saveAndSendInvoiceAction(
       };
     }
 
-    // 2) NIE ustawiamy tu `ksef_status: 'queued'` — część baz (stary SQL w
-    //    Supabase bez pełnej migracji 00003) ma CHECK bez wartości `queued`,
-    //    co kończy się błędem „violates check constraint invoices_ksef_status_check”.
-    //    Zostawiamy `draft` do momentu wejścia joba Inngest; pierwszy krok
-    //    `submit-invoice` ustawia `sending` + timestamp (admin client, bez RLS).
-
-    // 3) Publikuj event Inngest. UI: draft → (Realtime) sending → accepted/…
+    // 2) Publikuj event Inngest.
     await inngest.send({
       name: 'invoice/submit.requested',
       data: {
@@ -439,7 +471,29 @@ export async function saveAndSendInvoiceAction(
       },
     });
 
+    // 3) Oznacz jako „w kolejce” — job `submit-invoice` przełączy na `sending`.
+    //    (CHECK `queued` jest w migracji 00005.)
+    const { error: queueErr } = await supabase
+      .from('invoices')
+      .update({ ksef_status: 'queued' })
+      .eq('id', saved.invoiceId);
+
+    if (queueErr) {
+      // Event już wysłany — job i tak ustawi status; log tylko do diagnozy.
+      console.error('[saveAndSendInvoiceAction] queued update failed', queueErr);
+    }
+
+    await logAudit({
+      action: 'invoice.submit_requested',
+      tenantId: tenant.id,
+      userId,
+      entityType: 'invoice',
+      entityId: saved.invoiceId,
+      metadata: { nip: tenant.nip },
+    });
+
     revalidatePath('/invoices');
+    revalidatePath(`/invoices/${saved.invoiceId}`);
     return { success: true, invoiceId: saved.invoiceId };
   } catch (err) {
     return {

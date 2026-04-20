@@ -6,7 +6,9 @@ import {
   inboxPollingJob,
   inboxPollTenantJob,
 } from '@/lib/inngest/jobs/inbox-polling';
+import { archiveOldInvoicesJob } from '@/lib/inngest/jobs/archive-old-invoices';
 import { certExpiryAlertJob } from '@/lib/inngest/jobs/cert-expiry-alert';
+import { retentionDeleteJob } from '@/lib/inngest/jobs/retention-delete';
 import {
   notifyFailureJob,
   notifySuccessJob,
@@ -29,5 +31,7 @@ export const { GET, POST, PUT } = serve({
     inboxPollingJob,
     inboxPollTenantJob,
     certExpiryAlertJob,
+    archiveOldInvoicesJob,
+    retentionDeleteJob,
   ],
 });

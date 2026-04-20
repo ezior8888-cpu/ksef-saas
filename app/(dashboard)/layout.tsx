@@ -39,14 +39,6 @@ export default async function DashboardLayout({
     ? userData.tenants[0]
     : userData.tenants;
 
-  const { data: sampleInvoice } = await supabase
-    .from('invoices')
-    .select('id')
-    .eq('direction', 'outgoing')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center justify-between border-b bg-white px-6 py-3">
@@ -71,7 +63,7 @@ export default async function DashboardLayout({
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar sampleInvoiceId={sampleInvoice?.id ?? null} />
+        <Sidebar />
         <main className="flex-1 overflow-auto bg-white p-6">{children}</main>
       </div>
     </div>

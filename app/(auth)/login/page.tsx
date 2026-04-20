@@ -24,6 +24,8 @@ const ERROR_MESSAGES: Record<string, string> = {
 const SUCCESS_MESSAGES: Record<string, string> = {
   check_email:
     'Konto utworzone! Sprawdź swoją skrzynkę pocztową — wysłaliśmy link aktywacyjny.',
+  account_deleted:
+    'Zapisaliśmy żądanie usunięcia firmy. Zostałeś wylogowany — konto zostanie trwale usunięte po upływie okresu retencji (30 dni), o ile nie cofniesz decyzji z pomocą techniczną.',
 };
 
 export default async function LoginPage({

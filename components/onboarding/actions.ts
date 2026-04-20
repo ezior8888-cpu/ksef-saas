@@ -1,7 +1,7 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/server';
+import { logAudit } from '@/lib/audit/log';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { lookupCompanyByNip } from '@/lib/gus/client';
 import { validateNipChecksum } from '@/lib/xml/invoice-calculator';
 
@@ -95,7 +95,7 @@ export async function completeOnboardingAction(
   //    wymagałoby dodatkowych ograniczeń (np. "tylko gdy user ma
   //    tenant_id = NULL"). Server Action to ścieżka kontrolowana -
   //    weryfikujemy auth.getUser() wyżej, więc bypass RLS jest bezpieczny.
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   // Idempotencja: jeśli tenant z tym NIP-em już istnieje, przypisujemy
   // usera jako zwykłego członka (owner został wcześniej). Chroni przed
@@ -122,6 +122,12 @@ export async function completeOnboardingAction(
         error: `Błąd przypisania do istniejącej firmy: ${attachErr.message}`,
       };
     }
+    await logAudit({
+      action: 'tenant.updated',
+      tenantId: existingTenant.id,
+      userId: user.id,
+      metadata: { source: 'onboarding_join_existing', nip: company.nip },
+    });
     return { success: true };
   }
 
@@ -165,6 +171,13 @@ export async function completeOnboardingAction(
       error: `Błąd przypisania użytkownika: ${userError.message}`,
     };
   }
+
+  await logAudit({
+    action: 'tenant.created',
+    tenantId: newTenant.id,
+    userId: user.id,
+    metadata: { nip: company.nip, name: company.name },
+  });
 
   return { success: true };
 }

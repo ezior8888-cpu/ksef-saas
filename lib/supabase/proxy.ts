@@ -53,6 +53,7 @@ export async function updateSession(request: NextRequest) {
     '/forgot-password',
     '/auth',
     '/api/inngest',
+    '/accountant',
   ];
   const isPublicPath =
     publicPaths.some((p) => path.startsWith(p)) || path === '/';

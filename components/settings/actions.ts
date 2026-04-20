@@ -2,6 +2,7 @@
 
 import { X509Certificate } from 'node:crypto';
 
+import { logAudit } from '@/lib/audit/log';
 import { authenticateWithXades } from '@/lib/ksef/auth';
 import { encryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
@@ -87,6 +88,16 @@ export async function uploadCertificateAction(data: {
     if (updErr) {
       return { success: false, error: updErr.message };
     }
+
+    await logAudit({
+      action: 'ksef.credentials_uploaded',
+      tenantId: userData.tenant_id,
+      userId: user.id,
+      metadata: {
+        certificateExpiry: expiryDate?.toISOString(),
+        environment: process.env.KSEF_ENV ?? 'test',
+      },
+    });
 
     revalidatePath('/settings/ksef');
     return { success: true };

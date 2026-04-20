@@ -29,8 +29,8 @@ export interface InvoiceRow {
  *   - UPDATE: mergujemy pola z `payload.new`.
  *   - DELETE: usuwamy wiersz.
  *
- * Nie pollujemy - gdy job Inngest zmieni `ksef_status`, Supabase pushuje
- * event przez WebSocket w <1s.
+ * Nie pollujemy — po `queued` / `sending` / `accepted` job Inngest aktualizuje
+ * `ksef_status` w DB; Supabase pushuje zdarzenie przez WebSocket w <1s.
  *
  * RLS na `invoices` zapewnia że klient nie dostanie zdarzeń dla obcych
  * tenantów (policy `invoices_select_own_tenant` + `tenant_id = get_current_tenant_id()`).

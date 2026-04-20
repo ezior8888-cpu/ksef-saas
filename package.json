@@ -17,7 +17,11 @@
     "trigger:submit": "tsx scripts/trigger-submit.ts",
     "test:phase5": "tsx scripts/test-phase5-jobs.ts",
     "inngest:dev": "inngest-cli dev",
-    "test": "tsx --test lib/xml/invoice-calculator.test.ts lib/xml/fa3-generator.test.ts lib/xml/validator.test.ts"
+    "test": "tsx --test lib/xml/invoice-calculator.test.ts lib/xml/fa3-generator.test.ts lib/xml/validator.test.ts",
+    "test:vitest": "vitest run",
+    "test:vitest:watch": "vitest",
+    "test:rls": "vitest run tests/rls-isolation.test.ts",
+    "test:all": "pnpm test && pnpm test:vitest"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1032.0",
@@ -60,13 +64,15 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/xml-crypto": "^1.4.6",
+    "@vitest/ui": "^4.1.4",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "inngest-cli": "^1.17.9",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.4"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
