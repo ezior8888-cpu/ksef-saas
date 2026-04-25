@@ -2,12 +2,16 @@ import { cron } from 'inngest';
 
 import { inngest } from '../client';
 import { createAdminClient } from '@/lib/supabase/server';
+import { uploadToGlacier } from '@/lib/storage/glacier';
+import {
+  downloadInvoiceXml,
+  downloadInvoiceXmlUnchecked,
+} from '@/lib/storage/r2';
 
 /**
  * Cron codziennie o 3:00 PL — faktury starsze niż ~2 lata od daty wystawienia,
- * z zapisanym XML w R2, oznaczamy jako zarchiwizowane (`archived_at`).
- *
- * Fizyczne przeniesienie do S3 Glacier — Faza 8 (wtedy `archive_storage_path`).
+ * z zapisanym XML w R2: kopiujemy XML do S3 Glacier Deep Archive, zapisujemy
+ * `archive_storage_path`, potem oznaczamy `archived_at`.
  */
 export const archiveOldInvoicesJob = inngest.createFunction(
   {
@@ -39,6 +43,44 @@ export const archiveOldInvoicesJob = inngest.createFunction(
     if (candidates.length === 0) return { archived: 0 };
 
     const ids = candidates.map((c) => c.id);
+
+    for (const candidate of candidates) {
+      await step.run(`glacier-${candidate.id}`, async () => {
+        if (!candidate.xml_storage_path) return { skipped: true };
+
+        const supabase = createAdminClient();
+        const { data: xmlDoc } = await supabase
+          .from('xml_documents')
+          .select('sha256_hash')
+          .eq('storage_path', candidate.xml_storage_path)
+          .maybeSingle();
+
+        const hash = xmlDoc?.sha256_hash as string | undefined;
+        const xml = hash
+          ? await downloadInvoiceXml(candidate.xml_storage_path, hash)
+          : await downloadInvoiceXmlUnchecked(candidate.xml_storage_path);
+
+        const glacierKey = await uploadToGlacier(
+          candidate.tenant_id as string,
+          candidate.id as string,
+          String(candidate.issue_date),
+          xml
+        );
+
+        const { error: upErr } = await supabase
+          .from('invoices')
+          .update({ archive_storage_path: glacierKey })
+          .eq('id', candidate.id);
+
+        if (upErr) {
+          throw new Error(
+            `archive_storage_path update failed for ${candidate.id}: ${upErr.message}`
+          );
+        }
+
+        return { glacierKey };
+      });
+    }
 
     await step.run('mark-archived', async () => {
       const supabase = createAdminClient();
