@@ -53,6 +53,7 @@ export async function updateSession(request: NextRequest) {
     '/forgot-password',
     '/auth',
     '/api/inngest',
+    '/api/health',
     '/accountant',
   ];
   const isPublicPath =
