@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError } from 'inngest';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { inngest, invoiceSubmitRequested } from '../client';
@@ -184,6 +185,10 @@ export const submitInvoiceJob = inngest.createFunction(
           );
         }
         if (error instanceof KsefApiError && !error.isRetryable) {
+          Sentry.captureException(error, {
+            tags: { job: 'submit-invoice', kind: 'ksef-rejection' },
+            extra: { tenantId, invoiceId, ksefCode: error.ksefCode },
+          });
           throw new NonRetriableError(
             `KSeF odrzucił fakturę: ${error.message}`,
             { cause: error },
