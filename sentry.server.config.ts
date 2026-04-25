@@ -1,3 +1,6 @@
+// Inicjalizacja Sentry po stronie Node (SSR, route handlers, Server Actions).
+// https://docs.sentry.io/platforms/javascript/guides/nextjs/
+
 import * as Sentry from '@sentry/nextjs';
 
 Sentry.init({
