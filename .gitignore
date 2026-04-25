@@ -48,3 +48,6 @@ next-env.d.ts
 .ksef-test-certs/
 
 .npmrc
+
+# Supabase CLI (cache po `supabase link` / update — nie commituj)
+supabase/.temp/
