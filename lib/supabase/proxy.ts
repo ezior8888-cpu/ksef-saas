@@ -54,6 +54,7 @@ export async function updateSession(request: NextRequest) {
     '/auth',
     '/api/inngest',
     '/api/health',
+    '/api/sentry-test-log',
     '/accountant',
   ];
   const isPublicPath =
