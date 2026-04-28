@@ -4,6 +4,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ─── Tailwind theme bridge (shadcn + semantyka) ─── */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -39,6 +40,9 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,56 +52,87 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ─── Light mode (Apple / shadcn) ─── */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* shadcn/ui — jasna skórka + niebieski primary */
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.118 0.003 264);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.118 0.003 264);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.118 0.003 264);
+  --primary: oklch(0.45 0.22 264);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.01 264);
+  --secondary-foreground: oklch(0.118 0.003 264);
+  --muted: oklch(0.96 0.005 264);
+  --muted-foreground: oklch(0.45 0.02 264);
+  --accent: oklch(0.45 0.22 264);
+  --accent-foreground: oklch(0.99 0 0);
+  --destructive: oklch(0.62 0.24 22);
+  --border: oklch(0.9 0.01 264);
+  --input: oklch(0.9 0.01 264);
+  --ring: oklch(0.55 0.15 264);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.875rem;
+  --sidebar: oklch(0.99 0.002 264);
+  --sidebar-foreground: oklch(0.118 0.003 264);
+  --sidebar-primary: oklch(0.45 0.22 264);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.96 0.01 264);
+  --sidebar-accent-foreground: oklch(0.118 0.003 264);
+  --sidebar-border: oklch(0.9 0.01 264);
+  --sidebar-ring: oklch(0.55 0.15 264);
+
+  --success: hsl(142 71% 45%);
+  --warning: hsl(33 100% 52%);
+  --error: hsl(5 100% 61%);
+
+  /* Glassmorphism */
+  --glass-white: rgba(255, 255, 255, 0.72);
+  --glass-white-strong: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08);
+  --glass-shadow-lg: 0 16px 48px 0 rgba(31, 38, 135, 0.12);
+  --glass-blur: 24px;
+  --glass-blur-strong: 40px;
+  --glass-blur-light: 12px;
+
+  /* Typografia (utility — nie nadpisuje Tailwind `font-mono`) */
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui,
+    sans-serif;
+  --font-text: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui,
+    sans-serif;
+  --font-mono-sf: "SF Mono", Monaco, Menlo, monospace;
+
+  /* Mesh gradient */
+  --mesh-violet: rgba(120, 119, 198, 0.15);
+  --mesh-peach: rgba(255, 145, 120, 0.12);
+  --mesh-sky: rgba(56, 189, 248, 0.15);
+  --mesh-purple: rgba(167, 139, 250, 0.12);
+  --mesh-mint: rgba(52, 211, 153, 0.1);
 }
 
+/* ─── Dark mode ─── */
 .dark {
-  --background: oklch(0.145 0 0);
+  --background: oklch(0 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.55 0.22 264);
+  --primary-foreground: oklch(0.118 0.003 264);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.55 0.22 264);
+  --accent-foreground: oklch(0.118 0.003 264);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
@@ -109,22 +144,122 @@
   --chart-5: oklch(0.269 0 0);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.55 0.22 264);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  --success: hsl(142 71% 45%);
+  --warning: hsl(33 100% 52%);
+  --error: hsl(5 100% 61%);
+
+  --glass-white: rgba(28, 28, 30, 0.72);
+  --glass-white-strong: rgba(28, 28, 30, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+  --glass-shadow-lg: 0 16px 48px 0 rgba(0, 0, 0, 0.6);
+
+  --mesh-violet: rgba(120, 119, 198, 0.08);
+  --mesh-peach: rgba(255, 145, 120, 0.06);
+  --mesh-sky: rgba(56, 189, 248, 0.07);
+  --mesh-purple: rgba(167, 139, 250, 0.07);
+  --mesh-mint: rgba(52, 211, 153, 0.06);
 }
 
+/* ─── Body — Sequoia mesh (nad warstwą --background) ─── */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background:
+      radial-gradient(at 27% 37%, var(--mesh-violet) 0px, transparent 50%),
+      radial-gradient(at 97% 21%, var(--mesh-peach) 0px, transparent 50%),
+      radial-gradient(at 52% 99%, var(--mesh-sky) 0px, transparent 50%),
+      radial-gradient(at 10% 29%, var(--mesh-purple) 0px, transparent 50%),
+      radial-gradient(at 75% 70%, var(--mesh-mint) 0px, transparent 50%),
+      var(--background);
+    background-attachment: fixed;
   }
+
   html {
     @apply font-sans;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    background: var(--glass-white);
+    backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+    border: 0.5px solid var(--glass-border);
+    box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    border-radius: 28px;
+  }
+
+  .glass-panel-strong {
+    background: var(--glass-white-strong);
+    backdrop-filter: blur(var(--glass-blur-strong)) saturate(200%);
+    border: 0.5px solid var(--glass-border);
+    box-shadow: var(--glass-shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    border-radius: 28px;
+  }
+
+  .glass-button {
+    background: var(--glass-white);
+    backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+    border: 0.5px solid var(--glass-border);
+    border-radius: 12px;
+    transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+  }
+
+  .glass-button:hover {
+    background: var(--glass-white-strong);
+  }
+
+  .glass-button:active {
+    transform: scale(0.97);
+  }
+
+  .glass-input {
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(12px) saturate(150%);
+    border: 0.5px solid var(--glass-border);
+    border-radius: 12px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .dark .glass-input {
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
+@layer utilities {
+  .tracking-tighter-display {
+    letter-spacing: -0.025em;
+  }
+
+  .tracking-tighter-text {
+    letter-spacing: -0.015em;
+  }
+
+  .tracking-tight-ui {
+    letter-spacing: -0.01em;
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-text {
+    font-family: var(--font-text);
+  }
+
+  /* Nie nadpisuje wbudowanego `font-mono` (Geist) — osobna klasa */
+  .font-mono-sf {
+    font-family: var(--font-mono-sf);
   }
 }
