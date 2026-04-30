@@ -9,6 +9,7 @@ export interface AccountantPortalData {
     accountant_email: string;
     access_level: string;
     tenant_id: string;
+    expires_at: string;
   };
   tenant: { name: string; nip: string };
   invoices: Array<{
@@ -87,6 +88,7 @@ export async function loadAccountantPortal(
       accountant_email: access.accountant_email as string,
       access_level: access.access_level as string,
       tenant_id: access.tenant_id as string,
+      expires_at: access.expires_at as string,
     },
     tenant: {
       name: tenant.name as string,

@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server';
-import { Badge } from '@/components/ui/badge';
 
 const ACTION_LABELS: Record<string, string> = {
   'auth.login': 'Zalogowanie',
@@ -36,54 +35,66 @@ export default async function AuditPage() {
     .limit(200);
 
   return (
-    <div className="max-w-4xl">
-      <h1 className="text-2xl font-bold mb-2">Historia aktywności</h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Log wszystkich operacji w Twoim koncie — zgodnie z zasadą rozliczalności
-        RODO.
-      </p>
+    <div className="space-y-8 max-w-4xl">
+      <div>
+        <h1 className="text-4xl font-semibold tracking-tight">
+          Historia aktywności
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          Pełny audit trail Twojego konta — RODO zgodność
+        </p>
+      </div>
 
       {error ? (
-        <p className="text-sm text-red-600">
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-700 dark:text-red-400">
           Nie udało się wczytać historii: {error.message}
-        </p>
+        </div>
       ) : (
-        <div className="rounded-md border">
+        <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-foreground/[0.03] border-b border-white/55 dark:border-white/14">
               <tr className="text-left">
-                <th className="px-4 py-3">Data</th>
-                <th className="px-4 py-3">Akcja</th>
-                <th className="px-4 py-3">Zasób</th>
-                <th className="px-4 py-3">IP</th>
+                {['Data', 'Akcja', 'Zasób', 'IP'].map((h) => (
+                  <th key={h} className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {(logs ?? []).map((log) => (
-                <tr key={log.id} className="border-b hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                    {new Date(log.created_at as string).toLocaleString('pl-PL')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant="outline">
-                      {ACTION_LABELS[log.action as string] ?? log.action}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-xs font-mono text-gray-500">
-                    {log.entity_type && log.entity_id
-                      ? `${log.entity_type}:${String(log.entity_id).slice(0, 8)}…`
-                      : '-'}
-                  </td>
-                  <td className="px-4 py-3 text-xs font-mono text-gray-500">
-                    {log.ip_address != null ? String(log.ip_address) : '-'}
+              {(logs ?? []).length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground">
+                    Brak wpisów.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                (logs ?? []).map((log) => (
+                  <tr
+                    key={log.id}
+                    className="border-b border-white/55 dark:border-white/[0.07] last:border-0 hover:bg-foreground/[0.02] transition-colors duration-150"
+                  >
+                    <td className="px-6 py-4 text-muted-foreground whitespace-nowrap tabular-nums">
+                      {new Date(log.created_at as string).toLocaleString('pl-PL')}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-foreground/5 border border-white/55 dark:border-white/14 text-xs font-medium backdrop-blur-[12px]">
+                        {ACTION_LABELS[log.action as string] ?? log.action}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-xs font-mono text-muted-foreground">
+                      {log.entity_type && log.entity_id
+                        ? `${log.entity_type}:${String(log.entity_id).slice(0, 8)}…`
+                        : '—'}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-mono text-muted-foreground">
+                      {log.ip_address != null ? String(log.ip_address) : '—'}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
-          {(!logs || logs.length === 0) && (
-            <div className="p-8 text-center text-gray-500">Brak wpisów.</div>
-          )}
         </div>
       )}
     </div>

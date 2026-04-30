@@ -1,56 +1,76 @@
 import { Loader2 } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
-/**
- * Odwzorowanie `ksef_status` z DB na etykietę UI.
- * Zgodnie z 00001 + 00003 możliwe wartości w DB:
- *   draft, queued, sending, accepted, rejected, received, failed.
- * `received` to status dla faktur z inboxu (direction='incoming') -
- * tu w liście wystawionych się nie pojawia, ale mapę trzymamy kompletną.
- */
+/** W kolejce (UI) — w DB jako `queued`. */
+const IN_QUEUE_CLASSES =
+  'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20';
+
 const STATUS_MAP: Record<string, { label: string; className: string }> = {
-  draft: { label: 'Szkic', className: 'bg-gray-100 text-gray-700 border-gray-200' },
+  draft: {
+    label: 'Szkic',
+    className:
+      'bg-foreground/5 text-muted-foreground border-white/55 dark:border-white/14',
+  },
+  pending: {
+    label: 'W kolejce',
+    className: IN_QUEUE_CLASSES,
+  },
   queued: {
-    label: 'Oczekuje na wysyłkę',
-    className: 'bg-yellow-100 text-yellow-900 border-yellow-200',
+    label: 'W kolejce',
+    className: IN_QUEUE_CLASSES,
   },
   sending: {
     label: 'Wysyłanie',
-    className: 'bg-blue-100 text-blue-900 border-blue-200',
+    className: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
   },
   accepted: {
     label: 'Zaakceptowana',
-    className: 'bg-green-100 text-green-900 border-green-200',
+    className: 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
   },
   rejected: {
     label: 'Odrzucona',
-    className: 'bg-red-100 text-red-900 border-red-200',
+    className: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20',
   },
   failed: {
-    label: 'Błąd wysyłki',
-    className: 'bg-red-100 text-red-900 border-red-200',
+    label: 'Błąd',
+    className: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20',
   },
   received: {
     label: 'Odebrana',
-    className: 'bg-purple-100 text-purple-900 border-purple-200',
+    className:
+      'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20',
   },
 };
 
-export function StatusBadge({ status }: { status: string }) {
-  const meta = STATUS_MAP[status] ?? {
-    label: status,
-    className: 'bg-gray-100 text-gray-700 border-gray-200',
-  };
-  const isInFlight = status === 'queued' || status === 'sending';
+const FALLBACK = {
+  label: 'Nieznany',
+  className:
+    'bg-foreground/5 text-muted-foreground border-white/55 dark:border-white/14',
+};
+
+interface StatusBadgeProps {
+  status: string;
+  isLoading?: boolean;
+}
+
+export function StatusBadge({ status, isLoading }: StatusBadgeProps) {
+  const meta = STATUS_MAP[status] ?? FALLBACK;
+  const showSpinner =
+    isLoading === true ||
+    status === 'queued' ||
+    status === 'pending' ||
+    status === 'sending';
 
   return (
-    <Badge
-      variant="outline"
-      className={`${meta.className} gap-1 font-normal`}
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium backdrop-blur-[12px]',
+        meta.className
+      )}
     >
-      {isInFlight && <Loader2 className="h-3 w-3 animate-spin" />}
+      {showSpinner && <Loader2 className="h-3 w-3 animate-spin" />}
       {meta.label}
-    </Badge>
+    </span>
   );
 }

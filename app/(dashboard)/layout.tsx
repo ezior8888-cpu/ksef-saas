@@ -4,6 +4,7 @@ import { LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { signOut } from '../(auth)/login/actions';
 import { Sidebar } from '@/components/dashboard/sidebar';
+import { ThemeToggle } from '@/components/dashboard/theme-toggle';
 import { Button } from '@/components/ui/button';
 
 export default async function DashboardLayout({
@@ -13,58 +14,71 @@ export default async function DashboardLayout({
 }) {
   const supabase = await createClient();
 
-  // Defense-in-depth: middleware powinien był przekierować niezalogowanych,
-  // ale dublujemy check tutaj (layout to drugi bastion).
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) redirect('/login');
 
-  // Dociągamy tenanta w jednym query (join po FK users.tenant_id -> tenants.id).
   const { data: userData } = await supabase
     .from('users')
     .select('tenant_id, tenants(name, nip)')
     .eq('id', user.id)
     .single();
 
-  // Brak tenanta = user nie przeszedł onboardingu (Faza 6.3 doda ten ekran).
   if (!userData?.tenant_id) {
     redirect('/onboarding');
   }
 
-  // Supabase PostgREST zwraca `tenants` jako obiekt przy 1:1 join,
-  // ale typy z generatora czasem dają array. Normalizujemy defensywnie.
   const tenant = Array.isArray(userData.tenants)
     ? userData.tenants[0]
     : userData.tenants;
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b bg-white px-6 py-3">
-        <Link href="/invoices" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded bg-black text-white flex items-center justify-center font-bold text-sm">
-            K
-          </div>
-          <span className="font-semibold">KSeF SaaS</span>
-        </Link>
+    <div className="flex h-screen min-h-0 flex-col bg-mesh-surface">
+      <header className="sticky top-0 z-40 bg-white/55 dark:bg-[rgba(15,10,30,0.55)] backdrop-blur-glass-lg border-b border-white/55 dark:border-white/10 shadow-glass-sm">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <Link href="/invoices" className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-2xl bg-foreground text-background flex items-center justify-center font-bold text-sm shadow-glass-sm">
+              K
+            </div>
+            <span className="font-semibold tracking-tight">
+              KSeF SaaS
+            </span>
+          </Link>
 
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <p className="text-sm font-medium">{tenant?.name ?? 'Bez nazwy'}</p>
-            <p className="text-xs text-gray-500">NIP: {tenant?.nip}</p>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-sm font-medium">
+                {tenant?.name ?? 'Bez nazwy'}
+              </p>
+              <p className="text-xs text-muted-foreground font-mono">
+                NIP: {tenant?.nip}
+              </p>
+            </div>
+            <ThemeToggle />
+            <form action={signOut}>
+              <Button
+                variant="ghost"
+                size="icon"
+                type="submit"
+                aria-label="Wyloguj"
+                className="rounded-full hover:bg-foreground/5"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </form>
           </div>
-          <form action={signOut}>
-            <Button variant="ghost" size="icon" type="submit" aria-label="Wyloguj">
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </form>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-auto bg-white p-6">{children}</main>
+        <main className="min-h-0 flex-1 overflow-auto bg-transparent">
+          <div className="max-w-7xl mx-auto p-6 lg:p-8">
+            {children}
+          </div>
+        </main>
       </div>
     </div>
   );

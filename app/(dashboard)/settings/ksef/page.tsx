@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
+import { CheckCircle2, AlertTriangle, Lock } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/server';
 import { CertificateUpload } from '@/components/settings/certificate-upload';
-import { Card } from '@/components/ui/card';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,53 +31,71 @@ export default async function KsefSettingsPage() {
   const hasCredentials = !!tenant?.ksef_credentials_encrypted;
 
   return (
-    <div className="max-w-3xl">
-      <h1 className="text-2xl font-bold mb-6">Ustawienia KSeF</h1>
+    <div className="space-y-8 max-w-3xl">
+      <div>
+        <h1 className="text-4xl font-semibold tracking-tight">
+          Ustawienia KSeF
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          Skonfiguruj certyfikat do podpisywania faktur
+        </p>
+      </div>
 
-      <Card className="p-6 mb-6">
-        <h2 className="font-semibold mb-2">Status połączenia</h2>
+      {/* Status card */}
+      <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-6">
         {hasCredentials ? (
-          <div className="flex items-center gap-2 text-green-700">
-            <div className="w-2 h-2 bg-green-500 rounded-full" />
-            <span>Skonfigurowano certyfikat dla NIP {tenant?.nip}</span>
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-green-500/10 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium">Skonfigurowano połączenie</p>
+              <p className="text-sm text-muted-foreground">
+                NIP: <span className="font-mono">{tenant?.nip}</span>
+              </p>
+              {tenant?.ksef_certificate_expiry && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Certyfikat ważny do:{' '}
+                  {new Date(tenant.ksef_certificate_expiry).toLocaleDateString('pl-PL')}
+                </p>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="flex items-center gap-2 text-amber-700">
-            <div className="w-2 h-2 bg-amber-500 rounded-full" />
-            <span>Brak certyfikatu — nie możesz wysyłać faktur do KSeF</span>
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-orange-500/10 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium">Brak certyfikatu</p>
+              <p className="text-sm text-muted-foreground">
+                Wgraj certyfikat aby móc wysyłać faktury do KSeF
+              </p>
+            </div>
           </div>
         )}
+      </div>
 
-        {tenant?.ksef_certificate_expiry && (
-          <p className="text-xs text-gray-500 mt-2">
-            Certyfikat ważny do:{' '}
-            {new Date(tenant.ksef_certificate_expiry).toLocaleDateString(
-              'pl-PL'
-            )}
-          </p>
-        )}
-      </Card>
-
-      <Card className="p-6">
-        <h2 className="font-semibold mb-3">Wgrywanie certyfikatu KSeF</h2>
-        <div className="prose prose-sm text-gray-600 mb-4">
-          <p>Potrzebujesz:</p>
-          <ul>
-            <li>
-              Certyfikatu KSeF typu 1 (uwierzytelnianie) — pobierz z Modułu
-              Certyfikatów w Aplikacji Podatnika KSeF
-            </li>
-            <li>Klucza prywatnego (plik .pem lub .key)</li>
-          </ul>
-          <p className="text-xs">
-            Certyfikat i klucz zostaną zaszyfrowane AES-256-GCM i zapisane
-            wyłącznie w naszej bazie we Frankfurcie. Nigdy nie opuszczają
-            infrastruktury RODO-compliant.
+      {/* Upload card */}
+      <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-6 lg:p-8 space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">
+            Wgrywanie certyfikatu
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+            Potrzebujesz certyfikatu KSeF typu 1 (uwierzytelnianie) — pobierz go
+            z Modułu Certyfikatów w Aplikacji Podatnika KSeF.
           </p>
         </div>
-
+        <div className="rounded-2xl bg-blue-500/5 border border-blue-500/20 p-4 flex items-start gap-3">
+          <Lock className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-foreground leading-relaxed">
+            Certyfikat i klucz prywatny są szyfrowane AES-256-GCM i przechowywane
+            wyłącznie we Frankfurcie (RODO).
+          </p>
+        </div>
         <CertificateUpload />
-      </Card>
+      </div>
     </div>
   );
 }

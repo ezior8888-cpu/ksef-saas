@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { FileText, ArrowRight } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from './status-badge';
@@ -49,11 +50,7 @@ export function InvoiceList({
       .channel('invoices-realtime')
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'invoices',
-        },
+        { event: 'UPDATE', schema: 'public', table: 'invoices' },
         (payload) => {
           const next = payload.new as Partial<InvoiceRow> & { id: string };
           setInvoices((prev) =>
@@ -63,17 +60,11 @@ export function InvoiceList({
       )
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'invoices',
-        },
+        { event: 'INSERT', schema: 'public', table: 'invoices' },
         (payload) => {
           const next = payload.new as InvoiceRow;
-          // Lista jest filtrowana po direction='outgoing' - pomiń incoming.
-          if ((next as unknown as { direction?: string }).direction === 'incoming') {
+          if ((next as unknown as { direction?: string }).direction === 'incoming')
             return;
-          }
           setInvoices((prev) => {
             if (prev.some((inv) => inv.id === next.id)) return prev;
             return [next, ...prev];
@@ -82,11 +73,7 @@ export function InvoiceList({
       )
       .on(
         'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'invoices',
-        },
+        { event: 'DELETE', schema: 'public', table: 'invoices' },
         (payload) => {
           const old = payload.old as { id?: string };
           if (!old.id) return;
@@ -102,65 +89,76 @@ export function InvoiceList({
 
   if (invoices.length === 0) {
     return (
-      <div className="rounded-md border border-dashed p-12 text-center text-gray-500">
-        <p className="mb-2">Nie masz jeszcze żadnej wystawionej faktury.</p>
+      <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] py-16 text-center">
+        <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-foreground/5 mb-4">
+          <FileText className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <h3 className="font-semibold text-lg tracking-tight mb-1">
+          Brak faktur wystawionych
+        </h3>
+        <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-6">
+          Wystaw pierwszą fakturę aby pojawiła się tutaj
+        </p>
         <Link
           href="/invoices/new"
-          className="text-blue-600 hover:underline"
+          className="inline-flex items-center gap-2 text-sm font-medium text-foreground hover:text-foreground/70 transition-colors"
         >
-          Wystaw pierwszą fakturę →
+          Wystaw pierwszą fakturę
+          <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="rounded-md border overflow-hidden">
+    <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] overflow-hidden">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b">
+        <thead className="bg-foreground/[0.03] border-b border-white/55 dark:border-white/14">
           <tr className="text-left">
-            <th className="px-4 py-3 font-medium">Numer</th>
-            <th className="px-4 py-3 font-medium">Data</th>
-            <th className="px-4 py-3 font-medium">Nabywca</th>
-            <th className="px-4 py-3 font-medium text-right">Kwota brutto</th>
-            <th className="px-4 py-3 font-medium">Status KSeF</th>
-            <th className="px-4 py-3 font-medium">Numer KSeF</th>
+            {['Numer', 'Data', 'Nabywca', 'Kwota brutto', 'Status KSeF', 'Numer KSeF'].map((h) => (
+              <th
+                key={h}
+                className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider"
+              >
+                {h}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {invoices.map((inv) => (
             <tr
               key={inv.id}
-              className="border-b last:border-b-0 hover:bg-gray-50"
+              className="border-b border-white/55 dark:border-white/[0.07] last:border-0 hover:bg-foreground/[0.02] transition-colors duration-150"
             >
-              <td className="px-4 py-3">
+              <td className="px-6 py-4">
                 <Link
                   href={`/invoices/${inv.id}`}
-                  className="font-medium hover:underline"
+                  className="font-medium font-mono text-sm hover:text-foreground/60 transition-colors"
                 >
                   {inv.internal_number ?? '(bez numeru)'}
                 </Link>
               </td>
-              <td className="px-4 py-3 text-gray-600 tabular-nums">
+              <td className="px-6 py-4 text-muted-foreground tabular-nums">
                 {inv.issue_date ?? '—'}
               </td>
-              <td className="px-4 py-3">
-                <div>{inv.buyer_data?.name ?? '—'}</div>
+              <td className="px-6 py-4">
+                <div className="font-medium">{inv.buyer_data?.name ?? '—'}</div>
                 {inv.buyer_data?.nip && (
-                  <div className="text-xs text-gray-500">
-                    NIP: {inv.buyer_data.nip}
+                  <div className="text-xs text-muted-foreground font-mono">
+                    {inv.buyer_data.nip}
                   </div>
                 )}
               </td>
-              <td className="px-4 py-3 text-right tabular-nums">
+              <td className="px-6 py-4 text-right tabular-nums font-medium">
                 {inv.gross_total != null
                   ? `${Number(inv.gross_total).toFixed(2)} PLN`
                   : '—'}
               </td>
-              <td className="px-4 py-3">
+              <td className="px-6 py-4">
                 <StatusBadge status={inv.ksef_status} />
               </td>
-              <td className="px-4 py-3 font-mono text-xs text-gray-600">
+              <td className="px-6 py-4 font-mono text-xs text-muted-foreground">
                 {inv.ksef_number ?? '—'}
               </td>
             </tr>

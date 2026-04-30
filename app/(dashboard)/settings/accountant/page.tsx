@@ -4,7 +4,6 @@ import {
   AccountantAccessList,
   type AccountantAccessPublicRow,
 } from '@/components/settings/accountant-list';
-import { Card } from '@/components/ui/card';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -43,11 +42,15 @@ export default async function AccountantAccessPage() {
 
   if (userData.role !== 'owner') {
     return (
-      <div className="max-w-4xl">
-        <h1 className="text-2xl font-bold mb-2">Dostęp dla księgowej</h1>
-        <p className="text-sm text-muted-foreground">
-          Tylko właściciel konta może tworzyć i cofać linki dostępu.
-        </p>
+      <div className="space-y-8 max-w-4xl">
+        <div>
+          <h1 className="text-4xl font-semibold tracking-tight">
+            Dostęp dla księgowej
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            Tylko właściciel konta może tworzyć i cofać linki dostępu.
+          </p>
+        </div>
       </div>
     );
   }
@@ -60,16 +63,19 @@ export default async function AccountantAccessPage() {
   const accesses = toPublicAccesses(raw ?? []);
 
   return (
-    <div className="max-w-4xl">
-      <h1 className="text-2xl font-bold mb-2">Dostęp dla księgowej</h1>
-      <p className="text-sm text-muted-foreground mb-6">
-        Generuj ograniczone czasowo linki, przez które biuro rachunkowe pobierze
-        Twoje faktury bez potrzeby zakładania konta.
-      </p>
+    <div className="space-y-8 max-w-4xl">
+      <div>
+        <h1 className="text-4xl font-semibold tracking-tight">
+          Dostęp dla księgowej
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          Generuj ograniczone czasowo linki do udostępnienia faktur biuru rachunkowemu
+        </p>
+      </div>
 
-      <Card className="p-6">
+      <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-6 lg:p-8">
         <AccountantAccessList accesses={accesses} />
-      </Card>
+      </div>
     </div>
   );
 }

@@ -24,7 +24,6 @@ import { BuyerLookup } from './buyer-lookup';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card } from '@/components/ui/card';
 import {
   Select,
   SelectTrigger,
@@ -33,7 +32,7 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Trash2, Loader2 } from 'lucide-react';
+import { AlertCircle, Plus, Trash2, Loader2 } from 'lucide-react';
 
 const defaultLine: InvoiceFormValues['lines'][number] = {
   name: '',
@@ -43,10 +42,7 @@ const defaultLine: InvoiceFormValues['lines'][number] = {
   vatRate: '23',
 };
 
-/** RHF nie wywołuje onSubmit przy błędach Zod — bez toastu user myśli że guzik jest zepsuty. */
-function firstValidationMessage(
-  errors: FieldErrors<InvoiceFormValues>
-): string {
+function firstValidationMessage(errors: FieldErrors<InvoiceFormValues>): string {
   const walk = (node: unknown): string | null => {
     if (!node || typeof node !== 'object') return null;
     const o = node as Record<string, unknown>;
@@ -66,6 +62,9 @@ function firstValidationMessage(
   };
   return walk(errors) ?? 'Sprawdź pola formularza (czerwone podpowiedzi).';
 }
+
+const labelClass =
+  'text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block';
 
 export function InvoiceForm() {
   const router = useRouter();
@@ -101,12 +100,9 @@ export function InvoiceForm() {
     name: 'lines',
   });
 
-  // Totale liczymy w locie z watchowanych pozycji. calculateInvoiceTotals
-  // oczekuje `InvoiceLineItem` - budujemy snapshot z zaokrąglonymi
-  // kwotami z calculateLineItem (to ta sama logika co backend użyje
-  // przy finalizeInvoice, więc podgląd = rzeczywista faktura).
   const watchedLines = useWatch({ control: form.control, name: 'lines' });
   const buyerNipWatch = useWatch({ control: form.control, name: 'buyerNip' });
+
   const totals = calculateInvoiceTotals(
     ((watchedLines ?? []) as InvoiceFormValues['lines']).map<InvoiceLineItem>(
       (line, idx) => {
@@ -159,9 +155,7 @@ export function InvoiceForm() {
             router.push(`/invoices/${result.invoiceId}`);
           } else {
             toast.error(result.error);
-            if (result.invoiceId) {
-              router.push(`/invoices/${result.invoiceId}`);
-            }
+            if (result.invoiceId) router.push(`/invoices/${result.invoiceId}`);
           }
         } catch (e) {
           toast.error(e instanceof Error ? e.message : 'Błąd wysyłki');
@@ -185,37 +179,62 @@ export function InvoiceForm() {
     form.setValue('buyerAddressLine2', data.addressLine2);
   };
 
+  const paymentMethod = form.watch('paymentMethod');
+
   return (
-    <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
-      <Card className="p-6 space-y-4">
-        <h2 className="font-semibold">Dane faktury</h2>
+    <form onSubmit={(e) => e.preventDefault()} className="space-y-8 pb-32">
+      {/* Page header */}
+      <div>
+        <h1 className="text-4xl font-semibold tracking-tight">Nowa faktura</h1>
+        <p className="mt-2 text-muted-foreground">
+          Wystaw fakturę i wyślij do KSeF jednym kliknięciem
+        </p>
+      </div>
+
+      {/* SECTION: Dane faktury */}
+      <section className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-7 lg:p-8 space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Dane faktury</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Numer i data wystawienia
+          </p>
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label>Numer faktury</Label>
+            <Label htmlFor="internalNumber" className={labelClass}>
+              Numer faktury
+            </Label>
             <Input
+              id="internalNumber"
               placeholder="FV/2026/04/001"
               {...form.register('internalNumber')}
             />
             {form.formState.errors.internalNumber && (
-              <p className="text-xs text-red-600 mt-1">
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1.5">
+                <AlertCircle className="h-3 w-3" />
                 {form.formState.errors.internalNumber.message}
               </p>
             )}
           </div>
           <div>
-            <Label>Data wystawienia</Label>
+            <Label className={labelClass}>Data wystawienia</Label>
             <Input type="date" {...form.register('issueDate')} />
           </div>
         </div>
-      </Card>
+      </section>
 
-      <Card className="p-6 space-y-4">
-        <h2 className="font-semibold">Nabywca</h2>
+      {/* SECTION: Nabywca */}
+      <section className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-7 lg:p-8 space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Nabywca</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Wyszukaj po NIP w bazie GUS lub wprowadź ręcznie
+          </p>
+        </div>
         <BuyerLookup
           nip={buyerNipWatch ?? ''}
           onNipChange={(digits) => {
             form.setValue('buyerNip', digits, { shouldDirty: true });
-            // Waliduj dopiero przy pełnym NIP (unikamy „10 cyfr” po 1. cyfrze).
             if (digits.length === 10) void form.trigger('buyerNip');
           }}
           onSelected={handleBuyerSelected}
@@ -223,50 +242,52 @@ export function InvoiceForm() {
         />
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label>Nazwa</Label>
+            <Label className={labelClass}>Nazwa firmy</Label>
             <Input {...form.register('buyerName')} />
           </div>
           <div>
-            <Label>Adres (linia 1)</Label>
+            <Label className={labelClass}>Adres (linia 1)</Label>
             <Input {...form.register('buyerAddressLine1')} />
           </div>
           <div>
-            <Label>Adres (linia 2)</Label>
+            <Label className={labelClass}>Adres (linia 2)</Label>
             <Input {...form.register('buyerAddressLine2')} />
           </div>
           <div className="col-span-2">
-            <Label>Email (opcjonalnie)</Label>
+            <Label className={labelClass}>Email (opcjonalnie)</Label>
             <Input type="email" {...form.register('buyerEmail')} />
           </div>
         </div>
-      </Card>
+      </section>
 
-      <Card className="p-6 space-y-4">
+      {/* SECTION: Pozycje */}
+      <section className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-7 lg:p-8 space-y-5">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">Pozycje</h2>
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Pozycje</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Towary i usługi na fakturze
+            </p>
+          </div>
           <Button
             type="button"
-            variant="outline"
+            variant="glass"
             size="sm"
             onClick={() => append(defaultLine)}
           >
-            <Plus className="h-4 w-4 mr-1" /> Dodaj pozycję
+            <Plus className="h-4 w-4 mr-2" />
+            Dodaj pozycję
           </Button>
         </div>
-
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b text-left text-gray-500">
-                <th className="py-2 w-8">#</th>
-                <th>Nazwa</th>
-                <th className="w-20">J.m.</th>
-                <th className="w-24">Ilość</th>
-                <th className="w-28">Cena netto</th>
-                <th className="w-20">VAT</th>
-                <th className="w-24">Netto</th>
-                <th className="w-24">Brutto</th>
-                <th className="w-8"></th>
+              <tr className="border-b border-white/55 dark:border-white/14 text-left text-muted-foreground">
+                {['#', 'Nazwa', 'J.m.', 'Ilość', 'Cena netto', 'VAT', 'Netto', 'Brutto', ''].map((h) => (
+                  <th key={h} className="py-3 font-medium text-xs uppercase tracking-wider">
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -278,43 +299,40 @@ export function InvoiceForm() {
                   vatRate: watched?.vatRate ?? '23',
                 });
                 return (
-                  <tr key={field.id} className="border-b">
-                    <td className="py-2">{index + 1}</td>
-                    <td>
-                      <Input
-                        className="h-8"
-                        {...form.register(`lines.${index}.name`)}
-                      />
+                  <tr
+                    key={field.id}
+                    className="border-b border-white/55 dark:border-white/[0.07] last:border-0"
+                  >
+                    <td className="py-3 text-muted-foreground">{index + 1}</td>
+                    <td className="py-3 pr-2">
+                      <Input className="h-9" {...form.register(`lines.${index}.name`)} />
                     </td>
-                    <td>
-                      <Input
-                        className="h-8"
-                        {...form.register(`lines.${index}.unit`)}
-                      />
+                    <td className="py-3 pr-2">
+                      <Input className="h-9" {...form.register(`lines.${index}.unit`)} />
                     </td>
-                    <td>
+                    <td className="py-3 pr-2">
                       <Input
                         type="number"
                         step="0.0001"
-                        className="h-8"
+                        className="h-9"
                         {...form.register(`lines.${index}.quantity`, {
                           valueAsNumber: true,
                         })}
                       />
                     </td>
-                    <td>
+                    <td className="py-3 pr-2">
                       <Input
                         type="number"
                         step="0.01"
-                        className="h-8"
+                        className="h-9"
                         {...form.register(`lines.${index}.unitPriceNet`, {
                           valueAsNumber: true,
                         })}
                       />
                     </td>
-                    <td>
+                    <td className="py-3 pr-2">
                       <select
-                        className="h-8 border rounded px-2 text-sm w-full"
+                        className="h-9 border border-white/55 dark:border-white/14 rounded-xl px-2 text-sm w-full bg-white/50 dark:bg-white/[0.05] backdrop-blur-[12px] transition-colors focus:outline-none focus:ring-2 focus:ring-foreground/20"
                         {...form.register(`lines.${index}.vatRate`)}
                       >
                         <option value="23">23%</option>
@@ -326,21 +344,22 @@ export function InvoiceForm() {
                         <option value="np">np</option>
                       </select>
                     </td>
-                    <td className="text-right tabular-nums">
+                    <td className="py-3 text-right tabular-nums pr-2">
                       {calc.netAmount.toFixed(2)}
                     </td>
-                    <td className="text-right tabular-nums font-medium">
+                    <td className="py-3 text-right tabular-nums font-medium pr-2">
                       {calc.grossAmount.toFixed(2)}
                     </td>
-                    <td>
+                    <td className="py-3">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
                         disabled={fields.length === 1}
                         onClick={() => remove(index)}
+                        className="h-9 w-9 rounded-lg hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                       >
-                        <Trash2 className="h-4 w-4 text-gray-500" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </td>
                   </tr>
@@ -348,14 +367,17 @@ export function InvoiceForm() {
               })}
             </tbody>
             <tfoot>
-              <tr>
-                <td colSpan={6} className="py-3 text-right font-medium">
+              <tr className="border-t-2 border-white/55 dark:border-white/14">
+                <td
+                  colSpan={6}
+                  className="py-4 text-right font-medium text-muted-foreground text-xs uppercase tracking-wider"
+                >
                   RAZEM
                 </td>
-                <td className="text-right tabular-nums font-medium">
+                <td className="py-4 text-right tabular-nums font-medium">
                   {totals.netTotal.toFixed(2)}
                 </td>
-                <td className="text-right tabular-nums font-bold">
+                <td className="py-4 text-right tabular-nums font-bold">
                   {totals.grossTotal.toFixed(2)} PLN
                 </td>
                 <td></td>
@@ -363,15 +385,21 @@ export function InvoiceForm() {
             </tfoot>
           </table>
         </div>
-      </Card>
+      </section>
 
-      <Card className="p-6 space-y-4">
-        <h2 className="font-semibold">Płatność</h2>
+      {/* SECTION: Płatność */}
+      <section className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-7 lg:p-8 space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Płatność</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Sposób i termin zapłaty
+          </p>
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label>Metoda</Label>
+            <Label className={labelClass}>Metoda płatności</Label>
             <Select
-              value={form.watch('paymentMethod')}
+              value={paymentMethod}
               onValueChange={(v) =>
                 form.setValue(
                   'paymentMethod',
@@ -391,42 +419,49 @@ export function InvoiceForm() {
             </Select>
           </div>
           <div>
-            <Label>Termin płatności</Label>
+            <Label className={labelClass}>Termin płatności</Label>
             <Input type="date" {...form.register('paymentDueDate')} />
           </div>
           <div className="col-span-2">
-            <Label>Numer rachunku (dla przelewu)</Label>
+            <Label className={labelClass}>Numer rachunku (dla przelewu)</Label>
             <Input
               {...form.register('bankAccount')}
               placeholder="12 3456 7890 ..."
             />
           </div>
         </div>
-      </Card>
+      </section>
 
-      <Card className="p-6">
-        <Label>Uwagi</Label>
+      {/* SECTION: Uwagi */}
+      <section className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-7 lg:p-8">
+        <Label className={labelClass}>Uwagi</Label>
         <Textarea rows={3} {...form.register('notes')} />
-      </Card>
+      </section>
 
-      <div className="flex gap-3 justify-end sticky bottom-0 bg-white py-3">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleSaveDraft}
-          disabled={isSaving || isSending}
-        >
-          {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Zapisz szkic
-        </Button>
-        <Button
-          type="button"
-          onClick={handleSend}
-          disabled={isSaving || isSending}
-        >
-          {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Wystaw i wyślij do KSeF
-        </Button>
+      {/* STICKY FOOTER */}
+      <div className="fixed bottom-0 left-0 right-0 lg:left-[280px] z-30 px-6 py-4 bg-white/62 dark:bg-[rgba(15,10,30,0.62)] backdrop-blur-[40px] border-t border-white/55 dark:border-white/10">
+        <div className="max-w-7xl mx-auto flex gap-3 justify-end">
+          <Button
+            type="button"
+            variant="glass"
+            size="lg"
+            onClick={handleSaveDraft}
+            disabled={isSaving || isSending}
+          >
+            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Zapisz szkic
+          </Button>
+          <Button
+            type="button"
+            variant="glass-primary"
+            size="lg"
+            onClick={handleSend}
+            disabled={isSaving || isSending}
+          >
+            {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Wystaw i wyślij do KSeF
+          </Button>
+        </div>
       </div>
     </form>
   );

@@ -3,42 +3,32 @@ import { PlusCircle } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
-import {
-  InvoiceList,
-  type InvoiceRow,
-} from '@/components/invoices/invoice-list';
+import { InvoiceList, type InvoiceRow } from '@/components/invoices/invoice-list';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * Lista faktur wystawionych. SSR renderuje initial snapshot, klient
- * podtrzymuje listę aktualną przez Supabase Realtime (invoice-list.tsx).
- *
- * Filtrujemy po `direction='outgoing'` (schema 00001 CHECK). Faktury
- * `incoming` mają osobną stronę `/inbox` (Faza 7).
- */
 export default async function InvoicesPage() {
   const supabase = await createClient();
 
   const { data: invoices, error } = await supabase
     .from('invoices')
-    .select(
-      'id, internal_number, issue_date, buyer_data, gross_total, ksef_status, ksef_number, created_at'
-    )
+    .select('id, internal_number, issue_date, buyer_data, gross_total, ksef_status, ksef_number, created_at')
     .eq('direction', 'outgoing')
     .order('created_at', { ascending: false })
     .limit(100);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-8">
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Faktury wystawione</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Status KSeF aktualizuje się automatycznie po wysyłce.
+          <h1 className="text-4xl font-semibold tracking-tight">
+            Faktury wystawione
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            Wszystkie faktury sprzedażowe wysłane do KSeF
           </p>
         </div>
-        <Button asChild>
+        <Button asChild variant="glass-primary">
           <Link href="/invoices/new">
             <PlusCircle className="h-4 w-4 mr-2" />
             Nowa faktura
@@ -47,7 +37,7 @@ export default async function InvoicesPage() {
       </div>
 
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-700 dark:text-red-400">
           Nie udało się pobrać faktur: {error.message}
         </div>
       ) : (

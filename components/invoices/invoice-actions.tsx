@@ -33,8 +33,6 @@ export function InvoiceActions({ invoice }: Props) {
         toast.error(result.error);
         return;
       }
-      // URL.createObjectURL + anchor.click to klasyczny pattern downloadu
-      // bez pośredników - nie potrzebujemy signed URL bo XML jest już w pamięci.
       const blob = new Blob([result.xml], { type: 'application/xml' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -47,27 +45,12 @@ export function InvoiceActions({ invoice }: Props) {
     });
   };
 
-  const handleResend = () => {
-    startResending(async () => {
-      const result = await resendInvoiceAction(invoice.id);
-      if (result.success) {
-        toast.success('Ponowna wysyłka rozpoczęta');
-      } else {
-        toast.error(result.error);
-      }
-    });
-  };
-
   if (!canDownload && !canResend) return null;
 
   return (
-    <div className="flex gap-2 justify-end">
+    <div className="flex gap-2 justify-end pt-2">
       {canDownload && (
-        <Button
-          variant="outline"
-          onClick={handleDownload}
-          disabled={isDownloading}
-        >
+        <Button variant="glass" size="lg" onClick={handleDownload} disabled={isDownloading}>
           {isDownloading ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
@@ -77,7 +60,18 @@ export function InvoiceActions({ invoice }: Props) {
         </Button>
       )}
       {canResend && (
-        <Button onClick={handleResend} disabled={isResending}>
+        <Button
+          variant="glass-primary"
+          size="lg"
+          disabled={isResending}
+          onClick={() => {
+            startResending(async () => {
+              const result = await resendInvoiceAction(invoice.id);
+              if (result.success) toast.success('Ponowna wysyłka rozpoczęta');
+              else toast.error(result.error);
+            });
+          }}
+        >
           {isResending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
