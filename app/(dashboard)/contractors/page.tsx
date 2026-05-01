@@ -1,92 +1,100 @@
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-
-export const dynamic = 'force-dynamic';
-
-type ContractorRow = {
-  id: string;
-  nip: string;
-  name: string;
-  address: {
-    countryCode?: string;
-    addressLine1?: string;
-    addressLine2?: string;
-  } | null;
-  email: string | null;
-  phone: string | null;
-  last_used_at: string | null;
-  created_at: string;
-};
-
-function formatAddress(addr: ContractorRow['address']): string {
-  if (!addr) return '—';
-  const line1 = addr.addressLine1?.trim();
-  const line2 = addr.addressLine2?.trim();
-  if (!line1 && !line2) return '—';
-  return [line1, line2].filter(Boolean).join(', ');
-}
+import { Users, ArrowRight } from 'lucide-react';
 
 export default async function ContractorsPage() {
   const supabase = await createClient();
-
-  const { data: contractors, error } = await supabase
+  const { data: contractors } = await supabase
     .from('contractors')
-    .select('id, nip, name, address, email, phone, last_used_at, created_at')
-    .order('last_used_at', { ascending: false, nullsFirst: true })
-    .order('name', { ascending: true })
-    .limit(500);
+    .select('*')
+    .order('last_used_at', { ascending: false, nullsFirst: false })
+    .limit(200);
+
+  const hasContractors = contractors && contractors.length > 0;
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-2">Kontrahenci</h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Lista zapisana przy wystawianiu faktur — używana do podpowiedzi NIP i
-        danych adresowych.
-      </p>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-4xl font-display font-semibold tracking-tighter-display">
+          Kontrahenci
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          Zapisani automatycznie z faktur. Dane pobierane z bazy GUS REGON
+        </p>
+      </div>
 
-      {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-          Nie udało się pobrać kontrahentów: {error.message}
+      {!hasContractors ? (
+        <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass py-16 text-center">
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-foreground/5 mb-4">
+            <Users className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <h3 className="font-display font-semibold text-lg tracking-tighter-text mb-1">
+            Brak kontrahentów
+          </h3>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-6">
+            Kontrahenci zostaną dodani automatycznie przy wystawianiu pierwszej faktury
+          </p>
+          <Link
+            href="/invoices/new"
+            className="inline-flex items-center gap-2 text-sm font-medium text-foreground hover:text-accent transition-colors"
+          >
+            Wystaw fakturę
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       ) : (
-        <div className="rounded-md border overflow-hidden">
+        <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-foreground/[0.03] border-b border-glass-border">
               <tr className="text-left">
-                <th className="px-4 py-3 font-medium">NIP</th>
-                <th className="px-4 py-3 font-medium">Nazwa</th>
-                <th className="px-4 py-3 font-medium">Adres</th>
-                <th className="px-4 py-3 font-medium">Kontakt</th>
-                <th className="px-4 py-3 font-medium">Ostatnio użyty</th>
+                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                  NIP
+                </th>
+                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                  Nazwa firmy
+                </th>
+                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                  Adres
+                </th>
+                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                  Email
+                </th>
+                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                  Ostatnio użyty
+                </th>
               </tr>
             </thead>
             <tbody>
-              {(contractors as ContractorRow[] | null)?.length ? (
-                (contractors as ContractorRow[]).map((c) => (
-                  <tr key={c.id} className="border-b last:border-0 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-xs">{c.nip}</td>
-                    <td className="px-4 py-3 font-medium">{c.name}</td>
-                    <td className="px-4 py-3 text-gray-700 max-w-xs">
-                      {formatAddress(c.address)}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      <div className="text-xs">{c.email ?? '—'}</div>
-                      <div className="text-xs">{c.phone ?? ''}</div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                      {c.last_used_at
-                        ? new Date(c.last_used_at).toLocaleDateString('pl-PL')
-                        : '—'}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                    Brak zapisanych kontrahentów — dodadzą się przy pierwszej fakturze z
-                    podanym NIP nabywcy.
+              {contractors.map((contractor) => (
+                <tr
+                  key={contractor.id}
+                  className="border-b border-glass-border/50 last:border-0 hover:bg-foreground/[0.02] transition-colors duration-150"
+                >
+                  <td className="px-6 py-4 font-mono text-xs">
+                    {contractor.nip}
+                  </td>
+                  <td className="px-6 py-4 font-medium">
+                    {contractor.name}
+                  </td>
+                  <td className="px-6 py-4 text-muted-foreground text-xs">
+                    {contractor.address?.addressLine1 ?? '-'}
+                    {contractor.address?.addressLine2 && (
+                      <>
+                        <br />
+                        {contractor.address.addressLine2}
+                      </>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-muted-foreground text-xs">
+                    {contractor.email ?? '-'}
+                  </td>
+                  <td className="px-6 py-4 text-muted-foreground text-xs">
+                    {contractor.last_used_at
+                      ? new Date(contractor.last_used_at).toLocaleDateString('pl-PL')
+                      : 'Jeszcze nie użyty'}
                   </td>
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
         </div>

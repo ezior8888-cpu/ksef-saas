@@ -16,9 +16,9 @@ export default function NotFound() {
             Strona, której szukasz, nie istnieje lub została przeniesiona.
           </p>
         </div>
-        <Link href="/invoices">
+        <Link href="/reports">
           <Button variant="glass-primary" size="lg">
-            Powrót do faktur
+            Powrót do pulpitu
           </Button>
         </Link>
       </div>

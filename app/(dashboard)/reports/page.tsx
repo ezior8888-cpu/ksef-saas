@@ -1,127 +1,225 @@
 import { createClient } from '@/lib/supabase/server';
-
-export const dynamic = 'force-dynamic';
+import { TrendingUp, FileText, CheckCircle2, Coins } from 'lucide-react';
 
 export default async function ReportsPage() {
   const supabase = await createClient();
 
-  const [
-    { count: outgoingCount, error: errCount },
-    { data: grossRows, error: errGross },
-    { count: contractorsCount, error: errContr },
-  ] = await Promise.all([
-    supabase
-      .from('invoices')
-      .select('*', { count: 'exact', head: true })
-      .eq('direction', 'outgoing'),
-    supabase
-      .from('invoices')
-      .select('gross_total, currency')
-      .eq('direction', 'outgoing')
-      .limit(10_000),
-    supabase
-      .from('contractors')
-      .select('*', { count: 'exact', head: true }),
-  ]);
+  // Bieżący miesiąc
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfMonthIso = startOfMonth.toISOString().slice(0, 10);
 
-  const error = errCount || errGross || errContr;
+  // Statystyki bieżący miesiąc
+  const { data: monthInvoices } = await supabase
+    .from('invoices')
+    .select('gross_total, net_total, vat_total, ksef_status')
+    .eq('direction', 'issued')
+    .gte('issue_date', startOfMonthIso);
 
-  const grossPln =
-    grossRows?.reduce((sum, row) => {
-      const cur = (row.currency ?? 'PLN').trim() || 'PLN';
-      if (cur !== 'PLN') return sum;
-      return sum + Number(row.gross_total ?? 0);
-    }, 0) ?? 0;
+  const issuedCount = monthInvoices?.length ?? 0;
+  const acceptedCount =
+    monthInvoices?.filter((i) => i.ksef_status === 'accepted').length ?? 0;
+  const totalNet =
+    monthInvoices?.reduce((sum, i) => sum + Number(i.net_total ?? 0), 0) ?? 0;
+  const totalVat =
+    monthInvoices?.reduce((sum, i) => sum + Number(i.vat_total ?? 0), 0) ?? 0;
+  const totalGross =
+    monthInvoices?.reduce((sum, i) => sum + Number(i.gross_total ?? 0), 0) ?? 0;
 
-  const grossOther =
-    grossRows?.filter((r) => (r.currency ?? 'PLN').trim() && (r.currency ?? 'PLN').trim() !== 'PLN')
-      .length ?? 0;
+  // Ostatnie 6 miesięcy - prosty rozkład
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const { data: yearInvoices } = await supabase
+    .from('invoices')
+    .select('gross_total, issue_date')
+    .eq('direction', 'issued')
+    .gte('issue_date', sixMonthsAgo.toISOString().slice(0, 10));
+
+  // Grupowanie po miesiącach
+  const monthlyData = new Map<string, number>();
+  yearInvoices?.forEach((inv) => {
+    const key = inv.issue_date.slice(0, 7); // YYYY-MM
+    monthlyData.set(
+      key,
+      (monthlyData.get(key) ?? 0) + Number(inv.gross_total ?? 0)
+    );
+  });
+
+  const sortedMonths = Array.from(monthlyData.entries()).sort();
+  const maxMonthValue = Math.max(...sortedMonths.map(([, v]) => v), 1);
+
+  const monthName = startOfMonth.toLocaleDateString('pl-PL', {
+    month: 'long',
+    year: 'numeric',
+  });
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-2">Raporty</h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Podsumowanie z bazy (faktury wystawione i kontrahenci). Szczegółowe eksporty
-        CSV/PDF planowane w kolejnych iteracjach.
-      </p>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-4xl font-display font-semibold tracking-tighter-display">
+          Dashboard
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          Zestawienia sprzedaży i podatku VAT • {monthName}
+        </p>
+      </div>
 
-      {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-          Nie udało się wczytać danych: {error.message}
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="h-10 w-10 rounded-2xl bg-blue-500/10 flex items-center justify-center">
+              <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              Wystawione faktury
+            </p>
+            <p className="text-3xl font-display font-semibold tracking-tighter-display mt-1">
+              {issuedCount}
+            </p>
+          </div>
         </div>
-      ) : (
-        <>
-          <div className="grid gap-4 sm:grid-cols-3 mb-8">
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Faktury wystawione
-              </p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums">
-                {outgoingCount ?? 0}
-              </p>
-            </div>
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Suma brutto (PLN)
-              </p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums">
-                {grossPln.toLocaleString('pl-PL', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </p>
-              {grossOther > 0 && (
-                <p className="mt-1 text-xs text-amber-700">
-                  Część faktur ma inną walutę — suma tylko dla PLN.
-                </p>
-              )}
-            </div>
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Kontrahenci
-              </p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums">
-                {contractorsCount ?? 0}
-              </p>
-            </div>
-          </div>
 
-          <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr className="text-left">
-                  <th className="px-4 py-3 font-medium">Wskaźnik</th>
-                  <th className="px-4 py-3 font-medium text-right">Wartość</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b hover:bg-gray-50">
-                  <td className="px-4 py-3">Liczba faktur wystawionych (outgoing)</td>
-                  <td className="px-4 py-3 text-right tabular-nums font-medium">
-                    {outgoingCount ?? 0}
-                  </td>
-                </tr>
-                <tr className="border-b hover:bg-gray-50">
-                  <td className="px-4 py-3">Łączna kwota brutto w PLN</td>
-                  <td className="px-4 py-3 text-right tabular-nums font-medium">
-                    {grossPln.toLocaleString('pl-PL', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{' '}
-                    PLN
-                  </td>
-                </tr>
-                <tr className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="px-4 py-3">Liczba kontrahentów w cache</td>
-                  <td className="px-4 py-3 text-right tabular-nums font-medium">
-                    {contractorsCount ?? 0}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="h-10 w-10 rounded-2xl bg-green-500/10 flex items-center justify-center">
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+            </div>
           </div>
-        </>
-      )}
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              Zaakceptowane przez KSeF
+            </p>
+            <p className="text-3xl font-display font-semibold tracking-tighter-display mt-1">
+              {acceptedCount}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              z {issuedCount} wystawionych
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="h-10 w-10 rounded-2xl bg-orange-500/10 flex items-center justify-center">
+              <Coins className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              Suma VAT
+            </p>
+            <p className="text-3xl font-display font-semibold tracking-tighter-display mt-1 tabular-nums">
+              {totalVat.toFixed(2)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">PLN</p>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="h-10 w-10 rounded-2xl bg-purple-500/10 flex items-center justify-center">
+              <TrendingUp className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              Sprzedaż brutto
+            </p>
+            <p className="text-3xl font-display font-semibold tracking-tighter-display mt-1 tabular-nums">
+              {totalGross.toFixed(2)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">PLN</p>
+          </div>
+        </div>
+      </div>
+
+      {/* VAT breakdown */}
+      <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+        <div>
+          <h2 className="text-lg font-display font-semibold tracking-tighter-text">
+            Podsumowanie podatku VAT
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {monthName}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              Netto
+            </p>
+            <p className="text-2xl font-display font-semibold tracking-tighter-text tabular-nums">
+              {totalNet.toFixed(2)} PLN
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              VAT
+            </p>
+            <p className="text-2xl font-display font-semibold tracking-tighter-text tabular-nums">
+              {totalVat.toFixed(2)} PLN
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              Brutto
+            </p>
+            <p className="text-2xl font-display font-semibold tracking-tighter-text tabular-nums">
+              {totalGross.toFixed(2)} PLN
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly chart */}
+      <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+        <div>
+          <h2 className="text-lg font-display font-semibold tracking-tighter-text">
+            Sprzedaż w ostatnich 6 miesiącach
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Sumaryczna kwota brutto wystawionych faktur
+          </p>
+        </div>
+
+        {sortedMonths.length === 0 ? (
+          <p className="text-center py-8 text-muted-foreground text-sm">
+            Brak danych do wyświetlenia
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {sortedMonths.map(([month, value]) => {
+              const widthPercent = (value / maxMonthValue) * 100;
+              const monthLabel = new Date(month + '-01').toLocaleDateString(
+                'pl-PL',
+                { month: 'long', year: 'numeric' }
+              );
+              return (
+                <div key={month} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground capitalize">
+                      {monthLabel}
+                    </span>
+                    <span className="font-medium tabular-nums">
+                      {value.toFixed(2)} PLN
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-foreground/5 overflow-hidden">
+                    <div
+                      className="h-full bg-foreground rounded-full transition-all duration-500 ease-apple"
+                      style={{ width: `${widthPercent}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

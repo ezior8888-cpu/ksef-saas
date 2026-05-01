@@ -6,17 +6,15 @@ import { Button } from '@/components/ui/button';
 
 export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   useEffect(() => {
     const raw = localStorage.getItem('theme');
     const stored =
       raw === 'light' || raw === 'dark' ? (raw as 'light' | 'dark') : null;
-    const systemPrefers = window.matchMedia(
-      '(prefers-color-scheme: dark)'
-    ).matches;
-    const initial = stored ?? (systemPrefers ? 'dark' : 'light');
+    const initial = stored ?? 'dark';
     setTheme(initial);
+    document.documentElement.classList.toggle('dark', initial === 'dark');
     document.documentElement.style.colorScheme =
       initial === 'dark' ? 'dark' : 'light';
     setMounted(true);

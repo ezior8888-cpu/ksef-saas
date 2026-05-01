@@ -183,6 +183,30 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 
+  .border-glass-border {
+    @apply border-white/55 dark:border-white/14;
+  }
+
+  .bg-glass-white {
+    @apply bg-white/62 dark:bg-[rgba(15,10,30,0.62)];
+  }
+
+  .font-display {
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .tracking-tighter-display {
+    letter-spacing: -0.04em;
+  }
+
+  .tracking-tighter-text {
+    letter-spacing: -0.025em;
+  }
+
+  .ease-apple {
+    transition-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
   .bg-mesh-surface {
     /* scroll: Safari ma liczne bugi z fixed + backdrop-filter na potomkach (sticky header). */
     background:
@@ -257,4 +281,190 @@
       );
     background-attachment: scroll;
   }
+
+  .bg-glass-white-strong {
+    @apply bg-white/80 dark:bg-[rgba(15,10,30,0.85)];
+  }
+
+  /* Alias pod auth (bg-mesh-light dark:bg-mesh-dark): jasny gradient jak domyślny mesh. */
+  .bg-mesh-light {
+    background:
+      radial-gradient(
+        ellipse 70% 55% at 15% 15%,
+        rgba(139, 92, 246, 0.55) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 55% 50% at 88% 12%,
+        rgba(59, 130, 246, 0.45) 0%,
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 60% 50% at 85% 82%,
+        rgba(236, 72, 153, 0.4) 0%,
+        transparent 58%
+      ),
+      radial-gradient(
+        ellipse 50% 45% at 8% 85%,
+        rgba(16, 185, 129, 0.35) 0%,
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 45% 40% at 52% 52%,
+        rgba(251, 191, 36, 0.25) 0%,
+        transparent 50%
+      ),
+      linear-gradient(
+        135deg,
+        #e8e4f8 0%,
+        #dbeafe 35%,
+        #fce7f3 70%,
+        #d1fae5 100%
+      );
+    background-attachment: scroll;
+  }
+
+  .bg-mesh-dark {
+    background:
+      radial-gradient(
+        ellipse 70% 55% at 15% 15%,
+        rgba(139, 92, 246, 0.45) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 55% 50% at 88% 12%,
+        rgba(59, 130, 246, 0.35) 0%,
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 60% 50% at 85% 82%,
+        rgba(236, 72, 153, 0.3) 0%,
+        transparent 58%
+      ),
+      radial-gradient(
+        ellipse 50% 45% at 8% 85%,
+        rgba(16, 185, 129, 0.25) 0%,
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 45% 40% at 52% 52%,
+        rgba(251, 191, 36, 0.15) 0%,
+        transparent 50%
+      ),
+      linear-gradient(
+        135deg,
+        #0f0a1e 0%,
+        #0a0f1e 40%,
+        #1a0a14 70%,
+        #0a1410 100%
+      );
+    background-attachment: scroll;
+  }
+}
+
+/* === ANIMOWANE ORB TŁO === */
+@keyframes float-orb {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(30px, -20px) scale(1.05);
+  }
+  66% {
+    transform: translate(-20px, 15px) scale(0.95);
+  }
+}
+
+.mesh-orb-1 {
+  animation: float-orb 20s ease-in-out infinite;
+}
+
+.mesh-orb-2 {
+  animation: float-orb 25s ease-in-out infinite reverse;
+}
+
+/* === SHIMMER SKELETON === */
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 12px;
+}
+
+.dark .skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* === FOCUS RING GLASSY === */
+.glass-input:focus {
+  border-color: rgba(0, 113, 227, 0.5);
+  box-shadow:
+    0 0 0 4px rgba(0, 113, 227, 0.12),
+    0 0 0 1px rgba(0, 113, 227, 0.4);
+}
+
+/* === BUTTON SPRING PRESS === */
+.glass-button:active {
+  transform: scale(0.96);
+  transition-duration: 0.08s;
+  transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* === TABLE ROW HOVER === */
+.glass-table tr:hover td {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(4px);
+  transition: background 0.15s ease;
+}
+
+.dark .glass-table tr:hover td {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* === TYPOGRAFIA === */
+.text-display {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.text-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.text-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.text-body {
+  font-size: 0.9375rem;
+  letter-spacing: -0.012em;
+  line-height: 1.6;
 }

@@ -68,10 +68,10 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Zalogowany próbuje wejść na /login → /invoices
+  // Zalogowany próbuje wejść na /login → dashboard
   if (user && (path === '/login' || path === '/register')) {
     const url = request.nextUrl.clone();
-    url.pathname = '/invoices';
+    url.pathname = '/reports';
     return NextResponse.redirect(url);
   }
 

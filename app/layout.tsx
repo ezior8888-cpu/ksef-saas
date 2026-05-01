@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
-/** Ta sama logika co w `ThemeToggle`: tylko `light`|`dark`; reszta → system UI. */
+/** Domyślnie ciemny; zapisany wybór w `localStorage` ma pierwszeństwo (jak ThemeToggle). */
 const THEME_BOOT =
-  `(function(){try{var r=localStorage.getItem('theme');var mq=window.matchMedia('(prefers-color-scheme: dark)').matches;var stored=r==='light'||r==='dark'?r:null;var t=stored!=null?stored:(mq?'dark':'light');var el=document.documentElement;el.classList.toggle('dark',t==='dark');el.style.colorScheme=t==='dark'?'dark':'light';}catch(e){}})();`;
+  `(function(){try{var r=localStorage.getItem('theme');var stored=r==='light'||r==='dark'?r:null;var t=stored!=null?stored:'dark';var el=document.documentElement;el.classList.toggle('dark',t==='dark');el.style.colorScheme=t==='dark'?'dark':'light';}catch(e){}})();`;
 
 export const metadata: Metadata = {
   title: 'KSeF SaaS',
@@ -37,13 +37,24 @@ export default function RootLayout({
     <html
       lang="pl"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full scroll-smooth antialiased`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} h-full scroll-smooth antialiased`}
     >
       <body className="min-h-screen font-sans antialiased text-foreground">
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <SentryClientInit />
         {children}
-        <Toaster richColors position="top-right" />
+        <Toaster
+          richColors
+          position="top-right"
+          toastOptions={{
+            classNames: {
+              toast:
+                'backdrop-blur-[24px] border border-white/55 dark:border-white/14 bg-white/75 dark:bg-[rgba(15,10,30,0.75)] shadow-[0_8px_32px_rgba(31,38,135,0.12)] rounded-2xl',
+              title: 'font-semibold tracking-tight text-sm',
+              description: 'text-muted-foreground text-xs',
+            },
+          }}
+        />
       </body>
     </html>
   );

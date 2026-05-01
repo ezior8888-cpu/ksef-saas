@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
+import { cn } from "@/lib/utils";
+
 /**
  * Nie używamy `useTheme()` z next-themes — w projekcie nie ma `<ThemeProvider>`.
  * Bez tego przy pełnym reloadzie (hydratacja) można dostać niespójny subtree.
@@ -18,7 +20,7 @@ import { Toaster as Sonner, type ToasterProps } from "sonner";
  */
 export function Toaster(props: ToasterProps) {
   const [mounted, setMounted] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   useEffect(() => {
     const read = () =>
@@ -60,10 +62,13 @@ export function Toaster(props: ToasterProps) {
         } as React.CSSProperties
       }
       toastOptions={{
-        classNames: {
-          toast: "cn-toast",
-        },
         ...props.toastOptions,
+        classNames: {
+          ...props.toastOptions?.classNames,
+          toast: cn("cn-toast", props.toastOptions?.classNames?.toast),
+          title: props.toastOptions?.classNames?.title,
+          description: props.toastOptions?.classNames?.description,
+        },
       }}
     />
   );
