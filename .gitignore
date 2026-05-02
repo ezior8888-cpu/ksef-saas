@@ -22,7 +22,12 @@
 
 # misc
 .DS_Store
+
+# Certyfikaty KSeF (testowe i produkcyjne)
 *.pem
+*.key
+*.crt
+*.cer
 
 # debug
 npm-debug.log*

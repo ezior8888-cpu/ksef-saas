@@ -10,6 +10,9 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  if (process.env.NODE_ENV === 'development') {
+    console.error(error);
+  }
   return (
     <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] py-20 text-center space-y-6 max-w-lg mx-auto">
       <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10">

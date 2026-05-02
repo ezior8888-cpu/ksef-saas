@@ -13,11 +13,13 @@ export function ThemeToggle() {
     const stored =
       raw === 'light' || raw === 'dark' ? (raw as 'light' | 'dark') : null;
     const initial = stored ?? 'dark';
-    setTheme(initial);
     document.documentElement.classList.toggle('dark', initial === 'dark');
     document.documentElement.style.colorScheme =
       initial === 'dark' ? 'dark' : 'light';
-    setMounted(true);
+    queueMicrotask(() => {
+      setTheme(initial);
+      setMounted(true);
+    });
   }, []);
 
   const toggle = () => {

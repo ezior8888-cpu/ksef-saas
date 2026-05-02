@@ -179,6 +179,8 @@ export function InvoiceForm() {
     form.setValue('buyerAddressLine2', data.addressLine2);
   };
 
+  // react-hook-form: watch() jest celowo niememoizowalny — React Compiler pomija ten hook.
+  // eslint-disable-next-line react-hooks/incompatible-library -- RHF watch dla warunkowego UI
   const paymentMethod = form.watch('paymentMethod');
 
   return (

@@ -88,9 +88,9 @@ export const inboxPollTenantJob = inngest.createFunction(
     id: 'inbox-poll-tenant',
     name: 'Polling skrzynki dla tenanta',
     retries: 2,
-    // Max 10 tenantów pollowanych jednocześnie - szanuje limit sesji KSeF
+    // Max 5 tenantów pollowanych jednocześnie - szanuje limit sesji KSeF
     // (rate-limiter w kliencie działa per-NIP, ten limit to drugi poziom).
-    concurrency: { limit: 10 },
+    concurrency: { limit: 5 },
     triggers: [inboxPollTenant],
   },
   async ({ event, step, logger }) => {

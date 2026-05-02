@@ -27,9 +27,13 @@ export function Toaster(props: ToasterProps) {
       setTheme(
         document.documentElement.classList.contains("dark") ? "dark" : "light"
       );
-    read();
-    setMounted(true);
-    const mo = new MutationObserver(read);
+    queueMicrotask(() => {
+      read();
+      setMounted(true);
+    });
+    const mo = new MutationObserver(() => {
+      queueMicrotask(read);
+    });
     mo.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["class"],
