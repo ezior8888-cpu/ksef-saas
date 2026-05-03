@@ -46,13 +46,12 @@ export type Database = {
           accountant_name: string
           created_at: string
           created_by_user_id: string | null
-          expires_at: string | null
+          expires_at: string
           granted_at: string | null
           id: string
           last_used_at: string | null
           revoked_at: string | null
           tenant_id: string
-          token: string | null
           token_hash: string
           use_count: number
         }
@@ -62,13 +61,12 @@ export type Database = {
           accountant_name: string
           created_at?: string
           created_by_user_id?: string | null
-          expires_at?: string | null
+          expires_at: string
           granted_at?: string | null
           id?: string
           last_used_at?: string | null
           revoked_at?: string | null
           tenant_id: string
-          token?: string | null
           token_hash: string
           use_count?: number
         }
@@ -78,13 +76,12 @@ export type Database = {
           accountant_name?: string
           created_at?: string
           created_by_user_id?: string | null
-          expires_at?: string | null
+          expires_at?: string
           granted_at?: string | null
           id?: string
           last_used_at?: string | null
           revoked_at?: string | null
           tenant_id?: string
-          token?: string | null
           token_hash?: string
           use_count?: number
         }
@@ -251,6 +248,99 @@ export type Database = {
         }
         Relationships: []
       }
+      import_jobs: {
+        Row: {
+          completed_at: string | null
+          contractors_created: number | null
+          contractors_updated: number | null
+          created_at: string
+          date_from: string | null
+          date_to: string | null
+          direction: string | null
+          id: string
+          invoices_found: number | null
+          invoices_imported: number | null
+          products_created: number | null
+          progress_message: string | null
+          progress_percent: number
+          source: string | null
+          source_file_path: string | null
+          source_file_size: number | null
+          source_filename: string | null
+          started_at: string | null
+          status: string
+          tenant_id: string
+          triggered_by: string | null
+          updated_at: string
+          warnings: Json
+        }
+        Insert: {
+          completed_at?: string | null
+          contractors_created?: number | null
+          contractors_updated?: number | null
+          created_at?: string
+          date_from?: string | null
+          date_to?: string | null
+          direction?: string | null
+          id?: string
+          invoices_found?: number | null
+          invoices_imported?: number | null
+          products_created?: number | null
+          progress_message?: string | null
+          progress_percent?: number
+          source?: string | null
+          source_file_path?: string | null
+          source_file_size?: number | null
+          source_filename?: string | null
+          started_at?: string | null
+          status?: string
+          tenant_id: string
+          triggered_by?: string | null
+          updated_at?: string
+          warnings?: Json
+        }
+        Update: {
+          completed_at?: string | null
+          contractors_created?: number | null
+          contractors_updated?: number | null
+          created_at?: string
+          date_from?: string | null
+          date_to?: string | null
+          direction?: string | null
+          id?: string
+          invoices_found?: number | null
+          invoices_imported?: number | null
+          products_created?: number | null
+          progress_message?: string | null
+          progress_percent?: number
+          source?: string | null
+          source_file_path?: string | null
+          source_file_size?: number | null
+          source_filename?: string | null
+          started_at?: string | null
+          status?: string
+          tenant_id?: string
+          triggered_by?: string | null
+          updated_at?: string
+          warnings?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_jobs_triggered_by_fkey"
+            columns: ["triggered_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inngest_run_log: {
         Row: {
           created_at: string
@@ -397,6 +487,9 @@ export type Database = {
           last_error_suggestion: string | null
           net_total: number | null
           notes: string | null
+          offline_idempotency_key: string | null
+          offline_qr_certyfikat: string | null
+          offline_qr_offline: string | null
           paid_amount: number
           paid_at: string | null
           parent_invoice_id: string | null
@@ -413,9 +506,6 @@ export type Database = {
           updated_at: string | null
           vat_total: number | null
           xml_storage_path: string | null
-          offline_qr_offline: string | null
-          offline_qr_certyfikat: string | null
-          offline_idempotency_key: string | null
         }
         Insert: {
           advance_amount?: number | null
@@ -452,6 +542,9 @@ export type Database = {
           last_error_suggestion?: string | null
           net_total?: number | null
           notes?: string | null
+          offline_idempotency_key?: string | null
+          offline_qr_certyfikat?: string | null
+          offline_qr_offline?: string | null
           paid_amount?: number
           paid_at?: string | null
           parent_invoice_id?: string | null
@@ -468,9 +561,6 @@ export type Database = {
           updated_at?: string | null
           vat_total?: number | null
           xml_storage_path?: string | null
-          offline_qr_offline?: string | null
-          offline_qr_certyfikat?: string | null
-          offline_idempotency_key?: string | null
         }
         Update: {
           advance_amount?: number | null
@@ -507,6 +597,9 @@ export type Database = {
           last_error_suggestion?: string | null
           net_total?: number | null
           notes?: string | null
+          offline_idempotency_key?: string | null
+          offline_qr_certyfikat?: string | null
+          offline_qr_offline?: string | null
           paid_amount?: number
           paid_at?: string | null
           parent_invoice_id?: string | null
@@ -523,9 +616,6 @@ export type Database = {
           updated_at?: string | null
           vat_total?: number | null
           xml_storage_path?: string | null
-          offline_qr_offline?: string | null
-          offline_qr_certyfikat?: string | null
-          offline_idempotency_key?: string | null
         }
         Relationships: [
           {
@@ -1276,11 +1366,6 @@ export type Database = {
     }
     Functions: {
       get_current_tenant_id: { Args: never; Returns: string }
-      install_test_helpers: { Args: never; Returns: undefined }
-      test_as_user: {
-        Args: { p_sql: string; p_tenant_id: string; p_user_id: string }
-        Returns: Json[]
-      }
     }
     Enums: {
       buyer_id_type_enum: "nip" | "pesel" | "id_card" | "passport" | "no_id"

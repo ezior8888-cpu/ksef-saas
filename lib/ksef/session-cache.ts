@@ -2,6 +2,7 @@ import type { KsefAuth, KsefAuthSession } from './auth';
 import { authenticateWithXades } from './auth';
 import { authenticateWithToken } from './auth-token';
 import type { KsefEnvironment } from '@/types/ksef';
+import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
 
 /**
  * In-memory cache sesji KSeF per (environment, NIP).
@@ -94,3 +95,20 @@ class SessionCache {
 }
 
 export const ksefSessionCache = new SessionCache();
+
+/**
+ * Ładuje credentials tenanta (service role) i zwraca aktywną sesję KSeF.
+ * Używane przez joby serwerowe (np. historia faktur). Zwraca `null` gdy brak certyfikatu/tokena.
+ */
+export async function getValidSession(
+  tenantId: string,
+  env?: KsefEnvironment,
+): Promise<{ auth: KsefAuth; session: KsefAuthSession } | null> {
+  try {
+    const auth = await getTenantKsefCredentials(tenantId);
+    const session = await ksefSessionCache.getSession(auth, env);
+    return { auth, session };
+  } catch {
+    return null;
+  }
+}

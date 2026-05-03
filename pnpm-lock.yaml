@@ -68,6 +68,9 @@ importers:
       p-queue:
         specifier: ^9.1.2
         version: 9.1.2
+      papaparse:
+        specifier: ^5.5.3
+        version: 5.5.3
       pdfkit:
         specifier: ^0.18.0
         version: 0.18.0
@@ -126,6 +129,9 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.39
+      '@types/papaparse':
+        specifier: ^5.5.2
+        version: 5.5.2
       '@types/pdfkit':
         specifier: ^0.17.6
         version: 0.17.6
@@ -3489,6 +3495,9 @@ packages:
   '@types/oracledb@6.5.2':
     resolution: {integrity: sha512-kK1eBS/Adeyis+3OlBDMeQQuasIDLUYXsi2T15ccNJ0iyUpQ4xDF7svFu3+bGVrI0CMBUclPciz+lsQR3JX3TQ==}
 
+  '@types/papaparse@5.5.2':
+    resolution: {integrity: sha512-gFnFp/JMzLHCwRf7tQHrNnfhN4eYBVYYI897CGX4MY1tzY9l2aLkVyx2IlKZ/SAqDbB3I1AOZW5gTMGGsqWliA==}
+
   '@types/pdfkit@0.17.6':
     resolution: {integrity: sha512-tIwzxk2uWKp0Cq9JIluQXJid77lYhF52EsIOwhsMF4iWLA6YneoBR1xVKYYdAysHuepUB0OX4tdwMiUDdGKmig==}
 
@@ -5660,6 +5669,9 @@ packages:
 
   pako@1.0.11:
     resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
+
+  papaparse@5.5.3:
+    resolution: {integrity: sha512-5QvjGxYVjxO59MGU2lHVYpRWBBtKHnlIAcSe1uNFCkkptUh63NFRj0FJQm7nR67puEruUci/ZkjmEFrjCAyP4A==}
 
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
@@ -10714,6 +10726,10 @@ snapshots:
     dependencies:
       '@types/node': 20.19.39
 
+  '@types/papaparse@5.5.2':
+    dependencies:
+      '@types/node': 20.19.39
+
   '@types/pdfkit@0.17.6':
     dependencies:
       '@types/node': 20.19.39
@@ -13056,6 +13072,8 @@ snapshots:
   pako@0.2.9: {}
 
   pako@1.0.11: {}
+
+  papaparse@5.5.3: {}
 
   parent-module@1.0.1:
     dependencies:

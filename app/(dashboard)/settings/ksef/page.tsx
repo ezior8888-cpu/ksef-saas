@@ -1,8 +1,10 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { CheckCircle2, AlertTriangle, Lock } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Lock, Sparkles } from 'lucide-react';
 
-import { createClient } from '@/lib/supabase/server';
 import { CertificateUpload } from '@/components/settings/certificate-upload';
+import { Button } from '@/components/ui/button';
+import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,6 +97,40 @@ export default async function KsefSettingsPage() {
           </p>
         </div>
         <CertificateUpload />
+      </div>
+
+      <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-6 lg:p-8 space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          <div className="h-12 w-12 rounded-2xl bg-linear-to-br from-purple-500/15 to-blue-500/15 flex items-center justify-center shrink-0 mx-auto sm:mx-0">
+            <Sparkles className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+          </div>
+          <div className="flex-1 space-y-4 text-center sm:text-left">
+            <div>
+              <h2 className="text-lg font-display font-semibold tracking-tighter-text">
+                Magiczny Import historii
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                Pobierz faktury z KSeF w wybranym zakresie i uzupełnij kartotekę kontrahentów oraz
+                produktów bez ręcznego przepisywania.
+              </p>
+            </div>
+            {hasCredentials ? (
+              <Button asChild variant="glass-primary" size="lg" className="w-full sm:w-auto">
+                <Link
+                  href={`/onboarding/magic-import?tenantId=${encodeURIComponent(userData.tenant_id)}`}
+                >
+                  <Sparkles className="mr-2 h-4 w-4 shrink-0" />
+                  Rozpocznij Magiczny Import
+                </Link>
+              </Button>
+            ) : (
+              <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 backdrop-blur-glass-sm p-4 text-sm text-muted-foreground text-left">
+                Aby uruchomić import, najpierw wgraj certyfikat powyżej — KSeF wymaga
+                uwierzytelnienia przy pobieraniu historii.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

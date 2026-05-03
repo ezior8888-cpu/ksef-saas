@@ -102,6 +102,32 @@ export const invoiceUpoRequested = eventType('invoice/upo.requested', {
   }>(),
 });
 
+/** Żądanie Magicznego Importu historii faktur z KSeF (wydane lub odebrane). */
+export const importKsefHistoryRequested = eventType('import/ksef-history.requested', {
+  schema: staticSchema<{
+    importJobId: string;
+    tenantId: string;
+    dateFrom: string;
+    dateTo: string;
+    direction: 'issued' | 'received';
+  }>(),
+});
+
+/** Wgrany plik JPK_FA / CSV gotowy do parsowania (ścieżka w R2 z `file-storage`). */
+export const importFileUploaded = eventType('import/file.uploaded', {
+  schema: staticSchema<{
+    importJobId: string;
+    tenantId: string;
+    filePath: string;
+    source:
+      | 'jpk_fa'
+      | 'fakturownia_csv'
+      | 'infakt_csv'
+      | 'wfirma_csv'
+      | 'ifirma_csv';
+  }>(),
+});
+
 // ═══════════════════════════════════════════════════════════════
 // CLIENT
 // ═══════════════════════════════════════════════════════════════

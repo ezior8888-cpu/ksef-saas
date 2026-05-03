@@ -19,6 +19,8 @@ import {
   offlineQueueSuccessHandler,
   processOfflineQueueJob,
 } from '@/lib/inngest/jobs/process-offline-queue';
+import { bulkImportFileJob } from '@/lib/inngest/jobs/bulk-import';
+import { magicImportKsefJob } from '@/lib/inngest/jobs/magic-import-ksef';
 
 /**
  * Webhook dla Inngest Cloud. Obsługuje GET, POST, PUT.
@@ -43,5 +45,7 @@ export const { GET, POST, PUT } = serve({
     processOfflineQueueJob,
     offlineQueueSuccessHandler,
     offlineQueueFailureHandler,
+    magicImportKsefJob,
+    bulkImportFileJob,
   ],
 });

@@ -38,7 +38,7 @@ export function OnboardingForm() {
     startSubmitting(async () => {
       const result = await completeOnboardingAction(company);
       if (result.success) {
-        router.push('/settings/ksef?onboarding=1');
+        router.push('/onboarding/import-source');
       } else {
         setError(result.error);
       }
