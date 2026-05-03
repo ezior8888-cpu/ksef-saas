@@ -288,6 +288,9 @@ export async function resendInvoiceAction(
       .update({
         ksef_status: 'queued',
         last_error: null,
+        last_error_code: null,
+        last_error_field: null,
+        last_error_suggestion: null,
       })
       .eq('id', invoiceId);
 

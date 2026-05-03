@@ -12,6 +12,15 @@ export function getKsefBaseUrl(env: KsefEnvironment = 'test'): string {
   return envMap[env];
 }
 
+/** Pełna baza URL API KSeF (`…/v2`) — alias pod health-check i jawny `fetch`. */
+export function getKsefApiUrl(
+  env?: KsefEnvironment,
+): string {
+  const resolved =
+    env ?? (process.env.KSEF_ENV as KsefEnvironment) ?? 'test';
+  return getKsefBaseUrl(resolved);
+}
+
 /**
  * Błąd rzucany przez klienta KSeF.
  * Zawiera pełną odpowiedź KSeF do debugowania.

@@ -8,7 +8,15 @@ import {
   updateInvoiceStatus,
 } from '@/lib/supabase/admin-queries';
 import { KsefApiError } from '@/lib/ksef/client';
+import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
+import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
+import type {
+  CorrectionInvoiceData,
+  AdvanceInvoiceData,
+  FinalInvoiceData,
+} from '@/types/invoice-types';
+import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 
 /**
  * Job wysyłki faktury do KSeF.
@@ -54,18 +62,13 @@ export const submitInvoiceJob = inngest.createFunction(
           invoiceId: string;
           nip: string;
           invoice: { internalNumber: string };
+          fromOfflineQueue?: boolean;
         };
       };
 
       const { tenantId, invoiceId, nip, invoice } = originalEvent.data;
+      const fromOfflineQueue = Boolean(originalEvent.data.fromOfflineQueue);
 
-      // Rozróżnienie:
-      //   - NonRetriableError → KSeF/XSD świadomie odrzucił (wina danych) → 'rejected'
-      //   - inne błędy → infrastruktura wyczerpała retries → 'failed'
-      //
-      // Semantyka statusów:
-      //   'rejected' = user musi poprawić fakturę (walidacja/400)
-      //   'failed'   = user może spróbować ponownie bez zmian (network/5xx/timeout)
       const isBusinessRejection = error.name === 'NonRetriableError';
       const finalStatus: 'rejected' | 'failed' = isBusinessRejection
         ? 'rejected'
@@ -79,53 +82,121 @@ export const submitInvoiceJob = inngest.createFunction(
         errorName: error.name,
         errorMessage: error.message,
         finalStatus,
+        fromOfflineQueue,
       });
 
-      await step.run('mark-as-failed', async () => {
-        await updateInvoiceStatus(invoiceId, {
-          ksef_status: finalStatus,
-          last_error: `${error.name}: ${error.message}`,
+      if (!fromOfflineQueue) {
+        await step.run('mark-as-failed', async () => {
+          await updateInvoiceStatus(invoiceId, {
+            ksef_status: finalStatus,
+            last_error: `${error.name}: ${error.message}`,
+            last_error_code: null,
+            last_error_field: null,
+            last_error_suggestion: null,
+          });
         });
-      });
 
-      await step.run('audit-submit-failed', async () => {
-        await logAuditSystem({
-          action: 'invoice.submit_failed',
-          tenantId,
-          userId: null,
-          entityType: 'invoice',
-          entityId: invoiceId,
-          metadata: {
-            internalNumber: invoice.internalNumber,
-            finalStatus,
-            error: `${error.name}: ${error.message}`,
-          },
+        await step.run('audit-submit-failed', async () => {
+          await logAuditSystem({
+            action: 'invoice.submit_failed',
+            tenantId,
+            userId: null,
+            entityType: 'invoice',
+            entityId: invoiceId,
+            metadata: {
+              internalNumber: invoice.internalNumber,
+              finalStatus,
+              error: `${error.name}: ${error.message}`,
+            },
+          });
         });
-      });
+      }
 
-      // Publikujemy event żeby notify-submit-failed mógł wysłać emaila / Slacka.
-      // Osobny job trzyma handler od DB update - separation of concerns.
-      await step.sendEvent('publish-failure', {
+      await step.sendEvent('emit-failure', {
         name: 'invoice/submit.failed',
         data: {
-          tenantId,
           invoiceId,
-          errorMessage: `${error.name}: ${error.message}`,
+          tenantId,
+          error: `${error.name}: ${error.message}`,
+          fromOfflineQueue: originalEvent.data.fromOfflineQueue,
         },
       });
 
-      return { handled: true, finalStatus };
+      return { handled: true, finalStatus, fromOfflineQueue };
     },
   },
   async ({ event, step, logger }) => {
     const { tenantId, invoiceId, invoice, nip } = event.data;
+    const env = (process.env.KSEF_ENV as 'test' | 'demo' | 'production') ?? 'test';
+    const fromOfflineQueue = Boolean(event.data.fromOfflineQueue);
 
     logger.info('Rozpoczynam wysyłkę faktury', {
       tenantId,
       invoiceId,
       nip,
       internalNumber: invoice.internalNumber,
+      fromOfflineQueue,
     });
+
+    // Re-emisja po odebraniu z kolejki offline — nie blokuj kolejnym probingiem `/health`,
+    // tylko idź klasyczną ścieżką online submit.
+    if (!fromOfflineQueue) {
+      const health = await step.run('check-ksef-health', async () =>
+        shouldUseOfflineMode(env),
+      );
+
+      if (health.offline) {
+        const redirected = await step.run(
+          'try-redirect-offline-queue',
+          async (): Promise<boolean> => {
+            const creds = await getTenantKsefCredentials(tenantId);
+            if (creds.type !== 'xades') {
+              logger.warn('KSeF offline — pomijam kolejkę offline (brak PEM / token)', {
+                tenantId,
+                invoiceId,
+                authType: creds.type,
+              });
+              return false;
+            }
+
+            await addToOfflineQueue({
+              tenantId,
+              invoiceId,
+              isMfOutage: health.isMfOutage,
+              certificate: creds.certificatePem,
+            });
+            return true;
+          },
+        );
+
+        if (redirected) {
+          await step.run('audit-redirect-offline', async () => {
+            await logAuditSystem({
+              action: 'invoice.submit_redirected_offline',
+              tenantId,
+              entityType: 'invoice',
+              entityId: invoiceId,
+              metadata: {
+                reason: health.reason,
+                isMfOutage: health.isMfOutage,
+                internalNumber: invoice.internalNumber,
+              },
+            });
+          });
+
+          logger.info('KSeF niedostępny — faktura przekierowana do trybu Offline24', {
+            invoiceId,
+            reason: health.reason,
+          });
+
+          return {
+            redirected: 'offline',
+            reason: health.reason,
+            isMfOutage: health.isMfOutage,
+          };
+        }
+      }
+    }
 
     // Krok 1: credentials PRZED `sending` — jeśli brak certyfikatu / decrypt
     // padnie (NonRetriableError), `onFailure` oznaczy fakturę jako `rejected`
@@ -168,12 +239,32 @@ export const submitInvoiceJob = inngest.createFunction(
     // nie wcześniejszych (status w DB już 'sending', credentials w pamięci).
     const result = await step.run('submit-to-ksef', async () => {
       try {
+        const ed = event.data as {
+          correctionData?: CorrectionInvoiceData;
+          advanceData?: AdvanceInvoiceData;
+          finalData?: FinalInvoiceData;
+          finalAdvanceSettlementRows?: AdvanceInvoiceSettlementRow[];
+        };
+
+        const finalPayload =
+          ed.finalData &&
+          ed.finalAdvanceSettlementRows &&
+          ed.finalAdvanceSettlementRows.length > 0
+            ? {
+                finalData: ed.finalData,
+                advanceSettlementRows: ed.finalAdvanceSettlementRows,
+              }
+            : null;
+
         return await submitInvoiceFullFlow(
           tenantId,
           invoiceId,
           invoice,
           credentials,
-          (process.env.KSEF_ENV as 'test' | 'demo' | 'production') ?? 'test',
+          env,
+          ed.correctionData ?? null,
+          ed.advanceData ?? null,
+          finalPayload,
         );
       } catch (error) {
         // Nie-retry-owalne: walidacja biznesowa i odrzucenie przez KSeF.
@@ -207,7 +298,19 @@ export const submitInvoiceJob = inngest.createFunction(
         ksef_accepted_at: result.acquisitionTimestamp,
         xml_storage_path: result.xmlStoragePath,
         last_error: null,
+        last_error_code: null,
+        last_error_field: null,
+        last_error_suggestion: null,
       });
+    });
+
+    await step.sendEvent('trigger-upo-download', {
+      name: 'invoice/upo.requested',
+      data: {
+        invoiceId,
+        tenantId,
+        ksefNumber: result.ksefNumber,
+      },
     });
 
     await step.run('audit-success', async () => {
@@ -220,14 +323,13 @@ export const submitInvoiceJob = inngest.createFunction(
       });
     });
 
-    // Krok 5: publikuj sukces - osobny handler wyśle email przez Resend.
-    await step.sendEvent('publish-success', {
+    await step.sendEvent('emit-success', {
       name: 'invoice/submit.succeeded',
       data: {
-        tenantId,
         invoiceId,
+        tenantId,
         ksefNumber: result.ksefNumber,
-        xmlStoragePath: result.xmlStoragePath,
+        fromOfflineQueue: event.data.fromOfflineQueue,
       },
     });
 

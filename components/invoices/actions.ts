@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache';
 
 import { logAudit } from '@/lib/audit/log';
+import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { createClient } from '@/lib/supabase/server';
 import { lookupCompanyByNip } from '@/lib/gus/client';
-import { inngest } from '@/lib/inngest/client';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
   calculateInvoiceTotals,
@@ -247,20 +247,72 @@ function buildInvoiceFromForm(
     address: sellerAddress,
   };
 
-  const buyer: BuyerParty = {
-    nip: values.buyerNip,
-    name: values.buyerName,
-    address: {
+  const buyerEmail =
+    typeof values.buyerEmail === 'string' && values.buyerEmail.length > 0
+      ? values.buyerEmail
+      : undefined;
+
+  const buyer: BuyerParty = (() => {
+    const jst = 2 as const;
+    const gv = 2 as const;
+    const addr: Address = {
       countryCode: 'PL',
       addressLine1: values.buyerAddressLine1,
       addressLine2: values.buyerAddressLine2,
-    },
-    email: values.buyerEmail || undefined,
-    // Pola FA(3) - domyślne "nie dotyczy" (2). Panel zmiany markerów
-    // (grupa VAT / JST) dopisujemy dopiero gdy user tego zażąda.
-    jst: 2,
-    gv: 2,
-  };
+    };
+
+    if (!values.buyerIsConsumer) {
+      return {
+        nip: values.buyerNip,
+        name: values.buyerName,
+        address: addr,
+        jst,
+        gv,
+        email: buyerEmail,
+      };
+    }
+
+    const t = values.buyerConsumerIdType;
+    switch (t) {
+      case 'pesel':
+        return {
+          name: values.buyerName,
+          address: addr,
+          pesel: values.buyerPesel.replace(/\D/g, ''),
+          jst,
+          gv,
+          email: buyerEmail,
+        };
+      case 'no_id':
+        return {
+          name: values.buyerName,
+          address: addr,
+          noIdMarker: true,
+          jst,
+          gv,
+          email: buyerEmail,
+        };
+      case 'id_card':
+      case 'passport':
+        return {
+          name: values.buyerName,
+          address: addr,
+          nrInny: values.buyerIdDocument.trim(),
+          jst,
+          gv,
+          email: buyerEmail,
+        };
+      default:
+        return {
+          name: values.buyerName,
+          address: addr,
+          noIdMarker: true,
+          jst,
+          gv,
+          email: buyerEmail,
+        };
+    }
+  })();
 
   const payment: PaymentInfo = {
     amountDue: totals.grossTotal,
@@ -286,12 +338,45 @@ function buildInvoiceFromForm(
   };
 }
 
+/** Kolumny B2C w `public.invoices` (ułatwia raportowanie bez parsowania JSON). */
+function buyerColumnsFromInvoiceForm(values: InvoiceFormValues): {
+  is_b2c: boolean;
+  buyer_id_type: 'nip' | 'pesel' | 'id_card' | 'passport' | 'no_id';
+  buyer_pesel: string | null;
+  buyer_id_number: string | null;
+} {
+  if (!values.buyerIsConsumer) {
+    return {
+      is_b2c: false,
+      buyer_id_type: 'nip',
+      buyer_pesel: null,
+      buyer_id_number: null,
+    };
+  }
+
+  const t = values.buyerConsumerIdType ?? 'no_id';
+
+  const pes =
+    t === 'pesel' ? values.buyerPesel.replace(/\D/g, '') || null : null;
+  const idNum =
+    t === 'id_card' || t === 'passport'
+      ? values.buyerIdDocument.trim() || null
+      : null;
+
+  return {
+    is_b2c: true,
+    buyer_id_type: t,
+    buyer_pesel: pes,
+    buyer_id_number: idNum,
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════
 // saveDraftAction / saveAndSendInvoiceAction
 // ═══════════════════════════════════════════════════════════════
 
 export type InvoiceActionResult =
-  | { success: true; invoiceId: string }
+  | { success: true; invoiceId: string; offline?: boolean }
   /** `invoiceId` — zapisany szkic (np. brak certyfikatu KSeF; user może do niego wrócić). */
   | { success: false; error: string; invoiceId?: string };
 
@@ -301,8 +386,11 @@ export type InvoiceActionResult =
 async function insertInvoiceAndLines(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tenantId: string,
-  invoice: Invoice
+  invoice: Invoice,
+  formValues?: InvoiceFormValues,
 ): Promise<InvoiceActionResult> {
+  const b2c = formValues ? buyerColumnsFromInvoiceForm(formValues) : null;
+
   const { data: inserted, error: invErr } = await supabase
     .from('invoices')
     .insert({
@@ -325,6 +413,10 @@ async function insertInvoiceAndLines(
       net_total: invoice.netTotal,
       vat_total: invoice.vatTotal,
       gross_total: invoice.grossTotal,
+      is_b2c: b2c?.is_b2c ?? false,
+      buyer_id_type: b2c?.buyer_id_type ?? 'nip',
+      buyer_pesel: b2c?.buyer_pesel ?? null,
+      buyer_id_number: b2c?.buyer_id_number ?? null,
       // fa3_data NOT NULL w 00001 - trzymamy tam ten sam snapshot co w
       // seller_data/buyer_data/payment_data, plus ewentualne adnotacje.
       // Generator XML i tak odtworzy go z `invoice` w jobie - to jest
@@ -376,7 +468,7 @@ export async function saveDraftAction(
     const { supabase, tenant, userId } = await getTenantContext();
     const invoice = buildInvoiceFromForm(values, tenant);
 
-    const result = await insertInvoiceAndLines(supabase, tenant.id, invoice);
+    const result = await insertInvoiceAndLines(supabase, tenant.id, invoice, values);
     if (result.success && result.invoiceId) {
       await logAudit({
         action: 'invoice.draft_created',
@@ -408,93 +500,56 @@ export async function saveAndSendInvoiceAction(
     const invoice = buildInvoiceFromForm(values, tenant);
 
     // 1) Najpierw draft - jeśli DB padnie, nie publikujemy eventu-sieroty.
-    const saved = await insertInvoiceAndLines(supabase, tenant.id, invoice);
+    const saved = await insertInvoiceAndLines(supabase, tenant.id, invoice, values);
     if (!saved.success) return saved;
 
-    const { data: tenantKsef, error: tenantErr } = await supabase
-      .from('tenants')
-      .select('ksef_credentials_encrypted')
-      .eq('id', tenant.id)
-      .single();
-
-    if (tenantErr) {
-      if (saved.invoiceId) {
-        await logAudit({
-          action: 'invoice.draft_created',
-          tenantId: tenant.id,
-          userId,
-          entityType: 'invoice',
-          entityId: saved.invoiceId,
-          metadata: {
-            internalNumber: invoice.internalNumber,
-            note: 'submit_aborted_tenant_read_error',
-          },
-        });
-      }
-      return {
-        success: false,
-        error: `Nie można sprawdzić ustawień KSeF: ${tenantErr.message}`,
-        invoiceId: saved.invoiceId,
-      };
-    }
-
-    if (!tenantKsef?.ksef_credentials_encrypted) {
-      if (saved.invoiceId) {
-        await logAudit({
-          action: 'invoice.draft_created',
-          tenantId: tenant.id,
-          userId,
-          entityType: 'invoice',
-          entityId: saved.invoiceId,
-          metadata: {
-            internalNumber: invoice.internalNumber,
-            note: 'submit_blocked_no_ksef_cert',
-          },
-        });
-      }
-      return {
-        success: false,
-        error:
-          'Najpierw wgraj certyfikat KSeF w Ustawienia KSeF — bez niego wysyłka nie jest możliwa. Faktura została zapisana jako szkic.',
-        invoiceId: saved.invoiceId,
-      };
-    }
-
-    // 2) Publikuj event Inngest.
-    await inngest.send({
-      name: 'invoice/submit.requested',
-      data: {
-        tenantId: tenant.id,
-        invoiceId: saved.invoiceId,
-        invoice,
-        nip: tenant.nip,
-      },
-    });
-
-    // 3) Oznacz jako „w kolejce” — job `submit-invoice` przełączy na `sending`.
-    //    (CHECK `queued` jest w migracji 00005.)
-    const { error: queueErr } = await supabase
-      .from('invoices')
-      .update({ ksef_status: 'queued' })
-      .eq('id', saved.invoiceId);
-
-    if (queueErr) {
-      // Event już wysłany — job i tak ustawi status; log tylko do diagnozy.
-      console.error('[saveAndSendInvoiceAction] queued update failed', queueErr);
-    }
-
-    await logAudit({
-      action: 'invoice.submit_requested',
+    const enq = await enqueueKsefSubmitAfterDraft({
+      supabase,
       tenantId: tenant.id,
       userId,
-      entityType: 'invoice',
-      entityId: saved.invoiceId,
-      metadata: { nip: tenant.nip },
+      invoiceId: saved.invoiceId,
+      nip: tenant.nip,
+      invoice,
+      auditKind: 'regular',
+      internalNumberForAudit: invoice.internalNumber,
     });
 
-    revalidatePath('/invoices');
-    revalidatePath(`/invoices/${saved.invoiceId}`);
-    return { success: true, invoiceId: saved.invoiceId };
+    if (!enq.ok) {
+      if (saved.invoiceId) {
+        const isSettingsRead = enq.error.startsWith('Nie można sprawdzić ustawień');
+        const isNoCert =
+          enq.error.includes('Najpierw wgraj certyfikat') ||
+          enq.error.includes('Brak certyfikatu KSeF');
+        if (isSettingsRead || isNoCert) {
+          await logAudit({
+            action: 'invoice.draft_created',
+            tenantId: tenant.id,
+            userId,
+            entityType: 'invoice',
+            entityId: saved.invoiceId,
+            metadata: {
+              internalNumber: invoice.internalNumber,
+              note: isSettingsRead ? 'submit_aborted_tenant_read_error' : 'submit_blocked_no_ksef_cert',
+            },
+          });
+        }
+      }
+      return {
+        success: false,
+        error: enq.error,
+        invoiceId: saved.invoiceId,
+      };
+    }
+
+    if (!saved.invoiceId) {
+      return { success: false, error: 'Brak invoiceId po zapisie szkicu' };
+    }
+
+    return {
+      success: true,
+      invoiceId: saved.invoiceId,
+      offline: enq.mode === 'offline_queued',
+    };
   } catch (err) {
     return {
       success: false,

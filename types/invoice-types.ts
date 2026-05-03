@@ -113,6 +113,8 @@ export interface CorrectionInvoiceData extends InvoiceCommonFields {
   invoiceType: 'correction';
   parentInvoiceId: string; // UUID faktury pierwotnej
   parentInvoiceNumber: string; // wewnętrzny numer faktury pierwotnej (do wyświetlania)
+  /** Data wystawienia faktury pierwotnej (`Fa`, `DataWystFaKorygowanej`). */
+  parentInvoiceIssueDate?: string;
   parentKsefNumber?: string; // numer KSeF faktury pierwotnej (jeśli zaakceptowana)
 
   correctionType: CorrectionType;

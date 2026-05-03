@@ -84,6 +84,29 @@ async function streamToString(body: unknown): Promise<string> {
   return Buffer.concat(chunks).toString('utf-8');
 }
 
+/**
+ * Sukcesywnie zbiera Body z GetObject jako bufor binarny (PDF, XML jako bytes).
+ */
+async function streamToBuffer(body: unknown): Promise<Buffer> {
+  if (!body) throw new Error('R2: empty response body');
+
+  if (
+    typeof (body as { transformToByteArray?: () => Promise<Uint8Array> })
+      .transformToByteArray === 'function'
+  ) {
+    const arr = await (
+      body as { transformToByteArray: () => Promise<Uint8Array> }
+    ).transformToByteArray();
+    return Buffer.from(arr);
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
 function sha256Hex(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex');
 }
@@ -203,6 +226,45 @@ async function uploadXmlDocument(params: {
     sizeBytes: bodyBuffer.length,
     etag: result.ETag ?? '',
   };
+}
+
+/**
+ * Generyczny zapis bloba pod dowolnym kluczem (np. ścieżki z `lib/ksef/upo-storage`).
+ */
+export async function uploadToR2(
+  key: string,
+  body: Buffer,
+  contentType: string,
+): Promise<void> {
+  const { bucketName } = getR2Config();
+  const client = getR2Client();
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }),
+  );
+}
+
+/**
+ * Generyczny odczyt obiektu z R2 po kluczu.
+ */
+export async function downloadFromR2(key: string): Promise<Buffer> {
+  const { bucketName } = getR2Config();
+  const client = getR2Client();
+
+  const response = await client.send(
+    new GetObjectCommand({ Bucket: bucketName, Key: key }),
+  );
+
+  if (!response.Body) {
+    throw new Error(`R2 object not found: ${key}`);
+  }
+
+  return streamToBuffer(response.Body);
 }
 
 /**

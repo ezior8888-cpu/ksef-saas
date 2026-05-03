@@ -24,6 +24,10 @@ const STATUS_MAP: Record<string, { label: string; className: string }> = {
     label: 'Wysyłanie',
     className: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
   },
+  offline_queued: {
+    label: 'Offline (oczekuje KSeF)',
+    className: IN_QUEUE_CLASSES,
+  },
   accepted: {
     label: 'Zaakceptowana',
     className: 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
@@ -60,6 +64,7 @@ export function StatusBadge({ status, isLoading }: StatusBadgeProps) {
     isLoading === true ||
     status === 'queued' ||
     status === 'pending' ||
+    status === 'offline_queued' ||
     status === 'sending';
 
   return (

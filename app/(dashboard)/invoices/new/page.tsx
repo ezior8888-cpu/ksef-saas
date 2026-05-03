@@ -1,9 +1,5 @@
-import { InvoiceForm } from '@/components/invoices/invoice-form';
+import { InvoiceTypeSelector } from '@/components/invoices/invoice-type-selector';
 
 export default function NewInvoicePage() {
-  return (
-    <div className="max-w-4xl">
-      <InvoiceForm />
-    </div>
-  );
+  return <InvoiceTypeSelector />;
 }

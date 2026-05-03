@@ -300,12 +300,16 @@ function buildBuyerChoice(daneId: any, buyer: BuyerParty): void {
     const { kodUE, numer } = splitVatUe(buyer.vatUeNumber);
     daneId.ele('KodUE').txt(kodUE);
     daneId.ele('NrVatUE').txt(numer);
+  } else if (buyer.pesel?.trim()) {
+    daneId.ele('NrPESEL').txt(buyer.pesel.trim());
+  } else if (buyer.nrInny?.trim()) {
+    daneId.ele('NrInny').txt(buyer.nrInny.trim());
   } else if (buyer.noIdMarker) {
     daneId.ele('BrakID').txt('1');
   } else {
     // validateInvoice powinno to złapać wcześniej, ale to safety-net.
     throw new Error(
-      'FA(3): nabywca musi mieć dokładnie jeden identyfikator (nip / vatUeNumber / noIdMarker).',
+      'FA(3): nabywca musi mieć dokładnie jeden identyfikator (nip / vatUeNumber / PESEL / NrInny / noIdMarker).',
     );
   }
 }

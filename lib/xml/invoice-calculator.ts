@@ -211,6 +211,18 @@ export function validateNipChecksum(nip: string): boolean {
   return mod < 10 && mod === digits[9];
 }
 
+/** PESEL — 11 cyfr + algorytm sumy kontrolnej (jak w GUS/regon). */
+export function validatePeselChecksum(pesel: string): boolean {
+  if (!/^\d{11}$/.test(pesel)) return false;
+  const weights = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
+  let sum = 0;
+  for (let i = 0; i < 10; i++) {
+    sum += parseInt(pesel[i], 10) * weights[i];
+  }
+  const checksum = (10 - (sum % 10)) % 10;
+  return checksum === parseInt(pesel[10], 10);
+}
+
 /**
  * Walidacja IBAN (dowolny kraj, ale zoptymalizowane pod PL).
  * Format: 2 litery kraju + 2 cyfry kontrolne + BBAN (max 30 znaków).
@@ -279,18 +291,23 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
   const buyerIdCount =
     (invoice.buyer.nip ? 1 : 0) +
     (invoice.buyer.vatUeNumber ? 1 : 0) +
-    (invoice.buyer.noIdMarker ? 1 : 0);
+    (invoice.buyer.noIdMarker ? 1 : 0) +
+    (invoice.buyer.pesel?.trim() ? 1 : 0) +
+    (invoice.buyer.nrInny?.trim() ? 1 : 0);
   if (buyerIdCount === 0) {
     errors.push(
-      'Nabywca musi mieć ustawiony dokładnie jeden z: nip, vatUeNumber, noIdMarker=true.'
+      'Nabywca musi mieć ustawiony dokładnie jeden identyfikator (NIP, VAT UE, PESEL, nr inny dokumentu lub „brak ID”).'
     );
   } else if (buyerIdCount > 1) {
     errors.push(
-      'Nabywca może mieć tylko jeden identyfikator: nip, vatUeNumber albo noIdMarker.'
+      'Nabywca może mieć tylko jeden identyfikator (NIP, VAT UE, PESEL, dokument lub marker braku ID).'
     );
   }
   if (invoice.buyer.nip && !validateNipChecksum(invoice.buyer.nip)) {
     errors.push(`NIP nabywcy "${invoice.buyer.nip}" ma nieprawidłową sumę kontrolną.`);
+  }
+  if (invoice.buyer.pesel && !validatePeselChecksum(invoice.buyer.pesel)) {
+    errors.push(`PESEL nabywcy ma nieprawidłową sumę kontrolną.`);
   }
 
   // ── Daty ───────────────────────────────────────────────────

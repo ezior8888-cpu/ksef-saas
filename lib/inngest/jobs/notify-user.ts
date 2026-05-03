@@ -74,7 +74,18 @@ export const notifyFailureJob = inngest.createFunction(
     triggers: [invoiceSubmitFailed],
   },
   async ({ event, step, logger }) => {
-    const { tenantId, invoiceId, errorMessage } = event.data;
+    const { tenantId, invoiceId, error, fromOfflineQueue } = event.data;
+
+    if (fromOfflineQueue) {
+      logger.info(
+        'Pomijam email o błędzie — faktura z kolejki Offline24 wraca do kolejki',
+        { tenantId, invoiceId },
+      );
+      return {
+        skipped: true as const,
+        reason: 'offline-queue-retry' as const,
+      };
+    }
 
     const email = await step.run('get-admin-email', () =>
       getTenantAdminEmail(tenantId),
@@ -89,7 +100,7 @@ export const notifyFailureJob = inngest.createFunction(
     }
 
     const result = await step.run('send-email', () =>
-      sendInvoiceFailedEmail(email, { invoiceId, errorMessage }),
+      sendInvoiceFailedEmail(email, { invoiceId, errorMessage: error }),
     );
 
     logger.info('notify-failure zakończone', {

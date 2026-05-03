@@ -32,7 +32,9 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { AlertCircle, Plus, Trash2, Loader2 } from 'lucide-react';
+import { BUYER_ID_TYPE_LABELS } from '@/types/invoice-types';
 
 const defaultLine: InvoiceFormValues['lines'][number] = {
   name: '',
@@ -87,6 +89,10 @@ export function InvoiceForm() {
       buyerAddressLine1: '',
       buyerAddressLine2: '',
       buyerEmail: '',
+      buyerIsConsumer: false,
+      buyerConsumerIdType: undefined,
+      buyerPesel: '',
+      buyerIdDocument: '',
       lines: [defaultLine],
       paymentMethod: 'transfer',
       paymentDueDate: in14days,
@@ -102,6 +108,11 @@ export function InvoiceForm() {
 
   const watchedLines = useWatch({ control: form.control, name: 'lines' });
   const buyerNipWatch = useWatch({ control: form.control, name: 'buyerNip' });
+  const buyerIsConsumer = useWatch({ control: form.control, name: 'buyerIsConsumer' });
+  const buyerConsumerIdType = useWatch({
+    control: form.control,
+    name: 'buyerConsumerIdType',
+  });
 
   const totals = calculateInvoiceTotals(
     ((watchedLines ?? []) as InvoiceFormValues['lines']).map<InvoiceLineItem>(
@@ -189,7 +200,7 @@ export function InvoiceForm() {
       <div>
         <h1 className="text-4xl font-semibold tracking-tight">Nowa faktura</h1>
         <p className="mt-2 text-muted-foreground">
-          Wystaw fakturę i wyślij do KSeF jednym kliknięciem
+          Wystaw fakturę B2B lub B2C i wyślij do KSeF jednym kliknięciem
         </p>
       </div>
 
@@ -230,18 +241,120 @@ export function InvoiceForm() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Nabywca</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Wyszukaj po NIP w bazie GUS lub wprowadź ręcznie
+            {buyerIsConsumer
+              ? 'Dane osoby fizycznej (bez NIP podatnika)'
+              : 'Wyszukaj po NIP w bazie GUS lub wprowadź ręcznie'}
           </p>
         </div>
-        <BuyerLookup
-          nip={buyerNipWatch ?? ''}
-          onNipChange={(digits) => {
-            form.setValue('buyerNip', digits, { shouldDirty: true });
-            if (digits.length === 10) void form.trigger('buyerNip');
-          }}
-          onSelected={handleBuyerSelected}
-          nipError={form.formState.errors.buyerNip?.message}
-        />
+        <div className="flex items-start gap-3 rounded-2xl border border-white/45 bg-white/30 p-4 dark:border-white/12 dark:bg-white/[0.04]">
+          <Checkbox
+            id="buyer-is-consumer"
+            checked={!!buyerIsConsumer}
+            onCheckedChange={(c) => {
+              const on = c === true;
+              form.setValue('buyerIsConsumer', on, { shouldDirty: true });
+              if (on) {
+                form.setValue('buyerNip', '', { shouldDirty: true });
+                form.setValue('buyerConsumerIdType', 'pesel', { shouldDirty: true });
+              } else {
+                form.setValue('buyerConsumerIdType', undefined, { shouldDirty: true });
+                form.setValue('buyerPesel', '', { shouldDirty: true });
+                form.setValue('buyerIdDocument', '', { shouldDirty: true });
+              }
+              void form.trigger(['buyerNip', 'buyerConsumerIdType', 'buyerPesel', 'buyerIdDocument']);
+            }}
+          />
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <Label htmlFor="buyer-is-consumer" className="text-sm font-medium leading-none">
+              Faktura dla osoby fizycznej (bez NIP)
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Włącz dla B2C: wybierz typ identyfikatora (PESEL, dowód, paszport lub brak).
+            </p>
+          </div>
+        </div>
+        {!buyerIsConsumer ? (
+          <BuyerLookup
+            nip={buyerNipWatch ?? ''}
+            onNipChange={(digits) => {
+              form.setValue('buyerNip', digits, { shouldDirty: true });
+              if (digits.length === 10) void form.trigger('buyerNip');
+            }}
+            onSelected={handleBuyerSelected}
+            nipError={form.formState.errors.buyerNip?.message}
+          />
+        ) : null}
+        {buyerIsConsumer ? (
+          <div className="space-y-2">
+            <Label className={labelClass}>Typ identyfikatora</Label>
+            <Select
+              value={buyerConsumerIdType ?? 'pesel'}
+              onValueChange={(v) => {
+                form.setValue(
+                  'buyerConsumerIdType',
+                  v as InvoiceFormValues['buyerConsumerIdType'],
+                  { shouldDirty: true },
+                );
+                form.setValue('buyerPesel', '', { shouldDirty: true });
+                form.setValue('buyerIdDocument', '', { shouldDirty: true });
+                void form.trigger(['buyerConsumerIdType', 'buyerPesel', 'buyerIdDocument']);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Wybierz typ" />
+              </SelectTrigger>
+              <SelectContent>
+                {(['pesel', 'id_card', 'passport', 'no_id'] as const).map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {BUYER_ID_TYPE_LABELS[k]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {form.formState.errors.buyerConsumerIdType ? (
+              <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                <AlertCircle className="h-3 w-3" />
+                {form.formState.errors.buyerConsumerIdType.message}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {buyerIsConsumer && buyerConsumerIdType === 'pesel' ? (
+          <div>
+            <Label className={labelClass}>PESEL</Label>
+            <Input
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="11 cyfr"
+              {...form.register('buyerPesel')}
+            />
+            {form.formState.errors.buyerPesel ? (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1.5">
+                <AlertCircle className="h-3 w-3" />
+                {form.formState.errors.buyerPesel.message}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {buyerIsConsumer &&
+        (buyerConsumerIdType === 'id_card' || buyerConsumerIdType === 'passport') ? (
+          <div>
+            <Label className={labelClass}>Numer dokumentu</Label>
+            <Input
+              autoComplete="off"
+              placeholder={
+                buyerConsumerIdType === 'id_card' ? 'Seria i numer dowodu' : 'Numer paszportu'
+              }
+              {...form.register('buyerIdDocument')}
+            />
+            {form.formState.errors.buyerIdDocument ? (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1.5">
+                <AlertCircle className="h-3 w-3" />
+                {form.formState.errors.buyerIdDocument.message}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Label className={labelClass}>Nazwa firmy</Label>

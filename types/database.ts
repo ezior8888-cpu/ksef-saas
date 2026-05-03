@@ -392,6 +392,9 @@ export type Database = {
           ksef_status: string | null
           last_attempt_at: string | null
           last_error: string | null
+          last_error_code: string | null
+          last_error_field: string | null
+          last_error_suggestion: string | null
           net_total: number | null
           notes: string | null
           paid_amount: number
@@ -410,6 +413,9 @@ export type Database = {
           updated_at: string | null
           vat_total: number | null
           xml_storage_path: string | null
+          offline_qr_offline: string | null
+          offline_qr_certyfikat: string | null
+          offline_idempotency_key: string | null
         }
         Insert: {
           advance_amount?: number | null
@@ -441,6 +447,9 @@ export type Database = {
           ksef_status?: string | null
           last_attempt_at?: string | null
           last_error?: string | null
+          last_error_code?: string | null
+          last_error_field?: string | null
+          last_error_suggestion?: string | null
           net_total?: number | null
           notes?: string | null
           paid_amount?: number
@@ -459,6 +468,9 @@ export type Database = {
           updated_at?: string | null
           vat_total?: number | null
           xml_storage_path?: string | null
+          offline_qr_offline?: string | null
+          offline_qr_certyfikat?: string | null
+          offline_idempotency_key?: string | null
         }
         Update: {
           advance_amount?: number | null
@@ -490,6 +502,9 @@ export type Database = {
           ksef_status?: string | null
           last_attempt_at?: string | null
           last_error?: string | null
+          last_error_code?: string | null
+          last_error_field?: string | null
+          last_error_suggestion?: string | null
           net_total?: number | null
           notes?: string | null
           paid_amount?: number
@@ -508,6 +523,9 @@ export type Database = {
           updated_at?: string | null
           vat_total?: number | null
           xml_storage_path?: string | null
+          offline_qr_offline?: string | null
+          offline_qr_certyfikat?: string | null
+          offline_idempotency_key?: string | null
         }
         Relationships: [
           {

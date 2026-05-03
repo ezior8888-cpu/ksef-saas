@@ -2,7 +2,7 @@
 // Walidatory Zod dla wszystkich typów faktur
 
 import { z } from 'zod';
-import { validateNipChecksum } from '@/lib/xml/invoice-calculator';
+import { validateNipChecksum, validatePeselChecksum } from '@/lib/xml/invoice-calculator';
 
 // ============================================================================
 // Helpers walidacyjne
@@ -20,16 +20,7 @@ const peselSchema = z
   .regex(/^\d{11}$/, 'PESEL musi mieć 11 cyfr')
   .refine(validatePeselChecksum, 'Niepoprawny PESEL');
 
-function validatePeselChecksum(pesel: string): boolean {
-  if (pesel.length !== 11) return false;
-  const weights = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
-  let sum = 0;
-  for (let i = 0; i < 10; i++) {
-    sum += parseInt(pesel[i], 10) * weights[i];
-  }
-  const checksum = (10 - (sum % 10)) % 10;
-  return checksum === parseInt(pesel[10], 10);
-}
+export { validatePeselChecksum } from '@/lib/xml/invoice-calculator';
 
 /** Numer faktury - dozwolone znaki alfanumeryczne + / - . */
 const invoiceNumberSchema = z
@@ -57,6 +48,8 @@ export const invoiceLineSchema = z.object({
   pkwiuCode: z.string().optional(),
   gtuCode: z.string().optional(),
 });
+
+export type InvoiceLineSchema = z.infer<typeof invoiceLineSchema>;
 
 // ============================================================================
 // Sprzedawca
@@ -158,11 +151,14 @@ export const correctionInvoiceSchema = z
     issueDate: dateSchema,
     paymentMethod: z.enum(['transfer', 'card', 'cash', 'compensation', 'other']),
     paymentDueDate: dateSchema,
-    bankAccount: z.string().regex(/^\d{26}$/).optional(),
+    bankAccount: z
+      .union([z.literal(''), z.string().regex(/^[0-9]{26}$/)])
+      .optional(),
     notes: z.string().max(2000).optional(),
 
     parentInvoiceId: z.string().uuid('Wybierz fakturę pierwotną'),
     parentInvoiceNumber: z.string().min(1),
+    parentInvoiceIssueDate: dateSchema,
     parentKsefNumber: z.string().optional(),
 
     correctionType: z.enum(['before_after', 'amount_change', 'cancellation']),
@@ -196,7 +192,11 @@ export const correctionInvoiceSchema = z
     {
       message: 'Wypełnij dane korekty zgodnie z wybranym typem',
     }
-  );
+  )
+  .refine((data) => new Date(data.paymentDueDate) >= new Date(data.issueDate), {
+    message: 'Termin płatności nie może być przed datą wystawienia',
+    path: ['paymentDueDate'],
+  });
 
 // ============================================================================
 // Faktura ZALICZKOWA
@@ -209,7 +209,9 @@ export const advanceInvoiceSchema = z
     issueDate: dateSchema,
     paymentMethod: z.enum(['transfer', 'card', 'cash', 'compensation', 'other']),
     paymentDueDate: dateSchema,
-    bankAccount: z.string().regex(/^\d{26}$/).optional(),
+    bankAccount: z
+      .union([z.literal(''), z.string().regex(/^\d{26}$/, 'Numer konta = 26 cyfr')])
+      .optional(),
     notes: z.string().max(2000).optional(),
 
     seller: sellerSchema,
@@ -224,28 +226,39 @@ export const advanceInvoiceSchema = z
   .refine((data) => data.advanceAmount <= data.totalContractAmount, {
     message: 'Zaliczka nie może być większa niż wartość umowy',
     path: ['advanceAmount'],
+  })
+  .refine((data) => new Date(data.paymentDueDate) >= new Date(data.issueDate), {
+    message: 'Termin płatności nie może być przed datą wystawienia',
+    path: ['paymentDueDate'],
   });
 
 // ============================================================================
 // Faktura FINALNA
 // ============================================================================
 
-export const finalInvoiceSchema = z.object({
-  invoiceType: z.literal('final'),
-  internalNumber: invoiceNumberSchema,
-  issueDate: dateSchema,
-  paymentMethod: z.enum(['transfer', 'card', 'cash', 'compensation', 'other']),
-  paymentDueDate: dateSchema,
-  bankAccount: z.string().regex(/^\d{26}$/).optional(),
-  notes: z.string().max(2000).optional(),
+export const finalInvoiceSchema = z
+  .object({
+    invoiceType: z.literal('final'),
+    internalNumber: invoiceNumberSchema,
+    issueDate: dateSchema,
+    paymentMethod: z.enum(['transfer', 'card', 'cash', 'compensation', 'other']),
+    paymentDueDate: dateSchema,
+    bankAccount: z
+      .union([z.literal(''), z.string().regex(/^\d{26}$/, 'Numer konta = 26 cyfr')])
+      .optional(),
+    notes: z.string().max(2000).optional(),
 
-  seller: sellerSchema,
-  buyer: buyerSchema,
+    seller: sellerSchema,
+    buyer: buyerSchema,
 
-  advanceInvoiceIds: z.array(z.string().uuid()).min(1, 'Wybierz min. 1 zaliczkę'),
-  totalAdvances: z.number().nonnegative(),
-  lines: z.array(invoiceLineSchema).min(1).max(100),
-});
+    advanceInvoiceIds: z.array(z.string().uuid()).min(1, 'Wybierz min. 1 zaliczkę'),
+    totalAdvances: z.number().nonnegative(),
+    lines: z.array(invoiceLineSchema).min(1).max(100),
+  })
+  .refine((data) => new Date(data.paymentDueDate) >= new Date(data.issueDate), {
+    message: 'Termin płatności nie może być przed datą wystawienia',
+    path: ['paymentDueDate'],
+  });
 
 // ============================================================================
 // DISCRIMINATED UNION - cały formularz
@@ -259,3 +272,7 @@ export const invoiceFormSchema = z.discriminatedUnion('invoiceType', [
 ]);
 
 export type InvoiceFormSchemaType = z.infer<typeof invoiceFormSchema>;
+
+export type CorrectionInvoiceSchemaIn = z.infer<typeof correctionInvoiceSchema>;
+export type AdvanceInvoiceSchemaIn = z.infer<typeof advanceInvoiceSchema>;
+export type FinalInvoiceSchemaIn = z.infer<typeof finalInvoiceSchema>;

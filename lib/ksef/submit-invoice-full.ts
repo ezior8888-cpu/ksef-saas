@@ -1,4 +1,11 @@
 import type { Invoice } from '@/types/invoice';
+import type { CorrectionInvoiceData, AdvanceInvoiceData, FinalInvoiceData } from '@/types/invoice-types';
+import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
+import { generateCorrectionInvoiceXml } from '@/lib/ksef/fa3-correction-generator';
+import {
+  generateAdvanceInvoiceXml,
+  generateFinalInvoiceXml,
+} from '@/lib/ksef/fa3-advance-generator';
 import { generateFA3Xml } from '@/lib/xml/fa3-generator';
 import { validateInvoiceXml } from '@/lib/xml/validator';
 import { uploadInvoiceXml } from '@/lib/storage/r2';
@@ -34,9 +41,22 @@ export async function submitInvoiceFullFlow(
   invoice: Invoice,
   auth: KsefAuth,
   env?: 'test' | 'demo' | 'production',
+  correctionData?: CorrectionInvoiceData | null,
+  advanceData?: AdvanceInvoiceData | null,
+  /** Dla ROZ — XML potrzebuje osobnego bloku rozliczenia z listą zaliczek. */
+  finalPayload?:
+    | { finalData: FinalInvoiceData; advanceSettlementRows: AdvanceInvoiceSettlementRow[] }
+    | null,
 ): Promise<FullSubmitResult> {
-  // 1. Generuj XML (z walidacją biznesową wewnątrz generatora).
-  const xml = generateFA3Xml(invoice);
+  // 1. Generuj XML (faktura VAT albo faktura korygująca FA(3)).
+  const xml =
+    correctionData != null
+      ? generateCorrectionInvoiceXml(correctionData)
+      : advanceData != null
+        ? generateAdvanceInvoiceXml(advanceData)
+      : finalPayload != null && finalPayload.advanceSettlementRows.length > 0
+        ? generateFinalInvoiceXml(finalPayload.finalData, finalPayload.advanceSettlementRows)
+        : generateFA3Xml(invoice);
 
   // 2. Waliduj XSD - jeśli XML się nie zgadza ze schematem FA(3), KSeF i tak
   //    by go odrzucił. Robimy to lokalnie żeby nie palić sesji KSeF

@@ -1,5 +1,7 @@
 import { Inngest, eventType, staticSchema } from 'inngest';
 import type { Invoice } from '@/types/invoice';
+import type { CorrectionInvoiceData, AdvanceInvoiceData, FinalInvoiceData } from '@/types/invoice-types';
+import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 
 /**
  * Inngest v4 nie ma już `EventSchemas().fromRecord<Record>()` z v3 -
@@ -29,6 +31,16 @@ export const invoiceSubmitRequested = eventType('invoice/submit.requested', {
     invoice: Invoice;
     /** NIP tenanta (klucz rate-limitera + kontekst sesji KSeF). */
     nip: string;
+    /** Gdy ustawione, generujemy XML z `generateCorrectionInvoiceXml`. */
+    correctionData?: CorrectionInvoiceData;
+    /** Faktura ZAL w FA(3). */
+    advanceData?: AdvanceInvoiceData;
+    /** ROZ — nagłówek bez listy zaliczek; użyj razem z `finalAdvanceSettlementRows`. */
+    finalData?: FinalInvoiceData;
+    finalAdvanceSettlementRows?: AdvanceInvoiceSettlementRow[];
+    fromOfflineQueue?: boolean;
+    offlineQueueId?: string;
+    idempotencyKey?: string;
   }>(),
 });
 
@@ -38,7 +50,9 @@ export const invoiceSubmitSucceeded = eventType('invoice/submit.succeeded', {
     tenantId: string;
     invoiceId: string;
     ksefNumber: string;
-    xmlStoragePath: string;
+    /** Opcjonalne — konsumenci mogą pobierać ścieżkę z rekordu faktury w DB. */
+    xmlStoragePath?: string;
+    fromOfflineQueue?: boolean;
   }>(),
 });
 
@@ -47,7 +61,8 @@ export const invoiceSubmitFailed = eventType('invoice/submit.failed', {
   schema: staticSchema<{
     tenantId: string;
     invoiceId: string;
-    errorMessage: string;
+    error: string;
+    fromOfflineQueue?: boolean;
   }>(),
 });
 
@@ -75,6 +90,15 @@ export const inboxInvoiceReceived = eventType('inbox/invoice.received', {
     grossAmount: number;
     currency: string;
     acquisitionTimestamp: string;
+  }>(),
+});
+
+/** Zaplanuj pobranie UPO dla faktury po akceptacji w KSeF. */
+export const invoiceUpoRequested = eventType('invoice/upo.requested', {
+  schema: staticSchema<{
+    invoiceId: string;
+    tenantId: string;
+    ksefNumber: string;
   }>(),
 });
 

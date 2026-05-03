@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { validateNipChecksum } from '@/lib/xml/invoice-calculator';
+import {
+  validateNipChecksum,
+  validatePeselChecksum,
+} from '@/lib/xml/invoice-calculator';
 
 // UWAGA: typ VatRate w types/invoice.ts nie zawiera '3' (stawka ryczałtu
 // rolnika ryczałtowego). Trzymamy się tego samego zestawu, żeby
@@ -7,11 +10,19 @@ import { validateNipChecksum } from '@/lib/xml/invoice-calculator';
 // dodać jednym punktem w types/invoice.ts + mapping w invoice-calculator.
 export const vatRateEnum = z.enum(['23', '8', '5', '0', 'zw', 'oo', 'np']);
 
+export const buyerConsumerIdTypeEnum = z.enum([
+  'pesel',
+  'id_card',
+  'passport',
+  'no_id',
+]);
+
+const consumerIdChoices = buyerConsumerIdTypeEnum.enum;
+
 // UWAGA: quantity/unitPriceNet to `z.number()` (nie `z.coerce.number()`).
 // RHF zadba o konwersję string→number przez `{ valueAsNumber: true }`.
 // Puste pole number → `NaN`; `z.number()` w Zod odrzuca NaN — wtedy
 // walidacja się nie udaje — MUSIMY pokazać toast w `handleSubmit` onInvalid
-// (invoice-form.tsx), inaczej wygląda to jak „guzik nie działa”.
 
 export const lineItemSchema = z.object({
   name: z.string().min(1, 'Nazwa wymagana').max(512, 'Maksymalnie 512 znaków'),
@@ -21,31 +32,69 @@ export const lineItemSchema = z.object({
   vatRate: vatRateEnum,
 });
 
-export const invoiceFormSchema = z.object({
-  internalNumber: z.string().min(1, 'Numer faktury wymagany').max(50),
-  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format: RRRR-MM-DD'),
-  /** Pusta lub prawidłowa data — sam regex na opcjonalnym stringu psuł `''` w Zod. */
-  saleDate: z.union([
-    z.literal(''),
-    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data sprzedaży: RRRR-MM-DD'),
-  ]),
-  buyerNip: z
-    .string()
-    .regex(/^\d{10}$/, 'NIP: 10 cyfr')
-    .refine(validateNipChecksum, 'Nieprawidłowa suma kontrolna NIP'),
-  buyerName: z.string().min(1, 'Nazwa wymagana'),
-  buyerAddressLine1: z.string().min(1, 'Adres — linia 1 wymagana'),
-  buyerAddressLine2: z.string().min(1, 'Adres — linia 2 wymagana'),
-  /** Pusty string musi być w union — inaczej `.email()` na `''` blokuje submit. */
-  buyerEmail: z.union([
-    z.literal(''),
-    z.string().email('Nieprawidłowy adres e-mail'),
-  ]),
-  lines: z.array(lineItemSchema).min(1, 'Dodaj co najmniej jedną pozycję'),
-  paymentMethod: z.enum(['transfer', 'cash', 'card', 'other']),
-  paymentDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  bankAccount: z.string().optional(),
-  notes: z.string().max(3500).optional(),
-});
+export const invoiceFormSchema = z
+  .object({
+    internalNumber: z.string().min(1, 'Numer faktury wymagany').max(50),
+    issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format: RRRR-MM-DD'),
+    saleDate: z.union([
+      z.literal(''),
+      z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data sprzedaży: RRRR-MM-DD'),
+    ]),
+    /** Dla firm — 10 cyfr + checksum (walidacja gdy buyerIsConsumer=false). */
+    buyerNip: z.string(),
+    buyerName: z.string().min(1, 'Nazwa wymagana'),
+    buyerAddressLine1: z.string().min(1, 'Adres — linia 1 wymagana'),
+    buyerAddressLine2: z.string().min(1, 'Adres — linia 2 wymagana'),
+    buyerEmail: z.union([
+      z.literal(''),
+      z.string().email('Nieprawidłowy adres e-mail'),
+    ]),
+    buyerIsConsumer: z.boolean(),
+    buyerConsumerIdType: buyerConsumerIdTypeEnum.optional(),
+    buyerPesel: z.string(),
+    buyerIdDocument: z.string(),
+    lines: z.array(lineItemSchema).min(1, 'Dodaj co najmniej jedną pozycję'),
+    paymentMethod: z.enum(['transfer', 'cash', 'card', 'other']),
+    paymentDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    bankAccount: z.string().optional(),
+    notes: z.string().max(3500).optional(),
+  })
+  .refine(
+    (d) =>
+      !!d.buyerIsConsumer ||
+      (/^\d{10}$/.test(d.buyerNip) &&
+        validateNipChecksum(d.buyerNip)),
+    { message: 'NIP firmy — 10 cyfr i suma kontrolna', path: ['buyerNip'] },
+  )
+  .refine((d) => !d.buyerIsConsumer || !!d.buyerConsumerIdType, {
+    message: 'Wybierz typ identyfikatora osoby fizycznej',
+    path: ['buyerConsumerIdType'],
+  })
+  .refine(
+    (d) => {
+      if (!d.buyerIsConsumer || d.buyerConsumerIdType !== consumerIdChoices.pesel) {
+        return true;
+      }
+      const peselDigits = d.buyerPesel.replace(/\D/g, '');
+      return validatePeselChecksum(peselDigits);
+    },
+    { message: 'Nieprawidłowy PESEL (11 cyfr, suma kontrolna)', path: ['buyerPesel'] },
+  )
+  .refine(
+    (d) => {
+      if (!d.buyerIsConsumer) return true;
+      const t = d.buyerConsumerIdType;
+      if (t !== consumerIdChoices.id_card && t !== consumerIdChoices.passport) return true;
+      return (d.buyerIdDocument?.trim().length ?? 0) >= 3;
+    },
+    {
+      message: 'Podaj numer dokumentu (min. 3 znaki)',
+      path: ['buyerIdDocument'],
+    },
+  )
+  .refine((d) => new Date(d.paymentDueDate) >= new Date(d.issueDate), {
+    message: 'Termin płatności nie może być przed datą wystawienia',
+    path: ['paymentDueDate'],
+  });
 
 export type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;

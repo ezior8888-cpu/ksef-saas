@@ -13,6 +13,12 @@ import {
   notifyFailureJob,
   notifySuccessJob,
 } from '@/lib/inngest/jobs/notify-user';
+import { downloadUpoJob } from '@/lib/inngest/jobs/download-upo';
+import {
+  offlineQueueFailureHandler,
+  offlineQueueSuccessHandler,
+  processOfflineQueueJob,
+} from '@/lib/inngest/jobs/process-offline-queue';
 
 /**
  * Webhook dla Inngest Cloud. Obsługuje GET, POST, PUT.
@@ -33,5 +39,9 @@ export const { GET, POST, PUT } = serve({
     certExpiryAlertJob,
     archiveOldInvoicesJob,
     retentionDeleteJob,
+    downloadUpoJob,
+    processOfflineQueueJob,
+    offlineQueueSuccessHandler,
+    offlineQueueFailureHandler,
   ],
 });

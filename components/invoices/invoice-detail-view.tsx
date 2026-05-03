@@ -8,6 +8,9 @@ import { createClient } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/invoices/status-badge';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
+import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
+import { UpoDownload } from '@/components/invoices/upo-download';
+import type { Database } from '@/types/database';
 
 export interface InvoiceDetailLine {
   ordinal: number;
@@ -47,9 +50,13 @@ export interface InvoiceDetailInitial {
   gross_total: string | number | null;
   notes: string | null;
   last_error: string | null;
+  last_error_code: string | null;
+  last_error_field: string | null;
+  last_error_suggestion: string | null;
   seller_data: unknown;
   buyer_data: unknown;
   lines: InvoiceDetailLine[];
+  upo_status: Database['public']['Enums']['upo_status_enum'] | null;
 }
 
 function formatNumber(value: string | number | null, digits = 2): string {
@@ -100,8 +107,40 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               prev.xml_storage_path,
             last_error:
               (row.last_error as string | null | undefined) ?? prev.last_error,
+            last_error_code:
+              (row.last_error_code as string | null | undefined) ??
+              prev.last_error_code,
+            last_error_field:
+              (row.last_error_field as string | null | undefined) ??
+              prev.last_error_field,
+            last_error_suggestion:
+              (row.last_error_suggestion as string | null | undefined) ??
+              prev.last_error_suggestion,
           }));
-        }
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'upo_receipts',
+          filter: `invoice_id=eq.${initial.id}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'DELETE') {
+            setInv((prev) => ({ ...prev, upo_status: null }));
+            return;
+          }
+          const row = payload.new as Record<string, unknown>;
+          const status = row.status;
+          if (typeof status === 'string') {
+            setInv((prev) => ({
+              ...prev,
+              upo_status: status as InvoiceDetailInitial['upo_status'],
+            }));
+          }
+        },
       )
       .subscribe();
 
@@ -153,17 +192,31 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
         </Card>
       )}
 
-      {inv.last_error &&
-        (inv.ksef_status === 'rejected' || inv.ksef_status === 'failed') && (
-          <Card className="p-4 mb-6 bg-red-50 border-red-200">
-            <p className="text-xs text-red-800 uppercase tracking-wide mb-1">
-              Ostatni błąd wysyłki
-            </p>
-            <p className="text-sm text-red-900 font-mono whitespace-pre-wrap">
-              {inv.last_error}
-            </p>
-          </Card>
-        )}
+      {inv.ksef_status === 'accepted' && inv.ksef_number && (
+        <div className="mb-6">
+          <UpoDownload
+            invoiceId={inv.id}
+            ksefNumber={inv.ksef_number}
+            upoStatus={inv.upo_status}
+          />
+        </div>
+      )}
+
+      {inv.last_error && (
+        <div className="mb-6">
+          <InvoiceErrorDisplay
+            errorMessage={inv.last_error}
+            errorCode={inv.last_error_code}
+            errorField={inv.last_error_field}
+            errorSuggestion={inv.last_error_suggestion}
+            invoiceId={inv.id}
+            showEditLink={
+              inv.ksef_status === 'rejected' ||
+              inv.ksef_status === 'failed'
+            }
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <Card className="p-4">

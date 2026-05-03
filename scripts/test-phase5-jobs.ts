@@ -256,7 +256,6 @@ async function main() {
       tenantId,
       invoiceId,
       ksefNumber: 'FAK-TEST-20260419-NOTIFY-SUCCESS',
-      xmlStoragePath: 'r2://test-bucket/test.xml',
     }),
   );
   ok(`event_id: ${r1.ids[0]}`);
@@ -266,7 +265,8 @@ async function main() {
     invoiceSubmitFailed.create({
       tenantId,
       invoiceId,
-      errorMessage: 'Test błąd: NonRetriableError - KSeF odrzucił fakturę (sync test)',
+      error:
+        'Test błąd: NonRetriableError - KSeF odrzucił fakturę (sync test)',
     }),
   );
   ok(`event_id: ${r2.ids[0]}`);

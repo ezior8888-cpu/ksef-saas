@@ -148,6 +148,7 @@ export interface InvoiceStatusUpdates {
     | 'sending'
     | 'accepted'
     | 'rejected'
+    | 'offline_queued'
     | 'received'
     | 'failed';
   ksef_number?: string;
@@ -156,6 +157,9 @@ export interface InvoiceStatusUpdates {
   xml_storage_path?: string;
   submission_attempts?: number;
   last_error?: string | null;
+  last_error_code?: string | null;
+  last_error_field?: string | null;
+  last_error_suggestion?: string | null;
   last_attempt_at?: string;
 }
 

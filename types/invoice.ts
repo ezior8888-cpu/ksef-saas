@@ -46,8 +46,12 @@ export interface SellerParty {
 export interface BuyerParty {
   /** NIP dla VAT-owców polskich (10 cyfr).
    *  Dla zagranicznych: pole vatUeNumber.
-   *  Dla osób fizycznych: noIdMarker=1 + name z imieniem i nazwiskiem. */
+   *  Dla osób fizycznych: jeden z: noIdMarker, pesel / nrInny (FA(3) Podmiot2). */
   nip?: string;
+  /** NrPESEL w FA(3) — wyłącznie z nip/vatUeNumber/noIdMarker jako pojedynczy identyfikator. */
+  pesel?: string;
+  /** NrInny (np. dowód, paszport) — dla B2C bez NIP. */
+  nrInny?: string;
   /** VAT UE (kraj + numer, np. DE123456789) dla kontrahentów zagranicznych */
   vatUeNumber?: string;
   /** Marker dla nabywcy bez identyfikatora podatkowego (B2C, pracownik) */

@@ -35,6 +35,9 @@ export default async function InvoiceDetailPage({
       gross_total,
       notes,
       last_error,
+      last_error_code,
+      last_error_field,
+      last_error_suggestion,
       seller_data,
       buyer_data,
       payment_data,
@@ -53,6 +56,12 @@ export default async function InvoiceDetailPage({
     .maybeSingle();
 
   if (!invoice) notFound();
+
+  const { data: upo } = await supabase
+    .from('upo_receipts')
+    .select('status')
+    .eq('invoice_id', id)
+    .maybeSingle();
 
   const lines = ((invoice.invoice_line_items ?? []) as InvoiceDetailLine[])
     .slice()
@@ -73,9 +82,15 @@ export default async function InvoiceDetailPage({
     gross_total: invoice.gross_total as string | number | null,
     notes: (invoice.notes as string | null) ?? null,
     last_error: (invoice.last_error as string | null) ?? null,
+    last_error_code: (invoice.last_error_code as string | null) ?? null,
+    last_error_field: (invoice.last_error_field as string | null) ?? null,
+    last_error_suggestion: (invoice.last_error_suggestion as string | null) ?? null,
     seller_data: invoice.seller_data,
     buyer_data: invoice.buyer_data,
     lines,
+    upo_status:
+      upo?.status ??
+      null,
   };
 
   return <InvoiceDetailView key={initial.id} initial={initial} />;
