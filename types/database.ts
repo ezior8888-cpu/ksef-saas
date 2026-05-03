@@ -162,36 +162,57 @@ export type Database = {
       contractors: {
         Row: {
           address: Json | null
+          bank_accounts_validated: string[] | null
           created_at: string
           email: string | null
           id: string
           last_used_at: string | null
+          last_validation_at: string | null
+          last_validation_source:
+            | Database["public"]["Enums"]["validation_source_enum"]
+            | null
           name: string
           nip: string
           phone: string | null
           tenant_id: string
+          validation_warning: string | null
+          vat_status: Database["public"]["Enums"]["vat_status_enum"] | null
         }
         Insert: {
           address?: Json | null
+          bank_accounts_validated?: string[] | null
           created_at?: string
           email?: string | null
           id?: string
           last_used_at?: string | null
+          last_validation_at?: string | null
+          last_validation_source?:
+            | Database["public"]["Enums"]["validation_source_enum"]
+            | null
           name: string
           nip: string
           phone?: string | null
           tenant_id: string
+          validation_warning?: string | null
+          vat_status?: Database["public"]["Enums"]["vat_status_enum"] | null
         }
         Update: {
           address?: Json | null
+          bank_accounts_validated?: string[] | null
           created_at?: string
           email?: string | null
           id?: string
           last_used_at?: string | null
+          last_validation_at?: string | null
+          last_validation_source?:
+            | Database["public"]["Enums"]["validation_source_enum"]
+            | null
           name?: string
           nip?: string
           phone?: string | null
           tenant_id?: string
+          validation_warning?: string | null
+          vat_status?: Database["public"]["Enums"]["vat_status_enum"] | null
         }
         Relationships: [
           {
@@ -457,11 +478,15 @@ export type Database = {
           advance_invoice_ids: string[]
           archive_storage_path: string | null
           archived_at: string | null
+          bank_account_validated: boolean | null
           buyer_data: Json | null
           buyer_id_number: string | null
           buyer_id_type: Database["public"]["Enums"]["buyer_id_type_enum"]
           buyer_nip: string | null
           buyer_pesel: string | null
+          buyer_vat_status_at_issue:
+            | Database["public"]["Enums"]["vat_status_enum"]
+            | null
           correction_reason: string | null
           correction_type:
             | Database["public"]["Enums"]["correction_type_enum"]
@@ -504,6 +529,7 @@ export type Database = {
           submitted_to_ksef_at: string | null
           tenant_id: string
           updated_at: string | null
+          validation_warnings: string[] | null
           vat_total: number | null
           xml_storage_path: string | null
         }
@@ -512,11 +538,15 @@ export type Database = {
           advance_invoice_ids?: string[]
           archive_storage_path?: string | null
           archived_at?: string | null
+          bank_account_validated?: boolean | null
           buyer_data?: Json | null
           buyer_id_number?: string | null
           buyer_id_type?: Database["public"]["Enums"]["buyer_id_type_enum"]
           buyer_nip?: string | null
           buyer_pesel?: string | null
+          buyer_vat_status_at_issue?:
+            | Database["public"]["Enums"]["vat_status_enum"]
+            | null
           correction_reason?: string | null
           correction_type?:
             | Database["public"]["Enums"]["correction_type_enum"]
@@ -559,6 +589,7 @@ export type Database = {
           submitted_to_ksef_at?: string | null
           tenant_id: string
           updated_at?: string | null
+          validation_warnings?: string[] | null
           vat_total?: number | null
           xml_storage_path?: string | null
         }
@@ -567,11 +598,15 @@ export type Database = {
           advance_invoice_ids?: string[]
           archive_storage_path?: string | null
           archived_at?: string | null
+          bank_account_validated?: boolean | null
           buyer_data?: Json | null
           buyer_id_number?: string | null
           buyer_id_type?: Database["public"]["Enums"]["buyer_id_type_enum"]
           buyer_nip?: string | null
           buyer_pesel?: string | null
+          buyer_vat_status_at_issue?:
+            | Database["public"]["Enums"]["vat_status_enum"]
+            | null
           correction_reason?: string | null
           correction_type?:
             | Database["public"]["Enums"]["correction_type_enum"]
@@ -614,6 +649,7 @@ export type Database = {
           submitted_to_ksef_at?: string | null
           tenant_id?: string
           updated_at?: string | null
+          validation_warnings?: string[] | null
           vat_total?: number | null
           xml_storage_path?: string | null
         }
@@ -1309,6 +1345,60 @@ export type Database = {
           },
         ]
       }
+      validation_cache: {
+        Row: {
+          bank_accounts: string[] | null
+          cached_at: string
+          country_code: string
+          expires_at: string
+          hit_count: number
+          id: string
+          is_valid: boolean | null
+          legal_name: string | null
+          nip: string
+          raw_response: Json | null
+          registered_address: string | null
+          registration_date: string | null
+          source: Database["public"]["Enums"]["validation_source_enum"]
+          termination_date: string | null
+          vat_status: Database["public"]["Enums"]["vat_status_enum"] | null
+        }
+        Insert: {
+          bank_accounts?: string[] | null
+          cached_at?: string
+          country_code?: string
+          expires_at?: string
+          hit_count?: number
+          id?: string
+          is_valid?: boolean | null
+          legal_name?: string | null
+          nip: string
+          raw_response?: Json | null
+          registered_address?: string | null
+          registration_date?: string | null
+          source: Database["public"]["Enums"]["validation_source_enum"]
+          termination_date?: string | null
+          vat_status?: Database["public"]["Enums"]["vat_status_enum"] | null
+        }
+        Update: {
+          bank_accounts?: string[] | null
+          cached_at?: string
+          country_code?: string
+          expires_at?: string
+          hit_count?: number
+          id?: string
+          is_valid?: boolean | null
+          legal_name?: string | null
+          nip?: string
+          raw_response?: Json | null
+          registered_address?: string | null
+          registration_date?: string | null
+          source?: Database["public"]["Enums"]["validation_source_enum"]
+          termination_date?: string | null
+          vat_status?: Database["public"]["Enums"]["vat_status_enum"] | null
+        }
+        Relationships: []
+      }
       xml_documents: {
         Row: {
           created_at: string | null
@@ -1365,6 +1455,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_expired_validation_cache: { Args: never; Returns: number }
       get_current_tenant_id: { Args: never; Returns: string }
     }
     Enums: {
@@ -1388,6 +1479,8 @@ export type Database = {
       reminder_stage_enum: "stage_1" | "stage_2" | "stage_3" | "stage_4"
       reminder_status_enum: "pending" | "sent" | "failed" | "cancelled"
       upo_status_enum: "pending" | "downloaded" | "failed" | "archived"
+      validation_source_enum: "whitelist" | "vies" | "manual"
+      vat_status_enum: "active" | "exempt" | "inactive" | "unknown" | "pending"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1540,6 +1633,8 @@ export const Constants = {
       reminder_stage_enum: ["stage_1", "stage_2", "stage_3", "stage_4"],
       reminder_status_enum: ["pending", "sent", "failed", "cancelled"],
       upo_status_enum: ["pending", "downloaded", "failed", "archived"],
+      validation_source_enum: ["whitelist", "vies", "manual"],
+      vat_status_enum: ["active", "exempt", "inactive", "unknown", "pending"],
     },
   },
 } as const

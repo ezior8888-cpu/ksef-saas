@@ -1,12 +1,35 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { Users, ArrowRight } from 'lucide-react';
 
+import { BulkValidateButton } from '@/components/validation/bulk-validate-button';
+import { VatStatusBadge } from '@/components/validation/vat-status-badge';
+
 export default async function ContractorsPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect('/login');
+
+  const { data: userTenant } = await supabase
+    .from('users')
+    .select('tenant_id')
+    .eq('id', user.id)
+    .single();
+
+  const userTenantId = userTenant?.tenant_id ?? null;
+
+  if (!userTenantId) redirect('/onboarding');
+
   const { data: contractors } = await supabase
     .from('contractors')
-    .select('*')
+    .select(
+      'id, nip, name, address, email, vat_status, last_validation_at, validation_warning, last_used_at'
+    )
+    .eq('tenant_id', userTenantId)
     .order('last_used_at', { ascending: false, nullsFirst: false })
     .limit(200);
 
@@ -14,13 +37,17 @@ export default async function ContractorsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-display font-semibold tracking-tighter-display">
-          Kontrahenci
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Zapisani automatycznie z faktur. Dane pobierane z bazy GUS REGON
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-display font-semibold tracking-tighter-display">
+            Kontrahenci
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            Zapisani automatycznie z faktur. Dane pobierane z bazy GUS REGON
+          </p>
+        </div>
+
+        <BulkValidateButton />
       </div>
 
       {!hasContractors ? (
@@ -60,6 +87,9 @@ export default async function ContractorsPage() {
                   Email
                 </th>
                 <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                  Status VAT
+                </th>
+                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
                   Ostatnio użyty
                 </th>
               </tr>
@@ -87,6 +117,12 @@ export default async function ContractorsPage() {
                   </td>
                   <td className="px-6 py-4 text-muted-foreground text-xs">
                     {contractor.email ?? '-'}
+                  </td>
+                  <td className="px-6 py-4">
+                    <VatStatusBadge
+                      status={contractor.vat_status ?? 'unknown'}
+                      warning={contractor.validation_warning}
+                    />
                   </td>
                   <td className="px-6 py-4 text-muted-foreground text-xs">
                     {contractor.last_used_at

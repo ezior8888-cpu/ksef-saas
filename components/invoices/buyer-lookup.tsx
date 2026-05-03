@@ -4,8 +4,11 @@ import { useTransition } from 'react';
 import { Search, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { Input } from '@/components/ui/input';
+import { NipValidatedInput } from '@/components/validation/nip-validated-input';
 import { Button } from '@/components/ui/button';
+
+import type { CachedValidationResult } from '@/lib/validation/cache';
+
 import { lookupBuyerAction } from './actions';
 
 interface Props {
@@ -18,9 +21,16 @@ interface Props {
     addressLine2: string;
   }) => void;
   nipError?: string;
+  onValidationComplete?: (result: CachedValidationResult | null) => void;
 }
 
-export function BuyerLookup({ nip, onNipChange, onSelected, nipError }: Props) {
+export function BuyerLookup({
+  nip,
+  onNipChange,
+  onSelected,
+  nipError,
+  onValidationComplete,
+}: Props) {
   const [isLoading, startLoading] = useTransition();
 
   const handleLookup = () => {
@@ -31,7 +41,7 @@ export function BuyerLookup({ nip, onNipChange, onSelected, nipError }: Props) {
         toast.success(
           result.source === 'cache'
             ? 'Uzupełniono z historii kontrahentów'
-            : 'Uzupełniono danymi z GUS'
+            : 'Uzupełniono danymi z GUS',
         );
       } else {
         toast.error(result.error);
@@ -41,25 +51,31 @@ export function BuyerLookup({ nip, onNipChange, onSelected, nipError }: Props) {
 
   return (
     <div className="space-y-1.5">
-      <div className="relative">
-        <Input
-          id="buyer-nip-lookup"
-          value={nip}
-          onChange={(e) => onNipChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
-          placeholder="Wyszukaj kontrahenta po NIP..."
-          inputMode="numeric"
-          maxLength={10}
-          disabled={isLoading}
-          autoComplete="off"
-          className={`pr-12 font-mono${nipError ? ' border-red-500/60 focus:border-red-500/60 focus:ring-red-500/20' : ''}`}
-        />
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <NipValidatedInput
+            value={nip}
+            onChange={(v) =>
+              onNipChange(v.replace(/\D/g, '').slice(0, 10))
+            }
+            onValidationComplete={onValidationComplete}
+            placeholder="np. 5260250995"
+            disabled={isLoading}
+            className={
+              nipError
+                ? 'border-red-500/60 focus-visible:border-red-500/60 focus-visible:ring-red-500/20'
+                : ''
+            }
+          />
+        </div>
         <Button
           type="button"
           variant="ghost"
           size="icon"
           onClick={handleLookup}
           disabled={nip.length !== 10 || isLoading}
-          className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-lg"
+          className="h-10 w-10 shrink-0 rounded-lg"
+          aria-label="Wyszukaj w GUS lub historii kontrahentów"
         >
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -72,7 +88,8 @@ export function BuyerLookup({ nip, onNipChange, onSelected, nipError }: Props) {
         <p className="text-xs text-red-600 dark:text-red-400">{nipError}</p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Wpisz NIP i opcjonalnie kliknij lupę, żeby uzupełnić nazwę i adres.
+          Wpisz NIP — weryfikacja VAT w tle — i opcjonalnie kliknij lupę, żeby
+          uzupełnić nazwę i adres (GUS / historia).
         </p>
       )}
     </div>

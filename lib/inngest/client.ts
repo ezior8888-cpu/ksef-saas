@@ -128,6 +128,19 @@ export const importFileUploaded = eventType('import/file.uploaded', {
   }>(),
 });
 
+/** Serwer: batch walidacji NIP/VAT kontrahentów (Biała Lista / VIES + cache). */
+export const validationBulkContractorsRequested = eventType(
+  'validation/bulk-contractors.requested',
+  {
+    schema: staticSchema<{
+      tenantId: string;
+      contractorIds: string[];
+      forceRefresh: boolean;
+      triggeredBy: string;
+    }>(),
+  },
+);
+
 // ═══════════════════════════════════════════════════════════════
 // CLIENT
 // ═══════════════════════════════════════════════════════════════

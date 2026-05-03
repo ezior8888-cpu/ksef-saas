@@ -1,6 +1,6 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   useForm,
@@ -21,6 +21,8 @@ import {
 import type { InvoiceLineItem } from '@/types/invoice';
 import { saveAndSendInvoiceAction, saveDraftAction } from './actions';
 import { BuyerLookup } from './buyer-lookup';
+import { VatStatusBadge } from '@/components/validation/vat-status-badge';
+import type { CachedValidationResult } from '@/lib/validation/cache';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -72,6 +74,8 @@ export function InvoiceForm() {
   const router = useRouter();
   const [isSaving, startSaving] = useTransition();
   const [isSending, startSending] = useTransition();
+  const [buyerVatStatus, setBuyerVatStatus] =
+    useState<CachedValidationResult | null>(null);
 
   const today = new Date().toISOString().slice(0, 10);
   const in14days = new Date(Date.now() + 14 * 86400_000)
@@ -158,6 +162,24 @@ export function InvoiceForm() {
 
   const handleSend = form.handleSubmit(
     (values) => {
+      if (
+        !buyerIsConsumer &&
+        buyerVatStatus &&
+        !buyerVatStatus.isValid
+      ) {
+        const label =
+          buyerVatStatus.legalName?.trim() ||
+          `(NIP ${buyerVatStatus.nip ?? '?'})`;
+        const proceed =
+          typeof window !== 'undefined' &&
+          confirm(
+            `Uwaga: kontrahent ${label} ma status "${buyerVatStatus.vatStatus}". KSeF może odrzucić fakturę. Kontynuować?`,
+          );
+        if (!proceed) {
+          return;
+        }
+      }
+
       startSending(async () => {
         try {
           const result = await saveAndSendInvoiceAction(values);
@@ -253,6 +275,7 @@ export function InvoiceForm() {
             onCheckedChange={(c) => {
               const on = c === true;
               form.setValue('buyerIsConsumer', on, { shouldDirty: true });
+              setBuyerVatStatus(null);
               if (on) {
                 form.setValue('buyerNip', '', { shouldDirty: true });
                 form.setValue('buyerConsumerIdType', 'pesel', { shouldDirty: true });
@@ -274,15 +297,40 @@ export function InvoiceForm() {
           </div>
         </div>
         {!buyerIsConsumer ? (
-          <BuyerLookup
-            nip={buyerNipWatch ?? ''}
-            onNipChange={(digits) => {
-              form.setValue('buyerNip', digits, { shouldDirty: true });
-              if (digits.length === 10) void form.trigger('buyerNip');
-            }}
-            onSelected={handleBuyerSelected}
-            nipError={form.formState.errors.buyerNip?.message}
-          />
+          <div className="space-y-2">
+            <Label className={labelClass}>NIP nabywcy</Label>
+            <BuyerLookup
+              nip={buyerNipWatch ?? ''}
+              onNipChange={(digits) => {
+                form.setValue('buyerNip', digits, { shouldDirty: true });
+                if (digits.length === 10) void form.trigger('buyerNip');
+              }}
+              onSelected={handleBuyerSelected}
+              nipError={form.formState.errors.buyerNip?.message}
+              onValidationComplete={(result) => {
+                setBuyerVatStatus(result);
+                if (
+                  result?.legalName &&
+                  !form.getValues('buyerName')?.trim()
+                ) {
+                  form.setValue('buyerName', result.legalName, {
+                    shouldDirty: true,
+                  });
+                }
+              }}
+            />
+            {buyerVatStatus ? (
+              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                <VatStatusBadge
+                  status={buyerVatStatus.vatStatus}
+                  source={buyerVatStatus.source}
+                  fromCache={buyerVatStatus.fromCache}
+                  warning={buyerVatStatus.warning ?? null}
+                  size="sm"
+                />
+              </div>
+            ) : null}
+          </div>
         ) : null}
         {buyerIsConsumer ? (
           <div className="space-y-2">

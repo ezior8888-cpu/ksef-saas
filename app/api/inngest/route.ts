@@ -20,6 +20,8 @@ import {
   processOfflineQueueJob,
 } from '@/lib/inngest/jobs/process-offline-queue';
 import { bulkImportFileJob } from '@/lib/inngest/jobs/bulk-import';
+import { bulkValidateContractorsJob } from '@/lib/inngest/jobs/bulk-validate-contractors';
+import { nightlyValidationRecheckJob } from '@/lib/inngest/jobs/nightly-validation-recheck';
 import { magicImportKsefJob } from '@/lib/inngest/jobs/magic-import-ksef';
 
 /**
@@ -47,5 +49,7 @@ export const { GET, POST, PUT } = serve({
     offlineQueueFailureHandler,
     magicImportKsefJob,
     bulkImportFileJob,
+    bulkValidateContractorsJob,
+    nightlyValidationRecheckJob,
   ],
 });
