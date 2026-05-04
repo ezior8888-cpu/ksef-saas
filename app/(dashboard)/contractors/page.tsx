@@ -5,6 +5,7 @@ import { Users, ArrowRight } from 'lucide-react';
 
 import { BulkValidateButton } from '@/components/validation/bulk-validate-button';
 import { VatStatusBadge } from '@/components/validation/vat-status-badge';
+import { ContractorReminderToggle } from '@/components/reminders/contractor-reminder-toggle';
 
 export default async function ContractorsPage() {
   const supabase = await createClient();
@@ -27,7 +28,7 @@ export default async function ContractorsPage() {
   const { data: contractors } = await supabase
     .from('contractors')
     .select(
-      'id, nip, name, address, email, vat_status, last_validation_at, validation_warning, last_used_at'
+      'id, nip, name, address, email, vat_status, last_validation_at, validation_warning, last_used_at, reminder_excluded, reminder_exclusion_reason'
     )
     .eq('tenant_id', userTenantId)
     .order('last_used_at', { ascending: false, nullsFirst: false })
@@ -72,7 +73,7 @@ export default async function ContractorsPage() {
       ) : (
         <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-foreground/[0.03] border-b border-glass-border">
+            <thead className="bg-foreground/3 border-b border-glass-border">
               <tr className="text-left">
                 <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
                   NIP
@@ -89,6 +90,9 @@ export default async function ContractorsPage() {
                 <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
                   Status VAT
                 </th>
+                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider text-center">
+                  Wkurzacz
+                </th>
                 <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
                   Ostatnio użyty
                 </th>
@@ -98,7 +102,7 @@ export default async function ContractorsPage() {
               {contractors.map((contractor) => (
                 <tr
                   key={contractor.id}
-                  className="border-b border-glass-border/50 last:border-0 hover:bg-foreground/[0.02] transition-colors duration-150"
+                  className="border-b border-glass-border/50 last:border-0 hover:bg-foreground/2 transition-colors duration-150"
                 >
                   <td className="px-6 py-4 font-mono text-xs">
                     {contractor.nip}
@@ -122,6 +126,12 @@ export default async function ContractorsPage() {
                     <VatStatusBadge
                       status={contractor.vat_status ?? 'unknown'}
                       warning={contractor.validation_warning}
+                    />
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <ContractorReminderToggle
+                      contractorId={contractor.id}
+                      excluded={contractor.reminder_excluded ?? false}
                     />
                   </td>
                   <td className="px-6 py-4 text-muted-foreground text-xs">

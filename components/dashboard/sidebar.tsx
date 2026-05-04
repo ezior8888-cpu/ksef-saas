@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  AlertCircle,
   FileText,
   Inbox,
   Users,
@@ -34,6 +35,7 @@ function isActivePath(pathname: string, href: string): boolean {
 const navItems: NavItem[] = [
   { href: '/reports', label: 'Dashboard', icon: BarChart3 },
   { href: '/invoices', label: 'Faktury wystawione', icon: FileText },
+  { href: '/payments/overdue', label: 'Przeterminowane', icon: AlertCircle },
   { href: '/inbox', label: 'Skrzynka odbiorcza', icon: Inbox },
   { href: '/contractors', label: 'Kontrahenci', icon: Users },
   { href: '/settings', label: 'Ustawienia', icon: Settings },

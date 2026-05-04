@@ -171,9 +171,13 @@ export type Database = {
           last_validation_source:
             | Database["public"]["Enums"]["validation_source_enum"]
             | null
+          late_payment_count: number
           name: string
           nip: string
+          payment_terms_days_avg: number | null
           phone: string | null
+          reminder_excluded: boolean
+          reminder_exclusion_reason: string | null
           tenant_id: string
           validation_warning: string | null
           vat_status: Database["public"]["Enums"]["vat_status_enum"] | null
@@ -189,9 +193,13 @@ export type Database = {
           last_validation_source?:
             | Database["public"]["Enums"]["validation_source_enum"]
             | null
+          late_payment_count?: number
           name: string
           nip: string
+          payment_terms_days_avg?: number | null
           phone?: string | null
+          reminder_excluded?: boolean
+          reminder_exclusion_reason?: string | null
           tenant_id: string
           validation_warning?: string | null
           vat_status?: Database["public"]["Enums"]["vat_status_enum"] | null
@@ -207,9 +215,13 @@ export type Database = {
           last_validation_source?:
             | Database["public"]["Enums"]["validation_source_enum"]
             | null
+          late_payment_count?: number
           name?: string
           nip?: string
+          payment_terms_days_avg?: number | null
           phone?: string | null
+          reminder_excluded?: boolean
+          reminder_exclusion_reason?: string | null
           tenant_id?: string
           validation_warning?: string | null
           vat_status?: Database["public"]["Enums"]["vat_status_enum"] | null
@@ -408,6 +420,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inngest_run_log_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "inngest_run_log_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
@@ -470,6 +489,13 @@ export type Database = {
             referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "invoice_line_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
         ]
       }
       invoices: {
@@ -493,6 +519,7 @@ export type Database = {
             | null
           created_at: string | null
           currency: string | null
+          days_to_payment: number | null
           direction: string
           fa3_data: Json
           gross_total: number | null
@@ -521,6 +548,8 @@ export type Database = {
           payment_data: Json | null
           payment_due_date: string | null
           payment_status: Database["public"]["Enums"]["payment_status_enum"]
+          reminders_paused: boolean
+          reminders_paused_reason: string | null
           sale_date: string | null
           scheduled_deletion_at: string | null
           seller_data: Json | null
@@ -553,6 +582,7 @@ export type Database = {
             | null
           created_at?: string | null
           currency?: string | null
+          days_to_payment?: number | null
           direction: string
           fa3_data: Json
           gross_total?: number | null
@@ -581,6 +611,8 @@ export type Database = {
           payment_data?: Json | null
           payment_due_date?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status_enum"]
+          reminders_paused?: boolean
+          reminders_paused_reason?: string | null
           sale_date?: string | null
           scheduled_deletion_at?: string | null
           seller_data?: Json | null
@@ -613,6 +645,7 @@ export type Database = {
             | null
           created_at?: string | null
           currency?: string | null
+          days_to_payment?: number | null
           direction?: string
           fa3_data?: Json
           gross_total?: number | null
@@ -641,6 +674,8 @@ export type Database = {
           payment_data?: Json | null
           payment_due_date?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status_enum"]
+          reminders_paused?: boolean
+          reminders_paused_reason?: string | null
           sale_date?: string | null
           scheduled_deletion_at?: string | null
           seller_data?: Json | null
@@ -659,6 +694,13 @@ export type Database = {
             columns: ["parent_invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_parent_invoice_id_fkey"
+            columns: ["parent_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
             referencedColumns: ["id"]
           },
           {
@@ -710,6 +752,13 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpir_entries_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
             referencedColumns: ["id"]
           },
           {
@@ -785,6 +834,13 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_offline_queue_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
             referencedColumns: ["id"]
           },
           {
@@ -886,6 +942,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ksef_submissions_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "ksef_submissions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
@@ -981,7 +1044,9 @@ export type Database = {
       payment_reminders: {
         Row: {
           channel: Database["public"]["Enums"]["reminder_channel_enum"]
+          clicked_at: string | null
           created_at: string
+          days_overdue_at_send: number | null
           delivery_status: string | null
           email_body: string | null
           email_message_id: string | null
@@ -989,6 +1054,10 @@ export type Database = {
           failure_reason: string | null
           id: string
           invoice_id: string
+          opened_at: string | null
+          opened_count: number
+          pdf_attachment_path: string | null
+          replied_at: string | null
           scheduled_for: string
           sent_at: string | null
           sms_body: string | null
@@ -999,7 +1068,9 @@ export type Database = {
         }
         Insert: {
           channel?: Database["public"]["Enums"]["reminder_channel_enum"]
+          clicked_at?: string | null
           created_at?: string
+          days_overdue_at_send?: number | null
           delivery_status?: string | null
           email_body?: string | null
           email_message_id?: string | null
@@ -1007,6 +1078,10 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           invoice_id: string
+          opened_at?: string | null
+          opened_count?: number
+          pdf_attachment_path?: string | null
+          replied_at?: string | null
           scheduled_for: string
           sent_at?: string | null
           sms_body?: string | null
@@ -1017,7 +1092,9 @@ export type Database = {
         }
         Update: {
           channel?: Database["public"]["Enums"]["reminder_channel_enum"]
+          clicked_at?: string | null
           created_at?: string
+          days_overdue_at_send?: number | null
           delivery_status?: string | null
           email_body?: string | null
           email_message_id?: string | null
@@ -1025,6 +1102,10 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           invoice_id?: string
+          opened_at?: string | null
+          opened_count?: number
+          pdf_attachment_path?: string | null
+          replied_at?: string | null
           scheduled_for?: string
           sent_at?: string | null
           sms_body?: string | null
@@ -1039,6 +1120,13 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_reminders_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
             referencedColumns: ["id"]
           },
           {
@@ -1117,6 +1205,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "payments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
@@ -1180,6 +1275,121 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "products_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reminder_settings: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          max_reminders_per_invoice: number
+          pause_on_partial_payment: boolean
+          pause_on_reply: boolean
+          reply_to_email: string | null
+          send_hour: number
+          send_on_weekdays_only: boolean
+          sender_email: string | null
+          sender_name: string | null
+          stage_1_days_after_due: number
+          stage_1_enabled: boolean
+          stage_2_days_after_due: number
+          stage_2_enabled: boolean
+          stage_3_days_after_due: number
+          stage_3_enabled: boolean
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          max_reminders_per_invoice?: number
+          pause_on_partial_payment?: boolean
+          pause_on_reply?: boolean
+          reply_to_email?: string | null
+          send_hour?: number
+          send_on_weekdays_only?: boolean
+          sender_email?: string | null
+          sender_name?: string | null
+          stage_1_days_after_due?: number
+          stage_1_enabled?: boolean
+          stage_2_days_after_due?: number
+          stage_2_enabled?: boolean
+          stage_3_days_after_due?: number
+          stage_3_enabled?: boolean
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          max_reminders_per_invoice?: number
+          pause_on_partial_payment?: boolean
+          pause_on_reply?: boolean
+          reply_to_email?: string | null
+          send_hour?: number
+          send_on_weekdays_only?: boolean
+          sender_email?: string | null
+          sender_name?: string | null
+          stage_1_days_after_due?: number
+          stage_1_enabled?: boolean
+          stage_2_days_after_due?: number
+          stage_2_enabled?: boolean
+          stage_3_days_after_due?: number
+          stage_3_enabled?: boolean
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reminder_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reminder_templates: {
+        Row: {
+          created_at: string
+          email_body: string
+          email_subject: string
+          id: string
+          is_default: boolean
+          stage: Database["public"]["Enums"]["reminder_stage_enum"]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email_body: string
+          email_subject: string
+          id?: string
+          is_default?: boolean
+          stage: Database["public"]["Enums"]["reminder_stage_enum"]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email_body?: string
+          email_subject?: string
+          id?: string
+          is_default?: boolean
+          stage?: Database["public"]["Enums"]["reminder_stage_enum"]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reminder_templates_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1299,6 +1509,13 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: true
             referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upo_receipts_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: true
+            referencedRelation: "invoices_overdue"
             referencedColumns: ["id"]
           },
           {
@@ -1442,6 +1659,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "xml_documents_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "xml_documents_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
@@ -1452,10 +1676,78 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      invoices_overdue: {
+        Row: {
+          amount_due: number | null
+          buyer_email: string | null
+          buyer_name: string | null
+          buyer_nip: string | null
+          days_overdue: number | null
+          gross_total: number | null
+          id: string | null
+          internal_number: string | null
+          issue_date: string | null
+          paid_amount: number | null
+          payment_due_date: string | null
+          payment_status:
+            | Database["public"]["Enums"]["payment_status_enum"]
+            | null
+          reminders_paused: boolean | null
+          reminders_sent_count: number | null
+          tenant_id: string | null
+        }
+        Insert: {
+          amount_due?: never
+          buyer_email?: never
+          buyer_name?: never
+          buyer_nip?: never
+          days_overdue?: never
+          gross_total?: number | null
+          id?: string | null
+          internal_number?: string | null
+          issue_date?: string | null
+          paid_amount?: number | null
+          payment_due_date?: string | null
+          payment_status?:
+            | Database["public"]["Enums"]["payment_status_enum"]
+            | null
+          reminders_paused?: boolean | null
+          reminders_sent_count?: never
+          tenant_id?: string | null
+        }
+        Update: {
+          amount_due?: never
+          buyer_email?: never
+          buyer_name?: never
+          buyer_nip?: never
+          days_overdue?: never
+          gross_total?: number | null
+          id?: string | null
+          internal_number?: string | null
+          issue_date?: string | null
+          paid_amount?: number | null
+          payment_due_date?: string | null
+          payment_status?:
+            | Database["public"]["Enums"]["payment_status_enum"]
+            | null
+          reminders_paused?: boolean | null
+          reminders_sent_count?: never
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       cleanup_expired_validation_cache: { Args: never; Returns: number }
+      days_overdue: { Args: { invoice_due_date: string }; Returns: number }
       get_current_tenant_id: { Args: never; Returns: string }
     }
     Enums: {

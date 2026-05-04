@@ -141,6 +141,23 @@ export const validationBulkContractorsRequested = eventType(
   },
 );
 
+/** Zaplanuj wysyłkę przypomnienia (Po `reminder-scheduler` — job `send-reminder`). */
+export const remindersSendRequested = eventType('reminders/send.requested', {
+  schema: staticSchema<{
+    reminderId: string;
+  }>(),
+});
+
+/**
+ * Zaksięgowano płatność przy fakturze — konsumenci (np. „Wkurzacz”) mogą
+ * anulować oczekujące przypomnienia.
+ */
+export const invoicePaymentReceived = eventType('invoice/payment.received', {
+  schema: staticSchema<{
+    invoiceId: string;
+  }>(),
+});
+
 // ═══════════════════════════════════════════════════════════════
 // CLIENT
 // ═══════════════════════════════════════════════════════════════

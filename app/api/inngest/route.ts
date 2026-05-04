@@ -23,6 +23,9 @@ import { bulkImportFileJob } from '@/lib/inngest/jobs/bulk-import';
 import { bulkValidateContractorsJob } from '@/lib/inngest/jobs/bulk-validate-contractors';
 import { nightlyValidationRecheckJob } from '@/lib/inngest/jobs/nightly-validation-recheck';
 import { magicImportKsefJob } from '@/lib/inngest/jobs/magic-import-ksef';
+import { reminderSchedulerJob } from '@/lib/inngest/jobs/reminder-scheduler';
+import { sendReminderJob } from '@/lib/inngest/jobs/send-reminder';
+import { cancelRemindersOnPaymentJob } from '@/lib/inngest/jobs/cancel-reminders-on-payment';
 
 /**
  * Webhook dla Inngest Cloud. Obsługuje GET, POST, PUT.
@@ -51,5 +54,8 @@ export const { GET, POST, PUT } = serve({
     bulkImportFileJob,
     bulkValidateContractorsJob,
     nightlyValidationRecheckJob,
+    reminderSchedulerJob,
+    sendReminderJob,
+    cancelRemindersOnPaymentJob,
   ],
 });

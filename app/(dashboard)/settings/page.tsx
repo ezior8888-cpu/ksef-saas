@@ -9,6 +9,7 @@ import {
   UserCog,
   ChevronRight,
   AlertTriangle,
+  Mail,
 } from 'lucide-react';
 import { DeleteAccountSection } from '@/components/settings/delete-account';
 
@@ -39,6 +40,16 @@ export default async function SettingsPage() {
       description: 'Certyfikat i połączenie z systemem KSeF',
       icon: ShieldCheck,
     },
+    ...(isOwner
+      ? [
+          {
+            href: '/settings/reminders',
+            label: 'Wkurzacz Dłużników',
+            description: 'Automatyczne przypomnienia o płatnościach',
+            icon: Mail,
+          },
+        ]
+      : []),
     {
       href: '/settings/accountant',
       label: 'Dostęp dla księgowej',
@@ -198,7 +209,7 @@ export default async function SettingsPage() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`flex items-center gap-4 p-5 hover:bg-foreground/[0.02] transition-colors duration-150 ${
+                className={`flex items-center gap-4 p-5 hover:bg-foreground/2 transition-colors duration-150 ${
                   idx !== settingsLinks.length - 1
                     ? 'border-b border-glass-border/50'
                     : ''
