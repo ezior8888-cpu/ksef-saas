@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   AlertCircle,
+  FileSpreadsheet,
   FileText,
   Inbox,
   Users,
@@ -34,6 +35,7 @@ function isActivePath(pathname: string, href: string): boolean {
 
 const navItems: NavItem[] = [
   { href: '/reports', label: 'Dashboard', icon: BarChart3 },
+  { href: '/reports/exports', label: 'Eksport', icon: FileSpreadsheet },
   { href: '/invoices', label: 'Faktury wystawione', icon: FileText },
   { href: '/payments/overdue', label: 'Przeterminowane', icon: AlertCircle },
   { href: '/inbox', label: 'Skrzynka odbiorcza', icon: Inbox },

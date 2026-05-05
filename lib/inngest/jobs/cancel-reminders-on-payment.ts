@@ -2,6 +2,7 @@
 
 import { invoicePaymentReceived, inngest } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { sendPushToTenant } from '@/lib/push/sender';
 
 export const cancelRemindersOnPaymentJob = inngest.createFunction(
   {
@@ -16,7 +17,7 @@ export const cancelRemindersOnPaymentJob = inngest.createFunction(
     const invoice = await step.run('check-invoice', async () => {
       const { data, error } = await supabase
         .from('invoices')
-        .select('paid_amount, gross_total')
+        .select('paid_amount, gross_total, tenant_id, internal_number')
         .eq('id', invoiceId)
         .maybeSingle();
 
@@ -57,6 +58,21 @@ export const cancelRemindersOnPaymentJob = inngest.createFunction(
       return { count: data?.length ?? 0 };
     });
 
-    return { cancelled: cancelled.count };
+    const pushResult = await step.run('push-payment-received', async () => {
+      if (!invoice.tenant_id) {
+        return { skipped: true as const, reason: 'no-tenant' as const };
+      }
+      const label = invoice.internal_number?.trim()
+        ? invoice.internal_number
+        : invoiceId.slice(0, 8);
+      return sendPushToTenant(invoice.tenant_id, 'payment_received', {
+        title: 'Faktura opłacona',
+        body: `Pełna zapłata · ${label}`,
+        url: '/payments',
+        tag: `payment-${invoiceId}`,
+      });
+    });
+
+    return { cancelled: cancelled.count, push: pushResult };
   },
 );

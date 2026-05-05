@@ -26,11 +26,12 @@ const buttonVariants = cva(
           "bg-foreground text-background hover:bg-foreground/90 shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] active:scale-[0.97] transition-all duration-200",
       },
       size: {
-        default: "h-11 gap-1.5 px-5 py-2.5 rounded-xl has-data-[icon=inline-end]:pr-4 has-data-[icon=inline-start]:pl-4",
+        default:
+          "h-11 gap-1.5 px-5 py-2.5 rounded-xl lg:h-11 [@media(pointer:coarse)]:h-12 has-data-[icon=inline-end]:pr-4 has-data-[icon=inline-start]:pl-4",
         xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-9 gap-1 rounded-lg px-4 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-12 gap-1.5 px-6 rounded-xl has-data-[icon=inline-end]:pr-5 has-data-[icon=inline-start]:pl-5",
-        icon: "size-11 rounded-xl",
+        sm: "h-9 gap-1 rounded-lg px-4 text-[0.8rem] [@media(pointer:coarse)]:h-10 in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-12 gap-1.5 px-6 rounded-xl [@media(pointer:coarse)]:h-14 [@media(pointer:coarse)]:px-7 has-data-[icon=inline-end]:pr-5 has-data-[icon=inline-start]:pl-5",
+        icon: "h-11 w-11 rounded-xl [@media(pointer:coarse)]:h-12 [@media(pointer:coarse)]:w-12",
         "icon-xs": "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",

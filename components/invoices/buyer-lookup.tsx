@@ -59,7 +59,7 @@ export function BuyerLookup({
               onNipChange(v.replace(/\D/g, '').slice(0, 10))
             }
             onValidationComplete={onValidationComplete}
-            placeholder="np. 5260250995"
+            placeholder="1234567890"
             disabled={isLoading}
             className={
               nipError

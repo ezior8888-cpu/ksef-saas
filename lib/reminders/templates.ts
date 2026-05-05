@@ -155,7 +155,7 @@ function replaceVariables(text: string, variables: TemplateVariables): string {
 
 function markdownToHtml(markdown: string): string {
   // Lekka konwersja markdown → HTML (bez external library)
-  let html = markdown
+  const html = markdown
     // Bold
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     // Inline code (rachunki bankowe etc.)

@@ -8,7 +8,7 @@ import {
 } from '@/lib/ksef/fa3-advance-generator';
 import { generateFA3Xml } from '@/lib/xml/fa3-generator';
 import { validateInvoiceXml } from '@/lib/xml/validator';
-import { uploadInvoiceXml } from '@/lib/storage/r2';
+import { invoiceXmlExistsForId, uploadInvoiceXml } from '@/lib/storage/r2';
 
 import type { KsefAuth } from './auth';
 import { submitInvoice } from './submit';
@@ -73,14 +73,28 @@ export async function submitInvoiceFullFlow(
   // 3. Upload do R2 PRZED wysyłką do KSeF.
   //    - sukces KSeF → mamy archive z SHA-256 integrity check
   //    - odrzucenie KSeF → też mamy historię próby (audit / retry)
-  //    IfNoneMatch='*' zablokuje nadpisanie, więc drugi call submitInvoiceFullFlow
-  //    na tej samej (tenantId, invoiceId) parze rzuci PreconditionFailed - pożądane,
-  //    bo deduplikuje wysyłki (idempotency na poziomie storage).
+  //
+  //    Idempotency dwuwarstwowa, oparta o deterministyczny generator FA(3):
+  //      a) HEAD przed PUT — przy retry wykrywamy istnienie obiektu i wyłączamy
+  //         `IfNoneMatch: '*'`, żeby drugi PUT nie wracał `PreconditionFailed`
+  //         w środku flow (a wtedy `submit-to-ksef` retryowałby w nieskończoność).
+  //      b) `IfNoneMatch: '*'` na pierwszym wgraniu — gwarantuje, że dwa
+  //         równoczesne calle z różnych instancji nie nadpiszą się nawzajem.
+  //      c) Obsługa `PreconditionFailed` w `r2.uploadXmlDocument` — gdyby a) i b)
+  //         zawiodły jednocześnie (np. klient_już-uploadował, my retryujemy
+  //         z `immutable=true`), traktujemy to jako sukces idempotentny.
+  const alreadyUploaded = await invoiceXmlExistsForId(
+    tenantId,
+    invoiceId,
+    invoice.issueDate,
+  );
+
   const uploadResult = await uploadInvoiceXml(
     tenantId,
     invoiceId,
     invoice.issueDate,
     xml,
+    { immutable: !alreadyUploaded },
   );
 
   // 4. Wysyłka do KSeF (rate-limited, z enkrypcją i auto-close sesji).

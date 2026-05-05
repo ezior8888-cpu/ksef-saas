@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   useForm,
@@ -77,6 +77,15 @@ export function InvoiceForm() {
   const [buyerVatStatus, setBuyerVatStatus] =
     useState<CachedValidationResult | null>(null);
 
+  // Synchroniczny re-entry guard — `isSaving`/`isSending` z `useTransition`
+  // ustawia się dopiero po async-walidacji RHF/Zod (kilka ms okna), przez co
+  // szybkie podwójne kliknięcie "Wystaw i wyślij" potrafiło stworzyć dwie
+  // faktury z tym samym `internal_number` (audyt #11). Ten ref blokuje submit
+  // od razu na pierwszym kliknięciu, jeszcze zanim transition pendinguje.
+  // Stanowi PIERWSZĄ warstwę ochrony — drugą jest unique index z migracji
+  // 00028, trzecią mapowanie 23505 → friendly error w `actions.ts`.
+  const submitInFlightRef = useRef(false);
+
   const today = new Date().toISOString().slice(0, 10);
   const in14days = new Date(Date.now() + 14 * 86400_000)
     .toISOString()
@@ -141,6 +150,8 @@ export function InvoiceForm() {
 
   const handleSaveDraft = form.handleSubmit(
     (values) => {
+      if (submitInFlightRef.current) return;
+      submitInFlightRef.current = true;
       startSaving(async () => {
         try {
           const result = await saveDraftAction(values);
@@ -152,16 +163,21 @@ export function InvoiceForm() {
           }
         } catch (e) {
           toast.error(e instanceof Error ? e.message : 'Błąd zapisu');
+        } finally {
+          submitInFlightRef.current = false;
         }
       });
     },
     (errors) => {
+      submitInFlightRef.current = false;
       toast.error(firstValidationMessage(errors));
     }
   );
 
   const handleSend = form.handleSubmit(
     (values) => {
+      if (submitInFlightRef.current) return;
+
       if (
         !buyerIsConsumer &&
         buyerVatStatus &&
@@ -180,6 +196,7 @@ export function InvoiceForm() {
         }
       }
 
+      submitInFlightRef.current = true;
       startSending(async () => {
         try {
           const result = await saveAndSendInvoiceAction(values);
@@ -192,10 +209,13 @@ export function InvoiceForm() {
           }
         } catch (e) {
           toast.error(e instanceof Error ? e.message : 'Błąd wysyłki');
+        } finally {
+          submitInFlightRef.current = false;
         }
       });
     },
     (errors) => {
+      submitInFlightRef.current = false;
       toast.error(firstValidationMessage(errors));
     }
   );
@@ -253,7 +273,11 @@ export function InvoiceForm() {
           </div>
           <div>
             <Label className={labelClass}>Data wystawienia</Label>
-            <Input type="date" {...form.register('issueDate')} />
+            <Input
+              type="date"
+              className="h-12 text-base"
+              {...form.register('issueDate')}
+            />
           </div>
         </div>
       </section>
@@ -418,17 +442,27 @@ export function InvoiceForm() {
           </div>
           <div className="col-span-2">
             <Label className={labelClass}>Email (opcjonalnie)</Label>
-            <Input type="email" {...form.register('buyerEmail')} />
+            <Input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              className="h-12 text-base"
+              {...form.register('buyerEmail')}
+            />
           </div>
         </div>
       </section>
 
-      {/* SECTION: Pozycje */}
-      <section className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-7 lg:p-8 space-y-5">
-        <div className="flex items-center justify-between">
+      {/* SECTION: Pozycje — desktop: tabela, mobile: karty (lg:) */}
+      <section
+        className="space-y-5 rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-5 lg:p-8"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight">Pozycje</h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h2 className="font-display text-lg font-semibold tracking-tighter-text">
+              Pozycje
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
               Towary i usługi na fakturze
             </p>
           </div>
@@ -437,47 +471,78 @@ export function InvoiceForm() {
             variant="glass"
             size="sm"
             onClick={() => append(defaultLine)}
+            className="shrink-0"
           >
-            <Plus className="h-4 w-4 mr-2" />
-            Dodaj pozycję
+            <Plus className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Dodaj pozycję</span>
+            <span className="sm:hidden">Dodaj</span>
           </Button>
         </div>
-        <div className="overflow-x-auto">
+
+        {/* DESKTOP: tabela */}
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/55 dark:border-white/14 text-left text-muted-foreground">
-                {['#', 'Nazwa', 'J.m.', 'Ilość', 'Cena netto', 'VAT', 'Netto', 'Brutto', ''].map((h) => (
-                  <th key={h} className="py-3 font-medium text-xs uppercase tracking-wider">
-                    {h}
-                  </th>
-                ))}
+              <tr className="border-b border-glass-border text-left text-muted-foreground">
+                <th className="w-8 py-3 text-xs font-medium uppercase tracking-wider">
+                  #
+                </th>
+                <th className="py-3 text-xs font-medium uppercase tracking-wider">
+                  Nazwa
+                </th>
+                <th className="w-20 py-3 text-xs font-medium uppercase tracking-wider">
+                  J.m.
+                </th>
+                <th className="w-24 py-3 text-xs font-medium uppercase tracking-wider">
+                  Ilość
+                </th>
+                <th className="w-32 py-3 text-xs font-medium uppercase tracking-wider">
+                  Cena netto
+                </th>
+                <th className="w-24 py-3 text-xs font-medium uppercase tracking-wider">
+                  VAT
+                </th>
+                <th className="w-28 py-3 text-right text-xs font-medium uppercase tracking-wider">
+                  Netto
+                </th>
+                <th className="w-28 py-3 text-right text-xs font-medium uppercase tracking-wider">
+                  Brutto
+                </th>
+                <th className="w-10 py-3" />
               </tr>
             </thead>
             <tbody>
               {fields.map((field, index) => {
-                const watched = watchedLines?.[index];
+                const w = watchedLines?.[index];
                 const calc = calculateLineItem({
-                  quantity: Number(watched?.quantity) || 0,
-                  unitPriceNet: Number(watched?.unitPriceNet) || 0,
-                  vatRate: watched?.vatRate ?? '23',
+                  quantity: Number(w?.quantity) || 0,
+                  unitPriceNet: Number(w?.unitPriceNet) || 0,
+                  vatRate: w?.vatRate ?? '23',
                 });
                 return (
                   <tr
                     key={field.id}
-                    className="border-b border-white/55 dark:border-white/[0.07] last:border-0"
+                    className="border-b border-glass-border/50 last:border-0"
                   >
                     <td className="py-3 text-muted-foreground">{index + 1}</td>
                     <td className="py-3 pr-2">
-                      <Input className="h-9" {...form.register(`lines.${index}.name`)} />
+                      <Input
+                        className="h-9"
+                        {...form.register(`lines.${index}.name`)}
+                      />
                     </td>
                     <td className="py-3 pr-2">
-                      <Input className="h-9" {...form.register(`lines.${index}.unit`)} />
+                      <Input
+                        className="h-9"
+                        {...form.register(`lines.${index}.unit`)}
+                      />
                     </td>
                     <td className="py-3 pr-2">
                       <Input
                         type="number"
                         step="0.0001"
-                        className="h-9"
+                        inputMode="decimal"
+                        className="h-9 text-right tabular-nums"
                         {...form.register(`lines.${index}.quantity`, {
                           valueAsNumber: true,
                         })}
@@ -487,7 +552,8 @@ export function InvoiceForm() {
                       <Input
                         type="number"
                         step="0.01"
-                        className="h-9"
+                        inputMode="decimal"
+                        className="h-9 text-right tabular-nums"
                         {...form.register(`lines.${index}.unitPriceNet`, {
                           valueAsNumber: true,
                         })}
@@ -495,7 +561,7 @@ export function InvoiceForm() {
                     </td>
                     <td className="py-3 pr-2">
                       <select
-                        className="h-9 border border-white/55 dark:border-white/14 rounded-xl px-2 text-sm w-full bg-white/50 dark:bg-white/[0.05] backdrop-blur-[12px] transition-colors focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                        className="h-9 w-full rounded-lg border border-glass-border bg-white/50 px-2 text-sm backdrop-blur-glass-sm dark:bg-white/[0.05]"
                         {...form.register(`lines.${index}.vatRate`)}
                       >
                         <option value="23">23%</option>
@@ -507,10 +573,10 @@ export function InvoiceForm() {
                         <option value="np">np</option>
                       </select>
                     </td>
-                    <td className="py-3 text-right tabular-nums pr-2">
+                    <td className="py-3 text-right tabular-nums">
                       {calc.netAmount.toFixed(2)}
                     </td>
-                    <td className="py-3 text-right tabular-nums font-medium pr-2">
+                    <td className="py-3 text-right tabular-nums font-medium">
                       {calc.grossAmount.toFixed(2)}
                     </td>
                     <td className="py-3">
@@ -520,7 +586,7 @@ export function InvoiceForm() {
                         size="icon"
                         disabled={fields.length === 1}
                         onClick={() => remove(index)}
-                        className="h-9 w-9 rounded-lg hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                        className="h-9 w-9 rounded-lg hover:bg-red-500/10 hover:text-red-600"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -530,23 +596,147 @@ export function InvoiceForm() {
               })}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-white/55 dark:border-white/14">
-                <td
-                  colSpan={6}
-                  className="py-4 text-right font-medium text-muted-foreground text-xs uppercase tracking-wider"
-                >
+              <tr className="border-t-2 border-glass-border/80">
+                <td colSpan={6} className="py-4 text-right font-medium">
                   RAZEM
                 </td>
-                <td className="py-4 text-right tabular-nums font-medium">
+                <td className="py-4 text-right font-medium tabular-nums">
                   {totals.netTotal.toFixed(2)}
                 </td>
-                <td className="py-4 text-right tabular-nums font-bold">
+                <td className="py-4 text-right text-base font-bold tabular-nums">
                   {totals.grossTotal.toFixed(2)} PLN
                 </td>
-                <td></td>
+                <td />
               </tr>
             </tfoot>
           </table>
+        </div>
+
+        {/* MOBILE: karty */}
+        <div className="space-y-3 lg:hidden">
+          {fields.map((field, index) => {
+            const w = watchedLines?.[index];
+            const calc = calculateLineItem({
+              quantity: Number(w?.quantity) || 0,
+              unitPriceNet: Number(w?.unitPriceNet) || 0,
+              vatRate: w?.vatRate ?? '23',
+            });
+            return (
+              <div
+                key={field.id}
+                className="space-y-3 rounded-2xl border border-glass-border/50 bg-foreground/2 p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <span
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-xs font-medium text-background"
+                  >
+                    {index + 1}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={fields.length === 1}
+                    onClick={() => remove(index)}
+                    className="h-9 w-9 rounded-lg hover:bg-red-500/10 hover:text-red-600"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div>
+                  <Label className={labelClass}>Nazwa pozycji</Label>
+                  <Input
+                    placeholder="np. Usługa programistyczna"
+                    className="h-12 text-base"
+                    {...form.register(`lines.${index}.name`)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className={labelClass}>Ilość</Label>
+                    <Input
+                      type="number"
+                      step="0.0001"
+                      inputMode="decimal"
+                      className="h-12 text-right text-base tabular-nums"
+                      {...form.register(`lines.${index}.quantity`, {
+                        valueAsNumber: true,
+                      })}
+                    />
+                  </div>
+                  <div>
+                    <Label className={labelClass}>Jednostka</Label>
+                    <Input
+                      placeholder="szt."
+                      className="h-12 text-base"
+                      {...form.register(`lines.${index}.unit`)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className={labelClass}>Cena netto (PLN)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      className="h-12 text-right text-base tabular-nums"
+                      {...form.register(`lines.${index}.unitPriceNet`, {
+                        valueAsNumber: true,
+                      })}
+                    />
+                  </div>
+                  <div>
+                    <Label className={labelClass}>Stawka VAT</Label>
+                    <select
+                      className="h-12 w-full rounded-xl border border-glass-border bg-white/50 px-3 text-base backdrop-blur-glass-sm dark:bg-white/[0.05]"
+                      {...form.register(`lines.${index}.vatRate`)}
+                    >
+                      <option value="23">23%</option>
+                      <option value="8">8%</option>
+                      <option value="5">5%</option>
+                      <option value="0">0%</option>
+                      <option value="zw">zw — zwolnione</option>
+                      <option value="oo">oo — odwrotne obciążenie</option>
+                      <option value="np">np — nie podlega</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-glass-border/50 pt-3">
+                  <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Brutto
+                  </span>
+                  <div className="text-right">
+                    <p className="text-base font-bold tabular-nums">
+                      {calc.grossAmount.toFixed(2)} PLN
+                    </p>
+                    <p className="text-xs tabular-nums text-muted-foreground">
+                      Netto: {calc.netAmount.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          <div className="mt-4 rounded-2xl border border-foreground/20 bg-foreground/5 p-5 backdrop-blur-glass-sm">
+            <div className="flex items-center justify-between">
+              <span className="font-medium">RAZEM</span>
+              <div className="text-right">
+                <p className="font-display text-2xl font-bold tabular-nums tracking-tighter-display">
+                  {totals.grossTotal.toFixed(2)} PLN
+                </p>
+                <p className="text-xs tabular-nums text-muted-foreground">
+                  Netto: {totals.netTotal.toFixed(2)} • VAT:{' '}
+                  {(totals.grossTotal - totals.netTotal).toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -583,7 +773,11 @@ export function InvoiceForm() {
           </div>
           <div>
             <Label className={labelClass}>Termin płatności</Label>
-            <Input type="date" {...form.register('paymentDueDate')} />
+            <Input
+              type="date"
+              className="h-12 text-base"
+              {...form.register('paymentDueDate')}
+            />
           </div>
           <div className="col-span-2">
             <Label className={labelClass}>Numer rachunku (dla przelewu)</Label>

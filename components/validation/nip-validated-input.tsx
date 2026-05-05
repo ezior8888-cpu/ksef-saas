@@ -82,8 +82,10 @@ export function NipValidatedInput({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
-          className={cn('pr-10 font-mono', className)}
-          maxLength={20}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={10}
+          className={cn('h-12 pr-10 font-mono text-lg', className)}
         />
         {trailingIcon ? (
           <div className="absolute right-3 top-1/2 -translate-y-1/2">

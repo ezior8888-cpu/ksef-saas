@@ -5,6 +5,7 @@
  */
 
 import { create } from 'xmlbuilder2';
+import type { XMLBuilder } from 'xmlbuilder2/lib/interfaces';
 
 import type { InvoiceLineItem, VatRate } from '@/types/invoice';
 import {
@@ -147,8 +148,7 @@ function typKorektyNumber(): '1' | '2' | '3' {
   return '2';
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function emitVatSummaries(fa: any, summaries: ReturnType<typeof summarizeVatPerRate>): void {
+function emitVatSummaries(fa: XMLBuilder, summaries: ReturnType<typeof summarizeVatPerRate>): void {
   const emissions = new Map<
     string,
     { netElement: string; vatElement?: string; netSum: number; vatSum: number }
@@ -177,8 +177,7 @@ function emitVatSummaries(fa: any, summaries: ReturnType<typeof summarizeVatPerR
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildAdnotacjeMinimal(fa: any, lines: InvoiceLineItem[]): void {
+function buildAdnotacjeMinimal(fa: XMLBuilder, lines: InvoiceLineItem[]): void {
   const adn = fa.ele('Adnotacje');
   const hasOoLine = lines.some((l) => l.vatRate === 'oo');
   const p18 = hasOoLine ? 1 : 2;
@@ -200,8 +199,7 @@ function buildAdnotacjeMinimal(fa: any, lines: InvoiceLineItem[]): void {
   adn.ele('PMarzy').ele('P_PMarzyN').txt('1');
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function appendFaWiersze(fa: any, lines: InvoiceLineItem[]): void {
+function appendFaWiersze(fa: XMLBuilder, lines: InvoiceLineItem[]): void {
   for (const line of lines) {
     const wiersz = fa.ele('FaWiersz');
 
@@ -230,9 +228,8 @@ function appendFaWiersze(fa: any, lines: InvoiceLineItem[]): void {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildPlatnosc(
-  fa: any,
+  fa: XMLBuilder,
   data: CorrectionInvoiceData,
 ): void {
   const platnosc = fa.ele('Platnosc');

@@ -29,7 +29,10 @@ export const downloadUpoJob = inngest.createFunction(
     id: 'download-upo',
     name: 'Pobranie UPO z KSeF',
     retries: 5,
-    concurrency: { limit: 5 },
+    // Per-NIP concurrency: max 3 równoległe pobrania UPO per tenant globalnie
+    // przez Inngest. Bez tego, gdy submit wysyła 50 faktur, KSeF /upo dostaje
+    // 50 równoległych żądań z jednego NIP-u i rate-limituje całość.
+    concurrency: { key: 'event.data.nip', limit: 3 },
     triggers: [invoiceUpoRequested],
   },
   async ({ event, step, logger }) => {

@@ -6,6 +6,7 @@ import { signOut } from '../(auth)/login/actions';
 import { MobileNav } from '@/components/dashboard/mobile-nav';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { ThemeToggle } from '@/components/dashboard/theme-toggle';
+import { InstallPrompt } from '@/components/pwa/install-prompt';
 import { Button } from '@/components/ui/button';
 
 export default async function DashboardLayout({
@@ -84,6 +85,7 @@ export default async function DashboardLayout({
           </div>
         </main>
       </div>
+      <InstallPrompt />
     </div>
   );
 }

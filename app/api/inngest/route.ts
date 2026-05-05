@@ -26,7 +26,12 @@ import { magicImportKsefJob } from '@/lib/inngest/jobs/magic-import-ksef';
 import { reminderSchedulerJob } from '@/lib/inngest/jobs/reminder-scheduler';
 import { sendReminderJob } from '@/lib/inngest/jobs/send-reminder';
 import { cancelRemindersOnPaymentJob } from '@/lib/inngest/jobs/cancel-reminders-on-payment';
-
+import { exportsGenerateJob } from '@/lib/inngest/jobs/exports-generate';
+import {
+  coPilotMonthlyJob,
+  coPilotSendPackageJob,
+} from '@/lib/inngest/jobs/co-pilot-monthly';
+import { jobsWatchdogJob } from '@/lib/inngest/jobs/jobs-watchdog';
 /**
  * Webhook dla Inngest Cloud. Obsługuje GET, POST, PUT.
  * Na tym endpoincie Inngest sprawdza status, rejestruje funkcje
@@ -57,5 +62,9 @@ export const { GET, POST, PUT } = serve({
     reminderSchedulerJob,
     sendReminderJob,
     cancelRemindersOnPaymentJob,
+    exportsGenerateJob,
+    coPilotMonthlyJob,
+    coPilotSendPackageJob,
+    jobsWatchdogJob,
   ],
 });

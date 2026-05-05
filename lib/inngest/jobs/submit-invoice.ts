@@ -11,12 +11,6 @@ import { KsefApiError } from '@/lib/ksef/client';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
-import type {
-  CorrectionInvoiceData,
-  AdvanceInvoiceData,
-  FinalInvoiceData,
-} from '@/types/invoice-types';
-import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 
 /**
  * Job wysyłki faktury do KSeF.
@@ -126,9 +120,20 @@ export const submitInvoiceJob = inngest.createFunction(
     },
   },
   async ({ event, step, logger }) => {
-    const { tenantId, invoiceId, invoice, nip } = event.data;
+    // Runtime walidacja Zod — bramka między event store a transakcją KSeF.
+    // Zła paczka (np. brak NIP-u po replay'u eventu ze starego kodu) zostaje
+    // odrzucona PRZED jakąkolwiek operacją w DB / R2 / KSeF. NonRetriableError
+    // zatrzymuje retry i woła `onFailure`, który oznacza fakturę jako rejected.
+    const parsed = invoiceSubmitRequested.safeParse(event.data);
+    if (!parsed.success) {
+      throw new NonRetriableError(
+        `Niepoprawny payload eventu invoice/submit.requested: ${parsed.error.message}`,
+        { cause: parsed.error },
+      );
+    }
+    const { tenantId, invoiceId, invoice, nip } = parsed.data;
     const env = (process.env.KSEF_ENV as 'test' | 'demo' | 'production') ?? 'test';
-    const fromOfflineQueue = Boolean(event.data.fromOfflineQueue);
+    const fromOfflineQueue = Boolean(parsed.data.fromOfflineQueue);
 
     logger.info('Rozpoczynam wysyłkę faktury', {
       tenantId,
@@ -198,12 +203,21 @@ export const submitInvoiceJob = inngest.createFunction(
       }
     }
 
-    // Krok 1: credentials PRZED `sending` — jeśli brak certyfikatu / decrypt
-    // padnie (NonRetriableError), `onFailure` oznaczy fakturę jako `rejected`
-    // zanim status przejdzie na `sending`. Wcześniej UI ma zwykle `queued`.
-    const credentials = await step.run('load-credentials', async () => {
+    // Krok 1: walidacja credentials PRZED `sending` — jeśli brak certyfikatu /
+    // decrypt padnie (NonRetriableError), `onFailure` oznaczy fakturę jako
+    // `rejected` zanim status przejdzie na `sending`.
+    //
+    // UWAGA SECOPS: ten step CELOWO zwraca tylko `{ type, nip }` zamiast
+    // pełnych credentials. Inngest serializuje return-value każdego `step.run`
+    // do swojego event store'u (memoization na potrzeby retry) — gdybyśmy
+    // wracali pełny `KsefAuth`, odszyfrowany PEM klucza prywatnego XAdES /
+    // long-lived token KSeF lądował-by w cudzej bazie z retencją >1d.
+    // Faktyczne credentials wczytujemy ponownie wewnątrz kroku `submit-to-ksef`
+    // (świeży decrypt z naszej DB, bez serializacji do Inngest).
+    await step.run('load-credentials-meta', async () => {
       try {
-        return await getTenantKsefCredentials(tenantId);
+        const c = await getTenantKsefCredentials(tenantId);
+        return { type: c.type, nip: c.nip };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         throw new NonRetriableError(
@@ -235,24 +249,28 @@ export const submitInvoiceJob = inngest.createFunction(
     });
 
     // Krok 3: pełny flow (generuj XML → waliduj XSD → R2 → KSeF).
-    // Ten step ma własny retry - błąd sieciowy retryuje TYLKO ten step,
-    // nie wcześniejszych (status w DB już 'sending', credentials w pamięci).
+    // Credentials wczytujemy świeżo wewnątrz tego step.run — return value
+    // tego stepu jest stripowany przez `submitInvoiceFullFlow` do meta-danych
+    // wyniku (ksefNumber, hash, path), więc nic wrażliwego nie wycieka do
+    // Inngest store'u.
+    //
+    // Ten step ma własny retry — błąd sieciowy retryuje TYLKO jego, nie
+    // wcześniejszych (status w DB już 'sending'). Przy retry credentials
+    // wczytamy ponownie z DB — koszt: jeden dodatkowy SELECT + decrypt,
+    // zysk: brak wycieku PEM-a do zewnętrznego storage'u.
     const result = await step.run('submit-to-ksef', async () => {
-      try {
-        const ed = event.data as {
-          correctionData?: CorrectionInvoiceData;
-          advanceData?: AdvanceInvoiceData;
-          finalData?: FinalInvoiceData;
-          finalAdvanceSettlementRows?: AdvanceInvoiceSettlementRow[];
-        };
+      const credentials = await getTenantKsefCredentials(tenantId);
 
+      try {
+        // Po refaktorze na zodEvent korzystamy z `parsed.data` (zwalidowanego),
+        // a nie z surowego `event.data` — typy są pewne, bez `as` casta.
         const finalPayload =
-          ed.finalData &&
-          ed.finalAdvanceSettlementRows &&
-          ed.finalAdvanceSettlementRows.length > 0
+          parsed.data.finalData &&
+          parsed.data.finalAdvanceSettlementRows &&
+          parsed.data.finalAdvanceSettlementRows.length > 0
             ? {
-                finalData: ed.finalData,
-                advanceSettlementRows: ed.finalAdvanceSettlementRows,
+                finalData: parsed.data.finalData,
+                advanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
               }
             : null;
 
@@ -262,8 +280,8 @@ export const submitInvoiceJob = inngest.createFunction(
           invoice,
           credentials,
           env,
-          ed.correctionData ?? null,
-          ed.advanceData ?? null,
+          parsed.data.correctionData ?? null,
+          parsed.data.advanceData ?? null,
           finalPayload,
         );
       } catch (error) {
@@ -309,6 +327,10 @@ export const submitInvoiceJob = inngest.createFunction(
       data: {
         invoiceId,
         tenantId,
+        // `nip` powędruje do `downloadUpoJob` jako klucz concurrency
+        // (`{ key: 'event.data.nip', limit: 3 }`) — limit per-tenant zapobiega
+        // zalaniu KSeF /upo żądaniami z jednego podmiotu.
+        nip,
         ksefNumber: result.ksefNumber,
       },
     });

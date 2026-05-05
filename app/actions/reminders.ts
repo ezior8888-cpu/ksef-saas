@@ -4,7 +4,11 @@ import { revalidatePath } from 'next/cache';
 
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import { inngest, remindersSendRequested } from '@/lib/inngest/client';
-import { createClient } from '@/lib/supabase/server';
+import {
+  ActionAuthError,
+  requireOwner,
+  requireUserAndTenant,
+} from '@/lib/supabase/auth-context';
 import {
   decideNextReminder,
   type InvoiceForScheduling,
@@ -66,18 +70,27 @@ export async function triggerManualReminderAction(
   | { success: true; reminderId: string }
   | { success: false; error: string }
 > {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let ctx;
+  try {
+    ctx = await requireUserAndTenant();
+  } catch (e) {
+    if (e instanceof ActionAuthError) {
+      return { success: false, error: e.message };
+    }
+    throw e;
+  }
+  const { supabase, tenantId } = ctx;
 
-  if (!user) return { success: false, error: 'Niezalogowany' };
-
+  // `.eq('tenant_id', tenantId)` defense-in-depth — RLS jest pierwszą linią,
+  // ale nie ufamy jej w 100%. Brak filtra pozwoliłby triggerować przypomnienie
+  // dla cudzej faktury, gdyby kiedykolwiek polityka SELECT na `invoices` została
+  // poluzowana / źle przemigrowana.
   const { data: invoiceRow, error: invErr } = await supabase
     .from('invoices')
     .select('*')
     .eq('id', invoiceId)
-    .single();
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
 
   if (invErr || !invoiceRow) {
     return { success: false, error: 'Faktura nie znaleziona' };
@@ -100,7 +113,7 @@ export async function triggerManualReminderAction(
   const { data: reminder, error } = await supabase
     .from('payment_reminders')
     .insert({
-      tenant_id: invoiceRow.tenant_id,
+      tenant_id: tenantId,
       invoice_id: invoiceId,
       stage: stageToUse,
       channel: 'email',
@@ -127,6 +140,7 @@ export async function triggerManualReminderAction(
       .from('payment_reminders')
       .delete()
       .eq('id', reminder.id)
+      .eq('tenant_id', tenantId)
       .eq('status', 'pending');
     return { success: false, error: formatInngestSendError(e) };
   }
@@ -144,12 +158,16 @@ export async function toggleInvoiceRemindersAction(
   paused: boolean,
   reason?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { success: false, error: 'Niezalogowany' };
+  let ctx;
+  try {
+    ctx = await requireUserAndTenant();
+  } catch (e) {
+    if (e instanceof ActionAuthError) {
+      return { success: false, error: e.message };
+    }
+    throw e;
+  }
+  const { supabase, tenantId } = ctx;
 
   const { error } = await supabase
     .from('invoices')
@@ -157,7 +175,8 @@ export async function toggleInvoiceRemindersAction(
       reminders_paused: paused,
       reminders_paused_reason: paused ? (reason ?? null) : null,
     })
-    .eq('id', invoiceId);
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId);
 
   if (error) return { success: false, error: error.message };
 
@@ -169,6 +188,7 @@ export async function toggleInvoiceRemindersAction(
         failure_reason: 'Wstrzymane przez użytkownika',
       })
       .eq('invoice_id', invoiceId)
+      .eq('tenant_id', tenantId)
       .eq('status', 'pending');
     if (cancelErr) return { success: false, error: cancelErr.message };
   }
@@ -186,31 +206,17 @@ export async function toggleInvoiceRemindersAction(
 export async function updateReminderSettingsAction(
   settings: ReminderSettingsPayload,
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { success: false, error: 'Niezalogowany' };
-
-  const { data: userTenant, error: userErr } = await supabase
-    .from('users')
-    .select('tenant_id, role')
-    .eq('id', user.id)
-    .single();
-
-  if (userErr || !userTenant?.tenant_id) {
-    return { success: false, error: 'Brak przypisania do tenanta' };
+  let ctx;
+  try {
+    ctx = await requireOwner();
+  } catch (e) {
+    if (e instanceof ActionAuthError) {
+      return { success: false, error: e.message };
+    }
+    throw e;
   }
+  const { supabase, tenantId } = ctx;
 
-  if (userTenant.role !== 'owner') {
-    return {
-      success: false,
-      error: 'Tylko właściciel może zmieniać ustawienia',
-    };
-  }
-
-  const tenantId = userTenant.tenant_id;
   const patch = pickDefined(settings as Record<string, unknown>);
 
   const { error } = await supabase.from('reminder_settings').upsert(
@@ -236,12 +242,16 @@ export async function toggleContractorRemindersAction(
   excluded: boolean,
   reason?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { success: false, error: 'Niezalogowany' };
+  let ctx;
+  try {
+    ctx = await requireUserAndTenant();
+  } catch (e) {
+    if (e instanceof ActionAuthError) {
+      return { success: false, error: e.message };
+    }
+    throw e;
+  }
+  const { supabase, tenantId } = ctx;
 
   const { error } = await supabase
     .from('contractors')
@@ -249,7 +259,8 @@ export async function toggleContractorRemindersAction(
       reminder_excluded: excluded,
       reminder_exclusion_reason: excluded ? (reason ?? null) : null,
     })
-    .eq('id', contractorId);
+    .eq('id', contractorId)
+    .eq('tenant_id', tenantId);
 
   if (error) return { success: false, error: error.message };
 

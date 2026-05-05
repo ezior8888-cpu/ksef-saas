@@ -69,7 +69,7 @@ export function parseIfirmaCsv(content: string): CsvParseResult {
       cell(row, ['Wartość brutto', 'Kwota brutto', 'Brutto', 'Suma brutto']),
     );
 
-    let vatRate = warnTotalsConsistency(
+    const vatRate = warnTotalsConsistency(
       netTotal,
       vatTotal,
       grossTotal,

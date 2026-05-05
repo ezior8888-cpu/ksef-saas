@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import {
   User,
+  Bell,
   Building2,
   ShieldCheck,
   History,
@@ -52,9 +53,15 @@ export default async function SettingsPage() {
       : []),
     {
       href: '/settings/accountant',
-      label: 'Dostęp dla księgowej',
-      description: 'Generowanie linków dla biura rachunkowego',
+      label: 'Co-Pilot Księgowego',
+      description: 'Auto-wysyłka paczek do biura rachunkowego',
       icon: UserCog,
+    },
+    {
+      href: '/settings/notifications',
+      label: 'Powiadomienia',
+      description: 'Push notifications na telefon i desktop',
+      icon: Bell,
     },
     {
       href: '/settings/audit',

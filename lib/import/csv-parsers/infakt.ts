@@ -71,7 +71,7 @@ export function parseInfaktCsv(content: string): CsvParseResult {
     const vatTotal = parseAmount(row.vat_total ?? row['VAT total']);
     const grossTotal = parseAmount(row.gross_total ?? row['Gross total']);
 
-    let vatRate = warnTotalsConsistency(
+    const vatRate = warnTotalsConsistency(
       netTotal,
       vatTotal,
       grossTotal,

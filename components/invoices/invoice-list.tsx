@@ -6,20 +6,11 @@ import { FileText, ArrowRight } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from './status-badge';
+import { SwipeableInvoiceRow } from './swipeable-invoice-row';
 
-export interface InvoiceRow {
-  id: string;
-  internal_number: string | null;
-  issue_date: string | null;
-  buyer_data: {
-    nip?: string;
-    name?: string;
-  } | null;
-  gross_total: string | number | null;
-  ksef_status: string;
-  ksef_number: string | null;
-  created_at: string;
-}
+import type { InvoiceRow } from './invoice-row-types';
+
+export type { InvoiceRow } from './invoice-row-types';
 
 /**
  * Lista faktur z nasłuchem Realtime.
@@ -111,60 +102,72 @@ export function InvoiceList({
   }
 
   return (
-    <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-foreground/[0.03] border-b border-white/55 dark:border-white/14">
-          <tr className="text-left">
-            {['Numer', 'Data', 'Nabywca', 'Kwota brutto', 'Status KSeF', 'Numer KSeF'].map((h) => (
-              <th
-                key={h}
-                className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider"
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {invoices.map((inv) => (
-            <tr
-              key={inv.id}
-              className="border-b border-white/55 dark:border-white/[0.07] last:border-0 hover:bg-foreground/[0.02] transition-colors duration-150"
-            >
-              <td className="px-6 py-4">
-                <Link
-                  href={`/invoices/${inv.id}`}
-                  className="font-medium font-mono text-sm hover:text-foreground/60 transition-colors"
+    <>
+      {/* MOBILE: lista kart ze swipe */}
+      <div className="lg:hidden space-y-2">
+        {invoices.map((inv) => (
+          <SwipeableInvoiceRow key={inv.id} invoice={inv} />
+        ))}
+      </div>
+
+      {/* DESKTOP: tabela (jak było) */}
+      <div className="hidden lg:block overflow-hidden rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-foreground/[0.03] border-b border-white/55 dark:border-white/14">
+              <tr className="text-left">
+                {['Numer', 'Data', 'Nabywca', 'Kwota brutto', 'Status KSeF', 'Numer KSeF'].map((h) => (
+                  <th
+                    key={h}
+                    className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((inv) => (
+                <tr
+                  key={inv.id}
+                  className="border-b border-white/55 dark:border-white/[0.07] last:border-0 hover:bg-foreground/[0.02] transition-colors duration-150"
                 >
-                  {inv.internal_number ?? '(bez numeru)'}
-                </Link>
-              </td>
-              <td className="px-6 py-4 text-muted-foreground tabular-nums">
-                {inv.issue_date ?? '—'}
-              </td>
-              <td className="px-6 py-4">
-                <div className="font-medium">{inv.buyer_data?.name ?? '—'}</div>
-                {inv.buyer_data?.nip && (
-                  <div className="text-xs text-muted-foreground font-mono">
-                    {inv.buyer_data.nip}
-                  </div>
-                )}
-              </td>
-              <td className="px-6 py-4 text-right tabular-nums font-medium">
-                {inv.gross_total != null
-                  ? `${Number(inv.gross_total).toFixed(2)} PLN`
-                  : '—'}
-              </td>
-              <td className="px-6 py-4">
-                <StatusBadge status={inv.ksef_status} />
-              </td>
-              <td className="px-6 py-4 font-mono text-xs text-muted-foreground">
-                {inv.ksef_number ?? '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+                  <td className="px-6 py-4">
+                    <Link
+                      href={`/invoices/${inv.id}`}
+                      className="font-medium font-mono text-sm hover:text-foreground/60 transition-colors"
+                    >
+                      {inv.internal_number ?? '(bez numeru)'}
+                    </Link>
+                  </td>
+                  <td className="px-6 py-4 text-muted-foreground tabular-nums">
+                    {inv.issue_date ?? '—'}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="font-medium">{inv.buyer_data?.name ?? '—'}</div>
+                    {inv.buyer_data?.nip && (
+                      <div className="text-xs text-muted-foreground font-mono">
+                        {inv.buyer_data.nip}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-right tabular-nums font-medium">
+                    {inv.gross_total != null
+                      ? `${Number(inv.gross_total).toFixed(2)} PLN`
+                      : '—'}
+                  </td>
+                  <td className="px-6 py-4">
+                    <StatusBadge status={inv.ksef_status} />
+                  </td>
+                  <td className="px-6 py-4 font-mono text-xs text-muted-foreground">
+                    {inv.ksef_number ?? '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
   );
 }

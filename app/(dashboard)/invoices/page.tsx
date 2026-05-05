@@ -3,7 +3,8 @@ import { PlusCircle } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
-import { InvoiceList, type InvoiceRow } from '@/components/invoices/invoice-list';
+import { InvoicesPullToRefresh } from './_components/invoices-pull-to-refresh';
+import type { InvoiceRow } from '@/components/invoices/invoice-row-types';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,10 +13,20 @@ export default async function InvoicesPage() {
 
   const { data: invoices, error } = await supabase
     .from('invoices')
-    .select('id, internal_number, issue_date, buyer_data, gross_total, ksef_status, ksef_number, created_at')
+    .select(
+      'id, internal_number, issue_date, buyer_data, gross_total, ksef_status, ksef_number, created_at, xml_storage_path'
+    )
     .eq('direction', 'outgoing')
     .order('created_at', { ascending: false })
     .limit(100);
+
+  const rows = (invoices ?? []) as InvoiceRow[];
+  const listKey = rows
+    .map(
+      (row) =>
+        `${row.id}:${row.ksef_status}:${String(row.internal_number ?? '')}:${String(row.ksef_number ?? '')}:${String(row.xml_storage_path ?? '')}`
+    )
+    .join('|');
 
   return (
     <div className="space-y-8">
@@ -41,7 +52,10 @@ export default async function InvoicesPage() {
           Nie udało się pobrać faktur: {error.message}
         </div>
       ) : (
-        <InvoiceList initialInvoices={(invoices ?? []) as InvoiceRow[]} />
+        <InvoicesPullToRefresh
+          listKey={listKey}
+          initialInvoices={rows}
+        />
       )}
     </div>
   );

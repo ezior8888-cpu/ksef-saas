@@ -7,6 +7,7 @@ import {
 } from '../client';
 import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
 import { queryReceivedInvoices } from '@/lib/ksef/inbox';
+import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/server';
 import type { KsefEnvironment } from '@/types/ksef';
 
@@ -88,9 +89,12 @@ export const inboxPollTenantJob = inngest.createFunction(
     id: 'inbox-poll-tenant',
     name: 'Polling skrzynki dla tenanta',
     retries: 2,
-    // Max 5 tenantów pollowanych jednocześnie - szanuje limit sesji KSeF
-    // (rate-limiter w kliencie działa per-NIP, ten limit to drugi poziom).
-    concurrency: { limit: 5 },
+    // Per-NIP concurrency: globalna kolejka Inngest po `event.data.nip` zapewnia,
+    // że jeden tenant nigdy nie wystawia >3 równoległych pollów do KSeF
+    // niezależnie od liczby instancji Vercela (in-memory `ksefRateLimiter` z
+    // `lib/ksef/rate-limiter.ts` jest per-process, więc na multi-instance
+    // hostingu nie wystarcza).
+    concurrency: { key: 'event.data.nip', limit: 3 },
     triggers: [inboxPollTenant],
   },
   async ({ event, step, logger }) => {
@@ -201,6 +205,27 @@ export const inboxPollTenantJob = inngest.createFunction(
           `Failed to insert incoming invoices: ${error.message}`,
         );
       }
+    });
+
+    await step.run('push-inbox-new', async () => {
+      const n = freshInvoices.length;
+      if (n === 0) return { skipped: true as const };
+
+      const first = freshInvoices[0];
+      const body =
+        n === 1
+          ? `${first.invoiceNumber} · ${first.seller.name}`
+          : `${n} faktur, m.in. ${first.invoiceNumber}`;
+
+      return sendPushToTenant(tenantId, 'inbox_new', {
+        title:
+          n === 1
+            ? 'Nowa faktura w skrzynce KSeF'
+            : `${n} nowych faktur w skrzynce`,
+        body,
+        url: '/inbox',
+        tag: `inbox-new-${tenantId}`,
+      });
     });
 
     // Fan-out do listenerów (np. notify-user w Fazie 6 UI dla real-time toast).

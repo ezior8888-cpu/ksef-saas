@@ -3,11 +3,16 @@ import {
   invoiceSubmitFailed,
   invoiceSubmitSucceeded,
 } from '../client';
-import { getTenantAdminEmail } from '@/lib/supabase/admin-queries';
+import {
+  getTenantAdminEmail,
+  getTenantOwnerUserId,
+} from '@/lib/supabase/admin-queries';
 import {
   sendInvoiceAcceptedEmail,
   sendInvoiceFailedEmail,
 } from '@/lib/email/send';
+import { sendPushToUser } from '@/lib/push/sender';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
  * Notyfikacje per-użytkownik po zakończeniu wysyłki faktury.
@@ -39,26 +44,57 @@ export const notifySuccessJob = inngest.createFunction(
       getTenantAdminEmail(tenantId),
     );
 
+    const result = await step.run('send-email', async () => {
+      if (!email) {
+        return {
+          sent: false as const,
+          reason: 'no-admin-email' as const,
+        };
+      }
+      return sendInvoiceAcceptedEmail(email, { ksefNumber, invoiceId });
+    });
+
     if (!email) {
-      logger.warn('Brak email dla tenanta - pomijam powiadomienie', {
+      logger.warn('Brak email dla tenanta — email pominięty, push dalej próbujemy', {
         tenantId,
         invoiceId,
       });
-      return { skipped: true as const, reason: 'no-admin-email' };
     }
 
-    const result = await step.run('send-email', () =>
-      sendInvoiceAcceptedEmail(email, { ksefNumber, invoiceId }),
-    );
+    const pushResult = await step.run('send-push', async () => {
+      const ownerId = await getTenantOwnerUserId(tenantId);
+      if (!ownerId) {
+        return { skipped: true as const, reason: 'no-owner' as const };
+      }
+
+      const supabase = createAdminClient();
+      const { data: inv } = await supabase
+        .from('invoices')
+        .select('internal_number')
+        .eq('id', invoiceId)
+        .maybeSingle();
+
+      const label = inv?.internal_number?.trim()
+        ? inv.internal_number
+        : invoiceId.slice(0, 8);
+
+      return sendPushToUser(ownerId, 'invoice_accepted', {
+        title: '✅ Faktura zaakceptowana',
+        body: `Faktura ${label} przeszła walidację KSeF`,
+        url: `/invoices/${invoiceId}`,
+        tag: `invoice-${invoiceId}`,
+      });
+    });
 
     logger.info('notify-success zakończone', {
       tenantId,
       invoiceId,
       emailTo: email,
+      pushResult,
       ...result,
     });
 
-    return { emailed: result.sent, reason: result.reason };
+    return { emailed: result.sent, reason: result.reason, push: pushResult };
   },
 );
 
@@ -91,25 +127,58 @@ export const notifyFailureJob = inngest.createFunction(
       getTenantAdminEmail(tenantId),
     );
 
+    const result = await step.run('send-email', async () => {
+      if (!email) {
+        return {
+          sent: false as const,
+          reason: 'no-admin-email' as const,
+        };
+      }
+      return sendInvoiceFailedEmail(email, { invoiceId, errorMessage: error });
+    });
+
     if (!email) {
-      logger.warn('Brak email dla tenanta - pomijam powiadomienie', {
+      logger.warn('Brak email dla tenanta — email pominięty, push dalej próbujemy', {
         tenantId,
         invoiceId,
       });
-      return { skipped: true as const, reason: 'no-admin-email' };
     }
 
-    const result = await step.run('send-email', () =>
-      sendInvoiceFailedEmail(email, { invoiceId, errorMessage: error }),
-    );
+    const pushResult = await step.run('send-push', async () => {
+      const ownerId = await getTenantOwnerUserId(tenantId);
+      if (!ownerId) {
+        return { skipped: true as const, reason: 'no-owner' as const };
+      }
+
+      const supabase = createAdminClient();
+      const { data: inv } = await supabase
+        .from('invoices')
+        .select('internal_number')
+        .eq('id', invoiceId)
+        .maybeSingle();
+
+      const label = inv?.internal_number?.trim()
+        ? inv.internal_number
+        : invoiceId.slice(0, 8);
+      const errShort =
+        error.length > 140 ? `${error.slice(0, 137)}…` : error;
+
+      return sendPushToUser(ownerId, 'invoice_rejected', {
+        title: 'Faktura odrzucona przez KSeF',
+        body: `${label}: ${errShort}`,
+        url: `/invoices/${invoiceId}`,
+        tag: `invoice-${invoiceId}`,
+      });
+    });
 
     logger.info('notify-failure zakończone', {
       tenantId,
       invoiceId,
       emailTo: email,
+      pushResult,
       ...result,
     });
 
-    return { emailed: result.sent, reason: result.reason };
+    return { emailed: result.sent, reason: result.reason, push: pushResult };
   },
 );

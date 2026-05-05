@@ -239,6 +239,12 @@ export function CorrectionInvoiceForm({
     userDismissedPrefillRef.current = false;
   }, [preselectedParentId]);
 
+  // `loadParentContext` jest async i wewnętrznie wywołuje setState — React
+  // Compiler flaguje to jako "setState within effect". Tu jest to świadomy
+  // bridge URL-param → form-state (pre-select rodzica korekty), więc wzorzec
+  // jest pożądany. Refaktor na `useSyncExternalStore` byłby przesadą dla
+  // jednego pre-fillu; suppress z explicit komentarzem.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-fill bridge for ?parent=<id> URL param
   useEffect(() => {
     if (!validPreselect || userDismissedPrefillRef.current) return;
     const row = parentInvoices.find((p) => p.id === validPreselect);

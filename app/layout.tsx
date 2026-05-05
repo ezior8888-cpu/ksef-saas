@@ -21,10 +21,33 @@ const THEME_BOOT =
 
 export const metadata: Metadata = {
   title: 'KSeF SaaS',
-  description: 'Fakturowanie zgodne z KSeF 2.0',
+  description: 'Faktury KSeF dla mikrofirm',
+  // PWA / iOS (Safari) — manifest z `app/manifest.ts` nie wystarczy na iOS
+  applicationName: 'KSeF SaaS',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'KSeF',
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    icon: '/icons/icon-192x192.png',
+    shortcut: '/icons/icon-96x96.png',
+    apple: '/icons/apple-touch-icon.png',
+  },
 };
 
 export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#000000' },
+  ],
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
   colorScheme: 'dark light',
 };
 

@@ -72,6 +72,21 @@ export async function startMagicImportAction(
     return { success: false, error: 'Niepoprawny format dat (YYYY-MM-DD).' };
   }
 
+  // NIP potrzebny do klucza concurrency w `magicImportKsefJob`
+  // (`{ key: 'event.data.nip', limit: 3 }`) — limit per-tenant.
+  const { data: tenantRow, error: tenantErr } = await supabase
+    .from('tenants')
+    .select('nip')
+    .eq('id', tenantId)
+    .single();
+
+  if (tenantErr || !tenantRow?.nip) {
+    return {
+      success: false,
+      error: tenantErr?.message ?? 'Brak NIP tenanta',
+    };
+  }
+
   const { data: job, error } = await supabase
     .from('import_jobs')
     .insert({
@@ -96,6 +111,7 @@ export async function startMagicImportAction(
       importKsefHistoryRequested.create({
         importJobId: job.id,
         tenantId,
+        nip: tenantRow.nip,
         dateFrom,
         dateTo,
         direction,

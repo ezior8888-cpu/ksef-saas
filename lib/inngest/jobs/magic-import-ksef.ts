@@ -20,7 +20,11 @@ export const magicImportKsefJob = inngest.createFunction(
     id: 'magic-import-ksef',
     name: 'Magiczny Import historii z KSeF',
     retries: 2,
-    concurrency: { limit: 3 },
+    // Per-NIP concurrency: max 3 równoczesne importy historii per tenant.
+    // Magiczny Import wystawia setki żądań do KSeF (`fetch-batch-${i}` po
+    // 10 faktur), więc bez tego limita jeden tenant z dużą historią potrafi
+    // zająć cały budżet rate-limitera u MF.
+    concurrency: { key: 'event.data.nip', limit: 3 },
     triggers: [importKsefHistoryRequested],
     onFailure: async ({ error: failureErr, event, step }) => {
       const original = event.data.event as {

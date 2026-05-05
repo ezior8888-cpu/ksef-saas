@@ -1,7 +1,11 @@
 import { Inngest, eventType, staticSchema } from 'inngest';
+import { z } from 'zod';
+
 import type { Invoice } from '@/types/invoice';
 import type { CorrectionInvoiceData, AdvanceInvoiceData, FinalInvoiceData } from '@/types/invoice-types';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
+
+import { zodEvent } from './event-schema';
 
 /**
  * Inngest v4 nie ma już `EventSchemas().fromRecord<Record>()` z v3 -
@@ -23,26 +27,46 @@ import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generat
 // EVENT TYPES
 // ═══════════════════════════════════════════════════════════════
 
-/** Użytkownik kliknął "Wyślij fakturę do KSeF" w UI. */
-export const invoiceSubmitRequested = eventType('invoice/submit.requested', {
-  schema: staticSchema<{
-    tenantId: string;
-    invoiceId: string;
-    invoice: Invoice;
-    /** NIP tenanta (klucz rate-limitera + kontekst sesji KSeF). */
-    nip: string;
-    /** Gdy ustawione, generujemy XML z `generateCorrectionInvoiceXml`. */
-    correctionData?: CorrectionInvoiceData;
-    /** Faktura ZAL w FA(3). */
-    advanceData?: AdvanceInvoiceData;
-    /** ROZ — nagłówek bez listy zaliczek; użyj razem z `finalAdvanceSettlementRows`. */
-    finalData?: FinalInvoiceData;
-    finalAdvanceSettlementRows?: AdvanceInvoiceSettlementRow[];
-    fromOfflineQueue?: boolean;
-    offlineQueueId?: string;
-    idempotencyKey?: string;
-  }>(),
+/**
+ * Schemat Zod dla `invoice/submit.requested`.
+ *
+ * Walidacja runtime'owa: chroni przed zniekształconym payloadem (np. brak
+ * NIP-u przy replay'u eventu ze starego kodu) — handler robi `.parse()`
+ * na wejściu i bezpiecznie kończy się NonRetriableError, zamiast łamać się
+ * w środku transakcji KSeF.
+ *
+ * Domena (`invoice`, `correctionData`, ...) idzie przez `z.custom<T>()` —
+ * top-level kształt wymuszamy, ale głębokie pola walidują formularze i
+ * generatory XML (RHF + Zod + libxmljs2 XSD).
+ */
+const InvoiceSubmitRequestedSchema = z.object({
+  tenantId: z.string().uuid('tenantId musi być UUID'),
+  invoiceId: z.string().uuid('invoiceId musi być UUID'),
+  invoice: z.custom<Invoice>(
+    (v): v is Invoice => v != null && typeof v === 'object' && !Array.isArray(v),
+    { message: 'invoice musi być obiektem domeny' },
+  ),
+  /** NIP tenanta (klucz rate-limitera + kontekst sesji KSeF). */
+  nip: z.string().regex(/^\d{10}$/, 'NIP musi mieć dokładnie 10 cyfr'),
+  /** Gdy ustawione, generujemy XML z `generateCorrectionInvoiceXml`. */
+  correctionData: z.custom<CorrectionInvoiceData>().optional(),
+  /** Faktura ZAL w FA(3). */
+  advanceData: z.custom<AdvanceInvoiceData>().optional(),
+  /** ROZ — nagłówek bez listy zaliczek; użyj razem z `finalAdvanceSettlementRows`. */
+  finalData: z.custom<FinalInvoiceData>().optional(),
+  finalAdvanceSettlementRows: z
+    .array(z.custom<AdvanceInvoiceSettlementRow>())
+    .optional(),
+  fromOfflineQueue: z.boolean().optional(),
+  offlineQueueId: z.string().optional(),
+  idempotencyKey: z.string().optional(),
 });
+
+/** Użytkownik kliknął "Wyślij fakturę do KSeF" w UI. */
+export const invoiceSubmitRequested = zodEvent(
+  'invoice/submit.requested',
+  InvoiceSubmitRequestedSchema,
+);
 
 /** Faktura została zaakceptowana przez KSeF i zarchiwizowana w R2. */
 export const invoiceSubmitSucceeded = eventType('invoice/submit.succeeded', {
@@ -93,20 +117,36 @@ export const inboxInvoiceReceived = eventType('inbox/invoice.received', {
   }>(),
 });
 
-/** Zaplanuj pobranie UPO dla faktury po akceptacji w KSeF. */
+/**
+ * Zaplanuj pobranie UPO dla faktury po akceptacji w KSeF.
+ *
+ * `nip` jest tu po to, by `downloadUpoJob` mógł użyć
+ * `concurrency: { key: 'event.data.nip', limit: 3 }` — globalna kolejka
+ * Inngest na klucz NIP zapewnia, że jeden tenant nie zalewa KSeF API
+ * (multi-instance Vercel ten warunek omija per-NIP rate-limitera w pamięci).
+ */
 export const invoiceUpoRequested = eventType('invoice/upo.requested', {
   schema: staticSchema<{
     invoiceId: string;
     tenantId: string;
+    /** NIP tenanta — klucz concurrency w `downloadUpoJob`. */
+    nip: string;
     ksefNumber: string;
   }>(),
 });
 
-/** Żądanie Magicznego Importu historii faktur z KSeF (wydane lub odebrane). */
+/**
+ * Żądanie Magicznego Importu historii faktur z KSeF (wydane lub odebrane).
+ *
+ * `nip` jest tu po to, by `magicImportKsefJob` mógł użyć
+ * `concurrency: { key: 'event.data.nip', limit: 3 }`.
+ */
 export const importKsefHistoryRequested = eventType('import/ksef-history.requested', {
   schema: staticSchema<{
     importJobId: string;
     tenantId: string;
+    /** NIP tenanta — klucz concurrency w `magicImportKsefJob`. */
+    nip: string;
     dateFrom: string;
     dateTo: string;
     direction: 'issued' | 'received';
@@ -157,6 +197,29 @@ export const invoicePaymentReceived = eventType('invoice/payment.received', {
     invoiceId: string;
   }>(),
 });
+
+/** Uruchom generowanie pliku eksportu (worker Inngest). */
+export const exportsGenerateRequested = eventType('exports/generate.requested', {
+  schema: staticSchema<{
+    exportJobId: string;
+  }>(),
+});
+
+/** Paczka dla księgowego — generowanie ZIP / e‑mail Co‑Pilot. */
+export const exportsCoPilotSendPackage = eventType(
+  'exports/co-pilot.send-package',
+  {
+    schema: staticSchema<{
+      tenantId: string;
+      periodStart: string;
+      periodEnd: string;
+      formats: string[];
+      accountantEmail: string;
+      accountantName: string | null;
+      manual: boolean;
+    }>(),
+  },
+);
 
 // ═══════════════════════════════════════════════════════════════
 // CLIENT

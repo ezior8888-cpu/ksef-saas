@@ -1,0 +1,67 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    "group:allNonMajor"
+  ],
+  "timezone": "Europe/Warsaw",
+  "schedule": ["before 6am every weekday"],
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  },
+  "packageRules": [
+    {
+      "description": "Auto-merge wszystkich patch updates (low risk)",
+      "matchUpdateTypes": ["patch", "pin", "digest"],
+      "groupName": "patch updates",
+      "automerge": true,
+      "automergeType": "branch",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Wszystkie dev dependencies w jednym PR-ze (testy, linter, types)",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "dev dependencies",
+      "automerge": false
+    },
+    {
+      "description": "Paczki krytyczne dla bezpieczeństwa — osobny PR, manual review",
+      "matchPackageNames": [
+        "@supabase/ssr",
+        "@supabase/supabase-js",
+        "next",
+        "@sentry/nextjs",
+        "@aws-sdk/client-s3",
+        "@aws-sdk/s3-request-presigner",
+        "xml-crypto",
+        "xades",
+        "xmllint-wasm",
+        "@xmldom/xmldom",
+        "fast-xml-parser"
+      ],
+      "groupName": "security-critical",
+      "automerge": false,
+      "labels": ["dependencies", "security-review-required"]
+    },
+    {
+      "description": "Major bumps Next/React/Inngest — zawsze ręcznie + breaking-changes label",
+      "matchPackageNames": ["next", "react", "react-dom", "inngest"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "breaking-changes"]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["dependencies", "security"],
+    "automerge": false
+  },
+  "osvVulnerabilityAlerts": true,
+  "prHourlyLimit": 4,
+  "prConcurrentLimit": 6
+}

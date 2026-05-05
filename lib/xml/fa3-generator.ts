@@ -1,4 +1,6 @@
 import { create } from 'xmlbuilder2';
+import type { XMLBuilder } from 'xmlbuilder2/lib/interfaces';
+
 import type { Invoice, InvoiceLineItem, VatRate, BuyerParty } from '@/types/invoice';
 import {
   calculateInvoiceTotals,
@@ -205,8 +207,7 @@ export function generateFA3Xml(
 // ═══════════════════════════════════════════════════════════════
 
 function buildNaglowek(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  root: any,
+  root: XMLBuilder,
   generatedAt: Date,
   systemInfo: string,
 ): void {
@@ -229,8 +230,7 @@ function buildNaglowek(
 // ═══════════════════════════════════════════════════════════════
 
 function buildPodmiot1(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  root: any,
+  root: XMLBuilder,
   invoice: Invoice,
 ): void {
   const podmiot1 = root.ele('Podmiot1');
@@ -261,8 +261,7 @@ function buildPodmiot1(
 // ═══════════════════════════════════════════════════════════════
 
 function buildPodmiot2(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  root: any,
+  root: XMLBuilder,
   invoice: Invoice,
 ): void {
   const podmiot2 = root.ele('Podmiot2');
@@ -292,8 +291,7 @@ function buildPodmiot2(
   podmiot2.ele('GV').txt(String(invoice.buyer.gv ?? 2));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildBuyerChoice(daneId: any, buyer: BuyerParty): void {
+function buildBuyerChoice(daneId: XMLBuilder, buyer: BuyerParty): void {
   if (buyer.nip) {
     daneId.ele('NIP').txt(buyer.nip);
   } else if (buyer.vatUeNumber) {
@@ -319,8 +317,7 @@ function buildBuyerChoice(daneId: any, buyer: BuyerParty): void {
 // ═══════════════════════════════════════════════════════════════
 
 function buildFa(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  root: any,
+  root: XMLBuilder,
   invoice: Invoice,
 ): void {
   const fa = root.ele('Fa');
@@ -354,8 +351,7 @@ function buildFa(
   buildPlatnosc(fa, invoice);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildVatSummaries(fa: any, lines: InvoiceLineItem[]): void {
+function buildVatSummaries(fa: XMLBuilder, lines: InvoiceLineItem[]): void {
   const summaries = summarizeVatPerRate(lines);
 
   // Zbieramy wszystkie emisje, a potem iterujemy w kolejności XSD.
@@ -389,8 +385,7 @@ function buildVatSummaries(fa: any, lines: InvoiceLineItem[]): void {
 // ═══════════════════════════════════════════════════════════════
 
 function buildAdnotacje(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  fa: any,
+  fa: XMLBuilder,
   invoice: Invoice,
 ): void {
   const adn = fa.ele('Adnotacje');
@@ -440,8 +435,7 @@ function buildAdnotacje(
 // ═══════════════════════════════════════════════════════════════
 
 function buildFaWiersz(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  fa: any,
+  fa: XMLBuilder,
   line: InvoiceLineItem,
 ): void {
   const wiersz = fa.ele('FaWiersz');
@@ -484,8 +478,7 @@ function buildFaWiersz(
 // ═══════════════════════════════════════════════════════════════
 
 function buildPlatnosc(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  fa: any,
+  fa: XMLBuilder,
   invoice: Invoice,
 ): void {
   const platnosc = fa.ele('Platnosc');
@@ -523,8 +516,7 @@ function buildPlatnosc(
 // ═══════════════════════════════════════════════════════════════
 
 function buildStopka(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  root: any,
+  root: XMLBuilder,
   invoice: Invoice,
 ): void {
   if (!invoice.notes) return;

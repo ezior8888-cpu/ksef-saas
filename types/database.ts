@@ -102,6 +102,92 @@ export type Database = {
           },
         ]
       }
+      accountant_settings: {
+        Row: {
+          accountant_company: string | null
+          accountant_email: string | null
+          accountant_name: string | null
+          cc_emails: string[] | null
+          co_pilot_enabled: boolean
+          created_at: string
+          email_body_template: string | null
+          email_subject_template: string | null
+          id: string
+          include_corrections: boolean
+          include_issued_invoices: boolean
+          include_received_invoices: boolean
+          include_unpaid_only: boolean
+          last_sent_at: string | null
+          last_sent_period_end: string | null
+          last_sent_period_start: string | null
+          preferred_formats:
+            | Database["public"]["Enums"]["export_format_enum"][]
+            | null
+          send_day_of_month: number
+          tenant_id: string
+          total_packages_sent: number
+          updated_at: string
+        }
+        Insert: {
+          accountant_company?: string | null
+          accountant_email?: string | null
+          accountant_name?: string | null
+          cc_emails?: string[] | null
+          co_pilot_enabled?: boolean
+          created_at?: string
+          email_body_template?: string | null
+          email_subject_template?: string | null
+          id?: string
+          include_corrections?: boolean
+          include_issued_invoices?: boolean
+          include_received_invoices?: boolean
+          include_unpaid_only?: boolean
+          last_sent_at?: string | null
+          last_sent_period_end?: string | null
+          last_sent_period_start?: string | null
+          preferred_formats?:
+            | Database["public"]["Enums"]["export_format_enum"][]
+            | null
+          send_day_of_month?: number
+          tenant_id: string
+          total_packages_sent?: number
+          updated_at?: string
+        }
+        Update: {
+          accountant_company?: string | null
+          accountant_email?: string | null
+          accountant_name?: string | null
+          cc_emails?: string[] | null
+          co_pilot_enabled?: boolean
+          created_at?: string
+          email_body_template?: string | null
+          email_subject_template?: string | null
+          id?: string
+          include_corrections?: boolean
+          include_issued_invoices?: boolean
+          include_received_invoices?: boolean
+          include_unpaid_only?: boolean
+          last_sent_at?: string | null
+          last_sent_period_end?: string | null
+          last_sent_period_start?: string | null
+          preferred_formats?:
+            | Database["public"]["Enums"]["export_format_enum"][]
+            | null
+          send_day_of_month?: number
+          tenant_id?: string
+          total_packages_sent?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accountant_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -280,6 +366,175 @@ export type Database = {
           user_message_pl?: string
         }
         Relationships: []
+      }
+      export_files: {
+        Row: {
+          created_at: string
+          download_count: number
+          export_job_id: string
+          file_hash: string | null
+          filename: string
+          format: Database["public"]["Enums"]["export_format_enum"]
+          id: string
+          last_downloaded_at: string | null
+          last_downloaded_by: string | null
+          mime_type: string
+          r2_path: string
+          size_bytes: number | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          download_count?: number
+          export_job_id: string
+          file_hash?: string | null
+          filename: string
+          format: Database["public"]["Enums"]["export_format_enum"]
+          id?: string
+          last_downloaded_at?: string | null
+          last_downloaded_by?: string | null
+          mime_type: string
+          r2_path: string
+          size_bytes?: number | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          download_count?: number
+          export_job_id?: string
+          file_hash?: string | null
+          filename?: string
+          format?: Database["public"]["Enums"]["export_format_enum"]
+          id?: string
+          last_downloaded_at?: string | null
+          last_downloaded_by?: string | null
+          mime_type?: string
+          r2_path?: string
+          size_bytes?: number | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "export_files_export_job_id_fkey"
+            columns: ["export_job_id"]
+            isOneToOne: false
+            referencedRelation: "export_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "export_files_last_downloaded_by_fkey"
+            columns: ["last_downloaded_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "export_files_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      export_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          email_message_id: string | null
+          emailed_at: string | null
+          emailed_to: string | null
+          error_details: Json | null
+          error_message: string | null
+          expires_at: string | null
+          format: Database["public"]["Enums"]["export_format_enum"]
+          id: string
+          include_corrections: boolean
+          include_issued: boolean
+          include_received: boolean
+          invoices_count: number
+          period_end: string
+          period_start: string
+          progress_message: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["export_status_enum"]
+          tenant_id: string
+          total_gross: number | null
+          total_net: number | null
+          total_vat: number | null
+          trigger_source: Database["public"]["Enums"]["export_trigger_enum"]
+          triggered_by: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          email_message_id?: string | null
+          emailed_at?: string | null
+          emailed_to?: string | null
+          error_details?: Json | null
+          error_message?: string | null
+          expires_at?: string | null
+          format: Database["public"]["Enums"]["export_format_enum"]
+          id?: string
+          include_corrections?: boolean
+          include_issued?: boolean
+          include_received?: boolean
+          invoices_count?: number
+          period_end: string
+          period_start: string
+          progress_message?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["export_status_enum"]
+          tenant_id: string
+          total_gross?: number | null
+          total_net?: number | null
+          total_vat?: number | null
+          trigger_source?: Database["public"]["Enums"]["export_trigger_enum"]
+          triggered_by?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          email_message_id?: string | null
+          emailed_at?: string | null
+          emailed_to?: string | null
+          error_details?: Json | null
+          error_message?: string | null
+          expires_at?: string | null
+          format?: Database["public"]["Enums"]["export_format_enum"]
+          id?: string
+          include_corrections?: boolean
+          include_issued?: boolean
+          include_received?: boolean
+          invoices_count?: number
+          period_end?: string
+          period_start?: string
+          progress_message?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["export_status_enum"]
+          tenant_id?: string
+          total_gross?: number | null
+          total_net?: number | null
+          total_vat?: number | null
+          trigger_source?: Database["public"]["Enums"]["export_trigger_enum"]
+          triggered_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "export_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "export_jobs_triggered_by_fkey"
+            columns: ["triggered_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       import_jobs: {
         Row: {
@@ -1282,6 +1537,80 @@ export type Database = {
           },
         ]
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          device_name: string | null
+          device_type: string | null
+          endpoint: string
+          failed_count: number
+          id: string
+          is_active: boolean
+          last_used_at: string | null
+          notify_cert_expiry: boolean
+          notify_inbox_new: boolean
+          notify_invoice_accepted: boolean
+          notify_invoice_rejected: boolean
+          notify_payment_received: boolean
+          p256dh: string
+          tenant_id: string
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          device_name?: string | null
+          device_type?: string | null
+          endpoint: string
+          failed_count?: number
+          id?: string
+          is_active?: boolean
+          last_used_at?: string | null
+          notify_cert_expiry?: boolean
+          notify_inbox_new?: boolean
+          notify_invoice_accepted?: boolean
+          notify_invoice_rejected?: boolean
+          notify_payment_received?: boolean
+          p256dh: string
+          tenant_id: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          device_name?: string | null
+          device_type?: string | null
+          endpoint?: string
+          failed_count?: number
+          id?: string
+          is_active?: boolean
+          last_used_at?: string | null
+          notify_cert_expiry?: boolean
+          notify_inbox_new?: boolean
+          notify_invoice_accepted?: boolean
+          notify_invoice_rejected?: boolean
+          notify_payment_received?: boolean
+          p256dh?: string
+          tenant_id?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'push_subscriptions_tenant_id_fkey'
+            columns: ['tenant_id']
+            isOneToOne: false
+            referencedRelation: 'tenants'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       reminder_settings: {
         Row: {
           created_at: string
@@ -1749,10 +2078,33 @@ export type Database = {
       cleanup_expired_validation_cache: { Args: never; Returns: number }
       days_overdue: { Args: { invoice_due_date: string }; Returns: number }
       get_current_tenant_id: { Args: never; Returns: string }
+      increment_push_failed_count: {
+        Args: { sub_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       buyer_id_type_enum: "nip" | "pesel" | "id_card" | "passport" | "no_id"
       correction_type_enum: "before_after" | "amount_change" | "cancellation"
+      export_format_enum:
+        | "jpk_fa"
+        | "kpir_excel"
+        | "comarch_optima"
+        | "insert_subiekt"
+        | "symfonia"
+        | "wapro"
+        | "csv_universal"
+      export_status_enum:
+        | "pending"
+        | "generating"
+        | "completed"
+        | "failed"
+        | "expired"
+      export_trigger_enum:
+        | "manual"
+        | "co_pilot_monthly"
+        | "accountant_portal"
+        | "api"
       invoice_type_enum: "regular" | "correction" | "advance" | "final"
       offline_queue_status_enum:
         | "queued"
@@ -1905,6 +2257,28 @@ export const Constants = {
     Enums: {
       buyer_id_type_enum: ["nip", "pesel", "id_card", "passport", "no_id"],
       correction_type_enum: ["before_after", "amount_change", "cancellation"],
+      export_format_enum: [
+        "jpk_fa",
+        "kpir_excel",
+        "comarch_optima",
+        "insert_subiekt",
+        "symfonia",
+        "wapro",
+        "csv_universal",
+      ],
+      export_status_enum: [
+        "pending",
+        "generating",
+        "completed",
+        "failed",
+        "expired",
+      ],
+      export_trigger_enum: [
+        "manual",
+        "co_pilot_monthly",
+        "accountant_portal",
+        "api",
+      ],
       invoice_type_enum: ["regular", "correction", "advance", "final"],
       offline_queue_status_enum: [
         "queued",

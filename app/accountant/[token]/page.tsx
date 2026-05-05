@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { Eye, Download } from 'lucide-react';
 
+import { AccountantExportButtons } from '@/components/exports/accountant-export-buttons';
 import { loadAccountantPortal } from '@/lib/accountant/load-accountant-portal';
 import { AccountantInvoiceList } from '@/components/accountant/invoice-list';
 
@@ -61,6 +62,18 @@ export default async function AccountantPortalPage({
             </div>
           </div>
         </div>
+
+        {access.access_level === 'download' ? (
+          <section className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-6">
+            <h2 className="text-lg font-display font-semibold mb-4 tracking-tighter-text">
+              Pobierz dane księgowe
+            </h2>
+            <AccountantExportButtons
+              tenantId={access.tenant_id}
+              accessToken={rawToken}
+            />
+          </section>
+        ) : null}
 
         <AccountantInvoiceList
           invoices={invoices ?? []}

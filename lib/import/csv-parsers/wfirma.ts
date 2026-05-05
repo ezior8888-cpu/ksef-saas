@@ -85,7 +85,7 @@ export function parseWfirmaCsv(content: string): CsvParseResult {
       cell(row, ['Razem brutto', 'Suma brutto', 'Brutto', 'Kwota brutto']),
     );
 
-    let vatRate = warnTotalsConsistency(
+    const vatRate = warnTotalsConsistency(
       netTotal,
       vatTotal,
       grossTotal,
@@ -98,7 +98,7 @@ export function parseWfirmaCsv(content: string): CsvParseResult {
     const ulica = cell(row, ['Ulica', 'Adres']);
     const miasto = cell(row, ['Miasto', 'Miejscowość']);
 
-    let address =
+    const address =
       [ulica, miasto].filter(Boolean).join(', ').trim() ||
       cell(row, ['Adres kontrahenta', 'Pełny adres']);
 

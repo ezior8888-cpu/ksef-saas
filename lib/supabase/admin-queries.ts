@@ -106,6 +106,22 @@ export async function getTenantAdminEmail(
   return authUser?.user?.email ?? null;
 }
 
+/** `users.id` właściciela (owner) dla tenanta — m.in. Web Push bez auth.admin. */
+export async function getTenantOwnerUserId(
+  tenantId: string,
+): Promise<string | null> {
+  const supabase = await createAdminClient();
+
+  const { data: owner } = await supabase
+    .from('users')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('role', 'owner')
+    .maybeSingle();
+
+  return owner?.id ?? null;
+}
+
 /**
  * Pobiera Invoice (model domenowy) z fa3_data JSONB.
  *

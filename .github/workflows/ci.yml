@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Anuluj poprzednie runy tej samej gałęzi/PR-a — oszczędza minuty CI
+# i daje feedback od najświeższego commitu.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `pnpm run ci` (a nie `pnpm ci`) — żeby nie kolidowało z wbudowanym
+      # `pnpm ci` (alias na install --frozen-lockfile w nowszych pnpm).
+      - name: Run typecheck + lint + tests
+        run: pnpm run ci
+
+  # Lekka bramka: dependency review pokazuje w PR, czy wprowadzamy nowe paczki
+  # z otwartymi CVE (snapshot vs base). Nie blokuje merge'a — tylko sygnał
+  # do code-review.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure

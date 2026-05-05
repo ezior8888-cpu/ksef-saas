@@ -47,6 +47,9 @@ export async function updateSession(request: NextRequest) {
   // /api/inngest: webhook dla Inngest Cloud/Dev Server - Inngest SDK sam
   //   weryfikuje podpis przez INNGEST_SIGNING_KEY, więc Supabase auth
   //   musi się odsunąć, inaczej `inngest-cli dev` dostaje redirect na /login.
+  // /api/sentry-test-log: zostało celowo USUNIĘTE z whitelisty po audycie —
+  //   endpoint sam wymusza `SENTRY_LOG_TEST_SECRET` (fail-closed) i nie ma
+  //   powodu, by ktoś bez sesji mógł go w ogóle wywoływać.
   const publicPaths = [
     '/login',
     '/register',
@@ -54,7 +57,7 @@ export async function updateSession(request: NextRequest) {
     '/auth',
     '/api/inngest',
     '/api/health',
-    '/api/sentry-test-log',
+    '/api/portal',
     '/accountant',
   ];
   const isPublicPath =

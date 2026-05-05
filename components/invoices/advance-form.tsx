@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Resolver } from 'react-hook-form';
-import { useTransition, useEffect } from 'react';
+import { useEffect, useMemo, useTransition } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, Loader2 } from 'lucide-react';
@@ -53,8 +53,15 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
   const [saving, startSave] = useTransition();
   const [sending, startSend] = useTransition();
 
-  const today = new Date().toISOString().slice(0, 10);
-  const due = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  // useMemo([]) — daty defaultowe liczone raz przy mount; bez tego React Compiler
+  // flaguje `Date.now()` jako impure call w renderze.
+  const { today, due } = useMemo(() => {
+    const now = Date.now();
+    return {
+      today: new Date(now).toISOString().slice(0, 10),
+      due: new Date(now + 14 * 86400000).toISOString().slice(0, 10),
+    };
+  }, []);
 
   const defaults: AdvanceFormIn = {
     invoiceType: 'advance',

@@ -1,0 +1,166 @@
+'use client';
+
+import { useState, useTransition } from 'react';
+import { Download, FileText, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
+interface AccountantExportButtonsProps {
+  tenantId: string;
+  accessToken: string;
+}
+
+export function AccountantExportButtons({
+  tenantId,
+  accessToken,
+}: AccountantExportButtonsProps) {
+  const [isLoadingJpk, startJpk] = useTransition();
+  const [isLoadingKpir, startKpir] = useTransition();
+  const [selectedPeriod, setSelectedPeriod] = useState(getPreviousMonth);
+
+  const handleExport = (format: 'jpk_fa' | 'kpir_excel') => {
+    const transition = format === 'jpk_fa' ? startJpk : startKpir;
+
+    transition(async () => {
+      try {
+        const periodStart = `${selectedPeriod}-01`;
+        const periodEnd = getMonthEndIso(selectedPeriod);
+
+        const response = await fetch('/api/portal/exports/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Accountant-Token': accessToken,
+          },
+          body: JSON.stringify({
+            tenantId,
+            format,
+            periodStart,
+            periodEnd,
+          }),
+        });
+
+        if (!response.ok) {
+          let message = `Błąd ${response.status}`;
+          try {
+            const body = (await response.json()) as { error?: string };
+            if (typeof body?.error === 'string' && body.error.length > 0) {
+              message = body.error;
+            }
+          } catch {
+            /* ignore */
+          }
+          toast.error(message);
+          return;
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const fallbackExt = format === 'jpk_fa' ? 'xml' : 'xlsx';
+        const filename =
+          response.headers.get('X-Filename') ??
+          `${format}_${selectedPeriod}.${fallbackExt}`;
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        toast.success('Plik pobrany');
+      } catch {
+        toast.error('Błąd pobierania');
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label
+          htmlFor="accountant-export-month"
+          className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block"
+        >
+          Wybierz miesiąc
+        </Label>
+        <Input
+          id="accountant-export-month"
+          type="month"
+          value={selectedPeriod}
+          onChange={(e) => setSelectedPeriod(e.target.value)}
+          className="rounded-xl border border-glass-border bg-white/50 dark:bg-white/10 backdrop-blur-glass-sm max-w-[240px]"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Button
+          variant="glass"
+          size="lg"
+          type="button"
+          onClick={() => handleExport('jpk_fa')}
+          disabled={isLoadingJpk || isLoadingKpir}
+          className="justify-start"
+        >
+          {isLoadingJpk ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
+          ) : (
+            <FileText className="h-4 w-4 mr-2 shrink-0" />
+          )}
+          Pobierz JPK_FA(4)
+        </Button>
+
+        <Button
+          variant="glass"
+          size="lg"
+          type="button"
+          onClick={() => handleExport('kpir_excel')}
+          disabled={isLoadingJpk || isLoadingKpir}
+          className="justify-start"
+        >
+          {isLoadingKpir ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
+          ) : (
+            <Download className="h-4 w-4 mr-2 shrink-0" />
+          )}
+          Pobierz KPiR Excel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function getPreviousMonth(): string {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
+/** Ostatni dzień kalendarza dla `YYYY-MM` (czas lokalny). */
+function getMonthEndIso(yearMonth: string): string {
+  const parts = yearMonth.split('-').map(Number);
+  const year = parts[0];
+  const month = parts[1];
+  if (
+    year == null ||
+    month == null ||
+    Number.isNaN(year) ||
+    Number.isNaN(month) ||
+    month < 1 ||
+    month > 12
+  ) {
+    return `${yearMonth}-28`;
+  }
+  const end = new Date(year, month, 0);
+  const y = end.getFullYear();
+  const m = String(end.getMonth() + 1).padStart(2, '0');
+  const day = String(end.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}

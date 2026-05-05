@@ -427,6 +427,17 @@ async function insertInvoiceAndLines(
     .single();
 
   if (invErr || !inserted) {
+    // Postgres 23505 = unique_violation. Po migracji 00028 to oznacza duplikat
+    // `internal_number` w obrębie tego tenanta — najczęściej double-click "Wystaw
+    // i wyślij" lub równoległa próba zapisu z innej karty. Friendly message
+    // zamiast technicznego "duplicate key value violates unique constraint
+    // \"uq_invoices_tenant_internal_number\"".
+    if (invErr?.code === '23505') {
+      return {
+        success: false,
+        error: `Faktura o numerze "${invoice.internalNumber}" już istnieje. Sprawdź listę faktur lub wybierz inny numer.`,
+      };
+    }
     return {
       success: false,
       error: invErr?.message ?? 'Nie udało się zapisać faktury',

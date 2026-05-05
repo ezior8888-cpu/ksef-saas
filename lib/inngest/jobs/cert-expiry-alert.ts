@@ -5,6 +5,7 @@ import {
   getTenantAdminEmail,
 } from '@/lib/supabase/admin-queries';
 import { sendCertExpiryAlert } from '@/lib/email/send';
+import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/server';
 
 /**
@@ -68,18 +69,38 @@ export const certExpiryAlertJob = inngest.createFunction(
       // tenantów każdy, nie ma sensu paralelizować.
       for (const tenant of tenants) {
         await step.run(`alert-${tenant.id}-${days}d`, async () => {
+          let emailed = false as boolean;
+          let emailReason: string | undefined;
+
           const email = await getTenantAdminEmail(tenant.id);
           if (!email) {
-            return { skipped: true as const, reason: 'no-admin-email' };
+            emailReason = 'no-admin-email';
+          } else {
+            const result = await sendCertExpiryAlert(email, {
+              tenantName: tenant.name,
+              daysRemaining: days,
+              expiryDate: tenant.ksef_certificate_expiry,
+            });
+            emailed = result.sent;
+            emailReason = result.reason;
           }
 
-          const result = await sendCertExpiryAlert(email, {
-            tenantName: tenant.name,
-            daysRemaining: days,
-            expiryDate: tenant.ksef_certificate_expiry,
+          const push = await sendPushToTenant(tenant.id, 'cert_expiry', {
+            title:
+              days <= 7
+                ? 'Certyfikat KSeF — pilne'
+                : 'Certyfikat KSeF wkrótce wygaśnie',
+            body: `${tenant.name ?? 'Firma'}: ok. ${days} dni do wygaśnięcia.`,
+            url: '/settings/ksef',
+            tag: `cert-expiry-${tenant.id}-${days}`,
           });
 
-          return { emailed: result.sent, reason: result.reason };
+          return {
+            emailed,
+            reason: emailReason,
+            push,
+            skippedWithoutEmail: !email,
+          };
         });
         totalAlerts += 1;
       }

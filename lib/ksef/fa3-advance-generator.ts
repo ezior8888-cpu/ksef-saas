@@ -5,6 +5,7 @@
  */
 
 import { create } from 'xmlbuilder2';
+import type { XMLBuilder } from 'xmlbuilder2/lib/interfaces';
 
 import type { InvoiceLineItem, VatRate } from '@/types/invoice';
 import {
@@ -127,9 +128,8 @@ function requireText(value: string | undefined | null, field: string): string {
   return value;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function emitVatSummariesFromMap(
-  fa: any,
+  fa: XMLBuilder,
   summaries: ReturnType<typeof summarizeVatPerRate>,
   map: Record<VatRate, VatRateMapping>,
 ): void {
@@ -184,9 +184,8 @@ function buildAdnotacjeStandard(fa: any, lines: InvoiceLineItem[]): void {
   adn.ele('PMarzy').ele('P_PMarzyN').txt('1');
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildHeader(
-  root: any,
+  root: XMLBuilder,
   generatedAt: Date,
   systemInfo: string,
 ): void {
@@ -302,9 +301,8 @@ function toPreparedLineItems(lines: InvoiceLine[]): InvoiceLineItem[] {
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildPlatnoscFa(
-  fa: any,
+  fa: XMLBuilder,
   data: AdvanceInvoiceData | FinalInvoiceData,
 ): void {
   const platnosc = fa.ele('Platnosc');
