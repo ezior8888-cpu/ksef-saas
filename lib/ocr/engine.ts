@@ -8,7 +8,7 @@ import type {
   TextBlockParam,
 } from '@anthropic-ai/sdk/resources/messages/messages';
 
-import { anthropic, OCR_MODEL } from '@/lib/anthropic/client';
+import { getAnthropic, OCR_MODEL } from '@/lib/anthropic/client';
 
 import { claudeOutputInstructions, extractedInvoiceSchema } from './schema';
 import type { ExtractedInvoice } from './schema';
@@ -115,7 +115,7 @@ export async function extractInvoiceFromImage(
     const textPrompt = `Rozpoznaj fakturę/paragon na tym zdjęciu i zwróć strukturyzowane dane.\n\n${claudeOutputInstructions}`;
     const userContent = buildUserContent(imageBase64, mimeType, textPrompt);
 
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: OCR_MODEL,
       max_tokens: 2048,
       system: SYSTEM_PROMPT,

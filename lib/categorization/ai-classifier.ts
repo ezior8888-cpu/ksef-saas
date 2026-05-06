@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 
-import { anthropic, OCR_MODEL } from '@/lib/anthropic/client';
+import { getAnthropic, OCR_MODEL } from '@/lib/anthropic/client';
 import type { ExtractedInvoice } from '@/lib/ocr/schema';
 
 import type { CategorizationResult } from './rule-engine';
@@ -28,7 +28,7 @@ export async function classifyByAI(
   data: ExtractedInvoice
 ): Promise<CategorizationResult | null> {
   try {
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: OCR_MODEL,
       max_tokens: 256,
       system:
