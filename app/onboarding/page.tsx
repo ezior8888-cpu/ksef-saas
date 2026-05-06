@@ -16,7 +16,7 @@ export default async function OnboardingPage() {
     .eq('id', user.id)
     .single();
 
-  if (userData?.tenant_id) redirect('/reports');
+  if (userData?.tenant_id) redirect('/');
 
   return (
     <div className="min-h-screen bg-mesh-surface flex items-center justify-center p-4">

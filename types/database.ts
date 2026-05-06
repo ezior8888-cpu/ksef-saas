@@ -245,6 +245,50 @@ export type Database = {
           },
         ]
       }
+      categorization_rules: {
+        Row: {
+          category_label: string
+          created_at: string
+          hit_count: number
+          id: string
+          kpir_column: Database["public"]["Enums"]["kpir_column"]
+          last_used_at: string | null
+          match_type: string
+          match_value: string
+          tenant_id: string
+        }
+        Insert: {
+          category_label: string
+          created_at?: string
+          hit_count?: number
+          id?: string
+          kpir_column: Database["public"]["Enums"]["kpir_column"]
+          last_used_at?: string | null
+          match_type: string
+          match_value: string
+          tenant_id: string
+        }
+        Update: {
+          category_label?: string
+          created_at?: string
+          hit_count?: number
+          id?: string
+          kpir_column?: Database["public"]["Enums"]["kpir_column"]
+          last_used_at?: string | null
+          match_type?: string
+          match_value?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categorization_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contractors: {
         Row: {
           address: Json | null
@@ -366,6 +410,130 @@ export type Database = {
           user_message_pl?: string
         }
         Relationships: []
+      }
+      expenses: {
+        Row: {
+          categorization_confidence: number | null
+          categorization_method:
+            | Database["public"]["Enums"]["categorization_method"]
+            | null
+          category_label: string | null
+          created_at: string
+          created_by: string
+          document_number: string | null
+          document_type: string
+          gross_amount: number
+          id: string
+          is_deductible: boolean
+          is_reviewed: boolean
+          issue_date: string
+          kpir_column: Database["public"]["Enums"]["kpir_column"] | null
+          ksef_invoice_id: string | null
+          net_amount: number
+          notes: string | null
+          ocr_extracted_data: Json | null
+          ocr_job_id: string | null
+          seller_address: string | null
+          seller_name: string
+          seller_nip: string | null
+          source: Database["public"]["Enums"]["expense_source"]
+          source_file_mime: string | null
+          source_file_path: string | null
+          tenant_id: string
+          updated_at: string
+          vat_amount: number
+          vat_deductible_amount: number
+          vat_rate: string | null
+        }
+        Insert: {
+          categorization_confidence?: number | null
+          categorization_method?:
+            | Database["public"]["Enums"]["categorization_method"]
+            | null
+          category_label?: string | null
+          created_at?: string
+          created_by: string
+          document_number?: string | null
+          document_type?: string
+          gross_amount: number
+          id?: string
+          is_deductible?: boolean
+          is_reviewed?: boolean
+          issue_date: string
+          kpir_column?: Database["public"]["Enums"]["kpir_column"] | null
+          ksef_invoice_id?: string | null
+          net_amount: number
+          notes?: string | null
+          ocr_extracted_data?: Json | null
+          ocr_job_id?: string | null
+          seller_address?: string | null
+          seller_name: string
+          seller_nip?: string | null
+          source: Database["public"]["Enums"]["expense_source"]
+          source_file_mime?: string | null
+          source_file_path?: string | null
+          tenant_id: string
+          updated_at?: string
+          vat_amount?: number
+          vat_deductible_amount?: number
+          vat_rate?: string | null
+        }
+        Update: {
+          categorization_confidence?: number | null
+          categorization_method?:
+            | Database["public"]["Enums"]["categorization_method"]
+            | null
+          category_label?: string | null
+          created_at?: string
+          created_by?: string
+          document_number?: string | null
+          document_type?: string
+          gross_amount?: number
+          id?: string
+          is_deductible?: boolean
+          is_reviewed?: boolean
+          issue_date?: string
+          kpir_column?: Database["public"]["Enums"]["kpir_column"] | null
+          ksef_invoice_id?: string | null
+          net_amount?: number
+          notes?: string | null
+          ocr_extracted_data?: Json | null
+          ocr_job_id?: string | null
+          seller_address?: string | null
+          seller_name?: string
+          seller_nip?: string | null
+          source?: Database["public"]["Enums"]["expense_source"]
+          source_file_mime?: string | null
+          source_file_path?: string | null
+          tenant_id?: string
+          updated_at?: string
+          vat_amount?: number
+          vat_deductible_amount?: number
+          vat_rate?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_ksef_invoice_id_fkey"
+            columns: ["ksef_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_ksef_invoice_id_fkey"
+            columns: ["ksef_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       export_files: {
         Row: {
@@ -1025,6 +1193,36 @@ export type Database = {
           },
         ]
       }
+      kpir_global_rules: {
+        Row: {
+          category_label: string
+          created_at: string
+          id: string
+          keyword: string | null
+          kpir_column: Database["public"]["Enums"]["kpir_column"]
+          nip: string | null
+          notes: string | null
+        }
+        Insert: {
+          category_label: string
+          created_at?: string
+          id?: string
+          keyword?: string | null
+          kpir_column: Database["public"]["Enums"]["kpir_column"]
+          nip?: string | null
+          notes?: string | null
+        }
+        Update: {
+          category_label?: string
+          created_at?: string
+          id?: string
+          keyword?: string | null
+          kpir_column?: Database["public"]["Enums"]["kpir_column"]
+          nip?: string | null
+          notes?: string | null
+        }
+        Relationships: []
+      }
       ksef_offline_queue: {
         Row: {
           attempts: number
@@ -1205,6 +1403,78 @@ export type Database = {
           },
           {
             foreignKeyName: "ksef_submissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ocr_jobs: {
+        Row: {
+          ai_input_tokens: number | null
+          ai_model_used: string | null
+          ai_output_tokens: number | null
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          error_message: string | null
+          expense_id: string | null
+          extracted_data: Json | null
+          id: string
+          processing_time_ms: number | null
+          source_file_mime: string
+          source_file_path: string
+          source_file_size_bytes: number | null
+          status: Database["public"]["Enums"]["ocr_status"]
+          tenant_id: string
+        }
+        Insert: {
+          ai_input_tokens?: number | null
+          ai_model_used?: string | null
+          ai_output_tokens?: number | null
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          error_message?: string | null
+          expense_id?: string | null
+          extracted_data?: Json | null
+          id?: string
+          processing_time_ms?: number | null
+          source_file_mime: string
+          source_file_path: string
+          source_file_size_bytes?: number | null
+          status?: Database["public"]["Enums"]["ocr_status"]
+          tenant_id: string
+        }
+        Update: {
+          ai_input_tokens?: number | null
+          ai_model_used?: string | null
+          ai_output_tokens?: number | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          error_message?: string | null
+          expense_id?: string | null
+          extracted_data?: Json | null
+          id?: string
+          processing_time_ms?: number | null
+          source_file_mime?: string
+          source_file_path?: string
+          source_file_size_bytes?: number | null
+          status?: Database["public"]["Enums"]["ocr_status"]
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocr_jobs_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1603,11 +1873,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'push_subscriptions_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "push_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1721,6 +1991,38 @@ export type Database = {
             foreignKeyName: "reminder_templates_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_feature_flags: {
+        Row: {
+          co_pilot_enabled: boolean
+          exports_enabled: boolean
+          magic_import_enabled: boolean
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          co_pilot_enabled?: boolean
+          exports_enabled?: boolean
+          magic_import_enabled?: boolean
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          co_pilot_enabled?: boolean
+          exports_enabled?: boolean
+          magic_import_enabled?: boolean
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_feature_flags_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -2078,6 +2380,14 @@ export type Database = {
       cleanup_expired_validation_cache: { Args: never; Returns: number }
       days_overdue: { Args: { invoice_due_date: string }; Returns: number }
       get_current_tenant_id: { Args: never; Returns: string }
+      increment_export_file_download: {
+        Args: { p_file_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      increment_packages_sent: {
+        Args: { p_tenant_id: string }
+        Returns: undefined
+      }
       increment_push_failed_count: {
         Args: { sub_id: string }
         Returns: undefined
@@ -2085,7 +2395,15 @@ export type Database = {
     }
     Enums: {
       buyer_id_type_enum: "nip" | "pesel" | "id_card" | "passport" | "no_id"
+      categorization_method:
+        | "rule_nip"
+        | "rule_keyword"
+        | "ml_heuristic"
+        | "ai_claude"
+        | "manual"
+        | "learned"
       correction_type_enum: "before_after" | "amount_change" | "cancellation"
+      expense_source: "ocr_photo" | "ksef_inbox" | "manual" | "import"
       export_format_enum:
         | "jpk_fa"
         | "kpir_excel"
@@ -2106,6 +2424,16 @@ export type Database = {
         | "accountant_portal"
         | "api"
       invoice_type_enum: "regular" | "correction" | "advance" | "final"
+      kpir_column:
+        | "col_7"
+        | "col_8"
+        | "col_10"
+        | "col_11"
+        | "col_12"
+        | "col_13"
+        | "col_15"
+        | "col_16"
+      ocr_status: "pending" | "processing" | "completed" | "failed"
       offline_queue_status_enum:
         | "queued"
         | "sending"
@@ -2256,7 +2584,16 @@ export const Constants = {
   public: {
     Enums: {
       buyer_id_type_enum: ["nip", "pesel", "id_card", "passport", "no_id"],
+      categorization_method: [
+        "rule_nip",
+        "rule_keyword",
+        "ml_heuristic",
+        "ai_claude",
+        "manual",
+        "learned",
+      ],
       correction_type_enum: ["before_after", "amount_change", "cancellation"],
+      expense_source: ["ocr_photo", "ksef_inbox", "manual", "import"],
       export_format_enum: [
         "jpk_fa",
         "kpir_excel",
@@ -2280,6 +2617,17 @@ export const Constants = {
         "api",
       ],
       invoice_type_enum: ["regular", "correction", "advance", "final"],
+      kpir_column: [
+        "col_7",
+        "col_8",
+        "col_10",
+        "col_11",
+        "col_12",
+        "col_13",
+        "col_15",
+        "col_16",
+      ],
+      ocr_status: ["pending", "processing", "completed", "failed"],
       offline_queue_status_enum: [
         "queued",
         "sending",

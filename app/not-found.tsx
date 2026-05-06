@@ -16,7 +16,7 @@ export default function NotFound() {
             Strona, której szukasz, nie istnieje lub została przeniesiona.
           </p>
         </div>
-        <Link href="/reports">
+        <Link href="/">
           <Button variant="glass-primary" size="lg">
             Powrót do pulpitu
           </Button>

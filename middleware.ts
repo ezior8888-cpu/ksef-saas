@@ -7,7 +7,7 @@ import { updateSession } from '@/lib/supabase/proxy';
  * Zadania:
  * 1. Odświeżanie sesji Supabase (wymiana tokenów, zapis cookies).
  * 2. Przekierowanie niezalogowanych z chronionych tras → /login.
- * 3. Przekierowanie zalogowanych z /login → /reports.
+ * 3. Przekierowanie zalogowanych z /login → / (pulpit).
  *
  * UWAGA: Next.js wymaga domyślnego eksportu `middleware` (nie dowolnej nazwy).
  * Plik musi nazywać się `middleware.ts` (lub `.js`) w root projektu.

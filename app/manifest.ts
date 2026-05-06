@@ -64,5 +64,26 @@ export default function manifest(): MetadataRoute.Manifest {
         icons: [{ src: '/icons/icon-96x96.png', sizes: '96x96' }],
       },
     ],
+    share_target: {
+      action: '/share-target',
+      method: 'POST',
+      enctype: 'multipart/form-data',
+      params: {
+        title: 'title',
+        text: 'text',
+        url: 'url',
+        files: [
+          {
+            name: 'photo',
+            accept: [
+              'image/jpeg',
+              'image/png',
+              'image/webp',
+              'application/pdf',
+            ],
+          },
+        ],
+      },
+    },
   };
 }

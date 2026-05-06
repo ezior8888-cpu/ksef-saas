@@ -118,6 +118,18 @@ export const inboxInvoiceReceived = eventType('inbox/invoice.received', {
 });
 
 /**
+ * Zapisano nową fakturę `incoming` z inbox — worker tworzy `expenses` + KPiR.
+ * (Osobno od `inbox/invoice.received`, który służy UI / toast.)
+ */
+export const inboxInvoiceReceivedAutoCategorize = zodEvent(
+  'inbox/invoice-received',
+  z.object({
+    invoiceId: z.string().uuid('invoiceId musi być UUID'),
+    tenantId: z.string().uuid('tenantId musi być UUID'),
+  }),
+);
+
+/**
  * Zaplanuj pobranie UPO dla faktury po akceptacji w KSeF.
  *
  * `nip` jest tu po to, by `downloadUpoJob` mógł użyć
@@ -219,6 +231,15 @@ export const exportsCoPilotSendPackage = eventType(
       manual: boolean;
     }>(),
   },
+);
+
+/** OCR zdjęcia wydatku — worker aktualizuje `ocr_jobs` i tworzy `expenses`. */
+export const ocrProcessPhotoRequested = zodEvent(
+  'ocr/process-photo',
+  z.object({
+    ocrJobId: z.string().uuid('ocrJobId musi być UUID'),
+    tenantId: z.string().uuid('tenantId musi być UUID'),
+  }),
 );
 
 // ═══════════════════════════════════════════════════════════════

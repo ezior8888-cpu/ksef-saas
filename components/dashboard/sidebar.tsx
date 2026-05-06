@@ -4,13 +4,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   AlertCircle,
+  BarChart3,
+  BookOpen,
   FileSpreadsheet,
   FileText,
   Inbox,
-  Users,
-  BarChart3,
-  Settings,
+  LayoutDashboard,
   PlusCircle,
+  Receipt,
+  Settings,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -22,11 +25,20 @@ interface NavItem {
 }
 
 function isActivePath(pathname: string, href: string): boolean {
+  if (href === '/') return pathname === '/';
   if (href === '/invoices/new') return pathname === '/invoices/new';
   if (href === '/reports') return pathname === '/reports';
+  if (href === '/reports/kpir') {
+    return (
+      pathname === '/reports/kpir' || pathname.startsWith('/reports/kpir/')
+    );
+  }
   if (href === '/invoices') {
     if (pathname === '/invoices/new') return false;
     return pathname === '/invoices' || pathname.startsWith('/invoices/');
+  }
+  if (href === '/expenses') {
+    return pathname === '/expenses' || pathname.startsWith('/expenses/');
   }
   if (href === '/settings')
     return pathname === '/settings' || pathname.startsWith('/settings/');
@@ -34,11 +46,14 @@ function isActivePath(pathname: string, href: string): boolean {
 }
 
 const navItems: NavItem[] = [
-  { href: '/reports', label: 'Dashboard', icon: BarChart3 },
+  { href: '/', label: 'Przepływy', icon: LayoutDashboard },
+  { href: '/reports', label: 'Raporty', icon: BarChart3 },
   { href: '/reports/exports', label: 'Eksport', icon: FileSpreadsheet },
+  { href: '/reports/kpir', label: 'KPiR', icon: BookOpen },
   { href: '/invoices', label: 'Faktury wystawione', icon: FileText },
   { href: '/payments/overdue', label: 'Przeterminowane', icon: AlertCircle },
   { href: '/inbox', label: 'Skrzynka odbiorcza', icon: Inbox },
+  { href: '/expenses', label: 'Wydatki', icon: Receipt },
   { href: '/contractors', label: 'Kontrahenci', icon: Users },
   { href: '/settings', label: 'Ustawienia', icon: Settings },
 ];

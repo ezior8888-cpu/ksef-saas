@@ -9,7 +9,7 @@ import { createClient } from '@/lib/supabase/server';
 /**
  * Server Action: logowanie email+hasło.
  * Na błąd → redirect na /login z query `?error=...`.
- * Na sukces → redirect na /reports (dashboard).
+ * Na sukces → redirect na / (pulpit).
  */
 export async function loginWithEmail(formData: FormData): Promise<void> {
   const email = String(formData.get('email') ?? '');
@@ -47,7 +47,7 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
   }
 
   revalidatePath('/', 'layout');
-  redirect('/reports');
+  redirect('/');
 }
 
 /**
@@ -102,7 +102,7 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
   }
 
   revalidatePath('/', 'layout');
-  redirect('/reports');
+  redirect('/');
 }
 
 /**

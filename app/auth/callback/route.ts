@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-const SAFE_DEFAULT = '/reports';
+const SAFE_DEFAULT = '/';
 
 /**
  * Whitelistuje ścieżkę dla redirectu po wymianie kodu OAuth / email confirm.

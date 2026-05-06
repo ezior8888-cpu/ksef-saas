@@ -28,6 +28,7 @@
     "test:all": "pnpm test && pnpm test:vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.0",
     "@aws-sdk/client-s3": "^3.1032.0",
     "@aws-sdk/s3-request-presigner": "^3.1032.0",
     "@hookform/resolvers": "^5.2.2",

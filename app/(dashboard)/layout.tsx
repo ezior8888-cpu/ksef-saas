@@ -42,7 +42,7 @@ export default async function DashboardLayout({
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <MobileNav />
-            <Link href="/reports" className="flex min-w-0 items-center gap-2.5">
+            <Link href="/" className="flex min-w-0 items-center gap-2.5">
               <div className="h-9 w-9 shrink-0 rounded-2xl bg-foreground text-background flex items-center justify-center font-bold text-sm shadow-glass-sm">
                 K
               </div>

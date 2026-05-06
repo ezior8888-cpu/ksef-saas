@@ -32,6 +32,8 @@ import {
   coPilotSendPackageJob,
 } from '@/lib/inngest/jobs/co-pilot-monthly';
 import { jobsWatchdogJob } from '@/lib/inngest/jobs/jobs-watchdog';
+import { processOcrJob } from '@/lib/inngest/jobs/process-ocr';
+import { autoCategorizeInboxInvoice } from '@/lib/inngest/jobs/auto-categorize-inbox';
 /**
  * Webhook dla Inngest Cloud. Obsługuje GET, POST, PUT.
  * Na tym endpoincie Inngest sprawdza status, rejestruje funkcje
@@ -66,5 +68,7 @@ export const { GET, POST, PUT } = serve({
     coPilotMonthlyJob,
     coPilotSendPackageJob,
     jobsWatchdogJob,
+    processOcrJob,
+    autoCategorizeInboxInvoice,
   ],
 });

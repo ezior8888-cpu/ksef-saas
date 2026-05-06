@@ -59,9 +59,9 @@ export async function updateSession(request: NextRequest) {
     '/api/health',
     '/api/portal',
     '/accountant',
+    '/share-target',
   ];
-  const isPublicPath =
-    publicPaths.some((p) => path.startsWith(p)) || path === '/';
+  const isPublicPath = publicPaths.some((p) => path.startsWith(p));
 
   // Niezalogowany próbuje wejść na chronioną stronę → /login
   if (!user && !isPublicPath) {
@@ -74,7 +74,7 @@ export async function updateSession(request: NextRequest) {
   // Zalogowany próbuje wejść na /login → dashboard
   if (user && (path === '/login' || path === '/register')) {
     const url = request.nextUrl.clone();
-    url.pathname = '/reports';
+    url.pathname = '/';
     return NextResponse.redirect(url);
   }
 

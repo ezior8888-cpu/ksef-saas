@@ -2,6 +2,7 @@ import { cron } from 'inngest';
 
 import {
   inboxInvoiceReceived,
+  inboxInvoiceReceivedAutoCategorize,
   inboxPollTenant,
   inngest,
 } from '../client';
@@ -141,7 +142,7 @@ export const inboxPollTenantJob = inngest.createFunction(
       return { fetched: newInvoices.length, newlyAdded: 0 };
     }
 
-    await step.run('save-received-invoices', async () => {
+    const insertedInvoices = await step.run('save-received-invoices', async () => {
       const supabase = await createAdminClient();
 
       // Schemat `invoices` (00001):
@@ -199,13 +200,30 @@ export const inboxPollTenantJob = inngest.createFunction(
         },
       }));
 
-      const { error } = await supabase.from('invoices').insert(rows);
+      const { data: inserted, error } = await supabase
+        .from('invoices')
+        .insert(rows)
+        .select('id, ksef_number');
+
       if (error) {
         throw new Error(
           `Failed to insert incoming invoices: ${error.message}`,
         );
       }
+      return inserted ?? [];
     });
+
+    if (insertedInvoices.length > 0) {
+      await step.sendEvent(
+        'fan-out-auto-categorize-inbox',
+        insertedInvoices.map((row) =>
+          inboxInvoiceReceivedAutoCategorize.create({
+            invoiceId: row.id,
+            tenantId,
+          }),
+        ),
+      );
+    }
 
     await step.run('push-inbox-new', async () => {
       const n = freshInvoices.length;
