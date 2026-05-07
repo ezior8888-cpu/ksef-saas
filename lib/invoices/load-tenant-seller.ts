@@ -1,8 +1,11 @@
 import { createClient } from '@/lib/supabase/server';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import type { SellerData } from '@/types/invoice-types';
 
 /**
- * Dane sprzedawcy z profilu tenanta dla formularzy FA (zaliczka / rozliczenie / korekta).
+ * Dane sprzedawcy z profilu aktywnej organizacji dla formularzy FA
+ * (zaliczka / rozliczenie / korekta). Jeśli user nie ma aktywnej org —
+ * zwracamy null (caller pokaże fallback).
  */
 export async function loadTenantSellerForForms(): Promise<SellerData | null> {
   const supabase = await createClient();
@@ -11,16 +14,16 @@ export async function loadTenantSellerForForms(): Promise<SellerData | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: userData, error } = await supabase
-    .from('users')
-    .select('tenant_id, tenants(id, nip, name, address_json)')
-    .eq('id', user.id)
-    .single();
+  const tenantId = await getActiveOrgIdFromCookies();
+  if (!tenantId) return null;
 
-  if (error || !userData?.tenant_id) return null;
+  const { data: raw, error } = await supabase
+    .from('tenants')
+    .select('id, nip, name, address_json')
+    .eq('id', tenantId)
+    .maybeSingle();
 
-  const raw = Array.isArray(userData.tenants) ? userData.tenants[0] : userData.tenants;
-  if (!raw) return null;
+  if (error || !raw) return null;
 
   const nip = String(raw.nip ?? '').replace(/\D/g, '');
   const addr = (raw.address_json as {

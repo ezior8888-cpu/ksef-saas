@@ -1,8 +1,6 @@
-import { redirect } from 'next/navigation';
-
 import { CaptureButton } from '@/components/expenses/capture-button';
 import { ExpensesList } from '@/components/expenses/expenses-list';
-import { createClient } from '@/lib/supabase/server';
+import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,20 +12,7 @@ export default async function ExpensesPage({
   const { filter } = await searchParams;
   const unreviewedOnly = filter === 'unreviewed';
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: userTenant } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  const userTenantId = userTenant?.tenant_id ?? null;
-  if (!userTenantId) redirect('/onboarding');
+  const { supabase, tenantId } = await getPageContext();
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -37,7 +22,7 @@ export default async function ExpensesPage({
   let expensesQuery = supabase
     .from('expenses')
     .select('*')
-    .eq('tenant_id', userTenantId)
+    .eq('tenant_id', tenantId)
     .order('issue_date', { ascending: false });
 
   if (unreviewedOnly) {

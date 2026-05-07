@@ -35,12 +35,12 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
   if (signedIn) {
     const { data: row } = await supabase
       .from('users')
-      .select('tenant_id')
+      .select('last_active_tenant_id')
       .eq('id', signedIn.id)
       .maybeSingle();
     await logAudit({
       action: 'auth.login',
-      tenantId: row?.tenant_id ?? null,
+      tenantId: row?.last_active_tenant_id ?? null,
       userId: signedIn.id,
       metadata: { method: 'password' },
     });
@@ -88,14 +88,9 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
 
   const uid = data.user?.id;
   if (uid) {
-    const { data: row } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', uid)
-      .maybeSingle();
     await logAudit({
       action: 'auth.signup',
-      tenantId: row?.tenant_id ?? null,
+      tenantId: null,
       userId: uid,
       metadata: { flow: 'session_immediate' },
     });
@@ -139,12 +134,12 @@ export async function signOut(): Promise<void> {
   if (user) {
     const { data: row } = await supabase
       .from('users')
-      .select('tenant_id')
+      .select('last_active_tenant_id')
       .eq('id', user.id)
       .maybeSingle();
     await logAudit({
       action: 'auth.logout',
-      tenantId: row?.tenant_id ?? null,
+      tenantId: row?.last_active_tenant_id ?? null,
       userId: user.id,
     });
   }

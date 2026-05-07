@@ -26,10 +26,16 @@ export type { InvoiceRow } from './invoice-row-types';
  *
  * RLS na `invoices` zapewnia że klient nie dostanie zdarzeń dla obcych
  * tenantów (policy `invoices_select_own_tenant` + `tenant_id = get_current_tenant_id()`).
+ * Dodatkowo `filter` na INSERT/UPDATE ogranicza payload do wierszy tego tenanta
+ * (defense-in-depth przy Realtime). DELETE bez filtra — `old` często ma tylko PK
+ * (REPLICA IDENTITY), więc filtr `tenant_id` mógłby nie działać; lokalnie i tak
+ * usuwamy tylko po `id` obecnym na liście.
  */
 export function InvoiceList({
+  tenantId,
   initialInvoices,
 }: {
+  tenantId: string;
   initialInvoices: InvoiceRow[];
 }) {
   const [invoices, setInvoices] = useState<InvoiceRow[]>(initialInvoices);
@@ -37,11 +43,18 @@ export function InvoiceList({
   useEffect(() => {
     const supabase = createClient();
 
+    const filter = `tenant_id=eq.${tenantId}`;
+
     const channel = supabase
-      .channel('invoices-realtime')
+      .channel(`invoices-realtime:${tenantId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'invoices' },
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'invoices',
+          filter,
+        },
         (payload) => {
           const next = payload.new as Partial<InvoiceRow> & { id: string };
           setInvoices((prev) =>
@@ -51,7 +64,12 @@ export function InvoiceList({
       )
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'invoices' },
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'invoices',
+          filter,
+        },
         (payload) => {
           const next = payload.new as InvoiceRow;
           if ((next as unknown as { direction?: string }).direction === 'incoming')
@@ -64,7 +82,11 @@ export function InvoiceList({
       )
       .on(
         'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'invoices' },
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'invoices',
+        },
         (payload) => {
           const old = payload.old as { id?: string };
           if (!old.id) return;
@@ -76,7 +98,7 @@ export function InvoiceList({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [tenantId]);
 
   if (invoices.length === 0) {
     return (

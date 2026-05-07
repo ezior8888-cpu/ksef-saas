@@ -219,23 +219,25 @@ export const autoCategorizeInboxInvoice = inngest.createFunction(
         return { skipped: true as const, expenseId: existing.id };
       }
 
-      const { data: ownerUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('tenant_id', tenantId)
+      const { data: ownerMembership } = await supabase
+        .from('memberships')
+        .select('user_id')
+        .eq('organization_id', tenantId)
         .eq('role', 'owner')
+        .eq('status', 'active')
         .limit(1)
         .maybeSingle();
 
-      let createdById = ownerUser?.id;
+      let createdById = ownerMembership?.user_id;
       if (!createdById) {
-        const { data: anyUser } = await supabase
-          .from('users')
-          .select('id')
-          .eq('tenant_id', tenantId)
+        const { data: anyMembership } = await supabase
+          .from('memberships')
+          .select('user_id')
+          .eq('organization_id', tenantId)
+          .eq('status', 'active')
           .limit(1)
           .maybeSingle();
-        createdById = anyUser?.id;
+        createdById = anyMembership?.user_id;
       }
 
       if (!createdById) {

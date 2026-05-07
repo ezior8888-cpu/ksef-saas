@@ -1,26 +1,10 @@
-import { redirect } from 'next/navigation';
-
 import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
-import { createClient } from '@/lib/supabase/server';
+import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: userTenant } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  if (!userTenant?.tenant_id) redirect('/onboarding');
-
-  const tenantId = userTenant.tenant_id;
+  const { supabase, tenantId } = await getPageContext();
 
   const now = new Date();
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)

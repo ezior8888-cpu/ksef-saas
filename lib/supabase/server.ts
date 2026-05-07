@@ -2,6 +2,12 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
+import {
+  ACTIVE_ORG_COOKIE,
+  ACTIVE_ORG_HEADER,
+  isUuid,
+} from './active-org';
+
 /**
  * Supabase client do użycia na serwerze:
  * - Server Components
@@ -9,9 +15,19 @@ import { cookies } from 'next/headers';
  * - Route Handlers
  *
  * Obsługuje cookies przez next/headers.
+ *
+ * Multi-org: jeżeli cookie `ksef.active_org` jest ustawione, dokleja
+ * nagłówek `x-active-org` do każdego żądania PostgREST. Funkcja w bazie
+ * `public.get_current_tenant_id()` waliduje membership — sfałszowanie
+ * cookie z obcym uuid nie da dostępu.
  */
 export async function createClient() {
   const cookieStore = await cookies();
+  const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
+  const headers: Record<string, string> = {};
+  if (isUuid(activeOrg)) {
+    headers[ACTIVE_ORG_HEADER] = activeOrg;
+  }
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,6 +48,42 @@ export async function createClient() {
           }
         },
       },
+      global: Object.keys(headers).length > 0 ? { headers } : undefined,
+    }
+  );
+}
+
+/**
+ * Wariant `createClient()` z explicit aktywną org. Używaj w Server Actions
+ * gdzie aktywna org pochodzi z parametru (np. `setActiveOrganizationAction`)
+ * a nie z cookie — pozwala uniknąć race condition cookie-set vs request.
+ */
+export async function createClientForOrg(orgId: string | null | undefined) {
+  const cookieStore = await cookies();
+  const headers: Record<string, string> = {};
+  if (isUuid(orgId)) {
+    headers[ACTIVE_ORG_HEADER] = orgId as string;
+  }
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // ignore — Server Component context
+          }
+        },
+      },
+      global: Object.keys(headers).length > 0 ? { headers } : undefined,
     }
   );
 }

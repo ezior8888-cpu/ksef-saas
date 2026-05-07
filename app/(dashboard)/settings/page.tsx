@@ -1,6 +1,4 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
 import {
   User,
   Bell,
@@ -13,26 +11,23 @@ import {
   Mail,
 } from 'lucide-react';
 import { DeleteAccountSection } from '@/components/settings/delete-account';
+import { getPageContext } from '@/lib/supabase/page-context';
 
 export default async function SettingsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user, tenantId, role } = await getPageContext();
 
-  if (!user) redirect('/login');
+  const [{ data: tenant }, { data: authUser }] = await Promise.all([
+    supabase
+      .from('tenants')
+      .select('name, nip, address_json')
+      .eq('id', tenantId)
+      .maybeSingle(),
+    supabase.auth.getUser(),
+  ]);
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id, role, tenants(name, nip, address)')
-    .eq('id', user.id)
-    .single();
-
-  const tenant = Array.isArray(userData?.tenants)
-    ? userData.tenants[0]
-    : userData?.tenants;
-
-  const isOwner = userData?.role === 'owner';
+  // `user` z `getPageContext` ma email + id; created_at potrzebne tylko tutaj.
+  const userCreatedAt = authUser.user?.created_at ?? null;
+  const isOwner = role === 'owner';
 
   const settingsLinks = [
     {
@@ -57,6 +52,16 @@ export default async function SettingsPage() {
       description: 'Auto-wysyłka paczek do biura rachunkowego',
       icon: UserCog,
     },
+    ...(isOwner || role === 'admin'
+      ? [
+          {
+            href: '/settings/team',
+            label: 'Zespół',
+            description: 'Członkowie organizacji, zaproszenia, prośby o dostęp',
+            icon: User,
+          },
+        ]
+      : []),
     {
       href: '/settings/notifications',
       label: 'Powiadomienia',
@@ -103,7 +108,9 @@ export default async function SettingsPage() {
                 <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
                   Email
                 </dt>
-                <dd className="font-medium mt-1 truncate">{user.email}</dd>
+                <dd className="font-medium mt-1 truncate">
+                  {user.email ?? '-'}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
@@ -111,7 +118,7 @@ export default async function SettingsPage() {
                 </dt>
                 <dd className="mt-1">
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-foreground/5 border border-glass-border text-xs font-medium backdrop-blur-glass-sm capitalize">
-                    {userData?.role ?? 'user'}
+                    {role}
                   </span>
                 </dd>
               </div>
@@ -128,11 +135,13 @@ export default async function SettingsPage() {
                   Konto utworzone
                 </dt>
                 <dd className="text-sm text-muted-foreground mt-1">
-                  {new Date(user.created_at).toLocaleDateString('pl-PL', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
+                  {userCreatedAt
+                    ? new Date(userCreatedAt).toLocaleDateString('pl-PL', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })
+                    : '-'}
                 </dd>
               </div>
             </dl>
@@ -171,9 +180,9 @@ export default async function SettingsPage() {
                 </dt>
                 <dd className="font-mono mt-1">{tenant?.nip ?? '-'}</dd>
               </div>
-              {tenant?.address &&
-                typeof tenant.address === 'object' &&
-                tenant.address !== null && (
+              {tenant?.address_json &&
+                typeof tenant.address_json === 'object' &&
+                tenant.address_json !== null && (
                   <div>
                     <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
                       Adres siedziby
@@ -181,7 +190,7 @@ export default async function SettingsPage() {
                     <dd className="text-foreground mt-1 leading-relaxed">
                       {
                         (
-                          tenant.address as {
+                          tenant.address_json as {
                             addressLine1?: string;
                             addressLine2?: string;
                           }
@@ -190,7 +199,7 @@ export default async function SettingsPage() {
                       <br />
                       {
                         (
-                          tenant.address as {
+                          tenant.address_json as {
                             addressLine1?: string;
                             addressLine2?: string;
                           }

@@ -1,7 +1,5 @@
-import { redirect } from 'next/navigation';
-
 import { KpirView } from '@/components/expenses/kpir-view';
-import { createClient } from '@/lib/supabase/server';
+import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,19 +21,7 @@ export default async function KpirPage({
   searchParams: Promise<{ month?: string; year?: string }>;
 }) {
   const sp = await searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: userTenant } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  if (!userTenant?.tenant_id) redirect('/onboarding');
+  const { supabase, tenantId } = await getPageContext();
 
   const now = new Date();
   const month = clampMonth(Number(sp.month ?? now.getMonth() + 1));
@@ -47,7 +33,7 @@ export default async function KpirPage({
   const { data: expenses, error: expensesError } = await supabase
     .from('expenses')
     .select('*')
-    .eq('tenant_id', userTenant.tenant_id)
+    .eq('tenant_id', tenantId)
     .eq('is_deductible', true)
     .gte('issue_date', periodStart)
     .lte('issue_date', periodEnd)
@@ -56,7 +42,7 @@ export default async function KpirPage({
   const { data: invoices, error: invoicesError } = await supabase
     .from('invoices')
     .select('id, internal_number, issue_date, gross_total, net_total, buyer_data')
-    .eq('tenant_id', userTenant.tenant_id)
+    .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
     .gte('issue_date', periodStart)

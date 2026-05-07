@@ -10,6 +10,7 @@ import {
 } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { deleteExpensePhoto, uploadExpensePhoto } from '@/lib/storage/expenses';
 import type { Database } from '@/types/database';
 
@@ -86,13 +87,9 @@ export async function uploadExpensePhotoAction(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) return { success: false as const, error: 'Brak autoryzacji' };
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-  if (!userData?.tenant_id) {
-    return { success: false as const, error: 'Brak tenanta' };
+  const tenantId = await getActiveOrgIdFromCookies();
+  if (!tenantId) {
+    return { success: false as const, error: 'Brak aktywnej organizacji' };
   }
 
   const file = formData.get('photo');
@@ -107,7 +104,7 @@ export async function uploadExpensePhotoAction(formData: FormData) {
   const { data: ocrJob, error: jobError } = await admin
     .from('ocr_jobs')
     .insert({
-      tenant_id: userData.tenant_id,
+      tenant_id: tenantId,
       created_by: user.id,
       status: 'pending',
       source_file_path: 'pending',
@@ -126,7 +123,7 @@ export async function uploadExpensePhotoAction(formData: FormData) {
 
   try {
     r2Key = await uploadExpensePhoto(
-      userData.tenant_id,
+      tenantId,
       ocrJob.id,
       buffer,
       file.type || 'application/octet-stream',
@@ -146,7 +143,7 @@ export async function uploadExpensePhotoAction(formData: FormData) {
     await inngest.send(
       ocrProcessPhotoRequested.create({
         ocrJobId: ocrJob.id,
-        tenantId: userData.tenant_id,
+        tenantId,
       }),
     );
   } catch (e) {
@@ -197,20 +194,16 @@ export async function reviewExpenseAction(
   } = await supabase.auth.getUser();
   if (!user) return { success: false as const, error: 'Brak autoryzacji' };
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-  if (!userData?.tenant_id) {
-    return { success: false as const, error: 'Brak tenanta' };
+  const tenantId = await getActiveOrgIdFromCookies();
+  if (!tenantId) {
+    return { success: false as const, error: 'Brak aktywnej organizacji' };
   }
 
   const { data: existing } = await supabase
     .from('expenses')
     .select('seller_nip, seller_name, kpir_column, category_label')
     .eq('id', expenseId)
-    .eq('tenant_id', userData.tenant_id)
+    .eq('tenant_id', tenantId)
     .maybeSingle();
 
   if (!existing) {
@@ -231,7 +224,7 @@ export async function reviewExpenseAction(
     .from('expenses')
     .update(patch)
     .eq('id', expenseId)
-    .eq('tenant_id', userData.tenant_id)
+    .eq('tenant_id', tenantId)
     .select('id')
     .maybeSingle();
 
@@ -250,7 +243,7 @@ export async function reviewExpenseAction(
     resolvedLabel !== ''
   ) {
     try {
-      await learnFromCorrection(userData.tenant_id, {
+      await learnFromCorrection(tenantId, {
         seller_nip: updates.seller_nip ?? existing.seller_nip,
         seller_name: updates.seller_name ?? existing.seller_name,
         kpir_column: resolvedKpir,
@@ -274,20 +267,16 @@ export async function deleteExpenseAction(expenseId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { success: false as const, error: 'Brak autoryzacji' };
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-  if (!userData?.tenant_id) {
-    return { success: false as const, error: 'Brak tenanta' };
+  const tenantId = await getActiveOrgIdFromCookies();
+  if (!tenantId) {
+    return { success: false as const, error: 'Brak aktywnej organizacji' };
   }
 
   const { error, count } = await supabase
     .from('expenses')
     .delete({ count: 'exact' })
     .eq('id', expenseId)
-    .eq('tenant_id', userData.tenant_id);
+    .eq('tenant_id', tenantId);
 
   if (error) return { success: false as const, error: error.message };
   if (count === 0) {

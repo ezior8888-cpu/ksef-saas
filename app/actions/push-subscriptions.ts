@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { createClient } from '@/lib/supabase/server';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 
 interface SubscribeInput {
   endpoint: string;
@@ -20,22 +21,16 @@ export async function subscribePushAction(input: SubscribeInput) {
   } = await supabase.auth.getUser();
   if (!user) return { success: false as const, error: 'Brak autoryzacji' };
 
-  // `users.id` = auth.uid() (PK, nie kolumna `user_id`)
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  if (!userData?.tenant_id) {
-    return { success: false as const, error: 'Brak tenanta' };
+  const tenantId = await getActiveOrgIdFromCookies();
+  if (!tenantId) {
+    return { success: false as const, error: 'Brak aktywnej organizacji' };
   }
 
   // Upsert po endpoint (UNIQUE) — ten sam browser odświeża klucze
   const { error } = await supabase.from('push_subscriptions').upsert(
     {
       user_id: user.id,
-      tenant_id: userData.tenant_id,
+      tenant_id: tenantId,
       endpoint: input.endpoint,
       p256dh: input.p256dh,
       auth: input.auth,

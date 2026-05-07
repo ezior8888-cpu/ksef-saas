@@ -30,6 +30,7 @@ export type AuditAction =
   | 'tenant.created'
   | 'tenant.updated'
   | 'tenant.user_role_changed'
+  | 'tenant.ksef_verified'
   | 'invoice.draft_created'
   | 'invoice.draft_updated'
   | 'invoice.draft_deleted'
@@ -48,7 +49,15 @@ export type AuditAction =
   | 'accountant.access_used'
   | 'accountant.portal_export'
   | 'retention.deletion_requested'
-  | 'retention.deletion_executed';
+  | 'retention.deletion_executed'
+  | 'invitation.created'
+  | 'invitation.revoked'
+  | 'invitation.accepted'
+  | 'join_request.created'
+  | 'join_request.approved'
+  | 'join_request.denied'
+  | 'membership.revoked'
+  | 'membership.role_changed';
 
 export interface AuditLogEntry {
   action: AuditAction;

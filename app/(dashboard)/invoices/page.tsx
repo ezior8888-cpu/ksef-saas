@@ -1,21 +1,22 @@
 import Link from 'next/link';
 import { PlusCircle } from 'lucide-react';
 
-import { createClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
+import { getPageContext } from '@/lib/supabase/page-context';
 import { InvoicesPullToRefresh } from './_components/invoices-pull-to-refresh';
 import type { InvoiceRow } from '@/components/invoices/invoice-row-types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InvoicesPage() {
-  const supabase = await createClient();
+  const { supabase, tenantId } = await getPageContext();
 
   const { data: invoices, error } = await supabase
     .from('invoices')
     .select(
       'id, internal_number, issue_date, buyer_data, gross_total, ksef_status, ksef_number, created_at, xml_storage_path'
     )
+    .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
     .order('created_at', { ascending: false })
     .limit(100);
@@ -53,6 +54,7 @@ export default async function InvoicesPage() {
         </div>
       ) : (
         <InvoicesPullToRefresh
+          tenantId={tenantId}
           listKey={listKey}
           initialInvoices={rows}
         />

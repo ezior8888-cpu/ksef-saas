@@ -6,6 +6,7 @@ import { logAudit } from '@/lib/audit/log';
 import { authenticateWithXades } from '@/lib/ksef/auth';
 import { encryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { bufferToByteaLiteral } from '@/lib/supabase/bytea';
 import { revalidatePath } from 'next/cache';
 
@@ -20,18 +21,15 @@ export async function uploadCertificateAction(data: {
     } = await supabase.auth.getUser();
     if (!user) return { success: false, error: 'Brak sesji' };
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!userData?.tenant_id) return { success: false, error: 'Brak tenanta' };
+    const tenantId = await getActiveOrgIdFromCookies();
+    if (!tenantId) {
+      return { success: false, error: 'Brak aktywnej organizacji' };
+    }
 
     const { data: tenantRow } = await supabase
       .from('tenants')
       .select('nip')
-      .eq('id', userData.tenant_id)
+      .eq('id', tenantId)
       .single();
 
     const nip = tenantRow?.nip;
@@ -77,13 +75,27 @@ export async function uploadCertificateAction(data: {
     });
 
     const admin = createAdminClient();
+    const { data: tenantBefore } = await admin
+      .from('tenants')
+      .select('ksef_verified_at')
+      .eq('id', tenantId)
+      .maybeSingle();
+
     const { error: updErr } = await admin
       .from('tenants')
       .update({
         ksef_credentials_encrypted: bufferToByteaLiteral(encrypted),
         ksef_certificate_expiry: expiryDate?.toISOString() ?? null,
+        // Pierwsza udana autoryzacja w KSeF dla tej org = sygnał ownership.
+        // Nie nadpisujemy istniejącej wartości — claim raz nadany trzymamy.
+        ...(tenantBefore?.ksef_verified_at
+          ? {}
+          : {
+              ksef_verified_at: new Date().toISOString(),
+              ksef_authority_user_id: user.id,
+            }),
       })
-      .eq('id', userData.tenant_id);
+      .eq('id', tenantId);
 
     if (updErr) {
       return { success: false, error: updErr.message };
@@ -91,13 +103,22 @@ export async function uploadCertificateAction(data: {
 
     await logAudit({
       action: 'ksef.credentials_uploaded',
-      tenantId: userData.tenant_id,
+      tenantId,
       userId: user.id,
       metadata: {
         certificateExpiry: expiryDate?.toISOString(),
         environment: process.env.KSEF_ENV ?? 'test',
       },
     });
+
+    if (!tenantBefore?.ksef_verified_at) {
+      await logAudit({
+        action: 'tenant.ksef_verified',
+        tenantId,
+        userId: user.id,
+        metadata: { method: 'xades', environment: process.env.KSEF_ENV ?? 'test' },
+      });
+    }
 
     revalidatePath('/settings/ksef');
     return { success: true };

@@ -156,6 +156,23 @@ export async function sendInvoiceFailedEmail(
   });
 }
 
+/**
+ * Generyczna wysyłka maila — używana przez moduły, które same komponują
+ * HTML (np. zaproszenia do organizacji). Zachowuje tę samą semantykę
+ * "fail-soft" jak pozostałe helpery: brak `RESEND_API_KEY` → log do stdout.
+ */
+export async function sendEmail(opts: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    console.log(`[email:stub] sendEmail → ${opts.to}: ${opts.subject}`);
+    return { sent: false, reason: 'not-configured' };
+  }
+  return sendViaResend(opts);
+}
+
 export async function sendCertExpiryAlert(
   email: string,
   payload: CertExpiryPayload,

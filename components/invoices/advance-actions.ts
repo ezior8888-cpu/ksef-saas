@@ -57,16 +57,19 @@ async function tenantContext(): Promise<{
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Brak sesji użytkownika');
 
-  const { data: userData, error } = await supabase
-    .from('users')
-    .select('tenant_id, tenants(id, nip, name, address_json)')
-    .eq('id', user.id)
-    .single();
+  const { getActiveOrgIdFromCookies } = await import(
+    '@/lib/supabase/active-org'
+  );
+  const tenantId = await getActiveOrgIdFromCookies();
+  if (!tenantId) throw new Error('Użytkownik nie jest przypisany do firmy');
 
-  if (error || !userData?.tenant_id) throw new Error('Użytkownik nie jest przypisany do firmy');
+  const { data: raw, error } = await supabase
+    .from('tenants')
+    .select('id, nip, name, address_json')
+    .eq('id', tenantId)
+    .maybeSingle();
 
-  const raw = Array.isArray(userData.tenants) ? userData.tenants[0] : userData.tenants;
-  if (!raw) throw new Error('Brak danych firmy');
+  if (error || !raw) throw new Error('Brak danych firmy');
 
   return {
     supabase,

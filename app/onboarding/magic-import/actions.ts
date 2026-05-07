@@ -44,13 +44,11 @@ export async function startMagicImportAction(
 
   if (!user) return { success: false, error: 'Niezalogowany' };
 
-  const { data: userTenant } = await supabase
-    .from('users')
-    .select('tenant_id, role')
-    .eq('id', user.id)
-    .single();
-
-  if (userTenant?.tenant_id !== tenantId) {
+  const { getActiveOrgIdFromCookies } = await import(
+    '@/lib/supabase/active-org'
+  );
+  const activeOrg = await getActiveOrgIdFromCookies();
+  if (activeOrg !== tenantId) {
     return { success: false, error: 'Brak uprawnień' };
   }
 
@@ -197,13 +195,11 @@ export async function startFileImportAction(
     return { success: false, error: 'Plik za duży (max 10 MB)' };
   }
 
-  const { data: userTenant } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  if (userTenant?.tenant_id !== tenantId) {
+  const { getActiveOrgIdFromCookies } = await import(
+    '@/lib/supabase/active-org'
+  );
+  const activeOrg = await getActiveOrgIdFromCookies();
+  if (activeOrg !== tenantId) {
     return { success: false, error: 'Brak uprawnień' };
   }
 

@@ -1,33 +1,19 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { AlertTriangle, CheckCircle2, Lock, Sparkles } from 'lucide-react';
 
 import { CertificateUpload } from '@/components/settings/certificate-upload';
 import { Button } from '@/components/ui/button';
-import { createClient } from '@/lib/supabase/server';
+import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
 
 export default async function KsefSettingsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect('/login');
-
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  if (!userData?.tenant_id) redirect('/onboarding');
+  const { supabase, tenantId } = await getPageContext();
 
   const { data: tenant } = await supabase
     .from('tenants')
     .select('name, nip, ksef_credentials_encrypted, ksef_certificate_expiry')
-    .eq('id', userData.tenant_id)
+    .eq('id', tenantId)
     .single();
 
   const hasCredentials = !!tenant?.ksef_credentials_encrypted;
@@ -117,7 +103,7 @@ export default async function KsefSettingsPage() {
             {hasCredentials ? (
               <Button asChild variant="glass-primary" size="lg" className="w-full sm:w-auto">
                 <Link
-                  href={`/onboarding/magic-import?tenantId=${encodeURIComponent(userData.tenant_id)}`}
+                  href={`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`}
                 >
                   <Sparkles className="mr-2 h-4 w-4 shrink-0" />
                   Rozpocznij Magiczny Import

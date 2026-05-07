@@ -153,6 +153,28 @@ export function CoPilotSettingsForm({
     }
 
     startTrigger(async () => {
+      // `triggerCoPilotNowAction` czyta ustawienia z bazy — bez zapisu
+      // przełącznik/email w UI nie trafiały do DB i ręczne wysłanie kończyło się błędem.
+      const saveResult = await updateAccountantSettingsAction({
+        co_pilot_enabled: settings.co_pilot_enabled,
+        accountant_email: settings.accountant_email,
+        accountant_name: settings.accountant_name,
+        accountant_company: settings.accountant_company.trim()
+          ? settings.accountant_company.trim()
+          : undefined,
+        preferred_formats: settings.preferred_formats,
+        send_day_of_month: settings.send_day_of_month,
+        include_issued_invoices: settings.include_issued_invoices,
+        include_received_invoices: settings.include_received_invoices,
+        include_corrections: settings.include_corrections,
+        cc_emails:
+          settings.cc_emails.length > 0 ? settings.cc_emails : undefined,
+      });
+      if (!saveResult.success) {
+        toast.error(saveResult.error ?? 'Nie udało się zapisać ustawień');
+        return;
+      }
+
       const today = new Date();
       const previousMonth = new Date(
         today.getFullYear(),

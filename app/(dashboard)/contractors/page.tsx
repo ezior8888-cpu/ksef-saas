@@ -1,36 +1,20 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
 import { Users, ArrowRight } from 'lucide-react';
 
 import { BulkValidateButton } from '@/components/validation/bulk-validate-button';
 import { VatStatusBadge } from '@/components/validation/vat-status-badge';
 import { ContractorReminderToggle } from '@/components/reminders/contractor-reminder-toggle';
+import { getPageContext } from '@/lib/supabase/page-context';
 
 export default async function ContractorsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect('/login');
-
-  const { data: userTenant } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  const userTenantId = userTenant?.tenant_id ?? null;
-
-  if (!userTenantId) redirect('/onboarding');
+  const { supabase, tenantId } = await getPageContext();
 
   const { data: contractors } = await supabase
     .from('contractors')
     .select(
       'id, nip, name, address, email, vat_status, last_validation_at, validation_warning, last_used_at, reminder_excluded, reminder_exclusion_reason'
     )
-    .eq('tenant_id', userTenantId)
+    .eq('tenant_id', tenantId)
     .order('last_used_at', { ascending: false, nullsFirst: false })
     .limit(200);
 
@@ -91,7 +75,7 @@ export default async function ContractorsPage() {
                   Status VAT
                 </th>
                 <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider text-center">
-                  Wkurzacz
+                  Przypomnienia
                 </th>
                 <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
                   Ostatnio użyty

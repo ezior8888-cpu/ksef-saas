@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { createClient } from '@/lib/supabase/server';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { lookupCompanyByNip } from '@/lib/gus/client';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
@@ -54,20 +55,18 @@ async function getTenantContext(): Promise<{
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Brak sesji użytkownika');
 
-  const { data: userData, error } = await supabase
-    .from('users')
-    .select('tenant_id, tenants(id, nip, name, address_json)')
-    .eq('id', user.id)
-    .single();
-
-  if (error || !userData?.tenant_id) {
+  const tenantId = await getActiveOrgIdFromCookies();
+  if (!tenantId) {
     throw new Error('Użytkownik nie jest przypisany do firmy (onboarding)');
   }
 
-  const raw = Array.isArray(userData.tenants)
-    ? userData.tenants[0]
-    : userData.tenants;
-  if (!raw) throw new Error('Brak danych firmy');
+  const { data: raw, error } = await supabase
+    .from('tenants')
+    .select('id, nip, name, address_json')
+    .eq('id', tenantId)
+    .maybeSingle();
+
+  if (error || !raw) throw new Error('Brak danych firmy');
 
   return {
     supabase,

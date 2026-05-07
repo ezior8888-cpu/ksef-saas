@@ -2032,12 +2032,15 @@ export type Database = {
         Row: {
           address_json: Json | null
           created_at: string | null
+          created_by_user_id: string | null
           deleted_at: string | null
           hard_delete_at: string | null
           id: string
           is_active: boolean
+          ksef_authority_user_id: string | null
           ksef_certificate_expiry: string | null
           ksef_credentials_encrypted: string | null
+          ksef_verified_at: string | null
           name: string
           nip: string
           regon: string | null
@@ -2048,12 +2051,15 @@ export type Database = {
         Insert: {
           address_json?: Json | null
           created_at?: string | null
+          created_by_user_id?: string | null
           deleted_at?: string | null
           hard_delete_at?: string | null
           id?: string
           is_active?: boolean
+          ksef_authority_user_id?: string | null
           ksef_certificate_expiry?: string | null
           ksef_credentials_encrypted?: string | null
+          ksef_verified_at?: string | null
           name: string
           nip: string
           regon?: string | null
@@ -2064,12 +2070,15 @@ export type Database = {
         Update: {
           address_json?: Json | null
           created_at?: string | null
+          created_by_user_id?: string | null
           deleted_at?: string | null
           hard_delete_at?: string | null
           id?: string
           is_active?: boolean
+          ksef_authority_user_id?: string | null
           ksef_certificate_expiry?: string | null
           ksef_credentials_encrypted?: string | null
+          ksef_verified_at?: string | null
           name?: string
           nip?: string
           regon?: string | null
@@ -2078,6 +2087,157 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      memberships: {
+        Row: {
+          created_at: string
+          id: string
+          invited_at: string | null
+          invited_by: string | null
+          joined_at: string
+          organization_id: string
+          revoked_at: string | null
+          role: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          joined_at?: string
+          organization_id: string
+          revoked_at?: string | null
+          role?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          joined_at?: string
+          organization_id?: string
+          revoked_at?: string | null
+          role?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memberships_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memberships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by_user_id: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_at: string
+          invited_by: string
+          organization_id: string
+          revoked_at: string | null
+          role: string
+          token_hash: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by_user_id?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          invited_at?: string
+          invited_by: string
+          organization_id: string
+          revoked_at?: string | null
+          role?: string
+          token_hash: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by_user_id?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_at?: string
+          invited_by?: string
+          organization_id?: string
+          revoked_at?: string | null
+          role?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_invitations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_join_requests: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          id: string
+          message: string | null
+          organization_id: string
+          requested_by_user_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          message?: string | null
+          organization_id: string
+          requested_by_user_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          message?: string | null
+          organization_id?: string
+          requested_by_user_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_join_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       upo_receipts: {
         Row: {
@@ -2162,31 +2322,28 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          last_active_tenant_id: string | null
           last_login: string | null
           name: string | null
-          role: string | null
-          tenant_id: string | null
         }
         Insert: {
           created_at?: string | null
           id: string
+          last_active_tenant_id?: string | null
           last_login?: string | null
           name?: string | null
-          role?: string | null
-          tenant_id?: string | null
         }
         Update: {
           created_at?: string | null
           id?: string
+          last_active_tenant_id?: string | null
           last_login?: string | null
           name?: string | null
-          role?: string | null
-          tenant_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "users_tenant_id_fkey"
-            columns: ["tenant_id"]
+            foreignKeyName: "users_last_active_tenant_id_fkey"
+            columns: ["last_active_tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
@@ -2377,9 +2534,33 @@ export type Database = {
       }
     }
     Functions: {
+      accept_organization_invitation: {
+        Args: { p_token_hash: string }
+        Returns: string
+      }
+      approve_join_request: {
+        Args: { p_request_id: string; p_role?: string }
+        Returns: string
+      }
+      change_membership_role: {
+        Args: { p_membership_id: string; p_new_role: string }
+        Returns: undefined
+      }
       cleanup_expired_validation_cache: { Args: never; Returns: number }
+      create_organization_with_owner: {
+        Args: { p_name: string; p_nip: string; p_address_json: Json }
+        Returns: string
+      }
       days_overdue: { Args: { invoice_due_date: string }; Returns: number }
+      deny_join_request: {
+        Args: { p_request_id: string }
+        Returns: undefined
+      }
       get_current_tenant_id: { Args: never; Returns: string }
+      has_org_role: {
+        Args: { p_org: string; p_role: string }
+        Returns: boolean
+      }
       increment_export_file_download: {
         Args: { p_file_id: string; p_user_id: string }
         Returns: undefined
@@ -2390,6 +2571,14 @@ export type Database = {
       }
       increment_push_failed_count: {
         Args: { sub_id: string }
+        Returns: undefined
+      }
+      is_member_of: {
+        Args: { p_org: string }
+        Returns: boolean
+      }
+      revoke_membership: {
+        Args: { p_membership_id: string }
         Returns: undefined
       }
     }

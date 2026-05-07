@@ -1,9 +1,14 @@
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
+
 import { createClient } from '@/lib/supabase/server';
+import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
+import { listMyOrganizations } from '@/app/actions/organizations';
 import { signOut } from '../(auth)/login/actions';
 import { MobileNav } from '@/components/dashboard/mobile-nav';
+import { OrgSwitcher } from '@/components/dashboard/org-switcher';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { ThemeToggle } from '@/components/dashboard/theme-toggle';
 import { InstallPrompt } from '@/components/pwa/install-prompt';
@@ -22,19 +27,27 @@ export default async function DashboardLayout({
 
   if (!user) redirect('/login');
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id, tenants(name, nip)')
-    .eq('id', user.id)
-    .single();
-
-  if (!userData?.tenant_id) {
+  // Cookie aktywnej org jest ustawiane przez middleware (bootstrap z
+  // memberships) — jeśli mimo to brak, znaczy że user nie ma żadnego
+  // aktywnego membership. Wysyłamy do onboardingu.
+  const cookieStore = await cookies();
+  const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
+  if (!isUuid(activeOrg)) {
     redirect('/onboarding');
   }
 
-  const tenant = Array.isArray(userData.tenants)
-    ? userData.tenants[0]
-    : userData.tenants;
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('name, nip')
+    .eq('id', activeOrg)
+    .maybeSingle();
+
+  if (!tenant) {
+    // Cookie wskazuje na nieistniejącą / niedostępną org — bezpieczny redirect.
+    redirect('/onboarding');
+  }
+
+  const memberships = await listMyOrganizations();
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-mesh-surface">
@@ -42,25 +55,23 @@ export default async function DashboardLayout({
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <MobileNav />
-            <Link href="/" className="flex min-w-0 items-center gap-2.5">
+            <Link href="/reports" className="flex min-w-0 items-center gap-2.5">
               <div className="h-9 w-9 shrink-0 rounded-2xl bg-foreground text-background flex items-center justify-center font-bold text-sm shadow-glass-sm">
-                K
+                F
               </div>
               <span className="font-semibold tracking-tight truncate">
-                KSeF SaaS
+                FaktFlow
               </span>
             </Link>
           </div>
 
           <div className="flex shrink-0 items-center gap-4">
-            <div className="text-right">
-              <p className="text-sm font-medium">
-                {tenant?.name ?? 'Bez nazwy'}
-              </p>
-              <p className="text-xs text-muted-foreground font-mono">
-                NIP: {tenant?.nip}
-              </p>
-            </div>
+            <OrgSwitcher
+              memberships={memberships}
+              activeOrgId={activeOrg}
+              activeName={tenant.name}
+              activeNip={tenant.nip}
+            />
             <ThemeToggle />
             <form action={signOut}>
               <Button

@@ -21,7 +21,11 @@ interface NavItem {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  separator?: boolean;
+}
+
+interface NavSection {
+  title: string;
+  items: NavItem[];
 }
 
 function isActivePath(pathname: string, href: string): boolean {
@@ -45,17 +49,26 @@ function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-const navItems: NavItem[] = [
-  { href: '/', label: 'Przepływy', icon: LayoutDashboard },
-  { href: '/reports', label: 'Raporty', icon: BarChart3 },
-  { href: '/reports/exports', label: 'Eksport', icon: FileSpreadsheet },
-  { href: '/reports/kpir', label: 'KPiR', icon: BookOpen },
-  { href: '/invoices', label: 'Faktury wystawione', icon: FileText },
-  { href: '/payments/overdue', label: 'Przeterminowane', icon: AlertCircle },
-  { href: '/inbox', label: 'Skrzynka odbiorcza', icon: Inbox },
-  { href: '/expenses', label: 'Wydatki', icon: Receipt },
-  { href: '/contractors', label: 'Kontrahenci', icon: Users },
-  { href: '/settings', label: 'Ustawienia', icon: Settings },
+const navSections: NavSection[] = [
+  {
+    title: 'Dane',
+    items: [
+      { href: '/reports', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/', label: 'Przepływy', icon: BarChart3 },
+      { href: '/invoices', label: 'Faktury wystawione', icon: FileText },
+      { href: '/payments/overdue', label: 'Przeterminowane', icon: AlertCircle },
+      { href: '/inbox', label: 'Skrzynka odbiorcza', icon: Inbox },
+      { href: '/expenses', label: 'Wydatki', icon: Receipt },
+      { href: '/contractors', label: 'Kontrahenci', icon: Users },
+    ],
+  },
+  {
+    title: 'Księgowość',
+    items: [
+      { href: '/reports/kpir', label: 'KPiR', icon: BookOpen },
+      { href: '/reports/exports', label: 'Eksport', icon: FileSpreadsheet },
+    ],
+  },
 ];
 
 export function Sidebar({ drawer }: { drawer?: boolean }) {
@@ -79,30 +92,50 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
         <span>Nowa faktura</span>
       </Link>
 
-      <nav className="mt-6 flex-1 overflow-y-auto space-y-0.5 min-h-0">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = isActivePath(pathname, item.href);
-          return (
-            <div key={item.href}>
-              {item.separator && (
-                <div className="my-3 h-px bg-white/55 dark:bg-white/10" />
-              )}
-              <Link
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
-                  active
-                    ? 'rounded-2xl bg-foreground/90 dark:bg-white/15 text-background dark:text-foreground backdrop-blur-md shadow-glass-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-white/30 dark:hover:bg-white/8'
-                )}
-              >
-                <Icon className="h-[18px] w-[18px] shrink-0" />
-                {item.label}
-              </Link>
+      <nav className="mt-6 flex-1 overflow-y-auto min-h-0 space-y-4">
+        {navSections.map((section) => (
+          <div key={section.title}>
+            <p className="mb-1 px-3 text-[10px] font-medium tracking-[0.18em] uppercase text-foreground/30 select-none">
+              {section.title}
+            </p>
+            <div className="space-y-0.5">
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActivePath(pathname, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                      active
+                        ? 'rounded-2xl bg-foreground/90 dark:bg-white/15 text-background dark:text-foreground backdrop-blur-md shadow-glass-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-white/30 dark:hover:bg-white/8'
+                    )}
+                  >
+                    <Icon className="h-[18px] w-[18px] shrink-0" />
+                    {item.label}
+                  </Link>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        ))}
+
+        <div className="my-2 h-px bg-white/55 dark:bg-white/10" />
+
+        <Link
+          href="/settings"
+          className={cn(
+            'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
+            isActivePath(pathname, '/settings')
+              ? 'rounded-2xl bg-foreground/90 dark:bg-white/15 text-background dark:text-foreground backdrop-blur-md shadow-glass-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-white/30 dark:hover:bg-white/8'
+          )}
+        >
+          <Settings className="h-[18px] w-[18px] shrink-0" />
+          Ustawienia
+        </Link>
       </nav>
     </aside>
   );

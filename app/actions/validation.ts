@@ -2,6 +2,7 @@
 
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import { createClient } from '@/lib/supabase/server';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import {
   validateNipCached,
   type CachedValidationResult,
@@ -105,20 +106,15 @@ export async function bulkValidateContractorsAction(
 
   if (!user) return { success: false, error: 'Niezalogowany' };
 
-  const { data: userTenant } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  if (!userTenant?.tenant_id) {
-    return { success: false, error: 'Brak tenanta' };
+  const tenantId = await getActiveOrgIdFromCookies();
+  if (!tenantId) {
+    return { success: false, error: 'Brak aktywnej organizacji' };
   }
 
   const { data: contractors } = await supabase
     .from('contractors')
     .select('id, nip')
-    .eq('tenant_id', userTenant.tenant_id)
+    .eq('tenant_id', tenantId)
     .not('nip', 'is', null);
 
   if (!contractors || contractors.length === 0) {
@@ -131,7 +127,7 @@ export async function bulkValidateContractorsAction(
     );
     const sendResult = await inngest.send(
       validationBulkContractorsRequested.create({
-        tenantId: userTenant.tenant_id,
+        tenantId,
         contractorIds: contractors.map((c) => c.id),
         forceRefresh: options.forceRefresh ?? false,
         triggeredBy: user.id,
@@ -168,27 +164,23 @@ export async function getContractorVatStatusAction(
 
   if (!user) return { success: false, error: 'Niezalogowany' };
 
-  const { data: userRow } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  if (!userRow?.tenant_id) {
-    return { success: false, error: 'Brak tenanta' };
+  const tenantId = await getActiveOrgIdFromCookies();
+  if (!tenantId) {
+    return { success: false, error: 'Brak aktywnej organizacji' };
   }
 
   const { data: contractor } = await supabase
     .from('contractors')
     .select('id, nip, tenant_id')
     .eq('id', contractorId)
+    .eq('tenant_id', tenantId)
     .single();
 
   if (!contractor) {
     return { success: false, error: 'Kontrahent nie znaleziony' };
   }
 
-  if (contractor.tenant_id !== userRow.tenant_id) {
+  if (contractor.tenant_id !== tenantId) {
     return { success: false, error: 'Kontrahent nie znaleziony' };
   }
 
@@ -212,7 +204,7 @@ export async function getContractorVatStatusAction(
         validation_warning: status.warning ?? null,
       })
       .eq('id', contractorId)
-      .eq('tenant_id', userRow.tenant_id);
+      .eq('tenant_id', tenantId);
 
     if (upErr) {
       return {

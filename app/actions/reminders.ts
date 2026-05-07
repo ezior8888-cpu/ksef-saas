@@ -6,7 +6,7 @@ import { formatInngestSendError } from '@/lib/inngest/error-message';
 import { inngest, remindersSendRequested } from '@/lib/inngest/client';
 import {
   ActionAuthError,
-  requireOwner,
+  requireOrgRole,
   requireUserAndTenant,
 } from '@/lib/supabase/auth-context';
 import {
@@ -208,7 +208,7 @@ export async function updateReminderSettingsAction(
 ): Promise<{ success: boolean; error?: string }> {
   let ctx;
   try {
-    ctx = await requireOwner();
+    ctx = await requireOrgRole(['owner', 'admin']);
   } catch (e) {
     if (e instanceof ActionAuthError) {
       return { success: false, error: e.message };

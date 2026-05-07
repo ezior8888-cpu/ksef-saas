@@ -1,12 +1,16 @@
 'use server';
 
-import { logAudit } from '@/lib/audit/log';
-import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { lookupCompanyByNip } from '@/lib/gus/client';
+import { createAdminClient } from '@/lib/supabase/server';
 import { validateNipChecksum } from '@/lib/xml/invoice-calculator';
 
+import {
+  createOrganizationAction,
+  type OrganizationCompanyInput,
+} from '@/app/actions/organizations';
+
 // ═══════════════════════════════════════════════════════════════
-// Typy wyników (discriminated unions - wygodne w `if (result.success)`)
+// Typy wyników (discriminated unions — wygodne w `if (result.success)`)
 // ═══════════════════════════════════════════════════════════════
 
 export interface OnboardingCompanyData {
@@ -20,15 +24,26 @@ export interface OnboardingCompanyData {
 }
 
 export type LookupNipResult =
-  | { success: true; data: OnboardingCompanyData }
+  | { success: true; data: OnboardingCompanyData; existingOrgs: NipMatch[] }
   | { success: false; error: string };
 
+export interface NipMatch {
+  organizationId: string;
+  name: string;
+  ksefVerified: boolean;
+}
+
 export type CompleteOnboardingResult =
-  | { success: true }
+  | {
+      success: true;
+      organizationId: string;
+      nipDuplicate: boolean;
+      ksefVerifiedDuplicate: boolean;
+    }
   | { success: false; error: string };
 
 // ═══════════════════════════════════════════════════════════════
-// Action 1: wyszukaj firmę po NIP (GUS)
+// Action 1: wyszukaj firmę po NIP (GUS) + zwróć ewentualne istniejące orgs
 // ═══════════════════════════════════════════════════════════════
 
 export async function lookupNipAction(nip: string): Promise<LookupNipResult> {
@@ -49,14 +64,24 @@ export async function lookupNipAction(nip: string): Promise<LookupNipResult> {
   }
 
   if (result.kind === 'error') {
-    // Sandbox GUS bywa niestabilny - komunikat mówi userowi, że to nie
-    // jego wina (vs "nie znaleziono" co sugeruje zły NIP).
+    // Sandbox GUS bywa niestabilny — komunikat mówi userowi, że to nie jego
+    // wina (vs „nie znaleziono", co sugeruje zły NIP).
     return {
       success: false,
       error:
         'GUS chwilowo niedostępny (sandbox). Spróbuj ponownie za chwilę — to nie problem z Twoim NIP-em.',
     };
   }
+
+  // Multi-org: NIP nie jest unikatem na poziomie schematu. Pokazujemy
+  // listę istniejących orgs, żeby user mógł wybrać „poproś o dostęp" zamiast
+  // tworzyć duplikat — silniejszy sygnał gdy któraś ma `ksef_verified_at`.
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from('tenants')
+    .select('id, name, ksef_verified_at')
+    .eq('nip', nip)
+    .limit(10);
 
   return {
     success: true,
@@ -69,115 +94,46 @@ export async function lookupNipAction(nip: string): Promise<LookupNipResult> {
       buildingNumber: result.data.buildingNumber,
       localNumber: result.data.localNumber,
     },
+    existingOrgs: (existing ?? []).map((t) => ({
+      organizationId: t.id,
+      name: t.name,
+      ksefVerified: t.ksef_verified_at !== null,
+    })),
   };
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Action 2: utwórz/przypisz tenant i zakończ onboarding
+// Action 2: utwórz organizację
+//
+// Zmiana semantyki względem wcześniejszej wersji: NIE doczepiamy już
+// nikogo do istniejącej organizacji po samym NIP-ie (NIP jest publiczny —
+// to było źródło dziury w autoryzacji). Jeśli inna org używa już tego
+// NIP-u, frontend dostaje `nipDuplicate: true` i pokazuje banner ostrzegawczy
+// + sugestię „poproś o zaproszenie zamiast tworzyć duplikat".
 // ═══════════════════════════════════════════════════════════════
 
 export async function completeOnboardingAction(
-  company: OnboardingCompanyData
+  company: OnboardingCompanyData,
 ): Promise<CompleteOnboardingResult> {
-  // 1) Weryfikacja sesji zwykłym klientem (user-context, RLS aktywne).
-  const userClient = await createClient();
-  const {
-    data: { user },
-  } = await userClient.auth.getUser();
+  const input: OrganizationCompanyInput = {
+    nip: company.nip,
+    name: company.name,
+    postalCode: company.postalCode,
+    city: company.city,
+    street: company.street,
+    buildingNumber: company.buildingNumber,
+    localNumber: company.localNumber,
+  };
+  const result = await createOrganizationAction(input);
 
-  if (!user) {
-    return { success: false, error: 'Nie jesteś zalogowany.' };
+  if (!result.success) {
+    return { success: false, error: result.error };
   }
 
-  // 2) INSERT tenant + UPDATE users przez admin client.
-  //    Dlaczego admin? RLS 00002 nie ma polityki INSERT dla `tenants`,
-  //    a dodawanie polityki "każdy authenticated może wstawić tenant"
-  //    wymagałoby dodatkowych ograniczeń (np. "tylko gdy user ma
-  //    tenant_id = NULL"). Server Action to ścieżka kontrolowana -
-  //    weryfikujemy auth.getUser() wyżej, więc bypass RLS jest bezpieczny.
-  const admin = createAdminClient();
-
-  // Idempotencja: jeśli tenant z tym NIP-em już istnieje, przypisujemy
-  // usera jako zwykłego członka (owner został wcześniej). Chroni przed
-  // podwójnym kontem firmy, jeśli np. dwóch pracowników utworzy konta.
-  const { data: existingTenant, error: selectErr } = await admin
-    .from('tenants')
-    .select('id')
-    .eq('nip', company.nip)
-    .maybeSingle();
-
-  if (selectErr) {
-    return { success: false, error: `Błąd odczytu tenant: ${selectErr.message}` };
-  }
-
-  if (existingTenant) {
-    const { error: attachErr } = await admin
-      .from('users')
-      .update({ tenant_id: existingTenant.id, role: 'member' })
-      .eq('id', user.id);
-
-    if (attachErr) {
-      return {
-        success: false,
-        error: `Błąd przypisania do istniejącej firmy: ${attachErr.message}`,
-      };
-    }
-    await logAudit({
-      action: 'tenant.updated',
-      tenantId: existingTenant.id,
-      userId: user.id,
-      metadata: { source: 'onboarding_join_existing', nip: company.nip },
-    });
-    return { success: true };
-  }
-
-  // Nowy tenant - budujemy snapshot adresu w formacie zgodnym ze schemą FA(3).
-  const addressLine1 = `${company.street} ${company.buildingNumber}${
-    company.localNumber ? '/' + company.localNumber : ''
-  }`.trim();
-  const addressLine2 = `${company.postalCode} ${company.city}`;
-
-  const { data: newTenant, error: tenantError } = await admin
-    .from('tenants')
-    .insert({
-      nip: company.nip,
-      name: company.name,
-      // UWAGA: w schemacie 00001 kolumna nazywa się `address_json` (nie `address`).
-      address_json: {
-        countryCode: 'PL',
-        addressLine1,
-        addressLine2,
-      },
-      is_active: true,
-    })
-    .select('id')
-    .single();
-
-  if (tenantError || !newTenant) {
-    return {
-      success: false,
-      error: `Błąd tworzenia firmy: ${tenantError?.message ?? 'unknown'}`,
-    };
-  }
-
-  const { error: userError } = await admin
-    .from('users')
-    .update({ tenant_id: newTenant.id, role: 'owner' })
-    .eq('id', user.id);
-
-  if (userError) {
-    return {
-      success: false,
-      error: `Błąd przypisania użytkownika: ${userError.message}`,
-    };
-  }
-
-  await logAudit({
-    action: 'tenant.created',
-    tenantId: newTenant.id,
-    userId: user.id,
-    metadata: { nip: company.nip, name: company.name },
-  });
-
-  return { success: true };
+  return {
+    success: true,
+    organizationId: result.organizationId,
+    nipDuplicate: result.nipDuplicate,
+    ksefVerifiedDuplicate: result.ksefVerifiedDuplicate,
+  };
 }

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 
 import { logAudit } from '@/lib/audit/log';
 import { createClient } from '@/lib/supabase/server';
+import { requireOwner } from '@/lib/supabase/auth-context';
 
 export type RequestAccountDeletionResult =
   | { success: false; error: string }
@@ -21,37 +22,28 @@ function normalizeNip(raw: string): string {
 export async function requestAccountDeletionAction(
   formData: FormData
 ): Promise<RequestAccountDeletionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Brak sesji' };
-
   const nipConfirm = normalizeNip(String(formData.get('nipConfirm') ?? ''));
   if (nipConfirm.length !== 10) {
     return { success: false, error: 'Podaj poprawny 10-cyfrowy NIP.' };
   }
 
-  const { data: userData, error: userErr } = await supabase
-    .from('users')
-    .select('tenant_id, role, tenants(nip)')
-    .eq('id', user.id)
-    .single();
-
-  if (userErr || !userData?.tenant_id) {
-    return { success: false, error: 'Nie znaleziono firmy przypisanej do konta.' };
-  }
-
-  if (userData.role !== 'owner') {
+  let ctx;
+  try {
+    ctx = await requireOwner();
+  } catch (e) {
     return {
       success: false,
-      error: 'Tylko właściciel konta może zlecić usunięcie firmy.',
+      error: e instanceof Error ? e.message : 'Tylko właściciel konta może zlecić usunięcie firmy.',
     };
   }
+  const { supabase, tenantId, user } = ctx;
 
-  const tenantRow = Array.isArray(userData.tenants)
-    ? userData.tenants[0]
-    : userData.tenants;
+  const { data: tenantRow } = await supabase
+    .from('tenants')
+    .select('nip')
+    .eq('id', tenantId)
+    .maybeSingle();
+
   const tenantNip = normalizeNip(String(tenantRow?.nip ?? ''));
   if (tenantNip !== nipConfirm) {
     return {
@@ -62,7 +54,6 @@ export async function requestAccountDeletionAction(
 
   const now = new Date();
   const in30days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const tenantId = userData.tenant_id;
 
   const { error: updErr } = await supabase
     .from('tenants')

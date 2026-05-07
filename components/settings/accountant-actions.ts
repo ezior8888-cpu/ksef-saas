@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { generateAccountantToken } from '@/lib/accountant/tokens';
 import { logAudit } from '@/lib/audit/log';
 import { createClient } from '@/lib/supabase/server';
+import { requireOwner } from '@/lib/supabase/auth-context';
 
 const createTokenSchema = z.object({
   name: z.string().min(1).max(100),
@@ -27,25 +28,16 @@ export async function createAccountantTokenAction(
     return { success: false, error: msg || 'Niepoprawne dane' };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Brak sesji' };
-
-  const { data: userData, error: userErr } = await supabase
-    .from('users')
-    .select('tenant_id, role')
-    .eq('id', user.id)
-    .single();
-
-  if (userErr || !userData?.tenant_id) {
-    return { success: false, error: 'Brak przypisania do firmy.' };
+  let ctx;
+  try {
+    ctx = await requireOwner();
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : 'Brak uprawnień',
+    };
   }
-
-  if (userData.role !== 'owner') {
-    return { success: false, error: 'Tylko właściciel może tworzyć dostęp dla księgowej.' };
-  }
+  const { supabase, tenantId, user } = ctx;
 
   const { token, hash } = generateAccountantToken();
   const expiresAt = new Date();
@@ -54,7 +46,7 @@ export async function createAccountantTokenAction(
   const { data: created, error } = await supabase
     .from('accountant_access')
     .insert({
-      tenant_id: userData.tenant_id,
+      tenant_id: tenantId,
       token_hash: hash,
       accountant_name: parsed.data.name,
       accountant_email: parsed.data.email,
@@ -71,7 +63,7 @@ export async function createAccountantTokenAction(
 
   await logAudit({
     action: 'accountant.token_created',
-    tenantId: userData.tenant_id,
+    tenantId,
     userId: user.id,
     entityType: 'accountant_access',
     entityId: created.id,

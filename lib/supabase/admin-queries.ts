@@ -82,44 +82,40 @@ export async function getTenantKsefCredentials(
 }
 
 /**
- * Zwraca email właściciela tenanta (do alertów cert-expiry / submit-failed).
+ * Zwraca email właściciela organizacji (do alertów cert-expiry / submit-failed).
  *
- * Dwa kroki (zamiast cross-schema join public.users → auth.users):
- *   1. Znajdź users.id po tenant_id + role='owner'
- *   2. auth.admin.getUserById() po adres email - dostępne tylko dla service_role
+ * Multi-org: właściciel(ami) jest user(zy) w `memberships` z rolą `owner`
+ * dla danego organization_id. Bierzemy najstarszego (po `joined_at`) dla
+ * stabilności (kolizja: kilkoro ownerów → najstarszy "primary").
  */
 export async function getTenantAdminEmail(
   tenantId: string,
 ): Promise<string | null> {
+  const ownerUserId = await getTenantOwnerUserId(tenantId);
+  if (!ownerUserId) return null;
+
   const supabase = await createAdminClient();
-
-  const { data: owner } = await supabase
-    .from('users')
-    .select('id')
-    .eq('tenant_id', tenantId)
-    .eq('role', 'owner')
-    .maybeSingle();
-
-  if (!owner?.id) return null;
-
-  const { data: authUser } = await supabase.auth.admin.getUserById(owner.id);
+  const { data: authUser } = await supabase.auth.admin.getUserById(ownerUserId);
   return authUser?.user?.email ?? null;
 }
 
-/** `users.id` właściciela (owner) dla tenanta — m.in. Web Push bez auth.admin. */
+/** `users.id` właściciela (owner) dla organizacji — m.in. Web Push bez auth.admin. */
 export async function getTenantOwnerUserId(
   tenantId: string,
 ): Promise<string | null> {
   const supabase = await createAdminClient();
 
   const { data: owner } = await supabase
-    .from('users')
-    .select('id')
-    .eq('tenant_id', tenantId)
+    .from('memberships')
+    .select('user_id, joined_at')
+    .eq('organization_id', tenantId)
     .eq('role', 'owner')
+    .eq('status', 'active')
+    .order('joined_at', { ascending: true })
+    .limit(1)
     .maybeSingle();
 
-  return owner?.id ?? null;
+  return owner?.user_id ?? null;
 }
 
 /**

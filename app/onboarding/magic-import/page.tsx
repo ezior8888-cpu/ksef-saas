@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { MagicImportForm } from '@/components/onboarding/magic-import-form';
 import { createClient } from '@/lib/supabase/server';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 
 export default async function MagicImportPage({
   searchParams,
@@ -19,15 +20,20 @@ export default async function MagicImportPage({
   if (!params.tenantId?.trim()) redirect('/onboarding/import-source');
 
   const tenantId = params.tenantId.trim();
+  const activeOrg = await getActiveOrgIdFromCookies();
 
-  const { data: profile } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
+  if (!activeOrg) redirect('/onboarding');
+  // Magic import działa tylko dla aktywnej organizacji.
+  if (activeOrg !== tenantId) redirect('/onboarding/import-source');
 
-  if (!profile?.tenant_id) redirect('/onboarding');
-  if (profile.tenant_id !== tenantId) redirect('/onboarding/import-source');
+  // Membership weryfikujemy przez RLS — pobranie tenanta zwróci null jeśli
+  // nie jesteśmy aktywnym członkiem tej org.
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('id', tenantId)
+    .maybeSingle();
+  if (!tenant) redirect('/onboarding');
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">

@@ -143,15 +143,16 @@ export async function sendPushToTenant(
 ): Promise<{ sent: number; failed: number }> {
   const supabase = createAdminClient();
   const { data: rows, error } = await supabase
-    .from('users')
-    .select('id')
-    .eq('tenant_id', tenantId);
+    .from('memberships')
+    .select('user_id')
+    .eq('organization_id', tenantId)
+    .eq('status', 'active');
 
   if (error || !rows?.length) {
     return { sent: 0, failed: 0 };
   }
 
-  const ids = [...new Set(rows.map((r) => r.id))];
+  const ids = [...new Set(rows.map((r) => r.user_id))];
 
   const results = await Promise.all(
     ids.map((id) => sendPushToUser(id, type, payload)),

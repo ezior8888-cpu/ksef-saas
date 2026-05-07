@@ -19,19 +19,20 @@ export function ContractorReminderToggle({ contractorId, excluded }: Props) {
   const handleToggle = () => {
     startTransition(async () => {
       const newValue = !localExcluded;
-      const reason = newValue
-        ? prompt('Powód wykluczenia (opcjonalnie):') ?? undefined
-        : undefined;
 
       const result = await toggleContractorRemindersAction(
         contractorId,
         newValue,
-        reason,
+        undefined,
       );
 
       if (result.success) {
         setLocalExcluded(newValue);
-        toast.success(newValue ? 'Wykluczono z Wkurzacza' : 'Włączono Wkurzacza');
+        toast.success(
+          newValue
+            ? 'Przypomnienia wyłączone dla tego kontrahenta'
+            : 'Przypomnienia włączone dla tego kontrahenta',
+        );
         router.refresh();
       } else {
         toast.error(result.error ?? 'Błąd');
@@ -45,7 +46,7 @@ export function ContractorReminderToggle({ contractorId, excluded }: Props) {
       onClick={handleToggle}
       disabled={isPending}
       className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-      title={localExcluded ? 'Wkurzacz wykluczony' : 'Wkurzacz aktywny'}
+      title={localExcluded ? 'Przypomnienia wyłączone' : 'Przypomnienia włączone'}
     >
       {isPending ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" />

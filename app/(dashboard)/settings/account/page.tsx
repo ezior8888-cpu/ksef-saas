@@ -1,31 +1,20 @@
-import { redirect } from 'next/navigation';
-
 import { DeleteAccountForm } from '@/components/settings/delete-account-form';
 import { Card } from '@/components/ui/card';
-import { createClient } from '@/lib/supabase/server';
+import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AccountSettingsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, tenantId, role } = await getPageContext();
 
-  if (!user) redirect('/login');
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('nip')
+    .eq('id', tenantId)
+    .maybeSingle();
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id, role, tenants(nip)')
-    .eq('id', user.id)
-    .single();
-
-  if (!userData?.tenant_id) redirect('/onboarding');
-
-  const tenantRow = Array.isArray(userData.tenants)
-    ? userData.tenants[0]
-    : userData.tenants;
-  const nip = String(tenantRow?.nip ?? '');
+  const nip = String(tenant?.nip ?? '');
+  const isOwner = role === 'owner';
 
   return (
     <div className="max-w-3xl">
@@ -44,7 +33,7 @@ export default async function AccountSettingsPage() {
           zostaniesz wylogowany. W tym czasie możesz skontaktować się z
           pomocą, jeśli to pomyłka.
         </p>
-        {userData.role !== 'owner' ? (
+        {!isOwner ? (
           <p className="text-sm text-muted-foreground">
             Tylko właściciel konta może zlecić usunięcie firmy.
           </p>

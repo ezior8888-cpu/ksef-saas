@@ -1,11 +1,9 @@
-import { redirect } from 'next/navigation';
-
 import {
   AccountantAccessList,
   type AccountantAccessPublicRow,
 } from '@/components/settings/accountant-list';
 import { CoPilotSettingsForm } from '@/components/exports/co-pilot-settings-form';
-import { createClient } from '@/lib/supabase/server';
+import { getPageContextWithRole } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,24 +24,10 @@ function toPublicAccesses(
 }
 
 export default async function AccountantAccessPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect('/login');
-
-  const { data: userTenant } = await supabase
-    .from('users')
-    .select('tenant_id, role')
-    .eq('id', user.id)
-    .single();
-
-  if (!userTenant?.tenant_id) redirect('/onboarding');
-
-  if (userTenant.role !== 'owner') redirect('/settings');
-
-  const tenantId = userTenant.tenant_id;
+  const { supabase, tenantId } = await getPageContextWithRole(
+    'owner',
+    '/settings',
+  );
 
   const [{ data: settings }, { data: recentJobs }, { data: raw }] =
     await Promise.all([
@@ -61,9 +45,13 @@ export default async function AccountantAccessPage() {
         .eq('trigger_source', 'co_pilot_monthly')
         .order('created_at', { ascending: false })
         .limit(5),
-      supabase.from('accountant_access').select('*').order('created_at', {
-        ascending: false,
-      }),
+      supabase
+        .from('accountant_access')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('created_at', {
+          ascending: false,
+        }),
     ]);
 
   const accesses = toPublicAccesses(raw ?? []);

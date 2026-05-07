@@ -10,7 +10,7 @@ import {
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
   ActionAuthError,
-  requireOwner,
+  requireOrgRole,
   requireUserAndTenant,
 } from '@/lib/supabase/auth-context';
 import { downloadFromR2 } from '@/lib/storage/r2';
@@ -265,7 +265,7 @@ export async function updateAccountantSettingsAction(settings: {
 }): Promise<{ success: true } | { success: false; error: string }> {
   let ctx;
   try {
-    ctx = await requireOwner();
+    ctx = await requireOrgRole(['owner', 'admin']);
   } catch (e) {
     if (e instanceof ActionAuthError) {
       return { success: false, error: e.message };
@@ -351,7 +351,7 @@ export async function triggerCoPilotNowAction(
 
   let ctx;
   try {
-    ctx = await requireOwner();
+    ctx = await requireOrgRole(['owner', 'admin']);
   } catch (e) {
     if (e instanceof ActionAuthError) {
       return { success: false, error: e.message };

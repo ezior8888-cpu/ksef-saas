@@ -1,39 +1,21 @@
-import { redirect } from 'next/navigation';
-
 import { ReminderSettingsForm } from '@/components/reminders/reminder-settings-form';
-import { createClient } from '@/lib/supabase/server';
+import { getPageContextWithRole } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ReminderSettingsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, tenantId } = await getPageContextWithRole('owner', '/settings');
 
-  if (!user) redirect('/login');
+  const [{ data: settings }, { data: tenant }] = await Promise.all([
+    supabase
+      .from('reminder_settings')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .maybeSingle(),
+    supabase.from('tenants').select('name').eq('id', tenantId).maybeSingle(),
+  ]);
 
-  const { data: userTenant } = await supabase
-    .from('users')
-    .select('tenant_id, role, tenants(name)')
-    .eq('id', user.id)
-    .single();
-
-  if (!userTenant?.tenant_id) redirect('/settings');
-
-  if (userTenant.role !== 'owner') redirect('/settings');
-
-  const { data: settings } = await supabase
-    .from('reminder_settings')
-    .select('*')
-    .eq('tenant_id', userTenant.tenant_id)
-    .maybeSingle();
-
-  const tenantName =
-    (Array.isArray(userTenant.tenants)
-      ? userTenant.tenants[0]
-      : userTenant.tenants
-    )?.name ?? '';
+  const tenantName = tenant?.name ?? '';
 
   return (
     <div className="max-w-3xl">

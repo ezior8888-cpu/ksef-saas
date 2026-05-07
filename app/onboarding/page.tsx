@@ -1,8 +1,17 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { OnboardingForm } from '@/components/onboarding/form';
 
-export default async function OnboardingPage() {
+import { OnboardingForm } from '@/components/onboarding/form';
+import { createClient } from '@/lib/supabase/server';
+
+interface OnboardingPageProps {
+  searchParams: Promise<{
+    invite?: string;
+    action?: 'new' | 'invite' | 'join';
+  }>;
+}
+
+export default async function OnboardingPage(props: OnboardingPageProps) {
+  const sp = await props.searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -10,25 +19,34 @@ export default async function OnboardingPage() {
 
   if (!user) redirect('/login');
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
+  // Multi-org: jeśli user ma już aktywne membership i nie chce explicitnie
+  // dodać kolejnej organizacji (`?action=new`), wracamy na dashboard.
+  if (sp.action !== 'new') {
+    const { data: existing } = await supabase
+      .from('memberships')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .limit(1);
 
-  if (userData?.tenant_id) redirect('/');
+    if (existing && existing.length > 0 && !sp.invite) {
+      redirect('/');
+    }
+  }
 
   return (
     <div className="min-h-screen bg-mesh-surface flex items-center justify-center p-4">
-      <div className="w-full max-w-xl">
-        <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/62 dark:bg-[rgba(15,10,30,0.62)] backdrop-blur-[40px] shadow-[0_16px_48px_0_rgba(31,38,135,0.12)] p-8 lg:p-12">
+      <div className="w-full max-w-2xl">
+        <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/62 dark:bg-[rgba(15,10,30,0.62)] backdrop-blur-3xl shadow-[0_16px_48px_0_rgba(31,38,135,0.12)] p-8 lg:p-12">
           <h1 className="text-3xl font-semibold tracking-tight mb-3">
-            Witaj w KSeF SaaS
+            Witaj w FaktFlow
           </h1>
           <p className="text-muted-foreground leading-relaxed mb-8">
-            Zanim wystawisz pierwszą fakturę, podaj NIP swojej firmy — uzupełnimy resztę z bazy GUS.
+            Wybierz, jak chcesz zacząć: załóż nową organizację, akceptuj
+            zaproszenie albo poproś o dostęp do firmy, która już używa
+            FaktFlow.
           </p>
-          <OnboardingForm />
+          <OnboardingForm initialInviteToken={sp.invite} />
         </div>
       </div>
     </div>
