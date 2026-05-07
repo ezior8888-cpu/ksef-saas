@@ -1,5 +1,9 @@
 'use server';
 
+import {
+  KsefNotVerifiedError,
+  requireKsefVerification,
+} from '@/lib/auth/ksef-verification-guard';
 import { createClient } from '@/lib/supabase/server';
 import { downloadUpoPdf, downloadUpoXml } from '@/lib/ksef/upo-storage';
 
@@ -37,6 +41,19 @@ export async function getUpoPdfAction(
 
   if (invError || !invoice) {
     return { success: false, error: 'Faktura nie znaleziona' };
+  }
+
+  try {
+    await requireKsefVerification(invoice.tenant_id as string);
+  } catch (e) {
+    if (e instanceof KsefNotVerifiedError) {
+      return {
+        success: false,
+        error:
+          'Weryfikacja KSeF wymagana przed pobraniem UPO (PDF). Uzupełnij ją w Ustawieniach → KSeF.',
+      };
+    }
+    throw e;
   }
 
   if (invoice.ksef_status !== 'accepted') {

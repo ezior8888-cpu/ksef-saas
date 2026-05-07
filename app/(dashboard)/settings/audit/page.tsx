@@ -22,6 +22,8 @@ const ACTION_LABELS: Record<string, string> = {
   'tenant.created': 'Utworzenie firmy w systemie',
   'tenant.updated': 'Aktualizacja firmy',
   'tenant.user_role_changed': 'Zmiana roli użytkownika',
+  'tenant.ksef_verified': 'Weryfikacja KSeF (claim NIP)',
+  'tenant.ksef_nip_ownership_claimed': 'Przypisanie NIP do organizacji (KSeF)',
   'retention.deletion_requested': 'Żądanie usunięcia danych',
   'retention.deletion_executed': 'Wykonano usunięcie danych',
 };

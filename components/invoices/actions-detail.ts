@@ -3,6 +3,10 @@
 import { revalidatePath } from 'next/cache';
 
 import { logAudit } from '@/lib/audit/log';
+import {
+  KsefNotVerifiedError,
+  requireKsefVerification,
+} from '@/lib/auth/ksef-verification-guard';
 import { createClient } from '@/lib/supabase/server';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
 import { inngest } from '@/lib/inngest/client';
@@ -114,7 +118,7 @@ export async function downloadInvoiceXmlAction(
 
 export type ResendResult =
   | { success: true }
-  | { success: false; error: string };
+  | { success: false; error: string; code?: 'KSEF_NOT_VERIFIED' };
 
 /**
  * Ponawia wysyłkę faktury do KSeF. Działa tylko dla statusów
@@ -194,6 +198,20 @@ export async function resendInvoiceAction(
         error:
           'Najpierw wgraj certyfikat KSeF w Ustawienia KSeF — bez niego ponowna wysyłka nie jest możliwa.',
       };
+    }
+
+    try {
+      await requireKsefVerification(inv.tenant_id as string);
+    } catch (e) {
+      if (e instanceof KsefNotVerifiedError) {
+        return {
+          success: false,
+          code: 'KSEF_NOT_VERIFIED',
+          error:
+            'Twoja organizacja musi najpierw zweryfikować certyfikat KSeF w Ustawieniach → KSeF.',
+        };
+      }
+      throw e;
     }
 
     // Preferujemy `fa3_data` (pełny snapshot zapisany przy save), a line-items
@@ -312,6 +330,14 @@ export async function resendInvoiceAction(
 
     return { success: true };
   } catch (err) {
+    if (err instanceof KsefNotVerifiedError) {
+      return {
+        success: false,
+        code: 'KSEF_NOT_VERIFIED',
+        error:
+          'Twoja organizacja musi najpierw zweryfikować certyfikat KSeF w Ustawieniach → KSeF.',
+      };
+    }
     return {
       success: false,
       error:

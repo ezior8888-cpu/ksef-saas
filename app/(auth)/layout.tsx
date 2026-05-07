@@ -1,3 +1,5 @@
+import Image from 'next/image';
+
 export default function AuthLayout({
   children,
 }: {
@@ -9,9 +11,14 @@ export default function AuthLayout({
       <div className="w-full max-w-md">
         <div className="rounded-3xl border border-white/14 bg-[rgba(15,10,30,0.62)] backdrop-blur-glass-lg shadow-glass-lg p-8 lg:p-10">
           <div className="mb-8 text-center">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-foreground text-background font-bold text-lg mb-4 shadow-glass">
-              K
-            </div>
+            <Image
+              src="/brand/faktflow-logo.png"
+              alt="FaktFlow"
+              width={48}
+              height={48}
+              className="mx-auto mb-4 h-12 w-12 rounded-2xl object-contain bg-white/10 shadow-glass"
+              priority
+            />
             <h1 className="text-3xl font-semibold tracking-tight text-white">
               KSeF SaaS
             </h1>

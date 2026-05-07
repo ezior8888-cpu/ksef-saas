@@ -10,6 +10,10 @@ import { generateFA3Xml } from '@/lib/xml/fa3-generator';
 import { validateInvoiceXml } from '@/lib/xml/validator';
 import { invoiceXmlExistsForId, uploadInvoiceXml } from '@/lib/storage/r2';
 
+import {
+  requireKsefVerificationForBackgroundJob,
+} from '@/lib/auth/ksef-verification-guard';
+
 import type { KsefAuth } from './auth';
 import { submitInvoice } from './submit';
 
@@ -48,6 +52,8 @@ export async function submitInvoiceFullFlow(
     | { finalData: FinalInvoiceData; advanceSettlementRows: AdvanceInvoiceSettlementRow[] }
     | null,
 ): Promise<FullSubmitResult> {
+  await requireKsefVerificationForBackgroundJob(tenantId);
+
   // 1. Generuj XML (faktura VAT albo faktura korygująca FA(3)).
   const xml =
     correctionData != null

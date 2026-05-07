@@ -10,6 +10,10 @@ import { revalidatePath } from 'next/cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logAudit } from '@/lib/audit/log';
+import {
+  KsefNotVerifiedError,
+  requireKsefVerification,
+} from '@/lib/auth/ksef-verification-guard';
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
@@ -25,7 +29,7 @@ import type {
 
 export type KsefSubmitEnqueueResult =
   | { ok: true; mode: 'online_queued' | 'offline_queued' }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code?: 'KSEF_NOT_VERIFIED' };
 
 export interface EnqueueKsefSubmitParams {
   supabase: SupabaseClient;
@@ -80,6 +84,20 @@ export async function enqueueKsefSubmitAfterDraft(
   } = params;
 
   const nipNorm = nip.replace(/\s+/g, '');
+
+  try {
+    await requireKsefVerification(tenantId);
+  } catch (e) {
+    if (e instanceof KsefNotVerifiedError) {
+      return {
+        ok: false,
+        code: 'KSEF_NOT_VERIFIED',
+        error:
+          'Twoja organizacja musi najpierw zweryfikować certyfikat KSeF w Ustawieniach → KSeF.',
+      };
+    }
+    throw e;
+  }
 
   const { data: tenantKsef, error: tenantErr } = await supabase
     .from('tenants')

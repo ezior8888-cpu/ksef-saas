@@ -31,6 +31,7 @@ export type AuditAction =
   | 'tenant.updated'
   | 'tenant.user_role_changed'
   | 'tenant.ksef_verified'
+  | 'tenant.ksef_nip_ownership_claimed'
   | 'invoice.draft_created'
   | 'invoice.draft_updated'
   | 'invoice.draft_deleted'

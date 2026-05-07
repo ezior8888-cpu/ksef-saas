@@ -2532,6 +2532,33 @@ export type Database = {
           },
         ]
       }
+      tenant_verification_status: {
+        Row: {
+          id: string | null
+          nip: string | null
+          name: string | null
+          is_ksef_verified: boolean | null
+          ksef_verified_at: string | null
+          ksef_authority_user_id: string | null
+        }
+        Insert: {
+          id?: never
+          nip?: never
+          name?: never
+          is_ksef_verified?: never
+          ksef_verified_at?: never
+          ksef_authority_user_id?: never
+        }
+        Update: {
+          id?: never
+          nip?: never
+          name?: never
+          is_ksef_verified?: never
+          ksef_verified_at?: never
+          ksef_authority_user_id?: never
+        }
+        Relationships: []
+      }
     }
     Functions: {
       accept_organization_invitation: {
@@ -2545,6 +2572,10 @@ export type Database = {
       change_membership_role: {
         Args: { p_membership_id: string; p_new_role: string }
         Returns: undefined
+      }
+      claim_ksef_nip_ownership: {
+        Args: { p_tenant_id: string }
+        Returns: string
       }
       cleanup_expired_validation_cache: { Args: never; Returns: number }
       create_organization_with_owner: {
@@ -2575,6 +2606,10 @@ export type Database = {
       }
       is_member_of: {
         Args: { p_org: string }
+        Returns: boolean
+      }
+      is_nip_ksef_claimed: {
+        Args: { p_nip: string; p_tenant_id: string }
         Returns: boolean
       }
       revoke_membership: {

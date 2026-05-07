@@ -27,7 +27,7 @@ export function CertificateUpload() {
 
       const result = await uploadCertificateAction({ certPem, keyPem });
       if (result.success) {
-        toast.success('Certyfikat wgrany i zweryfikowany');
+        toast.success(result.message);
         window.location.reload();
         return;
       }

@@ -10,10 +10,23 @@ import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { bufferToByteaLiteral } from '@/lib/supabase/bytea';
 import { revalidatePath } from 'next/cache';
 
+/** Wynik wgrywania certyfikatu KSeF (claim NIP jest atomowy w DB). */
+export type UploadCertificateResult =
+  | {
+      success: true;
+      wasFirstClaim: boolean;
+      message: string;
+    }
+  | {
+      success: false;
+      error: string;
+      code?: 'NIP_ALREADY_CLAIMED';
+    };
+
 export async function uploadCertificateAction(data: {
   certPem: string;
   keyPem: string;
-}): Promise<{ success: true } | { success: false; error: string }> {
+}): Promise<UploadCertificateResult> {
   try {
     const supabase = await createClient();
     const {
@@ -74,26 +87,39 @@ export async function uploadCertificateAction(data: {
       privateKeyPem: data.keyPem,
     });
 
-    const admin = createAdminClient();
-    const { data: tenantBefore } = await admin
-      .from('tenants')
-      .select('ksef_verified_at')
-      .eq('id', tenantId)
-      .maybeSingle();
+    // Atomowy claim NIP (partial unique index + claim_ksef_nip_ownership).
+    // WAŻNE: wywołanie MUSI iść przez klienta z sesją użytkownika (JWT),
+    // nie przez createAdminClient — w przeciwnym razie auth.uid() w RPC
+    // jest NULL i claim się nie powiedzie.
+    const { data: claimResult, error: claimErr } = await supabase.rpc(
+      'claim_ksef_nip_ownership',
+      { p_tenant_id: tenantId },
+    );
 
+    if (claimErr) {
+      return {
+        success: false,
+        error: `Błąd bazy danych przy weryfikacji własności NIP: ${claimErr.message}`,
+      };
+    }
+
+    if (claimResult === 'already_claimed_by_other') {
+      return {
+        success: false,
+        code: 'NIP_ALREADY_CLAIMED',
+        error:
+          'Ten NIP jest już zweryfikowany przez inną organizację w FaktFlow. Jeśli uważasz, że to błąd, skontaktuj się z supportem: support@ksef-saas.pl',
+      };
+    }
+
+    const wasFirstClaim = claimResult === 'claimed';
+
+    const admin = createAdminClient();
     const { error: updErr } = await admin
       .from('tenants')
       .update({
         ksef_credentials_encrypted: bufferToByteaLiteral(encrypted),
         ksef_certificate_expiry: expiryDate?.toISOString() ?? null,
-        // Pierwsza udana autoryzacja w KSeF dla tej org = sygnał ownership.
-        // Nie nadpisujemy istniejącej wartości — claim raz nadany trzymamy.
-        ...(tenantBefore?.ksef_verified_at
-          ? {}
-          : {
-              ksef_verified_at: new Date().toISOString(),
-              ksef_authority_user_id: user.id,
-            }),
       })
       .eq('id', tenantId);
 
@@ -111,7 +137,17 @@ export async function uploadCertificateAction(data: {
       },
     });
 
-    if (!tenantBefore?.ksef_verified_at) {
+    if (claimResult === 'claimed') {
+      await logAudit({
+        action: 'tenant.ksef_nip_ownership_claimed',
+        tenantId,
+        userId: user.id,
+        metadata: {
+          nip,
+          method: 'xades',
+          environment: process.env.KSEF_ENV ?? 'test',
+        },
+      });
       await logAudit({
         action: 'tenant.ksef_verified',
         tenantId,
@@ -121,7 +157,13 @@ export async function uploadCertificateAction(data: {
     }
 
     revalidatePath('/settings/ksef');
-    return { success: true };
+    return {
+      success: true,
+      wasFirstClaim,
+      message: wasFirstClaim
+        ? 'Certyfikat zapisany. Twoja organizacja jest teraz zweryfikowanym właścicielem tego NIP-u w FaktFlow (claim KSeF).'
+        : 'Certyfikat zaktualizowany.',
+    };
   } catch (error) {
     return {
       success: false,

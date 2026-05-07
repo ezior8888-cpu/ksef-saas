@@ -4,6 +4,10 @@ import { logAuditSystem } from '@/lib/audit/log-system';
 import { inngest, invoiceSubmitRequested } from '../client';
 import { submitInvoiceFullFlow } from '@/lib/ksef/submit-invoice-full';
 import {
+  KsefNotVerifiedError,
+  requireKsefVerificationForBackgroundJob,
+} from '@/lib/auth/ksef-verification-guard';
+import {
   getTenantKsefCredentials,
   updateInvoiceStatus,
 } from '@/lib/supabase/admin-queries';
@@ -154,6 +158,18 @@ export const submitInvoiceJob = inngest.createFunction(
         const redirected = await step.run(
           'try-redirect-offline-queue',
           async (): Promise<boolean> => {
+            try {
+              await requireKsefVerificationForBackgroundJob(tenantId);
+            } catch (e) {
+              if (e instanceof KsefNotVerifiedError) {
+                throw new NonRetriableError(
+                  'Organizacja nie ma zweryfikowanego certyfikatu KSeF — tryb offline nie jest dostępny.',
+                  { cause: e },
+                );
+              }
+              throw e;
+            }
+
             const creds = await getTenantKsefCredentials(tenantId);
             if (creds.type !== 'xades') {
               logger.warn('KSeF offline — pomijam kolejkę offline (brak PEM / token)', {
@@ -227,6 +243,20 @@ export const submitInvoiceJob = inngest.createFunction(
       }
     });
 
+    await step.run('verify-ksef-claimed', async () => {
+      try {
+        await requireKsefVerificationForBackgroundJob(tenantId);
+      } catch (e) {
+        if (e instanceof KsefNotVerifiedError) {
+          throw new NonRetriableError(
+            'Organizacja nie ma zweryfikowanego certyfikatu KSeF (Ustawienia → KSeF). Wysyłka do KSeF jest zablokowana.',
+            { cause: e },
+          );
+        }
+        throw e;
+      }
+    });
+
     // Krok 2: status 'sending' + timestamp — dopiero gdy wiemy, że job może
     // realnie pogadać z KSeF.
     await step.run('mark-as-sending', async () => {
@@ -285,6 +315,12 @@ export const submitInvoiceJob = inngest.createFunction(
           finalPayload,
         );
       } catch (error) {
+        if (error instanceof KsefNotVerifiedError) {
+          throw new NonRetriableError(
+            'Organizacja nie ma zweryfikowanego certyfikatu KSeF (Ustawienia → KSeF). Wysyłka do KSeF jest zablokowana.',
+            { cause: error },
+          );
+        }
         // Nie-retry-owalne: walidacja biznesowa i odrzucenie przez KSeF.
         // Bez NonRetriableError Inngest zrobiłby 4 bezsensowne próby.
         if (error instanceof InvoiceValidationError) {
