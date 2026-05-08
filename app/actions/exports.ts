@@ -135,7 +135,7 @@ export async function startExportAction(params: {
     return { success: false, error: formatInngestSendError(e) };
   }
 
-  revalidatePath('/reports');
+  revalidatePath('/dashboard');
   revalidatePath('/reports/exports');
   return { success: true, jobId: job.id };
 }

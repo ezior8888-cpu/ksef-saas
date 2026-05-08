@@ -3,6 +3,7 @@
 import { createHash, randomBytes } from 'crypto';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 import { logAudit } from '@/lib/audit/log';
 import { sendEmail } from '@/lib/email/send';
@@ -13,6 +14,24 @@ import {
   requireOrgRole,
   type UserRole,
 } from '@/lib/supabase/auth-context';
+
+/**
+ * Wspólny helper ustawiający cookie ksef.active_org. Wywoływany ze Server
+ * Actions zaraz przed `redirect()` — Next.js łączy Set-Cookie z 303 redirect
+ * w jednym response HTTP, eliminując race condition cookie-set vs nawigacja.
+ */
+async function setActiveOrgCookie(orgId: string) {
+  const cookieStore = await cookies();
+  cookieStore.set({
+    name: ACTIVE_ORG_COOKIE,
+    value: orgId,
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 30,
+  });
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Typy
@@ -32,6 +51,114 @@ export interface OrganizationCompanyInput {
   localNumber?: string;
 }
 
+type OrganizationAddressJson = {
+  countryCode: string;
+  addressLine1: string;
+  addressLine2: string;
+};
+
+/** Czytelny komunikat przy INSERT tenants — tylko po nazwie constraincie / indeksu (bez ogólnego „tenants_nip”). */
+function formatTenantInsertError(err: {
+  message?: string;
+  details?: string;
+  code?: string | number;
+} | null): string {
+  const msg = err?.message ?? 'insert tenant failed';
+  const details = err?.details ?? '';
+  const blob = `${msg} ${details}`;
+  const codeStr = err?.code != null ? String(err.code) : '';
+  const isUnique = codeStr === '23505';
+
+  if (!isUnique) {
+    return msg;
+  }
+  // Wyłącznie stary globalny UNIQUE(nip) z initial schema — NIE łączyć z
+  // „idx_tenants_nip*” (np. idx_tenants_nip_ksef_unique_verified z 00039).
+  if (blob.includes('tenants_nip_key')) {
+    return (
+      'Ten NIP jest już zajęty w tej bazie (stare ograniczenie UNIQUE na nip — constraint tenants_nip_key). ' +
+      'Na zdalnym Supabase: w katalogu projektu `pnpm exec supabase db push` (m.in. migracje 00035 i 00041). ' +
+      'Lokalnie (`supabase start`): `pnpm exec supabase db reset`, żeby odtworzyć schemat z plików migracji. ' +
+      'Albo tymczasowo inny numer NIP testowy.'
+    );
+  }
+  if (blob.includes('idx_tenants_nip_ksef_unique_verified')) {
+    return (
+      'Dla tego NIP-u istnieje już organizacja ze zweryfikowanym KSeF. ' +
+      'Może być tylko jedna taka na numer — poproś o dostęp do istniejącej firmy lub użyj innego NIP-u testowego.'
+    );
+  }
+  return msg;
+}
+
+/**
+ * Tenant + membership owner + last_active_tenant_id (jak RPC
+ * `create_organization_with_owner`). Przez service_role — nie zależy od
+ * PostgREST schema cache dla RPC (omija błąd „function … not in schema cache”).
+ *
+ * Nie wysyłamy `created_by_user_id` w INSERT — przy przestarzałym cache PostgREST
+ * zdarza się błąd „column … not in schema cache”; kolumna jest nullable i czysto
+ * informacyjna (uprawnienia są w memberships).
+ */
+async function insertOrganizationAsOwner(params: {
+  admin: ReturnType<typeof createAdminClient>;
+  userId: string;
+  name: string;
+  nip: string;
+  addressJson: OrganizationAddressJson;
+}): Promise<{ ok: true; organizationId: string } | { ok: false; message: string }> {
+  const { admin, userId, name, nip, addressJson } = params;
+
+  const { data: tenant, error: tenantErr } = await admin
+    .from('tenants')
+    .insert({
+      name,
+      nip,
+      address_json: addressJson,
+      is_active: true,
+    })
+    .select('id')
+    .single();
+
+  if (tenantErr || !tenant?.id) {
+    return {
+      ok: false,
+      message: formatTenantInsertError(tenantErr),
+    };
+  }
+
+  const organizationId = tenant.id;
+
+  const { error: memErr } = await admin.from('memberships').insert({
+    organization_id: organizationId,
+    user_id: userId,
+    role: 'owner',
+    status: 'active',
+  });
+
+  if (memErr) {
+    await admin.from('tenants').delete().eq('id', organizationId);
+    return { ok: false, message: memErr.message };
+  }
+
+  const { error: userErr } = await admin
+    .from('users')
+    .update({ last_active_tenant_id: organizationId })
+    .eq('id', userId);
+
+  if (userErr) {
+    await admin
+      .from('memberships')
+      .delete()
+      .eq('organization_id', organizationId)
+      .eq('user_id', userId);
+    await admin.from('tenants').delete().eq('id', organizationId);
+    return { ok: false, message: userErr.message };
+  }
+
+  return { ok: true, organizationId };
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Set active organization
 // ═══════════════════════════════════════════════════════════════
@@ -49,7 +176,10 @@ export async function setActiveOrganizationAction(
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: 'Niezalogowany' };
 
-  const { data: membership } = await supabase
+  // Membership check przez admin (deterministyczne) — bezpieczne, bo
+  // filtrujemy explicit po user.id zalogowanego.
+  const admin = createAdminClient();
+  const { data: membership } = await admin
     .from('memberships')
     .select('id')
     .eq('user_id', user.id)
@@ -61,18 +191,8 @@ export async function setActiveOrganizationAction(
     return { success: false, error: 'Brak dostępu do tej organizacji' };
   }
 
-  const cookieStore = await cookies();
-  cookieStore.set({
-    name: ACTIVE_ORG_COOKIE,
-    value: orgId,
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  await setActiveOrgCookie(orgId);
 
-  // last_active_tenant_id — tylko helper do redirectu po loginie.
   await supabase
     .from('users')
     .update({ last_active_tenant_id: orgId })
@@ -86,12 +206,21 @@ export async function setActiveOrganizationAction(
 // Create organization (onboarding: stwórz nową firmę)
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * Tworzy organizację, ustawia cookie aktywnej org i przekierowuje na
+ * /onboarding/import-source W RAMACH JEDNEGO HTTP RESPONSE (Set-Cookie + 303).
+ *
+ * Atomowość Set-Cookie + redirect eliminuje race condition, w którym klient
+ * wykonywał `window.location.assign()` zanim cookie z poprzedniej akcji trafiło
+ * do browsera — co skutkowało redirectem z `/onboarding/import-source` z
+ * powrotem do `/onboarding` (pętla onboardingu).
+ *
+ * W razie błędu zwraca `{ success: false, error }`. W razie sukcesu nigdy nie
+ * zwraca (rzuca NEXT_REDIRECT obsługiwany przez Next.js).
+ */
 export async function createOrganizationAction(
   company: OrganizationCompanyInput,
-): Promise<
-  | (ActionOk<{ organizationId: string; nipDuplicate: boolean; ksefVerifiedDuplicate: boolean }>)
-  | ActionFail
-> {
+): Promise<ActionFail> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -107,8 +236,6 @@ export async function createOrganizationAction(
     return { success: false, error: 'Nazwa firmy wymagana' };
   }
 
-  // Wykrycie duplikatu NIP — tylko jako informacja zwrotna do UI
-  // (banner). Nie blokujemy — tylko KSeF authority może dać silniejszy claim.
   const admin = createAdminClient();
   const { data: nipMatches } = await admin
     .from('tenants')
@@ -126,29 +253,28 @@ export async function createOrganizationAction(
     company.localNumber ? '/' + company.localNumber : ''
   }`.trim();
   const addressLine2 = `${company.postalCode} ${company.city}`;
-  const addressJson = {
+  const addressJson: OrganizationAddressJson = {
     countryCode: 'PL',
     addressLine1,
     addressLine2,
   };
 
-  // RPC `create_organization_with_owner` jest SECURITY DEFINER —
-  // weryfikuje auth.uid() wewnątrz, więc nie potrzebujemy admin clienta.
-  const { data: orgId, error } = await supabase.rpc(
-    'create_organization_with_owner',
-    {
-      p_name: company.name,
-      p_nip: company.nip,
-      p_address_json: addressJson,
-    },
-  );
+  const created = await insertOrganizationAsOwner({
+    admin,
+    userId: user.id,
+    name: company.name,
+    nip: company.nip,
+    addressJson,
+  });
 
-  if (error || !orgId) {
+  if (!created.ok) {
     return {
       success: false,
-      error: `Błąd tworzenia firmy: ${error?.message ?? 'unknown'}`,
+      error: `Błąd tworzenia firmy: ${created.message}`,
     };
   }
+
+  const orgId = created.organizationId;
 
   await logAudit({
     action: 'tenant.created',
@@ -162,24 +288,11 @@ export async function createOrganizationAction(
     },
   });
 
-  // Ustaw aktywną org natychmiast (kolejne strony używają cookie).
-  const cookieStore = await cookies();
-  cookieStore.set({
-    name: ACTIVE_ORG_COOKIE,
-    value: orgId,
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  await setActiveOrgCookie(orgId);
 
-  return {
-    success: true,
-    organizationId: orgId,
-    nipDuplicate,
-    ksefVerifiedDuplicate,
-  };
+  // redirect() rzuca NEXT_REDIRECT — Next.js przejmie i zwróci 303 z
+  // Set-Cookie + Location atomowo.
+  redirect('/onboarding/import-source');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -346,9 +459,14 @@ export async function revokeInvitationAction(
 // Accept invitation (z poziomu zalogowanego usera, plaintext token z URL)
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * Akceptuje zaproszenie, ustawia cookie aktywnej org i przekierowuje na
+ * `/dashboard` (Dashboard). Cookie + redirect lecą w jednym HTTP response (atomowo).
+ * W razie błędu zwraca `{ success: false, error }`.
+ */
 export async function acceptInvitationAction(
   token: string,
-): Promise<ActionOk<{ organizationId: string }> | ActionFail> {
+): Promise<ActionFail> {
   if (typeof token !== 'string' || token.length < 16) {
     return { success: false, error: 'Nieprawidłowy token' };
   }
@@ -378,20 +496,8 @@ export async function acceptInvitationAction(
     userId: user.id,
   });
 
-  // Aktywuj organizację natychmiast.
-  const cookieStore = await cookies();
-  cookieStore.set({
-    name: ACTIVE_ORG_COOKIE,
-    value: orgId,
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
-  });
-
-  revalidatePath('/');
-  return { success: true, organizationId: orgId };
+  await setActiveOrgCookie(orgId);
+  redirect('/dashboard');
 }
 
 function mapInvitationError(raw: string): string {
@@ -616,7 +722,14 @@ export async function changeMembershipRoleAction(params: {
 // Helpery odczytu — używane w server components
 // ═══════════════════════════════════════════════════════════════
 
-/** Zwraca listę organizacji do których user należy (active memberships). */
+/**
+ * Zwraca listę organizacji do których user należy (active memberships).
+ *
+ * Czytamy admin clientem — używane w org switcherze tuż po założeniu nowej
+ * org (admin INSERT), więc user-context z RLS bywa niedeterministyczny przy
+ * fresh data. Bezpieczeństwo: filtruję po `auth.getUser()` więc widzimy
+ * wyłącznie memberships zalogowanego usera.
+ */
 export async function listMyOrganizations(): Promise<
   Array<{
     organizationId: string;
@@ -635,7 +748,8 @@ export async function listMyOrganizations(): Promise<
   const cookieStore = await cookies();
   const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value ?? null;
 
-  const { data } = await supabase
+  const admin = createAdminClient();
+  const { data } = await admin
     .from('memberships')
     .select(
       'organization_id, role, status, tenants:organization_id(name, nip)',

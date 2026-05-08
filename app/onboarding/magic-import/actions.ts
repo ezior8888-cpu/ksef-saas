@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
 import {
   importFileUploaded,
@@ -133,6 +134,15 @@ export async function startMagicImportAction(
   revalidatePath(`/onboarding/progress/${job.id}`);
 
   return { success: true, importJobId: job.id };
+}
+
+/**
+ * "Pomiń — zacznę od zera": atomowe server-side redirect na Dashboard (`/dashboard`).
+ * Eliminuje race-condition window.location.assign — kolejny request idzie
+ * z poprawnymi cookies (auth + ksef.active_org).
+ */
+export async function skipMagicImportAction(): Promise<void> {
+  redirect('/dashboard');
 }
 
 // ============================================================================

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
   AlertTriangle,
@@ -111,7 +110,6 @@ function TabButton({
 // ═══════════════════════════════════════════════════════════════
 
 function CreateOrgPanel() {
-  const router = useRouter();
   const [nipInput, setNipInput] = useState('');
   const [company, setCompany] = useState<OnboardingCompanyData | null>(null);
   const [duplicates, setDuplicates] = useState<NipMatch[]>([]);
@@ -148,10 +146,11 @@ function CreateOrgPanel() {
   const handleConfirm = () => {
     if (!company) return;
     startSubmitting(async () => {
+      // completeOnboardingAction → createOrganizationAction wykonuje redirect
+      // server-side po sukcesie (Set-Cookie + 303 atomowo). Tu obsługujemy
+      // tylko ścieżkę błędu — przy sukcesie funkcja nie returnsuje.
       const result = await completeOnboardingAction(company);
-      if (result.success) {
-        router.push('/onboarding/import-source');
-      } else {
+      if (!result.success) {
         setError(result.error);
       }
     });
@@ -305,7 +304,6 @@ function CreateOrgPanel() {
 // ═══════════════════════════════════════════════════════════════
 
 function AcceptInvitePanel({ initialToken }: { initialToken: string }) {
-  const router = useRouter();
   const [token, setToken] = useState(initialToken);
   const [error, setError] = useState<string | null>(null);
   const [isPending, start] = useTransition();
@@ -317,10 +315,9 @@ function AcceptInvitePanel({ initialToken }: { initialToken: string }) {
       return;
     }
     start(async () => {
+      // acceptInvitationAction wykonuje redirect server-side po sukcesie.
       const r = await acceptInvitationAction(token.trim());
-      if (r.success) {
-        router.push('/');
-      } else {
+      if (!r.success) {
         setError(r.error);
       }
     });

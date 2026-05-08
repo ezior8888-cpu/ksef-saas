@@ -2,6 +2,14 @@
  * Helpery dla Server Components stron — zwracają kontekst auth + aktywna org
  * i robią `redirect()` zamiast rzucać wyjątek (jak Server Actions).
  *
+ * Membership weryfikujemy DETERMINISTYCZNIE przez admin client (omija RLS).
+ * Bezpieczeństwo: cookie ksef.active_org jest httpOnly; gdy nawet zostanie
+ * sfałszowane, RLS na tabelach faktycznych danych biznesowych (faktury,
+ * expenses) i tak filtruje przez `is_member_of()` — admin client służy
+ * wyłącznie do podjęcia decyzji "czy renderować dashboard czy przekierować
+ * na /onboarding", po której wszystkie kolejne odczyty idą przez user-context
+ * `supabase` zwracane w kontekście.
+ *
  * Zachowujemy `tenantId` jako nazwę pola dla ciągłości z istniejącym kodem;
  * semantycznie to jest `organization_id` (multi-org).
  */
@@ -9,7 +17,7 @@
 import { redirect } from 'next/navigation';
 
 import { ACTIVE_ORG_COOKIE, getActiveOrgIdFromCookies } from './active-org';
-import { createClient } from './server';
+import { createAdminClient, createClient } from './server';
 import type { UserRole } from './auth-context';
 
 export interface PageContext {
@@ -19,12 +27,6 @@ export interface PageContext {
   role: UserRole;
 }
 
-/**
- * Standardowy kontekst dla strony w `(dashboard)`:
- * - niezalogowany → /login
- * - zalogowany bez aktywnej org → /onboarding
- * - zalogowany z cookie wskazującym org bez membership → /onboarding
- */
 export async function getPageContext(): Promise<PageContext> {
   const supabase = await createClient();
   const {
@@ -35,7 +37,8 @@ export async function getPageContext(): Promise<PageContext> {
   const activeOrg = await getActiveOrgIdFromCookies();
   if (!activeOrg) redirect('/onboarding');
 
-  const { data: membership } = await supabase
+  const admin = createAdminClient();
+  const { data: membership } = await admin
     .from('memberships')
     .select('role')
     .eq('user_id', user.id)
@@ -68,5 +71,4 @@ export async function getPageContextWithRole(
   return ctx;
 }
 
-// Re-export dla zgodności z importami (`COOKIE` używane lokalnie w kilku plikach).
 export { ACTIVE_ORG_COOKIE };

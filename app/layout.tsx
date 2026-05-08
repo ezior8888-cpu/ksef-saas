@@ -20,6 +20,9 @@ const THEME_BOOT =
   `(function(){try{var r=localStorage.getItem('theme');var stored=r==='light'||r==='dark'?r:null;var t=stored!=null?stored:'dark';var el=document.documentElement;el.classList.toggle('dark',t==='dark');el.style.colorScheme=t==='dark'?'dark':'light';}catch(e){}})();`;
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL ?? 'https://ksef-saas.pl',
+  ),
   title: 'KSeF SaaS',
   description: 'Faktury KSeF dla mikrofirm',
   // PWA / iOS (Safari) — manifest z `app/manifest.ts` nie wystarczy na iOS
@@ -60,6 +63,7 @@ export default function RootLayout({
     <html
       lang="pl"
       suppressHydrationWarning
+      data-scroll-behavior="smooth"
       className={`dark ${geistSans.variable} ${geistMono.variable} h-full scroll-smooth antialiased`}
     >
       <body className="min-h-screen font-sans antialiased text-foreground">

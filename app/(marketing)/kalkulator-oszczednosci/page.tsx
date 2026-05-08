@@ -1,0 +1,58 @@
+import type { Metadata } from 'next';
+
+import { SavingsCalculatorPreview } from '@/components/marketing/savings-calculator-preview';
+
+export const metadata: Metadata = {
+  title: 'Kalkulator oszczędności KSeF SaaS — sprawdź ile zaoszczędzisz',
+  description:
+    'Oblicz ile godzin i pieniędzy zaoszczędzisz z automatyczną kategoryzacją KPiR i OCR faktur. Bezpłatny kalkulator dla mikrofirm i freelancerów.',
+};
+
+export default function CalculatorPage() {
+  return (
+    <div className="py-16 lg:py-24">
+      <div className="mx-auto max-w-4xl px-6">
+        <div className="mb-12 text-center">
+          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Kalkulator oszczędności
+          </p>
+          <h1 className="mx-auto max-w-3xl font-display text-5xl leading-[1.1] font-semibold tracking-tighter-display md:text-6xl">
+            Sprawdź ile zaoszczędzisz w ciągu roku
+          </h1>
+          <p className="mx-auto mt-6 max-w-2xl text-xl text-muted-foreground">
+            Przesuń suwaki aby dopasować do swojej działalności
+          </p>
+        </div>
+
+        <SavingsCalculatorPreview />
+
+        <div className="mt-16 grid gap-6 text-center md:grid-cols-3">
+          <div className="p-6">
+            <p className="mb-2 font-display text-4xl font-bold tracking-tighter-display">8 → 1.5</p>
+            <p className="text-sm text-muted-foreground">
+              Minut na fakturę:
+              <br />
+              ręcznie vs z OCR
+            </p>
+          </div>
+          <div className="p-6">
+            <p className="mb-2 font-display text-4xl font-bold tracking-tighter-display">80%</p>
+            <p className="text-sm text-muted-foreground">
+              Mniej czasu
+              <br />
+              na księgowość
+            </p>
+          </div>
+          <div className="p-6">
+            <p className="mb-2 font-display text-4xl font-bold tracking-tighter-display">11 dni</p>
+            <p className="text-sm text-muted-foreground">
+              Średni DSO
+              <br />
+              z Wkurzaczem
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

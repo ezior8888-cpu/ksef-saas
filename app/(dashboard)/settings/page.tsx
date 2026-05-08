@@ -9,9 +9,12 @@ import {
   ChevronRight,
   AlertTriangle,
   Mail,
+  Plus,
 } from 'lucide-react';
 import { DeleteAccountSection } from '@/components/settings/delete-account';
 import { getPageContext } from '@/lib/supabase/page-context';
+
+export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {
   const { supabase, user, tenantId, role } = await getPageContext();
@@ -155,14 +158,24 @@ export default async function SettingsPage() {
           <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
             <Building2 className="h-6 w-6 text-muted-foreground" />
           </div>
-          <div className="flex-1 space-y-4">
-            <div>
-              <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-                Dane firmy
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Informacje o Twojej firmie z bazy GUS
-              </p>
+          <div className="flex-1 min-w-0 space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-display font-semibold tracking-tighter-text">
+                  Dane firmy
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Informacje o aktywnej organizacji (z onboardingu / GUS)
+                </p>
+              </div>
+              <Link
+                href="/onboarding?action=new"
+                prefetch={false}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-glass-border bg-foreground/5 px-4 py-2.5 text-sm font-medium hover:bg-foreground/10 transition-colors"
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+                Dodaj kolejną organizację
+              </Link>
             </div>
 
             <dl className="grid grid-cols-1 gap-4 text-sm">

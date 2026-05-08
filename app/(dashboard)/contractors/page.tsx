@@ -6,6 +6,8 @@ import { VatStatusBadge } from '@/components/validation/vat-status-badge';
 import { ContractorReminderToggle } from '@/components/reminders/contractor-reminder-toggle';
 import { getPageContext } from '@/lib/supabase/page-context';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ContractorsPage() {
   const { supabase, tenantId } = await getPageContext();
 

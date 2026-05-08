@@ -1,6 +1,11 @@
 import { withSentryConfig } from '@sentry/nextjs';
 import withSerwistInit from '@serwist/next';
+import createMDX from '@next/mdx';
 import type { NextConfig } from 'next';
+
+const withMDX = createMDX({
+  extension: /\.mdx?$/,
+});
 
 const withSerwist = withSerwistInit({
   // Ścieżka do service worker (pełna implementacja: zadanie 17.3)
@@ -79,6 +84,8 @@ const PROD_ONLY_HEADERS: { key: string; value: string }[] = [
 ];
 
 const nextConfig: NextConfig = {
+  pageExtensions: ['ts', 'tsx', 'js', 'jsx', 'md', 'mdx'],
+
   // `xmllint-wasm` ładuje plik `xmllint.wasm` z fizycznego node_modules przez
   // `fs.readFileSync` + `import.meta.url`. Gdy Turbopack bundluje kod serwerowy,
   // tłumaczy ścieżki modułów na wirtualne `/ROOT/...`, przez co WASM nie da się
@@ -104,7 +111,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(withSerwist(nextConfig), {
+export default withSentryConfig(withSerwist(withMDX(nextConfig)), {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
@@ -382,6 +383,19 @@
 
 .mesh-orb-2 {
   animation: float-orb 25s ease-in-out infinite reverse;
+}
+
+/* Marketing layout (19.2.1) — trzy orby z lekką dephasą animacji */
+.animate-orb-1 {
+  animation: float-orb 20s ease-in-out infinite;
+}
+
+.animate-orb-2 {
+  animation: float-orb 25s ease-in-out infinite reverse;
+}
+
+.animate-orb-3 {
+  animation: float-orb 22s ease-in-out infinite;
 }
 
 /* === SHIMMER SKELETON === */

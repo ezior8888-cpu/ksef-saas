@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { signupWithEmail, loginWithGoogle } from '../login/actions';
+import { loginWithGoogle } from '../login/actions';
+import { signupWithEmail } from './actions';
 
 const ERROR_MESSAGES: Record<string, string> = {
   weak_password: 'Hasło musi mieć co najmniej 8 znaków.',

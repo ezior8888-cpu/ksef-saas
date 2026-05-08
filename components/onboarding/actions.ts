@@ -33,14 +33,12 @@ export interface NipMatch {
   ksefVerified: boolean;
 }
 
-export type CompleteOnboardingResult =
-  | {
-      success: true;
-      organizationId: string;
-      nipDuplicate: boolean;
-      ksefVerifiedDuplicate: boolean;
-    }
-  | { success: false; error: string };
+/**
+ * `createOrganizationAction` po sukcesie wykonuje server-side redirect
+ * (`/onboarding/import-source`). Tu zwracamy wyłącznie ścieżkę błędu —
+ * sukces nigdy nie wraca jako wartość.
+ */
+export type CompleteOnboardingResult = { success: false; error: string };
 
 // ═══════════════════════════════════════════════════════════════
 // Action 1: wyszukaj firmę po NIP (GUS) + zwróć ewentualne istniejące orgs
@@ -124,16 +122,8 @@ export async function completeOnboardingAction(
     buildingNumber: company.buildingNumber,
     localNumber: company.localNumber,
   };
+  // Po sukcesie createOrganizationAction wywołuje redirect — funkcja nie
+  // returnsuje, throw NEXT_REDIRECT przeleci wyżej do Next.js.
   const result = await createOrganizationAction(input);
-
-  if (!result.success) {
-    return { success: false, error: result.error };
-  }
-
-  return {
-    success: true,
-    organizationId: result.organizationId,
-    nipDuplicate: result.nipDuplicate,
-    ksefVerifiedDuplicate: result.ksefVerifiedDuplicate,
-  };
+  return { success: false, error: result.error };
 }

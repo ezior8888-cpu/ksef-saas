@@ -1,9 +1,17 @@
 import { redirect } from 'next/navigation';
 
 import { ImportSourceSelector } from '@/components/onboarding/import-source-selector';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 
+/**
+ * Krok onboardingu: wybór źródła importu danych po założeniu organizacji.
+ *
+ * Membership/tenant query przez admin client (deterministyczne, omija RLS) —
+ * bez tego zaraz po `createOrganizationAction` zdarzała się sytuacja, gdy
+ * RLS odpowiadał `null` ze względu na propagację cache PostgREST → redirect
+ * z powrotem na /onboarding (pętla).
+ */
 export default async function ImportSourcePage() {
   const supabase = await createClient();
   const {
@@ -15,7 +23,19 @@ export default async function ImportSourcePage() {
   const tenantId = await getActiveOrgIdFromCookies();
   if (!tenantId) redirect('/onboarding');
 
-  const { data: tenant } = await supabase
+  const admin = createAdminClient();
+
+  const { data: membership } = await admin
+    .from('memberships')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('organization_id', tenantId)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (!membership) redirect('/onboarding');
+
+  const { data: tenant } = await admin
     .from('tenants')
     .select('name, nip, ksef_credentials_encrypted')
     .eq('id', tenantId)

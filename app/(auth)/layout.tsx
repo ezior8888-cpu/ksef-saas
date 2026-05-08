@@ -20,7 +20,7 @@ export default function AuthLayout({
               priority
             />
             <h1 className="text-3xl font-semibold tracking-tight text-white">
-              KSeF SaaS
+              FaktFlow
             </h1>
           </div>
           {children}

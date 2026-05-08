@@ -2,7 +2,8 @@
  * Centralna nazwa cookie i nagłówka dla aktywnej organizacji multi-org.
  *
  * Cookie ustawia `setActiveOrganizationAction` po zalogowaniu / wyborze
- * w org switcherze. Każdy server-side klient Supabase (server.ts, proxy.ts)
+ * w org switcherze. Każdy server-side klient Supabase (server.ts, `proxy.ts` /
+ * `lib/supabase/middleware.ts`).
  * dokleja wartość jako nagłówek `x-active-org`, który PostgREST udostępnia
  * funkcji `public.get_current_tenant_id()` przez `request.headers`.
  *

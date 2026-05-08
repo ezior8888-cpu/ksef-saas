@@ -82,3 +82,7 @@ Sentry.init({
     return event;
   },
 });
+
+// Hook wymagany przez @sentry/nextjs do instrumentacji router transitions
+// w App Routerze. Eksport wykrywany przez Next.js automatycznie.
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

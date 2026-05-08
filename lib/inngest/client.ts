@@ -233,6 +233,21 @@ export const exportsCoPilotSendPackage = eventType(
   },
 );
 
+const TrialOnboardingEmailPayloadSchema = z.object({
+  userId: z.string().uuid(),
+  email: z.string().email(),
+  firstName: z.string(),
+});
+
+/** Rejestracja użytkownika — start sekwencji trialowych maili (Inngest). */
+export const userRegistered = zodEvent('user/registered', TrialOnboardingEmailPayloadSchema);
+
+export const emailTrialDay1 = zodEvent('email/trial-day-1', TrialOnboardingEmailPayloadSchema);
+export const emailTrialDay4 = zodEvent('email/trial-day-4', TrialOnboardingEmailPayloadSchema);
+export const emailTrialDay8 = zodEvent('email/trial-day-8', TrialOnboardingEmailPayloadSchema);
+export const emailTrialDay12 = zodEvent('email/trial-day-12', TrialOnboardingEmailPayloadSchema);
+export const emailTrialDay14 = zodEvent('email/trial-day-14', TrialOnboardingEmailPayloadSchema);
+
 /** OCR zdjęcia wydatku — worker aktualizuje `ocr_jobs` i tworzy `expenses`. */
 export const ocrProcessPhotoRequested = zodEvent(
   'ocr/process-photo',

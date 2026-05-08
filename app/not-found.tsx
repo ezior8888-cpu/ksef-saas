@@ -18,7 +18,7 @@ export default function NotFound() {
         </div>
         <Link href="/">
           <Button variant="glass-primary" size="lg">
-            Powrót do pulpitu
+            Strona główna
           </Button>
         </Link>
       </div>

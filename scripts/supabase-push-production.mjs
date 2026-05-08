@@ -2,6 +2,7 @@
  * Zastosuj migracje z supabase/migrations na bazę Postgres (production).
  *
  * SUPABASE_DB_URL — pełny connection string z Dashboard → Database → URI (direct, :5432).
+ * Możesz ustawić w `.env.local` (skrypt ładuje go automatycznie) albo w shellu przed `pnpm db:push:prod`.
  *
  * Uruchom:
  *   pnpm db:push:prod:dry    # podejrzenie
@@ -15,6 +16,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { config as loadEnv } from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,10 +25,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const dryRun = process.argv.includes('--dry-run');
 
+// Żeby można było trzymać SUPABASE_DB_URL w .env.local (nie commituj).
+loadEnv({ path: path.join(root, '.env.local') });
+loadEnv({ path: path.join(root, '.env') });
+
 const url = process.env.SUPABASE_DB_URL;
 if (!url || String(url).trim() === '') {
   console.error(
-    'Brak SUPABASE_DB_URL. Przykład (PowerShell):\n  $env:SUPABASE_DB_URL="postgresql://..."\nPrzykład (bash/zsh):\n  export SUPABASE_DB_URL=\'postgresql://...\'',
+    [
+      'Brak SUPABASE_DB_URL.',
+      'Ustaw w `.env.local` (preferowane) lub w shellu:',
+      '  export SUPABASE_DB_URL=\'postgresql://postgres.[ref]:[HASŁO]@db.[ref].supabase.co:5432/postgres\'',
+      'URI: Supabase Dashboard → Settings → Database → Connection string (Direct).',
+    ].join('\n'),
   );
   process.exit(1);
 }

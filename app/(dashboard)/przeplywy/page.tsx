@@ -3,7 +3,7 @@ import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DashboardPage() {
+export default async function PrzeplywyPage() {
   const { supabase, tenantId } = await getPageContext();
 
   const now = new Date();

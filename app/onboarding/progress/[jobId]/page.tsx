@@ -13,7 +13,7 @@ export default async function ProgressPage({ params }: Props) {
 
   const { data: job } = await supabase.from('import_jobs').select('*').eq('id', jobId).single();
 
-  if (!job) redirect('/invoices');
+  if (!job) redirect('/dashboard');
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">

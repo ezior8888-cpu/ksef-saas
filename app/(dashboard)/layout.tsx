@@ -4,10 +4,9 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
 import { listMyOrganizations } from '@/app/actions/organizations';
-import { getKsefVerificationStatus } from '@/lib/auth/ksef-verification-guard';
 import { signOut } from '../(auth)/login/actions';
 import { MobileNav } from '@/components/dashboard/mobile-nav';
 import { OrgSwitcher } from '@/components/dashboard/org-switcher';
@@ -16,6 +15,21 @@ import { ThemeToggle } from '@/components/dashboard/theme-toggle';
 import { InstallPrompt } from '@/components/pwa/install-prompt';
 import { Button } from '@/components/ui/button';
 
+/**
+ * Dashboard layout dla wszystkich chronionych podstron `(dashboard)/...`.
+ *
+ * Decyzja "czy user może być na tej trasie" jest podejmowana DETERMINISTYCZNIE
+ * przez admin client (omija RLS). Bezpieczeństwo:
+ * - cookie `ksef.active_org` jest httpOnly (klient nie może go modyfikować
+ *   z JS) — sfałszowanie wymaga przejęcia sesji,
+ * - dane biznesowe (faktury, expenses, kontrahenci) i tak są chronione przez
+ *   RLS na ich tabelach (`get_current_tenant_id() = is_member_of`), więc
+ *   nawet sfałszowane cookie nie da dostępu do cudzych danych.
+ *
+ * Uzasadnienie admin client: query memberships/tenants przez user-context
+ * Supabase z RLS jest niedeterministyczne tuż po INSERT przez admin (cache
+ * PostgREST, propagacja). Skutkiem była pętla onboarding ↔ /invoices.
+ */
 export default async function DashboardLayout({
   children,
 }: {
@@ -29,29 +43,38 @@ export default async function DashboardLayout({
 
   if (!user) redirect('/login');
 
-  // Cookie aktywnej org jest ustawiane przez middleware (bootstrap z
-  // memberships) — jeśli mimo to brak, znaczy że user nie ma żadnego
-  // aktywnego membership. Wysyłamy do onboardingu.
   const cookieStore = await cookies();
   const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
   if (!isUuid(activeOrg)) {
     redirect('/onboarding');
   }
 
-  const { data: tenant } = await supabase
+  const admin = createAdminClient();
+
+  const { data: membership } = await admin
+    .from('memberships')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('organization_id', activeOrg)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (!membership) {
+    redirect('/onboarding');
+  }
+
+  const { data: tenant } = await admin
     .from('tenants')
-    .select('name, nip')
+    .select('name, nip, ksef_verified_at')
     .eq('id', activeOrg)
     .maybeSingle();
 
   if (!tenant) {
-    // Cookie wskazuje na nieistniejącą / niedostępną org — bezpieczny redirect.
     redirect('/onboarding');
   }
 
   const memberships = await listMyOrganizations();
-
-  const verification = await getKsefVerificationStatus(activeOrg);
+  const isVerified = tenant.ksef_verified_at !== null;
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-mesh-surface">
@@ -59,7 +82,7 @@ export default async function DashboardLayout({
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <MobileNav />
-            <Link href="/reports" className="flex min-w-0 items-center gap-2.5">
+            <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5">
               <Image
                 src="/brand/faktflow-logo.png"
                 alt="FaktFlow"
@@ -100,7 +123,7 @@ export default async function DashboardLayout({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {!verification.isVerified && (
+          {!isVerified && (
             <div
               className="shrink-0 border-b border-orange-500/20 bg-orange-500/10 px-6 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
               role="status"

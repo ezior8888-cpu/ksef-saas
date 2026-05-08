@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   useForm,
@@ -70,6 +70,9 @@ function firstValidationMessage(errors: FieldErrors<InvoiceFormValues>): string 
 const labelClass =
   'text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block';
 
+/** Tailwind `lg` — musi być zgodne z breakpointem ukrywania/pokazywania pozycji. */
+const LINES_LAYOUT_LG_MEDIA = '(min-width: 1024px)';
+
 export function InvoiceForm() {
   const router = useRouter();
   const [isSaving, startSaving] = useTransition();
@@ -85,6 +88,22 @@ export function InvoiceForm() {
   // Stanowi PIERWSZĄ warstwę ochrony — drugą jest unique index z migracji
   // 00028, trzecią mapowanie 23505 → friendly error w `actions.ts`.
   const submitInFlightRef = useRef(false);
+
+  /**
+   * Nie montuj jednocześnie tabeli desktop i kart mobile z tym samym
+   * `register('lines.*')` — oba bloki były w DOM (tylko `display:none`), przez co
+   * React Hook Form wiązał ref z „drugim” inputem i widoczne pole Nazwa nie
+   * aktualizowało stanu.
+   */
+  const [linesDesktopLayout, setLinesDesktopLayout] = useState(false);
+
+  useEffect(() => {
+    const mql = window.matchMedia(LINES_LAYOUT_LG_MEDIA);
+    const sync = () => setLinesDesktopLayout(mql.matches);
+    sync();
+    mql.addEventListener('change', sync);
+    return () => mql.removeEventListener('change', sync);
+  }, []);
 
   const today = new Date().toISOString().slice(0, 10);
   const in14days = new Date(Date.now() + 14 * 86400_000)
@@ -453,7 +472,7 @@ export function InvoiceForm() {
         </div>
       </section>
 
-      {/* SECTION: Pozycje — desktop: tabela, mobile: karty (lg:) */}
+      {/* SECTION: Pozycje — tabela vs karty wg `linesDesktopLayout` (1024px, jak Tailwind lg) */}
       <section
         className="space-y-5 rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-5 lg:p-8"
       >
@@ -479,8 +498,9 @@ export function InvoiceForm() {
           </Button>
         </div>
 
-        {/* DESKTOP: tabela */}
-        <div className="hidden overflow-x-auto lg:block">
+        {/* Tylko jeden wariant layoutu naraz — patrz `linesDesktopLayout` powyżej. */}
+        {linesDesktopLayout ? (
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-glass-border text-left text-muted-foreground">
@@ -611,9 +631,8 @@ export function InvoiceForm() {
             </tfoot>
           </table>
         </div>
-
-        {/* MOBILE: karty */}
-        <div className="space-y-3 lg:hidden">
+        ) : (
+        <div className="space-y-3">
           {fields.map((field, index) => {
             const w = watchedLines?.[index];
             const calc = calculateLineItem({
@@ -738,6 +757,7 @@ export function InvoiceForm() {
             </div>
           </div>
         </div>
+        )}
       </section>
 
       {/* SECTION: Płatność */}

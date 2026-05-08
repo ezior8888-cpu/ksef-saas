@@ -160,12 +160,12 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
 
         <Button
           type="button"
-          onClick={() => router.push('/invoices')}
+          onClick={() => router.push('/dashboard')}
           variant="glass-primary"
           size="lg"
           className="w-full"
         >
-          Przejdź do faktur
+          Przejdź do Dashboard
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
       </div>
@@ -199,7 +199,7 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
           </Button>
           <Button
             type="button"
-            onClick={() => router.push('/invoices')}
+            onClick={() => router.push('/dashboard')}
             variant="glass-primary"
             size="lg"
             className="flex-1"

@@ -29,9 +29,11 @@ interface NavSection {
 }
 
 function isActivePath(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/';
+  if (href === '/przeplywy') {
+    return pathname === '/przeplywy';
+  }
   if (href === '/invoices/new') return pathname === '/invoices/new';
-  if (href === '/reports') return pathname === '/reports';
+  if (href === '/dashboard') return pathname === '/dashboard';
   if (href === '/reports/kpir') {
     return (
       pathname === '/reports/kpir' || pathname.startsWith('/reports/kpir/')
@@ -53,8 +55,8 @@ const navSections: NavSection[] = [
   {
     title: 'Dane',
     items: [
-      { href: '/reports', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/', label: 'Przepływy', icon: BarChart3 },
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/przeplywy', label: 'Przepływy', icon: BarChart3 },
       { href: '/invoices', label: 'Faktury wystawione', icon: FileText },
       { href: '/payments/overdue', label: 'Przeterminowane', icon: AlertCircle },
       { href: '/inbox', label: 'Skrzynka odbiorcza', icon: Inbox },

@@ -23,7 +23,7 @@ export function InviteAcceptForm({
     start(async () => {
       const r = await acceptInvitationAction(token);
       if (r.success) {
-        router.push('/');
+        router.push('/dashboard');
         router.refresh();
       } else {
         setError(r.error);

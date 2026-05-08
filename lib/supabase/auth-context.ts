@@ -21,7 +21,7 @@
 
 import { cookies } from 'next/headers';
 
-import { createClient } from './server';
+import { createAdminClient, createClient } from './server';
 import { ACTIVE_ORG_COOKIE, isUuid } from './active-org';
 
 export class ActionAuthError extends Error {
@@ -63,7 +63,10 @@ export async function requireUserAndActiveOrg(): Promise<AuthContext> {
     throw new ActionAuthError('Brak aktywnej organizacji');
   }
 
-  const { data: membership } = await supabase
+  // Membership weryfikujemy admin clientem — pewny i deterministyczny check
+  // (omija RLS). Bezpieczeństwo: filtrujemy po auth.uid() z user-context.
+  const admin = createAdminClient();
+  const { data: membership } = await admin
     .from('memberships')
     .select('role, status')
     .eq('user_id', user.id)

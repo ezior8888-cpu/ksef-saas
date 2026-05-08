@@ -9,7 +9,7 @@ import { createClient } from '@/lib/supabase/server';
 /**
  * Server Action: logowanie email+hasło.
  * Na błąd → redirect na /login z query `?error=...`.
- * Na sukces → redirect na / (pulpit).
+ * Na sukces → redirect na /dashboard (pulpit aplikacji).
  */
 export async function loginWithEmail(formData: FormData): Promise<void> {
   const email = String(formData.get('email') ?? '');
@@ -47,57 +47,7 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
   }
 
   revalidatePath('/', 'layout');
-  redirect('/');
-}
-
-/**
- * Server Action: rejestracja email+hasło.
- * Supabase wyśle email z linkiem potwierdzającym (jeśli włączone).
- */
-export async function signupWithEmail(formData: FormData): Promise<void> {
-  const email = String(formData.get('email') ?? '');
-  const password = String(formData.get('password') ?? '');
-  const name = String(formData.get('name') ?? '');
-
-  if (!email || !password || password.length < 8) {
-    redirect('/register?error=weak_password');
-  }
-
-  const headersList = await headers();
-  const origin = headersList.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL;
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { full_name: name },
-      emailRedirectTo: `${origin}/auth/callback`,
-    },
-  });
-
-  if (error) {
-    redirect(`/register?error=${encodeURIComponent(error.message)}`);
-  }
-
-  // Potwierdzenie email włączone w Supabase → session = null, trzeba kliknąć link z maila.
-  // Potwierdzenie wyłączone → od razu jest sesja, użytkownik zalogowany.
-  if (!data.session) {
-    redirect('/login?success=check_email');
-  }
-
-  const uid = data.user?.id;
-  if (uid) {
-    await logAudit({
-      action: 'auth.signup',
-      tenantId: null,
-      userId: uid,
-      metadata: { flow: 'session_immediate' },
-    });
-  }
-
-  revalidatePath('/', 'layout');
-  redirect('/');
+  redirect('/dashboard');
 }
 
 /**

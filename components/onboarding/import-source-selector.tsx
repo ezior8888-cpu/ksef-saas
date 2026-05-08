@@ -1,20 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
   ChevronRight,
   FileSpreadsheet,
   FileText,
+  Loader2,
   Lock,
   Sparkles,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 
-import type { FileImportSource } from '@/app/onboarding/magic-import/actions';
+import {
+  skipMagicImportAction,
+  type FileImportSource,
+} from '@/app/onboarding/magic-import/actions';
 import { FileImportDialog } from './file-import-dialog';
 
 interface Props {
@@ -36,11 +39,13 @@ const FILE_IMPORT_OPTIONS: readonly {
 ] as const;
 
 export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: Props) {
-  const router = useRouter();
   const [importType, setImportType] = useState<FileImportSource | null>(null);
+  const [isSkipping, startSkip] = useTransition();
 
   const handleSkip = () => {
-    router.push('/invoices');
+    // skipMagicImportAction wykonuje server-side redirect → /dashboard (Dashboard)
+    // (atomowo, kolejny request leci z aktualnymi cookies).
+    startSkip(() => skipMagicImportAction());
   };
 
   const firstName = tenantName.trim().split(/\s+/)[0] ?? '';
@@ -60,7 +65,7 @@ export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: P
         type="button"
         onClick={() =>
           hasCertificate
-            ? router.push(`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`)
+            ? window.location.assign(`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`)
             : undefined
         }
         disabled={!hasCertificate}
@@ -141,8 +146,16 @@ export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: P
           variant="ghost"
           className="text-muted-foreground hover:text-foreground"
           onClick={handleSkip}
+          disabled={isSkipping}
         >
-          Pomiń — zacznę od zera
+          {isSkipping ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Otwieram aplikację...
+            </>
+          ) : (
+            'Pomiń — zacznę od zera'
+          )}
         </Button>
       </div>
 

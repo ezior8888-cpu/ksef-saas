@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   FileSpreadsheet,
   Loader2,
@@ -41,7 +40,6 @@ const FILE_ACCEPT: Record<FileImportSource, string> = {
 const MAX_BYTES = 10 * 1024 * 1024;
 
 export function FileImportDialog({ source, tenantId, onClose }: Props) {
-  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, startUpload] = useTransition();
 
@@ -64,7 +62,7 @@ export function FileImportDialog({ source, tenantId, onClose }: Props) {
 
         if (result.success) {
           toast.success('Import rozpoczęty');
-          router.push(`/onboarding/progress/${result.importJobId}`);
+          window.location.assign(`/onboarding/progress/${result.importJobId}`);
         } else {
           toast.error(result.error);
         }

@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { ArrowLeft, Calendar, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -17,7 +16,6 @@ const RANGE_OPTIONS = [
 ];
 
 export function MagicImportForm({ tenantId }: { tenantId: string }) {
-  const router = useRouter();
   const [selectedMonths, setSelectedMonths] = useState(6);
   const [isStarting, startImport] = useTransition();
 
@@ -25,7 +23,7 @@ export function MagicImportForm({ tenantId }: { tenantId: string }) {
     startImport(async () => {
       const result = await startMagicImportAction(tenantId, selectedMonths);
       if (result.success) {
-        router.push(`/onboarding/progress/${result.importJobId}`);
+        window.location.assign(`/onboarding/progress/${result.importJobId}`);
       } else {
         toast.error(result.error);
       }
