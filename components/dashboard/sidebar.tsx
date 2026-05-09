@@ -1,143 +1,226 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
-  AlertCircle,
-  BarChart3,
-  BookOpen,
-  FileSpreadsheet,
-  FileText,
-  Inbox,
-  LayoutDashboard,
-  PlusCircle,
-  Receipt,
-  Settings,
-  Users,
-} from 'lucide-react';
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
+
+import { dashboardNavSections, isActiveNavPath } from '@/lib/dashboard-nav-config';
 import { cn } from '@/lib/utils';
 
-interface NavItem {
+function shouldHandlePrimaryInAppNav(e: ReactPointerEvent): boolean {
+  return (
+    e.pointerType !== 'mouse' ||
+    (e.button === 0 &&
+      !e.altKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.shiftKey)
+  );
+}
+
+interface NavRowProps {
   href: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: string;
+  active: boolean;
+  onPrimaryDown: (href: string) => void;
+  onPrefetchHover: (href: string) => void;
 }
 
-interface NavSection {
-  title: string;
-  items: NavItem[];
-}
+/**
+ * Pojedynczy wiersz nawigacji — `memo` po stricte równym zestawie propsów.
+ * Dzięki temu zmiana `pendingHref` w rodzicu re-renderuje **wyłącznie** dwa
+ * wiersze (poprzedni aktywny + nowy), a nie całą listę 9 linków.
+ */
+const NavRow = memo(function NavRow({
+  href,
+  label,
+  icon,
+  active,
+  onPrimaryDown,
+  onPrefetchHover,
+}: NavRowProps) {
+  return (
+    <Link
+      href={href}
+      prefetch
+      onPointerDown={(e) => {
+        if (!shouldHandlePrimaryInAppNav(e)) return;
+        onPrimaryDown(href);
+      }}
+      onPointerEnter={() => onPrefetchHover(href)}
+      onFocus={() => onPrefetchHover(href)}
+      className={cn(
+        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-[15px] font-medium transition-colors active:opacity-90',
+        active
+          ? 'ff-sidebar-active font-semibold text-[var(--ff-primary)]'
+          : 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_80%,transparent)] hover:bg-white/5',
+      )}
+    >
+      <span
+        className={cn(
+          'material-symbols-outlined text-[22px]',
+          active && 'text-[var(--ff-primary)]',
+        )}
+      >
+        {icon}
+      </span>
+      {label}
+    </Link>
+  );
+});
 
-function isActivePath(pathname: string, href: string): boolean {
-  if (href === '/przeplywy') {
-    return pathname === '/przeplywy';
-  }
-  if (href === '/invoices/new') return pathname === '/invoices/new';
-  if (href === '/dashboard') return pathname === '/dashboard';
-  if (href === '/reports/kpir') {
-    return (
-      pathname === '/reports/kpir' || pathname.startsWith('/reports/kpir/')
-    );
-  }
-  if (href === '/invoices') {
-    if (pathname === '/invoices/new') return false;
-    return pathname === '/invoices' || pathname.startsWith('/invoices/');
-  }
-  if (href === '/expenses') {
-    return pathname === '/expenses' || pathname.startsWith('/expenses/');
-  }
-  if (href === '/settings')
-    return pathname === '/settings' || pathname.startsWith('/settings/');
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-const navSections: NavSection[] = [
-  {
-    title: 'Dane',
-    items: [
-      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/przeplywy', label: 'Przepływy', icon: BarChart3 },
-      { href: '/invoices', label: 'Faktury wystawione', icon: FileText },
-      { href: '/payments/overdue', label: 'Przeterminowane', icon: AlertCircle },
-      { href: '/inbox', label: 'Skrzynka odbiorcza', icon: Inbox },
-      { href: '/expenses', label: 'Wydatki', icon: Receipt },
-      { href: '/contractors', label: 'Kontrahenci', icon: Users },
-    ],
-  },
-  {
-    title: 'Księgowość',
-    items: [
-      { href: '/reports/kpir', label: 'KPiR', icon: BookOpen },
-      { href: '/reports/exports', label: 'Eksport', icon: FileSpreadsheet },
-    ],
-  },
-];
-
+/**
+ * Podświetlenie menu odłączone od momentu, w którym Next dokończy RSC:
+ * `pointerdown` ustawia „cel” natychmiast (urgent state); szybkie kolejne
+ * kliknięcia nadpisują cel. Memoizacja `NavRow` izoluje koszt re-renderu
+ * przy „spamowaniu kliknięć”.
+ */
 export function Sidebar({ drawer }: { drawer?: boolean }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
+
+  const beginNavTo = useCallback(
+    (href: string) => {
+      if (isActiveNavPath(pathname, href)) {
+        setPendingHref(null);
+        return;
+      }
+      setPendingHref(href);
+    },
+    [pathname],
+  );
+
+  const armPrefetch = useCallback(
+    (href: string) => {
+      void router.prefetch(href);
+    },
+    [router],
+  );
+
+  /** Obecnie podświetlana trasa: pending wygrywa, dopóki URL nie dogoni. */
+  const highlightedHref = useMemo(() => {
+    if (
+      pendingHref !== null &&
+      !isActiveNavPath(pathname, pendingHref)
+    ) {
+      return pendingHref;
+    }
+    return null;
+  }, [pathname, pendingHref]);
+
+  const isHrefActive = useCallback(
+    (href: string) => {
+      if (highlightedHref !== null) return href === highlightedHref;
+      return isActiveNavPath(pathname, href);
+    },
+    [pathname, highlightedHref],
+  );
+
+  const newInvoiceNavPending = highlightedHref === '/invoices/new';
+  const settingsActive = isHrefActive('/settings');
 
   return (
     <aside
       className={cn(
-        'flex flex-col w-[264px] shrink-0 p-4 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-glass border border-white/55 dark:border-white/14 rounded-3xl shadow-glass',
-        drawer
-          ? 'flex h-full min-h-0 w-full m-0 border-0 rounded-none shadow-none bg-transparent'
-          : 'hidden lg:flex m-3 mt-0 sticky top-[76px] h-[calc(100vh-88px)] min-h-0'
+        'ff-shell-sidebar relative z-[2] hidden h-full min-h-0 w-72 shrink-0 flex-col gap-[var(--ff-unit)] overflow-y-auto p-[var(--ff-gutter)] lg:flex',
+        drawer && 'flex m-0 w-full max-w-none border-0 bg-transparent p-4',
       )}
     >
+      <div className="mb-8 flex items-center gap-3 px-2">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--ff-primary)] shadow-lg">
+          <span className="material-symbols-outlined text-[22px] text-[var(--ff-on-primary)]">
+            description
+          </span>
+        </div>
+        <h1 className="font-display text-xl font-semibold tracking-tight text-[var(--ff-on-surface)]">
+          FaktFlow
+        </h1>
+      </div>
 
       <Link
         href="/invoices/new"
-        className="flex items-center gap-2.5 rounded-2xl bg-foreground text-background px-4 py-3.5 hover:bg-foreground/90 active:scale-[0.97] transition-all duration-200 shadow-glass-sm font-medium text-sm tracking-tight"
+        prefetch
+        onPointerDown={(e) => {
+          if (!shouldHandlePrimaryInAppNav(e)) return;
+          beginNavTo('/invoices/new');
+        }}
+        onPointerEnter={() => armPrefetch('/invoices/new')}
+        onFocus={() => armPrefetch('/invoices/new')}
+        className={cn(
+          'mb-8 flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--ff-on-surface)] px-6 py-4 text-[15px] font-bold text-[var(--ff-bg)] transition-transform hover:scale-[1.02] active:scale-95',
+          newInvoiceNavPending &&
+            'ring-2 ring-[var(--ff-primary)] ring-offset-2 ring-offset-[color-mix(in_srgb,var(--ff-surface-container-low)_100%,transparent)]',
+        )}
       >
-        <PlusCircle className="h-[18px] w-[18px] shrink-0" />
-        <span>Nowa faktura</span>
+        <span className="material-symbols-outlined text-[22px] text-[var(--ff-bg)]">
+          add
+        </span>
+        Nowa faktura
       </Link>
 
-      <nav className="mt-6 flex-1 overflow-y-auto min-h-0 space-y-4">
-        {navSections.map((section) => (
-          <div key={section.title}>
-            <p className="mb-1 px-3 text-[10px] font-medium tracking-[0.18em] uppercase text-foreground/30 select-none">
+      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+        {dashboardNavSections.map((section, sIdx) => (
+          <div key={section.title} className={sIdx > 0 ? 'mt-6' : undefined}>
+            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_40%,transparent)]">
               {section.title}
             </p>
-            <div className="space-y-0.5">
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                const active = isActivePath(pathname, item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
-                      active
-                        ? 'rounded-2xl bg-foreground/90 dark:bg-white/15 text-background dark:text-foreground backdrop-blur-md shadow-glass-sm'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-white/30 dark:hover:bg-white/8'
-                    )}
-                  >
-                    <Icon className="h-[18px] w-[18px] shrink-0" />
-                    {item.label}
-                  </Link>
-                );
-              })}
+            <div className="flex flex-col gap-0.5">
+              {section.items.map((item) => (
+                <NavRow
+                  key={item.href}
+                  href={item.href}
+                  label={item.label}
+                  icon={item.icon}
+                  active={isHrefActive(item.href)}
+                  onPrimaryDown={beginNavTo}
+                  onPrefetchHover={armPrefetch}
+                />
+              ))}
             </div>
           </div>
         ))}
 
-        <div className="my-2 h-px bg-white/55 dark:bg-white/10" />
-
-        <Link
-          href="/settings"
-          className={cn(
-            'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
-            isActivePath(pathname, '/settings')
-              ? 'rounded-2xl bg-foreground/90 dark:bg-white/15 text-background dark:text-foreground backdrop-blur-md shadow-glass-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-white/30 dark:hover:bg-white/8'
-          )}
-        >
-          <Settings className="h-[18px] w-[18px] shrink-0" />
-          Ustawienia
-        </Link>
+        <div className="mt-auto pt-10">
+          <Link
+            href="/settings"
+            prefetch
+            onPointerDown={(e) => {
+              if (!shouldHandlePrimaryInAppNav(e)) return;
+              beginNavTo('/settings');
+            }}
+            onPointerEnter={() => armPrefetch('/settings')}
+            onFocus={() => armPrefetch('/settings')}
+            className={cn(
+              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-[15px] font-medium transition-colors active:opacity-90',
+              settingsActive
+                ? 'ff-sidebar-active font-semibold text-[var(--ff-primary)]'
+                : 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_80%,transparent)] hover:bg-white/5',
+            )}
+          >
+            <span
+              className={cn(
+                'material-symbols-outlined text-[22px]',
+                settingsActive && 'text-[var(--ff-primary)]',
+              )}
+            >
+              settings
+            </span>
+            Ustawienia
+          </Link>
+        </div>
       </nav>
     </aside>
   );

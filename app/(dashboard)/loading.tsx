@@ -1,17 +1,27 @@
-export default function Loading() {
+/**
+ * Segment `(dashboard)` — lekki szkielet podczas streamowania RSC (bez logiki).
+ */
+export default function DashboardLoading() {
   return (
-    <div className="space-y-8 animate-pulse">
-      <div className="space-y-3">
-        <div className="skeleton h-10 w-72" />
-        <div className="skeleton h-4 w-96" />
+    <div
+      className="animate-pulse space-y-8 pb-10 text-[var(--ff-on-surface)]"
+      aria-busy
+      aria-label="Ładowanie"
+    >
+      <div className="space-y-2">
+        <div className="h-10 w-64 max-w-full rounded-lg bg-[color-mix(in_srgb,var(--ff-on-surface)_10%,transparent)]" />
+        <div className="h-5 w-96 max-w-full rounded-md bg-[color-mix(in_srgb,var(--ff-on-surface)_6%,transparent)]" />
       </div>
-      <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-6">
-        <div className="space-y-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="skeleton h-12" />
-          ))}
-        </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="ff-glass-pane h-28 rounded-[var(--ff-radius-lg)]"
+          />
+        ))}
       </div>
+      <div className="ff-glass-pane h-64 rounded-[var(--ff-radius-lg)]" />
+      <div className="ff-glass-pane h-48 rounded-[var(--ff-radius-lg)]" />
     </div>
   );
 }

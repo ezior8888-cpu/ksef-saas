@@ -66,6 +66,20 @@ export default function RootLayout({
       data-scroll-behavior="smooth"
       className={`dark ${geistSans.variable} ${geistMono.variable} h-full scroll-smooth antialiased`}
     >
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        {/* Nie @import w globals.css — Tailwind rozwija CSS i @import musi być na początku pliku. */}
+        {/* eslint-disable-next-line @next/next/no-page-custom-font -- App Router; Material Symbols dla dashboardu */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
+        />
+      </head>
       <body className="min-h-screen font-sans antialiased text-foreground">
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <SentryClientInit />

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { Download, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { safeFetch } from '@/lib/client-fetch';
 
 interface AccountantExportButtonsProps {
   tenantId: string;
@@ -21,61 +22,87 @@ export function AccountantExportButtons({
   const [isLoadingKpir, startKpir] = useTransition();
   const [selectedPeriod, setSelectedPeriod] = useState(getPreviousMonth);
 
+  /**
+   * Anulowanie aktywnego pobrania przy unmount / nawigacji w trakcie — bez
+   * tego user który kliknie i od razu opuści widok zostawia wiszące połączenie
+   * na backendzie i pamięci przeglądarki.
+   */
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
+
   const handleExport = (format: 'jpk_fa' | 'kpir_excel') => {
     const transition = format === 'jpk_fa' ? startJpk : startKpir;
 
     transition(async () => {
-      try {
-        const periodStart = `${selectedPeriod}-01`;
-        const periodEnd = getMonthEndIso(selectedPeriod);
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-        const response = await fetch('/api/portal/exports/generate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Accountant-Token': accessToken,
-          },
-          body: JSON.stringify({
-            tenantId,
-            format,
-            periodStart,
-            periodEnd,
-          }),
-        });
+      const periodStart = `${selectedPeriod}-01`;
+      const periodEnd = getMonthEndIso(selectedPeriod);
 
-        if (!response.ok) {
-          let message = `Błąd ${response.status}`;
-          try {
-            const body = (await response.json()) as { error?: string };
-            if (typeof body?.error === 'string' && body.error.length > 0) {
-              message = body.error;
-            }
-          } catch {
-            /* ignore */
-          }
-          toast.error(message);
+      const result = await safeFetch('/api/portal/exports/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Accountant-Token': accessToken,
+        },
+        body: JSON.stringify({
+          tenantId,
+          format,
+          periodStart,
+          periodEnd,
+        }),
+        signal: controller.signal,
+        timeoutMs: 45_000,
+      });
+
+      if (!result.ok) {
+        if (result.kind === 'aborted') return;
+        if (result.kind === 'circuit_open') {
+          toast.warning('Tryb ograniczonej łączności — spróbuj za chwilę.');
           return;
         }
-
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const fallbackExt = format === 'jpk_fa' ? 'xml' : 'xlsx';
-        const filename =
-          response.headers.get('X-Filename') ??
-          `${format}_${selectedPeriod}.${fallbackExt}`;
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        toast.success('Plik pobrany');
-      } catch {
-        toast.error('Błąd pobierania');
+        if (result.kind === 'timeout') {
+          toast.error('Pobieranie trwa zbyt długo — spróbuj ponownie.');
+          return;
+        }
+        if (result.kind === 'network') {
+          toast.error('Brak połączenia — sprawdź sieć i spróbuj ponownie.');
+          return;
+        }
+        let message = `Błąd ${result.status}`;
+        try {
+          const body = (await result.response.json()) as { error?: string };
+          if (typeof body?.error === 'string' && body.error.length > 0) {
+            message = body.error;
+          }
+        } catch {
+          /* ignore */
+        }
+        toast.error(message);
+        return;
       }
+
+      const response = result.response;
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const fallbackExt = format === 'jpk_fa' ? 'xml' : 'xlsx';
+      const filename =
+        response.headers.get('X-Filename') ??
+        `${format}_${selectedPeriod}.${fallbackExt}`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success('Plik pobrany');
     });
   };
 

@@ -10,6 +10,7 @@ import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
   correctionInvoiceSchema,
   type CorrectionInvoiceSchemaIn,
+  type InvoiceLineSchema,
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
 import { calculateLineItem, calculateInvoiceTotals } from '@/lib/xml/invoice-calculator';
@@ -88,6 +89,22 @@ function normalizeBankAccount(raw: string | undefined): string | undefined {
   return raw.replace(/\s+/g, '');
 }
 
+/** Pozycje z faktury pierwotnej (DB) mogą mieć stare stawki (np. zw) — forma korekt dopuszcza wyłącznie pełny zestaw do FA. */
+function vatRateFromDbForCorrectionLine(raw: unknown): InvoiceLineSchema['vatRate'] {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  switch (s) {
+    case '23':
+    case '8':
+    case '5':
+    case '0':
+    case 'oo':
+    case 'np':
+      return s;
+    default:
+      return '23';
+  }
+}
+
 function buyerDataFromParty(bp: BuyerParty): BuyerData {
   if (bp.nip) {
     const b: BuyerB2B = {
@@ -123,7 +140,7 @@ function sellerDataFromParty(sp: SellerParty): SellerData {
 async function fetchParentInvoiceLines(
   supabase: SupabaseClient,
   invoiceId: string,
-): Promise<InvoiceLine[]> {
+): Promise<InvoiceLineSchema[]> {
   const { data, error } = await supabase
     .from('invoice_line_items')
     .select('name, unit, quantity, unit_price_net, vat_rate')
@@ -139,7 +156,7 @@ async function fetchParentInvoiceLines(
     unit: row.unit ?? 'szt',
     quantity: Number(row.quantity) || 0,
     unitPriceNet: Number(row.unit_price_net) || 0,
-    vatRate: (row.vat_rate ?? '23') as InvoiceLine['vatRate'],
+    vatRate: vatRateFromDbForCorrectionLine(row.vat_rate),
   }));
 }
 
@@ -176,6 +193,7 @@ function buildCorrectionEnvelope(parsed: CorrectionInvoiceSchemaIn): CorrectionI
     parentInvoiceIssueDate: parsed.parentInvoiceIssueDate,
     correctionType: parsed.correctionType,
     correctionReason: parsed.correctionReason,
+    typKorekty: parsed.typKorekty,
     linesBefore: parsed.linesBefore,
     linesAfter: parsed.linesAfter,
     amountChange: parsed.amountChange,

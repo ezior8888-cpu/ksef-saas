@@ -141,11 +141,12 @@ function toPreparedLineItems(lines: InvoiceLine[]): InvoiceLineItem[] {
 }
 
 /**
- * MF `TTypKorekty`: 1 pierwotna data VAT / 2 data korekty / 3 „inna”.
- * MVP domyślnie „2” (skutek w dacie wystawienia faktury korygującej).
+ * MF `TTypKorekty`: 1 pierwotny okres VAT / 2 data korekty / 3 inna.
+ * Wartość podawana z formularza (`CorrectionInvoiceData.typKorekty`).
  */
-function typKorektyNumber(): '1' | '2' | '3' {
-  return '2';
+function typKorektyFromData(data: CorrectionInvoiceData): '1' | '2' | '3' {
+  const t = data.typKorekty;
+  return t === '1' || t === '2' || t === '3' ? t : '2';
 }
 
 function emitVatSummaries(fa: XMLBuilder, summaries: ReturnType<typeof summarizeVatPerRate>): void {
@@ -388,7 +389,7 @@ export function generateCorrectionInvoiceXml(
   fa.ele('RodzajFaktury').txt('KOR');
 
   fa.ele('PrzyczynaKorekty').txt(requireText(data.correctionReason, 'correctionReason'));
-  fa.ele('TypKorekty').txt(typKorektyNumber());
+  fa.ele('TypKorekty').txt(typKorektyFromData(data));
 
   const daneKor = fa.ele('DaneFaKorygowanej');
   daneKor.ele('DataWystFaKorygowanej').txt(parentIssue);

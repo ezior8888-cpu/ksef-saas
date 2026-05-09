@@ -321,11 +321,18 @@ function buildInvoiceFromForm(
     bankAccount: values.bankAccount || undefined,
   };
 
+  const saleTrim = values.saleDate?.trim();
+  const saleDistinct =
+    saleTrim &&
+    saleTrim !== values.issueDate
+      ? saleTrim
+      : undefined;
+
   return {
     internalNumber: values.internalNumber,
     type: 'VAT',
     issueDate: values.issueDate,
-    saleDate: values.saleDate && values.saleDate.length ? values.saleDate : undefined,
+    saleDate: saleDistinct,
     seller,
     buyer,
     lines,

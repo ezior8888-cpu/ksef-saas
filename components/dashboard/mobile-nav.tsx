@@ -1,7 +1,5 @@
 'use client';
 
-import { Menu } from 'lucide-react';
-
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,16 +16,16 @@ export function MobileNav() {
         <Button
           variant="ghost"
           size="icon"
-          className="rounded-xl lg:hidden"
+          className="rounded-full text-[var(--ff-on-surface)] hover:bg-white/5 lg:hidden"
           aria-label="Menu"
           type="button"
         >
-          <Menu className="h-5 w-5" />
+          <span className="material-symbols-outlined text-[24px]">menu</span>
         </Button>
       </SheetTrigger>
       <SheetContent
         side="left"
-        className="w-[264px] p-4 backdrop-blur-glass-lg bg-glass-white-strong border-r border-glass-border"
+        className="ff-dashboard ff-shell-mobile w-[min(100vw,288px)] p-0"
       >
         <SheetTitle className="sr-only">Nawigacja</SheetTitle>
         <Sidebar drawer />

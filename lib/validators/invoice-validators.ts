@@ -44,7 +44,8 @@ export const invoiceLineSchema = z.object({
   unit: z.string().min(1, 'Jednostka wymagana').max(20),
   quantity: z.number().positive('Ilość musi być dodatnia'),
   unitPriceNet: z.number().min(0, 'Cena nieujemna'),
-  vatRate: z.enum(['23', '8', '5', '0', 'zw', 'oo', 'np']),
+  /** Bez `zw` — brak pól P_19 (podstawa zwolnienia) w generatorze. */
+  vatRate: z.enum(['23', '8', '5', '0', 'oo', 'np']),
   pkwiuCode: z.string().optional(),
   gtuCode: z.string().optional(),
 });
@@ -163,6 +164,9 @@ export const correctionInvoiceSchema = z
 
     correctionType: z.enum(['before_after', 'amount_change', 'cancellation']),
     correctionReason: z.string().min(5, 'Wymagane uzasadnienie min. 5 znaków').max(500),
+
+    /** MF `TTypKorekty`: 1 skutek okres pierwotny / 2 skutek data korekty / 3 inna. */
+    typKorekty: z.enum(['1', '2', '3']).default('2'),
 
     seller: sellerSchema,
     buyer: buyerSchema,

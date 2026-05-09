@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import { Constants, type Tables } from '@/types/database';
 
 /** Wiersz joba + pliki z nested select (historia ręcznych eksportów). */
@@ -84,17 +85,17 @@ export interface ExportsCenterProps {
 
 export function ExportsCenter({ recentJobs }: ExportsCenterProps) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-10 text-[var(--ff-on-surface)]">
       <div>
-        <h1 className="text-4xl font-display font-semibold tracking-tighter-display">
+        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
           Eksport danych księgowych
         </h1>
-        <p className="mt-2 text-muted-foreground">
+        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
           Wygeneruj plik dla księgowego za dowolny okres
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <NewExportForm />
         <RecentExports jobs={recentJobs} />
       </div>
@@ -106,7 +107,7 @@ export function ExportsCenter({ recentJobs }: ExportsCenterProps) {
 // Form: nowy eksport
 // ============================================================================
 
-function NewExportForm() {
+export function NewExportForm() {
   const router = useRouter();
   const [format, setFormat] = useState<ExportFormat>('jpk_fa');
   const [periodStart, setPeriodStart] = useState(getCurrentMonthStart);
@@ -163,18 +164,18 @@ function NewExportForm() {
   };
 
   return (
-    <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
-      <div>
-        <h2 className="text-lg font-display font-semibold tracking-tighter-text">
+    <div className="ff-glass-pane space-y-5 rounded-[var(--ff-radius-lg)] p-7 lg:p-8">
+      <div className="border-b border-white/10 pb-4">
+        <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
           Nowy eksport
         </h2>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="mt-1 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
           Wygeneruj plik za wybrany okres
         </p>
       </div>
 
       <div>
-        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
+        <Label className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
           Format
         </Label>
         <div className="grid grid-cols-2 gap-2">
@@ -184,48 +185,54 @@ function NewExportForm() {
               type="button"
               disabled={isStarting}
               onClick={() => setFormat(value)}
-              className={`text-left p-3 rounded-2xl border transition-all duration-200 ease-apple active:scale-[0.98] disabled:opacity-50 ${
+              className={cn(
+                'rounded-[var(--ff-radius-lg)] border p-3 text-left transition-all duration-200 active:scale-[0.98] disabled:opacity-50',
                 format === value
-                  ? 'bg-foreground/5 border-foreground/30'
-                  : 'bg-glass-white border-glass-border hover:bg-glass-white-strong'
-              }`}
+                  ? 'border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] bg-[color-mix(in_srgb,var(--ff-primary)_12%,transparent)] ring-1 ring-[color-mix(in_srgb,var(--ff-primary)_25%,transparent)]'
+                  : 'border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)] hover:border-white/20 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_7%,transparent)]',
+              )}
             >
-              <p className="font-medium text-sm">{FORMAT_LABELS[value]}</p>
+              <p className="text-[13px] font-bold text-[var(--ff-on-surface)]">
+                {FORMAT_LABELS[value]}
+              </p>
             </button>
           ))}
         </div>
       </div>
 
       <div>
-        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
+        <Label className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
           Okres
         </Label>
 
-        <div className="flex flex-wrap gap-2 mb-3">
+        <div className="mb-3 flex flex-wrap gap-2">
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             type="button"
             disabled={isStarting}
             onClick={setPreviousMonth}
+            className="ff-glass-pane ff-glass-pane-hover border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_40%,transparent)] hover:text-[var(--ff-primary)]"
           >
             Poprzedni miesiąc
           </Button>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             type="button"
             disabled={isStarting}
             onClick={setCurrentMonth}
+            className="ff-glass-pane ff-glass-pane-hover border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_40%,transparent)] hover:text-[var(--ff-primary)]"
           >
             Bieżący miesiąc
           </Button>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             type="button"
             disabled={isStarting}
             onClick={setCurrentQuarter}
+            className="ff-glass-pane ff-glass-pane-hover border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_40%,transparent)] hover:text-[var(--ff-primary)]"
           >
             Kwartał
           </Button>
@@ -233,7 +240,7 @@ function NewExportForm() {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label className="text-xs text-muted-foreground mb-1 block">
+            <Label className="mb-1 block text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
               Od
             </Label>
             <Input
@@ -244,7 +251,7 @@ function NewExportForm() {
             />
           </div>
           <div>
-            <Label className="text-xs text-muted-foreground mb-1 block">
+            <Label className="mb-1 block text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
               Do
             </Label>
             <Input
@@ -258,7 +265,7 @@ function NewExportForm() {
       </div>
 
       <div className="space-y-2">
-        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
           Co dołączyć
         </Label>
 
@@ -283,19 +290,19 @@ function NewExportForm() {
       </div>
 
       <Button
-        variant="glass-primary"
+        variant="outline"
         size="lg"
         type="button"
         onClick={handleStart}
         disabled={
           isStarting || (!includeIssued && !includeReceived)
         }
-        className="w-full"
+        className="ff-glass-pane ff-glass-pane-hover w-full border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--ff-primary)_8%,transparent)] hover:text-[var(--ff-primary)] disabled:opacity-40"
       >
         {isStarting ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         ) : (
-          <FileText className="h-4 w-4 mr-2" />
+          <FileText className="mr-2 h-4 w-4" />
         )}
         Wygeneruj plik
       </Button>
@@ -307,16 +314,20 @@ function NewExportForm() {
 // Recent exports
 // ============================================================================
 
-function RecentExports({ jobs }: { jobs: ManualExportJobWithFiles[] }) {
+export function RecentExports({ jobs }: { jobs: ManualExportJobWithFiles[] }) {
   if (jobs.length === 0) {
     return (
-      <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8">
-        <h2 className="text-lg font-display font-semibold tracking-tighter-text mb-2">
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8">
+        <h2 className="mb-1 text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
           Historia eksportów
         </h2>
         <div className="py-12 text-center">
-          <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
-          <p className="text-sm text-muted-foreground">
+          <div className="mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-primary)_18%,transparent)]">
+            <span className="material-symbols-outlined text-[32px] text-[var(--ff-primary)]">
+              folder_open
+            </span>
+          </div>
+          <p className="mx-auto max-w-sm text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
             Brak eksportów. Wygeneruj pierwszy plik po lewej.
           </p>
         </div>
@@ -325,17 +336,17 @@ function RecentExports({ jobs }: { jobs: ManualExportJobWithFiles[] }) {
   }
 
   return (
-    <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-4">
-      <div>
-        <h2 className="text-lg font-display font-semibold tracking-tighter-text">
+    <div className="ff-glass-pane space-y-4 rounded-[var(--ff-radius-lg)] p-7 lg:p-8">
+      <div className="border-b border-white/10 pb-4">
+        <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
           Historia eksportów
         </h2>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="mt-1 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
           Ostatnie {jobs.length} eksportów
         </p>
       </div>
 
-      <div className="space-y-2 max-h-[600px] overflow-y-auto">
+      <div className="max-h-[600px] space-y-2 overflow-y-auto pr-1">
         {jobs.map((job) => (
           <ExportJobRow key={job.id} job={job} />
         ))}
@@ -386,27 +397,27 @@ function ExportJobRow({ job }: { job: ManualExportJobWithFiles }) {
     completed: {
       icon: CheckCircle2,
       label: 'Gotowe',
-      className: 'text-green-600 dark:text-green-400',
+      className: 'text-emerald-300',
     },
     failed: {
       icon: AlertCircle,
       label: 'Błąd',
-      className: 'text-red-600 dark:text-red-400',
+      className: 'text-red-300',
     },
     generating: {
       icon: Loader2,
       label: 'Generowanie',
-      className: 'text-orange-600 dark:text-orange-400 animate-spin',
+      className: 'text-orange-300 animate-spin',
     },
     pending: {
       icon: Clock,
       label: 'Oczekuje',
-      className: 'text-muted-foreground',
+      className: 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]',
     },
     expired: {
       icon: Clock,
       label: 'Wygasłe',
-      className: 'text-muted-foreground',
+      className: 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]',
     },
   };
 
@@ -416,17 +427,17 @@ function ExportJobRow({ job }: { job: ManualExportJobWithFiles }) {
   const periodLabel = `${formatDate(job.period_start)} — ${formatDate(job.period_end)}`;
 
   return (
-    <div className="flex items-center justify-between p-3 rounded-2xl bg-foreground/2 border border-glass-border/50 hover:bg-foreground/4 transition-colors gap-3">
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+    <div className="ff-glass-pane ff-glass-pane-hover flex items-center justify-between gap-3 rounded-[var(--ff-radius-lg)] border border-white/8 p-3 transition-transform active:scale-[0.99]">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <StatusIcon
-          className={`h-4 w-4 shrink-0 ${statusConfig.className}`}
+          className={cn('h-4 w-4 shrink-0', statusConfig.className)}
           aria-hidden
         />
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm truncate">
+          <p className="truncate text-[14px] font-bold text-[var(--ff-on-surface)]">
             {FORMAT_LABELS[job.format] ?? job.format}
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
             {periodLabel} • {job.invoices_count ?? 0} faktur
           </p>
         </div>
@@ -434,17 +445,17 @@ function ExportJobRow({ job }: { job: ManualExportJobWithFiles }) {
 
       {job.status === 'completed' && file ? (
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
           type="button"
           onClick={handleDownload}
           disabled={isDownloading}
-          className="shrink-0"
+          className="ff-glass-pane ff-glass-pane-hover shrink-0 border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] hover:text-[var(--ff-primary)]"
         >
           {isDownloading ? (
-            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
           ) : (
-            <Download className="h-3.5 w-3.5 mr-1.5" />
+            <Download className="mr-1.5 h-3.5 w-3.5" />
           )}
           Pobierz
         </Button>
@@ -473,18 +484,26 @@ function CheckboxItem({
       type="button"
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="w-full flex items-center gap-2 p-2 rounded-xl hover:bg-foreground/2 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+      className="flex w-full items-center gap-3 rounded-[var(--ff-radius-lg)] border border-transparent p-2.5 text-left transition-colors hover:border-white/10 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)] disabled:pointer-events-none disabled:opacity-50"
     >
       <div
-        className={`h-4 w-4 rounded border-2 flex items-center justify-center shrink-0 ${
-          checked ? 'bg-foreground border-foreground' : 'border-foreground/20'
-        }`}
+        className={cn(
+          'flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors',
+          checked
+            ? 'border-[var(--ff-primary)] bg-[color-mix(in_srgb,var(--ff-primary)_22%,transparent)]'
+            : 'border-white/20 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]',
+        )}
       >
         {checked ? (
-          <CheckCircle2 className="h-2.5 w-2.5 text-background" aria-hidden />
+          <CheckCircle2
+            className="h-3 w-3 text-[var(--ff-primary)]"
+            aria-hidden
+          />
         ) : null}
       </div>
-      <span className="text-sm">{label}</span>
+      <span className="text-[14px] font-medium text-[var(--ff-on-surface)]">
+        {label}
+      </span>
     </button>
   );
 }

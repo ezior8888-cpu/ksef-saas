@@ -2,14 +2,10 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  ExternalLink,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, ExternalLink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
 
 export type KpirExpenseRow = Database['public']['Tables']['expenses']['Row'];
@@ -48,6 +44,29 @@ function buyerName(buyerData: KpirInvoiceRow['buyer_data']): string {
   const name = (buyerData as Record<string, unknown>).name;
   return typeof name === 'string' && name.trim() ? name : '—';
 }
+
+function formatPlMoney(n: number): string {
+  return n.toLocaleString('pl-PL', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatPlDate(iso: string): string {
+  const day = iso.slice(0, 10);
+  const [y, m, dd] = day.split('-').map(Number);
+  if (!y || !m || !dd) return iso;
+  return new Date(y, m - 1, dd).toLocaleDateString('pl-PL');
+}
+
+const navIconBtn =
+  'ff-glass-pane ff-glass-pane-hover size-10 shrink-0 border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_40%,transparent)] hover:text-[var(--ff-primary)]';
+
+const exportBtnClass =
+  'ff-glass-pane ff-glass-pane-hover border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--ff-primary)_8%,transparent)] hover:text-[var(--ff-primary)]';
+
+const tableLinkClass =
+  'inline-flex text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] transition-colors hover:text-[var(--ff-primary)]';
 
 export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
   const router = useRouter();
@@ -90,29 +109,41 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-display text-4xl font-semibold tracking-tighter-display">
+        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
           Książka Przychodów i Rozchodów
         </h1>
-        <p className="mt-2 text-muted-foreground">
+        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
           Automatycznie generowana z faktur i wydatków
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <Button variant="glass" size="icon" onClick={() => navigate(-1)}>
+          <Button
+            variant="outline"
+            size="icon"
+            className={navIconBtn}
+            onClick={() => navigate(-1)}
+            aria-label="Poprzedni miesiąc"
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="min-w-[160px] rounded-2xl border border-glass-border bg-glass-white px-4 py-2.5 text-center backdrop-blur-glass">
-            <p className="font-display font-semibold">
+          <div className="ff-glass-pane min-w-[180px] rounded-[var(--ff-radius-lg)] px-5 py-3 text-center">
+            <p className="text-[15px] font-bold text-[var(--ff-on-surface)]">
               {monthLabel} {year}
             </p>
           </div>
-          <Button variant="glass" size="icon" onClick={() => navigate(1)}>
+          <Button
+            variant="outline"
+            size="icon"
+            className={navIconBtn}
+            onClick={() => navigate(1)}
+            aria-label="Następny miesiąc"
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <Button variant="glass-primary" size="lg" asChild>
+        <Button variant="outline" size="lg" asChild className={exportBtnClass}>
           <Link href={exportHref}>
             <Download className="mr-2 h-4 w-4" />
             Eksport KPiR
@@ -120,34 +151,36 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-[var(--ff-gutter)] md:grid-cols-3">
         <SummaryCard
           label="Przychody"
           value={totalRevenue}
-          className="border-green-500/20 bg-green-500/5"
+          className="border-emerald-400/20 bg-[color-mix(in_srgb,#34d399_10%,transparent)]"
         />
         <SummaryCard
           label="Wydatki"
           value={totalExpenses}
-          className="border-red-500/20 bg-red-500/5"
+          className="border-red-400/20 bg-[color-mix(in_srgb,#f87171_10%,transparent)]"
         />
         <SummaryCard
           label={profit >= 0 ? 'Dochód' : 'Strata'}
           value={profit}
           className={
             profit >= 0
-              ? 'border-blue-500/20 bg-blue-500/5'
-              : 'border-orange-500/20 bg-orange-500/5'
+              ? 'border-[color-mix(in_srgb,var(--ff-primary)_35%,transparent)] bg-[color-mix(in_srgb,var(--ff-primary)_10%,transparent)]'
+              : 'border-orange-400/25 bg-[color-mix(in_srgb,#fb923c_12%,transparent)]'
           }
           highlight
         />
       </div>
 
-      <section className="rounded-3xl border border-glass-border bg-glass-white p-7 shadow-glass backdrop-blur-glass">
-        <h2 className="mb-4 font-display text-lg font-semibold tracking-tighter-text">
-          Wydatki według kolumn KPiR
-        </h2>
-        <div className="space-y-2">
+      <section className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 sm:p-8">
+        <div className="mb-5 border-b border-white/10 pb-4">
+          <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
+            Wydatki według kolumn KPiR
+          </h2>
+        </div>
+        <div className="space-y-1">
           <KpirRow
             label="Kol. 10 — Towary handlowe i materiały"
             sum={sums.col_10}
@@ -156,133 +189,154 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
           <KpirRow label="Kol. 12 — Wynagrodzenia" sum={sums.col_12} />
           <KpirRow label="Kol. 13 — Pozostałe wydatki" sum={sums.col_13} />
           <KpirRow label="Kol. 15 — Koszty B+R" sum={sums.col_15} />
-          <div className="mt-3 flex items-center justify-between border-t-2 border-glass-border/80 pt-3">
-            <span className="font-medium">Razem (kol. 14)</span>
-            <span className="text-base font-bold tabular-nums">
-              {totalExpenses.toFixed(2)} PLN
+          <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
+            <span className="text-[14px] font-bold text-[var(--ff-on-surface)]">
+              Razem (kol. 14)
+            </span>
+            <span className="text-right text-[16px] font-bold tabular-nums text-[var(--ff-on-surface)]">
+              {formatPlMoney(totalExpenses)}{' '}
+              <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+                PLN
+              </span>
             </span>
           </div>
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-3xl border border-glass-border bg-glass-white shadow-glass backdrop-blur-glass">
-        <div className="p-6 pb-3">
-          <h2 className="font-display text-lg font-semibold tracking-tighter-text">
+      <section className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
+        <div className="border-b border-white/10 px-6 py-5 sm:px-8">
+          <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
             Przychody (kol. 7–8) — {invoices.length} faktur
           </h2>
         </div>
         {invoices.length === 0 ? (
-          <p className="px-6 pb-6 text-sm text-muted-foreground">
+          <p className="px-6 py-10 pb-8 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
             Brak przychodów w tym okresie
           </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="border-b border-glass-border bg-foreground/3">
-              <tr className="text-left">
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Data
-                </th>
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Numer
-                </th>
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Nabywca
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Netto
-                </th>
-                <th className="w-10 px-6 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv) => (
-                <tr
-                  key={inv.id}
-                  className="border-b border-glass-border/50 last:border-0 hover:bg-foreground/2"
-                >
-                  <td className="px-6 py-3">{inv.issue_date}</td>
-                  <td className="px-6 py-3 font-mono text-xs">
-                    {inv.internal_number ?? '—'}
-                  </td>
-                  <td className="px-6 py-3">{buyerName(inv.buyer_data)}</td>
-                  <td className="px-6 py-3 text-right font-medium tabular-nums">
-                    {Number(inv.net_total ?? 0).toFixed(2)}
-                  </td>
-                  <td className="px-6 py-3">
-                    <Link
-                      href={`/invoices/${inv.id}`}
-                      className="inline-flex text-muted-foreground hover:text-foreground"
-                      aria-label="Szczegóły faktury"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Link>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-[14px]">
+              <thead>
+                <tr className="border-b border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
+                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                    Data
+                  </th>
+                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                    Numer
+                  </th>
+                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                    Nabywca
+                  </th>
+                  <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                    Netto
+                  </th>
+                  <th className="w-12 px-6 py-3.5 sm:px-8" aria-hidden />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {invoices.map((inv) => (
+                  <tr
+                    key={inv.id}
+                    className="border-b border-white/6 transition-colors last:border-0 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]"
+                  >
+                    <td className="px-6 py-3.5 text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_70%,transparent)] sm:px-8">
+                      {formatPlDate(inv.issue_date)}
+                    </td>
+                    <td className="px-6 py-3.5 font-mono text-[13px] sm:px-8">
+                      {inv.internal_number ?? '—'}
+                    </td>
+                    <td className="px-6 py-3.5 font-medium text-[var(--ff-on-surface)] sm:px-8">
+                      {buyerName(inv.buyer_data)}
+                    </td>
+                    <td className="px-6 py-3.5 text-right font-semibold tabular-nums text-[var(--ff-on-surface)] sm:px-8">
+                      {formatPlMoney(Number(inv.net_total ?? 0))}{' '}
+                      <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+                        PLN
+                      </span>
+                    </td>
+                    <td className="px-6 py-3.5 sm:px-8">
+                      <Link
+                        href={`/invoices/${inv.id}`}
+                        className={tableLinkClass}
+                        aria-label="Szczegóły faktury"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
-      <section className="overflow-hidden rounded-3xl border border-glass-border bg-glass-white shadow-glass backdrop-blur-glass">
-        <div className="p-6 pb-3">
-          <h2 className="font-display text-lg font-semibold tracking-tighter-text">
+      <section className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
+        <div className="border-b border-white/10 px-6 py-5 sm:px-8">
+          <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
             Wydatki (kol. 10–15) — {expenses.length} pozycji
           </h2>
         </div>
         {expenses.length === 0 ? (
-          <p className="px-6 pb-6 text-sm text-muted-foreground">
+          <p className="px-6 py-10 pb-8 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
             Brak wydatków w tym okresie
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-glass-border bg-foreground/3">
-                <tr className="text-left">
-                  <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <table className="w-full min-w-[720px] text-left text-[14px]">
+              <thead>
+                <tr className="border-b border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
+                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
                     Data
                   </th>
-                  <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
                     Sprzedawca
                   </th>
-                  <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
                     Kategoria
                   </th>
-                  <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
                     Kol.
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
                     Netto
                   </th>
-                  <th className="w-10 px-6 py-3" />
+                  <th className="w-12 px-6 py-3.5 sm:px-8" aria-hidden />
                 </tr>
               </thead>
               <tbody>
                 {expenses.map((exp) => (
                   <tr
                     key={exp.id}
-                    className="border-b border-glass-border/50 last:border-0 hover:bg-foreground/2"
+                    className="border-b border-white/6 transition-colors last:border-0 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]"
                   >
-                    <td className="px-6 py-3">{exp.issue_date}</td>
-                    <td className="px-6 py-3">
-                      <p className="max-w-[200px] truncate">{exp.seller_name}</p>
-                      <p className="font-mono text-xs text-muted-foreground">
+                    <td className="px-6 py-3.5 text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_70%,transparent)] sm:px-8">
+                      {formatPlDate(exp.issue_date)}
+                    </td>
+                    <td className="px-6 py-3.5 sm:px-8">
+                      <p className="max-w-[220px] truncate font-medium text-[var(--ff-on-surface)]">
+                        {exp.seller_name}
+                      </p>
+                      <p className="font-mono text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_50%,transparent)]">
                         {exp.document_number ?? '—'}
                       </p>
                     </td>
-                    <td className="px-6 py-3">
+                    <td className="px-6 py-3.5 text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_75%,transparent)] sm:px-8">
                       {exp.category_label ?? '—'}
                     </td>
-                    <td className="px-6 py-3 font-mono text-xs">
+                    <td className="px-6 py-3.5 font-mono text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_70%,transparent)] sm:px-8">
                       {exp.kpir_column?.replace('col_', '') ?? '—'}
                     </td>
-                    <td className="px-6 py-3 text-right font-medium tabular-nums">
-                      {Number(exp.net_amount ?? 0).toFixed(2)}
+                    <td className="px-6 py-3.5 text-right font-semibold tabular-nums text-[var(--ff-on-surface)] sm:px-8">
+                      {formatPlMoney(Number(exp.net_amount ?? 0))}{' '}
+                      <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+                        PLN
+                      </span>
                     </td>
-                    <td className="px-6 py-3">
+                    <td className="px-6 py-3.5 sm:px-8">
                       <Link
                         href={`/expenses/${exp.id}`}
-                        className="inline-flex text-muted-foreground hover:text-foreground"
+                        className={tableLinkClass}
                         aria-label="Szczegóły wydatku"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
@@ -311,18 +365,27 @@ function SummaryCard({
   highlight?: boolean;
 }) {
   return (
-    <div className={`rounded-3xl border p-5 backdrop-blur-glass ${className}`}>
-      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+    <div
+      className={cn(
+        'ff-glass-pane ff-glass-pane-hover rounded-[var(--ff-radius-lg)] border p-6',
+        className,
+      )}
+    >
+      <p className="text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
         {label}
       </p>
       <p
-        className={`mt-2 tabular-nums ${
+        className={cn(
+          'mt-3 tabular-nums text-[var(--ff-on-surface)]',
           highlight
-            ? 'font-display text-3xl font-bold tracking-tighter-display'
-            : 'text-2xl font-semibold'
-        }`}
+            ? 'text-[40px] font-bold leading-none tracking-[-0.02em]'
+            : 'text-[28px] font-bold leading-none',
+        )}
       >
-        {value.toFixed(2)} PLN
+        {formatPlMoney(value)}{' '}
+        <span className="text-[12px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+          PLN
+        </span>
       </p>
     </div>
   );
@@ -330,9 +393,16 @@ function SummaryCard({
 
 function KpirRow({ label, sum }: { label: string; sum: number }) {
   return (
-    <div className="flex items-center justify-between py-2">
-      <span className="text-sm">{label}</span>
-      <span className="font-medium tabular-nums">{sum.toFixed(2)} PLN</span>
+    <div className="flex items-center justify-between gap-4 rounded-lg py-2.5 pl-1 pr-1 transition-colors hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
+      <span className="text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_85%,transparent)]">
+        {label}
+      </span>
+      <span className="shrink-0 text-right text-[14px] font-semibold tabular-nums text-[var(--ff-on-surface)]">
+        {formatPlMoney(sum)}{' '}
+        <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+          PLN
+        </span>
+      </span>
     </div>
   );
 }

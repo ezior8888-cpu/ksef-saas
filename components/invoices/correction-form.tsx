@@ -80,6 +80,15 @@ function buyerLabel(buyer: unknown): string {
   return '—';
 }
 
+/** Etykiety MF `TypKorekty` (1–3) — uproszczony opis dla użytkownika. */
+const TYPOLOGY_KOREKTY_LABELS = {
+  '1':
+    '1 — Skutek w okresie pierwotnym (np. wyższa podstawa w dawnym okresie rozliczenia)',
+  '2':
+    '2 — Skutek w dacie tej korekty — najczęstszy (rabat, zwrot, korekta błędu kwot)',
+  '3': '3 — Inna przyczyna (skonsultuj z księgowym lub doradcą podatkowym)',
+} satisfies Record<'1' | '2' | '3', string>;
+
 export interface CorrectionInvoiceFormProps {
   parentInvoices: CorrectionParentInvoiceRow[];
   preselectedParentId?: string;
@@ -111,6 +120,7 @@ function correctionDataFromForm(v: CorrectionFormParsed): CorrectionInvoiceData 
     parentKsefNumber: v.parentKsefNumber,
     correctionType: v.correctionType,
     correctionReason: v.correctionReason,
+    typKorekty: v.typKorekty,
     linesBefore: v.linesBefore,
     linesAfter: v.linesAfter,
     amountChange: v.amountChange,
@@ -137,6 +147,7 @@ function buildDefaultCorrectionFormValues(
 
     correctionType: 'before_after',
     correctionReason: '',
+    typKorekty: '2',
 
     seller: ctx.seller,
     buyer: ctx.buyer,
@@ -442,6 +453,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFill
   });
 
   const correctionType = useWatch({ control: form.control, name: 'correctionType' });
+  const typKorekty = useWatch({ control: form.control, name: 'typKorekty' }) ?? '2';
 
   const handleCorrectionTypeChange = (value: CorrectionFormParsed['correctionType']) => {
     form.setValue('correctionType', value);
@@ -576,6 +588,38 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFill
         </div>
 
         <div>
+          <Label className={labelClass}>Typ KSeF (skutek w czasie)</Label>
+          <Select
+            value={typKorekty}
+            onValueChange={(v) =>
+              form.setValue(
+                'typKorekty',
+                v as CorrectionFormParsed['typKorekty'],
+                { shouldDirty: true },
+              )
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Typ" />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.entries(TYPOLOGY_KOREKTY_LABELS) as [CorrectionFormParsed['typKorekty'], string][]).map(
+                ([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ),
+              )}
+            </SelectContent>
+          </Select>
+          {form.formState.errors.typKorekty ? (
+            <p className="mt-1 text-xs text-red-600">
+              {form.formState.errors.typKorekty.message}
+            </p>
+          ) : null}
+        </div>
+
+        <div>
           <Label className={labelClass}>Przyczyna korekty (obowiązkowe)</Label>
           <Textarea
             rows={2}
@@ -670,8 +714,8 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFill
         </p>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/55 bg-white/62 px-6 py-4 backdrop-blur-[40px] dark:border-white/10 dark:bg-[rgba(15,10,30,0.62)] lg:left-[280px]">
-        <div className="mx-auto flex max-w-7xl justify-end gap-3">
+      <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-30 px-6 py-4 lg:left-[280px]">
+        <div className="mx-auto flex max-w-7xl justify-end gap-3 pointer-events-auto">
           <Button type="button" variant="glass" size="lg" onClick={handleSaveDraft} disabled={busy}>
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Zapisz szkic
@@ -787,7 +831,6 @@ function CorrectionLinesTable(props: {
                       <option value="8">8%</option>
                       <option value="5">5%</option>
                       <option value="0">0%</option>
-                      <option value="zw">zw</option>
                       <option value="oo">oo</option>
                       <option value="np">np</option>
                     </select>

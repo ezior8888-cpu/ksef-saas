@@ -89,7 +89,8 @@ export interface InvoiceLine {
   unit: string; // 'szt.', 'godz.', 'kg', 'mb'
   quantity: number;
   unitPriceNet: number;
-  vatRate: '23' | '8' | '5' | '0' | 'zw' | 'oo' | 'np';
+  /** `zw` tylko z danych historycznych; nowe formularze nie emitują (wymaga P_19). */
+  vatRate: '23' | '8' | '5' | '0' | 'oo' | 'np' | 'zw';
   pkwiuCode?: string;
   gtuCode?: string;
 }
@@ -119,6 +120,9 @@ export interface CorrectionInvoiceData extends InvoiceCommonFields {
 
   correctionType: CorrectionType;
   correctionReason: string; // wymagane! np. "Błąd w nazwie nabywcy", "Zwrot towaru"
+
+  /** FA(3) `TypKorekty`: 1 / 2 / 3 (domyślnie „2”). */
+  typKorekty?: '1' | '2' | '3';
 
   seller: SellerData;
   buyer: BuyerData;

@@ -86,6 +86,16 @@ const PROD_ONLY_HEADERS: { key: string; value: string }[] = [
 const nextConfig: NextConfig = {
   pageExtensions: ['ts', 'tsx', 'js', 'jsx', 'md', 'mdx'],
 
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+        pathname: '/**',
+      },
+    ],
+  },
+
   // `xmllint-wasm` ładuje plik `xmllint.wasm` z fizycznego node_modules przez
   // `fs.readFileSync` + `import.meta.url`. Gdy Turbopack bundluje kod serwerowy,
   // tłumaczy ścieżki modułów na wirtualne `/ROOT/...`, przez co WASM nie da się

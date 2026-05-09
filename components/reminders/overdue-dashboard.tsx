@@ -3,23 +3,14 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
-import {
-  AlertCircle,
-  Clock,
-  Loader2,
-  Mail,
-  Pause,
-  Play,
-  Send,
-  TrendingUp,
-} from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
   toggleInvoiceRemindersAction,
   triggerManualReminderAction,
 } from '@/app/actions/reminders';
-import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export interface OverdueInvoice {
   id: string;
@@ -44,101 +35,150 @@ interface Props {
   };
 }
 
+function formatPlMoney(n: number): string {
+  return n.toLocaleString('pl-PL', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatPlInt(n: number): string {
+  return n.toLocaleString('pl-PL', { maximumFractionDigits: 0 });
+}
+
 export function OverdueDashboard({ overdueInvoices, stats }: Props) {
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-display font-semibold tracking-tighter-display">
+    <div className="pb-10 text-[var(--ff-on-surface)]">
+      <div className="mb-10">
+        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
           Przeterminowane
         </h1>
-        <p className="mt-2 text-muted-foreground">
-          Faktury po terminie płatności • Wkurzacz Dłużników aktywny
+        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+          Faktury po terminie płatności • przypomnienia e-mail
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="space-y-3 rounded-3xl border border-glass-border bg-glass-white p-6 shadow-glass backdrop-blur-glass">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/10">
-            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="mb-[var(--ff-gutter)] grid grid-cols-1 gap-[var(--ff-gutter)] md:grid-cols-3">
+        <div className="ff-glass-pane ff-glass-pane-hover group relative overflow-hidden rounded-[var(--ff-radius-lg)] p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,#f87171_22%,transparent)]">
+              <span className="material-symbols-outlined text-[22px] text-red-300">
+                error
+              </span>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]">
               Liczba przeterminowanych
-            </p>
-            <p className="mt-1 font-display text-3xl font-semibold tabular-nums tracking-tighter-display">
-              {stats.totalCount}
-            </p>
+            </span>
+          </div>
+          <p className="text-[48px] font-bold leading-none tabular-nums">
+            {formatPlInt(stats.totalCount)}
+          </p>
+          <p className="mt-2 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_45%,transparent)]">
+            Wymagają działania lub opłacenia
+          </p>
+          <div className="pointer-events-none absolute -bottom-4 -right-4 opacity-[0.06] transition-opacity group-hover:opacity-[0.1]">
+            <span className="material-symbols-outlined text-[120px] leading-none">
+              receipt_long
+            </span>
           </div>
         </div>
 
-        <div className="space-y-3 rounded-3xl border border-glass-border bg-glass-white p-6 shadow-glass backdrop-blur-glass">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-orange-500/10">
-            <TrendingUp className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <div className="ff-glass-pane ff-glass-pane-hover group relative overflow-hidden rounded-[var(--ff-radius-lg)] p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-secondary)_20%,transparent)]">
+              <span className="material-symbols-outlined text-[22px] text-[var(--ff-secondary)]">
+                payments
+              </span>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]">
               Suma do odzyskania
-            </p>
-            <p className="mt-1 font-display text-3xl font-semibold tabular-nums tracking-tighter-display">
-              {stats.totalAmount.toFixed(2)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">PLN</p>
+            </span>
           </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[32px] font-bold leading-none tabular-nums">
+              {formatPlMoney(stats.totalAmount)}
+            </span>
+            <span className="text-sm font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_85%,transparent)]">
+              PLN
+            </span>
+          </div>
+          <p className="mt-2 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_45%,transparent)]">
+            Kwoty „do zapłaty” z widoku
+          </p>
         </div>
 
-        <div className="space-y-3 rounded-3xl border border-glass-border bg-glass-white p-6 shadow-glass backdrop-blur-glass">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/10">
-            <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+        <div className="ff-glass-pane ff-glass-pane-hover relative overflow-hidden rounded-[var(--ff-radius-lg)] p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-tertiary)_18%,transparent)]">
+              <span className="material-symbols-outlined text-[22px] text-[var(--ff-tertiary)]">
+                schedule
+              </span>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]">
+              Średnie opóźnienie
+            </span>
           </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Średnie opóźnienie (DSO)
-            </p>
-            <p className="mt-1 font-display text-3xl font-semibold tabular-nums tracking-tighter-display">
-              {stats.avgDaysOverdue}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">dni</p>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[48px] font-bold leading-none tabular-nums">
+              {formatPlInt(stats.avgDaysOverdue)}
+            </span>
+            <span className="text-sm font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_85%,transparent)]">
+              dni
+            </span>
           </div>
+          <p className="mt-2 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_45%,transparent)]">
+            Średnia z bieżącej listy (DSO)
+          </p>
         </div>
       </div>
 
       {overdueInvoices.length === 0 ? (
-        <div className="rounded-3xl border border-glass-border bg-glass-white py-16 text-center shadow-glass backdrop-blur-glass">
-          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/10">
-            <AlertCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] px-8 py-16 text-center">
+          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-primary)_18%,transparent)]">
+            <span className="material-symbols-outlined text-[32px] text-[var(--ff-primary)]">
+              check_circle
+            </span>
           </div>
-          <h3 className="mb-1 font-display text-lg font-semibold tracking-tighter-text">
-            Wszystkie faktury opłacone w terminie!
+          <h3 className="mb-2 text-xl font-bold tracking-tight">
+            Wszystkie faktury opłacone w terminie
           </h3>
-          <p className="text-sm text-muted-foreground">
-            Świetna robota — żadnych zaległych płatności
+          <p className="mx-auto max-w-md text-[15px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+            Brak pozycji po terminie — gdy pojawią się zaległości, zobaczysz je w
+            tabeli poniżej.
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-3xl border border-glass-border bg-glass-white shadow-glass backdrop-blur-glass">
+        <div className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
+          <div className="border-b border-white/10 px-6 py-5 sm:px-8">
+            <h2 className="text-xl font-bold tracking-tight">Lista zaległości</h2>
+            <p className="mt-1 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+              {formatPlInt(overdueInvoices.length)} pozycji (max. 100) • sortowanie
+              wg dni po terminie
+            </p>
+          </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-sm">
-              <thead className="border-b border-glass-border bg-foreground/3">
-                <tr className="text-left">
-                  <th className="px-6 py-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <table className="w-full min-w-[880px] text-left text-[14px]">
+              <thead>
+                <tr className="border-b border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
+                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
                     Faktura
                   </th>
-                  <th className="px-6 py-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
                     Nabywca
                   </th>
-                  <th className="px-6 py-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
                     Termin
                   </th>
-                  <th className="px-6 py-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
                     Opóźnienie
                   </th>
-                  <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
                     Do zapłaty
                   </th>
-                  <th className="px-6 py-4 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <th className="px-6 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
                     Wysłane
                   </th>
-                  <th className="px-6 py-4" aria-hidden />
+                  <th className="px-6 py-3.5 sm:px-8" aria-hidden />
                 </tr>
               </thead>
               <tbody>
@@ -206,89 +246,111 @@ function OverdueRow({ invoice }: { invoice: OverdueInvoice }) {
       )
     : '—';
 
+  const badgeClass =
+    severity === 'critical'
+      ? 'border-red-400/25 bg-[color-mix(in_srgb,#f87171_14%,transparent)] text-red-200'
+      : severity === 'high'
+        ? 'border-[color-mix(in_srgb,var(--ff-secondary)_35%,transparent)] bg-[color-mix(in_srgb,var(--ff-secondary)_12%,transparent)] text-[var(--ff-secondary)]'
+        : severity === 'medium'
+          ? 'border-amber-400/25 bg-amber-500/10 text-amber-200'
+          : 'border-white/10 bg-white/5 text-[color-mix(in_srgb,var(--ff-on-surface-variant)_85%,transparent)]';
+
+  const iconBtn =
+    'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_6%,transparent)] text-[var(--ff-on-surface)] transition-colors hover:border-white/20 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] disabled:pointer-events-none disabled:opacity-40';
+
   return (
-    <tr className="border-b border-glass-border/50 transition-colors last:border-0 hover:bg-foreground/2">
-      <td className="px-6 py-4">
+    <tr className="border-b border-white/6 transition-colors last:border-0 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
+      <td className="px-6 py-4 sm:px-8">
         <Link
           href={`/invoices/${invoice.id}`}
-          className="font-mono text-sm font-medium transition-colors hover:text-accent"
+          className="font-mono text-[14px] font-semibold text-[var(--ff-primary)] underline-offset-2 hover:underline"
         >
           {invoice.internal_number || '—'}
         </Link>
       </td>
-      <td className="px-6 py-4">
-        <div className="font-medium">{invoice.buyer_name || '—'}</div>
+      <td className="px-6 py-4 sm:px-8">
+        <div className="font-medium text-[var(--ff-on-surface)]">
+          {invoice.buyer_name || '—'}
+        </div>
         {invoice.buyer_nip ? (
-          <div className="font-mono text-xs text-muted-foreground">
+          <div className="mt-0.5 font-mono text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_50%,transparent)]">
             {invoice.buyer_nip}
           </div>
         ) : null}
       </td>
-      <td className="px-6 py-4 text-xs text-muted-foreground">{dueLabel}</td>
-      <td className="px-6 py-4">
+      <td className="px-6 py-4 text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_65%,transparent)] sm:px-8">
+        {dueLabel}
+      </td>
+      <td className="px-6 py-4 sm:px-8">
         <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium backdrop-blur-glass-sm ${
-            severity === 'critical'
-              ? 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400'
-              : severity === 'high'
-                ? 'border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-400'
-                : severity === 'medium'
-                  ? 'border-yellow-500/20 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'
-                  : 'border-glass-border bg-foreground/5 text-muted-foreground'
-          }`}
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold',
+            badgeClass,
+          )}
         >
           {invoice.days_overdue} dni
         </span>
       </td>
-      <td className="px-6 py-4 text-right font-medium tabular-nums">
-        {Number(invoice.amount_due).toFixed(2)} PLN
+      <td className="px-6 py-4 text-right font-semibold tabular-nums text-[var(--ff-on-surface)] sm:px-8">
+        {formatPlMoney(invoice.amount_due)}{' '}
+        <span className="text-[12px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+          PLN
+        </span>
       </td>
-      <td className="px-6 py-4 text-center">
-        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <Mail className="h-3 w-3 shrink-0" />
+      <td className="px-6 py-4 text-center sm:px-8">
+        <span className="inline-flex items-center justify-center gap-1 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+          <span className="material-symbols-outlined text-[16px] leading-none">
+            mail
+          </span>
           {invoice.reminders_sent_count}/3
         </span>
       </td>
-      <td className="px-6 py-4">
-        <div className="flex items-center justify-end gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
+      <td className="px-6 py-4 sm:px-8">
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            type="button"
             onClick={handleSendReminder}
             disabled={
               isSending ||
               invoice.reminders_paused ||
               !(invoice.buyer_email?.trim())
             }
-            className="h-8 w-8 p-0"
+            className={iconBtn}
             title="Wyślij przypomnienie teraz"
+            aria-label="Wyślij przypomnienie teraz"
           >
             {isSending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             ) : (
-              <Send className="h-3.5 w-3.5" />
+              <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
+                send
+              </span>
             )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
+          </button>
+          <button
+            type="button"
             onClick={handleTogglePause}
             disabled={isPausing}
-            className="h-8 w-8 p-0"
+            className={iconBtn}
             title={
+              invoice.reminders_paused
+                ? 'Wznów przypomnienia'
+                : 'Wstrzymaj przypomnienia'
+            }
+            aria-label={
               invoice.reminders_paused
                 ? 'Wznów przypomnienia'
                 : 'Wstrzymaj przypomnienia'
             }
           >
             {isPausing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : invoice.reminders_paused ? (
-              <Play className="h-3.5 w-3.5" />
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             ) : (
-              <Pause className="h-3.5 w-3.5" />
+              <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
+                {invoice.reminders_paused ? 'play_arrow' : 'pause'}
+              </span>
             )}
-          </Button>
+          </button>
         </div>
       </td>
     </tr>

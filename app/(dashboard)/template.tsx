@@ -1,15 +1,17 @@
-'use client';
-
-import { motion } from 'framer-motion';
-
+/**
+ * Szablon segmentu `(dashboard)` — Next.js remountuje `template` przy każdej
+ * nawigacji między podstronami, więc to idealne miejsce na fade-in.
+ *
+ * Klasa `ff-route-template` (definicja w `app/globals.css`) animuje wyłącznie
+ * `transform` + `opacity` (GPU-compositable, bez layout/paint) przez 220 ms.
+ * Brak `framer-motion`, brak JS — zero kosztu w runtime, jedynie krótki
+ * compositor pass przy mountcie.
+ *
+ * Bezpieczne dla `.ff-glass-pane`, bo karty nie używają już `backdrop-filter`
+ * (animowany `opacity` na rodzicu nie wymusza re-rasteru filtra).
+ */
 export default function Template({ children }: { children: React.ReactNode }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-    >
-      {children}
-    </motion.div>
+    <div className="ff-route-template min-h-0 w-full min-w-0">{children}</div>
   );
 }

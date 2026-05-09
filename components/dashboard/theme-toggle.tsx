@@ -1,9 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Moon, Sun, SunMoon } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { calculateSunTimes, POLAND_CENTER } from '@/lib/utils/sun';
 
 type ThemeMode = 'light' | 'dark' | 'auto';
@@ -24,7 +22,7 @@ function computeTheme(m: ThemeMode): 'light' | 'dark' {
   const { sunrise, sunset } = calculateSunTimes(
     now,
     POLAND_CENTER.lat,
-    POLAND_CENTER.lng
+    POLAND_CENTER.lng,
   );
   return now >= sunrise && now < sunset ? 'light' : 'dark';
 }
@@ -37,7 +35,7 @@ function applyThemeClass(theme: 'light' | 'dark') {
 
 export function ThemeToggle() {
   const [mode, setMode] = useState<ThemeMode>('auto');
-  const [actualTheme, setActualTheme] = useState<'light' | 'dark'>('light');
+  const [actualTheme, setActualTheme] = useState<'light' | 'dark'>('dark');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -77,11 +75,11 @@ export function ThemeToggle() {
   }, []);
 
   if (!mounted) {
-    return <div className="h-11 w-11 shrink-0" aria-hidden />;
+    return <div className="h-10 w-10 shrink-0" aria-hidden />;
   }
 
-  const Icon =
-    mode === 'auto' ? SunMoon : actualTheme === 'light' ? Moon : Sun;
+  const symbol =
+    mode === 'auto' ? 'routine' : actualTheme === 'dark' ? 'light_mode' : 'dark_mode';
   const label =
     mode === 'auto'
       ? 'Auto (zmiana o zachodzie słońca)'
@@ -90,21 +88,22 @@ export function ThemeToggle() {
         : 'Włącz light mode';
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <button
+      type="button"
       onClick={cycleMode}
-      className="relative rounded-full hover:bg-foreground/5"
       aria-label={label}
       title={label}
+      className="relative rounded-full p-2 text-[var(--ff-on-surface)] transition-colors hover:bg-white/5"
     >
-      <Icon className="h-4 w-4" />
+      <span className="material-symbols-outlined text-[22px] leading-none">
+        {symbol}
+      </span>
       {mode === 'auto' ? (
         <span
-          className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-foreground/40"
+          className="pointer-events-none absolute bottom-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-[var(--ff-on-surface)]/40"
           aria-hidden
         />
       ) : null}
-    </Button>
+    </button>
   );
 }

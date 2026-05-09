@@ -14,6 +14,11 @@ import {
   requireOrgRole,
   type UserRole,
 } from '@/lib/supabase/auth-context';
+import {
+  getCachedMembershipRowsWithTenants,
+  getDashboardSessionUser,
+  mapMembershipRowsToOrgSwitcher,
+} from '@/lib/dashboard-shell-data';
 
 /**
  * Wspólny helper ustawiający cookie ksef.active_org. Wywoływany ze Server
@@ -729,6 +734,9 @@ export async function changeMembershipRoleAction(params: {
  * org (admin INSERT), więc user-context z RLS bywa niedeterministyczny przy
  * fresh data. Bezpieczeństwo: filtruję po `auth.getUser()` więc widzimy
  * wyłącznie memberships zalogowanego usera.
+ *
+ * Implementacja deleguje do `lib/dashboard-shell-data` — jedno zapytanie
+ * memberships+tenants na request (cache), bez drugiego `getUser()`.
  */
 export async function listMyOrganizations(): Promise<
   Array<{
@@ -739,40 +747,14 @@ export async function listMyOrganizations(): Promise<
     isActive: boolean;
   }>
 > {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [user, cookieStore] = await Promise.all([
+    getDashboardSessionUser(),
+    cookies(),
+  ]);
   if (!user) return [];
 
-  const cookieStore = await cookies();
   const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value ?? null;
 
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from('memberships')
-    .select(
-      'organization_id, role, status, tenants:organization_id(name, nip)',
-    )
-    .eq('user_id', user.id)
-    .eq('status', 'active');
-
-  type Row = {
-    organization_id: string;
-    role: string;
-    status: string;
-    tenants: { name: string; nip: string } | { name: string; nip: string }[] | null;
-  };
-
-  return ((data ?? []) as Row[]).map((row) => {
-    const t = Array.isArray(row.tenants) ? row.tenants[0] : row.tenants;
-    return {
-      organizationId: row.organization_id,
-      name: t?.name ?? '(bez nazwy)',
-      nip: t?.nip ?? '',
-      role: row.role as UserRole,
-      isActive: row.organization_id === activeOrg,
-    };
-  });
+  const rows = await getCachedMembershipRowsWithTenants(user.id);
+  return mapMembershipRowsToOrgSwitcher(rows, activeOrg);
 }
-

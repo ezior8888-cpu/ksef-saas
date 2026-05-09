@@ -11,6 +11,7 @@ import {
   uploadExpensePhotoAction,
 } from '@/app/actions/expenses';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 type CaptureState =
   | { kind: 'idle' }
@@ -18,7 +19,11 @@ type CaptureState =
   | { kind: 'processing'; jobId: string }
   | { kind: 'failed'; error: string };
 
-export function CaptureButton() {
+export function CaptureButton({
+  triggerClassName,
+}: {
+  triggerClassName?: string;
+} = {}) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -112,10 +117,14 @@ export function CaptureButton() {
   return (
     <>
       <Button
-        variant="glass-primary"
+        variant="outline"
         size="lg"
         onClick={() => setShowSheet(true)}
         disabled={state.kind === 'uploading' || state.kind === 'processing'}
+        className={cn(
+          'ff-glass-pane ff-glass-pane-hover border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--ff-primary)_8%,transparent)] hover:text-[var(--ff-primary)]',
+          triggerClassName,
+        )}
       >
         {state.kind === 'uploading' || state.kind === 'processing' ? (
           <>
@@ -169,17 +178,17 @@ export function CaptureButton() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 z-50 p-4 lg:bottom-8 lg:left-1/2 lg:max-w-md lg:-translate-x-1/2 lg:rounded-3xl"
+              className="fixed bottom-0 left-0 right-0 z-50 p-4 lg:bottom-8 lg:left-1/2 lg:max-w-md lg:-translate-x-1/2 lg:rounded-[var(--ff-radius-lg)]"
             >
-              <div className="space-y-3 rounded-3xl border border-glass-border bg-glass-white-strong p-5 shadow-glass-lg backdrop-blur-glass-lg">
+              <div className="ff-glass-pane space-y-3 rounded-[var(--ff-radius-lg)] p-5">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-display text-lg font-semibold tracking-tighter-text">
+                  <h3 className="text-lg font-bold tracking-tight text-[var(--ff-on-surface)]">
                     Dodaj wydatek
                   </h3>
                   <button
                     type="button"
                     onClick={() => setShowSheet(false)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-foreground/5"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_6%,transparent)] text-[var(--ff-on-surface)] transition-colors hover:bg-white/10"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -188,14 +197,16 @@ export function CaptureButton() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-glass-border bg-glass-white p-4 transition-all duration-200 ease-apple hover:bg-glass-white-strong active:scale-[0.98]"
+                  className="ff-glass-pane ff-glass-pane-hover flex w-full items-center gap-3 rounded-[var(--ff-radius-lg)] border border-white/10 p-4 text-left transition-transform active:scale-[0.99]"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-foreground text-background">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-primary)_22%,transparent)] text-[var(--ff-primary)]">
                     <Camera className="h-5 w-5" />
                   </div>
-                  <div className="flex-1 text-left">
-                    <p className="font-medium">Zrób zdjęcie</p>
-                    <p className="text-xs text-muted-foreground">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-[var(--ff-on-surface)]">
+                      Zrób zdjęcie
+                    </p>
+                    <p className="text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
                       Na telefonie otwiera od razu aparat tylny
                     </p>
                   </div>
@@ -204,20 +215,22 @@ export function CaptureButton() {
                 <button
                   type="button"
                   onClick={() => galleryInputRef.current?.click()}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-glass-border bg-glass-white p-4 transition-all duration-200 ease-apple hover:bg-glass-white-strong active:scale-[0.98]"
+                  className="ff-glass-pane ff-glass-pane-hover flex w-full items-center gap-3 rounded-[var(--ff-radius-lg)] border border-white/10 p-4 text-left transition-transform active:scale-[0.99]"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-foreground/10">
-                    <ImageIcon className="h-5 w-5 text-foreground" />
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_8%,transparent)] text-[var(--ff-on-surface)]">
+                    <ImageIcon className="h-5 w-5" />
                   </div>
-                  <div className="flex-1 text-left">
-                    <p className="font-medium">Wybierz z galerii</p>
-                    <p className="text-xs text-muted-foreground">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-[var(--ff-on-surface)]">
+                      Wybierz z galerii
+                    </p>
+                    <p className="text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
                       Zdjęcie lub PDF z plików
                     </p>
                   </div>
                 </button>
 
-                <p className="pt-2 text-center text-xs text-muted-foreground">
+                <p className="pt-2 text-center text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_50%,transparent)]">
                   Akceptujemy: paragon, faktura VAT, faktura uproszczona. Max 10
                   MB.
                 </p>

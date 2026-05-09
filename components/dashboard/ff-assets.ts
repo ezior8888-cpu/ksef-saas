@@ -1,0 +1,6 @@
+/** Zasoby wizualne z makiety (Google AIDA) — dashboard FaktFlow. */
+export const FF_DASHBOARD_DECOR_IMG =
+  'https://lh3.googleusercontent.com/aida-public/AB6AXuBGwKb8dXkC8fgeoG596DqMXHvAMlglo52db9kwUbIB-wnEtJ1HVYybmUEibWjHqcyxZLhIy_UmxeFP2_BFDoOW8XAqM2ksf-U2ASOUPbKp_6o7qG86HAE9Ll0bi4l0Fp1aMIfOcwJAYbbtgit4_pdgMixLGYIwAGccr33aU5U6r0h6xfowa_SgcJzMm3bUfLddcXr7c6UBn9RO8C6ZFq9Umik3RTXsgkQetpUh4es-w51rDenXknVtmX-ga6rSW8ZDJ4-DOSiH';
+
+export const FF_DASHBOARD_AVATAR_FALLBACK =
+  'https://lh3.googleusercontent.com/aida-public/AB6AXuAfW1az4PiIJCMXazCSG8iC4dIXkL2Gpx39lj6gRJTH0uXXNpatEAi9M15eJE1--qsCsLE8bObpD-80-4XoWEwYL-vAP35yGzIDkzn-3LFpdxhul4pg9tnwDNAl0NsgITeNOXgZvdPkde_UemX8Ea0E5z__Jpg3jrr-jXwRPWoLn54-zNSqRIF1M-tz23DhOroxYr2EXfJ-PVmurU27TNzef9NKYjZfsYSiezelXjwedyEAILz_2SqKYKWd8BooEzERagHaYZLP';

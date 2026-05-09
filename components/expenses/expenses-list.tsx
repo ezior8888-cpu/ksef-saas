@@ -1,49 +1,43 @@
 'use client';
 
 import Link from 'next/link';
-import type { LucideIcon } from 'lucide-react';
-import {
-  AlertCircle,
-  Camera,
-  CheckCircle2,
-  Edit3,
-  Inbox,
-  Upload,
-} from 'lucide-react';
 
 import type { Database } from '@/types/database';
+import { cn } from '@/lib/utils';
 
 export type ExpenseRow = Database['public']['Tables']['expenses']['Row'];
 type ExpenseSource = Database['public']['Enums']['expense_source'];
 
 interface SourceBadgeConfig {
   label: string;
-  icon: LucideIcon;
+  symbol: string;
   className: string;
 }
 
 const SOURCE_LABELS: Record<ExpenseSource, SourceBadgeConfig> = {
   ocr_photo: {
     label: 'Zdjęcie',
-    icon: Camera,
+    symbol: 'photo_camera',
     className:
-      'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
+      'border-blue-400/25 bg-[color-mix(in_srgb,#60a5fa_14%,transparent)] text-blue-200',
   },
   ksef_inbox: {
     label: 'KSeF',
-    icon: Inbox,
+    symbol: 'inbox',
     className:
-      'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20',
+      'border-purple-400/25 bg-[color-mix(in_srgb,#a78bfa_14%,transparent)] text-purple-200',
   },
   manual: {
     label: 'Ręczne',
-    icon: Edit3,
-    className: 'bg-foreground/5 text-muted-foreground border-glass-border',
+    symbol: 'edit',
+    className:
+      'border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_6%,transparent)] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_80%,transparent)]',
   },
   import: {
     label: 'Import',
-    icon: Upload,
-    className: 'bg-foreground/5 text-muted-foreground border-glass-border',
+    symbol: 'upload',
+    className:
+      'border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_6%,transparent)] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_80%,transparent)]',
   },
 };
 
@@ -67,6 +61,13 @@ function kpirShortLabel(col: ExpenseRow['kpir_column']): string {
   return KPIR_LABELS[col] ?? col;
 }
 
+function formatPlMoney(n: number): string {
+  return n.toLocaleString('pl-PL', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export function ExpensesList({
   initialExpenses,
   listVariant = 'month',
@@ -77,16 +78,18 @@ export function ExpensesList({
   if (initialExpenses.length === 0) {
     const unreviewedEmpty = listVariant === 'unreviewed';
     return (
-      <div className="rounded-3xl border border-glass-border bg-glass-white py-16 text-center shadow-glass backdrop-blur-glass">
-        <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-foreground/5">
-          <Camera className="h-6 w-6 text-muted-foreground" />
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] px-8 py-16 text-center">
+        <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-primary)_18%,transparent)]">
+          <span className="material-symbols-outlined text-[32px] text-[var(--ff-primary)]">
+            {unreviewedEmpty ? 'task_alt' : 'receipt_long'}
+          </span>
         </div>
-        <h3 className="mb-1 font-display text-lg font-semibold tracking-tighter-text">
+        <h3 className="mb-2 text-xl font-bold tracking-tight">
           {unreviewedEmpty
             ? 'Brak wydatków do akceptacji'
             : 'Brak wydatków w tym miesiącu'}
         </h3>
-        <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+        <p className="mx-auto max-w-md text-[15px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
           {unreviewedEmpty
             ? 'Wszystkie wydatki są już sprawdzone — świetna robota.'
             : 'Zrób zdjęcie paragonu lub poczekaj aż KSeF dostarczy faktury zakupowe'}
@@ -118,15 +121,18 @@ export function ExpensesList({
         return (
           <div key={date}>
             <div className="mb-3 flex items-baseline justify-between px-1">
-              <h2 className="text-sm font-medium text-muted-foreground">
+              <h2 className="text-[13px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
                 {new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', {
                   weekday: 'long',
                   day: 'numeric',
                   month: 'long',
                 })}
               </h2>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {dailyTotal.toFixed(2)} PLN
+              <span className="tabular-nums text-[13px] font-semibold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_70%,transparent)]">
+                {formatPlMoney(dailyTotal)}{' '}
+                <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_50%,transparent)]">
+                  PLN
+                </span>
               </span>
             </div>
             <div className="space-y-2">
@@ -143,7 +149,6 @@ export function ExpensesList({
 
 function ExpenseRow({ expense }: { expense: ExpenseRow }) {
   const cfg = sourceConfig(expense.source);
-  const SourceIcon = cfg.icon;
   const kpirLabel = kpirShortLabel(expense.kpir_column);
   const needsReview = !expense.is_reviewed;
   const categoryPart = expense.category_label?.trim() || '—';
@@ -151,46 +156,65 @@ function ExpenseRow({ expense }: { expense: ExpenseRow }) {
   return (
     <Link
       href={`/expenses/${expense.id}`}
-      className="block rounded-2xl border border-glass-border bg-glass-white p-4 shadow-glass-sm backdrop-blur-glass transition-all duration-200 ease-apple hover:bg-glass-white-strong"
+      className={cn(
+        'ff-glass-pane ff-glass-pane-hover block rounded-[var(--ff-radius-lg)] p-4 transition-transform duration-200 ease-out hover:scale-[1.005]',
+      )}
     >
       <div className="flex items-start gap-3">
         <div
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-            needsReview ? 'bg-orange-500/10' : 'bg-foreground/5'
-          }`}
+          className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border',
+            needsReview
+              ? 'border-orange-400/25 bg-[color-mix(in_srgb,#fb923c_14%,transparent)]'
+              : 'border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_6%,transparent)]',
+          )}
         >
           {needsReview ? (
-            <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+            <span className="material-symbols-outlined text-[22px] text-orange-200">
+              pending_actions
+            </span>
           ) : (
-            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+            <span className="material-symbols-outlined text-[22px] text-emerald-300">
+              check_circle
+            </span>
           )}
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-start justify-between gap-3">
-            <p className="truncate text-sm font-medium">{expense.seller_name}</p>
-            <p className="shrink-0 text-sm font-medium tabular-nums">
-              {Number(expense.gross_amount).toFixed(2)} PLN
+            <p className="truncate text-[14px] font-semibold text-[var(--ff-on-surface)]">
+              {expense.seller_name}
+            </p>
+            <p className="shrink-0 tabular-nums text-[14px] font-bold text-[var(--ff-on-surface)]">
+              {formatPlMoney(Number(expense.gross_amount))}{' '}
+              <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+                PLN
+              </span>
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-1.5">
               <span
-                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${cfg.className}`}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold',
+                  cfg.className,
+                )}
               >
-                <SourceIcon className="h-3 w-3" />
+                <span className="material-symbols-outlined text-[14px] leading-none">
+                  {cfg.symbol}
+                </span>
                 {cfg.label}
               </span>
-              <span className="inline-flex items-center rounded-full border border-glass-border bg-foreground/5 px-2 py-0.5 text-xs font-medium">
+              <span className="inline-flex items-center rounded-full border border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_5%,transparent)] px-2 py-0.5 text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_85%,transparent)]">
                 {categoryPart} · {kpirLabel}
               </span>
               {needsReview ? (
-                <span className="inline-flex items-center rounded-full border border-orange-500/20 bg-orange-500/10 px-2 py-0.5 text-xs font-medium text-orange-700 dark:text-orange-400">
+                <span className="inline-flex items-center rounded-full border border-orange-400/25 bg-[color-mix(in_srgb,#fb923c_12%,transparent)] px-2 py-0.5 text-[11px] font-bold text-orange-100">
                   Do akceptacji
                 </span>
               ) : null}
             </div>
-            <span className="font-mono text-xs text-muted-foreground">
+            <span className="font-mono text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_50%,transparent)]">
               {expense.document_number ?? '—'}
             </span>
           </div>

@@ -3,7 +3,6 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Building2, Check, ChevronDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { setActiveOrganizationAction } from '@/app/actions/organizations';
@@ -56,39 +55,43 @@ export function OrgSwitcher({
   };
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={isPending}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="flex items-center gap-2 rounded-xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] px-3 py-1.5 text-left hover:bg-white/65 transition-colors disabled:opacity-60"
+        className="ff-glass-pane flex max-w-full cursor-pointer items-center gap-3 rounded-lg border border-white/5 px-4 py-2 text-left transition-colors hover:bg-white/10 disabled:opacity-60"
       >
-        <Building2 className="h-4 w-4 text-muted-foreground" />
-        <div className="hidden sm:block min-w-0">
-          <p className="text-sm font-medium leading-tight truncate max-w-[180px]">
+        <span className="material-symbols-outlined shrink-0 text-[20px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]">
+          business
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[11px] font-bold uppercase leading-none text-[color-mix(in_srgb,var(--ff-on-surface-variant)_95%,transparent)]">
             {activeName}
           </p>
-          <p className="text-[10px] text-muted-foreground font-mono truncate">
+          <p className="mt-0.5 truncate font-mono text-[10px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
             NIP: {activeNip}
           </p>
         </div>
-        <ChevronDown
+        <span
           className={cn(
-            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+            'material-symbols-outlined shrink-0 text-base text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)] transition-transform',
             open && 'rotate-180',
           )}
-        />
+        >
+          expand_more
+        </span>
       </button>
 
       {open ? (
         <div
-          className="absolute right-0 mt-2 w-72 rounded-2xl border border-white/55 dark:border-white/14 bg-white/85 dark:bg-[rgba(20,15,35,0.85)] backdrop-blur-2xl shadow-[0_12px_32px_0_rgba(31,38,135,0.12)] py-2 z-50"
+          className="ff-glass-pane absolute right-0 z-50 mt-2 w-72 rounded-2xl border border-white/10 py-2 shadow-[0_12px_32px_0_rgba(0,0,0,0.45)]"
           role="listbox"
           aria-label="Wybór organizacji"
         >
-          <div className="px-3 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+          <div className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-[color-mix(in_srgb,var(--ff-on-surface-variant)_80%,transparent)]">
             Twoje organizacje
           </div>
           {memberships.map((m) => (
@@ -98,28 +101,34 @@ export function OrgSwitcher({
               role="option"
               aria-selected={m.isActive}
               onClick={() => handleSwitch(m.organizationId)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-foreground/5 transition-colors"
+              className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-white/5"
             >
-              <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="material-symbols-outlined shrink-0 text-[20px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]">
+                business
+              </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{m.name}</p>
-                <p className="text-[10px] text-muted-foreground font-mono">
+                <p className="truncate text-sm font-medium text-[var(--ff-on-surface)]">
+                  {m.name}
+                </p>
+                <p className="truncate font-mono text-[10px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_70%,transparent)]">
                   NIP: {m.nip} · {ROLE_LABEL[m.role]}
                 </p>
               </div>
               {m.isActive ? (
-                <Check className="h-4 w-4 text-foreground" />
+                <span className="material-symbols-outlined shrink-0 text-[20px] text-[var(--ff-primary)]">
+                  check
+                </span>
               ) : null}
             </button>
           ))}
-          <div className="border-t border-foreground/5 mt-1 pt-1">
+          <div className="mt-1 border-t border-white/10 pt-1">
             <Link
               href="/onboarding?action=new"
               prefetch={false}
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground hover:bg-foreground/5 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-[var(--ff-on-surface)] hover:bg-white/5"
             >
-              <Plus className="h-4 w-4" />
+              <span className="material-symbols-outlined text-[20px]">add</span>
               Dodaj kolejną organizację
             </Link>
           </div>

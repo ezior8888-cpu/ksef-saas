@@ -44,11 +44,19 @@ export default async function OverduePage() {
 
   if (error) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-4xl font-semibold tracking-tight">
-          Przeterminowane płatności
-        </h1>
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-700 dark:text-red-400">
+      <div className="pb-10 text-[var(--ff-on-surface)]">
+        <div className="mb-10">
+          <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+            Przeterminowane płatności
+          </h1>
+          <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+            Faktury po terminie płatności
+          </p>
+        </div>
+        <div
+          className="ff-glass-pane rounded-[var(--ff-radius-lg)] border border-red-500/25 p-6 text-[15px] text-red-300"
+          role="alert"
+        >
           Nie udało się pobrać listy: {error.message}
         </div>
       </div>

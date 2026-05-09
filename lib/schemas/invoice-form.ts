@@ -8,7 +8,8 @@ import {
 // rolnika ryczałtowego). Trzymamy się tego samego zestawu, żeby
 // calculateLineItem/getVatPercentage nie traciły type-safety. '3' da się
 // dodać jednym punktem w types/invoice.ts + mapping w invoice-calculator.
-export const vatRateEnum = z.enum(['23', '8', '5', '0', 'zw', 'oo', 'np']);
+/** Bez `zw` — wymaga P_19A/B/C w FA(3); wróci z UI na podstawę prawną. */
+export const vatRateEnum = z.enum(['23', '8', '5', '0', 'oo', 'np']);
 
 export const buyerConsumerIdTypeEnum = z.enum([
   'pesel',
@@ -95,6 +96,16 @@ export const invoiceFormSchema = z
   .refine((d) => new Date(d.paymentDueDate) >= new Date(d.issueDate), {
     message: 'Termin płatności nie może być przed datą wystawienia',
     path: ['paymentDueDate'],
-  });
+  })
+  .refine(
+    (d) =>
+      !d.saleDate ||
+      d.saleDate === '' ||
+      new Date(d.saleDate).getTime() <= new Date(d.issueDate).getTime(),
+    {
+      message: 'Data sprzedaży nie może być późniejsza niż data wystawienia',
+      path: ['saleDate'],
+    },
+  );
 
 export type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;

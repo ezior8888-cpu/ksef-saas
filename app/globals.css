@@ -482,3 +482,303 @@
   letter-spacing: -0.012em;
   line-height: 1.6;
 }
+
+/* ═══ FaktFlow dashboard (makiet HTML + tokeny JSON/CSS) ═══ */
+.ff-dashboard {
+  isolation: isolate;
+  /* Kolory jak w Tailwind config z HTML (M3 / FaktFlow dark) */
+  --ff-bg: #12131a;
+  /* Bazowe tło — bez tego `bg-transparent` na layoucie dawał „płaski” czarny i zabijał czytelność szkła. */
+  background-color: var(--ff-bg);
+  --ff-on-surface: #e2e1eb;
+  --ff-on-surface-variant: #bccabb;
+  --ff-primary: #6bfb9a;
+  --ff-on-primary: #003919;
+  --ff-primary-container: #4ade80;
+  --ff-secondary: #ffb783;
+  --ff-secondary-container: #d97722;
+  --ff-tertiary: #e9daff;
+  --ff-surface-container-low: #1a1b22;
+  --ff-surface-container-highest: #33343c;
+  --ff-outline-soft: rgba(255, 255, 255, 0.1);
+  --ff-unit: 8px;
+  --ff-gutter: 24px;
+  --ff-container-padding: 40px;
+  /* `--ff-glass-blur` zostawione dla kompatybilności (np. inne miejsca poza
+   * `.ff-glass-pane`); `.ff-glass-pane` świadomie NIE używa `backdrop-filter`,
+   * bo to było główne źródło zacinania scrolla (10+ paneli/stronę × read-back
+   * z parent layer + re-raster przy każdej klatce scrolla). */
+  --ff-glass-blur: 40px;
+  --ff-glass-bg: linear-gradient(
+    165deg,
+    rgba(46, 47, 59, 0.94),
+    rgba(28, 29, 38, 0.97)
+  );
+  --ff-glass-bg-hover: linear-gradient(
+    165deg,
+    rgba(58, 59, 72, 0.96),
+    rgba(38, 39, 50, 0.98)
+  );
+  --ff-glass-border: rgba(255, 255, 255, 0.1);
+  --ff-glass-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 8px 28px 0 rgba(0, 0, 0, 0.42);
+  --ff-radius-lg: 1rem;
+  --ff-radius-chart-glow: 0 0 8px rgba(107, 251, 154, 0.4);
+
+  /* Zmienne z dostarczonego :root (radius / cienie / powierzchnie) */
+  --color-surface: #12131a;
+  --color-surface-dim: #12131a;
+  --color-surface-bright: #383940;
+  --color-surface-container-lowest: #0c0e14;
+  --color-surface-container-low: #1a1b22;
+  --color-surface-container: #21222b;
+  --color-surface-container-high: #2b2c36;
+  --color-surface-container-highest: #363742;
+  --color-primary: #4ade80;
+  --color-on-primary: #00391c;
+  --color-primary-container: #00522c;
+  --color-on-primary-container: #6bfb9a;
+  --color-secondary: #b9ccb9;
+  --color-on-secondary: #253428;
+  --color-secondary-container: #3b4b3e;
+  --color-on-secondary-container: #d5e8d5;
+  --color-tertiary: #a4cded;
+  --color-on-tertiary: #04344f;
+  --color-tertiary-container: #234b67;
+  --color-on-tertiary-container: #c4e7ff;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.ff-dashboard .material-symbols-outlined {
+  font-family: 'Material Symbols Outlined', sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  font-size: 22px;
+  line-height: 1;
+  display: inline-block;
+  vertical-align: middle;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ff-dashboard .material-symbols-outlined.ff-ms-fill {
+  font-variation-settings:
+    'FILL' 1,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+}
+
+/* Mesh gradient: bez `filter: blur(72px)` — gradient radialny z miękkim color-stop
+ * wygląda identycznie jak gradient + blur (blur na bardzo miękkich gradientach
+ * to dodatkowy, kosztowny pass off-screen bez zauważalnej różnicy wizualnej).
+ *
+ * Bez `contain: strict` — to jest statyczna dekoracja `position: fixed` na całym
+ * viewport. `contain: strict` w Chrome bywa źródłem znikających klatek po HMR /
+ * nawigacji RSC (regresje compositingu z `position: fixed; inset: 0`). Statyczny
+ * gradient i tak jest rasteryzowany raz, więc benefit z containmentu = 0. */
+.ff-mesh-gradient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 60% at 0% 0%, rgba(30, 27, 75, 0.55), transparent 65%),
+    radial-gradient(70% 60% at 100% 0%, rgba(49, 46, 129, 0.5), transparent 65%),
+    radial-gradient(70% 60% at 100% 100%, rgba(19, 78, 74, 0.42), transparent 65%),
+    radial-gradient(70% 60% at 0% 100%, rgba(76, 29, 149, 0.5), transparent 65%),
+    #12131a;
+}
+
+/* Orby: dla 500-600 px „kuli” `filter: blur(150px)` to defacto gradient — tańszy
+ * i wizualnie identyczny `radial-gradient` bez `filter` ani animacji
+ * (animacja keepowała GPU 24/7 bez wartości UX).
+ * Bez `contain` — patrz komentarz przy mesh. */
+.ff-orb-tr {
+  position: fixed;
+  top: -10%;
+  right: -10%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--ff-primary) 22%, transparent) 0%,
+    transparent 65%
+  );
+  z-index: 0;
+  pointer-events: none;
+}
+
+.ff-orb-bl {
+  position: fixed;
+  bottom: -10%;
+  left: 20%;
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--ff-secondary) 14%, transparent) 0%,
+    transparent 65%
+  );
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Karta „glass”: ZERO `backdrop-filter` (kosztowny read-back parent layer). Wygląd
+ * zachowany przez bogaty gradient + border + cień (na dark theme efekt „glass”
+ * pochodzi w 90% z border + inner highlight).
+ *
+ * Bez `contain: paint` — przycina dzieci wychodzące poza karton (tooltipy,
+ * popovery, focus rings), co przy HMR / portalach Radix bywało źródłem
+ * „znikających” fragmentów UI. Karta i tak jest statyczna, więc paint
+ * containment nic by nie ratowało wydajnościowo. */
+.ff-glass-pane {
+  position: relative;
+  background-color: #1d1e27;
+  background-image: var(--ff-glass-bg);
+  border: 1px solid var(--ff-glass-border);
+  box-shadow: var(--ff-glass-shadow);
+}
+
+.ff-glass-pane-hover {
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+  will-change: auto;
+}
+
+.ff-glass-pane-hover:hover {
+  background-image: var(--ff-glass-bg-hover);
+  border-color: rgba(255, 255, 255, 0.18);
+  /* `translateY` celowo wycięte — przesuwanie elementu pod kartami z blur w
+   * sąsiedztwie powoduje re-raster sąsiadów. Lift osiągamy cieniem. */
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 14px 36px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Aktywna pozycja w sidebarze: bez `backdrop-filter` (sidebar już ma jeden blur
+ * na poziomie `<aside>` — drugi per-row to 9× zbędny pass). */
+.ff-sidebar-active {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.12);
+}
+
+/* shadcn `Card` domyślnie ma `backdrop-blur` — w dashboardzie (10+ kart / scroll)
+ * to było główne źródło zacinania. W `.ff-dashboard` wymuszamy ten sam wygląd co
+ * `.ff-glass-pane` (gradient + cień), bez compositing read-back. */
+.ff-dashboard [data-slot='card'] {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background-color: #1d1e27;
+  background-image: var(--ff-glass-bg);
+  border-color: var(--ff-glass-border);
+  box-shadow: var(--ff-glass-shadow);
+  color: var(--ff-on-surface);
+}
+
+.ff-dashboard [data-slot='card-footer'] {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: var(--ff-glass-border);
+}
+
+.ff-chart-glow {
+  filter: drop-shadow(var(--ff-radius-chart-glow));
+}
+
+.ff-dashboard ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ff-dashboard ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+/* ─── Statyczne klasy shell (HMR-safe) ───────────────────────────────────────
+ * Tailwind v4 generuje `bg-[color-mix(in_srgb,...)]` arbitrary classes
+ * deterministycznie, ale przy HMR / dodawaniu nowej klasy w tym samym pliku
+ * zdarza się klatka, w której nowa klasa nie jest jeszcze w arkuszu. Skutek:
+ * pasek/sidebar/nagłówek bez tła → przeźroczysty → widać `var(--ff-bg)`
+ * (prawie czarny), więc strona „robi się czarna”.
+ *
+ * Statyczne klasy w `globals.css` ładują się raz przy mount i nigdy nie
+ * znikają — to jest bezpiecznik. Wartości celowo lekko nieprzezroczyste
+ * (`rgba(...)` zamiast pełnych `#xxx`), żeby zachować efekt szkła nad mesh.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.ff-shell-sidebar {
+  background-color: rgba(26, 27, 34, 0.78);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ff-shell-header {
+  background-color: rgba(18, 19, 26, 0.88);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ff-shell-mobile {
+  background-color: rgba(26, 27, 34, 0.96);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ─── Fallback tła na <html>/<body> ──────────────────────────────────────────
+ * Bezpiecznik na sytuację, w której `.ff-dashboard` (z `background-color`)
+ * przez moment nie jest zamontowany (initial paint, error boundary, HMR
+ * remount). Bez tego biała domyślna kartka przeglądarki prześwitywała przez
+ * efekty „glass”, dając wrażenie zniknięcia designu.
+ * ──────────────────────────────────────────────────────────────────────────── */
+html.dark,
+html.dark body {
+  background-color: #12131a;
+}
+
+/* ─── Animacja przełączania podstron dashboardu ──────────────────────────────
+ * Animowany jest TYLKO wrapper `template.tsx` (jeden element na całą stronę),
+ * a nie poszczególne karty/sekcje. Dzięki temu compositor robi jeden GPU-pass
+ * na klatkę zamiast setek.
+ *
+ * Animowane wyłącznie `transform` + `opacity` — obie kompozytowane na GPU bez
+ * layout/paint, więc koszt = ~0 nawet przy długich listach. Czas 220 ms +
+ * Apple-like ease wystarczy żeby wyglądało „premium” i nie spowalniało
+ * percepcji nawigacji.
+ *
+ * Bez animacji `backdrop-filter` / `filter` / `width` / `height` — to są
+ * properties które wymuszają repaint całego subtree.
+ *
+ * `prefers-reduced-motion` — wyłączona całkowicie (a11y).
+ * ──────────────────────────────────────────────────────────────────────────── */
+@keyframes ff-route-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.ff-route-template {
+  animation: ff-route-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-route-template {
+    animation: none;
+  }
+}

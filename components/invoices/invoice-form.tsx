@@ -115,7 +115,7 @@ export function InvoiceForm() {
     defaultValues: {
       internalNumber: '',
       issueDate: today,
-      saleDate: '',
+      saleDate: today,
       buyerNip: '',
       buyerName: '',
       buyerAddressLine1: '',
@@ -298,6 +298,19 @@ export function InvoiceForm() {
               {...form.register('issueDate')}
             />
           </div>
+        </div>
+        <div className="max-w-md">
+          <Label className={labelClass}>Data sprzedaży / dostawy</Label>
+          <p className="-mt-0.5 mb-2 text-xs text-muted-foreground">
+            Opcjonalnie, gdy jest inna od daty wystawienia (pole P_6 w KSeF); identyczna data nie jest duplikowana w XML.
+          </p>
+          <Input type="date" className="h-12 text-base" {...form.register('saleDate')} />
+          {form.formState.errors.saleDate ? (
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+              <AlertCircle className="h-3 w-3" />
+              {form.formState.errors.saleDate.message}
+            </p>
+          ) : null}
         </div>
       </section>
 
@@ -588,7 +601,6 @@ export function InvoiceForm() {
                         <option value="8">8%</option>
                         <option value="5">5%</option>
                         <option value="0">0%</option>
-                        <option value="zw">zw</option>
                         <option value="oo">oo</option>
                         <option value="np">np</option>
                       </select>
@@ -718,7 +730,6 @@ export function InvoiceForm() {
                       <option value="8">8%</option>
                       <option value="5">5%</option>
                       <option value="0">0%</option>
-                      <option value="zw">zw — zwolnione</option>
                       <option value="oo">oo — odwrotne obciążenie</option>
                       <option value="np">np — nie podlega</option>
                     </select>
@@ -815,9 +826,9 @@ export function InvoiceForm() {
         <Textarea rows={3} {...form.register('notes')} />
       </section>
 
-      {/* STICKY FOOTER */}
-      <div className="fixed bottom-0 left-0 right-0 lg:left-[280px] z-30 px-6 py-4 bg-white/62 dark:bg-[rgba(15,10,30,0.62)] backdrop-blur-[40px] border-t border-white/55 dark:border-white/10">
-        <div className="max-w-7xl mx-auto flex gap-3 justify-end">
+      {/* STICKY FOOTER — przyciski bez tła/bluru (tylko „pływające” nad treścią) */}
+      <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-30 px-6 py-4 lg:left-[280px]">
+        <div className="mx-auto flex max-w-7xl justify-end gap-3 pointer-events-auto">
           <Button
             type="button"
             variant="glass"

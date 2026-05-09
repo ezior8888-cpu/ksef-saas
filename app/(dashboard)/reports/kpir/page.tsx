@@ -52,9 +52,9 @@ export default async function KpirPage({
   const loadError = expensesError?.message ?? invoicesError?.message ?? null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-10 text-[var(--ff-on-surface)]">
       {loadError ? (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-700 dark:text-red-400">
+        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] border border-red-400/25 bg-[color-mix(in_srgb,#f87171_10%,transparent)] p-4 text-sm text-red-200">
           {loadError}
         </div>
       ) : null}

@@ -1,13 +1,17 @@
-import { ExportsCenter } from '@/components/exports/exports-center';
+import { Suspense } from 'react';
+
+import {
+  NewExportForm,
+  RecentExports,
+  type ManualExportJobWithFiles,
+} from '@/components/exports/exports-center';
 import { getPageContext } from '@/lib/supabase/page-context';
-import type { ManualExportJobWithFiles } from '@/components/exports/exports-center';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ExportsCenterPage() {
+async function RecentExportsSection() {
   const { supabase, tenantId } = await getPageContext();
 
-  // Historia ostatnich 20 manualnych eksportów (RLS + jawny filtr tenanta).
   const { data: recentJobs } = await supabase
     .from('export_jobs')
     .select(
@@ -21,7 +25,35 @@ export default async function ExportsCenterPage() {
     .order('created_at', { ascending: false })
     .limit(20);
 
+  return <RecentExports jobs={(recentJobs ?? []) as ManualExportJobWithFiles[]} />;
+}
+
+function RecentExportsFallback() {
   return (
-    <ExportsCenter recentJobs={(recentJobs ?? []) as ManualExportJobWithFiles[]} />
+    <div className="ff-glass-pane flex min-h-[280px] items-center justify-center rounded-[var(--ff-radius-lg)] p-7 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] lg:p-8">
+      Wczytywanie historii eksportów…
+    </div>
+  );
+}
+
+export default function ExportsCenterPage() {
+  return (
+    <div className="space-y-8 pb-10 text-[var(--ff-on-surface)]">
+      <div>
+        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+          Eksport danych księgowych
+        </h1>
+        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+          Wygeneruj plik dla księgowego za dowolny okres
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <NewExportForm />
+        <Suspense fallback={<RecentExportsFallback />}>
+          <RecentExportsSection />
+        </Suspense>
+      </div>
+    </div>
   );
 }
