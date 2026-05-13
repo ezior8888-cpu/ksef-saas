@@ -35,10 +35,17 @@ export class KsefApiError extends Error {
     this.name = 'KsefApiError';
   }
 
-  /** Czy ten błąd warto retry-ować? */
+  /** Czy ten błąd warto retry-ować?
+   *
+   * Reguła (Faza 23 sekcja 2):
+   *   - 429 — retry z DELAY (KSeF mówi nam „zwolnij")
+   *   - 5xx (>=500, <600) — retry, KSeF leży po stronie MF
+   *   - 4xx (<500) — NonRetryable, błąd walidacji / autoryzacji po naszej stronie
+   *     (KSeF nie zaakceptuje tej samej faktury bez zmiany payloadu).
+   */
   get isRetryable(): boolean {
-    // 429 rate limit, 502/503/504 chwilowa niedostępność
-    return [429, 502, 503, 504].includes(this.status);
+    if (this.status === 429) return true;
+    return this.status >= 500 && this.status < 600;
   }
 
   /** Czy to błąd autoryzacji (wygasła sesja)? */
@@ -68,6 +75,107 @@ export interface KsefRequestOptions {
   env?: KsefEnvironment;
   /** Timeout w ms (domyślnie 30s) */
   timeoutMs?: number;
+  /**
+   * Audit log każdej interakcji z KSeF (Faza 23 sekcja 3). Gdy `audit`
+   * jest podane, każde wywołanie ksefFetch wpisuje do `audit_logs`:
+   *   - status HTTP, response time, payload size
+   *   - tenantId + invoiceId + nazwa akcji ('submit', 'upo.download', etc.)
+   *
+   * Logowanie jest fire-and-forget (`void` promise) — nie blokuje
+   * głównego flow ani nie rzuca jeśli `audit_logs` insert padnie.
+   */
+  audit?: {
+    tenantId: string;
+    /** Krótki opis operacji — np. 'submit', 'upo.download', 'inbox.poll', 'auth.token'. */
+    action: string;
+    /** ID faktury, której operacja dotyczy (jeśli relevantne). */
+    invoiceId?: string;
+    /** Dodatkowy kontekst — np. ksefNumber, batchSize. */
+    metadata?: Record<string, unknown>;
+  };
+}
+
+/**
+ * Asynchroniczny zapis do audit_logs (fire-and-forget). Import dynamiczny
+ * łamie potencjalny cycle `lib/audit/log-system` → `lib/supabase/server` →
+ * ... → `lib/ksef/client` (gdyby ktoś dodał).
+ */
+async function recordKsefAudit(
+  audit: NonNullable<KsefRequestOptions['audit']>,
+  context: {
+    method: string;
+    path: string;
+    status: number;
+    durationMs: number;
+    requestSize: number;
+    responseSize: number;
+    error?: string;
+  },
+): Promise<void> {
+  try {
+    const { logAuditSystem } = await import('@/lib/audit/log-system');
+    await logAuditSystem({
+      // Cast: `audit.action` to free-form string z call-site'ów ('session.open',
+      // 'invoice.send', etc.) — `AuditAction` ma już prefixed warianty
+      // `ksef.session.open` etc., więc concatenation jest typu `ksef.${string}`
+      // i nie zwęża się automatycznie. Bezpieczne bo lista call-site'ów
+      // jest ograniczona do helperów w `lib/ksef/`.
+      action: `ksef.${audit.action}` as 'ksef.session.open',
+      tenantId: audit.tenantId,
+      userId: null,
+      entityType: audit.invoiceId ? 'invoice' : 'ksef',
+      entityId: audit.invoiceId,
+      metadata: {
+        ...audit.metadata,
+        method: context.method,
+        path: context.path,
+        httpStatus: context.status,
+        durationMs: context.durationMs,
+        requestBytes: context.requestSize,
+        responseBytes: context.responseSize,
+        ...(context.error ? { error: context.error } : {}),
+      },
+    });
+  } catch (e) {
+    // Audit fail nie powinien wywracać samej operacji KSeF.
+    console.error('[ksef.audit] log failed', e);
+  }
+}
+
+/** Faza 23 sekcja 4: gdy `E2E_MOCK_KSEF=1`, interceptor zwraca deterministyczne
+ *  fixtures z `mock-fixtures.ts` zamiast hitować realne MF API. Zachowuje audit
+ *  logging i error throwing — testy widzą identyczny flow jak produkcyjny.
+ *
+ *  NIE dotyka `process.env.KSEF_ENV` — to wciąż `test`/`production`, decyzja
+ *  o mocku jest niezależna i opt-in.
+ */
+async function maybeMockResponse(
+  method: string,
+  path: string,
+): Promise<{ status: number; bodyText: string } | null> {
+  if (process.env.E2E_MOCK_KSEF !== '1') return null;
+
+  const { resolveFixture, applyScenario, getMockScenario } = await import(
+    './mock-fixtures'
+  );
+
+  const healthyFixture = resolveFixture(path, method);
+  if (!healthyFixture) {
+    return {
+      status: 404,
+      bodyText: JSON.stringify({ mock: true, reason: 'fixture-not-found', path }),
+    };
+  }
+
+  const applied = applyScenario(getMockScenario(), healthyFixture);
+  const bodyText =
+    typeof applied.body === 'string' ? applied.body : JSON.stringify(applied.body);
+
+  if (applied.delayMs && process.env.E2E_MOCK_KSEF_SKIP_DELAY !== '1') {
+    await new Promise((resolve) => setTimeout(resolve, applied.delayMs));
+  }
+
+  return { status: applied.status, bodyText };
 }
 
 /**
@@ -85,6 +193,7 @@ export async function ksefFetch<TResponse = unknown>(
     headers = {},
     env = (process.env.KSEF_ENV as KsefEnvironment) ?? 'test',
     timeoutMs = 30_000,
+    audit,
   } = options;
 
   const url = `${getKsefBaseUrl(env)}${path}`;
@@ -109,19 +218,43 @@ export async function ksefFetch<TResponse = unknown>(
     serializedBody = typeof body === 'string' ? body : JSON.stringify(body);
   }
 
+  const startedAt = Date.now();
+  const requestSize = serializedBody ? Buffer.byteLength(serializedBody, 'utf8') : 0;
+
   try {
-    const response = await fetch(url, {
-      method,
-      headers: requestHeaders,
-      body: serializedBody,
-      signal: controller.signal,
-    });
+    // Faza 23 sekcja 4: mock interceptor dla testów (E2E_MOCK_KSEF=1).
+    // Zwraca deterministyczne fixtures zamiast hitować realne MF API.
+    const mocked = await maybeMockResponse(method, path);
+    let responseStatus: number;
+    let responseOk: boolean;
+    let text: string;
+    let contentType: string | null;
 
-    clearTimeout(timeoutHandle);
+    if (mocked) {
+      clearTimeout(timeoutHandle);
+      responseStatus = mocked.status;
+      responseOk = mocked.status >= 200 && mocked.status < 300;
+      text = mocked.bodyText;
+      contentType = text.startsWith('<')
+        ? 'application/xml'
+        : 'application/json';
+    } else {
+      const response = await fetch(url, {
+        method,
+        headers: requestHeaders,
+        body: serializedBody,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutHandle);
+      responseStatus = response.status;
+      responseOk = response.ok;
+      text = await response.text();
+      contentType = response.headers.get('content-type');
+    }
 
-    const text = await response.text();
+    const responseSize = Buffer.byteLength(text, 'utf8');
     let parsedBody: unknown = text;
-    if (text && response.headers.get('content-type')?.includes('application/json')) {
+    if (text && contentType?.includes('application/json')) {
       try {
         parsedBody = JSON.parse(text);
       } catch {
@@ -129,24 +262,66 @@ export async function ksefFetch<TResponse = unknown>(
       }
     }
 
-    if (!response.ok) {
+    // Audit (fire-and-forget) — KAŻDA interakcja KSeF jest zapisana.
+    if (audit) {
+      void recordKsefAudit(audit, {
+        method,
+        path,
+        status: responseStatus,
+        durationMs: Date.now() - startedAt,
+        requestSize,
+        responseSize,
+        error: responseOk ? undefined : `HTTP ${responseStatus}`,
+      });
+    }
+
+    if (!responseOk) {
       throw new KsefApiError(
-        response.status,
+        responseStatus,
         parsedBody as KsefErrorResponse | string,
-        `KSeF API ${method} ${path} failed: ${response.status} ${response.statusText}`
+        `KSeF API ${method} ${path} failed: ${responseStatus}`
       );
     }
 
     return parsedBody as TResponse;
   } catch (error) {
     clearTimeout(timeoutHandle);
-    if (error instanceof KsefApiError) throw error;
+
+    if (error instanceof KsefApiError) {
+      // Audit już zapisany w bloku try (przed throw). Tylko re-throw.
+      throw error;
+    }
+
     if (error instanceof Error && error.name === 'AbortError') {
+      if (audit) {
+        void recordKsefAudit(audit, {
+          method,
+          path,
+          status: 408,
+          durationMs: Date.now() - startedAt,
+          requestSize,
+          responseSize: 0,
+          error: 'timeout',
+        });
+      }
       throw new KsefApiError(
         408,
         'Request timeout',
         `KSeF API ${method} ${path} timed out after ${timeoutMs}ms`
       );
+    }
+
+    // Network error (ECONNRESET, DNS fail) — bez statusu HTTP.
+    if (audit) {
+      void recordKsefAudit(audit, {
+        method,
+        path,
+        status: 0,
+        durationMs: Date.now() - startedAt,
+        requestSize,
+        responseSize: 0,
+        error: error instanceof Error ? error.message : 'network',
+      });
     }
     throw error;
   }

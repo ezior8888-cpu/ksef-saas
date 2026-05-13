@@ -96,6 +96,10 @@ export const inboxPollTenantJob = inngest.createFunction(
     // `lib/ksef/rate-limiter.ts` jest per-process, więc na multi-instance
     // hostingu nie wystarcza).
     concurrency: { key: 'event.data.nip', limit: 3 },
+    // Faza 23 sekcja 3: throttle per-NIP. Inbox polling cron leci co 15min,
+    // czyli 4 razy / godzinę / tenant — limit 8/h zostawia bufor na manual
+    // refresh z UI (przycisk "Odśwież" w `/inbox`) bez zalewania MF.
+    throttle: { key: 'event.data.nip', limit: 8, period: '1h' },
     triggers: [inboxPollTenant],
   },
   async ({ event, step, logger }) => {
@@ -110,7 +114,10 @@ export const inboxPollTenantJob = inngest.createFunction(
 
     const newInvoices = await step.run('query-ksef', async () => {
       const credentials = await getTenantKsefCredentials(tenantId);
-      return queryReceivedInvoices(credentials, dateFrom, dateTo, KSEF_ENV);
+      // Faza 23 sekcja 3: audit log każdej query do KSeF /invoices/query/metadata.
+      return queryReceivedInvoices(credentials, dateFrom, dateTo, KSEF_ENV, {
+        tenantId,
+      });
     });
 
     if (newInvoices.length === 0) {

@@ -104,7 +104,12 @@ export async function submitInvoiceFullFlow(
   );
 
   // 4. Wysyłka do KSeF (rate-limited, z enkrypcją i auto-close sesji).
-  const submitResult = await submitInvoice(xml, auth, env);
+  //    `auditContext` propaguje się do każdego `ksefFetch` w środku — dzięki
+  //    temu każdy request do MF wpisuje się do `audit_logs` (Faza 23 sekcja 3).
+  const submitResult = await submitInvoice(xml, auth, env, {
+    tenantId,
+    invoiceId,
+  });
 
   return {
     ksefNumber: submitResult.ksefNumber,

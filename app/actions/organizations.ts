@@ -293,6 +293,33 @@ export async function createOrganizationAction(
     },
   });
 
+  // Faza 25 Krok 1: eager Stripe customer creation. Spec ze speca wymaga
+  // customer'a przy rejestracji (nawet bez karty), żeby tracking
+  // ARR/lifecycle był od dnia 1. Fail-soft: jeśli Stripe niedostępne, tenant
+  // i tak powstaje — user dostaje Stripe customer później (lazy fallback
+  // w `/settings/billing`).
+  if (user.email) {
+    try {
+      const { ensureStripeCustomer } = await import('@/lib/stripe/customer');
+      const { isStripeConfigured } = await import('@/lib/stripe/client');
+      if (isStripeConfigured()) {
+        await ensureStripeCustomer({
+          tenantId: orgId,
+          email: user.email,
+          name: company.name,
+          nip: company.nip,
+        });
+      }
+    } catch (e) {
+      // Nie blokujemy onboardingu na Stripe outage. Sentry capture + dalej.
+      const Sentry = await import('@sentry/nextjs');
+      Sentry.captureException(e, {
+        tags: { area: 'onboarding.stripe-customer' },
+        extra: { tenantId: orgId },
+      });
+    }
+  }
+
   await setActiveOrgCookie(orgId);
 
   // redirect() rzuca NEXT_REDIRECT — Next.js przejmie i zwróci 303 z
@@ -721,6 +748,19 @@ export async function changeMembershipRoleAction(params: {
 
   revalidatePath('/settings/team');
   return { success: true };
+}
+
+/**
+ * Wywoływane po otwarciu modala „import po rejestracji” — miejsce na przyszłą
+ * persystencję (np. jednorazowy flag w profilu). Dziś: weryfikacja sesji, bez
+ * zmiany stanu (URL `post_register_import` i tak czyści klient).
+ */
+export async function markPostRegisterMagicImportConsumedAction(): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -210,6 +210,55 @@ export const invoicePaymentReceived = eventType('invoice/payment.received', {
   }>(),
 });
 
+/**
+ * Faza 25 — Stripe billing events. Emit'owane z `/api/stripe/webhook` po
+ * udanej walidacji signature + idempotency check. Konsumenci:
+ *   - `billing/payment.succeeded` → self-invoicing przez KSeF (Krok 4)
+ *   - `billing/payment.failed` → dunning email (Krok 5)
+ *   - `billing/subscription.trial_will_end` → trial countdown email (Krok 5)
+ *   - `billing/subscription.canceled` → re-engagement campaign hook
+ */
+export const billingPaymentSucceeded = eventType('billing/payment.succeeded', {
+  schema: staticSchema<{
+    tenantId: string;
+    paymentId: string;
+    stripeInvoiceId: string;
+    /** Amount + VAT w groszach (PLN). */
+    amountCents: number;
+    taxCents: number;
+    currency: string;
+    paidAt: string;
+  }>(),
+});
+
+export const billingPaymentFailed = eventType('billing/payment.failed', {
+  schema: staticSchema<{
+    tenantId: string;
+    paymentId: string;
+    stripeInvoiceId: string;
+    failureReason: string | null;
+  }>(),
+});
+
+export const billingTrialWillEnd = eventType('billing/subscription.trial_will_end', {
+  schema: staticSchema<{
+    tenantId: string;
+    subscriptionId: string;
+    trialEnd: string;
+  }>(),
+});
+
+export const billingSubscriptionCanceled = eventType(
+  'billing/subscription.canceled',
+  {
+    schema: staticSchema<{
+      tenantId: string;
+      subscriptionId: string;
+      canceledAt: string;
+    }>(),
+  },
+);
+
 /** Uruchom generowanie pliku eksportu (worker Inngest). */
 export const exportsGenerateRequested = eventType('exports/generate.requested', {
   schema: staticSchema<{

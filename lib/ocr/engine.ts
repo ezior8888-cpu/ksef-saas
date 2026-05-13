@@ -9,6 +9,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages/messages';
 
 import { getAnthropic, OCR_MODEL } from '@/lib/anthropic/client';
+import { isAnthropicMocked } from '@/lib/test-mode';
 
 import { claudeOutputInstructions, extractedInvoiceSchema } from './schema';
 import type { ExtractedInvoice } from './schema';
@@ -95,6 +96,35 @@ export async function extractInvoiceFromImage(
 ): Promise<OcrResult> {
   const startTime = Date.now();
   const elapsed = () => Date.now() - startTime;
+
+  if (isAnthropicMocked()) {
+    // Deterministyczny stub dla E2E — kwota i NIP zgodne z `e2e/helpers/test-data.ts`.
+    const stub: ExtractedInvoice = {
+      seller_name: 'PKN Orlen S.A.',
+      seller_nip: '7740001454',
+      seller_address: 'ul. Chemików 7, 09-411 Płock',
+      document_number: `E2E-OCR-${Date.now()}`,
+      document_type: 'receipt',
+      issue_date: new Date().toISOString().slice(0, 10),
+      net_amount: 81.3,
+      vat_amount: 18.7,
+      gross_amount: 100.0,
+      vat_rate: '23',
+      line_items: [
+        { name: 'Paliwo Pb95', quantity: 14.5, unit_price: 6.89, gross: 100.0 },
+      ],
+      ocr_confidence: 0.95,
+      notes: null,
+    };
+    return {
+      success: true,
+      data: stub,
+      inputTokens: 0,
+      outputTokens: 0,
+      processingTimeMs: elapsed(),
+      modelUsed: `${OCR_MODEL}:e2e-mock`,
+    };
+  }
 
   const mimeOk =
     normalizeImageMediaType(mimeType) !== null ||

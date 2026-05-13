@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   ci:
+    name: Typecheck + Lint + Unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -34,6 +35,71 @@ jobs:
       # `pnpm ci` (alias na install --frozen-lockfile w nowszych pnpm).
       - name: Run typecheck + lint + tests
         run: pnpm run ci
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+  # E2E job opcjonalny — uruchamiany gdy repo ma ustawione `vars.RUN_E2E_ON_CI=true`.
+  # Wymaga Supabase staging (sekrety w GitHub) + Playwright browsers.
+  # Sharding na 2 workers, każdy testuje wszystkie projekty (chromium/firefox/webkit/mobile).
+  e2e:
+    name: Playwright E2E (shard ${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ vars.RUN_E2E_ON_CI == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - name: Run Playwright tests
+        env:
+          CI: '1'
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          KSEF_CREDENTIALS_ENCRYPTION_KEY: ${{ secrets.KSEF_CREDENTIALS_ENCRYPTION_KEY }}
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/2
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-shard-${{ matrix.shard }}
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload trace + screenshots (failures)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures-shard-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 14
 
   # Lekka bramka: dependency review pokazuje w PR, czy wprowadzamy nowe paczki
   # z otwartymi CVE (snapshot vs base). Nie blokuje merge'a — tylko sygnał

@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    ".claude/**",
+    "public/sw.js",
+    "public/sw.js.map",
   ]),
   {
     // Reguły React Compiler / React 19 — `set-state-in-effect`, `refs`,
@@ -25,6 +28,15 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/refs": "warn",
       "react-hooks/purity": "warn",
+    },
+  },
+  {
+    // Pliki E2E (Playwright) używają `use` jako Playwright fixture API —
+    // ESLint myli to z React `use` hook. Wyłączamy rules-of-hooks dla
+    // wszystkich plików w `e2e/` (poza katalogiem React nie ma).
+    files: ["e2e/**/*.ts", "e2e/**/*.tsx"],
+    rules: {
+      "react-hooks/rules-of-hooks": "off",
     },
   },
 ]);

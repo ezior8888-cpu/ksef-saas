@@ -5,10 +5,12 @@ import DashboardOrgHeader, {
   OrgSwitcherHeaderSkeleton,
 } from '@/app/(dashboard)/_components/dashboard-org-header';
 import DashboardVerificationBanner from '@/app/(dashboard)/_components/dashboard-verification-banner';
+import { KsefHealthBanner } from '@/app/(dashboard)/_components/ksef-health-banner';
 import { MobileNav } from '@/components/dashboard/mobile-nav';
 import { PrefetchDashboardRoutes } from '@/components/dashboard/prefetch-dashboard-routes';
 import { PrefetchExportsRoute } from '@/components/dashboard/exports-route-client';
 import { Sidebar } from '@/components/dashboard/sidebar';
+import { WelcomeModal } from '@/components/dashboard/welcome-modal';
 import { InstallPrompt } from '@/components/pwa/install-prompt-lazy';
 
 /**
@@ -74,6 +76,9 @@ export default async function DashboardLayout({
             <Suspense fallback={null}>
               <DashboardVerificationBanner />
             </Suspense>
+            <Suspense fallback={null}>
+              <KsefHealthBanner />
+            </Suspense>
             {children}
           </div>
         </div>
@@ -82,6 +87,9 @@ export default async function DashboardLayout({
       <InstallPrompt />
       <PrefetchDashboardRoutes />
       <PrefetchExportsRoute />
+      <Suspense fallback={null}>
+        <WelcomeModal />
+      </Suspense>
     </div>
   );
 }

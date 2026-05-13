@@ -47,10 +47,39 @@ export async function downloadUpoFromKsef(
   opts?: {
     env?: KsefEnvironment;
     timeoutMs?: number;
+    /** Faza 23 sekcja 3: zapis do audit_logs (fire-and-forget). */
+    invoiceId?: string;
   },
 ): Promise<UpoDownloadResponse> {
   const env = resolveEnv(opts?.env);
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const auditStart = Date.now();
+  const auditInvoiceId = opts?.invoiceId;
+
+  // Helper: fire-and-forget audit, w czystym wnętrzu downloadUpoFromKsef nie
+  // używamy ksefFetch (raw `fetch` z streamingiem) — audit ręcznie.
+  const writeAudit = (status: number, errorMsg?: string) => {
+    void (async () => {
+      try {
+        const { logAuditSystem } = await import('@/lib/audit/log-system');
+        await logAuditSystem({
+          action: 'ksef.upo.download',
+          tenantId,
+          userId: null,
+          entityType: auditInvoiceId ? 'invoice' : 'ksef',
+          entityId: auditInvoiceId,
+          metadata: {
+            ksefNumber,
+            httpStatus: status,
+            durationMs: Date.now() - auditStart,
+            ...(errorMsg ? { error: errorMsg } : {}),
+          },
+        });
+      } catch (e) {
+        console.error('[ksef.audit] upo download log failed', e);
+      }
+    })();
+  };
 
   try {
     let auth;
@@ -111,6 +140,7 @@ export async function downloadUpoFromKsef(
     }
 
     if (!response.ok) {
+      writeAudit(response.status, `HTTP ${response.status}`);
       if (response.status === 404) {
         return {
           success: false,
@@ -144,6 +174,8 @@ export async function downloadUpoFromKsef(
     const acceptanceTimestamp = extractAcceptanceTimestamp(upoXml);
     const upoId = extractUpoId(upoXml);
 
+    writeAudit(response.status);
+
     return {
       success: true,
       upoXml,
@@ -153,6 +185,7 @@ export async function downloadUpoFromKsef(
     };
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      writeAudit(408, 'timeout');
       return {
         success: false,
         error: `UPO — przekroczono limit czasu żądania (${timeoutMs} ms)`,
@@ -161,6 +194,7 @@ export async function downloadUpoFromKsef(
       };
     }
     const message = error instanceof Error ? error.message : 'Unknown error';
+    writeAudit(0, message);
     return {
       success: false,
       error: `Błąd pobierania UPO: ${message}`,

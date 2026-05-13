@@ -193,6 +193,27 @@ function isRealApiKey(v: string | undefined): v is string {
 export async function lookupCompanyByNip(
   nip: string
 ): Promise<GusLookupResult> {
+  // E2E mock — sandbox GUS bywa wolny/flaky, w testach blokuje cały flow
+  // onboardingu. Aktywowane przez `E2E_MOCK_GUS=1` w `playwright.config.ts`.
+  // Sprawdzamy dynamicznie (bez `import { isGusMocked }`) żeby nie wciągać
+  // `lib/test-mode.ts` do bundla produkcyjnego.
+  if (process.env.E2E_MOCK_GUS === '1') {
+    return {
+      kind: 'found',
+      data: {
+        nip,
+        regon: '012345678',
+        name: 'E2E Mock Sp. z o.o.',
+        postalCode: '00-001',
+        city: 'Warszawa',
+        street: 'ul. Testowa',
+        buildingNumber: '1',
+        localNumber: undefined,
+        voivodeship: 'MAZOWIECKIE',
+      },
+    };
+  }
+
   const apiKeyRaw = process.env.GUS_API_KEY;
   const apiKey = isRealApiKey(apiKeyRaw) ? apiKeyRaw : undefined;
   const host = apiKey ? URL_PROD : URL_TEST;

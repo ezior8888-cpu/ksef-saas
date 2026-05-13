@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { FileText, ArrowRight } from 'lucide-react';
+import { FileText, ArrowRight, PlusCircle, Upload } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/client';
+import { EmptyState } from '@/components/ui/empty-state';
 import { StatusBadge } from './status-badge';
 import { SwipeableInvoiceRow } from './swipeable-invoice-row';
 
@@ -102,24 +103,23 @@ export function InvoiceList({
 
   if (invoices.length === 0) {
     return (
-      <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] py-16 text-center">
-        <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-foreground/5 mb-4">
-          <FileText className="h-6 w-6 text-muted-foreground" />
-        </div>
-        <h3 className="font-semibold text-lg tracking-tight mb-1">
-          Brak faktur wystawionych
-        </h3>
-        <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-6">
-          Wystaw pierwszą fakturę aby pojawiła się tutaj
-        </p>
-        <Link
-          href="/invoices/new"
-          className="inline-flex items-center gap-2 text-sm font-medium text-foreground hover:text-foreground/70 transition-colors"
-        >
-          Wystaw pierwszą fakturę
-          <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
+      <EmptyState
+        icon={FileText}
+        title="Brak faktur wystawionych"
+        description="Wystaw pierwszą fakturę albo zaimportuj historię z poprzedniego programu. Migracja CSV z Fakturownia / inFakt / wFirma / iFirma zajmuje 5 minut."
+        primaryAction={{
+          type: 'link',
+          label: 'Wystaw pierwszą fakturę',
+          href: '/invoices/new',
+          icon: PlusCircle,
+        }}
+        secondaryAction={{
+          type: 'link',
+          label: 'Importuj historię',
+          href: '/onboarding/import-source',
+          icon: Upload,
+        }}
+      />
     );
   }
 

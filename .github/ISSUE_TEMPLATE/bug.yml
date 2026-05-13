@@ -1,0 +1,82 @@
+name: Bug report
+description: Zgłoś bug, regresję, niepoprawne zachowanie.
+labels: ['kind/bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dzięki za zgłoszenie. Im więcej kontekstu, tym szybciej naprawimy.
+        Triaż priorytetu: zob. `docs/bug-triage.md`.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Co się stało?
+      description: Jedno-dwa zdania. Zachowanie aktualne (nie analiza).
+      placeholder: 'Kliknąłem "Wystaw fakturę" i zobaczyłem biały ekran.'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Czego oczekiwałeś?
+      placeholder: 'Powinien otworzyć się formularz nowej faktury.'
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Kroki reprodukcji
+      description: Numerowana lista. Im prościej, tym lepiej.
+      placeholder: |
+        1. Zaloguj się jako user X
+        2. Idź do `/invoices`
+        3. Kliknij "Nowa faktura"
+        4. Obserwuj biały ekran
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Sugerowany priorytet
+      description: Final triaż zrobimy my, ale Twoja sugestia jest pomocna.
+      options:
+        - P0 — apka niedostępna / utrata danych
+        - P1 — krytyczna funkcja zepsuta, są workaroundy
+        - P2 — drobne, pojedyncze użytkownicy
+        - P3 — polish, copy, micro-spacing
+      default: 2
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Środowisko
+      description: Przeglądarka + wersja, OS, urządzenie. Production czy local?
+      placeholder: 'Chrome 132 / macOS Sequoia 15.4 / production'
+    validations:
+      required: true
+
+  - type: input
+    id: user-id
+    attributes:
+      label: User / tenant ID
+      description: Jeśli dotyczy konkretnego konta (do debugowania).
+      placeholder: 'user_id: abc-123 / tenant: faktflow-test'
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors / Sentry link
+      description: Wklej errory z DevTools console, network failures lub link do Sentry issue.
+      render: text
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshoty / nagrania
+      description: Drop'nij obrazki bezpośrednio — GitHub załaduje sam.

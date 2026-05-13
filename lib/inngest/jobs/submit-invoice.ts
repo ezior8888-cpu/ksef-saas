@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
-import { NonRetriableError } from 'inngest';
+import { NonRetriableError, RetryAfterError } from 'inngest';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { inngest, invoiceSubmitRequested } from '../client';
 import { submitInvoiceFullFlow } from '@/lib/ksef/submit-invoice-full';
@@ -15,6 +15,13 @@ import { KsefApiError } from '@/lib/ksef/client';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
+import {
+  getKsefRetryDelay,
+  KSEF_MAX_RETRIES,
+  KSEF_TENANT_CONCURRENCY_LIMIT,
+  KSEF_TENANT_THROTTLE_LIMIT,
+  KSEF_TENANT_THROTTLE_PERIOD,
+} from '../retry-schedule';
 
 /**
  * Job wysyłki faktury do KSeF.
@@ -22,25 +29,35 @@ import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
  * Trigger: event 'invoice/submit.requested' (publikowany z Server Action
  * po kliknięciu "Wyślij do KSeF" w UI).
  *
- * Retry policy:
- * - Błędy retry-owalne (network, 5xx, 429 rate limit): automatyczny retry
- *   z exponential backoff (Inngest: 4 próby).
- * - Błędy nieretry-owalne (walidacja FA(3), 400 Bad Request, 403): owijamy
- *   w NonRetriableError - job kończy się natychmiast, faktura dostaje
- *   status 'rejected' z opisem błędu.
+ * Retry policy (Faza 23 sekcja 2):
+ * - Custom backoff: 30s → 2min → 5min → 15min → 1h przez `RetryAfterError`.
+ *   Override Inngest defaultu (10s/30s/1m/5m/15m), dający MF ponad godzinę
+ *   na recovery po większej awarii.
+ * - Błędy 5xx i 429 — retry z opóźnieniem.
+ * - Błędy 4xx (walidacja, auth, 404) — `NonRetriableError`, leci do
+ *   `onFailure` → faktura `rejected`.
+ *
+ * Concurrency + throttle (Faza 23 sekcja 2):
+ * - Per-tenant concurrency: max 100 równoległych submit'ów. Wyższy limit
+ *   per-tenant (vs poprzednie 3 per-NIP) dla dużych tenantów z 1000+ fakturami
+ *   miesięcznie; rate-limiter per-NIP wewnątrz KSeF clienta i tak zatrzyma
+ *   nadmiar.
+ * - Per-tenant throttle: 60 wysyłek/min — chroni MF przed zalaniem przy
+ *   bulk import, nawet jeśli concurrency 100 da chwilowy spike.
  */
 export const submitInvoiceJob = inngest.createFunction(
   {
     id: 'submit-invoice-to-ksef',
     name: 'Wysyłka faktury do KSeF',
-    retries: 4,
-    // Concurrency per NIP - nie wysyłamy 100 faktur tego samego tenanta
-    // równolegle (limit otwartych sesji KSeF + własny rate-limiter po stronie
-    // klienta). `key` to CEL expression - 'event.data.nip' wybiera pole
-    // z payloadu eventu.
+    retries: KSEF_MAX_RETRIES,
     concurrency: {
-      key: 'event.data.nip',
-      limit: 3,
+      key: 'event.data.tenantId',
+      limit: KSEF_TENANT_CONCURRENCY_LIMIT,
+    },
+    throttle: {
+      key: 'event.data.tenantId',
+      limit: KSEF_TENANT_THROTTLE_LIMIT,
+      period: KSEF_TENANT_THROTTLE_PERIOD,
     },
     triggers: [invoiceSubmitRequested],
 
@@ -67,24 +84,36 @@ export const submitInvoiceJob = inngest.createFunction(
       const { tenantId, invoiceId, nip, invoice } = originalEvent.data;
       const fromOfflineQueue = Boolean(originalEvent.data.fromOfflineQueue);
 
+      // Klasyfikacja błędu (Faza 23 sekcja 3):
+      //   - `NonRetriableError` → walidacja / 4xx → 'rejected' (nie ma sensu
+      //     parkować w Offline24, KSeF nigdy tego nie zaakceptuje).
+      //   - Inny (RetryAfterError po wyczerpaniu retries, generic Error) →
+      //     transient outage → Offline24 fallback.
+      //   - Z Offline24 (`fromOfflineQueue=true`) — już parkowane, nie
+      //     duplikujemy. Mark 'failed' i emit event.
       const isBusinessRejection = error.name === 'NonRetriableError';
-      const finalStatus: 'rejected' | 'failed' = isBusinessRejection
-        ? 'rejected'
-        : 'failed';
+      const isTransientFailure = !isBusinessRejection;
 
-      logger.error('Job wysyłki padł - oznaczam fakturę w DB', {
+      logger.error('Job wysyłki padł — klasyfikacja błędu', {
         tenantId,
         invoiceId,
         nip,
         internalNumber: invoice.internalNumber,
         errorName: error.name,
         errorMessage: error.message,
-        finalStatus,
+        isBusinessRejection,
+        isTransientFailure,
         fromOfflineQueue,
       });
 
-      if (!fromOfflineQueue) {
-        await step.run('mark-as-failed', async () => {
+      // Outcome zapisujemy po decyzji o ścieżce (rejected/offline_queued/failed).
+      let finalStatus: 'rejected' | 'failed' | 'offline_queued' = isBusinessRejection
+        ? 'rejected'
+        : 'failed';
+
+      if (fromOfflineQueue) {
+        // Już byliśmy w offline queue — nie zapętlamy parkingu. Mark final.
+        await step.run('mark-as-failed-from-offline', async () => {
           await updateInvoiceStatus(invoiceId, {
             ksef_status: finalStatus,
             last_error: `${error.name}: ${error.message}`,
@@ -93,22 +122,93 @@ export const submitInvoiceJob = inngest.createFunction(
             last_error_suggestion: null,
           });
         });
+      } else if (isTransientFailure) {
+        // Faza 23 sekcja 3: po wyczerpaniu 5 retries z błędem retry-owalnym
+        // (5xx, 429, timeout, RetryAfterError) → parking w Offline24 queue.
+        // Trzy QR kody zostają wygenerowane przez `addToOfflineQueue` i jako
+        // efekt uboczny ustawiają `invoices.ksef_status = 'offline_queued'`.
+        const offlineResult = await step.run('try-offline-queue', async () => {
+          try {
+            const { getTenantKsefCredentials } = await import('@/lib/supabase/admin-queries');
+            const { addToOfflineQueue } = await import('@/lib/ksef/offline-queue');
 
-        await step.run('audit-submit-failed', async () => {
-          await logAuditSystem({
-            action: 'invoice.submit_failed',
+            const creds = await getTenantKsefCredentials(tenantId);
+            // Offline24 QR wymaga PEM certyfikatu — token auth (dev/test)
+            // nie ma takiego. W tym przypadku jedziemy klasycznym 'failed'.
+            if (creds.type !== 'xades') {
+              return {
+                queued: false as const,
+                reason: 'token-auth-no-cert' as const,
+              };
+            }
+
+            await addToOfflineQueue({
+              tenantId,
+              invoiceId,
+              certificate: creds.certificatePem,
+              // Best-effort: jeśli ostatni błąd to 503, traktujemy jako MF outage
+              // (deadline 7 dni zamiast 24h zgodnie ze spec Fazy 11).
+              isMfOutage: error.message.includes('503') || error.message.includes('MF'),
+            });
+
+            return { queued: true as const };
+          } catch (e) {
+            return {
+              queued: false as const,
+              reason: 'offline-queue-error' as const,
+              errorMessage: e instanceof Error ? e.message : 'unknown',
+            };
+          }
+        });
+
+        if (offlineResult.queued) {
+          finalStatus = 'offline_queued';
+          logger.info('Faktura zaparkowana w Offline24 queue po wyczerpaniu retries', {
             tenantId,
-            userId: null,
-            entityType: 'invoice',
-            entityId: invoiceId,
-            metadata: {
-              internalNumber: invoice.internalNumber,
-              finalStatus,
-              error: `${error.name}: ${error.message}`,
-            },
+            invoiceId,
+            attempts: KSEF_MAX_RETRIES + 1,
+          });
+        } else {
+          // Fallback do klasycznego 'failed' gdy Offline24 niedostępne.
+          await step.run('mark-as-failed', async () => {
+            await updateInvoiceStatus(invoiceId, {
+              ksef_status: 'failed',
+              last_error: `${error.name}: ${error.message} (Offline24 ${offlineResult.reason})`,
+              last_error_code: null,
+              last_error_field: null,
+              last_error_suggestion: null,
+            });
+          });
+        }
+      } else {
+        // Standard 'rejected' flow dla NonRetriableError.
+        await step.run('mark-as-rejected', async () => {
+          await updateInvoiceStatus(invoiceId, {
+            ksef_status: 'rejected',
+            last_error: `${error.name}: ${error.message}`,
+            last_error_code: null,
+            last_error_field: null,
+            last_error_suggestion: null,
           });
         });
       }
+
+      await step.run('audit-submit-failed', async () => {
+        await logAuditSystem({
+          action: 'invoice.submit_failed',
+          tenantId,
+          userId: null,
+          entityType: 'invoice',
+          entityId: invoiceId,
+          metadata: {
+            internalNumber: invoice.internalNumber,
+            finalStatus,
+            isBusinessRejection,
+            wasFromOfflineQueue: fromOfflineQueue,
+            error: `${error.name}: ${error.message}`,
+          },
+        });
+      });
 
       await step.sendEvent('emit-failure', {
         name: 'invoice/submit.failed',
@@ -123,7 +223,7 @@ export const submitInvoiceJob = inngest.createFunction(
       return { handled: true, finalStatus, fromOfflineQueue };
     },
   },
-  async ({ event, step, logger }) => {
+  async ({ event, step, logger, attempt }) => {
     // Runtime walidacja Zod — bramka między event store a transakcją KSeF.
     // Zła paczka (np. brak NIP-u po replay'u eventu ze starego kodu) zostaje
     // odrzucona PRZED jakąkolwiek operacją w DB / R2 / KSeF. NonRetriableError
@@ -145,6 +245,7 @@ export const submitInvoiceJob = inngest.createFunction(
       nip,
       internalNumber: invoice.internalNumber,
       fromOfflineQueue,
+      attempt,
     });
 
     // Re-emisja po odebraniu z kolejki offline — nie blokuj kolejnym probingiem `/health`,
@@ -257,6 +358,31 @@ export const submitInvoiceJob = inngest.createFunction(
       }
     });
 
+    // Krok 1.5: pre-flight check KSeF health (Faza 23 sekcja 1+2).
+    // Jeśli health monitor wcześniej zaobserwował `down` (3+ consecutive
+    // failures lub HTTP 503 z MF), nie spalamy retry-budgetu na zapowiedzianą
+    // porażkę — od razu rzucamy RetryAfterError z naszego schedule'a.
+    //
+    // Dla `attempt === 0` skip — pierwsza próba zawsze powinna sięgnąć
+    // KSeF, żeby zweryfikować że monitor nie był stale (TTL Redis 90s).
+    if (attempt > 0) {
+      const { isKsefHealthy } = await import('@/lib/ksef/health-status');
+      const healthy = await step.run('health-check', () => isKsefHealthy(env));
+      if (!healthy) {
+        const delay = getKsefRetryDelay(attempt);
+        logger.warn('KSeF zgłaszany jako down — odkładam próbę', {
+          tenantId,
+          invoiceId,
+          attempt,
+          retryAfter: delay,
+        });
+        throw new RetryAfterError(
+          'KSeF health monitor zgłasza down — odkładam wysyłkę',
+          delay,
+        );
+      }
+    }
+
     // Krok 2: status 'sending' + timestamp — dopiero gdy wiemy, że job może
     // realnie pogadać z KSeF.
     await step.run('mark-as-sending', async () => {
@@ -274,7 +400,7 @@ export const submitInvoiceJob = inngest.createFunction(
         tenantId,
         entityType: 'invoice',
         entityId: invoiceId,
-        metadata: { attempt: 1 },
+        metadata: { attempt: attempt + 1, maxAttempts: KSEF_MAX_RETRIES + 1 },
       });
     });
 
@@ -332,15 +458,47 @@ export const submitInvoiceJob = inngest.createFunction(
         if (error instanceof KsefApiError && !error.isRetryable) {
           Sentry.captureException(error, {
             tags: { job: 'submit-invoice', kind: 'ksef-rejection' },
-            extra: { tenantId, invoiceId, ksefCode: error.ksefCode },
+            extra: { tenantId, invoiceId, ksefCode: error.ksefCode, status: error.status },
           });
           throw new NonRetriableError(
-            `KSeF odrzucił fakturę: ${error.message}`,
+            `KSeF odrzucił fakturę (HTTP ${error.status}): ${error.message}`,
             { cause: error },
           );
         }
-        // Pozostałe (5xx, timeout, ECONNRESET) - niech Inngest retryuje.
-        throw error;
+        // Retry-owalne — 5xx, 429, timeout, ECONNRESET. Zamiast pozwolić
+        // Inngestowi użyć defaultowego exponential backoff (10s/30s/1m/5m/15m),
+        // rzucamy `RetryAfterError` z naszym custom schedule:
+        // 30s → 2min → 5min → 15min → 1h (Faza 23 sekcja 2).
+        //
+        // KsefApiError 429 może mieć `Retry-After` header — jeśli MF mówi
+        // nam konkretnie ile czekać, słuchamy. Inaczej trzymamy się schedule'a.
+        const customDelay = getKsefRetryDelay(attempt);
+        const isKsefApi = error instanceof KsefApiError;
+        const errorLabel = isKsefApi
+          ? `KSeF HTTP ${error.status}: ${error.message}`
+          : error instanceof Error
+            ? `${error.name}: ${error.message}`
+            : 'Nieznany błąd';
+
+        logger.warn('Retry-owalny błąd KSeF — planuję ponowną próbę', {
+          tenantId,
+          invoiceId,
+          attempt,
+          maxRetries: KSEF_MAX_RETRIES,
+          retryAfter: customDelay,
+          errorLabel,
+        });
+
+        Sentry.addBreadcrumb({
+          category: 'ksef.submit',
+          level: 'warning',
+          message: 'KSeF retry scheduled',
+          data: { tenantId, invoiceId, attempt, retryAfter: customDelay, errorLabel },
+        });
+
+        throw new RetryAfterError(errorLabel, customDelay, {
+          cause: error instanceof Error ? error : undefined,
+        });
       }
     });
 
@@ -356,6 +514,11 @@ export const submitInvoiceJob = inngest.createFunction(
         last_error_field: null,
         last_error_suggestion: null,
       });
+
+      // Faza 22: faktura zaakceptowana → dashboard KPI się zmieniają.
+      // Czyścimy cache żeby user widział świeży count zamiast czekać na 5min TTL.
+      const { invalidateTenantDashboard } = await import('@/lib/cache/invalidation');
+      await invalidateTenantDashboard(tenantId);
     });
 
     await step.sendEvent('trigger-upo-download', {

@@ -3,6 +3,7 @@ import {
   User,
   Bell,
   Building2,
+  CreditCard,
   ShieldCheck,
   History,
   UserCog,
@@ -62,6 +63,12 @@ export default async function SettingsPage() {
             label: 'Zespół',
             description: 'Członkowie organizacji, zaproszenia, prośby o dostęp',
             icon: User,
+          },
+          {
+            href: '/settings/billing',
+            label: 'Subskrypcja i rozliczenia',
+            description: 'Plan, karta, faktury Stripe — 30 dni za darmo',
+            icon: CreditCard,
           },
         ]
       : []),

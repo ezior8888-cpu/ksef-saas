@@ -1,7 +1,19 @@
-// Cache wrapper dla walidacji NIP — ogranicza zapytania do Białej Listy / VIES
+// Cache wrapper dla walidacji NIP — ogranicza zapytania do Białej Listy / VIES.
+//
+// Faza 22: dorzucamy warstwę Redis (Upstash) przed DB validation_cache, żeby
+// powtórne sprawdzenia tego samego NIP-a (typowe przy bulk import 100+ faktur
+// z tym samym kontrahentem) nie hammer-owały Postgres. Hierarchia:
+//
+//   1. Redis (TTL 24h, in-memory)
+//   2. validation_cache (DB, TTL 24h, durable + hit_count audit)
+//   3. Live API (Whitelist / VIES)
+//
+// Gdy Redis nieskonfigurowany lub padnie — automatic fallback do DB cache
+// (`lib/cache/index.ts` ma fail-soft semantykę).
 
 import type { Database } from '@/types/database';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { cached, cacheDel, cacheKeys, cacheSet, TTL_SECONDS } from '@/lib/cache';
 import {
   checkNipInWhitelist,
   type WhitelistResponse,
@@ -75,25 +87,41 @@ export async function validateNipCached(
 
   const source: 'whitelist' | 'vies' =
     normalizedCountry === 'PL' ? 'whitelist' : 'vies';
+  const redisKey = cacheKeys.nipValidation(cleanNip, normalizedCountry);
 
   if (!options.forceRefresh) {
-    const { data: cached } = await supabase
-      .from('validation_cache')
-      .select('*')
-      .eq('nip', cleanNip)
-      .eq('country_code', normalizedCountry)
-      .eq('source', source)
-      .gt('expires_at', new Date().toISOString())
-      .maybeSingle();
+    // Warstwa 1: Redis (TTL 24h) — najszybsza.
+    const redisHit = await cached<CachedValidationResult>(
+      redisKey,
+      TTL_SECONDS.nipValidation,
+      async () => {
+        // Warstwa 2: DB validation_cache.
+        const { data: dbCached } = await supabase
+          .from('validation_cache')
+          .select('*')
+          .eq('nip', cleanNip)
+          .eq('country_code', normalizedCountry)
+          .eq('source', source)
+          .gt('expires_at', new Date().toISOString())
+          .maybeSingle();
 
-    if (cached) {
-      await supabase
-        .from('validation_cache')
-        .update({ hit_count: (cached.hit_count ?? 0) + 1 })
-        .eq('id', cached.id);
+        if (!dbCached) return null;
 
-      return mapRowToCached(cached, source);
-    }
+        // Inkrement hit_count tylko gdy Redis miss (Redis hit = już policzone
+        // pośrednio). Zapisuje "ostatnio rzeczywiście użyto" semantykę.
+        await supabase
+          .from('validation_cache')
+          .update({ hit_count: (dbCached.hit_count ?? 0) + 1 })
+          .eq('id', dbCached.id);
+
+        return mapRowToCached(dbCached, source);
+      },
+    );
+
+    if (redisHit) return redisHit;
+  } else {
+    // forceRefresh: czyścimy Redis, żeby kolejne calls nie dostały starego.
+    await cacheDel(redisKey);
   }
 
   let result: CachedValidationResult;
@@ -134,6 +162,10 @@ export async function validateNipCached(
       `validation_cache upsert failed: ${error.code} ${error.message}`,
     );
   }
+
+  // Warstwa 1: świeży wynik trafia do Redisa na 24h. Robimy to po DB upsert,
+  // żeby DB i Redis były spójne — jeśli DB upsert padnie, Redis się nie zapisuje.
+  await cacheSet(redisKey, result, TTL_SECONDS.nipValidation);
 
   return result;
 }

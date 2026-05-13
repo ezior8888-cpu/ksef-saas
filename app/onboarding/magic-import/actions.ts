@@ -140,9 +140,12 @@ export async function startMagicImportAction(
  * "Pomiń — zacznę od zera": atomowe server-side redirect na Dashboard (`/dashboard`).
  * Eliminuje race-condition window.location.assign — kolejny request idzie
  * z poprawnymi cookies (auth + ksef.active_org).
+ *
+ * `?welcome=1` triggeruje WelcomeModal w `app/(dashboard)/dashboard/page.tsx`
+ * z trzema ścieżkami startowymi (Faza 19).
  */
 export async function skipMagicImportAction(): Promise<void> {
-  redirect('/dashboard');
+  redirect('/dashboard?welcome=1');
 }
 
 // ============================================================================

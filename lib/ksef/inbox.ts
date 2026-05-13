@@ -9,6 +9,11 @@ import type {
   KsefEnvironment,
 } from '@/types/ksef';
 
+/** Kontekst audytu (Faza 23 sekcja 3) — opcjonalny propagator do `ksefFetch`. */
+export interface InboxAuditContext {
+  tenantId: string;
+}
+
 /**
  * Pobiera metadane faktur otrzymanych (subject2 = nabywca) z danego zakresu dat.
  * Obsługuje paginację automatycznie.
@@ -18,6 +23,7 @@ export async function queryReceivedInvoices(
   dateFrom: Date,
   dateTo: Date,
   env?: KsefEnvironment,
+  auditContext?: InboxAuditContext,
 ): Promise<InvoiceMetadata[]> {
   return ksefRateLimiter.enqueue(auth.nip, async () => {
     const authSession = await ksefSessionCache.getSession(auth, env);
@@ -53,6 +59,17 @@ export async function queryReceivedInvoices(
           body: req,
           headers,
           env,
+          audit: auditContext
+            ? {
+                tenantId: auditContext.tenantId,
+                action: 'inbox.poll',
+                metadata: {
+                  dateFrom: dateFrom.toISOString(),
+                  dateTo: dateTo.toISOString(),
+                  hasContinuation: Boolean(continuationToken),
+                },
+              }
+            : undefined,
         }
       );
 

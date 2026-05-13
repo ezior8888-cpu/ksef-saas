@@ -160,7 +160,7 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
 
         <Button
           type="button"
-          onClick={() => router.push('/dashboard')}
+          onClick={() => router.push('/dashboard?welcome=1')}
           variant="glass-primary"
           size="lg"
           className="w-full"
@@ -199,7 +199,7 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
           </Button>
           <Button
             type="button"
-            onClick={() => router.push('/dashboard')}
+            onClick={() => router.push('/dashboard?welcome=1')}
             variant="glass-primary"
             size="lg"
             className="flex-1"

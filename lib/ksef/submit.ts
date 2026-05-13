@@ -34,6 +34,15 @@ export interface SubmitInvoiceResult {
   upoDownloadUrl?: string;
 }
 
+/** Kontekst audytu (Faza 23 sekcja 3) — opcjonalny, propaguje się do każdego
+ * `ksefFetch` wewnątrz tego flow. Bez niego wywołania nie są logowane do
+ * `audit_logs` (backwards-compat — testy / dev scripty).
+ */
+export interface SubmitAuditContext {
+  tenantId: string;
+  invoiceId: string;
+}
+
 /**
  * Pełny flow wysyłki JEDNEJ faktury do KSeF:
  * 1. Pobierz/utwórz sesję auth
@@ -49,6 +58,7 @@ export async function submitInvoice(
   invoiceXml: string,
   auth: KsefAuth,
   env?: KsefEnvironment,
+  auditContext?: SubmitAuditContext,
 ): Promise<SubmitInvoiceResult> {
   return ksefRateLimiter.enqueue(auth.nip, async () => {
     // 1. Sesja auth (cache dispatcha na XAdES albo token wg auth.type).
@@ -76,6 +86,9 @@ export async function submitInvoice(
       accessToken,
       body: openSessionReq,
       env,
+      audit: auditContext
+        ? { ...auditContext, action: 'session.open' }
+        : undefined,
     });
 
     try {
@@ -99,6 +112,13 @@ export async function submitInvoice(
           accessToken,
           body: sendReq,
           env,
+          audit: auditContext
+            ? {
+                ...auditContext,
+                action: 'invoice.send',
+                metadata: { sessionRef: session.referenceNumber },
+              }
+            : undefined,
         }
       );
 
@@ -107,7 +127,10 @@ export async function submitInvoice(
         session.referenceNumber,
         sendResult.referenceNumber,
         accessToken,
-        env
+        env,
+        undefined,
+        undefined,
+        auditContext,
       );
 
       if (!invoiceStatus.ksefNumber) {
@@ -130,6 +153,9 @@ export async function submitInvoice(
           method: 'POST',
           accessToken,
           env,
+          audit: auditContext
+            ? { ...auditContext, action: 'session.close' }
+            : undefined,
         });
       } catch {
         // Zamknięcie sesji to best-effort
@@ -147,12 +173,23 @@ async function pollInvoiceStatus(
   accessToken: string,
   env?: KsefEnvironment,
   maxAttempts = 30,
-  intervalMs = 2000
+  intervalMs = 2000,
+  auditContext?: SubmitAuditContext,
 ): Promise<InvoiceStatusResponse> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const status = await ksefFetch<InvoiceStatusResponse>(
       `/sessions/${sessionRef}/invoices/${invoiceRef}`,
-      { accessToken, env }
+      {
+        accessToken,
+        env,
+        audit: auditContext
+          ? {
+              ...auditContext,
+              action: 'invoice.poll',
+              metadata: { sessionRef, attempt },
+            }
+          : undefined,
+      }
     );
 
     const code = ksefNumericStatusCode(status.status?.code);

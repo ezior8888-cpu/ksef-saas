@@ -17,6 +17,9 @@ import { Resend } from 'resend';
 import CertExpiry from './templates/CertExpiry';
 import InvoiceAccepted from './templates/InvoiceAccepted';
 import InvoiceFailed from './templates/InvoiceFailed';
+import PaymentFailed from './templates/PaymentFailed';
+import RefundIssued from './templates/RefundIssued';
+import TrialEnding from './templates/TrialEnding';
 
 // ═══════════════════════════════════════════════════════════════
 // KONFIGURACJA
@@ -196,6 +199,89 @@ export async function sendCertExpiryAlert(
   return sendViaResend({
     to: email,
     subject: `⚠ Certyfikat KSeF wygasa za ${payload.daysRemaining} dni`,
+    html,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FAZA 25 KROK 5 — BILLING EMAILS
+// ═══════════════════════════════════════════════════════════════
+
+export interface TrialEndingPayload {
+  tenantName: string;
+  daysRemaining: 14 | 7 | 3 | 1;
+  trialEndDate: string;
+  planLabel: string;
+  monthlyPriceLabel: string;
+}
+
+export async function sendTrialEndingEmail(
+  email: string,
+  payload: TrialEndingPayload,
+): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    console.log(
+      `[email:stub] sendTrialEndingEmail → ${email}: trial kończy się za ${payload.daysRemaining} dni`,
+    );
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(
+    TrialEnding({
+      ...payload,
+      appUrl: APP_URL,
+    }),
+  );
+  const isFinalDay = payload.daysRemaining === 1;
+  const subject = isFinalDay
+    ? '⏰ Twój trial FaktFlow kończy się jutro'
+    : `Twój trial FaktFlow kończy się za ${payload.daysRemaining} dni`;
+  return sendViaResend({ to: email, subject, html });
+}
+
+export interface PaymentFailedPayload {
+  tenantName: string;
+  amountLabel: string;
+  failureReason: string | null;
+}
+
+export async function sendPaymentFailedEmail(
+  email: string,
+  payload: PaymentFailedPayload,
+): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    console.log(
+      `[email:stub] sendPaymentFailedEmail → ${email}: ${payload.amountLabel} (${payload.failureReason ?? 'unknown'})`,
+    );
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(PaymentFailed({ ...payload, appUrl: APP_URL }));
+  return sendViaResend({
+    to: email,
+    subject: 'Nie udało się pobrać płatności FaktFlow',
+    html,
+  });
+}
+
+export interface RefundIssuedPayload {
+  tenantName: string;
+  amountLabel: string;
+  reason: string | null;
+}
+
+export async function sendRefundIssuedEmail(
+  email: string,
+  payload: RefundIssuedPayload,
+): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    console.log(
+      `[email:stub] sendRefundIssuedEmail → ${email}: ${payload.amountLabel}`,
+    );
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(RefundIssued(payload));
+  return sendViaResend({
+    to: email,
+    subject: `Zwrot ${payload.amountLabel} przetworzony`,
     html,
   });
 }

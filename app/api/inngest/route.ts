@@ -32,6 +32,13 @@ import {
   coPilotSendPackageJob,
 } from '@/lib/inngest/jobs/co-pilot-monthly';
 import { jobsWatchdogJob } from '@/lib/inngest/jobs/jobs-watchdog';
+import { refreshMaterializedViewsJob } from '@/lib/inngest/jobs/refresh-materialized-views';
+import { cleanupAuditLogsJob } from '@/lib/inngest/jobs/cleanup-audit-logs';
+import { ksefHealthCheckJob } from '@/lib/inngest/jobs/ksef-health-check';
+import { upoRetryStaleJob } from '@/lib/inngest/jobs/upo-retry-stale';
+import { selfInvoicePaymentJob } from '@/lib/inngest/jobs/self-invoice-payment';
+import { trialCountdownEmailsJob } from '@/lib/inngest/jobs/trial-countdown-emails';
+import { dunningPaymentFailedJob } from '@/lib/inngest/jobs/dunning-payment-failed';
 import { processOcrJob } from '@/lib/inngest/jobs/process-ocr';
 import { autoCategorizeInboxInvoice } from '@/lib/inngest/jobs/auto-categorize-inbox';
 import {
@@ -76,6 +83,13 @@ export const { GET, POST, PUT } = serve({
     coPilotMonthlyJob,
     coPilotSendPackageJob,
     jobsWatchdogJob,
+    refreshMaterializedViewsJob,
+    cleanupAuditLogsJob,
+    ksefHealthCheckJob,
+    upoRetryStaleJob,
+    selfInvoicePaymentJob,
+    trialCountdownEmailsJob,
+    dunningPaymentFailedJob,
     processOcrJob,
     autoCategorizeInboxInvoice,
     emailWelcome,
