@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
 
+// Faza 22: regulamin to dokument prawny — zmienia się rzadko, cache na dobę.
+export const revalidate = 86400;
+
 export const metadata: Metadata = {
   title: 'Regulamin KSeF SaaS',
 };

@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
 
+// Faza 22: RODO — dokument prawny, cache na dobę.
+export const revalidate = 86400;
+
 export const metadata: Metadata = {
   title: 'RODO i bezpieczeństwo — KSeF SaaS',
 };

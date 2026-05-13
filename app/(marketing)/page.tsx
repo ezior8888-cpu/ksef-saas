@@ -1,5 +1,10 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
+
+// Faza 22: edge caching dla landingu. 5min revalidate + on-demand purge
+// dla deploy'ów. Stronę odwiedzają anonimowi goście — żadna personalizacja,
+// safe na edge cache. Crawlerzy (Google, indeksery) dostają tę samą wersję.
+export const revalidate = 300; // 5 minut
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -19,6 +24,7 @@ import { SavingsCalculatorPreview } from '@/components/marketing/savings-calcula
 import { FeatureCard } from '@/components/marketing/feature-card';
 import { TestimonialCard } from '@/components/marketing/testimonial-card';
 import { FaqSection } from '@/components/marketing/faq-section';
+import { ScrollReveal } from '@/components/marketing/scroll-reveal';
 
 export const metadata: Metadata = {
   title: 'FaktFlow — faktury KSeF 2026 dla mikrofirm | Zdjęcie paragonu = wpis do KPiR',
@@ -95,15 +101,17 @@ export default function LandingPage() {
 
       <section className="border-t border-glass-border py-24">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="mx-auto mb-16 max-w-2xl text-center">
-            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Konkurencja zostaje w tyle
-            </p>
-            <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-              Stare apki to formularze.{' '}
-              <span className="text-muted-foreground">Nasza apka to asystent.</span>
-            </h2>
-          </div>
+          <ScrollReveal>
+            <div className="mx-auto mb-16 max-w-2xl text-center">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Konkurencja zostaje w tyle
+              </p>
+              <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
+                Stare apki to formularze.{' '}
+                <span className="text-muted-foreground">Nasza apka to asystent.</span>
+              </h2>
+            </div>
+          </ScrollReveal>
 
           <div className="grid gap-6 md:grid-cols-2">
             <ProblemCard
@@ -132,14 +140,16 @@ export default function LandingPage() {
 
       <section className="border-t border-glass-border py-24">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="mx-auto mb-16 max-w-2xl text-center">
-            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Co Ci to da
-            </p>
-            <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-              5 funkcji, które oszczędzą Ci 12–42 godziny rocznie
-            </h2>
-          </div>
+          <ScrollReveal>
+            <div className="mx-auto mb-16 max-w-2xl text-center">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Co Ci to da
+              </p>
+              <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
+                5 funkcji, które oszczędzą Ci 12–42 godziny rocznie
+              </h2>
+            </div>
+          </ScrollReveal>
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <FeatureCard
@@ -183,28 +193,34 @@ export default function LandingPage() {
 
       <section className="border-t border-glass-border py-24">
         <div className="mx-auto max-w-4xl px-6">
-          <div className="mb-12 text-center">
-            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Sprawdź sam
-            </p>
-            <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-              Ile zaoszczędzisz w ciągu roku?
-            </h2>
-          </div>
-          <SavingsCalculatorPreview />
+          <ScrollReveal>
+            <div className="mb-12 text-center">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Sprawdź sam
+              </p>
+              <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
+                Ile zaoszczędzisz w ciągu roku?
+              </h2>
+            </div>
+          </ScrollReveal>
+          <ScrollReveal delay={0.1}>
+            <SavingsCalculatorPreview />
+          </ScrollReveal>
         </div>
       </section>
 
       <section className="border-t border-glass-border py-24">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="mx-auto mb-16 max-w-2xl text-center">
-            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Beta testerzy mówią
-            </p>
-            <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-              „Nie wracam do Fakturownia”
-            </h2>
-          </div>
+          <ScrollReveal>
+            <div className="mx-auto mb-16 max-w-2xl text-center">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Beta testerzy mówią
+              </p>
+              <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
+                {'„Nie wracam do Fakturownia”'}
+              </h2>
+            </div>
+          </ScrollReveal>
 
           <div className="grid gap-6 md:grid-cols-3">
             <TestimonialCard
@@ -231,12 +247,14 @@ export default function LandingPage() {
 
       <section className="border-t border-glass-border py-24">
         <div className="mx-auto max-w-4xl px-6 text-center">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Cennik
-          </p>
-          <h2 className="mb-6 font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-            Jeden plan. Wszystkie funkcje.
-          </h2>
+          <ScrollReveal>
+            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Cennik
+            </p>
+            <h2 className="mb-6 font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
+              Jeden plan. Wszystkie funkcje.
+            </h2>
+          </ScrollReveal>
           <p className="mx-auto mb-12 max-w-2xl text-xl text-muted-foreground">
             Bez ukrytych dodatków. Bez „premium-only” toggle do OCR. Wszystko od pierwszego dnia.
           </p>
@@ -288,19 +306,21 @@ export default function LandingPage() {
 
       <section className="border-t border-glass-border py-24">
         <div className="mx-auto max-w-4xl px-6 text-center">
-          <h2 className="mb-6 font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-            KSeF jest obowiązkowy za 9 miesięcy.
-          </h2>
-          <p className="mx-auto mb-10 max-w-2xl text-xl text-muted-foreground">
-            Lepiej przyzwyczaj się dziś niż w panice w styczniu 2026.
-          </p>
-          <Button variant="glass-primary" size="lg" className="text-base" asChild>
-            <Link href="/register" className="inline-flex items-center gap-2">
-              Zacznij 30 dni za darmo
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </Link>
-          </Button>
-          <p className="mt-4 text-xs text-muted-foreground">Bez karty kredytowej. Anuluj kiedy chcesz.</p>
+          <ScrollReveal>
+            <h2 className="mb-6 font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
+              KSeF jest obowiązkowy za 9 miesięcy.
+            </h2>
+            <p className="mx-auto mb-10 max-w-2xl text-xl text-muted-foreground">
+              Lepiej przyzwyczaj się dziś niż w panice w styczniu 2026.
+            </p>
+            <Button variant="glass-primary" size="lg" className="text-base" asChild>
+              <Link href="/register" className="inline-flex items-center gap-2">
+                Zacznij 30 dni za darmo
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              </Link>
+            </Button>
+            <p className="mt-4 text-xs text-muted-foreground">Bez karty kredytowej. Anuluj kiedy chcesz.</p>
+          </ScrollReveal>
         </div>
       </section>
     </>

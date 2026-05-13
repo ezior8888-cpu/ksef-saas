@@ -1,0 +1,79 @@
+/**
+ * Strony porównań (`/vs/*`) — zmienne i utility pod `.ff-vs-comparison`.
+ * Nie nadpisuje globalnego `:root`.
+ */
+
+.ff-vs-comparison {
+  --color-comparison-surface: #1c1b1b;
+  --color-comparison-border: rgba(255, 255, 255, 0.08);
+  --color-status-error: #ef4444;
+  --color-status-error-bg: rgba(239, 68, 68, 0.1);
+  --color-status-success: #10b981;
+  --color-status-success-bg: rgba(16, 185, 129, 0.1);
+  --table-row-hover: rgba(255, 255, 255, 0.02);
+  --table-header-bg: rgba(16, 185, 129, 0.05);
+  --gradient-emerald-glow: radial-gradient(
+    circle,
+    rgba(16, 185, 129, 0.15) 0%,
+    rgba(0, 0, 0, 0) 70%
+  );
+  --cmp-primary: #4edea3;
+  --cmp-on-surface: #e5e2e1;
+  --cmp-on-surface-variant: #bbcabf;
+  --cmp-outline: rgba(255, 255, 255, 0.12);
+}
+
+.ff-vs-glass-card {
+  background: rgba(32, 31, 31, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--color-comparison-border);
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.3);
+}
+
+.ff-vs-emerald-glow {
+  box-shadow:
+    inset 0 0 40px rgba(78, 222, 163, 0.1),
+    0 0 20px rgba(78, 222, 163, 0.05);
+}
+
+@keyframes ff-vs-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ff-vs-animate-row {
+  animation: ff-vs-fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+.ff-vs-delay-1 {
+  animation-delay: 0.1s;
+}
+.ff-vs-delay-2 {
+  animation-delay: 0.2s;
+}
+.ff-vs-delay-3 {
+  animation-delay: 0.3s;
+}
+.ff-vs-delay-4 {
+  animation-delay: 0.4s;
+}
+
+.ff-vs-icon-success {
+  filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.55));
+}
+
+.ff-vs-icon-error {
+  filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.45));
+}
+
+.ff-vs-icon-warn {
+  filter: drop-shadow(0 0 5px rgba(251, 146, 60, 0.45));
+}

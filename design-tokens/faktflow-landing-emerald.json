@@ -1,0 +1,37 @@
+{
+  "name": "STRONA GŁÓWNA",
+  "theme": "Emerald Flow Dark",
+  "tokens": {
+    "colors": {
+      "brand": {
+        "emerald": { "value": "#10b981", "type": "color" },
+        "primaryUi": { "value": "#4edea3", "type": "color" }
+      },
+      "neutrals": {
+        "black": { "value": "#0e0e0e", "type": "color" },
+        "gray-dark": { "value": "#131313", "type": "color" },
+        "gray-light": { "value": "#f4f4f4", "type": "color" }
+      },
+      "semantic": {
+        "error": { "value": "#ef4444", "type": "color" },
+        "success": { "value": "#10b981", "type": "color" }
+      }
+    },
+    "typography": {
+      "family": {
+        "main": { "value": "Hanken Grotesk", "type": "fontFamily" }
+      },
+      "weight": {
+        "regular": { "value": "400", "type": "fontWeight" },
+        "medium": { "value": "500", "type": "fontWeight" },
+        "bold": { "value": "700", "type": "fontWeight" }
+      }
+    },
+    "effects": {
+      "glass": {
+        "blur": { "value": "16px", "type": "blur" },
+        "opacity": { "value": "0.03", "type": "opacity" }
+      }
+    }
+  }
+}

@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
 
+// Faza 22: polityka prywatności — dokument prawny, cache na dobę.
+export const revalidate = 86400;
+
 export const metadata: Metadata = {
   title: 'Polityka prywatności KSeF SaaS',
 };

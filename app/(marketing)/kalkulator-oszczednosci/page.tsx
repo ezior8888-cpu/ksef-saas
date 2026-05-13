@@ -2,6 +2,10 @@ import type { Metadata } from 'next';
 
 import { SavingsCalculatorPreview } from '@/components/marketing/savings-calculator-preview';
 
+// Faza 22: kalkulator pełni interaktywny (state w komponencie), ale shell strony
+// statyczny — cache na godzinę żeby SEO crawler dostawał konsystentny page.
+export const revalidate = 3600;
+
 export const metadata: Metadata = {
   title: 'Kalkulator oszczędności KSeF SaaS — sprawdź ile zaoszczędzisz',
   description:

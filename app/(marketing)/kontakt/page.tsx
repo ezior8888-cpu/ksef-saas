@@ -4,6 +4,9 @@ import { Mail, MapPin, MessageCircle } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
+// Faza 22: kontakt to czysto statyczna strona — cache na dobę.
+export const revalidate = 86400;
+
 export const metadata: Metadata = {
   title: 'Kontakt — KSeF SaaS',
 };

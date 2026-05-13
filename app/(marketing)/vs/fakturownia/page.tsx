@@ -5,6 +5,9 @@ import { ArrowRight } from 'lucide-react';
 import { ComparisonTable, type ComparisonRow } from '@/components/marketing/comparison-table';
 import { Button } from '@/components/ui/button';
 
+// Faza 22: comparison page — SEO ważne, cache na godzinę.
+export const revalidate = 3600;
+
 export const metadata: Metadata = {
   title: 'KSeF SaaS vs Fakturownia 2026 — porównanie ceny i funkcji',
   description:

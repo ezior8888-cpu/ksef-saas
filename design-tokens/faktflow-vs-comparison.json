@@ -1,0 +1,32 @@
+{
+  "name": "PORÓWNANIA",
+  "theme": "Emerald Flow Dark",
+  "version": "1.0.0",
+  "tokens": {
+    "colors": {
+      "comparison": {
+        "faktflow": { "value": "#10b981", "type": "color" },
+        "traditional": { "value": "#a1a1aa", "type": "color" },
+        "row-divider": { "value": "rgba(255, 255, 255, 0.1)", "type": "color" }
+      },
+      "icons": {
+        "success": { "value": "#10b981", "type": "color" },
+        "error": { "value": "#ef4444", "type": "color" },
+        "neutral": { "value": "#71717a", "type": "color" }
+      }
+    },
+    "layout": {
+      "table": {
+        "max-width": { "value": "1152px", "type": "dimension" },
+        "cell-padding": { "value": "1.5rem", "type": "dimension" }
+      }
+    },
+    "components": {
+      "comparison-card": {
+        "background": { "value": "var(--color-surface)", "type": "color" },
+        "border": { "value": "var(--glass-border)", "type": "color" },
+        "radius": { "value": "24px", "type": "dimension" }
+      }
+    }
+  }
+}

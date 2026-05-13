@@ -4,6 +4,9 @@ import { ArrowRight, CheckCircle2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 
+// Faza 22: cennik się rzadko zmienia — godzinny revalidate na edge.
+export const revalidate = 3600;
+
 export const metadata: Metadata = {
   title: 'Cennik KSeF SaaS — 49 zł/mc, wszystkie funkcje, 60 dni gwarancji',
   description:
