@@ -14,9 +14,11 @@
 import { render } from '@react-email/render';
 import { Resend } from 'resend';
 
+import AccountDeletionConfirmation from './templates/AccountDeletionConfirmation';
 import CertExpiry from './templates/CertExpiry';
 import InvoiceAccepted from './templates/InvoiceAccepted';
 import InvoiceFailed from './templates/InvoiceFailed';
+import MagicImportCompleted from './templates/MagicImportCompleted';
 import PaymentFailed from './templates/PaymentFailed';
 import RefundIssued from './templates/RefundIssued';
 import TrialEnding from './templates/TrialEnding';
@@ -55,8 +57,28 @@ function getResend(): Resend {
   return cachedResend;
 }
 
-function getFromEmail(): string {
-  return process.env.RESEND_FROM_EMAIL ?? DEFAULT_FROM;
+/**
+ * Faza 26: rozdzielenie reputacji transactional vs marketing przez różne
+ * subdomeny `From:`. Bez tego marketing complaint zniszczyłby reputację
+ * tej samej domeny używanej dla critical alerts (faktury, hasła).
+ *
+ * Konwencja (oba opcjonalne — fallback do single `RESEND_FROM_EMAIL`):
+ *   RESEND_FROM_TRANSACTIONAL = `FaktFlow <no-reply@app.faktflow.pl>`
+ *   RESEND_FROM_MARKETING     = `FaktFlow <hello@hello.faktflow.pl>`
+ */
+function getFromEmail(category: 'transactional' | 'product_updates' | 'marketing'): string {
+  if (category === 'transactional') {
+    return (
+      process.env.RESEND_FROM_TRANSACTIONAL ??
+      process.env.RESEND_FROM_EMAIL ??
+      DEFAULT_FROM
+    );
+  }
+  return (
+    process.env.RESEND_FROM_MARKETING ??
+    process.env.RESEND_FROM_EMAIL ??
+    DEFAULT_FROM
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -91,21 +113,61 @@ interface CertExpiryPayload {
 // INTERNAL: wrapper nad `resend.emails.send`
 // ═══════════════════════════════════════════════════════════════
 
+import { canSendTo, type EmailCategory } from './preferences';
+import {
+  createUnsubscribeToken,
+  isUnsubscribeConfigured,
+} from './unsubscribe-token';
+
 async function sendViaResend(opts: {
   to: string;
   subject: string;
   html: string;
+  /** Faza 26: kategoria emaila — domyślnie 'transactional' (zachowanie wsteczne). */
+  category?: EmailCategory;
+  /** User do którego należy email — używany do preferences check + unsubscribe token. */
+  userId?: string;
 }): Promise<EmailStubResult> {
+  const category: EmailCategory = opts.category ?? 'transactional';
   const finalTo = DEV_TO_OVERRIDE ?? opts.to;
   const finalSubject = DEV_TO_OVERRIDE
     ? `[DEV → ${opts.to}] ${opts.subject}`
     : opts.subject;
 
+  // Faza 26 Layer 1: preferences + bounce check.
+  // Skip dla DEV_TO_OVERRIDE (testy lokalne pomijają preferences).
+  if (!DEV_TO_OVERRIDE) {
+    const check = await canSendTo(opts.to, opts.userId ?? null, category);
+    if (!check.ok) {
+      return { sent: false, reason: check.reason };
+    }
+  }
+
+  // Faza 26: List-Unsubscribe headers (RFC 8058). Tylko dla product_updates +
+  // marketing — transactional MUSI zawsze dochodzić.
+  const headers: Record<string, string> = {};
+  if (
+    opts.userId &&
+    category !== 'transactional' &&
+    isUnsubscribeConfigured()
+  ) {
+    try {
+      const token = createUnsubscribeToken(opts.userId, category);
+      const unsubUrl = `${APP_URL}/api/email/unsubscribe?t=${encodeURIComponent(token)}`;
+      headers['List-Unsubscribe'] = `<${unsubUrl}>`;
+      // RFC 8058: bez tego Gmail/Outlook nie pokażą one-click button.
+      headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+    } catch {
+      // EMAIL_UNSUBSCRIBE_SECRET missing → skip headers, ale wyślij email.
+    }
+  }
+
   const { data, error } = await getResend().emails.send({
-    from: getFromEmail(),
+    from: getFromEmail(category),
     to: [finalTo],
     subject: finalSubject,
     html: opts.html,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
   });
   if (error) {
     // Inngest potrzebuje rzuconego błędu żeby ruszyć retry. Serializujemy
@@ -163,11 +225,16 @@ export async function sendInvoiceFailedEmail(
  * Generyczna wysyłka maila — używana przez moduły, które same komponują
  * HTML (np. zaproszenia do organizacji). Zachowuje tę samą semantykę
  * "fail-soft" jak pozostałe helpery: brak `RESEND_API_KEY` → log do stdout.
+ *
+ * Faza 26: opcjonalne `category` (default 'transactional') + `userId`
+ * (do unsubscribe token + preferences check).
  */
 export async function sendEmail(opts: {
   to: string;
   subject: string;
   html: string;
+  category?: EmailCategory;
+  userId?: string;
 }): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
     console.log(`[email:stub] sendEmail → ${opts.to}: ${opts.subject}`);
@@ -283,5 +350,71 @@ export async function sendRefundIssuedEmail(
     to: email,
     subject: `Zwrot ${payload.amountLabel} przetworzony`,
     html,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FAZA 26 — NOWE TEMPLATES
+// ═══════════════════════════════════════════════════════════════
+
+export interface MagicImportCompletedPayload {
+  tenantName: string;
+  invoicesImported: number;
+  contractorsImported: number;
+  productsImported: number;
+  warningsCount?: number;
+  /** userId potrzebny do unsubscribe token (kategoria 'product_updates'). */
+  userId?: string;
+}
+
+export async function sendMagicImportCompletedEmail(
+  email: string,
+  payload: MagicImportCompletedPayload,
+): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    console.log(
+      `[email:stub] sendMagicImportCompletedEmail → ${email}: ${payload.invoicesImported} faktur, ${payload.contractorsImported} kontrahentów`,
+    );
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(
+    MagicImportCompleted({ ...payload, appUrl: APP_URL }),
+  );
+  return sendViaResend({
+    to: email,
+    subject: '✨ Twoja historia z KSeF jest gotowa',
+    html,
+    category: 'product_updates',
+    userId: payload.userId,
+  });
+}
+
+export interface AccountDeletionConfirmationPayload {
+  tenantName: string;
+  hardDeleteDate: string;
+  supportEmail?: string;
+}
+
+export async function sendAccountDeletionConfirmationEmail(
+  email: string,
+  payload: AccountDeletionConfirmationPayload,
+): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    console.log(
+      `[email:stub] sendAccountDeletionConfirmationEmail → ${email}: hard delete ${payload.hardDeleteDate}`,
+    );
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(
+    AccountDeletionConfirmation({
+      ...payload,
+      supportEmail: payload.supportEmail ?? 'pomoc@faktflow.pl',
+    }),
+  );
+  return sendViaResend({
+    to: email,
+    subject: 'Potwierdzenie usunięcia konta FaktFlow',
+    html,
+    category: 'transactional',
   });
 }

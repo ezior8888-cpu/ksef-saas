@@ -32,6 +32,7 @@ const PUBLIC_API_PREFIXES = [
   '/api/inngest',
   '/api/health',
   '/api/portal',
+  '/api/email',
 ] as const;
 
 const STATIC_PUBLIC_EXACT = [
