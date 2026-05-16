@@ -1,12 +1,22 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TurnstileWidget } from '@/components/auth/turnstile-widget';
 import { loginWithGoogle } from '../login/actions';
 import { signupWithEmail } from './actions';
 
 const ERROR_MESSAGES: Record<string, string> = {
-  weak_password: 'Hasło musi mieć co najmniej 8 znaków.',
-  'email rate limit exceeded': 'Przekroczono limit wysyłki maili. Poczekaj kilka minut i spróbuj ponownie.',
+  missing_fields: 'Wypełnij wszystkie pola.',
+  weak_password:
+    'Hasło musi mieć min. 12 znaków, zawierać małą i dużą literę, cyfrę oraz znak specjalny.',
+  password_breached:
+    'To hasło pojawiło się w znanych wyciekach danych. Wybierz inne — najlepiej passphrase z 4-5 losowych słów.',
+  rate_limited:
+    'Zbyt wiele prób rejestracji z tego urządzenia. Poczekaj kilka minut i spróbuj ponownie.',
+  bot_check_failed:
+    'Nie udało się potwierdzić, że nie jesteś botem. Odśwież stronę i spróbuj ponownie.',
+  'email rate limit exceeded':
+    'Przekroczono limit wysyłki maili. Poczekaj kilka minut i spróbuj ponownie.',
 };
 
 const labelClass = 'text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block';
@@ -14,10 +24,15 @@ const labelClass = 'text-xs font-medium text-muted-foreground uppercase tracking
 export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; retry?: string }>;
 }) {
-  const { error } = await searchParams;
-  const errorMsg = error ? (ERROR_MESSAGES[error] ?? error) : null;
+  const { error, retry } = await searchParams;
+  const retryMinutes = retry ? Math.ceil(Number(retry) / 60) : null;
+  const errorMsg = error
+    ? error === 'rate_limited' && retryMinutes
+      ? `Zbyt wiele prób rejestracji. Spróbuj ponownie za ~${retryMinutes} min.`
+      : (ERROR_MESSAGES[error] ?? error)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -67,9 +82,13 @@ export default async function RegisterPage({
           <Input id="email" name="email" type="email" required autoComplete="email" />
         </div>
         <div>
-          <label htmlFor="password" className={labelClass}>Hasło (min. 8 znaków)</label>
-          <Input id="password" name="password" type="password" required minLength={8} autoComplete="new-password" />
+          <label htmlFor="password" className={labelClass}>Hasło</label>
+          <Input id="password" name="password" type="password" required minLength={12} autoComplete="new-password" />
+          <p className="text-xs text-muted-foreground mt-1.5">
+            Min. 12 znaków, mała + duża litera, cyfra, znak specjalny. Sprawdzamy w bazie wycieków.
+          </p>
         </div>
+        <TurnstileWidget action="register" />
         <Button type="submit" variant="glass-primary" size="lg" className="w-full">
           Utwórz konto
         </Button>

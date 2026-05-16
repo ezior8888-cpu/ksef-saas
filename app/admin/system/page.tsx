@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Cloud, Cog, Database } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { getBackupOverview } from '@/lib/admin/backups';
 import {
   getDbStats,
   getInngestJobStats,
@@ -11,6 +12,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { KsefEnvironment } from '@/types/ksef';
 
+import { BackupStatusCard } from './_components/backup-status-card';
 import { HealthTimeline } from './_components/health-timeline';
 
 export const dynamic = 'force-dynamic';
@@ -35,7 +37,7 @@ function formatBytes(bytes: number): string {
 export default async function AdminSystemPage() {
   const env = currentKsefEnv();
 
-  const [healthHistory, jobStats, dbStats, offline] = await Promise.all([
+  const [healthHistory, jobStats, dbStats, offline, backups] = await Promise.all([
     getKsefHealthHistory(env, WINDOW_HOURS).catch(() => []),
     getInngestJobStats(WINDOW_HOURS).catch(() => []),
     getDbStats().catch(() => ({ totalDatabaseBytes: 0, tables: [] })),
@@ -43,6 +45,12 @@ export default async function AdminSystemPage() {
       pending: 0,
       failed: 0,
       oldestDeadline: null,
+    })),
+    getBackupOverview().catch(() => ({
+      lastDaily: null,
+      lastWeekly: null,
+      hoursSinceLastSuccess: null,
+      hasRecentFailure: false,
     })),
   ]);
 
@@ -67,8 +75,8 @@ export default async function AdminSystemPage() {
         <HealthTimeline entries={healthHistory} windowHours={WINDOW_HOURS} />
       </section>
 
-      {/* Offline queue + DB size summary */}
-      <section className="grid gap-3 sm:grid-cols-3">
+      {/* Offline queue + DB size summary + Backups */}
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <OfflineQueueCard
           pending={offline.pending}
           failed={offline.failed}
@@ -97,6 +105,7 @@ export default async function AdminSystemPage() {
               : 'default'
           }
         />
+        <BackupStatusCard overview={backups} />
       </section>
 
       {/* Inngest jobs table */}

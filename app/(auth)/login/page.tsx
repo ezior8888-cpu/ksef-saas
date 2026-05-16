@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TurnstileWidget } from '@/components/auth/turnstile-widget';
 import { loginWithEmail, loginWithGoogle } from './actions';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -8,11 +9,14 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_credentials: 'Nieprawidłowy email lub hasło. Upewnij się, że email jest potwierdzony.',
   oauth_failed: 'Nie udało się zalogować przez Google. Spróbuj ponownie.',
   auth_callback_failed: 'Link z maila wygasł lub był już użyty. Zarejestruj się ponownie albo poproś o nowy link.',
+  rate_limited: 'Zbyt wiele prób logowania. Poczekaj kilka minut i spróbuj ponownie.',
+  bot_check_failed: 'Nie udało się potwierdzić, że nie jesteś botem. Odśwież stronę i spróbuj ponownie.',
 };
 
 const SUCCESS_MESSAGES: Record<string, string> = {
   check_email: 'Konto utworzone! Sprawdź swoją skrzynkę pocztową — wysłaliśmy link aktywacyjny.',
   account_deleted: 'Zapisaliśmy żądanie usunięcia firmy. Zostałeś wylogowany — konto zostanie trwale usunięte po upływie okresu retencji (30 dni), o ile nie cofniesz decyzji z pomocą techniczną.',
+  session_expired: 'Wylogowaliśmy Cię po godzinie bezczynności. Zaloguj się ponownie, aby kontynuować.',
 };
 
 const labelClass = 'text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block';
@@ -20,10 +24,15 @@ const labelClass = 'text-xs font-medium text-muted-foreground uppercase tracking
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; success?: string; redirect?: string }>;
+  searchParams: Promise<{ error?: string; success?: string; redirect?: string; retry?: string }>;
 }) {
-  const { error, success } = await searchParams;
-  const errorMsg = error ? ERROR_MESSAGES[error] ?? error : null;
+  const { error, success, retry } = await searchParams;
+  const retryMinutes = retry ? Math.ceil(Number(retry) / 60) : null;
+  const errorMsg = error
+    ? error === 'rate_limited' && retryMinutes
+      ? `Zbyt wiele prób logowania. Spróbuj ponownie za ~${retryMinutes} min.`
+      : ERROR_MESSAGES[error] ?? error
+    : null;
   const successMsg = success ? SUCCESS_MESSAGES[success] ?? null : null;
 
   return (
@@ -84,6 +93,7 @@ export default async function LoginPage({
           </div>
           <Input id="password" name="password" type="password" required autoComplete="current-password" />
         </div>
+        <TurnstileWidget action="login" />
         <Button type="submit" variant="glass-primary" size="lg" className="w-full">
           Zaloguj się
         </Button>

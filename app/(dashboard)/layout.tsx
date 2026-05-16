@@ -11,6 +11,7 @@ import { PrefetchDashboardRoutes } from '@/components/dashboard/prefetch-dashboa
 import { PrefetchExportsRoute } from '@/components/dashboard/exports-route-client';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { WelcomeModal } from '@/components/dashboard/welcome-modal';
+import { IdleWatcher } from '@/components/auth/idle-watcher';
 import { InstallPrompt } from '@/components/pwa/install-prompt-lazy';
 
 /**
@@ -87,6 +88,7 @@ export default async function DashboardLayout({
       <InstallPrompt />
       <PrefetchDashboardRoutes />
       <PrefetchExportsRoute />
+      <IdleWatcher />
       <Suspense fallback={null}>
         <WelcomeModal />
       </Suspense>

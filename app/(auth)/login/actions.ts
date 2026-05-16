@@ -4,6 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { logAudit } from '@/lib/audit/log';
+import { getClientIp } from '@/lib/auth/get-client-ip';
+import { checkLoginRateLimit } from '@/lib/rate-limit/auth';
+import { verifyTurnstile } from '@/lib/security/turnstile';
 import { createClient } from '@/lib/supabase/server';
 
 /**
@@ -12,11 +15,30 @@ import { createClient } from '@/lib/supabase/server';
  * Na sukces → redirect na /dashboard (pulpit aplikacji).
  */
 export async function loginWithEmail(formData: FormData): Promise<void> {
-  const email = String(formData.get('email') ?? '');
+  const email = String(formData.get('email') ?? '').trim().toLowerCase();
   const password = String(formData.get('password') ?? '');
 
   if (!email || !password) {
     redirect('/login?error=missing_fields');
+  }
+
+  const ip = await getClientIp();
+
+  // Bot protection PRZED rate-limit i Supabase call — bot z prawidłowym
+  // tokenem wchodzi w rate-limit, bot bez tokena pada od razu.
+  const turnstile = await verifyTurnstile(
+    formData.get('cf-turnstile-response') as string | null,
+    ip,
+  );
+  if (!turnstile.success) {
+    redirect('/login?error=bot_check_failed');
+  }
+
+  // Anti brute-force / credential stuffing — sprawdzamy PRZED Supabase
+  // żeby nawet nieprawidłowy email nie liczył się jako kosztowny call.
+  const rl = await checkLoginRateLimit(ip, email);
+  if (!rl.allowed) {
+    redirect(`/login?error=rate_limited&retry=${rl.retryAfter}`);
   }
 
   const supabase = await createClient();
@@ -47,6 +69,15 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
   }
 
   revalidatePath('/', 'layout');
+
+  // 2FA gate — jeśli user ma TOTP factor, signInWithPassword daje AAL1.
+  // Przekierowujemy do challenge zamiast bezpośrednio do dashboard.
+  const { data: aal } =
+    await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aal?.currentLevel === 'aal1' && aal?.nextLevel === 'aal2') {
+    redirect('/login/two-factor');
+  }
+
   redirect('/dashboard');
 }
 

@@ -16,6 +16,7 @@ import { Resend } from 'resend';
 
 import AccountDeletionConfirmation from './templates/AccountDeletionConfirmation';
 import CertExpiry from './templates/CertExpiry';
+import GdprDeletionScheduled from './templates/GdprDeletionScheduled';
 import InvoiceAccepted from './templates/InvoiceAccepted';
 import InvoiceFailed from './templates/InvoiceFailed';
 import MagicImportCompleted from './templates/MagicImportCompleted';
@@ -414,6 +415,36 @@ export async function sendAccountDeletionConfirmationEmail(
   return sendViaResend({
     to: email,
     subject: 'Potwierdzenie usunięcia konta FaktFlow',
+    html,
+    category: 'transactional',
+  });
+}
+
+export interface GdprDeletionScheduledPayload {
+  userEmail: string;
+  scheduledFor: string;
+  cancelUrl: string;
+  supportEmail?: string;
+}
+
+export async function sendGdprDeletionScheduledEmail(
+  payload: GdprDeletionScheduledPayload,
+): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    console.log(
+      `[email:stub] sendGdprDeletionScheduledEmail → ${payload.userEmail}: ${payload.cancelUrl}`,
+    );
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(
+    GdprDeletionScheduled({
+      ...payload,
+      supportEmail: payload.supportEmail ?? 'pomoc@faktflow.pl',
+    }),
+  );
+  return sendViaResend({
+    to: payload.userEmail,
+    subject: 'Żądanie usunięcia konta FaktFlow — możesz cofnąć (RODO)',
     html,
     category: 'transactional',
   });

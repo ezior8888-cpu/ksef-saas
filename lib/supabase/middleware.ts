@@ -26,6 +26,7 @@ const AUTH_PUBLIC_PREFIXES = [
   '/invite',
   '/accountant',
   '/share-target',
+  '/gdpr',
 ] as const;
 
 const PUBLIC_API_PREFIXES = [
@@ -33,6 +34,7 @@ const PUBLIC_API_PREFIXES = [
   '/api/health',
   '/api/portal',
   '/api/email',
+  '/api/status',
 ] as const;
 
 const STATIC_PUBLIC_EXACT = [
@@ -137,6 +139,31 @@ export async function updateSession(request: NextRequest) {
     const res = NextResponse.redirect(url);
     for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
     return res;
+  }
+
+  // 2FA enforcement (Faza 28 Krok 6). User zalogowany ale jego sesja jest
+  // AAL1 podczas gdy ma verified TOTP factor → musi przejść challenge.
+  // Pozwalamy tylko na /login/two-factor i /auth/* (callback OAuth, signOut).
+  if (
+    user &&
+    !path.startsWith('/login/two-factor') &&
+    !path.startsWith('/auth/') &&
+    !isApi &&
+    !isPublicPath(path)
+  ) {
+    const { data: aalData } =
+      await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (
+      aalData?.currentLevel === 'aal1' &&
+      aalData?.nextLevel === 'aal2'
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login/two-factor';
+      url.searchParams.set('redirect', path);
+      const res = NextResponse.redirect(url);
+      for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
+      return res;
+    }
   }
 
   const needsBootstrap =

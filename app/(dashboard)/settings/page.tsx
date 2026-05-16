@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Mail,
   Plus,
+  Lock,
 } from 'lucide-react';
 import { DeleteAccountSection } from '@/components/settings/delete-account';
 import { getPageContext } from '@/lib/supabase/page-context';
@@ -72,6 +73,12 @@ export default async function SettingsPage() {
           },
         ]
       : []),
+    {
+      href: '/settings/security',
+      label: 'Bezpieczeństwo',
+      description: 'Hasło, weryfikacja dwuetapowa (2FA), sesje',
+      icon: Lock,
+    },
     {
       href: '/settings/notifications',
       label: 'Powiadomienia',

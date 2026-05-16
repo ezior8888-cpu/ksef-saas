@@ -39,6 +39,9 @@ import { upoRetryStaleJob } from '@/lib/inngest/jobs/upo-retry-stale';
 import { selfInvoicePaymentJob } from '@/lib/inngest/jobs/self-invoice-payment';
 import { trialCountdownEmailsJob } from '@/lib/inngest/jobs/trial-countdown-emails';
 import { dunningPaymentFailedJob } from '@/lib/inngest/jobs/dunning-payment-failed';
+import { dailySummaryEmailJob } from '@/lib/inngest/jobs/daily-summary-email';
+import { weeklyBusinessReviewJob } from '@/lib/inngest/jobs/weekly-business-review';
+import { criticalAlertsMonitorJob } from '@/lib/inngest/jobs/critical-alerts-monitor';
 import { processOcrJob } from '@/lib/inngest/jobs/process-ocr';
 import { autoCategorizeInboxInvoice } from '@/lib/inngest/jobs/auto-categorize-inbox';
 import {
@@ -49,6 +52,10 @@ import {
   emailDay8,
   emailWelcome,
 } from '@/lib/inngest/jobs/email-sequence';
+import { gdprProcessDeletionsJob } from '@/lib/inngest/jobs/gdpr-process-deletions';
+import { dailyDbSnapshotJob } from '@/lib/inngest/jobs/daily-db-snapshot';
+import { verifyBackupJob } from '@/lib/inngest/jobs/verify-backup';
+import { cleanupOldBackupsJob } from '@/lib/inngest/jobs/cleanup-old-backups';
 /**
  * Webhook dla Inngest Cloud. Obsługuje GET, POST, PUT.
  * Na tym endpoincie Inngest sprawdza status, rejestruje funkcje
@@ -90,6 +97,9 @@ export const { GET, POST, PUT } = serve({
     selfInvoicePaymentJob,
     trialCountdownEmailsJob,
     dunningPaymentFailedJob,
+    dailySummaryEmailJob,
+    weeklyBusinessReviewJob,
+    criticalAlertsMonitorJob,
     processOcrJob,
     autoCategorizeInboxInvoice,
     emailWelcome,
@@ -98,5 +108,9 @@ export const { GET, POST, PUT } = serve({
     emailDay8,
     emailDay12,
     emailDay14,
+    gdprProcessDeletionsJob,
+    dailyDbSnapshotJob,
+    verifyBackupJob,
+    cleanupOldBackupsJob,
   ],
 });

@@ -4,6 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { logAudit } from '@/lib/audit/log';
+import { getClientIp } from '@/lib/auth/get-client-ip';
+import { validatePassword } from '@/lib/auth/password';
+import { checkRegisterRateLimit } from '@/lib/rate-limit/auth';
+import { verifyTurnstile } from '@/lib/security/turnstile';
 import { inngest, userRegistered } from '@/lib/inngest/client';
 import { createClient } from '@/lib/supabase/server';
 
@@ -16,8 +20,34 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
   const password = String(formData.get('password') ?? '');
   const name = String(formData.get('name') ?? '');
 
-  if (!email || !password || password.length < 8) {
-    redirect('/register?error=weak_password');
+  if (!email || !password) {
+    redirect('/register?error=missing_fields');
+  }
+
+  const ip = await getClientIp();
+
+  // Bot protection — pierwsza linia obrony przed spam signup.
+  const turnstile = await verifyTurnstile(
+    formData.get('cf-turnstile-response') as string | null,
+    ip,
+  );
+  if (!turnstile.success) {
+    redirect('/register?error=bot_check_failed');
+  }
+
+  // Anti-spam signup — per-IP.
+  const rl = await checkRegisterRateLimit(ip);
+  if (!rl.allowed) {
+    redirect(`/register?error=rate_limited&retry=${rl.retryAfter}`);
+  }
+
+  // Strength + HIBP breach check. Wykonujemy PO rate-limit żeby nie palić
+  // budżetu HIBP na bot spam.
+  const pw = await validatePassword(password);
+  if (!pw.valid) {
+    redirect(
+      `/register?error=${pw.reason === 'breached' ? 'password_breached' : 'weak_password'}`,
+    );
   }
 
   const headersList = await headers();
