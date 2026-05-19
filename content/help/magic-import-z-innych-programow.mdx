@@ -1,0 +1,33 @@
+---
+title: "Magic Import — przeniesienie danych z innego programu"
+category: "start"
+order: 3
+summary: "Jak zaimportować historię faktur, kontrahentów i produkty z Fakturowni, inFakt, wFirma czy iFirma."
+updated: "2026-05-19"
+---
+
+Magic Import przenosi Twoje dane do FaktFlow bez ręcznego przepisywania. Cały proces zajmuje zwykle kilka minut.
+
+## Co importuje Magic Import
+
+- **Historię faktur z KSeF** — wszystkie dokumenty wystawione i odebrane przez Twój NIP w ostatnich latach, prosto z Krajowego Systemu e-Faktur.
+- **Kontrahentów** — wyciągnięci automatycznie z historii faktur (NIP, nazwa, adres).
+- **Produkty i usługi** — pozycje z Twoich faktur, z częstotliwością użycia, żeby najczęstsze były pod ręką.
+
+## Import z konkurencji
+
+Jeśli korzystałeś z Fakturowni, inFakt, wFirma lub iFirma, wyeksportuj dane do pliku CSV lub XML i wgraj go w kreatorze importu. FaktFlow rozpoznaje formaty tych programów. Dla innych systemów użyj uniwersalnego importera JPK_FA.
+
+## Import z Excela
+
+Masz listę kontrahentów w arkuszu? Przeciągnij plik XLS — FaktFlow wykryje kolumny (NIP, nazwa, adres, email) na podstawie nagłówków i zawartości.
+
+## Jak uruchomić
+
+Magic Import startuje automatycznie po onboardingu. Możesz go też uruchomić później z panelu. Import historii z KSeF działa w tle — dostaniesz email, gdy się zakończy.
+
+## Po imporcie
+
+Sprawdź zaimportowanych kontrahentów i produkty. Duplikaty (ten sam NIP) FaktFlow scala automatycznie. Faktury historyczne są oznaczone jako zaimportowane — nie wysyłamy ich ponownie do KSeF.
+
+> Bezpieczeństwo: import jest jednokierunkowy i nie modyfikuje danych w programie, z którego eksportujesz. Możesz spokojnie testować.

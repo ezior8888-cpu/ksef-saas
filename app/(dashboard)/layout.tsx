@@ -13,6 +13,8 @@ import { Sidebar } from '@/components/dashboard/sidebar';
 import { WelcomeModal } from '@/components/dashboard/welcome-modal';
 import { IdleWatcher } from '@/components/auth/idle-watcher';
 import { InstallPrompt } from '@/components/pwa/install-prompt-lazy';
+import { SupportWidget } from '@/components/support/support-widget';
+import { getAllHelpArticles } from '@/lib/help/articles';
 
 /**
  * Dashboard layout dla wszystkich chronionych podstron `(dashboard)/...`.
@@ -38,6 +40,11 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   await assertDashboardShellAccess();
+
+  // Mapa slug → tytuł dla chipsów cytowań w support widgecie.
+  const helpArticleTitles: Record<string, string> = Object.fromEntries(
+    getAllHelpArticles().map((a) => [a.slug, a.title]),
+  );
 
   return (
     <div className="ff-dashboard relative flex h-screen min-h-0 overflow-hidden text-[var(--ff-on-surface)]">
@@ -89,6 +96,7 @@ export default async function DashboardLayout({
       <PrefetchDashboardRoutes />
       <PrefetchExportsRoute />
       <IdleWatcher />
+      <SupportWidget articleTitles={helpArticleTitles} />
       <Suspense fallback={null}>
         <WelcomeModal />
       </Suspense>

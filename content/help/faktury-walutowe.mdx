@@ -1,0 +1,33 @@
+---
+title: "Faktury walutowe i zagraniczne"
+category: "faktury"
+order: 4
+summary: "Jak wystawić fakturę w obcej walucie i co z transakcjami wewnątrzwspólnotowymi (WDT)."
+updated: "2026-05-19"
+---
+
+FaktFlow obsługuje faktury w walutach obcych i sprzedaż do kontrahentów z innych krajów UE.
+
+## Faktura w obcej walucie
+
+Wybierz walutę faktury (np. EUR, USD). Podajesz kwoty w walucie obcej, a FaktFlow przelicza je na złote według odpowiedniego kursu — KSeF wymaga wartości w PLN dla celów VAT.
+
+Kurs stosuje się zgodnie z przepisami: zwykle średni kurs NBP z ostatniego dnia roboczego poprzedzającego datę powstania obowiązku podatkowego.
+
+## Kontrahent z UE — WDT
+
+Przy sprzedaży towarów do podatnika z innego kraju UE (wewnątrzwspólnotowa dostawa towarów) numer VAT kontrahenta warto zweryfikować w systemie VIES. FaktFlow sprawdza VIES dla numerów spoza Polski — analogicznie jak Białą Listę dla polskich NIP-ów.
+
+Poprawnie zweryfikowany numer VAT UE jest warunkiem zastosowania stawki 0% dla WDT.
+
+## Kontrahent spoza UE
+
+Sprzedaż poza UE (eksport) ma własne zasady opodatkowania. Wybierz odpowiednią stawkę i typ transakcji — FaktFlow podpowie dostępne opcje.
+
+## Dane na fakturze
+
+Faktura zagraniczna zawiera te same elementy co krajowa, plus walutę i — w razie potrzeby — numer VAT UE nabywcy. KSeF przyjmuje dokument w formacie FA(3) niezależnie od waluty.
+
+## Co dalej?
+
+Chcesz wiedzieć, co oznaczają statusy faktury? Zobacz artykuł o statusach i UPO.

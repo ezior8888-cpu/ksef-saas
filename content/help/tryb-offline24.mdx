@@ -1,0 +1,38 @@
+---
+title: "Tryb Offline24 — co gdy KSeF nie działa"
+category: "ksef"
+order: 3
+summary: "Jak FaktFlow obsługuje awarie KSeF, żebyś nie stracił żadnej faktury."
+updated: "2026-05-19"
+---
+
+KSeF, jak każdy system, miewa przerwy techniczne. Tryb Offline24 sprawia, że awaria po stronie Ministerstwa nie blokuje Twojej pracy.
+
+## Jak to działa
+
+Gdy FaktFlow wykryje, że KSeF jest niedostępny:
+
+1. Faktura zostaje zapisana lokalnie i trafia do **kolejki Offline24**.
+2. Generujemy dwa kody QR zgodne z rozporządzeniem MF — kod offline oraz kod z podpisem certyfikatu.
+3. Możesz wydrukować lub wysłać fakturę nabywcy — jest ważna mimo braku numeru KSeF.
+4. Gdy KSeF wróci, FaktFlow automatycznie wysyła zakolejkowane faktury i pobiera numery KSeF oraz UPO.
+
+## Nie tracisz faktur
+
+Kolejka Offline24 używa deterministycznych identyfikatorów — nawet przy wielokrotnych próbach wysyłki ta sama faktura nie zostanie zdublowana w KSeF.
+
+## Termin wysyłki
+
+Zgodnie z przepisami fakturę wystawioną w trybie offline trzeba przesłać do KSeF w określonym terminie. FaktFlow pilnuje go i wysyła automatycznie — Ty nie musisz nic robić.
+
+## Ograniczenia
+
+Dopóki faktura czeka w kolejce Offline24, nie można wystawić do niej korekty. Korektę zrobisz, gdy oryginał uzyska numer KSeF.
+
+## Status KSeF
+
+Aktualny stan połączenia z KSeF widzisz w banerze panelu. Gdy KSeF jest „degraded" lub „down", baner Cię o tym informuje, a faktury idą do Offline24.
+
+## Co dalej?
+
+Jeśli faktura została odrzucona przez KSeF (a nie zakolejkowana), zobacz artykuł o najczęstszych błędach KSeF.

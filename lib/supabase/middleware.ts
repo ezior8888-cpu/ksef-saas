@@ -15,6 +15,7 @@ export const MARKETING_PATHS = [
   '/kalkulator-oszczednosci',
   '/kontakt',
   '/legal',
+  '/pomoc',
 ] as const;
 
 const AUTH_PUBLIC_PREFIXES = [

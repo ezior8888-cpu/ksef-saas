@@ -1,0 +1,41 @@
+---
+title: "Faktura korygująca"
+category: "faktury"
+order: 2
+summary: "Jak skorygować wystawioną fakturę — zmiana kwoty, danych lub zwrot."
+updated: "2026-05-19"
+---
+
+Faktury w KSeF są niezmienialne. Jeśli na wystawionym dokumencie jest błąd albo zmieniły się ustalenia, wystawiasz fakturę korygującą.
+
+## Kiedy korygować
+
+- pomyłka w cenie, ilości lub stawce VAT,
+- zwrot towaru lub rezygnacja z usługi,
+- rabat udzielony po sprzedaży,
+- błędne dane nabywcy (np. NIP).
+
+## Jak to działa w FaktFlow
+
+Otwórz fakturę pierwotną i wybierz „Wystaw korektę". FaktFlow:
+
+- automatycznie wczytuje dane oryginału,
+- pokazuje wizualizację **przed → po**, żebyś widział, co dokładnie się zmienia,
+- powiązuje korektę z fakturą pierwotną (pole `parent_invoice_id`).
+
+## Korekta na plus i na minus
+
+Korekta może zwiększać lub zmniejszać kwotę. Wpisujesz wartości docelowe — FaktFlow liczy różnicę względem oryginału i pokazuje ją na dokumencie.
+
+## Ograniczenia
+
+- Nie skorygujesz faktury, która czeka w kolejce Offline24. Najpierw musi uzyskać numer KSeF.
+- Korektę również wysyłasz do KSeF — dostaje własny numer KSeF i UPO.
+
+## Korekta do korekty
+
+Jeśli pomylisz się w samej korekcie, możesz wystawić kolejną korektę — do dokumentu korygującego. KSeF zachowuje cały łańcuch powiązań.
+
+## Co dalej?
+
+Wystawiasz zaliczki? Zobacz artykuł o fakturze zaliczkowej i końcowej.

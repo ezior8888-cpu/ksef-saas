@@ -1,0 +1,42 @@
+---
+title: "Konfiguracja certyfikatu KSeF"
+category: "ksef"
+order: 2
+summary: "Jak połączyć FaktFlow z KSeF — certyfikat, token i wybór środowiska."
+updated: "2026-05-19"
+---
+
+Zanim wyślesz pierwszą fakturę, FaktFlow musi mieć uprawnienia do działania w Twoim imieniu w KSeF.
+
+## Środowisko testowe vs produkcyjne
+
+KSeF udostępnia dwa środowiska:
+
+- **Testowe** — do prób. Faktury nie mają mocy prawnej. Używaj fikcyjnego NIP-u.
+- **Produkcyjne** — prawdziwe faktury z mocą prawną.
+
+W ustawieniach KSeF wybierasz, na którym środowisku pracujesz. Zalecamy zacząć od testowego, żeby spokojnie przejść cały proces.
+
+## Uzyskanie dostępu
+
+Dostęp do KSeF nadajesz przez certyfikat lub token uwierzytelniający, wygenerowany na stronie KSeF Ministerstwa Finansów. Certyfikat przypisany jest do NIP-u Twojej firmy.
+
+## Wgranie do FaktFlow
+
+W **Ustawienia → KSeF** wgrywasz certyfikat i klucz. FaktFlow szyfruje je przed zapisem (AES-256-GCM) — dane uwierzytelniające nigdy nie są przechowywane w postaci jawnej.
+
+## Weryfikacja połączenia
+
+Po wgraniu FaktFlow wykonuje testowe połączenie z KSeF. Zielony status oznacza, że wszystko działa. Jeśli pojawi się błąd, sprawdź:
+
+- czy certyfikat nie wygasł,
+- czy NIP w certyfikacie zgadza się z NIP-em organizacji,
+- czy wybrałeś właściwe środowisko (test/produkcja).
+
+## Wygasanie certyfikatu
+
+Certyfikaty mają datę ważności. FaktFlow przypomni Ci mailem, zanim certyfikat wygaśnie — odnów go z wyprzedzeniem, żeby nie przerwać wystawiania faktur.
+
+## Co dalej?
+
+Połączenie gotowe? Przejdź do wystawienia pierwszej faktury.

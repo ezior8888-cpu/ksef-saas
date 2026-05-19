@@ -1,0 +1,38 @@
+---
+title: "Czym jest KSeF i kogo dotyczy"
+category: "ksef"
+order: 1
+summary: "Krajowy System e-Faktur w pigułce — co to jest, od kiedy obowiązuje i co oznacza dla mikrofirmy."
+updated: "2026-05-19"
+---
+
+KSeF (Krajowy System e-Faktur) to centralny, rządowy system do wystawiania i odbierania faktur ustrukturyzowanych w Polsce.
+
+## Jak to działa
+
+Zamiast wysyłać fakturę PDF mailem, wystawiasz ją w formacie XML i przekazujesz do KSeF. System nadaje dokumentowi unikalny numer KSeF i udostępnia go odbiorcy. Faktura „istnieje" dopiero po przyjęciu przez KSeF.
+
+## Kogo dotyczy
+
+Obowiązek e-fakturowania przez KSeF obejmuje firmy wystawiające faktury VAT. Harmonogram wdrożenia jest etapowy — najpierw więksi podatnicy, potem pozostali. Mikrofirmy i jednoosobowe działalności również są objęte obowiązkiem.
+
+## Co to zmienia dla Ciebie
+
+- Faktura bez numeru KSeF jest nieważna w obrocie.
+- Nie musisz archiwizować PDF-ów — KSeF przechowuje dokumenty przez 10 lat.
+- Kontrola skarbowa ma wgląd w faktury bezpośrednio w systemie.
+
+## Rola FaktFlow
+
+FaktFlow jest pośrednikiem między Tobą a KSeF. My zajmujemy się:
+
+- generowaniem poprawnego XML w formacie FA(3),
+- walidacją dokumentu **zanim** trafi do KSeF (mniej odrzuceń),
+- wysyłką, pobieraniem UPO i obsługą błędów,
+- trybem Offline24, gdy KSeF jest niedostępny.
+
+Ty wystawiasz fakturę jak w zwykłym programie — całą komunikację z KSeF FaktFlow bierze na siebie.
+
+## Co dalej?
+
+Aby zacząć, skonfiguruj certyfikat KSeF. Zajrzyj do artykułu o konfiguracji certyfikatu.

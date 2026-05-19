@@ -253,3 +253,75 @@ export async function getPendingJoinRequests(
     };
   });
 }
+
+// ─── 5. AI support conversations (Faza 30) ─────────────────────────
+
+export interface AdminSupportConversation {
+  id: string;
+  status: 'open' | 'escalated' | 'resolved' | 'closed';
+  category: string | null;
+  subject: string | null;
+  csatPositive: boolean | null;
+  escalationReason: string | null;
+  escalatedAt: string | null;
+  createdAt: string;
+}
+
+interface SupportConvRow {
+  id: string;
+  status: 'open' | 'escalated' | 'resolved' | 'closed';
+  category: string | null;
+  subject: string | null;
+  csat_positive: boolean | null;
+  escalation_reason: string | null;
+  escalated_at: string | null;
+  created_at: string;
+}
+
+/**
+ * Ostatnie konwersacje AI support. `support_conversations` to nowa tabela
+ * (00054), nieobecna w `types/database.ts` — stąd cast przez `unknown`.
+ */
+export async function getSupportConversations(
+  limit = 25,
+): Promise<AdminSupportConversation[]> {
+  const supabase = createAdminClient();
+  const res = await (
+    supabase as unknown as {
+      from: (n: string) => {
+        select: (c: string) => {
+          order: (
+            k: string,
+            o: { ascending: boolean },
+          ) => {
+            limit: (n: number) => Promise<{
+              data: SupportConvRow[] | null;
+              error: { message: string } | null;
+            }>;
+          };
+        };
+      };
+    }
+  )
+    .from('support_conversations')
+    .select(
+      'id, status, category, subject, csat_positive, escalation_reason, escalated_at, created_at',
+    )
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (res.error) {
+    throw new Error(`support_conversations lookup: ${res.error.message}`);
+  }
+
+  return (res.data ?? []).map((row) => ({
+    id: row.id,
+    status: row.status,
+    category: row.category,
+    subject: row.subject,
+    csatPositive: row.csat_positive,
+    escalationReason: row.escalation_reason,
+    escalatedAt: row.escalated_at,
+    createdAt: row.created_at,
+  }));
+}

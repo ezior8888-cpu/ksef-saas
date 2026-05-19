@@ -4,6 +4,7 @@ import {
   Building2,
   CheckCircle2,
   Inbox,
+  MessagesSquare,
   Moon,
   UserPlus,
   XCircle,
@@ -16,6 +17,8 @@ import {
   getPendingJoinRequests,
   getRecentlyFailedInvoices,
   getRecentSignups,
+  getSupportConversations,
+  type AdminSupportConversation,
   type FailedInvoice,
   type InactiveUser,
   type PendingJoinRequest,
@@ -50,12 +53,18 @@ function fmtRelative(iso: string | null): string {
 }
 
 export default async function AdminSupportPage() {
-  const [signups, inactive, failed, pendingJoins] = await Promise.all([
-    getRecentSignups(SIGNUPS_WINDOW_HOURS).catch(() => []),
-    getInactiveUsers(INACTIVE_DAYS).catch(() => []),
-    getRecentlyFailedInvoices(FAILED_WINDOW_HOURS).catch(() => []),
-    getPendingJoinRequests().catch(() => []),
-  ]);
+  const [signups, inactive, failed, pendingJoins, conversations] =
+    await Promise.all([
+      getRecentSignups(SIGNUPS_WINDOW_HOURS).catch(() => []),
+      getInactiveUsers(INACTIVE_DAYS).catch(() => []),
+      getRecentlyFailedInvoices(FAILED_WINDOW_HOURS).catch(() => []),
+      getPendingJoinRequests().catch(() => []),
+      getSupportConversations(25).catch(() => []),
+    ]);
+
+  const escalatedCount = conversations.filter(
+    (c) => c.status === 'escalated',
+  ).length;
 
   // Onboarding completion rate (z 24h signups)
   const completionPct =
@@ -154,6 +163,22 @@ export default async function AdminSupportPage() {
         emptyHint="Wszyscy aktywni klienci logowali się ostatnio."
       >
         {inactive.length > 0 && <InactiveTable items={inactive} />}
+      </Section>
+
+      {/* AI support conversations */}
+      <Section
+        icon={MessagesSquare}
+        title={
+          escalatedCount > 0
+            ? `Konwersacje AI support — ${escalatedCount} eskalowanych`
+            : 'Konwersacje AI support'
+        }
+        count={conversations.length}
+        emptyHint="Brak konwersacji z asystentem AI."
+      >
+        {conversations.length > 0 && (
+          <SupportConversationsTable items={conversations} />
+        )}
       </Section>
     </div>
   );
@@ -417,6 +442,81 @@ function InactiveTable({ items }: { items: InactiveUser[] }) {
               </td>
               <td className="px-4 py-2.5 text-xs text-muted-foreground">
                 {fmtDate(u.createdAt)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const SUPPORT_CATEGORY_LABELS: Record<string, string> = {
+  onboarding: 'Onboarding',
+  ksef: 'KSeF',
+  invoicing: 'Faktury',
+  ocr_kpir: 'OCR / KPiR',
+  billing: 'Rozliczenia',
+  team: 'Zespół',
+  security: 'Bezpieczeństwo',
+  other: 'Inne',
+};
+
+function SupportConversationsTable({
+  items,
+}: {
+  items: AdminSupportConversation[];
+}) {
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-glass-border bg-foreground/3 backdrop-blur-glass">
+      <table className="w-full text-sm">
+        <thead className="border-b border-glass-border">
+          <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+            <th className="px-4 py-2.5 font-medium">Temat</th>
+            <th className="px-4 py-2.5 font-medium">Kategoria</th>
+            <th className="px-4 py-2.5 font-medium">Status</th>
+            <th className="px-4 py-2.5 font-medium">Ocena</th>
+            <th className="px-4 py-2.5 font-medium">Rozpoczęto</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((c) => (
+            <tr
+              key={c.id}
+              className="border-b border-glass-border last:border-0 hover:bg-foreground/5"
+            >
+              <td className="max-w-xs truncate px-4 py-2.5">
+                {c.subject ?? '(bez tematu)'}
+              </td>
+              <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                {c.category
+                  ? (SUPPORT_CATEGORY_LABELS[c.category] ?? c.category)
+                  : '—'}
+              </td>
+              <td className="px-4 py-2.5">
+                {c.status === 'escalated' ? (
+                  <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
+                    Eskalowane
+                  </Badge>
+                ) : c.status === 'resolved' ? (
+                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
+                    Rozwiązane
+                  </Badge>
+                ) : c.status === 'closed' ? (
+                  <Badge variant="outline">Zamknięte</Badge>
+                ) : (
+                  <Badge variant="outline">Otwarte</Badge>
+                )}
+              </td>
+              <td className="px-4 py-2.5">
+                {c.csatPositive === null
+                  ? '—'
+                  : c.csatPositive
+                    ? '👍'
+                    : '👎'}
+              </td>
+              <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                {fmtRelative(c.createdAt)}
               </td>
             </tr>
           ))}

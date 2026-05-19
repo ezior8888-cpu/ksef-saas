@@ -88,7 +88,6 @@ export interface AlertCriticalOptions {
 
 /**
  * Krytyczny alert na kanał `urgent` (wrapper dla jobów observability).
- * Mapuje pola i link na `context` + tekst — ten sam transport co `sendSlackAlert`.
  */
 export async function alertCritical(
   title: string,
@@ -110,9 +109,7 @@ export async function alertCritical(
   });
 }
 
-/**
- * Podsumowanie metryk na kanał `metrics` (np. weekly business review).
- */
+/** Podsumowanie metryk na kanał `metrics` (np. weekly business review). */
 export async function alertMetrics(
   title: string,
   message: string,
