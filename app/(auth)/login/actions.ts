@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { logAudit } from '@/lib/audit/log';
+import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
+import { trackServer } from '@/lib/analytics/server';
 import { getClientIp } from '@/lib/auth/get-client-ip';
 import { checkLoginRateLimit } from '@/lib/rate-limit/auth';
 import { verifyTurnstile } from '@/lib/security/turnstile';
@@ -65,6 +67,11 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
       tenantId: row?.last_active_tenant_id ?? null,
       userId: signedIn.id,
       metadata: { method: 'password' },
+    });
+    await trackServer({
+      distinctId: signedIn.id,
+      event: ANALYTICS_EVENTS.loginCompleted,
+      properties: { method: 'password' },
     });
   }
 

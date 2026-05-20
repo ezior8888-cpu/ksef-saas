@@ -119,6 +119,25 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
+  // PostHog reverse proxy (Faza 31) — ruch analityczny leci przez naszą
+  // domenę pod `/ingest`, omijając ad-blockery blokujące `*.posthog.com`.
+  // Region EU (zgodność z hostingiem Supabase / R2).
+  async rewrites() {
+    return [
+      {
+        source: '/ingest/static/:path*',
+        destination: 'https://eu-assets.i.posthog.com/static/:path*',
+      },
+      {
+        source: '/ingest/:path*',
+        destination: 'https://eu.i.posthog.com/:path*',
+      },
+    ];
+  },
+  // PostHog wysyła część żądań metodą innej niż domyślne — bez tego
+  // `/ingest/decide` pada na trailing-slash redirect.
+  skipTrailingSlashRedirect: true,
 };
 
 export default withSentryConfig(withSerwist(withMDX(nextConfig)), {

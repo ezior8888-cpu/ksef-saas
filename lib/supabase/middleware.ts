@@ -33,9 +33,9 @@ const AUTH_PUBLIC_PREFIXES = [
 const PUBLIC_API_PREFIXES = [
   '/api/inngest',
   '/api/health',
+  '/api/status',
   '/api/portal',
   '/api/email',
-  '/api/status',
 ] as const;
 
 const STATIC_PUBLIC_EXACT = [

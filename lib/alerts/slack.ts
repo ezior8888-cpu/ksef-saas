@@ -80,48 +80,42 @@ export async function sendSlackAlert(msg: SlackMessage): Promise<void> {
   }
 }
 
-/** Opcje dla `alertCritical` — zgodne z wywołaniami z `critical-alerts-monitor`. */
-export interface AlertCriticalOptions {
-  fields?: Array<{ label: string; value: string }>;
+export interface SlackAlertRichContext {
+  fields: { label: string; value: string }[];
   link?: { label: string; url: string };
 }
 
 /**
- * Krytyczny alert na kanał `urgent` (wrapper dla jobów observability).
+ * Slack #urgent — incydenty krytyczne (Faza 27, `critical-alerts-monitor`).
  */
 export async function alertCritical(
   title: string,
-  message: string,
-  opts: AlertCriticalOptions = {},
+  bodyMrkdwn: string,
+  rich: SlackAlertRichContext,
 ): Promise<void> {
-  let text = `🚨 *${title}*\n${message}`;
-  if (opts.link?.url) {
-    text += `\n<${opts.link.url}|${opts.link.label}>`;
-  }
+  const text = `*${title}*\n${bodyMrkdwn}`;
   const context: Record<string, string | number | boolean> = {};
-  for (const f of opts.fields ?? []) {
+  for (const f of rich.fields) {
     context[f.label] = f.value;
   }
-  await sendSlackAlert({
-    channel: 'urgent',
-    text,
-    context: Object.keys(context).length > 0 ? context : undefined,
-  });
+  if (rich.link) {
+    context[rich.link.label] = rich.link.url;
+  }
+  await sendSlackAlert({ channel: 'urgent', text, context });
 }
 
-/** Podsumowanie metryk na kanał `metrics` (np. weekly business review). */
+/**
+ * Slack #metrics — skrót KPI (Faza 27, `weekly-business-review`).
+ */
 export async function alertMetrics(
   title: string,
-  message: string,
-  fields: Array<{ label: string; value: string }> = [],
+  bodyMrkdwn: string,
+  rows: { label: string; value: string }[],
 ): Promise<void> {
+  const text = `*${title}*\n${bodyMrkdwn}`;
   const context: Record<string, string | number | boolean> = {};
-  for (const f of fields) {
-    context[f.label] = f.value;
+  for (const r of rows) {
+    context[r.label] = r.value;
   }
-  await sendSlackAlert({
-    channel: 'metrics',
-    text: `📈 *${title}*\n${message}`,
-    context: Object.keys(context).length > 0 ? context : undefined,
-  });
+  await sendSlackAlert({ channel: 'metrics', text, context });
 }

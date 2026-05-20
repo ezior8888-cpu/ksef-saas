@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError, RetryAfterError } from 'inngest';
+import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
+import { trackServer } from '@/lib/analytics/server';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { inngest, invoiceSubmitRequested } from '../client';
 import { submitInvoiceFullFlow } from '@/lib/ksef/submit-invoice-full';
@@ -519,6 +521,17 @@ export const submitInvoiceJob = inngest.createFunction(
       // Czyścimy cache żeby user widział świeży count zamiast czekać na 5min TTL.
       const { invalidateTenantDashboard } = await import('@/lib/cache/invalidation');
       await invalidateTenantDashboard(tenantId);
+    });
+
+    await step.run('analytics-invoice-accepted', async () => {
+      await trackServer({
+        distinctId: tenantId,
+        event: ANALYTICS_EVENTS.invoiceAccepted,
+        properties: {
+          ksef_env: process.env.KSEF_ENV ?? 'test',
+          internal_number: invoice.internalNumber ?? null,
+        },
+      });
     });
 
     await step.sendEvent('trigger-upo-download', {

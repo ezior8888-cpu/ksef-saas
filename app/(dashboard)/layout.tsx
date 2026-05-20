@@ -13,8 +13,11 @@ import { Sidebar } from '@/components/dashboard/sidebar';
 import { WelcomeModal } from '@/components/dashboard/welcome-modal';
 import { IdleWatcher } from '@/components/auth/idle-watcher';
 import { InstallPrompt } from '@/components/pwa/install-prompt-lazy';
+import { AnalyticsIdentify } from '@/components/analytics/analytics-identify';
 import { SupportWidget } from '@/components/support/support-widget';
 import { getAllHelpArticles } from '@/lib/help/articles';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
+import { createClient } from '@/lib/supabase/server';
 
 /**
  * Dashboard layout dla wszystkich chronionych podstron `(dashboard)/...`.
@@ -40,6 +43,15 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   await assertDashboardShellAccess();
+
+  // Identity dla PostHog (Faza 31 Krok 5). `assertDashboardShellAccess`
+  // już potwierdziło sesję i aktywną org — tu tylko czytamy id-ki dla
+  // `<AnalyticsIdentify>`. Oba odczyty są lekkie (sesja w cache, cookie).
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const activeOrg = await getActiveOrgIdFromCookies();
 
   // Mapa slug → tytuł dla chipsów cytowań w support widgecie.
   const helpArticleTitles: Record<string, string> = Object.fromEntries(
@@ -96,6 +108,13 @@ export default async function DashboardLayout({
       <PrefetchDashboardRoutes />
       <PrefetchExportsRoute />
       <IdleWatcher />
+      {user && activeOrg && (
+        <AnalyticsIdentify
+          userId={user.id}
+          email={user.email ?? null}
+          tenantId={activeOrg}
+        />
+      )}
       <SupportWidget articleTitles={helpArticleTitles} />
       <Suspense fallback={null}>
         <WelcomeModal />

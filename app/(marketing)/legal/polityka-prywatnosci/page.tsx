@@ -239,11 +239,17 @@ export default function PrivacyPage() {
           <li>Cookies preferencji: 1 rok</li>
         </ul>
 
-        <h2>13. Cookies</h2>
+        <h2>13. Cookies i analityka</h2>
         <p>
-          Używamy <strong>tylko niezbędnych</strong> cookies (sesja, preferencje
-          motywu). Brak cookies analitycznych ani marketingowych — mamy
-          GDPR-friendly approach.
+          Używamy <strong>niezbędnych</strong> cookies (sesja, preferencje
+          motywu) oraz — po wyrażeniu zgody — narzędzia analityki produktowej
+          (PostHog, przetwarzanie w regionie UE). Domyślnie analityka
+          kliencka jest wyłączona; zapis decyzji o zgodzie trzymamy w{' '}
+          <strong>localStorage</strong> przeglądarki (bez profilowania
+          reklamowego). Zdarzenia o znaczeniu biznesowym mogą być rejestrowane
+          po stronie serwera w modelu uzasadnionego interesu administratora,
+          z pseudonimizacją — zgodnie z opisem w dokumentacji technicznej
+          produktu.
         </p>
       </div>
     </article>

@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useTransition,
+} from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -15,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/client';
 import { getContextualArticleSlugs } from '@/lib/support/contextual-help';
 import { parseMeta, stripMetaLine } from '@/lib/support/meta';
 import {
@@ -74,6 +82,11 @@ export function SupportWidget({
   const [, startAction] = useTransition();
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const [portalReady, setPortalReady] = useState(false);
+
+  useLayoutEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -85,6 +98,10 @@ export function SupportWidget({
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || isStreaming) return;
+    // Pierwsza wiadomość w sesji widgetu = start konwersacji support.
+    if (!conversationId) {
+      track(ANALYTICS_EVENTS.supportChatStarted);
+    }
     setInput('');
     setMessages((m) => [
       ...m,
@@ -160,15 +177,17 @@ export function SupportWidget({
     (m) => m.role === 'assistant' && !m.streaming && m.content.length > 0,
   );
 
-  return (
+  const shell = (
     <>
-      {/* Floating button */}
+      {/* Floating button — portal do `body` + z nad banerem zgody (z-[60]),
+          żeby `fixed` nie był wycinany przez stacking / layout dashboardu
+          (localhost z PostHog vs prod bez klucza). */}
       {!open && (
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Otwórz pomoc"
-          className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform hover:scale-105"
+          className="fixed bottom-5 right-5 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform hover:scale-105"
         >
           <MessageCircle className="h-6 w-6" />
         </button>
@@ -176,7 +195,7 @@ export function SupportWidget({
 
       {/* Panel */}
       {open && (
-        <div className="fixed bottom-5 right-5 z-50 flex h-[600px] max-h-[calc(100vh-2.5rem)] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-3xl border border-glass-border bg-glass-white shadow-2xl backdrop-blur-glass-lg">
+        <div className="fixed bottom-5 right-5 z-[70] flex h-[600px] max-h-[calc(100vh-2.5rem)] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-3xl border border-glass-border bg-glass-white shadow-2xl backdrop-blur-glass-lg">
           {/* Header */}
           <div className="flex shrink-0 items-center justify-between border-b border-glass-border px-4 py-3">
             <div className="flex items-center gap-2">
@@ -270,6 +289,12 @@ export function SupportWidget({
       )}
     </>
   );
+
+  if (!portalReady || typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(shell, document.body);
 }
 
 function WelcomeState({

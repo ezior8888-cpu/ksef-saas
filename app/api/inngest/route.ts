@@ -39,9 +39,6 @@ import { upoRetryStaleJob } from '@/lib/inngest/jobs/upo-retry-stale';
 import { selfInvoicePaymentJob } from '@/lib/inngest/jobs/self-invoice-payment';
 import { trialCountdownEmailsJob } from '@/lib/inngest/jobs/trial-countdown-emails';
 import { dunningPaymentFailedJob } from '@/lib/inngest/jobs/dunning-payment-failed';
-import { dailySummaryEmailJob } from '@/lib/inngest/jobs/daily-summary-email';
-import { weeklyBusinessReviewJob } from '@/lib/inngest/jobs/weekly-business-review';
-import { criticalAlertsMonitorJob } from '@/lib/inngest/jobs/critical-alerts-monitor';
 import { processOcrJob } from '@/lib/inngest/jobs/process-ocr';
 import { autoCategorizeInboxInvoice } from '@/lib/inngest/jobs/auto-categorize-inbox';
 import {
@@ -56,6 +53,10 @@ import { gdprProcessDeletionsJob } from '@/lib/inngest/jobs/gdpr-process-deletio
 import { dailyDbSnapshotJob } from '@/lib/inngest/jobs/daily-db-snapshot';
 import { verifyBackupJob } from '@/lib/inngest/jobs/verify-backup';
 import { cleanupOldBackupsJob } from '@/lib/inngest/jobs/cleanup-old-backups';
+import { dailyAnalyticsDigestJob } from '@/lib/inngest/jobs/daily-analytics-digest';
+import { dailySummaryEmailJob } from '@/lib/inngest/jobs/daily-summary-email';
+import { weeklyBusinessReviewJob } from '@/lib/inngest/jobs/weekly-business-review';
+import { criticalAlertsMonitorJob } from '@/lib/inngest/jobs/critical-alerts-monitor';
 /**
  * Webhook dla Inngest Cloud. Obsługuje GET, POST, PUT.
  * Na tym endpoincie Inngest sprawdza status, rejestruje funkcje
@@ -97,9 +98,6 @@ export const { GET, POST, PUT } = serve({
     selfInvoicePaymentJob,
     trialCountdownEmailsJob,
     dunningPaymentFailedJob,
-    dailySummaryEmailJob,
-    weeklyBusinessReviewJob,
-    criticalAlertsMonitorJob,
     processOcrJob,
     autoCategorizeInboxInvoice,
     emailWelcome,
@@ -112,5 +110,9 @@ export const { GET, POST, PUT } = serve({
     dailyDbSnapshotJob,
     verifyBackupJob,
     cleanupOldBackupsJob,
+    dailyAnalyticsDigestJob,
+    dailySummaryEmailJob,
+    weeklyBusinessReviewJob,
+    criticalAlertsMonitorJob,
   ],
 });

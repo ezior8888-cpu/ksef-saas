@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 
 import './globals.css';
+import { AnalyticsProvider } from '@/components/analytics/analytics-provider';
 import { SentryClientInit } from '@/components/sentry-client-init';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -83,7 +84,7 @@ export default function RootLayout({
       <body className="min-h-screen font-sans antialiased text-foreground">
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <SentryClientInit />
-        {children}
+        <AnalyticsProvider>{children}</AnalyticsProvider>
         <Toaster
           richColors
           position="top-right"

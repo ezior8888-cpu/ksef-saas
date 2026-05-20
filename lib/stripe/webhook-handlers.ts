@@ -17,6 +17,8 @@
 import * as Sentry from '@sentry/nextjs';
 import type Stripe from 'stripe';
 
+import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
+import { trackServer } from '@/lib/analytics/server';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import {
   billingPaymentFailed,
@@ -72,6 +74,18 @@ export async function handleSubscriptionUpserted(
       priceId: subscription.items.data[0]?.price.id ?? null,
     },
   });
+
+  if (isCreate) {
+    await trackServer({
+      distinctId: tenantId,
+      event: ANALYTICS_EVENTS.subscriptionCreated,
+      properties: {
+        status: subscription.status,
+        price_id: subscription.items.data[0]?.price.id ?? null,
+      },
+      setPersonProperties: { plan: 'active' },
+    });
+  }
 }
 
 // ─── 2. subscription.deleted ──────────────────────────────────────────
@@ -119,6 +133,13 @@ export async function handleSubscriptionDeleted(
       canceledAt,
     }),
   );
+
+  await trackServer({
+    distinctId: tenantId,
+    event: ANALYTICS_EVENTS.subscriptionCanceled,
+    properties: { subscription_id: subscription.id },
+    setPersonProperties: { plan: 'canceled' },
+  });
 }
 
 // ─── 3. invoice.payment_succeeded ─────────────────────────────────────
@@ -184,6 +205,18 @@ export async function handleInvoicePaymentSucceeded(
           : new Date().toISOString(),
     }),
   );
+
+  // Analytics — payment_succeeded. Subskrypcja jest per-tenant, więc
+  // `distinctId = tenantId` (UUID nie koliduje z userId).
+  await trackServer({
+    distinctId: mapping.tenantId,
+    event: ANALYTICS_EVENTS.paymentSucceeded,
+    properties: {
+      amount_cents: invoice.amount_paid,
+      currency: (invoice.currency ?? 'pln').toLowerCase(),
+      stripe_invoice_id: invoice.id ?? '',
+    },
+  });
 }
 
 // ─── 4. invoice.payment_failed ────────────────────────────────────────
@@ -244,6 +277,16 @@ export async function handleInvoicePaymentFailed(
       failureReason,
     }),
   );
+
+  await trackServer({
+    distinctId: mapping.tenantId,
+    event: ANALYTICS_EVENTS.paymentFailed,
+    properties: {
+      amount_cents: invoice.amount_due,
+      currency: (invoice.currency ?? 'pln').toLowerCase(),
+      failure_reason: failureReason,
+    },
+  });
 }
 
 // ─── 5. subscription.trial_will_end ───────────────────────────────────
