@@ -1,6 +1,9 @@
 /**
  * Konfiguracja Sentry po stronie przeglądarki (ładowana dynamicznie z
  * komponentu klienckiego — nie importuj tego pliku w Server Components).
+ *
+ * PostHog: `array.js` + `posthog.init` w `PosthogSnippetLoader` / `browser-posthog.ts`
+ * (wzorzec jak snippet z panelu — wizard / health tracker).
  */
 import * as Sentry from '@sentry/nextjs';
 

@@ -2,21 +2,23 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+Ten projekt używa **pnpm** (`pnpm-lock.yaml`). Instalacja zależności:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Nie uruchamiaj `npm install` w katalogu głównym — npm nie obsługuje tego lockfile’a; przy globalnym `.npmrc` z opcjami pnpm (np. `store-dir`) npm bywa zgłaszany z błędami lub ostrzeżeniami.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Serwer developerski:
+
+```bash
+pnpm dev
+```
+
+Otwórz [http://localhost:3000](http://localhost:3000) w przeglądarce.
+
+Edycja zaczyna się od `app/page.tsx` — strona odświeża się przy zapisie.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

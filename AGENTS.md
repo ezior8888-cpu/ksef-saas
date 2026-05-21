@@ -13,6 +13,7 @@ Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (K
 - Inngest — background jobs (event-driven, step functions)
 - Cloudflare R2 — storage XML FA(3)
 - Vercel — hosting
+- **pnpm** — menedżer pakietów (`pnpm-lock.yaml`); w root nie używaj `npm install` (brak `package-lock.json`; globalny `.npmrc` z opcjami pnpm potrafi psuć npm).
 
 ## Konwencje kodu
 

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import posthog from 'posthog-js';
 import { X } from 'lucide-react';
 
+import { getBrowserPosthog, isBrowserPosthogReady } from '@/lib/analytics/browser-posthog';
 import {
   getAnalyticsConsent,
   isAnalyticsConfigured,
@@ -37,8 +37,9 @@ export function ConsentBanner() {
 
   const grant = () => {
     setAnalyticsConsent(true);
-    if (posthog.__loaded) {
-      posthog.opt_in_capturing();
+    const ph = getBrowserPosthog();
+    if (ph && isBrowserPosthogReady()) {
+      ph.opt_in_capturing();
       // Domyślnie session_recording jest disabled w init; opt_in nie odpala
       // nagrywania — potrzebny restart sesji. Najprościej: page reload.
       // Bez reload tracking eventów działa, replay włączy się przy kolejnej wizycie.
@@ -48,8 +49,9 @@ export function ConsentBanner() {
 
   const deny = () => {
     setAnalyticsConsent(false);
-    if (posthog.__loaded) {
-      posthog.opt_out_capturing();
+    const ph = getBrowserPosthog();
+    if (ph && isBrowserPosthogReady()) {
+      ph.opt_out_capturing();
     }
     setVisible(false);
   };

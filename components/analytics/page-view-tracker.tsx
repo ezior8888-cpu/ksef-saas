@@ -9,8 +9,8 @@ import { trackPageView } from '@/lib/analytics/client';
  *
  * `capture_pageview` w PostHog jest wyłączony — App Router nie emituje
  * natywnego page-change eventu, więc robimy to ręcznie. Łapiemy WSZYSTKIE
- * pageviews, łącznie z pierwszym (PostHog jest initowany eager w providerze,
- * więc przy pierwszym efekcie jest już gotowy).
+ * pageviews, łącznie z pierwszym (po zdarzeniu `ff:posthog-ready` i
+ * `PostHogProvider`).
  *
  * `useSearchParams` wymaga granicy Suspense — stąd wewnętrzny `Tracker`.
  */

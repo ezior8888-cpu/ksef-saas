@@ -1,13 +1,14 @@
 <wizard-report>
 # PostHog post-wizard report
 
-The wizard completed an initial PostHog pass; **Faza 31** consolidated tracking: client init lives in `components/analytics/analytics-provider.tsx` (reverse proxy `/ingest`), identify in `components/analytics/analytics-identify.tsx`, server capture in `lib/analytics/server.ts`. `instrumentation-client.ts` is **Sentry-only** — do not add a second `posthog.init` there.
+The wizard completed an initial PostHog pass; **Faza 31** loads **`array.js` from `eu-assets.i.posthog.com`** (same entry as the dashboard HTML snippet), then calls **`posthog.init`** with **`defaults: '2026-01-30'`**, **`api_host: '/ingest'`** (Next rewrites + `skipTrailingSlashRedirect`), and **`ui_host`** from env — see `lib/analytics/browser-posthog.ts`, `components/analytics/posthog-snippet-loader.tsx`, and `components/analytics/analytics-provider.tsx`. `/ingest` is allowed anonymously in `isPublicPath` so the SDK can load before login.
 
 ## Files created or modified
 
 | File | Change |
 |------|--------|
-| `lib/posthog-server.ts` | Opcjonalny singleton `posthog-node` (ten sam `NEXT_PUBLIC_POSTHOG_KEY` co `lib/analytics/server.ts`) |
+| `lib/analytics/posthog-node-client.ts` | Singleton `posthog-node` + `shutdown` (SIGTERM/SIGINT z `instrumentation.ts`) |
+| `lib/posthog-server.ts` | Re-export (`getPostHogClient` → `getPostHogNodeClient`) |
 | `components/analytics/analytics-identify.tsx` | Identify + `group('tenant', …)` na dashboardzie |
 | `app/(dashboard)/layout.tsx` | `AnalyticsIdentify` z danymi sesji |
 | `app/(auth)/login/actions.ts` | Added server-side `posthog.identify()` after successful email login |

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import posthog from 'posthog-js';
+
+import { getBrowserPosthog, isBrowserPosthogReady } from '@/lib/analytics/browser-posthog';
 
 /**
  * Identify zalogowanego użytkownika w PostHog (Faza 31 Krok 5).
@@ -28,18 +29,15 @@ export function AnalyticsIdentify({
   tenantId: string;
 }) {
   useEffect(() => {
-    if (!posthog.__loaded) return;
-    if (posthog.has_opted_out_capturing()) return;
+    const ph = getBrowserPosthog();
+    if (!ph || !isBrowserPosthogReady()) return;
+    if (ph.has_opted_out_capturing()) return;
 
-    // Identify aktualizuje też person properties — bezpieczne wywołanie
-    // przy każdej zmianie userId (np. po wylogowaniu + zalogowaniu kogoś innego).
-    posthog.identify(userId, {
+    ph.identify(userId, {
       email: email ?? undefined,
     });
 
-    // Group analytics — łączy eventy server-side wysyłane per-tenant
-    // z eventami klienckimi danego usera w widoku organizacji.
-    posthog.group('tenant', tenantId);
+    ph.group('tenant', tenantId);
   }, [userId, email, tenantId]);
 
   return null;

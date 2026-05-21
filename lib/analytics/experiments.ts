@@ -1,5 +1,6 @@
 import 'server-only';
-import { PostHog } from 'posthog-node';
+
+import { getPostHogNodeClient } from './posthog-node-client';
 
 /**
  * A/B testing przez PostHog feature flags (Faza 31 Krok 6).
@@ -20,20 +21,6 @@ import { PostHog } from 'posthog-node';
  * → Edge Config.
  */
 
-let client: PostHog | null = null;
-
-function getClient(): PostHog | null {
-  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
-  if (!key || key.startsWith('phc_xxx')) return null;
-  if (client) return client;
-  client = new PostHog(key, {
-    host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? 'https://eu.i.posthog.com',
-    flushAt: 1,
-    flushInterval: 0,
-  });
-  return client;
-}
-
 /**
  * Pobiera wariant eksperymentu dla danego użytkownika/tenanta.
  *
@@ -49,7 +36,7 @@ export async function getExperimentVariant(
   distinctId: string,
   flagKey: string,
 ): Promise<string | boolean | null> {
-  const c = getClient();
+  const c = getPostHogNodeClient();
   if (!c) return null;
   try {
     const v = await c.getFeatureFlag(flagKey, distinctId);

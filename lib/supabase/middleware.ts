@@ -55,6 +55,8 @@ export function isMarketingPath(pathname: string): boolean {
  * Całość `/api/*` NIE jest publiczna — tylko jawne prefiksy (bezpieczeństwo).
  */
 export function isPublicPath(pathname: string): boolean {
+  // PostHog reverse proxy — musi być publiczny (skrypt ładuje się przed logowaniem).
+  if (pathname.startsWith('/ingest')) return true;
   if (isMarketingPath(pathname)) return true;
   if (STATIC_PUBLIC_EXACT.some((p) => pathname === p)) return true;
   if (pathname.startsWith('/api/')) {

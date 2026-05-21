@@ -1,39 +1,32 @@
-import posthog from 'posthog-js';
 import {
   ANALYTICS_EVENTS,
   type AnalyticsEventName,
   type AnalyticsProperties,
 } from './events';
+import { getBrowserPosthog, isBrowserPosthogReady } from './browser-posthog';
 
 /**
  * Client-side tracking (Faza 31 Krok 3).
  *
- * Cienka warstwa nad `posthog-js`. `track()` przyjmuje wyłącznie nazwy
- * z taksonomii (`AnalyticsEventName`) — literówka nie przejdzie typechecka.
- *
- * Wszystkie funkcje są no-op gdy PostHog niezaładowany (brak env / brak
- * zgody) — komponenty mogą wołać `track()` bez sprawdzania stanu.
+ * Cienka warstwa nad `posthog-js` (instancja z `array.js` / `window.posthog`).
+ * `track()` przyjmuje wyłącznie nazwy z taksonomii (`AnalyticsEventName`).
  */
 
 export { ANALYTICS_EVENTS };
-
-function isReady(): boolean {
-  return typeof window !== 'undefined' && posthog.__loaded === true;
-}
 
 /** Wysyła event do PostHog (jeśli załadowany i jest zgoda). */
 export function track(
   event: AnalyticsEventName,
   properties?: AnalyticsProperties,
 ): void {
-  if (!isReady()) return;
-  posthog.capture(event, properties);
+  if (!isBrowserPosthogReady()) return;
+  getBrowserPosthog()?.capture(event, properties);
 }
 
 /** Ręczny pageview — App Router nie ma natywnego page-change eventu. */
 export function trackPageView(url: string): void {
-  if (!isReady()) return;
-  posthog.capture('$pageview', { $current_url: url });
+  if (!isBrowserPosthogReady()) return;
+  getBrowserPosthog()?.capture('$pageview', { $current_url: url });
 }
 
 /**

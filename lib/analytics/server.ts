@@ -1,6 +1,7 @@
 import 'server-only';
-import { PostHog } from 'posthog-node';
+
 import type { AnalyticsEventName, AnalyticsProperties } from './events';
+import { getPostHogNodeClient } from './posthog-node-client';
 
 /**
  * Server-side tracking (Faza 31 Krok 4).
@@ -10,31 +11,12 @@ import type { AnalyticsEventName, AnalyticsProperties } from './events';
  * JS i nie zależą od zgody na cookies (legitimate interest, pseudonimizacja
  * przez `distinctId = userId`).
  *
+ * Klient Node: singleton w `posthog-node-client.ts` (token + host z env).
+ *
  * `flushAt: 1` + `await flush()` w `trackServer` — w środowisku serverless
  * (Vercel) proces jest ubijany zaraz po odpowiedzi; bez natychmiastowego
  * flusha event nigdy by nie wyszedł.
  */
-
-let client: PostHog | null = null;
-
-function isConfigured(): boolean {
-  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
-  if (!key) return false;
-  if (key.startsWith('phc_xxx') || key === 'phc_placeholder') return false;
-  return true;
-}
-
-function getClient(): PostHog | null {
-  if (!isConfigured()) return null;
-  if (client) return client;
-  client = new PostHog(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
-    host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? 'https://eu.i.posthog.com',
-    // Flush po każdym evencie — serverless nie daje czasu na batching.
-    flushAt: 1,
-    flushInterval: 0,
-  });
-  return client;
-}
 
 export interface TrackServerInput {
   /** Zwykle `userId`. Dla zdarzeń bez usera — stabilny identyfikator (np. tenantId). */
@@ -50,7 +32,7 @@ export interface TrackServerInput {
  * operacji biznesowej (Server Action / Inngest job).
  */
 export async function trackServer(input: TrackServerInput): Promise<void> {
-  const c = getClient();
+  const c = getPostHogNodeClient();
   if (!c) return;
   try {
     c.capture({
@@ -75,7 +57,7 @@ export async function identifyServer(
   distinctId: string,
   properties: AnalyticsProperties,
 ): Promise<void> {
-  const c = getClient();
+  const c = getPostHogNodeClient();
   if (!c) return;
   try {
     c.identify({ distinctId, properties });

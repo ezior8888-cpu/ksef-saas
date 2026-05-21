@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import posthog from 'posthog-js';
+
+import { getBrowserPosthog, isBrowserPosthogReady } from '@/lib/analytics/browser-posthog';
 
 /**
  * React hook do PostHog A/B experiments (Faza 31 Krok 6).
@@ -29,16 +30,16 @@ export function useExperiment(
   const [variant, setVariant] = useState<string | boolean | null>(null);
 
   useEffect(() => {
-    if (!posthog.__loaded) return;
+    const ph = getBrowserPosthog();
+    if (!ph || !isBrowserPosthogReady()) return;
 
     const read = () => {
-      const v = posthog.getFeatureFlag(flagKey);
+      const v = ph.getFeatureFlag(flagKey);
       setVariant(v ?? null);
     };
 
     read();
-    // PostHog ładuje flagi async — subskrybujemy aktualizacje.
-    posthog.onFeatureFlags(read);
+    ph.onFeatureFlags(read);
   }, [flagKey]);
 
   return variant;
