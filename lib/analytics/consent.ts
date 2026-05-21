@@ -2,18 +2,16 @@
  * Zgoda na analytics (RODO) — Faza 31.
  *
  * Cookie banner z pełną granularnością powstaje dopiero w Fazie 38 (Legal).
- * Do tego czasu działa minimalny opt-in na **produkcji**: client-side tracking
- * startuje dopiero po świadomej zgodzie (`granted`). Na **localhost** capture
- * jest domyślnie włączony, dopóki user nie wybierze „Tylko niezbędne” (patrz
- * `browser-posthog.ts`). Server-side eventy
+ * Do tego czasu capture w przeglądarce jest **włączony**, dopóki user nie wybierze
+ * „Tylko niezbędne” (`denied` w localStorage). Baner przy `unset` informuje;
+ * po „Akceptuję” włącza się też session replay. Server-side eventy
  * (signup, płatności — pseudonimizowane) lecą niezależnie od tej zgody,
  * bo opierają się na legitimate interest, nie na cookies przeglądarki.
  *
  * Stan trzymamy w localStorage — bez cookie, bez wpływu na SSR.
  *
- * **Development:** dopóki user nie wybierze „Tylko niezbędne”, capture w PostHogu
- * jest włączony (łatwiejszy podgląd w Live events). **Production:** dopóki brak
- * jawnej zgody (`granted`), klient startuje w opt-out (`browser-posthog.ts`).
+ * Opt-out tylko przy `denied`. W panelu PostHog włącz **Scroll depth** ręcznie:
+ * Project settings → Web analytics (to nie jest w kodzie).
  */
 
 const CONSENT_KEY = 'ff_analytics_consent';

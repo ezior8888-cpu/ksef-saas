@@ -2,10 +2,11 @@
  * Konfiguracja Sentry po stronie przeglądarki (ładowana dynamicznie z
  * komponentu klienckiego — nie importuj tego pliku w Server Components).
  *
- * PostHog: `array.js` + `posthog.init` w `PosthogSnippetLoader` / `browser-posthog.ts`
- * (wzorzec jak snippet z panelu — wizard / health tracker).
+ * PostHog: `posthog-js` init tutaj (dokumentacja Next.js + checklist $pageview).
  */
 import * as Sentry from '@sentry/nextjs';
+
+import { initPosthogBrowser } from '@/lib/analytics/init-posthog-browser';
 
 /**
  * Maskuje bearer-token z URL-i portalu księgowej.
@@ -85,6 +86,8 @@ Sentry.init({
     return event;
   },
 });
+
+initPosthogBrowser();
 
 // Hook wymagany przez @sentry/nextjs do instrumentacji router transitions
 // w App Routerze. Eksport wykrywany przez Next.js automatycznie.

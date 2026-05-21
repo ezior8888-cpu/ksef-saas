@@ -1,7 +1,7 @@
 # PostHog — gdzie wkleić co (szablon)
 
 W tym projekcie **nie wklejasz** `posthog.init('phc_…', …)` do losowego pliku `.tsx`.  
-Klucz i host trzymasz w **`.env.local`**; w kodzie init jest już w **`lib/analytics/browser-posthog.ts`**, a loader `array.js` w **`components/analytics/posthog-snippet-loader.tsx`**.
+Klucz i host trzymasz w **`.env.local`**; init przeglądarki jest w **`instrumentation-client.ts`** → **`lib/analytics/init-posthog-browser.ts`** (`defaults: '2026-01-30'` = `$pageview` + `$pageleave`).
 
 ---
 
@@ -21,7 +21,7 @@ NEXT_PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
 
 Zapisz plik i **zrestartuj** `pnpm dev` (zmienne `NEXT_PUBLIC_*` ładowane przy starcie builda / dev).
 
-**Uwaga (zgoda):** na **localhost** eventy idą od razu (stan `unset` w localStorage). Na **produkcji** bez kliknięcia „Akceptuję” w banerze PostHog nie dostaje capture z przeglądarki. Jeśli wcześniej kliknąłeś „Tylko niezbędne”, wyczyść klucz `ff_analytics_consent` w Application → Local Storage albo kliknij „Akceptuję”.
+**Uwaga (zgoda):** capture jest **wyłączony tylko** gdy w localStorage jest `ff_analytics_consent` = `"denied"`. Jeśli wcześniej kliknąłeś „Tylko niezbędne”, w konsoli: `localStorage.removeItem('ff_analytics_consent')` i odśwież stronę.
 
 ---
 
@@ -60,7 +60,7 @@ U nas to jest **zbudowane tak**:
 | `'phc_.....'` | `process.env.NEXT_PUBLIC_POSTHOG_KEY` (wartość z **`.env.local`** / Vercel) |
 | `api_host: 'https://eu.i.posthog.com'` | `api_host: '/ingest'` — **reverse proxy** w `next.config.ts` (mniej ad-blocków); ruch i tak trafia do EU |
 | `defaults: '2026-01-30'` | Stała `POSTHOG_INIT_DEFAULTS` w `lib/analytics/browser-posthog.ts` |
-| `import posthog` + init w pliku | Ładowanie **`array.js`** + `initBrowserPosthogAfterSnippet()` — patrz `components/analytics/posthog-snippet-loader.tsx` |
+| `import posthog` + init w pliku | **`instrumentation-client.ts`** → `initPosthogBrowser()` (pakiet `posthog-js`) |
 
 **`ui_host`:** w init ustawiamy `process.env.NEXT_PUBLIC_POSTHOG_HOST` (toolbar / linki w UI PostHoga) — dlatego w env zostawiasz prawdziwy host `https://eu.i.posthog.com`.
 
@@ -69,7 +69,8 @@ U nas to jest **zbudowane tak**:
 ## 4. Czego **nie** rób
 
 - Nie wklejaj jawnego `phc_…` do `app/layout.tsx`, `browser-posthog.ts` ani innych plików **commitowanych** do Gita.
-- Nie duplikuj drugiego `posthog.init` — jedna ścieżka: loader + `initBrowserPosthogAfterSnippet()`.
+- Nie duplikuj drugiego `posthog.init` — tylko `initPosthogBrowser()` w `instrumentation-client.ts`.
+- **Scroll depth (3/3 w wizardzie):** w PostHog → **Project settings → Web analytics** włącz „Scroll depth” (to ustawienie projektu, nie kod).
 - **Nie modyfikuj `proxy.ts` pod PostHog** — w tym projekcie to Next.js proxy (sesja Supabase, logowanie), nie przekaźnik eventów. Instrukcja z wizarda (`new PostHog(...)` + `capture` w „proxy”) dotyczy innego typu aplikacji; u nas `posthog-node` jest w `lib/analytics/posthog-node-client.ts`, a eventy z przeglądarki lecą przez `/ingest`.
 
 ---

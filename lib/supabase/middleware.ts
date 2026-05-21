@@ -36,6 +36,8 @@ const PUBLIC_API_PREFIXES = [
   '/api/status',
   '/api/portal',
   '/api/email',
+  // Dev-only diagnostyka (route sam zwraca 404 na production)
+  '/api/dev',
 ] as const;
 
 const STATIC_PUBLIC_EXACT = [
