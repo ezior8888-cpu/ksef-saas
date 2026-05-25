@@ -1,3 +1,7 @@
+import 'server-only';
+
+import { headers } from 'next/headers';
+
 /**
  * Cloudflare Turnstile — bot protection alternatywa do reCAPTCHA / hCaptcha.
  *
@@ -24,8 +28,40 @@ export interface TurnstileVerifyResult {
   success: boolean;
   /** True gdy env nieskonfigurowane (lokalny dev) — przepuszczamy. */
   skipped?: boolean;
+  /** True gdy LOAD_TEST_MODE + nagłówek bypass (nigdy na produkcji). */
+  bypass?: boolean;
   /** error-codes z CF API. */
   errors?: string[];
+}
+
+/** Nagłówek dla botów load-test (tylko gdy `LOAD_TEST_MODE=true`, nie prod). */
+export const TURNSTILE_BYPASS_HEADER = 'x-turnstile-bypass';
+
+/**
+ * Środowisko produkcyjne — bypass Turnstile jest tu zawsze wyłączony.
+ */
+export function isProductionDeploy(): boolean {
+  if (process.env.VERCEL_ENV === 'production') return true;
+  if (process.env.NEXT_PUBLIC_APP_ENV === 'production') return true;
+  return false;
+}
+
+function isLoadTestModeEnabled(): boolean {
+  return process.env.LOAD_TEST_MODE === 'true';
+}
+
+/**
+ * Bypass Turnstile dla testów obciążeniowych (Faza 28).
+ * Wymaga: `LOAD_TEST_MODE=true` + nagłówek `x-turnstile-bypass` (niepusty).
+ * NIGDY nie zwraca true na produkcji (`VERCEL_ENV` / `NEXT_PUBLIC_APP_ENV`).
+ */
+export async function isTurnstileBypassActive(): Promise<boolean> {
+  if (isProductionDeploy()) return false;
+  if (!isLoadTestModeEnabled()) return false;
+
+  const h = await headers();
+  const value = h.get(TURNSTILE_BYPASS_HEADER)?.trim();
+  return Boolean(value);
 }
 
 export function isTurnstileConfigured(): boolean {
@@ -45,10 +81,23 @@ export function isTurnstileConfigured(): boolean {
  *   Fail-closed, bo bot protection musi działać. Cloudflare ma 99.99%+
  *   uptime, więc to ekstremalnie rzadki edge case.
  */
+export interface VerifyTurnstileOptions {
+  /** Tylko logowanie (load test). Rejestracja / reset hasła — bez bypass. */
+  allowLoadTestBypass?: boolean;
+}
+
 export async function verifyTurnstile(
   token: string | null | undefined,
   ip?: string,
+  options?: VerifyTurnstileOptions,
 ): Promise<TurnstileVerifyResult> {
+  if (
+    options?.allowLoadTestBypass === true &&
+    (await isTurnstileBypassActive())
+  ) {
+    return { success: true, skipped: true, bypass: true };
+  }
+
   if (!isTurnstileConfigured()) {
     return { success: true, skipped: true };
   }

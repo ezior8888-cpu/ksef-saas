@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Geist, Geist_Mono, Fraunces } from 'next/font/google';
 
 import './globals.css';
 import { AnalyticsProvider } from '@/components/analytics/analytics-provider';
 import { SentryClientInit } from '@/components/sentry-client-init';
 import { Toaster } from '@/components/ui/sonner';
+import { THEME_BOOT_SCRIPT } from '@/lib/theme/theme';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -16,9 +17,16 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
-/** Domyślnie ciemny; zapisany wybór w `localStorage` ma pierwszeństwo (jak ThemeToggle). */
-const THEME_BOOT =
-  `(function(){try{var r=localStorage.getItem('theme');var stored=r==='light'||r==='dark'?r:null;var t=stored!=null?stored:'dark';var el=document.documentElement;el.classList.toggle('dark',t==='dark');el.style.colorScheme=t==='dark'?'dark':'light';}catch(e){}})();`;
+// Fraunces — display serif do Polish Editorial direction marketingu.
+// `latin-ext` jest KRYTYCZNE — polskie znaki (ą, ć, ę, ł, ń, ó, ś, ź, ż)
+// nie są w podstawowym `latin`. `opsz` = optical sizing dla naturalnych
+// rozmiarów display, `SOFT` = wariacja miękkości krawędzi serifów.
+const fraunces = Fraunces({
+  variable: '--font-fraunces',
+  subsets: ['latin', 'latin-ext'],
+  display: 'swap',
+  axes: ['opsz', 'SOFT'],
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -45,8 +53,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#000000' },
+    { media: '(prefers-color-scheme: light)', color: '#f4f4f5' },
+    { media: '(prefers-color-scheme: dark)', color: '#12131a' },
   ],
   width: 'device-width',
   initialScale: 1,
@@ -65,9 +73,10 @@ export default function RootLayout({
       lang="pl"
       suppressHydrationWarning
       data-scroll-behavior="smooth"
-      className={`dark ${geistSans.variable} ${geistMono.variable} h-full scroll-smooth antialiased`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full scroll-smooth antialiased`}
     >
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -82,7 +91,6 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen font-sans antialiased text-foreground">
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <SentryClientInit />
         <AnalyticsProvider>{children}</AnalyticsProvider>
         <Toaster

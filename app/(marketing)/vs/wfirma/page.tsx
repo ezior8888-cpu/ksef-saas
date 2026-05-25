@@ -1,9 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
 
 import { ComparisonTable, type ComparisonRow } from '@/components/marketing/comparison-table';
-import { Button } from '@/components/ui/button';
+import {
+  VsHero,
+  VsTldr,
+  VsSectionHeader,
+  VsChooseColumns,
+  VsMigrationCta,
+} from '@/components/marketing/vs-page-chrome';
 
 // Faza 22: comparison page — SEO ważne, cache na godzinę.
 export const revalidate = 3600;
@@ -163,37 +168,38 @@ const COMPARISON_ROWS = [
 
 export default function WfirmaPage() {
   return (
-    <article className="py-16 lg:py-24">
-      <div className="mx-auto max-w-4xl px-6">
-        <header className="mb-16 text-center">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Porównanie 2026
-          </p>
-          <h1 className="font-display text-5xl leading-[1.1] font-semibold tracking-tighter-display md:text-6xl">
-            KSeF SaaS <span className="text-muted-foreground">vs</span> wFirma
-          </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-xl text-muted-foreground">
-            23 punkty porównawcze, historia produktu, cennik warstwowy i migracja — z naciskiem na mobile oraz
-            jakość OCR kosztów.
-          </p>
-        </header>
+    <article>
+      <VsHero
+        competitorName="wFirma"
+        subtitle="23 punkty porównawcze, historia produktu, cennik warstwowy i migracja — z naciskiem na mobile oraz jakość OCR kosztów."
+      />
 
-        <div className="mb-16 rounded-3xl border border-glass-border bg-glass-white p-8 shadow-glass backdrop-blur-glass">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">TL;DR</p>
-          <p className="text-lg leading-relaxed">
-            <strong>wFirma</strong> to potężny kombajn dla biur i większych JDG: kadry, pełniejszy back-office i
-            doświadczenie w polskim compliance. Jednocześnie mikrofirmy mobilne często słyszą dwa argumenty
-            przeciw: <strong>brak dedykowanej aplikacji mobilnej</strong> w stylu „otwieram, skanuję, wysyłam do
-            KSeF w windzie” oraz <strong>ograniczenia OCR</strong> na trudnych kosztach (wielostronicowe PDF-y,
-            słabe zdjęcia, batch). <strong>KSeF SaaS</strong> nie próbuje zastąpić całego ERP — koncentruje się na
-            superscieżce: KSeF + OCR + KPiR + windykacja + księgowa, z PWA i pushami jako domyślny sposób pracy.
-          </p>
-        </div>
+      <VsTldr>
+        <span className="font-editorial font-medium text-zinc-900">
+          wFirma
+        </span>{' '}
+        to potężny kombajn dla biur i większych JDG: kadry, pełniejszy
+        back-office i doświadczenie w polskim compliance. Jednocześnie
+        mikrofirmy mobilne często słyszą dwa argumenty przeciw:{' '}
+        <strong className="font-semibold">brak dedykowanej aplikacji mobilnej</strong>{' '}
+        w stylu &bdquo;otwieram, skanuję, wysyłam do KSeF w windzie&rdquo; oraz{' '}
+        <strong className="font-semibold">ograniczenia OCR</strong> na trudnych
+        kosztach (wielostronicowe PDF-y, słabe zdjęcia, batch).{' '}
+        <span className="font-editorial font-medium italic text-emerald-700">
+          FaktFlow
+        </span>{' '}
+        nie próbuje zastąpić całego ERP — koncentruje się na superscieżce: KSeF
+        + OCR + KPiR + windykacja + księgowa, z PWA i pushami jako domyślny
+        sposób pracy.
+      </VsTldr>
 
-        <section className="mb-16 space-y-5 text-muted-foreground leading-relaxed">
-          <h2 className="font-display text-2xl font-semibold tracking-tighter-text text-foreground">
-            Krótka historia wFirma i infrastruktura
-          </h2>
+      <div className="mx-auto max-w-[1280px] px-6 lg:px-8">
+        <VsSectionHeader
+          num="01"
+          eyebrow="Historia"
+          title="Krótka historia wFirma i infrastruktura"
+        />
+        <section className="space-y-5 leading-relaxed text-zinc-600">
           <p>
             wFirma wyrosła z potrzeby połączenia księgowości, kadrowej i rozliczeń ZUS w jednym ekosystemie dla
             polskiego przedsiębiorcy. Z biegiem lat produkt rozrósł się o moduły, które dla biura rachunkowego są
@@ -216,42 +222,42 @@ export default function WfirmaPage() {
           </p>
         </section>
 
-        <section className="mb-16">
-          <h2 className="mb-6 font-display text-2xl font-semibold tracking-tighter-text">
-            Głosy użytkowników (zsyntetyzowane wątki publiczne)
-          </h2>
-          <div className="grid gap-4 md:grid-cols-3">
-            <figure className="rounded-2xl border border-glass-border bg-glass-white p-5 shadow-glass backdrop-blur-glass">
-              <blockquote className="text-sm leading-relaxed text-muted-foreground">
-                &quot;Na biurku wFirma jest super, ale jak jestem na budowie, wolę zrobić zdjęcie i wrzucić później
-                — szkoda, że nie ma normalnej apki.&quot;
+        <VsSectionHeader
+          num="02"
+          eyebrow="Głosy użytkowników"
+          title="Zsyntetyzowane wątki publiczne"
+        />
+        <div className="grid gap-10 md:grid-cols-3 md:gap-12">
+          {[
+            { q: 'Na biurku wFirma jest super, ale jak jestem na budowie, wolę zrobić zdjęcie i wrzucić później — szkoda, że nie ma normalnej apki.', meta: 'Dyskusja branżowa · 2025' },
+            { q: 'OCR działa, ale jak dostaję 15-stronicowy cennik jako załącznik, to i tak robię ręcznie.', meta: 'Komentarz na grupie Facebook · 2024' },
+            { q: 'Liczyłem, że telefon wystarczy do całego KPiR w podróży — okazało się, że to raczej desktop first.', meta: 'Forum przedsiębiorców · 2025' },
+          ].map((o) => (
+            <figure
+              key={o.meta}
+              className="border-t-2 border-emerald-500/40 pt-6"
+            >
+              <blockquote className="font-editorial text-lg italic leading-snug text-zinc-600">
+                <span className="mr-1 font-editorial text-3xl leading-none text-emerald-700">&bdquo;</span>
+                {o.q}
+                <span className="ml-0.5 font-editorial text-2xl leading-none text-emerald-700">&rdquo;</span>
               </blockquote>
-              <figcaption className="mt-3 text-xs text-muted-foreground">Dyskusja branżowa, 2025</figcaption>
+              <figcaption className="mt-4 text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+                {o.meta}
+              </figcaption>
             </figure>
-            <figure className="rounded-2xl border border-glass-border bg-glass-white p-5 shadow-glass backdrop-blur-glass">
-              <blockquote className="text-sm leading-relaxed text-muted-foreground">
-                &quot;OCR działa, ale jak dostaję 15-stronicowy cennik jako załącznik, to i tak robię ręcznie.&quot;
-              </blockquote>
-              <figcaption className="mt-3 text-xs text-muted-foreground">Komentarz na grupie Facebook, 2024</figcaption>
-            </figure>
-            <figure className="rounded-2xl border border-glass-border bg-glass-white p-5 shadow-glass backdrop-blur-glass">
-              <blockquote className="text-sm leading-relaxed text-muted-foreground">
-                &quot;Liczyłem, że telefon wystarczy do całego KPiR w podróży — okazało się, że to raczej desktop
-                first.&quot;
-              </blockquote>
-              <figcaption className="mt-3 text-xs text-muted-foreground">Forum przedsiębiorców, 2025</figcaption>
-            </figure>
-          </div>
-          <p className="mt-6 text-sm text-muted-foreground leading-relaxed">
-            To nie są cytaty z konkretnych osób, lecz stylizowane streszczenia częstych obserwacji — zawsze
-            potwierdź stan funkcji na świeżym koncie trial i swoim zestawie dokumentów.
-          </p>
-        </section>
+          ))}
+        </div>
+        <p className="mt-8 font-editorial text-sm italic leading-relaxed text-zinc-500">
+          To nie są cytaty z konkretnych osób, lecz stylizowane streszczenia częstych obserwacji — zawsze potwierdź stan funkcji na świeżym koncie trial i swoim zestawie dokumentów.
+        </p>
 
-        <section className="mb-16 space-y-5 text-muted-foreground leading-relaxed">
-          <h2 className="font-display text-2xl font-semibold tracking-tighter-text text-foreground">
-            Mobile-first vs desktop-first w erze KSeF
-          </h2>
+        <VsSectionHeader
+          num="03"
+          eyebrow="Mobile vs desktop"
+          title="Mobile-first vs desktop-first w erze KSeF"
+        />
+        <section className="space-y-5 leading-relaxed text-zinc-600">
           <p>
             KSeF 2.0 zmienia psychologię pracy: status faktury nie jest już „pdf w mailu”, tylko rekord w systemie
             ministerialnym z numerem referencyjnym i audytem czasu. Oznacza to, że przedsiębiorca potrzebuje
@@ -275,149 +281,148 @@ export default function WfirmaPage() {
           </p>
         </section>
 
-        <ComparisonTable competitorName="wFirma" rows={COMPARISON_ROWS} />
+        <div className="mb-6 mt-16 flex items-baseline gap-4 border-b border-zinc-200 pb-4">
+          <span className="editorial-section-num text-3xl">04.</span>
+          <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+            Tabela porównawcza
+          </span>
+        </div>
+      </div>
 
-        <section className="mt-16 space-y-5 text-muted-foreground leading-relaxed">
-          <h2 className="font-display text-2xl font-semibold tracking-tighter-text text-foreground">
-            Pricing breakdown: gdzie rośnie koszt przy większej skali
-          </h2>
+      <div className="mx-auto max-w-[1280px] px-6 lg:px-8">
+        <ComparisonTable competitorName="wFirma" rows={COMPARISON_ROWS} />
+      </div>
+
+      <div className="mx-auto max-w-[1280px] px-6 lg:px-8">
+        <VsSectionHeader
+          num="05"
+          eyebrow="Pricing breakdown"
+          title="Gdzie rośnie koszt przy większej skali"
+        />
+        <section className="space-y-5 leading-relaxed text-zinc-600">
           <p>
-            wFirma stosuje klasyczny model pakietów zależnych od liczby dokumentów, użytkowników i modułów
-            kadrowych — to uczciwe przy biurze obsługującym wiele spółek, ale bywa mniej przewidywalne dla JDG,
-            która eksploduje liczbą kosztów w jednym kwartale (remont, import sprzętu, delegacje). Przy porównaniu
-            zawsze policz: ile kosztuje dopięcie modułu, którego potrzebujesz tylko przez 3 miesiące, oraz czy OCR
-            jest limitowany licznikami.
+            wFirma stosuje klasyczny model pakietów zależnych od liczby dokumentów, użytkowników i modułów kadrowych — to uczciwe przy biurze obsługującym wiele spółek, ale bywa mniej przewidywalne dla JDG, która eksploduje liczbą kosztów w jednym kwartale (remont, import sprzętu, delegacje). Przy porównaniu zawsze policz: ile kosztuje dopięcie modułu, którego potrzebujesz tylko przez 3 miesiące, oraz czy OCR jest limitowany licznikami.
           </p>
-          <ul className="list-disc space-y-3 pl-5 text-foreground/90">
-            <li>
-              <strong className="text-foreground">Warstwa podstawowa:</strong> rozliczenia, faktury, często sensowny
-              start bez pełnej „maszyny mobilnej”.
-            </li>
-            <li>
-              <strong className="text-foreground">Warstwa rozszerzeń:</strong> dodatkowe firmy, wyższe limity
-              dokumentów, integracje — koszt skokowy przy wzroście skali.
-            </li>
-            <li>
-              <strong className="text-foreground">Kadry i płace:</strong> mocna strona wFirma — jeśli tego
-              potrzebujesz, może to uzasadniać wyższy abonament nawet przy słabszym mobile OCR.
-            </li>
-            <li>
-              <strong className="text-foreground">KSeF SaaS:</strong> jedna stawka ok. 49 zł/mc, mobile + OCR + KSeF
-              w jednym worku, money-back 60 dni — czyli przewidywalny TCO dla mikrofirmy bez działu IT.
-            </li>
+          <ul className="space-y-0 border-t border-zinc-100">
+            {[
+              { k: 'Warstwa podstawowa', v: 'rozliczenia, faktury, często sensowny start bez pełnej „maszyny mobilnej”.' },
+              { k: 'Warstwa rozszerzeń', v: 'dodatkowe firmy, wyższe limity dokumentów, integracje — koszt skokowy przy wzroście skali.' },
+              { k: 'Kadry i płace', v: 'mocna strona wFirma — jeśli tego potrzebujesz, może to uzasadniać wyższy abonament nawet przy słabszym mobile OCR.' },
+              { k: 'FaktFlow', v: 'jedna stawka ok. 49 zł/mc, mobile + OCR + KSeF w jednym worku, money-back 60 dni — czyli przewidywalny TCO dla mikrofirmy bez działu IT.' },
+            ].map((item, i) => (
+              <li
+                key={item.k}
+                className="grid grid-cols-12 gap-4 border-b border-zinc-100 py-4"
+              >
+                <span className="editorial-section-num col-span-1 text-xs">
+                  {String(i + 1).padStart(2, '0')}.
+                </span>
+                <div className="col-span-11">
+                  <p className="font-editorial text-base font-medium">{item.k}</p>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    {item.v}
+                  </p>
+                </div>
+              </li>
+            ))}
           </ul>
           <p>
-            Nie traktuj tego rozdziału jako aktualnego cennika — to mapa mentalna przy negocjacjach z księgową i
-            przy szacowaniu kosztu migracji. Zawsze pobierz oficjalny cennik i regulamin z dnia dzisiejszego.
+            Nie traktuj tego rozdziału jako aktualnego cennika — to mapa mentalna przy negocjacjach z księgową i przy szacowaniu kosztu migracji. Zawsze pobierz oficjalny cennik i regulamin z dnia dzisiejszego.
           </p>
         </section>
+      </div>
 
-        <div className="mt-16 grid gap-6 md:grid-cols-2">
-          <div className="rounded-3xl border border-glass-border bg-glass-white p-7 backdrop-blur-glass">
-            <h3 className="mb-4 font-display text-lg font-semibold tracking-tighter-text">
-              Wybierz wFirmę, jeśli...
-            </h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Prowadzisz lub obsługujesz biuro z pełnym modułem kadrowym</li>
-              <li>• Pracujesz głównie na desktopie i zbieracie dokumenty centralnie</li>
-              <li>• Potrzebujesz głębokiej integracji z polskim stackiem bankowo-księgowym</li>
-              <li>• OCR mobilny nie jest Twoim głównym KPI (np. mało kosztów)</li>
-            </ul>
-          </div>
-          <div className="rounded-3xl border border-foreground/20 bg-foreground/5 p-7 backdrop-blur-glass">
-            <h3 className="mb-4 font-display text-lg font-semibold tracking-tighter-text">
-              Wybierz KSeF SaaS, jeśli...
-            </h3>
-            <ul className="space-y-2 text-sm">
-              <li>• Żyjesz z telefonu: budowy, dostawy, serwisy, taxi flota</li>
-              <li>• OCR i batch kosztów to Twój bottleneck operacyjny</li>
-              <li>• Chcesz push + offline queue bez obejść</li>
-              <li>• Szukasz prostszego TCO niż rosnące pakiety przy skoku dokumentów</li>
-            </ul>
-          </div>
-        </div>
+      <VsChooseColumns
+        competitorName="wFirma"
+        whenChooseCompetitor={[
+          'Prowadzisz lub obsługujesz biuro z pełnym modułem kadrowym',
+          'Pracujesz głównie na desktopie i zbieracie dokumenty centralnie',
+          'Potrzebujesz głębokiej integracji z polskim stackiem bankowo-księgowym',
+          'OCR mobilny nie jest Twoim głównym KPI (np. mało kosztów)',
+        ]}
+        whenChooseUs={[
+          'Żyjesz z telefonu: budowy, dostawy, serwisy, taxi flota',
+          'OCR i batch kosztów to Twój bottleneck operacyjny',
+          'Chcesz push + offline queue bez obejść',
+          'Szukasz prostszego TCO niż rosnące pakiety przy skoku dokumentów',
+        ]}
+      />
 
-        <section className="mt-16 rounded-3xl border border-glass-border bg-glass-white p-8 shadow-glass backdrop-blur-glass">
-          <h2 className="mb-4 font-display text-2xl font-semibold tracking-tighter-text">
-            Wymigracja z wFirma: plan krok po kroku
-          </h2>
-          <ol className="list-decimal space-y-4 pl-5 text-muted-foreground leading-relaxed">
-            <li>
-              <strong className="text-foreground">Inwentaryzacja modułów:</strong> zaznacz, które funkcje wFirma
-              są krytyczne (np. kadry) i czy zostają równolegle na okres przejściowy.
+      <div className="mx-auto max-w-[1280px] px-6 lg:px-8">
+        <VsSectionHeader
+          num="06"
+          eyebrow="Migracja krok po kroku"
+          title="Wyprowadzka z wFirma"
+        />
+        <ol className="space-y-0 border-t border-zinc-100">
+          {[
+            { k: 'Inwentaryzacja modułów', v: 'zaznacz, które funkcje wFirma są krytyczne (np. kadry) i czy zostają równolegle na okres przejściowy.' },
+            { k: 'Eksport danych', v: 'pobierz zestawienia faktur, kosztów i kontrahentów w formatach obsługiwanych przez Magiczny Import; zachowaj kopie offline.' },
+            { k: 'Import z KSeF', v: 'zsynchronizuj historię wysyłek FA z Ministerstwem — to redukuje ryzyko duplikatów przy ponownej rejestracji tych samych numerów.' },
+            { k: 'Test OCR', v: 'weź 30 najbrudniejszych skanów z ostatniego kwartału i sprawdź, ile z nich domyka się bez Excela w FaktFlow.' },
+            { k: 'Cut-over komunikacji', v: 'poinformuj kontrahentów o ewentualnej zmianie danych do płatności i webhooków, jeśli integrujesz sklep online.' },
+            { k: 'Okno stabilizacji', v: 'przez 14 dni monitoruj kolejkę KSeF, UPO i raporty błędów; dopiero potem wyłączaj stary rutynowy eksport z wFirmy.' },
+          ].map((step, i) => (
+            <li
+              key={step.k}
+              className="grid grid-cols-12 gap-4 border-b border-zinc-100 py-4"
+            >
+              <span className="editorial-section-num col-span-1 text-xs">
+                {String(i + 1).padStart(2, '0')}.
+              </span>
+              <div className="col-span-11">
+                <p className="font-editorial text-base font-medium">{step.k}</p>
+                <p className="mt-1 text-sm text-zinc-600">
+                  {step.v}
+                </p>
+              </div>
             </li>
-            <li>
-              <strong className="text-foreground">Eksport danych:</strong> pobierz zestawienia faktur, kosztów i
-              kontrahentów w formatach obsługiwanych przez Magiczny Import; zachowaj kopie offline.
-            </li>
-            <li>
-              <strong className="text-foreground">Import z KSeF:</strong> zsynchronizuj historię wysyłek FA z
-              Ministerstwem — to redukuje ryzyko duplikatów przy ponownej rejestracji tych samych numerów.
-            </li>
-            <li>
-              <strong className="text-foreground">Test OCR:</strong> weź 30 najbrudniejszych skanów z ostatniego
-              kwartału i sprawdź, ile z nich domyka się bez Excela w KSeF SaaS.
-            </li>
-            <li>
-              <strong className="text-foreground">Cut-over komunikacji:</strong> poinformuj kontrahentów o ewentualnej
-              zmianie danych do płatności i webhooków, jeśli integrujesz sklep online.
-            </li>
-            <li>
-              <strong className="text-foreground">Okno stabilizacji:</strong> przez 14 dni monitoruj kolejkę KSeF,
-              UPO i raporty błędów; dopiero potem wyłączaj stary rutynowy eksport z wFirmy.
-            </li>
-          </ol>
-        </section>
+          ))}
+        </ol>
 
-        <section className="mt-16 space-y-5 text-muted-foreground leading-relaxed">
-          <h2 className="font-display text-2xl font-semibold tracking-tighter-text text-foreground">
-            Długa fala SEO: intencja „wFirma vs …”
-          </h2>
+        <VsSectionHeader
+          num="07"
+          eyebrow="SEO + E-E-A-T"
+          title="Długa fala wokół „wFirma vs …”"
+        />
+        <section className="space-y-5 leading-relaxed text-zinc-600">
           <p>
-            Zapytania porównawcze mają to do siebie, że użytkownik już zna oba brandy i szuka argumentów „czy warto
-            przesiadać się teraz, czy po lutym 2026”. Dlatego ta strona łączy historię produktu, realne wątki
-            mobilne, breakdown cenowy i procedurę migracji: to sygnały dla wyszukiwarki, że treść jest procesowa,
-            a nie tylko landingiem z jednym CTA.
+            Zapytania porównawcze mają to do siebie, że użytkownik już zna oba brandy i szuka argumentów &bdquo;czy warto przesiadać się teraz, czy po lutym 2026&rdquo;. Dlatego ta strona łączy historię produktu, realne wątki mobilne, breakdown cenowy i procedurę migracji: to sygnały dla wyszukiwarki, że treść jest procesowa, a nie tylko landingiem z jednym CTA.
           </p>
           <p>
             Dodatkowo połącz tę analizę z{' '}
-            <Link href="/kalkulator-oszczednosci" className="text-foreground underline underline-offset-4 hover:text-primary">
+            <Link
+              href="/kalkulator-oszczednosci"
+              className="font-editorial italic underline decoration-emerald-400 decoration-2 underline-offset-[4px] transition-all hover:decoration-[3px]"
+            >
               kalkulatorem oszczędności
             </Link>{' '}
             oraz{' '}
-            <Link href="/pricing" className="text-foreground underline underline-offset-4 hover:text-primary">
+            <Link
+              href="/pricing"
+              className="font-editorial italic underline decoration-emerald-400 decoration-2 underline-offset-[4px] transition-all hover:decoration-[3px]"
+            >
               stroną cennika
             </Link>
             , żeby zbudować topical authority wokół KSeF + OCR + mikrofirma. Masz pytania migracyjne?{' '}
-            <Link href="/kontakt" className="text-foreground underline underline-offset-4 hover:text-primary">
+            <Link
+              href="/kontakt"
+              className="font-editorial italic underline decoration-emerald-400 decoration-2 underline-offset-[4px] transition-all hover:decoration-[3px]"
+            >
               Formularz kontaktowy
             </Link>{' '}
             zbiera też opis profilu dokumentów.
           </p>
           <p>
-            Jeśli jesteś biurem rachunkowym i rozważasz hybrydę (część klientów na wFirma, część na KSeF SaaS),
-            opisz nam profil dokumentów — przygotujemy szablon komunikacji do klientów końcowych i checklistę
-            zgód RODO na przeniesienie eksportów.
+            Jeśli jesteś biurem rachunkowym i rozważasz hybrydę (część klientów na wFirma, część na FaktFlow), opisz nam profil dokumentów — przygotujemy szablon komunikacji do klientów końcowych i checklistę zgód RODO na przeniesienie eksportów.
           </p>
         </section>
-
-        <div className="mt-16 rounded-3xl border border-glass-border bg-glass-white p-10 text-center shadow-glass-lg backdrop-blur-glass">
-          <h3 className="mb-4 font-display text-3xl font-semibold tracking-tighter-display">
-            Mobile + OCR bez kompromisu
-          </h3>
-          <p className="mx-auto mb-8 max-w-xl text-muted-foreground">
-            Załóż konto, zsynchronizuj KSeF i przetestuj batch OCR na swoich najgorszych skanach — zobaczysz różnicę
-            zanim wypowiesz umowę u obecnego dostawcy.
-          </p>
-          <Button variant="glass-primary" size="lg" asChild>
-            <Link href="/register" className="inline-flex items-center gap-2">
-              Wypróbuj 30 dni za darmo
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </Link>
-          </Button>
-          <p className="mt-3 text-xs text-muted-foreground">+ 60 dni gwarancji zwrotu pieniędzy</p>
-        </div>
       </div>
+
+      <VsMigrationCta
+        competitorName="wFirma"
+        copy="Załóż konto, zsynchronizuj KSeF i przetestuj batch OCR na swoich najgorszych skanach — zobaczysz różnicę zanim wypowiesz umowę u obecnego dostawcy."
+      />
     </article>
   );
 }

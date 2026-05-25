@@ -3,15 +3,19 @@ import { updateSession } from '@/lib/supabase/middleware';
 
 /**
  * Next.js 16+ Proxy (konwencja zamiast root `middleware.ts`) — każde żądanie
- * przed renderem. Logika sesji i reguł routingu: `lib/supabase/middleware.ts`
- * (spec 19.1.3 — MARKETING_PATHS, isPublicPath, redirect na `/dashboard`).
+ * przed renderem. Logika sesji i reguł routingu: `lib/supabase/middleware.ts`.
  *
- * NIE dodawaj tu PostHog (`posthog-node` / `client.capture`) — ten plik to
- * auth + redirecty, nie „proxy ruchu do PostHoga”. Wizard często myli nazwę
- * `proxy.ts` z reverse proxy `/ingest`. Integracja:
- *   - przeglądarka: `components/analytics/posthog-snippet-loader.tsx`
- *   - serwer: `lib/analytics/posthog-node-client.ts` + `trackServer()`
- *   - env: `NEXT_PUBLIC_POSTHOG_KEY` w `.env.local` (nigdy jawny `phc_` w kodzie)
+ * ─── PostHog (wizard często myli ten plik) ───
+ * NIE wklejaj tu `import { PostHog } from 'posthog-node'` ani `const client = new PostHog(...)`.
+ * Ten plik jest bundlowany pod Edge — `posthog-node` zwykle nie działa i psuje build.
+ *
+ * Gdzie jest to, o co prosi wizard:
+ *   • Token (Project API Key): `.env.local` → `NEXT_PUBLIC_POSTHOG_KEY` (nie `phc_` w kodzie)
+ *   • `new PostHog(...)`: `lib/analytics/posthog-node-client.ts` → `getPostHogNodeClient()`
+ *   • `await client.shutdown()`: `lib/analytics/posthog-process-shutdown.ts`
+ *     (rejestracja SIGINT/SIGTERM z `instrumentation.ts` przy starcie Node)
+ *   • Przeglądarka ($pageview): `instrumentation-client.ts` → `initPosthogBrowser()`
+ *   • Reverse proxy eventów: `next.config.ts` → `/ingest`
  */
 export async function proxy(request: NextRequest) {
   return await updateSession(request);

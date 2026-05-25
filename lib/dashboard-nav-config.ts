@@ -10,7 +10,7 @@ export interface DashboardNavSection {
   items: DashboardNavItem[];
 }
 
-/** Jedna lista tras menu — sidebar (`dashboardNavSections`). */
+/** Sekcje menu — sidebar (nagłówki: Dane, Księgowość, …). */
 export const dashboardNavSections: DashboardNavSection[] = [
   {
     title: 'Dane',
@@ -36,6 +36,10 @@ export const dashboardNavSections: DashboardNavSection[] = [
     ],
   },
 ];
+
+/** Płaska lista — prefetch i inne narzędzia. */
+export const dashboardNavItems: DashboardNavItem[] =
+  dashboardNavSections.flatMap((section) => section.items);
 
 /**
  * Czy `pathname` uznajemy za aktywną pozycję menu dla danego `href`
@@ -68,12 +72,7 @@ const EXTRA_PREFETCH_HREFS = ['/settings', '/invoices/new'] as const;
 
 /** Trasy do `router.prefetch` — pozycje menu + CTA + ustawienia. */
 export function getDashboardPrefetchHrefs(): string[] {
-  const set = new Set<string>();
-  for (const section of dashboardNavSections) {
-    for (const item of section.items) {
-      set.add(item.href);
-    }
-  }
+  const set = new Set<string>(dashboardNavItems.map((item) => item.href));
   for (const href of EXTRA_PREFETCH_HREFS) {
     set.add(href);
   }

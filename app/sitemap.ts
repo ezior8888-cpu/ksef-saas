@@ -15,7 +15,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'monthly',
     },
     { url: `${baseUrl}/blog`, priority: 0.8, changeFrequency: 'weekly' },
-    { url: `${baseUrl}/vs/fakturownia`, priority: 0.9, changeFrequency: 'monthly' },
+    { url: `${baseUrl}/vs/inni`, priority: 0.9, changeFrequency: 'monthly' },
     { url: `${baseUrl}/vs/infakt`, priority: 0.9, changeFrequency: 'monthly' },
     { url: `${baseUrl}/vs/wfirma`, priority: 0.9, changeFrequency: 'monthly' },
     { url: `${baseUrl}/vs/ifirma`, priority: 0.9, changeFrequency: 'monthly' },

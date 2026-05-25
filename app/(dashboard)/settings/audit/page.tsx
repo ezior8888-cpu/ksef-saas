@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { FfDataTableCard, ffTable } from '@/components/dashboard/ff-data-table';
 
 const ACTION_LABELS: Record<string, string> = {
   'auth.login': 'Zalogowanie',
@@ -36,68 +37,71 @@ export default async function AuditPage() {
     .order('created_at', { ascending: false })
     .limit(200);
 
+  const rows = logs ?? [];
+
   return (
-    <div className="space-y-8 max-w-4xl">
+    <div className="max-w-4xl space-y-8 pb-10 text-[var(--ff-on-surface)]">
       <div>
-        <h1 className="text-4xl font-semibold tracking-tight">
+        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
           Historia aktywności
         </h1>
-        <p className="mt-2 text-muted-foreground">
+        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
           Pełny audit trail Twojego konta — RODO zgodność
         </p>
       </div>
 
       {error ? (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-700 dark:text-red-400">
+        <div className="rounded-[var(--ff-radius-lg)] border border-red-500/25 bg-red-500/10 px-5 py-4 text-sm text-red-200">
           Nie udało się wczytać historii: {error.message}
         </div>
       ) : (
-        <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-foreground/[0.03] border-b border-white/55 dark:border-white/14">
-              <tr className="text-left">
-                {['Data', 'Akcja', 'Zasób', 'IP'].map((h) => (
-                  <th key={h} className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                    {h}
-                  </th>
-                ))}
+        <FfDataTableCard
+          title="Log zdarzeń"
+          subtitle={`${rows.length} wpisów (max. 200) • sortowanie od najnowszych`}
+          minWidth={720}
+        >
+          <thead>
+            <tr className={ffTable.headRow}>
+              <th className={ffTable.th}>Data</th>
+              <th className={ffTable.th}>Akcja</th>
+              <th className={ffTable.th}>Zasób</th>
+              <th className={ffTable.th}>IP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={4}
+                  className={`${ffTable.td} py-12 text-center text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]`}
+                >
+                  Brak wpisów.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {(logs ?? []).length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground">
-                    Brak wpisów.
+            ) : (
+              rows.map((log) => (
+                <tr key={log.id} className={ffTable.row}>
+                  <td className={`${ffTable.tdMuted} whitespace-nowrap`}>
+                    {new Date(log.created_at as string).toLocaleString('pl-PL')}
+                  </td>
+                  <td className={ffTable.td}>
+                    <span className={ffTable.badge}>
+                      {ACTION_LABELS[log.action as string] ?? log.action}
+                    </span>
+                  </td>
+                  <td className={ffTable.tdMono}>
+                    {log.entity_type && log.entity_id
+                      ? `${log.entity_type}:${String(log.entity_id).slice(0, 8)}…`
+                      : '—'}
+                  </td>
+                  <td className={ffTable.tdMono}>
+                    {log.ip_address != null ? String(log.ip_address) : '—'}
                   </td>
                 </tr>
-              ) : (
-                (logs ?? []).map((log) => (
-                  <tr
-                    key={log.id}
-                    className="border-b border-white/55 dark:border-white/[0.07] last:border-0 hover:bg-foreground/[0.02] transition-colors duration-150"
-                  >
-                    <td className="px-6 py-4 text-muted-foreground whitespace-nowrap tabular-nums">
-                      {new Date(log.created_at as string).toLocaleString('pl-PL')}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-foreground/5 border border-white/55 dark:border-white/14 text-xs font-medium backdrop-blur-[12px]">
-                        {ACTION_LABELS[log.action as string] ?? log.action}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-xs font-mono text-muted-foreground">
-                      {log.entity_type && log.entity_id
-                        ? `${log.entity_type}:${String(log.entity_id).slice(0, 8)}…`
-                        : '—'}
-                    </td>
-                    <td className="px-6 py-4 text-xs font-mono text-muted-foreground">
-                      {log.ip_address != null ? String(log.ip_address) : '—'}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+              ))
+            )}
+          </tbody>
+        </FfDataTableCard>
       )}
     </div>
   );

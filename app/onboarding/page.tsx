@@ -53,7 +53,7 @@ export default async function OnboardingPage(props: OnboardingPageProps) {
               <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <p className="text-sm text-foreground truncate">
                 Masz już aktywną organizację. Możesz dodać kolejną poniżej albo
-                wrócić do Dashboard.
+                wrócić do panelu.
               </p>
             </div>
             <Link

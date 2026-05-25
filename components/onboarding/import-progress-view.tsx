@@ -165,7 +165,7 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
           size="lg"
           className="w-full"
         >
-          Przejdź do Dashboard
+          Przejdź do panelu
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
       </div>

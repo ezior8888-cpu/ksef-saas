@@ -128,6 +128,8 @@ async function sendViaResend(opts: {
   category?: EmailCategory;
   /** User do którego należy email — używany do preferences check + unsubscribe token. */
   userId?: string;
+  /** Faza 33: załączniki (np. PDF faktury). */
+  attachments?: Array<{ filename: string; content: Buffer }>;
 }): Promise<EmailStubResult> {
   const category: EmailCategory = opts.category ?? 'transactional';
   const finalTo = DEV_TO_OVERRIDE ?? opts.to;
@@ -169,6 +171,10 @@ async function sendViaResend(opts: {
     subject: finalSubject,
     html: opts.html,
     headers: Object.keys(headers).length > 0 ? headers : undefined,
+    attachments: opts.attachments?.map((a) => ({
+      filename: a.filename,
+      content: a.content,
+    })),
   });
   if (error) {
     // Inngest potrzebuje rzuconego błędu żeby ruszyć retry. Serializujemy
@@ -448,4 +454,59 @@ export async function sendGdprDeletionScheduledEmail(
     html,
     category: 'transactional',
   });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Faza 33 — wysyłka faktury z PDF w załączniku
+// ═══════════════════════════════════════════════════════════════
+
+export interface InvoiceEmailPayload {
+  to: string;
+  invoiceNumber: string;
+  sellerName: string;
+  grossTotalLabel: string;
+  dueDate: string;
+  pdf: Buffer;
+  pdfFilename: string;
+}
+
+export async function sendInvoiceEmail(
+  payload: InvoiceEmailPayload,
+): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    console.log(
+      `[email:stub] sendInvoiceEmail → ${payload.to}: faktura ${payload.invoiceNumber}`,
+    );
+    return { sent: false, reason: 'not-configured' };
+  }
+
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:560px;margin:0 auto;color:#374151">
+      <h1 style="font-size:20px;color:#111827">Faktura ${escapeHtml(payload.invoiceNumber)}</h1>
+      <p>Dzień dobry,</p>
+      <p>W załączniku przesyłamy fakturę <strong>${escapeHtml(payload.invoiceNumber)}</strong>
+      od <strong>${escapeHtml(payload.sellerName)}</strong>.</p>
+      <table style="margin:16px 0;font-size:14px">
+        <tr><td style="color:#6b7280;padding-right:16px">Kwota brutto</td><td><strong>${escapeHtml(payload.grossTotalLabel)}</strong></td></tr>
+        <tr><td style="color:#6b7280;padding-right:16px">Termin płatności</td><td>${escapeHtml(payload.dueDate)}</td></tr>
+      </table>
+      <p style="color:#9ca3af;font-size:12px">Wiadomość wysłana przez FaktFlow.</p>
+    </div>
+  `;
+
+  return sendViaResend({
+    to: payload.to,
+    subject: `Faktura ${payload.invoiceNumber} od ${payload.sellerName}`,
+    html,
+    category: 'transactional',
+    attachments: [{ filename: payload.pdfFilename, content: payload.pdf }],
+  });
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

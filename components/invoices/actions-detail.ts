@@ -11,6 +11,10 @@ import { createClient } from '@/lib/supabase/server';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
 import { inngest } from '@/lib/inngest/client';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
+import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
+import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
+import { sendInvoiceEmail } from '@/lib/email/send';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import type {
   Address,
   BuyerParty,
@@ -346,4 +350,80 @@ export async function resendInvoiceAction(
           : 'Błąd ponownej wysyłki',
     };
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// emailInvoiceAction — wysyłka faktury do nabywcy z PDF (Faza 33 Krok 8)
+// ═══════════════════════════════════════════════════════════════
+
+export type EmailInvoiceResult =
+  | { success: true }
+  | { success: false; error: string };
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+export async function emailInvoiceAction(
+  invoiceId: string,
+  recipientEmail: string,
+): Promise<EmailInvoiceResult> {
+  const email = recipientEmail.trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) {
+    return { success: false, error: 'Nieprawidłowy adres email.' };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Sesja wygasła.' };
+
+  const tenantId = await getActiveOrgIdFromCookies();
+  if (!tenantId) {
+    return { success: false, error: 'Brak aktywnej organizacji.' };
+  }
+
+  const pdfResult = await generateInvoicePdf(invoiceId, tenantId);
+  if (!pdfResult.success) {
+    return { success: false, error: pdfResult.error };
+  }
+
+  const data = await loadInvoiceForPdf(invoiceId);
+  if (!data) {
+    return { success: false, error: 'Faktura nie istnieje.' };
+  }
+
+  const inv = data.invoice;
+  const send = await sendInvoiceEmail({
+    to: email,
+    invoiceNumber: inv.internalNumber,
+    sellerName: inv.seller.name,
+    grossTotalLabel: `${inv.grossTotal.toLocaleString('pl-PL', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} PLN`,
+    dueDate: inv.payment.dueDate,
+    pdf: pdfResult.pdf,
+    pdfFilename: pdfResult.filename,
+  });
+
+  if (!send.sent) {
+    return {
+      success: false,
+      error:
+        send.reason === 'not-configured'
+          ? 'Wysyłka email nie jest skonfigurowana.'
+          : 'Nie udało się wysłać wiadomości.',
+    };
+  }
+
+  await logAudit({
+    action: 'invoice.emailed',
+    tenantId,
+    userId: user.id,
+    entityType: 'invoice',
+    entityId: invoiceId,
+    metadata: { recipient: email },
+  });
+
+  return { success: true };
 }

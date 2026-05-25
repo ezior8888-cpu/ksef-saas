@@ -18,14 +18,18 @@ import type { Database } from '@/types/database';
 
 export type ExportFormatParam =
   | 'jpk_fa'
+  | 'jpk_v7m'
   | 'kpir_excel'
   | 'comarch_optima'
   | 'insert_subiekt'
   | 'symfonia'
   | 'wapro';
 
-const EXPORT_FORMATS: Database['public']['Enums']['export_format_enum'][] = [
+// `jpk_v7m` doszło migracją 00056; `types/database.ts` regenerujemy przed
+// Fazą 35, więc lista jest jawna (nie z `export_format_enum`).
+const EXPORT_FORMATS: string[] = [
   'jpk_fa',
+  'jpk_v7m',
   'kpir_excel',
   'comarch_optima',
   'insert_subiekt',
@@ -37,7 +41,7 @@ const EXPORT_FORMATS: Database['public']['Enums']['export_format_enum'][] = [
 function isExportDbFormat(
   v: string,
 ): v is Database['public']['Enums']['export_format_enum'] {
-  return (EXPORT_FORMATS as readonly string[]).includes(v);
+  return EXPORT_FORMATS.includes(v);
 }
 
 function parsePreferredFormats(formats: string[]) {

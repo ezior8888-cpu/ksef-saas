@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 
 const LINKS: { href: string; label: string; match: (pathname: string) => boolean }[] = [
   { href: '/pricing', label: 'Cennik', match: (p) => p === '/pricing' },
-  { href: '/vs/fakturownia', label: 'Porównania', match: (p) => p.startsWith('/vs') },
+  { href: '/vs/inni', label: 'Porównania', match: (p) => p.startsWith('/vs') },
   { href: '/kalkulator-oszczednosci', label: 'Kalkulator', match: (p) => p === '/kalkulator-oszczednosci' },
   { href: '/blog', label: 'Blog', match: (p) => p === '/blog' || p.startsWith('/blog/') },
 ];

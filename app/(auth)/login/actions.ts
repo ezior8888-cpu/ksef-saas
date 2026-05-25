@@ -26,11 +26,12 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
 
   const ip = await getClientIp();
 
-  // Bot protection PRZED rate-limit i Supabase call — bot z prawidłowym
-  // tokenem wchodzi w rate-limit, bot bez tokena pada od razu.
+  // Bot protection PRZED rate-limit i Supabase call.
+  // Bypass: LOAD_TEST_MODE=true + nagłówek x-turnstile-bypass (nigdy na prod) — Faza 28.
   const turnstile = await verifyTurnstile(
     formData.get('cf-turnstile-response') as string | null,
     ip,
+    { allowLoadTestBypass: true },
   );
   if (!turnstile.success) {
     redirect('/login?error=bot_check_failed');

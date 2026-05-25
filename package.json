@@ -31,7 +31,17 @@
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report",
     "test:e2e:install": "playwright install --with-deps chromium firefox webkit",
-    "test:all": "pnpm test && pnpm test:vitest"
+    "test:all": "pnpm test && pnpm test:vitest",
+    "load:smoke": "bash scripts/k6-run.sh load-tests/smoke.js",
+    "load:run": "bash scripts/k6-run.sh load-tests/main.js",
+    "load:dashboard": "bash scripts/k6-run.sh load-tests/scenarios/dashboard-viewer.js",
+    "load:invoice": "bash scripts/k6-run.sh load-tests/scenarios/invoice-issuer.js",
+    "load:ocr": "bash scripts/k6-run.sh load-tests/scenarios/ocr-scanner.js",
+    "load:bulk": "bash scripts/k6-run.sh load-tests/scenarios/bulk-importer.js",
+    "load:stress:db": "bash scripts/k6-run.sh load-tests/stress/db-stress.js",
+    "load:stress:ksef": "bash scripts/k6-run.sh load-tests/stress/ksef-queue.js",
+    "load:stress:ocr": "bash scripts/k6-run.sh load-tests/stress/ocr-pipeline.js",
+    "perf:lighthouse": "lighthouse --budget-path=load-tests/lighthouse-budget.json --only-categories=performance --chrome-flags=\"--headless\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",
@@ -89,7 +99,15 @@
     "xmllint-wasm": "^5.2.0",
     "zod": "^4.3.6"
   },
+  "browserslist": [
+    "chrome >= 110",
+    "edge >= 110",
+    "firefox >= 110",
+    "safari >= 16",
+    "not dead"
+  ],
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@tailwindcss/typography": "^0.5.19",

@@ -58,7 +58,7 @@ export default async function HelpArticlePage({ params }: PageProps) {
       <div className="mx-auto max-w-3xl px-6">
         <Link
           href="/pomoc"
-          className="mb-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="mb-8 inline-flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-900"
         >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
           Centrum pomocy
@@ -66,15 +66,15 @@ export default async function HelpArticlePage({ params }: PageProps) {
 
         <div className="mb-10">
           {category && (
-            <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
+            <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
               {category.label}
             </p>
           )}
-          <h1 className="font-display text-3xl leading-[1.15] font-semibold tracking-tighter-display md:text-4xl">
+          <h1 className="font-editorial text-3xl leading-[1.15] font-semibold md:text-4xl">
             {article.title}
           </h1>
           {article.updated && (
-            <p className="mt-3 text-xs text-muted-foreground">
+            <p className="mt-3 text-xs text-zinc-500">
               Zaktualizowano:{' '}
               {new Date(article.updated).toLocaleDateString('pl-PL', {
                 day: 'numeric',
@@ -88,12 +88,12 @@ export default async function HelpArticlePage({ params }: PageProps) {
         <div
           className={cn(
             'prose prose-lg max-w-none dark:prose-invert',
-            'prose-headings:font-display prose-headings:tracking-tighter-text',
+            'prose-headings:font-editorial prose-headings:tracking-tighter-text',
             'prose-h2:mt-10 prose-h2:mb-3 prose-h2:text-2xl',
             'prose-h3:mt-6 prose-h3:text-lg',
             'prose-p:leading-relaxed',
-            'prose-a:text-foreground prose-a:underline prose-a:underline-offset-2',
-            'prose-code:rounded prose-code:bg-foreground/5 prose-code:px-1 prose-code:text-foreground',
+            'prose-a:text-zinc-900 prose-a:underline prose-a:underline-offset-2',
+            'prose-code:rounded prose-code:bg-foreground/5 prose-code:px-1 prose-code:text-zinc-900',
             'prose-blockquote:border-l-foreground prose-blockquote:bg-foreground/2',
           )}
         >
@@ -102,7 +102,7 @@ export default async function HelpArticlePage({ params }: PageProps) {
 
         {related.length > 0 && (
           <div className="mt-14 border-t border-glass-border pt-8">
-            <h2 className="font-display text-lg font-semibold tracking-tighter-text">
+            <h2 className="font-editorial text-lg font-semibold">
               Zobacz też
             </h2>
             <ul className="mt-4 grid gap-2 sm:grid-cols-2">

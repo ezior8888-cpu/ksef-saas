@@ -33,7 +33,7 @@ function PlanCard({ plan, highlighted, isPending, onSelect }: PlanCardProps) {
   return (
     <div
       className={cn(
-        'rounded-3xl border bg-foreground/3 p-6 backdrop-blur-glass relative',
+        'ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 relative',
         highlighted
           ? 'border-emerald-500/40 bg-emerald-500/5 shadow-glass-lg'
           : 'border-glass-border',

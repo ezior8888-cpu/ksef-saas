@@ -9,6 +9,8 @@ export default function SettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="ff-settings-route w-full min-w-0 max-w-4xl">{children}</div>
+    <div className="ff-settings-route w-full min-w-0 max-w-4xl text-[var(--ff-on-surface)]">
+      {children}
+    </div>
   );
 }

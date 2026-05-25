@@ -1,9 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
 
 import { ComparisonTable, type ComparisonRow } from '@/components/marketing/comparison-table';
-import { Button } from '@/components/ui/button';
+import {
+  VsHero,
+  VsTldr,
+  VsSectionHeader,
+  VsChooseColumns,
+  VsMigrationCta,
+} from '@/components/marketing/vs-page-chrome';
 
 // Faza 22: comparison page — SEO ważne, cache na godzinę.
 export const revalidate = 3600;
@@ -157,38 +162,40 @@ const COMPARISON_ROWS = [
 
 export default function IfirmaPage() {
   return (
-    <article className="py-16 lg:py-24">
-      <div className="mx-auto max-w-4xl px-6">
-        <header className="mb-16 text-center">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Porównanie 2026
-          </p>
-          <h1 className="font-display text-5xl leading-[1.1] font-semibold tracking-tighter-display md:text-6xl">
-            KSeF SaaS <span className="text-muted-foreground">vs</span> iFirma
-          </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-xl text-muted-foreground">
-            23 wiersze porównania, historia marki, głosy użytkowników, rozbicie cen i migracja — z naciskiem na
-            odświeżenie UI oraz push jako kanał operacyjny.
-          </p>
-        </header>
+    <article>
+      <VsHero
+        competitorName="iFirma"
+        subtitle="23 wiersze porównania, historia marki, głosy użytkowników, rozbicie cen i migracja — z naciskiem na odświeżenie UI oraz push jako kanał operacyjny."
+      />
 
-        <div className="mb-16 rounded-3xl border border-glass-border bg-glass-white p-8 shadow-glass backdrop-blur-glass">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">TL;DR</p>
-          <p className="text-lg leading-relaxed">
-            <strong>iFirma</strong> to jedna z najstarszych marek fakturowych w Polsce — stabilna, rozpoznawalna,
-            z szeroką gamą funkcji „wszystko w jednym panelu”. Jednak w rozmowach z przedsiębiorcami mobilnymi
-            pojawiają się dwa wątki: <strong>postarzały interfejs</strong> (wolniejsza nawigacja, mniej współczesnych
-            mikrointerakcji) oraz <strong>brak sensownych pushy</strong> w modelu web-first, co oznacza, że status
-            KSeF odkrywasz dopiero po wejściu na skrzynkę mailową. <strong>KSeF SaaS</strong> stawia na świeży UI,
-            PWA z pushami i flow zaprojektowany pod KSeF 2.0 oraz OCR w jednym pakiecie — bo przecież „widziałem
-            status wysyłki” nie może być funkcją premium.
-          </p>
-        </div>
+      <VsTldr>
+        <span className="font-editorial font-medium text-zinc-900">
+          iFirma
+        </span>{' '}
+        to jedna z najstarszych marek fakturowych w Polsce — stabilna,
+        rozpoznawalna, z szeroką gamą funkcji &bdquo;wszystko w jednym
+        panelu&rdquo;. Jednak w rozmowach z przedsiębiorcami mobilnymi pojawiają
+        się dwa wątki:{' '}
+        <strong className="font-semibold">postarzały interfejs</strong>{' '}
+        (wolniejsza nawigacja, mniej współczesnych mikrointerakcji) oraz{' '}
+        <strong className="font-semibold">brak sensownych pushy</strong> w
+        modelu web-first, co oznacza, że status KSeF odkrywasz dopiero po
+        wejściu na skrzynkę mailową.{' '}
+        <span className="font-editorial font-medium italic text-emerald-700">
+          FaktFlow
+        </span>{' '}
+        stawia na świeży UI, PWA z pushami i flow zaprojektowany pod KSeF 2.0
+        oraz OCR w jednym pakiecie — bo przecież &bdquo;widziałem status
+        wysyłki&rdquo; nie może być funkcją premium.
+      </VsTldr>
 
-        <section className="mb-16 space-y-5 text-muted-foreground leading-relaxed">
-          <h2 className="font-display text-2xl font-semibold tracking-tighter-text text-foreground">
-            Krótka historia iFirma i hosting
-          </h2>
+      <div className="mx-auto max-w-[1280px] px-6 lg:px-8">
+        <VsSectionHeader
+          num="01"
+          eyebrow="Historia"
+          title="Krótka historia iFirma i hosting"
+        />
+        <section className="space-y-5 leading-relaxed text-zinc-600">
           <p>
             iFirma funkcjonuje na rynku od lat — przez dekadę zdążyła przejść przez wiele iteracji funkcjonalnych i
             integracji z polskimi systemami bankowymi. To ogromna zaleta dla użytkowników, którzy cenią
@@ -211,41 +218,42 @@ export default function IfirmaPage() {
           </p>
         </section>
 
-        <section className="mb-16">
-          <h2 className="mb-6 font-display text-2xl font-semibold tracking-tighter-text">
-            Co mówią użytkownicy (parafrazy publicznych opinii)
-          </h2>
-          <div className="grid gap-4 md:grid-cols-3">
-            <figure className="rounded-2xl border border-glass-border bg-glass-white p-5 shadow-glass backdrop-blur-glass">
-              <blockquote className="text-sm leading-relaxed text-muted-foreground">
-                &quot;Wszystko jest, tylko szukanie tej jednej opcji zajmuje mi za dużo czasu — czuję, że to UI z
-                poprzedniej epoki.&quot;
+        <VsSectionHeader
+          num="02"
+          eyebrow="Opinie publiczne"
+          title="Co mówią użytkownicy (parafrazy)"
+        />
+        <div className="grid gap-10 md:grid-cols-3 md:gap-12">
+          {[
+            { q: 'Wszystko jest, tylko szukanie tej jednej opcji zajmuje mi za dużo czasu — czuję, że to UI z poprzedniej epoki.', meta: 'Wątek forum · 2025' },
+            { q: 'Mail przychodzi, ale wolałbym push jak w banku — wtedy od razu wiem, że KSeF przyjął fakturę.', meta: 'Komentarz LinkedIn · 2024' },
+            { q: 'Jak już się nauczyłem, działa stabilnie — ale onboarding nowej osoby w firmie zajął tydzień.', meta: 'Grupa Facebook · 2025' },
+          ].map((o) => (
+            <figure
+              key={o.meta}
+              className="border-t-2 border-emerald-500/40 pt-6"
+            >
+              <blockquote className="font-editorial text-lg italic leading-snug text-zinc-600">
+                <span className="mr-1 font-editorial text-3xl leading-none text-emerald-700">&bdquo;</span>
+                {o.q}
+                <span className="ml-0.5 font-editorial text-2xl leading-none text-emerald-700">&rdquo;</span>
               </blockquote>
-              <figcaption className="mt-3 text-xs text-muted-foreground">Wątek forum, 2025</figcaption>
+              <figcaption className="mt-4 text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+                {o.meta}
+              </figcaption>
             </figure>
-            <figure className="rounded-2xl border border-glass-border bg-glass-white p-5 shadow-glass backdrop-blur-glass">
-              <blockquote className="text-sm leading-relaxed text-muted-foreground">
-                &quot;Mail przychodzi, ale wolałbym push jak w banku — wtedy od razu wiem, że KSeF przyjął fakturę.&quot;
-              </blockquote>
-              <figcaption className="mt-3 text-xs text-muted-foreground">Komentarz LinkedIn, 2024</figcaption>
-            </figure>
-            <figure className="rounded-2xl border border-glass-border bg-glass-white p-5 shadow-glass backdrop-blur-glass">
-              <blockquote className="text-sm leading-relaxed text-muted-foreground">
-                &quot;Jak już się nauczyłem, działa stabilnie — ale onboarding nowej osoby w firmie zajął tydzień.&quot;
-              </blockquote>
-              <figcaption className="mt-3 text-xs text-muted-foreground">Grupa Facebook, 2025</figcaption>
-            </figure>
-          </div>
-          <p className="mt-6 text-sm text-muted-foreground leading-relaxed">
-            Cytaty są stylizowane i nie identyfikują konkretnych osób — traktuj je jako ilustrację typowych frustracji
-            UX / powiadomień, a nie jako ocenę sądową produktu konkurenta.
-          </p>
-        </section>
+          ))}
+        </div>
+        <p className="mt-8 font-editorial text-sm italic leading-relaxed text-zinc-500">
+          Cytaty są stylizowane i nie identyfikują konkretnych osób — traktuj je jako ilustrację typowych frustracji UX / powiadomień, a nie jako ocenę sądową produktu konkurenta.
+        </p>
 
-        <section className="mb-16 space-y-5 text-muted-foreground leading-relaxed">
-          <h2 className="font-display text-2xl font-semibold tracking-tighter-text text-foreground">
-            Dlaczego UI i push mają znaczenie przy KSeF
-          </h2>
+        <VsSectionHeader
+          num="03"
+          eyebrow="UX + push"
+          title="Dlaczego UI i push mają znaczenie przy KSeF"
+        />
+        <section className="space-y-5 leading-relaxed text-zinc-600">
           <p>
             Interfejs to nie kwestia „ładnych ikonek”, tylko koszt błędu ludzkiego: im więcej kroków i rozproszenia
             uwagi, tym wyższe ryzyko pomyłki NIP, stawki VAT lub numeru faktury zaliczkowej. Przy KSeF 2.0 błąd
@@ -267,148 +275,148 @@ export default function IfirmaPage() {
           </p>
         </section>
 
-        <ComparisonTable competitorName="iFirma" rows={COMPARISON_ROWS} />
+        <div className="mb-6 mt-16 flex items-baseline gap-4 border-b border-zinc-200 pb-4">
+          <span className="editorial-section-num text-3xl">04.</span>
+          <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+            Tabela porównawcza
+          </span>
+        </div>
+      </div>
 
-        <section className="mt-16 space-y-5 text-muted-foreground leading-relaxed">
-          <h2 className="font-display text-2xl font-semibold tracking-tighter-text text-foreground">
-            Pricing breakdown: moduły vs jeden pakiet
-          </h2>
+      <div className="mx-auto max-w-[1280px] px-6 lg:px-8">
+        <ComparisonTable competitorName="iFirma" rows={COMPARISON_ROWS} />
+      </div>
+
+      <div className="mx-auto max-w-[1280px] px-6 lg:px-8">
+        <VsSectionHeader
+          num="05"
+          eyebrow="Pricing breakdown"
+          title="Moduły vs jeden pakiet"
+        />
+        <section className="space-y-5 leading-relaxed text-zinc-600">
           <p>
-            iFirma tradycyjnie sprzedaje szeroki zestaw funkcji w modelu modułowym — to pozwala dopasować ofertę do
-            biura rachunkowego, ale bywa mniej przejrzyste dla JDG, która chce po prostu KSeF + OCR + KPiR w jednym pakiecie.
-            Przy porównaniu zawsze rozłóż cennik na: abonament bazowy, limity dokumentów, moduły kadrowe,
-            integracje premium oraz ewentualne opłaty za szkolenie użytkowników.
+            iFirma tradycyjnie sprzedaje szeroki zestaw funkcji w modelu modułowym — to pozwala dopasować ofertę do biura rachunkowego, ale bywa mniej przejrzyste dla JDG, która chce po prostu KSeF + OCR + KPiR w jednym pakiecie. Przy porównaniu zawsze rozłóż cennik na: abonament bazowy, limity dokumentów, moduły kadrowe, integracje premium oraz ewentualne opłaty za szkolenie użytkowników.
           </p>
-          <ul className="list-disc space-y-3 pl-5 text-foreground/90">
-            <li>
-              <strong className="text-foreground">Warstwa wejścia:</strong> często atrakcyjna dla prostych faktur
-              sprzedaży, ale bez pełnego stacku mobilnego i push.
-            </li>
-            <li>
-              <strong className="text-foreground">Warstwa rozszerzeń:</strong> dodatkowe moduły, wyższe limity,
-              integracje — koszt skokowy przy wzroście skali biura.
-            </li>
-            <li>
-              <strong className="text-foreground">Koszty ukryte:</strong> czas pracy na szkoleniu nowych osób w
-              złożonym UI oraz czas na ręczne sprawdzanie statusów, jeśli brak push.
-            </li>
-            <li>
-              <strong className="text-foreground">KSeF SaaS:</strong> jedna stawka ok. 49 zł/mc, push + OCR + KSeF w
-              jednym worku, money-back 60 dni — czyli prostszy TCO dla mikrofirmy.
-            </li>
+          <ul className="space-y-0 border-t border-zinc-100">
+            {[
+              { k: 'Warstwa wejścia', v: 'często atrakcyjna dla prostych faktur sprzedaży, ale bez pełnego stacku mobilnego i push.' },
+              { k: 'Warstwa rozszerzeń', v: 'dodatkowe moduły, wyższe limity, integracje — koszt skokowy przy wzroście skali biura.' },
+              { k: 'Koszty ukryte', v: 'czas pracy na szkoleniu nowych osób w złożonym UI oraz czas na ręczne sprawdzanie statusów, jeśli brak push.' },
+              { k: 'FaktFlow', v: 'jedna stawka ok. 49 zł/mc, push + OCR + KSeF w jednym worku, money-back 60 dni — czyli prostszy TCO dla mikrofirmy.' },
+            ].map((item, i) => (
+              <li
+                key={item.k}
+                className="grid grid-cols-12 gap-4 border-b border-zinc-100 py-4"
+              >
+                <span className="editorial-section-num col-span-1 text-xs">
+                  {String(i + 1).padStart(2, '0')}.
+                </span>
+                <div className="col-span-11">
+                  <p className="font-editorial text-base font-medium">{item.k}</p>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    {item.v}
+                  </p>
+                </div>
+              </li>
+            ))}
           </ul>
           <p>
-            Pamiętaj, że cenniki zmieniają się kwartalnie — zanim podejmiesz decyzję migracyjną, pobierz aktualny PDF
-            z witryny iFirmy i porównaj go z naszym pricingiem oraz kalkulatorem oszczędności.
+            Pamiętaj, że cenniki zmieniają się kwartalnie — zanim podejmiesz decyzję migracyjną, pobierz aktualny PDF z witryny iFirmy i porównaj go z naszym pricingiem oraz kalkulatorem oszczędności.
           </p>
         </section>
+      </div>
 
-        <div className="mt-16 grid gap-6 md:grid-cols-2">
-          <div className="rounded-3xl border border-glass-border bg-glass-white p-7 backdrop-blur-glass">
-            <h3 className="mb-4 font-display text-lg font-semibold tracking-tighter-text">
-              Wybierz iFirmę, jeśli...
-            </h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Znasz produkt latami i nie chcesz zmieniać nawyków menu</li>
-              <li>• Korzystasz głównie z desktopu i maila jako kanału informacji</li>
-              <li>• Potrzebujesz szerokiego zestawu funkcji biurowych w jednym koncie</li>
-              <li>• Push i mobile-first nie są Twoim krytycznym KPI</li>
-            </ul>
-          </div>
-          <div className="rounded-3xl border border-foreground/20 bg-foreground/5 p-7 backdrop-blur-glass">
-            <h3 className="mb-4 font-display text-lg font-semibold tracking-tighter-text">
-              Wybierz KSeF SaaS, jeśli...
-            </h3>
-            <ul className="space-y-2 text-sm">
-              <li>• Frustruje Cię czas znalezienia opcji w przeładowanym UI</li>
-              <li>• Chcesz push o statusie KSeF zamiast odświeżania skrzynki</li>
-              <li>• Pracujesz hybrydowo (telefon + laptop) i zależy Ci na spójnym dark mode</li>
-              <li>• Szukasz prostszego onboarding dla nowego pracownika</li>
-            </ul>
-          </div>
-        </div>
+      <VsChooseColumns
+        competitorName="iFirma"
+        whenChooseCompetitor={[
+          'Znasz produkt latami i nie chcesz zmieniać nawyków menu',
+          'Korzystasz głównie z desktopu i maila jako kanału informacji',
+          'Potrzebujesz szerokiego zestawu funkcji biurowych w jednym koncie',
+          'Push i mobile-first nie są Twoim krytycznym KPI',
+        ]}
+        whenChooseUs={[
+          'Frustruje Cię czas znalezienia opcji w przeładowanym UI',
+          'Chcesz push o statusie KSeF zamiast odświeżania skrzynki',
+          'Pracujesz hybrydowo (telefon + laptop) i zależy Ci na spójnym dark mode',
+          'Szukasz prostszego onboarding dla nowego pracownika',
+        ]}
+      />
 
-        <section className="mt-16 rounded-3xl border border-glass-border bg-glass-white p-8 shadow-glass backdrop-blur-glass">
-          <h2 className="mb-4 font-display text-2xl font-semibold tracking-tighter-text">
-            Wymigracja z iFirma: checklista techniczna
-          </h2>
-          <ol className="list-decimal space-y-4 pl-5 text-muted-foreground leading-relaxed">
-            <li>
-              <strong className="text-foreground">Audyt danych:</strong> wypisz moduły iFirmy, z których korzystasz
-              (sprzedaż, koszty, ZUS, księgowa) oraz integracje z bankiem.
+      <div className="mx-auto max-w-[1280px] px-6 lg:px-8">
+        <VsSectionHeader
+          num="06"
+          eyebrow="Migracja krok po kroku"
+          title="Wyprowadzka z iFirma"
+        />
+        <ol className="space-y-0 border-t border-zinc-100">
+          {[
+            { k: 'Audyt danych', v: 'wypisz moduły iFirmy, z których korzystasz (sprzedaż, koszty, ZUS, księgowa) oraz integracje z bankiem.' },
+            { k: 'Eksport', v: 'pobierz CSV/JPK/XML zgodnie z instrukcją eksportu; zrób drugą kopię na nośnik zewnętrzny.' },
+            { k: 'Import KSeF', v: 'zsynchronizuj historię wysyłek FA, żeby uniknąć duplikatów referencyjnych numerów.' },
+            { k: 'Test UX', v: 'przejdź 10 najczęstszych scenariuszy (faktura zaliczkowa, korekta, koszt OCR) i zmierz czas przed/po.' },
+            { k: 'Push i uprawnienia', v: 'skonfiguruj powiadomienia przeglądarki oraz PWA na telefonie pracowników terenowych.' },
+            { k: 'Hypercare', v: 'przez 14 dni monitoruj log błędów KSeF i zgłoszenia księgowej — po stabilizacji wyłącz rutynowe logowanie do starego panelu.' },
+          ].map((step, i) => (
+            <li
+              key={step.k}
+              className="grid grid-cols-12 gap-4 border-b border-zinc-100 py-4"
+            >
+              <span className="editorial-section-num col-span-1 text-xs">
+                {String(i + 1).padStart(2, '0')}.
+              </span>
+              <div className="col-span-11">
+                <p className="font-editorial text-base font-medium">{step.k}</p>
+                <p className="mt-1 text-sm text-zinc-600">
+                  {step.v}
+                </p>
+              </div>
             </li>
-            <li>
-              <strong className="text-foreground">Eksport:</strong> pobierz CSV/JPK/XML zgodnie z instrukcją eksportu;
-              zrób drugą kopię na nośnik zewnętrzny.
-            </li>
-            <li>
-              <strong className="text-foreground">Import KSeF:</strong> zsynchronizuj historię wysyłek FA, żeby
-              uniknąć duplikatów referencyjnych numerów.
-            </li>
-            <li>
-              <strong className="text-foreground">Test UX:</strong> przejdź 10 najczęstszych scenariuszy (faktura
-              zaliczkowa, korekta, koszt OCR) i zmierz czas przed/po.
-            </li>
-            <li>
-              <strong className="text-foreground">Push i uprawnienia:</strong> skonfiguruj powiadomienia przeglądarki
-              oraz PWA na telefonie pracowników terenowych.
-            </li>
-            <li>
-              <strong className="text-foreground">Hypercare:</strong> przez 14 dni monitoruj log błędów KSeF i
-              zgłoszenia księgowej — po stabilizacji wyłącz rutynowe logowanie do starego panelu.
-            </li>
-          </ol>
-        </section>
+          ))}
+        </ol>
 
-        <section className="mt-16 space-y-5 text-muted-foreground leading-relaxed">
-          <h2 className="font-display text-2xl font-semibold tracking-tighter-text text-foreground">
-            Treść pod SEO: topical authority wokół „iFirma vs …”
-          </h2>
+        <VsSectionHeader
+          num="07"
+          eyebrow="SEO + E-E-A-T"
+          title="Topical authority wokół „iFirma vs …”"
+        />
+        <section className="space-y-5 leading-relaxed text-zinc-600">
           <p>
-            Strony porównawcze rankują lepiej, gdy łączą tabelę funkcji z narracją ekspercką: historia produktu,
-            hosting, cennik, migracja, cytaty użytkowników i sekcję o ryzyku operacyjnym. Dzięki temu wyszukiwarka
-            widzi nie tylko listę checkboxów, ale kontekst decyzyjny mikrofirmy — czyli dokładnie to, czego szuka
-            użytkownik wpisując długie zapytanie z nazwą konkurenta.
+            Strony porównawcze rankują lepiej, gdy łączą tabelę funkcji z narracją ekspercką: historia produktu, hosting, cennik, migracja, cytaty użytkowników i sekcję o ryzyku operacyjnym. Dzięki temu wyszukiwarka widzi nie tylko listę checkboxów, ale kontekst decyzyjny mikrofirmy — czyli dokładnie to, czego szuka użytkownik wpisując długie zapytanie z nazwą konkurenta.
           </p>
           <p>
             Powiąż lekturę z{' '}
-            <Link href="/kalkulator-oszczednosci" className="text-foreground underline underline-offset-4 hover:text-primary">
+            <Link
+              href="/kalkulator-oszczednosci"
+              className="font-editorial italic underline decoration-emerald-400 decoration-2 underline-offset-[4px] transition-all hover:decoration-[3px]"
+            >
               kalkulatorem oszczędności
             </Link>
             ,{' '}
-            <Link href="/pricing" className="text-foreground underline underline-offset-4 hover:text-primary">
+            <Link
+              href="/pricing"
+              className="font-editorial italic underline decoration-emerald-400 decoration-2 underline-offset-[4px] transition-all hover:decoration-[3px]"
+            >
               cennikiem
             </Link>{' '}
             oraz{' '}
-            <Link href="/kontakt" className="text-foreground underline underline-offset-4 hover:text-primary">
+            <Link
+              href="/kontakt"
+              className="font-editorial italic underline decoration-emerald-400 decoration-2 underline-offset-[4px] transition-all hover:decoration-[3px]"
+            >
               kontaktem
             </Link>
             , żeby zbudować graf wewnętrznych powiązań tematycznych.
           </p>
           <p>
-            Jeśli jesteś biurem rachunkowym i chcesz zaproponować klientom hybrydę (część na iFirma, część na KSeF
-            SaaS), przygotujemy dla Ciebie szablon komunikatu RODO oraz harmonogram techniczny migracji paczkowej —
-            napisz na support@ksef-saas.pl z informacją o liczbie podmiotów.
+            Jeśli jesteś biurem rachunkowym i chcesz zaproponować klientom hybrydę (część na iFirma, część na FaktFlow), przygotujemy dla Ciebie szablon komunikatu RODO oraz harmonogram techniczny migracji paczkowej — napisz na support@ksef-saas.pl z informacją o liczbie podmiotów.
           </p>
         </section>
-
-        <div className="mt-16 rounded-3xl border border-glass-border bg-glass-white p-10 text-center shadow-glass-lg backdrop-blur-glass">
-          <h3 className="mb-4 font-display text-3xl font-semibold tracking-tighter-display">
-            Nowy UI + push = mniej „sprawdzę później”
-          </h3>
-          <p className="mx-auto mb-8 max-w-xl text-muted-foreground">
-            Załóż konto, włącz PWA, przetestuj push przy pierwszej wysyłce FA(3) i zobacz, czy Twój dzień pracy
-            staje się krótszy jeszcze przed pełnym importem historii.
-          </p>
-          <Button variant="glass-primary" size="lg" asChild>
-            <Link href="/register" className="inline-flex items-center gap-2">
-              Wypróbuj 30 dni za darmo
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </Link>
-          </Button>
-          <p className="mt-3 text-xs text-muted-foreground">+ 60 dni gwarancji zwrotu pieniędzy</p>
-        </div>
       </div>
+
+      <VsMigrationCta
+        competitorName="iFirma"
+        copy="Załóż konto, włącz PWA, przetestuj push przy pierwszej wysyłce FA(3) i zobacz, czy Twój dzień pracy staje się krótszy jeszcze przed pełnym importem historii."
+      />
     </article>
   );
 }

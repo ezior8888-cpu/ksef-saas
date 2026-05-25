@@ -42,7 +42,7 @@ export function PostRegisterImportModal({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
         showCloseButton
-        className="dark ff-dashboard max-w-lg border-white/10 bg-[#12131a] p-6 text-[var(--ff-on-surface)] sm:max-w-lg"
+        className="ff-dashboard max-w-lg border-[var(--ff-glass-border)] bg-[var(--ff-bg)] p-6 text-[var(--ff-on-surface)] sm:max-w-lg"
       >
         <DialogTitle className="sr-only">Magiczny import z KSeF</DialogTitle>
         <ImportSourceSelector

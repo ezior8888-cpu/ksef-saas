@@ -86,6 +86,13 @@ const PROD_ONLY_HEADERS: { key: string; value: string }[] = [
 const nextConfig: NextConfig = {
   pageExtensions: ['ts', 'tsx', 'js', 'jsx', 'md', 'mdx'],
 
+  // Praca w git worktree: dwa `pnpm-workspace.yaml` — bez tego Next zgaduje root.
+  outputFileTracingRoot: import.meta.dirname,
+
+  experimental: {
+    optimizePackageImports: ['radix-ui', 'lucide-react'],
+  },
+
   images: {
     remotePatterns: [
       {
@@ -116,6 +123,17 @@ const nextConfig: NextConfig = {
           ...SECURITY_HEADERS,
           ...(isProd ? PROD_ONLY_HEADERS : []),
         ],
+      },
+    ];
+  },
+
+  // Redesign: `/vs/fakturownia` → `/vs/inni` (SEO 308).
+  async redirects() {
+    return [
+      {
+        source: '/vs/fakturownia',
+        destination: '/vs/inni',
+        permanent: true,
       },
     ];
   },
@@ -160,6 +178,13 @@ export default withSentryConfig(withSerwist(withMDX(nextConfig)), {
 
   // Upload a larger set of source maps for prettier stack traces (increases build time)
   widenClientFileUpload: true,
+
+  bundleSizeOptimizations: {
+    excludeReplayShadowDom: true,
+    excludeReplayIframe: true,
+    excludeReplayWorker: true,
+    excludeDebugStatements: true,
+  },
 
   // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
   // This can increase your server load as well as your hosting bill.

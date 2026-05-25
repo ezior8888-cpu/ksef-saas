@@ -1,6 +1,15 @@
 import { redirect } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  authAlertErrorClass,
+  authInputClass,
+  authLabelClass,
+  authLinkClass,
+  authPrimaryButtonClass,
+  authSubtitleClass,
+  authTitleClass,
+} from '@/components/auth/auth-form-styles';
 import { createClient } from '@/lib/supabase/server';
 import { safeRedirectPath } from '@/lib/auth/safe-redirect';
 import { verifyMfaChallengeAction } from './actions';
@@ -34,7 +43,6 @@ export default async function TwoFactorChallengePage({
     redirect('/dashboard');
   }
   if (aal?.nextLevel !== 'aal2') {
-    // User nie ma verified TOTP factora — nic do challenge'owania.
     redirect('/dashboard');
   }
 
@@ -45,27 +53,18 @@ export default async function TwoFactorChallengePage({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight text-white">
-          Weryfikacja dwuetapowa
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1.5">
+        <h2 className={authTitleClass}>Weryfikacja dwuetapowa</h2>
+        <p className={authSubtitleClass}>
           Wpisz 6-cyfrowy kod z aplikacji TOTP albo jeden z kodów ratunkowych.
         </p>
       </div>
 
-      {errorMsg && (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-          {errorMsg}
-        </div>
-      )}
+      {errorMsg && <div className={authAlertErrorClass}>{errorMsg}</div>}
 
       <form action={verifyMfaChallengeAction} className="space-y-4">
         <input type="hidden" name="redirect" value={safeNext} />
         <div>
-          <label
-            htmlFor="code"
-            className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block"
-          >
+          <label htmlFor="code" className={authLabelClass}>
             Kod
           </label>
           <Input
@@ -76,16 +75,17 @@ export default async function TwoFactorChallengePage({
             required
             placeholder="123456 lub kod ratunkowy"
             autoFocus
+            className={authInputClass}
           />
         </div>
-        <Button type="submit" variant="glass-primary" size="lg" className="w-full">
+        <Button type="submit" size="lg" className={authPrimaryButtonClass}>
           Zweryfikuj
         </Button>
       </form>
 
-      <p className="text-center text-xs text-muted-foreground">
+      <p className="text-center text-xs text-[color-mix(in_srgb,var(--ff-on-surface-variant)_50%,transparent)]">
         Stracił/aś dostęp do telefonu i kodów ratunkowych?{' '}
-        <a href="mailto:support@faktflow.pl" className="underline">
+        <a href="mailto:support@faktflow.pl" className={authLinkClass}>
           Skontaktuj się z pomocą
         </a>
       </p>

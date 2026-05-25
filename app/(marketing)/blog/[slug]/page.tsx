@@ -91,14 +91,14 @@ export default async function BlogPostPage({ params }: PageProps) {
       <div className="mx-auto max-w-3xl px-6">
         <Link
           href="/blog"
-          className="mb-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="mb-8 inline-flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-900"
         >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
           Powrót do bloga
         </Link>
 
         <div className="mb-12">
-          <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="mb-3 flex items-center gap-2 text-xs text-zinc-500">
             <time dateTime={parsed.date}>
               {new Date(parsed.date).toLocaleDateString('pl-PL', {
                 day: 'numeric',
@@ -109,21 +109,21 @@ export default async function BlogPostPage({ params }: PageProps) {
             <span aria-hidden>·</span>
             <span>{parsed.readTime} min czytania</span>
           </div>
-          <h1 className="font-display text-4xl leading-[1.1] font-semibold tracking-tighter-display md:text-5xl">
+          <h1 className="font-editorial text-4xl leading-[1.1] font-semibold md:text-5xl">
             {parsed.title}
           </h1>
-          <p className="mt-6 text-xl leading-relaxed text-muted-foreground">{parsed.description}</p>
+          <p className="mt-6 text-xl leading-relaxed text-zinc-500">{parsed.description}</p>
         </div>
 
         <div
           className={cn(
             'prose prose-lg max-w-none dark:prose-invert',
-            'prose-headings:font-display prose-headings:tracking-tighter-text',
+            'prose-headings:font-editorial prose-headings:tracking-tighter-text',
             'prose-h2:mt-12 prose-h2:mb-4 prose-h2:text-3xl',
             'prose-h3:mt-8 prose-h3:text-xl',
             'prose-p:leading-relaxed',
-            'prose-a:text-foreground prose-a:underline prose-a:underline-offset-2',
-            'prose-code:rounded prose-code:bg-foreground/5 prose-code:px-1 prose-code:text-foreground',
+            'prose-a:text-zinc-900 prose-a:underline prose-a:underline-offset-2',
+            'prose-code:rounded prose-code:bg-foreground/5 prose-code:px-1 prose-code:text-zinc-900',
             'prose-blockquote:border-l-foreground prose-blockquote:bg-foreground/2',
           )}
         >

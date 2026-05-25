@@ -36,6 +36,7 @@ import {
 } from '@/lib/exports/csv-generators';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import { generateJpkFa } from '@/lib/exports/jpk-fa-generator';
+import { generateJpkV7m } from '@/lib/exports/jpk-v7m-generator';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { r2ObjectExists, uploadToR2 } from '@/lib/storage/r2';
@@ -83,7 +84,25 @@ async function generateExportFile(
   const periodStr = `${job.period_start}_${job.period_end}`;
   const nip = safeNip(data.issuer.nip);
 
-  switch (job.format) {
+  // `jpk_v7m` doszło migracją 00056; `types/database.ts` regenerujemy
+  // dopiero przed Fazą 35 — cast rozszerza union o nową wartość enuma.
+  const format = job.format as ExportJobRow['format'] | 'jpk_v7m';
+
+  switch (format) {
+    case 'jpk_v7m': {
+      const xml = generateJpkV7m({
+        issuer: data.issuer,
+        periodStart: job.period_start,
+        periodEnd: job.period_end,
+        issuedInvoices: data.issuedInvoices,
+        receivedInvoices: data.receivedInvoices,
+      });
+      return {
+        buffer: Buffer.from(xml, 'utf8'),
+        filename: `JPK_V7M_${nip}_${periodStr}.xml`,
+        mimeType: 'application/xml',
+      };
+    }
     case 'jpk_fa': {
       const xml = generateJpkFa({
         issuer: data.issuer,
@@ -184,7 +203,7 @@ async function generateExportFile(
       };
     }
     default: {
-      const unexpected: never = job.format;
+      const unexpected: never = format;
       throw new NonRetriableError(
         `Format ${String(unexpected)} not implemented`,
       );

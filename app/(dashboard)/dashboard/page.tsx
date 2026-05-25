@@ -444,8 +444,8 @@ export default async function DashboardHomePage() {
                   cx={p.x}
                   cy={p.y}
                   r={6}
-                  fill="#6bfb9a"
-                  stroke="#12131a"
+                  fill="var(--ff-primary)"
+                  stroke="var(--ff-bg)"
                   strokeWidth="2"
                 />
               ))}

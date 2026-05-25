@@ -10,6 +10,7 @@ import { MobileNav } from '@/components/dashboard/mobile-nav';
 import { PrefetchDashboardRoutes } from '@/components/dashboard/prefetch-dashboard-routes';
 import { PrefetchExportsRoute } from '@/components/dashboard/exports-route-client';
 import { Sidebar } from '@/components/dashboard/sidebar';
+import { ThemeToggle } from '@/components/dashboard/theme-toggle';
 import { WelcomeModal } from '@/components/dashboard/welcome-modal';
 import { IdleWatcher } from '@/components/auth/idle-watcher';
 import { InstallPrompt } from '@/components/pwa/install-prompt-lazy';
@@ -77,6 +78,7 @@ export default async function DashboardLayout({
             <Suspense fallback={<OrgSwitcherHeaderSkeleton />}>
               <DashboardOrgHeader />
             </Suspense>
+            <ThemeToggle />
             <form action={signOut}>
               <button
                 type="submit"

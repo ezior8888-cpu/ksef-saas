@@ -1,0 +1,20 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["fra1"],
+  "functions": {
+    "app/api/portal/exports/generate/route.ts": {
+      "memory": 2048,
+      "maxDuration": 60
+    },
+    "app/api/gdpr/export/route.ts": {
+      "memory": 2048,
+      "maxDuration": 60
+    },
+    "app/api/inngest/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/support/chat/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}

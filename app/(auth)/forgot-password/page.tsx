@@ -1,6 +1,17 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  authAlertErrorClass,
+  authAlertSuccessClass,
+  authInputClass,
+  authLabelClass,
+  authLinkClass,
+  authMutedTextClass,
+  authPrimaryButtonClass,
+  authSubtitleClass,
+  authTitleClass,
+} from '@/components/auth/auth-form-styles';
 import { TurnstileWidget } from '@/components/auth/turnstile-widget';
 import { requestPasswordReset } from './actions';
 
@@ -16,9 +27,6 @@ const SUCCESS_MESSAGES: Record<string, string> = {
   email_sent:
     'Jeśli konto z tym adresem istnieje, wysłaliśmy link do resetu hasła. Sprawdź skrzynkę (również folder spam).',
 };
-
-const labelClass =
-  'text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block';
 
 export default async function ForgotPasswordPage({
   searchParams,
@@ -37,37 +45,38 @@ export default async function ForgotPasswordPage({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Reset hasła</h2>
-        <p className="text-sm text-muted-foreground mt-1.5">
+        <h2 className={authTitleClass}>Reset hasła</h2>
+        <p className={authSubtitleClass}>
           Wyślemy Ci link do ustawienia nowego hasła
         </p>
       </div>
 
-      {successMsg && (
-        <div className="rounded-2xl border border-green-500/20 bg-green-500/5 px-4 py-3 text-sm text-green-700 dark:text-green-400">
-          {successMsg}
-        </div>
-      )}
-      {errorMsg && (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-          {errorMsg}
-        </div>
-      )}
+      {successMsg && <div className={authAlertSuccessClass}>{successMsg}</div>}
+      {errorMsg && <div className={authAlertErrorClass}>{errorMsg}</div>}
 
       <form action={requestPasswordReset} className="space-y-4">
         <div>
-          <label htmlFor="email" className={labelClass}>Email</label>
-          <Input id="email" name="email" type="email" required autoComplete="email"
-                 placeholder="twoj@email.pl" />
+          <label htmlFor="email" className={authLabelClass}>
+            Email
+          </label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="twoj@email.pl"
+            className={authInputClass}
+          />
         </div>
         <TurnstileWidget action="forgot-password" />
-        <Button type="submit" variant="glass-primary" size="lg" className="w-full">
+        <Button type="submit" size="lg" className={authPrimaryButtonClass}>
           Wyślij link resetujący
         </Button>
       </form>
 
-      <p className="text-center text-sm text-muted-foreground">
-        <Link href="/login" className="font-medium text-foreground hover:text-foreground/70 transition-colors">
+      <p className={`text-center ${authMutedTextClass}`}>
+        <Link href="/login" className={authLinkClass}>
           ← Powrót do logowania
         </Link>
       </p>

@@ -971,6 +971,8 @@ export type Database = {
           payment_data: Json | null
           payment_due_date: string | null
           payment_status: Database["public"]["Enums"]["payment_status_enum"]
+          pdf_generated_at: string | null
+          pdf_storage_path: string | null
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
@@ -1034,6 +1036,8 @@ export type Database = {
           payment_data?: Json | null
           payment_due_date?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status_enum"]
+          pdf_generated_at?: string | null
+          pdf_storage_path?: string | null
           reminders_paused?: boolean
           reminders_paused_reason?: string | null
           sale_date?: string | null
@@ -1097,6 +1101,8 @@ export type Database = {
           payment_data?: Json | null
           payment_due_date?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status_enum"]
+          pdf_generated_at?: string | null
+          pdf_storage_path?: string | null
           reminders_paused?: boolean
           reminders_paused_reason?: string | null
           sale_date?: string | null
@@ -2630,6 +2636,7 @@ export type Database = {
       expense_source: "ocr_photo" | "ksef_inbox" | "manual" | "import"
       export_format_enum:
         | "jpk_fa"
+        | "jpk_v7m"
         | "kpir_excel"
         | "comarch_optima"
         | "insert_subiekt"
@@ -2820,6 +2827,7 @@ export const Constants = {
       expense_source: ["ocr_photo", "ksef_inbox", "manual", "import"],
       export_format_enum: [
         "jpk_fa",
+        "jpk_v7m",
         "kpir_excel",
         "comarch_optima",
         "insert_subiekt",

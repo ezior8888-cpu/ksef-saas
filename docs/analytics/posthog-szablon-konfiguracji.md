@@ -71,7 +71,10 @@ U nas to jest **zbudowane tak**:
 - Nie wklejaj jawnego `phc_…` do `app/layout.tsx`, `browser-posthog.ts` ani innych plików **commitowanych** do Gita.
 - Nie duplikuj drugiego `posthog.init` — tylko `initPosthogBrowser()` w `instrumentation-client.ts`.
 - **Scroll depth (3/3 w wizardzie):** w PostHog → **Project settings → Web analytics** włącz „Scroll depth” (to ustawienie projektu, nie kod).
-- **Nie modyfikuj `proxy.ts` pod PostHog** — w tym projekcie to Next.js proxy (sesja Supabase, logowanie), nie przekaźnik eventów. Instrukcja z wizarda (`new PostHog(...)` + `capture` w „proxy”) dotyczy innego typu aplikacji; u nas `posthog-node` jest w `lib/analytics/posthog-node-client.ts`, a eventy z przeglądarki lecą przez `/ingest`.
+- **Nie modyfikuj `proxy.ts` pod PostHog** — to Edge proxy (sesja Supabase). Wizard pisze „proxy.ts”, ale chodzi o **inny** typ aplikacji. U nas:
+  - `new PostHog(token, { host })` → **`lib/analytics/posthog-node-client.ts`** (token z env)
+  - `await client.shutdown()` → **`lib/analytics/posthog-process-shutdown.ts`** + **`instrumentation.ts`**
+  - **Nigdy** nie commituj jawnego `phc_…` w plikach `.ts`
 
 ---
 
@@ -83,7 +86,15 @@ W PostHogu: **Activity** / **Live events** — ustaw zakres czasu na „Last 15 
 
 ---
 
-## 6. Node.js (`posthog-node`) — serwer
+## 6. Wizard: „dodaj do proxy.ts” — mapowanie na ten projekt
+
+| Krok z wizarda | Gdzie u nas | Uwagi |
+|----------------|-------------|--------|
+| `import { PostHog } from 'posthog-node'` | `lib/analytics/posthog-node-client.ts` | Nie w `proxy.ts` (Edge) |
+| `const client = new PostHog('phc_…', { host })` | `getPostHogNodeClient()` + **env** | Token tylko w `.env.local` / Vercel |
+| `process.on('SIGINT', () => client.shutdown())` | `lib/analytics/posthog-process-shutdown.ts` + `instrumentation.ts` | Już podpięte przy starcie serwera Node |
+
+## 7. Node.js (`posthog-node`) — serwer
 
 Odpowiednik dokumentacji PostHoga:
 

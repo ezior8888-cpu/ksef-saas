@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { BrandWordmark } from '@/components/brand/brand-wordmark';
 
 export const metadata: Metadata = {
   title: {
@@ -20,60 +19,51 @@ export default function MarketingLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="animate-orb-1 absolute -top-40 -right-40 h-[600px] w-[600px] rounded-full bg-blue-500/10 blur-[120px]" />
-        <div className="animate-orb-2 absolute top-1/2 -left-40 h-[500px] w-[500px] rounded-full bg-purple-500/10 blur-[120px]" />
-        <div className="animate-orb-3 absolute -bottom-40 left-1/2 h-[500px] w-[500px] rounded-full bg-green-500/10 blur-[120px]" />
-      </div>
+    <div className="marketing-landing relative flex min-h-screen flex-col">
+      <div className="ff-mesh-gradient" aria-hidden />
+      <div className="ff-orb-tr" aria-hidden />
+      <div className="ff-orb-bl" aria-hidden />
 
-      <header
-        className="sticky top-0 z-40 border-b border-glass-border bg-glass-white-strong backdrop-blur-glass-lg"
-      >
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-6">
-          <Link href="/" className="flex min-w-0 items-center gap-2.5">
-            <Image
-              src="/brand/faktflow-logo.png"
-              alt="FaktFlow"
-              width={36}
-              height={36}
-              className="h-9 w-9 shrink-0 rounded-2xl object-contain bg-foreground/5 shadow-glass-sm dark:bg-white/10"
-              priority
-            />
-            <span className="font-display font-semibold tracking-tighter-text truncate">
-              FaktFlow
-            </span>
-          </Link>
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-[rgba(18,19,26,0.88)] backdrop-blur-md">
+        <div className="relative z-[1] mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
+          <BrandWordmark href="/" variant="landing" />
 
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 sm:flex lg:gap-1">
             <NavLink href="/pricing">Cennik</NavLink>
-            <NavLink href="/vs/fakturownia">Porównania</NavLink>
+            <NavLink href="/vs/inni">Porównania</NavLink>
             <NavLink href="/kalkulator-oszczednosci">Kalkulator</NavLink>
             <NavLink href="/blog">Blog</NavLink>
           </nav>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center justify-end gap-2">
             <Link
               href="/login"
-              className="hidden px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+              className="hidden px-3 py-2 text-sm font-semibold text-[color-mix(in_srgb,var(--marketing-muted)_90%,transparent)] transition-colors hover:text-[var(--marketing-text)] sm:inline-flex"
             >
               Zaloguj
             </Link>
-            <Button variant="glass-primary" size="sm" className="rounded-xl" asChild>
-              <Link href="/register" className="inline-flex items-center gap-1">
-                Wypróbuj 30 dni
-                <ArrowRight className="ml-0.5 h-3.5 w-3.5" aria-hidden />
-              </Link>
-            </Button>
+            <Link href="/register" className="marketing-cta-primary px-4 py-2 text-sm">
+              Wypróbuj za darmo
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
           </div>
         </div>
+        <nav
+          className="relative z-[1] flex gap-1 overflow-x-auto border-t border-white/8 px-4 py-2 sm:hidden"
+          aria-label="Menu główne"
+        >
+          <NavLink href="/pricing">Cennik</NavLink>
+          <NavLink href="/vs/inni">Porównania</NavLink>
+          <NavLink href="/kalkulator-oszczednosci">Kalkulator</NavLink>
+          <NavLink href="/blog">Blog</NavLink>
+        </nav>
       </header>
 
-      <main className="flex-1">{children}</main>
+      <main className="relative z-[1] flex-1">{children}</main>
 
-      <footer className="border-t border-glass-border bg-glass-white-strong backdrop-blur-glass-lg">
-        <div className="mx-auto max-w-6xl px-6 py-12">
-          <div className="mb-8 grid grid-cols-2 gap-8 md:grid-cols-4">
+      <footer className="relative z-[1] mt-32 border-t border-white/10 bg-[rgba(26,27,34,0.6)]">
+        <div className="mx-auto max-w-7xl px-6 py-16 lg:px-8">
+          <div className="mb-12 grid grid-cols-2 gap-8 md:grid-cols-4 lg:gap-12">
             <FooterCol title="Produkt">
               <FooterLink href="/">Funkcje</FooterLink>
               <FooterLink href="/pricing">Cennik</FooterLink>
@@ -82,7 +72,7 @@ export default function MarketingLayout({
               </FooterLink>
             </FooterCol>
             <FooterCol title="Porównania">
-              <FooterLink href="/vs/fakturownia">vs Fakturownia</FooterLink>
+              <FooterLink href="/vs/inni">vs Inni</FooterLink>
               <FooterLink href="/vs/infakt">vs inFakt</FooterLink>
               <FooterLink href="/vs/wfirma">vs wFirma</FooterLink>
               <FooterLink href="/vs/ifirma">vs iFirma</FooterLink>
@@ -90,7 +80,11 @@ export default function MarketingLayout({
             <FooterCol title="Zasoby">
               <FooterLink href="/blog">Blog</FooterLink>
               <FooterLink href="/kontakt">Kontakt</FooterLink>
-              <FooterLink href="https://docs.ksef-saas.pl" target="_blank" rel="noopener noreferrer">
+              <FooterLink
+                href="https://docs.ksef-saas.pl"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 Dokumentacja
               </FooterLink>
             </FooterCol>
@@ -102,11 +96,12 @@ export default function MarketingLayout({
               <FooterLink href="/legal/rodo">RODO</FooterLink>
             </FooterCol>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-glass-border pt-8">
-            <p className="text-xs text-muted-foreground">
+
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-8">
+            <p className="text-xs text-[var(--marketing-muted)]">
               © {new Date().getFullYear()} FaktFlow. Wszystkie prawa zastrzeżone.
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-[color-mix(in_srgb,var(--marketing-muted)_70%,transparent)]">
               Made in Poznań · Hosted in Frankfurt (EU)
             </p>
           </div>
@@ -116,11 +111,17 @@ export default function MarketingLayout({
   );
 }
 
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
+function NavLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
   return (
     <Link
       href={href}
-      className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+      className="whitespace-nowrap rounded-lg px-2 py-2 text-sm font-bold text-[var(--marketing-text)] transition-colors hover:text-[var(--marketing-accent)] sm:px-3.5"
     >
       {children}
     </Link>
@@ -136,10 +137,10 @@ function FooterCol({
 }) {
   return (
     <div>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+      <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-[color-mix(in_srgb,var(--marketing-muted)_80%,transparent)]">
         {title}
       </p>
-      <div className="space-y-2">{children}</div>
+      <div className="space-y-2.5">{children}</div>
     </div>
   );
 }
@@ -160,7 +161,7 @@ function FooterLink({
       href={href}
       target={target}
       rel={rel}
-      className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
+      className="block text-sm text-[var(--marketing-muted)] transition-colors hover:text-[var(--marketing-accent)]"
     >
       {children}
     </Link>

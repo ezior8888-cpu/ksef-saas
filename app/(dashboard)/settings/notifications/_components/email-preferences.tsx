@@ -114,7 +114,7 @@ export function EmailPreferences({ unsubscribedCategories }: Props) {
           return (
             <li
               key={cat.id}
-              className="rounded-2xl border border-glass-border bg-foreground/3 p-4 backdrop-blur-glass"
+              className="rounded-xl border border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)] p-4"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">

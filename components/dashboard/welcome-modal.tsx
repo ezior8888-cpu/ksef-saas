@@ -62,7 +62,7 @@ export function WelcomeModal() {
             </DialogTitle>
             <DialogDescription className="mx-auto max-w-md text-base text-muted-foreground">
               Twoja firma jest gotowa. Wybierz jak chcesz zacząć — zawsze możesz
-              wrócić tu z Dashboardu.
+              wrócić tu z panelu.
             </DialogDescription>
           </div>
 
@@ -92,7 +92,7 @@ export function WelcomeModal() {
 
           <div className="flex justify-center pt-2">
             <Button variant="ghost" size="sm" onClick={handleClose}>
-              Pominę, pokaż mi Dashboard
+              Pominę, pokaż mi panel
             </Button>
           </div>
         </div>

@@ -11,7 +11,11 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 
-import { dashboardNavSections, isActiveNavPath } from '@/lib/dashboard-nav-config';
+import { BrandWordmark } from '@/components/brand/brand-wordmark';
+import {
+  dashboardNavSections,
+  isActiveNavPath,
+} from '@/lib/dashboard-nav-config';
 import { cn } from '@/lib/utils';
 
 function shouldHandlePrimaryInAppNav(e: ReactPointerEvent): boolean {
@@ -139,15 +143,8 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
         drawer && 'flex m-0 w-full max-w-none border-0 bg-transparent p-4',
       )}
     >
-      <div className="mb-8 flex items-center gap-3 px-2">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--ff-primary)] shadow-lg">
-          <span className="material-symbols-outlined text-[22px] text-[var(--ff-on-primary)]">
-            description
-          </span>
-        </div>
-        <h1 className="font-display text-xl font-semibold tracking-tight text-[var(--ff-on-surface)]">
-          FaktFlow
-        </h1>
+      <div className="mb-8 px-2">
+        <BrandWordmark href="/dashboard" variant="app" />
       </div>
 
       <Link

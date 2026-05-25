@@ -1,14 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight, CheckCircle2 } from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
+import { ArrowRight } from 'lucide-react';
 
 // Faza 22: cennik się rzadko zmienia — godzinny revalidate na edge.
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'Cennik KSeF SaaS — 49 zł/mc, wszystkie funkcje, 60 dni gwarancji',
+  title: 'Cennik FaktFlow — 49 zł/mc, wszystkie funkcje, 60 dni gwarancji',
   description:
     'Jeden plan dla wszystkich. 49 zł/mc rocznie lub 59 zł/mc miesięcznie. OCR, KSeF 2.0, KPiR, Wkurzacz Dłużników w cenie. Bez ukrytych dodatków.',
 };
@@ -46,12 +44,18 @@ const FEATURES = [
   },
   {
     category: 'Mobile',
-    items: ['PWA installable', 'Native aparat', 'Push notifications', 'Offline mode', 'Swipe gestures'],
+    items: [
+      'PWA installable',
+      'Native aparat',
+      'Push notifications',
+      'Offline mode',
+      'Swipe gestures',
+    ],
   },
   {
     category: 'Workflow',
     items: [
-      'Magiczny Import z 4 konkurencji',
+      'Magiczny Import z 4 innych apek',
       'Wkurzacz Dłużników (przypomnienia + wezwania KPC)',
       'Co-Pilot Księgowego (auto-mailing 25.)',
       'Live walidacja NIP/VIES',
@@ -95,80 +99,156 @@ const FEATURES = [
 
 export default function PricingPage() {
   return (
-    <div className="py-16 lg:py-24">
-      <div className="mx-auto max-w-5xl px-6">
-        <div className="mb-16 text-center">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Cennik</p>
-          <h1 className="font-display text-5xl leading-[1.1] font-semibold tracking-tighter-display md:text-6xl">
-            Jeden plan. <span className="text-muted-foreground">Wszystkie funkcje.</span>
+    <article>
+      {/* Date strip */}
+      <div className="border-b border-zinc-200">
+        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-3 px-6 py-3 text-[10px] uppercase tracking-[0.25em] text-zinc-500 lg:px-8">
+          <span>Wydanie I · Cennik</span>
+          <span>Jeden plan, bez tierów</span>
+          <span className="font-editorial text-base italic">Nº 03</span>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-[1280px] px-6 py-16 lg:px-8 lg:py-24">
+        {/* HERO */}
+        <div className="mb-16 max-w-3xl">
+          <p className="editorial-section-num mb-6 text-sm">— Cennik</p>
+          <h1 className="font-editorial text-[clamp(2.5rem,6vw,5.5rem)] font-medium leading-[0.95] tracking-[-0.02em]">
+            Jeden plan.{' '}
+            <span className="italic text-emerald-700">
+              Wszystkie funkcje.
+            </span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-xl text-muted-foreground">
-            Bez tier&apos;ów. Bez &quot;premium&quot; toggle. Bez kart kredytowych żeby zacząć.
+          <p className="mt-8 max-w-xl font-editorial text-2xl leading-snug text-zinc-600">
+            Bez tierów. Bez &bdquo;premium&rdquo; toggle. Bez kart kredytowych
+            żeby zacząć.
           </p>
         </div>
 
-        <div className="mx-auto mb-16 max-w-md rounded-3xl border border-foreground/20 bg-foreground/5 p-10 shadow-glass-lg backdrop-blur-glass">
-          <p className="text-sm text-muted-foreground">Plan podstawowy</p>
-          <p className="mt-2 font-display text-6xl font-bold tracking-tighter-display">
-            49 zł
-            <span className="ml-2 text-lg font-normal text-muted-foreground">/ mc</span>
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">Płatne rocznie · 588 zł / rok</p>
-          <p className="mt-3 text-xs text-muted-foreground">Lub 59 zł/mc miesięcznie (708 zł/rok)</p>
+        {/* Price plate — asymetryczna, większa wersja niż w landingu */}
+        <div className="mb-20 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] lg:gap-16">
+          <div className="border-2 border-emerald-500/40 bg-zinc-50 p-10">
+            <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+              Plan podstawowy
+            </p>
+            <p className="mt-6 font-editorial text-[7rem] font-medium leading-[0.85]">
+              <span className="italic text-emerald-700">49 zł</span>
+            </p>
+            <p className="mt-2 font-editorial text-xl italic text-zinc-500">
+              / miesiąc · płatne rocznie
+            </p>
+            <p className="mt-4 text-sm text-zinc-600">
+              588 zł / rok · faktura VAT 23%
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Lub 59 zł/mc miesięcznie (708 zł/rok)
+            </p>
 
-          <Button variant="glass-primary" size="lg" className="mt-8 w-full" asChild>
-            <Link href="/register" className="inline-flex items-center justify-center gap-2">
+            <Link
+              href="/register"
+              className="mt-10 inline-flex w-full items-center justify-center gap-3 border border-emerald-500/40 bg-emerald-500 px-6 py-3.5 text-sm font-medium tracking-wide text-emerald-950 transition-all hover:border-emerald-400 hover:bg-emerald-400"
+            >
               Wypróbuj 30 dni za darmo
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
-          </Button>
-          <p className="mt-3 text-center text-xs text-muted-foreground">Bez karty kredytowej. Anuluj kiedy chcesz.</p>
+            <p className="mt-3 text-center text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+              Bez karty kredytowej · Anuluj kiedy chcesz
+            </p>
+          </div>
+
+          {/* Marginalia z 3 obietnicami */}
+          <div className="flex flex-col justify-center">
+            <p className="editorial-section-num mb-6 text-sm">— Trzy obietnice</p>
+            <div className="space-y-8">
+              <Promise
+                num="01"
+                value="30 dni"
+                label="Trial bez karty kredytowej. Pełen dostęp do wszystkich funkcji od pierwszej sekundy."
+              />
+              <Promise
+                num="02"
+                value="30 dni"
+                label="Parallel Run — możesz używać równolegle z poprzednią apką, by porównać przed migracją."
+              />
+              <Promise
+                num="03"
+                value="60 dni"
+                label="Money-back guarantee. Bez podawania powodu. Zwrot w 5 dni roboczych."
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-8">
-          <h2 className="text-center font-display text-3xl font-semibold tracking-tighter-text">
+        {/* Co dostajesz w 49 zł — hairline grid */}
+        <div className="mb-10 flex items-baseline gap-4 border-b border-zinc-200 pb-4">
+          <span className="editorial-section-num text-3xl">02.</span>
+          <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
             Co dostajesz w 49 zł
-          </h2>
-          <div className="grid gap-6 md:grid-cols-2">
-            {FEATURES.map((cat) => (
-              <div
-                key={cat.category}
-                className="rounded-3xl border border-glass-border bg-glass-white p-7 shadow-glass backdrop-blur-glass"
-              >
-                <h3 className="mb-4 font-display text-lg font-semibold tracking-tighter-text">{cat.category}</h3>
-                <ul className="space-y-2.5">
-                  {cat.items.map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-sm">
-                      <CheckCircle2
-                        className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400"
-                        aria-hidden
-                      />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+          </span>
         </div>
 
-        <div className="mt-16 rounded-3xl border border-glass-border bg-glass-white p-8 text-center shadow-glass backdrop-blur-glass">
-          <h3 className="mb-3 font-display text-2xl font-semibold tracking-tighter-text">Trzy obietnice</h3>
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
-            <div>
-              <p className="mb-2 font-display text-3xl font-bold tracking-tighter-display">30 dni</p>
-              <p className="text-sm text-muted-foreground">Trial bez karty kredytowej</p>
+        <h2 className="mb-12 max-w-3xl font-editorial text-4xl font-medium leading-[1] tracking-[-0.02em] md:text-5xl">
+          Osiem kategorii.{' '}
+          <span className="italic text-emerald-700">
+            Wszystko od pierwszego dnia.
+          </span>
+        </h2>
+
+        <div className="grid grid-cols-1 gap-px border border-zinc-200 bg-zinc-100 md:grid-cols-2">
+          {FEATURES.map((cat, i) => (
+            <div key={cat.category} className="bg-background p-8">
+              <div className="mb-5 flex items-baseline justify-between">
+                <span className="editorial-section-num text-2xl">
+                  {String(i + 1).padStart(2, '0')}.
+                </span>
+                <span className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+                  Kategoria
+                </span>
+              </div>
+              <h3 className="mb-5 font-editorial text-xl font-medium">
+                {cat.category}
+              </h3>
+              <ul className="space-y-2">
+                {cat.items.map((item) => (
+                  <li
+                    key={item}
+                    className="flex items-baseline gap-3 text-sm text-zinc-600"
+                  >
+                    <span
+                      className="font-editorial text-emerald-700"
+                      aria-hidden
+                    >
+                      ✓
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <div>
-              <p className="mb-2 font-display text-3xl font-bold tracking-tighter-display">30 dni</p>
-              <p className="text-sm text-muted-foreground">Parallel Run z konkurencją</p>
-            </div>
-            <div>
-              <p className="mb-2 font-display text-3xl font-bold tracking-tighter-display">60 dni</p>
-              <p className="text-sm text-muted-foreground">Money-back guarantee</p>
-            </div>
-          </div>
+          ))}
         </div>
+      </div>
+    </article>
+  );
+}
+
+function Promise({
+  num,
+  value,
+  label,
+}: {
+  num: string;
+  value: string;
+  label: string;
+}) {
+  return (
+    <div className="flex items-baseline gap-5 border-b border-zinc-100 pb-6">
+      <span className="editorial-section-num shrink-0 text-xs">{num}.</span>
+      <div>
+        <p className="font-editorial text-3xl font-medium italic text-emerald-700">
+          {value}
+        </p>
+        <p className="mt-1 text-sm text-zinc-600">{label}</p>
       </div>
     </div>
   );

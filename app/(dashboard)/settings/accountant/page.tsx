@@ -69,7 +69,7 @@ export default async function AccountantAccessPage() {
         </p>
       </div>
 
-      <div className="max-w-3xl rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-xl shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-6 lg:p-8">
+      <div className="max-w-3xl ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8">
         <CoPilotSettingsForm
           key={settings?.updated_at ?? 'defaults'}
           initialSettings={settings ?? null}
@@ -77,7 +77,7 @@ export default async function AccountantAccessPage() {
         />
       </div>
 
-      <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-xl shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-6 lg:p-8">
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8">
         <AccountantAccessList accesses={accesses} />
       </div>
     </div>

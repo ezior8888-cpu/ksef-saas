@@ -525,7 +525,8 @@
     0 8px 28px 0 rgba(0, 0, 0, 0.42);
   --ff-radius-lg: 1rem;
   --ff-radius-chart-glow: 0 0 8px rgba(107, 251, 154, 0.4);
-
+  --ff-cta-bg: var(--ff-on-surface);
+  --ff-cta-fg: var(--ff-bg);
   /* Zmienne z dostarczonego :root (radius / cienie / powierzchnie) */
   --color-surface: #12131a;
   --color-surface-dim: #12131a;
@@ -648,7 +649,8 @@
  * containment nic by nie ratowało wydajnościowo. */
 .ff-glass-pane {
   position: relative;
-  background-color: #1d1e27;
+  --ff-glass-pane-solid: #1d1e27;
+  background-color: var(--ff-glass-pane-solid);
   background-image: var(--ff-glass-bg);
   border: 1px solid var(--ff-glass-border);
   box-shadow: var(--ff-glass-shadow);
@@ -747,6 +749,152 @@ html.dark body {
   background-color: #12131a;
 }
 
+/* ═══ Light mode — szarość jak tabela /inbox (zinc-100 + białe panele) ═══════ */
+html:not(.dark),
+html:not(.dark) body {
+  background-color: #f4f4f5;
+}
+
+html:not(.dark) .ff-dashboard {
+  /* Canvas strony = tło za „tabelką” (ff-glass-pane) */
+  --ff-bg: #f4f4f5;
+  --ff-on-surface: #18181b;
+  --ff-on-surface-variant: #71717a;
+  --ff-primary: #047857;
+  --ff-on-primary: #ffffff;
+  --ff-primary-container: #ecfdf5;
+  --ff-secondary: #b45309;
+  --ff-secondary-container: #fffbeb;
+  --ff-tertiary: #4f46e5;
+  --ff-surface-container-low: #f4f4f5;
+  --ff-surface-container-highest: #e4e4e7;
+  --ff-outline-soft: #e4e4e7;
+  --ff-divider: #e4e4e7;
+  --ff-divider-strong: #d4d4d8;
+  /* thead / hover wiersza — jak inbox: color-mix(on-surface 4%) */
+  --ff-table-header-bg: color-mix(in srgb, var(--ff-on-surface) 4%, transparent);
+  --ff-table-row-hover: color-mix(in srgb, var(--ff-on-surface) 4%, transparent);
+  --ff-surface-muted: var(--ff-table-header-bg);
+  --ff-surface-hover: var(--ff-table-row-hover);
+  --ff-glass-bg: #ffffff;
+  --ff-glass-bg-hover: #ffffff;
+  --ff-glass-border: #e4e4e7;
+  --ff-glass-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 1px 3px rgba(0, 0, 0, 0.06);
+  --ff-radius-chart-glow: 0 0 4px rgba(4, 120, 87, 0.12);
+  --ff-cta-bg: #18181b;
+  --ff-cta-fg: #f4f4f5;
+}
+
+html:not(.dark) .ff-sidebar-active {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+html:not(.dark) .ff-mesh-gradient {
+  background:
+    radial-gradient(120% 80% at 50% -20%, rgba(228, 228, 231, 0.55), transparent 55%),
+    #f4f4f5;
+}
+
+html:not(.dark) .ff-orb-tr,
+html:not(.dark) .ff-orb-bl {
+  display: none;
+}
+
+html:not(.dark) .ff-glass-pane {
+  --ff-glass-pane-solid: #ffffff;
+  background-image: none;
+}
+
+html:not(.dark) .ff-glass-pane-hover:hover {
+  background-image: none;
+  background-color: #ffffff;
+  border-color: #d4d4d8;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 20px rgba(0, 0, 0, 0.06);
+}
+
+html:not(.dark) .ff-shell-sidebar {
+  background-color: #f4f4f5;
+  border-right: 1px solid #e4e4e7;
+}
+
+html:not(.dark) .ff-shell-header {
+  background-color: color-mix(in srgb, #ffffff 72%, #f4f4f5);
+  border-bottom: 1px solid #e4e4e7;
+}
+
+html:not(.dark) .ff-shell-mobile {
+  background-color: #f4f4f5;
+  border-right: 1px solid #e4e4e7;
+}
+
+html:not(.dark) .ff-dashboard [data-slot='card'] {
+  background-color: #ffffff;
+  background-image: none;
+  color: var(--ff-on-surface);
+  border-color: var(--ff-glass-border);
+  box-shadow: var(--ff-glass-shadow);
+}
+
+html:not(.dark) .ff-dashboard [data-slot='card-footer'] {
+  background-color: var(--ff-table-header-bg);
+  border-color: var(--ff-divider);
+}
+
+html:not(.dark) .ff-dashboard ::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+}
+
+/* Tabele / listy — klasy z dark UI → stonowane separatory */
+html:not(.dark) .ff-dashboard [class*='border-white/10'],
+html:not(.dark) .ff-dashboard [class*='border-white\\/10'] {
+  border-color: var(--ff-divider-strong) !important;
+}
+
+html:not(.dark) .ff-dashboard [class*='border-white/14'],
+html:not(.dark) .ff-dashboard [class*='border-white\\/14'] {
+  border-color: var(--ff-divider-strong) !important;
+}
+
+html:not(.dark) .ff-dashboard [class*='border-white/6'],
+html:not(.dark) .ff-dashboard [class*='border-white\\/6'],
+html:not(.dark) .ff-dashboard [class*='border-white/5'],
+html:not(.dark) .ff-dashboard [class*='border-white\\/5'] {
+  border-color: var(--ff-divider) !important;
+}
+
+html:not(.dark) .ff-dashboard [class*='border-white/55'],
+html:not(.dark) .ff-dashboard [class*='border-white\\/55'] {
+  border-color: var(--ff-divider-strong) !important;
+}
+
+html:not(.dark) .ff-dashboard [class*='bg-white/5'],
+html:not(.dark) .ff-dashboard [class*='bg-white\\/5'] {
+  background-color: var(--ff-surface-hover) !important;
+}
+
+html:not(.dark) .ff-dashboard [class*='hover:bg-white/5']:hover,
+html:not(.dark) .ff-dashboard [class*='hover\\:bg-white\\/5']:hover {
+  background-color: var(--ff-surface-hover) !important;
+}
+
+html:not(.dark) .ff-dashboard [class*='hover:bg-white/10']:hover,
+html:not(.dark) .ff-dashboard [class*='hover\\:bg-white\\/10']:hover {
+  background-color: var(--ff-surface-hover) !important;
+}
+
+html:not(.dark) .ff-dashboard thead tr[class*='bg-'] {
+  background-color: var(--ff-table-header-bg) !important;
+}
+
+html:not(.dark) .ff-dashboard tbody tr[class*='hover:bg-']:hover {
+  background-color: var(--ff-table-row-hover) !important;
+}
+
 /* ─── Animacja przełączania podstron dashboardu ──────────────────────────────
  * Animowany jest TYLKO wrapper `template.tsx` (jeden element na całą stronę),
  * a nie poszczególne karty/sekcje. Dzięki temu compositor robi jeden GPU-pass
@@ -779,6 +927,388 @@ html.dark body {
 
 @media (prefers-reduced-motion: reduce) {
   .ff-route-template {
+    animation: none;
+  }
+}
+
+
+/* Marketing shell — mesh/orby jak w `.ff-dashboard`, bez layoutu panelu. */
+.ff-marketing-shell {
+  --ff-bg: #12131a;
+  --ff-primary: #6bfb9a;
+  --ff-secondary: #ffb783;
+  background-color: var(--ff-bg);
+  color: var(--color-foreground, #e2e1eb);
+}
+
+/* Marketing — ciemny motyw jak panel (mesh + karty szklane + mięta). */
+.marketing-landing {
+  --marketing-accent: #6bfb9a;
+  --marketing-accent-hover: #4ade80;
+  --marketing-canvas: #12131a;
+  --marketing-surface: #1d1e27;
+  --marketing-text: #e2e1eb;
+  --marketing-muted: #9ca3af;
+  --marketing-border: rgba(255, 255, 255, 0.1);
+  color-scheme: dark;
+
+  --background: #12131a;
+  --foreground: #e2e1eb;
+  --card: #1d1e27;
+  --card-foreground: #e2e1eb;
+  --popover: #1d1e27;
+  --popover-foreground: #e2e1eb;
+  --primary: #6bfb9a;
+  --primary-foreground: #003919;
+  --secondary: #2b2c36;
+  --secondary-foreground: #e2e1eb;
+  --muted: #21222b;
+  --muted-foreground: #9ca3af;
+  --accent: rgba(107, 251, 154, 0.12);
+  --accent-foreground: #6bfb9a;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: #6bfb9a;
+
+  isolation: isolate;
+  background-color: var(--marketing-canvas);
+  color: var(--marketing-text);
+}
+
+.marketing-hero-eyebrow {
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, system-ui,
+    sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--marketing-accent);
+}
+
+.marketing-hero-title {
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'SF Pro Display',
+    system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  color: var(--marketing-text);
+}
+
+.marketing-hero-body {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-size: 1.125rem;
+  line-height: 1.65;
+  color: color-mix(in srgb, var(--marketing-muted) 92%, transparent);
+}
+
+.marketing-cta-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--marketing-accent);
+  padding: 0.875rem 1.75rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #003919;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+  box-shadow: 0 0 24px -6px rgba(107, 251, 154, 0.45);
+}
+.marketing-cta-primary:hover {
+  background-color: var(--marketing-accent-hover);
+  box-shadow: 0 0 32px -4px rgba(107, 251, 154, 0.55);
+}
+
+.marketing-landing .marketing-glass-card {
+  background-color: var(--marketing-surface);
+  background-image: linear-gradient(
+    165deg,
+    rgba(46, 47, 59, 0.94),
+    rgba(28, 29, 38, 0.97)
+  );
+  border: 1px solid var(--marketing-border);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 8px 28px rgba(0, 0, 0, 0.42);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.marketing-landing .marketing-glass-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 14px 36px rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px);
+}
+
+.marketing-landing .text-foreground {
+  color: var(--marketing-text);
+}
+.marketing-landing .text-muted-foreground {
+  color: var(--marketing-muted);
+}
+
+.marketing-landing .marketing-emerald-card {
+  background: color-mix(in srgb, var(--marketing-accent) 10%, var(--marketing-surface));
+  border: 1px solid color-mix(in srgb, var(--marketing-accent) 28%, transparent);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.marketing-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--marketing-accent) 88%, white);
+}
+
+.marketing-landing .marketing-gradient-emerald {
+  display: inline-block;
+  padding-right: 0.2em;
+  padding-left: 0.04em;
+  background: linear-gradient(135deg, #6bfb9a 0%, #4ade80 50%, #34d399 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.marketing-landing .marketing-glass-card details[open] summary,
+.marketing-landing .marketing-glass-card summary {
+  color: var(--marketing-text);
+}
+.marketing-landing .marketing-glass-card summary:hover {
+  color: var(--marketing-accent);
+}
+
+.marketing-landing article h1,
+.marketing-landing article h2,
+.marketing-landing article h3 {
+  color: var(--marketing-text);
+}
+
+.marketing-landing .editorial-section-num {
+  color: var(--marketing-accent);
+}
+
+.marketing-landing .prose {
+  --tw-prose-body: var(--marketing-muted);
+  --tw-prose-headings: var(--marketing-text);
+  --tw-prose-links: var(--marketing-accent);
+  --tw-prose-bold: var(--marketing-text);
+  color: var(--marketing-muted);
+}
+
+/* Sekcje z Tailwind bg-white/zinc — przezroczyste, widać mesh. */
+.marketing-landing .bg-white,
+.marketing-landing .bg-zinc-50,
+.marketing-landing .bg-zinc-100 {
+  background-color: transparent !important;
+}
+
+.marketing-landing .text-zinc-900,
+.marketing-landing .text-zinc-800,
+.marketing-landing .text-zinc-700 {
+  color: var(--marketing-text) !important;
+}
+
+.marketing-landing .text-zinc-600,
+.marketing-landing .text-zinc-500 {
+  color: var(--marketing-muted) !important;
+}
+
+.marketing-landing .text-zinc-400 {
+  color: color-mix(in srgb, var(--marketing-muted) 75%, transparent) !important;
+}
+
+.marketing-landing .border-zinc-200,
+.marketing-landing .border-zinc-200\/80 {
+  border-color: var(--marketing-border) !important;
+}
+
+.marketing-landing .bg-emerald-100 {
+  background-color: color-mix(in srgb, var(--marketing-accent) 14%, transparent) !important;
+}
+
+.marketing-landing .ring-emerald-200 {
+  --tw-ring-color: color-mix(in srgb, var(--marketing-accent) 35%, transparent) !important;
+}
+
+.marketing-landing .text-emerald-700,
+.marketing-landing .text-emerald-800 {
+  color: var(--marketing-accent) !important;
+}
+
+.marketing-landing .text-emerald-600 {
+  color: var(--marketing-accent-hover) !important;
+}
+
+.marketing-icon-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--marketing-accent) 28%, transparent);
+  background: color-mix(in srgb, var(--marketing-accent) 14%, transparent);
+  color: var(--marketing-accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ════════════════════════════════════════════════════════════════
+ * PREMIUM MARKETING — dark + emerald glow
+ * ────────────────────────────────────────────────────────────────
+ * Marketing dziedziczy dark theme od <html class="dark">. Tu tylko:
+ *   - tokeny emerald accent (dopasowane do dashboardu)
+ *   - utility do gradient textu i emerald glow
+ *   - animacje orbów tła
+ *   - .font-editorial jako globalne utility (italic Fraunces dla
+ *     emphasis typu "Automatyzacja" w hero)
+ * ════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Emerald: dopasowany do dashboardu/CTA z aplikacji. Bardziej mint
+   * niż klasyczny tailwind-emerald, żeby świecił na ciemnym tle. */
+  --ff-emerald: oklch(0.76 0.17 162);
+  --ff-emerald-bright: oklch(0.85 0.19 162);
+  --ff-emerald-deep: oklch(0.58 0.17 162);
+  --ff-emerald-glow: oklch(0.76 0.17 162 / 0.4);
+  --ff-emerald-soft: oklch(0.76 0.17 162 / 0.12);
+}
+
+/* Wordmark marki (landing + panel) — SF / Apple system UI, pochylony, gruby. */
+.marketing-wordmark {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+    var(--font-geist-sans), system-ui, sans-serif;
+  font-style: italic;
+  font-weight: 800;
+  font-synthesis: weight style;
+  letter-spacing: -0.04em;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Italic Fraunces — emphasis w hero/headlines (np. "Automatyzacja").
+ * Global utility, nie scoped — używane w landingu, vs, blog. */
+.font-editorial {
+  font-family: var(--font-fraunces), 'EB Garamond', Georgia, serif;
+  font-feature-settings: 'ss01' on;
+  font-optical-sizing: auto;
+}
+
+.editorial-section-num {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 400;
+  font-style: italic;
+  font-variant-numeric: tabular-nums;
+  color: var(--ff-emerald);
+}
+
+/* Gradient text emerald — dla "Automatyzacja" w hero i podobnych
+ * emfaz w nagłówkach. */
+.marketing-gradient-emerald {
+  display: inline-block;
+  padding-right: 0.2em;
+  padding-left: 0.04em;
+  background: linear-gradient(
+    135deg,
+    var(--ff-emerald-bright) 0%,
+    var(--ff-emerald) 60%,
+    var(--ff-emerald-deep) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Emerald glow card — szklane tło z aurą wokół, hover wzmacnia.
+ * Używane na CTA pills, feature cards, pricing card. */
+.marketing-emerald-card {
+  position: relative;
+  background: var(--ff-emerald-soft);
+  border: 1px solid color-mix(in srgb, var(--ff-emerald) 30%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ff-emerald) 15%, transparent),
+    0 8px 32px -8px var(--ff-emerald-glow);
+  transition: box-shadow 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.marketing-emerald-card:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ff-emerald) 35%, transparent),
+    0 16px 56px -8px var(--ff-emerald-glow);
+}
+
+/* Standardowa szklana karta marketing — używana dla feature cards,
+ * comparison cards itd. Subtelny border + backdrop blur. */
+.marketing-glass-card {
+  background: oklch(0.18 0.005 280 / 0.5);
+  border: 1px solid oklch(1 0 0 / 0.08);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  transition:
+    border-color 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.marketing-glass-card:hover {
+  border-color: color-mix(in srgb, var(--ff-emerald) 35%, transparent);
+  box-shadow: 0 12px 40px -12px var(--ff-emerald-glow);
+  transform: translateY(-2px);
+}
+
+/* Emerald pill / chip — small accent badge (np. "MUST READ"). */
+.marketing-emerald-pill {
+  background: color-mix(in srgb, var(--ff-emerald) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ff-emerald) 35%, transparent);
+  color: var(--ff-emerald-bright);
+  box-shadow: 0 0 12px -4px var(--ff-emerald-glow);
+}
+
+/* ─── Orby tła ─────────────────────────────────────────────────
+ * Slow drift z lekkim skalowaniem. Trzy orby = lekki sense of depth.
+ * Wymagają `prefers-reduced-motion` fallback (poniżej). */
+@keyframes marketing-orb-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translate3d(30px, -40px, 0) scale(1.08);
+    opacity: 0.7;
+  }
+}
+
+.marketing-orb {
+  animation: marketing-orb-drift 22s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+.marketing-orb-2 {
+  animation-delay: -7s;
+  animation-duration: 28s;
+}
+.marketing-orb-3 {
+  animation-delay: -14s;
+  animation-duration: 34s;
+}
+
+/* Subtelny pulse dla statusowych dot indicators (live, online). */
+@keyframes marketing-pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 var(--ff-emerald-glow); }
+  50% { box-shadow: 0 0 0 8px transparent; }
+}
+.marketing-pulse {
+  animation: marketing-pulse-glow 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-orb,
+  .marketing-orb-2,
+  .marketing-orb-3,
+  .marketing-pulse {
     animation: none;
   }
 }

@@ -5,5 +5,5 @@ export default function ForgotPasswordLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <AuthPageShell variant="legacy">{children}</AuthPageShell>;
+  return <AuthPageShell>{children}</AuthPageShell>;
 }

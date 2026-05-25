@@ -187,7 +187,7 @@ function ActiveSubscriptionCard({
 
   return (
     <section className="space-y-4">
-      <div className="rounded-3xl border border-glass-border bg-foreground/3 p-6 backdrop-blur-glass">
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">

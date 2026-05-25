@@ -32,7 +32,7 @@ export default async function SecuritySettingsPage() {
         </p>
       </div>
 
-      <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
         <div className="flex items-start gap-4">
           <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
             <KeyRound className="h-6 w-6 text-muted-foreground" />
@@ -52,7 +52,7 @@ export default async function SecuritySettingsPage() {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
         <div className="flex items-start gap-4">
           <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
             <ShieldCheck className="h-6 w-6 text-muted-foreground" />

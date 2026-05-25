@@ -30,13 +30,20 @@ export type ManualExportJobWithFiles = Tables<'export_jobs'> & {
   >[];
 };
 
-type ExportFormat = Tables<'export_jobs'>['format'];
+// `jpk_v7m` doszło migracją 00056 — `types/database.ts` regenerujemy przed
+// Fazą 35, więc rozszerzamy typ i listę formatów lokalnie.
+type ExportFormat = Tables<'export_jobs'>['format'] | 'jpk_v7m';
 type JobStatus = Tables<'export_jobs'>['status'];
 
-const EXPORT_FORMATS = Constants.public.Enums.export_format_enum;
+const EXPORT_FORMATS: ExportFormat[] = [
+  'jpk_fa',
+  'jpk_v7m',
+  ...Constants.public.Enums.export_format_enum.filter((f) => f !== 'jpk_fa'),
+];
 
 const FORMAT_LABELS: Record<ExportFormat, string> = {
   jpk_fa: 'JPK_FA(4)',
+  jpk_v7m: 'JPK_V7M (ewidencja + deklaracja VAT)',
   kpir_excel: 'KPiR Excel',
   comarch_optima: 'Comarch Optima',
   insert_subiekt: 'Insert Subiekt',

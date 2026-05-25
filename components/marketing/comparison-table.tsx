@@ -1,6 +1,4 @@
 import { Fragment } from 'react';
-import type { LucideIcon } from 'lucide-react';
-import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 
 export type FeatureStatus = 'yes' | 'no' | 'partial' | 'note';
 
@@ -16,19 +14,6 @@ interface Props {
   rows: ComparisonRow[];
 }
 
-const STATUS_CONFIG: Record<FeatureStatus, { icon: LucideIcon; className: string }> = {
-  yes: {
-    icon: CheckCircle2,
-    className: 'text-green-600 dark:text-green-400',
-  },
-  no: { icon: X, className: 'text-red-600 dark:text-red-400' },
-  partial: {
-    icon: AlertCircle,
-    className: 'text-orange-600 dark:text-orange-400',
-  },
-  note: { icon: AlertCircle, className: 'text-muted-foreground' },
-};
-
 export function ComparisonTable({ competitorName, rows }: Props) {
   const grouped = rows.reduce<Record<string, ComparisonRow[]>>((acc, r) => {
     const cat = r.category ?? 'Inne';
@@ -38,63 +23,138 @@ export function ComparisonTable({ competitorName, rows }: Props) {
   }, {});
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-glass-border bg-glass-white shadow-glass backdrop-blur-glass">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-glass-border bg-foreground/3">
-              <th className="px-6 py-5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Funkcja
-              </th>
-              <th className="px-6 py-5 text-center">
-                <p className="font-display font-semibold tracking-tighter-text">KSeF SaaS</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">49 zł/mc</p>
-              </th>
-              <th className="px-6 py-5 text-center">
-                <p className="font-display font-semibold tracking-tighter-text">{competitorName}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">~79 zł/mc</p>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(grouped).map(([category, categoryRows]) => (
-              <Fragment key={category}>
-                <tr className="bg-foreground/2">
-                  <td
-                    colSpan={3}
-                    className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-                  >
-                    {category}
-                  </td>
-                </tr>
-                {categoryRows.map((row, i) => (
-                  <tr
-                    key={`${category}-${i}`}
-                    className="border-b border-glass-border/50 last:border-0"
-                  >
-                    <td className="px-6 py-4 text-sm">{row.feature}</td>
-                    <FeatureCell status={row.ksefSaas} />
-                    <FeatureCell status={row.competitor} />
+    <div className="relative">
+      <div
+        className="pointer-events-none absolute -inset-6 bg-gradient-to-br from-emerald-500/10 via-transparent to-emerald-500/10 opacity-50 blur-2xl"
+        aria-hidden
+      />
+      <div className="marketing-glass-card relative overflow-hidden rounded-2xl">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <th className="w-1/2 border-b border-stone-200/80 px-6 py-6 text-left text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-500">
+                  Funkcja / Możliwość
+                </th>
+                <th className="w-1/4 border-b border-stone-200/80 px-6 py-6 text-center">
+                  <div className="mx-auto inline-flex flex-col items-center gap-1 rounded-2xl px-4 py-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-500">
+                      Standardowy soft
+                    </span>
+                    <span className="text-base font-semibold text-stone-800">
+                      Inne Aplikacje
+                    </span>
+                  </div>
+                </th>
+                <th className="relative w-1/4 border-b border-emerald-200/70 px-6 py-6 text-center">
+                  <div
+                    className="absolute inset-x-3 inset-y-2 rounded-2xl bg-emerald-50 ring-1 ring-emerald-200"
+                    aria-hidden
+                  />
+                  <div className="relative inline-flex flex-col items-center gap-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                      Standard jutra
+                    </span>
+                    <span className="text-base font-bold text-emerald-800">
+                      FaktFlow
+                    </span>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(grouped).map(([category, categoryRows]) => (
+                <Fragment key={category}>
+                  <tr>
+                    <td
+                      colSpan={3}
+                      className="border-b border-stone-200/60 bg-stone-100/40 px-6 py-2.5"
+                    >
+                      <p className="marketing-section-label">{category}</p>
+                    </td>
                   </tr>
-                ))}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+                  {categoryRows.map((row, i) => (
+                    <tr
+                      key={`${category}-${i}`}
+                      className="border-b border-stone-200/50 transition-colors hover:bg-stone-100/35 last:border-0"
+                    >
+                      <td className="px-6 py-4 text-sm text-stone-800">
+                        {row.feature}
+                      </td>
+                      <FeatureCell status={row.competitor} />
+                      <FeatureCell status={row.ksefSaas} highlight />
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
+      <span className="sr-only">Porównanie z {competitorName}</span>
     </div>
   );
 }
 
-function FeatureCell({ status }: { status: { status: FeatureStatus; note?: string } }) {
-  const config = STATUS_CONFIG[status.status];
-  const Icon = config.icon;
+function FeatureCell({
+  status,
+  highlight = false,
+}: {
+  status: { status: FeatureStatus; note?: string };
+  highlight?: boolean;
+}) {
+  const renderIcon = () => {
+    if (status.status === 'yes') {
+      return (
+        <span
+          className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${
+            highlight
+              ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300'
+              : 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'
+          }`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="h-3.5 w-3.5">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </span>
+      );
+    }
+    if (status.status === 'no') {
+      return (
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-rose-50 text-rose-600 ring-1 ring-rose-200">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-3.5 w-3.5">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </span>
+      );
+    }
+    if (status.status === 'partial') {
+      return (
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
+            <circle cx="12" cy="12" r="9" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+        </span>
+      );
+    }
+    return <span className="text-xs text-zinc-400">·</span>;
+  };
+
   return (
-    <td className="px-6 py-4 text-center">
-      <div className="flex flex-col items-center gap-1">
-        <Icon className={`h-5 w-5 ${config.className}`} aria-hidden />
+    <td
+      className={`relative px-6 py-4 text-center align-middle ${
+        highlight ? 'bg-emerald-50/50' : ''
+      }`}
+    >
+      <div className="flex flex-col items-center gap-1.5">
+        {renderIcon()}
         {status.note ? (
-          <span className="text-xs text-muted-foreground">{status.note}</span>
+          <span className="max-w-[8rem] text-[10px] leading-snug text-zinc-500">
+            {status.note}
+          </span>
         ) : null}
       </div>
     </td>

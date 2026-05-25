@@ -5,5 +5,5 @@ export default function RegisterLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <AuthPageShell variant="dashboard">{children}</AuthPageShell>;
+  return <AuthPageShell>{children}</AuthPageShell>;
 }

@@ -1,30 +1,15 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
 
 // Faza 22: edge caching dla landingu. 5min revalidate + on-demand purge
 // dla deploy'ów. Stronę odwiedzają anonimowi goście — żadna personalizacja,
 // safe na edge cache. Crawlerzy (Google, indeksery) dostają tę samą wersję.
 export const revalidate = 300; // 5 minut
 import Link from 'next/link';
-import {
-  ArrowRight,
-  Camera,
-  Shield,
-  Zap,
-  TrendingUp,
-  CheckCircle2,
-  Smartphone,
-  FileText,
-  AlertCircle,
-  X,
-} from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { LandingHero } from '@/components/marketing/landing-hero';
 import { SavingsCalculatorPreview } from '@/components/marketing/savings-calculator-preview';
-import { FeatureCard } from '@/components/marketing/feature-card';
-import { TestimonialCard } from '@/components/marketing/testimonial-card';
 import { FaqSection } from '@/components/marketing/faq-section';
-import { ScrollReveal } from '@/components/marketing/scroll-reveal';
 
 export const metadata: Metadata = {
   title: 'FaktFlow — faktury KSeF 2026 dla mikrofirm | Zdjęcie paragonu = wpis do KPiR',
@@ -35,92 +20,29 @@ export const metadata: Metadata = {
 export default function LandingPage() {
   return (
     <>
-      <section className="relative pb-24 pt-16 lg:pb-32 lg:pt-24">
-        <div className="mx-auto max-w-6xl px-6 text-center">
-          <div
-            className="mb-6 inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-xs font-medium text-orange-700 dark:text-orange-400"
-          >
-            <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
-            KSeF obowiązkowy od lutego 2026 — przygotuj się dziś
+      <LandingHero />
+
+      {/* SEKCJA 02 — Stare apki vs asystent (red X vs emerald check) */}
+      <section className="bg-zinc-100 py-24 lg:py-32">
+        <div className="mx-auto max-w-6xl px-6 lg:px-8">
+          <div className="mx-auto mb-16 max-w-3xl text-center">
+            <p className="marketing-section-label mb-3">
+              Konkurencja zostaje w tyle
+            </p>
+            <h2 className="marketing-hero-title text-4xl md:text-5xl">
+              Stare apki to formularze.{' '}
+              <span className="text-zinc-500">Nasza apka to asystent.</span>
+            </h2>
           </div>
-
-          <h1
-            className="mx-auto max-w-4xl font-display text-5xl font-semibold leading-[1.05] tracking-tighter-display md:text-7xl"
-          >
-            Faktury, KSeF i KPiR.{' '}
-            <span className="text-muted-foreground">
-              Automatyzacja, której nie ma u konkurencji.
-            </span>
-          </h1>
-
-          <p className="mx-auto mt-6 max-w-2xl text-xl leading-relaxed text-muted-foreground">
-            Wystawisz fakturę z parkingu klienta. Zdjęcie paragonu wpadnie do KPiR.
-            Wkurzacz Dłużników dopilnuje płatności. Jeden klik do KSeF.
-          </p>
-
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <Button variant="glass-primary" size="lg" className="text-base" asChild>
-              <Link href="/register" className="inline-flex items-center gap-2">
-                Wypróbuj 30 dni za darmo
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </Link>
-            </Button>
-            <Button variant="glass" size="lg" className="text-base" asChild>
-              <Link href="/kalkulator-oszczednosci">Sprawdź ile zaoszczędzisz</Link>
-            </Button>
-          </div>
-
-          <p className="mt-6 text-xs text-muted-foreground">
-            Bez karty. 60 dni money-back. Migracja z konkurencji jednym klikiem.
-          </p>
-
-          <div
-            className="mx-auto mt-16 max-w-5xl overflow-hidden rounded-3xl border border-glass-border bg-glass-white shadow-glass-lg backdrop-blur-glass"
-          >
-            <div className="relative aspect-video w-full bg-linear-to-br from-foreground/5 via-foreground/2 to-purple-500/10">
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center">
-                <Image
-                  src="/brand/faktflow-logo.png"
-                  alt="FaktFlow"
-                  width={64}
-                  height={64}
-                  className="h-16 w-16 rounded-2xl object-contain opacity-90"
-                />
-                <p className="max-w-sm text-sm text-muted-foreground">
-                  Zrzut ekranu aplikacji pojawi się tutaj (np.{' '}
-                  <code className="rounded bg-foreground/10 px-1.5 py-0.5 font-mono text-xs">
-                    /marketing/dashboard-preview.png
-                  </code>
-                  ).
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-t border-glass-border py-24">
-        <div className="mx-auto max-w-6xl px-6">
-          <ScrollReveal>
-            <div className="mx-auto mb-16 max-w-2xl text-center">
-              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Konkurencja zostaje w tyle
-              </p>
-              <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-                Stare apki to formularze.{' '}
-                <span className="text-muted-foreground">Nasza apka to asystent.</span>
-              </h2>
-            </div>
-          </ScrollReveal>
 
           <div className="grid gap-6 md:grid-cols-2">
             <ProblemCard
               title="W Fakturownia / inFakt / wFirma"
               issues={[
                 'Wpisujesz każdą pozycję ręcznie',
-                'KSeF authorization czasem zawiesza się na 24h (Fakturownia)',
-                'Faktura znika w KSeF, ale apka pokazuje „wysłana” (inFakt)',
-                'Brak mobile app albo tylko podgląd (wFirma)',
+                'KSeF authorization czasem zawiesza się na 24h',
+                'Faktura znika w KSeF, ale apka pokazuje „wysłana”',
+                'Brak mobile app albo tylko podgląd',
                 'Korekta wymaga 8 kroków i kalkulatora w drugiej karcie',
               ]}
             />
@@ -128,216 +50,246 @@ export default function LandingPage() {
               title="W FaktFlow"
               features={[
                 'Zdjęcie paragonu → automatycznie KPiR + kategoryzacja',
-                'Pre-send walidacja FA(3) — wiesz przed wysyłką że przejdzie',
-                'Post-send monitoring — 5 min po wysyłce sprawdzamy real status',
-                'Pełnoprawna PWA z aparatem, push notif, swipe gestures',
-                'Korekta jednym klikiem z auto-wyliczeniem różnic',
+                'Pre-send walidacja FA(3) — gwarancja poprawności',
+                'Post-send monitoring — sprawdzamy realny status',
+                'Pełnoprawna PWA z aparatem i push notif',
+                'Korekta jednym klikiem z auto-wyliczeniem',
               ]}
             />
           </div>
         </div>
       </section>
 
-      <section className="border-t border-glass-border py-24">
-        <div className="mx-auto max-w-6xl px-6">
-          <ScrollReveal>
-            <div className="mx-auto mb-16 max-w-2xl text-center">
-              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Co Ci to da
-              </p>
-              <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-                5 funkcji, które oszczędzą Ci 12–42 godziny rocznie
-              </h2>
-            </div>
-          </ScrollReveal>
+      {/* SEKCJA 03 — Sześć funkcji w glass cards */}
+      <section className="bg-white py-24 lg:py-32">
+        <div className="mx-auto max-w-6xl px-6 lg:px-8">
+          <div className="mx-auto mb-16 max-w-3xl text-center">
+            <p className="marketing-section-label mb-3">Co Ci to da</p>
+            <h2 className="marketing-hero-title text-4xl md:text-5xl">
+              Oszczędzaj do{' '}
+              <span className="font-editorial italic marketing-gradient-emerald">
+                42 godzin
+              </span>{' '}
+              rocznie
+            </h2>
+          </div>
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <FeatureCard
-              icon={Camera}
+              icon={<CameraIcon />}
               title="OCR + Auto-KPiR"
-              description="Robisz zdjęcie paragonu. AI rozpoznaje sprzedawcę, kwotę, VAT i automatycznie wpisuje do właściwej kolumny KPiR. Apka uczy się Twoich preferencji."
-              proof="80% mniej czasu na wpisywanie kosztów"
+              description="Robisz zdjęcie paragonu. AI rozpoznaje sprzedawcę, kwotę i VAT. Automatycznie wpisuje do właściwej kolumny KPiR."
+              proof="80% mniej czasu"
             />
             <FeatureCard
-              icon={Shield}
+              icon={<ShieldIcon />}
               title="KSeF 2.0 Compliance"
-              description="UPO automatycznie pobierane i archiwizowane. Tryb Offline24 dla awarii MF. Pre-send walidacja FA(3) — wiesz przed wysyłką że przejdzie."
-              proof="Zero rozmów z urzędem skarbowym"
+              description="UPO automatycznie archiwizowane. Tryb Offline24 dla awarii MF. Pre-send walidacja FA(3) — bezstresowa wysyłka."
+              proof="Zero stresu z US"
             />
             <FeatureCard
-              icon={TrendingUp}
+              icon={<TrendingIcon />}
               title="Wkurzacz Dłużników"
-              description="Apka sama wysyła przypomnienia o płatnościach (3, 7, 14 dni). Generuje wezwania do zapłaty z art. 187 KPC. Automatycznie zatrzymuje gdy klient zapłaci."
-              proof="Średni DSO spadł z 24 do 11 dni u beta testerów"
+              description="Automatyczne przypomnienia i wezwania do zapłaty. System sam zatrzymuje się, gdy klient wpłaca."
+              proof="Krótsze DSO o 50%"
             />
             <FeatureCard
-              icon={Zap}
+              icon={<ZapIcon />}
               title="Magiczny Import"
-              description="Migracja z Fakturownia / inFakt / wFirma / iFirma w 5 minut. Pobieramy historię z KSeF + Twoje pliki CSV. Zero ręcznego przepisywania."
+              description="Migracja z inFakt / Fakturownia / wFirma w 5 minut. Zero ręcznego przepisywania historii."
             />
             <FeatureCard
-              icon={FileText}
+              icon={<FileIcon />}
               title="Co-Pilot Księgowego"
-              description="Co miesiąc apka sama wysyła Twojej księgowej kompletny pakiet: JPK_FA, KPiR Excel, formaty Comarch / Symfonia / Insert. Nie pytasz, dostaje."
-              proof="Twoja księgowa pokocha Cię na nowo"
+              description="Co miesiąc apka sama wysyła księgowej kompletny pakiet: JPK_FA, KPiR Excel, Comarch, Symfonia, Insert."
+              proof="Księgowa Cię pokocha"
             />
             <FeatureCard
-              icon={Smartphone}
+              icon={<PhoneIcon />}
               title="Mobile-First PWA"
-              description="Pełnoprawna aplikacja na telefonie. Aparat, push notif, swipe gestures, offline mode. Zainstalujesz jak natywną apkę z home screen."
-              proof="60% akcji robisz z telefonu"
+              description="Pełnoprawna aplikacja na telefonie. Aparat, push, swipe gestures, tryb offline. Instalujesz jak natywną apkę."
+              proof="60% akcji z telefonu"
             />
           </div>
         </div>
       </section>
 
-      <section className="border-t border-glass-border py-24">
-        <div className="mx-auto max-w-4xl px-6">
-          <ScrollReveal>
-            <div className="mb-12 text-center">
-              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Sprawdź sam
-              </p>
-              <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-                Ile zaoszczędzisz w ciągu roku?
-              </h2>
-            </div>
-          </ScrollReveal>
-          <ScrollReveal delay={0.1}>
-            <SavingsCalculatorPreview />
-          </ScrollReveal>
+      {/* SEKCJA 04 — Kalkulator oszczędności */}
+      <section className="bg-zinc-100 py-24 lg:py-32">
+        <div className="mx-auto max-w-5xl px-6 lg:px-8">
+          <div className="mx-auto mb-12 max-w-3xl text-center">
+            <p className="marketing-section-label mb-3">Sprawdź sam</p>
+            <h2 className="marketing-hero-title text-4xl md:text-5xl">
+              Ile{' '}
+              <span className="font-editorial italic marketing-gradient-emerald">
+                zaoszczędzisz?
+              </span>
+            </h2>
+          </div>
+          <SavingsCalculatorPreview />
         </div>
       </section>
 
-      <section className="border-t border-glass-border py-24">
-        <div className="mx-auto max-w-6xl px-6">
-          <ScrollReveal>
-            <div className="mx-auto mb-16 max-w-2xl text-center">
-              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Beta testerzy mówią
-              </p>
-              <h2 className="font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-                {'„Nie wracam do Fakturownia”'}
-              </h2>
-            </div>
-          </ScrollReveal>
+      {/* SEKCJA 05 — Testimoniale */}
+      <section className="bg-white py-24 lg:py-32">
+        <div className="mx-auto max-w-6xl px-6 lg:px-8">
+          <div className="mx-auto mb-16 max-w-3xl text-center">
+            <p className="marketing-section-label mb-3">Zaufali nam</p>
+            <h2 className="marketing-hero-title text-4xl md:text-5xl">
+              Głosy{' '}
+              <span className="font-editorial italic marketing-gradient-emerald">
+                przedsiębiorców
+              </span>
+            </h2>
+          </div>
 
           <div className="grid gap-6 md:grid-cols-3">
             <TestimonialCard
-              quote="Zdjęcie paragonu z Orlenu → wpis do KPiR za 4 sekundy. Tego mi brakowało przez 5 lat w innych apkach."
-              author="Marcin K."
-              role="Freelance developer · Warszawa"
-              rating={5}
+              quote="Przesiadka z inFaktu zajęła 3 minuty. Funkcja skanowania paragonów to złoto — wreszcie nie mam sterty papierów w aucie."
+              author="Marek Kowalski"
+              role="Agencja SEO"
+              initials="MK"
             />
             <TestimonialCard
-              quote="Wkurzacz Dłużników to game changer. Klient który nigdy nie płacił na czas, zapłacił w dniu otrzymania pierwszej wiadomości."
-              author="Anna W."
-              role="Studio graficzne · Kraków"
-              rating={5}
+              quote="Wkurzacz Dłużników uratował mój cashflow. Klienci płacą po pierwszym SMS-ie, a ja nie muszę się o to prosić osobiście."
+              author="Anna Nowak"
+              role="Studio graficzne"
+              initials="AN"
             />
             <TestimonialCard
-              quote="Migracja z inFakt zajęła 7 minut. Łącznie z importem 600 faktur z 2 lat. Nie wierzyłam dopóki nie zobaczyłam."
-              author="Piotr S."
-              role="Konsulting IT · Poznań"
-              rating={5}
+              quote="KSeF wydawał się przerażający, ale z FaktFlow to po prostu kolejny przycisk. Żadnych błędów, żadnych stresów."
+              author="Piotr Wiśniewski"
+              role="E-commerce"
+              initials="PW"
             />
           </div>
         </div>
       </section>
 
-      <section className="border-t border-glass-border py-24">
-        <div className="mx-auto max-w-4xl px-6 text-center">
-          <ScrollReveal>
-            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Cennik
-            </p>
-            <h2 className="mb-6 font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-              Jeden plan. Wszystkie funkcje.
-            </h2>
-          </ScrollReveal>
-          <p className="mx-auto mb-12 max-w-2xl text-xl text-muted-foreground">
-            Bez ukrytych dodatków. Bez „premium-only” toggle do OCR. Wszystko od pierwszego dnia.
+      {/* SEKCJA 06 — Pricing — single plan z emerald glow */}
+      <section className="bg-zinc-100 py-24 lg:py-32">
+        <div className="mx-auto max-w-4xl px-6 text-center lg:px-8">
+          <p className="marketing-section-label mb-3">Cennik</p>
+          <h2 className="marketing-hero-title mb-6 text-4xl md:text-5xl">
+            Jeden plan.{' '}
+            <span className="font-editorial italic marketing-gradient-emerald">
+              Wszystkie funkcje.
+            </span>
+          </h2>
+          <p className="mx-auto mb-16 max-w-2xl text-lg text-zinc-600 md:text-xl">
+            Bez ukrytych dodatków. Bez &bdquo;premium-only&rdquo; toggle do OCR.
+            Wszystko od pierwszego dnia.
           </p>
 
-          <div
-            className="inline-block rounded-3xl border border-foreground/20 bg-foreground/5 p-10 shadow-glass-lg backdrop-blur-glass"
-          >
-            <p className="text-sm text-muted-foreground">Plan podstawowy</p>
-            <p className="mb-1 mt-2 font-display text-6xl font-bold tracking-tighter-display">
-              49 zł
-              <span className="ml-2 text-lg font-normal text-muted-foreground">/ mc</span>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Płatne rocznie · 588 zł / rok · faktura VAT 23%
-            </p>
+          <div className="relative mx-auto inline-block w-full max-w-md">
+            {/* Aura emerald wokół karty */}
+            <div
+              className="pointer-events-none absolute -inset-6 bg-gradient-to-br from-emerald-500/30 via-emerald-500/10 to-emerald-500/30 opacity-60 blur-2xl"
+              aria-hidden
+            />
+            <div className="marketing-emerald-card relative rounded-3xl p-10">
+              <p className="marketing-section-label">Plan podstawowy</p>
+              <p className="mt-4 flex items-baseline justify-center gap-2 text-zinc-900">
+                <span className="text-7xl font-bold tracking-tight">49 zł</span>
+                <span className="text-lg text-zinc-600">/ mc</span>
+              </p>
+              <p className="mt-1 text-sm text-zinc-600">
+                Płatne rocznie · 588 zł / rok · VAT 23%
+              </p>
 
-            <div className="mt-8 space-y-2 text-left">
-              {[
-                'Faktury sprzedaż + zakupy bez limitu',
-                'OCR z auto-kategoryzacją KPiR',
-                'KSeF 2.0 + UPO + walidacja',
-                'Wkurzacz Dłużników (przypomnienia + wezwania)',
-                'Magiczny import z konkurencji',
-                'Co-Pilot Księgowego (JPK_FA, KPiR Excel, Comarch, Symfonia)',
-                'PWA mobilna z OCR',
-                'Push notifications',
-                'Bank Frankfurt (UE)',
-                'Wsparcie po polsku',
-              ].map((item) => (
-                <div key={item} className="flex items-center gap-2 text-sm">
-                  <CheckCircle2
-                    className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400"
-                    aria-hidden
-                  />
-                  <span>{item}</span>
-                </div>
-              ))}
+              <ul className="mt-8 space-y-2.5 text-left">
+                {[
+                  'Faktury sprzedaż + zakupy bez limitu',
+                  'OCR z auto-kategoryzacją KPiR',
+                  'KSeF 2.0 + UPO + walidacja',
+                  'Wkurzacz Dłużników',
+                  'Magiczny import z innych apek',
+                  'Co-Pilot Księgowego',
+                  'PWA mobilna z OCR + push',
+                  'Bank Frankfurt (UE)',
+                ].map((item) => (
+                  <li
+                    key={item}
+                    className="flex items-start gap-2.5 text-sm text-zinc-700"
+                  >
+                    <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <Link
+                href="/register"
+                className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-500 px-6 py-3.5 text-sm font-semibold text-emerald-950 shadow-[0_0_24px_-4px_var(--ff-emerald-glow)] transition-all hover:bg-emerald-400 hover:shadow-[0_0_36px_0_var(--ff-emerald-glow)]"
+              >
+                Wypróbuj 30 dni za darmo
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              </Link>
+              <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                + 60 dni money-back guarantee
+              </p>
             </div>
-
-            <Button variant="glass-primary" size="lg" className="mt-8 w-full" asChild>
-              <Link href="/register">Wypróbuj 30 dni za darmo</Link>
-            </Button>
-            <p className="mt-3 text-xs text-muted-foreground">+ 60-day money-back guarantee</p>
           </div>
         </div>
       </section>
 
       <FaqSection />
 
-      <section className="border-t border-glass-border py-24">
-        <div className="mx-auto max-w-4xl px-6 text-center">
-          <ScrollReveal>
-            <h2 className="mb-6 font-display text-4xl font-semibold tracking-tighter-display md:text-5xl">
-              KSeF jest obowiązkowy za 9 miesięcy.
-            </h2>
-            <p className="mx-auto mb-10 max-w-2xl text-xl text-muted-foreground">
-              Lepiej przyzwyczaj się dziś niż w panice w styczniu 2026.
-            </p>
-            <Button variant="glass-primary" size="lg" className="text-base" asChild>
-              <Link href="/register" className="inline-flex items-center gap-2">
-                Zacznij 30 dni za darmo
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </Link>
-            </Button>
-            <p className="mt-4 text-xs text-muted-foreground">Bez karty kredytowej. Anuluj kiedy chcesz.</p>
-          </ScrollReveal>
+      {/* SEKCJA 08 — Final CTA — wielki emerald gradient banner */}
+      <section className="py-16 lg:py-24">
+        <div className="mx-auto max-w-6xl px-6 lg:px-8">
+          <div className="relative overflow-hidden rounded-3xl">
+            {/* Emerald gradient bg z glow */}
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-500" aria-hidden />
+            <div className="absolute inset-0 opacity-30 mix-blend-overlay" style={{
+              backgroundImage: 'radial-gradient(circle at 30% 20%, white 0%, transparent 50%), radial-gradient(circle at 70% 80%, white 0%, transparent 50%)',
+            }} aria-hidden />
+
+            <div className="relative px-8 py-20 text-center text-emerald-950 lg:px-16 lg:py-28">
+              <h2 className="mx-auto max-w-3xl text-4xl font-bold leading-tight tracking-tight md:text-6xl">
+                Odzyskaj swój czas.
+                <br />
+                <span className="font-editorial italic">Zacznij dzisiaj.</span>
+              </h2>
+              <p className="mx-auto mt-6 max-w-xl text-lg font-medium text-emerald-950/80 md:text-xl">
+                Pierwsze 30 dni za darmo. Potem tylko 49 zł netto / mc.
+                <br />
+                Bez zobowiązań, bez karty.
+              </p>
+              <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+                <Link
+                  href="/register"
+                  className="inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-semibold text-emerald-700 shadow-lg transition-transform hover:scale-105"
+                >
+                  Wypróbuj 30 dni za darmo
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                </Link>
+                <Link
+                  href="/pricing"
+                  className="inline-flex items-center gap-2 rounded-full border-2 border-emerald-950/30 bg-transparent px-7 py-3 text-sm font-semibold text-emerald-950 transition-colors hover:border-emerald-950/60 hover:bg-emerald-950/5"
+                >
+                  Pełny cennik
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </>
   );
 }
 
+/* ─── Dark/glow helpery dla landingu ─── */
+
 function ProblemCard({ title, issues }: { title: string; issues: string[] }) {
   return (
-    <div className="rounded-3xl border border-red-500/20 bg-red-500/5 p-7 backdrop-blur-glass">
-      <h3 className="mb-4 font-display text-lg font-semibold tracking-tighter-text text-red-700 dark:text-red-400">
-        {title}
-      </h3>
+    <div className="marketing-glass-card rounded-2xl p-7">
+      <h3 className="mb-5 text-lg font-semibold text-rose-700">{title}</h3>
       <ul className="space-y-3">
         {issues.map((issue) => (
-          <li key={issue} className="flex items-start gap-2 text-sm">
-            <X className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" aria-hidden />
-            <span className="text-muted-foreground">{issue}</span>
+          <li key={issue} className="flex items-start gap-2.5 text-sm">
+            <XIcon className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+            <span className="text-zinc-600">{issue}</span>
           </li>
         ))}
       </ul>
@@ -347,21 +299,131 @@ function ProblemCard({ title, issues }: { title: string; issues: string[] }) {
 
 function SolutionCard({ title, features }: { title: string; features: string[] }) {
   return (
-    <div className="rounded-3xl border border-green-500/20 bg-green-500/5 p-7 backdrop-blur-glass">
-      <h3 className="mb-4 font-display text-lg font-semibold tracking-tighter-text text-green-700 dark:text-green-400">
-        {title}
-      </h3>
+    <div className="marketing-emerald-card rounded-2xl p-7">
+      <h3 className="mb-5 text-lg font-semibold text-emerald-800">{title}</h3>
       <ul className="space-y-3">
         {features.map((feature) => (
-          <li key={feature} className="flex items-start gap-2 text-sm">
-            <CheckCircle2
-              className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400"
-              aria-hidden
-            />
-            <span>{feature}</span>
+          <li key={feature} className="flex items-start gap-2.5 text-sm">
+            <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            <span className="text-zinc-700">{feature}</span>
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+function FeatureCard({
+  icon,
+  title,
+  description,
+  proof,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  proof?: string;
+}) {
+  return (
+    <article className="marketing-glass-card rounded-2xl p-7">
+      <div className="marketing-icon-chip mb-5 h-11 w-11">
+        {icon}
+      </div>
+      <h3 className="mb-2.5 text-lg font-semibold text-zinc-900">{title}</h3>
+      <p className="text-sm leading-relaxed text-zinc-600">
+        {description}
+      </p>
+      {proof && (
+        <div className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--marketing-accent)_14%,transparent)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--marketing-accent)] ring-1 ring-[color-mix(in_srgb,var(--marketing-accent)_30%,transparent)]">
+          <CheckIcon className="h-3 w-3" />
+          {proof}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function TestimonialCard({
+  quote,
+  author,
+  role,
+  initials,
+}: {
+  quote: string;
+  author: string;
+  role: string;
+  initials: string;
+}) {
+  return (
+    <article className="marketing-glass-card flex h-full flex-col rounded-2xl p-7">
+      {/* 5 gwiazdek emerald */}
+      <div className="mb-4 flex gap-0.5">
+        {Array.from({ length: 5 }, (_, i) => (
+          <StarIcon key={i} className="h-4 w-4 text-emerald-600" />
+        ))}
+      </div>
+      <p className="mb-6 flex-1 text-sm leading-relaxed text-zinc-700">
+        &bdquo;{quote}&rdquo;
+      </p>
+      <div className="flex items-center gap-3 border-t border-white/10 pt-5">
+        <div className="marketing-icon-chip flex h-10 w-10 rounded-full text-sm font-semibold">
+          {initials}
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-zinc-900">{author}</p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+            {role}
+          </p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+/* ─── Inline SVG icons (zamiast lucide — pełna kontrola wagi/koloru) ─── */
+
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+  );
+}
+function ShieldIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+  );
+}
+function TrendingIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+  );
+}
+function ZapIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+  );
+}
+function FileIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+  );
+}
+function PhoneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><rect x="5" y="2" width="14" height="20" rx="2.5"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
+  );
+}
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className ?? 'h-4 w-4'}><polyline points="20 6 9 17 4 12"/></svg>
+  );
+}
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className ?? 'h-4 w-4'}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  );
+}
+function StarIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className ?? 'h-4 w-4'}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
   );
 }

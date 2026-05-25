@@ -15,10 +15,13 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { FfDataTableCard, ffTable } from '@/components/dashboard/ff-data-table';
 import {
   createAccountantTokenAction,
   revokeAccountantTokenAction,
 } from '@/components/settings/accountant-actions';
+import { ffSettingsPanelPadded } from '@/lib/dashboard/ff-surface-classes';
+import { cn } from '@/lib/utils';
 
 /** Row z serwera (bez pola `token`). */
 export interface AccountantAccessPublicRow {
@@ -89,47 +92,44 @@ export function AccountantAccessList({
 
       {/* Lista tokenów */}
       {accesses.length === 0 ? (
-        <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass py-16 text-center">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-foreground/5 mb-4">
-            <UserCog className="h-6 w-6 text-muted-foreground" />
+        <div
+          className={cn(
+            ffSettingsPanelPadded,
+            'py-16 text-center',
+          )}
+        >
+          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-primary)_18%,transparent)]">
+            <UserCog className="h-6 w-6 text-[var(--ff-primary)]" />
           </div>
-          <h3 className="font-display font-semibold text-lg tracking-tighter-text mb-1">
+          <h3 className="mb-1 text-xl font-bold tracking-tight">
             Brak udostępnionych dostępów
           </h3>
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+          <p className="mx-auto max-w-sm text-[15px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
             Utwórz pierwszy link dla księgowej aby udostępnić jej faktury
           </p>
         </div>
       ) : (
-        <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-foreground/[0.03] border-b border-glass-border">
-              <tr className="text-left">
-                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                  Księgowa
-                </th>
-                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                  Poziom dostępu
-                </th>
-                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                  Wygasa
-                </th>
-                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                  Użycia
-                </th>
-                <th className="px-6 py-4 font-medium text-muted-foreground text-xs uppercase tracking-wider"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {accesses.map((access) => (
-                <AccessRow key={access.id} access={access} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <FfDataTableCard
+          title="Udostępnione dostępy"
+          subtitle={`${accesses.length} tokenów • księgowi z linkiem portalu`}
+          minWidth={960}
+        >
+          <thead>
+            <tr className={ffTable.headRow}>
+              <th className={ffTable.th}>Księgowa</th>
+              <th className={ffTable.th}>Poziom dostępu</th>
+              <th className={ffTable.th}>Wygasa</th>
+              <th className={ffTable.th}>Status</th>
+              <th className={ffTable.th}>Użycia</th>
+              <th className={ffTable.th} aria-hidden />
+            </tr>
+          </thead>
+          <tbody>
+            {accesses.map((access) => (
+              <AccessRow key={access.id} access={access} />
+            ))}
+          </tbody>
+        </FfDataTableCard>
       )}
     </div>
   );
@@ -174,10 +174,10 @@ function CreateTokenForm({
   };
 
   return (
-    <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+    <div className={cn(ffSettingsPanelPadded, 'space-y-5')}>
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-lg font-display font-semibold tracking-tighter-text">
+          <h2 className="text-lg font-semibold tracking-tight text-[var(--ff-on-surface)]">
             Nowy dostęp dla księgowej
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
@@ -298,7 +298,12 @@ function GeneratedTokenCard({
   };
 
   return (
-    <div className="rounded-3xl border border-green-500/20 bg-green-500/5 backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+    <div
+      className={cn(
+        ffSettingsPanelPadded,
+        'space-y-5 border-green-500/25 bg-green-500/10',
+      )}
+    >
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 rounded-2xl bg-green-500/10 flex items-center justify-center shrink-0">
@@ -374,22 +379,24 @@ function AccessRow({ access }: { access: AccountantAccess }) {
   };
 
   return (
-    <tr className="border-b border-glass-border/50 last:border-0 hover:bg-foreground/[0.02] transition-colors duration-150">
-      <td className="px-6 py-4">
-        <div className="font-medium">{access.accountant_name}</div>
-        <div className="text-xs text-muted-foreground">
+    <tr className={ffTable.row}>
+      <td className={ffTable.td}>
+        <div className="font-semibold text-[var(--ff-on-surface)]">
+          {access.accountant_name}
+        </div>
+        <div className="mt-0.5 font-mono text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
           {access.accountant_email}
         </div>
       </td>
-      <td className="px-6 py-4">
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-foreground/5 border border-glass-border text-xs font-medium backdrop-blur-glass-sm">
+      <td className={ffTable.td}>
+        <span className={ffTable.badge}>
           {access.access_level === 'download' ? 'Pobieranie' : 'Podgląd'}
         </span>
       </td>
-      <td className="px-6 py-4 text-muted-foreground text-xs">
+      <td className={ffTable.tdMuted}>
         {new Date(access.expires_at).toLocaleDateString('pl-PL')}
       </td>
-      <td className="px-6 py-4">
+      <td className={ffTable.td}>
         {isActive && (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20 text-xs font-medium backdrop-blur-glass-sm">
             <CheckCircle2 className="h-3 w-3" />
@@ -408,15 +415,17 @@ function AccessRow({ access }: { access: AccountantAccess }) {
           </span>
         )}
       </td>
-      <td className="px-6 py-4 text-xs">
-        <div className="font-medium">{access.use_count}×</div>
-        {access.last_used_at && (
-          <div className="text-muted-foreground">
+      <td className={ffTable.tdMuted}>
+        <div className="font-semibold text-[var(--ff-on-surface)]">
+          {access.use_count}×
+        </div>
+        {access.last_used_at ? (
+          <div className="mt-0.5 text-[12px]">
             {new Date(access.last_used_at).toLocaleDateString('pl-PL')}
           </div>
-        )}
+        ) : null}
       </td>
-      <td className="px-6 py-4 text-right">
+      <td className={`${ffTable.td} text-right`}>
         {isActive && (
           <Button
             variant="ghost"

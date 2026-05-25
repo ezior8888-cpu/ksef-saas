@@ -121,7 +121,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-4">
+    <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-4">
       <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
         {title}
       </h2>
@@ -153,7 +153,7 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
   };
 
   return (
-    <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-4">
+    <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-4">
       <div className="flex items-center gap-3">
         <UserPlus className="h-5 w-5 text-muted-foreground" />
         <h2 className="text-base font-semibold">Zaproś nowego członka</h2>

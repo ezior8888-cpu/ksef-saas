@@ -53,6 +53,7 @@ export type AuditAction =
   | 'invoice.submit_failed'
   | 'invoice.upo_downloaded'
   | 'invoice.xml_downloaded'
+  | 'invoice.emailed'
   | 'invoice.resubmit_requested'
   | 'ksef.credentials_uploaded'
   | 'ksef.credentials_removed'

@@ -105,7 +105,7 @@ export default async function SettingsPage() {
       </div>
 
       {/* Profil użytkownika */}
-      <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
         <div className="flex items-start gap-4">
           <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
             <User className="h-6 w-6 text-muted-foreground" />
@@ -167,7 +167,7 @@ export default async function SettingsPage() {
       </div>
 
       {/* Dane firmy */}
-      <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
         <div className="flex items-start gap-4">
           <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
             <Building2 className="h-6 w-6 text-muted-foreground" />
@@ -245,16 +245,16 @@ export default async function SettingsPage() {
         <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider px-2">
           Konfiguracja
         </h2>
-        <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass overflow-hidden">
+        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] overflow-hidden">
           {settingsLinks.map((link, idx) => {
             const Icon = link.icon;
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`flex items-center gap-4 p-5 hover:bg-foreground/2 transition-colors duration-150 ${
+                className={`flex items-center gap-4 p-5 transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)] ${
                   idx !== settingsLinks.length - 1
-                    ? 'border-b border-glass-border/50'
+                    ? 'border-b border-white/10'
                     : ''
                 }`}
               >
@@ -276,7 +276,7 @@ export default async function SettingsPage() {
 
       {/* Niebezpieczna strefa - tylko owner */}
       {isOwner && (
-        <div className="rounded-3xl border border-red-500/20 bg-red-500/5 backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] border-red-500/25 bg-red-500/10 p-7 lg:p-8 space-y-5">
           <div className="flex items-start gap-4">
             <div className="h-12 w-12 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
               <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />

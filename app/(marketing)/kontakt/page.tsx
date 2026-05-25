@@ -12,17 +12,17 @@ export const metadata: Metadata = {
 };
 
 const cardClass =
-  'block rounded-3xl border border-glass-border bg-glass-white p-7 shadow-glass backdrop-blur-glass transition-shadow duration-300 hover:shadow-glass-lg text-foreground no-underline';
+  'block rounded-3xl border border-glass-border bg-glass-white p-7 shadow-glass backdrop-blur-glass transition-shadow duration-300 hover:shadow-glass-lg text-zinc-900 no-underline';
 
 export default function ContactPage() {
   return (
     <div className="py-16 lg:py-24">
       <div className="mx-auto max-w-3xl px-6">
         <div className="mb-16 text-center">
-          <h1 className="font-display text-5xl font-semibold tracking-tighter-display md:text-6xl">
+          <h1 className="font-editorial text-5xl font-semibold md:text-6xl">
             Pomożemy
           </h1>
-          <p className="mt-6 text-xl text-muted-foreground">
+          <p className="mt-6 text-xl text-zinc-500">
             Czytamy każdą wiadomość. Odpowiadamy w ciągu 24h.
           </p>
         </div>
@@ -82,15 +82,15 @@ function ContactCard({
 }: ContactCardProps) {
   const inner = (
     <>
-      <Icon className="mb-3 h-5 w-5 text-muted-foreground" />
-      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      <Icon className="mb-3 h-5 w-5 text-zinc-500" />
+      <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
         {title}
       </p>
-      <p className="mt-1 font-display text-lg font-semibold tracking-tighter-text">
+      <p className="mt-1 font-editorial text-lg font-semibold">
         {value}
       </p>
       {note ? (
-        <p className="mt-1 text-xs text-muted-foreground">{note}</p>
+        <p className="mt-1 text-xs text-zinc-500">{note}</p>
       ) : null}
     </>
   );

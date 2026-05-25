@@ -4,8 +4,11 @@ import { useId, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-
+/**
+ * Kalkulator oszczędności — dark+emerald glow. 2-col grid (inputy / wynik)
+ * z subtelną emerald aurą wokół całej karty. Gigantyczna liczba zysku
+ * w marketing-gradient-emerald.
+ */
 export function SavingsCalculatorPreview() {
   const [invoicesPerMonth, setInvoicesPerMonth] = useState(20);
   const [hourlyRate, setHourlyRate] = useState(150);
@@ -15,7 +18,8 @@ export function SavingsCalculatorPreview() {
   const calc = useMemo(() => {
     const minutesPerInvoiceManual = 8;
     const minutesPerInvoiceWithOcr = 1.5;
-    const savedMinutesPerInvoice = minutesPerInvoiceManual - minutesPerInvoiceWithOcr;
+    const savedMinutesPerInvoice =
+      minutesPerInvoiceManual - minutesPerInvoiceWithOcr;
 
     const invoicesPerYear = invoicesPerMonth * 12;
     const minutesSavedPerYear = invoicesPerYear * savedMinutesPerInvoice;
@@ -25,7 +29,8 @@ export function SavingsCalculatorPreview() {
     const ksefSaasYear = 49 * 12;
     const competitorAvg = 79 * 12;
 
-    const netSaving = moneySavedPerYear - ksefSaasYear + (competitorAvg - ksefSaasYear);
+    const netSaving =
+      moneySavedPerYear - ksefSaasYear + (competitorAvg - ksefSaasYear);
 
     return {
       hoursSavedPerYear,
@@ -37,14 +42,28 @@ export function SavingsCalculatorPreview() {
   }, [invoicesPerMonth, hourlyRate]);
 
   return (
-    <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass-lg p-8 lg:p-10">
-      <div className="mb-8 grid gap-8 md:grid-cols-2">
-        <div className="space-y-6">
-          <div>
-            <label htmlFor={invoicesInputId} className="mb-2 block text-sm font-medium">
-              Liczba faktur miesięcznie
-            </label>
-            <div className="flex items-center gap-4">
+    <div className="relative">
+      {/* Aura emerald wokół karty */}
+      <div
+        className="pointer-events-none absolute -inset-4 bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-emerald-500/20 opacity-50 blur-2xl"
+        aria-hidden
+      />
+      <div className="marketing-glass-card relative overflow-hidden rounded-2xl">
+        <div className="grid grid-cols-1 lg:grid-cols-2">
+          {/* LEWA — sliderowe inputy */}
+          <div className="space-y-8 border-b border-zinc-200 p-8 lg:border-b-0 lg:border-r lg:border-zinc-200 lg:p-10">
+            <div>
+              <div className="mb-3 flex items-baseline justify-between gap-4">
+                <label
+                  htmlFor={invoicesInputId}
+                  className="text-sm font-medium text-zinc-900"
+                >
+                  Faktury miesięcznie
+                </label>
+                <span className="text-2xl font-bold tabular-nums text-emerald-700">
+                  {invoicesPerMonth}
+                </span>
+              </div>
               <input
                 id={invoicesInputId}
                 type="range"
@@ -53,20 +72,22 @@ export function SavingsCalculatorPreview() {
                 step={5}
                 value={invoicesPerMonth}
                 onChange={(e) => setInvoicesPerMonth(Number(e.target.value))}
-                className="flex-1 accent-foreground"
+                className="w-full accent-emerald-500"
               />
-              <div className="w-16 text-right font-display text-lg font-semibold tabular-nums">
-                {invoicesPerMonth}
-              </div>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Wystawione + zakupowe + paragony</p>
-          </div>
 
-          <div>
-            <label htmlFor={hourlyRateInputId} className="mb-2 block text-sm font-medium">
-              Twoja stawka godzinowa (PLN)
-            </label>
-            <div className="flex items-center gap-4">
+            <div>
+              <div className="mb-3 flex items-baseline justify-between gap-4">
+                <label
+                  htmlFor={hourlyRateInputId}
+                  className="text-sm font-medium text-zinc-900"
+                >
+                  Stawka godzinowa (PLN)
+                </label>
+                <span className="text-2xl font-bold tabular-nums text-emerald-700">
+                  {hourlyRate}
+                </span>
+              </div>
               <input
                 id={hourlyRateInputId}
                 type="range"
@@ -75,61 +96,94 @@ export function SavingsCalculatorPreview() {
                 step={10}
                 value={hourlyRate}
                 onChange={(e) => setHourlyRate(Number(e.target.value))}
-                className="flex-1 accent-foreground"
+                className="w-full accent-emerald-500"
               />
-              <div className="w-16 text-right font-display text-lg font-semibold tabular-nums">
-                {hourlyRate}
+            </div>
+          </div>
+
+          {/* PRAWA — gigantyczny zysk netto */}
+          <div className="relative p-8 lg:p-10">
+            {/* Subtelny emerald glow tła kolumny wyniku */}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/[0.06] to-transparent" aria-hidden />
+            <div className="relative">
+              <p className="marketing-section-label">Zysk netto rocznie</p>
+              <p className="mt-4 flex items-baseline gap-2">
+                <span className="text-6xl font-bold tabular-nums tracking-tight marketing-gradient-emerald lg:text-7xl">
+                  {calc.netSaving.toFixed(0)}
+                </span>
+                <span className="text-2xl font-semibold text-zinc-600">
+                  PLN
+                </span>
+              </p>
+
+              <div className="mt-8 space-y-3 text-sm">
+                <BreakdownRow
+                  label="Czas wolny"
+                  value={`${calc.hoursSavedPerYear.toFixed(0)} h / rok`}
+                />
+                <BreakdownRow
+                  label="Wartość czasu"
+                  value={`+${calc.moneySavedPerYear.toFixed(0)} PLN`}
+                  positive
+                />
+                <BreakdownRow
+                  label="Subskrypcja FaktFlow"
+                  value={`−${calc.ksefSaasYear} PLN`}
+                />
+                <BreakdownRow
+                  label="Przewaga rynkowa"
+                  value="Wysoka"
+                  positive
+                  isLast
+                />
               </div>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Ile bierzesz za godzinę pracy</p>
           </div>
         </div>
 
-        <div className="flex flex-col justify-center rounded-2xl border border-glass-border bg-foreground/3 p-6">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Twoja oszczędność netto rocznie
+        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-zinc-200 bg-zinc-100 p-6 lg:px-10">
+          <p className="max-w-md text-xs text-zinc-600">
+            Szacowanie na podstawie pomiarów beta-testerów: 8 min ręcznie vs 1,5
+            min z OCR FaktFlow.
           </p>
-          <div className="mb-4 flex items-baseline gap-2">
-            <span className="font-display text-5xl font-bold tabular-nums tracking-tighter-display">
-              {calc.netSaving.toFixed(0)}
-            </span>
-            <span className="text-2xl text-muted-foreground">PLN</span>
-          </div>
-          <div className="space-y-1.5 text-xs text-muted-foreground">
-            <div className="flex justify-between">
-              <span>Czas zaoszczędzony</span>
-              <span className="tabular-nums">{calc.hoursSavedPerYear.toFixed(0)} h/rok</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Wartość Twojego czasu</span>
-              <span className="tabular-nums">+{calc.moneySavedPerYear.toFixed(0)} PLN</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Subskrypcja KSeF SaaS</span>
-              <span className="tabular-nums">−{calc.ksefSaasYear} PLN</span>
-            </div>
-            <div className="flex justify-between text-green-700 dark:text-green-400">
-              <span>vs. średnia konkurencji</span>
-              <span className="tabular-nums">
-                +{(calc.competitorAvg - calc.ksefSaasYear).toFixed(0)} PLN
-              </span>
-            </div>
-          </div>
+          <Link
+            href="/register"
+            className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-emerald-950 shadow-[0_0_24px_-4px_var(--ff-emerald-glow)] transition-all hover:bg-emerald-400 hover:shadow-[0_0_36px_0_var(--ff-emerald-glow)]"
+          >
+            Zacznij oszczędzać teraz
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-glass-border pt-6">
-        <p className="max-w-md text-xs text-muted-foreground">
-          Szacunek na podstawie pomiarów beta-testerów: 8 min ręcznego wpisania faktury vs 1.5 min z
-          OCR. Twoje rezultaty mogą się różnić.
-        </p>
-        <Button variant="glass-primary" asChild>
-          <Link href="/register" className="inline-flex items-center">
-            Wypróbuj 30 dni za darmo
-            <ArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden />
-          </Link>
-        </Button>
-      </div>
+function BreakdownRow({
+  label,
+  value,
+  positive = false,
+  isLast = false,
+}: {
+  label: string;
+  value: string;
+  positive?: boolean;
+  isLast?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-baseline justify-between gap-4 ${
+        isLast ? '' : 'border-b border-zinc-200 pb-3'
+      }`}
+    >
+      <span className="text-zinc-600">{label}</span>
+      <span
+        className={`tabular-nums ${
+          positive ? 'font-semibold text-emerald-700' : 'text-zinc-800'
+        }`}
+      >
+        {value}
+      </span>
     </div>
   );
 }

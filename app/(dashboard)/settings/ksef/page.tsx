@@ -30,7 +30,7 @@ export default async function KsefSettingsPage() {
       </div>
 
       {/* Status card */}
-      <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-6">
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6">
         {hasCredentials ? (
           <div className="flex items-center gap-4">
             <div className="h-12 w-12 rounded-2xl bg-green-500/10 flex items-center justify-center shrink-0">
@@ -65,7 +65,7 @@ export default async function KsefSettingsPage() {
       </div>
 
       {/* Upload card */}
-      <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-6 lg:p-8 space-y-5">
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8 space-y-5">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">
             Wgrywanie certyfikatu
@@ -85,7 +85,7 @@ export default async function KsefSettingsPage() {
         <CertificateUpload />
       </div>
 
-      <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-6 lg:p-8 space-y-4">
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8 space-y-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <div className="h-12 w-12 rounded-2xl bg-linear-to-br from-purple-500/15 to-blue-500/15 flex items-center justify-center shrink-0 mx-auto sm:mx-0">
             <Sparkles className="h-6 w-6 text-purple-600 dark:text-purple-400" />

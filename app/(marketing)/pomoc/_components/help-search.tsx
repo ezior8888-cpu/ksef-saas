@@ -33,7 +33,7 @@ export function HelpSearch({ items }: { items: HelpSearchItem[] }) {
   return (
     <div className="relative">
       <div className="relative">
-        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
         <input
           type="search"
           value={query}
@@ -46,7 +46,7 @@ export function HelpSearch({ items }: { items: HelpSearchItem[] }) {
       {query.trim().length >= 2 && (
         <div className="mt-2 overflow-hidden rounded-2xl border border-glass-border bg-glass-white backdrop-blur-glass">
           {results.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-muted-foreground">
+            <p className="px-4 py-3 text-sm text-zinc-500">
               Brak wyników dla „{query}”. Spróbuj innych słów albo zapytaj
               asystenta AI w panelu.
             </p>
@@ -58,7 +58,7 @@ export function HelpSearch({ items }: { items: HelpSearchItem[] }) {
                 className="block border-b border-glass-border/50 px-4 py-3 last:border-0 hover:bg-foreground/5"
               >
                 <p className="text-sm font-medium">{it.title}</p>
-                <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                <p className="mt-0.5 line-clamp-1 text-xs text-zinc-500">
                   {it.categoryLabel} · {it.summary}
                 </p>
               </Link>

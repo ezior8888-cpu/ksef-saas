@@ -15,6 +15,10 @@ const eslintConfig = defineConfig([
     ".claude/**",
     "public/sw.js",
     "public/sw.js.map",
+    // Skrypty k6 (Faza 34) — uruchamiane przez binarny runtime k6, nie Node.
+    // Importują moduły `k6/*` i `https://jslib.k6.io/...`, których ESLint
+    // projektu nie rozwiązuje. Lintowanie ich tu nie ma sensu.
+    "load-tests/**",
   ]),
   {
     // Reguły React Compiler / React 19 — `set-state-in-effect`, `refs`,
