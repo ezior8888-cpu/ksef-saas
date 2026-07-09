@@ -28,7 +28,10 @@ export default function MarketingLayout({
         <div className="relative z-[1] mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
           <BrandWordmark href="/" variant="landing" />
 
-          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 sm:flex lg:gap-1">
+          {/* Inline nav dopiero od lg: — między 640 a 1024px linki nie mieszczą
+              się obok wordmarka i CTA (nachodziły na siebie); wtedy działa
+              przewijany pasek pod headerem. */}
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex lg:gap-1">
             <NavLink href="/pricing">Cennik</NavLink>
             <NavLink href="/vs/inni">Porównania</NavLink>
             <NavLink href="/kalkulator-oszczednosci">Kalkulator</NavLink>
@@ -49,7 +52,7 @@ export default function MarketingLayout({
           </div>
         </div>
         <nav
-          className="relative z-[1] flex gap-1 overflow-x-auto border-t border-white/8 px-4 py-2 sm:hidden"
+          className="relative z-[1] flex gap-1 overflow-x-auto border-t border-white/8 px-4 py-2 lg:hidden"
           aria-label="Menu główne"
         >
           <NavLink href="/pricing">Cennik</NavLink>

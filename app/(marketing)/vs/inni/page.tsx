@@ -161,11 +161,11 @@ export default function InniPage() {
       />
 
       <VsTldr>
-        <span className="font-semibold text-zinc-900">Inni</span> (Fakturownia,
+        <span className="font-semibold text-[var(--marketing-text)]">Inni</span> (Fakturownia,
         inFakt, wFirma, iFirma) są dobre dla firm, które potrzebują klasycznego
         programu do faktur i nie mają dużo paragonów. Mają znane problemy ze
         stabilnością autoryzacji KSeF i bugi w korektach.{' '}
-        <span className="font-semibold text-emerald-700">FaktFlow</span> jest
+        <span className="font-semibold text-[var(--marketing-accent)]">FaktFlow</span> jest
         dla freelancerów i mikrofirm, które chcą OCR paragonów, workflow
         mobile-first i automatyczne wezwania do zapłaty — wszystko w cenie
         podstawowej, bez dodatków.

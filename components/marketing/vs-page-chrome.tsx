@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 
 /**
- * Wspólny układ podstron /vs/* — jasne tło, czytelny tekst (nie tokeny .dark).
+ * Wspólny układ podstron /vs/* — ciemny motyw marketingu (BUG-002 fix).
+ * Wcześniej używał jasnych kolorów (text-zinc-600, bg-emerald-50) na CIEMNYM
+ * tle `.marketing-landing` → nieczytelne. Teraz tokeny --marketing-*.
  */
 
 interface VsHeroProps {
@@ -15,21 +17,19 @@ export function VsHero({ competitorName, eyebrow, subtitle }: VsHeroProps) {
   return (
     <header className="relative bg-transparent pt-12 pb-16 lg:pt-20 lg:pb-24">
       <div className="mx-auto max-w-5xl px-6 text-center lg:px-8">
-        <div className="marketing-section-label mb-8 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3 text-emerald-700">
+        <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-[color-mix(in_srgb,var(--marketing-accent)_30%,transparent)] bg-[color-mix(in_srgb,var(--marketing-accent)_12%,transparent)] px-4 py-1.5">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3 text-[var(--marketing-accent)]">
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
             <polyline points="22 4 12 14.01 9 11.01" />
           </svg>
-          {eyebrow ?? 'Analiza rynkowa 2026'}
+          <span className="marketing-section-label">{eyebrow ?? 'Analiza rynkowa 2026'}</span>
         </div>
 
-        <h1 className="marketing-hero-title text-4xl md:text-6xl lg:text-7xl [&_.marketing-gradient-emerald]:tracking-normal">
+        <h1 className="marketing-hero-title text-4xl md:text-6xl lg:text-7xl">
           FaktFlow vs{' '}
-          <span className="font-editorial italic marketing-gradient-emerald">
-            {competitorName}
-          </span>
+          <span className="marketing-gradient-emerald">{competitorName}</span>
         </h1>
-        <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-zinc-600 md:text-xl">
+        <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-[var(--marketing-muted)] md:text-xl">
           {subtitle}
         </p>
       </div>
@@ -45,11 +45,11 @@ export function VsTldr({ children }: VsTldrProps) {
   return (
     <div className="mx-auto max-w-4xl px-6 lg:px-8">
       <div className="marketing-glass-card relative rounded-2xl p-8">
-        <div className="marketing-section-label mb-3 inline-flex items-center gap-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-          TL;DR
+        <div className="mb-3 inline-flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--marketing-accent)]" />
+          <span className="marketing-section-label">TL;DR</span>
         </div>
-        <p className="text-base leading-relaxed text-zinc-700 md:text-lg">
+        <p className="text-base leading-relaxed text-[var(--marketing-text)] md:text-lg">
           {children}
         </p>
       </div>
@@ -68,9 +68,9 @@ export function VsSectionHeader({
 }) {
   return (
     <div className="mb-8 mt-20">
-      <div className="marketing-section-label mb-3 flex items-baseline gap-3">
-        <span>{num}.</span>
-        {eyebrow ?? title}
+      <div className="mb-3 flex items-baseline gap-3">
+        <span className="marketing-section-label text-[var(--marketing-accent)]">{num}.</span>
+        <span className="marketing-section-label">{eyebrow ?? title}</span>
       </div>
       <h2 className="marketing-hero-title max-w-3xl text-3xl md:text-4xl">
         {title}
@@ -93,13 +93,13 @@ export function VsChooseColumns({
   return (
     <div className="mx-auto mt-20 grid max-w-6xl grid-cols-1 gap-6 px-6 md:grid-cols-2 lg:px-8">
       <div className="marketing-glass-card rounded-2xl p-7">
-        <h3 className="mb-5 text-lg font-semibold text-zinc-800">
+        <h3 className="mb-5 text-lg font-semibold text-[var(--marketing-text)]">
           Wybierz {competitorName}, jeśli&hellip;
         </h3>
         <ul className="space-y-3">
           {whenChooseCompetitor.map((item) => (
-            <li key={item} className="flex items-start gap-2.5 text-sm text-zinc-600">
-              <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500">
+            <li key={item} className="flex items-start gap-2.5 text-sm text-[var(--marketing-muted)]">
+              <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-[var(--marketing-muted)]">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3">
                   <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
@@ -110,13 +110,13 @@ export function VsChooseColumns({
         </ul>
       </div>
       <div className="marketing-emerald-card rounded-2xl p-7">
-        <h3 className="mb-5 text-lg font-semibold text-emerald-900">
+        <h3 className="mb-5 text-lg font-semibold text-[var(--marketing-accent)]">
           Wybierz FaktFlow, jeśli&hellip;
         </h3>
         <ul className="space-y-3">
           {whenChooseUs.map((item) => (
-            <li key={item} className="flex items-start gap-2.5 text-sm text-zinc-700">
-              <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">
+            <li key={item} className="flex items-start gap-2.5 text-sm text-[var(--marketing-text)]">
+              <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--marketing-accent)_18%,transparent)] text-[var(--marketing-accent)] ring-1 ring-[color-mix(in_srgb,var(--marketing-accent)_30%,transparent)]">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="h-3 w-3">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -135,10 +135,7 @@ interface VsMigrationCtaProps {
   copy?: string;
 }
 
-export function VsMigrationCta({
-  competitorName,
-  copy,
-}: VsMigrationCtaProps) {
+export function VsMigrationCta({ competitorName, copy }: VsMigrationCtaProps) {
   return (
     <div className="mx-auto mt-20 max-w-6xl px-6 lg:px-8">
       <div className="relative overflow-hidden rounded-3xl">

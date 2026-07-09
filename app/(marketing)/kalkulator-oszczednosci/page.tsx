@@ -17,13 +17,13 @@ export default function CalculatorPage() {
     <div className="py-16 lg:py-24">
       <div className="mx-auto max-w-4xl px-6">
         <div className="mb-12 text-center">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--marketing-muted)]">
             Kalkulator oszczędności
           </p>
           <h1 className="mx-auto max-w-3xl font-editorial text-5xl leading-[1.1] font-semibold md:text-6xl">
             Sprawdź ile zaoszczędzisz w ciągu roku
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-xl text-zinc-500">
+          <p className="mx-auto mt-6 max-w-2xl text-xl text-[var(--marketing-muted)]">
             Przesuń suwaki aby dopasować do swojej działalności
           </p>
         </div>
@@ -33,7 +33,7 @@ export default function CalculatorPage() {
         <div className="mt-16 grid gap-6 text-center md:grid-cols-3">
           <div className="p-6">
             <p className="mb-2 font-editorial text-4xl font-bold">8 → 1.5</p>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-[var(--marketing-muted)]">
               Minut na fakturę:
               <br />
               ręcznie vs z OCR
@@ -41,7 +41,7 @@ export default function CalculatorPage() {
           </div>
           <div className="p-6">
             <p className="mb-2 font-editorial text-4xl font-bold">80%</p>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-[var(--marketing-muted)]">
               Mniej czasu
               <br />
               na księgowość
@@ -49,7 +49,7 @@ export default function CalculatorPage() {
           </div>
           <div className="p-6">
             <p className="mb-2 font-editorial text-4xl font-bold">11 dni</p>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-[var(--marketing-muted)]">
               Średni DSO
               <br />
               z Wkurzaczem

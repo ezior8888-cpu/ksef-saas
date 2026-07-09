@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 const cardClass =
-  'block rounded-3xl border border-glass-border bg-glass-white p-7 shadow-glass backdrop-blur-glass transition-shadow duration-300 hover:shadow-glass-lg text-zinc-900 no-underline';
+  'block rounded-3xl border border-glass-border bg-glass-white p-7 shadow-glass backdrop-blur-glass transition-shadow duration-300 hover:shadow-glass-lg text-[var(--marketing-text)] no-underline';
 
 export default function ContactPage() {
   return (
@@ -22,7 +22,7 @@ export default function ContactPage() {
           <h1 className="font-editorial text-5xl font-semibold md:text-6xl">
             Pomożemy
           </h1>
-          <p className="mt-6 text-xl text-zinc-500">
+          <p className="mt-6 text-xl text-[var(--marketing-muted)]">
             Czytamy każdą wiadomość. Odpowiadamy w ciągu 24h.
           </p>
         </div>
@@ -82,15 +82,15 @@ function ContactCard({
 }: ContactCardProps) {
   const inner = (
     <>
-      <Icon className="mb-3 h-5 w-5 text-zinc-500" />
-      <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+      <Icon className="mb-3 h-5 w-5 text-[var(--marketing-muted)]" />
+      <p className="text-xs font-medium uppercase tracking-wider text-[var(--marketing-muted)]">
         {title}
       </p>
       <p className="mt-1 font-editorial text-lg font-semibold">
         {value}
       </p>
       {note ? (
-        <p className="mt-1 text-xs text-zinc-500">{note}</p>
+        <p className="mt-1 text-xs text-[var(--marketing-muted)]">{note}</p>
       ) : null}
     </>
   );

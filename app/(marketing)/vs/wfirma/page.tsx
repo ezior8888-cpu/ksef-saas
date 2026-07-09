@@ -175,7 +175,7 @@ export default function WfirmaPage() {
       />
 
       <VsTldr>
-        <span className="font-editorial font-medium text-zinc-900">
+        <span className="font-editorial font-medium text-[var(--marketing-text)]">
           wFirma
         </span>{' '}
         to potężny kombajn dla biur i większych JDG: kadry, pełniejszy
@@ -185,7 +185,7 @@ export default function WfirmaPage() {
         w stylu &bdquo;otwieram, skanuję, wysyłam do KSeF w windzie&rdquo; oraz{' '}
         <strong className="font-semibold">ograniczenia OCR</strong> na trudnych
         kosztach (wielostronicowe PDF-y, słabe zdjęcia, batch).{' '}
-        <span className="font-editorial font-medium italic text-emerald-700">
+        <span className="font-editorial font-medium italic text-[var(--marketing-accent)]">
           FaktFlow
         </span>{' '}
         nie próbuje zastąpić całego ERP — koncentruje się na superscieżce: KSeF
@@ -199,7 +199,7 @@ export default function WfirmaPage() {
           eyebrow="Historia"
           title="Krótka historia wFirma i infrastruktura"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             wFirma wyrosła z potrzeby połączenia księgowości, kadrowej i rozliczeń ZUS w jednym ekosystemie dla
             polskiego przedsiębiorcy. Z biegiem lat produkt rozrósł się o moduły, które dla biura rachunkowego są
@@ -237,18 +237,18 @@ export default function WfirmaPage() {
               key={o.meta}
               className="border-t-2 border-emerald-500/40 pt-6"
             >
-              <blockquote className="font-editorial text-lg italic leading-snug text-zinc-600">
-                <span className="mr-1 font-editorial text-3xl leading-none text-emerald-700">&bdquo;</span>
+              <blockquote className="font-editorial text-lg italic leading-snug text-[var(--marketing-muted)]">
+                <span className="mr-1 font-editorial text-3xl leading-none text-[var(--marketing-accent)]">&bdquo;</span>
                 {o.q}
-                <span className="ml-0.5 font-editorial text-2xl leading-none text-emerald-700">&rdquo;</span>
+                <span className="ml-0.5 font-editorial text-2xl leading-none text-[var(--marketing-accent)]">&rdquo;</span>
               </blockquote>
-              <figcaption className="mt-4 text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+              <figcaption className="mt-4 text-[10px] uppercase tracking-[0.22em] text-[var(--marketing-muted)]">
                 {o.meta}
               </figcaption>
             </figure>
           ))}
         </div>
-        <p className="mt-8 font-editorial text-sm italic leading-relaxed text-zinc-500">
+        <p className="mt-8 font-editorial text-sm italic leading-relaxed text-[var(--marketing-muted)]">
           To nie są cytaty z konkretnych osób, lecz stylizowane streszczenia częstych obserwacji — zawsze potwierdź stan funkcji na świeżym koncie trial i swoim zestawie dokumentów.
         </p>
 
@@ -257,7 +257,7 @@ export default function WfirmaPage() {
           eyebrow="Mobile vs desktop"
           title="Mobile-first vs desktop-first w erze KSeF"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             KSeF 2.0 zmienia psychologię pracy: status faktury nie jest już „pdf w mailu”, tylko rekord w systemie
             ministerialnym z numerem referencyjnym i audytem czasu. Oznacza to, że przedsiębiorca potrzebuje
@@ -281,9 +281,9 @@ export default function WfirmaPage() {
           </p>
         </section>
 
-        <div className="mb-6 mt-16 flex items-baseline gap-4 border-b border-zinc-200 pb-4">
+        <div className="mb-6 mt-16 flex items-baseline gap-4 border-b border-white/10 pb-4">
           <span className="editorial-section-num text-3xl">04.</span>
-          <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+          <span className="text-[10px] uppercase tracking-[0.25em] text-[var(--marketing-muted)]">
             Tabela porównawcza
           </span>
         </div>
@@ -299,7 +299,7 @@ export default function WfirmaPage() {
           eyebrow="Pricing breakdown"
           title="Gdzie rośnie koszt przy większej skali"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             wFirma stosuje klasyczny model pakietów zależnych od liczby dokumentów, użytkowników i modułów kadrowych — to uczciwe przy biurze obsługującym wiele spółek, ale bywa mniej przewidywalne dla JDG, która eksploduje liczbą kosztów w jednym kwartale (remont, import sprzętu, delegacje). Przy porównaniu zawsze policz: ile kosztuje dopięcie modułu, którego potrzebujesz tylko przez 3 miesiące, oraz czy OCR jest limitowany licznikami.
           </p>
@@ -319,7 +319,7 @@ export default function WfirmaPage() {
                 </span>
                 <div className="col-span-11">
                   <p className="font-editorial text-base font-medium">{item.k}</p>
-                  <p className="mt-1 text-sm text-zinc-600">
+                  <p className="mt-1 text-sm text-[var(--marketing-muted)]">
                     {item.v}
                   </p>
                 </div>
@@ -372,7 +372,7 @@ export default function WfirmaPage() {
               </span>
               <div className="col-span-11">
                 <p className="font-editorial text-base font-medium">{step.k}</p>
-                <p className="mt-1 text-sm text-zinc-600">
+                <p className="mt-1 text-sm text-[var(--marketing-muted)]">
                   {step.v}
                 </p>
               </div>
@@ -385,7 +385,7 @@ export default function WfirmaPage() {
           eyebrow="SEO + E-E-A-T"
           title="Długa fala wokół „wFirma vs …”"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             Zapytania porównawcze mają to do siebie, że użytkownik już zna oba brandy i szuka argumentów &bdquo;czy warto przesiadać się teraz, czy po lutym 2026&rdquo;. Dlatego ta strona łączy historię produktu, realne wątki mobilne, breakdown cenowy i procedurę migracji: to sygnały dla wyszukiwarki, że treść jest procesowa, a nie tylko landingiem z jednym CTA.
           </p>

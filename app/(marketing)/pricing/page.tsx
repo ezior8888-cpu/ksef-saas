@@ -101,8 +101,8 @@ export default function PricingPage() {
   return (
     <article>
       {/* Date strip */}
-      <div className="border-b border-zinc-200">
-        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-3 px-6 py-3 text-[10px] uppercase tracking-[0.25em] text-zinc-500 lg:px-8">
+      <div className="border-b border-white/10">
+        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-3 px-6 py-3 text-[10px] uppercase tracking-[0.25em] text-[var(--marketing-muted)] lg:px-8">
           <span>Wydanie I · Cennik</span>
           <span>Jeden plan, bez tierów</span>
           <span className="font-editorial text-base italic">Nº 03</span>
@@ -115,11 +115,11 @@ export default function PricingPage() {
           <p className="editorial-section-num mb-6 text-sm">— Cennik</p>
           <h1 className="font-editorial text-[clamp(2.5rem,6vw,5.5rem)] font-medium leading-[0.95] tracking-[-0.02em]">
             Jeden plan.{' '}
-            <span className="italic text-emerald-700">
+            <span className="italic text-[var(--marketing-accent)]">
               Wszystkie funkcje.
             </span>
           </h1>
-          <p className="mt-8 max-w-xl font-editorial text-2xl leading-snug text-zinc-600">
+          <p className="mt-8 max-w-xl font-editorial text-2xl leading-snug text-[var(--marketing-muted)]">
             Bez tierów. Bez &bdquo;premium&rdquo; toggle. Bez kart kredytowych
             żeby zacząć.
           </p>
@@ -127,20 +127,20 @@ export default function PricingPage() {
 
         {/* Price plate — asymetryczna, większa wersja niż w landingu */}
         <div className="mb-20 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] lg:gap-16">
-          <div className="border-2 border-emerald-500/40 bg-zinc-50 p-10">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+          <div className="border-2 border-emerald-500/40 bg-white/[0.03] p-10">
+            <p className="text-[10px] uppercase tracking-[0.25em] text-[var(--marketing-muted)]">
               Plan podstawowy
             </p>
             <p className="mt-6 font-editorial text-[7rem] font-medium leading-[0.85]">
-              <span className="italic text-emerald-700">49 zł</span>
+              <span className="italic text-[var(--marketing-accent)]">49 zł</span>
             </p>
-            <p className="mt-2 font-editorial text-xl italic text-zinc-500">
+            <p className="mt-2 font-editorial text-xl italic text-[var(--marketing-muted)]">
               / miesiąc · płatne rocznie
             </p>
-            <p className="mt-4 text-sm text-zinc-600">
+            <p className="mt-4 text-sm text-[var(--marketing-muted)]">
               588 zł / rok · faktura VAT 23%
             </p>
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-1 text-xs text-[var(--marketing-muted)]">
               Lub 59 zł/mc miesięcznie (708 zł/rok)
             </p>
 
@@ -151,7 +151,7 @@ export default function PricingPage() {
               Wypróbuj 30 dni za darmo
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
-            <p className="mt-3 text-center text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+            <p className="mt-3 text-center text-[10px] uppercase tracking-[0.22em] text-[var(--marketing-muted)]">
               Bez karty kredytowej · Anuluj kiedy chcesz
             </p>
           </div>
@@ -180,28 +180,28 @@ export default function PricingPage() {
         </div>
 
         {/* Co dostajesz w 49 zł — hairline grid */}
-        <div className="mb-10 flex items-baseline gap-4 border-b border-zinc-200 pb-4">
+        <div className="mb-10 flex items-baseline gap-4 border-b border-white/10 pb-4">
           <span className="editorial-section-num text-3xl">02.</span>
-          <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+          <span className="text-[10px] uppercase tracking-[0.25em] text-[var(--marketing-muted)]">
             Co dostajesz w 49 zł
           </span>
         </div>
 
         <h2 className="mb-12 max-w-3xl font-editorial text-4xl font-medium leading-[1] tracking-[-0.02em] md:text-5xl">
           Osiem kategorii.{' '}
-          <span className="italic text-emerald-700">
+          <span className="italic text-[var(--marketing-accent)]">
             Wszystko od pierwszego dnia.
           </span>
         </h2>
 
-        <div className="grid grid-cols-1 gap-px border border-zinc-200 bg-zinc-100 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-px border border-white/10 bg-white/10 md:grid-cols-2">
           {FEATURES.map((cat, i) => (
             <div key={cat.category} className="bg-background p-8">
               <div className="mb-5 flex items-baseline justify-between">
                 <span className="editorial-section-num text-2xl">
                   {String(i + 1).padStart(2, '0')}.
                 </span>
-                <span className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+                <span className="text-[10px] uppercase tracking-[0.22em] text-[var(--marketing-muted)]">
                   Kategoria
                 </span>
               </div>
@@ -212,10 +212,10 @@ export default function PricingPage() {
                 {cat.items.map((item) => (
                   <li
                     key={item}
-                    className="flex items-baseline gap-3 text-sm text-zinc-600"
+                    className="flex items-baseline gap-3 text-sm text-[var(--marketing-muted)]"
                   >
                     <span
-                      className="font-editorial text-emerald-700"
+                      className="font-editorial text-[var(--marketing-accent)]"
                       aria-hidden
                     >
                       ✓
@@ -245,10 +245,10 @@ function Promise({
     <div className="flex items-baseline gap-5 border-b border-zinc-100 pb-6">
       <span className="editorial-section-num shrink-0 text-xs">{num}.</span>
       <div>
-        <p className="font-editorial text-3xl font-medium italic text-emerald-700">
+        <p className="font-editorial text-3xl font-medium italic text-[var(--marketing-accent)]">
           {value}
         </p>
-        <p className="mt-1 text-sm text-zinc-600">{label}</p>
+        <p className="mt-1 text-sm text-[var(--marketing-muted)]">{label}</p>
       </div>
     </div>
   );

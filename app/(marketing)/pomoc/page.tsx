@@ -30,7 +30,7 @@ export default function PomocPage() {
         <h1 className="font-editorial text-4xl font-semibold sm:text-5xl">
           Centrum pomocy
         </h1>
-        <p className="mt-3 text-zinc-500">
+        <p className="mt-3 text-[var(--marketing-muted)]">
           Poradniki krok po kroku. Nie znajdujesz odpowiedzi? Asystent AI w
           panelu odpowie w kilka sekund.
         </p>
@@ -47,14 +47,14 @@ export default function PomocPage() {
           return (
             <section key={cat.id}>
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[22px] text-zinc-500">
+                <span className="material-symbols-outlined text-[22px] text-[var(--marketing-muted)]">
                   {cat.icon}
                 </span>
                 <h2 className="font-editorial text-xl font-semibold">
                   {cat.label}
                 </h2>
               </div>
-              <p className="mt-1 text-sm text-zinc-500">
+              <p className="mt-1 text-sm text-[var(--marketing-muted)]">
                 {cat.description}
               </p>
               <ul className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -65,7 +65,7 @@ export default function PomocPage() {
                       className="block rounded-2xl border border-glass-border bg-glass-white p-4 backdrop-blur-glass transition-colors hover:bg-foreground/5"
                     >
                       <p className="text-sm font-medium">{a.title}</p>
-                      <p className="mt-1 line-clamp-2 text-xs text-zinc-500">
+                      <p className="mt-1 line-clamp-2 text-xs text-[var(--marketing-muted)]">
                         {a.summary}
                       </p>
                     </Link>
@@ -77,7 +77,7 @@ export default function PomocPage() {
         })}
 
         {articles.length === 0 && (
-          <p className="text-center text-sm text-zinc-500">
+          <p className="text-center text-sm text-[var(--marketing-muted)]">
             Artykuły pomocy są w przygotowaniu.
           </p>
         )}
@@ -87,7 +87,7 @@ export default function PomocPage() {
         <h2 className="font-editorial text-xl font-semibold">
           Nie znalazłeś odpowiedzi?
         </h2>
-        <p className="mt-2 text-sm text-zinc-500">
+        <p className="mt-2 text-sm text-[var(--marketing-muted)]">
           Zaloguj się i kliknij ikonę pomocy w prawym dolnym rogu panelu —
           asystent AI zna całą dokumentację FaktFlow.
         </p>

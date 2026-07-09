@@ -169,7 +169,7 @@ export default function IfirmaPage() {
       />
 
       <VsTldr>
-        <span className="font-editorial font-medium text-zinc-900">
+        <span className="font-editorial font-medium text-[var(--marketing-text)]">
           iFirma
         </span>{' '}
         to jedna z najstarszych marek fakturowych w Polsce — stabilna,
@@ -181,7 +181,7 @@ export default function IfirmaPage() {
         <strong className="font-semibold">brak sensownych pushy</strong> w
         modelu web-first, co oznacza, że status KSeF odkrywasz dopiero po
         wejściu na skrzynkę mailową.{' '}
-        <span className="font-editorial font-medium italic text-emerald-700">
+        <span className="font-editorial font-medium italic text-[var(--marketing-accent)]">
           FaktFlow
         </span>{' '}
         stawia na świeży UI, PWA z pushami i flow zaprojektowany pod KSeF 2.0
@@ -195,7 +195,7 @@ export default function IfirmaPage() {
           eyebrow="Historia"
           title="Krótka historia iFirma i hosting"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             iFirma funkcjonuje na rynku od lat — przez dekadę zdążyła przejść przez wiele iteracji funkcjonalnych i
             integracji z polskimi systemami bankowymi. To ogromna zaleta dla użytkowników, którzy cenią
@@ -233,18 +233,18 @@ export default function IfirmaPage() {
               key={o.meta}
               className="border-t-2 border-emerald-500/40 pt-6"
             >
-              <blockquote className="font-editorial text-lg italic leading-snug text-zinc-600">
-                <span className="mr-1 font-editorial text-3xl leading-none text-emerald-700">&bdquo;</span>
+              <blockquote className="font-editorial text-lg italic leading-snug text-[var(--marketing-muted)]">
+                <span className="mr-1 font-editorial text-3xl leading-none text-[var(--marketing-accent)]">&bdquo;</span>
                 {o.q}
-                <span className="ml-0.5 font-editorial text-2xl leading-none text-emerald-700">&rdquo;</span>
+                <span className="ml-0.5 font-editorial text-2xl leading-none text-[var(--marketing-accent)]">&rdquo;</span>
               </blockquote>
-              <figcaption className="mt-4 text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+              <figcaption className="mt-4 text-[10px] uppercase tracking-[0.22em] text-[var(--marketing-muted)]">
                 {o.meta}
               </figcaption>
             </figure>
           ))}
         </div>
-        <p className="mt-8 font-editorial text-sm italic leading-relaxed text-zinc-500">
+        <p className="mt-8 font-editorial text-sm italic leading-relaxed text-[var(--marketing-muted)]">
           Cytaty są stylizowane i nie identyfikują konkretnych osób — traktuj je jako ilustrację typowych frustracji UX / powiadomień, a nie jako ocenę sądową produktu konkurenta.
         </p>
 
@@ -253,7 +253,7 @@ export default function IfirmaPage() {
           eyebrow="UX + push"
           title="Dlaczego UI i push mają znaczenie przy KSeF"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             Interfejs to nie kwestia „ładnych ikonek”, tylko koszt błędu ludzkiego: im więcej kroków i rozproszenia
             uwagi, tym wyższe ryzyko pomyłki NIP, stawki VAT lub numeru faktury zaliczkowej. Przy KSeF 2.0 błąd
@@ -275,9 +275,9 @@ export default function IfirmaPage() {
           </p>
         </section>
 
-        <div className="mb-6 mt-16 flex items-baseline gap-4 border-b border-zinc-200 pb-4">
+        <div className="mb-6 mt-16 flex items-baseline gap-4 border-b border-white/10 pb-4">
           <span className="editorial-section-num text-3xl">04.</span>
-          <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+          <span className="text-[10px] uppercase tracking-[0.25em] text-[var(--marketing-muted)]">
             Tabela porównawcza
           </span>
         </div>
@@ -293,7 +293,7 @@ export default function IfirmaPage() {
           eyebrow="Pricing breakdown"
           title="Moduły vs jeden pakiet"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             iFirma tradycyjnie sprzedaje szeroki zestaw funkcji w modelu modułowym — to pozwala dopasować ofertę do biura rachunkowego, ale bywa mniej przejrzyste dla JDG, która chce po prostu KSeF + OCR + KPiR w jednym pakiecie. Przy porównaniu zawsze rozłóż cennik na: abonament bazowy, limity dokumentów, moduły kadrowe, integracje premium oraz ewentualne opłaty za szkolenie użytkowników.
           </p>
@@ -313,7 +313,7 @@ export default function IfirmaPage() {
                 </span>
                 <div className="col-span-11">
                   <p className="font-editorial text-base font-medium">{item.k}</p>
-                  <p className="mt-1 text-sm text-zinc-600">
+                  <p className="mt-1 text-sm text-[var(--marketing-muted)]">
                     {item.v}
                   </p>
                 </div>
@@ -366,7 +366,7 @@ export default function IfirmaPage() {
               </span>
               <div className="col-span-11">
                 <p className="font-editorial text-base font-medium">{step.k}</p>
-                <p className="mt-1 text-sm text-zinc-600">
+                <p className="mt-1 text-sm text-[var(--marketing-muted)]">
                   {step.v}
                 </p>
               </div>
@@ -379,7 +379,7 @@ export default function IfirmaPage() {
           eyebrow="SEO + E-E-A-T"
           title="Topical authority wokół „iFirma vs …”"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             Strony porównawcze rankują lepiej, gdy łączą tabelę funkcji z narracją ekspercką: historia produktu, hosting, cennik, migracja, cytaty użytkowników i sekcję o ryzyku operacyjnym. Dzięki temu wyszukiwarka widzi nie tylko listę checkboxów, ale kontekst decyzyjny mikrofirmy — czyli dokładnie to, czego szuka użytkownik wpisując długie zapytanie z nazwą konkurenta.
           </p>

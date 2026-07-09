@@ -175,7 +175,7 @@ export default function InfaktPage() {
       />
 
       <VsTldr>
-        <span className="font-editorial font-medium text-zinc-900">
+        <span className="font-editorial font-medium text-[var(--marketing-text)]">
           inFakt
         </span>{' '}
         to dojrzały program online z szeroką bazą użytkowników i sensowną
@@ -186,7 +186,7 @@ export default function InfaktPage() {
         na trudnych PDF-ach oraz{' '}
         <strong className="font-semibold">drogiego stacku</strong>, gdzie
         &bdquo;pełna moc&rdquo; siedzi w wyższych pakietach i dodatkach.{' '}
-        <span className="font-editorial font-medium italic text-emerald-700">
+        <span className="font-editorial font-medium italic text-[var(--marketing-accent)]">
           FaktFlow
         </span>{' '}
         stawia na jedną, przewidywalną stawkę, OCR inspirowany pracą w terenie
@@ -200,7 +200,7 @@ export default function InfaktPage() {
           eyebrow="Historia"
           title="Krótka historia inFakt i model hostingu"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             inFakt zbudował pozycję na polskim rynku SaaS księgowym jeszcze w erze, gdy KSeF był raczej obietnicą legislacyjną niż codziennym obowiązkiem. Produkt wyrosł z prostego fakturowania online, stopniowo rozszerzany o rozliczenia ZUS, magazyn czy współpracę z biurem rachunkowym. To doświadczenie widać po stronie stabilności biznesowej i rozpoznawalności marki — dla wielu księgowych &bdquo;inFakt&rdquo; to domyślny punkt odniesienia przy onboardingu klienta.
           </p>
@@ -236,22 +236,22 @@ export default function InfaktPage() {
               key={o.meta}
               className="border-t-2 border-emerald-500/40 pt-6"
             >
-              <blockquote className="font-editorial text-lg italic leading-snug text-zinc-600">
-                <span className="mr-1 font-editorial text-3xl leading-none text-emerald-700">
+              <blockquote className="font-editorial text-lg italic leading-snug text-[var(--marketing-muted)]">
+                <span className="mr-1 font-editorial text-3xl leading-none text-[var(--marketing-accent)]">
                   &bdquo;
                 </span>
                 {o.q}
-                <span className="ml-0.5 font-editorial text-2xl leading-none text-emerald-700">
+                <span className="ml-0.5 font-editorial text-2xl leading-none text-[var(--marketing-accent)]">
                   &rdquo;
                 </span>
               </blockquote>
-              <figcaption className="mt-4 text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+              <figcaption className="mt-4 text-[10px] uppercase tracking-[0.22em] text-[var(--marketing-muted)]">
                 {o.meta}
               </figcaption>
             </figure>
           ))}
         </div>
-        <p className="mt-8 font-editorial text-sm italic leading-relaxed text-zinc-500">
+        <p className="mt-8 font-editorial text-sm italic leading-relaxed text-[var(--marketing-muted)]">
           Powyższe cytaty są stylizowanymi skrótami typowych wątków z publicznych dyskusji — nie cytują konkretnej osoby ani nie są gwarancją aktualnego stanu produktu konkurenta. Zawsze zweryfikuj funkcje na własnym koncie trial przed decyzją migracyjną.
         </p>
 
@@ -260,7 +260,7 @@ export default function InfaktPage() {
           eyebrow="Hard requirement"
           title="Dlaczego gross invoices i OCR to dziś nie opcja"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             Gross invoices — czyli dokumenty kosztowe w cenach brutto, często z paragonów albo z importu zagranicznego — nie są ciekawostką dla jednej branży. To codzienność usług remontowych, transportu, gastronomii i freelancingu B2B, gdzie kontrahent wystawia brutto, a Ty musisz rozłożyć VAT i koszt bez błędu. Jeśli system nie prowadzi Cię przez ten flow jak przez checklistę KSeF, tracisz czas na korekty i podwójne wpisy w KPiR.
           </p>
@@ -272,9 +272,9 @@ export default function InfaktPage() {
           </p>
         </section>
 
-        <div className="mb-6 mt-16 flex items-baseline gap-4 border-b border-zinc-200 pb-4">
+        <div className="mb-6 mt-16 flex items-baseline gap-4 border-b border-white/10 pb-4">
           <span className="editorial-section-num text-3xl">04.</span>
-          <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+          <span className="text-[10px] uppercase tracking-[0.25em] text-[var(--marketing-muted)]">
             Tabela porównawcza
           </span>
         </div>
@@ -290,7 +290,7 @@ export default function InfaktPage() {
           eyebrow="Pricing breakdown"
           title="Co zwykle jest w bazie, a co „dopłata”"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             Poniższy podział ma charakter edukacyjny i opiera się na typowym schemacie &bdquo;pakiet + moduły&rdquo;, który wielokrotnie widzimy u polskich SaaS księgowych — nie jest prawnym opisem cennika konkurenta. Zanim podejmiesz decyzję, pobierz aktualny cennik inFakt i porównaj limity (liczba firm, użytkowników, dokumentów, integracji) linia po linii.
           </p>
@@ -310,7 +310,7 @@ export default function InfaktPage() {
                 </span>
                 <div className="col-span-11">
                   <p className="font-editorial text-base font-medium">{item.k}</p>
-                  <p className="mt-1 text-sm text-zinc-600">
+                  <p className="mt-1 text-sm text-[var(--marketing-muted)]">
                     {item.v}
                   </p>
                 </div>
@@ -363,14 +363,14 @@ export default function InfaktPage() {
               </span>
               <div className="col-span-11">
                 <p className="font-editorial text-base font-medium">{step.k}</p>
-                <p className="mt-1 text-sm text-zinc-600">
+                <p className="mt-1 text-sm text-[var(--marketing-muted)]">
                   {step.v}
                 </p>
               </div>
             </li>
           ))}
         </ol>
-        <p className="mt-6 font-editorial text-sm italic leading-relaxed text-zinc-500">
+        <p className="mt-6 font-editorial text-sm italic leading-relaxed text-[var(--marketing-muted)]">
           Jeśli potrzebujesz checklisty PDF lub wsparcia przy imporcie wielofirmowym, zostaw zgłoszenie na support@ksef-saas.pl — dopasujemy scenariusz do Twojej skali.
         </p>
 
@@ -379,7 +379,7 @@ export default function InfaktPage() {
           eyebrow="SEO + E-E-A-T"
           title="Słowa kluczowe i intencja wyszukiwania"
         />
-        <section className="space-y-5 leading-relaxed text-zinc-600">
+        <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
             Użytkownicy szukający &bdquo;inFakt vs &hellip;&rdquo;, &bdquo;inFakt KSeF 2.0&rdquo;, &bdquo;inFakt OCR cena&rdquo; mają wysoką intencję migracyjną — ale też wysokie oczekiwanie merytoryczne. Dlatego ta strona celowo miesza twardą tabelę funkcji z narracją o TCO, gross invoices i limitach OCR: to są sygnały jakościowe, które Google coraz częściej wiąże z E-E-A-T (doświadczenie, ekspertyza, autorytet, wiarygodność). Nie obiecujemy magii — pokazujemy, które decyzje produktowe realnie wpływają na Twój dzień pracy.
           </p>
