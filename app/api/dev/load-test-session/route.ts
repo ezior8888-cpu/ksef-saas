@@ -2,15 +2,20 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-import { isProductionDeploy } from '@/lib/security/turnstile';
+import { isBypassAllowedEnv } from '@/lib/security/environment';
 
 /**
  * Bootstrap sesji dla k6 (Faza 34).
- * Tylko LOAD_TEST_MODE=true i nie produkcja — ustawia cookies Supabase SSR
- * tak jak prawdziwe logowanie, bez Turnstile i bez Server Action.
+ * Tylko LOAD_TEST_MODE=true i środowisko POZYTYWNIE nie-produkcyjne (SEC-1,
+ * fail-closed) — ustawia cookies Supabase SSR jak prawdziwe logowanie, bez
+ * Turnstile i bez Server Action.
+ *
+ * UWAGA: to auth-bypass. `isBypassAllowedEnv()` jest fail-closed — brak
+ * jednoznacznego markera środowiska nie-produkcyjnego = traktujemy jak
+ * produkcję = 404.
  */
 function isLoadTestSessionRouteEnabled(): boolean {
-  if (isProductionDeploy()) return false;
+  if (!isBypassAllowedEnv()) return false;
   return process.env.LOAD_TEST_MODE === 'true';
 }
 

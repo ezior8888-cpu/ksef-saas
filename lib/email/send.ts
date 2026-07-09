@@ -12,6 +12,7 @@
  * renderowane przez `@react-email/render` do stringa HTML.
  */
 import { render } from '@react-email/render';
+import { logger } from '@/lib/observability/logger';
 import { Resend } from 'resend';
 
 import AccountDeletionConfirmation from './templates/AccountDeletionConfirmation';
@@ -193,7 +194,7 @@ export async function sendInvoiceAcceptedEmail(
   payload: InvoiceAcceptedPayload,
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
-    console.log(
+    logger.debug(
       `[email:stub] sendInvoiceAcceptedEmail → ${email}:`,
       `faktura ${payload.invoiceId} zaakceptowana. Nr KSeF: ${payload.ksefNumber}`,
     );
@@ -214,7 +215,7 @@ export async function sendInvoiceFailedEmail(
   payload: InvoiceFailedPayload,
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
-    console.log(
+    logger.debug(
       `[email:stub] sendInvoiceFailedEmail → ${email}:`,
       `faktura ${payload.invoiceId} ODRZUCONA. Błąd: ${payload.errorMessage}`,
     );
@@ -244,7 +245,7 @@ export async function sendEmail(opts: {
   userId?: string;
 }): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
-    console.log(`[email:stub] sendEmail → ${opts.to}: ${opts.subject}`);
+    logger.debug(`[email:stub] sendEmail → ${opts.to}: ${opts.subject}`);
     return { sent: false, reason: 'not-configured' };
   }
   return sendViaResend(opts);
@@ -255,7 +256,7 @@ export async function sendCertExpiryAlert(
   payload: CertExpiryPayload,
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
-    console.log(
+    logger.debug(
       `[email:stub] sendCertExpiryAlert → ${email}:`,
       `certyfikat KSeF dla '${payload.tenantName}' wygasa za ${payload.daysRemaining} dni (${payload.expiryDate ?? 'brak daty'})`,
     );
@@ -294,7 +295,7 @@ export async function sendTrialEndingEmail(
   payload: TrialEndingPayload,
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
-    console.log(
+    logger.debug(
       `[email:stub] sendTrialEndingEmail → ${email}: trial kończy się za ${payload.daysRemaining} dni`,
     );
     return { sent: false, reason: 'not-configured' };
@@ -323,7 +324,7 @@ export async function sendPaymentFailedEmail(
   payload: PaymentFailedPayload,
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
-    console.log(
+    logger.debug(
       `[email:stub] sendPaymentFailedEmail → ${email}: ${payload.amountLabel} (${payload.failureReason ?? 'unknown'})`,
     );
     return { sent: false, reason: 'not-configured' };
@@ -347,7 +348,7 @@ export async function sendRefundIssuedEmail(
   payload: RefundIssuedPayload,
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
-    console.log(
+    logger.debug(
       `[email:stub] sendRefundIssuedEmail → ${email}: ${payload.amountLabel}`,
     );
     return { sent: false, reason: 'not-configured' };
@@ -379,7 +380,7 @@ export async function sendMagicImportCompletedEmail(
   payload: MagicImportCompletedPayload,
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
-    console.log(
+    logger.debug(
       `[email:stub] sendMagicImportCompletedEmail → ${email}: ${payload.invoicesImported} faktur, ${payload.contractorsImported} kontrahentów`,
     );
     return { sent: false, reason: 'not-configured' };
@@ -407,7 +408,7 @@ export async function sendAccountDeletionConfirmationEmail(
   payload: AccountDeletionConfirmationPayload,
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
-    console.log(
+    logger.debug(
       `[email:stub] sendAccountDeletionConfirmationEmail → ${email}: hard delete ${payload.hardDeleteDate}`,
     );
     return { sent: false, reason: 'not-configured' };
@@ -437,7 +438,7 @@ export async function sendGdprDeletionScheduledEmail(
   payload: GdprDeletionScheduledPayload,
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
-    console.log(
+    logger.debug(
       `[email:stub] sendGdprDeletionScheduledEmail → ${payload.userEmail}: ${payload.cancelUrl}`,
     );
     return { sent: false, reason: 'not-configured' };
@@ -474,7 +475,7 @@ export async function sendInvoiceEmail(
   payload: InvoiceEmailPayload,
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
-    console.log(
+    logger.debug(
       `[email:stub] sendInvoiceEmail → ${payload.to}: faktura ${payload.invoiceNumber}`,
     );
     return { sent: false, reason: 'not-configured' };

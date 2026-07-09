@@ -2,6 +2,11 @@ import 'server-only';
 
 import { headers } from 'next/headers';
 
+import { isBypassAllowedEnv, isProductionDeploy } from './environment';
+
+// Re-export dla kompatybilności wstecznej (inne moduły importują z turnstile).
+export { isProductionDeploy };
+
 /**
  * Cloudflare Turnstile — bot protection alternatywa do reCAPTCHA / hCaptcha.
  *
@@ -37,26 +42,17 @@ export interface TurnstileVerifyResult {
 /** Nagłówek dla botów load-test (tylko gdy `LOAD_TEST_MODE=true`, nie prod). */
 export const TURNSTILE_BYPASS_HEADER = 'x-turnstile-bypass';
 
-/**
- * Środowisko produkcyjne — bypass Turnstile jest tu zawsze wyłączony.
- */
-export function isProductionDeploy(): boolean {
-  if (process.env.VERCEL_ENV === 'production') return true;
-  if (process.env.NEXT_PUBLIC_APP_ENV === 'production') return true;
-  return false;
-}
-
 function isLoadTestModeEnabled(): boolean {
   return process.env.LOAD_TEST_MODE === 'true';
 }
 
 /**
  * Bypass Turnstile dla testów obciążeniowych (Faza 28).
- * Wymaga: `LOAD_TEST_MODE=true` + nagłówek `x-turnstile-bypass` (niepusty).
- * NIGDY nie zwraca true na produkcji (`VERCEL_ENV` / `NEXT_PUBLIC_APP_ENV`).
+ * Wymaga: `LOAD_TEST_MODE=true` + nagłówek `x-turnstile-bypass` (niepusty)
+ * + środowisko POZYTYWNIE potwierdzone jako nie-produkcyjne (SEC-1, fail-closed).
  */
 export async function isTurnstileBypassActive(): Promise<boolean> {
-  if (isProductionDeploy()) return false;
+  if (!isBypassAllowedEnv()) return false;
   if (!isLoadTestModeEnabled()) return false;
 
   const h = await headers();
