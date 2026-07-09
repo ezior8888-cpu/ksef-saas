@@ -217,7 +217,7 @@ export function CoPilotSettingsForm({
         </p>
       </div>
 
-      <section className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8">
+      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-lg font-display font-semibold tracking-tighter-text">
@@ -239,7 +239,7 @@ export function CoPilotSettingsForm({
         </div>
       </section>
 
-      <section className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-5">
         <div>
           <h3 className="text-lg font-display font-semibold tracking-tighter-text">
             Dane księgowego
@@ -298,7 +298,7 @@ export function CoPilotSettingsForm({
         </div>
       </section>
 
-      <section className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-5">
         <div>
           <h3 className="text-lg font-display font-semibold tracking-tighter-text">
             Formaty plików
@@ -318,7 +318,7 @@ export function CoPilotSettingsForm({
               className={`text-left rounded-2xl border p-4 transition-all duration-200 ease-apple active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${
                 settings.preferred_formats.includes(opt.value)
                   ? 'bg-foreground/5 border-foreground/30'
-                  : 'bg-glass-white border-glass-border hover:bg-glass-white-strong'
+                  : 'bg-[var(--ff-surface-container-low)] border-[var(--ff-glass-border)] hover:bg-[var(--ff-surface-hover)]'
               }`}
             >
               <div className="flex items-start gap-3">
@@ -338,7 +338,7 @@ export function CoPilotSettingsForm({
         </div>
       </section>
 
-      <section className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-5">
+      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-5">
         <div>
           <h3 className="text-lg font-display font-semibold tracking-tighter-text">
             Harmonogram
@@ -378,7 +378,7 @@ export function CoPilotSettingsForm({
         </div>
       </section>
 
-      <section className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-4">
+      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-4">
         <div>
           <h3 className="text-lg font-display font-semibold tracking-tighter-text">
             Co dołączać do paczki
@@ -414,7 +414,7 @@ export function CoPilotSettingsForm({
         />
       </section>
 
-      <section className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-4">
+      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-4">
         <div>
           <h3 className="text-lg font-display font-semibold tracking-tighter-text">
             Kopia do innych
@@ -433,7 +433,7 @@ export function CoPilotSettingsForm({
       </section>
 
       {recentJobs.length > 0 ? (
-        <section className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8 space-y-4">
+        <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-4">
           <div>
             <h3 className="text-lg font-display font-semibold tracking-tighter-text">
               Ostatnie paczki
@@ -451,7 +451,7 @@ export function CoPilotSettingsForm({
         </section>
       ) : null}
 
-      <div className="fixed bottom-0 left-0 right-0 lg:left-[280px] z-30 px-6 py-4 bg-glass-white-strong backdrop-blur-glass-lg border-t border-glass-border">
+      <div className="fixed bottom-0 left-0 right-0 lg:left-[280px] z-30 px-6 py-4 bg-[var(--ff-surface-container-low)]  border-t border-[var(--ff-glass-border)]">
         <div className="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-3">
           <Button
             variant="glass"
@@ -622,7 +622,7 @@ function CcEmailsInput({
           {emails.map((email) => (
             <span
               key={email}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-foreground/5 border border-glass-border"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-foreground/5 border border-[var(--ff-glass-border)]"
             >
               <Mail className="h-3 w-3 shrink-0" aria-hidden />
               {email}
@@ -662,11 +662,11 @@ function RecentJobRow({ job }: { job: ExportJobPreviewRow }) {
     },
     pending: {
       label: 'Oczekuje',
-      className: 'bg-foreground/5 text-muted-foreground border-glass-border',
+      className: 'bg-foreground/5 text-muted-foreground border-[var(--ff-glass-border)]',
     },
     expired: {
       label: 'Wygasłe',
-      className: 'bg-foreground/5 text-muted-foreground border-glass-border',
+      className: 'bg-foreground/5 text-muted-foreground border-[var(--ff-glass-border)]',
     },
   } as const;
 
@@ -674,7 +674,7 @@ function RecentJobRow({ job }: { job: ExportJobPreviewRow }) {
     statusDefaults[job.status as keyof typeof statusDefaults] ??
     ({
       label: job.status,
-      className: 'bg-foreground/5 text-muted-foreground border-glass-border',
+      className: 'bg-foreground/5 text-muted-foreground border-[var(--ff-glass-border)]',
     } as const);
 
   const formatLabel =
@@ -687,7 +687,7 @@ function RecentJobRow({ job }: { job: ExportJobPreviewRow }) {
     : null;
 
   return (
-    <div className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-foreground/2 border border-glass-border/50">
+    <div className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-foreground/2 border border-[var(--ff-glass-border)]/50">
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="h-9 w-9 rounded-xl bg-foreground/5 flex items-center justify-center shrink-0">
           <FileText className="h-4 w-4 text-muted-foreground" aria-hidden />

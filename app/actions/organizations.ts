@@ -328,6 +328,193 @@ export async function createOrganizationAction(
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Skip NIP (BUG-007): wejście do apki bez rejestrowania NIP-u
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * „Pomiń NIP" w onboardingu — tworzy organizację-szkic („Moja firma",
+ * nip = '') i wpuszcza usera do dashboardu na pełny podgląd aplikacji.
+ *
+ * Dlaczego organizacja-szkic zamiast „user bez organizacji": cały dashboard
+ * (RLS, active-org cookie, `assertDashboardShellAccess`) wymaga tenanta.
+ * Pusty NIP działa jako sentinel „NIP nieuzupełniony":
+ *  - `uploadCertificateAction` odmawia przy pustym NIP (guard `if (!nip)`),
+ *  - `/settings/ksef` pokazuje formularz uzupełnienia NIP zamiast uploadu,
+ *  - po uzupełnieniu (`completeCompanyNipAction`) org staje się pełnoprawna.
+ *
+ * Idempotentne: ponowne kliknięcie „Pomiń" NIE tworzy drugiego szkicu —
+ * ustawia cookie na istniejący szkic usera i przechodzi do dashboardu.
+ * W razie sukcesu nie returnsuje (NEXT_REDIRECT).
+ */
+export async function skipOnboardingWithoutNipAction(): Promise<ActionFail> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { success: false, error: 'Niezalogowany' };
+  }
+
+  const admin = createAdminClient();
+
+  // Czy user ma już organizację-szkic (nip = '')? → reuse zamiast duplikatu.
+  const { data: existing } = await admin
+    .from('memberships')
+    .select('organization_id, tenants:organization_id(nip)')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .limit(50);
+
+  const draft = (existing ?? []).find((m) => {
+    const t = Array.isArray(m.tenants) ? m.tenants[0] : m.tenants;
+    return t !== null && typeof t === 'object' && 'nip' in t && t.nip === '';
+  });
+
+  let orgId: string;
+
+  if (draft) {
+    orgId = draft.organization_id;
+  } else {
+    const created = await insertOrganizationAsOwner({
+      admin,
+      userId: user.id,
+      name: 'Moja firma',
+      nip: '',
+      addressJson: { countryCode: 'PL', addressLine1: '', addressLine2: '' },
+    });
+    if (!created.ok) {
+      return {
+        success: false,
+        error: `Błąd tworzenia organizacji: ${created.message}`,
+      };
+    }
+    orgId = created.organizationId;
+
+    await logAudit({
+      action: 'tenant.created',
+      tenantId: orgId,
+      userId: user.id,
+      metadata: { skipped_nip: true, name: 'Moja firma' },
+    });
+  }
+
+  await setActiveOrgCookie(orgId);
+  redirect('/dashboard');
+}
+
+/**
+ * Uzupełnienie NIP-u organizacji-szkicu (druga połowa BUG-007).
+ *
+ * UPDATE tenants ograniczony warunkiem `nip = ''` — nie da się tą akcją
+ * podmienić NIP-u pełnoprawnej (tym bardziej zweryfikowanej w KSeF)
+ * organizacji. Wymaga roli owner w aktywnej organizacji.
+ */
+export async function completeCompanyNipAction(
+  company: OrganizationCompanyInput,
+): Promise<ActionOk | ActionFail> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Niezalogowany' };
+
+  const cookieStore = await cookies();
+  const orgId = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
+  if (!isUuid(orgId)) {
+    return { success: false, error: 'Brak aktywnej organizacji' };
+  }
+
+  if (!/^\d{10}$/.test(company.nip)) {
+    return { success: false, error: 'NIP musi zawierać 10 cyfr' };
+  }
+  if (!company.name?.trim()) {
+    return { success: false, error: 'Nazwa firmy wymagana' };
+  }
+
+  const admin = createAdminClient();
+
+  const { data: membership } = await admin
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (!membership || membership.role !== 'owner') {
+    return {
+      success: false,
+      error: 'Tylko właściciel organizacji może uzupełnić NIP',
+    };
+  }
+
+  const addressLine1 = `${company.street} ${company.buildingNumber}${
+    company.localNumber ? '/' + company.localNumber : ''
+  }`.trim();
+  const addressJson: OrganizationAddressJson = {
+    countryCode: 'PL',
+    addressLine1,
+    addressLine2: `${company.postalCode} ${company.city}`,
+  };
+
+  const { data: updated, error: updErr } = await admin
+    .from('tenants')
+    .update({
+      name: company.name,
+      nip: company.nip,
+      address_json: addressJson,
+    })
+    .eq('id', orgId)
+    .eq('nip', '') // tylko szkic — nigdy podmiana NIP-u istniejącej firmy
+    .select('id')
+    .maybeSingle();
+
+  if (updErr) {
+    return { success: false, error: formatTenantInsertError(updErr) };
+  }
+  if (!updated) {
+    return {
+      success: false,
+      error:
+        'Ta organizacja ma już przypisany NIP — nie można go nadpisać tą akcją.',
+    };
+  }
+
+  await logAudit({
+    action: 'tenant.updated',
+    tenantId: orgId,
+    userId: user.id,
+    metadata: { nip_completed: true, nip: company.nip, name: company.name },
+  });
+
+  // Eager Stripe customer — jak w createOrganizationAction (fail-soft).
+  if (user.email) {
+    try {
+      const { ensureStripeCustomer } = await import('@/lib/stripe/customer');
+      const { isStripeConfigured } = await import('@/lib/stripe/client');
+      if (isStripeConfigured()) {
+        await ensureStripeCustomer({
+          tenantId: orgId,
+          email: user.email,
+          name: company.name,
+          nip: company.nip,
+        });
+      }
+    } catch (e) {
+      const Sentry = await import('@sentry/nextjs');
+      Sentry.captureException(e, {
+        tags: { area: 'settings.complete-nip.stripe-customer' },
+        extra: { tenantId: orgId },
+      });
+    }
+  }
+
+  revalidatePath('/settings/ksef');
+  revalidatePath('/', 'layout');
+  return { success: true };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Invitations
 // ═══════════════════════════════════════════════════════════════
 

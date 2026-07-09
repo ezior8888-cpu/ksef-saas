@@ -17,6 +17,7 @@ import {
 import {
   acceptInvitationAction,
   requestJoinAction,
+  skipOnboardingWithoutNipAction,
 } from '@/app/actions/organizations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -117,6 +118,18 @@ function CreateOrgPanel() {
   const [info, setInfo] = useState<string | null>(null);
   const [isSearching, startSearching] = useTransition();
   const [isSubmitting, startSubmitting] = useTransition();
+  const [isSkipping, startSkipping] = useTransition();
+
+  const handleSkip = () => {
+    setError(null);
+    startSkipping(async () => {
+      // Po sukcesie akcja robi server-side redirect → /dashboard (nie returnsuje).
+      const result = await skipOnboardingWithoutNipAction();
+      if (!result.success) {
+        setError(result.error);
+      }
+    });
+  };
 
   const handleLookup = () => {
     setError(null);
@@ -293,6 +306,34 @@ function CreateOrgPanel() {
           >
             ← Wpisz inny NIP
           </button>
+        </div>
+      )}
+
+      {/* BUG-007: wejście do aplikacji bez NIP-u — organizacja-szkic.
+          Widoczne dopóki user nie potwierdził firmy z GUS. */}
+      {!company && (
+        <div className="border-t border-glass-border pt-5 text-center">
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={handleSkip}
+            disabled={isSkipping || isSearching}
+          >
+            {isSkipping ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Otwieram aplikację...
+              </>
+            ) : (
+              'Pomiń — uzupełnię NIP później'
+            )}
+          </Button>
+          <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+            Zobaczysz całą aplikację od środka. Wgranie certyfikatu KSeF
+            i&nbsp;wysyłka faktur będą możliwe dopiero po uzupełnieniu NIP-u
+            w&nbsp;Ustawieniach.
+          </p>
         </div>
       )}
     </div>

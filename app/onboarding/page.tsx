@@ -1,9 +1,9 @@
 import { cookies } from 'next/headers';
-import Image from 'next/image';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 
+import { BrandWordmark } from '@/components/brand/brand-wordmark';
 import { OnboardingForm } from '@/components/onboarding/form';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
 import { createClient } from '@/lib/supabase/server';
@@ -26,6 +26,10 @@ interface OnboardingPageProps {
  *
  * Brak `redirect()` zapobiega soft-nav loop (URL pasek na /onboarding,
  * RSC zwracający redirect do /, browser wraca na /onboarding ad infinitum).
+ *
+ * BUG-007: wrapper `ff-dashboard` — panel NIP dostaje DOKŁADNIE ten sam
+ * motyw co wnętrze aplikacji (tło --ff-bg, karta .ff-glass-pane, wordmark
+ * jak w sidebarze), zamiast osobnego fioletowego „mesh glass".
  */
 export default async function OnboardingPage(props: OnboardingPageProps) {
   const sp = await props.searchParams;
@@ -42,16 +46,20 @@ export default async function OnboardingPage(props: OnboardingPageProps) {
   const showActiveOrgBanner = hasActiveOrg && sp.action === 'new';
 
   return (
-    <div className="min-h-screen bg-mesh-surface flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl space-y-4">
+    <div className="ff-dashboard relative flex min-h-screen items-center justify-center overflow-hidden p-4 text-[var(--ff-on-surface)]">
+      <div className="ff-mesh-gradient" aria-hidden />
+      <div className="ff-orb-tr" aria-hidden />
+      <div className="ff-orb-bl" aria-hidden />
+
+      <div className="relative z-[1] w-full max-w-2xl space-y-4">
         {showActiveOrgBanner ? (
           <div
-            className="rounded-2xl border border-emerald-500/25 bg-emerald-500/8 backdrop-blur-xl px-5 py-3 flex items-center justify-between gap-3"
+            className="ff-glass-pane flex items-center justify-between gap-3 rounded-2xl px-5 py-3"
             role="status"
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <p className="text-sm text-foreground truncate">
+            <div className="flex min-w-0 items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <p className="truncate text-sm">
                 Masz już aktywną organizację. Możesz dodać kolejną poniżej albo
                 wrócić do panelu.
               </p>
@@ -59,7 +67,7 @@ export default async function OnboardingPage(props: OnboardingPageProps) {
             <Link
               href="/dashboard"
               prefetch={false}
-              className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 dark:text-emerald-400 hover:underline whitespace-nowrap"
+              className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-medium text-emerald-700 hover:underline dark:text-emerald-400"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               Dashboard
@@ -67,21 +75,14 @@ export default async function OnboardingPage(props: OnboardingPageProps) {
           </div>
         ) : null}
 
-        <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/62 dark:bg-[rgba(15,10,30,0.62)] backdrop-blur-3xl shadow-[0_16px_48px_0_rgba(31,38,135,0.12)] p-8 lg:p-12">
-          <div className="mb-5 flex justify-center">
-            <Image
-              src="/brand/faktflow-logo.png"
-              alt="FaktFlow"
-              width={56}
-              height={56}
-              className="h-14 w-14 rounded-2xl object-contain bg-foreground/5 shadow-glass-sm dark:bg-white/10"
-              priority
-            />
+        <div className="ff-glass-pane rounded-3xl p-8 lg:p-12">
+          <div className="mb-6 flex justify-center">
+            <BrandWordmark variant="app" href="/" />
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight mb-3 text-center">
+          <h1 className="mb-3 text-center text-3xl font-semibold tracking-tight">
             {showActiveOrgBanner ? 'Dodaj kolejną organizację' : 'Witaj w FaktFlow'}
           </h1>
-          <p className="text-muted-foreground leading-relaxed mb-8">
+          <p className="mb-8 leading-relaxed text-muted-foreground">
             Wybierz, jak chcesz zacząć: załóż nową organizację, akceptuj
             zaproszenie albo poproś o dostęp do firmy, która już używa
             FaktFlow.

@@ -46,9 +46,13 @@ export default async function ImportSourcePage() {
   const hasCertificate = !!tenant.ksef_credentials_encrypted;
 
   return (
-    <div className="min-h-screen bg-mesh-surface flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl">
-        <div className="rounded-3xl border border-glass-border bg-glass-white-strong backdrop-blur-glass-lg shadow-glass-lg p-8 lg:p-12">
+    <div className="ff-dashboard relative flex min-h-screen items-center justify-center overflow-hidden p-4 text-[var(--ff-on-surface)]">
+      <div className="ff-mesh-gradient" aria-hidden />
+      <div className="ff-orb-tr" aria-hidden />
+      <div className="ff-orb-bl" aria-hidden />
+
+      <div className="relative z-[1] w-full max-w-3xl">
+        <div className="ff-glass-pane rounded-3xl p-8 lg:p-12">
           <ImportSourceSelector
             tenantId={tenantId}
             tenantName={tenant.name ?? ''}

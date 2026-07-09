@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { AlertTriangle, CheckCircle2, Lock, Sparkles } from 'lucide-react';
+import { AlertTriangle, Building2, CheckCircle2, Lock, Sparkles } from 'lucide-react';
 
 import { CertificateUpload } from '@/components/settings/certificate-upload';
+import { CompleteNipForm } from '@/components/settings/complete-nip-form';
 import { Button } from '@/components/ui/button';
 import { getPageContext } from '@/lib/supabase/page-context';
 
@@ -17,6 +18,52 @@ export default async function KsefSettingsPage() {
     .single();
 
   const hasCredentials = !!tenant?.ksef_credentials_encrypted;
+  const hasNip = !!tenant?.nip?.trim();
+
+  // BUG-007: organizacja-szkic (pomiń NIP w onboardingu) — zamiast uploadu
+  // certyfikatu pokazujemy uzupełnienie NIP-u. Server action i tak odmawia
+  // uploadu przy pustym NIP (guard w uploadCertificateAction).
+  if (!hasNip) {
+    return (
+      <div className="space-y-8 max-w-3xl">
+        <div>
+          <h1 className="text-4xl font-semibold tracking-tight">
+            Ustawienia KSeF
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            Najpierw uzupełnij NIP swojej firmy
+          </p>
+        </div>
+
+        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6">
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-orange-500/10 flex items-center justify-center shrink-0">
+              <Building2 className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium">Organizacja bez NIP-u</p>
+              <p className="text-sm text-muted-foreground">
+                Certyfikat KSeF jest przypisany do NIP-u firmy — bez niego nie
+                można go wgrać ani wysyłać faktur.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8 space-y-5">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">
+              Przypisz NIP do organizacji
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+              Wpisz NIP — dane firmy pobierzemy automatycznie z bazy GUS REGON.
+            </p>
+          </div>
+          <CompleteNipForm />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 max-w-3xl">

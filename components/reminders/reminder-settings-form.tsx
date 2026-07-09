@@ -173,7 +173,7 @@ export function ReminderSettingsForm({
         </p>
       </div>
 
-      <section className="rounded-3xl border border-glass-border bg-glass-white p-7 shadow-glass backdrop-blur-glass lg:p-8">
+      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <h2 className="text-lg font-display font-semibold tracking-tighter-text">
@@ -192,7 +192,7 @@ export function ReminderSettingsForm({
         </div>
       </section>
 
-      <section className="space-y-5 rounded-3xl border border-glass-border bg-glass-white p-7 shadow-glass backdrop-blur-glass lg:p-8">
+      <section className="space-y-5 rounded-3xl ff-glass-pane p-7 lg:p-8">
         <div>
           <h2 className="text-lg font-display font-semibold tracking-tighter-text">
             Etapy przypomnień
@@ -205,7 +205,7 @@ export function ReminderSettingsForm({
         {STAGE_META.map((meta, idx) => (
           <div
             key={meta.enabled}
-            className="flex flex-col gap-4 rounded-2xl border border-glass-border bg-foreground/2 p-4 sm:flex-row sm:items-start"
+            className="flex flex-col gap-4 rounded-2xl border border-[var(--ff-glass-border)] bg-foreground/2 p-4 sm:flex-row sm:items-start"
           >
             <Toggle
               checked={settings[meta.enabled]}
@@ -239,7 +239,7 @@ export function ReminderSettingsForm({
         ))}
       </section>
 
-      <section className="space-y-5 rounded-3xl border border-glass-border bg-glass-white p-7 shadow-glass backdrop-blur-glass lg:p-8">
+      <section className="space-y-5 rounded-3xl ff-glass-pane p-7 lg:p-8">
         <div>
           <h2 className="text-lg font-display font-semibold tracking-tighter-text">
             Inteligentne reguły
@@ -323,7 +323,7 @@ export function ReminderSettingsForm({
         </div>
       </section>
 
-      <section className="space-y-5 rounded-3xl border border-glass-border bg-glass-white p-7 shadow-glass backdrop-blur-glass lg:p-8">
+      <section className="space-y-5 rounded-3xl ff-glass-pane p-7 lg:p-8">
         <div>
           <h2 className="text-lg font-display font-semibold tracking-tighter-text">
             Dane nadawcy
@@ -401,7 +401,7 @@ export function ReminderSettingsForm({
         </div>
       </section>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-glass-border bg-glass-white-strong px-6 py-4 backdrop-blur-glass-lg lg:left-[280px]">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[var(--ff-glass-border)] bg-[var(--ff-surface-container-low)] px-6 py-4  lg:left-[280px]">
         <div className="mx-auto flex max-w-7xl justify-end">
           <Button
             variant="glass-primary"

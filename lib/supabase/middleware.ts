@@ -16,6 +16,7 @@ export const MARKETING_PATHS = [
   '/kontakt',
   '/legal',
   '/pomoc',
+  '/mobile',
 ] as const;
 
 const AUTH_PUBLIC_PREFIXES = [
@@ -74,6 +75,17 @@ export function isPublicPath(pathname: string): boolean {
 const APP_HOME = '/dashboard';
 
 /**
+ * BUG-008: telefony (nie tablety) nie wchodzą do panelu aplikacji — do czasu
+ * dedykowanej appki mobilnej dostają tylko landing + stronę `/mobile`.
+ * `Android` bez `Mobile` w UA to tablet — celowo przepuszczany, podobnie iPad.
+ */
+const PHONE_UA_RE = /iPhone|iPod|Windows Phone|Android(?=.*\bMobile\b)/i;
+
+function isPhoneUserAgent(ua: string | null): boolean {
+  return ua !== null && PHONE_UA_RE.test(ua);
+}
+
+/**
  * Proxy / „middleware” — odświeżenie sesji Supabase + reguły routingu.
  *
  * Reguły:
@@ -119,7 +131,27 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isApi = path.startsWith('/api');
 
-  if (user && path === '/') {
+  // ─── BUG-008: blokada aplikacji na telefonie ───
+  // Telefon widzi wyłącznie strony marketingowe (+ /mobile). Każda inna
+  // nawigacja HTML (login, register, onboarding, dashboard…) → /mobile.
+  // Filtr `accept: text/html` chroni asety (sw.js, manifest, /ingest,
+  // /monitoring) i fetch'e RSC przed zbędnym przekierowaniem.
+  const isPhone = isPhoneUserAgent(request.headers.get('user-agent'));
+  const wantsHtml =
+    request.headers.get('accept')?.includes('text/html') ?? false;
+
+  if (isPhone && wantsHtml && !isApi && !isMarketingPath(path)) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/mobile';
+    url.search = '';
+    const res = NextResponse.redirect(url);
+    for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
+    return res;
+  }
+
+  // Zalogowany na landing z telefonu zostaje na landingu (nie ma dokąd iść —
+  // panel jest zablokowany), stąd `!isPhone` w regule 0.
+  if (user && path === '/' && !isPhone) {
     const url = request.nextUrl.clone();
     url.pathname = APP_HOME;
     url.search = '';

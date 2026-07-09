@@ -8,7 +8,7 @@ import {
   FileSpreadsheet,
   FileText,
   Loader2,
-  Lock,
+  ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 
@@ -57,90 +57,110 @@ export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: P
           {firstName ? `Witaj, ${firstName}!` : 'Witaj!'}
         </h1>
         <p className="mt-2 text-muted-foreground">
-          Skąd przenosisz dane? Zaimportujemy historię w 60 sekund.
+          {hasCertificate
+            ? 'Skąd przenosisz dane? Zaimportujemy historię w 60 sekund.'
+            : 'Konto firmy gotowe. Zostało jeszcze jedno połączenie z KSeF.'}
         </p>
       </div>
 
-      <button
-        type="button"
-        onClick={() =>
-          hasCertificate
-            ? window.location.assign(`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`)
-            : undefined
-        }
-        disabled={!hasCertificate}
-        className="w-full text-left rounded-3xl border border-glass-border bg-linear-to-br from-purple-500/10 to-blue-500/10 backdrop-blur-glass shadow-glass p-6 hover:shadow-glass-lg transition-all duration-200 ease-apple active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed group"
-      >
-        <div className="flex items-start gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-linear-to-br from-purple-500 to-blue-500 flex items-center justify-center shrink-0">
-            <Sparkles className="h-6 w-6 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <h3 className="font-display font-semibold text-lg tracking-tighter-text">
-                Magiczny Import z KSeF
-              </h3>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-foreground/10 text-foreground font-medium">
-                ZALECANE
-              </span>
+      {/* BUG-009: Magiczny Import POJAWIA SIĘ DOPIERO po wgraniu certyfikatu.
+          Bez certyfikatu pokazujemy jasny komunikat „najpierw wgraj certyfikat",
+          żeby nie kusić niedziałającym przyciskiem zaraz po rejestracji. */}
+      {!hasCertificate ? (
+        <div className="rounded-3xl border border-emerald-500/25 bg-emerald-500/[0.06] p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15">
+              <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-              Pobieramy 6 miesięcy Twojej historii faktur prosto z KSeF. Auto-buduje katalog
-              kontrahentów i produktów.
-            </p>
-            {!hasCertificate && (
-              <div className="rounded-2xl bg-orange-500/10 border border-orange-500/20 p-3 flex items-start gap-2 mb-3">
-                <Lock className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-foreground">
-                  Wymaga skonfigurowanego certyfikatu KSeF.{' '}
-                  <Link href="/settings/ksef" className="font-medium underline">
-                    Skonfiguruj certyfikat
-                  </Link>
-                </p>
-              </div>
-            )}
-            {hasCertificate && (
-              <div className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground group-hover:gap-2 transition-all">
-                Rozpocznij <ArrowRight className="h-4 w-4" />
-              </div>
-            )}
+            <div className="min-w-0 flex-1">
+              <h3 className="font-display text-lg font-semibold tracking-tighter-text">
+                Przeniesiemy Twoje dane z KSeF
+              </h3>
+              <p className="mb-4 mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                Pobierzemy ostatnie 6 miesięcy faktur prosto z KSeF i automatycznie
+                zbudujemy katalog kontrahentów oraz produktów. Aby zacząć, najpierw
+                wgraj certyfikat KSeF swojej firmy — bez niego nie mamy dostępu do
+                Twojej historii.
+              </p>
+              <Link
+                href="/settings/ksef"
+                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Wgraj certyfikat KSeF
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
         </div>
-      </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() =>
+            window.location.assign(
+              `/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`,
+            )
+          }
+          className="group w-full rounded-3xl border border-emerald-500/25 bg-emerald-500/[0.06] p-6 text-left transition-all duration-200 ease-apple hover:border-emerald-500/40 hover:bg-emerald-500/[0.1] active:scale-[0.99]"
+        >
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15">
+              <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                <h3 className="font-display text-lg font-semibold tracking-tighter-text">
+                  Magiczny Import z KSeF
+                </h3>
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                  ZALECANE
+                </span>
+              </div>
+              <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
+                Pobieramy 6 miesięcy Twojej historii faktur prosto z KSeF.
+                Auto-buduje katalog kontrahentów i produktów.
+              </p>
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground transition-all group-hover:gap-2">
+                Rozpocznij <ArrowRight className="h-4 w-4" />
+              </span>
+            </div>
+          </div>
+        </button>
+      )}
 
       <div className="space-y-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-2">
+        <p className="px-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Lub przenieś z innego programu
         </p>
 
-        <div className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass overflow-hidden">
+        <div className="overflow-hidden rounded-3xl border border-glass-border bg-foreground/[0.02]">
           {FILE_IMPORT_OPTIONS.map((opt, idx, arr) => (
             <button
               key={opt.id}
               type="button"
               onClick={() => setImportType(opt.id)}
-              className={`w-full text-left flex items-center gap-3 p-4 hover:bg-foreground/2 transition-colors ${
+              className={`flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-foreground/5 ${
                 idx !== arr.length - 1 ? 'border-b border-glass-border/50' : ''
               }`}
             >
-              <div className="h-9 w-9 rounded-xl bg-foreground/5 flex items-center justify-center shrink-0">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground/5">
                 {opt.id === 'jpk_fa' ? (
                   <FileText className="h-4 w-4 text-muted-foreground" />
                 ) : (
                   <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
                 )}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm">{opt.label}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{opt.label}</p>
                 <p className="text-xs text-muted-foreground">{opt.sub}</p>
               </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
           ))}
         </div>
       </div>
 
-      <div className="text-center pt-2">
+      <div className="pt-2 text-center">
         <Button
           type="button"
           variant="ghost"
@@ -150,11 +170,11 @@ export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: P
         >
           {isSkipping ? (
             <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Otwieram aplikację...
             </>
           ) : (
-            'Pomiń — zacznę od zera'
+            'Pomiń — wejdę do aplikacji'
           )}
         </Button>
       </div>

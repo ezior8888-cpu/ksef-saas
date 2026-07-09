@@ -322,7 +322,7 @@ export default async function DashboardHomePage() {
             </div>
           </div>
           <div className="relative flex flex-col gap-2">
-            <div className="absolute left-0 top-1/2 hidden h-12 w-px -translate-x-6 -translate-y-1/2 bg-white/10 md:block" />
+            <div className="absolute left-0 top-1/2 hidden h-12 w-px -translate-x-6 -translate-y-1/2 bg-[var(--ff-outline-soft)] md:block" />
             <span className="text-[12px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_40%,transparent)]">
               VAT
             </span>
@@ -336,7 +336,7 @@ export default async function DashboardHomePage() {
             </div>
           </div>
           <div className="relative flex flex-col gap-2">
-            <div className="absolute left-0 top-1/2 hidden h-12 w-px -translate-x-6 -translate-y-1/2 bg-white/10 md:block" />
+            <div className="absolute left-0 top-1/2 hidden h-12 w-px -translate-x-6 -translate-y-1/2 bg-[var(--ff-outline-soft)] md:block" />
             <span className="text-[12px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_40%,transparent)]">
               Brutto
             </span>
