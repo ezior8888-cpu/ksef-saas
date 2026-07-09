@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { NextResponse } from 'next/server';
 
+import { getRedis, isRedisConfigured } from '@/lib/cache/redis';
 import { createAdminClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -51,6 +52,24 @@ export async function GET() {
     checks.database = { status: 'fail' };
   }
 
+  // ROB-1: Redis check — informacyjny, NIE bramkuje ogólnego statusu.
+  // Redis to cache (rate-limit, dashboard) z fail-open wszędzie, więc jego
+  // awaria = degradacja, nie „app down". Przyda się jako smoke target przy
+  // migracji M3 (Valkey). Gdy nieskonfigurowany — pomijamy (graceful).
+  const informational: Record<string, { status: 'ok' | 'fail' | 'skipped' }> = {};
+  if (isRedisConfigured()) {
+    try {
+      const pong = await getRedis().ping();
+      informational.redis = { status: pong === 'PONG' ? 'ok' : 'fail' };
+    } catch (error) {
+      Sentry.captureException(error, { tags: { check: 'health.redis' } });
+      informational.redis = { status: 'fail' };
+    }
+  } else {
+    informational.redis = { status: 'skipped' };
+  }
+
+  // Status ogólny zależy WYŁĄCZNIE od checków krytycznych (env + database).
   const allOk = Object.values(checks).every((c) => c.status === 'ok');
 
   return NextResponse.json(
@@ -58,6 +77,7 @@ export async function GET() {
       status: allOk ? 'healthy' : 'unhealthy',
       timestamp: new Date().toISOString(),
       checks,
+      informational,
     },
     { status: allOk ? 200 : 503 },
   );

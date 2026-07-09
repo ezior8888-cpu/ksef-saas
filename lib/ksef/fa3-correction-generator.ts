@@ -354,11 +354,15 @@ export function generateCorrectionInvoiceXml(
   if (data.buyer.type === 'b2b') {
     dane2.ele('NIP').txt(requireText(data.buyer.nip, 'buyer.nip'));
   } else if (data.buyer.idType === 'pesel' && data.buyer.pesel) {
-    dane2.ele('NrPESEL').txt(data.buyer.pesel);
+    // FA(3) Podmiot2 nie ma NrPESEL — PESEL idzie do KodKraju+NrID (bug fix).
+    dane2.ele('KodKraju').txt(data.buyer.address.countryCode || 'PL');
+    dane2.ele('NrID').txt(data.buyer.pesel);
   } else if (data.buyer.idType === 'no_id') {
     dane2.ele('BrakID').txt('1');
   } else if (data.buyer.idNumber) {
-    dane2.ele('NrInny').txt(data.buyer.idNumber);
+    // Nr dokumentu / zagraniczny ID → KodKraju+NrID (zamiast nieistniejącego NrInny).
+    dane2.ele('KodKraju').txt(data.buyer.address.countryCode || 'PL');
+    dane2.ele('NrID').txt(data.buyer.idNumber);
   } else {
     throw new Error('FA(3) KOR: nabywca B2C wymaga PESEL / BrakID / NrInny.');
   }

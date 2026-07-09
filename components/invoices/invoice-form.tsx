@@ -197,6 +197,22 @@ export function InvoiceForm() {
     (values) => {
       if (submitInFlightRef.current) return;
 
+      // BUG-010 (audyt przedlaunchowy): ostrzeżenie o fakturze bezpłatnej.
+      // Puste pole ceny jest blokowane przez walidację Zod. Cena 0.00 zł jest
+      // dozwolona (faktura bezpłatna jest legalna), ale wymaga świadomego
+      // potwierdzenia, żeby user nie wysłał przypadkiem faktury na 0 zł.
+      const hasZeroPriceLine = (values.lines ?? []).some(
+        (l) => Number(l.unitPriceNet) === 0,
+      );
+      if (hasZeroPriceLine) {
+        const proceed =
+          typeof window !== 'undefined' &&
+          confirm(
+            'Co najmniej jedna pozycja ma cenę 0.00 zł. Czy na pewno chcesz wystawić fakturę bezpłatną?',
+          );
+        if (!proceed) return;
+      }
+
       if (
         !buyerIsConsumer &&
         buyerVatStatus &&

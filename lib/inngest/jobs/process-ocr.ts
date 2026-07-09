@@ -30,6 +30,30 @@ export const processOcrJob = inngest.createFunction(
     retries: 2,
     concurrency: { limit: 5 },
     triggers: [ocrProcessPhotoRequested],
+    // BUG-012 (audyt przedlaunchowy): bez tego handlera, gdy job rzuci błąd
+    // (brak ANTHROPIC_API_KEY, nieczytelne zdjęcie, błąd DB) i wyczerpie retry,
+    // wiersz `ocr_jobs` zostawał w statusie 'processing' NA ZAWSZE — klient
+    // (`getOcrJobStatusAction`) odpytywał w nieskończoność aż do timeoutu.
+    // Tu po wyczerpaniu retries DEFINITYWNIE oznaczamy job jako 'failed' z
+    // komunikatem — klient od razu pokazuje błąd zamiast wisieć.
+    onFailure: async ({ error, event }) => {
+      const original = event.data.event as {
+        data: { ocrJobId: string; tenantId: string };
+      };
+      const { ocrJobId, tenantId } = original.data;
+      const supabase = createAdminClient();
+      await supabase
+        .from('ocr_jobs')
+        .update({
+          status: 'failed',
+          error_message:
+            error.message?.slice(0, 500) ||
+            'Nie udało się rozpoznać paragonu. Spróbuj ponownie lub wprowadź dane ręcznie.',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', ocrJobId)
+        .eq('tenant_id', tenantId);
+    },
   },
   async ({ event, step }) => {
     const { ocrJobId, tenantId } = ocrProcessPhotoRequested.parse(event.data);

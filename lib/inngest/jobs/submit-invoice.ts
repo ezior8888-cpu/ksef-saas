@@ -13,6 +13,7 @@ import {
   getTenantKsefCredentials,
   updateInvoiceStatus,
 } from '@/lib/supabase/admin-queries';
+import { createAdminClient } from '@/lib/supabase/server';
 import { KsefApiError } from '@/lib/ksef/client';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
@@ -240,6 +241,34 @@ export const submitInvoiceJob = inngest.createFunction(
     const { tenantId, invoiceId, invoice, nip } = parsed.data;
     const env = (process.env.KSEF_ENV as 'test' | 'demo' | 'production') ?? 'test';
     const fromOfflineQueue = Boolean(parsed.data.fromOfflineQueue);
+
+    // IDEMPOTENCJA (audyt przedlaunchowy): backstop przeciw podwójnej wysyłce.
+    // Gdyby ten sam event przyszedł dwa razy (double-click „Wyślij", replay
+    // eventu, równoległy enqueue z dwóch instancji), NIE wysyłamy faktury do
+    // KSeF drugi raz — jeśli ma już numer KSeF i status 'accepted', zwracamy
+    // istniejący wynik. To uzupełnia: deterministyczny generator FA(3) (ten sam
+    // XML), idempotencję R2 (HEAD + IfNoneMatch) oraz unikalność numeru P_2 po
+    // stronie MF. Trzy niezależne warstwy ochrony przed duplikatem w KSeF.
+    const alreadyDone = await step.run('idempotency-guard', async () => {
+      const supabase = await createAdminClient();
+      const { data } = await supabase
+        .from('invoices')
+        .select('ksef_status, ksef_number')
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      return data;
+    });
+    if (alreadyDone?.ksef_status === 'accepted' && alreadyDone.ksef_number) {
+      logger.info('Faktura już zaakceptowana w KSeF — pomijam ponowną wysyłkę', {
+        invoiceId,
+        ksefNumber: alreadyDone.ksef_number,
+      });
+      return {
+        alreadyAccepted: true as const,
+        ksefNumber: alreadyDone.ksef_number,
+      };
+    }
 
     logger.info('Rozpoczynam wysyłkę faktury', {
       tenantId,

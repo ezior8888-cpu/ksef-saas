@@ -83,7 +83,7 @@ export async function translateKsefError(error: RawKsefError): Promise<Translate
   };
 }
 
-function coerceSeverity(s: string | null | undefined): 'error' | 'warning' | 'info' {
+export function coerceSeverity(s: string | null | undefined): 'error' | 'warning' | 'info' {
   if (s === 'warning' || s === 'info') return s;
   return 'error';
 }
@@ -150,7 +150,7 @@ async function lookupByXpathPattern(xpath?: string): Promise<DbErrorTranslation 
 // Wzbogać tłumaczenie o numer pozycji
 // ============================================================================
 
-function enrichWithLineNumber(
+export function enrichWithLineNumber(
   translation: DbErrorTranslation,
   xpath: string | undefined,
   technicalCode: string
@@ -258,7 +258,7 @@ const KEYWORD_PATTERNS: Array<{
   },
 ];
 
-function matchByKeywords(message: string): TranslatedError | null {
+export function matchByKeywords(message: string): TranslatedError | null {
   for (const { patterns, translation } of KEYWORD_PATTERNS) {
     if (patterns.some((p) => p.test(message))) {
       return { ...translation };
@@ -271,7 +271,7 @@ function matchByKeywords(message: string): TranslatedError | null {
 // Zapis komunikatu na fakturze (`last_error` + kolumny z migracji 00016)
 // ============================================================================
 
-function formatLastErrorPayload(translated: TranslatedError): string {
+export function formatLastErrorPayload(translated: TranslatedError): string {
   const lines = [`[${translated.technicalCode}] ${translated.userMessage}`];
   if (translated.fixSuggestion) lines.push(translated.fixSuggestion);
   if (translated.fieldHint) lines.push(`Pole UI: ${translated.fieldHint}`);

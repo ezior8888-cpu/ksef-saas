@@ -1,7 +1,3 @@
-import {
-  KsefNotVerifiedError,
-  requireKsefVerification,
-} from '@/lib/auth/ksef-verification-guard';
 import { loadInvoiceForPdf, saveInvoicePdfPath } from './invoice-data';
 import {
   buildInvoicePdfKey,
@@ -37,19 +33,13 @@ export async function generateInvoicePdf(
   invoiceId: string,
   tenantId: string,
 ): Promise<GenerateInvoicePdfResult> {
-  try {
-    await requireKsefVerification(tenantId);
-  } catch (e) {
-    if (e instanceof KsefNotVerifiedError) {
-      return {
-        success: false,
-        error: 'Weryfikacja KSeF wymagana przed generowaniem faktur.',
-        code: 'KSEF_NOT_VERIFIED',
-      };
-    }
-    throw e;
-  }
-
+  // BUG-011 (audyt przedlaunchowy): USUNIĘTO bramkę `requireKsefVerification`.
+  // Generowanie PDF to czysto LOKALNE renderowanie wizualizacji faktury — nie
+  // dotyka KSeF, nie wysyła nic do MF. Wymaganie certyfikatu KSeF do pobrania
+  // PDF (nawet szkicu) blokowało podstawową funkcję: użytkownik bez certyfikatu
+  // testowego nie mógł pobrać żadnego PDF (zwracało 403 KSEF_NOT_VERIFIED).
+  // Renderer obsługuje brak numeru KSeF (`ksefNumber ?? null`) i dokleja
+  // watermark „WERSJA TESTOWA". Ownership (tenant) nadal sprawdzamy niżej.
   const data = await loadInvoiceForPdf(invoiceId);
   if (!data) {
     return { success: false, error: 'Faktura nie istnieje.', code: 'NOT_FOUND' };

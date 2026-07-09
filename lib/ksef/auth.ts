@@ -3,6 +3,7 @@ import { Crypto } from '@peculiar/webcrypto';
 import * as xadesjs from 'xadesjs';
 import * as XmlCore from 'xml-core';
 import { DOMParser, XMLSerializer, DOMImplementation } from '@xmldom/xmldom';
+import { isProductionDeploy } from '@/lib/security/environment';
 import { ksefFetch } from './client';
 import { ksefNumericStatusCode } from './normalize-status-code';
 import type {
@@ -174,8 +175,11 @@ async function buildSignedAuthXml(
 
   const serialized = new XMLSerializer().serializeToString(doc);
 
-  // DEBUG: loguj podpisany XML jeśli DEBUG_KSEF=1
-  if (process.env.DEBUG_KSEF === '1') {
+  // DEBUG: loguj podpisany XML jeśli DEBUG_KSEF=1.
+  // SEC-4: dodatkowo NIGDY na produkcji — podpisany XML to materiał
+  // kryptograficzny (token autoryzacyjny KSeF), nie może trafić do logów prod
+  // nawet przez pomyłkowe ustawienie flagi debug.
+  if (process.env.DEBUG_KSEF === '1' && !isProductionDeploy()) {
     console.log('\n--- PODPISANY XML ---\n' + serialized + '\n--- KONIEC ---\n');
   }
 

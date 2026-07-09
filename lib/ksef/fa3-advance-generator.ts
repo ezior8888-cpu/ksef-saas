@@ -226,11 +226,14 @@ function buildBuyer(root: any, buyer: BuyerData): void {
   if (buyer.type === 'b2b') {
     dane.ele('NIP').txt(requireText(buyer.nip, 'buyer.nip'));
   } else if (buyer.idType === 'pesel' && buyer.pesel) {
-    dane.ele('NrPESEL').txt(buyer.pesel);
+    // FA(3) Podmiot2 nie ma NrPESEL — PESEL → KodKraju+NrID (bug fix).
+    dane.ele('KodKraju').txt(buyer.address.countryCode || 'PL');
+    dane.ele('NrID').txt(buyer.pesel);
   } else if (buyer.idType === 'no_id') {
     dane.ele('BrakID').txt('1');
   } else if (buyer.idNumber) {
-    dane.ele('NrInny').txt(buyer.idNumber);
+    dane.ele('KodKraju').txt(buyer.address.countryCode || 'PL');
+    dane.ele('NrID').txt(buyer.idNumber);
   } else {
     throw new Error('FA(3): nabywca B2C — brak PESEL / BrakID / NrInny.');
   }

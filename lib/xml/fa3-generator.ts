@@ -299,9 +299,16 @@ function buildBuyerChoice(daneId: XMLBuilder, buyer: BuyerParty): void {
     daneId.ele('KodUE').txt(kodUE);
     daneId.ele('NrVatUE').txt(numer);
   } else if (buyer.pesel?.trim()) {
-    daneId.ele('NrPESEL').txt(buyer.pesel.trim());
+    // FA(3) Podmiot2 NIE ma elementu NrPESEL (bug naprawiony w audycie
+    // przedlaunchowym). Schemat dopuszcza tylko: NIP / KodUE+NrVatUE /
+    // KodKraju+NrID / BrakID. PESEL jest poprawnym identyfikatorem podatkowym,
+    // który wstawiamy do <NrID> z <KodKraju>PL.
+    daneId.ele('KodKraju').txt(buyer.address?.countryCode || 'PL');
+    daneId.ele('NrID').txt(buyer.pesel.trim());
   } else if (buyer.nrInny?.trim()) {
-    daneId.ele('NrInny').txt(buyer.nrInny.trim());
+    // „Inny" identyfikator (nr dokumentu / zagraniczny ID) → KodKraju + NrID.
+    daneId.ele('KodKraju').txt(buyer.address?.countryCode || 'PL');
+    daneId.ele('NrID').txt(buyer.nrInny.trim());
   } else if (buyer.noIdMarker) {
     daneId.ele('BrakID').txt('1');
   } else {

@@ -102,6 +102,6 @@ export async function checkRateLimit(
  * SHA-256 truncated do 32 znaków — nie trzymamy plaintext IP/email w Redis.
  * Drobna ochrona w razie wycieku snapshotu cache'a.
  */
-function hashIdentifier(id: string): string {
+export function hashIdentifier(id: string): string {
   return createHash('sha256').update(id.toLowerCase()).digest('hex').slice(0, 32);
 }

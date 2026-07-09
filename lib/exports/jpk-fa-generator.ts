@@ -9,6 +9,13 @@ export interface JpkFaInputData {
   issuer: {
     nip: string;
     name: string;
+    /**
+     * Kod Urzędu Skarbowego (4 cyfry, KodUrzedu w JPK_FA). Pochodzi z profilu
+     * tenanta (właściwy US wg miejsca zamieszkania/siedziby). Gdy brak/niepoprawny
+     * — używamy domyślnego (zob. `resolveTaxOfficeCode`). Po dodaniu kolumny
+     * `tenants.tax_office_code` caller przekazuje ją tutaj.
+     */
+    taxOfficeCode?: string;
     address?: {
       country?: string;
       city?: string;
@@ -138,7 +145,7 @@ function buildHeader(
   naglowek.ele('DataOd').txt(data.periodStart);
   naglowek.ele('DataDo').txt(data.periodEnd);
   naglowek.ele('NazwaSystemu').txt(data.systemInfo ?? 'KSeF SaaS');
-  naglowek.ele('KodUrzedu').txt(extractTaxOfficeCode(data.issuer.nip));
+  naglowek.ele('KodUrzedu').txt(resolveTaxOfficeCode(data.issuer.taxOfficeCode));
 }
 
 // ============================================================================
@@ -292,8 +299,16 @@ function normalizeVatRate(rate: string): string {
   return map[r] ?? '23';
 }
 
-function extractTaxOfficeCode(_nip: string): string {
-  // Domyślny kod US (1408 = Pierwszy Mazowiecki US Warszawa-Mokotów).
-  // TODO: dodać kolumnę tax_office_code do tenants i pobierać z profilu tenanta.
-  return '1408';
+/** Domyślny kod US, gdy tenant nie ma jeszcze ustawionego własnego. */
+export const DEFAULT_TAX_OFFICE_CODE = '1408'; // Pierwszy Mazowiecki US Warszawa-Mokotów
+
+/**
+ * Zwraca kod Urzędu Skarbowego do KodUrzedu. Kod US to dokładnie 4 cyfry.
+ * Gdy tenant przekazał poprawny kod (z profilu) — używamy go; w przeciwnym
+ * razie fallback do domyślnego, żeby JPK_FA pozostał walidowalny przez schemę MF
+ * (pusty/niepoprawny KodUrzedu = odrzucenie pliku przez bramkę).
+ */
+export function resolveTaxOfficeCode(code: string | null | undefined): string {
+  const trimmed = (code ?? '').trim();
+  return /^\d{4}$/.test(trimmed) ? trimmed : DEFAULT_TAX_OFFICE_CODE;
 }
