@@ -3,9 +3,8 @@ import * as Sentry from '@sentry/nextjs';
 
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { packageZip, type PackagedFile } from '@/lib/exports/zip-packager';
-import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
+import { resolveApiUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { createAdminClient } from '@/lib/supabase/server';
-import { createClient } from '@/lib/supabase/server';
 
 /**
  * GET /api/invoices/batch-pdf?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -14,6 +13,11 @@ import { createClient } from '@/lib/supabase/server';
  * Limit 100 faktur na paczkę — przy większej liczbie generowanie
  * przekroczyłoby timeout funkcji serverless. Cache PDF w R2 (Krok 3)
  * sprawia, że kolejne pobranie tego samego miesiąca jest szybkie.
+ *
+ * KRYTYCZNE: lista faktur idzie przez admin client (omija RLS), więc tenant
+ * MUSI być zweryfikowany membership (`resolveApiUserAndActiveOrg`), nie samym
+ * formatem cookie — inaczej spreparowane cookie z obcym org_id pozwoliłoby
+ * pobrać WSZYSTKIE faktury cudzej organizacji z danego okresu.
  */
 const MAX_INVOICES = 100;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -24,18 +28,11 @@ interface InvoiceRow {
 }
 
 export async function GET(req: Request): Promise<Response> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: 'not_authenticated' }, { status: 401 });
+  const ctx = await resolveApiUserAndActiveOrg();
+  if (!ctx.ok) {
+    return NextResponse.json({ error: ctx.error }, { status: ctx.status });
   }
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    return NextResponse.json({ error: 'no_active_org' }, { status: 400 });
-  }
+  const tenantId = ctx.tenantId;
 
   const url = new URL(req.url);
   const from = url.searchParams.get('from') ?? '';

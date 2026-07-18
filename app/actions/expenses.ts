@@ -11,6 +11,7 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
+import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { deleteExpensePhoto, uploadExpensePhoto } from '@/lib/storage/expenses';
 import type { Database } from '@/types/database';
 
@@ -81,16 +82,17 @@ function buildExpenseUpdatePatch(
  * Zwraca ocrJobId który można pollować.
  */
 export async function uploadExpensePhotoAction(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false as const, error: 'Brak autoryzacji' };
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    return { success: false as const, error: 'Brak aktywnej organizacji' };
+  // Ten job zapisujemy admin clientem (omija RLS), więc tenant MUSI być
+  // zweryfikowany przez membership — nie samym formatem cookie. Inaczej
+  // spreparowane cookie z obcym org_id pozwoliłoby wstrzyknąć OCR job do
+  // cudzej organizacji.
+  let auth;
+  try {
+    auth = await requireUserAndActiveOrg();
+  } catch {
+    return { success: false as const, error: 'Brak autoryzacji' };
   }
+  const { user, tenantId } = auth;
 
   const file = formData.get('photo');
   if (!(file instanceof File)) {

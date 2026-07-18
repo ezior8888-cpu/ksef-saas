@@ -17,10 +17,16 @@ export type WebhookProcessingStatus = 'processed' | 'failed' | 'skipped';
 
 /**
  * Próbuje zarejestrować webhook event jako "in flight". Zwraca:
- *   - `true` gdy to pierwszy raz (handler powinien przetworzyć)
- *   - `false` gdy event już był (handler skip'uje)
+ *   - `true` gdy handler powinien przetworzyć (pierwszy raz albo retry po błędzie)
+ *   - `false` gdy event został już POMYŚLNIE przetworzony (prawdziwy duplikat)
  *
- * UPSERT z ON CONFLICT DO NOTHING — atomic.
+ * KRYTYCZNE: event rejestrujemy jako `processing` (in-flight), a NIE `processed`.
+ * Skip robimy WYŁĄCZNIE dla statusu terminalnego `processed`. Gdy poprzednia
+ * próba padła (`failed`) albo utknęła (`processing` — crash przed finalize),
+ * pozwalamy Stripe retry ponowić — inaczej pojedynczy transient błąd handlera
+ * (blip DB, chwilowy KSeF) trwale gubiłby zdarzenie billingowe (Stripe dostawał
+ * 200 „duplicate" i nie ponawiał). Handlery są idempotentne (upsert po
+ * subscription id / pi_*), więc ponowne przetworzenie jest bezpieczne.
  */
 export async function tryClaimWebhookEvent(
   eventId: string,
@@ -29,14 +35,15 @@ export async function tryClaimWebhookEvent(
 ): Promise<{ claimed: boolean }> {
   const supabase = createAdminClient();
 
-  const { data, error } = await supabase
+  // 1) Próba INSERT jako `processing`. ON CONFLICT DO NOTHING (atomic).
+  const { data: inserted, error } = await supabase
     .from('stripe_webhook_events')
     .upsert(
       {
         id: eventId,
         type,
         payload: payload as never,
-        processing_status: 'processed',
+        processing_status: 'processing',
         received_at: new Date().toISOString(),
       },
       { onConflict: 'id', ignoreDuplicates: true },
@@ -47,10 +54,33 @@ export async function tryClaimWebhookEvent(
     throw new Error(`webhook idempotency upsert failed: ${error.message}`);
   }
 
-  // `ignoreDuplicates: true` + `.select()`: gdy konflikt nie ma INSERTu,
-  // `data` jest pusta tablica. Gdy INSERT się udał, `data` zawiera nowy wiersz.
-  const claimed = Array.isArray(data) && data.length > 0;
-  return { claimed };
+  // INSERT się udał = pierwszy raz.
+  if (Array.isArray(inserted) && inserted.length > 0) {
+    return { claimed: true };
+  }
+
+  // 2) Konflikt — event już istnieje. Skip TYLKO gdy naprawdę przetworzony.
+  const { data: existing, error: selErr } = await supabase
+    .from('stripe_webhook_events')
+    .select('processing_status')
+    .eq('id', eventId)
+    .maybeSingle();
+
+  if (selErr) {
+    throw new Error(`webhook idempotency read failed: ${selErr.message}`);
+  }
+
+  if (existing?.processing_status === 'processed') {
+    return { claimed: false }; // prawdziwy duplikat udanego przetworzenia
+  }
+
+  // `failed` / `processing` (stale) — pozwól ponowić. Oznacz jako in-flight.
+  await supabase
+    .from('stripe_webhook_events')
+    .update({ processing_status: 'processing', processing_error: null })
+    .eq('id', eventId);
+
+  return { claimed: true };
 }
 
 /**

@@ -90,6 +90,55 @@ export async function requireUserAndActiveOrg(): Promise<AuthContext> {
 export const requireUserAndTenant = requireUserAndActiveOrg;
 
 /**
+ * Wariant dla Route Handlerów (`app/api/*`), które zwracają JSON zamiast
+ * rzucać wyjątek. Zwraca zweryfikowany (membership) tenantId aktywnej org
+ * albo dyskryminowany błąd z gotowym statusem HTTP.
+ *
+ * KRYTYCZNE bezpieczeństwo: cookie `ksef.active_org` jest httpOnly, ale
+ * wartość cookie jest kontrolowana przez klienta na poziomie HTTP (httpOnly
+ * blokuje tylko JS, nie spreparowane żądanie). Dlatego każdy endpoint, który
+ * używa `createAdminClient()` (omija RLS) NIE MOŻE ufać samemu formatowi UUID
+ * z `getActiveOrgIdFromCookies()` — musi potwierdzić aktywne membership, co
+ * robi ten helper. Endpointy na kliencie user-context (RLS) są chronione i
+ * bez tego, ale użycie tego helpera i tam nie szkodzi.
+ */
+export type ApiOrgContext =
+  | { ok: true; userId: string; tenantId: string; role: UserRole }
+  | { ok: false; status: 401 | 403; error: string };
+
+export async function resolveApiUserAndActiveOrg(): Promise<ApiOrgContext> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, status: 401, error: 'not_authenticated' };
+
+  const cookieStore = await cookies();
+  const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
+  if (!isUuid(activeOrg)) {
+    return { ok: false, status: 403, error: 'no_active_org' };
+  }
+
+  const admin = createAdminClient();
+  const { data: membership } = await admin
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', activeOrg)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (!membership) return { ok: false, status: 403, error: 'no_active_org' };
+
+  return {
+    ok: true,
+    userId: user.id,
+    tenantId: activeOrg,
+    role: (membership.role ?? 'member') as UserRole,
+  };
+}
+
+/**
  * Wymaga konkretnej roli w aktywnej organizacji.
  * Lista akceptowanych ról jako argument — np. `requireOrgRole(['owner','admin'])`.
  */

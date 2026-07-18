@@ -2,14 +2,17 @@ import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
-import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
-import { createClient } from '@/lib/supabase/server';
+import { resolveApiUserAndActiveOrg } from '@/lib/supabase/auth-context';
 
 /**
  * GET /api/invoices/[id]/pdf — pobranie PDF faktury (Faza 33 Krok 4).
  *
  * PDF generowany z cache R2 (lub świeżo renderowany pdfkit przy cache miss).
- * Ownership weryfikuje `generateInvoicePdf` przez `tenantId` z aktywnej org.
+ * `generateInvoicePdf` czyta fakturę admin clientem (omija RLS), więc tenant
+ * MUSI pochodzić ze zweryfikowanego membership (`resolveApiUserAndActiveOrg`),
+ * a nie z samego formatu cookie — inaczej spreparowane cookie z obcym org_id
+ * pozwoliłoby pobrać PDF cudzej faktury (ownership check w `generateInvoicePdf`
+ * porównuje do wartości z cookie).
  */
 export async function GET(
   _req: Request,
@@ -17,18 +20,11 @@ export async function GET(
 ): Promise<Response> {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: 'not_authenticated' }, { status: 401 });
+  const ctx = await resolveApiUserAndActiveOrg();
+  if (!ctx.ok) {
+    return NextResponse.json({ error: ctx.error }, { status: ctx.status });
   }
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    return NextResponse.json({ error: 'no_active_org' }, { status: 400 });
-  }
+  const tenantId = ctx.tenantId;
 
   try {
     const result = await generateInvoicePdf(id, tenantId);
