@@ -30,6 +30,10 @@
 # Cursor / Claude Code — lokalne worktree (nie commituj)
 .claude/
 
+# Lokalne notatki operatora (nie commituj)
+.gemini.md
+instrukcja.txt
+
 # Certyfikaty KSeF (testowe i produkcyjne)
 *.pem
 *.key
@@ -75,3 +79,4 @@ backup_*.sql
 /playwright-report/
 /playwright/.cache/
 /.auth/
+docs/launch/
