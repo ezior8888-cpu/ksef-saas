@@ -67,7 +67,7 @@ export default function LandingPage() {
             <p className="marketing-section-label mb-3">Co Ci to da</p>
             <h2 className="marketing-hero-title text-4xl md:text-5xl">
               Oszczędzaj do{' '}
-              <span className="font-editorial italic marketing-gradient-emerald">
+              <span className="marketing-gradient-emerald">
                 42 godzin
               </span>{' '}
               rocznie
