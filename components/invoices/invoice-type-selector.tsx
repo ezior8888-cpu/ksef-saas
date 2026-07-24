@@ -44,10 +44,10 @@ export function InvoiceTypeSelector() {
   return (
     <div className="mx-auto max-w-[960px] pb-10 text-[var(--ff-on-surface)]">
       <div className="mb-10">
-        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+        <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
           Nowa faktura
         </h1>
-        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+        <p className="text-sm text-[var(--ff-text-muted)]">
           Wybierz typ dokumentu — każda ścieżka prowadzi do formularza w tym samym
           układzie co reszta aplikacji
         </p>

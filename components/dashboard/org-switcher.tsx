@@ -62,22 +62,24 @@ export function OrgSwitcher({
         disabled={isPending}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="ff-glass-pane flex max-w-full cursor-pointer items-center gap-3 rounded-lg border border-white/5 px-4 py-2 text-left transition-colors hover:bg-white/10 disabled:opacity-60"
+        className="flex max-w-full cursor-pointer items-center gap-3 rounded-[10px] border border-[var(--ff-border)] bg-[var(--ff-surface)] px-3.5 py-2 text-left transition-colors hover:border-[var(--ff-border-strong)] disabled:opacity-60"
       >
-        <span className="material-symbols-outlined shrink-0 text-[20px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]">
-          business
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--ff-surface-chip)] text-[var(--ff-accent)]">
+          <span className="material-symbols-outlined text-[16px] leading-none">
+            business
+          </span>
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] font-bold uppercase leading-none text-[color-mix(in_srgb,var(--ff-on-surface-variant)_95%,transparent)]">
+        <div className="min-w-0 flex-1 leading-[1.25]">
+          <p className="truncate text-[13px] font-semibold text-[var(--ff-text-strong)]">
             {activeName}
           </p>
-          <p className="mt-0.5 truncate font-mono text-[10px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
-            NIP: {activeNip}
+          <p className="truncate font-mono text-[11px] text-[var(--ff-text-dim)]">
+            NIP {activeNip}
           </p>
         </div>
         <span
           className={cn(
-            'material-symbols-outlined shrink-0 text-base text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)] transition-transform',
+            'material-symbols-outlined ml-1 shrink-0 text-[16px] text-[var(--ff-text-dim)] transition-transform',
             open && 'rotate-180',
           )}
         >
@@ -87,7 +89,7 @@ export function OrgSwitcher({
 
       {open ? (
         <div
-          className="ff-glass-pane absolute right-0 z-50 mt-2 w-72 rounded-2xl border border-white/10 py-2 shadow-[0_12px_32px_0_rgba(0,0,0,0.45)]"
+          className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-[var(--ff-border)] bg-[var(--ff-surface)] py-2 shadow-[0_12px_32px_0_rgba(0,0,0,0.45)]"
           role="listbox"
           aria-label="Wybór organizacji"
         >
@@ -101,7 +103,7 @@ export function OrgSwitcher({
               role="option"
               aria-selected={m.isActive}
               onClick={() => handleSwitch(m.organizationId)}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-white/5"
+              className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--ff-row-hover)]"
             >
               <span className="material-symbols-outlined shrink-0 text-[20px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]">
                 business
@@ -115,18 +117,18 @@ export function OrgSwitcher({
                 </p>
               </div>
               {m.isActive ? (
-                <span className="material-symbols-outlined shrink-0 text-[20px] text-[var(--ff-primary)]">
+                <span className="material-symbols-outlined shrink-0 text-[20px] text-[var(--ff-accent)]">
                   check
                 </span>
               ) : null}
             </button>
           ))}
-          <div className="mt-1 border-t border-white/10 pt-1">
+          <div className="mt-1 border-t border-[var(--ff-border)] pt-1">
             <Link
               href="/onboarding?action=new"
               prefetch={false}
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-[var(--ff-on-surface)] hover:bg-white/5"
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-[var(--ff-on-surface)] hover:bg-[var(--ff-row-hover)]"
             >
               <span className="material-symbols-outlined text-[20px]">add</span>
               Dodaj kolejną organizację

@@ -1,5 +1,11 @@
 import type { Metadata, Viewport } from 'next';
-import { Geist, Geist_Mono, Fraunces } from 'next/font/google';
+import {
+  Geist,
+  Geist_Mono,
+  Fraunces,
+  Inter,
+  IBM_Plex_Mono,
+} from 'next/font/google';
 
 import './globals.css';
 import { AnalyticsProvider } from '@/components/analytics/analytics-provider';
@@ -26,6 +32,25 @@ const fraunces = Fraunces({
   subsets: ['latin', 'latin-ext'],
   display: 'swap',
   axes: ['opsz', 'SOFT'],
+});
+
+// Typografia panelu (prototyp „FaktFlow Dashboard"): Inter na interfejs,
+// IBM Plex Mono na liczby, NIP-y, numery faktur i daty — dzięki stałej
+// szerokości znaku kwoty w kolumnach tabel wyrównują się do przecinka.
+// `latin-ext` jest KRYTYCZNE dla polskich znaków (ą, ć, ę, ł, ń, ó, ś, ź, ż).
+// Fonty są ładowane globalnie, ale stosowane TYLKO w `.ff-dashboard` —
+// marketing zostaje na Geist.
+const inter = Inter({
+  variable: '--font-inter',
+  subsets: ['latin', 'latin-ext'],
+  display: 'swap',
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: '--font-ibm-plex-mono',
+  weight: ['400', '500', '600'],
+  subsets: ['latin', 'latin-ext'],
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -73,7 +98,7 @@ export default function RootLayout({
       lang="pl"
       suppressHydrationWarning
       data-scroll-behavior="smooth"
-      className={`dark ${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full scroll-smooth antialiased`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${inter.variable} ${ibmPlexMono.variable} h-full scroll-smooth antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />

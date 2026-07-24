@@ -483,71 +483,104 @@
   line-height: 1.6;
 }
 
-/* ═══ FaktFlow dashboard (makiet HTML + tokeny JSON/CSS) ═══ */
+/* ═══ FaktFlow dashboard — paleta z prototypu „FaktFlow Dashboard recreation" ══
+ * Płaski, ciemny grunt (bez mesh/orbów/szkła): tło #0d1117, sidebar ciemniejszy
+ * o stopień (#0a0d12), karty jeden stopień jaśniejsze (#12171f) na cienkiej
+ * ramce #1c2230. Akcent = emerald #34d399 używany punktowo (CTA, aktywna
+ * pozycja menu, wartości „na plus"), nigdy jako duża plama.
+ * ──────────────────────────────────────────────────────────────────────────── */
 .ff-dashboard {
   isolation: isolate;
-  /* Kolory jak w Tailwind config z HTML (M3 / FaktFlow dark) */
-  --ff-bg: #12131a;
+  --ff-bg: #0d1117;
   /* Bazowe tło — bez tego `bg-transparent` na layoucie dawał „płaski” czarny i zabijał czytelność szkła. */
   background-color: var(--ff-bg);
-  --ff-on-surface: #e2e1eb;
-  --ff-on-surface-variant: #bccabb;
-  --ff-primary: #6bfb9a;
-  --ff-on-primary: #003919;
-  --ff-primary-container: #4ade80;
-  --ff-secondary: #ffb783;
-  --ff-secondary-container: #d97722;
-  --ff-tertiary: #e9daff;
-  --ff-surface-container-low: #1a1b22;
-  --ff-surface-container-highest: #33343c;
-  --ff-outline-soft: rgba(255, 255, 255, 0.1);
+  --ff-on-surface: #f4f6f8;
+  --ff-on-surface-variant: #8a94a3;
+  --ff-primary: #34d399;
+  --ff-on-primary: #062017;
+  --ff-primary-container: #152b22;
+  --ff-secondary: #f59e0b;
+  --ff-secondary-container: #1a1509;
+  --ff-tertiary: #38bdf8;
+  --ff-surface-container-low: #12171f;
+  --ff-surface-container-highest: #1b2430;
+  --ff-outline-soft: #1c2230;
+
+  /* ── Semantyczne tokeny prototypu ──────────────────────────────────────── */
+  --ff-surface: #12171f;
+  --ff-surface-sidebar: #0a0d12;
+  --ff-surface-inset: #0d1117;
+  --ff-surface-chip: #1b2430;
+  --ff-border: #1c2230;
+  --ff-border-strong: #2a3442;
+  --ff-divider: #1c2230;
+  --ff-divider-strong: #2a3442;
+  --ff-row-divider: #161c26;
+  --ff-row-hover: #141a24;
+  --ff-table-header-bg: transparent;
+  --ff-table-row-hover: #141a24;
+  --ff-surface-muted: #1b2430;
+  --ff-surface-hover: #141a24;
+  /* Rampa tekstu: strong → faint */
+  --ff-text-strong: #f4f6f8;
+  --ff-text: #e6e8eb;
+  --ff-text-soft: #c8cfda;
+  --ff-text-muted: #8a94a3;
+  --ff-text-dim: #6b7585;
+  --ff-text-faint: #5b6472;
+  /* Role statusów — kolor + tło „pigułki" pod ten kolor */
+  --ff-accent: #34d399;
+  --ff-accent-hover: #42e0a6;
+  --ff-accent-tint: #152b22;
+  --ff-warn: #f59e0b;
+  --ff-warn-tint: #1a1509;
+  --ff-warn-border: #3d2f0e;
+  --ff-warn-text: #d9c9a3;
+  --ff-info: #38bdf8;
+  --ff-info-tint: #13202b;
+  --ff-danger: #f87171;
+  --ff-danger-tint: #2a1215;
+  --ff-violet: #a78bfa;
+  --ff-violet-tint: #1c1830;
+  --ff-neutral-chip: #1b2430;
+  --ff-neutral-chip-fg: #8fa0b5;
+
   --ff-unit: 8px;
   --ff-gutter: 24px;
   --ff-container-padding: 40px;
-  /* `--ff-glass-blur` zostawione dla kompatybilności (np. inne miejsca poza
-   * `.ff-glass-pane`); `.ff-glass-pane` świadomie NIE używa `backdrop-filter`,
-   * bo to było główne źródło zacinania scrolla (10+ paneli/stronę × read-back
-   * z parent layer + re-raster przy każdej klatce scrolla). */
-  --ff-glass-blur: 40px;
-  --ff-glass-bg: linear-gradient(
-    165deg,
-    rgba(46, 47, 59, 0.94),
-    rgba(28, 29, 38, 0.97)
-  );
-  --ff-glass-bg-hover: linear-gradient(
-    165deg,
-    rgba(58, 59, 72, 0.96),
-    rgba(38, 39, 50, 0.98)
-  );
-  --ff-glass-border: rgba(255, 255, 255, 0.1);
-  --ff-glass-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 8px 28px 0 rgba(0, 0, 0, 0.42);
+  /* Prototyp jest PŁASKI — „szkło" (gradient + blur + cień) zostaje zmapowane
+   * na jednolitą powierzchnię z cienką ramką. Tokeny zostają, żeby nie trzeba
+   * było przepisywać każdego `.ff-glass-pane` w aplikacji. */
+  --ff-glass-blur: 0px;
+  --ff-glass-bg: none;
+  --ff-glass-bg-hover: none;
+  --ff-glass-border: #1c2230;
+  --ff-glass-shadow: none;
   --ff-radius-lg: 1rem;
-  --ff-radius-chart-glow: 0 0 8px rgba(107, 251, 154, 0.4);
-  --ff-cta-bg: var(--ff-on-surface);
-  --ff-cta-fg: var(--ff-bg);
+  --ff-radius-chart-glow: 0 0 8px rgba(52, 211, 153, 0.35);
+  --ff-cta-bg: var(--ff-primary);
+  --ff-cta-fg: var(--ff-on-primary);
   /* Zmienne z dostarczonego :root (radius / cienie / powierzchnie) */
-  --color-surface: #12131a;
-  --color-surface-dim: #12131a;
-  --color-surface-bright: #383940;
-  --color-surface-container-lowest: #0c0e14;
-  --color-surface-container-low: #1a1b22;
-  --color-surface-container: #21222b;
-  --color-surface-container-high: #2b2c36;
-  --color-surface-container-highest: #363742;
-  --color-primary: #4ade80;
-  --color-on-primary: #00391c;
-  --color-primary-container: #00522c;
-  --color-on-primary-container: #6bfb9a;
-  --color-secondary: #b9ccb9;
-  --color-on-secondary: #253428;
-  --color-secondary-container: #3b4b3e;
-  --color-on-secondary-container: #d5e8d5;
-  --color-tertiary: #a4cded;
-  --color-on-tertiary: #04344f;
-  --color-tertiary-container: #234b67;
-  --color-on-tertiary-container: #c4e7ff;
+  --color-surface: #0d1117;
+  --color-surface-dim: #0a0d12;
+  --color-surface-bright: #233042;
+  --color-surface-container-lowest: #0a0d12;
+  --color-surface-container-low: #12171f;
+  --color-surface-container: #161c26;
+  --color-surface-container-high: #1b2430;
+  --color-surface-container-highest: #233042;
+  --color-primary: #34d399;
+  --color-on-primary: #062017;
+  --color-primary-container: #152b22;
+  --color-on-primary-container: #34d399;
+  --color-secondary: #f59e0b;
+  --color-on-secondary: #1a1509;
+  --color-secondary-container: #1a1509;
+  --color-on-secondary-container: #f59e0b;
+  --color-tertiary: #38bdf8;
+  --color-on-tertiary: #062330;
+  --color-tertiary-container: #13202b;
+  --color-on-tertiary-container: #38bdf8;
   --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -558,6 +591,27 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* ── Typografia panelu: Inter + IBM Plex Mono ──────────────────────────────
+   * `@theme inline` wstawia WARTOŚĆ zmiennej wprost do utility (`font-sans` →
+   * `font-family: var(--font-geist-sans)`), więc podmiana roli fontu w panelu
+   * sprowadza się do nadpisania tych dwóch zmiennych w tym scope. Marketing
+   * jest poza `.ff-dashboard`, więc zostaje na Geist. */
+  --font-geist-sans: var(--font-inter);
+  --font-geist-mono: var(--font-ibm-plex-mono);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Bezpiecznik na wypadek, gdyby Tailwind wygenerował `font-mono` z inną
+ * zmienną niż powyższa — liczby w panelu MUSZĄ być mono, bo na tym stoi
+ * wyrównanie kwot do przecinka w kolumnach tabel. */
+.ff-dashboard .font-mono,
+.ff-dashboard code,
+.ff-dashboard kbd,
+.ff-dashboard samp {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, 'SFMono-Regular',
+    monospace;
 }
 
 .ff-dashboard .material-symbols-outlined {
@@ -649,7 +703,7 @@
  * containment nic by nie ratowało wydajnościowo. */
 .ff-glass-pane {
   position: relative;
-  --ff-glass-pane-solid: #1d1e27;
+  --ff-glass-pane-solid: var(--ff-surface, #12171f);
   background-color: var(--ff-glass-pane-solid);
   background-image: var(--ff-glass-bg);
   border: 1px solid var(--ff-glass-border);
@@ -664,21 +718,17 @@
   will-change: auto;
 }
 
+/* Prototyp nie „podnosi" kart na hover — reaguje wyłącznie krawędź. */
 .ff-glass-pane-hover:hover {
-  background-image: var(--ff-glass-bg-hover);
-  border-color: rgba(255, 255, 255, 0.18);
-  /* `translateY` celowo wycięte — przesuwanie elementu pod kartami z blur w
-   * sąsiedztwie powoduje re-raster sąsiadów. Lift osiągamy cieniem. */
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.06) inset,
-    0 14px 36px 0 rgba(0, 0, 0, 0.5);
+  background-image: none;
+  border-color: var(--ff-border-strong, #2a3442);
+  box-shadow: none;
 }
 
-/* Aktywna pozycja w sidebarze: bez `backdrop-filter` (sidebar już ma jeden blur
- * na poziomie `<aside>` — drugi per-row to 9× zbędny pass). */
+/* Aktywna pozycja w sidebarze: zielona „pigułka" (tło #152b22, tekst #34d399). */
 .ff-sidebar-active {
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.12);
+  background: var(--ff-accent-tint, #152b22);
+  box-shadow: none;
 }
 
 /* shadcn `Card` domyślnie ma `backdrop-blur` — w dashboardzie (10+ kart / scroll)
@@ -687,16 +737,67 @@
 .ff-dashboard [data-slot='card'] {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  background-color: #1d1e27;
-  background-image: var(--ff-glass-bg);
-  border-color: var(--ff-glass-border);
-  box-shadow: var(--ff-glass-shadow);
+  background-color: var(--ff-surface);
+  background-image: none;
+  border-color: var(--ff-border);
+  box-shadow: none;
   color: var(--ff-on-surface);
 }
 
 .ff-dashboard [data-slot='card-footer'] {
-  background-color: rgba(255, 255, 255, 0.04);
-  border-color: var(--ff-glass-border);
+  background-color: transparent;
+  border-color: var(--ff-border);
+}
+
+/* ─── Przyciski shadcn w panelu ───────────────────────────────────────────────
+ * Prototyp zna dwa przyciski: wypełniony akcentem (akcja główna) i konturowy
+ * (wszystko inne). Mapujemy je po `data-variant`, które `<Button>` już
+ * wystawia — dzięki temu nie trzeba dotykać 24 miejsc wywołania ani wariantów
+ * współdzielonych z marketingiem.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.ff-dashboard [data-slot='button'][data-variant='glass-primary'] {
+  background-color: var(--ff-accent);
+  color: var(--ff-on-primary);
+  border-color: transparent;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.ff-dashboard [data-slot='button'][data-variant='glass-primary']:hover {
+  background-color: var(--ff-accent-hover);
+}
+
+.ff-dashboard [data-slot='button'][data-variant='glass'],
+.ff-dashboard [data-slot='button'][data-variant='outline'] {
+  background-color: var(--ff-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--ff-border-strong);
+  color: var(--ff-text-soft);
+  box-shadow: none;
+}
+
+.ff-dashboard [data-slot='button'][data-variant='glass']:hover,
+.ff-dashboard [data-slot='button'][data-variant='outline']:hover {
+  background-color: var(--ff-surface);
+  border-color: var(--ff-accent);
+  color: var(--ff-accent);
+}
+
+/* Prototyp nie skaluje ani nie przesuwa przycisków — reaguje samym kolorem. */
+.ff-dashboard [data-slot='button']:active {
+  transform: none;
+  scale: 1;
+}
+
+/* Prototyp jest PŁASKI — mesh i orby zostają tłem marketingu, ale znikają
+ * wszędzie tam, gdzie obowiązuje scope `.ff-dashboard`: panel, `/login`,
+ * `/onboarding`. Wyłączenie jest tu (a nie przez usunięcie <div>-ów), bo te
+ * dekoracje są renderowane w czterech różnych layoutach. */
+.ff-dashboard .ff-mesh-gradient,
+.ff-dashboard .ff-orb-tr,
+.ff-dashboard .ff-orb-bl {
+  display: none;
 }
 
 .ff-chart-glow {
@@ -708,7 +809,7 @@
 }
 
 .ff-dashboard ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: #233042;
   border-radius: 10px;
 }
 
@@ -724,18 +825,18 @@
  * (`rgba(...)` zamiast pełnych `#xxx`), żeby zachować efekt szkła nad mesh.
  * ──────────────────────────────────────────────────────────────────────────── */
 .ff-shell-sidebar {
-  background-color: rgba(26, 27, 34, 0.78);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: #0a0d12;
+  border-right: 1px solid #1c2230;
 }
 
 .ff-shell-header {
-  background-color: rgba(18, 19, 26, 0.88);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: #0d1117;
+  border-bottom: 1px solid #1c2230;
 }
 
 .ff-shell-mobile {
-  background-color: rgba(26, 27, 34, 0.96);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: #0a0d12;
+  border-right: 1px solid #1c2230;
 }
 
 /* ─── Fallback tła na <html>/<body> ──────────────────────────────────────────

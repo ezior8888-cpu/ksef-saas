@@ -68,7 +68,7 @@ export default async function DashboardLayout({
       <Sidebar />
 
       <main className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="ff-shell-header sticky top-0 z-40 flex h-[72px] w-full shrink-0 items-center justify-between gap-3 px-4 sm:px-[var(--ff-container-padding)]">
+        <header className="ff-shell-header sticky top-0 z-40 flex h-20 w-full shrink-0 items-center justify-between gap-3 px-4 sm:px-[var(--ff-container-padding)]">
           <div className="flex shrink-0 items-center lg:min-w-0">
             <div className="lg:hidden">
               <MobileNav />
@@ -83,9 +83,9 @@ export default async function DashboardLayout({
               <button
                 type="submit"
                 aria-label="Wyloguj"
-                className="rounded-full p-2 text-[var(--ff-on-surface)] transition-colors hover:bg-white/5"
+                className="flex size-10 shrink-0 items-center justify-center rounded-[10px] border border-[var(--ff-border)] bg-[var(--ff-surface)] text-[var(--ff-text-muted)] transition-colors hover:text-[var(--ff-text)]"
               >
-                <span className="material-symbols-outlined text-[22px] leading-none">
+                <span className="material-symbols-outlined text-[18px] leading-none">
                   logout
                 </span>
               </button>
@@ -94,7 +94,7 @@ export default async function DashboardLayout({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto min-h-0 w-full max-w-[1400px] px-4 pb-10 sm:px-[var(--ff-container-padding)]">
+          <div className="mx-auto min-h-0 w-full max-w-[1500px] px-4 pb-12 sm:px-[var(--ff-container-padding)]">
             <Suspense fallback={null}>
               <DashboardVerificationBanner />
             </Suspense>

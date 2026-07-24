@@ -8,27 +8,28 @@ export default async function DashboardVerificationBanner() {
 
   return (
     <div
-      className="ff-glass-pane mb-8 mt-8 flex flex-col gap-3 rounded-xl border border-[color-mix(in_srgb,var(--ff-secondary)_20%,transparent)] bg-[color-mix(in_srgb,var(--ff-secondary-container)_10%,transparent)] p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+      className="mb-6 mt-7 flex flex-col gap-4 rounded-xl border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-[22px] py-4 sm:flex-row sm:items-center"
       role="status"
     >
-      <div className="flex min-w-0 items-start gap-3 sm:items-center">
-        <span
-          className="mt-1.5 h-2 w-2 shrink-0 animate-pulse rounded-full bg-[var(--ff-secondary)] sm:mt-0"
-          aria-hidden
-        />
-        <p className="text-[15px] leading-relaxed text-[var(--ff-on-surface)]">
-          <span className="font-bold text-[var(--ff-secondary)]">
-            Organizacja niezweryfikowana.
-          </span>{' '}
-          Możesz tworzyć szkice faktur, ale wysyłka do KSeF oraz generowanie
-          PDF-ów wymaga weryfikacji certyfikatu.
-        </p>
-      </div>
+      <span
+        className="mt-1.5 size-2 shrink-0 rounded-full bg-[var(--ff-warn)] sm:mt-0"
+        aria-hidden
+      />
+      <p className="min-w-0 flex-1 text-[13.5px] leading-[1.5] text-[var(--ff-warn-text)]">
+        <span className="font-semibold text-[var(--ff-warn)]">
+          Organizacja niezweryfikowana.
+        </span>{' '}
+        Możesz tworzyć szkice faktur, ale wysyłka do KSeF oraz generowanie
+        PDF-ów wymaga weryfikacji certyfikatu.
+      </p>
       <Link
         href="/settings/ksef"
-        className="shrink-0 text-[15px] font-bold text-[var(--ff-secondary)] underline decoration-[color-mix(in_srgb,var(--ff-secondary)_30%,transparent)] underline-offset-4 transition-colors hover:decoration-[var(--ff-secondary)]"
+        className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[13.5px] font-semibold text-[var(--ff-warn)] transition-colors hover:text-[#fbbf24]"
       >
-        Zweryfikuj teraz →
+        Zweryfikuj teraz
+        <span className="material-symbols-outlined text-[15px] leading-none">
+          arrow_forward
+        </span>
       </Link>
     </div>
   );

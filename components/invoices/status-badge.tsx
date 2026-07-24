@@ -1,56 +1,29 @@
 import { Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { ffStatusPill, ffStatusTone, type FfStatusTone } from '@/lib/dashboard/ff-surface-classes';
 
-/** W kolejce (UI) — w DB jako `queued`. */
-const IN_QUEUE_CLASSES =
-  'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20';
-
-const STATUS_MAP: Record<string, { label: string; className: string }> = {
-  draft: {
-    label: 'Szkic',
-    className:
-      'bg-foreground/5 text-muted-foreground border-white/55 dark:border-white/14',
-  },
-  pending: {
-    label: 'W kolejce',
-    className: IN_QUEUE_CLASSES,
-  },
-  queued: {
-    label: 'W kolejce',
-    className: IN_QUEUE_CLASSES,
-  },
-  sending: {
-    label: 'Wysyłanie',
-    className: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
-  },
-  offline_queued: {
-    label: 'Offline (oczekuje KSeF)',
-    className: IN_QUEUE_CLASSES,
-  },
-  accepted: {
-    label: 'Zaakceptowana',
-    className: 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
-  },
-  rejected: {
-    label: 'Odrzucona',
-    className: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20',
-  },
-  failed: {
-    label: 'Błąd',
-    className: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20',
-  },
-  received: {
-    label: 'Odebrana',
-    className:
-      'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20',
-  },
+/**
+ * „Pigułki" statusów z prototypu: tło = przyciemniony odcień roli, tekst =
+ * kolor roli, bez obramowania. Kropka po lewej niesie status niezależnie od
+ * samego koloru — dla osób nierozróżniających barw etykieta i kropka
+ * wystarczają, a spinner zastępuje kropkę tam, gdzie coś trwa.
+ */
+const STATUS_MAP: Record<string, { label: string; tone: FfStatusTone }> = {
+  draft: { label: 'Szkic', tone: 'neutral' },
+  pending: { label: 'W kolejce', tone: 'warning' },
+  queued: { label: 'W kolejce', tone: 'warning' },
+  sending: { label: 'Wysyłanie', tone: 'info' },
+  offline_queued: { label: 'Offline (oczekuje KSeF)', tone: 'warning' },
+  accepted: { label: 'Zaakceptowana', tone: 'success' },
+  rejected: { label: 'Odrzucona', tone: 'danger' },
+  failed: { label: 'Błąd', tone: 'danger' },
+  received: { label: 'Odebrana', tone: 'violet' },
 };
 
-const FALLBACK = {
+const FALLBACK: { label: string; tone: FfStatusTone } = {
   label: 'Nieznany',
-  className:
-    'bg-foreground/5 text-muted-foreground border-white/55 dark:border-white/14',
+  tone: 'neutral',
 };
 
 interface StatusBadgeProps {
@@ -68,13 +41,15 @@ export function StatusBadge({ status, isLoading }: StatusBadgeProps) {
     status === 'sending';
 
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium backdrop-blur-[12px]',
-        meta.className
+    <span className={cn(ffStatusPill, ffStatusTone[meta.tone])}>
+      {showSpinner ? (
+        <Loader2 className="size-3 animate-spin" />
+      ) : (
+        <span
+          className="size-1.5 shrink-0 rounded-full bg-current"
+          aria-hidden
+        />
       )}
-    >
-      {showSpinner && <Loader2 className="h-3 w-3 animate-spin" />}
       {meta.label}
     </span>
   );

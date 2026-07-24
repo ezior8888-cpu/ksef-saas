@@ -109,10 +109,10 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+        <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
           Książka Przychodów i Rozchodów
         </h1>
-        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+        <p className="text-sm text-[var(--ff-text-muted)]">
           Automatycznie generowana z faktur i wydatków
         </p>
       </div>
@@ -204,7 +204,7 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
       </section>
 
       <section className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
-        <div className="border-b border-white/10 px-6 py-5 sm:px-8">
+        <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
           <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
             Przychody (kol. 7–8) — {invoices.length} faktur
           </h2>
@@ -217,17 +217,17 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-[14px]">
               <thead>
-                <tr className="border-b border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <tr className="border-b border-[var(--ff-border)]">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Data
                   </th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Numer
                   </th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Nabywca
                   </th>
-                  <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Netto
                   </th>
                   <th className="w-12 px-6 py-3.5 sm:px-8" aria-hidden />
@@ -237,7 +237,7 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
                 {invoices.map((inv) => (
                   <tr
                     key={inv.id}
-                    className="border-b border-white/6 transition-colors last:border-0 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]"
+                    className="border-b border-[var(--ff-row-divider)] transition-colors last:border-0 hover:bg-[var(--ff-row-hover)]"
                   >
                     <td className="px-6 py-3.5 text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_70%,transparent)] sm:px-8">
                       {formatPlDate(inv.issue_date)}
@@ -272,7 +272,7 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
       </section>
 
       <section className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
-        <div className="border-b border-white/10 px-6 py-5 sm:px-8">
+        <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
           <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
             Wydatki (kol. 10–15) — {expenses.length} pozycji
           </h2>
@@ -285,20 +285,20 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-[14px]">
               <thead>
-                <tr className="border-b border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <tr className="border-b border-[var(--ff-border)]">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Data
                   </th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Sprzedawca
                   </th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Kategoria
                   </th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Kol.
                   </th>
-                  <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Netto
                   </th>
                   <th className="w-12 px-6 py-3.5 sm:px-8" aria-hidden />
@@ -308,7 +308,7 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
                 {expenses.map((exp) => (
                   <tr
                     key={exp.id}
-                    className="border-b border-white/6 transition-colors last:border-0 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]"
+                    className="border-b border-[var(--ff-row-divider)] transition-colors last:border-0 hover:bg-[var(--ff-row-hover)]"
                   >
                     <td className="px-6 py-3.5 text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_70%,transparent)] sm:px-8">
                       {formatPlDate(exp.issue_date)}

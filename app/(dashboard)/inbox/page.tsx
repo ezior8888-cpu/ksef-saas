@@ -50,16 +50,16 @@ export default async function InboxPage() {
   return (
     <div className="space-y-8 pb-10 text-[var(--ff-on-surface)]">
       <div>
-        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+        <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
           Skrzynka odbiorcza
         </h1>
-        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+        <p className="text-sm text-[var(--ff-text-muted)]">
           Faktury zakupowe pobrane z KSeF (aktualizowane co 15 minut)
         </p>
       </div>
 
       {error ? (
-        <div className="rounded-[var(--ff-radius-lg)] border border-red-500/25 bg-red-500/10 px-5 py-4 text-sm text-red-200">
+        <div className="rounded-[var(--ff-radius-lg)] border border-[var(--ff-danger)]/25 bg-[var(--ff-danger-tint)] px-5 py-4 text-sm text-[var(--ff-danger)]">
           Nie udało się pobrać faktur: {error.message}
         </div>
       ) : !hasRows ? (
@@ -70,32 +70,32 @@ export default async function InboxPage() {
             </span>
           </div>
           <h3 className="mb-2 text-xl font-bold tracking-tight">Brak faktur przychodzących</h3>
-          <p className="mx-auto max-w-md text-[15px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+          <p className="mx-auto max-w-md text-sm text-[var(--ff-text-muted)]">
             Otrzymane faktury pojawią się tutaj automatycznie po synchronizacji z KSeF
           </p>
         </div>
       ) : (
         <div className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
-          <div className="border-b border-white/10 px-6 py-5 sm:px-8">
-            <h2 className="text-xl font-bold tracking-tight">Lista faktur przychodzących</h2>
-            <p className="mt-1 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+          <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
+            <h2 className="text-[15px] font-semibold text-[var(--ff-text-strong)]">Lista faktur przychodzących</h2>
+            <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
               {rows.length} pozycji (max. 200) • sortowanie wg daty przyjęcia w KSeF
             </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[880px] text-left text-[14px]">
               <thead>
-                <tr className="border-b border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <tr className="border-b border-[var(--ff-border)]">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Data otrzymania
                   </th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Numer KSeF
                   </th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Sprzedawca
                   </th>
-                  <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Kwota brutto
                   </th>
                 </tr>
@@ -107,9 +107,9 @@ export default async function InboxPage() {
                   return (
                     <tr
                       key={inv.id}
-                      className="border-b border-white/6 transition-colors last:border-0 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]"
+                      className="border-b border-[var(--ff-row-divider)] transition-colors last:border-0 hover:bg-[var(--ff-row-hover)]"
                     >
-                      <td className="px-6 py-4 text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_65%,transparent)] tabular-nums sm:px-8">
+                      <td className="px-6 py-4 font-mono text-[13px] text-[var(--ff-text-muted)]">
                         {inv.ksef_accepted_at
                           ? new Date(inv.ksef_accepted_at).toLocaleString('pl-PL', {
                               dateStyle: 'short',
@@ -117,12 +117,12 @@ export default async function InboxPage() {
                             })
                           : '—'}
                       </td>
-                      <td className="px-6 py-4 font-mono text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_75%,transparent)] sm:px-8">
+                      <td className="px-6 py-4 font-mono text-[13px] text-[var(--ff-text-soft)]">
                         {inv.ksef_number ?? '—'}
                       </td>
                       <td className="px-6 py-4 sm:px-8">
                         <div className="font-semibold text-[var(--ff-on-surface)]">{seller.name}</div>
-                        <div className="mt-0.5 font-mono text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+                        <div className="mt-0.5 font-mono text-[11px] text-[var(--ff-text-dim)]">
                           {seller.nip}
                         </div>
                       </td>

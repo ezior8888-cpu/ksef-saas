@@ -50,83 +50,78 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
   return (
     <div className="pb-10 text-[var(--ff-on-surface)]">
       <div className="mb-10">
-        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+        <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
           Przeterminowane
         </h1>
-        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+        <p className="text-sm text-[var(--ff-text-muted)]">
           Faktury po terminie płatności • przypomnienia e-mail
         </p>
       </div>
 
       <div className="mb-[var(--ff-gutter)] grid grid-cols-1 gap-[var(--ff-gutter)] md:grid-cols-3">
-        <div className="ff-glass-pane ff-glass-pane-hover group relative overflow-hidden rounded-[var(--ff-radius-lg)] p-6">
+        <div className="group relative overflow-hidden rounded-[14px] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-[22px]">
           <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,#f87171_22%,transparent)]">
+            <div className="flex size-[38px] shrink-0 items-center justify-center rounded-[9px] bg-[color-mix(in_srgb,#f87171_22%,transparent)]">
               <span className="material-symbols-outlined text-[22px] text-red-300">
                 error
               </span>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]">
+            <span className="text-[11px] font-semibold uppercase leading-[1.3] tracking-[0.06em] text-[var(--ff-text-muted)]">
               Liczba przeterminowanych
             </span>
           </div>
-          <p className="text-[48px] font-bold leading-none tabular-nums">
+          <p className="text-[34px] font-bold leading-none tracking-[-0.02em] tabular-nums">
             {formatPlInt(stats.totalCount)}
           </p>
-          <p className="mt-2 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_45%,transparent)]">
+          <p className="mt-3 text-xs text-[var(--ff-text-dim)]">
             Wymagają działania lub opłacenia
           </p>
-          <div className="pointer-events-none absolute -bottom-4 -right-4 opacity-[0.06] transition-opacity group-hover:opacity-[0.1]">
-            <span className="material-symbols-outlined text-[120px] leading-none">
-              receipt_long
-            </span>
-          </div>
         </div>
 
-        <div className="ff-glass-pane ff-glass-pane-hover group relative overflow-hidden rounded-[var(--ff-radius-lg)] p-6">
+        <div className="group relative overflow-hidden rounded-[14px] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-[22px]">
           <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-secondary)_20%,transparent)]">
+            <div className="flex size-[38px] shrink-0 items-center justify-center rounded-[9px] bg-[color-mix(in_srgb,var(--ff-secondary)_20%,transparent)]">
               <span className="material-symbols-outlined text-[22px] text-[var(--ff-secondary)]">
                 payments
               </span>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]">
+            <span className="text-[11px] font-semibold uppercase leading-[1.3] tracking-[0.06em] text-[var(--ff-text-muted)]">
               Suma do odzyskania
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-[32px] font-bold leading-none tabular-nums">
+            <span className="text-[32px] font-bold leading-none tracking-[-0.02em] tabular-nums">
               {formatPlMoney(stats.totalAmount)}
             </span>
-            <span className="text-sm font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_85%,transparent)]">
+            <span className="text-sm font-medium text-[var(--ff-text-dim)]">
               PLN
             </span>
           </div>
-          <p className="mt-2 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_45%,transparent)]">
+          <p className="mt-3 text-xs text-[var(--ff-text-dim)]">
             Kwoty „do zapłaty” z widoku
           </p>
         </div>
 
-        <div className="ff-glass-pane ff-glass-pane-hover relative overflow-hidden rounded-[var(--ff-radius-lg)] p-6">
+        <div className="relative overflow-hidden rounded-[14px] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-[22px]">
           <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-tertiary)_18%,transparent)]">
+            <div className="flex size-[38px] shrink-0 items-center justify-center rounded-[9px] bg-[color-mix(in_srgb,var(--ff-tertiary)_18%,transparent)]">
               <span className="material-symbols-outlined text-[22px] text-[var(--ff-tertiary)]">
                 schedule
               </span>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]">
+            <span className="text-[11px] font-semibold uppercase leading-[1.3] tracking-[0.06em] text-[var(--ff-text-muted)]">
               Średnie opóźnienie
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-[48px] font-bold leading-none tabular-nums">
+            <span className="text-[34px] font-bold leading-none tracking-[-0.02em] tabular-nums">
               {formatPlInt(stats.avgDaysOverdue)}
             </span>
-            <span className="text-sm font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_85%,transparent)]">
+            <span className="text-sm font-medium text-[var(--ff-text-dim)]">
               dni
             </span>
           </div>
-          <p className="mt-2 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_45%,transparent)]">
+          <p className="mt-3 text-xs text-[var(--ff-text-dim)]">
             Średnia z bieżącej listy (DSO)
           </p>
         </div>
@@ -142,16 +137,16 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
           <h3 className="mb-2 text-xl font-bold tracking-tight">
             Wszystkie faktury opłacone w terminie
           </h3>
-          <p className="mx-auto max-w-md text-[15px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+          <p className="mx-auto max-w-md text-sm text-[var(--ff-text-muted)]">
             Brak pozycji po terminie — gdy pojawią się zaległości, zobaczysz je w
             tabeli poniżej.
           </p>
         </div>
       ) : (
         <div className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
-          <div className="border-b border-white/10 px-6 py-5 sm:px-8">
-            <h2 className="text-xl font-bold tracking-tight">Lista zaległości</h2>
-            <p className="mt-1 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+          <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
+            <h2 className="text-[15px] font-semibold text-[var(--ff-text-strong)]">Lista zaległości</h2>
+            <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
               {formatPlInt(overdueInvoices.length)} pozycji (max. 100) • sortowanie
               wg dni po terminie
             </p>
@@ -159,23 +154,23 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[880px] text-left text-[14px]">
               <thead>
-                <tr className="border-b border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <tr className="border-b border-[var(--ff-border)]">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Faktura
                   </th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Nabywca
                   </th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Termin
                   </th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Opóźnienie
                   </th>
-                  <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Do zapłaty
                   </th>
-                  <th className="px-6 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                  <th className="px-6 py-3.5 text-center text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Wysłane
                   </th>
                   <th className="px-6 py-3.5 sm:px-8" aria-hidden />
@@ -259,7 +254,7 @@ function OverdueRow({ invoice }: { invoice: OverdueInvoice }) {
     'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_6%,transparent)] text-[var(--ff-on-surface)] transition-colors hover:border-white/20 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] disabled:pointer-events-none disabled:opacity-40';
 
   return (
-    <tr className="border-b border-white/6 transition-colors last:border-0 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
+    <tr className="border-b border-[var(--ff-row-divider)] transition-colors last:border-0 hover:bg-[var(--ff-row-hover)]">
       <td className="px-6 py-4 sm:px-8">
         <Link
           href={`/invoices/${invoice.id}`}

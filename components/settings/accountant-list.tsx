@@ -384,7 +384,7 @@ function AccessRow({ access }: { access: AccountantAccess }) {
         <div className="font-semibold text-[var(--ff-on-surface)]">
           {access.accountant_name}
         </div>
-        <div className="mt-0.5 font-mono text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+        <div className="mt-0.5 font-mono text-[11px] text-[var(--ff-text-dim)]">
           {access.accountant_email}
         </div>
       </td>

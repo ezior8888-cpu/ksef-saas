@@ -99,10 +99,10 @@ export function CashFlowDashboard({
   return (
     <div className="pb-10 text-[var(--ff-on-surface)]">
       <div className="mb-10">
-        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+        <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
           Przepływy pieniężne
         </h1>
-        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+        <p className="text-sm text-[var(--ff-text-muted)]">
           Przychód i koszty (netto) • ostatnie 6 miesięcy • faktury zaakceptowane w
           KSeF
         </p>
@@ -160,9 +160,9 @@ export function CashFlowDashboard({
       </div>
 
       <section className="ff-glass-pane mb-[var(--ff-gutter)] overflow-hidden rounded-[var(--ff-radius-lg)]">
-        <div className="border-b border-white/10 px-6 py-5 sm:px-8">
-          <h2 className="text-xl font-bold tracking-tight">Wykres 6 miesięcy</h2>
-          <p className="mt-1 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+        <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
+          <h2 className="text-[15px] font-semibold text-[var(--ff-text-strong)]">Wykres 6 miesięcy</h2>
+          <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
             Słupki: przychód (zielony) vs wydatki (czerwony). Najedź na miesiąc —
             podświetlenie i podpowiedź z kwotami.
           </p>
@@ -288,26 +288,26 @@ export function CashFlowDashboard({
       </section>
 
       <div className="ff-glass-pane mb-[var(--ff-gutter)] overflow-hidden rounded-[var(--ff-radius-lg)]">
-        <div className="border-b border-white/10 px-6 py-5 sm:px-8">
-          <h2 className="text-xl font-bold tracking-tight">Szczegóły miesięczne</h2>
-          <p className="mt-1 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+        <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
+          <h2 className="text-[15px] font-semibold text-[var(--ff-text-strong)]">Szczegóły miesięczne</h2>
+          <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
             Ta sama siatka co lista przeterminowanych — jeden styl kart i wierszy
           </p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-[14px]">
             <thead>
-              <tr className="border-b border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
-                <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+              <tr className="border-b border-[var(--ff-border)]">
+                <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                   Miesiąc
                 </th>
-                <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                   Przychód (netto)
                 </th>
-                <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                   Wydatki (netto)
                 </th>
-                <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                   Dochód
                 </th>
               </tr>
@@ -316,7 +316,7 @@ export function CashFlowDashboard({
               {monthlyData.map((m) => (
                 <tr
                   key={m.key}
-                  className="border-b border-white/6 transition-colors last:border-0 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]"
+                  className="border-b border-[var(--ff-row-divider)] transition-colors last:border-0 hover:bg-[var(--ff-row-hover)]"
                 >
                   <td className="px-6 py-3.5 font-medium capitalize sm:px-8">
                     {m.label} {m.year}
@@ -440,11 +440,11 @@ function KpiCard({
 }: KpiCardProps) {
   const a = accentIconClass[accent];
   return (
-    <div className="ff-glass-pane ff-glass-pane-hover relative overflow-hidden rounded-[var(--ff-radius-lg)] p-6">
+    <div className="relative overflow-hidden rounded-[14px] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-[22px]">
       <div className="mb-4 flex items-center gap-3">
         <div
           className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
+            'flex size-[38px] shrink-0 items-center justify-center rounded-[9px]',
             a.wrap,
           )}
         >
@@ -452,7 +452,7 @@ function KpiCard({
             {icon}
           </span>
         </div>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]">
+        <span className="text-[11px] font-semibold uppercase leading-[1.3] tracking-[0.06em] text-[var(--ff-text-muted)]">
           {label}
         </span>
       </div>
@@ -480,7 +480,7 @@ function KpiCard({
         </p>
       ) : null}
       {subtitle ? (
-        <p className="mt-2 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_45%,transparent)]">
+        <p className="mt-3 text-xs text-[var(--ff-text-dim)]">
           {subtitle}
         </p>
       ) : null}

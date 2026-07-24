@@ -40,10 +40,10 @@ export default function ExportsCenterPage() {
   return (
     <div className="space-y-8 pb-10 text-[var(--ff-on-surface)]">
       <div>
-        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+        <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
           Eksport danych księgowych
         </h1>
-        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+        <p className="text-sm text-[var(--ff-text-muted)]">
           Wygeneruj plik dla księgowego za dowolny okres
         </p>
       </div>

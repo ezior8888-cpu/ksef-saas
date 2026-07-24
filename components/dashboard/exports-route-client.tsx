@@ -8,8 +8,13 @@ import { cn } from '@/lib/utils';
 
 const EXPORTS_HREF = '/reports/exports';
 
+/**
+ * Przycisk konturowy z prototypu: przezroczyste tło, ramka `#2a3442`,
+ * na hover ramka i tekst przechodzą w akcent. Bez podnoszenia i skalowania —
+ * prototyp reaguje wyłącznie kolorem.
+ */
 const exportsLinkClassName =
-  'group/link ff-glass-pane flex shrink-0 cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.02] hover:border-[color-mix(in_srgb,var(--ff-primary)_35%,transparent)] hover:bg-[color-mix(in_srgb,var(--ff-primary)_14%,transparent)] hover:text-[var(--ff-primary)] hover:shadow-[0_10px_28px_rgba(107,251,154,0.18)] active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent';
+  'group/link flex shrink-0 cursor-pointer items-center gap-2 rounded-[9px] border border-[var(--ff-border-strong)] bg-transparent px-4 py-[9px] text-[13px] font-medium text-[var(--ff-text-soft)] transition-colors hover:border-[var(--ff-accent)] hover:text-[var(--ff-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ff-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ff-surface)]';
 
 /** Prefetch RSC `/reports/exports` gdy user jest w `(dashboard)` — skraca opóźnienie pierwszego kliku. */
 export function PrefetchExportsRoute() {
@@ -51,15 +56,13 @@ export function DashboardExportsPdfLink() {
     >
       <span
         className={cn(
-          'material-symbols-outlined text-[18px] transition-transform duration-200 ease-out group-hover/link:-translate-y-px group-hover/link:scale-110',
+          'material-symbols-outlined text-[15px] leading-none',
           busy && 'animate-spin',
         )}
       >
         {busy ? 'progress_activity' : 'print'}
       </span>
-      <span className="transition-transform duration-200 ease-out group-hover/link:translate-x-0.5">
-        {busy ? 'Przechodzenie…' : 'Eksport PDF'}
-      </span>
+      <span>{busy ? 'Przechodzenie…' : 'Eksport PDF'}</span>
     </Link>
   );
 }

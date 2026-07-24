@@ -33,7 +33,7 @@ export function ThemeToggle() {
   }, []);
 
   if (!mounted) {
-    return <div className="size-9 shrink-0" aria-hidden />;
+    return <div className="size-10 shrink-0" aria-hidden />;
   }
 
   const isDark = theme === 'dark';
@@ -44,11 +44,11 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={isDark ? 'Włącz jasny motyw' : 'Włącz ciemny motyw'}
       className={cn(
-        'rounded-full p-2 text-[var(--ff-on-surface-variant)] transition-colors',
-        'hover:bg-[var(--ff-surface-hover)] hover:text-[var(--ff-on-surface)]',
+        'flex size-10 shrink-0 items-center justify-center rounded-[10px] border border-[var(--ff-border)] bg-[var(--ff-surface)] text-[var(--ff-text-muted)] transition-colors',
+        'hover:text-[var(--ff-text)]',
       )}
     >
-      <span className="material-symbols-outlined text-[22px] leading-none">
+      <span className="material-symbols-outlined text-[18px] leading-none">
         {isDark ? 'light_mode' : 'dark_mode'}
       </span>
     </button>

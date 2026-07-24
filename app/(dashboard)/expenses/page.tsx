@@ -40,10 +40,10 @@ export default async function ExpensesPage({
     <div className="space-y-8 pb-24 text-[var(--ff-on-surface)] lg:pb-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+          <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
             Wydatki
           </h1>
-          <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+          <p className="text-sm text-[var(--ff-text-muted)]">
             Faktury kosztowe i paragony — automatycznie kategoryzowane do KPiR
           </p>
           <div className="ff-glass-pane inline-flex rounded-full p-1">

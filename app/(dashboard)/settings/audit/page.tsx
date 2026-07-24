@@ -42,16 +42,16 @@ export default async function AuditPage() {
   return (
     <div className="max-w-4xl space-y-8 pb-10 text-[var(--ff-on-surface)]">
       <div>
-        <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+        <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
           Historia aktywności
         </h1>
-        <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+        <p className="text-sm text-[var(--ff-text-muted)]">
           Pełny audit trail Twojego konta — RODO zgodność
         </p>
       </div>
 
       {error ? (
-        <div className="rounded-[var(--ff-radius-lg)] border border-red-500/25 bg-red-500/10 px-5 py-4 text-sm text-red-200">
+        <div className="rounded-[var(--ff-radius-lg)] border border-[var(--ff-danger)]/25 bg-[var(--ff-danger-tint)] px-5 py-4 text-sm text-[var(--ff-danger)]">
           Nie udało się wczytać historii: {error.message}
         </div>
       ) : (

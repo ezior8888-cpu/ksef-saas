@@ -62,16 +62,16 @@ const NavRow = memo(function NavRow({
       onPointerEnter={() => onPrefetchHover(href)}
       onFocus={() => onPrefetchHover(href)}
       className={cn(
-        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-[15px] font-medium transition-colors active:opacity-90',
+        'flex items-center gap-3 rounded-lg px-3 py-[11px] text-sm font-medium transition-colors active:opacity-90',
         active
-          ? 'ff-sidebar-active font-semibold text-[var(--ff-primary)]'
-          : 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_80%,transparent)] hover:bg-white/5',
+          ? 'ff-sidebar-active text-[var(--ff-accent)]'
+          : 'text-[var(--ff-text-muted)] hover:bg-[var(--ff-row-hover)] hover:text-[var(--ff-text)]',
       )}
     >
       <span
         className={cn(
-          'material-symbols-outlined text-[22px]',
-          active && 'text-[var(--ff-primary)]',
+          'material-symbols-outlined flex size-5 shrink-0 text-[20px]',
+          active && 'text-[var(--ff-accent)]',
         )}
       >
         {icon}
@@ -139,11 +139,11 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
   return (
     <aside
       className={cn(
-        'ff-shell-sidebar relative z-[2] hidden h-full min-h-0 w-72 shrink-0 flex-col gap-[var(--ff-unit)] overflow-y-auto p-[var(--ff-gutter)] lg:flex',
+        'ff-shell-sidebar relative z-[2] hidden h-full min-h-0 w-[280px] shrink-0 flex-col overflow-y-auto px-5 py-7 lg:flex',
         drawer && 'flex m-0 w-full max-w-none border-0 bg-transparent p-4',
       )}
     >
-      <div className="mb-8 px-2">
+      <div className="px-2 pb-7">
         <BrandWordmark href="/dashboard" variant="app" />
       </div>
 
@@ -157,21 +157,21 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
         onPointerEnter={() => armPrefetch('/invoices/new')}
         onFocus={() => armPrefetch('/invoices/new')}
         className={cn(
-          'mb-8 flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--ff-on-surface)] px-6 py-4 text-[15px] font-bold text-[var(--ff-bg)] transition-transform hover:scale-[1.02] active:scale-95',
+          'flex w-full items-center justify-center gap-2.5 rounded-[10px] bg-[var(--ff-accent)] px-4 py-[13px] text-sm font-semibold text-[var(--ff-on-primary)] transition-colors hover:bg-[var(--ff-accent-hover)]',
           newInvoiceNavPending &&
-            'ring-2 ring-[var(--ff-primary)] ring-offset-2 ring-offset-[color-mix(in_srgb,var(--ff-surface-container-low)_100%,transparent)]',
+            'ring-2 ring-[var(--ff-accent)] ring-offset-2 ring-offset-[var(--ff-surface-sidebar)]',
         )}
       >
-        <span className="material-symbols-outlined text-[22px] text-[var(--ff-bg)]">
+        <span className="material-symbols-outlined text-[18px] text-[var(--ff-on-primary)]">
           add
         </span>
         Nowa faktura
       </Link>
 
-      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-        {dashboardNavSections.map((section, sIdx) => (
-          <div key={section.title} className={sIdx > 0 ? 'mt-6' : undefined}>
-            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_40%,transparent)]">
+      <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {dashboardNavSections.map((section) => (
+          <div key={section.title}>
+            <p className="px-2 pb-2.5 pt-7 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ff-text-faint)]">
               {section.title}
             </p>
             <div className="flex flex-col gap-0.5">
@@ -190,7 +190,7 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
           </div>
         ))}
 
-        <div className="mt-auto pt-10">
+        <div className="mt-auto pt-7">
           <Link
             href="/settings"
             prefetch
@@ -201,16 +201,16 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
             onPointerEnter={() => armPrefetch('/settings')}
             onFocus={() => armPrefetch('/settings')}
             className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-[15px] font-medium transition-colors active:opacity-90',
+              'flex items-center gap-3 rounded-lg px-3 py-[11px] text-sm font-medium transition-colors active:opacity-90',
               settingsActive
-                ? 'ff-sidebar-active font-semibold text-[var(--ff-primary)]'
-                : 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_80%,transparent)] hover:bg-white/5',
+                ? 'ff-sidebar-active text-[var(--ff-accent)]'
+                : 'text-[var(--ff-text-muted)] hover:bg-[var(--ff-row-hover)] hover:text-[var(--ff-text)]',
             )}
           >
             <span
               className={cn(
-                'material-symbols-outlined text-[22px]',
-                settingsActive && 'text-[var(--ff-primary)]',
+                'material-symbols-outlined flex size-5 shrink-0 text-[20px]',
+                settingsActive && 'text-[var(--ff-accent)]',
               )}
             >
               settings

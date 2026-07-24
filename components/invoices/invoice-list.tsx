@@ -134,32 +134,32 @@ export function InvoiceList({
 
       {/* DESKTOP: tabela — ten sam układ co /inbox */}
       <div className="ff-glass-pane hidden overflow-hidden rounded-[var(--ff-radius-lg)] lg:block">
-        <div className="border-b border-white/10 px-6 py-5 sm:px-8">
-          <h2 className="text-xl font-bold tracking-tight">Lista faktur wystawionych</h2>
-          <p className="mt-1 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+        <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
+          <h2 className="text-[15px] font-semibold text-[var(--ff-text-strong)]">Lista faktur wystawionych</h2>
+          <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
             {invoices.length} pozycji (max. 100) • sortowanie wg daty utworzenia
           </p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px] text-left text-[14px]">
             <thead>
-              <tr className="border-b border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
-                <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+              <tr className="border-b border-[var(--ff-border)]">
+                <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                   Numer
                 </th>
-                <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                   Data
                 </th>
-                <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                   Nabywca
                 </th>
-                <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                   Kwota brutto
                 </th>
-                <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                   Status KSeF
                 </th>
-                <th className="px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
+                <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                   Numer KSeF
                 </th>
               </tr>
@@ -168,7 +168,7 @@ export function InvoiceList({
               {invoices.map((inv) => (
                 <tr
                   key={inv.id}
-                  className="border-b border-white/6 transition-colors last:border-0 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]"
+                  className="border-b border-[var(--ff-row-divider)] transition-colors last:border-0 hover:bg-[var(--ff-row-hover)]"
                 >
                   <td className="px-6 py-4 sm:px-8">
                     <Link
@@ -186,7 +186,7 @@ export function InvoiceList({
                       {inv.buyer_data?.name ?? '—'}
                     </div>
                     {inv.buyer_data?.nip ? (
-                      <div className="mt-0.5 font-mono text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+                      <div className="mt-0.5 font-mono text-[11px] text-[var(--ff-text-dim)]">
                         {inv.buyer_data.nip}
                       </div>
                     ) : null}
@@ -199,7 +199,7 @@ export function InvoiceList({
                   <td className="px-6 py-4 sm:px-8">
                     <StatusBadge status={inv.ksef_status} />
                   </td>
-                  <td className="px-6 py-4 font-mono text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_75%,transparent)] sm:px-8">
+                  <td className="px-6 py-4 font-mono text-[13px] text-[var(--ff-text-soft)]">
                     {inv.ksef_number ?? '—'}
                   </td>
                 </tr>

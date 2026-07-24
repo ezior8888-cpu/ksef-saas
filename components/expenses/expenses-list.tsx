@@ -89,7 +89,7 @@ export function ExpensesList({
             ? 'Brak wydatków do akceptacji'
             : 'Brak wydatków w tym miesiącu'}
         </h3>
-        <p className="mx-auto max-w-md text-[15px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+        <p className="mx-auto max-w-md text-sm text-[var(--ff-text-muted)]">
           {unreviewedEmpty
             ? 'Wszystkie wydatki są już sprawdzone — świetna robota.'
             : 'Zrób zdjęcie paragonu lub poczekaj aż KSeF dostarczy faktury zakupowe'}
@@ -163,7 +163,7 @@ function ExpenseRow({ expense }: { expense: ExpenseRow }) {
       <div className="flex items-start gap-3">
         <div
           className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border',
+            'flex size-[38px] shrink-0 items-center justify-center rounded-[9px] border',
             needsReview
               ? 'border-orange-400/25 bg-[color-mix(in_srgb,#fb923c_14%,transparent)]'
               : 'border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_6%,transparent)]',

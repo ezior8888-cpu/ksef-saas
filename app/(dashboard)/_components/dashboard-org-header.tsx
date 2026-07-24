@@ -5,7 +5,7 @@ import { OrgSwitcher } from '@/components/dashboard/org-switcher';
 export function OrgSwitcherHeaderSkeleton() {
   return (
     <div
-      className="ff-glass-pane h-[52px] w-[min(100%,280px)] max-w-full animate-pulse rounded-lg border border-white/5"
+      className="h-[50px] w-[min(100%,280px)] max-w-full animate-pulse rounded-[10px] border border-[var(--ff-border)] bg-[var(--ff-surface)]"
       aria-hidden
     />
   );

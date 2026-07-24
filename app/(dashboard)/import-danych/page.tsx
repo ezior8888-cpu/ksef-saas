@@ -13,10 +13,10 @@ export default async function ImportDanychPage() {
     return (
       <div className="space-y-8 pb-6 text-[var(--ff-on-surface)]">
         <div>
-          <h1 className="text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+          <h1 className="text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
             Import danych
           </h1>
-          <p className="mt-2 text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+          <p className="mt-2 text-sm text-[var(--ff-text-muted)]">
             Magiczny import historii z KSeF — ten sam krok co w ustawieniach KSeF.
           </p>
         </div>
@@ -38,10 +38,10 @@ export default async function ImportDanychPage() {
   return (
     <div className="space-y-8 pb-6 text-[var(--ff-on-surface)]">
       <div>
-        <h1 className="text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+        <h1 className="text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
           Import danych
         </h1>
-        <p className="mt-2 text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+        <p className="mt-2 text-sm text-[var(--ff-text-muted)]">
           Magiczny import historii z KSeF — ten sam krok co w ustawieniach KSeF.
         </p>
       </div>

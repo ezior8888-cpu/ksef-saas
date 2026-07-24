@@ -5,6 +5,13 @@ import { cn } from '@/lib/utils';
 /** Wordmark FaktFlow — identyczna typografia jak na landingu. */
 const WORDMARK_CLASS = 'marketing-wordmark text-[1.35rem]';
 
+/**
+ * Wariant panelu (prototyp): Inter 700, prosta antykwa (bez kursywy),
+ * dwutonowo — „Fakt" w kolorze tekstu, „Flow" w akcencie.
+ */
+const APP_WORDMARK_CLASS =
+  'text-[22px] font-bold leading-none tracking-[-0.02em] text-[var(--ff-on-surface)]';
+
 type BrandWordmarkProps = {
   /** Na landingu i w panelu: jasny wordmark na ciemnym tle. */
   variant?: 'landing' | 'app';
@@ -17,21 +24,34 @@ export function BrandWordmark({
   href,
   className,
 }: BrandWordmarkProps) {
-  const colorClass =
-    variant === 'landing'
-      ? 'text-[var(--marketing-text,#e2e1eb)]'
-      : 'text-[var(--ff-on-surface)]';
-
-  const mark = (
-    <span className={cn(WORDMARK_CLASS, colorClass, className)}>FaktFlow</span>
-  );
+  const mark =
+    variant === 'app' ? (
+      <span className={cn(APP_WORDMARK_CLASS, className)}>
+        Fakt<span className="text-[var(--ff-accent)]">Flow</span>
+      </span>
+    ) : (
+      <span
+        className={cn(
+          WORDMARK_CLASS,
+          'text-[var(--marketing-text,#e2e1eb)]',
+          className,
+        )}
+      >
+        FaktFlow
+      </span>
+    );
 
   if (!href) return mark;
 
   return (
     <Link
       href={href}
-      className="inline-block transition-colors hover:text-[var(--marketing-accent,#6bfb9a)]"
+      className={cn(
+        'inline-block transition-colors',
+        variant === 'app'
+          ? 'hover:opacity-80'
+          : 'hover:text-[var(--marketing-accent,#6bfb9a)]',
+      )}
     >
       {mark}
     </Link>

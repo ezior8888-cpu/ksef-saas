@@ -34,10 +34,10 @@ export default async function InvoicesPage() {
     <div className="space-y-8 pb-10 text-[var(--ff-on-surface)]">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="mb-1 text-[40px] font-bold leading-[1.2] tracking-[-0.02em]">
+          <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
             Faktury wystawione
           </h1>
-          <p className="text-[16px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
+          <p className="text-sm text-[var(--ff-text-muted)]">
             Wszystkie faktury sprzedażowe wysłane do KSeF
           </p>
         </div>
@@ -53,7 +53,7 @@ export default async function InvoicesPage() {
       </div>
 
       {error ? (
-        <div className="rounded-[var(--ff-radius-lg)] border border-red-500/25 bg-red-500/10 px-5 py-4 text-sm text-red-200">
+        <div className="rounded-[var(--ff-radius-lg)] border border-[var(--ff-danger)]/25 bg-[var(--ff-danger-tint)] px-5 py-4 text-sm text-[var(--ff-danger)]">
           Nie udało się pobrać faktur: {error.message}
         </div>
       ) : (
