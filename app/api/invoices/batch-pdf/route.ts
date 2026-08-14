@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
+import PQueue from 'p-queue';
 
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { packageZip, type PackagedFile } from '@/lib/exports/zip-packager';
@@ -20,6 +21,10 @@ import { createAdminClient } from '@/lib/supabase/server';
  * pobrać WSZYSTKIE faktury cudzej organizacji z danego okresu.
  */
 const MAX_INVOICES = 100;
+// Render pdfkit jest CPU/IO-bound (fonty + R2 round-trip przy cache miss).
+// Sekwencyjnie 100 sztuk przy zimnym cache ocierało się o timeout funkcji —
+// 4 równoległe rendery mieszczą paczkę z zapasem, nie zajeżdżając pamięci.
+const PDF_RENDER_CONCURRENCY = 4;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 interface InvoiceRow {
@@ -97,14 +102,22 @@ export async function GET(req: Request): Promise<Response> {
       );
     }
 
+    const queue = new PQueue({ concurrency: PDF_RENDER_CONCURRENCY });
+    const results = await Promise.all(
+      invoices.map((inv) =>
+        queue.add(() => generateInvoicePdf(inv.id, tenantId)),
+      ),
+    );
+
+    // Kolejność plików w ZIP = kolejność zapytania (Promise.all zachowuje ją
+    // niezależnie od tego, w jakiej kolejności skończyły się rendery).
+    // Pojedyncza faktura, której nie da się wyrenderować, nie blokuje
+    // całej paczki — pomijamy ją po cichu (rzadkie, np. niespójne dane).
     const files: PackagedFile[] = [];
-    for (const inv of invoices) {
-      const result = await generateInvoicePdf(inv.id, tenantId);
-      if (result.success) {
+    for (const result of results) {
+      if (result && result.success) {
         files.push({ filename: result.filename, content: result.pdf });
       }
-      // Pojedyncza faktura, której nie da się wyrenderować, nie blokuje
-      // całej paczki — pomijamy ją po cichu (rzadkie, np. niespójne dane).
     }
 
     if (files.length === 0) {

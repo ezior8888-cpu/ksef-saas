@@ -10,6 +10,10 @@
       "memory": 2048,
       "maxDuration": 60
     },
+    "app/api/invoices/batch-pdf/route.ts": {
+      "memory": 2048,
+      "maxDuration": 60
+    },
     "app/api/inngest/route.ts": {
       "maxDuration": 120
     },

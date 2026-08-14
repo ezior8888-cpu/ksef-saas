@@ -124,9 +124,22 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Audyt przedlaunchowy (blok A5): `getClaims()` zamiast `getUser()`.
+  // `getUser()` robił sieciowy round-trip do GoTrue na KAŻDE żądanie HTML —
+  // przy kilku tysiącach userów to główny mnożnik latencji proxy.
+  // `getClaims()`:
+  //   - odświeża sesję jak dotąd (network tylko gdy token wygasł),
+  //   - przy asymetrycznych JWT signing keys weryfikuje podpis LOKALNIE
+  //     (JWKS cache — zero round-tripów w hot path),
+  //   - przy legacy HS256 sam spada do `getUser()` — zachowanie identyczne
+  //     jak przed zmianą, więc migracja kluczy w dashboardzie Supabase
+  //     jest przełącznikiem wydajności, nie warunkiem poprawności.
+  // Trade-off: przy weryfikacji lokalnej unieważniona sesja (force-logout)
+  // żyje w proxy do wygaśnięcia access tokenu (~1h max). Akceptowalne:
+  // każda mutacja i odczyt danych przechodzi przez Server Action / route,
+  // które robią pełny `auth.getUser()` w `requireUserAndActiveOrg()`.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims.sub ?? null;
 
   const path = request.nextUrl.pathname;
   const isApi = path.startsWith('/api');
@@ -151,7 +164,7 @@ export async function updateSession(request: NextRequest) {
 
   // Zalogowany na landing z telefonu zostaje na landingu (nie ma dokąd iść —
   // panel jest zablokowany), stąd `!isPhone` w regule 0.
-  if (user && path === '/' && !isPhone) {
+  if (userId && path === '/' && !isPhone) {
     const url = request.nextUrl.clone();
     url.pathname = APP_HOME;
     url.search = '';
@@ -160,7 +173,7 @@ export async function updateSession(request: NextRequest) {
     return res;
   }
 
-  if (!user && !isPublicPath(path)) {
+  if (!userId && !isPublicPath(path)) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', path);
@@ -169,7 +182,7 @@ export async function updateSession(request: NextRequest) {
     return res;
   }
 
-  if (user && (path === '/login' || path === '/register')) {
+  if (userId && (path === '/login' || path === '/register')) {
     const url = request.nextUrl.clone();
     url.pathname = APP_HOME;
     url.search = '';
@@ -182,7 +195,7 @@ export async function updateSession(request: NextRequest) {
   // AAL1 podczas gdy ma verified TOTP factor → musi przejść challenge.
   // Pozwalamy tylko na /login/two-factor i /auth/* (callback OAuth, signOut).
   if (
-    user &&
+    userId &&
     !path.startsWith('/login/two-factor') &&
     !path.startsWith('/auth/') &&
     !isApi &&
@@ -204,13 +217,13 @@ export async function updateSession(request: NextRequest) {
   }
 
   const needsBootstrap =
-    !!user && !isPublicPath(path) && !isApi && !isUuid(activeOrgCookie);
+    !!userId && !isPublicPath(path) && !isApi && !isUuid(activeOrgCookie);
 
   if (needsBootstrap) {
     const { data: candidates } = await supabase
       .from('memberships')
       .select('organization_id, joined_at')
-      .eq('user_id', user!.id)
+      .eq('user_id', userId!)
       .eq('status', 'active')
       .order('joined_at', { ascending: false })
       .limit(50);
@@ -229,7 +242,7 @@ export async function updateSession(request: NextRequest) {
     const { data: profile } = await supabase
       .from('users')
       .select('last_active_tenant_id')
-      .eq('id', user!.id)
+      .eq('id', userId!)
       .maybeSingle();
 
     const lastActive = profile?.last_active_tenant_id ?? null;
