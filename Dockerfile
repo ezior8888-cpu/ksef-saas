@@ -59,6 +59,13 @@ ENV NEXT_PUBLIC_APP_DOMAIN=$NEXT_PUBLIC_APP_DOMAIN \
 
 ENV NEXT_OUTPUT=standalone \
     NEXT_TELEMETRY_DISABLED=1
+# Node 22 domyślnie ogranicza sobie stertę do ~1958 MB niezależnie od realnie
+# dostępnego RAM-u (sprawdzone: `v8.getHeapStatistics().heap_size_limit` na
+# obrazie node:22-slim) — na `app-1` (CX23, 3.7 GB RAM) to za mało dla
+# `next build --webpack` na tym rozmiarze apki, mimo skonfigurowanego swapa.
+# 3072 MB mieści się wygodnie w samym RAM-u, z zapasem, bez polegania na
+# wolniejszym swapie.
+ENV NODE_OPTIONS="--max-old-space-size=3072"
 RUN pnpm build
 
 # ── runner: minimalny obraz produkcyjny ──
