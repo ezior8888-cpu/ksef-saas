@@ -80,3 +80,4 @@ backup_*.sql
 /playwright/.cache/
 /.auth/
 docs/launch/
+.env*.local
