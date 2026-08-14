@@ -103,6 +103,10 @@ export function getR2Client(config: R2Config = getR2Config()): S3Client {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
     },
+    // Migracja Hetzner (M3): MinIO adresuje buckety w ścieżce
+    // (`http://host:9000/bucket/key`), a nie w subdomenie jak R2/AWS.
+    // Włączane env-em na self-hosted; dla R2 zostaje default (false).
+    forcePathStyle: process.env.R2_FORCE_PATH_STYLE === 'true',
     // R2 wspiera checksum SHA256 ale nie CRC32/CRC32C, które AWS SDK v3
     // od 3.729+ próbuje wysłać domyślnie. Wyłączamy, żeby uniknąć 400 NotImplemented.
     requestChecksumCalculation: 'WHEN_REQUIRED',

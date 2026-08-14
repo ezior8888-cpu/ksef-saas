@@ -96,6 +96,25 @@ const nextConfig: NextConfig = {
   // Praca w git worktree: dwa `pnpm-workspace.yaml` — bez tego Next zgaduje root.
   outputFileTracingRoot: import.meta.dirname,
 
+  // Migracja Hetzner (M5): build do obrazu Docker wymaga `standalone`
+  // (samowystarczalny server.js + traced node_modules). Włączane JAWNIE
+  // przez env w Dockerfile — build na Vercelu zostaje bez zmian.
+  ...(process.env.NEXT_OUTPUT === 'standalone'
+    ? { output: 'standalone' as const }
+    : {}),
+
+  // Pliki czytane z dysku w RUNTIME (fs.readFileSync + process.cwd()), których
+  // statyczny tracing nie widzi: schematy XSD FA(3) (walidacja przed wysyłką
+  // do KSeF), fonty PDF (pdfkit) i artykuły MDX centrum pomocy. Bez tego
+  // standalone w Dockerze padnie na ENOENT przy pierwszej fakturze.
+  outputFileTracingIncludes: {
+    '/**': [
+      './lib/xml/schemas/**',
+      './lib/pdf/fonts/**',
+      './content/help/**',
+    ],
+  },
+
   experimental: {
     optimizePackageImports: ['radix-ui', 'lucide-react'],
   },

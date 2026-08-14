@@ -1,0 +1,33 @@
+# Build context = tylko to, czego potrzebuje `next build`.
+# Mniejszy context = szybszy upload do daemona i mniej cache-missów.
+node_modules
+.next
+.git
+.claude
+.vscode
+
+# Testy i narzędzia deweloperskie — nie wchodzą do obrazu.
+e2e
+tests
+load-tests
+playwright-report
+test-results
+playwright.config.ts
+vitest.config.ts
+
+# Dokumentacja i materiały wewnętrzne.
+docs
+*.md
+!README.md
+
+# Migracje wgrywane osobno (pnpm db:push:prod), nie z kontenera.
+supabase
+
+# Lokalne środowisko i sekrety — env wchodzi przez Coolify, nigdy z pliku.
+.env*
+instrukcja.txt
+ai_todo.md
+
+# Artefakty
+tsconfig.tsbuildinfo
+posthog-setup-report.md
