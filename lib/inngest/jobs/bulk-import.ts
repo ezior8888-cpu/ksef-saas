@@ -3,6 +3,8 @@
  */
 
 import { NonRetriableError } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 import type { ParsedInvoice } from '@/lib/import/fa3-parser';
 import { parseCsv, type CsvSource } from '@/lib/import/csv-parsers';
@@ -13,38 +15,36 @@ import { createAdminClient } from '@/lib/supabase/server';
 
 import { importFileUploaded, inngest } from '../client';
 
-export const bulkImportFileJob = inngest.createFunction(
-  {
-    id: 'bulk-import-file',
-    name: 'Import z pliku JPK/CSV',
-    retries: 1,
-    concurrency: { limit: 5 },
-    triggers: [importFileUploaded],
-    onFailure: async ({ error: failureErr, event, step }) => {
-      const original = event.data.event as {
-        data: { importJobId: string };
-      };
-      const { importJobId } = original.data;
+/**
+ * Obsługa po wyczerpaniu prób (Etap 7): wspólna dla Inngest `onFailure`
+ * i pg-boss `onExhausted` — oznacza job importu pliku jako nieudany,
+ * żeby pasek postępu w UI nie wisiał w nieskończoność.
+ */
+export async function onBulkImportExhausted(
+  failureErr: Error,
+  data: { importJobId: string },
+): Promise<void> {
+  const { importJobId } = data;
+  const supabase = createAdminClient();
+  const failureMsg = `${failureErr.name}: ${failureErr.message}`.slice(0, 900);
+  const { error } = await supabase
+    .from('import_jobs')
+    .update({
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+      progress_percent: 100,
+      progress_message: failureMsg,
+    })
+    .eq('id', importJobId);
+  if (error) throw new Error(error.message);
+}
 
-      await step.run('mark-import-failed', async () => {
-        const supabase = createAdminClient();
-        const failureMsg =
-          `${failureErr.name}: ${failureErr.message}`.slice(0, 900);
-        const { error } = await supabase
-          .from('import_jobs')
-          .update({
-            status: 'failed',
-            completed_at: new Date().toISOString(),
-            progress_percent: 100,
-            progress_message: failureMsg,
-          })
-          .eq('id', importJobId);
-        if (error) throw new Error(error.message);
-      });
-    },
-  },
-  async ({ event, step }) => {
-    const { importJobId, tenantId, filePath, source } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
+ */
+export async function runBulkImportFile(data: Parameters<typeof importFileUploaded.create>[0], { step }: JobContext) {
+    const { importJobId, tenantId, filePath, source } = data;
 
     const supabase = createAdminClient();
 
@@ -148,5 +148,21 @@ export const bulkImportFileJob = inngest.createFunction(
       success: true as const,
       imported: processResult.invoicesImported,
     };
+}
+
+export const bulkImportFileJob = inngest.createFunction(
+  {
+    id: 'bulk-import-file',
+    name: 'Import z pliku JPK/CSV',
+    retries: 1,
+    concurrency: { limit: 5 },
+    triggers: [importFileUploaded],
+    onFailure: async ({ error: failureErr, event }) =>
+      onBulkImportExhausted(
+        failureErr,
+        (event.data.event as { data: { importJobId: string } }).data,
+      ),
   },
+  async ({ event, step, logger, attempt }) =>
+    runBulkImportFile(event.data as Parameters<typeof importFileUploaded.create>[0], toJobContext({ step, logger, attempt })),
 );

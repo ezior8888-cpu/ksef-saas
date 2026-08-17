@@ -8,6 +8,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import {
+  NonRetriableError as InngestNonRetriableError,
+  RetryAfterError as InngestRetryAfterError,
+} from 'inngest';
 import { describe, expect, it } from 'vitest';
 
 import { parseDurationMs } from '@/lib/jobs/duration';
@@ -77,6 +81,43 @@ describe('decideRetry — parytet z Inngest', () => {
     }
     // 6. wykonanie (attempt=5) → exhausted → ścieżka Offline24 w onExhausted.
     expect(decideRetry(new Error('503'), KSEF_MAX_RETRIES, ksefPolicy)).toEqual({
+      action: 'exhausted',
+      reason: 'attempts-exhausted',
+    });
+  });
+});
+
+describe('decideRetry — błędy KLAS INNGEST (runnery są współdzielone)', () => {
+  const policy = { maxRetries: 5, getDelayMs: defaultRetryDelayMs };
+
+  it('NonRetriableError z pakietu inngest → exhausted (regresja: E2E paczki C)', () => {
+    // Realny błąd wykryty w E2E: job rzucał klasę Inngest, a worker ponawiał
+    // go zamiast wywołać onExhausted (pasek postępu w UI wisiałby w nieskończoność).
+    const err = new InngestNonRetriableError('Job nie istnieje');
+    expect(decideRetry(err, 0, policy)).toEqual({
+      action: 'exhausted',
+      reason: 'non-retriable',
+    });
+  });
+
+  it('RetryAfterError z pakietu inngest → honoruje jego opóźnienie (sekundy!)', () => {
+    // KRYTYCZNE dla paczki D: cały schedule KSeF 30s→1h jedzie na tej klasie.
+    const err = new InngestRetryAfterError('KSeF 503', '30s');
+    expect(decideRetry(err, 0, policy)).toEqual({
+      action: 'retry',
+      delayMs: 30_000,
+      nextAttempt: 1,
+    });
+    expect(decideRetry(new InngestRetryAfterError('x', '1h'), 2, policy)).toEqual({
+      action: 'retry',
+      delayMs: 3_600_000,
+      nextAttempt: 3,
+    });
+  });
+
+  it('RetryAfterError nie omija limitu prób', () => {
+    const err = new InngestRetryAfterError('KSeF 503', '30s');
+    expect(decideRetry(err, 5, policy)).toEqual({
       action: 'exhausted',
       reason: 'attempts-exhausted',
     });

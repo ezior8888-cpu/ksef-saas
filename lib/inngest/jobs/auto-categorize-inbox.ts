@@ -3,6 +3,8 @@
  */
 
 import { NonRetriableError } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 import { categorizeExpense } from '@/lib/categorization';
 import {
@@ -150,17 +152,13 @@ function invoiceToExtracted(invoice: InvoiceWithLines): ExtractedInvoice {
   return extractedInvoiceSchema.parse(draft);
 }
 
-export const autoCategorizeInboxInvoice = inngest.createFunction(
-  {
-    id: 'auto-categorize-inbox',
-    name: 'KPiR: expense z faktury inbox KSeF',
-    retries: 2,
-    concurrency: { limit: 10 },
-    triggers: [inboxInvoiceReceivedAutoCategorize],
-  },
-  async ({ event, step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
+ */
+export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoiceReceivedAutoCategorize.create>[0], { step }: JobContext) {
     const { invoiceId, tenantId } = inboxInvoiceReceivedAutoCategorize.parse(
-      event.data,
+      data,
     );
     const supabase = createAdminClient();
 
@@ -278,5 +276,16 @@ export const autoCategorizeInboxInvoice = inngest.createFunction(
     });
 
     return { success: true as const };
+}
+
+export const autoCategorizeInboxInvoice = inngest.createFunction(
+  {
+    id: 'auto-categorize-inbox',
+    name: 'KPiR: expense z faktury inbox KSeF',
+    retries: 2,
+    concurrency: { limit: 10 },
+    triggers: [inboxInvoiceReceivedAutoCategorize],
   },
+  async ({ event, step, logger, attempt }) =>
+    runAutoCategorizeInbox(event.data as Parameters<typeof inboxInvoiceReceivedAutoCategorize.create>[0], toJobContext({ step, logger, attempt })),
 );

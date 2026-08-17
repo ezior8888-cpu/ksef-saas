@@ -3,6 +3,8 @@
  */
 
 import { NonRetriableError } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 import { categorizeExpense } from '@/lib/categorization';
 import { extractInvoiceFromImage } from '@/lib/ocr/engine';
@@ -23,40 +25,36 @@ function extractedInvoiceToJson(data: ExtractedInvoice): Json {
   return JSON.parse(JSON.stringify(data)) as Json;
 }
 
-export const processOcrJob = inngest.createFunction(
-  {
-    id: 'process-ocr-photo',
-    name: 'OCR: rozpoznanie wydatku ze zdjęcia',
-    retries: 2,
-    concurrency: { limit: 5 },
-    triggers: [ocrProcessPhotoRequested],
-    // BUG-012 (audyt przedlaunchowy): bez tego handlera, gdy job rzuci błąd
-    // (brak ANTHROPIC_API_KEY, nieczytelne zdjęcie, błąd DB) i wyczerpie retry,
-    // wiersz `ocr_jobs` zostawał w statusie 'processing' NA ZAWSZE — klient
-    // (`getOcrJobStatusAction`) odpytywał w nieskończoność aż do timeoutu.
-    // Tu po wyczerpaniu retries DEFINITYWNIE oznaczamy job jako 'failed' z
-    // komunikatem — klient od razu pokazuje błąd zamiast wisieć.
-    onFailure: async ({ error, event }) => {
-      const original = event.data.event as {
-        data: { ocrJobId: string; tenantId: string };
-      };
-      const { ocrJobId, tenantId } = original.data;
-      const supabase = createAdminClient();
-      await supabase
-        .from('ocr_jobs')
-        .update({
-          status: 'failed',
-          error_message:
-            error.message?.slice(0, 500) ||
-            'Nie udało się rozpoznać paragonu. Spróbuj ponownie lub wprowadź dane ręcznie.',
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', ocrJobId)
-        .eq('tenant_id', tenantId);
-    },
-  },
-  async ({ event, step }) => {
-    const { ocrJobId, tenantId } = ocrProcessPhotoRequested.parse(event.data);
+/**
+ * Obsługa po wyczerpaniu prób (Etap 7): wspólna dla Inngest `onFailure`
+ * i pg-boss `onExhausted` — oznacza job OCR jako nieudany, żeby UI przestało
+ * pokazywać „przetwarzanie" i user mógł wpisać dane ręcznie.
+ */
+export async function onProcessOcrExhausted(
+  error: Error,
+  data: { ocrJobId: string; tenantId: string },
+): Promise<void> {
+  const { ocrJobId, tenantId } = data;
+  const supabase = createAdminClient();
+  await supabase
+    .from('ocr_jobs')
+    .update({
+      status: 'failed',
+      error_message:
+        error.message?.slice(0, 500) ||
+        'Nie udało się rozpoznać paragonu. Spróbuj ponownie lub wprowadź dane ręcznie.',
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', ocrJobId)
+    .eq('tenant_id', tenantId);
+}
+
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
+ */
+export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoRequested.create>[0], { step }: JobContext) {
+    const { ocrJobId, tenantId } = ocrProcessPhotoRequested.parse(data);
     const supabase = createAdminClient();
 
     await step.run('mark-processing', async () => {
@@ -210,5 +208,27 @@ export const processOcrJob = inngest.createFunction(
     });
 
     return { success: true as const, expenseId };
+}
+
+export const processOcrJob = inngest.createFunction(
+  {
+    id: 'process-ocr-photo',
+    name: 'OCR: rozpoznanie wydatku ze zdjęcia',
+    retries: 2,
+    concurrency: { limit: 5 },
+    triggers: [ocrProcessPhotoRequested],
+    // BUG-012 (audyt przedlaunchowy): bez tego handlera, gdy job rzuci błąd
+    // (brak ANTHROPIC_API_KEY, nieczytelne zdjęcie, błąd DB) i wyczerpie retry,
+    // wiersz `ocr_jobs` zostawał w statusie 'processing' NA ZAWSZE — klient
+    // (`getOcrJobStatusAction`) odpytywał w nieskończoność aż do timeoutu.
+    // Tu po wyczerpaniu retries DEFINITYWNIE oznaczamy job jako 'failed' z
+    // komunikatem — klient od razu pokazuje błąd zamiast wisieć.
+    onFailure: async ({ error, event }) =>
+      onProcessOcrExhausted(
+        error,
+        (event.data.event as { data: { ocrJobId: string; tenantId: string } }).data,
+      ),
   },
+  async ({ event, step, logger, attempt }) =>
+    runProcessOcr(event.data as Parameters<typeof ocrProcessPhotoRequested.create>[0], toJobContext({ step, logger, attempt })),
 );

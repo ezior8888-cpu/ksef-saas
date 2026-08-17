@@ -33,6 +33,7 @@ import { createJobStep } from './step-shim';
 // Rejestracje paczek (side-effect imports) — Etapy 3-6 planu.
 import './handlers/package-a';
 import './handlers/package-b';
+import './handlers/package-c';
 
 const log = createJobLogger('worker');
 

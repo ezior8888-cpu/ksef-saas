@@ -14,6 +14,7 @@ import { getRegisteredJobs } from '@/lib/jobs/registry';
 // Side-effect: rejestracje paczek.
 import '@/lib/jobs/handlers/package-a';
 import '@/lib/jobs/handlers/package-b';
+import '@/lib/jobs/handlers/package-c';
 
 const registered = getRegisteredJobs();
 const queues = registered.map((j) => j.queue);
@@ -91,5 +92,44 @@ describe('rejestr jobów', () => {
   it('dunning ma limit równoległości per tenant (grupa pg-boss)', () => {
     const dunning = registered.find((j) => j.queue === 'billing.payment.failed');
     expect(dunning?.groupConcurrency).toBe(1);
+  });
+
+  it('paczka C: 8 jobów OCR/importy/eksporty', () => {
+    const packageC = [
+      'cron.co-pilot-monthly',
+      'ocr.process-photo',
+      'inbox.invoice.received',
+      'import.file.uploaded',
+      'validation.bulk-contractors.requested',
+      'import.ksef-history.requested',
+      'exports.generate.requested',
+      'exports.co-pilot.send-package',
+    ];
+    expect(packageC.length).toBe(8);
+    for (const q of packageC) expect(queues, `brak ${q}`).toContain(q);
+  });
+
+  it('joby z onFailure w Inngest mają odpowiednik onExhausted', () => {
+    // Bez tego pasek postępu w UI wisiałby po nieudanym imporcie/OCR.
+    const withHandler = [
+      'ocr.process-photo',
+      'import.file.uploaded',
+      'import.ksef-history.requested',
+    ];
+    const byQueue = new Map(registered.map((j) => [j.queue, j]));
+    for (const q of withHandler) {
+      expect(typeof byQueue.get(q)?.onExhausted, `brak onExhausted: ${q}`).toBe(
+        'function',
+      );
+    }
+  });
+
+  it('parytet limitów równoległości paczki C', () => {
+    const byQueue = new Map(registered.map((j) => [j.queue, j]));
+    expect(byQueue.get('ocr.process-photo')?.batchSize).toBe(5);
+    expect(byQueue.get('inbox.invoice.received')?.batchSize).toBe(10);
+    expect(byQueue.get('validation.bulk-contractors.requested')?.batchSize).toBe(3);
+    // magic-import: limit per NIP (grupa), nie globalny batch
+    expect(byQueue.get('import.ksef-history.requested')?.groupConcurrency).toBe(3);
   });
 });

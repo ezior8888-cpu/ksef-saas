@@ -4,17 +4,15 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { validateNipCached } from '@/lib/validation/cache';
 
 import { inngest, validationBulkContractorsRequested } from '../client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
-export const bulkValidateContractorsJob = inngest.createFunction(
-  {
-    id: 'bulk-validate-contractors',
-    name: 'Bulk weryfikacja kontrahentów (Biała Lista/VIES)',
-    retries: 1,
-    concurrency: { limit: 3 },
-    triggers: [validationBulkContractorsRequested],
-  },
-  async ({ event, step }) => {
-    const { tenantId, contractorIds, forceRefresh } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
+ */
+export async function runBulkValidateContractors(data: Parameters<typeof validationBulkContractorsRequested.create>[0], { step }: JobContext) {
+    const { tenantId, contractorIds, forceRefresh } = data;
 
     const contractors = await step.run('fetch-contractors', async () => {
       const supabase = createAdminClient();
@@ -105,5 +103,16 @@ export const bulkValidateContractorsJob = inngest.createFunction(
       inactive,
       withWarnings,
     };
+}
+
+export const bulkValidateContractorsJob = inngest.createFunction(
+  {
+    id: 'bulk-validate-contractors',
+    name: 'Bulk weryfikacja kontrahentów (Biała Lista/VIES)',
+    retries: 1,
+    concurrency: { limit: 3 },
+    triggers: [validationBulkContractorsRequested],
   },
+  async ({ event, step, logger, attempt }) =>
+    runBulkValidateContractors(event.data as Parameters<typeof validationBulkContractorsRequested.create>[0], toJobContext({ step, logger, attempt })),
 );

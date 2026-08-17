@@ -3,6 +3,8 @@
 // + job obsługujący event exports/co-pilot.send-package
 
 import { NonRetriableError, cron } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { Resend } from 'resend';
 
 import {
@@ -105,14 +107,11 @@ function previousMonthRangeWarsaw(reference: Date): {
 // Cron: miesięcznie wg send_day_of_month (filtr dzienny 8:00)
 // ============================================================================
 
-export const coPilotMonthlyJob = inngest.createFunction(
-  {
-    id: 'co-pilot-monthly',
-    name: 'Co-Pilot Księgowego: miesięczna paczka',
-    concurrency: { limit: 1 },
-    triggers: [cron('TZ=Europe/Warsaw 0 8 * * *')],
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
+ */
+export async function runCoPilotMonthly({ step }: JobContext) {
     const supabase = createAdminClient();
 
     const dayOfMonth = await step.run('warsaw-day', () => dayOfMonthInWarsaw(new Date()));
@@ -211,7 +210,17 @@ export const coPilotMonthlyJob = inngest.createFunction(
       periodStart,
       periodEnd,
     };
+}
+
+export const coPilotMonthlyJob = inngest.createFunction(
+  {
+    id: 'co-pilot-monthly',
+    name: 'Co-Pilot Księgowego: miesięczna paczka',
+    concurrency: { limit: 1 },
+    triggers: [cron('TZ=Europe/Warsaw 0 8 * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runCoPilotMonthly(toJobContext({ step, logger, attempt })),
 );
 
 // ============================================================================
@@ -228,15 +237,11 @@ interface CoPilotDownloadLink {
   url: string;
 }
 
-export const coPilotSendPackageJob = inngest.createFunction(
-  {
-    id: 'co-pilot-send-package',
-    name: 'Co-Pilot: wyślij paczkę',
-    retries: 2,
-    concurrency: { limit: 3 },
-    triggers: [exportsCoPilotSendPackage],
-  },
-  async ({ event, step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
+ */
+export async function runCoPilotSendPackage(data: Parameters<typeof exportsCoPilotSendPackage.create>[0], { step }: JobContext) {
     const {
       tenantId,
       periodStart,
@@ -245,7 +250,7 @@ export const coPilotSendPackageJob = inngest.createFunction(
       accountantEmail,
       accountantName,
       manual,
-    } = event.data;
+    } = data;
 
     const supabase = createAdminClient();
 
@@ -536,7 +541,18 @@ export const coPilotSendPackageJob = inngest.createFunction(
       totalBytes: sendResult.totalBytes,
       emailedTo: toEmail,
     };
+}
+
+export const coPilotSendPackageJob = inngest.createFunction(
+  {
+    id: 'co-pilot-send-package',
+    name: 'Co-Pilot: wyślij paczkę',
+    retries: 2,
+    concurrency: { limit: 3 },
+    triggers: [exportsCoPilotSendPackage],
   },
+  async ({ event, step, logger, attempt }) =>
+    runCoPilotSendPackage(event.data as Parameters<typeof exportsCoPilotSendPackage.create>[0], toJobContext({ step, logger, attempt })),
 );
 
 function escapeHtml(s: string): string {

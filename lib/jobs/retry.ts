@@ -25,21 +25,46 @@ export type RetryDecision =
   | { action: 'retry'; delayMs: number; nextAttempt: number }
   | { action: 'exhausted'; reason: 'non-retriable' | 'attempts-exhausted' };
 
+/**
+ * Runnery są WSPÓŁDZIELONE z Inngest, więc rzucają jego klasy błędów
+ * (`NonRetriableError`, `RetryAfterError`). Rozpoznajemy je po `name` —
+ * dokładnie tak, jak robi to sam Inngest przy serializacji cross-process
+ * (patrz komentarz w submit-invoice.ts). Bez tego job z NonRetriableError
+ * byłby bezsensownie ponawiany zamiast trafić do `onExhausted`.
+ */
+function isNonRetriable(error: unknown): boolean {
+  if (error instanceof NonRetriableJobError) return true;
+  return error instanceof Error && error.name === 'NonRetriableError';
+}
+
+/** Jawne opóźnienie z błędu (nasz `RetryAfterJobError` lub Inngest `RetryAfterError`). */
+function explicitRetryDelayMs(error: unknown): number | null {
+  if (error instanceof RetryAfterJobError) return error.retryAfterMs;
+  if (!(error instanceof Error) || error.name !== 'RetryAfterError') return null;
+
+  // Inngest trzyma `retryAfter` jako łańcuch SEKUND ('30') albo Date.
+  const raw = (error as { retryAfter?: unknown }).retryAfter;
+  if (raw instanceof Date) return Math.max(0, raw.getTime() - Date.now());
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const seconds = Number(raw);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  }
+  return null;
+}
+
 export function decideRetry(
   error: unknown,
   attempt: number,
   policy: RetryPolicy,
 ): RetryDecision {
-  if (error instanceof NonRetriableJobError) {
+  if (isNonRetriable(error)) {
     return { action: 'exhausted', reason: 'non-retriable' };
   }
   if (attempt >= policy.maxRetries) {
     return { action: 'exhausted', reason: 'attempts-exhausted' };
   }
-  const delayMs =
-    error instanceof RetryAfterJobError
-      ? error.retryAfterMs
-      : policy.getDelayMs(attempt);
+  const explicit = explicitRetryDelayMs(error);
+  const delayMs = explicit ?? policy.getDelayMs(attempt);
   return { action: 'retry', delayMs, nextAttempt: attempt + 1 };
 }
 

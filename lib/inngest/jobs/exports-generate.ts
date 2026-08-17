@@ -22,6 +22,8 @@
 import { createHash } from 'node:crypto';
 
 import { NonRetriableError } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 import {
   exportsGenerateRequested,
@@ -217,16 +219,12 @@ function buildR2Path(job: ExportJobRow, exportJobId: string, filename: string) {
 
 // ============================================================================
 
-export const exportsGenerateJob = inngest.createFunction(
-  {
-    id: 'exports-generate',
-    name: 'Eksport: generowanie pliku',
-    retries: 2,
-    concurrency: { limit: 5 },
-    triggers: [exportsGenerateRequested],
-  },
-  async ({ event, step }) => {
-    const { exportJobId } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
+ */
+export async function runExportsGenerate(eventData: Parameters<typeof exportsGenerateRequested.create>[0], { step }: JobContext) {
+    const { exportJobId } = eventData;
     const supabase = createAdminClient();
 
     const job = await step.run('fetch-job', async () => {
@@ -379,5 +377,16 @@ export const exportsGenerateJob = inngest.createFunction(
       size: fileMeta.sizeBytes,
       invoicesCount: persistResult.invoicesCount,
     };
+}
+
+export const exportsGenerateJob = inngest.createFunction(
+  {
+    id: 'exports-generate',
+    name: 'Eksport: generowanie pliku',
+    retries: 2,
+    concurrency: { limit: 5 },
+    triggers: [exportsGenerateRequested],
   },
+  async ({ event, step, logger, attempt }) =>
+    runExportsGenerate(event.data as Parameters<typeof exportsGenerateRequested.create>[0], toJobContext({ step, logger, attempt })),
 );

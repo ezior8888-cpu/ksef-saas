@@ -14,43 +14,39 @@ import { processImportedInvoices } from '@/lib/import/import-engine';
 import { createAdminClient } from '@/lib/supabase/server';
 
 import { importKsefHistoryRequested, inngest } from '../client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
-export const magicImportKsefJob = inngest.createFunction(
-  {
-    id: 'magic-import-ksef',
-    name: 'Magiczny Import historii z KSeF',
-    retries: 2,
-    // Per-NIP concurrency: max 3 równoczesne importy historii per tenant.
-    // Magiczny Import wystawia setki żądań do KSeF (`fetch-batch-${i}` po
-    // 10 faktur), więc bez tego limita jeden tenant z dużą historią potrafi
-    // zająć cały budżet rate-limitera u MF.
-    concurrency: { key: 'event.data.nip', limit: 3 },
-    triggers: [importKsefHistoryRequested],
-    onFailure: async ({ error: failureErr, event, step }) => {
-      const original = event.data.event as {
-        data: { importJobId: string };
-      };
-      const { importJobId } = original.data;
+/**
+ * Obsługa po wyczerpaniu prób (Etap 7): wspólna dla Inngest `onFailure`
+ * i pg-boss `onExhausted` — oznacza job importu historii KSeF jako nieudany,
+ * żeby pasek postępu w UI nie wisiał w nieskończoność.
+ */
+export async function onMagicImportExhausted(
+  failureErr: Error,
+  data: { importJobId: string },
+): Promise<void> {
+  const { importJobId } = data;
+  const supabase = createAdminClient();
+  const failureMsg = `${failureErr.name}: ${failureErr.message}`.slice(0, 900);
+  const { error } = await supabase
+    .from('import_jobs')
+    .update({
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+      progress_percent: 100,
+      progress_message: failureMsg,
+    })
+    .eq('id', importJobId);
+  if (error) throw new Error(error.message);
+}
 
-      await step.run('mark-import-failed', async () => {
-        const supabase = createAdminClient();
-        const failureMsg =
-          `${failureErr.name}: ${failureErr.message}`.slice(0, 900);
-        const { error } = await supabase
-          .from('import_jobs')
-          .update({
-            status: 'failed',
-            completed_at: new Date().toISOString(),
-            progress_percent: 100,
-            progress_message: failureMsg,
-          })
-          .eq('id', importJobId);
-        if (error) throw new Error(error.message);
-      });
-    },
-  },
-  async ({ event, step }) => {
-    const { importJobId, tenantId, dateFrom, dateTo, direction } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
+ */
+export async function runMagicImportKsef(data: Parameters<typeof importKsefHistoryRequested.create>[0], { step }: JobContext) {
+    const { importJobId, tenantId, dateFrom, dateTo, direction } = data;
 
     const supabase = createAdminClient();
     const invoiceDirection = direction === 'received' ? 'incoming' : 'outgoing';
@@ -192,5 +188,25 @@ export const magicImportKsefJob = inngest.createFunction(
       contractors: processResult.contractorsCreated,
       products: processResult.productsCreated,
     };
+}
+
+export const magicImportKsefJob = inngest.createFunction(
+  {
+    id: 'magic-import-ksef',
+    name: 'Magiczny Import historii z KSeF',
+    retries: 2,
+    // Per-NIP concurrency: max 3 równoczesne importy historii per tenant.
+    // Magiczny Import wystawia setki żądań do KSeF (`fetch-batch-${i}` po
+    // 10 faktur), więc bez tego limita jeden tenant z dużą historią potrafi
+    // zająć cały budżet rate-limitera u MF.
+    concurrency: { key: 'event.data.nip', limit: 3 },
+    triggers: [importKsefHistoryRequested],
+    onFailure: async ({ error: failureErr, event }) =>
+      onMagicImportExhausted(
+        failureErr,
+        (event.data.event as { data: { importJobId: string } }).data,
+      ),
   },
+  async ({ event, step, logger, attempt }) =>
+    runMagicImportKsef(event.data as Parameters<typeof importKsefHistoryRequested.create>[0], toJobContext({ step, logger, attempt })),
 );
