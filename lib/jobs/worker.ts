@@ -34,6 +34,7 @@ import { createJobStep } from './step-shim';
 import './handlers/package-a';
 import './handlers/package-b';
 import './handlers/package-c';
+import './handlers/package-d';
 
 const log = createJobLogger('worker');
 
@@ -67,6 +68,7 @@ function wrapHandler(def: JobDefinition<never>) {
           await def.onExhausted?.(
             new Error(`Niepoprawny payload: ${parsed.error.message}`),
             job.data as never,
+            { step: createJobStep(jobLog), logger: jobLog, attempt },
           );
           continue;
         }
@@ -99,7 +101,11 @@ function wrapHandler(def: JobDefinition<never>) {
 
         jobLog.error(`wyczerpane próby (${decision.reason})`, error);
         try {
-          await def.onExhausted?.(error, data as never);
+          await def.onExhausted?.(error, data as never, {
+            step: createJobStep(jobLog),
+            logger: jobLog,
+            attempt,
+          });
         } catch (exhaustErr) {
           jobLog.error('onExhausted rzucił błąd', exhaustErr);
         }

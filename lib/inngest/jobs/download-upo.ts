@@ -1,5 +1,7 @@
 import type { Json } from '@/types/database';
 import { NonRetriableError } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { downloadUpoFromKsef } from '@/lib/ksef/upo-client';
@@ -24,24 +26,12 @@ function stringFromBuyerData(buyerData: Json | null): string {
  *
  * Trigger: `invoice/upo.requested` (np. po `invoice.submit.succeeded`).
  */
-export const downloadUpoJob = inngest.createFunction(
-  {
-    id: 'download-upo',
-    name: 'Pobranie UPO z KSeF',
-    retries: 5,
-    // Per-NIP concurrency: max 3 równoległe pobrania UPO per tenant globalnie
-    // przez Inngest. Bez tego, gdy submit wysyła 50 faktur, KSeF /upo dostaje
-    // 50 równoległych żądań z jednego NIP-u i rate-limituje całość.
-    concurrency: { key: 'event.data.nip', limit: 3 },
-    // Faza 23 sekcja 3: throttle per-NIP — nie więcej niż 30 zapytań /upo na
-    // minutę z jednego NIP-u. MF rate-limity są krótkie (per-sekundę), ale
-    // burst 50 faktur naraz zdarza się przy bulk import. Throttle zatrzymuje
-    // dispatch, retry-stale cron i tak je dotwierdzi po 24h.
-    throttle: { key: 'event.data.nip', limit: 30, period: '1m' },
-    triggers: [invoiceUpoRequested],
-  },
-  async ({ event, step, logger }) => {
-    const { invoiceId, tenantId, ksefNumber } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
+ */
+export async function runDownloadUpo(data: Parameters<typeof invoiceUpoRequested.create>[0], { step, logger }: JobContext) {
+    const { invoiceId, tenantId, ksefNumber } = data;
 
     logger.info('UPO download start', { invoiceId, tenantId, ksefNumber });
 
@@ -221,5 +211,24 @@ export const downloadUpoJob = inngest.createFunction(
       xmlPath,
       pdfPath,
     };
+}
+
+export const downloadUpoJob = inngest.createFunction(
+  {
+    id: 'download-upo',
+    name: 'Pobranie UPO z KSeF',
+    retries: 5,
+    // Per-NIP concurrency: max 3 równoległe pobrania UPO per tenant globalnie
+    // przez Inngest. Bez tego, gdy submit wysyła 50 faktur, KSeF /upo dostaje
+    // 50 równoległych żądań z jednego NIP-u i rate-limituje całość.
+    concurrency: { key: 'event.data.nip', limit: 3 },
+    // Faza 23 sekcja 3: throttle per-NIP — nie więcej niż 30 zapytań /upo na
+    // minutę z jednego NIP-u. MF rate-limity są krótkie (per-sekundę), ale
+    // burst 50 faktur naraz zdarza się przy bulk import. Throttle zatrzymuje
+    // dispatch, retry-stale cron i tak je dotwierdzi po 24h.
+    throttle: { key: 'event.data.nip', limit: 30, period: '1m' },
+    triggers: [invoiceUpoRequested],
   },
+  async ({ event, step, logger, attempt }) =>
+    runDownloadUpo(event.data as Parameters<typeof invoiceUpoRequested.create>[0], toJobContext({ step, logger, attempt })),
 );

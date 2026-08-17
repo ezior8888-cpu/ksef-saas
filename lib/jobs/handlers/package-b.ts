@@ -74,8 +74,8 @@ cronJob('cron.weekly-business-review', runWeeklyBusinessReview);
 
 // ── Powiadomienia o wyniku wysyłki faktury (retries 2 — lepiej nie wysłać
 //    niż wysłać 4×; parytet z konfiguracją Inngest) ──
-eventJob('invoice.submit.succeeded', runNotifySuccess, { maxRetries: 2 });
-eventJob('invoice.submit.failed', runNotifyFailure, { maxRetries: 2 });
+eventJob('invoice.submit.succeeded.notify', runNotifySuccess, { maxRetries: 2 });
+eventJob('invoice.submit.failed.notify', runNotifyFailure, { maxRetries: 2 });
 
 // ── Billing + przypomnienia ──
 eventJob('billing.payment.failed', runDunningPaymentFailed, {

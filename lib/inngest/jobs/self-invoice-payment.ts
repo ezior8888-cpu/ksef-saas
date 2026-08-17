@@ -22,6 +22,8 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 import { logAuditSystem } from '@/lib/audit/log-system';
 import {
@@ -37,19 +39,12 @@ import {
   invoiceSubmitRequested,
 } from '../client';
 
-export const selfInvoicePaymentJob = inngest.createFunction(
-  {
-    id: 'billing-self-invoice-payment',
-    name: 'Billing: wystaw fakturę VAT przez KSeF za zapłaconą subskrypcję',
-    retries: 3,
-    // Concurrency per-tenant — chronimy przed duplikacją gdy webhook retry
-    // dostarczy `payment.succeeded` 2× nim pierwsza iteracja zaktualizuje
-    // `vat_invoice_id`.
-    concurrency: { key: 'event.data.tenantId', limit: 1 },
-    triggers: [billingPaymentSucceeded],
-  },
-  async ({ event, step, logger }) => {
-    const { tenantId, paymentId, stripeInvoiceId, paidAt } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
+ */
+export async function runSelfInvoicePayment(data: Parameters<typeof billingPaymentSucceeded.create>[0], { step, logger }: JobContext) {
+    const { tenantId, paymentId, stripeInvoiceId, paidAt } = data;
 
     if (!isSelfInvoicingConfigured()) {
       logger.warn(
@@ -207,5 +202,19 @@ export const selfInvoicePaymentJob = inngest.createFunction(
       invoiceId: insertResult.invoiceId,
       internalNumber: insertResult.internalNumber,
     };
+}
+
+export const selfInvoicePaymentJob = inngest.createFunction(
+  {
+    id: 'billing-self-invoice-payment',
+    name: 'Billing: wystaw fakturę VAT przez KSeF za zapłaconą subskrypcję',
+    retries: 3,
+    // Concurrency per-tenant — chronimy przed duplikacją gdy webhook retry
+    // dostarczy `payment.succeeded` 2× nim pierwsza iteracja zaktualizuje
+    // `vat_invoice_id`.
+    concurrency: { key: 'event.data.tenantId', limit: 1 },
+    triggers: [billingPaymentSucceeded],
   },
+  async ({ event, step, logger, attempt }) =>
+    runSelfInvoicePayment(event.data as Parameters<typeof billingPaymentSucceeded.create>[0], toJobContext({ step, logger, attempt })),
 );

@@ -108,4 +108,6 @@ COPY . .
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.WORKER_HEALTH_PORT||8080)+'/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
-CMD ["node_modules/.bin/tsx", "lib/jobs/worker.ts"]
+# `--conditions=react-server`: moduły z `import 'server-only'` (np. analytics)
+# rzucają wyjątek poza tym warunkiem — Next ustawia go sam, worker musi jawnie.
+CMD ["node", "--conditions=react-server", "--import", "tsx", "lib/jobs/worker.ts"]

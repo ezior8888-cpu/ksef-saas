@@ -44,7 +44,7 @@
     "perf:lighthouse": "lighthouse --budget-path=load-tests/lighthouse-budget.json --only-categories=performance --chrome-flags=\"--headless\"",
     "verify:fa3": "tsx scripts/verify-fa3-all-types.ts",
     "check:env": "tsx scripts/check-env.ts",
-    "worker:dev": "tsx lib/jobs/worker.ts",
+    "worker:dev": "node --conditions=react-server --import tsx lib/jobs/worker.ts",
     "jobs:smoke": "tsx scripts/pgboss-smoke.ts"
   },
   "dependencies": {
@@ -91,6 +91,7 @@
     "react-dom": "19.2.4",
     "react-hook-form": "^7.72.1",
     "resend": "^6.12.0",
+    "server-only": "^0.0.1",
     "shadcn": "^4.3.0",
     "sonner": "^2.0.7",
     "stripe": "^22.1.1",

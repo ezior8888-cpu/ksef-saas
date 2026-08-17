@@ -8,13 +8,14 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { CRON_JOBS, EVENT_QUEUE_MAP } from '@/lib/jobs/queues';
+import { allEventQueues, CRON_JOBS } from '@/lib/jobs/queues';
 import { getRegisteredJobs } from '@/lib/jobs/registry';
 
 // Side-effect: rejestracje paczek.
 import '@/lib/jobs/handlers/package-a';
 import '@/lib/jobs/handlers/package-b';
 import '@/lib/jobs/handlers/package-c';
+import '@/lib/jobs/handlers/package-d';
 
 const registered = getRegisteredJobs();
 const queues = registered.map((j) => j.queue);
@@ -27,7 +28,7 @@ describe('rejestr jobów', () => {
   it('każda zarejestrowana kolejka istnieje w queues.ts', () => {
     const known = new Set<string>([
       ...CRON_JOBS.map((c) => c.queue),
-      ...Object.values(EVENT_QUEUE_MAP),
+      ...allEventQueues(),
     ]);
     const unknown = queues.filter((q) => !known.has(q));
     expect(unknown, 'kolejki spoza queues.ts (literówka?)').toEqual([]);
@@ -59,8 +60,8 @@ describe('rejestr jobów', () => {
       'cron.reminder-scheduler',
       'cron.trial-countdown-emails',
       'cron.weekly-business-review',
-      'invoice.submit.succeeded',
-      'invoice.submit.failed',
+      'invoice.submit.succeeded.notify',
+      'invoice.submit.failed.notify',
       'billing.payment.failed',
       'reminders.send.requested',
       'invoice.payment.received',
@@ -78,7 +79,7 @@ describe('rejestr jobów', () => {
   it('parytet retries z konfiguracją Inngest (kluczowe joby)', () => {
     const byQueue = new Map(registered.map((j) => [j.queue, j]));
     // Powiadomienia i sekwencja: 2 (lepiej nie wysłać niż wysłać 4×).
-    expect(byQueue.get('invoice.submit.succeeded')?.maxRetries).toBe(2);
+    expect(byQueue.get('invoice.submit.succeeded.notify')?.maxRetries).toBe(2);
     expect(byQueue.get('user.registered')?.maxRetries).toBe(2);
     // Billing/przypomnienia: 3.
     expect(byQueue.get('billing.payment.failed')?.maxRetries).toBe(3);
@@ -122,6 +123,50 @@ describe('rejestr jobów', () => {
         'function',
       );
     }
+  });
+
+  it('paczka D: 9 jobów rdzenia KSeF', () => {
+    const packageD = [
+      'invoice.submit.requested',
+      'invoice.upo.requested',
+      'cron.upo-retry-stale',
+      'cron.inbox-polling',
+      'inbox.poll.tenant',
+      'cron.process-offline-queue',
+      'invoice.submit.succeeded.offline-queue',
+      'invoice.submit.failed.offline-queue',
+      'billing.payment.succeeded',
+    ];
+    expect(packageD.length).toBe(9);
+    for (const q of packageD) expect(queues, `brak ${q}`).toContain(q);
+  });
+
+  it('submit-invoice: PEŁNY harmonogram KSeF 30s→2m→5m→15m→1h w rejestrze', () => {
+    // Serce produktu. Zły harmonogram = zalewanie API Ministerstwa albo
+    // faktury wiszące bez ponowienia.
+    const submit = registered.find((j) => j.queue === 'invoice.submit.requested');
+    expect(submit?.maxRetries).toBe(5);
+    expect(typeof submit?.onExhausted, 'brak ścieżki Offline24').toBe('function');
+
+    const expected = [30_000, 120_000, 300_000, 900_000, 3_600_000];
+    for (let attempt = 0; attempt < expected.length; attempt++) {
+      expect(submit?.getDelayMs?.(attempt), `próba ${attempt}`).toBe(
+        expected[attempt],
+      );
+    }
+  });
+
+  it('limity per tenant/NIP w rdzeniu KSeF', () => {
+    const byQueue = new Map(registered.map((j) => [j.queue, j]));
+    expect(byQueue.get('invoice.submit.requested')?.groupConcurrency).toBe(100);
+    expect(byQueue.get('invoice.upo.requested')?.groupConcurrency).toBe(3);
+    expect(byQueue.get('inbox.poll.tenant')?.groupConcurrency).toBe(3);
+    expect(byQueue.get('billing.payment.succeeded')?.groupConcurrency).toBe(1);
+  });
+
+  it('KOMPLET: 46 jobów z inwentaryzacji + kolejka smoke', () => {
+    // Alarm, gdyby któraś paczka wypadła z importów workera.
+    expect(registered.length).toBe(46);
   });
 
   it('parytet limitów równoległości paczki C', () => {

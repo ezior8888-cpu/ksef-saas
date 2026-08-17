@@ -3,6 +3,8 @@
  */
 
 import { cron } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 import { createAdminClient } from '@/lib/supabase/server';
 import { checkKsefAvailability } from '@/lib/ksef/health-check';
@@ -19,14 +21,11 @@ import {
   invoiceSubmitSucceeded,
 } from '../client';
 
-export const processOfflineQueueJob = inngest.createFunction(
-  {
-    id: 'process-offline-queue',
-    name: 'Procesowanie kolejki Offline24',
-    concurrency: { limit: 1 },
-    triggers: [cron('TZ=Europe/Warsaw */5 * * * *')],
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
+ */
+export async function runProcessOfflineQueue({ step }: JobContext) {
     const health = await step.run('check-ksef-health', () =>
       checkKsefAvailability(),
     );
@@ -166,22 +165,29 @@ export const processOfflineQueueJob = inngest.createFunction(
     }
 
     return { processed: results.length, results };
+}
+
+export const processOfflineQueueJob = inngest.createFunction(
+  {
+    id: 'process-offline-queue',
+    name: 'Procesowanie kolejki Offline24',
+    concurrency: { limit: 1 },
+    triggers: [cron('TZ=Europe/Warsaw */5 * * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runProcessOfflineQueue(toJobContext({ step, logger, attempt })),
 );
 
-export const offlineQueueSuccessHandler = inngest.createFunction(
-  {
-    id: 'offline-queue-success-handler',
-    name: 'Offline24: oznaczenie wysłanych po sukcesie',
-    concurrency: { limit: 25 },
-    triggers: [invoiceSubmitSucceeded],
-  },
-  async ({ event, step }) => {
-    if (!event.data.fromOfflineQueue) {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
+ */
+export async function runOfflineQueueSuccess(data: Parameters<typeof invoiceSubmitSucceeded.create>[0], { step }: JobContext) {
+    if (!data.fromOfflineQueue) {
       return { skipped: true as const, reason: 'not-from-offline' };
     }
 
-    const invoiceId = event.data.invoiceId;
+    const invoiceId = data.invoiceId;
 
     await step.run('mark-queue-sent', async () => {
       const supabase = createAdminClient();
@@ -194,22 +200,29 @@ export const offlineQueueSuccessHandler = inngest.createFunction(
     });
 
     return { success: true as const };
+}
+
+export const offlineQueueSuccessHandler = inngest.createFunction(
+  {
+    id: 'offline-queue-success-handler',
+    name: 'Offline24: oznaczenie wysłanych po sukcesie',
+    concurrency: { limit: 25 },
+    triggers: [invoiceSubmitSucceeded],
   },
+  async ({ event, step, logger, attempt }) =>
+    runOfflineQueueSuccess(event.data as Parameters<typeof invoiceSubmitSucceeded.create>[0], toJobContext({ step, logger, attempt })),
 );
 
-export const offlineQueueFailureHandler = inngest.createFunction(
-  {
-    id: 'offline-queue-failure-handler',
-    name: 'Offline24: przywrócenie kolejki po błędzie submit',
-    concurrency: { limit: 25 },
-    triggers: [invoiceSubmitFailed],
-  },
-  async ({ event, step }) => {
-    if (!event.data.fromOfflineQueue) {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
+ */
+export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubmitFailed.create>[0], { step }: JobContext) {
+    if (!data.fromOfflineQueue) {
       return { skipped: true as const, reason: 'not-from-offline' };
     }
 
-    const { invoiceId, error: errorMessage } = event.data;
+    const { invoiceId, error: errorMessage } = data;
 
     await step.run('rollback-queue-status', async () => {
       const supabase = createAdminClient();
@@ -253,5 +266,15 @@ export const offlineQueueFailureHandler = inngest.createFunction(
     });
 
     return { success: true as const };
+}
+
+export const offlineQueueFailureHandler = inngest.createFunction(
+  {
+    id: 'offline-queue-failure-handler',
+    name: 'Offline24: przywrócenie kolejki po błędzie submit',
+    concurrency: { limit: 25 },
+    triggers: [invoiceSubmitFailed],
   },
+  async ({ event, step, logger, attempt }) =>
+    runOfflineQueueFailure(event.data as Parameters<typeof invoiceSubmitFailed.create>[0], toJobContext({ step, logger, attempt })),
 );

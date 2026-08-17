@@ -16,7 +16,12 @@ import { describe, expect, it } from 'vitest';
 
 import { parseDurationMs } from '@/lib/jobs/duration';
 import { NonRetriableJobError, RetryAfterJobError } from '@/lib/jobs/errors';
-import { CRON_JOBS, EVENT_QUEUE_MAP, queueForEvent } from '@/lib/jobs/queues';
+import {
+  allEventQueues,
+  CRON_JOBS,
+  EVENT_QUEUE_MAP,
+  queuesForEvent,
+} from '@/lib/jobs/queues';
 import {
   ATTEMPT_KEY,
   decideRetry,
@@ -151,13 +156,26 @@ describe('EVENT_QUEUE_MAP — alarm dryfu względem lib/inngest/client.ts', () =
   });
 
   it('nazwy kolejek w bezpiecznym charsecie, bez duplikatów', () => {
-    const queues = Object.values(EVENT_QUEUE_MAP);
+    const queues = allEventQueues();
     for (const q of queues) expect(q).toMatch(/^[a-z0-9.-]+$/);
-    expect(new Set(queues).size).toBe(queues.length);
+    expect(new Set(queues).size, 'duplikat nazwy kolejki').toBe(queues.length);
   });
 
-  it('queueForEvent rzuca na nieznanym evencie', () => {
-    expect(() => queueForEvent('foo/bar')).toThrow(/Nieznany event/);
+  it('queuesForEvent rzuca na nieznanym evencie', () => {
+    expect(() => queuesForEvent('foo/bar')).toThrow(/Nieznany event/);
+  });
+
+  it('fan-out: wynik wysyłki faktury trafia do DWÓCH kolejek', () => {
+    // Parytet z Inngest: powiadomienie użytkownika ORAZ obsługa Offline24
+    // słuchają tego samego eventu. Pominięcie jednej = cicho martwy job.
+    expect(queuesForEvent('invoice/submit.succeeded')).toEqual([
+      'invoice.submit.succeeded.notify',
+      'invoice.submit.succeeded.offline-queue',
+    ]);
+    expect(queuesForEvent('invoice/submit.failed')).toEqual([
+      'invoice.submit.failed.notify',
+      'invoice.submit.failed.offline-queue',
+    ]);
   });
 });
 

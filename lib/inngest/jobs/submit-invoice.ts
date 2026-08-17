@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError, RetryAfterError } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { trackServer } from '@/lib/analytics/server';
 import { logAuditSystem } from '@/lib/audit/log-system';
@@ -48,44 +50,21 @@ import {
  * - Per-tenant throttle: 60 wysyłek/min — chroni MF przed zalaniem przy
  *   bulk import, nawet jeśli concurrency 100 da chwilowy spike.
  */
-export const submitInvoiceJob = inngest.createFunction(
-  {
-    id: 'submit-invoice-to-ksef',
-    name: 'Wysyłka faktury do KSeF',
-    retries: KSEF_MAX_RETRIES,
-    concurrency: {
-      key: 'event.data.tenantId',
-      limit: KSEF_TENANT_CONCURRENCY_LIMIT,
-    },
-    throttle: {
-      key: 'event.data.tenantId',
-      limit: KSEF_TENANT_THROTTLE_LIMIT,
-      period: KSEF_TENANT_THROTTLE_PERIOD,
-    },
-    triggers: [invoiceSubmitRequested],
 
-    // Handler wywoływany PO wyczerpaniu wszystkich retries (lub NonRetriableError).
-    // Inngest wewnętrznie robi z tego osobną funkcję na evencie
-    // `inngest/function.failed` - pojawi się w UI jako
-    // "Wysyłka faktury do KSeF (failure)".
-    //
-    // UWAGA: `error` jest zserializowany przez JSON (cross-process), więc:
-    //   - `instanceof NonRetriableError` NIE działa
-    //   - używaj `error.name === 'NonRetriableError'` jako dyskryminatora
-    onFailure: async ({ error, event, step, logger }) => {
-      // event.data.event = oryginalny `invoice/submit.requested`
-      const originalEvent = event.data.event as {
-        data: {
-          tenantId: string;
-          invoiceId: string;
-          nip: string;
-          invoice: { internalNumber: string };
-          fromOfflineQueue?: boolean;
-        };
-      };
-
-      const { tenantId, invoiceId, nip, invoice } = originalEvent.data;
-      const fromOfflineQueue = Boolean(originalEvent.data.fromOfflineQueue);
+/**
+ * Obsługa po wyczerpaniu prób (Etap 7) — wspólna dla Inngest `onFailure`
+ * i pg-boss `onExhausted`. Klasyfikuje porażkę na trzy ścieżki:
+ * `rejected` (walidacja / 4xx — KSeF i tak nie przyjmie), `offline_queued`
+ * (błąd przejściowy → parking w trybie Offline24) oraz `failed`
+ * (Offline24 niedostępny albo wracaliśmy już z niego).
+ */
+export async function onSubmitInvoiceExhausted(
+  error: Error,
+  data: Parameters<typeof invoiceSubmitRequested.create>[0],
+  { step, logger }: JobContext,
+) {
+      const { tenantId, invoiceId, nip, invoice } = data;
+      const fromOfflineQueue = Boolean(data.fromOfflineQueue);
 
       // Klasyfikacja błędu (Faza 23 sekcja 3):
       //   - `NonRetriableError` → walidacja / 4xx → 'rejected' (nie ma sensu
@@ -219,19 +198,26 @@ export const submitInvoiceJob = inngest.createFunction(
           invoiceId,
           tenantId,
           error: `${error.name}: ${error.message}`,
-          fromOfflineQueue: originalEvent.data.fromOfflineQueue,
+          fromOfflineQueue: data.fromOfflineQueue,
         },
       });
 
       return { handled: true, finalStatus, fromOfflineQueue };
-    },
-  },
-  async ({ event, step, logger, attempt }) => {
+}
+
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
+ */
+export async function runSubmitInvoice(
+  data: Parameters<typeof invoiceSubmitRequested.create>[0],
+  { step, logger, attempt }: JobContext,
+) {
     // Runtime walidacja Zod — bramka między event store a transakcją KSeF.
     // Zła paczka (np. brak NIP-u po replay'u eventu ze starego kodu) zostaje
     // odrzucona PRZED jakąkolwiek operacją w DB / R2 / KSeF. NonRetriableError
     // zatrzymuje retry i woła `onFailure`, który oznacza fakturę jako rejected.
-    const parsed = invoiceSubmitRequested.safeParse(event.data);
+    const parsed = invoiceSubmitRequested.safeParse(data);
     if (!parsed.success) {
       throw new NonRetriableError(
         `Niepoprawny payload eventu invoice/submit.requested: ${parsed.error.message}`,
@@ -450,7 +436,7 @@ export const submitInvoiceJob = inngest.createFunction(
 
       try {
         // Po refaktorze na zodEvent korzystamy z `parsed.data` (zwalidowanego),
-        // a nie z surowego `event.data` — typy są pewne, bez `as` casta.
+        // a nie z surowego `data` — typy są pewne, bez `as` casta.
         const finalPayload =
           parsed.data.finalData &&
           parsed.data.finalAdvanceSettlementRows &&
@@ -569,7 +555,7 @@ export const submitInvoiceJob = inngest.createFunction(
         invoiceId,
         tenantId,
         // `nip` powędruje do `downloadUpoJob` jako klucz concurrency
-        // (`{ key: 'event.data.nip', limit: 3 }`) — limit per-tenant zapobiega
+        // (`{ key: 'data.nip', limit: 3 }`) — limit per-tenant zapobiega
         // zalaniu KSeF /upo żądaniami z jednego podmiotu.
         nip,
         ksefNumber: result.ksefNumber,
@@ -592,7 +578,7 @@ export const submitInvoiceJob = inngest.createFunction(
         invoiceId,
         tenantId,
         ksefNumber: result.ksefNumber,
-        fromOfflineQueue: event.data.fromOfflineQueue,
+        fromOfflineQueue: data.fromOfflineQueue,
       },
     });
 
@@ -605,5 +591,49 @@ export const submitInvoiceJob = inngest.createFunction(
       success: true,
       ksefNumber: result.ksefNumber,
     };
+}
+
+export const submitInvoiceJob = inngest.createFunction(
+  {
+    id: 'submit-invoice-to-ksef',
+    name: 'Wysyłka faktury do KSeF',
+    retries: KSEF_MAX_RETRIES,
+    concurrency: {
+      key: 'event.data.tenantId',
+      limit: KSEF_TENANT_CONCURRENCY_LIMIT,
+    },
+    throttle: {
+      key: 'event.data.tenantId',
+      limit: KSEF_TENANT_THROTTLE_LIMIT,
+      period: KSEF_TENANT_THROTTLE_PERIOD,
+    },
+    triggers: [invoiceSubmitRequested],
+
+    // Handler wywoływany PO wyczerpaniu wszystkich retries (lub NonRetriableError).
+    // Inngest wewnętrznie robi z tego osobną funkcję na evencie
+    // `inngest/function.failed` - pojawi się w UI jako
+    // "Wysyłka faktury do KSeF (failure)".
+    //
+    // UWAGA: `error` jest zserializowany przez JSON (cross-process), więc:
+    //   - `instanceof NonRetriableError` NIE działa
+    //   - używaj `error.name === 'NonRetriableError'` jako dyskryminatora
+    // `error` jest serializowany przez JSON (cross-process), więc
+    // `instanceof` nie działa — klasyfikacja idzie po `error.name`
+    // (tak samo rozpoznaje je worker pg-boss, patrz lib/jobs/retry.ts).
+    onFailure: async ({ error, event, step, logger, attempt }) =>
+      onSubmitInvoiceExhausted(
+        error,
+        (
+          event.data.event as {
+            data: Parameters<typeof invoiceSubmitRequested.create>[0];
+          }
+        ).data,
+        toJobContext({ step, logger, attempt }),
+      ),
   },
+  async ({ event, step, logger, attempt }) =>
+    runSubmitInvoice(
+      event.data as Parameters<typeof invoiceSubmitRequested.create>[0],
+      toJobContext({ step, logger, attempt }),
+    ),
 );

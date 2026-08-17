@@ -10,7 +10,7 @@
  */
 
 import { getJobsBackend } from './config';
-import { queueForEvent } from './queues';
+import { queuesForEvent } from './queues';
 
 export interface JobEvent {
   name: string;
@@ -45,12 +45,18 @@ export async function sendJobEvents(
 
   const { startBoss } = await import('./boss');
   const boss = await startBoss();
+  const sendOptions = {
+    ...(options?.startAfterMs !== undefined
+      ? { startAfter: Math.ceil(options.startAfterMs / 1000) }
+      : {}),
+    ...(options?.groupId ? { group: { id: options.groupId } } : {}),
+  };
+
   for (const e of events) {
-    await boss.send(queueForEvent(e.name), e.data, {
-      ...(options?.startAfterMs !== undefined
-        ? { startAfter: Math.ceil(options.startAfterMs / 1000) }
-        : {}),
-      ...(options?.groupId ? { group: { id: options.groupId } } : {}),
-    });
+    // Fan-out: jeden event może mieć kilku odbiorców (patrz EVENT_QUEUE_MAP) —
+    // publikujemy do KAŻDEJ kolejki, co odtwarza zachowanie Inngest.
+    for (const queue of queuesForEvent(e.name)) {
+      await boss.send(queue, e.data, sendOptions);
+    }
   }
 }

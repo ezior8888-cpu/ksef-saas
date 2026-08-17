@@ -1,4 +1,6 @@
 import { cron } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 import {
   inboxInvoiceReceived,
@@ -39,13 +41,11 @@ const KSEF_ENV: KsefEnvironment =
 // CRON: wybór aktywnych tenantów + fan-out
 // ═══════════════════════════════════════════════════════════════
 
-export const inboxPollingJob = inngest.createFunction(
-  {
-    id: 'inbox-polling-cron',
-    name: 'Polling skrzynki KSeF - cron',
-    triggers: [cron('TZ=Europe/Warsaw */15 * * * *')],
-  },
-  async ({ step, logger }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
+ */
+export async function runInboxPolling({ step, logger }: JobContext) {
     // "Aktywny" = ma uzupełnione credentials. Schemat `tenants` z 00001 nie ma
     // kolumny `is_active` - używamy `ksef_credentials_encrypted IS NOT NULL`
     // jako sygnatury "tenant skończył onboarding KSeF".
@@ -78,32 +78,28 @@ export const inboxPollingJob = inngest.createFunction(
     await step.sendEvent('fan-out-polling', events);
 
     return { polled: tenants.length };
+}
+
+export const inboxPollingJob = inngest.createFunction(
+  {
+    id: 'inbox-polling-cron',
+    name: 'Polling skrzynki KSeF - cron',
+    triggers: [cron('TZ=Europe/Warsaw */15 * * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runInboxPolling(toJobContext({ step, logger, attempt })),
 );
 
 // ═══════════════════════════════════════════════════════════════
 // PER-TENANT: polling + diff + insert
 // ═══════════════════════════════════════════════════════════════
 
-export const inboxPollTenantJob = inngest.createFunction(
-  {
-    id: 'inbox-poll-tenant',
-    name: 'Polling skrzynki dla tenanta',
-    retries: 2,
-    // Per-NIP concurrency: globalna kolejka Inngest po `event.data.nip` zapewnia,
-    // że jeden tenant nigdy nie wystawia >3 równoległych pollów do KSeF
-    // niezależnie od liczby instancji Vercela (in-memory `ksefRateLimiter` z
-    // `lib/ksef/rate-limiter.ts` jest per-process, więc na multi-instance
-    // hostingu nie wystarcza).
-    concurrency: { key: 'event.data.nip', limit: 3 },
-    // Faza 23 sekcja 3: throttle per-NIP. Inbox polling cron leci co 15min,
-    // czyli 4 razy / godzinę / tenant — limit 8/h zostawia bufor na manual
-    // refresh z UI (przycisk "Odśwież" w `/inbox`) bez zalewania MF.
-    throttle: { key: 'event.data.nip', limit: 8, period: '1h' },
-    triggers: [inboxPollTenant],
-  },
-  async ({ event, step, logger }) => {
-    const { tenantId, nip } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
+ */
+export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant.create>[0], { step, logger }: JobContext) {
+    const { tenantId, nip } = data;
 
     // Okno czasowe: ostatnie 48h. Cron chodzi co 15min, więc teoretycznie
     // wystarczyłby bufor ~2h, ale 48h daje nam samonaprawę przy outage
@@ -276,5 +272,25 @@ export const inboxPollTenantJob = inngest.createFunction(
       fetched: newInvoices.length,
       newlyAdded: freshInvoices.length,
     };
+}
+
+export const inboxPollTenantJob = inngest.createFunction(
+  {
+    id: 'inbox-poll-tenant',
+    name: 'Polling skrzynki dla tenanta',
+    retries: 2,
+    // Per-NIP concurrency: globalna kolejka Inngest po `event.data.nip` zapewnia,
+    // że jeden tenant nigdy nie wystawia >3 równoległych pollów do KSeF
+    // niezależnie od liczby instancji Vercela (in-memory `ksefRateLimiter` z
+    // `lib/ksef/rate-limiter.ts` jest per-process, więc na multi-instance
+    // hostingu nie wystarcza).
+    concurrency: { key: 'event.data.nip', limit: 3 },
+    // Faza 23 sekcja 3: throttle per-NIP. Inbox polling cron leci co 15min,
+    // czyli 4 razy / godzinę / tenant — limit 8/h zostawia bufor na manual
+    // refresh z UI (przycisk "Odśwież" w `/inbox`) bez zalewania MF.
+    throttle: { key: 'event.data.nip', limit: 8, period: '1h' },
+    triggers: [inboxPollTenant],
   },
+  async ({ event, step, logger, attempt }) =>
+    runInboxPollTenant(event.data as Parameters<typeof inboxPollTenant.create>[0], toJobContext({ step, logger, attempt })),
 );

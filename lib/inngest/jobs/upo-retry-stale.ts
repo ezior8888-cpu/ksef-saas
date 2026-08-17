@@ -14,6 +14,8 @@
 // Inngest gdy zaległości urosną do tysięcy (np. po długiej awarii MF).
 
 import { cron } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import * as Sentry from '@sentry/nextjs';
 
 import { inngest } from '../client';
@@ -34,14 +36,11 @@ interface StaleUpoRow {
   } | null;
 }
 
-export const upoRetryStaleJob = inngest.createFunction(
-  {
-    id: 'upo-retry-stale',
-    name: 'KSeF: retry UPO download (>24h pending/failed)',
-    concurrency: { limit: 1 },
-    triggers: [cron('TZ=Europe/Warsaw 5 * * * *')],
-  },
-  async ({ step, logger }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
+ */
+export async function runUpoRetryStale({ step, logger }: JobContext) {
     const cutoffIso = new Date(Date.now() - STALE_HOURS * 60 * 60 * 1000).toISOString();
 
     const stale = await step.run('find-stale-upo', async () => {
@@ -120,5 +119,15 @@ export const upoRetryStaleJob = inngest.createFunction(
       dispatched: events.length,
       cutoffIso,
     };
+}
+
+export const upoRetryStaleJob = inngest.createFunction(
+  {
+    id: 'upo-retry-stale',
+    name: 'KSeF: retry UPO download (>24h pending/failed)',
+    concurrency: { limit: 1 },
+    triggers: [cron('TZ=Europe/Warsaw 5 * * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runUpoRetryStale(toJobContext({ step, logger, attempt })),
 );

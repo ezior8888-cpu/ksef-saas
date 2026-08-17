@@ -10,44 +10,66 @@
  * rozjechała się z eventami zdefiniowanymi w `lib/inngest/client.ts`.
  */
 
-/** Wszystkie eventy domenowe + wewnętrzne sekwencji e-mail (stan: 17 sie 2026). */
+/**
+ * Wszystkie eventy domenowe + wewnętrzne sekwencji e-mail (stan: 17 sie 2026).
+ *
+ * Wartość to TABLICA kolejek, bo Inngest pozwala wielu funkcjom słuchać tego
+ * samego eventu (fan-out), a w pg-boss jedna kolejka = jeden handler.
+ * Dwa takie eventy: `invoice/submit.succeeded` i `invoice/submit.failed`
+ * (powiadomienie użytkownika ORAZ obsługa kolejki Offline24) — nadawca
+ * publikuje do obu kolejek, co odtwarza semantykę Inngest 1:1.
+ */
 export const EVENT_QUEUE_MAP = {
-  'billing/payment.failed': 'billing.payment.failed',
-  'billing/payment.succeeded': 'billing.payment.succeeded',
-  'billing/subscription.canceled': 'billing.subscription.canceled',
-  'email/trial-day-1': 'email.trial-day-1',
-  'email/trial-day-4': 'email.trial-day-4',
-  'email/trial-day-8': 'email.trial-day-8',
-  'email/trial-day-12': 'email.trial-day-12',
-  'email/trial-day-14': 'email.trial-day-14',
-  'exports/co-pilot.send-package': 'exports.co-pilot.send-package',
-  'exports/generate.requested': 'exports.generate.requested',
-  'import/file.uploaded': 'import.file.uploaded',
-  'import/ksef-history.requested': 'import.ksef-history.requested',
-  'inbox/invoice-received': 'inbox.invoice-received',
-  'inbox/invoice.received': 'inbox.invoice.received',
-  'inbox/poll.tenant': 'inbox.poll.tenant',
-  'invoice/payment.received': 'invoice.payment.received',
-  'invoice/submit.failed': 'invoice.submit.failed',
-  'invoice/submit.requested': 'invoice.submit.requested',
-  'invoice/submit.succeeded': 'invoice.submit.succeeded',
-  'invoice/upo.requested': 'invoice.upo.requested',
-  'ocr/process-photo': 'ocr.process-photo',
-  'reminders/send.requested': 'reminders.send.requested',
-  'user/registered': 'user.registered',
-  'validation/bulk-contractors.requested': 'validation.bulk-contractors.requested',
+  'billing/payment.failed': ['billing.payment.failed'],
+  'billing/payment.succeeded': ['billing.payment.succeeded'],
+  'billing/subscription.canceled': ['billing.subscription.canceled'],
+  'email/trial-day-1': ['email.trial-day-1'],
+  'email/trial-day-4': ['email.trial-day-4'],
+  'email/trial-day-8': ['email.trial-day-8'],
+  'email/trial-day-12': ['email.trial-day-12'],
+  'email/trial-day-14': ['email.trial-day-14'],
+  'exports/co-pilot.send-package': ['exports.co-pilot.send-package'],
+  'exports/generate.requested': ['exports.generate.requested'],
+  'import/file.uploaded': ['import.file.uploaded'],
+  'import/ksef-history.requested': ['import.ksef-history.requested'],
+  'inbox/invoice-received': ['inbox.invoice-received'],
+  'inbox/invoice.received': ['inbox.invoice.received'],
+  'inbox/poll.tenant': ['inbox.poll.tenant'],
+  'invoice/payment.received': ['invoice.payment.received'],
+  // fan-out: powiadomienie + obsługa kolejki Offline24
+  'invoice/submit.failed': [
+    'invoice.submit.failed.notify',
+    'invoice.submit.failed.offline-queue',
+  ],
+  'invoice/submit.requested': ['invoice.submit.requested'],
+  // fan-out: powiadomienie + obsługa kolejki Offline24
+  'invoice/submit.succeeded': [
+    'invoice.submit.succeeded.notify',
+    'invoice.submit.succeeded.offline-queue',
+  ],
+  'invoice/upo.requested': ['invoice.upo.requested'],
+  'ocr/process-photo': ['ocr.process-photo'],
+  'reminders/send.requested': ['reminders.send.requested'],
+  'user/registered': ['user.registered'],
+  'validation/bulk-contractors.requested': ['validation.bulk-contractors.requested'],
 } as const;
 
 export type KnownJobEvent = keyof typeof EVENT_QUEUE_MAP;
 
-export function queueForEvent(eventName: string): string {
-  const queue = EVENT_QUEUE_MAP[eventName as KnownJobEvent];
-  if (!queue) {
+/** Kolejki, do których trafia dany event (1 lub więcej — fan-out). */
+export function queuesForEvent(eventName: string): readonly string[] {
+  const queues = EVENT_QUEUE_MAP[eventName as KnownJobEvent];
+  if (!queues) {
     throw new Error(
       `Nieznany event jobowy: "${eventName}" — dodaj do EVENT_QUEUE_MAP w lib/jobs/queues.ts`,
     );
   }
-  return queue;
+  return queues;
+}
+
+/** Wszystkie nazwy kolejek eventowych (do walidacji rejestru). */
+export function allEventQueues(): string[] {
+  return Object.values(EVENT_QUEUE_MAP).flat();
 }
 
 export interface CronJobDef {

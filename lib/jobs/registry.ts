@@ -26,8 +26,16 @@ export interface JobDefinition<TData = unknown> {
   maxRetries?: number;
   /** Custom schedule opóźnień (default: defaultRetryDelayMs). */
   getDelayMs?: (attempt: number) => number;
-  /** Odpowiednik Inngest `onFailure` — po wyczerpaniu prób / NonRetriable. */
-  onExhausted?: (error: Error, data: TData) => Promise<void>;
+  /**
+   * Odpowiednik Inngest `onFailure` — po wyczerpaniu prób / NonRetriable.
+   * Dostaje pełny kontekst, bo część handlerów robi jeszcze realną pracę
+   * (submit-invoice: parkowanie w Offline24, audyt, emisja eventu).
+   */
+  onExhausted?: (
+    error: Error,
+    data: TData,
+    ctx: JobContext,
+  ) => Promise<unknown>;
   /** pg-boss work: ile jobów naraz (globalna równoległość kolejki). Default 1. */
   batchSize?: number;
   /** pg-boss 12: limit równoległości per grupa (np. per tenant). */
