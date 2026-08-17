@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { sendJobEvent } from '@/lib/jobs/enqueue';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { logAudit } from '@/lib/audit/log';
@@ -10,7 +11,7 @@ import { getClientIp } from '@/lib/auth/get-client-ip';
 import { validatePassword } from '@/lib/auth/password';
 import { checkRegisterRateLimit } from '@/lib/rate-limit/auth';
 import { verifyTurnstile } from '@/lib/security/turnstile';
-import { inngest, userRegistered } from '@/lib/inngest/client';
+import { userRegistered } from '@/lib/inngest/client';
 import { createClient } from '@/lib/supabase/server';
 
 /**
@@ -74,7 +75,7 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
     const firstName =
       name.trim().split(/\s+/)[0] || email.split('@')[0] || 'użytkowniku';
     try {
-      await inngest.send(
+      await sendJobEvent(
         userRegistered.create({
           userId: authUser.id,
           email: authUser.email,

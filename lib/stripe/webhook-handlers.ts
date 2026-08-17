@@ -15,6 +15,7 @@
  */
 
 import * as Sentry from '@sentry/nextjs';
+import { sendJobEvent } from '@/lib/jobs/enqueue';
 import type Stripe from 'stripe';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
@@ -25,8 +26,7 @@ import {
   billingPaymentSucceeded,
   billingSubscriptionCanceled,
   billingTrialWillEnd,
-  inngest,
-} from '@/lib/inngest/client';
+  } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import {
@@ -126,7 +126,7 @@ export async function handleSubscriptionDeleted(
 
   // Inngest event — konsumenci re-engagement campaign mogą zaplanować
   // sequence emaili "wracaj do nas".
-  await inngest.send(
+  await sendJobEvent(
     billingSubscriptionCanceled.create({
       tenantId,
       subscriptionId: subscription.id,
@@ -191,8 +191,10 @@ export async function handleInvoicePaymentSucceeded(
   });
 
   // Inngest event — uruchamia self-invoicing przez KSeF (Krok 4).
-  await inngest.send(
-    billingPaymentSucceeded.create({
+  await sendJobEvent({
+    // Grupa per tenant — jedna faktura własna naraz (parytet z Inngest).
+    groupId: mapping.tenantId,
+    ...billingPaymentSucceeded.create({
       tenantId: mapping.tenantId,
       paymentId,
       stripeInvoiceId: invoice.id ?? '',
@@ -204,7 +206,7 @@ export async function handleInvoicePaymentSucceeded(
           ? new Date(invoice.status_transitions.paid_at * 1000).toISOString()
           : new Date().toISOString(),
     }),
-  );
+  });
 
   // Analytics — payment_succeeded. Subskrypcja jest per-tenant, więc
   // `distinctId = tenantId` (UUID nie koliduje z userId).
@@ -269,14 +271,15 @@ export async function handleInvoicePaymentFailed(
     },
   });
 
-  await inngest.send(
-    billingPaymentFailed.create({
+  await sendJobEvent({
+    groupId: mapping.tenantId,
+    ...billingPaymentFailed.create({
       tenantId: mapping.tenantId,
       paymentId,
       stripeInvoiceId: invoice.id ?? '',
       failureReason,
     }),
-  );
+  });
 
   await trackServer({
     distinctId: mapping.tenantId,
@@ -310,7 +313,7 @@ export async function handleTrialWillEnd(
     metadata: { trialEnd: trialEndIso },
   });
 
-  await inngest.send(
+  await sendJobEvent(
     billingTrialWillEnd.create({
       tenantId,
       subscriptionId: subscription.id,

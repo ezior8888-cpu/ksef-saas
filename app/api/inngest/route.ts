@@ -1,5 +1,7 @@
 import { serve } from 'inngest/next';
 
+import { isPgBossBackend } from '@/lib/jobs/config';
+
 import { inngest } from '@/lib/inngest/client';
 import { submitInvoiceJob } from '@/lib/inngest/jobs/submit-invoice';
 import {
@@ -65,9 +67,15 @@ import { criticalAlertsMonitorJob } from '@/lib/inngest/jobs/critical-alerts-mon
  * Każda funkcja dodana tu musi być WYSTAWIONA - inaczej Inngest jej nie
  * zarejestruje i eventy będą cicho nie-obsługiwane (ani retry, ani alert).
  */
-export const { GET, POST, PUT } = serve({
-  client: inngest,
-  functions: [
+/**
+ * Etap 7 migracji (pg-boss): przy `JOBS_BACKEND=pgboss` rejestrujemy PUSTĄ
+ * listę funkcji. Inngest Cloud przestaje wtedy widzieć nasze joby i gasi
+ * własne crony — bez tego oba backendy odpalałyby te same zadania równolegle.
+ *
+ * Rollback to sam flip zmiennej środowiskowej + restart: lista wraca,
+ * Inngest znów synchronizuje funkcje (bez przebudowy obrazu).
+ */
+const ALL_FUNCTIONS = [
     submitInvoiceJob,
     notifySuccessJob,
     notifyFailureJob,
@@ -114,5 +122,11 @@ export const { GET, POST, PUT } = serve({
     dailySummaryEmailJob,
     weeklyBusinessReviewJob,
     criticalAlertsMonitorJob,
-  ],
+];
+
+const REGISTERED_FUNCTIONS = isPgBossBackend() ? [] : ALL_FUNCTIONS;
+
+export const { GET, POST, PUT } = serve({
+  client: inngest,
+  functions: REGISTERED_FUNCTIONS,
 });

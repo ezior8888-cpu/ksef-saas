@@ -1,13 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { sendJobEvent } from '@/lib/jobs/enqueue';
 import { redirect } from 'next/navigation';
 
 import {
   importFileUploaded,
   importKsefHistoryRequested,
-  inngest,
-} from '@/lib/inngest/client';
+  } from '@/lib/inngest/client';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import { uploadImportFile } from '@/lib/import/file-storage';
 import { createClient } from '@/lib/supabase/server';
@@ -106,8 +106,11 @@ export async function startMagicImportAction(
   }
 
   try {
-    await inngest.send(
-      importKsefHistoryRequested.create({
+    await sendJobEvent({
+      // Grupa per NIP — odpowiednik `concurrency: { key: 'event.data.nip' }`
+      // z Inngest (max 3 równoległe importy historii jednego podmiotu).
+      groupId: tenantRow.nip,
+      ...importKsefHistoryRequested.create({
         importJobId: job.id,
         tenantId,
         nip: tenantRow.nip,
@@ -115,7 +118,7 @@ export async function startMagicImportAction(
         dateTo,
         direction,
       }),
-    );
+    });
   } catch (e) {
     const friendly = formatInngestSendError(e);
     await supabase
@@ -280,7 +283,7 @@ export async function startFileImportAction(
   }
 
   try {
-    await inngest.send(
+    await sendJobEvent(
       importFileUploaded.create({
         importJobId: job.id,
         tenantId,

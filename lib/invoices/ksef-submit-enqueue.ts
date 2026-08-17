@@ -7,6 +7,7 @@
  */
 
 import { revalidatePath } from 'next/cache';
+import { sendJobEvent } from '@/lib/jobs/enqueue';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logAudit } from '@/lib/audit/log';
@@ -17,7 +18,6 @@ import {
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
-import { inngest } from '@/lib/inngest/client';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 import type { Invoice } from '@/types/invoice';
@@ -160,7 +160,10 @@ export async function enqueueKsefSubmitAfterDraft(
   }
 
   try {
-    await inngest.send({
+    await sendJobEvent({
+      // Grupa per tenant — odpowiednik `concurrency: { key: 'event.data.tenantId' }`
+      // z Inngest (limit 100 równoległych wysyłek jednej organizacji).
+      groupId: tenantId,
       name: 'invoice/submit.requested',
       data: {
         tenantId,

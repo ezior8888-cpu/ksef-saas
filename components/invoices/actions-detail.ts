@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { sendJobEvent } from '@/lib/jobs/enqueue';
 
 import { logAudit } from '@/lib/audit/log';
 import {
@@ -9,7 +10,6 @@ import {
 } from '@/lib/auth/ksef-verification-guard';
 import { createClient } from '@/lib/supabase/server';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
-import { inngest } from '@/lib/inngest/client';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
@@ -295,7 +295,8 @@ export async function resendInvoiceAction(
       notes: (inv.notes as string | null) ?? snapshot?.notes ?? undefined,
     };
 
-    await inngest.send({
+    await sendJobEvent({
+      groupId: inv.tenant_id as string,
       name: 'invoice/submit.requested',
       data: {
         tenantId: inv.tenant_id as string,

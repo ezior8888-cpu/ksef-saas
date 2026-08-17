@@ -1,9 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { sendJobEvent } from '@/lib/jobs/enqueue';
 
 import { formatInngestSendError } from '@/lib/inngest/error-message';
-import { inngest, remindersSendRequested } from '@/lib/inngest/client';
+import { remindersSendRequested } from '@/lib/inngest/client';
 import {
   ActionAuthError,
   requireOrgRole,
@@ -134,7 +135,7 @@ export async function triggerManualReminderAction(
   }
 
   try {
-    await inngest.send(remindersSendRequested.create({ reminderId: reminder.id }));
+    await sendJobEvent(remindersSendRequested.create({ reminderId: reminder.id }));
   } catch (e) {
     await supabase
       .from('payment_reminders')

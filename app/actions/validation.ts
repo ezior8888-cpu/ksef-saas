@@ -1,6 +1,7 @@
 'use server';
 
 import { formatInngestSendError } from '@/lib/inngest/error-message';
+import { sendJobEvent } from '@/lib/jobs/enqueue';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import {
@@ -122,10 +123,10 @@ export async function bulkValidateContractorsAction(
   }
 
   try {
-    const { inngest, validationBulkContractorsRequested } = await import(
+    const { validationBulkContractorsRequested } = await import(
       '@/lib/inngest/client'
     );
-    const sendResult = await inngest.send(
+    const sendResult = await sendJobEvent(
       validationBulkContractorsRequested.create({
         tenantId,
         contractorIds: contractors.map((c) => c.id),

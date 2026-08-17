@@ -1,12 +1,12 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { sendJobEvent } from '@/lib/jobs/enqueue';
 
 import {
   exportsCoPilotSendPackage,
   exportsGenerateRequested,
-  inngest,
-} from '@/lib/inngest/client';
+  } from '@/lib/inngest/client';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
   ActionAuthError,
@@ -125,7 +125,7 @@ export async function startExportAction(params: {
   }
 
   try {
-    await inngest.send(
+    await sendJobEvent(
       exportsGenerateRequested.create({ exportJobId: job.id }),
     );
   } catch (e) {
@@ -398,7 +398,7 @@ export async function triggerCoPilotNowAction(
   }
 
   try {
-    const sent = await inngest.send(
+    const sent = await sendJobEvent(
       exportsCoPilotSendPackage.create({
         tenantId,
         periodStart,

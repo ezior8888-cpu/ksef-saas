@@ -1,11 +1,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { sendJobEvent } from '@/lib/jobs/enqueue';
 
 import { learnFromCorrection } from '@/lib/categorization';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
-  inngest,
   ocrProcessPhotoRequested,
 } from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -142,7 +142,7 @@ export async function uploadExpensePhotoAction(formData: FormData) {
       return { success: false as const, error: pathErr.message };
     }
 
-    await inngest.send(
+    await sendJobEvent(
       ocrProcessPhotoRequested.create({
         ocrJobId: ocrJob.id,
         tenantId,
