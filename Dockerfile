@@ -68,7 +68,28 @@ ENV NEXT_OUTPUT=standalone \
 ENV NODE_OPTIONS="--max-old-space-size=3072"
 RUN pnpm build
 
+# ── worker: proces jobów pg-boss (Etap 7 migracji Hetzner) ──
+# Drugi kontener z TEGO SAMEGO repo — w Coolify osobna aplikacja z
+# `Dockerfile target: worker` (kolumna dockerfile_target_build).
+# Celowo pełne node_modules + tsx zamiast standalone: worker importuje
+# szeroki przekrój lib/** (joby, e-maile React Email, XSD/WASM), a rozmiar
+# obrazu na własnym serwerze nie jest krytyczny.
+FROM base AS worker
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.WORKER_HEALTH_PORT||8080)+'/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+# `--conditions=react-server`: moduły z `import 'server-only'` (np. analytics)
+# rzucają wyjątek poza tym warunkiem — Next ustawia go sam, worker musi jawnie.
+CMD ["node", "--conditions=react-server", "--import", "tsx", "lib/jobs/worker.ts"]
+
 # ── runner: minimalny obraz produkcyjny ──
+# MUSI zostać ostatnim etapem pliku: `docker build` bez `--target` buduje
+# etap ostatni, więc każdy build bez jawnego targetu ma dać aplikację webową,
+# a nie workera. (Odwrotna kolejność raz już wyłączyła produkcję.)
 FROM node:22-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
@@ -93,21 +114,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
 
 CMD ["node", "server.js"]
-
-# ── worker: proces jobów pg-boss (Etap 7 migracji Hetzner) ──
-# Drugi kontener z TEGO SAMEGO repo — w Coolify osobna aplikacja z
-# `Dockerfile target: worker` (kolumna dockerfile_target_build).
-# Celowo pełne node_modules + tsx zamiast standalone: worker importuje
-# szeroki przekrój lib/** (joby, e-maile React Email, XSD/WASM), a rozmiar
-# obrazu na własnym serwerze nie jest krytyczny.
-FROM base AS worker
-WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.WORKER_HEALTH_PORT||8080)+'/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
-# `--conditions=react-server`: moduły z `import 'server-only'` (np. analytics)
-# rzucają wyjątek poza tym warunkiem — Next ustawia go sam, worker musi jawnie.
-CMD ["node", "--conditions=react-server", "--import", "tsx", "lib/jobs/worker.ts"]
