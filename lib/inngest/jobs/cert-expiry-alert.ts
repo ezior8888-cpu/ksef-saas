@@ -1,6 +1,8 @@
 import { cron } from 'inngest';
 
 import { inngest } from '../client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import {
   getTenantAdminEmail,
 } from '@/lib/supabase/admin-queries';
@@ -24,13 +26,11 @@ import { createAdminClient } from '@/lib/supabase/server';
  * Pętla `for (days of thresholds)` iteruje sekwencyjnie - każdy próg jako
  * osobny step.run (audit trail w Inngest UI + memoizacja przy retry).
  */
-export const certExpiryAlertJob = inngest.createFunction(
-  {
-    id: 'cert-expiry-alert',
-    name: 'Alerty o wygasających certyfikatach KSeF',
-    triggers: [cron('TZ=Europe/Warsaw 0 8 * * *')],
-  },
-  async ({ step, logger }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.cert-expiry-alert).
+ */
+export async function runCertExpiryAlert({ step, logger }: JobContext) {
     const now = new Date();
     const thresholds = [30, 14, 7] as const;
     let totalAlerts = 0;
@@ -107,5 +107,14 @@ export const certExpiryAlertJob = inngest.createFunction(
     }
 
     return { totalAlerts };
+}
+
+export const certExpiryAlertJob = inngest.createFunction(
+  {
+    id: 'cert-expiry-alert',
+    name: 'Alerty o wygasających certyfikatach KSeF',
+    triggers: [cron('TZ=Europe/Warsaw 0 8 * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runCertExpiryAlert(toJobContext({ step, logger, attempt })),
 );

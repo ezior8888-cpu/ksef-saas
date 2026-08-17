@@ -165,8 +165,8 @@ Odpięcie appki w dashboardzie Inngest → usunięcie `lib/inngest/` + zależno�
 - [x] ETAP 0 — inwentaryzacja (17 sie 2026)
 - [x] Weryfikacja planu przeciw kodowi (17 sie 2026 — **46/46 jobów pokrytych (12+17+8+9), 24/24 eventów, 9/9 plików enqueue**; weryfikacja wyłapała 3 błędy pierwszej wersji planu: 6 funkcji sekwencji zamiast 1, 2 handlery offline, nazwa autoCategorize)
 - [x] ETAP 1 — fundament (17 sie 2026: `lib/jobs/` 9 plików + worker target w Dockerfile + smoke script + 12 testów; typecheck/lint/109 vitest/66 node/build ✅; pg-boss 12.27 — nazwane exporty, grupy `groupConcurrency` dają NATYWNE per-tenant limity, lepiej niż zakładał plan)
-- [ ] ETAP 2 — infrastruktura
-- [ ] ETAP 3 — Paczka A (12)
+- [x] ETAP 2 — infrastruktura (17 sie 2026: WYKRYTO i naprawiono duplikat sieci — app-1 wisiał w `appp-1` [literówka z lipca], oba serwery teraz w `faktflow-net`: db-1=10.0.0.2, app-1=10.0.0.3; port 5432 wystawiony TYLKO na 10.0.0.2 [live compose + docker_compose_raw w Coolify, backup .bak-etap7]; stack 15× healthy po odtworzeniu kontenera bazy; TCP z app-1 ✓, z internetu zamknięty ✓; smoke pg-boss ✅ roundtrip 2s, schemat `pgboss` 12 tabel)
+- [x] ETAP 3 — Paczka A (17 sie 2026: 12 cronów sportowanych wzorcem „runner w pliku Inngest + delegacja" [jedno źródło prawdy logiki], rejestracje w `lib/jobs/handlers/package-a.ts`, adapter `lib/jobs/inngest-adapter.ts`, flaga `WORKER_DISABLE_SCHEDULES` do testów; **E2E ✅: lokalny worker przez tunel wykonał realny refresh-materialized-views na żywej bazie db-1** [`step ok: refresh-views`, job `completed` w pgboss.job]; typecheck/lint/109 vitest/build ✅)
 - [ ] ETAP 4 — Paczka B (12)
 - [ ] ETAP 5 — Paczka C (8)
 - [ ] ETAP 6 — Paczka D (7)

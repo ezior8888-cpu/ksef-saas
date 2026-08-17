@@ -15,6 +15,8 @@ import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
 import { inngest } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 const DEFAULT_RETENTION_MONTHS = 12;
@@ -25,15 +27,11 @@ interface CleanupResult {
   duration_ms: number;
 }
 
-export const cleanupAuditLogsJob = inngest.createFunction(
-  {
-    id: 'cleanup-audit-logs',
-    name: 'DB: cleanup audit_logs starsze niż 12 miesięcy',
-    concurrency: { limit: 1 },
-    // 1. dnia miesiąca o 03:00 PL.
-    triggers: [cron('TZ=Europe/Warsaw 0 3 1 * *')],
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.cleanup-audit-logs).
+ */
+export async function runCleanupAuditLogs({ step }: JobContext) {
     const supabase = createAdminClient();
 
     const result = await step.run('cleanup', async () => {
@@ -67,5 +65,16 @@ export const cleanupAuditLogsJob = inngest.createFunction(
     }
 
     return result ?? { skipped: true as const };
+}
+
+export const cleanupAuditLogsJob = inngest.createFunction(
+  {
+    id: 'cleanup-audit-logs',
+    name: 'DB: cleanup audit_logs starsze niż 12 miesięcy',
+    concurrency: { limit: 1 },
+    // 1. dnia miesiąca o 03:00 PL.
+    triggers: [cron('TZ=Europe/Warsaw 0 3 1 * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runCleanupAuditLogs(toJobContext({ step, logger, attempt })),
 );

@@ -6,19 +6,17 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { validateNipCached } from '@/lib/validation/cache';
 
 import { inngest } from '../client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 const STALE_AFTER_MS = 7 * 86400_000;
 const BATCH_SIZE = 10;
 
-export const nightlyValidationRecheckJob = inngest.createFunction(
-  {
-    id: 'nightly-validation-recheck',
-    name: 'Nocna re-walidacja kontrahentów (Biała Lista/VIES)',
-    retries: 1,
-    concurrency: { limit: 1 },
-    triggers: [cron('TZ=Europe/Warsaw 0 4 * * *')],
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.nightly-validation-recheck).
+ */
+export async function runNightlyValidationRecheck({ step }: JobContext) {
     const cutoffIso = new Date(Date.now() - STALE_AFTER_MS).toISOString();
 
     const deletedRows = await step.run('cleanup-cache', async () => {
@@ -111,5 +109,16 @@ export const nightlyValidationRecheckJob = inngest.createFunction(
       validated,
       statusChanged,
     };
+}
+
+export const nightlyValidationRecheckJob = inngest.createFunction(
+  {
+    id: 'nightly-validation-recheck',
+    name: 'Nocna re-walidacja kontrahentów (Biała Lista/VIES)',
+    retries: 1,
+    concurrency: { limit: 1 },
+    triggers: [cron('TZ=Europe/Warsaw 0 4 * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runNightlyValidationRecheck(toJobContext({ step, logger, attempt })),
 );

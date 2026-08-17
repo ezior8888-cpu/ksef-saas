@@ -30,6 +30,9 @@ import {
 import { ATTEMPT_KEY, decideRetry, readAttempt } from './retry';
 import { createJobStep } from './step-shim';
 
+// Rejestracje paczek (side-effect imports) — Etapy 3-6 planu.
+import './handlers/package-a';
+
 const log = createJobLogger('worker');
 
 /** Kolejka smoke — weryfikacja fundamentu (Etap 1/2) i żywotności workera. */
@@ -130,7 +133,14 @@ async function main(): Promise<void> {
   }
 
   let scheduled = 0;
+  // WORKER_DISABLE_SCHEDULES=true: tryb testowy (lokalny worker przez tunel) —
+  // obsługuje kolejki, ale NIE planuje cronów w żywym schemacie pgboss.
+  const schedulesDisabled = process.env.WORKER_DISABLE_SCHEDULES === 'true';
+  if (schedulesDisabled) {
+    log.warn('WORKER_DISABLE_SCHEDULES=true — pomijam planowanie cronów');
+  }
   for (const cron of CRON_JOBS) {
+    if (schedulesDisabled) break;
     if (!registeredQueues.has(cron.queue)) continue;
     await boss.schedule(cron.queue, cron.cron, {}, cron.tz ? { tz: cron.tz } : {});
     scheduled++;

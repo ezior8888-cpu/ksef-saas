@@ -13,6 +13,8 @@ import { sendSlackAlert } from '@/lib/alerts/slack';
 import { verifySnapshot } from '@/lib/backup/verify';
 import { createAdminClient } from '@/lib/supabase/server';
 import { inngest } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 interface BackupLogRow {
   id: string;
@@ -54,14 +56,11 @@ interface AdminBackupQuery {
 
 const VERIFY_BATCH = 7;
 
-export const verifyBackupJob = inngest.createFunction(
-  {
-    id: 'verify-backup',
-    name: 'Backup: weekly verify ostatnich snapshotów',
-    concurrency: { limit: 1 },
-    triggers: [cron('TZ=Europe/Warsaw 0 3 * * 0')], // niedziela 03:00 PL
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.verify-backup).
+ */
+export async function runVerifyBackup({ step }: JobContext) {
     const recent = await step.run('list-recent', async () => {
       const admin = createAdminClient() as unknown as AdminBackupQuery;
       const res = await admin
@@ -139,5 +138,15 @@ export const verifyBackupJob = inngest.createFunction(
     }
 
     return { verified, failed };
+}
+
+export const verifyBackupJob = inngest.createFunction(
+  {
+    id: 'verify-backup',
+    name: 'Backup: weekly verify ostatnich snapshotów',
+    concurrency: { limit: 1 },
+    triggers: [cron('TZ=Europe/Warsaw 0 3 * * 0')], // niedziela 03:00 PL
   },
+  async ({ step, logger, attempt }) =>
+    runVerifyBackup(toJobContext({ step, logger, attempt })),
 );

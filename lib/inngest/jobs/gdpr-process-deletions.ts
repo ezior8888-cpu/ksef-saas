@@ -13,20 +13,18 @@ import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
 import { inngest } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import {
   executeGdprRequest,
   findDueGdprRequests,
 } from '@/lib/gdpr/deletion';
 
-export const gdprProcessDeletionsJob = inngest.createFunction(
-  {
-    id: 'gdpr-process-deletions',
-    name: 'GDPR: wykonaj pending requests z minionym cooling-off',
-    concurrency: { limit: 1 },
-    // Co godzinę.
-    triggers: [cron('0 * * * *')],
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.gdpr-process-deletions).
+ */
+export async function runGdprProcessDeletions({ step }: JobContext) {
     const due = await step.run('find-due', async () => {
       return await findDueGdprRequests();
     });
@@ -63,5 +61,16 @@ export const gdprProcessDeletionsJob = inngest.createFunction(
     }
 
     return { processed: due.length, success, failed };
+}
+
+export const gdprProcessDeletionsJob = inngest.createFunction(
+  {
+    id: 'gdpr-process-deletions',
+    name: 'GDPR: wykonaj pending requests z minionym cooling-off',
+    concurrency: { limit: 1 },
+    // Co godzinę.
+    triggers: [cron('0 * * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runGdprProcessDeletions(toJobContext({ step, logger, attempt })),
 );

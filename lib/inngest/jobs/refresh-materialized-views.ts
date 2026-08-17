@@ -17,6 +17,8 @@ import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
 import { inngest } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 interface RefreshResult {
@@ -25,16 +27,13 @@ interface RefreshResult {
   refreshed_at: string;
 }
 
-export const refreshMaterializedViewsJob = inngest.createFunction(
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka
+ * cron.refresh-materialized-views).
+ */
+export async function runRefreshMaterializedViews({ step }: JobContext) {
   {
-    id: 'refresh-materialized-views',
-    name: 'DB: refresh dashboard materialized views',
-    concurrency: { limit: 1 },
-    // Co godzinę o pełnej godzinie — synchronizujemy z timezone PL żeby
-    // operator widział w logach „00:00 / 01:00 / ..." zamiast UTC.
-    triggers: [cron('TZ=Europe/Warsaw 0 * * * *')],
-  },
-  async ({ step }) => {
     const supabase = createAdminClient();
 
     const result = await step.run('refresh-views', async () => {
@@ -72,5 +71,18 @@ export const refreshMaterializedViewsJob = inngest.createFunction(
     }
 
     return result ?? { skipped: true as const };
+  }
+}
+
+export const refreshMaterializedViewsJob = inngest.createFunction(
+  {
+    id: 'refresh-materialized-views',
+    name: 'DB: refresh dashboard materialized views',
+    concurrency: { limit: 1 },
+    // Co godzinę o pełnej godzinie — synchronizujemy z timezone PL żeby
+    // operator widział w logach „00:00 / 01:00 / ..." zamiast UTC.
+    triggers: [cron('TZ=Europe/Warsaw 0 * * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runRefreshMaterializedViews(toJobContext({ step, logger, attempt })),
 );

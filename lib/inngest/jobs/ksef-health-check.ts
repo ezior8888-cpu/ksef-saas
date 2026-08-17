@@ -16,6 +16,8 @@ import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
 import { inngest } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { checkKsefAvailability } from '@/lib/ksef/health-check';
 import { recordKsefPing } from '@/lib/ksef/health-status';
 import type { KsefEnvironment } from '@/types/ksef';
@@ -54,16 +56,11 @@ async function pingAndRecord(env: KsefEnvironment): Promise<void> {
   }
 }
 
-export const ksefHealthCheckJob = inngest.createFunction(
-  {
-    id: 'ksef-health-check',
-    name: 'KSeF: health monitor (30s ping)',
-    // Concurrency 1 — zapobiega race condition na counter consecutive failures.
-    concurrency: { limit: 1 },
-    // Co minutę uruchamiamy "podwójny" ping (0s + 30s) — efektywnie 30s cadence.
-    triggers: [cron('TZ=Europe/Warsaw * * * * *')],
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.ksef-health-check).
+ */
+export async function runKsefHealthCheck({ step }: JobContext) {
     const env = getCurrentEnv();
 
     // Pierwszy ping — natychmiast na starcie minuty.
@@ -78,5 +75,17 @@ export const ksefHealthCheckJob = inngest.createFunction(
     await step.run('ping-2', () => pingAndRecord(env));
 
     return { env, pingedAt: new Date().toISOString() };
+}
+
+export const ksefHealthCheckJob = inngest.createFunction(
+  {
+    id: 'ksef-health-check',
+    name: 'KSeF: health monitor (30s ping)',
+    // Concurrency 1 — zapobiega race condition na counter consecutive failures.
+    concurrency: { limit: 1 },
+    // Co minutę uruchamiamy "podwójny" ping (0s + 30s) — efektywnie 30s cadence.
+    triggers: [cron('TZ=Europe/Warsaw * * * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runKsefHealthCheck(toJobContext({ step, logger, attempt })),
 );

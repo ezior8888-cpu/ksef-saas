@@ -16,6 +16,8 @@ import * as Sentry from '@sentry/nextjs';
 import { deleteSnapshot } from '@/lib/backup/r2-backup-client';
 import { createAdminClient } from '@/lib/supabase/server';
 import { inngest } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 const DAILY_RETENTION_DAYS = 30;
 const WEEKLY_RETENTION_DAYS = 56;
@@ -52,14 +54,11 @@ interface AdminBackupCleanup {
   };
 }
 
-export const cleanupOldBackupsJob = inngest.createFunction(
-  {
-    id: 'cleanup-old-backups',
-    name: 'Backup: cleanup starych snapshotów (retention)',
-    concurrency: { limit: 1 },
-    triggers: [cron('TZ=Europe/Warsaw 0 4 * * *')],
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.cleanup-old-backups).
+ */
+export async function runCleanupOldBackups({ step }: JobContext) {
     const now = new Date();
     const dailyCutoff = new Date(
       now.getTime() - DAILY_RETENTION_DAYS * 24 * 60 * 60 * 1000,
@@ -125,5 +124,15 @@ export const cleanupOldBackupsJob = inngest.createFunction(
     }
 
     return { removed, failed, total: toRemove.length };
+}
+
+export const cleanupOldBackupsJob = inngest.createFunction(
+  {
+    id: 'cleanup-old-backups',
+    name: 'Backup: cleanup starych snapshotów (retention)',
+    concurrency: { limit: 1 },
+    triggers: [cron('TZ=Europe/Warsaw 0 4 * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runCleanupOldBackups(toJobContext({ step, logger, attempt })),
 );

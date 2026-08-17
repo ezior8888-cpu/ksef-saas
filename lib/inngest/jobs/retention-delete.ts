@@ -1,6 +1,8 @@
 import { cron } from 'inngest';
 
 import { inngest } from '../client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/server';
 import { logAuditSystem } from '@/lib/audit/log-system';
 
@@ -11,13 +13,11 @@ import { logAuditSystem } from '@/lib/audit/log-system';
  * HARD DELETE — `invoice_line_items`, `ksef_submissions`, `xml_documents`
  * kasują się kaskadowo (FK ON DELETE CASCADE w schemacie).
  */
-export const retentionDeleteJob = inngest.createFunction(
-  {
-    id: 'retention-delete-cron',
-    name: 'Usuwanie faktur po retencji',
-    triggers: [cron('TZ=Europe/Warsaw 0 4 * * *')],
-  },
-  async ({ step, logger }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.retention-delete).
+ */
+export async function runRetentionDelete({ step, logger }: JobContext) {
     const nowIso = new Date().toISOString();
 
     const candidates = await step.run('find-candidates', async () => {
@@ -60,5 +60,14 @@ export const retentionDeleteJob = inngest.createFunction(
     });
 
     return { deleted: candidates.length };
-  }
+}
+
+export const retentionDeleteJob = inngest.createFunction(
+  {
+    id: 'retention-delete-cron',
+    name: 'Usuwanie faktur po retencji',
+    triggers: [cron('TZ=Europe/Warsaw 0 4 * * *')],
+  },
+  async ({ step, logger, attempt }) =>
+    runRetentionDelete(toJobContext({ step, logger, attempt })),
 );

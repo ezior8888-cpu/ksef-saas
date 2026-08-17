@@ -17,16 +17,14 @@ import {
 } from '@/lib/backup/backup-log';
 import { createDbSnapshot } from '@/lib/backup/db-snapshot';
 import { inngest } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
-export const dailyDbSnapshotJob = inngest.createFunction(
-  {
-    id: 'daily-db-snapshot',
-    name: 'Backup: daily DB snapshot to R2',
-    concurrency: { limit: 1 },
-    // 02:00 PL codziennie. Niedziele = weekly (dłuższa retencja).
-    triggers: [cron('TZ=Europe/Warsaw 0 2 * * *')],
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.daily-db-snapshot).
+ */
+export async function runDailyDbSnapshot({ step }: JobContext) {
     const now = new Date();
     // 0=ndz w UTC; przy 02:00 PL = 00:00 albo 01:00 UTC, wciąż niedziela.
     const kind = now.getUTCDay() === 0 ? 'weekly' : 'daily';
@@ -90,5 +88,16 @@ export const dailyDbSnapshotJob = inngest.createFunction(
 
       throw err;
     }
+}
+
+export const dailyDbSnapshotJob = inngest.createFunction(
+  {
+    id: 'daily-db-snapshot',
+    name: 'Backup: daily DB snapshot to R2',
+    concurrency: { limit: 1 },
+    // 02:00 PL codziennie. Niedziele = weekly (dłuższa retencja).
+    triggers: [cron('TZ=Europe/Warsaw 0 2 * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runDailyDbSnapshot(toJobContext({ step, logger, attempt })),
 );

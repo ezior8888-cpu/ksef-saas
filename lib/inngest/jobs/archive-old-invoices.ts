@@ -1,6 +1,8 @@
 import { cron } from 'inngest';
 
 import { inngest } from '../client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/server';
 import { uploadToGlacier } from '@/lib/storage/glacier';
 import {
@@ -13,13 +15,11 @@ import {
  * z zapisanym XML w R2: kopiujemy XML do S3 Glacier Deep Archive, zapisujemy
  * `archive_storage_path`, potem oznaczamy `archived_at`.
  */
-export const archiveOldInvoicesJob = inngest.createFunction(
-  {
-    id: 'archive-old-invoices-cron',
-    name: 'Archiwizacja faktur starszych niż 2 lata',
-    triggers: [cron('TZ=Europe/Warsaw 0 3 * * *')],
-  },
-  async ({ step, logger }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.archive-old-invoices).
+ */
+export async function runArchiveOldInvoices({ step, logger }: JobContext) {
     const twoYearsAgo = new Date();
     twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
     const issueBefore = twoYearsAgo.toISOString().slice(0, 10);
@@ -108,5 +108,14 @@ export const archiveOldInvoicesJob = inngest.createFunction(
     });
 
     return { archived: candidates.length };
-  }
+}
+
+export const archiveOldInvoicesJob = inngest.createFunction(
+  {
+    id: 'archive-old-invoices-cron',
+    name: 'Archiwizacja faktur starszych niż 2 lata',
+    triggers: [cron('TZ=Europe/Warsaw 0 3 * * *')],
+  },
+  async ({ step, logger, attempt }) =>
+    runArchiveOldInvoices(toJobContext({ step, logger, attempt })),
 );

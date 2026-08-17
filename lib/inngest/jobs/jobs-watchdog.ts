@@ -14,6 +14,8 @@ import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
 import { inngest } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
@@ -37,14 +39,11 @@ const STUCK_REMINDER_THRESHOLD_MINUTES = 60;
  */
 const MAX_ALERTS_PER_RUN = 50;
 
-export const jobsWatchdogJob = inngest.createFunction(
-  {
-    id: 'jobs-watchdog',
-    name: 'Watchdog: zawieszone joby (export + reminders)',
-    concurrency: { limit: 1 },
-    triggers: [cron('TZ=Europe/Warsaw */15 * * * *')],
-  },
-  async ({ step, logger }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.jobs-watchdog).
+ */
+export async function runJobsWatchdog({ step, logger }: JobContext) {
     const supabase = createAdminClient();
 
     const stuckExports = await step.run('find-stuck-exports', async () => {
@@ -141,5 +140,15 @@ export const jobsWatchdogJob = inngest.createFunction(
       stuckExports: stuckExports.length,
       stuckReminders: stuckReminders.length,
     };
+}
+
+export const jobsWatchdogJob = inngest.createFunction(
+  {
+    id: 'jobs-watchdog',
+    name: 'Watchdog: zawieszone joby (export + reminders)',
+    concurrency: { limit: 1 },
+    triggers: [cron('TZ=Europe/Warsaw */15 * * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runJobsWatchdog(toJobContext({ step, logger, attempt })),
 );
