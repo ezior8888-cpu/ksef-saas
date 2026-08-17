@@ -1,0 +1,176 @@
+# ETAP 7 — Plan migracji Inngest → pg-boss
+
+> Utworzony 17 sierpnia 2026 na bazie pełnej inwentaryzacji kodu (nie pamięci).
+> Stan wejściowy: Etapy 1-6 przeprowadzki zrobione; apka działa na Hetznerze,
+> joby w tle nadal na Inngest Cloud (działają — zero presji czasowej).
+
+---
+
+## 0. Wynik inwentaryzacji (fakty z kodu, 17 sie 2026)
+
+| Metryka | Wartość (zweryfikowana skryptem) |
+|---|---|
+| Funkcje zarejestrowane w `app/api/inngest/route.ts` | **46** |
+| Joby cron | 20 (wszystkie `TZ=Europe/Warsaw` poza gdpr `0 * * * *`) |
+| Joby eventowe | 26 (w tym 6 funkcji sekwencji e-maili + 2 handlery offline-queue) |
+| Eventy zdefiniowane (`lib/inngest/client.ts`, zodEvent) | **24** (19 domenowych + 5 `emailTrialDay*`) |
+| Punkty `inngest.send` w apce (poza jobami) | 9 plików / 14 wywołań |
+| `step.sleep` KRÓTKIE (≤30 s; rate-limit, polling) | 6 plików — trywialne (worker to proces, wolno mu spać) |
+| `step.sleep` DŁUGIE (dni) | email-sequence.ts: 6 funkcji, każda już emituje NASTĘPNY event po `sleep(Nd)` — redesign = `sendEvent(next, {startAfter: Nd})` zamiast sleep+send (zmiana jednoliniowa per funkcja, łańcuch zostaje) |
+| `onFailure` | 4: submit-invoice, bulk-import, magic-import, process-ocr |
+| `RetryAfterError` (custom schedule 30s→1h) | tylko submit-invoice |
+| concurrency per-klucz (nip/tenant) | download-upo(3/nip), inbox(3/nip), magic-import(3/nip), dunning(1/tenant), submit(100/tenant) |
+| throttle per-klucz | submit(60/min/tenant), upo(30/min/nip), inbox(8/h/nip) |
+
+## 1. Architektura docelowa
+
+```
+┌─ app-1 ──────────────────────────────────────────────┐
+│  [apka Next.js]──enqueue──┐      [worker] ← NOWY     │
+│   (ten sam obraz,          │       kontener, ten sam  │
+│    target: runner)         │       obraz, target:     │
+│                            ▼       worker (tsx)       │
+└────────────────────── pg-boss ───────┬────────────────┘
+                    (schemat `pgboss`) │
+┌─ db-1 ────────────────────────────── ▼ ───────────────┐
+│  Postgres (Supabase) — DOTYCHCZASOWA baza, port 5432  │
+│  wystawiony TYLKO na sieć prywatną Hetznera           │
+└───────────────────────────────────────────────────────┘
+```
+
+Zasady nadrzędne:
+1. **Parytet 1:1** logiki biznesowej — ciała jobów przenoszone niemal bez zmian
+   przez shim `step.run/sleep/sendEvent` (audytowana logika zostaje nietknięta).
+2. **`JOBS_BACKEND=inngest|pgboss`** — przełącznik na enqueue i na rejestracji
+   `/api/inngest`. Domyślnie `inngest` przez CAŁY development → można bezpiecznie
+   commitować/pushować paczki, kod pg-boss jest nieaktywny na prod aż do Etapu 9.
+3. **Weryfikacja po każdym etapie**: typecheck + lint + vitest + build; commit
+   po każdej paczce (za zgodą usera).
+4. Rollback zawsze możliwy: flip env → `inngest` + restart (do Etapu 10).
+
+## 2. Tabela parytetu (każdy feature Inngest → odpowiednik)
+
+| Inngest | Odpowiednik w pg-boss/workerze |
+|---|---|
+| `cron('TZ=…')` | `boss.schedule(queue, cron, {tz})` — natywne wsparcie stref |
+| event `inngest.send` | `boss.send(queueFor(event), data)`; mapa 1:1 event→kolejka |
+| `step.sendEvent` (fan-out, tablice) | `boss.insert([...])` przez shim |
+| `step.run(name, fn)` | shim: `await fn()` + log (bez memoizacji — patrz niżej) |
+| memoizacja stepów przy retry | zastąpiona istniejącą idempotencją: guard w submit (ksef_status), R2 `IfNoneMatch`, unikalność P_2 w MF, `billing_notifications`, upserty — **audyt 18 lip potwierdził 3 niezależne warstwy** |
+| `step.sleep` ≤30 s | zwykłe `setTimeout` w procesie (worker nie jest serverless) |
+| `step.sleep` wielodniowe (email-sequence) | **redesign**: łańcuch jobów `startAfter: Nd` (etap→etap) |
+| `retries: N` + backoff | własny wrapper: licznik `__attempt` w danych, re-send z `startAfter` |
+| `RetryAfterError(msg, delay)` | klasa własna, wrapper honoruje delay (`getKsefRetryDelay` reużyty 1:1) |
+| `NonRetriableError` | klasa własna → natychmiast `onExhausted` |
+| `onFailure` | callback `onExhausted(error, data)` w definicji handlera |
+| concurrency globalne (limit 1-10) | `work({batchSize})` per kolejka + jeden proces workera |
+| concurrency/throttle per-NIP | **jeden proces workera** ⇒ istniejący in-process `ksefRateLimiter` staje się POPRAWNY globalnie (na Vercelu nie był — multi-instance); dodatkowo małe batchSize. Świadome uproszczenie, poprawne przy skali alpha |
+| `logger` | pino-podobny prosty logger konsolowy (Coolify zbiera stdout) |
+| dashboard Inngest (obserwowalność) | tabele `pgboss.job`/`archive` + healthcheck HTTP workera + istniejący jobs-watchdog (już dziś patrzy na tabele DOMENOWE, nie na Inngest — przenosi się bez zmian) |
+
+## 3. Etapy
+
+### ETAP 1 — Fundament `lib/jobs/` (sam kod, zero dotykania jobów)
+Pliki: `errors.ts`, `duration.ts`, `config.ts` (JOBS_BACKEND/DATABASE_URL),
+`queues.ts` (mapa 19 eventów + 20 cronów), `boss.ts` (singleton),
+`enqueue.ts` (dispatcher wg backendu), `retry.ts` (czysta funkcja decyzyjna
++ wrapper), `step-shim.ts` (run/sleep≤120s/sendEvent), `worker.ts` (rejestr
+handlerów, bootstrap schedulek TYLKO dla zarejestrowanych kolejek, healthcheck
+HTTP, graceful shutdown, kolejka smoke). Dockerfile: target `worker`
+(tsx + pełne node_modules). `scripts/pgboss-smoke.ts`. Testy unit:
+duration, retry-decyzje, kompletność mapy eventów.
+**DoD**: typecheck/lint/vitest/build zielone; smoke NIE wymaga jeszcze DB.
+
+### ETAP 2 — Infrastruktura (jedyny etap z klikaniem usera)
+1. **User**: Hetzner Console → db-1 → Networking → Attach to `faktflow-net`
+   (bridge'e Dockera na db-1 to 172.x — sprawdzone, zero kolizji jak na ops-1).
+2. **AI**: publish `5432` na prywatnym IP db-1 (edycja compose Supabase przez
+   tinker) → user: redeploy Supabase.
+3. **AI**: smoke pg-boss przez tunel SSH z Maca (`pnpm jobs:smoke`) — tworzy
+   schemat `pgboss`, wysyła i odbiera job testowy.
+**DoD**: smoke zielony; schemat `pgboss` istnieje obok `public` (nietknięty).
+
+### ETAP 3 — Paczka A: crony utrzymaniowe (12 jobów, najniższe ryzyko)
+refresh-materialized-views, cleanup-audit-logs, daily-db-snapshot,
+verify-backup, cleanup-old-backups, retention-delete, archive-old-invoices,
+nightly-validation-recheck, jobs-watchdog, ksef-health-check (co 1 min,
+2 pingi z 30-sekundową pauzą w procesie), gdpr-process-deletions,
+cert-expiry-alert. Wszystkie idempotentne, żaden nie wysyła e-maili do klientów.
+
+### ETAP 4 — Paczka B: e-maile / billing / przypomnienia (17)
+notify-success, notify-failure, **sekwencja: emailWelcome + emailDay1/4/8/12/14
+(6 funkcji; każda już dziś emituje następny event po `sleep(Nd)` — port =
+`sendEvent(next, {startAfter: Nd})` zamiast sleep+send, łańcuch bez zmian)**,
+trial-countdown, dunning, daily-summary, weekly-review, critical-alerts,
+daily-analytics-digest, reminder-scheduler, send-reminder,
+cancel-reminders-on-payment. Idempotencja mailowa istnieje
+(`billing_notifications`, preferences, bounce-guard).
+
+### ETAP 5 — Paczka C: OCR / importy / eksporty (8)
+process-ocr(+onFailure), auto-categorize-inbox (`autoCategorizeInboxInvoice`),
+bulk-import(+onFailure), bulk-validate-contractors,
+magic-import-ksef(+onFailure), exports-generate,
+co-pilot-monthly, co-pilot-send-package.
+
+### ETAP 6 — Paczka D: RDZEŃ KSeF (9, najwyższe ryzyko — na końcu, na rozgrzanym fundamencie)
+**submit-invoice** (pełny parytet: schedule 30s→2m→5m→15m→1h z
+`retry-schedule.ts`, klasyfikacja onFailure → rejected/offline_queued/failed,
+Offline24, audyt), download-upo, upo-retry-stale, inbox-polling +
+inbox-poll-tenant, process-offline-queue + **offlineQueueSuccessHandler +
+offlineQueueFailureHandler** (2 handlery eventowe w tym samym pliku),
+self-invoice-payment.
+Testy symulacyjne wzorowane na `tests/mf-outage-simulation` i `ksef-mock`
+przeciw nowemu wrapperowi.
+
+### ETAP 7 — Punkty enqueue w apce + przełącznik rejestracji
+9 plików (validation, reminders, exports, expenses, register,
+magic-import×2, actions-detail, ksef-submit-enqueue, stripe/webhook-handlers)
+→ `sendJobEvent()` z dispatchera. `/api/inngest/route.ts`: przy
+`JOBS_BACKEND=pgboss` `serve()` z pustą listą (Inngest przestaje widzieć
+funkcje ⇒ crony Cloud gasną; rollback = env flip + restart, bez rebuilda).
+
+### ETAP 8 — Flagi: Edge Config → Postgres
+Migracja `00060_global_feature_flags.sql`; refactor `lib/feature-flags/`
+(ten sam interfejs, fail-soft zostaje); usunięcie `@vercel/edge-config` z deps.
+
+### ETAP 9 — Cutover
+Coolify: druga aplikacja z tego samego repo (Build Pack Dockerfile,
+**target `worker`** — kolumna `dockerfile_target_build` istnieje), komplet env
++ `DATABASE_URL`; `JOBS_BACKEND=pgboss` na apce i workerze → redeploy obu.
+E2E: faktura testowa przechodzi PEŁNY cykl (submit→numer KSeF→UPO→mail) bez
+Inngest w łańcuchu. Tydzień obserwacji (Kuma + watchdog + Sentry).
+**Playbook rollback**: `JOBS_BACKEND=inngest` na obu → restart → Inngest
+z powrotem widzi funkcje. Uwaga: joby zakolejkowane w pg-boss w międzyczasie
+NIE przeskoczą same do Inngest — po rollbacku sprawdzić `pgboss.job`
+(stan `created`) i ręcznie ponowić z apki (skala alpha: pojedyncze sztuki).
+
+### ETAP 10 — Decommission (po tygodniu stabilności)
+Odpięcie appki w dashboardzie Inngest → usunięcie `lib/inngest/` + zależności
+`inngest` z package.json (osobny commit; event-schematy zod przenieść do
+`lib/jobs/` — są używane jako walidacja payloadów).
+
+## 4. Ryzyka i decyzje
+
+| Ryzyko | Mitygacja |
+|---|---|
+| pg-boss API pisane z pamięci | Etap 1 zaczyna się od instalacji i przeczytania `.d.ts` — kod przeciw realnym typom |
+| Brak Dockera na Macu usera | build targetu `worker` weryfikowany dopiero na serwerze; do tego czasu tsx lokalnie + typecheck |
+| Podwójne wykonywanie (Inngest + pg-boss) | niemożliwe konstrukcyjnie: jeden dispatcher + warunkowa rejestracja — zawsze dokładnie jeden backend aktywny |
+| Sekwencja maili w locie podczas cutover | userzy w środku 14-dniowej sekwencji Inngest dokończą ją na Inngest (tydzień równoległości crona wystarcza dla day-8+; skala alpha: akceptowalne, odnotować przy cutover) |
+| `tsx` + aliasy `@/*` w workerze | tsx wspiera tsconfig paths; fallback: bundling esbuild (decyzja przy pierwszym uruchomieniu) |
+| Kolizja `emailTrialDay*` eventów | wyjaśnić przy Paczce B (mogą być wewnętrzne dla sekwencji) |
+
+## 5. Postęp
+
+- [x] ETAP 0 — inwentaryzacja (17 sie 2026)
+- [x] Weryfikacja planu przeciw kodowi (17 sie 2026 — **46/46 jobów pokrytych (12+17+8+9), 24/24 eventów, 9/9 plików enqueue**; weryfikacja wyłapała 3 błędy pierwszej wersji planu: 6 funkcji sekwencji zamiast 1, 2 handlery offline, nazwa autoCategorize)
+- [x] ETAP 1 — fundament (17 sie 2026: `lib/jobs/` 9 plików + worker target w Dockerfile + smoke script + 12 testów; typecheck/lint/109 vitest/66 node/build ✅; pg-boss 12.27 — nazwane exporty, grupy `groupConcurrency` dają NATYWNE per-tenant limity, lepiej niż zakładał plan)
+- [ ] ETAP 2 — infrastruktura
+- [ ] ETAP 3 — Paczka A (12)
+- [ ] ETAP 4 — Paczka B (12)
+- [ ] ETAP 5 — Paczka C (8)
+- [ ] ETAP 6 — Paczka D (7)
+- [ ] ETAP 7 — enqueue + przełącznik
+- [ ] ETAP 8 — flagi
+- [ ] ETAP 9 — cutover
+- [ ] ETAP 10 — decommission

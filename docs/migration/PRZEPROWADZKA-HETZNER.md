@@ -405,27 +405,64 @@ z Vercela (Vercel → Settings → Environment Variables). Dwa wyjątki/uwagi:
 - NIE przenoś zmiennych `VERCEL_*` (nie istnieją poza Vercelem — i dobrze;
   gate `lib/security/environment.ts` jest na to przygotowany, ale sprawdź,
   że na Hetznerze ustawiasz `NEXT_PUBLIC_APP_ENV=production`).
+- ⚠️ **Sprawdź konkretnie `NEXT_PUBLIC_APP_URL`.** Jeśli kopiujesz z
+  jakiegokolwiek starego backupu `.env.local`, łatwo przypadkiem wkleić
+  `http://localhost:3000` (wartość do pracy lokalnej) zamiast prawdziwego
+  adresu produkcyjnego. Musi być: **`https://faktflow.pl`** (patrz §3.3 —
+  to jest prawdziwa domena produkcyjna, nie `app.faktflow.pl`).
 
 ### 3.3 Domena + Cloudflare (uwaga, jedyny podchwytliwy moment)
 
-1. W Coolify, w aplikacji: **Domains** → `https://app.faktflow.pl`.
-2. Cloudflare → DNS → rekord `A`, nazwa `app`, wartość: **publiczne IP
-   app-1**, chmurka **SZARA (DNS only)** — na czas wystawienia certyfikatu.
-3. **Deploy** w Coolify. Pierwszy build ~5-8 min. Coolify sam pobierze
-   certyfikat Let's Encrypt.
-4. Gdy `https://app.faktflow.pl` działa na kłódce → wróć do Cloudflare
-   i przełącz chmurkę na **POMARAŃCZOWĄ (Proxied)**, a w Cloudflare →
-   SSL/TLS ustaw tryb **Full (strict)**.
+**Zanim zaczniesz: prawdziwa domena produkcyjna to `faktflow.pl` (goła,
+bez „app.") + `www.faktflow.pl`** — sprawdziłem to bezpośrednio w Vercelu
+(`vercel alias ls`). To jeden Next.js, który serwuje i stronę marketingową,
+i panel z tego samego adresu — nie ma osobnej subdomeny „app.". Domena już
+wskazuje na Cloudflare (sprawdzone przez DNS), więc od razu przechodzisz
+do konfiguracji.
+
+**Kolejność (rób dokładnie w tej kolejności, żeby zrobić tylko jeden
+redeploy zamiast dwóch):**
+
+1. **Napraw `NEXT_PUBLIC_APP_URL`** w zmiennych aplikacji (§3.2) na
+   `https://faktflow.pl`, jeśli tam jeszcze nie jest.
+2. W Coolify, w aplikacji: zakładka **Domains**. Dodaj **oba** adresy
+   (Coolify pozwala na kilka domen dla jednej apki — osobne linie albo
+   przecinek, zależnie od wersji UI):
+   ```
+   https://faktflow.pl
+   https://www.faktflow.pl
+   ```
+3. Cloudflare → DNS → dodaj **dwa** rekordy, oba typu `A`, oba wskazujące
+   na publiczne IP `app-1` (**`116.203.71.134`**), oba z chmurką
+   **SZARĄ (DNS only)** — na czas wystawienia certyfikatu:
+   | Typ | Nazwa | Wartość | Proxy |
+   |---|---|---|---|
+   | A | `@` (czyli goła domena) | `116.203.71.134` | Szara (DNS only) |
+   | A | `www` | `116.203.71.134` | Szara (DNS only) |
+4. Wróć do Coolify → **Deploy**. Ten jeden build załatwia dwie rzeczy
+   naraz: wypieka poprawiony `NEXT_PUBLIC_APP_URL` w kod ORAZ rejestruje
+   domenę w proxy Coolify, które samo wystąpi o certyfikat Let's Encrypt.
+   Pierwszy build ~5-10 min.
+5. Gdy `https://faktflow.pl` ładuje się na kłódce (bez ostrzeżenia
+   certyfikatu) → wróć do Cloudflare i przełącz **OBIE** chmurki na
+   **POMARAŃCZOWĄ (Proxied)**, a w Cloudflare → SSL/TLS ustaw tryb
+   **Full (strict)**.
 
 ### 3.4 Rzeczy, które trzeba przepiąć ręcznie po zmianie hostingu
 
-- **Inngest** (dashboard → Twoja app → sync URL): upewnij się, że wskazuje
-  `https://app.faktflow.pl/api/inngest` i zrób **Resync** (jeśli domena była
-  ta sama co na Vercelu — nic nie zmieniasz).
-- **Stripe webhook, Resend webhook, Turnstile, Google OAuth** — działają bez
-  zmian (są przypięte do DOMENY, a domena idzie za Tobą).
+Dobra wiadomość: skoro używasz TEJ SAMEJ domeny co na Vercelu
+(`faktflow.pl`), prawie nic nie trzeba przepinać — usługi zewnętrzne są
+przypięte do domeny, nie do hostingu.
 
-✅ **Weryfikacja etapu:** logujesz się na `https://app.faktflow.pl`,
+- **Inngest** (dashboard Inngest → Twoja app → ustawienia/sync URL):
+  zerknij, czy widnieje tam `https://faktflow.pl/api/inngest`. Skoro
+  domena się nie zmienia — **nie musisz nic klikać**, to tylko szybka
+  weryfikacja, żeby mieć pewność (nie ślepa wiara).
+- **Stripe webhook, Resend webhook, Turnstile, Google OAuth** — identycznie:
+  działają bez zmian, bo są przypięte do domeny `faktflow.pl`, którą
+  właśnie przenosisz razem z hostingiem, nie zamieniasz na inną.
+
+✅ **Weryfikacja etapu:** logujesz się na `https://faktflow.pl`,
 wystawiasz fakturę testową do KSeF (env test), pobierasz PDF, `/api/health`
 zwraca `healthy`. Vercel możesz na razie zostawić — działa jako zapas.
 
@@ -452,15 +489,15 @@ w chmurze zostaje nietknięta do samego końca (Etap 9).
 Dopisz/zmień w Environment Variables serwisu:
 
 ```
-SITE_URL=https://app.faktflow.pl
+SITE_URL=https://faktflow.pl
 API_EXTERNAL_URL=https://db.faktflow.pl
-ADDITIONAL_REDIRECT_URLS=https://app.faktflow.pl/auth/callback
+ADDITIONAL_REDIRECT_URLS=https://faktflow.pl/auth/callback
 # E-maile (potwierdzenia, reset hasła) przez Resend:
 SMTP_HOST=smtp.resend.com
 SMTP_PORT=587
 SMTP_USER=resend
 SMTP_PASS=<Twój RESEND_API_KEY>
-SMTP_ADMIN_EMAIL=no-reply@app.faktflow.pl
+SMTP_ADMIN_EMAIL=no-reply@faktflow.pl
 SMTP_SENDER_NAME=FaktFlow
 # Google OAuth:
 GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
@@ -472,17 +509,38 @@ GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=https://db.faktflow.pl/auth/v1/callback
 W Google Cloud Console (ten sam projekt OAuth co dziś) dodaj do
 „Authorized redirect URIs": `https://db.faktflow.pl/auth/v1/callback`.
 
-### 4.3 Schemat bazy = Twoje migracje (to jest łatwe!)
+### 4.3 Schemat bazy = Twoje migracje ✅ WYKONANE (14 sierpnia 2026)
 
-Cały schemat (59 migracji) odtwarzasz jedną komendą z Maca. Connection
-string do Postgresa znajdziesz w Coolify w serwisie Supabase (user
-`postgres`, hasło z env; jeśli port 5432 nie jest wystawiony publicznie —
-w konfiguracji serwisu tymczasowo dodaj mapowanie portu 5432, po migracji
-je USUŃ):
+**Status: zrobione.** 59 migracji wgranych, 50 tabel utworzonych, RLS
+włączony na wszystkich 50 (pełna izolacja klientów), funkcje
+bezpieczeństwa `is_member_of` / `get_current_tenant_id` /
+`shares_active_org_with` (fix rekurencji z 00058) na miejscu.
+
+**Metoda — tunel SSH, NIE wystawianie bazy do internetu.** Pierwotnie ten
+dokument radził tymczasowo opublikować port 5432 na świat. To zły pomysł:
+port bazy w internecie (choćby na chwilę) to zaproszenie dla skanerów.
+Zamiast tego port kontenera jest przekierowany przez zaszyfrowany tunel
+SSH — nic nie jest wystawione publicznie ani na sekundę.
+
+Gdybyś musiał powtórzyć (np. po odtworzeniu bazy z backupu):
 
 ```bash
-supabase db push --db-url "postgresql://postgres:HASLO@IP_PUBLICZNE_DB-1:5432/postgres"
+cd /Users/mokryrys/dev/ksef-saas
+PGPASS_RAW=$(ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@178.104.128.144 \
+  "docker exec supabase-db-ovrhjbsdpjdlnmkle1ulid4s printenv POSTGRES_PASSWORD")
+PGPASS_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read().strip(), safe=''))" <<< "$PGPASS_RAW")
+ssh -i ~/.ssh/hetzner_faktflow_ed25519 -f -N -L 55432:172.19.0.5:5432 root@178.104.128.144
+SUPABASE_DB_URL="postgresql://postgres:${PGPASS_ENC}@127.0.0.1:55432/postgres?sslmode=disable" pnpm db:push:prod
+pkill -f "55432:172.19.0.5:5432"
 ```
+
+Trzy rzeczy, o które łatwo się potknąć (wszystkie już uwzględnione wyżej):
+- **`?sslmode=disable`** — CLI Supabase domyślnie żąda SSL, którego
+  lokalny Postgres nie oferuje. Bezpieczne, bo ruch i tak idzie tunelem.
+- **Hasło URL-encoded** — jeśli zawiera `@` czy `/`, bez kodowania
+  connection string się rozjedzie.
+- **IP kontenera** (`172.19.0.5`) może się zmienić po odtworzeniu serwisu.
+  Sprawdź: `docker inspect supabase-db-… --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'`
 
 ### 4.4 Dane
 
@@ -591,7 +649,7 @@ XML; pobierz PDF (drugi raz — z cache). R2 zostawiamy na 30 dni jako zapas.
    Resource → Service → Uptime Kuma** →
    `ops-1`, domena `https://status-int.faktflow.pl`. Dodaj monitory (typ
    HTTP, co 60 s):
-   - `https://app.faktflow.pl/api/health` (słowo kluczowe: `healthy`)
+   - `https://faktflow.pl/api/health` (słowo kluczowe: `healthy`)
    - `https://db.faktflow.pl/auth/v1/health`
    - `https://s3.faktflow.pl/minio/health/live`
    W każdym monitorze → Notifications → podepnij webhook Slacka (#urgent).
