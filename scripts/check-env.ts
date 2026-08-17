@@ -111,6 +111,10 @@ const SPECS: VarSpec[] = [
   // ── Panel admina + raporty operatora ──
   { name: 'ADMIN_EMAILS', feature: 'Panel admina', level: 'required', note: 'pusty = /admin zablokowany + brak daily summary (fail-closed)' },
 
+  // ── Joby w tle (pg-boss — Etap 7 migracji) ──
+  { name: 'JOBS_BACKEND', feature: 'Joby w tle (pg-boss)', level: 'optional', note: 'inngest (default) | pgboss — przełączane przy cutover Etapu 9' },
+  { name: 'DATABASE_URL', feature: 'Joby w tle (pg-boss)', level: 'optional', note: 'wymagany od cutover: Postgres db-1 przez sieć prywatną (worker + enqueue)' },
+
   // ── ODŁOŻONE świadomie (nie blokują startu) ──
   { name: 'STRIPE_SECRET_KEY', feature: 'Billing (Stripe)', level: 'deferred', note: 'Faza 37 — wymaga firmy; UI degraduje gracefully' },
   { name: 'STRIPE_WEBHOOK_SECRET', feature: 'Billing (Stripe)', level: 'deferred' },

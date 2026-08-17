@@ -93,3 +93,19 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
 
 CMD ["node", "server.js"]
+
+# ── worker: proces jobów pg-boss (Etap 7 migracji Hetzner) ──
+# Drugi kontener z TEGO SAMEGO repo — w Coolify osobna aplikacja z
+# `Dockerfile target: worker` (kolumna dockerfile_target_build).
+# Celowo pełne node_modules + tsx zamiast standalone: worker importuje
+# szeroki przekrój lib/** (joby, e-maile React Email, XSD/WASM), a rozmiar
+# obrazu na własnym serwerze nie jest krytyczny.
+FROM base AS worker
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.WORKER_HEALTH_PORT||8080)+'/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+CMD ["node_modules/.bin/tsx", "lib/jobs/worker.ts"]
