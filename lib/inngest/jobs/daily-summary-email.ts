@@ -19,6 +19,8 @@ import { sendEmail } from '@/lib/email/send';
 import { getDailyMetrics, type DailyMetrics } from '@/lib/observability/business-metrics';
 
 import { inngest } from '../client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 function parseAdminEmails(): string[] {
   const raw = process.env.ADMIN_EMAILS?.trim();
@@ -127,15 +129,11 @@ function buildHtml(metrics: DailyMetrics): string {
 </html>`;
 }
 
-export const dailySummaryEmailJob = inngest.createFunction(
-  {
-    id: 'observability-daily-summary',
-    name: 'Observability: daily summary email do operatora',
-    concurrency: { limit: 1 },
-    // 06:00 PL — przed otwarciem biur. Operator widzi co się działo w nocy.
-    triggers: [cron('TZ=Europe/Warsaw 0 6 * * *')],
-  },
-  async ({ step, logger }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runDailySummaryEmail({ step, logger }: JobContext) {
     const recipients = parseAdminEmails();
     if (recipients.length === 0) {
       logger.warn('ADMIN_EMAILS pusty — daily summary skipped');
@@ -173,5 +171,16 @@ export const dailySummaryEmailJob = inngest.createFunction(
       sent: results.filter((r) => r.ok).length,
       failed: results.filter((r) => !r.ok).length,
     };
+}
+
+export const dailySummaryEmailJob = inngest.createFunction(
+  {
+    id: 'observability-daily-summary',
+    name: 'Observability: daily summary email do operatora',
+    concurrency: { limit: 1 },
+    // 06:00 PL — przed otwarciem biur. Operator widzi co się działo w nocy.
+    triggers: [cron('TZ=Europe/Warsaw 0 6 * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runDailySummaryEmail(toJobContext({ step, logger, attempt })),
 );

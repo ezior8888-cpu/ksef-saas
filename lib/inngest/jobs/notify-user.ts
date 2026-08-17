@@ -3,6 +3,8 @@ import {
   invoiceSubmitFailed,
   invoiceSubmitSucceeded,
 } from '../client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import {
   getTenantAdminEmail,
   getTenantOwnerUserId,
@@ -30,15 +32,12 @@ import { createAdminClient } from '@/lib/supabase/admin';
 // SUKCES: faktura zaakceptowana przez KSeF
 // ═══════════════════════════════════════════════════════════════
 
-export const notifySuccessJob = inngest.createFunction(
-  {
-    id: 'notify-invoice-success',
-    name: 'Email: faktura zaakceptowana',
-    retries: 2,
-    triggers: [invoiceSubmitSucceeded],
-  },
-  async ({ event, step, logger }) => {
-    const { tenantId, invoiceId, ksefNumber } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucceeded.create>[0], { step, logger }: JobContext) {
+    const { tenantId, invoiceId, ksefNumber } = data;
 
     const email = await step.run('get-admin-email', () =>
       getTenantAdminEmail(tenantId),
@@ -95,22 +94,29 @@ export const notifySuccessJob = inngest.createFunction(
     });
 
     return { emailed: result.sent, reason: result.reason, push: pushResult };
+}
+
+export const notifySuccessJob = inngest.createFunction(
+  {
+    id: 'notify-invoice-success',
+    name: 'Email: faktura zaakceptowana',
+    retries: 2,
+    triggers: [invoiceSubmitSucceeded],
   },
+  async ({ event, step, logger, attempt }) =>
+    runNotifySuccess(event.data as Parameters<typeof invoiceSubmitSucceeded.create>[0], toJobContext({ step, logger, attempt })),
 );
 
 // ═══════════════════════════════════════════════════════════════
 // BŁĄD: faktura odrzucona lub retries wyczerpane
 // ═══════════════════════════════════════════════════════════════
 
-export const notifyFailureJob = inngest.createFunction(
-  {
-    id: 'notify-invoice-failure',
-    name: 'Email: faktura odrzucona',
-    retries: 2,
-    triggers: [invoiceSubmitFailed],
-  },
-  async ({ event, step, logger }) => {
-    const { tenantId, invoiceId, error, fromOfflineQueue } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFailed.create>[0], { step, logger }: JobContext) {
+    const { tenantId, invoiceId, error, fromOfflineQueue } = data;
 
     if (fromOfflineQueue) {
       logger.info(
@@ -180,5 +186,15 @@ export const notifyFailureJob = inngest.createFunction(
     });
 
     return { emailed: result.sent, reason: result.reason, push: pushResult };
+}
+
+export const notifyFailureJob = inngest.createFunction(
+  {
+    id: 'notify-invoice-failure',
+    name: 'Email: faktura odrzucona',
+    retries: 2,
+    triggers: [invoiceSubmitFailed],
   },
+  async ({ event, step, logger, attempt }) =>
+    runNotifyFailure(event.data as Parameters<typeof invoiceSubmitFailed.create>[0], toJobContext({ step, logger, attempt })),
 );

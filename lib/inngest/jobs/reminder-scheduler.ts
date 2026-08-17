@@ -3,20 +3,19 @@
 import { cron } from 'inngest';
 
 import { inngest, remindersSendRequested } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   decideNextReminder,
   findInvoicesRequiringReminders,
 } from '@/lib/reminders/scheduler';
 
-export const reminderSchedulerJob = inngest.createFunction(
-  {
-    id: 'reminder-scheduler',
-    name: 'Wkurzacz: scheduler (co godzinę)',
-    concurrency: { limit: 1 },
-    triggers: [cron('TZ=Europe/Warsaw 0 * * * *')],
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runReminderScheduler({ step }: JobContext) {
     const supabase = createAdminClient();
 
     const candidates = await step.run('find-candidates', async () => {
@@ -98,7 +97,17 @@ export const reminderSchedulerJob = inngest.createFunction(
       scheduled: scheduledCount,
       errors: errors.length,
     };
+}
+
+export const reminderSchedulerJob = inngest.createFunction(
+  {
+    id: 'reminder-scheduler',
+    name: 'Wkurzacz: scheduler (co godzinę)',
+    concurrency: { limit: 1 },
+    triggers: [cron('TZ=Europe/Warsaw 0 * * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runReminderScheduler(toJobContext({ step, logger, attempt })),
 );
 
 function coerceStepDate(value: unknown): Date {

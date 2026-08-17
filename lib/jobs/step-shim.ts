@@ -11,6 +11,8 @@
 
 import { parseDurationMs } from './duration';
 import { sendJobEvents, type JobEvent, type SendJobOptions } from './enqueue';
+
+export type { JobEvent, SendJobOptions };
 import type { JobLogger } from './logger';
 
 /**
@@ -27,6 +29,20 @@ export interface JobStep {
     name: string,
     events: JobEvent | JobEvent[],
     options?: SendJobOptions,
+  ): Promise<void>;
+  /**
+   * „Wyślij event ZA X czasu" — jedyny poprawny sposób na odstępy liczone
+   * w godzinach/dniach (sekwencja e-maili onboardingowych).
+   *
+   * Każdy backend realizuje to swoim durable mechanizmem:
+   *   - pg-boss: job z `startAfter` (czeka w tabeli, przeżywa restart workera),
+   *   - Inngest: `step.sleep` + `step.sendEvent` (durable sleep silnika).
+   * Dzięki temu ta sama linia kodu zachowuje się identycznie na obu.
+   */
+  scheduleAfter(
+    name: string,
+    delay: string | number,
+    events: JobEvent | JobEvent[],
   ): Promise<void>;
 }
 
@@ -64,6 +80,17 @@ export function createJobStep(log: JobLogger): JobStep {
       const list = Array.isArray(events) ? events : [events];
       await sendJobEvents(list, options);
       log.debug(`step sendEvent: ${name} (${list.length})`);
+    },
+
+    async scheduleAfter(
+      name: string,
+      delay: string | number,
+      events: JobEvent | JobEvent[],
+    ): Promise<void> {
+      const ms = parseDurationMs(delay);
+      const list = Array.isArray(events) ? events : [events];
+      await sendJobEvents(list, { startAfterMs: ms });
+      log.debug(`step scheduleAfter: ${name} (+${ms}ms, ${list.length})`);
     },
   };
 }

@@ -19,6 +19,8 @@ import {
 } from '@/lib/observability/business-metrics';
 
 import { inngest } from '../client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 function parseAdminEmails(): string[] {
   const raw = process.env.ADMIN_EMAILS?.trim();
@@ -106,15 +108,11 @@ function buildHtml(m: WeeklyMetrics): string {
 </html>`;
 }
 
-export const weeklyBusinessReviewJob = inngest.createFunction(
-  {
-    id: 'observability-weekly-review',
-    name: 'Observability: weekly business review (Pn 09:00)',
-    concurrency: { limit: 1 },
-    // Poniedziałek 09:00 PL.
-    triggers: [cron('TZ=Europe/Warsaw 0 9 * * 1')],
-  },
-  async ({ step, logger }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runWeeklyBusinessReview({ step, logger }: JobContext) {
     const recipients = parseAdminEmails();
     if (recipients.length === 0) {
       logger.warn('ADMIN_EMAILS pusty — weekly review skipped');
@@ -168,5 +166,16 @@ export const weeklyBusinessReviewJob = inngest.createFunction(
       mrr: metrics.mrrPln,
       signups: metrics.signups,
     };
+}
+
+export const weeklyBusinessReviewJob = inngest.createFunction(
+  {
+    id: 'observability-weekly-review',
+    name: 'Observability: weekly business review (Pn 09:00)',
+    concurrency: { limit: 1 },
+    // Poniedziałek 09:00 PL.
+    triggers: [cron('TZ=Europe/Warsaw 0 9 * * 1')],
   },
+  async ({ step, logger, attempt }) =>
+    runWeeklyBusinessReview(toJobContext({ step, logger, attempt })),
 );

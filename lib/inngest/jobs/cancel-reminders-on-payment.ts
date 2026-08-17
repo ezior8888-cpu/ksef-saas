@@ -1,17 +1,17 @@
 // Gdy faktura zostanie zapłacona — anuluj wszystkie pending przypomnienia
 
 import { invoicePaymentReceived, inngest } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendPushToTenant } from '@/lib/push/sender';
 
-export const cancelRemindersOnPaymentJob = inngest.createFunction(
-  {
-    id: 'cancel-reminders-on-payment',
-    name: 'Wkurzacz: anuluj przypomnienia po płatności',
-    triggers: [invoicePaymentReceived],
-  },
-  async ({ event, step }) => {
-    const { invoiceId } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runCancelRemindersOnPayment(data: Parameters<typeof invoicePaymentReceived.create>[0], { step }: JobContext) {
+    const { invoiceId } = data;
     const supabase = createAdminClient();
 
     const invoice = await step.run('check-invoice', async () => {
@@ -74,5 +74,14 @@ export const cancelRemindersOnPaymentJob = inngest.createFunction(
     });
 
     return { cancelled: cancelled.count, push: pushResult };
+}
+
+export const cancelRemindersOnPaymentJob = inngest.createFunction(
+  {
+    id: 'cancel-reminders-on-payment',
+    name: 'Wkurzacz: anuluj przypomnienia po płatności',
+    triggers: [invoicePaymentReceived],
   },
+  async ({ event, step, logger, attempt }) =>
+    runCancelRemindersOnPayment(event.data as Parameters<typeof invoicePaymentReceived.create>[0], toJobContext({ step, logger, attempt })),
 );

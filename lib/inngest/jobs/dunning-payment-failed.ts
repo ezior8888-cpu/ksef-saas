@@ -13,6 +13,8 @@
  */
 
 import { NonRetriableError } from 'inngest';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 import { sendPaymentFailedEmail } from '@/lib/email/send';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -28,16 +30,12 @@ function fmtPlnAmount(cents: number): string {
   });
 }
 
-export const dunningPaymentFailedJob = inngest.createFunction(
-  {
-    id: 'billing-dunning-payment-failed',
-    name: 'Billing: dunning email po nieudanej płatności',
-    retries: 3,
-    concurrency: { key: 'event.data.tenantId', limit: 1 },
-    triggers: [billingPaymentFailed],
-  },
-  async ({ event, step, logger }) => {
-    const { tenantId, paymentId } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runDunningPaymentFailed(data: Parameters<typeof billingPaymentFailed.create>[0], { step, logger }: JobContext) {
+    const { tenantId, paymentId } = data;
     const supabase = createAdminClient();
 
     // 1. Load payment row (cast — tabela poza typed gen).
@@ -143,5 +141,16 @@ export const dunningPaymentFailedJob = inngest.createFunction(
       .eq('kind', 'payment_failed');
 
     return { sent: result.sent, email };
+}
+
+export const dunningPaymentFailedJob = inngest.createFunction(
+  {
+    id: 'billing-dunning-payment-failed',
+    name: 'Billing: dunning email po nieudanej płatności',
+    retries: 3,
+    concurrency: { key: 'event.data.tenantId', limit: 1 },
+    triggers: [billingPaymentFailed],
   },
+  async ({ event, step, logger, attempt }) =>
+    runDunningPaymentFailed(event.data as Parameters<typeof billingPaymentFailed.create>[0], toJobContext({ step, logger, attempt })),
 );

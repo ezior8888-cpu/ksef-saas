@@ -4,6 +4,8 @@ import { NonRetriableError } from 'inngest';
 import { Resend } from 'resend';
 
 import { inngest, remindersSendRequested } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { generateDemandLetterPdf } from '@/lib/reminders/pdf-demand-letter';
 import {
@@ -39,16 +41,12 @@ function isReminderStagePdf(stage: ReminderStage): boolean {
   return stage === 'stage_3' || stage === 'stage_4';
 }
 
-export const sendReminderJob = inngest.createFunction(
-  {
-    id: 'send-reminder',
-    name: 'Wkurzacz: wysyłka emaila',
-    retries: 3,
-    concurrency: { limit: 5 },
-    triggers: [remindersSendRequested],
-  },
-  async ({ event, step }) => {
-    const { reminderId } = event.data;
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runSendReminder(data: Parameters<typeof remindersSendRequested.create>[0], { step }: JobContext) {
+    const { reminderId } = data;
     const supabase = createAdminClient();
 
     const reminder = await step.run('fetch-reminder', async () => {
@@ -291,7 +289,18 @@ export const sendReminderJob = inngest.createFunction(
       messageId: emailResult.messageId,
       hasPdf: !!pdfPath,
     };
+}
+
+export const sendReminderJob = inngest.createFunction(
+  {
+    id: 'send-reminder',
+    name: 'Wkurzacz: wysyłka emaila',
+    retries: 3,
+    concurrency: { limit: 5 },
+    triggers: [remindersSendRequested],
   },
+  async ({ event, step, logger, attempt }) =>
+    runSendReminder(event.data as Parameters<typeof remindersSendRequested.create>[0], toJobContext({ step, logger, attempt })),
 );
 
 // ============================================================================

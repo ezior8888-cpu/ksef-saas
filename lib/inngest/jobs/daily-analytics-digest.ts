@@ -13,15 +13,14 @@ import * as Sentry from '@sentry/nextjs';
 import { sendSlackAlert } from '@/lib/alerts/slack';
 import { getAdminOverviewMetrics } from '@/lib/admin/metrics';
 import { inngest } from '@/lib/inngest/client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
-export const dailyAnalyticsDigestJob = inngest.createFunction(
-  {
-    id: 'daily-analytics-digest',
-    name: 'Analytics: daily digest na Slack #metrics',
-    concurrency: { limit: 1 },
-    triggers: [cron('TZ=Europe/Warsaw 0 6 * * *')],
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runDailyAnalyticsDigest({ step }: JobContext) {
     const metrics = await step.run('collect-metrics', async () => {
       return await getAdminOverviewMetrics();
     });
@@ -64,5 +63,15 @@ export const dailyAnalyticsDigestJob = inngest.createFunction(
       signups_24h: metrics.signups24h,
       invoices_accepted_24h: metrics.invoicesAccepted24h,
     };
+}
+
+export const dailyAnalyticsDigestJob = inngest.createFunction(
+  {
+    id: 'daily-analytics-digest',
+    name: 'Analytics: daily digest na Slack #metrics',
+    concurrency: { limit: 1 },
+    triggers: [cron('TZ=Europe/Warsaw 0 6 * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runDailyAnalyticsDigest(toJobContext({ step, logger, attempt })),
 );

@@ -23,6 +23,8 @@ import { sendTrialEndingEmail } from '@/lib/email/send';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import { inngest } from '../client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 interface TrialingSubscription {
   id: string;
@@ -61,15 +63,11 @@ function fmtDate(iso: string): string {
   });
 }
 
-export const trialCountdownEmailsJob = inngest.createFunction(
-  {
-    id: 'billing-trial-countdown-emails',
-    name: 'Billing: trial countdown emails (14/7/3/1 dni)',
-    concurrency: { limit: 1 },
-    // 09:00 PL = sensowna pora na business email (nie spamuje o 3 nad ranem).
-    triggers: [cron('TZ=Europe/Warsaw 0 9 * * *')],
-  },
-  async ({ step, logger }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runTrialCountdownEmails({ step, logger }: JobContext) {
     const supabase = createAdminClient();
 
     // 1. Znajdź wszystkie trialing subscriptions z trial_end w ciągu 15 dni.
@@ -135,7 +133,18 @@ export const trialCountdownEmailsJob = inngest.createFunction(
     }
 
     return { processed: subscriptions.length, sent, skipped, failed };
+}
+
+export const trialCountdownEmailsJob = inngest.createFunction(
+  {
+    id: 'billing-trial-countdown-emails',
+    name: 'Billing: trial countdown emails (14/7/3/1 dni)',
+    concurrency: { limit: 1 },
+    // 09:00 PL = sensowna pora na business email (nie spamuje o 3 nad ranem).
+    triggers: [cron('TZ=Europe/Warsaw 0 9 * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runTrialCountdownEmails(toJobContext({ step, logger, attempt })),
 );
 
 async function dispatchTrialEmail(

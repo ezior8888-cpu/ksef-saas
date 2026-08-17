@@ -23,6 +23,8 @@ import { cacheGet, cacheSet } from '@/lib/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import { inngest } from '../client';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 
 const ALERT_DEDUP_TTL_SECONDS = 30 * 60; // 30 min
 const ALERT_DEDUP_KEY_PREFIX = 'alerts:critical:lastsent';
@@ -185,14 +187,11 @@ async function checkPaymentFailures(): Promise<AlertCheckResult> {
   return { type: 'payment_failures', fired: true };
 }
 
-export const criticalAlertsMonitorJob = inngest.createFunction(
-  {
-    id: 'observability-critical-alerts-monitor',
-    name: 'Observability: critical alerts monitor (co 5 min)',
-    concurrency: { limit: 1 },
-    triggers: [cron('TZ=Europe/Warsaw */5 * * * *')],
-  },
-  async ({ step }) => {
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runCriticalAlertsMonitor({ step }: JobContext) {
     const results = await Promise.all([
       step.run('check-ksef', () => checkKsefDowntime().catch(captureAndReturn('ksef_down'))),
       step.run('check-offline', () =>
@@ -211,7 +210,17 @@ export const criticalAlertsMonitorJob = inngest.createFunction(
       fired: results.filter((r) => r.fired).length,
       details: results,
     };
+}
+
+export const criticalAlertsMonitorJob = inngest.createFunction(
+  {
+    id: 'observability-critical-alerts-monitor',
+    name: 'Observability: critical alerts monitor (co 5 min)',
+    concurrency: { limit: 1 },
+    triggers: [cron('TZ=Europe/Warsaw */5 * * * *')],
   },
+  async ({ step, logger, attempt }) =>
+    runCriticalAlertsMonitor(toJobContext({ step, logger, attempt })),
 );
 
 function captureAndReturn(type: string): (err: unknown) => AlertCheckResult {

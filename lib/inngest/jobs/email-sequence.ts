@@ -1,4 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import type { JobContext } from '@/lib/jobs/registry';
 import { sendEmail } from '@/lib/email/send';
 import {
   emailTrialDay1,
@@ -163,15 +165,12 @@ ${baseStyle}
 }
 
 /** Email 1: Welcome — zaraz po rejestracji (`user/registered`). */
-export const emailWelcome = inngest.createFunction(
-  {
-    id: 'email-trial-welcome',
-    name: 'Email: trial — powitalny',
-    retries: 2,
-    triggers: [userRegistered],
-  },
-  async ({ event, step }) => {
-    const { userId, email, firstName } = userRegistered.parse(event.data);
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runEmailWelcome(data: Parameters<typeof userRegistered.create>[0], { step }: JobContext) {
+    const { userId, email, firstName } = userRegistered.parse(data);
 
     await step.run('send-welcome', async () => {
       await sendEmail({
@@ -181,24 +180,29 @@ export const emailWelcome = inngest.createFunction(
       });
     });
 
-    await step.sleep('wait-day-1', '1d');
-
-    await step.sendEvent('schedule-day-1', emailTrialDay1.create({ userId, email, firstName }));
+    await step.scheduleAfter('schedule-day-1', '1d', emailTrialDay1.create({ userId, email, firstName }));
 
     return { sent: 'welcome' as const };
+}
+
+export const emailWelcome = inngest.createFunction(
+  {
+    id: 'email-trial-welcome',
+    name: 'Email: trial — powitalny',
+    retries: 2,
+    triggers: [userRegistered],
   },
+  async ({ event, step, logger, attempt }) =>
+    runEmailWelcome(event.data as Parameters<typeof userRegistered.create>[0], toJobContext({ step, logger, attempt })),
 );
 
 /** Email 2: dzień 1 — pierwsze kroki lub gratulacje. */
-export const emailDay1 = inngest.createFunction(
-  {
-    id: 'email-trial-day-1',
-    name: 'Email: trial — dzień 1',
-    retries: 2,
-    triggers: [emailTrialDay1],
-  },
-  async ({ event, step }) => {
-    const { email, firstName, userId } = emailTrialDay1.parse(event.data);
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runEmailDay1(data: Parameters<typeof emailTrialDay1.create>[0], { step }: JobContext) {
+    const { email, firstName, userId } = emailTrialDay1.parse(data);
 
     const firstInvoice = await step.run('check-first-invoice', async () => {
       const supabase = createAdminClient();
@@ -240,21 +244,27 @@ export const emailDay1 = inngest.createFunction(
       });
     }
 
-    await step.sleep('wait-day-4', '3d');
-    await step.sendEvent('schedule-day-4', emailTrialDay4.create({ userId, email, firstName }));
+    await step.scheduleAfter('schedule-day-4', '3d', emailTrialDay4.create({ userId, email, firstName }));
+}
+
+export const emailDay1 = inngest.createFunction(
+  {
+    id: 'email-trial-day-1',
+    name: 'Email: trial — dzień 1',
+    retries: 2,
+    triggers: [emailTrialDay1],
   },
+  async ({ event, step, logger, attempt }) =>
+    runEmailDay1(event.data as Parameters<typeof emailTrialDay1.create>[0], toJobContext({ step, logger, attempt })),
 );
 
 /** Email 3: dzień 4 — OCR. */
-export const emailDay4 = inngest.createFunction(
-  {
-    id: 'email-trial-day-4',
-    name: 'Email: trial — dzień 4 (OCR)',
-    retries: 2,
-    triggers: [emailTrialDay4],
-  },
-  async ({ event, step }) => {
-    const { email, firstName, userId } = emailTrialDay4.parse(event.data);
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runEmailDay4(data: Parameters<typeof emailTrialDay4.create>[0], { step }: JobContext) {
+    const { email, firstName, userId } = emailTrialDay4.parse(data);
 
     await step.run('send-ocr-demo', async () => {
       await sendEmail({
@@ -264,21 +274,27 @@ export const emailDay4 = inngest.createFunction(
       });
     });
 
-    await step.sleep('wait-day-8', '4d');
-    await step.sendEvent('schedule-day-8', emailTrialDay8.create({ userId, email, firstName }));
+    await step.scheduleAfter('schedule-day-8', '4d', emailTrialDay8.create({ userId, email, firstName }));
+}
+
+export const emailDay4 = inngest.createFunction(
+  {
+    id: 'email-trial-day-4',
+    name: 'Email: trial — dzień 4 (OCR)',
+    retries: 2,
+    triggers: [emailTrialDay4],
   },
+  async ({ event, step, logger, attempt }) =>
+    runEmailDay4(event.data as Parameters<typeof emailTrialDay4.create>[0], toJobContext({ step, logger, attempt })),
 );
 
 /** Email 4: dzień 8 — statystyki z bazy. */
-export const emailDay8 = inngest.createFunction(
-  {
-    id: 'email-trial-day-8',
-    name: 'Email: trial — dzień 8 (statystyki)',
-    retries: 2,
-    triggers: [emailTrialDay8],
-  },
-  async ({ event, step }) => {
-    const { email, firstName, userId } = emailTrialDay8.parse(event.data);
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runEmailDay8(data: Parameters<typeof emailTrialDay8.create>[0], { step }: JobContext) {
+    const { email, firstName, userId } = emailTrialDay8.parse(data);
 
     const stats = await step.run('compute-stats', async () => {
       const supabase = createAdminClient();
@@ -320,21 +336,27 @@ export const emailDay8 = inngest.createFunction(
       });
     });
 
-    await step.sleep('wait-day-12', '4d');
-    await step.sendEvent('schedule-day-12', emailTrialDay12.create({ userId, email, firstName }));
+    await step.scheduleAfter('schedule-day-12', '4d', emailTrialDay12.create({ userId, email, firstName }));
+}
+
+export const emailDay8 = inngest.createFunction(
+  {
+    id: 'email-trial-day-8',
+    name: 'Email: trial — dzień 8 (statystyki)',
+    retries: 2,
+    triggers: [emailTrialDay8],
   },
+  async ({ event, step, logger, attempt }) =>
+    runEmailDay8(event.data as Parameters<typeof emailTrialDay8.create>[0], toJobContext({ step, logger, attempt })),
 );
 
 /** Email 5: dzień 12 — konwersja. */
-export const emailDay12 = inngest.createFunction(
-  {
-    id: 'email-trial-day-12',
-    name: 'Email: trial — dzień 12',
-    retries: 2,
-    triggers: [emailTrialDay12],
-  },
-  async ({ event, step }) => {
-    const data = emailTrialDay12.parse(event.data);
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runEmailDay12(rawData: Parameters<typeof emailTrialDay12.create>[0], { step }: JobContext) {
+    const data = emailTrialDay12.parse(rawData);
 
     await step.run('send-push', async () => {
       await sendEmail({
@@ -344,9 +366,18 @@ export const emailDay12 = inngest.createFunction(
       });
     });
 
-    await step.sleep('wait-day-14', '2d');
-    await step.sendEvent('schedule-day-14', emailTrialDay14.create(data));
+    await step.scheduleAfter('schedule-day-14', '2d', emailTrialDay14.create(data));
+}
+
+export const emailDay12 = inngest.createFunction(
+  {
+    id: 'email-trial-day-12',
+    name: 'Email: trial — dzień 12',
+    retries: 2,
+    triggers: [emailTrialDay12],
   },
+  async ({ event, step, logger, attempt }) =>
+    runEmailDay12(event.data as Parameters<typeof emailTrialDay12.create>[0], toJobContext({ step, logger, attempt })),
 );
 
 /**
@@ -354,15 +385,12 @@ export const emailDay12 = inngest.createFunction(
  * Płatność: `tenants.subscription_tier !== 'basic'` traktujemy jako aktywną subskrypcję
  * (do podmiany, gdy pojawi się dedykowany billing / Stripe).
  */
-export const emailDay14 = inngest.createFunction(
-  {
-    id: 'email-trial-day-14',
-    name: 'Email: trial — dzień 14',
-    retries: 2,
-    triggers: [emailTrialDay14],
-  },
-  async ({ event, step }) => {
-    const { email, firstName, userId } = emailTrialDay14.parse(event.data);
+/**
+ * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ */
+export async function runEmailDay14(data: Parameters<typeof emailTrialDay14.create>[0], { step }: JobContext) {
+    const { email, firstName, userId } = emailTrialDay14.parse(data);
 
     const subscribed = await step.run('check-subscription', async () => {
       const supabase = createAdminClient();
@@ -399,5 +427,15 @@ export const emailDay14 = inngest.createFunction(
     });
 
     return { sent: true as const };
+}
+
+export const emailDay14 = inngest.createFunction(
+  {
+    id: 'email-trial-day-14',
+    name: 'Email: trial — dzień 14',
+    retries: 2,
+    triggers: [emailTrialDay14],
   },
+  async ({ event, step, logger, attempt }) =>
+    runEmailDay14(event.data as Parameters<typeof emailTrialDay14.create>[0], toJobContext({ step, logger, attempt })),
 );
