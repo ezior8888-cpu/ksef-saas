@@ -729,8 +729,8 @@ Checklist wyłączeń (kolejność dowolna, wszystkie odwracalne przez ~30 dni):
       aż postawisz GlitchTipa (§7 pkt 1). Wtedy zamknij projekt.
 - [ ] R2: po 30 dniach od Etapu 5 usuń bucket (najpierw upewnij się, że
       kopia plików jest w MinIO — `rclone check`).
-- [ ] Vercel Edge Config: flagi przenosimy do bazy w ramach Etapu 7
-      (drobny kod — robi AI).
+- [x] Vercel Edge Config: ZROBIONE (Etap 7.8) — tabela `global_feature_flags`
+      + migracja 00060; pakiet `@vercel/edge-config` usunięty z zależności.
 
 ---
 

@@ -63,7 +63,6 @@
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
     "@upstash/redis": "^1.38.0",
-    "@vercel/edge-config": "^1.4.3",
     "@xmldom/xmldom": "^0.9.10",
     "archiver": "^7.0.1",
     "bir1": "^4.2.0",

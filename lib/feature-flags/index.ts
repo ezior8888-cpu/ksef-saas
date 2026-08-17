@@ -7,21 +7,22 @@
  *   Cache: Redis 10min TTL (`TTL_SECONDS.featureFlags`), invalidacja przy
  *   admin update przez `invalidateAllTenantCaches`.
  *
- * Global (Vercel Edge Config — `lib/feature-flags/edge-config.ts`):
- *   Instant runtime kill-switch dla całej apki — `killAllKsefSubmissions`,
- *   `maintenanceMode`, etc. Edge Config = serverless KV z TTL 0 i edge-cache
- *   propagation < 1s. Idealne do incident response.
+ * Global (`lib/feature-flags/global-flags.ts` — tabela `global_feature_flags`):
+ *   Runtime kill-switch dla całej apki — `killAllKsefSubmissions`,
+ *   `maintenanceMode`, etc. Odczyt przez Redis (TTL 60 s), zapis z panelu
+ *   admina czyści cache. Do Etapu 8 migracji Hetzner siedziało to w Vercel
+ *   Edge Config.
  *
  * Reguła kciuka:
  *   - Coś dla pojedynczych klientów → per-tenant (DB)
  *   - Coś dla wszystkich naraz (np. "wyłączamy Magic Import bo KSeF API padło")
- *     → Edge Config global flag
+ *     → globalna flaga (`global_feature_flags`)
  */
 
 import { cached, cacheKeys, TTL_SECONDS } from '@/lib/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-import { getGlobalFlag } from './edge-config';
+import { getGlobalFlag } from './global-flags';
 
 export type PerTenantFlag =
   | 'co_pilot_enabled'
@@ -41,8 +42,8 @@ interface TenantFlagsRow {
 }
 
 /**
- * Sprawdza czy globalny flag jest włączony. Edge Config jest pierwszą warstwą —
- * gdy `killAllKsefSubmissions=true` w Edge Config, ignorujemy per-tenant
+ * Sprawdza czy globalny flag jest włączony. Flaga globalna jest pierwszą
+ * warstwą — gdy `killAllKsefSubmissions=true`, ignorujemy per-tenant
  * `co_pilot_enabled` i tak zwracamy "wyłączone".
  */
 export async function isGlobalFlagEnabled(flag: GlobalFlag): Promise<boolean> {

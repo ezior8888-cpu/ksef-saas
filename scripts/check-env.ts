@@ -35,7 +35,8 @@ interface VarSpec {
  * Zmienne czytane przez kod produkcyjny (lib/ app/ components/ proxy.ts
  * instrumentation* sentry* next.config.ts). Dev-only (E2E_MOCK_*, DEBUG_KSEF,
  * LOAD_TEST_MODE, INNGEST_DEV, RESEND_DEV_TO_OVERRIDE, SENTRY_LOG_TEST_SECRET,
- * CI) oraz Vercel-only (VERCEL_*, EDGE_CONFIG) celowo POZA listą.
+ * CI) oraz Vercel-only (VERCEL_*) celowo POZA listą. `EDGE_CONFIG` zniknął
+ * w Etapie 8 migracji — globalne flagi siedzą teraz w naszym Postgresie.
  */
 const SPECS: VarSpec[] = [
   // ── Rdzeń aplikacji ──
