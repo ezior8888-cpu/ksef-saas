@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 
 import '@/styles/zova.css';
 
-import { AuthTiltPanel } from './auth-tilt-panel';
+import { AuthDotGrid } from './auth-dot-grid';
 
 type AuthPageShellProps = {
   children: React.ReactNode;
@@ -25,15 +25,18 @@ const LOGO = '/landing/img/oKmGzYlWFu13ruJRasum68wrh5Y.png';
 export function AuthPageShell({ children }: AuthPageShellProps) {
   return (
     <div className="zova relative min-h-screen w-full overflow-hidden">
-      {/* panel tła w prawej połowie, ten sam gradient co w hero */}
+      {/* Prawa połowa: siatka kropek reagująca na kursor, na gradiencie
+          z nagłówka strony głównej. Warstwa jest interaktywna, więc NIE ma
+          `pointer-events-none` — inaczej kropki nie widziałyby myszy. */}
       <div
-        aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 hidden w-1/2 lg:block"
+        className="absolute inset-y-0 right-0 hidden w-1/2 overflow-hidden lg:block"
         style={{
           background:
             'linear-gradient(160deg, #fff 0%, #eff5fe 45%, #dbe8fb 100%)',
         }}
-      />
+      >
+        <AuthDotGrid />
+      </div>
 
       <Link
         href="/"
@@ -71,12 +74,13 @@ export function AuthPageShell({ children }: AuthPageShellProps) {
           </p>
         </div>
 
-        {/* ── panel 3D ───────────────────────────────────────────────── */}
-        <div className="hidden lg:flex lg:flex-col lg:items-center lg:gap-10">
-          <AuthTiltPanel />
-          <p className="z-lead max-w-[420px] text-center text-[var(--z-muted)]">
+        {/* Kolumna po prawej jest pusta w warstwie treści: całą robotę
+            robi tło z kropkami. Hasło leży na wierzchu, ale nie przechwytuje
+            myszy, żeby kropki reagowały także pod tekstem. */}
+        <div className="pointer-events-none hidden lg:flex lg:flex-col lg:items-center lg:justify-center">
+          <p className="z-h4 max-w-[420px] text-center font-normal text-[var(--z-black)]">
             Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy
-            potwierdzenia. Zdjęcie paragonu trafia prosto do KPiR.
+            potwierdzenia.
           </p>
         </div>
       </div>

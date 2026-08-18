@@ -1,0 +1,166 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+
+/**
+ * Siatka kropek reagująca na kursor.
+ *
+ * Każda kropka ma swój dom w regularnej siatce. Gdy kursor się zbliża,
+ * kropka wypada z siatki i zaczyna krążyć po elipsie wokół domu — elipsa
+ * jest nachylona pod losowym kątem, przez co ruch czyta się jak orbitowanie
+ * w różnych płaszczyznach, mimo że rysujemy na płaskim płótnie.
+ *
+ * Im bliżej kursora, tym większy promień orbity, jaśniejszy kolor i większa
+ * kropka. Powrót do domu jest sprężynowy, więc siatka „oddycha” za myszą.
+ *
+ * Rysowane na canvasie, bo przy ~600 kropkach osobne elementy DOM zabiłyby
+ * płynność. Kolory z palety landingu: neutralne w spoczynku, nasz błękit
+ * przy kursorze.
+ */
+const ODSTEP = 26; // rozstaw siatki w px
+const ZASIEG = 130; // promień oddziaływania kursora
+const KOLOR_SPOCZYNEK = [187, 187, 187] as const; // między --z-500 a --z-600
+const KOLOR_AKTYWNY = [64, 150, 255] as const; // --z-blue
+
+type Kropka = {
+  x: number;
+  y: number;
+  faza: number;
+  tempo: number;
+  nachylenie: number;
+  sila: number;
+};
+
+export function AuthDotGrid() {
+  const ref = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const redukcja = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches;
+
+    let kropki: Kropka[] = [];
+    let szer = 0;
+    let wys = 0;
+    let klatka = 0;
+    let t = 0;
+
+    // Kursor trzymamy poza kadrem, żeby siatka startowała w spoczynku.
+    const mysz = { x: -9999, y: -9999 };
+
+    const zbuduj = () => {
+      const r = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      szer = r.width;
+      wys = r.height;
+      canvas.width = Math.round(szer * dpr);
+      canvas.height = Math.round(wys * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      kropki = [];
+      for (let y = ODSTEP / 2; y < wys; y += ODSTEP) {
+        for (let x = ODSTEP / 2; x < szer; x += ODSTEP) {
+          kropki.push({
+            x,
+            y,
+            faza: Math.random() * Math.PI * 2,
+            tempo: 0.8 + Math.random() * 1.4,
+            nachylenie: Math.random() * Math.PI,
+            sila: 0,
+          });
+        }
+      }
+    };
+
+    // Rysowanie oddzielone od pętli: dzięki temu siatka pojawia się od razu
+    // po zbudowaniu, nawet jeśli przeglądarka dławi klatki animacji (tak jest
+    // np. w karcie w tle). Bez tego prawa połowa bywała po prostu pusta.
+    const rysuj = () => {
+      t += redukcja ? 0 : 0.016;
+      ctx.clearRect(0, 0, szer, wys);
+
+      for (const k of kropki) {
+        const dx = mysz.x - k.x;
+        const dy = mysz.y - k.y;
+        const dist = Math.hypot(dx, dy);
+
+        // docelowa siła oddziaływania: 1 tuż przy kursorze, 0 poza zasięgiem
+        const cel = dist < ZASIEG ? 1 - dist / ZASIEG : 0;
+        // sprężynowy powrót — bez tego kropki skakałyby skokowo
+        k.sila += (cel - k.sila) * 0.12;
+
+        let px = k.x;
+        let py = k.y;
+        let promien = 1.7;
+
+        if (k.sila > 0.002) {
+          const kat = t * k.tempo + k.faza;
+          const orbita = k.sila * 16;
+          // elipsa obrócona o `nachylenie` daje wrażenie osobnej płaszczyzny
+          const ox = Math.cos(kat) * orbita;
+          const oy = Math.sin(kat) * orbita * 0.45;
+          px += ox * Math.cos(k.nachylenie) - oy * Math.sin(k.nachylenie);
+          py += ox * Math.sin(k.nachylenie) + oy * Math.cos(k.nachylenie);
+          promien = 1.7 + k.sila * 2.2;
+        }
+
+        const m = k.sila;
+        const r = Math.round(
+          KOLOR_SPOCZYNEK[0] + (KOLOR_AKTYWNY[0] - KOLOR_SPOCZYNEK[0]) * m,
+        );
+        const g = Math.round(
+          KOLOR_SPOCZYNEK[1] + (KOLOR_AKTYWNY[1] - KOLOR_SPOCZYNEK[1]) * m,
+        );
+        const b = Math.round(
+          KOLOR_SPOCZYNEK[2] + (KOLOR_AKTYWNY[2] - KOLOR_SPOCZYNEK[2]) * m,
+        );
+
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(${r},${g},${b},${0.7 + m * 0.3})`;
+        ctx.arc(px, py, promien, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+
+    const petla = () => {
+      rysuj();
+      klatka = requestAnimationFrame(petla);
+    };
+
+    const onMove = (e: MouseEvent) => {
+      const r = canvas.getBoundingClientRect();
+      mysz.x = e.clientX - r.left;
+      mysz.y = e.clientY - r.top;
+    };
+    const onLeave = () => {
+      mysz.x = -9999;
+      mysz.y = -9999;
+    };
+
+    zbuduj();
+    rysuj(); // pierwsza klatka natychmiast
+    klatka = requestAnimationFrame(petla);
+
+    const obs = new ResizeObserver(() => {
+      zbuduj();
+      rysuj();
+    });
+    obs.observe(canvas);
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('mouseleave', onLeave);
+
+    return () => {
+      cancelAnimationFrame(klatka);
+      obs.disconnect();
+      canvas.removeEventListener('mousemove', onMove);
+      canvas.removeEventListener('mouseleave', onLeave);
+    };
+  }, []);
+
+  return <canvas ref={ref} className="absolute inset-0 size-full" />;
+}
