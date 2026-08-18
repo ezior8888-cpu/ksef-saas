@@ -46,9 +46,9 @@ export function Hero() {
                 {/* Nagłówek wychodzi zza krawędzi maski, słowo po słowie —
                     tak robi to oryginał (kontener `overflow: clip`). */}
                 <h1 className="z-h1">
-                  <MaskRevealWords text="Faktury do KSeF" delay={0.05} />{' '}
+                  <MaskRevealWords text="Faktury do KSeF w" delay={0.05} />{' '}
                   <span className="z-mark">
-                    <MaskRevealWords text="bez klikania w kółko" delay={0.22} />
+                    <MaskRevealWords text="jednym kliknięciu" delay={0.22} />
                   </span>
                 </h1>
               </div>
@@ -102,7 +102,11 @@ export function Hero() {
                 loop
                 muted
                 playsInline
-          style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
+          style={{
+            transform: 'translateZ(0)',
+            backfaceVisibility: 'hidden',
+            mixBlendMode: 'multiply',
+          }}
                 className="h-auto w-full"
               />
 

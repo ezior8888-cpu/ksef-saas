@@ -47,18 +47,35 @@ export function WhyUs() {
   const refs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
+    // Obserwator widoczności zamiast nasłuchu przewijania: działa też wtedy,
+    // gdy przeglądarka dławi zdarzenia scrolla i klatki animacji.
+    //
+    // Kluczowe: w wywołaniu dostajemy WYŁĄCZNIE elementy, których widoczność
+    // się zmieniła. Poprzednia wersja wybierała spośród nich i przez to
+    // podświetlenie zamarzało na pierwszej pozycji. Dlatego trzymamy stopień
+    // widoczności wszystkich bloków i za każdym razem szukamy największego.
+    const ratios = new Map<Element, number>();
+
     const io = new IntersectionObserver(
       (entries) => {
-        // wybieramy blok najbliżej środka okna
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        if (visible.length === 0) return;
-        const idx = refs.current.indexOf(visible[0].target as HTMLDivElement);
-        if (idx !== -1) setActive(idx);
+        for (const e of entries) ratios.set(e.target, e.intersectionRatio);
+
+        let best = 0;
+        let bestRatio = -1;
+        refs.current.forEach((el, i) => {
+          if (!el) return;
+          const r = ratios.get(el) ?? 0;
+          if (r > bestRatio) {
+            bestRatio = r;
+            best = i;
+          }
+        });
+
+        if (bestRatio > 0) setActive((prev) => (prev === best ? prev : best));
       },
-      { rootMargin: '-40% 0px -40% 0px', threshold: [0, 0.25, 0.5, 0.75, 1] },
+      { threshold: [0, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1] },
     );
+
     refs.current.forEach((el) => el && io.observe(el));
     return () => io.disconnect();
   }, []);

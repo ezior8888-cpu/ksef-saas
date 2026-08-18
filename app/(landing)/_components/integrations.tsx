@@ -33,7 +33,11 @@ export function Integrations() {
             loop
             muted
             playsInline
-          style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
+          style={{
+            transform: 'translateZ(0)',
+            backfaceVisibility: 'hidden',
+            mixBlendMode: 'multiply',
+          }}
             initial={{ opacity: 0, scale: 0.94 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true, amount: 0.3 }}

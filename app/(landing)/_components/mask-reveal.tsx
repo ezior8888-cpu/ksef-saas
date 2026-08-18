@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { motion, useInView } from 'framer-motion';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -80,30 +80,33 @@ export function MaskRevealWords({
   return (
     <span ref={ref} className={className}>
       {words.map((word, i) => (
-        <span
-          key={`${word}-${i}`}
-          className={`inline-block pb-[0.16em] -mb-[0.16em] align-bottom ${
-            done ? '' : 'overflow-clip'
-          }`}
-        >
-          <motion.span
-            className="inline-block"
-            initial={{ y: '110%' }}
-            animate={inView ? { y: '0%' } : { y: '110%' }}
-            transition={{
-              duration: 0.75,
-              delay: delay + i * stagger,
-              ease: EASE,
-            }}
-            onAnimationComplete={() => {
-              if (inView && i === words.length - 1) setDone(true);
-            }}
-            style={{ willChange: done ? 'auto' : 'transform' }}
+        <Fragment key={`${word}-${i}`}>
+          <span
+            className={`inline-block pb-[0.16em] -mb-[0.16em] align-bottom ${
+              done ? '' : 'overflow-clip'
+            }`}
           >
-            {word}
-            {i < words.length - 1 ? ' ' : null}
-          </motion.span>
-        </span>
+            <motion.span
+              className="inline-block"
+              initial={{ y: '110%' }}
+              animate={inView ? { y: '0%' } : { y: '110%' }}
+              transition={{
+                duration: 0.75,
+                delay: delay + i * stagger,
+                ease: EASE,
+              }}
+              onAnimationComplete={() => {
+                if (inView && i === words.length - 1) setDone(true);
+              }}
+              style={{ willChange: done ? 'auto' : 'transform' }}
+            >
+              {word}
+            </motion.span>
+          </span>
+          {/* Spacja MUSI zostać poza elementem inline-block — w środku
+              jest zwijana i słowa sklejają się w jeden ciąg. */}
+          {i < words.length - 1 ? ' ' : null}
+        </Fragment>
       ))}
     </span>
   );

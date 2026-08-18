@@ -9,7 +9,7 @@ import { ArrowRight, Menu, X } from 'lucide-react';
 import { asset } from '../_assets';
 
 const LINKS = [
-  { label: 'Strona główna', href: '/' },
+  { label: 'Start', href: '/' },
   { label: 'O nas', href: '/about' },
   { label: 'Cennik', href: '#pricing' },
   { label: 'Blog', href: '#blog' },
@@ -31,7 +31,7 @@ export function SiteNav() {
       className="fixed inset-x-0 top-5 z-50 flex justify-center px-5"
     >
       <nav
-        className="flex w-full max-w-[600px] items-center justify-between rounded-[16px] bg-white p-[10px_12px]"
+        className="flex w-full max-w-[720px] items-center justify-between rounded-[16px] bg-white p-[10px_12px]"
         style={{ boxShadow: '0 5px 10px 0 rgba(0,0,0,0.08)' }}
       >
         <Link href="/" className="flex shrink-0 items-center pl-1">

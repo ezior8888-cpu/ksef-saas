@@ -52,7 +52,11 @@ export function Contact() {
               loop
               muted
               playsInline
-          style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
+          style={{
+            transform: 'translateZ(0)',
+            backfaceVisibility: 'hidden',
+            mixBlendMode: 'multiply',
+          }}
               className="size-[274px] object-contain"
             />
           </div>
