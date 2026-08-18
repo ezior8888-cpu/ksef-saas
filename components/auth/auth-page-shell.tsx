@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react';
 import '@/styles/zova.css';
 
 import { AuthDotGrid } from './auth-dot-grid';
+import { AuthReveal, AuthRevealRight } from './auth-reveal';
 
 type AuthPageShellProps = {
   children: React.ReactNode;
@@ -38,23 +39,34 @@ export function AuthPageShell({ children }: AuthPageShellProps) {
         <AuthDotGrid />
       </div>
 
+      <AuthReveal className="absolute left-5 top-5 z-20 sm:left-7 sm:top-7">
       <Link
         href="/"
-        className="z-small absolute left-5 top-5 z-20 inline-flex items-center gap-1.5 rounded-[10px] border border-[var(--z-300)] bg-white px-3 py-2 font-medium text-[var(--z-black)] transition-colors hover:bg-[var(--z-50)] sm:left-7 sm:top-7"
+        className="z-small inline-flex items-center gap-1.5 rounded-[10px] border border-[var(--z-300)] bg-white px-3 py-2 font-medium text-[var(--z-black)] transition-colors hover:bg-[var(--z-50)]"
       >
         <ArrowLeft className="size-3.5" aria-hidden />
         Strona główna
       </Link>
+      </AuthReveal>
 
       <div className="relative z-10 mx-auto grid min-h-screen w-full max-w-[1300px] grid-cols-1 items-center gap-16 px-5 py-24 md:px-[var(--z-gutter)] lg:grid-cols-2">
         {/* ── kolumna formularza ─────────────────────────────────────── */}
         <div className="mx-auto w-full max-w-[420px]">
-          <Link href="/" className="mb-8 inline-flex items-center">
-            <Image src={LOGO} alt="FaktFlow" width={32} height={32} priority />
-          </Link>
+          <AuthReveal delay={0.05}>
+            <Link href="/" className="mb-8 inline-flex items-center">
+              <Image
+                src={LOGO}
+                alt="FaktFlow"
+                width={32}
+                height={32}
+                priority
+              />
+            </Link>
+          </AuthReveal>
 
-          {children}
+          <AuthReveal delay={0.12}>{children}</AuthReveal>
 
+          <AuthReveal delay={0.22}>
           <p className="z-small mt-8 text-[var(--z-muted)]">
             Zakładając konto akceptujesz{' '}
             <a
@@ -72,17 +84,21 @@ export function AuthPageShell({ children }: AuthPageShellProps) {
             </a>
             .
           </p>
+          </AuthReveal>
         </div>
 
         {/* Kolumna po prawej jest pusta w warstwie treści: całą robotę
             robi tło z kropkami. Hasło leży na wierzchu, ale nie przechwytuje
             myszy, żeby kropki reagowały także pod tekstem. */}
-        <div className="pointer-events-none hidden lg:flex lg:flex-col lg:items-center lg:justify-center">
+        <AuthRevealRight
+          delay={0.3}
+          className="pointer-events-none hidden lg:flex lg:flex-col lg:items-center lg:justify-center"
+        >
           <p className="z-h4 max-w-[420px] text-center font-normal text-[var(--z-black)]">
             Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy
             potwierdzenia.
           </p>
-        </div>
+        </AuthRevealRight>
       </div>
     </div>
   );

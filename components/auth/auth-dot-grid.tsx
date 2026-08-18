@@ -132,14 +132,26 @@ export function AuthDotGrid() {
       klatka = requestAnimationFrame(petla);
     };
 
+    // Nasłuch na OKNIE, nie na płótnie. Nad kanwą leży kolumna z treścią
+    // i to ona dostawała zdarzenia myszy, przez co kropki nigdy nie widziały
+    // kursora. Współrzędne przeliczamy względem prostokąta płótna, a gdy
+    // kursor jest poza nim, odsuwamy punkt oddziaływania poza kadr.
     const onMove = (e: MouseEvent) => {
       const r = canvas.getBoundingClientRect();
-      mysz.x = e.clientX - r.left;
-      mysz.y = e.clientY - r.top;
+      const x = e.clientX - r.left;
+      const y = e.clientY - r.top;
+      const poza = x < -ZASIEG || y < -ZASIEG || x > r.width + ZASIEG || y > r.height + ZASIEG;
+      mysz.x = poza ? -9999 : x;
+      mysz.y = poza ? -9999 : y;
+      // Przerysowujemy od razu, nie czekając na klatkę animacji: gdy
+      // przeglądarka je dławi (karta w tle, oszczędzanie energii), siatka
+      // inaczej w ogóle nie reagowałaby na kursor.
+      rysuj();
     };
     const onLeave = () => {
       mysz.x = -9999;
       mysz.y = -9999;
+      rysuj();
     };
 
     zbuduj();
@@ -151,14 +163,14 @@ export function AuthDotGrid() {
       rysuj();
     });
     obs.observe(canvas);
-    canvas.addEventListener('mousemove', onMove);
-    canvas.addEventListener('mouseleave', onLeave);
+    window.addEventListener('mousemove', onMove, { passive: true });
+    document.addEventListener('mouseleave', onLeave);
 
     return () => {
       cancelAnimationFrame(klatka);
       obs.disconnect();
-      canvas.removeEventListener('mousemove', onMove);
-      canvas.removeEventListener('mouseleave', onLeave);
+      window.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseleave', onLeave);
     };
   }, []);
 
