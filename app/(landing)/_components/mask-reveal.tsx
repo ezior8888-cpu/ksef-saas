@@ -1,22 +1,23 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { motion } from 'framer-motion';
+import { useRef } from 'react';
+import { motion, useInView } from 'framer-motion';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 /**
  * Odsłonięcie tekstu spod krawędzi maski — sygnaturowa animacja Zovy.
+ * Warstwa z tekstem startuje przesunięta w dół o własną wysokość i wjeżdża
+ * na miejsce, zamiast zanikać. Tekst *wychodzi zza krawędzi*.
  *
- * W oryginale nagłówek siedzi w kontenerze z `overflow: clip`, a warstwa
- * z tekstem startuje przesunięta w dół o własną wysokość i wjeżdża na
- * miejsce. Efekt jest wyraźnie lepszy niż zwykłe zanikanie, bo tekst
- * *wychodzi zza krawędzi*, zamiast materializować się w powietrzu.
- *
- * Opakowanie MUSI być blokowe. Wcześniej był tu `<span>`, co dawało
- * `<div>`/`<p>` wewnątrz elementu tekstowego — DOM po stronie klienta to
- * znosi, ale parser HTML przy pierwszym wejściu na stronę wyrzuca takie
- * dziecko poza rodzica i układ się rozjeżdża.
+ * UWAGA na pułapkę, która wcześniej ukryła całą treść: nie wolno użyć tu
+ * `whileInView` na animowanej warstwie. Jest ona przesunięta o 110% w dół,
+ * czyli POZA własny kontener z `overflow: clip`, a obserwator widoczności
+ * liczy przecięcie już po przycięciu przez rodzica — element nigdy nie
+ * zostaje uznany za widoczny, animacja nie startuje i napis znika na dobre.
+ * Dlatego widoczność śledzimy na MASCE (jest w normalnym układzie), a ruch
+ * odpalamy przez `animate`.
  */
 export function MaskReveal({
   children,
@@ -29,12 +30,14 @@ export function MaskReveal({
   duration?: number;
   className?: string;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, amount: 0.1 });
+
   return (
-    <div className={`overflow-clip pb-[3px] -mb-[3px] ${className}`}>
+    <div ref={ref} className={`overflow-clip pb-[3px] -mb-[3px] ${className}`}>
       <motion.div
         initial={{ y: '110%' }}
-        whileInView={{ y: '0%' }}
-        viewport={{ once: true, amount: 0.1 }}
+        animate={inView ? { y: '0%' } : { y: '110%' }}
         transition={{ duration, delay, ease: EASE }}
       >
         {children}
@@ -48,7 +51,7 @@ export function MaskReveal({
  * `<span>`-y per wyraz (w DOM oryginału widać „Real”, „-”, „time”,
  * „intelligence” jako oddzielne elementy) i animuje każdy z opóźnieniem.
  *
- * Wszystko jest tu tekstowe (`span`), więc wolno tego użyć wewnątrz `h1`–`h4`.
+ * Wszystko jest tekstowe, więc wolno tego użyć wewnątrz `h1`–`h4`.
  */
 export function MaskRevealWords({
   text,
@@ -61,9 +64,12 @@ export function MaskRevealWords({
   stagger?: number;
   className?: string;
 }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, amount: 0.1 });
   const words = text.split(' ');
+
   return (
-    <span className={className}>
+    <span ref={ref} className={className}>
       {words.map((word, i) => (
         <span
           key={`${word}-${i}`}
@@ -72,8 +78,7 @@ export function MaskRevealWords({
           <motion.span
             className="inline-block"
             initial={{ y: '110%' }}
-            whileInView={{ y: '0%' }}
-            viewport={{ once: true, amount: 0.1 }}
+            animate={inView ? { y: '0%' } : { y: '110%' }}
             transition={{
               duration: 0.75,
               delay: delay + i * stagger,
@@ -81,8 +86,8 @@ export function MaskRevealWords({
             }}
           >
             {word}
+            {i < words.length - 1 ? ' ' : null}
           </motion.span>
-          {i < words.length - 1 ? ' ' : null}
         </span>
       ))}
     </span>
