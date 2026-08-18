@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { MaskReveal, MaskRevealWords } from './mask-reveal';
+
 /**
  * Ikona z sprite'u Zovy. Framer odwołuje się do nich przez `<use href="#id">`,
  * więc trzymamy ten sam mechanizm — patrz `icon-sprite.tsx`.
@@ -62,8 +64,14 @@ export function SectionHeading({
       className={`flex flex-col gap-4 ${centered ? 'items-center text-center' : ''}`}
       style={centered ? { maxWidth: max, marginInline: 'auto' } : { maxWidth: max }}
     >
-      <h2 className="z-h2">{title}</h2>
-      {lead ? <p className="z-lead text-[var(--z-muted)]">{lead}</p> : null}
+      <h2 className="z-h2">
+        {typeof title === 'string' ? <MaskRevealWords text={title} /> : title}
+      </h2>
+      {lead ? (
+        <MaskReveal delay={0.18}>
+          <p className="z-lead text-[var(--z-muted)]">{lead}</p>
+        </MaskReveal>
+      ) : null}
     </div>
   );
 }

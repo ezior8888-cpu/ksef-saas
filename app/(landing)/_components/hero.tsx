@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 
 import { asset } from '../_assets';
+import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Icon } from './ui';
 
 /** Krzywa i czasy zgodne z domyślnym wejściem Framera. */
@@ -42,10 +43,14 @@ export function Hero() {
                   </span>
                 </motion.div>
 
-                <motion.h1 {...rise(0.08)} className="z-h1">
-                  Real-time insight for{' '}
-                  <span className="z-mark">modern finance</span>
-                </motion.h1>
+                {/* Nagłówek wychodzi zza krawędzi maski, słowo po słowie —
+                    tak robi to oryginał (kontener `overflow: clip`). */}
+                <h1 className="z-h1">
+                  <MaskRevealWords text="Real-time insight for" delay={0.05} />{' '}
+                  <span className="z-mark">
+                    <MaskRevealWords text="modern finance" delay={0.22} />
+                  </span>
+                </h1>
               </div>
 
               <motion.div {...rise(0.16)} className="mt-6 flex flex-wrap gap-3">
@@ -101,10 +106,12 @@ export function Hero() {
               />
 
               <div className="flex flex-col gap-3">
-                <p className="z-body text-[var(--z-muted)]">
-                  Powerful AI platform simplifying reporting and delivering
-                  forecasts for faster decisions.
-                </p>
+                <MaskReveal delay={0.3}>
+                  <p className="z-body text-[var(--z-muted)]">
+                    Powerful AI platform simplifying reporting and delivering
+                    forecasts for faster decisions.
+                  </p>
+                </MaskReveal>
                 <div className="flex items-center gap-2">
                   <div className="flex gap-0.5">
                     {Array.from({ length: 5 }).map((_, i) => (
