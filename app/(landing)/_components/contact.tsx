@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 
 import { asset } from '../_assets';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
+import { Pop } from './anim';
 import { Container, Icon } from './ui';
 
 const DETAILS = [
@@ -34,9 +35,11 @@ export function Contact() {
           <div className="flex flex-col gap-8 lg:w-[274px] lg:shrink-0">
 
             <ul className="flex flex-col gap-4">
-              {DETAILS.map((d) => (
+              {DETAILS.map((d, i) => (
                 <li key={d.value} className="flex items-start gap-3">
-                  <Icon id={d.icon} size={22} />
+                  <Pop delay={i * 0.08}>
+                    <Icon id={d.icon} size={22} />
+                  </Pop>
                   <span className="z-body whitespace-pre-line text-[var(--z-muted)]">
                     {d.value}
                   </span>
@@ -63,10 +66,10 @@ export function Contact() {
 
           {/* formularz — 946×628 w oryginale, tu jako reszta szerokości */}
           <motion.form
-            initial={{ opacity: 0, y: 24 }}
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.6, ease: [0.44, 0, 0.56, 1] }}
+            transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
             className="flex w-full flex-col gap-5 rounded-[20px] border border-[var(--z-300)] bg-white p-6 lg:p-8"
             onSubmit={(e) => e.preventDefault()}
           >

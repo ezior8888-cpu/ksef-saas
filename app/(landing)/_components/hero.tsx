@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 
 import { asset } from '../_assets';
+import { Tilt } from './anim';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Icon } from './ui';
 
@@ -53,7 +54,13 @@ export function Hero() {
                 </h1>
               </div>
 
-              <motion.div {...rise(0.16)} className="mt-6 flex flex-wrap gap-3">
+              <motion.div
+                initial={{ opacity: 0, x: -30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, amount: 0.15 }}
+                transition={{ duration: 0.75, delay: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                className="mt-6 flex flex-wrap gap-3"
+              >
                 <Link
                   href="/register"
                   className="z-body group inline-flex items-center gap-2 rounded-[12px] bg-[var(--z-black)] px-5 py-3.5 font-medium text-white transition-transform hover:scale-[1.02]"
@@ -72,7 +79,10 @@ export function Hero() {
               {/* Pas logotypów klientów: w oryginale <ul> 513×26 tuż pod
                   przyciskami. Wcześniej go przeoczyłem. */}
               <motion.ul
-                {...rise(0.2)}
+                initial={{ opacity: 0, x: -30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, amount: 0.15 }}
+                transition={{ duration: 0.75, delay: 0.24, ease: [0.16, 1, 0.3, 1] }}
                 className="flex max-w-[513px] flex-wrap items-center gap-x-[5px] gap-y-3 lg:flex-nowrap"
               >
                 {asset.hero.clientLogos.map((src) => (
@@ -91,7 +101,10 @@ export function Hero() {
 
             {/* prawa kolumna — 365 px: film, opis, ocena */}
             <motion.div
-              {...rise(0.24)}
+              initial={{ opacity: 0, x: 30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, amount: 0.15 }}
+              transition={{ duration: 0.75, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
               className="flex w-full flex-col gap-10 lg:max-w-[365px]"
             >
               <video
@@ -138,10 +151,8 @@ export function Hero() {
         </div>
 
         {/* zrzut pulpitu — 969×579, wystaje poza dolną krawędź panelu */}
-        <motion.div
-          initial={{ opacity: 0, y: 48 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: 0.32, ease: EASE }}
+        <Tilt
+          delay={0.28}
           className="mx-auto w-full max-w-[var(--z-container)] px-5 md:px-[var(--z-gutter)]"
         >
           {/* Proporcje 969×579 wymuszone kadrowaniem: plik źródłowy ma
@@ -156,7 +167,7 @@ export function Hero() {
               className="object-cover object-top"
             />
           </div>
-        </motion.div>
+        </Tilt>
       </div>
     </header>
   );

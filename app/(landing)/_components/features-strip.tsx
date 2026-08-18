@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 
+import { Nudge } from './anim';
 import { Container, Icon } from './ui';
 
 /** Zmierzone na oryginale: karta 1140×168, 4 kolumny po 236, kreski 1 px. */
@@ -48,13 +49,13 @@ export function FeaturesStrip() {
                 className="hidden w-px shrink-0 self-stretch bg-[var(--z-300)] lg:block"
               />
             ) : null}
-            <div className="flex flex-col gap-6 lg:w-[236px] lg:shrink-0">
+            <Nudge delay={i * 0.07} className="flex flex-col gap-6 lg:w-[236px] lg:shrink-0">
               <Icon id={it.icon} />
               <div className="flex flex-col gap-2">
                 <h3 className="z-lead">{it.title}</h3>
                 <p className="z-body text-[var(--z-muted)]">{it.body}</p>
               </div>
-            </div>
+            </Nudge>
           </div>
         ))}
       </motion.div>

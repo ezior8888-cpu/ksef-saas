@@ -39,14 +39,14 @@ export function Blog() {
           {POSTS.map((p, i) => (
             <motion.article
               key={p.title}
-              initial={{ opacity: 0, y: 24 }}
+              initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               whileHover={{ y: -4 }}
               viewport={{ once: true, amount: 0.2 }}
               transition={{
-                duration: 0.6,
-                delay: i * 0.08,
-                ease: [0.44, 0, 0.56, 1],
+                duration: 0.75,
+                delay: i * 0.1,
+                ease: [0.16, 1, 0.3, 1],
               }}
               className="flex flex-col gap-5 rounded-[20px] bg-white p-5 transition-shadow duration-300 hover:shadow-[0_16px_40px_-16px_rgba(16,32,64,0.22)]"
             >

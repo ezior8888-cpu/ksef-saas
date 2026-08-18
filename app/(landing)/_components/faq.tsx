@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 
 import { asset } from '../_assets';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
+import { Rise } from './anim';
 import { Container } from './ui';
 
 const QA = [
@@ -86,8 +87,9 @@ export function Faq() {
           {QA.map((item, i) => {
             const isOpen = open === i;
             return (
-              <div
+              <Rise
                 key={item.q}
+                delay={i * 0.07}
                 className="overflow-hidden rounded-[16px] border border-[var(--z-300)] bg-white"
               >
                 <button
@@ -124,7 +126,7 @@ export function Faq() {
                     </motion.div>
                   ) : null}
                 </AnimatePresence>
-              </div>
+              </Rise>
             );
           })}
         </div>

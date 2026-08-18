@@ -1,23 +1,17 @@
 'use client';
 
 import Image from 'next/image';
-import { motion } from 'framer-motion';
 
 import { asset } from '../_assets';
+import { SlideX } from './anim';
 import { Container } from './ui';
 
 export function Testimonial() {
   return (
     <section className="bg-[var(--z-50)] py-20 lg:py-[100px]">
       <Container>
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.2 }}
-          transition={{ duration: 0.7, ease: [0.44, 0, 0.56, 1] }}
-          className="flex flex-col items-center gap-10 lg:flex-row lg:items-end lg:gap-16"
-        >
-          <div className="w-full max-w-[369px] shrink-0 overflow-hidden rounded-[20px]">
+        <div className="flex flex-col items-center gap-10 lg:flex-row lg:items-end lg:gap-16">
+          <SlideX from="left" className="w-full max-w-[369px] shrink-0 overflow-hidden rounded-[20px]">
             <Image
               src={asset.testimonial.portrait}
               alt="Marcin Zawadzki"
@@ -25,9 +19,9 @@ export function Testimonial() {
               height={439}
               className="h-auto w-full"
             />
-          </div>
+          </SlideX>
 
-          <div className="flex flex-col gap-8 pb-4">
+          <SlideX from="right" delay={0.1} className="flex flex-col gap-8 pb-4">
             <p className="z-h4">
               “Wysyłam faktury z telefonu w drodze do klienta. Wcześniej
               siedziałem nad tym wieczorami w Excelu.”
@@ -45,8 +39,8 @@ export function Testimonial() {
               height={32}
               className="h-8 w-auto object-contain"
             />
-          </div>
-        </motion.div>
+          </SlideX>
+        </div>
       </Container>
     </section>
   );

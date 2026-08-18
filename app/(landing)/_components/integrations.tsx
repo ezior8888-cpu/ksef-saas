@@ -38,10 +38,10 @@ export function Integrations() {
             backfaceVisibility: 'hidden',
             mixBlendMode: 'multiply',
           }}
-            initial={{ opacity: 0, scale: 0.94 }}
+            initial={{ opacity: 0, scale: 0.9 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true, amount: 0.3 }}
-            transition={{ duration: 0.6, ease: [0.44, 0, 0.56, 1] }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
             className="size-[210px] object-contain"
           />
 
@@ -49,10 +49,10 @@ export function Integrations() {
             {asset.integrations.logos.map((src, i) => (
               <motion.div
                 key={src}
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 10 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.4 }}
-                transition={{ duration: 0.5, delay: i * 0.04 }}
+                transition={{ duration: 0.55, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
                 className="flex h-7 items-center"
               >
                 <Image

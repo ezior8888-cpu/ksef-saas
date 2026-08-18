@@ -43,10 +43,10 @@ export function Closing() {
       <section className="pb-20">
         <Container>
           <motion.div
-            initial={{ opacity: 0, y: 24 }}
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.7, ease: [0.44, 0, 0.56, 1] }}
+            transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
             className="flex flex-col items-center gap-8 rounded-[24px] bg-[var(--z-black)] px-6 py-16 text-center text-white"
           >
             <div className="flex w-full max-w-[550px] flex-col gap-4">
