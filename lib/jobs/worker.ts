@@ -141,11 +141,24 @@ async function main(): Promise<void> {
   }
 
   let scheduled = 0;
-  // WORKER_DISABLE_SCHEDULES=true: tryb testowy (lokalny worker przez tunel) —
-  // obsługuje kolejki, ale NIE planuje cronów w żywym schemacie pgboss.
+  // WORKER_DISABLE_SCHEDULES=true: tryb testowy (lokalny worker przez tunel)
+  // oraz pierwsza faza cutoveru — worker obsługuje kolejki, ale nie prowadzi
+  // cronów, bo w tym czasie robi to jeszcze poprzedni backend.
+  //
+  // Samo pominięcie `schedule()` NIE wystarcza: wpisy z wcześniejszego startu
+  // zostają w tabeli `pgboss.schedule` i pg-boss podejmie je natychmiast po
+  // starcie dowolnej instancji, niezależnie od tej flagi. Dlatego przy
+  // wyłączonych cronach kasujemy je jawnie — inaczej flaga daje złudzenie
+  // bezpieczeństwa. (Sprawdzone bólem: przypadkowo uruchomiony worker
+  // przepracował noc na cronach, mimo że nikt ich nie planował świadomie.)
   const schedulesDisabled = process.env.WORKER_DISABLE_SCHEDULES === 'true';
   if (schedulesDisabled) {
-    log.warn('WORKER_DISABLE_SCHEDULES=true — pomijam planowanie cronów');
+    for (const cron of CRON_JOBS) {
+      await boss.unschedule(cron.queue);
+    }
+    log.warn(
+      `WORKER_DISABLE_SCHEDULES=true — crony wyłączone, wyczyszczono ${CRON_JOBS.length} wpisów harmonogramu`,
+    );
   }
   for (const cron of CRON_JOBS) {
     if (schedulesDisabled) break;
