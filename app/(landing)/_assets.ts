@@ -66,7 +66,12 @@ export const asset = {
     `${IMG}/R68oiXEuFsP2L3K2FOSqywEJsa4.png`,
     `${IMG}/3JpXcZ5EkSA0ODYl2R5anZWBvjc.png`,
     `${IMG}/BJT53IKNztUmssqXvvkrTpHFEhY.png`,
+    `${IMG}/ds5iNL0LI0ZFRiRxqvtdHUBal8o.png`,
+    `${IMG}/lCeNvnyGCctiMifPsHYWkdKYlYY.png`,
   ],
+
+  /** Film w nagłówku listy wpisów — 400×325. */
+  blogHero: `${VID}/Fkym4xUSeFPyCLvy4nYh2QRALcU.mp4`,
 
   contact: { video: `${VID}/xFa8xTukUIggR8hGr7JxZKUlRQ.mp4` },
 

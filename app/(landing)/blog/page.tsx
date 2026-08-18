@@ -10,7 +10,7 @@ import { asset } from '../_assets';
 import { Rise } from '../_components/anim';
 import { SiteFooter } from '../_components/closing';
 import { IconSprite } from '../_components/icon-sprite';
-import { MaskReveal, MaskRevealWords } from '../_components/mask-reveal';
+import { MaskRevealWords } from '../_components/mask-reveal';
 import { SiteNav } from '../_components/site-nav';
 import { Container } from '../_components/ui';
 
@@ -74,19 +74,33 @@ export default function BlogPage() {
       <IconSprite />
       <SiteNav />
 
-      {/* ── nagłówek: sekcja 704 px, tytuł w bloku 700 ──────────────── */}
+      {/* ── nagłówek ─────────────────────────────────────────────────
+          Zmierzone na oryginale: blok 752 wyśrodkowany, kolumna z odstępem
+          40, tytuł w 700 px i POD nim film 400×325. Bez akapitu wstępnego —
+          oryginał go nie ma, sam tytuł i ilustracja. */}
       <header className="pb-10 pt-[128px]">
         <Container>
-          <div className="flex max-w-[752px] flex-col gap-6">
+          <div className="mx-auto flex max-w-[752px] flex-col items-center gap-10 text-center">
             <h1 className="z-h1 max-w-[700px]">
               <MaskRevealWords text="Poradniki dla tych, którzy wolą mieć to z głowy" />
             </h1>
-            <MaskReveal delay={0.2}>
-              <p className="z-lead max-w-[550px] text-[var(--z-muted)]">
-                Piszemy o KSeF, kosztach i pilnowaniu płatności. Konkretnie,
-                bez urzędowego żargonu i bez wciskania Ci niczego na siłę.
-              </p>
-            </MaskReveal>
+            <Rise delay={0.25}>
+              <video
+                src={asset.blogHero}
+                width={400}
+                height={325}
+                autoPlay
+                loop
+                muted
+                playsInline
+                style={{
+                  transform: 'translateZ(0)',
+                  backfaceVisibility: 'hidden',
+                  mixBlendMode: 'multiply',
+                }}
+                className="h-[325px] w-[400px] max-w-full object-contain"
+              />
+            </Rise>
           </div>
         </Container>
       </header>
