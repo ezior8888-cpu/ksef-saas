@@ -65,6 +65,7 @@ export function Pricing() {
               key={p.name}
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
+              whileHover={{ y: -4 }}
               viewport={{ once: true, amount: 0.2 }}
               transition={{
                 duration: 0.6,

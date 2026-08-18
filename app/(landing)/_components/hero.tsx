@@ -3,9 +3,10 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowRight, Star } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 import { asset } from '../_assets';
+import { Icon } from './ui';
 
 /** Krzywa i czasy zgodne z domyślnym wejściem Framera. */
 const EASE = [0.44, 0, 0.56, 1] as const;
@@ -32,7 +33,7 @@ export function Hero() {
         <div className="mx-auto w-full max-w-[var(--z-container)] px-5 md:px-[var(--z-gutter)]">
           <div className="mx-auto flex w-full max-w-[var(--z-content)] flex-col gap-16 lg:flex-row lg:items-start lg:justify-between">
             {/* lewa kolumna — 570 px w oryginale */}
-            <div className="flex w-full flex-col gap-16 lg:max-w-[570px]">
+            <div className="flex w-full flex-col gap-10 lg:max-w-[570px]">
               <div className="flex flex-col gap-10">
                 <motion.div {...rise(0)}>
                   <span className="z-tiny inline-flex items-center gap-2 rounded-full border border-[var(--z-300)] bg-white/70 px-3 py-1.5 text-[var(--z-black)]">
@@ -47,7 +48,7 @@ export function Hero() {
                 </motion.h1>
               </div>
 
-              <motion.div {...rise(0.16)} className="flex flex-wrap gap-3">
+              <motion.div {...rise(0.16)} className="mt-6 flex flex-wrap gap-3">
                 <Link
                   href="/register"
                   className="z-body group inline-flex items-center gap-2 rounded-[12px] bg-[var(--z-black)] px-5 py-3.5 font-medium text-white transition-transform hover:scale-[1.02]"
@@ -62,6 +63,25 @@ export function Hero() {
                   Contact sales
                 </Link>
               </motion.div>
+
+              {/* Pas logotypów klientów: w oryginale <ul> 513×26 tuż pod
+                  przyciskami. Wcześniej go przeoczyłem. */}
+              <motion.ul
+                {...rise(0.2)}
+                className="flex max-w-[513px] flex-wrap items-center gap-x-[5px] gap-y-3 lg:flex-nowrap"
+              >
+                {asset.hero.clientLogos.map((src) => (
+                  <li key={src} className="flex h-[26px] items-center">
+                    <Image
+                      src={src}
+                      alt="Logo klienta"
+                      width={130}
+                      height={26}
+                      className="h-[26px] w-auto object-contain opacity-70 transition-opacity hover:opacity-100"
+                    />
+                  </li>
+                ))}
+              </motion.ul>
             </div>
 
             {/* prawa kolumna — 365 px: film, opis, ocena */}
@@ -88,9 +108,11 @@ export function Hero() {
                 <div className="flex items-center gap-2">
                   <div className="flex gap-0.5">
                     {Array.from({ length: 5 }).map((_, i) => (
-                      <Star
+                      <Icon
                         key={i}
-                        className="size-3.5 fill-[var(--z-yellow)] text-[var(--z-yellow)]"
+                        id="2930526878"
+                        size={14}
+                        className="text-[var(--z-yellow)]"
                       />
                     ))}
                   </div>

@@ -17,6 +17,7 @@ export const MARKETING_PATHS = [
   '/legal',
   '/pomoc',
   '/mobile',
+  '/about',
 ] as const;
 
 const AUTH_PUBLIC_PREFIXES = [

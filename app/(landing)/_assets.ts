@@ -71,4 +71,27 @@ export const asset = {
   contact: { video: `${VID}/xFa8xTukUIggR8hGr7JxZKUlRQ.mp4` },
 
   wave: `${IMG}/wGAHOWhVswEtWkOKTJN6s2CW0.svg`,
+
+  about: {
+    /** Film w nagłówku — 400×254. */
+    hero: `${VID}/XsbctVRtvLemldF50MdIUZxBXCc.mp4`,
+    /** Cztery kadry z biura, 400×400, pas pod nagłówkiem. */
+    gallery: [
+      `${IMG}/UjLAh1s7ty7HJE28FnWk0qZpa0.png`,
+      `${IMG}/R7NNtI35yeDmaQ9rAAcL9kqWN0U.png`,
+      `${IMG}/ML2EhspDjOewlhR4Mu5rf8vIXMA.png`,
+      `${IMG}/wq2CMg89ksSqdwtxzKjT0Ao2al4.png`,
+    ],
+    /** Portret przy cytacie założyciela — 240×240. */
+    founder: `${IMG}/4TmSrJCJHuEEY04elzA6KYDiaSA.png`,
+    /** Zespół — 271×316 każdy. */
+    team: [
+      `${IMG}/4TmSrJCJHuEEY04elzA6KYDiaSA.png`,
+      `${IMG}/USUEObF0JUZGvWprdX8VTUWdTo.png`,
+      `${IMG}/F7jTygFOl6jyyaVIUj2INGsM0qw.png`,
+      `${IMG}/jz6BDhx2KT1f30lh8rGYsW9Fo.png`,
+    ],
+    /** Film w sekcji rekrutacyjnej — 250×150. */
+    career: `${VID}/ppmjq0EWXJtY5Ch0Zwzoeg7j1s.mp4`,
+  },
 } as const;

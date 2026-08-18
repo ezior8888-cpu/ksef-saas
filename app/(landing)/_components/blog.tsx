@@ -40,13 +40,14 @@ export function Blog() {
               key={p.title}
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
+              whileHover={{ y: -4 }}
               viewport={{ once: true, amount: 0.2 }}
               transition={{
                 duration: 0.6,
                 delay: i * 0.08,
                 ease: [0.44, 0, 0.56, 1],
               }}
-              className="flex flex-col gap-5 rounded-[20px] bg-white p-5"
+              className="flex flex-col gap-5 rounded-[20px] bg-white p-5 transition-shadow duration-300 hover:shadow-[0_16px_40px_-16px_rgba(16,32,64,0.22)]"
             >
               <div className="overflow-hidden rounded-[14px]">
                 <Image
@@ -54,7 +55,7 @@ export function Blog() {
                   alt={p.title}
                   width={372}
                   height={274}
-                  className="h-auto w-full"
+                  className="h-auto w-full transition-transform duration-500 hover:scale-[1.04]"
                 />
               </div>
               <div className="flex flex-col gap-2">

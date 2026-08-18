@@ -47,9 +47,14 @@ export function WhyUs() {
           </div>
           <ul className="flex flex-col gap-3">
             {BLOCKS.map((b) => (
-              <li key={b.title} className="flex items-center gap-3">
-                <Icon id={b.icon} size={22} />
-                <span className="z-lead font-medium">{b.title}</span>
+              <li key={b.title}>
+                <a
+                  href={`#benefit-${BLOCKS.indexOf(b) + 1}`}
+                  className="group flex items-center gap-3 transition-opacity hover:opacity-60"
+                >
+                  <Icon id={b.icon} size={22} />
+                  <span className="z-lead font-medium">{b.title}</span>
+                </a>
               </li>
             ))}
           </ul>
@@ -60,6 +65,7 @@ export function WhyUs() {
           {BLOCKS.map((b, i) => (
             <motion.div
               key={b.title}
+              id={`benefit-${i + 1}`}
               initial={{ opacity: 0, y: 28 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.2 }}
@@ -68,7 +74,7 @@ export function WhyUs() {
                 delay: i * 0.05,
                 ease: [0.44, 0, 0.56, 1],
               }}
-              className="flex flex-col gap-6"
+              className="flex scroll-mt-28 flex-col gap-6"
             >
               <div className="flex flex-col gap-3">
                 <h3 className="z-h4">{b.title}</h3>
