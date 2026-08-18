@@ -73,3 +73,22 @@ export function isBypassAllowedEnv(): boolean {
   const appEnv = normalized(process.env.APP_ENV || process.env.NEXT_PUBLIC_APP_ENV);
   return NON_PROD_MARKERS.has(appEnv);
 }
+
+/**
+ * Czy to lokalny development, w którym wolno pominąć Turnstile?
+ *
+ * Świadomie WĘŻSZE niż `isBypassAllowedEnv`: tamto obejmuje też testy
+ * i środowiska oznaczone jako nie-produkcyjne, a widżet chcemy wyłączyć
+ * wyłącznie na maszynie dewelopera.
+ *
+ * Fail-closed przez konstrukcję, dwa niezależne warunki naraz:
+ *   1. jakikolwiek marker produkcji ⇒ false,
+ *   2. `NODE_ENV` musi być dokładnie `development`.
+ *
+ * Build produkcyjny ustawia `NODE_ENV=production`, więc na Hetznerze ta
+ * funkcja nie ma jak zwrócić `true`, nawet gdyby markery środowiska zniknęły.
+ */
+export function isLocalDevEnv(): boolean {
+  if (isProductionDeploy()) return false;
+  return normalized(process.env.NODE_ENV) === 'development';
+}

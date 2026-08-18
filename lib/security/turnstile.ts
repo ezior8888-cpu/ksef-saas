@@ -2,7 +2,11 @@ import 'server-only';
 
 import { headers } from 'next/headers';
 
-import { isBypassAllowedEnv, isProductionDeploy } from './environment';
+import {
+  isBypassAllowedEnv,
+  isLocalDevEnv,
+  isProductionDeploy,
+} from './environment';
 
 // Re-export dla kompatybilności wstecznej (inne moduły importują z turnstile).
 export { isProductionDeploy };
@@ -61,6 +65,11 @@ export async function isTurnstileBypassActive(): Promise<boolean> {
 }
 
 export function isTurnstileConfigured(): boolean {
+  // Na maszynie dewelopera widżet się nie renderuje, więc żaden token nie
+  // przyjdzie. Traktujemy Turnstile jako nieskonfigurowany, żeby logowanie
+  // działało lokalnie. Na produkcji `isLocalDevEnv()` nie może zwrócić true.
+  if (isLocalDevEnv()) return false;
+
   const secret = process.env.TURNSTILE_SECRET_KEY?.trim();
   if (!secret) return false;
   if (secret.includes('xxx')) return false;
