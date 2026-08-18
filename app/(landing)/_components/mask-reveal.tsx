@@ -3,6 +3,8 @@
 import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 
+const EASE = [0.16, 1, 0.3, 1] as const;
+
 /**
  * Odsłonięcie tekstu spod krawędzi maski — sygnaturowa animacja Zovy.
  *
@@ -11,44 +13,42 @@ import { motion } from 'framer-motion';
  * miejsce. Efekt jest wyraźnie lepszy niż zwykłe zanikanie, bo tekst
  * *wychodzi zza krawędzi*, zamiast materializować się w powietrzu.
  *
- * Zmierzone na oryginale: kontener maski jest o ~4 px wyższy od tekstu,
- * żeby wydłużenia liter (np. „y” w „Why”) nie były obcinane.
+ * Opakowanie MUSI być blokowe. Wcześniej był tu `<span>`, co dawało
+ * `<div>`/`<p>` wewnątrz elementu tekstowego — DOM po stronie klienta to
+ * znosi, ale parser HTML przy pierwszym wejściu na stronę wyrzuca takie
+ * dziecko poza rodzica i układ się rozjeżdża.
  */
 export function MaskReveal({
   children,
   delay = 0,
   duration = 0.8,
-  as = 'div',
   className = '',
 }: {
   children: ReactNode;
   delay?: number;
   duration?: number;
-  as?: 'div' | 'span';
   className?: string;
 }) {
-  const Tag = as === 'span' ? motion.span : motion.div;
   return (
-    <span
-      className={`block overflow-clip pb-1 ${className}`}
-      style={{ display: as === 'span' ? 'inline-block' : 'block' }}
-    >
-      <Tag
+    <div className={`overflow-clip pb-[3px] -mb-[3px] ${className}`}>
+      <motion.div
         initial={{ y: '110%' }}
         whileInView={{ y: '0%' }}
-        viewport={{ once: true, amount: 0.4 }}
-        transition={{ duration, delay, ease: [0.16, 1, 0.3, 1] }}
-        style={{ display: 'block' }}
+        viewport={{ once: true, amount: 0.1 }}
+        transition={{ duration, delay, ease: EASE }}
       >
         {children}
-      </Tag>
-    </span>
+      </motion.div>
+    </div>
   );
 }
 
 /**
- * Ta sama maska, ale słowo po słowie z opóźnieniem — Framer rozbija tekst
- * na osobne `<span>`-y per wyraz i animuje każdy z przesunięciem.
+ * Ta sama maska, ale słowo po słowie — Framer rozbija napis na osobne
+ * `<span>`-y per wyraz (w DOM oryginału widać „Real”, „-”, „time”,
+ * „intelligence” jako oddzielne elementy) i animuje każdy z opóźnieniem.
+ *
+ * Wszystko jest tu tekstowe (`span`), więc wolno tego użyć wewnątrz `h1`–`h4`.
  */
 export function MaskRevealWords({
   text,
@@ -64,25 +64,25 @@ export function MaskRevealWords({
   const words = text.split(' ');
   return (
     <span className={className}>
-      {words.map((w, i) => (
+      {words.map((word, i) => (
         <span
-          key={`${w}-${i}`}
-          className="inline-block overflow-clip pb-[0.12em] align-bottom"
+          key={`${word}-${i}`}
+          className="inline-block overflow-clip pb-[0.16em] -mb-[0.16em] align-bottom"
         >
           <motion.span
             className="inline-block"
             initial={{ y: '110%' }}
             whileInView={{ y: '0%' }}
-            viewport={{ once: true, amount: 0.4 }}
+            viewport={{ once: true, amount: 0.1 }}
             transition={{
               duration: 0.75,
               delay: delay + i * stagger,
-              ease: [0.16, 1, 0.3, 1],
+              ease: EASE,
             }}
           >
-            {w}
-            {i < words.length - 1 ? ' ' : ''}
+            {word}
           </motion.span>
+          {i < words.length - 1 ? ' ' : null}
         </span>
       ))}
     </span>

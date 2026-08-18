@@ -49,7 +49,7 @@ export function Closing() {
             transition={{ duration: 0.7, ease: [0.44, 0, 0.56, 1] }}
             className="flex flex-col items-center gap-8 rounded-[24px] bg-[var(--z-black)] px-6 py-16 text-center text-white"
           >
-            <div className="flex max-w-[620px] flex-col gap-4">
+            <div className="flex w-full max-w-[550px] flex-col gap-4">
               <h2 className="z-h2">
                 Bring financial clarity to your numbers today
               </h2>

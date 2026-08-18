@@ -36,21 +36,24 @@ export function FeaturesStrip() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.2 }}
         transition={{ duration: 0.7, ease: [0.44, 0, 0.56, 1] }}
-        className="grid grid-cols-1 gap-x-6 gap-y-10 rounded-[16px] bg-white p-6 sm:grid-cols-2 lg:grid-cols-[repeat(4,1fr)]"
+        className="grid grid-cols-1 gap-x-6 gap-y-10 rounded-[16px] bg-white p-6 sm:grid-cols-2 lg:flex lg:items-stretch lg:gap-6"
       >
         {ITEMS.map((it, i) => (
-          <div key={it.title} className="relative flex flex-col gap-6">
-            {/* pionowa kreska rozdzielająca — tylko między kolumnami */}
+          <div key={it.title} className="flex flex-1 flex-col gap-6 lg:contents">
+            {/* Kreska rozdzielająca jest w oryginale osobnym elementem 1×120,
+                a kolumny mają po 236 px: 4×236 + 3 kreski + 6 odstępów = 1091. */}
             {i > 0 ? (
               <span
                 aria-hidden
-                className="absolute -left-3 top-0 hidden h-full w-px bg-[var(--z-300)] lg:block"
+                className="hidden w-px shrink-0 self-stretch bg-[var(--z-300)] lg:block"
               />
             ) : null}
-            <Icon id={it.icon} />
-            <div className="flex flex-col gap-2">
-              <h3 className="z-lead">{it.title}</h3>
-              <p className="z-body text-[var(--z-muted)]">{it.body}</p>
+            <div className="flex flex-col gap-6 lg:w-[236px] lg:shrink-0">
+              <Icon id={it.icon} />
+              <div className="flex flex-col gap-2">
+                <h3 className="z-lead">{it.title}</h3>
+                <p className="z-body text-[var(--z-muted)]">{it.body}</p>
+              </div>
             </div>
           </div>
         ))}

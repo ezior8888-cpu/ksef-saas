@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 import { asset } from '../_assets';
+import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Container } from './ui';
 
 const QA = [
@@ -41,13 +42,17 @@ export function Faq() {
     <section className="py-20 lg:py-[100px]">
       <Container className="flex flex-col gap-12 lg:flex-row lg:gap-16">
         {/* lewa kolumna: nagłówek + film + odsyłacz do kontaktu */}
-        <div className="flex flex-col gap-8 lg:w-[420px] lg:shrink-0">
+        <div className="flex flex-col gap-8 lg:w-[376px] lg:shrink-0">
           <div className="flex flex-col gap-4">
-            <h2 className="z-h2">Help and support</h2>
-            <p className="z-lead text-[var(--z-muted)]">
-              Answers to common questions about setup, pricing, and how
-              everything works.
-            </p>
+            <h2 className="z-h2 w-full">
+              <MaskRevealWords text="Help and support" />
+            </h2>
+            <MaskReveal delay={0.18}>
+              <p className="z-lead text-[var(--z-muted)]">
+                Answers to common questions about setup, pricing, and how
+                everything works.
+              </p>
+            </MaskReveal>
           </div>
 
           <video

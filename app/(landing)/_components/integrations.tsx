@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { motion } from 'framer-motion';
 
 import { asset } from '../_assets';
+import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Container } from './ui';
 
 /** Oryginał: nagłówek 550 wyśrodkowany, POD nim pas 946 z filmem i logotypami. */
@@ -11,12 +12,16 @@ export function Integrations() {
   return (
     <section className="py-20 lg:py-[80px]">
       <Container className="flex flex-col items-center gap-16">
-        <div className="flex max-w-[550px] flex-col items-center gap-5 text-center">
-          <h2 className="z-h2">Connect your entire stack</h2>
-          <p className="z-lead text-[var(--z-muted)]">
-            Sync data directly from your favorite tools and keep every workflow
-            unified in one centralized place.
-          </p>
+        <div className="flex w-full max-w-[550px] flex-col items-center gap-5 text-center">
+          <h2 className="z-h2 w-full">
+            <MaskRevealWords text="Connect your entire stack" />
+          </h2>
+          <MaskReveal delay={0.18}>
+            <p className="z-lead text-[var(--z-muted)]">
+              Sync data directly from your favorite tools and keep every
+              workflow unified in one centralized place.
+            </p>
+          </MaskReveal>
         </div>
 
         <div className="flex w-full max-w-[946px] flex-col items-center gap-10">

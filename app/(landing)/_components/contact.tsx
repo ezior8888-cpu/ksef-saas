@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 
 import { asset } from '../_assets';
+import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Container, Icon } from './ui';
 
 const DETAILS = [
@@ -17,12 +18,16 @@ export function Contact() {
       <Container className="flex flex-col items-center gap-16">
         {/* Nagłówek: 550 wyśrodkowany. Pas poniżej: 946, w nim wąska
             kolumna 274 z danymi kontaktowymi i formularz na resztę. */}
-        <div className="flex max-w-[550px] flex-col items-center gap-5 text-center">
-          <h2 className="z-h2">Get in touch</h2>
-          <p className="z-lead text-[var(--z-muted)]">
-            Reach out to our team at any time for support or questions and
-            we’ll get back to you within 2 business days.
-          </p>
+        <div className="flex w-full max-w-[550px] flex-col items-center gap-5 text-center">
+          <h2 className="z-h2 w-full">
+            <MaskRevealWords text="Get in touch" />
+          </h2>
+          <MaskReveal delay={0.18}>
+            <p className="z-lead text-[var(--z-muted)]">
+              Reach out to our team at any time for support or questions and
+              we’ll get back to you within 2 business days.
+            </p>
+          </MaskReveal>
         </div>
 
         <div className="flex w-full max-w-[946px] flex-col gap-10 lg:flex-row lg:items-start">

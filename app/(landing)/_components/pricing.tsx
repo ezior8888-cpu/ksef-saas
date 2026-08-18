@@ -55,6 +55,8 @@ export function Pricing() {
     <section id="pricing" className="py-20 lg:py-[100px]">
       <Container className="flex flex-col gap-16">
         <SectionHeading
+          align="left"
+          nowrap
           title="Simple pricing for every team"
           lead="Choose a plan that supports your workflow and scales as you grow."
         />

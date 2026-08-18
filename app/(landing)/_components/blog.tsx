@@ -30,6 +30,7 @@ export function Blog() {
     <section id="blog" className="bg-[var(--z-50)] py-20 lg:py-[100px]">
       <Container className="flex flex-col gap-16">
         <SectionHeading
+          align="left"
           title="Insights and resources"
           lead="Practical guides and ideas to help modern teams improve their financial workflow."
         />

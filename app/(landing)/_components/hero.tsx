@@ -34,7 +34,7 @@ export function Hero() {
         <div className="mx-auto w-full max-w-[var(--z-container)] px-5 md:px-[var(--z-gutter)]">
           <div className="mx-auto flex w-full max-w-[var(--z-content)] flex-col gap-16 lg:flex-row lg:items-start lg:justify-between">
             {/* lewa kolumna — 570 px w oryginale */}
-            <div className="flex w-full flex-col gap-10 lg:max-w-[570px]">
+            <div className="flex w-full flex-col gap-10 lg:max-w-[550px]">
               <div className="flex flex-col gap-10">
                 <motion.div {...rise(0)}>
                   <span className="z-tiny inline-flex items-center gap-2 rounded-full border border-[var(--z-300)] bg-white/70 px-3 py-1.5 text-[var(--z-black)]">
