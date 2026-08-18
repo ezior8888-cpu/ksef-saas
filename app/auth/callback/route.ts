@@ -26,6 +26,34 @@ function safeNextPath(rawNext: string | null): string {
 }
 
 /**
+ * Adres bazowy dla WSZYSTKICH przekierowań z tego handlera.
+ *
+ * `new URL(request.url).origin` w trybie standalone za proxy zwraca adres
+ * nasłuchu kontenera (`https://0.0.0.0:3000`), a nie adres publiczny —
+ * przeglądarka nie ma jak go otworzyć i użytkownik widzi błąd DNS.
+ * Wcześniej dotyczyło to obu ścieżek błędu, więc nieudany reset hasła
+ * kończył się na nieistniejącej stronie zamiast na ekranie logowania.
+ *
+ * Kolejność źródeł jest celowa: `NEXT_PUBLIC_APP_URL` jest wartością
+ * konfiguracyjną, więc — inaczej niż nagłówek `x-forwarded-host` — nie da
+ * się jej podmienić spreparowanym żądaniem.
+ */
+function resolveBase(request: Request, origin: string): string {
+  if (process.env.NEXT_PUBLIC_APP_ENV === 'development') return origin;
+
+  const configured = process.env.NEXT_PUBLIC_APP_URL;
+  if (configured) return configured.replace(/\/$/, '');
+
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  if (forwardedHost) {
+    const proto = request.headers.get('x-forwarded-proto') ?? 'https';
+    return `${proto}://${forwardedHost}`;
+  }
+
+  return origin;
+}
+
+/**
  * Callback dla OAuth (Google) i email confirmation.
  * Supabase przekierowuje tu z parametrem `code`. Wymieniamy kod na sesję.
  */
@@ -33,25 +61,19 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
   const next = safeNextPath(searchParams.get('next'));
+  const base = resolveBase(request, origin);
 
   if (!code) {
     return NextResponse.redirect(
-      `${origin}/login?error=auth_callback_missing_code`,
+      `${base}/login?error=auth_callback_missing_code`,
     );
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
-    return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
+    return NextResponse.redirect(`${base}/login?error=auth_callback_failed`);
   }
-
-  // Produkcja/staging mogą stać za load balancerem — ufamy `x-forwarded-host`
-  // tylko w trybie nielokalnym; w dev używamy origin z URL-a żądania.
-  const forwardedHost = request.headers.get('x-forwarded-host');
-  const isLocalEnv = process.env.NEXT_PUBLIC_APP_ENV === 'development';
-  const base =
-    isLocalEnv || !forwardedHost ? origin : `https://${forwardedHost}`;
 
   return NextResponse.redirect(`${base}${next}`);
 }
