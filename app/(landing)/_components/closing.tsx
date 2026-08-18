@@ -12,17 +12,17 @@ const COLUMNS = [
     title: 'Produkt',
     links: [
       { label: 'Strona główna', href: '/' },
-      { label: 'Cennik', href: '#pricing' },
-      { label: 'Możliwości', href: '#why-us' },
-      { label: 'Pytania', href: '#faq' },
+      { label: 'Cennik', href: '/#pricing' },
+      { label: 'Możliwości', href: '/#why-us' },
+      { label: 'Pytania', href: '/#faq' },
     ],
   },
   {
     title: 'Firma',
     links: [
       { label: 'O nas', href: '/about' },
-      { label: 'Kontakt', href: '#contact' },
-      { label: 'Blog', href: '#blog' },
+      { label: 'Kontakt', href: '/#contact' },
+      { label: 'Blog', href: '/blog' },
     ],
   },
   {

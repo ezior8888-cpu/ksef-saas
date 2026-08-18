@@ -8,12 +8,14 @@ import { ArrowRight, Menu, X } from 'lucide-react';
 
 import { asset } from '../_assets';
 
+// Odsyłacze muszą być bezwzględne: kotwica `#pricing` działa tylko na
+// stronie głównej, a ten sam pasek wisi też na /about i /blog.
 const LINKS = [
   { label: 'Start', href: '/' },
   { label: 'O nas', href: '/about' },
-  { label: 'Cennik', href: '#pricing' },
-  { label: 'Blog', href: '#blog' },
-  { label: 'Kontakt', href: '#contact' },
+  { label: 'Cennik', href: '/#pricing' },
+  { label: 'Blog', href: '/blog' },
+  { label: 'Kontakt', href: '/#contact' },
 ];
 
 /**
@@ -31,7 +33,7 @@ export function SiteNav() {
       className="fixed inset-x-0 top-7 z-50 flex justify-center px-5"
     >
       <nav
-        className="flex w-full max-w-[720px] items-center justify-between rounded-[16px] bg-white p-[10px_12px]"
+        className="flex w-full max-w-[820px] items-center justify-between rounded-[16px] bg-white p-[10px_12px]"
         style={{ boxShadow: '0 5px 10px 0 rgba(0,0,0,0.08)' }}
       >
         <Link href="/" className="flex shrink-0 items-center pl-1">
@@ -57,7 +59,13 @@ export function SiteNav() {
           ))}
         </ul>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <Link
+            href="/login"
+            className="z-body hidden h-[43px] items-center rounded-[10px] px-4 font-medium text-[var(--z-black)] transition-colors hover:bg-[var(--z-50)] md:inline-flex"
+          >
+            Zaloguj
+          </Link>
           <Link
             href="/register"
             className="z-body group hidden h-[43px] items-center gap-1.5 rounded-[10px] bg-[var(--z-black)] px-4 font-medium text-white transition-transform hover:scale-[1.02] md:inline-flex"
@@ -95,6 +103,15 @@ export function SiteNav() {
                 </Link>
               </li>
             ))}
+            <li>
+              <Link
+                href="/login"
+                onClick={() => setOpen(false)}
+                className="z-body block rounded-lg px-3 py-2.5 font-medium text-[var(--z-black)] hover:bg-[var(--z-100)]"
+              >
+                Zaloguj
+              </Link>
+            </li>
             <li className="mt-1">
               <Link
                 href="/register"
