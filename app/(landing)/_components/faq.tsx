@@ -10,28 +10,28 @@ import { Container } from './ui';
 
 const QA = [
   {
-    q: 'How do I connect my financial data sources?',
-    a: 'You can link banks, tools, and spreadsheets directly from the setup page with secure one click integrations.',
+    q: 'Czy muszę mieć podpis elektroniczny?',
+    a: 'Nie. Wystarczy token z KSeF albo profil zaufany. Przeprowadzimy Cię przez to przy zakładaniu konta.',
   },
   {
-    q: 'Can I change or cancel my plan at any time?',
-    a: 'Yes, you can upgrade, downgrade, or cancel your plan whenever you like with no hidden extra fees.',
+    q: 'Co się dzieje, gdy KSeF nie odpowiada?',
+    a: 'Faktura czeka w kolejce, a my wysyłamy ją automatycznie, gdy system wróci. Dostajesz wtedy powiadomienie.',
   },
   {
-    q: 'How secure is my data?',
-    a: 'All data is encrypted in transit and at rest, and we follow industry standard security practices to keep your information protected.',
+    q: 'Czy moja księgowa dostanie dostęp?',
+    a: 'Tak. Zapraszasz ją na konto, a ona sama pobiera komplet dokumentów za wybrany okres.',
   },
   {
-    q: 'Does the platform support multiple team members?',
-    a: 'Yes, you can invite your team, assign specific roles, and manage permissions based on your current plan.',
+    q: 'Gdzie trzymacie moje dane?',
+    a: 'Na serwerach w Niemczech, szyfrowane. Faktury przechowujemy dziesięć lat, tak jak wymagają przepisy.',
   },
   {
-    q: 'What integrations are included?',
-    a: 'Most integrations are available on all plans, while advanced data connections are included in higher tiers.',
+    q: 'Czy mogę zrezygnować w każdej chwili?',
+    a: 'Tak. Nie ma umowy na czas określony ani opłaty za wyjście.',
   },
   {
-    q: 'Do you offer onboarding support?',
-    a: 'Yes, we provide guided setup and extensive resources to help you get your business fully up and running.',
+    q: 'Przeniesiecie moje dane z innego programu?',
+    a: 'Tak. Wgrywasz plik z Fakturowni albo inFaktu, resztę robimy my.',
   },
 ];
 
@@ -45,12 +45,11 @@ export function Faq() {
         <div className="flex flex-col gap-8 lg:w-[376px] lg:shrink-0">
           <div className="flex flex-col gap-4">
             <h2 className="z-h2 w-full">
-              <MaskRevealWords text="Help and support" />
+              <MaskRevealWords text="Pytania i odpowiedzi" />
             </h2>
             <MaskReveal delay={0.18}>
               <p className="z-lead text-[var(--z-muted)]">
-                Answers to common questions about setup, pricing, and how
-                everything works.
+                Krótko o tym, jak to działa, ile kosztuje i co z danymi.
               </p>
             </MaskReveal>
           </div>
@@ -63,16 +62,17 @@ export function Faq() {
             loop
             muted
             playsInline
+          style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
             className="size-[200px] object-contain"
           />
 
           <div className="flex flex-col gap-3">
-            <span className="z-lead font-medium">Still got questions?</span>
+            <span className="z-lead font-medium">Nie znalazłeś odpowiedzi?</span>
             <Link
               href="#contact"
               className="z-body inline-flex w-fit items-center rounded-[12px] bg-[var(--z-black)] px-5 py-3.5 font-medium text-white transition-transform hover:scale-[1.02]"
             >
-              Contact us
+              Napisz do nas
             </Link>
           </div>
         </div>

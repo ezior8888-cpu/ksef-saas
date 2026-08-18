@@ -7,45 +7,45 @@ import { Container, Icon, SectionHeading } from './ui';
 
 const PLANS = [
   {
-    name: 'Starter',
-    body: 'For individuals and early teams getting started with financial clarity.',
-    price: 'Free',
+    name: 'Start',
+    body: 'Dla jednoosobowej firmy, która dopiero zaczyna.',
+    price: '0 zł',
     suffix: '',
     featured: false,
     features: [
-      'Connect up to three data sources',
-      'Basic dashboard views',
-      'Standard forecasting',
-      'Automated weekly reports',
-      'Email support',
+      'Do 10 faktur miesięcznie',
+      'Wysyłka do KSeF i pobieranie UPO',
+      'Podstawowe zestawienia',
+      'Eksport do pliku',
+      'Pomoc mailowa',
     ],
   },
   {
-    name: 'Growth',
-    body: 'For growing teams that need deeper insights and more automation.',
-    price: '$49',
-    suffix: '/mo',
+    name: 'Firma',
+    body: 'Dla firm, które fakturują regularnie.',
+    price: '49 zł',
+    suffix: '/mies.',
     featured: true,
     features: [
-      'Unlimited data sources',
-      'Advanced dashboard customization',
-      'Real time forecasting',
-      'Automated daily reports',
-      'Priority support',
+      'Faktury bez limitu',
+      'Zdjęcie paragonu do KPiR',
+      'Przypomnienia o płatnościach',
+      'Paczka dla księgowej',
+      'Pomoc na czacie',
     ],
   },
   {
-    name: 'Pro',
-    body: 'For established teams looking for full visibility and powerful analysis.',
-    price: '$99',
-    suffix: '/mo',
+    name: 'Biuro',
+    body: 'Dla księgowych prowadzących wielu klientów.',
+    price: '99 zł',
+    suffix: '/mies.',
     featured: false,
     features: [
-      'Full integrations with all tools',
-      'Custom reporting and exports',
-      'Team collaboration and permissions',
-      'Anomaly detection alerts',
-      'Dedicated account support',
+      'Wielu klientów na jednym koncie',
+      'Import z Fakturowni i inFaktu',
+      'Uprawnienia dla zespołu',
+      'Powiadomienia o błędach wysyłki',
+      'Opiekun konta',
     ],
   },
 ];
@@ -57,8 +57,8 @@ export function Pricing() {
         <SectionHeading
           align="left"
           nowrap
-          title="Simple pricing for every team"
-          lead="Choose a plan that supports your workflow and scales as you grow."
+          title="Cennik bez gwiazdek"
+          lead="Płacisz za to, ile faktur wystawiasz. Bez umów na rok."
         />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -108,7 +108,7 @@ export function Pricing() {
                     : 'bg-[var(--z-black)] text-white'
                 }`}
               >
-                Get started
+                Zaczynam
               </Link>
 
               <ul className="flex flex-col gap-3">

@@ -24,20 +24,20 @@ import { Container, Icon } from './ui';
 const BLOCKS = [
   {
     icon: '450316432',
-    title: 'Real-time intelligence',
-    body: 'Get instant insights and forecasts powered by advanced AI so your team can make decisions with clarity.',
+    title: 'Wysyłka bez niespodzianek',
+    body: 'Faktura trafia do KSeF zaraz po wystawieniu, a Ty dostajesz potwierdzenie. Gdy urząd milczy, próbujemy ponownie.',
     image: asset.whyUs.shotA,
   },
   {
     icon: '1283949305',
-    title: 'Effortless workflow',
-    body: 'A simple and intuitive interface that removes friction and keeps your financial operations moving smoothly.',
+    title: 'Koszty bez przepisywania',
+    body: 'Zdjęcie paragonu albo faktura z maila zamienia się we wpis w książce przychodów i rozchodów.',
     image: asset.whyUs.shotB,
   },
   {
     icon: '1430394497',
-    title: 'Reliable accuracy',
-    body: 'Consistent, data-driven analysis that helps teams effectively reduce risk and stay ahead of the curve with confidence.',
+    title: 'Spokój przy kontroli',
+    body: 'Trzymamy komplet dokumentów przez dziesięć lat i pokazujemy, kto i kiedy co robił.',
     image: asset.whyUs.shotA,
   },
 ];
@@ -70,12 +70,12 @@ export function WhyUs() {
         <div className="flex flex-col gap-10 lg:w-[376px] lg:shrink-0 lg:sticky lg:top-28 lg:self-start">
           <div className="flex flex-col gap-4">
             <h2 className="z-h2">
-              <MaskRevealWords text="Why modern teams choose us" />
+              <MaskRevealWords text="Dlaczego mikrofirmy zostają z nami" />
             </h2>
             <MaskReveal delay={0.18}>
               <p className="z-lead text-[var(--z-muted)]">
-                A smarter AI engine and financial workflow built to help teams
-                move with clarity.
+                Prosty program do faktur, który sam pilnuje terminów
+                i przepisów.
               </p>
             </MaskReveal>
           </div>

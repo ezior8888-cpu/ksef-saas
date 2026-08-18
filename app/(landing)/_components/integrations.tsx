@@ -14,12 +14,12 @@ export function Integrations() {
       <Container className="flex flex-col items-center gap-16">
         <div className="flex w-full max-w-[550px] flex-col items-center gap-5 text-center">
           <h2 className="z-h2 w-full">
-            <MaskRevealWords text="Connect your entire stack" />
+            <MaskRevealWords text="Działa z tym, czego już używasz" />
           </h2>
           <MaskReveal delay={0.18}>
             <p className="z-lead text-[var(--z-muted)]">
-              Sync data directly from your favorite tools and keep every
-              workflow unified in one centralized place.
+              Pobierzemy dane z banku, poczty i sklepu, żebyś nie
+              przepisywał ich ręcznie.
             </p>
           </MaskReveal>
         </div>
@@ -33,6 +33,7 @@ export function Integrations() {
             loop
             muted
             playsInline
+          style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
             initial={{ opacity: 0, scale: 0.94 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true, amount: 0.3 }}

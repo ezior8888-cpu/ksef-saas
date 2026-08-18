@@ -7,9 +7,9 @@ import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Container, Icon } from './ui';
 
 const DETAILS = [
-  { icon: '986463349', value: '412-483-8261' },
-  { icon: '4022663340', value: 'support@zovasaas.com' },
-  { icon: '1743809183', value: '210 Market St. Suite 402\nSan Francisco, CA' },
+  { icon: '986463349', value: '+48 22 123 45 67' },
+  { icon: '4022663340', value: 'kontakt@faktflow.pl' },
+  { icon: '1743809183', value: 'ul. Piękna 15/3\n00-549 Warszawa' },
 ];
 
 export function Contact() {
@@ -20,12 +20,12 @@ export function Contact() {
             kolumna 274 z danymi kontaktowymi i formularz na resztę. */}
         <div className="flex w-full max-w-[550px] flex-col items-center gap-5 text-center">
           <h2 className="z-h2 w-full">
-            <MaskRevealWords text="Get in touch" />
+            <MaskRevealWords text="Napisz do nas" />
           </h2>
           <MaskReveal delay={0.18}>
             <p className="z-lead text-[var(--z-muted)]">
-              Reach out to our team at any time for support or questions and
-              we’ll get back to you within 2 business days.
+              Odpowiadamy w ciągu jednego dnia roboczego. Bez botów
+              i bez infolinii.
             </p>
           </MaskReveal>
         </div>
@@ -52,6 +52,7 @@ export function Contact() {
               loop
               muted
               playsInline
+          style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
               className="size-[274px] object-contain"
             />
           </div>
@@ -65,28 +66,28 @@ export function Contact() {
             className="flex w-full flex-col gap-5 rounded-[20px] border border-[var(--z-300)] bg-white p-6 lg:p-8"
             onSubmit={(e) => e.preventDefault()}
           >
-            <h3 className="z-h4">How can we help you today?</h3>
+            <h3 className="z-h4">W czym możemy pomóc?</h3>
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-              <Field label="Name">
+              <Field label="Imię">
                 <input type="text" name="name" className={INPUT} />
               </Field>
-              <Field label="Email">
+              <Field label="E-mail">
                 <input type="email" name="email" className={INPUT} />
               </Field>
             </div>
 
-            <Field label="Topic">
+            <Field label="Temat">
               <select name="topic" className={INPUT} defaultValue="">
                 <option value="" disabled>
-                  Select…
+                  Wybierz…
                 </option>
-                <option>Product</option>
-                <option>Support</option>
+                <option>Pytanie o produkt</option>
+                <option>Pomoc techniczna</option>
               </select>
             </Field>
 
-            <Field label="Message">
+            <Field label="Wiadomość">
               <textarea name="message" rows={5} className={INPUT} />
             </Field>
 
@@ -94,7 +95,7 @@ export function Contact() {
               type="submit"
               className="z-body inline-flex w-fit items-center rounded-[12px] bg-[var(--z-black)] px-6 py-3.5 font-medium text-white transition-transform hover:scale-[1.02]"
             >
-              Submit
+              Wyślij
             </button>
           </motion.form>
         </div>

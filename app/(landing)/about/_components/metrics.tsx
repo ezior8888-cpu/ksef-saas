@@ -11,10 +11,10 @@ import { Counter } from './counter';
  * ze źródła — format (M+, %, K+, jedno miejsce po przecinku) jest wierny.
  */
 const METRICS = [
-  { to: 240, suffix: 'M+', decimals: 0, label: 'Tracked Annually', body: 'Supporting financial activity with accuracy.' },
-  { to: 70, suffix: '%', decimals: 0, label: 'Less Manual Work', body: 'Automating repetitive tasks for workflows.' },
-  { to: 15, suffix: 'K+', decimals: 0, label: 'Monthly Audits', body: 'Ensuring accurate books at scale for teams.' },
-  { to: 99.9, suffix: '%', decimals: 1, label: 'Uptime', body: 'Reliable performance for your operations.' },
+  { to: 1.2, suffix: ' mln', decimals: 1, label: 'Faktur w KSeF', body: 'Tyle dokumentów przeszło przez FaktFlow.' },
+  { to: 92, suffix: '%', decimals: 0, label: 'Mniej klikania', body: 'Tyle czasu oszczędzają nasi użytkownicy.' },
+  { to: 8, suffix: ' tys.', decimals: 0, label: 'Firm miesięcznie', body: 'Mikrofirmy i biura rachunkowe.' },
+  { to: 99.9, suffix: '%', decimals: 1, label: 'Dostępność', body: 'Bo faktura nie może poczekać do jutra.' },
 ];
 
 export function Metrics() {

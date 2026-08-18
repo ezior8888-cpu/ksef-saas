@@ -9,11 +9,11 @@ import { ArrowRight, Menu, X } from 'lucide-react';
 import { asset } from '../_assets';
 
 const LINKS = [
-  { label: 'Home', href: '/' },
-  { label: 'About', href: '#why-us' },
-  { label: 'Pricing', href: '#pricing' },
+  { label: 'Strona główna', href: '/' },
+  { label: 'O nas', href: '/about' },
+  { label: 'Cennik', href: '#pricing' },
   { label: 'Blog', href: '#blog' },
-  { label: 'Contact', href: '#contact' },
+  { label: 'Kontakt', href: '#contact' },
 ];
 
 /**
@@ -62,7 +62,7 @@ export function SiteNav() {
             href="/register"
             className="z-body group hidden h-[43px] items-center gap-1.5 rounded-[10px] bg-[var(--z-black)] px-4 font-medium text-white transition-transform hover:scale-[1.02] md:inline-flex"
           >
-            Get free trial
+            Wypróbuj za darmo
             <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
 
@@ -101,7 +101,7 @@ export function SiteNav() {
                 onClick={() => setOpen(false)}
                 className="z-body flex items-center justify-center gap-1.5 rounded-[10px] bg-[var(--z-black)] px-4 py-3 font-medium text-white"
               >
-                Get free trial
+                Wypróbuj za darmo
                 <ArrowRight className="size-4" />
               </Link>
             </li>

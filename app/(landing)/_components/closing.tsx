@@ -9,27 +9,27 @@ import { Container, Icon } from './ui';
 
 const COLUMNS = [
   {
-    title: 'Product',
+    title: 'Produkt',
     links: [
-      { label: 'Home', href: '/' },
-      { label: 'Pricing', href: '#pricing' },
-      { label: 'Features', href: '#why-us' },
-      { label: 'FAQ', href: '#faq' },
+      { label: 'Strona główna', href: '/' },
+      { label: 'Cennik', href: '#pricing' },
+      { label: 'Możliwości', href: '#why-us' },
+      { label: 'Pytania', href: '#faq' },
     ],
   },
   {
-    title: 'Company',
+    title: 'Firma',
     links: [
-      { label: 'About', href: '#why-us' },
-      { label: 'Contact', href: '#contact' },
+      { label: 'O nas', href: '/about' },
+      { label: 'Kontakt', href: '#contact' },
       { label: 'Blog', href: '#blog' },
     ],
   },
   {
-    title: 'More',
+    title: 'Więcej',
     links: [
-      { label: 'Privacy Policy', href: '/legal/polityka-prywatnosci' },
-      { label: 'Terms', href: '/legal/regulamin' },
+      { label: 'Polityka prywatności', href: '/legal/polityka-prywatnosci' },
+      { label: 'Regulamin', href: '/legal/regulamin' },
     ],
   },
 ];
@@ -51,11 +51,11 @@ export function Closing() {
           >
             <div className="flex w-full max-w-[550px] flex-col gap-4">
               <h2 className="z-h2">
-                Bring financial clarity to your numbers today
+                Wystaw pierwszą fakturę jeszcze dziś
               </h2>
               <p className="z-lead text-white/70">
-                Start your free trial today and discover how easy it is to bring
-                absolute clarity to your financial workflow.
+                Trzydzieści dni za darmo, bez podawania karty. Jeśli nie
+                podejdzie, po prostu odchodzisz.
               </p>
             </div>
             <div className="flex flex-wrap justify-center gap-3">
@@ -63,13 +63,13 @@ export function Closing() {
                 href="/register"
                 className="z-body inline-flex items-center rounded-[12px] bg-white px-5 py-3.5 font-medium text-[var(--z-black)] transition-transform hover:scale-[1.02]"
               >
-                Get free trial
+                Zacznij za darmo
               </Link>
               <Link
                 href="#pricing"
                 className="z-body inline-flex items-center rounded-[12px] border border-white/25 px-5 py-3.5 font-medium text-white transition-colors hover:bg-white/10"
               >
-                See our plans
+                Zobacz cennik
               </Link>
             </div>
           </motion.div>
@@ -81,7 +81,7 @@ export function Closing() {
           <div className="flex flex-col gap-10 md:flex-row md:justify-between">
             <div className="flex flex-col gap-5">
               <Image src={asset.logo} alt="FaktFlow" width={32} height={32} />
-              <span className="z-lead font-medium">Stay connected</span>
+              <span className="z-lead font-medium">Bądźmy w kontakcie</span>
               <div className="flex gap-3">
                 {SOCIAL.map((id) => (
                   <span
@@ -113,7 +113,7 @@ export function Closing() {
           </div>
 
           <p className="z-small text-[var(--z-muted)]">
-            Designed by Lunis. All rights reserved.
+            FaktFlow. Wszystkie prawa zastrzeżone.
           </p>
         </Container>
       </footer>

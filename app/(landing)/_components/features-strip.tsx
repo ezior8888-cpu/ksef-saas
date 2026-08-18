@@ -8,23 +8,23 @@ import { Container, Icon } from './ui';
 const ITEMS = [
   {
     icon: '1529132500',
-    title: 'AI driven forecasting',
-    body: 'See AI-powered revenue and risk predictions in seconds.',
+    title: 'Wysyłka do KSeF',
+    body: 'Faktura idzie do systemu i wraca z UPO. Bez ręcznego klikania.',
   },
   {
     icon: '3656879250',
-    title: 'Unified dashboard',
-    body: 'Track key metrics in one clean, customizable view.',
+    title: 'Wszystko w jednym miejscu',
+    body: 'Sprzedaż, koszty i płatności na jednym ekranie.',
   },
   {
     icon: '1675043417',
-    title: 'Automated reporting',
-    body: 'Create clear reports instantly with no manual effort.',
+    title: 'Paragon do KPiR',
+    body: 'Robisz zdjęcie, my odczytujemy dane i księgujemy.',
   },
   {
     icon: '257698632',
-    title: 'Risk detection',
-    body: 'Spot unusual patterns and potential risks right away.',
+    title: 'Sprawdzenie przed wysyłką',
+    body: 'Kontrolujemy plik zanim trafi do urzędu.',
   },
 ];
 

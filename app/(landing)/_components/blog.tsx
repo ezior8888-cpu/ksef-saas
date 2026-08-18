@@ -9,18 +9,18 @@ import { Container, SectionHeading } from './ui';
 
 const POSTS = [
   {
-    title: 'The new era of intelligent financial automation (2026)',
-    body: 'How modern teams streamline operations with automated financial workflows.',
+    title: 'KSeF 2026: co się zmienia dla mikrofirm',
+    body: 'Terminy, obowiązki i to, czego naprawdę musisz dopilnować.',
     image: asset.blog[0],
   },
   {
-    title: 'How startups can stay organized during rapid growth',
-    body: 'A practical guide to keeping your financial operations steady while scaling.',
+    title: 'Zdjęcie paragonu zamiast wpisywania kosztów',
+    body: 'Jak zamienić stos paragonów w gotowe wpisy do KPiR.',
     image: asset.blog[1],
   },
   {
-    title: 'A powerful financial dashboard that your team will actually use',
-    body: 'What makes a financial dashboard effective and easy for teams to adopt.',
+    title: 'Faktura korygująca w KSeF krok po kroku',
+    body: 'Kiedy ją wystawić i jak nie pomylić się w numeracji.',
     image: asset.blog[2],
   },
 ];
@@ -31,8 +31,8 @@ export function Blog() {
       <Container className="flex flex-col gap-16">
         <SectionHeading
           align="left"
-          title="Insights and resources"
-          lead="Practical guides and ideas to help modern teams improve their financial workflow."
+          title="Poradniki i aktualności"
+          lead="Piszemy o KSeF, podatkach i prowadzeniu małej firmy."
         />
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -67,7 +67,7 @@ export function Blog() {
                 href="/blog"
                 className="z-body mt-auto w-fit font-medium underline underline-offset-4"
               >
-                Read more
+                Czytaj dalej
               </Link>
             </motion.article>
           ))}

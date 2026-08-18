@@ -39,16 +39,16 @@ export function Hero() {
                 <motion.div {...rise(0)}>
                   <span className="z-tiny inline-flex items-center gap-2 rounded-full border border-[var(--z-300)] bg-white/70 px-3 py-1.5 text-[var(--z-black)]">
                     <span className="size-1.5 rounded-full bg-[var(--z-blue)]" />
-                    Now available for early access
+                    Wczesny dostęp, KSeF 2.0
                   </span>
                 </motion.div>
 
                 {/* Nagłówek wychodzi zza krawędzi maski, słowo po słowie —
                     tak robi to oryginał (kontener `overflow: clip`). */}
                 <h1 className="z-h1">
-                  <MaskRevealWords text="Real-time insight for" delay={0.05} />{' '}
+                  <MaskRevealWords text="Faktury do KSeF" delay={0.05} />{' '}
                   <span className="z-mark">
-                    <MaskRevealWords text="modern finance" delay={0.22} />
+                    <MaskRevealWords text="bez klikania w kółko" delay={0.22} />
                   </span>
                 </h1>
               </div>
@@ -58,14 +58,14 @@ export function Hero() {
                   href="/register"
                   className="z-body group inline-flex items-center gap-2 rounded-[12px] bg-[var(--z-black)] px-5 py-3.5 font-medium text-white transition-transform hover:scale-[1.02]"
                 >
-                  Get free trial
+                  Zacznij za darmo
                   <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
                 </Link>
                 <Link
                   href="#contact"
                   className="z-body inline-flex items-center rounded-[12px] border border-[var(--z-300)] bg-white px-5 py-3.5 font-medium text-[var(--z-black)] transition-colors hover:bg-[var(--z-50)]"
                 >
-                  Contact sales
+                  Porozmawiajmy
                 </Link>
               </motion.div>
 
@@ -102,14 +102,15 @@ export function Hero() {
                 loop
                 muted
                 playsInline
+          style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
                 className="h-auto w-full"
               />
 
               <div className="flex flex-col gap-3">
                 <MaskReveal delay={0.3}>
                   <p className="z-body text-[var(--z-muted)]">
-                    Powerful AI platform simplifying reporting and delivering
-                    forecasts for faster decisions.
+                    Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy
+                    potwierdzenia. Zdjęcie paragonu trafia prosto do KPiR.
                   </p>
                 </MaskReveal>
                 <div className="flex items-center gap-2">
@@ -124,7 +125,7 @@ export function Hero() {
                     ))}
                   </div>
                   <span className="z-small text-[var(--z-muted)]">
-                    4.8 rated by 8K+ users
+                    Ocena 4,8 od księgowych i mikrofirm
                   </span>
                 </div>
               </div>
@@ -144,7 +145,7 @@ export function Hero() {
           <div className="relative mx-auto aspect-[969/579] w-full max-w-[969px] overflow-hidden rounded-[16px] bg-white shadow-[0_24px_60px_-20px_rgba(16,32,64,0.28)]">
             <Image
               src={asset.hero.dashboard}
-              alt="Pulpit aplikacji"
+              alt="Pulpit FaktFlow"
               fill
               sizes="(max-width: 1024px) 100vw, 969px"
               priority

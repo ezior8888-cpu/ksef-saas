@@ -11,35 +11,35 @@ import { Metrics } from './_components/metrics';
 import { Reveal } from './_components/reveal';
 
 export const metadata: Metadata = {
-  title: 'O nas — FaktFlow',
+  title: 'O nas | FaktFlow',
   description:
     'Zespół, wartości i liczby stojące za FaktFlow — aplikacją do faktur KSeF dla mikrofirm.',
 };
 
 const VALUES = [
   {
-    title: 'Transparency',
-    body: 'We communicate clearly, operate openly, and ensure users always understand how their financial data is handled.',
+    title: 'Jasne zasady',
+    body: 'Mówimy wprost, ile co kosztuje i co dzieje się z danymi. Bez gwiazdek i drobnego druku.',
   },
   {
-    title: 'Reliability',
-    body: 'We design every feature with precision and care, delivering consistent performance that users can trust every day.',
+    title: 'Niezawodność',
+    body: 'Faktura musi wyjść wtedy, kiedy jej potrzebujesz. Dlatego pilnujemy wysyłki nawet, gdy KSeF ma gorszy dzień.',
   },
   {
-    title: 'Simplicity',
-    body: 'We turn complex financial tasks into intuitive workflows so teams can focus on growth rather than manual processes.',
+    title: 'Prostota',
+    body: 'Zamieniamy urzędowe formularze w kilka pól do wypełnienia. Resztę robimy w tle.',
   },
   {
-    title: 'Customer Focus',
-    body: 'We listen closely, iterate quickly, and prioritize solutions that genuinely improve our customers’ financial operations.',
+    title: 'Blisko użytkownika',
+    body: 'Czytamy każdą wiadomość i poprawiamy to, co realnie przeszkadza w pracy.',
   },
 ];
 
 const TEAM = [
-  { name: 'Evan Mercer', role: 'Chief Executive Officer' },
-  { name: 'Amy Park', role: 'Head of Product' },
-  { name: 'Daniel Cho', role: 'Customer Success Manager' },
-  { name: 'Sofia Ramirez', role: 'Lead Financial Analyst' },
+  { name: 'Bartosz Gierszewski', role: 'Założyciel' },
+  { name: 'Anna Wiśniewska', role: 'Produkt' },
+  { name: 'Paweł Nowak', role: 'Wsparcie klienta' },
+  { name: 'Katarzyna Lis', role: 'Księgowość' },
 ];
 
 export default function AboutPage() {
@@ -62,7 +62,7 @@ export default function AboutPage() {
         <Container className="relative flex flex-col items-center gap-10 text-center">
           <Reveal>
             <h1 className="z-h1 max-w-[820px]">
-              Zova unites teams around smarter financial decisions
+              Robimy program do faktur, którego sami chcieliśmy używać
             </h1>
           </Reveal>
           <Reveal delay={0.1}>
@@ -107,26 +107,25 @@ export default function AboutPage() {
         <Container className="flex flex-col gap-16">
           <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-16">
             <div className="lg:w-[376px] lg:shrink-0">
-              <h2 className="z-h2">Our values</h2>
+              <h2 className="z-h2">W co wierzymy</h2>
             </div>
             <div className="flex flex-col gap-8 lg:max-w-[661px]">
               <p className="z-h4">
-                At Zova, we believe teams make their best decisions when money
-                is no longer a mystery. Our goal is simple: give every business
-                the absolute clarity and insight they deserve.
+                Faktury to obowiązek, nie zajęcie. Chcemy, żeby zajmowały
+                kilka minut dziennie, a nie cały wieczór na koniec miesiąca.
               </p>
               <div className="flex items-center gap-4">
                 <Image
                   src={asset.about.founder}
-                  alt="Evan Mercer"
+                  alt="Bartosz Gierszewski"
                   width={56}
                   height={56}
                   className="size-14 rounded-full object-cover"
                 />
                 <div className="flex flex-col">
-                  <span className="z-lead font-medium">Evan Mercer</span>
+                  <span className="z-lead font-medium">Bartosz Gierszewski</span>
                   <span className="z-body text-[var(--z-muted)]">
-                    CEO, Zova Tech
+                    Założyciel FaktFlow
                   </span>
                 </div>
               </div>
@@ -150,8 +149,8 @@ export default function AboutPage() {
       <section className="py-20 lg:py-[80px]">
         <Container className="flex flex-col gap-16">
           <SectionHeading
-            title="Our leadership and experts"
-            lead="A dedicated team of analysts, engineers, and expert advisors helping you build a stronger financial foundation."
+            title="Ludzie za FaktFlow"
+            lead="Mały zespół, który zna KSeF od podszewki i sam prowadzi firmę."
             max={620}
           />
           <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
@@ -196,10 +195,10 @@ export default function AboutPage() {
                 className="h-auto w-[250px] max-w-full"
               />
               <div className="flex max-w-[620px] flex-col gap-4">
-                <h2 className="z-h2">Grow your career at Zova</h2>
+                <h2 className="z-h2">Dołącz do nas</h2>
                 <p className="z-lead text-[var(--z-muted)]">
-                  Work with a trusted team that simplifies complex financial
-                  workflows and brings clarity to every business we support.
+                  Szukamy ludzi, którzy lubią upraszczać skomplikowane rzeczy.
+                  Napisz, nawet jeśli nie widzisz pasującego ogłoszenia.
                 </p>
               </div>
               <Link
@@ -208,7 +207,7 @@ export default function AboutPage() {
                 rel="noopener noreferrer"
                 className="z-body inline-flex items-center rounded-[12px] bg-[var(--z-black)] px-5 py-3.5 font-medium text-white transition-transform hover:scale-[1.02]"
               >
-                See openings on LinkedIn
+                Zobacz oferty na LinkedIn
               </Link>
             </div>
           </Reveal>

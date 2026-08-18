@@ -20,7 +20,7 @@ export function Testimonial() {
           <div className="w-full max-w-[369px] shrink-0 overflow-hidden rounded-[20px]">
             <Image
               src={asset.testimonial.portrait}
-              alt="John Smith"
+              alt="Marcin Zawadzki"
               width={369}
               height={439}
               className="h-auto w-full"
@@ -29,13 +29,13 @@ export function Testimonial() {
 
           <div className="flex flex-col gap-8 pb-4">
             <p className="z-h4">
-              “This platform gives us instant clarity. Our forecasts are more
-              accurate and team makes decisions faster than ever.”
+              “Wysyłam faktury z telefonu w drodze do klienta. Wcześniej
+              siedziałem nad tym wieczorami w Excelu.”
             </p>
             <div className="flex flex-col gap-1">
-              <span className="z-lead font-medium">John Smith</span>
+              <span className="z-lead font-medium">Marcin Zawadzki</span>
               <span className="z-lead font-medium text-[var(--z-muted)]">
-                Operations Lead
+                Usługi remontowe, Poznań
               </span>
             </div>
             <Image

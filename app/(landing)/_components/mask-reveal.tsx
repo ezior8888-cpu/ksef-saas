@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { motion, useInView } from 'framer-motion';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -32,13 +32,21 @@ export function MaskReveal({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, amount: 0.1 });
+  const [done, setDone] = useState(false);
 
+  // Po animacji przycinanie jest już niepotrzebne, a przy przewijaniu jego
+  // krawędź łapie zaokrąglenie do pełnych pikseli i miga cienką kreską.
   return (
-    <div ref={ref} className={`overflow-clip pb-[3px] -mb-[3px] ${className}`}>
+    <div
+      ref={ref}
+      className={`pb-[3px] -mb-[3px] ${done ? '' : 'overflow-clip'} ${className}`}
+    >
       <motion.div
         initial={{ y: '110%' }}
         animate={inView ? { y: '0%' } : { y: '110%' }}
         transition={{ duration, delay, ease: EASE }}
+        onAnimationComplete={() => inView && setDone(true)}
+        style={{ willChange: done ? 'auto' : 'transform' }}
       >
         {children}
       </motion.div>
@@ -66,6 +74,7 @@ export function MaskRevealWords({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, amount: 0.1 });
+  const [done, setDone] = useState(false);
   const words = text.split(' ');
 
   return (
@@ -73,7 +82,9 @@ export function MaskRevealWords({
       {words.map((word, i) => (
         <span
           key={`${word}-${i}`}
-          className="inline-block overflow-clip pb-[0.16em] -mb-[0.16em] align-bottom"
+          className={`inline-block pb-[0.16em] -mb-[0.16em] align-bottom ${
+            done ? '' : 'overflow-clip'
+          }`}
         >
           <motion.span
             className="inline-block"
@@ -84,6 +95,10 @@ export function MaskRevealWords({
               delay: delay + i * stagger,
               ease: EASE,
             }}
+            onAnimationComplete={() => {
+              if (inView && i === words.length - 1) setDone(true);
+            }}
+            style={{ willChange: done ? 'auto' : 'transform' }}
           >
             {word}
             {i < words.length - 1 ? ' ' : null}

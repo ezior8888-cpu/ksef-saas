@@ -9,20 +9,20 @@ import { Container, SectionHeading } from './ui';
 const STEPS = [
   {
     n: '01',
-    title: 'Connect your data',
-    body: 'Import financial sources with quick and secure integrations.',
+    title: 'Podłącz firmę',
+    body: 'Wpisujesz NIP, resztę danych pobieramy z rejestru.',
     image: asset.process.stepA,
   },
   {
     n: '02',
-    title: 'Let AI analyze',
-    body: 'Your data is processed instantly to reveal trends and patterns.',
+    title: 'Wystaw fakturę',
+    body: 'Uzupełniasz pozycje, my pilnujemy poprawności pliku.',
     image: asset.process.stepC,
   },
   {
     n: '03',
-    title: 'View clear insights',
-    body: 'See forecasts, reports, and metrics in one intuitive workspace.',
+    title: 'Wyślij do KSeF',
+    body: 'Jedno kliknięcie i masz numer oraz potwierdzenie.',
     image: asset.process.stepB,
   },
 ];
@@ -32,8 +32,8 @@ export function Process() {
     <section className="bg-[var(--z-50)] py-20 lg:py-[100px]">
       <Container className="flex flex-col gap-16">
         <SectionHeading
-          title="Get started in 3 steps"
-          lead="A simple flow that brings clarity to your financial data in minutes."
+          title="Zaczynasz w trzy kroki"
+          lead="Pierwszą fakturę wystawisz w kilka minut."
         />
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
