@@ -128,7 +128,7 @@ export default async function RegisterPage({
             Min. 12 znaków, mała + duża litera, cyfra, znak specjalny. Sprawdzamy w bazie wycieków.
           </p>
         </div>
-        <TurnstileWidget action="register" theme="dark" />
+        <TurnstileWidget action="register" theme="light" />
         <Button type="submit" size="lg" className={authPrimaryButtonClass}>
           Utwórz konto
         </Button>

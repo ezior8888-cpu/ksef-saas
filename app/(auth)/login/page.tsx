@@ -121,7 +121,7 @@ export default async function LoginPage({
             className={authInputClass}
           />
         </div>
-        <TurnstileWidget action="login" theme="dark" />
+        <TurnstileWidget action="login" theme="light" />
         <Button type="submit" size="lg" className={authPrimaryButtonClass}>
           Zaloguj się
         </Button>

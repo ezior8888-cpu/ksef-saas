@@ -10,7 +10,6 @@ type AuthPageShellProps = {
   children: React.ReactNode;
 };
 
-const DASHBOARD = '/landing/img/yy9Th00CLJit9boMtM5QSv5E.png';
 const LOGO = '/landing/img/oKmGzYlWFu13ruJRasum68wrh5Y.png';
 
 /**
@@ -74,7 +73,7 @@ export function AuthPageShell({ children }: AuthPageShellProps) {
 
         {/* ── panel 3D ───────────────────────────────────────────────── */}
         <div className="hidden lg:flex lg:flex-col lg:items-center lg:gap-10">
-          <AuthTiltPanel src={DASHBOARD} />
+          <AuthTiltPanel />
           <p className="z-lead max-w-[420px] text-center text-[var(--z-muted)]">
             Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy
             potwierdzenia. Zdjęcie paragonu trafia prosto do KPiR.
