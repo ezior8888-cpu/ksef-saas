@@ -15,6 +15,13 @@
 FROM node:22-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+# curl jest wymagany przez healthcheck Coolify: dla obrazów budowanych
+# z Dockerfile'a Coolify odpytuje kontener właśnie `curl`em (lub `wget`em),
+# a `node:22-slim` nie ma żadnego z nich — bez tego deploy kończy się
+# statusem "unhealthy" i wycofaniem, mimo że proces działa poprawnie.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/*
 # corepack czyta `packageManager` z package.json → dokładnie ta sama
 # wersja pnpm co lokalnie i w CI.
 RUN corepack enable
@@ -96,6 +103,11 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     NEXT_TELEMETRY_DISABLED=1
+
+# Jak w etapie `base` — healthcheck Coolify potrzebuje curla.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/*
 
 # Proces bez roota — standard bezpieczeństwa kontenerów.
 RUN groupadd --system --gid 1001 nodejs \
