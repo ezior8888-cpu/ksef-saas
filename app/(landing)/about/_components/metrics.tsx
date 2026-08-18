@@ -2,7 +2,6 @@
 
 import { motion } from 'framer-motion';
 
-import { Container } from '../../_components/ui';
 import { Counter } from './counter';
 
 /**
@@ -18,9 +17,10 @@ const METRICS = [
 ];
 
 export function Metrics() {
+  // Oryginał trzyma liczby w BIAŁEJ karcie 1140×204: promień 16, padding 24,
+  // przerwy 40 w pionie i 24 w poziomie. Wcześniej wisiały luzem na tle.
   return (
-    <Container>
-      <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-x-6 gap-y-10 rounded-[16px] bg-white p-6 shadow-[0_16px_40px_-28px_rgba(16,32,64,0.3)] sm:grid-cols-2 lg:grid-cols-4">
         {METRICS.map((m, i) => (
           <motion.div
             key={m.label}
@@ -35,7 +35,6 @@ export function Metrics() {
             <p className="z-body text-[var(--z-muted)]">{m.body}</p>
           </motion.div>
         ))}
-      </div>
-    </Container>
+    </div>
   );
 }

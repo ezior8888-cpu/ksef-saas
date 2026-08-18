@@ -75,48 +75,53 @@ export function Closing() {
           </motion.div>
         </Container>
       </section>
+    </>
+  );
+}
 
+/** Stopka wspólna dla strony głównej i O nas. */
+export function SiteFooter() {
+  return (
       <footer className="border-t border-[var(--z-300)] py-16">
-        <Container className="flex flex-col gap-12">
-          <div className="flex flex-col gap-10 md:flex-row md:justify-between">
-            <div className="flex flex-col gap-5">
-              <Image src={asset.logo} alt="FaktFlow" width={32} height={32} />
-              <span className="z-lead font-medium">Bądźmy w kontakcie</span>
-              <div className="flex gap-3">
-                {SOCIAL.map((id) => (
-                  <span
-                    key={id}
-                    className="flex size-10 items-center justify-center rounded-full border border-[var(--z-300)]"
-                  >
-                    <Icon id={id} size={18} />
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-10 sm:grid-cols-3">
-              {COLUMNS.map((c) => (
-                <div key={c.title} className="flex flex-col gap-3">
-                  <span className="z-body font-medium">{c.title}</span>
-                  {c.links.map((l) => (
-                    <Link
-                      key={l.label}
-                      href={l.href}
-                      className="z-body text-[var(--z-muted)] transition-colors hover:text-[var(--z-black)]"
-                    >
-                      {l.label}
-                    </Link>
-                  ))}
-                </div>
+      <Container className="flex flex-col gap-12">
+        <div className="flex flex-col gap-10 md:flex-row md:justify-between">
+          <div className="flex flex-col gap-5">
+            <Image src={asset.logo} alt="FaktFlow" width={32} height={32} />
+            <span className="z-lead font-medium">Bądźmy w kontakcie</span>
+            <div className="flex gap-3">
+              {SOCIAL.map((id) => (
+                <span
+                  key={id}
+                  className="flex size-10 items-center justify-center rounded-full border border-[var(--z-300)]"
+                >
+                  <Icon id={id} size={18} />
+                </span>
               ))}
             </div>
           </div>
 
-          <p className="z-small text-[var(--z-muted)]">
-            FaktFlow. Wszystkie prawa zastrzeżone.
-          </p>
-        </Container>
-      </footer>
-    </>
+          <div className="grid grid-cols-2 gap-10 sm:grid-cols-3">
+            {COLUMNS.map((c) => (
+              <div key={c.title} className="flex flex-col gap-3">
+                <span className="z-body font-medium">{c.title}</span>
+                {c.links.map((l) => (
+                  <Link
+                    key={l.label}
+                    href={l.href}
+                    className="z-body text-[var(--z-muted)] transition-colors hover:text-[var(--z-black)]"
+                  >
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <p className="z-small text-[var(--z-muted)]">
+          FaktFlow. Wszystkie prawa zastrzeżone.
+        </p>
+      </Container>
+    </footer>
   );
 }

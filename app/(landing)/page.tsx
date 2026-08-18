@@ -1,5 +1,5 @@
 import { Blog } from './_components/blog';
-import { Closing } from './_components/closing';
+import { Closing, SiteFooter } from './_components/closing';
 import { Contact } from './_components/contact';
 import { Faq } from './_components/faq';
 import { FeaturesStrip } from './_components/features-strip';
@@ -32,6 +32,7 @@ export default function LandingPage() {
       <Blog />
       <Contact />
       <Closing />
+      <SiteFooter />
     </>
   );
 }
