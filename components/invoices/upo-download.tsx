@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import { getUpoPdfAction, getUpoXmlAction } from '@/app/(dashboard)/invoices/[id]/upo-actions';
 import { Button } from '@/components/ui/button';
+import { saveBlob } from '@/lib/download';
 
 interface UpoDownloadProps {
   invoiceId: string;
@@ -41,12 +42,7 @@ export function UpoDownload({
         bytes[i] = binary.charCodeAt(i);
       }
       const blob = new Blob([bytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = result.filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      saveBlob(blob, result.filename);
 
       toast.success('UPO pobrane');
     });
@@ -61,12 +57,7 @@ export function UpoDownload({
       }
 
       const blob = new Blob([result.xml], { type: 'application/xml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `UPO-${safeXmlBasename(ksefNumber)}.xml`;
-      a.click();
-      URL.revokeObjectURL(url);
+      saveBlob(blob, `UPO-${safeXmlBasename(ksefNumber)}.xml`);
 
       toast.success('UPO XML pobrane');
     });

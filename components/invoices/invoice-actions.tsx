@@ -10,6 +10,7 @@ import {
   downloadInvoiceXmlAction,
   resendInvoiceAction,
 } from './actions-detail';
+import { saveBlob } from '@/lib/download';
 
 interface Props {
   invoice: {
@@ -27,18 +28,6 @@ export function InvoiceActions({ invoice }: Props) {
   const canDownload = !!invoice.xml_storage_path;
   const canResend =
     invoice.ksef_status === 'rejected' || invoice.ksef_status === 'failed';
-
-  /** Zapisuje Blob jako plik do pobrania. */
-  const saveBlob = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
 
   const handleDownload = () => {
     startDownloading(async () => {

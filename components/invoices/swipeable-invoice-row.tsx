@@ -21,6 +21,7 @@ import {
 import { StatusBadge } from './status-badge';
 
 import type { InvoiceRow } from './invoice-row-types';
+import { saveBlob } from '@/lib/download';
 
 export type SwipeableInvoiceRowInvoice = InvoiceRow;
 
@@ -74,14 +75,7 @@ export function SwipeableInvoiceRow({ invoice }: Props) {
         return;
       }
       const blob = new Blob([result.xml], { type: 'application/xml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = result.filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      saveBlob(blob, result.filename);
       toast.success('Pobrano XML');
     });
   };

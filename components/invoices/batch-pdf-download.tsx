@@ -6,6 +6,7 @@ import { FileArchive, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { saveBlob } from '@/lib/download';
 
 /**
  * Pobranie ZIP z PDF wszystkich faktur wybranego miesiąca (Faza 33 Krok 7).
@@ -47,14 +48,7 @@ export function BatchPdfDownload() {
           return;
         }
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Faktury_${month}.zip`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
+        saveBlob(blob, `Faktury_${month}.zip`);
       } catch {
         toast.error('Błąd połączenia przy pobieraniu paczki.');
       }

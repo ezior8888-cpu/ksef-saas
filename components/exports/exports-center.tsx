@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { Constants, type Tables } from '@/types/database';
+import { saveBlob } from '@/lib/download';
 
 /** Wiersz joba + pliki z nested select (historia ręcznych eksportów). */
 export type ManualExportJobWithFiles = Tables<'export_jobs'> & {
@@ -382,15 +383,7 @@ function ExportJobRow({ job }: { job: ManualExportJobWithFiles }) {
       }
 
       const blob = base64ToBlob(result.base64, result.mimeType);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = result.filename;
-      a.rel = 'noopener';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      saveBlob(blob, result.filename);
 
       toast.success('Plik pobrany');
       router.refresh();

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { safeFetch } from '@/lib/client-fetch';
+import { saveBlob } from '@/lib/download';
 
 interface AccountantExportButtonsProps {
   tenantId: string;
@@ -88,19 +89,11 @@ export function AccountantExportButtons({
 
       const response = result.response;
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
       const fallbackExt = format === 'jpk_fa' ? 'xml' : 'xlsx';
       const filename =
         response.headers.get('X-Filename') ??
         `${format}_${selectedPeriod}.${fallbackExt}`;
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.rel = 'noopener';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      saveBlob(blob, filename);
 
       toast.success('Plik pobrany');
     });
