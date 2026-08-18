@@ -1,33 +1,30 @@
-/** Klasy formularzy auth — ciemna karta (panel). */
-export const authTitleClass =
-  'text-[28px] font-bold leading-[1.2] tracking-[-0.02em] text-[var(--ff-on-surface)]';
+/** Klasy formularzy auth — paleta landingu (tokeny `.zova`). */
+export const authTitleClass = 'z-h4 text-[var(--z-black)]';
 
-export const authSubtitleClass =
-  'mt-2 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]';
+export const authSubtitleClass = 'z-body mt-3 text-[var(--z-muted)]';
 
 export const authLabelClass =
-  'mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]';
+  'z-small mb-2 block font-medium text-[var(--z-muted)]';
 
-export const authMutedTextClass =
-  'text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]';
+export const authMutedTextClass = 'z-body text-[var(--z-muted)]';
 
 export const authLinkClass =
-  'font-semibold text-[var(--ff-primary)] transition-opacity hover:opacity-80';
+  'font-medium text-[var(--z-blue)] underline underline-offset-2 transition-opacity hover:opacity-70';
 
 export const authInputClass =
-  'h-11 rounded-xl border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_8%,transparent)] text-[var(--ff-on-surface)] shadow-none placeholder:text-[color-mix(in_srgb,var(--ff-on-surface-variant)_45%,transparent)] focus-visible:border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] focus-visible:ring-[color-mix(in_srgb,var(--ff-primary)_25%,transparent)]';
+  'z-body h-12 rounded-[12px] border-[var(--z-300)] bg-white text-[var(--z-black)] shadow-none placeholder:text-[var(--z-700)] focus-visible:border-[var(--z-black)] focus-visible:ring-0';
 
 export const authGoogleButtonClass =
-  'w-full border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_6%,transparent)] text-[var(--ff-on-surface)] hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_12%,transparent)]';
+  'z-body h-12 w-full rounded-[12px] border-[var(--z-300)] bg-white font-medium text-[var(--z-black)] shadow-none hover:bg-[var(--z-50)]';
 
 export const authPrimaryButtonClass =
-  'w-full bg-[var(--ff-primary)] text-[var(--ff-on-primary)] hover:brightness-110 active:scale-[0.98]';
+  'z-body h-12 w-full rounded-[12px] bg-[var(--z-black)] font-medium text-white transition-transform hover:scale-[1.02] hover:bg-[var(--z-black)] active:scale-[0.99]';
 
 export const authAlertSuccessClass =
-  'rounded-xl border border-green-500/25 bg-green-500/10 px-4 py-3 text-sm text-green-400';
+  'z-body rounded-[12px] border border-[var(--z-blue-200)] bg-[var(--z-blue-50)] px-4 py-3 text-[var(--z-black)]';
 
 export const authAlertErrorClass =
-  'rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-400';
+  'z-body rounded-[12px] border border-[#f0c4c9] bg-[#fdeef0] px-4 py-3 text-[var(--z-red)]';
 
 /** Jasna karta (login, register) — jak landing. */
 export const authLightTitleClass =

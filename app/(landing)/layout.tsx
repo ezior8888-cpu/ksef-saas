@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import './zova.css';
+import '@/styles/zova.css';
 
 /**
  * Landing page stoi w osobnej grupie tras, poza `(marketing)`.

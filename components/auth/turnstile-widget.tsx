@@ -7,7 +7,7 @@ import Script from 'next/script';
  */
 export function TurnstileWidget({
   action,
-  theme = 'dark',
+  theme = 'light',
 }: {
   action?: 'login' | 'register' | 'forgot-password';
   theme?: 'light' | 'dark';
