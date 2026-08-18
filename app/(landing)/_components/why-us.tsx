@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 
 import { asset } from '../_assets';
@@ -44,40 +44,49 @@ const BLOCKS = [
 
 export function WhyUs() {
   const [active, setActive] = useState(0);
-  const refs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
-    // Obserwator widoczności zamiast nasłuchu przewijania: działa też wtedy,
-    // gdy przeglądarka dławi zdarzenia scrolla i klatki animacji.
-    //
-    // Kluczowe: w wywołaniu dostajemy WYŁĄCZNIE elementy, których widoczność
-    // się zmieniła. Poprzednia wersja wybierała spośród nich i przez to
-    // podświetlenie zamarzało na pierwszej pozycji. Dlatego trzymamy stopień
-    // widoczności wszystkich bloków i za każdym razem szukamy największego.
-    const ratios = new Map<Element, number>();
+    // Bloki czytamy wprost z dokumentu, nie z tablicy referencji: przy
+    // przerysowaniu React czyści wywołanie zwrotne przed ponownym ustawieniem
+    // i tablica bywa chwilowo pusta, a wtedy przeliczenie nie ma czego mierzyć.
+    const bloki = () =>
+      Array.from(document.querySelectorAll<HTMLElement>('[id^="benefit-"]'));
 
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) ratios.set(e.target, e.intersectionRatio);
+    // O aktywnej pozycji decyduje GEOMETRIA, nie współczynnik widoczności.
+    // Wybieramy blok, którego góra jest najbliżej linii czytania (40% okna);
+    // bloki jeszcze poniżej niej są karane trzykrotnie, żeby podświetlenie
+    // nie wybiegało w przód.
+    const recompute = () => {
+      const line = window.innerHeight * 0.4;
+      let best = 0;
+      let bestDist = Infinity;
 
-        let best = 0;
-        let bestRatio = -1;
-        refs.current.forEach((el, i) => {
-          if (!el) return;
-          const r = ratios.get(el) ?? 0;
-          if (r > bestRatio) {
-            bestRatio = r;
-            best = i;
-          }
-        });
+      bloki().forEach((el, i) => {
+        const { top } = el.getBoundingClientRect();
+        const dist = top <= line ? line - top : (top - line) * 3;
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = i;
+        }
+      });
 
-        if (bestRatio > 0) setActive((prev) => (prev === best ? prev : best));
-      },
-      { threshold: [0, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1] },
-    );
+      setActive((prev) => (prev === best ? prev : best));
+    };
 
-    refs.current.forEach((el) => el && io.observe(el));
-    return () => io.disconnect();
+    const io = new IntersectionObserver(recompute, {
+      threshold: [0, 0.05, 0.2, 0.4, 0.6, 0.8, 1],
+    });
+    bloki().forEach((el) => io.observe(el));
+
+    recompute();
+    window.addEventListener('scroll', recompute, { passive: true });
+    window.addEventListener('resize', recompute, { passive: true });
+
+    return () => {
+      io.disconnect();
+      window.removeEventListener('scroll', recompute);
+      window.removeEventListener('resize', recompute);
+    };
   }, []);
 
   return (
@@ -145,9 +154,6 @@ export function WhyUs() {
             <div
               key={b.title}
               id={`benefit-${i + 1}`}
-              ref={(el) => {
-                refs.current[i] = el;
-              }}
               className="flex scroll-mt-28 flex-col gap-6"
             >
               <div className="flex flex-col gap-2">

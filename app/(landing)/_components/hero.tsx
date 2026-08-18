@@ -30,7 +30,7 @@ export function Hero() {
         }}
       />
 
-      <div className="relative flex flex-col gap-20 pt-[160px]">
+      <div className="relative flex flex-col gap-20 pt-[128px]">
         <div className="mx-auto w-full max-w-[var(--z-container)] px-5 md:px-[var(--z-gutter)]">
           <div className="mx-auto flex w-full max-w-[var(--z-content)] flex-col gap-16 lg:flex-row lg:items-start lg:justify-between">
             {/* lewa kolumna — 570 px w oryginale */}

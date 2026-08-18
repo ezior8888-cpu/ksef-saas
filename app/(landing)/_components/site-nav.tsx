@@ -28,7 +28,7 @@ export function SiteNav() {
       initial={{ opacity: 0, y: -16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: [0.44, 0, 0.56, 1] }}
-      className="fixed inset-x-0 top-5 z-50 flex justify-center px-5"
+      className="fixed inset-x-0 top-7 z-50 flex justify-center px-5"
     >
       <nav
         className="flex w-full max-w-[720px] items-center justify-between rounded-[16px] bg-white p-[10px_12px]"
