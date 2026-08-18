@@ -1043,33 +1043,37 @@ html:not(.dark) .ff-dashboard tbody tr[class*='hover:bg-']:hover {
 }
 
 /* Marketing — ciemny motyw jak panel (mesh + karty szklane + mięta). */
-.marketing-landing {
-  --marketing-accent: #6bfb9a;
-  --marketing-accent-hover: #4ade80;
-  --marketing-canvas: #12131a;
-  --marketing-surface: #1d1e27;
-  --marketing-text: #e2e1eb;
-  --marketing-muted: #9ca3af;
-  --marketing-border: rgba(255, 255, 255, 0.1);
-  color-scheme: dark;
+/* Marketing — paleta landingu. Strony w tej grupie trzymają kolory na
+     zmiennych `--marketing-*`, więc podmiana tego bloku przestawia cennik,
+     pomoc, regulaminy, porównania i kalkulator naraz, bez ruszania ich
+     znaczników. */
+  .marketing-landing {
+  --marketing-accent: #4096ff;
+  --marketing-accent-hover: #1f7ae0;
+  --marketing-canvas: #ffffff;
+  --marketing-surface: #fafafa;
+  --marketing-text: #000000;
+  --marketing-muted: #605f5f;
+  --marketing-border: #e6e6e6;
+  color-scheme: light;
 
-  --background: #12131a;
-  --foreground: #e2e1eb;
-  --card: #1d1e27;
-  --card-foreground: #e2e1eb;
-  --popover: #1d1e27;
-  --popover-foreground: #e2e1eb;
-  --primary: #6bfb9a;
-  --primary-foreground: #003919;
-  --secondary: #2b2c36;
-  --secondary-foreground: #e2e1eb;
-  --muted: #21222b;
-  --muted-foreground: #9ca3af;
-  --accent: rgba(107, 251, 154, 0.12);
-  --accent-foreground: #6bfb9a;
-  --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.1);
-  --ring: #6bfb9a;
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f4;
+  --secondary-foreground: #000000;
+  --muted: #fafafa;
+  --muted-foreground: #605f5f;
+  --accent: #e8f1fc;
+  --accent-foreground: #4096ff;
+  --border: #e6e6e6;
+  --input: #e6e6e6;
+  --ring: #000000;
 
   isolation: isolate;
   background-color: var(--marketing-canvas);
