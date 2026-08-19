@@ -62,15 +62,20 @@ export function DrawnVideo({
       playsInline
       preload="auto"
       className={className}
-      /* BEZ `mix-blend-mode`. Rodzice tych filmów są animowane przez
-         framer-motion, a element z transformacją tworzy własny kontekst
-         nakładania. Mnożenie przez PRZEZROCZYSTE tło daje przezroczystość,
-         więc rysunek znikał w całości. Tło filmów jest białe, tak jak
-         strona, więc krawędź i tak się nie odcina. */
-      style={{
-        transform: 'translateZ(0)',
-        backfaceVisibility: 'hidden',
-      }}
+      /* BEZ wymuszania warstwy GPU i BEZ trybu mieszania — obie rzeczy
+         dodałem wcześniej i obie szkodziły:
+
+         `translateZ(0)` i `backface-visibility` promują element do osobnej
+         warstwy kompozycji. Jej krawędź zaokrągla się do pikseli urządzenia
+         niezależnie od tła, więc przy przewijaniu widać migoczącą obramówkę.
+
+         `mix-blend-mode: multiply` znikało całkiem: rodzic animowany przez
+         framer-motion tworzy własny kontekst nakładania, a mnożenie przez
+         przezroczyste tło daje przezroczystość.
+
+         Bez obojga film maluje się w normalnym przepływie razem ze stroną.
+         Tło rysunków jest białe, a gradient w tym miejscu też, więc żadna
+         krawędź się nie odcina. */
     />
   );
 }
