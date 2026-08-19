@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 
+import { DrawnVideo } from '@/components/ui/drawn-video';
+
 import { asset } from '../_assets';
 import { Tilt } from './anim';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
@@ -107,21 +109,12 @@ export function Hero() {
               transition={{ duration: 0.75, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
               className="flex w-full flex-col gap-10 lg:max-w-[365px]"
             >
-              <video
-                src={asset.hero.illustration}
-                width={365}
-                height={274}
-                autoPlay
-                loop
-                muted
-                playsInline
-          style={{
-            transform: 'translateZ(0)',
-            backfaceVisibility: 'hidden',
-            mixBlendMode: 'multiply',
-          }}
-                className="h-auto w-full"
-              />
+              <DrawnVideo
+            src={asset.hero.illustration}
+            width={365}
+            height={274}
+            className="h-auto w-full"
+          />
 
               <div className="flex flex-col gap-3">
                 <MaskReveal delay={0.3}>

@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
+import { DrawnVideo } from '@/components/ui/drawn-video';
+
 import { asset } from '../_assets';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Rise } from './anim';
@@ -55,19 +57,10 @@ export function Faq() {
             </MaskReveal>
           </div>
 
-          <video
+          <DrawnVideo
             src={asset.faq.video}
             width={200}
             height={200}
-            autoPlay
-            loop
-            muted
-            playsInline
-          style={{
-            transform: 'translateZ(0)',
-            backfaceVisibility: 'hidden',
-            mixBlendMode: 'multiply',
-          }}
             className="size-[200px] object-contain"
           />
 

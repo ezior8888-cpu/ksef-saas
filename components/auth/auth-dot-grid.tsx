@@ -80,49 +80,60 @@ export function AuthDotGrid() {
     // Rysowanie oddzielone od pętli: dzięki temu siatka pojawia się od razu
     // po zbudowaniu, nawet jeśli przeglądarka dławi klatki animacji (tak jest
     // np. w karcie w tle). Bez tego prawa połowa bywała po prostu pusta.
-    const rysuj = () => {
-      t += redukcja ? 0 : 0.016;
-      ctx.clearRect(0, 0, szer, wys);
+    // Kropki w spoczynku rysujemy JEDNĄ ścieżką i jednym kolorem, a osobno
+    // tylko te w zasięgu kursora. Wcześniej każda z ~950 kropek dostawała
+    // własną ścieżkę i własny łańcuch koloru, czyli kilkadziesiąt tysięcy
+    // alokacji na sekundę. To była główna przyczyna zacinania.
+    //
+    // Gdy nic się nie rusza i kursor jest poza zasięgiem, klatkę pomijamy
+    // w całości — statyczna siatka została już namalowana.
+    let bylRuch = true;
 
+    const rysuj = () => {
+      let aktywnych = 0;
       for (const k of kropki) {
         const dx = mysz.x - k.x;
         const dy = mysz.y - k.y;
-        const dist = Math.hypot(dx, dy);
-
-        // docelowa siła oddziaływania: 1 tuż przy kursorze, 0 poza zasięgiem
-        const cel = dist < ZASIEG ? 1 - dist / ZASIEG : 0;
-        // sprężynowy powrót — bez tego kropki skakałyby skokowo
+        const cel =
+          Math.abs(dx) > ZASIEG || Math.abs(dy) > ZASIEG
+            ? 0
+            : Math.max(0, 1 - Math.hypot(dx, dy) / ZASIEG);
         k.sila += (cel - k.sila) * 0.12;
+        if (k.sila > 0.004) aktywnych++;
+      }
 
-        let px = k.x;
-        let py = k.y;
-        let promien = 1.7;
+      if (aktywnych === 0 && !bylRuch) return;
+      bylRuch = aktywnych > 0;
 
-        if (k.sila > 0.002) {
-          const kat = t * k.tempo + k.faza;
-          const orbita = k.sila * 16;
-          // elipsa obrócona o `nachylenie` daje wrażenie osobnej płaszczyzny
-          const ox = Math.cos(kat) * orbita;
-          const oy = Math.sin(kat) * orbita * 0.45;
-          px += ox * Math.cos(k.nachylenie) - oy * Math.sin(k.nachylenie);
-          py += ox * Math.sin(k.nachylenie) + oy * Math.cos(k.nachylenie);
-          promien = 1.7 + k.sila * 2.2;
-        }
+      t += redukcja ? 0 : 0.016;
+      ctx.clearRect(0, 0, szer, wys);
 
+      // warstwa spoczynkowa — jedna ścieżka, jeden kolor
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(${KOLOR_SPOCZYNEK[0]},${KOLOR_SPOCZYNEK[1]},${KOLOR_SPOCZYNEK[2]},0.7)`;
+      for (const k of kropki) {
+        if (k.sila > 0.004) continue;
+        ctx.moveTo(k.x + 1.7, k.y);
+        ctx.arc(k.x, k.y, 1.7, 0, Math.PI * 2);
+      }
+      ctx.fill();
+
+      // warstwa aktywna — tylko kropki w zasięgu kursora
+      for (const k of kropki) {
+        if (k.sila <= 0.004) continue;
+        const kat = t * k.tempo + k.faza;
+        const orbita = k.sila * 16;
+        const ox = Math.cos(kat) * orbita;
+        const oy = Math.sin(kat) * orbita * 0.45;
+        const px = k.x + ox * Math.cos(k.nachylenie) - oy * Math.sin(k.nachylenie);
+        const py = k.y + ox * Math.sin(k.nachylenie) + oy * Math.cos(k.nachylenie);
         const m = k.sila;
-        const r = Math.round(
-          KOLOR_SPOCZYNEK[0] + (KOLOR_AKTYWNY[0] - KOLOR_SPOCZYNEK[0]) * m,
-        );
-        const g = Math.round(
-          KOLOR_SPOCZYNEK[1] + (KOLOR_AKTYWNY[1] - KOLOR_SPOCZYNEK[1]) * m,
-        );
-        const b = Math.round(
-          KOLOR_SPOCZYNEK[2] + (KOLOR_AKTYWNY[2] - KOLOR_SPOCZYNEK[2]) * m,
-        );
-
+        const r = Math.round(KOLOR_SPOCZYNEK[0] + (KOLOR_AKTYWNY[0] - KOLOR_SPOCZYNEK[0]) * m);
+        const g = Math.round(KOLOR_SPOCZYNEK[1] + (KOLOR_AKTYWNY[1] - KOLOR_SPOCZYNEK[1]) * m);
+        const b = Math.round(KOLOR_SPOCZYNEK[2] + (KOLOR_AKTYWNY[2] - KOLOR_SPOCZYNEK[2]) * m);
         ctx.beginPath();
         ctx.fillStyle = `rgba(${r},${g},${b},${0.7 + m * 0.3})`;
-        ctx.arc(px, py, promien, 0, Math.PI * 2);
+        ctx.arc(px, py, 1.7 + m * 2.2, 0, Math.PI * 2);
         ctx.fill();
       }
     };
@@ -143,15 +154,10 @@ export function AuthDotGrid() {
       const poza = x < -ZASIEG || y < -ZASIEG || x > r.width + ZASIEG || y > r.height + ZASIEG;
       mysz.x = poza ? -9999 : x;
       mysz.y = poza ? -9999 : y;
-      // Przerysowujemy od razu, nie czekając na klatkę animacji: gdy
-      // przeglądarka je dławi (karta w tle, oszczędzanie energii), siatka
-      // inaczej w ogóle nie reagowałaby na kursor.
-      rysuj();
     };
     const onLeave = () => {
       mysz.x = -9999;
       mysz.y = -9999;
-      rysuj();
     };
 
     zbuduj();

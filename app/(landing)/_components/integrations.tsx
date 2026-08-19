@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 
+import { DrawnVideo } from '@/components/ui/drawn-video';
 import { asset } from '../_assets';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Container } from './ui';
@@ -25,25 +26,19 @@ export function Integrations() {
         </div>
 
         <div className="flex w-full max-w-[946px] flex-col items-center gap-10">
-          <motion.video
-            src={asset.integrations.video}
-            width={210}
-            height={210}
-            autoPlay
-            loop
-            muted
-            playsInline
-          style={{
-            transform: 'translateZ(0)',
-            backfaceVisibility: 'hidden',
-            mixBlendMode: 'multiply',
-          }}
-            initial={{ opacity: 0, scale: 0.9 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true, amount: 0.3 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="size-[210px] object-contain"
-          />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <DrawnVideo
+                src={asset.integrations.video}
+                width={210}
+                height={210}
+                className="size-[210px] object-contain"
+              />
+            </motion.div>
 
           <div className="flex w-full flex-wrap items-center justify-center gap-x-12 gap-y-8">
             {asset.integrations.logos.map((src, i) => (

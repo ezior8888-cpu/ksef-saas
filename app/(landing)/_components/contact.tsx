@@ -2,6 +2,8 @@
 
 import { motion } from 'framer-motion';
 
+import { DrawnVideo } from '@/components/ui/drawn-video';
+
 import { asset } from '../_assets';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Pop } from './anim';
@@ -47,21 +49,12 @@ export function Contact() {
               ))}
             </ul>
 
-            <video
-              src={asset.contact.video}
-              width={274}
-              height={274}
-              autoPlay
-              loop
-              muted
-              playsInline
-          style={{
-            transform: 'translateZ(0)',
-            backfaceVisibility: 'hidden',
-            mixBlendMode: 'multiply',
-          }}
-              className="size-[274px] object-contain"
-            />
+            <DrawnVideo
+            src={asset.contact.video}
+            width={274}
+            height={274}
+            className="size-[274px] object-contain"
+          />
           </div>
 
           {/* formularz — 946×628 w oryginale, tu jako reszta szerokości */}

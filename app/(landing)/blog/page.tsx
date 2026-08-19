@@ -6,6 +6,8 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { DrawnVideo } from '@/components/ui/drawn-video';
+
 import { asset } from '../_assets';
 import { Rise } from '../_components/anim';
 import { SiteFooter } from '../_components/closing';
@@ -85,21 +87,12 @@ export default function BlogPage() {
               <MaskRevealWords text="Poradniki dla tych, którzy wolą mieć to z głowy" />
             </h1>
             <Rise delay={0.25}>
-              <video
-                src={asset.blogHero}
-                width={400}
-                height={325}
-                autoPlay
-                loop
-                muted
-                playsInline
-                style={{
-                  transform: 'translateZ(0)',
-                  backfaceVisibility: 'hidden',
-                  mixBlendMode: 'multiply',
-                }}
-                className="h-[325px] w-[400px] max-w-full object-contain"
-              />
+              <DrawnVideo
+            src={asset.blogHero}
+            width={400}
+            height={325}
+            className="h-[325px] w-[400px] max-w-full object-contain"
+          />
             </Rise>
           </div>
         </Container>

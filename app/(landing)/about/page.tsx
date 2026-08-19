@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { DrawnVideo } from '@/components/ui/drawn-video';
+
 import { asset } from '../_assets';
 import { Rise, SlideX, Tilt } from '../_components/anim';
 import { SiteFooter } from '../_components/closing';
@@ -62,21 +64,12 @@ export default function AboutPage() {
               <MaskRevealWords text="Robimy program do faktur, którego sami chcieliśmy używać" />
             </h1>
             <Rise delay={0.2}>
-              <video
-                src={asset.about.hero}
-                width={400}
-                height={252}
-                autoPlay
-                loop
-                muted
-                playsInline
-                style={{
-                  transform: 'translateZ(0)',
-                  backfaceVisibility: 'hidden',
-                  mixBlendMode: 'multiply',
-                }}
-                className="h-auto w-[400px] max-w-full"
-              />
+              <DrawnVideo
+            src={asset.about.hero}
+            width={400}
+            height={252}
+            className="h-auto w-[400px] max-w-full"
+          />
             </Rise>
           </div>
         </Container>
@@ -172,21 +165,12 @@ export default function AboutPage() {
           {/* biała karta 946×246: film 250×150 obok tekstu, przerwa 64 */}
           <Rise>
             <div className="mx-auto flex w-full max-w-[946px] flex-col items-center gap-8 rounded-[20px] bg-white p-8 shadow-[0_16px_40px_-24px_rgba(16,32,64,0.25)] lg:flex-row lg:gap-16 lg:px-8 lg:py-12">
-              <video
-                src={asset.about.career}
-                width={250}
-                height={150}
-                autoPlay
-                loop
-                muted
-                playsInline
-                style={{
-                  transform: 'translateZ(0)',
-                  backfaceVisibility: 'hidden',
-                  mixBlendMode: 'multiply',
-                }}
-                className="h-auto w-[250px] shrink-0"
-              />
+              <DrawnVideo
+            src={asset.about.career}
+            width={250}
+            height={150}
+            className="h-auto w-[250px] shrink-0"
+          />
               <div className="flex flex-col gap-6 lg:w-[500px]">
                 <div className="flex flex-col gap-3">
                   <h3 className="z-h4">Dołącz do nas</h3>
