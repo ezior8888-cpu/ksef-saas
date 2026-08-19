@@ -20,13 +20,11 @@ export function DrawnVideo({
   width,
   height,
   className,
-  blend = true,
 }: {
   src: string;
   width: number;
   height: number;
   className?: string;
-  blend?: boolean;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
 
@@ -64,10 +62,14 @@ export function DrawnVideo({
       playsInline
       preload="auto"
       className={className}
+      /* BEZ `mix-blend-mode`. Rodzice tych filmów są animowane przez
+         framer-motion, a element z transformacją tworzy własny kontekst
+         nakładania. Mnożenie przez PRZEZROCZYSTE tło daje przezroczystość,
+         więc rysunek znikał w całości. Tło filmów jest białe, tak jak
+         strona, więc krawędź i tak się nie odcina. */
       style={{
         transform: 'translateZ(0)',
         backfaceVisibility: 'hidden',
-        ...(blend ? { mixBlendMode: 'multiply' as const } : {}),
       }}
     />
   );

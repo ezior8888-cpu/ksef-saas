@@ -89,7 +89,7 @@ export function AuthDotGrid() {
     // w całości — statyczna siatka została już namalowana.
     let bylRuch = true;
 
-    const rysuj = () => {
+    const rysuj = (): boolean => {
       let aktywnych = 0;
       for (const k of kropki) {
         const dx = mysz.x - k.x;
@@ -102,7 +102,7 @@ export function AuthDotGrid() {
         if (k.sila > 0.004) aktywnych++;
       }
 
-      if (aktywnych === 0 && !bylRuch) return;
+      if (aktywnych === 0 && !bylRuch) return false;
       bylRuch = aktywnych > 0;
 
       t += redukcja ? 0 : 0.016;
@@ -136,10 +136,28 @@ export function AuthDotGrid() {
         ctx.arc(px, py, 1.7 + m * 2.2, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      return aktywnych > 0;
     };
 
+    // Pętla chodzi WYŁĄCZNIE wtedy, gdy jest co animować. Wcześniej kręciła
+    // się bez przerwy, czyszcząc płótno 1440×1800 sześćdziesiąt razy na
+    // sekundę nawet przy kursorze po drugiej stronie ekranu. To było główne
+    // źródło zacinania na tych dwóch ekranach.
+    let biegnie = false;
+
     const petla = () => {
-      rysuj();
+      const cos = rysuj();
+      if (cos) {
+        klatka = requestAnimationFrame(petla);
+      } else {
+        biegnie = false;
+      }
+    };
+
+    const obudz = () => {
+      if (biegnie) return;
+      biegnie = true;
       klatka = requestAnimationFrame(petla);
     };
 
@@ -154,15 +172,16 @@ export function AuthDotGrid() {
       const poza = x < -ZASIEG || y < -ZASIEG || x > r.width + ZASIEG || y > r.height + ZASIEG;
       mysz.x = poza ? -9999 : x;
       mysz.y = poza ? -9999 : y;
+      if (!poza) obudz();
     };
     const onLeave = () => {
       mysz.x = -9999;
       mysz.y = -9999;
+      obudz(); // jedna seria klatek na wygaszenie kropek
     };
 
     zbuduj();
-    rysuj(); // pierwsza klatka natychmiast
-    klatka = requestAnimationFrame(petla);
+    rysuj(); // statyczna siatka od razu, bez uruchamiania pętli
 
     const obs = new ResizeObserver(() => {
       zbuduj();
