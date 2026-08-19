@@ -64,9 +64,12 @@ export async function GET(request: Request) {
   const base = resolveBase(request, origin);
 
   if (!code) {
-    return NextResponse.redirect(
-      `${base}/login?error=auth_callback_missing_code`,
-    );
+    // Brak `code` znaczy zwykle, że token siedzi w KOTWICY adresu (magic
+    // link, link administracyjny, część resetów hasła). Kotwica nie dociera
+    // na serwer, ale PRZEŻYWA przekierowanie 3xx, więc oddajemy sprawę
+    // stronie klienckiej, która potrafi ją odczytać.
+    const dokad = encodeURIComponent(next);
+    return NextResponse.redirect(`${base}/auth/finish?next=${dokad}`);
   }
 
   const supabase = await createClient();
