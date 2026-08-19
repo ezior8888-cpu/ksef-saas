@@ -22,7 +22,11 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Lista rozszerzeń musi obejmować KAŻDY typ pliku serwowany z `public/`.
+  // Czego tu nie ma, to leci przez bramkę auth i kończy przekierowaniem na
+  // `/login` — dla obrazka widać to od razu, dla wideo objawia się tylko
+  // cichym błędem dekodera w przeglądarce.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|mp4|webm|mov|woff|woff2)$).*)',
   ],
 };
