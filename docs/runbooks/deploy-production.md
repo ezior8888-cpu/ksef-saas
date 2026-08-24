@@ -1,3 +1,15 @@
+> ## ⚠️ TEN DOKUMENT JEST NIEAKTUALNY
+>
+> Opisuje wdrożenia przez **Vercela**, z którego zrezygnowaliśmy w sierpniu
+> 2026. Produkcja stoi teraz na **Hetznerze pod Coolify**.
+>
+> **Aktualna procedura: `AGENTS.md`, sekcja „Infrastruktura i dostępy".**
+>
+> Zostawiony wyłącznie jako zapis tego, jak było. Nie wykonuj poleceń
+> z tego pliku na produkcji.
+
+---
+
 # Deploy to Production Runbook (Faza 35)
 
 Procedura wypuszczania zmian na produkcję. Od checkout po smoke test.

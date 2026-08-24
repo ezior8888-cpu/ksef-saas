@@ -78,6 +78,94 @@ Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (K
 - Logowanie audytowe — każda akcja istotna zapisana w `audit_logs`.
 - Dane hostowane w EU (Frankfurt).
 
+## Infrastruktura i dostępy
+
+Ta sekcja jest tu, bo `AGENTS.md` czyta KAŻDA sesja agenta. Bez niej nowy czat
+nie wie, że serwery istnieją, i odbija się od zadań operacyjnych.
+
+### Serwery (Hetzner, region NBG1)
+
+| Rola | IP | Co tam działa |
+|---|---|---|
+| `app-1` | `116.203.71.134` | aplikacja Next.js + worker pg-boss |
+| `ops-1` | `91.98.134.85` | panel Coolify (port 8000, dostęp filtrowany po IP) |
+| `db-1` | `178.104.128.144` | Supabase self-hosted: Postgres, GoTrue, Kong, MinIO |
+
+Klucz SSH: `~/.ssh/hetzner_faktflow_ed25519`, użytkownik `root`.
+
+```bash
+ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@178.104.128.144
+```
+
+Kontener Postgresa: `supabase-db-ovrhjbsdpjdlnmkle1ulid4s`.
+
+### Wgrywanie migracji na produkcję
+
+NAJPIERW przeczytaj plik migracji i sprawdź, czy nie ma `DROP`, `TRUNCATE`
+ani `DELETE FROM`. Dopiero potem uruchamiaj.
+
+```bash
+DB=178.104.128.144; K=~/.ssh/hetzner_faktflow_ed25519
+PGC=supabase-db-ovrhjbsdpjdlnmkle1ulid4s
+M=00063_nazwa
+
+scp -i $K supabase/migrations/$M.sql root@$DB:/tmp/
+ssh -i $K root@$DB "docker cp /tmp/$M.sql $PGC:/tmp/ && \
+  docker exec $PGC psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  --single-transaction -f /tmp/$M.sql"
+```
+
+Po wykonaniu ZAWSZE dwie rzeczy, inaczej migracja jest połowiczna:
+
+```bash
+ssh -i $K root@$DB "docker exec $PGC psql -U postgres -d postgres \
+  -c \"INSERT INTO supabase_migrations.schema_migrations (version, name)
+        VALUES ('00063','nazwa') ON CONFLICT (version) DO NOTHING;\" \
+  -c \"NOTIFY pgrst, 'reload schema';\""
+```
+
+Bez `NOTIFY pgrst` nowe tabele istnieją w bazie, ale aplikacja zwraca
+`PGRST205 Could not find the table`. To nie jest teoria, potknęliśmy się
+o to przy migracji 00060.
+
+### Wdrożenie produkcji
+
+Wdrożeniami steruje Coolify na `ops-1`. Najpewniejsza droga to `tinker`,
+bo interfejs bywa zawodny:
+
+```bash
+ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@91.98.134.85 \
+  "docker exec coolify php artisan tinker --execute=\"
+    \$a = App\\Models\\Application::find(1);
+    queue_application_deployment(application: \$a,
+      deployment_uuid: (string) new \\Visus\\Cuid2\\Cuid2(),
+      force_rebuild: false, commit: 'HEAD', is_api: false);\""
+```
+
+Aplikacja ma `id=1`, worker jobów `id=2`. Build trwa 12-18 minut.
+
+### Pułapki, które kosztowały nas awarie
+
+- **Pusty `dockerfile_target_build` w Coolify** buduje OSTATNI etap pliku.
+  Dopisanie etapu na końcu `Dockerfile` raz wyłączyło produkcję na 15 godzin.
+  Aplikacja ma jawnie `runner`, worker `worker`.
+- **Healthcheck Coolify wymaga `curl` w obrazie.** Bez niego deploy kończy się
+  statusem „unhealthy" i wycofaniem, mimo poprawnie działającego procesu.
+- **Zmienne środowiskowe mają bliźniaki `is_preview`.** Wyglądają jak duplikaty,
+  ale nimi nie są. Produkcja używa `is_preview = false`.
+- **`proxy.ts` przepuszcza tylko wymienione rozszerzenia.** Czego nie ma we
+  wzorcu, leci przez bramkę auth i kończy przekierowaniem na `/login`.
+  Dla wideo objawia się to wyłącznie cichym błędem dekodera.
+- **Lokalny `.env.local` celuje w INNĄ bazę** (`utuzzxstfcnglppplvlw.supabase.co`)
+  niż produkcja. To celowe. Nie podmieniaj bez uzgodnienia.
+
+### Praca w worktree
+
+Sesje agentów bywają uruchamiane w `.claude/worktrees/*`, na osobnych gałęziach
+lub w stanie „detached HEAD". Wtedy `git push` na `main` NIE przejdzie.
+Sprawdź `git status` na starcie; jeśli nie jesteś na `main`, wypchnij swoją
+gałąź i otwórz pull request zamiast walczyć z `main`.
+
 ## Co NIE robić
 
 - Nie proponować alternatywnych technologii do stacku powyżej.
