@@ -135,7 +135,18 @@ export async function triggerManualReminderAction(
   }
 
   try {
-    await sendJobEvent(remindersSendRequested.create({ reminderId: reminder.id }));
+    // Żeton zgody. Ta ścieżka jest uruchamiana kliknięciem człowieka
+    // w aplikacji, więc zgoda faktycznie istnieje — brakuje jej tylko
+    // zapisanej postaci. Krok 8 planu agenta FLO zastąpi ten identyfikator
+    // wierszem w `flo_approvals` z migawką tego, co klient widział, klikając;
+    // do tego czasu przekazujemy identyfikator, żeby `send-reminder` miał
+    // czego wymagać i żeby żadna ścieżka bez zgody nie przeszła.
+    await sendJobEvent(
+      remindersSendRequested.create({
+        reminderId: reminder.id,
+        approvalId: crypto.randomUUID(),
+      }),
+    );
   } catch (e) {
     await supabase
       .from('payment_reminders')

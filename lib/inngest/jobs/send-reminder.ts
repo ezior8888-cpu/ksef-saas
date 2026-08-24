@@ -4,6 +4,7 @@ import { NonRetriableError } from 'inngest';
 import { Resend } from 'resend';
 
 import { inngest, remindersSendRequested } from '@/lib/inngest/client';
+import { requireApprovalId } from '@/lib/flo/approval';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -46,7 +47,31 @@ function isReminderStagePdf(stage: ReminderStage): boolean {
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
  */
 export async function runSendReminder(data: Parameters<typeof remindersSendRequested.create>[0], { step }: JobContext) {
-    const { reminderId } = data;
+    const { reminderId, approvalId } = data;
+
+    // ŻETON ZGODY (krok 6 planu agenta FLO).
+    //
+    // Ta funkcja wysyła wiadomość do kontrahenta klienta — czyli robi coś
+    // nieodwracalnego, w cudzym imieniu, na zewnątrz. Bez identyfikatora
+    // zgody nie wykonuje się w ogóle, nawet gdyby ktoś zawołał ją z crona.
+    // Rzucamy błąd nieponawialny, bo brak zgody nie naprawi się przy kolejnej
+    // próbie — to nie jest awaria sieci, tylko brakująca decyzja człowieka.
+    //
+    // Druga połowa — sprawdzenie w `flo_approvals`, że żeton istnieje, dotyczy
+    // tej sprawy, nie został zużyty i nie wygasł — należy do wykonawcy
+    // propozycji (krok 11), bo to on zna identyfikator propozycji. Tutaj
+    // pilnujemy warunku, który da się sprawdzić bez bazy: że zgoda w ogóle
+    // istnieje.
+    try {
+      requireApprovalId(approvalId, `Wysyłka ponaglenia ${reminderId}`);
+    } catch (e) {
+      throw new NonRetriableError(
+        e instanceof Error
+          ? `${e.message} Każda wiadomość do kontrahenta wymaga kliknięcia w aplikacji.`
+          : 'Brak zgody człowieka — odmawiam wysyłki.',
+      );
+    }
+
     const supabase = createAdminClient();
 
     const reminder = await step.run('fetch-reminder', async () => {

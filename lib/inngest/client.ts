@@ -194,9 +194,18 @@ export const validationBulkContractorsRequested = eventType(
 );
 
 /** Zaplanuj wysyłkę przypomnienia (Po `reminder-scheduler` — job `send-reminder`). */
+/**
+ * Wysyłka ponaglenia do kontrahenta.
+ *
+ * `approvalId` jest OBOWIĄZKOWY: żadna wiadomość nie wychodzi w imieniu
+ * klienta bez jego kliknięcia (krok 6 planu agenta FLO). Do 24.08.2026 to
+ * zdarzenie emitował cron — teraz emituje je wyłącznie akcja uruchomiona
+ * przez człowieka albo wykonawca zatwierdzonej propozycji.
+ */
 export const remindersSendRequested = eventType('reminders/send.requested', {
   schema: staticSchema<{
     reminderId: string;
+    approvalId: string;
   }>(),
 });
 
