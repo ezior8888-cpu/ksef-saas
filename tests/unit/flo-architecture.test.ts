@@ -52,8 +52,13 @@ const OUTGOING_SINKS: Record<string, string> = {
 const KNOWN_UNGATED: Record<string, string> = {
   // Faktury w kolejce offline zostały zatwierdzone przez człowieka PRZED
   // awarią Ministerstwa — dosłanie po jej ustaniu nie jest nową decyzją.
-  // Brakuje jednak śladu tamtej zgody; dokłada go wykonawca propozycji.
-  // ZAMYKA: krok 11 (lib/flo/execute.ts przekazuje approvalId przez kolejkę).
+  // Brakuje jednak śladu tamtej zgody.
+  // KOREKTA (26.08): krok 11 zbudował wykonawcę, ale TEGO nie zamknął.
+  // Żeton mógłby tu trafić dopiero wtedy, gdy wysyłka faktur zacznie
+  // przechodzić przez propozycje — a to jest P-02, czyli krok 32. Dopisanie
+  // żetonu wcześniej wymagałoby przerobienia ręcznego wystawiania faktur,
+  // które z agentem nie ma nic wspólnego.
+  // ZAMYKA: krok 32 (P-02 — wysyłka faktur przez wykonawcę propozycji).
   'lib/inngest/jobs/process-offline-queue.ts':
     'Offline24 — dosyłka faktur zatwierdzonych przed awarią',
 

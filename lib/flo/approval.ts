@@ -19,7 +19,7 @@
  * dwóch wysyłek.
  */
 
-import { floDb, type FloApprovalRow } from '@/lib/flo/db-types';
+import { floDb, type FloApprovalRow, type FloDbClient } from '@/lib/flo/db-types';
 
 // ═══════════════════════════════════════════════════════════════
 // Błędy
@@ -122,8 +122,8 @@ export interface CreateApprovalInput {
  */
 export async function createApproval(
   input: CreateApprovalInput,
+  db: FloDbClient = floDb(),
 ): Promise<string> {
-  const db = floDb();
   const expiresAt = new Date(
     Date.now() + (input.ttlMinutes ?? 30) * 60_000,
   ).toISOString();
@@ -175,8 +175,8 @@ export async function consumeApproval(
   approvalId: string,
   expectedProposalId: string,
   now: Date = new Date(),
+  db: FloDbClient = floDb(),
 ): Promise<Record<string, unknown>> {
-  const db = floDb();
   const nowIso = now.toISOString();
 
   const claimed = await db

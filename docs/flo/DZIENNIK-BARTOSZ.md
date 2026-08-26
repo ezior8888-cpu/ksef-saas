@@ -383,3 +383,75 @@ Stan repozytorium: moje 4 commity z wczoraj są na origin/main, doszedł
 commit Masła (helpery interfejsu). Zestaw po scaleniu: 16 plików, 179 testów.
 
 Następny krok: 11 (lib/flo/execute.ts)
+
+## 2026-08-26 · Krok 11 — wykonawca propozycji
+
+Zrobione:
+- `lib/flo/handlers/index.ts` — rejestr wykonawców (rodzaj → handler).
+- `lib/flo/execute.ts` — `executeProposal`.
+- `tests/unit/flo-fake-db.ts` — atrapa klienta bazy w pamięci.
+- `tests/unit/flo-execute.test.ts` — 11 testów.
+- `lib/audit/log.ts` — dwie nowe akcje: `flo.proposal.executed` / `.failed`.
+
+KOLEJNOŚĆ KROKÓW W WYKONAWCY (nienegocjowalna, każda zamiana otwiera inną
+klasę awarii):
+świeżość → atomowe przejęcie → zużycie żetonu → handler → dziennik.
+Świeżość PRZED przejęciem, bo nieaktualnej propozycji nie ma sensu nawet
+blokować pod siebie. Przejęcie PRZED żetonem, bo inaczej dwa równoległe
+kliknięcia spaliłyby żeton, zanim ustaliłoby się, kto wykonuje.
+
+Klucz idempotencji to samo przejście statusu:
+`UPDATE ... SET status='executing' WHERE id=? AND status IN ('open','approved')`.
+Pięćdziesiąt kliknięć wykona ten UPDATE, warunek spełni jedno. Bez osobnej
+tabeli blokad i bez zewnętrznego zamka.
+
+Decyzje, które warto pamiętać:
+- Przegrani wyścigu dostają `{ok:true}`, nie błąd. Ich kliknięcie doprowadziło
+  do działania — straszenie ich komunikatem byłoby kłamstwem.
+- Po nieudanym wykonaniu NIE odtwarzamy zużytego żetonu. Gdyby funkcja
+  wychodząca zdążyła zadziałać, druga próba wysłałaby to samo dwa razy.
+  Człowiek zatwierdza od nowa, czyli świadomie.
+- Klient nigdy nie widzi treści błędu technicznego (test pilnuje, że w
+  komunikacie nie ma `ECONNREFUSED` ani adresów IP).
+
+Weryfikacja, że test współbieżności nie jest deklaratywny: usunąłem warunek
+`.in('status', CLAIMABLE)` z przejęcia — test padł (handler wywołany więcej
+niż raz). Warunek przywrócony.
+
+KOREKTA WŁASNEGO ZAPISU: w kroku 9 napisałem w `KNOWN_UNGATED`, że pozycję
+`process-offline-queue` zamyka krok 11. To była nieprawda. Żeton mógłby tam
+trafić dopiero wtedy, gdy wysyłka faktur zacznie przechodzić przez
+propozycje — czyli przy P-02, w kroku 32. Komentarz poprawiony.
+
+Następny krok: 12
+
+## 2026-08-26 · Krok 12 — pamięć decyzji i wyciszanie
+
+Zrobione:
+- `lib/flo/decisions.ts` — `nextDecisionState` (czysta reguła), `recordDecision`,
+  `muteKind`, `unmuteKind`, `isMuted`, `listMutedKinds`.
+- `tests/unit/flo-decisions.test.ts` — 12 testów.
+- `lib/flo/proposals.ts` — lokalne `isMuted` usunięte; jedno źródło prawdy.
+
+Decyzje:
+- `dismissed` to licznik odrzuceń Z RZĘDU, nie suma z całego życia konta.
+  Przyjęcie zeruje serię i zdejmuje wyciszenie. Ktoś, kto raz odrzucił,
+  potem skorzystał, a po pół roku odrzucił znowu, nie prosił o ciszę.
+- „Nigdy więcej takich” ucisza NATYCHMIAST, osobną funkcją. To nie jest
+  drugie odrzucenie z rzędu, tylko jasna prośba — czekanie z ciszą do
+  następnego razu byłoby ignorowaniem tego, co człowiek powiedział.
+- Cisza jest odwracalna z ekranu ustawień (`unmuteKind`, `listMutedKinds`
+  dla toru interfejsu, krok 21 Masła).
+- Wyciszenie jest per organizacja i per rodzaj — testy pilnują, że nie
+  przecieka ani na inne konto, ani na inne sprawy.
+
+Przy okazji: `assertFresh` tworzy teraz klienta bazy dopiero wtedy, gdy
+propozycja naprawdę zależy od jakiegoś rekordu. Podsumowanie roku nie ma
+jak się zdezaktualizować, więc nie ma powodu otwierać połączenia — a testy
+nie potrzebują zmiennych środowiskowych.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 18 plików, 201 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Następny krok: 13 (lib/flo/undo.ts + cron flo.tick)

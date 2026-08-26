@@ -189,9 +189,12 @@ export async function readState(
 ): Promise<FloState> {
   const invoiceId = readString(payload.invoiceId);
   const expenseId = readString(payload.expenseId);
-  const db = createAdminClient() as unknown as StateClient;
 
   if (invoiceId && isInvoiceKind(kind)) {
+    // Klient bazy powstaje dopiero tutaj: propozycja, która nie zależy od
+    // żadnego rekordu (np. podsumowanie roku), nie ma powodu otwierać
+    // połączenia — ani wymagać zmiennych środowiskowych w testach.
+    const db = createAdminClient() as unknown as StateClient;
     const { data, error } = await db
       .from('invoices')
       .select(
@@ -223,6 +226,7 @@ export async function readState(
   }
 
   if (expenseId) {
+    const db = createAdminClient() as unknown as StateClient;
     const { data, error } = await db
       .from('expenses')
       .select('id, gross_amount, kpir_column, is_reviewed, is_deductible')

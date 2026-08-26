@@ -25,6 +25,7 @@ import {
   type FloProposalInsert,
   type FloProposalRow,
 } from '@/lib/flo/db-types';
+import { isMuted } from '@/lib/flo/decisions';
 import { FLO_KIND_VARIANT } from '@/lib/flo/kind-variant';
 import {
   isFloProposalKind,
@@ -300,37 +301,6 @@ function secondaryActions(
     { label: 'Nie teraz', intent: 'snooze' },
     { label: 'Nigdy więcej takich', intent: 'mute' },
   ];
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Wyciszanie
-// ═══════════════════════════════════════════════════════════════
-
-/**
- * Czy ten rodzaj spraw jest wyciszony. Sprawdzane PRZED utworzeniem
- * propozycji: dwa odrzucenia z rzędu znaczą „nie pisz mi o tym”, a nie
- * „pisz dalej, tylko schowaj”.
- *
- * Pełną obsługę licznika odrzuceń dokłada krok 12 (`lib/flo/decisions.ts`);
- * tutaj czytamy wyłącznie efekt.
- */
-export async function isMuted(
-  tenantId: string,
-  kind: FloProposalKind,
-  now: Date = new Date(),
-): Promise<boolean> {
-  const db = floDb();
-
-  const result = await db
-    .from('flo_decisions')
-    .select('muted_until')
-    .eq('tenant_id', tenantId)
-    .eq('kind', kind)
-    .maybeSingle();
-
-  if (result.error) throw new Error(result.error.message);
-  const until = result.data?.muted_until;
-  return typeof until === 'string' && Date.parse(until) > now.getTime();
 }
 
 // ═══════════════════════════════════════════════════════════════
