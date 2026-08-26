@@ -359,3 +359,27 @@ Weryfikacja:
 
 Następny krok: 11 (lib/flo/execute.ts — wykonawca propozycji; zamyka też
 pozycję nr 1 z KNOWN_UNGATED)
+
+## 2026-08-25 · Poprawka po zgłoszeniu Masła + weryfikacja produkcji
+
+Zgłoszenie z DZIENNIK-MASLO.md: `tests/unit/flo-architecture.test.ts` padał
+na Windows (4 z 8). Miał rację — `relative()` zwraca tam ścieżki z odwrotnymi
+ukośnikami, a klucze `OUTGOING_SINKS` i `KNOWN_UNGATED` są zapisane zwykłymi.
+Dodany helper `toPosix()` przy obu wywołaniach `relative()`. 8/8 zielone.
+Dobrze, że nie ruszał mojego pliku — mapa własności zadziałała.
+
+WNIOSEK NA PRZYSZŁOŚĆ: Masło pracuje na Windows, ja na macOS, a produkcja
+stoi na Linuksie. Każdy kod dotykający ścieżek plików musi być pisany
+przenośnie, bo inaczej „u mnie działa” będzie normą, a nie wyjątkiem.
+
+Weryfikacja produkcji (db-1, przez procedurę z AGENTS.md):
+- sześć tabel `flo_*` istnieje
+- 00061 i 00062 zarejestrowane w `supabase_migrations.schema_migrations`
+- 17 indeksów, 4 polityki RLS, komentarze kolumn z 00062 na miejscu
+- wykonane `NOTIFY pgrst, 'reload schema'` (krok, bez którego aplikacja
+  zwraca PGRST205 — pułapka opisana w AGENTS.md)
+
+Stan repozytorium: moje 4 commity z wczoraj są na origin/main, doszedł
+commit Masła (helpery interfejsu). Zestaw po scaleniu: 16 plików, 179 testów.
+
+Następny krok: 11 (lib/flo/execute.ts)

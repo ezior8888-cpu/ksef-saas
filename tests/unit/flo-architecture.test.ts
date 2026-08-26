@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve as resolvePath, dirname } from 'node:path';
+import { join, relative, resolve as resolvePath, dirname, sep } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -23,6 +23,18 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = process.cwd();
 const SCAN_DIRS = ['lib', 'app'];
+
+/**
+ * Ścieżka w jednej, przenośnej postaci.
+ *
+ * Na Windowsie `relative()` zwraca `lib\\ksef\\submit.ts`, a klucze
+ * w `OUTGOING_SINKS` i `KNOWN_UNGATED` są zapisane ukośnikami zwykłymi —
+ * bez tej normalizacji test przechodzi na macOS i Linuksie, a u kolegi
+ * pada na czterech asercjach. Zgłoszone przez Masło, 25.08.2026.
+ */
+function toPosix(path: string): string {
+  return path.split(sep).join('/');
+}
 
 /** Miejsca, w których coś naprawdę opuszcza nasz system. */
 const OUTGOING_SINKS: Record<string, string> = {
@@ -66,7 +78,7 @@ function listSourceFiles(dir: string): string[] {
       if (statSync(full).isDirectory()) {
         walk(full);
       } else if (entry.endsWith('.ts') || entry.endsWith('.tsx')) {
-        out.push(relative(ROOT, full));
+        out.push(toPosix(relative(ROOT, full)));
       }
     }
   };
@@ -88,7 +100,7 @@ function resolveImport(spec: string, from: string): string | null {
   if (spec.startsWith('@/')) {
     candidate = spec.slice(2);
   } else if (spec.startsWith('.')) {
-    candidate = relative(ROOT, resolvePath(ROOT, dirname(from), spec));
+    candidate = toPosix(relative(ROOT, resolvePath(ROOT, dirname(from), spec)));
   } else {
     return null; // pakiet z node_modules
   }
