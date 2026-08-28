@@ -996,3 +996,69 @@ Weryfikacja:
 - `pnpm typecheck` — zero błędów, eslint czysto
 
 Następny krok: 29 (X-04 spokój przy awarii Ministerstwa)
+
+## 2026-08-26 · Krok 29 — X-04 spokój przy awarii Ministerstwa
+
+Zrobione:
+- `lib/flo/functions/ksef-outage.ts` — `evaluateOutage` (czysta),
+  `shouldSwitchOffline`, `shouldReturnOnline`, `evaluateDeadline`,
+  `buildOutageProposal`, `buildDeadlineProposal`.
+
+NAJWAŻNIEJSZY WARUNEK W CAŁYM PLIKU: `if (!ourWorkerHealthy) return
+'our_problem'` — sprawdzany PRZED czymkolwiek innym. Padnięty nasz worker
+wygląda z zewnątrz identycznie jak awaria MF: wysyłki nie przechodzą, monitor
+milczy. Różnica jest taka, że w jednym przypadku winni jesteśmy my, a spokój
+oparty na kłamstwie kończy się utratą zaufania do wszystkiego, co agent mówi
+— bo prawda wyjdzie, gdy koledzy klienta będą fakturować normalnie.
+
+Awarię MF wolno ogłosić dopiero przy DWÓCH niezależnych źródłach (monitor
+zdrowia + realny kod 5xx z ostatniej wysyłki). Przy jednym obowiązuje formuła
+neutralna: „wysyłka nie przechodzi, sprawdzam dlaczego". Własna awaria NIE
+tworzy karty dla klienta — to sprawa operatora; klient dowie się z X-01,
+które mówi prawdę bez wskazywania winnego.
+
+Przełączenie w tryb offline wymaga serii trzech niepowodzeń I potwierdzenia
+z dwóch źródeł. Fałszywe przełączenie kosztuje rygor terminów i kody QR przy
+fakturach, których nikt nie potrzebował. Powrót po PIERWSZYM sukcesie.
+
+Termin Offline24 w weekend: ostrzeżenie w piątek, nie sześć godzin przed
+sobotnią północą. Klient nie zagląda do aplikacji w weekend, a po terminie
+zostaje mu przekroczony obowiązek ustawowy z powodu narzędzia, które miało
+go przed tym chronić.
+
+## 2026-08-26 · Krok 30 — X-05 audyt porządku
+
+Zrobione:
+- `lib/flo/functions/ksef-audit.ts` — `findAuditIssues` (czysta),
+  `buildAuditProposal`, `isAutoRepairable`.
+
+Kontrola ciągłości numeracji obejmuje WYŁĄCZNIE numery nadane przez nas
+(`ownNumbering`). Klient, który wcześniej fakturował gdzie indziej, ma tam
+własną numerację i własne anulowane dokumenty — zgłaszanie „luk" w cudzej
+numeracji to fałszywy alarm, po którym przestaje czytać cokolwiek od agenta.
+I słusznie, bo kazaliśmy mu tłumaczyć się z niczego.
+
+Sprawy sprzed rejestracji oznaczone jako zastane i pokazywane PO bieżących.
+To historia, którą klient nam przyniósł, nie zaniedbanie wobec nas — karta
+mówi to wprost.
+
+Max 5 pozycji, reszta zwinięta. Lista czterdziestu siedmiu problemów po
+imporcie historii to nie audyt, tylko paraliż.
+
+NIC nie jest zaznaczone z góry i nie ma przycisku „napraw wszystko" bez
+listy. Naprawy dotyczą wyłącznie metadanych (pobranie brakującego UPO,
+uzupełnienie NIP-u z rejestru) — nigdy treści faktury, kwot ani stron
+transakcji, bo tam każda zmiana jest zmianą dokumentu o wartości dowodowej.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 28 plików, 420 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+BLOK 5 (KSeF) DOMKNIĘTY. Zrobione 30 z 57 kroków.
+
+DŁUG WPIĘCIA (świadomy, jak przy bloku 3): funkcje X-01..X-05 są czystymi
+modułami z testami, ale nie są jeszcze wołane z zadań produkcyjnych. Wpięcie
+dotyka wysyłki do rejestru państwowego, więc robię je jednym ruchem, gdy
+komplet reguł jest gotowy — czyli teraz, w kroku 31, razem z blokiem 6.
+
+Następny krok: 31 (P-01 wykrywanie rytmu + wpięcie bloku 5)
