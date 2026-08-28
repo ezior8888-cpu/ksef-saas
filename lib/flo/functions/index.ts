@@ -9,6 +9,7 @@
 
 import './expense-review';
 import './expense-rules';
+import './payment-chase-handler';
 import './payment-confirm';
 
 export {};

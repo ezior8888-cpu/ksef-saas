@@ -800,3 +800,70 @@ z dwóch źródeł: zdjęć z telefonu i skrzynki KSeF.
 
 Następny krok: 23 (K-02 ponaglenia — wykonawca dla propozycji, które cron
 tworzy od kroku 6)
+
+## 2026-08-26 · Krok 23 — K-02 ponaglenia (domknięcie pętli z kroku 6)
+
+Zrobione:
+- `lib/flo/functions/payment-chase.ts` — część czysta: `evaluateChaseSafety`,
+  `validateRecipient`, `buildChaseProposal`, stała `DISCLAIMER`.
+- `lib/flo/functions/payment-chase-handler.ts` — wykonawca: okno
+  bezpieczeństwa na żywych danych, wiersz w `payment_reminders`, emisja
+  zdarzenia wysyłki Z ŻETONEM ZGODY.
+- `lib/reminders/templates.ts` — zdanie ratunkowe dopisane do etapów 2, 3 i 4.
+- `lib/inngest/jobs/reminder-scheduler.ts` — używa `buildChaseProposal`,
+  jedno źródło prawdy dla treści i progów.
+
+POTRÓJNA OBRONA, bo każda warstwa z osobna ma dziurę:
+1. Re-walidacja przy kliknięciu (wykonawca) — nie widzi wpłaty jeszcze
+   niezaksięgowanej.
+2. Okno bezpieczeństwa 48 h na wpłaty od kontrahenta — nie widzi gotówki.
+   Blokuje NAWET gdy wpłata nie została dopasowana do tej faktury:
+   księgowanie bywa wolniejsze niż przelew.
+3. Zdanie ratunkowe w treści maila — nie chroni przed wysłaniem, tylko
+   łagodzi skutek.
+
+ZNALEZIONE PRZY OKAZJI: etapy 2, 3 i 4 szablonów ponagleń NIE MIAŁY zdania
+ratunkowego. Etap 1 miał. To jest odwrotność tego, co powinno być — im
+ostrzejsza wiadomość, tym większa szkoda, jeśli adresat już zapłacił.
+Dopisane, plus test pilnujący, że każdy etap je ma.
+
+Wiersz w `payment_reminders` powstaje dopiero w wykonawcy, czyli po zgodzie.
+Od kroku 6 cron go nie tworzy — kolejka wpisów „pending", których nikt nie
+wyśle, to śmieci w bazie i fałszywy obraz w raportach.
+
+TEST ARCHITEKTONICZNY ZŁAPAŁ MNIE NA GORĄCYM UCZYNKU: po wpięciu
+`buildChaseProposal` do crona powstała statyczna ścieżka „cron → moduł, który
+potrafi wysyłać". Rozdzieliłem moduł na czysty i wykonawczy zamiast dopisywać
+wyjątek do listy długu. To jest dokładnie ta sytuacja, do której ten test
+powstał — i pierwszy raz zadziałał na czymś, co sam napisałem.
+
+## 2026-08-26 · Krok 24 — K-05 odsetki
+
+Zrobione:
+- `lib/flo/interest.ts` — tabela stóp z datami, naliczanie w podokresach,
+  `shouldOfferInterest`, `formatInterestBreakdown`.
+- Złoty zbiór: 20 przypadków, w tym przełom zmiany stopy, rok przestępny
+  (2028: luty ma 29 dni), jeden dzień, dzień płatności, daty odwrócone,
+  okres przez dwie zmiany stopy.
+
+⚠️ NAJWAŻNIEJSZE: `RATES_VERIFIED = false`.
+Wartości stóp to dane prawne, zmieniane decyzjami RPP i obwieszczeniami
+ministra. NIE WOLNO ich brać z pamięci modelu. Algorytm jest przetestowany
+i liczy poprawnie to, co mu się poda — ale dopóki flaga stoi na `false`,
+`shouldOfferInterest()` zwraca `false` i agent nie proponuje odsetek nikomu.
+
+DO ZROBIENIA PRZEZ CZŁOWIEKA: sprawdzić stawki w źródle urzędowym, uzupełnić
+pole `source` przy każdej pozycji i dopiero wtedy przestawić flagę. Test
+przypomina, że jedno bez drugiego nie ma sensu. To jest pytanie na rozmowę
+z księgową albo prawnikiem (bramka prawna, część VI.2 planu).
+
+Poza tym: naliczanie w podokresach, bo zaległość przez zmianę stopy liczona
+jedną stawką daje kwotę, której klient nie obroni — a wezwanie z kwotą nie do
+obronienia traci powagę i zabiera powagę wszystkiemu, co wyślemy później.
+Domyślnie WYŁĄCZONE, poniżej 10 zł opcja się nie pojawia.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 25 plików, 352 testy, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Następny krok: 25 (K-03 ocena kontrahenta — ŻÓŁTE, buduje się za flagą)

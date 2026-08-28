@@ -35,8 +35,10 @@ describe('zasada zgody — ponaglenia', () => {
   });
 
   it('cron tworzy propozycję do zatwierdzenia', () => {
-    expect(scheduler).toContain('flo_proposals');
-    expect(scheduler).toContain("kind: 'payment.chase'");
+    // Treść karty buduje `buildChaseProposal` (krok 23) — jedno źródło
+    // prawdy dla tekstu, progów i bezpieczników.
+    expect(scheduler).toContain('buildChaseProposal');
+    expect(scheduler).toContain('createProposal');
   });
 
   it('cron nie zapisuje już wierszy do payment_reminders', () => {

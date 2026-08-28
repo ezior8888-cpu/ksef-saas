@@ -20,14 +20,12 @@ import { inngest } from '@/lib/inngest/client';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
 import { computeFingerprint } from '@/lib/flo/fingerprint';
+import { buildChaseProposal } from '@/lib/flo/functions/payment-chase';
 import { createProposal } from '@/lib/flo/proposals';
 import {
   decideNextReminder,
   findInvoicesRequiringReminders,
 } from '@/lib/reminders/scheduler';
-
-/** Ponaglenie starzeje się szybko — po dwóch dobach sytuacja jest już inna. */
-const PROPOSAL_TTL_MS = 48 * 60 * 60 * 1000;
 
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
@@ -63,7 +61,9 @@ export async function runReminderScheduler({ step }: JobContext) {
         // kliknięciu. Gdyby cron budował fakty po swojemu, a wykonawca po
         // swojemu, każda propozycja wyglądałaby na nieaktualną w chwili
         // otwarcia — i agent milczałby zawsze.
-        const { fingerprint, state } = await computeFingerprint(
+        // Odcisk trafia do propozycji przez `buildChaseProposal`; tutaj
+        // potrzebujemy samych faktów do treści.
+        const { state } = await computeFingerprint(
           'payment.chase',
           payload,
         );
@@ -75,29 +75,19 @@ export async function runReminderScheduler({ step }: JobContext) {
         const number = state.context.invoiceNumber ?? 'bez numeru';
         const overdueDays = daysOverdue(invoice.payment_due_date);
 
-        const result = await createProposal({
-          tenantId: invoice.tenant_id,
-          kind: 'payment.chase',
-          // Etap w kluczu tematu, bo drugie i trzecie ponaglenie to osobne
-          // decyzje, a nie powtórka tej samej.
-          topicKey: `payment.chase:${invoice.id}:${stage}`,
-          priority: 10,
-          title: `${who} — ${formatPln(outstanding)}, ${overdueDays} dni po terminie`,
-          body: 'Przygotowałem wiadomość do wysłania. Przeczytaj ją i zdecyduj — sam jej nie wyślę.',
-          fingerprint,
-          expiresAt: new Date(Date.now() + PROPOSAL_TTL_MS),
-          payload: {
-            ...payload,
-            // Fakty zapisujemy razem z propozycją, żeby przy kliknięciu dało
-            // się powiedzieć nie tylko „nieaktualne”, ale CO się zmieniło.
+        const result = await createProposal(
+          buildChaseProposal({
+            tenantId: invoice.tenant_id,
+            invoiceId: invoice.id,
+            invoiceNumber: number,
+            contractorName: who,
+            outstanding,
+            daysOverdue: overdueDays,
+            stage,
+            recipientEmail: null,
             facts: state.facts,
-            suggestedFor: coerceStepDate(decision.scheduledFor).toISOString(),
-          },
-          evidence: [
-            { label: `Faktura ${number}`, href: `/invoices/${invoice.id}` },
-            { label: 'Przeterminowane', href: '/payments/overdue' },
-          ],
-        });
+          }),
+        );
 
         return result.status === 'created';
       });
@@ -132,31 +122,14 @@ export const reminderSchedulerJob = inngest.createFunction(
 // ═══════════════════════════════════════════════════════════════
 // Pomocnicze
 //
-// TYMCZASOWE: `formatPln` przenosi się do `lib/flo/money.ts` (krok 14),
-// razem z resztą formatowania kwot po stronie serwera.
+// Treść karty buduje `buildChaseProposal` (krok 23) — jedno źródło prawdy
+// dla tekstu, progów i bezpieczników. Tutaj zostaje wyłącznie to, czego
+// scheduler potrzebuje do wyliczeń.
 // ═══════════════════════════════════════════════════════════════
-
-function coerceStepDate(value: unknown): Date {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value;
-  }
-  if (typeof value === 'string' || typeof value === 'number') {
-    const d = new Date(value);
-    if (!Number.isNaN(d.getTime())) return d;
-  }
-  return new Date(NaN);
-}
 
 function daysOverdue(dueDate: string | null): number {
   if (!dueDate) return 0;
   const due = Date.parse(dueDate);
   if (Number.isNaN(due)) return 0;
   return Math.max(0, Math.floor((Date.now() - due) / 86_400_000));
-}
-
-function formatPln(amount: number): string {
-  return new Intl.NumberFormat('pl-PL', {
-    style: 'currency',
-    currency: 'PLN',
-  }).format(amount);
 }

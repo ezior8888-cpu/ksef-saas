@@ -64,6 +64,8 @@ W tytule przelewu prosimy podać numer faktury: **{numerFaktury}**
 
 Jeśli wystąpiły problemy z płatnością lub potrzebujecie Państwo dłuższego terminu, prosimy o kontakt — wspólnie znajdziemy rozwiązanie.
 
+Jeśli płatność już wyszła, prosimy potraktować tę wiadomość jako nieaktualną.
+
 Pozdrawiam,
 {imieNadawcy}
 {nazwaFirmy}`,
@@ -89,6 +91,8 @@ Tytuł przelewu: **{numerFaktury}**
 
 Mamy nadzieję na polubowne rozwiązanie sprawy. W razie pytań prosimy o pilny kontakt.
 
+Jeśli płatność już wyszła, prosimy potraktować tę wiadomość jako nieaktualną.
+
 Z poważaniem,
 {imieNadawcy}
 {nazwaFirmy}`,
@@ -109,6 +113,8 @@ W przypadku braku wpłaty w ciągu **3 dni roboczych** od otrzymania tego emaila
 - koszty postępowania sądowego obciążą dłużnika
 
 To ostatnia szansa na polubowne rozwiązanie. Prosimy o pilny kontakt lub zapłatę.
+
+Jeśli płatność już wyszła, prosimy potraktować tę wiadomość jako nieaktualną.
 
 Z poważaniem,
 {imieNadawcy}
