@@ -1062,3 +1062,67 @@ dotyka wysyłki do rejestru państwowego, więc robię je jednym ruchem, gdy
 komplet reguł jest gotowy — czyli teraz, w kroku 31, razem z blokiem 6.
 
 Następny krok: 31 (P-01 wykrywanie rytmu + wpięcie bloku 5)
+
+## 2026-08-26 · WPIĘCIE BLOKU 5 (KSeF)
+
+Dług z kroków 26-30 spłacony. Pięć funkcji przestało być czystymi modułami
+i zaczęło pracować na produkcji:
+
+- `notify-user.ts` — X-01 (karta o stanie wysyłki, z rozdzieleniem „przyjęta"
+  i „mam poświadczenie") oraz X-02 (karta po odrzuceniu). Powiadomienie znika,
+  karta zostaje i mówi prawdę o tym, czy dowód przyjęcia już jest.
+- `cert-expiry-alert.ts` — X-03. Stan liczony z ostatniego wpisu w
+  `ksef_health_log` (realna próba autoryzacji), nie z pola z datą.
+- `process-offline-queue.ts` — X-04. Drugie źródło do potwierdzenia awarii MF
+  bierzemy z `health.isMfOutage`, które health-check ustawia dopiero przy
+  odpowiedzi 5xx z samego KSeF — czyli na podstawie tego, co odpowiedziało
+  Ministerstwo, a nie tego, że cokolwiek padło. Do tego alarm o zbliżającym
+  się terminie Offline24, z osobnym wariantem weekendowym.
+- `lib/flo/tick.ts` + `lib/flo/functions/audit-sweep.ts` — X-05. Audyt chodzi
+  RAZ W MIESIĄCU, pierwszego dnia roboczego. Codzienne przypominanie o tych
+  samych zaległościach zamieniłoby przegląd papierów w listę zarzutów, a audyt
+  wypadający w sobotę klient zobaczyłby dopiero po weekendzie — z kartą, która
+  ma już trzy dni i wygląda na zaniedbaną przez agenta.
+
+`audit-sweep.ts` jest osobno od `ksef-audit.ts` celowo: tamten moduł zostaje
+czysty i testowalny bez bazy, tutaj mieszka wyłącznie odczyt i pętla po
+organizacjach — czyli to, co i tak trzeba by wyciąć z testów.
+
+## 2026-08-26 · Krok 31 — P-01 wykrywanie rytmu
+
+Zrobione:
+- `lib/flo/rhythm.ts` — `detectRhythm`, `itemSimilarity`, `missedCycles`,
+  `nextProfileState`, `canGenerateDrafts`, `detectSeasonality`.
+- `tests/unit/flo-rhythm.test.ts` — 18 testów.
+
+TRZY WARUNKI NARAZ, bo każdy z osobna daje fałszywe trafienia:
+- min. 3 faktury — sama liczba nie odróżnia abonamentu od trzech zleceń,
+- rozrzut odstępów < 25% mediany — sam odstęp nie odróżnia współpracy od
+  zbiegu okoliczności,
+- podobieństwo pozycji > 0,8 — same pozycje nie mówią nic o rytmie.
+
+Test najważniejszej awarii: trzy jednorazowe zlecenia dla tej samej firmy
+w odstępach zbliżonych do miesiąca NIE dają profilu, bo pozycje są różne.
+Bez tego warunku agent zacząłby dowozić szkice, których nikt nie zamawiał —
+i straciłby zaufanie także do propozycji trafnych.
+
+Podobieństwo liczone tolerancyjnie: „Usługi programistyczne" i „Usługi
+programistyczne — sierpień" to ta sama usługa. Wymaganie identyczności
+sprawiłoby, że funkcja nie działałaby u nikogo.
+
+Profil rodzi się jako KANDYDAT i nie generuje szkiców, dopóki człowiek raz
+nie potwierdzi. Agent coś zauważył, ale nie ma prawa działać na podstawie
+własnego domysłu.
+
+Uśpienie po dwóch pominiętych cyklach jest CICHE — komunikat „usypiam profil"
+brzmiałby jak przypomnienie o straconym kliencie. Cykle liczone w cyklach,
+nie w dniach: przy rytmie kwartalnym miesiąc zwłoki to nic.
+
+Sezonowość wymaga DWÓCH PEŁNYCH LAT. Jeden rok to nie wzorzec, tylko opis
+zeszłego roku — fotograf, który miał jedno lato, nie dowiódł jeszcze niczego.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 29 plików, 438 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Następny krok: 32 (P-02 paczka szkiców — promień rażenia 4)

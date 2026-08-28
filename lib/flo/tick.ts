@@ -14,6 +14,7 @@
 
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { floDb, type FloDbClient } from '@/lib/flo/db-types';
+import { runKsefAuditSweep } from '@/lib/flo/functions/audit-sweep';
 import { expireStale } from '@/lib/flo/proposals';
 import type { JobContext } from '@/lib/jobs/registry';
 
@@ -31,6 +32,7 @@ const STUCK_AFTER_MS = 15 * 60_000;
 export interface FloTickResult {
   expired: number;
   released: number;
+  audited: number;
 }
 
 export async function runFloTick(
@@ -41,6 +43,15 @@ export async function runFloTick(
   const expired = await expireStale(now, db);
   const released = await releaseStuck(now, db);
 
+  // ── reguły funkcji ─────────────────────────────────────────
+  //
+  // Audyt porządku (X-05) chodzi RAZ W MIESIĄCU, nie codziennie: to jest
+  // przegląd papierów, a nie sprawa bieżąca. Codzienne przypominanie o tych
+  // samych zaległościach zamieniłoby go w listę zarzutów.
+  const audited = isFirstBusinessDay(now)
+    ? await runKsefAuditSweep(now)
+    : 0;
+
   // ── miejsce na reguły funkcji ──────────────────────────────
   //
   // Od bloku 3 każda funkcja agenta dokłada tu swoje pytanie do danych:
@@ -49,7 +60,7 @@ export async function runFloTick(
   // potem propozycje), więc nowe reguły dopisujemy NA KOŃCU, a nie
   // wciskamy między istniejące.
 
-  return { expired, released };
+  return { expired, released, audited };
 }
 
 /**
@@ -101,4 +112,19 @@ async function releaseStuck(now: Date, db: FloDbClient): Promise<number> {
   }
 
   return rows.length;
+}
+
+/**
+ * Czy dziś jest pierwszy dzień miesiąca (albo poniedziałek po nim).
+ *
+ * Audyt wpadający w sobotę zobaczyłby klient dopiero po weekendzie, kiedy
+ * karta ma już trzy dni i wygląda na zaniedbaną przez agenta.
+ */
+function isFirstBusinessDay(now: Date): boolean {
+  const day = now.getUTCDate();
+  const weekday = now.getUTCDay();
+  if (day === 1) return weekday !== 0 && weekday !== 6;
+  if (day === 2) return weekday === 1;
+  if (day === 3) return weekday === 1;
+  return false;
 }

@@ -15,6 +15,12 @@ import {
 } from '@/lib/email/send';
 import { sendPushToUser } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createProposal } from '@/lib/flo/proposals';
+import {
+  buildKsefStatusProposal,
+  evaluateSubmission,
+} from '@/lib/flo/functions/ksef-status';
+import { buildKsefFixProposal } from '@/lib/flo/functions/ksef-fix';
 
 /**
  * Notyfikacje per-użytkownik po zakończeniu wysyłki faktury.
@@ -38,6 +44,39 @@ import { createAdminClient } from '@/lib/supabase/admin';
  */
 export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucceeded.create>[0], { step, logger }: JobContext) {
     const { tenantId, invoiceId, ksefNumber } = data;
+
+    // Karta agenta (X-01). Powiadomienie znika, karta zostaje — i mówi
+    // prawdę o tym, czy poświadczenie odbioru już jest. Przy kontroli
+    // różnica między „wysłałem" a „mam UPO" jest całą różnicą.
+    await step.run('flo-status-card', async () => {
+      const supabase = createAdminClient();
+      const { data: invoice } = await supabase
+        .from('invoices')
+        .select('internal_number, ksef_status, updated_at')
+        .eq('id', invoiceId)
+        .maybeSingle();
+
+      const { count } = await supabase
+        .from('upo_receipts')
+        .select('*', { count: 'exact', head: true })
+        .eq('invoice_id', invoiceId);
+
+      const snapshot = {
+        invoiceId,
+        invoiceNumber: invoice?.internal_number ?? ksefNumber ?? 'bez numeru',
+        state: 'accepted' as const,
+        hasUpo: (count ?? 0) > 0,
+        since: invoice?.updated_at ?? new Date().toISOString(),
+        attempts: 1,
+      };
+
+      const proposal = buildKsefStatusProposal({
+        tenantId,
+        snapshot,
+        verdict: evaluateSubmission(snapshot, new Date()),
+      });
+      if (proposal) await createProposal(proposal);
+    });
 
     const email = await step.run('get-admin-email', () =>
       getTenantAdminEmail(tenantId),
@@ -117,6 +156,38 @@ export const notifySuccessJob = inngest.createFunction(
  */
 export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFailed.create>[0], { step, logger }: JobContext) {
     const { tenantId, invoiceId, error, fromOfflineQueue } = data;
+
+    // Karta agenta (X-02). Tłumaczy odrzucenie i — gdy rozwiązanie jest
+    // jedno — pokazuje gotową poprawkę z podglądem różnicy.
+    await step.run('flo-fix-card', async () => {
+      const supabase = createAdminClient();
+      const { data: invoice } = await supabase
+        .from('invoices')
+        .select('internal_number, last_error_code')
+        .eq('id', invoiceId)
+        .maybeSingle();
+
+      const { count } = await supabase
+        .from('ksef_submissions')
+        .select('*', { count: 'exact', head: true })
+        .eq('invoice_id', invoiceId);
+
+      await createProposal(
+        buildKsefFixProposal({
+          tenantId,
+          invoiceId,
+          invoiceNumber: invoice?.internal_number ?? 'bez numeru',
+          context: {
+            code: String(invoice?.last_error_code ?? 'brak'),
+            rawMessage: error,
+            attempts: count ?? 1,
+            // Kandydat na poprawkę wyliczy osobne zadanie; tutaj nie
+            // zgadujemy, bo poprawka bez pewności jest gorsza od jej braku.
+            candidate: undefined,
+          },
+        }),
+      );
+    });
 
     if (fromOfflineQueue) {
       logger.info(

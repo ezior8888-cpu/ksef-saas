@@ -8,6 +8,13 @@ import type { JobContext } from '@/lib/jobs/registry';
 
 import { createAdminClient } from '@/lib/supabase/server';
 import { checkKsefAvailability } from '@/lib/ksef/health-check';
+import { createProposal } from '@/lib/flo/proposals';
+import {
+  buildDeadlineProposal,
+  buildOutageProposal,
+  evaluateDeadline,
+  evaluateOutage,
+} from '@/lib/flo/functions/ksef-outage';
 import { calculateNextRetry } from '@/lib/ksef/idempotency';
 import {
   getInvoiceForSubmit,
@@ -31,6 +38,62 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
     );
 
     if (!health.available) {
+      // Karta agenta (X-04). Awarię Ministerstwa wolno ogłosić dopiero
+      // przy DWÓCH źródłach: monitorze i realnym kodzie 5xx z wysyłki.
+      // Przy jednym mówimy, co widzimy, bez wskazywania winnego — spokój
+      // oparty na kłamstwie kończy się utratą zaufania do wszystkiego.
+      await step.run('flo-outage-card', async () => {
+        const supabase = createAdminClient();
+
+        const { data: queued } = await supabase
+          .from('ksef_offline_queue')
+          .select('tenant_id, deadline')
+          .eq('status', 'pending');
+
+        const byTenant = new Map<string, string[]>();
+        for (const row of queued ?? []) {
+          const id = row.tenant_id as string;
+          byTenant.set(id, [...(byTenant.get(id) ?? []), String(row.deadline)]);
+        }
+
+        const now = new Date();
+
+        for (const [tenantId, deadlines] of byTenant) {
+          const verdict = evaluateOutage({
+            monitorSaysDown: true,
+            // Drugie źródło: `isMfOutage` ustawia health-check dopiero przy
+            // odpowiedzi 5xx z samego KSeF — czyli na podstawie tego, co
+            // Ministerstwo odpowiedziało, a nie tego, że cokolwiek padło.
+            lastSubmitStatus: health.isMfOutage ? 503 : null,
+            consecutiveFailures: deadlines.length,
+            // Skoro ten cron się wykonuje, nasz worker żyje.
+            ourWorkerHealthy: true,
+          });
+
+          const outage = buildOutageProposal({
+            tenantId,
+            verdict,
+            queuedCount: deadlines.length,
+            now,
+          });
+          if (outage) await createProposal(outage);
+
+          // Najbliższy termin decyduje o alarmie — po nim zostaje tylko
+          // droga papierowa.
+          const soonest = deadlines.sort()[0];
+          if (soonest) {
+            const alert = evaluateDeadline(new Date(soonest), now);
+            const deadlineCard = buildDeadlineProposal({
+              tenantId,
+              alert,
+              invoiceCount: deadlines.length,
+              now,
+            });
+            if (deadlineCard) await createProposal(deadlineCard);
+          }
+        }
+      });
+
       return {
         skipped: true as const,
         reason: 'KSeF unavailable',
