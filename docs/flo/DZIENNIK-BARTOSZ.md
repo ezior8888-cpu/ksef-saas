@@ -1177,3 +1177,55 @@ Do `FLO-PLAN-MASLO.md` dopisana krótsza wersja: co jest gotowe, trzy nowe
 pola w ładunku, gdzie się zatrzyma i dlaczego.
 
 Następny krok: 34 (P-07 zaliczka i faktura końcowa)
+
+## 2026-08-26 · app/actions/flo.ts — MASŁO ODBLOKOWANY
+
+Zrobione poza kolejnością planu, przed krokiem 34, bo to jedyna rzecz
+blokująca tor interfejsu przy jego kroku 19.
+
+- `app/actions/flo.ts` — komplet ośmiu akcji z kontraktu III.3.
+- `tests/unit/flo-actions.test.ts` — 8 testów.
+
+Trzy rzeczy zrobione dokładnie tak, jak musiały:
+1. `import '@/lib/flo/functions'` dla efektu ubocznego — bez tego rejestr
+   wykonawców jest pusty i agent odpowiada „tego jeszcze nie umiem wykonać"
+   na każde kliknięcie. Osobny test tego pilnuje, bo to pułapka, która już
+   raz uderzyła w workerze.
+2. Żeton zgody powstaje w akcji, PRZED wykonaniem, z migawką tego, co klient
+   miał na ekranie (tytuł, treść, ładunek, wpisane dane, czas kliknięcia).
+   Test sprawdza kolejność: `createApproval` przed `executeProposal`.
+3. `reason: 'stale'` wraca do interfejsu jako normalna zwrotka, nie wyjątek.
+
+BŁĄD ZŁAPANY PRZED WDROŻENIEM: plik z dyrektywą `'use server'` może
+eksportować WYŁĄCZNIE funkcje asynchroniczne. Miałem na końcu re-eksport
+`ActionAuthError` i `toProposalView` — `pnpm typecheck` tego nie łapie,
+wywaliłby się dopiero `next build`, czyli w najgorszym momencie. Usunięte,
+a test skanujący źródło pilnuje, żeby nie wróciło.
+
+Bezpieczeństwo: każda akcja zaczyna się od `requireUserAndActiveOrg()`,
+a akcje działające na pojedynczej propozycji dodatkowo filtrują po
+`tenant_id` w zapytaniu. Klient administracyjny omija RLS, więc sama
+znajomość identyfikatora propozycji nie może wystarczyć do wykonania cudzej
+sprawy. Osobne testy na jedno i drugie.
+
+Decyzje semantyczne:
+- `listScheduled` czyta propozycje o statusie `approved` i odfiltrowuje te
+  bez `approved_at`. Pozycja bez śladu zatwierdzenia nie ma prawa pojawić
+  się w panelu „Zatwierdzone — czeka na wykonanie": byłaby zgodą przez
+  milczenie, czyli modelem, który został odrzucony.
+- „Wstrzymaj" (`cancelScheduled`) wraca propozycję do wątku jako OTWARTĄ,
+  nie kasuje jej. Klient wstrzymał wykonanie, ale sprawa nadal istnieje —
+  skasowanie byłoby podjęciem za niego drugiej decyzji, o którą nie prosił.
+- Data zatwierdzenia formatowana w strefie Europe/Warsaw. Kontenery chodzą
+  w UTC, a to jest ślad zgody, który przy reklamacji musi zgadzać się co do
+  dnia.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 31 plików, 466 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Uwagi dla Masła: możesz iść dalej od kroku 19. Wołasz `approveProposal(id,
+input?)`, a `{ ok: false, reason: 'stale' }` obsługujesz spokojnym
+komunikatem z pola `message`, nie błędem.
+
+Następny krok: 34 (P-07 zaliczka i faktura końcowa)
