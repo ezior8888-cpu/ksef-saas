@@ -22,6 +22,7 @@
 
 import {
   floDb,
+  type FloDbClient,
   type FloProposalInsert,
   type FloProposalRow,
 } from '@/lib/flo/db-types';
@@ -150,8 +151,10 @@ export async function createProposal(
  * co agent widział i czego człowiek nie potrzebował. To materiał do pomiaru
  * trafności, a nie śmieć.
  */
-export async function expireStale(now: Date = new Date()): Promise<number> {
-  const db = floDb();
+export async function expireStale(
+  now: Date = new Date(),
+  db: FloDbClient = floDb(),
+): Promise<number> {
 
   const stale = await db
     .from('flo_proposals')

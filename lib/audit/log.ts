@@ -49,6 +49,7 @@ export type AuditAction =
   // na karcie: to jest odpowiedź na reklamację „ja tego nie klikałem”.
   | 'flo.proposal.executed'
   | 'flo.proposal.failed'
+  | 'flo.proposal.undone'
   | 'invoice.draft_created'
   | 'invoice.draft_updated'
   | 'invoice.draft_deleted'

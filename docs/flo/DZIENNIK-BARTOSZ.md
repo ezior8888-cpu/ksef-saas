@@ -455,3 +455,76 @@ Weryfikacja:
 - `pnpm typecheck` — zero błędów, eslint czysto
 
 Następny krok: 13 (lib/flo/undo.ts + cron flo.tick)
+
+## 2026-08-26 · Krok 13 — cofnięcie i puls agenta
+
+Zrobione:
+- `lib/flo/undo.ts` — `captureUndo`, `evaluateUndo` (czysta reguła),
+  `undoAction`, okno 10 minut.
+- `lib/flo/tick.ts` — `runFloTick`: wygaszanie przeterminowanych + podnoszenie
+  propozycji porzuconych w stanie „wykonuję”.
+- `lib/jobs/handlers/flo-tick.ts` + wpis w `queues.ts` (`cron.flo-tick`,
+  07:30 Europe/Warsaw) + import w `worker.ts`.
+- `tests/unit/flo-undo-tick.test.ts` — 12 testów.
+
+Decyzje:
+- Cofnięcie NIE nadpisuje pól, których człowiek dotknął w międzyczasie.
+  Przed przywróceniem sprawdzamy, czy wartość nadal jest ta, którą ustawił
+  agent; jeśli ktoś ją poprawił ręcznie, wycofujemy się z komunikatem
+  „zostawiam Twoją wersję”. Bez tego cofnięcie kasowałoby cudzą pracę.
+- Puls podnosi propozycje wiszące w „wykonuję” dłużej niż 15 minut (worker
+  mógł zginąć w połowie). Wracają do stanu „zatwierdzona”, nie „otwarta” —
+  człowiek już się zgodził, więc odbieranie mu tej zgody byłoby cofaniem
+  jego decyzji. Żeton jest wtedy zużyty, więc realne wykonanie i tak wymaga
+  ponownego kliknięcia. To domyka obietnicę z komentarza w `execute.ts`.
+- ŚWIADOME ODSTĘPSTWO: nie tworzę bliźniaczej funkcji Inngest dla tego crona.
+  Produkcja pracuje na pg-boss od 18 sierpnia, Inngest jest odpinany —
+  dokładanie do niego nowych funkcji byłoby długiem w chwili powstania.
+  Starsze zadania mają jeszcze bliźniaki z okresu przejściowego, nowe nie.
+- Test inwentaryzacji cronów podniesiony z 22 na 23, z komentarzem dlaczego.
+  Ta liczba ma być zmieniana świadomie — cron dokłada się cicho, a każdy
+  kosztuje przebiegi na produkcji.
+
+## 2026-08-26 · Krok 14 — szablony i kwoty
+
+Zrobione:
+- `lib/flo/money.ts` — `formatPln`, `formatPlnPlain`, `formatDays`.
+- `lib/flo/copy.ts` — 15 szablonów, `renderCopy`, `renderTemplate`,
+  `placeholdersOf`, `FloCopyError`.
+- `tests/unit/flo-copy.test.ts` — 13 testów, w tym właściwościowy na 500 losowań.
+
+NAJWAŻNIEJSZA ASERCJA: żaden szablon nie zawiera ani jednej cyfry. Cyfra
+wpisana na sztywno („14 dni”, „23% VAT”) sprawia, że agent zaczyna kłamać
+klientom, u których liczba jest inna — i nikt tego nie zauważy, bo tekst
+wygląda poprawnie. Do tego test właściwościowy: dla 500 losowych zestawów
+wartości każda liczba w wyrenderowanym tekście musi pochodzić z danych.
+
+Decyzje o kwotach:
+- Twarda spacja (U+00A0) jako separator tysięcy i przed „zł”: „22 140,00 zł”
+  nie ma prawa złamać się na końcu linii w mailu ani w PDF.
+- `formatPlnPlain` dla plików czytanych przez maszynę — twarda spacja
+  w arkuszu potrafi zamienić liczbę w tekst i zepsuć import u księgowej.
+- `useGrouping: 'always'` — domyślny `Intl` dla polskiego pomija separator
+  przy czterech cyfrach („4300,00”), przez co dwie kwoty obok siebie wyglądają
+  jak z dwóch różnych programów. Złapane przez test.
+
+DO POPRAWY KIEDYŚ (nie w tym kroku): `formatPln` w `lib/reminders/templates.ts`
+używa gołego `Intl`, więc w istniejących mailach kwoty czterocyfrowe są bez
+separatora. Rozjazd kosmetyczny, ale realny — do ujednolicenia przy pracy
+nad treściami ponagleń.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 20 plików, 227 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+## PUNKT INTEGRACJI Z MASŁEM — blok 1 domknięty
+
+Od tego momentu pierwsza prawdziwa propozycja przechodzi CAŁĄ drogę:
+cron `flo.tick` → `createProposal` → wątek → kliknięcie → żeton zgody →
+re-walidacja → wykonawca → dziennik audytowy → status `done`.
+
+Czego Masło jeszcze nie ma: `app/actions/flo.ts`. Jego kroki 3-18 działają
+na atrapach bez zmian, blokada zaczyna się przy jego kroku 19. To jest
+następna rzecz do zrobienia po bloku 2.
+
+Następny krok: 15 (lib/flo/llm.ts — warstwa modelu)

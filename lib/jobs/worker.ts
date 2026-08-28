@@ -35,6 +35,7 @@ import './handlers/package-a';
 import './handlers/package-b';
 import './handlers/package-c';
 import './handlers/package-d';
+import './handlers/flo-tick';
 
 const log = createJobLogger('worker');
 

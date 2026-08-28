@@ -94,6 +94,9 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.daily-analytics-digest', cron: '0 6 * * *', tz: TZ },
   { queue: 'cron.daily-db-snapshot', cron: '0 2 * * *', tz: TZ },
   { queue: 'cron.daily-summary-email', cron: '0 6 * * *', tz: TZ },
+  // Puls agenta FLO: sprząta po sobie i (od bloku 3) tworzy propozycje.
+  // 07:30, czyli po ciszy nocnej, a przed tym, jak ktokolwiek otworzy apkę.
+  { queue: 'cron.flo-tick', cron: '30 7 * * *', tz: TZ },
   { queue: 'cron.gdpr-process-deletions', cron: '0 * * * *' },
   { queue: 'cron.inbox-polling', cron: '*/15 * * * *', tz: TZ },
   { queue: 'cron.jobs-watchdog', cron: '*/15 * * * *', tz: TZ },

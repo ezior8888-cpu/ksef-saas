@@ -180,8 +180,12 @@ describe('EVENT_QUEUE_MAP — alarm dryfu względem lib/inngest/client.ts', () =
 });
 
 describe('CRON_JOBS', () => {
-  it('22 crony (inwentaryzacja 17 sie 2026), unikalne kolejki cron.*', () => {
-    expect(CRON_JOBS.length).toBe(22);
+  it('23 crony (inwentaryzacja 26 sie 2026), unikalne kolejki cron.*', () => {
+    // 22 → 23: doszedł `cron.flo-tick`, puls agenta FLO (krok 13 planu).
+    // Ta liczba jest celowo wpisana na sztywno: cron dokłada się cicho,
+    // a każdy nowy kosztuje przebiegi na produkcji. Zmiana tu ma być
+    // świadoma, nie automatyczna.
+    expect(CRON_JOBS.length).toBe(23);
     const queues = CRON_JOBS.map((c) => c.queue);
     expect(new Set(queues).size).toBe(queues.length);
     for (const c of CRON_JOBS) {
