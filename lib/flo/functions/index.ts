@@ -8,5 +8,6 @@
  */
 
 import './expense-review';
+import './expense-rules';
 
 export {};

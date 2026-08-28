@@ -652,3 +652,76 @@ Weryfikacja:
 - `pnpm typecheck` — zero błędów, eslint czysto
 
 Następny krok: 19 (W-02 koszty z KSeF + podłączenie propozycji do OCR)
+
+## 2026-08-26 · Krok 19 — W-02 koszty ze skrzynki KSeF
+
+Zrobione:
+- `lib/flo/functions/expense-inbox.ts` — `classifyInboxDocuments`,
+  `buildInboxSummaryProposal`, `pairReceiptsWithInvoices`,
+  `evaluateContinuity`, `cursorMatchesWindow`.
+- `supabase/migrations/00063_flo_inbox_and_rules.sql` — tabela
+  `ksef_inbox_cursor` (utrwalony kursor paginacji + liczniki).
+
+TRZY AWARIE:
+1. Cudza faktura — nieznany sprzedawca powyżej 500 zł oraz każdy dokument
+   z niepełnymi danymi sprzedawcy trafia do „do decyzji", nigdy sam do księgi.
+   Drobne kwoty od nieznanych przechodzą, bo pytanie o każdy byłoby udręką.
+2. Ten sam zakup dwa razy — `pairReceiptsWithInvoices` łączy po znormalizowanej
+   nazwie, kwocie (±1 gr) i dacie (±3 dni). Wynik idzie WYŁĄCZNIE do domknięcia
+   miesiąca. Bez powiadomienia i bez słowa „duplikat": klient sfotografował
+   paragon, a potem dostał fakturę — nie zrobił nic złego.
+3. Urwane pobieranie — najgroźniejsza, bo cicha. `evaluateContinuity` daje
+   `resume` (mamy token — dokończ), `incomplete` (token się skończył, a liczby
+   się nie zgadzają — alarm) albo `complete`. Kursor jest związany z oknem dat:
+   token z innego zapytania dałby wyniki z innego zakresu i cichą lukę.
+
+Jedna karta na przebieg, nie jedna na dokument — pięć faktur w nocy to pięć
+powiadomień o siódmej rano, czyli hałas, przez który ludzie wyłączają
+powiadomienia i przestają widzieć również te ważne. Odmiana przez liczebnik
+po stronie serwera, bo tam powstaje tekst.
+
+## 2026-08-26 · Krok 20 — W-03 nauka reguł
+
+Zrobione:
+- `lib/flo/functions/expense-rules.ts` — `ruleApplies` (czysta),
+  `computeBounds`, `ruleSourceMarker`, `buildRuleProposal`,
+  `invalidatesRules`, `invalidateRulesForTenant`, handler `expense.rule`.
+- Migracja 00063 dokłada `min_amount` / `max_amount` do `categorization_rules`.
+
+TRZY AWARIE:
+1. Reguła nauczona na wyjątku — reguła zapamiętuje sprzedawcę I WIDEŁKI
+   KWOTOWE (dotychczasowe kwoty ×2,5 w górę, ÷2,5 w dół). Wydatek poza
+   widełkami pyta MIMO istnienia reguły. Bez tego reguła z zakupu za 200 zł
+   księgowałaby laptop za 8000 — cicho, przez wiele miesięcy.
+   Reguły sprzed migracji (bez widełek) działają jak dotąd; nie zmieniam
+   zachowania rzeczy, które już działają.
+2. „Kto to zaksięgował" — `ruleSourceMarker` niesie nazwę reguły, datę
+   powstania i odnośnik do wyłączenia. Bez daty i drogi wyjścia znacznik
+   byłby ozdobą, nie wyjaśnieniem.
+3. Zmiana profilu podatkowego — `invalidatesRules` przy zmianie formy albo
+   statusu VAT. Reguły KASUJEMY, nie wyłączamy: reguła oparta na nieaktualnym
+   założeniu jest gorsza od jej braku, bo wygląda na przemyślaną. Brak profilu
+   po którejś stronie nie kasuje niczego — nie wolno kasować cudzej pracy
+   na podstawie niewiedzy.
+
+Propozycja mówi wprost, jakich kwot reguła dotyczy („od 39,60 zł do 247,50 zł
+— przy większych i tak zapytam"). „Zawsze tak księguj" bez podania zakresu
+byłoby zgodą w ciemno.
+
+DŁUG DO SPŁACENIA W KROKU 21 (jawnie, żeby nie wyglądało na przeoczenie):
+- `process-ocr.ts` i `inbox-polling.ts` nadal nie tworzą propozycji ani nie
+  używają kursora. Funkcje są gotowe i przetestowane, ale wpięcie zmienia
+  zachowanie produkcyjnych zadań, a te dwa dotykają realnych dokumentów
+  klientów. Robię to jednym świadomym ruchem w kroku 21, razem z W-04,
+  zamiast trzema wdrożeniami po kawałku.
+- `ruleApplies` nie jest jeszcze wpięte w `lib/categorization/rule-engine.ts`
+  — to samo uzasadnienie.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 23 pliki, 299 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+- migracja 00063: nawiasy zbilansowane, brak kolizji numeru
+
+DO WGRANIA PRZEZ CZŁOWIEKA: migracja 00063 (procedura z AGENTS.md).
+
+Następny krok: 21 (W-04 łowca zapomnianych kosztów + wpięcie W-01..W-03)
