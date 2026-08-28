@@ -528,3 +528,64 @@ na atrapach bez zmian, blokada zaczyna się przy jego kroku 19. To jest
 następna rzecz do zrobienia po bloku 2.
 
 Następny krok: 15 (lib/flo/llm.ts — warstwa modelu)
+
+## 2026-08-26 · Krok 15 — warstwa modelu
+
+Zrobione:
+- `lib/flo/llm.ts` — `generateCopy`, `validateModelCopy` (czysta), `modelFor`.
+- `tests/unit/flo-llm-budget.test.ts` — część testów (razem z krokiem 16: 22).
+
+Jak to działa:
+- Model dostaje NAZWY pól i wzór do ulepszenia, a nie wartości. Ma zwrócić
+  zdanie z placeholderami; liczby podstawia kod z kroku 14. Halucynacja kwoty
+  jest przez to strukturalnie niemożliwa, a nie „mało prawdopodobna”.
+- Trzy sita na wyjściu: schemat (JSON z title/body), ZAKAZ JAKIEJKOLWIEK
+  CYFRY, biała lista placeholderów. Po odrzuceniu jedna ponowna próba
+  z informacją, co było źle. Po drugim — szablon.
+- `claude-haiku-4-5` domyślnie, `claude-sonnet-5` tylko tam, gdzie danych
+  jest dużo, a wywołanie jedno (domknięcie miesiąca, podsumowanie roku).
+  Kryterium to nie „ważność”, tylko objętość kontekstu.
+- Zużycie zapisywane TAKŻE dla odrzuconych odpowiedzi — inaczej pętla
+  ponowień byłaby niewidoczna w rachunku, czyli dokładnie tam, gdzie boli.
+
+ŚWIADOME ODSTĘPSTWA (oba opisane w kodzie):
+1. KOLEJKA WSADOWA — nie teraz. Plan przewiduje ją dla nocnych wywołań
+   z `flo.tick`, ale puls dziś nie generuje ŻADNYCH treści (reguły funkcji
+   dochodzą od bloku 3). Zbudowałbym potok bez nadawcy. Wraca przy pierwszej
+   funkcji produkującej propozycje nocą, razem z odbiorem wyników przed 07:30.
+2. PAMIĘĆ PODRĘCZNA PROMPTU — znacznik jest, oszczędności jeszcze nie ma.
+   Część stała ma dziś kilkaset tokenów, a próg opłacalności liczy się
+   w tysiącach. Urośnie, gdy dojdzie przewodnik po głosie agenta od Masła.
+   Zapisane w komentarzu, żeby nikt nie uznał tego za działającą optymalizację.
+
+## 2026-08-26 · Krok 16 — bezpiecznik kosztowy
+
+Zrobione:
+- `lib/flo/budget.ts` — cennik, `estimateCostUsd`, `evaluateBudget` (czysta),
+  `assertBudget`, `recordUsage`, `readSpend`.
+
+Liczby (założenia jawnie w kodzie):
+- kurs 3,60 zł/USD jako stała — limity są z natury przybliżone, a odpytywanie
+  NBP po to, żeby wiedzieć, czy wolno wywołać model za grosz, byłoby absurdem
+- cel 0,95 zł/mies. na klienta (≈3% ceny netto), twardy limit 3 zł (≈9%)
+- limit dobowy 0,60 zł — celowo NIE 1/30 miesięcznego: klient może mieć jeden
+  ciężki dzień (import historii, domknięcie miesiąca) i nie ma powodu go za to
+  karać. Ten limit istnieje przeciw pętli ponowień, nie przeciw klientowi.
+- alarm dla operatora przy dwukrotności celu, czyli PRZED twardym limitem —
+  wtedy jeszcze da się poprawić regułę, po fakcie zostaje tłumaczenie rachunku
+
+NAJWAŻNIEJSZE ZACHOWANIE: po przekroczeniu limitu agent NIE MILKNIE.
+Przechodzi na szablony — klient traci elokwencję, nie funkcje. Propozycje
+powstają dalej, liczby są te same, zdania sztywniejsze. Osobny test pilnuje,
+że przy wyczerpanym budżecie nie leci ani jedno wywołanie modelu, a treść
+nadal zawiera kwotę i numer faktury.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 21 plików, 249 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+BLOK 2 DOMKNIĘTY. Zostaje krok 17 (minimalizacja danych w promptach) —
+zadanie z bramki prawnej, świadomie zostawione jako osobny krok, bo dotyka
+tego, co wychodzi poza naszą infrastrukturę.
+
+Następny krok: 17 (lib/flo/redact.ts)
