@@ -100,6 +100,47 @@ export const FLO_TEMPLATES: Partial<Record<FloProposalKind, FloTemplate>> = {
 };
 
 /**
+ * Warianty tej samej sprawy.
+ *
+ * Ten sam rodzaj propozycji potrafi mieć dwa różne zdania w zależności od
+ * tego, co agent zastał: „zaksięgowałem, sprawdź” to co innego niż „nie
+ * jestem pewien, zapytam”. Trzymanie tego jako osobnych rodzajów rozdęłoby
+ * kontrakt i zmusiło interfejs do rozróżniania rzeczy, które rysuje tak samo.
+ */
+export const FLO_TEMPLATE_VARIANTS: Record<string, FloTemplate> = {
+  // W-01: odczyt pewny, koszt zaksięgowany — zostaje potwierdzenie.
+  'expense.review:done': {
+    title: '{{sprzedawca}}, {{kwota}}',
+    body: 'Zaksięgowałem to jako {{kategoria}}. Sprawdź, jeśli to nie był firmowy zakup — cofnę jednym kliknięciem.',
+  },
+  // W-01: coś się nie zgadza — agent NIE twierdzi, że zaksięgował.
+  'expense.review:ask': {
+    title: '{{sprzedawca}}, {{kwota}} — do sprawdzenia',
+    body: '{{powod}} Zajrzyj na chwilę, zanim to zaksięguję.',
+  },
+  // W-01: odczyt się nie udał, zdjęcie jest w archiwum.
+  'expense.review:failed': {
+    title: 'Nie odczytałem tego zdjęcia',
+    body: 'Zdjęcie zostało w archiwum, nic nie przepadło. Wpisz kwotę ręcznie albo zrób nowe ujęcie.',
+  },
+};
+
+export function renderCopyVariant(
+  kind: FloProposalKind,
+  variant: string,
+  values: Record<string, string>,
+): FloTemplate {
+  const template = FLO_TEMPLATE_VARIANTS[`${kind}:${variant}`];
+  if (!template) {
+    throw new FloCopyError(`Brak wariantu „${variant}" dla rodzaju: ${kind}`);
+  }
+  return {
+    title: renderTemplate(template.title, values),
+    body: renderTemplate(template.body, values),
+  };
+}
+
+/**
  * Podstawia wartości do szablonu.
  *
  * Placeholder bez wartości to WYJĄTEK, nie pusty napis. Zdanie

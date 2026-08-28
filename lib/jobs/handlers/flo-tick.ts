@@ -12,6 +12,9 @@
  */
 
 import { runFloTick } from '@/lib/flo/tick';
+// Skutek uboczny: rejestracja wykonawców propozycji. Bez tego worker
+// potrafiłby stworzyć propozycję, ale nie umiałby jej wykonać.
+import '@/lib/flo/functions';
 
 import { registerJob, type JobContext } from '../registry';
 

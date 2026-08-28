@@ -30,6 +30,7 @@ import {
 import { FLO_TEMPLATES, placeholdersOf, renderCopy, type FloTemplate } from '@/lib/flo/copy';
 import type { FloDbClient } from '@/lib/flo/db-types';
 import { logger } from '@/lib/observability/logger';
+import { redactForModel } from '@/lib/flo/redact';
 import { isAnthropicMocked } from '@/lib/test-mode';
 import type { FloProposalKind } from '@/types/flo';
 
@@ -301,7 +302,11 @@ function buildUserPrompt(
   allowed: string[],
   template: FloTemplate,
 ): string {
-  const hints = input.hints?.length ? `\nKontekst: ${input.hints.join('; ')}` : '';
+  // Kontekst słowny idzie przez minimalizację (krok 17). Podpowiedź bywa
+  // budowana z danych dokumentu, a stamtąd do prompta jest jeden nieuważny
+  // szablon — numer konta kontrahenta nie ma czego szukać u dostawcy modelu.
+  const safeHints = redactForModel(input.hints ?? []);
+  const hints = safeHints.length ? `\nKontekst: ${safeHints.join('; ')}` : '';
   return [
     `Rodzaj sprawy: ${input.kind}`,
     `Dostępne placeholdery: ${allowed.map((n) => `{{${n}}}`).join(', ')}`,

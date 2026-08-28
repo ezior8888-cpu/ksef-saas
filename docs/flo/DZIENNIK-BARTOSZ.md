@@ -589,3 +589,66 @@ zadanie z bramki prawnej, świadomie zostawione jako osobny krok, bo dotyka
 tego, co wychodzi poza naszą infrastrukturę.
 
 Następny krok: 17 (lib/flo/redact.ts)
+
+## 2026-08-26 · Krok 17 — minimalizacja danych
+
+Zrobione:
+- `lib/flo/redact.ts` — `redactText`, `redactForModel`, `containsSensitive`.
+- `lib/flo/llm.ts` — podpowiedzi (`hints`) przechodzą przez minimalizację
+  przed zbudowaniem prompta.
+- testy w `tests/unit/flo-redact-expense.test.ts`.
+
+Maskowane: numery kont (IBAN i bez prefiksu), PESEL, e-mail, telefon, kod
+pocztowy, adres, oraz — jako siatka na resztę — każdy ciąg co najmniej
+dziewięciu cyfr. NIP wpada w tę siatkę CELOWO: treść karty da się napisać
+bez niego, a jawne dopuszczenie (`allowNip`) jest decyzją widoczną w miejscu
+wywołania.
+
+Dwie decyzje:
+- Zamiana na znacznik (`[konto]`), nie usunięcie. Puste miejsce prowokuje
+  model do uzupełnienia luki zmyśloną wartością; „wyślij na [konto]" jest
+  zrozumiałe i bezpieczne.
+- Kolejność wzorców ma znaczenie: gdyby ogólny wzorzec na długie liczby szedł
+  pierwszy, IBAN zostałby zamaskowany jako „liczba" i stracilibyśmy
+  informację, czym naprawdę był.
+
+## 2026-08-26 · Krok 18 — W-01 paragon z telefonu
+
+Zrobione:
+- `lib/flo/functions/expense-review.ts` — `assessExpense` (czysta),
+  `buildExpenseReviewProposal`, `buildOcrFailedProposal`, `readSellerHistory`,
+  `findStuckOcrJobs`, handler `expense.review`.
+- `lib/flo/functions/index.ts` — jedno miejsce zapełniające rejestr
+  wykonawców; ładowane przez worker (skutek uboczny importu).
+- `lib/flo/copy.ts` — warianty szablonów (`:done`, `:ask`, `:failed`).
+
+TRZY AWARIE Z KATALOGU, KAŻDA Z TESTEM:
+1. Zły odczyt — trzy niezależne sita: brak wymaganego pola, kontrola
+   arytmetyczna (netto+VAT=brutto, tolerancja 2 gr) i kontrola rzędu
+   wielkości wobec mediany u tego sprzedawcy. To ostatnie łapie klasyczny
+   błąd „312,40 → 31 240", którego nie widzi ani arytmetyka, ani pewność.
+2. Wydatek prywatny — kategorie z natury wątpliwe (spożywcze, odzież,
+   elektronika) pytają ZAWSZE, nawet przy idealnym odczycie i znanym
+   sprzedawcy. Nieznany sprzedawca pyta powyżej 500 zł; poniżej nie zawraca
+   głowy, bo pytanie o każdy drobiazg byłoby udręką.
+3. Zawieszony odczyt — `findStuckOcrJobs` po trzech minutach; karta mówi
+   wprost, że zdjęcie ZOSTAŁO W ARCHIWUM i podaje dwie drogi wyjścia.
+   Bez tego zdania klient wyrzuca paragon i po miesiącu nie ma czego odtwarzać.
+
+Najważniejsza różnica w treści: przy wątpliwościach agent PYTA i nie twierdzi,
+że zaksięgował. Wariant `:ask` nie zawiera słowa „Zaksięgowałem" i nie ma
+zapisu cofnięcia — bo nie ma czego cofać. Osobny test tego pilnuje.
+
+CO ZOSTAJE DO PODŁĄCZENIA (świadomie, nie przeoczenie):
+- `process-ocr.ts` jeszcze nie tworzy propozycji — dopisanie tego to jedna
+  funkcja, ale zmienia zachowanie produkcyjne OCR, więc chcę to zrobić razem
+  z W-02 (krok 19), gdy będzie komplet reguł kosztowych.
+- `findStuckOcrJobs` ma właściwą częstotliwość dopiero w strażniku zadań
+  (co 15 min), nie w dobowym pulsie. Puls zostaje jako siatka bezpieczeństwa.
+  Podwójne wywołanie jest nieszkodliwe — klucz tematu daje jedną kartę.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 22 pliki, 270 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Następny krok: 19 (W-02 koszty z KSeF + podłączenie propozycji do OCR)
