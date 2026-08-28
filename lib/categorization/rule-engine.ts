@@ -33,7 +33,14 @@ function normalizeNip(raw: string): string | null {
  */
 export async function classifyByNip(
   tenantId: string,
-  nip: string
+  nip: string,
+  /**
+   * Kwota brutto dokumentu. Reguły agenta FLO mają widełki kwotowe
+   * (migracja 00063): reguła nauczona na zakupie za 200 zł nie ma prawa
+   * księgować sama laptopa za 8000. Wydatek poza widełkami zwraca `null`,
+   * czyli spada do kolejnej warstwy i kończy się pytaniem do człowieka.
+   */
+  grossAmount?: number,
 ): Promise<CategorizationResult | null> {
   const normalized = normalizeNip(nip);
   if (!normalized) return null;
@@ -42,11 +49,15 @@ export async function classifyByNip(
 
   const { data: tenantRule } = await supabase
     .from('categorization_rules')
-    .select('id, hit_count, kpir_column, category_label')
+    .select('id, hit_count, kpir_column, category_label, min_amount, max_amount')
     .eq('tenant_id', tenantId)
     .eq('match_type', 'nip')
     .eq('match_value', normalized)
     .maybeSingle();
+
+  if (tenantRule && grossAmount !== undefined && !withinBounds(tenantRule, grossAmount)) {
+    return null;
+  }
 
   if (tenantRule) {
     await supabase
@@ -141,4 +152,21 @@ export async function classifyByKeyword(
   }
 
   return null;
+}
+
+/**
+ * Czy kwota mieści się w widełkach reguły.
+ *
+ * Reguły sprzed migracji 00063 nie mają widełek (NULL po obu stronach)
+ * i obowiązują jak dotąd — nie zmieniamy zachowania rzeczy, które działają.
+ */
+function withinBounds(
+  rule: { min_amount?: number | null; max_amount?: number | null },
+  grossAmount: number,
+): boolean {
+  const min = rule.min_amount ?? null;
+  const max = rule.max_amount ?? null;
+  if (min !== null && grossAmount < Number(min)) return false;
+  if (max !== null && grossAmount > Number(max)) return false;
+  return true;
 }

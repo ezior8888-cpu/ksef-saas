@@ -10,6 +10,17 @@ import {
 } from '../client';
 import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
 import { queryReceivedInvoices } from '@/lib/ksef/inbox';
+import { createProposal } from '@/lib/flo/proposals';
+import {
+  buildInboxSummaryProposal,
+  classifyInboxDocuments,
+  evaluateContinuity,
+} from '@/lib/flo/functions/expense-inbox';
+import {
+  readInboxCursor,
+  saveInboxCursor,
+  clearInboxCursor,
+} from '@/lib/flo/functions/inbox-cursor';
 import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/server';
 import type { KsefEnvironment } from '@/types/ksef';
@@ -110,10 +121,54 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
 
     const newInvoices = await step.run('query-ksef', async () => {
       const credentials = await getTenantKsefCredentials(tenantId);
+
+      // Kursor z poprzedniego, przerwanego przebiegu — ale tylko wtedy, gdy
+      // dotyczy TEGO SAMEGO okna dat. Token z innego zapytania dałby wyniki
+      // z innego zakresu i cichą lukę w danych.
+      const cursor = await readInboxCursor(tenantId, dateFrom, dateTo);
+      let announced = cursor.announcedCount;
+
       // Faza 23 sekcja 3: audit log każdej query do KSeF /invoices/query/metadata.
-      return queryReceivedInvoices(credentials, dateFrom, dateTo, KSEF_ENV, {
-        tenantId,
-      });
+      const invoices = await queryReceivedInvoices(
+        credentials,
+        dateFrom,
+        dateTo,
+        KSEF_ENV,
+        { tenantId },
+        {
+          resumeToken: cursor.continuationToken ?? undefined,
+          onPage: async (page, token) => {
+            announced += page.length;
+            await saveInboxCursor(tenantId, {
+              continuationToken: token,
+              windowFrom: dateFrom,
+              windowTo: dateTo,
+              announcedCount: announced,
+              savedCount: announced,
+            });
+          },
+        },
+      );
+
+      return invoices;
+    });
+
+    // Kontrola ciągłości: token wyczerpany, więc pobieranie doszło do końca.
+    // Rozjazd liczb oznacza zgubione dokumenty i jest JEDYNYM sygnałem,
+    // jaki dostaniemy — nikt się o tym nie dowie z drugiej strony.
+    await step.run('check-continuity', async () => {
+      const cursor = await readInboxCursor(tenantId, dateFrom, dateTo);
+      const verdict = evaluateContinuity(cursor);
+      if (verdict.status === 'incomplete') {
+        logger.error('Niekompletne pobranie skrzynki KSeF', {
+          tenantId,
+          missing: verdict.missing,
+          message: verdict.message,
+        });
+      }
+      if (verdict.status === 'complete') {
+        await clearInboxCursor(tenantId);
+      }
     });
 
     if (newInvoices.length === 0) {
@@ -216,7 +271,52 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
       return inserted ?? [];
     });
 
+    // Jedna zbiorcza karta na cały przebieg. Pięć faktur w nocy to pięć
+    // powiadomień o siódmej rano — czyli hałas, przez który ludzie wyłączają
+    // powiadomienia i przestają widzieć również te ważne.
     if (insertedInvoices.length > 0) {
+      await step.run('flo-inbox-card', async () => {
+        const supabase = await createAdminClient();
+
+        // Sprzedawcy, których klient już u siebie widział. Nieznany
+        // sprzedawca powyżej progu nie trafia sam do księgi — to jest sito
+        // na fakturę wystawioną przez pomyłkę na cudzy NIP.
+        const { data: seen } = await supabase
+          .from('invoices')
+          .select('seller_nip')
+          .eq('tenant_id', tenantId)
+          .eq('direction', 'incoming')
+          .limit(500);
+
+        const known = new Set(
+          (seen ?? [])
+            .map((row) => (row as { seller_nip: string | null }).seller_nip)
+            .filter((nip): nip is string => Boolean(nip)),
+        );
+
+        const byKsefNumber = new Map(
+          insertedInvoices.map((row) => [row.ksef_number as string, row.id as string]),
+        );
+
+        const documents = freshInvoices
+          .filter((inv) => byKsefNumber.has(inv.ksefNumber))
+          .map((inv) => ({
+            id: byKsefNumber.get(inv.ksefNumber)!,
+            sellerName: inv.seller?.name ?? null,
+            sellerNip: inv.seller?.nip ?? null,
+            grossAmount: Number(inv.grossAmount ?? 0),
+            issueDate: inv.issueDate,
+          }));
+
+        const proposal = buildInboxSummaryProposal({
+          tenantId,
+          documents: classifyInboxDocuments(documents, known),
+          periodKey: new Date().toISOString().slice(0, 10),
+        });
+
+        if (proposal) await createProposal(proposal);
+      });
+
       await step.sendEvent(
         'fan-out-auto-categorize-inbox',
         insertedInvoices.map((row) =>

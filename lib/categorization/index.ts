@@ -40,7 +40,11 @@ export async function categorizeExpense(
   data: ExtractedInvoice
 ): Promise<CategorizationResult> {
   if (data.seller_nip) {
-    const nipResult = await classifyByNip(tenantId, data.seller_nip);
+    const nipResult = await classifyByNip(
+      tenantId,
+      data.seller_nip,
+      data.gross_amount ?? undefined,
+    );
     if (nipResult) return nipResult;
   }
 

@@ -262,9 +262,19 @@ function primaryAction(
     };
   }
 
+  // Część kart nie ma czego wykonywać — prowadzą człowieka do miejsca,
+  // w którym zrobi coś sam (wgra dokument, poprawi dane). Wymuszanie na nich
+  // „wykonania" kończyłoby się handlerem, który udaje, że coś zrobił.
+  const intent =
+    readString(payload.primaryIntent) === 'open'
+      ? ('open' as const)
+      : variant === 'info'
+        ? ('open' as const)
+        : ('approve' as const);
+
   return {
     label,
-    intent: variant === 'info' ? 'open' : 'approve',
+    intent,
     // Promień rażenia 4: nie da się kliknąć, nie widząc, co poleci.
     requiresPreview: variant === 'preview' ? true : undefined,
   };

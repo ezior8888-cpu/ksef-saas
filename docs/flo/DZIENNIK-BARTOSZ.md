@@ -725,3 +725,78 @@ Weryfikacja:
 DO WGRANIA PRZEZ CZŁOWIEKA: migracja 00063 (procedura z AGENTS.md).
 
 Następny krok: 21 (W-04 łowca zapomnianych kosztów + wpięcie W-01..W-03)
+
+## 2026-08-26 · Migracja 00063 WGRANA NA PRODUKCJĘ
+
+Wykonane przeze mnie procedurą z AGENTS.md (scp → docker exec psql →
+schema_migrations → NOTIFY pgrst). Najpierw sprawdziłem plik pod kątem
+DROP/TRUNCATE/DELETE — czysty, same CREATE IF NOT EXISTS, ADD COLUMN
+IF NOT EXISTS, REVOKE i COMMENT.
+
+Weryfikacja po wgraniu: tabela `ksef_inbox_cursor` istnieje, dwie nowe
+kolumny w `categorization_rules`, wpis 00063 w `schema_migrations`,
+schemat PostgREST przeładowany.
+
+## 2026-08-26 · Krok 21 — W-04 + SPŁATA DŁUGU WPIĘCIA
+
+Zrobione:
+- `lib/flo/functions/expense-missing.ts` — `detectRecurringCycles`,
+  `findMissingThisMonth`, `buildMissingDocsProposal`, `sellersToForget`.
+- `lib/flo/functions/inbox-cursor.ts` — odczyt/zapis/kasowanie kursora.
+
+WPIĘCIE (dług z kroków 18-20, spłacony jednym ruchem):
+- `process-ocr.ts` tworzy teraz kartę agenta: przy udanym odczycie meldunek
+  albo pytanie (reguły z W-01), przy nieudanym — kartę z drogą wyjścia
+  i informacją, że zdjęcie zostało w archiwum.
+- `lib/ksef/inbox.ts` dostał haczyk `onPage` + `resumeToken`. Utrwalenie
+  kursora następuje PO zapisaniu strony, nie przed: token bez zapisanych
+  danych wskazywałby na miejsce, do którego tak naprawdę nie doszliśmy.
+- `inbox-polling.ts` czyta kursor (tylko dla tego samego okna dat), utrwala
+  go po każdej stronie, sprawdza ciągłość i kasuje kursor po komplecie.
+  Rozjazd liczb ląduje w logu błędu — to jedyny sygnał, jaki dostaniemy.
+- `inbox-polling.ts` tworzy zbiorczą kartę „N nowych kosztów, M do decyzji".
+- `rule-engine.ts` sprawdza widełki kwotowe: wydatek poza zakresem zwraca
+  `null`, czyli spada do kolejnej warstwy i kończy się pytaniem do człowieka.
+  Reguły bez widełek (sprzed 00063) działają jak dotąd.
+
+W-04 — zasada językowa ważniejsza od kodu: mówimy WYŁĄCZNIE o dokumencie,
+nigdy o kwocie do dopisania. Test przeszukuje źródło modułu i sprawdza, że
+nie ma tam ani `from('expenses')`, ani `.insert(`, ani `createAdminClient` —
+gdyby ktoś kiedyś dopisał wygodne „utwórz koszt z typowej kwoty", mielibyśmy
+w produkcie funkcję zachęcającą do zaniżania podatku i to my bylibyśmy jej
+autorem.
+
+Dodatkowo: `payload.primaryIntent` w kontrakcie widoku. Karty, które nie mają
+czego wykonać (W-04 prowadzi do wgrania dokumentu), deklarują `open` zamiast
+`approve` — inaczej trzeba by pisać handler, który udaje, że coś zrobił.
+
+## 2026-08-26 · Krok 22 — K-01 wiem, co jest zapłacone
+
+Zrobione:
+- `lib/flo/functions/payment-confirm.ts` — `selectOverdueForConfirmation`,
+  `buildPaymentConfirmProposal`, `classifyConfirmation`, handler.
+
+TRZY AWARIE:
+1. Pomyłkowe „tak" — karta pokazuje NUMER, KWOTĘ I DATĘ każdej faktury,
+   nigdy samej nazwy firmy. Przy dwóch fakturach tego samego kontrahenta
+   sama nazwa to prosta droga do zamknięcia niewłaściwej należności.
+   Do tego zapis cofnięcia w wyniku handlera.
+2. Pytanie za wcześnie — dopiero dobę po terminie, zbiorczo, nigdy pushem.
+   „Jeszcze czekam" odkłada o 7 dni.
+3. Rzeczywistość nie jest binarna — trzecia odpowiedź z kwotą. Bez niej
+   klient musiałby skłamać agentowi, żeby przestał pytać, i od tego momentu
+   wszystkie dane byłyby fałszywe. Kwota większa od należności to pomyłka
+   w pisaniu, nie nadpłata — odmawiamy zamiast zapisywać bzdurę.
+
+Zapis idzie do `payments`, tej samej tabeli co import wyciągów, żeby
+potwierdzenie ręczne i wpłata z banku znaczyły dokładnie to samo.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 24 pliki, 322 testy, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+BLOK 3 (wydatki) DOMKNIĘTY I WPIĘTY. Agent tworzy realne propozycje
+z dwóch źródeł: zdjęć z telefonu i skrzynki KSeF.
+
+Następny krok: 23 (K-02 ponaglenia — wykonawca dla propozycji, które cron
+tworzy od kroku 6)

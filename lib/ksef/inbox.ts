@@ -18,19 +18,39 @@ export interface InboxAuditContext {
  * Pobiera metadane faktur otrzymanych (subject2 = nabywca) z danego zakresu dat.
  * Obsługuje paginację automatycznie.
  */
+/**
+ * Haczyk na każdą pobraną stronę.
+ *
+ * PO CO: bez utrwalania kursora przerwane pobieranie zaczyna od zera przy
+ * następnym przebiegu — a jeśli okno dat zdążyło się przesunąć, część faktur
+ * kosztowych NIGDY nie trafia do klienta. Brakujący koszt to zawyżony
+ * podatek, o którym nie ma jak się dowiedzieć.
+ */
+export interface InboxPageHook {
+  /** Token do wznowienia; `null` gdy to była ostatnia strona. */
+  onPage: (
+    invoices: InvoiceMetadata[],
+    continuationToken: string | null,
+  ) => Promise<void>;
+  /** Token z poprzedniego, przerwanego przebiegu. */
+  resumeToken?: string;
+}
+
 export async function queryReceivedInvoices(
   auth: KsefAuth,
   dateFrom: Date,
   dateTo: Date,
   env?: KsefEnvironment,
   auditContext?: InboxAuditContext,
+  pageHook?: InboxPageHook,
 ): Promise<InvoiceMetadata[]> {
   return ksefRateLimiter.enqueue(auth.nip, async () => {
     const authSession = await ksefSessionCache.getSession(auth, env);
     const accessToken = authSession.accessToken;
 
     const allInvoices: InvoiceMetadata[] = [];
-    let continuationToken: string | undefined = undefined;
+    // Wznowienie po przerwanym przebiegu: token pochodzi z utrwalonego kursora.
+    let continuationToken: string | undefined = pageHook?.resumeToken;
 
     do {
       // UWAGA: KSeF 2.0 nie ma już filtru `Acquisition` (date-of-receipt) -
@@ -75,6 +95,12 @@ export async function queryReceivedInvoices(
 
       allInvoices.push(...response.invoices);
       continuationToken = response.continuationToken;
+
+      // Utrwalenie PO zapisaniu strony, nie przed: token bez zapisanych
+      // danych wskazywałby na miejsce, do którego tak naprawdę nie doszliśmy.
+      if (pageHook) {
+        await pageHook.onPage(response.invoices, continuationToken ?? null);
+      }
     } while (continuationToken);
 
     return allInvoices;

@@ -7,6 +7,12 @@ import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
 
 import { categorizeExpense } from '@/lib/categorization';
+import { createProposal } from '@/lib/flo/proposals';
+import {
+  buildExpenseReviewProposal,
+  buildOcrFailedProposal,
+  readSellerHistory,
+} from '@/lib/flo/functions/expense-review';
 import { extractInvoiceFromImage } from '@/lib/ocr/engine';
 import {
   extractedInvoiceSchema,
@@ -129,6 +135,13 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         tag: `ocr-${ocrJobId}`,
       });
 
+      // Karta agenta zamiast samego powiadomienia: powiadomienie znika,
+      // a klient musi wiedzieć, że zdjęcie ZOSTAŁO w archiwum. Bez tego
+      // wyrzuca paragon i po miesiącu nie ma czego odtwarzać.
+      await step.run('flo-failed-card', async () => {
+        await createProposal(buildOcrFailedProposal(tenantId, ocrJobId));
+      });
+
       return { success: false as const };
     }
 
@@ -196,6 +209,34 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         .eq('tenant_id', tenantId);
 
       if (error) throw new Error(error.message);
+    });
+
+    // Karta agenta. Decyduje o tym, czy klient zobaczy meldunek („zaksięgowałem"),
+    // czy pytanie („do sprawdzenia") — reguły w lib/flo/functions/expense-review.ts.
+    await step.run('flo-review-card', async () => {
+      const history = await readSellerHistory(tenantId, extractedData.seller_name);
+
+      await createProposal(
+        buildExpenseReviewProposal({
+          tenantId,
+          expenseId,
+          facts: {
+            sellerName: extractedData.seller_name,
+            sellerNip: extractedData.seller_nip,
+            netAmount: extractedData.net_amount,
+            vatAmount: extractedData.vat_amount,
+            grossAmount: extractedData.gross_amount,
+            issueDate: extractedData.issue_date,
+            confidence: extractedData.ocr_confidence,
+            categoryLabel: categorization.category_label,
+          },
+          history,
+          applied: {
+            kpirColumn: categorization.kpir_column,
+            categoryLabel: categorization.category_label,
+          },
+        }),
+      );
     });
 
     await step.run('notify-user', async () => {
