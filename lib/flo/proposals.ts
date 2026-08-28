@@ -27,6 +27,7 @@ import {
   type FloProposalRow,
 } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
+import { isKindEnabled } from '@/lib/flo/flags';
 import { FLO_KIND_VARIANT } from '@/lib/flo/kind-variant';
 import {
   isFloProposalKind,
@@ -59,7 +60,9 @@ export interface CreateProposalInput {
 export type CreateProposalResult =
   | { status: 'created'; id: string }
   | { status: 'updated'; id: string }
-  | { status: 'muted' };
+  | { status: 'muted' }
+  /** Funkcja wyłączona globalnie (prawo, niepotwierdzone dane) — patrz flags.ts */
+  | { status: 'disabled' };
 
 /**
  * Tworzy propozycję albo — gdy żywa propozycja tego samego tematu już
@@ -73,6 +76,13 @@ export type CreateProposalResult =
 export async function createProposal(
   input: CreateProposalInput,
 ): Promise<CreateProposalResult> {
+  // Wyłącznik globalny idzie PIERWSZY: funkcja czekająca na opinię prawnika
+  // nie ma prawa zostawić śladu w bazie klienta. Inaczej po włączeniu
+  // wysypałaby się na niego lawina kart sprzed miesięcy.
+  if (!isKindEnabled(input.kind)) {
+    return { status: 'disabled' };
+  }
+
   if (await isMuted(input.tenantId, input.kind)) {
     return { status: 'muted' };
   }

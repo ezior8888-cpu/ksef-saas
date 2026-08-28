@@ -867,3 +867,69 @@ Weryfikacja:
 - `pnpm typecheck` — zero błędów, eslint czysto
 
 Następny krok: 25 (K-03 ocena kontrahenta — ŻÓŁTE, buduje się za flagą)
+
+## 2026-08-26 · Krok 25 — K-03 ocena kontrahenta (ZA FLAGĄ) + wyłączniki
+
+Zrobione:
+- `lib/flo/flags.ts` — wyłączniki funkcji agenta z POWODEM i notatką.
+- `lib/flo/functions/payment-score.ts` — `scorePaymentBehaviour` (czysta),
+  `buildPaymentScoreProposal`, `readPaymentHistory`.
+- `createProposal` sprawdza wyłącznik PRZED zapisem.
+
+DLACZEGO WŁASNY MECHANIZM FLAG, A NIE ISTNIEJĄCY: `lib/feature-flags/` opiera
+się na kolumnach w tabeli — każda nowa flaga to migracja. Agent ma 33 funkcje,
+z czego osiem jest gotowych i świadomie wyłączonych. Lista w kodzie ma przewagę
+nad tabelą: powód jest widoczny tam, gdzie ktoś będzie go szukał, i przechodzi
+przez przegląd kodu. Włączenie funkcji prawnie wątpliwej wymaga wtedy commita
+z uzasadnieniem, a nie kliknięcia w panelu o drugiej w nocy.
+Przełączniki per konto (krok 53) będą warstwą NAD tym.
+
+Wyłącznik działa PRZED zapisem: funkcja czekająca na opinię nie zostawia śladu
+w bazie klienta. Inaczej po włączeniu wysypałaby się na niego lawina kart
+sprzed miesięcy.
+
+WYŁĄCZONE DZIŚ (8): payment.score, payment.interest, tax.simulate,
+tax.deadline, tax.limit, tax.relief, tax.setaside, contractor.foreign.
+
+K-03 — trzy awarie:
+1. Ocena krzywdząca — MEDIANA, nie średnia, i minimum trzy opłacone faktury.
+   Test: faktura zapłacona 46 dni po terminie nie robi z kontrahenta dłużnika.
+2. Ocena zobaczona przez kontrahenta — wynik nie trafia do dokumentu, maila
+   ani listy kontrahentów. Test przeszukuje źródło modułu.
+3. Ocena z danych, których nie mamy — dokumenty z importu odfiltrowane NA
+   POZIOMIE ZAPYTANIA (`neq('source','import')`), bo KSeF nie zna dat zapłaty.
+   Liczby wyglądałyby wiarygodnie i byłyby zmyślone.
+
+Opis, nigdy etykieta: „płaci zwykle 14 dni po terminie" to fakt. „Ryzykowny
+kontrahent" to wyrok wydany przez program na firmę, która nigdy nie zgodziła
+się na ocenianie. Test pilnuje, że w opisie nie ma słów wartościujących.
+
+## 2026-08-26 · Krok 26 — X-01 strażnik wysyłki
+
+Zrobione:
+- `lib/flo/functions/ksef-status.ts` — `evaluateSubmission` (czysta),
+  `buildKsefStatusProposal`, `isAbandoned`.
+
+ROZDZIELONE STANY „PRZYJĘTA" I „MAM POŚWIADCZENIE". KSeF potwierdza przyjęcie
+od razu, a UPO potrafi przyjść po godzinach. Zlanie tego w jedno „wszystko
+gotowe" jest kłamstwem w sprawie, w której klient ma dowód albo go nie ma —
+przy kontroli to jest cała różnica.
+
+Czasy: cisza przez pierwsze 15 minut (faktura w drodze to normalny stan, nie
+sprawa), potem „ponawiam", po drugiej próbie eskalacja. Brak UPO po dobie idzie
+do operatora. Osobna kontrola dobowa łapie dokumenty, o których wszyscy
+zapomnieli — łącznie z agentem.
+
+Najważniejsze zdanie w całej funkcji: przy nieudanej wysyłce karta mówi
+„Twoja faktura jest bezpieczna w archiwum — nie wystawiaj jej drugi raz".
+Bez tego klient wystawia ją ponownie i ma dwa dokumenty w rejestrze
+państwowym, czego nie da się cofnąć.
+
+Odrzucenie i kolejka offline mają własne funkcje (X-02, X-04) — tutaj cisza,
+żeby dwie karty nie mówiły o tym samym.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 26 plików, 377 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Następny krok: 27 (X-02 tłumacz odrzuceń)
