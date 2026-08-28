@@ -1126,3 +1126,54 @@ Weryfikacja:
 - `pnpm typecheck` — zero błędów, eslint czysto
 
 Następny krok: 32 (P-02 paczka szkiców — promień rażenia 4)
+
+## 2026-08-26 · Kroki 32 i 33 — P-02 paczka szkiców, P-03 brakująca faktura
+
+Zrobione:
+- `lib/flo/functions/invoice-batch.ts` — `buildBatchItems`,
+  `buildBatchProposal`, `filterStillNeeded`, `shouldAskAboutMissing`,
+  `buildMissingInvoiceProposal`.
+- `tests/unit/flo-invoice-batch.test.ts` — 20 testów.
+
+P-02, trzy awarie:
+1. Hurtowa wysyłka złej kwoty — pozycja odbiegająca od typowej o >15% jest
+   DOMYŚLNIE ODZNACZONA i wymaga otwarcia podglądu. Limit 10 pozycji.
+2. Duplikat okresu — faktura już wystawiona NIE trafia do paczki w ogóle.
+   Pokazanie jej jako odznaczonej kusiłoby do zaznaczenia „skoro tu jest, to
+   pewnie trzeba". Druga warstwa: `filterStillNeeded` przy kliknięciu, bo
+   między zbudowaniem paczki a wysyłką mija kilka godzin.
+3. Luki w numeracji — SZKIC NIE DOSTAJE NUMERU. Test sprawdza, że w ładunku
+   nie ma pola z numerem. To ta awaria, której klient nie zauważy przez rok,
+   do pierwszego pytania księgowej, dlaczego brakuje faktury numer 14.
+
+P-03:
+- Pyta dopiero 7 dni po typowym terminie (faktura bywa wystawiana z poślizgiem).
+- NIGDY „zapomniałeś" — test tego pilnuje. Zdanie brzmi „Wystawiłeś ją gdzie
+  indziej?", bo klient mógł fakturować na papierze albo przez biuro.
+- Trzeci przycisk „Wystawiona poza FaktFlow" — bez niego wybór jest między
+  dwiema nieprawdami.
+- Dwa razy „gdzie indziej" i agent milknie na stałe: to odpowiedź, nie zbieg
+  okoliczności.
+- Klucz tematu BEZ okresu, więc pytanie o zakończenie współpracy pada raz
+  w życiu profilu, a nie co miesiąc.
+- `noPush: true` — przypomnienie o cudzej decyzji biznesowej dzwoniące
+  w telefonie podczas urlopu to natręctwo, nie pomoc.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 30 plików, 458 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+## 2026-08-26 · PRZEKAZANIE DLA NOWEJ SESJI
+
+Do `FLO-PLAN-BARTOSZ.md` na pulpicie dopisana CZĘŚĆ VII ze wszystkim, czego
+w planie nie było: poprawki operacyjne (db:push nie działa, auto-deploy jest
+włączony, tinker gubi pierwszą linię), decyzje architektoniczne (brak
+bliźniaków Inngest, wyłączniki w kodzie, rozdzielanie modułów wysyłkowych,
+przenośność ścieżek), dodatki do kontraktu, wzorzec wstrzykiwania klienta
+bazy, lista ośmiu funkcji zablokowanych i na kim stoją, oraz to, czego
+brakuje Masłu (`app/actions/flo.ts`).
+
+Do `FLO-PLAN-MASLO.md` dopisana krótsza wersja: co jest gotowe, trzy nowe
+pola w ładunku, gdzie się zatrzyma i dlaczego.
+
+Następny krok: 34 (P-07 zaliczka i faktura końcowa)
