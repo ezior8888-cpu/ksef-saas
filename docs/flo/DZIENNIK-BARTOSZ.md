@@ -933,3 +933,66 @@ Weryfikacja:
 - `pnpm typecheck` — zero błędów, eslint czysto
 
 Następny krok: 27 (X-02 tłumacz odrzuceń)
+
+## 2026-08-26 · Krok 27 — X-02 tłumacz odrzuceń
+
+Zrobione:
+- `lib/flo/functions/ksef-fix.ts` — `decideFix` (czysta),
+  `buildKsefFixProposal`, `needsOperatorAttention`.
+
+DWIE ZASADY, KTÓRE TU DECYDUJĄ O WSZYSTKIM:
+
+1. ZAMKNIĘTA LISTA POPRAWEK. Automatycznie poprawiamy wyłącznie rzeczy
+   o jednym możliwym rozwiązaniu: format pola, brakujący kod kraju, kolejność
+   elementów. Do tego osobna lista `NEVER_AUTOFIX` — NIP-y, nazwy podmiotów,
+   kwoty, stawki. „Poprawienie" NIP-u przez dobranie z rejestru firmy
+   o podobnej nazwie wystawiłoby fakturę na obcy podmiot, w rejestrze
+   państwowym, bez możliwości cofnięcia. Lista jest zakazem, nie sugestią:
+   nawet gdyby pojawił się kod o jednoznacznym rozwiązaniu dotyczącym kwoty,
+   poprawia człowiek.
+
+2. NIEZNANY KOD = BRAK INTERPRETACJI. Model NIE dostaje zadania „wytłumacz
+   ten kod". Wymyśliłby coś sensownie brzmiącego, a stawką jest zgodność
+   z prawem. Komunikat brzmi wprost: „Nie znam tego kodu — zgłosiłem to
+   zespołowi". Sprawa idzie do operatora.
+
+Pętla odrzuceń: po dwóch próbach agent przestaje proponować wysyłkę i daje
+gotowy opis sprawy (numer, kod, liczba prób, surowy komunikat KSeF), żeby
+klient nie musiał niczego tłumaczyć.
+
+Karta z poprawką ZAWSZE ma podgląd różnicy. Zmiana w dokumencie, której
+klient nie zobaczył, jest zmianą zrobioną za jego plecami.
+
+## 2026-08-26 · Krok 28 — X-03 opiekun certyfikatu
+
+Zrobione:
+- `lib/flo/functions/ksef-cert.ts` — `evaluateCert` (czysta), `shouldWarn`,
+  `buildCertProposal`, `shouldHoldApprovedSubmissions`.
+
+STAN LICZONY Z REALNEJ PRÓBY AUTORYZACJI, NIE Z POLA Z DATĄ. To jest sedno:
+- klient, który odnowił certyfikat u wystawcy, ale go nie wgrał, DALEJ dostaje
+  ostrzeżenie — i słusznie, bo wysyłka nadal nie zadziała, choć data mówi
+  „ważny jeszcze rok";
+- klient, który wgrał nowy certyfikat, przestaje dostawać ostrzeżenia
+  NATYCHMIAST, bez klikania czegokolwiek.
+Data w polu bywa nieaktualna w obie strony; udana autoryzacja jest faktem.
+
+Trzy progi (30/14/3), nie codzienne przypominanie — ostrzeganie codziennie
+przez miesiąc uczy ignorowania. Trwały pasek poniżej 14 dni (mail bywa
+w spamie). Mail i push razem tylko na 3 dni przed — jedyny przypadek
+w produkcie, w którym wychodzimy poza budżet zaczepień.
+
+Przy nieudanej autoryzacji NIE mówimy „certyfikat wygasł", tylko „nie mogę
+się zalogować". Powód może być inny (odwołany, zły plik, zmienione
+uprawnienia), a zgadywanie wyprowadza klienta na manowce.
+
+Zatwierdzone wysyłki CZEKAJĄ, zamiast zostać odrzucone. Decyzja człowieka
+już padła; awaria techniczna nie ma prawa jej unieważnić i zmusić go do
+klikania wszystkiego od nowa. Karta mówi to wprost: „faktury czekają
+w kolejce — nic nie przepadło".
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 27 plików, 396 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Następny krok: 29 (X-04 spokój przy awarii Ministerstwa)
