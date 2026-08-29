@@ -180,6 +180,19 @@ export type FloKindFlagInsert = Omit<FloKindFlagRow, 'updated_at'> & {
   updated_at?: string;
 };
 
+/** Etap wdrożenia kanarkowego per rodzaj (migracja 00067). */
+export interface FloRolloutRow {
+  kind: string;
+  stage: number;
+  stage_since: string | null;
+  complaints: number;
+  halted: boolean;
+  halt_reason: string | null;
+  updated_at: string;
+}
+
+export type FloRolloutInsert = Partial<FloRolloutRow> & { kind: string };
+
 export interface FloShadowRow {
   id: string;
   tenant_id: string;
@@ -284,6 +297,7 @@ export interface FloDbClient {
   from(
     table: 'flo_kind_flags',
   ): FloTableClient<FloKindFlagRow, FloKindFlagInsert>;
+  from(table: 'flo_rollout'): FloTableClient<FloRolloutRow, FloRolloutInsert>;
 }
 
 /**

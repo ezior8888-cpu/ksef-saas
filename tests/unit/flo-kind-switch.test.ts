@@ -92,10 +92,13 @@ describe('trzy warstwy, w tej kolejności', () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe('odczyt przełącznika', () => {
-  it('konto bez żadnego wpisu ma wszystko włączone', async () => {
+  it('konto bez wpisu ma włączone wszystko SPOZA kanarka', async () => {
+    // Od kroku 55 rodzaje z `ROLLOUT_ORDER` są domyślnie nieodsłonięte —
+    // patrz `flo-rollout.test.ts`. Tutaj sprawdzamy resztę, czyli funkcje,
+    // których pomyłka zostaje wewnątrz konta.
     const db = createFakeDb();
     const verdict = await isKindEnabledForTenant(
-      'payment.chase',
+      'ksef.cert',
       't1',
       db.client,
       async () => false,
@@ -128,11 +131,11 @@ describe('odczyt przełącznika', () => {
   it('wpis DRUGIEGO konta nie dotyczy tego', async () => {
     const db = createFakeDb({
       flo_kind_flags: [
-        { tenant_id: 'inne', kind: 'payment.chase', enabled: false, reason: 'x' },
+        { tenant_id: 'inne', kind: 'ksef.cert', enabled: false, reason: 'x' },
       ],
     });
     expect(
-      (await isKindEnabledForTenant('payment.chase', 't1', db.client, async () => false))
+      (await isKindEnabledForTenant('ksef.cert', 't1', db.client, async () => false))
         .enabled,
     ).toBe(true);
   });
@@ -156,7 +159,7 @@ describe('odczyt przełącznika', () => {
   it('globalny wyłącznik ucisza wszystko', async () => {
     const db = createFakeDb();
     const verdict = await isKindEnabledForTenant(
-      'expense.review',
+      'ksef.cert',
       't1',
       db.client,
       async () => true,
@@ -255,7 +258,7 @@ describe('ĆWICZENIE — wyłączamy jedną funkcję, reszta działa', () => {
     });
 
     const result = await createProposal(
-      { ...base, kind: 'expense.review', topicKey: 'y' },
+      { ...base, kind: 'ksef.cert', topicKey: 'y' },
       db.client,
       async () => false,
     );
@@ -267,7 +270,7 @@ describe('ĆWICZENIE — wyłączamy jedną funkcję, reszta działa', () => {
   it('globalny wyłącznik ucisza WSZYSTKIE rodzaje naraz', async () => {
     const db = createFakeDb();
 
-    for (const kind of ['expense.review', 'ksef.status', 'invoice.final'] as const) {
+    for (const kind of ['ksef.cert', 'ksef.outage', 'invoice.final'] as const) {
       const result = await createProposal(
         { ...base, kind, topicKey: kind },
         db.client,

@@ -15,7 +15,15 @@
  *
  * 3. PRZEŁĄCZNIK PER KONTO (`flo_kind_flags`, migracja 00066). Wiersz
  *    powstaje wyłącznie przy odstępstwie; konto bez wierszy ma wszystko
- *    włączone.
+ *    włączone. Wpis operatora jest OSTATECZNY — jeżeli istnieje, kanarek
+ *    już nie decyduje. Inaczej nie dałoby się wpuścić konkretnego konta
+ *    do wczesnego dostępu ani wypisać kogoś, kto poprosił.
+ *
+ * 4. KANAREK (`flo_rollout`, migracja 00067). Funkcje promienia 4 idą przez
+ *    10% kont, potem 50%, potem 100%. Rodzaj bez wiersza w tej tabeli jest
+ *    dla kanarka nieodsłonięty — ale kanarek dotyczy WYŁĄCZNIE rodzajów
+ *    z listy `ROLLOUT_ORDER`. Reszta działa bez niego, bo ich pomyłka
+ *    zostaje wewnątrz konta.
  *
  * NAJWAŻNIEJSZA WŁASNOŚĆ CAŁEGO PLIKU: WARSTWA 3 NIE MOŻE ODWRÓCIĆ WARSTWY 2.
  * Wpis `enabled = true` dla rodzaju zablokowanego w kodzie jest ignorowany.
@@ -27,9 +35,14 @@
 import { getGlobalFlag } from '@/lib/feature-flags/global-flags';
 import { floDb, type FloDbClient } from '@/lib/flo/db-types';
 import { kindStatus, type FloKindStatus } from '@/lib/flo/flags';
+import { isInCanary, readRollout, ROLLOUT_ORDER } from '@/lib/flo/rollout';
 import type { FloProposalKind } from '@/types/flo';
 
-export type SwitchLayer = 'global_kill' | 'code_block' | 'tenant_override';
+export type SwitchLayer =
+  | 'global_kill'
+  | 'code_block'
+  | 'tenant_override'
+  | 'canary';
 
 export interface SwitchVerdict {
   enabled: boolean;
@@ -51,6 +64,8 @@ export function resolveSwitch(input: {
   codeStatus: FloKindStatus;
   /** `undefined` = brak wiersza dla tego konta. */
   tenantOverride?: { enabled: boolean; reason: string | null };
+  /** `undefined` = rodzaj nie podlega wdrożeniu kanarkowemu. */
+  canary?: { inCanary: boolean; stage: number };
 }): SwitchVerdict {
   if (input.globalKill) {
     return {
@@ -70,11 +85,22 @@ export function resolveSwitch(input: {
     };
   }
 
+  // Wpis operatora jest OSTATECZNY: przebija kanarka w obie strony.
+  // Bez tego nie dałoby się wpuścić testera do wczesnego dostępu ani
+  // wypisać klienta, który poprosił o wyłączenie.
   if (input.tenantOverride) {
     return {
       enabled: input.tenantOverride.enabled,
       decidedBy: 'tenant_override',
       note: input.tenantOverride.reason ?? undefined,
+    };
+  }
+
+  if (input.canary && !input.canary.inCanary) {
+    return {
+      enabled: false,
+      decidedBy: 'canary',
+      note: `Funkcja odsłonięta na ${input.canary.stage}% kont — to konto jeszcze nie w tej grupie.`,
     };
   }
 
@@ -124,13 +150,28 @@ export async function isKindEnabledForTenant(
 
   if (error) throw new Error(error.message);
 
-  return resolveSwitch({
-    globalKill: false,
-    codeStatus,
-    tenantOverride: data
-      ? { enabled: data.enabled, reason: data.reason }
-      : undefined,
-  });
+  const override = data
+    ? { enabled: data.enabled, reason: data.reason }
+    : undefined;
+
+  // Kanarka pytamy tylko wtedy, gdy rodzaj mu podlega I gdy nie ma wpisu
+  // operatora — inaczej byłoby to zapytanie, którego wynik i tak nic nie zmienia.
+  const underCanary =
+    !override && ROLLOUT_ORDER.some((entry) => entry.kind === kind);
+
+  if (underCanary) {
+    const rollout = await readRollout(kind, db);
+    return resolveSwitch({
+      globalKill: false,
+      codeStatus,
+      canary: {
+        inCanary: isInCanary(rollout, tenantId),
+        stage: rollout?.stage ?? 0,
+      },
+    });
+  }
+
+  return resolveSwitch({ globalKill: false, codeStatus, tenantOverride: override });
 }
 
 // ═══════════════════════════════════════════════════════════════
