@@ -29,6 +29,7 @@ import {
 import { isMuted } from '@/lib/flo/decisions';
 import { isKindEnabled } from '@/lib/flo/flags';
 import { FLO_KIND_VARIANT } from '@/lib/flo/kind-variant';
+import { isTaxKind, taxGateOpen } from '@/lib/flo/tax-profile';
 import {
   isFloProposalKind,
   type FloAction,
@@ -62,7 +63,12 @@ export type CreateProposalResult =
   | { status: 'updated'; id: string }
   | { status: 'muted' }
   /** Funkcja wyłączona globalnie (prawo, niepotwierdzone dane) — patrz flags.ts */
-  | { status: 'disabled' };
+  | { status: 'disabled' }
+  /**
+   * Grupa podatkowa bez kompletnego profilu albo bez sprawdzonej tabeli
+   * parametrów (mechanizm M12) — patrz `lib/flo/tax-profile.ts`.
+   */
+  | { status: 'no_tax_profile' };
 
 /**
  * Tworzy propozycję albo — gdy żywa propozycja tego samego tematu już
@@ -75,6 +81,7 @@ export type CreateProposalResult =
  */
 export async function createProposal(
   input: CreateProposalInput,
+  db: FloDbClient = floDb(),
 ): Promise<CreateProposalResult> {
   // Wyłącznik globalny idzie PIERWSZY: funkcja czekająca na opinię prawnika
   // nie ma prawa zostawić śladu w bazie klienta. Inaczej po włączeniu
@@ -83,11 +90,16 @@ export async function createProposal(
     return { status: 'disabled' };
   }
 
-  if (await isMuted(input.tenantId, input.kind)) {
-    return { status: 'muted' };
+  // Bramka M12: bez profilu podatkowego cała grupa T milczy. Warunek stoi
+  // tutaj, a nie w pięciu funkcjach podatkowych osobno — inaczej szósta,
+  // dopisana za rok, pominęłaby go przez zwykłe przeoczenie.
+  if (isTaxKind(input.kind) && !(await taxGateOpen(input.tenantId, db))) {
+    return { status: 'no_tax_profile' };
   }
 
-  const db = floDb();
+  if (await isMuted(input.tenantId, input.kind, new Date(), db)) {
+    return { status: 'muted' };
+  }
 
   const existing = await db
     .from('flo_proposals')

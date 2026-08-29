@@ -1229,3 +1229,132 @@ input?)`, a `{ ok: false, reason: 'stale' }` obsługujesz spokojnym
 komunikatem z pola `message`, nie błędem.
 
 Następny krok: 34 (P-07 zaliczka i faktura końcowa)
+
+## 2026-08-29 · Krok 34 — P-07 zaliczka i faktura końcowa
+
+Zrobione:
+- `lib/flo/functions/invoice-final.ts` — `inspectChain`, `decideFinalInvoice`,
+  `hasSimilarInvoice`, `postponeUntil`, `buildFinalInvoiceProposal`,
+  `recheckBeforeIssue`, `needsOperatorAttention`.
+- `tests/unit/flo-invoice-final.test.ts` — 30 testów.
+
+P-07, trzy awarie:
+
+1. **Podwójne rozliczenie zaliczki.** Obrona DWUWARSTWOWA i to jest tu sedno.
+   Warstwa pierwsza to łańcuch `parent_invoice_id`. Warstwa druga to faktura
+   o zbliżonej kwocie w oknie 30 dni — bo klient wystawiający fakturę końcową
+   ręcznie prawie nigdy nie wpina jej w łańcuch; dla niego to po prostu
+   „faktura za resztę”. Sama pierwsza warstwa nie zobaczyłaby jej wcale.
+   Próg podobieństwa 5% jest świadomie szeroki: przemilczenie faktury, którą
+   klient i tak wystawi sam, kosztuje mniej niż drugi dokument rozliczający
+   tę samą zaliczkę w rejestrze państwowym.
+
+2. **Zła kwota do zapłaty.** Kwotę liczy `calculateFinalInvoiceTotals`
+   z `lib/invoices/calculator` — ten sam kod, który liczy prawdziwe faktury.
+   Osobny rachunek napisany na potrzeby agenta rozjechałby się z fakturą
+   przy pierwszej pozycji z inną stawką VAT. Gdy suma zaliczek przekracza
+   wartość zamówienia albo łańcuch jest rozspojony: MILCZENIE wobec klienta
+   plus zgłoszenie do operatora. Ujemna kwota do zapłaty na karcie byłaby
+   przerzuceniem naszego błędu w danych na klienta.
+
+3. **Zaczepianie w trakcie projektu.** Start dopiero po dacie realizacji
+   z faktury zaliczkowej; brak tej daty = milczenie, nie zgadywanie z daty
+   wystawienia. „Projekt trwa” przesuwa o 30 dni bez limitu użyć.
+
+DECYZJA, KTÓRA JEST TU NAJWAŻNIEJSZA: **„Projekt trwa” siedzi na
+`intent: 'snooze'`, nie na `dismiss`.** Gdyby było odwrotnie, dwa kliknięcia
+uruchomiłyby `MUTE_AFTER_DISMISSALS` i agent zamilkłby na 90 dni o obowiązku
+ustawowym — dokładnie u tych klientów, którzy prowadzą najdłuższe projekty,
+czyli u tych, którym ta funkcja jest najbardziej potrzebna. Osobny test tego
+pilnuje.
+
+Pozostałe decyzje:
+- Zaliczki pokrywające 100% zamówienia → `fully_settled`, agent milczy.
+  Czy faktura końcowa jest wtedy potrzebna, jest pytaniem do księgowej,
+  a agent nie wchodzi w spory interpretacyjne.
+- Nieprzejście walidacji FA(3) idzie do OPERATORA, nie do klienta. Szkic,
+  który odbiłby się od bramki Ministerstwa, jest naszym błędem.
+  Sprawdzane na końcu — dokument, którego i tak nie zamierzaliśmy pokazać,
+  nie ma po co budzić operatora.
+- Klucz tematu po korzeniu łańcucha, nie po okresie: jedno zamówienie ma
+  jedną fakturę końcową, choćby projekt trwał rok.
+- Karta żyje 90 dni. Obowiązek ustawowy nie znika po tygodniu.
+- Szkic BEZ NUMERU, tak samo jak w P-02. Test skanuje ładunek.
+- `recheckBeforeIssue` porównuje kwotę z tą, na którą klient się zgodził.
+  Zgoda dotyczyła KONKRETNEJ LICZBY — po jej zmianie trzeba pokazać nową
+  kartę, a nie wystawić dokument na liczbę, której człowiek nie widział.
+
+Dług: warstwa wpięcia (odczyt łańcucha z bazy, tworzenie szkica, wykonawca)
+idzie razem z resztą bloku 6, zgodnie z rytmem z części VII.8 planu.
+
+## 2026-08-29 · Krok 35 — profil podatkowy i parametry roczne
+
+Zrobione:
+- `lib/flo/tax-params.ts` — tabela parametrów z datami obowiązywania,
+  kalendarz dni wolnych (Wielkanoc liczona algorytmem, święta ruchome),
+  `shiftToBusinessDay`, `taxDeadline`, bezpiecznik wieku tabeli.
+- `lib/flo/tax-profile.ts` — `parseTaxProfile`, `isTaxProfileUsable`,
+  `missingProfileFields`, `taxGateOpen`, lista `TAX_KINDS`.
+- `lib/flo/proposals.ts` — bramka M12 wpięta w `createProposal`; nowy status
+  `no_tax_profile`; opcjonalny parametr `db` (wzorzec z części VII.5).
+- `tests/unit/flo-tax-params.test.ts` — 32 testy.
+
+**Migracja NIE była potrzebna.** Kolumna `flo_prefs.tax_profile` istnieje od
+00061, a `getPrefs`/`savePrefs` już ją czytają i zapisują. Krok 35 dokłada
+walidację kształtu i bramkę, nie schemat.
+
+**BRAMKA STOI W `createProposal`, nie w pięciu funkcjach podatkowych osobno.**
+Warunek sprawdzany w jednym miejscu nie da się pominąć przez przeoczenie
+w szóstej funkcji, którą ktoś dopisze za rok. Zwrotka `no_tax_profile`
+zamiast `disabled`, żeby w pomiarze dało się odróżnić „prawnik jeszcze nie
+odpowiedział” od „klient nie wypełnił kreatora”. Wywołujący sprawdzają
+wyłącznie `status === 'created'`, więc dodanie wariantu niczego nie psuje.
+
+Bramka ma DWA warunki naraz:
+1. `PARAMS_VERIFIED` — wspólny dla wszystkich; tabela limitów i terminów
+   sprawdzona przez człowieka.
+2. Kompletny profil podatkowy — osobny dla każdego konta.
+
+Sam profil nie wystarcza. To jest ta sama dyscyplina co przy odsetkach
+(`RATES_VERIFIED` w `interest.ts`): limity, progi i terminy to DANE PRAWNE,
+których nie wolno brać z pamięci modelu. Model poda liczbę prawdziwą dwa lata
+temu i zrobi to z pełnym przekonaniem. Każdy wiersz ma puste pole `source`,
+a test pilnuje, żeby flaga i puste źródła chodziły w parze.
+
+Co otwiera bramkę, a co nie:
+- Forma `nieznana` NIE otwiera. Kreator ma prawo zapisać „klient jeszcze nie
+  wie”; agent ma wtedy obowiązek milczeć, a nie wybrać za niego skalę.
+- Brak `startedOn` NIE otwiera. Bez daty rozpoczęcia działalności T-02 nie
+  policzy proporcji limitu dla firmy założonej w trakcie roku, a T-03 nie ma
+  od czego odliczać ulgi.
+- `2026-02-31` nie zostaje datą profilu: `Date.parse` przyjmuje ją i cofa na
+  marzec. Osobny test.
+
+Kalendarz:
+- Wielkanoc liczona algorytmem Meeusa/Jonesa/Butchera, od niej poniedziałek
+  wielkanocny, Zielone Świątki (+49) i Boże Ciało (+60). To czysta arytmetyka,
+  więc kalendarz NIE STARZEJE SIĘ razem z tabelą parametrów — i nie wymaga
+  niczyjej weryfikacji.
+- Przesunięcie ZAWSZE DO PRZODU. Termin z soboty upływa w poniedziałek;
+  przesunięcie w tył kazałoby zapłacić wcześniej, niż trzeba.
+- `taxDeadline` zwraca termin nominalny OBOK faktycznego. Bez obu dat nie da
+  się napisać uczciwie „termin wypada w sobotę, więc masz czas do poniedziałku”.
+- Testy na lata 2026–2028, w tym przełom roku (VAT za grudzień 2025 rozlicza
+  się 26 stycznia 2026) i ciąg dni wolnych 1–3 maja 2026.
+
+**BEZPIECZNIK WIEKU: `paramsStale()` psuje zestaw testów, gdy tabela nie była
+przeglądana od roku.** Data przeglądu: `PARAMS_REVIEWED_ON = '2026-08-29'`.
+Test upadnie 30 sierpnia 2027 i to jest zamierzone. Parametry podatkowe,
+o których wszyscy zapomnieli, są gorsze od ich braku: brak widać od razu,
+a stara liczba wygląda dokładnie tak samo jak świeża.
+
+Weryfikacja obu kroków:
+- `npx vitest run tests/unit/` — 33 pliki, 528 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+(Uwaga operacyjna: `pnpm typecheck` zgłaszał sześć błędów w `.next/types/`
+o brakujących `app/(marketing)/page.js` i `blog/page.js`. To STARY ARTEFAKT
+BUILDA, nie regres — te strony nie istnieją w drzewie. `rm -rf .next/types`
+i typecheck jest czysty.)
+
+Następny krok: 36 (T-01 kalendarz obowiązków)
