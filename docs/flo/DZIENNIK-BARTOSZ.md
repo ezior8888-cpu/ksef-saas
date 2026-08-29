@@ -2146,3 +2146,108 @@ gotowe funkcje panelu, oraz dwie rzeczy do pokazania inaczej niż reszta.
 
 Następny krok: 53 (M8 — wyłączniki per konto jako warstwa NAD `flags.ts`,
 z ćwiczeniem na produkcji)
+
+## 2026-08-29 · Kroki 53 i 54 — M8 wyłączniki, runbook awaryjny
+
+Zrobione:
+- `supabase/migrations/00066_flo_kind_flags.sql` — WGRANA NA PRODUKCJĘ.
+- `lib/flo/kind-switch.ts` — trzy warstwy przełączników.
+- `killFloAgent` w `lib/feature-flags/*` + wiersz w `global_feature_flags`.
+- Wpięcie w `createProposal`, `flo_kind_flags` w atrapie bazy.
+- `docs/runbooks/flo-incident.md`.
+- `tests/unit/flo-kind-switch.test.ts` (17).
+
+### M8 — trzy warstwy, każda może tylko ZABRAĆ
+
+1. **Globalny wyłącznik agenta** (`killFloAgent` w `global_feature_flags`) —
+   jeden UPDATE, cache 60 s, bez wdrożenia.
+2. **Blokada w kodzie** (`lib/flo/flags.ts`) — prawo i niepotwierdzone dane.
+3. **Przełącznik per konto** (`flo_kind_flags`) — wiersz tylko przy
+   odstępstwie.
+
+**Najważniejsza własność: warstwa 3 NIE MOŻE ODWRÓCIĆ WARSTWY 2.** Wpis
+`enabled = true` dla rodzaju zablokowanego w kodzie jest ignorowany, i jest
+na to osobny test. Gdyby było inaczej, jeden UPDATE o drugiej w nocy
+wypuszczałby na klienta funkcję, której nikt nie zatwierdził — a właśnie
+przed tym miało chronić trzymanie tamtej listy w commicie.
+
+ODSTĘPSTWO OD PLANU: plan mówi „flaga dla każdej z 33 funkcji
+w `tenant_feature_flags`”. Tamta tabela ma jedną kolumnę BOOLEAN na flagę,
+więc oznaczałoby to 33 kolumny i migrację przy każdej kolejnej funkcji.
+Zrobiłem osobną tabelę `(tenant_id, kind, enabled, reason)` — wiersz powstaje
+tylko przy odstępstwie, konto bez wierszy ma wszystko włączone i nic nie
+kosztuje. Jest to zgodne z częścią VII.3, która mówi wprost, że przełączniki
+per konto mają być warstwą NAD `flags.ts`.
+
+Powód wyłączenia jest OBOWIĄZKOWY (walidacja rzuca). Wyłącznik bez powodu po
+pół roku jest nie do odróżnienia od pomyłki i nikt nie odważy się go cofnąć —
+a wtedy klient zostaje bez funkcji na zawsze, bo raz komuś coś nie zadziałało.
+
+Drobiazg wart zapisania: gdy kod i tak blokuje rodzaj, `isKindEnabledForTenant`
+NIE PYTA ani bazy, ani cache'u flag globalnych. Test tego pilnuje licznikiem
+zapytań — bo i tak nic tego nie odwróci, a to jest ścieżka wołana przed
+każdym zapisem propozycji.
+
+Odczyt globalnego wyłącznika jest wstrzykiwalny (`readGlobalKill`) wyłącznie
+po to, żeby testy jednostkowe nie sięgały po Redis i po bazę flag. Bez tego
+`createProposal` w testach robiłby prawdziwe wywołanie sieciowe, które
+`loadFlags` po cichu połyka — czyli test przechodziłby z powodu, o którym
+nikt by nie wiedział.
+
+### ĆWICZENIE Z PLANU — co dokładnie zostało sprawdzone
+
+Wykonane na produkcji:
+1. Wpis wyłączający `payment.chase` dla jedynego konta produkcyjnego
+   (`Moja firma`), z powodem.
+2. Odczyt dokładnie tym zapytaniem, które wysyła `isKindEnabledForTenant`
+   (filtr po `tenant_id` i `kind`) — zwraca `enabled = f` z powodem.
+3. Kontrola, że inny rodzaj (`expense.review`) nie ma wiersza, czyli
+   pozostaje domyślnie włączony.
+4. Sprzątnięcie: wiersz usunięty, tabela pusta.
+
+**CZEGO NIE SPRAWDZIŁEM I DLACZEGO:** nie zaobserwowałem „agent milczy”
+w działającej aplikacji, bo ten kod NIE JEST JESZCZE WDROŻONY — produkcja
+chodzi na starszym buildzie, a lokalny `.env.local` celuje w inną bazę.
+Zachowanie samej bramki jest pokryte testami jednostkowymi (wyłączony rodzaj
+nie zostawia śladu w bazie, pozostałe rodzaje tworzą propozycje normalnie,
+globalny wyłącznik ucisza wszystkie naraz). **Ćwiczenie trzeba powtórzyć po
+najbliższym wdrożeniu** — dopiero wtedy będzie w pełni wykonane w sensie,
+o który chodzi w planie.
+
+### Runbook awaryjny
+
+`docs/runbooks/flo-incident.md`, sześć części: zatrzymanie (30 s) → zasięg
+(10 min) → odwrócenie (30 min) → powiedzenie (ten sam dzień) → alarmy → po
+wszystkim.
+
+BŁĄD ZŁAPANY PRZED ODDANIEM: pierwsza wersja zapytań ustalających zasięg
+używała `WHERE actor = 'flo'` — wprost z planu. **`audit_logs` NIE MA
+kolumny `actor`.** Runbook z zapytaniem, które sypie błędem składni,
+jest gorszy niż brak runbooka: czyta się go w chwili, w której nikt nie ma
+głowy do debugowania SQL-a. Faktycznym wyróżnikiem jest prefiks w `action`
+(`flo.proposal.executed|failed|undone`) i to jest lepszy wyróżnik niż
+proponowany, bo te trzy wartości należą do unii `AuditAction`, więc literówka
+się nie skompiluje. `metadata->>'actor'` bywa ustawione, ale tylko w trzech
+miejscach — nie nadaje się do ustalania zasięgu.
+
+**Wszystkie zapytania z runbooka odpalone na produkcji** (wynik pusty, bo
+agent jeszcze nie działa — ale składnia i nazwy kolumn się zgadzają). To
+jedyny sposób, żeby mieć pewność, że runbook zadziała wtedy, kiedy będzie
+potrzebny.
+
+Dwie rzeczy w runbooku, których nie było w planie, a wyszły przy pisaniu:
+- Tabela „co da się cofnąć, a czego nie”, z jawnym wierszem „poszło do
+  człowieka — NIE, tylko rozmowa”. Bez niej pierwszym odruchem będzie
+  szukanie sposobu na cofnięcie maila.
+- Zdanie zamykające: **wyłącznik zostawiony włączony „na wszelki wypadek”
+  jest awarią samą w sobie**, i punkt przywrócenia ma termin.
+
+Czeka: wpis Masła w jego dzienniku, że przeczytał runbook (definicja
+gotowości kroku 54).
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 49 plików, 914 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+- migracja 00066 wgrana, zarejestrowana, RLS włączony, `killFloAgent = false`
+
+Następny krok: 55 (wdrożenie kanarkowe — funkcje promienia 4 na 10% kont)
