@@ -28,6 +28,7 @@ export const GLOBAL_FLAGS: readonly GlobalFlag[] = [
   'killAllKsefSubmissions',
   'maintenanceMode',
   'disableSignups',
+  'killFloAgent',
 ] as const;
 
 /** Kill-switch musi reagować szybko, ale nie kosztem zapytania na każdy request. */

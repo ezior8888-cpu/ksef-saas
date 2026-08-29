@@ -32,7 +32,8 @@ export type PerTenantFlag =
 export type GlobalFlag =
   | 'killAllKsefSubmissions'
   | 'maintenanceMode'
-  | 'disableSignups';
+  | 'disableSignups'
+  | 'killFloAgent';
 
 interface TenantFlagsRow {
   tenant_id: string;

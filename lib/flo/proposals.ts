@@ -28,6 +28,7 @@ import {
 } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
 import { isKindEnabled } from '@/lib/flo/flags';
+import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
 import { FLO_KIND_VARIANT } from '@/lib/flo/kind-variant';
 import { isTaxKind, taxGateOpen } from '@/lib/flo/tax-profile';
 import {
@@ -82,11 +83,27 @@ export type CreateProposalResult =
 export async function createProposal(
   input: CreateProposalInput,
   db: FloDbClient = floDb(),
+  /** Wstrzykiwane tylko w testach — patrz `isKindEnabledForTenant`. */
+  readGlobalKill?: () => Promise<boolean>,
 ): Promise<CreateProposalResult> {
   // Wyłącznik globalny idzie PIERWSZY: funkcja czekająca na opinię prawnika
   // nie ma prawa zostawić śladu w bazie klienta. Inaczej po włączeniu
   // wysypałaby się na niego lawina kart sprzed miesięcy.
   if (!isKindEnabled(input.kind)) {
+    return { status: 'disabled' };
+  }
+
+  // Warstwy M8 (krok 53): globalny wyłącznik agenta i przełącznik per konto.
+  // Sprawdzane PRZED zapisem — funkcja wyłączona nie ma zostawiać śladu
+  // w bazie klienta, bo po ponownym włączeniu wysypałaby się na niego
+  // lawina kart sprzed tygodni.
+  const verdict = await isKindEnabledForTenant(
+    input.kind,
+    input.tenantId,
+    db,
+    readGlobalKill,
+  );
+  if (!verdict.enabled) {
     return { status: 'disabled' };
   }
 

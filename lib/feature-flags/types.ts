@@ -6,4 +6,6 @@ export type PerTenantFlag =
 export type GlobalFlag =
   | 'killAllKsefSubmissions'
   | 'maintenanceMode'
-  | 'disableSignups';
+  | 'disableSignups'
+  /** Zatrzymuje CAŁEGO agenta FLO — pierwszy krok runbooku incydentowego. */
+  | 'killFloAgent';

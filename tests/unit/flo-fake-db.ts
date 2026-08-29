@@ -28,6 +28,7 @@ interface Tables {
   flo_prefs: Row[];
   flo_usage: Row[];
   flo_shadow: Row[];
+  flo_kind_flags: Row[];
 }
 
 export interface FakeDb {
@@ -47,6 +48,7 @@ export function createFakeDb(seed: Partial<Tables> = {}): FakeDb {
     flo_prefs: seed.flo_prefs ?? [],
     flo_usage: seed.flo_usage ?? [],
     flo_shadow: seed.flo_shadow ?? [],
+    flo_kind_flags: seed.flo_kind_flags ?? [],
   };
   const state = { writes: 0 };
 

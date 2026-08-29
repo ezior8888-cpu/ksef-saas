@@ -167,6 +167,19 @@ export type FloUsageInsert = Partial<FloUsageRow> & {
   day: string;
 };
 
+/** Przełącznik funkcji per konto (migracja 00066). */
+export interface FloKindFlagRow {
+  tenant_id: string;
+  kind: string;
+  enabled: boolean;
+  reason: string | null;
+  updated_at: string;
+}
+
+export type FloKindFlagInsert = Omit<FloKindFlagRow, 'updated_at'> & {
+  updated_at?: string;
+};
+
 export interface FloShadowRow {
   id: string;
   tenant_id: string;
@@ -254,7 +267,7 @@ export interface FloTableClient<Row, Insert> {
   delete(): FloFilteredMutation<Row>;
 }
 
-/** Klient ograniczony do sześciu tabel agenta — nic więcej nie jest widoczne. */
+/** Klient ograniczony do tabel agenta — nic więcej nie jest widoczne. */
 export interface FloDbClient {
   from(
     table: 'flo_proposals',
@@ -268,6 +281,9 @@ export interface FloDbClient {
   from(table: 'flo_prefs'): FloTableClient<FloPrefsRow, FloPrefsInsert>;
   from(table: 'flo_usage'): FloTableClient<FloUsageRow, FloUsageInsert>;
   from(table: 'flo_shadow'): FloTableClient<FloShadowRow, FloShadowInsert>;
+  from(
+    table: 'flo_kind_flags',
+  ): FloTableClient<FloKindFlagRow, FloKindFlagInsert>;
 }
 
 /**
@@ -275,7 +291,7 @@ export interface FloDbClient {
  *
  * Rzutowanie przez `unknown` jest świadome: `types/database.ts` nie zna
  * jeszcze tabel z migracji 00061, więc bez tego kroku każde zapytanie
- * kończyłoby się błędem typów. Zawężenie do sześciu tabel sprawia, że tym
+ * kończyłoby się błędem typów. Zawężenie do tabel agenta sprawia, że tym
  * rzutowaniem nie da się przypadkiem sięgnąć do faktur ani do kontrahentów.
  */
 export function floDb(): FloDbClient {

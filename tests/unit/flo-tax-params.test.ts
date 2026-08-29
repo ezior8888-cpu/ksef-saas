@@ -301,6 +301,7 @@ describe('M12 — bez profilu grupa T milczy', () => {
         expiresAt: new Date('2026-05-01T00:00:00.000Z'),
       },
       db.client,
+      async () => false,
     );
 
     expect(result.status).not.toBe('created');
@@ -321,6 +322,7 @@ describe('M12 — bez profilu grupa T milczy', () => {
         expiresAt: new Date('2026-12-01T00:00:00.000Z'),
       },
       db.client,
+      async () => false,
     );
 
     expect(result.status).toBe('created');
