@@ -69,6 +69,15 @@ export const FLO_PROPOSAL_KINDS = [
   'chat.draft', // O-04 szkic z rozmowy
   'wrapped.ready', // S-03
   'milestone.money', // S-04
+  /**
+   * B-01, dodane w kroku 41 — meldunek po wysyłce paczki do księgowej.
+   *
+   * Osobny rodzaj, bo `accountant.package` rysuje się wariantem `input`
+   * (pytamy o adres), a potwierdzenie doręczenia nie ma o co pytać.
+   * Cisza po wysyłce paczki z danymi finansowymi jest STANEM ZABRONIONYM:
+   * klient musi wiedzieć, czy poszło, czy odbiło się od serwera księgowej.
+   */
+  'accountant.delivery',
 ] as const;
 
 export type FloProposalKind = (typeof FLO_PROPOSAL_KINDS)[number];

@@ -54,6 +54,7 @@ export const FLO_KIND_VARIANT: Record<FloProposalKind, FloCardVariant> = {
   // ── Biuro rachunkowe ─────────────────────────────────────────
   'accountant.package': 'input', // B-01 — najpierw adres księgowej
   'accountant.format': 'choice', // B-02 — w czym pracuje księgowa
+  'accountant.delivery': 'info', // B-01 — doręczono albo odbiło się
 
   // ── Start i rozmowa ──────────────────────────────────────────
   'onboarding.step': 'single', // O-01 — następny krok kreatora
