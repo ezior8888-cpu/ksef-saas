@@ -1983,3 +1983,77 @@ zaznaczenia, priorytet 90 i `noPush` przy karcie podpowiedzi.
 
 Następny krok: 49 (O-01 wsparcie onboardingu — ścieżka pierwszej faktury
 bez certyfikatu KSeF)
+
+## 2026-08-29 · Kroki 49 i 50 — O-01 onboarding, S-03 Wrapped
+
+Zrobione:
+- `lib/flo/functions/onboarding.ts` — O-01.
+- `lib/flo/wrapped.ts` — S-03.
+- `tests/unit/flo-onboarding.test.ts` (25 testów, obie funkcje).
+
+### O-01 — sukces onboardingu nie zależy od certyfikatu KSeF
+
+To jest jedno zdanie, wokół którego stoi cały ten krok. Certyfikat wymaga
+profilu zaufanego albo podpisu kwalifikowanego; bywa, że czeka się dzień,
+bywa, że tydzień. Nasz docelowy klient trafia na nas najczęściej dlatego, że
+MA JUŻ USŁUGĘ WYKONANĄ i musi ją zafakturować. Produkt, który mówi wtedy
+„najpierw zdobądź certyfikat”, jest produktem, z którego ten człowiek
+wychodzi i nie wraca.
+
+Ścieżka ma cztery kroki i kończy się PDF-em wysłanym mailem. Test przechodzi
+ją w pętli na koncie z `hasKsefCertificate: false` i wymaga dojścia do
+`done`; drugi test skanuje wszystkie kroki i wymaga, żeby w tytule ani
+w etykiecie przycisku nie padło słowo „certyfikat”. To zabezpieczenie na
+przyszłość, nie na dziś — łatwo dopisać taki krok „dla porządku” za pół roku.
+
+Brak NIP-u NIE ZATRZYMUJE ścieżki: organizacja szkicowa wystarczy do
+przygotowania i wysłania PDF-a. Wymagania KSeF (`ksefTodo`) są osobną listą,
+pokazywaną wtedy, kiedy klient sam się na nią zdecyduje.
+
+M13 zrealizowany jako `capabilitiesFor`: cztery zdolności działają od
+pierwszej minuty bez żadnej formalności, a każda zablokowana ma POWÓD
+I NAPRAWĘ z odnośnikiem. Nie „nie mogę wysyłać do KSeF”, tylko „potrzebny
+certyfikat, zdobywa się go tak”. Zdanie do kreatora mówi wprost, czego agent
+teraz nie potrafi — milczenie o ograniczeniach kończy się tym, że klient
+odkrywa je sam przy pierwszej fakturze, która ma iść dzisiaj.
+
+### S-03 — przy spadku nie ma dynamiki
+
+Definicja gotowości („brak jakiejkolwiek liczby ujemnej”) sprawdzona na całym
+wyniku: `JSON.stringify(result)` nie może pasować do `/-\d/` ani zawierać
+minusa typograficznego. Drugi test szuka słów „spad”, „mniej”, „gorzej”,
+„strat”.
+
+Przy słabszym roku sekwencja DOBIERA INNE EKRANY — liczba obsłużonych
+klientów, najdłuższa współpraca, terminowość. Ekrany porównawcze
+(`quarter_to_quarter`, `biggest_client`) znikają w całości, a nie są
+„wyszarzane”. Wrapped u kogoś, komu rok wyszedł gorzej, nie ma być raportem
+o tym, że wyszedł gorzej.
+
+Drobiazg, który wyszedł przy pisaniu i mógł popsuć całą regułę: średni czas
+płatności bywa UJEMNY (klient płaci przed terminem). Jest to najlepsza liczba
+w całym zestawieniu, a na ekranie wyglądałaby jak zła wiadomość — stąd
+`describePaymentSpeed` zwraca „Płaci przed terminem” zamiast „−3 dni”.
+Bez tego test na liczby ujemne padłby na koncie, któremu idzie DOBRZE.
+
+Nazwy kontrahentów domyślnie zasłonięte („Twój największy klient”), prawdziwe
+wyłącznie przy `revealNames: true`. Ekran zapisuje się w 9:16 i ląduje
+w mediach społecznościowych, a kontrahent nie pytał nikogo o zgodę na
+pokazanie, ile u nas wydał. Test sprawdza, że nazwa nie przecieka do wyniku.
+
+**Zero wywołań modelu** pilnowane testem skanującym źródło pliku: brak
+importu z `lib/flo/llm` i brak wzmianki o Anthropic. Powód jest kosztowy —
+Wrapped ogląda naraz całe konto klientów w jednym tygodniu grudnia.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 46 plików, 853 testy, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Blok 9 domknięty (kroki 46–49), blok 10 zaczęty.
+
+Do `FLO-PLAN-MASLO.md` dopisane: zakaz wymagania certyfikatu w kreatorze,
+`capabilitiesFor` jako źródło listy „co potrafię teraz”, wariant `steady`
+w Wrapped bez dokładania własnych strzałek w dół, domyślne zasłonięcie nazw.
+
+Następny krok: 51 (S-04 progi pieniężne — konto z historią z importu nie
+dostaje progów wstecz)
