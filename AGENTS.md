@@ -187,6 +187,31 @@ PHP
   Dla wideo objawia się to wyłącznie cichym błędem dekodera.
 - **Lokalny `.env.local` celuje w INNĄ bazę** (`utuzzxstfcnglppplvlw.supabase.co`)
   niż produkcja. To celowe. Nie podmieniaj bez uzgodnienia.
+- **Build padający z `exit code 137` to zabójca OOM, nie błąd kodu.** `pnpm build`
+  na `app-1` potrzebuje więcej pamięci, niż maszyna ma fizycznie: pułap sterty
+  w `Dockerfile` to 3072 MB, a realnie wolne jest ~2.2 GB (sam `dockerd` bierze
+  ~775 MB). Build jedzie na swapie i przy udanym przebiegu zjada go **4.5 GB**.
+  **`app-1` musi mieć ≥ 8 GB swapu** — przy 4 GB wdrożenie ginie. Sprawdzenie:
+
+  ```bash
+  ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@116.203.71.134 'swapon --show'
+  ```
+
+  Potwierdzenie diagnozy w logach jądra `app-1`:
+  `dmesg -T | grep -i oom-kill`. Zdarzyło się 29 sierpnia 2026, gdy urósł
+  `lib/flo/`; wcześniej build po prostu nie dobijał do sufitu.
+- **Panel Coolify ma filtr po IP w chmurowej zaporze Hetznera, nie na serwerze.**
+  Objaw jest mylący: przeglądarka ładuje się w nieskończoność, bo Hetzner
+  odrzuca pakiety po cichu, zamiast zamknąć połączenie. Na serwerze `ufw` jest
+  wyłączony i `iptables` nic nie blokuje, więc szukanie tam to strata czasu.
+  Zamiast dopisywać zmienny domowy adres do zapory — tunel:
+
+  ```bash
+  ssh -i ~/.ssh/hetzner_faktflow_ed25519 -N -L 8000:localhost:8000 root@91.98.134.85
+  ```
+
+  Potem `http://localhost:8000`. Działa, bo `APP_URL` Coolify jest puste
+  i panel trzyma się nagłówka `Host`.
 
 ### Praca w worktree
 

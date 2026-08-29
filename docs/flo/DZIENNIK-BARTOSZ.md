@@ -2353,3 +2353,85 @@ Co czeka na ludzi, nie na kod:
 
 Następny krok: nie ma. Plan toru A skończony; dalej idą zgłoszenia
 i to, co pokaże alfa.
+
+## 2026-08-29 · WDROŻENIE NA PRODUKCJĘ — i awaria po drodze
+
+Commit `0095f07` (kroki 34–56) jest na produkcji. Aplikacja i worker chodzą
+na tym samym obrazie, oba `healthy`, `https://www.faktflow.pl` oddaje 200.
+
+### Awaria: build zabity przez OOM
+
+Pierwsze wdrożenie aplikacji (`#23`) padło z **exit code 137** na `pnpm build`.
+137 to 128+9, czyli SIGKILL — zabójca OOM. Potwierdzenie w `dmesg` na `app-1`:
+`Out of memory: Killed process (node) anon-rss:1709300kB`.
+
+**To nie był pech, tylko nieprawdziwy komentarz w `Dockerfile`**, który
+czekał na wyzwolenie. Linia 75 ustawia pułap sterty na 3072 MB z komentarzem
+„mieści się wygodnie w samym RAM-ie, z zapasem, bez polegania na wolniejszym
+swapie". Rachunek na `app-1` (3.7 GB): `dockerd` bierze 775 MB, działająca
+aplikacja 132 MB, worker 128 MB, `containerd`, `traefik` i proxy kolejne
+~180 MB. Dla builda zostaje ~2.2 GB — **mniej niż pułap**. V8 dostawał
+pozwolenie na urośnięcie ponad to, co maszyna ma.
+
+Działało do dziś, bo build nigdy nie dobijał do sufitu. Dwadzieścia nowych
+modułów w `lib/flo/` przesunęło go za krawędź.
+
+**Naprawa:** swap na `app-1` z 4 na 8 GB (drugi plik 4 GB, wpis w `/etc/fstab`),
+plus wyczyszczone 6.89 GB nieaktywnego cache'u builda (dysk 61% → 43%).
+Ponowione wdrożenie (`#25`) przeszło.
+
+**Pomiar, który to domyka:** przy udanym buildzie swap dobił do **4546 MB** —
+czyli powyżej pierwotnego limitu 4 GB. Dodatkowe 4 GB nie były „na wszelki
+wypadek", tylko dokładnie tym, czego brakowało. Wolny RAM schodził w szczycie
+do 212 MB.
+
+Świadomie NIE zmieniałem liczby 3072. Wartość domyślna Node 22 (~1958 MB)
+była już testowana i nie wystarcza, a zgadywanie czegoś pomiędzy kosztowałoby
+kolejne piętnastominutowe buildy. Poprawiony został KOMENTARZ, który kłamał,
+i dopisany wymóg 8 GB swapu — w `Dockerfile` i w pułapkach w `AGENTS.md`.
+
+### Druga poprawka: komenda wdrożenia w `AGENTS.md` nie działała
+
+Wariant z `--execute="..."` przechodzi przez DWA shelle. `\$a` przeżywa
+lokalny jako `$a`, a potem zdalny rozwija je do pustego napisu i do tinkera
+trafia `= App\Models\...`:
+
+```
+PHP Parse error: Syntax error, unexpected '=' on line 1
+```
+
+Zastąpione heredokiem w apostrofach (`<<'PHP'`) z `docker exec -i`. Przy
+okazji znika potrzeba podwajania ukośników. Dopisany powód razem z dokładnym
+brzmieniem błędu — po to, żeby ten, kto go zobaczy, znalazł sekcję szukając
+po treści komunikatu.
+
+### Trzecia rzecz: panel Coolify „ładuje się w nieskończoność"
+
+Nie awaria. Chmurowa zapora Hetznera filtruje port 8000 po IP i **dropuje**
+pakiety zamiast je odrzucać — stąd wieczne ładowanie zamiast błędu.
+Na serwerze `ufw` jest wyłączony, w `iptables` nic nie blokuje, więc szukanie
+tam to ślepa uliczka. Rozwiązanie bez dotykania zapory: tunel SSH na 8000.
+Opisane w `AGENTS.md`.
+
+### Weryfikacja po wdrożeniu
+
+- Aplikacja i worker: `healthy`, obraz `0095f072c7...` (nasz commit)
+- `/api/health` → HTTP 200 w 0.07 s
+- `https://faktflow.pl` → 200 (jeden przeskok na `www`)
+- **Migracje widoczne dla PostgREST**: zapytania o `flo_kind_flags`,
+  `flo_rollout`, `contractors?select=manual_fields` i `invoices?select=origin`
+  zwracają `42501 permission denied` — czyli tabele i kolumny SĄ w cache'u
+  schematu, a odmowa jest na autoryzacji. Gdyby cache był nieświeży,
+  dostalibyśmy `PGRST205`/`PGRST204`. Pułapka z migracji 00060 nie wróciła.
+- Worker: błędy `pg-boss timeout` z 20:26 UTC pochodzą z okna PIERWSZEGO,
+  zabitego builda. Po nim crony chodzą czysto (20:30, 20:45 UTC).
+
+### Stan po wdrożeniu
+
+**Agent nadal nie jest widoczny dla klientów** i to jest stan zamierzony:
+`flo_rollout` jest puste, więc dziewięć rodzajów z listy kanarkowej jest
+nieodsłoniętych, a interfejs (tor B) i tak jest na kroku 2. Wdrożenie
+oznacza „kod jest na serwerze", nie „funkcje działają u ludzi".
+
+Do zrobienia po wdrożeniu: POWTÓRZYĆ ćwiczenie M8 z kroku 53 — teraz da się
+je wykonać do końca, bo bramka jest na produkcji.
