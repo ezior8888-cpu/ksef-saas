@@ -73,6 +73,12 @@ export interface TaxParams {
   reliefStartMonths: number;
   /** Preferencyjny ZUS: ile miesięcy po uldze na start. */
   reliefPreferentialMonths: number;
+  /** Miesięczna składka w okresie ulgi na start, PLN. */
+  zusStartReliefMonthly: number;
+  /** Miesięczna składka preferencyjna, PLN. */
+  zusPreferentialMonthly: number;
+  /** Miesięczna składka standardowa („duży ZUS”), PLN. */
+  zusStandardMonthly: number;
   /** Dzień miesiąca: JPK_V7 i zapłata VAT. */
   vatFilingDay: number;
   /** Dzień miesiąca: zaliczka na PIT. */
@@ -101,6 +107,9 @@ export const TAX_PARAMS: readonly TaxParams[] = [
     pitFlatRate: 0.19,
     reliefStartMonths: 6,
     reliefPreferentialMonths: 24,
+    zusStartReliefMonthly: 400,
+    zusPreferentialMonthly: 700,
+    zusStandardMonthly: 1_600,
     vatFilingDay: 25,
     pitAdvanceDay: 20,
     zusDay: 20,
