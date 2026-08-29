@@ -2057,3 +2057,92 @@ w Wrapped bez dokładania własnych strzałek w dół, domyślne zasłonięcie n
 
 Następny krok: 51 (S-04 progi pieniężne — konto z historią z importu nie
 dostaje progów wstecz)
+
+## 2026-08-29 · Kroki 51 i 52 — S-04 progi pieniężne, M7 tryb cichy i metryki
+
+Zrobione:
+- `lib/flo/functions/milestone.ts` — S-04.
+- `lib/flo/shadow.ts` — tryb cichy, promienie, progi trafności.
+- `lib/flo/metrics.ts` — sześć liczb dla panelu operatora.
+- `tests/unit/flo-milestone.test.ts` (16) i `flo-shadow-metrics.test.ts` (28).
+
+### S-04 — import nie odblokowuje progów wstecz
+
+Definicja gotowości sprawdzona wprost: faktury z `origin` innym niż `app`
+nie liczą się do progów. Ta funkcja jest pierwszym realnym konsumentem
+kolumny z migracji 00065 — bez niej „wyłącznie przychód po rejestracji
+konta” byłoby deklaracją, bo pochodzenia nie dałoby się odczytać z niczego
+trwałego.
+
+Reguła, która wymagała osobnej ścieżki w kodzie: **konto, które w pierwszym
+miesiącu przebija najwyższy próg, nie dostaje żadnego.** To nie jest ktoś,
+kto właśnie zaczyna, tylko firma, która się do nas przeprowadziła —
+i gratulowanie jej „pierwszych 10 000 zł” byłoby dowodem, że program nie
+rozumie, z kim rozmawia. Werdykt `suppress_all` zwraca komplet kluczy do
+zapisania jako przyznane, żeby drabinka nie odpaliła się miesiąc później.
+
+Karencja siedmiu dni od wpłaty ma konkretny powód: próg raz przyznany nie
+jest odbierany, a wpłata bywa cofana. Próg przyznany i po tygodniu
+nieprawdziwy jest gorszy niż brak progu.
+
+Przy kilku progach przekroczonych naraz przyznajemy NAJWYŻSZY — trzy karty
+jednego dnia zamieniłyby miły moment w spam.
+
+Ton pilnowany testem skanującym całą kartę: bez „gratulacje”, bez odznak,
+bez poziomów, bez licznika faktur. Priorytet 99 (najniższy w wątku, niżej
+niż podpowiedzi funkcji) i `noPush`.
+
+### M7 — tryb cichy
+
+Bez trybu cichego jedynym sposobem sprawdzenia, czy funkcja trafia, jest
+wypuszczenie jej na klientów. Przy promieniu 4 — dokument w rejestrze
+państwowym albo wiadomość u obcej osoby — to nie jest test, tylko
+eksperyment na ludziach.
+
+`KIND_RADIUS` przypisuje promień KAŻDEMU z 32 rodzajów; test tego pilnuje,
+bo rodzaj bez promienia nie miałby progu, czyli wyszedłby z ukrycia bez
+żadnego warunku. **Gdy jeden rodzaj obsługuje kilka funkcji o różnym
+promieniu, wpisujemy WYŻSZY** — `invoice.draft` niesie P-03 (promień 1)
+i pojedynczy szkic z P-02 (promień 4), a przy sporze wygrywa surowszy próg.
+
+Definicja trafienia jest CELOWO WĄSKA: ta sama rzecz, ta sama kwota, ta sama
+encja. Luźniejsza („klient coś zrobił”) dawałaby trafność bliską stu procent
+u każdej funkcji i nie mówiłaby nic.
+
+Do `flo_shadow` trafiają wyłącznie klucze i kwoty — test sprawdza dokładny
+zestaw kluczy zapisanego obiektu. Treść karty i dane kontrahenta nie mają
+czego szukać w tabeli operatorskiej.
+
+Przy promieniu 3 jeden błąd blokuje wydanie. „99% poprawnych kwot podatku”
+znaczy, że co setny człowiek dostanie złą.
+
+### Sześć liczb panelu — dwie decyzje warte zapisania
+
+1. **„Zignorowane” to WYGASŁE, nie odrzucone.** Odrzucenie jest decyzją
+   i informacją („nie chcę tego”); wygaśnięcie bez kliknięcia znaczy, że
+   karta nie była dość ważna, żeby cokolwiek z nią zrobić. Zlepienie obu
+   w jedną liczbę ukryłoby różnicę między funkcją NIECHCIANĄ a NIEWIDOCZNĄ,
+   a to są dwa zupełnie różne problemy do naprawienia.
+2. **Odsetek cofnięć liczony OD PRZYJĘTYCH**, nie od wszystkich propozycji.
+   Cofnięcie mierzy, jak często agent zrobił coś, czego człowiek po namyśle
+   nie chciał — a namysł dotyczy wyłącznie tego, na co się zgodził.
+
+Liczba zdarzeń zablokowanych przez re-walidację jest jedyną metryką w tym
+zestawie, która liczy AWARIE, DO KTÓRYCH NIE DOSZŁO. Przy rosnącym ruchu ma
+prawo rosnąć — dopisane w planie Masła, żeby nie wylądowała na panelu na
+czerwono.
+
+Kurs USD/PLN przy koszcie modelu podajemy z zewnątrz zamiast zaszywać:
+metryka operatorska licząca po kursie sprzed roku myli bardziej, niż pomaga.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 48 plików, 897 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Blok 10 domknięty (kroki 50–51), blok 11 zaczęty.
+
+Do `FLO-PLAN-MASLO.md` dopisane: priorytet 99 i jedna liczba na karcie progu,
+gotowe funkcje panelu, oraz dwie rzeczy do pokazania inaczej niż reszta.
+
+Następny krok: 53 (M8 — wyłączniki per konto jako warstwa NAD `flags.ts`,
+z ćwiczeniem na produkcji)
