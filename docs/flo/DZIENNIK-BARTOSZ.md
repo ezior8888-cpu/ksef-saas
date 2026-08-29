@@ -1893,3 +1893,93 @@ Blok 8 domknięty (kroki 41–45), blok 9 zaczęty.
 
 Następny krok: 47 (O-04 narzędzia rozmowy, ŻÓŁTE — wyłącznie odczyt
 i szkice, narzędzie wysyłające nie istnieje)
+
+## 2026-08-29 · Kroki 47 i 48 — O-04 narzędzia rozmowy, O-03 podpowiadanie funkcji
+
+Zrobione:
+- `lib/flo/tools.ts` — rejestr narzędzi, walidacja, ogrodzenie danych.
+- `lib/flo/tax-topic.ts` — klasyfikator tematów podatkowych (za flagą).
+- `lib/flo/functions/feature-hint.ts` — O-03.
+- `tests/unit/flo-tools.test.ts` (24) i `flo-feature-hint.test.ts` (22).
+
+### O-04 — cztery warstwy obrony, w kolejności od najważniejszej
+
+Zagrożenie jest realne, nie teoretyczne: do skrzynki KSeF trafiają faktury od
+podmiotów, których NIE KONTROLUJEMY, a w nazwie pozycji można wpisać dowolny
+tekst. Ten tekst wchodzi potem do kontekstu modelu jako dane klienta.
+
+1. **NARZĘDZIE WYSYŁAJĄCE NIE ISTNIEJE.** To jest cała obrona; reszta to
+   utrudnienia. Nawet wstrzyknięcie, które w pełni przejmie model, nie ma
+   czego wywołać. Typ `ToolMode` jest domknięty do `'read' | 'draft'` —
+   dopisanie narzędzia wysyłającego wymaga zmiany TYPU, czyli świadomej
+   decyzji w przeglądzie kodu, a nie dopisania linii do tablicy. Test skanuje
+   też nazwy narzędzi wyrażeniem `/wysl|wyśl|send|submit|mail|sms|publish/i`.
+2. **Dane oddzielone od instrukcji.** Rekordy idą w ogrodzonym bloku,
+   a ogrodzenie jest NEUTRALIZOWANE w treści. Pięć realnych wariantów ataku
+   w zestawie testów, w tym taki, który zawiera sam znacznik końca bloku —
+   żaden z niego nie wychodzi.
+3. **Parametry walidowane po stronie serwera.** `tenantId` przysłany przez
+   model jest USUWANY, nie honorowany (razem z `tenant_id` i
+   `organizationId`) — inaczej wystarczyłoby, żeby wstrzyknięcie kazało go
+   podmienić. Osobno `assertBelongsToTenant` jako pas obok szelek na wyniku
+   zapytania.
+4. RLS jako ostatnia linia.
+
+Świadomie NIE blokujemy po wzorcach. `looksLikeInjection` jest CZUJKĄ do
+alertu operatorskiego, nie bramką: wzorce da się ominąć, a zablokowana
+faktura z dziwną nazwą pozycji to zablokowana praca klienta. Test tego
+pilnuje — sprawdza, że czujka wykrywa, ale nic nie zatrzymuje.
+
+Piąta zasada, nie o bezpieczeństwie: **przy niejednoznaczności pytamy, nie
+wybieramy.** `resolveOne` zwraca jeden wynik albo listę — nigdy „najlepszy”
+z domysłem. Dwóch Kamilów to pytanie, nie ranking.
+
+**Klasyfikator podatkowy.** Podatki sprawdzane PIERWSZE i wygrywają z każdym
+innym tematem: „czy mogę wystawić fakturę bez VAT-u?” ma w sobie słowo
+„faktura”, a jest pytaniem podatkowym — przy odwrotnej kolejności dostałoby
+odpowiedź od modelu. Lista wzorców jest celowo szeroka: fałszywy alarm
+kosztuje jedno zdanie o księgowej za dużo, przeoczenie kosztuje własną
+wykładnię przepisu.
+
+Dziesięć pytań-pułapek w testach. `modelMayAnswer('tax')` zwraca `false` —
+pytanie podatkowe NIE IDZIE DO MODELU W OGÓLE. Nie chodzi o to, żeby model
+odpowiedział ostrożnie, tylko żeby nie odpowiadał. Pole `modelMayAnswer`
+w wyniku jest typowane na `false`, nie na `boolean`: to gwarancja na poziomie
+typów, nie ustawienie.
+
+Za flagą (`TAX_TOPIC_APPROVED = false`) nie oddajemy NAWET artykułu z bazy
+wiedzy — sam dobór artykułu pod pytanie klienta jest już krokiem w stronę
+wykładni. Osobny test sprawdza, że treść artykułu nie przecieka do odpowiedzi.
+
+### O-03 — cztery bezpieczniki na jeden zasób: uwagę
+
+Promień rażenia 1, ale uwaga jest tu jedynym zasobem, jaki mamy.
+
+1. **Nigdy w trakcie rozpoczętego procesu** — sprawdzane pierwsze, wygrywa
+   nawet z najpilniejszym sygnałem.
+2. **Jedna podpowiedź tygodniowo**, a odstęp sprawdzany PRZED filtrowaniem
+   sygnałów: odwrotna kolejność zużywałaby tydzień limitu na podpowiedź,
+   której i tak nie wolno pokazać.
+3. **Funkcja już używana nie jest podpowiadana** — definicja gotowości kroku,
+   sprawdzona wprost.
+4. **Dwa odrzucenia kasują typ TRWALE** — nie 90 dni jak przy zwykłym
+   wyciszeniu. Osobny test sprawdza, że za rok też jest cisza.
+
+Piąta zasada, produktowa: wyłącznie funkcje z planu klienta. Wątek FLO nie
+jest miejscem na sprzedaż.
+
+Kolejność reguł ma znaczenie: na górze licznik limitu VAT, bo to jedyna
+pozycja, w której zwłoka kosztuje pieniądze, a nie wygodę. Karta ma
+priorytet 90 (najniższy w wątku) i `noPush: true` — bez okien, bez dymków.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 45 plików, 828 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+- test architektoniczny nadal zielony (8/8)
+
+Do `FLO-PLAN-MASLO.md` dopisane: pytania podatkowe nie idą do modelu (bez
+animacji „myślenia” przy takiej odpowiedzi), lista kandydatów bez domyślnego
+zaznaczenia, priorytet 90 i `noPush` przy karcie podpowiedzi.
+
+Następny krok: 49 (O-01 wsparcie onboardingu — ścieżka pierwszej faktury
+bez certyfikatu KSeF)
