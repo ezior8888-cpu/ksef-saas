@@ -111,6 +111,50 @@ function aggregateSales(invoices: JpkInvoice[]): RateBucket {
 }
 
 /**
+ * Rozliczenie okresu — te same liczby, które trafiają do deklaracji.
+ *
+ * WYCIĄGNIĘTE Z GENERATORA ŚWIADOMIE. Agent FLO (funkcja T-01) mówi
+ * klientowi, ile wychodzi VAT-u za okres, na kilka dni przed terminem.
+ * Gdyby liczył to własnym wzorem, kwota na karcie i kwota w złożonym pliku
+ * mogłyby się rozjechać — a to jest dokładnie ta awaria, po której klient
+ * przestaje wierzyć obu liczbom naraz. Jedno źródło, dwa zastosowania.
+ */
+export interface JpkV7mSummary {
+  /** Podatek należny — pozycja P_38. */
+  vatDue: number;
+  /** Podatek naliczony do odliczenia — pozycja P_48. */
+  vatDeductible: number;
+  /** Netto zakupów — pozycja P_44. */
+  purchaseNet: number;
+  /** Dodatnie = do zapłaty (P_51); ujemne = nadwyżka do przeniesienia (P_53). */
+  balance: number;
+  /** Ile dokumentów złożyło się na te liczby — podstawa komunikatu agenta. */
+  salesCount: number;
+  purchaseCount: number;
+}
+
+export function summarizeJpkV7m(data: JpkV7mInputData): JpkV7mSummary {
+  const issued = data.issuedInvoices;
+  const received = data.receivedInvoices ?? [];
+  const sales = aggregateSales(issued);
+
+  const vatDue = round2(sales.vat23 + sales.vat8 + sales.vat5);
+
+  // Zakupy: VAT naliczony do odliczenia — suma vatTotal faktur kosztowych.
+  const purchaseNet = round2(received.reduce((s, inv) => s + inv.netTotal, 0));
+  const vatDeductible = round2(received.reduce((s, inv) => s + inv.vatTotal, 0));
+
+  return {
+    vatDue,
+    vatDeductible,
+    purchaseNet,
+    balance: round2(vatDue - vatDeductible),
+    salesCount: issued.length,
+    purchaseCount: received.length,
+  };
+}
+
+/**
  * Generuje XML JPK_V7M. Część deklaracyjna jest uproszczona do pól
  * podstawowych (sprzedaż krajowa wg stawek + zakupy krajowe) — pełne
  * pola specjalne (WDT, eksport, import usług, korekty) wymagają
@@ -121,17 +165,12 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
   const received = data.receivedInvoices ?? [];
   const sales = aggregateSales(issued);
 
-  const vatNalezny = round2(sales.vat23 + sales.vat8 + sales.vat5);
-
-  // Zakupy: VAT naliczony do odliczenia — suma vatTotal faktur kosztowych.
-  const purchaseNet = round2(
-    received.reduce((s, inv) => s + inv.netTotal, 0),
-  );
-  const vatNaliczony = round2(
-    received.reduce((s, inv) => s + inv.vatTotal, 0),
-  );
-
-  const balance = round2(vatNalezny - vatNaliczony);
+  const {
+    vatDue: vatNalezny,
+    vatDeductible: vatNaliczony,
+    purchaseNet,
+    balance,
+  } = summarizeJpkV7m(data);
 
   const year = data.periodStart.slice(0, 4);
   const month = String(Number(data.periodStart.slice(5, 7)));
