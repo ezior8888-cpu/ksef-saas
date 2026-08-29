@@ -1608,3 +1608,91 @@ Cały blok 7 jest gotowy poza krokiem 40 (T-04 symulator formy) — pozycja
 CZERWONA, nie budujemy bez pisemnej opinii prawnika.
 
 Następny krok: 41 (B-01 domknięcie miesiąca, promień 4)
+
+## 2026-08-29 · Kroki 41 i 42 — B-01 domknięcie miesiąca, B-02 format księgowej
+
+Zrobione:
+- `types/flo.ts` + `lib/flo/kind-variant.ts` — nowy rodzaj `accountant.delivery`
+  (wariant `info`).
+- `lib/flo/functions/month-close.ts` — B-01.
+- `lib/flo/functions/accountant-format.ts` — B-02.
+- `tests/unit/flo-month-close.test.ts` (24) i `flo-accountant-format.test.ts` (16).
+
+### B-01 — promień rażenia 4
+
+Paczka z danymi finansowymi firmy wychodzi do OBCEJ OSOBY. Tego się nie
+cofa: zła zawartość zostaje zaksięgowana, zły adres zostaje przeczytany.
+
+1. **Niekompletna paczka u księgowej.** Trzy warunki (skrzynka KSeF pobrana
+   do końca, zero nieprzejrzanych dokumentów, zgodność liczby faktur z KSeF)
+   sprawdzane przed pokazaniem karty I ponownie przy kliknięciu. **Karta
+   w ogóle nie powstaje, dopóki miesiąc nie jest kompletny** — pokazywanie jej
+   z dopiskiem „wyślij mimo braków” byłoby zaproszeniem do dokładnie tej
+   awarii, przed którą warunki mają chronić.
+2. **Zły adres księgowej.** Wpisywany ręcznie, potwierdzany osobno przed
+   pierwszą wysyłką („wysyłam do anna@biuro.pl — zgadza się?”), zapamiętywany
+   **dopiero po udanym doręczeniu**. Adres z odbiciem zapisany jako
+   „sprawdzony” zamieniłby jednorazową literówkę w trwały błąd: kolejne
+   miesiące szłyby pod niego już bez pytania.
+3. **Ciche dosłanie spóźnionego dokumentu.** Propozycja ANEKSU, nazywająca
+   dokument po numerze, kontrahencie i kwocie, z WŁASNYM kluczem tematu
+   (`accountant.annex:*`, nie `accountant.package:*`) — to dwie różne zgody
+   na dwie różne przesyłki. Księgowa z dwiema paczkami różniącymi się
+   niewidocznie nie ma jak zgadnąć, którą zaksięgowała.
+
+Czwarta rzecz, nie awaria, tylko zasada: **cisza po wysyłce jest stanem
+zabronionym.** Po każdej wysyłce powstaje meldunek. Odbicie ma priorytet 5
+(prawie góra wątku), bo klient jest wtedy przekonany, że księgowa ma komplet.
+
+**ZMIANA KONTRAKTU: nowy rodzaj `accountant.delivery`.** Dopisany na końcu
+`FLO_PROPOSAL_KINDS`, wariant `info` — czyli komponent, który Masło już ma.
+Musiał powstać osobny rodzaj, bo `accountant.package` rysuje się wariantem
+`input` (pytamy o adres), a meldunek o doręczeniu nie ma o co pytać.
+
+### B-02 — dwa bezpieczniki na ten sam problem z dwóch stron
+
+Klient zgaduje, w czym pracuje jego księgowa, i ma prawo zgadnąć źle.
+- **Pierwsza paczka zawsze niesie uniwersalny CSV obok wybranego formatu.**
+  Przy jednym pliku zła odpowiedź kosztuje tydzień telefonów; z drugim plikiem
+  księgowa po prostu otwiera ten, który wchodzi.
+- **Zgłoszenie nieudanego importu jednym kliknięciem w wątku** — wisi na
+  karcie DORĘCZENIA, bo doręczenie nie znaczy, że plik wszedł do programu.
+  Maila do wsparcia klient nie napisze.
+
+Zmiana formatu wisi na karcie DOMKNIĘCIA, nie w ustawieniach: moment,
+w którym klient myśli o księgowej, to moment wysyłania jej paczki; ustawienia
+odwiedza raz w życiu. Obie akcje używają zamiaru `correct` z kroku 37 —
+to poprawienie faktu, na którym agent oparł działanie, a nie odrzucenie karty.
+
+**ODSTĘPSTWO OD PLANU, ŚWIADOME:** plan mówi „wersja generatora w nazwie
+pliku i nagłówku”. Wersja jest w NAZWIE PLIKU i w osobnym `MANIFEST.txt`
+w paczce — **nie w treści plików**. Dopisanie wiersza nagłówka do CSV-a pod
+Subiekta albo Symfonię zepsułoby import, czyli zrobiłoby dokładnie to, przed
+czym ten mechanizm ma chronić. Osobny test pilnuje, że wersja NIE pojawia się
+w treści CSV-a. Manifest czyta człowiek — klient, księgowa albo my przy
+zgłoszeniu nieudanego importu.
+
+Definicja gotowości kroku 42 („paczka testowa zawiera oba pliki”) sprawdzona
+naprawdę: test buduje ZIP-a prawdziwymi generatorami (Comarch Optima + CSV)
+i szuka obu nazw w katalogu centralnym archiwum.
+
+### Poprawka własnego długu z kroku 36
+
+Fixture JPK w teście T-01 był rzutowany przez `as never` i przez to
+niekompletny — brakowało `position`, `unit`, `quantity`, `unitPriceNet`
+i `invoiceType`. `summarizeJpkV7m` tych pól nie czyta, więc test przechodził;
+generator Comarch Optima czyta i wywalił się przy pierwszym użyciu tego
+samego kształtu w kroku 42. Rzutowanie usunięte, fixture'y typowane. To ten
+sam rodzaj długu co `any` — obejście typów, które kupuje minutę i zwraca
+ją z odsetkami przy pierwszym ponownym użyciu.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 39 plików, 679 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Do `FLO-PLAN-MASLO.md` dopisane: nowy rodzaj `accountant.delivery`, dwa pola
+karty domknięcia (`prefilledEmail`, `needsAddressConfirmation`) z powodem,
+dla którego pola adresu nie wolno chować, oraz zakaz dorabiania przycisku
+„wyślij mimo braków”.
+
+Następny krok: 43 (P-04 podwyżka stawki, promień 4)

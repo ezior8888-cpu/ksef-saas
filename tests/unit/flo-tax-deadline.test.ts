@@ -11,6 +11,8 @@ import {
 } from '@/lib/flo/functions/tax-deadline';
 import { formatPln } from '@/lib/flo/money';
 import { generateJpkV7m, summarizeJpkV7m } from '@/lib/exports/jpk-v7m-generator';
+import type { JpkInvoice } from '@/lib/exports/jpk-fa-generator';
+import type { JpkV7mInputData } from '@/lib/exports/jpk-v7m-generator';
 import type { JpkV7mSummary } from '@/lib/exports/jpk-v7m-generator';
 
 /**
@@ -21,6 +23,53 @@ import type { JpkV7mSummary } from '@/lib/exports/jpk-v7m-generator';
  */
 
 const d = (iso: string) => new Date(`${iso}T09:00:00.000Z`);
+
+function jpkInvoice(overrides: Partial<JpkInvoice> = {}): JpkInvoice {
+  return {
+    invoiceNumber: 'FV/1',
+    invoiceType: 'regular',
+    issueDate: '2026-08-10',
+    buyerName: 'Klient',
+    netTotal: 10_000,
+    vatTotal: 2_300,
+    grossTotal: 12_300,
+    lines: [
+      {
+        position: 1,
+        name: 'Usługa',
+        unit: 'usł.',
+        quantity: 1,
+        unitPriceNet: 10_000,
+        netAmount: 10_000,
+        vatRate: '23',
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function jpkPurchase(): JpkInvoice {
+  return jpkInvoice({
+    invoiceNumber: 'ZAK/1',
+    issueDate: '2026-08-12',
+    buyerName: 'Dostawca',
+    netTotal: 1_000,
+    vatTotal: 230,
+    grossTotal: 1_230,
+    lines: [],
+  });
+}
+
+function jpkData(overrides: Partial<JpkV7mInputData> = {}): JpkV7mInputData {
+  return {
+    issuer: { nip: '1234567890', name: 'Test' },
+    periodStart: '2026-08-01',
+    periodEnd: '2026-08-31',
+    issuedInvoices: [jpkInvoice()],
+    receivedInvoices: [jpkPurchase()],
+    ...overrides,
+  };
+}
 
 function summary(overrides: Partial<JpkV7mSummary> = {}): JpkV7mSummary {
   return {
@@ -54,33 +103,7 @@ describe('kwota pochodzi z generatora JPK, nie z osobnego wzoru', () => {
   it('summarizeJpkV7m liczy to, co trafia do deklaracji', () => {
     // Gdyby agent liczył po swojemu, karta i złożony plik mogłyby pokazywać
     // dwie różne kwoty — a wtedy klient przestaje wierzyć obu naraz.
-    const result = summarizeJpkV7m({
-      issuer: { nip: '1234567890', name: 'Test' },
-      periodStart: '2026-08-01',
-      periodEnd: '2026-08-31',
-      issuedInvoices: [
-        {
-          invoiceNumber: 'FV/1',
-          issueDate: '2026-08-10',
-          buyerName: 'Klient',
-          netTotal: 10_000,
-          vatTotal: 2_300,
-          grossTotal: 12_300,
-          lines: [{ netAmount: 10_000, vatRate: '23' }],
-        },
-      ] as never,
-      receivedInvoices: [
-        {
-          invoiceNumber: 'ZAK/1',
-          issueDate: '2026-08-12',
-          buyerName: 'Dostawca',
-          netTotal: 1_000,
-          vatTotal: 230,
-          grossTotal: 1_230,
-          lines: [],
-        },
-      ] as never,
-    });
+    const result = summarizeJpkV7m(jpkData());
 
     expect(result.vatDue).toBe(2_300);
     expect(result.vatDeductible).toBe(230);
@@ -92,34 +115,7 @@ describe('kwota pochodzi z generatora JPK, nie z osobnego wzoru', () => {
   it('to, co mówi agent, jest tym, co ląduje w deklaracji', () => {
     // Zabezpieczenie wyciągnięcia `summarizeJpkV7m` z generatora: kwota
     // z karty musi zgadzać się z pozycjami P_38, P_48 i P_51 złożonego pliku.
-    const data = {
-      issuer: { nip: '1234567890', name: 'Test' },
-      periodStart: '2026-08-01',
-      periodEnd: '2026-08-31',
-      issuedInvoices: [
-        {
-          invoiceNumber: 'FV/1',
-          issueDate: '2026-08-10',
-          buyerName: 'Klient',
-          netTotal: 10_000,
-          vatTotal: 2_300,
-          grossTotal: 12_300,
-          lines: [{ netAmount: 10_000, vatRate: '23' }],
-        },
-      ],
-      receivedInvoices: [
-        {
-          invoiceNumber: 'ZAK/1',
-          issueDate: '2026-08-12',
-          buyerName: 'Dostawca',
-          netTotal: 1_000,
-          vatTotal: 230,
-          grossTotal: 1_230,
-          lines: [],
-        },
-      ],
-    } as never;
-
+    const data = jpkData();
     const result = summarizeJpkV7m(data);
     const xml = generateJpkV7m(data);
 
@@ -130,23 +126,7 @@ describe('kwota pochodzi z generatora JPK, nie z osobnego wzoru', () => {
   });
 
   it('nadwyżka idzie do P_53, nie do P_51', () => {
-    const data = {
-      issuer: { nip: '1234567890', name: 'Test' },
-      periodStart: '2026-08-01',
-      periodEnd: '2026-08-31',
-      issuedInvoices: [],
-      receivedInvoices: [
-        {
-          invoiceNumber: 'ZAK/1',
-          issueDate: '2026-08-12',
-          buyerName: 'Dostawca',
-          netTotal: 1_000,
-          vatTotal: 230,
-          grossTotal: 1_230,
-          lines: [],
-        },
-      ],
-    } as never;
+    const data = jpkData({ issuedInvoices: [] });
 
     expect(summarizeJpkV7m(data).balance).toBe(-230);
     expect(generateJpkV7m(data)).toContain('<P_53>230.00</P_53>');
