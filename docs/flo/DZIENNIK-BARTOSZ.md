@@ -1787,3 +1787,109 @@ zamiast „Wyślij”, trzy tony do wyboru człowieka i zakaz dorabiania
 podpowiedzi „sugerowana stawka”.
 
 Następny krok: 45 (P-09 kontrahent z zagranicy, ŻÓŁTE — `lib/flo/nbp.ts`)
+
+## 2026-08-29 · MIGRACJE 00064 i 00065 WGRANE NA PRODUKCJĘ
+
+Procedurą z `AGENTS.md`: `scp` → `docker exec psql --single-transaction` →
+wpis do `schema_migrations` → `NOTIFY pgrst`. Obie sprawdzone przed
+uruchomieniem pod kątem `DROP`, `TRUNCATE` i `DELETE FROM` — czysto.
+
+- **00064** `contractors.manual_fields TEXT[]` + indeks GIN częściowy.
+  Zweryfikowane: kolumna, indeks i wpis 00064 są w bazie.
+- **00065** `invoices.origin TEXT` z ograniczeniem CHECK, indeks częściowy
+  po `(tenant_id, origin)` i uzupełnienie historii z prefiksu w `notes`.
+  **`UPDATE` dotknął ZERA wierszy** — produkcja ma w tej chwili dwie faktury
+  i żadnej z importu. Sprawdziłem to zapytaniem PRZED uruchomieniem
+  migracji, nie po.
+
+`types/database.ts` uzupełnione ręcznie o oba pola. W projekcie nie ma
+skryptu generującego typy (`db:push:prod` to pozostałość po Supabase Cloud),
+a pełna regeneracja zaciągnęłaby niezwiązany dryf schematu.
+
+## 2026-08-29 · Kroki 45 i 46 — P-09 zagranica, O-02 import historii
+
+Zrobione:
+- `lib/flo/nbp.ts` — kursy z regułą „ostatnia tabela przed datą”.
+- `lib/flo/functions/contractor-foreign.ts` — P-09.
+- `lib/flo/functions/import-history.ts` — O-02.
+- `supabase/migrations/00065_invoice_origin.sql`.
+- `tests/unit/flo-nbp.test.ts` (27) i `flo-import-history.test.ts` (25).
+
+### P-09 — jedyna funkcja, której domyślną odpowiedzią jest „zapytaj człowieka”
+
+Kwalifikacja transakcji zagranicznej zależy od rzeczy, których agent nie
+widzi: gdzie usługa jest faktycznie świadczona, czy nabywca jest podatnikiem,
+czy ma stałe miejsce prowadzenia działalności w Polsce. Program, który wybiera
+za klienta, myli się w sposób, którego klient nie zauważy do kontroli.
+
+Obrona jest w KONTRAKCIE, nie w treści: **w ładunku nie ma i nie będzie pola
+ze stawką VAT**. Test skanuje klucze pod kątem `vatRate`, `reverseCharge`,
+`taxRate`. Dopóki pola nie ma, nikt nie zbuduje interfejsu, który ustawia
+stawkę jednym kliknięciem — także przez pomyłkę, przy okazji innego zadania.
+Warianty są OPISAMI: każdy zaczyna się od „Zwykle”, a osobny test tego
+pilnuje. Każda karta kończy się „pokaż to księgowej”.
+
+Kursy — reguła brzmi „ostatnia tabela opublikowana PRZED datą zdarzenia”.
+Ta jedna litera („przed”, nie „w dniu”) to inna kwota VAT-u przy kontroli.
+Tabela z tego samego dnia jest odrzucana, i jest na to osobny test.
+
+Definicja gotowości („testy na długie weekendy, święta i przełom roku”)
+zrobiona tak, że fixture NIE JEST ręcznie wpisaną listą dat: zapas tabel
+generuje się po dniach roboczych z kalendarza `tax-params` (tego samego,
+którego pilnują testy kroku 35). Dzięki temu nie da się przeoczyć akurat
+tego święta, o które chodzi. Pokryte: zwykły weekend, majówka 2026
+(1 maja piątek + 3 maja niedziela), wtorek po poniedziałku wielkanocnym,
+Boże Ciało w czwartek, przełom roku (2 stycznia 2027 bierze kurs z 31 grudnia
+2026, numeracja tabel startuje od 1/A/NBP/2027).
+
+DECYZJA POZA PLANEM: `MAX_PUBLICATION_GAP_DAYS = 7`. Dziura większa niż
+długi weekend ze świętami oznacza, że NASZ ZAPAS jest nieaktualny, a nie że
+NBP nie publikował — i wtedy funkcja odmawia podstawienia (`stale_buffer`)
+zamiast oddać kurs sprzed dwóch tygodni. Kurs bliski prawdzie wygląda na
+fakturze tak samo jak prawdziwy i różni się od niego przy każdej korekcie.
+Zapas przycinamy PER WALUTA, nie globalnie: przy trzech walutach globalny
+limit trzydziestu wpisów zostawiłby dziesięć dni historii na każdą.
+
+### O-02 — import historii
+
+Definicja gotowości („dwukrotny import = zero duplikatów”) sprawdzona wprost:
+test uruchamia dedup dwa razy i wymaga zera w drugim przebiegu.
+
+Odcisk trzyma się NUMERU KSeF, nie numeru własnego klienta — po imporcie
+z dwóch programów numery własne potrafią się powtórzyć. Odsiewamy w dwóch
+wymiarach: wobec bazy i WEWNĄTRZ paczki, bo stronicowanie z nakładką zwraca
+ten sam dokument na dwóch stronach. Dokument bez numeru KSeF nie wjeżdża
+po cichu — nie da się go odcisnąć, więc przy kolejnym przebiegu wjechałby
+drugi raz.
+
+**Trwały znacznik pochodzenia wymagał migracji.** Dotąd pochodzenie dało się
+odczytać wyłącznie z `notes` (pole EDYTOWALNE PRZEZ KLIENTA — jedna poprawka
+notatki i dokument przestaje być rozpoznawalny) albo z `fa3_data.import.source`
+w blobie JSONB. Stąd `invoices.origin` z ograniczeniem CHECK. Bez tego
+wykluczenie z K-03 i z kontroli numeracji było deklaracją, nie mechanizmem.
+
+Nieznana wartość `origin` jest traktowana jak import, nie jak własna faktura.
+Kierunek pomyłki wybrany świadomie: dokument wyłączony z oceny nie psuje
+niczyich liczb, dokument wpuszczony po cichu psuje.
+
+Ograniczenie tempa per NIP JUŻ ISTNIEJE (`lib/ksef/rate-limiter.ts`,
+`ksefRateLimiter`) — nie dublowałem go. Wznawianie: przy jakiejkolwiek
+wątpliwości co do świeżości tokenu wybieramy restart, a nie kontynuację.
+Restart jest wolny, ale nie jest niebezpieczny — przed duplikatami broni
+odcisk na numerze KSeF, nie ten mechanizm.
+
+Sprawdzenie po podłączeniu mówi WPROST, czego agent nie może: środowisko
+testowe („to nie są prawdziwe dokumenty”), token tylko do odczytu („nie wyślę
+żadnej faktury, nawet po Twoim zatwierdzeniu”), brak prawa odczytu („nie
+zaciągnę historii”). Klient, który dowiaduje się o tym przy pierwszej
+nieudanej wysyłce, ma problem dziś; klient, który dowiaduje się przy
+podłączaniu, ma zadanie na spokojnie.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 43 pliki, 782 testy, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Blok 8 domknięty (kroki 41–45), blok 9 zaczęty.
+
+Następny krok: 47 (O-04 narzędzia rozmowy, ŻÓŁTE — wyłącznie odczyt
+i szkice, narzędzie wysyłające nie istnieje)

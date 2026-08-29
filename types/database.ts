@@ -968,6 +968,7 @@ export type Database = {
           offline_idempotency_key: string | null
           offline_qr_certyfikat: string | null
           offline_qr_offline: string | null
+          origin: string
           paid_amount: number
           paid_at: string | null
           parent_invoice_id: string | null
@@ -1033,6 +1034,7 @@ export type Database = {
           offline_idempotency_key?: string | null
           offline_qr_certyfikat?: string | null
           offline_qr_offline?: string | null
+          origin?: string
           paid_amount?: number
           paid_at?: string | null
           parent_invoice_id?: string | null
@@ -1098,6 +1100,7 @@ export type Database = {
           offline_idempotency_key?: string | null
           offline_qr_certyfikat?: string | null
           offline_qr_offline?: string | null
+          origin?: string
           paid_amount?: number
           paid_at?: string | null
           parent_invoice_id?: string | null
