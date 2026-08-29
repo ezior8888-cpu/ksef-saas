@@ -162,7 +162,19 @@ export interface FloEvidence {
 
 export interface FloAction {
   label: string;
-  intent: 'approve' | 'dismiss' | 'snooze' | 'mute' | 'input' | 'open';
+  /**
+   * `correct` (dodane w kroku 37) — człowiek poprawia FAKT, na którym agent
+   * oparł wniosek, a nie decyduje o działaniu. T-02 ma przycisk „to był
+   * jednorazowy kontrakt”: nie odrzuca karty i nie wycisza rodzaju, tylko
+   * mówi agentowi, żeby nie wyciągał trendu z tej jednej faktury. Bez
+   * osobnego zamiaru trzeba by to wcisnąć w `dismiss`, a dwa odrzucenia
+   * wyciszają rodzaj na 90 dni — czyli poprawienie agenta kończyłoby się
+   * jego zamilknięciem.
+   *
+   * Interfejs rysuje `correct` jak zwykły przycisk drugorzędny i woła
+   * `dismissProposal(id, 'not_now')` wraz z `payload.correction`.
+   */
+  intent: 'approve' | 'dismiss' | 'snooze' | 'mute' | 'input' | 'open' | 'correct';
   /**
    * true = wykonanie wymaga wcześniejszego otwarcia podglądu (promień 4).
    * Interfejs trzyma przycisk zablokowany, dopóki człowiek nie zobaczy,

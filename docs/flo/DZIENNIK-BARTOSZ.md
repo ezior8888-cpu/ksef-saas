@@ -1358,3 +1358,134 @@ BUILDA, nie regres — te strony nie istnieją w drzewie. `rm -rf .next/types`
 i typecheck jest czysty.)
 
 Następny krok: 36 (T-01 kalendarz obowiązków)
+
+## 2026-08-29 · Kroki 36 i 37 — T-01 kalendarz obowiązków, T-02 licznik limitu VAT
+
+Zrobione:
+- `lib/exports/jpk-v7m-generator.ts` — wyciągnięty `summarizeJpkV7m`.
+- `lib/flo/functions/tax-deadline.ts` — T-01.
+- `lib/flo/functions/vat-limit.ts` — T-02.
+- `types/flo.ts` + `lib/flo/proposals.ts` — nowy zamiar akcji `correct`.
+- `tests/unit/flo-tax-deadline.test.ts` (28) i `flo-vat-limit.test.ts` (33).
+
+Obie funkcje są ZA FLAGĄ (`tax.deadline`, `tax.limit` w `flags.ts`) i za
+bramką M12 z kroku 35. Nic z tego nie odezwie się do klienta przed odpowiedzią
+prawnika i przed przestawieniem `PARAMS_VERIFIED`.
+
+### T-01 — kwota z tego samego kodu, co plik
+
+`generateJpkV7m` liczyła saldo w środku, tylko po to, żeby wpisać je do XML-a.
+Wyciągnąłem to do `summarizeJpkV7m`. Powód nie jest kosmetyczny: agent mówi
+klientowi, ile wychodzi VAT-u, a potem klient składa plik. **Gdyby to były dwa
+osobne wzory, prędzej czy później pokazałyby dwie różne liczby — i wtedy klient
+przestaje wierzyć obu naraz.** Jedno źródło, dwa zastosowania. XML wychodzi
+bit w bit ten sam, osobny test porównuje wynik podsumowania z pozycjami
+deklaracji.
+
+Cztery rzeczy pilnowane testami:
+1. **Liczba nigdy bez podstawy.** Każda kwota chodzi w parze ze zdaniem
+   „na podstawie 34 dokumentów, stan na 18.09, 3 koszty czekają na Twoją
+   decyzję”. Kwota bez podstawy jest wyrocznią, a wyrocznię albo się
+   bezkrytycznie przyjmuje, albo przestaje się jej wierzyć.
+2. **Nigdy „zapłać”, zawsze „wychodzi mi”.** Test przelatuje cztery warianty
+   karty i szuka trybu rozkazującego. „do zapłaty” zostaje — to termin
+   z deklaracji (P_51) i rzeczownik, nie rozkaz.
+3. **Nieprzejrzane dokumenty = kwota niepełna**, a zastrzeżenie stoi ZARAZ ZA
+   LICZBĄ, w następnym zdaniu. Test tego pilnuje wyrażeniem regularnym.
+   Zastrzeżenie, które trzeba doczytać, nie jest zastrzeżeniem. Wtedy też
+   przycisk zmienia się na „Przejrzyj koszty” — najpierw domknięcie, potem
+   kwota.
+4. **Trzy zakończenia okresu, nie jedno.** Saldo dodatnie, zero i nadwyżka
+   do przeniesienia. Powiedzenie klientowi z nadwyżką, że coś mu wychodzi
+   do zapłaty, jest po prostu nieprawdą.
+
+ODSTĘPSTWO OD PLANU, ŚWIADOME: plan mówi „7 i 3 dni przed terminem”.
+Zrobiłem z tego **próg**, nie dwa konkretne dni — karta pojawia się przy
+siedmiu dniach i podnosi priorytet przy trzech. Dosłowne trafianie w dzień
+siódmy i trzeci znaczyłoby, że jeden nieudany przebieg crona zabiera klientowi
+jedyne ostrzeżenie o terminie podatkowym. To awaria, o której nikt się nie
+dowie do momentu, w którym jest za późno. Osobny test sprawdza, że dni 6, 5
+i 4 też są objęte.
+
+Drobiazgi, które i tak trzeba było rozstrzygnąć:
+- Po terminie agent MILCZY. Przypominanie po fakcie to inna funkcja i inna
+  rozmowa (i inna odpowiedzialność).
+- `asOf` NIE wchodzi do odcisku danych. Zmienia się codziennie, więc karta
+  udawałaby nową wiedzę przy każdym przebiegu.
+- Przesunięty termin dostaje zdanie „ustawowy termin to 25.04, ale wypada
+  w dzień wolny — liczy się 27.04”. Bez tego klient widzi datę inną niż ta,
+  którą zna z ustawy, i nie wie, czy program się myli, czy on źle pamięta.
+- Odmiana liczby mnogiej („1 koszt czeka”, „3 koszty czekają”, „12 kosztów
+  czeka”) zrobiona na serwerze, bo kontrakt niesie gotowe napisy. Zwykle to
+  robota toru interfejsu — tutaj nie ma jak.
+
+### T-02 — licznik, który nie kwalifikuje transakcji
+
+Najważniejsza decyzja tej funkcji: **agent NIE decyduje, co wlicza się do
+limitu.** To kwalifikacja prawna, nie zadanie dla programu. Pozycja sprzedaży
+wchodzi do licznika DOMYŚLNIE; wyłączenie musi przyjść z zewnątrz razem
+z powodem, który ląduje na ekranie.
+
+Kierunek domyślnej pomyłki wybrany świadomie: policzenie za dużo kończy się
+niepotrzebnym ostrzeżeniem, policzenie za mało — przekroczeniem limitu,
+o którym klient dowiaduje się od urzędu. Te dwa błędy nie kosztują tyle samo.
+(Uwaga na przyszłość: kuszące mapowanie „stawka `zw` → poza limitem” byłoby
+BŁĘDEM. Firma korzystająca ze zwolnienia podmiotowego wystawia `zw` na całą
+swoją sprzedaż — czyli akurat u naszego docelowego klienta ta reguła zerowałaby
+licznik.)
+
+Złoty zbiór z planu przechodzi w całości:
+- **firma od 1 stycznia** — limit pełny,
+- **firma od 17 sierpnia** — 200 000 × 137/365 = 75 068,49 zł; ta sama
+  sprzedaż zjada u niej 66% limitu zamiast 25%,
+- **firma zawieszona** — zawieszenie NIE zmniejsza limitu (jest roczny
+  i zależy od daty rozpoczęcia), ale wypada z mianownika tempa: firma
+  zawieszona przez pół roku nie ma zerowego tempa, tylko nie miała kiedy
+  sprzedawać. Wliczenie tych dni zaniżyłoby tempo i przesunęło ostrzeżenie
+  na po fakcie. **To rozróżnienie idzie do potwierdzenia razem z tabelą
+  parametrów.**
+- **sprzedaż zwolniona przedmiotowo** — poza licznikiem, z powodem widocznym
+  w dowodach.
+
+Wzór („200 000,00 zł × 137/365 dni = 75 068,49 zł; wliczone …”) siedzi
+w `evidence` jako ETYKIETA. Odesłanie po wzór na osobny ekran znaczy, że nikt
+go nigdy nie zobaczy.
+
+Progi: jedna faktura przeskakująca kilka progów naraz daje JEDNĄ kartę, tę
+najwyższą — trzy karty za jedną fakturę to nie ostrzeżenie, tylko hałas.
+Przekroczenie limitu ma priorytet 0 i mówi wprost, że obowiązek biegnie od
+transakcji, która limit przekroczyła. Klient, który dowiaduje się o tym po
+fakcie, ma problem wsteczny — cała funkcja istnieje po to, żeby ta wiadomość
+przyszła przed, a nie po.
+
+Prognoza jest scenariuszem: zawsze „jeśli tempo się utrzyma”. Przycisk
+„to był jednorazowy kontrakt” zmienia WYŁĄCZNIE PROGNOZĘ, nigdy licznik —
+jednorazowość kontraktu nie sprawia, że pieniądze nie wpłynęły. Osobny test
+tego pilnuje.
+
+### ⚠️ ZMIANA KONTRAKTU — UWAGA DLA MASŁA
+
+Do `FloAction.intent` doszedł siódmy zamiar: **`correct`**. Zmiana wyłącznie
+przez dodanie, więc nic Ci się nie przestanie kompilować — ale jeżeli masz
+gdzieś `switch` po zamiarze z gałęzią `never`, to jest miejsce do uzupełnienia.
+
+Po co: T-02 ma przycisk „to był jednorazowy kontrakt”. Człowiek poprawia nim
+FAKT, na którym agent oparł wniosek — nie odrzuca karty i nie wycisza rodzaju.
+Bez osobnego zamiaru trzeba by to wcisnąć w `dismiss`, a **dwa odrzucenia
+wyciszają rodzaj na 90 dni** (`MUTE_AFTER_DISMISSALS`), czyli poprawienie
+agenta kończyłoby się jego zamilknięciem.
+
+Jak to rysować: zwykły przycisk drugorzędny. Po kliknięciu wołasz
+`dismissProposal(id, 'not_now')` i przekazujesz `payload.correction`
+(dla T-02: `'ignore_largest_sale'`). Agent przeliczy prognozę i wróci
+z poprawioną kartą.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 35 plików, 589 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Dług: obie funkcje to czyste reguły. Wpięcie (odczyt okresu z bazy, licznik
+odpalany po każdej wystawionej fakturze, cron terminów) idzie jednym commitem
+razem z resztą bloku 7 — i tak nie ruszy przed bramką prawną.
+
+Następny krok: 38 (T-03 zegar ulg)

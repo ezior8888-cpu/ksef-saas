@@ -374,7 +374,8 @@ function readActions(value: unknown): FloAction[] | null {
       intent === 'snooze' ||
       intent === 'mute' ||
       intent === 'input' ||
-      intent === 'open';
+      intent === 'open' ||
+      intent === 'correct';
     return label && valid ? [{ label, intent } as FloAction] : [];
   });
   return actions.length > 0 ? actions : null;
