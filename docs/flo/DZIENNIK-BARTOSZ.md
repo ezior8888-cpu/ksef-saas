@@ -1696,3 +1696,94 @@ dla którego pola adresu nie wolno chować, oraz zakaz dorabiania przycisku
 „wyślij mimo braków”.
 
 Następny krok: 43 (P-04 podwyżka stawki, promień 4)
+
+## 2026-08-29 · Kroki 43 i 44 — P-04 podwyżka stawki, P-08 prześwietlenie kontrahenta
+
+Zrobione:
+- `lib/flo/functions/rate-raise.ts` — P-04.
+- `lib/flo/functions/contractor-check.ts` — P-08.
+- `supabase/migrations/00064_contractor_manual_fields.sql` — `manual_fields`.
+- `tests/unit/flo-rate-raise.test.ts` (28) i `flo-contractor-check.test.ts` (23).
+
+### P-04 — promień rażenia 4
+
+Stawka, której nikt nie ruszył od dwóch lat, to najcichsza strata w całej
+jednoosobowej działalności: nie boli w żadnym miesiącu z osobna i nie
+pojawia się w żadnym zestawieniu.
+
+1. **Podwyżka policzona od sumy faktury.** Faktura urosła, bo klient sprzedał
+   więcej godzin, nie dlatego, że podniósł stawkę. Liczymy PER POZYCJA,
+   dopasowaną po nazwie I jednostce — „usługa/godz.” i „usługa/szt.” to dwie
+   różne rzeczy (cena czasu vs cena efektu). Niejednorodne pozycje =
+   milczenie. Osobny test: faktura, która urosła wolumenem, nie wygląda
+   jak podwyżka.
+2. **Wysyłka jednym kliknięciem.** Przycisk główny to „Pokaż treść”, a test
+   skanuje całą kartę wyrażeniem `/wyślij/i` i wymaga, żeby nie było go
+   nigdzie. Dodatkowo `recheckBeforeRaiseSend` odrzuca wysyłkę bez
+   `previewOpened` — **silnik nie wypuści wiadomości, której nikt nie czytał,
+   nawet jeśli interfejs kiedyś się pomyli.**
+3. **Podwyżka w najgorszym momencie.** Trzy blokady (otwarta faktura po
+   terminie, ponaglenie w 90 dni, korekta w 30 dni), sprawdzane przy
+   budowaniu karty i ponownie przy kliknięciu. Karta o podwyżce potrafi leżeć
+   w wątku tygodniami — w tym czasie kontrahent mógł przestać płacić.
+
+DECYZJA, KTÓREJ PLAN NIE ROZSTRZYGAŁ: **agent nie ustala ceny.** Katalog mówi
+„liczy skutek roczny”, ale nie mówi, skąd wziąć nową stawkę. Wybór wysokości
+podwyżki jest decyzją biznesową o cudzej relacji — agent pokazuje więc
+ELASTYCZNOŚĆ („każde 10% to 1 200 zł rocznie przy Twoim wolumenie”),
+a liczbę wpisuje człowiek. Trzy tony wiadomości też są do wyboru, nie do
+zgadnięcia: ten sam tekst bywa uprzejmy wobec korporacji i oschły wobec
+kogoś, z kim klient pracuje od pięciu lat.
+
+Drobiazg, który wyszedł przy pisaniu: przy stawce niezmienionej od zawsze
+`lastRateChange` zwraca datę PIERWSZEGO wystąpienia — tyle czasu klient
+pracuje za te same pieniądze. Przy stawce raz podniesionej zwraca datę
+podwyżki, nie pierwszej faktury.
+
+### P-08 — funkcja, która w 95% przypadków milczy
+
+1. **Fałszywy alarm na kimś, kto nie ma prawa być w rejestrze.** Osoba
+   fizyczna nieprowadząca działalności nie ma wpisu na białej liście;
+   podatnik zwolniony podmiotowo nie jest „czynny”. Logika dwustanowa
+   oznaczyłaby oboje jako podejrzanych — czyli agent straszyłby przy połowie
+   faktur NASZEJ GRUPY DOCELOWEJ, aż klient przestałby czytać ostrzeżenia.
+   Stąd cztery stany (`active`, `not_listed`, `removed`, `unavailable`)
+   i ostrzeżenie wyłącznie przy `removed`.
+   **`exempt` mapuje się na `active`** — tak wygląda w rejestrze większość
+   naszych własnych klientów.
+2. **Nadpisanie ręcznej poprawki.** Migracja 00064 dokłada
+   `contractors.manual_fields TEXT[]`. Znacznik jest TRWAŁY i działa PER POLE:
+   poprawiona nazwa nie ma powodu blokować odświeżania statusu VAT, który
+   jest jedyną rzeczą, o którą w tej funkcji naprawdę chodzi.
+3. **M17 — awaria rejestru.** `planAfterOutage` ma pola typowane na `false`,
+   nie na `boolean`: to nie jest ustawienie, tylko gwarancja na poziomie
+   typów. Awaria nie blokuje wystawienia i nie produkuje komunikatu w chwili
+   wystawiania — klient i tak nic na nią nie poradzi. Ponowienie w tle po
+   30 minutach, a jeżeli DOPIERO WTEDY wyjdzie wykreślenie, karta mówi
+   wprost, że pierwsze podejście nie doszło.
+
+Ton: „sprawdź to przed wystawieniem”, nigdy „nie wystawiaj”. Test szuka
+`/nie wystawiaj|zablokowa|nie wolno/i`. Wykreślenie z rejestru VAT nie jest
+zakazem współpracy — agent nie wie, czy klient ma powód wystawić tę fakturę.
+
+### ⚠️ MIGRACJA 00064 NIE JEST WGRANA NA PRODUKCJĘ
+
+Plik leży w `supabase/migrations/`, ale nikt go nie uruchomił. Do zrobienia
+procedurą z `AGENTS.md`: `scp` na `db-1` → `docker exec psql` → wpis do
+`schema_migrations` → `NOTIFY pgrst`. Migracja jest addytywna (`ADD COLUMN
+IF NOT EXISTS` z domyślną wartością, indeks częściowy), bez `DROP`,
+`TRUNCATE` ani `DELETE`.
+
+Po wgraniu trzeba odświeżyć `types/database.ts` — dziś nie ma tam
+`manual_fields`. Kod P-08 tego nie odczuwa, bo `mergeRegistryData` jest
+generyczne i nie sięga do typów tabeli, ale warstwa wpięcia będzie musiała.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 41 plików, 730 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Do `FLO-PLAN-MASLO.md` dopisana sekcja o P-04: przycisk „Pokaż treść”
+zamiast „Wyślij”, trzy tony do wyboru człowieka i zakaz dorabiania
+podpowiedzi „sugerowana stawka”.
+
+Następny krok: 45 (P-09 kontrahent z zagranicy, ŻÓŁTE — `lib/flo/nbp.ts`)
