@@ -297,6 +297,7 @@ export type Database = {
           email: string | null
           id: string
           last_used_at: string | null
+          manual_fields: string[]
           last_validation_at: string | null
           last_validation_source:
             | Database["public"]["Enums"]["validation_source_enum"]
@@ -324,6 +325,7 @@ export type Database = {
             | Database["public"]["Enums"]["validation_source_enum"]
             | null
           late_payment_count?: number
+          manual_fields?: string[]
           name: string
           nip: string
           payment_terms_days_avg?: number | null
@@ -346,6 +348,7 @@ export type Database = {
             | Database["public"]["Enums"]["validation_source_enum"]
             | null
           late_payment_count?: number
+          manual_fields?: string[]
           name?: string
           nip?: string
           payment_terms_days_avg?: number | null
