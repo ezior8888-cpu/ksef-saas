@@ -1493,3 +1493,118 @@ odpalany po każdej wystawionej fakturze, cron terminów) idzie jednym commitem
 razem z resztą bloku 7 — i tak nie ruszy przed bramką prawną.
 
 Następny krok: 38 (T-03 zegar ulg)
+
+## 2026-08-29 · PRZEKAZANIE DLA MASŁA — plan zaktualizowany
+
+Do `FLO-PLAN-MASLO.md` na pulpicie wpisane wszystko, co zmieniło się po jego
+stronie kontraktu przez kroki 34–39:
+
+- **Sekcja III.2 poprawiona w miejscu** — `FloAction.intent` ma teraz siedem
+  wartości, z komentarzem odsyłającym do wyjaśnienia. Bez tego czytałby stary
+  kontrakt i nie wiedziałby, skąd mu się bierze nieznany zamiar.
+- **Nowa część VII (29 sierpnia)** z: zamiarem `correct` i instrukcją
+  renderowania, nowymi polami ładunku (`snoozeDays`, `correction`, `complete`,
+  `deadlineKind`/`due`/`nominalDue`), piątym polem profilu podatkowego
+  (`ryczaltRate`, tylko dla ryczałtu, wpisywane w procentach, zapisywane
+  ułamkiem), listą funkcji z kroków 34–37 i trzema zakazami przy grupie T.
+
+Trzy rzeczy napisane mu wprost, bo są łatwe do przeoczenia przy projektowaniu
+ekranów, a kosztowne do cofnięcia:
+1. T-01 nigdy nie mówi „zapłać” i nie ma przycisku „zapłać”.
+2. T-05 nie może wyglądać jak portfel — ładunek ma trzy pola i test po stronie
+   silnika pilnuje, żeby nie doszło czwarte.
+3. T-03 pokazuje datę, z której liczy, na pierwszym miejscu — nie pod
+   „pokaż szczegóły”.
+
+Masło jest u siebie na kroku 2, więc wszystkie te zmiany trafiają do niego
+na długo przed miejscem, w którym mogłyby zaboleć.
+
+## 2026-08-29 · Kroki 38 i 39 — T-03 zegar ulg, T-05 ile odłożyć
+
+Zrobione:
+- `lib/flo/tax-params.ts` — trzy nowe pola: składka w uldze na start,
+  preferencyjna i standardowa.
+- `types/flo.ts`, `lib/flo/db-types.ts`, `lib/flo/tax-profile.ts` —
+  `ryczaltRate` w profilu + `canComputeTax()`.
+- `lib/flo/functions/tax-relief.ts` — T-03.
+- `lib/flo/functions/tax-setaside.ts` — T-05.
+- `tests/unit/flo-tax-relief.test.ts` (23) i `flo-tax-setaside.test.ts` (23),
+  plus trzy testy dopisane do zestawu profilu.
+
+### T-03 — trzy awarie
+
+1. **Zła data, zły komunikat.** Cała funkcja stoi na jednej dacie z profilu.
+   Jeżeli kreator podstawił datę rejestracji zamiast rozpoczęcia działalności,
+   agent straszy wzrostem składki w niewłaściwym miesiącu — a klient nie ma
+   jak tego sprawdzić, bo nie wie, na czym agent się oparł. Obrona: **data
+   jest pierwszym dowodem na karcie, razem z odnośnikiem „to nie ta data”.**
+   Brak daty = milczenie.
+2. **Zawieszenie policzone jak praca.** Ulga nie biegnie, kiedy firma stoi.
+   Agent liczący po kalendarzu skróciłby ulgę o czas zawieszenia i zapowiedział
+   wzrost składki, którego w tym miesiącu nie będzie. Test sprawdza jedno
+   i drugie: przesunięcie końca i to, że w dniu, w którym bez przesunięcia
+   agent by mówił, teraz milczy.
+3. **Zła wiadomość bez konkretu.** Test przelatuje trzy warianty profilu
+   i wymaga, żeby w każdym padło „Odkładaj po …”.
+
+Decyzje, które trzeba było podjąć poza planem:
+- **Ulga na start jest DEKLARACJĄ, nie wnioskiem agenta.** Nie każdy ma do
+  niej prawo (decyduje m.in. praca dla byłego pracodawcy), a agent tego nie
+  rozstrzyga. `usesStartRelief: null` = milczenie. Trzeci stan, nie `false`.
+- **Zawieszenie doliczamy RAZ do całego ciągu ulg**, nie do każdej z osobna.
+  Inaczej pół roku przerwy wydłużałoby ulgi o rok.
+- `addMonths` trzyma koniec miesiąca: 31 sierpnia + 6 miesięcy to 28 lutego,
+  a nie 3 marca. Kilka dni wystarczy, żeby komunikat wypadł PO pierwszym
+  wyższym przelewie, czyli dokładnie wtedy, kiedy jest bezużyteczny.
+- **„Ile odkładać” to RÓŻNICA między starą a nową składką.** Przykład
+  w planie („rośnie z 400 do 1 600, odkładaj po 400”) nie domyka się
+  arytmetycznie; wziąłem regułę, która domyka: odkładana różnica sprawia, że
+  w dniu podwyżki pieniądze już są. Jeżeli intencja była inna, to jedna linia
+  do zmiany.
+
+### T-05 — trzy awarie
+
+1. **Licznik wyglądający jak portfel.** Obrona jest w KONTRAKCIE, nie
+   w wyglądzie: ładunek ma dokładnie trzy pola (`periodKey`, `toSetAside`,
+   `primaryLabel`), a test skanuje go pod kątem listy `FORBIDDEN_PAYLOAD_KEYS`
+   i sprawdza dokładny zestaw kluczy. Powód: dopóki serwer wysyła saldo,
+   prędzej czy później ktoś je narysuje — w dobrej wierze, przy okazji innego
+   zadania. Nie ma tam nawet pola „odłożone dotąd”.
+2. **Procent od pojedynczej faktury.** Licznik jest narastający na okresie
+   i uwzględnia koszty; przy ryczałcie liczy od przychodu, bo tam to poprawne.
+   Test pilnuje, że koszt dopisany w środku okresu ZMNIEJSZA to, co zostało
+   do odłożenia.
+3. **Zmiana formy w trakcie okresu.** Przeliczenie obejmuje cały okres od
+   początku. Gdy z przeliczenia wychodzi mniej, niż klient już odłożył, karta
+   mówi „w tym miesiącu nie musisz już nic odkładać” — i **nigdy „wypłać
+   sobie nadwyżkę”**. Osobny test szuka słów „wypłać”, „odbierz”, „zwrot”.
+
+**ŚWIADOME ZAWĘŻENIE, ZGŁASZAM WPROST:** T-05 liczy PODATEK DOCHODOWY.
+Składka zdrowotna NIE jest wliczona, bo jej podstawa i wzór różnią się dla
+każdej formy — plan wymienia ją wprost wśród pozycji, których agent nie ma
+prawa liczyć bez opinii (lista wyłączeń przy T-04). Katalog funkcji mówi
+„na podatek i składki”, więc to jest odstępstwo. Zamiast policzyć źle,
+karta mówi wprost, czego w liczbie nie ma — lista `excluded` idzie do dowodów
+i jest widoczna. **Rozszerzenie o składkę zdrowotną to zadanie do rozmowy
+z księgową, razem z resztą tabeli parametrów.**
+
+Pozostałe decyzje T-05:
+- **Ryczałt bez zadeklarowanej stawki MILCZY.** Stawek jest kilkanaście
+  (2–17%), zależą od rodzaju działalności, a wybór jest kwalifikacją. Stąd
+  `ryczaltRate` w profilu i `canComputeTax()` obok `isTaxProfileUsable()`:
+  profil może być kompletny dla T-01 i T-02, a wciąż niewystarczający dla T-05.
+- Wartość spoza zakresu (0, 1) jest odrzucana. `8.5` zamiast `0.085` to
+  typowa pomyłka o dwa rzędy wielkości — lepiej puste pole niż podatek 850%.
+- Kwota wolna na skali zastosowana jako pomniejszenie podstawy. To
+  uproszczenie; jest na liście „czego tu nie ma”.
+- Poniżej 50 zł karta nie powstaje. Odkładanie dwudziestu złotych to
+  powiadomienie bez treści.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 37 plików, 639 testów, wszystko zielone
+- `pnpm typecheck` — zero błędów, eslint czysto
+
+Cały blok 7 jest gotowy poza krokiem 40 (T-04 symulator formy) — pozycja
+CZERWONA, nie budujemy bez pisemnej opinii prawnika.
+
+Następny krok: 41 (B-01 domknięcie miesiąca, promień 4)
