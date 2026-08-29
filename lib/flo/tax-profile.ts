@@ -67,6 +67,10 @@ export function parseTaxProfile(value: unknown): FloTaxProfile | null {
     vat: raw.vat === true,
     period,
     startedOn,
+    ryczaltRate:
+      typeof raw.ryczaltRate === 'number' && raw.ryczaltRate > 0 && raw.ryczaltRate < 1
+        ? raw.ryczaltRate
+        : null,
   };
 }
 
@@ -83,6 +87,20 @@ export function isTaxProfileUsable(profile: FloTaxProfile | null): boolean {
   if (!profile) return false;
   if (profile.form === 'nieznana') return false;
   if (!profile.startedOn) return false;
+  return true;
+}
+
+/**
+ * Czy da się z tego profilu policzyć PODATEK.
+ *
+ * Ryczałt bez zadeklarowanej stawki nie przechodzi. Stawek ryczałtu jest
+ * kilkanaście (od 2% do 17%), zależą od rodzaju działalności, a wybór między
+ * nimi jest kwalifikacją — nie zadaniem dla programu. Agent ma tu milczeć,
+ * a nie wybierać „najbardziej prawdopodobną”.
+ */
+export function canComputeTax(profile: FloTaxProfile | null): boolean {
+  if (!isTaxProfileUsable(profile)) return false;
+  if (profile!.form === 'ryczalt' && !profile!.ryczaltRate) return false;
   return true;
 }
 

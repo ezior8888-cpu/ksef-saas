@@ -277,6 +277,15 @@ export interface FloTaxProfile {
   period: 'M' | 'K';
   /** data rozpoczęcia działalności, ISO (YYYY-MM-DD) */
   startedOn: string | null;
+  /**
+   * Stawka ryczałtu jako ułamek (0.085 = 8,5%); dodane w kroku 39.
+   *
+   * Pole istnieje, bo AGENT NIE WYBIERA STAWKI RYCZAŁTU. Stawek jest
+   * kilkanaście, zależą od rodzaju działalności, a wybór między nimi jest
+   * kwalifikacją zastrzeżoną dla człowieka. Bez tej wartości funkcja T-05
+   * milczy zamiast zgadywać.
+   */
+  ryczaltRate?: number | null;
 }
 
 /**

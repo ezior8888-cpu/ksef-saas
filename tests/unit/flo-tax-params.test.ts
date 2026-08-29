@@ -18,6 +18,7 @@ import {
   taxDeadline,
 } from '@/lib/flo/tax-params';
 import {
+  canComputeTax,
   isTaxKind,
   isTaxProfileUsable,
   missingProfileFields,
@@ -202,7 +203,28 @@ describe('profil podatkowy', () => {
       vat: true,
       period: 'M',
       startedOn: '2025-03-01',
+      // Dodane w kroku 39: agent nie wybiera stawki ryczałtu za człowieka.
+      ryczaltRate: null,
     });
+  });
+
+  it('czyta stawkę ryczałtu, ale tylko sensowną', () => {
+    expect(parseTaxProfile({ ...complete, form: 'ryczalt', ryczaltRate: 0.085 })?.ryczaltRate).toBe(
+      0.085,
+    );
+    // 8.5 zamiast 0.085 to typowa pomyłka o dwa rzędy wielkości — odrzucamy,
+    // zamiast policzyć klientowi 850% podatku.
+    expect(parseTaxProfile({ ...complete, ryczaltRate: 8.5 })?.ryczaltRate).toBeNull();
+    expect(parseTaxProfile({ ...complete, ryczaltRate: '0.085' })?.ryczaltRate).toBeNull();
+  });
+
+  it('ryczałt bez stawki nie pozwala policzyć podatku, choć profil jest kompletny', () => {
+    const ryczalt = parseTaxProfile({ ...complete, form: 'ryczalt' });
+    expect(isTaxProfileUsable(ryczalt)).toBe(true);
+    expect(canComputeTax(ryczalt)).toBe(false);
+    expect(canComputeTax(parseTaxProfile({ ...complete, form: 'ryczalt', ryczaltRate: 0.085 }))).toBe(
+      true,
+    );
   });
 
   it('brak profilu to normalny stan konta, nie awaria', () => {

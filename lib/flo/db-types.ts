@@ -146,6 +146,7 @@ export interface FloPrefsRow {
     vat: boolean;
     period: 'M' | 'K';
     startedOn: string | null;
+    ryczaltRate?: number | null;
   } | null;
   updated_at: string;
 }
