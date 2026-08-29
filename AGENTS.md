@@ -131,18 +131,47 @@ o to przy migracji 00060.
 ### Wdrożenie produkcji
 
 Wdrożeniami steruje Coolify na `ops-1`. Najpewniejsza droga to `tinker`,
-bo interfejs bywa zawodny:
+bo interfejs bywa zawodny.
+
+Kod PHP podajemy na WEJŚCIU, przez heredoc w apostrofach — nie przez
+`--execute`:
 
 ```bash
 ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@91.98.134.85 \
-  "docker exec coolify php artisan tinker --execute=\"
-    \$a = App\\Models\\Application::find(1);
-    queue_application_deployment(application: \$a,
-      deployment_uuid: (string) new \\Visus\\Cuid2\\Cuid2(),
-      force_rebuild: false, commit: 'HEAD', is_api: false);\""
+  'docker exec -i coolify php artisan tinker' <<'PHP'
+$a = App\Models\Application::find(1);
+queue_application_deployment(application: $a,
+  deployment_uuid: (string) new \Visus\Cuid2\Cuid2(),
+  force_rebuild: false, commit: 'HEAD', is_api: false);
+PHP
 ```
 
-Aplikacja ma `id=1`, worker jobów `id=2`. Build trwa 12-18 minut.
+Worker jobów to `id=2` — ta sama komenda z `find(2)`. Build trwa 12-18 minut.
+
+**Dlaczego heredoc, a nie `--execute`.** Wariant z `--execute="..."` przechodzi
+przez DWA shelle: lokalny i zdalny. `\$a` przeżywa lokalny jako `$a`, a potem
+zdalny rozwija je do pustego napisu i do tinkera trafia `= App\Models\...`:
+
+```
+PHP Parse error: Syntax error, unexpected '=' on line 1
+```
+
+Heredoc w apostrofach (`<<'PHP'`) nie rozwija niczego lokalnie, a apostrofy
+wokół komendy zdalnej zamykają sprawę po drugiej stronie. Przy okazji znika
+też potrzeba podwajania ukośników w `App\\Models\\` i `\\Visus\\Cuid2`.
+`docker exec` musi mieć `-i`, inaczej nie przyjmie wejścia.
+
+Ten sam wzorzec działa do wszystkiego, co robimy tinkerem — na przykład
+do sprawdzenia, co jest w kolejce wdrożeń:
+
+```bash
+ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@91.98.134.85 \
+  'docker exec -i coolify php artisan tinker' <<'PHP'
+foreach (App\Models\ApplicationDeploymentQueue::orderBy('id','desc')->take(4)->get() as $d) {
+  echo $d->id . " | " . $d->application_name . " | " . $d->status . " | " . $d->commit . "\n";
+}
+PHP
+```
 
 ### Pułapki, które kosztowały nas awarie
 
