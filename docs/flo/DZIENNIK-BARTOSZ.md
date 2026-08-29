@@ -2251,3 +2251,105 @@ Weryfikacja:
 - migracja 00066 wgrana, zarejestrowana, RLS włączony, `killFloAgent = false`
 
 Następny krok: 55 (wdrożenie kanarkowe — funkcje promienia 4 na 10% kont)
+
+## 2026-08-29 · Kroki 55 i 56 — kanarek i domknięcie planu
+
+Zrobione:
+- `supabase/migrations/00067_flo_rollout.sql` — WGRANA NA PRODUKCJĘ.
+- `lib/flo/rollout.ts` — wdrożenie kanarkowe.
+- Kanarek jako CZWARTA warstwa w `lib/flo/kind-switch.ts`.
+- `lib/flo/weekly-review.ts` — przegląd tygodniowy z werdyktem per funkcja.
+- `CHANGELOG.md`, wpis w pamięci projektu.
+- `tests/unit/flo-rollout.test.ts` (24) i `flo-weekly-review.test.ts` (13).
+
+### Krok 55 — kanarek
+
+Przydział konta do grupy ma dwie własności, które MUSZĄ być prawdziwe naraz:
+
+1. **Stabilność.** To samo konto zawsze w tym samym kubełku, także po
+   restarcie i po wdrożeniu. Konto wpadające i wypadające z kanarka dostaje
+   funkcję znikającą bez powodu — to jest gorsze niż jej brak.
+2. **Różny podział dla każdej funkcji.** Rodzaj wchodzi do skrótu, więc te
+   same 10% kont nie jest królikiem doświadczalnym przy każdej kolejnej
+   funkcji. Bez tego garstka klientów dostawałaby wszystkie surowe funkcje
+   produktu, jedna po drugiej.
+
+Trzecia własność wyszła przy pisaniu testu i jest równie ważna: **rozwinięcie
+etapu tylko DODAJE konta, nigdy nie zabiera.** Klient, który miał funkcję
+przy 10%, musi mieć ją przy 50%. Wynika to wprost z porównania `bucket < stage`,
+ale bez testu nikt by nie zauważył, gdyby ktoś kiedyś zmienił to na haszowanie
+z etapem w środku.
+
+**JEDNA REKLAMACJA ZATRZYMUJE ROZWIJANIE** — nie „kilka”, nie „istotny
+odsetek”. Przy promieniu 4 pojedyncze zgłoszenie oznacza jeden dokument
+w rejestrze państwowym albo jedną wiadomość, której nie da się cofnąć,
+a rozwinięcie z 10% na 50% zaraz po nim znaczy, że pięć razy tyle ludzi
+dostanie tę samą awarię, zanim zdążymy ją zrozumieć.
+
+Zgłoszenie sprawdzane PRZED czasem etapu — odwrotna kolejność dawałaby
+komunikat „poczekaj jeszcze dwa dni” w sytuacji, w której czekanie nic nie
+zmieni. Zatrzymanie NIE COFA etapu: odsłonięcie i schowanie funkcji tego
+samego dnia jest dla klienta gorsze niż jedno i drugie osobno.
+
+**Wpis operatora per konto PRZEBIJA kanarka w obie strony.** Bez tego nie
+dałoby się wpuścić testera alfy do wczesnego dostępu ani wypisać klienta,
+który poprosił o wyłączenie.
+
+TRZY TESTY Z KROKU 53 PADŁY PO WPIĘCIU KANARKA i to było poprawne
+zachowanie: `expense.review` i `payment.chase` są na liście kanarkowej,
+więc bez wiersza w `flo_rollout` są teraz domyślnie nieodsłonięte.
+Zaktualizowałem testy na rodzaj spoza listy (`ksef.cert`) zamiast osłabiać
+nową warstwę — bo to warstwa miała rację, a test opisywał świat sprzed niej.
+
+### Krok 56 — przegląd tygodniowy
+
+`weekly-review.ts` składa sześć wskaźników i wydaje JEDNO ZDANIE WERDYKTU
+per funkcja: zostaje, wraca do poprawki, czeka na próbkę, wstrzymana.
+Przegląd bez werdyktu zamienia się w tabelkę, na którą się patrzy i nic
+z niej nie wynika.
+
+Kolejność sprawdzeń: **zgłoszenie klienta bije wszystkie liczby.** Funkcja
+z doskonałą trafnością i jedną reklamacją jest funkcją do poprawki, bo
+trafność mierzy średnią, a reklamacja mierzy człowieka, któremu coś
+zepsuliśmy. Zaraz za nią cofnięcia — z tego samego powodu.
+
+Osobna reguła, której nie było w planie: **funkcja, którą wszyscy ignorują
+(ponad 70% kart wygasa bez decyzji), też wraca do poprawki.** Nie jest
+awarią — jest funkcją, której nikt nie potrzebuje, i to też jest wynik
+przeglądu, a nie jego brak.
+
+Wiersze „do poprawki” idą na górę listy. To nie jest kosmetyka: przegląd
+czyta się w piątek po południu i to, co jest pierwsze, jest jedyną rzeczą,
+która na pewno zostanie przeczytana.
+
+### ⚠️ CZEGO NIE DA SIĘ ODHACZYĆ — I DLACZEGO
+
+Definicje gotowości kroków 55 i 56 brzmią „wszystkie zielone funkcje działają
+u 100% kont alfy” i „alfa działa, kolejka zgłoszeń zastępuje ten plan”.
+**Ani jedna z nich nie jest spełniona i nie mogłem tego zmienić z klawiatury.**
+
+- Interfejs (tor B) jest na kroku 2 z 40 — nie ma czym rysować kart.
+- Kod nie jest wypchnięty ani wdrożony.
+- Nie ma alfy: produkcja ma jedno konto i dwie faktury.
+
+Zbudowany jest MECHANIZM kanarka i MECHANIZM przeglądu. Uruchomienie ich to
+osobna, ludzka robota, która zaczyna się po wdrożeniu i po tym, jak Masło
+dojdzie do swojego bloku 1. Wpisałem to wprost do `CHANGELOG.md` i do pamięci
+projektu — status brzmi „silnik kompletny, NIEWDROŻONY”, nie „agent wdrożony”.
+Napisanie tam czegokolwiek innego byłoby najkosztowniejszym kłamstwem w całym
+tym planie, bo następna sesja przeczytałaby to jako stan faktyczny.
+
+### Stan planu toru A: 56 z 56 kroków zbudowanych
+
+Zestaw testów: 51 plików, 951 testów. `pnpm typecheck` czysty, eslint czysto.
+Migracje 00061, 00063–00067 na produkcji.
+
+Co czeka na ludzi, nie na kod:
+- **prawnik** — sześć pytań z części VI.2; bez nich grupa T, K-03, K-05 i P-09
+  zostają wyłączone,
+- **księgowa** — potwierdzenie tabeli parametrów i stawek odsetek,
+- **Masło** — wpis o przeczytaniu runbooka (krok 54) i dojście do bloku 1,
+- **wdrożenie** — po nim POWTÓRZYĆ ćwiczenie M8 z kroku 53.
+
+Następny krok: nie ma. Plan toru A skończony; dalej idą zgłoszenia
+i to, co pokaże alfa.

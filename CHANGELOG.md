@@ -7,6 +7,72 @@ Format luźno na podstawie [Keep a Changelog](https://keepachangelog.com).
 Każda faza linkuje do swojego state-of-the-art opisu w pamięci projektu
 (`current_state.md`) i do ADR jeśli wprowadziła kluczową decyzję.
 
+## [Unreleased] — Agent FLO: silnik (kroki 0–56 planu toru A)
+
+**Data:** 29 sierpnia 2026 · **Status:** silnik kompletny, **NIEWDROŻONY**
+
+Produkt przestaje być „kolejnym programem do faktur”: głównym elementem
+aplikacji staje się agent FLO, który sam obserwuje dane, doprowadza sprawy
+do końca i zaczepia człowieka dopiero wtedy, gdy została jedna decyzja.
+
+Zasada nadrzędna, wbudowana w kod i pilnowana testami: **co odwracalne
+i wewnątrz konta — agent robi sam z cofnięciem przez 10 minut; co
+nieodwracalne albo wychodzące na zewnątrz — wymaga kliknięcia człowieka,
+zawsze, bez wyjątku i bez możliwości wyłączenia w ustawieniach.** Nie ma
+poziomów autonomii ani trybów.
+
+### Added — silnik
+- `lib/flo/` — cykl życia propozycji, żeton zgody, re-walidacja przed
+  wykonaniem, wykonawca z atomowym przejęciem, pamięć decyzji, cofnięcie,
+  puls (`flo.tick`), warstwa modelu z budżetem, minimalizacja danych.
+- `lib/flo/functions/` — 30 funkcji agenta: przychody (P-01…P-04, P-07…P-09),
+  kasa (K-01…K-03, K-05), wydatki (W-01…W-04), KSeF (X-01…X-05),
+  podatki (T-01…T-03, T-05), biuro rachunkowe (B-01, B-02), start i rozmowa
+  (O-01…O-04), do pokazania (S-03, S-04).
+- `lib/flo/shadow.ts` — tryb cichy: propozycje niewidoczne dla klienta,
+  porównywane z tym, co zrobił naprawdę; progi trafności per promień rażenia.
+- `lib/flo/rollout.ts` — wdrożenie kanarkowe 10% → 50% → 100%, tydzień na
+  etap, **jedna reklamacja zatrzymuje rozwijanie**.
+- `lib/flo/kind-switch.ts` — cztery warstwy wyłączników; warstwa konta nie
+  może odwrócić blokady w kodzie.
+- `lib/flo/metrics.ts`, `lib/flo/weekly-review.ts` — sześć wskaźników
+  operatorskich i werdykt per funkcja (zostaje / do poprawki / czeka).
+- `app/actions/flo.ts` — osiem akcji serwerowych dla interfejsu.
+
+### Added — dane
+- Migracja `00061` — sześć tabel agenta.
+- Migracja `00063` — kursor skrzynki KSeF, widełki kwotowe reguł.
+- Migracja `00064` — `contractors.manual_fields` (ręczne poprawki nietykalne).
+- Migracja `00065` — `invoices.origin` (trwały znacznik pochodzenia).
+- Migracja `00066` — `flo_kind_flags` + globalna flaga `killFloAgent`.
+- Migracja `00067` — `flo_rollout` (stan wdrożenia kanarkowego).
+
+### Added — dokumentacja
+- `docs/runbooks/flo-incident.md` — zatrzymanie (30 s), zasięg, odwrócenie,
+  rozmowa z klientami, alarmy. Zapytania sprawdzone na produkcji.
+- `docs/flo/DZIENNIK-BARTOSZ.md` — uzasadnienie każdej decyzji.
+
+### Changed
+- `lib/exports/jpk-v7m-generator.ts` — wydzielony `summarizeJpkV7m`, żeby
+  kwota na karcie agenta i kwota w złożonym pliku pochodziły z tego samego
+  kodu.
+- `types/flo.ts` — dodany zamiar akcji `correct` i rodzaj
+  `accountant.delivery` (zmiany wyłącznie przez dodanie).
+
+### Wyłączone świadomie
+Grupa podatkowa (`tax.*`), ocena kontrahenta (`payment.score`), odsetki
+(`payment.interest`) i transakcje zagraniczne (`contractor.foreign`) są
+zbudowane, przetestowane i **wyłączone** w `lib/flo/flags.ts` — czekają na
+opinię prawnika albo na potwierdzenie danych przez człowieka. Tabela
+parametrów podatkowych ma `PARAMS_VERIFIED = false` i test psujący build,
+gdy zestarzeje się o rok.
+
+### Czego jeszcze nie ma
+Interfejs (tor B, Masło) jest na wczesnym etapie, więc **agent nie jest
+widoczny dla klientów**. Kroki 55 i 56 planu są zbudowane, ale nie
+wykonane: wdrożenia kanarkowego nikt nie uruchomił, a przegląd tygodniowy
+nie ma jeszcze danych. Migracje 00064–00067 są na produkcji; kod nie.
+
 ## [Unreleased] — Faza 35: Documentation & Internal Runbooks
 
 **Data:** w trakcie · **Status:** doc-only, brak zmian runtime
