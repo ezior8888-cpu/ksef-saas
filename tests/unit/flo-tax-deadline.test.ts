@@ -10,7 +10,7 @@ import {
   type PeriodSnapshot,
 } from '@/lib/flo/functions/tax-deadline';
 import { formatPln } from '@/lib/flo/money';
-import { summarizeJpkV7m } from '@/lib/exports/jpk-v7m-generator';
+import { generateJpkV7m, summarizeJpkV7m } from '@/lib/exports/jpk-v7m-generator';
 import type { JpkV7mSummary } from '@/lib/exports/jpk-v7m-generator';
 
 /**
@@ -87,6 +87,69 @@ describe('kwota pochodzi z generatora JPK, nie z osobnego wzoru', () => {
     expect(result.balance).toBe(2_070);
     expect(result.salesCount).toBe(1);
     expect(result.purchaseCount).toBe(1);
+  });
+
+  it('to, co mówi agent, jest tym, co ląduje w deklaracji', () => {
+    // Zabezpieczenie wyciągnięcia `summarizeJpkV7m` z generatora: kwota
+    // z karty musi zgadzać się z pozycjami P_38, P_48 i P_51 złożonego pliku.
+    const data = {
+      issuer: { nip: '1234567890', name: 'Test' },
+      periodStart: '2026-08-01',
+      periodEnd: '2026-08-31',
+      issuedInvoices: [
+        {
+          invoiceNumber: 'FV/1',
+          issueDate: '2026-08-10',
+          buyerName: 'Klient',
+          netTotal: 10_000,
+          vatTotal: 2_300,
+          grossTotal: 12_300,
+          lines: [{ netAmount: 10_000, vatRate: '23' }],
+        },
+      ],
+      receivedInvoices: [
+        {
+          invoiceNumber: 'ZAK/1',
+          issueDate: '2026-08-12',
+          buyerName: 'Dostawca',
+          netTotal: 1_000,
+          vatTotal: 230,
+          grossTotal: 1_230,
+          lines: [],
+        },
+      ],
+    } as never;
+
+    const result = summarizeJpkV7m(data);
+    const xml = generateJpkV7m(data);
+
+    expect(xml).toContain(`<P_38>${result.vatDue.toFixed(2)}</P_38>`);
+    expect(xml).toContain(`<P_48>${result.vatDeductible.toFixed(2)}</P_48>`);
+    expect(xml).toContain(`<P_44>${result.purchaseNet.toFixed(2)}</P_44>`);
+    expect(xml).toContain(`<P_51>${result.balance.toFixed(2)}</P_51>`);
+  });
+
+  it('nadwyżka idzie do P_53, nie do P_51', () => {
+    const data = {
+      issuer: { nip: '1234567890', name: 'Test' },
+      periodStart: '2026-08-01',
+      periodEnd: '2026-08-31',
+      issuedInvoices: [],
+      receivedInvoices: [
+        {
+          invoiceNumber: 'ZAK/1',
+          issueDate: '2026-08-12',
+          buyerName: 'Dostawca',
+          netTotal: 1_000,
+          vatTotal: 230,
+          grossTotal: 1_230,
+          lines: [],
+        },
+      ],
+    } as never;
+
+    expect(summarizeJpkV7m(data).balance).toBe(-230);
+    expect(generateJpkV7m(data)).toContain('<P_53>230.00</P_53>');
   });
 });
 

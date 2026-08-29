@@ -1366,7 +1366,7 @@ Zrobione:
 - `lib/flo/functions/tax-deadline.ts` — T-01.
 - `lib/flo/functions/vat-limit.ts` — T-02.
 - `types/flo.ts` + `lib/flo/proposals.ts` — nowy zamiar akcji `correct`.
-- `tests/unit/flo-tax-deadline.test.ts` (28) i `flo-vat-limit.test.ts` (33).
+- `tests/unit/flo-tax-deadline.test.ts` (30) i `flo-vat-limit.test.ts` (33).
 
 Obie funkcje są ZA FLAGĄ (`tax.deadline`, `tax.limit` w `flags.ts`) i za
 bramką M12 z kroku 35. Nic z tego nie odezwie się do klienta przed odpowiedzią
@@ -1378,9 +1378,13 @@ prawnika i przed przestawieniem `PARAMS_VERIFIED`.
 Wyciągnąłem to do `summarizeJpkV7m`. Powód nie jest kosmetyczny: agent mówi
 klientowi, ile wychodzi VAT-u, a potem klient składa plik. **Gdyby to były dwa
 osobne wzory, prędzej czy później pokazałyby dwie różne liczby — i wtedy klient
-przestaje wierzyć obu naraz.** Jedno źródło, dwa zastosowania. XML wychodzi
-bit w bit ten sam, osobny test porównuje wynik podsumowania z pozycjami
-deklaracji.
+przestaje wierzyć obu naraz.** Jedno źródło, dwa zastosowania.
+
+Generator nie miał ŻADNEGO testu, więc wyciągnięcie zabezpieczyłem dwoma:
+kwota z `summarizeJpkV7m` musi zgadzać się z pozycjami `P_38`, `P_48`, `P_44`
+i `P_51` w wygenerowanym XML-u, a nadwyżka musi trafiać do `P_53`, nie do
+`P_51`. Bez tego refaktor opierałby się wyłącznie na tym, że przeczytałem
+kod uważnie.
 
 Cztery rzeczy pilnowane testami:
 1. **Liczba nigdy bez podstawy.** Każda kwota chodzi w parze ze zdaniem
@@ -1481,7 +1485,7 @@ Jak to rysować: zwykły przycisk drugorzędny. Po kliknięciu wołasz
 z poprawioną kartą.
 
 Weryfikacja:
-- `npx vitest run tests/unit/` — 35 plików, 589 testów, wszystko zielone
+- `npx vitest run tests/unit/` — 35 plików, 591 testów, wszystko zielone
 - `pnpm typecheck` — zero błędów, eslint czysto
 
 Dług: obie funkcje to czyste reguły. Wpięcie (odczyt okresu z bazy, licznik
