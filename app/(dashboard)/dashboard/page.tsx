@@ -1,6 +1,12 @@
+import { Suspense } from 'react';
+
 import { listProposals, listScheduled } from '@/app/actions/flo';
 import { SectionErrorBoundary } from '@/components/dashboard/section-error-boundary';
+import { FloComposer } from '@/components/flo/flo-composer';
 import { FloScreen } from '@/components/flo/flo-screen';
+import { FloScheduledPanel } from '@/components/flo/scheduled-panel';
+import { FloWelcome } from '@/components/dashboard/flo-welcome';
+import DashboardVerificationBanner from '@/app/(dashboard)/_components/dashboard-verification-banner';
 import {
   formatPlInt,
   formatPlMoney,
@@ -43,11 +49,18 @@ export default async function DashboardHomePage() {
     loadAgent(),
   ]);
 
-  const liczby = <MonthlyFiguresCard figures={figures} />;
+  const szyna = (
+    <>
+      <Suspense fallback={null}>
+        <DashboardVerificationBanner variant="rail" />
+      </Suspense>
+      <MonthlyFiguresCard figures={figures} />
+    </>
+  );
 
   if (!agent.ok) {
     return (
-      <div className="grid grid-cols-1 items-start gap-4 pb-8 pt-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid h-[calc(100vh-5rem)] grid-cols-1 items-start gap-4 py-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section
           role="status"
           className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-[22px] py-5"
@@ -57,33 +70,44 @@ export default async function DashboardHomePage() {
             aktualne — spróbuj odświeżyć za chwilę.
           </p>
         </section>
-        {liczby}
+        {szyna}
+      </div>
+    );
+  }
+
+  if (agent.proposals.length === 0) {
+    return (
+      <div className="flex h-[calc(100vh-5rem)] min-h-0 flex-col gap-3 py-4">
+        {agent.fixtures ? <PasekAtrap /> : null}
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="flex min-h-0 flex-col gap-3">
+            <div className="flex min-h-0 flex-1 rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)]">
+              <FloWelcome />
+            </div>
+            <FloComposer />
+          </div>
+          <aside className="flex min-h-0 flex-col gap-4 xl:overflow-y-auto">
+            {szyna}
+            <FloScheduledPanel
+              scheduled={agent.scheduled}
+              className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] p-4"
+            />
+          </aside>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-3 pb-8 pt-4">
-      {agent.fixtures ? (
-        <p
-          role="status"
-          className="rounded-xl border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-4 py-2.5 text-[12.5px] text-[var(--ff-warn-text)]"
-        >
-          <strong className="font-semibold text-[var(--ff-warn)]">
-            Dane przykładowe.
-          </strong>{' '}
-          Baza deweloperska nie ma tabel agenta, więc to są atrapy
-          z&nbsp;<code>lib/flo/fixtures.ts</code>, a nie Twoje sprawy. Ten pasek
-          nie może pojawić się na produkcji.
-        </p>
-      ) : null}
+    <div className="flex h-[calc(100vh-5rem)] min-h-0 flex-col gap-3 py-4">
+      {agent.fixtures ? <PasekAtrap /> : null}
 
-      <SectionErrorBoundary label="Flo" fallback={liczby}>
+      <SectionErrorBoundary label="Flo" fallback={szyna}>
         <FloScreen
           proposals={agent.proposals}
           scheduled={agent.scheduled}
           showHeader={false}
-          aside={liczby}
+          aside={szyna}
         />
       </SectionErrorBoundary>
     </div>
@@ -257,5 +281,22 @@ function StatRow({
         {value}
       </span>
     </div>
+  );
+}
+
+/** Uczciwa adnotacja, że na ekranie są atrapy, a nie sprawy klienta. */
+function PasekAtrap() {
+  return (
+    <p
+      role="status"
+      className="shrink-0 rounded-xl border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-4 py-2.5 text-[12.5px] text-[var(--ff-warn-text)]"
+    >
+      <strong className="font-semibold text-[var(--ff-warn)]">
+        Dane przykładowe.
+      </strong>{' '}
+      Baza deweloperska nie ma tabel agenta, więc to są atrapy
+      z <code>lib/flo/fixtures.ts</code>, a nie Twoje sprawy. Ten pasek nie może
+      pojawić się na produkcji.
+    </p>
   );
 }

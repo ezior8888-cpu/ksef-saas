@@ -11,9 +11,42 @@ import { getDashboardActiveOrgVerified } from '@/lib/dashboard-shell-data';
  * z faktur, wydatków i skrzynki, czyli z miejsc, w których człowiek dowiaduje
  * się o braku certyfikatu najpóźniej i najboleśniej.
  */
-export default async function DashboardVerificationBanner() {
+export default async function DashboardVerificationBanner({
+  variant = 'wide',
+}: {
+  /** `rail` = wąska karta do prawej szyny dashboardu (układ z makiety). */
+  variant?: 'wide' | 'rail';
+} = {}) {
   const isVerified = await getDashboardActiveOrgVerified();
   if (isVerified) return null;
+
+  if (variant === 'rail') {
+    return (
+      <section
+        role="status"
+        className="flex gap-2.5 rounded-2xl border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-4 py-3.5"
+      >
+        <span
+          className="material-symbols-outlined shrink-0 text-[18px] leading-none text-[var(--ff-warn)]"
+          aria-hidden
+        >
+          error
+        </span>
+        <p className="min-w-0 text-[12.5px] leading-[1.5] text-[var(--ff-warn-text)]">
+          <span className="font-semibold text-[var(--ff-warn)]">
+            Organizacja niezweryfikowana.
+          </span>{' '}
+          Wysyłka do KSeF wymaga certyfikatu.{' '}
+          <Link
+            href="/settings/ksef"
+            className="whitespace-nowrap font-semibold text-[var(--ff-warn)] underline-offset-4 hover:underline"
+          >
+            Zweryfikuj →
+          </Link>
+        </p>
+      </section>
+    );
+  }
 
   return (
     <div

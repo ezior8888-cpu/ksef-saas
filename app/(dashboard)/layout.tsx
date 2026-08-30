@@ -5,6 +5,7 @@ import DashboardOrgHeader, {
   OrgSwitcherHeaderSkeleton,
 } from '@/app/(dashboard)/_components/dashboard-org-header';
 import { DashboardPageHeading } from '@/app/(dashboard)/_components/dashboard-page-heading';
+import { DashboardRouteFlags } from '@/components/dashboard/dashboard-route-flags';
 import DashboardVerificationBanner from '@/app/(dashboard)/_components/dashboard-verification-banner';
 import { KsefHealthBanner } from '@/app/(dashboard)/_components/ksef-health-banner';
 import { MobileNav } from '@/components/dashboard/mobile-nav';
@@ -91,11 +92,15 @@ export default async function DashboardLayout({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="ff-shell-scroll min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto min-h-0 w-full max-w-[1500px] px-4 pb-12 sm:px-[var(--ff-container-padding)]">
-            <Suspense fallback={null}>
-              <DashboardVerificationBanner />
-            </Suspense>
+            {/* Na dashboardzie ten baner stoi w prawej szynie — szeroki
+                wariant chowa CSS. Na pozostałych stronach zostaje. */}
+            <div className="ff-shell-banner">
+              <Suspense fallback={null}>
+                <DashboardVerificationBanner />
+              </Suspense>
+            </div>
             <Suspense fallback={null}>
               <KsefHealthBanner />
             </Suspense>
@@ -104,6 +109,7 @@ export default async function DashboardLayout({
         </div>
       </main>
 
+      <DashboardRouteFlags />
       <InstallPrompt />
       <PrefetchDashboardRoutes />
       <PrefetchExportsRoute />

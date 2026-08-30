@@ -1477,3 +1477,37 @@ html:not(.dark) .ff-dashboard tbody tr[class*='hover:bg-']:hover {
     animation: none;
   }
 }
+
+/* ─── Dashboard: ekran agenta mieści się w oknie ────────────────────────────
+ * Wątek ma własne przewijanie w środku, więc przewijanie CAŁEJ strony dawało
+ * drugi pasek i pozwalało „zgubić” pas rozmowy pod krawędzią okna.
+ * Klasę na `<html>` ustawia `DashboardRouteFlags`.
+ * ────────────────────────────────────────────────────────────────────────── */
+html.ff-route-dashboard .ff-shell-scroll {
+  overflow: hidden;
+}
+
+/* Wysokość musi przejść przez kontener treści z layoutu, inaczej `h-full`
+ * na stronie nie ma się od czego odbić i `overflow:hidden` zamiast blokować
+ * przewijanie po prostu OBCINA pas rozmowy pod krawędzią okna. */
+html.ff-route-dashboard .ff-shell-scroll > div {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 0;
+}
+
+/* Ostatnie dziecko to strona; banery nad nią zajmują tyle, ile potrzebują,
+ * a resztę wysokości dostaje ekran agenta. */
+html.ff-route-dashboard .ff-shell-scroll > div > :last-child {
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
+/* Baner certyfikatu na dashboardzie stoi w prawej szynie (jak na makiecie),
+ * więc szeroki wariant z layoutu jest tam zbędny. Na pozostałych stronach
+ * zostaje bez zmian — tam nie ma szyny, w której mógłby zamieszkać. */
+html.ff-route-dashboard .ff-shell-banner {
+  display: none;
+}
