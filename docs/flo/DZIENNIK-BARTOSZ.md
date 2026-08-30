@@ -2677,3 +2677,50 @@ DO ZROBIENIA PRZEZ CZŁOWIEKA: wgranie ośmiu migracji na bazę deweloperską
 (gotowa paczka SQL do wklejenia w edytorze Supabase) albo — decyzja
 strategiczna — przeniesienie deva z martwego Supabase Cloud na coś, co
 utrzymujemy.
+
+### 2026-08-30, 18:54 — WDROŻENIE NA PRODUKCJĘ
+
+Pierwsze wdrożenie agenta FLO. Przeszło całą ścieżkę z `AGENTS.md`.
+
+Commity: `531dcdb` (biały motyw) i `f77586b` (agent w dashboardzie), plus
+wszystko, co Masło wypchnął wcześniej — bloki 0–6 toru B nigdy nie były na
+produkcji, więc to wdrożenie wywiozło je razem z moją ramą.
+
+Kolejność zgodna z instrukcją:
+1. `pnpm build` LOKALNIE przed pushem — przeszedł. To nie jest zbytek: build
+   produkcyjny trwał 17 minut, lokalny złapałby błąd w trzy.
+2. Migracje — POMINIĘTE ŚWIADOMIE. Produkcja ma 00060–00067 od tygodnia,
+   sprawdzone odczytem `schema_migrations` i testem PostgREST-a (`42501`,
+   czyli tabela znaleziona).
+3. `git push origin main` → `1cba1d4..f77586b`.
+4. Wdrożenie OBU aplikacji: `id=1` (Next.js, kolejka #26) i `id=2` (worker
+   pg-boss, #27). Cele budowania potwierdzone przed wyzwoleniem: `runner`
+   i `worker` — pułapka z pustym `dockerfile_target_build` nie dotyczy.
+   Worker: 10 minut. Aplikacja: 17 minut. Oba `finished`.
+5. Weryfikacja.
+
+Swap na `app-1` sprawdzony PRZED wdrożeniem: 8 GB w dwóch plikach, próg
+spełniony. Zabójstwa OOM w `dmesg` są z 29 sierpnia (tamto nieudane wdrożenie
+#23), nie z tego przebiegu.
+
+**Weryfikacja po wdrożeniu:**
+- oba kontenery `healthy`,
+- `/api/health`: `status: healthy`, baza ok, Redis ok,
+- `https://faktflow.pl` → 200 w 1,3 s,
+- `sw.js` zawiera `actionUrls` — marker bloku 4 Masła, którego przed
+  wdrożeniem NIE BYŁO; to twardy dowód, że jego kod jest na żywo,
+- w zbudowanych arkuszach: `--ff-accent:#2563eb` i `--ff-bg:#f7f8fa` w bazie,
+  `html.dark .ff-dashboard` jako nadpisanie — biały motyw działa,
+- zero błędów w logach obu kontenerów,
+- worker: 48 kolejek, 23/23 cronów, w tym `cron.flo-tick`.
+
+**CZEGO KLIENT JESZCZE NIE ZOBACZY I DLACZEGO TO JEST W PORZĄDKU.**
+`flo_rollout` jest puste, więc dziewięć rodzajów z listy kanarkowej
+(W-01, W-02, K-01, K-02, X-01, X-02, B-01, P-01, P-02) jest domyślnie
+NIEODSŁONIĘTYCH. Do tego wykonawcę ma tylko cztery rodzaje z 33, a cała grupa
+podatkowa jest wyłączona w `flags.ts` do opinii prawnika. Agent będzie więc
+na produkcji prawie milczący — i tak ma być. Odsłanianie to osobna, świadoma
+decyzja przez `flo_rollout`, nie skutek uboczny wdrożenia.
+
+Ćwiczenie M8 z kroku 53 (wyłączenie funkcji na produkcji) dalej NIEPOWTÓRZONE
+po wdrożeniu — to jest następna rzecz do zrobienia.
