@@ -11,7 +11,8 @@ import { describe, expect, it, vi } from 'vitest';
  */
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ refresh: () => {}, push: () => {} }),
+  useRouter: () => ({ refresh: () => {}, push: () => {}, replace: () => {} }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('@/app/actions/flo', () => ({

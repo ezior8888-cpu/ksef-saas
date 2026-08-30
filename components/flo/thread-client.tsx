@@ -1,7 +1,7 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useCallback, useState, useTransition } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 
 import {
   approveProposal,
@@ -45,6 +45,7 @@ export function FloThreadClient({
   className?: string;
 }) {
   const router = useRouter();
+  const params = useSearchParams();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [notices, setNotices] = useState<Record<string, string>>({});
   const [, startTransition] = useTransition();
@@ -134,6 +135,33 @@ export function FloThreadClient({
     },
     [refresh, setNotice],
   );
+
+  /**
+   * Cofnięcie prosto z powiadomienia (kroki 18 i 23).
+   *
+   * Przycisk „cofnij” na telefonie otwiera aplikację pod adresem
+   * `/flo?undo=<id>` — i to jest kliknięcie człowieka, więc cofamy od razu,
+   * bez proszenia go o powtórzenie tej samej decyzji na drugim ekranie.
+   * Wykonujemy RAZ: `undoneRef` pilnuje, żeby powrót do tej karty w historii
+   * przeglądarki nie odwracał niczego drugi raz.
+   */
+  const undoParam = params.get('undo');
+  const undoneRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!undoParam || undoneRef.current === undoParam) return;
+
+    const target = proposals.find((p) => p.id === undoParam);
+    undoneRef.current = undoParam;
+    router.replace('/flo');
+
+    // Cofnięcie uruchamia kliknięcie w powiadomienie, a nie render; adres
+    // z parametrem jest tu jedynym nośnikiem tej decyzji, więc musi ją
+    // odpalić efekt.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (target) void handleUndo(target);
+  }, [undoParam, proposals, router, handleUndo]);
+
   return (
     <FloThread
       proposals={proposals}

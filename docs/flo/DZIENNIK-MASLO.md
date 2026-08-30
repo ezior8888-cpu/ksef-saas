@@ -429,3 +429,68 @@ Weryfikacja:
   środowisku z bazą, zanim uznamy blok 3 za domknięty.
 
 Następny krok: 22 (ścieżka paragonu z telefonu) — blok 4.
+
+## 2026-08-30 · Kroki 22–24 — telefon (BLOK 4)
+
+Zrobione:
+- `app/share-target/route.ts` — udostępnione zdjęcie ląduje w `/flo?paragon=…`,
+  nie w `/expenses?ocr_pending=…`.
+- `app/(dashboard)/flo/_components/flo-photo-banner.tsx` — stan „mam, czytam,
+  zaraz pokażę” z odpytywaniem co 15 s i progiem trzech minut.
+- `app/sw.ts` — przyciski akcji w powiadomieniu, `renotify` przy `tag`,
+  kierowanie kliknięcia po `event.action`.
+- `components/flo/thread-client.tsx` — cofnięcie prosto z powiadomienia
+  (`/flo?undo=<id>`), wykonywane raz.
+- `components/flo/thread.tsx` — kotwice kart (`id`), żeby powiadomienie
+  prowadziło do konkretnej sprawy.
+- Kciuk i wąski ekran: przyciski karty mają 36 px wysokości, podglądy
+  przewijają się w poziomie, kolumna z godzinami znika poniżej `sm`.
+- `tests/unit/ui-flo-photo.test.tsx` — 5 testów.
+
+Decyzje:
+- ZDJĘCIE PROWADZI DO WĄTKU, nie do Wydatków. Klient udostępnia paragon
+  i ma zobaczyć gotowy koszt tam, gdzie agent mówi wszystko inne — plan
+  nazywa to „od zdjęcia do kosztu bez wchodzenia w menu”. Zmieniło to
+  zachowanie istniejącej ścieżki i jest to świadome.
+- Po trzech minutach pasek mówi, że trwa to dłużej niż zwykle, I ŻE ZDJĘCIE
+  JEST BEZPIECZNE W ARCHIWUM. Klient, który usłyszy samo „nie wyszło”,
+  wyrzuca paragon i po miesiącu nie ma czego odtwarzać. Prawdziwą kartę
+  z diagnozą przysyła silnik (`findStuckOcrJobs`), pasek to tylko stan
+  przejściowy.
+- PRZYCISK W POWIADOMIENIU NICZEGO NIE WYSYŁA. Otwiera aplikację na właściwej
+  karcie — zgoda na wysyłkę zapada po obejrzeniu podglądu, a nie na ekranie
+  blokady telefonu. Jedyny wyjątek to „cofnij”: cofnięcie odwraca czynność
+  agenta, więc kliknięcie w powiadomienie wystarczy za decyzję.
+- `tag` = klucz sprawy, plus `renotify`. Dwa zdarzenia tej samej sprawy
+  podmieniają jedno powiadomienie zamiast mnożyć osiem o jednej fakturze.
+
+BŁĄD, KTÓRY ZŁAPAŁEM PO DRODZE: po włożeniu wątku w `Suspense` z
+`fallback={null}` test ekranu przestał widzieć karty — wyspa kliencka wywalała
+się po cichu (brakowało atrapy `useSearchParams`), a pusty wątek wyglądał
+dokładnie jak „nic nie masz do zrobienia”. To jest najgorszy możliwy fałszywy
+komunikat w tym produkcie. Zastępnik pokazuje teraz „Zbieram Twoje sprawy…”,
+więc awaria wyspy nie udaje ciszy.
+
+UWAGI DLA BARTOSZA:
+- `PushPayload` w `lib/push/sender.ts` nie ma pól `actions` ani `actionUrls`.
+  Service worker już je obsługuje (czyta surowy JSON), ale żeby przyciski się
+  pojawiły, wysyłka musi je dołożyć. Proponowany kształt dla propozycji:
+  `actions: [{ action: 'open', title: '<primary.label>' }]` i
+  `actionUrls: { open: '/flo#<id>' }`; dla czynności zrobionej samodzielnie:
+  `actions: [{ action: 'undo', title: 'Cofnij' }]` i
+  `actionUrls: { undo: '/flo?undo=<id>' }`. Plus `tag` = klucz tematu.
+- Ścieżka `/share-target` prowadzi teraz do `/flo`. Jeśli któreś zadanie
+  zakłada, że po OCR klient jest w `/expenses`, to założenie się zmieniło.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 60 plików, 1042 testy, wszystko zielone.
+- `pnpm typecheck` czysto, eslint czysto (dwa świadome wyłączenia reguły
+  `set-state-in-effect` z uzasadnieniem w kodzie).
+- Wątek wyrenderowany na szerokości 375 px i obejrzany.
+- CZEGO NIE ZWERYFIKOWAŁEM: prawdziwego telefonu. Blokada z `BUG-008`
+  (`lib/supabase/middleware.ts:159`) nadal przekierowuje telefony na
+  `/mobile`, więc ani ścieżki paragonu, ani powiadomień nie da się dziś
+  przeklikać na urządzeniu. Wszystko jest zbudowane tak, żeby zadziałało po
+  zdjęciu blokady — ale to jest deklaracja, nie dowód.
+
+Następny krok: 25 (treści grupy W) — blok 5, czyli to, co agent MÓWI.

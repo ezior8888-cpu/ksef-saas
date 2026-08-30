@@ -49,7 +49,11 @@ export function FloThread({
           </h2>
 
           {group.items.map((proposal) => (
-            <div key={proposal.id} className="flex gap-3">
+            <div
+              key={proposal.id}
+              id={proposal.id}
+              className="flex scroll-mt-4 gap-3"
+            >
               <time
                 dateTime={proposal.createdAt}
                 className="hidden w-11 shrink-0 pt-3.5 text-right text-xs tabular-nums text-[var(--ff-text-dim)] sm:block"

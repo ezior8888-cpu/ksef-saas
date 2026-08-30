@@ -54,7 +54,7 @@ export function FloPreviewPanel({
       />
 
       {open ? (
-        <div className="mt-2 rounded-lg border border-[var(--ff-border)] bg-[var(--ff-surface-inset)] p-3 text-xs text-[var(--ff-text-soft)]">
+        <div className="mt-2 overflow-x-auto rounded-lg border border-[var(--ff-border)] bg-[var(--ff-surface-inset)] p-3 text-xs text-[var(--ff-text-soft)]">
           <FloPreviewBody
             preview={preview}
             editedBody={editedBody}

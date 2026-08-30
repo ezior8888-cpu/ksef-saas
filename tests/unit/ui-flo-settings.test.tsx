@@ -13,7 +13,8 @@ import type { FloPrefs } from '@/types/flo';
  */
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ refresh: () => {}, push: () => {} }),
+  useRouter: () => ({ refresh: () => {}, push: () => {}, replace: () => {} }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('@/app/actions/flo', () => ({
