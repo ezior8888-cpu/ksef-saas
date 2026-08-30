@@ -48,3 +48,63 @@ Uwagi dla Bartosza:
   Reszta zestawu: 175 testów zielonych.
 
 Następny krok: 2
+
+## 2026-08-30 · Krok 2 — szkielet ekranu agenta `/flo`
+
+UWAGA O NUMERACJI: część IV planu (lista kroków toru B) nie dotarła do sesji —
+wklejka planu urwała się dwa razy w tym samym miejscu, na II.3. Zakres tego
+kroku jest więc moją interpretacją tego, czego brakuje między helperami
+(krok 1) a kartą bazową (krok 3, tak nazwany przez Bartosza w jego dzienniku).
+Jeżeli plan mówi co innego — numer do przestawienia, kod zostaje.
+
+Zrobione:
+- `components/flo/timeline.ts` — `groupByDay`, `sortByUrgency`,
+  `countTodayTasks` (czysta logika osi, bez Reacta).
+- `app/(dashboard)/flo/page.tsx` — trasa `/flo` na atrapach.
+- `app/(dashboard)/flo/_components/` — `flo-screen`, `flo-header`,
+  `flo-timeline`, `flo-card-slot`, `flo-side-panel`, `flo-composer`.
+- `tests/unit/flo-ui-timeline.test.ts` — 9 testów.
+- `tests/unit/flo-ui-screen.test.tsx` — 5 testów dymnych (render do napisu).
+
+Decyzje:
+- Oś idzie CHRONOLOGICZNIE, najnowsze na dole, a nie po ważności. Klient
+  wraca do ekranu kilka razy dziennie i szuka miejsca, w którym skończył —
+  sortowanie po `priority` przestawiałoby mu karty pod ręką przy każdym
+  odświeżeniu. `priority` zostaje do powiadomień i skrótów (`sortByUrgency`).
+- Cały szkielet jest serwerowy. Stan wjedzie dopiero z kartą (krok 3) i jako
+  wyspy klienckie w środku, nie jako `"use client"` na całym ekranie.
+- Karta jest na razie MIEJSCEM, nie kartą: tytuł, treść, dowody, godzina.
+  Świadomie bez przycisków — martwy przycisk „Wyślij do KSeF” jest gorszy
+  niż jego brak.
+- Pole rozmowy stoi, ale jest wyłączone i mówi o tym wprost. Ekran bez niego
+  kłamałby o tym, czym FLO ma być; ekran z polem, które połyka tekst,
+  kłamałby mocniej.
+- Panel prawy pokazuje `approvedAtLabel` przy KAŻDEJ pozycji — to jest ten
+  ślad zgody z inwariantu `FloScheduledView`, i test dymny tego pilnuje.
+- Nagłówek: „Pracuje sam · informuje” i odznaka „N zadań dziś”. Żadnego
+  „TRYB 3” z sierpniowej makiety; osobny test sprawdza, że nie wróciło.
+- Paleta z `app/globals.css` (`--ff-*`), a nie jasne kolory z makiety —
+  dashboard jest ciemny i ekran ma do niego pasować. Układ za makietą,
+  barwy za aplikacją.
+- Trasy NIE dodałem do menu bocznego (`lib/dashboard-nav-config.ts`):
+  dopóki na ekranie są atrapy, wchodzi się na niego adresem. Nagłówek ma
+  o tym uczciwą plakietkę „Dane przykładowe”.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 189 testów zielonych; moje trzy pliki 28/28.
+- `pnpm typecheck` — czysto. eslint na `components/flo` i `app/(dashboard)/flo`
+  — czysto.
+- Ekranu nie da się otworzyć w dev-serwerze z tego worktree: nie ma tu
+  `.env.local`, a `/flo` siedzi za bramką auth. Zamiast tego wyrenderowałem
+  go do statycznego HTML-a na komplecie 12 atrap i obejrzałem — komplet kart
+  się rysuje, długie tytuły i nazwa kontrahenta bez spacji łamią się
+  poprawnie. Ten zrzut nie wchodzi do repozytorium.
+
+Uwagi dla Bartosza:
+- `lib/flo/fixtures.ts` nie ma atrap historii („co FLO zrobił”). Na razie
+  jest tam pusty stan; jak dorobisz `FloHistoryView` albo powiesz, że to ma
+  być ta sama struktura co `FloScheduledView`, podepnę.
+- Windowsowy błąd w `tests/unit/flo-architecture.test.ts` z kroku 1 nadal
+  jest — 4 z 8 testów czerwone przy każdym `vitest run tests/unit/`.
+
+Następny krok: 3 (karta bazowa)
