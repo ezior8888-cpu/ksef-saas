@@ -108,3 +108,17 @@ Uwagi dla Bartosza:
   jest — 4 z 8 testów czerwone przy każdym `vitest run tests/unit/`.
 
 Następny krok: 3 (karta bazowa)
+
+### Sprostowanie do kroków 1–2 (po dociągnięciu `main`)
+
+Pracowałem na gałęzi odbitej od starszego `main` i widziałem tor A na kroku 10.
+Po rebase okazało się, że tor A jest domknięty (krok 56) i wdrożony na
+produkcję, a windowsowy błąd w `tests/unit/flo-architecture.test.ts`, który
+zgłosiłem w kroku 1, jest już naprawiony przez Bartosza. Cały zestaw: 53 pliki,
+965 testów, wszystko zielone.
+
+Co z tego wynika dla toru B: `app/actions/flo.ts` ma komplet akcji
+(`listProposals`, `listScheduled`, `approveProposal`, `dismissProposal`,
+`undoAction`, `cancelScheduled`, `getPrefs`, `savePrefs`). Ekran z kroku 2
+zostaje na atrapach — podmiana to dwie linijki w `page.tsx` — ale karta
+z kroku 3 może od razu wpinać się w prawdziwe akcje, bez czekania na cokolwiek.
