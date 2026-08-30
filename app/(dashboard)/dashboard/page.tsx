@@ -1,537 +1,261 @@
-import { Suspense } from 'react';
-
+import { listProposals, listScheduled } from '@/app/actions/flo';
+import { SectionErrorBoundary } from '@/components/dashboard/section-error-boundary';
+import { FloScreen } from '@/components/flo/flo-screen';
 import {
-  FloDashboardCard,
-  FloDashboardCardSkeleton,
-} from '@/app/(dashboard)/dashboard/_components/flo-card';
-import { createClient } from '@/lib/supabase/server';
-import { DashboardExportsPdfLink } from '@/components/dashboard/exports-route-client';
-
-export const dynamic = 'force-dynamic';
-
-function formatPlMoney(n: number): string {
-  return n.toLocaleString('pl-PL', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function formatPlInt(n: number): string {
-  return n.toLocaleString('pl-PL', { maximumFractionDigits: 0 });
-}
-
-/* ── Geometria wykresu — 1:1 z prototypu ─────────────────────────────────────
- * Płótno 1400×260 skalowane do szerokości karty. `PAD` zostawia miejsce na
- * podpisy osi Y po lewej, `TOP`/dolne 30 px na etykiety miesięcy pod spodem.
- * ────────────────────────────────────────────────────────────────────────── */
-const CHART_W = 1400;
-const CHART_H = 260;
-const CHART_PAD = 40;
-const CHART_TOP = 20;
-const PLOT_W = CHART_W - CHART_PAD * 2;
-const PLOT_H = CHART_H - CHART_TOP - 30;
+  formatPlInt,
+  formatPlMoney,
+  getMonthlyFigures,
+  type MonthlyFigures,
+} from '@/lib/dashboard/monthly-figures';
+import { FLO_FIXTURES, FLO_SCHEDULED_FIXTURES } from '@/lib/flo/fixtures';
+import { isLocalDevEnv } from '@/lib/security/environment';
+import { getPageContext } from '@/lib/supabase/page-context';
+import type { FloProposalView, FloScheduledView } from '@/types/flo';
 
 /**
- * „Ładny” szczyt osi Y: 4 równe kroki, każdy zaokrąglony w górę do 1/2/2.5/5×10ⁿ.
- * Bez tego linie siatki wypadałyby na wartościach typu 47 813 zamiast 50k.
+ * WŁAŚCICIEL: Bartosz (tor silnika) — kompozycja ekranu, nie jego wnętrze.
+ *
+ * DASHBOARD JEST EKRANEM AGENTA (decyzja właściciela produktu, 30.08.2026).
+ * Wcześniej agent mieszkał na osobnej trasie `/flo`, a dashboard pokazywał
+ * skrót. Teraz jest odwrotnie i tak, jak na sierpniowej makiecie: wątek zajmuje
+ * główną kolumnę, a listy pomocnicze stoją z boku. `/flo` przekierowuje tutaj,
+ * żeby nie zerwać linków z powiadomień push, ze ścieżki paragonu i z wątku.
+ *
+ * WNĘTRZE NALEŻY DO MASŁA: `FloScreen` i wszystko, co ono składa
+ * (`components/flo/*`). Ta strona pobiera dane, dokłada kartę z liczbami
+ * miesiąca przez gniazdo `aside` i nie zna środka wątku.
+ *
+ * Nagłówek agenta jest wyłączony (`showHeader={false}`) — panel ma własny
+ * pasek tytułu z „Dashboard” i miesiącem, a dwa nagłówki jeden nad drugim
+ * to szum. Licznik spraw wraca do wątku razem z krokiem 39 Masła.
+ *
+ * Pełna mapa: `docs/flo/UKLAD-DASHBOARDU.md`.
  */
-function niceAxisMax(rawMax: number): number {
-  if (rawMax <= 0) return 4;
-  const target = rawMax / 4;
-  const magnitude = 10 ** Math.floor(Math.log10(target));
-  const step =
-    [1, 2, 2.5, 5, 10]
-      .map((m) => m * magnitude)
-      .find((candidate) => candidate >= target) ?? 10 * magnitude;
-  return step * 4;
-}
-
-/** Podpis linii siatki: powyżej 1000 skracamy do „k”, niżej pokazujemy wprost. */
-function axisLabel(value: number, axisMax: number): string {
-  if (axisMax >= 1000) return `${Math.round(value / 1000)}k`;
-  return String(Math.round(value));
-}
+export const dynamic = 'force-dynamic';
 
 export default async function DashboardHomePage() {
-  const supabase = await createClient();
+  const { supabase, tenantId } = await getPageContext();
 
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfMonthIso = startOfMonth.toISOString().slice(0, 10);
-
-  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevMonthStartIso = prevMonthStart.toISOString().slice(0, 10);
-
-  const [{ data: monthInvoices }, { count: prevIssuedCount }] = await Promise.all([
-    supabase
-      .from('invoices')
-      .select('gross_total, net_total, vat_total, ksef_status')
-      .eq('direction', 'issued')
-      .gte('issue_date', startOfMonthIso),
-    supabase
-      .from('invoices')
-      .select('*', { count: 'exact', head: true })
-      .eq('direction', 'issued')
-      .gte('issue_date', prevMonthStartIso)
-      .lt('issue_date', startOfMonthIso),
+  // Liczby miesiąca są niezależne od agenta — pobierane równolegle, żeby
+  // wolniejsza strona nie czekała na drugą.
+  const [figures, agent] = await Promise.all([
+    getMonthlyFigures(supabase, tenantId),
+    loadAgent(),
   ]);
 
-  const issuedCount = monthInvoices?.length ?? 0;
-  const acceptedCount =
-    monthInvoices?.filter((i) => i.ksef_status === 'accepted').length ?? 0;
-  const pendingCount = Math.max(0, issuedCount - acceptedCount);
-  const totalNet =
-    monthInvoices?.reduce((sum, i) => sum + Number(i.net_total ?? 0), 0) ?? 0;
-  const totalVat =
-    monthInvoices?.reduce((sum, i) => sum + Number(i.vat_total ?? 0), 0) ?? 0;
-  const totalGross =
-    monthInvoices?.reduce((sum, i) => sum + Number(i.gross_total ?? 0), 0) ?? 0;
+  const liczby = <MonthlyFiguresCard figures={figures} />;
 
-  /** 6 miesięcy kalendarzowych jak na osi wykresu (najstarszy = bieżący − 5). */
-  const chartMonths: { key: string; prevKey: string; label: string }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const prevKey = `${d.getFullYear() - 1}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const raw = d
-      .toLocaleDateString('pl-PL', { month: 'short' })
-      .replace(/\./g, '')
-      .trim();
-    const label = raw.charAt(0).toUpperCase() + raw.slice(1);
-    chartMonths.push({ key, prevKey, label });
+  if (!agent.ok) {
+    return (
+      <div className="grid grid-cols-1 items-start gap-4 pb-8 pt-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section
+          role="status"
+          className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-[22px] py-5"
+        >
+          <p className="text-[13px] text-[var(--ff-text-muted)]">
+            Nie mogę teraz sięgnąć po Twoje sprawy. Liczby miesiąca obok są
+            aktualne — spróbuj odświeżyć za chwilę.
+          </p>
+        </section>
+        {liczby}
+      </div>
+    );
   }
-  const chartWindowStartIso = `${chartMonths[0]!.key}-01`;
-  /** To samo okno 6 miesięcy rok wcześniej — szara linia odniesienia. */
-  const prevYearWindowStartIso = `${chartMonths[0]!.prevKey}-01`;
-  const prevYearWindowEndIso = `${chartMonths[0]!.key}-01`;
-
-  const [{ data: yearInvoices }, { data: prevYearInvoices }] = await Promise.all([
-    supabase
-      .from('invoices')
-      .select('gross_total, issue_date')
-      .eq('direction', 'issued')
-      .gte('issue_date', chartWindowStartIso),
-    supabase
-      .from('invoices')
-      .select('gross_total, issue_date')
-      .eq('direction', 'issued')
-      .gte('issue_date', prevYearWindowStartIso)
-      .lt('issue_date', prevYearWindowEndIso),
-  ]);
-
-  const monthlyData = new Map<string, number>();
-  yearInvoices?.forEach((inv) => {
-    const key = inv.issue_date.slice(0, 7);
-    monthlyData.set(
-      key,
-      (monthlyData.get(key) ?? 0) + Number(inv.gross_total ?? 0),
-    );
-  });
-
-  const prevYearMonthly = new Map<string, number>();
-  prevYearInvoices?.forEach((inv) => {
-    const key = inv.issue_date.slice(0, 7);
-    prevYearMonthly.set(
-      key,
-      (prevYearMonthly.get(key) ?? 0) + Number(inv.gross_total ?? 0),
-    );
-  });
-
-  const yStartStr = `${now.getFullYear()}-01-01`;
-  const { data: ytdInvoices } = await supabase
-    .from('invoices')
-    .select('gross_total, issue_date')
-    .eq('direction', 'issued')
-    .gte('issue_date', yStartStr);
-
-  const ytdByMonth = new Map<string, number>();
-  ytdInvoices?.forEach((inv) => {
-    const key = inv.issue_date.slice(0, 7);
-    ytdByMonth.set(
-      key,
-      (ytdByMonth.get(key) ?? 0) + Number(inv.gross_total ?? 0),
-    );
-  });
-  const maxYtdMonthGross = Math.max(0, ...Array.from(ytdByMonth.values()));
-  const isBestYearMo =
-    totalGross > 0 &&
-    maxYtdMonthGross > 0 &&
-    totalGross >= maxYtdMonthGross - 0.01;
-
-  const monthName = startOfMonth.toLocaleDateString('pl-PL', {
-    month: 'long',
-    year: 'numeric',
-  });
-
-  const prevIssued = prevIssuedCount ?? 0;
-  const momPct =
-    prevIssued > 0
-      ? Math.round(((issuedCount - prevIssued) / prevIssued) * 100)
-      : issuedCount > 0
-        ? 100
-        : 0;
-  const momPositive = momPct >= 0;
-
-  const vatDueDate = new Date(now.getFullYear(), now.getMonth() + 1, 25);
-  const vatDueLabel = vatDueDate.toLocaleDateString('pl-PL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-  /** Dni do terminu VAT liczone po dobach kalendarzowych, nie po milisekundach. */
-  const daysToVatDue = Math.max(
-    0,
-    Math.round(
-      (new Date(
-        vatDueDate.getFullYear(),
-        vatDueDate.getMonth(),
-        vatDueDate.getDate(),
-      ).getTime() -
-        new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) /
-        86_400_000,
-    ),
-  );
-
-  const ksefPct =
-    issuedCount > 0
-      ? Math.min(100, Math.round((acceptedCount / issuedCount) * 100))
-      : 0;
-
-  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const currentSeries = chartMonths.map((m) => monthlyData.get(m.key) ?? 0);
-  const prevSeries = chartMonths.map((m) => prevYearMonthly.get(m.prevKey) ?? 0);
-  const hasPrevSeries = prevSeries.some((v) => v > 0);
-  const axisMax = niceAxisMax(Math.max(...currentSeries, ...prevSeries, 0));
-
-  const chartX = (i: number) =>
-    CHART_PAD + (PLOT_W / (chartMonths.length - 1)) * i;
-  const chartY = (v: number) =>
-    CHART_TOP + PLOT_H - (v / axisMax) * PLOT_H;
-  const linePath = (data: number[]) =>
-    data
-      .map((v, i) => `${i ? 'L' : 'M'}${chartX(i).toFixed(1)} ${chartY(v).toFixed(1)}`)
-      .join(' ');
-  const areaPath = (data: number[]) =>
-    `M${chartX(0)} ${CHART_TOP + PLOT_H} ${data
-      .map((v, i) => `L${chartX(i).toFixed(1)} ${chartY(v).toFixed(1)}`)
-      .join(' ')} L${chartX(data.length - 1)} ${CHART_TOP + PLOT_H} Z`;
-
-  const gridFractions = [0, 0.25, 0.5, 0.75, 1];
 
   return (
-    <div className="flex flex-col gap-7 pb-12 pt-9 text-[var(--ff-on-surface)]">
-      <div>
-        <h1 className="text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-          Dashboard
-        </h1>
-        <p className="mt-1.5 text-sm text-[var(--ff-text-muted)]">
-          Zestawienie sprzedaży i podatku VAT · {monthName}
+    <div className="flex flex-col gap-3 pb-8 pt-4">
+      {agent.fixtures ? (
+        <p
+          role="status"
+          className="rounded-xl border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-4 py-2.5 text-[12.5px] text-[var(--ff-warn-text)]"
+        >
+          <strong className="font-semibold text-[var(--ff-warn)]">
+            Dane przykładowe.
+          </strong>{' '}
+          Baza deweloperska nie ma tabel agenta, więc to są atrapy
+          z&nbsp;<code>lib/flo/fixtures.ts</code>, a nie Twoje sprawy. Ten pasek
+          nie może pojawić się na produkcji.
         </p>
+      ) : null}
+
+      <SectionErrorBoundary label="Flo" fallback={liczby}>
+        <FloScreen
+          proposals={agent.proposals}
+          scheduled={agent.scheduled}
+          showHeader={false}
+          aside={liczby}
+        />
+      </SectionErrorBoundary>
+    </div>
+  );
+}
+
+/**
+ * Odczyt agenta odporny na awarię silnika.
+ *
+ * Wyjątek z `listProposals` jest tu ŁAPANY, a nie przepuszczany do granicy
+ * błędu: pobranie dzieje się na poziomie strony, więc rzucony wyjątek przewraca
+ * cały render, zanim granica zdąży się zamontować — sprawdzone na żywo
+ * 30.08.2026, gdy brak tabel FLO w bazie deweloperskiej wygasił cały dashboard.
+ *
+ * Zwracamy `ok: false`, a NIE pustą listę. Pusta lista znaczy „nie masz nic do
+ * zrobienia” i byłaby kłamstwem w chwili, gdy agent po prostu nie odpowiada —
+ * cisza jest stanem zabronionym (własność W5 planu FLO).
+ */
+type AgentData =
+  | {
+      ok: true;
+      proposals: FloProposalView[];
+      scheduled: FloScheduledView[];
+      /** true = na ekranie są atrapy, nie dane klienta. */
+      fixtures: boolean;
+    }
+  | { ok: false };
+
+async function loadAgent(): Promise<AgentData> {
+  try {
+    const [proposals, scheduled] = await Promise.all([
+      listProposals(),
+      listScheduled(),
+    ]);
+    return { ok: true, proposals, scheduled, fixtures: false };
+  } catch (blad) {
+    console.error('[dashboard] odczyt agenta nieudany:', blad);
+
+    /**
+     * AWARYJNE PRZEJŚCIE NA ATRAPY — TYLKO NA MASZYNIE DEWELOPERA.
+     *
+     * Baza deweloperska (Supabase Cloud, pozostałość po erze Vercela) nie ma
+     * tabel FLO i nikt nie ma już do niej hasła, więc bez tego ani tor B, ani
+     * tor A nie widzi interfejsu agenta na oczy. Atrapy pokrywają wszystkie
+     * sześć wariantów karty i cztery typy podglądu.
+     *
+     * BEZPIECZNIK JEST FAIL-CLOSED: `isLocalDevEnv()` wymaga
+     * `NODE_ENV === 'development'` ORAZ braku jakiegokolwiek markera produkcji.
+     * Build produkcyjny ustawia `NODE_ENV=production`, więc na Hetznerze ta
+     * gałąź nie ma jak się wykonać, nawet gdyby zmienne środowiskowe zniknęły.
+     *
+     * Na produkcji awaria zostaje awarią i klient dostaje uczciwy komunikat —
+     * pokazanie mu cudzych przykładowych faktur jako własnych spraw byłoby
+     * znacznie gorsze niż pusty ekran.
+     */
+    if (isLocalDevEnv()) {
+      return {
+        ok: true,
+        proposals: FLO_FIXTURES,
+        scheduled: FLO_SCHEDULED_FIXTURES,
+        fixtures: true,
+      };
+    }
+
+    return { ok: false };
+  }
+}
+
+/** Karta „liczby miesiąca” — góra prawej kolumny, jak na makiecie. */
+function MonthlyFiguresCard({ figures }: { figures: MonthlyFigures }) {
+  return (
+    <section className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-4 py-4">
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-[var(--ff-text-muted)]">
+        {figures.monthName}
+      </h2>
+
+      <dl className="mt-3.5 flex flex-col gap-3.5">
+        <StatRow
+          icon="description"
+          label="Wystawione faktury"
+          sublabel={
+            figures.hasPrevMonth
+              ? `Poprzedni miesiąc: ${formatPlInt(figures.prevIssuedCount)}`
+              : 'Pierwszy miesiąc'
+          }
+          value={formatPlInt(figures.issuedCount)}
+          accent
+        />
+        <StatRow
+          icon="check_circle"
+          label="Przyjęte przez KSeF"
+          sublabel={`${formatPlInt(figures.pendingCount)} oczekuje`}
+          value={formatPlInt(figures.acceptedCount)}
+          accent
+        />
+        <StatRow
+          icon="credit_card"
+          label="VAT należny"
+          sublabel="JPK_V7"
+          value={formatPlMoney(figures.totalVat)}
+          tone="warn"
+        />
+        <StatRow
+          icon="trending_up"
+          label="Sprzedaż brutto"
+          sublabel={
+            figures.isBestMonthOfYear
+              ? 'Najlepszy wynik w roku'
+              : figures.hasPrevMonth
+                ? `${figures.momGrossPct >= 0 ? '+' : ''}${figures.momGrossPct}% m/m`
+                : 'Pierwszy miesiąc ze sprzedażą'
+          }
+          value={formatPlMoney(figures.totalGross)}
+        />
+      </dl>
+
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-[var(--ff-border)] pt-3.5">
+        <span className="text-[12.5px] font-medium text-[var(--ff-text-soft)]">
+          Termin VAT · {figures.vatDueLabel}
+        </span>
+        <span className="shrink-0 rounded-full bg-[var(--ff-warn-tint)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ff-warn)]">
+          {figures.daysToVatDue} {figures.daysToVatDue === 1 ? 'dzień' : 'dni'}
+        </span>
       </div>
+    </section>
+  );
+}
 
-      {/* Agent stoi nad liczbami, bo to on ma coś do powiedzenia dzisiaj —
-          reszta dashboardu podsumowuje miesiąc. W `Suspense`, żeby jego
-          zapytanie nie opóźniało wykresu ani KPI. */}
-      <Suspense fallback={<FloDashboardCardSkeleton />}>
-        <FloDashboardCard />
-      </Suspense>
+/** Wiersz szyny: ikona, etykieta z podetykietą, liczba po prawej. */
+function StatRow({
+  icon,
+  label,
+  sublabel,
+  value,
+  accent = false,
+  tone,
+}: {
+  icon: string;
+  label: string;
+  sublabel: string;
+  value: string;
+  accent?: boolean;
+  tone?: 'warn';
+}) {
+  const valueColor =
+    tone === 'warn'
+      ? 'text-[var(--ff-warn)]'
+      : accent
+        ? 'text-[var(--ff-accent)]'
+        : 'text-[var(--ff-text-strong)]';
 
-      {/* KPI — cztery karty w jednym rzędzie, jak w prototypie */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-[14px] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-[22px]">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-[var(--ff-surface-chip)] text-[var(--ff-text-muted)]">
-              <span className="material-symbols-outlined text-[20px]">
-                description
-              </span>
-            </div>
-            <div className="text-[11px] font-semibold uppercase leading-[1.3] tracking-[0.06em] text-[var(--ff-text-muted)]">
-              Wystawione faktury
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-[32px] font-bold leading-none tracking-[-0.02em] text-[var(--ff-text-strong)] tabular-nums">
-              {formatPlInt(issuedCount)}
-            </span>
-          </div>
-          <p className="mt-3 text-xs text-[var(--ff-text-dim)]">
-            <span
-              className={
-                momPositive
-                  ? 'font-semibold text-[var(--ff-accent)]'
-                  : 'font-semibold text-[var(--ff-danger)]'
-              }
-            >
-              <span className="material-symbols-outlined mr-0.5 align-middle text-[12px]">
-                {momPositive ? 'trending_up' : 'trending_down'}
-              </span>
-              {momPositive ? '+' : ''}
-              {momPct}%
-            </span>{' '}
-            vs. poprzedni miesiąc: {formatPlInt(prevIssued)}
-          </p>
-        </div>
-
-        <div className="rounded-[14px] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-[22px]">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-[var(--ff-surface-chip)] text-[var(--ff-text-muted)]">
-              <span className="material-symbols-outlined text-[20px]">
-                check_circle
-              </span>
-            </div>
-            <div className="text-[11px] font-semibold uppercase leading-[1.3] tracking-[0.06em] text-[var(--ff-text-muted)]">
-              Zaakceptowane przez KSeF
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-[32px] font-bold leading-none tracking-[-0.02em] text-[var(--ff-text-strong)] tabular-nums">
-              {formatPlInt(acceptedCount)}
-            </span>
-          </div>
-          <p className="mt-3 text-xs text-[var(--ff-text-dim)]">
-            z {formatPlInt(issuedCount)} wystawionych · {formatPlInt(pendingCount)}{' '}
-            oczekuje
-          </p>
-          <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-[var(--ff-surface-chip)]">
-            <div
-              className="h-full rounded-full bg-[var(--ff-accent)]"
-              style={{ width: `${ksefPct}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="rounded-[14px] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-[22px]">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-[var(--ff-surface-chip)] text-[var(--ff-text-muted)]">
-              <span className="material-symbols-outlined text-[20px]">
-                credit_card
-              </span>
-            </div>
-            <div className="text-[11px] font-semibold uppercase leading-[1.3] tracking-[0.06em] text-[var(--ff-text-muted)]">
-              VAT należny
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-[32px] font-bold leading-none tracking-[-0.02em] text-[var(--ff-text-strong)] tabular-nums">
-              {formatPlMoney(totalVat)}
-            </span>
-            <span className="text-sm font-medium text-[var(--ff-text-dim)]">
-              PLN
-            </span>
-          </div>
-          <p className="mt-3 text-xs font-medium text-[var(--ff-warn)]">
-            Termin: {vatDueLabel}
-          </p>
-        </div>
-
-        <div className="rounded-[14px] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-[22px]">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-[var(--ff-surface-chip)] text-[var(--ff-text-muted)]">
-              <span className="material-symbols-outlined text-[20px]">
-                trending_up
-              </span>
-            </div>
-            <div className="text-[11px] font-semibold uppercase leading-[1.3] tracking-[0.06em] text-[var(--ff-text-muted)]">
-              Sprzedaż brutto
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-[32px] font-bold leading-none tracking-[-0.02em] text-[var(--ff-text-strong)] tabular-nums">
-              {formatPlMoney(totalGross)}
-            </span>
-            <span className="text-sm font-medium text-[var(--ff-text-dim)]">
-              PLN
-            </span>
-          </div>
-          {isBestYearMo ? (
-            <p className="mt-3 flex items-center gap-1 text-xs font-medium text-[var(--ff-accent)]">
-              <span className="material-symbols-outlined text-[12px]">
-                arrow_upward
-              </span>
-              Najlepszy wynik w roku
-            </p>
-          ) : (
-            <p className="mt-3 text-xs text-[var(--ff-text-dim)]">
-              Suma brutto bieżącego miesiąca
-            </p>
-          )}
-        </div>
+  return (
+    <div className="flex items-center gap-2.5">
+      <span
+        className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-[var(--ff-surface-chip)] text-[var(--ff-text-muted)]"
+        aria-hidden
+      >
+        <span className="material-symbols-outlined text-[18px]">{icon}</span>
+      </span>
+      <div className="min-w-0 flex-1">
+        <dt className="truncate text-[13px] font-medium text-[var(--ff-text-soft)]">
+          {label}
+        </dt>
+        <dd className="truncate text-[11.5px] text-[var(--ff-text-dim)]">
+          {sublabel}
+        </dd>
       </div>
-
-      {/* Podsumowanie VAT */}
-      <div className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-8 py-[30px]">
-        <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold text-[var(--ff-text-strong)]">
-              Podsumowanie podatku VAT
-            </h2>
-            <p className="mt-1.5 text-[13px] text-[var(--ff-text-muted)]">
-              {monthName} · deklaracja JPK_V7
-            </p>
-          </div>
-          <DashboardExportsPdfLink />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3">
-          <div className="md:pr-7">
-            <div className="mb-2.5 text-xs font-semibold uppercase tracking-[0.05em] text-[var(--ff-text-muted)]">
-              Netto
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[30px] font-bold leading-none text-[var(--ff-text-strong)] tabular-nums">
-                {formatPlMoney(totalNet)}
-              </span>
-              <span className="text-sm text-[var(--ff-text-dim)]">PLN</span>
-            </div>
-          </div>
-          <div className="mt-6 md:mt-0 md:border-l md:border-[var(--ff-border)] md:px-7">
-            <div className="mb-2.5 text-xs font-semibold uppercase tracking-[0.05em] text-[var(--ff-text-muted)]">
-              VAT należny
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[30px] font-bold leading-none text-[var(--ff-warn)] tabular-nums">
-                {formatPlMoney(totalVat)}
-              </span>
-              <span className="text-sm text-[var(--ff-text-dim)]">PLN</span>
-            </div>
-          </div>
-          <div className="mt-6 md:mt-0 md:border-l md:border-[var(--ff-border)] md:px-7">
-            <div className="mb-2.5 text-xs font-semibold uppercase tracking-[0.05em] text-[var(--ff-text-muted)]">
-              Brutto
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[30px] font-bold leading-none text-[var(--ff-text-strong)] tabular-nums">
-                {formatPlMoney(totalGross)}
-              </span>
-              <span className="text-sm text-[var(--ff-text-dim)]">PLN</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 flex items-center gap-2.5 rounded-[10px] border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-4 py-3 text-[13px] text-[var(--ff-warn)]">
-          <span className="material-symbols-outlined text-[16px] leading-none">
-            error
-          </span>
-          <span>
-            Termin płatności VAT: <strong className="font-semibold">{vatDueLabel}</strong>{' '}
-            — pozostało {daysToVatDue}{' '}
-            {daysToVatDue === 1 ? 'dzień' : 'dni'}
-          </span>
-        </div>
-      </div>
-
-      {/* Wykres sprzedaży */}
-      <div className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-8 py-[30px]">
-        <div className="mb-2 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold text-[var(--ff-text-strong)]">
-              Sprzedaż w ostatnich 6 miesiącach
-            </h2>
-            <p className="mt-1.5 text-[13px] text-[var(--ff-text-muted)]">
-              Sumaryczna kwota brutto wystawionych faktur
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <span className="flex items-center gap-1.5 rounded-full bg-[#182029] px-3 py-1.5 text-xs text-[var(--ff-text)]">
-              <span className="size-2 shrink-0 rounded-full bg-[var(--ff-accent)]" />
-              {now.getFullYear()}
-            </span>
-            <span className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[var(--ff-text-dim)]">
-              <span className="size-2 shrink-0 rounded-full bg-[#3a4452]" />
-              {now.getFullYear() - 1}
-            </span>
-          </div>
-        </div>
-
-        {currentSeries.every((v) => v === 0) ? (
-          <p className="mt-4 text-center text-xs text-[var(--ff-text-dim)]">
-            Brak faktur w tym okresie — oś pokazuje skalę miesięcy
-          </p>
-        ) : null}
-
-        <div className="mt-5">
-          <svg
-            viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-            width="100%"
-            className="block overflow-visible"
-            role="img"
-            aria-label="Wykres sprzedaży brutto ostatnich 6 miesięcy"
-          >
-            <defs>
-              <linearGradient id="ff-dash-area" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#34d399" stopOpacity="0.22" />
-                <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-
-            {gridFractions.map((f) => {
-              const gy = CHART_TOP + PLOT_H - f * PLOT_H;
-              return (
-                <g key={f}>
-                  <line
-                    x1={CHART_PAD}
-                    y1={gy}
-                    x2={CHART_W - CHART_PAD}
-                    y2={gy}
-                    stroke="#1c2230"
-                    strokeWidth="1"
-                  />
-                  <text
-                    x={CHART_PAD - 10}
-                    y={gy + 4}
-                    textAnchor="end"
-                    fill="#5b6472"
-                    fontSize="11"
-                    className="font-mono"
-                  >
-                    {axisLabel(f * axisMax, axisMax)}
-                  </text>
-                </g>
-              );
-            })}
-
-            <path d={areaPath(currentSeries)} fill="url(#ff-dash-area)" />
-            {hasPrevSeries ? (
-              <path
-                d={linePath(prevSeries)}
-                fill="none"
-                stroke="#3a4452"
-                strokeWidth="2"
-                strokeDasharray="5 5"
-              />
-            ) : null}
-            <path
-              d={linePath(currentSeries)}
-              fill="none"
-              stroke="#34d399"
-              strokeWidth="2.5"
-            />
-            {currentSeries.map((v, i) => (
-              <circle
-                key={chartMonths[i]!.key}
-                cx={chartX(i)}
-                cy={chartY(v)}
-                r={4}
-                fill="#12171f"
-                stroke="#34d399"
-                strokeWidth="2"
-              />
-            ))}
-            {chartMonths.map((m, i) => (
-              <text
-                key={m.key}
-                x={chartX(i)}
-                y={CHART_H - 6}
-                textAnchor="middle"
-                fill={m.key === currentMonthKey ? '#34d399' : '#6b7585'}
-                fontSize="12"
-              >
-                {m.label}
-              </text>
-            ))}
-          </svg>
-        </div>
-      </div>
+      <span
+        className={`shrink-0 text-[17px] font-semibold tabular-nums ${valueColor}`}
+      >
+        {value}
+      </span>
     </div>
   );
 }

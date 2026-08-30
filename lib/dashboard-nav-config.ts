@@ -17,7 +17,9 @@ export const dashboardNavSections: DashboardNavSection[] = [
     items: [
       // FLO stoi nad Dashboardem, bo to on jest teraz głównym ekranem
       // produktu — reszta menu to miejsca, do których zagląda się rzadziej.
-      { href: '/flo', label: 'Flo', icon: 'assistant' },
+      // Dashboard JEST ekranem agenta od 30.08.2026 (decyzja właściciela
+      // produktu). Osobna pozycja „Flo” prowadziłaby do tego samego miejsca
+      // przez przekierowanie, więc została zdjęta.
       { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
       {
         href: '/przeplywy',

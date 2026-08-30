@@ -4,6 +4,7 @@ import { signOut } from '../(auth)/login/actions';
 import DashboardOrgHeader, {
   OrgSwitcherHeaderSkeleton,
 } from '@/app/(dashboard)/_components/dashboard-org-header';
+import { DashboardPageHeading } from '@/app/(dashboard)/_components/dashboard-page-heading';
 import DashboardVerificationBanner from '@/app/(dashboard)/_components/dashboard-verification-banner';
 import { KsefHealthBanner } from '@/app/(dashboard)/_components/ksef-health-banner';
 import { MobileNav } from '@/components/dashboard/mobile-nav';
@@ -61,18 +62,15 @@ export default async function DashboardLayout({
 
   return (
     <div className="ff-dashboard relative flex h-screen min-h-0 overflow-hidden text-[var(--ff-on-surface)]">
-      <div className="ff-mesh-gradient" aria-hidden />
-      <div className="ff-orb-tr" aria-hidden />
-      <div className="ff-orb-bl" aria-hidden />
-
       <Sidebar />
 
       <main className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="ff-shell-header sticky top-0 z-40 flex h-20 w-full shrink-0 items-center justify-between gap-3 px-4 sm:px-[var(--ff-container-padding)]">
-          <div className="flex shrink-0 items-center lg:min-w-0">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="lg:hidden">
               <MobileNav />
             </div>
+            <DashboardPageHeading />
           </div>
           <div className="flex min-w-0 shrink-0 items-center justify-end gap-2 sm:gap-3">
             <Suspense fallback={<OrgSwitcherHeaderSkeleton />}>

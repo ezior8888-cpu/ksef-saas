@@ -17,7 +17,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 const { FloPhotoBanner } = await import(
-  '@/app/(dashboard)/flo/_components/flo-photo-banner'
+  '@/components/flo/flo-photo-banner'
 );
 
 function render(params: string, latestExpenseAt: string | null = null) {

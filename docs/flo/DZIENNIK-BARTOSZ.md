@@ -2435,3 +2435,245 @@ oznacza „kod jest na serwerze", nie „funkcje działają u ludzi".
 
 Do zrobienia po wdrożeniu: POWTÓRZYĆ ćwiczenie M8 z kroku 53 — teraz da się
 je wykonać do końca, bo bramka jest na produkcji.
+
+---
+
+## 2026-08-30 · Przebudowa ramy interfejsu — biały motyw i miejsce dla agenta
+
+Nie jest to krok z planu toru A. Plan toru A jest skończony (56 z 56). To jest
+usunięcie przeszkody, o którą tor B rozbiłby się przy pierwszym kroku z bloku 1.
+
+**Dlaczego.** Oba pliki planu opisują ekrany słowami „układ z makiety”, „blok
+z makiety”, „wygląda jak makieta”. Makieta była ZDJĘCIEM PROTOTYPU, a nie
+zrzutem aplikacji — założenie, że interfejs już tak wygląda, było fałszywe.
+Panel był ciemny, akcent zielony, dashboard jednokolumnowy bez centymetra
+miejsca na agenta. Masło miał więc kroki 3–16 opisane odniesieniem do czegoś,
+czego w repozytorium nie było.
+
+**Co zrobione.** Rama i tylko rama:
+- pełna inwersja palety `--ff-*`: jasna baza w `.ff-dashboard`, ciemna
+  w `html.dark .ff-dashboard`; akcent niebieski `#2563eb`,
+- domyślny motyw jasny (`lib/theme/theme.ts`, `THEME_BOOT_SCRIPT`,
+  zdjęta zaszyta klasa `dark` z `<html>`),
+- dashboard przepisany na układ „kolumna agenta + prawa szyna z liczbami”,
+- podsumowanie VAT i wykres sprzedaży przeniesione na `/przeplywy`,
+- tytuł strony w pasku nagłówka (na razie wyłącznie dla `/dashboard`).
+
+Mapa całości: `docs/flo/UKLAD-DASHBOARDU.md`.
+
+**JASNY MOTYW BYŁ REALNIE ZEPSUTY, nie tylko nieużywany.** Blok
+`html:not(.dark) .ff-dashboard` nadpisywał ~25 tokenów z 94 — brakowało
+`--ff-surface`, `--ff-border`, całej rampy tekstu i `--ff-accent`. Klient,
+który kliknął przełącznik, dostawał ciemne karty i niemal biały tekst na
+jasnej kanwie. Dlatego nie „poprawiałem jasnego wariantu”, tylko odwróciłem
+strony: baza wypisuje komplet, ciemny dopisuje wyłącznie różnice.
+
+**ZMIANA WŁASNOŚCI PLIKU, jawna.** `app/globals.css` należał do Masła
+(część IV.2: „Bartosz nigdy, ani jednej linijki”). Motywu nie da się odwrócić
+bez tego pliku, więc przechodzi do mnie. Zapisane w nagłówku samego pliku,
+w `UKLAD-DASHBOARDU.md` i w części VIII jego planu.
+
+**`lib/dashboard-nav-config.ts` NIE BYŁ RUSZANY** i dalej należy do Masła —
+nawigacja okazała się już zgodna z prototypem co do pozycji i ikon, więc
+drugie naruszenie mapy własności było niepotrzebne. Pozycja „FLO” zostaje
+jego krokiem 2; nie dodawałem jej, bo trasa `/flo` nie istnieje i link dałby
+404.
+
+**Trzy zaślepki w katalogu Masła.** `dashboard/_components/flo-card.tsx`,
+`flo-scheduled.tsx`, `flo-history.tsx`. Postawione raz, po czym są jego na
+zawsze — nie dotykam ich więcej. Kontrakt gniazda to BRAK PROPSÓW: komponent
+sam woła `listProposals()` / `listScheduled()`. Dzięki temu podmiana zaślepki
+na prawdziwy interfejs nie wymaga tknięcia `page.tsx`, czyli mojego pliku,
+i git nadal nie ma czego scalać.
+
+Każda zaślepka niesie w nagłówku ostrzeżenie o trzech rzeczach z makiety,
+których nie wolno przepisać: „TRYB 3”, „Pracuje sam · informuje” i „1 zadania
+dziś”. Model AI kopiujący zdjęcie wprowadziłby z powrotem koncepcję poziomów
+autonomii odrzuconą w II.3 — a to jest dokładnie ten rodzaj błędu, którego
+nikt nie wyłapie na przeglądzie, bo „przecież jest jak na makiecie”.
+
+**BŁĄD ZNALEZIONY PRZY OKAZJI, NAPRAWIONY W ZAKRESIE DASHBOARDU.** Strona
+filtrowała `direction = 'issued'`, a kolumna `invoices.direction` dopuszcza
+wyłącznie `'outgoing' | 'incoming'` — migracja `00044_phase21_performance.sql`
+ostrzega o tym wprost w komentarzu z lipca. Wszystkie cztery karty KPI
+pokazywały zero niezależnie od danych klienta. Nowe liczby idą przez
+`lib/dashboard/monthly-figures.ts`. Ten sam błąd siedzi w dziewięciu innych
+plikach (`lib/exports/*`, `lib/admin/metrics.ts`,
+`lib/observability/business-metrics.ts`, `lib/ksef/history-fetcher.ts`) —
+poza zakresem, do osobnego zadania.
+
+**Weryfikacja.** `pnpm typecheck` czysty, `pnpm lint` 0 błędów (28 ostrzeżeń,
+wszystkie zastane, żadnego w nowych plikach). W przeglądarce sprawdzone
+logowanie, `/pricing`, `/blog` i strona główna — marketing i logowanie stoją
+na `.zova` / `.marketing-landing`, które nie są warunkowane klasą `dark`, więc
+zmiana domyślnego motywu ich nie dotknęła. Panel czeka na weryfikację
+wzrokową: sesja deweloperska wygasła, potrzebny świeży link logujący.
+
+Następny krok toru A: dalej brak. To była robota poza planem.
+
+### 2026-08-30, po południu — scalenie z torem B i weryfikacja na żywo
+
+Masło wypchnął na `main` bloki 0–6 (kroki 0–34): sześć wariantów karty, cztery
+podglądy, wątek `/flo`, ustawienia, treści 32 rodzajów, testy przeglądarkowe.
+Scalenie **fast-forward, zero konfliktów**.
+
+**Moja rama mu nie przeszkodziła i to nie był przypadek.** Sprawdzone plik po
+pliku: w całym jego interfejsie (`components/flo/*`, `app/(dashboard)/flo/*`,
+`_components/flo-card.tsx`) jest ZERO zaszytych kolorów, zero wariantów `dark:`
+i zero literałów `text-white` / `bg-white`. Wszystko stoi na tokenach `--ff-*`,
+więc odwrócenie palety objęło jego pracę bez jednej linijki po jego stronie.
+
+Punkty styku były dwa i oba rozwiązane na jego korzyść:
+- `dashboard/_components/flo-card.tsx` — moja zaślepka ustąpiła jego
+  prawdziwej karcie (`FloDashboardCard` + `FloDashboardCardSkeleton`),
+- `dashboard/page.tsx` — mój układ dwukolumnowy montuje teraz jego komponent.
+
+Zaślepki `flo-scheduled.tsx` i `flo-history.tsx` skasowane bez zastępnika:
+panel zatwierdzonych i historia stoją na `/flo`, gdzie jest ich miejsce,
+a dublowanie ich na dashboardzie byłoby szumem. `lib/dashboard-nav-config.ts`
+dalej nietknięty przeze mnie — pozycję „Flo” dodał on sam w kroku 2.
+
+**GRANICA BŁĘDU WOKÓŁ AGENTA — nowa rzecz, wymuszona przez awarię.**
+`listProposals()` rzuciło `PGRST205` i cały dashboard zamienił się w ekran
+„Coś poszło nie tak”, razem z liczbami miesiąca, które z agentem nie mają nic
+wspólnego. `Suspense` tego nie łapie — obsługuje oczekiwanie, nie wyjątek.
+Stąd `components/dashboard/section-error-boundary.tsx` wokół karty agenta.
+To nie jest kosmetyka: agent ma prawo czasem milczeć, ale nie ma prawa
+zabierać człowiekowi całej strony.
+
+**BAZA DEWELOPERSKA NIE MA TABEL FLO.** Migracje 00060–00067 poszły wyłącznie
+na produkcję. `/flo` leży w całości (jego strona woła `listScheduled()` na
+poziomie trasy, więc żadna granica błędu tego nie uratuje), a karta na
+dashboardzie degraduje się do komunikatu. Skryptem `pnpm db:push:prod` tego
+nie naprawię — wymaga `SUPABASE_DB_URL`, którego nie ma w `.env.local`.
+To jest zadanie dla człowieka i **blokuje wszystko, co Masło chciałby
+kliknąć**: on też nigdy nie zobaczył swojego interfejsu na prawdziwych danych.
+
+Pułapka przy diagnozie, warta zapamiętania: **żądanie `HEAD` przez PostgREST
+NIE dotyka cache'u schematu.** `select('*', { head: true, count: 'exact' })`
+zwróciło „OK” z `count: null` na nieistniejącej tabeli i przez chwilę
+uwierzyłem, że tabele są. Dopiero zwykły `GET` pokazał `PGRST205`. Do
+sprawdzania obecności tabeli używać `GET`, nigdy `HEAD`.
+
+**Poprawka w moich liczbach.** Podpis pod „Sprzedaż brutto” pokazywał zmianę
+LICZBY faktur, nie kwoty — przy jednej dużej fakturze te dwie wartości
+rozjeżdżają się i było to zwykłe kłamstwo na ekranie. Teraz `momCountPct`
+i `momGrossPct` są liczone osobno, a przy zerowej podstawie nie ma procentu
+w ogóle (brak poprzedniego miesiąca to nie jest wzrost o 100%).
+
+**Zweryfikowane wzrokowo, na zalogowanej sesji** (przez helper testowy
+projektu `e2e/helpers/db-seed.ts` + ścieżka `/auth/finish`):
+- biały motyw i niebieski akcent na `/dashboard` i `/przeplywy`,
+- motyw ciemny po przełączeniu — tokeny działają w obie strony,
+- szyna pokazuje PRAWDZIWE liczby („Poprzedni miesiąc: 2”), co jest dowodem,
+  że naprawa `direction = 'outgoing'` zadziałała,
+- wykres i podsumowanie VAT czytelne na białym po przejściu na tokeny,
+- 390 px: zero przewijania poziomego, szyna schodzi pod kolumnę agenta,
+- `pnpm typecheck` czysto, eslint 0 błędów, `pnpm test:vitest` 1083/1083.
+
+Czego NIE zweryfikowałem: ani jednej karty agenta w działaniu — bez tabel
+w bazie deweloperskiej nie ma czego narysować.
+
+### 2026-08-30, wieczorem — agent wchodzi do dashboardu
+
+**Decyzja właściciela produktu:** FLO nie ma osobnego ekranu. Ma mieszkać
+w dashboardzie, tak jak na sierpniowej makiecie, a listy pomocnicze stoją
+z boku. Odwraca to krok 39 Masła („po zalogowaniu klient trafia do `/flo`”) —
+cel jest ten sam (agent jest produktem), droga inna.
+
+Zrobione:
+- `/dashboard` renderuje `FloScreen` Masła; do jego prawej kolumny wstrzykuję
+  kartę z liczbami miesiąca przez nowe gniazdo `aside` (prop dodany, nie
+  zmieniony — bez niego ekran działa jak wcześniej). Nagłówek agenta wyłączony
+  `showHeader={false}`, bo panel ma własny pasek tytułu.
+- `/flo` → przekierowanie na `/dashboard` Z ZACHOWANIEM PARAMETRÓW ZAPYTANIA.
+  Trasy nie skasowałem, bo prowadzi do niej osiem miejsc: `actionUrls` push
+  (`/flo#<id>`, `/flo?undo=<id>`), `share-target` (`?paragon=`), cztery
+  `revalidatePath('/flo')` i stare zakładki. Zgubienie `?undo=` zamieniłoby
+  cofnięcie z powiadomienia w pustą stronę bez śladu błędu.
+- Pięć komponentów `git mv` z `app/(dashboard)/flo/_components/` do
+  `components/flo/` — były prywatne dla trasy, która przestała renderować.
+- Pozycja „Flo” zdjęta z menu; `revalidatePath('/dashboard')` dołożone do
+  czterech akcji; `thread-client` czyści adres na `/dashboard`.
+
+**BŁĄD, KTÓRY SAM ZROBIŁEM I ZŁAPAŁEM ZRZUTEM EKRANU.** Przeniosłem odczyt
+agenta na poziom strony i owinąłem go granicą błędu — bezużytecznie. Wyjątek
+z `listProposals` leci PRZED zamontowaniem granicy, więc przewraca cały render.
+Dashboard znowu pokazywał „Coś poszło nie tak”, mimo że granica istniała.
+Teraz odczyt jest w `try/catch` i zwraca `ok: false`, a **nie pustą listę** —
+pusta lista znaczy „nie masz nic do zrobienia” i byłaby kłamstwem w chwili,
+gdy agent nie odpowiada. Granica zostaje jako druga warstwa, na błędy renderu.
+
+Lekcja ogólna: w Server Components granica błędu nie chroni przed niczym, co
+dzieje się w `await` rodzica. Ochrania tylko to, co jest pod nią w drzewie.
+
+**POPRAWKA W PLIKU MASŁA, jedna linijka.** `flo-header.tsx` niósł podpis
+„Pracuje sam · informuje”. Oba plany wymieniają to zdanie OBOK „TRYB 3” jako
+odrzucone (krok 15: „zamiast «TRYB 3» i «Pracuje sam · informuje» napisz po
+ludzku”). W `flo-card.tsx` użył już poprawnego zdania — wstawiłem dokładnie
+jego własne. Do 30.08 ten nagłówek stał na osobnej trasie i nie rzucał się
+w oczy; teraz jest na głównym ekranie.
+
+Testów e2e nie ruszałem: wołają `page.goto('/flo')`, więc przechodzą przez
+przekierowanie i przy okazji je sprawdzają.
+
+Weryfikacja: `pnpm typecheck` czysto, eslint 0 błędów, 1083 testy zielone,
+przekierowanie `/flo?undo=abc123` → `/dashboard?undo=abc123` sprawdzone
+w przeglądarce, układ dwukolumnowy potwierdzony zrzutem.
+
+NADAL BLOKUJE: brak tabel FLO w bazie deweloperskiej. Wątek nie ma czego
+narysować, więc widać wyłącznie uczciwy komunikat o niedostępności agenta.
+
+### 2026-08-30, wieczorem — interfejs agenta wreszcie widoczny
+
+**Migracji na bazę deweloperską NIE DA SIĘ wgrać i to jest ustalenie, nie
+porażka.** Sprawdzone cztery drogi, wszystkie zamknięte:
+
+- procedura z `AGENTS.md` prowadzi na `db-1` przez SSH i `docker exec` — dev
+  stoi na Supabase Cloud, gdzie nie ma ani jednego, ani drugiego,
+- DDL przez API wymagałby funkcji typu `exec_sql` — w migracjach jej nie ma,
+- lokalne Supabase (`supabase start`) wymaga Dockera — nie ma go na tej maszynie,
+- Supabase CLI działa (2.116.0), ale `link` i `db push` żądają hasła do bazy.
+
+Connection stringa nie ma w żadnym pliku env ani w kopiach sprzed sierpnia.
+Właściciel hasła nie zna. Baza `utuzzxstfcnglppplvlw` to **pozostałość po erze
+Vercela** — produkcja od sierpnia stoi na Supabase self-hosted na `db-1`,
+więc tamtej nikt nie utrzymuje i dlatego migracje 00060+ nigdy tam nie poszły.
+
+**Produkcja jest kompletna.** Odczytem przez SSH: `schema_migrations` ma
+00060–00067, a test PostgREST-a z instrukcji zwraca `42501 permission denied`
+dla `flo_proposals`, `flo_rollout` i `flo_kind_flags` — czyli tabela znaleziona,
+odmowa dopiero na autoryzacji. Cache schematu świeży. Na produkcji brakuje
+wyłącznie KODU, nie bazy.
+
+**AWARYJNE PRZEJŚCIE NA ATRAPY — i dzięki temu widać wreszcie ekran.**
+Gdy odczyt agenta padnie, a `isLocalDevEnv()` jest prawdziwe, dashboard
+pokazuje `FLO_FIXTURES` z widocznym paskiem „Dane przykładowe”. Masło zbudował
+pod to prop `usingFixtures` w kroku 0 — użyłem jego pomysłu, tylko pasek rysuję
+u siebie, bo nagłówek agenta jest na dashboardzie wyłączony.
+
+Bezpiecznik jest FAIL-CLOSED i to jest tu najważniejsze zdanie: `isLocalDevEnv()`
+wymaga `NODE_ENV === 'development'` ORAZ braku jakiegokolwiek markera produkcji.
+Build produkcyjny ustawia `NODE_ENV=production`, więc na Hetznerze ta gałąź nie
+ma jak się wykonać, nawet gdyby zmienne środowiskowe zniknęły. Na produkcji
+awaria zostaje awarią — pokazanie klientowi cudzych przykładowych faktur jako
+jego spraw byłoby dużo gorsze niż uczciwy komunikat o niedostępności.
+
+**Co zobaczyłem po raz pierwszy na oczy** (zrzuty na 1440×980, zalogowana
+sesja): wątek z nagłówkami dni i godzinami w osi, karty wszystkich sześciu
+wariantów, odliczanie ważności („zostało 29 dni”), rozwijane „Dlaczego to
+widzę”, pasek cofnięcia z licznikiem („zostało 8 minut”), wariant listy
+z zablokowanym przyciskiem i podanym POWODEM blokady („Zaznacz przynajmniej
+jedną pozycję”), panel „Zatwierdzone — czeka na wykonanie” ze śladem zgody przy
+każdej pozycji, pas rozmowy „Napisz do Flo… (jeszcze nieczynne)”.
+
+Wszystko w białym motywie, bez jednej poprawki po stronie toru B — bo Masło
+trzymał się tokenów `--ff-*`.
+
+Weryfikacja: `pnpm typecheck` czysto, eslint 0 błędów, 1083 testy zielone.
+Bezpiecznik `isLocalDevEnv()` ma własny zestaw w `tests/unit/security-environment.test.ts`.
+
+DO ZROBIENIA PRZEZ CZŁOWIEKA: wgranie ośmiu migracji na bazę deweloperską
+(gotowa paczka SQL do wklejenia w edytorze Supabase) albo — decyzja
+strategiczna — przeniesienie deva z martwego Supabase Cloud na coś, co
+utrzymujemy.

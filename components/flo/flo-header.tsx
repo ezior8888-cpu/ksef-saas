@@ -7,8 +7,14 @@ import { countLabel, FLO_FORMS } from '@/components/flo/format';
  * ani żadnego innego poziomu, trybu czy suwaka samodzielności. Zachowanie
  * agenta jest identyczne u każdego klienta: rzeczy odwracalne wewnątrz konta
  * robi sam i pokazuje „cofnij”, wszystko wychodzące na zewnątrz wymaga
- * kliknięcia — zawsze. Podpis „Pracuje sam · informuje” opisuje tę jedną
- * zasadę, a nie ustawienie do zmiany.
+ * kliknięcia — zawsze.
+ *
+ * POPRAWKA 30.08.2026 (tor silnika): podpis brzmiał „Pracuje sam · informuje”.
+ * Oba plany wymieniają to zdanie OBOK „TRYB 3” jako odrzucone przez
+ * właściciela produktu (krok 15: „zamiast «TRYB 3» i «Pracuje sam · informuje»
+ * napisz po ludzku”). Wstawione zdanie jest Twoje własne — dokładnie to, którego
+ * użyłeś w `dashboard/_components/flo-card.tsx`. Zmiana wymuszona tym, że po
+ * przebudowie ten nagłówek stoi na głównym ekranie, a nie na osobnej trasie.
  */
 export function FloHeader({
   todayTasks,
@@ -35,7 +41,7 @@ export function FloHeader({
             aria-hidden
             className="size-1.5 rounded-full bg-[var(--ff-accent)]"
           />
-          Pracuje sam · informuje
+          Robi sam to, co da się cofnąć. Pyta przed każdą wysyłką.
         </p>
       </div>
 

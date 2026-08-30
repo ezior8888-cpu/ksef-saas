@@ -140,7 +140,8 @@ export function FloThreadClient({
    * Cofnięcie prosto z powiadomienia (kroki 18 i 23).
    *
    * Przycisk „cofnij” na telefonie otwiera aplikację pod adresem
-   * `/flo?undo=<id>` — i to jest kliknięcie człowieka, więc cofamy od razu,
+   * `/flo?undo=<id>` (przekierowywane na `/dashboard?undo=<id>`) — i to jest
+   * kliknięcie człowieka, więc cofamy od razu,
    * bez proszenia go o powtórzenie tej samej decyzji na drugim ekranie.
    * Wykonujemy RAZ: `undoneRef` pilnuje, żeby powrót do tej karty w historii
    * przeglądarki nie odwracał niczego drugi raz.
@@ -153,7 +154,7 @@ export function FloThreadClient({
 
     const target = proposals.find((p) => p.id === undoParam);
     undoneRef.current = undoParam;
-    router.replace('/flo');
+    router.replace('/dashboard');
 
     // Cofnięcie uruchamia kliknięcie w powiadomienie, a nie render; adres
     // z parametrem jest tu jedynym nośnikiem tej decyzji, więc musi ją

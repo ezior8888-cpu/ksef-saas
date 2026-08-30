@@ -1,28 +1,38 @@
-import { listProposals, listScheduled } from '@/app/actions/flo';
-
-import { FloScreen } from './_components/flo-screen';
+import { redirect } from 'next/navigation';
 
 /**
- * Ekran agenta FLO.
+ * `/flo` → `/dashboard`.
  *
- * Dane są PRAWDZIWE — `listProposals` i `listScheduled` czytają propozycje
- * tej organizacji. Atrapy z `lib/flo/fixtures.ts` zostają tam, gdzie ich
- * miejsce: w testach i w podglądach przy budowie kolejnych wariantów.
+ * Decyzja właściciela produktu z 30.08.2026: agent nie ma osobnego ekranu,
+ * tylko MIESZKA w dashboardzie — tak jak na sierpniowej makiecie. Trasa
+ * zostaje jako przekierowanie, a nie znika, bo prowadzi do niej osiem miejsc
+ * w kodzie, których zerwanie byłoby cichą awarią:
  *
- * Oba odczyty idą równolegle, bo nie zależą od siebie. Pobrane szeregowo
- * dokładałyby do ekranu czas drugiego zapytania bez żadnego powodu.
+ *   - powiadomienia push (`actionUrls`: `/flo#<id>`, `/flo?undo=<id>`),
+ *   - ścieżka paragonu z telefonu (`app/share-target/route.ts` → `/flo?paragon=`),
+ *   - `revalidatePath('/flo')` w akcjach serwerowych,
+ *   - stare zakładki klientów alfy.
+ *
+ * PARAMETRY ZAPYTANIA MUSZĄ PRZEŻYĆ. `?undo=` uruchamia cofnięcie, a
+ * `?paragon=` pokazuje pasek przetwarzania zdjęcia — przekierowanie, które
+ * je gubi, zamienia działającą ścieżkę w pustą stronę bez śladu błędu.
+ * Kotwica (`#<id>`) przeżywa po stronie przeglądarki i nie trzeba jej przenosić.
  */
-export const dynamic = 'force-dynamic';
+export default async function FloRedirectPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const query = new URLSearchParams();
 
-export const metadata = {
-  title: 'Flo',
-};
+  for (const [klucz, wartosc] of Object.entries(params)) {
+    if (typeof wartosc === 'string') query.set(klucz, wartosc);
+    else if (Array.isArray(wartosc)) {
+      for (const v of wartosc) query.append(klucz, v);
+    }
+  }
 
-export default async function FloPage() {
-  const [proposals, scheduled] = await Promise.all([
-    listProposals(),
-    listScheduled(),
-  ]);
-
-  return <FloScreen proposals={proposals} scheduled={scheduled} />;
+  const suffix = query.size > 0 ? `?${query.toString()}` : '';
+  redirect(`/dashboard${suffix}`);
 }

@@ -23,7 +23,7 @@ vi.mock('@/app/actions/flo', () => ({
 }));
 
 const { FloScreen } = await import(
-  '@/app/(dashboard)/flo/_components/flo-screen'
+  '@/components/flo/flo-screen'
 );
 const { FLO_FIXTURES, FLO_SCHEDULED_FIXTURES } = await import(
   '@/lib/flo/fixtures'

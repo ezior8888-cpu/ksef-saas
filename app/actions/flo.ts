@@ -161,6 +161,7 @@ export async function approveProposal(
 
   revalidatePath('/flo');
   revalidatePath('/dashboard');
+  revalidatePath('/dashboard');
   return result;
 }
 
@@ -206,6 +207,7 @@ export async function dismissProposal(
 
   revalidatePath('/flo');
   revalidatePath('/dashboard');
+  revalidatePath('/dashboard');
 }
 
 /** Cofnięcie czynności, którą agent wykonał sam. Okno: dziesięć minut. */
@@ -228,6 +230,7 @@ export async function undoAction(proposalId: string): Promise<{
   const result = await undoProposalAction(proposalId, user.id);
 
   revalidatePath('/flo');
+  revalidatePath('/dashboard');
   revalidatePath('/expenses');
 
   return result.ok ? { ok: true } : { ok: false, message: result.message };
@@ -253,6 +256,7 @@ export async function cancelScheduled(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 
   revalidatePath('/flo');
+  revalidatePath('/dashboard');
   revalidatePath('/dashboard');
 }
 
