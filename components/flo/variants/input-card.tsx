@@ -57,6 +57,7 @@ export function FloInputCard({
     previewSeen,
   };
   const lock = primaryLock(view, state);
+  const lockId = `flo-lock-${view.id}`;
 
   const needsConfirmation = kind === 'email';
 
@@ -93,7 +94,7 @@ export function FloInputCard({
           disabled={valueConfirmed}
           onChange={(e) => setValue(e.target.value)}
           placeholder={kind === 'email' ? 'anna@biuro.pl' : undefined}
-          className="mt-1 w-full rounded-md border border-[var(--ff-border)] bg-transparent px-2 py-1.5 text-sm text-[var(--ff-text)] placeholder:text-[var(--ff-text-faint)] focus:border-[var(--ff-border-strong)] focus:outline-none disabled:opacity-70"
+          className="mt-1 w-full rounded-md border border-[var(--ff-border)] bg-transparent px-2 py-1.5 text-sm text-[var(--ff-text)] placeholder:text-[var(--ff-text-muted)] focus:border-[var(--ff-border-strong)] focus:outline-none disabled:opacity-70"
         />
       </div>
 
@@ -128,13 +129,14 @@ export function FloInputCard({
           label={view.primary.label}
           disabled={inert || lock.locked}
           lockReason={lock.locked ? lock.reason : undefined}
+          lockId={lockId}
           onClick={() =>
             onAction?.(view.primary, view, approveInputFor(view, state))
           }
         />
       </FloSecondaryRow>
 
-      <FloLockNote reason={lock.locked ? lock.reason : undefined} />
+      <FloLockNote id={lockId} reason={lock.locked ? lock.reason : undefined} />
     </FloCardShell>
   );
 }

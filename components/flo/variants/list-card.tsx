@@ -60,6 +60,7 @@ export function FloListCard({
   const inert = onAction === undefined || pending === true;
   const state = { ...EMPTY_CARD_STATE, selectedIds, seenItemIds };
   const lock = primaryLock(view, state);
+  const lockId = `flo-lock-${view.id}`;
 
   const toggleSelected = (id: string) => {
     setSelectedIds((current) =>
@@ -116,13 +117,14 @@ export function FloListCard({
           )}`}
           disabled={inert || lock.locked}
           lockReason={lock.locked ? lock.reason : undefined}
+          lockId={lockId}
           onClick={() =>
             onAction?.(view.primary, view, approveInputFor(view, state))
           }
         />
       </FloSecondaryRow>
 
-      <FloLockNote reason={lock.locked ? lock.reason : undefined} />
+      <FloLockNote id={lockId} reason={lock.locked ? lock.reason : undefined} />
     </FloCardShell>
   );
 }
@@ -156,6 +158,11 @@ function FloListRow({
           type="checkbox"
           checked={checked}
           disabled={!selectable}
+          aria-label={
+            selectable
+              ? item.label
+              : `${item.label} — najpierw obejrzyj tę pozycję`
+          }
           onChange={onToggle}
           className="size-4 shrink-0 accent-[var(--ff-accent)] disabled:cursor-not-allowed"
         />
@@ -192,7 +199,7 @@ function FloListRow({
             {item.sublabel}
           </p>
           <p className="mt-1 tabular-nums">{item.amount}</p>
-          <p className="mt-1 text-[var(--ff-text-faint)]">
+          <p className="mt-1 text-[var(--ff-text-muted)]">
             Ta pozycja odbiega od tego, co zwykle wystawiasz — dlatego pytam
             o nią osobno.
           </p>

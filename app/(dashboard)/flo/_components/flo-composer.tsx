@@ -18,7 +18,7 @@ export function FloComposer() {
         type="text"
         disabled
         placeholder="Napisz do Flo… (jeszcze nieczynne)"
-        className="min-w-0 flex-1 bg-transparent text-sm text-[var(--ff-text)] placeholder:text-[var(--ff-text-faint)] focus:outline-none disabled:cursor-not-allowed"
+        className="min-w-0 flex-1 bg-transparent text-sm text-[var(--ff-text)] placeholder:text-[var(--ff-text-muted)] focus:outline-none disabled:cursor-not-allowed"
       />
 
       <FloComposerButton icon="mic" label="Nagraj wiadomość" />
@@ -33,7 +33,7 @@ function FloComposerButton({ icon, label }: { icon: string; label: string }) {
       type="button"
       disabled
       aria-label={`${label} (jeszcze nieczynne)`}
-      className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[var(--ff-text-faint)] transition-colors hover:bg-[var(--ff-surface-hover)] disabled:cursor-not-allowed disabled:hover:bg-transparent"
+      className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[var(--ff-text-muted)] transition-colors hover:bg-[var(--ff-surface-hover)] disabled:cursor-not-allowed disabled:hover:bg-transparent"
     >
       <span aria-hidden className="material-symbols-outlined text-[18px]">
         {icon}

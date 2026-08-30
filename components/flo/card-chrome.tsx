@@ -136,7 +136,7 @@ export function FloCardShell({
             className={cn(
               'text-[11px] whitespace-nowrap',
               expired
-                ? 'text-[var(--ff-text-faint)]'
+                ? 'text-[var(--ff-text-muted)]'
                 : 'text-[var(--ff-text-dim)]',
             )}
           >
@@ -191,20 +191,28 @@ export function FloPrimaryButton({
   onClick,
   disabled,
   lockReason,
+  lockId,
 }: {
   label: string;
   onClick?: () => void;
   disabled?: boolean;
   /** powód blokady — napis dla człowieka, trafia na `title` i pod przycisk */
   lockReason?: string;
+  /**
+   * Identyfikator zdania z powodem blokady. Czytnik ekranu przeczyta je
+   * razem z etykietą przycisku, zamiast zostawić klienta z samym
+   * „niedostępne” — a to jest cała informacja, której tu potrzeba.
+   */
+  lockId?: string;
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
       title={lockReason}
+      aria-describedby={lockReason ? lockId : undefined}
       onClick={onClick}
-      className="min-h-9 rounded-lg bg-[var(--ff-cta-bg)] px-3 py-1.5 text-xs font-medium text-[var(--ff-cta-fg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+      className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ff-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--ff-surface)] min-h-9 rounded-lg bg-[var(--ff-cta-bg)] px-3 py-1.5 text-xs font-medium text-[var(--ff-cta-fg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {label}
     </button>
@@ -229,7 +237,7 @@ export function FloQuietButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'min-h-9 rounded-lg border border-[var(--ff-border)] px-3 py-1.5 text-xs text-[var(--ff-text-muted)] transition-colors hover:border-[var(--ff-border-strong)] hover:text-[var(--ff-text)] disabled:cursor-not-allowed disabled:opacity-50',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ff-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--ff-surface)] min-h-9 rounded-lg border border-[var(--ff-border)] px-3 py-1.5 text-xs text-[var(--ff-text-muted)] transition-colors hover:border-[var(--ff-border-strong)] hover:text-[var(--ff-text)] disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}
     >
@@ -272,10 +280,18 @@ export function FloSecondaryRow({
 }
 
 /** Powód blokady napisany pod przyciskiem — nie tylko w dymku. */
-export function FloLockNote({ reason }: { reason?: string }) {
+export function FloLockNote({
+  reason,
+  id,
+}: {
+  reason?: string;
+  id?: string;
+}) {
   if (!reason) return null;
 
   return (
-    <p className="mt-2 text-[11px] text-[var(--ff-text-faint)]">{reason}</p>
+    <p id={id} className="mt-2 text-[11px] text-[var(--ff-text-muted)]">
+      {reason}
+    </p>
   );
 }

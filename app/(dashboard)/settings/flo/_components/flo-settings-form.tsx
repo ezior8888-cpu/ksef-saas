@@ -111,7 +111,7 @@ export function FloSettingsForm({ prefs }: { prefs: FloPrefs }) {
           <h2 className="text-sm font-semibold text-[var(--ff-text-strong)]">
             Wyciszone sprawy
           </h2>
-          <span className="text-[11px] text-[var(--ff-text-faint)]">
+          <span className="text-[11px] text-[var(--ff-text-muted)]">
             {countLabel(current.mutedKinds.length, FLO_FORMS.sprawa)}
           </span>
         </div>

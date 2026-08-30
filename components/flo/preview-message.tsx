@@ -64,7 +64,7 @@ export function FloPreviewMessage({
         />
       </div>
 
-      <p className="text-[11px] text-[var(--ff-text-faint)]">
+      <p className="text-[11px] text-[var(--ff-text-muted)]">
         {edited
           ? 'Wyślę dokładnie tę treść, po Twoich zmianach.'
           : 'Możesz poprawić treść — wyślę to, co tu zostanie.'}

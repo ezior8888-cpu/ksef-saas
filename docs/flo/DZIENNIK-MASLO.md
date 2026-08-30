@@ -562,3 +562,67 @@ Weryfikacja:
 - `pnpm typecheck` czysto, eslint czysto.
 
 Następny krok: 32 (testy przeglądarkowe podstawowych ścieżek) — blok 6.
+
+## 2026-08-30 · Kroki 32–34 — sprawdzanie (BLOK 6)
+
+Zrobione:
+- `e2e/helpers/flo-seed.ts` — sianie propozycji wprost do bazy plus sprzątanie.
+- `e2e/tests/flo-basic.spec.ts` — 6 testów podstawowych ścieżek.
+- `e2e/tests/flo-critical.spec.ts` — 4 testy funkcji promienia 4.
+- `e2e/tests/flo-a11y.spec.ts` — 5 testów dostępności (axe + klawiatura).
+- Poprawki dostępności w kodzie agenta (10 plików).
+
+Poprawki dostępności — co konkretnie:
+- KONTRAST. Wszystkie napisy niosące treść przeniesione z `--ff-text-faint`
+  (#5b6472) na `--ff-text-muted` (#8a94a3). Pierwszy daje na tle karty około
+  3:1, czyli poniżej progu AA dla drobnego tekstu — a siedziały w nim powody
+  blokady i ślady zatwierdzenia, czyli rzeczy najważniejsze.
+- WIDOCZNE SKUPIENIE. Przyciski karty dostały pierścień `focus-visible`
+  w kolorze akcentu. Wcześniej nie miały żadnego — obsługa klawiaturą była
+  możliwa, ale niewidzialna.
+- POWÓD BLOKADY DLA CZYTNIKA EKRANU. Przycisk zablokowany ma
+  `aria-describedby` wskazujące zdanie z powodem. Bez tego czytnik mówił
+  „przycisk niedostępny” i nic więcej — a cała informacja jest właśnie
+  w powodzie.
+- POZYCJA ODSTAJĄCA W PACZCE tłumaczy się w `aria-label`: „…— najpierw
+  obejrzyj tę pozycję”. Samo wyszarzenie to informacja wyłącznie wzrokowa.
+- MNIEJ RUCHU. Szkielety ładowania mają `motion-reduce:animate-none`.
+
+Decyzje przy testach:
+- Propozycje wsiewam WPROST DO BAZY, nie przez silnik. Testy interfejsu mają
+  sprawdzać, co widzi i może kliknąć człowiek, a nie trafność wykrywania
+  spraw — ta ma własne testy po stronie Bartosza. Przy okazji da się ustawić
+  stan, którego silnik nie wyprodukuje na żądanie: propozycję z nieaktualnym
+  odciskiem danych, czyli przypadek z kroku 19.
+- Test ponaglenia sprawdza rzecz, o którą najłatwiej się potknąć przy
+  przebudowie: zwinięcie podglądu NIE kasuje poprawionej treści i NIE zamyka
+  z powrotem przycisku.
+- Test klawiatury sprawdza nie tylko to, że skupienie DOCHODZI do przycisku,
+  ale że jest WIDOCZNE (czyta `outline` i `box-shadow`). Focus bez obwódki
+  przechodzi każdy automat i nie da się z nim pracować.
+- Testy agenta są POMIJANE na projektach mobilnych. Telefony nadal lądują na
+  `/mobile` (BUG-008), więc na tych projektach sprawdzałyby wyłącznie
+  działanie przekierowania. Pominięcie ma powód wpisany w kod.
+
+CZEGO NIE ZWERYFIKOWAŁEM — I TO JEST ISTOTNE:
+tych testów NIE URUCHOMIŁEM. Playwright potrzebuje działającej aplikacji
+i bazy, a w tym worktree nie ma `.env.local`. Sprawdziłem tyle, ile się dało
+bez uruchomienia: `pnpm typecheck` czysto, eslint czysto,
+`npx playwright test --list` wykrywa wszystkie 15 testów w trzech plikach.
+To znaczy, że są poprawne składniowo i typowo — NIE znaczy, że przechodzą.
+Pierwsze uruchomienie na środowisku z bazą prawie na pewno wymaga korekt
+w selektorach; traktujcie te pliki jako gotowy szkielet do dopięcia, nie jako
+zielony zestaw.
+
+Uwagi dla Bartosza:
+- `e2e/helpers/flo-seed.ts` wstawia wiersze do `flo_proposals` i sprząta
+  `flo_approvals`. Jeśli dojdzie tabela, do której trafia ślad wykonania,
+  dopisz ją do `cleanupProposals`, żeby testy nie zostawiały śmieci.
+- `undoableUntil` siedzi w `payload`, nie w kolumnie — zapisałem to w helperze,
+  bo szukałem tego przez chwilę.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 61 plików, 1055 testów, wszystko zielone.
+- `pnpm typecheck` czysto, eslint czysto na całym `e2e/` i `components/flo/`.
+
+Następny krok: 35 (panel trybu cichego) — blok 7.

@@ -99,7 +99,7 @@ export function FloChoiceCard({
               placeholder={
                 openInput.inputKind === 'amount' ? '1 234,56' : undefined
               }
-              className="mt-1 w-full rounded-md border border-[var(--ff-border)] bg-transparent px-2 py-1.5 text-sm text-[var(--ff-text)] placeholder:text-[var(--ff-text-faint)] focus:border-[var(--ff-border-strong)] focus:outline-none"
+              className="mt-1 w-full rounded-md border border-[var(--ff-border)] bg-transparent px-2 py-1.5 text-sm text-[var(--ff-text)] placeholder:text-[var(--ff-text-muted)] focus:border-[var(--ff-border-strong)] focus:outline-none"
             />
           </div>
 

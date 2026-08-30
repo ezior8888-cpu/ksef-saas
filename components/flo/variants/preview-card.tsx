@@ -50,6 +50,7 @@ export function FloPreviewCard({
 
   const state = { ...EMPTY_CARD_STATE, previewSeen, editedBody };
   const lock = primaryLock(view, state);
+  const lockId = `flo-lock-${view.id}`;
 
   return (
     <FloCardShell
@@ -74,13 +75,14 @@ export function FloPreviewCard({
           label={view.primary.label}
           disabled={inert || lock.locked}
           lockReason={lock.locked ? lock.reason : undefined}
+          lockId={lockId}
           onClick={() =>
             onAction?.(view.primary, view, approveInputFor(view, state))
           }
         />
       </FloSecondaryRow>
 
-      <FloLockNote reason={lock.locked ? lock.reason : undefined} />
+      <FloLockNote id={lockId} reason={lock.locked ? lock.reason : undefined} />
     </FloCardShell>
   );
 }

@@ -63,7 +63,7 @@ export function FloScheduledPanel({
         <h2 className="text-[11px] font-semibold tracking-[0.14em] text-[var(--ff-text-dim)]">
           ZATWIERDZONE — CZEKA NA WYKONANIE
         </h2>
-        <span className="text-[11px] text-[var(--ff-text-faint)]">
+        <span className="text-[11px] text-[var(--ff-text-muted)]">
           {countLabel(scheduled.length, FLO_FORMS.sprawa)}
         </span>
       </div>
@@ -86,7 +86,7 @@ export function FloScheduledPanel({
                 <p className="text-[11px] text-[var(--ff-text-muted)]">
                   {item.whenLabel}
                 </p>
-                <p className="text-[11px] text-[var(--ff-text-faint)]">
+                <p className="text-[11px] text-[var(--ff-text-muted)]">
                   {item.approvedAtLabel ||
                     'brak śladu zatwierdzenia — zgłoś to nam'}
                 </p>
@@ -111,7 +111,7 @@ export function FloScheduledPanel({
         </p>
       ) : null}
 
-      <p className="mt-3 text-[11px] text-[var(--ff-text-faint)]">
+      <p className="mt-3 text-[11px] text-[var(--ff-text-muted)]">
         Wszystko z tej listy już zatwierdziłeś. Dopóki nie ruszy, możesz to
         wstrzymać — wróci wtedy do wątku.
       </p>

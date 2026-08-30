@@ -87,17 +87,17 @@ export function FloDashboardCardSkeleton() {
   return (
     <section className="rounded-[14px] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-[22px]">
       <div className="flex items-center gap-3">
-        <div className="size-9 shrink-0 animate-pulse rounded-full bg-[var(--ff-surface-muted)]" />
+        <div className="size-9 shrink-0 animate-pulse motion-reduce:animate-none rounded-full bg-[var(--ff-surface-muted)]" />
         <div className="space-y-1.5">
-          <div className="h-3 w-12 animate-pulse rounded bg-[var(--ff-surface-muted)]" />
-          <div className="h-2.5 w-56 animate-pulse rounded bg-[var(--ff-surface-muted)]" />
+          <div className="h-3 w-12 animate-pulse motion-reduce:animate-none rounded bg-[var(--ff-surface-muted)]" />
+          <div className="h-2.5 w-56 animate-pulse motion-reduce:animate-none rounded bg-[var(--ff-surface-muted)]" />
         </div>
       </div>
       <div className="mt-4 space-y-2">
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="h-3 w-full animate-pulse rounded bg-[var(--ff-surface-muted)]"
+            className="h-3 w-full animate-pulse motion-reduce:animate-none rounded bg-[var(--ff-surface-muted)]"
           />
         ))}
       </div>
