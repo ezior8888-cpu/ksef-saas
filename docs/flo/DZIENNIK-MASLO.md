@@ -494,3 +494,71 @@ Weryfikacja:
   zdjęciu blokady — ale to jest deklaracja, nie dowód.
 
 Następny krok: 25 (treści grupy W) — blok 5, czyli to, co agent MÓWI.
+
+## 2026-08-30 · Kroki 25–31 — treści agenta (BLOK 5)
+
+Zrobione:
+- `content/flo/<kind>.md` — 32 pliki, po jednym na każdy rodzaj propozycji
+  z kontraktu. Tytuł, treść, warianty, etykiety przycisków i zasada, której
+  dany tekst pilnuje.
+- `content/flo/GLOS.md` — głos agenta na piśmie: cztery reguły tonu z parami
+  „źle / dobrze”, tabela „czego nigdy nie piszemy”, lista zdań obowiązkowych.
+- `content/flo/DO-AKCEPTACJI-PRAWNIKA.md` — dziewięć tekstów z obszarów
+  regulowanych plus pięć pytań do prawnika.
+- `tests/unit/ui-flo-content.test.ts` — 13 testów pilnujących reguł tonu.
+- `components/reminders/reminder-settings-form.tsx` — ekran ponagleń nie
+  obiecuje już automatu (dług z kroku 6 Bartosza).
+
+DLACZEGO TE PLIKI MAJĄ TEST:
+tekst bez testu jest notatką. Reguły z części II.5 pilnuje teraz kod:
+- ani jednej cyfry w tekście agenta — liczby wchodzą wyłącznie przez
+  `{{placeholder}}`, dokładnie jak w `lib/flo/copy.ts`;
+- zero wykrzykników;
+- każdy z trzech tonów ponaglenia zawiera zdanie „jeśli płatność już wyszła,
+  proszę potraktować tę wiadomość jako nieaktualną”;
+- w grupie T nie pada „musisz”, „powinieneś” ani „zapłać”;
+- `tax.deadline` mówi wprost „to nie jest deklaracja podatkowa”;
+- `invoice.draft` nigdy nie zarzuca zapomnienia;
+- `invoice.raise` ma etykietę „Pokaż treść”, nie „Wyślij”.
+Sprawdzone, że test gryzie: po wpisaniu do jednego pliku „Licząc 19% od tej
+faktury. Musisz to odłożyć.” padły trzy testy naraz.
+
+Decyzje redakcyjne warte zapamiętania:
+- `expense.missing` mówi WYŁĄCZNIE o dokumencie. Nigdy „dodaj koszt” — agent
+  zauważa brak papieru, a nie podpowiada, co wpisać w księgę.
+- `payment.chase` ma trzy tony (miękki, stanowczy, wezwanie) i wszystkie
+  kończą się tym samym zdaniem ratunkowym. Przelewy księgują się z
+  opóźnieniem; bez tego zdania agent obraża klienta, który właśnie zapłacił.
+- `ksef.outage` ma wariant `:neutral` na wypadek, gdy nie wiemy, po czyjej
+  stronie leży awaria. Zrzucanie winy na Ministerstwo bez komunikatu jest
+  zarzutem, nie diagnozą.
+- `invoice.raise` — w wiadomości do kontrahenta ZERO uzasadnień typu
+  „inflacja”. Klient dopisze je sam; my nie wkładamy mu w usta argumentów,
+  których nie sprawdziliśmy.
+- `tax.simulate` nie ma treści i mieć nie będzie do opinii prawnej. Nawet
+  zdanie „przy ryczałcie wyszłoby mniej” jest rekomendacją, jeśli stoi obok
+  konkretnej kwoty.
+- `milestone.money` liczy faktury OPŁACONE, nie wystawione. Faktura, za którą
+  nikt nie zapłacił, nie jest osiągnięciem.
+- `wrapped.ready` ma wyjście „nie chcę tego oglądać” w pierwszym zdaniu. Dla
+  firmy po słabym roku podsumowanie jest przykrością, nie zabawą.
+
+UWAGI DLA BARTOSZA:
+- Teksty w `lib/flo/copy.ts` są Twoje i celowo ich nie ruszałem. Pliki
+  z `content/flo/` są źródłem redakcyjnym: nazwy placeholderów wzięte z
+  Twoich szablonów, więc przeniesienie brzmienia to podmiana napisów, bez
+  zmian w kodzie. Gdzie dołożyłem nowy placeholder (np. `{{kolumna}}`,
+  `{{numerKsef}}`, `{{zrodlo}}`, `{{stawka}}`), trzeba go najpierw policzyć
+  po Twojej stronie — inaczej `renderTemplate` słusznie rzuci wyjątkiem.
+- `payment.chase` potrzebuje wariantów `:soft`, `:firm`, `:demand`, a
+  `ksef.outage` — `:confirmed` i `:neutral`. Dziś `FLO_TEMPLATE_VARIANTS` ma
+  tylko warianty `expense.review`.
+- Ostatnie miejsce w aplikacji, gdzie ustawienie nadal znaczy „wyślij samo”,
+  to Co-Pilot Księgowego (`/settings/accountant`). Tekstu nie zmieniałem, bo
+  opisuje prawdziwe zachowanie — zamyka to Twój krok 41 (B-01).
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 61 plików, 1055 testów, wszystko zielone.
+- `pnpm typecheck` czysto, eslint czysto.
+
+Następny krok: 32 (testy przeglądarkowe podstawowych ścieżek) — blok 6.

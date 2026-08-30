@@ -169,7 +169,8 @@ export function ReminderSettingsForm({
           Wkurzacz Dłużników
         </h1>
         <p className="mt-2 text-muted-foreground">
-          Automatyczne przypomnienia o płatności dla przeterminowanych faktur
+          Flo przygotowuje ponaglenia do przeterminowanych faktur. Wysyłasz je
+          Ty, jednym kliknięciem — nic nie wychodzi automatycznie.
         </p>
       </div>
 
@@ -177,12 +178,14 @@ export function ReminderSettingsForm({
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-              {settings.enabled ? 'Wkurzacz włączony' : 'Wkurzacz wyłączony'}
+              {settings.enabled
+                ? 'Flo pilnuje terminów'
+                : 'Flo nie pilnuje terminów'}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {settings.enabled
-                ? 'Automatycznie wysyłamy przypomnienia o przeterminowanych fakturach'
-                : 'Żadne przypomnienia nie są wysyłane'}
+                ? 'Po terminie przygotuję ponaglenie i pokażę Ci je do zatwierdzenia'
+                : 'Nie odezwę się w sprawie przeterminowanych faktur'}
             </p>
           </div>
           <Toggle
