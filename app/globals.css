@@ -483,22 +483,149 @@
   line-height: 1.6;
 }
 
-/* ═══ FaktFlow dashboard — paleta z prototypu „FaktFlow Dashboard recreation" ══
- * Płaski, ciemny grunt (bez mesh/orbów/szkła): tło #0d1117, sidebar ciemniejszy
- * o stopień (#0a0d12), karty jeden stopień jaśniejsze (#12171f) na cienkiej
- * ramce #1c2230. Akcent = emerald #34d399 używany punktowo (CTA, aktywna
- * pozycja menu, wartości „na plus"), nigdy jako duża plama.
+/* ═══ FaktFlow — paleta panelu (biała, z prototypu z sierpnia 2026) ══════════
+ * WŁAŚCICIEL PLIKU: Bartosz (tor silnika) od 30.08.2026.
+ * Do 29.08.2026 `app/globals.css` należał do Masła (plan FLO, część IV.2).
+ * Przekazanie opisane w `docs/flo/UKLAD-DASHBOARDU.md` i w części VIII planu
+ * Masła — powód jest jeden: motywu nie da się odwrócić bez tego pliku.
+ *
+ * MOTYW JASNY JEST DOMYŚLNY. Ciemny to nadpisanie w `html.dark .ff-dashboard`
+ * niżej, włączane wyłącznie przełącznikiem w nagłówku (`lib/theme/theme.ts`).
+ * Przed 30.08.2026 było odwrotnie, a jasny wariant nadpisywał ledwie ćwierć
+ * tokenów — karty i tekst zostawały ciemne. Dlatego nie „poprawiamy jasnego”,
+ * tylko odwracamy strony: baza niżej wypisuje KOMPLET tokenów.
+ *
+ * Grunt płaski, bez mesh/orbów/szkła: kanwa #f7f8fa, karty białe na ramce
+ * #e6e8ec. Akcent = niebieski #2563eb punktowo (CTA, aktywna pozycja menu,
+ * awatar agenta), nigdy jako duża plama.
  * ──────────────────────────────────────────────────────────────────────────── */
 .ff-dashboard {
   isolation: isolate;
-  --ff-bg: #0d1117;
-  /* Bazowe tło — bez tego `bg-transparent` na layoucie dawał „płaski” czarny i zabijał czytelność szkła. */
+  --ff-bg: #f7f8fa;
+  /* Bazowe tło — bez tego `bg-transparent` na layoucie prześwituje kartką przeglądarki. */
   background-color: var(--ff-bg);
+  --ff-on-surface: #0f172a;
+  --ff-on-surface-variant: #64748b;
+  --ff-primary: #2563eb;
+  --ff-on-primary: #ffffff;
+  --ff-primary-container: #eff6ff;
+  --ff-secondary: #d97706;
+  --ff-secondary-container: #fffbeb;
+  --ff-tertiary: #0284c7;
+  --ff-surface-container-low: #ffffff;
+  --ff-surface-container-highest: #f1f5f9;
+  --ff-outline-soft: #e6e8ec;
+
+  /* ── Semantyczne tokeny prototypu ──────────────────────────────────────── */
+  --ff-surface: #ffffff;
+  --ff-surface-sidebar: #ffffff;
+  --ff-surface-inset: #f7f8fa;
+  --ff-surface-chip: #f1f5f9;
+  --ff-border: #e6e8ec;
+  --ff-border-strong: #d4d8de;
+  --ff-divider: #e6e8ec;
+  --ff-divider-strong: #d4d8de;
+  --ff-row-divider: #f1f5f9;
+  --ff-row-hover: #f8fafc;
+  --ff-table-header-bg: transparent;
+  --ff-table-row-hover: #f8fafc;
+  --ff-surface-muted: #f8fafc;
+  --ff-surface-hover: #f1f5f9;
+  /* Rampa tekstu: strong → faint */
+  --ff-text-strong: #0f172a;
+  --ff-text: #1e293b;
+  --ff-text-soft: #334155;
+  --ff-text-muted: #64748b;
+  --ff-text-dim: #94a3b8;
+  --ff-text-faint: #a3adba;
+  /* Role statusów — kolor + tło „pigułki" pod ten kolor */
+  --ff-accent: #2563eb;
+  --ff-accent-hover: #1d4ed8;
+  --ff-accent-tint: #eff6ff;
+  --ff-warn: #b45309;
+  --ff-warn-tint: #fffbeb;
+  --ff-warn-border: #fde68a;
+  --ff-warn-text: #92400e;
+  --ff-info: #0284c7;
+  --ff-info-tint: #f0f9ff;
+  --ff-danger: #dc2626;
+  --ff-danger-tint: #fef2f2;
+  --ff-violet: #7c3aed;
+  --ff-violet-tint: #f5f3ff;
+  --ff-neutral-chip: #f1f5f9;
+  --ff-neutral-chip-fg: #475569;
+
+  --ff-unit: 8px;
+  --ff-gutter: 24px;
+  --ff-container-padding: 40px;
+  /* Prototyp jest PŁASKI — „szkło" (gradient + blur + cień) zostaje zmapowane
+   * na jednolitą powierzchnię z cienką ramką. Tokeny zostają, żeby nie trzeba
+   * było przepisywać każdego `.ff-glass-pane` w aplikacji. */
+  --ff-glass-blur: 0px;
+  --ff-glass-bg: none;
+  --ff-glass-bg-hover: none;
+  --ff-glass-border: #e6e8ec;
+  --ff-glass-shadow: none;
+  --ff-radius-lg: 1rem;
+  --ff-radius-chart-glow: 0 0 4px rgba(37, 99, 235, 0.18);
+  --ff-cta-bg: var(--ff-primary);
+  --ff-cta-fg: var(--ff-on-primary);
+  /* Zmienne z dostarczonego :root (radius / cienie / powierzchnie) */
+  --color-surface: #f7f8fa;
+  --color-surface-dim: #eef1f5;
+  --color-surface-bright: #ffffff;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #ffffff;
+  --color-surface-container: #f8fafc;
+  --color-surface-container-high: #f1f5f9;
+  --color-surface-container-highest: #e6e8ec;
+  --color-primary: #2563eb;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #eff6ff;
+  --color-on-primary-container: #1d4ed8;
+  --color-secondary: #b45309;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #fffbeb;
+  --color-on-secondary-container: #92400e;
+  --color-tertiary: #0284c7;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #f0f9ff;
+  --color-on-tertiary-container: #075985;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -1px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(15, 23, 42, 0.09), 0 10px 10px -5px rgba(15, 23, 42, 0.03);
+
+  /* ── Typografia panelu: Inter + IBM Plex Mono ──────────────────────────────
+   * `@theme inline` wstawia WARTOŚĆ zmiennej wprost do utility (`font-sans` →
+   * `font-family: var(--font-geist-sans)`), więc podmiana roli fontu w panelu
+   * sprowadza się do nadpisania tych dwóch zmiennych w tym scope. Marketing
+   * jest poza `.ff-dashboard`, więc zostaje na Geist. */
+  --font-geist-sans: var(--font-inter);
+  --font-geist-mono: var(--font-ibm-plex-mono);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══ Motyw ciemny — nadpisanie bazy, włączane klasą `.dark` na <html> ═══════
+ * Wypisuje WYŁĄCZNIE tokeny, które różnią się od jasnej bazy. Metryki
+ * (`--ff-unit`, `--ff-gutter`, `--ff-container-padding`, promienie, fonty)
+ * są wspólne i celowo nie powtarzają się tutaj — rozjechanie ich między
+ * motywami dałoby dwa różne układy tej samej strony.
+ * ──────────────────────────────────────────────────────────────────────────── */
+html.dark .ff-dashboard {
+  --ff-bg: #0d1117;
   --ff-on-surface: #f4f6f8;
   --ff-on-surface-variant: #8a94a3;
-  --ff-primary: #34d399;
-  --ff-on-primary: #062017;
-  --ff-primary-container: #152b22;
+  --ff-primary: #60a5fa;
+  --ff-on-primary: #0b1b34;
+  --ff-primary-container: #14263f;
   --ff-secondary: #f59e0b;
   --ff-secondary-container: #1a1509;
   --ff-tertiary: #38bdf8;
@@ -506,7 +633,6 @@
   --ff-surface-container-highest: #1b2430;
   --ff-outline-soft: #1c2230;
 
-  /* ── Semantyczne tokeny prototypu ──────────────────────────────────────── */
   --ff-surface: #12171f;
   --ff-surface-sidebar: #0a0d12;
   --ff-surface-inset: #0d1117;
@@ -521,17 +647,17 @@
   --ff-table-row-hover: #141a24;
   --ff-surface-muted: #1b2430;
   --ff-surface-hover: #141a24;
-  /* Rampa tekstu: strong → faint */
+
   --ff-text-strong: #f4f6f8;
   --ff-text: #e6e8eb;
   --ff-text-soft: #c8cfda;
   --ff-text-muted: #8a94a3;
   --ff-text-dim: #6b7585;
   --ff-text-faint: #5b6472;
-  /* Role statusów — kolor + tło „pigułki" pod ten kolor */
-  --ff-accent: #34d399;
-  --ff-accent-hover: #42e0a6;
-  --ff-accent-tint: #152b22;
+
+  --ff-accent: #60a5fa;
+  --ff-accent-hover: #93c5fd;
+  --ff-accent-tint: #14263f;
   --ff-warn: #f59e0b;
   --ff-warn-tint: #1a1509;
   --ff-warn-border: #3d2f0e;
@@ -545,22 +671,9 @@
   --ff-neutral-chip: #1b2430;
   --ff-neutral-chip-fg: #8fa0b5;
 
-  --ff-unit: 8px;
-  --ff-gutter: 24px;
-  --ff-container-padding: 40px;
-  /* Prototyp jest PŁASKI — „szkło" (gradient + blur + cień) zostaje zmapowane
-   * na jednolitą powierzchnię z cienką ramką. Tokeny zostają, żeby nie trzeba
-   * było przepisywać każdego `.ff-glass-pane` w aplikacji. */
-  --ff-glass-blur: 0px;
-  --ff-glass-bg: none;
-  --ff-glass-bg-hover: none;
   --ff-glass-border: #1c2230;
-  --ff-glass-shadow: none;
-  --ff-radius-lg: 1rem;
-  --ff-radius-chart-glow: 0 0 8px rgba(52, 211, 153, 0.35);
-  --ff-cta-bg: var(--ff-primary);
-  --ff-cta-fg: var(--ff-on-primary);
-  /* Zmienne z dostarczonego :root (radius / cienie / powierzchnie) */
+  --ff-radius-chart-glow: 0 0 8px rgba(96, 165, 250, 0.35);
+
   --color-surface: #0d1117;
   --color-surface-dim: #0a0d12;
   --color-surface-bright: #233042;
@@ -569,10 +682,10 @@
   --color-surface-container: #161c26;
   --color-surface-container-high: #1b2430;
   --color-surface-container-highest: #233042;
-  --color-primary: #34d399;
-  --color-on-primary: #062017;
-  --color-primary-container: #152b22;
-  --color-on-primary-container: #34d399;
+  --color-primary: #60a5fa;
+  --color-on-primary: #0b1b34;
+  --color-primary-container: #14263f;
+  --color-on-primary-container: #93c5fd;
   --color-secondary: #f59e0b;
   --color-on-secondary: #1a1509;
   --color-secondary-container: #1a1509;
@@ -581,26 +694,10 @@
   --color-on-tertiary: #062330;
   --color-tertiary-container: #13202b;
   --color-on-tertiary-container: #38bdf8;
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-  --radius-full: 9999px;
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-
-  /* ── Typografia panelu: Inter + IBM Plex Mono ──────────────────────────────
-   * `@theme inline` wstawia WARTOŚĆ zmiennej wprost do utility (`font-sans` →
-   * `font-family: var(--font-geist-sans)`), więc podmiana roli fontu w panelu
-   * sprowadza się do nadpisania tych dwóch zmiennych w tym scope. Marketing
-   * jest poza `.ff-dashboard`, więc zostaje na Geist. */
-  --font-geist-sans: var(--font-inter);
-  --font-geist-mono: var(--font-ibm-plex-mono);
-  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
 }
 
 /* Bezpiecznik na wypadek, gdyby Tailwind wygenerował `font-mono` z inną
@@ -825,16 +922,31 @@
  * (`rgba(...)` zamiast pełnych `#xxx`), żeby zachować efekt szkła nad mesh.
  * ──────────────────────────────────────────────────────────────────────────── */
 .ff-shell-sidebar {
+  background-color: #ffffff;
+  border-right: 1px solid #e6e8ec;
+}
+
+.ff-shell-header {
+  background-color: #ffffff;
+  border-bottom: 1px solid #e6e8ec;
+}
+
+.ff-shell-mobile {
+  background-color: #ffffff;
+  border-right: 1px solid #e6e8ec;
+}
+
+html.dark .ff-shell-sidebar {
   background-color: #0a0d12;
   border-right: 1px solid #1c2230;
 }
 
-.ff-shell-header {
+html.dark .ff-shell-header {
   background-color: #0d1117;
   border-bottom: 1px solid #1c2230;
 }
 
-.ff-shell-mobile {
+html.dark .ff-shell-mobile {
   background-color: #0a0d12;
   border-right: 1px solid #1c2230;
 }
@@ -845,58 +957,21 @@
  * remount). Bez tego biała domyślna kartka przeglądarki prześwitywała przez
  * efekty „glass”, dając wrażenie zniknięcia designu.
  * ──────────────────────────────────────────────────────────────────────────── */
+html,
+html body {
+  background-color: #f7f8fa;
+}
+
 html.dark,
 html.dark body {
-  background-color: #12131a;
+  background-color: #0d1117;
 }
 
-/* ═══ Light mode — szarość jak tabela /inbox (zinc-100 + białe panele) ═══════ */
-html:not(.dark),
-html:not(.dark) body {
-  background-color: #f4f4f5;
-}
-
-html:not(.dark) .ff-dashboard {
-  /* Canvas strony = tło za „tabelką” (ff-glass-pane) */
-  --ff-bg: #f4f4f5;
-  --ff-on-surface: #18181b;
-  --ff-on-surface-variant: #71717a;
-  --ff-primary: #047857;
-  --ff-on-primary: #ffffff;
-  --ff-primary-container: #ecfdf5;
-  --ff-secondary: #b45309;
-  --ff-secondary-container: #fffbeb;
-  --ff-tertiary: #4f46e5;
-  --ff-surface-container-low: #f4f4f5;
-  --ff-surface-container-highest: #e4e4e7;
-  --ff-outline-soft: #e4e4e7;
-  --ff-divider: #e4e4e7;
-  --ff-divider-strong: #d4d4d8;
-  /* thead / hover wiersza — jak inbox: color-mix(on-surface 4%) */
-  --ff-table-header-bg: color-mix(in srgb, var(--ff-on-surface) 4%, transparent);
-  --ff-table-row-hover: color-mix(in srgb, var(--ff-on-surface) 4%, transparent);
-  --ff-surface-muted: var(--ff-table-header-bg);
-  --ff-surface-hover: var(--ff-table-row-hover);
-  --ff-glass-bg: #ffffff;
-  --ff-glass-bg-hover: #ffffff;
-  --ff-glass-border: #e4e4e7;
-  --ff-glass-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 1px 3px rgba(0, 0, 0, 0.06);
-  --ff-radius-chart-glow: 0 0 4px rgba(4, 120, 87, 0.12);
-  --ff-cta-bg: #18181b;
-  --ff-cta-fg: #f4f4f5;
-}
-
-html:not(.dark) .ff-sidebar-active {
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
+/* Tokeny jasne wróciły do bazy `.ff-dashboard` — jasny motyw jest domyślny
+ * od 30.08.2026. Ciemny siedzi w `html.dark .ff-dashboard` wyżej. */
 
 html:not(.dark) .ff-mesh-gradient {
-  background:
-    radial-gradient(120% 80% at 50% -20%, rgba(228, 228, 231, 0.55), transparent 55%),
-    #f4f4f5;
+  background: var(--ff-bg, #f7f8fa);
 }
 
 html:not(.dark) .ff-orb-tr,
@@ -905,36 +980,21 @@ html:not(.dark) .ff-orb-bl {
 }
 
 html:not(.dark) .ff-glass-pane {
-  --ff-glass-pane-solid: #ffffff;
+  --ff-glass-pane-solid: var(--ff-surface, #ffffff);
   background-image: none;
 }
 
 html:not(.dark) .ff-glass-pane-hover:hover {
   background-image: none;
-  background-color: #ffffff;
-  border-color: #d4d4d8;
+  background-color: var(--ff-surface, #ffffff);
+  border-color: var(--ff-border-strong, #d4d8de);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 8px 20px rgba(0, 0, 0, 0.06);
-}
-
-html:not(.dark) .ff-shell-sidebar {
-  background-color: #f4f4f5;
-  border-right: 1px solid #e4e4e7;
-}
-
-html:not(.dark) .ff-shell-header {
-  background-color: color-mix(in srgb, #ffffff 72%, #f4f4f5);
-  border-bottom: 1px solid #e4e4e7;
-}
-
-html:not(.dark) .ff-shell-mobile {
-  background-color: #f4f4f5;
-  border-right: 1px solid #e4e4e7;
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 20px rgba(15, 23, 42, 0.06);
 }
 
 html:not(.dark) .ff-dashboard [data-slot='card'] {
-  background-color: #ffffff;
+  background-color: var(--ff-surface, #ffffff);
   background-image: none;
   color: var(--ff-on-surface);
   border-color: var(--ff-glass-border);
@@ -947,7 +1007,7 @@ html:not(.dark) .ff-dashboard [data-slot='card-footer'] {
 }
 
 html:not(.dark) .ff-dashboard ::-webkit-scrollbar-thumb {
-  background: #d4d4d8;
+  background: var(--ff-border-strong, #d4d8de);
 }
 
 /* Tabele / listy — klasy z dark UI → stonowane separatory */

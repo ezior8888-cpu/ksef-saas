@@ -4,14 +4,22 @@ import { useCallback, useEffect, useState } from 'react';
 
 import {
   applyTheme,
+  DEFAULT_THEME,
   readStoredTheme,
   type Theme,
   THEME_STORAGE_KEY,
 } from '@/lib/theme/theme';
 import { cn } from '@/lib/utils';
 
+/**
+ * WŁAŚCICIEL: Bartosz (tor silnika) — rama panelu.
+ *
+ * Od 30.08.2026 domyślny motyw to jasny, więc stan początkowy bierze
+ * `DEFAULT_THEME` zamiast zaszytego `'dark'`. Renderowanie jest wstrzymane do
+ * `mounted`, bo inaczej pierwszy render pokazałby ikonę drugiego motywu.
+ */
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>('dark');
+  const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

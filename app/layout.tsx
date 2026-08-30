@@ -98,9 +98,13 @@ export default function RootLayout({
       lang="pl"
       suppressHydrationWarning
       data-scroll-behavior="smooth"
-      className={`dark ${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${inter.variable} ${ibmPlexMono.variable} h-full scroll-smooth antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${inter.variable} ${ibmPlexMono.variable} h-full scroll-smooth antialiased`}
     >
       <head>
+        {/* Klasa `dark` NIE jest już zaszyta na <html> (było tak do 29.08.2026).
+            Motyw domyślny to jasny; ten skrypt dokłada `dark` przed pierwszym
+            malowaniem, gdy klient wybrał ciemny. Kolejność ma znaczenie:
+            skrypt musi być pierwszym elementem <head>. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
