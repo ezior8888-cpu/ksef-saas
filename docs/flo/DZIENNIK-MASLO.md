@@ -626,3 +626,79 @@ Weryfikacja:
 - `pnpm typecheck` czysto, eslint czysto na całym `e2e/` i `components/flo/`.
 
 Następny krok: 35 (panel trybu cichego) — blok 7.
+
+## 2026-08-30 · PODSUMOWANIE DLA BARTOSZA — tor B po bloku 6
+
+Bartek, w skrócie: **interfejs agenta jest gotowy od kroku 0 do 34**. Wszystko
+siedzi w `main` (ostatni commit `7fafee2`). Poniżej stan i lista rzeczy, które
+wiszą po Twojej stronie — zebrane w jedno miejsce, bo rozsypały się po
+sześciu wpisach.
+
+### Co jest zrobione
+
+| Blok | Kroki | Co z tego masz |
+|---|---|---|
+| 0 | 1–4 | `lib/i18n/plural.ts`, pozycja „Flo” w menu nad Dashboardem, karta bazowa, wątek `/flo` |
+| 1 | 5–10 | sześć wariantów karty — Twoje 32 rodzaje propozycji renderują się bez ani jednej linijki po mojej stronie |
+| 2 | 11–14 | cztery podglądy: faktura, wiadomość z edycją, różnica „było → jest”, plik |
+| 3 | 15–21 | wpięte `approveProposal`, `dismissProposal`, `undoAction`, `cancelScheduled`, `getPrefs`, `savePrefs`; dowody, pasek cofnięcia, karta na dashboardzie, ustawienia |
+| 4 | 22–24 | paragon z telefonu ląduje w wątku, powiadomienia z przyciskiem akcji, wąski ekran |
+| 5 | 25–31 | `content/flo/` — 32 pliki treści, `GLOS.md`, lista dla prawnika |
+| 6 | 32–34 | `e2e/flo-*.spec.ts` (15 testów) i dostępność |
+
+Stan zestawu: `pnpm typecheck` czysto, eslint bez błędów, 1055 testów
+jednostkowych zielonych, `next build` przechodzi (`/flo` i `/settings/flo`
+w tabeli tras).
+
+### Czego potrzebuję od Ciebie (12 rzeczy, od najważniejszej)
+
+1. **`listHistory()`** — panel „co Flo zrobił” stoi pusty. `listScheduled`
+   opisuje kolejkę, nie przeszłość, a historii nie wymyślam.
+2. **`listScheduled` ma `whenLabel: 'zaraz'` na sztywno** — w panelu wygląda
+   to, jakby wszystko miało pójść w tej samej sekundzie.
+3. **`PushPayload` bez `actions` i `actionUrls`.** Service worker już je
+   obsługuje. Dla propozycji: `actions: [{ action: 'open', title: <primary.label> }]`,
+   `actionUrls: { open: '/flo#<id>' }`. Dla czynności zrobionej samodzielnie:
+   `actions: [{ action: 'undo', title: 'Cofnij' }]`,
+   `actionUrls: { undo: '/flo?undo=<id>' }`. Plus `tag` = klucz tematu, bo bez
+   niego klient dostaje osiem powiadomień o jednej fakturze.
+4. **Warianty szablonów**: `payment.chase:soft|:firm|:demand` oraz
+   `ksef.outage:confirmed|:neutral`. Treści leżą gotowe w `content/flo/`.
+5. **Nowe placeholdery w treściach** (`{{kolumna}}`, `{{numerKsef}}`,
+   `{{zrodlo}}`, `{{stawka}}`, `{{dataStawki}}`, `{{terminWezwania}}`,
+   `{{nadawca}}`, `{{liczbaFaktur}}`, `{{liczbaPoTerminie}}`). Bez policzenia
+   ich po Twojej stronie `renderTemplate` słusznie rzuci wyjątkiem.
+6. **Suma zaznaczonych w wariancie `list`.** Plan ją przewiduje, ale kwoty są
+   napisami, a interfejsowi nie wolno liczyć pieniędzy. Pokazuję liczbę
+   pozycji. Jeśli ma być suma — potrzebne pole liczbowe w `FloListItem`.
+7. **`FloListItem.preview` albo `href`** — plan chce podglądu POJEDYNCZEJ
+   pozycji, a kontrakt go nie ma. Na razie rozwijam wiersz z tym, co jest.
+8. **`FloPreview` typu `message` bez wariantów tonu.** Jeśli mają być
+   zakładki: `tones?: { label, bodyText }[]` obok `bodyText`.
+9. **`/share-target` prowadzi teraz do `/flo?paragon=<job>`**, nie do
+   `/expenses?ocr_pending=…`. Jeśli któreś zadanie zakładało `/expenses`, to
+   założenie się zmieniło.
+10. **B-01 Co-Pilot Księgowego** to ostatnie miejsce w aplikacji, gdzie
+    ustawienie znaczy „wyślij samo”. Tekstu nie zmieniałem, bo opisuje
+    prawdziwe zachowanie — zamyka to Twój krok 41.
+11. **`e2e/helpers/flo-seed.ts`** czyści `flo_proposals` i `flo_approvals`.
+    Jeśli dojdzie tabela ze śladem wykonania, dopisz ją, żeby testy nie
+    zostawiały śmieci.
+12. **BUG-008** — telefony nadal lecą na `/mobile`, więc mobilne projekty
+    Playwrighta pomijają testy agenta, a ścieżki paragonu i powiadomień nie
+    da się dziś przeklikać na urządzeniu.
+
+### Dwie rzeczy, których NIE zweryfikowałem
+
+- **Ani jedno kliknięcie nie przeszło przez prawdziwy serwer.** W worktree nie
+  ma `.env.local`, a `/flo` jest za bramką auth. Wpięcie akcji jest sprawdzone
+  kompilacją, testami renderu i lekturą kontraktu — nie klikaniem.
+- **Testów e2e nie uruchomiłem** (brak bazy). `playwright test --list` je
+  widzi, typy i lint są czyste, ale pierwszy przebieg pewnie wymaga korekt
+  w selektorach.
+
+### Produkcja
+
+`main` ma wszystko, ale **produkcja tego nie ma**. Sprawdzone twardo:
+`https://www.faktflow.pl/sw.js` nie zawiera `actionUrls`, czyli działa tam
+build sprzed bloku 4. Wdrożenia nie ruszam — to nie moja działka.
