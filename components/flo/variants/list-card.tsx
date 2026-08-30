@@ -14,7 +14,12 @@ import {
   type FloVariantProps,
 } from '../card-chrome';
 import { countLabel, FLO_FORMS } from '../format';
-import { canSelectItem, EMPTY_CARD_STATE, primaryLock } from '../gating';
+import {
+  approveInputFor,
+  canSelectItem,
+  EMPTY_CARD_STATE,
+  primaryLock,
+} from '../gating';
 
 /**
  * Wariant `list` (krok 9) — paczka pozycji z zaznaczaniem.
@@ -101,7 +106,9 @@ export function FloListCard({
           )}`}
           disabled={inert || lock.locked}
           lockReason={lock.locked ? lock.reason : undefined}
-          onClick={() => onAction?.(view.primary, view, { selectedIds })}
+          onClick={() =>
+            onAction?.(view.primary, view, approveInputFor(view, state))
+          }
         />
       </FloSecondaryRow>
 

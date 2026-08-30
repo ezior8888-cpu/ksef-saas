@@ -300,3 +300,54 @@ cofnięcia (18), wpiętych akcji serwerowych (16 i 19), dopracowanych podglądó
 (11–14).
 
 Następny krok: 11 (podgląd faktury) — blok 2.
+
+## 2026-08-30 · Kroki 11–14 — cztery podglądy (BLOK 2)
+
+Zrobione:
+- `components/flo/preview-invoice.tsx` — układ i kolumny jak w podglądzie
+  faktury wystawianej ręcznie (`components/invoices/invoice-detail-view.tsx`).
+- `components/flo/preview-message.tsx` — adresat, temat, treść w polu
+  edytowalnym.
+- `components/flo/preview-diff.tsx` — tabela „było → jest”.
+- `components/flo/preview-file.tsx` — nazwa, rozmiar, pobranie.
+- `components/flo/card-preview.tsx` — rozgałęzienie na cztery komponenty,
+  bez `default`.
+- `components/flo/gating.ts` — `approveInputFor`: co dokładnie leci na serwer
+  razem z kliknięciem.
+- `tests/unit/ui-flo-previews.test.tsx` (11) + 5 testów `approveInputFor`
+  dopisanych do `ui-flo-gating.test.ts`.
+
+Decyzje:
+- Faktura ma TE SAME kolumny i nagłówki co dokument, który klient zna
+  z ręcznego wystawiania. Ma go poznać bez czytania, a nie zastanawiać się,
+  czy „faktura od FLO” to to samo co jego faktura.
+- Treść wiadomości jest sterowana Z KARTY, nie trzymana w panelu podglądu.
+  Zwinięcie podglądu odmontowuje pole; gdyby treść siedziała w nim, poprawka
+  zniknęłaby razem z nim, a klient miałby prawo sądzić, że została zapamiętana.
+- `approveInputFor` jest osobną czystą funkcją z tego samego powodu co
+  `primaryLock`: to granica między tym, co człowiek widział, a tym, co idzie
+  na serwer. Nietknięta treść NIE jedzie — serwer wysyła wtedy swoją wersję
+  i nie musi porównywać dwóch napisów, żeby stwierdzić, że są identyczne.
+- W różnicy zmienione pole ma znacznik przy nazwie, nie tylko inny kolor.
+  Kolor jest nośnikiem tylko dla tych, którzy go rozróżniają.
+- Plik: świadomie BEZ atrybutu `download`. Przy adresie podpisanym czasowo
+  przeglądarka zapisałaby plik pod nazwą wyciągniętą z adresu, a nie tą,
+  którą nadał serwer. Adres bierzemy z ładunku przy każdym renderze i nigdzie
+  go nie zapamiętujemy, więc odświeżenie ekranu daje świeży link; gdyby
+  trafił się przeterminowany, klient zobaczy odpowiedź serwera, a nie ciszę.
+
+UWAGI DLA BARTOSZA:
+- TRZY WARIANTY TONU wiadomości (plan, krok 12: „zakładki, gdy serwer je
+  przyśle”) nie mają miejsca w kontrakcie — `FloPreview` typu `message` ma
+  jedno `bodyText`. Nie wymyślam pola za Ciebie. Gdyby miało powstać,
+  najmniej inwazyjnie: `tones?: { label: string; bodyText: string }[]`
+  obok `bodyText`, a interfejs pokaże zakładki tylko wtedy, gdy przyjdą.
+- Przypominam dwie sprawy z bloku 1: suma zaznaczonych w wariancie `list`
+  i podgląd pojedynczej pozycji (`FloListItem.preview`).
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 58 plików, 1029 testów, wszystko zielone.
+- `pnpm typecheck` czysto, eslint czysto.
+- Cztery podglądy wyrenderowane do statycznego HTML-a i obejrzane.
+
+Następny krok: 15 (karta FLO na dashboardzie) — blok 3.

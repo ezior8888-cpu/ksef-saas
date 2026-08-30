@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  approveInputFor,
   canSelectItem,
   EMPTY_CARD_STATE,
   isValueValid,
@@ -188,5 +189,51 @@ describe('primaryLock — warianty bez blokad', () => {
     for (const id of ['fx-info-ksef', 'fx-single-expense']) {
       expect(primaryLock(fixture(id), EMPTY_CARD_STATE).locked).toBe(false);
     }
+  });
+});
+
+describe('approveInputFor — co leci na serwer razem z kliknięciem', () => {
+  it('paczka przekazuje zaznaczone pozycje', () => {
+    const batch = fixture('fx-list-batch');
+    const input = approveInputFor(batch, {
+      ...EMPTY_CARD_STATE,
+      selectedIds: ['b1', 'b2'],
+    });
+
+    expect(input).toEqual({ selectedIds: ['b1', 'b2'] });
+  });
+
+  it('pytanie o dane przekazuje wpisaną wartość bez spacji na brzegach', () => {
+    const pack = fixture('fx-input-accountant');
+    const input = approveInputFor(pack, {
+      ...EMPTY_CARD_STATE,
+      value: '  anna@biuro.pl ',
+      valueConfirmed: true,
+    });
+
+    expect(input).toEqual({ value: 'anna@biuro.pl' });
+  });
+
+  it('poprawiona treść wiadomości jedzie dalej', () => {
+    const chase = fixture('fx-preview-chase');
+    const input = approveInputFor(chase, {
+      ...EMPTY_CARD_STATE,
+      editedBody: 'Dzień dobry, przypominam o płatności.',
+    });
+
+    expect(input).toEqual({
+      editedBody: 'Dzień dobry, przypominam o płatności.',
+    });
+  });
+
+  it('nietknięta treść NIE jedzie — serwer wysyła swoją wersję', () => {
+    const chase = fixture('fx-preview-chase');
+    expect(approveInputFor(chase, EMPTY_CARD_STATE)).toBeUndefined();
+  });
+
+  it('karta bez pól i bez listy nie dokłada niczego', () => {
+    expect(
+      approveInputFor(fixture('fx-info-ksef'), EMPTY_CARD_STATE),
+    ).toBeUndefined();
   });
 });

@@ -10,7 +10,7 @@ import {
   type FloVariantProps,
 } from '../card-chrome';
 import { FloPreviewPanel } from '../card-preview';
-import { EMPTY_CARD_STATE, primaryLock } from '../gating';
+import { approveInputFor, EMPTY_CARD_STATE, primaryLock } from '../gating';
 
 /**
  * Wariant `preview` (krok 7) — NAJWAŻNIEJSZY WARIANT W CAŁYM INTERFEJSIE.
@@ -29,6 +29,11 @@ import { EMPTY_CARD_STATE, primaryLock } from '../gating';
  * Etykiety przycisku NIE ZMIENIAMY. Serwer przysyła gotową („Wyślij
  * wiadomość”, a przy P-04 „Pokaż treść”) i to on wie, co jest na końcu tej
  * drogi.
+ *
+ * EDYCJA TREŚCI (krok 12) mieszka tutaj, a nie w panelu podglądu: zwinięcie
+ * podglądu odmontowuje pole tekstowe, więc gdyby treść siedziała w nim,
+ * zniknęłaby razem z nim — a klient miałby prawo sądzić, że jego poprawka
+ * została zapamiętana.
  */
 export function FloPreviewCard({
   view,
@@ -37,9 +42,11 @@ export function FloPreviewCard({
   className,
 }: FloVariantProps) {
   const [previewSeen, setPreviewSeen] = useState(false);
+  const [editedBody, setEditedBody] = useState<string | null>(null);
   const inert = onAction === undefined;
 
-  const lock = primaryLock(view, { ...EMPTY_CARD_STATE, previewSeen });
+  const state = { ...EMPTY_CARD_STATE, previewSeen, editedBody };
+  const lock = primaryLock(view, state);
 
   return (
     <FloCardShell view={view} showTime={showTime} className={className}>
@@ -47,6 +54,8 @@ export function FloPreviewCard({
         <FloPreviewPanel
           preview={view.preview}
           onOpened={() => setPreviewSeen(true)}
+          editedBody={editedBody ?? undefined}
+          onEditBody={setEditedBody}
         />
       ) : null}
 
@@ -55,7 +64,9 @@ export function FloPreviewCard({
           label={view.primary.label}
           disabled={inert || lock.locked}
           lockReason={lock.locked ? lock.reason : undefined}
-          onClick={() => onAction?.(view.primary, view)}
+          onClick={() =>
+            onAction?.(view.primary, view, approveInputFor(view, state))
+          }
         />
       </FloSecondaryRow>
 

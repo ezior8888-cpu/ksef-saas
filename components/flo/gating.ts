@@ -1,4 +1,4 @@
-import type { FloProposalView } from '@/types/flo';
+import type { FloApproveInput, FloProposalView } from '@/types/flo';
 
 /**
  * Kiedy główny przycisk karty jest zablokowany (kroki 5–10 toru B).
@@ -26,6 +26,8 @@ export interface FloCardState {
   value: string;
   /** czy potwierdził wpisaną wartość na ekranie potwierdzenia */
   valueConfirmed: boolean;
+  /** treść wiadomości po edycji; `null` = człowiek jej nie ruszał */
+  editedBody: string | null;
 }
 
 export const EMPTY_CARD_STATE: FloCardState = {
@@ -34,6 +36,7 @@ export const EMPTY_CARD_STATE: FloCardState = {
   seenItemIds: [],
   value: '',
   valueConfirmed: false,
+  editedBody: null,
 };
 
 export type FloLock =
@@ -155,4 +158,37 @@ export function primaryLock(
   }
 
   return UNLOCKED;
+}
+
+/**
+ * Co dokładnie leci do akcji zatwierdzającej razem z kliknięciem.
+ *
+ * Osobna funkcja, a nie sklejanie obiektu w komponencie, z tego samego
+ * powodu co `primaryLock`: to jest granica między tym, co człowiek widział
+ * na ekranie, a tym, co pojedzie na serwer. Ma być czytelna i przetestowana.
+ *
+ * Zasada: przekazujemy WYŁĄCZNIE to, co człowiek naprawdę ustawił. Treść
+ * wiadomości idzie tylko wtedy, gdy ją ruszył — inaczej serwer wysyła swoją
+ * wersję i nie musi porównywać dwóch napisów, żeby się dowiedzieć, że są
+ * identyczne.
+ */
+export function approveInputFor(
+  view: FloProposalView,
+  state: FloCardState,
+): FloApproveInput | undefined {
+  const input: FloApproveInput = {};
+
+  if (view.variant === 'list') {
+    input.selectedIds = [...state.selectedIds];
+  }
+
+  if (view.variant === 'input' || view.primary.intent === 'input') {
+    input.value = state.value.trim();
+  }
+
+  if (state.editedBody !== null && view.preview?.type === 'message') {
+    input.editedBody = state.editedBody;
+  }
+
+  return Object.keys(input).length > 0 ? input : undefined;
 }

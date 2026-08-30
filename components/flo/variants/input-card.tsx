@@ -11,7 +11,12 @@ import {
   type FloVariantProps,
 } from '../card-chrome';
 import { FloPreviewPanel } from '../card-preview';
-import { EMPTY_CARD_STATE, isValueValid, primaryLock } from '../gating';
+import {
+  approveInputFor,
+  EMPTY_CARD_STATE,
+  isValueValid,
+  primaryLock,
+} from '../gating';
 
 /**
  * Wariant `input` (krok 10) — agent pyta o brakującą daną.
@@ -42,12 +47,13 @@ export function FloInputCard({
   const trimmed = value.trim();
   const valueOk = isValueValid(value, kind);
 
-  const lock = primaryLock(view, {
+  const state = {
     ...EMPTY_CARD_STATE,
     value,
     valueConfirmed,
     previewSeen,
-  });
+  };
+  const lock = primaryLock(view, state);
 
   const needsConfirmation = kind === 'email';
 
@@ -112,7 +118,9 @@ export function FloInputCard({
           label={view.primary.label}
           disabled={inert || lock.locked}
           lockReason={lock.locked ? lock.reason : undefined}
-          onClick={() => onAction?.(view.primary, view, { value: trimmed })}
+          onClick={() =>
+            onAction?.(view.primary, view, approveInputFor(view, state))
+          }
         />
       </FloSecondaryRow>
 
