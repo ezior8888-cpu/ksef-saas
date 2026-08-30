@@ -231,3 +231,72 @@ szkielety ładowania (20).
 Uwagi dla Bartosza: brak.
 
 Następny krok: 5 (wariant `info`) — początek bloku 1, sześć wariantów karty.
+
+## 2026-08-30 · Kroki 5–10 — sześć wariantów karty (BLOK 1)
+
+Zrobione:
+- `components/flo/gating.ts` — `primaryLock`, `canSelectItem`, `isValueValid`,
+  `FloCardState`. Czyste reguły blokowania akcji głównej.
+- `components/flo/card-chrome.tsx` — skorupa karty (nagłówek, odliczanie,
+  stan po wygaśnięciu) i wspólne przyciski.
+- `components/flo/card-preview.tsx` — rozwijany podgląd z czterema rodzajami
+  zawartości. Do dopracowania w krokach 11–14.
+- `components/flo/variants/` — `info-card`, `single-card`, `preview-card`,
+  `choice-card`, `list-card`, `input-card`.
+- `components/flo/proposal-card.tsx` — sam wybór wariantu, bez `default`.
+- `tests/unit/ui-flo-gating.test.ts` (18) i `ui-flo-variants.test.tsx` (17).
+
+DLACZEGO REGUŁY BLOKOWANIA SĄ W OSOBNYM PLIKU:
+to jedyne miejsce w moim torze, którego złamanie kosztuje klienta pieniądze —
+fakturę wysłaną do rejestru państwowego bez obejrzenia, wiadomość u obcej
+firmy, paczkę dokumentów na zły adres. Jako czysta funkcja mają test bez
+przeglądarki i nie da się ich zgubić przy przebudowie wyglądu. Sprawdziłem, że
+test nie jest pusty: po tymczasowym wyłączeniu `primaryLock` padło 10 testów
+reguł i 3 renderowe. Po przywróceniu — 35 zielonych.
+
+Krok po kroku:
+- 5 `info`: żadnego przycisku w kolorze wezwania do działania. Karta, która
+  melduje dobrą wiadomość, nie ma prawa krzyczeć tak samo jak ta, która czeka
+  na decyzję o wysłaniu pieniędzy w świat. „Pokaż fakturę” i „Ukryj” są
+  równorzędne i ciche.
+- 6 `single`: przycisk główny wyraźny, odmowa dyskretna obok. Odmowa ma być
+  łatwa do znalezienia, ale nie ma konkurować wzrokowo ze zgodą.
+- 7 `preview`: przycisk zablokowany do czasu otwarcia podglądu. Raz obejrzany
+  podgląd zostaje obejrzany — zamknięcie panelu nie zamyka przycisku, bo
+  człowiek już wie, co zatwierdza. Etykiety z `primary.label` nie ruszam.
+- 8 `choice`: trzecia odpowiedź z polem kwoty rozwija się W MIEJSCU, nie na
+  osobnym ekranie. Kwota jedzie do serwera jako napis, dokładnie tak, jak ją
+  wpisano — interfejs sprawdza tylko kształt, nie przelicza.
+- 9 `list`: pozycja odstająca ma WYŁĄCZONE pole wyboru do czasu rozwinięcia
+  jej wiersza. Silnik pilnuje tego po swojej stronie, interfejs po swojej —
+  między klientem a hurtową wysyłką na złą kwotę mają stać dwie niezależne
+  blokady, nie jedna.
+- 10 `input`: przy adresie e-mail samo wpisanie nie wystarcza. Musi jeszcze
+  paść zdanie „Wysyłam do anna@biuro.pl — zgadza się?” i potwierdzenie.
+  Literówka w adresie to komplet dokumentów firmy u obcej osoby.
+
+DWIE RZECZY DO USTALENIA — UWAGI DLA BARTOSZA:
+1. SUMA ZAZNACZONYCH w wariancie `list`. Plan ją przewiduje (krok 9), ale
+   kontrakt przysyła kwoty jako gotowe napisy, a interfejsowi nie wolno
+   liczyć pieniędzy. Nie sumuję ich po cichu przez parsowanie napisów —
+   pokazuję liczbę pozycji („Zaznaczone: 7 pozycji z 10”). Żeby była suma,
+   potrzebne jest pole od silnika; sam wybór jest dowolny, więc chyba
+   najprościej: `FloListItem.amountMinor: number` i suma liczona po stronie
+   serwera przy zatwierdzeniu, a w interfejsie wyłącznie do wyświetlenia.
+2. PODGLĄD POZYCJI LISTY. Plan mówi „zaznaczenie możliwe dopiero po otwarciu
+   podglądu TEJ POZYCJI”, ale `FloListItem` nie ma własnego podglądu, a
+   atrapa `fx-list-batch` nie ma nawet podglądu na poziomie karty. Zrobiłem
+   rozwijany wiersz z tym, co jest w pozycji — to spełnia sens reguły
+   (człowiek musi na nią spojrzeć), ale gdyby doszło `FloListItem.preview`
+   albo `href`, wyglądałoby to poważniej.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 57 plików, 1013 testów, wszystko zielone.
+- `pnpm typecheck` czysto, eslint czysto.
+- Zrzut statyczny wszystkich sześciu wariantów obejrzany.
+
+Czego w kartach nadal nie ma: dowodów „dlaczego to widzę” (krok 17), paska
+cofnięcia (18), wpiętych akcji serwerowych (16 i 19), dopracowanych podglądów
+(11–14).
+
+Następny krok: 11 (podgląd faktury) — blok 2.
