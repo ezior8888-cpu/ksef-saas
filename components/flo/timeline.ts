@@ -4,15 +4,12 @@
  * Czysta logika, bez Reacta — dzięki temu da się ją przetestować bez
  * renderowania czegokolwiek, a ekran zostaje głupi i przewidywalny.
  *
- * DLACZEGO OŚ, A NIE LISTA POSORTOWANA PO WAŻNOŚCI: ekran agenta ma czytać
- * się jak zapis tego, co się działo — „wczoraj o 14:31 przyjęta faktura,
- * dziś o 08:34 zaksięgowane koszty”. Klient wraca do niego kilka razy
- * dziennie i szuka wzrokiem miejsca, w którym ostatnio skończył. Kolejność
- * po ważności przestawiałaby mu karty pod ręką przy każdym odświeżeniu.
- *
- * Pole `priority` z kontraktu NIE ZNIKA — służy do wyboru, co pokazać
- * w powiadomieniu i co ma trafić na górę, gdy kart jest więcej niż mieści
- * ekran. Na osi decyduje czas.
+ * PODZIAŁ RÓL: dni idą chronologicznie („WCZORAJ”, potem „DZIŚ”), bo ekran
+ * ma się czytać jak zapis tego, co się działo, a klient wraca do niego kilka
+ * razy dziennie i szuka miejsca, w którym skończył. Wewnątrz dnia decyduje
+ * priorytet, a dopiero po nim czas — dzień jest na tyle wąską ramką, że
+ * pilna sprawa nie ucieknie pod inne karty, a godzina przy każdej karcie
+ * i tak mówi, kiedy co się wydarzyło.
  */
 
 import type { FloProposalView } from '@/types/flo';
@@ -28,7 +25,19 @@ export interface FloDayGroup {
   items: FloProposalView[];
 }
 
-/** Najstarsze na górze — jak w zapisie rozmowy. */
+/**
+ * Kolejność WEWNĄTRZ dnia: najpierw priorytet, potem czas (nowsze wyżej).
+ * Tak każe plan i tak jest sensownie — dzień to na tyle wąska ramka, że
+ * pilna sprawa nie ucieka pod inne karty, a klient nadal wie, kiedy co się
+ * wydarzyło, bo przy każdej karcie stoi godzina.
+ */
+function byPriorityThenTime(a: FloProposalView, b: FloProposalView): number {
+  return (
+    a.priority - b.priority || Date.parse(b.createdAt) - Date.parse(a.createdAt)
+  );
+}
+
+/** Do podziału na dni: najstarsze pierwsze, żeby grupy szły chronologicznie. */
 function byTimeAsc(a: FloProposalView, b: FloProposalView): number {
   return Date.parse(a.createdAt) - Date.parse(b.createdAt);
 }
@@ -71,7 +80,7 @@ export function groupByDay(
   return [...groups.entries()].map(([label, items]) => ({
     key: items[0]!.createdAt,
     label,
-    items,
+    items: [...items].sort(byPriorityThenTime),
   }));
 }
 

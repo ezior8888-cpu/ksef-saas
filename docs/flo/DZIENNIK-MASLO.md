@@ -122,3 +122,69 @@ Co z tego wynika dla toru B: `app/actions/flo.ts` ma komplet akcji
 `undoAction`, `cancelScheduled`, `getPrefs`, `savePrefs`). Ekran z kroku 2
 zostaje na atrapach — podmiana to dwie linijki w `page.tsx` — ale karta
 z kroku 3 może od razu wpinać się w prawdziwe akcje, bez czekania na cokolwiek.
+
+## 2026-08-30 · Kroki 1–3 uzgodnione z planem + karta bazowa
+
+Dostałem wreszcie pełny plan (części II.3–V). Dwie rzeczy z niego wynikły od
+razu: moje wcześniejsze kroki miały inne numery, niż myślałem, i jeden krok
+zrobiłem odwrotnie, niż plan każe.
+
+CO POPRAWIŁEM WSTECZ:
+- Odmiana przez liczebnik przeniesiona do `lib/i18n/plural.ts` — plan wskazuje
+  tę ścieżkę w mapie własności (IV.2). `components/flo/format.ts` zostaje przy
+  czasie i tylko przepuszcza `plural`/`countLabel` dalej.
+- KROK 2 z planu to „miejsce dla FLO w nawigacji”, a ja go świadomie pominąłem
+  (myślałem, że `lib/dashboard-nav-config.ts` jest wspólny — jest MÓJ, plan
+  mówi to wprost). Dodane: pozycja „Flo” nad Dashboardem, ikona `assistant`,
+  trasa `/flo`. `isActiveNavPath` obsługuje ją gałęzią domyślną, bez zmian.
+- To, co zrobiłem jako „krok 2” (wątek z osią zdarzeń), jest w planie KROKIEM
+  4. Zostaje — brakuje mu jeszcze mikrofonu i aparatu przy polu rozmowy,
+  dorobię je, wracając po numer 4.
+- Kolejność w wątku ODWRÓCONA na zgodną z planem: wewnątrz dnia najpierw
+  priorytet, potem czas. Wcześniej sortowałem czysto chronologicznie i tak to
+  uzasadniłem w kroku 2 — plan mówi inaczej i plan wygrywa. Dni nadal idą
+  chronologicznie, więc układ z makiety („WCZORAJ”, potem „DZIŚ”) zostaje.
+- Moje testy jednostkowe przeniesione z `tests/unit/flo-ui-*` na
+  `tests/unit/ui-flo-*`. Wzorzec `tests/unit/flo-*` należy do Bartosza (IV.2);
+  nazwy nie kolidowały, ale mapa własności ma być czytelna, a nie „prawie”.
+
+KROK 3 — KARTA BAZOWA:
+- `components/flo/proposal-card.tsx` — `FloProposalCard` przyjmuje
+  `FloProposalView`, rysuje nagłówek (godzina + odliczanie), `title`, `body`
+  i przyciski z `primary` oraz `secondary`. Rozgałęzienie przez
+  `switch (view.variant)` z sześcioma jawnymi gałęziami; wszystkie prowadzą
+  na razie do wyglądu `info`, zgodnie z planem.
+- `app/(dashboard)/flo/_components/flo-card-slot.tsx` skasowany — zastąpiła go
+  prawdziwa karta.
+- `tests/unit/ui-flo-card.test.tsx` — 8 testów.
+
+Decyzje:
+- Brak `default` w switchu jest celowy: siódmy wariant ma zatrzymać
+  kompilację, a nie wywalić ekran klientowi.
+- `useNow` zwraca `null` przed zamontowaniem i dopiero potem tyka. Gdyby czas
+  brał się z `new Date()` w trakcie renderu, serwer i przeglądarka policzyłyby
+  go w dwóch różnych sekundach i React zgłosiłby rozjazd hydratacji na każdej
+  karcie. Skutek uboczny: odliczania nie widać na statycznym zrzucie.
+- Zegar tyka co sekundę, gdy do terminu jest mniej niż godzina, i co minutę
+  w pozostałych przypadkach. Napis „zostały 4 minuty” musi się zmieniać,
+  „zostało 6 dni” nie musi.
+- Wygasła karta gaśnie i dostaje spokojne zdanie zamiast przycisków. Żadnej
+  czerwieni — to ta sama zasada co przy odpowiedzi `stale` z kroku 19.
+- Blokada przycisku przy `requiresPreview` jest już w karcie bazowej, mimo że
+  podgląd dochodzi w kroku 7. Nie chcę, żeby ta blokada powstawała później
+  przy okazji — to jedyna rzecz między klientem a wysyłką, której nie obejrzał.
+- Bez wpiętej obsługi (`onAction`) przyciski są WYŁĄCZONE. Wpięcie akcji
+  serwerowych plan umieszcza przy wariantach i w krokach 16–19.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 54 pliki, 973 testy, wszystko zielone
+  (moje cztery pliki: 36 testów).
+- `pnpm typecheck` czysto, eslint na wszystkich dotkniętych plikach czysto.
+- Ekran wyrenderowany do statycznego HTML-a na komplecie 12 atrap i obejrzany.
+  Nadal nie da się go otworzyć w dev-serwerze z tego worktree: brak
+  `.env.local`, a `/flo` jest za bramką auth.
+
+Uwagi dla Bartosza: brak.
+
+Następny krok: 4 (wątek `/flo` — domknięcie: mikrofon i aparat przy polu
+rozmowy, stany puste), potem blok 1 (warianty 5–10).

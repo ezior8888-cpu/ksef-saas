@@ -1,6 +1,5 @@
+import { FloProposalCard } from '@/components/flo/proposal-card';
 import type { FloDayGroup } from '@/components/flo/timeline';
-
-import { FloCardSlot } from './flo-card-slot';
 
 /**
  * Oś zdarzeń: nagłówek dnia, pod nim karty tego dnia.
@@ -37,7 +36,7 @@ export function FloTimeline({ groups }: { groups: FloDayGroup[] }) {
           </h2>
 
           {group.items.map((proposal) => (
-            <FloCardSlot key={proposal.id} proposal={proposal} />
+            <FloProposalCard key={proposal.id} view={proposal} />
           ))}
         </div>
       ))}

@@ -22,6 +22,8 @@
  * krok 10 Bartosza).
  */
 
+import { countLabel, plural, type PluralForms } from '@/lib/i18n/plural';
+
 /** Strefa klienta. Wszystkie etykiety dat i godzin liczymy w niej. */
 export const FLO_TZ = 'Europe/Warsaw';
 
@@ -30,46 +32,11 @@ export const FLO_TZ = 'Europe/Warsaw';
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Trzy formy rzeczownika: dla 1, dla 2–4, dla 5 i więcej (oraz dla 0).
- * Kolejność jak w zdaniach: „1 zadanie, 2 zadania, 5 zadań”.
+ * Sama reguła odmiany mieszka w `lib/i18n/plural.ts` — jest wspólna dla
+ * całej aplikacji, nie tylko dla agenta. Tutaj tylko ją przepuszczamy dalej,
+ * żeby komponenty FLO miały jeden import.
  */
-export type PluralForms = readonly [one: string, few: string, many: string];
-
-/**
- * Wybiera formę rzeczownika dla liczby. To JEDYNE miejsce w interfejsie
- * agenta, które zna polskie reguły odmiany — nigdzie indziej nie sklejamy
- * napisów przez `n === 1 ? ... : ...`.
- *
- * Reguła: 1 → forma pierwsza; końcówka 2–4 (poza nastolatkami 12–14) →
- * forma druga; reszta, łącznie z zerem → forma trzecia.
- *
- *     plural(1, FLO_FORMS.zadanie)  // 'zadanie'
- *     plural(3, FLO_FORMS.zadanie)  // 'zadania'
- *     plural(13, FLO_FORMS.zadanie) // 'zadań'   ← nastolatek, nie „zadania”
- *     plural(0, FLO_FORMS.zadanie)  // 'zadań'
- */
-export function plural(count: number, forms: PluralForms): string {
-  const n = Math.abs(Math.trunc(count));
-
-  if (n === 1) return forms[0];
-
-  const lastTwo = n % 100;
-  const last = n % 10;
-
-  if (last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14)) {
-    return forms[1];
-  }
-
-  return forms[2];
-}
-
-/**
- * Liczba razem z odmienionym rzeczownikiem: „1 zadanie”, „22 faktury”,
- * „0 zadań”. Tego używamy w odznakach i nagłówkach.
- */
-export function countLabel(count: number, forms: PluralForms): string {
-  return `${Math.trunc(count)} ${plural(count, forms)}`;
-}
+export { countLabel, plural, type PluralForms };
 
 /**
  * Formy używane w interfejsie agenta. Trzymamy je tutaj, zamiast wpisywać

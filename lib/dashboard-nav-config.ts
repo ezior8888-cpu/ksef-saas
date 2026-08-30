@@ -15,6 +15,9 @@ export const dashboardNavSections: DashboardNavSection[] = [
   {
     title: 'Dane',
     items: [
+      // FLO stoi nad Dashboardem, bo to on jest teraz głównym ekranem
+      // produktu — reszta menu to miejsca, do których zagląda się rzadziej.
+      { href: '/flo', label: 'Flo', icon: 'assistant' },
       { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
       {
         href: '/przeplywy',

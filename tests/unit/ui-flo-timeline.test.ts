@@ -47,17 +47,34 @@ describe('groupByDay — oś zdarzeń', () => {
     expect(groups[1]!.items.map((i) => i.id)).toEqual(['dzis']);
   });
 
-  it('w obrębie dnia najnowsze jest na dole, tuż nad polem rozmowy', () => {
+  it('w obrębie dnia decyduje priorytet, a przy remisie nowsze', () => {
     const groups = groupByDay(
       [
-        proposal({ id: 'pozniej', createdAt: '2026-08-24T09:48:00.000Z' }),
-        proposal({ id: 'wczesniej', createdAt: '2026-08-24T06:34:00.000Z' }),
+        proposal({
+          id: 'zwykla-starsza',
+          priority: 50,
+          createdAt: '2026-08-24T06:34:00.000Z',
+        }),
+        proposal({
+          id: 'pilna',
+          priority: 0,
+          createdAt: '2026-08-24T07:00:00.000Z',
+        }),
+        proposal({
+          id: 'zwykla-nowsza',
+          priority: 50,
+          createdAt: '2026-08-24T09:48:00.000Z',
+        }),
       ],
       now,
     );
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]!.items.map((i) => i.id)).toEqual(['wczesniej', 'pozniej']);
+    expect(groups[0]!.items.map((i) => i.id)).toEqual([
+      'pilna',
+      'zwykla-nowsza',
+      'zwykla-starsza',
+    ]);
   });
 
   it('nocne zdarzenie trafia do polskiego „dziś”, nie do wczoraj', () => {
