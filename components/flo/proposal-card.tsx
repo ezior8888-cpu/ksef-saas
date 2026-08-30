@@ -36,6 +36,12 @@ export type FloActionHandler = (
 export interface FloProposalCardProps {
   view: FloProposalView;
   onAction?: FloActionHandler;
+  /**
+   * Czy karta pokazuje godzinę u siebie. W wątku godzina stoi w lewej
+   * kolumnie osi czasu (krok 4), więc karta ją tam oddaje; na dashboardzie
+   * i w powiadomieniach nie ma osi, więc godzina wraca do karty.
+   */
+  showTime?: boolean;
   className?: string;
 }
 
@@ -89,7 +95,12 @@ function useNow(expiresAt: string): Date | null {
 // Wspólna skorupa karty
 // ═══════════════════════════════════════════════════════════════
 
-function FloCardShell({ view, onAction, className }: FloProposalCardProps) {
+function FloCardShell({
+  view,
+  onAction,
+  showTime = true,
+  className,
+}: FloProposalCardProps) {
   const now = useNow(view.expiresAt);
   const left = now ? timeLeft(view.expiresAt, now) : null;
   const expired = left?.expired ?? false;
@@ -103,12 +114,16 @@ function FloCardShell({ view, onAction, className }: FloProposalCardProps) {
       )}
     >
       <header className="flex items-baseline justify-between gap-3">
-        <time
-          dateTime={view.createdAt}
-          className="text-xs tabular-nums text-[var(--ff-text-dim)]"
-        >
-          {clockLabel(view.createdAt)}
-        </time>
+        {showTime ? (
+          <time
+            dateTime={view.createdAt}
+            className="text-xs tabular-nums text-[var(--ff-text-dim)]"
+          >
+            {clockLabel(view.createdAt)}
+          </time>
+        ) : (
+          <span />
+        )}
 
         {/* Odliczanie pojawia się po zamontowaniu — patrz `useNow`. */}
         {left ? (

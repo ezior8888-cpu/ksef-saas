@@ -1,10 +1,10 @@
-import { countTodayTasks, groupByDay } from '@/components/flo/timeline';
+import { FloThread } from '@/components/flo/thread';
+import { countTodayTasks } from '@/components/flo/timeline';
 import type { FloProposalView, FloScheduledView } from '@/types/flo';
 
 import { FloComposer } from './flo-composer';
 import { FloHeader } from './flo-header';
 import { FloSidePanel } from './flo-side-panel';
-import { FloTimeline } from './flo-timeline';
 
 /**
  * Szkielet ekranu agenta: nagłówek, oś zdarzeń, prawa kolumna, pole rozmowy.
@@ -29,7 +29,6 @@ export function FloScreen({
   usingFixtures?: boolean;
 }) {
   const now = new Date();
-  const groups = groupByDay(proposals, now);
   const todayTasks = countTodayTasks(proposals, now);
 
   return (
@@ -38,7 +37,11 @@ export function FloScreen({
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex min-h-0 flex-col gap-3">
-          <FloTimeline groups={groups} />
+          <FloThread
+            proposals={proposals}
+            now={now}
+            className="min-h-0 flex-1 space-y-6 overflow-y-auto rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] p-4 md:p-5"
+          />
           <FloComposer />
         </div>
 

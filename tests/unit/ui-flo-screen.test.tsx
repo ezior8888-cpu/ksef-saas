@@ -58,4 +58,13 @@ describe('FloScreen — szkielet ekranu agenta', () => {
     expect(html).toContain('id="flo-composer"');
     expect(html).toMatch(/id="flo-composer"[^>]*disabled/);
   });
+
+  it('pas rozmowy ma mikrofon i aparat z makiety — oba nieczynne', () => {
+    const html = render();
+
+    expect(html).toContain('Nagraj wiadomość (jeszcze nieczynne)');
+    expect(html).toContain('Zrób zdjęcie paragonu (jeszcze nieczynne)');
+    // Żaden z nich nie może być klikalny, dopóki nic za nim nie stoi.
+    expect(html.match(/<button[^>]*disabled/g)?.length ?? 0).toBeGreaterThan(1);
+  });
 });

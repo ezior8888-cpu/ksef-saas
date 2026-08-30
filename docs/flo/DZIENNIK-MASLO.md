@@ -188,3 +188,46 @@ Uwagi dla Bartosza: brak.
 
 Następny krok: 4 (wątek `/flo` — domknięcie: mikrofon i aparat przy polu
 rozmowy, stany puste), potem blok 1 (warianty 5–10).
+
+## 2026-08-30 · Krok 4 — wątek `/flo`
+
+Zrobione:
+- `components/flo/thread.tsx` — `FloThread`: podział na dni, godzina w lewej
+  kolumnie osi, stan pusty.
+- `components/flo/proposal-card.tsx` — nowy props `showTime`.
+- `app/(dashboard)/flo/_components/flo-composer.tsx` — mikrofon i aparat.
+- `app/(dashboard)/flo/_components/flo-screen.tsx` — przepięty na `FloThread`.
+- `app/(dashboard)/flo/_components/flo-timeline.tsx` — skasowany, jego robotę
+  przejął komponent współdzielony z `components/flo/`.
+- `tests/unit/ui-flo-thread.test.tsx` — 4 testy; plus jeden dopisany do testu
+  ekranu (mikrofon i aparat).
+
+Decyzje:
+- Godzina wróciła z karty do OSI. Wątek jest osią czasu i to on ma prawo
+  pisać godzinę w marginesie; ta sama karta na dashboardzie (krok 15) nie ma
+  osi, w którą mogłaby ją wpisać, więc tam pokazuje ją u siebie. Stąd
+  `showTime`, domyślnie włączone — wątek jest wyjątkiem, nie regułą.
+- W wąskim oknie margines z godziną znika (`hidden sm:block`), żeby karta
+  miała pełną szerokość. Godzina nie jest wtedy zgubiona — wraca do karty
+  dopiero w kroku 24 (widok mobilny), tam się tym zajmę na poważnie.
+- Stan pusty ma JEDNO zdanie i żadnej zachęty. Test sprawdza wprost, że nie
+  ma tam słów „skonfiguruj”, „ustaw”, „dodaj”, „zacznij”, „uzupełnij” — cisza
+  jest dobrą wiadomością i klient nie ma wychodzić z tego ekranu z poczuciem,
+  że czegoś zaniedbał.
+- Mikrofon i aparat są wyłączone i mówią to w `aria-label`
+  („jeszcze nieczynne”), a nie tylko wyglądem. Czytnik ekranu ma dostać tę
+  samą informację co oko.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 55 plików, 978 testów, wszystko zielone.
+- `pnpm typecheck` czysto, eslint czysto.
+- Zrzut statyczny na komplecie atrap obejrzany: nagłówki dni, godziny
+  w marginesie, pas rozmowy z dwoma ikonami.
+
+Czego w wątku NADAL nie ma (i gdzie to jest w planie): dowody „dlaczego to
+widzę” (krok 17), pasek cofnięcia (18), wpięcie akcji serwerowych (16 i 19),
+szkielety ładowania (20).
+
+Uwagi dla Bartosza: brak.
+
+Następny krok: 5 (wariant `info`) — początek bloku 1, sześć wariantów karty.
