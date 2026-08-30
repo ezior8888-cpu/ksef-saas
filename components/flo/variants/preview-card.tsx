@@ -40,16 +40,26 @@ export function FloPreviewCard({
   onAction,
   showTime,
   className,
+  notice,
+  pending,
+  onUndo,
 }: FloVariantProps) {
   const [previewSeen, setPreviewSeen] = useState(false);
   const [editedBody, setEditedBody] = useState<string | null>(null);
-  const inert = onAction === undefined;
+  const inert = onAction === undefined || pending === true;
 
   const state = { ...EMPTY_CARD_STATE, previewSeen, editedBody };
   const lock = primaryLock(view, state);
 
   return (
-    <FloCardShell view={view} showTime={showTime} className={className}>
+    <FloCardShell
+      view={view}
+      showTime={showTime}
+      className={className}
+      notice={notice}
+      pending={pending}
+      onUndo={onUndo}
+    >
       {view.preview ? (
         <FloPreviewPanel
           preview={view.preview}
@@ -59,7 +69,7 @@ export function FloPreviewCard({
         />
       ) : null}
 
-      <FloSecondaryRow view={view} onAction={onAction}>
+      <FloSecondaryRow view={view} onAction={onAction} disabled={inert}>
         <FloPrimaryButton
           label={view.primary.label}
           disabled={inert || lock.locked}

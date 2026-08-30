@@ -37,12 +37,15 @@ export function FloInputCard({
   onAction,
   showTime,
   className,
+  notice,
+  pending,
+  onUndo,
 }: FloVariantProps) {
   const [value, setValue] = useState('');
   const [valueConfirmed, setValueConfirmed] = useState(false);
   const [previewSeen, setPreviewSeen] = useState(false);
 
-  const inert = onAction === undefined;
+  const inert = onAction === undefined || pending === true;
   const kind = view.primary.inputKind;
   const trimmed = value.trim();
   const valueOk = isValueValid(value, kind);
@@ -58,7 +61,14 @@ export function FloInputCard({
   const needsConfirmation = kind === 'email';
 
   return (
-    <FloCardShell view={view} showTime={showTime} className={className}>
+    <FloCardShell
+      view={view}
+      showTime={showTime}
+      className={className}
+      notice={notice}
+      pending={pending}
+      onUndo={onUndo}
+    >
       {view.preview ? (
         <FloPreviewPanel
           preview={view.preview}
@@ -113,7 +123,7 @@ export function FloInputCard({
         </div>
       ) : null}
 
-      <FloSecondaryRow view={view} onAction={onAction}>
+      <FloSecondaryRow view={view} onAction={onAction} disabled={inert}>
         <FloPrimaryButton
           label={view.primary.label}
           disabled={inert || lock.locked}

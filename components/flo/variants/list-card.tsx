@@ -45,6 +45,9 @@ export function FloListCard({
   onAction,
   showTime,
   className,
+  notice,
+  pending,
+  onUndo,
 }: FloVariantProps) {
   const items = view.items ?? [];
 
@@ -54,7 +57,7 @@ export function FloListCard({
   const [seenItemIds, setSeenItemIds] = useState<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const inert = onAction === undefined;
+  const inert = onAction === undefined || pending === true;
   const state = { ...EMPTY_CARD_STATE, selectedIds, seenItemIds };
   const lock = primaryLock(view, state);
 
@@ -74,7 +77,14 @@ export function FloListCard({
   };
 
   return (
-    <FloCardShell view={view} showTime={showTime} className={className}>
+    <FloCardShell
+      view={view}
+      showTime={showTime}
+      className={className}
+      notice={notice}
+      pending={pending}
+      onUndo={onUndo}
+    >
       <ul className="mt-3 space-y-1">
         {items.map((item) => (
           <FloListRow
@@ -95,7 +105,7 @@ export function FloListCard({
         {items.length}
       </p>
 
-      <FloSecondaryRow view={view} onAction={onAction}>
+      <FloSecondaryRow view={view} onAction={onAction} disabled={inert}>
         <FloPrimaryButton
           /* Słowa są serwera, liczba nasza: „Wyślij zaznaczone · 4 pozycje”.
              Etykiety z `primary.label` nie przepisujemy — serwer wie, co jest

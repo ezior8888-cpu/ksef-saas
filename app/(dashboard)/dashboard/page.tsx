@@ -1,3 +1,9 @@
+import { Suspense } from 'react';
+
+import {
+  FloDashboardCard,
+  FloDashboardCardSkeleton,
+} from '@/app/(dashboard)/dashboard/_components/flo-card';
 import { createClient } from '@/lib/supabase/server';
 import { DashboardExportsPdfLink } from '@/components/dashboard/exports-route-client';
 
@@ -222,6 +228,13 @@ export default async function DashboardHomePage() {
           Zestawienie sprzedaży i podatku VAT · {monthName}
         </p>
       </div>
+
+      {/* Agent stoi nad liczbami, bo to on ma coś do powiedzenia dzisiaj —
+          reszta dashboardu podsumowuje miesiąc. W `Suspense`, żeby jego
+          zapytanie nie opóźniało wykresu ani KPI. */}
+      <Suspense fallback={<FloDashboardCardSkeleton />}>
+        <FloDashboardCard />
+      </Suspense>
 
       {/* KPI — cztery karty w jednym rzędzie, jak w prototypie */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">

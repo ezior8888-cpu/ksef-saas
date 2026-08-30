@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { FloAction, FloApproveInput, FloProposalView } from '@/types/flo';
 
+import { FloEvidenceDisclosure } from './evidence';
 import { clockLabel, timeLeft } from './format';
+import { FloUndoBar } from './undo-bar';
 
 /**
  * Wspólna skorupa karty i jej przyciski — to, co mają wszystkie sześć
@@ -28,6 +30,16 @@ export interface FloVariantProps {
   onAction?: FloActionHandler;
   showTime?: boolean;
   className?: string;
+  /**
+   * Spokojne zdanie od serwera: „Nowak zapłacił wczoraj — anulowałem”.
+   * Odmowa wykonania (`stale`, `expired`, `blocked`) NIE JEST awarią, więc
+   * nie ma tu miejsca na czerwień ani na słowo „błąd” (krok 19).
+   */
+  notice?: string;
+  /** true = trwa wykonywanie; przyciski tej karty są chwilowo nieczynne */
+  pending?: boolean;
+  /** cofnięcie czynności, którą agent wykonał sam (krok 18) */
+  onUndo?: () => void;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -71,11 +83,17 @@ export function FloCardShell({
   view,
   showTime = true,
   className,
+  notice,
+  pending,
+  onUndo,
   children,
 }: {
   view: FloProposalView;
   showTime?: boolean;
   className?: string;
+  notice?: string;
+  pending?: boolean;
+  onUndo?: () => void;
   /** wnętrze wariantu: pola, lista, podgląd i przyciski */
   children: React.ReactNode;
 }) {
@@ -92,6 +110,14 @@ export function FloCardShell({
         className,
       )}
     >
+      {view.undoableUntil ? (
+        <FloUndoBar
+          until={view.undoableUntil}
+          onUndo={onUndo}
+          disabled={pending || onUndo === undefined}
+        />
+      ) : null}
+
       <header className="flex items-baseline justify-between gap-3">
         {showTime ? (
           <time
@@ -137,6 +163,20 @@ export function FloCardShell({
       ) : (
         children
       )}
+
+      <FloEvidenceDisclosure evidence={view.evidence} />
+
+      {notice ? (
+        /* Odpowiedź serwera „nie wykonałem, bo dane się zmieniły” to dobra
+           wiadomość: bezpiecznik zadziałał. Ton ma to oddawać — spokojny
+           komunikat, nigdy czerwony pasek awarii. */
+        <p
+          role="status"
+          className="mt-3 rounded-lg border border-[var(--ff-border)] bg-[var(--ff-surface-inset)] p-2.5 text-xs text-[var(--ff-text-soft)]"
+        >
+          {notice}
+        </p>
+      ) : null}
     </article>
   );
 }

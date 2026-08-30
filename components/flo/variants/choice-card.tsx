@@ -32,17 +32,27 @@ export function FloChoiceCard({
   onAction,
   showTime,
   className,
+  notice,
+  pending,
+  onUndo,
 }: FloVariantProps) {
   const [openInput, setOpenInput] = useState<FloAction | null>(null);
   const [value, setValue] = useState('');
-  const inert = onAction === undefined;
+  const inert = onAction === undefined || pending === true;
 
   const valueOk = openInput
     ? isValueValid(value, openInput.inputKind)
     : false;
 
   return (
-    <FloCardShell view={view} showTime={showTime} className={className}>
+    <FloCardShell
+      view={view}
+      showTime={showTime}
+      className={className}
+      notice={notice}
+      pending={pending}
+      onUndo={onUndo}
+    >
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <FloPrimaryButton
           label={view.primary.label}

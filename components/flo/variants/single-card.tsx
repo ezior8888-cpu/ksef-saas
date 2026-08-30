@@ -24,12 +24,22 @@ export function FloSingleCard({
   onAction,
   showTime,
   className,
+  notice,
+  pending,
+  onUndo,
 }: FloVariantProps) {
-  const inert = onAction === undefined;
+  const inert = onAction === undefined || pending === true;
 
   return (
-    <FloCardShell view={view} showTime={showTime} className={className}>
-      <FloSecondaryRow view={view} onAction={onAction}>
+    <FloCardShell
+      view={view}
+      showTime={showTime}
+      className={className}
+      notice={notice}
+      pending={pending}
+      onUndo={onUndo}
+    >
+      <FloSecondaryRow view={view} onAction={onAction} disabled={inert}>
         <FloPrimaryButton
           label={view.primary.label}
           disabled={inert}

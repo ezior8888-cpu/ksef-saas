@@ -2,6 +2,7 @@ import Link from 'next/link';
 import {
   User,
   Bell,
+  Bot,
   Building2,
   CreditCard,
   ShieldCheck,
@@ -36,6 +37,12 @@ export default async function SettingsPage() {
 
   const settingsLinks = [
     {
+      href: '/settings/flo',
+      label: 'Flo',
+      description: 'Kiedy i którędy agent ma się odzywać',
+      icon: Bot,
+    },
+    {
       href: '/settings/ksef',
       label: 'Ustawienia KSeF',
       description: 'Certyfikat i połączenie z systemem KSeF',
@@ -46,7 +53,7 @@ export default async function SettingsPage() {
           {
             href: '/settings/reminders',
             label: 'Wkurzacz Dłużników',
-            description: 'Automatyczne przypomnienia o płatnościach',
+            description: 'Ponaglenia, które Flo przygotowuje do Twojej zgody',
             icon: Mail,
           },
         ]

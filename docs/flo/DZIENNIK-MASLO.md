@@ -351,3 +351,81 @@ Weryfikacja:
 - Cztery podglądy wyrenderowane do statycznego HTML-a i obejrzane.
 
 Następny krok: 15 (karta FLO na dashboardzie) — blok 3.
+
+## 2026-08-30 · Kroki 15–21 — reszta interfejsu agenta (BLOK 3)
+
+TO JEST KROK, W KTÓRYM KARTY PRZESTAŁY BYĆ MAKIETĄ. `/flo` czyta prawdziwe
+propozycje przez `listProposals`, a kliknięcia wołają `approveProposal`,
+`dismissProposal`, `undoAction` i `cancelScheduled`. Atrapy zostają tam, gdzie
+ich miejsce: w testach.
+
+Zrobione:
+- `components/flo/thread-client.tsx` — kontroler wątku: woła akcje, trzyma
+  stan wykonywania, pokazuje odpowiedzi serwera.
+- `components/flo/thread.tsx` — sam układ, przyjmuje zachowanie przez
+  `cardProps`; jedna kopia układu dla atrap i dla prawdziwych danych.
+- `components/flo/evidence.tsx` — „dlaczego to widzę” (17).
+- `components/flo/undo-bar.tsx` — pasek cofnięcia z odliczaniem (18).
+- `components/flo/scheduled-panel.tsx` — panel zatwierdzonych z „Wstrzymaj” (16).
+- `components/flo/kind-labels.ts` — nazwy 32 rodzajów spraw po ludzku.
+- `app/(dashboard)/dashboard/_components/flo-card.tsx` + wpięcie w dashboard (15).
+- `app/(dashboard)/flo/loading.tsx` — szkielet ładowania (20).
+- `app/(dashboard)/settings/flo/` — ustawienia agenta (21).
+- `tests/unit/ui-flo-settings.test.tsx` (6) + przepisany `ui-flo-screen` (8).
+
+Decyzje:
+- ODMOWA NIE JEST AWARIĄ (19). `stale`, `expired` i `blocked` lądują jako
+  spokojne zdanie pod kartą, w ramce w kolorze tła. Zero czerwieni, zero
+  słowa „błąd”. Bezpiecznik, który zadziałał, to dobra wiadomość.
+- CISZA JEST STANEM ZABRONIONYM (W5). Gdy akcja się wywali — zerwana sieć,
+  błąd serwera — klient dostaje zdanie „nic nie poszło dalej, spróbuj za
+  chwilę”. Nigdy przycisku, który po prostu nic nie robi.
+- Karta w trakcie wykonywania ma WSZYSTKIE przyciski wyłączone. Żeton zgody
+  po stronie silnika i tak jest jednorazowy, ale klient nie ma powodu tego
+  sprawdzać podwójnym kliknięciem.
+- „Pokaż fakturę” (intent `open`) prowadzi do pierwszego dowodu. Akcja nie ma
+  własnego adresu, a `evidence` jest dokładnie po to.
+- Panel nazywa się „ZATWIERDZONE — CZEKA NA WYKONANIE”, nie „co Flo zrobi
+  dalej” jak na makiecie. Pierwsze mówi prawdę: nic tu nie trafia bez
+  kliknięcia. Pozycja bez `approvedAtLabel` dostaje zamiast daty zdanie
+  „brak śladu zatwierdzenia — zgłoś to nam”, zamiast udawać, że wszystko gra.
+- Na dashboardzie zamiast „TRYB 3” stoi zdanie: „Robi sam to, co da się
+  cofnąć. Pyta przed każdą wysyłką”. Numer poziomu i tak u wszystkich jest
+  ten sam, więc lepiej powiedzieć, co agent robi.
+- Ustawienia zapisują się od razu, bez przycisku „Zapisz” — każde jest
+  osobnym przełącznikiem, a przycisk tworzyłby stan „zmienione, ale
+  niezapisane”, w którym nie wiadomo, czy cisza nocna już działa. Gdy zapis
+  padnie, przełącznik wraca na starą wartość i mówimy o tym wprost.
+- Szkielet ładowania ma kształt docelowego ekranu, żeby nic nie podskoczyło.
+  Żadnego kręcącego się kółka — ono mówi tylko tyle, że czekamy.
+- Test ustawień pilnuje, że NIE MA tam słów „tryb”, „poziom”, „autonomia”,
+  „suwak” ani „automatyczn”. Za pół roku nikt nie będzie pamiętał, dlaczego
+  ich tam nie ma.
+
+Przy okazji: kafelek „Wkurzacz Dłużników” w `/settings` obiecywał
+„automatyczne przypomnienia o płatnościach”. Po zmianie z kroku 6 Bartosza to
+nieprawda — poprawione na „Ponaglenia, które Flo przygotowuje do Twojej zgody”.
+Sam ekran `/settings/reminders` przepiszę w kroku 26.
+
+UWAGI DLA BARTOSZA:
+- HISTORIA („co Flo zrobił”) nie ma odczytu w akcjach — `listScheduled` opisuje
+  kolejkę, nie przeszłość. Zostawiłem stan pusty zamiast wymyślać listę, która
+  nie zgadzałaby się z rzeczywistością. Przydałoby się `listHistory()`
+  zwracające wykonane propozycje z godziną i autorem kliknięcia.
+- `listScheduled` ustawia `whenLabel: 'zaraz'` na sztywno. W panelu wygląda to
+  tak, jakby wszystko miało pójść w tej samej chwili.
+- `FLO_KIND_LABELS` jest `Record<FloProposalKind, string>` — złapało mi to
+  `accountant.delivery`, którego dołożyłeś. Kompilacja padnie przy każdym
+  nowym rodzaju bez opisu i to jest zamierzone.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 59 plików, 1037 testów, wszystko zielone.
+- `pnpm typecheck` czysto, eslint czysto.
+- Ekran i ustawienia wyrenderowane do statycznego HTML-a i obejrzane.
+- CZEGO NIE ZWERYFIKOWAŁEM: kliknięć na żywo. Z tego worktree nie odpalę
+  aplikacji (brak `.env.local`, trasy za bramką auth), więc wpięcie akcji jest
+  sprawdzone kompilacją, testami renderu i lekturą kontraktu — ale ani jedno
+  kliknięcie nie przeszło przez prawdziwy serwer. To jest do zrobienia na
+  środowisku z bazą, zanim uznamy blok 3 za domknięty.
+
+Następny krok: 22 (ścieżka paragonu z telefonu) — blok 4.

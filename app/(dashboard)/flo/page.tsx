@@ -1,17 +1,16 @@
-import { FLO_FIXTURES, FLO_SCHEDULED_FIXTURES } from '@/lib/flo/fixtures';
+import { listProposals, listScheduled } from '@/app/actions/flo';
 
 import { FloScreen } from './_components/flo-screen';
 
 /**
- * Ekran agenta FLO (krok 2 toru B — szkielet).
+ * Ekran agenta FLO.
  *
- * DANE SĄ ATRAPAMI. To jest celowe i tymczasowe: tor interfejsu nie czeka
- * na silnik, tylko buduje wszystko na `lib/flo/fixtures.ts`. Podmiana na
- * prawdziwe dane to dwie linijki poniżej — `listOpen()` z
- * `lib/flo/proposals.ts` zwraca dokładnie ten sam kształt (`FloProposalView`).
+ * Dane są PRAWDZIWE — `listProposals` i `listScheduled` czytają propozycje
+ * tej organizacji. Atrapy z `lib/flo/fixtures.ts` zostają tam, gdzie ich
+ * miejsce: w testach i w podglądach przy budowie kolejnych wariantów.
  *
- * Dopóki tak jest, ekran nie trafia do menu bocznego. Wchodzi się na niego
- * z ręki, adresem `/flo`.
+ * Oba odczyty idą równolegle, bo nie zależą od siebie. Pobrane szeregowo
+ * dokładałyby do ekranu czas drugiego zapytania bez żadnego powodu.
  */
 export const dynamic = 'force-dynamic';
 
@@ -19,12 +18,11 @@ export const metadata = {
   title: 'Flo',
 };
 
-export default function FloPage() {
-  return (
-    <FloScreen
-      proposals={FLO_FIXTURES}
-      scheduled={FLO_SCHEDULED_FIXTURES}
-      usingFixtures
-    />
-  );
+export default async function FloPage() {
+  const [proposals, scheduled] = await Promise.all([
+    listProposals(),
+    listScheduled(),
+  ]);
+
+  return <FloScreen proposals={proposals} scheduled={scheduled} />;
 }

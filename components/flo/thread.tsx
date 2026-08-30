@@ -1,5 +1,8 @@
+'use client';
+
 import type { FloProposalView } from '@/types/flo';
 
+import type { FloVariantProps } from './card-chrome';
 import { clockLabel } from './format';
 import { FloProposalCard } from './proposal-card';
 import { groupByDay } from './timeline';
@@ -15,17 +18,23 @@ import { groupByDay } from './timeline';
  * Kolejność: dni chronologicznie, wewnątrz dnia najpierw priorytet, potem
  * czas — uzasadnienie w `timeline.ts`.
  *
- * Komponent jest serwerowy. Klienckie są dopiero karty, i tylko one.
+ * SAM UKŁAD, ZERO DECYZJI. Co karta robi po kliknięciu, wie wyłącznie
+ * `thread-client.tsx`; tutaj wchodzi to przez `cardProps`. Dzięki temu ten
+ * sam wątek rysuje się tak samo na atrapach (bez akcji) i na prawdziwych
+ * danych (z akcjami), a układ nie ma dwóch kopii.
  */
 export function FloThread({
   proposals,
   now,
   className,
+  cardProps,
 }: {
   proposals: readonly FloProposalView[];
   /** wstrzykiwany czas — do testów; normalnie „teraz” z renderu */
   now?: Date;
   className?: string;
+  /** dodatkowe właściwości karty: akcje, komunikat, stan wykonywania */
+  cardProps?: (proposal: FloProposalView) => Partial<FloVariantProps>;
 }) {
   const groups = groupByDay(proposals, now ?? new Date());
 
@@ -52,6 +61,7 @@ export function FloThread({
                 view={proposal}
                 showTime={false}
                 className="min-w-0 flex-1"
+                {...cardProps?.(proposal)}
               />
             </div>
           ))}
@@ -62,19 +72,16 @@ export function FloThread({
 }
 
 /**
- * Stan pusty.
+ * Stan pusty (krok 20).
  *
  * Cisza jest dobrą wiadomością i tak ma brzmieć. Żadnej zachęty „skonfiguruj
  * coś”, żadnego pustego rysunku z wykrzyknikiem — jedno spokojne zdanie
  * i tyle. Klient, który nic tu nie zastał, ma odejść od ekranu z poczuciem,
  * że jest w porządku, a nie że coś zaniedbał.
  */
-function FloThreadEmpty({ className }: { className?: string }) {
+export function FloThreadEmpty({ className }: { className?: string }) {
   return (
-    <section
-      aria-label="Wątek Flo"
-      className={className}
-    >
+    <section aria-label="Wątek Flo" className={className}>
       <p className="max-w-sm text-sm text-[var(--ff-text-muted)]">
         Nic nie wymaga Twojej decyzji. Jak coś się wydarzy w fakturach,
         kosztach albo w KSeF — znajdziesz to tutaj.

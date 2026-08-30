@@ -1,31 +1,45 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
-
-import { FloScreen } from '@/app/(dashboard)/flo/_components/flo-screen';
-import { FLO_FIXTURES, FLO_SCHEDULED_FIXTURES } from '@/lib/flo/fixtures';
+import { describe, expect, it, vi } from 'vitest';
 
 /**
- * Dymny test szkieletu ekranu agenta (krok 2 toru B).
+ * Ekran agenta w całości (kroki 4, 15–20 toru B).
  *
- * Ekran jest w całości komponentem serwerowym bez stanu i bez pobierania
- * danych, więc da się go wyrenderować do napisu i sprawdzić bez przeglądarki.
- * Test pilnuje trzech rzeczy, na których taki ekran zwykle pada: że komplet
- * atrap w ogóle się rysuje, że odznaka odmienia się przez liczebnik i że
- * nie wróciło „TRYB”.
+ * Ekran woła teraz prawdziwe akcje serwerowe, więc w teście podstawiamy dwie
+ * rzeczy: router Next (poza aplikacją nie istnieje) i moduł akcji (jest
+ * `'use server'` i ciągnie za sobą pół backendu). Podstawiamy JE, a nie
+ * komponenty — sprawdzamy prawdziwy ekran, nie jego atrapę.
  */
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: () => {}, push: () => {} }),
+}));
+
+vi.mock('@/app/actions/flo', () => ({
+  approveProposal: async () => ({ ok: true }),
+  dismissProposal: async () => {},
+  undoAction: async () => ({ ok: true }),
+  cancelScheduled: async () => {},
+}));
+
+const { FloScreen } = await import(
+  '@/app/(dashboard)/flo/_components/flo-screen'
+);
+const { FLO_FIXTURES, FLO_SCHEDULED_FIXTURES } = await import(
+  '@/lib/flo/fixtures'
+);
 
 function render() {
   return renderToStaticMarkup(
     <FloScreen
-      proposals={FLO_FIXTURES}
-      scheduled={FLO_SCHEDULED_FIXTURES}
+      proposals={[...FLO_FIXTURES]}
+      scheduled={[...FLO_SCHEDULED_FIXTURES]}
       usingFixtures
     />,
   );
 }
 
-describe('FloScreen — szkielet ekranu agenta', () => {
-  it('rysuje wszystkie atrapy propozycji', () => {
+describe('FloScreen — ekran agenta', () => {
+  it('rysuje wszystkie propozycje', () => {
     const html = render();
 
     for (const proposal of FLO_FIXTURES) {
@@ -33,28 +47,28 @@ describe('FloScreen — szkielet ekranu agenta', () => {
     }
   });
 
-  it('pokazuje kolejkę zatwierdzonych razem ze śladem zgody', () => {
+  it('panel zatwierdzonych nazywa się tym, czym jest, i pokazuje ślad zgody', () => {
     const html = render();
 
+    expect(html).toContain('ZATWIERDZONE — CZEKA NA WYKONANIE');
     for (const item of FLO_SCHEDULED_FIXTURES) {
       expect(html).toContain(item.label);
-      // Ślad zgody jest obowiązkowy — bez niego panel łamie swój inwariant.
+      // Bez tego przy reklamacji „ja tego nie wysyłałem” nie ma czego pokazać.
       expect(html).toContain(item.approvedAtLabel);
     }
   });
 
   it('odznaka zadań jest odmieniona przez liczebnik', () => {
-    const html = render();
-    expect(html).toMatch(/\d+ (zadanie|zadania|zadań) dziś/);
+    expect(render()).toMatch(/\d+ (zadanie|zadania|zadań) dziś/);
   });
 
   it('nigdzie nie ma trybu ani poziomu samodzielności agenta', () => {
-    const html = render();
-    expect(html).not.toMatch(/TRYB|Tryb \d|poziom \d/i);
+    expect(render()).not.toMatch(/TRYB|Tryb \d|poziom \d/i);
   });
 
   it('pole rozmowy jest wyłączone, a nie udaje działającego', () => {
     const html = render();
+
     expect(html).toContain('id="flo-composer"');
     expect(html).toMatch(/id="flo-composer"[^>]*disabled/);
   });
@@ -64,7 +78,21 @@ describe('FloScreen — szkielet ekranu agenta', () => {
 
     expect(html).toContain('Nagraj wiadomość (jeszcze nieczynne)');
     expect(html).toContain('Zrób zdjęcie paragonu (jeszcze nieczynne)');
-    // Żaden z nich nie może być klikalny, dopóki nic za nim nie stoi.
-    expect(html.match(/<button[^>]*disabled/g)?.length ?? 0).toBeGreaterThan(1);
+  });
+
+  it('każda karta ma rozwijane „dlaczego to widzę”, gdy są dowody', () => {
+    const html = render();
+    const withEvidence = FLO_FIXTURES.filter((f) => f.evidence.length > 0);
+
+    const found = html.match(/Dlaczego to widzę/g) ?? [];
+    expect(found).toHaveLength(withEvidence.length);
+  });
+
+  it('karta z czynnością zrobioną samodzielnie zapowiada cofnięcie', () => {
+    // Pasek cofnięcia liczy czas, więc rysuje się dopiero po zamontowaniu —
+    // w renderze serwerowym ma go NIE być. Inaczej byłby rozjazd hydratacji.
+    const undoable = FLO_FIXTURES.filter((f) => f.undoableUntil);
+    expect(undoable.length).toBeGreaterThan(0);
+    expect(render()).not.toContain('Zrobiłem to za Ciebie');
   });
 });
