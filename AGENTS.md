@@ -99,6 +99,53 @@ ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@178.104.128.144
 
 Kontener Postgresa: `supabase-db-ovrhjbsdpjdlnmkle1ulid4s`.
 
+### CO GDZIE ROBISZ — przeczytaj to, zanim cokolwiek wgrasz
+
+| Chcesz… | Idziesz na | Sekcja niżej |
+|---|---|---|
+| wgrać migrację SQL | `db-1` | „Wgrywanie migracji" |
+| wdrożyć kod | `ops-1` (Coolify steruje `app-1`) | „Wdrożenie produkcji" |
+| zobaczyć logi aplikacji / workera | `app-1` | `docker logs` |
+| wejść w panel Coolify z przeglądarki | tunel SSH | pułapki na końcu |
+
+**CZTERY RZECZY, KTÓRE ZASKAKUJĄ KAŻDĄ NOWĄ SESJĘ.** Każda kosztowała nas
+realny czas, więc nie są to przestrogi teoretyczne:
+
+1. **`pnpm db:push:prod` NIE DZIAŁA.** Jest w `package.json`, więc wygląda na
+   właściwą drogę, ale to pozostałość po Supabase Cloud — wymaga
+   `SUPABASE_DB_URL`, którego nie ma. Migracje wgrywa się ręcznie, procedurą
+   niżej. Nie próbuj tego skryptu i nie „naprawiaj" go bez uzgodnienia.
+2. **AUTO-DEPLOY NIE DZIAŁA — repozytorium nie ma webhooka.** Flaga
+   `is_auto_deploy_enabled` po stronie Coolify jest włączona, ale
+   `gh api repos/.../hooks` zwraca pustą listę: nic nie powiadamia Coolify
+   o pushu. **Po każdym pushu wyzwól wdrożenie ręcznie.** Kiedyś 13 commitów
+   poszło na `main` bez ani jednego wdrożenia, bo ktoś wziął ręcznie
+   wyzwolony deploy za efekt webhooka.
+3. **Wdrażasz DWIE aplikacje, nie jedną.** `id=1` to Next.js, `id=2` to worker
+   pg-boss z tego samego repo. Sam worker importuje szeroki przekrój `lib/**`,
+   więc pominięcie go zostawia produkcję w stanie mieszanym: strona na nowym
+   kodzie, joby na starym.
+4. **Baza może wyprzedzać aplikację i to jest w porządku** — migracja wgrana
+   przed wdrożeniem nie psuje działającej wersji, o ile jest addytywna
+   (`ADD COLUMN` z wartością domyślną, nowa tabela). Odwrotna kolejność
+   (kod przed migracją) wywala produkcję. **Zawsze: najpierw migracja,
+   potem wdrożenie.**
+
+### Kolejność przy pełnym wydaniu
+
+```
+1. pnpm test && pnpm typecheck && pnpm build   ← lokalnie, PRZED pushem
+2. migracje na db-1  (+ wpis do schema_migrations + NOTIFY pgrst)
+3. git push origin main
+4. wdrożenie id=1 (aplikacja) i id=2 (worker)
+5. weryfikacja: kontenery healthy, /api/health, strona, PostgREST
+```
+
+Krok 1 nie jest zbytkiem: produkcyjny build trwa 12-18 minut, a `pnpm build`
+lokalnie łapie w trzy minuty te same błędy (np. plik `'use server'`
+eksportujący coś innego niż funkcję asynchroniczną — `pnpm typecheck` tego
+NIE łapie).
+
 ### Wgrywanie migracji na produkcję
 
 NAJPIERW przeczytaj plik migracji i sprawdź, czy nie ma `DROP`, `TRUNCATE`
@@ -127,6 +174,46 @@ ssh -i $K root@$DB "docker exec $PGC psql -U postgres -d postgres \
 Bez `NOTIFY pgrst` nowe tabele istnieją w bazie, ale aplikacja zwraca
 `PGRST205 Could not find the table`. To nie jest teoria, potknęliśmy się
 o to przy migracji 00060.
+
+**Trzy rzeczy do sprawdzenia PRZED uruchomieniem, poza `DROP`/`TRUNCATE`:**
+
+- **`UPDATE` na istniejących wierszach** — policz najpierw, ilu dotknie:
+  `SELECT count(*) FROM tabela WHERE <ten sam warunek>;`. Zero wierszy
+  znaczy, że możesz uruchamiać spokojnie; tysiąc znaczy, że najpierw pytasz
+  właściciela.
+- **Polityki RLS** — sprawdź nazwy kolumn w tabelach, do których się
+  odwołujesz. `memberships` ma `organization_id`, NIE `tenant_id`; tabele
+  agenta używają helpera `public.get_current_tenant_id()`. Zła kolumna =
+  wycofana transakcja (to akurat kończy się bezpiecznie dzięki
+  `--single-transaction`, ale kosztuje przebieg).
+- **Numer migracji** — musi być kolejny i niezajęty:
+  `SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 3;`
+
+**Weryfikacja PO wgraniu — nie ufaj samemu „CREATE TABLE" w wyjściu.**
+Sprawdź trzy rzeczy: obiekt istnieje, wpis w `schema_migrations` jest,
+a PostgREST naprawdę go widzi:
+
+```bash
+ssh -i $K root@$DB "docker exec $PGC psql -U postgres -d postgres \
+  -c \"\\d nazwa_tabeli\" \
+  -c \"SELECT version, name FROM supabase_migrations.schema_migrations
+        ORDER BY version DESC LIMIT 3;\""
+```
+
+Test PostgREST-a (najważniejszy, bo to on wywala `PGRST205`) — z `db-1`,
+przez adres kontenera, bo sam kontener nie ma `curl`:
+
+```bash
+ssh -i $K root@$DB 'IP=$(docker inspect -f \
+  "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" \
+  supabase-rest-ovrhjbsdpjdlnmkle1ulid4s)
+curl -s "http://$IP:3000/nazwa_tabeli?limit=1"'
+```
+
+**Jak czytać wynik:** `42501 permission denied` to ODPOWIEDŹ POPRAWNA —
+znaczy, że PostgREST znalazł tabelę i odmówił dopiero na autoryzacji
+(zapytanie leci bez tokenu). Dopiero `PGRST205` (brak tabeli) albo
+`PGRST204` (brak kolumny) oznaczają nieprzeładowany cache schematu.
 
 ### Wdrożenie produkcji
 
@@ -172,6 +259,68 @@ foreach (App\Models\ApplicationDeploymentQueue::orderBy('id','desc')->take(4)->g
 }
 PHP
 ```
+
+**Czytanie wyjścia `tinker`:** odbija on wpisane linie z prefiksem `>` i skraca
+długie znakiem `<`. Filtrowanie po początku linii (`grep "^app"`) gubi wynik
+i wygląda, jakby wdrożenie nie istniało. Filtruj po treści, nie po `^`.
+
+**Statusy w kolejce:** `queued` → `in_progress` → `finished` albo `failed`.
+Build trwa 12-18 minut, więc odpytuj co minutę, a nie w pętli bez przerwy.
+
+### Kiedy wdrożenie padnie
+
+Wyciągnij logi — bez nich zgadujesz:
+
+```bash
+ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@91.98.134.85 \
+  'docker exec -i coolify php artisan tinker' <<'PHP'
+$d = App\Models\ApplicationDeploymentQueue::find(NUMER);
+$logs = json_decode($d->logs, true) ?? [];
+foreach (array_slice(array_map(fn($l) => $l['output'] ?? '', $logs), -40) as $line) {
+  echo $line . "\n";
+}
+PHP
+```
+
+Coolify przy nieudanym buildzie **wycofuje nową wersję i zostawia działającą
+starą** — awarii produkcji nie ma, masz czas na diagnozę.
+
+### Weryfikacja po wdrożeniu
+
+Nie kończ na „status = finished". Sprawdź, co faktycznie wstało:
+
+Nazwy kontenerów to hasze generowane przez Coolify i zmieniają się przy
+każdym wdrożeniu — nie wpisuj ich z pamięci, wyszukaj:
+
+```bash
+K=~/.ssh/hetzner_faktflow_ed25519
+
+# 1. co działa, na jakim commicie, czy healthy
+ssh -i $K root@116.203.71.134 \
+  'docker ps --format "{{.Names}}\t{{.Status}}\t{{.Image}}" | grep -v coolify-'
+
+# 2. aplikacja odpowiada (nazwa kontenera znaleziona automatycznie)
+ssh -i $K root@116.203.71.134 'C=$(docker ps --format "{{.Names}}" \
+  | grep "^gpcs70aai71any6dnf8w69l8"); docker exec $C \
+  curl -s -o /dev/null -w "app: HTTP %{http_code} w %{time_total}s\n" \
+  http://localhost:3000/api/health'
+
+# 3. strona publiczna (apex przekierowuje na www — to normalne)
+curl -s -L -o /dev/null -w "%{http_code} %{url_effective}\n" https://faktflow.pl
+
+# 4. błędy w logach obu kontenerów
+ssh -i $K root@116.203.71.134 'for C in $(docker ps --format "{{.Names}}" \
+  | grep -E "^gpcs70aai71any6dnf8w69l8|^chy9lasi0mcbuy0i54a1hr3t"); do
+  echo "--- $C"; docker logs --since 10m $C 2>&1 | grep -i error | head -5; done'
+```
+
+Prefiksy nazw: aplikacja `gpcs70aai71any6dnf8w69l8`, worker
+`chy9lasi0mcbuy0i54a1hr3t` — to identyfikatory aplikacji w Coolify i one
+się nie zmieniają, zmienia się tylko sufiks po myślniku.
+
+W logach aplikacji ostrzeżenia `Using the user object as returned from
+supabase.auth.getSession()` to znany szum, nie awaria — nie zgłaszaj ich
+jako problemu.
 
 ### Pułapki, które kosztowały nas awarie
 
