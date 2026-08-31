@@ -702,3 +702,44 @@ w tabeli tras).
 `main` ma wszystko, ale **produkcja tego nie ma**. Sprawdzone twardo:
 `https://www.faktflow.pl/sw.js` nie zawiera `actionUrls`, czyli działa tam
 build sprzed bloku 4. Wdrożenia nie ruszam — to nie moja działka.
+
+## 2026-08-30 · Kroki 35–36 — panel operatora i baza wiedzy (BLOK 7)
+
+Zrobione:
+- `app/admin/flo/page.tsx` — panel trybu cichego: sześć wskaźników, trafność
+  per funkcja z werdyktem, stan kanarka, koszt modelu, lista funkcji
+  wyłączonych z powodem.
+- `app/admin/_components/admin-nav.tsx` — pozycja w menu operatora.
+- `content/help/flo-*.mdx` — sześć artykułów bazy wiedzy.
+- `lib/help/articles.ts` — nowa kategoria „Agent Flo”.
+- `tests/unit/ui-flo-help.test.ts` — 4 testy.
+
+Decyzje:
+- Panel odpowiada na JEDNO pytanie: która funkcja jest gotowa wyjść z ukrycia.
+  Wszystko inne na tym ekranie służy temu pytaniu.
+- Liczby liczy silnik (`metrics.ts`, `shadow.ts`, `rollout.ts`). Panel ich nie
+  przelicza — układa je tak, żeby dało się podjąć decyzję bez wchodzenia do
+  bazy.
+- ŚWIADOMIE BEZ PRZEŁĄCZNIKA „włącz funkcję” dla blokad z `lib/flo/flags.ts`.
+  Tam siedzą rzeczy czekające na opinię prawnika — odsłonięcie funkcji
+  podatkowej jednym kliknięciem w panelu jest dokładnie tym, czego ta blokada
+  ma nie dopuścić. Włączenie wymaga commita z uzasadnieniem, tak jak
+  zaprojektował to Bartosz.
+- Kurs dolara do przeliczenia kosztu bierzemy ze zmiennej `FLO_USD_PLN`,
+  a nie z kodu. Metryka po kursie sprzed roku myli bardziej, niż pomaga.
+- Artykuły dostały WŁASNĄ kategorię w bazie wiedzy. Sześć tekstów o agencie
+  w „Pierwszych krokach” przykryłoby wszystko inne.
+- Treść artykułów trzyma ten sam głos co karty: bez wykrzykników, z listą
+  rzeczy, których agent nigdy nie zrobi, i ze zdaniem o tym, że cisza jest
+  dobrą wiadomością.
+
+Uwagi dla Bartosza:
+- `flo_kind_flags` (00066) ma `setKindForTenant`, więc przełącznik per konto
+  da się zrobić. Nie wstawiłem go, bo panel bez pola „powód” (wymaganego
+  przez Twoją funkcję) byłby połowiczny — zrobię, gdy powiesz, że to
+  potrzebne przed alfą.
+- Panel czyta `flo_shadow` i `flo_usage`, czyli tabele bez polityki SELECT.
+  Działa, bo `/admin` chodzi na kliencie administracyjnym — ale gdyby kiedyś
+  przeszedł na klienta użytkownika, ekran zgaśnie.
+
+Następny krok: 37 (Wrapped) — blok 8.

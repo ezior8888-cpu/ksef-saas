@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   ActivitySquare,
   ArrowLeft,
+  Bot,
   ClipboardList,
   Flag,
   Gauge,
@@ -28,6 +29,7 @@ const LINKS: AdminNavLink[] = [
   { href: '/admin/support', label: 'Support', icon: LifeBuoy },
   { href: '/admin/audit', label: 'Audit log', icon: ClipboardList },
   { href: '/admin/flags', label: 'Feature flags', icon: Flag },
+  { href: '/admin/flo', label: 'Flo — tryb cichy', icon: Bot },
 ];
 
 export function AdminNav() {

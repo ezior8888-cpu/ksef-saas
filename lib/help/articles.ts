@@ -19,6 +19,7 @@ import matter from 'gray-matter';
  */
 
 export type HelpCategoryId =
+  | 'flo'
   | 'start'
   | 'ksef'
   | 'faktury'
@@ -36,6 +37,16 @@ export interface HelpCategory {
 }
 
 export const HELP_CATEGORIES: HelpCategory[] = [
+  {
+    // Agent jest teraz głównym elementem produktu, więc ma własną półkę
+    // w bazie wiedzy — w „Pierwszych krokach” sześć artykułów o nim
+    // przykryłoby wszystko inne.
+    id: 'flo',
+    label: 'Agent Flo',
+    description:
+      'Co robi sam, o co pyta, jak cofnąć jego zmianę i jak go wyciszyć.',
+    icon: 'smart_toy',
+  },
   {
     id: 'start',
     label: 'Pierwsze kroki',
