@@ -806,3 +806,105 @@ Weryfikacja:
 
 STAN TORU B: kroki 0–40 zrobione. Lista kontrolna z części VI.2 planu jest
 zamknięta.
+
+---
+
+# DOMKNIĘCIE TORU B — 30 sierpnia 2026
+
+Interfejs agenta jest skończony w zakresie, który opisuje plan. Ten wpis jest
+punktem wyjścia dla następnej sesji: co jest, czego nie ma i co wisi po czyjej
+stronie. Nie trzeba czytać całego dziennika.
+
+## Lista kontrolna z części VI.2
+
+```
+BLOK 0  [x]0  [x]1  [x]2  [x]3  [x]4
+BLOK 1  [x]5  [x]6  [x]7  [x]8  [x]9  [x]10
+BLOK 2  [x]11 [x]12 [x]13 [x]14
+BLOK 3  [x]15 [x]16 [x]17 [x]18 [x]19 [x]20 [x]21
+BLOK 4  [x]22 [x]23 [x]24
+BLOK 5  [x]25 [x]26 [x]27 [x]28 [x]29 [x]30 [x]31
+BLOK 6  [x]32 [x]33 [x]34
+BLOK 7  [x]35 [x]36
+BLOK 8  [x]37 [x]38
+BLOK 9  [x]39 [x]40*
+```
+
+`*` krok 40: scenariusze i lista zrzutów gotowe, same nagrania i pliki PNG do
+zrobienia przez człowieka przy działającej aplikacji.
+
+## Gdzie co leży
+
+| Obszar | Pliki |
+|---|---|
+| Odmiana przez liczebnik | `lib/i18n/plural.ts` |
+| Czas, strefa, odliczanie | `components/flo/format.ts` |
+| Oś czasu wątku | `components/flo/timeline.ts`, `thread.tsx`, `thread-client.tsx` |
+| Karta i sześć wariantów | `components/flo/proposal-card.tsx`, `card-chrome.tsx`, `variants/*` |
+| Reguły blokowania akcji | `components/flo/gating.ts` |
+| Cztery podglądy | `components/flo/preview-*.tsx`, `card-preview.tsx` |
+| Dowody, cofanie, kolejka | `evidence.tsx`, `undo-bar.tsx`, `scheduled-panel.tsx` |
+| Ekran agenta | `components/flo/flo-screen.tsx` (montowany przez dashboard) |
+| Ustawienia | `app/(dashboard)/settings/flo/*` |
+| Panel operatora | `app/admin/flo/page.tsx` |
+| Podsumowanie roku | `app/(dashboard)/flo/wrapped/*`, `components/flo/wrapped/*` |
+| Treści agenta | `content/flo/*.md` (32 rodzaje + GLOS + lista dla prawnika) |
+| Baza wiedzy | `content/help/flo-*.mdx` |
+| Testy | `tests/unit/ui-flo-*.{ts,tsx}`, `e2e/tests/flo-*.spec.ts` |
+
+## Czego NIE zweryfikowałem — trzy rzeczy, w tej kolejności
+
+1. **Ani jedno kliknięcie nie przeszło przez prawdziwy serwer.** Worktree nie
+   ma `.env.local`, a trasy agenta są za bramką logowania. Wpięcie akcji jest
+   sprawdzone kompilacją, testami renderu i lekturą kontraktu. Ktoś musi wejść
+   na dashboard z prawdziwą bazą i przeklikać po jednej propozycji każdego
+   wariantu. To jest zadanie numer jeden przed alfą.
+2. **Testów przeglądarkowych nie uruchomiłem.** `playwright test --list` widzi
+   wszystkie 15, typy i lint są czyste — ale pierwszy przebieg prawie na pewno
+   wymaga korekt w selektorach. Traktować jako szkielet do dopięcia.
+3. **Telefonu nie da się dziś sprawdzić.** BUG-008 w
+   `lib/supabase/middleware.ts` przekierowuje telefony na `/mobile`, więc ani
+   ścieżka paragonu, ani powiadomienia nie przeszły przez urządzenie.
+
+## Co wisi po stronie silnika
+
+Kolejność od najbardziej blokującej:
+
+1. `listHistory()` — panel „Co Flo zrobił” stoi pusty, bo `listScheduled`
+   opisuje kolejkę, nie przeszłość.
+2. `listScheduled` ma `whenLabel: 'zaraz'` wpisane na sztywno.
+3. `PushPayload` bez `actions` i `actionUrls` — service worker już je obsługuje,
+   ale bez wysłania przyciski w powiadomieniu się nie pojawią.
+4. Warianty szablonów: `payment.chase:soft|:firm|:demand`,
+   `ksef.outage:confirmed|:neutral`. Treści leżą gotowe w `content/flo/`.
+5. Nowe placeholdery z treści (`{{kolumna}}`, `{{numerKsef}}`, `{{zrodlo}}`,
+   `{{stawka}}`, `{{dataStawki}}`, `{{terminWezwania}}`, `{{nadawca}}`,
+   `{{liczbaFaktur}}`, `{{liczbaPoTerminie}}`) muszą zostać policzone.
+6. Suma zaznaczonych w wariancie `list` — potrzebne pole liczbowe
+   w `FloListItem`, bo interfejs nie parsuje kwot z napisów.
+7. `FloListItem.preview` albo `href` — podgląd pojedynczej pozycji paczki.
+8. `FloPreview` typu `message` bez wariantów tonu (`tones`).
+9. `getWrapped()` — dziś odczyt danych podsumowania roku leży w folderze trasy
+   (`app/(dashboard)/flo/wrapped/data.ts`) i chętnie go stamtąd zabiorę.
+10. B-01 Co-Pilot Księgowego — ostatnie miejsce, gdzie ustawienie znaczy
+    „wyślij samo”.
+11. Przełącznik funkcji per konto w panelu operatora: `setKindForTenant`
+    istnieje, ale wymaga pola „powód”. Dorobię, gdy to będzie potrzebne.
+
+## Sprawy poza kodem
+
+- **Prawnik.** Dziewięć tekstów czeka w `content/flo/DO-AKCEPTACJI-PRAWNIKA.md`
+  wraz z pięcioma pytaniami. Grupa T i `tax.simulate` nie wychodzą do klientów
+  przed odpowiedzią — i tak są wyłączone w `lib/flo/flags.ts`.
+- **Produkcja.** Sprawdzone twardo 30.08: `https://www.faktflow.pl/sw.js` nie
+  zawiera `actionUrls`, czyli działa tam build sprzed bloku 4. Wdrożenia nie
+  ruszam — komendy leżą w `AGENTS.md`, sekcja „Wdrożenie produkcji”.
+- **Dostęp SSH.** Klucz `hetzner_faktflow_ed25519` z WSL jest odrzucany przez
+  wszystkie trzy serwery (`Permission denied (publickey)`). Ktokolwiek będzie
+  wdrażał, musi mieć działający dostęp albo poprosić kolegę.
+
+## Stan zestawu na dziś
+
+`pnpm typecheck` czysto · `npx eslint .` zero błędów (28 zastanych ostrzeżeń
+poza katalogami toru B) · 1071 testów jednostkowych zielonych · `next build`
+przechodzi.
