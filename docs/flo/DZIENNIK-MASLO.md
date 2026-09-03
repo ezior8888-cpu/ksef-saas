@@ -743,3 +743,66 @@ Uwagi dla Bartosza:
   przeszedł na klienta użytkownika, ekran zgaśnie.
 
 Następny krok: 37 (Wrapped) — blok 8.
+
+## 2026-08-30 · Kroki 37–40 — Wrapped, progi, strona główna, materiały (BLOKI 8–9)
+
+Zrobione:
+- `app/(dashboard)/flo/wrapped/page.tsx` + `data.ts` — trasa podsumowania roku
+  i odczyt danych dla `buildWrapped`.
+- `components/flo/wrapped/share-image.ts` — obraz 9:16 budowany z SVG.
+- `components/flo/wrapped/wrapped-deck.tsx` — sekwencja ekranów.
+- `components/flo/wrapped/milestone-share.tsx` + gałąź w `info-card.tsx` —
+  próg pieniężny z obrazem do zapisania (krok 38).
+- `components/flo/flo-screen.tsx` — licznik spraw wraca nad wątek, gdy
+  dashboard chowa nagłówek (domknięcie kroku 39).
+- `app/(dashboard)/dashboard/_components/flo-card.tsx` — SKASOWANY.
+- `docs/flo/materialy/` — README, trzy scenariusze nagrań, lista zrzutów.
+- `tests/unit/ui-flo-wrapped.test.tsx` — 12 testów.
+
+Decyzje:
+- SILNIK MIAŁ `buildWrapped`, ALE NIKT GO NIE KARMIŁ. Dopisałem odczyt
+  w folderze trasy, nie w `lib/flo/` — to jest zapytanie do tabeli faktur na
+  potrzeby jednego ekranu, a `lib/flo/*` należy do toru silnika. Gdyby doszła
+  akcja `getWrapped()`, ten plik znika i zostaje jedno wywołanie.
+- ZAPIS OBRAZU NIE ZALEŻY OD ANIMACJI. Obraz powstaje z opisu SVG, nie ze
+  zrzutu ekranu — działa tak samo na telefonie, który animacji nie odtworzył,
+  i przy włączonym „ogranicz ruch”. Plan wymagał tego wprost.
+- PODGLĄD RYSUJE TEN SAM NAPIS SVG, KTÓRY IDZIE NA PŁÓTNO. Nie ma dwóch
+  ścieżek, które mogłyby się rozjechać — a to jest ekran, po którym ludzie
+  wrzucają obraz do sieci i nie mogą się dowiedzieć po fakcie, że była na nim
+  nazwa klienta.
+- ZAPIS ZABLOKOWANY DO CZASU OBEJRZENIA PODGLĄDU. Ta sama zasada, co przy
+  wysyłce: nie zapisujemy w ciemno czegoś, co zaraz trafi do sieci.
+- Dwie wersje (`masked`, `revealed`) budowane na serwerze i przełączane
+  w przeglądarce. Natychmiastowe, a klient widzi w podglądzie dokładnie to,
+  co zapisze.
+- Kwoty da się ukryć osobnym przełącznikiem — można pochwalić się rokiem bez
+  pokazywania, ile się zarabia.
+- PRÓG PIENIĘŻNY to jedyna karta z rozgałęzieniem po rodzaju w interfejsie.
+  Świadomy wyjątek: alternatywą byłoby pole w kontrakcie, którego nie użyłaby
+  żadna inna funkcja.
+- `useCallback` przy zapisie USUNIĘTY — kompilator Reacta odmawiał
+  optymalizacji całego komponentu, bo ręczna lista zależności (`screen?.key`)
+  była węższa niż wywnioskowana. Kompilator zapamiętuje to sam.
+
+Krok 39 — co zostało po przebudowie Bartosza:
+Dashboard jest już ekranem agenta, a `/flo` przekierowuje (zrobił to tor
+silnika 30.08). Z mojej strony zostały dwie rzeczy i obie są zrobione: licznik
+spraw wrócił nad wątek (bez niego znikał razem z ukrytym nagłówkiem), a martwy
+skrót agenta na dashboardzie skasowany.
+
+Krok 40 — CZEGO NIE MA:
+nagrań i zrzutów. Nie da się ich zrobić bez działającej aplikacji z danymi,
+a w tym worktree nie ma `.env.local` i wszystkie trasy agenta są za bramką
+logowania. Zamiast udawać, że materiały istnieją, zostawiłem scenariusze na
+tyle dokładne, że nagranie jest odtworzeniem instrukcji: ujęcie po ujęciu,
+z napisami na ekran i listą rzeczy, których nie wolno pokazać. Do tego lista
+ośmiu zrzutów przypisanych do konkretnych artykułów pomocy.
+
+Weryfikacja:
+- `npx vitest run tests/unit/` — 1071 testów, wszystko zielone.
+- `pnpm typecheck` czysto, `npx eslint .` — 0 błędów (28 zastanych ostrzeżeń
+  poza moimi katalogami).
+
+STAN TORU B: kroki 0–40 zrobione. Lista kontrolna z części VI.2 planu jest
+zamknięta.

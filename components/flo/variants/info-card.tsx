@@ -6,6 +6,7 @@ import {
   FloSecondaryRow,
   type FloVariantProps,
 } from '../card-chrome';
+import { FloMilestoneShare } from '../wrapped/milestone-share';
 
 /**
  * Wariant `info` (krok 5) — sama informacja, nic do zatwierdzania.
@@ -46,6 +47,15 @@ export function FloInfoCard({
           onClick={() => onAction?.(view.primary, view)}
         />
       </FloSecondaryRow>
+
+      {/* Próg pieniężny (S-04, krok 38) to jedyna karta, z której coś się
+          zapisuje na telefon. Rozgałęzienie po rodzaju jest tu świadomym
+          wyjątkiem od zasady „karta nie wie, która funkcja ją zrobiła” —
+          alternatywą byłoby pole w kontrakcie, którego nikt poza tą jedną
+          funkcją by nie użył. */}
+      {view.kind === 'milestone.money' ? (
+        <FloMilestoneShare title={view.title} body={view.body} />
+      ) : null}
     </FloCardShell>
   );
 }

@@ -1,5 +1,6 @@
 import { Suspense, type ReactNode } from 'react';
 
+import { countLabel, FLO_FORMS } from '@/components/flo/format';
 import { FloScheduledPanel } from '@/components/flo/scheduled-panel';
 import { FloThreadClient } from '@/components/flo/thread-client';
 import { countTodayTasks } from '@/components/flo/timeline';
@@ -56,7 +57,28 @@ export function FloScreen({
     <div className="flex h-full min-h-0 flex-col gap-4 p-4 md:p-6">
       {showHeader ? (
         <FloHeader todayTasks={todayTasks} usingFixtures={usingFixtures} />
-      ) : null}
+      ) : (
+        /* Dashboard chowa nagłówek agenta, bo ma własny pasek tytułu — ale
+           licznik spraw nie może zniknąć razem z nim (krok 39). Wraca tu,
+           nad wątek, w formie jednej linijki. */
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1.5 rounded-full border border-[var(--ff-border)] bg-[var(--ff-surface-chip)] px-2.5 py-1 text-xs text-[var(--ff-text-soft)]">
+            <span
+              aria-hidden
+              className="material-symbols-outlined text-[14px] leading-none text-[var(--ff-accent)]"
+            >
+              bolt
+            </span>
+            {countLabel(todayTasks, FLO_FORMS.zadanie)} dziś
+          </span>
+
+          {usingFixtures ? (
+            <span className="rounded-full border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-2.5 py-1 text-xs text-[var(--ff-warn-text)]">
+              Dane przykładowe
+            </span>
+          ) : null}
+        </div>
+      )}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex min-h-0 flex-col gap-3">
