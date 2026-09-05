@@ -159,6 +159,19 @@ describe('cofnięcie — wykonanie', () => {
     expect(db.tables.flo_proposals[0]!.status).toBe('dismissed');
   });
 
+  it('COFNIĘCIE ZAPISUJE SIĘ INACZEJ NIŻ ODRZUCENIE', async () => {
+    // Bez własnego powodu cofnięcie było nieodróżnialne od „nie teraz”,
+    // a panel operatora pokazywał stałe zero cofnięć niezależnie od tego,
+    // ile razy agent zrobił coś, czego człowiek po namyśle nie chciał.
+    const db = createFakeDb({ flo_proposals: [{ ...proposal }] });
+    const rows = fakeRows({ kpir_column: 'col_13', is_reviewed: true });
+
+    await undoAction('prop-1', 'usr-1', NOW, db.client, rows.client as never);
+
+    expect(db.tables.flo_proposals[0]!.dismissed_reason).toBe('undone');
+    expect(db.tables.flo_proposals[0]!.dismissed_reason).not.toBe('not_now');
+  });
+
   it('nie rusza dokumentu, gdy człowiek zmienił go w międzyczasie', async () => {
     const db = createFakeDb({ flo_proposals: [{ ...proposal }] });
     const rows = fakeRows({ kpir_column: 'col_10', is_reviewed: true });

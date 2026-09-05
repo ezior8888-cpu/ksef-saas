@@ -215,9 +215,14 @@ export async function undoAction(
 
   if (restore.error) throw new Error(restore.error.message);
 
+  // Powód `undone`, a NIE `not_now`: karta znika z wątku tak samo jak przy
+  // odrzuceniu, ale to są dwa różne zdarzenia. „Nie teraz” znaczy „nie chcę
+  // tego”; cofnięcie znaczy „zgodziłem się, a potem zmieniłem zdanie” — czyli
+  // agent zrobił coś, czego człowiek po namyśle nie chciał. Zlepienie ich
+  // w jeden zapis kasowało jedyną metrykę, która to mierzy.
   await db
     .from('flo_proposals')
-    .update({ status: 'dismissed', dismissed_reason: 'not_now' })
+    .update({ status: 'dismissed', dismissed_reason: 'undone' })
     .eq('id', proposalId);
 
   await logAuditSystem({

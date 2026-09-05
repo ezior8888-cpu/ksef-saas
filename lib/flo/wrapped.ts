@@ -45,8 +45,14 @@ export interface ContractorFigure {
   name: string;
   /** Suma brutto w roku. */
   gross: number;
-  /** Średnia liczba dni od terminu do wpłaty; ujemna = płaci przed terminem. */
-  avgDaysToPay: number;
+  /**
+   * Średnia liczba dni od terminu do wpłaty; ujemna = płaci przed terminem.
+   *
+   * `null` ZNACZY „NIE WIEM”, NIE „ZERO”. Kontrahent bez ani jednej
+   * potwierdzonej wpłaty nie jest kontrahentem punktualnym — a zero dni
+   * po terminie właśnie tak wygląda i wygrywało ekran „najszybciej płacący”.
+   */
+  avgDaysToPay: number | null;
   /** Miesiąc pierwszej faktury, „2023-04”. */
   firstInvoiceMonth: string;
 }
@@ -90,6 +96,39 @@ export interface WrappedScreen {
   value: string;
   /** Podpis pod liczbą. */
   caption: string;
+  /**
+   * PEŁNA wersja ekranu bez kwot — `null`, gdy na ekranie nie ma pieniędzy.
+   *
+   * Buduje ją silnik, a nie przeglądarka, i obejmuje ZARÓWNO liczbę, JAK
+   * I PODPIS. Zasłanianie samej liczby zostawiało kwotę w podpisie
+   * („48 200,00 zł w jednym miesiącu”) i wypuszczało ją do zapisanego obrazu
+   * mimo wyłączonego przełącznika.
+   */
+  withoutAmounts: { value: string; caption: string } | null;
+}
+
+/** Zasłonięta kwota — jeden napis dla ekranu i dla zapisywanego obrazu. */
+export const AMOUNT_HIDDEN = '•••••';
+
+/**
+ * Ekran w wersji, którą klient ma teraz zobaczyć — funkcja czysta.
+ *
+ * Jedno źródło prawdy dla podglądu, dla ekranu i dla pliku PNG: gdyby każde
+ * z nich decydowało samo, dałoby się zapisać obraz inny niż widoczny
+ * w podglądzie, a to jest dokładnie ta pomyłka, której na tym ekranie nie
+ * wolno popełnić.
+ */
+export function screenForDisplay(
+  screen: WrappedScreen,
+  options: { showAmounts: boolean },
+): { label: string; value: string; caption: string } {
+  const hidden = !options.showAmounts ? screen.withoutAmounts : null;
+
+  return {
+    label: screen.label,
+    value: hidden?.value ?? screen.value,
+    caption: hidden?.caption ?? screen.caption,
+  };
 }
 
 export interface WrappedResult {
@@ -149,12 +188,17 @@ function growthScreens(
       label: `Tyle zafakturowałeś w ${input.year}`,
       value: formatPln(totalGross),
       caption: 'Brutto, ze wszystkich wystawionych faktur.',
+      withoutAmounts: {
+        value: AMOUNT_HIDDEN,
+        caption: 'Brutto, ze wszystkich wystawionych faktur.',
+      },
     },
     {
       key: 'invoice_count',
       label: 'Tyle faktur wystawiłeś',
       value: String(totalInvoices),
       caption: 'Każda z nich to była czyjaś decyzja, żeby z Tobą pracować.',
+      withoutAmounts: null,
     },
   ];
 
@@ -163,7 +207,13 @@ function growthScreens(
       key: 'best_month',
       label: 'Twój najlepszy miesiąc',
       value: monthName(best.yearMonth),
+      // Kwota siedzi w PODPISIE, nie w liczbie — dlatego wersja bez kwot
+      // podmienia właśnie podpis, a nazwę miesiąca zostawia.
       caption: `${formatPln(best.totalGross)} w jednym miesiącu.`,
+      withoutAmounts: {
+        value: monthName(best.yearMonth),
+        caption: 'Wtedy poszło Ci najlepiej w całym roku.',
+      },
     });
   }
 
@@ -173,15 +223,20 @@ function growthScreens(
       label: revealNames ? biggest.name : PLACEHOLDER_BIGGEST,
       value: formatPln(biggest.gross),
       caption: 'Tyle u Ciebie zamówił.',
+      withoutAmounts: {
+        value: AMOUNT_HIDDEN,
+        caption: 'U niego zafakturowałeś najwięcej.',
+      },
     });
   }
 
   if (fastest) {
     screens.push({
       key: 'fastest_payer',
-      label: revealNames ? fastest.name : PLACEHOLDER_FASTEST,
+      label: revealNames ? fastest.contractor.name : PLACEHOLDER_FASTEST,
       value: describePaymentSpeed(fastest.avgDaysToPay),
       caption: 'Tacy klienci są warci więcej, niż wynika z faktury.',
+      withoutAmounts: null,
     });
   }
 
@@ -191,6 +246,7 @@ function growthScreens(
       label: 'Tyle faktur poszło do KSeF bez poprawki',
       value: `${clean}%`,
       caption: 'Za pierwszym razem, bez odrzucenia.',
+      withoutAmounts: null,
     });
   }
 
@@ -200,6 +256,10 @@ function growthScreens(
       label: 'Twój najmocniejszy kwartał',
       value: quarters.label,
       caption: `${formatPln(quarters.gross)} w trzy miesiące.`,
+      withoutAmounts: {
+        value: quarters.label,
+        caption: 'Trzy miesiące, w których poszło Ci najlepiej.',
+      },
     });
   }
 
@@ -228,18 +288,24 @@ function steadyScreens(
       label: 'Tylu klientów obsłużyłeś',
       value: String(input.contractors.length),
       caption: 'Każdy z nich wybrał Ciebie.',
+      withoutAmounts: null,
     },
     {
       key: 'total_invoiced',
       label: `Tyle zafakturowałeś w ${input.year}`,
       value: formatPln(totalGross),
       caption: 'Brutto, ze wszystkich wystawionych faktur.',
+      withoutAmounts: {
+        value: AMOUNT_HIDDEN,
+        caption: 'Brutto, ze wszystkich wystawionych faktur.',
+      },
     },
     {
       key: 'invoice_count',
       label: 'Tyle faktur wystawiłeś',
       value: String(totalInvoices),
       caption: 'Każda z nich to była czyjaś decyzja, żeby z Tobą pracować.',
+      withoutAmounts: null,
     },
   ];
 
@@ -249,6 +315,7 @@ function steadyScreens(
       label: revealNames ? longest.contractor.name : PLACEHOLDER_LONGEST,
       value: `${longest.years} ${yearWord(longest.years)}`,
       caption: 'Tyle trwa Wasza współpraca.',
+      withoutAmounts: null,
     });
   }
 
@@ -257,7 +324,8 @@ function steadyScreens(
       key: 'punctuality',
       label: 'Tylu Twoich klientów płaci w terminie',
       value: `${punctual}%`,
-      caption: 'To rzadziej spotykane, niż się wydaje.',
+      caption: 'Liczone z klientów, których wpłaty już potwierdziłeś.',
+      withoutAmounts: null,
     });
   }
 
@@ -267,6 +335,7 @@ function steadyScreens(
       label: 'Tyle faktur poszło do KSeF bez poprawki',
       value: `${clean}%`,
       caption: 'Za pierwszym razem, bez odrzucenia.',
+      withoutAmounts: null,
     });
   }
 
@@ -289,11 +358,26 @@ function biggestClient(
   return [...contractors].sort((a, b) => b.gross - a.gross)[0]!;
 }
 
+/**
+ * Najszybciej płacący — TYLKO spośród tych, o których cokolwiek wiemy.
+ *
+ * Kontrahent bez ani jednej potwierdzonej wpłaty nie ma terminowości, więc
+ * nie startuje w tym rankingu. Wcześniej brak historii wchodził tu jako zero
+ * dni po terminie i wygrywał z każdym, kto płacił choćby dzień po czasie —
+ * czyli ekran chwalił za punktualność kogoś, kto nigdy nie zapłacił.
+ */
 function fastestPayer(
   contractors: readonly ContractorFigure[],
-): ContractorFigure | null {
-  if (contractors.length === 0) return null;
-  return [...contractors].sort((a, b) => a.avgDaysToPay - b.avgDaysToPay)[0]!;
+): { contractor: ContractorFigure; avgDaysToPay: number } | null {
+  const known = contractors
+    .filter(
+      (contractor): contractor is ContractorFigure & { avgDaysToPay: number } =>
+        contractor.avgDaysToPay !== null,
+    )
+    .sort((a, b) => a.avgDaysToPay - b.avgDaysToPay);
+
+  const best = known[0];
+  return best ? { contractor: best, avgDaysToPay: best.avgDaysToPay } : null;
 }
 
 /**
@@ -351,12 +435,24 @@ function longestRelationship(
   return { contractor: oldest, years };
 }
 
+/**
+ * Odsetek klientów płacących w terminie — z MIANOWNIKIEM ZE ZNANYCH.
+ *
+ * Kontrahenci bez potwierdzonej wpłaty wypadają z obu stron ułamka. Gdyby
+ * zostali w mianowniku, konto z samymi nieopłaconymi fakturami dostałoby
+ * „0% płaci w terminie”, co jest równie nieprawdziwe jak wcześniejsze 100%.
+ * Brak wiedzy nie jest ani pochwałą, ani zarzutem — jest brakiem ekranu.
+ */
 function punctualityShare(
   contractors: readonly ContractorFigure[],
 ): number | null {
-  if (contractors.length === 0) return null;
-  const onTime = contractors.filter((c) => c.avgDaysToPay <= 0).length;
-  return Math.round((onTime / contractors.length) * 100);
+  const known = contractors.filter(
+    (contractor) => contractor.avgDaysToPay !== null,
+  );
+  if (known.length === 0) return null;
+
+  const onTime = known.filter((c) => (c.avgDaysToPay ?? 0) <= 0).length;
+  return Math.round((onTime / known.length) * 100);
 }
 
 function sum(values: readonly number[]): number {

@@ -25,6 +25,7 @@ function counts(overrides: Partial<ProposalCounts> = {}): ProposalCounts {
     expired: 20,
     blocked: 0,
     undone: 2,
+    staleBlocked: 0,
     ...overrides,
   };
 }

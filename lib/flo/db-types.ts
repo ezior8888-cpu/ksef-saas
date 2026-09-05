@@ -33,12 +33,27 @@ export type FloProposalStatus =
   | 'dismissed'
   | 'blocked';
 
-/** Powód zniknięcia propozycji z wątku. */
+/**
+ * Powód zniknięcia propozycji z wątku.
+ *
+ * `undone` I `stale` SĄ TU PO TO, ŻEBY PANEL OPERATORA NIE KŁAMAŁ. Bez nich
+ * cofnięcie zapisywało się nieodróżnialnie od zwykłego odrzucenia
+ * (`dismissed`/`not_now`), a blokada re-walidacyjna nieodróżnialnie od
+ * wygaśnięcia z braku decyzji — więc obie metryki pokazywały zero niezależnie
+ * od tego, co naprawdę działo się na produkcji.
+ *
+ * Kolumna w bazie jest zwykłym TEXT-em bez CHECK-a (migracja 00061), więc
+ * nowe wartości nie wymagają migracji — ale wymagają, żeby ten typ był
+ * jedynym miejscem, z którego się je bierze.
+ */
 export type FloDismissedReason =
   | 'not_now'
   | 'never'
   | 'auto_expired'
-  | 'stale';
+  /** Re-walidacja odmówiła wykonania: dane zmieniły się po pokazaniu karty. */
+  | 'stale'
+  /** Człowiek cofnął wykonaną czynność w oknie dziesięciu minut. */
+  | 'undone';
 
 /**
  * `kind` jest tu `string`, nie `FloProposalKind` — w bazie to kolumna TEXT

@@ -10,6 +10,7 @@ import {
   countProposals,
   readCostMetrics,
   readProposalMetrics,
+  warsawMonthRange,
 } from '@/lib/flo/metrics';
 import {
   accuracyByKind,
@@ -287,11 +288,13 @@ describe('trafność per rodzaj', () => {
 
 describe('sześć liczb panelu', () => {
   const proposals = [
-    { kind: 'payment.chase', status: 'done', undone: false },
-    { kind: 'payment.chase', status: 'done', undone: true },
-    { kind: 'payment.chase', status: 'expired' },
-    { kind: 'payment.chase', status: 'dismissed' },
-    { kind: 'expense.review', status: 'blocked' },
+    { kind: 'payment.chase', status: 'done', dismissed_reason: null },
+    // Cofnięte: status jak przy odrzuceniu, ale powód inny — i to powód
+    // decyduje, do której liczby wiersz trafia.
+    { kind: 'payment.chase', status: 'dismissed', dismissed_reason: 'undone' },
+    { kind: 'payment.chase', status: 'expired', dismissed_reason: 'auto_expired' },
+    { kind: 'payment.chase', status: 'dismissed', dismissed_reason: 'not_now' },
+    { kind: 'expense.review', status: 'blocked', dismissed_reason: null },
   ];
 
   it('ZIGNOROWANE TO WYGASŁE, nie odrzucone', () => {
@@ -306,11 +309,43 @@ describe('sześć liczb panelu', () => {
       expired: 1,
       blocked: 0,
       undone: 1,
+      staleBlocked: 0,
     });
 
     const rates = computeRates(counts);
     expect(rates.acceptedPct).toBe(50);
     expect(rates.ignoredPct).toBe(25);
+  });
+
+  it('COFNIĘCIE ZOSTAJE W PRZYJĘTYCH, choć status ma jak odrzucenie', () => {
+    // Człowiek się zgodził i dopiero potem zmienił zdanie. Gdyby cofnięcie
+    // wypadało z mianownika, odsetek cofnięć malałby razem z licznikiem
+    // i nigdy nie urósłby powyżej zera.
+    const counts = countProposals([
+      { status: 'dismissed', dismissed_reason: 'undone' },
+      { status: 'dismissed', dismissed_reason: 'undone' },
+    ]);
+
+    expect(counts.accepted).toBe(2);
+    expect(counts.undone).toBe(2);
+    expect(counts.dismissed).toBe(0);
+    expect(computeRates(counts).undonePct).toBe(100);
+  });
+
+  it('BLOKADA RE-WALIDACYJNA TO NIE ZIGNOROWANIE', () => {
+    // Re-walidacja zapisuje `expired`/`stale`, ale człowiek tę kartę
+    // KLIKNĄŁ — to silnik odmówił wykonania. Wliczanie tego do
+    // „zignorowanych" zawyżałoby jedyną miarę nieciekawych kart.
+    const counts = countProposals([
+      { status: 'expired', dismissed_reason: 'stale' },
+      { status: 'expired', dismissed_reason: 'auto_expired' },
+      { status: 'blocked', dismissed_reason: null },
+    ]);
+
+    expect(counts.staleBlocked).toBe(1);
+    expect(counts.expired).toBe(1);
+    // Blokada techniczna (brak certyfikatu) to osobne zdarzenie.
+    expect(counts.blocked).toBe(1);
   });
 
   it('odsetek cofnięć liczony OD PRZYJĘTYCH, nie od wszystkich', () => {
@@ -323,13 +358,22 @@ describe('sześć liczb panelu', () => {
       expired: 90,
       blocked: 0,
       undone: 5,
+      staleBlocked: 0,
     });
     expect(rates.undonePct).toBe(50);
   });
 
   it('pusty zestaw nie dzieli przez zero', () => {
     expect(
-      computeRates({ total: 0, accepted: 0, dismissed: 0, expired: 0, blocked: 0, undone: 0 }),
+      computeRates({
+        total: 0,
+        accepted: 0,
+        dismissed: 0,
+        expired: 0,
+        blocked: 0,
+        undone: 0,
+        staleBlocked: 0,
+      }),
     ).toEqual({ acceptedPct: 0, ignoredPct: 0, undonePct: 0 });
   });
 
@@ -359,14 +403,17 @@ describe('sześć liczb panelu', () => {
     expect(COST_HARD_LIMIT_PLN).toBe(3.0);
   });
 
-  it('liczy AWARIE, DO KTÓRYCH NIE DOSZŁO', async () => {
-    // Każde zdarzenie zablokowane przez re-walidację to jedna faktura, która
-    // nie poszła podwójnie. Ta metryka ma prawo rosnąć przy rosnącym ruchu.
+  it('liczy AWARIE, DO KTÓRYCH NIE DOSZŁO — po powodzie, nie po statusie', async () => {
+    // Każde zdarzenie zatrzymane przez re-walidację to jedna faktura, która
+    // nie poszła podwójnie. `lib/flo/execute.ts` zapisuje to jako
+    // `expired`/`stale`; status `blocked` znaczy co innego (brak certyfikatu),
+    // więc liczenie po nim dawało stałe zero.
     const db = createFakeDb({
       flo_proposals: [
-        { id: 'p1', status: 'blocked', kind: 'payment.chase' },
-        { id: 'p2', status: 'blocked', kind: 'invoice.batch' },
-        { id: 'p3', status: 'done', kind: 'payment.chase' },
+        { id: 'p1', status: 'expired', dismissed_reason: 'stale', kind: 'payment.chase' },
+        { id: 'p2', status: 'expired', dismissed_reason: 'stale', kind: 'invoice.batch' },
+        { id: 'p3', status: 'blocked', dismissed_reason: null, kind: 'payment.chase' },
+        { id: 'p4', status: 'done', dismissed_reason: null, kind: 'payment.chase' },
       ],
     });
     expect(await countBlockedByRevalidation(db.client)).toBe(2);
@@ -379,6 +426,52 @@ describe('sześć liczb panelu', () => {
     });
 
     expect(await readProposalMetrics(db.client)).toHaveLength(2);
-    expect((await readCostMetrics(4.0, db.client)).tenants).toBe(1);
+    expect(
+      (await readCostMetrics(4.0, db.client, new Date('2026-09-16T10:00:00Z')))
+        .tenants,
+    ).toBe(1);
+  });
+
+  it('KOSZT LICZY SIĘ ZA BIEŻĄCY MIESIĄC, nie za całą historię', async () => {
+    // Progi z części II.9 są miesięczne. Liczone od początku świata każde
+    // aktywne konto przekroczyłoby 3 zł po kilku miesiącach, siedząc
+    // w limicie — i panel alarmowałby bez powodu.
+    const db = createFakeDb({
+      flo_usage: [
+        { tenant_id: 't1', day: '2026-06-10', cost_usd: 0.7 },
+        { tenant_id: 't1', day: '2026-07-10', cost_usd: 0.7 },
+        { tenant_id: 't1', day: '2026-09-02', cost_usd: 0.1 },
+        { tenant_id: 't1', day: '2026-09-30', cost_usd: 0.05 },
+        { tenant_id: 't1', day: '2026-10-01', cost_usd: 0.9 },
+      ],
+    });
+
+    const cost = await readCostMetrics(4.0, db.client, new Date('2026-09-16T10:00:00Z'));
+
+    // 0,15 USD = 0,60 zł — mieści się w celu, mimo 2,45 USD w całej historii.
+    expect(cost.totalUsd).toBe(0.15);
+    expect(cost.overTarget).toBe(0);
+    expect(cost.overHardLimit).toBe(0);
+    expect(cost.period).toMatchObject({
+      from: '2026-09-01',
+      to: '2026-10-01',
+      label: 'wrzesień 2026',
+    });
+  });
+
+  it('granicę miesiąca wyznacza kalendarz polski, nie strefa serwera', () => {
+    // Serwer chodzi w UTC. 1 września o 00:30 czasu polskiego to jeszcze
+    // 31 sierpnia w UTC — a limit jest limitem miesiąca klienta.
+    expect(warsawMonthRange(new Date('2026-08-31T22:30:00Z'))).toMatchObject({
+      from: '2026-09-01',
+      to: '2026-10-01',
+    });
+
+    // Przełom roku nie może dać miesiąca 13.
+    expect(warsawMonthRange(new Date('2026-12-20T10:00:00Z'))).toMatchObject({
+      from: '2026-12-01',
+      to: '2027-01-01',
+      label: 'grudzień 2026',
+    });
   });
 });

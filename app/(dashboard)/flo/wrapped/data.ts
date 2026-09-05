@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { countsForPaymentScore } from '@/lib/flo/functions/import-history';
 import type {
   ContractorFigure,
   MonthFigure,
@@ -31,6 +32,8 @@ interface InvoiceRow {
   payment_due_date: string | null;
   buyer_nip: string | null;
   buyer_data: unknown;
+  /** Pochodzenie dokumentu (migracja 00065); `app` = wystawiony tutaj. */
+  origin: string | null;
 }
 
 /** Nazwa kontrahenta z `buyer_data` — bez rzutowania na siłę. */
@@ -57,8 +60,14 @@ const DAY = 24 * 60 * 60 * 1000;
  * Ile dni po terminie wpłynęła płatność. Ujemna wartość znaczy „przed
  * terminem” i tak ma zostać — `buildWrapped` robi z tego ekran
  * „najszybciej płacący”.
+ *
+ * `null` znaczy „nie wiem” i tak też jest dalej traktowane. Dokumenty spoza
+ * aplikacji odpadają przez ten sam warunek, co przy ocenie terminowości
+ * (`countsForPaymentScore`): historia z KSeF nie niesie dat zapłaty, więc
+ * opóźnienie liczone z importu jest liczone z pustki.
  */
 function daysToPay(row: InvoiceRow): number | null {
+  if (!countsForPaymentScore(row.origin ?? 'app')) return null;
   if (!row.paid_at || !row.payment_due_date) return null;
 
   const paid = Date.parse(row.paid_at);
@@ -76,11 +85,11 @@ export async function readWrappedInput(
   const from = `${year - 1}-01-01`;
   const to = `${year + 1}-01-01`;
 
-  const [{ data: recent }, { data: history }] = await Promise.all([
+  const [recentResult, historyResult] = await Promise.all([
     supabase
       .from('invoices')
       .select(
-        'issue_date, gross_total, ksef_status, paid_at, payment_due_date, buyer_nip, buyer_data',
+        'issue_date, gross_total, ksef_status, paid_at, payment_due_date, buyer_nip, buyer_data, origin',
       )
       .eq('tenant_id', tenantId)
       .eq('direction', 'issued')
@@ -97,7 +106,14 @@ export async function readWrappedInput(
       .limit(10_000),
   ]);
 
-  const rows = (recent ?? []) as InvoiceRow[];
+  // BŁĄD ZAPYTANIA TO NIE JEST „BRAK DANYCH”. Odmowa RLS albo nieprzeładowany
+  // schemat PostgREST-a wyglądałyby tu identycznie jak konto bez faktur —
+  // czyli klient z pełnym rokiem pracy zobaczyłby „nie mam z czego zrobić
+  // podsumowania”, a my nie dowiedzielibyśmy się o awarii.
+  const failure = recentResult.error ?? historyResult.error;
+  if (failure) throw new Error(failure.message);
+
+  const rows = (recentResult.data ?? []) as InvoiceRow[];
   const thisYear = rows.filter((row) => row.issue_date.startsWith(String(year)));
 
   // ── Miesiące ────────────────────────────────────────────────
@@ -123,7 +139,7 @@ export async function readWrappedInput(
 
   // ── Kontrahenci ─────────────────────────────────────────────
   const firstSeen = new Map<string, string>();
-  for (const row of (history ?? []) as InvoiceRow[]) {
+  for (const row of (historyResult.data ?? []) as InvoiceRow[]) {
     const key = buyerKey(row);
     if (!firstSeen.has(key)) firstSeen.set(key, row.issue_date.slice(0, 7));
   }
@@ -153,9 +169,11 @@ export async function readWrappedInput(
       id: key,
       name: bucket.name,
       gross: bucket.gross,
+      // `null`, a NIE zero: brak potwierdzonej wpłaty to brak wiedzy
+      // o terminowości, nie płatność w terminie.
       avgDaysToPay:
         bucket.delays.length === 0
-          ? 0
+          ? null
           : Math.round(
               bucket.delays.reduce((sum, d) => sum + d, 0) /
                 bucket.delays.length,

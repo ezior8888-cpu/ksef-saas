@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
 import { cn } from '@/lib/utils';
-import type { WrappedResult, WrappedScreenKey } from '@/lib/flo/wrapped';
+import { screenForDisplay, type WrappedResult } from '@/lib/flo/wrapped';
 
 import {
   buildShareSvg,
@@ -33,15 +33,6 @@ import {
  * z opisu SVG, nie ze zrzutu ekranu.
  */
 
-/** Ekrany, na których widać pieniądze — do przełącznika ukrywania kwot. */
-const MONEY_SCREENS = new Set<WrappedScreenKey>([
-  'total_invoiced',
-  'best_month',
-  'biggest_client',
-]);
-
-const HIDDEN = '•••••';
-
 export function FloWrappedDeck({
   masked,
   revealed,
@@ -61,20 +52,23 @@ export function FloWrappedDeck({
   const screens = result.screens;
   const screen = screens[index] ?? screens[0];
 
-  const value =
-    screen && !showAmounts && MONEY_SCREENS.has(screen.key)
-      ? HIDDEN
-      : (screen?.value ?? '');
+  // Wersję do pokazania składa SILNIK, nie ten komponent. Lista „ekranów
+  // z pieniędzmi” trzymana tutaj rozjeżdżała się z treścią: zasłaniała samą
+  // liczbę, a kwoty w podpisach („48 200,00 zł w jednym miesiącu”) szły do
+  // pliku mimo wyłączonego przełącznika.
+  const shown = screen
+    ? screenForDisplay(screen, { showAmounts })
+    : { label: '', value: '', caption: '' };
 
   const svg = useMemo(() => {
     if (!screen) return '';
     return buildShareSvg({
-      label: screen.label,
-      value,
-      caption: screen.caption,
+      label: shown.label,
+      value: shown.value,
+      caption: shown.caption,
       footer: `FaktFlow · ${result.year}`,
     });
-  }, [screen, value, result.year]);
+  }, [screen, shown.label, shown.value, shown.caption, result.year]);
 
   // Bez `useCallback`: kompilator Reacta zapamiętuje to sam, a ręczna lista
   // zależności z `screen?.key` była węższa niż wywnioskowana i blokowała mu
@@ -127,18 +121,18 @@ export function FloWrappedDeck({
         className="relative flex min-h-[420px] flex-1 flex-col items-center justify-center rounded-3xl border border-[var(--ff-border)] bg-[var(--ff-surface-container-low)] p-8 text-center"
       >
         <p className="text-[11px] tracking-[0.18em] text-[var(--ff-text-muted)] uppercase">
-          {screen.label}
+          {shown.label}
         </p>
 
         <p
-          key={`${screen.key}:${value}`}
+          key={`${screen.key}:${shown.value}`}
           className="mt-4 text-5xl font-bold tabular-nums text-[var(--ff-text-strong)] motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95"
         >
-          {value}
+          {shown.value}
         </p>
 
         <p className="mt-4 max-w-sm text-sm text-[var(--ff-text-soft)]">
-          {screen.caption}
+          {shown.caption}
         </p>
       </section>
 
@@ -250,7 +244,7 @@ export function FloWrappedDeck({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={shareSvgDataUrl(svg)}
-              alt={`Podgląd obrazu: ${screen.label}, ${value}`}
+              alt={`Podgląd obrazu: ${shown.label}, ${shown.value}`}
               className="mx-auto w-40 rounded-xl border border-[var(--ff-border)]"
             />
             <p className="mt-2 text-center text-[11px] text-[var(--ff-text-muted)]">

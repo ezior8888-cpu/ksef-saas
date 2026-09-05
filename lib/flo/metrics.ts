@@ -25,16 +25,30 @@ import type { FloProposalKind } from '@/types/flo';
 
 export interface ProposalCounts {
   total: number;
-  /** Zatwierdzone albo wykonane. */
+  /** Zatwierdzone albo wykonane — RAZEM Z COFNIĘTYMI (patrz `countProposals`). */
   accepted: number;
-  /** Odrzucone świadomie. */
+  /** Odrzucone świadomie — bez cofnięć. */
   dismissed: number;
   /** Wygasłe bez decyzji — to jest właśnie „zignorowane”. */
   expired: number;
-  /** Zablokowane warunkiem technicznym. */
+  /** Zablokowane warunkiem technicznym (np. brak certyfikatu). */
   blocked: number;
   /** Cofnięte przez człowieka w oknie dziesięciu minut. */
   undone: number;
+  /** Zatrzymane przez re-walidację: dane zmieniły się po pokazaniu karty. */
+  staleBlocked: number;
+}
+
+/**
+ * Wiersz `flo_proposals` zawężony do tego, z czego liczą się metryki.
+ *
+ * `dismissed_reason` JEST TU NIEZBĘDNE, nie ozdobne: sam `status` nie
+ * odróżnia cofnięcia od odrzucenia ani blokady re-walidacyjnej od
+ * wygaśnięcia z braku decyzji.
+ */
+export interface ProposalLifecycleRow {
+  status: string;
+  dismissed_reason?: string | null;
 }
 
 export interface ProposalRates {
@@ -66,9 +80,24 @@ export function computeRates(counts: ProposalCounts): ProposalRates {
   };
 }
 
-/** Zlicza statusy propozycji — funkcja czysta. */
+/**
+ * Zlicza cykl życia propozycji — funkcja czysta.
+ *
+ * TRZY ROZRÓŻNIENIA, KTÓRYCH SAM `status` NIE UNIESIE:
+ *
+ * 1. COFNIĘCIE ZOSTAJE W PRZYJĘTYCH. Po cofnięciu wiersz ma status
+ *    `dismissed`, ale człowiek się na tę czynność ZGODZIŁ — zmienił zdanie
+ *    dopiero potem. Gdyby cofnięcie wypadało z mianownika, odsetek cofnięć
+ *    malałby razem z licznikiem i nigdy nie urósłby powyżej zera.
+ * 2. COFNIĘCIE TO NIE ODRZUCENIE. `dismissed` liczy świadome „nie chcę tego”;
+ *    cofnięcie ma własny licznik, bo mówi coś zupełnie innego o agencie.
+ * 3. BLOKADA RE-WALIDACYJNA TO NIE ZIGNOROWANIE. Wiersz dostaje status
+ *    `expired`, ale człowiek go KLIKNĄŁ — to silnik odmówił wykonania, bo
+ *    dane się zmieniły. Wliczanie tego do „zignorowanych” zawyżałoby jedyną
+ *    metrykę, która mierzy, jak często karta była nieciekawa.
+ */
 export function countProposals(
-  rows: readonly { status: string; undone?: boolean }[],
+  rows: readonly ProposalLifecycleRow[],
 ): ProposalCounts {
   const counts: ProposalCounts = {
     total: rows.length,
@@ -77,16 +106,26 @@ export function countProposals(
     expired: 0,
     blocked: 0,
     undone: 0,
+    staleBlocked: 0,
   };
 
   for (const row of rows) {
-    if (row.status === 'approved' || row.status === 'done' || row.status === 'executing') {
+    const undone = row.dismissed_reason === 'undone';
+    const stale = row.dismissed_reason === 'stale';
+
+    if (
+      row.status === 'approved' ||
+      row.status === 'done' ||
+      row.status === 'executing' ||
+      undone
+    ) {
       counts.accepted++;
     }
-    if (row.status === 'dismissed') counts.dismissed++;
-    if (row.status === 'expired') counts.expired++;
+    if (row.status === 'dismissed' && !undone) counts.dismissed++;
+    if (row.status === 'expired' && !stale) counts.expired++;
     if (row.status === 'blocked') counts.blocked++;
-    if (row.undone) counts.undone++;
+    if (undone) counts.undone++;
+    if (stale) counts.staleBlocked++;
   }
 
   return counts;
@@ -101,6 +140,60 @@ export const COST_TARGET_PLN = 0.95;
 
 /** Twardy limit: 3,00 zł. */
 export const COST_HARD_LIMIT_PLN = 3.0;
+
+/** Zakres jednego miesiąca w kalendarzu Europe/Warsaw. */
+export interface MonthRange {
+  /** Pierwszy dzień miesiąca, „2026-09-01” — granica włączna. */
+  from: string;
+  /** Pierwszy dzień następnego miesiąca — granica WYŁĄCZNA. */
+  to: string;
+  /** Etykieta do interfejsu, „wrzesień 2026”. */
+  label: string;
+}
+
+const MONTHS_PL = [
+  'styczeń',
+  'luty',
+  'marzec',
+  'kwiecień',
+  'maj',
+  'czerwiec',
+  'lipiec',
+  'sierpień',
+  'wrzesień',
+  'październik',
+  'listopad',
+  'grudzień',
+];
+
+/**
+ * Bieżący miesiąc według kalendarza polskiego, nie według strefy serwera.
+ *
+ * Serwer stoi w Norymberdze i chodzi w UTC, więc przez pierwsze dwie godziny
+ * pierwszego dnia miesiąca „dziś” w UTC należy jeszcze do miesiąca
+ * poprzedniego. Limit kosztowy jest limitem miesięcznym w rozumieniu klienta
+ * i rachunku, więc granicę wyznacza jego kalendarz.
+ */
+export function warsawMonthRange(now: Date = new Date()): MonthRange {
+  const [year, month] = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Warsaw',
+    year: 'numeric',
+    month: '2-digit',
+  })
+    .format(now)
+    .split('-')
+    .map(Number) as [number, number];
+
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+
+  return {
+    from: `${year}-${pad(month)}-01`,
+    to: `${nextYear}-${pad(nextMonth)}-01`,
+    label: `${MONTHS_PL[month - 1]} ${year}`,
+  };
+}
 
 export interface CostStats {
   tenants: number;
@@ -153,9 +246,9 @@ export interface PanelRow {
 }
 
 export function buildPanelRows(
-  rows: readonly { kind: string; status: string; undone?: boolean }[],
+  rows: readonly (ProposalLifecycleRow & { kind: string })[],
 ): PanelRow[] {
-  const byKind = new Map<string, { status: string; undone?: boolean }[]>();
+  const byKind = new Map<string, ProposalLifecycleRow[]>();
 
   for (const row of rows) {
     const bucket = byKind.get(row.kind) ?? [];
@@ -180,37 +273,67 @@ export async function readProposalMetrics(
 ): Promise<PanelRow[]> {
   const { data, error } = await db
     .from('flo_proposals')
-    .select('kind, status, undoable_until');
+    .select('kind, status, dismissed_reason');
   if (error) throw new Error(error.message);
 
   return buildPanelRows(
-    (data ?? []).map((row) => ({ kind: row.kind, status: row.status })),
+    (data ?? []).map((row) => ({
+      kind: row.kind,
+      status: row.status,
+      dismissed_reason: row.dismissed_reason,
+    })),
   );
 }
 
+/** Koszt modelu razem z okresem, za który został policzony. */
+export type CostMetrics = CostStats & { period: MonthRange };
+
+/**
+ * Koszt modelu za BIEŻĄCY MIESIĄC.
+ *
+ * Zakres dat jest tu warunkiem poprawności, nie optymalizacją: progi
+ * z części II.9 (0,95 zł celu, 3,00 zł twardego limitu) są miesięczne, więc
+ * liczone od całej historii każde aktywne konto przekroczyłoby je po
+ * kilku miesiącach, siedząc w limicie.
+ */
 export async function readCostMetrics(
   usdToPln: number,
   db: FloDbClient = floDb(),
-): Promise<CostStats> {
-  const { data, error } = await db.from('flo_usage').select('tenant_id, cost_usd');
+  now: Date = new Date(),
+): Promise<CostMetrics> {
+  const period = warsawMonthRange(now);
+
+  const { data, error } = await db
+    .from('flo_usage')
+    .select('tenant_id, cost_usd')
+    .gte('day', period.from)
+    .lt('day', period.to);
   if (error) throw new Error(error.message);
 
-  return computeCost(
-    (data ?? []).map((row) => ({
-      tenant_id: row.tenant_id,
-      cost_usd: Number(row.cost_usd),
-    })),
-    usdToPln,
-  );
+  return {
+    ...computeCost(
+      (data ?? []).map((row) => ({
+        tenant_id: row.tenant_id,
+        cost_usd: Number(row.cost_usd),
+      })),
+      usdToPln,
+    ),
+    period,
+  };
 }
 
 /**
- * Liczba zdarzeń zablokowanych przez re-walidację.
+ * Liczba zdarzeń zatrzymanych przez re-walidację.
  *
- * Zliczamy żetony zgody, które zostały wystawione, ale nigdy skonsumowane
- * ze skutkiem — czyli momenty, w których człowiek kliknął, a silnik
- * powiedział „dane się zmieniły”. Każdy taki wiersz to jedna awaria,
- * do której NIE DOSZŁO.
+ * Zliczamy momenty, w których człowiek kliknął, a silnik powiedział „dane się
+ * zmieniły” — każdy taki wiersz to jedna faktura, która nie poszła podwójnie,
+ * albo jedno ponaglenie, które nie poleciało do kogoś, kto już zapłacił.
+ * To jedyna metryka w tym zestawie licząca awarie, DO KTÓRYCH NIE DOSZŁO.
+ *
+ * SZUKAMY POWODU, NIE STATUSU. Re-walidacja zapisuje
+ * `status = 'expired', dismissed_reason = 'stale'` (`lib/flo/execute.ts`);
+ * status `blocked` znaczy co innego — warunek techniczny, np. brak
+ * certyfikatu. Zliczanie po statusie dawało stałe zero.
  */
 export async function countBlockedByRevalidation(
   db: FloDbClient = floDb(),
@@ -218,7 +341,7 @@ export async function countBlockedByRevalidation(
   const { data, error } = await db
     .from('flo_proposals')
     .select('id')
-    .eq('status', 'blocked');
+    .eq('dismissed_reason', 'stale');
   if (error) throw new Error(error.message);
 
   return (data ?? []).length;

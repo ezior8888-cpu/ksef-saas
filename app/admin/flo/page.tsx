@@ -53,8 +53,17 @@ export default async function AdminFloPage() {
       expired: acc.expired + row.counts.expired,
       blocked: acc.blocked + row.counts.blocked,
       undone: acc.undone + row.counts.undone,
+      staleBlocked: acc.staleBlocked + row.counts.staleBlocked,
     }),
-    { total: 0, accepted: 0, dismissed: 0, expired: 0, blocked: 0, undone: 0 },
+    {
+      total: 0,
+      accepted: 0,
+      dismissed: 0,
+      expired: 0,
+      blocked: 0,
+      undone: 0,
+      staleBlocked: 0,
+    },
   );
 
   const pct = (part: number, whole: number) =>
@@ -90,21 +99,21 @@ export default async function AdminFloPage() {
         />
         <Metric
           label="Zablokowane re-walidacją"
-          value={String(totals.blocked)}
+          value={String(totals.staleBlocked)}
           hint="dane zmieniły się między propozycją a kliknięciem"
         />
         <Metric
           label="Koszt modelu"
           value={`${(cost.avgPerTenantUsd * USD_TO_PLN).toFixed(2)} zł`}
-          hint={`średnio na konto · cel ${COST_TARGET_PLN.toFixed(2)} zł · limit ${COST_HARD_LIMIT_PLN.toFixed(2)} zł`}
+          hint={`średnio na konto · ${cost.period.label} · cel ${COST_TARGET_PLN.toFixed(2)} zł · limit ${COST_HARD_LIMIT_PLN.toFixed(2)} zł`}
           alarm={cost.overHardLimit > 0}
         />
       </section>
 
       {cost.overHardLimit > 0 ? (
         <p className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">
-          {cost.overHardLimit} kont przekroczyło twardy limit kosztu. Te konta
-          działają w trybie regułowym, bez modelu.
+          {cost.overHardLimit} kont przekroczyło twardy limit kosztu w okresie{' '}
+          {cost.period.label}. Te konta działają w trybie regułowym, bez modelu.
         </p>
       ) : null}
 
@@ -231,12 +240,14 @@ export default async function AdminFloPage() {
                 <th className="p-2 text-right font-medium">Przyjęte</th>
                 <th className="p-2 text-right font-medium">Zignorowane</th>
                 <th className="p-2 text-right font-medium">Cofnięte</th>
+                <th className="p-2 text-right font-medium">Re-walidacja</th>
+                <th className="p-2 text-right font-medium">Blokada techn.</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-4 text-muted-foreground">
+                  <td colSpan={7} className="p-4 text-muted-foreground">
                     Brak propozycji w bazie.
                   </td>
                 </tr>
@@ -255,6 +266,12 @@ export default async function AdminFloPage() {
                     </td>
                     <td className="p-2 text-right tabular-nums">
                       {row.rates.undonePct}%
+                    </td>
+                    <td className="p-2 text-right tabular-nums">
+                      {row.counts.staleBlocked}
+                    </td>
+                    <td className="p-2 text-right tabular-nums">
+                      {row.counts.blocked}
                     </td>
                   </tr>
                 ))

@@ -8,7 +8,11 @@ import {
   SHARE_WIDTH,
 } from '@/components/flo/wrapped/share-image';
 import { FloWrappedDeck } from '@/components/flo/wrapped/wrapped-deck';
-import type { WrappedResult } from '@/lib/flo/wrapped';
+import {
+  AMOUNT_HIDDEN,
+  screenForDisplay,
+  type WrappedResult,
+} from '@/lib/flo/wrapped';
 
 /**
  * Podsumowanie roku i progi pieniężne (kroki 37–38 toru B).
@@ -28,12 +32,29 @@ const MASKED: WrappedResult = {
       label: 'Zafakturowane',
       value: '482 300,00 zł',
       caption: 'Tyle wystawiłeś w tym roku.',
+      withoutAmounts: {
+        value: AMOUNT_HIDDEN,
+        caption: 'Tyle wystawiłeś w tym roku.',
+      },
     },
     {
       key: 'biggest_client',
       label: 'Największy klient',
       value: 'Twój największy klient',
       caption: 'U niego zafakturowałeś najwięcej.',
+      withoutAmounts: null,
+    },
+    // Ekran, którego kwota siedzi WYŁĄCZNIE w podpisie — to on wyciekał
+    // do zapisanego obrazu przy wyłączonym przełączniku kwot.
+    {
+      key: 'best_month',
+      label: 'Najlepszy miesiąc',
+      value: 'Marzec',
+      caption: '48 200,00 zł w jednym miesiącu.',
+      withoutAmounts: {
+        value: 'Marzec',
+        caption: 'Wtedy poszło Ci najlepiej w całym roku.',
+      },
     },
   ],
 };
@@ -44,6 +65,7 @@ const REVEALED: WrappedResult = {
   screens: [
     MASKED.screens[0]!,
     { ...MASKED.screens[1]!, value: 'ACME Sp. z o.o.' },
+    MASKED.screens[2]!,
   ],
 };
 
@@ -124,6 +146,52 @@ describe('FloWrappedDeck', () => {
 
   it('pozwala ukryć kwoty przed zapisaniem', () => {
     expect(html).toContain('Pokaż kwoty');
+  });
+});
+
+describe('WYŁĄCZONE KWOTY NIE MOGĄ WYJŚĆ W PLIKU', () => {
+  /**
+   * Sprawdzamy GOTOWY SVG, nie stan komponentu: to ten napis trafia na
+   * płótno i do galerii. Zasłanianie samej liczby zostawiało kwotę
+   * w podpisie i wypuszczało ją mimo wyłączonego przełącznika.
+   */
+  function svgFor(index: number, showAmounts: boolean): string {
+    const shown = screenForDisplay(MASKED.screens[index]!, { showAmounts });
+    return buildShareSvg({ ...shown, footer: 'FaktFlow · 2026' });
+  }
+
+  it('ekran z kwotą w LICZBIE — liczba znika', () => {
+    expect(svgFor(0, true)).toContain('482 300,00 zł');
+
+    const hidden = svgFor(0, false);
+    expect(hidden).not.toContain('482 300,00 zł');
+    expect(hidden).toContain(AMOUNT_HIDDEN);
+  });
+
+  it('ekran z kwotą w PODPISIE — kwota też znika', () => {
+    expect(svgFor(2, true)).toContain('48 200,00 zł');
+
+    const hidden = svgFor(2, false);
+    expect(hidden).not.toContain('48 200,00 zł');
+    // Nazwa miesiąca zostaje: to nie jest kwota.
+    expect(hidden).toContain('Marzec');
+  });
+
+  it('ANI JEDNEJ kwoty w całym zestawie po wyłączeniu przełącznika', () => {
+    const zloty = /\d[\d\s\u00a0]*,\d{2}\s*zł/;
+
+    for (let index = 0; index < MASKED.screens.length; index++) {
+      expect(svgFor(index, false)).not.toMatch(zloty);
+    }
+  });
+
+  it('ekran bez pieniędzy nie zmienia się wcale', () => {
+    const screen = MASKED.screens[1]!;
+    expect(screenForDisplay(screen, { showAmounts: false })).toEqual({
+      label: screen.label,
+      value: screen.value,
+      caption: screen.caption,
+    });
   });
 });
 

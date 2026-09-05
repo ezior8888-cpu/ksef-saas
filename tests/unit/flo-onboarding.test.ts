@@ -284,6 +284,88 @@ describe('DEFINICJA GOTOWOŚCI — konto ze spadkiem nie widzi liczby ujemnej', 
   });
 });
 
+// ═══════════════════════════════════════════════════════════════
+// S-03 — TERMINOWOŚĆ BEZ ZMYŚLANIA
+// ═══════════════════════════════════════════════════════════════
+
+describe('Wrapped nie chwali klienta, który nigdy nie zapłacił', () => {
+  const unknown = {
+    id: 'c9',
+    name: 'Bez wpłat sp. z o.o.',
+    gross: 90_000,
+    // Brak potwierdzonej wpłaty: „nie wiem”, a nie „płaci w terminie”.
+    avgDaysToPay: null,
+    firstInvoiceMonth: '2026-02',
+  };
+
+  it('KONTRAHENT BEZ HISTORII NIE WYGRYWA „najszybciej płacącego”', () => {
+    const result = buildWrapped(
+      wrappedInput({
+        previousYearGross: 10_000,
+        contractors: [
+          unknown,
+          {
+            id: 'c1',
+            name: 'ACME Sp. z o.o.',
+            gross: 40_000,
+            avgDaysToPay: 4,
+            firstInvoiceMonth: '2023-04',
+          },
+        ],
+      }),
+    );
+
+    const fastest = result.screens.find((s) => s.key === 'fastest_payer');
+    expect(fastest?.label).toBe('Twój najszybciej płacący klient');
+    // Wygrywa jedyny znany, czyli ACME z czterema dniami — nie „zero dni”
+    // wzięte z braku danych.
+    expect(fastest?.value).toBe('Płaci w 4 dni');
+  });
+
+  it('same nieznane wpłaty — ekranu po prostu nie ma', () => {
+    const result = buildWrapped(
+      wrappedInput({ previousYearGross: 10_000, contractors: [unknown] }),
+    );
+    expect(result.screens.map((s) => s.key)).not.toContain('fastest_payer');
+  });
+
+  it('ODSETEK PŁACĄCYCH W TERMINIE liczy się ze znanych, nie ze wszystkich', () => {
+    // Trzech kontrahentów, ale wiadomo tylko o jednym — i ten jeden płaci
+    // po terminie. Wcześniej dwaj nieznani wchodzili jako punktualni
+    // i dawały 67% zamiast prawdziwego 0%.
+    const result = buildWrapped(
+      wrappedInput({
+        months: months([3000, 2000, 2500]),
+        previousYearGross: 200_000,
+        contractors: [
+          unknown,
+          { ...unknown, id: 'c10' },
+          {
+            id: 'c11',
+            name: 'Spóźnialski',
+            gross: 5_000,
+            avgDaysToPay: 12,
+            firstInvoiceMonth: '2025-01',
+          },
+        ],
+      }),
+    );
+
+    expect(result.screens.find((s) => s.key === 'punctuality')?.value).toBe('0%');
+  });
+
+  it('nikt ze znanych wpłat — ekran terminowości znika zamiast kłamać', () => {
+    const result = buildWrapped(
+      wrappedInput({
+        months: months([3000, 2000, 2500]),
+        previousYearGross: 200_000,
+        contractors: [unknown],
+      }),
+    );
+    expect(result.screens.map((s) => s.key)).not.toContain('punctuality');
+  });
+});
+
 describe('Wrapped — nazwy, liczba ekranów i koszt', () => {
   it('nazwy kontrahentów są DOMYŚLNIE ZASŁONIĘTE', () => {
     // Ekran zapisuje się w 9:16 i ląduje na Instagramie, a klient nie pytał
@@ -317,6 +399,26 @@ describe('Wrapped — nazwy, liczba ekranów i koszt', () => {
     for (const screen of buildWrapped(wrappedInput()).screens) {
       expect(screen.value.length).toBeGreaterThan(0);
       expect(screen.caption.length).toBeGreaterThan(10);
+    }
+  });
+
+  it('KAŻDY ekran z kwotą niesie własną wersję bez kwot', () => {
+    // Silnik, a nie przeglądarka, decyduje, jak wygląda ekran z wyłączonymi
+    // kwotami — razem z podpisem, bo tam też stoją złotówki.
+    const zloty = /\d[\d\s\u00a0]*,\d{2}\s*zł/;
+
+    for (const variant of [
+      buildWrapped(wrappedInput({ previousYearGross: 10_000 })),
+      buildWrapped(wrappedInput({ previousYearGross: 500_000 })),
+    ]) {
+      for (const screen of variant.screens) {
+        const hasMoney = zloty.test(screen.value) || zloty.test(screen.caption);
+        if (!hasMoney) continue;
+
+        expect(screen.withoutAmounts).not.toBeNull();
+        expect(screen.withoutAmounts!.value).not.toMatch(zloty);
+        expect(screen.withoutAmounts!.caption).not.toMatch(zloty);
+      }
     }
   });
 
