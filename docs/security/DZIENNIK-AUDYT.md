@@ -167,3 +167,53 @@ Uwagi:
 - Nie streszczaj wyników. Wklej surowe wyjście.
 
 Następny krok: 1 (sekrety i granica przeglądarka/serwer)
+
+---
+
+## 2026-09-06 · Krok 0.5 — zaległy `pnpm audit`
+
+Kto: Igor + Claude
+
+Zrobione:
+- `pnpm install --frozen-lockfile` w tym worktree (wcześniej `node_modules` było puste,
+  co blokowało ten krok). Zakończone bez błędu, 18 s.
+- `pnpm audit`.
+
+Wynik: **56 podatności — 30 wysokich, 22 średnie, 4 niskie.**
+
+Najważniejsze: **dziewięć** doradztw dotyczy samego Next.js. Mamy `16.2.6`,
+zakres podatny to `>=16.0.0 <16.2.11`, a więc wszystkie dziewięć zamyka
+podbicie do `16.2.11` — łatka w obrębie tej samej wersji pomniejszej.
+
+Dwa z nich są dokładnie o tym, czego szukamy w tym audycie:
+- **Cache confusion of response bodies** — treść odpowiedzi jednego żądania
+  może trafić do innego. Wyciek między użytkownikami z poziomu frameworka.
+- **Unauthenticated disclosure of internal Server Function endpoints** —
+  ujawnia adresy akcji serwerowych. W parze z ustaleniem z kroku 0 (układ
+  strony NIE chroni akcji) to gotowy łańcuch ataku, nie sama ciekawostka.
+
+Ustalenia:
+- SEC-A-03 — dziewięć doradztw dla Next.js 16.2.6, naprawa: podbicie do 16.2.11.
+- SEC-A-04 — mapowanie OWASP twierdzi „z 43 vulns ➜ 3". Jest 56.
+
+Świadomie odrzucone (szczegóły w rejestrze):
+- „Next.js: Middleware / Proxy bypass in App Router" (wysoka waga, nasza wersja)
+  — **nie dotyczy nas**. Doradztwo wymaga jednocześnie Turbopacka i dokładnie
+  jednego wpisu w `config.i18n.locales`. Budujemy `next build --webpack`,
+  a klucza `i18n` w `next.config.ts` nie ma. Odpada na obu warunkach.
+  Zapisane z warunkiem powrotu: gdyby ktoś usunął `--webpack` albo dodał
+  `config.i18n`, ustalenie wraca jako krytyczne, bo cała bramka auth
+  siedzi w `proxy.ts`.
+
+Czego NIE sprawdziliśmy:
+- Podziału podatności na „dotyczy kodu produkcyjnego" i „tylko narzędzia
+  deweloperskie". Część trafień siedzi w `shadcn`, `lighthouse` i podobnych,
+  które nigdy nie trafiają na produkcję — ich waga jest w praktyce niższa
+  niż pokazuje `pnpm audit`. Rozdzielenie tego to zadanie na dzień 1.
+- Czy podbicie Next.js do 16.2.11 przechodzi build. **Nie sprawdzamy tego
+  w audycie** — tryb „tylko raport", a to zmiana w zależnościach.
+
+Zadania dla Bartka:
+- brak nowych; sześć z kroku 0 nadal czeka.
+
+Następny krok: 1 (sekrety i granica przeglądarka/serwer)
