@@ -306,3 +306,109 @@ Zadania dla Bartka:
   się domknąć dnia 3, a od tej jednej funkcji zależy cała izolacja między klientami.
 
 Następny krok: 2 (izolacja najemców — 206 wywołań omijających RLS)
+
+---
+
+## 2026-09-06 · Sprostowanie do kroku 1 — zadanie wycofane
+
+Kto: Igor + Claude
+
+**Zadanie „region PostHoga" wycofane. Nie wykonuj go.** Odpowiedź była w repozytorium
+przez cały czas, a ja odesłałem pytanie na serwer bez sprawdzenia kodu.
+
+`next.config.ts:170-183` przekierowuje `/ingest` na `https://eu.i.posthog.com`,
+a `/ingest/static/*` i `/ingest/array/*` na `https://eu-assets.i.posthog.com`.
+Klient inicjalizuje się z `api_host: '/ingest'`, czyli na własną domenę — cała
+ścieżka danych idzie przez to przekierowanie. Zmienna `NEXT_PUBLIC_POSTHOG_HOST`
+ustawia wyłącznie `ui_host`, czyli adres panelu w odnośnikach, i na kierunek
+wysyłki danych nie wpływa.
+
+**Wniosek: dane analityczne idą do chmury EU.** Rozstrzyga się to przy budowaniu
+z zawartości repozytorium, nie ze zmiennych na serwerze — więc odczyt środowiska
+kontenera niczego by nie dodał.
+
+Wpływ na ustalenie SEC-D-01: waga zostaje **wysoka**, ale bez transferu poza EOG.
+Wyciek nagrań sesji z danymi kontrahentów do zewnętrznego przetwarzającego jest
+problemem sam w sobie; brak transferu poza EOG zdejmuje z niego drugą warstwę.
+
+Zadania dla Bartka: bez zmian — sześć zapytań SQL z kroku 0 nadal aktualne.
+
+---
+
+## 2026-09-06 · Krok 1b — co baza oddaje niezalogowanemu
+
+Kto: Igor + Claude
+
+Kontekst zmiany podziału pracy: Igor spytał, czy zadań dla Bartosza nie da się
+wykonać samemu. Sprawdziłem i odpowiedź jest mieszana — opis niżej, bo dotyczy
+też przyszłych sesji.
+
+**Czego NIE mogę i dlaczego.** Klucz `~/.ssh/hetzner_faktflow_ed25519` jest
+w WSL i `wsl.exe` stąd działa, ale klucz jest **chroniony hasłem**, a agenta SSH
+nie ma. Hasła do klucza nie obsługuję. Wszystkie trzy serwery odpowiadają
+`Permission denied (publickey,password)`. **Zadania na serwerach musi wykonać
+człowiek** — sześć zapytań SQL zostaje po stronie Bartosza.
+
+Przy okazji: `AGENTS.md` podaje `db-1 = 178.104.128.144` z bezpośrednim SSH,
+a `~/.ssh/config` mówi, że baza jest w sieci prywatnej pod `10.0.0.2`
+i wchodzi się przez `ops-1` jako bastion (`ProxyJump faktflow-ops`).
+Dokumentacja i konfiguracja się nie zgadzają — Bartoszu, która wersja jest
+prawdziwa?
+
+**Co MOGŁEM zrobić zamiast tego.** Nowe narzędzie
+`scripts/security/audit-postgrest-exposure.ts` — test empiryczny zamiast
+czytania polityk. Wysyła prawdziwe żądania HTTP kluczem `anon`, czyli tym
+samym, który jest wbudowany w pakiet przeglądarki i który ma każdy odwiedzający.
+Nie pobiera danych: pyta z `limit=0` i czyta kod odpowiedzi.
+
+Jest to test MOCNIEJSZY niż przegląd polityk, bo przechodzi przez wszystkie
+warstwy naraz — uprawnienia tabelowe, polityki RLS, widoki. Polityka może być
+poprawna, a mimo to nieskuteczna.
+
+Wynik na instalacji z `.env.local` (60 tabel z migracji):
+- **0 tabel otwartych** — żadna nie zwróciła danych
+- 47 odmawia kodem `42501 permission denied` — poprawnie
+- 11 nie istnieje w tej instalacji
+- **2 zwróciły HTTP 200 z zerem wierszy** — i to jest znalezisko
+
+Ustalenia:
+- SEC-C-03 (wysoka, zależna od SEC-C-01) — `mfa_recovery_codes`
+  i `gdpr_deletion_requests` odbierają anonowi tylko `INSERT, UPDATE, DELETE`,
+  a nie `SELECT`. Pozostałe 34 migracje używają `REVOKE ALL`. Powód: zbiorczy
+  `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon` działa jednorazowo
+  i nie obejmuje tabel utworzonych później. Dziś broni ich sam RLS — czyli
+  jedna warstwa tam, gdzie reszta projektu ma dwie.
+- SEC-C-04 (średnia) — `cancel_token` w `gdpr_deletion_requests` leży otwartym
+  tekstem, choć portal księgowej rozwiązuje to samo poprawnie, trzymając skrót
+  (`token_hash`). Niespójność, nie kompromis.
+
+Czego NIE sprawdziliśmy:
+- **Produkcji.** Przebieg dotyczy instalacji `utuzzxstfcnglppplvlw.supabase.co`
+  z lokalnego `.env.local`. Produkcja to osobna, samodzielnie hostowana
+  instalacja — patrz zadanie niżej.
+- Dostępu **zalogowanego klienta A do danych klienta B**. To wymaga dwóch kont
+  i osobnego narzędzia (`probe-idor.ts`, dzień 5).
+
+Zadania dla Bartka:
+- ⬜ **Powtórz test na produkcji — jedna komenda, nic nie zapisuje.** Wystarczy
+  plik z produkcyjnymi `NEXT_PUBLIC_SUPABASE_URL` i `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  (oba są publiczne z definicji — siedzą w pakiecie przeglądarki):
+
+  ```bash
+  node scripts/security/audit-postgrest-exposure.ts --env=/sciezka/do/prod.env
+  ```
+
+  Interesuje nas jedna liczba: ile tabel wypadnie jako **OTWARTE**. Każda
+  wartość poza zerem to ustalenie krytyczne — wtedy przerwij i zgłoś od razu.
+  Osobno: czy `mfa_recovery_codes` i `gdpr_deletion_requests` też zwracają 200.
+
+- ⬜ **Która wersja adresu bazy jest prawdziwa** — `178.104.128.144` z `AGENTS.md`
+  czy `10.0.0.2` przez bastion z `~/.ssh/config`? Dokumentacja wprowadza w błąd
+  i trzeba poprawić tę, która kłamie.
+
+- ⬜ Sześć zapytań SQL z kroku 0 — nadal aktualne i nadal najpilniejsze.
+  Zwłaszcza `04-funkcje-definer.sql` punkt 4.3 i `01-rls-pokrycie.sql`, bo od
+  nich zależy waga SEC-C-03: jeśli PostgREST łączy się rolą właściciela tabel,
+  RLS jest pomijany i te dwie tabele stają się czytelne dla każdego.
+
+Następny krok: 2 (izolacja najemców — 206 wywołań omijających RLS)
