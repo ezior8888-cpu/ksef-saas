@@ -217,3 +217,92 @@ Zadania dla Bartka:
 - brak nowych; sześć z kroku 0 nadal czeka.
 
 Następny krok: 1 (sekrety i granica przeglądarka/serwer)
+
+---
+
+## 2026-09-06 · Krok 1 — sekrety i granica przeglądarka/serwer
+
+Kto: Igor + Claude
+
+Zrobione:
+- `scripts/security/audit-secrets.ts` — 1104 pliki śledzone + **wszystkie 173 commity
+  na 9 gałęziach**. Osobno sprawdzone, czy jakikolwiek plik `.env` kiedykolwiek
+  trafił do repozytorium.
+- `scripts/security/audit-client-bundle.ts` — build produkcyjny ze zmiennymi
+  z `C:\dev\ksef-saas\.env.local` (czytanymi w miejscu, bez kopiowania do worktree)
+  i przeszukanie 157 plików, które pobiera przeglądarka.
+- Przegląd 9 zmiennych `NEXT_PUBLIC_*`, granicy `use server` w 25 plikach,
+  konfiguracji Sentry i PostHoga, map źródeł lokalnie i na produkcji.
+
+Wynik — trzy rzeczy czyste, dwie do naprawy:
+
+**Czysto: sekrety w kodzie i w historii.** Zero prawdziwych trafień. Żaden
+prawdziwy `.env` nigdy nie trafił do repozytorium — tylko dwa pliki wzorcowe.
+
+**Czysto: pakiet przeglądarki.** Zero zmiennych serwerowych. Ten wynik jest
+wiarygodny, bo skrypt najpierw sprawdza sam siebie: szuka w pakiecie zmiennych
+`NEXT_PUBLIC_*`, które MUSZĄ tam być. Znalazł 6. Bez tej samokontroli wynik
+„brak sekretów" mógłby znaczyć „szukam w złym miejscu" i nikt by się nie
+zorientował.
+
+**Czysto: mapy źródeł.** `public/sw.js.map` na produkcji zwraca 307 — bramka
+auth przekierowuje na logowanie. Ale to ochrona przypadkowa: wynika z listy
+rozszerzeń w `proxy.ts`, nie z decyzji. Dopisanie tam `.map` odsłoniłoby ją
+bez ostrzeżenia.
+
+**Do naprawy: PostHog wynosi dane kontrahentów.** Szczegóły niżej.
+
+Ustalenia:
+- SEC-D-01 (wysoka) — nagrywanie sesji PostHog maskuje pola formularzy, ale nie
+  maskuje tekstu na ekranie. Selektor maskujący to `[data-ph-mask]`, a ten
+  atrybut **nie występuje w kodzie ani razu** poza samą linią konfiguracji.
+  Przy zgodzie na analitykę nagranie odtwarza panel z nazwami kontrahentów,
+  NIP-ami i kwotami.
+- SEC-D-02 (średnia) — `autocapture` działa również przy stanie zgody `unset`,
+  czyli zanim użytkownik odpowie na baner. Nagrywanie sesji jest w tym samym
+  pliku ustawione odwrotnie i poprawnie — stąd wniosek, że to przeoczenie,
+  nie decyzja.
+
+Co poszło nie tak przy pisaniu narzędzi (do zapamiętania):
+- `execSync` na Windowsie idzie przez `cmd.exe`, który zjada `|` i `%`. Format
+  `--format=...%H|%ad|%s` rozpadł się na potok. Rozwiązanie: `execFileSync`
+  z argumentami w tablicy, bez powłoki.
+- Pierwsza wersja skanera sekretów dała 4 fałszywe trafienia. Wzorzec Turnstile
+  `0x[A-Za-z0-9_-]{30,}` łapał base64 z favikony — przypięty do `0x4` i ograniczony
+  z góry. Lista atrap nie znała podstawień w nawiasach kwadratowych, przez co
+  komunikat pomocy z `[HASŁO]` szedł jako ustalenie krytyczne.
+- Skaner pakietu w pierwszym przebiegu zgłosił 3 zmienne, a rozstrzygnięcie
+  każdej wymagało ręcznego grepowania po pakiecie. Dołożone automatyczne
+  wyciąganie kontekstu wokół trafienia — to samo pytanie następnym razem
+  rozstrzyga się z tabeli.
+
+Czego NIE sprawdziliśmy:
+- **Podziału 56 podatności z kroku 0.5 na produkcyjne i deweloperskie.**
+  Przesuwam na dzień 5 razem z resztą tematów zależności — dzień 1 i tak urósł.
+- **Danych osobowych w logach serwera** (`logger`, `console`). To krok 4.6,
+  osobne narzędzie `audit-pii-sinks.ts`.
+- **Czy PostHog stoi w chmurze UE czy USA.** Rozstrzyga to `NEXT_PUBLIC_POSTHOG_HOST`
+  na produkcji i ustawienia projektu w panelu PostHog. Waga SEC-D-01 zależy od
+  tej odpowiedzi — przy chmurze w USA dochodzi transfer poza EOG.
+- **Zmiennych środowiskowych ustawionych na produkcji.** Skanowaliśmy plik lokalny.
+  Produkcja ma własny zestaw w Coolify i może zawierać zmienne, których tu nie ma.
+
+Zadania dla Bartka:
+- ⬜ **Region PostHoga.** Na `app-1` sprawdź, na jaki adres wskazuje `NEXT_PUBLIC_POSTHOG_HOST`
+  w środowisku działającego kontenera aplikacji:
+
+  ```bash
+  ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@116.203.71.134 \
+    'C=$(docker ps --format "{{.Names}}" | grep "^gpcs70aai71any6dnf8w69l8"); \
+     docker exec $C printenv | grep -i posthog'
+  ```
+
+  Interesuje nas wyłącznie, czy adres to `eu.i.posthog.com`, czy `us.i.posthog.com`.
+  Klucz projektu (`NEXT_PUBLIC_POSTHOG_KEY`) jest publiczny z definicji, więc jego
+  obecność w wyniku nie jest problemem — ale i tak nie ma potrzeby go wklejać.
+
+- ⬜ Sześć zapytań SQL z kroku 0 — **nadal czeka, to najpilniejsze**. Bez wyniku
+  z `04-funkcje-definer.sql` (punkt 4.3, treść `get_current_tenant_id()`) nie da
+  się domknąć dnia 3, a od tej jednej funkcji zależy cała izolacja między klientami.
+
+Następny krok: 2 (izolacja najemców — 206 wywołań omijających RLS)
