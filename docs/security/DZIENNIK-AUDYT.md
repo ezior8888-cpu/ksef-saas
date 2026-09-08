@@ -496,3 +496,72 @@ Zadania dla Bartka: bez zmian — trzy zadania z kroków 0 i 1b nadal czekają.
 
 Następny krok: 3 (baza, tokeny, pliki) — częściowo zablokowany do czasu
 odpowiedzi z produkcji.
+
+---
+
+## 2026-09-08 · Krok 3 — baza od środka (wyniki od Igora z produkcji)
+
+Kto: Igor odpalił `run-prod-readonly.sh` w WSL, Claude czyta wyniki.
+
+Zrobione:
+- Igor wykonał sześć zapytań SQL po katalogu systemowym produkcji + dwa testy
+  powłoki (rola PostgREST, dostęp bez tokenu). Wyniki w `docs/security/audyt/wynik-*.txt`.
+- Claude przeczytał wszystkie dziewięć plików.
+
+To był najważniejszy krok całego audytu bazy — i odwrócił kilka wcześniejszych
+podejrzeń, w obie strony.
+
+**Dwa realne, nowe ustalenia — oba to rozjazd produkcji z intencją kodu:**
+
+- **SEC-C-05 (KRYTYCZNE): widok `invoices_overdue` wynosi faktury między
+  najemcami.** Widok jest `SECURITY DEFINER` (omija RLS), nie filtruje po
+  `tenant_id`, a `authenticated` ma na nim SELECT. Każdy zalogowany może przez
+  `GET /rest/v1/invoices_overdue` zobaczyć faktury po terminie WSZYSTKICH firm:
+  numer, kwoty, nazwę nabywcy, NIP, e-mail. To jest ta kategoria, przed którą
+  plan kazał się zatrzymać i zgłosić Igorowi. **Zgłoszone.**
+- **SEC-C-06 (wysokie): `anonymize_user_audit_logs` wywoływalna przez anon.**
+  Funkcja DEFINER bez walidacji wywołującego. Kod migracji ma `REVOKE ALL FROM
+  PUBLIC`, ale produkcja pokazuje `anon=X` — REVOKE nie obowiązuje. Niezalogowany
+  może przez `/rpc` zniszczyć czyjeś (albo własne po ataku) logi audytu,
+  omijając trigger niezmienności.
+
+Do tego dwa drobne: SEC-C-07 (nadmiarowe granty `anon` na 5 obiektach, dziś
+kryte przez RLS) i SEC-C-08 (funkcje `admin_*` do rozpoznania rozmiaru bazy
+przez anon).
+
+**Co się OBALIŁO albo zeszło z wysokiego — i to jest połowa wartości tego kroku:**
+
+- SEC-C-01 (brak FORCE RLS) → z „może krytyczne" na NISKĄ. PostgREST łączy się
+  jako `authenticator`, właściciel tabel to `postgres`, role aplikacyjne nie mają
+  `BYPASSRLS`. RLS działa mimo braku FORCE.
+- SEC-C-02 (funkcje DEFINER bez search_path) → OBALONE. Zero takich na produkcji.
+  Statyczne zliczanie w migracjach kłamało. `get_current_tenant_id` — poprawna:
+  search_path, walidacja UUID, `is_member_of` przed zwrotem. Fundament izolacji
+  stoi solidnie.
+- Rozjazd migracji → BRAK (67 = 67). Schemat produkcji zgadza się z repo. Rozjazd
+  jest w UPRAWNIENIACH (SEC-C-06), nie w schemacie — czyli w czymś, czego migracje
+  nie odtwarzają wiernie.
+- `audit_logs` niezmienny → potwierdzone (polityki `no_update`/`no_delete`
+  z warunkiem `false` + trigger).
+- Widoki `mv_tenant_*` (DEFINER) → bezpieczne, brak grantu dla ról aplikacyjnych.
+- Adres bazy: `178.104.128.144` bezpośrednio (AGENTS.md OK, `~/.ssh/config` nieaktualny).
+
+Lekcja metodologiczna: dzień 2 (analiza kodu) dał zero wycieków między najemcami.
+Dzień 3 (odczyt żywej bazy) znalazł jeden krytyczny — bo wyciek NIE był w kodzie
+aplikacji, tylko w definicji widoku i w uprawnieniu, które migracja miała odebrać,
+a nie odebrała. Sama analiza repozytorium by tego nie złapała.
+
+Czego jeszcze NIE potwierdziliśmy (przygotowany `run-prod-verify.sh`, dwa
+bezpieczne testy):
+- SEC-C-05 empirycznie: `SET ROLE authenticated; SELECT count(DISTINCT tenant_id)
+  FROM invoices_overdue` — liczba > 1 domyka dowód.
+- SEC-C-06 empirycznie: RPC z nieistniejącym UUID — `updated_rows:0` domyka dowód,
+  nic nie niszcząc.
+
+Zadania dla Bartka:
+- ⬜ (opcjonalnie, domyka dowód) odpal `run-prod-verify.sh` — dwa bezpieczne testy.
+- ⬜ SEC-C-05, SEC-C-06, SEC-C-07, SEC-C-08 to naprawy przez migrację — Twoja
+  działka. Szczegóły i gotowe `ALTER`/`REVOKE` w rejestrze ustaleń.
+
+Następny krok: decyzja Igora co do SEC-C-05 (wyjątek awaryjny z planu), potem
+dzień 4 (wycieki na zewnątrz: model, poczta, logi, RODO).

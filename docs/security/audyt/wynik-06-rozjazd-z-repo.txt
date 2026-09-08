@@ -1,0 +1,188 @@
+═══ 6.1 Migracje wgrane na produkcji ═══
+ version |                 name                  
+---------+---------------------------------------
+ 00001   | initial_schema
+ 00002   | rls_policies
+ 00003   | invoice_job_status
+ 00004   | phase6_ui
+ 00005   | ksef_status_check_align
+ 00006   | test_rls_helpers
+ 00007   | test_as_user_security_invoker
+ 00008   | audit_logs_refinements
+ 00009   | retention
+ 00010   | accountant_access
+ 00011   | accountant_access_token_optional
+ 00012   | invoice_types_extension
+ 00013   | products_catalog
+ 00014   | payments_and_reminders
+ 00015   | ksef_compliance
+ 00016   | invoice_error_tracking
+ 00017   | invoice_offline_qr_columns
+ 00018   | offline_invoice_fields
+ 00019   | import_jobs
+ 00020   | import_jobs_pending_metadata
+ 00021   | import_jobs_realtime
+ 00022   | validation_infrastructure
+ 00023   | payment_reminder_settings
+ 00024   | accountant_copilot
+ 00025   | increment_packages_sent
+ 00026   | drop_test_helpers_in_prod
+ 00027   | lockdown_audit_xml_writes
+ 00028   | invoices_internal_number_unique
+ 00029   | export_files_unique
+ 00030   | increment_download_count
+ 00031   | feature_flags
+ 00032   | push_subscriptions
+ 00033   | increment_push_failed_count
+ 00034   | expenses_kpir_ocr
+ 00035   | organizations_extend
+ 00036   | memberships_invitations
+ 00037   | rls_membership_based
+ 00038   | organization_rpcs
+ 00039   | nip_ksef_unique_claim
+ 00040   | ensure_create_organization_with_owner
+ 00041   | ensure_drop_tenants_nip_global_unique
+ 00042   | auth_email_registered
+ 00043   | claim_purge_unverified_nip_dupes
+ 00044   | phase21_performance
+ 00045   | admin_panel
+ 00046   | system_dashboard
+ 00047   | billing_stripe
+ 00048   | billing_notifications
+ 00049   | email_infrastructure
+ 00050   | mfa_recovery_codes
+ 00051   | gdpr_deletion_requests
+ 00052   | audit_logs_immutable_trigger
+ 00053   | backup_log
+ 00054   | support_conversations
+ 00055   | phase34_performance_indexes
+ 00056   | invoice_pdf_cache
+ 00057   | export_format_jpk_v7m
+ 00058   | fix_memberships_rls_recursion
+ 00059   | newsletter_subscribers
+ 00060   | global_feature_flags
+ 00061   | flo
+ 00062   | reminders_opt_in
+ 00063   | flo_inbox_and_rules
+ 00064   | contractor_manual_fields
+ 00065   | invoice_origin
+ 00066   | flo_kind_flags
+ 00067   | flo_rollout
+(67 rows)
+
+
+═══ 6.2 Rozszerzenia i schematy, w których siedzą ═══
+    rozszerzenie    |  schemat   | wersja 
+--------------------+------------+--------
+ pg_net             | extensions | 0.14.0
+ pg_stat_statements | extensions | 1.10
+ pgcrypto           | extensions | 1.3
+ pgjwt              | extensions | 0.2.0
+ uuid-ossp          | extensions | 1.1
+ pg_graphql         | graphql    | 1.5.11
+ plpgsql            | pg_catalog | 1.0
+ citext             | public     | 1.6
+ supabase_vault     | vault      | 0.3.1
+(9 rows)
+
+
+═══ 6.3 Wyzwalacze na tabelach z danymi ═══
+        tabela        |                wyzwalacz                |             funkcja             |  tryb   
+----------------------+-----------------------------------------+---------------------------------+---------
+ accountant_settings  | trigger_accountant_settings_updated_at  | set_updated_at                  | INVOKER
+ admin_user_notes     | trigger_admin_user_notes_updated_at     | set_updated_at                  | INVOKER
+ audit_logs           | trg_audit_logs_prevent_delete           | prevent_audit_logs_mutate       | INVOKER
+ audit_logs           | trg_audit_logs_prevent_update           | prevent_audit_logs_mutate       | INVOKER
+ error_translations   | trigger_error_translations_updated_at   | set_updated_at                  | INVOKER
+ expenses             | trg_expenses_updated_at                 | set_updated_at                  | INVOKER
+ import_jobs          | trigger_import_jobs_updated_at          | set_updated_at                  | INVOKER
+ invoices             | trg_invoices_updated_at                 | set_updated_at                  | INVOKER
+ invoices             | trigger_update_payment_status           | update_invoice_payment_status   | INVOKER
+ ksef_offline_queue   | trigger_offline_queue_updated_at        | set_updated_at                  | INVOKER
+ memberships          | trg_memberships_updated_at              | set_updated_at                  | INVOKER
+ payments             | trigger_payments_updated_at             | set_updated_at                  | INVOKER
+ payments             | trigger_recalculate_paid_amount         | recalculate_invoice_paid_amount | DEFINER
+ products             | trigger_products_updated_at             | set_updated_at                  | INVOKER
+ push_subscriptions   | trg_push_subscriptions_updated_at       | set_updated_at                  | INVOKER
+ reminder_settings    | trigger_reminder_settings_updated_at    | set_updated_at                  | INVOKER
+ reminder_templates   | trigger_reminder_templates_updated_at   | set_updated_at                  | INVOKER
+ stripe_payments      | trigger_stripe_payments_updated_at      | set_updated_at                  | INVOKER
+ subscriptions        | trigger_subscriptions_updated_at        | set_updated_at                  | INVOKER
+ tenant_feature_flags | trigger_tenant_feature_flags_updated_at | set_updated_at                  | INVOKER
+ tenants              | trg_tenants_updated_at                  | set_updated_at                  | INVOKER
+(21 rows)
+
+
+═══ 6.4 Kolumny wyglądające na dane wrażliwe ═══
+           tabela           |          kolumna           |           typ            
+----------------------------+----------------------------+--------------------------
+ accountant_access          | accountant_email           | character varying
+ accountant_access          | accountant_name            | text
+ accountant_access          | token_hash                 | text
+ accountant_settings        | accountant_company         | text
+ accountant_settings        | accountant_email           | text
+ accountant_settings        | accountant_name            | text
+ accountant_settings        | cc_emails                  | ARRAY
+ accountant_settings        | email_body_template        | text
+ accountant_settings        | email_subject_template     | text
+ admin_user_notes           | author_email               | text
+ audit_logs                 | ip_address                 | inet
+ billing_notifications      | recipient_email            | text
+ contractors                | address                    | jsonb
+ contractors                | bank_accounts_validated    | ARRAY
+ contractors                | email                      | text
+ contractors                | nip                        | text
+ contractors                | phone                      | text
+ email_bounces              | email                      | text
+ expenses                   | seller_address             | text
+ expenses                   | seller_nip                 | text
+ export_jobs                | email_message_id           | text
+ export_jobs                | emailed_at                 | timestamp with time zone
+ export_jobs                | emailed_to                 | text
+ flo_prefs                  | email_enabled              | boolean
+ flo_usage                  | input_tokens               | bigint
+ flo_usage                  | output_tokens              | bigint
+ gdpr_deletion_requests     | cancel_token               | text
+ gdpr_deletion_requests     | ip_address                 | text
+ gdpr_deletion_requests     | user_email                 | text
+ invoices                   | bank_account_validated     | boolean
+ invoices                   | buyer_nip                  | character varying
+ invoices                   | buyer_pesel                | text
+ invoices                   | offline_qr_certyfikat      | text
+ invoices                   | seller_nip                 | character varying
+ invoices_overdue           | buyer_email                | text
+ invoices_overdue           | buyer_nip                  | character varying
+ kpir_global_rules          | nip                        | text
+ ksef_inbox_cursor          | continuation_token         | text
+ ksef_offline_queue         | qr_certyfikat_payload      | text
+ ksef_sessions              | session_token_encrypted    | bytea
+ newsletter_subscribers     | email                      | text
+ ocr_jobs                   | ai_input_tokens            | integer
+ ocr_jobs                   | ai_output_tokens           | integer
+ organization_invitations   | email                      | USER-DEFINED
+ organization_invitations   | token_hash                 | text
+ payment_imports            | account_currency           | text
+ payment_imports            | account_iban               | text
+ payment_imports            | counterparty_account       | text
+ payment_imports            | counterparty_nip           | text
+ payment_reminders          | email_body                 | text
+ payment_reminders          | email_message_id           | text
+ payment_reminders          | email_subject              | text
+ payments                   | bank_payer_account         | text
+ push_subscriptions         | notify_cert_expiry         | boolean
+ reminder_settings          | reply_to_email             | text
+ reminder_settings          | sender_email               | text
+ reminder_templates         | email_body                 | text
+ reminder_templates         | email_subject              | text
+ support_messages           | ai_uncertain               | boolean
+ tenant_verification_status | nip                        | character varying
+ tenants                    | address_json               | jsonb
+ tenants                    | ksef_certificate_expiry    | timestamp with time zone
+ tenants                    | ksef_credentials_encrypted | bytea
+ tenants                    | nip                        | character varying
+ tenants                    | regon                      | character varying
+ validation_cache           | bank_accounts              | ARRAY
+ validation_cache           | nip                        | text
+ validation_cache           | registered_address         | text
+(68 rows)
+

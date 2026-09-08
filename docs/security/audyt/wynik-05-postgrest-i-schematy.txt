@@ -1,0 +1,45 @@
+═══ 5.1 Schematy w bazie i ich właściciele ═══
+       schemat       |    wlasciciel     | tabel 
+---------------------+-------------------+-------
+ _realtime           | supabase_admin    |     3
+ auth                | supabase_admin    |    20
+ extensions          | postgres          |     0
+ graphql             | supabase_admin    |     0
+ graphql_public      | supabase_admin    |     0
+ net                 | supabase_admin    |     2
+ pgboss              | postgres          |    10
+ pgbouncer           | pgbouncer         |     0
+ public              | pg_database_owner |    60
+ realtime            | supabase_admin    |     8
+ storage             | supabase_admin    |    10
+ supabase_functions  | supabase_admin    |     2
+ supabase_migrations | postgres          |     1
+ vault               | supabase_admin    |     1
+(14 rows)
+
+
+═══ 5.2 Ustawienia PostgREST-a zapisane w bazie ═══
+           rola           |                   ustawienia                   
+--------------------------+------------------------------------------------
+ anon                     | statement_timeout=3s
+ authenticated            | statement_timeout=8s
+ authenticator            | session_preload_libraries=safeupdate          +
+                          | statement_timeout=8s                          +
+                          | lock_timeout=8s
+ postgres                 | search_path="\$user", public, extensions
+ supabase_admin           | search_path="\$user", public, auth, extensions+
+                          | log_statement=none
+ supabase_auth_admin      | search_path=auth                              +
+                          | idle_in_transaction_session_timeout=60000     +
+                          | log_statement=none
+ supabase_functions_admin | search_path=supabase_functions
+ supabase_storage_admin   | search_path=storage                           +
+                          | log_statement=none
+(8 rows)
+
+
+═══ 5.3 Tabele bez klucza głównego ═══
+ tabela 
+--------
+(0 rows)
+
