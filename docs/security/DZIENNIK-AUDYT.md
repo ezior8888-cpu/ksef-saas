@@ -681,3 +681,39 @@ Bartosza", choć rozstrzygnięte w kroku 3. Poprawione.
 
 Następny krok: dzień 4 — wycieki na zewnątrz (model FLO, czat wsparcia, OCR,
 poczta, logi z PII, eksport RODO).
+
+---
+
+## 2026-09-08 · Krok 3e — domknięcie brakujących punktów 3.6, 3.7, 3.8
+
+Kto: Igor + Claude
+
+Korekta: wcześniejszy wpis „domknięcie dnia 3" był przedwczesny. Dotyczył
+warstwy bazy (punkty 3.1-3.5), a plan dnia 3 miał jeszcze trzy: portal
+księgowej (3.6), pliki R2 (3.7) i webhooki-replay (3.8). Zjechałem na bazę,
+bo tam poszły wyniki od Bartka i tam był wyciek — ale to nie zamykało dnia.
+Teraz domknięte wszystkie trzy.
+
+3.6 — portal biura rachunkowego: CZYSTO.
+- token `randomBytes(32)` = 256 bitów, zapis jako SHA-256, lookup po hashu
+  (nie plaintext) — timing-attack niewykorzystywalny;
+- `loadAccountantPortal` sprawdza `revoked_at` i `expires_at`;
+- wszystkie trzy ścieżki portalu filtrują po `tenant_id` z rekordu dostępu.
+
+3.7 — pliki R2: CZYSTO w kodzie.
+- klucze zawsze prefiksowane najemcą; pre-signed URL 300 s; brak publicznego
+  ACL; nazwa pliku od użytkownika nie trafia do klucza (brak path traversal).
+- Do potwierdzenia na infrze (dzień 5): polityka bucketa MinIO (publiczny?).
+- Drobiazg: paragony z `Cache-Control: public` (za signed URL, niska waga).
+
+3.8 — webhooki: CZYSTO.
+- Stripe: podpis + wbudowana tolerancja czasu w `constructEvent` przed
+  handlerem, idempotency UNIQUE na `event.id` (duplikat → `{duplicate:true}`);
+- Resend/Svix: HMAC + `timingSafeEqual`, idempotency po `svix-id` (23505).
+- Drobiazg: Resend bez jawnego okna `svix-timestamp` (replay kryty idempotency).
+
+Bez nowych ustaleń wagi średniej+. Trzy drobne obserwacje (niskie) w rejestrze.
+
+TERAZ dzień 3 jest zrobiony w całości — wszystkie 8 punktów planu.
+
+Następny krok: dzień 4 — wycieki na zewnątrz.
