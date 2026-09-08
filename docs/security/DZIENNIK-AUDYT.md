@@ -412,3 +412,87 @@ Zadania dla Bartka:
   RLS jest pomijany i te dwie tabele stają się czytelne dla każdego.
 
 Następny krok: 2 (izolacja najemców — 206 wywołań omijających RLS)
+
+---
+
+## 2026-09-08 · Krok 2 — 206 wywołań omijających RLS
+
+Kto: Igor + Claude
+
+Zrobione:
+- `scripts/security/audit-service-role.ts` — analiza wszystkich zapytań idących
+  przez `createAdminClient()`, czyli przez rolę `service_role`, dla której
+  Postgres NIE STOSUJE polityk RLS. W tych miejscach baza nie chroni niczego.
+- Wynik: **305 zapytań** (206 wywołań klienta obsługuje więcej niż jedno zapytanie).
+- Weryfikacja ręczna wszystkich, które przetrwały cztery przebiegi kalibracyjne.
+
+**Wynik: 0 krytycznych, 0 wysokich, 12 średnich, 78 do przejrzenia, 215 w porządku.**
+
+Skrypt nie pyta „czy jest filtr `tenant_id`", tylko **skąd pochodzi jego wartość**.
+To rozróżnienie jest sednem: filtr wypełniony identyfikatorem z ciasteczka wygląda
+identycznie jak bezpieczny, a nie chroni przed niczym.
+
+Cztery przebiegi kalibracyjne — i to jest właściwy wynik tego dnia:
+
+| Przebieg | Krytyczne | Wysokie | Czego skrypt się nauczył |
+|---|---|---|---|
+| 1 | 17 | 126 | — |
+| 2 | 0 | 2 | zapytanie o `memberships` po `user_id` to STRAŻNIK, nie wyciek; `token_hash` to AUTORYZACJA; przy INSERT izolacja jest w treści wiersza; zadanie w tle z założenia przegląda wszystkich |
+| 3 | 0 | 2 | wiersz budowany w zmiennej wyżej (`rows.push({tenant_id})`) to nadal izolacja |
+| 4 | 0 | 0 | strażnik przypisany bez `const` (wzorzec z `try/catch`); układ strony chroni gałąź `/admin`; zegar to nie żądanie; podpis webhooka to uprawnienie |
+
+Pierwszy przebieg oskarżał o wyciek **samą warstwę obronną** — zapytania
+weryfikujące członkostwo. Gdyby ktoś wziął tamten wynik za prawdę, „naprawiłby"
+strażników.
+
+Prześledzenie wywołujących: dla 102 zapytań skrypt sam ustalił, kto woła daną
+funkcję i czy wywołujący jest chroniony. To zamieniło „nie wiem" w odpowiedź
+w większości przypadków.
+
+Rozkład filtrów w 305 zapytaniach:
+
+| Rodzaj | Ile |
+|---|---|
+| po kluczu głównym | 99 |
+| po kolumnie izolacji najemcy | 88 |
+| po czymś innym | 72 |
+| bez żadnego filtra | 25 |
+| po `user_id` | 16 |
+| po tokenie (autoryzacja) | 5 |
+
+Sprawdzone ręcznie, wszystkie poprawne:
+- `app/actions/expenses.ts` — strażnik w `try`, potem `tenant_id` z jego wyniku.
+  To jest wzorzec, do którego porównywaliśmy resztę.
+- `app/api/stripe/webhook/route.ts` — `constructEvent` w linii 76, **przed**
+  wywołaniem jakiegokolwiek handlera. Zły podpis kończy się kodem 400.
+- `lib/inngest/jobs/send-reminder.ts` — `tenant_id` z wiersza pobranego z bazy
+  po identyfikatorze przypomnienia, nie z danych od użytkownika.
+- `lib/admin/audit.ts` — odczyt całej tabeli `audit_logs` bez filtra. Wołane
+  wyłącznie z `app/admin/audit/page.tsx`, czyli spod układu z `requireAdmin()`.
+  Przegląd w poprzek najemców jest tu sensem narzędzia operatora.
+- `app/admin/flags/actions.ts` — `requireAdmin()` w pierwszej linii, `tenantId`
+  jako argument. Działanie w poprzek najemców zamierzone.
+- `lib/import/import-engine.ts`, `lib/stripe/webhook-handlers.ts`,
+  `lib/auth/mfa-recovery.ts` — zapisy bez kolumny izolacji w samym wywołaniu,
+  ale wiersz budowany wyżej ZAWIERA `tenant_id` / `user_id`.
+
+Ustalenia:
+- **Brak nowych ustaleń.** Dyscyplina izolacji w tym kodzie się broni.
+  12 „średnich" i 78 „do przejrzenia" to granice analizy statycznej, nie
+  ślady problemów — każde z nich ma filtr na właściwej kolumnie, a nieustalone
+  jest wyłącznie pochodzenie wartości.
+
+Czego NIE sprawdziliśmy:
+- **Nie przeczytałem ręcznie wszystkich 305 zapytań** — przeczytałem te, które
+  przetrwały kalibrację, plus próbkę z każdej kategorii. Plan zakładał komplet
+  i to zostaje jako dług: 78 pozycji „do przejrzenia" czeka.
+- **Dowodu empirycznego.** Cały dzień 2 to analiza kodu. Odpowiedź na pytanie
+  „czy klient A naprawdę zobaczy dane klienta B" da dopiero `probe-idor.ts`
+  z dnia 5 — dwa konta, żądania krzyżowe.
+- **Zależności od SEC-C-01.** Cała ta analiza zakłada, że kolumny tabel
+  w produkcji zgadzają się z migracjami w repozytorium.
+
+Zadania dla Bartka: bez zmian — trzy zadania z kroków 0 i 1b nadal czekają.
+
+Następny krok: 3 (baza, tokeny, pliki) — częściowo zablokowany do czasu
+odpowiedzi z produkcji.
