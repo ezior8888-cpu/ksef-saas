@@ -604,3 +604,38 @@ Zadania dla Bartka:
 - ⬜ Wdróż `00069` (hardening) po przetestowaniu, że newsletter signup działa.
 
 Następny krok: dzień 4 (wycieki na zewnątrz — model, poczta, logi, RODO).
+
+---
+
+## 2026-09-08 · Krok 3c — potwierdzenie: C-06 tak, C-05 test był ślepy
+
+Kto: Igor odpalił `run-prod-verify.sh`, Claude czyta.
+
+**SEC-C-06 — POTWIERDZONE empirycznie.** RPC `anonymize_user_audit_logs`
+wywołane bez tokenu zwróciło `{"updated_rows":0}` — czyli anon wykonał funkcję
+(0 wierszy tylko dlatego, że UUID był nieistniejący). Gdyby nie miał prawa,
+byłoby 401/403/42501. Niezalogowany może niszczyć logi audytu. Migracja 00069
+zamyka to.
+
+**SEC-C-05 — test był ŹLE ZAPROJEKTOWANY, nie rozstrzyga.** `SET ROLE
+authenticated; SELECT ... FROM invoices_overdue` dało 0 wierszy — ale to samo
+`SELECT count(*) FROM invoices` też dało 0. Zero przy pustej (przedlaunchowej)
+bazie nic nie dowodzi: widok zwróci 0 niezależnie od tego, czy wyciek istnieje.
+Mój błąd — podałem ten test jako rozstrzygający, a jest ślepy na brak danych.
+
+Nie ogłaszam więc ani „potwierdzone", ani „obalone". Rejestr: C-05 → status
+NIEROZSTRZYGNIĘTE, ryzyko strukturalne pozostaje (widok DEFINER bez filtra +
+grant authenticated to fakt z odczytu uprawnień, niezależny od ilości danych).
+
+Rozstrzyga to `run-prod-verify2.sh` — jedno zapytanie jako postgres: ile faktur
+po terminie i u ilu najemców realnie jest, oraz jakie NAPRAWDĘ są opcje widoku
+(`security_invoker`?). Interpretacja wprost w nagłówku skryptu.
+
+Migracja 00068 pozostaje zasadna niezależnie od wyniku: jeśli wyciek realny —
+naprawia; jeśli baza pusta — zamyka ryzyko przed pojawieniem się danych; jedynie
+gdyby widok już miał `security_invoker=true`, byłaby zbędna (to też pokaże 3c).
+
+Zadania dla Bartka:
+- ⬜ odpal `run-prod-verify2.sh` (jedno zapytanie, tylko odczyt) — rozstrzyga C-05.
+
+Następny krok: odczyt wyniku 3c, potem dzień 4.
