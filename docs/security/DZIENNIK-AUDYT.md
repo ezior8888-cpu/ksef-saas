@@ -565,3 +565,42 @@ Zadania dla Bartka:
 
 Następny krok: decyzja Igora co do SEC-C-05 (wyjątek awaryjny z planu), potem
 dzień 4 (wycieki na zewnątrz: model, poczta, logi, RODO).
+
+---
+
+## 2026-09-08 · Krok 3b — migracje naprawcze przygotowane (decyzja Igora)
+
+Kto: Igor + Claude
+
+Igor podjął dwie decyzje: (1) domknąć dowód SEC-C-05/06 empirycznie,
+(2) przygotować migracje naprawcze dla Bartka. Migracje NIE są wdrożone —
+wdrożenie robi Bartosz, procedurą z AGENTS.md.
+
+Przed napisaniem naprawy sprawdzone, że nie zepsuje funkcjonalności:
+- `invoices_overdue` używany w JEDNYM miejscu — `app/(dashboard)/payments/overdue/page.tsx`,
+  przez klienta RLS, z `select('*')` BEZ filtra po najemcy. To potwierdza wyciek
+  (strona polega w całości na widoku) i zarazem, że `security_invoker=true` ją
+  naprawia, a nie psuje: użytkownik zacznie widzieć swoje zamiast wszystkich.
+- newsletter i global_feature_flags zapisują przez `service_role`, więc
+  `REVOKE ... FROM anon` nie zepsuje publicznego zapisu.
+
+Przygotowane:
+- **`supabase/migrations/00068_fix_invoices_overdue_cross_tenant_leak.sql`** —
+  SEC-C-05. `security_invoker=true` na widoku. Krytyczny hotfix, izolowany,
+  łatwy do zweryfikowania. Zawiera alternatywę dla PostgreSQL <15 i procedurę
+  weryfikacji.
+- **`supabase/migrations/00069_audit_permission_hardening.sql`** —
+  SEC-C-06/07/08. REVOKE-y na `anonymize_user_audit_logs`, nadmiarowych grantach
+  `anon` i funkcjach `admin_*`. Porządkowe, mniej pilne.
+
+Rozdzielone celowo: Bartek może wdrożyć sam krytyczny hotfix (00068) natychmiast,
+a porządki (00069) w swoim czasie.
+
+Zadania dla Bartka:
+- ⬜ Odpal `run-prod-verify.sh` (dwa bezpieczne testy) — domyka dowód C-05/06.
+- ⬜ Wdróż `00068` (krytyczny) procedurą z AGENTS.md: migracja → schema_migrations
+  → NOTIFY pgrst → weryfikacja (SET ROLE authenticated; SELECT z invoices_overdue
+  = 0 wierszy). To hotfix na wyciek między najemcami.
+- ⬜ Wdróż `00069` (hardening) po przetestowaniu, że newsletter signup działa.
+
+Następny krok: dzień 4 (wycieki na zewnątrz — model, poczta, logi, RODO).
