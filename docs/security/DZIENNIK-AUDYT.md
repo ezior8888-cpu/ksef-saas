@@ -639,3 +639,45 @@ Zadania dla Bartka:
 - ⬜ odpal `run-prod-verify2.sh` (jedno zapytanie, tylko odczyt) — rozstrzyga C-05.
 
 Następny krok: odczyt wyniku 3c, potem dzień 4.
+
+---
+
+## 2026-09-08 · Krok 3d — rozstrzygnięcie C-05 (werdykt końcowy dnia 3)
+
+Kto: Igor odpalił `run-prod-verify2.sh`, Claude czyta.
+
+Wynik jednoznaczny:
+- `invoices_total = 2` — produkcja przedlaunchowa, dwie faktury.
+- `overdue_total = 0` — żadna po terminie. Dlatego pierwszy test dał 0 (ślepy
+  na brak danych, nie dowód ochrony).
+- `reloptions` widoku PUSTE — brak `security_invoker`, czyli widok jest DEFINER
+  i omija RLS. To zachowanie deterministyczne, niezależne od ilości danych.
+
+**Werdykt SEC-C-05: potwierdzone strukturalnie, dziś uśpione.** Mechanika
+wycieku jest pewna (DEFINER + grant `authenticated` + brak filtra najemcy —
+wszystkie trzy odczytane z produkcji, nie z domysłu). Nie wyzwala się DZIŚ
+wyłącznie dlatego, że nie ma faktur po terminie. Przy pierwszych realnych danych
+po launchu — u dwóch klientów z zaległościami — każdy zalogowany zobaczy oba.
+Obowiązkowa naprawa przed launchem; migracja 00068 zasadna (`security_invoker`
+faktycznie nieustawione).
+
+Uczciwe rozróżnienie, które zapisuję na przyszłość: „charakter luki" (wyciek
+między najemcami — poważny) to co innego niż „wyzwalalność dziś" (zerowa, bo
+baza pusta). Zaniżenie charakteru byłoby błędem; twierdzenie, że ktoś dziś
+wyciąga cudze faktury — też.
+
+Przy okazji uspójnione statusy w rejestrze: SEC-C-01 (→ niska, rozstrzygnięte)
+i SEC-C-02 (→ obalone) miały w tabeli głównej wciąż stary status „czeka na
+Bartosza", choć rozstrzygnięte w kroku 3. Poprawione.
+
+**Domknięcie dnia 3.** Bilans warstwy bazodanowej:
+- Realne do naprawy: SEC-C-05 (wyciek strukturalny, migracja 00068),
+  SEC-C-06 (anon niszczy audyt — potwierdzone empirycznie, migracja 00069),
+  SEC-C-03/04/07/08 (uprawnienia i cancel_token — porządki, 00069 + osobno C-04).
+- Obalone/zdegradowane: SEC-C-01, SEC-C-02, rozjazd migracji, mv_ widoki,
+  niepełne pokrycie polityk — wszystkie po empirycznym sprawdzeniu.
+- Fundament izolacji (`get_current_tenant_id`, RLS, rola `authenticator`)
+  potwierdzony jako solidny.
+
+Następny krok: dzień 4 — wycieki na zewnątrz (model FLO, czat wsparcia, OCR,
+poczta, logi z PII, eksport RODO).
