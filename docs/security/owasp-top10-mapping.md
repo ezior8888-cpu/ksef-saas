@@ -1,7 +1,11 @@
 # OWASP Top 10 (2021) — Mapping FaktFlow
 
-Mapowanie kontroli bezpieczeństwa wprowadzonych w Fazach 1-28 vs OWASP Top 10
-(2021). Aktualizowane na koniec Fazy 28 (Security Audit & Hardening).
+Mapowanie kontroli bezpieczeństwa vs OWASP Top 10 (2021).
+
+> **Weryfikacja 2026-09-09 (audyt wycieków, dni 0–5).** Trzy wiersze tego
+> dokumentu rozjechały się ze stanem faktycznym i zostały poprawione niżej
+> (oznaczone „skorygowano"). Metoda: zamiast nazwy fazy podajemy datę i sposób
+> sprawdzenia. Pełne ustalenia: `docs/security/audyt/RAPORT.md`.
 
 ---
 
@@ -32,7 +36,7 @@ Mapowanie kontroli bezpieczeństwa wprowadzonych w Fazach 1-28 vs OWASP Top 10
 | Unsubscribe tokens | HMAC-SHA256 z `EMAIL_UNSUBSCRIBE_SECRET` |
 | Cancel tokens GDPR | `randomBytes(32)` hex, unique index, regex walidacja |
 | Webhook signatures | Stripe + Resend + Inngest (HMAC w każdym) |
-| TLS | Vercel auto-managed, HSTS preload (Faza 28 — already in next.config.ts) |
+| TLS | **skorygowano 2026-09-09:** produkcja NIE stoi na Vercelu (Hetzner + Coolify, `AGENTS.md`). HSTS `max-age=1rok; includeSubDomains; preload` potwierdzone GET-em na prod — ustawiane przez `next.config.ts`, nie przez dostawcę. (SEC-E-01) |
 | Key rotation | Runbook [docs/runbooks/key-rotation.md](../runbooks/key-rotation.md) (Faza 28 Krok 8) |
 
 **Pozostałe ryzyko:** RPC `protobufjs` 7 high w `@opentelemetry/*` (transitive
@@ -81,7 +85,7 @@ Prometheus exporter.
 |---|---|
 | Security headers | HSTS prod, X-Frame-Options DENY, X-Content-Type-Options, Permissions-Policy, Referrer-Policy ([next.config.ts](../../next.config.ts)) |
 | CSP | Report-Only (przełączenie na enforced w Fazie 42) |
-| Stack traces hidden | Sentry capture, `console.error` nie leci do response body |
+| Stack traces hidden | **skorygowano 2026-09-09:** cztery route'y odsyłają `e.message` w ciele odpowiedzi (SEC-A-01) — `portal/exports/generate`, `stripe/webhook`, `email/resend-webhook`, `dev/posthog-test`. Reszta tras czysta. Do naprawy. |
 | Default credentials | Brak defaultów w env vars; `isResendConfigured()` etc. wykrywa placeholders |
 | Disabled directory listing | Vercel default |
 | Unused features off | `Permissions-Policy: camera=(), microphone=(), geolocation=()` |
@@ -95,7 +99,7 @@ Prometheus exporter.
 
 | Kontrola | Implementacja |
 |---|---|
-| Dependency audit | `pnpm audit` w Fazie 28 Krok 1 — z 43 vulns ➜ 3 (overrides) |
+| Dependency audit | **skorygowano 2026-09-09:** `pnpm audit` = **56 podatności (30 wysokich)**, nie „3". Dziewięć dotyczy Next.js 16.2.6 → 16.2.11 (SEC-A-03, SEC-A-04). Zalecane `pnpm audit` w CI. |
 | Renovate bot | Configured (`renovate.json` w repo) |
 | Direct deps current | Next 16.2.6, Supabase SSR 0.10, Stripe 22.1, Sentry 10.53, Inngest 4.4 |
 

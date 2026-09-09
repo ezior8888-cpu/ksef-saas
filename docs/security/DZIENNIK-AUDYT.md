@@ -765,3 +765,58 @@ Zadania dla Bartka: brak nowych do odpalenia. SEC-D-04 wymaga decyzji prawnej
 
 Następny krok: dzień 5 — produkcja (nagłówki, trasy dev, PostgREST od zewnątrz,
 Cache-Control, IDOR lokalnie) + raport końcowy.
+
+---
+
+## 2026-09-09 · Krok 5 — produkcja od zewnątrz + raport końcowy
+
+Kto: Igor + Claude
+
+Zrobione:
+- `scripts/security/audit-headers.ts` — GET-y na produkcję: nagłówki, trasy dev,
+  cache za logowaniem, PostgREST od zewnątrz. Wynik `07-produkcja.md`.
+- Uruchomiony istniejący `tests/rls-isolation.test.ts` (env z głównego .env.local)
+  jako test IDOR — **7/7 przeszło**.
+- Raport końcowy `RAPORT.md`. Aktualizacja `owasp-top10-mapping.md` (3 wiersze).
+
+Wyniki:
+- 5.1 nagłówki: HSTS preload, X-Frame DENY, nosniff, Referrer no-referrer,
+  Permissions-Policy — komplet i egzekwowane. CSP w Report-Only (SEC-E-02).
+- 5.2 trasy dev: żadna publicznie. `/api/dev/*` niedostępne; sentry-* za bramką
+  auth (307→/login). Pierwszy przebieg mylił 307 z „działa" — poprawione.
+- 5.3 PostgREST zewnątrz: `db.faktflow.pl` → 401 bez tokenu. Zgodne z dniem 3.
+- 5.4 cache: `/login` no-store, chronione trasy → redirect, marketing s-maxage.
+- 5.5 IDOR: 7/7 testów izolacji RLS. Sfałszowany x-active-org NIE daje dostępu,
+  UPDATE cudzej faktury zablokowany, cofnięte członkostwo traci dostęp. Fundament
+  izolacji potwierdzony empirycznie. Spójne z C-05: RLS na TABELACH działa,
+  wyciek był w WIDOKU omijającym RLS.
+
+Nowe ustalenia: SEC-E-02 (CSP Report-Only, średnia), SEC-E-03 (X-Powered-By, niska).
+
+═══════════════════════════════════════════════════════════════
+DOMKNIĘCIE AUDYTU (dni 0–5)
+═══════════════════════════════════════════════════════════════
+
+22 pozycje w rejestrze: 1 krytyczna, 5 wysokich, 5 średnich, 8 niskich,
+3 obalone/zdegradowane. Dwie migracje naprawcze gotowe (00068, 00069).
+Kod aplikacji nietknięty przez cały audyt.
+
+Motyw przewodni: najgroźniejsze ustalenia są UŚPIONE — czekają na pierwszego
+klienta. C-05 (faktury) na pierwsze zaległości u dwóch klientów; D-03 (redakcja)
+na wpięcie FLO; D-04 (pliki R2) na pierwsze usunięcie konta. Aplikacja
+przedlaunchowa nie krzyczy, bo nie ma danych ani ruchu.
+
+Lekcja o metodzie: wyciek między najemcami (C-05) nie był w kodzie aplikacji —
+dzień 2 (206 obejść RLS) dał w tej kategorii zero. Był w widoku i w uprawnieniu
+na produkcji. Trzy podejrzenia z analizy statycznej (C-01, C-02, część redakcji)
+obalił dopiero odczyt żywej bazy. Wniosek: audyt samego repozytorium nie
+wystarcza; produkcję trzeba pytać o jej faktyczny stan.
+
+Zadania po stronie Bartka: wdrożyć 00068 (krytyczne) i 00069; powtórzyć
+audit-postgrest-exposure i audit-headers na produkcji po naprawach; decyzja
+prawna dla SEC-D-04. Zadania po stronie Igora (poza trybem tylko-raport):
+naprawy w kodzie (PostHog, błędy do klienta, wzorce redakcji, podbicie Next,
+CSP enforce, poweredByHeader).
+
+KONIEC. Wszystkie zadania SQL z kroku 0 wykonane (dzień 3). Wszystkie ⬜ z tego
+dziennika domknięte albo przekazane jako świadome zadania dla Bartka.
