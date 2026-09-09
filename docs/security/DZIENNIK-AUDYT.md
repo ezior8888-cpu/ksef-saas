@@ -717,3 +717,51 @@ Bez nowych ustaleń wagi średniej+. Trzy drobne obserwacje (niskie) w rejestrze
 TERAZ dzień 3 jest zrobiony w całości — wszystkie 8 punktów planu.
 
 Następny krok: dzień 4 — wycieki na zewnątrz.
+
+---
+
+## 2026-09-09 · Krok 4 — wycieki na zewnątrz
+
+Kto: Igor + Claude
+
+Zrobione: przejrzane wszystkie cztery drogi danych na zewnątrz plus poczta,
+logi i RODO. Powstało narzędzie `scripts/security/audit-redaction.ts` (test
+skuteczności maskowania). Wynik `06-redakcja.md`.
+
+Trzy ścieżki do modelu Anthropic — każda inna:
+- **FLO** (`lib/flo/llm.ts`): jedna droga (`generateCopy`), redakcja wbudowana
+  w `buildUserPrompt`, system prompt to stała. Nie da się ominąć maskowania.
+  ALE `generateCopy` NIE jest jeszcze nigdzie wołane w produkcji.
+- **Czat wsparcia** (`lib/support/chat.ts`): baza wiedzy statyczna (artykuły
+  pomocy, nie DB), konwersacje izolowane (`getOwnedConversation` sprawdza
+  `user_id`), brak tool use. Injection nie ma czego wyciągnąć.
+- **OCR** (`lib/ocr/engine.ts`): wysyła zdjęcie paragonu do modelu — nieodłączne,
+  ale to transfer danych do podprzetwarzającego (kwestia rejestru RODO).
+
+Ustalenia:
+- **SEC-D-04 (wysoka, RODO art. 17):** usunięcie konta i retencja kasują rekordy
+  DB, ale NIE pliki w R2. XML faktur, UPO i zdjęcia paragonów zostają
+  bezterminowo. `deleteInvoiceXml` i `deleteExpensePhoto` istnieją, ale w
+  ścieżkach usuwania niewołane. Prawo do bycia zapomnianym niekompletne.
+- **SEC-D-03 (średnia, uśpione):** maskowanie FLO ma 5 luk (NIP z separatorami,
+  IBAN z literami, adres bez prefiksu, nazwisko osoby) — potwierdzone
+  `audit-redaction.ts` (5/17 przecieka). Uśpione, bo `generateCopy` niewpięte.
+  Do naprawy PRZED aktywacją FLO. `containsSensitive` już istnieje — można wpiąć
+  jako twardą bramkę przed wysyłką.
+- **SEC-D-05 (niska, zgodność):** OCR → Anthropic jako subprocessor; musi być
+  w rejestrze czynności przetwarzania i umowie powierzenia.
+
+Czysto (odrzucone): obowiązkowość maskowania FLO (4.2), czat wsparcia (4.3),
+poczta (4.5 — adresat z bazy, override tylko dev, unsubscribe HMAC+timingSafe),
+logi (4.6 — debug/info no-op na prod, XML KSeF za podwójną flagą SEC-4).
+
+Metodologicznie znów: dwa ustalenia dnia 4 (D-03, D-04) to rzeczy UŚPIONE albo
+strukturalne — brak kasowania plików ujawnia się przy pierwszym usunięciu konta,
+luki redakcji przy pierwszym wywołaniu FLO. Wzorzec całego audytu: najgroźniejsze
+nie jest to, co dziś krzyczy, tylko to, co czeka na pierwszego realnego klienta.
+
+Zadania dla Bartka: brak nowych do odpalenia. SEC-D-04 wymaga decyzji prawnej
+(RODO art. 17 vs 10-letni obowiązek przechowywania faktur) — do uzgodnienia.
+
+Następny krok: dzień 5 — produkcja (nagłówki, trasy dev, PostgREST od zewnątrz,
+Cache-Control, IDOR lokalnie) + raport końcowy.
