@@ -1,5 +1,7 @@
 # Dziennik napraw bezpieczeństwa — Astra
 
+> **Przekazanie zatwierdzone:** kod i dziennik są w [roboczym PR #1](https://github.com/ezior8888-cpu/ksef-saas/pull/1), gałąź codex/security-leak-fixes. Nie wdrożono zmian.
+
 > **Aktualny stan:** czytaj również wpis z 2026-09-10. Własne propozycje schematu są wyłącznie w dokumentacji; nie ma nowych migracji 00070/00071. Zmian nie wdrożono.
 
 ## Jak przejąć pracę
@@ -181,3 +183,11 @@ Ograniczenie: w tym smoke PWA jest wyłączone wyłącznie w izolowanej przeglą
 Kod i dziennik zapisano na lokalnej gałęzi codex/security-leak-fixes. Planowany draft PR do main nie został utworzony. Automatyczna kontrola uprawnień odrzuciła polecenie wysyłki do origin, wskazując brak wyraźnej zgody na eksport tej zawartości do zdalnego repozytorium. Git remote i metadane konektora wskazują https://github.com/ezior8888-cpu/ksef-saas — repozytorium PUBLICZNE. Wysłanie ujawni również dokumentację niezastosowanych poprawek bazy. Wymagana jest decyzja użytkownika przed publikacją.
 
 Nie wysłano gałęzi, nie zmieniono main, nie wykonano migracji ani wdrożenia. Wymagania schematu GDPR oraz pozostałe sprawy retencji, dostawców i produkcyjnych grantów pozostają jawnie otwarte. Nie wykonywać automatycznego merge ani wdrożenia na podstawie samych zielonych testów.
+
+## 2026-09-10 — zatwierdzone przekazanie do GitHub
+
+Igor wyraźnie zatwierdził publiczne wysłanie kodu i dziennika do ezior8888-cpu/ksef-saas oraz utworzenie roboczego PR. Gałąź **codex/security-leak-fixes** została wysłana; utworzono **[draft PR #1](https://github.com/ezior8888-cpu/ksef-saas/pull/1)** do main.
+
+Poprzedni wpis o blokadzie opisuje stan przed zgodą. Integracja GitHub nie miała uprawnień do tworzenia PR (403), więc PR utworzono przez istniejące uwierzytelnienie Git, bez zmiany jego uprawnień i bez ujawniania poświadczeń. Kod i dziennik są teraz dostępne współpracownikowi oraz publicznie w repozytorium.
+
+PR pozostaje roboczy z jawnymi zależnościami schematu i retencji. Nie wykonano merge, migracji, wdrożenia ani restartu usług.
