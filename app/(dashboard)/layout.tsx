@@ -117,7 +117,6 @@ export default async function DashboardLayout({
       {user && activeOrg && (
         <AnalyticsIdentify
           userId={user.id}
-          email={user.email ?? null}
           tenantId={activeOrg}
         />
       )}
