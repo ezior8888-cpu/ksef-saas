@@ -74,13 +74,12 @@ export async function POST(req: Request): Promise<Response> {
   let event: Stripe.Event;
   try {
     event = getStripe().webhooks.constructEvent(rawBody, stripeSignature, webhookSecret);
-  } catch (err) {
+  } catch {
     // Zła signature = bezpieczeństwo, nie hałasujmy w Sentry per request
     // (atakujący mógłby zalać error tracking).
     return NextResponse.json(
       {
         error: 'Invalid signature',
-        detail: err instanceof Error ? err.message : 'unknown',
       },
       { status: 400 },
     );
@@ -98,8 +97,8 @@ export async function POST(req: Request): Promise<Response> {
   try {
     claim = await tryClaimWebhookEvent(event.id, event.type, event);
   } catch (err) {
-    Sentry.captureException(err, { tags: { area: 'stripe.webhook.idempotency' } });
-    return NextResponse.json({ error: 'Idempotency check failed' }, { status: 500 });
+    const errorId = Sentry.captureException(err, { tags: { area: 'stripe.webhook.idempotency' } });
+    return NextResponse.json({ error: 'Idempotency check failed', errorId }, { status: 500 });
   }
   if (!claim.claimed) {
     return NextResponse.json({ duplicate: true, eventId: event.id });
@@ -113,16 +112,23 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ received: true, eventId: event.id });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    await finalizeWebhookEvent(event.id, 'failed', message);
-    Sentry.captureException(err, {
+    const errorId = Sentry.captureException(err, {
       tags: { area: 'stripe.webhook.dispatch', eventType: event.type },
       extra: { eventId: event.id },
     });
+    try {
+      await finalizeWebhookEvent(event.id, 'failed', message);
+    } catch (finalizeError) {
+      Sentry.captureException(finalizeError, {
+        tags: { area: 'stripe.webhook.finalize' },
+        extra: { eventId: event.id },
+      });
+    }
     // **WAŻNE**: zwracamy 500 żeby Stripe ponowił dostawę (retry policy
     // Stripe = exponential backoff przez 3 dni). Idempotency tabela
     // sprawi że duplikat się nie wpisze drugi raz, więc retry jest safe.
     return NextResponse.json(
-      { error: 'Handler failed', detail: message },
+      { error: 'Handler failed', errorId },
       { status: 500 },
     );
   }
