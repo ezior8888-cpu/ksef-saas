@@ -1,5 +1,7 @@
 # Raport z audytu bezpieczeństwa FaktFlow
 
+> **Aktualizacja 2026-09-10:** poniższy audyt opisuje stan historyczny. Aktualne poprawki, testy i ograniczenia są w [dzienniku napraw Astra](../DZIENNIK-NAPRAW-ASTRA.md). Nie wdrożono ich na produkcję ani nie wykonano migracji.
+
 **Zakres:** wycieki danych — między najemcami i poza firmę.
 **Okres:** 6–9 września 2026 (dni 0–5).
 **Tryb:** tylko raport. Kod aplikacji (`app/`, `lib/`) nietknięty; powstały

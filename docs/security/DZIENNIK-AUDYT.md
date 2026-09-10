@@ -820,3 +820,10 @@ CSP enforce, poweredByHeader).
 
 KONIEC. Wszystkie zadania SQL z kroku 0 wykonane (dzień 3). Wszystkie ⬜ z tego
 dziennika domknięte albo przekazane jako świadome zadania dla Bartka.
+
+
+---
+
+## 2026-09-09 · Naprawy po audycie — Igor + Codex Astra
+
+Igor zlecił naprawę ustaleń i dopisanie dziennika dla AI współpracownika. Bieżące zmiany, wyniki testów, zależności migracji i ograniczenia są w [DZIENNIK-NAPRAW-ASTRA.md](DZIENNIK-NAPRAW-ASTRA.md). Historyczny raport dni 0–5 pozostaje zapisem stanu sprzed napraw. Żadna migracja ani wdrożenie nie zostały wykonane przez Astrę. Nie traktować przygotowanego pliku SQL jako naprawionej produkcji.

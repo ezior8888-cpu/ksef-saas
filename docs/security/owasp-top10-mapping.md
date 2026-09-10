@@ -1,193 +1,65 @@
-# OWASP Top 10 (2021) — Mapping FaktFlow
+# OWASP Top 10 (2021) — kontrole i granice weryfikacji FaktFlow
 
-Mapowanie kontroli bezpieczeństwa vs OWASP Top 10 (2021).
+Aktualizacja 2026-09-10 po naprawach audytu wycieków. Ta mapa wskazuje kontrole w kodzie i brakujące dowody. Nie jest certyfikatem ani deklaracją pełnego pokrycia OWASP. Nie potwierdza wdrożenia.
 
-> **Weryfikacja 2026-09-09 (audyt wycieków, dni 0–5).** Trzy wiersze tego
-> dokumentu rozjechały się ze stanem faktycznym i zostały poprawione niżej
-> (oznaczone „skorygowano"). Metoda: zamiast nazwy fazy podajemy datę i sposób
-> sprawdzenia. Pełne ustalenia: `docs/security/audyt/RAPORT.md`.
+Źródła: [dziennik napraw](DZIENNIK-NAPRAW-ASTRA.md), [rejestr ustaleń](audyt/REJESTR-USTALEN.md), [historyczny raport](audyt/RAPORT.md). Poprzednia wersja mapy zawierała nieaktualne założenia o Vercelu, liczbie podatności oraz kompletności kontroli.
 
----
+## A01 — kontrola dostępu
 
-## A01:2021 — Broken Access Control
+RLS i członkostwo organizacji pozostają podstawą izolacji. Odczyt i podpisywanie obiektów storage wymagają teraz pasującego prefiksu tenantId, także gdy ścieżka pochodzi z własnego rekordu. Portal księgowego i cache PDF mają testy izolacji.
 
-| Kontrola | Implementacja |
-|---|---|
-| Row-level security | Wszystkie tabele z `tenant_id` mają RLS (Faza 1, migracje 00001-00049) |
-| Membership check | `get_current_tenant_id()` + `is_member_of()` w policies |
-| Admin guard | `lib/auth/admin-guard.ts` + `ADMIN_EMAILS` allowlist (Faza 24) |
-| Force logout | Admin action `admin.user.force_logout` (Faza 24) |
-| Path-level public allowlist | `lib/supabase/middleware.ts → AUTH_PUBLIC_PREFIXES` (eksplicytna whitelist) |
-| Safe redirect | `lib/auth/safe-redirect.ts` — blok open-redirect (Faza 28 Krok 6) |
-| Multi-org context | `ksef.active_org` cookie httpOnly, RLS sprawdza member (Faza 27) |
+**Otwarte:** istniejące poprawki 00068 (widok invoices_overdue) i 00069 (grants/RPC) wymagają obsługi właściciela. Nie wykonywano migracji ani aktualnego testu produkcyjnych uprawnień. Brak FORCE RLS nie jest samodzielnym dowodem wycieku; istotna jest rzeczywista rola i definicje obiektów.
 
-**Status:** ✅ Pełne pokrycie.
+## A02 — kryptografia
 
----
+Kod szyfruje poświadczenia KSeF, hashuje kody odzyskiwania i weryfikuje podpisy webhooków. Nowy kod GDPR zapisuje SHA-256 losowego tokenu anulowania, zamiast tekstu jawnego.
 
-## A02:2021 — Cryptographic Failures
+**Zależność:** schema GDPR opisana w [propozycji dla właściciela](PROPOZYCJE-SCHEMATU-GDPR.md); nie ma nowych plików migracji ani deklaracji zgodności starej bazy z nowym kodem. TLS/klucze na Hetznerze wymagają odrębnej kontroli konfiguracji.
 
-| Kontrola | Implementacja |
-|---|---|
-| KSeF credentials encryption | AES-256-GCM, `KSEF_CREDENTIALS_ENCRYPTION_KEY`, per-row IV ([lib/ksef/credentials-crypto.ts](../../lib/ksef/credentials-crypto.ts)) |
-| KSeF token encryption | RSA-OAEP SHA-256 ([lib/ksef/encryption.ts](../../lib/ksef/encryption.ts)) |
-| Password storage | Supabase Auth (bcrypt) |
-| Recovery codes hash | scrypt N=2^14, 16-byte salt per row ([lib/auth/backup-codes.ts](../../lib/auth/backup-codes.ts)) |
-| Unsubscribe tokens | HMAC-SHA256 z `EMAIL_UNSUBSCRIBE_SECRET` |
-| Cancel tokens GDPR | `randomBytes(32)` hex, unique index, regex walidacja |
-| Webhook signatures | Stripe + Resend + Inngest (HMAC w każdym) |
-| TLS | **skorygowano 2026-09-09:** produkcja NIE stoi na Vercelu (Hetzner + Coolify, `AGENTS.md`). HSTS `max-age=1rok; includeSubDomains; preload` potwierdzone GET-em na prod — ustawiane przez `next.config.ts`, nie przez dostawcę. (SEC-E-01) |
-| Key rotation | Runbook [docs/runbooks/key-rotation.md](../runbooks/key-rotation.md) (Faza 28 Krok 8) |
+## A03 — wstrzykiwanie danych
 
-**Pozostałe ryzyko:** RPC `protobufjs` 7 high w `@opentelemetry/*` (transitive
-via `inngest`). Czekamy na inngest update. Brak ekspozycji — nie używamy
-Prometheus exporter.
+Supabase/PostgREST i walidacja domenowa, escaping React oraz lokalna walidacja FA(3) przez xmllint-wasm ograniczają typowe wejścia. Schematy XSD są ładowane lokalnie, bez sieci. Testy XML: 66/66.
 
-**Status:** ✅ Pełne pokrycie production code, ⚠️ 3 transitive vulns akceptowane.
+CSP jest egzekwowana; produkcja nie dopuszcza unsafe-eval. Inline bootstrap Next pozostaje dozwolony, więc nie jest to kompletna ochrona przed XSS. Nie twierdzimy, że sam escaping lub parametryzacja potwierdzają wszystkie ścieżki aplikacji.
 
----
+## A04 — projekt mechanizmów bezpieczeństwa
 
-## A03:2021 — Injection
+Rate limiting, Turnstile, MFA, ponowne uwierzytelnienie wrażliwych operacji i opóźnienie GDPR istnieją w kodzie. Brak sekretu Turnstile poza lokalnym developmentem zwraca błąd konfiguracji.
 
-| Kontrola | Implementacja |
-|---|---|
-| SQL injection | Supabase PostgREST (zawsze parametryzowane). Custom RPC z `SECURITY DEFINER` + `SET search_path = public, pg_temp` |
-| XSS | React auto-escaping (Server Components default). Brak `dangerouslySetInnerHTML` poza emaili (rendered server-side przez `@react-email/render` — bezpieczne) |
-| XML injection | FA(3) XML walidacja `libxmljs2` PRZED submit do KSeF |
-| Command injection | Brak `child_process.exec()` z user input |
-| CSP | Report-Only w `next.config.ts` (przełączamy na enforced w Fazie 42 zgodnie z Q3 planowania) |
+Cykl GDPR wymaga atomowego przejęcia zadania, rozstrzygnięcia wyścigu z anulowaniem oraz ograniczenia aktywnych żądań na użytkownika. Szczegóły i testy w dzienniku; zmiany schematu pozostają zależnością właściciela. Retencja i trwała kolejka usuwania obiektów pozostają otwarte.
 
-**Status:** ✅ Pełne pokrycie.
+## A05 — konfiguracja
 
----
+Poprawiono CSP, wyłączono X-Powered-By i ograniczono testowy odbiorca maila/debug KSeF do development/test bez markera produkcji. Cztery wskazane route’y zwracają stały komunikat i errorId.
 
-## A04:2021 — Insecure Design
+**Granice:** aplikacja działa na Hetzner/Coolify. Nie zakładać domyślnych zabezpieczeń, directory listing ani atestacji Vercel. Konfiguracja reverse proxy, CDN, MinIO i egress nie była ponownie sprawdzana w tej sesji.
 
-| Kontrola | Implementacja |
-|---|---|
-| Rate limiting | Auth routes (login/register/reset/2FA) + KSeF API (Faza 28 Krok 2) |
-| Bot protection | Cloudflare Turnstile na login/register/forgot-password (Faza 28 Krok 4) |
-| 2FA | Supabase MFA TOTP + 8 recovery codes per user (Faza 28 Krok 6) |
-| Session inactivity | 1h timeout + 60s warning modal (Faza 28 Krok 5) |
-| Re-auth na sensitive | Zmiana hasła, unenroll 2FA, regenerate codes, GDPR delete |
-| Anti-enumeration | forgot-password zawsze ten sam success message |
-| Password strength | min 12 + complexity + HIBP breach check (Faza 28 Krok 3) |
-| GDPR cooling-off | 14 dni delay z email cancel link (Faza 28 Krok 7) |
-| Audit logs immutable | RLS REVOKE + trigger PREVENT UPDATE/DELETE (Faza 28 Krok 8) |
+## A06 — zależności
 
-**Status:** ✅ Wszystkie wymagane kontrole.
+Skan 2026-09-10 aktualnego lockfile: produkcyjne zależności **0 zgłoszeń**; pełny audit **1 średnia** w developerskim adm-zip przez inngest-cli. Next.js/@next/mdx/eslint-config-next 16.3.4, @xmldom/xmldom 0.9.12, Vitest 4.1.11 i poprawki pośrednie.
 
----
+Dla adm-zip nie ma wydanej poprawki według zweryfikowanego doradztwa. Instalować wyłącznie zaufane wydania w prywatnym katalogu bez podstawionych symlinków. To nie jest formalna akceptacja ryzyka. Inngest pozostaje dostępną ścieżką rollbacku jobów. Wynik audytu jest przypisany do daty i lockfile, nie do wszystkich możliwych błędów kodu.
 
-## A05:2021 — Security Misconfiguration
+## A07 — uwierzytelnianie
 
-| Kontrola | Implementacja |
-|---|---|
-| Security headers | HSTS prod, X-Frame-Options DENY, X-Content-Type-Options, Permissions-Policy, Referrer-Policy ([next.config.ts](../../next.config.ts)) |
-| CSP | Report-Only (przełączenie na enforced w Fazie 42) |
-| Stack traces hidden | **skorygowano 2026-09-09:** cztery route'y odsyłają `e.message` w ciele odpowiedzi (SEC-A-01) — `portal/exports/generate`, `stripe/webhook`, `email/resend-webhook`, `dev/posthog-test`. Reszta tras czysta. Do naprawy. |
-| Default credentials | Brak defaultów w env vars; `isResendConfigured()` etc. wykrywa placeholders |
-| Disabled directory listing | Vercel default |
-| Unused features off | `Permissions-Policy: camera=(), microphone=(), geolocation=()` |
-| Dev override flags | `RESEND_DEV_TO_OVERRIDE` jawnie udokumentowany w `lib/email/send.ts` |
+Supabase Auth, MFA, rate limit i walidacja hasła pozostają w kodzie. Link anulowania GDPR nie wykonuje mutacji podczas GET; potrzebne jest świadome potwierdzenie POST. Pełnego E2E logowania przez prawdziwego dostawcę nie uruchamiano.
 
-**Status:** ✅ Production headers OK, ⏳ CSP enforcement zaplanowany na Fazę 42.
+## A08 — integralność
 
----
+Lockfile wersjonowany; podpisy webhooków sprawdzane, Resend kontroluje również świeżość timestampu. Testy zwykłego CI są oddzielone od RLS i nie otrzymują sekretów bazy. RLS wymaga osobnego zestawu RLS_TEST_SUPABASE_*.
 
-## A06:2021 — Vulnerable and Outdated Components
+Nie zakładać podpisania artefaktów lub SRI na podstawie hostingu. Integralność audit_logs nadal zależy od poprawnych uprawnień RPC — patrz istniejąca 00069.
 
-| Kontrola | Implementacja |
-|---|---|
-| Dependency audit | **skorygowano 2026-09-09:** `pnpm audit` = **56 podatności (30 wysokich)**, nie „3". Dziewięć dotyczy Next.js 16.2.6 → 16.2.11 (SEC-A-03, SEC-A-04). Zalecane `pnpm audit` w CI. |
-| Renovate bot | Configured (`renovate.json` w repo) |
-| Direct deps current | Next 16.2.6, Supabase SSR 0.10, Stripe 22.1, Sentry 10.53, Inngest 4.4 |
+## A09 — logi i monitorowanie
 
-**Pozostałe 3 high:** `@opentelemetry/auto-instrumentations-node`, `sdk-node`,
-`exporter-prometheus` (Prometheus exporter — niewystawiony publicznie).
-Wymaga update inngest upstream. Akceptowane jako known issue, monitoring co
-miesiąc czy inngest wydał.
+Wspólna polityka Sentry dla przeglądarki, Node i Edge filtruje błędy, requesty, transakcje, spany i breadcrumbs. Automatyczny eksport console oraz breadcrumbs DOM wyłączony. Debug/info ograniczone do development/test.
 
-**Status:** ✅ 93% redukcja vulns, dokumentowana known issue.
+Nie dołączać dowolnego XML, OCR ani danych kontrahenta do wyjątków. Filtr wzorców nie jest pełnym rozpoznawaniem danych osobowych. Wcześniejsze logi i nagrania nie są usuwane wskutek zmiany kodu.
 
----
+## A10 — żądania serwera do sieci
 
-## A07:2021 — Identification and Authentication Failures
+Adresy usług i generowane podpisy storage podlegają konfiguracji i walidacji. Własny serwer ma odrębną powierzchnię dostępu do sieci wewnętrznej; nie zakładać braku SSRF na podstawie dawnego środowiska Vercel. W tej sesji nie kontrolowano produkcyjnego firewalla ani wszystkich możliwych przekierowań dostawców.
 
-| Kontrola | Implementacja |
-|---|---|
-| Strong passwords | min 12, complexity, HIBP check (Faza 28 Krok 3) |
-| 2FA | TOTP + 8 backup codes (Faza 28 Krok 6) |
-| Brute force protection | Rate limit 5/15min/(IP+email) (Faza 28 Krok 2) |
-| Credential stuffing | Per-(IP+email) bucket, Turnstile pre-check |
-| Session timeout | 1h inactivity (Faza 28 Krok 5) |
-| Account lockout | Brak (rate limit wystarcza dla MVP) |
-| Secure session | httpOnly, Secure (prod), SameSite=Lax (Supabase defaults) |
-| Password recovery | Magic link z 14d cooling-off, anti-enumeration |
+## Dalsza weryfikacja
 
-**Status:** ✅ Pełne pokrycie.
-
----
-
-## A08:2021 — Software and Data Integrity Failures
-
-| Kontrola | Implementacja |
-|---|---|
-| Lockfile committed | `pnpm-lock.yaml` w repo |
-| Subresource integrity | Vercel CDN dla własnego JS; Turnstile + Sentry to zaufane domeny |
-| Webhook signatures | Stripe + Resend + Inngest (HMAC verify) |
-| Audit log integrity | Append-only RLS + trigger (Faza 28 Krok 8) |
-| Code signing | Brak (Vercel attestation by default) |
-| Insecure deserialization | JSON.parse z try/catch wokół user input (zod walidacja zawsze przed użyciem) |
-
-**Status:** ✅ Pełne pokrycie.
-
----
-
-## A09:2021 — Security Logging and Monitoring Failures
-
-| Kontrola | Implementacja |
-|---|---|
-| Audit logs | `audit_logs` table, append-only (Faza 8 + 28 trigger) |
-| Auth events logged | login/logout/signup/password_reset/password_changed/mfa_* (Faza 28 Kroki 5-7) |
-| GDPR events logged | export_requested/deletion_requested/canceled/executed (Faza 28 Krok 7) |
-| Sentry capture | Server + Client + Edge configs, PII scrubbing (Faza 27) |
-| Slack alerts | 3 channels: urgent/bugs/metrics (Faza 27) |
-| Daily summary email | 06:00 PL cron (Faza 27) |
-| Better Uptime / status page | `/api/status/components` (Faza 27) |
-| Retention | 12 mc dla audit_logs (Inngest cleanup) — RODO/legal exempt |
-
-**Status:** ✅ Pełne pokrycie.
-
----
-
-## A10:2021 — Server-Side Request Forgery (SSRF)
-
-| Kontrola | Implementacja |
-|---|---|
-| Outbound fetch whitelist | Aplikacja woła tylko: Supabase, Stripe, Resend, Cloudflare Turnstile, HIBP, KSeF (TEST/PROD), GUS, VIES, Inngest, Sentry — wszystko hardcoded URLs |
-| User-provided URLs | NIE wykonujemy fetch z user-supplied URLs (poza KSeF webhook URL który jest własną domeną) |
-| Internal services | Brak metadata.aws/google.internal calls — Vercel runtime nie ma SSRF surface |
-| R2 presigned URLs | Server-side generuje, klient tylko PUT/GET (nie SSRF) |
-
-**Status:** ✅ Pełne pokrycie.
-
----
-
-## Podsumowanie
-
-| Kategoria | Status |
-|---|---|
-| A01 Access Control | ✅ |
-| A02 Crypto Failures | ✅ (3 transitive vulns akceptowane) |
-| A03 Injection | ✅ |
-| A04 Insecure Design | ✅ |
-| A05 Misconfiguration | ✅ (CSP enforce w Fazie 42) |
-| A06 Vulnerable Components | ✅ (93% redukcja) |
-| A07 Auth Failures | ✅ |
-| A08 Data Integrity | ✅ |
-| A09 Logging | ✅ |
-| A10 SSRF | ✅ |
-
-**Wniosek po Fazie 28:** wszystkie 10 kategorii pokryte. Pozostałe ryzyka są
-known/akceptowane lub zaplanowane do innych faz (CSP enforcement).
+Właściciel powinien ocenić wymagane schema GDPR, istniejące 00068/00069, politykę retencji i usuwania plików, dokumentację przetwarzających oraz rzeczywistą konfigurację serwera. Przekazanie zmian do przeglądu nie stanowi zgody na wdrożenie. Instrukcja wznowienia i wyniki testów są w dzienniku napraw.

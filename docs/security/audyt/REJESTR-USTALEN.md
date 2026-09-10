@@ -1,10 +1,12 @@
 # Rejestr ustaleń — audyt bezpieczeństwa
 
-Jeden wiersz = jedno znalezisko. Plik jest jedynym źródłem prawdy o tym,
+> **Aktualizacja 2026-09-10:** poniższy audyt opisuje stan historyczny. Aktualne poprawki, testy i ograniczenia są w [dzienniku napraw Astra](../DZIENNIK-NAPRAW-ASTRA.md). Nie wdrożono ich na produkcję ani nie wykonano migracji.
+
+Jeden wiersz = jedno znalezisko. Plik przechowuje historyczny rejestr tego,
 co znaleźliśmy. Przebieg audytu i zadania dla Bartosza są w dzienniku:
 `docs/security/DZIENNIK-AUDYT.md`.
 
-**Tryb audytu: TYLKO RAPORT.** Kolumna „Propozycja naprawy" to opis, nie
+**Historyczny tryb audytu: TYLKO RAPORT (do 2026-09-09).** Kolumna „Propozycja naprawy" to opis, nie
 wykonana zmiana. Ani jedna linijka w `app/` i `lib/` nie została ruszona.
 
 ## Numeracja
@@ -97,3 +99,29 @@ sprawdzać ich drugi raz za pół roku.
 | Dostęp niezalogowanego do 58 pozostałych tabel | **Czysto.** Test empiryczny kluczem `anon` (tym samym, który jest w pakiecie przeglądarki) na 60 tabelach z migracji: 47 odmawia kodem `42501 permission denied`, 11 nie istnieje w badanej instalacji, 0 zwraca dane. Wyjątkiem są dwie tabele opisane w SEC-C-03. **Zastrzeżenie:** przebieg wykonany przeciwko instalacji `utuzzxstfcnglppplvlw.supabase.co` z `.env.local`, nie przeciwko produkcji — produkcja to osobna, samodzielnie hostowana instalacja i wymaga powtórzenia tą samą komendą z jej zmiennymi. |
 | **Dzień 2 — 305 zapytań omijających RLS** | **Czysto: 0 krytycznych, 0 wysokich.** Analiza wszystkich zapytań przez `service_role` (rola, dla której Postgres nie stosuje RLS) pod kątem POCHODZENIA wartości filtra, nie samej jego obecności. Sprawdzone ręcznie i poprawne: strażnik w `try` w `app/actions/expenses.ts`; `constructEvent` przed handlerem w webhooku Stripe; `tenant_id` z wiersza bazy w `send-reminder`; pełny odczyt `audit_logs` wołany wyłącznie spod układu z `requireAdmin()`; zapisy z wierszem budowanym w zmiennej wyżej. **Zastrzeżenie:** 78 pozycji „do przejrzenia" to granica analizy statycznej (pochodzenie wartości nieustalone), nie potwierdzone bezpieczeństwo — dowód empiryczny da dopiero `probe-idor.ts` w dniu 5. |
 | `GHSA-6gpp-xcg3-4w24` — „Next.js: Middleware / Proxy bypass in App Router", wysoka waga, dotyczy naszej wersji | **Warunki nie są spełnione.** Doradztwo wymaga JEDNOCZEŚNIE Turbopacka i dokładnie jednego wpisu w `config.i18n.locales`. Produkcja buduje się `next build --webpack` (jawnie, patrz `package.json`), a klucza `i18n` w `next.config.ts` nie ma w ogóle. Odpada na obu warunkach. **Warunek dla przyszłych sesji:** gdyby ktoś kiedyś usunął `--webpack` z polecenia budowania albo dodał `config.i18n`, to ustalenie wraca jako krytyczne — cała bramka auth siedzi w `proxy.ts`. Zalecany przez Vercel obejściowy środek („autoryzuj w ścieżce danych strony, nie polegaj wyłącznie na warstwie pośredniczącej") jest sam w sobie dobrą zasadą i pokrywa się z tym, co sprawdzamy w dniu 2. |
+
+## Stan napraw — 2026-09-10
+
+To uzupełnienie zmienia status kodu, nie historyczne dowody z tabeli. Nie oznacza wdrożenia.
+
+- SEC-A-01: cztery odpowiedzi HTTP poprawione; stały komunikat i errorId, testy regresji.
+- SEC-A-02/04: mapa OWASP poprawiona; nie deklaruje pełnego pokrycia ani stałej liczby zaakceptowanych luk.
+- SEC-A-03: Next.js 16.3.4 i aktualizacje pośrednie. Audyt produkcyjny: 0; pełny: 1 średnia w adm-zip przez developerski inngest-cli, bez wydanej poprawki.
+- SEC-D-01/02: PostHog dopiero po zgodzie, replay/autocapture wyłączone, allowlista zdarzeń i właściwości także na serwerze.
+- SEC-D-03: poprawione formaty redakcji; prompt FLO przyjmuje statyczne kody i placeholdery. Regex nie jest pełnym anonimizatorem nazwisk.
+- SEC-E-02/03: CSP egzekwowana w kodzie; poweredByHeader wyłączony. Inline bootstrap Next pozostaje dozwolony.
+- SEC-C-04: hash tokenu i bezpieczniejszy cykl GDPR wymagają zmian schematu z [propozycji](../PROPOZYCJE-SCHEMATU-GDPR.md). Migracje przygotowuje właściciel.
+- SEC-C-03/05/06/07/08: istniejące 00068/00069 niewykonane w tej sesji. Stan na produkcji niepotwierdzony.
+- SEC-D-04/05: nadal otwarte — retencja, usuwanie obiektów i dokumentacja przetwarzających wymagają decyzji właściciela.
+- SEC-E-01: wpisy o Vercelu skorygowane; aktualna konfiguracja Hetzner/Coolify/CDN nie została ponownie zbadana.
+
+### Nowe ustalenia z przeglądu napraw
+
+- **SEC-B-01 (wysoka):** storage ufał ścieżce z własnego rekordu, możliwej do podmiany przez UPDATE. Obowiązkowa walidacja prefiksu tenantId na granicy odczytu/podpisu obejmuje XML/PDF/import/OCR/UPO/eksporty. Testy izolacji używają atrap.
+- **SEC-D-06 (wysoka, zależna od konfiguracji):** debug KSeF i testowy odbiorca maila nie miały kompletnej bramki runtime. Teraz wyłącznie development/test bez markera produkcji; testy kombinacji env i mock Resend.
+- **SEC-D-07 (wysoka):** Sentry scrub pomijał transakcje/spany/automatyczne logi i Edge. Wspólny filtr wszystkich transportów; eksport console i breadcrumbs DOM wyłączony. Nie dołączać dowolnej treści faktur do błędów; regex nie rozpoznaje całego PII.
+- **SEC-D-08 (wysoka):** service worker zapisywał prywatne API/RSC/HTML bez izolacji sesji. Cache ograniczony do publicznych zasobów statycznych, legacy cache usuwane przy aktywacji. Stare podpisane URL i historyczny HTTP cache wymagają osobnej oceny.
+- **SEC-E-04 (średnia):** brak konfiguracji Turnstile dawał sukces poza lokalnym developmentem. Teraz błąd konfiguracji.
+- **SEC-E-05 (średnia, proces):** domyślne testy ładowały env aplikacji i testy RLS. Osobny konfigurator RLS wymaga jawnych RLS_TEST_SUPABASE_*; zwykłe CI bez sekretów i RLS.
+
+Wyniki i dalsze działania: [DZIENNIK-NAPRAW-ASTRA.md](../DZIENNIK-NAPRAW-ASTRA.md).
