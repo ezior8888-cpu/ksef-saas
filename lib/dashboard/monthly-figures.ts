@@ -39,16 +39,12 @@ export interface MonthlyFigures {
   hasPrevMonth: boolean;
 }
 
-export function formatPlMoney(n: number): string {
-  return n.toLocaleString('pl-PL', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-export function formatPlInt(n: number): string {
-  return n.toLocaleString('pl-PL', { maximumFractionDigits: 0 });
-}
+/**
+ * Formatery przeniesione do `lib/format/pl.ts` (moduł bez importów, więc
+ * nadaje się też do komponentów klienckich). Re-eksport zostaje, żeby nie
+ * przepisywać wywołań w stronach, które już go stąd biorą.
+ */
+export { formatPlInt, formatPlMoney } from '@/lib/format/pl';
 
 export async function getMonthlyFigures(
   supabase: PageContext['supabase'],

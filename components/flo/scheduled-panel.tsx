@@ -96,7 +96,7 @@ export function FloScheduledPanel({
                 type="button"
                 disabled={pendingId === item.id}
                 onClick={() => void cancel(item.id)}
-                className="shrink-0 rounded-lg border border-[var(--ff-border)] px-2 py-1 text-[11px] text-[var(--ff-text-muted)] transition-colors hover:border-[var(--ff-border-strong)] hover:text-[var(--ff-text)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="shrink-0 rounded-lg border border-[var(--ff-border)] px-2 py-1 text-[11px] text-[var(--ff-text-muted)] transition-colors hover:border-[var(--ff-border-strong)] hover:text-[var(--ff-text)] disabled:cursor-not-allowed disabled:opacity-50 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-3"
               >
                 {item.cancelLabel}
               </button>

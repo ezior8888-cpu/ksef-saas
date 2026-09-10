@@ -6,6 +6,7 @@ import { ArrowRight } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
+import { formatPlMoney } from '@/lib/format/pl';
 
 export type CashFlowInvoiceRow = Pick<
   Database['public']['Tables']['invoices']['Row'],
@@ -27,12 +28,6 @@ interface CashFlowDashboardProps {
 const NEON_GREEN = '#39ff9a';
 const NEON_RED = '#ff3b5c';
 
-function formatPlMoney(n: number): string {
-  return n.toLocaleString('pl-PL', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 export function CashFlowDashboard({
   invoices,

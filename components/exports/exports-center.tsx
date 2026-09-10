@@ -246,7 +246,7 @@ export function NewExportForm() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label className="mb-1 block text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
               Od
