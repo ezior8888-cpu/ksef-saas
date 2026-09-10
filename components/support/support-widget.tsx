@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/client';
 import { getContextualArticleSlugs } from '@/lib/support/contextual-help';
+import { OTWORZ_POMOC } from '@/lib/support/open-support-event';
 import { parseMeta, stripMetaLine } from '@/lib/support/meta';
 import {
   escalateConversationAction,
@@ -73,6 +74,15 @@ export function SupportWidget({
   articleTitles: Record<string, string>;
 }) {
   const [open, setOpen] = useState(false);
+
+  // Otwarcie z zewnątrz — dolna nawigacja („Więcej” → „Pomoc”) na telefonie,
+  // gdzie pływający bąbelek jest ukryty. Zdarzenie zamiast kontekstu, bo
+  // widget siedzi w layoucie, a nawigacja to zupełnie inne poddrzewo.
+  useEffect(() => {
+    const otworz = () => setOpen(true);
+    window.addEventListener(OTWORZ_POMOC, otworz);
+    return () => window.removeEventListener(OTWORZ_POMOC, otworz);
+  }, []);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -187,7 +197,16 @@ export function SupportWidget({
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Otwórz pomoc"
-          className="fixed bottom-5 right-5 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform hover:scale-105"
+          /* Warstwa 45: nad treścią i nad dolną nawigacją (40), ale POD
+             arkuszami i oknami dialogowymi (50). Przy z-70 bąbelek
+             pływał nad otwartym arkuszem „Więcej" i zasłaniał w nim
+             przełącznik motywu. */
+          /* `hidden lg:flex` — na telefonie bąbelek NIE PŁYWA. Każdy formularz
+             w panelu ma przyklejony pasek akcji przy dolnej krawędzi, a koło
+             56 px w prawym dolnym rogu siadało dokładnie na przycisku
+             „Zapisz”. Wejście do pomocy jest zamiast tego w arkuszu „Więcej”
+             i otwiera ten sam panel przez zdarzenie `OTWORZ_POMOC`. */
+          className="fixed bottom-[calc(1.25rem+var(--ff-bottom-nav-h)+var(--ff-safe-b))] right-5 z-[45] hidden h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform hover:scale-105 lg:flex"
         >
           <MessageCircle className="h-6 w-6" />
         </button>
@@ -195,7 +214,7 @@ export function SupportWidget({
 
       {/* Panel */}
       {open && (
-        <div className="fixed bottom-5 right-5 z-[70] flex h-[600px] max-h-[calc(100vh-2.5rem)] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-3xl border border-glass-border bg-glass-white shadow-2xl backdrop-blur-glass-lg">
+        <div className="fixed bottom-[calc(1.25rem+var(--ff-bottom-nav-h)+var(--ff-safe-b))] right-5 z-[45] flex h-[600px] max-h-[calc(100dvh-2.5rem-var(--ff-bottom-nav-h)-var(--ff-safe-b))] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-3xl border border-glass-border bg-glass-white shadow-2xl backdrop-blur-glass-lg">
           {/* Header */}
           <div className="flex shrink-0 items-center justify-between border-b border-glass-border px-4 py-3">
             <div className="flex items-center gap-2">

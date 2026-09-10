@@ -404,7 +404,7 @@ export function ReminderSettingsForm({
         </div>
       </section>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[var(--ff-glass-border)] bg-[var(--ff-surface-container-low)] px-6 py-4  lg:left-[280px]">
+      <div className="ff-sticky-actions border-t border-[var(--ff-glass-border)] bg-[var(--ff-surface-container-low)]">
         <div className="mx-auto flex max-w-7xl justify-end">
           <Button
             variant="glass-primary"

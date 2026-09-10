@@ -178,7 +178,7 @@ export function CaptureButton({
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 z-50 p-4 lg:bottom-8 lg:left-1/2 lg:max-w-md lg:-translate-x-1/2 lg:rounded-[var(--ff-radius-lg)]"
+              className="fixed bottom-0 left-0 right-0 z-50 p-4 pb-[calc(1rem+var(--ff-bottom-nav-h)+var(--ff-safe-b))] lg:bottom-8 lg:left-1/2 lg:max-w-md lg:-translate-x-1/2 lg:rounded-[var(--ff-radius-lg)] lg:pb-4"
             >
               <div className="ff-glass-pane space-y-3 rounded-[var(--ff-radius-lg)] p-5">
                 <div className="flex items-center justify-between">

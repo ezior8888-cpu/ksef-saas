@@ -929,11 +929,11 @@ html.dark .ff-dashboard {
 .ff-shell-header {
   background-color: #ffffff;
   border-bottom: 1px solid #e6e8ec;
-}
-
-.ff-shell-mobile {
-  background-color: #ffffff;
-  border-right: 1px solid #e6e8ec;
+  /* Wysokość i wcięcie pod wcięcie ekranu — zob. sekcja „Telefon" niżej.
+   * Dzięki temu w layoucie nie ma już `h-20`, którego kopie krążyły po
+   * wyliczeniach wysokości na dashboardzie. */
+  height: calc(var(--ff-header-h) + var(--ff-safe-t));
+  padding-top: var(--ff-safe-t);
 }
 
 html.dark .ff-shell-sidebar {
@@ -946,9 +946,114 @@ html.dark .ff-shell-header {
   border-bottom: 1px solid #1c2230;
 }
 
-html.dark .ff-shell-mobile {
-  background-color: #0a0d12;
-  border-right: 1px solid #1c2230;
+
+/* ─── Telefon: bezpieczne obszary i wysokości szkieletu ─────────────────────
+ * `app/layout.tsx` ustawia `viewportFit: 'cover'` i `black-translucent`, czyli
+ * treść ROZLEWA SIĘ pod wcięciem i pod paskiem domowym iOS. Do września 2026
+ * nic tego nie kompensowało — w repozytorium nie było ani jednego
+ * `env(safe-area-inset-*)`, a dziesięć pasków `fixed bottom-0` siedziało
+ * dokładnie na pasku domowym.
+ *
+ * Wysokości trzymamy w zmiennych, bo liczy z nich i szkielet, i strony
+ * (dashboard musi odjąć nagłówek i dolną nawigację, żeby wątek agenta
+ * kończył się tam, gdzie trzeba). Wcześniej stało tam `calc(100vh - 5rem)`
+ * z ręcznie wpisanym 5rem — rozjeżdżało się przy każdej zmianie nagłówka.
+ * ────────────────────────────────────────────────────────────────────────── */
+:root {
+  --ff-safe-t: env(safe-area-inset-top, 0px);
+  --ff-safe-b: env(safe-area-inset-bottom, 0px);
+  --ff-safe-l: env(safe-area-inset-left, 0px);
+  --ff-safe-r: env(safe-area-inset-right, 0px);
+
+  /* Poniżej `lg` szkielet ma niższy nagłówek, dolną nawigację i zero sidebara. */
+  --ff-header-h: 56px;
+  --ff-bottom-nav-h: 64px;
+  --ff-sidebar-w: 0px;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --ff-header-h: 80px;
+    --ff-bottom-nav-h: 0px;
+    --ff-sidebar-w: 280px;
+  }
+}
+
+/* 40 px marginesu bocznego to wymiar biurkowy. Na tablecie i telefonie zjada
+ * ósmą część szerokości ekranu — schodzimy tu, w jednym miejscu, zamiast
+ * dopisywać próg do czterdziestu wystąpień `sm:px-[var(--ff-container-padding)]`. */
+@media (max-width: 1023.98px) {
+  .ff-dashboard {
+    --ff-container-padding: 20px;
+  }
+}
+
+/* Miejsce na dolną nawigację + pasek domowy. Od `lg` oba tokeny są zerowe,
+ * więc reguła nie robi nic na komputerze. */
+.ff-shell-scroll {
+  padding-bottom: calc(var(--ff-bottom-nav-h) + var(--ff-safe-b));
+}
+
+/* ─── Przyklejone paski akcji ────────────────────────────────────────────────
+ * Dziesięć formularzy miało własną kopię `fixed bottom-0 … lg:left-[280px]`
+ * z ręcznie przepisaną szerokością sidebara i bez śladu bezpiecznego obszaru.
+ * Jedna klasa zamiast dziesięciu kopii: gdy zmieni się wysokość nawigacji albo
+ * szerokość sidebara, zmienia się w jednym miejscu.
+ *
+ * Klasa opisuje WYŁĄCZNIE położenie i odstępy. `pointer-events` zostaje po
+ * stronie wywołań, bo paski bez tła muszą przepuszczać kliknięcia, a te
+ * z tłem i ramką mają je przechwytywać — to nie jest ta sama sprawa.
+ * ────────────────────────────────────────────────────────────────────────── */
+.ff-sticky-actions {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: var(--ff-sidebar-w);
+  z-index: 30;
+  padding: 12px 16px
+    calc(12px + var(--ff-bottom-nav-h) + var(--ff-safe-b));
+}
+
+@media (min-width: 1024px) {
+  .ff-sticky-actions {
+    /* Z prawej robimy miejsce na pływający bąbelek pomocy (56 px + 20 px od
+     * krawędzi). Bez tego przycisk „Wystaw i wyślij do KSeF" kończy się pod
+     * nim i ostatnie znaki są zasłonięte — widać to na każdym z formularzy
+     * z przyklejonym paskiem. Na telefonie bąbelka nie ma (`hidden lg:flex`
+     * w `support-widget.tsx`), więc tam ta rezerwa byłaby stratą miejsca. */
+    padding: 16px 100px 16px 24px;
+  }
+}
+
+/* ─── Dolna nawigacja telefonu ───────────────────────────────────────────────
+ * Tło i ramka statycznie, jak reszta klas szkieletu (`.ff-shell-*`) — z tego
+ * samego powodu: klasa arbitralna Tailwinda potrafi na jedną klatkę po HMR
+ * nie być jeszcze w arkuszu, a przezroczysty pasek nawigacji nad treścią
+ * wygląda jak zepsuta strona.
+ *
+ * Wysokość niesie `--ff-bottom-nav-h` + pasek domowy. Żadnego `overflow`:
+ * wyróżniony przycisk „Nowa" celowo wystaje ponad górną krawędź. */
+.ff-bottom-nav {
+  height: calc(var(--ff-bottom-nav-h) + var(--ff-safe-b));
+  background-color: #ffffff;
+  border-top: 1px solid #e6e8ec;
+}
+
+html.dark .ff-bottom-nav {
+  background-color: #0d1117;
+  border-top: 1px solid #1c2230;
+}
+
+/* Arkusz z dołu dostaje klasę `.ff-dashboard`, bo Radix portaluje go POZA
+ * szkielet i bez niej nie widziałby tokenów `--ff-*`. Ta klasa maluje jednak
+ * także PŁÓTNO (`--ff-bg`, prawie białe szaro), a arkusz jest powierzchnią,
+ * nie płótnem — ma być biały jak każda karta w panelu.
+ *
+ * Utility Tailwinda tego nie załatwi: `.ff-dashboard` jest zwykłym CSS-em bez
+ * warstwy, a takie reguły biją wszystko z `@layer utilities`, niezależnie od
+ * kolejności w pliku. Stąd selektor z atrybutem — o jedną specyficzność wyżej. */
+.ff-dashboard[data-slot='sheet-content'] {
+  background-color: var(--ff-surface);
 }
 
 /* ─── Fallback tła na <html>/<body> ──────────────────────────────────────────
@@ -1082,8 +1187,26 @@ html:not(.dark) .ff-dashboard tbody tr[class*='hover:bg-']:hover {
   }
 }
 
+/* `backwards`, NIE `both` — i to jest tu najważniejsze słowo.
+ *
+ * `both` utrzymuje wartości ostatniej klatki NA ZAWSZE, więc po zakończeniu
+ * animacji element zostaje z `transform: matrix(1,0,0,1,0,0)`. Niezerowy
+ * `transform` tworzy blok zawierający dla potomków `position: fixed` — a to
+ * znaczy, że KAŻDY przyklejony pasek akcji w panelu (dziesięć sztuk: cztery
+ * formularze faktur, wydatki, dwa formularze ustawień, arkusz paragonu,
+ * pływający przycisk, zachęta do instalacji) był przypięty do dolnej krawędzi
+ * TEGO pudełka, a nie do okna. Zmierzone na telefonie: pasek „Wyślij do KSeF"
+ * wisiał 112 px nad dolną krawędzią ekranu, w powietrzu.
+ *
+ * `backwards` daje to samo zabezpieczenie przed mignięciem PRZED startem
+ * animacji, ale po jej końcu własności wracają do wartości bazowych —
+ * `transform: none`, czyli żadnego bloku zawierającego. Wartość bazowa
+ * `opacity` to 1, a ostatnia klatka też ma 1, więc nic nie mignie.
+ *
+ * Nie zmieniaj tego z powrotem na `both` bez przejścia po tych dziesięciu
+ * miejscach. */
 .ff-route-template {
-  animation: ff-route-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: ff-route-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1507,7 +1630,13 @@ html.ff-route-dashboard .ff-shell-scroll > div > :last-child {
 
 /* Baner certyfikatu na dashboardzie stoi w prawej szynie (jak na makiecie),
  * więc szeroki wariant z layoutu jest tam zbędny. Na pozostałych stronach
- * zostaje bez zmian — tam nie ma szyny, w której mógłby zamieszkać. */
-html.ff-route-dashboard .ff-shell-banner {
-  display: none;
+ * zostaje bez zmian — tam nie ma szyny, w której mógłby zamieszkać.
+ *
+ * TYLKO OD `lg`. Poniżej tego progu prawej szyny NIE MA (schodziła pod wątek,
+ * czyli poza zablokowaną wysokość ekranu), więc ukrycie szerokiego wariantu
+ * kasowałoby ostrzeżenie o braku certyfikatu z telefonu w całości. */
+@media (min-width: 1024px) {
+  html.ff-route-dashboard .ff-shell-banner {
+    display: none;
+  }
 }

@@ -264,7 +264,7 @@ export function ExpenseEditForm({ expense, photoUrl }: ExpenseEditFormProps) {
             <h2 className="font-display text-lg font-semibold tracking-tighter-text">
               Dokument
             </h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <Label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Numer
@@ -295,7 +295,7 @@ export function ExpenseEditForm({ expense, photoUrl }: ExpenseEditFormProps) {
             <h2 className="font-display text-lg font-semibold tracking-tighter-text">
               Kwoty (PLN)
             </h2>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <Label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Netto
@@ -446,7 +446,7 @@ export function ExpenseEditForm({ expense, photoUrl }: ExpenseEditFormProps) {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-glass-border bg-glass-white-strong px-6 py-4 backdrop-blur-glass-lg lg:left-[280px]">
+      <div className="ff-sticky-actions border-t border-glass-border bg-glass-white-strong backdrop-blur-glass-lg">
         <div className="mx-auto flex max-w-7xl justify-between gap-3">
           <Button
             variant="ghost"

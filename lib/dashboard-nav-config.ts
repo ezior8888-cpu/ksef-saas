@@ -47,6 +47,58 @@ export const dashboardNavItems: DashboardNavItem[] =
   dashboardNavSections.flatMap((section) => section.items);
 
 /**
+ * Dolna nawigacja telefonu — pięć slotów z sierpniowej makiety:
+ * Flo · Faktury · Nowa · Miesiąc · Więcej.
+ *
+ * DLACZEGO OSOBNA LISTA, A NIE WYCINEK Z `dashboardNavSections`.
+ * Sidebar jest spisem miejsc; dolny pasek to CZTERY najczęstsze czynności plus
+ * furtka do reszty. „Nowa" nie jest pozycją menu (to przycisk akcji, dlatego
+ * w sidebarze stoi nad listą), a „Więcej" nie jest trasą. Wycinanie tego
+ * z sekcji wymagałoby wyjątków w obie strony.
+ *
+ * Etykiety są krótsze niż w sidebarze — „Faktury" zamiast „Faktury wystawione",
+ * „Miesiąc" zamiast „Przepływy" — bo na 375 px slot ma około 70 px i dłuższy
+ * napis albo się łamie, albo zostaje przycięty. To nie jest zmiana nazwy
+ * strony, tylko podpis ikony.
+ */
+export interface DashboardMobileTab {
+  /** `null` = slot bez trasy (otwiera arkusz „Więcej"). */
+  href: string | null;
+  label: string;
+  icon: string;
+  /** Wyróżniony środkowy przycisk akcji (niebieskie koło). */
+  emphasis?: boolean;
+}
+
+export const dashboardMobileTabs: DashboardMobileTab[] = [
+  { href: '/dashboard', label: 'Flo', icon: 'bolt' },
+  { href: '/invoices', label: 'Faktury', icon: 'description' },
+  { href: '/invoices/new', label: 'Nowa', icon: 'add', emphasis: true },
+  { href: '/przeplywy', label: 'Miesiąc', icon: 'account_balance_wallet' },
+  { href: null, label: 'Więcej', icon: 'more_horiz' },
+];
+
+/** Trasy, które mają własny slot na dole — w arkuszu „Więcej" byłyby dublem. */
+const MOBILE_TAB_HREFS = new Set(
+  dashboardMobileTabs
+    .map((tab) => tab.href)
+    .filter((href): href is string => href !== null),
+);
+
+/**
+ * Sekcje do arkusza „Więcej”: to samo menu, bez pozycji, które stoją już
+ * na dolnym pasku. Puste sekcje odpadają, żeby nie został sam nagłówek.
+ */
+export function getDashboardMoreSections(): DashboardNavSection[] {
+  return dashboardNavSections
+    .map((section) => ({
+      title: section.title,
+      items: section.items.filter((item) => !MOBILE_TAB_HREFS.has(item.href)),
+    }))
+    .filter((section) => section.items.length > 0);
+}
+
+/**
  * Czy `pathname` uznajemy za aktywną pozycję menu dla danego `href`
  * (sidebar, stan „pending” po kliknięciu).
  */

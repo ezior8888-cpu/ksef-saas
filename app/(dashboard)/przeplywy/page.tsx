@@ -1,3 +1,4 @@
+import { MonthlyFiguresCard } from '@/components/dashboard/monthly-figures-card';
 import { SalesChartCard } from '@/components/dashboard/sales-chart-card';
 import { VatSummaryCard } from '@/components/dashboard/vat-summary-card';
 import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
@@ -60,6 +61,14 @@ export default async function PrzeplywyPage() {
 
   return (
     <div className="flex flex-col gap-7">
+      {/* Liczby miesiąca stoją na komputerze w prawej szynie dashboardu.
+          Na telefonie szyny nie ma, a dolna nawigacja prowadzi tutaj pod
+          nazwą „Miesiąc” — więc tu jest ich drugi (i na telefonie jedyny)
+          adres. Od `lg` byłyby dublem szyny, stąd `lg:hidden`. */}
+      <div className="lg:hidden">
+        <MonthlyFiguresCard figures={figures} />
+      </div>
+
       <CashFlowDashboard
         invoices={invoices ?? []}
         expenses={expenses ?? []}
