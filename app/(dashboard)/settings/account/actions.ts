@@ -5,90 +5,78 @@ import { headers } from 'next/headers';
 import { logAudit } from '@/lib/audit/log';
 import { reauthenticateWithPassword } from '@/lib/auth/reauth';
 import { sendGdprDeletionScheduledEmail } from '@/lib/email/send';
-import { createGdprRequest } from '@/lib/gdpr/deletion';
+import { cancelOwnGdprRequest, createGdprRequest } from '@/lib/gdpr/deletion';
 import { createClient } from '@/lib/supabase/server';
 
+type GdprActionError = 'not_authenticated' | 'invalid_password' | 'no_email' | 'request_failed' | 'not_pending';
 export type GdprDeletionResult =
-  | {
-      ok: true;
-      scheduledFor: string;
-    }
-  | {
-      ok: false;
-      error:
-        | 'not_authenticated'
-        | 'invalid_password'
-        | 'no_email'
-        | 'request_failed';
-    };
+  | { ok: true; scheduledFor: string; alreadyScheduled: boolean; emailSent: boolean }
+  | { ok: false; error: GdprActionError };
+export type GdprCancellationResult = { ok: true } | { ok: false; error: GdprActionError };
 
-/**
- * Server Action: zgłoszenie GDPR right-to-be-forgotten.
- *
- * Wymaga re-auth hasłem — nie chcemy żeby skradzione cookie spowodowało
- * przypadkowe zniszczenie konta. Po sukcesie wysyła email z linkiem cancel
- * (14 dni cooling-off).
- */
-export async function requestGdprDeletionAction(
-  formData: FormData,
-): Promise<GdprDeletionResult> {
-  const password = String(formData.get('current_password') ?? '');
-
+export async function requestGdprDeletionAction(formData: FormData): Promise<GdprDeletionResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'not_authenticated' };
   if (!user.email) return { ok: false, error: 'no_email' };
-
-  const reauth = await reauthenticateWithPassword(password);
+  const reauth = await reauthenticateWithPassword(String(formData.get('current_password') ?? ''));
   if (!reauth.ok) return { ok: false, error: 'invalid_password' };
 
-  const headersList = await headers();
-  const ipAddress =
-    headersList.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    headersList.get('x-real-ip') ??
-    null;
-  const userAgent = headersList.get('user-agent') ?? null;
-  const origin =
-    headersList.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? '';
-
+  const requestHeaders = await headers();
+  const origin = requestHeaders.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? '';
   try {
     const created = await createGdprRequest({
-      userId: user.id,
-      userEmail: user.email,
-      ipAddress: ipAddress ?? undefined,
-      userAgent: userAgent ?? undefined,
+      userId: user.id, userEmail: user.email,
+      ipAddress: requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim()
+        ?? requestHeaders.get('x-real-ip') ?? undefined,
+      userAgent: requestHeaders.get('user-agent') ?? undefined,
     });
-
-    const cancelUrl = `${origin}/gdpr/cancel?token=${created.cancelToken}`;
-    const scheduledForFmt = created.scheduledFor.toLocaleDateString('pl-PL', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+    const scheduledFor = created.scheduledFor.toLocaleDateString('pl-PL', {
+      year: 'numeric', month: 'long', day: 'numeric',
     });
-
-    await sendGdprDeletionScheduledEmail({
-      userEmail: user.email,
-      scheduledFor: scheduledForFmt,
-      cancelUrl,
-    });
-
-    await logAudit({
-      action: 'gdpr.deletion_requested',
-      tenantId: null,
-      userId: user.id,
-      metadata: {
-        request_id: created.id,
-        scheduled_for: created.scheduledFor.toISOString(),
-      },
-    });
-
+    let emailSent = false;
+    if (created.cancelToken) {
+      try {
+        const delivery = await sendGdprDeletionScheduledEmail({
+          userEmail: user.email, scheduledFor,
+          cancelUrl: `${origin}/gdpr/cancel?token=${created.cancelToken}`,
+        });
+        emailSent = delivery.sent;
+      } catch {
+        // Żądanie już istnieje. Pokazujemy prawdziwy stan i możliwość anulowania hasłem.
+        emailSent = false;
+      }
+    }
+    if (!created.alreadyScheduled) {
+      await logAudit({
+        action: 'gdpr.deletion_requested', tenantId: null, userId: user.id,
+        metadata: { request_id: created.id, scheduled_for: created.scheduledFor.toISOString() },
+      });
+    }
     revalidatePath('/settings/account');
+    return { ok: true, scheduledFor, alreadyScheduled: created.alreadyScheduled, emailSent };
+  } catch {
+    return { ok: false, error: 'request_failed' };
+  }
+}
 
-    return { ok: true, scheduledFor: scheduledForFmt };
-  } catch (err) {
-    console.error('[requestGdprDeletionAction]', err);
+/** Awaryjna droga anulowania, gdy mail nie dotarł: sesja + aktualne hasło. */
+export async function cancelOwnGdprDeletionAction(formData: FormData): Promise<GdprCancellationResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'not_authenticated' };
+  const reauth = await reauthenticateWithPassword(String(formData.get('current_password') ?? ''));
+  if (!reauth.ok) return { ok: false, error: 'invalid_password' };
+  try {
+    const result = await cancelOwnGdprRequest(user.id);
+    if (!result.ok) return { ok: false, error: 'not_pending' };
+    await logAudit({
+      action: 'gdpr.deletion_canceled', tenantId: null, userId: user.id,
+      metadata: { method: 'authenticated_password_confirmation', request_id: result.requestId },
+    });
+    revalidatePath('/settings/account');
+    return { ok: true };
+  } catch {
     return { ok: false, error: 'request_failed' };
   }
 }
