@@ -13,6 +13,7 @@
  */
 import { render } from '@react-email/render';
 import { logger } from '@/lib/observability/logger';
+import { isSensitiveDebugAllowed } from '@/lib/security/debug';
 import { Resend } from 'resend';
 
 import AccountDeletionConfirmation from './templates/AccountDeletionConfirmation';
@@ -39,7 +40,9 @@ const DEFAULT_FROM = 'KSeF SaaS <onboarding@resend.dev>';
  * prawdziwego odbiorcę. W produkcji ZOSTAW PUSTĄ - inaczej wszyscy
  * klienci dostaną mail na Twój adres.
  */
-const DEV_TO_OVERRIDE = process.env.RESEND_DEV_TO_OVERRIDE?.trim() || null;
+const DEV_TO_OVERRIDE = isSensitiveDebugAllowed()
+  ? process.env.RESEND_DEV_TO_OVERRIDE?.trim() || null
+  : null;
 
 // Cache klienta - `new Resend()` jest lightweight, ale nie chcemy tworzyć
 // instancji na każdy email (jeden proces = jeden klient).
