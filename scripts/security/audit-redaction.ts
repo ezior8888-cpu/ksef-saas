@@ -1,20 +1,15 @@
 /**
- * Skuteczność maskowania danych przed modelem — krok 4.1 audytu.
+ * Lokalny test rozpoznawalnych identyfikatorów w helperze redactForModel.
+ * Regexy nie potrafią zagwarantować usunięcia dowolnych nazwisk i opisów.
+ * Granica modelu w generateCopy używa osobno zamkniętego słownika FLO_HINTS.
  *
- * PO CO: `lib/flo/redact.ts` ma dobrą intencję i jest strukturalnie
- * obowiązkowe (FLO nie da się wywołać z pominięciem go). Ale intencja to nie
- * skuteczność — regexy łapią pewne kształty i przepuszczają inne. Ten test
- * puszcza przez `redactForModel` realistyczne przypadki brzegowe i sprawdza,
- * czy po maskowaniu została w tekście dana, której być nie powinno.
- *
- * TYLKO ODCZYT — importuje i woła funkcję, nic nie zapisuje poza raportem.
- *
- * Uruchomienie:  node scripts/security/audit-redaction.ts
+ * Zapisuje wyłącznie raport z fikcyjnych danych testowych; nie łączy usług.
+ * Uruchomienie: corepack pnpm exec tsx scripts/security/audit-redaction.ts
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { redactForModel } from '../../lib/flo/redact.ts';
+import { redactForModel } from '../../lib/flo/redact';
 
 const ROOT = process.cwd();
 const OUT_MD = 'docs/security/audyt/06-redakcja.md';
@@ -30,10 +25,10 @@ interface Przypadek {
 // Przypadki dobrane pod realne dane z polskiej faktury i pod kształty,
 // które regex łatwo przepuszcza.
 const PRZYPADKI: Przypadek[] = [
-  { co: 'NIP ciągiem (10 cyfr)', wejscie: 'Kontrahent NIP 1234563218 zalega', wrazliwe: '1234563218' },
-  { co: 'NIP z myślnikami', wejscie: 'Kontrahent NIP 123-456-32-18 zalega', wrazliwe: '123-456-32-18' },
-  { co: 'NIP ze spacjami', wejscie: 'NIP 123 456 32 18', wrazliwe: '123 456 32 18' },
-  { co: 'NIP z prefiksem PL', wejscie: 'PL1234563218', wrazliwe: '1234563218' },
+  { co: 'NIP ciągiem (10 cyfr)', wejscie: 'Kontrahent NIP 1234567890 zalega', wrazliwe: '1234567890' },
+  { co: 'NIP z myślnikami', wejscie: 'Kontrahent NIP 123-456-78-90 zalega', wrazliwe: '123-456-78-90' },
+  { co: 'NIP ze spacjami', wejscie: 'NIP 123 456 78 90', wrazliwe: '123 456 78 90' },
+  { co: 'NIP z prefiksem PL', wejscie: 'PL1234567890', wrazliwe: '1234567890' },
   { co: 'IBAN polski', wejscie: 'Przelew na PL61109010140000071219812874', wrazliwe: '109010140000071219812874' },
   { co: 'IBAN polski w grupach', wejscie: 'konto PL61 1090 1014 0000 0712 1981 2874', wrazliwe: '1090 1014' },
   { co: 'IBAN niemiecki', wejscie: 'IBAN DE89370400440532013000', wrazliwe: '370400440532013000' },
@@ -86,15 +81,19 @@ for (const w of wyniki) {
 L.push('');
 L.push('## Jak czytać');
 L.push('');
-L.push('Maskowanie w FLO jest OBOWIĄZKOWE i wychwytuje najczęstsze kształty');
-L.push('(NIP ciągiem, IBAN cyfrowy, e-mail, telefon, PESEL, kod pocztowy).');
-L.push('Przecieki powyżej to kształty, których regex nie obejmuje — każdy wymaga');
-L.push('decyzji: czy to realna droga wypływu danych kontrahenta do modelu.');
+L.push('Helper maskowania wychwytuje wiele typowych identyfikatorów');
+L.push('(NIP także z separatorami, IBAN z literami, e-mail, telefon, PESEL, adres).');
+L.push('Pozostały tekst pokazuje ograniczenia regexów: nie są one gwarancją');
+L.push('anonimizacji dowolnych nazwisk i opisów.');
 L.push('');
-L.push('Uwaga o zakresie: `redactForModel` czyści `input.hints` — czyli tekst');
-L.push('kontekstowy budowany z danych dokumentu. Kwoty i wartości pól model');
-L.push('dostaje jako placeholdery, nie wartości (osobny mechanizm). Przeciek tutaj');
-L.push('ma znaczenie tylko wtedy, gdy dana trafia do `hints`.');
+L.push('**Granica wysyłki FLO została zmieniona:** `generateCopy` przyjmuje w `hints`');
+L.push('wyłącznie kody ze stałego słownika `FLO_HINTS`. Wolny tekst, także nazwiska');
+L.push('nierozpoznane przez regex, jest odrzucany przed budową promptu. Model dostaje');
+L.push('nazwy placeholderów wyłącznie z szablonu; wartości pozostają lokalnie.');
+L.push('');
+L.push('Tabela mierzy skuteczność pomocniczych regexów, NIE potwierdza transferu');
+L.push('pozostałego tekstu do modelu. Granicę wysyłki testuje osobno');
+L.push('`tests/unit/flo-privacy.test.ts` na rzeczywistym `generateCopy` z atrapą modelu.');
 
 mkdirSync(join(ROOT, 'docs/security/audyt'), { recursive: true });
 writeFileSync(join(ROOT, OUT_MD), L.join('\n') + '\n', 'utf8');
