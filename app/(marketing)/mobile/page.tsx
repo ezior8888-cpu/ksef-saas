@@ -14,6 +14,12 @@ export const metadata: Metadata = {
  * je tutaj. Landing pozostaje dostępny; ta strona tłumaczy dlaczego i
  * wskazuje sklepy (badge'e „wkrótce" do podmiany na prawdziwe linki
  * po publikacji w App Store / Google Play).
+ *
+ * Od września 2026 blokadę zdejmuje przełącznik `NEXT_PUBLIC_MOBILE_PANEL`
+ * (`lib/mobile-access.ts`). Konto z listy testowej NIE trafia już tutaj —
+ * jedzie prosto do panelu. Ta strona jest tym, co widzą wszyscy pozostali,
+ * i dlatego mówi też o wersji testowej: inaczej tester, który wyląduje tu
+ * przed zalogowaniem, uzna, że przełącznik nie zadziałał.
  */
 export default function MobilePage() {
   return (
@@ -35,6 +41,13 @@ export default function MobilePage() {
         Panel FaktFlow projektujemy na telefon od nowa — dlatego na razie nie
         udostępniamy go w przeglądarce mobilnej. Zaloguj się z komputera, a po
         premierze pobierzesz aplikację prosto ze sklepu.
+      </p>
+      <p className="mt-4 max-w-md text-sm leading-relaxed text-[var(--marketing-muted)]">
+        Bierzesz udział w testach wersji mobilnej?{' '}
+        <Link href="/login" className="underline underline-offset-4">
+          Zaloguj się
+        </Link>{' '}
+        — jeśli Twoje konto jest na liście, wejdziesz prosto do panelu.
       </p>
 
       {/* Badge'e sklepów — placeholdery do podmiany po publikacji. */}
