@@ -12,6 +12,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createHash } from 'node:crypto';
 
 import { getR2Client, getR2Config } from './r2-client';
+import { assertTenantStoragePath } from './tenant-path';
 
 /**
  * Warstwa operacji na obiektach R2 pod tabelę `xml_documents` w Supabase.
@@ -284,7 +285,8 @@ export async function uploadToR2(
 /**
  * Generyczny odczyt obiektu z R2 po kluczu.
  */
-export async function downloadFromR2(key: string): Promise<Buffer> {
+export async function downloadFromR2(key: string, tenantId: string): Promise<Buffer> {
+  assertTenantStoragePath(key, tenantId);
   const { bucketName } = getR2Config();
   const client = getR2Client();
 
@@ -308,7 +310,9 @@ export async function downloadFromR2(key: string): Promise<Buffer> {
 export async function downloadInvoiceXml(
   storagePath: string,
   expectedSha256Hash: string,
+  tenantId: string,
 ): Promise<string> {
+  assertTenantStoragePath(storagePath, tenantId);
   const { bucketName } = getR2Config();
   const client = getR2Client();
 
@@ -337,7 +341,9 @@ export async function downloadInvoiceXml(
  */
 export async function downloadInvoiceXmlUnchecked(
   storagePath: string,
+  tenantId: string,
 ): Promise<string> {
+  assertTenantStoragePath(storagePath, tenantId);
   const { bucketName } = getR2Config();
   const client = getR2Client();
 
@@ -392,14 +398,22 @@ export async function invoiceXmlExistsForId(
  */
 export async function getSignedInvoiceUrl(
   storagePath: string,
+  tenantId: string,
   expiresInSeconds: number = 300,
 ): Promise<string> {
+  assertTenantStoragePath(storagePath, tenantId);
   const { bucketName } = getR2Config();
   const client = getR2Client();
 
   return getSignedUrl(
     client,
-    new GetObjectCommand({ Bucket: bucketName, Key: storagePath }),
+    // Override legacy metadata too: a public cache must not keep serving a
+    // sensitive document after its signed URL expires.
+    new GetObjectCommand({
+      Bucket: bucketName,
+      Key: storagePath,
+      ResponseCacheControl: 'private, no-store',
+    }),
     { expiresIn: expiresInSeconds },
   );
 }

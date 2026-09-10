@@ -94,6 +94,7 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
 
         const { buffer, mimeType: mt } = await downloadExpensePhoto(
           jobRow.source_file_path,
+          tenantId,
         );
 
         return {
