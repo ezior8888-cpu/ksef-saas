@@ -30,6 +30,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const WEBHOOK_TOLERANCE_SECONDS = 5 * 60;
+
 type ResendBounceType = 'hard' | 'soft' | 'undetermined';
 type ResendEvent =
   | 'email.bounced'
@@ -68,6 +70,15 @@ function verifySvixSignature(
   svixSignature: string,
   secret: string,
 ): boolean {
+  // A valid old signature remains a replay even after its idempotency row
+  // is removed. Svix signs UNIX seconds and permits five minutes of skew.
+  if (!/^\d+$/.test(svixTimestamp)) return false;
+  const timestamp = Number(svixTimestamp);
+  if (
+    !Number.isSafeInteger(timestamp) ||
+    Math.abs(Math.floor(Date.now() / 1000) - timestamp) > WEBHOOK_TOLERANCE_SECONDS
+  ) return false;
+
   // Secret format z Resend: `whsec_<base64>`. Trzeba pominąć prefix.
   const decodedSecret = secret.startsWith('whsec_')
     ? Buffer.from(secret.slice(6), 'base64')
@@ -83,7 +94,7 @@ function verifySvixSignature(
   const sigs = svixSignature.split(' ');
   for (const sig of sigs) {
     const parts = sig.split(',');
-    if (parts.length !== 2) continue;
+    if (parts.length !== 2 || parts[0] !== 'v1') continue;
     const sigB64 = parts[1];
     if (!sigB64) continue;
 
@@ -262,12 +273,12 @@ export async function POST(req: Request): Promise<Response> {
     }
     return NextResponse.json({ ok: true, type: payload.type });
   } catch (e) {
-    Sentry.captureException(e, {
+    const errorId = Sentry.captureException(e, {
       tags: { area: 'resend.webhook' },
       extra: { eventType: payload.type, svixId },
     });
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'unknown' },
+      { error: 'Webhook processing failed', errorId },
       { status: 500 },
     );
   }

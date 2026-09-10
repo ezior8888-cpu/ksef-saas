@@ -6,6 +6,8 @@ import {
   type AnalyticsProperties,
 } from './events';
 import { isBrowserPosthogReady } from './browser-posthog';
+import { hasAnalyticsConsent } from './consent';
+import { sanitizeAnalyticsUrl } from './privacy';
 
 /**
  * Client-side tracking (Faza 31 Krok 3).
@@ -17,7 +19,7 @@ import { isBrowserPosthogReady } from './browser-posthog';
 export { ANALYTICS_EVENTS };
 
 function canCapture(): boolean {
-  return isBrowserPosthogReady() && !posthog.has_opted_out_capturing();
+  return hasAnalyticsConsent() && isBrowserPosthogReady() && !posthog.has_opted_out_capturing();
 }
 
 /** Wysyła event do PostHog (jeśli załadowany i nie ma opt-out). */
@@ -32,7 +34,7 @@ export function track(
 /** Ręczny pageview — zwykle zbędny przy `defaults`; zostawione na wypadek SPA edge case. */
 export function trackPageView(url: string): void {
   if (!canCapture()) return;
-  posthog.capture('$pageview', { $current_url: url });
+  posthog.capture('$pageview', { $current_url: sanitizeAnalyticsUrl(url) });
 }
 
 export function trackFeatureUsed(feature: string): void {

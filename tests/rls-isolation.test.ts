@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { getRlsTestEnvironment } from './helpers/rls-environment';
 
 /**
  * Test izolacji RLS w modelu multi-org (memberships).
@@ -17,9 +18,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
  * tak jak robi to runtime aplikacji.
  */
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const { url, anonKey, serviceRoleKey: serviceRole } = getRlsTestEnvironment();
 const admin = createClient(url, serviceRole);
 
 const TENANT_A_ID = '11111111-1111-1111-1111-111111111111';
@@ -44,7 +43,6 @@ let userBId = '';
 let userDupId = '';
 let clientA: SupabaseClient;
 let clientB: SupabaseClient;
-let clientDup: SupabaseClient;
 
 function createFreshAnonClient(activeOrgId: string | null = null) {
   return createClient(url, anonKey, {
@@ -92,7 +90,7 @@ async function signInClient(
 describe('RLS isolation in multi-org model', () => {
   beforeAll(async () => {
     if (!anonKey) {
-      throw new Error('Brak NEXT_PUBLIC_SUPABASE_ANON_KEY — potrzebne do logowania w teście RLS.');
+      throw new Error('Brak RLS_TEST_SUPABASE_ANON_KEY — potrzebne do logowania w teście RLS.');
     }
 
     userAId = await findOrCreateAuthUser(EMAIL_A, PASS);
@@ -222,7 +220,7 @@ describe('RLS isolation in multi-org model', () => {
 
     clientA = await signInClient(EMAIL_A, PASS, TENANT_A_ID);
     clientB = await signInClient(EMAIL_B, PASS, TENANT_B_ID);
-    clientDup = await signInClient(EMAIL_DUP, PASS, TENANT_DUP_ID);
+    await signInClient(EMAIL_DUP, PASS, TENANT_DUP_ID);
   });
 
   afterAll(async () => {

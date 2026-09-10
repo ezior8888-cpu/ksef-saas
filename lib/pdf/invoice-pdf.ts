@@ -6,6 +6,7 @@ import {
   uploadInvoicePdf,
 } from './pdf-storage';
 import { renderInvoicePdf } from './invoice-renderer';
+import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 
 export type GenerateInvoicePdfResult =
   | { success: true; pdf: Buffer; filename: string }
@@ -57,6 +58,7 @@ export async function generateInvoicePdf(
   // Cache hit: PDF istnieje i jest świeższy niż ostatnia zmiana faktury.
   const cacheValid =
     data.pdfStoragePath &&
+    isTenantStoragePath(data.pdfStoragePath, tenantId) &&
     data.pdfGeneratedAt &&
     (!data.updatedAt ||
       new Date(data.pdfGeneratedAt) >= new Date(data.updatedAt));
@@ -64,7 +66,7 @@ export async function generateInvoicePdf(
   if (cacheValid && data.pdfStoragePath) {
     try {
       if (await invoicePdfExists(data.pdfStoragePath)) {
-        const cached = await downloadInvoicePdf(data.pdfStoragePath);
+        const cached = await downloadInvoicePdf(data.pdfStoragePath, tenantId);
         return { success: true, pdf: cached, filename };
       }
     } catch {

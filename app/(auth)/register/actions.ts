@@ -91,8 +91,6 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
       event: ANALYTICS_EVENTS.signupCompleted,
       properties: { method: 'password' },
       setPersonProperties: {
-        email: authUser.email,
-        first_name: firstName,
         plan: 'trial',
       },
     });

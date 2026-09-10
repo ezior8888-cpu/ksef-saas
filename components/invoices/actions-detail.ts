@@ -68,6 +68,8 @@ export async function downloadInvoiceXmlAction(
       .from('xml_documents')
       .select('sha256_hash')
       .eq('storage_path', inv.xml_storage_path)
+      .eq('tenant_id', inv.tenant_id)
+      .eq('invoice_id', invoiceId)
       .maybeSingle();
 
     if (xmlErr) return { success: false, error: xmlErr.message };
@@ -80,7 +82,8 @@ export async function downloadInvoiceXmlAction(
 
     const xml = await downloadInvoiceXml(
       inv.xml_storage_path,
-      xmlDoc.sha256_hash
+      xmlDoc.sha256_hash,
+      inv.tenant_id,
     );
 
     const safeName = (inv.internal_number ?? invoiceId).replace(

@@ -19,26 +19,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10.33.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high
+
       # `pnpm run ci` (a nie `pnpm ci`) — żeby nie kolidowało z wbudowanym
       # `pnpm ci` (alias na install --frozen-lockfile w nowszych pnpm).
       - name: Run typecheck + lint + tests
         run: pnpm run ci
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        # Zestaw lokalny nie potrzebuje żadnych sekretów ani dostępu do bazy.
 
   # E2E job opcjonalny — uruchamiany gdy repo ma ustawione `vars.RUN_E2E_ON_CI=true`.
   # Wymaga Supabase staging (sekrety w GitHub) + Playwright browsers.
@@ -55,13 +55,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10.33.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies

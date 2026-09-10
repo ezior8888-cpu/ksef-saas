@@ -30,7 +30,7 @@ import {
 import { FLO_TEMPLATES, placeholdersOf, renderCopy, type FloTemplate } from '@/lib/flo/copy';
 import type { FloDbClient } from '@/lib/flo/db-types';
 import { logger } from '@/lib/observability/logger';
-import { redactForModel } from '@/lib/flo/redact';
+import { containsSensitive } from '@/lib/flo/redact';
 import { isAnthropicMocked } from '@/lib/test-mode';
 import type { FloProposalKind } from '@/types/flo';
 
@@ -157,7 +157,7 @@ export function validateModelCopy(
     return {
       ok: false,
       reason: 'unknown_placeholder',
-      detail: `Nie mam wartości dla: ${unknown.join(', ')}. Użyj wyłącznie: ${allowedPlaceholders.join(', ')}.`,
+      detail: `Użyto niedozwolonego placeholdera. Użyj wyłącznie: ${allowedPlaceholders.join(', ')}.`,
     };
   }
 
@@ -190,20 +190,29 @@ export type ModelCall = (req: {
   user: string;
 }) => Promise<ModelCallResult>;
 
+// Only reviewed, static phrases may enter the provider's prompt. Never add
+// document text here at runtime: use local placeholders for all real values.
+export const FLO_HINTS = {
+  repeated_delay: 'To kolejne opóźnienie płatności.',
+  first_document: 'To pierwszy dokument w tej sprawie.',
+  needs_review: 'Sprawa wymaga sprawdzenia przez użytkownika.',
+} as const;
+export type FloHint = keyof typeof FLO_HINTS;
+
 export interface GenerateCopyInput {
   kind: FloProposalKind;
   tenantId: string;
   /** Gotowe, sformatowane wartości — model ich NIE widzi. */
   values: Record<string, string>;
-  /** Kontekst słowny bez liczb i bez danych osobowych, np. „trzecie opóźnienie”. */
-  hints?: string[];
+  /** Kody sprawdzonych podpowiedzi. Wolny tekst nie jest wysyłany. */
+  hints?: readonly FloHint[];
 }
 
 export interface GenerateCopyResult {
   copy: FloTemplate;
   source: 'model' | 'template';
   /** Powód zejścia na szablon — do dziennika, nie dla klienta. */
-  fallbackReason?: 'budget' | 'mocked' | 'no_key' | 'invalid_output' | 'error';
+  fallbackReason?: 'budget' | 'mocked' | 'no_key' | 'invalid_output' | 'unsafe_prompt' | 'error';
 }
 
 /**
@@ -251,8 +260,11 @@ export async function generateCopy(
   }
 
   const model = modelFor(input.kind);
-  const allowed = Object.keys(input.values);
+  const allowed = [...new Set([
+    ...placeholdersOf(template.title), ...placeholdersOf(template.body),
+  ])].filter((name) => Object.hasOwn(input.values, name));
   const userPrompt = buildUserPrompt(input, allowed, template);
+  if (containsSensitive(userPrompt)) return fallback('unsafe_prompt');
 
   let lastDetail = '';
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -302,10 +314,12 @@ function buildUserPrompt(
   allowed: string[],
   template: FloTemplate,
 ): string {
-  // Kontekst słowny idzie przez minimalizację (krok 17). Podpowiedź bywa
-  // budowana z danych dokumentu, a stamtąd do prompta jest jeden nieuważny
-  // szablon — numer konta kontrahenta nie ma czego szukać u dostawcy modelu.
-  const safeHints = redactForModel(input.hints ?? []);
+  // Runtime allowlist also rejects untyped callers and serialized input.
+  // Regex masking cannot promise removal of surnames, lowercase addresses
+  // or novel identifier formats, so free text never reaches this boundary.
+  const safeHints = (input.hints ?? []).flatMap((hint) =>
+    Object.hasOwn(FLO_HINTS, hint) ? [FLO_HINTS[hint]] : [],
+  );
   const hints = safeHints.length ? `\nKontekst: ${safeHints.join('; ')}` : '';
   return [
     `Rodzaj sprawy: ${input.kind}`,

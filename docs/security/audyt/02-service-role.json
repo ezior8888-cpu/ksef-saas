@@ -1,0 +1,5036 @@
+[
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 137,
+    "klasa": "wejście z internetu",
+    "funkcja": "insertOrganizationAsOwner",
+    "tabela": "memberships",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/admin/audit.ts",
+    "linia": 52,
+    "klasa": "biblioteka",
+    "funkcja": "searchAuditLogs",
+    "tabela": "audit_logs",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "SELECT na całej tabeli `audit_logs` — bez filtra po `tenant_id` i z pominięciem RLS obejmuje wiersze wszystkich najemców. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/admin/audit/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin)."
+  },
+  {
+    "plik": "lib/flo/functions/expense-rules.ts",
+    "linia": 266,
+    "klasa": "biblioteka",
+    "funkcja": "invalidateRulesForTenant",
+    "tabela": "categorization_rules",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/flo/functions/payment-chase-handler.ts",
+    "linia": 113,
+    "klasa": "biblioteka",
+    "funkcja": "(najwyższy poziom)",
+    "tabela": "payment_reminders",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/flo/functions/payment-confirm.ts",
+    "linia": 261,
+    "klasa": "biblioteka",
+    "funkcja": "classifyConfirmation",
+    "tabela": "payments",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/import/has-completed-ksef-magic-import.ts",
+    "linia": 12,
+    "klasa": "biblioteka",
+    "funkcja": "(najwyższy poziom)",
+    "tabela": "import_jobs",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "source",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/import/import-engine.ts",
+    "linia": 311,
+    "klasa": "biblioteka",
+    "funkcja": "upsertProducts",
+    "tabela": "products",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/dunning-payment-failed.ts",
+    "linia": 69,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDunningPaymentFailed",
+    "tabela": "billing_notifications",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/nightly-validation-recheck.ts",
+    "linia": 75,
+    "klasa": "zadanie w tle",
+    "funkcja": "runNightlyValidationRecheck",
+    "tabela": "contractors",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id",
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-ocr.ts",
+    "linia": 45,
+    "klasa": "zadanie w tle",
+    "funkcja": "onProcessOcrExhausted",
+    "tabela": "ocr_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id",
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/send-reminder.ts",
+    "linia": 136,
+    "klasa": "zadanie w tle",
+    "funkcja": "runSendReminder",
+    "tabela": "reminder_settings",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/send-reminder.ts",
+    "linia": 146,
+    "klasa": "zadanie w tle",
+    "funkcja": "runSendReminder",
+    "tabela": "reminder_templates",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "stage",
+      "is_default"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "średnie",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "app/accountant/[token]/download/[invoiceId]/route.ts",
+    "linia": 47,
+    "klasa": "wejście z internetu",
+    "funkcja": "GET",
+    "tabela": "xml_documents",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "storage_path"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `storage_path` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 11 miejsc, z czego 9 BEZ widocznego strażnika: `app/api/dev/posthog-test/route.ts`, `app/api/email/unsubscribe/route.ts`, `app/api/gdpr/export/route.ts`, `app/api/health/route.ts`, `app/api/ksef/health/route.ts`, `app/api/sentry-example-api/route.ts`, `app/api/sentry-test-log/route.ts`, `app/api/status/components/route.ts`, `app/auth/callback/route.ts`."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 149,
+    "klasa": "wejście z internetu",
+    "funkcja": "insertOrganizationAsOwner",
+    "tabela": "users",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "app/admin/users/[userId]/billing-actions.ts",
+    "linia": 41,
+    "klasa": "wejście z internetu",
+    "funkcja": "issueRefundAction",
+    "tabela": "stripe_payments",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `app/admin/users/[userId]/_components/payments-section.tsx`."
+  },
+  {
+    "plik": "app/admin/users/[userId]/billing-actions.ts",
+    "linia": 131,
+    "klasa": "wejście z internetu",
+    "funkcja": "result",
+    "tabela": "stripe_refunds",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "payment_id"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `payment_id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `lib/cache/keys.ts`."
+  },
+  {
+    "plik": "lib/admin/refunds.ts",
+    "linia": 129,
+    "klasa": "biblioteka",
+    "funkcja": "refundRow",
+    "tabela": "stripe_payments",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/admin/refunds.ts",
+    "linia": 168,
+    "klasa": "biblioteka",
+    "funkcja": "notifyCustomerOfRefund",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "organization_id",
+      "role",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/admin/users.ts",
+    "linia": 277,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminUserDetail",
+    "tabela": "audit_logs",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "user_id"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `user_id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia."
+  },
+  {
+    "plik": "lib/audit/log-system.ts",
+    "linia": 13,
+    "klasa": "biblioteka",
+    "funkcja": "logAuditSystem",
+    "tabela": "audit_logs",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 18 miejsc, z czego 9 BEZ widocznego strażnika: `app/accountant/[token]/download/[invoiceId]/route.ts`, `app/api/portal/exports/generate/route.ts`, `lib/accountant/load-accountant-portal.ts`, `lib/flo/execute.ts`, `lib/flo/undo.ts`, `lib/ksef/client.ts`, `lib/ksef/upo-client.ts`, `lib/stripe/checkout.ts`, `lib/stripe/webhook-handlers.ts`."
+  },
+  {
+    "plik": "lib/audit/log.ts",
+    "linia": 129,
+    "klasa": "biblioteka",
+    "funkcja": "logAudit",
+    "tabela": "audit_logs",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 11 miejsc, z czego 10 BEZ widocznego strażnika: `app/(auth)/forgot-password/actions.ts`, `app/(auth)/gdpr/cancel/page.tsx`, `app/(auth)/login/actions.ts`, `app/(auth)/login/two-factor/actions.ts`, `app/(auth)/register/actions.ts`, `app/(dashboard)/settings/account/actions.ts`, `app/(dashboard)/settings/security/actions.ts`, `app/api/gdpr/export/route.ts`, `lib/auth/inactivity-logout.ts`, `lib/invoices/ksef-submit-enqueue.ts`."
+  },
+  {
+    "plik": "lib/auth/mfa-recovery.ts",
+    "linia": 69,
+    "klasa": "biblioteka",
+    "funkcja": "generateAndStoreRecoveryCodes",
+    "tabela": "mfa_recovery_codes",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": "user_id",
+    "filtry": [
+      "user_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `app/(dashboard)/settings/security/actions.ts`."
+  },
+  {
+    "plik": "lib/auth/mfa-recovery.ts",
+    "linia": 84,
+    "klasa": "biblioteka",
+    "funkcja": "generateAndStoreRecoveryCodes",
+    "tabela": "mfa_recovery_codes",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "user_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `app/(dashboard)/settings/security/actions.ts`."
+  },
+  {
+    "plik": "lib/auth/mfa-recovery.ts",
+    "linia": 104,
+    "klasa": "biblioteka",
+    "funkcja": "consumeRecoveryCode",
+    "tabela": "mfa_recovery_codes",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "user_id",
+    "filtry": [
+      "user_id",
+      "used_at"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `app/(auth)/login/two-factor/actions.ts`."
+  },
+  {
+    "plik": "lib/auth/mfa-recovery.ts",
+    "linia": 114,
+    "klasa": "biblioteka",
+    "funkcja": "consumeRecoveryCode",
+    "tabela": "mfa_recovery_codes",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "user_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `user_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `app/(auth)/login/two-factor/actions.ts`."
+  },
+  {
+    "plik": "lib/auth/mfa-recovery.ts",
+    "linia": 146,
+    "klasa": "biblioteka",
+    "funkcja": "deleteAllRecoveryCodes",
+    "tabela": "mfa_recovery_codes",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": "user_id",
+    "filtry": [
+      "user_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `app/(dashboard)/settings/security/actions.ts`."
+  },
+  {
+    "plik": "lib/categorization/rule-engine.ts",
+    "linia": 50,
+    "klasa": "biblioteka",
+    "funkcja": "classifyByNip",
+    "tabela": "categorization_rules",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "match_type",
+      "match_value"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `lib/categorization/index.ts`."
+  },
+  {
+    "plik": "lib/categorization/rule-engine.ts",
+    "linia": 109,
+    "klasa": "biblioteka",
+    "funkcja": "classifyByKeyword",
+    "tabela": "categorization_rules",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "match_type"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `lib/categorization/index.ts`."
+  },
+  {
+    "plik": "lib/email/preferences.ts",
+    "linia": 46,
+    "klasa": "biblioteka",
+    "funkcja": "isSubscribed",
+    "tabela": "email_preferences",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "user_id",
+    "filtry": [
+      "user_id",
+      "category"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/email/preferences.ts",
+    "linia": 91,
+    "klasa": "biblioteka",
+    "funkcja": "unsubscribe",
+    "tabela": "email_preferences",
+    "operacja": "UPSERT",
+    "kolumnaIzolacji": "user_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 3 miejsc, z czego 2 BEZ widocznego strażnika: `app/(dashboard)/settings/notifications/email-actions.ts`, `app/api/email/unsubscribe/route.ts`."
+  },
+  {
+    "plik": "lib/email/preferences.ts",
+    "linia": 112,
+    "klasa": "biblioteka",
+    "funkcja": "resubscribe",
+    "tabela": "email_preferences",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": "user_id",
+    "filtry": [
+      "user_id",
+      "category"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `app/(dashboard)/settings/notifications/email-actions.ts`."
+  },
+  {
+    "plik": "lib/exports/data-fetcher.ts",
+    "linia": 95,
+    "klasa": "biblioteka",
+    "funkcja": "fetchInvoiceRows",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "direction",
+      "ksef_status",
+      "issue_date",
+      "issue_date"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/exports/data-fetcher.ts",
+    "linia": 151,
+    "klasa": "biblioteka",
+    "funkcja": "fetchParentInvoiceNumbers",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/feature-flags/index.ts",
+    "linia": 77,
+    "klasa": "biblioteka",
+    "funkcja": "getTenantFlags",
+    "tabela": "tenant_feature_flags",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/flo/fingerprint.ts",
+    "linia": 198,
+    "klasa": "biblioteka",
+    "funkcja": "readState",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `lib/flo/decisions.ts`."
+  },
+  {
+    "plik": "lib/flo/fingerprint.ts",
+    "linia": 230,
+    "klasa": "biblioteka",
+    "funkcja": "readState",
+    "tabela": "expenses",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc, z czego 1 BEZ widocznego strażnika: `lib/flo/decisions.ts`."
+  },
+  {
+    "plik": "lib/flo/functions/expense-review.ts",
+    "linia": 360,
+    "klasa": "biblioteka",
+    "funkcja": "median",
+    "tabela": "expenses",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 3 miejsc, z czego 3 BEZ widocznego strażnika: `lib/flo/functions/expense-missing.ts`, `lib/flo/functions/payment-score.ts`, `lib/flo/rhythm.ts`."
+  },
+  {
+    "plik": "lib/flo/functions/expense-review.ts",
+    "linia": 396,
+    "klasa": "biblioteka",
+    "funkcja": "findStuckOcrJobs",
+    "tabela": "ocr_jobs",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/flo/functions/expense-rules.ts",
+    "linia": 229,
+    "klasa": "biblioteka",
+    "funkcja": "invalidateRulesForTenant",
+    "tabela": "categorization_rules",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/flo/functions/payment-chase-handler.ts",
+    "linia": 81,
+    "klasa": "biblioteka",
+    "funkcja": "(najwyższy poziom)",
+    "tabela": "payments",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "invoice_id"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `invoice_id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/gdpr/data-collector.ts",
+    "linia": 78,
+    "klasa": "biblioteka",
+    "funkcja": "collectUserData",
+    "tabela": "audit_logs",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "user_id",
+      "issued_by_user_id",
+      "user_id",
+      "role"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `user_id, issued_by_user_id, user_id, role` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia."
+  },
+  {
+    "plik": "lib/gdpr/data-collector.ts",
+    "linia": 84,
+    "klasa": "biblioteka",
+    "funkcja": "collectUserData",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "issued_by_user_id",
+      "user_id",
+      "role"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `issued_by_user_id, user_id, role` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia."
+  },
+  {
+    "plik": "lib/import/import-engine.ts",
+    "linia": 146,
+    "klasa": "biblioteka",
+    "funkcja": "upsertContractors",
+    "tabela": "contractors",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "nip"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/import/import-engine.ts",
+    "linia": 162,
+    "klasa": "biblioteka",
+    "funkcja": "upsertContractors",
+    "tabela": "contractors",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/import/import-engine.ts",
+    "linia": 184,
+    "klasa": "biblioteka",
+    "funkcja": "upsertContractors",
+    "tabela": "contractors",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/import/import-engine.ts",
+    "linia": 252,
+    "klasa": "biblioteka",
+    "funkcja": "upsertProducts",
+    "tabela": "products",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/import/import-engine.ts",
+    "linia": 286,
+    "klasa": "biblioteka",
+    "funkcja": "upsertProducts",
+    "tabela": "products",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/import/import-engine.ts",
+    "linia": 348,
+    "klasa": "biblioteka",
+    "funkcja": "insertInvoices",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "internal_number"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/import/import-engine.ts",
+    "linia": 362,
+    "klasa": "biblioteka",
+    "funkcja": "insertInvoices",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "ksef_number"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/import/import-engine.ts",
+    "linia": 427,
+    "klasa": "biblioteka",
+    "funkcja": "insertInvoices",
+    "tabela": "invoices",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/archive-old-invoices.ts",
+    "linia": 29,
+    "klasa": "zadanie w tle",
+    "funkcja": "runArchiveOldInvoices",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "archived_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `archived_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/archive-old-invoices.ts",
+    "linia": 52,
+    "klasa": "zadanie w tle",
+    "funkcja": "runArchiveOldInvoices",
+    "tabela": "xml_documents",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "storage_path"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `storage_path` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/archive-old-invoices.ts",
+    "linia": 87,
+    "klasa": "zadanie w tle",
+    "funkcja": "runArchiveOldInvoices",
+    "tabela": "invoices",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/bulk-import.ts",
+    "linia": 30,
+    "klasa": "zadanie w tle",
+    "funkcja": "onBulkImportExhausted",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/cancel-reminders-on-payment.ts",
+    "linia": 18,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCancelRemindersOnPayment",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/cancel-reminders-on-payment.ts",
+    "linia": 47,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCancelRemindersOnPayment",
+    "tabela": "payment_reminders",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "invoice_id",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `invoice_id, status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/critical-alerts-monitor.ts",
+    "linia": 98,
+    "klasa": "zadanie w tle",
+    "funkcja": "checkOfflineQueueBacklog",
+    "tabela": "ksef_offline_queue",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/critical-alerts-monitor.ts",
+    "linia": 127,
+    "klasa": "zadanie w tle",
+    "funkcja": "checkInngestFailures",
+    "tabela": "inngest_run_log",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `status, created_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/critical-alerts-monitor.ts",
+    "linia": 160,
+    "klasa": "zadanie w tle",
+    "funkcja": "checkPaymentFailures",
+    "tabela": "stripe_payments",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `status, created_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/dunning-payment-failed.ts",
+    "linia": 96,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDunningPaymentFailed",
+    "tabela": "billing_notifications",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "entity_id",
+      "kind"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `entity_id, kind` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/dunning-payment-failed.ts",
+    "linia": 107,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDunningPaymentFailed",
+    "tabela": "billing_notifications",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "entity_id",
+      "kind"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `entity_id, kind` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/dunning-payment-failed.ts",
+    "linia": 132,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDunningPaymentFailed",
+    "tabela": "billing_notifications",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "entity_id",
+      "kind"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `entity_id, kind` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/email-sequence.ts",
+    "linia": 209,
+    "klasa": "zadanie w tle",
+    "funkcja": "runEmailDay1",
+    "tabela": "users",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/email-sequence.ts",
+    "linia": 301,
+    "klasa": "zadanie w tle",
+    "funkcja": "runEmailDay8",
+    "tabela": "users",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/email-sequence.ts",
+    "linia": 397,
+    "klasa": "zadanie w tle",
+    "funkcja": "runEmailDay14",
+    "tabela": "users",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/jobs-watchdog.ts",
+    "linia": 54,
+    "klasa": "zadanie w tle",
+    "funkcja": "runJobsWatchdog",
+    "tabela": "export_jobs",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/jobs-watchdog.ts",
+    "linia": 71,
+    "klasa": "zadanie w tle",
+    "funkcja": "runJobsWatchdog",
+    "tabela": "payment_reminders",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/magic-import-ksef.ts",
+    "linia": 32,
+    "klasa": "zadanie w tle",
+    "funkcja": "onMagicImportExhausted",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/nightly-validation-recheck.ts",
+    "linia": 35,
+    "klasa": "zadanie w tle",
+    "funkcja": "runNightlyValidationRecheck",
+    "tabela": "contractors",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Odczyt CAŁEJ tabeli `contractors` w zadaniu w tle. Dla nocnych przeglądów to normalne — sprawdzić, czy uruchamia je zegar, a nie żądanie z internetu. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/notify-user.ts",
+    "linia": 53,
+    "klasa": "zadanie w tle",
+    "funkcja": "runNotifySuccess",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/notify-user.ts",
+    "linia": 59,
+    "klasa": "zadanie w tle",
+    "funkcja": "runNotifySuccess",
+    "tabela": "upo_receipts",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "invoice_id"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `invoice_id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/notify-user.ts",
+    "linia": 164,
+    "klasa": "zadanie w tle",
+    "funkcja": "runNotifyFailure",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/notify-user.ts",
+    "linia": 170,
+    "klasa": "zadanie w tle",
+    "funkcja": "runNotifyFailure",
+    "tabela": "ksef_submissions",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "invoice_id"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `invoice_id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-offline-queue.ts",
+    "linia": 108,
+    "klasa": "zadanie w tle",
+    "funkcja": "queueItems",
+    "tabela": "ksef_offline_queue",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status",
+      "next_attempt_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `status, next_attempt_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-offline-queue.ts",
+    "linia": 139,
+    "klasa": "zadanie w tle",
+    "funkcja": "queueItems",
+    "tabela": "ksef_offline_queue",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-offline-queue.ts",
+    "linia": 188,
+    "klasa": "zadanie w tle",
+    "funkcja": "queueItems",
+    "tabela": "ksef_offline_queue",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/retention-delete.ts",
+    "linia": 25,
+    "klasa": "zadanie w tle",
+    "funkcja": "runRetentionDelete",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Odczyt CAŁEJ tabeli `invoices` w zadaniu w tle. Dla nocnych przeglądów to normalne — sprawdzić, czy uruchamia je zegar, a nie żądanie z internetu. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/retention-delete.ts",
+    "linia": 58,
+    "klasa": "zadanie w tle",
+    "funkcja": "runRetentionDelete",
+    "tabela": "invoices",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/send-reminder.ts",
+    "linia": 78,
+    "klasa": "zadanie w tle",
+    "funkcja": "runSendReminder",
+    "tabela": "payment_reminders",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/send-reminder.ts",
+    "linia": 114,
+    "klasa": "zadanie w tle",
+    "funkcja": "runSendReminder",
+    "tabela": "payment_reminders",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/send-reminder.ts",
+    "linia": 296,
+    "klasa": "zadanie w tle",
+    "funkcja": "runSendReminder",
+    "tabela": "payment_reminders",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/trial-countdown-emails.ts",
+    "linia": 157,
+    "klasa": "zadanie w tle",
+    "funkcja": "dispatchTrialEmail",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "organization_id",
+      "role",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "ładunek zdarzenia",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Zadanie w tle — wartość z ładunku zdarzenia. Bezpieczne, o ile zdarzenie tworzy kod, a nie użytkownik. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/inngest/jobs/trial-countdown-emails.ts",
+    "linia": 206,
+    "klasa": "zadanie w tle",
+    "funkcja": "dispatchTrialEmail",
+    "tabela": "billing_notifications",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "entity_id",
+      "kind"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `entity_id, kind` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/ksef/error-translator.ts",
+    "linia": 289,
+    "klasa": "biblioteka",
+    "funkcja": "logTranslatedErrorToInvoice",
+    "tabela": "invoices",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/ksef/offline-queue.ts",
+    "linia": 28,
+    "klasa": "biblioteka",
+    "funkcja": "addToOfflineQueue",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 2 miejsc, z czego 1 BEZ widocznego strażnika: `lib/invoices/ksef-submit-enqueue.ts`."
+  },
+  {
+    "plik": "lib/ksef/offline-queue.ts",
+    "linia": 78,
+    "klasa": "biblioteka",
+    "funkcja": "addToOfflineQueue",
+    "tabela": "ksef_offline_queue",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 2 miejsc, z czego 1 BEZ widocznego strażnika: `lib/invoices/ksef-submit-enqueue.ts`."
+  },
+  {
+    "plik": "lib/ksef/offline-queue.ts",
+    "linia": 97,
+    "klasa": "biblioteka",
+    "funkcja": "addToOfflineQueue",
+    "tabela": "ksef_offline_queue",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "idempotency_key"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `idempotency_key` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 2 miejsc, z czego 1 BEZ widocznego strażnika: `lib/invoices/ksef-submit-enqueue.ts`."
+  },
+  {
+    "plik": "lib/ksef/offline-queue.ts",
+    "linia": 108,
+    "klasa": "biblioteka",
+    "funkcja": "addToOfflineQueue",
+    "tabela": "invoices",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 2 miejsc, z czego 1 BEZ widocznego strażnika: `lib/invoices/ksef-submit-enqueue.ts`."
+  },
+  {
+    "plik": "lib/reminders/scheduler.ts",
+    "linia": 222,
+    "klasa": "zadanie w tle",
+    "funkcja": "countSentReminders",
+    "tabela": "payment_reminders",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "invoice_id",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `invoice_id, status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "lib/reminders/scheduler.ts",
+    "linia": 236,
+    "klasa": "zadanie w tle",
+    "funkcja": "getStagesAlreadyQueuedOrSent",
+    "tabela": "payment_reminders",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "invoice_id",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "do-przejrzenia",
+    "powod": "Filtr po `invoice_id, status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Nie znaleziono wywołujących poza własnym plikiem** — funkcja lokalna albo punkt wejścia."
+  },
+  {
+    "plik": "app/(dashboard)/settings/billing/actions.ts",
+    "linia": 53,
+    "klasa": "wejście z internetu",
+    "funkcja": "startCheckoutAction",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "strażnik",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/(dashboard)/settings/billing/actions.ts",
+    "linia": 104,
+    "klasa": "wejście z internetu",
+    "funkcja": "openCustomerPortalAction",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "strażnik",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/accountant/[token]/download/[invoiceId]/route.ts",
+    "linia": 21,
+    "klasa": "wejście z internetu",
+    "funkcja": "GET",
+    "tabela": "accountant_access",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "token_hash"
+    ],
+    "rodzajFiltra": "token",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Wyszukanie po skrócie tokenu — to JEST autoryzacja. Z tokenu dowiadujemy się, o którego najemcę chodzi."
+  },
+  {
+    "plik": "app/accountant/[token]/download/[invoiceId]/route.ts",
+    "linia": 36,
+    "klasa": "wejście z internetu",
+    "funkcja": "GET",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id",
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "app/actions/expenses.ts",
+    "linia": 106,
+    "klasa": "wejście z internetu",
+    "funkcja": "uploadExpensePhotoAction",
+    "tabela": "ocr_jobs",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "strażnik",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: strażnik."
+  },
+  {
+    "plik": "app/actions/expenses.ts",
+    "linia": 134,
+    "klasa": "wejście z internetu",
+    "funkcja": "uploadExpensePhotoAction",
+    "tabela": "ocr_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "app/actions/expenses.ts",
+    "linia": 141,
+    "klasa": "wejście z internetu",
+    "funkcja": "uploadExpensePhotoAction",
+    "tabela": "ocr_jobs",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "app/actions/expenses.ts",
+    "linia": 159,
+    "klasa": "wejście z internetu",
+    "funkcja": "uploadExpensePhotoAction",
+    "tabela": "ocr_jobs",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "app/actions/newsletter.ts",
+    "linia": 66,
+    "klasa": "wejście z internetu",
+    "funkcja": "subscribeNewsletterAction",
+    "tabela": "newsletter_subscribers",
+    "operacja": "UPSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 117,
+    "klasa": "wejście z internetu",
+    "funkcja": "insertOrganizationAsOwner",
+    "tabela": "tenants",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 145,
+    "klasa": "wejście z internetu",
+    "funkcja": "insertOrganizationAsOwner",
+    "tabela": "tenants",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 155,
+    "klasa": "wejście z internetu",
+    "funkcja": "insertOrganizationAsOwner",
+    "tabela": "memberships",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "organization_id",
+      "user_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 160,
+    "klasa": "wejście z internetu",
+    "funkcja": "insertOrganizationAsOwner",
+    "tabela": "tenants",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 187,
+    "klasa": "wejście z internetu",
+    "funkcja": "setActiveOrganizationAction",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "organization_id",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 245,
+    "klasa": "wejście z internetu",
+    "funkcja": "createOrganizationAction",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "nip"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 361,
+    "klasa": "wejście z internetu",
+    "funkcja": "skipOnboardingWithoutNipAction",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "status"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 436,
+    "klasa": "wejście z internetu",
+    "funkcja": "completeCompanyNipAction",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "organization_id",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 460,
+    "klasa": "wejście z internetu",
+    "funkcja": "completeCompanyNipAction",
+    "tabela": "tenants",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id",
+      "nip"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 556,
+    "klasa": "wejście z internetu",
+    "funkcja": "inviteMemberAction",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "organization_id",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "strażnik",
+    "ryzyko": "ok",
+    "powod": "Filtr po `organization_id`, wartość ze źródła: strażnik."
+  },
+  {
+    "plik": "app/actions/organizations.ts",
+    "linia": 576,
+    "klasa": "wejście z internetu",
+    "funkcja": "inviteMemberAction",
+    "tabela": "organization_invitations",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "organization_id",
+      "email",
+      "accepted_at",
+      "revoked_at"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "strażnik",
+    "ryzyko": "ok",
+    "powod": "Filtr po `organization_id`, wartość ze źródła: strażnik."
+  },
+  {
+    "plik": "app/admin/flags/actions.ts",
+    "linia": 40,
+    "klasa": "wejście z internetu",
+    "funkcja": "toggleTenantFlagAction",
+    "tabela": "tenant_feature_flags",
+    "operacja": "UPSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Akcja operatora platformy (`requireAdmin`) przyjmuje `tenantId` jako argument — działanie w poprzek najemców jest tu zamierzone."
+  },
+  {
+    "plik": "app/admin/users/[userId]/billing-actions.ts",
+    "linia": 90,
+    "klasa": "wejście z internetu",
+    "funkcja": "listUserPayments",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "status"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "app/admin/users/actions.ts",
+    "linia": 186,
+    "klasa": "wejście z internetu",
+    "funkcja": "deleteUserGdprAction",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "role"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "app/admin/users/actions.ts",
+    "linia": 196,
+    "klasa": "wejście z internetu",
+    "funkcja": "deleteUserGdprAction",
+    "tabela": "tenants",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/admin/users/actions.ts",
+    "linia": 207,
+    "klasa": "wejście z internetu",
+    "funkcja": "deleteUserGdprAction",
+    "tabela": "memberships",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "app/admin/users/actions.ts",
+    "linia": 253,
+    "klasa": "wejście z internetu",
+    "funkcja": "addUserNoteAction",
+    "tabela": "admin_user_notes",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/admin/users/actions.ts",
+    "linia": 283,
+    "klasa": "wejście z internetu",
+    "funkcja": "archiveUserNoteAction",
+    "tabela": "admin_user_notes",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/admin/users/actions.ts",
+    "linia": 293,
+    "klasa": "wejście z internetu",
+    "funkcja": "archiveUserNoteAction",
+    "tabela": "admin_user_notes",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/api/email/resend-webhook/route.ts",
+    "linia": 130,
+    "klasa": "wejście z internetu",
+    "funkcja": "handleBounce",
+    "tabela": "email_bounces",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/api/email/resend-webhook/route.ts",
+    "linia": 172,
+    "klasa": "wejście z internetu",
+    "funkcja": "handleComplaint",
+    "tabela": "email_bounces",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/api/email/resend-webhook/route.ts",
+    "linia": 254,
+    "klasa": "wejście z internetu",
+    "funkcja": "POST",
+    "tabela": "email_bounces",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/api/health/route.ts",
+    "linia": 40,
+    "klasa": "wejście z internetu",
+    "funkcja": "GET",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/api/portal/exports/generate/route.ts",
+    "linia": 42,
+    "klasa": "wejście z internetu",
+    "funkcja": "POST",
+    "tabela": "accountant_access",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "token_hash"
+    ],
+    "rodzajFiltra": "token",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Wyszukanie po skrócie tokenu — to JEST autoryzacja. Z tokenu dowiadujemy się, o którego najemcę chodzi."
+  },
+  {
+    "plik": "app/api/status/components/route.ts",
+    "linia": 45,
+    "klasa": "wejście z internetu",
+    "funkcja": "checkDatabase",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/invite/[token]/page.tsx",
+    "linia": 29,
+    "klasa": "wejście z internetu",
+    "funkcja": "InviteLandingPage",
+    "tabela": "organization_invitations",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "token_hash"
+    ],
+    "rodzajFiltra": "token",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Wyszukanie po skrócie tokenu — to JEST autoryzacja. Z tokenu dowiadujemy się, o którego najemcę chodzi."
+  },
+  {
+    "plik": "app/onboarding/import-source/page.tsx",
+    "linia": 28,
+    "klasa": "wejście z internetu",
+    "funkcja": "ImportSourcePage",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "organization_id",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "ciasteczko",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "app/onboarding/import-source/page.tsx",
+    "linia": 38,
+    "klasa": "wejście z internetu",
+    "funkcja": "ImportSourcePage",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "app/onboarding/magic-import/page.tsx",
+    "linia": 29,
+    "klasa": "wejście z internetu",
+    "funkcja": "MagicImportPage",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "organization_id",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "lib/accountant/load-accountant-portal.ts",
+    "linia": 37,
+    "klasa": "biblioteka",
+    "funkcja": "loadAccountantPortal",
+    "tabela": "accountant_access",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "token_hash"
+    ],
+    "rodzajFiltra": "token",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Wyszukanie po skrócie tokenu — to JEST autoryzacja. Z tokenu dowiadujemy się, o którego najemcę chodzi."
+  },
+  {
+    "plik": "lib/accountant/load-accountant-portal.ts",
+    "linia": 49,
+    "klasa": "biblioteka",
+    "funkcja": "loadAccountantPortal",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/accountant/load-accountant-portal.ts",
+    "linia": 57,
+    "klasa": "biblioteka",
+    "funkcja": "loadAccountantPortal",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/accountant/load-accountant-portal.ts",
+    "linia": 65,
+    "klasa": "biblioteka",
+    "funkcja": "loadAccountantPortal",
+    "tabela": "accountant_access",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/admin/flags.ts",
+    "linia": 48,
+    "klasa": "biblioteka",
+    "funkcja": "listTenantsWithFlags",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "deleted_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/admin/flags.ts",
+    "linia": 76,
+    "klasa": "biblioteka",
+    "funkcja": "listTenantsWithFlags",
+    "tabela": "tenant_feature_flags",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/admin/flags/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin)."
+  },
+  {
+    "plik": "lib/admin/metrics.ts",
+    "linia": 70,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminOverviewMetrics",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "is_active",
+      "deleted_at",
+      "created_at",
+      "created_at",
+      "direction",
+      "created_at",
+      "direction",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/admin/metrics.ts",
+    "linia": 71,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminOverviewMetrics",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "is_active",
+      "deleted_at",
+      "created_at",
+      "created_at",
+      "direction",
+      "created_at",
+      "direction",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/admin/metrics.ts",
+    "linia": 76,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminOverviewMetrics",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "created_at",
+      "created_at",
+      "direction",
+      "created_at",
+      "direction",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/admin/metrics.ts",
+    "linia": 84,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminOverviewMetrics",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "created_at",
+      "created_at",
+      "direction",
+      "created_at",
+      "direction",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/admin/metrics.ts",
+    "linia": 88,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminOverviewMetrics",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "created_at",
+      "direction",
+      "created_at",
+      "direction",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/admin/metrics.ts",
+    "linia": 92,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminOverviewMetrics",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "direction",
+      "created_at",
+      "direction",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `direction, created_at, direction, ksef_status, created_at, ksef_status, status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 2 miejsc i KAŻDE jest chronione (`app/admin/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin; `lib/inngest/jobs/daily-analytics-digest.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/admin/metrics.ts",
+    "linia": 97,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminOverviewMetrics",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "direction",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `direction, ksef_status, created_at, ksef_status, status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 2 miejsc i KAŻDE jest chronione (`app/admin/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin; `lib/inngest/jobs/daily-analytics-digest.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/admin/metrics.ts",
+    "linia": 103,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminOverviewMetrics",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "ksef_status",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `ksef_status, status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 2 miejsc i KAŻDE jest chronione (`app/admin/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin; `lib/inngest/jobs/daily-analytics-digest.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/admin/metrics.ts",
+    "linia": 107,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminOverviewMetrics",
+    "tabela": "organization_join_requests",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `status` zamiast po `organization_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 2 miejsc i KAŻDE jest chronione (`app/admin/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin; `lib/inngest/jobs/daily-analytics-digest.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/admin/refunds.ts",
+    "linia": 184,
+    "klasa": "biblioteka",
+    "funkcja": "notifyCustomerOfRefund",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/admin/support.ts",
+    "linia": 51,
+    "klasa": "biblioteka",
+    "funkcja": "getRecentSignups",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "status"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "lib/admin/support.ts",
+    "linia": 165,
+    "klasa": "biblioteka",
+    "funkcja": "getRecentlyFailedInvoices",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "ksef_status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `ksef_status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/admin/support/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin)."
+  },
+  {
+    "plik": "lib/admin/support.ts",
+    "linia": 223,
+    "klasa": "biblioteka",
+    "funkcja": "getPendingJoinRequests",
+    "tabela": "organization_join_requests",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `status` zamiast po `organization_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/admin/support/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin)."
+  },
+  {
+    "plik": "lib/admin/system.ts",
+    "linia": 30,
+    "klasa": "biblioteka",
+    "funkcja": "getKsefHealthHistory",
+    "tabela": "ksef_health_log",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "env",
+      "recorded_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/admin/system.ts",
+    "linia": 70,
+    "klasa": "biblioteka",
+    "funkcja": "getInngestJobStats",
+    "tabela": "inngest_run_log",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `created_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/admin/system/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin)."
+  },
+  {
+    "plik": "lib/admin/system.ts",
+    "linia": 201,
+    "klasa": "biblioteka",
+    "funkcja": "getOfflineQueueSnapshot",
+    "tabela": "ksef_offline_queue",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status",
+      "status",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `status, status, status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/admin/system/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin)."
+  },
+  {
+    "plik": "lib/admin/system.ts",
+    "linia": 205,
+    "klasa": "biblioteka",
+    "funkcja": "getOfflineQueueSnapshot",
+    "tabela": "ksef_offline_queue",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `status, status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/admin/system/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin)."
+  },
+  {
+    "plik": "lib/admin/system.ts",
+    "linia": 209,
+    "klasa": "biblioteka",
+    "funkcja": "getOfflineQueueSnapshot",
+    "tabela": "ksef_offline_queue",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/admin/system/page.tsx` — układ `app/admin/layout.tsx` → requireAdmin)."
+  },
+  {
+    "plik": "lib/admin/users.ts",
+    "linia": 76,
+    "klasa": "biblioteka",
+    "funkcja": "listAdminUsers",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "status"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "lib/admin/users.ts",
+    "linia": 214,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminUserDetail",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "lib/admin/users.ts",
+    "linia": 238,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminUserDetail",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: sprawdzone członkostwo."
+  },
+  {
+    "plik": "lib/admin/users.ts",
+    "linia": 244,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminUserDetail",
+    "tabela": "expenses",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: sprawdzone członkostwo."
+  },
+  {
+    "plik": "lib/admin/users.ts",
+    "linia": 285,
+    "klasa": "biblioteka",
+    "funkcja": "getAdminUserDetail",
+    "tabela": "admin_user_notes",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "user_id",
+      "archived_at"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/auth/ksef-verification-guard.ts",
+    "linia": 101,
+    "klasa": "biblioteka",
+    "funkcja": "requireKsefVerificationForBackgroundJob",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/auth/mfa-recovery.ts",
+    "linia": 133,
+    "klasa": "biblioteka",
+    "funkcja": "countRemainingRecoveryCodes",
+    "tabela": "mfa_recovery_codes",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "user_id",
+    "filtry": [
+      "user_id",
+      "used_at"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/(dashboard)/settings/security/page.tsx` — układ `app/(dashboard)/layout.tsx` → sesja)."
+  },
+  {
+    "plik": "lib/backup/backup-log.ts",
+    "linia": 67,
+    "klasa": "zadanie w tle",
+    "funkcja": "logBackupStart",
+    "tabela": "backup_log",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/backup/backup-log.ts",
+    "linia": 92,
+    "klasa": "zadanie w tle",
+    "funkcja": "logBackupSuccess",
+    "tabela": "backup_log",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "ładunek zdarzenia",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/backup/backup-log.ts",
+    "linia": 111,
+    "klasa": "zadanie w tle",
+    "funkcja": "logBackupFailure",
+    "tabela": "backup_log",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "ładunek zdarzenia",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/backup/backup-log.ts",
+    "linia": 143,
+    "klasa": "zadanie w tle",
+    "funkcja": "getLastBackup",
+    "tabela": "backup_log",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "kind"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/billing/operator-config.ts",
+    "linia": 49,
+    "klasa": "biblioteka",
+    "funkcja": "getOperatorTenant",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/billing/self-invoice.ts",
+    "linia": 84,
+    "klasa": "biblioteka",
+    "funkcja": "buildSelfInvoiceDraft",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/billing/self-invoice.ts",
+    "linia": 192,
+    "klasa": "biblioteka",
+    "funkcja": "insertSelfInvoice",
+    "tabela": "invoices",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/self-invoice-payment.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/billing/self-invoice.ts",
+    "linia": 224,
+    "klasa": "biblioteka",
+    "funkcja": "insertSelfInvoice",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "internal_number"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/billing/self-invoice.ts",
+    "linia": 237,
+    "klasa": "biblioteka",
+    "funkcja": "insertSelfInvoice",
+    "tabela": "invoice_line_items",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/billing/self-invoice.ts",
+    "linia": 254,
+    "klasa": "biblioteka",
+    "funkcja": "insertSelfInvoice",
+    "tabela": "invoices",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/categorization/index.ts",
+    "linia": 93,
+    "klasa": "biblioteka",
+    "funkcja": "learnFromCorrection",
+    "tabela": "categorization_rules",
+    "operacja": "UPSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/actions/expenses.ts` — strażnik w pliku)."
+  },
+  {
+    "plik": "lib/categorization/index.ts",
+    "linia": 109,
+    "klasa": "biblioteka",
+    "funkcja": "learnFromCorrection",
+    "tabela": "categorization_rules",
+    "operacja": "UPSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/actions/expenses.ts` — strażnik w pliku)."
+  },
+  {
+    "plik": "lib/categorization/rule-engine.ts",
+    "linia": 63,
+    "klasa": "biblioteka",
+    "funkcja": "classifyByNip",
+    "tabela": "categorization_rules",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/categorization/rule-engine.ts",
+    "linia": 79,
+    "klasa": "biblioteka",
+    "funkcja": "classifyByNip",
+    "tabela": "kpir_global_rules",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "nip"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/categorization/rule-engine.ts",
+    "linia": 132,
+    "klasa": "biblioteka",
+    "funkcja": "classifyByKeyword",
+    "tabela": "kpir_global_rules",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/dashboard-shell-data.ts",
+    "linia": 50,
+    "klasa": "biblioteka",
+    "funkcja": "fetchMembershipRowsWithTenantsFromAdmin",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "status"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "lib/email/preferences.ts",
+    "linia": 67,
+    "klasa": "biblioteka",
+    "funkcja": "isEmailBlocked",
+    "tabela": "email_bounces",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "email",
+      "bounce_type"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/email/preferences.ts",
+    "linia": 127,
+    "klasa": "biblioteka",
+    "funkcja": "getUnsubscribedCategories",
+    "tabela": "email_preferences",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "user_id",
+    "filtry": [
+      "user_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/(dashboard)/settings/notifications/page.tsx` — układ `app/(dashboard)/layout.tsx` → sesja)."
+  },
+  {
+    "plik": "lib/exports/data-fetcher.ts",
+    "linia": 40,
+    "klasa": "biblioteka",
+    "funkcja": "fetchInvoicesForExport",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/exports/data-fetcher.ts",
+    "linia": 181,
+    "klasa": "biblioteka",
+    "funkcja": "resolveLinesForInvoices",
+    "tabela": "invoice_line_items",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "invoice_id"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/feature-flags/global-flags.ts",
+    "linia": 47,
+    "klasa": "biblioteka",
+    "funkcja": "readAllFlags",
+    "tabela": "global_feature_flags",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/feature-flags/global-flags.ts",
+    "linia": 102,
+    "klasa": "biblioteka",
+    "funkcja": "setGlobalFlag",
+    "tabela": "global_feature_flags",
+    "operacja": "UPSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/flo/functions/audit-sweep.ts",
+    "linia": 19,
+    "klasa": "biblioteka",
+    "funkcja": "runKsefAuditSweep",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/flo/functions/audit-sweep.ts",
+    "linia": 33,
+    "klasa": "biblioteka",
+    "funkcja": "runKsefAuditSweep",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "direction",
+      "tenant_id",
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/flo/tick.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/flo/functions/audit-sweep.ts",
+    "linia": 39,
+    "klasa": "biblioteka",
+    "funkcja": "runKsefAuditSweep",
+    "tabela": "contractors",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/flo/tick.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/flo/functions/audit-sweep.ts",
+    "linia": 44,
+    "klasa": "biblioteka",
+    "funkcja": "runKsefAuditSweep",
+    "tabela": "expenses",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/flo/tick.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/flo/functions/audit-sweep.ts",
+    "linia": 61,
+    "klasa": "biblioteka",
+    "funkcja": "runKsefAuditSweep",
+    "tabela": "upo_receipts",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "invoice_id"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `invoice_id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/flo/tick.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/flo/functions/expense-review.ts",
+    "linia": 319,
+    "klasa": "biblioteka",
+    "funkcja": "readSellerHistory",
+    "tabela": "expenses",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "seller_name"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/process-ocr.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/gdpr/data-collector.ts",
+    "linia": 77,
+    "klasa": "biblioteka",
+    "funkcja": "collectUserData",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "user_id",
+      "issued_by_user_id",
+      "user_id",
+      "role"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "lib/gdpr/data-collector.ts",
+    "linia": 89,
+    "klasa": "biblioteka",
+    "funkcja": "collectUserData",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "role"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "lib/gdpr/deletion.ts",
+    "linia": 96,
+    "klasa": "biblioteka",
+    "funkcja": "createGdprRequest",
+    "tabela": "gdpr_deletion_requests",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "user_id"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/gdpr/deletion.ts",
+    "linia": 116,
+    "klasa": "biblioteka",
+    "funkcja": "createGdprRequest",
+    "tabela": "gdpr_deletion_requests",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/gdpr/deletion.ts",
+    "linia": 148,
+    "klasa": "biblioteka",
+    "funkcja": "cancelGdprRequest",
+    "tabela": "gdpr_deletion_requests",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "cancel_token"
+    ],
+    "rodzajFiltra": "token",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/gdpr/deletion.ts",
+    "linia": 157,
+    "klasa": "biblioteka",
+    "funkcja": "cancelGdprRequest",
+    "tabela": "gdpr_deletion_requests",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/gdpr/deletion.ts",
+    "linia": 173,
+    "klasa": "biblioteka",
+    "funkcja": "findDueGdprRequests",
+    "tabela": "gdpr_deletion_requests",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "scheduled_for"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/import/import-engine.ts",
+    "linia": 481,
+    "klasa": "biblioteka",
+    "funkcja": "insertInvoices",
+    "tabela": "invoice_line_items",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/import/import-engine.ts",
+    "linia": 485,
+    "klasa": "biblioteka",
+    "funkcja": "insertInvoices",
+    "tabela": "invoices",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/archive-old-invoices.ts",
+    "linia": 70,
+    "klasa": "zadanie w tle",
+    "funkcja": "runArchiveOldInvoices",
+    "tabela": "invoices",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/archive-old-invoices.ts",
+    "linia": 102,
+    "klasa": "zadanie w tle",
+    "funkcja": "runArchiveOldInvoices",
+    "tabela": "invoices",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/auto-categorize-inbox.ts",
+    "linia": 166,
+    "klasa": "zadanie w tle",
+    "funkcja": "runAutoCategorizeInbox",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/auto-categorize-inbox.ts",
+    "linia": 209,
+    "klasa": "zadanie w tle",
+    "funkcja": "runAutoCategorizeInbox",
+    "tabela": "expenses",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "ksef_invoice_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/auto-categorize-inbox.ts",
+    "linia": 220,
+    "klasa": "zadanie w tle",
+    "funkcja": "runAutoCategorizeInbox",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "organization_id",
+      "role",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `organization_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/auto-categorize-inbox.ts",
+    "linia": 231,
+    "klasa": "zadanie w tle",
+    "funkcja": "runAutoCategorizeInbox",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "organization_id",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `organization_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/auto-categorize-inbox.ts",
+    "linia": 245,
+    "klasa": "zadanie w tle",
+    "funkcja": "runAutoCategorizeInbox",
+    "tabela": "expenses",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/bulk-import.ts",
+    "linia": 52,
+    "klasa": "zadanie w tle",
+    "funkcja": "runBulkImportFile",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/bulk-import.ts",
+    "linia": 97,
+    "klasa": "zadanie w tle",
+    "funkcja": "runBulkImportFile",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/bulk-import.ts",
+    "linia": 111,
+    "klasa": "zadanie w tle",
+    "funkcja": "runBulkImportFile",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/bulk-import.ts",
+    "linia": 130,
+    "klasa": "zadanie w tle",
+    "funkcja": "runBulkImportFile",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/bulk-validate-contractors.ts",
+    "linia": 20,
+    "klasa": "zadanie w tle",
+    "funkcja": "runBulkValidateContractors",
+    "tabela": "contractors",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/bulk-validate-contractors.ts",
+    "linia": 60,
+    "klasa": "zadanie w tle",
+    "funkcja": "runBulkValidateContractors",
+    "tabela": "contractors",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id",
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/cleanup-old-backups.ts",
+    "linia": 73,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCleanupOldBackups",
+    "tabela": "backup_log",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "kind"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/inngest/jobs/cleanup-old-backups.ts",
+    "linia": 79,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCleanupOldBackups",
+    "tabela": "backup_log",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "kind"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/inngest/jobs/cleanup-old-backups.ts",
+    "linia": 110,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCleanupOldBackups",
+    "tabela": "backup_log",
+    "operacja": "DELETE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/inngest/jobs/co-pilot-monthly.ts",
+    "linia": 120,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCoPilotMonthly",
+    "tabela": "accountant_settings",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "co_pilot_enabled",
+      "send_day_of_month"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `co_pilot_enabled, send_day_of_month` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/co-pilot-monthly.ts",
+    "linia": 163,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCoPilotMonthly",
+    "tabela": "accountant_settings",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "co_pilot_enabled"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/co-pilot-monthly.ts",
+    "linia": 258,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCoPilotSendPackage",
+    "tabela": "accountant_settings",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/co-pilot-monthly.ts",
+    "linia": 294,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCoPilotSendPackage",
+    "tabela": "export_jobs",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/co-pilot-monthly.ts",
+    "linia": 337,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCoPilotSendPackage",
+    "tabela": "export_jobs",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/co-pilot-monthly.ts",
+    "linia": 376,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCoPilotSendPackage",
+    "tabela": "export_files",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "export_job_id"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `export_job_id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/co-pilot-monthly.ts",
+    "linia": 410,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCoPilotSendPackage",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/inngest/jobs/co-pilot-monthly.ts",
+    "linia": 525,
+    "klasa": "zadanie w tle",
+    "funkcja": "runCoPilotSendPackage",
+    "tabela": "accountant_settings",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/critical-alerts-monitor.ts",
+    "linia": 53,
+    "klasa": "zadanie w tle",
+    "funkcja": "checkKsefDowntime",
+    "tabela": "ksef_health_log",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "recorded_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/inngest/jobs/download-upo.ts",
+    "linia": 40,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDownloadUpo",
+    "tabela": "upo_receipts",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "invoice_id"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `invoice_id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/download-upo.ts",
+    "linia": 63,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDownloadUpo",
+    "tabela": "upo_receipts",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/download-upo.ts",
+    "linia": 77,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDownloadUpo",
+    "tabela": "upo_receipts",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/download-upo.ts",
+    "linia": 106,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDownloadUpo",
+    "tabela": "upo_receipts",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/download-upo.ts",
+    "linia": 113,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDownloadUpo",
+    "tabela": "upo_receipts",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/download-upo.ts",
+    "linia": 137,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDownloadUpo",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/download-upo.ts",
+    "linia": 177,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDownloadUpo",
+    "tabela": "upo_receipts",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/dunning-payment-failed.ts",
+    "linia": 85,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDunningPaymentFailed",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "organization_id",
+      "role",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `organization_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/dunning-payment-failed.ts",
+    "linia": 116,
+    "klasa": "zadanie w tle",
+    "funkcja": "runDunningPaymentFailed",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/inngest/jobs/email-sequence.ts",
+    "linia": 218,
+    "klasa": "zadanie w tle",
+    "funkcja": "runEmailDay1",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/email-sequence.ts",
+    "linia": 310,
+    "klasa": "zadanie w tle",
+    "funkcja": "runEmailDay8",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/email-sequence.ts",
+    "linia": 317,
+    "klasa": "zadanie w tle",
+    "funkcja": "runEmailDay8",
+    "tabela": "expenses",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/email-sequence.ts",
+    "linia": 406,
+    "klasa": "zadanie w tle",
+    "funkcja": "runEmailDay14",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/inngest/jobs/exports-generate.ts",
+    "linia": 231,
+    "klasa": "zadanie w tle",
+    "funkcja": "runExportsGenerate",
+    "tabela": "export_jobs",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/exports-generate.ts",
+    "linia": 244,
+    "klasa": "zadanie w tle",
+    "funkcja": "runExportsGenerate",
+    "tabela": "export_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/exports-generate.ts",
+    "linia": 269,
+    "klasa": "zadanie w tle",
+    "funkcja": "runExportsGenerate",
+    "tabela": "export_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/exports-generate.ts",
+    "linia": 327,
+    "klasa": "zadanie w tle",
+    "funkcja": "runExportsGenerate",
+    "tabela": "export_files",
+    "operacja": "UPSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/exports-generate.ts",
+    "linia": 351,
+    "klasa": "zadanie w tle",
+    "funkcja": "runExportsGenerate",
+    "tabela": "export_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/magic-import-ksef.ts",
+    "linia": 55,
+    "klasa": "zadanie w tle",
+    "funkcja": "runMagicImportKsef",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/magic-import-ksef.ts",
+    "linia": 76,
+    "klasa": "zadanie w tle",
+    "funkcja": "runMagicImportKsef",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/magic-import-ksef.ts",
+    "linia": 90,
+    "klasa": "zadanie w tle",
+    "funkcja": "runMagicImportKsef",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/magic-import-ksef.ts",
+    "linia": 129,
+    "klasa": "zadanie w tle",
+    "funkcja": "runMagicImportKsef",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/magic-import-ksef.ts",
+    "linia": 145,
+    "klasa": "zadanie w tle",
+    "funkcja": "runMagicImportKsef",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/magic-import-ksef.ts",
+    "linia": 168,
+    "klasa": "zadanie w tle",
+    "funkcja": "runMagicImportKsef",
+    "tabela": "import_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/notify-user.ts",
+    "linia": 109,
+    "klasa": "zadanie w tle",
+    "funkcja": "runNotifySuccess",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/notify-user.ts",
+    "linia": 231,
+    "klasa": "zadanie w tle",
+    "funkcja": "runNotifyFailure",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-ocr.ts",
+    "linia": 67,
+    "klasa": "zadanie w tle",
+    "funkcja": "runProcessOcr",
+    "tabela": "ocr_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id",
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-ocr.ts",
+    "linia": 79,
+    "klasa": "zadanie w tle",
+    "funkcja": "runProcessOcr",
+    "tabela": "ocr_jobs",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id",
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-ocr.ts",
+    "linia": 113,
+    "klasa": "zadanie w tle",
+    "funkcja": "runProcessOcr",
+    "tabela": "ocr_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id",
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-ocr.ts",
+    "linia": 159,
+    "klasa": "zadanie w tle",
+    "funkcja": "runProcessOcr",
+    "tabela": "expenses",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-ocr.ts",
+    "linia": 196,
+    "klasa": "zadanie w tle",
+    "funkcja": "runProcessOcr",
+    "tabela": "ocr_jobs",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id",
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-c.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-offline-queue.ts",
+    "linia": 48,
+    "klasa": "zadanie w tle",
+    "funkcja": "runProcessOfflineQueue",
+    "tabela": "ksef_offline_queue",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-offline-queue.ts",
+    "linia": 161,
+    "klasa": "zadanie w tle",
+    "funkcja": "queueItems",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-offline-queue.ts",
+    "linia": 257,
+    "klasa": "zadanie w tle",
+    "funkcja": "runOfflineQueueSuccess",
+    "tabela": "ksef_offline_queue",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "invoice_id",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `invoice_id, status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-offline-queue.ts",
+    "linia": 293,
+    "klasa": "zadanie w tle",
+    "funkcja": "runOfflineQueueFailure",
+    "tabela": "ksef_offline_queue",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "invoice_id",
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `invoice_id, status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/process-offline-queue.ts",
+    "linia": 306,
+    "klasa": "zadanie w tle",
+    "funkcja": "runOfflineQueueFailure",
+    "tabela": "ksef_offline_queue",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/self-invoice-payment.ts",
+    "linia": 153,
+    "klasa": "zadanie w tle",
+    "funkcja": "runSelfInvoicePayment",
+    "tabela": "stripe_payments",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/trial-countdown-emails.ts",
+    "linia": 174,
+    "klasa": "zadanie w tle",
+    "funkcja": "dispatchTrialEmail",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/inngest/jobs/trial-countdown-emails.ts",
+    "linia": 182,
+    "klasa": "zadanie w tle",
+    "funkcja": "dispatchTrialEmail",
+    "tabela": "billing_notifications",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/inngest/jobs/upo-retry-stale.ts",
+    "linia": 48,
+    "klasa": "zadanie w tle",
+    "funkcja": "runUpoRetryStale",
+    "tabela": "upo_receipts",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `status` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/jobs/handlers/package-d.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/inngest/jobs/verify-backup.ts",
+    "linia": 66,
+    "klasa": "zadanie w tle",
+    "funkcja": "runVerifyBackup",
+    "tabela": "backup_log",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "status"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/invoices/load-tenant-seller.ts",
+    "linia": 25,
+    "klasa": "biblioteka",
+    "funkcja": "loadTenantSellerForForms",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "organization_id",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "ciasteczko",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "lib/invoices/load-tenant-seller.ts",
+    "linia": 34,
+    "klasa": "biblioteka",
+    "funkcja": "loadTenantSellerForForms",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "sprawdzone członkostwo",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/ksef/error-translator.ts",
+    "linia": 99,
+    "klasa": "biblioteka",
+    "funkcja": "lookupExactError",
+    "tabela": "error_translations",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "error_code"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/ksef/error-translator.ts",
+    "linia": 117,
+    "klasa": "biblioteka",
+    "funkcja": "bumpErrorTranslationOccurrence",
+    "tabela": "error_translations",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/ksef/error-translator.ts",
+    "linia": 139,
+    "klasa": "biblioteka",
+    "funkcja": "lookupByXpathPattern",
+    "tabela": "error_translations",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/ksef/health-status.ts",
+    "linia": 154,
+    "klasa": "biblioteka",
+    "funkcja": "persistHealthLogIfRelevant",
+    "tabela": "ksef_health_log",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/observability/business-metrics.ts",
+    "linia": 63,
+    "klasa": "biblioteka",
+    "funkcja": "getDailyMetrics",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "created_at",
+      "direction",
+      "created_at",
+      "direction",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "status",
+      "created_at",
+      "recorded_at",
+      "status",
+      "created_at",
+      "status",
+      "paid_at",
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/observability/business-metrics.ts",
+    "linia": 67,
+    "klasa": "biblioteka",
+    "funkcja": "getDailyMetrics",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "direction",
+      "created_at",
+      "direction",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "status",
+      "created_at",
+      "recorded_at",
+      "status",
+      "created_at",
+      "status",
+      "paid_at",
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `direction, created_at, direction, ksef_status, created_at, ksef_status, created_at, ksef_status, status, created_at, recorded_at, status, created_at, status, paid_at, status, created_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/daily-summary-email.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/observability/business-metrics.ts",
+    "linia": 72,
+    "klasa": "biblioteka",
+    "funkcja": "getDailyMetrics",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "direction",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "status",
+      "created_at",
+      "recorded_at",
+      "status",
+      "created_at",
+      "status",
+      "paid_at",
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `direction, ksef_status, created_at, ksef_status, created_at, ksef_status, status, created_at, recorded_at, status, created_at, status, paid_at, status, created_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/daily-summary-email.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/observability/business-metrics.ts",
+    "linia": 78,
+    "klasa": "biblioteka",
+    "funkcja": "getDailyMetrics",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "ksef_status",
+      "created_at",
+      "ksef_status",
+      "status",
+      "created_at",
+      "recorded_at",
+      "status",
+      "created_at",
+      "status",
+      "paid_at",
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `ksef_status, created_at, ksef_status, status, created_at, recorded_at, status, created_at, status, paid_at, status, created_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/daily-summary-email.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/observability/business-metrics.ts",
+    "linia": 83,
+    "klasa": "biblioteka",
+    "funkcja": "getDailyMetrics",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "ksef_status",
+      "status",
+      "created_at",
+      "recorded_at",
+      "status",
+      "created_at",
+      "status",
+      "paid_at",
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `ksef_status, status, created_at, recorded_at, status, created_at, status, paid_at, status, created_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/daily-summary-email.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/observability/business-metrics.ts",
+    "linia": 87,
+    "klasa": "biblioteka",
+    "funkcja": "getDailyMetrics",
+    "tabela": "ocr_jobs",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status",
+      "created_at",
+      "recorded_at",
+      "status",
+      "created_at",
+      "status",
+      "paid_at",
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `status, created_at, recorded_at, status, created_at, status, paid_at, status, created_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/daily-summary-email.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/observability/business-metrics.ts",
+    "linia": 92,
+    "klasa": "biblioteka",
+    "funkcja": "getDailyMetrics",
+    "tabela": "ksef_health_log",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "recorded_at",
+      "status",
+      "created_at",
+      "status",
+      "paid_at",
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/observability/business-metrics.ts",
+    "linia": 97,
+    "klasa": "biblioteka",
+    "funkcja": "getDailyMetrics",
+    "tabela": "inngest_run_log",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status",
+      "created_at",
+      "status",
+      "paid_at",
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `status, created_at, status, paid_at, status, created_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/daily-summary-email.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/observability/business-metrics.ts",
+    "linia": 102,
+    "klasa": "biblioteka",
+    "funkcja": "getDailyMetrics",
+    "tabela": "stripe_payments",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status",
+      "paid_at",
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `status, paid_at, status, created_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/daily-summary-email.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/observability/business-metrics.ts",
+    "linia": 107,
+    "klasa": "biblioteka",
+    "funkcja": "getDailyMetrics",
+    "tabela": "stripe_payments",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "status",
+      "created_at"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `status, created_at` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/daily-summary-email.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/push/sender.ts",
+    "linia": 84,
+    "klasa": "biblioteka",
+    "funkcja": "sendPushToUser",
+    "tabela": "push_subscriptions",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "user_id",
+      "is_active"
+    ],
+    "rodzajFiltra": "użytkownik",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Filtr po `user_id, is_active` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 2 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/notify-user.ts` — uruchamiane zegarem, nie żądaniem; `lib/inngest/jobs/process-ocr.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/push/sender.ts",
+    "linia": 110,
+    "klasa": "biblioteka",
+    "funkcja": "sendPushToUser",
+    "tabela": "push_subscriptions",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 2 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/notify-user.ts` — uruchamiane zegarem, nie żądaniem; `lib/inngest/jobs/process-ocr.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/push/sender.ts",
+    "linia": 120,
+    "klasa": "biblioteka",
+    "funkcja": "sendPushToUser",
+    "tabela": "push_subscriptions",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 2 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/notify-user.ts` — uruchamiane zegarem, nie żądaniem; `lib/inngest/jobs/process-ocr.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/push/sender.ts",
+    "linia": 145,
+    "klasa": "biblioteka",
+    "funkcja": "sendPushToTenant",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "organization_id",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Filtr wypełniony argumentem funkcji — bezpieczeństwo zależy od KAŻDEGO wywołującego. **Prześledzone:** wołana z 3 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/cancel-reminders-on-payment.ts` — uruchamiane zegarem, nie żądaniem; `lib/inngest/jobs/cert-expiry-alert.ts` — uruchamiane zegarem, nie żądaniem; `lib/inngest/jobs/inbox-polling.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/reminders/scheduler.ts",
+    "linia": 109,
+    "klasa": "zadanie w tle",
+    "funkcja": "decideNextReminder",
+    "tabela": "contractors",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id",
+      "nip"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "ładunek zdarzenia",
+    "ryzyko": "ok",
+    "powod": "Zadanie w tle — wartość z ładunku zdarzenia. Bezpieczne, o ile zdarzenie tworzy kod, a nie użytkownik. **Prześledzone:** wołana z 2 miejsc i KAŻDE jest chronione (`app/actions/reminders.ts` — strażnik w pliku; `lib/inngest/jobs/reminder-scheduler.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/reminders/scheduler.ts",
+    "linia": 125,
+    "klasa": "zadanie w tle",
+    "funkcja": "decideNextReminder",
+    "tabela": "reminder_settings",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "tenant_id"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Filtr po `tenant_id`, wartość ze źródła: wiersz z bazy."
+  },
+  {
+    "plik": "lib/reminders/scheduler.ts",
+    "linia": 291,
+    "klasa": "zadanie w tle",
+    "funkcja": "findInvoicesRequiringReminders",
+    "tabela": "invoices",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "direction",
+      "ksef_status",
+      "payment_status",
+      "reminders_paused"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `direction, ksef_status, payment_status, reminders_paused` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`lib/inngest/jobs/reminder-scheduler.ts` — uruchamiane zegarem, nie żądaniem)."
+  },
+  {
+    "plik": "lib/stripe/customer.ts",
+    "linia": 37,
+    "klasa": "biblioteka",
+    "funkcja": "ensureStripeCustomer",
+    "tabela": "tenants",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/stripe/customer.ts",
+    "linia": 79,
+    "klasa": "biblioteka",
+    "funkcja": "ensureStripeCustomer",
+    "tabela": "tenants",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/stripe/webhook-handlers.ts",
+    "linia": 56,
+    "klasa": "biblioteka",
+    "funkcja": "handleSubscriptionUpserted",
+    "tabela": "subscriptions",
+    "operacja": "UPSERT",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po kolumnie izolacji jest, ale nie ustaliłem pochodzenia wartości. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/api/stripe/webhook/route.ts` — weryfikacja podpisu nadawcy)."
+  },
+  {
+    "plik": "lib/stripe/webhook-handlers.ts",
+    "linia": 104,
+    "klasa": "biblioteka",
+    "funkcja": "handleSubscriptionDeleted",
+    "tabela": "subscriptions",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": "tenant_id",
+    "filtry": [
+      "stripe_subscription_id"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Filtr po `stripe_subscription_id` zamiast po `tenant_id`. Bezpieczne, jeśli ten identyfikator pochodzi z zapytania już ograniczonego do najemcy — do sprawdzenia. **Prześledzone:** wołana z 1 miejsc i KAŻDE jest chronione (`app/api/stripe/webhook/route.ts` — weryfikacja podpisu nadawcy)."
+  },
+  {
+    "plik": "lib/stripe/webhook-store.ts",
+    "linia": 39,
+    "klasa": "biblioteka",
+    "funkcja": "tryClaimWebhookEvent",
+    "tabela": "stripe_webhook_events",
+    "operacja": "UPSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/stripe/webhook-store.ts",
+    "linia": 63,
+    "klasa": "biblioteka",
+    "funkcja": "tryClaimWebhookEvent",
+    "tabela": "stripe_webhook_events",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/stripe/webhook-store.ts",
+    "linia": 78,
+    "klasa": "biblioteka",
+    "funkcja": "tryClaimWebhookEvent",
+    "tabela": "stripe_webhook_events",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/stripe/webhook-store.ts",
+    "linia": 96,
+    "klasa": "biblioteka",
+    "funkcja": "finalizeWebhookEvent",
+    "tabela": "stripe_webhook_events",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/supabase/auth-context.ts",
+    "linia": 69,
+    "klasa": "biblioteka",
+    "funkcja": "requireUserAndActiveOrg",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "organization_id",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "lib/supabase/auth-context.ts",
+    "linia": 123,
+    "klasa": "biblioteka",
+    "funkcja": "resolveApiUserAndActiveOrg",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "organization_id",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "lib/supabase/page-context.ts",
+    "linia": 41,
+    "klasa": "biblioteka",
+    "funkcja": "getPageContext",
+    "tabela": "memberships",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": "organization_id",
+    "filtry": [
+      "user_id",
+      "organization_id",
+      "status"
+    ],
+    "rodzajFiltra": "najemca",
+    "zrodlo": "ciasteczko",
+    "ryzyko": "ok",
+    "powod": "Sprawdzenie członkostwa po `user_id` — to jest strażnik, nie odczyt danych najemcy."
+  },
+  {
+    "plik": "lib/support/conversations.ts",
+    "linia": 74,
+    "klasa": "biblioteka",
+    "funkcja": "createConversation",
+    "tabela": "support_conversations",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/support/conversations.ts",
+    "linia": 98,
+    "klasa": "biblioteka",
+    "funkcja": "getOwnedConversation",
+    "tabela": "support_conversations",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/support/conversations.ts",
+    "linia": 113,
+    "klasa": "biblioteka",
+    "funkcja": "getMessages",
+    "tabela": "support_messages",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "conversation_id"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/support/conversations.ts",
+    "linia": 133,
+    "klasa": "biblioteka",
+    "funkcja": "appendMessage",
+    "tabela": "support_messages",
+    "operacja": "INSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/support/conversations.ts",
+    "linia": 151,
+    "klasa": "biblioteka",
+    "funkcja": "appendMessage",
+    "tabela": "support_conversations",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/support/conversations.ts",
+    "linia": 163,
+    "klasa": "biblioteka",
+    "funkcja": "updateConversation",
+    "tabela": "support_conversations",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "argument funkcji",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/validation/cache.ts",
+    "linia": 99,
+    "klasa": "biblioteka",
+    "funkcja": "validateNipCached",
+    "tabela": "validation_cache",
+    "operacja": "SELECT",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "nip",
+      "country_code",
+      "source"
+    ],
+    "rodzajFiltra": "inny",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/validation/cache.ts",
+    "linia": 112,
+    "klasa": "biblioteka",
+    "funkcja": "validateNipCached",
+    "tabela": "validation_cache",
+    "operacja": "UPDATE",
+    "kolumnaIzolacji": null,
+    "filtry": [
+      "id"
+    ],
+    "rodzajFiltra": "klucz",
+    "zrodlo": "wiersz z bazy",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  },
+  {
+    "plik": "lib/validation/cache.ts",
+    "linia": 154,
+    "klasa": "biblioteka",
+    "funkcja": "validateNipCached",
+    "tabela": "validation_cache",
+    "operacja": "UPSERT",
+    "kolumnaIzolacji": null,
+    "filtry": [],
+    "rodzajFiltra": "brak",
+    "zrodlo": "nieustalone",
+    "ryzyko": "ok",
+    "powod": "Tabela globalna — nie ma kolumny izolacji, więc nie ma czego pilnować."
+  }
+]

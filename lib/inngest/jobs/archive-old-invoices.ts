@@ -53,12 +53,14 @@ export async function runArchiveOldInvoices({ step, logger }: JobContext) {
           .from('xml_documents')
           .select('sha256_hash')
           .eq('storage_path', candidate.xml_storage_path)
+          .eq('tenant_id', candidate.tenant_id)
+          .eq('invoice_id', candidate.id)
           .maybeSingle();
 
         const hash = xmlDoc?.sha256_hash as string | undefined;
         const xml = hash
-          ? await downloadInvoiceXml(candidate.xml_storage_path, hash)
-          : await downloadInvoiceXmlUnchecked(candidate.xml_storage_path);
+          ? await downloadInvoiceXml(candidate.xml_storage_path, hash, candidate.tenant_id)
+          : await downloadInvoiceXmlUnchecked(candidate.xml_storage_path, candidate.tenant_id);
 
         const glacierKey = await uploadToGlacier(
           candidate.tenant_id as string,

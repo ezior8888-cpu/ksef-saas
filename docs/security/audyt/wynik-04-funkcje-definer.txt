@@ -1,0 +1,80 @@
+═══ 4.1 Funkcje DEFINER BEZ przypiętej ścieżki wyszukiwania ═══
+ funkcja | argumenty | wlasciciel | ustawienia 
+---------+-----------+------------+------------
+(0 rows)
+
+
+═══ 4.2 Wszystkie funkcje DEFINER z ustawieniami ═══
+               funkcja                | wlasciciel |           ustawienia           
+--------------------------------------+------------+--------------------------------
+ accept_organization_invitation       | postgres   | search_path=public
+ admin_database_size                  | postgres   | search_path=pg_catalog
+ admin_table_sizes                    | postgres   | search_path=pg_catalog, public
+ anonymize_user_audit_logs            | postgres   | search_path=public, pg_temp
+ approve_join_request                 | postgres   | search_path=public
+ auth_email_registered                | postgres   | search_path=public, auth
+ change_membership_role               | postgres   | search_path=public
+ claim_ksef_nip_ownership             | postgres   | search_path=public
+ cleanup_old_audit_logs               | postgres   | search_path=public, pg_temp
+ create_organization_with_owner       | postgres   | search_path=public
+ deny_join_request                    | postgres   | search_path=public
+ get_current_tenant_id                | postgres   | search_path=public
+ handle_new_user                      | postgres   | search_path=public
+ has_org_role                         | postgres   | search_path=public
+ increment_push_failed_count          | postgres   | search_path=public
+ is_member_of                         | postgres   | search_path=public
+ is_nip_ksef_claimed                  | postgres   | search_path=public
+ list_public_tables                   | postgres   | search_path=pg_catalog, public
+ recalculate_invoice_paid_amount      | postgres   | search_path=public
+ refresh_dashboard_materialized_views | postgres   | search_path=public, pg_temp
+ revoke_membership                    | postgres   | search_path=public
+ shares_active_org_with               | postgres   | search_path=public
+(22 rows)
+
+
+═══ 4.3 Treść `get_current_tenant_id()` — fundament całej izolacji ═══
+                             definicja                             
+-------------------------------------------------------------------
+ CREATE OR REPLACE FUNCTION public.get_current_tenant_id()        +
+  RETURNS uuid                                                    +
+  LANGUAGE plpgsql                                                +
+  STABLE SECURITY DEFINER                                         +
+  SET search_path TO 'public'                                     +
+ AS $function$                                                    +
+ DECLARE                                                          +
+   v_headers jsonb;                                               +
+   v_org_text text;                                               +
+   v_org uuid;                                                    +
+ BEGIN                                                            +
+   BEGIN                                                          +
+     v_headers := current_setting('request.headers', true)::jsonb;+
+   EXCEPTION WHEN others THEN                                     +
+     v_headers := NULL;                                           +
+   END;                                                           +
+                                                                  +
+   IF v_headers IS NULL THEN                                      +
+     RETURN NULL;                                                 +
+   END IF;                                                        +
+                                                                  +
+   v_org_text := v_headers ->> 'x-active-org';                    +
+                                                                  +
+   IF v_org_text IS NULL OR v_org_text = '' THEN                  +
+     RETURN NULL;                                                 +
+   END IF;                                                        +
+                                                                  +
+   BEGIN                                                          +
+     v_org := v_org_text::uuid;                                   +
+   EXCEPTION WHEN others THEN                                     +
+     RETURN NULL;                                                 +
+   END;                                                           +
+                                                                  +
+   IF NOT public.is_member_of(v_org) THEN                         +
+     RETURN NULL;                                                 +
+   END IF;                                                        +
+                                                                  +
+   RETURN v_org;                                                  +
+ END;                                                             +
+ $function$                                                       +
+ 
+(1 row)
+

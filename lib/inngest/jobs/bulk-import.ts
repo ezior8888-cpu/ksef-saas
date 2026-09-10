@@ -62,7 +62,7 @@ export async function runBulkImportFile(data: Parameters<typeof importFileUpload
     });
 
     const fileContent = await step.run('download-file', async () => {
-      const buffer = await downloadImportFile(filePath);
+      const buffer = await downloadImportFile(filePath, tenantId);
       return buffer.toString('utf-8');
     });
 

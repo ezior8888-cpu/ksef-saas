@@ -79,7 +79,7 @@ export function isTurnstileConfigured(): boolean {
 /**
  * Weryfikuje token Turnstile po stronie serwera.
  *
- * - Brak ustawienia env vars → `{ success: true, skipped: true }`.
+ * - Brak ustawienia env vars TYLKO lokalnie → `{ success: true, skipped: true }`.
  *   Lokalny dev nie wymaga konta Cloudflare.
  * - Brak tokena gdy skonfigurowane → `{ success: false }` (twardy blok).
  * - Network error / timeout → `{ success: false, errors: ['network'] }`.
@@ -104,7 +104,9 @@ export async function verifyTurnstile(
   }
 
   if (!isTurnstileConfigured()) {
-    return { success: true, skipped: true };
+    return isLocalDevEnv()
+      ? { success: true, skipped: true }
+      : { success: false, errors: ['not-configured'] };
   }
 
   if (!token || typeof token !== 'string' || token.length < 10) {

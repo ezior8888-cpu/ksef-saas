@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 
 import { getPostHogNodeClient } from '@/lib/analytics/posthog-node-client';
 
@@ -13,20 +14,19 @@ export async function GET() {
     return NextResponse.json({ error: 'Not available in production' }, { status: 404 });
   }
 
-  const client = getPostHogNodeClient();
-  if (!client) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: 'PostHog not configured — set NEXT_PUBLIC_POSTHOG_KEY in .env.local',
-      },
-      { status: 503 },
-    );
-  }
-
-  console.log('=== PROXY: Próba wysłania eventu do PostHog ===');
-
   try {
+    const client = getPostHogNodeClient();
+    if (!client) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'PostHog not configured — set NEXT_PUBLIC_POSTHOG_KEY in .env.local',
+        },
+        { status: 503 },
+      );
+    }
+
+    console.log('=== PROXY: Próba wysłania eventu do PostHog ===');
     client.capture({
       distinctId: 'test_user_backend',
       event: 'test_proxy_event_v2',
@@ -45,9 +45,11 @@ export async function GET() {
       event: 'test_proxy_event_v2',
     });
   } catch (error) {
-    console.error('=== PROXY BŁĄD podczas capture: ===', error);
+    const errorId = Sentry.captureException(error, {
+      tags: { area: 'dev.posthog_test' },
+    });
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      { ok: false, error: 'PostHog test failed', errorId },
       { status: 500 },
     );
   }

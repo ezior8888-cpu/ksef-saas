@@ -1,12 +1,14 @@
 import { DeleteAccountForm } from '@/components/settings/delete-account-form';
 import { Card } from '@/components/ui/card';
 import { getPageContext } from '@/lib/supabase/page-context';
+import { getActiveGdprRequest } from '@/lib/gdpr/deletion';
 import { GdprSection } from './_components/gdpr-section';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AccountSettingsPage() {
-  const { supabase, tenantId, role } = await getPageContext();
+  const { supabase, tenantId, role, user } = await getPageContext();
+  const gdprRequest = await getActiveGdprRequest(supabase, user.id);
 
   const { data: tenant } = await supabase
     .from('tenants')
@@ -31,7 +33,12 @@ export default async function AccountSettingsPage() {
         <p className="text-sm text-muted-foreground mb-4">
           Prawo dostępu (art. 15) i prawo do bycia zapomnianym (art. 17).
         </p>
-        <GdprSection />
+        <GdprSection initialRequest={gdprRequest ? {
+          status: gdprRequest.status,
+          scheduledFor: new Date(gdprRequest.scheduled_for).toLocaleDateString('pl-PL', {
+            year: 'numeric', month: 'long', day: 'numeric',
+          }),
+        } : null} />
       </Card>
 
       <Card className="p-6 border-destructive/30">

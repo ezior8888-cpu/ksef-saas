@@ -202,7 +202,7 @@ export async function downloadExportFileAction(
   }
 
   try {
-    const buffer = await downloadFromR2(file.r2_path);
+    const buffer = await downloadFromR2(file.r2_path, tenantId);
 
     // Atomowy increment przez RPC `increment_export_file_download` (00030).
     //
