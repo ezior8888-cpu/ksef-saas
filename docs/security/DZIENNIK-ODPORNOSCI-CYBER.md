@@ -174,6 +174,25 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 
 **Stan odbioru:** kod i testy lokalne powyższych kontroli gotowe; nowy przebieg CodeQL oraz Offline security inventory czeka na publikację. Pełne F01/F03/F04 pozostają otwarte. Właściciel GitHub musi włączyć Dependency graph i ustawić wymagane kontrole; Bartek odpowiada za środowisko, wdrożone RLS, backup/restore i pozostałą infrastrukturę. MFA, pozostałe miejsca service_role, runtime i ćwiczenia incydentu nie zostały ukończone w tym pakiecie.
 
+## 2026-09-13 — Wyjaśnienie maili GitHub i ujawnione automatyczne preview Vercel
+
+**Zlecenie:** Igor, przed zatwierdzeniem kolejnej publikacji, przekazał treść powiadomień i poprosił o ich sprawdzenie. To NIE jest zgoda na push ani wdrożenie. W tej kontroli odczytano załącznik, wyniki/logi GitHub i komentarze PR; nie zmieniano ustawień ani nie otwierano aplikacji preview.
+
+**Powiadomienia:** w załączniku jest sześć maili o wynikach trzech wersji PR (d19c45a, 30f5a79, 7182579), po dwa zestawy kontroli CI/Security, oraz dwa komentarze botów. GitHub Code Scanning informuje o uruchomieniu skanera; Vercel informuje o podglądzie.
+
+**Potwierdzony stan ostatniej opublikowanej wersji 7182579:**
+- [CI 34776188642](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34776188642): główne testy PASS (job 103774620194); dependency-review FAIL (103774620349), z jawnym komunikatem o konieczności włączenia Dependency graph.
+- [Security 34776188655](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34776188655): Secret scan PASS, CodeQL Actions PASS, CodeQL JS/TS blokuje cztery ustalenia opisane wyżej. Ich poprawki w 4041868 są nadal lokalne.
+- Pierwsze niepowodzenia parsera SARIF i brak xmllint były problemami odbioru konfiguracji CI; poprawiono je w 30f5a79. Późniejsze czerwone powiadomienia nie oznaczają nowych niezależnych incydentów.
+
+**Nowy fakt wymagający korekty wcześniejszych deklaracji:** [komentarz Vercel w PR #2](https://github.com/ezior8888-cpu/ksef-saas/pull/2#issuecomment-5655251921) został zaktualizowany do Ready o 18:59:09 UTC; status Vercel dla 7182579 również ma success. Zatem publikacja PR wyzwoliła AUTOMATYCZNE wdrożenie wersji podglądowej przez istniejącą integrację. Wcześniejsze określenie „bez wdrożenia” było zbyt szerokie: nie wykonano polecenia deploy, merge ani operacji na Hetzner/Coolify, lecz automatyczny preview powstał.
+
+**Źródło automatyzacji:** sprawdzone workflowy nie wywołują Vercel CLI/API/hooków. Repo zachowuje vercel.json, a dokument migracji dopuszcza Vercel jako zapas. To jest zgodne z istniejącą integracją GitHub–Vercel, która uruchamia preview po aktualizacji gałęzi/PR ([dokumentacja Vercel](https://vercel.com/docs/git/vercel-for-github)). Nie odczytano ustawień konta Vercel.
+
+**Nierozstrzygnięte:** jakie dane, sekrety i usługi są przypisane do preview oraz czy taka integracja jest nadal zamierzona. Etykieta Preview nie dowodzi izolacji od produkcyjnej bazy. Przed kolejną publikacją należy z Bartkiem potwierdzić ten zakres i ewentualnie ograniczyć/wyłączyć automatyzację w oddzielnym zatwierdzonym działaniu. Nie obiecywać, że kolejny push „nie wdraża”: przy obecnym stanie może uruchomić następny preview.
+
+**Status:** nie wysłano kolejnych commitów, nie zmieniono powiadomień ani integracji, nie wykonano restartów czy migracji. Zatwierdzenie opisane w poprzednim wpisie pozostaje oczekujące, teraz z ujawnionym skutkiem automatycznego preview. Aktualizacja dziennika wyłącznie lokalna.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:
