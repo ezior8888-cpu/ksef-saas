@@ -3,7 +3,7 @@
 // Trigger: 06:00 PL codziennie — godzina przed startem dnia roboczego.
 // Founder dostaje liczby zanim usiądzie do laptopa.
 //
-// Źródło danych: nasza DB przez `getAdminOverviewMetrics` (Faza 24 admin).
+// Źródło danych: wewnętrzny kolektor metryk platformy, bez sesji użytkownika.
 // PostHog NIE jest źródłem — chcemy niezależnej liczby (gdyby PostHog padł
 // na dłużej, digest dalej działa). PostHog jest do exploracji w dashboardzie.
 
@@ -11,7 +11,7 @@ import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
 import { sendSlackAlert } from '@/lib/alerts/slack';
-import { getAdminOverviewMetrics } from '@/lib/admin/metrics';
+import { collectPlatformOverviewMetrics } from '@/lib/analytics/platform-metrics';
 import { inngest } from '@/lib/inngest/client';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
@@ -22,7 +22,7 @@ import type { JobContext } from '@/lib/jobs/registry';
  */
 export async function runDailyAnalyticsDigest({ step }: JobContext) {
     const metrics = await step.run('collect-metrics', async () => {
-      return await getAdminOverviewMetrics();
+      return await collectPlatformOverviewMetrics();
     });
 
     await step.run('send-slack', async () => {

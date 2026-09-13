@@ -84,6 +84,7 @@ export interface UserPaymentRow {
 }
 
 export async function listUserPayments(userId: string): Promise<UserPaymentRow[]> {
+  await requireAdmin();
   const supabase = createAdminClient();
 
   // 1. Find tenants where user is member.

@@ -1,6 +1,6 @@
 # Plan odporności cybernetycznej FaktFlow / KSeF SaaS
 
-Data: 2026-09-13. Autor: Astra, na prośbę Igora. Status: **plan przyjęty; realizacja rozpoczęta 2026-09-13**. Aktualne wyniki i ograniczenia pierwszego pakietu znajdują się w dzienniku.
+Data: 2026-09-13. Autor: Astra, na prośbę Igora. Status: **plan przyjęty; realizacja rozpoczęta 2026-09-13, przerwa po dzisiejszym pakiecie na polecenie Igora**. Aktualne wyniki i ograniczenia pierwszego pakietu znajdują się w dzienniku.
 
 ## Cel i sposób pracy
 

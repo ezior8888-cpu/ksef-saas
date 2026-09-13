@@ -4,7 +4,7 @@
 
 Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNOSCI-CYBER.md). Jest osobnym etapem po [wcześniejszych naprawach Astry](DZIENNIK-NAPRAW-ASTRA.md) i [audytach Claude](DZIENNIK-AUDYT.md). Nie zastępuje ich ani nie zmienia historycznych wyników.
 
-- Aktualna zgoda Igora z 2026-09-13: rozpocząć stopniową realizację planu. Pierwszy pakiet obejmuje CI i zabezpieczenie celu testów. Samo otwarcie tego pliku nie upoważnia do wdrożenia produkcji, SQL, testów na produkcji ani rotacji; działania operacyjne nadal wymagają konkretnego uzgodnienia.
+- Aktualna dyspozycja Igora z 2026-09-13: opublikować przygotowane poprawki, przekazać listę Bartkowi i zakończyć na dziś. Kolejnej fazy nie rozpoczynać bez wznowienia. Zgoda na publikację uwzględnia automatyczny Vercel Preview, ale nie upoważnia do merge, działań na produkcji, SQL, testów na produkcji ani rotacji.
 - Przed pracą przeczytaj aktualne instrukcje projektu i zgodę z rozmowy, sprawdź gałąź oraz cudze niezapisane zmiany.
 - Dopisuj datowane wpisy. Korekty starszych wniosków opisuj jako korekty, z przyczyną i nowym dowodem.
 - Oddzielaj: zaplanowane, w kodzie/konfiguracji, sprawdzone na testach, wdrożone, potwierdzone w nazwanym środowisku. Przywrócenie problemu otwiera wpis ponownie.
@@ -131,9 +131,79 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 - js/incomplete-sanitization, scripts/security/audit-client-bundle.ts: fragment otoczenia maskował tylko bieżące trafienie i mógł zawierać sąsiedni lub powtórzony sekret. Usunięto snippety; pozostają nazwa zmiennej, plik, offset UTF-16 i liczniki. Metadane raportu są kodowane. Helper przetestowano bez uruchamiania skryptu audytu, builda i odczytu .env.
 - js/user-controlled-bypass, app/api/email/unsubscribe/route.ts: ręczny przegląd nie potwierdził obejścia; zapis już wymagał zweryfikowanego HMAC. Weryfikacja wykonuje się teraz przed rozróżnieniem brakującego tokenu. Zachowano odpowiedzi GET/POST i zakres tokenu. Testy korzystają z prawdziwego podpisu/weryfikatora oraz atrapy zapisu i potwierdzają odmowę dla braku, podmiany, wygaśnięcia i niedostępnego klucza.
 
-**Weryfikacja celowana:** 12 testów recovery/GUS, 14 testów tokenu oraz 4 testy metadanych raportu PASS; lint zmienionych plików PASS. Niezależny przegląd zmiany unsubscribe bez uwag. Workflow Security uruchamia testy bezpiecznej diagnostyki i redakcji. Nowy CodeQL jest konieczny do potwierdzenia zamknięcia czterech sygnałów.
+**Weryfikacja celowana:** 12 testów recovery/GUS, 14 testów tokenu oraz 4 testy metadanych raportu PASS; lint zmienionych plików PASS. Niezależny przegląd zmiany unsubscribe bez uwag. Workflow Security uruchamia testy bezpiecznej diagnostyki i redakcji. Nowy CodeQL jest konieczny do potwierdzenia zamknięcia czterech sygnałów; wysyłka 4041868 została później zatrzymana przez automatyczny przegląd (opis poniżej).
 
 **Granice:** audit-client-bundle pozostaje skryptem operatorskim poza zwykłym CI; stary tryb build wymaga osobnego przeglądu wyjścia procesu i zmiennych. Żaden z tych testów nie odczytywał sekretów aplikacji ani nie korzystał z prawdziwych kont, bazy lub usług. Poprawki administracji i inwentaryzacji pozostają osobnym pakietem lokalnym.
+
+## 2026-09-13 — Drugi pakiet: kontrola dostępu przy danych i powtarzalny spis
+
+**Fazy:** F01, F03, F04. **Zakres:** lokalny kod i hermetyczne testy na gałęzi codex/security-audit-inventory; bez migracji, prawdziwej bazy, usług i wdrożenia. Podstawa opublikowana w PR #2 to 7182579. Lokalny commit 4041868 zawiera osobne poprawki czterech sygnałów CodeQL i czeka na publikację.
+
+**Ręczny przegląd czterech początkowych ścieżek:**
+- Audyt administracyjny: searchAuditLogs tworzył service_role bez własnego requireAdmin, polegając na app/admin/layout.tsx. Potwierdzono brak kontroli na granicy odczytu; nie wykonywano dowodu wycieku przez HTTP. Autoryzacja musi być przy danych, ponieważ layout nie zapewnia takiej granicy dla komponentów potomnych. [Dokumentacja Next.js](https://nextjs.org/docs/app/guides/authentication).
+- Tworzenie faktur: plik wejściowy przekazuje eksporty; rzeczywiste akcje sprawdzają użytkownika i korzystają z klienta sesji. Nie potwierdzono obejścia. Potwierdzenie wdrożonych polityk RLS pozostaje po stronie środowiska.
+- Pobranie XML przez księgową: token jest wyszukiwany po hash, sprawdzane są ważność, cofnięcie i poziom dostępu. Faktura oraz metadane pliku są wiązane z firmą tokenu; ścieżka i suma pliku są weryfikowane. Nie potwierdzono obejścia przez samą podmianę invoiceId.
+- Newsletter: publiczny zapis nie ujawnia listy subskrybentów ani faktur. Alarm o braku strażnika nie dowodzi wycieku. Ryzyko spamu przez zaufanie do X-Forwarded-For i zachowanie limitera przy awarii Redis pozostaje osobnym zadaniem zależnym także od proxy.
+
+**Naprawy granicy dostępu (pięć operacji):**
+- requireAdmin jest oczekiwany przed utworzeniem klienta w searchAuditLogs, listAdminUsers, getAdminUserDetail i listUserPayments. Ostatnia funkcja jest eksportowaną Server Action; layout nie chroni jej bezpośredniego wywołania.
+- getAdminOverviewMetrics jest chronionym wrapperem. Wewnętrzny kolektor przeniesiono do lib/analytics/platform-metrics.ts. Korzysta z niego wrapper oraz zaufany daily-analytics-digest, bez przełącznika skipAuth.
+- Nie zmieniono obliczeń metryk, formatów wyników, harmonogramów ani obu backendów jobów. Kolektor nie służy do bezpośredniego użycia w obsłudze żądań.
+- Helpery są oznaczone server-only. Poprawiono komentarze sugerujące wystarczalność layoutu.
+- Strony audytu i szczegółów użytkownika nie przechwytują już przekierowania odmowy jako pustej listy. Błąd odczytu trafia do granicy błędu strony zamiast udawać brak danych.
+
+**Commity lokalne:** 9d1b03f — pięć granic dostępu i testy joba; c046ad0 — bezpieczna inwentaryzacja, testy i osobny job CI. 4041868 pozostaje odrębnym pakietem ustaleń CodeQL.
+
+**Narzędzia audytu:**
+- Wyłącznie audit-service-role.ts i inventory-entrypoints.ts otrzymały wymagany --output-dir do nowego katalogu. Blokowane są URL/UNC, historyczny docs/security/audyt (także przez junction) i nadpisanie istniejących raportów. Nie czytają .env i nie wykonują kodu aplikacji.
+- Osobny job Offline security inventory testuje helper i generuje spisy w RUNNER_TEMP, bez instalowania zależności aplikacji i publikacji artefaktów. Exit 0 oznacza wygenerowanie spisu, nie brak luk.
+- Korekta inwentarza: strażnik layoutu jest wyłącznie kontekstem. Strona polegająca tylko na nim dostaje zadanie prześledzenia odczytu; silniejsze sygnały zachowują pierwszeństwo.
+- Świeży spis końcowy: 305 zapytań service_role (12 średnich, 76 do przeglądu, 217 heurystyczne ok) oraz 100 wejść (37 z flagą: 1 krytyczne, 3 wysokie, 4 średnie, 29 do przeglądu). Są to etykiety skryptów, NIE potwierdzone podatności.
+- 23 dodatkowe flagi wejść wynikają z korekty założenia o layoucie. Spis nie śledzi wywołań między plikami, dlatego także strona z już chronionym helperem może wymagać ręcznego potwierdzenia. Nie uznajemy 76 lub 37 za licznik ukończenia audytu.
+- Raporty pozostały poza repo w tymczasowym katalogu security-offline-final-omrNpj. SHA-256 czterech historycznych raportów przed/po są identyczne.
+
+**Weryfikacja całego lokalnego stanu:**
+- Vitest: **88 plików / 1373 testy PASS**, w tym 34 testy kontroli administracji i działania kolektora/jobu oraz 26 testów recovery/GUS/unsubscribe.
+- Narzędzia Node: **52/52 PASS** (20 bramki CodeQL, 10 ograniczonej diagnostyki, 18 inwentaryzacji, 4 metadanych raportu pakietu).
+- Typecheck, lint zmienionych plików, Actionlint trzech workflow i kontrola diffu PASS.
+- Gitleaks przygotowanych poprawek CodeQL i administracji: brak trafień. Testy XML 66/66 i rzeczywisty główny job CI potwierdzono wcześniej w tym wpisie dziennym; generator i walidator FA(3) nie były dalej zmieniane.
+- Testy administracji uruchamiają prawdziwy requireAdmin z atrapą sesji i bazy: odmowa dla braku sesji, zwykłego użytkownika, usuniętej allowlisty oraz błędu weryfikacji; brak klienta w trakcie oczekiwania; zachowane wyniki administratora. Test prawdziwego runDailyAnalyticsDigest wykorzystuje kolektor, atrapę bazy i wysyłki, a próba użycia sesji powodowałaby błąd.
+- Niezależne przeglądy helpera raportów i poprawki searchAuditLogs bez istotnych uwag; uwaga o przechwytywaniu przekierowania została uwzględniona.
+
+**Publikacja i zależności:** automatyczny przegląd uprawnień odrzucił wysyłkę nowych poprawek aplikacji/raportowania do publicznego ezior8888-cpu/ksef-saas, wskazując brak wystarczającej zgody dla konkretnego publicznego celu i zestawu. Nie ponowiono zapisu do GitHub ani nie użyto obejścia. Commity i dziennik przygotowano lokalnie; następna zgoda ma obejmować 4041868 do codex/security-foundations (PR #2) oraz drugi pakiet na codex/security-audit-inventory jako draft PR względem foundations. Taka publikacja nie oznacza merge ani deploy.
+
+**Stan odbioru:** kod i testy lokalne powyższych kontroli gotowe; nowy przebieg CodeQL oraz Offline security inventory czeka na publikację. Pełne F01/F03/F04 pozostają otwarte. Właściciel GitHub musi włączyć Dependency graph i ustawić wymagane kontrole; Bartek odpowiada za środowisko, wdrożone RLS, backup/restore i pozostałą infrastrukturę. MFA, pozostałe miejsca service_role, runtime i ćwiczenia incydentu nie zostały ukończone w tym pakiecie.
+
+## 2026-09-13 — Wyjaśnienie maili GitHub i ujawnione automatyczne preview Vercel
+
+**Zlecenie:** Igor, przed zatwierdzeniem kolejnej publikacji, przekazał treść powiadomień i poprosił o ich sprawdzenie. To NIE jest zgoda na push ani wdrożenie. W tej kontroli odczytano załącznik, wyniki/logi GitHub i komentarze PR; nie zmieniano ustawień ani nie otwierano aplikacji preview.
+
+**Powiadomienia:** w załączniku jest sześć maili o wynikach trzech wersji PR (d19c45a, 30f5a79, 7182579), po dwa zestawy kontroli CI/Security, oraz dwa komentarze botów. GitHub Code Scanning informuje o uruchomieniu skanera; Vercel informuje o podglądzie.
+
+**Potwierdzony stan ostatniej opublikowanej wersji 7182579:**
+- [CI 34776188642](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34776188642): główne testy PASS (job 103774620194); dependency-review FAIL (103774620349), z jawnym komunikatem o konieczności włączenia Dependency graph.
+- [Security 34776188655](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34776188655): Secret scan PASS, CodeQL Actions PASS, CodeQL JS/TS blokuje cztery ustalenia opisane wyżej. Ich poprawki w 4041868 są nadal lokalne.
+- Pierwsze niepowodzenia parsera SARIF i brak xmllint były problemami odbioru konfiguracji CI; poprawiono je w 30f5a79. Późniejsze czerwone powiadomienia nie oznaczają nowych niezależnych incydentów.
+
+**Nowy fakt wymagający korekty wcześniejszych deklaracji:** [komentarz Vercel w PR #2](https://github.com/ezior8888-cpu/ksef-saas/pull/2#issuecomment-5655251921) został zaktualizowany do Ready o 18:59:09 UTC; status Vercel dla 7182579 również ma success. Zatem publikacja PR wyzwoliła AUTOMATYCZNE wdrożenie wersji podglądowej przez istniejącą integrację. Wcześniejsze określenie „bez wdrożenia” było zbyt szerokie: nie wykonano polecenia deploy, merge ani operacji na Hetzner/Coolify, lecz automatyczny preview powstał.
+
+**Źródło automatyzacji:** sprawdzone workflowy nie wywołują Vercel CLI/API/hooków. Repo zachowuje vercel.json, a dokument migracji dopuszcza Vercel jako zapas. To jest zgodne z istniejącą integracją GitHub–Vercel, która uruchamia preview po aktualizacji gałęzi/PR ([dokumentacja Vercel](https://vercel.com/docs/git/vercel-for-github)). Nie odczytano ustawień konta Vercel.
+
+**Nierozstrzygnięte:** jakie dane, sekrety i usługi są przypisane do preview oraz czy taka integracja jest nadal zamierzona. Etykieta Preview nie dowodzi izolacji od produkcyjnej bazy. Przed kolejną publikacją należy z Bartkiem potwierdzić ten zakres i ewentualnie ograniczyć/wyłączyć automatyzację w oddzielnym zatwierdzonym działaniu. Nie obiecywać, że kolejny push „nie wdraża”: przy obecnym stanie może uruchomić następny preview.
+
+**Status:** nie wysłano kolejnych commitów, nie zmieniono powiadomień ani integracji, nie wykonano restartów czy migracji. Zatwierdzenie opisane w poprzednim wpisie pozostaje oczekujące, teraz z ujawnionym skutkiem automatycznego preview. Aktualizacja dziennika wyłącznie lokalna.
+
+## 2026-09-13 — Zatwierdzona publikacja i zamknięcie dzisiejszego zakresu
+
+**Dyspozycja Igora:** po wyjaśnieniu maili i Vercel Preview zatwierdził publikację przygotowanego pakietu; wyraźnie zabronił rozpoczynania kolejnej fazy i poprosił o listę dla Bartka. Poprzednie wpisy o oczekiwaniu na zgodę są historyczne.
+
+**Wykonano:** wysłano 40418689c301e53a11612f05e34fb5a9b8e6b556 do codex/security-foundations, aktualizując draft PR #2. Powstała [lista czynności dla Bartka](PRZEKAZANIE-BARTEK-2026-09-13.md). Drugi pakiet z 9d1b03f i c046ad0 oraz dziennik przygotowano na codex/security-audit-inventory względem foundations.
+
+**Odbiór publikacji:** PR #2 uruchomił [CI 34777397347](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34777397347) i [Security 34777397329](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34777397329). Dla PR #2 potwierdzono PASS głównego zadania CI, skanu sekretów i obu CodeQL. Surowy raport JS/TS: results=0, high=0, critical=0, inputErrors=0 (job 103777902691). Dependency-review nadal FAIL z powodu wyłączonego Dependency graph. Wynik ostatniego commita drugiego pakietu należy sprawdzić w jego PR; nie zakładać powodzenia przed zakończeniem kontroli.
+
+**Pozostało Bartkowi:** Dependency graph, wymagane kontrole/review, potwierdzenie konfiguracji Vercel Preview, chroniony odizolowany staging i zakres sekretów, zgodność faktycznie wdrożonego kodu/workera/schematu. Instrukcja rozróżnia te czynności od późniejszych faz.
+
+**Granice zgody i zakończenie:** zatwierdzenie uwzględnia ujawnione automatyczne preview po publikacji; nie wykonano merge, polecenia deploy, zmian na Hetzner/Coolify, migracji, restartów ani rotacji. Nie wysyłano wiadomości Bartkowi. Nie rozpoczynamy dalszej fazy ani pracy w tle. Kolejne prace wymagają wznowienia przez użytkownika.
 
 ## Format następnego wpisu
 

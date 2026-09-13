@@ -3,12 +3,15 @@
  *
  * Wszystko leci przez `createAdminClient` (service_role, bypass RLS), bo:
  *   1. Admin musi widzieć cudzą zawartość (organizacje, faktury, notki).
- *   2. Te funkcje są wołane TYLKO z `/admin/*` server components, które są
- *      pre-guarded przez `requireAdmin()` w `app/admin/layout.tsx`.
+ *   2. Każda funkcja sprawdza `requireAdmin()` przed utworzeniem klienta.
+ *      Layout nie gwarantuje kolejności odczytów w komponentach potomnych.
  *
  * NIE używamy Redis cache — admin ogląda dane operacyjne, świeżość > 50ms.
  */
 
+import 'server-only';
+
+import { requireAdmin } from '@/lib/auth/admin-guard';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export interface AdminUserListItem {
@@ -54,6 +57,7 @@ export async function listAdminUsers(
   page: number;
   pageSize: number;
 }> {
+  await requireAdmin();
   const supabase = createAdminClient();
   const page = options.page ?? 0;
   const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
@@ -200,6 +204,7 @@ export interface AdminUserDetail {
 export async function getAdminUserDetail(
   userId: string,
 ): Promise<AdminUserDetail | null> {
+  await requireAdmin();
   const supabase = createAdminClient();
 
   const { data: userData, error: userErr } = await supabase.auth.admin.getUserById(
