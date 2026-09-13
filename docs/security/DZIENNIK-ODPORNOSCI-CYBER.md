@@ -87,7 +87,9 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 
 **Nie wykonano:** mutujących testów RLS/E2E, migracji, połączeń do bazy, rotacji, deploy/restartów, zmian ustawień GitHub ani aktualizacji serwerów. Nie odczytywano wartości sekretów środowiskowych. Skany obejmowały lokalne pliki Git; zamaskowane raporty pozostały w katalogu tymczasowym poza repo.
 
-**Następny krok:** opublikować osobny draft PR względem poprzednich poprawek, potwierdzić rzeczywiste przebiegi CI/CodeQL i zapisać ich wynik. Odbiór kontynuować z właścicielem GitHub oraz przygotowaniem środowiska i odtwarzania z Bartkiem.
+**Publikacja:** próba wysłania wyłącznie gałęzi codex/security-foundations została odrzucona przez automatyczny przegląd uprawnień. Wskazany powód: brak wyraźnej zgody na konkretny zestaw zmian i cel GitHub. Użytkownik otrzymał pytanie określające publiczne repo, gałąź i zakres draft PR. Do czasu odpowiedzi zmiany pozostają lokalne; nie zastosowano obejścia.
+
+**Następny krok:** po zatwierdzeniu publikacji utworzyć osobny draft PR względem poprzednich poprawek, potwierdzić rzeczywiste przebiegi CI/CodeQL i zapisać ich wynik. Odbiór kontynuować z właścicielem GitHub oraz przygotowaniem środowiska i odtwarzania z Bartkiem.
 
 ## Format następnego wpisu
 
