@@ -4,7 +4,7 @@
 
 Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNOSCI-CYBER.md). Jest osobnym etapem po [wcześniejszych naprawach Astry](DZIENNIK-NAPRAW-ASTRA.md) i [audytach Claude](DZIENNIK-AUDYT.md). Nie zastępuje ich ani nie zmienia historycznych wyników.
 
-- Aktualna zgoda Igora z 2026-09-13: rozpocząć stopniową realizację planu. Pierwszy pakiet obejmuje CI i zabezpieczenie celu testów. Samo otwarcie tego pliku nie upoważnia do wdrożenia produkcji, SQL, testów na produkcji ani rotacji; działania operacyjne nadal wymagają konkretnego uzgodnienia.
+- Aktualna dyspozycja Igora z 2026-09-13: opublikować przygotowane poprawki, przekazać listę Bartkowi i zakończyć na dziś. Kolejnej fazy nie rozpoczynać bez wznowienia. Zgoda na publikację uwzględnia automatyczny Vercel Preview, ale nie upoważnia do merge, działań na produkcji, SQL, testów na produkcji ani rotacji.
 - Przed pracą przeczytaj aktualne instrukcje projektu i zgodę z rozmowy, sprawdź gałąź oraz cudze niezapisane zmiany.
 - Dopisuj datowane wpisy. Korekty starszych wniosków opisuj jako korekty, z przyczyną i nowym dowodem.
 - Oddzielaj: zaplanowane, w kodzie/konfiguracji, sprawdzone na testach, wdrożone, potwierdzone w nazwanym środowisku. Przywrócenie problemu otwiera wpis ponownie.
@@ -192,6 +192,18 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 **Nierozstrzygnięte:** jakie dane, sekrety i usługi są przypisane do preview oraz czy taka integracja jest nadal zamierzona. Etykieta Preview nie dowodzi izolacji od produkcyjnej bazy. Przed kolejną publikacją należy z Bartkiem potwierdzić ten zakres i ewentualnie ograniczyć/wyłączyć automatyzację w oddzielnym zatwierdzonym działaniu. Nie obiecywać, że kolejny push „nie wdraża”: przy obecnym stanie może uruchomić następny preview.
 
 **Status:** nie wysłano kolejnych commitów, nie zmieniono powiadomień ani integracji, nie wykonano restartów czy migracji. Zatwierdzenie opisane w poprzednim wpisie pozostaje oczekujące, teraz z ujawnionym skutkiem automatycznego preview. Aktualizacja dziennika wyłącznie lokalna.
+
+## 2026-09-13 — Zatwierdzona publikacja i zamknięcie dzisiejszego zakresu
+
+**Dyspozycja Igora:** po wyjaśnieniu maili i Vercel Preview zatwierdził publikację przygotowanego pakietu; wyraźnie zabronił rozpoczynania kolejnej fazy i poprosił o listę dla Bartka. Poprzednie wpisy o oczekiwaniu na zgodę są historyczne.
+
+**Wykonano:** wysłano 40418689c301e53a11612f05e34fb5a9b8e6b556 do codex/security-foundations, aktualizując draft PR #2. Powstała [lista czynności dla Bartka](PRZEKAZANIE-BARTEK-2026-09-13.md). Drugi pakiet z 9d1b03f i c046ad0 oraz dziennik przygotowano na codex/security-audit-inventory względem foundations.
+
+**Odbiór publikacji:** PR #2 uruchomił [CI 34777397347](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34777397347) i [Security 34777397329](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34777397329). Dla PR #2 potwierdzono PASS głównego zadania CI, skanu sekretów i obu CodeQL. Surowy raport JS/TS: results=0, high=0, critical=0, inputErrors=0 (job 103777902691). Dependency-review nadal FAIL z powodu wyłączonego Dependency graph. Wynik ostatniego commita drugiego pakietu należy sprawdzić w jego PR; nie zakładać powodzenia przed zakończeniem kontroli.
+
+**Pozostało Bartkowi:** Dependency graph, wymagane kontrole/review, potwierdzenie konfiguracji Vercel Preview, chroniony odizolowany staging i zakres sekretów, zgodność faktycznie wdrożonego kodu/workera/schematu. Instrukcja rozróżnia te czynności od późniejszych faz.
+
+**Granice zgody i zakończenie:** zatwierdzenie uwzględnia ujawnione automatyczne preview po publikacji; nie wykonano merge, polecenia deploy, zmian na Hetzner/Coolify, migracji, restartów ani rotacji. Nie wysyłano wiadomości Bartkowi. Nie rozpoczynamy dalszej fazy ani pracy w tle. Kolejne prace wymagają wznowienia przez użytkownika.
 
 ## Format następnego wpisu
 

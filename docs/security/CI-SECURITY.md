@@ -23,7 +23,9 @@ Po udanym CodeQL analyze [bramka SARIF](../../scripts/security/check-codeql-resu
 
 Bramka pokazuje liczniki, bez treści podatności, fragmentów kodu i URL. Nie pomija wyników suppressed/unchanged. Obsługuje określony format CodeQL SARIF 2.1.0; nie jest ogólnym walidatorem SARIF. Poprawny raport z results:[] oznacza brak wyników skanera; nie potwierdza kompletności modelu zagrożeń.
 
-**Sukces testów bramki nie oznacza braku ustaleń CodeQL.** Po korekcie obsługi formatu rzeczywisty przebieg 34775777627 przeszedł dla Actions, a JS/TS zatrzymał się na czterech wynikach high. GitHub API raportowało zero wyników dla zakresu PR; bramka analizuje raport z runnera i nadal blokuje. Ocena i lokalne poprawki trafień (4041868, jeszcze nieopublikowane) znajdują się w dzienniku. Nie zamieniaj tego stanu na zielony poprzez oparcie bramki o sam licznik API.
+**Sukces testów bramki nie oznacza braku ustaleń CodeQL.** Po korekcie obsługi formatu rzeczywisty przebieg 34775777627 przeszedł dla Actions, a JS/TS zatrzymał się na czterech wynikach high. GitHub API raportowało zero wyników dla zakresu PR; bramka analizuje raport z runnera i nadal blokuje. Ocena i poprawki trafień (4041868, opublikowane po zgodzie Igora) znajdują się w dzienniku. Bieżący odbiór należy odczytać z ostatniego przebiegu PR, a historyczne cztery trafienia nie opisują automatycznie nowego commita. Nie zamieniaj tego stanu na zielony poprzez oparcie bramki o sam licznik API.
+
+Odbiór opublikowanego 4041868: [Security 34777397329](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34777397329) — Gitleaks i oba CodeQL PASS, surowy raport JS/TS ma zero wyników. [CI 34777397347](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34777397347) — główny job PASS, dependency-review nadal blokuje brak Dependency graph. Ten dowód odnosi się do tego commita; następne wersje wymagają własnych kontroli.
 
 ## Trzy wąskie wyjątki Gitleaks
 
