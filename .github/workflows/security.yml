@@ -80,6 +80,8 @@ jobs:
           category: /language:${{ matrix.language }}
           output: ${{ runner.temp }}/codeql-results
           upload-database: false
+      - name: Test security report redaction
+        run: node --test scripts/security/print-codeql-locations.test.mjs scripts/security/bundle-report-metadata.test.mjs
       - name: List safe finding locations
         run: node scripts/security/print-codeql-locations.mjs "$RUNNER_TEMP/codeql-results"
       - name: Reject high and critical findings

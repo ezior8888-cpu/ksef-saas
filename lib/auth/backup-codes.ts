@@ -1,9 +1,9 @@
-import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
+import { randomBytes, randomInt, scryptSync, timingSafeEqual } from 'crypto';
 
 /**
  * Recovery codes dla 2FA — generowane przy enrollment TOTP.
  *
- * Alfabet bez ambiguous chars (0/O, 1/I/L) — łatwiej przepisać z kartki.
+ * Alfabet bez cyfr 0/1 i liter O/I — łatwiej przepisać z kartki.
  *
  * Format: XXXXX-XXXXX (10 znaków + separator) — ~50 bitów entropii.
  * Nawet przy mass attack z dostępem do hash-bazy odgadnięcie jednego z 8
@@ -20,10 +20,10 @@ const KEY_LEN = 32;
 export const RECOVERY_CODE_COUNT = 8;
 
 export function generateRecoveryCode(): string {
-  const bytes = randomBytes(CODE_LEN);
   let code = '';
-  for (const b of bytes) {
-    code += ALPHABET[b % ALPHABET.length];
+  for (let index = 0; index < CODE_LEN; index += 1) {
+    // randomInt stays unbiased even if the alphabet length changes.
+    code += ALPHABET[randomInt(ALPHABET.length)];
   }
   return `${code.slice(0, 5)}-${code.slice(5)}`;
 }

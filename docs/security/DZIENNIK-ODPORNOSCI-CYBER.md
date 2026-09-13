@@ -121,6 +121,20 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 
 **Status:** lokalizacja i ocena czterech trafień otwarte do kolejnego przebiegu; to nie cztery potwierdzone podatności. Ustawienia GitHub wymagają Bartka. Zmiany aplikacji i kolejna inwentaryzacja przygotowywane są osobno na lokalnej gałęzi codex/security-audit-inventory.
 
+## 2026-09-13 — Ocena i poprawki czterech ustaleń CodeQL
+
+**Dowód:** [Security 34776188655](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34776188655), JS/TS job 103774620437. Ograniczona diagnostyka podała cztery reguły i lokalizacje. Nie publikowano surowego SARIF ani jego treści. Źródło różnicy względem licznika API: [przypięty CodeQL Action filtruje przesyłane wyniki według zakresu PR](https://github.com/github/codeql-action/blob/b96794f015dfd88f77b49b1c93e0fa7110f94c63/src/upload-lib.ts#L976); bramka nadal sprawdza surowy raport z runnera.
+
+**Ocena i zmiany:**
+- js/biased-cryptographic-random, lib/auth/backup-codes.ts: alfabet ma 32 znaki, więc modulo bajtu przez 32 NIE powodowało nierównomiernego losowania. Pierwsza hipoteza o 31 znakach była błędna i została skorygowana przez deterministyczny test. Zastosowano randomInt(ALPHABET.length), poprawne także przy zmianie długości alfabetu. Zachowano znaki, format i sposób weryfikacji już wydanych kodów. To wzmocnienie konstrukcji, nie dowód słabości wcześniejszych kodów.
+- js/double-escaping, lib/gus/client.ts: sekwencyjne dekodowanie rozwijało &amp;lt; aż do znacznika przed właściwym parserem XML. Nowy decodeSoapXml dekoduje tylko jedną warstwę. Test z prawdziwym XMLParser potwierdza, że zakodowany tekst nazwy nie staje się dodatkowymi polami rekordu. Nie wykonywano zapytań GUS.
+- js/incomplete-sanitization, scripts/security/audit-client-bundle.ts: fragment otoczenia maskował tylko bieżące trafienie i mógł zawierać sąsiedni lub powtórzony sekret. Usunięto snippety; pozostają nazwa zmiennej, plik, offset UTF-16 i liczniki. Metadane raportu są kodowane. Helper przetestowano bez uruchamiania skryptu audytu, builda i odczytu .env.
+- js/user-controlled-bypass, app/api/email/unsubscribe/route.ts: ręczny przegląd nie potwierdził obejścia; zapis już wymagał zweryfikowanego HMAC. Weryfikacja wykonuje się teraz przed rozróżnieniem brakującego tokenu. Zachowano odpowiedzi GET/POST i zakres tokenu. Testy korzystają z prawdziwego podpisu/weryfikatora oraz atrapy zapisu i potwierdzają odmowę dla braku, podmiany, wygaśnięcia i niedostępnego klucza.
+
+**Weryfikacja celowana:** 12 testów recovery/GUS, 14 testów tokenu oraz 4 testy metadanych raportu PASS; lint zmienionych plików PASS. Niezależny przegląd zmiany unsubscribe bez uwag. Workflow Security uruchamia testy bezpiecznej diagnostyki i redakcji. Nowy CodeQL jest konieczny do potwierdzenia zamknięcia czterech sygnałów.
+
+**Granice:** audit-client-bundle pozostaje skryptem operatorskim poza zwykłym CI; stary tryb build wymaga osobnego przeglądu wyjścia procesu i zmiennych. Żaden z tych testów nie odczytywał sekretów aplikacji ani nie korzystał z prawdziwych kont, bazy lub usług. Poprawki administracji i inwentaryzacji pozostają osobnym pakietem lokalnym.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:
