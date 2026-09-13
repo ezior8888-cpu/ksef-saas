@@ -60,6 +60,9 @@ async function handleUnsubscribe(
   source: 'one_click' | 'settings_ui',
   isOneClick: boolean,
 ): Promise<Response> {
+  // Każde wejście przechodzi przez weryfikację. Brak tokenu jest również
+  // wynikiem odmowy; osobna gałąź poniżej ustala tylko treść odpowiedzi.
+  const verified = verifyUnsubscribeToken(token ?? '');
   if (!token) {
     if (isOneClick) {
       return NextResponse.json({ error: 'missing token' }, { status: 400 });
@@ -71,7 +74,7 @@ async function handleUnsubscribe(
     });
   }
 
-  const verified = verifyUnsubscribeToken(token);
+
   if (!verified.valid) {
     if (isOneClick) {
       // RFC 8058: zwracamy 200 OK nawet przy złym tokenie, żeby Gmail
