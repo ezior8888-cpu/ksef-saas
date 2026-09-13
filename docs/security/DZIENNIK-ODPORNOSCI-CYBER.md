@@ -131,9 +131,48 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 - js/incomplete-sanitization, scripts/security/audit-client-bundle.ts: fragment otoczenia maskował tylko bieżące trafienie i mógł zawierać sąsiedni lub powtórzony sekret. Usunięto snippety; pozostają nazwa zmiennej, plik, offset UTF-16 i liczniki. Metadane raportu są kodowane. Helper przetestowano bez uruchamiania skryptu audytu, builda i odczytu .env.
 - js/user-controlled-bypass, app/api/email/unsubscribe/route.ts: ręczny przegląd nie potwierdził obejścia; zapis już wymagał zweryfikowanego HMAC. Weryfikacja wykonuje się teraz przed rozróżnieniem brakującego tokenu. Zachowano odpowiedzi GET/POST i zakres tokenu. Testy korzystają z prawdziwego podpisu/weryfikatora oraz atrapy zapisu i potwierdzają odmowę dla braku, podmiany, wygaśnięcia i niedostępnego klucza.
 
-**Weryfikacja celowana:** 12 testów recovery/GUS, 14 testów tokenu oraz 4 testy metadanych raportu PASS; lint zmienionych plików PASS. Niezależny przegląd zmiany unsubscribe bez uwag. Workflow Security uruchamia testy bezpiecznej diagnostyki i redakcji. Nowy CodeQL jest konieczny do potwierdzenia zamknięcia czterech sygnałów.
+**Weryfikacja celowana:** 12 testów recovery/GUS, 14 testów tokenu oraz 4 testy metadanych raportu PASS; lint zmienionych plików PASS. Niezależny przegląd zmiany unsubscribe bez uwag. Workflow Security uruchamia testy bezpiecznej diagnostyki i redakcji. Nowy CodeQL jest konieczny do potwierdzenia zamknięcia czterech sygnałów; wysyłka 4041868 została później zatrzymana przez automatyczny przegląd (opis poniżej).
 
 **Granice:** audit-client-bundle pozostaje skryptem operatorskim poza zwykłym CI; stary tryb build wymaga osobnego przeglądu wyjścia procesu i zmiennych. Żaden z tych testów nie odczytywał sekretów aplikacji ani nie korzystał z prawdziwych kont, bazy lub usług. Poprawki administracji i inwentaryzacji pozostają osobnym pakietem lokalnym.
+
+## 2026-09-13 — Drugi pakiet: kontrola dostępu przy danych i powtarzalny spis
+
+**Fazy:** F01, F03, F04. **Zakres:** lokalny kod i hermetyczne testy na gałęzi codex/security-audit-inventory; bez migracji, prawdziwej bazy, usług i wdrożenia. Podstawa opublikowana w PR #2 to 7182579. Lokalny commit 4041868 zawiera osobne poprawki czterech sygnałów CodeQL i czeka na publikację.
+
+**Ręczny przegląd czterech początkowych ścieżek:**
+- Audyt administracyjny: searchAuditLogs tworzył service_role bez własnego requireAdmin, polegając na app/admin/layout.tsx. Potwierdzono brak kontroli na granicy odczytu; nie wykonywano dowodu wycieku przez HTTP. Autoryzacja musi być przy danych, ponieważ layout nie zapewnia takiej granicy dla komponentów potomnych. [Dokumentacja Next.js](https://nextjs.org/docs/app/guides/authentication).
+- Tworzenie faktur: plik wejściowy przekazuje eksporty; rzeczywiste akcje sprawdzają użytkownika i korzystają z klienta sesji. Nie potwierdzono obejścia. Potwierdzenie wdrożonych polityk RLS pozostaje po stronie środowiska.
+- Pobranie XML przez księgową: token jest wyszukiwany po hash, sprawdzane są ważność, cofnięcie i poziom dostępu. Faktura oraz metadane pliku są wiązane z firmą tokenu; ścieżka i suma pliku są weryfikowane. Nie potwierdzono obejścia przez samą podmianę invoiceId.
+- Newsletter: publiczny zapis nie ujawnia listy subskrybentów ani faktur. Alarm o braku strażnika nie dowodzi wycieku. Ryzyko spamu przez zaufanie do X-Forwarded-For i zachowanie limitera przy awarii Redis pozostaje osobnym zadaniem zależnym także od proxy.
+
+**Naprawy granicy dostępu (pięć operacji):**
+- requireAdmin jest oczekiwany przed utworzeniem klienta w searchAuditLogs, listAdminUsers, getAdminUserDetail i listUserPayments. Ostatnia funkcja jest eksportowaną Server Action; layout nie chroni jej bezpośredniego wywołania.
+- getAdminOverviewMetrics jest chronionym wrapperem. Wewnętrzny kolektor przeniesiono do lib/analytics/platform-metrics.ts. Korzysta z niego wrapper oraz zaufany daily-analytics-digest, bez przełącznika skipAuth.
+- Nie zmieniono obliczeń metryk, formatów wyników, harmonogramów ani obu backendów jobów. Kolektor nie służy do bezpośredniego użycia w obsłudze żądań.
+- Helpery są oznaczone server-only. Poprawiono komentarze sugerujące wystarczalność layoutu.
+- Strony audytu i szczegółów użytkownika nie przechwytują już przekierowania odmowy jako pustej listy. Błąd odczytu trafia do granicy błędu strony zamiast udawać brak danych.
+
+**Commity lokalne:** 9d1b03f — pięć granic dostępu i testy joba; c046ad0 — bezpieczna inwentaryzacja, testy i osobny job CI. 4041868 pozostaje odrębnym pakietem ustaleń CodeQL.
+
+**Narzędzia audytu:**
+- Wyłącznie audit-service-role.ts i inventory-entrypoints.ts otrzymały wymagany --output-dir do nowego katalogu. Blokowane są URL/UNC, historyczny docs/security/audyt (także przez junction) i nadpisanie istniejących raportów. Nie czytają .env i nie wykonują kodu aplikacji.
+- Osobny job Offline security inventory testuje helper i generuje spisy w RUNNER_TEMP, bez instalowania zależności aplikacji i publikacji artefaktów. Exit 0 oznacza wygenerowanie spisu, nie brak luk.
+- Korekta inwentarza: strażnik layoutu jest wyłącznie kontekstem. Strona polegająca tylko na nim dostaje zadanie prześledzenia odczytu; silniejsze sygnały zachowują pierwszeństwo.
+- Świeży spis końcowy: 305 zapytań service_role (12 średnich, 76 do przeglądu, 217 heurystyczne ok) oraz 100 wejść (37 z flagą: 1 krytyczne, 3 wysokie, 4 średnie, 29 do przeglądu). Są to etykiety skryptów, NIE potwierdzone podatności.
+- 23 dodatkowe flagi wejść wynikają z korekty założenia o layoucie. Spis nie śledzi wywołań między plikami, dlatego także strona z już chronionym helperem może wymagać ręcznego potwierdzenia. Nie uznajemy 76 lub 37 za licznik ukończenia audytu.
+- Raporty pozostały poza repo w tymczasowym katalogu security-offline-final-omrNpj. SHA-256 czterech historycznych raportów przed/po są identyczne.
+
+**Weryfikacja całego lokalnego stanu:**
+- Vitest: **88 plików / 1373 testy PASS**, w tym 34 testy kontroli administracji i działania kolektora/jobu oraz 26 testów recovery/GUS/unsubscribe.
+- Narzędzia Node: **52/52 PASS** (20 bramki CodeQL, 10 ograniczonej diagnostyki, 18 inwentaryzacji, 4 metadanych raportu pakietu).
+- Typecheck, lint zmienionych plików, Actionlint trzech workflow i kontrola diffu PASS.
+- Gitleaks przygotowanych poprawek CodeQL i administracji: brak trafień. Testy XML 66/66 i rzeczywisty główny job CI potwierdzono wcześniej w tym wpisie dziennym; generator i walidator FA(3) nie były dalej zmieniane.
+- Testy administracji uruchamiają prawdziwy requireAdmin z atrapą sesji i bazy: odmowa dla braku sesji, zwykłego użytkownika, usuniętej allowlisty oraz błędu weryfikacji; brak klienta w trakcie oczekiwania; zachowane wyniki administratora. Test prawdziwego runDailyAnalyticsDigest wykorzystuje kolektor, atrapę bazy i wysyłki, a próba użycia sesji powodowałaby błąd.
+- Niezależne przeglądy helpera raportów i poprawki searchAuditLogs bez istotnych uwag; uwaga o przechwytywaniu przekierowania została uwzględniona.
+
+**Publikacja i zależności:** automatyczny przegląd uprawnień odrzucił wysyłkę nowych poprawek aplikacji/raportowania do publicznego ezior8888-cpu/ksef-saas, wskazując brak wystarczającej zgody dla konkretnego publicznego celu i zestawu. Nie ponowiono zapisu do GitHub ani nie użyto obejścia. Commity i dziennik przygotowano lokalnie; następna zgoda ma obejmować 4041868 do codex/security-foundations (PR #2) oraz drugi pakiet na codex/security-audit-inventory jako draft PR względem foundations. Taka publikacja nie oznacza merge ani deploy.
+
+**Stan odbioru:** kod i testy lokalne powyższych kontroli gotowe; nowy przebieg CodeQL oraz Offline security inventory czeka na publikację. Pełne F01/F03/F04 pozostają otwarte. Właściciel GitHub musi włączyć Dependency graph i ustawić wymagane kontrole; Bartek odpowiada za środowisko, wdrożone RLS, backup/restore i pozostałą infrastrukturę. MFA, pozostałe miejsca service_role, runtime i ćwiczenia incydentu nie zostały ukończone w tym pakiecie.
 
 ## Format następnego wpisu
 
