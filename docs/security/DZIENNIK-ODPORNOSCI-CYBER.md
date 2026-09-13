@@ -91,6 +91,26 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 
 **Następny krok:** po zatwierdzeniu publikacji utworzyć osobny draft PR względem poprzednich poprawek, potwierdzić rzeczywiste przebiegi CI/CodeQL i zapisać ich wynik. Odbiór kontynuować z właścicielem GitHub oraz przygotowaniem środowiska i odtwarzania z Bartkiem.
 
+## 2026-09-13 — Publikacja zatwierdzona i pierwszy odbiór GitHub
+
+**Zgoda i publikacja:** Igor odpowiedział „zatwierdzam” na konkretny zakres i publiczny cel. Wysłano codex/security-foundations (d19c45a) i utworzono [draft PR #2](https://github.com/ezior8888-cpu/ksef-saas/pull/2) względem codex/security-leak-fixes. Wcześniejszy wpis o oczekiwaniu na zgodę jest historyczny. PR #1 pozostaje osobną zależnością. Nie połączono żadnego PR ani nie wdrożono aplikacji.
+
+**Rzeczywiste wyniki pierwszego przebiegu:**
+- [Security 34775088182](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34775088182): Secret scan PASS, oba zadania CodeQL wykonały analizę, ale lokalna bramka odrzuciła strukturę raportu. Analizy 1769122107 (JS/TS) i 1769121037 (Actions) dotyczyły testowego merge a66d921359304e170bb298364069be58a95003be, nie samego commita gałęzi.
+- Pobrane raporty CodeQL nie zawierały wyników. Analiza PR korzysta z pr-diff-range: zero wyników w tym przebiegu nie stanowi pełnego audytu całej aplikacji.
+- [CI 34775088117](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34775088117): typecheck i lint przeszły (lint z istniejącymi ostrzeżeniami); cztery testy XML nie przeszły z powodu braku systemowego xmllint. Dependency review zgłosił wyłączony Dependency graph.
+- Użyte konto ma push, ale nie admin/maintain. Ustawienie Dependency graph wymaga właściciela GitHub; nie usunięto ani nie złagodzono kontroli.
+
+**Korekty przygotowane na podstawie dowodów:**
+- CI instaluje libxml2-utils przed testami i sprawdza obecność xmllint.
+- Bramka SARIF akceptuje pominiętą tablicę rules w sterowniku i pakietach bibliotecznych CodeQL. Nadal odrzuca rules:null, nieznaną regułę, niepoprawny raport i ustalenia wysokie/krytyczne.
+- Dodano cztery testy regresji odwzorowujące układ rzeczywistych raportów, bez zapisywania ich treści w repo.
+- Uzupełniono CI-SECURITY.md o potwierdzoną zależność od administratora.
+
+**Weryfikacja korekt:** bramka 20/20 PASS; oba rzeczywiste raporty po korekcie przechodzą (2 pliki, 2 przebiegi, 0 wyników). Lokalne testy XML po udostępnieniu xmllint: 66/66 PASS. Actionlint trzech workflow PASS. Korekty wymagają jeszcze nowego przebiegu GitHub.
+
+**Status:** F04 ma działający rzeczywisty skan sekretów i wykonane analizy CodeQL; pełny odbiór CI oraz ustawienia wymaganych kontroli nadal otwarte. Migracje, baza, staging i produkcja nie były zmieniane.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:

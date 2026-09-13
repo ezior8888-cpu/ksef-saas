@@ -15,6 +15,24 @@ const report = (rules = [rule('7.5')], results = []) => ({
   runs: [{ tool: { driver: { name: 'CodeQL', rules } }, invocations: [{ executionSuccessful: true }], results }],
 });
 
+// Mirrors the CodeQL pack layout observed in the JS/TS and Actions CI output.
+// No raw report, source locations, or findings from CI are stored here.
+const packReport = (language, results = []) => ({
+  version: '2.1.0',
+  runs: [{
+    tool: {
+      driver: { name: 'CodeQL', semanticVersion: '2.0.0' },
+      extensions: [
+        { name: 'codeql/util' },
+        { name: `codeql/${language}-queries`, rules: [rule('8.1')] },
+        { name: `codeql/${language}-all` },
+        { name: 'pr-diff-range' },
+      ],
+    },
+    results,
+  }],
+});
+
 function cli(t, files, args) {
   const directory = mkdtempSync(join(tmpdir(), 'codeql-gate-test-'));
   t.after(() => {
@@ -69,6 +87,43 @@ test('CodeQL pack rule metadata resolves through extension index', () => {
   assert.equal(checkReport(input).critical, 1);
 });
 
+test('actual CodeQL layout permits driver and library extensions without rules', (t) => {
+  const input = packReport('javascript');
+  assert.equal(checkReport(input).results, 0);
+  assert.equal(Object.hasOwn(input.runs[0].tool.driver, 'rules'), false);
+  assert.equal(Object.hasOwn(input.runs[0].tool.extensions[0], 'rules'), false);
+  const actual = cli(t, { 'javascript.sarif': input, 'actions.sarif': packReport('actions') });
+  assert.equal(actual.status, 0);
+  assert.match(actual.stdout, /files=2 runs=2 results=0 high=0 critical=0/);
+});
+
+test('high extension rule still blocks with no rules on the driver or libraries', (t) => {
+  const finding = result({
+    ruleIndex: undefined,
+    rule: { id: 'js/synthetic-rule', index: 0, toolComponent: { index: 1, name: 'codeql/javascript-queries' } },
+  });
+  const actual = cli(t, { 'javascript.sarif': packReport('javascript', [finding]) });
+  assert.equal(actual.status, 1);
+  assert.match(actual.stdout, /results=1 high=1 critical=0/);
+});
+
+test('omitted rule tables cannot satisfy a result reference', (t) => {
+  for (const finding of [
+    result(),
+    result({ rule: { index: 0, toolComponent: { index: 0 } } }),
+  ]) assert.equal(cli(t, { 'javascript.sarif': packReport('javascript', [finding]) }).status, 2);
+});
+
+test('explicitly malformed driver or extension rules still reject', (t) => {
+  for (const target of ['driver', 'library', 'queries']) {
+    const input = packReport('javascript');
+    const tool = input.runs[0].tool;
+    const component = target === 'driver' ? tool.driver : tool.extensions[target === 'library' ? 0 : 1];
+    component.rules = null;
+    assert.equal(cli(t, { 'javascript.sarif': input }).status, 2);
+  }
+});
+
 test('suppression and baseline metadata cannot hide a high finding', () => {
   const actual = checkReport(report([rule('8')], [result({ level: 'none', baselineState: 'unchanged', suppressions: [{ kind: 'external', status: 'accepted' }] })]));
   assert.equal(actual.high, 1);
@@ -103,7 +158,7 @@ test('missing, empty, malformed, or non-CodeQL report structures reject', () => 
     (run) => { delete run.results; },
     (run) => { run.results = null; },
     (run) => { run.tool.driver.name = 'Other scanner'; },
-    (run) => { delete run.tool.driver.rules; },
+    (run) => { run.tool.driver.rules = null; },
     (run) => { run.tool.driver.rules = [rule('8'), rule('2')]; },
     (run) => { run.tool.extensions = {}; },
     (run) => { run.tool.driver.rules[0].properties = null; },

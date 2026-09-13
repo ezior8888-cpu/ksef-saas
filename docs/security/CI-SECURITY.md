@@ -40,12 +40,13 @@ Każdy kolejny wyjątek wymaga wskazania konkretnego trafienia, uzasadnienia, au
 
 Zmiana pliku workflow nie ustanawia uprawnień i ochrony w ustawieniach repo. Ten pakiet ich nie zmienia.
 
-1. W ruleset ustawić jako wymagane: Typecheck + Lint + Unit tests, dependency-review, Secret scan i oba zadania CodeQL. Zweryfikować dokładne nazwy po pierwszym przebiegu i kontrolnym niepowodzeniu.
-2. Wymagać przeglądu zmian workflow, konfiguracji skanerów, wyjątków i skryptów bramek. Osoba mająca możliwość zmiany workflow może zmienić także sam test; same pliki nie stanowią ochrony przed złośliwym współpracownikiem z takim dostępem.
-3. Skonfigurować environment security-staging: wyłącznie main, wymagany zatwierdzający, brak samodzielnego obejścia przez autora. Dodać tylko osobne klucze jednorazowego staging w sekretach środowiska:
+1. Włączyć Dependency graph w ustawieniach bezpieczeństwa repo. Pierwszy rzeczywisty przebieg dependency-review w PR #2 potwierdził brak tej funkcji (job 103771627779). Użyte konto ma push, ale nie ma admin/maintain, więc nie zmieniono ustawienia i nie wyłączono kontroli.
+2. W ruleset ustawić jako wymagane: Typecheck + Lint + Unit tests, dependency-review, Secret scan i oba zadania CodeQL. Zweryfikować dokładne nazwy po pierwszym przebiegu i kontrolnym niepowodzeniu.
+3. Wymagać przeglądu zmian workflow, konfiguracji skanerów, wyjątków i skryptów bramek. Osoba mająca możliwość zmiany workflow może zmienić także sam test; same pliki nie stanowią ochrony przed złośliwym współpracownikiem z takim dostępem.
+4. Skonfigurować environment security-staging: wyłącznie main, wymagany zatwierdzający, brak samodzielnego obejścia przez autora. Dodać tylko osobne klucze jednorazowego staging w sekretach środowiska:
    STAGING_SUPABASE_URL, STAGING_SUPABASE_ANON_KEY, STAGING_SUPABASE_SERVICE_ROLE_KEY, STAGING_KSEF_CREDENTIALS_ENCRYPTION_KEY.
-4. Sprawdzić istniejące sekrety repozytorium i organizacji. Wrażliwe klucze nie mogą pozostać dostępne wszystkim workflow. Samo przeniesienie odwołań w YAML nie usuwa istniejącego sekretu z repo; potrzebne jest ograniczenie go do właściwego środowiska, a przy podejrzeniu ujawnienia — rotacja.
-5. Potwierdzić odizolowanie staging i brak skutków w produkcyjnym KSeF, Stripe, storage i poczcie. Środowisko GitHub to ochrona dostępu do sekretów, nie dowód tożsamości bazy.
+5. Sprawdzić istniejące sekrety repozytorium i organizacji. Wrażliwe klucze nie mogą pozostać dostępne wszystkim workflow. Samo przeniesienie odwołań w YAML nie usuwa istniejącego sekretu z repo; potrzebne jest ograniczenie go do właściwego środowiska, a przy podejrzeniu ujawnienia — rotacja.
+6. Potwierdzić odizolowanie staging i brak skutków w produkcyjnym KSeF, Stripe, storage i poczcie. Środowisko GitHub to ochrona dostępu do sekretów, nie dowód tożsamości bazy.
 
 Dotychczasowe RUN_E2E_ON_CI nie włącza już uprzywilejowanych testów PR. Trace, screenshoty i HTML mogą zawierać dane lub sesje, więc nowy E2E nie publikuje ich automatycznie. Odbiór redakcji artefaktów jest osobnym zadaniem.
 

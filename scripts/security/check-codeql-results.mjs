@@ -32,9 +32,13 @@ function severityFor(rule) {
 }
 
 function validateRules(component) {
-  requireValid(isObject(component) && nonempty(component.name) && Array.isArray(component.rules));
+  requireValid(isObject(component) && nonempty(component.name));
+  // CodeQL omits rules on the driver and on non-query pack extensions.
+  // An omitted array is empty; an explicitly malformed array is not.
+  const rules = has(component, 'rules') ? component.rules : [];
+  requireValid(Array.isArray(rules));
   const seen = new Set();
-  for (const rule of component.rules) {
+  for (const rule of rules) {
     requireValid(isObject(rule) && nonempty(rule.id) && !seen.has(rule.id));
     seen.add(rule.id);
     severityFor(rule);
@@ -45,7 +49,7 @@ function validateRules(component) {
     const problemSeverity = rule.properties?.['problem.severity'];
     if (problemSeverity !== undefined) requireValid(['error', 'warning', 'recommendation'].includes(problemSeverity));
   }
-  return component;
+  return { ...component, rules };
 }
 
 function resolveRule(result, driver, extensions) {
