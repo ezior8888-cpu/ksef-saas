@@ -111,6 +111,16 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 
 **Status:** F04 ma działający rzeczywisty skan sekretów i wykonane analizy CodeQL; pełny odbiór CI oraz ustawienia wymaganych kontroli nadal otwarte. Migracje, baza, staging i produkcja nie były zmieniane.
 
+## 2026-09-13 — Ponowny odbiór CI i cztery trafienia CodeQL
+
+**Wysłana korekta:** 30f5a797d3542f1b88771e9d65c87db2b4aadef0, nadal zatwierdzony draft PR #2. [CI 34775777543](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34775777543) potwierdził PASS całego zadania Typecheck + Lint + Unit tests, auditu zależności i 20 testów bramki. Dependency review nadal blokuje brak Dependency graph u właściciela.
+
+**[Security 34775777627](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34775777627):** Secret scan i CodeQL Actions PASS. Raport JS/TS na runnerze zawiera 4 wyniki high; bramka poprawnie kończy się exit 1 przy inputErrors=0. Nie jest to kolejny błąd parsera. GitHub API analizy 1769145714 dla testowego merge c429db8ef4a1106cb82b2724081dc47db53937e5 pokazuje 0 wyników w przetworzonym zakresie PR. Nie wolno z tego wyciągać wniosku o czystym surowym raporcie ani osłabiać bramki.
+
+**Diagnostyka:** przygotowano osobny skrypt print-codeql-locations.mjs i krok workflow. Wypisuje wyłącznie zwalidowane identyfikatory reguł, względne ścieżki repo i numer początkowej linii. Nie publikuje wiadomości, fragmentów kodu, przepływów ani surowych raportów. Błędne metadane i ponad 100 rekordów kończą się błędem bez częściowego wyjścia; próg blokowania CodeQL pozostaje bez zmian. Testy hermetyczne sprawdzają także brak ujawnienia syntetycznej prywatnej treści.
+
+**Status:** lokalizacja i ocena czterech trafień otwarte do kolejnego przebiegu; to nie cztery potwierdzone podatności. Ustawienia GitHub wymagają Bartka. Zmiany aplikacji i kolejna inwentaryzacja przygotowywane są osobno na lokalnej gałęzi codex/security-audit-inventory.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:
