@@ -1,6 +1,6 @@
 # Plan odporności cybernetycznej FaktFlow / KSeF SaaS
 
-Data: 2026-09-13. Autor: Astra, na prośbę Igora. Status: **plan do realizacji; wykonano analizę przygotowawczą, bez wdrażania zabezpieczeń**.
+Data: 2026-09-13. Autor: Astra, na prośbę Igora. Status: **plan przyjęty; realizacja rozpoczęta 2026-09-13**. Aktualne wyniki i ograniczenia pierwszego pakietu znajdują się w dzienniku.
 
 ## Cel i sposób pracy
 
@@ -176,6 +176,6 @@ Po zgodzie na realizację zaczynamy od fazy 1. Równolegle przygotowujemy bezpie
 
 Plan nie wymaga zakupu wszystkich narzędzi ani równoczesnego wdrożenia kilku skanerów. Kolejne prace dobieramy do potwierdzonego ryzyka, zasobów zespołu i dowodów odbioru.
 
-**Obecna zgoda obejmuje wyłącznie analizę i dokumentację.** Nie wykonano migracji, skanów produkcji, rotacji, zmian konfiguracji ani wdrożeń. Zmiany SQL i ich wykonanie należą do odrębnego uzgodnienia z właścicielem repo; tak samo działania na serwerze i publikacja. Zachowujemy obecny stack, nazwy R2_*/UPSTASH_* oraz oba backendy jobów.
+**Igor zatwierdził rozpoczęcie stopniowej realizacji 2026-09-13.** Pierwszy pakiet dotyczy kodu CI i bezpiecznych testów. Nie oznacza to zgody na dowolne działania produkcyjne; nie wykonano migracji, skanów produkcji, rotacji ani zmian na serwerze. Zmiany SQL i ich wykonanie należą do odrębnego uzgodnienia z właścicielem repo; tak samo działania na serwerze i publikacja. Zachowujemy obecny stack, nazwy R2_*/UPSTASH_* oraz oba backendy jobów.
 
 Dalszą pracę zapisujemy w [dzienniku odporności cybernetycznej](DZIENNIK-ODPORNOSCI-CYBER.md). Rejestr ma dokumentować fakty i dowody, a nie samą liczbę zamkniętych zadań.

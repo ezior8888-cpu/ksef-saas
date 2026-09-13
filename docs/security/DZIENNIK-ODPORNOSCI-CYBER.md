@@ -4,7 +4,7 @@
 
 Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNOSCI-CYBER.md). Jest osobnym etapem po [wcześniejszych naprawach Astry](DZIENNIK-NAPRAW-ASTRA.md) i [audytach Claude](DZIENNIK-AUDYT.md). Nie zastępuje ich ani nie zmienia historycznych wyników.
 
-- Najnowsza instrukcja Igora: przygotować własny plan; **realizacji zabezpieczeń jeszcze nie rozpoczęto**. Samo otwarcie tego pliku nie upoważnia do wdrożeń, SQL, testów na produkcji ani rotacji.
+- Aktualna zgoda Igora z 2026-09-13: rozpocząć stopniową realizację planu. Pierwszy pakiet obejmuje CI i zabezpieczenie celu testów. Samo otwarcie tego pliku nie upoważnia do wdrożenia produkcji, SQL, testów na produkcji ani rotacji; działania operacyjne nadal wymagają konkretnego uzgodnienia.
 - Przed pracą przeczytaj aktualne instrukcje projektu i zgodę z rozmowy, sprawdź gałąź oraz cudze niezapisane zmiany.
 - Dopisuj datowane wpisy. Korekty starszych wniosków opisuj jako korekty, z przyczyną i nowym dowodem.
 - Oddzielaj: zaplanowane, w kodzie/konfiguracji, sprawdzone na testach, wdrożone, potwierdzone w nazwanym środowisku. Przywrócenie problemu otwiera wpis ponownie.
@@ -55,6 +55,39 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 - Kolejne AI: po rozpoczęciu realizacji odświeżyć stan repo, potwierdzić zależności i prowadzić osobny dowód dla każdej kontroli.
 
 **Następny krok po zgodzie na realizację:** wykonać odbiór stanu z F01, ustalić bezpieczne środowisko i pierwsze ćwiczenie odtwarzania; równolegle przygotować przegląd krytycznej autoryzacji oraz bramki CI. Na etapie samego planu zatrzymujemy się na dokumentacji.
+
+## 2026-09-13 — Rozpoczęcie realizacji: bezpieczne CI i cel testów
+
+**Zgoda:** Igor zlecił rozpoczęcie stopniowego wdrażania planu; po przerwie związanej z limitem wznowił pracę. Zakres tego pakietu to repo i testy lokalne, bez produkcji i SQL.
+
+**Gałąź:** `codex/security-foundations`, utworzona z planu `cc4fa9a`, który bazuje na wcześniejszych poprawkach `d49e8ae`. Zdalne main nadal wskazywało `13a7d81b`, a gałąź poprzednich poprawek `d49e8ae` podczas odczytu. Stan wdrożenia aplikacji i schematu pozostaje niepotwierdzony.
+
+**Wykonane zmiany:**
+- `a29a1de`: testy RLS dopuszczają jedynie numeryczny loopback i jawne potwierdzenie jednorazowej lokalnej bazy. Blokują zdalne cele, ścieżki proxy i konflikt z obecną konfiguracją aplikacji. [Instrukcja i ograniczenia](../../tests/README-RLS.md).
+- `7d9a01c`: uprzywilejowane E2E wydzielono z PR do ręcznego main z osobnymi nazwami sekretów staging i środowiskiem security-staging. Usunięto automatyczną publikację raportów/trace, które mogłyby zawierać sesje lub dane.
+- CI ogranicza uprawnienia tokenu, nie zachowuje poświadczeń checkout i korzysta z przypiętych SHA Actions. Zachowano audit zależności i dependency review.
+- Dodano Gitleaks 8.30.1 z weryfikacją SHA256 pobranego narzędzia, pełnym maskowaniem oraz sprawdzaniem historii i własnej skuteczności.
+- Dodano CodeQL dla JS/TS oraz Actions bez budowania aplikacji, z bramką wysokich/krytycznych wyników i błędów raportu. Skrypt bramki nie wypisuje treści ustaleń.
+- Dodano [instrukcję odbioru CI](CI-SECURITY.md), w tym zakres wymagający ustawień właściciela GitHub.
+
+**Trafienia skanera:** pierwszy skan historii wykazał trzy false positives. Dwa są porównaniami odrzucającymi placeholder Stripe, trzecie komentarzem z identyfikatorem modelu Claude. Oceniono kontekst w konkretnych commitach. Wyjątki obejmują tylko trzy historyczne fingerprinty w .gitleaksignore, bez wyłączania całych plików lub reguł. Kolejny skan historii i przygotowanych zmian: zero niewyjątkowanych trafień.
+
+**Weryfikacja lokalna:**
+- Vitest: **82 pliki, 1313 testów PASS**, w tym 31 testów guardu RLS; integracyjne RLS były wyłączone.
+- Bramka CodeQL: **16/16 PASS**, w tym rzeczywiste procesy CLI z exit 0/1/2 i test braku ujawniania treści.
+- Gitleaks: czyste tymczasowe repo przechodzi; wygenerowany sztuczny token blokuje; usunięcie go z najnowszego pliku nadal blokuje przez historię; błędna konfiguracja nie przechodzi; token nie trafia do wyjścia.
+- Actionlint 1.7.12: trzy workflow bez błędów. Oba pobrane narzędzia Windows sprawdzono przez SHA256 oficjalnych wydań.
+- Typecheck, lint zmienionych skryptów/testów i diff --check: PASS.
+- Bieżący audit zależności produkcyjnych: brak znanych podatności.
+- Niezależny agent nie zgłosił potwierdzonej istotnej luki w pakiecie. Trzy wyjątki Gitleaks potwierdził osobno autor na podstawie zamaskowanego kontekstu.
+
+**Stan odbioru:** F02 — zaimplementowana ochrona celu testów, bez wykonania testu na bazie lub restore. F04 — pierwszy pakiet lokalnie zweryfikowany; rzeczywisty CodeQL/GitHub i wymagane kontrole pozostają do potwierdzenia. F01 — sprawdzony stan repo, ale stan serwerów wymaga odczytu przez operatora. Pozostałe fazy pozostają zaplanowane.
+
+**Istotne ograniczenia:** loopback nie rozpoznaje bazy ukrytej za tunelem; zabronione jest kierowanie tych testów przez proxy/tunel do produkcji. Ochrona environment i wymagane statusy nie powstają przez sam wpis YAML. Właściciel musi ograniczyć istniejące sekrety repo/organizacji i skonfigurować dedykowany staging. SARIF sprawdzono na syntetycznych raportach; publiczna próbka testowa CodeQL Action zawiera historyczne nazwy narzędzi, więc nie potwierdza formatu obecnego skanu aplikacji.
+
+**Nie wykonano:** mutujących testów RLS/E2E, migracji, połączeń do bazy, rotacji, deploy/restartów, zmian ustawień GitHub ani aktualizacji serwerów. Nie odczytywano wartości sekretów środowiskowych. Skany obejmowały lokalne pliki Git; zamaskowane raporty pozostały w katalogu tymczasowym poza repo.
+
+**Następny krok:** opublikować osobny draft PR względem poprzednich poprawek, potwierdzić rzeczywiste przebiegi CI/CodeQL i zapisać ich wynik. Odbiór kontynuować z właścicielem GitHub oraz przygotowaniem środowiska i odtwarzania z Bartkiem.
 
 ## Format następnego wpisu
 
