@@ -1,0 +1,8 @@
+# Reviewed 2026-09-13; review by 2026-12-13. See docs/security/CI-SECURITY.md.
+# Exact historical findings only. New commits/lines are NOT exempt.
+# Placeholder equality in isPlaceholder(), explicitly treated as invalid configuration.
+5dabb4bbffa0fa4c63fdc06d886fdc0ec1fe124e:scripts/check-env.ts:stripe-access-token:134
+# Public Claude model identifier in an .env.example comment, not a credential.
+5add3213535497d7a72ee4ea99990db1d531b04a:.env.example:generic-api-key:189
+# Placeholder equality in isStripeConfigured(), explicitly treated as an invalid key.
+4baf606ec64002b6d0ff3688afe0aa63316bd1b8:lib/stripe/client.ts:stripe-access-token:24

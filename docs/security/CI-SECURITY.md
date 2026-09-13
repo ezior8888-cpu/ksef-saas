@@ -1,0 +1,62 @@
+# Kontrole bezpieczeństwa w CI
+
+Stan implementacji pierwszego pakietu: 2026-09-13. Powiązany [plan](PLAN-ODPORNOSCI-CYBER.md) i [dziennik](DZIENNIK-ODPORNOSCI-CYBER.md).
+
+## Co sprawdzają workflow
+
+- [CI](../../.github/workflows/ci.yml): typy, lint, testy lokalne, audit zależności produkcyjnych na poziomie high oraz dependency review zmian PR. Dodatkowo testuje interpretację wyników CodeQL.
+- [Security](../../.github/workflows/security.yml): Gitleaks skanuje całą historię osiągalną z badanego HEAD; CodeQL analizuje JavaScript/TypeScript i workflow Actions bez instalowania/uruchamiania aplikacji.
+- [E2E staging](../../.github/workflows/e2e-staging.yml): uprzywilejowane testy przeniesione z automatycznego PR do osobnego ręcznego przebiegu na main, z domyślnie wyłączonym potwierdzeniem i środowiskiem security-staging.
+
+Zwykłe CI i skan sekretów mają tylko contents:read, checkout nie zapisuje tokenu w konfiguracji Git. CodeQL otrzymuje dodatkowo security-events:write do przesłania wyników do GitHub. Nie ma komentarzy bota ani publikacji raportów Gitleaks. Akcje przypięto do sprawdzonych pełnych SHA; Gitleaks 8.30.1 pobierany jest z oficjalnego wydania i weryfikowany przez przypięte SHA256 archiwum Linux.
+
+Źródła konfiguracji: [Gitleaks CLI](https://github.com/gitleaks/gitleaks), [CodeQL Action](https://github.com/github/codeql-action), [oficjalne opcje workflow CodeQL](https://docs.github.com/en/code-security/reference/code-scanning/workflow-configuration-options). Datowane przypięcie wersji wymaga okresowego przeglądu i aktualizacji, nie gwarantuje bezpieczeństwa na zawsze.
+
+## Znaczenie wyniku
+
+Gitleaks zwraca błąd przy trafieniu lub problemie uruchomienia. W każdym przebiegu najpierw wykonuje test w nowym repo tymczasowym: czysty plik, syntetyczny token, usunięcie tego tokenu z najnowszej wersji oraz błędna konfiguracja. Weryfikowana jest również redakcja tokenu w wyjściu. Wartość testowa powstaje dopiero w katalogu tymczasowym.
+
+Po udanym CodeQL analyze [bramka SARIF](../../scripts/security/check-codeql-results.mjs) rozróżnia:
+- exit 0 — prawidłowe raporty, bez wyników przekraczających ustalony próg;
+- exit 1 — ocena security-severity ≥ 7 albo wynik error bez takiej oceny;
+- exit 2 — brak/popsuty/nieobsługiwany raport lub błąd narzędzia.
+
+Bramka pokazuje liczniki, bez treści podatności, fragmentów kodu i URL. Nie pomija wyników suppressed/unchanged. Obsługuje określony format CodeQL SARIF 2.1.0; nie jest ogólnym walidatorem SARIF. Poprawny raport z results:[] oznacza brak wyników skanera; nie potwierdza kompletności modelu zagrożeń.
+
+**Sukces lokalnych testów bramki nie oznacza wykonania CodeQL.** SAST musi jeszcze przejść w GitHub na rzeczywistej zmianie, a nowe ustalenia wymagają oceny i naprawy.
+
+## Trzy wąskie wyjątki Gitleaks
+
+[.gitleaksignore](../../.gitleaksignore) zawiera wyłącznie historyczne fingerprinty obejmujące commit, plik, regułę i linię:
+- scripts/check-env.ts — porównanie do placeholdera Stripe, który walidator uznaje za niepoprawną konfigurację;
+- lib/stripe/client.ts — porównanie do tego samego rodzaju placeholdera, odrzucanego jako skonfigurowany klucz;
+- .env.example — komentarz z publicznym identyfikatorem modelu Claude.
+
+Kontekst każdego trafienia sprawdzono w wskazanym commicie. Nie dodano wyłączenia całych plików, dokumentacji, testów ani rodzin tokenów. Nowe trafienia w tych plikach nadal blokują skan. Autor kwalifikacji: Astra; proponowany przegląd przez właściciela do 2026-12-13. Nie stwierdzono tu rzeczywistych kluczy wymagających wyłączenia skanera lub ukrycia nowego wycieku.
+
+Każdy kolejny wyjątek wymaga wskazania konkretnego trafienia, uzasadnienia, autora i daty przeglądu. Rzeczywisty ujawniony klucz wymaga reakcji i unieważnienia; dopisanie wyjątku nie jest naprawą.
+
+## Co musi ustawić właściciel GitHub przed uznaniem CI za odebrane
+
+Zmiana pliku workflow nie ustanawia uprawnień i ochrony w ustawieniach repo. Ten pakiet ich nie zmienia.
+
+1. W ruleset ustawić jako wymagane: Typecheck + Lint + Unit tests, dependency-review, Secret scan i oba zadania CodeQL. Zweryfikować dokładne nazwy po pierwszym przebiegu i kontrolnym niepowodzeniu.
+2. Wymagać przeglądu zmian workflow, konfiguracji skanerów, wyjątków i skryptów bramek. Osoba mająca możliwość zmiany workflow może zmienić także sam test; same pliki nie stanowią ochrony przed złośliwym współpracownikiem z takim dostępem.
+3. Skonfigurować environment security-staging: wyłącznie main, wymagany zatwierdzający, brak samodzielnego obejścia przez autora. Dodać tylko osobne klucze jednorazowego staging w sekretach środowiska:
+   STAGING_SUPABASE_URL, STAGING_SUPABASE_ANON_KEY, STAGING_SUPABASE_SERVICE_ROLE_KEY, STAGING_KSEF_CREDENTIALS_ENCRYPTION_KEY.
+4. Sprawdzić istniejące sekrety repozytorium i organizacji. Wrażliwe klucze nie mogą pozostać dostępne wszystkim workflow. Samo przeniesienie odwołań w YAML nie usuwa istniejącego sekretu z repo; potrzebne jest ograniczenie go do właściwego środowiska, a przy podejrzeniu ujawnienia — rotacja.
+5. Potwierdzić odizolowanie staging i brak skutków w produkcyjnym KSeF, Stripe, storage i poczcie. Środowisko GitHub to ochrona dostępu do sekretów, nie dowód tożsamości bazy.
+
+Dotychczasowe RUN_E2E_ON_CI nie włącza już uprzywilejowanych testów PR. Trace, screenshoty i HTML mogą zawierać dane lub sesje, więc nowy E2E nie publikuje ich automatycznie. Odbiór redakcji artefaktów jest osobnym zadaniem.
+
+## Uruchomienia lokalne i granice pierwszego pakietu
+
+Test parsera raportów jest hermetyczny:
+`node --test scripts/security/check-codeql-results.test.mjs`.
+
+Test skanera przyjmuje ścieżkę do pobranego i zweryfikowanego Gitleaks:
+`node scripts/security/verify-gitleaks.mjs <ścieżka-do-binarki>`.
+
+Instrukcja bezpiecznych mutujących testów RLS: [README-RLS](../../tests/README-RLS.md). Zdalne RLS są zablokowane; test guardu nie zastępuje testu polityk na przygotowanej bazie.
+
+Nie podłączono starych audit-*.ts ani run-prod-*.sh do CI. Wymagają odrębnej adaptacji dotyczącej efektów ubocznych, celu, wyników i ochrony danych. Ten pakiet nie zmienia schematu, uprawnień produkcyjnych, kluczy ani konfiguracji hostów.
