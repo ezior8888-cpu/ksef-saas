@@ -65,7 +65,7 @@ export default async function AdminAuditPage(props: {
     to: normalizeDt(params.to),
     page,
     pageSize: PAGE_SIZE,
-  }).catch(() => ({ items: [], total: 0, page: 0, pageSize: PAGE_SIZE }));
+  });
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
