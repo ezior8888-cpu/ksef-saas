@@ -12,18 +12,21 @@
  * jest w ogóle użyty. To zostaje dla człowieka. Zadaniem skryptu jest
  * zawęzić czytanie ze 150 plików do kilkunastu.
  *
- * TYLKO ODCZYT. Nie modyfikuje niczego poza plikami wyjściowymi w `docs/`.
+ * Odczyt lokalnego kodu; zapis wyłącznie nowych raportów w jawnym --output-dir.
+ * Bez odczytu .env i połączeń z usługami. Kod 0 nie oznacza braku podatności.
  *
- * Uruchomienie:  node scripts/security/inventory-entrypoints.ts
+ * Uruchomienie: node scripts/security/inventory-entrypoints.ts --output-dir <lokalny-katalog>
  * (Node 24 czyta TypeScript natywnie — nie trzeba `pnpm install` w worktree.)
  */
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { configureOfflineAudit } from './offline-audit-output.mjs';
 
 const ROOT = process.cwd();
-const OUT_MD = 'docs/security/audyt/01-powierzchnia.md';
-const OUT_JSON = 'docs/security/audyt/01-powierzchnia.json';
+const { markdownPath: OUT_MD, jsonPath: OUT_JSON, writeReports } = configureOfflineAudit({
+  args: process.argv.slice(2), root: ROOT, reportName: '01-powierzchnia', script: 'inventory-entrypoints.ts',
+});
 
 // ═══════════════════════════════════════════════════════════════
 // Słownik strażników — nazwy wzięte z kodu, nie z głowy.
@@ -158,9 +161,9 @@ interface Entry {
   /** Czy plik w ogóle sprawdza tożsamość (`auth.getUser()`). */
   authCheck: boolean;
   /**
-   * Strażnik odziedziczony z układu strony (`layout.tsx`) wyżej w drzewie.
-   * UWAGA: działa WYŁĄCZNIE dla stron. Akcje serwerowe i route handlery
-   * NIE przechodzą przez układ — to najczęstsze złudzenie w App Routerze.
+   * Kontekst strażnika w układzie strony (`layout.tsx`) wyżej w drzewie.
+   * Nie dowodzi autoryzacji przed odczytem danych komponentu potomnego.
+   * Akcje serwerowe i route handlery nie dziedziczą nawet tego kontekstu.
    */
   layoutGuard: string | null;
   /** Strażnik wpisany w miejscu: własne zapytanie o członkostwo. */
@@ -255,14 +258,13 @@ function actionNames(src: string): string[] {
 /**
  * Mapa: katalog → strażnik w jego `layout.tsx`.
  *
- * DLACZEGO TO JEST OSOBNA RZECZ: w App Routerze układ strony renderuje się
- * przed stroną, więc `requireAdmin()` w `app/admin/layout.tsx` chroni całą
- * gałąź `/admin`. Bez tej wiedzy skrypt zgłasza osiem fałszywych alarmów.
+ * Layout opisuje kontrolę dostępu do interfejsu, ale nie gwarantuje, że
+ * strażnik wykona się przed odczytem w komponencie potomnym. Zachowujemy
+ * tę informację jako kontekst do ręcznego prześledzenia warstwy danych;
+ * sama obecność `requireAdmin()` w layoucie nie daje stronie oceny „ok".
  *
- * ALE — i to jest właściwa lekcja — układ NIE jest wołany przy wywołaniu
- * akcji serwerowej ani route handlera. Te wchodzą do aplikacji bezpośrednio
- * po `POST`. Akcja w `app/(dashboard)/.../actions.ts` bez własnego
- * sprawdzenia jest otwarta, choć leży „za" chronionym układem.
+ * Akcje serwerowe i route handlery są osobnymi punktami wejścia.
+ * Ich autoryzację trzeba sprawdzać niezależnie od układu strony.
  */
 function buildLayoutGuards(root: string): Map<string, string> {
   const map = new Map<string, string>();
@@ -335,10 +337,10 @@ function analyse(abs: string): Entry | null {
   const authCheck = AUTH_CHECK.test(src);
   const expected = expectedAccess(rel, src);
 
-  // Układ chroni WYŁĄCZNIE strony. Akcje i route handlery wchodzą z pominięciem
-  // układu — to jest sedno tego rozróżnienia, nie detal implementacyjny.
-  const coveredByLayout = isPage && !isAction;
-  const layoutGuard = coveredByLayout ? inheritedGuard(abs) : null;
+  // Kontekst layoutu dotyczy stron, ale nie jest dowodem autoryzacji danych.
+  // Akcje i route handlery trzeba analizować jako niezależne wejścia.
+  const hasLayoutContext = isPage && !isAction;
+  const layoutGuard = hasLayoutContext ? inheritedGuard(abs) : null;
 
   const exports = isRoute ? httpMethods(src) : isAction ? actionNames(src) : [];
 
@@ -353,10 +355,10 @@ function analyse(abs: string): Entry | null {
   const anyGuard =
     guardsStrong.length > 0 ||
     guardsAdmin.length > 0 ||
-    layoutGuard !== null ||
     inlineMembership ||
     tokenAuth ||
     signatureAuth;
+  const layoutOnly = layoutGuard !== null && !anyGuard;
   const tenantData = expected === 'czlonek organizacji' || rlsBypass > 0;
 
   // ── Ocena ────────────────────────────────────────────────────
@@ -365,6 +367,15 @@ function analyse(abs: string): Entry | null {
   const raise = (r: Risk) => {
     if (RISK_ORDER[r] < RISK_ORDER[risk]) risk = r;
   };
+
+  if (layoutOnly) {
+    flags.push(
+      'LAYOUT-BEZ-AUTORYZACJI-DANYCH: widoczny strażnik jest tylko w layoucie. ' +
+        'Prześledzić, czy strona lub wywoływany helper autoryzuje użytkownika przed odczytem danych. ' +
+        'Sam layout nie dowodzi ani bezpieczeństwa, ani podatności.',
+    );
+    raise('do-przejrzenia');
+  }
 
   // Najgroźniejsza para w całym kodzie: RLS wyłączony, a organizacja
   // pochodzi z ciasteczka, którego nikt nie zweryfikował przez członkostwo.
@@ -381,7 +392,7 @@ function analyse(abs: string): Entry | null {
     raise('krytyczne');
   }
 
-  if (rlsBypass > 0 && !anyGuard && expected !== 'wewnetrzny (Inngest)') {
+  if (rlsBypass > 0 && !anyGuard && !layoutOnly && expected !== 'wewnetrzny (Inngest)') {
     flags.push(
       'OMIJA-RLS-BEZ-STRAŻNIKA: w pliku nie ma żadnego strażnika. Prześledzić, skąd bierze się `tenantId`.',
     );
@@ -492,7 +503,7 @@ function guardCell(e: Entry): string {
   const parts: string[] = [];
   if (e.guardsStrong.length) parts.push(...e.guardsStrong);
   if (e.guardsAdmin.length) parts.push(...e.guardsAdmin);
-  if (e.layoutGuard) parts.push('układ: ' + e.layoutGuard);
+  if (e.layoutGuard) parts.push('kontekst układu: ' + e.layoutGuard);
   if (e.inlineMembership) parts.push('sprawdza members');
   if (e.tokenAuth) parts.push('token');
   if (e.expected === 'podpis webhooka' && e.flags.every((f) => !f.startsWith('WEBHOOK'))) parts.push('podpis');
@@ -513,10 +524,11 @@ const L: string[] = [];
 L.push('# 01 — Powierzchnia ataku');
 L.push('');
 L.push('Wygenerowane przez `scripts/security/inventory-entrypoints.ts`.');
-L.push('**Nie edytuj ręcznie** — przy kolejnym przebiegu zmiany przepadną.');
+L.push('**Nie edytuj ręcznie** — każdy przebieg zapisuj w osobnym katalogu wyników.');
 L.push('Wnioski i ustalenia idą do `REJESTR-USTALEN.md`.');
 L.push('');
 L.push(`Data przebiegu: ${new Date().toISOString().slice(0, 10)}`);
+L.push('Klasyfikacje są heurystyczną listą do ręcznej oceny, nie potwierdzonymi podatnościami.');
 L.push('');
 L.push('## Podsumowanie');
 L.push('');
@@ -564,9 +576,10 @@ L.push('### Kolumna „Ochrona"');
 L.push('');
 L.push('- `requireUserAndActiveOrg` i pokrewne — **strażnik mocny**: waliduje członkostwo w organizacji i zwraca `tenantId`.');
 L.push('- `requireAdmin` — operator platformy, lista z `ADMIN_EMAILS`.');
-L.push('- `układ: <nazwa>` — strażnik odziedziczony z `layout.tsx` wyżej w drzewie.');
-L.push('  **Dotyczy wyłącznie stron.** Akcja serwerowa i route handler wchodzą do aplikacji');
-L.push('  bezpośrednio po `POST`, z pominięciem układu — dla nich ta ochrona nie istnieje.');
+L.push('- `kontekst układu: <nazwa>` — strażnik obecny w `layout.tsx` wyżej w drzewie.');
+L.push('  Nie gwarantuje autoryzacji przed odczytem danych strony. Gdy to jedyny widoczny');
+L.push('  strażnik, strona dostaje co najmniej „do przejrzenia"; to zadanie dla ręcznej analizy,');
+L.push('  nie potwierdzenie luki. Akcje serwerowe i route handlery nie dziedziczą tej ochrony.');
 L.push('- `auth.getUser` — sprawdzone, KTO to jest, ale nie do której organizacji ma prawo.');
 L.push('- `⚠ getActiveOrgIdFromCookies` — czyta ciasteczko i sprawdza tylko format UUID.');
 L.push('');
@@ -588,9 +601,7 @@ L.push('wywołanego przed zapytaniem od wywołanego po nim, ani strażnika, któ
 L.push('ignorowany. Kolumna „ok" znaczy „brak przesłanek do czytania w pierwszej kolejności",');
 L.push('nie „sprawdzone i bezpieczne".');
 
-mkdirSync(join(ROOT, 'docs/security/audyt'), { recursive: true });
-writeFileSync(join(ROOT, OUT_MD), L.join('\n') + '\n', 'utf8');
-writeFileSync(join(ROOT, OUT_JSON), JSON.stringify(entries, null, 2), 'utf8');
+writeReports(L.join('\n') + '\n', JSON.stringify(entries, null, 2));
 
 console.log(`Wejść: ${entries.length}, z podejrzeniem: ${flagged.length}`);
 console.log(`→ ${OUT_MD}`);

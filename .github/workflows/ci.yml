@@ -40,8 +40,28 @@ jobs:
       - name: Run typecheck + lint + tests
         run: pnpm run ci
         # Bez sekretów aplikacji i bez dostępu do bazy.
-      - name: Test CodeQL result gate
-        run: node --test scripts/security/check-codeql-results.test.mjs
+      - name: Test CodeQL gate and safe diagnostics
+        run: node --test scripts/security/check-codeql-results.test.mjs scripts/security/print-codeql-locations.test.mjs
+
+  offline-inventory:
+    name: Offline security inventory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Test isolated report generation
+        run: node --test scripts/security/offline-audit-output.test.mjs
+      - name: Generate inventories without application services
+        run: |
+          node scripts/security/audit-service-role.ts --output-dir "$RUNNER_TEMP/security-inventory/service-role"
+          node scripts/security/inventory-entrypoints.ts --output-dir "$RUNNER_TEMP/security-inventory/entrypoints"
+        # Bez zależności aplikacji, sekretów i publikacji surowych raportów.
+        # Sukces oznacza wygenerowanie spisu, nie brak podatności.
 
   # Job może zakończyć się błędem; wymaganie go przed merge ustawia ruleset.
   dependency-review:
