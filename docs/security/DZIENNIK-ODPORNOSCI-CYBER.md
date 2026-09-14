@@ -5,6 +5,7 @@
 Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNOSCI-CYBER.md). Jest osobnym etapem po [wcześniejszych naprawach Astry](DZIENNIK-NAPRAW-ASTRA.md) i [audytach Claude](DZIENNIK-AUDYT.md). Nie zastępuje ich ani nie zmienia historycznych wyników.
 
 - Aktualna dyspozycja Igora z 2026-09-14: wznowić następną część planu. Przygotowano lokalnie pakiet F03 (MFA i granice administracji); pełna faza i odbiór środowiska pozostają otwarte. Igor następnie zatwierdził publikację tego pakietu na codex/security-admin-mfa i draft PR względem PR #3, z ujawnionym skutkiem Vercel Preview. Brak zgody na merge, działania produkcyjne, SQL i rotacje.
+- Hosting właściwej aplikacji: własny serwer Hetzner zarządzany przez Coolify (Igor potwierdził ponownie 2026-09-14). Vercel nie jest używanym hostingiem aplikacji; odnotowane statusy Vercel dotyczą pozostałej integracji GitHuba i nie potwierdzają wdrożenia na własnym serwerze.
 - Przed pracą przeczytaj aktualne instrukcje projektu i zgodę z rozmowy, sprawdź gałąź oraz cudze niezapisane zmiany.
 - Dopisuj datowane wpisy. Korekty starszych wniosków opisuj jako korekty, z przyczyną i nowym dowodem.
 - Oddzielaj: zaplanowane, w kodzie/konfiguracji, sprawdzone na testach, wdrożone, potwierdzone w nazwanym środowisku. Przywrócenie problemu otwiera wpis ponownie.
@@ -246,6 +247,16 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 Po przedstawieniu wyników, zakresu gałęzi codex/security-admin-mfa i skutku automatycznego Vercel Preview Igor odpowiedział „zatwierdzam lecisz dalej”. Zgoda obejmuje wysłanie przygotowanego pakietu do ezior8888-cpu/ksef-saas i roboczy PR względem codex/security-audit-inventory (PR #3). Nie oznacza merge ani operacji na Hetzner/Coolify, zmian schematu, rotacji lub odbioru produkcji.
 
 Stan kodu zatwierdzony do wysyłki: f9d3183 (kod aplikacji f592979). Niniejszy wpis jedynie zapisuje zgodę przed publikacją. Wyniki kontroli dla opublikowanego commita oraz faktyczny status publikacji zostaną umieszczone w opisie PR, aby kolejne dopiski dokumentacyjne nie uruchamiały ponownie CI i podglądów. Poprzednie wpisy o oczekiwaniu na zgodę są historyczne.
+
+## 2026-09-14 — Sprostowanie hostingu: własny serwer, pozostała integracja Vercel
+
+**Źródło:** Igor po odbiorze PR #4 doprecyzował, że nie używamy Vercela, a aplikacja działa na własnym serwerze. Jest to zgodne z aktualnymi instrukcjami projektu: Hetzner + Coolify. Wcześniejszy raport zbyt mocno eksponował wynik Vercela bez przypomnienia tej różnicy.
+
+**Rozróżnienie dowodów:** GitHub zgłosił status Vercel SUCCESS dla opublikowanych commitów c409bd6 i 6046db2. To wynik istniejącej integracji, nie potwierdzenie hostingu produkcji ani wdrożenia poprawek na Hetzner/Coolify. Nie odczytano ustawień konta Vercel, dlatego konfiguracja danych i sekretów tego podglądu pozostaje niezweryfikowana.
+
+**Dalsze raportowanie i odbiór:** gotowość aplikacji odnosimy do własnego serwera, faktycznie wdrożonego kodu, workera i schematu. Wpisy o Vercelu dotyczą uporządkowania pozostałości po migracji. Właściciel integracji powinien sprawdzić i odłączyć nieużywane automatyczne podglądy oraz zbędny dostęp, po potwierdzeniu ich konfiguracji. Samo sprostowanie nie stanowi zlecenia wyłączenia integracji.
+
+**Wykonano:** doprecyzowano zasady tego dziennika i dokument F03. Wyłącznie lokalna korekta dokumentacji; bez push, ponownego uruchamiania CI, zmian integracji, migracji i operacji na serwerze.
 
 ## Format następnego wpisu
 

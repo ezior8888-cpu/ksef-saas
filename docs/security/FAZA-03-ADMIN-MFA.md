@@ -2,6 +2,8 @@
 
 Data: 2026-09-14. Autor: Astra. Zakres zlecony przez Igora: kolejny pakiet stopniowej realizacji [planu](PLAN-ODPORNOSCI-CYBER.md). Stan wyjściowy: 2649cd0, lokalna gałąź codex/security-admin-mfa, oparta na PR #3. Dokument dotyczy kodu i lokalnych testów; nie potwierdza wdrożenia ani całej fazy 3.
 
+**Hosting (potwierdzenie Igora, 2026-09-14):** aplikacja działa na własnym serwerze Hetzner/Coolify. Vercel nie jest używanym hostingiem aplikacji. Wzmianki o Vercel Preview poniżej opisują pozostałą integrację GitHuba, której status nie potwierdza wdrożenia ani odbioru poprawek na własnym serwerze.
+
 ## Co zmienia pakiet
 
 ### CYB-F03-01 — potwierdzenie administratora przy danych
