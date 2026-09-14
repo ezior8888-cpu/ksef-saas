@@ -10,6 +10,8 @@ import {
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Sesja wygasła. Zaloguj się ponownie.',
+  mfa_required: 'Potwierdź logowanie kodem weryfikacji dwuetapowej i spróbuj ponownie.',
+  session_verification_failed: 'Nie udało się zweryfikować sesji. Zaloguj się ponownie.',
   invalid_password: 'Hasło nieprawidłowe.',
   no_email: 'Twoje konto nie ma przypisanego emaila.',
   request_failed: 'Nie udało się potwierdzić operacji. Odśwież stronę i sprawdź stan żądania.',

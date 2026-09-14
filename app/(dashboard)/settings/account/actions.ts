@@ -4,11 +4,12 @@ import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { logAudit } from '@/lib/audit/log';
 import { reauthenticateWithPassword } from '@/lib/auth/reauth';
+import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { sendGdprDeletionScheduledEmail } from '@/lib/email/send';
 import { cancelOwnGdprRequest, createGdprRequest } from '@/lib/gdpr/deletion';
 import { createClient } from '@/lib/supabase/server';
 
-type GdprActionError = 'not_authenticated' | 'invalid_password' | 'no_email' | 'request_failed' | 'not_pending';
+type GdprActionError = 'not_authenticated' | 'mfa_required' | 'session_verification_failed' | 'invalid_password' | 'no_email' | 'request_failed' | 'not_pending';
 export type GdprDeletionResult =
   | { ok: true; scheduledFor: string; alreadyScheduled: boolean; emailSent: boolean }
   | { ok: false; error: GdprActionError };
@@ -16,8 +17,11 @@ export type GdprCancellationResult = { ok: true } | { ok: false; error: GdprActi
 
 export async function requestGdprDeletionAction(formData: FormData): Promise<GdprDeletionResult> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'not_authenticated' };
+  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  if (!state) return { ok: false, error: 'session_verification_failed' };
+  if (state.status === 'unauthenticated') return { ok: false, error: 'not_authenticated' };
+  if (state.status === 'challenge_required') return { ok: false, error: 'mfa_required' };
+  const { user } = state;
   if (!user.email) return { ok: false, error: 'no_email' };
   const reauth = await reauthenticateWithPassword(String(formData.get('current_password') ?? ''));
   if (!reauth.ok) return { ok: false, error: 'invalid_password' };
@@ -63,8 +67,11 @@ export async function requestGdprDeletionAction(formData: FormData): Promise<Gdp
 /** Awaryjna droga anulowania, gdy mail nie dotarł: sesja + aktualne hasło. */
 export async function cancelOwnGdprDeletionAction(formData: FormData): Promise<GdprCancellationResult> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'not_authenticated' };
+  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  if (!state) return { ok: false, error: 'session_verification_failed' };
+  if (state.status === 'unauthenticated') return { ok: false, error: 'not_authenticated' };
+  if (state.status === 'challenge_required') return { ok: false, error: 'mfa_required' };
+  const { user } = state;
   const reauth = await reauthenticateWithPassword(String(formData.get('current_password') ?? ''));
   if (!reauth.ok) return { ok: false, error: 'invalid_password' };
   try {

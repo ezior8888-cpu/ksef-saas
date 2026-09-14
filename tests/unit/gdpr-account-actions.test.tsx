@@ -4,7 +4,7 @@ import { cancelOwnGdprDeletionAction, requestGdprDeletionAction } from '@/app/(d
 import { GdprSection } from '@/app/(dashboard)/settings/account/_components/gdpr-section';
 
 const mocks = vi.hoisted(() => ({
-  getUser: vi.fn(), createClient: vi.fn(), reauthenticateWithPassword: vi.fn(),
+  getSession: vi.fn(), getUser: vi.fn(), getClaims: vi.fn(), createClient: vi.fn(), reauthenticateWithPassword: vi.fn(),
   createGdprRequest: vi.fn(), cancelOwnGdprRequest: vi.fn(),
   sendGdprDeletionScheduledEmail: vi.fn(), logAudit: vi.fn(), revalidatePath: vi.fn(),
 }));
@@ -19,8 +19,14 @@ const created = { id: 'request-1', scheduledFor: new Date('2030-01-16'), cancelT
 const form = () => { const data = new FormData(); data.set('current_password', 'test-password'); data.set('user_id', 'attacker-supplied-id'); return data; };
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.createClient.mockResolvedValue({ auth: { getUser: mocks.getUser } });
+  vi.resetAllMocks();
+  mocks.createClient.mockResolvedValue({ auth: {
+    getSession: mocks.getSession, getUser: mocks.getUser, getClaims: mocks.getClaims,
+  } });
+  mocks.getSession.mockResolvedValue({ data: { session: {
+    access_token: 'synthetic-original-token', user: { id: 'cookie-user', factors: [] },
+  } }, error: null });
+  mocks.getClaims.mockResolvedValue({ data: { claims: { sub: 'session-user', aal: 'aal1' } }, error: null });
   mocks.getUser.mockResolvedValue({ data: { user: { id: 'session-user', email: 'user@example.test' } } });
   mocks.reauthenticateWithPassword.mockResolvedValue({ ok: true });
   mocks.createGdprRequest.mockResolvedValue(created);
@@ -30,6 +36,71 @@ beforeEach(() => {
 });
 
 describe('GDPR account actions', () => {
+
+  it.each(['phone', 'webauthn'])('blocks GDPR mutations from AAL1 with a verified %s factor', async (factor_type) => {
+    mocks.getUser.mockResolvedValue({ data: { user: {
+      id: 'session-user', email: 'user@example.test',
+      factors: [{ id: 'unsupported-factor', factor_type, status: 'verified' }],
+    } }, error: null });
+    expect(await requestGdprDeletionAction(form())).toEqual({ ok: false, error: 'mfa_required' });
+    expect(await cancelOwnGdprDeletionAction(form())).toEqual({ ok: false, error: 'mfa_required' });
+    expect(mocks.reauthenticateWithPassword).not.toHaveBeenCalled();
+    expect(mocks.createGdprRequest).not.toHaveBeenCalled();
+    expect(mocks.cancelOwnGdprRequest).not.toHaveBeenCalled();
+    expect(mocks.sendGdprDeletionScheduledEmail).not.toHaveBeenCalled();
+    expect(mocks.logAudit).not.toHaveBeenCalled();
+  });
+  it('blocks AAL1 with enrolled MFA before password confirmation and all effects, ignoring cookie factors', async () => {
+    mocks.getUser.mockResolvedValue({ data: { user: {
+      id: 'session-user', email: 'user@example.test',
+      factors: [{ id: 'factor', factor_type: 'totp', status: 'verified' }],
+      user_metadata: { mfa_verified: true, recovery_verified: true },
+    } }, error: null });
+    expect(await requestGdprDeletionAction(form())).toEqual({ ok: false, error: 'mfa_required' });
+    expect(await cancelOwnGdprDeletionAction(form())).toEqual({ ok: false, error: 'mfa_required' });
+    expect(mocks.reauthenticateWithPassword).not.toHaveBeenCalled();
+    expect(mocks.createGdprRequest).not.toHaveBeenCalled();
+    expect(mocks.cancelOwnGdprRequest).not.toHaveBeenCalled();
+    expect(mocks.sendGdprDeletionScheduledEmail).not.toHaveBeenCalled();
+    expect(mocks.logAudit).not.toHaveBeenCalled();
+  });
+
+  it('allows verified AAL2 without an organization and verifies the original token before reauthentication', async () => {
+    mocks.getUser.mockResolvedValue({ data: { user: {
+      id: 'session-user', email: 'user@example.test',
+      factors: [{ id: 'factor', factor_type: 'totp', status: 'verified' }],
+    } }, error: null });
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: 'session-user', aal: 'aal2' } }, error: null });
+    expect(await requestGdprDeletionAction(form())).toMatchObject({ ok: true });
+    expect(await cancelOwnGdprDeletionAction(form())).toEqual({ ok: true });
+    expect(mocks.getUser).toHaveBeenCalledWith('synthetic-original-token');
+    expect(mocks.getClaims).toHaveBeenCalledWith('synthetic-original-token');
+    expect(mocks.getClaims.mock.invocationCallOrder[0]).toBeLessThan(mocks.reauthenticateWithPassword.mock.invocationCallOrder[0]!);
+    expect(mocks.reauthenticateWithPassword.mock.invocationCallOrder[0]).toBeLessThan(mocks.createGdprRequest.mock.invocationCallOrder[0]!);
+  });
+
+  it.each([
+    { data: { claims: { sub: 'another-user', aal: 'aal2' } }, error: null },
+    { data: { claims: { sub: 'session-user' } }, error: null },
+    { data: null, error: { message: 'internal-signature-error' } },
+  ])('fails closed on invalid claims before password or GDPR operations: %j', async (response) => {
+    mocks.getClaims.mockResolvedValue(response);
+    expect(await requestGdprDeletionAction(form())).toEqual({ ok: false, error: 'session_verification_failed' });
+    expect(await cancelOwnGdprDeletionAction(form())).toEqual({ ok: false, error: 'session_verification_failed' });
+    expect(mocks.reauthenticateWithPassword).not.toHaveBeenCalled();
+    expect(mocks.createGdprRequest).not.toHaveBeenCalled();
+    expect(mocks.cancelOwnGdprRequest).not.toHaveBeenCalled();
+  });
+
+  it.each(['getSession', 'getUser', 'getClaims'] as const)('fails closed if %s is unavailable', async (method) => {
+    mocks[method].mockRejectedValue(new Error('internal-auth-detail'));
+    expect(await requestGdprDeletionAction(form())).toEqual({ ok: false, error: 'session_verification_failed' });
+    expect(await cancelOwnGdprDeletionAction(form())).toEqual({ ok: false, error: 'session_verification_failed' });
+    expect(mocks.reauthenticateWithPassword).not.toHaveBeenCalled();
+    expect(mocks.createGdprRequest).not.toHaveBeenCalled();
+    expect(mocks.cancelOwnGdprRequest).not.toHaveBeenCalled();
+  });
+
   it('requires a session and password before creating or cancelling anything', async () => {
     mocks.getUser.mockResolvedValue({ data: { user: null } });
     expect(await requestGdprDeletionAction(form())).toEqual({ ok: false, error: 'not_authenticated' });

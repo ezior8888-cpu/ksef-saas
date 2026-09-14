@@ -32,10 +32,15 @@ export async function getVerifiedMfaState(
   if (aal !== 'aal1' && aal !== 'aal2') throw new Error('mfa_assurance_invalid');
 
   const user = userData.user;
+  // A factor unsupported by our UI still protects the account. Do not treat
+  // its AAL1 session as an account without MFA at optional-MFA boundaries.
+  if (aal === 'aal1' && user.factors?.some((factor) => factor.status === 'verified')) {
+    return { status: 'challenge_required', user };
+  }
   // TOTP is the factor supported by the application's enrollment/challenge UI.
   // A stale AAL2 token after factor removal must not retain admin privileges.
   if (!user.factors?.some((factor) => factor.factor_type === 'totp' && factor.status === 'verified')) {
     return { status: 'enrollment_required', user };
   }
-  return { status: aal === 'aal2' ? 'verified' : 'challenge_required', user };
+  return { status: 'verified', user };
 }
