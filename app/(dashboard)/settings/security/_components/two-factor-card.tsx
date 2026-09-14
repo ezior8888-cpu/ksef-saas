@@ -5,24 +5,42 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   enrollTotpAction,
-  regenerateRecoveryCodesAction,
   unenrollTotpAction,
   verifyTotpEnrollmentAction,
 } from '../actions';
 
 interface Props {
   isEnabled: boolean;
-  remainingRecoveryCodes: number;
 }
 
 type Stage =
   | { kind: 'idle' }
   | { kind: 'enrolling'; factorId: string; qrCode: string; secret: string }
-  | { kind: 'show-codes'; codes: string[] }
-  | { kind: 'unenroll' }
-  | { kind: 'regenerate' };
+  | { kind: 'unenroll' };
 
-export function TwoFactorCard({ isEnabled, remainingRecoveryCodes }: Props) {
+const MFA_ERROR_MESSAGES: Record<string, string> = {
+  not_authenticated: 'Zaloguj się ponownie i spróbuj jeszcze raz.',
+  mfa_required: 'Potwierdź logowanie kodem z aplikacji 2FA i spróbuj ponownie.',
+  rate_limited: 'Zbyt wiele prób. Poczekaj chwilę i spróbuj ponownie.',
+  verification_unavailable: 'Nie możemy teraz potwierdzić sesji. Spróbuj ponownie za chwilę.',
+  already_enrolled: 'Masz już aktywne 2FA. Potwierdź logowanie kodem z aplikacji.',
+  verify_failed: 'Nieprawidłowy kod. Sprawdź godzinę w telefonie i spróbuj ponownie.',
+};
+
+function RecoveryUnavailableNotice() {
+  return (
+    <p className="rounded-xl border border-yellow-500/30 bg-yellow-500/5 px-4 py-3 text-sm text-yellow-900 dark:text-yellow-200">
+      Utrata dostępu do aplikacji TOTP może zablokować logowanie.
+      Samodzielne odzyskiwanie dostępu, także kodami ratunkowymi, jest obecnie
+      niedostępne. W razie utraty dostępu{' '}
+      <a href="mailto:support@faktflow.pl" className="underline underline-offset-4">
+        skontaktuj się z pomocą
+      </a>.
+    </p>
+  );
+}
+
+export function TwoFactorCard({ isEnabled }: Props) {
   const [stage, setStage] = useState<Stage>({ kind: 'idle' });
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -37,11 +55,7 @@ export function TwoFactorCard({ isEnabled, remainingRecoveryCodes }: Props) {
     startTransition(async () => {
       const r = await enrollTotpAction();
       if (!r.ok) {
-        setError(
-          r.error === 'already_enrolled'
-            ? 'Masz już aktywne 2FA. Wyłącz je przed dodaniem nowego.'
-            : 'Nie udało się rozpocząć rejestracji. Spróbuj ponownie.',
-        );
+        setError(MFA_ERROR_MESSAGES[r.error ?? ''] ?? 'Nie udało się rozpocząć rejestracji. Spróbuj ponownie.');
         return;
       }
       setStage({
@@ -60,10 +74,10 @@ export function TwoFactorCard({ isEnabled, remainingRecoveryCodes }: Props) {
     startTransition(async () => {
       const r = await verifyTotpEnrollmentAction(stage.factorId, code);
       if (!r.ok) {
-        setError('Nieprawidłowy kod. Sprawdź godzinę w telefonie i spróbuj ponownie.');
+        setError(MFA_ERROR_MESSAGES[r.error] ?? 'Nie udało się potwierdzić 2FA. Spróbuj ponownie.');
         return;
       }
-      setStage({ kind: 'show-codes', codes: r.recoveryCodes });
+      reset();
     });
   };
 
@@ -74,11 +88,8 @@ export function TwoFactorCard({ isEnabled, remainingRecoveryCodes }: Props) {
       const r = await unenrollTotpAction(password);
       if (!r.ok) {
         setError(
-          r.error === 'mfa_required'
-            ? 'Potwierdź logowanie kodem z aplikacji 2FA i spróbuj ponownie.'
-            : r.error === 'invalid_password'
-            ? 'Hasło nieprawidłowe.'
-            : 'Nie udało się wyłączyć 2FA.',
+          MFA_ERROR_MESSAGES[r.error] ??
+            (r.error === 'invalid_password' ? 'Hasło nieprawidłowe.' : 'Nie udało się wyłączyć 2FA.'),
         );
         return;
       }
@@ -86,32 +97,10 @@ export function TwoFactorCard({ isEnabled, remainingRecoveryCodes }: Props) {
     });
   };
 
-  const onRegenerateSubmit = (formData: FormData) => {
-    const password = String(formData.get('password') ?? '');
-    setError(null);
-    startTransition(async () => {
-      const r = await regenerateRecoveryCodesAction(password);
-      if (!r.ok) {
-        setError(
-          r.error === 'mfa_required'
-            ? 'Potwierdź logowanie kodem z aplikacji 2FA i spróbuj ponownie.'
-            : r.error === 'invalid_password'
-            ? 'Hasło nieprawidłowe.'
-            : 'Nie udało się wygenerować nowych kodów.',
-        );
-        return;
-      }
-      setStage({ kind: 'show-codes', codes: r.recoveryCodes });
-    });
-  };
-
-  if (stage.kind === 'show-codes') {
-    return <RecoveryCodesPanel codes={stage.codes} onDone={reset} />;
-  }
-
   if (stage.kind === 'enrolling') {
     return (
       <div className="space-y-4">
+        <RecoveryUnavailableNotice />
         <p className="text-sm">
           Zeskanuj QR aplikacją TOTP (Google Authenticator, 1Password, Authy)
           i wpisz 6-cyfrowy kod, aby potwierdzić.
@@ -152,18 +141,13 @@ export function TwoFactorCard({ isEnabled, remainingRecoveryCodes }: Props) {
                 />
               </div>
               {error && (
-                <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+                <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>
               )}
               <div className="flex gap-2">
                 <Button type="submit" disabled={isPending}>
                   {isPending ? 'Weryfikacja...' : 'Potwierdź'}
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={reset}
-                  disabled={isPending}
-                >
+                <Button type="button" variant="outline" onClick={reset} disabled={isPending}>
                   Anuluj
                 </Button>
               </div>
@@ -187,17 +171,12 @@ export function TwoFactorCard({ isEnabled, remainingRecoveryCodes }: Props) {
           autoComplete="current-password"
           placeholder="Aktualne hasło"
         />
-        {error && <p className="text-sm text-red-700 dark:text-red-400">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>}
         <div className="flex gap-2">
           <Button type="submit" variant="destructive" disabled={isPending}>
             {isPending ? 'Wyłączanie...' : 'Wyłącz 2FA'}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={reset}
-            disabled={isPending}
-          >
+          <Button type="button" variant="outline" onClick={reset} disabled={isPending}>
             Anuluj
           </Button>
         </div>
@@ -205,128 +184,24 @@ export function TwoFactorCard({ isEnabled, remainingRecoveryCodes }: Props) {
     );
   }
 
-  if (stage.kind === 'regenerate') {
-    return (
-      <form action={onRegenerateSubmit} className="space-y-3 max-w-sm">
-        <p className="text-sm">
-          Nowe kody zastąpią stare — nieaktualne kody przestaną działać.
-          Potwierdź aktualnym hasłem.
-        </p>
-        <Input
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          placeholder="Aktualne hasło"
-        />
-        {error && <p className="text-sm text-red-700 dark:text-red-400">{error}</p>}
-        <div className="flex gap-2">
-          <Button type="submit" disabled={isPending}>
-            {isPending ? 'Generowanie...' : 'Wygeneruj nowe kody'}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={reset}
-            disabled={isPending}
-          >
-            Anuluj
-          </Button>
-        </div>
-      </form>
-    );
-  }
-
-  // idle
-  if (!isEnabled) {
-    return (
-      <div className="space-y-3">
-        {error && <p className="text-sm text-red-700 dark:text-red-400">{error}</p>}
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-foreground/5 border border-glass-border text-xs font-medium">
-            Wyłączone
-          </span>
-        </div>
+  return (
+    <div className="space-y-4">
+      {error && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>}
+      <span className={isEnabled
+        ? 'inline-flex items-center px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-xs font-medium text-green-700 dark:text-green-400'
+        : 'inline-flex items-center px-2.5 py-1 rounded-full bg-foreground/5 border border-glass-border text-xs font-medium'}>
+        {isEnabled ? 'Włączone' : 'Wyłączone'}
+      </span>
+      <RecoveryUnavailableNotice />
+      {isEnabled ? (
+        <Button variant="destructive" onClick={() => setStage({ kind: 'unenroll' })}>
+          Wyłącz 2FA
+        </Button>
+      ) : (
         <Button onClick={onEnroll} disabled={isPending}>
           {isPending ? 'Ładowanie...' : 'Włącz 2FA'}
         </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {error && <p className="text-sm text-red-700 dark:text-red-400">{error}</p>}
-      <div className="flex items-center gap-3">
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-xs font-medium text-green-700 dark:text-green-400">
-          Włączone
-        </span>
-        <span className="text-sm text-muted-foreground">
-          {remainingRecoveryCodes > 0
-            ? `Pozostało ${remainingRecoveryCodes} kodów ratunkowych`
-            : 'Brak kodów ratunkowych — wygeneruj nowe'}
-        </span>
-      </div>
-      <div className="flex gap-2 flex-wrap">
-        <Button
-          variant="outline"
-          onClick={() => setStage({ kind: 'regenerate' })}
-        >
-          Nowe kody ratunkowe
-        </Button>
-        <Button
-          variant="destructive"
-          onClick={() => setStage({ kind: 'unenroll' })}
-        >
-          Wyłącz 2FA
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function RecoveryCodesPanel({
-  codes,
-  onDone,
-}: {
-  codes: string[];
-  onDone: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(codes.join('\n'));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // graceful — user może ręcznie zaznaczyć
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/5 px-4 py-3 text-sm text-yellow-900 dark:text-yellow-200">
-        <strong>Zapisz te kody w bezpiecznym miejscu</strong> (menedżer haseł,
-        wydruk, sejf). Każdy działa raz — używaj gdy stracisz dostęp do
-        aplikacji TOTP. Po opuszczeniu strony już ich NIE pokażemy.
-      </div>
-      <div className="grid grid-cols-2 gap-2 font-mono text-sm">
-        {codes.map((c) => (
-          <code
-            key={c}
-            className="px-3 py-2 rounded-lg bg-foreground/5 border border-glass-border"
-          >
-            {c}
-          </code>
-        ))}
-      </div>
-      <div className="flex gap-2">
-        <Button onClick={onCopy} variant="outline">
-          {copied ? 'Skopiowane!' : 'Skopiuj do schowka'}
-        </Button>
-        <Button onClick={onDone}>Mam zapisane — kontynuuj</Button>
-      </div>
+      )}
     </div>
   );
 }

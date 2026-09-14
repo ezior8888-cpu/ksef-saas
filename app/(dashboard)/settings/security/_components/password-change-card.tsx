@@ -8,6 +8,8 @@ import { changePasswordAction, type PasswordChangeResult } from '../actions';
 const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Sesja wygasła. Zaloguj się ponownie.',
   invalid_current: 'Aktualne hasło jest nieprawidłowe.',
+  mfa_required: 'Potwierdź logowanie kodem z aplikacji 2FA i spróbuj ponownie.',
+  verification_unavailable: 'Nie możemy teraz potwierdzić sesji. Spróbuj ponownie za chwilę.',
   weak_password:
     'Nowe hasło nie spełnia wymagań (min 12, mała + duża litera, cyfra, znak specjalny).',
   password_breached:

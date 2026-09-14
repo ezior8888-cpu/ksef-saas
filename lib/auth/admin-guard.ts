@@ -43,7 +43,7 @@ export async function requireAdmin(): Promise<AdminContext> {
     redirect('/dashboard');
   }
   if (state.status === 'enrollment_required') {
-    redirect('/settings/security?notice=admin_mfa_required');
+    redirect('/login/two-factor/setup');
   }
   if (state.status === 'challenge_required') {
     redirect('/login/two-factor?redirect=%2Fadmin');
