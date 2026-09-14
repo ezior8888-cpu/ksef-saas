@@ -7,7 +7,12 @@ import { TwoFactorCard } from './_components/two-factor-card';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SecuritySettingsPage() {
+export default async function SecuritySettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ notice?: string }>;
+}) {
+  const { notice } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -31,6 +36,13 @@ export default async function SecuritySettingsPage() {
           Hasło, weryfikacja dwuetapowa i sesje
         </p>
       </div>
+
+      {notice === 'admin_mfa_required' && (
+        <p role="status" className="rounded-xl border border-glass-border bg-foreground/5 p-4 text-sm">
+          Panel administratora wymaga weryfikacji dwuetapowej. Włącz 2FA poniżej,
+          zapisz kody ratunkowe i wróć do panelu administratora.
+        </p>
+      )}
 
       <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
         <div className="flex items-start gap-4">

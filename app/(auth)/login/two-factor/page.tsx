@@ -11,6 +11,7 @@ import {
   authTitleClass,
 } from '@/components/auth/auth-form-styles';
 import { createClient } from '@/lib/supabase/server';
+import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { safeRedirectPath } from '@/lib/auth/safe-redirect';
 import { verifyMfaChallengeAction } from './actions';
 
@@ -31,24 +32,14 @@ export default async function TwoFactorChallengePage({
 }: {
   searchParams: Promise<{ error?: string; redirect?: string }>;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: aal } =
-    await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-  if (aal?.currentLevel === 'aal2') {
-    redirect('/dashboard');
-  }
-  if (aal?.nextLevel !== 'aal2') {
-    redirect('/dashboard');
-  }
-
   const { error, redirect: redirectParam } = await searchParams;
-  const errorMsg = error ? ERROR_MESSAGES[error] ?? ERROR_MESSAGES.unknown : null;
   const safeNext = safeRedirectPath(redirectParam ?? null);
+  const state = await getVerifiedMfaState(await createClient());
+  if (state.status === 'unauthenticated') redirect('/login');
+  if (state.status === 'verified') redirect(safeNext);
+  if (state.status === 'enrollment_required') redirect('/settings/security');
+
+  const errorMsg = error ? ERROR_MESSAGES[error] ?? ERROR_MESSAGES.unknown : null;
 
   return (
     <div className="space-y-6">

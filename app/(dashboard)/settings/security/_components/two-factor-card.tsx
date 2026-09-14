@@ -74,7 +74,9 @@ export function TwoFactorCard({ isEnabled, remainingRecoveryCodes }: Props) {
       const r = await unenrollTotpAction(password);
       if (!r.ok) {
         setError(
-          r.error === 'invalid_password'
+          r.error === 'mfa_required'
+            ? 'Potwierdź logowanie kodem z aplikacji 2FA i spróbuj ponownie.'
+            : r.error === 'invalid_password'
             ? 'Hasło nieprawidłowe.'
             : 'Nie udało się wyłączyć 2FA.',
         );
@@ -91,7 +93,9 @@ export function TwoFactorCard({ isEnabled, remainingRecoveryCodes }: Props) {
       const r = await regenerateRecoveryCodesAction(password);
       if (!r.ok) {
         setError(
-          r.error === 'invalid_password'
+          r.error === 'mfa_required'
+            ? 'Potwierdź logowanie kodem z aplikacji 2FA i spróbuj ponownie.'
+            : r.error === 'invalid_password'
             ? 'Hasło nieprawidłowe.'
             : 'Nie udało się wygenerować nowych kodów.',
         );

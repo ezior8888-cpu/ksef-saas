@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   getUser: vi.fn(),
+  getSession: vi.fn(),
+  getClaims: vi.fn(),
   admin: vi.fn(),
   from: vi.fn(),
   listUsers: vi.fn(),
@@ -23,7 +25,7 @@ import { listAdminUsers, getAdminUserDetail } from '@/lib/admin/users';
 import { getAdminOverviewMetrics } from '@/lib/admin/metrics';
 import { listUserPayments } from '@/app/admin/users/[userId]/billing-actions';
 
-const operator = { id: 'operator-fixture', email: 'operator@example.test' };
+const operator = { id: 'operator-fixture', email: 'operator@example.test', email_confirmed_at: '2026-09-14T00:00:00Z', factors: [{ id: 'factor-fixture', factor_type: 'totp', status: 'verified' }] };
 const member = { id: 'member-fixture', email: 'member@example.test' };
 const user = {
   id: 'user-fixture', email: 'user@example.test',
@@ -72,7 +74,9 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv('ADMIN_EMAILS', operator.email);
   vi.stubEnv('KSEF_ENV', 'test');
-  mocks.session.mockResolvedValue({ auth: { getUser: mocks.getUser } });
+  mocks.session.mockResolvedValue({ auth: { getUser: mocks.getUser, getSession: mocks.getSession, getClaims: mocks.getClaims } });
+  mocks.getSession.mockResolvedValue({ data: { session: { access_token: 'synthetic-token' } }, error: null });
+  mocks.getClaims.mockResolvedValue({ data: { claims: { sub: operator.id, aal: 'aal2' } }, error: null });
   mocks.getUser.mockResolvedValue({ data: { user: operator } });
   mocks.redirect.mockImplementation((target: string): never => {
     throw new Error('test-redirect:' + target);
@@ -111,10 +115,17 @@ describe.each(readers)('$name authorization at the data boundary', ({ read }) =>
     { name: 'identity without email', identity: { id: 'no-email-fixture' }, destination: '/dashboard' },
   ])('rejects $name before any privileged read', async ({ identity, destination }) => {
     mocks.getUser.mockResolvedValue({ data: { user: identity } });
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: identity?.id, aal: 'aal2' } }, error: null });
 
     await expect(read()).rejects.toThrow('test-redirect:' + destination);
 
     expect(mocks.getUser).toHaveBeenCalledOnce();
+    expectNoPrivilegedRead();
+  });
+
+  it('blocks an allowlisted operator with only first-factor authentication', async () => {
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: operator.id, aal: 'aal1' } }, error: null });
+    await expect(read()).rejects.toThrow('test-redirect:/login/two-factor?redirect=%2Fadmin');
     expectNoPrivilegedRead();
   });
 

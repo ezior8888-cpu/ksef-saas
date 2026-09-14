@@ -1,3 +1,6 @@
+import 'server-only';
+
+import { requireAdmin } from '@/lib/auth/admin-guard';
 import { getLastBackup, type LastBackupSummary } from '@/lib/backup/backup-log';
 
 /**
@@ -17,6 +20,7 @@ export interface BackupOverview {
 }
 
 export async function getBackupOverview(): Promise<BackupOverview> {
+  await requireAdmin();
   const [lastDaily, lastWeekly] = await Promise.all([
     getLastBackup('daily'),
     getLastBackup('weekly'),

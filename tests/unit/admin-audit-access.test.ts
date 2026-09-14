@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   getUser: vi.fn(),
+  getSession: vi.fn(),
+  getClaims: vi.fn(),
   admin: vi.fn(),
   from: vi.fn(),
   range: vi.fn(),
@@ -14,7 +16,7 @@ vi.mock('next/navigation', () => ({ redirect: mocks.redirect }));
 
 import { searchAuditLogs } from '@/lib/admin/audit';
 
-const operator = { id: 'operator-fixture', email: 'operator@example.test' };
+const operator = { id: 'operator-fixture', email: 'operator@example.test', email_confirmed_at: '2026-09-14T00:00:00Z', factors: [{ id: 'factor-fixture', factor_type: 'totp', status: 'verified' }] };
 const rows = ['tenant-a', 'tenant-b'].map((tenantId, index) => ({
   id: 'audit-' + index,
   action: 'invoice.xml_downloaded',
@@ -30,7 +32,9 @@ const rows = ['tenant-a', 'tenant-b'].map((tenantId, index) => ({
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv('ADMIN_EMAILS', operator.email);
-  mocks.session.mockResolvedValue({ auth: { getUser: mocks.getUser } });
+  mocks.session.mockResolvedValue({ auth: { getUser: mocks.getUser, getSession: mocks.getSession, getClaims: mocks.getClaims } });
+  mocks.getSession.mockResolvedValue({ data: { session: { access_token: 'synthetic-token' } }, error: null });
+  mocks.getClaims.mockResolvedValue({ data: { claims: { sub: operator.id, aal: 'aal2' } }, error: null });
   mocks.redirect.mockImplementation((target: string) => {
     throw new Error('test-redirect:' + target);
   });
@@ -52,6 +56,7 @@ describe('admin audit data access', () => {
     { name: 'ordinary authenticated member', user: { id: 'member-fixture', email: 'member@example.test' }, destination: '/dashboard' },
   ])('rejects $name before creating a service-role client', async ({ user, destination }) => {
     mocks.getUser.mockResolvedValue({ data: { user } });
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: user?.id, aal: 'aal2' } }, error: null });
 
     await expect(searchAuditLogs()).rejects.toThrow('test-redirect:' + destination);
 
