@@ -4,7 +4,10 @@ Zasada jak w `docs/flo/DZIENNIK-BARTOSZ.md`: **dopisujemy na końcu, nigdy
 nie edytujemy cudzych wpisów.** Jedyny wyjątek — znacznik `⬜` przy zadaniu
 zmieniasz na `✅`, gdy je wykonasz.
 
-Audyt prowadzi Igor (+ Claude) na gałęzi `claude/app-security-plan-74b134`.
+Audyt prowadzi Igor (+ Claude). **Kod audytu, naprawy i migracje są na origin
+na gałęzi `codex/security-admin-mfa` (PR #4 do `main`).** Gałąź
+`claude/app-security-plan-74b134`, na której audyt się zaczynał, istnieje tylko
+lokalnie u Igora — nie szukaj jej na origin (korekta 2026-09-14, wpis na końcu).
 Zadania wymagające dostępu do produkcyjnej bazy i serwerów wykonuje Bartosz.
 
 ---
@@ -827,3 +830,51 @@ dziennika domknięte albo przekazane jako świadome zadania dla Bartka.
 ## 2026-09-09 · Naprawy po audycie — Igor + Codex Astra
 
 Igor zlecił naprawę ustaleń i dopisanie dziennika dla AI współpracownika. Bieżące zmiany, wyniki testów, zależności migracji i ograniczenia są w [DZIENNIK-NAPRAW-ASTRA.md](DZIENNIK-NAPRAW-ASTRA.md). Historyczny raport dni 0–5 pozostaje zapisem stanu sprzed napraw. Żadna migracja ani wdrożenie nie zostały wykonane przez Astrę. Nie traktować przygotowanego pliku SQL jako naprawionej produkcji.
+
+---
+
+## 2026-09-14 · KOREKTA DLA CLAUDE'A BARTOSZA — gdzie NAPRAWDĘ są migracje
+
+Kto: Igor + Claude
+
+Bartosz zgłosił, że jego sesja nie widzi migracji 00068/00069. Sprawdzone
+w gicie — przyczyna jest po naszej stronie, nie po jego. Trzy fakty:
+
+1. **Migracji NIE MA na `main`.** `origin/main` kończy się na `00067_flo_rollout`.
+   `git pull` na main niczego nie przyniesie.
+2. **Gałąź podana na górze tego dziennika (`claude/app-security-plan-74b134`)
+   istnieje TYLKO lokalnie u Igora.** Nigdy nie została wypchnięta. Nie szukaj jej
+   na origin — nie ma jej tam. To był nasz błąd w instrukcji.
+3. **Migracje SĄ na origin, na gałęzi `codex/security-admin-mfa`**, która idzie
+   jako **PR #4** i zawiera całość audytu plus trzy starsze PR-y (#1-#3).
+
+Do wdrożenia są **dokładnie DWIE**:
+- `supabase/migrations/00068_fix_invoices_overdue_cross_tenant_leak.sql` (SEC-C-05, krytyczna)
+- `supabase/migrations/00069_audit_permission_hardening.sql` (SEC-C-06/07/08)
+
+**Migracja `00070` NIE ISTNIEJE** — mimo wpisu w `DZIENNIK-NAPRAW-ASTRA.md` (linia 53).
+Nowsza korekta w tym samym pliku (linia 5) to prostuje. Pliku nie ma ani lokalnie,
+ani na origin. Nie szukaj.
+
+**Jak je zobaczyć od ręki (bez merge):**
+
+```bash
+git fetch origin
+git show origin/codex/security-admin-mfa:supabase/migrations/00068_fix_invoices_overdue_cross_tenant_leak.sql
+git show origin/codex/security-admin-mfa:supabase/migrations/00069_audit_permission_hardening.sql
+```
+
+**UWAGA o kolejności — przeczytaj przed wdrożeniem.** Zgodnie z `AGENTS.md`
+migracje wdraża się z `main`, bo main jest źródłem prawdy. Wdrożenie 68/69 na
+produkcję, gdy main ich nie ma, tworzy rozjazd (prod ma migrację, repo nie),
+i przy następnym `git pull` nikt nie będzie wiedział, skąd się wzięła. Właściwa
+kolejność: **najpierw merge PR #4 do main, potem wdrożenie z main.** Decyzja
+o merge należy do Bartosza jako właściciela repo — PR #4 to 42 commity
+(migracje + MFA + naprawy kodu), nie same dwa pliki SQL.
+
+Zadania dla Bartka:
+- ⬜ Przejrzeć i zmergować PR #4 (`codex/security-admin-mfa` → `main`).
+- ⬜ Po merge: wdrożyć 00068 i 00069 z main procedurą z AGENTS.md
+  (migracja → `schema_migrations` → `NOTIFY pgrst` → weryfikacja z nagłówka pliku).
+- ⬜ Po wdrożeniu: `bash scripts/security/run-prod-verify.sh` — potwierdza, że
+  C-05 i C-06 są zamknięte.

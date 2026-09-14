@@ -4,7 +4,8 @@
 
 Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNOSCI-CYBER.md). Jest osobnym etapem po [wcześniejszych naprawach Astry](DZIENNIK-NAPRAW-ASTRA.md) i [audytach Claude](DZIENNIK-AUDYT.md). Nie zastępuje ich ani nie zmienia historycznych wyników.
 
-- Aktualna dyspozycja Igora z 2026-09-13: opublikować przygotowane poprawki, przekazać listę Bartkowi i zakończyć na dziś. Kolejnej fazy nie rozpoczynać bez wznowienia. Zgoda na publikację uwzględnia automatyczny Vercel Preview, ale nie upoważnia do merge, działań na produkcji, SQL, testów na produkcji ani rotacji.
+- Aktualna dyspozycja Igora z 2026-09-14: wznowić następną część planu. Przygotowano lokalnie pakiet F03 (MFA i granice administracji); pełna faza i odbiór środowiska pozostają otwarte. Igor następnie zatwierdził publikację tego pakietu na codex/security-admin-mfa i draft PR względem PR #3, z ujawnionym skutkiem Vercel Preview. Brak zgody na merge, działania produkcyjne, SQL i rotacje.
+- Hosting właściwej aplikacji: własny serwer Hetzner zarządzany przez Coolify (Igor potwierdził ponownie 2026-09-14). Vercel nie jest używanym hostingiem aplikacji; odnotowane statusy Vercel dotyczą pozostałej integracji GitHuba i nie potwierdzają wdrożenia na własnym serwerze.
 - Przed pracą przeczytaj aktualne instrukcje projektu i zgodę z rozmowy, sprawdź gałąź oraz cudze niezapisane zmiany.
 - Dopisuj datowane wpisy. Korekty starszych wniosków opisuj jako korekty, z przyczyną i nowym dowodem.
 - Oddzielaj: zaplanowane, w kodzie/konfiguracji, sprawdzone na testach, wdrożone, potwierdzone w nazwanym środowisku. Przywrócenie problemu otwiera wpis ponownie.
@@ -204,6 +205,58 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 **Pozostało Bartkowi:** Dependency graph, wymagane kontrole/review, potwierdzenie konfiguracji Vercel Preview, chroniony odizolowany staging i zakres sekretów, zgodność faktycznie wdrożonego kodu/workera/schematu. Instrukcja rozróżnia te czynności od późniejszych faz.
 
 **Granice zgody i zakończenie:** zatwierdzenie uwzględnia ujawnione automatyczne preview po publikacji; nie wykonano merge, polecenia deploy, zmian na Hetzner/Coolify, migracji, restartów ani rotacji. Nie wysyłano wiadomości Bartkowi. Nie rozpoczynamy dalszej fazy ani pracy w tle. Kolejne prace wymagają wznowienia przez użytkownika.
+
+## 2026-09-14 — F03: MFA administratorów i dodatkowe granice dostępu
+
+**Dyspozycja:** Igor wznowił stopniową realizację następnej fazy. Potwierdził w rozmowie, że Bartek nie wykonał jeszcze wczorajszego przekazania. Dzisiejszy zakres to kod, lokalne testy i dziennik. Poprzednia zgoda na publikację dotyczyła poprzedniego pakietu; nie wykonano dziś push, merge, wdrożenia, operacji na serwerach, migracji, rotacji ani testów prawdziwych usług.
+
+**Stan początkowy:** worktree flo-agent-interface-04fab0, czysty kod na 2649cd0. Utworzono lokalną gałąź codex/security-admin-mfa. Root repo i jego zastane zmiany .gitignore/AGENTS/.codex/.mcp pozostały nietknięte. Odczyt GitHub potwierdził otwarty draft PR #3 z tym samym headem, ostatni Security PASS i CI FAIL (znana konfiguracja Dependency graph); nowych przebiegów nie było. To nie jest wynik GitHub dla dzisiejszych zmian.
+
+**Wykonano:** pełny opis i scenariusze odbioru w [FAZA-03-ADMIN-MFA.md](FAZA-03-ADMIN-MFA.md).
+
+- **CYB-F03-01:** centralny guard wymaga allowlisty, potwierdzonego emaila, zweryfikowanego AAL2 i aktualnego TOTP. getUser(token) i getClaims(token) odnoszą się do jednego tokenu, a sub musi odpowiadać użytkownikowi. Cookies/metadata nie są źródłem decyzji. Pierwszy enrollment i challenge mają odrębne ścieżki; brak/błąd nie przyznaje dostępu.
+- **CYB-F03-02:** jedenaście dodatkowych odczytów flags/support/system/backups chronionych przed klientem uprzywilejowanym. Cztery strony, w tym FLO, wymagają guarda przed rozpoczęciem pracy. Usunięto catch na stronach support/system połykający odmowę; nie zmieniano starych fallbacków wewnętrznych statystyk.
+- **CYB-F03-03:** regeneracja kodów i wyłączenie MFA wymagają AAL2 przy samej akcji. Sprawdzenie hasła używa izolowanego klienta, nie obniża sesji przeglądarki; zamyka wyłącznie nową tymczasową sesję, z potwierdzeniem wyniku.
+- **CYB-F03-04:** warunkowe zużycie recovery code po id + user_id + used_at IS NULL; sukces wymaga jednego zapisanego rekordu. Dwie równoległe próby nie uzyskują dwóch sukcesów.
+- **CYB-F03-05:** usunięcie konta bierze pod uwagę wyłącznie aktywne właścicielstwo. Były właściciel z historycznym role=owner/status=revoked nie wyłącza dawnej organizacji. Błędy odczytu i zapisów zatrzymują dalsze kroki; retencja i wieloetapowość bez transakcji pozostają oddzielne.
+- **CYB-F03-06, ograniczenie skutków:** usunięto błędne signOut(UUID). Niedostępne wymuszenie wylogowania jawnie odmawia po autoryzacji. Zawieszenie potwierdza tylko ban i oznacza odwołanie sesji jako niepotwierdzone. Właściwy mechanizm odwołania po ID pozostaje otwarty dla właściciela.
+
+**Korekta podczas dodatkowego przeglądu:** zwykłe SDK auth.signOut ukrywa HTTP 401/403/404. Trzy hermetyczne testy z prawdziwym SDK wykazały błędny sukces pierwszej wersji reauth. Zastąpiono wyłącznie cleanup przez auth.admin.signOut z JWT świeżej sesji i scope local, bez service_role. Po poprawce wszystkie odmowy blokują operację. Nie zastępowano tokenu JWT identyfikatorem ani tokenem innego użytkownika.
+
+**Commity kodu:**
+- 3b44695312db85e14cb2f82df79b5da38af0bf07 — izolowana reautoryzacja i potwierdzony cleanup.
+- 3351c93b1c008d36f760bdeee8b843650419b2e5 — atomowe zużywanie recovery code.
+- 1c7428b2ff4eec7cadd0b5606fb3a86f24a55c18 — zakres usuwania konta i uczciwy status sesji.
+- f59297974c7c7511e02c81371fb721a4d02cf660 — obowiązkowe MFA i brakujące granice administracji.
+
+**Końcowa walidacja lokalna kodu:**
+- Vitest: **96 plików / 1506 testów PASS**. W tym 21 reauth (rzeczywisty SDK, atrapa HTTP), 13 konsumpcji recovery z barierą współbieżności, 10 zakresu GDPR, 8 statusu odwołania sesji, 30 bocznych odczytów i scenariusze guarda/MFA/ustawień/routingu.
+- Typecheck i lint wszystkich 27 zmienionych/nowych plików TS/TSX PASS; diff check PASS.
+- Izolowana kompilacja Next.js 16.3.4 webpack w trybie compile PASS. Kopia źródeł bez plików .env, jawna lista zmiennych procesu i syntetyczna konfiguracja Supabase (loopback port 1). Zgodność bajtowa wszystkich 17 zmienionych plików aplikacji z końcowym kodem: PASS. Artefakt lokalny: faktflow-security-compile-YtCv5P. To nie pełny build z generowaniem stron ani test przeglądarkowy/produkcyjny; Sentry zgłosił ostrzeżenie o niepełnym wsparciu trybu compile.
+- Gitleaks przygotowanego kodu PASS. Jedno wcześniejsze trafienie dotyczyło sztucznego tokenu dopisanego do testu reauth; zastąpiono go oczywistym krótkim placeholderem. Nie dodano wyjątku ani pominięcia skanera.
+- Gitleaks całej osiągalnej historii do f592979: **210 commitów / 9,48 MB, brak trafień**; historyczne trzy dokładne wyjątki pozostały bez zmian.
+- Dodatkowe przeglądy agentów potwierdziły kolejność guardów i poprawkę cleanup. To przegląd w obrębie tego zespołu AI, nie zewnętrzny pentest.
+- Nie ma zmian pod supabase, lib/jobs ani lib/inngest. Testy nie korzystały z .env, prawdziwej bazy, kont, maili, płatności, KSeF ani kluczy.
+
+**Otwarte warunki odbioru:** Bartek musi potwierdzić działające TOTP w rzeczywistym GoTrue; lokalny config wyłącza enrollment/verification. Trzeba przećwiczyć enrollment/operatora bez membership, stare sesje, odzyskiwanie MFA i zmianę hasła przy secure_password_change. Istniejące recovery codes nie podnoszą AAL do AAL2 — jednorazowość kodu nie naprawia kompletnego odzyskiwania. Brak sprawdzonej ścieżki odzyskania blokuje uznanie obowiązkowego MFA za odebrane. Nadal otwarte: odwołanie sesji po ID, pełne MFA zwykłych kont/API/RLS, pozostała inwentaryzacja oraz retencja i transakcyjność GDPR.
+
+**Publikacja i dalszy krok:** kod jest wyłącznie lokalny, do review jako kolejny draft względem codex/security-audit-inventory (PR #3) w ezior8888-cpu/ksef-saas. Istniejący Vercel Preview może uruchomić się po publikacji. Osobna zgoda ma dotyczyć dokładnie tej gałęzi/pakietu i tego skutku. Wydanie na Hetzner/Coolify wymaga odrębnego uzgodnienia oraz odbioru Bartka. Pełna F03 pozostaje otwarta; nie ustawiono automatyzacji ani pracy w tle.
+
+## 2026-09-14 — Zgoda na publikację pakietu F03
+
+Po przedstawieniu wyników, zakresu gałęzi codex/security-admin-mfa i skutku automatycznego Vercel Preview Igor odpowiedział „zatwierdzam lecisz dalej”. Zgoda obejmuje wysłanie przygotowanego pakietu do ezior8888-cpu/ksef-saas i roboczy PR względem codex/security-audit-inventory (PR #3). Nie oznacza merge ani operacji na Hetzner/Coolify, zmian schematu, rotacji lub odbioru produkcji.
+
+Stan kodu zatwierdzony do wysyłki: f9d3183 (kod aplikacji f592979). Niniejszy wpis jedynie zapisuje zgodę przed publikacją. Wyniki kontroli dla opublikowanego commita oraz faktyczny status publikacji zostaną umieszczone w opisie PR, aby kolejne dopiski dokumentacyjne nie uruchamiały ponownie CI i podglądów. Poprzednie wpisy o oczekiwaniu na zgodę są historyczne.
+
+## 2026-09-14 — Sprostowanie hostingu: własny serwer, pozostała integracja Vercel
+
+**Źródło:** Igor po odbiorze PR #4 doprecyzował, że nie używamy Vercela, a aplikacja działa na własnym serwerze. Jest to zgodne z aktualnymi instrukcjami projektu: Hetzner + Coolify. Wcześniejszy raport zbyt mocno eksponował wynik Vercela bez przypomnienia tej różnicy.
+
+**Rozróżnienie dowodów:** GitHub zgłosił status Vercel SUCCESS dla opublikowanych commitów c409bd6 i 6046db2. To wynik istniejącej integracji, nie potwierdzenie hostingu produkcji ani wdrożenia poprawek na Hetzner/Coolify. Nie odczytano ustawień konta Vercel, dlatego konfiguracja danych i sekretów tego podglądu pozostaje niezweryfikowana.
+
+**Dalsze raportowanie i odbiór:** gotowość aplikacji odnosimy do własnego serwera, faktycznie wdrożonego kodu, workera i schematu. Wpisy o Vercelu dotyczą uporządkowania pozostałości po migracji. Właściciel integracji powinien sprawdzić i odłączyć nieużywane automatyczne podglądy oraz zbędny dostęp, po potwierdzeniu ich konfiguracji. Samo sprostowanie nie stanowi zlecenia wyłączenia integracji.
+
+**Wykonano:** doprecyzowano zasady tego dziennika i dokument F03. Wyłącznie lokalna korekta dokumentacji; bez push, ponownego uruchamiania CI, zmian integracji, migracji i operacji na serwerze.
 
 ## Format następnego wpisu
 

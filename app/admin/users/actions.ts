@@ -46,9 +46,7 @@ export async function suspendUserAction(
     return { success: false, error: error.message };
   }
 
-  // Force-logout wszędzie — bez tego user może dalej używać aktywnej sesji
-  // do końca jej TTL (1h dla session, 1y dla refresh token).
-  await supabase.auth.admin.signOut(userId, 'global');
+  // A successful ban does not prove that existing sessions were revoked.
 
   await logAuditSystem({
     action: 'admin.user.suspended',
@@ -56,13 +54,16 @@ export async function suspendUserAction(
     userId: admin.userId,
     entityType: 'user',
     entityId: userId,
-    metadata: { adminEmail: admin.email, action: 'ban + global signout' },
+    metadata: { adminEmail: admin.email, action: 'ban', sessionRevocation: 'unverified' },
   });
 
   revalidatePath(`/admin/users/${userId}`);
   revalidatePath('/admin/users');
 
-  return { success: true, message: 'User zawieszony + wszystkie sesje usunięte' };
+  return {
+    success: true,
+    message: 'Konto zawieszone. Odwołanie istniejących sesji nie zostało potwierdzone.',
+  };
 }
 
 export async function unsuspendUserAction(
@@ -98,25 +99,16 @@ export async function unsuspendUserAction(
 export async function forceLogoutAction(
   userId: string,
 ): Promise<AdminActionResult> {
-  const admin = await requireAdmin();
-  const supabase = createAdminClient();
+  await requireAdmin();
+  // Preserve the Server Action input contract while the operation is unavailable.
+  void userId;
 
-  const { error } = await supabase.auth.admin.signOut(userId, 'global');
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  await logAuditSystem({
-    action: 'admin.user.force_logout',
-    tenantId: null,
-    userId: admin.userId,
-    entityType: 'user',
-    entityId: userId,
-    metadata: { adminEmail: admin.email },
-  });
-
-  revalidatePath(`/admin/users/${userId}`);
-  return { success: true, message: 'Wszystkie sesje usunięte' };
+  // Auth admin.signOut requires a session JWT, not a user UUID. Keep this
+  // action unavailable until a user-wide revocation flow is verified.
+  return {
+    success: false,
+    error: 'Wymuszenie wylogowania jest obecnie niedostępne. Skontaktuj się z operatorem.',
+  };
 }
 
 // ─── 3. Password reset trigger ──────────────────────────────────────
@@ -183,17 +175,24 @@ export async function deleteUserGdprAction(
   // Krok 1: ustaw soft-delete + hard_delete_at na tenantach, gdzie user jest
   // ownerem (10-lat retention vs RODO). Pełne czyszczenie zrobi Inngest job
   // `retention-delete` po upływie retention period.
-  const { data: ownerMemberships } = await supabase
+  const { data: ownerMemberships, error: membershipsReadError } = await supabase
     .from('memberships')
     .select('organization_id, role')
     .eq('user_id', userId)
-    .eq('role', 'owner');
+    .eq('role', 'owner')
+    .eq('status', 'active');
 
-  const ownerOrgIds = (ownerMemberships ?? []).map((m) => m.organization_id);
+  // Revoked memberships retain their historical role, including owner.
+  // Never infer an empty ownership scope from a failed read.
+  if (membershipsReadError || !ownerMemberships) {
+    return { success: false, error: 'Nie udało się odczytać aktywnych organizacji użytkownika' };
+  }
+
+  const ownerOrgIds = ownerMemberships.map((m) => m.organization_id);
   if (ownerOrgIds.length > 0) {
     const now = new Date();
     const hardDeleteAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 dni
-    await supabase
+    const { error: tenantsUpdateError } = await supabase
       .from('tenants')
       .update({
         deleted_at: now.toISOString(),
@@ -201,13 +200,19 @@ export async function deleteUserGdprAction(
         is_active: false,
       })
       .in('id', ownerOrgIds);
+    if (tenantsUpdateError) {
+      return { success: false, error: 'Nie udało się oznaczyć organizacji do usunięcia; konto nie zostało usunięte' };
+    }
   }
 
   // Krok 2: usuń wszystkie membership usera (revoked).
-  await supabase
+  const { error: membershipsUpdateError } = await supabase
     .from('memberships')
     .update({ revoked_at: new Date().toISOString(), status: 'revoked' })
     .eq('user_id', userId);
+  if (membershipsUpdateError) {
+    return { success: false, error: 'Nie udało się odwołać członkostw; konto nie zostało usunięte' };
+  }
 
   // Krok 3: usuń konto z auth.users (cascada wpieprza notki, kontrahentów
   // gdzie user był created_by, etc.). Audyt zachowuje user_id w `audit_logs`

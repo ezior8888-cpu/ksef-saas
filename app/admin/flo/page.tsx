@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/auth/admin-guard';
 import { floKindLabel } from '@/components/flo/kind-labels';
 import { blockedKinds } from '@/lib/flo/flags';
 import {
@@ -32,6 +33,8 @@ export const metadata = { title: 'Flo — panel operatora' };
 const USD_TO_PLN = Number(process.env.FLO_USD_PLN ?? '4.0');
 
 export default async function AdminFloPage() {
+  await requireAdmin();
+
   const [rows, cost, accuracy] = await Promise.all([
     readProposalMetrics(),
     readCostMetrics(USD_TO_PLN),

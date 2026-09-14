@@ -1,6 +1,6 @@
 # Plan odporności cybernetycznej FaktFlow / KSeF SaaS
 
-Data: 2026-09-13. Autor: Astra, na prośbę Igora. Status: **plan przyjęty; realizacja rozpoczęta 2026-09-13, przerwa po dzisiejszym pakiecie na polecenie Igora**. Aktualne wyniki i ograniczenia pierwszego pakietu znajdują się w dzienniku.
+Data: 2026-09-13. Autor: Astra, na prośbę Igora. Status: **plan przyjęty; realizacja rozpoczęta 2026-09-13, wznowiona 2026-09-14 w zakresie F03 (MFA i granice administracji)**. Aktualne wyniki i ograniczenia znajdują się w dzienniku. Nowy zakres opisuje [pakiet F03](FAZA-03-ADMIN-MFA.md); odbiór środowisk pozostaje otwarty.
 
 ## Cel i sposób pracy
 

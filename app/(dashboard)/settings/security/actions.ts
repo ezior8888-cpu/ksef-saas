@@ -9,6 +9,7 @@ import {
   generateAndStoreRecoveryCodes,
 } from '@/lib/auth/mfa-recovery';
 import { createClient } from '@/lib/supabase/server';
+import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 
 export type PasswordChangeResult =
   | { ok: true }
@@ -145,7 +146,7 @@ export async function verifyTotpEnrollmentAction(
 
 export type UnenrollTotpResult =
   | { ok: true }
-  | { ok: false; error: 'not_authenticated' | 'invalid_password' | 'unenroll_failed' };
+  | { ok: false; error: 'not_authenticated' | 'invalid_password' | 'mfa_required' | 'unenroll_failed' };
 
 /**
  * Usuwa wszystkie TOTP factory + wyczyść recovery codes. Wymaga re-auth
@@ -155,16 +156,18 @@ export async function unenrollTotpAction(
   currentPassword: string,
 ): Promise<UnenrollTotpResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'not_authenticated' };
+  // Check the original MFA session before verifying the password.
+  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  if (state?.status === 'unauthenticated') return { ok: false, error: 'not_authenticated' };
+  if (!state || state.status !== 'verified') return { ok: false, error: 'mfa_required' };
+  const { user } = state;
 
   const reauth = await reauthenticateWithPassword(currentPassword);
   if (!reauth.ok) return { ok: false, error: 'invalid_password' };
 
-  const { data: factors } = await supabase.auth.mfa.listFactors();
-  const all = factors?.all ?? [];
+  const { data: factors, error: factorsError } = await supabase.auth.mfa.listFactors();
+  if (factorsError || !factors) return { ok: false, error: 'unenroll_failed' };
+  const all = factors.all;
   for (const f of all) {
     const { error } = await supabase.auth.mfa.unenroll({ factorId: f.id });
     if (error) return { ok: false, error: 'unenroll_failed' };
@@ -184,7 +187,7 @@ export async function unenrollTotpAction(
 
 export type RegenerateRecoveryCodesResult =
   | { ok: true; recoveryCodes: string[] }
-  | { ok: false; error: 'not_authenticated' | 'invalid_password' | 'regenerate_failed' };
+  | { ok: false; error: 'not_authenticated' | 'invalid_password' | 'mfa_required' | 'regenerate_failed' };
 
 /**
  * Wymiana wszystkich recovery codes na nowe. Wymaga re-auth.
@@ -194,10 +197,11 @@ export async function regenerateRecoveryCodesAction(
   currentPassword: string,
 ): Promise<RegenerateRecoveryCodesResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'not_authenticated' };
+  // Check the original MFA session before verifying the password.
+  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  if (state?.status === 'unauthenticated') return { ok: false, error: 'not_authenticated' };
+  if (!state || state.status !== 'verified') return { ok: false, error: 'mfa_required' };
+  const { user } = state;
 
   const reauth = await reauthenticateWithPassword(currentPassword);
   if (!reauth.ok) return { ok: false, error: 'invalid_password' };
@@ -211,8 +215,8 @@ export async function regenerateRecoveryCodesAction(
     });
     revalidatePath('/settings/security');
     return { ok: true, recoveryCodes };
-  } catch (err) {
-    console.error('[regenerateRecoveryCodesAction]', err);
+  } catch {
+    console.error('[regenerateRecoveryCodesAction] failed');
     return { ok: false, error: 'regenerate_failed' };
   }
 }

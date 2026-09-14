@@ -22,39 +22,6 @@ interface RecoveryCodeRow {
   used_at: string | null;
 }
 
-interface MfaRecoveryTable {
-  from: (n: 'mfa_recovery_codes') => {
-    select: (c: string) => {
-      eq: (
-        k: string,
-        v: string,
-      ) => {
-        is: (
-          k: string,
-          v: null,
-        ) => Promise<{
-          data: RecoveryCodeRow[] | null;
-          error: { message: string } | null;
-        }>;
-      };
-    };
-    insert: (rows: Array<Omit<RecoveryCodeRow, 'id' | 'used_at'>>) => Promise<{
-      error: { message: string } | null;
-    }>;
-    update: (patch: { used_at: string }) => {
-      eq: (k: string, v: string) => Promise<{
-        error: { message: string } | null;
-      }>;
-    };
-    delete: () => {
-      eq: (
-        k: string,
-        v: string,
-      ) => Promise<{ error: { message: string } | null }>;
-    };
-  };
-}
-
 /**
  * Generuje 8 nowych recovery codes dla usera, zastępując poprzednie
  * (jeśli istniały). Zwraca PLAINTEXT kody do jednorazowego pokazania
@@ -63,7 +30,7 @@ interface MfaRecoveryTable {
 export async function generateAndStoreRecoveryCodes(
   userId: string,
 ): Promise<string[]> {
-  const admin = createAdminClient() as unknown as MfaRecoveryTable;
+  const admin = createAdminClient();
 
   // Hard delete poprzednich (zachowując historyczny audit log poza tabelą).
   const del = await admin.from('mfa_recovery_codes').delete().eq('user_id', userId);
@@ -99,13 +66,14 @@ export async function consumeRecoveryCode(
   userId: string,
   code: string,
 ): Promise<boolean> {
-  const admin = createAdminClient() as unknown as MfaRecoveryTable;
+  const admin = createAdminClient();
 
   const { data, error } = await admin
     .from('mfa_recovery_codes')
     .select('id, user_id, code_hash, code_salt, used_at')
     .eq('user_id', userId)
-    .is('used_at', null);
+    .is('used_at', null)
+    .returns<RecoveryCodeRow[]>();
 
   if (error || !data) return false;
 
@@ -114,9 +82,13 @@ export async function consumeRecoveryCode(
       const upd = await admin
         .from('mfa_recovery_codes')
         .update({ used_at: new Date().toISOString() })
-        .eq('id', row.id);
-      if (upd.error) return false;
-      return true;
+        .eq('id', row.id)
+        .eq('user_id', userId)
+        .is('used_at', null)
+        .select('id');
+      // The conditional write decides who consumed the code, even when two
+      // requests both read its unused hash before either finishes verification.
+      return !upd.error && upd.data?.length === 1;
     }
   }
 
@@ -129,7 +101,7 @@ export async function consumeRecoveryCode(
 export async function countRemainingRecoveryCodes(
   userId: string,
 ): Promise<number> {
-  const admin = createAdminClient() as unknown as MfaRecoveryTable;
+  const admin = createAdminClient();
   const { data } = await admin
     .from('mfa_recovery_codes')
     .select('id')
@@ -142,6 +114,6 @@ export async function countRemainingRecoveryCodes(
  * Twardo usuwa wszystkie kody (unenroll 2FA).
  */
 export async function deleteAllRecoveryCodes(userId: string): Promise<void> {
-  const admin = createAdminClient() as unknown as MfaRecoveryTable;
+  const admin = createAdminClient();
   await admin.from('mfa_recovery_codes').delete().eq('user_id', userId);
 }

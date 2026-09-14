@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/auth/admin-guard';
 import Link from 'next/link';
 import {
   AlertCircle,
@@ -53,13 +54,15 @@ function fmtRelative(iso: string | null): string {
 }
 
 export default async function AdminSupportPage() {
+  await requireAdmin();
+
   const [signups, inactive, failed, pendingJoins, conversations] =
     await Promise.all([
-      getRecentSignups(SIGNUPS_WINDOW_HOURS).catch(() => []),
-      getInactiveUsers(INACTIVE_DAYS).catch(() => []),
-      getRecentlyFailedInvoices(FAILED_WINDOW_HOURS).catch(() => []),
-      getPendingJoinRequests().catch(() => []),
-      getSupportConversations(25).catch(() => []),
+      getRecentSignups(SIGNUPS_WINDOW_HOURS),
+      getInactiveUsers(INACTIVE_DAYS),
+      getRecentlyFailedInvoices(FAILED_WINDOW_HOURS),
+      getPendingJoinRequests(),
+      getSupportConversations(25),
     ]);
 
   const escalatedCount = conversations.filter(

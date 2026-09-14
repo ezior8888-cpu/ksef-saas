@@ -9,6 +9,9 @@
  * nowy stan (bez 10min Redis TTL).
  */
 
+import 'server-only';
+
+import { requireAdmin } from '@/lib/auth/admin-guard';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { PerTenantFlag } from '@/lib/feature-flags';
 
@@ -41,6 +44,7 @@ export async function listTenantsWithFlags(
   page: number;
   pageSize: number;
 }> {
+  await requireAdmin();
   const supabase = createAdminClient();
   const page = opts.page ?? 0;
   const pageSize = opts.pageSize ?? DEFAULT_PAGE_SIZE;
