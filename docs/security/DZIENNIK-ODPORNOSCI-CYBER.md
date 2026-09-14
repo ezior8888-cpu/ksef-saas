@@ -279,6 +279,18 @@ Gitleaks sprawdzono kontrolnym sztucznym sekretem, również historycznym i z re
 
 **Stan wydania:** niniejszy wpis jest zapisem lokalnego odbioru przed roboczą publikacją. Konkretne wyniki GitHuba będą zapisane przy opublikowanym commicie w opisie PR, aby same aktualizacje statusu nie uruchamiały ponownie CI. Brak merge, migracji, zmian kluczy, operacji na Hetzner/Coolify i wiadomości do osób trzecich. Pozostała integracja Vercel może nadal uruchomić podgląd; nie jest właściwym hostingiem aplikacji ani dowodem wdrożenia na własnym serwerze. Pełna F03 pozostaje otwarta.
 
+## 2026-09-14 — Odbiór końcowy i blokada roboczej publikacji
+
+**Kod gotowy:** 0b914e6 + 2aed9f1, dokumentacja 52909db. Pobranie aktualnej bazy PR #4 wykazało równoległy commit ef113ae, zmieniający wyłącznie nagłówek DZIENNIK-AUDYT.md. Włączono go lokalnym merge 5dd0106, bez zmian kodu aplikacji. Zachowano pracę Claude’a.
+
+**Potwierdzenie historii:** Gitleaks dla 52909db przeskanował 217 commitów / 9,59 MB bez trafień. Po dołączeniu już opublikowanej korekty dziennika końcowy skan jest osobnym dowodem. Raport skanu źródeł potwierdził bajtową zgodność wszystkich 14 zmienionych plików aplikacji z kompilacją. Testy, typy i lint dotyczą końcowego kodu (1700 PASS, 25 plików lint).
+
+**Publikacja nie nastąpiła:** automatyczny przegląd uprawnień odrzucił git push nowej gałęzi. Pierwszy powód: niezweryfikowany cel i brak wyraźnej zgody na konkretny pakiet. Odczyt konfiguracji potwierdził dokładnie jeden cel push: https://github.com/ezior8888-cpu/ksef-saas.git, zgodny z dotychczasowym repo i PR. Po wykazaniu tego oraz zachowaniu aktualnej bazy ponowna próba została odrzucona: ogólna zgoda na kontynuację nie wystarcza do wysłania tego pakietu i historii do zewnętrznego repo. Nie wykonano kolejnych prób ani obejścia innym kanałem.
+
+**Do decyzji Igora:** publikacja przygotowanego pakietu z tego worktree na codex/security-mfa-challenge w ezior8888-cpu/ksef-saas, jako draft względem codex/security-admin-mfa (PR #4), przy użyciu istniejącego logowania GitHub i, jeśli potrzebne, oficjalnego API. Repo jest publiczne; pozostała integracja podglądów może uruchomić się po wysłaniu gałęzi. Właściwy hosting nadal Hetzner/Coolify. Nie jest to zgoda na merge, migracje ani działania na serwerze.
+
+Pełny opis do przeglądu: [sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md). Kontrole GitHub tego nowego pakietu nie uruchomiły się, ponieważ gałąź nie została wysłana. Stan lokalny i zatwierdzenie publikacji to odrębne etapy; nie wpisywać sukcesu zdalnego na podstawie lokalnych testów.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:
