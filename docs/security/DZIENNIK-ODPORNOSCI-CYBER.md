@@ -6,6 +6,7 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 
 - Aktualna dyspozycja Igora z 2026-09-14: wznowić następną część planu. Przygotowano lokalnie pakiet F03 (MFA i granice administracji); pełna faza i odbiór środowiska pozostają otwarte. Igor następnie zatwierdził publikację tego pakietu na codex/security-admin-mfa i draft PR względem PR #3, z ujawnionym skutkiem Vercel Preview. Brak zgody na merge, działania produkcyjne, SQL i rotacje.
 - Hosting właściwej aplikacji: własny serwer Hetzner zarządzany przez Coolify (Igor potwierdził ponownie 2026-09-14). Vercel nie jest używanym hostingiem aplikacji; odnotowane statusy Vercel dotyczą pozostałej integracji GitHuba i nie potwierdzają wdrożenia na własnym serwerze.
+- Kolejna kontynuacja F03: [sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md), gałąź codex/security-mfa-challenge. Odbiór lokalny: 1700 testów; pełny odbiór środowiska i recovery nadal otwarte.
 - Przed pracą przeczytaj aktualne instrukcje projektu i zgodę z rozmowy, sprawdź gałąź oraz cudze niezapisane zmiany.
 - Dopisuj datowane wpisy. Korekty starszych wniosków opisuj jako korekty, z przyczyną i nowym dowodem.
 - Oddzielaj: zaplanowane, w kodzie/konfiguracji, sprawdzone na testach, wdrożone, potwierdzone w nazwanym środowisku. Przywrócenie problemu otwiera wpis ponownie.
@@ -257,6 +258,26 @@ Stan kodu zatwierdzony do wysyłki: f9d3183 (kod aplikacji f592979). Niniejszy w
 **Dalsze raportowanie i odbiór:** gotowość aplikacji odnosimy do własnego serwera, faktycznie wdrożonego kodu, workera i schematu. Wpisy o Vercelu dotyczą uporządkowania pozostałości po migracji. Właściciel integracji powinien sprawdzić i odłączyć nieużywane automatyczne podglądy oraz zbędny dostęp, po potwierdzeniu ich konfiguracji. Samo sprostowanie nie stanowi zlecenia wyłączenia integracji.
 
 **Wykonano:** doprecyzowano zasady tego dziennika i dokument F03. Wyłącznie lokalna korekta dokumentacji; bez push, ponownego uruchamiania CI, zmian integracji, migracji i operacji na serwerze.
+
+## 2026-09-14 — Kontynuacja F03: sesje, API, limity i uczciwy stan recovery
+
+**Dyspozycja:** Igor zatwierdził dotychczasowe prace („zatwierdzam wszystko i leć dalej”) i ponownie polecił kontynuować. Właściwy hosting to Hetzner/Coolify. Nowy pakiet powstał w osobnym worktree security-mfa-continuation-20260914, na gałęzi codex/security-mfa-challenge od 9b1e43d; cudzy, równolegle edytowany DZIENNIK-AUDYT.md w poprzednim worktree pozostał nietknięty.
+
+**Ustalenia i poprawki CYB-F03-07…12:** odrzucono AAL1 z aktywnym MFA w prywatnym API, wspólnych granicach danych i wrażliwych operacjach konta. Usunięto zaufanie middleware do czynników w cookies. Dodano wspólny limit pięciu operacji MFA/300 s na konto, atomowy EVAL oraz odmowę przy awarii. Kod ratunkowy nie jest już konsumowany bez odzyskania sesji, a UI/akcje nie generują nieczynnych kodów. Setup administratora jest poza layoutem firmy i nie wymaga organizacji. Zweryfikowany czynnik inny niż TOTP także wymusza challenge przy AAL1. Szczegóły, ścieżki i warunki odbioru: [FAZA-03-SESJE-I-CHALLENGE.md](FAZA-03-SESJE-I-CHALLENGE.md).
+
+**Commity kodu:**
+- 0b914e6 — MFA przed dostępem do firmy i operacjami na koncie.
+- 2aed9f1 — challenge, limiter, brak pozornego recovery oraz setup operatora.
+
+**Końcowe dowody lokalne:** 103 pliki / **1700 testów PASS**; pełny typecheck PASS; lint 25 plików TS/TSX bez ostrzeżeń PASS. Izolowana kompilacja Next.js webpack w trybie compile PASS (nie pełne generowanie stron ani E2E); 14 zmienionych plików aplikacji jest bajtowo zgodnych z kopią kompilacji. Brak .env i prawdziwych kluczy w kopii, konfiguracja syntetyczna z loopback. Raporty: faktflow-mfa-final-checks-jnI7iq, kopia faktflow-security-compile-F1Oshv.
+
+Gitleaks sprawdzono kontrolnym sztucznym sekretem, również historycznym i z redakcją wyniku: PASS. Skan 29 przygotowanych plików kodu/testów/dokumentacji: **brak trafień**, bez dodawania wyjątków. Dodatkowe przeglądy wykryły utratę odświeżonych cookies przy odmowie API (test najpierw czerwony) i obejście przez inny typ czynnika; oba poprawiono przed końcowym przebiegiem. Ostatni przegląd nie znalazł kolejnych pewnych usterek w tym zakresie; to nie zewnętrzny pentest.
+
+**Inwentaryzacja offline:** nadal 305 zapytań service_role, 77 do przejrzenia i 12 średnich; 101 wejść, 35 sygnałów. Porównano z 9b1e43d: dodatkowa pozycja to nieużywany countRemainingRecoveryCodes; dwa dodatkowe sygnały wynikają z nierozpoznania getVerifiedMfaState przez heurystykę w plikach akcji ustawień. Nie zmieniano klasyfikatora dla poprawienia liczników. Skuteczność granic potwierdzają osobne testy; sam spis nie jest dowodem braku podatności.
+
+**Otwarte:** rzeczywisty EVAL/TTL na SRH/Valkey, GoTrue i konfiguracja TOTP, UI w przeglądarce, pełne odzyskiwanie, bezpośredni Auth/PostgREST i polityki MFA/RLS, wszystkie pozostałe wejścia, odwołanie sesji po ID oraz nonce zmiany hasła. Testy limitera korzystają z atrapy odpowiedzi EVAL, nie wykonały Lua. MFA zwykłych kont bez czynnika pozostaje opcjonalne; nieobsługiwane czynniki przy AAL1 odmawiają dostępu. Obciążenie dodatkowych odczytów Auth wymaga pomiaru na stagingu.
+
+**Stan wydania:** niniejszy wpis jest zapisem lokalnego odbioru przed roboczą publikacją. Konkretne wyniki GitHuba będą zapisane przy opublikowanym commicie w opisie PR, aby same aktualizacje statusu nie uruchamiały ponownie CI. Brak merge, migracji, zmian kluczy, operacji na Hetzner/Coolify i wiadomości do osób trzecich. Pozostała integracja Vercel może nadal uruchomić podgląd; nie jest właściwym hostingiem aplikacji ani dowodem wdrożenia na własnym serwerze. Pełna F03 pozostaje otwarta.
 
 ## Format następnego wpisu
 
