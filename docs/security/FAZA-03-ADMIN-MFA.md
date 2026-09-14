@@ -67,7 +67,7 @@ Przed wydaniem tego pakietu:
 4. Przećwiczyć odzyskanie dostępu z drugą osobą. Obecne recovery codes nie przywracają AAL2; zatwierdzona i sprawdzona ścieżka odzyskiwania jest warunkiem odbioru obowiązkowego MFA. Do tego czasu nie deklarować zakończonej ochrony/recovery administracji.
 5. Sprawdzić ustawienie secure_password_change i zmianę hasła ze starą sesją. Jeśli serwer wymaga nonce, formularz będzie potrzebował obsługi tej ścieżki — izolowane sprawdzenie hasła celowo nie odnawia sesji przeglądarki. Nie wyłączać ustawienia serwera dla dopasowania testu. [Opis Supabase](https://supabase.com/docs/guides/auth/password-security#require-reauthentication-when-changing-password).
 6. Potwierdzić obecność tabeli i uprawnienia z istniejącej migracji 00050 oraz warunkowe zużycie kodu na fikcyjnych danych. Nie uruchamiano migracji ani prawdziwego testu RLS/Postgres.
-7. Powiązać potwierdzenia z konkretnymi commitami aplikacji/workera i schematu oraz poprzednimi PR 1→2→3. Nowa publikacja może uruchomić automatyczny Vercel Preview. Kod tego pakietu pozostaje lokalny do odrębnej zgody na publikację z tym skutkiem.
+7. Powiązać potwierdzenia z konkretnymi commitami aplikacji/workera i schematu oraz poprzednimi PR 1→2→3. Nowa publikacja może uruchomić automatyczny Vercel Preview. Igor zatwierdził publikację tej gałęzi i draft PR względem PR #3, z ujawnionym skutkiem Vercel Preview. Bieżące wyniki opublikowanego commita znajdą się w opisie PR; zgoda nie zastępuje powyższego odbioru środowiska.
 
 ## Pozostałe konkretne ustalenia
 

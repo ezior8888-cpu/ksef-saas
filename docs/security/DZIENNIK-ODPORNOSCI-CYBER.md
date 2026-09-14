@@ -4,7 +4,7 @@
 
 Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNOSCI-CYBER.md). Jest osobnym etapem po [wcześniejszych naprawach Astry](DZIENNIK-NAPRAW-ASTRA.md) i [audytach Claude](DZIENNIK-AUDYT.md). Nie zastępuje ich ani nie zmienia historycznych wyników.
 
-- Aktualna dyspozycja Igora z 2026-09-14: wznowić następną część planu. Przygotowano lokalnie pakiet F03 (MFA i granice administracji); pełna faza i odbiór środowiska pozostają otwarte. Dzisiejsza publikacja, która może wyzwolić Vercel Preview, wymaga osobnej zgody. Brak zgody na merge, działania produkcyjne, SQL i rotacje.
+- Aktualna dyspozycja Igora z 2026-09-14: wznowić następną część planu. Przygotowano lokalnie pakiet F03 (MFA i granice administracji); pełna faza i odbiór środowiska pozostają otwarte. Igor następnie zatwierdził publikację tego pakietu na codex/security-admin-mfa i draft PR względem PR #3, z ujawnionym skutkiem Vercel Preview. Brak zgody na merge, działania produkcyjne, SQL i rotacje.
 - Przed pracą przeczytaj aktualne instrukcje projektu i zgodę z rozmowy, sprawdź gałąź oraz cudze niezapisane zmiany.
 - Dopisuj datowane wpisy. Korekty starszych wniosków opisuj jako korekty, z przyczyną i nowym dowodem.
 - Oddzielaj: zaplanowane, w kodzie/konfiguracji, sprawdzone na testach, wdrożone, potwierdzone w nazwanym środowisku. Przywrócenie problemu otwiera wpis ponownie.
@@ -240,6 +240,12 @@ Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNO
 **Otwarte warunki odbioru:** Bartek musi potwierdzić działające TOTP w rzeczywistym GoTrue; lokalny config wyłącza enrollment/verification. Trzeba przećwiczyć enrollment/operatora bez membership, stare sesje, odzyskiwanie MFA i zmianę hasła przy secure_password_change. Istniejące recovery codes nie podnoszą AAL do AAL2 — jednorazowość kodu nie naprawia kompletnego odzyskiwania. Brak sprawdzonej ścieżki odzyskania blokuje uznanie obowiązkowego MFA za odebrane. Nadal otwarte: odwołanie sesji po ID, pełne MFA zwykłych kont/API/RLS, pozostała inwentaryzacja oraz retencja i transakcyjność GDPR.
 
 **Publikacja i dalszy krok:** kod jest wyłącznie lokalny, do review jako kolejny draft względem codex/security-audit-inventory (PR #3) w ezior8888-cpu/ksef-saas. Istniejący Vercel Preview może uruchomić się po publikacji. Osobna zgoda ma dotyczyć dokładnie tej gałęzi/pakietu i tego skutku. Wydanie na Hetzner/Coolify wymaga odrębnego uzgodnienia oraz odbioru Bartka. Pełna F03 pozostaje otwarta; nie ustawiono automatyzacji ani pracy w tle.
+
+## 2026-09-14 — Zgoda na publikację pakietu F03
+
+Po przedstawieniu wyników, zakresu gałęzi codex/security-admin-mfa i skutku automatycznego Vercel Preview Igor odpowiedział „zatwierdzam lecisz dalej”. Zgoda obejmuje wysłanie przygotowanego pakietu do ezior8888-cpu/ksef-saas i roboczy PR względem codex/security-audit-inventory (PR #3). Nie oznacza merge ani operacji na Hetzner/Coolify, zmian schematu, rotacji lub odbioru produkcji.
+
+Stan kodu zatwierdzony do wysyłki: f9d3183 (kod aplikacji f592979). Niniejszy wpis jedynie zapisuje zgodę przed publikacją. Wyniki kontroli dla opublikowanego commita oraz faktyczny status publikacji zostaną umieszczone w opisie PR, aby kolejne dopiski dokumentacyjne nie uruchamiały ponownie CI i podglądów. Poprzednie wpisy o oczekiwaniu na zgodę są historyczne.
 
 ## Format następnego wpisu
 
