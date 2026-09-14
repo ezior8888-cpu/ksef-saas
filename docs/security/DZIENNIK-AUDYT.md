@@ -4,7 +4,10 @@ Zasada jak w `docs/flo/DZIENNIK-BARTOSZ.md`: **dopisujemy na końcu, nigdy
 nie edytujemy cudzych wpisów.** Jedyny wyjątek — znacznik `⬜` przy zadaniu
 zmieniasz na `✅`, gdy je wykonasz.
 
-Audyt prowadzi Igor (+ Claude) na gałęzi `claude/app-security-plan-74b134`.
+Audyt prowadzi Igor (+ Claude). **Kod audytu, naprawy i migracje są na origin
+na gałęzi `codex/security-admin-mfa` (PR #4 do `main`).** Gałąź
+`claude/app-security-plan-74b134`, na której audyt się zaczynał, istnieje tylko
+lokalnie u Igora — nie szukaj jej na origin (korekta 2026-09-14, wpis na końcu).
 Zadania wymagające dostępu do produkcyjnej bazy i serwerów wykonuje Bartosz.
 
 ---
