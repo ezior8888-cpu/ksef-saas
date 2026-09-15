@@ -4,9 +4,10 @@
 
 Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNOSCI-CYBER.md). Jest osobnym etapem po [wcześniejszych naprawach Astry](DZIENNIK-NAPRAW-ASTRA.md) i [audytach Claude](DZIENNIK-AUDYT.md). Nie zastępuje ich ani nie zmienia historycznych wyników.
 
-- Aktualna dyspozycja Igora z 2026-09-14: wznowić następną część planu. Przygotowano lokalnie pakiet F03 (MFA i granice administracji); pełna faza i odbiór środowiska pozostają otwarte. Igor następnie zatwierdził publikację tego pakietu na codex/security-admin-mfa i draft PR względem PR #3, z ujawnionym skutkiem Vercel Preview. Brak zgody na merge, działania produkcyjne, SQL i rotacje.
-- Hosting właściwej aplikacji: własny serwer Hetzner zarządzany przez Coolify (Igor potwierdził ponownie 2026-09-14). Vercel nie jest używanym hostingiem aplikacji; odnotowane statusy Vercel dotyczą pozostałej integracji GitHuba i nie potwierdzają wdrożenia na własnym serwerze.
-- Kolejna kontynuacja F03: [sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md), gałąź codex/security-mfa-challenge. Odbiór lokalny: 1700 testów; pełny odbiór środowiska i recovery nadal otwarte.
+- Aktualna dyspozycja Igora z 2026-09-15: kontynuować po opublikowaniu PR #10 i sprawdzeniu prac Bartka. Nowa lokalna gałąź: codex/security-account-continuation; opublikowany pakiet MFA pozostaje na dc7806a. Brak zgody na merge do main, produkcję, SQL i rotacje.
+- Hosting właściwej aplikacji: Hetzner/Coolify. Historyczne statusy Vercel nie dowodzą wdrożenia na własnym serwerze. Aktualny opis zmian operatora jest w [odpowiedzi Bartka](ODPOWIEDZ-BARTEK-2026-09-14.md) i [planie wydania GDPR](PLAN-WYDANIA-GDPR.md); nie powtarzać dawnych list jako bieżącego stanu.
+- [Sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md) opublikowano jako [PR #10](https://github.com/ezior8888-cpu/ksef-saas/pull/10). CI i Security dla dc7806a przeszły 15.09 (1700 testów Vitest). Pełny odbiór środowiska i odzyskiwanie MFA pozostają otwarte.
+
 - Przed pracą przeczytaj aktualne instrukcje projektu i zgodę z rozmowy, sprawdź gałąź oraz cudze niezapisane zmiany.
 - Dopisuj datowane wpisy. Korekty starszych wniosków opisuj jako korekty, z przyczyną i nowym dowodem.
 - Oddzielaj: zaplanowane, w kodzie/konfiguracji, sprawdzone na testach, wdrożone, potwierdzone w nazwanym środowisku. Przywrócenie problemu otwiera wpis ponownie.
@@ -290,6 +291,43 @@ Gitleaks sprawdzono kontrolnym sztucznym sekretem, również historycznym i z re
 **Do decyzji Igora:** publikacja przygotowanego pakietu z tego worktree na codex/security-mfa-challenge w ezior8888-cpu/ksef-saas, jako draft względem codex/security-admin-mfa (PR #4), przy użyciu istniejącego logowania GitHub i, jeśli potrzebne, oficjalnego API. Repo jest publiczne; pozostała integracja podglądów może uruchomić się po wysłaniu gałęzi. Właściwy hosting nadal Hetzner/Coolify. Nie jest to zgoda na merge, migracje ani działania na serwerze.
 
 Pełny opis do przeglądu: [sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md). Kontrole GitHub tego nowego pakietu nie uruchomiły się, ponieważ gałąź nie została wysłana. Stan lokalny i zatwierdzenie publikacji to odrębne etapy; nie wpisywać sukcesu zdalnego na podstawie lokalnych testów.
+
+## 2026-09-15 — Publikacja PR #10 i lokalna integracja prac zespołu
+
+**Zgoda i publikacja:** po wyraźnej akceptacji konkretnego dc7806a, celu i sposobu publikacji powstał roboczy PR #10 względem PR #4. Wcześniejsze wpisy o blokadzie push są historyczne. [CI 34994437965](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34994437965) oraz [Security 34994438036](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/34994438036): SUCCESS. 103 pliki / 1700 Vitest, 66 XML, 30 testów narzędzi CodeQL; typy, lint, audit produkcyjnych zależności, dependency-review i offline inventory przeszły. CodeQL JS/TS i Actions po 0 wyników oraz 0 błędów wejścia; Gitleaks 219 commitów bez trafień. To odbiór PR na jego bazie, nie produkcji.
+
+**Aktualizacja źródeł:** Igor poprosił sprawdzić zadania Bartka. Odczytano PR #7 (8f2a37f), PR #9 (4d8fda4), bieżące kontrole GitHuba i main b9c3703. Raport operatorski i plan GDPR dołączono poniższymi merge. Stan środowiska w tych dokumentach pochodzi od Bartka; AI nie wykonywało ponownie kontroli żywej bazy. Bieżący dependency-review działa; nie traktować dawnej blokady Dependency graph jako nadal otwartej. Migracje mają numerację właściciela, odrębną od wcześniejszych propozycji.
+
+**Lokalna integracja, po kolejnym poleceniu kontynuacji:** nowy worktree security-account-continuation-20260915 chroni gałęzie PR #4 i #10 oraz cudze zmiany. Commity:
+- 2ac6280 — main b9c3703: nowy panel mobilny połączony z aktualnymi granicami MFA.
+- 788257c — PR #7: odpowiedź właściciela, uporządkowanie instrukcji dostępu i usunięcie przestarzałego vercel.json. Istniejące 00068/00069 były już identyczne.
+- a1f0927 — PR #9: istniejące pliki 00070/00071/00072 i plan skoordynowanego wydania, bez zmian treści i bez wykonania SQL.
+
+**Konflikt zależności:** main zmieniał wyłącznie wersje bezpośrednie Next i xmldom, które nasz pakiet już uwzględniał. Zachowano sprawdzony manifest i lockfile dc7806a (Next 16.3.4, xmldom ^0.9.12, Vitest ^4.1.11), bez regeneracji zależności przechodnich lub cofania poprawek. Nowe funkcje main nie wprowadzają dodatkowych pakietów. Typecheck po merge main PASS.
+
+**Regresja integracji:** sześć nowych scenariuszy łączy rzeczywisty middleware z przełącznikiem mobilnym. On/allowlist nadal wymagają MFA przed stroną; żaden tryb telefonu nie wyłącza ochrony API; AAL2 przechodzi, a odmowa zachowuje odświeżone cookies. Zestaw middleware/mobile/responsive-table: 3 pliki / 48 testów PASS. Auth jest atrapą, więc nie jest to test przeglądarki ani rzeczywistego serwera.
+
+**Stan dalszych prac:** przygotowanie kontroli bootstrapu/zaproszeń i zmiany hasła jest w toku. Końcowy zakres i wyniki zostaną dopisane po testach. Nowa gałąź pozostaje lokalna; integracja nie scala PR-ów na GitHubie i nie oznacza wydania aplikacji/workera. 00072 zachowuje warunki wydania określone przez Bartka.
+
+## 2026-09-15 — Odbiór lokalny: onboarding, zaproszenia i zmiana hasła
+
+**Zakres:** po poleceniu kontynuacji przygotowano CYB-F03-13 (MFA na bootstrapie, zaproszeniach i importach) oraz CYB-F03-14 (potwierdzenie zmiany hasła), wraz z kontrolą czterech akcji formularza faktury po integracji main. [Opis pakietu i odbiór](FAZA-03-ONBOARDING-I-HASLO.md). Konta bez MFA nadal przechodzą zwykły onboarding; konta z aktywnym czynnikiem kończą challenge przed danymi i operacjami. Hasło i nonce nie trafiają do URL ani dzienników.
+
+**Commity:**
+- 034cb2a — wspólny guard bez wymogu organizacji, onboarding, zaproszenia, GUS i importy.
+- e19fbca — nonce/current_password, formularz, oddzielne limity prób oraz wysyłki.
+- 1cfbf4b — wspólna kontrola MFA i aktywnego membership w akcjach formularza faktury.
+- 986a2cd — sześć dodatkowych regresji łączących panel mobilny z MFA.
+
+**Weryfikacja końcowego kodu:** 110 plików / **1915 Vitest PASS**, 0 nieudanych i 0 pominiętych; 66 XML PASS; pełny typecheck i lint PASS; 48 testów narzędzi audytu PASS. Wyniki w lokalnym faktflow-account-checks-zujDlC (JSON + logi). Izolowany Next.js webpack compile: PASS, faktflow-account-compile-s4oC5L; konfiguracja syntetyczna, bez .env i kluczy aplikacji. Zgodność bajtowa wszystkich 13 zmienionych plików aplikacji z kopią kompilacji: PASS. Nie jest to pełne generowanie stron ani odbiór runtime. Nowe zależności nie były instalowane.
+
+**Przegląd i regresje:** security-review nie wykazał potwierdzonej podatności w nonce, limiterze i publicznych osłonach. Wstępne P1 o publicznym wywołaniu prefill wycofano po sprawdzeniu workerów Next; nie używać tego jako potwierdzonego exploita. Wzmocnienie helpera faktur jest dodatkową kontrolą bezpośrednią; osobny końcowy przegląd dwóch plików nie wykazał usterki. Testy odmawiają AAL1/TOTP/phone/WebAuthn i awarii Auth przed skutkami, zachowują poprawny bootstrap bez org, AAL2, membership/tenant i kontrakty akcji. Prawdziwy SDK testowany z atrapą HTTP potwierdza zachowanie oryginalnej sesji. Hermetyczny komponent w headless Edge: wymagany kod → jawne wysłanie → błędny kod → sukces, pola zachowane przy błędach, wyczyszczone po sukcesie, 0 żądań sieciowych. To nie przeglądarkowy E2E z GoTrue.
+
+**Sekrety i inwentaryzacja:** Gitleaks kopii 24 przygotowanych plików: 0 trafień; wszystkie 20 plików kodu/testów zgodne z kopią skanu. Historia do 986a2cd: 231 commitów / 9,83 MB, 0 trafień. Bez nowych wyjątków. Offline inventory nadal 305 zapytań (0 krytycznych, 0 wysokich, 12 średnich, 77 do przejrzenia, 216 ok) oraz 101 wejść / 35 sygnałów. Nie zmieniano heurystyk dla poprawy liczników; nie oznaczają one liczby potwierdzonych luk ani domknięcia wszystkich zapytań.
+
+**Pozostałe działania:** zgodnie z opisem pakietu odbiór wersji i konfiguracji GoTrue, dostarczenia/wygaśnięcia nonce, działania EVAL/TTL i awarii SRH/Valkey, pełnych przepływów MFA/RLS na stagingu. Pełne recovery i odwołanie sesji po ID nadal otwarte. Własna sesja nie wykonała SQL, restartów, rotacji, wysyłki prawdziwych maili ani wdrożenia. Pliki 00070–00072 zachowano identyczne jak w PR #9; 00072 podlega skoordynowanemu planowi właściciela.
+
+**Publikacja:** cała nowa gałąź codex/security-account-continuation pozostaje lokalna, po bazie PR #10. Wyniki lokalne nie są wynikiem CI GitHuba tej gałęzi. Pakiet i dziennik są przygotowane do oddzielnej akceptacji publikacji w publicznym repo; opis publicznego PR ma być zwięzły i pozbawiony surowych danych operacyjnych. Nie dopisywać nowych szczegółów bezpieczeństwa do publicznego PR na podstawie samej zgody na wcześniejszy pakiet. Pełna F03 pozostaje otwarta.
 
 ## Format następnego wpisu
 
