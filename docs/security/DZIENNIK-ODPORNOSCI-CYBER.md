@@ -4,7 +4,7 @@
 
 Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNOSCI-CYBER.md). Jest osobnym etapem po [wcześniejszych naprawach Astry](DZIENNIK-NAPRAW-ASTRA.md) i [audytach Claude](DZIENNIK-AUDYT.md). Nie zastępuje ich ani nie zmienia historycznych wyników.
 
-- Aktualna dyspozycja Igora z 2026-09-15: kontynuować po opublikowaniu PR #10 i sprawdzeniu prac Bartka. Nowa lokalna gałąź: codex/security-account-continuation; opublikowany pakiet MFA pozostaje na dc7806a. Brak zgody na merge do main, produkcję, SQL i rotacje.
+- Aktualna dyspozycja Igora z 2026-09-15: kontynuować po publikacji PR #11 (0ec1069) i rozpoznaniu zgłoszenia CodeQL. Na codex/security-account-continuation przygotowano lokalną poprawkę CYB-F03-15; jej testy nie zastępują nowego CI. Brak zgody na merge do main, produkcję, SQL i rotacje.
 - Hosting właściwej aplikacji: Hetzner/Coolify. Historyczne statusy Vercel nie dowodzą wdrożenia na własnym serwerze. Aktualny opis zmian operatora jest w [odpowiedzi Bartka](ODPOWIEDZ-BARTEK-2026-09-14.md) i [planie wydania GDPR](PLAN-WYDANIA-GDPR.md); nie powtarzać dawnych list jako bieżącego stanu.
 - [Sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md) opublikowano jako [PR #10](https://github.com/ezior8888-cpu/ksef-saas/pull/10). CI i Security dla dc7806a przeszły 15.09 (1700 testów Vitest). Pełny odbiór środowiska i odzyskiwanie MFA pozostają otwarte.
 
@@ -328,6 +328,22 @@ Pełny opis do przeglądu: [sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md
 **Pozostałe działania:** zgodnie z opisem pakietu odbiór wersji i konfiguracji GoTrue, dostarczenia/wygaśnięcia nonce, działania EVAL/TTL i awarii SRH/Valkey, pełnych przepływów MFA/RLS na stagingu. Pełne recovery i odwołanie sesji po ID nadal otwarte. Własna sesja nie wykonała SQL, restartów, rotacji, wysyłki prawdziwych maili ani wdrożenia. Pliki 00070–00072 zachowano identyczne jak w PR #9; 00072 podlega skoordynowanemu planowi właściciela.
 
 **Publikacja:** cała nowa gałąź codex/security-account-continuation pozostaje lokalna, po bazie PR #10. Wyniki lokalne nie są wynikiem CI GitHuba tej gałęzi. Pakiet i dziennik są przygotowane do oddzielnej akceptacji publikacji w publicznym repo; opis publicznego PR ma być zwięzły i pozbawiony surowych danych operacyjnych. Nie dopisywać nowych szczegółów bezpieczeństwa do publicznego PR na podstawie samej zgody na wcześniejszy pakiet. Pełna F03 pozostaje otwarta.
+
+## 2026-09-15 — PR #11 i prywatność kontroli wycieków haseł (CYB-F03-15)
+
+**Zgoda i punkt wyjścia:** Igor jawnie zatwierdził publikację pakietu 0ec1069 wraz z dziennikiem. Opublikowano [roboczy PR #11](https://github.com/ezior8888-cpu/ksef-saas/pull/11) względem PR #10. Następnie polecił kontynuację po wyjaśnieniu wyniku kontroli. Dotychczasowy wpis o oczekiwaniu na publikację jest historyczny.
+
+**Rzeczywiste kontrole opublikowanego pakietu:** CI 34999065676 PASS (1915 Vitest, 66 XML, typy/lint/zależności); Security 34999065411 FAILURE przez jedno zgłoszenie SHA-1 przy HIBP. Secret scan: 232 commity, brak trafień; CodeQL Actions PASS. Wyniki wpisano do PR. Automatyczna kontrola zgody nie dopuściła dopisania szczegółów nowego alertu do publicznego opisu; zapisano wyłącznie statusy i linki.
+
+**Ocena i poprawka lokalna:** ustalono wymagane użycie SHA-1 do HIBP range lookup, bez przechowywania lub uwierzytelniania hasła tym wynikiem. Osobno usunięto rzeczywisty nadmiarowy zapis: cache oparty na odcisku konkretnego hasła. Dodano brak cache fetch, zakaz redirect, timeout obejmujący body, limit strumienia 256 KiB, pełną walidację odpowiedzi i stały log bez wyjątków. Zachowano kontrakt fallback. [Pełny zakres i dowody](FAZA-03-KONTROLA-WYCIEKOW-HASEL.md).
+
+**Rozliczenie skanera:** jawny manifest wiąże najwyżej jedno false positive z całością przeglądniętego źródła, linią, ścieżką i regułą. Surowe high pozostaje widoczne. Zmiana bajtów, druga podatność, duplikat, błędny raport lub brak/wygaśnięcie polityki nie daje zielonego wyniku dla tego trafienia. Termin ponownego review: 2026-12-15 UTC, właściciele Igor/Bartek; nie odnawiać automatycznie. SHA256 modułu: 74b53285ee125ef0e5be187700a69f854f457282fbf8df9ec042138518891d0b, linia 34, LF wymuszone tylko dla tego pliku.
+
+**Dowody lokalne:** 111 plików / 1950 Vitest PASS, zero pominiętych; pełne typy/lint PASS; 67 testów narzędzi PASS. Osobny natywny fetch na loopback: 5/5 PASS. Izolowany Next compile PASS i zgodny odcisk. Przeglądy kodu, bramki i manifestu bez potwierdzonych usterek. Prawdziwy historyczny SARIF wykorzystano do sprawdzenia kompatybilności parsera; kopia z przestawioną linią nie stanowi nowego skanu. Nowe wyniki GitHuba wymagają publikacji nowego commitu.
+
+**Granice:** GitHub alert #1 nadal jest otwarty; manifest sam go nie zamyka. Nie usunięto istniejących kluczy Redis (dotychczasowy TTL 24 h). Bez SQL/produkcji/rotacji oraz bez prawdziwych zapytań HIBP. Odbiór Auth, Redis/RLS i recovery nadal otwarty. Ten wpis nie potwierdza wdrożenia.
+
+**Zapis pakietu CYB-F03-15:** kod i testy w 0d45b7f15722d58ef763d35500e17696bcac8030. Gitleaks 10 przygotowanych plików bez trafień; historia tego commitu: 233 commity / 9,87 MB, brak trafień. Zweryfikowano zgodność pełnego odcisku bloba Git, manifestu i kopii kompilacji. Nowa poprawka jest lokalna; rzeczywisty zdalny wynik wymaga jej publikacji i nowego przebiegu.
 
 ## Format następnego wpisu
 
