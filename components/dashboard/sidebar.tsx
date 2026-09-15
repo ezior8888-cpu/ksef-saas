@@ -87,7 +87,7 @@ const NavRow = memo(function NavRow({
  * kliknięcia nadpisują cel. Memoizacja `NavRow` izoluje koszt re-renderu
  * przy „spamowaniu kliknięć”.
  */
-export function Sidebar({ drawer }: { drawer?: boolean }) {
+export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
@@ -137,12 +137,7 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
   const settingsActive = isHrefActive('/settings');
 
   return (
-    <aside
-      className={cn(
-        'ff-shell-sidebar relative z-[2] hidden h-full min-h-0 w-[280px] shrink-0 flex-col overflow-y-auto px-5 py-7 lg:flex',
-        drawer && 'flex m-0 w-full max-w-none border-0 bg-transparent p-4',
-      )}
-    >
+    <aside className="ff-shell-sidebar relative z-[2] hidden h-full min-h-0 w-[280px] shrink-0 flex-col overflow-y-auto px-5 py-7 lg:flex">
       <div className="px-2 pb-7">
         <BrandWordmark href="/dashboard" variant="app" />
       </div>

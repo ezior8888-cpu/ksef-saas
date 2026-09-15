@@ -1,6 +1,6 @@
 # Plan odporności cybernetycznej FaktFlow / KSeF SaaS
 
-Data: 2026-09-13. Autor: Astra, na prośbę Igora. Status: **plan przyjęty; realizacja rozpoczęta 2026-09-13, wznowiona 2026-09-14 w zakresie F03 (MFA i granice administracji)**. Aktualne wyniki i ograniczenia znajdują się w dzienniku. Zakres opisują [pakiet administracji F03](FAZA-03-ADMIN-MFA.md) oraz [kontynuacja: sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md); odbiór środowisk i pełne odzyskiwanie pozostają otwarte.
+Data: 2026-09-13. Autor: Astra, na prośbę Igora. Status: **plan przyjęty; realizacja rozpoczęta 2026-09-13, wznowiona 2026-09-14 w zakresie F03 (MFA i granice administracji)**. Aktualne wyniki i ograniczenia znajdują się w dzienniku. Zakres opisują [pakiet administracji F03](FAZA-03-ADMIN-MFA.md) oraz [kontynuacja: sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md); odbiór środowisk i pełne odzyskiwanie pozostają otwarte. Kontynuacja 15.09: [onboarding, zaproszenia i zmiana hasła](FAZA-03-ONBOARDING-I-HASLO.md), po lokalnym połączeniu aktualnego main i prac Bartka. Dalsza poprawka po PR #11: [kontrola wycieków haseł i rozliczenie CodeQL](FAZA-03-KONTROLA-WYCIEKOW-HASEL.md).
 
 ## Cel i sposób pracy
 

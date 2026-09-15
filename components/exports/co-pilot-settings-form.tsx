@@ -451,7 +451,7 @@ export function CoPilotSettingsForm({
         </section>
       ) : null}
 
-      <div className="fixed bottom-0 left-0 right-0 lg:left-[280px] z-30 px-6 py-4 bg-[var(--ff-surface-container-low)]  border-t border-[var(--ff-glass-border)]">
+      <div className="ff-sticky-actions border-t border-[var(--ff-glass-border)] bg-[var(--ff-surface-container-low)]">
         <div className="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-3">
           <Button
             variant="glass"

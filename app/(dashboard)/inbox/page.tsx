@@ -1,3 +1,4 @@
+import { ResponsiveTable, ResponsiveTableCard } from '@/components/dashboard/responsive-table';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -75,14 +76,10 @@ export default async function InboxPage() {
           </p>
         </div>
       ) : (
-        <div className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
-          <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
-            <h2 className="text-[15px] font-semibold text-[var(--ff-text-strong)]">Lista faktur przychodzących</h2>
-            <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
-              {rows.length} pozycji (max. 200) • sortowanie wg daty przyjęcia w KSeF
-            </p>
-          </div>
-          <div className="overflow-x-auto">
+        <ResponsiveTable
+          title="Lista faktur przychodzących"
+          subtitle={`${rows.length} pozycji (max. 200) • sortowanie wg daty przyjęcia w KSeF`}
+          table={
             <table className="w-full min-w-[880px] text-left text-[14px]">
               <thead>
                 <tr className="border-b border-[var(--ff-border)]">
@@ -134,8 +131,35 @@ export default async function InboxPage() {
                 })}
               </tbody>
             </table>
-          </div>
-        </div>
+          }
+          cards={rows.map((inv) => {
+            const seller = sellerDisplay(inv);
+            const cur = inv.currency?.trim() || 'PLN';
+            return (
+              <ResponsiveTableCard
+                key={inv.id}
+                title={seller.name}
+                subtitle={`NIP ${seller.nip}`}
+                amount={formatMoney(inv.gross_total, cur)}
+                meta={
+                  <>
+                    <span className="font-mono">
+                      {inv.ksef_accepted_at
+                        ? new Date(inv.ksef_accepted_at).toLocaleString('pl-PL', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })
+                        : '—'}
+                    </span>
+                    <span className="truncate font-mono text-[var(--ff-text-dim)]">
+                      {inv.ksef_number ?? '—'}
+                    </span>
+                  </>
+                }
+              />
+            );
+          })}
+        />
       )}
     </div>
   );

@@ -8,12 +8,26 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: 'KSeF',
     description:
       'Wystawiaj faktury i wysyłaj do KSeF jednym kliknięciem',
-    start_url: '/invoices',
+    /**
+     * `/dashboard`, nie `/invoices`. `APP_HOME` w `lib/supabase/middleware.ts`
+     * wskazuje dashboard, a od 30.08.2026 to właśnie on JEST ekranem agenta.
+     * Skrót w manifeście prowadził gdzie indziej niż logowanie, więc aplikacja
+     * dodana do ekranu głównego otwierała się w innym miejscu niż ta sama
+     * aplikacja otwarta z przeglądarki.
+     */
+    start_url: '/dashboard',
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',
-    background_color: '#0a0a0b',
-    theme_color: '#000000',
+    /**
+     * Kolory z ery ciemnego motywu (`#0a0a0b` / `#000000`) — motyw domyślny
+     * jest jasny od 30.08.2026. Na telefonie widać to wprost: przy dodaniu do
+     * ekranu głównego ekran startowy błyskał czernią, a pasek stanu w trybie
+     * `standalone` zostawał czarny nad białym interfejsem.
+     * Wartości zgodne z `--ff-bg` i `--ff-surface` z `app/globals.css`.
+     */
+    background_color: '#f7f8fa',
+    theme_color: '#ffffff',
     lang: 'pl-PL',
     categories: ['business', 'finance', 'productivity'],
     icons: [

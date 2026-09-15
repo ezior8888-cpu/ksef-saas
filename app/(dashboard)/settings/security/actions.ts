@@ -1,58 +1,143 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import type { User } from '@supabase/supabase-js';
 import { logAudit } from '@/lib/audit/log';
 import { validatePassword } from '@/lib/auth/password';
 import { reauthenticateWithPassword } from '@/lib/auth/reauth';
 import { deleteAllRecoveryCodes } from '@/lib/auth/mfa-recovery';
 import { checkMfaRateLimit } from '@/lib/rate-limit/mfa';
+import { checkPasswordOperationRateLimit, checkPasswordNonceSendRateLimit } from '@/lib/rate-limit/password';
 import { createClient } from '@/lib/supabase/server';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 
-export type PasswordChangeResult =
-  | { ok: true }
-  | { ok: false; error: 'not_authenticated' | 'invalid_current' | 'weak_password' | 'password_breached' | 'update_failed' | 'mfa_required' | 'verification_unavailable' };
+type PasswordOperationError =
+  | 'not_authenticated' | 'invalid_current' | 'weak_password' | 'password_breached'
+  | 'update_failed' | 'mfa_required' | 'verification_unavailable'
+  | 'reauthentication_needed' | 'invalid_nonce' | 'same_password' | 'rate_limited' | 'nonce_send_failed';
 
-/**
- * Zmiana hasła w panelu /settings/security.
- *
- * Wymaga re-auth (podanie aktualnego hasła) — zgodne z masterplanem Fazy 28
- * "re-auth na sensitive operations".
- */
-export async function changePasswordAction(
-  formData: FormData,
-): Promise<PasswordChangeResult> {
-  const currentPassword = String(formData.get('current_password') ?? '');
-  const newPassword = String(formData.get('new_password') ?? '');
+type PasswordOperationFailure = { ok: false; error: PasswordOperationError; retryAfter?: number };
+export type PasswordChangeResult = { ok: true } | PasswordOperationFailure;
+export type PasswordNonceResult = { ok: true } | PasswordOperationFailure;
 
-  const supabase = await createClient();
+function passwordAuthError(
+  error: { code?: string; status?: number },
+  fallback: 'update_failed' | 'nonce_send_failed',
+): PasswordOperationFailure {
+  switch (error.code) {
+    case 'reauthentication_needed': return { ok: false, error: 'reauthentication_needed' };
+    case 'reauthentication_not_valid':
+    case 'otp_expired': return { ok: false, error: 'invalid_nonce' };
+    case 'current_password_required':
+    case 'current_password_mismatch': return { ok: false, error: 'invalid_current' };
+    case 'same_password': return { ok: false, error: 'same_password' };
+    case 'weak_password': return { ok: false, error: 'weak_password' };
+    case 'insufficient_aal': return { ok: false, error: 'mfa_required' };
+    case 'session_not_found':
+    case 'session_expired':
+    case 'bad_jwt': return { ok: false, error: 'not_authenticated' };
+    case 'over_request_rate_limit':
+    case 'over_email_send_rate_limit':
+    case 'over_sms_send_rate_limit': return { ok: false, error: 'rate_limited' };
+    default: return { ok: false, error: error.status === 429 ? 'rate_limited' : fallback };
+  }
+}
+
+async function passwordSession(): Promise<
+  PasswordOperationFailure |
+  { ok: true; supabase: Awaited<ReturnType<typeof createClient>>; user: User }
+> {
+  const supabase = await createClient().catch(() => null);
+  if (!supabase) return { ok: false, error: 'verification_unavailable' };
   const state = await getVerifiedMfaState(supabase).catch(() => null);
   if (!state) return { ok: false, error: 'verification_unavailable' };
   if (state.status === 'unauthenticated') return { ok: false, error: 'not_authenticated' };
   if (state.status === 'challenge_required') return { ok: false, error: 'mfa_required' };
-  const { user } = state;
+  return { ok: true, supabase, user: state.user };
+}
 
-  const reauth = await reauthenticateWithPassword(currentPassword);
-  if (!reauth.ok) return { ok: false, error: 'invalid_current' };
+function readCurrentPassword(formData: FormData): string | null {
+  const password = formData.get('current_password');
+  // Older passwords need not satisfy today's creation policy; only bound the input.
+  return typeof password === 'string' && password.length > 0 && password.length <= 1024 ? password : null;
+}
 
-  const pw = await validatePassword(newPassword);
-  if (!pw.valid) {
-    return {
-      ok: false,
-      error: pw.reason === 'breached' ? 'password_breached' : 'weak_password',
-    };
+async function checkCurrentPassword(currentPassword: string): Promise<PasswordOperationFailure | null> {
+  const reauth = await reauthenticateWithPassword(currentPassword).catch(() => null);
+  if (!reauth || (!reauth.ok && reauth.error === 'unknown')) {
+    return { ok: false, error: 'verification_unavailable' };
   }
+  if (!reauth.ok) return { ok: false, error: reauth.error === 'not_authenticated' ? 'not_authenticated' : 'invalid_current' };
+  return null;
+}
 
-  const { error } = await supabase.auth.updateUser({ password: newPassword });
-  if (error) return { ok: false, error: 'update_failed' };
+/**
+ * Keep the original MFA session. Isolated password verification does not satisfy
+ * GoTrue's separate reauthentication requirement for an old session.
+ */
+export async function changePasswordAction(formData: FormData): Promise<PasswordChangeResult> {
+  const currentPassword = readCurrentPassword(formData);
+  if (!currentPassword) return { ok: false, error: 'invalid_current' };
+  const newPassword = formData.get('new_password');
+  if (typeof newPassword !== 'string' || !newPassword || newPassword.length > 128) {
+    return { ok: false, error: 'weak_password' };
+  }
+  const rawNonce = formData.get('nonce');
+  if (rawNonce !== null && (typeof rawNonce !== 'string' || (rawNonce !== '' && !/^[0-9]{6,10}$/.test(rawNonce)))) {
+    return { ok: false, error: 'invalid_nonce' };
+  }
+  const nonce = typeof rawNonce === 'string' ? rawNonce : '';
+
+  const session = await passwordSession();
+  if (!session.ok) return session;
+  const { supabase, user } = session;
+  const limit = await checkPasswordOperationRateLimit(user.id);
+  if (limit.unavailable) return { ok: false, error: 'verification_unavailable' };
+  if (!limit.allowed) return { ok: false, error: 'rate_limited', retryAfter: limit.retryAfter };
+  const reauthError = await checkCurrentPassword(currentPassword);
+  if (reauthError) return reauthError;
+
+  const pw = await validatePassword(newPassword).catch(() => null);
+  if (!pw) return { ok: false, error: 'verification_unavailable' };
+  if (!pw.valid) return { ok: false, error: pw.reason === 'breached' ? 'password_breached' : 'weak_password' };
+
+  // Keep isolated reauth: the server's current-password requirement may be disabled.
+  const result = await supabase.auth.updateUser({
+    password: newPassword, current_password: currentPassword, ...(nonce ? { nonce } : {}),
+  }).catch(() => null);
+  if (!result) return { ok: false, error: 'verification_unavailable' };
+  if (result.error) return passwordAuthError(result.error, 'update_failed');
+  if (result.data?.user?.id !== user.id) return { ok: false, error: 'verification_unavailable' };
 
   await logAudit({
     action: 'auth.password_changed',
     tenantId: null,
     userId: user.id,
   });
-
   revalidatePath('/settings/security');
+  return { ok: true };
+}
+
+/** Sends a code only after the user explicitly requests it; no password change. */
+export async function requestPasswordChangeNonceAction(formData: FormData): Promise<PasswordNonceResult> {
+  const currentPassword = readCurrentPassword(formData);
+  if (!currentPassword) return { ok: false, error: 'invalid_current' };
+  const session = await passwordSession();
+  if (!session.ok) return session;
+  const { supabase, user } = session;
+  const limit = await checkPasswordOperationRateLimit(user.id);
+  if (limit.unavailable) return { ok: false, error: 'verification_unavailable' };
+  if (!limit.allowed) return { ok: false, error: 'rate_limited', retryAfter: limit.retryAfter };
+  const sendLimit = await checkPasswordNonceSendRateLimit(user.id);
+  if (sendLimit.unavailable) return { ok: false, error: 'verification_unavailable' };
+  if (!sendLimit.allowed) return { ok: false, error: 'rate_limited', retryAfter: sendLimit.retryAfter };
+  const reauthError = await checkCurrentPassword(currentPassword);
+  if (reauthError) return reauthError;
+
+  const result = await supabase.auth.reauthenticate().catch(() => null);
+  if (!result) return { ok: false, error: 'verification_unavailable' };
+  if (result.error) return passwordAuthError(result.error, 'nonce_send_failed');
+  // reauthenticate() only sends the nonce; it never upgrades AAL or changes a password.
   return { ok: true };
 }
 

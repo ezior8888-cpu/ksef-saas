@@ -1,6 +1,7 @@
 'use server';
 
 import { lookupCompanyByNip } from '@/lib/gus/client';
+import { getVerifiedUserContext } from '@/lib/auth/verified-user';
 import { createAdminClient } from '@/lib/supabase/server';
 import { validateNipChecksum } from '@/lib/xml/invoice-calculator';
 
@@ -45,6 +46,9 @@ export type CompleteOnboardingResult = { success: false; error: string };
 // ═══════════════════════════════════════════════════════════════
 
 export async function lookupNipAction(nip: string): Promise<LookupNipResult> {
+  const context = await getVerifiedUserContext();
+  if (!context.ok) return { success: false, error: context.error };
+
   if (!/^\d{10}$/.test(nip)) {
     return { success: false, error: 'NIP musi zawierać 10 cyfr.' };
   }

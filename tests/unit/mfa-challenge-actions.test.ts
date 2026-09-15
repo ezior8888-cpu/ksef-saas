@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.client }));
 vi.mock('@/lib/rate-limit/mfa', () => ({ checkMfaRateLimit: mocks.limit }));
+vi.mock('@/lib/rate-limit/password', () => ({ checkPasswordOperationRateLimit: mocks.limit, checkPasswordNonceSendRateLimit: mocks.limit }));
 vi.mock('@/lib/auth/mfa-recovery', () => ({
   consumeRecoveryCode: mocks.consume, generateAndStoreRecoveryCodes: mocks.generate, deleteAllRecoveryCodes: vi.fn(),
 }));
@@ -51,7 +52,7 @@ beforeEach(() => {
   mocks.unenroll.mockResolvedValue({ error: null });
   mocks.reauth.mockResolvedValue({ ok: true });
   mocks.password.mockResolvedValue({ valid: true });
-  mocks.updateUser.mockResolvedValue({ error: null });
+  mocks.updateUser.mockResolvedValue({ data: { user: { id } }, error: null });
 });
 function form(code = '123456', next = '/admin') {
   const data = new FormData();
@@ -190,6 +191,6 @@ describe('password changes', () => {
   it.each(['aal2', 'no-factor'])('preserves password changes for authorized %s sessions', async (state) => {
     if (state === 'no-factor') factors = []; else aal = 'aal2';
     await expect(changePasswordAction(passwords())).resolves.toEqual({ ok: true });
-    expect(mocks.updateUser).toHaveBeenCalledWith({ password: 'fixture-new' });
+    expect(mocks.updateUser).toHaveBeenCalledWith({ password: 'fixture-new', current_password: 'fixture-current' });
   });
 });

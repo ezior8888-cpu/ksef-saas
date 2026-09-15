@@ -10,6 +10,7 @@ import { StatusBadge } from './status-badge';
 import { SwipeableInvoiceRow } from './swipeable-invoice-row';
 
 import type { InvoiceRow } from './invoice-row-types';
+import { formatPlMoney } from '@/lib/format/pl';
 
 export type { InvoiceRow } from './invoice-row-types';
 
@@ -193,7 +194,7 @@ export function InvoiceList({
                   </td>
                   <td className="px-6 py-4 text-right text-[13px] font-semibold tabular-nums text-[var(--ff-on-surface)] sm:px-8">
                     {inv.gross_total != null
-                      ? `${Number(inv.gross_total).toFixed(2)} PLN`
+                      ? `${formatPlMoney(Number(inv.gross_total))} PLN`
                       : '—'}
                   </td>
                   <td className="px-6 py-4 sm:px-8">

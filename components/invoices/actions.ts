@@ -4,8 +4,8 @@ import { revalidatePath } from 'next/cache';
 
 import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
-import { createClient } from '@/lib/supabase/server';
-import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
+import type { createClient } from '@/lib/supabase/server';
+import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { lookupCompanyByNip } from '@/lib/gus/client';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
@@ -49,16 +49,8 @@ async function getTenantContext(): Promise<{
   userId: string;
   tenant: TenantSnapshot;
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Brak sesji użytkownika');
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    throw new Error('Użytkownik nie jest przypisany do firmy (onboarding)');
-  }
+  // This action boundary enforces MFA and current membership independently of routing.
+  const { supabase, user, tenantId } = await requireUserAndActiveOrg();
 
   const { data: raw, error } = await supabase
     .from('tenants')
@@ -576,4 +568,102 @@ export async function saveAndSendInvoiceAction(
           : 'Nieznany błąd wysyłki',
     };
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Wypełnienie z ostatniej faktury (podpowiedź Flo na `/invoices/new`)
+// ═══════════════════════════════════════════════════════════════
+
+/** Wartości do wstrzyknięcia w formularz — bez numeru i bez dat. */
+export interface PrefillFromLastInvoice {
+  contractorName: string;
+  values: Pick<
+    InvoiceFormValues,
+    | 'buyerNip'
+    | 'buyerName'
+    | 'buyerAddressLine1'
+    | 'buyerAddressLine2'
+    | 'buyerEmail'
+    | 'lines'
+    | 'paymentMethod'
+    | 'bankAccount'
+  >;
+}
+
+/**
+ * Ostatnia wystawiona faktura tego tenanta jako podkład pod nową.
+ *
+ * CZEGO TU CELOWO NIE MA: numeru faktury, daty wystawienia, daty sprzedaży
+ * i terminu płatności. Numer musi być nowy, a przepisanie starych dat to
+ * najprostszy sposób na wystawienie faktury z datą sprzed miesiąca — błąd,
+ * którego klient nie zauważy, dopóki nie zrobi tego księgowa.
+ *
+ * `direction = 'outgoing'`. Kolumna `invoices.direction` przyjmuje WYŁĄCZNIE
+ * `'outgoing' | 'incoming'`; wpisanie tam `'issued'` cicho zwraca zero wierszy
+ * i nie rzuca błędem — dokładnie tak przez wiele miesięcy wszystkie karty KPI
+ * dashboardu pokazywały zera (`docs/flo/UKLAD-DASHBOARDU.md`).
+ *
+ * Odczyt idzie klientem z sesji, więc RLS pilnuje tenanta; `eq('tenant_id')`
+ * jest drugą warstwą, nie jedyną.
+ */
+export async function prefillFromLastInvoiceAction(): Promise<PrefillFromLastInvoice | null> {
+  let supabase: Awaited<ReturnType<typeof createClient>>;
+  let tenantId: string;
+  try {
+    const ctx = await getTenantContext();
+    supabase = ctx.supabase;
+    tenantId = ctx.tenant.id;
+  } catch {
+    return null;
+  }
+
+  const { data: ostatnia } = await supabase
+    .from('invoices')
+    .select('id, fa3_data')
+    .eq('tenant_id', tenantId)
+    .eq('direction', 'outgoing')
+    .order('issue_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!ostatnia?.fa3_data) return null;
+
+  const faktura = ostatnia.fa3_data as Invoice;
+  const buyer = faktura.buyer;
+  if (!buyer?.name) return null;
+
+  const { data: pozycje } = await supabase
+    .from('invoice_line_items')
+    .select('ordinal, name, unit, quantity, unit_price_net, vat_rate')
+    .eq('invoice_id', ostatnia.id)
+    .order('ordinal', { ascending: true });
+
+  const lines = (pozycje ?? [])
+    .map((poz) => ({
+      name: String(poz.name ?? ''),
+      unit: String(poz.unit ?? 'szt'),
+      quantity: Number(poz.quantity) || 0,
+      unitPriceNet: Number(poz.unit_price_net) || 0,
+      vatRate: String(poz.vat_rate ?? '23'),
+    }))
+    .filter((poz) => poz.name.length > 0 && poz.quantity > 0);
+
+  // Faktura bez czytelnych pozycji nie jest podkładem, tylko pułapką:
+  // klient kliknąłby „Wypełnij" i dostał pusty formularz z samym nabywcą.
+  if (lines.length === 0) return null;
+
+  return {
+    contractorName: buyer.name,
+    values: {
+      buyerNip: 'nip' in buyer && buyer.nip ? buyer.nip : '',
+      buyerName: buyer.name,
+      buyerAddressLine1: buyer.address?.addressLine1 ?? '',
+      buyerAddressLine2: buyer.address?.addressLine2 ?? '',
+      buyerEmail: buyer.email ?? '',
+      lines: lines as InvoiceFormValues['lines'],
+      paymentMethod: faktura.payment?.method ?? 'transfer',
+      bankAccount: faktura.payment?.bankAccount ?? '',
+    },
+  };
 }

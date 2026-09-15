@@ -1,3 +1,4 @@
+import { ResponsiveTable, ResponsiveTableCard } from '@/components/dashboard/responsive-table';
 import Link from 'next/link';
 
 import { BulkValidateButton } from '@/components/validation/bulk-validate-button';
@@ -61,15 +62,10 @@ export default async function ContractorsPage() {
           </Link>
         </div>
       ) : (
-        <div className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
-          <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
-            <h2 className="text-[15px] font-semibold text-[var(--ff-text-strong)]">Lista kontrahentów</h2>
-            <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
-              {contractors.length} pozycji (max. 200) • sortowanie wg ostatniego
-              użycia
-            </p>
-          </div>
-          <div className="overflow-x-auto">
+        <ResponsiveTable
+          title="Lista kontrahentów"
+          subtitle={`${contractors.length} pozycji (max. 200) • sortowanie wg ostatniego użycia`}
+          table={
             <table className="w-full min-w-[880px] text-left text-[14px]">
               <thead>
                 <tr className="border-b border-[var(--ff-border)]">
@@ -143,8 +139,34 @@ export default async function ContractorsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
-        </div>
+          }
+          cards={contractors.map((contractor) => (
+            <ResponsiveTableCard
+              key={contractor.id}
+              title={contractor.name}
+              subtitle={`NIP ${contractor.nip}`}
+              meta={
+                <>
+                  <VatStatusBadge
+                    status={contractor.vat_status ?? 'unknown'}
+                    warning={contractor.validation_warning}
+                  />
+                  <span>
+                    {contractor.last_used_at
+                      ? `Ostatnio: ${new Date(contractor.last_used_at).toLocaleDateString('pl-PL')}`
+                      : 'Jeszcze nie użyty'}
+                  </span>
+                </>
+              }
+              actions={
+                <ContractorReminderToggle
+                  contractorId={contractor.id}
+                  excluded={contractor.reminder_excluded ?? false}
+                />
+              }
+            />
+          ))}
+        />
       )}
     </div>
   );

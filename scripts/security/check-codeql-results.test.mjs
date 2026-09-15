@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import { checkReport } from './check-codeql-results.mjs';
+import { checkDirectory, checkReport } from './check-codeql-results.mjs';
 
 const script = fileURLToPath(new URL('./check-codeql-results.mjs', import.meta.url));
 const rule = (severity, extra = {}) => ({ id: 'js/synthetic-rule', properties: severity === undefined ? {} : { 'security-severity': severity }, ...extra });
@@ -50,7 +51,7 @@ function cli(t, files, args) {
 test('valid empty CodeQL results pass and produce only safe counters', (t) => {
   const actual = cli(t, { 'javascript.sarif': report(), 'ignored.txt': 'ignored' });
   assert.equal(actual.status, 0);
-  assert.match(actual.stdout, /^CodeQL gate: files=1 runs=1 results=0 high=0 critical=0 errorsWithoutSeverity=0 inputErrors=0\r?\n$/);
+  assert.match(actual.stdout, /^CodeQL gate: files=1 runs=1 results=0 high=0 critical=0 errorsWithoutSeverity=0 acceptedReviewedFalsePositives=0 inputErrors=0\r?\n$/);
   assert.equal(actual.stderr, '');
 });
 
@@ -229,4 +230,246 @@ test('CLI never discloses report contents, paths, messages, or parse errors', (t
     assert.ok(!(actual.stdout + actual.stderr).includes(marker));
     assert.ok(!(actual.stdout + actual.stderr).includes(actual.directory));
   }
+});
+
+const reviewedRuleId = 'js/insufficient-password-hash';
+const reviewedSourcePath = 'lib/auth/breach-check.ts';
+const reviewedResult = (extra = {}) => result({
+  ruleId: reviewedRuleId,
+  locations: [{ physicalLocation: {
+    artifactLocation: { uri: reviewedSourcePath, uriBaseId: '%SRCROOT%' },
+    region: { startLine: 7 },
+  } }],
+  ...extra,
+});
+const reviewedReport = (results = [reviewedResult()], severity = '8.2') => report([rule(severity, { id: reviewedRuleId })], results);
+const blockingCount = (counts) => counts.high + counts.critical + counts.errorsWithoutSeverity - counts.acceptedReviewedFalsePositives;
+
+function reviewedFixture(t) {
+  const directory = mkdtempSync(join(tmpdir(), 'codeql-reviewed-test-'));
+  t.after(() => {
+    assert.equal(dirname(resolve(directory)), resolve(tmpdir()));
+    assert.match(directory.split(/[\\/]/).at(-1), /^codeql-reviewed-test-/);
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const sourceRoot = join(directory, 'source');
+  const reports = join(directory, 'reports');
+  const sourceFile = join(sourceRoot, reviewedSourcePath);
+  mkdirSync(dirname(sourceFile), { recursive: true });
+  mkdirSync(reports);
+  // Synthetic bytes only. Time is fixed; a test run never renews the review.
+  const source = '// Synthetic fixture\n\n\n\n\n\nprotocolHash();\n';
+  writeFileSync(sourceFile, source);
+  const manifest = {
+    version: 1,
+    ruleId: reviewedRuleId,
+    path: reviewedSourcePath,
+    startLine: 7,
+    sourceSha256: createHash('sha256').update(source).digest('hex'),
+    maxOccurrences: 1,
+    reviewedAt: '2026-09-15',
+    reviewBy: '2026-12-15',
+    reason: 'Synthetic reviewed use of the HIBP range protocol, not password storage.',
+    reference: 'https://haveibeenpwned.com/API/v3#SearchingPwnedPasswordsByRange',
+  };
+  const manifestPath = join(directory, 'review.json');
+  const saveManifest = (value = manifest) => writeFileSync(manifestPath, JSON.stringify(value));
+  const saveReport = (value = reviewedReport(), name = 'javascript.sarif') => writeFileSync(join(reports, name), JSON.stringify(value));
+  saveManifest();
+  saveReport();
+  const options = { manifestPath, sourceRoot, now: Date.parse('2026-09-16T12:00:00.000Z') };
+  return { directory, sourceRoot, sourceFile, source, reports, manifestPath, manifest, options, saveManifest, saveReport };
+}
+
+test('one reviewed HIBP finding passes explicitly while all original counters remain visible', (t) => {
+  const f = reviewedFixture(t);
+  const counts = checkDirectory(f.reports, f.options);
+  assert.deepEqual(counts, { files: 1, runs: 1, results: 1, high: 1, critical: 0, errorsWithoutSeverity: 0, acceptedReviewedFalsePositives: 1 });
+  assert.equal(blockingCount(counts), 0);
+  const ordinary = checkDirectory(f.reports);
+  assert.equal(ordinary.high, 1);
+  assert.equal(ordinary.acceptedReviewedFalsePositives, 0);
+  assert.equal(blockingCount(ordinary), 1);
+});
+
+test('another source path, line, rule, missing location or multiple locations never matches', (t) => {
+  const f = reviewedFixture(t);
+  for (const mutate of [
+    (input) => { input.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri = 'lib/auth/other.ts'; },
+    (input) => { input.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri = '../lib/auth/breach-check.ts'; },
+    (input) => { input.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri = 'file:///lib/auth/breach-check.ts'; },
+    (input) => { input.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uriBaseId = 'OTHER_ROOT'; },
+    (input) => { input.runs[0].results[0].locations[0].physicalLocation.region.startLine = 8; },
+    (input) => { input.runs[0].results[0].locations[0].physicalLocation.region.startLine = '7'; },
+    (input) => { input.runs[0].results[0].ruleId = 'js/other-rule'; input.runs[0].tool.driver.rules[0].id = 'js/other-rule'; },
+    (input) => { delete input.runs[0].results[0].locations; },
+    (input) => { input.runs[0].results[0].locations = [{}]; },
+    (input) => { input.runs[0].results[0].locations.push(structuredClone(input.runs[0].results[0].locations[0])); },
+  ]) {
+    const input = reviewedReport(); mutate(input); f.saveReport(input);
+    const counts = checkDirectory(f.reports, f.options);
+    assert.equal(counts.acceptedReviewedFalsePositives, 0);
+    assert.equal(blockingCount(counts), 1);
+  }
+});
+
+test('a change anywhere in the complete source, including line endings, restores the block', (t) => {
+  const f = reviewedFixture(t);
+  for (const source of [f.source + '// change after the finding\n', f.source.replace('Synthetic', 'Changed'), f.source.replaceAll('\n', '\r\n')]) {
+    writeFileSync(f.sourceFile, source);
+    const counts = checkDirectory(f.reports, f.options);
+    assert.equal(counts.high, 1);
+    assert.equal(counts.acceptedReviewedFalsePositives, 0);
+    assert.equal(blockingCount(counts), 1);
+  }
+});
+
+test('duplicates within one run, across runs, or across files invalidate the entire exception', (t) => {
+  const f = reviewedFixture(t);
+  const duplicateRun = reviewedReport();
+  duplicateRun.runs.push(structuredClone(duplicateRun.runs[0]));
+  for (const input of [reviewedReport([reviewedResult(), reviewedResult()]), duplicateRun]) {
+    f.saveReport(input);
+    const counts = checkDirectory(f.reports, f.options);
+    assert.equal(counts.high, 2);
+    assert.equal(counts.acceptedReviewedFalsePositives, 0);
+    assert.equal(blockingCount(counts), 2);
+  }
+  f.saveReport(); f.saveReport(reviewedReport(), 'duplicate.sarif');
+  const counts = checkDirectory(f.reports, f.options);
+  assert.equal(counts.files, 2);
+  assert.equal(counts.high, 2);
+  assert.equal(counts.acceptedReviewedFalsePositives, 0);
+});
+
+test('a second high, a critical, or an unscored error still blocks with one accepted finding', (t) => {
+  const f = reviewedFixture(t);
+  for (const severity of ['7.0', '9.8', undefined]) {
+    const input = reviewedReport();
+    input.runs[0].tool.driver.rules.push(rule(severity));
+    input.runs[0].results.push(result({ ruleIndex: 1, level: 'error', baselineState: 'unchanged', suppressions: [{ kind: 'external', status: 'accepted' }] }));
+    f.saveReport(input);
+    const counts = checkDirectory(f.reports, f.options);
+    assert.equal(counts.acceptedReviewedFalsePositives, 1);
+    assert.equal(blockingCount(counts), 1);
+    assert.equal(counts.results, 2);
+  }
+});
+
+test('a critical score on the reviewed rule can never use the high-only exception', (t) => {
+  const f = reviewedFixture(t);
+  f.saveReport(reviewedReport([reviewedResult()], '9.0'));
+  const counts = checkDirectory(f.reports, f.options);
+  assert.equal(counts.critical, 1);
+  assert.equal(counts.acceptedReviewedFalsePositives, 0);
+  assert.equal(blockingCount(counts), 1);
+});
+
+test('SARIF suppressions and baseline metadata do not grant an exception or alter raw counts', (t) => {
+  const f = reviewedFixture(t);
+  f.saveReport(reviewedReport([reviewedResult({ baselineState: 'unchanged', suppressions: [{ kind: 'external', status: 'accepted' }], level: 'none' })]));
+  const without = checkDirectory(f.reports);
+  assert.equal(without.high, 1);
+  assert.equal(blockingCount(without), 1);
+  const reviewed = checkDirectory(f.reports, f.options);
+  assert.equal(reviewed.high, 1);
+  assert.equal(reviewed.acceptedReviewedFalsePositives, 1);
+});
+
+test('an indexed SARIF artifact must resolve to the same source and root', (t) => {
+  const f = reviewedFixture(t);
+  const input = reviewedReport();
+  const location = input.runs[0].results[0].locations[0].physicalLocation.artifactLocation;
+  input.runs[0].artifacts = [{ location: structuredClone(location) }];
+  location.index = 0;
+  f.saveReport(input);
+  assert.equal(checkDirectory(f.reports, f.options).acceptedReviewedFalsePositives, 1);
+  for (const index of [-1, 1, '0']) {
+    location.index = index; f.saveReport(input);
+    assert.equal(checkDirectory(f.reports, f.options).acceptedReviewedFalsePositives, 0);
+  }
+  location.index = 0;
+  input.runs[0].artifacts[0].location.uri = 'lib/other.ts'; f.saveReport(input);
+  assert.equal(checkDirectory(f.reports, f.options).acceptedReviewedFalsePositives, 0);
+});
+
+test('extension rules retain the same exact match requirements', (t) => {
+  const f = reviewedFixture(t);
+  const input = packReport('javascript', [reviewedResult({ rule: { id: reviewedRuleId, index: 0, toolComponent: { index: 1 } } })]);
+  input.runs[0].tool.extensions[1].rules = [rule('8.2', { id: reviewedRuleId })];
+  f.saveReport(input);
+  assert.equal(checkDirectory(f.reports, f.options).acceptedReviewedFalsePositives, 1);
+});
+
+test('strict manifest validation rejects broader rules, paths, wildcards, counts and malformed fields', (t) => {
+  const f = reviewedFixture(t);
+  for (const value of [null, [], {}, { ...f.manifest, extra: true }, { ...f.manifest, version: 2 },
+    { ...f.manifest, maxOccurrences: 2 }, { ...f.manifest, ruleId: 'js/*' }, { ...f.manifest, path: '../breach-check.ts' },
+    { ...f.manifest, startLine: 0 }, { ...f.manifest, startLine: '7' }, { ...f.manifest, sourceSha256: 'short' },
+    { ...f.manifest, sourceSha256: 'A'.repeat(64) }, { ...f.manifest, reason: '' }, { ...f.manifest, reference: 'https://example.test' },
+    { ...f.manifest, reviewedAt: '2026-02-30' }, { ...f.manifest, reviewBy: 'never' },
+  ]) {
+    f.saveManifest(value);
+    assert.throws(() => checkDirectory(f.reports, f.options));
+  }
+});
+
+test('review dates are checked with injected UTC time and cannot silently renew or precede review', (t) => {
+  const f = reviewedFixture(t);
+  for (const now of ['2026-09-14T23:59:59.999Z', '2026-12-16T00:00:00.000Z']) {
+    assert.throws(() => checkDirectory(f.reports, { ...f.options, now: Date.parse(now) }));
+  }
+  for (const now of ['2026-09-15T00:00:00.000Z', '2026-12-15T23:59:59.999Z']) {
+    assert.equal(checkDirectory(f.reports, { ...f.options, now: Date.parse(now) }).acceptedReviewedFalsePositives, 1);
+  }
+});
+
+test('missing source, manifest or malformed report fails closed despite an otherwise valid exception', (t) => {
+  const f = reviewedFixture(t);
+  assert.throws(() => checkDirectory(f.reports, { ...f.options, manifestPath: join(f.directory, 'missing.json') }));
+  f.saveReport({});
+  assert.throws(() => checkDirectory(f.reports, f.options));
+  f.saveReport();
+  rmSync(f.sourceFile);
+  assert.throws(() => checkDirectory(f.reports, f.options));
+});
+
+test('a source directory junction or symlink is rejected even inside the chosen repository', (t) => {
+  const f = reviewedFixture(t);
+  const original = dirname(f.sourceFile);
+  const target = join(f.sourceRoot, 'other-source');
+  renameSync(original, target);
+  symlinkSync(target, original, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.throws(() => checkDirectory(f.reports, f.options));
+});
+
+test('CLI opt-in prints only safe counters and requires both exact flags', (t) => {
+  const f = reviewedFixture(t);
+  // Wide fixed fixture dates keep the CLI test deterministic without changing
+  // the production manifest or adding a way to override its clock in CI.
+  f.saveManifest({ ...f.manifest, reviewedAt: '2000-01-01', reviewBy: '9999-12-31' });
+  const args = [script, f.reports, '--reviewed-findings', f.manifestPath, '--source-root', f.sourceRoot];
+  const actual = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 10_000 });
+  assert.equal(actual.status, 0);
+  assert.match(actual.stdout, /^CodeQL gate: files=1 runs=1 results=1 high=1 critical=0 errorsWithoutSeverity=0 acceptedReviewedFalsePositives=1 inputErrors=0\r?\n$/);
+  assert.equal(actual.stderr, '');
+  for (const badArgs of [args.slice(0, -2), [...args, 'extra'], [script, f.reports, '--ignore', f.manifestPath, '--source-root', f.sourceRoot]]) {
+    const invalid = spawnSync(process.execPath, badArgs, { encoding: 'utf8', timeout: 10_000 });
+    assert.equal(invalid.status, 2);
+    assert.equal(invalid.stdout, '');
+    assert.equal(invalid.stderr, 'CodeQL gate: inputErrors=1\n');
+  }
+});
+
+test('CLI never prints malformed manifest data or a source read error', (t) => {
+  const f = reviewedFixture(t);
+  const marker = 'SYNTHETIC_PRIVATE_REVIEW_MARKER_6543';
+  const args = [script, f.reports, '--reviewed-findings', f.manifestPath, '--source-root', f.sourceRoot];
+  f.saveManifest({ ...f.manifest, sourceSha256: marker, reason: marker });
+  const execution = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 10_000 });
+  assert.equal(execution.status, 2);
+  assert.equal(execution.stdout, '');
+  assert.equal(execution.stderr, 'CodeQL gate: inputErrors=1\n');
+  assert.ok(!(execution.stdout + execution.stderr).includes(marker));
+  assert.ok(!(execution.stdout + execution.stderr).includes(f.directory));
 });

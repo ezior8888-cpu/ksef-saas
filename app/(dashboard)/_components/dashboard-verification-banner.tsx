@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { DismissibleBanner } from '@/components/dashboard/dismissible-banner';
 import { getDashboardActiveOrgVerified } from '@/lib/dashboard-shell-data';
 
 /**
@@ -24,7 +25,7 @@ export default async function DashboardVerificationBanner({
     return (
       <section
         role="status"
-        className="flex gap-2.5 rounded-2xl border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-4 py-3.5"
+        className="flex gap-2.5 rounded-2xl border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-4 py-3.5 pr-11 lg:pr-4"
       >
         <span
           className="material-symbols-outlined shrink-0 text-[18px] leading-none text-[var(--ff-warn)]"
@@ -76,5 +77,36 @@ export default async function DashboardVerificationBanner({
         </span>
       </Link>
     </div>
+  );
+}
+
+/**
+ * Baner certyfikatu w szkielecie panelu — wariant szeroki na komputerze,
+ * wąski na telefonie, oba do zamknięcia na dobę.
+ *
+ * DWA WARIANTY TEGO SAMEGO OSTRZEŻENIA. Wersja szeroka ma pięć wierszy tekstu;
+ * na ekranie 375 px zajmowała 180 px, czyli ponad jedną czwartą wysokości,
+ * i to nad wątkiem agenta, który ma zablokowaną wysokość. Wersja wąska mówi
+ * to samo w trzech zdaniach i mieści się w 90 px — dokładnie jak baner
+ * z makiety telefonu.
+ *
+ * SPRAWDZENIE WERYFIKACJI JEST TUTAJ, NIE W OPAKOWANIU. Gdyby `DismissibleBanner`
+ * dostawał dzieci, które renderują się do `null`, sam wciąż narysowałby ramkę
+ * z krzyżykiem nad pustką — komponent kliencki nie widzi, że serwerowe dziecko
+ * nic nie zwróciło.
+ */
+export async function DashboardVerificationBannerSlot() {
+  const isVerified = await getDashboardActiveOrgVerified();
+  if (isVerified) return null;
+
+  return (
+    <DismissibleBanner id="ksef-cert">
+      <div className="mt-4 lg:hidden">
+        <DashboardVerificationBanner variant="rail" />
+      </div>
+      <div className="hidden lg:block">
+        <DashboardVerificationBanner />
+      </div>
+    </DismissibleBanner>
   );
 }

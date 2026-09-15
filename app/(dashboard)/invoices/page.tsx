@@ -41,9 +41,16 @@ export default async function InvoicesPage() {
             Wszystkie faktury sprzedażowe wysłane do KSeF
           </p>
         </div>
-        <div className="flex items-end gap-3">
+        {/* `flex-wrap` i pełna szerokość poniżej `sm`: na 375 px pasek
+            rozpychał się do 452 px, więc przycisk „Nowa faktura" był przycięty
+            przy prawej krawędzi. Strona nie przewijała się w bok, bo treść jest
+            obcinana — czyli defekt nie dawał o sobie znać niczym poza tym, że
+            przycisku po prostu nie dało się dokliknąć.
+            Na telefonie „Nowa faktura" jest i tak w dolnej nawigacji, ale
+            przycięty przycisk wygląda jak zepsuta strona. */}
+        <div className="flex w-full flex-wrap items-end gap-3 sm:w-auto">
           <BatchPdfDownload />
-          <Button asChild variant="glass-primary">
+          <Button asChild variant="glass-primary" className="flex-1 sm:flex-none">
             <Link href="/invoices/new">
               <PlusCircle className="h-4 w-4 mr-2" />
               Nowa faktura
