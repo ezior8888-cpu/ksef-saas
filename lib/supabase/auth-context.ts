@@ -21,6 +21,7 @@
 
 import { cookies } from 'next/headers';
 
+import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { createAdminClient, createClient } from './server';
 import { ACTIVE_ORG_COOKIE, isUuid } from './active-org';
 
@@ -51,10 +52,17 @@ export interface AuthContext {
  */
 export async function requireUserAndActiveOrg(): Promise<AuthContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new ActionAuthError('Niezalogowany');
+  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  if (!state) {
+    throw new ActionAuthError('Nie udało się zweryfikować sesji. Zaloguj się ponownie.');
+  }
+  if (state.status === 'unauthenticated') throw new ActionAuthError('Niezalogowany');
+  if (state.status === 'challenge_required') {
+    throw new ActionAuthError('Wymagana weryfikacja dwuetapowa');
+  }
+  // MFA is optional for tenant users, but an enrolled user must finish the
+  // challenge before any tenant lookup or construction of a service-role client.
+  const { user } = state;
 
   const cookieStore = await cookies();
   const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
@@ -108,10 +116,15 @@ export type ApiOrgContext =
 
 export async function resolveApiUserAndActiveOrg(): Promise<ApiOrgContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, status: 401, error: 'not_authenticated' };
+  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  if (!state) return { ok: false, status: 401, error: 'session_verification_failed' };
+  if (state.status === 'unauthenticated') {
+    return { ok: false, status: 401, error: 'not_authenticated' };
+  }
+  if (state.status === 'challenge_required') {
+    return { ok: false, status: 403, error: 'mfa_required' };
+  }
+  const { user } = state;
 
   const cookieStore = await cookies();
   const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;

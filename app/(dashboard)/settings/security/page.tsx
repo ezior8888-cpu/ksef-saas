@@ -1,6 +1,5 @@
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import { countRemainingRecoveryCodes } from '@/lib/auth/mfa-recovery';
 import { createClient } from '@/lib/supabase/server';
 import { PasswordChangeCard } from './_components/password-change-card';
 import { TwoFactorCard } from './_components/two-factor-card';
@@ -22,9 +21,6 @@ export default async function SecuritySettingsPage({
   const { data: factorsRes } = await supabase.auth.mfa.listFactors();
   const verifiedTotp = factorsRes?.totp?.find((f) => f.status === 'verified');
   const isTotpEnabled = Boolean(verifiedTotp);
-  const remainingRecovery = isTotpEnabled
-    ? await countRemainingRecoveryCodes(user.id)
-    : 0;
 
   return (
     <div className="space-y-8 max-w-4xl">
@@ -40,7 +36,7 @@ export default async function SecuritySettingsPage({
       {notice === 'admin_mfa_required' && (
         <p role="status" className="rounded-xl border border-glass-border bg-foreground/5 p-4 text-sm">
           Panel administratora wymaga weryfikacji dwuetapowej. Włącz 2FA poniżej,
-          zapisz kody ratunkowe i wróć do panelu administratora.
+          potwierdź kod z aplikacji TOTP i wróć do panelu administratora.
         </p>
       )}
 
@@ -79,10 +75,7 @@ export default async function SecuritySettingsPage({
                 1Password, Authy). Chroni konto nawet jeśli hasło wycieknie.
               </p>
             </div>
-            <TwoFactorCard
-              isEnabled={isTotpEnabled}
-              remainingRecoveryCodes={remainingRecovery}
-            />
+            <TwoFactorCard isEnabled={isTotpEnabled} />
           </div>
         </div>
       </div>

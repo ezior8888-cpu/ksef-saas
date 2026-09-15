@@ -106,7 +106,7 @@ describe('administrator MFA boundary', () => {
   it.each([undefined, [], [{ factor_type: 'totp', status: 'unverified' }], [{ factor_type: 'phone', status: 'verified' }]])(
     'requires an active supported factor even with an old AAL2 token: %j', async (factors) => {
       mocks.getUser.mockResolvedValue({ data: { user: { ...operator, factors } }, error: null });
-      await expect(requireAdmin()).rejects.toThrow('redirect:/settings/security?notice=admin_mfa_required');
+      await expect(requireAdmin()).rejects.toThrow('redirect:/login/two-factor/setup');
       await expect(getAdminContext()).resolves.toBeNull();
     },
   );

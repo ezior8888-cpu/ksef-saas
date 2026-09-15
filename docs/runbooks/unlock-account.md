@@ -3,6 +3,8 @@
 Kilka rzeczy może zablokować dostęp user-a do konta. Ten runbook listuje
 najczęstsze + procedurę odblokowania.
 
+> Aktualizacja 2026-09-14 dotyczy §2 (MFA). Pozostałe sekcje są historyczne i wymagają porównania z aktualnym kodem oraz własnym serwerem Hetzner/Coolify przed użyciem operacyjnym.
+
 ## Macierz scenariuszy
 
 | Symptom (ze strony user-a) | Przyczyna | Sekcja |
@@ -41,40 +43,55 @@ Po przekroczeniu user dostaje 429 z `Retry-After`.
 
 ❌ Nie wyłączaj rate limit "tymczasowo" — ataki bruteforce wracają w 30 s.
 
-## §2. 2FA lost — TOTP factor brakuje
+## §2. Utrata dostępu do aplikacji TOTP
 
-**Trigger:** user zgubił telefon / odinstalował Authy. Login wymaga TOTP,
-ale user nie ma generatora.
+**Stan na 2026-09-14:** samodzielne odzyskiwanie MFA jest niedostępne.
+Formularz logowania przyjmuje wyłącznie 6-cyfrowy kod TOTP. Próba użycia
+kodu ratunkowego kończy się komunikatem o niedostępności; kod nie jest
+zużywany. Nowe kody ratunkowe nie są generowane.
 
-### Procedura
+Poprzednia implementacja zużywała kod i przekierowywała użytkownika bez
+uzyskania sesji AAL2, co prowadziło do ponownego żądania TOTP. Taki wpis
+audytowy nie dowodzi odzyskania dostępu. Wcześniej zapisane kody nie
+stanowią obecnie sposobu logowania.
 
-1. **Pierwszy krok — recovery codes.** Kiedy user enrollował 2FA (Faza 28),
-   dostał 8 kodów scrypt-hashed w `mfa_recovery_codes`. Sprawdź czy ich
-   nie ma w bezpiecznym miejscu (1Password, sejf).
+Weryfikacja i konfiguracja TOTP współdzielą limit pięciu operacji na konto
+w stałym oknie 300 s od pierwszej próby. Próba po przekroczeniu nie przedłuża
+okna. Niedostępność limitera blokuje operację; diagnoza jego dostępności
+i uprawnień EVAL należy do operatora używanego SRH/Valkey.
 
-2. **Jeśli ma recovery code** — wpisuje go zamiast TOTP. Działa raz, potem
-   się "spala" (`used_at = now()`).
+### Obsługa zgłoszenia
 
-3. **Jeśli nie ma żadnego** — pełen recovery procedure:
+1. Poinformuj użytkownika o braku samodzielnego odzyskiwania i przekaż
+   zgłoszenie właścicielowi usługi. Kontakt: support@faktflow.pl.
+   Nie obiecuj terminu ani sposobu resetu, którego nie wdrożono.
+2. Właściciel odpowiada za zatwierdzenie procedury i potwierdzenie tożsamości
+   zgłaszającego przez niezależne dowody i kanały. Sam dostęp do sesji AAL1,
+   adres e-mail, dane faktury lub znajomość danych firmy nie wystarczają do
+   wyłączenia drugiego czynnika.
+3. Panel administracji nie ma obecnie opisanego wcześniej przycisku
+   „Disable 2FA”. Ten runbook nie jest zgodą ani instrukcją wykonania resetu.
 
-   **a)** Weryfikuj tożsamość przez **dwa** kanały:
-   - Email z którego się rejestrował (potwierdza dostęp do skrzynki).
-   - Telefon/Slack/spotkanie wideo — pyta o szczegóły konta (NIP firmy,
-     ostatnia faktura, kwota subskrypcji).
+### Warunki przygotowania i odbioru pełnego odzyskiwania
 
-   **b)** W `/admin/users/<userId>` → "Disable 2FA". Backend:
-   - Wywołuje `supabase.auth.admin.deleteFactor(...)` na TOTP factorze.
-   - Anulowuje wszystkie `mfa_recovery_codes` (`used_at = now()`).
-   - Loguje akcję w `audit_logs` z `actor_id = admin`.
-   - Email do user-a: "2FA wyłączone na Twoją prośbę przez admina".
+Lokalny SDK udostępnia `supabase.auth.admin.mfa.listFactors` oraz
+`supabase.auth.admin.mfa.deleteFactor` z identyfikatorami użytkownika
+i czynnika. Są to operacje administracyjne; usunięcie czynnika nie wystawia
+sesji AAL2 i nie dowodzi unieważnienia wszystkich starych sesji.
+Zwykłe `supabase.auth.mfa.unenroll` wymaga AAL2 dla zweryfikowanego czynnika.
 
-   **c)** Powiedz user-owi że **musi włączyć 2FA z nowych kodów po zalogowaniu**
-   — middleware AAL (Faza 28) wymusi to przy próbie wejścia na sensitive route.
+Zanim właściciel dopuści procedurę odzyskania, potrzebne są:
 
-### Co NIE robić
+- potwierdzenie tożsamości, uprawnień wykonawcy i zakresu resetu;
+- obsługa pozostałych kodów, współbieżnych żądań i częściowych awarii;
+- audyt operacji i powiadomienie użytkownika;
+- test odwołania starych sesji, ponownego logowania, enrollmentu nowego TOTP
+  i weryfikacji sesji wystawionej przez Auth;
+- dowód, że dostęp administracyjny nadal wymaga poprawnego AAL2 i aktywnego
+  TOTP, także przy błędach, starych tokenach i niedokończonym odzyskiwaniu.
 
-❌ NIGDY nie disable 2FA bez weryfikacji tożsamości — to dokładnie ten wektor,
-przed którym 2FA chroni.
+Odbiór pełnego odzyskiwania pozostaje otwarty. Nie dodajemy wyjątków
+w strażnikach MFA ani sygnałów w ciasteczkach lub metadata zastępujących AAL2.
 
 ## §3. Konto zawieszone (admin suspend / dispute lost)
 

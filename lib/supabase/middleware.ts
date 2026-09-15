@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 
 import { ACTIVE_ORG_COOKIE, ACTIVE_ORG_HEADER, isUuid } from './active-org';
 
@@ -99,6 +100,16 @@ function isPhoneUserAgent(ua: string | null): boolean {
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
+  function withSessionCookies(response: NextResponse): NextResponse {
+    for (const cookie of supabaseResponse.cookies.getAll()) response.cookies.set(cookie);
+    return response;
+  }
+  function denyApi(error: string, status: number): NextResponse {
+    return withSessionCookies(NextResponse.json({ error }, {
+      status, headers: { 'Cache-Control': 'no-store' },
+    }));
+  }
+
   const activeOrgCookie = request.cookies.get(ACTIVE_ORG_COOKIE)?.value;
 
   const supabase = createServerClient(
@@ -143,7 +154,8 @@ export async function updateSession(request: NextRequest) {
   const userId = claimsData?.claims.sub ?? null;
 
   const path = request.nextUrl.pathname;
-  const isApi = path.startsWith('/api');
+  const isApi = path === '/api' || path.startsWith('/api/');
+  const isAdmin = path === '/admin' || path.startsWith('/admin/');
 
   // ─── BUG-008: blokada aplikacji na telefonie ───
   // Telefon widzi wyłącznie strony marketingowe (+ /mobile). Każda inna
@@ -175,6 +187,9 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (!userId && !isPublicPath(path)) {
+    if (isApi) {
+      return denyApi('not_authenticated', 401);
+    }
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', path);
@@ -192,33 +207,44 @@ export async function updateSession(request: NextRequest) {
     return res;
   }
 
-  // 2FA enforcement (Faza 28 Krok 6). User zalogowany ale jego sesja jest
-  // AAL1 podczas gdy ma verified TOTP factor → musi przejść challenge.
-  // Pozwalamy tylko na /login/two-factor i /auth/* (callback OAuth, signOut).
-  if (
-    userId &&
-    !path.startsWith('/login/two-factor') &&
-    !path.startsWith('/auth/') &&
-    !isApi &&
-    !isPublicPath(path)
-  ) {
-    const { data: aalData } =
-      await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (
-      aalData?.currentLevel === 'aal1' &&
-      aalData?.nextLevel === 'aal2'
-    ) {
+  // Recheck authoritative factors and the claims of the exact session token.
+  // The SDK's no-argument AAL helper reads session.user from client cookies.
+  // Private APIs must enforce the same policy as HTML before any org lookup.
+  if (userId && !isPublicPath(path)) {
+    const state = await getVerifiedMfaState(supabase).catch(() => null);
+    const verificationFailed = !state ||
+      (state.status !== 'unauthenticated' && state.user.id !== userId);
+    if (verificationFailed) {
+      return isApi
+        ? denyApi('session_verification_failed', 503)
+        : withSessionCookies(new NextResponse('Nie udało się zweryfikować sesji. Spróbuj ponownie.', {
+          status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+        }));
+    }
+    if (state.status === 'unauthenticated') {
+      if (isApi) return denyApi('not_authenticated', 401);
       const url = request.nextUrl.clone();
-      url.pathname = '/login/two-factor';
+      url.pathname = '/login';
+      url.search = '';
       url.searchParams.set('redirect', path);
       const res = NextResponse.redirect(url);
-      for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
+      for (const cookie of supabaseResponse.cookies.getAll()) res.cookies.set(cookie);
+      return res;
+    }
+    if (state.status === 'challenge_required') {
+      if (isApi) return denyApi('mfa_required', 403);
+      const url = request.nextUrl.clone();
+      url.pathname = '/login/two-factor';
+      url.search = '';
+      url.searchParams.set('redirect', path);
+      const res = NextResponse.redirect(url);
+      for (const cookie of supabaseResponse.cookies.getAll()) res.cookies.set(cookie);
       return res;
     }
   }
 
   const needsBootstrap =
-    !!userId && !isPublicPath(path) && !isApi && !isUuid(activeOrgCookie);
+    !!userId && !isPublicPath(path) && !isApi && !isAdmin && !isUuid(activeOrgCookie);
 
   if (needsBootstrap) {
     const { data: candidates } = await supabase

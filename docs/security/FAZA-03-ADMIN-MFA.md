@@ -4,6 +4,8 @@ Data: 2026-09-14. Autor: Astra. Zakres zlecony przez Igora: kolejny pakiet stopn
 
 **Hosting (potwierdzenie Igora, 2026-09-14):** aplikacja działa na własnym serwerze Hetzner/Coolify. Vercel nie jest używanym hostingiem aplikacji. Wzmianki o Vercel Preview poniżej opisują pozostałą integrację GitHuba, której status nie potwierdza wdrożenia ani odbioru poprawek na własnym serwerze.
 
+**Dalszy pakiet (2026-09-14):** [sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md) zastępuje opisane poniżej zachowanie recovery: brak konsumpcji kodu bez odzyskania oraz brak generowania nowych kodów. Dodaje ochronę MFA w granicach danych i setup operatora bez firmy. Poniższy zakres pozostaje zapisem poprzedniego pakietu.
+
 ## Co zmienia pakiet
 
 ### CYB-F03-01 — potwierdzenie administratora przy danych
