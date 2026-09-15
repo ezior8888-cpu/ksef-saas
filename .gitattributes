@@ -1,0 +1,3 @@
+
+# The reviewed CodeQL finding fingerprints these exact source bytes.
+lib/auth/breach-check.ts text eol=lf

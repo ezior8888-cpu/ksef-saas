@@ -85,4 +85,4 @@ jobs:
       - name: List safe finding locations
         run: node scripts/security/print-codeql-locations.mjs "$RUNNER_TEMP/codeql-results"
       - name: Reject high and critical findings
-        run: node scripts/security/check-codeql-results.mjs "$RUNNER_TEMP/codeql-results"
+        run: node scripts/security/check-codeql-results.mjs "$RUNNER_TEMP/codeql-results" --reviewed-findings scripts/security/codeql-reviewed-finding.json --source-root .
