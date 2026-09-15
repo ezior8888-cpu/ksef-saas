@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 const mocks = vi.hoisted(() => ({
   create: vi.fn(), getSession: vi.fn(), getUser: vi.fn(), getClaims: vi.fn(),
@@ -15,6 +15,9 @@ let factors: typeof factor[];
 let refresh: boolean;
 beforeEach(() => {
   vi.resetAllMocks(); aal = 'aal1'; factors = [factor]; refresh = false;
+  vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'production');
+  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', 'off');
+  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', '');
   mocks.create.mockImplementation((_url: string, _key: string, options: {
     cookies: { setAll: (values: { name: string; value: string; options: { path: string; httpOnly: boolean } }[]) => void };
   }) => {
@@ -38,6 +41,7 @@ beforeEach(() => {
   mocks.eq.mockReturnValue(query); mocks.order.mockReturnValue(query);
   mocks.limit.mockResolvedValue({ data: [], error: null });
 });
+afterEach(() => vi.unstubAllEnvs());
 function request(path: string, withOrg = true, method = 'GET') {
   return new NextRequest('https://app.example.test' + path, {
     method, headers: withOrg ? { cookie: ACTIVE_ORG_COOKIE + '=' + org } : undefined,
@@ -110,4 +114,43 @@ it('preserves refreshed session cookies on an API MFA refusal', async () => {
   const response = await updateSession(request('/api/gdpr/export'));
   expect(response.status).toBe(403);
   expect(response.cookies.get('fixture-session')?.value).toBe('refreshed');
+});
+
+function phoneRequest(path: string) {
+  return new NextRequest('https://app.example.test' + path, {
+    headers: {
+      'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+      accept: 'text/html',
+      cookie: ACTIVE_ORG_COOKIE + '=' + org,
+    },
+  });
+}
+
+it.each(['on', 'allowlist'])('mobile rollout %s still challenges enrolled AAL1 before company data', async (mode) => {
+  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', mode);
+  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', userId);
+  refresh = true;
+  const response = await updateSession(phoneRequest('/invoices'));
+  expect(response.headers.get('location')).toBe('https://app.example.test/login/two-factor?redirect=%2Finvoices');
+  expect(response.cookies.get('fixture-session')?.value).toBe('refreshed');
+  expect(mocks.from).not.toHaveBeenCalled();
+  expect(mocks.localAal).not.toHaveBeenCalled();
+});
+
+it.each(['off', 'on', 'allowlist'])('mobile mode %s cannot exempt a private API from MFA', async (mode) => {
+  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', mode);
+  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', userId);
+  const response = await updateSession(phoneRequest('/api/gdpr/export'));
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: 'mfa_required' });
+  expect(mocks.from).not.toHaveBeenCalled();
+});
+
+it('lets an allowed phone with verified MFA continue to its protected page', async () => {
+  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', 'allowlist');
+  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', userId);
+  aal = 'aal2';
+  const response = await updateSession(phoneRequest('/invoices'));
+  expect(response.headers.get('x-middleware-next')).toBe('1');
+  expect(mocks.getUser).toHaveBeenCalledWith('signed-fixture');
 });
