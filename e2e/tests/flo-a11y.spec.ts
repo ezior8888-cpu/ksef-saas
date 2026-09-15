@@ -35,16 +35,6 @@ async function seedThread(tenantId: string): Promise<void> {
 }
 
 test.describe('FLO — dostępność', () => {
-  // Telefon nadal jest przekierowywany na /mobile — blokada BUG-008 siedzi
-  // w lib/supabase/middleware.ts. Do czasu jej zdjęcia testy agenta na
-  // projektach mobilnych sprawdzałyby wyłącznie działanie przekierowania.
-  test.beforeEach(({}, testInfo) => {
-    test.skip(
-      testInfo.project.name.startsWith('mobile'),
-      'aplikacja nie wpuszcza telefonów na trasy panelu (BUG-008)',
-    );
-  });
-
   test.afterEach(async ({ seededUser }) => {
     await cleanupProposals(seededUser.tenantId);
   });

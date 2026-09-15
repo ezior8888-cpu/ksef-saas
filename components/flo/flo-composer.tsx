@@ -6,6 +6,12 @@
  * kogo można się odezwać. Pas, który przyjmuje tekst i wyrzuca go do kosza,
  * kłamałby mocniej. Rozmowa (O-04) i ścieżka paragonu z telefonu wchodzą
  * osobnymi krokami — wtedy te trzy elementy ożywają.
+ *
+ * WRZESIEŃ 2026: przycisk mikrofonu i aparatu dostały okrągłą obwódkę
+ * z makiety telefonu i rozmiar 44 px na ekranach dotykowych. To jest zmiana
+ * WYŁĄCZNIE w klasach — nadal `disabled`, nadal z uczciwą etykietą
+ * „(jeszcze nieczynne)”. Wygląd gotowy przed działaniem jest w porządku;
+ * działanie udawane nie byłoby.
  */
 export function FloComposer() {
   return (
@@ -33,9 +39,9 @@ function FloComposerButton({ icon, label }: { icon: string; label: string }) {
       type="button"
       disabled
       aria-label={`${label} (jeszcze nieczynne)`}
-      className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[var(--ff-text-muted)] transition-colors hover:bg-[var(--ff-surface-hover)] disabled:cursor-not-allowed disabled:hover:bg-transparent"
+      className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[var(--ff-border)] text-[var(--ff-text-muted)] transition-colors hover:bg-[var(--ff-surface-hover)] disabled:cursor-not-allowed disabled:hover:bg-transparent [@media(pointer:coarse)]:size-11"
     >
-      <span aria-hidden className="material-symbols-outlined text-[18px]">
+      <span aria-hidden className="material-symbols-outlined text-[18px] [@media(pointer:coarse)]:text-[20px]">
         {icon}
       </span>
     </button>

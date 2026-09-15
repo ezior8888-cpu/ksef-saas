@@ -4,6 +4,7 @@ import Link from 'next/link';
 
 import type { Database } from '@/types/database';
 import { cn } from '@/lib/utils';
+import { formatPlMoney } from '@/lib/format/pl';
 
 export type ExpenseRow = Database['public']['Tables']['expenses']['Row'];
 type ExpenseSource = Database['public']['Enums']['expense_source'];
@@ -61,12 +62,6 @@ function kpirShortLabel(col: ExpenseRow['kpir_column']): string {
   return KPIR_LABELS[col] ?? col;
 }
 
-function formatPlMoney(n: number): string {
-  return n.toLocaleString('pl-PL', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 export function ExpensesList({
   initialExpenses,

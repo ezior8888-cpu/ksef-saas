@@ -6,9 +6,10 @@ import DashboardOrgHeader, {
 } from '@/app/(dashboard)/_components/dashboard-org-header';
 import { DashboardPageHeading } from '@/app/(dashboard)/_components/dashboard-page-heading';
 import { DashboardRouteFlags } from '@/components/dashboard/dashboard-route-flags';
-import DashboardVerificationBanner from '@/app/(dashboard)/_components/dashboard-verification-banner';
+import { DashboardVerificationBannerSlot } from '@/app/(dashboard)/_components/dashboard-verification-banner';
 import { KsefHealthBanner } from '@/app/(dashboard)/_components/ksef-health-banner';
-import { MobileNav } from '@/components/dashboard/mobile-nav';
+import { BottomNav } from '@/components/dashboard/bottom-nav';
+import { BrandWordmark } from '@/components/brand/brand-wordmark';
 import { PrefetchDashboardRoutes } from '@/components/dashboard/prefetch-dashboard-routes';
 import { PrefetchExportsRoute } from '@/components/dashboard/exports-route-client';
 import { Sidebar } from '@/components/dashboard/sidebar';
@@ -61,24 +62,48 @@ export default async function DashboardLayout({
     getAllHelpArticles().map((a) => [a.slug, a.title]),
   );
 
+  // `100dvh`, nie `100vh`: na iOS Safari `100vh` to wysokość okna BEZ pasków
+  // przeglądarki, więc dolna krawędź szkieletu chowa się pod paskiem adresu.
+  // Wysokość nagłówka niesie `.ff-shell-header` (tokeny `--ff-header-h`
+  // i `--ff-safe-t`), stąd brak `h-20` niżej.
   return (
-    <div className="ff-dashboard relative flex h-screen min-h-0 overflow-hidden text-[var(--ff-on-surface)]">
+    <div className="ff-dashboard relative flex h-[100dvh] min-h-0 overflow-hidden text-[var(--ff-on-surface)]">
       <Sidebar />
 
       <main className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="ff-shell-header sticky top-0 z-40 flex h-20 w-full shrink-0 items-center justify-between gap-3 px-4 sm:px-[var(--ff-container-padding)]">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="lg:hidden">
-              <MobileNav />
+        <header className="ff-shell-header sticky top-0 z-40 flex w-full shrink-0 items-center justify-between gap-3 px-4 sm:px-[var(--ff-container-padding)]">
+          {/* PODZIAŁ SZEROKOŚCI. Na telefonie lewa strona ma stałą szerokość
+              wordmarku (`shrink-0`), a kurczy się prawa — inaczej długa nazwa
+              organizacji („ORANGE POLSKA SPÓŁKA AKCYJNA") zjada cały pasek
+              i z „FaktFlow" zostaje samo „F". Od `lg` odwrotnie: rośnie lewa,
+              bo to ona niesie tytuł strony. */}
+          <div className="flex shrink-0 items-center gap-3 lg:min-w-0 lg:flex-1">
+            {/* Na telefonie pasek nosi wordmark, nie tytuł strony: gdzie
+                jesteśmy, mówi podświetlony slot dolnej nawigacji, a marka nie
+                ma innego miejsca — sidebar z wordmarkiem jest schowany. */}
+            {/* Ukrycie na opakowaniu, nie przez `className` wordmarku: ten prop
+                trafia do wewnętrznego `<span>`, więc `lg:hidden` chowałby napis,
+                a pusty odsyłacz zostawałby w kolejności tabulacji. */}
+            <div className="shrink-0 lg:hidden">
+              <BrandWordmark
+                href="/dashboard"
+                variant="app"
+                className="text-[19px]"
+              />
             </div>
-            <DashboardPageHeading />
+            <div className="hidden min-w-0 lg:block">
+              <DashboardPageHeading />
+            </div>
           </div>
-          <div className="flex min-w-0 shrink-0 items-center justify-end gap-2 sm:gap-3">
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3 lg:flex-none lg:shrink-0">
             <Suspense fallback={<OrgSwitcherHeaderSkeleton />}>
               <DashboardOrgHeader />
             </Suspense>
             <ThemeToggle />
-            <form action={signOut}>
+            {/* Wylogowanie zeszło na telefonie do arkusza „Więcej" — nagłówek
+                ma tam 56 px i dzieli się już między wordmark, przełącznik
+                organizacji i motyw. */}
+            <form action={signOut} className="hidden lg:block">
               <button
                 type="submit"
                 aria-label="Wyloguj"
@@ -98,7 +123,7 @@ export default async function DashboardLayout({
                 wariant chowa CSS. Na pozostałych stronach zostaje. */}
             <div className="ff-shell-banner">
               <Suspense fallback={null}>
-                <DashboardVerificationBanner />
+                <DashboardVerificationBannerSlot />
               </Suspense>
             </div>
             <Suspense fallback={null}>
@@ -109,6 +134,7 @@ export default async function DashboardLayout({
         </div>
       </main>
 
+      <BottomNav />
       <DashboardRouteFlags />
       <InstallPrompt />
       <PrefetchDashboardRoutes />

@@ -212,7 +212,7 @@ export function FloPrimaryButton({
       title={lockReason}
       aria-describedby={lockReason ? lockId : undefined}
       onClick={onClick}
-      className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ff-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--ff-surface)] min-h-9 rounded-lg bg-[var(--ff-cta-bg)] px-3 py-1.5 text-xs font-medium text-[var(--ff-cta-fg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+      className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ff-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--ff-surface)] min-h-9 rounded-lg [@media(pointer:coarse)]:min-h-11 bg-[var(--ff-cta-bg)] px-3 py-1.5 text-xs font-medium text-[var(--ff-cta-fg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {label}
     </button>
@@ -237,7 +237,7 @@ export function FloQuietButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ff-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--ff-surface)] min-h-9 rounded-lg border border-[var(--ff-border)] px-3 py-1.5 text-xs text-[var(--ff-text-muted)] transition-colors hover:border-[var(--ff-border-strong)] hover:text-[var(--ff-text)] disabled:cursor-not-allowed disabled:opacity-50',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ff-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--ff-surface)] min-h-9 rounded-lg [@media(pointer:coarse)]:min-h-11 border border-[var(--ff-border)] px-3 py-1.5 text-xs text-[var(--ff-text-muted)] transition-colors hover:border-[var(--ff-border-strong)] hover:text-[var(--ff-text)] disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}
     >

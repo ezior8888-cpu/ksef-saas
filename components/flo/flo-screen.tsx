@@ -6,6 +6,8 @@ import { FloThreadClient } from '@/components/flo/thread-client';
 import { countTodayTasks } from '@/components/flo/timeline';
 import type { FloProposalView, FloScheduledView } from '@/types/flo';
 
+import { FloQueueSheet } from '@/components/flo/flo-queue-sheet';
+
 import { FloComposer } from './flo-composer';
 import { FloHeader } from './flo-header';
 import { FloHistoryPanel } from './flo-history-panel';
@@ -20,7 +22,14 @@ import { FloPhotoBanner } from './flo-photo-banner';
  * czego robić w przeglądarce.
  *
  * UKŁAD: wątek jest szeroki i po lewej, bo to on jest treścią; prawa kolumna
- * to listy pomocnicze i schodzi pod wątek na wąskim ekranie.
+ * to listy pomocnicze.
+ *
+ * NA TELEFONIE PRAWEJ KOLUMNY NIE MA (`hidden lg:flex`). Wcześniej schodziła
+ * pod wątek — a że ekran agenta ma zablokowaną wysokość, lądowała poza nim
+ * i nie dało się do niej doscrollować. Zamiast tego: liczby miesiąca mieszkają
+ * na `/przeplywy` (zakładka „Miesiąc” w dolnej nawigacji), a kolejka i historia
+ * otwierają się z chipa nad wątkiem (`FloQueueSheet`). Dzięki temu wątek
+ * dostaje CAŁĄ wysokość ekranu zamiast połowy.
  *
  * GNIAZDO `aside` (dodane 30.08.2026 przez tor silnika, zmiana przez DODANIE):
  * dashboard wstrzykuje tędy kartę z liczbami miesiąca, żeby prawa kolumna
@@ -53,31 +62,55 @@ export function FloScreen({
       .sort()
       .at(-1) ?? null;
 
+  // Ciaśniej na telefonie: ekran agenta ma zablokowaną wysokość, więc każde
+  // 8 px odstępu to 8 px mniej dla wątku — a wątek jest treścią.
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 p-4 md:p-6">
+    <div className="flex h-full min-h-0 flex-col gap-3 p-3 sm:gap-4 sm:p-4 md:p-6">
       {showHeader ? (
         <FloHeader todayTasks={todayTasks} usingFixtures={usingFixtures} />
       ) : (
-        /* Dashboard chowa nagłówek agenta, bo ma własny pasek tytułu — ale
-           licznik spraw nie może zniknąć razem z nim (krok 39). Wraca tu,
-           nad wątek, w formie jednej linijki. */
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full border border-[var(--ff-border)] bg-[var(--ff-surface-chip)] px-2.5 py-1 text-xs text-[var(--ff-text-soft)]">
-            <span
-              aria-hidden
-              className="material-symbols-outlined text-[14px] leading-none text-[var(--ff-accent)]"
-            >
-              bolt
-            </span>
-            {countLabel(todayTasks, FLO_FORMS.zadanie)} dziś
-          </span>
+        <>
+          {/* NA TELEFONIE NAGŁÓWEK AGENTA WRACA. Dashboard chowa go, bo pasek
+              nad nim niesie tytuł „Dashboard” — ale poniżej `lg` w pasku stoi
+              wordmark FaktFlow, więc bez tego agent nigdzie się nie przedstawia
+              i ekran wygląda jak lista powiadomień bez nadawcy.
+              Odznaki „TRYB 3” tu NIE MA i nie będzie — powód w `flo-header.tsx`. */}
+          <div className="lg:hidden">
+            <FloHeader
+              todayTasks={todayTasks}
+              usingFixtures={usingFixtures}
+              extraBadges={
+                /* Kolejka jako druga odznaka, nie osobny pas nad wątkiem:
+                   własny wiersz zabierał 56 px, a przy zablokowanej wysokości
+                   ekranu to jedna piąta tego, co zostaje dla wątku. */
+                <FloQueueSheet
+                  scheduled={scheduled}
+                  className="flex items-center gap-1.5 rounded-full border border-[var(--ff-border)] bg-[var(--ff-surface-chip)] px-2.5 py-1 text-xs text-[var(--ff-text-soft)] transition-colors hover:border-[var(--ff-border-strong)]"
+                />
+              }
+            />
+          </div>
 
-          {usingFixtures ? (
-            <span className="rounded-full border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-2.5 py-1 text-xs text-[var(--ff-warn-text)]">
-              Dane przykładowe
+          {/* Od `lg` zostaje sam licznik spraw: nagłówek byłby drugim tytułem
+              jeden pod drugim (krok 39). */}
+          <div className="hidden flex-wrap items-center gap-2 lg:flex">
+            <span className="flex items-center gap-1.5 rounded-full border border-[var(--ff-border)] bg-[var(--ff-surface-chip)] px-2.5 py-1 text-xs text-[var(--ff-text-soft)]">
+              <span
+                aria-hidden
+                className="material-symbols-outlined text-[14px] leading-none text-[var(--ff-accent)]"
+              >
+                bolt
+              </span>
+              {countLabel(todayTasks, FLO_FORMS.zadanie)} dziś
             </span>
-          ) : null}
-        </div>
+
+            {usingFixtures ? (
+              <span className="rounded-full border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-2.5 py-1 text-xs text-[var(--ff-warn-text)]">
+                Dane przykładowe
+              </span>
+            ) : null}
+          </div>
+        </>
       )}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -104,7 +137,7 @@ export function FloScreen({
           <FloComposer />
         </div>
 
-        <aside className="flex min-h-0 flex-col gap-4 lg:overflow-y-auto">
+        <aside className="hidden min-h-0 flex-col gap-4 lg:flex lg:overflow-y-auto">
           {aside}
           <FloScheduledPanel
             scheduled={scheduled}

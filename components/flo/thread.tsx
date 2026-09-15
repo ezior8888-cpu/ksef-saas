@@ -15,6 +15,13 @@ import { groupByDay } from './timeline';
  * wątek jest osią czasu — ta sama karta użyta na dashboardzie (krok 15)
  * pokazuje godzinę u siebie, bo tam nie ma osi, w którą można ją wpisać.
  *
+ * NA TELEFONIE GODZINA IDZIE NAD KARTĘ, nie znika. Rynna 44 px zabierałaby
+ * ósmą część szerokości ekranu 375 px, więc do września 2026 była po prostu
+ * chowana (`hidden sm:block`) — a wtedy z osi czasu robi się lista bez czasu
+ * i klient nie wie, czy sprawa jest sprzed pięciu minut, czy sprzed doby.
+ * Makieta telefonu pokazuje godzinę jako osobny wiersz nad treścią i tak to
+ * jest teraz zbudowane.
+ *
  * Kolejność: dni chronologicznie, wewnątrz dnia najpierw priorytet, potem
  * czas — uzasadnienie w `timeline.ts`.
  *
@@ -52,11 +59,11 @@ export function FloThread({
             <div
               key={proposal.id}
               id={proposal.id}
-              className="flex scroll-mt-4 gap-3"
+              className="scroll-mt-4 sm:flex sm:gap-3"
             >
               <time
                 dateTime={proposal.createdAt}
-                className="hidden w-11 shrink-0 pt-3.5 text-right text-xs tabular-nums text-[var(--ff-text-dim)] sm:block"
+                className="mb-1 block font-mono text-xs tabular-nums text-[var(--ff-text-dim)] sm:mb-0 sm:w-11 sm:shrink-0 sm:pt-3.5 sm:text-right"
               >
                 {clockLabel(proposal.createdAt)}
               </time>
@@ -64,7 +71,7 @@ export function FloThread({
               <FloProposalCard
                 view={proposal}
                 showTime={false}
-                className="min-w-0 flex-1"
+                className="min-w-0 sm:flex-1"
                 {...cardProps?.(proposal)}
               />
             </div>
