@@ -4,8 +4,8 @@ import { revalidatePath } from 'next/cache';
 
 import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
-import { createClient } from '@/lib/supabase/server';
-import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
+import type { createClient } from '@/lib/supabase/server';
+import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { lookupCompanyByNip } from '@/lib/gus/client';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
@@ -49,16 +49,8 @@ async function getTenantContext(): Promise<{
   userId: string;
   tenant: TenantSnapshot;
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Brak sesji użytkownika');
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    throw new Error('Użytkownik nie jest przypisany do firmy (onboarding)');
-  }
+  // This action boundary enforces MFA and current membership independently of routing.
+  const { supabase, user, tenantId } = await requireUserAndActiveOrg();
 
   const { data: raw, error } = await supabase
     .from('tenants')
