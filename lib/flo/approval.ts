@@ -150,6 +150,8 @@ export async function createApproval(
     .from('flo_approvals')
     .select('id')
     .eq('proposal_id', input.proposalId)
+    .eq('tenant_id', input.tenantId)
+    .eq('user_id', input.userId)
     .is('consumed_at', null)
     .maybeSingle();
 
@@ -174,6 +176,8 @@ export async function createApproval(
 export async function consumeApproval(
   approvalId: string,
   expectedProposalId: string,
+  expectedTenantId: string,
+  expectedUserId: string,
   now: Date = new Date(),
   db: FloDbClient = floDb(),
 ): Promise<Record<string, unknown>> {
@@ -184,6 +188,8 @@ export async function consumeApproval(
     .update({ consumed_at: nowIso })
     .eq('id', approvalId)
     .eq('proposal_id', expectedProposalId)
+    .eq('tenant_id', expectedTenantId)
+    .eq('user_id', expectedUserId)
     .is('consumed_at', null)
     .gt('expires_at', nowIso)
     .select('*');
@@ -200,6 +206,8 @@ export async function consumeApproval(
     .from('flo_approvals')
     .select('*')
     .eq('id', approvalId)
+    .eq('tenant_id', expectedTenantId)
+    .eq('user_id', expectedUserId)
     .maybeSingle();
 
   if (lookup.error) throw new Error(lookup.error.message);

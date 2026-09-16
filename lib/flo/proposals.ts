@@ -145,7 +145,9 @@ export async function createProposal(
         expires_at: input.expiresAt.toISOString(),
         priority: input.priority ?? 50,
       })
-      .eq('id', existing.data.id);
+      .eq('id', existing.data.id)
+      .eq('tenant_id', input.tenantId)
+      .eq('status', 'open');
 
     if (patch.error) throw new Error(patch.error.message);
     return { status: 'updated', id: existing.data.id };

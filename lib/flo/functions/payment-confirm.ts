@@ -16,7 +16,7 @@
  * 1. POMYŁKOWE „TAK". Klient klika w biegu, myląc dwie faktury tego samego
  *    kontrahenta. Należność zamknięta, pieniędzy nie ma. Dlatego karta
  *    pokazuje NUMER, KWOTĘ I DATĘ każdej faktury — nigdy samą nazwę firmy —
- *    a oznaczenie ma cofnięcie przez dziesięć minut.
+ *    a cofnięcie musi odwrócić wpis płatności, nie tylko sumę na fakturze.
  *
  * 2. PYTANIE ZA WCZEŚNIE. Termin minął wczoraj, przelew jest w drodze,
  *    klient dobrze o tym wie. Pytamy dopiero dobę po terminie, zbiorczo,
@@ -33,7 +33,6 @@ import { fingerprintOf } from '@/lib/flo/fingerprint';
 import { registerFloHandler } from '@/lib/flo/handlers';
 import { formatDays, formatPlnPlain } from '@/lib/flo/money';
 import type { CreateProposalInput } from '@/lib/flo/proposals';
-import { captureUndo } from '@/lib/flo/undo';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 /** Dobę po terminie, nie w dniu terminu. Przelew bywa w drodze. */
@@ -190,101 +189,85 @@ export type ConfirmationKind = 'full' | 'partial' | 'invalid';
 export function classifyConfirmation(
   input: ConfirmationInput,
 ): ConfirmationKind {
-  if (!Number.isFinite(input.amount) || input.amount <= 0) return 'invalid';
+  if (!Number.isFinite(input.amount) || input.amount <= 0 ||
+      !Number.isFinite(input.outstanding) || input.outstanding <= 0) return 'invalid';
   if (input.amount > input.outstanding + 0.01) return 'invalid';
   return input.amount >= input.outstanding - 0.01 ? 'full' : 'partial';
-}
-
-interface PaymentsClient {
-  from: (table: 'payments' | 'invoices') => {
-    insert: (row: Record<string, unknown>) => Promise<{
-      error: { message: string } | null;
-    }>;
-    select: (columns: string) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => {
-        maybeSingle: () => Promise<{
-          data: Record<string, unknown> | null;
-          error: { message: string } | null;
-        }>;
-      };
-    };
-    update: (patch: Record<string, unknown>) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => Promise<{ error: { message: string } | null }>;
-    };
-  };
 }
 
 /**
  * „Tak, zapłacił" albo „częściowo, tyle a tyle".
  *
- * Czynność odwracalna wewnątrz konta, więc ma cofnięcie. Zapis idzie do
- * `payments` — tej samej tabeli, z której korzysta import wyciągów — żeby
+ * Zapis idzie do `payments` — tej samej tabeli, z której korzysta import wyciągów — żeby
  * potwierdzenie ręczne i wpłata z banku znaczyły dokładnie to samo.
  */
 registerFloHandler('payment.confirm', async (ctx) => {
   const payload = ctx.proposal.payload ?? {};
   const list = Array.isArray(payload.invoices) ? payload.invoices : [];
+  const selected = ctx.input?.selectedIds;
+  if (selected !== undefined &&
+      (!Array.isArray(selected) || selected.length !== 1 || typeof selected[0] !== 'string')) {
+    throw new Error('Wybierz jedną fakturę z propozycji');
+  }
   const first = list[0] as Record<string, unknown> | undefined;
-
-  const invoiceId =
-    typeof ctx.input?.selectedIds?.[0] === 'string'
-      ? ctx.input.selectedIds[0]
-      : typeof first?.invoiceId === 'string'
-        ? first.invoiceId
-        : null;
-
-  if (!invoiceId) throw new Error('Propozycja bez identyfikatora faktury');
-
-  const entry = list.find(
-    (item) =>
-      typeof item === 'object' &&
-      item !== null &&
-      (item as Record<string, unknown>).invoiceId === invoiceId,
-  ) as Record<string, unknown> | undefined;
-
-  const outstanding = Number(entry?.outstanding ?? 0);
-  const declared = ctx.input?.value ? Number(ctx.input.value) : outstanding;
-
-  const kind = classifyConfirmation({ invoiceId, amount: declared, outstanding });
-  if (kind === 'invalid') {
-    throw new Error('Kwota poza zakresem należności');
+  const invoiceId = selected?.[0] ?? first?.invoiceId;
+  const entry = list.find((item) => typeof item === 'object' && item !== null &&
+    (item as Record<string, unknown>).invoiceId === invoiceId) as Record<string, unknown> | undefined;
+  if (typeof invoiceId !== 'string' || !invoiceId || !entry) {
+    throw new Error('Faktura nie należy do zatwierdzanej propozycji');
   }
 
-  const client = createAdminClient() as unknown as PaymentsClient;
+  const proposedBalance = Number(entry.outstanding);
+  if (!Number.isFinite(proposedBalance) || proposedBalance <= 0) {
+    throw new Error('Propozycja bez dodatniej należności');
+  }
+  const raw = ctx.input?.value;
+  if (raw !== undefined && (typeof raw !== 'string' ||
+      !/^(?:0|[1-9]\d{0,12})(?:[.,]\d{1,2})?$/.test(raw.trim()))) {
+    throw new Error('Podaj dodatnią kwotę z dokładnością do grosza');
+  }
+  const declared = raw === undefined ? proposedBalance : Number(raw.trim().replace(',', '.'));
+  const amountCents = Math.round(declared * 100);
+  if (!Number.isSafeInteger(amountCents) || amountCents <= 0 ||
+      Math.abs(declared * 100 - amountCents) > 0.0001) {
+    throw new Error('Nieprawidłowa kwota wpłaty');
+  }
 
+  const client = createAdminClient();
+  // A proposal ID is not proof of ownership of every entity inside its payload.
+  const invoice = await client.from('invoices')
+    .select('id, gross_total, paid_amount')
+    .eq('id', invoiceId)
+    .eq('tenant_id', ctx.proposal.tenant_id)
+    .maybeSingle();
+  if (invoice.error || !invoice.data) throw new Error('Nie można potwierdzić tej faktury');
+  const outstanding = Number(invoice.data.gross_total) - Number(invoice.data.paid_amount);
+  const balanceCents = Math.round(outstanding * 100);
+  const proposedCents = Math.round(proposedBalance * 100);
+  if (!Number.isSafeInteger(balanceCents) || balanceCents <= 0 ||
+      amountCents > balanceCents || amountCents > proposedCents) {
+    throw new Error('Kwota poza zakresem aktualnej należności');
+  }
+  const kind: ConfirmationKind = amountCents === balanceCents ? 'full' : 'partial';
+  const amount = amountCents / 100;
   const { error } = await client.from('payments').insert({
     tenant_id: ctx.proposal.tenant_id,
     invoice_id: invoiceId,
-    amount: declared,
-    paid_at: new Date().toISOString(),
-    source: 'flo_confirmation',
-    note: 'potwierdzone przez klienta w karcie FLO',
+    amount,
+    payment_date: new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw' }).format(new Date()),
+    is_confirmed: true,
+    match_method: 'flo_confirmation',
+    notes: 'potwierdzone przez klienta w karcie FLO',
   });
-
   if (error) throw new Error(error.message);
 
+  // Payments drive invoice totals through a database trigger. Restoring only
+  // invoices.paid_amount would leave the actual payment in place, so do not
+  // publish a fictitious invoice-only undo operation.
   return {
-    summary:
-      kind === 'full'
-        ? `faktura ${String(entry?.number ?? '')} oznaczona jako zapłacona`
-        : `zapisano wpłatę częściową ${formatPlnPlain(declared)}`,
-    details: {
-      invoiceId,
-      amount: declared,
-      kind,
-      // Stan sprzed zmiany — podstawa cofnięcia przez dziesięć minut.
-      undo: captureUndo(
-        'invoices',
-        invoiceId,
-        { paid_amount: Number(payload.previousPaid ?? 0) },
-        { paid_amount: declared },
-      ),
-    },
+    summary: kind === 'full'
+      ? `faktura ${String(entry.number ?? '')} oznaczona jako zapłacona`
+      : `zapisano wpłatę częściową ${formatPlnPlain(amount)}`,
+    details: { invoiceId, amount, kind },
   };
 });

@@ -154,6 +154,7 @@ export async function approveProposal(
 
   const result = await executeProposal({
     proposalId: id,
+    tenantId,
     userId: user.id,
     approvalId,
     input,
@@ -227,7 +228,7 @@ export async function undoAction(proposalId: string): Promise<{
   if (owned.error) throw new Error(owned.error.message);
   if (!owned.data) return { ok: false, message: 'Tej zmiany nie da się cofnąć.' };
 
-  const result = await undoProposalAction(proposalId, user.id);
+  const result = await undoProposalAction(proposalId, user.id, tenantId);
 
   revalidatePath('/flo');
   revalidatePath('/dashboard');
