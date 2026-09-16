@@ -4,7 +4,7 @@
 
 Ten dziennik śledzi realizację [planu odporności cybernetycznej](PLAN-ODPORNOSCI-CYBER.md). Jest osobnym etapem po [wcześniejszych naprawach Astry](DZIENNIK-NAPRAW-ASTRA.md) i [audytach Claude](DZIENNIK-AUDYT.md). Nie zastępuje ich ani nie zmienia historycznych wyników.
 
-- Aktualna dyspozycja Igora z 2026-09-15: kontynuować po publikacji PR #11 (0ec1069) i rozpoznaniu zgłoszenia CodeQL. Na codex/security-account-continuation przygotowano lokalną poprawkę CYB-F03-15; jej testy nie zastępują nowego CI. Brak zgody na merge do main, produkcję, SQL i rotacje.
+- Aktualna dyspozycja Igora z 2026-09-16: kontynuować po wczorajszym zakończeniu. PR #11 / a8dd109 ma potwierdzone CI i Security PASS; alert #1 rozliczono po jawnej zgodzie. Nowy lokalny pakiet CYB-F03-16…19 na codex/security-access-continuation opisuje [odzyskiwanie hasła, TOTP i przekierowania](FAZA-03-ODZYSKIWANIE-HASLA-I-DOSTEP.md). Bez zgody na merge do main, produkcję, SQL i rotacje.
 - Hosting właściwej aplikacji: Hetzner/Coolify. Historyczne statusy Vercel nie dowodzą wdrożenia na własnym serwerze. Aktualny opis zmian operatora jest w [odpowiedzi Bartka](ODPOWIEDZ-BARTEK-2026-09-14.md) i [planie wydania GDPR](PLAN-WYDANIA-GDPR.md); nie powtarzać dawnych list jako bieżącego stanu.
 - [Sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md) opublikowano jako [PR #10](https://github.com/ezior8888-cpu/ksef-saas/pull/10). CI i Security dla dc7806a przeszły 15.09 (1700 testów Vitest). Pełny odbiór środowiska i odzyskiwanie MFA pozostają otwarte.
 
@@ -344,6 +344,40 @@ Pełny opis do przeglądu: [sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md
 **Granice:** GitHub alert #1 nadal jest otwarty; manifest sam go nie zamyka. Nie usunięto istniejących kluczy Redis (dotychczasowy TTL 24 h). Bez SQL/produkcji/rotacji oraz bez prawdziwych zapytań HIBP. Odbiór Auth, Redis/RLS i recovery nadal otwarty. Ten wpis nie potwierdza wdrożenia.
 
 **Zapis pakietu CYB-F03-15:** kod i testy w 0d45b7f15722d58ef763d35500e17696bcac8030. Gitleaks 10 przygotowanych plików bez trafień; historia tego commitu: 233 commity / 9,87 MB, brak trafień. Zweryfikowano zgodność pełnego odcisku bloba Git, manifestu i kopii kompilacji. Nowa poprawka jest lokalna; rzeczywisty zdalny wynik wymaga jej publikacji i nowego przebiegu.
+
+## 2026-09-16 — Stan po publikacji PR #11 i kontynuacja dostępu (CYB-F03-16…19)
+
+**Dyspozycja i granice:** Igor wznowił pracę po przerwie („siemano stary lecimy dalej”). Utworzono osobny worktree `security-access-continuation-20260916`, gałąź `codex/security-access-continuation`, od `a8dd10935b9c44225038fe8598dd53a28cb44da8`. Zastane zmiany użytkownika w root repo pozostały nietknięte. Bez merge, publikacji nowej gałęzi, produkcji, SQL, nowych migracji, rotacji i prawdziwej poczty.
+
+**Rozliczenie wczorajszego wpisu:** po jego zapisaniu Igor jawnie zatwierdził publikację `a8dd109` oraz rozliczenie wyłącznie alertu CodeQL #1. Wysłano poprawkę do [PR #11](https://github.com/ezior8888-cpu/ksef-saas/pull/11), pozostawiając draft względem PR #10. [CI 35004416971](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/35004416971) i [Security 35004417038](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/35004417038) przeszły: wszystkie siedem kontroli, 1950 Vitest, 66 XML; historia 234 commitów bez sekretów. Jeden HIBP high pozostaje widoczny w surowym wyniku i został dopuszczony wyłącznie przez przeglądnięty manifest. Alert #1 oznaczono false positive z uzasadnieniem po wskazanej zgodzie. Wpis z 15.09 o otwartym alercie i oczekiwaniu na publikację jest historycznym stanem przed tą operacją. Dzisiejszy odczyt potwierdził nadal zielone kontrole PR #11; nie są to wyniki CI dla dzisiejszego kodu.
+
+**Stan prac Bartka:** main nadal `b9c3703b6997d6623ba30f889c5f0c5ff267218b`, PR #7/#9/#11 bez nowych komentarzy i brak nowych gałęzi/commitów operatora do włączenia. Nie ma nowego dowodu odbioru GoTrue, Redis, RLS czy pełnego recovery. To obserwacja repo, nie twierdzenie o braku prac poza GitHubem. Obowiązują wcześniejsze datowane raporty właściciela, w tym wstrzymany/skorelowany odbiór 00072.
+
+**Wykonano:** szczegóły, źródła i scenariusze odbioru w [pakiecie odzyskiwania hasła i dostępu](FAZA-03-ODZYSKIWANIE-HASLA-I-DOSTEP.md).
+
+- CYB-F03-16: ograniczono próby hasła przy wyłączeniu TOTP, zachowano inne rodzaje czynników, wstrzymano usuwanie przy błędzie cleanup i ujawniono częściowy wynik bez pozornego pełnego sukcesu.
+- CYB-F03-17: osobny formularz zapomnianego hasła z podpisanym, świeżym PKCE recovery AMR, weryfikacją tego samego JWT/tożsamości/sesji, zachowaniem wymogu MFA, kontrolą siły/wycieków i atomowym pojedynczym zapisem na sesję. Żądania maila mają osobne limity email/IP, konfigurację zaufanej domeny i jednakowy komunikat bez enumeracji kont.
+- CYB-F03-18: usunięto pozorną wysyłkę przez admin generateLink. Akcja po guardzie odmawia i pokazuje własny proces odbiorcy; administracyjnie inicjowany reset pozostaje niedostępny do czasu właściwego kontraktu odbioru.
+- CYB-F03-19: wspólne sprawdzanie wewnętrznych przekierowań, brak zaufania do request origin/forwarded, kontrolowane 503 przy błędnej konfiguracji oraz usuwanie fragmentów logowania przed Auth I/O również przy błędzie.
+
+**Poprawka z przeglądu:** zwykłe `auth.signOut` zamienia 401/403/404 w lokalny sukces cleanup. Odtworzono zachowanie na zainstalowanym SDK. Globalne odwołanie własnej sesji używa teraz dokładnie zweryfikowanego JWT na anon kliencie przez metodę zachowującą błąd; lokalny cleanup i oba statusy UI są osobne. Regresje obejmują 204/401/403/404/500. Przed zapisem ponownie weryfikowane są świeżość/MFA/tożsamość po I/O kontroli hasła.
+
+**Commity kodu:**
+- `f55ab932a8126b82dc7f296efde9481473fac999` — TOTP, limity i częściowy cleanup.
+- `5446b190f1b67db4155676c37ab0ff3ddedce3fb` — callback, domena, wewnętrzne przekierowania i fragment.
+- `f1069606d96f0ad34b4b59a4b78c3e809a111fea` — kompletny samodzielny reset hasła, jednorazowość akcji i uczciwy stan resetu admina.
+
+**Końcowa weryfikacja kodu:** 124 pliki / **2332 Vitest PASS**, zero pominiętych; **66 XML PASS**, **67 testów narzędzi PASS**; pełny typecheck PASS. Pełny lint: 0 błędów, 29 istniejących ostrzeżeń poza zmienionym zakresem (poprzednio 30); wszystkie 34 zmienione/nowe pliki TS/TSX: lint bez ostrzeżeń PASS. Izolowany Next webpack compile PASS; 34 pliki kodu/testów identyczne bajtowo z kopią kompilacji. To tryb compile, nie pełne generowanie stron ani odbiór środowiska.
+
+**Test przeglądarki:** rzeczywisty formularz w headless Edge 153, akcja serwera jako atrapa: pending, MFA, ponowienie procesu, sukces i wszystkie cztery kombinacje statusów wylogowania PASS; 0 żądań strony i 0 pageerror. To nie E2E z GoTrue. Testy efektu finish obejmują replay/unmount i usunięcie fragmentu przed Auth. Zespół AI nie znalazł kolejnych potwierdzonych usterek po poprawce logout; to nie zewnętrzny pentest.
+
+**Skan i inwentaryzacja:** Gitleaks kopii 36 przygotowanych plików: 0 trafień; historia do `f106960`: 237 commitów / 9,98 MB, 0 trafień, bez nowych wyjątków. Odcisk HIBP pozostaje dokładnie `74b53285ee125ef0e5be187700a69f854f457282fbf8df9ec042138518891d0b`; manifest nie został rozszerzony ani odnowiony. Offline nadal 305 zapytań service_role (77 do przeglądu, 12 średnich) oraz 103 wejścia / 35 sygnałów. Dwa nowe wejścia to odzyskiwanie hasła. Heurystyki nie zmieniano; liczby nie są werdyktem braku podatności.
+
+**Dowody lokalne:** `faktflow-day16-validation-I2nPLH`, `faktflow-day16-offline-YWnCbD`, `faktflow-day16-compile-8PcNP8`, `faktflow-day16-scan-zJnPhj`, `faktflow-reset-ui-20260916-wiSXc4`. Hermetyczna konfiguracja bez .env i rzeczywistych usług. Zrzuty/raporty robocze są poza repo.
+
+**Otwarte i przekazanie:** Bartek odbiera wersję/konfigurację GoTrue, PKCE mail w tej samej przeglądarce, TOTP podczas resetu, secure_password_change, awarie/równoległość/TTL SRH-Valkey, zaufanie proxy oraz bezpośredni Auth/PostgREST. Limit 15 minut i pojedynczy zapis dotyczą akcji aplikacji, nie całego API GoTrue; access JWT mogą przetrwać do wygaśnięcia. Nadal otwarte pełne odzyskiwanie po utracie MFA oraz odwołanie sesji innego konta po ID. Aktualna dokumentacja ma eksperymentalne natywne recoveryCodes, ale lokalny SDK 2.103.3 go nie udostępnia — potrzebna weryfikacja kompatybilności, bez własnego JWT i bez usuwania faktorów jako obejścia. Szczegółowa lista jest w nowym pakiecie.
+
+**Stan publikacji:** nowe commity i dokumentacja są lokalne, przygotowane jako kolejny draft względem PR #11. Poprzednia dokładna zgoda na publikację `a8dd109` i alert #1 została wykonana; nie obejmuje sama w sobie nowego pakietu z opisem bezpieczeństwa. Nowe wyniki GitHuba i faktyczną publikację zapisać po ich wykonaniu w opisie PR, żeby dokumentacyjne dopiski nie uruchamiały bez potrzeby kolejnych przebiegów. Pełna F03 pozostaje otwarta.
 
 ## Format następnego wpisu
 
