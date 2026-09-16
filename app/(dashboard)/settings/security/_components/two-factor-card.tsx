@@ -22,7 +22,8 @@ const MFA_ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Zaloguj się ponownie i spróbuj jeszcze raz.',
   mfa_required: 'Potwierdź logowanie kodem z aplikacji 2FA i spróbuj ponownie.',
   rate_limited: 'Zbyt wiele prób. Poczekaj chwilę i spróbuj ponownie.',
-  verification_unavailable: 'Nie możemy teraz potwierdzić sesji. Spróbuj ponownie za chwilę.',
+  verification_unavailable: 'Nie możemy teraz potwierdzić operacji. Spróbuj ponownie za chwilę.',
+  unenroll_incomplete: 'Usunięto część aplikacji TOTP, ale nie udało się zakończyć. Sprawdź stan zabezpieczeń i spróbuj ponownie.',
   already_enrolled: 'Masz już aktywne 2FA. Potwierdź logowanie kodem z aplikacji.',
   verify_failed: 'Nieprawidłowy kod. Sprawdź godzinę w telefonie i spróbuj ponownie.',
 };
@@ -162,19 +163,20 @@ export function TwoFactorCard({ isEnabled }: Props) {
     return (
       <form action={onUnenrollSubmit} className="space-y-3 max-w-sm">
         <p className="text-sm">
-          Wyłączenie 2FA osłabi ochronę konta. Potwierdź aktualnym hasłem.
+          Usunięcie aplikacji TOTP osłabi ochronę konta. Inne metody logowania pozostaną. Potwierdź aktualnym hasłem.
         </p>
         <Input
           name="password"
           type="password"
           required
           autoComplete="current-password"
+          maxLength={1024}
           placeholder="Aktualne hasło"
         />
         {error && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>}
         <div className="flex gap-2">
           <Button type="submit" variant="destructive" disabled={isPending}>
-            {isPending ? 'Wyłączanie...' : 'Wyłącz 2FA'}
+            {isPending ? 'Wyłączanie...' : 'Wyłącz aplikację TOTP'}
           </Button>
           <Button type="button" variant="outline" onClick={reset} disabled={isPending}>
             Anuluj
@@ -195,7 +197,7 @@ export function TwoFactorCard({ isEnabled }: Props) {
       <RecoveryUnavailableNotice />
       {isEnabled ? (
         <Button variant="destructive" onClick={() => setStage({ kind: 'unenroll' })}>
-          Wyłącz 2FA
+          Wyłącz aplikację TOTP
         </Button>
       ) : (
         <Button onClick={onEnroll} disabled={isPending}>

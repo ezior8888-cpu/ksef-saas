@@ -61,7 +61,7 @@ it.each([true, false])('does not offer recovery generation when MFA is enabled=%
 
 it('still offers turning off active MFA and provides a support contact', () => {
   const markup = renderToStaticMarkup(<TwoFactorCard isEnabled />);
-  expect(markup).toContain('Wyłącz 2FA');
+  expect(markup).toContain('Wyłącz aplikację TOTP');
   expect(markup).toContain('href="mailto:support@faktflow.pl"');
   expect(markup).toContain('niedostępne.');
 });

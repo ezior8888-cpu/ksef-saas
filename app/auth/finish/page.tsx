@@ -1,9 +1,10 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 
 import { createClient } from '@/lib/supabase/client';
+import { finishSignInFromFragment, type FinishSignInResult } from '@/lib/auth/finish-sign-in';
 
 import '@/styles/zova.css';
 
@@ -24,39 +25,28 @@ function Finish() {
   const params = useSearchParams();
   const [blad, setBlad] = useState<string | null>(null);
 
+  const completion = useRef<Promise<FinishSignInResult> | null>(null);
+
   useEffect(() => {
-    const hash = window.location.hash.replace(/^#/, '');
-    const h = new URLSearchParams(hash);
-
-    const opis = h.get('error_description');
-    if (opis) {
-      setBlad(opis);
-      return;
-    }
-
-    const access_token = h.get('access_token');
-    const refresh_token = h.get('refresh_token');
-    if (!access_token || !refresh_token) {
-      router.replace('/login?error=auth_callback_missing_code');
-      return;
-    }
-
-    const dokad = params.get('next') || '/dashboard';
-
-    void (async () => {
-      const supabase = createClient();
-      const { error } = await supabase.auth.setSession({
-        access_token,
-        refresh_token,
+    let active = true;
+    // StrictMode replays the effect. Reuse the in-flight result after URL cleanup.
+    if (!completion.current) {
+      completion.current = finishSignInFromFragment({
+        fragment: window.location.hash,
+        destination: params.get('next'),
+        clearFragment: () => window.history.replaceState(null, '', window.location.pathname),
+        setSession: (tokens) => createClient().auth.setSession(tokens),
       });
-      if (error) {
-        setBlad(error.message);
-        return;
-      }
-      // czyścimy kotwicę, żeby token nie został w historii przeglądarki
-      window.history.replaceState(null, '', window.location.pathname);
-      router.replace(dokad);
-    })();
+    }
+    void completion.current.then((result) => {
+      if (!active) return;
+      if (result.ok) router.replace(result.destination);
+      else if (result.error === 'missing_code') router.replace('/login?error=auth_callback_missing_code');
+      else setBlad('Nie udało się potwierdzić linku. Spróbuj ponownie lub poproś o nowy link.');
+    }).catch(() => {
+      if (active) setBlad('Nie udało się dokończyć logowania. Spróbuj ponownie.');
+    });
+    return () => { active = false; };
   }, [params, router]);
 
   return (
@@ -64,7 +54,7 @@ function Finish() {
       <div className="flex max-w-[420px] flex-col items-center gap-4">
         {blad ? (
           <>
-            <h1 className="z-h4">Link wygasł albo był już użyty</h1>
+            <h1 className="z-h4">Nie udało się dokończyć logowania</h1>
             <p className="z-body text-[var(--z-muted)]">{blad}</p>
             <a
               href="/login"

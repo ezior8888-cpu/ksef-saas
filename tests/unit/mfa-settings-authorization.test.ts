@@ -11,6 +11,7 @@ vi.mock('@/lib/auth/mfa-recovery', () => ({
   generateAndStoreRecoveryCodes: mocks.generate, deleteAllRecoveryCodes: mocks.remove,
 }));
 vi.mock('@/lib/rate-limit/mfa', () => ({ checkMfaRateLimit: mocks.limit }));
+vi.mock('@/lib/rate-limit/password', () => ({ checkPasswordOperationRateLimit: mocks.limit, checkPasswordNonceSendRateLimit: vi.fn() }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.audit }));
 vi.mock('@/lib/auth/password', () => ({ validatePassword: vi.fn() }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -63,7 +64,7 @@ describe.each([
   });
   it('fails closed when signed claims cannot be checked', async () => {
     mocks.getClaims.mockRejectedValue(new Error('fixture failure'));
-    await expect(run()).resolves.toEqual({ ok: false, error: 'mfa_required' });
+    await expect(run()).resolves.toEqual({ ok: false, error: name === 'disable TOTP' ? 'verification_unavailable' : 'mfa_required' });
     expectNoSensitiveWork();
   });
   it('rejects a removed TOTP factor even if the session still says AAL2', async () => {

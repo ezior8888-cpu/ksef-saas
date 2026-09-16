@@ -20,7 +20,6 @@ import { Input } from '@/components/ui/input';
 import {
   deleteUserGdprAction,
   forceLogoutAction,
-  sendPasswordResetAction,
   suspendUserAction,
   unsuspendUserAction,
   type AdminActionResult,
@@ -32,7 +31,7 @@ interface Props {
   isSuspended: boolean;
 }
 
-export function UserActions({ userId, email, isSuspended }: Props) {
+export function UserActions({ userId, isSuspended }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -90,17 +89,15 @@ export function UserActions({ userId, email, isSuspended }: Props) {
         Force logout
       </Button>
 
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={isPending || !email}
-        onClick={() =>
-          handle('Reset hasła', () => sendPasswordResetAction(userId))
-        }
-      >
-        <KeyRound className="mr-1.5 h-3.5 w-3.5" />
-        Wyślij reset hasła
-      </Button>
+      <div className="flex max-w-sm flex-col gap-1">
+        <Button variant="outline" size="sm" disabled aria-describedby="admin-password-reset-status">
+          <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+          Reset hasła niedostępny
+        </Button>
+        <p id="admin-password-reset-status" className="text-xs text-muted-foreground">
+          Użytkownik może sam rozpocząć reset na stronie /forgot-password.
+        </p>
+      </div>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <Button
