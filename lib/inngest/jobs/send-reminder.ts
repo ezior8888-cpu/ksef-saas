@@ -1,3 +1,4 @@
+import { assertJobIdentity } from './tenant-boundary';
 // Wysyłka pojedynczego przypomnienia (email + ewentualnie PDF)
 
 import { NonRetriableError } from 'inngest';
@@ -87,6 +88,14 @@ export async function runSendReminder(data: Parameters<typeof remindersSendReque
       return data as ReminderWithRelations;
     });
 
+    // Keep this outside step.run: durable retries may restore an older fetch result.
+    assertJobIdentity(reminder.id, reminder.tenant_id);
+    if (!reminder.invoices ||
+        reminder.invoice_id !== reminder.invoices.id ||
+        reminder.tenant_id !== reminder.invoices.tenant_id) {
+      throw new NonRetriableError('Faktura nie należy do organizacji przypomnienia');
+    }
+
     if (reminder.status !== 'pending') {
       return {
         skipped: true as const,
@@ -117,7 +126,9 @@ export async function runSendReminder(data: Parameters<typeof remindersSendReque
             status: 'cancelled',
             failure_reason: failureReason,
           })
-          .eq('id', reminderId);
+          .eq('id', reminderId)
+          .eq('tenant_id', reminder.tenant_id)
+          .eq('invoice_id', reminder.invoice_id);
         if (error) throw new Error(error.message);
       });
       return { skipped: true as const, reason: 'no-longer-needed' as const };
@@ -304,7 +315,9 @@ export async function runSendReminder(data: Parameters<typeof remindersSendReque
           pdf_attachment_path: pdfPath,
           days_overdue_at_send: daysOverdue,
         })
-        .eq('id', reminderId);
+        .eq('id', reminderId)
+          .eq('tenant_id', reminder.tenant_id)
+          .eq('invoice_id', reminder.invoice_id);
       if (error) throw new Error(error.message);
     });
 

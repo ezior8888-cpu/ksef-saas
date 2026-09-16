@@ -1,3 +1,4 @@
+import { requireImportJobTenant } from './tenant-boundary';
 /**
  * Inngest: Magiczny Import historii faktur z KSeF (wydane lub odebrane).
  */
@@ -23,12 +24,13 @@ import type { JobContext } from '@/lib/jobs/registry';
  * żeby pasek postępu w UI nie wisiał w nieskończoność.
  */
 export async function onMagicImportExhausted(
-  failureErr: Error,
-  data: { importJobId: string },
+  _failureErr: Error,
+  data: { importJobId: string; tenantId: string },
 ): Promise<void> {
-  const { importJobId } = data;
+  const { importJobId, tenantId } = data;
+  await requireImportJobTenant(importJobId, tenantId);
   const supabase = createAdminClient();
-  const failureMsg = `${failureErr.name}: ${failureErr.message}`.slice(0, 900);
+  const failureMsg = 'Nie udało się zakończyć importu. Spróbuj ponownie.';
   const { error } = await supabase
     .from('import_jobs')
     .update({
@@ -37,7 +39,8 @@ export async function onMagicImportExhausted(
       progress_percent: 100,
       progress_message: failureMsg,
     })
-    .eq('id', importJobId);
+    .eq('id', importJobId)
+    .eq('tenant_id', tenantId);
   if (error) throw new Error(error.message);
 }
 
@@ -47,6 +50,7 @@ export async function onMagicImportExhausted(
  */
 export async function runMagicImportKsef(data: Parameters<typeof importKsefHistoryRequested.create>[0], { step }: JobContext) {
     const { importJobId, tenantId, dateFrom, dateTo, direction } = data;
+    await requireImportJobTenant(importJobId, tenantId, 'ksef_history');
 
     const supabase = createAdminClient();
     const invoiceDirection = direction === 'received' ? 'incoming' : 'outgoing';
@@ -60,7 +64,8 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
           progress_message: 'Łączymy się z KSeF...',
           progress_percent: 5,
         })
-        .eq('id', importJobId);
+        .eq('id', importJobId)
+        .eq('tenant_id', tenantId);
       if (error) throw new Error(error.message);
     });
 
@@ -81,7 +86,8 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
           progress_percent: 10,
           status: 'extracting',
         })
-        .eq('id', importJobId);
+        .eq('id', importJobId)
+        .eq('tenant_id', tenantId);
       if (error) throw new Error(error.message);
     });
 
@@ -95,7 +101,8 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
             progress_percent: 100,
             progress_message: 'Brak faktur w wybranym okresie',
           })
-          .eq('id', importJobId);
+          .eq('id', importJobId)
+        .eq('tenant_id', tenantId);
         if (error) throw new Error(error.message);
       });
       return { success: true as const, imported: 0 };
@@ -132,7 +139,8 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
             progress_percent: percent,
             progress_message: `Pobrano ${processedCount} z ${metadata.totalCount} faktur`,
           })
-          .eq('id', importJobId);
+          .eq('id', importJobId)
+        .eq('tenant_id', tenantId);
         if (error) throw new Error(error.message);
       });
 
@@ -149,7 +157,8 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
           progress_percent: 85,
           progress_message: 'Analizujemy kontrahentów i produkty...',
         })
-        .eq('id', importJobId);
+        .eq('id', importJobId)
+        .eq('tenant_id', tenantId);
       if (error) throw new Error(error.message);
     });
 
@@ -178,7 +187,8 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
           products_created: processResult.productsCreated,
           warnings: processResult.warnings,
         })
-        .eq('id', importJobId);
+        .eq('id', importJobId)
+        .eq('tenant_id', tenantId);
       if (error) throw new Error(error.message);
     });
 
@@ -204,7 +214,7 @@ export const magicImportKsefJob = inngest.createFunction(
     onFailure: async ({ error: failureErr, event }) =>
       onMagicImportExhausted(
         failureErr,
-        (event.data.event as { data: { importJobId: string } }).data,
+        (event.data.event as { data: { importJobId: string; tenantId: string } }).data,
       ),
   },
   async ({ event, step, logger, attempt }) =>
