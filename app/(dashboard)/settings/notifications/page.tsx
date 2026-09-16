@@ -23,7 +23,7 @@ export default async function NotificationsPage() {
       .eq('user_id', user.id)
       .eq('is_active', true)
       .order('created_at', { ascending: false }),
-    getUnsubscribedCategories(user.id).catch(() => []),
+    getUnsubscribedCategories(user.id).catch(() => null),
   ]);
 
   return (
@@ -33,7 +33,11 @@ export default async function NotificationsPage() {
           (subscriptions ?? []) as Tables<'push_subscriptions'>[]
         }
       />
-      <EmailPreferences unsubscribedCategories={unsubscribedCategories} />
+      {unsubscribedCategories === null ? (
+        <p role="alert">Nie udało się odczytać ustawień email. Odśwież stronę, zanim je zmienisz.</p>
+      ) : (
+        <EmailPreferences unsubscribedCategories={unsubscribedCategories} />
+      )}
     </div>
   );
 }

@@ -1,14 +1,8 @@
 'use server';
 
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-
-import {
-  resubscribe,
-  unsubscribe,
-  type EmailCategory,
-} from '@/lib/email/preferences';
-import { createClient } from '@/lib/supabase/server';
+import { getVerifiedUserContext } from '@/lib/auth/verified-user';
+import { resubscribe, unsubscribe, type EmailCategory } from '@/lib/email/preferences';
 
 export type EmailPreferenceResult =
   | { success: true }
@@ -20,39 +14,20 @@ export async function toggleEmailCategoryAction(
   category: EmailCategory,
   subscribed: boolean,
 ): Promise<EmailPreferenceResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    redirect('/login');
+  const context = await getVerifiedUserContext();
+  if (!context.ok) return { success: false, error: context.error };
+  if (!TOGGLEABLE.includes(category) || typeof subscribed !== 'boolean') {
+    return { success: false, error: 'Nieprawidłowe ustawienie powiadomień.' };
   }
-
-  if (!TOGGLEABLE.includes(category)) {
-    return {
-      success: false,
-      error:
-        'Emaile transakcyjne (faktury, KSeF, hasła) są wymagane prawnie — nie można ich wyłączyć.',
-    };
-  }
-
   try {
     if (subscribed) {
-      await resubscribe(user.id, category);
+      await resubscribe(context.user.id, category);
     } else {
-      await unsubscribe({
-        userId: user.id,
-        category,
-        source: 'settings_ui',
-      });
+      await unsubscribe({ userId: context.user.id, category, source: 'settings_ui' });
     }
-  } catch (e) {
-    return {
-      success: false,
-      error: e instanceof Error ? e.message : 'unknown',
-    };
+  } catch {
+    return { success: false, error: 'Nie udało się zapisać ustawienia. Spróbuj ponownie.' };
   }
-
   revalidatePath('/settings/notifications');
   return { success: true };
 }
