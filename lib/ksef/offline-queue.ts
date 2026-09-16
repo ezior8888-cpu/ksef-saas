@@ -31,6 +31,7 @@ export async function addToOfflineQueue(
       'tenant_id, internal_number, issue_date, gross_total, buyer_data, buyer_nip, seller_nip, created_at, tenants(nip)',
     )
     .eq('id', params.invoiceId)
+    .eq('tenant_id', params.tenantId)
     .single();
 
   if (invErr || !invoiceRow) {
@@ -98,14 +99,18 @@ export async function addToOfflineQueue(
         .from('ksef_offline_queue')
         .select('*')
         .eq('idempotency_key', idempotencyKey)
+        .eq('tenant_id', params.tenantId)
+        .eq('invoice_id', params.invoiceId)
         .single();
-      if (fetchErr || !existing) throw error;
+      if (fetchErr || !existing) {
+        throw new Error('Offline queue conflict could not be verified');
+      }
       return existing as OfflineQueueRow;
     }
     throw error;
   }
 
-  const { error: updErr } = await supabase
+  const { data: updated, error: updErr } = await supabase
     .from('invoices')
     .update({
       ksef_status: 'offline_queued',
@@ -113,9 +118,12 @@ export async function addToOfflineQueue(
       offline_qr_certyfikat: qrCodes.certyfikatPayload,
       offline_idempotency_key: idempotencyKey,
     })
-    .eq('id', params.invoiceId);
+    .eq('id', params.invoiceId)
+    .eq('tenant_id', params.tenantId)
+    .select('id')
+    .single();
 
-  if (updErr) throw updErr;
+  if (updErr || !updated) throw new Error('Invoice could not be updated for offline queue');
 
   return row as OfflineQueueRow;
 }
