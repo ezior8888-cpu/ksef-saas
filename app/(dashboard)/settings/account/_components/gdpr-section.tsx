@@ -54,7 +54,7 @@ export function GdprSection({ initialRequest = null }: { initialRequest?: Schedu
     <div className="space-y-4">
       <div className="flex flex-col gap-2">
         <h3 className="font-medium">Pobierz moje dane</h3>
-        <p className="text-sm text-muted-foreground">Eksport JSON danych powiązanych z Twoim kontem.</p>
+        <p className="text-sm text-muted-foreground">Eksport JSON profilu konta, członkostw i ostatnich wpisów audytu. Plik wskazuje ograniczenia wyników. Faktury pobierzesz przez eksport w panelu firmy.</p>
         <a href="/api/gdpr/export" className="inline-flex w-fit rounded-xl border border-glass-border bg-foreground/5 px-4 py-2 text-sm font-medium hover:bg-foreground/10">Pobierz dane (JSON)</a>
       </div>
       {cancellation?.ok && <p role="status" className="text-sm text-green-700 dark:text-green-400">Usunięcie konta zostało anulowane. Konto pozostaje aktywne.</p>}
