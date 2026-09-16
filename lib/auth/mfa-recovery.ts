@@ -115,5 +115,6 @@ export async function countRemainingRecoveryCodes(
  */
 export async function deleteAllRecoveryCodes(userId: string): Promise<void> {
   const admin = createAdminClient();
-  await admin.from('mfa_recovery_codes').delete().eq('user_id', userId);
+  const { error } = await admin.from('mfa_recovery_codes').delete().eq('user_id', userId);
+  if (error) throw new Error('recovery_codes_cleanup_failed');
 }

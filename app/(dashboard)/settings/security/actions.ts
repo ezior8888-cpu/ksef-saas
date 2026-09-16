@@ -238,39 +238,63 @@ export async function verifyTotpEnrollmentAction(
 
 export type UnenrollTotpResult =
   | { ok: true }
-  | { ok: false; error: 'not_authenticated' | 'invalid_password' | 'mfa_required' | 'unenroll_failed' };
+  | { ok: false; error: 'not_authenticated' | 'invalid_password' | 'mfa_required' | 'unenroll_failed' | 'unenroll_incomplete' | 'verification_unavailable' | 'rate_limited'; retryAfter?: number };
 
 /**
- * Usuwa wszystkie TOTP factory + wyczyść recovery codes. Wymaga re-auth
- * hasłem — wyłączenie 2FA to sensitive operation.
+ * Removes this user's TOTP factors after MFA and rate-limited password reauth.
+ * Auth deletions are separate operations; a partial failure is not a rollback.
  */
 export async function unenrollTotpAction(
   currentPassword: string,
 ): Promise<UnenrollTotpResult> {
-  const supabase = await createClient();
+  if (typeof currentPassword !== 'string' || !currentPassword || currentPassword.length > 1024) {
+    return { ok: false, error: 'invalid_password' };
+  }
+  const supabase = await createClient().catch(() => null);
+  if (!supabase) return { ok: false, error: 'verification_unavailable' };
   // Check the original MFA session before verifying the password.
   const state = await getVerifiedMfaState(supabase).catch(() => null);
   if (state?.status === 'unauthenticated') return { ok: false, error: 'not_authenticated' };
-  if (!state || state.status !== 'verified') return { ok: false, error: 'mfa_required' };
+  if (!state) return { ok: false, error: 'verification_unavailable' };
+  if (state.status !== 'verified') return { ok: false, error: 'mfa_required' };
   const { user } = state;
 
-  const reauth = await reauthenticateWithPassword(currentPassword);
-  if (!reauth.ok) return { ok: false, error: 'invalid_password' };
-
-  const { data: factors, error: factorsError } = await supabase.auth.mfa.listFactors();
-  if (factorsError || !factors) return { ok: false, error: 'unenroll_failed' };
-  const all = factors.all;
-  for (const f of all) {
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: f.id });
-    if (error) return { ok: false, error: 'unenroll_failed' };
+  // Share the password-attempt budget with password changes and nonce requests.
+  const limit = await checkPasswordOperationRateLimit(user.id).catch(() => null);
+  if (!limit || limit.unavailable) return { ok: false, error: 'verification_unavailable' };
+  if (!limit.allowed) return { ok: false, error: 'rate_limited', retryAfter: limit.retryAfter };
+  const reauth = await reauthenticateWithPassword(currentPassword).catch(() => null);
+  if (!reauth || (!reauth.ok && reauth.error === 'unknown')) {
+    return { ok: false, error: 'verification_unavailable' };
   }
+  if (!reauth.ok) return { ok: false, error: reauth.error === 'not_authenticated' ? 'not_authenticated' : 'invalid_password' };
 
-  await deleteAllRecoveryCodes(user.id);
+  const factors = await supabase.auth.mfa.listFactors().catch(() => null);
+  if (!factors || factors.error || !Array.isArray(factors.data?.all)) return { ok: false, error: 'unenroll_failed' };
+  // Auth supplies factors for the original session; never remove phone/WebAuthn.
+  const totp = factors.data.all.filter((factor) => factor.factor_type === 'totp');
+  if (!totp.some((factor) => factor.status === 'verified')) return { ok: false, error: 'unenroll_failed' };
+
+  // A failed cleanup must not silently leave old codes behind after disabling TOTP.
+  // Recovery stays unavailable; clearing legacy codes does not restore access.
+  const cleaned = await deleteAllRecoveryCodes(user.id).then(() => true, () => false);
+  if (!cleaned) return { ok: false, error: 'unenroll_failed' };
+
+  let removed = 0;
+  for (const factor of totp) {
+    const result = await supabase.auth.mfa.unenroll({ factorId: factor.id }).catch(() => null);
+    if (!result || result.error) {
+      if (removed > 0) revalidatePath('/settings/security');
+      return { ok: false, error: removed > 0 ? 'unenroll_incomplete' : 'unenroll_failed' };
+    }
+    removed += 1;
+  }
 
   await logAudit({
     action: 'auth.mfa_unenrolled',
     tenantId: null,
     userId: user.id,
+    metadata: { factor_type: 'totp', removed_count: removed },
   });
 
   revalidatePath('/settings/security');
