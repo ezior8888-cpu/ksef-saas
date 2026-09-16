@@ -1,3 +1,4 @@
+import { requireInvoiceTenant } from './tenant-boundary';
 import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError, RetryAfterError } from 'inngest';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
@@ -63,7 +64,10 @@ export async function onSubmitInvoiceExhausted(
   data: Parameters<typeof invoiceSubmitRequested.create>[0],
   { step, logger }: JobContext,
 ) {
-      const { tenantId, invoiceId, nip, invoice } = data;
+      const parsed = invoiceSubmitRequested.safeParse(data);
+      if (!parsed.success) return { handled: false, reason: 'invalid-payload' };
+      const { tenantId, invoiceId, nip, invoice } = parsed.data;
+      await requireInvoiceTenant(invoiceId, tenantId);
       const fromOfflineQueue = Boolean(data.fromOfflineQueue);
 
       // Klasyfikacja błędu (Faza 23 sekcja 3):
@@ -102,7 +106,7 @@ export async function onSubmitInvoiceExhausted(
             last_error_code: null,
             last_error_field: null,
             last_error_suggestion: null,
-          });
+          }, tenantId);
         });
       } else if (isTransientFailure) {
         // Faza 23 sekcja 3: po wyczerpaniu 5 retries z błędem retry-owalnym
@@ -159,7 +163,7 @@ export async function onSubmitInvoiceExhausted(
               last_error_code: null,
               last_error_field: null,
               last_error_suggestion: null,
-            });
+            }, tenantId);
           });
         }
       } else {
@@ -171,7 +175,7 @@ export async function onSubmitInvoiceExhausted(
             last_error_code: null,
             last_error_field: null,
             last_error_suggestion: null,
-          });
+          }, tenantId);
         });
       }
 
@@ -225,6 +229,7 @@ export async function runSubmitInvoice(
       );
     }
     const { tenantId, invoiceId, invoice, nip } = parsed.data;
+    await requireInvoiceTenant(invoiceId, tenantId);
     const env = (process.env.KSEF_ENV as 'test' | 'demo' | 'production') ?? 'test';
     const fromOfflineQueue = Boolean(parsed.data.fromOfflineQueue);
 
@@ -408,7 +413,7 @@ export async function runSubmitInvoice(
         ksef_status: 'sending',
         submitted_to_ksef_at: now,
         last_attempt_at: now,
-      });
+      }, tenantId);
     });
 
     await step.run('audit-start', async () => {
@@ -530,7 +535,7 @@ export async function runSubmitInvoice(
         last_error_code: null,
         last_error_field: null,
         last_error_suggestion: null,
-      });
+      }, tenantId);
 
       // Faza 22: faktura zaakceptowana → dashboard KPI się zmieniają.
       // Czyścimy cache żeby user widział świeży count zamiast czekać na 5min TTL.

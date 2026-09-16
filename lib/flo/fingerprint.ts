@@ -160,20 +160,15 @@ export function describeChange(
 // Odczyt stanu z bazy
 // ═══════════════════════════════════════════════════════════════
 
+interface StateQuery {
+  eq(column: string, value: string): StateQuery;
+  maybeSingle(): Promise<{
+    data: Record<string, unknown> | null;
+    error: { message: string } | null;
+  }>;
+}
 interface StateClient {
-  from: (table: 'invoices' | 'expenses') => {
-    select: (columns: string) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => {
-        maybeSingle: () => Promise<{
-          data: Record<string, unknown> | null;
-          error: { message: string } | null;
-        }>;
-      };
-    };
-  };
+  from(table: 'invoices' | 'expenses'): { select(columns: string): StateQuery };
 }
 
 /**
@@ -186,7 +181,9 @@ interface StateClient {
 export async function readState(
   kind: FloProposalKind,
   payload: Record<string, unknown>,
+  tenantId: string,
 ): Promise<FloState> {
+  if (!tenantId) throw new Error("Brak kontekstu organizacji");
   const invoiceId = readString(payload.invoiceId);
   const expenseId = readString(payload.expenseId);
 
@@ -201,6 +198,7 @@ export async function readState(
         'id, ksef_status, gross_total, paid_amount, payment_due_date, reminders_paused, buyer_data, internal_number, updated_at',
       )
       .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
       .maybeSingle();
 
     if (error) throw new Error(error.message);
@@ -231,6 +229,7 @@ export async function readState(
       .from('expenses')
       .select('id, gross_amount, kpir_column, is_reviewed, is_deductible')
       .eq('id', expenseId)
+      .eq('tenant_id', tenantId)
       .maybeSingle();
 
     if (error) throw new Error(error.message);
@@ -253,8 +252,9 @@ export async function readState(
 export async function computeFingerprint(
   kind: FloProposalKind,
   payload: Record<string, unknown>,
+  tenantId: string,
 ): Promise<{ fingerprint: string; state: FloState }> {
-  const state = await readState(kind, payload);
+  const state = await readState(kind, payload, tenantId);
   return { fingerprint: fingerprintOf(state.facts), state };
 }
 
@@ -266,11 +266,11 @@ export async function computeFingerprint(
  * z gotowym zdaniem dla człowieka.
  */
 export async function assertFresh(
-  row: Pick<FloProposalRow, 'kind' | 'payload' | 'fingerprint'>,
+  row: Pick<FloProposalRow, 'kind' | 'payload' | 'fingerprint' | 'tenant_id'>,
   now: Date = new Date(),
 ): Promise<void> {
   const kind = row.kind as FloProposalKind;
-  const { fingerprint, state } = await computeFingerprint(kind, row.payload);
+  const { fingerprint, state } = await computeFingerprint(kind, row.payload, row.tenant_id);
 
   if (fingerprint === row.fingerprint) return;
 

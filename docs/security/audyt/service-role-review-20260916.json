@@ -1,0 +1,1792 @@
+{
+  "schemaVersion": 1,
+  "reviewDate": "2026-09-16",
+  "baselineCommit": "36f2baeac39475fba2fbcbcb849d6c8bea5f8ca5",
+  "baselineInventorySha256": "e2f3aeb60f2e7eba3d593ed28d5444834639a41d9a5d3119b60ab3e6ab72d90d",
+  "baselineCounts": {
+    "total": 305,
+    "heuristicOk": 216,
+    "toReview": 77,
+    "medium": 12,
+    "manualRecords": 89
+  },
+  "scope": "Każdy non-ok rekord bazowego inventory ma dokładnie jedno rozliczenie. Baseline lines refer to36f2bae. Assessment distinguishes current local changes, dormant code and remaining owner/runtime work; reviewed does not mean secure.",
+  "limitations": [
+    "No SQL, migrations, remote exploitation or real service tests performed.",
+    "All database relation findings require owner assessment and direct two-tenant tests on designated staging.",
+    "Not a full re-review of216 heuristic-ok rows or independent human pentest.",
+    "Audit sinks are caller-dependent; findings and runtime gaps remain open."
+  ],
+  "records": [
+    {
+      "key": "app/actions/organizations.ts:138:memberships:INSERT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "app/actions/organizations.ts:138:memberships:INSERT",
+        "file": "app/actions/organizations.ts",
+        "baselineLine": 138,
+        "table": "memberships",
+        "operation": "INSERT",
+        "baselineRisk": "średnie",
+        "status": "reviewed-static",
+        "source": "createOrganizationAction / skipOnboardingWithoutNipAction → prywatny insertOrganizationAsOwner; userId wyłącznie context.user.id; organization_id pochodzi z INSERT nowego tenant.",
+        "guard": "getVerifiedUserContext przed utworzeniem admin client; istniejące membership re-use ma status active. INSERT owner dotyczy nowego tenanta, UPDATE users id=zweryfikowany user.",
+        "evidence": [
+          "app/actions/organizations.ts:109",
+          "app/actions/organizations.ts:230",
+          "app/actions/organizations.ts:347",
+          "tests/unit/onboarding-mfa-boundary.test.tsx"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań."
+      }
+    },
+    {
+      "key": "app/actions/organizations.ts:150:users:UPDATE",
+      "reviewer": "root",
+      "assessment": {
+        "key": "app/actions/organizations.ts:150:users:UPDATE",
+        "file": "app/actions/organizations.ts",
+        "baselineLine": 150,
+        "table": "users",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "source": "createOrganizationAction / skipOnboardingWithoutNipAction → prywatny insertOrganizationAsOwner; userId wyłącznie context.user.id; organization_id pochodzi z INSERT nowego tenant.",
+        "guard": "getVerifiedUserContext przed utworzeniem admin client; istniejące membership re-use ma status active. INSERT owner dotyczy nowego tenanta, UPDATE users id=zweryfikowany user.",
+        "evidence": [
+          "app/actions/organizations.ts:109",
+          "app/actions/organizations.ts:230",
+          "app/actions/organizations.ts:347",
+          "tests/unit/onboarding-mfa-boundary.test.tsx"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań."
+      }
+    },
+    {
+      "key": "app/admin/users/[userId]/billing-actions.ts:132:stripe_refunds:SELECT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "app/admin/users/[userId]/billing-actions.ts:132:stripe_refunds:SELECT",
+        "file": "app/admin/users/[userId]/billing-actions.ts",
+        "baselineLine": 132,
+        "table": "stripe_refunds",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "source": "listUserPayments: docelowy userId → aktywne membership → payment IDs z tych organizacji.",
+        "guard": "requireAdmin w obu Server Actions przed admin client/Stripe; globalny dostęp administratora celowy, nie użytkownika firmy.",
+        "evidence": [
+          "app/admin/users/[userId]/billing-actions.ts:27",
+          "app/admin/users/[userId]/billing-actions.ts:87",
+          "lib/auth/admin-guard.ts",
+          "tests/unit/admin-audit-access.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Test guardu admin nie jest end-to-end testem refundów. Obsługa częściowego zapisu po zwrocie Stripe pozostaje osobnym zadaniem."
+      }
+    },
+    {
+      "key": "app/admin/users/[userId]/billing-actions.ts:41:stripe_payments:SELECT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "app/admin/users/[userId]/billing-actions.ts:41:stripe_payments:SELECT",
+        "file": "app/admin/users/[userId]/billing-actions.ts",
+        "baselineLine": 41,
+        "table": "stripe_payments",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "source": "issueRefundAction: paymentId od administratora; wynik i tenant pobrane z rekordu płatności.",
+        "guard": "requireAdmin w obu Server Actions przed admin client/Stripe; globalny dostęp administratora celowy, nie użytkownika firmy.",
+        "evidence": [
+          "app/admin/users/[userId]/billing-actions.ts:27",
+          "app/admin/users/[userId]/billing-actions.ts:87",
+          "lib/auth/admin-guard.ts",
+          "tests/unit/admin-audit-access.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Test guardu admin nie jest end-to-end testem refundów. Obsługa częściowego zapisu po zwrocie Stripe pozostaje osobnym zadaniem."
+      }
+    },
+    {
+      "key": "lib/admin/audit.ts:57:audit_logs:SELECT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/admin/audit.ts:57:audit_logs:SELECT",
+        "file": "lib/admin/audit.ts",
+        "baselineLine": 57,
+        "table": "audit_logs",
+        "operation": "SELECT",
+        "baselineRisk": "średnie",
+        "status": "reviewed-static",
+        "source": "searchAuditLogs, wywołanie admin/audit/page.tsx.",
+        "guard": "server-only + requireAdmin bezpośrednio w helperze odczytującym dane, przed service_role; cross-tenant celowy dla zweryfikowanego administratora.",
+        "evidence": [
+          "lib/admin/audit.ts",
+          "lib/auth/admin-guard.ts",
+          "tests/unit/admin-audit-access.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań."
+      }
+    },
+    {
+      "key": "lib/admin/refunds.ts:129:stripe_payments:UPDATE",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/admin/refunds.ts:129:stripe_payments:UPDATE",
+        "file": "lib/admin/refunds.ts",
+        "baselineLine": 129,
+        "table": "stripe_payments",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "source": "issueRefundAction (jedyny produkcyjny caller) → issueRefund → prywatny notifyCustomerOfRefund.",
+        "guard": "requireAdmin w akcji; payment tenant pobrany z bazy, klient nie podaje tenant odbiorcy; membership organization_id=payment.tenant_id AND owner AND active.",
+        "evidence": [
+          "app/admin/users/[userId]/billing-actions.ts:27",
+          "lib/admin/refunds.ts:29",
+          "lib/admin/refunds.ts:168"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Helper nie ma własnego requireAdmin. Nie dowodzi to osobnego wejścia. Brak idempotency key Stripe i sprawdzenia wyniku UPDATE to otwarta niezawodność refundów; nie testowano rzeczywistych płatności."
+      }
+    },
+    {
+      "key": "lib/admin/refunds.ts:168:memberships:SELECT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/admin/refunds.ts:168:memberships:SELECT",
+        "file": "lib/admin/refunds.ts",
+        "baselineLine": 168,
+        "table": "memberships",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "source": "issueRefundAction (jedyny produkcyjny caller) → issueRefund → prywatny notifyCustomerOfRefund.",
+        "guard": "requireAdmin w akcji; payment tenant pobrany z bazy, klient nie podaje tenant odbiorcy; membership organization_id=payment.tenant_id AND owner AND active.",
+        "evidence": [
+          "app/admin/users/[userId]/billing-actions.ts:27",
+          "lib/admin/refunds.ts:29",
+          "lib/admin/refunds.ts:168"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Helper nie ma własnego requireAdmin. Nie dowodzi to osobnego wejścia. Brak idempotency key Stripe i sprawdzenia wyniku UPDATE to otwarta niezawodność refundów; nie testowano rzeczywistych płatności."
+      }
+    },
+    {
+      "key": "lib/admin/users.ts:282:audit_logs:SELECT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/admin/users.ts:282:audit_logs:SELECT",
+        "file": "lib/admin/users.ts",
+        "baselineLine": 282,
+        "table": "audit_logs",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "source": "getAdminUserDetail, wywołanie admin/users/[userId]/page.tsx.",
+        "guard": "server-only + requireAdmin bezpośrednio w helperze odczytującym dane, przed service_role; cross-tenant celowy dla zweryfikowanego administratora.",
+        "evidence": [
+          "lib/admin/users.ts",
+          "lib/auth/admin-guard.ts",
+          "tests/unit/admin-user-metrics-access.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań."
+      }
+    },
+    {
+      "key": "lib/audit/log-system.ts:13:audit_logs:INSERT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/audit/log-system.ts:13:audit_logs:INSERT",
+        "file": "lib/audit/log-system.ts",
+        "baselineLine": 13,
+        "table": "audit_logs",
+        "operation": "INSERT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "fixed-privacy + caller-dependent",
+        "source": "Wewnętrzny sink logAudit / logAuditSystem, nie HTTP handler. Wywoływany przez akcje konta/organizacji/admina, podpisane webhooki, portale, joby i FLO.",
+        "guard": "Autoryzacja należy do callerów; sam sink zapisuje przekazaną tożsamość i tenant. Odczyt chroniony oddzielnie. Nie przeprowadzono w tym rekordzie kompletnego audytu wszystkich producentów metadanych.",
+        "evidence": [
+          "lib/audit/log-system.ts",
+          "tests/unit/audit-failure-privacy.test.ts"
+        ],
+        "remaining": "Usunięto raw SDK error i całe entry z console przy błędzie. Nie zmieniono trwałego audytu ani historii logów. Retencja/dostęp do istniejących logów i wiarygodność wszystkich producerów pozostają odrębnymi kontrolami."
+      }
+    },
+    {
+      "key": "lib/audit/log.ts:129:audit_logs:INSERT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/audit/log.ts:129:audit_logs:INSERT",
+        "file": "lib/audit/log.ts",
+        "baselineLine": 129,
+        "table": "audit_logs",
+        "operation": "INSERT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "fixed-privacy + caller-dependent",
+        "source": "Wewnętrzny sink logAudit / logAuditSystem, nie HTTP handler. Wywoływany przez akcje konta/organizacji/admina, podpisane webhooki, portale, joby i FLO.",
+        "guard": "Autoryzacja należy do callerów; sam sink zapisuje przekazaną tożsamość i tenant. Odczyt chroniony oddzielnie. Nie przeprowadzono w tym rekordzie kompletnego audytu wszystkich producentów metadanych.",
+        "evidence": [
+          "lib/audit/log.ts",
+          "tests/unit/audit-failure-privacy.test.ts"
+        ],
+        "remaining": "Usunięto raw SDK error i całe entry z console przy błędzie. Nie zmieniono trwałego audytu ani historii logów. Retencja/dostęp do istniejących logów i wiarygodność wszystkich producerów pozostają odrębnymi kontrolami."
+      }
+    },
+    {
+      "key": "lib/auth/mfa-recovery.ts:105:mfa_recovery_codes:SELECT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/auth/mfa-recovery.ts:105:mfa_recovery_codes:SELECT",
+        "file": "lib/auth/mfa-recovery.ts",
+        "baselineLine": 105,
+        "table": "mfa_recovery_codes",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "dormant + runtime-gap",
+        "source": "Brak produkcyjnego callera tej funkcji; wyszukanie nazw w app i lib. Stare własne recovery nie jest ścieżką odzyskania natywnego AAL2.",
+        "guard": "Helper zawęża po user_id; zużycie dodatkowo id i used_at IS NULL, sukces tylko przy jednym zwróconym wierszu. Nie traktować tożsamości argumentu jako zweryfikowanej przed przyszłym podłączeniem.",
+        "evidence": [
+          "lib/auth/mfa-recovery.ts",
+          "app/(dashboard)/settings/security/actions.ts",
+          "tests/unit/mfa-recovery-consumption.test.ts",
+          "tests/unit/mfa-recovery-cleanup.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Pełne recovery po utracie MFA nadal otwarte; brak natywnego AAL2 przez te kody. Generowanie usuwa stare przed INSERT i nie jest atomowe; nie podłączać bez projektu natywnego procesu."
+      }
+    },
+    {
+      "key": "lib/auth/mfa-recovery.ts:118:mfa_recovery_codes:DELETE",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/auth/mfa-recovery.ts:118:mfa_recovery_codes:DELETE",
+        "file": "lib/auth/mfa-recovery.ts",
+        "baselineLine": 118,
+        "table": "mfa_recovery_codes",
+        "operation": "DELETE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "source": "unenrollTotpAction → deleteAllRecoveryCodes(user.id).",
+        "guard": "Zweryfikowana oryginalna sesja/MFA, limit prób hasła i reauth przed usunięciem; DELETE user_id=zweryfikowany user.",
+        "evidence": [
+          "lib/auth/mfa-recovery.ts",
+          "app/(dashboard)/settings/security/actions.ts",
+          "tests/unit/totp-unenroll-boundary.test.ts",
+          "tests/unit/mfa-recovery-cleanup.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Pełne recovery po utracie MFA nadal otwarte; brak natywnego AAL2 przez te kody. Generowanie usuwa stare przed INSERT i nie jest atomowe; nie podłączać bez projektu natywnego procesu."
+      }
+    },
+    {
+      "key": "lib/auth/mfa-recovery.ts:36:mfa_recovery_codes:DELETE",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/auth/mfa-recovery.ts:36:mfa_recovery_codes:DELETE",
+        "file": "lib/auth/mfa-recovery.ts",
+        "baselineLine": 36,
+        "table": "mfa_recovery_codes",
+        "operation": "DELETE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "dormant + runtime-gap",
+        "source": "Brak produkcyjnego callera tej funkcji; wyszukanie nazw w app i lib. Stare własne recovery nie jest ścieżką odzyskania natywnego AAL2.",
+        "guard": "Helper zawęża po user_id; zużycie dodatkowo id i used_at IS NULL, sukces tylko przy jednym zwróconym wierszu. Nie traktować tożsamości argumentu jako zweryfikowanej przed przyszłym podłączeniem.",
+        "evidence": [
+          "lib/auth/mfa-recovery.ts",
+          "app/(dashboard)/settings/security/actions.ts",
+          "tests/unit/mfa-recovery-consumption.test.ts",
+          "tests/unit/mfa-recovery-cleanup.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Pełne recovery po utracie MFA nadal otwarte; brak natywnego AAL2 przez te kody. Generowanie usuwa stare przed INSERT i nie jest atomowe; nie podłączać bez projektu natywnego procesu."
+      }
+    },
+    {
+      "key": "lib/auth/mfa-recovery.ts:51:mfa_recovery_codes:INSERT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/auth/mfa-recovery.ts:51:mfa_recovery_codes:INSERT",
+        "file": "lib/auth/mfa-recovery.ts",
+        "baselineLine": 51,
+        "table": "mfa_recovery_codes",
+        "operation": "INSERT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "dormant + runtime-gap",
+        "source": "Brak produkcyjnego callera tej funkcji; wyszukanie nazw w app i lib. Stare własne recovery nie jest ścieżką odzyskania natywnego AAL2.",
+        "guard": "Helper zawęża po user_id; zużycie dodatkowo id i used_at IS NULL, sukces tylko przy jednym zwróconym wierszu. Nie traktować tożsamości argumentu jako zweryfikowanej przed przyszłym podłączeniem.",
+        "evidence": [
+          "lib/auth/mfa-recovery.ts",
+          "app/(dashboard)/settings/security/actions.ts",
+          "tests/unit/mfa-recovery-consumption.test.ts",
+          "tests/unit/mfa-recovery-cleanup.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Pełne recovery po utracie MFA nadal otwarte; brak natywnego AAL2 przez te kody. Generowanie usuwa stare przed INSERT i nie jest atomowe; nie podłączać bez projektu natywnego procesu."
+      }
+    },
+    {
+      "key": "lib/auth/mfa-recovery.ts:71:mfa_recovery_codes:SELECT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/auth/mfa-recovery.ts:71:mfa_recovery_codes:SELECT",
+        "file": "lib/auth/mfa-recovery.ts",
+        "baselineLine": 71,
+        "table": "mfa_recovery_codes",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "dormant + runtime-gap",
+        "source": "Brak produkcyjnego callera tej funkcji; wyszukanie nazw w app i lib. Stare własne recovery nie jest ścieżką odzyskania natywnego AAL2.",
+        "guard": "Helper zawęża po user_id; zużycie dodatkowo id i used_at IS NULL, sukces tylko przy jednym zwróconym wierszu. Nie traktować tożsamości argumentu jako zweryfikowanej przed przyszłym podłączeniem.",
+        "evidence": [
+          "lib/auth/mfa-recovery.ts",
+          "app/(dashboard)/settings/security/actions.ts",
+          "tests/unit/mfa-recovery-consumption.test.ts",
+          "tests/unit/mfa-recovery-cleanup.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Pełne recovery po utracie MFA nadal otwarte; brak natywnego AAL2 przez te kody. Generowanie usuwa stare przed INSERT i nie jest atomowe; nie podłączać bez projektu natywnego procesu."
+      }
+    },
+    {
+      "key": "lib/auth/mfa-recovery.ts:82:mfa_recovery_codes:UPDATE",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/auth/mfa-recovery.ts:82:mfa_recovery_codes:UPDATE",
+        "file": "lib/auth/mfa-recovery.ts",
+        "baselineLine": 82,
+        "table": "mfa_recovery_codes",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "dormant + runtime-gap",
+        "source": "Brak produkcyjnego callera tej funkcji; wyszukanie nazw w app i lib. Stare własne recovery nie jest ścieżką odzyskania natywnego AAL2.",
+        "guard": "Helper zawęża po user_id; zużycie dodatkowo id i used_at IS NULL, sukces tylko przy jednym zwróconym wierszu. Nie traktować tożsamości argumentu jako zweryfikowanej przed przyszłym podłączeniem.",
+        "evidence": [
+          "lib/auth/mfa-recovery.ts",
+          "app/(dashboard)/settings/security/actions.ts",
+          "tests/unit/mfa-recovery-consumption.test.ts",
+          "tests/unit/mfa-recovery-cleanup.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Pełne recovery po utracie MFA nadal otwarte; brak natywnego AAL2 przez te kody. Generowanie usuwa stare przed INSERT i nie jest atomowe; nie podłączać bez projektu natywnego procesu."
+      }
+    },
+    {
+      "key": "lib/categorization/rule-engine.ts:109:categorization_rules:SELECT",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/categorization/rule-engine.ts:109:categorization_rules:SELECT",
+        "status": "static-reviewed",
+        "reachability": "Same categorization job chain as NIP branch.",
+        "identity": "Same server/worker verified tenant from OCR job or matched incoming invoice; AI cannot provide or override tenantId.",
+        "targets": "SellerName is treated as matching data, not authorization. SELECT eq tenant_id and match_type=keyword. Global fallback table intentionally has no tenant.",
+        "evidence": [
+          "lib/categorization/index.ts:51",
+          "lib/inngest/jobs/process-ocr.ts:152",
+          "lib/inngest/jobs/auto-categorize-inbox.ts:199"
+        ],
+        "tests": [
+          "Read existing classification and FLO builders; no runtime database proof in this pass."
+        ],
+        "followup": "No cross-tenant path found under current callers. Distinct rule business bug: keyword matching doesn't implement min/max rule amounts, outside tenant scope.",
+        "finalStatus": "static-reviewed",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/categorization/rule-engine.ts:50:categorization_rules:SELECT",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/categorization/rule-engine.ts:50:categorization_rules:SELECT",
+        "status": "static-reviewed",
+        "reachability": "categorizeExpense called by OCR processing and inbox auto-categorization jobs.",
+        "identity": "OCR event from uploadExpensePhotoAction verified membership; runProcessOcr validates job id+tenant before categorization. Inbox event emitted by poller after own-tenant inserts; autoCategorize rechecks row.tenant_id === event.tenantId before categorization.",
+        "targets": "tenantId is separate from OCR/AI output; seller NIP comes from validated extracted invoice; rule query eq tenant_id and nip; learned-rule hit update uses id obtained from that scoped query.",
+        "evidence": [
+          "app/actions/expenses.ts:80",
+          "lib/inngest/jobs/process-ocr.ts:78",
+          "lib/inngest/jobs/auto-categorize-inbox.ts:168",
+          "lib/categorization/index.ts:38"
+        ],
+        "tests": [
+          "No focused end-to-end job tenant proof executed in this audit. Existing FLO rule tests are not a complete transport authorization proof."
+        ],
+        "followup": "Runtime evidence needed for queue-only access, signing key/dev mode and database grants; not reason to label scoped code unsafe. Preserve tenant independent of model data.",
+        "finalStatus": "static-reviewed",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/email/preferences.ts:112:email_preferences:DELETE",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/email/preferences.ts:112:email_preferences:DELETE",
+        "file": "lib/email/preferences.ts",
+        "baselineLine": 112,
+        "table": "email_preferences",
+        "operation": "DELETE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "fixed-error-boundary + reviewed-static",
+        "source": "Ustawienia: zweryfikowany user z getVerifiedUserContext; /api/email/unsubscribe: userId z HMAC capability; webhook: zweryfikowany Svix + Auth email lookup; wysyłka: zaufany caller.",
+        "guard": "Ustawienia po MFA i runtime boolean/category validation; signed opt-out nie jest ogólnym dostępem do konta. Zapisy user_id+category, odczyty user_id+category. Awarie odczytu rzucają błąd zamiast pomijać opt-out; zapis potwierdzany dopiero bez DB error.",
+        "evidence": [
+          "lib/email/preferences.ts",
+          "app/(dashboard)/settings/notifications/email-actions.ts",
+          "app/api/email/unsubscribe/route.ts",
+          "app/api/email/resend-webhook/route.ts",
+          "tests/unit/email-preferences-failures.test.ts",
+          "tests/unit/resend-opt-out-retry.test.ts",
+          "tests/unit/unsubscribe-access.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Bez prawdziwej poczty. Webhook rozwiązuje konto tylko w pierwszej stronie 200 użytkowników; trwały blok email_bounces działa niezależnie. Polityka zgód/transactional wymaga właściciela, nie jest ustalana tym patchem."
+      }
+    },
+    {
+      "key": "lib/email/preferences.ts:46:email_preferences:SELECT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/email/preferences.ts:46:email_preferences:SELECT",
+        "file": "lib/email/preferences.ts",
+        "baselineLine": 46,
+        "table": "email_preferences",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "fixed-error-boundary + reviewed-static",
+        "source": "Ustawienia: zweryfikowany user z getVerifiedUserContext; /api/email/unsubscribe: userId z HMAC capability; webhook: zweryfikowany Svix + Auth email lookup; wysyłka: zaufany caller.",
+        "guard": "Ustawienia po MFA i runtime boolean/category validation; signed opt-out nie jest ogólnym dostępem do konta. Zapisy user_id+category, odczyty user_id+category. Awarie odczytu rzucają błąd zamiast pomijać opt-out; zapis potwierdzany dopiero bez DB error.",
+        "evidence": [
+          "lib/email/preferences.ts",
+          "app/(dashboard)/settings/notifications/email-actions.ts",
+          "app/api/email/unsubscribe/route.ts",
+          "app/api/email/resend-webhook/route.ts",
+          "tests/unit/email-preferences-failures.test.ts",
+          "tests/unit/resend-opt-out-retry.test.ts",
+          "tests/unit/unsubscribe-access.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Bez prawdziwej poczty. Webhook rozwiązuje konto tylko w pierwszej stronie 200 użytkowników; trwały blok email_bounces działa niezależnie. Polityka zgód/transactional wymaga właściciela, nie jest ustalana tym patchem."
+      }
+    },
+    {
+      "key": "lib/email/preferences.ts:91:email_preferences:UPSERT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/email/preferences.ts:91:email_preferences:UPSERT",
+        "file": "lib/email/preferences.ts",
+        "baselineLine": 91,
+        "table": "email_preferences",
+        "operation": "UPSERT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "fixed-error-boundary + reviewed-static",
+        "source": "Ustawienia: zweryfikowany user z getVerifiedUserContext; /api/email/unsubscribe: userId z HMAC capability; webhook: zweryfikowany Svix + Auth email lookup; wysyłka: zaufany caller.",
+        "guard": "Ustawienia po MFA i runtime boolean/category validation; signed opt-out nie jest ogólnym dostępem do konta. Zapisy user_id+category, odczyty user_id+category. Awarie odczytu rzucają błąd zamiast pomijać opt-out; zapis potwierdzany dopiero bez DB error.",
+        "evidence": [
+          "lib/email/preferences.ts",
+          "app/(dashboard)/settings/notifications/email-actions.ts",
+          "app/api/email/unsubscribe/route.ts",
+          "app/api/email/resend-webhook/route.ts",
+          "tests/unit/email-preferences-failures.test.ts",
+          "tests/unit/resend-opt-out-retry.test.ts",
+          "tests/unit/unsubscribe-access.test.ts"
+        ],
+        "remaining": "Brak testu na wdrożonej bazie/Auth. Klasyfikacja dotyczy obecnego łańcucha wywołań. Bez prawdziwej poczty. Webhook rozwiązuje konto tylko w pierwszej stronie 200 użytkowników; trwały blok email_bounces działa niezależnie. Polityka zgód/transactional wymaga właściciela, nie jest ustalana tym patchem."
+      }
+    },
+    {
+      "key": "lib/exports/data-fetcher.ts:151:invoices:SELECT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/exports/data-fetcher.ts",
+        "baselineLine": 151,
+        "table": "invoices",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding: PARENT-01 latent cross-tenant read",
+        "source": "parent_invoice_id pochodzi z tenant-scoped invoice, ale może wskazywać cudzą fakturę.",
+        "ingressGuard": "fetchInvoicesForExport ma dwóch wywołujących: portal exports/generate route wymaga hasha ważnego, nieodwołanego tokenu accountant_access z download i porównuje body.tenantId z accessRow.tenant_id (:98). exports-generate runner odczytuje exportJobId z serwerowego eventu, job z DB, a tenantId bierze z job.tenant_id (:258). Producers: startExportAction wymaga requireUserAndTenant i tworzy własny job (:110-130); Co-Pilot pobiera ustawienia tenantów z DB (cron), manual wymaga owner/admin (exports.ts:358), tworzy joby i publikuje ich otrzymane id. Pg-boss package-c i Inngest współdzielą runner; prywatność kolejek/signature jest warunkiem operacyjnym.",
+        "reason": "PARENT-01: SELECT service_role tylko po ids, bez tenant_id, zwraca internal_number/ksef_number obcego parenta. 00012:60 FK invoices(id), RLS 00002:104-112 kontroluje jedynie tenant_id bieżącego rekordu. Relacja nie jest dowodem własności.",
+        "existingTestEvidence": "Brak istniejącego testu. Dziś source-executed mock reprodukcja fetchParentInvoiceNumbers zwróciła PRIVATE-B-001 dla parenta B z korekty A.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji. Osiągalność pełnego eksportu obecnie ogranicza osobny błąd direction; trzeba zabezpieczyć parent przed jego naprawą.",
+        "remediation": {
+          "status": "code-fixed; runtime-gap remains",
+          "test": "tests/unit/tenant-export-reminder-offline-boundaries.test.ts",
+          "detail": "Parent lookup constrained by tenant and rejects missing/foreign parent."
+        }
+      }
+    },
+    {
+      "key": "lib/exports/data-fetcher.ts:95:invoices:SELECT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/exports/data-fetcher.ts",
+        "baselineLine": 95,
+        "table": "invoices",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "params.tenantId → z autoryzowanego tokenu księgowego lub job.tenant_id.",
+        "ingressGuard": "fetchInvoicesForExport ma dwóch wywołujących: portal exports/generate route wymaga hasha ważnego, nieodwołanego tokenu accountant_access z download i porównuje body.tenantId z accessRow.tenant_id (:98). exports-generate runner odczytuje exportJobId z serwerowego eventu, job z DB, a tenantId bierze z job.tenant_id (:258). Producers: startExportAction wymaga requireUserAndTenant i tworzy własny job (:110-130); Co-Pilot pobiera ustawienia tenantów z DB (cron), manual wymaga owner/admin (exports.ts:358), tworzy joby i publikuje ich otrzymane id. Pg-boss package-c i Inngest współdzielą runner; prywatność kolejek/signature jest warunkiem operacyjnym.",
+        "reason": "Sam SELECT invoice ograniczony tenantem jest poprawny po prześledzeniu wszystkich producerów. Odrębny bug funkcjonalny: direction issued/received nie odpowiada schematowi outgoing/incoming (00001:54, 00044:18); aktualny eksport według schematu repo jest pusty.",
+        "existingTestEvidence": "security-api-error-boundaries.test.ts:140 mockuje cały fetchInvoicesForExport, bada tylko bezpieczny błąd po ważnej autoryzacji; nie jest dowodem izolacji danych.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji.",
+        "remediation": {
+          "status": "code-fixed; runtime-gap remains",
+          "test": "tests/unit/tenant-export-reminder-offline-boundaries.test.ts",
+          "detail": "Direction values mapped to outgoing/incoming; own invoice isolation regression passed."
+        }
+      }
+    },
+    {
+      "key": "lib/feature-flags/index.ts:77:tenant_feature_flags:SELECT",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/feature-flags/index.ts:77:tenant_feature_flags:SELECT",
+        "status": "static-reviewed",
+        "reachability": "No production caller found for getTenantFlags/getTenantFlag/isModuleEnabled outside own module.",
+        "identity": "Helper takes tenantId argument, SELECT eq tenant_id, cache key includes tenant. No user ingress currently.",
+        "targets": "Only 3 boolean feature flags. Comment incorrectly claims RLS would protect admin-client access; caller must establish membership.",
+        "evidence": [
+          "lib/feature-flags/index.ts:61",
+          "lib/feature-flags/index.ts:69",
+          "lib/feature-flags/index.ts:113"
+        ],
+        "tests": [
+          "No new execution test. rg over app/lib confirms dormant helper."
+        ],
+        "followup": "Document as dormant helper with caller authorization precondition, not universal safe endpoint. Future ingress must use verified tenant; service_role bypasses RLS.",
+        "finalStatus": "static-reviewed",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/flo/fingerprint.ts:198:invoices:SELECT",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/flo/fingerprint.ts:198:invoices:SELECT",
+        "status": "static-reviewed",
+        "reachability": "computeFingerprint called by reminder cron and assertFresh in execution. Baseline caller lib/flo/decisions.ts is a scanner name-collision: that file has a different private readState.",
+        "identity": "Cron invoice id and tenant originate in same DB candidate; user execute reads an owned proposal before this helper; target id is not accepted from FloApproveInput.",
+        "targets": "Actual helper filters only id and has no tenant argument. It relies on the producer chain; stale-change messages may include invoice context if a future caller constructs foreign payload.",
+        "evidence": [
+          "lib/flo/fingerprint.ts:186",
+          "lib/flo/fingerprint.ts:203",
+          "lib/flo/fingerprint.ts:253",
+          "lib/flo/fingerprint.ts:273",
+          "lib/inngest/jobs/reminder-scheduler.ts:66",
+          "app/actions/flo.ts:116"
+        ],
+        "tests": [
+          "tests/unit/flo-fingerprint.test.ts tests pure hashes/messages only; no query or foreign-tenant tests."
+        ],
+        "followup": "Strengthen signature to require trusted tenantId and eq tenant_id in both read branches, propagate from proposal/scheduler. No current client-controllable cross-tenant path proven.",
+        "finalStatus": "hardened-locally-runtime-pending",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/flo/fingerprint.ts:230:expenses:SELECT",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/flo/fingerprint.ts:230:expenses:SELECT",
+        "status": "static-reviewed",
+        "reachability": "assertFresh for expense.review from guarded user action; expense payload generated by OCR job after own-tenant expense insertion.",
+        "identity": "upload verified session/membership → job tenant+id checked → new expense inserted under same tenant → proposal stores returned expense.id.",
+        "targets": "Id originates in DB INSERT result, not OCR text/model output. Helper lacks its own tenant filter and should be strengthened.",
+        "evidence": [
+          "app/actions/expenses.ts:80",
+          "lib/inngest/jobs/process-ocr.ts:155",
+          "lib/inngest/jobs/process-ocr.ts:217",
+          "lib/flo/functions/expense-review.ts:231",
+          "lib/flo/fingerprint.ts:233"
+        ],
+        "tests": [
+          "Existing fingerprint tests omit SQL scoping. OCR/proposal builder tests don't replace runtime RLS checks."
+        ],
+        "followup": "Require trusted tenantId at helper boundary; otherwise a future malformed server proposal leaks cross-tenant read context.",
+        "finalStatus": "hardened-locally-runtime-pending",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/flo/functions/expense-review.ts:360:expenses:UPDATE",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/flo/functions/expense-review.ts:360:expenses:UPDATE",
+        "status": "static-reviewed",
+        "reachability": "Registered expense.review handler; valid currently produced OCR card after owned proposal approval.",
+        "identity": "Proposal tenant established in action; target expenseId from create-expense step of same tenant OCR job; no ctx.input used for target.",
+        "targets": "Update is by id only, but present call chain binds id. Baseline function='median' is scanner misattribution: actual code is registered handler.",
+        "evidence": [
+          "lib/flo/functions/expense-review.ts:351",
+          "lib/flo/functions/expense-review.ts:362",
+          "lib/inngest/jobs/process-ocr.ts:155",
+          "app/actions/flo.ts:116"
+        ],
+        "tests": [
+          "tests/unit/flo-redact-expense.test.ts pure assessment/builders; no adversarial ownership query test."
+        ],
+        "followup": "Add tenant filter directly, and require affected row to prevent false successful audit on missing/unowned target. Global kill must guard execution.",
+        "finalStatus": "hardened-locally-runtime-pending",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/flo/functions/expense-review.ts:396:ocr_jobs:SELECT",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/flo/functions/expense-review.ts:396:ocr_jobs:SELECT",
+        "status": "static-reviewed",
+        "reachability": "No current production caller; documented intended watchdog/cron is not actually wired.",
+        "identity": "Global maintenance helper takes Date, not client tenant; returns pairs id and tenant_id from each same DB row.",
+        "targets": "Cross-tenant scan is intentional for stuck jobs if called only by cron; per-job proposal creation must preserve returned row pair.",
+        "evidence": [
+          "lib/flo/functions/expense-review.ts:388",
+          "lib/flo/tick.ts:51"
+        ],
+        "tests": [
+          "No database execution or caller proof; rg shows no call outside definition."
+        ],
+        "followup": "Do not mark as working watchdog. Before wiring, require queue/cron-only entry and use per-row tenant; no public route.",
+        "finalStatus": "static-reviewed",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/flo/functions/expense-rules.ts:229:categorization_rules:DELETE",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/flo/functions/expense-rules.ts:229:categorization_rules:DELETE",
+        "status": "static-reviewed",
+        "reachability": "No current production caller.",
+        "identity": "tenantId argument to helper; DELETE eq tenant_id, but no authentication inside library.",
+        "targets": "No current public ingress; a future tax profile settings action must derive tenant from verified session, not incoming preferences.",
+        "evidence": [
+          "lib/flo/functions/expense-rules.ts:225",
+          "app/actions/flo.ts:307"
+        ],
+        "tests": [
+          "Existing rule tests review invalidation policy; no live DB validation or current caller."
+        ],
+        "followup": "Document dormant helper and preserve typed caller precondition. Do not claim profile save currently invalidates old rules.",
+        "finalStatus": "static-reviewed",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/flo/functions/expense-rules.ts:266:categorization_rules:INSERT",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/flo/functions/expense-rules.ts:266:categorization_rules:INSERT",
+        "status": "static-reviewed",
+        "reachability": "Registered expense.rule handler; builder presently has no production caller.",
+        "identity": "Server action approveProposal → verified MFA/session user + active membership → flo_proposals SELECT id AND tenant_id → executeProposal; INSERT tenant_id from stored proposal, never input.",
+        "targets": "Rule values from service-created proposal.payload. Client input cannot replace tenant or rule fields. App table grants revoke authenticated mutation.",
+        "evidence": [
+          "app/actions/flo.ts:104",
+          "lib/supabase/auth-context.ts:54",
+          "lib/flo/execute.ts:169",
+          "supabase/migrations/00061_flo.sql:256"
+        ],
+        "tests": [
+          "tests/unit/flo-actions.test.ts (source guards only)",
+          "tests/unit/flo-expense-inbox-rules.test.ts (builders and pure rules)",
+          "TEMP flo-audit.test.ts third test: execution gate bypass"
+        ],
+        "followup": "FLO-02 global kill must gate execution, not only creation. Runtime payload type validation should be strict; rule executor is currently registered even though builder unused.",
+        "finalStatus": "static-reviewed",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/flo/functions/payment-chase-handler.ts:113:payment_reminders:INSERT",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/flo/functions/payment-chase-handler.ts:113:payment_reminders:INSERT",
+        "status": "static-reviewed",
+        "reachability": "Reminder scheduler cron creates payment.chase; user approves via guarded server action.",
+        "identity": "tenant_id from proposal loaded through id+active organization in approveProposal; invoiceId from payload created by scheduler using database candidate id+tenant_id.",
+        "targets": "findInvoicesRequiringReminders reads candidates across tenants intentionally; each maps its own row tenant_id and id; computeFingerprint rereads same id. No client selectedIds or fields used.",
+        "evidence": [
+          "lib/reminders/scheduler.ts:284",
+          "lib/inngest/jobs/reminder-scheduler.ts:42",
+          "app/actions/flo.ts:116",
+          "lib/flo/functions/payment-chase-handler.ts:116"
+        ],
+        "tests": [
+          "tests/unit/flo-chase-interest.test.ts pure safety/builders",
+          "tests/unit/flo-actions.test.ts source guard"
+        ],
+        "followup": "Add tenant filter and current invoice ownership check inside handler. No live job run; payments.paid_at read mismatches repo payment_date schema and blocks normal chase. Global kill gap FLO-02.",
+        "finalStatus": "hardened-locally-runtime-pending",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/flo/functions/payment-chase-handler.ts:81:payments:SELECT",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/flo/functions/payment-chase-handler.ts:81:payments:SELECT",
+        "status": "static-reviewed",
+        "reachability": "Same current reminder cron → stored proposal → approve → execute path as reminder INSERT.",
+        "identity": "invoiceId from stored service-created proposal, not user fields; source candidate id+tenant DB row.",
+        "targets": "SELECT only invoice_id; target ownership assumed from creator chain. Read paid_at is incompatible with payments schema payment_date.",
+        "evidence": [
+          "lib/flo/functions/payment-chase-handler.ts:65",
+          "lib/flo/functions/payment-chase-handler.ts:82",
+          "lib/inngest/jobs/reminder-scheduler.ts:66",
+          "supabase/migrations/00014_payments_and_reminders.sql:52"
+        ],
+        "tests": [
+          "No mocked handler-query tests in existing chase test (pure safety)."
+        ],
+        "followup": "Add tenant filter and authoritative invoice ownership check; schema repair requires careful regression and should not mask the latent selected-ID vulnerability elsewhere.",
+        "finalStatus": "hardened-locally-runtime-pending",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/flo/functions/payment-confirm.ts:261:payments:INSERT",
+      "reviewer": "flo",
+      "assessment": {
+        "key": "lib/flo/functions/payment-confirm.ts:261:payments:INSERT",
+        "status": "confirmed-finding",
+        "reachability": "Latent handler is registered; current builder has no production caller and currently generates a fingerprint rejected by assertFresh.",
+        "identity": "Proposal tenant comes from guarded action, but invoice ID may be overwritten by input.selectedIds[0].",
+        "targets": "Unknown selection produces missing entry/outstanding=0. value='0.01' passes amount <= outstanding+0.01, and INSERT combines own proposal tenant with arbitrary selected invoice ID.",
+        "evidence": [
+          "lib/flo/functions/payment-confirm.ts:193",
+          "lib/flo/functions/payment-confirm.ts:235",
+          "lib/flo/functions/payment-confirm.ts:251",
+          "lib/flo/functions/payment-confirm.ts:261"
+        ],
+        "tests": [
+          "TEMP flo-audit.test.ts test1 proves wrong-tenant INSERT attempted",
+          "TEMP flo-audit.test.ts test2 proves current builder freshness failure; all mocked, no DB"
+        ],
+        "followup": "FLO-01 reject unknown IDs before amount validation, validate finite positive outstanding, reload target invoice by id+tenant and current balance before write. Do not just repair incompatible INSERT columns and enable flow. No claim of a working production cross-tenant exploit.",
+        "finalStatus": "fixed-locally-runtime-pending",
+        "finalTestEvidence": [
+          "tests/unit/flo-tenant-boundaries.test.ts",
+          "tests/unit/flo-global-flag-execution.test.ts"
+        ]
+      }
+    },
+    {
+      "key": "lib/gdpr/data-collector.ts:78:audit_logs:SELECT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/gdpr/data-collector.ts:78:audit_logs:SELECT",
+        "file": "lib/gdpr/data-collector.ts",
+        "baselineLine": 78,
+        "table": "audit_logs",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "fixed-scope-and-errors",
+        "source": "GET /api/gdpr/export → getVerifiedUserContext → collectUserData(context.user.id). Brak ID użytkownika w parametrach żądania.",
+        "guard": "MFA/auth sprawdzane w route, account ID dodatkowo zgodny z wynikiem Auth; wszystkie membership/audit odczyty po user_id; błędy blokują plik. Nieistniejąca kolumna autora invoice usunięta, nie zastąpiona nieograniczonym eksportem firmy.",
+        "evidence": [
+          "lib/gdpr/data-collector.ts",
+          "app/api/gdpr/export/route.ts",
+          "tests/unit/gdpr-export-boundary.test.ts"
+        ],
+        "remaining": "Format JSON v2: ograniczony snapshot profilu/członkostw/audytu, exact count i truncated. Faktury przez osobny uprawniony eksport firmy. Nie jest dowodem kompletnej obsługi wniosku RODO; brak stabilnego snapshotu podczas równoległych zmian i zdalnego testu."
+      }
+    },
+    {
+      "key": "lib/gdpr/data-collector.ts:84:invoices:SELECT",
+      "reviewer": "root",
+      "assessment": {
+        "key": "lib/gdpr/data-collector.ts:84:invoices:SELECT",
+        "file": "lib/gdpr/data-collector.ts",
+        "baselineLine": 84,
+        "table": "invoices",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "removed-invalid-query",
+        "source": "GET /api/gdpr/export → getVerifiedUserContext → collectUserData(context.user.id). Brak ID użytkownika w parametrach żądania.",
+        "guard": "MFA/auth sprawdzane w route, account ID dodatkowo zgodny z wynikiem Auth; wszystkie membership/audit odczyty po user_id; błędy blokują plik. Nieistniejąca kolumna autora invoice usunięta, nie zastąpiona nieograniczonym eksportem firmy.",
+        "evidence": [
+          "lib/gdpr/data-collector.ts",
+          "app/api/gdpr/export/route.ts",
+          "tests/unit/gdpr-export-boundary.test.ts"
+        ],
+        "remaining": "Format JSON v2: ograniczony snapshot profilu/członkostw/audytu, exact count i truncated. Faktury przez osobny uprawniony eksport firmy. Nie jest dowodem kompletnej obsługi wniosku RODO; brak stabilnego snapshotu podczas równoległych zmian i zdalnego testu."
+      }
+    },
+    {
+      "key": "lib/import/has-completed-ksef-magic-import.ts:12:import_jobs:SELECT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/import/has-completed-ksef-magic-import.ts",
+        "baselineLine": 12,
+        "table": "import_jobs",
+        "operation": "SELECT",
+        "baselineRisk": "średnie",
+        "status": "static-reviewed + runtime-gap",
+        "source": "Argument tenantId (brak wywołujących w śledzonym repo).",
+        "ingressGuard": "Nie ma wejścia HTTP ani importu tej funkcji; export cache jest nieużywany. Nie wolno przedstawiać jako zweryfikowanej autoryzacji przyszłego callera.",
+        "reason": "SELECT ograniczony tenantId, ale funkcja nie ma własnego auth guard. Aktualnie dormant, bez wykazanego ingressu. Przed podpięciem wymaga zweryfikowanego tenant context.",
+        "existingTestEvidence": "Nie znaleziono istniejącego testu wykonującego ten helper i sprawdzającego tenant A/B. tests/unit/jobs-registry.test.ts i jobs-foundation.test.ts obejmują transport/rejestr, nie własność danych.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji."
+      }
+    },
+    {
+      "key": "lib/import/import-engine.ts:146:contractors:SELECT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/import/import-engine.ts",
+        "baselineLine": 146,
+        "table": "contractors",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "tenantId z eventu; nips z parsowanego pliku/XML użytkownika.",
+        "ingressGuard": "app/onboarding/magic-import/actions.ts:40-52 i 174-221: requireUserAndActiveOrg() sprawdza zweryfikowaną sesję/MFA i aktywne membership, a przekazany tenantId musi być równy activeOrg. Job.id pochodzi z INSERT własnego import_jobs; filePath tworzy uploadImportFile(tenantId,job.id), a downloadFromR2 dodatkowo wymusza tenant prefix. Eventy importKsefHistoryRequested/importFileUploaded są emitowane tylko w tym pliku. Runnery bulk-import.ts i magic-import-ksef.ts otrzymują tenantId ze zdarzenia; same nie sprawdzają relacji importJobId↔tenantId. Inngest i pg-boss uruchamiają te same runnery (package-c.ts).",
+        "reason": "Wynik SELECT ograniczony tenant_id; sam NIP nie nadaje dostępu do innej organizacji.",
+        "existingTestEvidence": "Brak testów silnika importu dla A/B. storage-tenant-boundaries.test.ts sprawdza realny helper ścieżek R2/MinIO, ale nie tenantId eventu, job ownership ani zapytań tego silnika.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji."
+      }
+    },
+    {
+      "key": "lib/import/import-engine.ts:162:contractors:INSERT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/import/import-engine.ts",
+        "baselineLine": 162,
+        "table": "contractors",
+        "operation": "INSERT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "tenantId z eventu; własne dane kontrahenta z parsowanego inputu.",
+        "ingressGuard": "app/onboarding/magic-import/actions.ts:40-52 i 174-221: requireUserAndActiveOrg() sprawdza zweryfikowaną sesję/MFA i aktywne membership, a przekazany tenantId musi być równy activeOrg. Job.id pochodzi z INSERT własnego import_jobs; filePath tworzy uploadImportFile(tenantId,job.id), a downloadFromR2 dodatkowo wymusza tenant prefix. Eventy importKsefHistoryRequested/importFileUploaded są emitowane tylko w tym pliku. Runnery bulk-import.ts i magic-import-ksef.ts otrzymują tenantId ze zdarzenia; same nie sprawdzają relacji importJobId↔tenantId. Inngest i pg-boss uruchamiają te same runnery (package-c.ts).",
+        "reason": "INSERT jawnie przypisuje tenant_id bez rozpakowywania dowolnego inputu; nie przyjmuje id kontrahenta.",
+        "existingTestEvidence": "Brak testów silnika importu dla A/B. storage-tenant-boundaries.test.ts sprawdza realny helper ścieżek R2/MinIO, ale nie tenantId eventu, job ownership ani zapytań tego silnika.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji."
+      }
+    },
+    {
+      "key": "lib/import/import-engine.ts:184:contractors:UPDATE",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/import/import-engine.ts",
+        "baselineLine": 184,
+        "table": "contractors",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "row.id z poprzedniego SELECT contractors.eq(tenant_id, tenantId).",
+        "ingressGuard": "app/onboarding/magic-import/actions.ts:40-52 i 174-221: requireUserAndActiveOrg() sprawdza zweryfikowaną sesję/MFA i aktywne membership, a przekazany tenantId musi być równy activeOrg. Job.id pochodzi z INSERT własnego import_jobs; filePath tworzy uploadImportFile(tenantId,job.id), a downloadFromR2 dodatkowo wymusza tenant prefix. Eventy importKsefHistoryRequested/importFileUploaded są emitowane tylko w tym pliku. Runnery bulk-import.ts i magic-import-ksef.ts otrzymują tenantId ze zdarzenia; same nie sprawdzają relacji importJobId↔tenantId. Inngest i pg-boss uruchamiają te same runnery (package-c.ts).",
+        "reason": "UPDATE tylko id korzysta z ID już ograniczonego tenantem. Dodatkowy filtr tenant_id zalecany jako obrona, ale brak wykazanego obcego ID w tym call graph.",
+        "existingTestEvidence": "Brak testów silnika importu dla A/B. storage-tenant-boundaries.test.ts sprawdza realny helper ścieżek R2/MinIO, ale nie tenantId eventu, job ownership ani zapytań tego silnika.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji."
+      }
+    },
+    {
+      "key": "lib/import/import-engine.ts:252:products:SELECT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/import/import-engine.ts",
+        "baselineLine": 252,
+        "table": "products",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "tenantId z eventu.",
+        "ingressGuard": "app/onboarding/magic-import/actions.ts:40-52 i 174-221: requireUserAndActiveOrg() sprawdza zweryfikowaną sesję/MFA i aktywne membership, a przekazany tenantId musi być równy activeOrg. Job.id pochodzi z INSERT własnego import_jobs; filePath tworzy uploadImportFile(tenantId,job.id), a downloadFromR2 dodatkowo wymusza tenant prefix. Eventy importKsefHistoryRequested/importFileUploaded są emitowane tylko w tym pliku. Runnery bulk-import.ts i magic-import-ksef.ts otrzymują tenantId ze zdarzenia; same nie sprawdzają relacji importJobId↔tenantId. Inngest i pg-boss uruchamiają te same runnery (package-c.ts).",
+        "reason": "SELECT produktów ograniczony tenant_id, a nazwa/unit służy do dopasowania wyłącznie w tym zbiorze.",
+        "existingTestEvidence": "Brak testów silnika importu dla A/B. storage-tenant-boundaries.test.ts sprawdza realny helper ścieżek R2/MinIO, ale nie tenantId eventu, job ownership ani zapytań tego silnika.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji."
+      }
+    },
+    {
+      "key": "lib/import/import-engine.ts:286:products:UPDATE",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/import/import-engine.ts",
+        "baselineLine": 286,
+        "table": "products",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "hit.id z mapy budowanej wyłącznie z tenant-scoped SELECT products.",
+        "ingressGuard": "app/onboarding/magic-import/actions.ts:40-52 i 174-221: requireUserAndActiveOrg() sprawdza zweryfikowaną sesję/MFA i aktywne membership, a przekazany tenantId musi być równy activeOrg. Job.id pochodzi z INSERT własnego import_jobs; filePath tworzy uploadImportFile(tenantId,job.id), a downloadFromR2 dodatkowo wymusza tenant prefix. Eventy importKsefHistoryRequested/importFileUploaded są emitowane tylko w tym pliku. Runnery bulk-import.ts i magic-import-ksef.ts otrzymują tenantId ze zdarzenia; same nie sprawdzają relacji importJobId↔tenantId. Inngest i pg-boss uruchamiają te same runnery (package-c.ts).",
+        "reason": "UPDATE tylko id korzysta z ID już ograniczonego tenantem. Nie przyjmuje product_id z CSV/XML.",
+        "existingTestEvidence": "Brak testów silnika importu dla A/B. storage-tenant-boundaries.test.ts sprawdza realny helper ścieżek R2/MinIO, ale nie tenantId eventu, job ownership ani zapytań tego silnika.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji."
+      }
+    },
+    {
+      "key": "lib/import/import-engine.ts:311:products:INSERT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/import/import-engine.ts",
+        "baselineLine": 311,
+        "table": "products",
+        "operation": "INSERT",
+        "baselineRisk": "średnie",
+        "status": "static-reviewed + runtime-gap",
+        "source": "toInsert budowane z tenantId param i wybranych scalar pól parsowanych linii.",
+        "ingressGuard": "app/onboarding/magic-import/actions.ts:40-52 i 174-221: requireUserAndActiveOrg() sprawdza zweryfikowaną sesję/MFA i aktywne membership, a przekazany tenantId musi być równy activeOrg. Job.id pochodzi z INSERT własnego import_jobs; filePath tworzy uploadImportFile(tenantId,job.id), a downloadFromR2 dodatkowo wymusza tenant prefix. Eventy importKsefHistoryRequested/importFileUploaded są emitowane tylko w tym pliku. Runnery bulk-import.ts i magic-import-ksef.ts otrzymują tenantId ze zdarzenia; same nie sprawdzają relacji importJobId↔tenantId. Inngest i pg-boss uruchamiają te same runnery (package-c.ts).",
+        "reason": "INSERT wszystkich produktów z jawnie nadanym tenant_id; identyfikatory DB generowane przez bazę.",
+        "existingTestEvidence": "Brak testów silnika importu dla A/B. storage-tenant-boundaries.test.ts sprawdza realny helper ścieżek R2/MinIO, ale nie tenantId eventu, job ownership ani zapytań tego silnika.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji."
+      }
+    },
+    {
+      "key": "lib/import/import-engine.ts:348:invoices:SELECT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/import/import-engine.ts",
+        "baselineLine": 348,
+        "table": "invoices",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "tenantId z eventu; internal_number z parsowanych faktur.",
+        "ingressGuard": "app/onboarding/magic-import/actions.ts:40-52 i 174-221: requireUserAndActiveOrg() sprawdza zweryfikowaną sesję/MFA i aktywne membership, a przekazany tenantId musi być równy activeOrg. Job.id pochodzi z INSERT własnego import_jobs; filePath tworzy uploadImportFile(tenantId,job.id), a downloadFromR2 dodatkowo wymusza tenant prefix. Eventy importKsefHistoryRequested/importFileUploaded są emitowane tylko w tym pliku. Runnery bulk-import.ts i magic-import-ksef.ts otrzymują tenantId ze zdarzenia; same nie sprawdzają relacji importJobId↔tenantId. Inngest i pg-boss uruchamiają te same runnery (package-c.ts).",
+        "reason": "Wyszukiwanie duplikatów tylko we własnej organizacji; brak globalnego wyszukiwania po numerze.",
+        "existingTestEvidence": "Brak testów silnika importu dla A/B. storage-tenant-boundaries.test.ts sprawdza realny helper ścieżek R2/MinIO, ale nie tenantId eventu, job ownership ani zapytań tego silnika.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji."
+      }
+    },
+    {
+      "key": "lib/import/import-engine.ts:362:invoices:SELECT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/import/import-engine.ts",
+        "baselineLine": 362,
+        "table": "invoices",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "tenantId z eventu; ksef_number z parsowanych faktur.",
+        "ingressGuard": "app/onboarding/magic-import/actions.ts:40-52 i 174-221: requireUserAndActiveOrg() sprawdza zweryfikowaną sesję/MFA i aktywne membership, a przekazany tenantId musi być równy activeOrg. Job.id pochodzi z INSERT własnego import_jobs; filePath tworzy uploadImportFile(tenantId,job.id), a downloadFromR2 dodatkowo wymusza tenant prefix. Eventy importKsefHistoryRequested/importFileUploaded są emitowane tylko w tym pliku. Runnery bulk-import.ts i magic-import-ksef.ts otrzymują tenantId ze zdarzenia; same nie sprawdzają relacji importJobId↔tenantId. Inngest i pg-boss uruchamiają te same runnery (package-c.ts).",
+        "reason": "Wyszukiwanie numeru KSeF ograniczone tenantem; nie zwraca rekordów obcych firm.",
+        "existingTestEvidence": "Brak testów silnika importu dla A/B. storage-tenant-boundaries.test.ts sprawdza realny helper ścieżek R2/MinIO, ale nie tenantId eventu, job ownership ani zapytań tego silnika.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji."
+      }
+    },
+    {
+      "key": "lib/import/import-engine.ts:427:invoices:INSERT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/import/import-engine.ts",
+        "baselineLine": 427,
+        "table": "invoices",
+        "operation": "INSERT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "tenantId z eventu, pola faktury wybierane jawnie, invoice id z INSERT RETURNING.",
+        "ingressGuard": "app/onboarding/magic-import/actions.ts:40-52 i 174-221: requireUserAndActiveOrg() sprawdza zweryfikowaną sesję/MFA i aktywne membership, a przekazany tenantId musi być równy activeOrg. Job.id pochodzi z INSERT własnego import_jobs; filePath tworzy uploadImportFile(tenantId,job.id), a downloadFromR2 dodatkowo wymusza tenant prefix. Eventy importKsefHistoryRequested/importFileUploaded są emitowane tylko w tym pliku. Runnery bulk-import.ts i magic-import-ksef.ts otrzymują tenantId ze zdarzenia; same nie sprawdzają relacji importJobId↔tenantId. Inngest i pg-boss uruchamiają te same runnery (package-c.ts).",
+        "reason": "INSERT nie przenosi parent_invoice_id/contractor_id/product_id z inputu. Nieregularny import jest zapisywany invoice_kind regular + warning. Linie invoice_line_items mają invoice_id z nowo wstawionego rekordu; cleanup DELETE po id używa tego samego zwróconego ID. Brak podatności poprzez relacje w tym silniku.",
+        "existingTestEvidence": "Brak testów silnika importu dla A/B. storage-tenant-boundaries.test.ts sprawdza realny helper ścieżek R2/MinIO, ale nie tenantId eventu, job ownership ani zapytań tego silnika.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/archive-old-invoices.ts:29:invoices:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/archive-old-invoices.ts",
+        "baselineLine": 29,
+        "table": "invoices",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global scheduled archive scan selects id+tenant+path from invoice rows. UPDATE ids derive only from scan, not payload.",
+        "entryGuard": "Inngest cron and package-a ignores payload. XML document matched by storage_path+tenant_id+invoice_id; storage reads enforce tenant path.",
+        "tests": "jobs-registry only cron registration; storage-tenant-boundaries tests validate namespace, not actual Glacier.",
+        "notes": "Cross-tenant global cron scope is intentional. Actual retention law, Glacier policies, permissions and archive restore not audited here."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/archive-old-invoices.ts:89:invoices:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/archive-old-invoices.ts",
+        "baselineLine": 89,
+        "table": "invoices",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global scheduled archive scan selects id+tenant+path from invoice rows. UPDATE ids derive only from scan, not payload.",
+        "entryGuard": "Inngest cron and package-a ignores payload. XML document matched by storage_path+tenant_id+invoice_id; storage reads enforce tenant path.",
+        "tests": "jobs-registry only cron registration; storage-tenant-boundaries tests validate namespace, not actual Glacier.",
+        "notes": "Cross-tenant global cron scope is intentional. Actual retention law, Glacier policies, permissions and archive restore not audited here."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/bulk-import.ts:30:import_jobs:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/bulk-import.ts",
+        "baselineLine": 30,
+        "table": "import_jobs",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "app/onboarding/magic-import/actions.ts:182 requireUserAndActiveOrg and activeOrg===form tenant; INSERT returns job.id, file path produced by uploadImportFile and saved in row. Only producer found.",
+        "entryGuard": "Baseline main/exhausted trust jobId independent of tenant and UPDATE by id. Added fresh job id+tenant lookup, source/file binding in main, all UPDATE tenant scoped including exhausted.",
+        "tests": "jobs-tenant-boundaries.test.ts foreign job and source/path mismatch reject before downloads/writes; scoped success/failure retained.",
+        "notes": "JOB-F04 fixed-local defense against mismatched stored events, no direct public malformed-pair producer proven. Replaced raw failure string in progress_message with generic message. Server ACL unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/cancel-reminders-on-payment.ts:18:invoices:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/cancel-reminders-on-payment.ts",
+        "baselineLine": 18,
+        "table": "invoices",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "runtime/server-unverified",
+        "sourceIdentity": "Event invoice/payment.received declares invoiceId only. Exhaustive rg found no producer in app/lib (declaration, registry and listener only).",
+        "entryGuard": "Dormant event consumer loads invoice by id, derives push tenant from that row, cancels payment_reminders by invoice_id+pending without tenant.",
+        "tests": "jobs-registry and jobs-foundation verify route registration only; no consumer isolation tests.",
+        "notes": "No active producer found; cannot close as end-to-end validated. Mutable mixed-tenant reminder rows could be cancelled across tenant. Add tenantId to future producer contract and tenant-scoped writes before activating."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/cancel-reminders-on-payment.ts:47:payment_reminders:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/cancel-reminders-on-payment.ts",
+        "baselineLine": 47,
+        "table": "payment_reminders",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "runtime/server-unverified",
+        "sourceIdentity": "Event invoice/payment.received declares invoiceId only. Exhaustive rg found no producer in app/lib (declaration, registry and listener only).",
+        "entryGuard": "Dormant event consumer loads invoice by id, derives push tenant from that row, cancels payment_reminders by invoice_id+pending without tenant.",
+        "tests": "jobs-registry and jobs-foundation verify route registration only; no consumer isolation tests.",
+        "notes": "No active producer found; cannot close as end-to-end validated. Mutable mixed-tenant reminder rows could be cancelled across tenant. Add tenantId to future producer contract and tenant-scoped writes before activating."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/critical-alerts-monitor.ts:127:inngest_run_log:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/critical-alerts-monitor.ts",
+        "baselineLine": 127,
+        "table": "inngest_run_log",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global operator monitoring cron, no user payload. Aggregate counts only for queued jobs, run failures and Stripe failures.",
+        "entryGuard": "Inngest cron/package-b cron wrapper ignores payload; no tenant-directed writes/mail. Alerts go to configured operator Slack/Sentry.",
+        "tests": "jobs-registry cron route only; no real monitoring endpoints tested.",
+        "notes": "Separate functionality issue: offline backlog filters status='pending' while SQL00015 queue uses queued/sending/sent/failed/expired. Also DB error count fallback can mask monitoring outage. No tenant data response to user."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/critical-alerts-monitor.ts:160:stripe_payments:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/critical-alerts-monitor.ts",
+        "baselineLine": 160,
+        "table": "stripe_payments",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global operator monitoring cron, no user payload. Aggregate counts only for queued jobs, run failures and Stripe failures.",
+        "entryGuard": "Inngest cron/package-b cron wrapper ignores payload; no tenant-directed writes/mail. Alerts go to configured operator Slack/Sentry.",
+        "tests": "jobs-registry cron route only; no real monitoring endpoints tested.",
+        "notes": "Separate functionality issue: offline backlog filters status='pending' while SQL00015 queue uses queued/sending/sent/failed/expired. Also DB error count fallback can mask monitoring outage. No tenant data response to user."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/critical-alerts-monitor.ts:98:ksef_offline_queue:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/critical-alerts-monitor.ts",
+        "baselineLine": 98,
+        "table": "ksef_offline_queue",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global operator monitoring cron, no user payload. Aggregate counts only for queued jobs, run failures and Stripe failures.",
+        "entryGuard": "Inngest cron/package-b cron wrapper ignores payload; no tenant-directed writes/mail. Alerts go to configured operator Slack/Sentry.",
+        "tests": "jobs-registry cron route only; no real monitoring endpoints tested.",
+        "notes": "Separate functionality issue: offline backlog filters status='pending' while SQL00015 queue uses queued/sending/sent/failed/expired. Also DB error count fallback can mask monitoring outage. No tenant data response to user."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/dunning-payment-failed.ts:107:billing_notifications:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/dunning-payment-failed.ts",
+        "baselineLine": 107,
+        "table": "billing_notifications",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Stripe raw-body signature in app/api/stripe/webhook/route.ts:68; mapInvoiceToPaymentRow resolves subscription -> tenant in lib/stripe/event-mapping.ts:140; webhook-handlers.ts:229 creates payment row and emits id+tenant from that mapping. Only producer found.",
+        "entryGuard": "Trusted signed Stripe producer. Worker consumer still queries stripe_payments only by paymentId and uses event tenantId independently. billing_notifications service_role-only SQL00048, unique(entity_id,kind); no authenticated writer found.",
+        "tests": "tests/unit/security-api-error-boundaries.test.ts invalid Stripe signature case; jobs-registry tests only routing/retries/concurrency, no mismatch consumer test.",
+        "notes": "Reviewed complete current producer chain, not proof against forged queue data; recommended consumer payment.tenant_id binding remains hardening. Server signing key/mode and pgboss ACL unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/dunning-payment-failed.ts:132:billing_notifications:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/dunning-payment-failed.ts",
+        "baselineLine": 132,
+        "table": "billing_notifications",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Stripe raw-body signature in app/api/stripe/webhook/route.ts:68; mapInvoiceToPaymentRow resolves subscription -> tenant in lib/stripe/event-mapping.ts:140; webhook-handlers.ts:229 creates payment row and emits id+tenant from that mapping. Only producer found.",
+        "entryGuard": "Trusted signed Stripe producer. Worker consumer still queries stripe_payments only by paymentId and uses event tenantId independently. billing_notifications service_role-only SQL00048, unique(entity_id,kind); no authenticated writer found.",
+        "tests": "tests/unit/security-api-error-boundaries.test.ts invalid Stripe signature case; jobs-registry tests only routing/retries/concurrency, no mismatch consumer test.",
+        "notes": "Reviewed complete current producer chain, not proof against forged queue data; recommended consumer payment.tenant_id binding remains hardening. Server signing key/mode and pgboss ACL unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/dunning-payment-failed.ts:69:billing_notifications:INSERT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/dunning-payment-failed.ts",
+        "baselineLine": 69,
+        "table": "billing_notifications",
+        "operation": "INSERT",
+        "baselineRisk": "średnie",
+        "status": "reviewed-static",
+        "sourceIdentity": "Stripe raw-body signature in app/api/stripe/webhook/route.ts:68; mapInvoiceToPaymentRow resolves subscription -> tenant in lib/stripe/event-mapping.ts:140; webhook-handlers.ts:229 creates payment row and emits id+tenant from that mapping. Only producer found.",
+        "entryGuard": "Trusted signed Stripe producer. Worker consumer still queries stripe_payments only by paymentId and uses event tenantId independently. billing_notifications service_role-only SQL00048, unique(entity_id,kind); no authenticated writer found.",
+        "tests": "tests/unit/security-api-error-boundaries.test.ts invalid Stripe signature case; jobs-registry tests only routing/retries/concurrency, no mismatch consumer test.",
+        "notes": "Reviewed complete current producer chain, not proof against forged queue data; recommended consumer payment.tenant_id binding remains hardening. Server signing key/mode and pgboss ACL unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/dunning-payment-failed.ts:96:billing_notifications:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/dunning-payment-failed.ts",
+        "baselineLine": 96,
+        "table": "billing_notifications",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Stripe raw-body signature in app/api/stripe/webhook/route.ts:68; mapInvoiceToPaymentRow resolves subscription -> tenant in lib/stripe/event-mapping.ts:140; webhook-handlers.ts:229 creates payment row and emits id+tenant from that mapping. Only producer found.",
+        "entryGuard": "Trusted signed Stripe producer. Worker consumer still queries stripe_payments only by paymentId and uses event tenantId independently. billing_notifications service_role-only SQL00048, unique(entity_id,kind); no authenticated writer found.",
+        "tests": "tests/unit/security-api-error-boundaries.test.ts invalid Stripe signature case; jobs-registry tests only routing/retries/concurrency, no mismatch consumer test.",
+        "notes": "Reviewed complete current producer chain, not proof against forged queue data; recommended consumer payment.tenant_id binding remains hardening. Server signing key/mode and pgboss ACL unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/email-sequence.ts:209:users:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/email-sequence.ts",
+        "baselineLine": 209,
+        "table": "users",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "signupWithEmail gets user id/email from Auth signUp response then emits user/registered; internal scheduleAfter preserves same trio through day1/4/8/12/14. Zod validates shape only.",
+        "entryGuard": "SELECT users id=userId then legacy tenant_id used for stats/subscription. Migration00036:183 drops users.tenant_id. Email destination remains original event email and isn't rechecked against current Auth identity.",
+        "tests": "jobs registry/foundation verify routing and delay engine only. No direct job tests; not executed against a server.",
+        "notes": "JOB-F06 unresolved: stale schema makes day1/8/14 fail on DB matching repo migrations; potential stale recipient/removed membership should be resolved when repairing flow. Do not infer confirmed current leak, because missing column stops execution."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/email-sequence.ts:301:users:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/email-sequence.ts",
+        "baselineLine": 301,
+        "table": "users",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "signupWithEmail gets user id/email from Auth signUp response then emits user/registered; internal scheduleAfter preserves same trio through day1/4/8/12/14. Zod validates shape only.",
+        "entryGuard": "SELECT users id=userId then legacy tenant_id used for stats/subscription. Migration00036:183 drops users.tenant_id. Email destination remains original event email and isn't rechecked against current Auth identity.",
+        "tests": "jobs registry/foundation verify routing and delay engine only. No direct job tests; not executed against a server.",
+        "notes": "JOB-F06 unresolved: stale schema makes day1/8/14 fail on DB matching repo migrations; potential stale recipient/removed membership should be resolved when repairing flow. Do not infer confirmed current leak, because missing column stops execution."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/email-sequence.ts:397:users:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/email-sequence.ts",
+        "baselineLine": 397,
+        "table": "users",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "signupWithEmail gets user id/email from Auth signUp response then emits user/registered; internal scheduleAfter preserves same trio through day1/4/8/12/14. Zod validates shape only.",
+        "entryGuard": "SELECT users id=userId then legacy tenant_id used for stats/subscription. Migration00036:183 drops users.tenant_id. Email destination remains original event email and isn't rechecked against current Auth identity.",
+        "tests": "jobs registry/foundation verify routing and delay engine only. No direct job tests; not executed against a server.",
+        "notes": "JOB-F06 unresolved: stale schema makes day1/8/14 fail on DB matching repo migrations; potential stale recipient/removed membership should be resolved when repairing flow. Do not infer confirmed current leak, because missing column stops execution."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/jobs-watchdog.ts:54:export_jobs:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/jobs-watchdog.ts",
+        "baselineLine": 54,
+        "table": "export_jobs",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global scheduled watchdog selects at most50 stale exports/reminders, id/tenant only for operator diagnostics.",
+        "entryGuard": "Cron wrappers ignore payload. No mutations; Sentry operational alerts, no user data-return endpoint.",
+        "tests": "jobs-registry cron coverage only. No real Sentry calls performed.",
+        "notes": "Intentional global scan; real telemetry retention/access and secrets scrubber ownership unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/jobs-watchdog.ts:71:payment_reminders:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/jobs-watchdog.ts",
+        "baselineLine": 71,
+        "table": "payment_reminders",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global scheduled watchdog selects at most50 stale exports/reminders, id/tenant only for operator diagnostics.",
+        "entryGuard": "Cron wrappers ignore payload. No mutations; Sentry operational alerts, no user data-return endpoint.",
+        "tests": "jobs-registry cron coverage only. No real Sentry calls performed.",
+        "notes": "Intentional global scan; real telemetry retention/access and secrets scrubber ownership unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/magic-import-ksef.ts:32:import_jobs:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/magic-import-ksef.ts",
+        "baselineLine": 32,
+        "table": "import_jobs",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "startMagicImportAction verifies active membership+tenant equality, reads tenant NIP and inserts job then emits returned id+tenant+dates/direction.",
+        "entryGuard": "Baseline main/exhausted UPDATE by id only. Added fresh id+tenant/source='ksef_history' ownership lookup before KSeF, scoped all updates and exhausted callback.",
+        "tests": "jobs-tenant-boundaries.test.ts mismatched main/exhausted denial; valid empty import completion scoped.",
+        "notes": "JOB-F04 fixed-local. No malformed pair reachable through current guarded producer found. Real KSeF and worker ACL remain unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/nightly-validation-recheck.ts:35:contractors:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/nightly-validation-recheck.ts",
+        "baselineLine": 35,
+        "table": "contractors",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global scheduled maintenance, no event tenant supplied; ids+tenant_id selected together from stale contractor rows (line35).",
+        "entryGuard": "Inngest cron; package-a cron.nightly-validation-recheck ignores data. Per-row UPDATE has both id and c.tenant_id (line75).",
+        "tests": "jobs-registry registrations and retries only; no runtime tenant test for this cron.",
+        "notes": "The all-tenant SELECT is intentional cron scope. External NIP validation, server ACL, actual cron schedule unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/nightly-validation-recheck.ts:75:contractors:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/nightly-validation-recheck.ts",
+        "baselineLine": 75,
+        "table": "contractors",
+        "operation": "UPDATE",
+        "baselineRisk": "średnie",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global scheduled maintenance, no event tenant supplied; ids+tenant_id selected together from stale contractor rows (line35).",
+        "entryGuard": "Inngest cron; package-a cron.nightly-validation-recheck ignores data. Per-row UPDATE has both id and c.tenant_id (line75).",
+        "tests": "jobs-registry registrations and retries only; no runtime tenant test for this cron.",
+        "notes": "The all-tenant SELECT is intentional cron scope. External NIP validation, server ACL, actual cron schedule unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/notify-user.ts:164:invoices:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/notify-user.ts",
+        "baselineLine": 164,
+        "table": "invoices",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "Only producer invoice/submit.succeeded/failed in submit runner/exhausted; incoming submit sources: public draft enqueue, self-invoice payment and global offline queue. Offline queue could mix event tenant+invoice before fixes.",
+        "entryGuard": "Baseline independent tenant and invoice ids; admin reads invoice/UPO/submissions by invoiceId then creates tenant-targeted FLO card/mail/push. Added fresh invoice ownership guard before any effect and tenant filters to related SELECTs.",
+        "tests": "jobs-tenant-boundaries.test.ts success/failure wrong-tenant rejects before card/mail/push.",
+        "notes": "JOB-F02 fixed-local secondary leak chain after forged offline row. Transport signing, real worker and notification channels not exercised."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/notify-user.ts:170:ksef_submissions:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/notify-user.ts",
+        "baselineLine": 170,
+        "table": "ksef_submissions",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "Only producer invoice/submit.succeeded/failed in submit runner/exhausted; incoming submit sources: public draft enqueue, self-invoice payment and global offline queue. Offline queue could mix event tenant+invoice before fixes.",
+        "entryGuard": "Baseline independent tenant and invoice ids; admin reads invoice/UPO/submissions by invoiceId then creates tenant-targeted FLO card/mail/push. Added fresh invoice ownership guard before any effect and tenant filters to related SELECTs.",
+        "tests": "jobs-tenant-boundaries.test.ts success/failure wrong-tenant rejects before card/mail/push.",
+        "notes": "JOB-F02 fixed-local secondary leak chain after forged offline row. Transport signing, real worker and notification channels not exercised."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/notify-user.ts:53:invoices:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/notify-user.ts",
+        "baselineLine": 53,
+        "table": "invoices",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "Only producer invoice/submit.succeeded/failed in submit runner/exhausted; incoming submit sources: public draft enqueue, self-invoice payment and global offline queue. Offline queue could mix event tenant+invoice before fixes.",
+        "entryGuard": "Baseline independent tenant and invoice ids; admin reads invoice/UPO/submissions by invoiceId then creates tenant-targeted FLO card/mail/push. Added fresh invoice ownership guard before any effect and tenant filters to related SELECTs.",
+        "tests": "jobs-tenant-boundaries.test.ts success/failure wrong-tenant rejects before card/mail/push.",
+        "notes": "JOB-F02 fixed-local secondary leak chain after forged offline row. Transport signing, real worker and notification channels not exercised."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/notify-user.ts:59:upo_receipts:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/notify-user.ts",
+        "baselineLine": 59,
+        "table": "upo_receipts",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "Only producer invoice/submit.succeeded/failed in submit runner/exhausted; incoming submit sources: public draft enqueue, self-invoice payment and global offline queue. Offline queue could mix event tenant+invoice before fixes.",
+        "entryGuard": "Baseline independent tenant and invoice ids; admin reads invoice/UPO/submissions by invoiceId then creates tenant-targeted FLO card/mail/push. Added fresh invoice ownership guard before any effect and tenant filters to related SELECTs.",
+        "tests": "jobs-tenant-boundaries.test.ts success/failure wrong-tenant rejects before card/mail/push.",
+        "notes": "JOB-F02 fixed-local secondary leak chain after forged offline row. Transport signing, real worker and notification channels not exercised."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/process-ocr.ts:45:ocr_jobs:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/process-ocr.ts",
+        "baselineLine": 45,
+        "table": "ocr_jobs",
+        "operation": "UPDATE",
+        "baselineRisk": "średnie",
+        "status": "reviewed-static",
+        "sourceIdentity": "app/actions/expenses.ts:91 requireUserAndActiveOrg, job INSERT server-generated id, tenant from verified membership, created_by user.id, then enqueue id+tenant.",
+        "entryGuard": "Runner parses UUIDs, SELECT/UPDATE id+tenant; downloadExpensePhoto checks tenant namespace. Exhausted callback already scopes by both ids. Added active membership check for mutable job.created_by before storage/AI and push.",
+        "tests": "jobs-tenant-boundaries.test.ts tampered created_by case; storage-tenant-boundaries.test.ts wrong tenant path rejection.",
+        "notes": "Baseline row45 UPDATE itself reviewed. Additional created_by ownership finding JOB-F03 fixed-local; raw exhausted error text and DB error handling unchanged. Server RLS/grants unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/process-offline-queue.ts:108:ksef_offline_queue:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/process-offline-queue.ts",
+        "baselineLine": 108,
+        "table": "ksef_offline_queue",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "Global cron scans tenant-writable ksef_offline_queue. SQL00015 grants authenticated CRUD, only tenant checked, invoice_id plain foreign key. Success/failure events from submit runner.",
+        "entryGuard": "Added explicit queue invoice->tenant check before expiry, read, enqueue or invoice update. getInvoiceForSubmit/updateInvoiceStatus now mandatory tenant; queue mutations and callbacks scoped tenant+invoice. Fresh submit and failure guards also added. Positively established invoice mismatch quarantines only id+tenant+invoice+queued row; DB error retries without quarantine. updateInvoiceStatus requires exactly one updated row.",
+        "tests": "jobs-tenant-boundaries.test.ts malicious own queue row with foreign invoice, expired+unexpired; valid expired row; success/failure callback mismatch; scoped success; submit normal/failure malformed pair.",
+        "notes": "JOB-F02 fixed-local. Residual DB composite FK/authenticated queue write restriction needs owner SQL decision; no migrations created/executed. Production and real RLS not tested."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/process-offline-queue.ts:139:ksef_offline_queue:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/process-offline-queue.ts",
+        "baselineLine": 139,
+        "table": "ksef_offline_queue",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "Global cron scans tenant-writable ksef_offline_queue. SQL00015 grants authenticated CRUD, only tenant checked, invoice_id plain foreign key. Success/failure events from submit runner.",
+        "entryGuard": "Added explicit queue invoice->tenant check before expiry, read, enqueue or invoice update. getInvoiceForSubmit/updateInvoiceStatus now mandatory tenant; queue mutations and callbacks scoped tenant+invoice. Fresh submit and failure guards also added. Positively established invoice mismatch quarantines only id+tenant+invoice+queued row; DB error retries without quarantine. updateInvoiceStatus requires exactly one updated row.",
+        "tests": "jobs-tenant-boundaries.test.ts malicious own queue row with foreign invoice, expired+unexpired; valid expired row; success/failure callback mismatch; scoped success; submit normal/failure malformed pair.",
+        "notes": "JOB-F02 fixed-local. Residual DB composite FK/authenticated queue write restriction needs owner SQL decision; no migrations created/executed. Production and real RLS not tested."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/process-offline-queue.ts:188:ksef_offline_queue:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/process-offline-queue.ts",
+        "baselineLine": 188,
+        "table": "ksef_offline_queue",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "Global cron scans tenant-writable ksef_offline_queue. SQL00015 grants authenticated CRUD, only tenant checked, invoice_id plain foreign key. Success/failure events from submit runner.",
+        "entryGuard": "Added explicit queue invoice->tenant check before expiry, read, enqueue or invoice update. getInvoiceForSubmit/updateInvoiceStatus now mandatory tenant; queue mutations and callbacks scoped tenant+invoice. Fresh submit and failure guards also added. Positively established invoice mismatch quarantines only id+tenant+invoice+queued row; DB error retries without quarantine. updateInvoiceStatus requires exactly one updated row.",
+        "tests": "jobs-tenant-boundaries.test.ts malicious own queue row with foreign invoice, expired+unexpired; valid expired row; success/failure callback mismatch; scoped success; submit normal/failure malformed pair.",
+        "notes": "JOB-F02 fixed-local. Residual DB composite FK/authenticated queue write restriction needs owner SQL decision; no migrations created/executed. Production and real RLS not tested."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/retention-delete.ts:25:invoices:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/retention-delete.ts",
+        "baselineLine": 25,
+        "table": "invoices",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global retention cron gets candidate invoice ids+tenant from due scheduled_deletion_at scan, logs per-row audit then deletes only those ids.",
+        "entryGuard": "Inngest cron and package-a wrapper ignores event payload. No independent user-supplied id is used.",
+        "tests": "jobs-registry registration only; no destructive retention job executed.",
+        "notes": "This classification concerns tenant identity only. Retention date integrity, statutory retention, storage object lifecycle and real backup recovery are separate unresolved owner checks."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/retention-delete.ts:58:invoices:DELETE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/retention-delete.ts",
+        "baselineLine": 58,
+        "table": "invoices",
+        "operation": "DELETE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global retention cron gets candidate invoice ids+tenant from due scheduled_deletion_at scan, logs per-row audit then deletes only those ids.",
+        "entryGuard": "Inngest cron and package-a wrapper ignores event payload. No independent user-supplied id is used.",
+        "tests": "jobs-registry registration only; no destructive retention job executed.",
+        "notes": "This classification concerns tenant identity only. Retention date integrity, statutory retention, storage object lifecycle and real backup recovery are separate unresolved owner checks."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/send-reminder.ts:114:payment_reminders:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/send-reminder.ts",
+        "baselineLine": 114,
+        "table": "payment_reminders",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "app/actions/reminders.ts:76 verified context -> invoices id+tenant query -> own reminder INSERT -> event id. Alternative FLO handler uses approved proposal, inserts tenant+invoice; scheduler creates proposal from invoice rows.",
+        "entryGuard": "Baseline trusted only reminderId and nonempty approvalId; join could cross tenants because authenticated can mutate own reminder.invoice_id under SQL00014. Added explicit joined invoice.id/tenant equality before side effects; scoped writes.",
+        "tests": "jobs-tenant-boundaries.test.ts foreign joined invoice blocks before settings/PDF/mail; valid paid reminder cancelled with id+tenant+invoice.",
+        "notes": "JOB-F01 fixed-local. DB single invoice FK and authenticated CRUD remain; complete approval row binding not implemented, manual caller still random token. Production/runtime unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/send-reminder.ts:136:reminder_settings:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/send-reminder.ts",
+        "baselineLine": 136,
+        "table": "reminder_settings",
+        "operation": "SELECT",
+        "baselineRisk": "średnie",
+        "status": "finding",
+        "sourceIdentity": "app/actions/reminders.ts:76 verified context -> invoices id+tenant query -> own reminder INSERT -> event id. Alternative FLO handler uses approved proposal, inserts tenant+invoice; scheduler creates proposal from invoice rows.",
+        "entryGuard": "Baseline trusted only reminderId and nonempty approvalId; join could cross tenants because authenticated can mutate own reminder.invoice_id under SQL00014. Added explicit joined invoice.id/tenant equality before side effects; scoped writes.",
+        "tests": "jobs-tenant-boundaries.test.ts foreign joined invoice blocks before settings/PDF/mail; valid paid reminder cancelled with id+tenant+invoice.",
+        "notes": "JOB-F01 fixed-local. DB single invoice FK and authenticated CRUD remain; complete approval row binding not implemented, manual caller still random token. Production/runtime unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/send-reminder.ts:146:reminder_templates:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/send-reminder.ts",
+        "baselineLine": 146,
+        "table": "reminder_templates",
+        "operation": "SELECT",
+        "baselineRisk": "średnie",
+        "status": "finding",
+        "sourceIdentity": "app/actions/reminders.ts:76 verified context -> invoices id+tenant query -> own reminder INSERT -> event id. Alternative FLO handler uses approved proposal, inserts tenant+invoice; scheduler creates proposal from invoice rows.",
+        "entryGuard": "Baseline trusted only reminderId and nonempty approvalId; join could cross tenants because authenticated can mutate own reminder.invoice_id under SQL00014. Added explicit joined invoice.id/tenant equality before side effects; scoped writes.",
+        "tests": "jobs-tenant-boundaries.test.ts foreign joined invoice blocks before settings/PDF/mail; valid paid reminder cancelled with id+tenant+invoice.",
+        "notes": "JOB-F01 fixed-local. DB single invoice FK and authenticated CRUD remain; complete approval row binding not implemented, manual caller still random token. Production/runtime unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/send-reminder.ts:296:payment_reminders:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/send-reminder.ts",
+        "baselineLine": 296,
+        "table": "payment_reminders",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "app/actions/reminders.ts:76 verified context -> invoices id+tenant query -> own reminder INSERT -> event id. Alternative FLO handler uses approved proposal, inserts tenant+invoice; scheduler creates proposal from invoice rows.",
+        "entryGuard": "Baseline trusted only reminderId and nonempty approvalId; join could cross tenants because authenticated can mutate own reminder.invoice_id under SQL00014. Added explicit joined invoice.id/tenant equality before side effects; scoped writes.",
+        "tests": "jobs-tenant-boundaries.test.ts foreign joined invoice blocks before settings/PDF/mail; valid paid reminder cancelled with id+tenant+invoice.",
+        "notes": "JOB-F01 fixed-local. DB single invoice FK and authenticated CRUD remain; complete approval row binding not implemented, manual caller still random token. Production/runtime unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/send-reminder.ts:78:payment_reminders:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/send-reminder.ts",
+        "baselineLine": 78,
+        "table": "payment_reminders",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding",
+        "sourceIdentity": "app/actions/reminders.ts:76 verified context -> invoices id+tenant query -> own reminder INSERT -> event id. Alternative FLO handler uses approved proposal, inserts tenant+invoice; scheduler creates proposal from invoice rows.",
+        "entryGuard": "Baseline trusted only reminderId and nonempty approvalId; join could cross tenants because authenticated can mutate own reminder.invoice_id under SQL00014. Added explicit joined invoice.id/tenant equality before side effects; scoped writes.",
+        "tests": "jobs-tenant-boundaries.test.ts foreign joined invoice blocks before settings/PDF/mail; valid paid reminder cancelled with id+tenant+invoice.",
+        "notes": "JOB-F01 fixed-local. DB single invoice FK and authenticated CRUD remain; complete approval row binding not implemented, manual caller still random token. Production/runtime unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/trial-countdown-emails.ts:157:memberships:SELECT",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/trial-countdown-emails.ts",
+        "baselineLine": 157,
+        "table": "memberships",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global cron selects subscription id+tenant+plan+end, then resolves active owner membership in that tenant and current Auth admin email.",
+        "entryGuard": "No caller-supplied identity. billing_notifications insert uses same subscription+tenant; final update entity_id+kind relies on unique constraint and service-role-only writes (SQL00048).",
+        "tests": "jobs-registry route only; no real Auth/email/Stripe calls.",
+        "notes": "Global scan justified; unique billing notification rows cannot be seeded by authenticated in repo SQL. Server grants, mail delivery and idempotency outages remain unverified."
+      }
+    },
+    {
+      "key": "lib/inngest/jobs/trial-countdown-emails.ts:206:billing_notifications:UPDATE",
+      "reviewer": "jobs",
+      "assessment": {
+        "baselineFile": "lib/inngest/jobs/trial-countdown-emails.ts",
+        "baselineLine": 206,
+        "table": "billing_notifications",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "reviewed-static",
+        "sourceIdentity": "Global cron selects subscription id+tenant+plan+end, then resolves active owner membership in that tenant and current Auth admin email.",
+        "entryGuard": "No caller-supplied identity. billing_notifications insert uses same subscription+tenant; final update entity_id+kind relies on unique constraint and service-role-only writes (SQL00048).",
+        "tests": "jobs-registry route only; no real Auth/email/Stripe calls.",
+        "notes": "Global scan justified; unique billing notification rows cannot be seeded by authenticated in repo SQL. Server grants, mail delivery and idempotency outages remain unverified."
+      }
+    },
+    {
+      "key": "lib/ksef/error-translator.ts:289:invoices:UPDATE",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/ksef/error-translator.ts",
+        "baselineLine": 289,
+        "table": "invoices",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "dormant unsafe helper: no current ingress",
+        "source": "invoiceId argument eksportowanej funkcji; brak jakiegokolwiek wywołującego/importującego funkcję w repo.",
+        "ingressGuard": "Brak osiągalnego ingressu; test ksef-error-translator.test.ts testuje translateKsefError i formatLastErrorPayload, nie zapis DB.",
+        "reason": "ERROR-01: uśpiony helper zapisuje last_error po samym id bez tenant binding. Brak obecnie wykazanej ścieżki ataku; wymaga tenant param + filtr przed przyszłym użyciem.",
+        "existingTestEvidence": "Nie znaleziono istniejącego testu wykonującego ten helper i sprawdzającego tenant A/B. tests/unit/jobs-registry.test.ts i jobs-foundation.test.ts obejmują transport/rejestr, nie własność danych.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji."
+      }
+    },
+    {
+      "key": "lib/ksef/offline-queue.ts:108:invoices:UPDATE",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/ksef/offline-queue.ts",
+        "baselineLine": 108,
+        "table": "invoices",
+        "operation": "UPDATE",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "params.invoiceId już sprawdzony z tenant_id w tym wywołaniu.",
+        "ingressGuard": "addToOfflineQueue odczytuje invoices po invoiceId, następnie jawnie porównuje invoiceRow.tenant_id z params.tenantId (:36), PRZED QR/INSERT/UPDATE. Ksef-submit-enqueue dostaje nowo zapisany ID szkicu z actions/correction/advance/final actions. Regular używa requireUserAndActiveOrg; pozostałe getUser + aktywna org + SELECT tenant przez klienta RLS. Submit-invoice i onFailure podają tenant/id z eventu; addToOfflineQueue weryfikuje ich zgodność samodzielnie. Nie zakładać, że pozostałe ścieżki zapisu kolejki używają tego helpera.",
+        "reason": "W aktualnym helperze sprawdzono relację przed UPDATE. Dodać tenant_id do mutacji dla defense-in-depth; osobny cron expired ma potwierdzony niesprawdzony UPDATE obcej faktury.",
+        "existingTestEvidence": "Nie znaleziono istniejącego testu wykonującego ten helper i sprawdzającego tenant A/B. tests/unit/jobs-registry.test.ts i jobs-foundation.test.ts obejmują transport/rejestr, nie własność danych.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji.",
+        "remediation": {
+          "status": "helper hardened; job and DB checks separate",
+          "test": "tests/unit/tenant-export-reminder-offline-boundaries.test.ts",
+          "detail": "Tenant+invoice constraints on reads/mutations/conflict resolution; zero-row update fails. Job expired vulnerability delegated to tenant_jobs_review."
+        }
+      }
+    },
+    {
+      "key": "lib/ksef/offline-queue.ts:28:invoices:SELECT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/ksef/offline-queue.ts",
+        "baselineLine": 28,
+        "table": "invoices",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "params.invoiceId+tenantId od opisanych callerów.",
+        "ingressGuard": "addToOfflineQueue odczytuje invoices po invoiceId, następnie jawnie porównuje invoiceRow.tenant_id z params.tenantId (:36), PRZED QR/INSERT/UPDATE. Ksef-submit-enqueue dostaje nowo zapisany ID szkicu z actions/correction/advance/final actions. Regular używa requireUserAndActiveOrg; pozostałe getUser + aktywna org + SELECT tenant przez klienta RLS. Submit-invoice i onFailure podają tenant/id z eventu; addToOfflineQueue weryfikuje ich zgodność samodzielnie. Nie zakładać, że pozostałe ścieżki zapisu kolejki używają tego helpera.",
+        "reason": "Odczyt początkowo globalny, ale wynik nigdy nie wychodzi przed jawnym sprawdzeniem zgodności tenant_id. Niejednolity komunikat not-found vs mismatch może stanowić oracle tylko dla callera; internetowy caller używa nowego własnego ID.",
+        "existingTestEvidence": "Nie znaleziono istniejącego testu wykonującego ten helper i sprawdzającego tenant A/B. tests/unit/jobs-registry.test.ts i jobs-foundation.test.ts obejmują transport/rejestr, nie własność danych.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji.",
+        "remediation": {
+          "status": "helper hardened; job and DB checks separate",
+          "test": "tests/unit/tenant-export-reminder-offline-boundaries.test.ts",
+          "detail": "Tenant+invoice constraints on reads/mutations/conflict resolution; zero-row update fails. Job expired vulnerability delegated to tenant_jobs_review."
+        }
+      }
+    },
+    {
+      "key": "lib/ksef/offline-queue.ts:78:ksef_offline_queue:INSERT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/ksef/offline-queue.ts",
+        "baselineLine": 78,
+        "table": "ksef_offline_queue",
+        "operation": "INSERT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "static-reviewed + runtime-gap",
+        "source": "params.tenantId + invoiceId sprawdzone z invoiceRow.tenant_id.",
+        "ingressGuard": "addToOfflineQueue odczytuje invoices po invoiceId, następnie jawnie porównuje invoiceRow.tenant_id z params.tenantId (:36), PRZED QR/INSERT/UPDATE. Ksef-submit-enqueue dostaje nowo zapisany ID szkicu z actions/correction/advance/final actions. Regular używa requireUserAndActiveOrg; pozostałe getUser + aktywna org + SELECT tenant przez klienta RLS. Submit-invoice i onFailure podają tenant/id z eventu; addToOfflineQueue weryfikuje ich zgodność samodzielnie. Nie zakładać, że pozostałe ścieżki zapisu kolejki używają tego helpera.",
+        "reason": "Sam INSERT helpera prawidłowo wiąże tenant i fakturę. SZERSZY finding OFFLINE-01: tabela dopuszcza authenticated bezpośrednio wpisać własny tenant + cudzy invoice_id, pomijając helper, a cron ufa relacji. Nie oznacza to błędu tego INSERT, ale eliminuje wniosek, że każda kolejka jest zaufana.",
+        "existingTestEvidence": "Nie znaleziono istniejącego testu wykonującego ten helper i sprawdzającego tenant A/B. tests/unit/jobs-registry.test.ts i jobs-foundation.test.ts obejmują transport/rejestr, nie własność danych.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji.",
+        "remediation": {
+          "status": "helper hardened; job and DB checks separate",
+          "test": "tests/unit/tenant-export-reminder-offline-boundaries.test.ts",
+          "detail": "Tenant+invoice constraints on reads/mutations/conflict resolution; zero-row update fails. Job expired vulnerability delegated to tenant_jobs_review."
+        }
+      }
+    },
+    {
+      "key": "lib/ksef/offline-queue.ts:97:ksef_offline_queue:SELECT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/ksef/offline-queue.ts",
+        "baselineLine": 97,
+        "table": "ksef_offline_queue",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding: OFFLINE-02 conflict record ownership not checked",
+        "source": "idempotencyKey = SHA256 tenantId:invoiceId:created_at(sec), obcięty do 32 hex; konflikt 23505 powoduje odczyt tylko po globalnym kluczu.",
+        "ingressGuard": "addToOfflineQueue odczytuje invoices po invoiceId, następnie jawnie porównuje invoiceRow.tenant_id z params.tenantId (:36), PRZED QR/INSERT/UPDATE. Ksef-submit-enqueue dostaje nowo zapisany ID szkicu z actions/correction/advance/final actions. Regular używa requireUserAndActiveOrg; pozostałe getUser + aktywna org + SELECT tenant przez klienta RLS. Submit-invoice i onFailure podają tenant/id z eventu; addToOfflineQueue weryfikuje ich zgodność samodzielnie. Nie zakładać, że pozostałe ścieżki zapisu kolejki używają tego helpera.",
+        "reason": "OFFLINE-02: wiersz znaleziony po konflikcie nie ma sprawdzonego tenant_id ani invoice_id. Klucz jest deterministyczny, a ksef_offline_queue jest zapisywalna przez authenticated, więc nie wolno używać hash jako substytutu kontroli właściciela. Obecni callerzy ignorują zwracany wiersz, brak udowodnionego bezpośredniego wycieku do HTTP. Zalecany filtr tenant+invoice oraz jawne fail-closed przy cudzym konflikcie.",
+        "existingTestEvidence": "Nie znaleziono istniejącego testu wykonującego ten helper i sprawdzającego tenant A/B. tests/unit/jobs-registry.test.ts i jobs-foundation.test.ts obejmują transport/rejestr, nie własność danych.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji.",
+        "remediation": {
+          "status": "helper hardened; job and DB checks separate",
+          "test": "tests/unit/tenant-export-reminder-offline-boundaries.test.ts",
+          "detail": "Tenant+invoice constraints on reads/mutations/conflict resolution; zero-row update fails. Job expired vulnerability delegated to tenant_jobs_review."
+        }
+      }
+    },
+    {
+      "key": "lib/reminders/scheduler.ts:222:payment_reminders:SELECT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/reminders/scheduler.ts",
+        "baselineLine": 222,
+        "table": "payment_reminders",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding: REMINDER-01 foreign reminder poisoning",
+        "source": "invoice.id z własnej faktury/wiersza crona; powiązane reminder rows mogą być zapisane przez innego tenanta.",
+        "ingressGuard": "decideNextReminder ma dwóch wywołujących: triggerManualReminderAction wymaga requireUserAndTenant i pobiera invoice po id+tenant_id (:89-94), a cron runReminderScheduler iteruje wiersze invoices pobrane przez findInvoicesRequiringReminders. ID faktury jest więc prawidłowy, ale invoice_id w payment_reminders nie gwarantuje zgodności tenant_id reminderu.",
+        "reason": "REMINDER-01: count po invoice_id+sent obejmuje obce reminders, pozwala zatrzymać limit dla cudzej faktury.",
+        "existingTestEvidence": "Brak istniejących testów tej funkcji. Dziś source-executed mock z trzema sent rows A→invoice B blokuje decyzję B limitem.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji. UNIQUE(invoice_id,stage) z 00014:163 oznacza, że filtr aplikacji nie naprawia DoS rezerwacji klucza; konieczna ochrona relacji/grantów w DB.",
+        "remediation": {
+          "status": "application query fixed; DB residual remains",
+          "test": "tests/unit/tenant-export-reminder-offline-boundaries.test.ts",
+          "detail": "Tenant+invoice binding, database query errors fail closed. UNIQUE(invoice_id,stage) remains directly poisonable until DB relation/grants reviewed."
+        }
+      }
+    },
+    {
+      "key": "lib/reminders/scheduler.ts:236:payment_reminders:SELECT",
+      "reviewer": "exports-imports",
+      "assessment": {
+        "file": "lib/reminders/scheduler.ts",
+        "baselineLine": 236,
+        "table": "payment_reminders",
+        "operation": "SELECT",
+        "baselineRisk": "do-przejrzenia",
+        "status": "finding: REMINDER-01 foreign reminder poisoning",
+        "source": "invoice.id z własnej faktury/wiersza crona; powiązane reminder rows mogą być zapisane przez innego tenanta.",
+        "ingressGuard": "decideNextReminder ma dwóch wywołujących: triggerManualReminderAction wymaga requireUserAndTenant i pobiera invoice po id+tenant_id (:89-94), a cron runReminderScheduler iteruje wiersze invoices pobrane przez findInvoicesRequiringReminders. ID faktury jest więc prawidłowy, ale invoice_id w payment_reminders nie gwarantuje zgodności tenant_id reminderu.",
+        "reason": "REMINDER-01: stage/status po invoice_id obejmuje obce reminders, pozwala zablokować etapy cudzej faktury.",
+        "existingTestEvidence": "Brak istniejących testów tej funkcji. Dziś source-executed mock z trzema sent rows A→invoice B blokuje decyzję B limitem.",
+        "runtimeGap": "Brak dowodu runtime na wdrożonym schemacie/grantach/GoTrue/PostgREST oraz na konfiguracji obu backendów. Nie wykonano SQL ani zapytań do usług. tests/rls-isolation.test.ts jest izolowanym, domyślnie wyłączonym testem i nie obejmuje tych relacji. UNIQUE(invoice_id,stage) z 00014:163 oznacza, że filtr aplikacji nie naprawia DoS rezerwacji klucza; konieczna ochrona relacji/grantów w DB.",
+        "remediation": {
+          "status": "application query fixed; DB residual remains",
+          "test": "tests/unit/tenant-export-reminder-offline-boundaries.test.ts",
+          "detail": "Tenant+invoice binding, database query errors fail closed. UNIQUE(invoice_id,stage) remains directly poisonable until DB relation/grants reviewed."
+        }
+      }
+    }
+  ],
+  "statusSemantics": "status/reachability/followup may describe the baseline observation; finalStatus, remediation and groupRemediation describe local fixes. Runtime and database limitations remain open. Do not equate static-reviewed with vulnerability-free.",
+  "groupRemediation": {
+    "flo": {
+      "changes": [
+        "Required trusted tenantId for execute, undo, fingerprint. All target entity and proposal reads/writes scoped explicitly.",
+        "Approval consumption and reuse bind proposal, tenant and authenticated user.",
+        "Existing proposals recheck code/global/tenant/canary gates before claim and approval consumption. Global gate reads current DB without stale cache/fail-open fallback; outages deny.",
+        "Expense review requires affected owned row. Payment chase rechecks owned invoice/current balance/pause and own-tenant payment_date records; stage allowlist.",
+        "Payment confirm accepts one listed target only, then verifies invoice ownership; finite positive cent amount bounded by proposed/current balance; actual payment_date/notes/match_method schema. Builder remains unconnected and no new feature activation.",
+        "Removed fictitious invoice-only undo from payment result; rejects legacy invoice-total undo. Expense undo allows only existing supported fields and atomically checks previous value + tenant during restoration.",
+        "Claim requires unchanged fingerprint. If a race loses the claim, reload scoped row: changed=>stale, executing=>in progress, only done=>success. Existing 50 concurrent clicks regression retained.",
+        "Producer proposal update can only change still-open owned proposal, preventing overwrite after approval/claim.",
+        "Feature flags helper comment now states service_role bypasses RLS; future callers must authenticate tenant."
+      ],
+      "limitations": [
+        "No SQL file, SQL execution, actual job execution, deployment, real DB/Auth/email/Redis calls.",
+        "DB-PAYMENTS-01 cross-tenant payments/invoice relation remains OPEN for Bartek; application repairs cannot fix direct authenticated PostgREST writes.",
+        "Payment-confirm builder is dormant and its original fingerprint contract is still not wired for production; do not describe that feature as ready.",
+        "FLO tools are not wired into a live production tool loop; tests alone are not end-to-end AI authorization evidence.",
+        "Authorization snapshot/producer-update concurrency beyond unchanged fingerprint should be separately considered when future action kinds are added."
+      ]
+    },
+    "exports": {
+      "status": "Tenant parent/filter fixes and offline helper boundary tests complete locally; database independent FK/UNIQUE remains open."
+    },
+    "jobs": {
+      "status": "14 baseline findings repaired in application;3 email-sequence column/recipient cases open; global cron scopes remain justified. Added quarantine and zero-row mutation checks."
+    },
+    "root": {
+      "status": "Bounded account export v2, email failures/retry and audit privacy fixed locally; admin guards retained; dormant recovery helpers not enabled."
+    }
+  },
+  "postChangeInventory": {
+    "total": 305,
+    "heuristicOk": 217,
+    "toReview": 64,
+    "medium": 24,
+    "entrypoints": 103,
+    "signals": 36,
+    "note": "Fresh unchanged heuristic, not verdict. New helpers and dynamic client aliases can be missed by the scanner. This ledger keys the89 original non-ok records; new code is also covered by diff review/tests."
+  }
+}

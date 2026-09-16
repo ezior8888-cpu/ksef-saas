@@ -2,6 +2,8 @@
 
 Data: 2026-09-13. Autor: Astra, na prośbę Igora. Status: **plan przyjęty; realizacja rozpoczęta 2026-09-13, wznowiona 2026-09-14 w zakresie F03 (MFA i granice administracji)**. Aktualne wyniki i ograniczenia znajdują się w dzienniku. Zakres opisują [pakiet administracji F03](FAZA-03-ADMIN-MFA.md) oraz [kontynuacja: sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md); odbiór środowisk i pełne odzyskiwanie pozostają otwarte. Kontynuacja 15.09: [onboarding, zaproszenia i zmiana hasła](FAZA-03-ONBOARDING-I-HASLO.md), po lokalnym połączeniu aktualnego main i prac Bartka. Kontynuacja 16.09: [odzyskiwanie hasła, TOTP i przekierowania](FAZA-03-ODZYSKIWANIE-HASLA-I-DOSTEP.md), sprawdzona lokalnie przed publikacją i odbiorem. Dalsza poprawka po PR #11: [kontrola wycieków haseł i rozliczenie CodeQL](FAZA-03-KONTROLA-WYCIEKOW-HASEL.md).
 
+Kontynuacja 16.09 po PR #12: [izolacja firm i ręczne rozliczenie 89 zapytań](FAZA-03-IZOLACJA-FIRM-I-SERVICE-ROLE.md). Kod i lokalne regresje zapisane; kompilacja i ochrona relacji w rzeczywistej bazie nadal wymagają odbioru. Nie zamyka to F03.
+
 ## Cel i sposób pracy
 
 Chronimy poufność danych każdej firmy, poprawność faktur i operacji finansowych, dostęp do KSeF oraz możliwość odtworzenia usługi po awarii lub przejęciu. Celem jest także szybkie zauważenie zdarzenia, ograniczenie szkód i odzyskanie kontroli. Nie istnieje plan zapewniający odporność na wszystkie ataki.

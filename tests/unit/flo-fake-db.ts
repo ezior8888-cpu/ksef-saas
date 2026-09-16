@@ -22,6 +22,10 @@ type Row = Record<string, unknown>;
 type Filter = (row: Row) => boolean;
 
 interface Tables {
+  invoices: Row[];
+  expenses: Row[];
+  payments: Row[];
+  payment_reminders: Row[];
   flo_proposals: Row[];
   flo_approvals: Row[];
   flo_decisions: Row[];
@@ -41,8 +45,12 @@ export interface FakeDb {
 
 const yieldToOthers = () => Promise.resolve();
 
-export function createFakeDb(seed: Partial<Tables> = {}): FakeDb {
+export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => void): FakeDb {
   const tables: Tables = {
+    invoices: seed.invoices ?? [],
+    expenses: seed.expenses ?? [],
+    payments: seed.payments ?? [],
+    payment_reminders: seed.payment_reminders ?? [],
     flo_proposals: seed.flo_proposals ?? [],
     flo_approvals: seed.flo_approvals ?? [],
     flo_decisions: seed.flo_decisions ?? [],
@@ -59,6 +67,7 @@ export function createFakeDb(seed: Partial<Tables> = {}): FakeDb {
 
     const run = async (): Promise<{ data: Row[] | null; error: null }> => {
       await yieldToOthers();
+      if (mode === "update") beforeUpdate?.();
       const matched = apply();
       if (mode === 'update' && patch) {
         state.writes++;

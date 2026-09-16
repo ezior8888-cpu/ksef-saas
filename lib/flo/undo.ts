@@ -70,13 +70,35 @@ export function readUndoRecord(payload: Record<string, unknown>): UndoRecord | n
   const candidate = raw as Partial<UndoRecord>;
   if (
     typeof candidate.at !== 'string' ||
+    !Number.isFinite(Date.parse(candidate.at)) ||
     typeof candidate.rowId !== 'string' ||
     (candidate.table !== 'expenses' &&
       candidate.table !== 'invoices' &&
       candidate.table !== 'contractors') ||
     typeof candidate.before !== 'object' ||
-    candidate.before === null
+    candidate.before === null ||
+    Array.isArray(candidate.before) ||
+    typeof candidate.after !== 'object' ||
+    candidate.after === null ||
+    Array.isArray(candidate.after)
   ) {
+    return null;
+  }
+  const allowedFields: Record<UndoableTable, readonly string[]> = {
+    expenses: ['kpir_column', 'is_reviewed', 'is_deductible'],
+    // Legacy invoice-only undo never removes the triggering payment.
+    invoices: [],
+    contractors: [],
+  };
+  const before = candidate.before as Record<string, unknown>;
+  const after = candidate.after as Record<string, unknown>;
+  const keys = Object.keys(before);
+  const scalar = (value: unknown) => value === null ||
+    typeof value === 'string' || typeof value === 'boolean' ||
+    (typeof value === 'number' && Number.isFinite(value));
+  if (!keys.length || keys.length !== Object.keys(after).length ||
+      keys.some((key) => !allowedFields[candidate.table!].includes(key) ||
+        !Object.hasOwn(after, key) || !scalar(before[key]) || !scalar(after[key]))) {
     return null;
   }
   return {
@@ -142,31 +164,26 @@ export function evaluateUndo(
 // Wykonanie cofnięcia
 // ═══════════════════════════════════════════════════════════════
 
+interface UndoQuery {
+  eq(column: string, value: string | number | boolean): UndoQuery;
+  is(column: string, value: null): UndoQuery;
+  select(columns: string): UndoQuery;
+  maybeSingle(): Promise<{
+    data: Record<string, unknown> | null;
+    error: { message: string } | null;
+  }>;
+}
 interface UndoClient {
-  from: (table: UndoableTable) => {
-    select: (columns: string) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => {
-        maybeSingle: () => Promise<{
-          data: Record<string, unknown> | null;
-          error: { message: string } | null;
-        }>;
-      };
-    };
-    update: (patch: Record<string, unknown>) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => Promise<{ error: { message: string } | null }>;
-    };
+  from(table: UndoableTable): {
+    select(columns: string): UndoQuery;
+    update(patch: Record<string, unknown>): UndoQuery;
   };
 }
 
 export async function undoAction(
   proposalId: string,
   userId: string,
+  tenantId: string,
   now: Date = new Date(),
   db: FloDbClient = floDb(),
   rows: UndoClient = createAdminClient() as unknown as UndoClient,
@@ -175,6 +192,7 @@ export async function undoAction(
     .from('flo_proposals')
     .select('*')
     .eq('id', proposalId)
+    .eq('tenant_id', tenantId)
     .maybeSingle();
 
   if (loaded.error) throw new Error(loaded.error.message);
@@ -201,6 +219,7 @@ export async function undoAction(
     .from(record.table)
     .select(['id', ...fields].join(', '))
     .eq('id', record.rowId)
+    .eq('tenant_id', tenantId)
     .maybeSingle();
 
   if (current.error) throw new Error(current.error.message);
@@ -208,12 +227,21 @@ export async function undoAction(
   const verdict = evaluateUndo(record, current.data, now);
   if (!verdict.ok) return verdict;
 
-  const restore = await rows
+  // Compare-and-set in the same UPDATE: a manual edit after the read wins.
+  let restoreQuery = rows
     .from(record.table)
     .update(record.before)
-    .eq('id', record.rowId);
+    .eq('id', record.rowId)
+    .eq('tenant_id', tenantId);
+  for (const [field, expected] of Object.entries(record.after)) {
+    restoreQuery = expected === null
+      ? restoreQuery.is(field, null)
+      : restoreQuery.eq(field, expected);
+  }
+  const restore = await restoreQuery.select('id').maybeSingle();
 
   if (restore.error) throw new Error(restore.error.message);
+  if (!restore.data) return { ok: false, reason: 'changed', message: 'Dokument zmienił się w międzyczasie — nie cofam zmian.' };
 
   // Powód `undone`, a NIE `not_now`: karta znika z wątku tak samo jak przy
   // odrzuceniu, ale to są dwa różne zdarzenia. „Nie teraz” znaczy „nie chcę
@@ -223,7 +251,8 @@ export async function undoAction(
   await db
     .from('flo_proposals')
     .update({ status: 'dismissed', dismissed_reason: 'undone' })
-    .eq('id', proposalId);
+    .eq('id', proposalId)
+    .eq('tenant_id', tenantId);
 
   await logAuditSystem({
     tenantId: proposal.tenant_id,

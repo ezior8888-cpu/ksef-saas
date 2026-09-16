@@ -1,3 +1,4 @@
+import { requireInvoiceTenant } from './tenant-boundary';
 import {
   inngest,
   invoiceSubmitFailed,
@@ -44,6 +45,7 @@ import { buildKsefFixProposal } from '@/lib/flo/functions/ksef-fix';
  */
 export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucceeded.create>[0], { step, logger }: JobContext) {
     const { tenantId, invoiceId, ksefNumber } = data;
+    await requireInvoiceTenant(invoiceId, tenantId);
 
     // Karta agenta (X-01). Powiadomienie znika, karta zostaje — i mówi
     // prawdę o tym, czy poświadczenie odbioru już jest. Przy kontroli
@@ -54,12 +56,14 @@ export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucc
         .from('invoices')
         .select('internal_number, ksef_status, updated_at')
         .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
         .maybeSingle();
 
       const { count } = await supabase
         .from('upo_receipts')
         .select('*', { count: 'exact', head: true })
-        .eq('invoice_id', invoiceId);
+        .eq('invoice_id', invoiceId)
+        .eq('tenant_id', tenantId);
 
       const snapshot = {
         invoiceId,
@@ -110,6 +114,7 @@ export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucc
         .from('invoices')
         .select('internal_number')
         .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
         .maybeSingle();
 
       const label = inv?.internal_number?.trim()
@@ -156,6 +161,7 @@ export const notifySuccessJob = inngest.createFunction(
  */
 export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFailed.create>[0], { step, logger }: JobContext) {
     const { tenantId, invoiceId, error, fromOfflineQueue } = data;
+    await requireInvoiceTenant(invoiceId, tenantId);
 
     // Karta agenta (X-02). Tłumaczy odrzucenie i — gdy rozwiązanie jest
     // jedno — pokazuje gotową poprawkę z podglądem różnicy.
@@ -165,12 +171,14 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
         .from('invoices')
         .select('internal_number, last_error_code')
         .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
         .maybeSingle();
 
       const { count } = await supabase
         .from('ksef_submissions')
         .select('*', { count: 'exact', head: true })
-        .eq('invoice_id', invoiceId);
+        .eq('invoice_id', invoiceId)
+        .eq('tenant_id', tenantId);
 
       await createProposal(
         buildKsefFixProposal({
@@ -232,6 +240,7 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
         .from('invoices')
         .select('internal_number')
         .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
         .maybeSingle();
 
       const label = inv?.internal_number?.trim()

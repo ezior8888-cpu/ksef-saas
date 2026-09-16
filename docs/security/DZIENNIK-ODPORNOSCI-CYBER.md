@@ -379,6 +379,31 @@ Pełny opis do przeglądu: [sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md
 
 **Stan publikacji:** nowe commity i dokumentacja są lokalne, przygotowane jako kolejny draft względem PR #11. Poprzednia dokładna zgoda na publikację `a8dd109` i alert #1 została wykonana; nie obejmuje sama w sobie nowego pakietu z opisem bezpieczeństwa. Nowe wyniki GitHuba i faktyczną publikację zapisać po ich wykonaniu w opisie PR, żeby dokumentacyjne dopiski nie uruchamiały bez potrzeby kolejnych przebiegów. Pełna F03 pozostaje otwarta.
 
+## 2026-09-16 — przegląd izolacji firm i 89 zapytań (CYB-F03-20…23)
+
+**Dyspozycja:** Igor zatwierdził dalszą pracę po PR #12. Nowy worktree `security-tenant-boundaries-20260916`, gałąź `codex/security-tenant-boundaries`, baza `36f2baeac39475fba2fbcbcb849d6c8bea5f8ca5`. Root checkout i zastane zmiany użytkownika nietknięte. Nie wykonano SQL/nowych migracji/produkcji ani publikacji tego pakietu.
+
+**Rozliczenie poprzedniego wpisu:** PR #12 został wcześniej jawnie zatwierdzony i opublikowany jako draft względem PR #11. Dla 36f2bae [CI 35114996980](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/35114996980) i [Security 35114996655](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/35114996655) PASS: siedem kontroli, 2332 Vitest/66 XML; Gitleaks 238 commitów bez trafień, CodeQL JS/Actions bez wyników. Stan opublikowany zapisano w PR bez kolejnego dokumentacyjnego przebiegu CI. Wpis o lokalnym oczekiwaniu PR #12 był stanem przed publikacją. Dzisiejszy odczyt nie wykazał nowych commitów/raportów Bartka; main nadal b9c3703, PR #7/#9 bez nowego materiału. To obserwacja repo, nie dowód braku działań poza nim.
+
+**Zakres i wynik:** [pełny pakiet z odbiorem Bartka](FAZA-03-IZOLACJA-FIRM-I-SERVICE-ROLE.md) oraz [rejestr 89 pozycji](audyt/service-role-review-20260916.json). Historyczne 78 zastąpiono aktualnym punktem odniesienia:77 do przejrzenia + 12 średnich w 305 zapytaniach bazowego commitu. Każdy z 89 rekordów ma identyfikator, tożsamość, guard, dowód i ograniczenia; brak duplikatów/pominięć. To rozliczenie, nie deklaracja 89 bezpiecznych miejsc ani ponowny audyt 216 automatycznych „ok”.
+
+- CYB-F03-20: powiązania faktur w eksporcie, prawidłowe kierunki, tenantowe liczniki przypomnień i konflikt kolejki offline.
+- CYB-F03-21: firma–faktura/import przed skutkami jobów, bezpieczniejsze failure callbacks, kwarantanna własnych niezgodnych wpisów kolejki, wymagany tenant i jeden zmieniony rekord helpera, kontrola członkostwa autora OCR.
+- CYB-F03-22: tożsamość zgody FLO, tenant w wykonaniu/odciskach/cofaniu, aktualne wyłączniki, odrzucanie obcych ID i błędnych kwot, poprawki wyścigu oraz usunięcie fałszywego cofania salda bez cofnięcia płatności. Nie aktywowano niepodłączonego payment.confirm.
+- CYB-F03-23: uczciwy eksport konta JSON v2 z limitami, błędy preferencji poczty/retry webhooka i brak danych zdarzenia w logu awarii audytu.
+
+**Commity kodu:** 9e5fd2b (eksport/scheduler/offline), 67eadab (joby), ac3bc20 (FLO), 2874fa7 (eksport konta), 574abf6 (poczta), dd616a7 (prywatność audytu). Pełne SHA w dokumencie pakietu.
+
+**Weryfikacja:**132 pliki/2465 Vitest PASS, 66 XML PASS, 67 narzędzi PASS; typecheck PASS; lint: 0 błędów / 29 istniejących ostrzeżeń; 44 zmienione pliki TS/TSX bez ostrzeżeń. Gitleaks 46 przygotowanych plików bez trafień; pełna historia do dd616a7: 244 commity bez trafień. Źródła zgodne z odciskami po commitach. Dodatkowy review poprawił 2 konkretne ścieżki błędu; końcowo bez nowych otwartych uwag w zmienionym zakresie. Mocki nie zastępują odbioru serwera.
+
+**Kompilacja pozostaje niepotwierdzona:**4 próby webpack compile zakończone 2 jawnymi OOM i 2 awariami procesu Windows. Próba ograniczenia zasobów i optymalizacji dotyczyła wyłącznie kopii testowej; nie zmieniono repo next.config.ts ani ustawień komputera. Dokończyć build na środowisku z dostępną pamięcią przed wydaniem. Nie przedstawiać zielonych testów jako zielonego builda.
+
+**Otwarte/Bartek:** wysoki priorytet zgodności tenant–invoice w samej bazie (payments+trigger salda, reminders+UNIQUE, offline queue, parent faktury) oraz created_by OCR. Kod nie zamyka bezpośredniego PostgREST. Dodatkowo sekwencja mailowa używa usuniętej users.tenant_id, trwały kontrakt zgody na przypomnienie wymaga osobnego projektu, a wcześniejsze GoTrue/Redis/recovery/backup pozostają otwarte. Rejestr zawiera niepodłączone helpery i świadome globalne crony, bez fałszywego zielonego statusu całości.
+
+**Skaner po zmianach:**305 zapytań (217 ok / 64 do przejrzenia / 24 średnie), 103 wejścia / 36 sygnałów, heurystyki nietknięte. Liczniki nie są liczbą luk; nowe helpery objęto review/testami także tam, gdzie parser ich nie rozpoznaje. HIBP i jego manifest oraz wszystkie migracje są identyczne jak w bazie.
+
+**Przekazanie:** pakiet pozostaje lokalny, przygotowany do przeglądu jako kolejny draft względem PR #12. Publikacja nowych szczegółów do publicznego repo wymaga decyzji o tym konkretnym pakiecie; wcześniejsze zgody na PR #11/#12 zostały wykonane. Nie wykonano merge/deploy. F03 pozostaje otwarta.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:

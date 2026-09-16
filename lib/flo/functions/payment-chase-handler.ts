@@ -22,35 +22,6 @@ import { createAdminClient } from '@/lib/supabase/admin';
 // Wykonawca
 // ═══════════════════════════════════════════════════════════════
 
-interface ChaseClient {
-  from: (table: 'payments' | 'payment_reminders' | 'email_bounces') => {
-    select: (columns: string) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => {
-        order: (
-          column: string,
-          opts: { ascending: boolean },
-        ) => {
-          limit: (count: number) => Promise<{
-            data: Array<Record<string, unknown>> | null;
-            error: { message: string } | null;
-          }>;
-        };
-      };
-    };
-    insert: (row: Record<string, unknown>) => {
-      select: (columns: string) => {
-        maybeSingle: () => Promise<{
-          data: { id: string } | null;
-          error: { message: string } | null;
-        }>;
-      };
-    };
-  };
-}
-
 /**
  * Wysyłka ponaglenia.
  *
@@ -67,39 +38,46 @@ registerFloHandler('payment.chase', async (ctx) => {
   const invoiceId = payload.invoiceId;
   const stage = payload.stage;
 
-  if (typeof invoiceId !== 'string' || typeof stage !== 'string') {
+  if (typeof invoiceId !== 'string' ||
+      (stage !== 'stage_1' && stage !== 'stage_2' && stage !== 'stage_3' && stage !== 'stage_4')) {
     throw new Error('Propozycja ponaglenia bez kompletu danych');
   }
 
-  const client = createAdminClient() as unknown as ChaseClient;
+  const client = createAdminClient();
+  const currentInvoice = await client.from('invoices')
+    .select('id, gross_total, paid_amount, reminders_paused')
+    .eq('id', invoiceId)
+    .eq('tenant_id', ctx.proposal.tenant_id)
+    .maybeSingle();
+  if (currentInvoice.error || !currentInvoice.data) {
+    throw new Error('Faktura nie należy do organizacji albo już nie istnieje');
+  }
 
   // ── Okno bezpieczeństwa ──────────────────────────────────────
   //
-  // Sprawdzamy wpłaty od kontrahenta, nie tylko do tej faktury: przelew
-  // bywa zaksięgowany na innej pozycji albo jeszcze niedopasowany, a mimo
-  // to znaczy „ten człowiek właśnie zapłacił".
+  // Check payments for this owned invoice. The schema stores a payment day,
+  // not paid_at; treat the entire day as recent rather than guess its time.
   const recent = await client
     .from('payments')
-    .select('paid_at')
+    .select('payment_date')
     .eq('invoice_id', invoiceId)
-    .order('paid_at', { ascending: false })
+    .eq('tenant_id', ctx.proposal.tenant_id)
+    .order('payment_date', { ascending: false })
     .limit(1);
 
   if (recent.error) throw new Error(recent.error.message);
 
-  const lastPaymentAt =
-    typeof recent.data?.[0]?.paid_at === 'string'
-      ? (recent.data[0].paid_at as string)
-      : null;
-
-  const facts = (payload.facts ?? {}) as Record<string, unknown>;
-  const outstanding =
-    Number(facts.grossTotal ?? 0) - Number(facts.paidAmount ?? 0);
+  const lastPaymentDate = recent.data?.[0]?.payment_date;
+  const lastPaymentAt = typeof lastPaymentDate === 'string'
+    ? lastPaymentDate + 'T23:59:59.999Z'
+    : null;
+  const outstanding = Number(currentInvoice.data.gross_total) - Number(currentInvoice.data.paid_amount);
+  if (!Number.isFinite(outstanding)) throw new Error('Nieprawidłowa kwota należności');
 
   const safety = evaluateChaseSafety({
     outstanding,
     lastPaymentFromContractorAt: lastPaymentAt,
-    remindersPaused: facts.remindersPaused === 1,
+    remindersPaused: currentInvoice.data.reminders_paused === true,
     now: new Date(),
   });
 

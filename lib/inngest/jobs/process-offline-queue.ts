@@ -1,3 +1,4 @@
+import { InvoiceTenantMismatchError, requireInvoiceTenant } from './tenant-boundary';
 /**
  * Inngest: cykliczna próba wysłania faktur z kolejki Trybu Offline24.
  */
@@ -128,6 +129,23 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
     }> = [];
 
     for (const item of queueItems) {
+      // Queue rows are tenant-writable; do not trust their invoice_id.
+      try {
+        await requireInvoiceTenant(item.invoice_id, item.tenant_id);
+      } catch (error) {
+        // A DB outage is not evidence of a corrupt row. Retry instead of quarantining.
+        if (!(error instanceof InvoiceTenantMismatchError)) throw error;
+        const { error: quarantineError } = await createAdminClient()
+          .from('ksef_offline_queue')
+          .update({ status: 'failed', last_error: 'QUEUE_INVOICE_OWNERSHIP_MISMATCH' })
+          .eq('id', item.id)
+          .eq('tenant_id', item.tenant_id)
+          .eq('invoice_id', item.invoice_id)
+          .eq('status', 'queued');
+        if (quarantineError) throw new Error('Nie można odizolować błędnego wpisu kolejki');
+        results.push({ invoiceId: item.invoice_id, queueId: item.id, status: 'ownership-mismatch' });
+        continue;
+      }
       const deadlinePassed = await step.run(
         `deadline-check-${item.id}`,
         () => new Date(item.deadline).getTime() < Date.now(),
@@ -139,7 +157,9 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
           const { error } = await supabase
             .from('ksef_offline_queue')
             .update({ status: 'expired', last_error: 'OFFLINE_DEADLINE_EXCEEDED' })
-            .eq('id', item.id);
+            .eq('id', item.id)
+            .eq('tenant_id', item.tenant_id)
+            .eq('invoice_id', item.invoice_id);
           if (error) throw new Error(error.message);
 
           await updateInvoiceStatus(item.invoice_id, {
@@ -148,7 +168,7 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
             last_error_code: 'OFFLINE_DEADLINE_EXCEEDED',
             last_error_field: null,
             last_error_suggestion: null,
-          });
+          }, item.tenant_id);
         });
         results.push({ invoiceId: item.invoice_id, status: 'expired' });
         continue;
@@ -169,7 +189,7 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
             );
           }
 
-          const invoice = await getInvoiceForSubmit(item.invoice_id);
+          const invoice = await getInvoiceForSubmit(item.invoice_id, item.tenant_id);
 
           return {
             tenantId: item.tenant_id,
@@ -193,7 +213,9 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
               last_attempt_at: new Date().toISOString(),
               next_attempt_at: calculateNextRetry(attempts).toISOString(),
             })
-            .eq('id', item.id);
+            .eq('id', item.id)
+            .eq('tenant_id', item.tenant_id)
+            .eq('invoice_id', item.invoice_id);
           if (error) throw new Error(error.message);
         });
 
@@ -250,7 +272,8 @@ export async function runOfflineQueueSuccess(data: Parameters<typeof invoiceSubm
       return { skipped: true as const, reason: 'not-from-offline' };
     }
 
-    const invoiceId = data.invoiceId;
+    const { invoiceId, tenantId } = data;
+    await requireInvoiceTenant(invoiceId, tenantId);
 
     await step.run('mark-queue-sent', async () => {
       const supabase = createAdminClient();
@@ -258,6 +281,7 @@ export async function runOfflineQueueSuccess(data: Parameters<typeof invoiceSubm
         .from('ksef_offline_queue')
         .update({ status: 'sent', last_error: null })
         .eq('invoice_id', invoiceId)
+        .eq('tenant_id', tenantId)
         .eq('status', 'sending');
       if (error) throw new Error(error.message);
     });
@@ -285,7 +309,8 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
       return { skipped: true as const, reason: 'not-from-offline' };
     }
 
-    const { invoiceId, error: errorMessage } = data;
+    const { invoiceId, tenantId, error: errorMessage } = data;
+    await requireInvoiceTenant(invoiceId, tenantId);
 
     await step.run('rollback-queue-status', async () => {
       const supabase = createAdminClient();
@@ -294,6 +319,7 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
         .from('ksef_offline_queue')
         .select('id, attempts, status')
         .eq('invoice_id', invoiceId)
+        .eq('tenant_id', tenantId)
         .eq('status', 'sending')
         .maybeSingle();
       if (selErr) throw new Error(selErr.message);
@@ -313,7 +339,9 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
               : errorMessage,
           next_attempt_at: calculateNextRetry(attempts).toISOString(),
         })
-        .eq('id', row.id);
+        .eq('id', row.id)
+        .eq('tenant_id', tenantId)
+        .eq('invoice_id', invoiceId);
       if (updQ) throw new Error(updQ.message);
 
       await updateInvoiceStatus(invoiceId, {
@@ -325,7 +353,7 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
         last_error_code: 'OFFLINE_SUBMIT_RETRY',
         last_error_field: null,
         last_error_suggestion: null,
-      });
+      }, tenantId);
     });
 
     return { success: true as const };

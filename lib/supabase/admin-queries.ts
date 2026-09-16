@@ -126,13 +126,15 @@ export async function getTenantOwnerUserId(
  * dla raportowania SQL - submit-flow jej nie potrzebuje, bo `lines` są
  * już w fa3_data.
  */
-export async function getInvoiceForSubmit(invoiceId: string): Promise<Invoice> {
+export async function getInvoiceForSubmit(invoiceId: string, tenantId: string): Promise<Invoice> {
+  if (!tenantId) throw new Error('Brak organizacji faktury');
   const supabase = await createAdminClient();
 
   const { data, error } = await supabase
     .from('invoices')
     .select('fa3_data')
     .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
     .single();
 
   if (error) throw new Error(`Invoice ${invoiceId} not found: ${error.message}`);
@@ -140,8 +142,8 @@ export async function getInvoiceForSubmit(invoiceId: string): Promise<Invoice> {
     throw new Error(`Invoice ${invoiceId} has no fa3_data (corrupted row?)`);
   }
 
-  // fa3_data jest zapisywane przy tworzeniu faktury jako cały obiekt Invoice,
-  // więc zaufanie do kształtu jest OK (zapis idzie przez Zod-validated form).
+  // The database blob is tenant-scoped, not a trusted shape: the submit flow
+  // must still validate the document before contacting KSeF.
   return data.fa3_data as Invoice;
 }
 
@@ -192,9 +194,10 @@ const TIMESTAMPTZ_FIELDS: ReadonlyArray<keyof InvoiceStatusUpdates> = [
 export async function updateInvoiceStatus(
   invoiceId: string,
   updates: InvoiceStatusUpdates,
+  tenantId: string,
 ): Promise<void> {
+  if (!tenantId) throw new Error('Brak organizacji faktury');
   const supabase = await createAdminClient();
-
   const sanitized: Record<string, unknown> = { ...updates };
   for (const field of TIMESTAMPTZ_FIELDS) {
     if (sanitized[field] === '') {
@@ -202,11 +205,14 @@ export async function updateInvoiceStatus(
     }
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('invoices')
     .update(sanitized)
-    .eq('id', invoiceId);
-  if (error) {
-    throw new Error(`Failed to update invoice ${invoiceId}: ${error.message}`);
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .select('id')
+    .maybeSingle();
+  if (error || !data || data.id !== invoiceId) {
+    throw new Error('Nie udało się zaktualizować faktury w organizacji zadania');
   }
 }

@@ -132,7 +132,7 @@ export async function decideNextReminder(
     return { shouldSend: false, skipReason: 'Wkurzacz wyłączony' };
   }
 
-  const sentCount = await countSentReminders(invoice.id);
+  const sentCount = await countSentReminders(invoice.id, invoice.tenant_id);
   if (sentCount >= settings.max_reminders_per_invoice) {
     return {
       shouldSend: false,
@@ -164,6 +164,7 @@ export async function decideNextReminder(
 
   const stagesQueuedOrFinished = await getStagesAlreadyQueuedOrSent(
     invoice.id,
+    invoice.tenant_id,
   );
 
   let nextStage: 'stage_1' | 'stage_2' | 'stage_3' | null = null;
@@ -217,27 +218,32 @@ export async function decideNextReminder(
   };
 }
 
-async function countSentReminders(invoiceId: string): Promise<number> {
+async function countSentReminders(invoiceId: string, tenantId: string): Promise<number> {
   const supabase = createAdminClient();
   const { count, error } = await supabase
     .from('payment_reminders')
     .select('id', { count: 'exact', head: true })
     .eq('invoice_id', invoiceId)
+    .eq('tenant_id', tenantId)
     .eq('status', 'sent');
 
-  if (error) return 0;
+  if (error) throw new Error('Could not verify reminder limit');
   return count ?? 0;
 }
 
 async function getStagesAlreadyQueuedOrSent(
   invoiceId: string,
+  tenantId: string,
 ): Promise<Set<ReminderStage>> {
   const supabase = createAdminClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('payment_reminders')
     .select('stage, status')
     .eq('invoice_id', invoiceId)
+    .eq('tenant_id', tenantId)
     .in('status', ['pending', 'sent']);
+
+  if (error) throw new Error('Could not verify reminder stages');
 
   const out = new Set<ReminderStage>();
   for (const row of data ?? []) {
@@ -293,7 +299,7 @@ export async function findInvoicesRequiringReminders(): Promise<
     .select(
       'id, tenant_id, internal_number, payment_due_date, gross_total, paid_amount, buyer_data, buyer_nip, reminders_paused',
     )
-    .eq('direction', 'issued')
+    .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
     .in('payment_status', ['unpaid', 'partial', 'overdue'])
     .lt('payment_due_date', todaySlice)

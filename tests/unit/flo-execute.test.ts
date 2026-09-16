@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: vi.fn(async () => false), getGlobalFlag: vi.fn(async () => false) }));
 
 import { executeProposal } from '@/lib/flo/execute';
 import { fingerprintOf } from '@/lib/flo/fingerprint';
@@ -55,7 +56,7 @@ function approval(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const ARGS = { proposalId: 'prop-1', userId: 'usr-1', approvalId: 'apr-1' };
+const ARGS = { tenantId: 'ten-1', proposalId: 'prop-1', userId: 'usr-1', approvalId: 'apr-1' };
 
 beforeEach(() => {
   resetFloHandlers();
@@ -122,10 +123,10 @@ describe('wykonawca — pięćdziesiąt równoległych kliknięć', () => {
 
     // Jedno wykonanie. Nie „mniej więcej jedno” — dokładnie jedno.
     expect(calls).toBe(1);
-    // Żaden z pozostałych czterdziestu dziewięciu nie dostaje błędu:
-    // ich kliknięcie doprowadziło do działania, więc straszenie ich
-    // komunikatem byłoby kłamstwem.
-    expect(results.every((r) => r.ok)).toBe(true);
+    // A concurrent request may still be running. Never claim completion
+    // until the persisted status is done; blocked results explain "in progress".
+    expect(results.some((r) => r.ok)).toBe(true);
+    expect(results.every((r) => r.ok || r.reason === 'blocked')).toBe(true);
     expect(db.tables.flo_proposals[0]!.status).toBe('done');
     // Żeton zużyty raz.
     expect(db.tables.flo_approvals[0]!.consumed_at).toBe(NOW.toISOString());
