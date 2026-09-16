@@ -138,9 +138,9 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
     });
 
     if (error) {
-      console.error('[audit] Failed to log:', error.message, entry);
+      console.error('[audit] write_failed');
     }
-  } catch (error) {
-    console.error('[audit] Unexpected error:', error);
+  } catch {
+    console.error('[audit] write_failed');
   }
 }
