@@ -28,6 +28,7 @@ const AUTH_PUBLIC_PREFIXES = [
   '/login',
   '/register',
   '/forgot-password',
+  '/reset-password',
   '/auth',
   '/onboarding',
   '/invite',

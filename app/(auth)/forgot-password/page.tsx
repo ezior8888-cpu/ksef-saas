@@ -16,6 +16,7 @@ import { TurnstileWidget } from '@/components/auth/turnstile-widget';
 import { requestPasswordReset } from './actions';
 
 const ERROR_MESSAGES: Record<string, string> = {
+  verification_unavailable: 'Nie możemy teraz bezpiecznie wysłać prośby. Spróbuj ponownie za chwilę.',
   invalid_email: 'Podaj prawidłowy adres email.',
   rate_limited:
     'Zbyt wiele prób resetu hasła. Poczekaj chwilę i spróbuj ponownie.',
@@ -25,7 +26,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 const SUCCESS_MESSAGES: Record<string, string> = {
   email_sent:
-    'Jeśli konto z tym adresem istnieje, wysłaliśmy link do resetu hasła. Sprawdź skrzynkę (również folder spam).',
+    'Jeśli konto z tym adresem istnieje, otrzymasz link do resetu hasła. Sprawdź skrzynkę (również folder spam) i otwórz link w tej samej przeglądarce, w której wysłano prośbę.',
 };
 
 export default async function ForgotPasswordPage({
@@ -34,7 +35,8 @@ export default async function ForgotPasswordPage({
   searchParams: Promise<{ error?: string; success?: string; retry?: string }>;
 }) {
   const { error, success, retry } = await searchParams;
-  const retryMinutes = retry ? Math.ceil(Number(retry) / 60) : null;
+  const seconds = Number(retry);
+  const retryMinutes = Number.isFinite(seconds) && seconds > 0 && seconds <= 3600 ? Math.ceil(seconds / 60) : null;
   const errorMsg = error
     ? error === 'rate_limited' && retryMinutes
       ? `Zbyt wiele prób resetu hasła. Spróbuj ponownie za ~${retryMinutes} min.`
@@ -63,6 +65,7 @@ export default async function ForgotPasswordPage({
             id="email"
             name="email"
             type="email"
+            maxLength={254}
             required
             autoComplete="email"
             placeholder="twoj@email.pl"

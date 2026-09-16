@@ -13,6 +13,9 @@ export interface PasswordRateLimitResult {
 const POLICIES = {
   attempt: { limit: 5, windowSeconds: 300 },
   send: { limit: 1, windowSeconds: 60 },
+  resetEmail: { limit: 5, windowSeconds: 3600 },
+  resetIp: { limit: 10, windowSeconds: 3600 },
+  recoveryUse: { limit: 1, windowSeconds: 16 * 60 },
 } as const;
 
 const PASSWORD_ATTEMPT_SCRIPT = `
@@ -85,4 +88,28 @@ export async function checkPasswordOperationRateLimit(userId: string): Promise<P
 /** Additional cooldown before sending an email/SMS nonce, including retries. */
 export async function checkPasswordNonceSendRateLimit(userId: string): Promise<PasswordRateLimitResult> {
   return checkPasswordLimit(userId, 'send');
+}
+
+/** Email and IP budgets independent of authenticated password attempts. */
+export async function checkPasswordRecoveryRequestRateLimit(
+  email: string, ip: string,
+): Promise<PasswordRateLimitResult> {
+  if (!email || email.length > 254 || !ip || ip.length > 128) {
+    return { allowed: false, retryAfter: 3600, unavailable: true };
+  }
+  const ipLimit = await checkPasswordLimit(hashIdentifier(ip), 'resetIp');
+  if (!ipLimit.allowed) return ipLimit;
+  return checkPasswordLimit(hashIdentifier(email), 'resetEmail');
+}
+
+/**
+ * One attempt per verified recovery session, atomically before password update.
+ * 16 minutes exceeds the guard's 15-minute AMR lifetime + 30s clock tolerance.
+ * Do not release this claim after a failed/uncertain Auth call.
+ */
+export async function claimPasswordRecoverySession(sessionId: string): Promise<PasswordRateLimitResult> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) {
+    return { allowed: false, retryAfter: 16 * 60, unavailable: true };
+  }
+  return checkPasswordLimit(sessionId.toLowerCase(), 'recoveryUse');
 }

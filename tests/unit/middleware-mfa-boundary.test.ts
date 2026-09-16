@@ -86,7 +86,7 @@ it('returns API 401 when the previously claimed session no longer authenticates'
   expect(response.status).toBe(401);
   expect(await response.json()).toEqual({ error: 'not_authenticated' });
 });
-it.each(['/api/health', '/api/inngest', '/auth/callback', '/login/two-factor', '/login/two-factor/setup'])('preserves public/auth route %s for the route’s own guard', async (path) => {
+it.each(['/api/health', '/api/inngest', '/auth/callback', '/reset-password', '/login/two-factor', '/login/two-factor/setup'])('preserves public/auth route %s for the route’s own guard', async (path) => {
   const response = await updateSession(request(path, false));
   expect(response.status).toBe(200);
   expect(mocks.getUser).not.toHaveBeenCalled();

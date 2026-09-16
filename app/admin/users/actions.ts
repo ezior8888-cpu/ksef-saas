@@ -25,8 +25,6 @@ export type AdminActionResult =
   | { success: true; message?: string }
   | { success: false; error: string };
 
-const NOT_FOUND_ERR = { success: false, error: 'User nie istnieje' } as const;
-
 // ─── 1. Suspend / Unsuspend ─────────────────────────────────────────
 
 export async function suspendUserAction(
@@ -116,40 +114,16 @@ export async function forceLogoutAction(
 export async function sendPasswordResetAction(
   userId: string,
 ): Promise<AdminActionResult> {
-  const admin = await requireAdmin();
-  const supabase = createAdminClient();
+  await requireAdmin();
+  // Preserve the Server Action contract without creating an unusable bearer link.
+  void userId;
 
-  const { data: userData, error: userErr } = await supabase.auth.admin.getUserById(
-    userId,
-  );
-  if (userErr || !userData.user.email) {
-    return NOT_FOUND_ERR;
-  }
-
-  const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/auth/callback?next=/dashboard`;
-  const { error } = await supabase.auth.admin.generateLink({
-    type: 'recovery',
-    email: userData.user.email,
-    options: { redirectTo },
-  });
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  await logAuditSystem({
-    action: 'admin.user.password_reset_triggered',
-    tenantId: null,
-    userId: admin.userId,
-    entityType: 'user',
-    entityId: userId,
-    metadata: { adminEmail: admin.email, targetEmail: userData.user.email },
-  });
-
-  revalidatePath(`/admin/users/${userId}`);
+  // generateLink does not send mail. A PKCE reset started by the operator binds
+  // its verifier to the wrong browser. Implicit/OTP sessions do not establish
+  // the trusted recovery proof required by our password-reset endpoint.
   return {
-    success: true,
-    message: `Link reset wysłany na ${userData.user.email}`,
+    success: false,
+    error: 'Resetowanie hasła z panelu administratora jest niedostępne. Użytkownik może sam rozpocząć reset na stronie /forgot-password.',
   };
 }
 
