@@ -380,7 +380,7 @@ function readEvidence(value: unknown): FloEvidence[] {
 
 function readActions(value: unknown): FloAction[] | null {
   if (!Array.isArray(value)) return null;
-  const actions = value.flatMap((entry) => {
+  const actions = value.flatMap((entry): FloAction[] => {
     if (typeof entry !== 'object' || entry === null) return [];
     const record = entry as Record<string, unknown>;
     const label = readString(record.label);
@@ -393,7 +393,23 @@ function readActions(value: unknown): FloAction[] | null {
       intent === 'input' ||
       intent === 'open' ||
       intent === 'correct';
-    return label && valid ? [{ label, intent } as FloAction] : [];
+    if (!label || !valid) return [];
+
+    // Akcja z polem niesie ze sobą pytanie i rodzaj pola. Zgubione tutaj
+    // zamieniały „Częściowo" w pole „Podaj wartość" bez sprawdzania kształtu
+    // kwoty — a wtedy do serwera szło cokolwiek.
+    if (intent === 'input') {
+      const action: FloAction = {
+        label,
+        intent: 'input',
+        inputKind: readInputKind(record.inputKind),
+      };
+      const inputLabel = readString(record.inputLabel);
+      if (inputLabel) action.inputLabel = inputLabel;
+      return [action];
+    }
+
+    return [{ label, intent } as FloAction];
   });
   return actions.length > 0 ? actions : null;
 }

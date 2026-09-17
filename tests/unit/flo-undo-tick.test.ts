@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  captureInsertUndo,
   captureUndo,
   evaluateUndo,
   readUndoRecord,
@@ -91,6 +92,26 @@ describe('cofnięcie — reguła', () => {
     expect(readUndoRecord({ undo: { at: 'x' } })).toBeNull();
     expect(readUndoRecord({ undo: { ...record(), table: 'audit_logs' } })).toBeNull();
     expect(readUndoRecord({ undo: record() })).not.toBeNull();
+  });
+
+  it('usunięcie wiersza tylko tam, gdzie jest dokładnym odwróceniem wstawienia', () => {
+    const insert = captureInsertUndo(
+      'payments',
+      'pay-1',
+      { tenant_id: 'ten-1', invoice_id: 'inv-1', amount: 3300 },
+      NOW,
+    );
+    expect(readUndoRecord({ undo: insert })).toMatchObject({ op: 'delete', table: 'payments' });
+
+    // Podrzucony do ładunku zapis „usuń fakturę" nie jest cofnięciem.
+    expect(readUndoRecord({ undo: { ...insert, table: 'invoices' } })).toBeNull();
+    // Usunięcie bez warunku „wiersz dalej jest taki, jak go wstawiliśmy".
+    expect(readUndoRecord({ undo: { ...insert, after: {} } })).toBeNull();
+    // Wpłatę agent tylko wstawia — „przywracanie" jej pól nie ma sensu.
+    expect(readUndoRecord({ undo: { ...insert, op: 'restore' } })).toBeNull();
+    expect(readUndoRecord({ undo: { ...insert, op: 'truncate' } })).toBeNull();
+    // Zapisy sprzed wprowadzenia `op` dalej działają jak przywrócenie.
+    expect(readUndoRecord({ undo: record() })).toMatchObject({ op: 'restore' });
   });
 
   it('zapisuje stan sprzed i po zmianie', () => {

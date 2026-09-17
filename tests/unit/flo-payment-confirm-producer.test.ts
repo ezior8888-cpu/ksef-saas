@@ -253,6 +253,105 @@ describe('K-01 w pulsie — jedno pytanie', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+// Kwoty i odcisk z jednego odczytu
+// ═══════════════════════════════════════════════════════════════
+
+describe('K-01 w pulsie — kwoty z tego samego odczytu co odcisk', () => {
+  /**
+   * Lista faktur po terminie zapamiętana PRZED wpłatą — tak wygląda wyścig
+   * między zapytaniem o listę a odczytem pojedynczej faktury.
+   */
+  function staleList() {
+    const snapshot = [...invoiceRows.values()].map(toOverdue);
+    return sources({ readOverdueInvoices: async () => snapshot });
+  }
+
+  it('AWARIA: wpłata między odczytami — karta pokazuje należność PO wpłacie', async () => {
+    putInvoice('A', { gross: 4300 });
+    const src = staleList();
+    // Wpłata wpada po zapytaniu o listę, a przed odczytem faktury.
+    invoiceRows.get('A')!.paid_amount = 1000;
+    const db = createFakeDb({ flo_kind_flags: [alphaFlag()] });
+
+    const result = await producePaymentConfirm(TENANT, NOW, db.client, src.value);
+
+    expect(result.outcome).toBe('created');
+    const row = db.tables.flo_proposals[0]! as unknown as FloProposalRow;
+    // Przed poprawką: „4 300,00 zł" na karcie i odcisk ze stanu z wpłatą —
+    // re-walidacja przepuszczała kliknięcie, a „Tak" zapisywało wpłatę na
+    // kwotę, której nikt już nie był winien.
+    expect(row.body).toContain('3 300,00 zł');
+    expect(row.body).not.toContain('4 300,00 zł');
+    expect((row.payload.facts as Record<string, unknown>).paidAmount).toBe(1000);
+    await expect(assertFresh(row, NOW)).resolves.toBeUndefined();
+  });
+
+  it('lista mówi „zaległa", faktura jest już opłacona — nie pytamy, bierzemy następną', async () => {
+    putInvoice('A', { gross: 9000 });
+    putInvoice('B', { gross: 1000 });
+    const src = staleList();
+    invoiceRows.get('A')!.paid_amount = 9000;
+    const db = createFakeDb({ flo_kind_flags: [alphaFlag()] });
+
+    const result = await producePaymentConfirm(TENANT, NOW, db.client, src.value);
+
+    expect(result.outcome).toBe('created');
+    expect(db.tables.flo_proposals).toHaveLength(1);
+    expect(db.tables.flo_proposals[0]!.topic_key).toBe('payment.confirm:B');
+  });
+
+  it('wstrzymane przypomnienia w drugim odczycie też zamykają pytanie', async () => {
+    putInvoice('A');
+    const src = staleList();
+    invoiceRows.get('A')!.reminders_paused = true;
+    const db = createFakeDb({ flo_kind_flags: [alphaFlag()] });
+
+    const result = await producePaymentConfirm(TENANT, NOW, db.client, src.value);
+
+    expect(result.outcome).toBe('nothing');
+    expect(db.tables.flo_proposals).toHaveLength(0);
+  });
+
+  it('odświeżenie żywej karty: kwota idzie za wpłatą częściową', async () => {
+    putInvoice('A', { gross: 4300 });
+    const db = createFakeDb({ flo_kind_flags: [alphaFlag()] });
+    await producePaymentConfirm(TENANT, NOW, db.client, sources().value);
+
+    const src = staleList();
+    invoiceRows.get('A')!.paid_amount = 1300;
+    const tomorrow = new Date(NOW.getTime() + DAY);
+    const result = await producePaymentConfirm(TENANT, tomorrow, db.client, src.value);
+
+    expect(result.outcome).toBe('waiting');
+    const row = db.tables.flo_proposals[0]! as unknown as FloProposalRow;
+    expect(row.body).toContain('3 000,00 zł');
+    await expect(assertFresh(row, tomorrow)).resolves.toBeUndefined();
+  });
+
+  it('odświeżenie żywej karty: faktura opłacona w drugim odczycie — karta zamknięta, następne pytanie', async () => {
+    putInvoice('A', { gross: 9000 });
+    putInvoice('B', { gross: 1000 });
+    const db = createFakeDb({ flo_kind_flags: [alphaFlag()] });
+    await producePaymentConfirm(TENANT, NOW, db.client, sources().value);
+
+    // Lista dalej widzi A jako zaległą — zamknąć kartę może tylko drugi odczyt.
+    const src = staleList();
+    invoiceRows.get('A')!.paid_amount = 9000;
+    const result = await producePaymentConfirm(
+      TENANT,
+      new Date(NOW.getTime() + DAY),
+      db.client,
+      src.value,
+    );
+
+    expect(result).toEqual({ outcome: 'created', closed: 1 });
+    const [a, b] = db.tables.flo_proposals;
+    expect(a).toMatchObject({ topic_key: 'payment.confirm:A', status: 'expired', dismissed_reason: 'stale' });
+    expect(b).toMatchObject({ topic_key: 'payment.confirm:B', status: 'open' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 // Kolejka i „pytam raz"
 // ═══════════════════════════════════════════════════════════════
 

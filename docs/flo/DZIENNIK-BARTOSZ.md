@@ -2870,3 +2870,143 @@ Inngesta go nie widziała.
   odsłonięcia.
 - 1.2 (W-03 w wykonawcy W-01) albo decyzja o `flo.tick.tenant` przed
   dopisaniem kolejnych reguł do pulsu.
+
+---
+
+## 2026-09-17 · Plan FLO 2, Krok 1.1a — wykonawca K-01 i karta z jednego odczytu
+
+Gałąź `claude/fix-build-invoice-confirm-956016`, na bazie
+`claude/zadanie-1-1-producent-k01-cf0fb8` (PR #14). Naprawia trzy punkty
+„⚠️ Wykonawca K-01 NIE DZIAŁA" z wpisu wyżej i jeden błąd producenta
+znaleziony przy ich czytaniu.
+
+### Co zrobione
+
+| # | Problem | Naprawa | Plik |
+|---|---|---|---|
+| A | Kwoty na karcie z listy faktur, odcisk z drugiego odczytu. Wpłata między nimi = karta ze starą kwotą i świeżym odciskiem, którą re-walidacja przepuszcza | `buildInvoiceConfirmProposal` przyjmuje `state` z `readState` i z niego bierze kwoty, numer, termin i odcisk. Zwraca `null`, gdy według tego odczytu faktura nie jest zaległa → producent ją pomija, a żywą kartę zamyka (`stale`) | `payment-confirm.ts`, `payment-confirm-producer.ts` |
+| B1 | Wstawianie `paid_at`, `source`, `note`; brak `payment_date` (NOT NULL). Rzutowanie `as unknown as PaymentsClient` ukrywało to przed `tsc` | wiersz `TablesInsert<'payments'>`, klient `SupabaseClient<Database>`; `payment_date` = dzień w strefie Europe/Warsaw, `is_confirmed: true`, ślad w `notes`. `tsc` odrzuca teraz `paid_at` (sprawdzone) | `payment-confirm.ts`, `fingerprint.ts` (`warsawIsoDate`) |
+| B2 | Cofnięcie przywracało `invoices.paid_amount` z `previousPaid`, którego nikt nie ustawiał (= 0), i nie ruszało `payments` | cofnięcie **usuwa wstawiony wiersz** z `payments`; `paid_amount` przelicza trigger. Szczegóły niżej | `undo.ts`, `execute.ts`, `handlers/index.ts` |
+| B3 | „Częściowo" nie istniało: brak akcji na karcie, `readActions` gubił `inputLabel`/`inputKind`, `Number('1 234,56')` = `NaN` | karta ma „Tak, zapłacił" / „Jeszcze nie" / „Częściowo" (jak atrapa `fx-choice-payment`); `readActions` zachowuje pola akcji `input`; `parsePlnAmount` czyta dokładnie ten kształt, który przepuszcza pole w karcie (`gating.ts`), inaczej odmawia | `payment-confirm.ts`, `proposals.ts`, `money.ts` |
+
+Logika wykonawcy jest w funkcji czystej `planPaymentConfirmation` — handler
+tylko zapisuje wiersz. Należność liczy się z `payload.facts`, czyli z faktów,
+które `assertFresh` sprawdziło z bazą tuż przed wywołaniem wykonawcy, a nie
+z kwot zapisanych w karcie przy jej tworzeniu. Ładunek karty jest składany od
+zera: bez `invoices`, `snoozeDays` i `inputLabel` z funkcji zbiorczej, które
+opisywały inną kartę.
+
+### Znalezione przy okazji i naprawione — BEZPIECZEŃSTWO
+
+Wykonawca brał identyfikator faktury z `ctx.input.selectedIds[0]`, czyli
+**z przeglądarki**, a zapis szedł klientem administracyjnym (bez RLS).
+Podmienione żądanie mogło dopisać wpłatę do dowolnej faktury, także cudzego
+konta — a trigger `recalculate_invoice_paid_amount` (SECURITY DEFINER)
+przeliczyłby jej `paid_amount`. Teraz faktura pochodzi wyłącznie z
+`payload.invoiceId`, a `selectedIds` wskazujące inną fakturę kończy się
+odmową. Test: „BEZPIECZEŃSTWO: identyfikator faktury z przeglądarki nie
+wybiera faktury".
+
+Na produkcji to nie było wykorzystywalne: K-01 jest na etapie 0 kanarka, kart
+nie ma, a wykonawca i tak padał na złych kolumnach.
+
+### Decyzja o cofnięciu — dlaczego usunięcie wiersza
+
+`invoices.paid_amount` nie jest polem, które ktokolwiek w kodzie ustawia —
+jedynym piszącym jest trigger z 00014, liczący sumę wpłat
+(`is_auto_matched = false OR is_confirmed = true`). Przywracanie
+`paid_amount` z zapamiętanej liczby rozjeżdża go z sumą wpłat przy pierwszym
+kolejnym przeliczeniu, a przy wcześniejszej wpłacie częściowej zerowało ją
+na fakturze. Usunięcie wstawionego wiersza jest dokładnym odwróceniem
+„Tak" — faktura wraca do stanu sprzed kliknięcia sama.
+
+Zmiany w mechanizmie cofnięcia:
+
+- `UndoRecord.op`: `restore` (domyślne — stare zapisy bez pola działają jak
+  dotąd) albo `delete`; `captureInsertUndo` buduje ten drugi.
+- `delete` dozwolone **tylko** dla `payments` (lista `DELETABLE`). Zapis
+  „usuń fakturę" podrzucony do ładunku jest odrzucany przy odczycie, tak samo
+  `delete` bez pól kontrolnych i `restore` na `payments`.
+- Pola kontrolne wpłaty: `tenant_id`, `invoice_id`, `amount`. Jeśli człowiek
+  poprawił kwotę wpłaty w międzyczasie — cofnięcie się wycofuje, jak dotąd.
+- **Zapis cofnięcia nie trafiał tam, gdzie go szukano.** Wykonawca oddawał go
+  w `details`, a `execute.ts` wrzucał `details` tylko do `audit_logs`;
+  `undoAction` czyta `payload.undo`. Każde cofnięcie K-01 kończyłoby się
+  „Tej zmiany nie da się cofnąć". Teraz `FloHandlerResult.undo` jest zapisywane
+  w ładunku razem ze statusem `done` (w jednym zapisie), z `undoableUntil`.
+
+### Do decyzji Bartosza
+
+- **Przycisku „cofnij" dla K-01 nie widać w interfejsie.** Serwerowo
+  cofnięcie działa (test całej drogi: „Tak" → `executeProposal` →
+  `undoAction`), ale wątek (`listOpen`) pokazuje tylko karty `open`
+  i `approved`, a po wykonaniu karta ma `done` — pasek cofnięcia nie ma na
+  czym się narysować. `/dashboard?undo=<id>` szuka karty w tej samej liście.
+  To zmiana w torze interfejsu, nie w silniku.
+- **Dwa „Jeszcze nie" z rzędu wyciszają K-01 na 90 dni.** „Jeszcze nie" to
+  `dismissProposal('not_now')` → `recordDecision('dismissed')`, a
+  `MUTE_AFTER_DISMISSALS = 2`. Tak samo działało domyślne „Nie teraz", więc
+  to nie regresja — ale w K-01 „jeszcze nie zapłacił" jest prawdziwą
+  odpowiedzią o świecie, nie oceną agenta.
+- **Błąd kwoty kończy się ogólnikiem.** Kwota ponad należność albo
+  nieczytelna rzuca wyjątek, a `execute.ts` pokazuje wtedy „Nie udało mi się
+  tego dokończyć. Zajmujemy się tym." i cofa kartę do `approved`. Pole
+  w karcie odsiewa zły kształt, więc realnie dotyczy to kwoty większej od
+  należności. Lepszy komunikat wymaga osobnego rodzaju wyniku w wykonawcy
+  propozycji.
+
+### Znalezione, NIE naprawione (poza zakresem)
+
+- **K-02 (`payment-chase-handler.ts`) czyta `payments.paid_at`** — tej
+  kolumny nie ma (jest `payment_date`), rzutowanie znów to ukrywa. Zapytanie
+  „okno bezpieczeństwa" padnie błędem PostgREST-a, więc wykonawca ponagleń
+  nie wyśle niczego. Błąd bezpieczny (nic nie wychodzi), ale K-02 nie działa.
+- Wpłata z banku dopasowana automatycznie i niepotwierdzona
+  (`is_auto_matched = true`, `is_confirmed = false`) nie wlicza się do
+  `paid_amount`. Jeśli klient kliknie „Tak" przy takiej wpłacie, a potem ktoś
+  potwierdzi dopasowanie — suma przekroczy brutto i
+  `check_paid_amount_valid` odrzuci potwierdzenie. Dziś w `app/` i `lib/`
+  nic nie zapisuje `is_auto_matched` — jedynym kodem piszącym do `payments`
+  jest ten wykonawca — więc to teoria na później.
+- `payment_method` zostaje z domyślną wartością bazy (`bank_transfer`) —
+  klient nie mówi, jak zapłacono, a nic tej kolumny dziś nie czyta.
+
+### Czego świadomie NIE zrobiłem
+
+- Migracji (żadna nie była potrzebna), wdrożenia, zmian w `types/flo.ts`.
+- Usunięcia funkcji zbiorczej `buildPaymentConfirmProposal` — dalej
+  nieużywana, decyzja z wpisu 1.1 czeka.
+- Zmian w interfejsie (pasek cofnięcia dla kart `done`).
+
+### Weryfikacja
+
+- **Nowy plik** `tests/unit/flo-payment-confirm-executor.test.ts` (28
+  testów). Atrapa `payments` zachowuje się jak baza: odrzuca nieistniejące
+  kolumny i brak `payment_date`, a po wstawieniu i usunięciu przelicza
+  `paid_amount` jak trigger. Kluczowy test idzie PRAWDZIWYM
+  `executeProposal` i `undoAction`: „Tak" zapisuje wpłatę, faktura z
+  wcześniejszą wpłatą 1 000 zł wraca po cofnięciu do 1 000 zł.
+- `flo-payment-confirm-producer.test.ts` +5 (wyścig „lista przed wpłatą,
+  faktura po wpłacie" przy tworzeniu i przy odświeżaniu karty),
+  `flo-undo-tick.test.ts` +1, `flo-proposals.test.ts` +1.
+- **Test mutacyjny** — każdy z dziesięciu starych błędów wstawiony z
+  powrotem wywala co najmniej jeden test: kwota nie z drugiego odczytu (5),
+  odświeżenie nie zamyka karty (1), kolumna `paid_at` (6), data w UTC (1),
+  `selectedIds` bez kontroli (1), `Number()` zamiast parsera (2),
+  `readActions` gubi pola (2), cofnięcie nie w ładunku (4), cofnięcie
+  nadpisuje zamiast usuwać (1), usuwanie z dowolnej tabeli (1).
+- `tsc --noEmit` na całym projekcie czysto; eslint na zmienionych plikach
+  0 błędów, 0 ostrzeżeń; vitest **1179/1179** (czerwony tylko
+  `rls-isolation.test.ts`, bez `.env.local` — jak w 1.1); W1 zielony.
+  `tsx --test` (XML) nie uruchamiany — nie dotyczy zmienionych plików.
+- Uwaga środowiskowa: pierwsze `tsc` padło na braku pamięci systemowej
+  (inny program trzymał ~13,5 GB), drugie przeszło. Narzędzia z
+  `node_modules` głównego katalogu, jak w 1.1.
+
+### Następny krok
+
+- Scalenie PR #14, potem tego PR-a (baza = gałąź 1.1).
+- Decyzje z sekcji „Do decyzji Bartosza" — przede wszystkim pasek cofnięcia
+  w interfejsie; bez niego K-01 nie powinno wyjść z etapu 0 kanarka, bo
+  „odwracalne" byłoby tylko deklaracją.
+- Osobne zadanie: `payments.paid_at` w wykonawcy K-02.

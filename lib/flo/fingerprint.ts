@@ -314,8 +314,17 @@ const WARSAW_DATE = new Intl.DateTimeFormat('en-CA', {
  * Granicę doby wyznaczamy więc jawnie w strefie Europe/Warsaw.
  */
 function warsawDayNumber(ms: number): number {
-  const iso = WARSAW_DATE.format(new Date(ms)); // YYYY-MM-DD
+  const iso = warsawIsoDate(new Date(ms));
   return Math.floor(Date.parse(`${iso}T00:00:00Z`) / 86_400_000);
+}
+
+/**
+ * Data kalendarzowa w polskiej strefie jako YYYY-MM-DD — do kolumn `DATE`.
+ * Z tego samego powodu co wyżej: `toISOString().slice(0, 10)` o 00:30 czasu
+ * polskiego zapisałoby wczorajszą datę.
+ */
+export function warsawIsoDate(date: Date): string {
+  return WARSAW_DATE.format(date);
 }
 
 /** „dziś”, „wczoraj” albo data — tak, jak powiedziałby to człowiek. */

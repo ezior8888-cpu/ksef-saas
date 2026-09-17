@@ -27,13 +27,32 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export const UNDO_WINDOW_MS = 10 * 60_000;
 
 /** Tabele, w których agent wolno mu cokolwiek zmienić samodzielnie. */
-export type UndoableTable = 'expenses' | 'invoices' | 'contractors';
+export type UndoableTable = 'expenses' | 'invoices' | 'contractors' | 'payments';
+
+/**
+ * Tabele, w których cofnięcie wolno zrobić USUNIĘCIEM wiersza.
+ *
+ * Wyłącznie wiersze, które agent sam wstawił, i wyłącznie tam, gdzie
+ * usunięcie jest dokładnym odwróceniem wstawienia. Wpłata z karty K-01 jest
+ * takim wierszem: trigger `recalculate_invoice_paid_amount` liczy
+ * `invoices.paid_amount` jako sumę wpłat, więc po usunięciu faktura wraca
+ * do stanu sprzed kliknięcia sama. Faktury czy koszty nigdy nie trafią na tę
+ * listę — zapis cofnięcia z `op: 'delete'` na nich jest odrzucany przy
+ * odczycie, nawet gdyby ktoś go podrzucił do ładunku.
+ */
+const DELETABLE: ReadonlySet<UndoableTable> = new Set(['payments']);
 
 export interface UndoRecord {
   /** Kiedy agent wykonał zmianę (ISO). */
   at: string;
   table: UndoableTable;
   rowId: string;
+  /**
+   * Jak cofnąć: `restore` (domyślnie) przywraca pola z `before`, `delete`
+   * usuwa wiersz, który agent wstawił. Brak pola = `restore`, bo tak wyglądają
+   * zapisy sprzed wprowadzenia wstawień.
+   */
+  op?: 'restore' | 'delete';
   /** Wartości SPRZED zmiany — tylko pola, które agent ruszył. */
   before: Record<string, string | number | boolean | null>;
   /** Wartości, które agent ustawił — do sprawdzenia, czy nikt ich nie nadpisał. */
@@ -59,6 +78,29 @@ export function captureUndo(
   return { at: now.toISOString(), table, rowId, before, after };
 }
 
+/**
+ * Zapis cofnięcia dla wiersza, który agent WSTAWIŁ.
+ *
+ * `inserted` to pola, po których poznamy, że wiersz jest dalej ten sam —
+ * jeśli człowiek w międzyczasie poprawił kwotę wpłaty, cofnięcie nie
+ * skasuje jego poprawki.
+ */
+export function captureInsertUndo(
+  table: UndoableTable,
+  rowId: string,
+  inserted: UndoRecord['after'],
+  now: Date = new Date(),
+): UndoRecord {
+  return {
+    at: now.toISOString(),
+    table,
+    rowId,
+    op: 'delete',
+    before: {},
+    after: inserted,
+  };
+}
+
 /** Do kiedy da się cofnąć — interfejs pokazuje z tego odliczanie. */
 export function undoableUntil(record: UndoRecord): string {
   return new Date(Date.parse(record.at) + UNDO_WINDOW_MS).toISOString();
@@ -73,16 +115,38 @@ export function readUndoRecord(payload: Record<string, unknown>): UndoRecord | n
     typeof candidate.rowId !== 'string' ||
     (candidate.table !== 'expenses' &&
       candidate.table !== 'invoices' &&
-      candidate.table !== 'contractors') ||
+      candidate.table !== 'contractors' &&
+      candidate.table !== 'payments') ||
     typeof candidate.before !== 'object' ||
     candidate.before === null
   ) {
     return null;
   }
+
+  const op = candidate.op ?? 'restore';
+  if (op !== 'restore' && op !== 'delete') return null;
+  if (op === 'delete') {
+    // Usunięcie bez warunku „wiersz dalej jest taki, jak go wstawiliśmy”
+    // skasowałoby cokolwiek, co akurat ma ten identyfikator.
+    const after = candidate.after;
+    if (
+      !DELETABLE.has(candidate.table) ||
+      typeof after !== 'object' ||
+      after === null ||
+      Object.keys(after).length === 0
+    ) {
+      return null;
+    }
+  } else if (candidate.table === 'payments') {
+    // Wpłatę agent tylko wstawia. „Przywracanie” jej pól nie ma sensu.
+    return null;
+  }
+
   return {
     at: candidate.at,
     table: candidate.table,
     rowId: candidate.rowId,
+    op,
     before: candidate.before as UndoRecord['before'],
     after: (candidate.after ?? {}) as UndoRecord['after'],
   };
@@ -161,6 +225,12 @@ interface UndoClient {
         value: string,
       ) => Promise<{ error: { message: string } | null }>;
     };
+    delete: () => {
+      eq: (
+        column: string,
+        value: string,
+      ) => Promise<{ error: { message: string } | null }>;
+    };
   };
 }
 
@@ -208,12 +278,16 @@ export async function undoAction(
   const verdict = evaluateUndo(record, current.data, now);
   if (!verdict.ok) return verdict;
 
-  const restore = await rows
-    .from(record.table)
-    .update(record.before)
-    .eq('id', record.rowId);
+  const deleting = record.op === 'delete';
 
-  if (restore.error) throw new Error(restore.error.message);
+  // Wstawiony wiersz usuwamy, a nie „zerujemy” pól w innej tabeli. Przy wpłacie
+  // to jest różnica między danymi, które się zgadzają, a fakturą z kwotą
+  // zapłaconą niezgodną z sumą wpłat — `paid_amount` przelicza trigger bazy.
+  const reverted = deleting
+    ? await rows.from(record.table).delete().eq('id', record.rowId)
+    : await rows.from(record.table).update(record.before).eq('id', record.rowId);
+
+  if (reverted.error) throw new Error(reverted.error.message);
 
   // Powód `undone`, a NIE `not_now`: karta znika z wątku tak samo jak przy
   // odrzuceniu, ale to są dwa różne zdarzenia. „Nie teraz” znaczy „nie chcę
@@ -236,6 +310,7 @@ export async function undoAction(
       kind: proposal.kind,
       table: record.table,
       rowId: record.rowId,
+      op: record.op ?? 'restore',
       restored: Object.keys(record.before),
     },
   });
