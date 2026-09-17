@@ -230,10 +230,22 @@ describe('etapy 10 → 50 → 100', () => {
 
   it('kolejność z planu: od pomyłek wewnątrz konta do rejestru państwowego', () => {
     expect(ROLLOUT_ORDER.map((entry) => entry.feature)).toEqual([
-      'W-01', 'W-02', 'K-01', 'X-01', 'X-02', 'B-01', 'K-02', 'P-01', 'P-02',
+      'W-01', 'W-02', 'K-01', 'X-05', 'X-01', 'X-02', 'B-01', 'K-02', 'P-01', 'P-02',
     ]);
     // Ostatnie pozycje to promień 4.
     expect(KIND_RADIUS[ROLLOUT_ORDER[ROLLOUT_ORDER.length - 1]!.kind]).toBe(4);
+  });
+
+  it('X-05 jest w kanarku: bez wiersza w flo_rollout audyt nie powstaje na żadnym koncie', async () => {
+    // Decyzja z 17.09.2026 — pierwsze karty audytu nie idą do wszystkich
+    // naraz. Konto alfy wpuszcza się wpisem w flo_kind_flags.
+    const verdict = await isKindEnabledForTenant(
+      'ksef.audit',
+      'tenant-abc',
+      createFakeDb().client,
+      async () => false,
+    );
+    expect(verdict).toMatchObject({ enabled: false, decidedBy: 'canary' });
   });
 
   it('zapis etapu ustawia znacznik czasu', async () => {
