@@ -2724,3 +2724,149 @@ decyzja przez `flo_rollout`, nie skutek uboczny wdrożenia.
 
 Ćwiczenie M8 z kroku 53 (wyłączenie funkcji na produkcji) dalej NIEPOWTÓRZONE
 po wdrożeniu — to jest następna rzecz do zrobienia.
+
+---
+
+## 2026-09-17 · Plan FLO 2, Krok 1.1 — producent K-01 w pulsie
+
+Gałąź `claude/zadanie-1-1-producent-k01-cf0fb8`. Pierwsza pozycja fazy 1
+z `docs/flo/PLAN-FLO-2.md`: puls ma zadawać pytanie „zapłacił?" dobę po
+terminie. Funkcje czyste i wykonawca istniały, nikt nie tworzył karty.
+
+### Co zrobione
+
+- **`lib/flo/functions/payment-confirm-producer.ts`** (nowy). Na jednym
+  koncie: bramki → historia kart K-01 → faktury po terminie → decyzja.
+  Na wszystkich kontach: pętla z izolacją błędów (padnięte konto trafia do
+  logów workera, puls idzie dalej).
+- **`lib/flo/tick.ts`** — K-01 wpięte na końcu pulsu, po audycie X-05.
+  Puls czyta aktywne, nieusunięte konta stronami po 500 (bez stałego limitu —
+  audyt X-05 ma `limit(200)` bez sortowania i stronicowania, więc konta ponad
+  dwusetne mogą go nie dostać nigdy; zostawione, bo to nie ten krok). Źródła
+  danych są wstrzykiwalne jak `db`.
+- **`buildInvoiceConfirmProposal`** w `payment-confirm.ts` — DODANA obok
+  funkcji zbiorczej, która zostaje bez zmian.
+- **`buyerName`** z `fingerprint.ts` wyeksportowane: nazwa na karcie i nazwa
+  w zdaniu re-walidacji z jednego miejsca.
+
+### Dlaczego karta o JEDNEJ fakturze, a nie zbiorcza
+
+Plan zakładał `buildPaymentConfirmProposal` wprost. Przy wpinaniu wyszło, że
+jej wynik jest martwy w trzech miejscach, których sama funkcja nie widzi:
+
+| # | Problem | Skutek |
+|---|---|---|
+| 1 | wariant `choice` nie rysuje listy faktur, a wykonawca zamyka „Tak" PIERWSZĄ z ładunku | klient klika „Tak" pod „Sprawdźmy 3 zaległe płatności" i zamyka fakturę, której nie widział — awaria nr 1 z nagłówka pliku |
+| 2 | ładunek zbiorczy nie ma `invoiceId`, więc `readState` liczy odcisk z etykiet ładunku | odcisk nie zgadza się NIGDY — każde kliknięcie = „dane się zmieniły" (test to udowadnia) |
+| 3 | `topicKey` z datą dnia | nowa karta o to samo przy każdym przebiegu pulsu |
+
+Karta o jednej fakturze zgadza się z resztą systemu: szablon w `copy.ts`
+(„Pytam raz — potem się już nie odezwę"), atrapa `fx-choice-payment`,
+wzorzec K-02 (fakty przez `computeFingerprint`, temat per faktura).
+**Decyzja do potwierdzenia przez Bartosza** — funkcja zbiorcza jest
+nieużywana i można ją usunąć albo przerobić na wariant `list`.
+
+### Cztery zasady producenta (każda ma test)
+
+1. **Jedna żywa karta K-01 na konto.** Pięć zaległości = kolejka, nie pięć
+   pytań. Największa kwota pierwsza.
+2. **Pytam raz.** Faktura z kartą `done`, `dismissed` (także `undone`) albo
+   przemilczaną do wygaśnięcia nie wraca. Wraca tylko po `stale` — tamto
+   pytanie dotyczyło innego stanu faktury.
+3. **Karta nie kłamie o świecie.** Otwarta karta o fakturze, która przestała
+   być zaległa (np. import wyciągu), jest zamykana z `stale` przy najbliższym
+   przebiegu. Zatwierdzonej nie ruszamy. Odświeżenie nie przesuwa `expires_at`
+   — inaczej przemilczana karta nie wygasłaby nigdy.
+4. **Konto wyłączone nie kosztuje odczytu faktur.** Bramki przed zapytaniem.
+   Dziś K-01 jest w kanarku na etapie 0, czyli puls na produkcji robi dla
+   K-01 tylko odczyty flag — **zero kart, zero zapisów**.
+
+Definicja „po terminie" ta sama co w cronie ponagleń (`issued`, `accepted`,
+`unpaid/partial/overdue`), plus dwa warunki własne:
+
+- **`origin = 'app'`** — import historii nie odblokowuje pytań wstecz
+  (plan 1.19, część dotycząca K-01). Faktury z KSeF są „nieopłacone" tylko
+  dlatego, że import nie zna wyciągów.
+- **termin w ostatnich 60 dniach** — „zapłacił?" po kwartale brzmi jak
+  zarzut, a dalsze upominanie się to K-02.
+
+Błąd na koncie idzie do Sentry z tagami `job`, `kind`, `tenant_id` (plan,
+reguła pulsu nr 2) i do logów workera; puls leci dalej.
+
+### Czego świadomie NIE zrobiłem
+
+- **Kolejki `flo.tick.tenant`** (wzorzec z 1A). Nowa kolejka zmienia układ
+  workera — decyzja Bartosza. `producePaymentConfirm` działa na jednym
+  koncie, więc przyszłe zadanie per konto zawoła ją bez zmian.
+- **Honorowania `snoozeDays` (7 dni).** `flo_proposals` nie ma kolumny z
+  czasem odrzucenia, a liczenie od `created_at` skracałoby odłożenie do zera.
+  Zamiast tego „Nie teraz" = pytanie zamknięte (zasada 2). Prawdziwe
+  odłożenie wymaga migracji — do decyzji.
+- **Definicji aktywnego konta wg subskrypcji** (plan, decyzja D12). Puls
+  bierze dziś `tenants.is_active = true AND deleted_at IS NULL` — tę samą
+  definicję co metryki panelu. Po decyzji D12 zmienia się jedno zapytanie
+  w `readActiveTenantIds` (`tick.ts`).
+- **Wyniku pulsu per producent** w kształcie `{ kind, created, updated, error }`
+  z planu — jest płasko (`confirmAsked`, `confirmClosed`, `failedTenants`).
+  Przy drugim producencie warto to uogólnić, przy jednym byłaby to
+  abstrakcja na zapas.
+- **Cap dzienny na wszystkie rodzaje (1.20)** — K-01 sam tworzy najwyżej
+  jedną kartę dziennie na konto, ale limit wspólny dla pulsu to osobne zadanie.
+- **Naprawy wykonawcy K-01** — niżej, osobne zadanie.
+- Migracji, wdrożenia, zmian w `types/flo.ts`.
+
+### ⚠️ Wykonawca K-01 NIE DZIAŁA — zał. A planu mówi „Wyk. ✅", to nieprawda
+
+Znalezione przy czytaniu, nie naprawione (poza zakresem 1.1, dotyka zapisu
+pieniędzy — wymaga przeglądu):
+
+1. **Zły zapis do `payments`.** Wykonawca wstawia `paid_at`, `source`,
+   `note`. Tabela (migracja 00014) ma `payment_date DATE NOT NULL` i `notes`,
+   kolumny `source` nie ma. Rzutowanie `as unknown as PaymentsClient` ukrywa
+   to przed typecheckiem. Skutek: każde „Tak" kończy się błędem PostgREST-a
+   i komunikatem „Nie udało mi się tego dokończyć".
+2. **Cofnięcie rozjeżdża dane.** `captureUndo('invoices', …)` zapisuje
+   `paid_amount` sprzed zmiany z `payload.previousPaid`, którego nikt nie
+   ustawia (zawsze 0). Cofnięcie przywraca kolumnę faktury, ale NIE kasuje
+   wiersza z `payments` — suma wpłat przestaje się zgadzać z fakturą.
+3. **„Częściowo" nie istnieje.** Karta nie ma tej akcji (brak `secondary`
+   w ładunku), `readActions` i tak gubi `inputLabel`/`inputKind` akcji
+   drugorzędnych, a wykonawca robi `Number('1 234,56')` = `NaN`.
+
+Dopóki to nie jest naprawione, **K-01 nie może wyjść z etapu 0 kanarka**
+ani trafić do `flo_kind_flags` konta alfy.
+
+### Test W1 miał ślepą plamkę — załatana
+
+`IMPORT_RE` w `flo-architecture.test.ts` nie widział gołych `import '…'`,
+a tak rejestrują się wykonawcy (`lib/flo/functions/index.ts`). Po dopisaniu
+tej formy W1 nadal jest zielony (sprawdzone sondą: z cronów dosięgają wysyłki
+tylko dwa znane długi). Doszła asercja „puls agenta jest odcięty od
+wysyłki" — `cron.flo-tick` jest tylko na pg-boss, więc pętla po cronach
+Inngesta go nie widziała.
+
+### Weryfikacja
+
+- `tests/unit/flo-payment-confirm-producer.test.ts` — 15 testów na
+  `flo-fake-db`. Kluczowy: karta z producenta przechodzi PRAWDZIWE
+  `assertFresh`, a po wpłacie zatrzymuje kliknięcie zdaniem „…zapłacił".
+- Test mutacyjny: usunięcie `invoiceId` z ładunku i wyłączenie „pytam raz"
+  wywala 3 testy — testy łapią to, co mają łapać.
+- Atrapa bazy nadaje teraz `status = 'open'` przy wstawianiu propozycji
+  (jak `DEFAULT` w migracji 00061).
+- `tsc --noEmit` czysto; eslint 0 błędów (29 ostrzeżeń, żadne w zmienionych
+  plikach); `tsx --test` 66/66; vitest **1144/1144 testów zielonych**.
+  Czerwony jest jeden plik, który nie ładuje się bez bazy:
+  `rls-isolation.test.ts` („supabaseUrl is required" — worktree bez
+  `.env.local`). W pierwszym przebiegu padł też `ksef-mock.test.ts`
+  (prawdziwy `fetch`, limit 5 s), w drugim przeszedł — chwiejność sieci.
+- Uwaga środowiskowa: `pnpm install` w worktree padał na braku pamięci,
+  narzędzia szły z `node_modules` głównego katalogu (tam `next` 16.2.6
+  zamiast 16.3.3 z tej gałęzi — bez wpływu na zmienione pliki).
+
+### Następny krok
+
+- Osobne zadanie: naprawa wykonawcy K-01 (trzy punkty wyżej) — warunek
+  odsłonięcia.
+- 1.2 (W-03 w wykonawcy W-01) albo decyzja o `flo.tick.tenant` przed
+  dopisaniem kolejnych reguł do pulsu.

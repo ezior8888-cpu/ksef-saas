@@ -9,7 +9,7 @@ import {
   UNDO_WINDOW_MS,
   type UndoRecord,
 } from '@/lib/flo/undo';
-import { runFloTick } from '@/lib/flo/tick';
+import { runFloTick, type FloTickSources } from '@/lib/flo/tick';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -184,6 +184,17 @@ describe('cofnięcie — wykonanie', () => {
 });
 
 describe('puls agenta', () => {
+  // Te testy dotyczą sprzątania. Reguły funkcji mają własne testy
+  // (np. `flo-payment-confirm-producer.test.ts`), więc tutaj puls nie widzi
+  // żadnego konta — inaczej sięgnąłby po bazę z `.env.local`.
+  const NO_TENANTS: FloTickSources = {
+    listTenantIds: async () => [],
+    paymentConfirm: {
+      readOverdueInvoices: async () => [],
+      readInvoiceState: async () => ({ facts: {}, context: {} }),
+    },
+  };
+
   it('wygasza przeterminowane propozycje', async () => {
     const db = createFakeDb({
       flo_proposals: [
@@ -192,7 +203,7 @@ describe('puls agenta', () => {
       ],
     });
 
-    const result = await runFloTick(undefined, NOW, db.client);
+    const result = await runFloTick(undefined, NOW, db.client, NO_TENANTS);
 
     expect(result.expired).toBe(1);
     expect(db.tables.flo_proposals[0]!.status).toBe('expired');
@@ -218,7 +229,7 @@ describe('puls agenta', () => {
       ],
     });
 
-    const result = await runFloTick(undefined, NOW, db.client);
+    const result = await runFloTick(undefined, NOW, db.client, NO_TENANTS);
 
     expect(result.released).toBe(1);
     // Wraca do „zatwierdzona”, nie do „otwarta”: człowiek już się zgodził,
@@ -240,7 +251,7 @@ describe('puls agenta', () => {
       ],
     });
 
-    const result = await runFloTick(undefined, NOW, db.client);
+    const result = await runFloTick(undefined, NOW, db.client, NO_TENANTS);
 
     expect(result.released).toBe(0);
     expect(db.tables.flo_proposals[0]!.status).toBe('executing');

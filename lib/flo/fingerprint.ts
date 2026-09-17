@@ -370,7 +370,11 @@ function toNumber(value: unknown): number {
   return 0;
 }
 
-function buyerName(buyerData: unknown): string | null {
+/**
+ * Nazwa nabywcy z `buyer_data`. Eksportowana dla producentów kart: nazwa na
+ * karcie i nazwa w zdaniu re-walidacji muszą pochodzić z jednego miejsca.
+ */
+export function buyerName(buyerData: unknown): string | null {
   if (typeof buyerData !== 'object' || buyerData === null) return null;
   const record = buyerData as Record<string, unknown>;
   const name = record.name ?? record.nazwa ?? record.buyer_name;
