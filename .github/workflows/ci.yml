@@ -19,9 +19,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Wersja MUSI zgadzać się z `packageManager` w `package.json`.
+      # Rozjazd wywalał CI przed pierwszym testem: pnpm 9 czyta
+      # `pnpm-workspace.yaml` (od pnpm 10 mieszkają tam ustawienia, nie tylko
+      # lista pakietów) i odmawia z „packages field missing or empty".
+      # Od 14.09.2026 czerwone były przez to WSZYSTKIE przebiegi, także na main.
       - uses: pnpm/action-setup@v3
         with:
-          version: 9
+          version: 10.33.0
 
       - uses: actions/setup-node@v4
         with:
@@ -55,9 +60,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Ta sama wersja co wyżej i co w `package.json`.
       - uses: pnpm/action-setup@v3
         with:
-          version: 9
+          version: 10.33.0
 
       - uses: actions/setup-node@v4
         with:
