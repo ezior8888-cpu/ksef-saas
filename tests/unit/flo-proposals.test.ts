@@ -65,6 +65,29 @@ describe('wiersz → karta', () => {
     const view = toProposalView(row({ kind: 'expense.review' }));
     expect(view?.secondary.map((a) => a.intent)).toEqual(['snooze', 'mute']);
   });
+
+  it('akcja drugorzędna z polem zachowuje pytanie i rodzaj pola', () => {
+    // Zgubione zamieniały „Częściowo" w pole bez sprawdzania kształtu kwoty.
+    const view = toProposalView(
+      row({
+        kind: 'payment.confirm',
+        payload: {
+          secondary: [
+            { label: 'Jeszcze nie', intent: 'dismiss', inputLabel: 'nie dotyczy' },
+            { label: 'Częściowo', intent: 'input', inputLabel: 'Ile wpłynęło?', inputKind: 'amount' },
+            { label: 'Coś', intent: 'input', inputKind: 'sql' },
+          ],
+        },
+      }),
+    );
+
+    expect(view?.secondary).toEqual([
+      { label: 'Jeszcze nie', intent: 'dismiss' },
+      { label: 'Częściowo', intent: 'input', inputLabel: 'Ile wpłynęło?', inputKind: 'amount' },
+      // Nieznany rodzaj pola to zwykły tekst, nie wyjątek.
+      { label: 'Coś', intent: 'input', inputKind: 'text' },
+    ]);
+  });
 });
 
 describe('wiersz → karta: bezpieczne czytanie ładunku', () => {

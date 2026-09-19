@@ -62,6 +62,29 @@ export function formatPlnPlain(amount: number): string {
 }
 
 /**
+ * Kwota wpisana przez człowieka w karcie: „1 234,56”, „1234.5”, „1234”.
+ *
+ * Kształt jest TEN SAM, który przepuszcza interfejs (`components/flo/gating.ts`),
+ * bo karta wysyła napis dokładnie tak, jak został wpisany. Wszystko inne to
+ * `null`, a nie „najlepsze zgadnięcie”: `Number('1 234,56')` daje `NaN`,
+ * a `parseFloat('1 234,56')` daje 1 — zapis wpłaty na złotówkę zamiast na
+ * tysiąc to gorsza awaria niż odmowa.
+ *
+ * Separator tysięcy: zwykła spacja albo twarda (U+00A0) — dokładnie te dwie,
+ * które przepuszcza pole w karcie. Serwer luźniejszy od interfejsu nie
+ * byłby bezpieczniejszy, tylko trudniejszy do przetestowania.
+ */
+const AMOUNT_INPUT = /^\d{1,3}(?:[  ]?\d{3})*(?:[.,]\d{1,2})?$/;
+
+export function parsePlnAmount(value: string): number | null {
+  const trimmed = value.trim();
+  if (!AMOUNT_INPUT.test(trimmed)) return null;
+
+  const parsed = Number(trimmed.replace(/[  ]/g, '').replace(',', '.'));
+  return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : null;
+}
+
+/**
  * Liczba dni w poprawnej odmianie: „1 dzień”, „3 dni”, „5 dni”.
  *
  * Po polsku dzień ma tylko dwie formy, więc pełna reguła przez liczebnik nie

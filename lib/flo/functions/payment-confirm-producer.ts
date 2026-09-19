@@ -46,7 +46,6 @@ import {
   buildInvoiceConfirmProposal,
   selectOverdueForConfirmation,
   type OverdueInvoice,
-  type OverdueSelection,
 } from '@/lib/flo/functions/payment-confirm';
 import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
@@ -225,7 +224,22 @@ export async function producePaymentConfirm(
     // Faktura dalej zaległa: aktualizujemy liczbę dni i odcisk, ale NIE
     // termin ważności. Odświeżanie terminu przy każdym przebiegu sprawiłoby,
     // że przemilczana karta nie wygaśnie nigdy.
-    await askAbout(tenantId, entry, now, db, sources, new Date(card.expires_at));
+    const refreshed = await askAbout(
+      tenantId,
+      entry.invoice.id,
+      now,
+      db,
+      sources,
+      new Date(card.expires_at),
+    );
+
+    // Lista faktur mówiła „zaległa", ale odczyt faktury, z którego powstaje
+    // karta, już nie. Wierzymy świeższemu odczytowi: karta zostawiona
+    // w spokoju pytałaby o wpłatę, o której system już wie.
+    if (refreshed === 'skipped') {
+      if (await closeOutdated(card.id, db)) closed++;
+      continue;
+    }
     live++;
   }
 
@@ -237,7 +251,7 @@ export async function producePaymentConfirm(
   for (const entry of selection) {
     if (asked.has(entry.invoice.id)) continue;
 
-    const outcome = await askAbout(tenantId, entry, now, db, sources);
+    const outcome = await askAbout(tenantId, entry.invoice.id, now, db, sources);
     if (outcome === 'skipped') continue;
     return { outcome, closed };
   }
@@ -245,26 +259,29 @@ export async function producePaymentConfirm(
   return { outcome: 'nothing', closed };
 }
 
+/**
+ * Stawia albo odświeża kartę o jednej fakturze.
+ *
+ * Z listy faktur po terminie bierzemy TYLKO identyfikator. Kwoty, numer
+ * i termin na karcie pochodzą z `readInvoiceState` — tego samego odczytu,
+ * z którego liczy się odcisk. Lista i ten odczyt to dwa zapytania w dwóch
+ * chwilach; wpłata, która wpadła pomiędzy, dawała kartę z nieaktualną kwotą
+ * i aktualnym odciskiem, czyli taką, której re-walidacja nie zatrzyma.
+ */
 async function askAbout(
   tenantId: string,
-  entry: OverdueSelection,
+  invoiceId: string,
   now: Date,
   db: FloDbClient,
   sources: PaymentConfirmSources,
   keepExpiresAt?: Date,
 ): Promise<'created' | 'disabled' | 'muted' | 'skipped'> {
-  const state = await sources.readInvoiceState(entry.invoice.id);
+  const state = await sources.readInvoiceState(invoiceId);
 
-  // Faktura zniknęła między dwoma odczytami. Karta o niej padłaby przy
-  // pierwszym kliknięciu, więc nie ma po co jej stawiać.
-  if ('missing' in state.facts) return 'skipped';
-
-  const card = buildInvoiceConfirmProposal({
-    tenantId,
-    entry,
-    facts: state.facts,
-    now,
-  });
+  // `null`, gdy według tego odczytu nie ma o co pytać: faktura zniknęła,
+  // została opłacona, wstrzymana albo przestała być przyjęta przez KSeF.
+  const card = buildInvoiceConfirmProposal({ tenantId, invoiceId, state, now });
+  if (!card) return 'skipped';
 
   const result = await createProposal(
     keepExpiresAt ? { ...card, expiresAt: keepExpiresAt } : card,

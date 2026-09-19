@@ -13,6 +13,7 @@
  */
 
 import type { FloProposalRow } from '@/lib/flo/db-types';
+import type { UndoRecord } from '@/lib/flo/undo';
 import type { FloApproveInput, FloProposalKind } from '@/types/flo';
 
 export interface FloHandlerContext {
@@ -34,6 +35,15 @@ export interface FloHandlerResult {
   /** Jedno zdanie do dziennika i do meldunku dla klienta. */
   summary: string;
   details?: Record<string, unknown>;
+  /**
+   * Zapis cofnięcia czynności, którą wykonawca właśnie zrobił.
+   *
+   * Wykonawca zapisuje go w ładunku propozycji (`payload.undo` i
+   * `payload.undoableUntil`) — tam, skąd czyta go `undoAction`. Zapis tylko
+   * w `details` trafiał wyłącznie do dziennika audytowego i cofnięcie
+   * odpowiadało „tej zmiany nie da się cofnąć".
+   */
+  undo?: UndoRecord;
 }
 
 export type FloHandler = (
