@@ -41,6 +41,18 @@ export interface FakeDb {
 
 const yieldToOthers = () => Promise.resolve();
 
+/**
+ * Wartości `DEFAULT` z migracji, których kod celowo nie wysyła przy wstawianiu.
+ *
+ * Bez tego propozycja utworzona przez `createProposal` nie miałaby statusu,
+ * a kolejny przebieg producenta nie rozpoznałby jej jako żywej karty — test
+ * „drugi przebieg nie stawia drugiej karty" przechodziłby albo padał z powodu
+ * atrapy, a nie kodu.
+ */
+const INSERT_DEFAULTS: Partial<Record<keyof Tables, Row>> = {
+  flo_proposals: { status: 'open' },
+};
+
 export function createFakeDb(seed: Partial<Tables> = {}): FakeDb {
   const tables: Tables = {
     flo_proposals: seed.flo_proposals ?? [],
@@ -121,7 +133,11 @@ export function createFakeDb(seed: Partial<Tables> = {}): FakeDb {
             await yieldToOthers();
             state.writes++;
             for (const row of incoming) {
-              const withId = { id: row.id ?? `id-${rows.length + 1}`, ...row };
+              const withId = {
+                id: row.id ?? `id-${rows.length + 1}`,
+                ...INSERT_DEFAULTS[table],
+                ...row,
+              };
               rows.push(withId);
               inserted.push(withId);
             }

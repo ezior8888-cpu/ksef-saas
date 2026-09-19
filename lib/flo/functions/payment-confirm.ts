@@ -29,7 +29,7 @@
  */
 
 import { renderCopy } from '@/lib/flo/copy';
-import { fingerprintOf } from '@/lib/flo/fingerprint';
+import { fingerprintOf, type FloFacts } from '@/lib/flo/fingerprint';
 import { registerFloHandler } from '@/lib/flo/handlers';
 import { formatDays, formatPlnPlain } from '@/lib/flo/money';
 import type { CreateProposalInput } from '@/lib/flo/proposals';
@@ -165,6 +165,66 @@ export function buildPaymentConfirmProposal(input: {
       { label: 'Przeterminowane', href: '/payments/overdue' },
       { label: `Faktura ${first.invoice.number}`, href: `/invoices/${first.invoice.id}` },
     ],
+  };
+}
+
+/**
+ * Karta o JEDNEJ fakturze — tę buduje producent w pulsie (zadanie 1.1
+ * planu FLO 2, `payment-confirm-producer.ts`).
+ *
+ * DLACZEGO NIE KARTA ZBIORCZA Z FUNKCJI WYŻEJ. Przy wpinaniu producenta
+ * wyszły trzy rzeczy, których tamta funkcja nie widzi, bo żyją w innych
+ * plikach:
+ *
+ * 1. Wariant `choice` NIE RYSUJE LISTY faktur. Karta „Sprawdźmy 3 zaległe
+ *    płatności" ma jeden przycisk „Tak", a wykonawca zamyka nim PIERWSZĄ
+ *    fakturę z ładunku — tę, której człowiek na ekranie nie widział. To jest
+ *    dokładnie awaria nr 1 z nagłówka tego pliku.
+ *
+ * 2. Re-walidacja (`fingerprint.ts`) czyta fakty faktury po `payload.invoiceId`.
+ *    Karta zbiorcza go nie ma, więc przy kliknięciu odcisk liczy się z etykiet
+ *    ładunku i nie zgadza się z zapisanym NIGDY — każde kliknięcie kończyłoby
+ *    się komunikatem „dane się zmieniły".
+ *
+ * 3. Klucz tematu z datą dnia daje NOWĄ kartę przy każdym przebiegu pulsu,
+ *    bo wczorajsza ma inny klucz. Po tygodniu: siedem kart o to samo.
+ *
+ * Tekst, kwoty i dowody zostają z funkcji zbiorczej. Zmieniają się tylko
+ * rzeczy, które zależą od tożsamości faktury, a nie od treści.
+ */
+export function buildInvoiceConfirmProposal(input: {
+  tenantId: string;
+  entry: OverdueSelection;
+  /**
+   * Fakty faktury z `computeFingerprint` — TĄ SAMĄ drogą, którą pójdzie
+   * re-walidacja przy kliknięciu. Fakty zbudowane tu po swojemu dawałyby
+   * odcisk, który nie zgadza się nigdy.
+   */
+  facts: FloFacts;
+  now?: Date;
+}): CreateProposalInput {
+  // Jednoelementowy wybór zawsze daje kartę — `null` jest tylko dla pustego.
+  const base = buildPaymentConfirmProposal({
+    tenantId: input.tenantId,
+    selection: [input.entry],
+    now: input.now,
+  })!;
+  const invoiceId = input.entry.invoice.id;
+
+  return {
+    ...base,
+    // Jedna faktura = jeden temat. Kolejny przebieg pulsu aktualizuje tę
+    // samą kartę, zamiast stawiać obok drugą.
+    topicKey: `payment.confirm:${invoiceId}`,
+    fingerprint: fingerprintOf(input.facts),
+    payload: {
+      ...base.payload,
+      invoiceId,
+      // Stan „przed" dla zdania o zmianie. Muszą to być te same klucze, które
+      // policzy `readState` — inaczej komunikat re-walidacji byłby o niczym.
+      facts: input.facts,
+      primaryLabel: 'Tak, zapłacił',
+    },
   };
 }
 
