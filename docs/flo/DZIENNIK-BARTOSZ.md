@@ -3010,3 +3010,114 @@ Zmiany w mechanizmie cofnięcia:
   w interfejsie; bez niego K-01 nie powinno wyjść z etapu 0 kanarka, bo
   „odwracalne" byłoby tylko deklaracją.
 - Osobne zadanie: `payments.paid_at` w wykonawcy K-02.
+
+---
+
+## 2026-09-17 · Plan FLO 2, Krok 1.1b — okno bezpieczeństwa K-02 naprawdę działa
+
+Gałąź `claude/k02-okno-wplat`, na bazie 1.1a (PR #15). Znalezisko z 1.1a:
+wykonawca ponagleń pytał o `payments.paid_at`, którego tabela nie ma.
+
+### Co było zepsute — dwie rzeczy, nie jedna
+
+| # | Problem | Skutek |
+|---|---|---|
+| 1 | `select('paid_at')` / `order('paid_at')` na `payments` (tabela ma `payment_date` i `created_at`), ukryte rzutowaniem `as unknown as ChaseClient` | zapytanie zwracało błąd, wykonawca rzucał wyjątek — każde zatwierdzone ponaglenie kończyło się „Nie udało mi się tego dokończyć". Awaria bezpieczna, ale K-02 nie działał wcale |
+| 2 | zapytanie filtrowało po `invoice_id` tej jednej faktury | nagłówek `payment-chase.ts` i typ `ChaseSafetyInput` obiecują „jakakolwiek wpłata od TEGO KONTRAHENTA w 48 h blokuje, nawet na inną fakturę". Po samej naprawie kolumny okno dalej nie widziałoby przelewu zaksięgowanego na drugą fakturę tej samej firmy — czyli najczęstszego przypadku, dla którego istnieje |
+
+### Co zrobione
+
+- **Typowany klient** `SupabaseClient<Database>` zamiast rzutowania — w
+  `payment_reminders` też `TablesInsert<'payment_reminders'>`. Sprawdzone:
+  przywrócenie `paid_at` daje teraz błąd `tsc` („column 'paid_at' does not
+  exist on 'payments'").
+- **Wpłaty po kontrahencie**: `payments` złączone z `invoices!inner(buyer_nip)`,
+  w obrębie konta. Faktura bez NIP-u (konsument) — wpłaty do niej samej.
+- **Przynależność faktury do konta sprawdzana jawnie** (`eq('tenant_id')`)
+  przed odczytem — klient administracyjny omija RLS.
+- **Etap z ładunku walidowany** z `Constants.public.Enums.reminder_stage_enum`
+  — wcześniej dowolny napis szedł do kolumny ENUM.
+- `latestPaymentMoment` i `paymentDateWindowStart` w `payment-chase.ts` —
+  funkcje czyste.
+
+### Decyzja: która data znaczy „kontrahent właśnie zapłacił"
+
+Wiersz `payments` ma dwie: `payment_date` (DATE — dzień przelewu z wyciągu
+albo deklaracji) i `created_at` (kiedy system się dowiedział). **Bierzemy
+późniejszą.** Wyciąg zaimportowany dziś z przelewem sprzed tygodnia to
+świeży sygnał, że ten kontrahent właśnie się rozlicza. Przy promieniu 4
+fałszywa blokada = dwa dni zwłoki; fałszywa wysyłka = kompromitacja klienta.
+
+Koszt, świadomie przyjęty: import wyciągu z całym miesiącem wstrzymuje
+ponaglenia do kontrahentów z tego wyciągu na 48 h.
+
+`payment_date` liczone jako **koniec dnia w UTC** (23:59:59.999Z) — w
+Warszawie dzień kończy się 1–2 h wcześniej, więc okno jest odrobinę dłuższe,
+nigdy krótsze. Filtr zapytania (`payment_date >= data UTC początku okna`)
+wynika z tej samej definicji; test sprawdza zgodność obu na każdej godzinie
+48-godzinnego okna.
+
+**Do potwierdzenia przez Bartosza** — to decyzja produktowa, nie techniczna.
+
+### Czego świadomie NIE zrobiłem
+
+- **Przelewów niedopasowanych do żadnej faktury** okno nie widzi —
+  `payments.invoice_id` jest NOT NULL. Komentarz w nagłówku poprawiony
+  („NAWET jeśli nie została dopasowana" było nieprawdą).
+- **Normalizacji NIP-u** — porównanie dokładne. Jeśli ta sama firma ma NIP
+  zapisany raz z kreskami, raz bez, okno jej nie połączy. Warto sprawdzić
+  na produkcji, jak zapisuje go aplikacja i import.
+- Naprawy X-05 i K-03 (niżej).
+
+### ⚠️ Przegląd rzutowań i zapytań w `lib/flo` — X-05 NIE DZIAŁA NA PRODUKCJI
+
+Przejrzane wszystkie `createAdminClient() as unknown as …` w `lib/flo/**`
+i ich kolumny względem migracji (typy w `types/database.ts` są sprzed 00063,
+więc tabele z 00063 porównane z migracją):
+
+| Plik | Tabele / kolumny | Stan |
+|---|---|---|
+| `fingerprint.ts` | `invoices`, `expenses` | ✅ |
+| `expense-review.ts` | `expenses`, `ocr_jobs` | ✅ |
+| `expense-rules.ts` | `categorization_rules` (+`min_amount`/`max_amount` z 00063) | ✅ |
+| `inbox-cursor.ts` | `ksef_inbox_cursor` (00063) | ✅ |
+| `undo.ts` | ogólne, kolumny z zapisu cofnięcia | ✅ |
+| `payment-chase-handler.ts` | `payments.paid_at` | ❌ → naprawione tutaj |
+| `payment-score.ts` (K-03) | `invoices.source` — nie istnieje (jest `origin`) | ❌ martwy kod: K-03 zablokowane prawnie, plan każe skreślić |
+| **`audit-sweep.ts` (X-05)** — bez rzutowania, ale ten sam błąd | `invoices.source`, `expenses.image_path` — **oba nie istnieją** | ❌ **produkcja** |
+
+**X-05 (audyt porządku, pierwszy dzień roboczy miesiąca) nigdy niczego nie
+znalazł.** Zapytanie o faktury zwraca błąd, `audit-sweep.ts` nie sprawdza
+`invoices.error`, bierze `data ?? []`, widzi zero faktur i przechodzi do
+następnego konta. Bez wyjątku, bez logu. Załącznik A planu oznacza X-05
+jako 🟡/działające — to nieprawda.
+
+Nie naprawione tutaj celowo: X-05 nie ma kanarka, więc poprawka + wdrożenie =
+pierwsze w historii karty audytu u WSZYSTKICH klientów w najbliższy pierwszy
+dzień roboczy miesiąca. To decyzja o odsłonięciu funkcji, nie poprawka
+w cieniu. Sama naprawa jest mała (`source` → `origin`, `image_path` →
+`source_file_path`, sprawdzanie `error`), ale mapowanie `source !== 'import'`
+na `origin` trzeba przemyśleć.
+
+### Weryfikacja
+
+- `tests/unit/flo-payment-chase-handler.test.ts` — 12 testów. Atrapa bazy
+  zwraca `42703` na nieznaną kolumnę (w `select`, `order` i `or`) i łączy
+  wpłaty z fakturami po `invoice_id`. Kluczowy: „wpłata od tego kontrahenta
+  na INNĄ fakturę wczoraj — nie wysyłamy".
+- **Test mutacyjny — 7 z 7 złapanych:** kolumna `paid_at` (6 testów), okno
+  tylko po tej fakturze (1), faktura bez sprawdzenia konta (1), wpłaty bez
+  filtra konta (1), tylko dzień przelewu bez `created_at` (2), filtr dnia
+  o dzień za wąski (1), etap bez walidacji (1). Uwaga: pierwsze podejście do
+  dwóch mutacji „przeżyło", bo wzorzec nie trafiał w końce linii CRLF —
+  mutacja się nie nałożyła. Po poprawce wzorca obie padają.
+- `tsc --noEmit` czysto; eslint na zmienionych plikach 0/0.
+- vitest **1191/1191** (1179 z 1.1a + 12 nowych); czerwony tylko
+  `rls-isolation.test.ts` bez `.env.local`, jak w 1.1 i 1.1a. W1 zielony.
+
+### Następny krok
+
+- Scalenie #14 → #15 → ten PR.
+- Decyzja o X-05 (naprawić i odsłonić, czy najpierw kanarek) oraz o dacie
+  w oknie K-02.
+- K-02 dalej na etapie 0 kanarka — ta zmiana niczego nie odsłania.

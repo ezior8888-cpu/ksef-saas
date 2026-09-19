@@ -10,46 +10,86 @@
  * workera i przez akcje serwerowe.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 import {
   evaluateChaseSafety,
+  latestPaymentMoment,
+  paymentDateWindowStart,
+  SAFETY_WINDOW_MS,
 } from '@/lib/flo/functions/payment-chase';
 import { registerFloHandler } from '@/lib/flo/handlers';
 import { remindersSendRequested } from '@/lib/inngest/client';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 import { createAdminClient } from '@/lib/supabase/admin';
+import {
+  Constants,
+  type Database,
+  type TablesInsert,
+} from '@/types/database';
+
+type ReminderStage = Database['public']['Enums']['reminder_stage_enum'];
+
+function isReminderStage(value: unknown): value is ReminderStage {
+  return (Constants.public.Enums.reminder_stage_enum as readonly unknown[]).includes(
+    value,
+  );
+}
+
+/** Wystarczy jedna świeża wpłata — reszta niczego nie zmienia w decyzji. */
+const RECENT_PAYMENTS_LIMIT = 20;
+
+// ═══════════════════════════════════════════════════════════════
+// Okno bezpieczeństwa — odczyt
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Ostatnia wpłata od kontrahenta tej faktury, na DOWOLNĄ jego fakturę.
+ *
+ * DLACZEGO PO KONTRAHENCIE: przelew bywa zaksięgowany na inną pozycję tego
+ * samego klienta, a mimo to znaczy „ten człowiek właśnie zapłacił". Kontrahent
+ * to NIP nabywcy na fakturze w obrębie konta. Faktura bez NIP-u (konsument)
+ * nie ma po czym szukać innych faktur — wtedy liczą się wpłaty do niej samej.
+ *
+ * Filtr w zapytaniu to tylko zawężenie; o blokadzie decyduje
+ * `latestPaymentMoment` + `evaluateChaseSafety`. Dwa warunki w `or`, bo
+ * wiersz może być świeży z dwóch powodów (patrz `latestPaymentMoment`).
+ */
+async function readLastContractorPayment(
+  client: SupabaseClient<Database>,
+  input: {
+    tenantId: string;
+    invoiceId: string;
+    buyerNip: string | null;
+    now: Date;
+  },
+): Promise<string | null> {
+  const since = new Date(input.now.getTime() - SAFETY_WINDOW_MS);
+  const nip = input.buyerNip?.trim() || null;
+
+  const query = client
+    .from('payments')
+    .select('payment_date, created_at, invoices!inner(buyer_nip)')
+    .eq('tenant_id', input.tenantId)
+    .or(
+      `created_at.gte.${since.toISOString()},payment_date.gte.${paymentDateWindowStart(since)}`,
+    );
+
+  const scoped = nip
+    ? query.eq('invoices.buyer_nip', nip)
+    : query.eq('invoice_id', input.invoiceId);
+
+  const { data, error } = await scoped
+    .order('created_at', { ascending: false })
+    .limit(RECENT_PAYMENTS_LIMIT);
+
+  if (error) throw new Error(error.message);
+  return latestPaymentMoment(data ?? []);
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Wykonawca
 // ═══════════════════════════════════════════════════════════════
-
-interface ChaseClient {
-  from: (table: 'payments' | 'payment_reminders' | 'email_bounces') => {
-    select: (columns: string) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => {
-        order: (
-          column: string,
-          opts: { ascending: boolean },
-        ) => {
-          limit: (count: number) => Promise<{
-            data: Array<Record<string, unknown>> | null;
-            error: { message: string } | null;
-          }>;
-        };
-      };
-    };
-    insert: (row: Record<string, unknown>) => {
-      select: (columns: string) => {
-        maybeSingle: () => Promise<{
-          data: { id: string } | null;
-          error: { message: string } | null;
-        }>;
-      };
-    };
-  };
-}
 
 /**
  * Wysyłka ponaglenia.
@@ -63,34 +103,45 @@ interface ChaseClient {
  * pokrycie w decyzji człowieka.
  */
 registerFloHandler('payment.chase', async (ctx) => {
+  const now = new Date();
   const payload = ctx.proposal.payload ?? {};
   const invoiceId = payload.invoiceId;
   const stage = payload.stage;
 
-  if (typeof invoiceId !== 'string' || typeof stage !== 'string') {
+  if (typeof invoiceId !== 'string' || !isReminderStage(stage)) {
     throw new Error('Propozycja ponaglenia bez kompletu danych');
   }
 
-  const client = createAdminClient() as unknown as ChaseClient;
+  const tenantId = ctx.proposal.tenant_id;
+
+  // KLIENT TYPOWANY, NIE RZUTOWANY. Poprzednia wersja rzutowała klienta na
+  // ręczny interfejs przyjmujący dowolny napis kolumny i pytała o
+  // `payments.paid_at`, którego tabela nie ma. Typecheck milczał, zapytanie
+  // zwracało błąd, a każde zatwierdzone ponaglenie kończyło się
+  // „Nie udało mi się tego dokończyć".
+  const client: SupabaseClient<Database> = createAdminClient();
+
+  // Klient administracyjny omija RLS — przynależność faktury do konta
+  // sprawdzamy jawnie, zanim cokolwiek o niej przeczytamy.
+  const invoice = await client
+    .from('invoices')
+    .select('buyer_nip')
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+
+  if (invoice.error) throw new Error(invoice.error.message);
+  if (!invoice.data) {
+    throw new Error('Faktury z tego ponaglenia nie ma na tym koncie');
+  }
 
   // ── Okno bezpieczeństwa ──────────────────────────────────────
-  //
-  // Sprawdzamy wpłaty od kontrahenta, nie tylko do tej faktury: przelew
-  // bywa zaksięgowany na innej pozycji albo jeszcze niedopasowany, a mimo
-  // to znaczy „ten człowiek właśnie zapłacił".
-  const recent = await client
-    .from('payments')
-    .select('paid_at')
-    .eq('invoice_id', invoiceId)
-    .order('paid_at', { ascending: false })
-    .limit(1);
-
-  if (recent.error) throw new Error(recent.error.message);
-
-  const lastPaymentAt =
-    typeof recent.data?.[0]?.paid_at === 'string'
-      ? (recent.data[0].paid_at as string)
-      : null;
+  const lastPaymentAt = await readLastContractorPayment(client, {
+    tenantId,
+    invoiceId,
+    buyerNip: invoice.data.buyer_nip,
+    now,
+  });
 
   const facts = (payload.facts ?? {}) as Record<string, unknown>;
   const outstanding =
@@ -100,7 +151,7 @@ registerFloHandler('payment.chase', async (ctx) => {
     outstanding,
     lastPaymentFromContractorAt: lastPaymentAt,
     remindersPaused: facts.remindersPaused === 1,
-    now: new Date(),
+    now,
   });
 
   if (!safety.ok) {
@@ -110,16 +161,18 @@ registerFloHandler('payment.chase', async (ctx) => {
   }
 
   // ── Wiersz przypomnienia dopiero po zgodzie ──────────────────
+  const reminder: TablesInsert<'payment_reminders'> = {
+    tenant_id: tenantId,
+    invoice_id: invoiceId,
+    stage,
+    channel: 'email',
+    scheduled_for: now.toISOString(),
+    status: 'pending',
+  };
+
   const created = await client
     .from('payment_reminders')
-    .insert({
-      tenant_id: ctx.proposal.tenant_id,
-      invoice_id: invoiceId,
-      stage,
-      channel: 'email',
-      scheduled_for: new Date().toISOString(),
-      status: 'pending',
-    })
+    .insert(reminder)
     .select('id')
     .maybeSingle();
 

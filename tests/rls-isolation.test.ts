@@ -17,10 +17,26 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
  * tak jak robi to runtime aplikacji.
  */
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const admin = createClient(url, serviceRole);
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+
+/**
+ * TEN TEST WYMAGA ŻYWEJ BAZY (staging albo lokalny Supabase) — zakłada konta,
+ * loguje się i czyta przez RLS. Bez zmiennych środowiskowych cały plik
+ * wywalał się już przy imporcie („supabaseUrl is required") i barwił CI na
+ * czerwono niezależnie od tego, co ktoś zmienił w kodzie. Czerwone CI, które
+ * jest czerwone zawsze, przestaje cokolwiek znaczyć.
+ *
+ * Dlatego bez bazy zestaw jest POMIJANY — widocznie, jako „skipped", a nie
+ * cicho wycięty. Gdy sekrety wrócą do CI albo gdy ktoś ma `.env.local`,
+ * uruchomi się sam, bez zmian w kodzie. Osobno woła go `pnpm test:rls`.
+ */
+const hasDatabase = Boolean(url && anonKey && serviceRole);
+
+const admin: SupabaseClient = hasDatabase
+  ? createClient(url, serviceRole)
+  : (null as unknown as SupabaseClient);
 
 const TENANT_A_ID = '11111111-1111-1111-1111-111111111111';
 const TENANT_B_ID = '22222222-2222-2222-2222-222222222222';
@@ -89,7 +105,7 @@ async function signInClient(
   return c;
 }
 
-describe('RLS isolation in multi-org model', () => {
+describe.skipIf(!hasDatabase)('RLS isolation in multi-org model', () => {
   beforeAll(async () => {
     if (!anonKey) {
       throw new Error('Brak NEXT_PUBLIC_SUPABASE_ANON_KEY — potrzebne do logowania w teście RLS.');
