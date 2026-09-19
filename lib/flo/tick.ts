@@ -43,7 +43,10 @@ export interface FloTickResult {
   confirmAsked: number;
   /** K-01: otwarte pytania zamknięte, bo faktura przestała być zaległa. */
   confirmClosed: number;
-  /** Konta, na których któraś reguła padła — puls poszedł dalej. */
+  /**
+   * Nieudane przebiegi reguł na kontach (X-05 i K-01 liczone osobno — konto,
+   * na którym padły obie, liczy się dwa razy). Puls za każdym razem szedł dalej.
+   */
   failedTenants: number;
 }
 
@@ -57,6 +60,11 @@ export interface FloTickSources {
   /** Konta, na które puls patrzy. */
   listTenantIds: () => Promise<string[]>;
   paymentConfirm: PaymentConfirmSources;
+  /**
+   * Globalny wyłącznik dla reguł, które nie mają własnych źródeł (X-05).
+   * Wstrzykiwany tylko w testach.
+   */
+  readGlobalKill?: () => Promise<boolean>;
 }
 
 export async function runFloTick(
@@ -70,14 +78,20 @@ export async function runFloTick(
 
   // ── reguły funkcji ─────────────────────────────────────────
   //
+  // Jedna lista kont dla wszystkich reguł. Audyt miał kiedyś własne
+  // `limit(200)` bez sortowania — konta ponad dwusetne mogły go nie dostać
+  // nigdy.
+  const tenantIds = await sources.listTenantIds();
+
   // Audyt porządku (X-05) chodzi RAZ W MIESIĄCU, nie codziennie: to jest
   // przegląd papierów, a nie sprawa bieżąca. Codzienne przypominanie o tych
   // samych zaległościach zamieniłoby go w listę zarzutów.
-  const audited = isFirstBusinessDay(now)
-    ? await runKsefAuditSweep(now)
-    : 0;
-
-  const tenantIds = await sources.listTenantIds();
+  const audit = isFirstBusinessDay(now)
+    ? await runKsefAuditSweep(tenantIds, now, db, {
+        readGlobalKill: sources.readGlobalKill,
+        logger: ctx?.logger,
+      })
+    : { created: 0, failed: 0 };
 
   // K-01 (zadanie 1.1 planu FLO 2): „zapłacił?" dobę po terminie.
   // Idzie PRZED regułami, które coś proponują: agent najpierw ustala, co
@@ -100,10 +114,10 @@ export async function runFloTick(
   return {
     expired,
     released,
-    audited,
+    audited: audit.created,
     confirmAsked: confirm.asked,
     confirmClosed: confirm.closed,
-    failedTenants: confirm.failed,
+    failedTenants: audit.failed + confirm.failed,
   };
 }
 

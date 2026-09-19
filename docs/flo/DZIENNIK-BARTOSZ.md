@@ -3121,3 +3121,81 @@ na `origin` trzeba przemyśleć.
 - Decyzja o X-05 (naprawić i odsłonić, czy najpierw kanarek) oraz o dacie
   w oknie K-02.
 - K-02 dalej na etapie 0 kanarka — ta zmiana niczego nie odsłania.
+
+---
+
+## 2026-09-17 · Plan FLO 2, Krok 1.1c — X-05 do kanarka i naprawa audytu
+
+Gałąź `claude/x05-kanarek`, na bazie 1.1b (PR #16). **Decyzja Igora
+(właściciel produktu), 17.09: najpierw kanarek dla X-05, potem naprawa** —
+zamiast naprawić i odsłonić audyt wszystkim naraz.
+
+### Dlaczego kanarek dla funkcji o promieniu 2
+
+Kanarek był dotąd dla promienia 4 (i kilku rodzajów promienia 2 z początku
+kolejki). X-05 zostaje w koncie, ale ma inny problem: **do dziś nie działał
+na produkcji ani razu** (krok 1.1b), więc jego naprawa to pierwsze w historii
+karty audytu. Nikt nie widział, jak ten audyt wygląda na prawdziwych danych.
+Bez kanarka zobaczyłyby go wszystkie konta w jeden pierwszy dzień roboczy
+miesiąca.
+
+`flo_rollout.kind` to `TEXT` bez `CHECK` (migracja 00067) — **dodanie rodzaju
+do kanarka nie wymaga migracji**. Panel `/admin/flo` pokazuje X-05 sam, bo
+czyta `ROLLOUT_ORDER`.
+
+### Co zrobione
+
+| # | Było | Jest |
+|---|---|---|
+| 1 | X-05 poza kanarkiem | `{ feature: 'X-05', kind: 'ksef.audit' }` w `ROLLOUT_ORDER`, zaraz po K-01 (pomyłka zostaje w koncie). Bez wiersza w `flo_rollout` audyt nie powstaje nigdzie |
+| 2 | `invoices.source` (nie istnieje) | `invoices.origin`; numeracja „nasza" = `origin === 'app'` — ta sama granica co w komentarzu migracji 00065 |
+| 3 | `expenses.image_path` (nie istnieje) | `source_file_path` |
+| 4 | `e.source === 'ksef_invoice'` — takiej wartości enum nie ma | koszt ma dokument, gdy ma plik **albo** `ksef_invoice_id` **albo** `source = 'ksef_inbox'`. Sama poprawka kolumn bez tego dałaby fałszywe „koszt bez dokumentu" przy każdym koszcie z KSeF — pierwszy zarzut, jaki klient zobaczyłby od audytu |
+| 5 | błąd zapytania = `data ?? []` = „konto bez faktur" | każde zapytanie sprawdza `error`; wyjątek na koncie → Sentry (`kind`, `tenant_id`) + log workera, pozostałe konta dalej |
+| 6 | `tenants.limit(200)` bez sortowania | ta sama lista kont co K-01 (aktywne, nieusunięte, stronami) — liczona raz w `runFloTick` |
+| 7 | 500 dowolnych faktur/kosztów | 500 najnowszych (`order('issue_date', desc)`) — ciągłość numeracji na wyrywkowym podzbiorze zgłaszałaby luki, których nie ma |
+| 8 | `in('invoice_id', …500 id)` w adresie żądania (~18 KB) | partie po 100 |
+| 9 | bramki tylko w `createProposal` | bramki przed odczytem — konto poza kanarkiem nie kosztuje zapytania o dokumenty |
+| 10 | `createAdminClient()` bez typów w wyniku | `SupabaseClient<Database>` — przy złym `select` cały wiersz miał typ błędu i `tsc` nie sprawdzał dalej |
+
+### Czego świadomie NIE zrobiłem
+
+- **Odsłonięcia.** Po wdrożeniu X-05 milczy wszędzie, dopóki ktoś nie wpisze
+  wiersza w `flo_rollout` albo konta w `flo_kind_flags`. Dziś oba wymagają
+  SQL-a na produkcji (panel nie ma przycisków — plan 2.3).
+- **Wykonawcy X-05** (plan 1.8) — karta dalej nie ma czego wykonać po
+  zaznaczeniu pozycji.
+- **Numeracji zerowanej co rok** w `findAuditIssues` (`sequenceOf` bierze
+  pierwszą liczbę z numeru, więc `7/2025` i `7/2026` to ta sama „siódemka").
+  Nie sprawdzałem, czy przy przełomie roku daje fałszywe albo przeoczone
+  luki — to logika funkcji czystej, nie wpięcia. Warto obejrzeć na
+  prawdziwych danych, a kanarek jest do tego właściwym miejscem.
+- `payment-score.ts` (K-03) z `invoices.source` — martwy kod, K-03 do skreślenia.
+
+### Weryfikacja
+
+- `tests/unit/flo-audit-sweep.test.ts` — 7 testów. Atrapa klienta
+  administracyjnego ma PEŁNE listy kolumn czterech tabel przepisane
+  z `types/database.ts` i zwraca `42703` na nieznaną kolumnę w `select`
+  i `order`. `flo-rollout.test.ts` +1 (X-05 w kanarku), zaktualizowana
+  oczekiwana kolejność `ROLLOUT_ORDER`.
+- **Test mutacyjny 9/9:** stara kolumna `invoices.source` (6 testów),
+  `expenses.image_path` (6), import liczony do numeracji (1), stary warunek
+  dokumentu kosztu (1), błąd zapytania jako „zero faktur" (1 — dokładnie
+  pierwotny błąd produkcyjny), X-05 poza kanarkiem (3), UPO bez partii (1),
+  bramki po odczycie (1), bez izolacji błędu konta (1). Mutacje nakładane
+  z kontrolą, czy plik naprawdę się zmienił (lekcja z CRLF w 1.1b).
+- **`tsc` łapie stary błąd wartości:** przywrócenie `'ksef_invoice'` daje
+  `TS2367: types '"manual" | "ocr_photo" | "ksef_inbox" | "import"' and
+  '"ksef_invoice"' have no overlap`.
+- `tsc --noEmit` czysto; eslint na zmienionych plikach 0/0.
+- vitest **1199/1199** (1191 z 1.1b + 8 nowych); czerwony tylko
+  `rls-isolation.test.ts` bez `.env.local`. W1 zielony.
+
+### Następny krok
+
+- Scalenie #14 → #15 → #16 → ten PR.
+- **Jak odsłonić X-05 w alfie:** wpis w `flo_kind_flags` (`kind = 'ksef.audit'`,
+  `enabled = true`, powód) dla 1–2 kont, najbliższy pierwszy dzień roboczy
+  miesiąca, obejrzeć karty. Dopiero potem `flo_rollout` 10%.
+- Załącznik A planu: X-05 z 🟡 na „⚠️ nie działał do 1.1c, teraz w kanarku 0".
