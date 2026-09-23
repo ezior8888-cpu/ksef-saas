@@ -3,10 +3,21 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { savePrefs } from '@/app/actions/flo';
-import { floKindLabel } from '@/components/flo/kind-labels';
-import { countLabel, FLO_FORMS } from '@/components/flo/format';
-import type { FloPrefs, FloProposalKind } from '@/types/flo';
+import { restoreSilenced, savePrefs } from '@/app/actions/flo';
+import { countLabel, FLO_FORMS, FLO_TZ } from '@/components/flo/format';
+import type { SilencedEntry } from '@/lib/flo/silenced';
+import type { FloPrefs } from '@/types/flo';
+
+/** „do 21 grudnia" — cisza ma widoczny koniec, inaczej wygląda na wieczną. */
+function shortDate(iso: string): string {
+  const parsed = Date.parse(iso);
+  if (Number.isNaN(parsed)) return 'odwołania';
+  return new Date(parsed).toLocaleDateString('pl-PL', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: FLO_TZ,
+  });
+}
 
 /**
  * Formularz ustawień agenta.
@@ -20,9 +31,17 @@ import type { FloPrefs, FloProposalKind } from '@/types/flo';
  * wprost. Przełącznik, który wygląda na włączony, a nie jest, to gorsze
  * kłamstwo niż komunikat o niepowodzeniu.
  */
-export function FloSettingsForm({ prefs }: { prefs: FloPrefs }) {
+export function FloSettingsForm({
+  prefs,
+  silenced = [],
+}: {
+  prefs: FloPrefs;
+  /** Co naprawdę zamyka agentowi usta — z pamięci decyzji, nie z ustawień. */
+  silenced?: SilencedEntry[];
+}) {
   const router = useRouter();
   const [current, setCurrent] = useState(prefs);
+  const [muted, setMuted] = useState(silenced);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -38,6 +57,31 @@ export function FloSettingsForm({ prefs }: { prefs: FloPrefs }) {
     } catch {
       setCurrent(before);
       setNotice('Nie udało mi się zapisać tej zmiany. Spróbuj za chwilę.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /**
+   * Przywrócenie sprawy albo rodzaju.
+   *
+   * Tak samo jak przy przełącznikach: znika z listy od razu, a gdy zapis
+   * padnie — wraca razem z uczciwym komunikatem. Lista, która pokazuje coś
+   * przywróconego, choć agent dalej milczy, byłaby gorszym kłamstwem niż
+   * komunikat o niepowodzeniu.
+   */
+  async function restore(key: string) {
+    const before = muted;
+    setMuted(muted.filter((entry) => entry.key !== key));
+    setSaving(true);
+    setNotice(null);
+
+    try {
+      await restoreSilenced(key);
+      router.refresh();
+    } catch {
+      setMuted(before);
+      setNotice('Nie udało mi się tego przywrócić. Spróbuj za chwilę.');
     } finally {
       setSaving(false);
     }
@@ -112,35 +156,40 @@ export function FloSettingsForm({ prefs }: { prefs: FloPrefs }) {
             Wyciszone sprawy
           </h2>
           <span className="text-[11px] text-[var(--ff-text-muted)]">
-            {countLabel(current.mutedKinds.length, FLO_FORMS.sprawa)}
+            {countLabel(muted.length, FLO_FORMS.sprawa)}
           </span>
         </div>
 
-        {current.mutedKinds.length === 0 ? (
+        {muted.length === 0 ? (
           <p className="text-xs text-[var(--ff-text-muted)]">
-            Nic nie jest wyciszone. Gdy dwa razy odrzucisz ten sam rodzaj
-            sprawy, przestanę o nim pisać i znajdziesz go tutaj.
+            Nic nie jest wyciszone. Gdy dwa razy odpowiesz „nie” w tej samej
+            sprawie, przestanę o nią pytać. Gdy klikniesz „Nigdy więcej
+            takich”, zamilknę w całym rodzaju. Jedno i drugie znajdziesz tutaj.
           </p>
         ) : (
           <ul className="space-y-2">
-            {current.mutedKinds.map((kind) => (
+            {muted.map((entry) => (
               <li
-                key={kind}
+                key={entry.key}
                 className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--ff-border)] bg-[var(--ff-surface-container-low)] p-2.5"
               >
-                <span className="min-w-0 flex-1 text-xs text-[var(--ff-text-soft)]">
-                  {floKindLabel(kind)}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs text-[var(--ff-text-soft)]">
+                    {entry.label}
+                  </span>
+                  {/* Przy pojedynczej sprawie mówimy, o jaki rodzaj chodzi
+                      i do kiedy trwa cisza — inaczej „Nowak zapłacił za
+                      fakturę 5/2026?" na liście niczego nie tłumaczy. */}
+                  <span className="block text-[11px] text-[var(--ff-text-muted)]">
+                    {entry.wholeKind
+                      ? `Cały rodzaj — do ${shortDate(entry.mutedUntil)}`
+                      : `${entry.kindLabel} — do ${shortDate(entry.mutedUntil)}`}
+                  </span>
                 </span>
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={() =>
-                    void apply({
-                      mutedKinds: current.mutedKinds.filter(
-                        (k: FloProposalKind) => k !== kind,
-                      ),
-                    })
-                  }
+                  onClick={() => void restore(entry.key)}
                   className="rounded-lg border border-[var(--ff-border)] px-2.5 py-1 text-[11px] text-[var(--ff-text-muted)] transition-colors hover:border-[var(--ff-border-strong)] hover:text-[var(--ff-text)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Przywróć

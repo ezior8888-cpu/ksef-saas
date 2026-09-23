@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { SilencedEntry } from '@/lib/flo/silenced';
 import type { FloPrefs } from '@/types/flo';
 
 /**
@@ -19,6 +20,7 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/app/actions/flo', () => ({
   savePrefs: async () => {},
+  restoreSilenced: async () => {},
 }));
 
 const { FloSettingsForm } = await import(
@@ -30,12 +32,37 @@ const PREFS: FloPrefs = {
   emailEnabled: false,
   quietFrom: '21:00',
   quietTo: '07:30',
-  mutedKinds: ['payment.chase', 'tax.relief'],
+  mutedKinds: [],
   taxProfile: null,
 };
 
-function render(prefs: FloPrefs = PREFS) {
-  return renderToStaticMarkup(<FloSettingsForm prefs={prefs} />);
+/**
+ * Wyciszenia idą z pamięci decyzji, nie z ustawień — dwa poziomy: cały
+ * rodzaj i pojedyncza sprawa, podpisana tytułem ostatniej karty.
+ */
+const SILENCED: SilencedEntry[] = [
+  {
+    key: 'payment.chase',
+    kind: 'payment.chase',
+    wholeKind: true,
+    label: 'Ponaglenia o płatność',
+    kindLabel: 'Ponaglenia o płatność',
+    mutedUntil: '2026-12-21T10:00:00.000Z',
+  },
+  {
+    key: 'payment.confirm:inv-5',
+    kind: 'payment.confirm',
+    wholeKind: false,
+    label: 'Nowak zapłacił za fakturę 5/2026?',
+    kindLabel: 'Pytania „czy zapłacił?”',
+    mutedUntil: '2026-12-21T10:00:00.000Z',
+  },
+];
+
+function render(prefs: FloPrefs = PREFS, silenced: SilencedEntry[] = SILENCED) {
+  return renderToStaticMarkup(
+    <FloSettingsForm prefs={prefs} silenced={silenced} />,
+  );
 }
 
 describe('FloSettingsForm', () => {
@@ -61,16 +88,29 @@ describe('FloSettingsForm', () => {
     const html = render();
 
     expect(html).toContain('Ponaglenia o płatność');
-    expect(html).toContain('Ulgi i odliczenia');
+    // Pojedyncza sprawa: tytuł ostatniej karty, nie „payment.confirm:inv-5".
+    expect(html).toContain('Nowak zapłacił za fakturę 5/2026?');
     expect(html).not.toContain('payment.chase');
+    expect(html).not.toContain('inv-5');
     expect(html).toContain('Przywróć');
   });
 
+  it('widać, czy cisza dotyczy jednej sprawy, czy całego rodzaju — i do kiedy', () => {
+    // Bez tego „Nowak zapłacił za fakturę 5/2026?" na liście niczego nie
+    // tłumaczy, a cisza wygląda na wieczną.
+    const html = render();
+
+    expect(html).toContain('Cały rodzaj —');
+    expect(html).toContain('Pytania „czy zapłacił?”');
+    expect(html).toContain('21 grudnia');
+  });
+
   it('brak wyciszeń tłumaczy, skąd się one biorą', () => {
-    const html = render({ ...PREFS, mutedKinds: [] });
+    const html = render(PREFS, []);
 
     expect(html).toContain('Nic nie jest wyciszone');
-    expect(html).toContain('dwa razy odrzucisz');
+    expect(html).toContain('w tej samej sprawie');
+    expect(html).toContain('Nigdy więcej takich');
   });
 
   it('NIE MA poziomu samodzielności ani wysyłki automatycznej', () => {

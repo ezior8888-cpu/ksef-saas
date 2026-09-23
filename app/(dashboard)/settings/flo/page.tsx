@@ -1,4 +1,4 @@
-import { getPrefs } from '@/app/actions/flo';
+import { getPrefs, listSilenced } from '@/app/actions/flo';
 
 import { FloSettingsForm } from './_components/flo-settings-form';
 
@@ -22,11 +22,13 @@ export const metadata = {
 };
 
 export default async function FloSettingsPage() {
-  const prefs = await getPrefs();
+  // Wyciszenia idą z pamięci decyzji, nie z ustawień: to one realnie zamykają
+  // agentowi usta. Lista w `flo_prefs` niczego nie uciszała.
+  const [prefs, silenced] = await Promise.all([getPrefs(), listSilenced()]);
 
   return (
     <div className="max-w-3xl">
-      <FloSettingsForm prefs={prefs} />
+      <FloSettingsForm prefs={prefs} silenced={silenced} />
     </div>
   );
 }

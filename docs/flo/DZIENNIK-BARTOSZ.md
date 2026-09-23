@@ -3435,3 +3435,70 @@ Doszło `listMutedSubjects`.
 
 - Ekran ustawień: lista wyciszonych spraw z możliwością cofnięcia.
 - Powrót do planu: K1.10 (P-03) albo K1.11 (O-01).
+
+---
+
+## 2026-09-23 · K2.16 c.d. — ekran ustawień pokazuje PRAWDZIWE wyciszenia
+
+Gałąź `claude/k2-16-ekran-wyciszen`, na bazie poprzedniego kroku.
+
+### Ekran kłamał, i to w obie strony
+
+„Wyciszone sprawy" czytało `flo_prefs.muted_kinds` — tablicę, której **NIC
+nigdy nie zapisywało**. Prawdziwa cisza mieszka w `flo_decisions`. Skutek:
+
+| Co robił klient | Co widział |
+|---|---|
+| dwa razy odrzucił sprawę, agent zamilkł | „Nic nie jest wyciszone" |
+| kliknął „Przywróć" | nic — przycisk zmieniał tablicę, której nikt nie czyta |
+
+To nie jest usterka wyglądu: klient nie miał jak cofnąć ciszy, a jedyny ekran,
+który mógł mu to wytłumaczyć, twierdził, że wszystko jest w porządku.
+
+### Co teraz widać
+
+- **Dwa poziomy**: „Cały rodzaj" i pojedyncza sprawa. Sprawa podpisana
+  TYTUŁEM OSTATNIEJ KARTY („Nowak zapłacił za fakturę 5/2026?"), nigdy
+  kluczem z bazy. Gdy karta zdążyła zniknąć — „…: jedna sprawa".
+- **Do kiedy** cisza trwa („do 21 grudnia"), bo inaczej wygląda na wieczną.
+- **„Przywróć"** woła `restoreSilenced`, czyli realnie zdejmuje ciszę; przy
+  niepowodzeniu wpis wraca na listę z uczciwym komunikatem.
+
+Reguła tłumu (cztery różne sprawy w miesiąc) świadomie NIE ma wpisu na liście:
+nie zapisujemy jej nigdzie, sama wygasa, a pokazanie czegoś, czego nie da się
+przywrócić przyciskiem, byłoby gorsze od niepokazania.
+
+### Znalezione przy okazji — BEZPIECZEŃSTWO
+
+Klucz tematu bywa **wspólny między kontami**: `expense.missing:2026-09`
+wygląda tak samo u każdego klienta. Odczyt tytułów bez filtra po koncie
+pokazałby na liście tytuł karty innej firmy. Filtr jest, a od teraz pilnuje
+go test („tytuł sprawy nie może przyjść z cudzej karty") — dopisany dlatego,
+że mutacja usuwająca ten filtr początkowo nie ruszyła ani jednego testu.
+
+### Zmiany
+
+- `lib/flo/silenced.ts` (nowy): `buildSilencedList` (czysta), `kindOfKey`.
+- `app/actions/flo.ts`: `listSilenced`, `restoreSilenced` (sprząta też po
+  starej tablicy w `flo_prefs`).
+- ekran ustawień: strona dokłada listę, formularz ją rysuje i przywraca.
+
+### Czego świadomie NIE zrobiłem
+
+- **Nie usunąłem `flo_prefs.muted_kinds`.** Kolumna zostaje (usunięcie to
+  migracja), a `savePrefs` dalej ją zapisuje. Ekran jej już nie czyta,
+  `restoreSilenced` sprząta z niej wpisy. Do skreślenia przy najbliższej
+  migracji porządkowej.
+- **Nie klikałem tego na żywo** — testy renderują komponent do HTML-a, ale
+  ekranu na prawdziwej bazie nikt jeszcze nie widział (to dług z fazy 0).
+
+### Weryfikacja
+
+- `flo-silenced-list.test.ts` — 9 testów (reguła + akcje + izolacja kont),
+  `ui-flo-settings.test.tsx` rozszerzony do 7.
+- Test mutacyjny **5/5**: lista z wygasłymi ciszeniami, sprawa pokazana
+  kluczem z bazy, brak rozróżnienia rodzaj/sprawa, przywracanie bez zdjęcia
+  ciszy, tytuły bez filtra konta.
+- `tsc --noEmit` czysto; eslint 0/0 (po drodze złapał niezescapowane
+  cudzysłowy w tekście dla klienta); vitest **1252 zielone, 7 pominiętych,
+  zero czerwonych**.
