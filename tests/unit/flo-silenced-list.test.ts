@@ -54,7 +54,9 @@ function card(topicKey: string, title: string): CreateProposalInput {
 }
 
 beforeEach(() => {
-  db = createFakeDb();
+  db = createFakeDb({
+    flo_kind_flags: [{ tenant_id: TENANT, kind: KIND, enabled: true, reason: 'test' }],
+  });
   fake.client = db.client;
 });
 

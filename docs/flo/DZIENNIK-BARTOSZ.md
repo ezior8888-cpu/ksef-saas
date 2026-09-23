@@ -3580,3 +3580,78 @@ pokazywałby inaczej „invoice.missing" jako rodzaj.
 - K1.11 (O-01, pierwsze kroki) zamyka listę producentów z K1.B.
 - Potem K1.4 (wspólny cap dzienny) — trzy reguły w pulsie to już moment,
   w którym limit przestaje być abstrakcją na zapas.
+
+---
+
+## 2026-09-23 · Plan FLO 2, K1.11 — O-01 prowadzi pierwsze kroki
+
+Gałąź `claude/k1-11-pierwsze-kroki`, na bazie K1.10. **To zamyka listę
+producentów z K1.B: wszystkie pięć rodzajów z V1 ma wreszcie kogoś, kto
+tworzy kartę.**
+
+### Co robi
+
+Na kontach młodszych niż trzydzieści dni puls stawia JEDNĄ kartę
+z następnym krokiem ścieżki: dane firmy → kontrahent → pierwsza faktura →
+wyślij ją klientowi. Kolejny krok PODMIENIA poprzednią kartę (klucz tematu
+jest stały), a gdy pierwsza faktura wychodzi — kreator znika.
+
+Zasada z modułu O-01 obowiązuje bez zmian: **sukces onboardingu nie zależy
+od certyfikatu KSeF.** Producent nie sprawdza certyfikatu przy wyborze kroku;
+osobny test przechodzi całą ścieżkę na koncie bez certyfikatu.
+
+### Trzy decyzje
+
+| Decyzja | Dlaczego |
+|---|---|
+| tylko konta < 30 dni (`GUIDE_FOR_DAYS`) | po miesiącu klient wie, gdzie co jest; kreator w trzecim miesiącu to wyrzut sumienia |
+| konto bez daty założenia = stare | lepiej nie prowadzić kogoś, kto jest z nami od roku, niż prowadzić na ślepo |
+| O-01 do kanarka | jak X-05 i W-04: karty nikt nie widział na prawdziwym koncie, a trafia w najwrażliwszy moment. **Najlepszy kandydat do odsłonięcia jako pierwszy w alfie** |
+
+### Przybliżenie, które trzeba znać
+
+`firstInvoiceDelivered` liczę jako „ma poświadczenie z KSeF **albo**
+wygenerowany PDF". **Wysyłka PDF-a mailem nie zostawia dziś śladu w bazie** —
+nie ma tabeli wysyłek. Fałszywe „doręczona" kosztuje zniknięcie ostatniej
+karty kreatora; fałszywe „niedoręczona" kazałoby agentowi powtarzać
+instrukcję przy zrobionej robocie. Wybrałem to pierwsze.
+
+Prawdziwy znacznik doręczenia wymagałby kolumny albo tabeli — czyli migracji.
+**Do decyzji.**
+
+### Przy okazji: testy ciszy były zależne od przypadku
+
+Dodanie O-01 do kanarka wywróciło 12 testów z K2.16 — używały
+`onboarding.step` jako „rodzaju spoza kanarka". To był ukryty warunek,
+o którym nikt nie wiedział. Teraz wpuszczają rodzaj jawnym wpisem operatora,
+więc nie obchodzi ich, co akurat jest w kanarku.
+
+### Weryfikacja
+
+- `flo-onboarding-producer.test.ts` — 11 testów; kluczowy: konto BEZ
+  certyfikatu KSeF przechodzi ścieżkę do końca (PDF + mail).
+- Test mutacyjny **6/6 za pierwszym podejściem**: prowadzenie starych kont,
+  niezamykanie skończonego kreatora, przesuwanie ważności przy podmianie
+  kroku, bramki po odczycie, O-01 poza kanarkiem, brak izolacji awarii.
+- `tsc --noEmit` czysto; eslint 0/0; vitest **1279 zielonych, 7 pominiętych,
+  zero czerwonych**.
+
+### Stan po K1.B
+
+| Rodzaj | Producent | Kanarek |
+|---|---|---|
+| K-01 `payment.confirm` | ✅ puls | etap 0 |
+| W-03 `expense.rule` | ✅ wykonawca W-01 | etap 0 |
+| W-04 `expense.missing` | ✅ puls | etap 0 |
+| P-03 `invoice.draft` | ✅ puls | etap 0 |
+| O-01 `onboarding.step` | ✅ puls | etap 0 |
+| X-05 `ksef.audit` | ✅ puls (naprawiony) | etap 0 |
+
+Wszystko ciche do świadomej decyzji o odsłonięciu.
+
+### Następny krok
+
+- **K1.4 — wspólny cap dzienny.** W pulsie są teraz cztery reguły; przy
+  odsłonięciu kilku naraz konto może dostać kilka kart jednego ranka.
+  Każda reguła pilnuje się dziś sama, ale nikt nie pilnuje sumy.
+- K1.3 — ujednolicenie wyniku `runFloTick` (dziś osiem płaskich liczników).

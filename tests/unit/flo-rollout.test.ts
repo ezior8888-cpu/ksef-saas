@@ -230,8 +230,8 @@ describe('etapy 10 → 50 → 100', () => {
 
   it('kolejność z planu: od pomyłek wewnątrz konta do rejestru państwowego', () => {
     expect(ROLLOUT_ORDER.map((entry) => entry.feature)).toEqual([
-      'W-01', 'W-02', 'W-04', 'K-01', 'X-05', 'X-01', 'X-02', 'B-01', 'K-02',
-      'P-01', 'P-02',
+      'W-01', 'W-02', 'W-04', 'O-01', 'K-01', 'X-05', 'X-01', 'X-02', 'B-01',
+      'K-02', 'P-01', 'P-02',
     ]);
     // Ostatnie pozycje to promień 4.
     expect(KIND_RADIUS[ROLLOUT_ORDER[ROLLOUT_ORDER.length - 1]!.kind]).toBe(4);

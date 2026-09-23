@@ -522,6 +522,7 @@ describe('K-01 w pulsie — wszystkie konta', () => {
       paymentConfirm: sources().value,
       expenseMissing: { readRecentExpenses: async () => [] },
     invoiceMissing: { readIssuedInvoices: async () => [] },
+    onboarding: { readAccount: async () => null },
     });
 
     expect(result).toMatchObject({ confirmAsked: 1, confirmClosed: 0, failedTenants: 0 });

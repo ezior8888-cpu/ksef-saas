@@ -284,6 +284,7 @@ describe('X-05 — w pulsie', () => {
       },
       expenseMissing: { readRecentExpenses: async () => [], readGlobalKill: noKill },
       invoiceMissing: { readIssuedInvoices: async () => [], readGlobalKill: noKill },
+      onboarding: { readAccount: async () => null, readGlobalKill: noKill },
     });
 
     expect(result).toMatchObject({ audited: 1, failedTenants: 0 });

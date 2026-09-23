@@ -26,6 +26,11 @@ import {
   type InvoiceMissingSources,
 } from '@/lib/flo/functions/invoice-missing-producer';
 import {
+  productionOnboardingSources,
+  runOnboardingSweep,
+  type OnboardingSources,
+} from '@/lib/flo/functions/onboarding-producer';
+import {
   productionPaymentConfirmSources,
   runPaymentConfirmSweep,
   type PaymentConfirmSources,
@@ -59,6 +64,10 @@ export interface FloTickResult {
   missingDocsClosed: number;
   /** P-03: pytania „wystawiłeś ją gdzie indziej?". */
   missingInvoicesAsked: number;
+  /** O-01: karty kreatora postawione na młodych kontach. */
+  onboardingGuided: number;
+  /** O-01: kreatory zamknięte, bo pierwsza faktura poszła. */
+  onboardingFinished: number;
   /**
    * Nieudane przebiegi reguł na kontach — każda reguła liczona osobno, więc
    * konto, na którym padły dwie, liczy się dwa razy. Puls za każdym razem
@@ -79,6 +88,7 @@ export interface FloTickSources {
   paymentConfirm: PaymentConfirmSources;
   expenseMissing: ExpenseMissingSources;
   invoiceMissing: InvoiceMissingSources;
+  onboarding: OnboardingSources;
   /**
    * Globalny wyłącznik dla reguł, które nie mają własnych źródeł (X-05).
    * Wstrzykiwany tylko w testach.
@@ -144,11 +154,22 @@ export async function runFloTick(
     ctx?.logger,
   );
 
+  // O-01 (K1.11): pierwsze kroki na nowym koncie. NA KOŃCU, bo to najmiększa
+  // z reguł: prowadzenie za rękę ustępuje wszystkiemu, co dotyczy pieniędzy
+  // albo terminów.
+  const onboarding = await runOnboardingSweep(
+    tenantIds,
+    now,
+    db,
+    sources.onboarding,
+    ctx?.logger,
+  );
+
   // ── miejsce na kolejne reguły ──────────────────────────────
   //
-  // Zostało O-01: prowadzenie nowego konta. Kolejność ma znaczenie
-  // (najpierw fakty, potem propozycje, na końcu miękkie podpowiedzi), więc
-  // nowe reguły dopisujemy NA KOŃCU, a nie wciskamy między istniejące.
+  // Kolejność ma znaczenie: najpierw fakty, potem propozycje, na końcu
+  // miękkie podpowiedzi. Nowe reguły dopisujemy NA KOŃCU, a nie wciskamy
+  // między istniejące.
 
   return {
     expired,
@@ -159,8 +180,14 @@ export async function runFloTick(
     missingDocsAsked: missingDocs.asked,
     missingDocsClosed: missingDocs.closed,
     missingInvoicesAsked: missingInvoices.asked,
+    onboardingGuided: onboarding.guided,
+    onboardingFinished: onboarding.finished,
     failedTenants:
-      audit.failed + confirm.failed + missingDocs.failed + missingInvoices.failed,
+      audit.failed +
+      confirm.failed +
+      missingDocs.failed +
+      missingInvoices.failed +
+      onboarding.failed,
   };
 }
 
@@ -170,6 +197,7 @@ export function productionTickSources(): FloTickSources {
     paymentConfirm: productionPaymentConfirmSources(),
     expenseMissing: productionExpenseMissingSources(),
     invoiceMissing: productionInvoiceMissingSources(),
+    onboarding: productionOnboardingSources(),
   };
 }
 

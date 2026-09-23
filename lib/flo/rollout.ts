@@ -55,6 +55,11 @@ export const ROLLOUT_ORDER: readonly {
   // prawdziwych danych, a rytm kosztów wykrywa się z historii — pierwszy
   // przebieg po dziesiątym dniu miesiąca zapytałby naraz wszystkie konta.
   { feature: 'W-04', kind: 'expense.missing' },
+  // O-01 pierwsze kroki: promień 1, karta tylko prowadzi do miejsca w apce.
+  // W kanarku z tego samego powodu co W-04 i X-05 — nikt nie widział tego
+  // kreatora na prawdziwym koncie, a trafia w najwrażliwszy moment, pierwszy
+  // dzień klienta. Najlepszy kandydat do odsłonięcia jako pierwszy w alfie.
+  { feature: 'O-01', kind: 'onboarding.step' },
   { feature: 'K-01', kind: 'payment.confirm' },
   // X-05 ma promień 2 — pomyłka zostaje w koncie — a mimo to idzie przez
   // kanarka. Decyzja właściciela produktu z 17.09.2026: do tego dnia audyt

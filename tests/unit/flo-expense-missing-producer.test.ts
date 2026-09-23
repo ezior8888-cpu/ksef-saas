@@ -290,6 +290,7 @@ describe('W-04 — wszystkie konta', () => {
       },
       expenseMissing: sources().value,
       invoiceMissing: { readIssuedInvoices: async () => [] },
+    onboarding: { readAccount: async () => null },
     });
 
     expect(result).toMatchObject({

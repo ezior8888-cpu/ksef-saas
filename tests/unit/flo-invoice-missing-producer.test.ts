@@ -301,6 +301,7 @@ describe('P-03 — wszystkie konta', () => {
       },
       expenseMissing: { readRecentExpenses: async () => [], readGlobalKill: async () => false },
       invoiceMissing: sources().value,
+      onboarding: { readAccount: async () => null },
     });
 
     expect(result).toMatchObject({ missingInvoicesAsked: 1, failedTenants: 0 });

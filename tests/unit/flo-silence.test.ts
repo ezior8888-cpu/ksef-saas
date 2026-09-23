@@ -29,6 +29,17 @@ const TENANT = 'ten-1';
 const KIND = 'onboarding.step';
 const noKill = async () => false;
 
+/**
+ * Wpis operatora wpuszczający rodzaj na to konto.
+ *
+ * Testy ciszy nie mogą zależeć od tego, czy akurat ten rodzaj jest w kanarku —
+ * raz już się o to potknęły, gdy O-01 doszło do listy kanarkowej.
+ */
+const ALLOW = [
+  { tenant_id: TENANT, kind: KIND, enabled: true, reason: 'test ciszy' },
+  { tenant_id: 'ten-2', kind: KIND, enabled: true, reason: 'test ciszy' },
+];
+
 function row(overrides: Partial<DecisionRow> & { kind: string }): DecisionRow {
   return {
     accepted: 0,
@@ -144,7 +155,7 @@ describe('cisza — reguła', () => {
 
 describe('cisza — od kliknięcia do następnej karty', () => {
   it('REGRESJA: dwa „nie" o różnych sprawach, a trzecia karta nadal powstaje', async () => {
-    const db = createFakeDb();
+    const db = createFakeDb({ flo_kind_flags: ALLOW });
 
     await recordSubjectDismissal(TENANT, `${KIND}:adobe`, NOW, db.client);
     await recordSubjectDismissal(TENANT, `${KIND}:ovh`, NOW, db.client);
@@ -155,7 +166,7 @@ describe('cisza — od kliknięcia do następnej karty', () => {
   });
 
   it('dwa „nie" o TEJ SAMEJ sprawie: ta sprawa milknie, inne nie', async () => {
-    const db = createFakeDb();
+    const db = createFakeDb({ flo_kind_flags: ALLOW });
 
     await recordSubjectDismissal(TENANT, `${KIND}:adobe`, NOW, db.client);
     await recordSubjectDismissal(TENANT, `${KIND}:adobe`, NOW, db.client);
@@ -169,7 +180,7 @@ describe('cisza — od kliknięcia do następnej karty', () => {
   });
 
   it('„nigdy więcej takich" zamyka wszystkie sprawy rodzaju', async () => {
-    const db = createFakeDb();
+    const db = createFakeDb({ flo_kind_flags: ALLOW });
 
     await muteKind(TENANT, KIND, NOW, db.client);
 
@@ -179,7 +190,7 @@ describe('cisza — od kliknięcia do następnej karty', () => {
   });
 
   it('przyjęcie sprawy zdejmuje jej ciszę', async () => {
-    const db = createFakeDb();
+    const db = createFakeDb({ flo_kind_flags: ALLOW });
     await recordSubjectDismissal(TENANT, `${KIND}:adobe`, NOW, db.client);
     await recordSubjectDismissal(TENANT, `${KIND}:adobe`, NOW, db.client);
 
@@ -191,7 +202,7 @@ describe('cisza — od kliknięcia do następnej karty', () => {
   });
 
   it('cisza jednego konta nie przenosi się na drugie', async () => {
-    const db = createFakeDb();
+    const db = createFakeDb({ flo_kind_flags: ALLOW });
     await recordSubjectDismissal(TENANT, `${KIND}:adobe`, NOW, db.client);
     await recordSubjectDismissal(TENANT, `${KIND}:adobe`, NOW, db.client);
 
@@ -202,7 +213,7 @@ describe('cisza — od kliknięcia do następnej karty', () => {
   it('ustawienia widzą rodzaje osobno, a sprawy osobno', async () => {
     // Bez tego rozdzielenia ekran ustawień pokazałby klientowi
     // „onboarding.step:adobe" jako rodzaj sprawy.
-    const db = createFakeDb();
+    const db = createFakeDb({ flo_kind_flags: ALLOW });
     await muteKind(TENANT, KIND, NOW, db.client);
     await recordSubjectDismissal(TENANT, `${KIND}:adobe`, NOW, db.client);
     await recordSubjectDismissal(TENANT, `${KIND}:adobe`, NOW, db.client);
@@ -214,7 +225,7 @@ describe('cisza — od kliknięcia do następnej karty', () => {
   });
 
   it('bramka pyta o ciszę raz — jednym odczytem, nie po jednym na poziom', async () => {
-    const db = createFakeDb();
+    const db = createFakeDb({ flo_kind_flags: ALLOW });
     const verdict = await isSilenced(TENANT, KIND, `${KIND}:adobe`, NOW, db.client);
 
     expect(verdict.silenced).toBe(false);

@@ -67,6 +67,9 @@ function card(topicKey: string): CreateProposalInput {
 
 beforeEach(() => {
   db = createFakeDb({
+    // Rodzaj wpuszczony wpisem operatora — test nie ma zależeć od tego,
+    // czy akurat jest w kanarku.
+    flo_kind_flags: [{ tenant_id: TENANT, kind: KIND, enabled: true, reason: 'test' }],
     flo_proposals: [
       seedCard('p-adobe', `${KIND}:adobe`),
       seedCard('p-adobe-2', `${KIND}:adobe`),
