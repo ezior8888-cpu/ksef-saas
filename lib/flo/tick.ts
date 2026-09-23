@@ -16,6 +16,11 @@ import { logAuditSystem } from '@/lib/audit/log-system';
 import { floDb, type FloDbClient } from '@/lib/flo/db-types';
 import { runKsefAuditSweep } from '@/lib/flo/functions/audit-sweep';
 import {
+  productionExpenseMissingSources,
+  runMissingDocsSweep,
+  type ExpenseMissingSources,
+} from '@/lib/flo/functions/expense-missing-producer';
+import {
   productionPaymentConfirmSources,
   runPaymentConfirmSweep,
   type PaymentConfirmSources,
@@ -43,6 +48,10 @@ export interface FloTickResult {
   confirmAsked: number;
   /** K-01: otwarte pytania zamknięte, bo faktura przestała być zaległa. */
   confirmClosed: number;
+  /** W-04: nowe pytania „zgubił się dokument?". */
+  missingDocsAsked: number;
+  /** W-04: pytania zamknięte, bo dokument się znalazł. */
+  missingDocsClosed: number;
   /**
    * Nieudane przebiegi reguł na kontach (X-05 i K-01 liczone osobno — konto,
    * na którym padły obie, liczy się dwa razy). Puls za każdym razem szedł dalej.
@@ -60,6 +69,7 @@ export interface FloTickSources {
   /** Konta, na które puls patrzy. */
   listTenantIds: () => Promise<string[]>;
   paymentConfirm: PaymentConfirmSources;
+  expenseMissing: ExpenseMissingSources;
   /**
    * Globalny wyłącznik dla reguł, które nie mają własnych źródeł (X-05).
    * Wstrzykiwany tylko w testach.
@@ -104,12 +114,23 @@ export async function runFloTick(
     ctx?.logger,
   );
 
+  // W-04 (K1.9): „co miesiąc masz tu koszt, a w tym miesiącu nie widzę
+  // dokumentu". Po K-01, bo to już propozycja, a nie ustalanie faktu.
+  // Sama reguła milczy przed dziesiątym dniem miesiąca.
+  const missingDocs = await runMissingDocsSweep(
+    tenantIds,
+    now,
+    db,
+    sources.expenseMissing,
+    ctx?.logger,
+  );
+
   // ── miejsce na kolejne reguły ──────────────────────────────
   //
-  // W-04 szuka zgubionych dokumentów, P-03 brakującej faktury, O-01
-  // prowadzi nowe konto. Kolejność ma znaczenie (najpierw fakty, potem
-  // propozycje, na końcu miękkie podpowiedzi), więc nowe reguły dopisujemy
-  // NA KOŃCU, a nie wciskamy między istniejące.
+  // P-03 szuka brakującej faktury, O-01 prowadzi nowe konto. Kolejność ma
+  // znaczenie (najpierw fakty, potem propozycje, na końcu miękkie
+  // podpowiedzi), więc nowe reguły dopisujemy NA KOŃCU, a nie wciskamy
+  // między istniejące.
 
   return {
     expired,
@@ -117,7 +138,9 @@ export async function runFloTick(
     audited: audit.created,
     confirmAsked: confirm.asked,
     confirmClosed: confirm.closed,
-    failedTenants: audit.failed + confirm.failed,
+    missingDocsAsked: missingDocs.asked,
+    missingDocsClosed: missingDocs.closed,
+    failedTenants: audit.failed + confirm.failed + missingDocs.failed,
   };
 }
 
@@ -125,6 +148,7 @@ export function productionTickSources(): FloTickSources {
   return {
     listTenantIds: readActiveTenantIds,
     paymentConfirm: productionPaymentConfirmSources(),
+    expenseMissing: productionExpenseMissingSources(),
   };
 }
 

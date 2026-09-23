@@ -3277,3 +3277,79 @@ przejrzany, i tę samą kartę do kliknięcia po raz drugi. Błąd idzie do Sent
   oba w pulsie, więc warto przy nich zrobić od razu wspólny cap dzienny
   z K1.4 i ujednolicić wynik `runFloTick` (K1.3).
 - W-03 zostaje w kanarku na etapie 0, jak K-01 i X-05.
+
+---
+
+## 2026-09-23 · Plan FLO 2, K1.9 — W-04 szuka zgubionych dokumentów
+
+Gałąź `claude/k1-9-zgubione-dokumenty`, na bazie K1.8 (PR #18 — inaczej
+wpisy w tym dzienniku kłóciłyby się przy scalaniu). Funkcje czyste W-04
+istniały od kroku 21, nikt ich nie wołał.
+
+### Co robi
+
+Raz dziennie, od dziesiątego dnia miesiąca: wykryj koszty powtarzające się
+miesiąc w miesiąc (trzy różne miesiące, podobne kwoty), sprawdź, których nie
+ma w tym miesiącu, i zapytaj JEDNĄ kartą — o dokument, nigdy o kwotę do
+dopisania. Tę zasadę językową pilnuje funkcja czysta i osobny test; producent
+niczego w niej nie zmienia.
+
+### Cztery zasady producenta
+
+| # | Zasada | Dlaczego |
+|---|---|---|
+| 1 | nie pytamy przed dziesiątym | faktura za hosting potrafi przyjść piątego; warunek jest PRZED bramkami, więc przez dziewięć dni miesiąca puls nie czyta nawet flag |
+| 2 | jedna karta na miesiąc | klucz `expense.missing:RRRR-MM`; kolejne przebiegi aktualizują ją, nie stawiają nowej, i NIE przesuwają terminu ważności |
+| 3 | **karta znika, gdy dokument się znajdzie** | klient wgrywa fakturę — przy najbliższym przebiegu otwarte pytanie jest zamykane (`stale`). Pytanie o coś, co system już widzi, traktuje klienta jak niekompetentnego |
+| 4 | konto wyłączone nie kosztuje odczytu kosztów | bramki przed zapytaniem, jak w K-01 i X-05 |
+
+Zatwierdzonej karty nie ruszamy — człowiek już się zgodził.
+
+### ⚠️ Decyzja: W-04 wchodzi do kanarka
+
+`expense.missing` NIE był na liście kanarkowej, więc samo wpięcie producenta
+oznaczałoby, że po wdrożeniu pierwszego dziesiątego dnia miesiąca pytanie
+dostają NARAZ wszystkie konta — a tej karty nikt jeszcze nie widział na
+prawdziwych danych. To ta sama sytuacja co X-05 w 1.1c, więc ta sama decyzja:
+`{ feature: 'W-04', kind: 'expense.missing' }` w `ROLLOUT_ORDER`, etap 0.
+
+**Do potwierdzenia przez Bartosza i Igora.** Jeśli W-04 ma iść od razu do
+wszystkich, wystarczy usunąć tę jedną pozycję z listy.
+
+### Czego świadomie NIE zrobiłem
+
+- **Wspólnego capu dziennego (K1.4).** Dziś każdy rodzaj pilnuje się sam:
+  K-01 jedna karta, W-04 jedna karta na miesiąc. Przy trzecim producencie
+  w pulsie (P-03, O-01) limit wspólny przestanie być abstrakcją na zapas.
+- **Ujednolicenia wyniku `runFloTick` (K1.3)** — dołożyłem dwa pola
+  (`missingDocsAsked`, `missingDocsClosed`) w istniejącej, płaskiej
+  konwencji. Przerabianie na `{ kind, created, updated, error }` przy okazji
+  zrobiłoby z tego PR-a dwie zmiany naraz.
+- **Zapominania pojedynczego sprzedawcy.** `sellersToForget` z W-04 istnieje,
+  ale nic go nie woła — „Nigdy więcej takich" wycisza dziś CAŁY rodzaj, a nie
+  jeden abonament. To ten sam wątek co „Pytaj za każdym razem" w K1.8
+  i „Jeszcze nie" w K-01: trzy funkcje, jeden brakujący mechanizm.
+- Migracji, wdrożenia, zmian w `types/flo.ts`.
+
+### Weryfikacja
+
+- `tests/unit/flo-expense-missing-producer.test.ts` — 11 testów: kiedy
+  milczymy (przed dziesiątym, dokument jest, poza kanarkiem, wyciszone),
+  kiedy pytamy, zamykanie po znalezieniu dokumentu, przebieg po kontach
+  z izolacją błędu i wpięcie w puls.
+- **Test mutacyjny 7/7** — ale jedna mutacja („zamykanie także zatwierdzonych
+  kart") PRZEŻYŁA pierwsze podejście i to jest ciekawsze niż sam wynik:
+  zamykanie ma dwie warstwy ochrony, warunek w kodzie i `status = 'open'`
+  w samym zapisie, więc usunięcie jednej nie zmieniało zachowania. Test
+  sprawdzał skutek, nie próbę. Dociśnięty o „liczba zapisów ma zostać zerem"
+  — i wtedy mutacja pada.
+- `tsc --noEmit` czysto; eslint na zmienionych plikach 0 błędów, 0 ostrzeżeń.
+- vitest **1223 zielone, 7 pominiętych, zero czerwonych** (74 pliki
+  + 1 pominięty). W1 zielony.
+
+### Następny krok
+
+- K1.10 (P-03 — brakująca faktura) albo K1.11 (O-01 — onboarding); przy
+  którymkolwiek warto wziąć K1.4 (wspólny cap) i K1.3 (wynik pulsu).
+- Osobno, dla trzech funkcji naraz: wyciszanie POJEDYNCZEJ sprawy zamiast
+  całego rodzaju.

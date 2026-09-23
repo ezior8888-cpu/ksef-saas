@@ -50,6 +50,11 @@ export const ROLLOUT_ORDER: readonly {
 }[] = [
   { feature: 'W-01', kind: 'expense.review' },
   { feature: 'W-02', kind: 'expense.rule' },
+  // W-04 ma promień 2, ale idzie przez kanarka z tego samego powodu co X-05
+  // (decyzja z 17.09): to pytanie, którego nikt jeszcze nie widział na
+  // prawdziwych danych, a rytm kosztów wykrywa się z historii — pierwszy
+  // przebieg po dziesiątym dniu miesiąca zapytałby naraz wszystkie konta.
+  { feature: 'W-04', kind: 'expense.missing' },
   { feature: 'K-01', kind: 'payment.confirm' },
   // X-05 ma promień 2 — pomyłka zostaje w koncie — a mimo to idzie przez
   // kanarka. Decyzja właściciela produktu z 17.09.2026: do tego dnia audyt
