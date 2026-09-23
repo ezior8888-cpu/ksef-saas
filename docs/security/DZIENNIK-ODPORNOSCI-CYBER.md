@@ -404,6 +404,45 @@ Pełny opis do przeglądu: [sesje, API i challenge](FAZA-03-SESJE-I-CHALLENGE.md
 
 **Przekazanie:** pakiet pozostaje lokalny, przygotowany do przeglądu jako kolejny draft względem PR #12. Publikacja nowych szczegółów do publicznego repo wymaga decyzji o tym konkretnym pakiecie; wcześniejsze zgody na PR #11/#12 zostały wykonane. Nie wykonano merge/deploy. F03 pozostaje otwarta.
 
+## 2026-09-16 — przegląd całego łańcucha po publikacji PR #13 (REV-01…08)
+
+Na prośbę Igora wykonano przekrojowy przegląd dotychczasowych prac na f3ca0d4. [Pełny raport, źródła, dowody i kolejność napraw](PRZEGLAD-CALOSCI-2026-09-16.md). To przegląd, bez nowych napraw kodu i bez wdrożenia.
+
+**Korekta stanu publikacji poprzedniego wpisu:** pakiet f3ca0d4 jest opublikowany w roboczym [PR #13](https://github.com/ezior8888-cpu/ksef-saas/pull/13). Wszystkie 7 kontroli tego HEAD zakończone sukcesem; [CI](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/35120892202), [Security](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/35120892103). Łańcuch #1/#2/#3/#4/#10/#11/#12/#13 nadal draft, open, niepołączony. Publikacja nie oznacza wdrożenia.
+
+**Nowy wynik lokalny:** 132 pliki / 2465 Vitest PASS, typecheck PASS, lint 0 błędów / 29 wcześniejszych ostrzeżeń. Dodatkowe hermetyczne próby potwierdziły niezgodność wersji zgody FLO, odrzucanie Stripe przez proxy, pozorny logout przy Auth500, możliwość podstawienia sesji przez legacy finish i pominięty limiter prób hasła GDPR. Statycznie potwierdzono błąd timera bezczynności i brak kontroli relacji firmy w UPO. To starsze luki lub pozostałości niedomknięte we wcześniejszych poprawkach; nie deklarujemy incydentu na serwerze.
+
+**GitHub:** efektywne reguły main chronią tylko przed usunięciem i force-push; wymagane statusy/PR/review nie są skonfigurowane. Właściciel powinien domknąć tę wcześniej otwartą bramkę.
+
+**Otwarte:** szczegóły REV-01…08 w raporcie, znane relacje DB oraz GoTrue/Redis/recovery/backup i pełna kompilacja. Nie rozszerzać ręcznej puli 89 ani etykiet heurystyki na zapewnienie bezpieczeństwa wszystkich zapytań. Historyczne stwierdzenie o czystych logach nie obejmuje całego loggera workera.
+
+Nowy raport i ten wpis pozostają lokalne. Nie wykonano commit/push nowych ustaleń, merge, migracji, zmian serwera ani prawdziwej wysyłki. Odtwarzające testy znajdują się w TEMP, z odniesieniami w raporcie. Kolejny krok to osobny pakiet poprawek i odbiór właściciela, nie automatyczne wdrożenie.
+
+## 2026-09-23 — poprawki po przeglądzie REV-01…08
+
+Na prośbę Igora wznowiono i dokończono lokalne naprawy na bazie f3ca0d4 (PR #13), gałąź codex/security-review-remediation. [Pełny opis napraw, testów i granic](NAPRAWY-PRZEGLADU-2026-09-23.md). Przerwany wcześniej zapis nie był wykonany; po odnowieniu dostępu sprawdzono rzeczywisty stan plików i dokończono zmiany. Root checkout i jego własne zmiany pozostawiono nietknięte.
+
+**Wykonano:** walidacja firmy/faktury/numeru KSeF w UPO i retry; dokładny wyjątek podpisanego Stripe webhook; wersja treści i input w zgodzie FLO; poprawny termin bezczynności; lokalny logout mimo awarii Auth i uczciwy status odwołania; odmowa legacy finish z zachowaniem PKCE; wspólny atomowy budżet prób hasła obejmujący GDPR. Dodano rzeczywiste testy React/SDK, regresje wyścigów, cache i awarii. Poprawiono historyczny zbyt szeroki wniosek o logach workera, zachowując jego pierwotny zapis.
+
+**Commity kodu:**
+- 0ef909a7044975a9327bcdb5b38972171c5005e6 — security: update ZIP tooling and add DOM regression dependencies
+- 020cd27a49c7e6c5d97805c57a0a8e21eae2d7d1 — fix: let signed Stripe webhooks reach signature verification
+- d631ae5780c413626f7d32882cfe224542e749d0 — security: bind UPO jobs and retries to accepted tenant invoices
+- 61ef18163e9ae6c6db1836a83e7316da4bf774d1 — security: bind FLO consent to the displayed operation and input
+- 1d7e7cf97c21a9c660ff70438f19e5e9581739a2 — security: reject unsolicited legacy sign-in sessions
+- d0b6b27ad6f7d662c6134726c823a2f2f675d995 — security: enforce inactivity deadline and report logout outcomes
+- f2a22bda30cd0f0acd63606550cb1e0ed0a278aa — security: share password reauthentication budget with GDPR
+
+**Weryfikacja:** 140 plików / 2568 Vitest PASS; 66 XML PASS; 67 testów narzędzi PASS; typecheck PASS; lint 0 błędów / 29 istniejących ostrzeżeń. Pełny next build --webpack PASS w 102 s, 82/82 stron, finalizacja ukończona. Build w kopii TEMP bez sekretów, heap 6 GB/cpus1/memoryopt, bez standalone/Dockera; kod aplikacji zgodny, późniejsza zmiana dotyczyła testu TOTP. Tymczasowy alias nowych dev typów i poprawki konfiguracji testowej nie zmieniały repo config ani produkcji. Dowody: TEMP/faktflow-auth-dom-U8LY1F, faktflow-review-validation-bZt9lU, faktflow-remediation-full-build-VY4kwc.
+
+**Zależności:** wykryto 2 nowe zgłoszenia adm-zip (high/moderate), wyłącznie ścieżka dev inngest-cli. Dokładny override 0.6.1 usuwa oba zgłoszenia z ponownego audytu all/prod: po 0, exit 0. Frozen lockfile offline PASS. Dodano jsdom/@types do regresji React; shared node_modules nietknięte. Build/testy korzystają ze współdzielonych istniejących zależności oraz izolowanego dodatku jsdom; czystą instalację końcowego lockfile ma dodatkowo potwierdzić CI. Produkcyjne zależności pozostają takie same.
+
+**Skan sekretów przed commitami:** Gitleaks 8.30.1, 48 przygotowanych plików kodu/testów/dokumentacji — brak trafień, bez nowych wyjątków. Dowód TEMP/faktflow-remediation-scan-x5QCu6. Końcowe dokumenty oraz historia 252 commitów do f2a22bda30cd również bez trafień; dowód TEMP/faktflow-final-remediation-check-jcFYi4.
+
+**Otwarte/Bartek:** REV-04: konto nie ma admin/maintain; świeże reguły main nadal tylko deletion/non_fast_forward. [Gotowa konfiguracja sześciu kontroli, PR/review i odbiór](GITHUB-WYMAGANE-KONTROLE.md). REV-01: spójność parent–receipt, granty i test dwóch firm przez PostgREST. REV-03: nowa zgoda zabezpiecza wejście wykonawcy; niezmienność późniejszego maila w starszej kolejce przypomnień wciąż wymaga osobnego projektu. Ponadto GoTrue/PKCE/MFA/logout, Valkey EVAL/TTL, obraz aplikacji+workera, backup/restore i wcześniejsze zależności F03. Nie włączano nowych funkcji FLO.
+
+**Stan wydania:** kod i dokumentacja lokalne, brak SQL/nowych migracji, zdalnych ustawień, merge i wdrożenia. Zielone wyniki PR #13 odnoszą się wyłącznie do f3ca0d4. Nie stanowią CI nowych commitów. F03 pozostaje otwarta do odbioru środowiska i zaległych granic danych.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:
