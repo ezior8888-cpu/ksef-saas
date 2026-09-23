@@ -26,6 +26,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { approvedReminderDelivery } from '@/lib/reminders/delivery-consent';
 import { createApproval } from '@/lib/flo/approval';
 import { approvalOperationHash, isApprovalVersion, parseApprovalInput, proposalApprovalVersion } from '@/lib/flo/approval-version';
 import { floDb, type FloProposalRow } from '@/lib/flo/db-types';
@@ -139,6 +140,15 @@ export async function approveProposal(
 
   if (proposalApprovalVersion(proposal) !== expectedVersion) {
     return { ok: false, reason: 'stale', message: 'Propozycja zmieniła się. Sprawdź ją ponownie przed zatwierdzeniem.' };
+  }
+
+  if (proposal.kind === 'payment.chase') {
+    try {
+      if (proposal.payload.preparedBy !== user.id) throw new Error('wrong-previewer');
+      approvedReminderDelivery(proposal, input);
+    } catch {
+      return { ok: false, reason: 'blocked', message: 'Przygotuj nowy podgląd przypomnienia. Zachowaj informację o płatności, która mogła już zostać wykonana.' };
+    }
   }
 
   let approvalId: string;

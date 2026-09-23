@@ -6,13 +6,13 @@ import {
 } from '@/components/dashboard/responsive-table';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
+import { ReminderConsentDialog } from './reminder-consent-dialog';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
   toggleInvoiceRemindersAction,
-  triggerManualReminderAction,
 } from '@/app/actions/reminders';
 import { cn } from '@/lib/utils';
 import { formatPlInt, formatPlMoney } from '@/lib/format/pl';
@@ -43,6 +43,8 @@ interface Props {
 
 
 export function OverdueDashboard({ overdueInvoices, stats }: Props) {
+  const router = useRouter();
+  const [reminderInvoice, setReminderInvoice] = useState<OverdueInvoice | null>(null);
   return (
     <div className="pb-10 text-[var(--ff-on-surface)]">
       <div className="mb-10">
@@ -169,16 +171,22 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
               </thead>
               <tbody>
                 {overdueInvoices.map((inv) => (
-                  <OverdueRow key={inv.id} invoice={inv} />
+                  <OverdueRow key={inv.id} invoice={inv} onPrepare={() => setReminderInvoice(inv)} />
                 ))}
               </tbody>
             </table>
           }
           cards={overdueInvoices.map((inv) => (
-            <OverdueRow key={inv.id} invoice={inv} variant="card" />
+            <OverdueRow key={inv.id} invoice={inv} variant="card" onPrepare={() => setReminderInvoice(inv)} />
           ))}
         />
       )}
+      {reminderInvoice ? (
+        <ReminderConsentDialog key={reminderInvoice.id}
+          source={{ invoiceId: reminderInvoice.id, recipientEmail: reminderInvoice.buyer_email ?? undefined }}
+          onClose={() => setReminderInvoice(null)}
+          onSent={() => { toast.success('Przypomnienie przekazane do wysyłki'); router.refresh(); }} />
+      ) : null}
     </div>
   );
 }
@@ -194,12 +202,13 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
 function OverdueRow({
   invoice,
   variant = 'row',
+  onPrepare,
 }: {
   invoice: OverdueInvoice;
   variant?: 'row' | 'card';
+  onPrepare: () => void;
 }) {
   const router = useRouter();
-  const [isSending, startSending] = useTransition();
   const [isPausing, startPausing] = useTransition();
 
   const severity =
@@ -211,17 +220,7 @@ function OverdueRow({
           ? 'medium'
           : 'low';
 
-  const handleSendReminder = () => {
-    startSending(async () => {
-      const result = await triggerManualReminderAction(invoice.id);
-      if (result.success) {
-        toast.success('Przypomnienie wysłane');
-        router.refresh();
-      } else {
-        toast.error(result.error);
-      }
-    });
-  };
+  const handleSendReminder = onPrepare;
 
   const handleTogglePause = () => {
     startPausing(async () => {
@@ -278,19 +277,15 @@ function OverdueRow({
         type="button"
         onClick={handleSendReminder}
         disabled={
-          isSending || invoice.reminders_paused || !(invoice.buyer_email?.trim())
+          invoice.reminders_paused
         }
         className={iconBtn}
-        title="Wyślij przypomnienie teraz"
-        aria-label="Wyślij przypomnienie teraz"
+        title="Przygotuj przypomnienie"
+        aria-label="Przygotuj przypomnienie"
       >
-        {isSending ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-        ) : (
-          <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
+        <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
             send
           </span>
-        )}
       </button>
       <button
         type="button"
@@ -401,21 +396,15 @@ function OverdueRow({
             type="button"
             onClick={handleSendReminder}
             disabled={
-              isSending ||
-              invoice.reminders_paused ||
-              !(invoice.buyer_email?.trim())
+              invoice.reminders_paused
             }
             className={iconBtn}
-            title="Wyślij przypomnienie teraz"
-            aria-label="Wyślij przypomnienie teraz"
+            title="Przygotuj przypomnienie"
+            aria-label="Przygotuj przypomnienie"
           >
-            {isSending ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
+            <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
                 send
               </span>
-            )}
           </button>
           <button
             type="button"

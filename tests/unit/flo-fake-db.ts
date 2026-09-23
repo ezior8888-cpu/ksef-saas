@@ -21,11 +21,15 @@ import type { FloDbClient } from '@/lib/flo/db-types';
 type Row = Record<string, unknown>;
 type Filter = (row: Row) => boolean;
 function columnValue(row: Row, column: string): unknown {
-  const [root, key] = column.split('->>');
-  if (!key) return row[column];
-  const obj = row[root!] as Row | undefined;
-  const value = obj?.[key];
-  return value == null ? null : String(value);
+  if (!column.includes('->')) return row[column];
+  const [root, ...keys] = column.split(/->>?/);
+  let value: unknown = row[root!];
+  for (const key of keys) {
+    if (!value || typeof value !== 'object' || !Object.prototype.hasOwnProperty.call(value, key)) return null;
+    value = (value as Row)[key];
+  }
+  if (value == null) return null;
+  return column.includes('->>') ? String(value) : value;
 }
 
 interface Tables {
@@ -95,6 +99,15 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
         makeQuery(rows, [...filters, (r) => columnValue(r, col) === value], mode, patch),
       neq: (col: string, value: unknown) =>
         makeQuery(rows, [...filters, (r) => r[col] !== value], mode, patch),
+      not: (col: string, operator: 'like', pattern: string) => {
+        if (operator !== 'like') throw new Error('Unsupported fake filter');
+        const escaped = pattern.split('').map((char) => char === '%' ? '.*' : char === '_' ? '.' : '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0')).join('');
+        const matches = new RegExp('^' + escaped + '$');
+        return makeQuery(rows, [...filters, (r) => {
+          const value = columnValue(r, col);
+          return typeof value === 'string' && !matches.test(value);
+        }], mode, patch);
+      },
       in: (col: string, values: readonly unknown[]) =>
         makeQuery(rows, [...filters, (r) => values.includes(r[col])], mode, patch),
       is: (col: string, value: unknown) =>

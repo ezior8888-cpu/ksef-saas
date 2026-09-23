@@ -125,12 +125,12 @@ describe('service-role job boundaries', () => {
     expect(tables.ksef_offline_queue[10].status).toBe('expired');
     expect(tables.invoices[0]).toEqual({ id: ID, tenant_id: B });
   });
-  it('rechecks reminder relations even when the durable fetch step was cached', async () => {
+  it('rejects legacy reminder consent before restoring an old durable fetch', async () => {
     const cached = { id: ID, tenant_id: A, invoice_id: OTHER, status: 'pending', invoices: { id: OTHER, tenant_id: B } };
     const cachedContext = { ...ctx, step: { ...ctx.step, run: vi.fn().mockResolvedValue(cached) } };
-    await expect(runSendReminder({ reminderId: ID, approvalId: 'approved' }, cachedContext)).rejects.toThrow('nie należy');
-    expect(cachedContext.step.run).toHaveBeenCalledTimes(1);
-    expect(mocks.admin).toHaveBeenCalledTimes(1);
+    await expect(runSendReminder({ reminderId: ID, approvalId: 'approved' }, cachedContext)).rejects.toThrow('zgody');
+    expect(cachedContext.step.run).not.toHaveBeenCalled();
+    expect(mocks.admin).not.toHaveBeenCalled();
     expect(writes()).toEqual([]);
   });
   it('rejects invalid IDs before constructing an admin client', async () => {
@@ -191,17 +191,18 @@ describe('service-role job boundaries', () => {
       id: ID, tenant_id: A, invoice_id: OTHER, status: 'pending',
       invoices: { id: OTHER, tenant_id: B, gross_total: 100, paid_amount: 0 },
     }];
-    await expect(runSendReminder({ reminderId: ID, approvalId: 'approved' }, ctx)).rejects.toThrow('nie należy');
+    await expect(runSendReminder({ reminderId: ID, approvalId: 'approved' }, ctx)).rejects.toThrow('zgody');
     expect(writes()).toEqual([]);
-    expect(calls.map((q) => q.table)).toEqual(['payment_reminders']);
+    expect(calls).toEqual([]);
   });
-  it('still cancels a paid invoice reminder, scoping its update by tenant and invoice', async () => {
+  it('does not mutate a paid reminder when legacy queue data has no durable consent', async () => {
     tables.payment_reminders = [{
       id: ID, tenant_id: A, invoice_id: OTHER, status: 'pending',
       invoices: { id: OTHER, tenant_id: A, gross_total: 100, paid_amount: 100 },
     }];
-    await expect(runSendReminder({ reminderId: ID, approvalId: 'approved' }, ctx)).resolves.toMatchObject({ skipped: true });
-    expect(writes()[0].filters).toEqual([['id', ID], ['tenant_id', A], ['invoice_id', OTHER]]);
+    await expect(runSendReminder({ reminderId: ID, approvalId: 'approved' }, ctx)).rejects.toThrow('zgody');
+    expect(writes()).toEqual([]);
+    expect(tables.payment_reminders[0].status).toBe('pending');
   });
   it('blocks a tampered OCR created_by before photo download, AI or push', async () => {
     tables.ocr_jobs = [{ id: ID, tenant_id: A, created_by: USER, source_file_path: 'tenants/' + A + '/x.jpg' }];

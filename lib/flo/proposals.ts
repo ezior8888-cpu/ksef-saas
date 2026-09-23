@@ -234,6 +234,8 @@ export async function listOpen(tenantId: string): Promise<FloProposalView[]> {
     .from('flo_proposals')
     .select('*')
     .eq('tenant_id', tenantId)
+    // Internal consent previews stay out of the feed, before pagination.
+    .not('topic_key', 'like', 'reminder-preview:%')
     .in('status', ['open', 'approved'])
     .order('priority', { ascending: true })
     .order('created_at', { ascending: false })
@@ -268,6 +270,7 @@ export function toProposalView(row: FloProposalRow): FloProposalView | null {
   return {
     id: row.id,
     approvalVersion: proposalApprovalVersion(row),
+    reminder: kind === 'payment.chase' ? readReminderSource(payload) : undefined,
     kind,
     variant,
     title: row.title,
@@ -456,4 +459,11 @@ function isUniqueViolation(error: { message: string } & { code?: string }) {
     error.code === '23505' ||
     error.message.includes('duplicate key value violates unique constraint')
   );
+}
+
+function readReminderSource(payload: Record<string, unknown>): FloProposalView['reminder'] {
+  const invoiceId = readString(payload.invoiceId);
+  const stage = payload.stage;
+  if (!invoiceId || (stage !== 'stage_1' && stage !== 'stage_2' && stage !== 'stage_3' && stage !== 'stage_4')) return undefined;
+  return { invoiceId, stage };
 }

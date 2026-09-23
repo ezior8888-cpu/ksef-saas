@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FloProposalRow } from '@/lib/flo/db-types';
+import type { ReminderDelivery, ReminderInvoiceSource } from '@/types/reminder-delivery';
+import { reminderDeliverySchema, reminderInvoiceFingerprint } from '@/lib/reminders/delivery-schema';
+import { DISCLAIMER } from '@/lib/flo/functions/payment-chase';
 import { createFakeDb, type FakeDb } from './flo-fake-db';
 
 const mock = vi.hoisted(() => ({
@@ -52,6 +55,42 @@ beforeEach(() => {
   mock.send.mockClear();
   mock.audit.mockClear();
 });
+/** A real, version-bound consumed consent; failures below must reach tenant/current-state checks. */
+function chaseContext(foreignInvoice = false) {
+  const tenantId = '11111111-1111-4111-8111-111111111111';
+  const invoiceId = '22222222-2222-4222-8222-222222222222';
+  const approvalId = '33333333-3333-4333-8333-333333333333';
+  const userId = '44444444-4444-4444-8444-444444444444';
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 30 * 60_000).toISOString();
+  const invoice: ReminderInvoiceSource = {
+    id: invoiceId, tenant_id: foreignInvoice ? '55555555-5555-4555-8555-555555555555' : tenantId,
+    gross_total: 100, paid_amount: 0, currency: 'PLN', payment_status: 'unpaid',
+    direction: 'issued', ksef_status: 'accepted', payment_due_date: '2026-09-01',
+    issue_date: '2026-08-20', internal_number: 'FV/fixture', ksef_number: null,
+    buyer_data: { name: 'Fixture buyer', email: 'buyer@example.test' }, buyer_nip: null,
+    payment_data: {}, seller_data: { name: 'Fixture seller' }, reminders_paused: false,
+  };
+  db.tables.invoices.push({ ...invoice });
+  const delivery: ReminderDelivery = reminderDeliverySchema.parse({
+    version: 1, tenantId, invoiceId, stage: 'stage_1', preparedAt: now.toISOString(), expiresAt,
+    sourceFingerprint: reminderInvoiceFingerprint(invoice), from: 'Fixture seller <sender@example.test>',
+    to: 'buyer@example.test', replyTo: null, subject: 'Fixture reminder', text: 'Fixture reminder. ' + DISCLAIMER,
+    attachment: null, daysOverdue: 1,
+  });
+  const row = proposal({
+    id: '66666666-6666-4666-8666-666666666666', tenant_id: tenantId, kind: 'payment.chase',
+    status: 'executing', approved_by: userId, approved_at: now.toISOString(), expires_at: expiresAt,
+    payload: { invoiceId, stage: 'stage_1', delivery, preparedBy: userId },
+  });
+  const version = proposalApprovalVersion(row);
+  const snapshot = { approvalVersion: 1, proposalVersion: version, operationHash: approvalOperationHash(version) };
+  db.tables.flo_proposals.push({ ...row });
+  db.tables.flo_approvals.push({ id: approvalId, proposal_id: row.id, tenant_id: tenantId, user_id: userId,
+    created_at: now.toISOString(), consumed_at: now.toISOString(), expires_at: expiresAt, snapshot });
+  return { proposal: row, userId, approvalId, snapshot };
+}
+
 describe('FLO entity boundaries', () => {
   it.each(['invoice-b', 'missing'])('rejects selected ID %s outside the proposal even for one grosz', async (id) => {
     await expect(getFloHandler('payment.confirm')!(context(proposal(), { selectedIds: [id], value: '0.01' }))).rejects.toThrow();
@@ -94,19 +133,40 @@ describe('FLO entity boundaries', () => {
     expect(db.tables.expenses[0]!.is_reviewed).toBe(false);
   });
   it('chase rejects a foreign target before a reminder or event can be created', async () => {
-    await expect(getFloHandler('payment.chase')!(context(proposal({ kind: 'payment.chase', payload: { invoiceId: 'invoice-b', stage: 'stage_1' } })))).rejects.toThrow();
+    const ctx = chaseContext(true);
+    await expect(getFloHandler('payment.chase')!(ctx)).rejects.toThrow('nie należy do organizacji');
     expect(db.tables.payment_reminders).toHaveLength(0);
+    expect(db.writes).toBe(0);
     expect(mock.send).not.toHaveBeenCalled();
   });
   it('chase uses current paused state instead of proposal facts', async () => {
-    db.tables.invoices[0]!.reminders_paused = true;
-    await expect(getFloHandler('payment.chase')!(context(proposal({ kind: 'payment.chase', payload: { invoiceId: 'invoice-a', stage: 'stage_1', facts: { remindersPaused: 0 } } })))).rejects.toThrow();
+    const ctx = chaseContext();
+    db.tables.invoices.find((row) => row.id === ctx.proposal.payload.invoiceId)!.reminders_paused = true;
+    await expect(getFloHandler('payment.chase')!(ctx)).rejects.toThrow('Dane faktury zmieniły się');
+    expect(db.tables.payment_reminders).toHaveLength(0);
+    expect(db.writes).toBe(0);
     expect(mock.send).not.toHaveBeenCalled();
   });
   it('chase checks only own payments and uses payment_date', async () => {
-    db.tables.payments.push({ id: 'pay-b', tenant_id: 'tenant-b', invoice_id: 'invoice-a', payment_date: '2099-01-01' });
-    await getFloHandler('payment.chase')!(context(proposal({ kind: 'payment.chase', payload: { invoiceId: 'invoice-a', stage: 'stage_1' } })));
-    expect(db.tables.payment_reminders[0]).toMatchObject({ tenant_id: 'tenant-a', invoice_id: 'invoice-a' });
+    const ctx = chaseContext();
+    const invoiceId = ctx.proposal.payload.invoiceId;
+    db.tables.payments.push({ id: 'pay-b', tenant_id: 'tenant-b', invoice_id: invoiceId, payment_date: '2099-01-01' });
+    const own = { id: 'pay-a', tenant_id: ctx.proposal.tenant_id, invoice_id: invoiceId,
+      payment_date: new Date().toISOString().slice(0, 10) };
+    db.tables.payments.push(own);
+    await expect(getFloHandler('payment.chase')!(ctx)).rejects.toThrow('ostatnich dwóch dni');
+    expect(db.tables.payment_reminders).toHaveLength(0);
+    expect(mock.send).not.toHaveBeenCalled();
+    // Moving only the owned payment out of the safety window allows delivery;
+    // the foreign tenant's future payment must remain invisible to this check.
+    own.payment_date = '2020-01-01';
+    await getFloHandler('payment.chase')!(ctx);
+    expect(db.tables.payment_reminders[0]).toMatchObject({
+      id: ctx.approvalId, tenant_id: ctx.proposal.tenant_id, invoice_id: invoiceId,
+    });
+    expect(db.tables.flo_approvals[0]!.snapshot).toMatchObject({
+      reminderDispatch: { reminderId: ctx.approvalId, invoiceId, stage: 'stage_1' },
+    });
     expect(mock.send).toHaveBeenCalledOnce();
   });
 });

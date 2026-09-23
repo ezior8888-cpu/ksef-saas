@@ -83,7 +83,7 @@ describe('bezpieczeństwo akcji', () => {
 
   it('zatwierdzenie tworzy żeton PRZED wykonaniem', () => {
     const start = SOURCE.indexOf('export async function approveProposal');
-    const body = SOURCE.slice(start, start + 2200);
+    const body = SOURCE.slice(start, SOURCE.indexOf('export async function dismissProposal', start));
     expect(body.indexOf('createApproval')).toBeGreaterThan(-1);
     expect(body.indexOf('createApproval')).toBeLessThan(
       body.indexOf('executeProposal'),

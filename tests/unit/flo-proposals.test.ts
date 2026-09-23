@@ -149,3 +149,18 @@ describe('wiersz → karta: bezpieczne czytanie ładunku', () => {
     expect(view?.primary.inputKind).toBe('email');
   });
 });
+
+describe('wiersz → karta: źródło podglądu przypomnienia', () => {
+  it('exposes only invoice and allowed stage, never the delivery contents', () => {
+    const view = toProposalView(row({ payload: { invoiceId: 'invoice-a', stage: 'stage_2', delivery: { text: 'private draft', attachment: { contentBase64: 'fixture' } } } }));
+    expect(view?.reminder).toEqual({ invoiceId: 'invoice-a', stage: 'stage_2' });
+  });
+  it.each([
+    {}, { invoiceId: 'invoice-a', stage: 'invalid' }, { invoiceId: '', stage: 'stage_1' },
+  ])('does not enable preparation with malformed identifiers: %j', (payload) => {
+    expect(toProposalView(row({ payload }))?.reminder).toBeUndefined();
+  });
+  it('does not turn another proposal kind into a reminder', () => {
+    expect(toProposalView(row({ kind: 'invoice.raise', payload: { invoiceId: 'invoice-a', stage: 'stage_1' } }))?.reminder).toBeUndefined();
+  });
+});
