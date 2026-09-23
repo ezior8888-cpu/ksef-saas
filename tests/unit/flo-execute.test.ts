@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: vi.fn(async () => false), getGlobalFlag: vi.fn(async () => false) }));
 
+import { approvalOperationHash, proposalApprovalVersion } from '@/lib/flo/approval-version';
 import { executeProposal } from '@/lib/flo/execute';
 import { fingerprintOf } from '@/lib/flo/fingerprint';
 import { registerFloHandler, resetFloHandlers } from '@/lib/flo/handlers';
@@ -48,7 +49,7 @@ function approval(overrides: Record<string, unknown> = {}) {
     proposal_id: 'prop-1',
     tenant_id: 'ten-1',
     user_id: 'usr-1',
-    snapshot: { title: 'Podsumowanie roku gotowe' },
+    snapshot: { title: 'Podsumowanie roku gotowe', approvalVersion: 1, proposalVersion: proposalApprovalVersion(proposal()), operationHash: approvalOperationHash(proposalApprovalVersion(proposal())) },
     created_at: '2026-08-26T11:59:00.000Z',
     consumed_at: null,
     expires_at: '2026-08-26T12:20:00.000Z',
@@ -56,7 +57,7 @@ function approval(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const ARGS = { tenantId: 'ten-1', proposalId: 'prop-1', userId: 'usr-1', approvalId: 'apr-1' };
+const ARGS = { proposalVersion: proposalApprovalVersion(proposal()), tenantId: 'ten-1', proposalId: 'prop-1', userId: 'usr-1', approvalId: 'apr-1' };
 
 beforeEach(() => {
   resetFloHandlers();
@@ -147,7 +148,7 @@ describe('wykonawca — odmowy', () => {
       flo_approvals: [approval()],
     });
 
-    const result = await executeProposal(ARGS, NOW, db.client);
+    const result = await executeProposal({ ...ARGS, proposalVersion: proposalApprovalVersion(proposal({ fingerprint: 'odcisk-z-innego-swiata' })) }, NOW, db.client);
 
     expect(result.ok).toBe(false);
     expect(result).toMatchObject({ reason: 'stale' });

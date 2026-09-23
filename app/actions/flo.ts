@@ -27,6 +27,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { createApproval } from '@/lib/flo/approval';
+import { approvalOperationHash, isApprovalVersion, parseApprovalInput, proposalApprovalVersion } from '@/lib/flo/approval-version';
 import { floDb, type FloProposalRow } from '@/lib/flo/db-types';
 import { muteKind, recordDecision } from '@/lib/flo/decisions';
 import { executeProposal } from '@/lib/flo/execute';
@@ -103,9 +104,18 @@ export async function listScheduled(): Promise<FloScheduledView[]> {
  */
 export async function approveProposal(
   id: string,
+  expectedVersion: string,
   input?: FloApproveInput,
 ): Promise<FloApproveResult> {
   const { tenantId, user } = await requireUserAndActiveOrg();
+  if (!isApprovalVersion(expectedVersion)) {
+    return { ok: false, reason: 'stale', message: 'Odśwież propozycję i sprawdź ją przed zatwierdzeniem.' };
+  }
+  try {
+    input = parseApprovalInput(input);
+  } catch {
+    return { ok: false, reason: 'blocked', message: 'Sprawdź wprowadzone dane.' };
+  }
 
   const loaded = await floDb()
     .from('flo_proposals')
@@ -127,6 +137,10 @@ export async function approveProposal(
     };
   }
 
+  if (proposalApprovalVersion(proposal) !== expectedVersion) {
+    return { ok: false, reason: 'stale', message: 'Propozycja zmieniła się. Sprawdź ją ponownie przed zatwierdzeniem.' };
+  }
+
   let approvalId: string;
   try {
     approvalId = await createApproval({
@@ -134,6 +148,9 @@ export async function approveProposal(
       tenantId,
       userId: user.id,
       snapshot: {
+        approvalVersion: 1,
+        proposalVersion: expectedVersion,
+        operationHash: approvalOperationHash(expectedVersion, input),
         title: proposal.title,
         body: proposal.body,
         kind: proposal.kind,
@@ -157,6 +174,7 @@ export async function approveProposal(
     tenantId,
     userId: user.id,
     approvalId,
+    proposalVersion: expectedVersion,
     input,
   });
 

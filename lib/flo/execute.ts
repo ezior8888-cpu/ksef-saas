@@ -20,6 +20,7 @@
  */
 
 import { consumeApproval, FloApprovalError } from '@/lib/flo/approval';
+import { isApprovalVersion, parseApprovalInput, proposalApprovalVersion } from './approval-version';
 import { floDb, type FloDbClient, type FloProposalRow } from '@/lib/flo/db-types';
 import { assertFresh, FloStaleError } from '@/lib/flo/fingerprint';
 import { getFloHandler } from '@/lib/flo/handlers';
@@ -35,6 +36,7 @@ export interface ExecuteProposalInput {
   tenantId: string;
   userId: string;
   approvalId: string;
+  proposalVersion: string;
   input?: FloApproveInput;
 }
 
@@ -54,6 +56,16 @@ export async function executeProposal(
   const { proposalId, tenantId, userId, approvalId } = args;
   if (!tenantId || !userId) {
     return { ok: false, reason: 'blocked', message: 'Brak dostępu do organizacji.' };
+  }
+
+  let input: FloApproveInput | undefined;
+  if (!isApprovalVersion(args.proposalVersion)) {
+    return { ok: false, reason: 'stale', message: 'Odśwież propozycję przed zatwierdzeniem.' };
+  }
+  try {
+    input = parseApprovalInput(args.input);
+  } catch {
+    return { ok: false, reason: 'blocked', message: 'Sprawdź wprowadzone dane.' };
   }
 
   const loaded = await db
@@ -76,7 +88,9 @@ export async function executeProposal(
 
   // Powtórka po wykonaniu nie jest błędem — człowiek mógł kliknąć drugi raz
   // na starym ekranie. Mówimy „zrobione”, bo to jest prawda.
-  if (proposal.status === 'done') return { ok: true };
+  if (proposal.status === 'done') {
+    return proposalApprovalVersion(proposal) === args.proposalVersion ? { ok: true } : changedVersion();
+  }
 
   if (proposal.status === 'executing') {
     return { ok: false, reason: 'blocked', message: 'Wykonanie tej sprawy nadal trwa. Odśwież za chwilę.' };
@@ -90,7 +104,7 @@ export async function executeProposal(
     };
   }
 
-  if (Date.parse(proposal.expires_at) <= now.getTime()) {
+  if (!Number.isFinite(Date.parse(proposal.expires_at)) || Date.parse(proposal.expires_at) <= now.getTime()) {
     await db
       .from('flo_proposals')
       .update({ status: 'expired', dismissed_reason: 'auto_expired' })
@@ -125,6 +139,8 @@ export async function executeProposal(
   } catch {
     return { ok: false, reason: 'blocked', message: 'Nie udało się sprawdzić dostępności tej funkcji.' };
   }
+
+  if (proposalApprovalVersion(proposal) !== args.proposalVersion) return changedVersion();
 
   // ── 1. Świeżość danych ──────────────────────────────────────
   try {
@@ -170,7 +186,7 @@ export async function executeProposal(
     if (!latest.data) {
       return { ok: false, reason: 'expired', message: 'Tej propozycji już nie ma.' };
     }
-    if (latest.data.fingerprint !== proposal.fingerprint) {
+    if (proposalApprovalVersion(latest.data) !== args.proposalVersion) {
       return { ok: false, reason: 'stale', message: 'Propozycja zmieniła się w międzyczasie. Sprawdź ją ponownie.' };
     }
     if (latest.data.status === 'done') return { ok: true };
@@ -181,11 +197,17 @@ export async function executeProposal(
   }
 
   const previousStatus = proposal.status;
+  // Content may change without changing the fingerprint of underlying facts.
+  // Check the returned, atomically claimed row before consuming the token.
+  if (proposalApprovalVersion(claimedRow) !== args.proposalVersion) {
+    await release(db, proposalId, tenantId, previousStatus);
+    return changedVersion();
+  }
 
   // ── 3. Zużycie żetonu zgody ─────────────────────────────────
   let snapshot: Record<string, unknown>;
   try {
-    snapshot = await consumeApproval(approvalId, proposalId, tenantId, userId, now, db);
+    snapshot = await consumeApproval(approvalId, proposalId, tenantId, userId, args.proposalVersion, input, now, db);
   } catch (e) {
     await release(db, proposalId, tenantId, previousStatus);
     if (e instanceof FloApprovalError) {
@@ -211,7 +233,7 @@ export async function executeProposal(
       userId,
       approvalId,
       snapshot,
-      input: args.input,
+      input,
     });
 
     await db
@@ -262,7 +284,8 @@ async function release(
     .from('flo_proposals')
     .update({ status: status as FloProposalRow['status'] })
     .eq('id', proposalId)
-    .eq('tenant_id', tenantId);
+    .eq('tenant_id', tenantId)
+    .eq('status', 'executing');
   if (error) {
     // Propozycja utknie w stanie „executing” i zostanie podniesiona przez
     // strażnika zadań. Lepsze to niż przykrycie pierwotnego błędu drugim.
@@ -294,4 +317,8 @@ async function audit(
       actor: 'flo',
     },
   });
+}
+
+function changedVersion(): FloApproveResult {
+  return { ok: false, reason: 'stale', message: 'Propozycja zmieniła się. Sprawdź ją ponownie przed zatwierdzeniem.' };
 }

@@ -277,6 +277,7 @@ export interface FloFilteredMutation<Row>
   ): FloFilteredMutation<Row>;
   is(column: string, value: null | boolean): FloFilteredMutation<Row>;
   lt(column: string, value: string | number): FloFilteredMutation<Row>;
+  lte(column: string, value: string | number): FloFilteredMutation<Row>;
   // `gt` jest potrzebne do atomowego zużycia żetonu zgody: warunek „jeszcze
   // nie wygasł” musi być częścią tego samego UPDATE-u, a nie osobnym
   // sprawdzeniem przed nim (inaczej między jednym a drugim mieści się wyścig).

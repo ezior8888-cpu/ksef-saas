@@ -218,6 +218,8 @@ export interface FloListItem {
  */
 export interface FloProposalView {
   id: string;
+  /** Version of the displayed operation; legacy cards require a refresh. */
+  approvalVersion?: string;
   kind: FloProposalKind;
   variant: FloCardVariant;
   /** Liczby JUŻ podstawione przez serwer. */

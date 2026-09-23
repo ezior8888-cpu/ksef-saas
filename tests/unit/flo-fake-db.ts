@@ -20,6 +20,13 @@ import type { FloDbClient } from '@/lib/flo/db-types';
 
 type Row = Record<string, unknown>;
 type Filter = (row: Row) => boolean;
+function columnValue(row: Row, column: string): unknown {
+  const [root, key] = column.split('->>');
+  if (!key) return row[column];
+  const obj = row[root!] as Row | undefined;
+  const value = obj?.[key];
+  return value == null ? null : String(value);
+}
 
 interface Tables {
   invoices: Row[];
@@ -85,7 +92,7 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
 
     const builder = {
       eq: (col: string, value: unknown) =>
-        makeQuery(rows, [...filters, (r) => r[col] === value], mode, patch),
+        makeQuery(rows, [...filters, (r) => columnValue(r, col) === value], mode, patch),
       neq: (col: string, value: unknown) =>
         makeQuery(rows, [...filters, (r) => r[col] !== value], mode, patch),
       in: (col: string, values: readonly unknown[]) =>
@@ -129,8 +136,13 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
           const run = async () => {
             await yieldToOthers();
             state.writes++;
+            if (table === 'flo_approvals' && incoming.some((row) =>
+              rows.some((existing) => existing.proposal_id === row.proposal_id && existing.consumed_at == null))) {
+              return { data: null, error: { code: '23505', message: 'duplicate approval' } };
+            }
             for (const row of incoming) {
-              const withId = { id: row.id ?? `id-${rows.length + 1}`, ...row };
+              const defaults = table === 'flo_approvals' ? { consumed_at: null } : {};
+              const withId = { id: row.id ?? `id-${rows.length + 1}`, ...defaults, ...row };
               rows.push(withId);
               inserted.push(withId);
             }
@@ -139,12 +151,12 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
           return {
             select: () => ({
               maybeSingle: async () => {
-                const { data } = await run();
-                return { data: data?.[0] ?? null, error: null };
+                const { data, error } = await run();
+                return { data: data?.[0] ?? null, error };
               },
               single: async () => {
-                const { data } = await run();
-                return { data: data?.[0] ?? null, error: null };
+                const { data, error } = await run();
+                return { data: data?.[0] ?? null, error };
               },
             }),
             then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>

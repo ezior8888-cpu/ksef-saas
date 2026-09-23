@@ -86,7 +86,7 @@ export function FloThreadClient({
         } else if (action.intent === 'mute') {
           await dismissProposal(view.id, 'never');
         } else {
-          const result = await approveProposal(view.id, input);
+          const result = await approveProposal(view.id, view.approvalVersion ?? '', input);
 
           if (!result.ok) {
             // Bezpiecznik zadziałał. To dobra wiadomość i tak ma zabrzmieć.

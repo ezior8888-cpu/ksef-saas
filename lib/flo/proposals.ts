@@ -26,6 +26,7 @@ import {
   type FloProposalInsert,
   type FloProposalRow,
 } from '@/lib/flo/db-types';
+import { proposalApprovalVersion } from '@/lib/flo/approval-version';
 import { isMuted } from '@/lib/flo/decisions';
 import { isKindEnabled } from '@/lib/flo/flags';
 import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
@@ -266,6 +267,7 @@ export function toProposalView(row: FloProposalRow): FloProposalView | null {
 
   return {
     id: row.id,
+    approvalVersion: proposalApprovalVersion(row),
     kind,
     variant,
     title: row.title,

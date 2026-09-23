@@ -20,6 +20,7 @@ import '@/lib/flo/functions/payment-chase-handler';
 import '@/lib/flo/functions/expense-review';
 import { getFloHandler } from '@/lib/flo/handlers';
 import { readState, fingerprintOf } from '@/lib/flo/fingerprint';
+import { approvalOperationHash, proposalApprovalVersion } from '@/lib/flo/approval-version';
 import { executeProposal } from '@/lib/flo/execute';
 import { undoAction } from '@/lib/flo/undo';
 
@@ -114,9 +115,10 @@ describe('FLO execution authorization', () => {
   function seed(tenant = 'tenant-a', user = 'user-a') {
     const payload = { topic: 'synthetic' };
     db.tables.flo_proposals.push({ ...proposal({ kind: 'wrapped.ready', payload, fingerprint: fingerprintOf(payload) }) });
-    db.tables.flo_approvals.push({ id: 'approval-a', proposal_id: 'proposal-a', tenant_id: tenant, user_id: user, snapshot: {}, consumed_at: null, expires_at: '2026-09-17T00:00:00Z' });
+    db.tables.flo_approvals.push({ id: 'approval-a', proposal_id: 'proposal-a', tenant_id: tenant, user_id: user, snapshot: { approvalVersion: 1, proposalVersion: version, operationHash: approvalOperationHash(version) }, consumed_at: null, expires_at: '2026-09-17T00:00:00Z' });
   }
-  const args = { proposalId: 'proposal-a', tenantId: 'tenant-a', userId: 'user-a', approvalId: 'approval-a' };
+  const version = proposalApprovalVersion(proposal({ kind: 'wrapped.ready', payload: { topic: 'synthetic' }, fingerprint: fingerprintOf({ topic: 'synthetic' }) }));
+  const args = { proposalVersion: version, proposalId: 'proposal-a', tenantId: 'tenant-a', userId: 'user-a', approvalId: 'approval-a' };
   it('does not load or change another tenant proposal', async () => {
     seed();
     const result = await executeProposal({ ...args, tenantId: 'tenant-b' }, NOW, db.client);
@@ -198,6 +200,7 @@ it('returns stale if an open proposal is refreshed during the atomic claim', asy
     }
   });
   const result = await executeProposal({
+    proposalVersion: proposalApprovalVersion(proposal({ kind: 'wrapped.ready', payload, fingerprint: fingerprintOf(payload) })),
     proposalId: 'proposal-a', tenantId: 'tenant-a', userId: 'user-a', approvalId: 'approval-a',
   }, NOW, racing.client);
   expect(result).toMatchObject({ ok: false, reason: 'stale' });
@@ -209,6 +212,7 @@ it('returns stale if an open proposal is refreshed during the atomic claim', asy
 it('does not claim completion when execution is still in progress', async () => {
   db.tables.flo_proposals.push({ ...proposal({ status: 'executing' }) });
   const result = await executeProposal({
+    proposalVersion: proposalApprovalVersion(proposal()),
     proposalId: 'proposal-a', tenantId: 'tenant-a', userId: 'user-a', approvalId: 'approval-a',
   }, NOW, db.client);
   expect(result).toMatchObject({ ok: false, reason: 'blocked' });
