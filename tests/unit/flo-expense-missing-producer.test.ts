@@ -289,6 +289,7 @@ describe('W-04 — wszystkie konta', () => {
         readGlobalKill: async () => false,
       },
       expenseMissing: sources().value,
+      invoiceMissing: { readIssuedInvoices: async () => [] },
     });
 
     expect(result).toMatchObject({

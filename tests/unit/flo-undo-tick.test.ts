@@ -215,6 +215,7 @@ describe('puls agenta', () => {
       readInvoiceState: async () => ({ facts: {}, context: {} }),
     },
     expenseMissing: { readRecentExpenses: async () => [] },
+    invoiceMissing: { readIssuedInvoices: async () => [] },
   };
 
   it('wygasza przeterminowane propozycje', async () => {

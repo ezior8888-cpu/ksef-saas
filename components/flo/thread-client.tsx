@@ -84,7 +84,13 @@ export function FloThreadClient({
         if (action.intent === 'dismiss' || action.intent === 'snooze') {
           await dismissProposal(view.id, 'not_now');
         } else if (action.intent === 'mute') {
-          await dismissProposal(view.id, 'never');
+          // „Skończyliśmy współpracę" zamyka JEDNĄ sprawę, „nigdy więcej
+          // takich" — cały rodzaj. O tym, co znaczy przycisk, decyduje
+          // karta, nie interfejs.
+          await dismissProposal(
+            view.id,
+            action.scope === 'subject' ? 'never_subject' : 'never',
+          );
         } else {
           const result = await approveProposal(view.id, input);
 

@@ -3502,3 +3502,81 @@ go test („tytuł sprawy nie może przyjść z cudzej karty") — dopisany dlat
 - `tsc --noEmit` czysto; eslint 0/0 (po drodze złapał niezescapowane
   cudzysłowy w tekście dla klienta); vitest **1252 zielone, 7 pominiętych,
   zero czerwonych**.
+
+---
+
+## 2026-09-23 · Plan FLO 2, K1.10 — P-03 pyta o brakującą fakturę
+
+Gałąź `claude/k1-10-brakujaca-faktura`, na bazie ekranu wyciszeń.
+
+### Co robi
+
+Puls sprawdza, u których kontrahentów klient ma RYTM fakturowania (trzy
+faktury, równe odstępy, ta sama usługa), i gdy spodziewana faktura nie
+przyszła od tygodnia, pyta: „Zwykle fakturujesz ich około 10. dnia, na
+2 460,00 zł. Wystawiłeś ją gdzie indziej?".
+
+**Tylko pytanie, żaden szkic.** Szkice to P-01/P-02 i osobna decyzja.
+
+### Pamięć profilu bez tabeli
+
+Plan zakładał zapisany profil rytmu (stan, historia pytań). Takiej tabeli nie
+ma i nie tworzyłem jej migracją — wszystko, czego trzeba, już gdzieś jest:
+
+| Czego trzeba | Skąd |
+|---|---|
+| rytm (odstęp, typowy dzień, kwota) | `detectRhythm` z faktur ostatniego roku |
+| „czy pytanie już padło" | istnienie karty o tym kluczu tematu, w dowolnym stanie |
+| „wystawiam gdzie indziej" | licznik odrzuceń sprawy w pamięci decyzji (K2.16) |
+| „profil uśpiony" | `missedCycles` — po dwóch pominiętych cyklach milkniemy |
+
+Ostatni wiersz jest tu najważniejszy: agent, który co miesiąc przypomina
+o straconym kliencie, jest okrutny bez powodu. Uśpienie jest ciche.
+
+Nazwy pozycji (do sprawdzenia, czy to ta sama usługa) biorę z `fa3_data.lines`
+— tam, gdzie czyta je eksport JPK.
+
+### Przy okazji domknięte: „Skończyliśmy współpracę" ucisza JEDNEGO klienta
+
+Karta P-03 ma przycisk „Skończyliśmy współpracę" z zamiarem `mute`, który do
+dziś oznaczał ciszę w CAŁYM rodzaju — jedna zakończona współpraca zabrałaby
+pytania o wszystkich pozostałych klientów. Po K2.16 mamy ciszę per sprawa,
+więc domknąłem to tutaj:
+
+- `FloAction.scope?: 'kind' | 'subject'` (DODANIE do kontraktu),
+- `FloDismissMode` + `'never_subject'`, `FloDismissedReason` + `'never_subject'`
+  (kolumna to TEXT bez CHECK — bez migracji; panel odróżni „klient nie chce
+  tej funkcji" od „ta relacja się skończyła"),
+- `readActions` przenosi `scope`, interfejs wysyła właściwy tryb.
+
+Klucz tematu P-03 zmieniony z `invoice.missing:…` na `invoice.draft:missing:…`
+— pamięć decyzji rozpoznaje sprawę po prefiksie rodzaju, a ekran ustawień
+pokazywałby inaczej „invoice.missing" jako rodzaj.
+
+### Weryfikacja
+
+- `flo-invoice-missing-producer.test.ts` — 15 testów, w większości o MILCZENIU
+  (za wcześnie, inne usługi, klient stracony, pytanie już padło, fakturuje
+  gdzie indziej, poza kanarkiem).
+- **Test mutacyjny 7/7 — znowu po dociśnięciu jednego testu.** Mutacja
+  „licznik »gdzie indziej« ignorowany" przeżyła: mój test opierał się na
+  wyciszeniu sprawy, które i tak zatrzymuje kartę. Różnica wychodzi dopiero
+  po wygaśnięciu ciszy — cisza trwa kwartał, a odpowiedź „fakturuję ich
+  w innym programie" nie przestaje być prawdą razem z nią. Test rozdzielający
+  te dwie warstwy dopisany.
+- `tsc --noEmit` czysto; eslint 0/0; vitest **1268 zielonych, 7 pominiętych,
+  zero czerwonych**.
+
+### Do decyzji
+
+- **P-03 jest w kanarku jako P-01** (`invoice.draft` już tam był) — etap 0,
+  więc na produkcji cisza.
+- **Rytm wymaga trzech faktur o podobnych pozycjach.** Przy fakturach
+  z importu nazwy pozycji bywają puste — wtedy rytmu nie wykryjemy wcale.
+  Do obejrzenia na prawdziwych danych.
+
+### Następny krok
+
+- K1.11 (O-01, pierwsze kroki) zamyka listę producentów z K1.B.
+- Potem K1.4 (wspólny cap dzienny) — trzy reguły w pulsie to już moment,
+  w którym limit przestaje być abstrakcją na zapas.

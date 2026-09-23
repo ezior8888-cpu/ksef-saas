@@ -121,6 +121,21 @@ describe('dismissProposal — co ląduje w pamięci decyzji', () => {
     ).toBe('muted');
   });
 
+  it('„Skończyliśmy współpracę" zamyka JEDNĄ sprawę, nie cały rodzaj', async () => {
+    // Karta P-03 pyta o konkretnego klienta. Gdyby ten przycisk uciszał
+    // rodzaj, jedna zakończona współpraca zabrałaby pytania o wszystkich
+    // pozostałych klientów.
+    await dismissProposal('p-adobe', 'never_subject');
+
+    expect(await listMutedSubjects(TENANT, NOW, db.client)).toEqual([
+      { topicKey: `${KIND}:adobe`, mutedUntil: expect.any(String) },
+    ]);
+    expect(await listMutedKinds(TENANT, NOW, db.client)).toEqual([]);
+    expect(
+      (await createProposal(card(`${KIND}:notion`), db.client, noKill)).status,
+    ).toBe('created');
+  });
+
   it('karta znika z wątku z właściwym powodem', async () => {
     await dismissProposal('p-adobe', 'not_now');
     await dismissProposal('p-never', 'never');

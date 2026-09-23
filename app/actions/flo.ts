@@ -30,6 +30,7 @@ import { createApproval } from '@/lib/flo/approval';
 import { floDb, type FloProposalRow } from '@/lib/flo/db-types';
 import {
   muteKind,
+  muteSubject,
   readDecisionRows,
   recordSubjectDismissal,
   unmuteKind,
@@ -210,6 +211,10 @@ export async function dismissProposal(
     // Jasna prośba o ciszę w całym rodzaju — jedyne miejsce, w którym
     // odpowiedź o jednej karcie zamyka wszystkie.
     await muteKind(tenantId, proposal.kind);
+  } else if (mode === 'never_subject') {
+    // „Skończyliśmy współpracę z tym klientem" — koniec pytań o TĘ sprawę,
+    // bez czekania na drugie „nie" i bez ruszania pozostałych.
+    await muteSubject(tenantId, proposal.topic_key);
   } else {
     // „Nie teraz" dotyczy TEJ sprawy — tej faktury, tego sprzedawcy, tego
     // miesiąca. Wcześniej liczyło się na poziomie rodzaju, więc dwie takie

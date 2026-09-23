@@ -419,6 +419,12 @@ function readActions(value: unknown): FloAction[] | null {
       return [action];
     }
 
+    // Zasięg wyciszenia. Zgubiony tutaj zamieniłby „skończyliśmy współpracę
+    // z tym klientem" w „nigdy więcej żadnych szkiców faktur".
+    if (intent === 'mute' && record.scope === 'subject') {
+      return [{ label, intent: 'mute', scope: 'subject' }];
+    }
+
     return [{ label, intent } as FloAction];
   });
   return actions.length > 0 ? actions : null;
