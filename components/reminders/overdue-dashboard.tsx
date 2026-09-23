@@ -29,6 +29,7 @@ export interface OverdueInvoice {
   buyer_email: string | null;
   reminders_paused: boolean;
   reminders_sent_count: number;
+  reminder_status: 'none' | 'pending' | 'review' | 'unavailable';
 }
 
 interface Props {
@@ -52,7 +53,7 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
           Przeterminowane
         </h1>
         <p className="text-sm text-[var(--ff-text-muted)]">
-          Faktury po terminie płatności • przypomnienia e-mail
+          Faktury po terminie płatności • przypomnienia e-mail. Stan przypomnień jest orientacyjny.
         </p>
       </div>
 
@@ -164,7 +165,7 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
                     Do zapłaty
                   </th>
                   <th className="px-6 py-3.5 text-center text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Wysłane
+                    Stan orientacyjny
                   </th>
                   <th className="px-6 py-3.5 sm:px-8" aria-hidden />
                 </tr>
@@ -221,6 +222,23 @@ function OverdueRow({
           : 'low';
 
   const handleSendReminder = onPrepare;
+  const reminderNotice = invoice.reminder_status === 'pending'
+    ? 'Oczekuje na wysyłkę'
+    : invoice.reminder_status === 'review'
+      ? 'Wymaga weryfikacji wysyłki'
+      : invoice.reminder_status === 'unavailable'
+        ? 'Stan wysyłki niedostępny'
+        : null;
+  const canPrepareReminder = !invoice.reminders_paused && invoice.reminder_status === 'none';
+  const prepareLabel = invoice.reminder_status === 'review'
+    ? 'Wysyłka wymaga weryfikacji'
+    : invoice.reminder_status === 'pending'
+      ? 'Przypomnienie już zlecone'
+      : invoice.reminder_status === 'unavailable'
+        ? 'Stan wysyłki niedostępny'
+        : 'Przygotuj przypomnienie';
+  const reminderNoticeClass = invoice.reminder_status === 'review'
+    ? 'text-amber-300' : 'text-[var(--ff-text-muted)]';
 
   const handleTogglePause = () => {
     startPausing(async () => {
@@ -276,12 +294,10 @@ function OverdueRow({
       <button
         type="button"
         onClick={handleSendReminder}
-        disabled={
-          invoice.reminders_paused
-        }
+        disabled={!canPrepareReminder}
         className={iconBtn}
-        title="Przygotuj przypomnienie"
-        aria-label="Przygotuj przypomnienie"
+        title={prepareLabel}
+        aria-label={prepareLabel}
       >
         <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
             send
@@ -334,8 +350,9 @@ function OverdueRow({
               <span className="material-symbols-outlined text-[15px] leading-none" aria-hidden>
                 mail
               </span>
-              {invoice.reminders_sent_count}/3
+              Stan orientacyjny: {invoice.reminders_sent_count}/3
             </span>
+            {reminderNotice ? <span className={cn('text-xs', reminderNoticeClass)}>{reminderNotice}</span> : null}
           </>
         }
         actions={przyciski}
@@ -383,24 +400,23 @@ function OverdueRow({
         </span>
       </td>
       <td className="px-6 py-4 text-center sm:px-8">
-        <span className="inline-flex items-center justify-center gap-1 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-          <span className="material-symbols-outlined text-[16px] leading-none">
-            mail
+        <div className="flex flex-col items-center gap-1">
+          <span className="inline-flex items-center justify-center gap-1 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+            <span className="material-symbols-outlined text-[16px] leading-none">mail</span>
+            {invoice.reminders_sent_count}/3
           </span>
-          {invoice.reminders_sent_count}/3
-        </span>
+          {reminderNotice ? <span className={cn('text-xs', reminderNoticeClass)}>{reminderNotice}</span> : null}
+        </div>
       </td>
       <td className="px-6 py-4 sm:px-8">
         <div className="flex items-center justify-end gap-1.5">
           <button
             type="button"
             onClick={handleSendReminder}
-            disabled={
-              invoice.reminders_paused
-            }
+            disabled={!canPrepareReminder}
             className={iconBtn}
-            title="Przygotuj przypomnienie"
-            aria-label="Przygotuj przypomnienie"
+            title={prepareLabel}
+            aria-label={prepareLabel}
           >
             <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
                 send

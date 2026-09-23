@@ -136,7 +136,7 @@ export async function prepareReminderAction(input: {
       stage = decision.stage;
     }
     if (await hasReminderDispatch(tenantId, args.invoiceId, stage)) {
-      return { success: false, error: 'Ten etap już zlecono. Sprawdź historię dostaw przed kolejną próbą.' };
+      return { success: false, error: 'Ten etap już zlecono. Nie ponawiaj wysyłki; status musi sprawdzić administrator.' };
     }
     const delivery = await buildReminderDelivery(tenantId, args.invoiceId, stage, args.recipientEmail);
     const payload = { invoiceId: args.invoiceId, stage, delivery, preparedBy: user.id };

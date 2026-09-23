@@ -10,7 +10,7 @@ registerFloHandler('payment.chase', async (ctx) => {
   const delivery = approvedReminderDelivery(ctx.proposal, ctx.input);
   await assertReminderSendable(delivery);
   if (await hasReminderDispatch(delivery.tenantId, delivery.invoiceId, delivery.stage)) {
-    throw new Error('Ten etap został już zlecony. Sprawdź historię dostaw przed kolejną próbą.');
+    throw new Error('Ten etap został już zlecony. Nie ponawiaj wysyłki; status musi sprawdzić administrator.');
   }
   // The approval ID is also the reminder PK: one consent cannot authorize a
   // second reminder. The client-writable reminder row is NOT the authority.

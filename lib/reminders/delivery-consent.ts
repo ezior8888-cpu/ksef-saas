@@ -53,7 +53,7 @@ export function assertDeliveryDeadline(row: FloApprovalRow, delivery: ReminderDe
   const expires = Math.min(Date.parse(row.expires_at), Date.parse(delivery.expiresAt), created + 30 * 60_000);
   if (![created, consumed, expires].every(Number.isFinite) ||
       created > now || consumed < created || consumed > now || now >= expires) {
-    throw new ReminderConsentDenied('Termin wysyłki minął. Sprawdź historię dostaw przed przygotowaniem kolejnego przypomnienia.');
+    throw new ReminderConsentDenied('Termin wysyłki minął. Nie ponawiaj jej bez sprawdzenia statusu przez administratora.');
   }
 }
 
