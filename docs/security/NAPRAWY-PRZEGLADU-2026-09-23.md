@@ -24,6 +24,8 @@ Token jest związany także z dokładnym zwalidowanym input użytkownika. Zużyc
 
 **Granica:** wiązanie chroni przepływ karta → akcja → wykonawca FLO. Nie jest deklaracją niezmienności wszystkich późniejszych skutków kolejki. Znany starszy przepływ `payment-chase-handler` → `send-reminder` przekazuje `approvalId`, a późniejsza wysyłka pobiera aktualnego adresata. Trwała zgoda obejmująca ostateczną wiadomość/adresata w kolejce pozostaje osobnym zadaniem przed szerszym uruchomieniem FLO. Nie włączano żadnych funkcji ani flag.
 
+Aktualizacja po tym pakiecie: [osobna kontynuacja zgody w kolejce przypomnień](ZGODA-NA-PRZYPOMNIENIA-2026-09-23.md) zamraża wiadomość i PDF oraz weryfikuje dispatch/receipt. Jej granice i odbiór są opisane osobno.
+
 ### REV-04 — wymagania GitHuba
 
 Świeży odczyt 23.09 potwierdza tylko zakaz usuwania i force push na `main`. Konto ma `push`, ale nie ma `admin` ani `maintain`. Zapis ustawień nie był podejmowany. **Ten punkt pozostaje otwarty po stronie Bartka.**

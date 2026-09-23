@@ -443,6 +443,22 @@ Na prośbę Igora wznowiono i dokończono lokalne naprawy na bazie f3ca0d4 (PR #
 
 **Stan wydania:** kod i dokumentacja lokalne, brak SQL/nowych migracji, zdalnych ustawień, merge i wdrożenia. Zielone wyniki PR #13 odnoszą się wyłącznie do f3ca0d4. Nie stanowią CI nowych commitów. F03 pozostaje otwarta do odbioru środowiska i zaległych granic danych.
 
+## 2026-09-23 — REV-03: trwała zgoda aż do wysyłki przypomnienia
+
+**Dyspozycja:** Igor zatwierdził kontynuację. Oddzielna gałąź codex/security-reminder-consent, baza f502baa1f54128cf3c329dd25f3c8fc5531e61b2. Root repo i zmiany użytkownika nietknięte. Bez serwera, SQL, nowych migracji, prawdziwej poczty i merge.
+
+**Rozliczenie poprzedniego wpisu:** pakiet f502baa został opublikowany jako [roboczy PR #19](https://github.com/ezior8888-cpu/ksef-saas/pull/19). Wszystkie 7 kontroli dokładnego HEAD zakończone sukcesem: [CI](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/35894636445) i [Security](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/35894636254). Świeży odczyt potwierdził draft/open, bez merge. To wynik poprzedniego pakietu; nie zastępuje CI obecnej gałęzi.
+
+**Wykonano:** [pełny zakres, testy i odbiór](ZGODA-NA-PRZYPOMNIENIA-2026-09-23.md). Wspólny podgląd manual/FLO, trwała koperta i gotowy PDF, rzeczywista zgoda związana z wersją i edycją, dispatch odróżniony od zwykłego consumed_at. Kolejka używa zatwierdzonych danych i stałego klucza Resend, ponownie sprawdza bieżące uprawnienia/stan faktury/wyłączniki. Zaufany receipt pozwala dokończyć historię po awarii bez kolejnej wysyłki. Limit podglądów i bezpieczny HTML. Stare losowe tokeny odrzucane.
+
+**Weryfikacja:** 145 plików / 2681 Vitest, 66 XML, 67 narzędzi — PASS; typecheck PASS; lint 0 błędów / 29 wcześniejszych ostrzeżeń. Pełny Next build PASS w 100 s, 82/82 stron; 1294 pliki zgodne bajtowo z kopią. Bez standalone/Docker i E2E z usługami. Regresje obu modeli kolejki, deadline, receipt, NIP i przejściowych błędów DB. Dowody TEMP/faktflow-reminder-validation-ehXJ1o oraz faktflow-reminder-consent-build-Z6iy0M. Offline: 302 zapytania service_role (20 średnich, 65 do przeglądu), 103 wejścia / 36 sygnałów — nadal materiał do ręcznej weryfikacji.
+
+**Ważne dla Bartka:** faktyczne service-only grants flo_* i UNIQUE etapów wymagają odbioru. Manual także podlega wyłącznikom FLO; żadnych flag nie włączano. Niepewna wysyłka pozostaje do rozliczenia i nie dostaje automatycznie nowego klucza. 48 h obejmuje tę fakturę, nie wszystkie wpłaty kontrahenta. Oddzielne odczyty nie zapewniają atomowości z zewnętrzną pocztą. Plan odbioru i rollback w podlinkowanym dokumencie. F03 i odbiór infrastruktury pozostają otwarte.
+
+**Zapis kodu i skan:** 89cc64b05276a2ef9dfcec18ecdcfe5ab3ee3165. Gitleaks 8.30.1: 33 przygotowane pliki kodu/testów/dokumentacji, brak trafień, bez nowych wyjątków. Dowód TEMP/faktflow-reminder-scan-EW4AH9.
+
+**Stan wydania w chwili wpisu:** lokalny, zweryfikowany pakiet gotowy do roboczego PR względem #19. Wyniki nowego SHA zostaną dopisane do opisu tego PR po publikacji. Wpis nie potwierdza wdrożenia.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:
