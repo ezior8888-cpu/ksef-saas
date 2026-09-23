@@ -47,6 +47,10 @@ const PUBLIC_API_PREFIXES = [
   '/api/dev',
 ] as const;
 
+// Stripe authenticates this one endpoint with its raw-body signature.
+// Billing APIs and any nested paths must still require a user session.
+const PUBLIC_API_EXACT = ['/api/stripe/webhook'] as const;
+
 const STATIC_PUBLIC_EXACT = [
   '/manifest.webmanifest',
   '/sw.js',
@@ -69,7 +73,7 @@ export function isPublicPath(pathname: string): boolean {
   if (isMarketingPath(pathname)) return true;
   if (STATIC_PUBLIC_EXACT.some((p) => pathname === p)) return true;
   if (pathname.startsWith('/api/')) {
-    return PUBLIC_API_PREFIXES.some(
+    return PUBLIC_API_EXACT.some((p) => pathname === p) || PUBLIC_API_PREFIXES.some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
     );
   }
