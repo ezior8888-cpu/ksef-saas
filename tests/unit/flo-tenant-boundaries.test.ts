@@ -56,7 +56,7 @@ beforeEach(() => {
   mock.audit.mockClear();
 });
 /** A real, version-bound consumed consent; failures below must reach tenant/current-state checks. */
-function chaseContext(foreignInvoice = false) {
+function chaseContext(foreignInvoice = false, missingNip = false) {
   const tenantId = '11111111-1111-4111-8111-111111111111';
   const invoiceId = '22222222-2222-4222-8222-222222222222';
   const approvalId = '33333333-3333-4333-8333-333333333333';
@@ -68,7 +68,10 @@ function chaseContext(foreignInvoice = false) {
     gross_total: 100, paid_amount: 0, currency: 'PLN', payment_status: 'unpaid',
     direction: 'issued', ksef_status: 'accepted', payment_due_date: '2026-09-01',
     issue_date: '2026-08-20', internal_number: 'FV/fixture', ksef_number: null,
-    buyer_data: { name: 'Fixture buyer', email: 'buyer@example.test' }, buyer_nip: null,
+    buyer_data: missingNip
+      ? { name: 'Fixture buyer', email: 'buyer@example.test' }
+      : { name: 'Fixture buyer', email: 'buyer@example.test', nip: '1234567890' },
+    buyer_nip: missingNip ? null : '1234567890',
     payment_data: {}, seller_data: { name: 'Fixture seller' }, reminders_paused: false,
   };
   db.tables.invoices.push({ ...invoice });
@@ -147,12 +150,19 @@ describe('FLO entity boundaries', () => {
     expect(db.writes).toBe(0);
     expect(mock.send).not.toHaveBeenCalled();
   });
-  it('chase checks only own payments and uses payment_date', async () => {
+  it('chase denies a buyer without NIP before creating a reminder', async () => {
+    const ctx = chaseContext(false, true);
+    await expect(getFloHandler('payment.chase')!(ctx)).rejects.toThrow('NIP');
+    expect(db.tables.payment_reminders).toHaveLength(0);
+    expect(db.writes).toBe(0);
+    expect(mock.send).not.toHaveBeenCalled();
+  });
+  it('chase checks only own payments and still blocks the recent payment date', async () => {
     const ctx = chaseContext();
     const invoiceId = ctx.proposal.payload.invoiceId;
     db.tables.payments.push({ id: 'pay-b', tenant_id: 'tenant-b', invoice_id: invoiceId, payment_date: '2099-01-01' });
     const own = { id: 'pay-a', tenant_id: ctx.proposal.tenant_id, invoice_id: invoiceId,
-      payment_date: new Date().toISOString().slice(0, 10) };
+      payment_date: new Date().toISOString().slice(0, 10), created_at: '2020-01-01T00:00:00Z' };
     db.tables.payments.push(own);
     await expect(getFloHandler('payment.chase')!(ctx)).rejects.toThrow('ostatnich dwóch dni');
     expect(db.tables.payment_reminders).toHaveLength(0);

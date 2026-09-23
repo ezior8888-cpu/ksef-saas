@@ -6,7 +6,9 @@ import type { ReminderDelivery, ReminderInvoiceSource } from '@/types/reminder-d
 import type { JobContext } from '@/lib/jobs/registry';
 
 type Row = Record<string, unknown>;
-type Query = { table: string; action: 'select' | 'update'; filters: Array<[string, unknown]>; patch?: Row };
+type Query = { table: string; action: 'select' | 'update'; filters: Array<[string, unknown]>;
+  columns?: string; count?: 'exact'; limit?: number; or?: string;
+  notEqual?: Array<[string, unknown]>; patch?: Row };
 const mocks = vi.hoisted(() => ({ db: vi.fn(), send: vi.fn(), upload: vi.fn(), kind: vi.fn(), tenantKind: vi.fn(), globalFlag: vi.fn() }));
 vi.mock('@/lib/flo/db-types', () => ({ floDb: mocks.db }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.db }));
@@ -25,6 +27,9 @@ import { DISCLAIMER } from '@/lib/flo/functions/payment-chase';
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const FOREIGN = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const INVOICE = '11111111-1111-4111-8111-111111111111';
+const OTHER_INVOICE = '55555555-5555-4555-8555-555555555555';
+const FOREIGN_INVOICE = '66666666-6666-4666-8666-666666666666';
+const OTHER_PAYMENT = '77777777-7777-4777-8777-777777777777';
 const PROPOSAL = '22222222-2222-4222-8222-222222222222';
 const APPROVAL = '33333333-3333-4333-8333-333333333333';
 const USER = '44444444-4444-4444-8444-444444444444';
@@ -36,6 +41,7 @@ const jobData = { reminderId: APPROVAL, approvalId: APPROVAL };
 let tables: Record<string, Row[]>;
 let calls: Query[];
 let fail: ((query: Query) => boolean) | undefined;
+let truncate: ((query: Query, rows: Row[]) => Row[]) | undefined;
 function field(row: Row, key: string): unknown {
   const parts = key.replaceAll('->>', '->').split('->');
   let value: unknown = row;
@@ -52,20 +58,53 @@ function db() {
     const execute = () => {
       if (fail?.(q)) return { data: null, error: { message: 'PRIVATE-DATABASE-DIAGNOSTIC' } };
       let rows = (tables[table] ?? []).filter((row) => filters.every((check) => check(row)));
+      const count = q.count === 'exact' ? rows.length : null;
       if (order) rows = rows.toSorted((a, b) => String(b[order!]).localeCompare(String(a[order!])));
       rows = rows.slice(0, limit);
+      if (truncate) rows = truncate(q, rows);
       if (q.action === 'update') rows.forEach((row) => Object.assign(row, structuredClone(q.patch)));
-      return { data: structuredClone(one ? rows[0] ?? null : rows), error: null };
+      return { data: structuredClone(one ? rows[0] ?? null : rows), error: null, count };
     };
     const builder = {
-      select: () => builder,
+      select: (columns: string, options?: { count?: 'exact' }) => {
+        q.columns = columns; q.count = options?.count; return builder;
+      },
       update: (patch: Row) => { q.action = 'update'; q.patch = patch; return builder; },
       eq: (key: string, value: unknown) => { q.filters.push([key, value]); filters.push((r) => field(r, key) === value); return builder; },
       is: (key: string, value: unknown) => { q.filters.push([key, value]); filters.push((r) => field(r, key) === value); return builder; },
       in: (key: string, values: unknown[]) => { q.filters.push([key, values]); filters.push((r) => values.includes(field(r, key))); return builder; },
-      gt: (key: string, value: string) => { filters.push((r) => String(field(r, key)) > value); return builder; },
+      gt: (key: string, value: number | string) => {
+        q.filters.push([key, value]);
+        filters.push((r) => typeof value === 'number'
+          ? Number(field(r, key)) > value : String(field(r, key)) > value);
+        return builder;
+      },
+      neq: (key: string, value: unknown) => {
+        q.filters.push([key, value]); (q.notEqual ??= []).push([key, value]);
+        filters.push((r) => field(r, key) !== value);
+        return builder;
+      },
+      gte: (key: string, value: number | string) => {
+        q.filters.push([key, value]);
+        filters.push((r) => typeof value === 'number'
+          ? Number(field(r, key)) >= value : String(field(r, key)) >= value);
+        return builder;
+      },
+      or: (expression: string) => {
+        q.or = expression;
+        const clauses = expression.split(',').map((part) => {
+          const match = /^(payment_date|created_at|transaction_date|booking_date|imported_at)\.gte\.(.+)$/.exec(part);
+          if (!match) throw new Error('Unsupported test PostgREST OR: ' + part);
+          return { key: match[1]!, cutoff: match[2]! };
+        });
+        filters.push((r) => clauses.some(({ key, cutoff }) => {
+          const value = field(r, key);
+          return typeof value === 'string' && value >= cutoff;
+        }));
+        return builder;
+      },
       order: (key: string) => { order = key; return builder; },
-      limit: (value: number) => { limit = value; return builder; },
+      limit: (value: number) => { q.limit = value; limit = value; return builder; },
       maybeSingle: () => { one = true; return Promise.resolve(execute()); },
       single: () => { one = true; return Promise.resolve(execute()); },
       then: <T = ReturnType<typeof execute>, E = never>(resolve?: ((v: ReturnType<typeof execute>) => T | PromiseLike<T>) | null,
@@ -90,6 +129,19 @@ function invoice(): ReminderInvoiceSource {
     buyer_data: { name: 'Buyer test', email: 'buyer@example.test' }, buyer_nip: '1234567890',
     payment_data: { bankAccount: 'TEST-ACCOUNT' }, seller_data: { name: 'Seller test' }, reminders_paused: false };
 }
+function paymentRow(invoiceId: string, tenantId = TENANT, paymentDate = '2026-09-23',
+  createdAt = '2026-09-23T11:00:00.000Z'): Row {
+  return { tenant_id: tenantId, invoice_id: invoiceId, payment_date: paymentDate,
+    created_at: createdAt, amount: 1 };
+}
+function syntheticInvoiceId(index: number): string {
+  return '00000000-0000-4000-8000-' + String(index).padStart(12, '0');
+}
+function importRow(patch: Row = {}): Row {
+  return { tenant_id: TENANT, transaction_date: '2026-09-23', booking_date: null,
+    imported_at: '2026-09-23T11:00:00.000Z', amount: 1,
+    counterparty_nip: '123-456-78-90', is_matched: false, ignored: false, ...patch };
+}
 function delivery(attachment = false): ReminderDelivery {
   return { version: 1, tenantId: TENANT, invoiceId: INVOICE, stage: attachment ? 'stage_3' : 'stage_1',
     preparedAt: CREATED, expiresAt: EXPIRES, sourceFingerprint: reminderInvoiceFingerprint(invoice()),
@@ -111,7 +163,7 @@ async function seed(options: { attachment?: boolean; input?: FloApproveInput; au
     snapshot: { approvalVersion: 1, proposalVersion: version, operationHash: approvalOperationHash(version, options.input),
       input: options.input ?? null, payload: structuredClone(proposal.payload) } };
   tables.flo_proposals = [{ ...proposal }]; tables.flo_approvals = [{ ...approval }];
-  tables.invoices = [{ ...invoice() }]; tables.payments = []; tables.contractors = [];
+  tables.invoices = [{ ...invoice() }]; tables.payments = []; tables.payment_imports = []; tables.contractors = [];
   tables.memberships = [{ user_id: USER, organization_id: TENANT, status: 'active' }];
   tables.payment_reminders = [{ id: APPROVAL, tenant_id: TENANT, invoice_id: INVOICE, stage: source.stage, channel: 'email', status: 'pending' }];
   if (options.authorize !== false) await authorizeReminderDispatch({ proposal, userId: USER, approvalId: APPROVAL, snapshot: approval.snapshot, input: options.input });
@@ -122,7 +174,7 @@ function snapshot(): Row { return tables.flo_approvals[0].snapshot as Row; }
 function expectNoSend() { expect(mocks.send).not.toHaveBeenCalled(); expect(mocks.upload).not.toHaveBeenCalled(); }
 beforeEach(() => {
   vi.clearAllMocks(); vi.useFakeTimers(); vi.setSystemTime(NOW); vi.stubEnv('RESEND_API_KEY', 're_synthetic_test_key');
-  tables = {}; calls = []; fail = undefined;
+  tables = {}; calls = []; fail = undefined; truncate = undefined;
   mocks.db.mockImplementation(db); mocks.kind.mockReturnValue(true);
   mocks.tenantKind.mockResolvedValue({ enabled: true }); mocks.globalFlag.mockResolvedValue(false);
   mocks.send.mockResolvedValue({ data: { id: 'mail-accepted-test' }, error: null }); mocks.upload.mockResolvedValue(undefined);
@@ -169,7 +221,7 @@ describe('reminder consent registry with the real helper', () => {
 });
 
 describe('delayed reminder dispatch guards', () => {
-  it.each(['flo_approvals', 'memberships', 'invoices', 'payments', 'contractors'])('retries an unavailable %s query within the original deadline without sending prematurely', async (table) => {
+  it.each(['flo_approvals', 'memberships', 'invoices', 'payments', 'payment_imports', 'contractors'])('retries an unavailable %s query within the original deadline without sending prematurely', async (table) => {
     await seed({ attachment: true }); fail = (q) => q.table === table && q.action === 'select';
     const result: unknown = await runSendReminder(jobData, context).catch((error: unknown) => error);
     expect(result).toBeInstanceOf(Error); expect(result).not.toBeInstanceOf(NonRetriableError);
@@ -212,6 +264,196 @@ describe('delayed reminder dispatch guards', () => {
     { buyer_data: { email: 'changed@example.test' } }, { payment_data: { bankAccount: 'CHANGED' } }])('fresh invoice changes invalidate a delayed send: %j', async (patch) => {
     await seed(); Object.assign(tables.invoices[0], patch);
     await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+  });
+  it('blocks a recent payment assigned to another invoice of the same contractor', async () => {
+    await seed();
+    tables.invoices.push({ ...invoice(), id: OTHER_INVOICE, buyer_nip: null,
+      buyer_data: { name: 'Buyer test', nip: '123-456-78-90' } });
+    tables.payments = [paymentRow(OTHER_INVOICE)];
+    await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+    const recent = calls.find((q) => q.table === 'payments' && q.count === 'exact');
+    expect(recent?.filters).toContainEqual(['tenant_id', TENANT]);
+    expect(recent?.or).toContain('payment_date.gte.2026-09-21');
+    expect(recent?.or).toContain('created_at.gte.2026-09-21T12:00:00.000Z');
+    expect(recent?.columns?.split(',')).toContain('created_at');
+    expect(recent?.limit).toBe(501);
+    const related = calls.find((q) => q.table === 'invoices' &&
+      q.filters.some(([key, value]) => key === 'id' && Array.isArray(value) && value.includes(OTHER_INVOICE)));
+    expect(related?.columns?.split(',')).toEqual(expect.arrayContaining(['id', 'tenant_id', 'buyer_nip', 'buyer_data']));
+  });
+  it('blocks a formatted contractor NIP on the exclusion list', async () => {
+    await seed();
+    tables.contractors = [{ tenant_id: TENANT, nip: 'PL 123-456-78-90', reminder_excluded: true }];
+    await expect(runSendReminder(jobData, context)).rejects.toThrow('wstrzymane'); expectNoSend();
+    const excluded = calls.find((q) => q.table === 'contractors');
+    expect(excluded?.count).toBe('exact'); expect(excluded?.limit).toBe(501);
+    expect(excluded?.filters).toContainEqual(['tenant_id', TENANT]);
+    expect(excluded?.filters).toContainEqual(['reminder_excluded', true]);
+  });
+  it('rejects a target invoice without a verifiable buyer NIP', async () => {
+    await seed();
+    const source = { ...invoice(), buyer_nip: null,
+      buyer_data: { name: 'Buyer test', email: 'buyer@example.test' } };
+    tables.invoices = [{ ...source }];
+    await expect(assertReminderSendable({ ...delivery(),
+      sourceFingerprint: reminderInvoiceFingerprint(source) })).rejects.toThrow('NIP');
+    expectNoSend();
+  });
+  it('does not treat a different buyer or tenant as the same contractor', async () => {
+    await seed();
+    tables.invoices.push({ ...invoice(), id: OTHER_INVOICE, buyer_nip: '9999999999',
+      buyer_data: { name: 'Other buyer', nip: '9999999999' } });
+    tables.invoices.push({ ...invoice(), id: FOREIGN_INVOICE, tenant_id: FOREIGN });
+    tables.payments = [paymentRow(OTHER_INVOICE), paymentRow(FOREIGN_INVOICE, FOREIGN)];
+    await expect(runSendReminder(jobData, context)).resolves.toMatchObject({ success: true });
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+  });
+  it('fails closed when a tenant payment points to another tenant invoice', async () => {
+    await seed();
+    tables.invoices.push({ ...invoice(), id: FOREIGN_INVOICE, tenant_id: FOREIGN });
+    tables.payments = [paymentRow(FOREIGN_INVOICE)];
+    await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+  });
+  it('blocks a recent unmatched incoming bank import with normalized NIP', async () => {
+    await seed(); tables.payment_imports = [importRow()];
+    await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+    const imports = calls.find((q) => q.table === 'payment_imports');
+    expect(imports?.count).toBe('exact'); expect(imports?.limit).toBe(501);
+    expect(imports?.filters).toContainEqual(['tenant_id', TENANT]);
+    expect(imports?.or).toContain('transaction_date.gte.2026-09-21');
+    expect(imports?.or).toContain('booking_date.gte.2026-09-21');
+    expect(imports?.or).toContain('imported_at.gte.');
+    expect(imports?.columns?.split(',')).toEqual(expect.arrayContaining(['booking_date', 'imported_at']));
+    expect(imports?.notEqual).toContainEqual(['amount', 0]);
+  });
+  it.each([
+    { label: 'ignored', patch: { ignored: true } },
+    { label: 'negative', patch: { amount: -1 } },
+  ])('still checks a same-contractor $label bank import', async ({ patch }) => {
+    await seed(); tables.payment_imports = [importRow(patch)];
+    await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+    const imports = calls.find((q) => q.table === 'payment_imports');
+    expect(imports?.filters).not.toContainEqual(['ignored', false]);
+    expect(imports?.notEqual).toContainEqual(['amount', 0]);
+  });
+  it.each([
+    { label: 'booking date', patch: { transaction_date: '2026-09-10', booking_date: '2026-09-23',
+      imported_at: '2026-09-10T08:00:00.000Z' } },
+    { label: 'import time', patch: { transaction_date: '2026-09-10', booking_date: '2026-09-10',
+      imported_at: '2026-09-23T11:00:00.000Z' } },
+  ])('blocks an older transaction first visible by a recent $label', async ({ patch }) => {
+    await seed(); tables.payment_imports = [importRow(patch)];
+    await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+    const imports = calls.find((q) => q.table === 'payment_imports');
+    expect(imports?.or).toContain('transaction_date.gte.2026-09-21');
+    expect(imports?.or).toContain('booking_date.gte.2026-09-21');
+    expect(imports?.or).toContain('imported_at.gte.2026-09-21T12:00:00.000Z');
+  });
+  it('still checks bank identity when an import was matched to the wrong invoice', async () => {
+    await seed();
+    tables.invoices.push({ ...invoice(), id: OTHER_INVOICE, buyer_nip: '9999999999',
+      buyer_data: { name: 'Other buyer', nip: '9999999999' } });
+    tables.payments = [{ ...paymentRow(OTHER_INVOICE), id: OTHER_PAYMENT }];
+    tables.payment_imports = [importRow({ is_matched: true, matched_payment_id: OTHER_PAYMENT })];
+    await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+    const imports = calls.find((q) => q.table === 'payment_imports');
+    expect(imports?.filters).not.toContainEqual(['is_matched', false]);
+  });
+  it('fails closed for a recent import without a trustworthy payer NIP', async () => {
+    await seed(); tables.payment_imports = [importRow({ counterparty_nip: null })];
+    await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+  });
+  it.each([
+    { label: 'zero amount', patch: { amount: 0 } },
+    { label: 'another contractor', patch: { counterparty_nip: '9999999999' } },
+    { label: 'another tenant', patch: { tenant_id: FOREIGN } },
+  ])('does not block for an $label bank row', async ({ patch }) => {
+    await seed(); tables.payment_imports = [importRow(patch)];
+    await expect(runSendReminder(jobData, context)).resolves.toMatchObject({ success: true });
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+  });
+  it('retries when the lookup of other paid invoices is unavailable', async () => {
+    await seed(); tables.payments = [paymentRow(OTHER_INVOICE)];
+    fail = (q) => q.table === 'invoices' && q.filters.some(([key, value]) => key === 'id' && Array.isArray(value));
+    const result: unknown = await runSendReminder(jobData, context).catch((error: unknown) => error);
+    expect(result).toBeInstanceOf(Error); expect(result).not.toBeInstanceOf(NonRetriableError);
+    expect(String(result)).not.toContain('PRIVATE-DATABASE-DIAGNOSTIC'); expectNoSend();
+  });
+  it('blocks a newly recorded payment with an older payment date', async () => {
+    await seed(); tables.invoices.push({ ...invoice(), id: OTHER_INVOICE });
+    tables.payments = [paymentRow(OTHER_INVOICE, TENANT, '2026-09-10',
+      '2026-09-23T11:00:00.000Z')];
+    await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+    const recent = calls.find((q) => q.table === 'payments' && q.count === 'exact');
+    expect(recent?.or).toContain('payment_date.gte.2026-09-21');
+    expect(recent?.or).toContain('created_at.gte.2026-09-21T12:00:00.000Z');
+  });
+  it('checks all 101 invoice identities in two bounded batches', async () => {
+    await seed();
+    const ids = Array.from({ length: 101 }, (_, index) => syntheticInvoiceId(index + 1));
+    ids.forEach((id, index) => {
+      const nip = index === 100 ? '1234567890' : '9999999999';
+      tables.invoices.push({ ...invoice(), id, buyer_nip: nip,
+        buyer_data: { name: 'Synthetic buyer', nip } });
+    });
+    tables.payments = ids.map((id) => paymentRow(id));
+    await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+    const batches = calls.filter((q) => q.table === 'invoices' &&
+      q.filters.some(([key, value]) => key === 'id' && Array.isArray(value)));
+    const batchIds = batches.map((q) => q.filters.find(([key, value]) => key === 'id' && Array.isArray(value))![1] as string[]);
+    expect(batchIds.map((idsInBatch) => idsInBatch.length)).toEqual([100, 1]);
+    expect(new Set(batchIds.flat()).size).toBe(101);
+    expect(batchIds[1]).toContain(ids[100]);
+  });
+  it('fails closed when the final invoice of a 101-row batch is missing', async () => {
+    await seed();
+    const ids = Array.from({ length: 101 }, (_, index) => syntheticInvoiceId(index + 1));
+    ids.slice(0, 100).forEach((id) => tables.invoices.push({ ...invoice(), id,
+      buyer_nip: '9999999999', buyer_data: { name: 'Other buyer', nip: '9999999999' } }));
+    tables.payments = ids.map((id) => paymentRow(id));
+    await expect(runSendReminder(jobData, context)).rejects.toThrow('właściciela'); expectNoSend();
+    const batches = calls.filter((q) => q.table === 'invoices' &&
+      q.filters.some(([key, value]) => key === 'id' && Array.isArray(value)));
+    expect(batches).toHaveLength(2);
+  });
+  it.each([
+    { paymentDate: '2026-09-21', blocked: true },
+    { paymentDate: '2026-09-20', blocked: false },
+  ])('uses the complete cutoff day for a $paymentDate payment', async ({ paymentDate, blocked }) => {
+    await seed(); tables.invoices.push({ ...invoice(), id: OTHER_INVOICE });
+    tables.payments = [paymentRow(OTHER_INVOICE, TENANT, paymentDate,
+      paymentDate === '2026-09-20' ? '2026-09-20T10:00:00.000Z' : '2026-09-23T11:00:00.000Z')];
+    if (blocked) {
+      await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+    } else {
+      await expect(runSendReminder(jobData, context)).resolves.toMatchObject({ success: true });
+      expect(mocks.send).toHaveBeenCalledTimes(1);
+    }
+  });
+  it.each(['payments', 'payment_imports'])('fails closed when PostgREST silently truncates %s', async (table) => {
+    await seed();
+    if (table === 'payments') {
+      tables.invoices.push({ ...invoice(), id: OTHER_INVOICE });
+      tables.payments = [paymentRow(OTHER_INVOICE)];
+    } else {
+      tables.payment_imports = [importRow()];
+    }
+    truncate = (q, rows) => q.table === table && q.count === 'exact' ? [] : rows;
+    await expect(runSendReminder(jobData, context)).rejects.toThrow('wszystkich'); expectNoSend();
+    const bounded = calls.find((q) => q.table === table && q.count === 'exact');
+    expect(bounded?.limit).toBe(501);
+  });
+  it.each(['payments', 'payment_imports'])('fails closed above 500 recent %s rows, even for another buyer', async (table) => {
+    await seed(); tables.invoices.push({ ...invoice(), id: OTHER_INVOICE, buyer_nip: '9999999999' });
+    if (table === 'payments') {
+      tables.payments = Array.from({ length: 502 }, () => paymentRow(OTHER_INVOICE));
+    } else {
+      tables.payment_imports = Array.from({ length: 502 }, (_, index) =>
+        importRow({ transaction_id: 'synthetic-' + index, counterparty_nip: '9999999999' }));
+    }
+    await expect(runSendReminder(jobData, context)).rejects.toThrow(); expectNoSend();
+    const bounded = calls.find((q) => q.table === table && q.count === 'exact');
+    expect(bounded?.limit).toBe(501);
   });
   it('rechecks recent invoice payments and excluded contractors', async () => {
     await seed(); tables.payments = [{ tenant_id: TENANT, invoice_id: INVOICE, payment_date: '2026-09-23' }];

@@ -36,6 +36,8 @@ interface Tables {
   invoices: Row[];
   expenses: Row[];
   payments: Row[];
+  payment_imports: Row[];
+  contractors: Row[];
   payment_reminders: Row[];
   flo_proposals: Row[];
   flo_approvals: Row[];
@@ -61,6 +63,8 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
     invoices: seed.invoices ?? [],
     expenses: seed.expenses ?? [],
     payments: seed.payments ?? [],
+    payment_imports: seed.payment_imports ?? [],
+    contractors: seed.contractors ?? [],
     payment_reminders: seed.payment_reminders ?? [],
     flo_proposals: seed.flo_proposals ?? [],
     flo_approvals: seed.flo_approvals ?? [],
@@ -73,13 +77,15 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
   };
   const state = { writes: 0 };
 
-  function makeQuery(rows: Row[], filters: Filter[], mode: 'read' | 'update' | 'delete', patch?: Row) {
+  function makeQuery(rows: Row[], filters: Filter[], mode: 'read' | 'update' | 'delete', patch?: Row,
+    options: { count?: 'exact'; limit?: number } = {}) {
     const apply = () => rows.filter((row) => filters.every((f) => f(row)));
 
-    const run = async (): Promise<{ data: Row[] | null; error: null }> => {
+    const run = async (): Promise<{ data: Row[] | null; error: null; count: number | null }> => {
       await yieldToOthers();
       if (mode === "update") beforeUpdate?.();
       const matched = apply();
+      const count = options.count === 'exact' ? matched.length : null;
       if (mode === 'update' && patch) {
         state.writes++;
         for (const row of matched) Object.assign(row, patch);
@@ -91,14 +97,14 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
           if (idx >= 0) rows.splice(idx, 1);
         }
       }
-      return { data: matched.map((r) => ({ ...r })), error: null };
+      return { data: matched.slice(0, options.limit).map((r) => ({ ...r })), error: null, count };
     };
 
     const builder = {
       eq: (col: string, value: unknown) =>
-        makeQuery(rows, [...filters, (r) => columnValue(r, col) === value], mode, patch),
+        makeQuery(rows, [...filters, (r) => columnValue(r, col) === value], mode, patch, options),
       neq: (col: string, value: unknown) =>
-        makeQuery(rows, [...filters, (r) => r[col] !== value], mode, patch),
+        makeQuery(rows, [...filters, (r) => r[col] !== value], mode, patch, options),
       not: (col: string, operator: 'like', pattern: string) => {
         if (operator !== 'like') throw new Error('Unsupported fake filter');
         const escaped = pattern.split('').map((char) => char === '%' ? '.*' : char === '_' ? '.' : '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0')).join('');
@@ -106,23 +112,35 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
         return makeQuery(rows, [...filters, (r) => {
           const value = columnValue(r, col);
           return typeof value === 'string' && !matches.test(value);
-        }], mode, patch);
+        }], mode, patch, options);
       },
       in: (col: string, values: readonly unknown[]) =>
-        makeQuery(rows, [...filters, (r) => values.includes(r[col])], mode, patch),
+        makeQuery(rows, [...filters, (r) => values.includes(r[col])], mode, patch, options),
       is: (col: string, value: unknown) =>
-        makeQuery(rows, [...filters, (r) => (r[col] ?? null) === value], mode, patch),
+        makeQuery(rows, [...filters, (r) => (r[col] ?? null) === value], mode, patch, options),
       lt: (col: string, value: string | number) =>
-        makeQuery(rows, [...filters, (r) => String(r[col]) < String(value)], mode, patch),
+        makeQuery(rows, [...filters, (r) => String(r[col]) < String(value)], mode, patch, options),
       lte: (col: string, value: string | number) =>
-        makeQuery(rows, [...filters, (r) => String(r[col]) <= String(value)], mode, patch),
+        makeQuery(rows, [...filters, (r) => String(r[col]) <= String(value)], mode, patch, options),
       gt: (col: string, value: string | number) =>
-        makeQuery(rows, [...filters, (r) => String(r[col] ?? '') > String(value)], mode, patch),
+        makeQuery(rows, [...filters, (r) => String(r[col] ?? '') > String(value)], mode, patch, options),
       gte: (col: string, value: string | number) =>
-        makeQuery(rows, [...filters, (r) => String(r[col] ?? '') >= String(value)], mode, patch),
+        makeQuery(rows, [...filters, (r) => String(r[col] ?? '') >= String(value)], mode, patch, options),
+      or: (expression: string) => {
+        const clauses = expression.split(',').map((part) => {
+          const match = /^(payment_date|created_at|transaction_date|booking_date|imported_at)\.gte\.(.+)$/.exec(part);
+          if (!match) throw new Error('Unsupported fake OR filter: ' + part);
+          return { column: match[1]!, cutoff: match[2]! };
+        });
+        return makeQuery(rows, [...filters, (row) => clauses.some(({ column, cutoff }) => {
+          const value = columnValue(row, column);
+          return typeof value === 'string' && value >= cutoff;
+        })], mode, patch, options);
+      },
       order: () => builder,
-      limit: () => builder,
-      select: () => makeQuery(rows, filters, mode, patch),
+      limit: (value: number) => makeQuery(rows, filters, mode, patch, { ...options, limit: value }),
+      select: (_columns?: string, selectOptions?: { count?: 'exact' }) =>
+        makeQuery(rows, filters, mode, patch, { ...options, count: selectOptions?.count ?? options.count }),
       maybeSingle: async () => {
         const { data } = await run();
         return { data: data?.[0] ?? null, error: null };
@@ -131,7 +149,7 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
         const { data } = await run();
         return { data: data?.[0] ?? null, error: null };
       },
-      then: (resolve: (v: { data: Row[] | null; error: null }) => unknown, reject?: (e: unknown) => unknown) =>
+      then: (resolve: (v: { data: Row[] | null; error: null; count: number | null }) => unknown, reject?: (e: unknown) => unknown) =>
         run().then(resolve, reject),
     };
 
@@ -142,7 +160,7 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
     from(table: keyof Tables) {
       const rows = tables[table];
       return {
-        select: () => makeQuery(rows, [], 'read'),
+        select: (_columns?: string, options?: { count?: 'exact' }) => makeQuery(rows, [], 'read', undefined, options),
         insert: (payload: Row | Row[]) => {
           const incoming = Array.isArray(payload) ? payload : [payload];
           const inserted: Row[] = [];

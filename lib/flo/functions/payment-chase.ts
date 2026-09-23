@@ -11,9 +11,10 @@
  *
  *   1. RE-WALIDACJA przy kliknięciu — wykonawca liczy odcisk danych na nowo
  *      i blokuje wykonanie, gdy status faktury albo wpłaty się zmieniły.
- *   2. OKNO BEZPIECZEŃSTWA — jakakolwiek wpłata od tego kontrahenta
- *      w ostatnich 48 godzinach blokuje wysyłkę, NAWET jeśli nie została
- *      dopasowana do tej faktury. Księgowanie bywa wolniejsze niż przelew.
+ *   2. OKNO BEZPIECZEŃSTWA — wpłata widoczna w bazie dla tego kontrahenta
+ *      w ostatnich 48 godzinach blokuje wysyłkę, także z innej faktury lub
+ *      importu bankowego. DATE wymaga ostrożnego pełnego dnia granicznego.
+ *      Niezaimportowanego przelewu aplikacja nie może wykryć.
  *   3. ZDANIE W TREŚCI — „jeśli płatność już wyszła, potraktuj tę wiadomość
  *      jako nieaktualną". Zamienia potencjalną wpadkę w uprzejmość.
  *
