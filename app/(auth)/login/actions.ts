@@ -10,6 +10,7 @@ import { getClientIp } from '@/lib/auth/get-client-ip';
 import { checkLoginRateLimit } from '@/lib/rate-limit/auth';
 import { verifyTurnstile } from '@/lib/security/turnstile';
 import { createClient } from '@/lib/supabase/server';
+import { signOutCurrentSession } from '@/lib/auth/sign-out';
 
 /**
  * Server Action: logowanie email+hasło.
@@ -116,23 +117,14 @@ export async function loginWithGoogle(): Promise<void> {
  * Server Action: wylogowanie.
  */
 export async function signOut(): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user) {
-    const { data: row } = await supabase
-      .from('users')
-      .select('last_active_tenant_id')
-      .eq('id', user.id)
-      .maybeSingle();
+  const result = await signOutCurrentSession();
+  if (!result.localSessionCleared) throw new Error('Nie udało się wylogować tej przeglądarki. Spróbuj ponownie.');
+  if (result.userId) {
     await logAudit({
-      action: 'auth.logout',
-      tenantId: row?.last_active_tenant_id ?? null,
-      userId: user.id,
+      action: 'auth.logout', tenantId: null, userId: result.userId,
+      metadata: { local_session_cleared: true, global_sign_out_confirmed: result.globalSignOutConfirmed },
     });
   }
-  await supabase.auth.signOut();
   revalidatePath('/', 'layout');
-  redirect('/login');
+  redirect(result.globalSignOutConfirmed ? '/login' : '/login?notice=logout_local_only');
 }

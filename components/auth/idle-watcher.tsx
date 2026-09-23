@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useTransition } from 'react';
+import { useCallback, useRef, useState, useTransition } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -26,10 +26,23 @@ import { forceSignOutInactive } from '@/lib/auth/inactivity-logout';
  */
 export function IdleWatcher() {
   const [isPending, startTransition] = useTransition();
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  const logoutInFlight = useRef(false);
 
   const handleTimeout = useCallback(() => {
-    startTransition(() => {
-      void forceSignOutInactive();
+    if (logoutInFlight.current) return;
+    logoutInFlight.current = true;
+    startTransition(async () => {
+      setLogoutError(null);
+      try {
+        const result = await forceSignOutInactive();
+        if (!result.ok) setLogoutError('Nie udało się wylogować tej przeglądarki. Spróbuj ponownie.');
+      } catch {
+        setLogoutError('Nie udało się potwierdzić wylogowania. Spróbuj ponownie.');
+      } finally {
+        logoutInFlight.current = false;
+      }
     });
   }, []);
 
@@ -48,22 +61,23 @@ export function IdleWatcher() {
         <DialogHeader>
           <DialogTitle>Sesja wygasa</DialogTitle>
           <DialogDescription>
-            Nie wykryliśmy aktywności od godziny. Za{' '}
-            <span className="font-mono font-semibold text-foreground">
-              {secondsLeft}s
-            </span>{' '}
-            zostaniesz automatycznie wylogowany.
+            {secondsLeft > 0 ? <>
+              Nie wykryliśmy aktywności. Za{' '}
+              <span className="font-mono font-semibold text-foreground">{secondsLeft}s</span>{' '}
+              zostaniesz automatycznie wylogowany.
+            </> : 'Czas bezczynności minął. Kończymy sesję na tym urządzeniu.'}
           </DialogDescription>
         </DialogHeader>
+        {logoutError && <p role="alert" className="text-sm text-destructive">{logoutError}</p>}
         <div className="mt-2 flex gap-2 sm:justify-end">
           <Button
             variant="outline"
             onClick={handleTimeout}
             disabled={isPending}
           >
-            Wyloguj teraz
+            {logoutError ? 'Spróbuj wylogować ponownie' : 'Wyloguj teraz'}
           </Button>
-          <Button onClick={reset} disabled={isPending}>
+          <Button onClick={reset} disabled={isPending || secondsLeft === 0}>
             Pozostań zalogowany
           </Button>
         </div>
