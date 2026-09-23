@@ -3199,3 +3199,81 @@ czyta `ROLLOUT_ORDER`.
   `enabled = true`, powód) dla 1–2 kont, najbliższy pierwszy dzień roboczy
   miesiąca, obejrzeć karty. Dopiero potem `flo_rollout` 10%.
 - Załącznik A planu: X-05 z 🟡 na „⚠️ nie działał do 1.1c, teraz w kanarku 0".
+
+---
+
+## 2026-09-23 · Plan FLO 2, K1.8 — W-03 pyta o regułę po drugim koszcie
+
+Gałąź `claude/k1-8-regula-w03`, od świeżego `main` (`b16b062` — 1.1…1.1c są
+już scalone). Funkcje czyste W-03 istniały od kroku 20; nikt nie tworzył karty.
+
+### Gdzie siedzi producent i dlaczego nie w pulsie
+
+W wykonawcy W-01, zaraz po tym, jak człowiek potwierdzi kategorię kosztu.
+Dwa powody:
+
+1. Reguła ma się brać z **decyzji człowieka**, a nie z odczytu OCR. Karta
+   „zawsze tak księgować?" po kliknięciu „Zgadza się" opiera się na czymś,
+   co klient właśnie zatwierdził.
+2. Pytanie pada, gdy ma tę sprawę w głowie — nie nazajutrz o 7:30.
+
+### Cztery powody, dla których agent MILCZY mimo drugiego wystąpienia
+
+| Powód | Dlaczego |
+|---|---|
+| koszt bez kolumny księgi | nie ma czego utrwalać |
+| **historia niespójna** — ten sprzedawca był już księgowany inaczej | reguła zgadywałaby, które z dwóch księgowań jest tym właściwym, i myliłaby się cicho przez miesiące |
+| reguła dla tego sprzedawcy już istnieje | drugie pytanie o to samo; szukamy po NIP-ie **oraz** po nazwie, bo reguła mogła powstać, zanim OCR odczytał NIP |
+| bramki (wyłącznik, kanarek, wyciszenie) | sprawdzane PRZED odczytem kosztów — konto poza kanarkiem nie kosztuje zapytań |
+
+### Karta dostaje własne odpowiedzi
+
+Wariant `choice` bez etykiet w ładunku dałby „Tak" i „Nie teraz" — a to jest
+pytanie o trwałą decyzję, nie o odłożenie sprawy. Stąd „Tak, zawsze tak
+księguj" i „Pytaj za każdym razem", zgodnie z komentarzem w `kind-variant.ts`.
+To ta sama pułapka, która w 1.1a wyszła przy K-01.
+
+### Awaria pytania nie psuje potwierdzenia kosztu
+
+Wywołanie jest w osobnym `try`. Gdyby wywróciło wykonanie, człowiek dostałby
+„nie udało mi się tego dokończyć" przy koszcie, który JEST już oznaczony jako
+przejrzany, i tę samą kartę do kliknięcia po raz drugi. Błąd idzie do Sentry
+(`job`, `kind`, `tenant_id`) i do logów; wynik („created", „too_few",
+„failed"…) ląduje w `details` wykonania, więc widać go w dzienniku audytowym.
+
+### Czego świadomie NIE zrobiłem
+
+- **Nie ruszałem licznika odrzuceń.** „Pytaj za każdym razem" idzie dziś jako
+  zwykłe odrzucenie, więc dwie takie odpowiedzi — choćby u RÓŻNYCH sprzedawców
+  — wyciszają W-03 na 90 dni. Formalnie to nie regresja (tak działa
+  `decisions.ts` dla wszystkich rodzajów), ale przy tej funkcji „nie chcę
+  reguły u Adobe" nie znaczy „nie pytaj mnie nigdy o żadne reguły".
+  **Do decyzji razem z tym samym problemem w K-01 („Jeszcze nie").**
+- **Nie sprawdzam, czy reguła faktycznie jest stosowana przy kolejnych
+  kosztach** — `ruleApplies` i widełki istnieją, ale wpięcie w ścieżkę OCR to
+  osobna sprawa, poza K1.8.
+- Migracji, wdrożenia, zmian w `types/flo.ts`.
+
+### Weryfikacja
+
+- `tests/unit/flo-expense-rule-producer.test.ts` — 11 testów na atrapie bazy
+  (kiedy pytamy, kiedy milczymy, bramki, szukanie reguły po NIP-ie i nazwie).
+- `tests/unit/flo-expense-review-rule-hook.test.ts` — 2 testy wpięcia: czy
+  potwierdzenie kosztu w ogóle pyta o regułę i czy awaria pytania nie psuje
+  potwierdzenia.
+- **Test mutacyjny 6/6:** bramki po odczycie, niespójna historia ignorowana,
+  istniejąca reguła ignorowana, karta bez własnych etykiet, szukanie reguły
+  tylko po NIP-ie, wykonawca bez izolacji awarii. Dwie wieloliniowe mutacje
+  najpierw się nie nałożyły (CRLF) — powtórzone jednoliniowo, z kontrolą,
+  czy plik naprawdę się zmienił.
+- `tsc --noEmit` czysto; eslint na zmienionych plikach 0 błędów, 0 ostrzeżeń.
+- vitest **1212 zielonych, 7 pominiętych, zero czerwonych** (73 pliki + 1
+  pominięty). Test RLS pomija się sam od poprawki CI z 19.09, więc cały
+  przebieg kończy się wreszcie kodem 0. W1 zielony.
+
+### Następny krok
+
+- K1.9 (W-04, zgubione dokumenty) albo K1.10 (P-03, brakująca faktura) —
+  oba w pulsie, więc warto przy nich zrobić od razu wspólny cap dzienny
+  z K1.4 i ujednolicić wynik `runFloTick` (K1.3).
+- W-03 zostaje w kanarku na etapie 0, jak K-01 i X-05.
