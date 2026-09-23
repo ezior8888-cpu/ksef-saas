@@ -28,7 +28,7 @@ import { revalidatePath } from 'next/cache';
 
 import { createApproval } from '@/lib/flo/approval';
 import { floDb, type FloProposalRow } from '@/lib/flo/db-types';
-import { muteKind, recordDecision } from '@/lib/flo/decisions';
+import { muteKind, recordSubjectDismissal } from '@/lib/flo/decisions';
 import { executeProposal } from '@/lib/flo/execute';
 // Skutek uboczny: rejestracja wykonawców propozycji. NIE USUWAĆ.
 import '@/lib/flo/functions';
@@ -200,9 +200,14 @@ export async function dismissProposal(
   if (error) throw new Error(error.message);
 
   if (mode === 'never') {
+    // Jasna prośba o ciszę w całym rodzaju — jedyne miejsce, w którym
+    // odpowiedź o jednej karcie zamyka wszystkie.
     await muteKind(tenantId, proposal.kind);
   } else {
-    await recordDecision(tenantId, proposal.kind, 'dismissed');
+    // „Nie teraz" dotyczy TEJ sprawy — tej faktury, tego sprzedawcy, tego
+    // miesiąca. Wcześniej liczyło się na poziomie rodzaju, więc dwie takie
+    // odpowiedzi o dwóch RÓŻNYCH sprawach uciszały funkcję na kwartał.
+    await recordSubjectDismissal(tenantId, proposal.topic_key);
   }
 
   revalidatePath('/flo');

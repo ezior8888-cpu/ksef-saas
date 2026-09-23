@@ -197,6 +197,10 @@ export async function executeProposal(
     });
 
     await recordDecision(proposal.tenant_id, proposal.kind, 'accepted', now, db);
+    // Także na poziomie sprawy: przyjęcie zeruje serię odrzuceń i zdejmuje
+    // ciszę, więc sprawa, na którą człowiek się w końcu zgodził, przestaje
+    // się liczyć do reguły tłumu.
+    await recordDecision(proposal.tenant_id, proposal.topic_key, 'accepted', now, db);
 
     return { ok: true };
   } catch (e) {

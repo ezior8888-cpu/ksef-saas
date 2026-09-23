@@ -19,8 +19,44 @@
 import { floDb, type FloDbClient, type FloDecisionRow } from '@/lib/flo/db-types';
 import type { FloProposalKind } from '@/types/flo';
 
-/** Po tylu odrzuceniach z rzędu agent milknie w danej sprawie. */
+/**
+ * DWA POZIOMY CISZY (plan FLO 2, K2.16 — poprawka z 23.09.2026).
+ *
+ * Do tej pory był jeden: rodzaj. „Nie chcę reguły akurat u Adobe" kliknięte
+ * dwa razy przy DWÓCH RÓŻNYCH sprzedawcach wyciszało całe W-03 na kwartał —
+ * klient odpowiadał o dwóch konkretnych sprawach, a agent rozumiał to jako
+ * „nie pytaj mnie o nic tego rodzaju". Ten sam błąd dotyczył „Jeszcze nie"
+ * w K-01 (dwie różne faktury) i „Nigdy więcej takich" w W-04.
+ *
+ * Od teraz:
+ *
+ * | Poziom | Co ucisza | Kiedy |
+ * |---|---|---|
+ * | SPRAWA | jedną fakturę, jednego sprzedawcę, jeden miesiąc | dwa odrzucenia TEJ SAMEJ sprawy |
+ * | RODZAJ | wszystkie karty tego rodzaju | „Nigdy więcej takich" — jasna prośba |
+ * | TŁUM | rodzaj, tymczasowo | odrzucenie WIELU różnych spraw tego rodzaju w krótkim czasie |
+ *
+ * ZAPIS BEZ MIGRACJI: sprawa mieszka w tej samej tabeli co rodzaj, pod
+ * kluczem tematu karty (`topic_key`), który zawsze zaczyna się od nazwy
+ * rodzaju i dwukropka (`expense.rule:Adobe`). Kolumna `kind` jest zwykłym
+ * TEXT-em bez ograniczeń, a klucz główny `(tenant_id, kind)` daje dokładnie
+ * tę unikalność, której potrzebujemy.
+ */
+
+/** Po tylu odrzuceniach z rzędu agent milknie — w sprawie albo w rodzaju. */
 export const MUTE_AFTER_DISMISSALS = 2;
+
+/**
+ * Ile RÓŻNYCH spraw jednego rodzaju musi zostać odrzuconych, żeby uznać, że
+ * klientowi nie podoba się sam rodzaj, a nie poszczególne sprawy.
+ *
+ * Trzy to jeszcze przypadek („akurat te trzy faktury"), pięć to już seria,
+ * której nikt nie klika przypadkiem.
+ */
+export const CROWD_MUTE_SUBJECTS = 4;
+
+/** W jakim oknie liczymy te odrzucenia. */
+export const CROWD_WINDOW_DAYS = 30;
 
 /** Na jak długo. Kwartał to dość, żeby sytuacja klienta zdążyła się zmienić. */
 export const MUTE_DAYS = 90;
@@ -76,6 +112,68 @@ export function isMutedAt(
 ): boolean {
   const until = state?.mutedUntil;
   return typeof until === 'string' && Date.parse(until) > now.getTime();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Cisza: sprawa, rodzaj, tłum — funkcja czysta
+// ═══════════════════════════════════════════════════════════════
+
+/** Wiersz pamięci decyzji: rodzaj ALBO pojedyncza sprawa (klucz tematu). */
+export interface DecisionRow {
+  kind: string;
+  accepted: number;
+  dismissed: number;
+  muted_until: string | null;
+  last_at: string;
+}
+
+export type SilenceReason = 'kind' | 'subject' | 'crowd';
+
+export type SilenceVerdict =
+  | { silenced: false }
+  | { silenced: true; reason: SilenceReason };
+
+/**
+ * Czy agent ma milczeć w tej konkretnej sprawie — całe sedno poprawki.
+ *
+ * Kolejność sprawdzeń jest treścią: najpierw jasna prośba o ciszę w rodzaju,
+ * potem cisza w tej sprawie, na końcu wniosek z zachowania (tłum). Dwie
+ * pierwsze wynikają z tego, co człowiek powiedział wprost; trzecia jest
+ * naszym domysłem, więc ma być ostatnia i ma sama wygasać.
+ */
+export function silenceVerdict(
+  rows: readonly DecisionRow[],
+  kind: string,
+  topicKey: string,
+  now: Date = new Date(),
+): SilenceVerdict {
+  const stateOf = (key: string): DecisionState | null => {
+    const row = rows.find((r) => r.kind === key);
+    return row
+      ? { accepted: row.accepted, dismissed: row.dismissed, mutedUntil: row.muted_until }
+      : null;
+  };
+
+  if (isMutedAt(stateOf(kind), now)) return { silenced: true, reason: 'kind' };
+  if (isMutedAt(stateOf(topicKey), now)) {
+    return { silenced: true, reason: 'subject' };
+  }
+
+  // Tłum: wiele RÓŻNYCH spraw tego rodzaju odrzuconych w jednym oknie.
+  // Liczymy sprawy, nie kliknięcia — dwa odrzucenia tej samej faktury to
+  // jedna sprawa, o której klient powiedział to samo dwa razy.
+  const cutoff = now.getTime() - CROWD_WINDOW_DAYS * 86_400_000;
+  const prefix = `${kind}:`;
+  const dismissedSubjects = rows.filter(
+    (row) =>
+      row.kind.startsWith(prefix) &&
+      row.dismissed > 0 &&
+      Date.parse(row.last_at) > cutoff,
+  ).length;
+
+  return dismissedSubjects >= CROWD_MUTE_SUBJECTS
+    ? { silenced: true, reason: 'crowd' }
+    : { silenced: false };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -169,12 +267,39 @@ export async function isMuted(
   return isMutedAt(await readState(tenantId, kind, db), now);
 }
 
-/** Wyciszone rodzaje — do ekranu ustawień (tor interfejsu, krok 21). */
+/**
+ * Wyciszone RODZAJE — do ekranu ustawień (tor interfejsu, krok 21).
+ *
+ * Wiersze pojedynczych spraw mieszkają w tej samej tabeli, więc trzeba je
+ * odsiać: klucz tematu ma dwukropek, nazwa rodzaju nigdy. Bez tego ekran
+ * ustawień pokazywałby klientowi „expense.rule:Adobe" jako rodzaj sprawy.
+ */
 export async function listMutedKinds(
   tenantId: string,
   now: Date = new Date(),
   db: FloDbClient = floDb(),
 ): Promise<string[]> {
+  const rows = await readMuted(tenantId, now, db);
+  return rows.filter((row) => !row.kind.includes(':')).map((row) => row.kind);
+}
+
+/** Wyciszone pojedyncze sprawy — klucze tematów kart. */
+export async function listMutedSubjects(
+  tenantId: string,
+  now: Date = new Date(),
+  db: FloDbClient = floDb(),
+): Promise<Array<{ topicKey: string; mutedUntil: string }>> {
+  const rows = await readMuted(tenantId, now, db);
+  return rows
+    .filter((row) => row.kind.includes(':'))
+    .map((row) => ({ topicKey: row.kind, mutedUntil: String(row.muted_until) }));
+}
+
+async function readMuted(
+  tenantId: string,
+  now: Date,
+  db: FloDbClient,
+): Promise<Array<{ kind: string; muted_until: string | null }>> {
   const { data, error } = await db
     .from('flo_decisions')
     .select('kind, muted_until')
@@ -182,7 +307,72 @@ export async function listMutedKinds(
     .gt('muted_until', now.toISOString());
 
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => row.kind);
+  return data ?? [];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Cisza: odczyt i zapis
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Jeden odczyt zamiast dwóch: wiersze rodzaju i spraw tego konta.
+ *
+ * Wierszy jest tyle, ile rodzajów plus sprawy, o których klient coś
+ * powiedział — czyli kilkanaście, nie tysiące.
+ */
+export async function readDecisionRows(
+  tenantId: string,
+  db: FloDbClient = floDb(),
+): Promise<DecisionRow[]> {
+  const { data, error } = await db
+    .from('flo_decisions')
+    .select('kind, accepted, dismissed, muted_until, last_at')
+    .eq('tenant_id', tenantId);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as DecisionRow[];
+}
+
+/** Czy agent ma milczeć w tej sprawie — odczyt plus reguła. */
+export async function isSilenced(
+  tenantId: string,
+  kind: string,
+  topicKey: string,
+  now: Date = new Date(),
+  db: FloDbClient = floDb(),
+): Promise<SilenceVerdict> {
+  return silenceVerdict(await readDecisionRows(tenantId, db), kind, topicKey, now);
+}
+
+/**
+ * Zapis odpowiedzi „nie" — na poziomie SPRAWY, nie rodzaju.
+ *
+ * Klucz tematu identyfikuje sprawę (faktura, sprzedawca, miesiąc), więc
+ * dwa „nie" o tej samej sprawie uciszają właśnie ją. Odpowiedzi o różnych
+ * sprawach zbiera dopiero reguła tłumu.
+ */
+export async function recordSubjectDismissal(
+  tenantId: string,
+  topicKey: string,
+  now: Date = new Date(),
+  db: FloDbClient = floDb(),
+): Promise<DecisionState> {
+  return recordDecision(tenantId, topicKey, 'dismissed', now, db);
+}
+
+/**
+ * Cisza w jednej sprawie na życzenie — bez czekania na drugie „nie".
+ *
+ * To samo co `muteKind`, tylko kluczem jest temat karty. Osobna nazwa, bo
+ * `muteKind(tenant, 'expense.rule:Adobe')` czytałoby się jak pomyłka.
+ */
+export async function muteSubject(
+  tenantId: string,
+  topicKey: string,
+  now: Date = new Date(),
+  db: FloDbClient = floDb(),
+): Promise<void> {
+  return muteKind(tenantId, topicKey, now, db);
 }
 
 async function readState(

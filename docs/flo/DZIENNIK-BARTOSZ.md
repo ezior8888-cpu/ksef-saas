@@ -3353,3 +3353,85 @@ wszystkich, wystarczy usunąć tę jedną pozycję z listy.
   którymkolwiek warto wziąć K1.4 (wspólny cap) i K1.3 (wynik pulsu).
 - Osobno, dla trzech funkcji naraz: wyciszanie POJEDYNCZEJ sprawy zamiast
   całego rodzaju.
+
+---
+
+## 2026-09-23 · K2.16 — cisza dotyczy SPRAWY, nie całego rodzaju
+
+Gałąź `claude/k2-16-cisza-sprawy`, na bazie K1.9. Zrobione poza kolejnością
+planu, bo ten sam brak wyszedł przy trzech funkcjach z rzędu (K-01, K1.8,
+K1.9) — to już nie drobiazg jednej karty, tylko brakujący mechanizm.
+
+### Co było źle
+
+`flo_decisions` pamiętało decyzje wyłącznie po RODZAJU. „Nie teraz" przy
+dwóch RÓŻNYCH fakturach albo „Pytaj za każdym razem" przy dwóch RÓŻNYCH
+sprzedawcach dawało `dismissed = 2` na rodzaju, czyli **ciszę na kwartał
+w całej funkcji**. Klient odpowiadał o dwóch konkretnych sprawach, a agent
+rozumiał to jako „nie pytaj mnie o nic takiego".
+
+### Trzy poziomy ciszy
+
+| Poziom | Co ucisza | Kiedy | Skąd wiemy |
+|---|---|---|---|
+| **sprawa** | jedną fakturę, sprzedawcę, miesiąc | dwa „nie" o TEJ SAMEJ sprawie | z tego, co człowiek kliknął |
+| **rodzaj** | wszystkie karty rodzaju | „Nigdy więcej takich" | jasna prośba |
+| **tłum** | rodzaj, tymczasowo | 4 różne sprawy odrzucone w 30 dni | nasz domysł — więc sam wygasa |
+
+Kolejność sprawdzania jest treścią: najpierw to, co człowiek powiedział
+wprost, na końcu nasz domysł.
+
+### Zapis BEZ MIGRACJI
+
+Sprawa mieszka w tej samej tabeli co rodzaj, pod kluczem tematu karty
+(`topic_key`), który zawsze zaczyna się od nazwy rodzaju i dwukropka
+(`expense.rule:Adobe`). Kolumna `kind` to zwykły TEXT bez ograniczeń, a klucz
+główny `(tenant_id, kind)` daje dokładnie tę unikalność, o którą chodzi.
+Sprawdzone dla wszystkich rodzajów: konwencja `rodzaj:cokolwiek` trzyma się
+w każdym builderze.
+
+Koszt: `listMutedKinds` musiało zacząć odsiewać wiersze spraw, bo inaczej
+ekran ustawień pokazałby klientowi „expense.rule:Adobe" jako rodzaj sprawy.
+Doszło `listMutedSubjects`.
+
+### Zmiany
+
+- `decisions.ts`: `silenceVerdict` (czysta), `readDecisionRows`, `isSilenced`,
+  `recordSubjectDismissal`, `muteSubject`, poprawione `listMutedKinds`.
+- `proposals.ts`: bramka pyta o ciszę JEDNYM odczytem i patrzy na oba poziomy.
+- `app/actions/flo.ts`: „nie teraz" zapisuje się po kluczu tematu; „nigdy
+  więcej takich" dalej ucisza rodzaj.
+- `execute.ts`: przyjęcie zapisuje się też na sprawie — zdejmuje jej ciszę
+  i wyklucza ją z reguły tłumu.
+
+### Do decyzji
+
+- **Progi tłumu**: 4 sprawy w 30 dni. Wzięte z sufitu w tym sensie, że nie ma
+  na czym ich oprzeć przed alfą — trzy to jeszcze „akurat te trzy faktury",
+  pięć to seria. Do zmiany jedną stałą.
+- **Cisza sprawy trwa 90 dni** (`MUTE_DAYS`, wspólne z rodzajem). Przy
+  fakturze to dużo: po kwartale sprawa zwykle jest nieaktualna, więc
+  praktycznie znaczy „nigdy". Zostawione wspólne, żeby nie mnożyć progów.
+- **Interfejs nie pokazuje jeszcze wyciszonych spraw** — `listMutedSubjects`
+  istnieje, ekran ustawień go nie woła. Bez tego klient nie cofnie ciszy
+  w sprawie inaczej niż czekaniem.
+
+### Weryfikacja
+
+- `tests/unit/flo-silence.test.ts` — 13 testów (reguła + cała droga od
+  kliknięcia do następnej karty).
+- `tests/unit/flo-actions-dismiss.test.ts` — 6 testów akcji serwerowej.
+  **Ten plik powstał przez test mutacyjny:** podmiana `proposal.topic_key`
+  na `proposal.kind` w `dismissProposal` przechodziła bez jednego czerwonego
+  testu, bo reguła miała własne testy, ale nikt nie sprawdzał, CZYM woła ją
+  akcja. Po dopisaniu pliku ta mutacja wywala trzy testy.
+- Test mutacyjny **6/6**: bramka tylko po rodzaju, zapis po rodzaju zamiast
+  po sprawie, wyłączona reguła tłumu, tłum bez okna czasowego, tłum liczący
+  inne rodzaje, ustawienia bez odsiewania spraw.
+- `tsc --noEmit` czysto; eslint 0/0; vitest **1242 zielone, 7 pominiętych,
+  zero czerwonych**.
+
+### Następny krok
+
+- Ekran ustawień: lista wyciszonych spraw z możliwością cofnięcia.
+- Powrót do planu: K1.10 (P-03) albo K1.11 (O-01).

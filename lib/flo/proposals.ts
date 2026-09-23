@@ -26,7 +26,7 @@ import {
   type FloProposalInsert,
   type FloProposalRow,
 } from '@/lib/flo/db-types';
-import { isMuted } from '@/lib/flo/decisions';
+import { isSilenced } from '@/lib/flo/decisions';
 import { isKindEnabled } from '@/lib/flo/flags';
 import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
 import { FLO_KIND_VARIANT } from '@/lib/flo/kind-variant';
@@ -114,7 +114,17 @@ export async function createProposal(
     return { status: 'no_tax_profile' };
   }
 
-  if (await isMuted(input.tenantId, input.kind, new Date(), db)) {
+  // Cisza na dwóch poziomach: rodzaj („nigdy więcej takich") i POJEDYNCZA
+  // sprawa („nie chcę reguły akurat u Adobe"). Klucz tematu jest tożsamością
+  // sprawy, więc wyciszenie jednej faktury nie zabiera pytań o pozostałe.
+  const silence = await isSilenced(
+    input.tenantId,
+    input.kind,
+    input.topicKey,
+    new Date(),
+    db,
+  );
+  if (silence.silenced) {
     return { status: 'muted' };
   }
 
