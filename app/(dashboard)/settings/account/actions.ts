@@ -9,11 +9,27 @@ import { sendGdprDeletionScheduledEmail } from '@/lib/email/send';
 import { cancelOwnGdprRequest, createGdprRequest } from '@/lib/gdpr/deletion';
 import { createClient } from '@/lib/supabase/server';
 
-type GdprActionError = 'not_authenticated' | 'mfa_required' | 'session_verification_failed' | 'invalid_password' | 'no_email' | 'request_failed' | 'not_pending';
+type GdprActionError = 'not_authenticated' | 'mfa_required' | 'session_verification_failed' | 'invalid_password' | 'no_email' | 'request_failed' | 'not_pending' | 'rate_limited' | 'verification_unavailable';
 export type GdprDeletionResult =
   | { ok: true; scheduledFor: string; alreadyScheduled: boolean; emailSent: boolean }
-  | { ok: false; error: GdprActionError };
-export type GdprCancellationResult = { ok: true } | { ok: false; error: GdprActionError };
+  | { ok: false; error: GdprActionError; retryAfter?: number };
+export type GdprCancellationResult = { ok: true } | { ok: false; error: GdprActionError; retryAfter?: number };
+
+async function confirmGdprPassword(formData: FormData): Promise<Exclude<GdprCancellationResult, { ok: true }> | null> {
+  const password = formData.get('current_password');
+  if (typeof password !== 'string' || !password || password.length > 1024) {
+    return { ok: false, error: 'invalid_password' };
+  }
+  const reauth = await reauthenticateWithPassword(password).catch(() => null);
+  if (!reauth || (!reauth.ok && (reauth.error === 'unknown' || reauth.error === 'verification_unavailable'))) {
+    return { ok: false, error: 'verification_unavailable' };
+  }
+  if (!reauth.ok && reauth.error === 'rate_limited') {
+    return { ok: false, error: 'rate_limited', retryAfter: reauth.retryAfter };
+  }
+  if (!reauth.ok) return { ok: false, error: reauth.error === 'not_authenticated' ? 'not_authenticated' : 'invalid_password' };
+  return null;
+}
 
 export async function requestGdprDeletionAction(formData: FormData): Promise<GdprDeletionResult> {
   const supabase = await createClient();
@@ -23,8 +39,8 @@ export async function requestGdprDeletionAction(formData: FormData): Promise<Gdp
   if (state.status === 'challenge_required') return { ok: false, error: 'mfa_required' };
   const { user } = state;
   if (!user.email) return { ok: false, error: 'no_email' };
-  const reauth = await reauthenticateWithPassword(String(formData.get('current_password') ?? ''));
-  if (!reauth.ok) return { ok: false, error: 'invalid_password' };
+  const passwordError = await confirmGdprPassword(formData);
+  if (passwordError) return passwordError;
 
   const requestHeaders = await headers();
   const origin = requestHeaders.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? '';
@@ -72,8 +88,8 @@ export async function cancelOwnGdprDeletionAction(formData: FormData): Promise<G
   if (state.status === 'unauthenticated') return { ok: false, error: 'not_authenticated' };
   if (state.status === 'challenge_required') return { ok: false, error: 'mfa_required' };
   const { user } = state;
-  const reauth = await reauthenticateWithPassword(String(formData.get('current_password') ?? ''));
-  if (!reauth.ok) return { ok: false, error: 'invalid_password' };
+  const passwordError = await confirmGdprPassword(formData);
+  if (passwordError) return passwordError;
   try {
     const result = await cancelOwnGdprRequest(user.id);
     if (!result.ok) return { ok: false, error: 'not_pending' };

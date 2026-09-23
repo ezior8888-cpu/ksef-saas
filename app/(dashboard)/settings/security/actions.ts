@@ -7,7 +7,7 @@ import { validatePassword } from '@/lib/auth/password';
 import { reauthenticateWithPassword } from '@/lib/auth/reauth';
 import { deleteAllRecoveryCodes } from '@/lib/auth/mfa-recovery';
 import { checkMfaRateLimit } from '@/lib/rate-limit/mfa';
-import { checkPasswordOperationRateLimit, checkPasswordNonceSendRateLimit } from '@/lib/rate-limit/password';
+import { checkPasswordNonceSendRateLimit } from '@/lib/rate-limit/password';
 import { createClient } from '@/lib/supabase/server';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 
@@ -64,9 +64,10 @@ function readCurrentPassword(formData: FormData): string | null {
 
 async function checkCurrentPassword(currentPassword: string): Promise<PasswordOperationFailure | null> {
   const reauth = await reauthenticateWithPassword(currentPassword).catch(() => null);
-  if (!reauth || (!reauth.ok && reauth.error === 'unknown')) {
+  if (!reauth || (!reauth.ok && (reauth.error === 'unknown' || reauth.error === 'verification_unavailable'))) {
     return { ok: false, error: 'verification_unavailable' };
   }
+  if (!reauth.ok && reauth.error === 'rate_limited') return { ok: false, error: 'rate_limited', retryAfter: reauth.retryAfter };
   if (!reauth.ok) return { ok: false, error: reauth.error === 'not_authenticated' ? 'not_authenticated' : 'invalid_current' };
   return null;
 }
@@ -91,9 +92,6 @@ export async function changePasswordAction(formData: FormData): Promise<Password
   const session = await passwordSession();
   if (!session.ok) return session;
   const { supabase, user } = session;
-  const limit = await checkPasswordOperationRateLimit(user.id);
-  if (limit.unavailable) return { ok: false, error: 'verification_unavailable' };
-  if (!limit.allowed) return { ok: false, error: 'rate_limited', retryAfter: limit.retryAfter };
   const reauthError = await checkCurrentPassword(currentPassword);
   if (reauthError) return reauthError;
 
@@ -125,9 +123,6 @@ export async function requestPasswordChangeNonceAction(formData: FormData): Prom
   const session = await passwordSession();
   if (!session.ok) return session;
   const { supabase, user } = session;
-  const limit = await checkPasswordOperationRateLimit(user.id);
-  if (limit.unavailable) return { ok: false, error: 'verification_unavailable' };
-  if (!limit.allowed) return { ok: false, error: 'rate_limited', retryAfter: limit.retryAfter };
   const sendLimit = await checkPasswordNonceSendRateLimit(user.id);
   if (sendLimit.unavailable) return { ok: false, error: 'verification_unavailable' };
   if (!sendLimit.allowed) return { ok: false, error: 'rate_limited', retryAfter: sendLimit.retryAfter };
@@ -259,14 +254,12 @@ export async function unenrollTotpAction(
   if (state.status !== 'verified') return { ok: false, error: 'mfa_required' };
   const { user } = state;
 
-  // Share the password-attempt budget with password changes and nonce requests.
-  const limit = await checkPasswordOperationRateLimit(user.id).catch(() => null);
-  if (!limit || limit.unavailable) return { ok: false, error: 'verification_unavailable' };
-  if (!limit.allowed) return { ok: false, error: 'rate_limited', retryAfter: limit.retryAfter };
+  // The reauth helper consumes the same budget as password changes and GDPR.
   const reauth = await reauthenticateWithPassword(currentPassword).catch(() => null);
-  if (!reauth || (!reauth.ok && reauth.error === 'unknown')) {
+  if (!reauth || (!reauth.ok && (reauth.error === 'unknown' || reauth.error === 'verification_unavailable'))) {
     return { ok: false, error: 'verification_unavailable' };
   }
+  if (!reauth.ok && reauth.error === 'rate_limited') return { ok: false, error: 'rate_limited', retryAfter: reauth.retryAfter };
   if (!reauth.ok) return { ok: false, error: reauth.error === 'not_authenticated' ? 'not_authenticated' : 'invalid_password' };
 
   const factors = await supabase.auth.mfa.listFactors().catch(() => null);

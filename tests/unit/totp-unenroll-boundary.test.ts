@@ -17,7 +17,7 @@ vi.mock('@/lib/auth/password', () => ({ validatePassword: mocks.validate }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
 
 import {
-  changePasswordAction, requestPasswordChangeNonceAction, unenrollTotpAction,
+  unenrollTotpAction,
 } from '@/app/(dashboard)/settings/security/actions';
 
 const user = { id: 'fixture-user', email: 'member@example.test' };
@@ -86,20 +86,15 @@ it('waits for MFA before touching the password budget', async () => {
   await expect(pending).resolves.toEqual({ ok: false, error: 'mfa_required' });
 });
 it.each([
-  { result: { allowed: false, unavailable: false, retryAfter: 42 }, error: 'rate_limited', retryAfter: 42 },
-  { result: { allowed: false, unavailable: true, retryAfter: 300 }, error: 'verification_unavailable' },
-])('blocks a password limiter refusal: $error', async ({ result, error, retryAfter }) => {
-  mocks.limit.mockResolvedValue(result);
-  expect(await unenrollTotpAction('fixture')).toEqual({ ok: false, error, ...(retryAfter ? { retryAfter } : {}) });
-  expect(mocks.limit).toHaveBeenCalledExactlyOnceWith(user.id);
-  expect(mocks.reauth).not.toHaveBeenCalled();
+  { error: 'rate_limited', retryAfter: 42 },
+  { error: 'verification_unavailable' },
+])('propagates a refusal from the authoritative reauth budget: $error', async ({ error, retryAfter }) => {
+  const result = { ok: false, error, ...(retryAfter ? { retryAfter } : {}) };
+  mocks.reauth.mockResolvedValue(result);
+  expect(await unenrollTotpAction('fixture')).toEqual(result);
+  expect(mocks.limit).not.toHaveBeenCalled();
+  expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith('fixture');
   expect(mocks.factors).not.toHaveBeenCalled();
-  noMutation();
-});
-it('fails closed when the password limiter throws', async () => {
-  mocks.limit.mockRejectedValue(new Error('synthetic-private-detail'));
-  expect(await unenrollTotpAction('fixture')).toEqual({ ok: false, error: 'verification_unavailable' });
-  expect(mocks.reauth).not.toHaveBeenCalled();
   noMutation();
 });
 it.each([
@@ -116,25 +111,7 @@ it('handles a thrown isolated reauth failure without leaking it', async () => {
   expect(await unenrollTotpAction('fixture')).toEqual({ ok: false, error: 'verification_unavailable' });
   noMutation();
 });
-it('shares the same authoritative account budget across password changes, nonce and TOTP removal', async () => {
-  let attempts = 0;
-  mocks.limit.mockImplementation(async () => ++attempts <= 5 ? allowed : { allowed: false, unavailable: false, retryAfter: 100 });
-  mocks.reauth.mockResolvedValue({ ok: false, error: 'invalid_password' });
-  const form = new FormData();
-  form.set('current_password', 'fixture');
-  form.set('new_password', 'fixture-new-password');
-  await changePasswordAction(form);
-  await changePasswordAction(form);
-  await requestPasswordChangeNonceAction(form);
-  await unenrollTotpAction('fixture');
-  await unenrollTotpAction('fixture');
-  expect(await unenrollTotpAction('fixture')).toEqual({ ok: false, error: 'rate_limited', retryAfter: 100 });
-  expect(mocks.reauth).toHaveBeenCalledTimes(5);
-  expect(mocks.limit.mock.calls).toEqual(Array.from({ length: 6 }, () => [user.id]));
-  expect(mocks.nonce).not.toHaveBeenCalled();
-  expect(mocks.update).not.toHaveBeenCalled();
-  noMutation();
-});
+// The mixed-action budget regression uses real reauth + limiter in password-shared-budget.test.ts.
 it.each([
   { data: null, error: { message: 'synthetic-private-detail' } },
   { data: null, error: null }, { data: {}, error: null },
@@ -167,7 +144,8 @@ it('cleans codes before touching TOTP and leaves phone and WebAuthn factors alon
   expect(await unenrollTotpAction('x'.repeat(1024))).toEqual({ ok: true });
   expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith('x'.repeat(1024));
   expect(mocks.unenroll.mock.calls).toEqual([[{ factorId: totp.id }], [{ factorId: pending.id }]]);
-  expect(mocks.limit.mock.invocationCallOrder[0]).toBeLessThan(mocks.reauth.mock.invocationCallOrder[0]);
+  expect(mocks.limit).not.toHaveBeenCalled();
+  expect(mocks.reauth.mock.invocationCallOrder[0]).toBeLessThan(mocks.factors.mock.invocationCallOrder[0]);
   expect(mocks.cleanup.mock.invocationCallOrder[0]).toBeLessThan(mocks.unenroll.mock.invocationCallOrder[0]);
   expect(mocks.audit).toHaveBeenCalledExactlyOnceWith({
     action: 'auth.mfa_unenrolled', tenantId: null, userId: user.id,

@@ -11,10 +11,12 @@ const mocks = vi.hoisted(() => ({
   isolatedClient: vi.fn(),
   passwordSignIn: vi.fn(),
   temporarySignOut: vi.fn(),
+  attempt: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.browserClient }));
 vi.mock('@supabase/supabase-js', () => ({ createClient: mocks.isolatedClient }));
+vi.mock('@/lib/rate-limit/password', () => ({ checkPasswordOperationRateLimit: mocks.attempt }));
 
 import { reauthenticateWithPassword } from '@/lib/auth/reauth';
 
@@ -39,6 +41,7 @@ beforeEach(() => {
     },
   });
   mocks.getUser.mockResolvedValue({ data: { user }, error: null });
+  mocks.attempt.mockResolvedValue({ allowed: true, retryAfter: 0, unavailable: false });
   mocks.isolatedClient.mockReturnValue({
     auth: {
       signInWithPassword: mocks.passwordSignIn,
@@ -68,6 +71,7 @@ describe('password reauthentication preserves the browser MFA session', () => {
     await expect(reauthenticateWithPassword(password)).resolves.toEqual({ ok: true });
 
     expect(mocks.getUser).toHaveBeenCalledOnce();
+    expect(mocks.attempt).toHaveBeenCalledExactlyOnceWith(user.id);
     expect(mocks.isolatedClient).toHaveBeenCalledWith(
       'https://auth.example.test',
       'synthetic-anon-key',
@@ -83,7 +87,7 @@ describe('password reauthentication preserves the browser MFA session', () => {
     expect(mocks.temporarySignOut).toHaveBeenCalledExactlyOnceWith(temporarySession.access_token, 'local');
   });
 
-  it.each(['', null, undefined, 123])('rejects an invalid password input without creating a client (%s)', async (value) => {
+  it.each(['', 'x'.repeat(1025), null, undefined, 123])('rejects an invalid password input without creating a client (%s)', async (value) => {
     await expect(reauthenticateWithPassword(value as string)).resolves.toEqual({
       ok: false, error: 'invalid_password',
     });
@@ -102,6 +106,21 @@ describe('password reauthentication preserves the browser MFA session', () => {
       ok: false, error: 'not_authenticated',
     });
     expect(mocks.isolatedClient).not.toHaveBeenCalled();
+  });
+
+  it('rejects an exhausted budget before password verification', async () => {
+    mocks.attempt.mockResolvedValue({ allowed: false, retryAfter: 117, unavailable: false });
+    await expect(reauthenticateWithPassword(password)).resolves.toEqual({ ok: false, error: 'rate_limited', retryAfter: 117 });
+    expect(mocks.isolatedClient).not.toHaveBeenCalled();
+    expect(mocks.passwordSignIn).not.toHaveBeenCalled();
+  });
+
+  it.each(['unavailable', 'exception'])('fails closed if the account budget cannot be checked (%s)', async (failure) => {
+    if (failure === 'exception') mocks.attempt.mockRejectedValue(new Error('synthetic-private-detail'));
+    else mocks.attempt.mockResolvedValue({ allowed: false, retryAfter: 300, unavailable: true });
+    await expect(reauthenticateWithPassword(password)).resolves.toEqual({ ok: false, error: 'verification_unavailable' });
+    expect(mocks.isolatedClient).not.toHaveBeenCalled();
+    expect(mocks.passwordSignIn).not.toHaveBeenCalled();
   });
 
   it('rejects an incorrect password without logging out any existing session', async () => {

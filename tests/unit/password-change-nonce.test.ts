@@ -72,18 +72,19 @@ describe('password operations', () => {
     mocks.getClaims.mockResolvedValue({ data: { claims: { sub: id, aal: 'aal1' } }, error: null });
     expect(await action(form())).toEqual({ ok: true });
   });
-  it.each([changePasswordAction, requestPasswordChangeNonceAction])('shares the operation limit before checking the password', async (action) => {
-    mocks.attempt.mockResolvedValue({ allowed: false, retryAfter: 117, unavailable: false });
+  it.each([changePasswordAction, requestPasswordChangeNonceAction])('propagates the shared reauth limit without charging a second attempt', async (action) => {
+    mocks.reauth.mockResolvedValue({ ok: false, error: 'rate_limited', retryAfter: 117 });
     expect(await action(form())).toEqual({ ok: false, error: 'rate_limited', retryAfter: 117 });
-    expect(mocks.attempt).toHaveBeenCalledExactlyOnceWith(id);
-    expect(mocks.reauth).not.toHaveBeenCalled();
+    expect(mocks.attempt).not.toHaveBeenCalled();
+    expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith(current);
     expect(mocks.send).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
   });
   it.each([changePasswordAction, requestPasswordChangeNonceAction])('fails closed if the account limiter is unavailable', async (action) => {
-    mocks.attempt.mockResolvedValue({ allowed: false, retryAfter: 300, unavailable: true });
+    mocks.reauth.mockResolvedValue({ ok: false, error: 'verification_unavailable' });
     expect(await action(form())).toEqual({ ok: false, error: 'verification_unavailable' });
-    expect(mocks.reauth).not.toHaveBeenCalled();
+    expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith(current);
+    expect(mocks.attempt).not.toHaveBeenCalled();
   });
   it.each([changePasswordAction, requestPasswordChangeNonceAction])('keeps wrong passwords and verification outages distinct', async (action) => {
     mocks.reauth.mockResolvedValueOnce({ ok: false, error: 'invalid_password' });

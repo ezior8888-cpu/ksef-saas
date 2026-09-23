@@ -3,11 +3,13 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 import { createClient } from '@/lib/supabase/server';
+import { checkPasswordOperationRateLimit } from '@/lib/rate-limit/password';
 
 export interface ReauthResult {
   ok: boolean;
   /** Tłumaczalny kod błędu — UI mapuje na komunikat. */
-  error?: 'not_authenticated' | 'invalid_password' | 'unknown';
+  error?: 'not_authenticated' | 'invalid_password' | 'unknown' | 'rate_limited' | 'verification_unavailable';
+  retryAfter?: number;
 }
 
 /**
@@ -23,7 +25,7 @@ export interface ReauthResult {
 export async function reauthenticateWithPassword(
   password: string,
 ): Promise<ReauthResult> {
-  if (typeof password !== 'string' || !password) {
+  if (typeof password !== 'string' || !password || password.length > 1024) {
     return { ok: false, error: 'invalid_password' };
   }
 
@@ -36,6 +38,12 @@ export async function reauthenticateWithPassword(
   if (userError || !user?.email) {
     return { ok: false, error: 'not_authenticated' };
   }
+
+  // Every caller, including GDPR, shares one authoritative account budget.
+  // Keep it here so a new sensitive action cannot omit the password-attempt limit.
+  const limit = await checkPasswordOperationRateLimit(user.id).catch(() => null);
+  if (!limit || limit.unavailable) return { ok: false, error: 'verification_unavailable' };
+  if (!limit.allowed) return { ok: false, error: 'rate_limited', retryAfter: limit.retryAfter };
 
   const verifier = createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

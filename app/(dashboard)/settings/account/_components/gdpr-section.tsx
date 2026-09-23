@@ -13,6 +13,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   mfa_required: 'Potwierdź logowanie kodem weryfikacji dwuetapowej i spróbuj ponownie.',
   session_verification_failed: 'Nie udało się zweryfikować sesji. Zaloguj się ponownie.',
   invalid_password: 'Hasło nieprawidłowe.',
+  rate_limited: 'Zbyt wiele prób potwierdzenia hasła. Odczekaj kilka minut i spróbuj ponownie.',
+  verification_unavailable: 'Nie udało się bezpiecznie potwierdzić hasła. Spróbuj ponownie później.',
   no_email: 'Twoje konto nie ma przypisanego emaila.',
   request_failed: 'Nie udało się potwierdzić operacji. Odśwież stronę i sprawdź stan żądania.',
   not_pending: 'Żądanie zostało zakończone albo usuwanie konta już się rozpoczęło. Odśwież stronę.',
