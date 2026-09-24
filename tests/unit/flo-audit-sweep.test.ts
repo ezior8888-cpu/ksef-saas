@@ -116,7 +116,7 @@ vi.mock('@/lib/supabase/admin', () => {
 });
 
 import { runKsefAuditSweep } from '@/lib/flo/functions/audit-sweep';
-import { runFloTick } from '@/lib/flo/tick';
+import { ruleRun, runFloTick } from '@/lib/flo/tick';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -177,17 +177,33 @@ beforeEach(() => {
 });
 
 describe('X-05 — kanarek', () => {
-  it('konto poza kanarkiem: zero zapytań o dokumenty i zero kart', async () => {
-    // Tak wygląda każde konto po wdrożeniu tej zmiany, dopóki ktoś świadomie
-    // nie odsłoni audytu w flo_rollout albo nie wpuści konta w flo_kind_flags.
+  it('konto poza kanarkiem: audyt liczy do trybu cichego, klient nie dostaje karty', async () => {
+    // Tak wygląda każde konto, dopóki ktoś świadomie nie odsłoni audytu
+    // w flo_rollout albo nie wpuści konta w flo_kind_flags.
+    // Do 24.09 ten test brzmiał „konto poza kanarkiem: nic nie czytamy"
+    // i pilnował BŁĘDU: bramka przed odczytem wycinała też kanarka, więc tryb
+    // cichy nie zapisał dla tej reguły ani jednego wpisu. Konto poza
+    // kanarkiem ma liczyć — klient nie dostaje karty, operator dostaje wpis.
     invoice('A', { upo: false });
     const db = createFakeDb();
 
     const result = await runKsefAuditSweep([TENANT], NOW, db.client, { readGlobalKill: noKill });
 
-    expect(result).toEqual({ created: 0, failed: 0 });
-    expect(store.queries).toBe(0);
+    expect(result).toEqual({ asked: 0, closed: 0, failed: 0 });
+    expect(store.queries).toBeGreaterThan(0);
     expect(db.tables.flo_proposals).toHaveLength(0);
+    expect(db.tables.flo_shadow).toHaveLength(1);
+  });
+
+  it('konto wypisane przez operatora: zero zapytań o dokumenty', async () => {
+    invoice('A', { upo: false });
+    const db = createFakeDb({ flo_kind_flags: [{ tenant_id: TENANT, kind: 'ksef.audit', enabled: false, reason: 'klient poprosił' }] });
+
+    const result = await runKsefAuditSweep([TENANT], NOW, db.client, { readGlobalKill: noKill });
+
+    expect(result).toEqual({ asked: 0, closed: 0, failed: 0 });
+    expect(store.queries).toBe(0);
+    expect(db.tables.flo_shadow).toHaveLength(0);
   });
 });
 
@@ -198,7 +214,7 @@ describe('X-05 — audyt naprawdę coś znajduje', () => {
 
     const result = await runKsefAuditSweep([TENANT], NOW, db.client, { readGlobalKill: noKill });
 
-    expect(result).toEqual({ created: 1, failed: 0 });
+    expect(result).toEqual({ asked: 1, closed: 0, failed: 0 });
     expect(captureException).not.toHaveBeenCalled();
     expect(db.tables.flo_proposals[0]!.topic_key).toBe('ksef.audit:2026-10');
     expect(labels(db)).toContain('Faktura FV/A bez poświadczenia odbioru');
@@ -216,7 +232,7 @@ describe('X-05 — audyt naprawdę coś znajduje', () => {
       logger: { error: (message: string) => errors.push(message) },
     });
 
-    expect(result).toEqual({ created: 1, failed: 1 });
+    expect(result).toEqual({ asked: 1, closed: 0, failed: 1 });
     expect(captureException).toHaveBeenCalledTimes(1);
     expect(captureException.mock.calls[0]![1]).toMatchObject({
       tags: { kind: 'ksef.audit', tenant_id: 'ten-bad' },
@@ -265,7 +281,7 @@ describe('X-05 — bez fałszywych zarzutów', () => {
 
     expect(store.upoBatches).toEqual([100, 100, 50]);
     // Wszystkie mają UPO i numerację bez luk — nie ma o czym pisać.
-    expect(result).toEqual({ created: 0, failed: 0 });
+    expect(result).toEqual({ asked: 0, closed: 0, failed: 0 });
   });
 });
 
@@ -282,8 +298,17 @@ describe('X-05 — w pulsie', () => {
         readInvoiceState: async () => ({ facts: {}, context: {} }),
         readGlobalKill: noKill,
       },
+      expenseMissing: { readRecentExpenses: async () => [], readGlobalKill: noKill },
+      invoiceMissing: { readIssuedInvoices: async () => [], readGlobalKill: noKill },
+      onboarding: { readAccount: async () => null, readGlobalKill: noKill },
     });
 
-    expect(result).toMatchObject({ audited: 1, failedTenants: 0 });
+    expect(ruleRun(result, 'ksef.audit')).toEqual({
+      kind: 'ksef.audit',
+      asked: 1,
+      closed: 0,
+      failed: 0,
+    });
+    expect(result.failedTenants).toBe(0);
   });
 });

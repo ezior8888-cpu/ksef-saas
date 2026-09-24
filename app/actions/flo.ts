@@ -28,7 +28,15 @@ import { revalidatePath } from 'next/cache';
 
 import { createApproval } from '@/lib/flo/approval';
 import { floDb, type FloProposalRow } from '@/lib/flo/db-types';
-import { muteKind, recordDecision } from '@/lib/flo/decisions';
+import {
+  muteKind,
+  muteSubject,
+  readDecisionRows,
+  recordSubjectDismissal,
+  unmuteKind,
+} from '@/lib/flo/decisions';
+import { buildSilencedList, type SilencedEntry } from '@/lib/flo/silenced';
+import { floKindLabel } from '@/components/flo/kind-labels';
 import { executeProposal } from '@/lib/flo/execute';
 // Skutek uboczny: rejestracja wykonawców propozycji. NIE USUWAĆ.
 import '@/lib/flo/functions';
@@ -200,9 +208,18 @@ export async function dismissProposal(
   if (error) throw new Error(error.message);
 
   if (mode === 'never') {
+    // Jasna prośba o ciszę w całym rodzaju — jedyne miejsce, w którym
+    // odpowiedź o jednej karcie zamyka wszystkie.
     await muteKind(tenantId, proposal.kind);
+  } else if (mode === 'never_subject') {
+    // „Skończyliśmy współpracę z tym klientem" — koniec pytań o TĘ sprawę,
+    // bez czekania na drugie „nie" i bez ruszania pozostałych.
+    await muteSubject(tenantId, proposal.topic_key);
   } else {
-    await recordDecision(tenantId, proposal.kind, 'dismissed');
+    // „Nie teraz" dotyczy TEJ sprawy — tej faktury, tego sprzedawcy, tego
+    // miesiąca. Wcześniej liczyło się na poziomie rodzaju, więc dwie takie
+    // odpowiedzi o dwóch RÓŻNYCH sprawach uciszały funkcję na kwartał.
+    await recordSubjectDismissal(tenantId, proposal.topic_key);
   }
 
   revalidatePath('/flo');
@@ -323,6 +340,77 @@ export async function savePrefs(next: Partial<FloPrefs>): Promise<void> {
   );
 
   if (error) throw new Error(error.message);
+  revalidatePath('/settings/flo');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Wyciszenia
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Czego agent nie mówi i dlaczego — do ekranu ustawień.
+ *
+ * Czyta PAMIĘĆ DECYZJI (`flo_decisions`), czyli to, co naprawdę zamyka mu
+ * usta. Ekran czytał wcześniej `flo_prefs.muted_kinds` — tablicę, której nic
+ * nigdy nie zapisywało, więc zawsze mówił „nic nie jest wyciszone", nawet gdy
+ * agent milczał w pięciu sprawach.
+ *
+ * Sprawy podpisujemy TYTUŁEM OSTATNIEJ KARTY, nie kluczem z bazy.
+ */
+export async function listSilenced(): Promise<SilencedEntry[]> {
+  const { tenantId } = await requireUserAndActiveOrg();
+  const db = floDb();
+  const now = new Date();
+
+  const rows = await readDecisionRows(tenantId, db);
+  const subjectKeys = rows
+    .filter((row) => row.kind.includes(':'))
+    .map((row) => row.kind);
+
+  const titles = new Map<string, string>();
+  if (subjectKeys.length > 0) {
+    const { data, error } = await db
+      .from('flo_proposals')
+      .select('topic_key, title, created_at')
+      .eq('tenant_id', tenantId)
+      .in('topic_key', subjectKeys)
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error(error.message);
+    // Pierwszy wiersz każdego tematu to ten najnowszy — kolejność z bazy.
+    for (const row of data ?? []) {
+      if (!titles.has(row.topic_key)) titles.set(row.topic_key, row.title);
+    }
+  }
+
+  return buildSilencedList({
+    rows,
+    titles,
+    labelOfKind: (kind) => floKindLabel(kind),
+    now,
+  });
+}
+
+/**
+ * „Przywróć" — agent znowu może mówić w tej sprawie albo w tym rodzaju.
+ *
+ * Jeden klucz obsługuje oba poziomy, bo pamięć decyzji trzyma je w tej samej
+ * kolumnie. Filtr po organizacji jest w zapytaniu, nie tylko w RLS.
+ */
+export async function restoreSilenced(key: string): Promise<void> {
+  const { tenantId } = await requireUserAndActiveOrg();
+
+  await unmuteKind(tenantId, key);
+
+  // Sprzątanie po starym ekranie: rodzaje wpisane ręcznie do
+  // `flo_prefs.muted_kinds` nic nie uciszały, ale zostałyby na liście.
+  const prefs = await getPrefs();
+  if (prefs.mutedKinds.some((kind) => kind === key)) {
+    await savePrefs({
+      mutedKinds: prefs.mutedKinds.filter((kind) => kind !== key),
+    });
+  }
+
   revalidatePath('/settings/flo');
 }
 

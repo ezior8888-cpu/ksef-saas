@@ -13,16 +13,39 @@
  */
 
 import { logAuditSystem } from '@/lib/audit/log-system';
+import {
+  createDailyCap,
+  readTodayCardCounts,
+  type DailyCap,
+} from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient } from '@/lib/flo/db-types';
 import { runKsefAuditSweep } from '@/lib/flo/functions/audit-sweep';
+import {
+  productionExpenseMissingSources,
+  runMissingDocsSweep,
+  type ExpenseMissingSources,
+} from '@/lib/flo/functions/expense-missing-producer';
+import {
+  productionInvoiceMissingSources,
+  runMissingInvoiceSweep,
+  type InvoiceMissingSources,
+} from '@/lib/flo/functions/invoice-missing-producer';
+import {
+  productionOnboardingSources,
+  runOnboardingSweep,
+  type OnboardingSources,
+} from '@/lib/flo/functions/onboarding-producer';
 import {
   productionPaymentConfirmSources,
   runPaymentConfirmSweep,
   type PaymentConfirmSources,
 } from '@/lib/flo/functions/payment-confirm-producer';
 import { expireStale } from '@/lib/flo/proposals';
+import { emptySweep, type FloSweepResult } from '@/lib/flo/sweep';
+import type { JobLogger } from '@/lib/jobs/logger';
 import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/admin';
+import type { FloProposalKind } from '@/types/flo';
 
 /**
  * Po tylu minutach propozycja w stanie „wykonuję” jest uznana za porzuconą.
@@ -35,17 +58,39 @@ import { createAdminClient } from '@/lib/supabase/admin';
  */
 const STUCK_AFTER_MS = 15 * 60_000;
 
+/**
+ * Co JEDNA reguła zrobiła w jednym przebiegu.
+ *
+ * `kind` to ten sam napis, co w `flo_proposals.kind`. Dzięki temu wynik
+ * pulsu daje się zestawić z tym, co naprawdę leży w bazie, bez tłumaczenia
+ * sobie w głowie, że „confirmAsked" znaczy `payment.confirm`.
+ */
+export interface FloRuleRun extends FloSweepResult {
+  kind: FloProposalKind;
+}
+
 export interface FloTickResult {
+  /** Sprzątanie — nie należy do żadnej reguły z osobna. */
   expired: number;
   released: number;
-  audited: number;
-  /** K-01: nowe pytania „zapłacił?". */
-  confirmAsked: number;
-  /** K-01: otwarte pytania zamknięte, bo faktura przestała być zaległa. */
-  confirmClosed: number;
   /**
-   * Nieudane przebiegi reguł na kontach (X-05 i K-01 liczone osobno — konto,
-   * na którym padły obie, liczy się dwa razy). Puls za każdym razem szedł dalej.
+   * Jedna pozycja na regułę, w kolejności przebiegu.
+   *
+   * Reguła, która dziś nie startowała (audyt poza pierwszym dniem miesiąca),
+   * ma tu swoje zera. Brak pozycji znaczyłby „nie ma takiej reguły", a to
+   * co innego niż „reguła przeszła i nie miała nic do powiedzenia".
+   */
+  rules: FloRuleRun[];
+  /**
+   * Ile kart zatrzymał dzienny limit (K1.4). Zero to stan normalny; liczba
+   * rosnąca z dnia na dzień znaczy, że reguły chcą mówić częściej, niż
+   * klient jest w stanie słuchać — i że limit trzyma lawinę.
+   */
+  withheld: number;
+  /**
+   * Nieudane przebiegi reguł na kontach — każda reguła liczona osobno, więc
+   * konto, na którym padły dwie, liczy się dwa razy. Puls za każdym razem
+   * szedł dalej.
    */
   failedTenants: number;
 }
@@ -60,12 +105,88 @@ export interface FloTickSources {
   /** Konta, na które puls patrzy. */
   listTenantIds: () => Promise<string[]>;
   paymentConfirm: PaymentConfirmSources;
+  expenseMissing: ExpenseMissingSources;
+  invoiceMissing: InvoiceMissingSources;
+  onboarding: OnboardingSources;
   /**
    * Globalny wyłącznik dla reguł, które nie mają własnych źródeł (X-05).
    * Wstrzykiwany tylko w testach.
    */
   readGlobalKill?: () => Promise<boolean>;
 }
+
+/** Wszystko, czego reguła potrzebuje, żeby przejść po kontach. */
+interface FloRuleContext {
+  tenantIds: string[];
+  now: Date;
+  db: FloDbClient;
+  sources: FloTickSources;
+  /** Wspólny dzienny limit nowych kart (K1.4). */
+  cap: DailyCap;
+  logger?: JobLogger;
+}
+
+interface FloRule {
+  kind: FloProposalKind;
+  /** Czy reguła startuje dziś. Brak pola znaczy: codziennie. */
+  runsToday?: (now: Date) => boolean;
+  sweep: (ctx: FloRuleContext) => Promise<FloSweepResult>;
+}
+
+/**
+ * KOLEJNOŚĆ TEJ TABLICY JEST KOLEJNOŚCIĄ PULSU i nie jest przypadkowa:
+ * najpierw fakty (co wpłynęło), potem propozycje, na końcu miękkie
+ * podpowiedzi. Agent najpierw ustala stan świata, a dopiero potem ma prawo
+ * cokolwiek na tej podstawie sugerować. Kolejność decyduje też o tym, kto
+ * dostanie ostatnie wolne miejsce pod dziennym limitem.
+ *
+ * NOWA REGUŁA TO JEDNA POZYCJA DOPISANA NA KOŃCU — nie dwa nowe pola
+ * w wyniku pulsu i nie kolejny blok w `runFloTick`. Po to ta tablica
+ * powstała (plan FLO 2, K1.3).
+ */
+const RULES: readonly FloRule[] = [
+  {
+    // X-05: audyt porządku chodzi RAZ W MIESIĄCU, nie codziennie — to
+    // przegląd papierów, a nie sprawa bieżąca. Codzienne przypominanie
+    // o tych samych zaległościach zamieniłoby go w listę zarzutów.
+    kind: 'ksef.audit',
+    runsToday: isFirstBusinessDay,
+    sweep: ({ tenantIds, now, db, sources, cap, logger }) =>
+      runKsefAuditSweep(tenantIds, now, db, {
+        readGlobalKill: sources.readGlobalKill,
+        logger,
+        cap,
+      }),
+  },
+  {
+    // K-01 (zadanie 1.1): „zapłacił?" dobę po terminie.
+    kind: 'payment.confirm',
+    sweep: ({ tenantIds, now, db, sources, cap, logger }) =>
+      runPaymentConfirmSweep(tenantIds, now, db, sources.paymentConfirm, logger, cap),
+  },
+  {
+    // W-04 (K1.9): „co miesiąc masz tu koszt, a w tym miesiącu nie widzę
+    // dokumentu". Sama reguła milczy przed dziesiątym dniem miesiąca.
+    kind: 'expense.missing',
+    sweep: ({ tenantIds, now, db, sources, cap, logger }) =>
+      runMissingDocsSweep(tenantIds, now, db, sources.expenseMissing, logger, cap),
+  },
+  {
+    // P-03 (K1.10): „zwykle fakturujesz ich około 10., w tym miesiącu nie
+    // widzę faktury". TYLKO pytanie — szkice to P-01/P-02 i osobna decyzja.
+    kind: 'invoice.draft',
+    sweep: ({ tenantIds, now, db, sources, cap, logger }) =>
+      runMissingInvoiceSweep(tenantIds, now, db, sources.invoiceMissing, logger, cap),
+  },
+  {
+    // O-01 (K1.11): pierwsze kroki na nowym koncie. NA KOŃCU, bo to
+    // najmiększa z reguł: prowadzenie za rękę ustępuje wszystkiemu, co
+    // dotyczy pieniędzy albo terminów.
+    kind: 'onboarding.step',
+    sweep: ({ tenantIds, now, db, sources, cap, logger }) =>
+      runOnboardingSweep(tenantIds, now, db, sources.onboarding, logger, cap),
+  },
+];
 
 export async function runFloTick(
   ctx?: JobContext,
@@ -76,55 +197,91 @@ export async function runFloTick(
   const expired = await expireStale(now, db);
   const released = await releaseStuck(now, db);
 
-  // ── reguły funkcji ─────────────────────────────────────────
-  //
   // Jedna lista kont dla wszystkich reguł. Audyt miał kiedyś własne
   // `limit(200)` bez sortowania — konta ponad dwusetne mogły go nie dostać
   // nigdy.
   const tenantIds = await sources.listTenantIds();
 
-  // Audyt porządku (X-05) chodzi RAZ W MIESIĄCU, nie codziennie: to jest
-  // przegląd papierów, a nie sprawa bieżąca. Codzienne przypominanie o tych
-  // samych zaległościach zamieniłoby go w listę zarzutów.
-  const audit = isFirstBusinessDay(now)
-    ? await runKsefAuditSweep(tenantIds, now, db, {
-        readGlobalKill: sources.readGlobalKill,
-        logger: ctx?.logger,
-      })
-    : { created: 0, failed: 0 };
+  // Jeden limit na CAŁY przebieg, wspólny dla wszystkich reguł (K1.4).
+  // Osobne limity per reguła nie zatrzymałyby lawiny, bo to właśnie suma
+  // reguł zalewa konto. Punkt wyjścia to karty, które konto dostało już
+  // dzisiaj — inaczej drugie uruchomienie pulsu dałoby drugą porcję.
+  const cap = createDailyCap(await readTodayCardCounts(tenantIds, now, db));
 
-  // K-01 (zadanie 1.1 planu FLO 2): „zapłacił?" dobę po terminie.
-  // Idzie PRZED regułami, które coś proponują: agent najpierw ustala, co
-  // wpłynęło, a dopiero potem ma prawo cokolwiek na tej podstawie sugerować.
-  const confirm = await runPaymentConfirmSweep(
+  const ruleCtx: FloRuleContext = {
     tenantIds,
     now,
     db,
-    sources.paymentConfirm,
-    ctx?.logger,
-  );
+    sources,
+    cap,
+    logger: ctx?.logger,
+  };
 
-  // ── miejsce na kolejne reguły ──────────────────────────────
-  //
-  // W-04 szuka zgubionych dokumentów, P-03 brakującej faktury, O-01
-  // prowadzi nowe konto. Kolejność ma znaczenie (najpierw fakty, potem
-  // propozycje, na końcu miękkie podpowiedzi), więc nowe reguły dopisujemy
-  // NA KOŃCU, a nie wciskamy między istniejące.
+  const rules: FloRuleRun[] = [];
+  for (const rule of RULES) {
+    const startsToday = rule.runsToday?.(now) ?? true;
+    const run = startsToday ? await rule.sweep(ruleCtx) : emptySweep();
+    rules.push({ kind: rule.kind, ...run });
+  }
 
-  return {
+  const result: FloTickResult = {
     expired,
     released,
-    audited: audit.created,
-    confirmAsked: confirm.asked,
-    confirmClosed: confirm.closed,
-    failedTenants: audit.failed + confirm.failed,
+    rules,
+    withheld: cap.withheld,
+    failedTenants: rules.reduce((sum, rule) => sum + rule.failed, 0),
   };
+
+  // Do tej pory te liczby nie trafiały NIGDZIE: worker ignoruje zwrotkę
+  // handlera, więc wynik pulsu czytały wyłącznie testy. Jedna linia na
+  // stdout to całe okno operatora na to, co agent zrobił w nocy.
+  ctx?.logger.info(`[flo.tick] ${summarizeTick(result)}`);
+
+  return result;
+}
+
+/**
+ * Wynik jednej reguły — zera, gdy reguła w tym przebiegu nie startowała.
+ *
+ * Do czytania wyniku bez grzebania w tablicy; używają tego testy i wszystko,
+ * co interesuje jedna konkretna reguła.
+ */
+export function ruleRun(
+  result: FloTickResult,
+  kind: FloProposalKind,
+): FloRuleRun {
+  return result.rules.find((rule) => rule.kind === kind) ?? { kind, ...emptySweep() };
+}
+
+/**
+ * Jedna linia do logów workera — funkcja czysta, więc da się ją testować
+ * bez odpalania pulsu.
+ *
+ * Reguły, które nic nie zrobiły, są pomijane: linia ma być do przeczytania
+ * jednym rzutem oka, a nie listą dwunastu zer. Sprzątanie zostaje zawsze —
+ * jest dowodem, że puls w ogóle się odbył.
+ */
+export function summarizeTick(result: FloTickResult): string {
+  const parts = [`wygasłe ${result.expired}`, `podniesione ${result.released}`];
+
+  for (const rule of result.rules) {
+    if (rule.asked === 0 && rule.closed === 0 && rule.failed === 0) continue;
+    const awarie = rule.failed > 0 ? ` (awarie ${rule.failed})` : '';
+    parts.push(`${rule.kind} +${rule.asked}/-${rule.closed}${awarie}`);
+  }
+
+  if (result.withheld > 0) parts.push(`limit zatrzymał ${result.withheld}`);
+
+  return parts.join(' · ');
 }
 
 export function productionTickSources(): FloTickSources {
   return {
     listTenantIds: readActiveTenantIds,
     paymentConfirm: productionPaymentConfirmSources(),
+    expenseMissing: productionExpenseMissingSources(),
+    invoiceMissing: productionInvoiceMissingSources(),
+    onboarding: productionOnboardingSources(),
   };
 }
 

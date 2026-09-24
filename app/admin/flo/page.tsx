@@ -1,14 +1,22 @@
 import { floKindLabel } from '@/components/flo/kind-labels';
-import { blockedKinds } from '@/lib/flo/flags';
+import { blockedKinds, kindStatus } from '@/lib/flo/flags';
 import {
   COST_HARD_LIMIT_PLN,
   COST_TARGET_PLN,
   readCostMetrics,
   readProposalMetrics,
 } from '@/lib/flo/metrics';
-import { readRollout, ROLLOUT_ORDER } from '@/lib/flo/rollout';
+import {
+  canSetStage,
+  nextStage as nextRolloutStage,
+  readRollout,
+  ROLLOUT_ORDER,
+  type RolloutStage,
+} from '@/lib/flo/rollout';
 import { accuracyByKind, isReadyToReveal } from '@/lib/flo/shadow';
 import { cn } from '@/lib/utils';
+
+import { RolloutControls } from './_components/rollout-controls';
 
 /**
  * Panel operatora agenta (krok 35 toru B).
@@ -38,11 +46,40 @@ export default async function AdminFloPage() {
     accuracyByKind(),
   ]);
 
+  // Werdykt liczymy TUTAJ, a nie w przycisku: to ta sama funkcja czysta,
+  // którą sprawdzi akcja przy zapisie. Przeglądarka dostaje gotową
+  // odpowiedź „wolno / nie wolno i dlaczego", zamiast zgadywać.
+  const now = new Date();
   const rollouts = await Promise.all(
-    ROLLOUT_ORDER.map(async (entry) => ({
-      kind: entry.kind,
-      state: await readRollout(entry.kind),
-    })),
+    ROLLOUT_ORDER.map(async (entry) => {
+      const state = await readRollout(entry.kind);
+      const stage: RolloutStage = state?.stage ?? 0;
+      const status = kindStatus(entry.kind);
+
+      // Przy 100% nie ma dokąd rozwijać — i nie ma o czym informować.
+      if (stage === 100) {
+        return { kind: entry.kind, state, stage, nextStage: null, blocker: null };
+      }
+
+      const target: RolloutStage = stage === 0 ? 10 : nextRolloutStage(stage);
+      const verdict = canSetStage({
+        state,
+        kind: entry.kind,
+        to: target,
+        now,
+        blockedInCode: status.enabled
+          ? null
+          : (status.note ?? status.reason ?? 'brak powodu'),
+      });
+
+      return {
+        kind: entry.kind,
+        state,
+        stage,
+        nextStage: verdict.allowed ? verdict.to : null,
+        blocker: verdict.allowed ? null : verdict.detail,
+      };
+    }),
   );
 
   const totals = rows.reduce(
@@ -130,6 +167,7 @@ export default async function AdminFloPage() {
               <tr>
                 <th className="p-2 font-medium">Funkcja</th>
                 <th className="p-2 font-medium">Promień</th>
+                <th className="p-2 text-right font-medium">Zebrane</th>
                 <th className="p-2 text-right font-medium">Rozstrzygnięte</th>
                 <th className="p-2 text-right font-medium">Trafność</th>
                 <th className="p-2 font-medium">Werdykt</th>
@@ -138,7 +176,7 @@ export default async function AdminFloPage() {
             <tbody>
               {accuracy.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-4 text-muted-foreground">
+                  <td colSpan={6} className="p-4 text-muted-foreground">
                     Tryb cichy nie zebrał jeszcze ani jednej propozycji.
                   </td>
                 </tr>
@@ -150,6 +188,9 @@ export default async function AdminFloPage() {
                       <td className="p-2">{floKindLabel(stat.kind)}</td>
                       <td className="p-2 tabular-nums">
                         {stat.radius}
+                      </td>
+                      <td className="p-2 text-right tabular-nums">
+                        {stat.settled + stat.pending}
                       </td>
                       <td className="p-2 text-right tabular-nums">
                         {stat.settled}
@@ -177,25 +218,33 @@ export default async function AdminFloPage() {
         </p>
 
         <ul className="space-y-2">
-          {rollouts.map(({ kind, state }) => (
-            <li
-              key={kind}
-              className="flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm"
-            >
-              <span className="min-w-0 flex-1">{floKindLabel(kind)}</span>
-              <span className="tabular-nums text-muted-foreground">
-                {state ? `${state.stage}% kont` : 'nieodsłonięte'}
-              </span>
-              {state?.halted ? (
-                <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
-                  wstrzymane: {state.haltReason ?? 'skargi'}
+          {rollouts.map(({ kind, state, stage, nextStage, blocker }) => (
+            <li key={kind} className="rounded-xl border p-3 text-sm">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="min-w-0 flex-1">{floKindLabel(kind)}</span>
+                <span className="tabular-nums text-muted-foreground">
+                  {state ? `${state.stage}% kont` : 'nieodsłonięte'}
                 </span>
-              ) : null}
-              {state && state.complaints > 0 ? (
-                <span className="text-xs text-muted-foreground">
-                  skargi: {state.complaints}
-                </span>
-              ) : null}
+                {state?.halted ? (
+                  <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
+                    wstrzymane: {state.haltReason ?? 'skargi'}
+                  </span>
+                ) : null}
+                {state && state.complaints > 0 ? (
+                  <span className="text-xs text-muted-foreground">
+                    skargi: {state.complaints}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="mt-2">
+                <RolloutControls
+                  kind={kind}
+                  stage={stage}
+                  nextStage={nextStage}
+                  advanceBlocker={blocker}
+                />
+              </div>
             </li>
           ))}
         </ul>

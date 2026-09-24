@@ -245,7 +245,12 @@ export function buildMissingInvoiceProposal(input: {
     kind: 'invoice.draft',
     // Klucz BEZ okresu: pytanie o zakończenie współpracy ma paść raz
     // w życiu profilu, a nie co miesiąc.
-    topicKey: `invoice.missing:${input.missing.profileId}`,
+    //
+    // Prefiks `invoice.draft:` NIE jest ozdobą — pamięć decyzji rozpoznaje
+    // po nim, że to sprawa tego rodzaju (patrz `decisions.ts`). Bez niego
+    // wyciszenie jednego klienta nie liczyłoby się do niczego, a ekran
+    // ustawień pokazałby „invoice.missing" jako rodzaj sprawy.
+    topicKey: `invoice.draft:missing:${input.missing.profileId}`,
     title: `${input.missing.contractorName} — brak faktury w tym miesiącu`,
     // NIGDY „zapomniałeś". Klient mógł wystawić ją w innym programie, na
     // papierze albo przez biuro — a posądzanie go o niekompetencję przez
@@ -264,7 +269,10 @@ export function buildMissingInvoiceProposal(input: {
       // a „nie teraz", z których żaden nie jest prawdą.
       secondary: [
         { label: 'Wystawiona poza FaktFlow', intent: 'dismiss' },
-        { label: 'Skończyliśmy współpracę', intent: 'mute' },
+        // `scope: 'subject'` — „skończyliśmy współpracę" dotyczy TEGO
+        // kontrahenta, nie wszystkich szkiców faktur. Bez tego jedna
+        // zakończona współpraca zamykałaby funkcję dla wszystkich klientów.
+        { label: 'Skończyliśmy współpracę', intent: 'mute', scope: 'subject' },
       ],
       primaryLabel: 'Wystaw fakturę',
       // Ta karta NIE MA PRAWA do powiadomienia push ani do maila.

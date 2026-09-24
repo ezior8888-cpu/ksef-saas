@@ -25,14 +25,15 @@
  * kanarkiem nie kosztuje ani jednego zapytania o faktury.
  */
 
-import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
 import { buildAuditProposal, findAuditIssues } from '@/lib/flo/functions/ksef-audit';
-import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
+import { isKindEnabledForTenant, shouldCompute } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
+import { runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/types/database';
@@ -50,11 +51,6 @@ const DOCUMENT_LIMIT = 500;
  */
 const UPO_CHUNK = 100;
 
-export interface AuditSweepResult {
-  created: number;
-  /** Konta, na których audyt padł. Pozostałe przeszły normalnie. */
-  failed: number;
-}
 
 export async function runKsefAuditSweep(
   tenantIds: readonly string[],
@@ -64,29 +60,33 @@ export async function runKsefAuditSweep(
     /** Globalny wyłącznik — wstrzykiwany tylko w testach. */
     readGlobalKill?: () => Promise<boolean>;
     logger?: Pick<JobLogger, 'error'>;
+    cap?: DailyCap;
   } = {},
-): Promise<AuditSweepResult> {
+): Promise<FloSweepResult> {
   const periodKey = now.toISOString().slice(0, 7);
-  const result: AuditSweepResult = { created: 0, failed: 0 };
 
-  for (const tenantId of tenantIds) {
-    try {
-      if (await auditTenant(tenantId, periodKey, now, db, options.readGlobalKill)) {
-        result.created++;
-      }
-    } catch (e) {
-      result.failed++;
-      Sentry.captureException(e, {
-        tags: { job: 'flo-tick', kind: KIND, tenant_id: tenantId },
-      });
-      const message = e instanceof Error ? e.message : 'nieznany błąd';
-      (options.logger ?? console).error(
-        `[flo.tick] ${KIND} padło na koncie ${tenantId}: ${message}`,
+  // Audyt chodzi raz w miesiącu, ale trafia w ten sam poranek co reguły
+  // codzienne — więc liczy się do tego samego dziennego limitu (K1.4).
+  const cap = options.cap ?? unlimitedCap();
+
+  return runSweep(
+    KIND,
+    tenantIds,
+    async (tenantId) => {
+      const created = await auditTenant(
+        tenantId,
+        periodKey,
+        now,
+        db,
+        cap,
+        options.readGlobalKill,
       );
-    }
-  }
-
-  return result;
+      // Audyt niczego nie zamyka sam: przegląd papierów kończy człowiek,
+      // a karta wygasa normalną drogą.
+      return { asked: created ? 1 : 0 };
+    },
+    options.logger,
+  );
 }
 
 /** Audyt jednego konta. `true`, gdy powstała nowa karta. */
@@ -95,10 +95,11 @@ async function auditTenant(
   periodKey: string,
   now: Date,
   db: FloDbClient,
+  cap: DailyCap,
   readGlobalKill?: () => Promise<boolean>,
 ): Promise<boolean> {
   const verdict = await isKindEnabledForTenant(KIND, tenantId, db, readGlobalKill);
-  if (!verdict.enabled) return false;
+  if (!shouldCompute(verdict)) return false;
   if (await isMuted(tenantId, KIND, now, db)) return false;
 
   const supabase: SupabaseClient<Database> = createAdminClient();
@@ -180,7 +181,13 @@ async function auditTenant(
   const proposal = buildAuditProposal({ tenantId, issues, periodKey, now });
   if (!proposal) return false;
 
+  // Limit sprawdzamy dopiero TUTAJ, gdy wiadomo, że karta naprawdę by
+  // powstała. Wcześniej licznik zatrzymanych kart rósłby przy kontach, które
+  // i tak nie miały nic do zgłoszenia.
+  if (!cap.canAsk(tenantId)) return false;
+
   const created = await createProposal(proposal, db, readGlobalKill);
+  if (created.status === 'created') cap.spend(tenantId);
   return created.status === 'created';
 }
 

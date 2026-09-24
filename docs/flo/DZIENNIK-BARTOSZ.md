@@ -3199,3 +3199,1010 @@ czyta `ROLLOUT_ORDER`.
   `enabled = true`, powód) dla 1–2 kont, najbliższy pierwszy dzień roboczy
   miesiąca, obejrzeć karty. Dopiero potem `flo_rollout` 10%.
 - Załącznik A planu: X-05 z 🟡 na „⚠️ nie działał do 1.1c, teraz w kanarku 0".
+
+---
+
+## 2026-09-23 · Plan FLO 2, K1.8 — W-03 pyta o regułę po drugim koszcie
+
+Gałąź `claude/k1-8-regula-w03`, od świeżego `main` (`b16b062` — 1.1…1.1c są
+już scalone). Funkcje czyste W-03 istniały od kroku 20; nikt nie tworzył karty.
+
+### Gdzie siedzi producent i dlaczego nie w pulsie
+
+W wykonawcy W-01, zaraz po tym, jak człowiek potwierdzi kategorię kosztu.
+Dwa powody:
+
+1. Reguła ma się brać z **decyzji człowieka**, a nie z odczytu OCR. Karta
+   „zawsze tak księgować?" po kliknięciu „Zgadza się" opiera się na czymś,
+   co klient właśnie zatwierdził.
+2. Pytanie pada, gdy ma tę sprawę w głowie — nie nazajutrz o 7:30.
+
+### Cztery powody, dla których agent MILCZY mimo drugiego wystąpienia
+
+| Powód | Dlaczego |
+|---|---|
+| koszt bez kolumny księgi | nie ma czego utrwalać |
+| **historia niespójna** — ten sprzedawca był już księgowany inaczej | reguła zgadywałaby, które z dwóch księgowań jest tym właściwym, i myliłaby się cicho przez miesiące |
+| reguła dla tego sprzedawcy już istnieje | drugie pytanie o to samo; szukamy po NIP-ie **oraz** po nazwie, bo reguła mogła powstać, zanim OCR odczytał NIP |
+| bramki (wyłącznik, kanarek, wyciszenie) | sprawdzane PRZED odczytem kosztów — konto poza kanarkiem nie kosztuje zapytań |
+
+### Karta dostaje własne odpowiedzi
+
+Wariant `choice` bez etykiet w ładunku dałby „Tak" i „Nie teraz" — a to jest
+pytanie o trwałą decyzję, nie o odłożenie sprawy. Stąd „Tak, zawsze tak
+księguj" i „Pytaj za każdym razem", zgodnie z komentarzem w `kind-variant.ts`.
+To ta sama pułapka, która w 1.1a wyszła przy K-01.
+
+### Awaria pytania nie psuje potwierdzenia kosztu
+
+Wywołanie jest w osobnym `try`. Gdyby wywróciło wykonanie, człowiek dostałby
+„nie udało mi się tego dokończyć" przy koszcie, który JEST już oznaczony jako
+przejrzany, i tę samą kartę do kliknięcia po raz drugi. Błąd idzie do Sentry
+(`job`, `kind`, `tenant_id`) i do logów; wynik („created", „too_few",
+„failed"…) ląduje w `details` wykonania, więc widać go w dzienniku audytowym.
+
+### Czego świadomie NIE zrobiłem
+
+- **Nie ruszałem licznika odrzuceń.** „Pytaj za każdym razem" idzie dziś jako
+  zwykłe odrzucenie, więc dwie takie odpowiedzi — choćby u RÓŻNYCH sprzedawców
+  — wyciszają W-03 na 90 dni. Formalnie to nie regresja (tak działa
+  `decisions.ts` dla wszystkich rodzajów), ale przy tej funkcji „nie chcę
+  reguły u Adobe" nie znaczy „nie pytaj mnie nigdy o żadne reguły".
+  **Do decyzji razem z tym samym problemem w K-01 („Jeszcze nie").**
+- **Nie sprawdzam, czy reguła faktycznie jest stosowana przy kolejnych
+  kosztach** — `ruleApplies` i widełki istnieją, ale wpięcie w ścieżkę OCR to
+  osobna sprawa, poza K1.8.
+- Migracji, wdrożenia, zmian w `types/flo.ts`.
+
+### Weryfikacja
+
+- `tests/unit/flo-expense-rule-producer.test.ts` — 11 testów na atrapie bazy
+  (kiedy pytamy, kiedy milczymy, bramki, szukanie reguły po NIP-ie i nazwie).
+- `tests/unit/flo-expense-review-rule-hook.test.ts` — 2 testy wpięcia: czy
+  potwierdzenie kosztu w ogóle pyta o regułę i czy awaria pytania nie psuje
+  potwierdzenia.
+- **Test mutacyjny 6/6:** bramki po odczycie, niespójna historia ignorowana,
+  istniejąca reguła ignorowana, karta bez własnych etykiet, szukanie reguły
+  tylko po NIP-ie, wykonawca bez izolacji awarii. Dwie wieloliniowe mutacje
+  najpierw się nie nałożyły (CRLF) — powtórzone jednoliniowo, z kontrolą,
+  czy plik naprawdę się zmienił.
+- `tsc --noEmit` czysto; eslint na zmienionych plikach 0 błędów, 0 ostrzeżeń.
+- vitest **1212 zielonych, 7 pominiętych, zero czerwonych** (73 pliki + 1
+  pominięty). Test RLS pomija się sam od poprawki CI z 19.09, więc cały
+  przebieg kończy się wreszcie kodem 0. W1 zielony.
+
+### Następny krok
+
+- K1.9 (W-04, zgubione dokumenty) albo K1.10 (P-03, brakująca faktura) —
+  oba w pulsie, więc warto przy nich zrobić od razu wspólny cap dzienny
+  z K1.4 i ujednolicić wynik `runFloTick` (K1.3).
+- W-03 zostaje w kanarku na etapie 0, jak K-01 i X-05.
+
+---
+
+## 2026-09-23 · Plan FLO 2, K1.9 — W-04 szuka zgubionych dokumentów
+
+Gałąź `claude/k1-9-zgubione-dokumenty`, na bazie K1.8 (PR #18 — inaczej
+wpisy w tym dzienniku kłóciłyby się przy scalaniu). Funkcje czyste W-04
+istniały od kroku 21, nikt ich nie wołał.
+
+### Co robi
+
+Raz dziennie, od dziesiątego dnia miesiąca: wykryj koszty powtarzające się
+miesiąc w miesiąc (trzy różne miesiące, podobne kwoty), sprawdź, których nie
+ma w tym miesiącu, i zapytaj JEDNĄ kartą — o dokument, nigdy o kwotę do
+dopisania. Tę zasadę językową pilnuje funkcja czysta i osobny test; producent
+niczego w niej nie zmienia.
+
+### Cztery zasady producenta
+
+| # | Zasada | Dlaczego |
+|---|---|---|
+| 1 | nie pytamy przed dziesiątym | faktura za hosting potrafi przyjść piątego; warunek jest PRZED bramkami, więc przez dziewięć dni miesiąca puls nie czyta nawet flag |
+| 2 | jedna karta na miesiąc | klucz `expense.missing:RRRR-MM`; kolejne przebiegi aktualizują ją, nie stawiają nowej, i NIE przesuwają terminu ważności |
+| 3 | **karta znika, gdy dokument się znajdzie** | klient wgrywa fakturę — przy najbliższym przebiegu otwarte pytanie jest zamykane (`stale`). Pytanie o coś, co system już widzi, traktuje klienta jak niekompetentnego |
+| 4 | konto wyłączone nie kosztuje odczytu kosztów | bramki przed zapytaniem, jak w K-01 i X-05 |
+
+Zatwierdzonej karty nie ruszamy — człowiek już się zgodził.
+
+### ⚠️ Decyzja: W-04 wchodzi do kanarka
+
+`expense.missing` NIE był na liście kanarkowej, więc samo wpięcie producenta
+oznaczałoby, że po wdrożeniu pierwszego dziesiątego dnia miesiąca pytanie
+dostają NARAZ wszystkie konta — a tej karty nikt jeszcze nie widział na
+prawdziwych danych. To ta sama sytuacja co X-05 w 1.1c, więc ta sama decyzja:
+`{ feature: 'W-04', kind: 'expense.missing' }` w `ROLLOUT_ORDER`, etap 0.
+
+**Do potwierdzenia przez Bartosza i Igora.** Jeśli W-04 ma iść od razu do
+wszystkich, wystarczy usunąć tę jedną pozycję z listy.
+
+### Czego świadomie NIE zrobiłem
+
+- **Wspólnego capu dziennego (K1.4).** Dziś każdy rodzaj pilnuje się sam:
+  K-01 jedna karta, W-04 jedna karta na miesiąc. Przy trzecim producencie
+  w pulsie (P-03, O-01) limit wspólny przestanie być abstrakcją na zapas.
+- **Ujednolicenia wyniku `runFloTick` (K1.3)** — dołożyłem dwa pola
+  (`missingDocsAsked`, `missingDocsClosed`) w istniejącej, płaskiej
+  konwencji. Przerabianie na `{ kind, created, updated, error }` przy okazji
+  zrobiłoby z tego PR-a dwie zmiany naraz.
+- **Zapominania pojedynczego sprzedawcy.** `sellersToForget` z W-04 istnieje,
+  ale nic go nie woła — „Nigdy więcej takich" wycisza dziś CAŁY rodzaj, a nie
+  jeden abonament. To ten sam wątek co „Pytaj za każdym razem" w K1.8
+  i „Jeszcze nie" w K-01: trzy funkcje, jeden brakujący mechanizm.
+- Migracji, wdrożenia, zmian w `types/flo.ts`.
+
+### Weryfikacja
+
+- `tests/unit/flo-expense-missing-producer.test.ts` — 11 testów: kiedy
+  milczymy (przed dziesiątym, dokument jest, poza kanarkiem, wyciszone),
+  kiedy pytamy, zamykanie po znalezieniu dokumentu, przebieg po kontach
+  z izolacją błędu i wpięcie w puls.
+- **Test mutacyjny 7/7** — ale jedna mutacja („zamykanie także zatwierdzonych
+  kart") PRZEŻYŁA pierwsze podejście i to jest ciekawsze niż sam wynik:
+  zamykanie ma dwie warstwy ochrony, warunek w kodzie i `status = 'open'`
+  w samym zapisie, więc usunięcie jednej nie zmieniało zachowania. Test
+  sprawdzał skutek, nie próbę. Dociśnięty o „liczba zapisów ma zostać zerem"
+  — i wtedy mutacja pada.
+- `tsc --noEmit` czysto; eslint na zmienionych plikach 0 błędów, 0 ostrzeżeń.
+- vitest **1223 zielone, 7 pominiętych, zero czerwonych** (74 pliki
+  + 1 pominięty). W1 zielony.
+
+### Następny krok
+
+- K1.10 (P-03 — brakująca faktura) albo K1.11 (O-01 — onboarding); przy
+  którymkolwiek warto wziąć K1.4 (wspólny cap) i K1.3 (wynik pulsu).
+- Osobno, dla trzech funkcji naraz: wyciszanie POJEDYNCZEJ sprawy zamiast
+  całego rodzaju.
+
+---
+
+## 2026-09-23 · K2.16 — cisza dotyczy SPRAWY, nie całego rodzaju
+
+Gałąź `claude/k2-16-cisza-sprawy`, na bazie K1.9. Zrobione poza kolejnością
+planu, bo ten sam brak wyszedł przy trzech funkcjach z rzędu (K-01, K1.8,
+K1.9) — to już nie drobiazg jednej karty, tylko brakujący mechanizm.
+
+### Co było źle
+
+`flo_decisions` pamiętało decyzje wyłącznie po RODZAJU. „Nie teraz" przy
+dwóch RÓŻNYCH fakturach albo „Pytaj za każdym razem" przy dwóch RÓŻNYCH
+sprzedawcach dawało `dismissed = 2` na rodzaju, czyli **ciszę na kwartał
+w całej funkcji**. Klient odpowiadał o dwóch konkretnych sprawach, a agent
+rozumiał to jako „nie pytaj mnie o nic takiego".
+
+### Trzy poziomy ciszy
+
+| Poziom | Co ucisza | Kiedy | Skąd wiemy |
+|---|---|---|---|
+| **sprawa** | jedną fakturę, sprzedawcę, miesiąc | dwa „nie" o TEJ SAMEJ sprawie | z tego, co człowiek kliknął |
+| **rodzaj** | wszystkie karty rodzaju | „Nigdy więcej takich" | jasna prośba |
+| **tłum** | rodzaj, tymczasowo | 4 różne sprawy odrzucone w 30 dni | nasz domysł — więc sam wygasa |
+
+Kolejność sprawdzania jest treścią: najpierw to, co człowiek powiedział
+wprost, na końcu nasz domysł.
+
+### Zapis BEZ MIGRACJI
+
+Sprawa mieszka w tej samej tabeli co rodzaj, pod kluczem tematu karty
+(`topic_key`), który zawsze zaczyna się od nazwy rodzaju i dwukropka
+(`expense.rule:Adobe`). Kolumna `kind` to zwykły TEXT bez ograniczeń, a klucz
+główny `(tenant_id, kind)` daje dokładnie tę unikalność, o którą chodzi.
+Sprawdzone dla wszystkich rodzajów: konwencja `rodzaj:cokolwiek` trzyma się
+w każdym builderze.
+
+Koszt: `listMutedKinds` musiało zacząć odsiewać wiersze spraw, bo inaczej
+ekran ustawień pokazałby klientowi „expense.rule:Adobe" jako rodzaj sprawy.
+Doszło `listMutedSubjects`.
+
+### Zmiany
+
+- `decisions.ts`: `silenceVerdict` (czysta), `readDecisionRows`, `isSilenced`,
+  `recordSubjectDismissal`, `muteSubject`, poprawione `listMutedKinds`.
+- `proposals.ts`: bramka pyta o ciszę JEDNYM odczytem i patrzy na oba poziomy.
+- `app/actions/flo.ts`: „nie teraz" zapisuje się po kluczu tematu; „nigdy
+  więcej takich" dalej ucisza rodzaj.
+- `execute.ts`: przyjęcie zapisuje się też na sprawie — zdejmuje jej ciszę
+  i wyklucza ją z reguły tłumu.
+
+### Do decyzji
+
+- **Progi tłumu**: 4 sprawy w 30 dni. Wzięte z sufitu w tym sensie, że nie ma
+  na czym ich oprzeć przed alfą — trzy to jeszcze „akurat te trzy faktury",
+  pięć to seria. Do zmiany jedną stałą.
+- **Cisza sprawy trwa 90 dni** (`MUTE_DAYS`, wspólne z rodzajem). Przy
+  fakturze to dużo: po kwartale sprawa zwykle jest nieaktualna, więc
+  praktycznie znaczy „nigdy". Zostawione wspólne, żeby nie mnożyć progów.
+- **Interfejs nie pokazuje jeszcze wyciszonych spraw** — `listMutedSubjects`
+  istnieje, ekran ustawień go nie woła. Bez tego klient nie cofnie ciszy
+  w sprawie inaczej niż czekaniem.
+
+### Weryfikacja
+
+- `tests/unit/flo-silence.test.ts` — 13 testów (reguła + cała droga od
+  kliknięcia do następnej karty).
+- `tests/unit/flo-actions-dismiss.test.ts` — 6 testów akcji serwerowej.
+  **Ten plik powstał przez test mutacyjny:** podmiana `proposal.topic_key`
+  na `proposal.kind` w `dismissProposal` przechodziła bez jednego czerwonego
+  testu, bo reguła miała własne testy, ale nikt nie sprawdzał, CZYM woła ją
+  akcja. Po dopisaniu pliku ta mutacja wywala trzy testy.
+- Test mutacyjny **6/6**: bramka tylko po rodzaju, zapis po rodzaju zamiast
+  po sprawie, wyłączona reguła tłumu, tłum bez okna czasowego, tłum liczący
+  inne rodzaje, ustawienia bez odsiewania spraw.
+- `tsc --noEmit` czysto; eslint 0/0; vitest **1242 zielone, 7 pominiętych,
+  zero czerwonych**.
+
+### Następny krok
+
+- Ekran ustawień: lista wyciszonych spraw z możliwością cofnięcia.
+- Powrót do planu: K1.10 (P-03) albo K1.11 (O-01).
+
+---
+
+## 2026-09-23 · K2.16 c.d. — ekran ustawień pokazuje PRAWDZIWE wyciszenia
+
+Gałąź `claude/k2-16-ekran-wyciszen`, na bazie poprzedniego kroku.
+
+### Ekran kłamał, i to w obie strony
+
+„Wyciszone sprawy" czytało `flo_prefs.muted_kinds` — tablicę, której **NIC
+nigdy nie zapisywało**. Prawdziwa cisza mieszka w `flo_decisions`. Skutek:
+
+| Co robił klient | Co widział |
+|---|---|
+| dwa razy odrzucił sprawę, agent zamilkł | „Nic nie jest wyciszone" |
+| kliknął „Przywróć" | nic — przycisk zmieniał tablicę, której nikt nie czyta |
+
+To nie jest usterka wyglądu: klient nie miał jak cofnąć ciszy, a jedyny ekran,
+który mógł mu to wytłumaczyć, twierdził, że wszystko jest w porządku.
+
+### Co teraz widać
+
+- **Dwa poziomy**: „Cały rodzaj" i pojedyncza sprawa. Sprawa podpisana
+  TYTUŁEM OSTATNIEJ KARTY („Nowak zapłacił za fakturę 5/2026?"), nigdy
+  kluczem z bazy. Gdy karta zdążyła zniknąć — „…: jedna sprawa".
+- **Do kiedy** cisza trwa („do 21 grudnia"), bo inaczej wygląda na wieczną.
+- **„Przywróć"** woła `restoreSilenced`, czyli realnie zdejmuje ciszę; przy
+  niepowodzeniu wpis wraca na listę z uczciwym komunikatem.
+
+Reguła tłumu (cztery różne sprawy w miesiąc) świadomie NIE ma wpisu na liście:
+nie zapisujemy jej nigdzie, sama wygasa, a pokazanie czegoś, czego nie da się
+przywrócić przyciskiem, byłoby gorsze od niepokazania.
+
+### Znalezione przy okazji — BEZPIECZEŃSTWO
+
+Klucz tematu bywa **wspólny między kontami**: `expense.missing:2026-09`
+wygląda tak samo u każdego klienta. Odczyt tytułów bez filtra po koncie
+pokazałby na liście tytuł karty innej firmy. Filtr jest, a od teraz pilnuje
+go test („tytuł sprawy nie może przyjść z cudzej karty") — dopisany dlatego,
+że mutacja usuwająca ten filtr początkowo nie ruszyła ani jednego testu.
+
+### Zmiany
+
+- `lib/flo/silenced.ts` (nowy): `buildSilencedList` (czysta), `kindOfKey`.
+- `app/actions/flo.ts`: `listSilenced`, `restoreSilenced` (sprząta też po
+  starej tablicy w `flo_prefs`).
+- ekran ustawień: strona dokłada listę, formularz ją rysuje i przywraca.
+
+### Czego świadomie NIE zrobiłem
+
+- **Nie usunąłem `flo_prefs.muted_kinds`.** Kolumna zostaje (usunięcie to
+  migracja), a `savePrefs` dalej ją zapisuje. Ekran jej już nie czyta,
+  `restoreSilenced` sprząta z niej wpisy. Do skreślenia przy najbliższej
+  migracji porządkowej.
+- **Nie klikałem tego na żywo** — testy renderują komponent do HTML-a, ale
+  ekranu na prawdziwej bazie nikt jeszcze nie widział (to dług z fazy 0).
+
+### Weryfikacja
+
+- `flo-silenced-list.test.ts` — 9 testów (reguła + akcje + izolacja kont),
+  `ui-flo-settings.test.tsx` rozszerzony do 7.
+- Test mutacyjny **5/5**: lista z wygasłymi ciszeniami, sprawa pokazana
+  kluczem z bazy, brak rozróżnienia rodzaj/sprawa, przywracanie bez zdjęcia
+  ciszy, tytuły bez filtra konta.
+- `tsc --noEmit` czysto; eslint 0/0 (po drodze złapał niezescapowane
+  cudzysłowy w tekście dla klienta); vitest **1252 zielone, 7 pominiętych,
+  zero czerwonych**.
+
+---
+
+## 2026-09-23 · Plan FLO 2, K1.10 — P-03 pyta o brakującą fakturę
+
+Gałąź `claude/k1-10-brakujaca-faktura`, na bazie ekranu wyciszeń.
+
+### Co robi
+
+Puls sprawdza, u których kontrahentów klient ma RYTM fakturowania (trzy
+faktury, równe odstępy, ta sama usługa), i gdy spodziewana faktura nie
+przyszła od tygodnia, pyta: „Zwykle fakturujesz ich około 10. dnia, na
+2 460,00 zł. Wystawiłeś ją gdzie indziej?".
+
+**Tylko pytanie, żaden szkic.** Szkice to P-01/P-02 i osobna decyzja.
+
+### Pamięć profilu bez tabeli
+
+Plan zakładał zapisany profil rytmu (stan, historia pytań). Takiej tabeli nie
+ma i nie tworzyłem jej migracją — wszystko, czego trzeba, już gdzieś jest:
+
+| Czego trzeba | Skąd |
+|---|---|
+| rytm (odstęp, typowy dzień, kwota) | `detectRhythm` z faktur ostatniego roku |
+| „czy pytanie już padło" | istnienie karty o tym kluczu tematu, w dowolnym stanie |
+| „wystawiam gdzie indziej" | licznik odrzuceń sprawy w pamięci decyzji (K2.16) |
+| „profil uśpiony" | `missedCycles` — po dwóch pominiętych cyklach milkniemy |
+
+Ostatni wiersz jest tu najważniejszy: agent, który co miesiąc przypomina
+o straconym kliencie, jest okrutny bez powodu. Uśpienie jest ciche.
+
+Nazwy pozycji (do sprawdzenia, czy to ta sama usługa) biorę z `fa3_data.lines`
+— tam, gdzie czyta je eksport JPK.
+
+### Przy okazji domknięte: „Skończyliśmy współpracę" ucisza JEDNEGO klienta
+
+Karta P-03 ma przycisk „Skończyliśmy współpracę" z zamiarem `mute`, który do
+dziś oznaczał ciszę w CAŁYM rodzaju — jedna zakończona współpraca zabrałaby
+pytania o wszystkich pozostałych klientów. Po K2.16 mamy ciszę per sprawa,
+więc domknąłem to tutaj:
+
+- `FloAction.scope?: 'kind' | 'subject'` (DODANIE do kontraktu),
+- `FloDismissMode` + `'never_subject'`, `FloDismissedReason` + `'never_subject'`
+  (kolumna to TEXT bez CHECK — bez migracji; panel odróżni „klient nie chce
+  tej funkcji" od „ta relacja się skończyła"),
+- `readActions` przenosi `scope`, interfejs wysyła właściwy tryb.
+
+Klucz tematu P-03 zmieniony z `invoice.missing:…` na `invoice.draft:missing:…`
+— pamięć decyzji rozpoznaje sprawę po prefiksie rodzaju, a ekran ustawień
+pokazywałby inaczej „invoice.missing" jako rodzaj.
+
+### Weryfikacja
+
+- `flo-invoice-missing-producer.test.ts` — 15 testów, w większości o MILCZENIU
+  (za wcześnie, inne usługi, klient stracony, pytanie już padło, fakturuje
+  gdzie indziej, poza kanarkiem).
+- **Test mutacyjny 7/7 — znowu po dociśnięciu jednego testu.** Mutacja
+  „licznik »gdzie indziej« ignorowany" przeżyła: mój test opierał się na
+  wyciszeniu sprawy, które i tak zatrzymuje kartę. Różnica wychodzi dopiero
+  po wygaśnięciu ciszy — cisza trwa kwartał, a odpowiedź „fakturuję ich
+  w innym programie" nie przestaje być prawdą razem z nią. Test rozdzielający
+  te dwie warstwy dopisany.
+- `tsc --noEmit` czysto; eslint 0/0; vitest **1268 zielonych, 7 pominiętych,
+  zero czerwonych**.
+
+### Do decyzji
+
+- **P-03 jest w kanarku jako P-01** (`invoice.draft` już tam był) — etap 0,
+  więc na produkcji cisza.
+- **Rytm wymaga trzech faktur o podobnych pozycjach.** Przy fakturach
+  z importu nazwy pozycji bywają puste — wtedy rytmu nie wykryjemy wcale.
+  Do obejrzenia na prawdziwych danych.
+
+### Następny krok
+
+- K1.11 (O-01, pierwsze kroki) zamyka listę producentów z K1.B.
+- Potem K1.4 (wspólny cap dzienny) — trzy reguły w pulsie to już moment,
+  w którym limit przestaje być abstrakcją na zapas.
+
+---
+
+## 2026-09-23 · Plan FLO 2, K1.11 — O-01 prowadzi pierwsze kroki
+
+Gałąź `claude/k1-11-pierwsze-kroki`, na bazie K1.10. **To zamyka listę
+producentów z K1.B: wszystkie pięć rodzajów z V1 ma wreszcie kogoś, kto
+tworzy kartę.**
+
+### Co robi
+
+Na kontach młodszych niż trzydzieści dni puls stawia JEDNĄ kartę
+z następnym krokiem ścieżki: dane firmy → kontrahent → pierwsza faktura →
+wyślij ją klientowi. Kolejny krok PODMIENIA poprzednią kartę (klucz tematu
+jest stały), a gdy pierwsza faktura wychodzi — kreator znika.
+
+Zasada z modułu O-01 obowiązuje bez zmian: **sukces onboardingu nie zależy
+od certyfikatu KSeF.** Producent nie sprawdza certyfikatu przy wyborze kroku;
+osobny test przechodzi całą ścieżkę na koncie bez certyfikatu.
+
+### Trzy decyzje
+
+| Decyzja | Dlaczego |
+|---|---|
+| tylko konta < 30 dni (`GUIDE_FOR_DAYS`) | po miesiącu klient wie, gdzie co jest; kreator w trzecim miesiącu to wyrzut sumienia |
+| konto bez daty założenia = stare | lepiej nie prowadzić kogoś, kto jest z nami od roku, niż prowadzić na ślepo |
+| O-01 do kanarka | jak X-05 i W-04: karty nikt nie widział na prawdziwym koncie, a trafia w najwrażliwszy moment. **Najlepszy kandydat do odsłonięcia jako pierwszy w alfie** |
+
+### Przybliżenie, które trzeba znać
+
+`firstInvoiceDelivered` liczę jako „ma poświadczenie z KSeF **albo**
+wygenerowany PDF". **Wysyłka PDF-a mailem nie zostawia dziś śladu w bazie** —
+nie ma tabeli wysyłek. Fałszywe „doręczona" kosztuje zniknięcie ostatniej
+karty kreatora; fałszywe „niedoręczona" kazałoby agentowi powtarzać
+instrukcję przy zrobionej robocie. Wybrałem to pierwsze.
+
+Prawdziwy znacznik doręczenia wymagałby kolumny albo tabeli — czyli migracji.
+**Do decyzji.**
+
+### Przy okazji: testy ciszy były zależne od przypadku
+
+Dodanie O-01 do kanarka wywróciło 12 testów z K2.16 — używały
+`onboarding.step` jako „rodzaju spoza kanarka". To był ukryty warunek,
+o którym nikt nie wiedział. Teraz wpuszczają rodzaj jawnym wpisem operatora,
+więc nie obchodzi ich, co akurat jest w kanarku.
+
+### Weryfikacja
+
+- `flo-onboarding-producer.test.ts` — 11 testów; kluczowy: konto BEZ
+  certyfikatu KSeF przechodzi ścieżkę do końca (PDF + mail).
+- Test mutacyjny **6/6 za pierwszym podejściem**: prowadzenie starych kont,
+  niezamykanie skończonego kreatora, przesuwanie ważności przy podmianie
+  kroku, bramki po odczycie, O-01 poza kanarkiem, brak izolacji awarii.
+- `tsc --noEmit` czysto; eslint 0/0; vitest **1279 zielonych, 7 pominiętych,
+  zero czerwonych**.
+
+### Stan po K1.B
+
+| Rodzaj | Producent | Kanarek |
+|---|---|---|
+| K-01 `payment.confirm` | ✅ puls | etap 0 |
+| W-03 `expense.rule` | ✅ wykonawca W-01 | etap 0 |
+| W-04 `expense.missing` | ✅ puls | etap 0 |
+| P-03 `invoice.draft` | ✅ puls | etap 0 |
+| O-01 `onboarding.step` | ✅ puls | etap 0 |
+| X-05 `ksef.audit` | ✅ puls (naprawiony) | etap 0 |
+
+Wszystko ciche do świadomej decyzji o odsłonięciu.
+
+### Następny krok
+
+- **K1.4 — wspólny cap dzienny.** W pulsie są teraz cztery reguły; przy
+  odsłonięciu kilku naraz konto może dostać kilka kart jednego ranka.
+  Każda reguła pilnuje się dziś sama, ale nikt nie pilnuje sumy.
+- K1.3 — ujednolicenie wyniku `runFloTick` (dziś osiem płaskich liczników).
+
+## 2026-09-24 · Plan FLO 2, K1.4 — wspólny dzienny limit kart
+
+W pulsie są cztery reguły i audyt. Każda pilnuje się sama — K-01 pyta o jedną
+fakturę, W-04 stawia jedną kartę na miesiąc, P-03 jedną na kontrahenta, O-01
+jedną na konto — ale **nikt nie pilnuje sumy, a klient widzi właśnie sumę**.
+Po odsłonięciu kilku funkcji naraz konto mogło dostać pięć kart jednego ranka.
+Lawina kart to najczęstszy powód, dla którego ludzie wyłączają takiego agenta;
+wtedy tracimy nie jedną kartę, tylko wszystkie.
+
+`lib/flo/daily-cap.ts` — jeden limit na CAŁY przebieg pulsu, wspólny dla
+wszystkich reguł. Sufit: **5 nowych kart na konto na dobę**
+(`FLO_DAILY_NEW_CARDS_CAP`). To sufit, nie cel — przy dzisiejszych regułach
+normalny dzień to zero albo jedna karta.
+
+### Co limit obejmuje, a czego nie
+
+| Zdarzenie | Pod limitem? | Dlaczego |
+|---|---|---|
+| nowa karta z pulsu | **tak** | o to klient nie prosił |
+| odświeżenie żywej karty (W-04, O-01) | nie | ta sama sprawa, o którą raz już zapytaliśmy |
+| zamknięcie nieaktualnej karty | nie | domknięcie rozmowy, którą agent sam zaczął |
+| reakcja na działanie klienta (status wysyłki, odczyt paragonu, awaria MF) | nie i nie może | cisza w odpowiedzi na kliknięcie jest gorsza niż nadmiar kart |
+
+**Limit nie odwraca hierarchii reguł.** Kolejność w pulsie jest kolejnością
+ważności: pieniądze przed prowadzeniem za rękę. Ostatnie wolne miejsce dostaje
+reguła, która jest wyżej — osobny test to przybija.
+
+### Trzy decyzje
+
+| Decyzja | Dlaczego |
+|---|---|
+| limit **dzienny**, nie na przebieg | punktem wyjścia są karty, które konto dostało dziś. Inaczej drugie uruchomienie pulsu (ponowienie zadania) dawałoby drugą porcję |
+| **bez kolejki zaległych** | reguła, która się nie zmieściła, spróbuje jutro — jej warunki i tak liczą się od nowa. Rejestr „kart odłożonych" byłby drugim źródłem prawdy o tym, o co agent chce zapytać |
+| limit sprawdzany **tuż przed zapisem**, nie na wejściu do reguły | wcześniej licznik zatrzymanych rósłby przy kontach, które i tak nie miały o czym pisać, i operator czytałby fałszywą lawinę |
+
+### Dwie rzeczy, które trzeba było naprawić przy okazji
+
+**Granica doby leciała po UTC.** Pierwsza wersja liczyła „dzisiaj" od północy
+UTC. W czasie letnim polska doba zaczyna się o 22:00 UTC dnia poprzedniego,
+więc karta z 00:30 czasu polskiego wpadałaby do wczoraj — i konto dostawało
+tego dnia o jedną kartę za dużo. `warsawDayStart()` wyznacza granicę
+w kalendarzu klienta, bez wpisanego na sztywno przesunięcia strefy (zmienia
+się dwa razy w roku).
+
+**Odczyt dzisiejszych kart nie był stronicowany.** Ucięta odpowiedź PostgREST-a
+znaczyłaby limit policzony z niepełnych danych — czyli limit cicho przeciekający,
+przy zapytaniu, które wygląda na udane. Teraz czyta stronami po 1000, jak
+`readActiveTenantIds`. Wymagało to `range()` w atrapie bazy (`flo-fake-db.ts`)
+i w `FloFilter` — atrapa tnie **po** filtrach, tak jak PostgREST.
+
+### Nowe w wyniku pulsu
+
+`FloTickResult.withheld` — ile kart limit zatrzymał. Zero to stan normalny;
+liczba rosnąca z dnia na dzień znaczy, że reguły chcą mówić częściej, niż
+klient jest w stanie słuchać. **To jest sygnał do przycinania reguł, nie do
+podnoszenia sufitu.**
+
+### Weryfikacja
+
+- `flo-daily-cap.test.ts` — 14 testów: liczenie, granica doby (lato i zima),
+  odczyt z bazy, cztery przebiegi pulsu.
+- Test mutacyjny **8/8 złapanych za pierwszym podejściem**: limit nieobowiązujący,
+  liczenie od zera, limit wspólny dla kont, doba po UTC, licznik zatrzymanych
+  zawsze zero, limit blokujący zamykanie kart, karta niezużywająca miejsca,
+  puls nieczytający dzisiejszych kart.
+- `tsc --noEmit` czysto; eslint 0/0; vitest **1293 zielonych, 7 pominiętych,
+  zero czerwonych**; `tsx --test` (XML) 66/66.
+
+> `pnpm run ci` nie przechodzi w worktree — brak `node_modules`, więc `tsc`
+> nie jest na ścieżce. Te same cztery kroki puszczone przez `npx`, każdy
+> zielony.
+
+### Bez zmian
+
+Migracji nie ma. Kontraktu `types/flo.ts` nie ruszałem. Nic nie wdrażam.
+
+### Następny krok
+
+- **K1.3 — ujednolicenie wyniku `runFloTick`.** Dziś to dziewięć płaskich
+  liczników (`confirmAsked`, `confirmClosed`, `missingDocsAsked`, …) plus
+  `withheld`. Każda nowa reguła dokłada dwa kolejne pola i nikt tego nie
+  czyta poza testami.
+
+## 2026-09-24 · Plan FLO 2, K1.3 — jeden kształt wyniku pulsu
+
+Wynik `runFloTick` urósł do jedenastu płaskich liczników (`confirmAsked`,
+`confirmClosed`, `missingDocsAsked`, `onboardingGuided`, …). Każda nowa
+reguła dokładała dwa kolejne pola i osobny blok w `runFloTick`. Przy okazji
+wyszły dwie rzeczy gorsze od brzydoty.
+
+### Rzecz pierwsza: pięć kopii izolacji awarii
+
+Każda reguła miała WŁASNĄ pętlę po kontach z własnym `try/catch`, zgłoszeniem
+do Sentry i logiem — pięć kopii tych samych dwudziestu linii. To nie jest
+kwestia estetyki: **izolacja awarii jednego konta jest wymaganiem
+bezpieczeństwa**, a wymaganie skopiowane pięć razy jest spełnione dokładnie
+do chwili, w której ktoś napisze szóstą regułę i zapomni o `try`. Wtedy jedno
+konto z uszkodzonymi danymi zabiera karty wszystkim pozostałym — i nikt tego
+nie zauważy do pierwszej awarii.
+
+Teraz jest jedno miejsce: `runSweep()` w `lib/flo/sweep.ts`. Reguła podaje
+tylko to, co robi na JEDNYM koncie.
+
+### Rzecz druga: wynik pulsu nie trafiał NIGDZIE
+
+`lib/jobs/worker.ts` robi `await def.handler(...)` i **zwrotkę wyrzuca**.
+Nikt jej nie logował, nie zapisywał, nie liczył. Wszystkie te liczniki
+czytały wyłącznie testy.
+
+Doszła jedna linia na stdout (Coolify ją zbiera):
+
+```
+[flo.tick] wygasłe 3 · podniesione 0 · payment.confirm +2/-1 · expense.missing +0/-0 (awarie 2) · limit zatrzymał 4
+```
+
+Reguły, które nic nie zrobiły, są pomijane — ale **reguła z samymi awariami
+zostaje**, bo to najważniejszy przypadek do zobaczenia: wygląda jak cisza,
+a jest zepsutą regułą. Sprzątanie jest zawsze, jako dowód, że puls się odbył.
+`summarizeTick()` jest funkcją czystą, więc testuje się bez odpalania pulsu.
+
+> To wykracza poza literalne „ujednolicenie wyniku". Zrobiłem, bo bez tego
+> ujednolicony wynik dalej szedłby do kosza. **Do cofnięcia jednym commitem,
+> jeśli uznasz, że to nie ta gałąź.**
+
+### Jedno słownictwo zamiast trzech
+
+Audyt liczył `created`, O-01 `guided` i `finished`, reszta `asked` i `closed`
+— trzy słowniki na to samo. Teraz każda reguła mówi tak samo:
+
+| pole | znaczy |
+|---|---|
+| `asked` | ile NOWYCH kart postawiła |
+| `closed` | ile zamknęła, bo sprawa przestała być aktualna |
+| `failed` | na ilu kontach padła (puls i tak poszedł dalej) |
+
+Reguła, która niczego nie zamyka (P-03, audyt), zgłasza zero. **To jest
+informacja, a nie brak:** „ta reguła nigdy nie sprząta po sobie sama".
+
+### Tablica reguł
+
+`runFloTick` nie ma już pięciu bloków pod rząd — ma tablicę `RULES`.
+Kolejność tablicy jest kolejnością pulsu (najpierw fakty, potem propozycje,
+na końcu miękkie podpowiedzi) i decyduje też o tym, kto dostaje ostatnie
+wolne miejsce pod dziennym limitem z K1.4.
+
+**Nowa reguła to JEDNA pozycja dopisana na końcu tablicy** — nie dwa pola
+w wyniku i nie kolejny blok w funkcji. Po to to powstało.
+
+Wynik: `rules: FloRuleRun[]`, jedna pozycja na regułę, plus `expired`,
+`released`, `withheld` i `failedTenants`. Reguła, która dziś nie startowała
+(audyt poza pierwszym dniem roboczym miesiąca), **ma w wyniku swoje zera** —
+brak pozycji znaczyłby „nie ma takiej reguły", a to co innego niż „przeszła
+i nie miała nic do powiedzenia". Do czytania jest `ruleRun(result, kind)`.
+
+### Weryfikacja
+
+- `flo-sweep.test.ts` — 14 nowych testów: izolacja awarii, kształt wyniku,
+  kolejność reguł, linia do logów.
+- Test mutacyjny **10/10**, ale **9/10 za pierwszym podejściem**. Przeżyła
+  jedna: „skończony kreator nie liczy się jako karta zamknięta" (O-01).
+  Żaden test nie pilnował, że `finished` stało się `closed` — czyli dokładnie
+  ta zmiana nazwy, która mogła przejść niezauważona. Dopisany test, mutacja
+  łapana.
+- `tsc --noEmit` czysto; eslint **0 błędów** (29 ostrzeżeń, wszystkie
+  zastane, żadnego w plikach zadania); vitest **1308 zielonych, 7 pominiętych**;
+  `tsx --test` (XML) 66/66.
+
+### Bez zmian
+
+Migracji nie ma. `types/flo.ts` nietknięty — `FloProposalKind` tylko
+zaimportowany. Nic nie wdrażam. Zachowanie reguł jest identyczne:
+zmieniły się nazwy pól i miejsce pętli, nie decyzje.
+
+### Następny krok
+
+Lista producentów z K1.B jest zamknięta, cap i wynik pulsu uporządkowane.
+Do decyzji, co dalej: **odsłonięcie pierwszej funkcji w kanarku** (O-01
+albo W-04) czy kolejne pozycje planu.
+
+## 2026-09-24 · Panel operatora dostaje przycisk odsłaniania
+
+Do dziś kanarka dało się przestawić **wyłącznie ręcznym SQL-em na
+produkcyjnej bazie**. Panel `/admin/flo` odpowiadał na pytanie „która funkcja
+jest gotowa wyjść z ukrycia" i nie dawał żadnego sposobu, żeby to zrobić.
+
+To zawężało decyzję produktową do jednej osoby — tej z dostępem do `db-1` —
+i zamieniało ruch z natury odwracalny w operację, przy której łatwiej
+o literówkę niż o pomyłkę w ocenie.
+
+### Trzy ruchy, trzy różne zasady
+
+| ruch | zasada |
+|---|---|
+| odsłonięcie (0 → 10%) | zawsze od dziesięciu procent, nigdy od razu szerzej |
+| rozwinięcie (10 → 50 → 100) | pełne `canAdvance`: tydzień na etapie, zero skarg |
+| schowanie (w dół, też do zera) | **ZAWSZE wolno, natychmiast, bez potwierdzenia** |
+
+Asymetria jest świadoma. Odsłanianie ma być trudne, chowanie ma być jednym
+kliknięciem — bo w chwili, w której operator chce coś schować, zwykle właśnie
+dzieje się coś złego, a kazanie mu wtedy czekać albo szukać SQL-a to najgorszy
+możliwy moment na tarcie.
+
+### Luka, którą trzeba było zamknąć od razu
+
+Skoro schowanie jest zawsze dozwolone, to **„schowaj i odsłoń jeszcze raz"
+byłoby praniem skargi**: dwa kliknięcia i wstrzymanie znika, a w historii
+wygląda to na zwykłe wycofanie i ponowne wydanie. Dlatego wstrzymanie blokuje
+KAŻDE podnoszenie etapu, także pierwsze odsłonięcie z zera. Licznik skarg
+zeruje się świadomie i poza panelem.
+
+To jest najważniejszy test w `flo-rollout.test.ts` i osobna mutacja
+w zestawie.
+
+### Gdzie co siedzi
+
+- `canSetStage()` w `lib/flo/rollout.ts` — **cała** logika decyzji, funkcja
+  czysta, testowana bez bazy i bez sesji. Blokadę z `flags.ts` dostaje
+  parametrem, żeby nie wciągać flag do modułu kanarka.
+- `app/admin/flo/actions.ts` — wyłącznie wiązanie: kto pyta, czy dane są tym,
+  za co się podają, zapis, ślad w audycie (`admin.flo.rollout.changed`,
+  `tenantId: null` — to decyzja o platformie, nie o koncie).
+- `app/admin/flo/_components/rollout-controls.tsx` — trzy przyciski. Werdykty
+  liczy serwer tą samą funkcją, którą sprawdzi akcja; przeglądarka dostaje
+  gotowe „wolno / nie wolno i dlaczego". **Zablokowany przycisk zawsze mówi
+  powód** — wyszarzone „rozwiń" bez wyjaśnienia jest gorsze niż jego brak,
+  bo operator nie wie, czy czekać, czy coś naprawić.
+
+### Rzecz, o którą łatwo się potknąć
+
+`requireAdmin()` stoi w PIERWSZEJ linii akcji i to nie jest ozdoba.
+**Akcja serwerowa to zwykły endpoint POST** pod wygenerowanym adresem —
+guard z `app/admin/layout.tsx` chroni renderowanie strony, nie to wywołanie.
+Bez tej linii wystarczyłoby znać adres akcji, żeby odsłonić funkcję wszystkim
+klientom. Osobny test to sprawdza, osobna mutacja próbuje to usunąć.
+
+Rodzaj i etap przechodzą przez białą listę (`ROLLOUT_ORDER`, `ROLLOUT_STAGES`),
+a nie przez sam strażnik typu: argumenty przychodzą z przeglądarki, więc są
+danymi, nie deklaracją.
+
+### Czego panel NIE przeskoczy
+
+Rodzaj zablokowany w `lib/flo/flags.ts` nie odsłoni się kliknięciem — panel
+mówi wprost „Włączenie wymaga commita z uzasadnieniem", a przycisk, który to
+omija, kasowałby tę zasadę po cichu. Schować zablokowany rodzaj wolno zawsze.
+Promień 3 dalej czeka na prawnika.
+
+### Weryfikacja
+
+- 19 nowych testów reguły w `flo-rollout.test.ts` (42 w pliku), 9 testów akcji
+  w `flo-admin-rollout-action.test.ts`.
+- Test mutacyjny **10/10 za pierwszym podejściem**: akcja bez sprawdzenia
+  admina, bez białej listy rodzajów, bez białej listy etapów, ignorująca
+  werdykt, bez audytu; reguła ze schowaniem pod warunkami, z luką „schowaj
+  i odsłoń", z wyjściem z zera na dowolny etap, z przeskakiwaniem etapów,
+  z pominiętą blokadą z kodu.
+- `tsc --noEmit` czysto · eslint 0 błędów · vitest **1334 zielonych,
+  7 pominiętych** · **`next build` przechodzi** (ważne przy `'use server'` —
+  typecheck tego nie łapie).
+
+### Czego NIE zweryfikowałem
+
+**Wyglądu strony w przeglądarce.** Dwa niezależne powody: w worktree nie ma
+`node_modules`, więc `next dev` (Turbopack) nie wstaje, a lokalnie nie jest
+ustawione `ADMIN_EMAILS` — pusta lista adminów blokuje `/admin/*` w całości,
+i tak ma być. Zalogowanie się na konto admina wymagałoby cudzych haseł.
+
+Build i testy pokrywają logikę i kompilację; **układ przycisków obejrzyj sam
+po wdrożeniu.**
+
+### Co to zmienia dla O-01
+
+Nic automatycznie. Odsłonięcie O-01 dalej wymaga najpierw scalenia stosu
+i wdrożenia — producenta nie ma na `main`. Zmienia się tylko to, że gdy już
+tam będzie, odsłonięcie jest kliknięciem w panelu, a nie `INSERT`-em na
+produkcji.
+
+## 2026-09-24 · Tryb cichy wreszcie coś zapisuje
+
+Przy okazji przycisku odsłaniania wyszło, że **`recordShadow` i `settleShadow`
+wołały wyłącznie testy.** Tabela `flo_shadow` stała pusta od powstania, panel
+pokazywał „Tryb cichy nie zebrał jeszcze ani jednej propozycji", a bramka
+gotowości (`isReadyToReveal`) liczyła trafność z zera — przy progu 100
+propozycji dla promienia 1 nie mogła zapalić się na zielono **nigdy i dla
+żadnej funkcji.**
+
+Domykało to kółko: rodzaj na etapie 0 nie zostawia śladu (celowo — `disabled`
+przed jakimkolwiek zapisem), więc funkcja w kanarku nie mogła zebrać danych,
+które są warunkiem wyjścia z kanarka.
+
+### Granica: które milczenie wolno zmierzyć
+
+Agent milczy z czterech różnych powodów i **tylko jeden z nich da się
+zmierzyć**:
+
+| powód milczenia | mierzymy? | dlaczego |
+|---|---|---|
+| konto poza kanarkiem | **tak** | agent wie, co by powiedział, i milczy wyłącznie dlatego, że funkcja nie wyszła z ukrycia |
+| wyłącznik globalny | nie | mierzylibyśmy awarię, nie trafność |
+| blokada z kodu (prawo) | nie | nie mamy prawa nawet POLICZYĆ, co byśmy powiedzieli |
+| operator wypisał konto | nie | to decyzja człowieka |
+| klient wyciszył rodzaj | nie | cisza jest prawdziwą odpowiedzią, nie brakiem danych |
+
+`SwitchVerdict.decidedBy` już to rozróżniał — wystarczyło z tego skorzystać:
+`shadowOnly = !verdict.enabled && verdict.decidedBy === 'canary'`.
+
+Wpis powstaje **po** bramce podatkowej i **po** wyciszeniu, nie zaraz po
+kanarku. Zapis wyżej liczyłby propozycje, których agent i tak by nie
+postawił, i zawyżał próbkę o przypadki, w których prawdziwą odpowiedzią
+jest milczenie.
+
+### To NIE jest złamanie zasady „bez śladu w bazie klienta"
+
+`flo_shadow` jest tabelą operatorską: klucz tematu i odcisk, bez tytułu, bez
+treści karty, bez nazwy kontrahenta. Żaden jej wiersz nigdy nie stanie się
+kartą w wątku klienta — a zasada z `createProposal` mówi właśnie o kartach,
+które po włączeniu funkcji wysypałyby się lawiną sprzed tygodni.
+
+### Jedna sprawa to jeden wpis
+
+Puls chodzi codziennie, a zaległa faktura potrafi wisieć miesiąc. Bez
+deduplikacji jedna zaległość dałaby trzydzieści wpisów, a **„sto propozycji"
+z bramki gotowości oznaczałoby trzy sprawy widziane trzydzieści razy** —
+próbka wyglądałaby na dużą i nie mówiła nic.
+
+Powtórkę rozpoznajemy po kluczu tematu wśród wpisów **nierozstrzygniętych**:
+ten sam kontrahent zalegający drugi raz w roku to druga sprawa, nie duplikat.
+
+### Atrapa bazy kłamała
+
+`summarizeShadow` porównuje `matched === null`, a atrapa zostawiała po
+wstawieniu `undefined`. Efekt: wpis oczekujący liczył się jako
+**rozstrzygnięty i nietrafiony** — test pokazywałby 0% trafności tam, gdzie
+produkcja pokazuje „jeszcze nie wiadomo". Atrapa ma teraz `matched: null`
+i `actual: null` w wartościach domyślnych, jak Postgres.
+
+Poprawiony został jeden zastany test (`toBeUndefined` → `toBeNull`).
+
+### `accuracyByKind` czytało bez stronicowania
+
+Ta tabela urośnie jako pierwsza w całym agencie — dostaje wpis z każdego
+przebiegu pulsu na każdym koncie poza kanarkiem. Ucięta odpowiedź PostgREST-a
+zaniżałaby trafność po cichu. Teraz strony po 1000, jak `readActiveTenantIds`
+i `readTodayCardCounts`. Osobny test na 1200 wpisach.
+
+### Panel
+
+Doszła kolumna **„Zebrane"** (rozstrzygnięte + oczekujące). Bez niej operator
+przez najbliższe tygodnie widziałby same zera i „za mała próbka", nie
+wiedząc, czy tryb cichy w ogóle działa.
+
+### CZEGO TO NIE ROBI — przeczytaj, zanim uznasz temat za zamknięty
+
+**Bramka gotowości nadal nie zapali się na zielono.** To jest połowa roboty:
+wpisy powstają (`pending` rośnie), ale nikt ich nie rozstrzyga, więc
+`settled` zostaje zerem.
+
+Druga połowa to `settleShadow` i zadanie porównujące: „czy klient zrobił to
+sam?". To jest robota z decyzjami produktowymi, nie techniczna:
+
+- ile czekamy, zanim uznamy „nie zrobił" (tydzień? do końca miesiąca?),
+- co liczy się jako „to samo" dla każdej reguły z osobna,
+- skąd bierzemy kwotę i encję do porównania — dziś wpis ma sam klucz tematu
+  i odcisk, bo `topicKey` i tak niesie identyfikator faktury
+  (`payment.confirm:${invoiceId}`), a zgadywanie kwoty przy zapisie byłoby
+  wpisaniem do bazy czegoś, czego nikt nie sprawdził.
+
+**To jest pozycja planu do decyzji Bartosza, nie rzecz do dopisania po cichu.**
+
+### Koszt
+
+Na konto poza kanarkiem dochodzi, przy sprawie, o której agent chciałby
+powiedzieć: jeden odczyt wyciszeń, jeden odczyt deduplikacji i ewentualnie
+jeden zapis. Ograniczone tym, ile reguł ma dziennie coś do powiedzenia —
+dziś najwyżej jedna karta na regułę na konto, czyli ≤5 dodatkowych zapytań
+na konto na dobę.
+
+Drobiazg do zapamiętania: producenci sprawdzają dzienny limit PRZED
+`createProposal`, więc konto pod sufitem limitu nie zapisze też wpisu trybu
+cichego. Dziś bez znaczenia (nic nie jest odsłonięte, więc limit się nie
+zapełnia), ale po odsłonięciu pierwszej funkcji to zacznie lekko zaniżać
+próbkę.
+
+### Weryfikacja
+
+- `flo-shadow-wiring.test.ts` — 14 testów: granica „które milczenie",
+  zawartość wpisu, deduplikacja, stronicowanie.
+- Test mutacyjny **9/9 za pierwszym podejściem**: mierzenie każdego milczenia,
+  brak zapisu, zapis mimo wyciszenia, brak deduplikacji, deduplikacja bez
+  klucza tematu / obejmująca rozstrzygnięte / ignorująca konto, treść karty
+  we wpisie, czytanie tylko pierwszej strony.
+- `tsc --noEmit` czysto · eslint 0 błędów (29 ostrzeżeń, wszystkie zastane) ·
+  vitest **1348 zielonych, 7 pominiętych** · `next build` przechodzi.
+
+Przy okazji: poprawione ostrzeżenie lintera, które sam wprowadziłem
+w testach przycisku odsłaniania.
+
+## 2026-09-24 · Strażnik podpięcia: „zbudowane i niepodłączone" ma wywalać test
+
+W tej sesji **cztery razy** trafiliśmy na ten sam wzorzec:
+
+| kiedy | co było napisane, otestowane i niepodpięte |
+|---|---|
+| 17.09 | X-05 pytał o nieistniejące kolumny — zero kart na produkcji |
+| 17.09 | wykonawca K-01 pisał do kolumn, których `payments` nie ma |
+| 23.09 | ekran wyciszeń pokazywał atrapę zamiast prawdziwych danych |
+| 24.09 | tryb cichy nie zapisał ani jednego wpisu od dnia powstania |
+
+Za każdym razem testy jednostkowe były **zielone** — bo testowały funkcję,
+a nie to, czy ktokolwiek jej używa. Za każdym razem znalazł to człowiek,
+przypadkiem, tygodnie później.
+
+`tests/unit/flo-wiring.test.ts` zamienia „ktoś zauważy" na „test nie
+przejdzie". Nie sprawdza, czy kod działa — od tego są testy funkcji.
+Sprawdza, czy jest PODŁĄCZONY, a jeśli nie, to czy ktoś to świadomie zapisał.
+
+### Co pilnuje
+
+1. **Każdy `build*Proposal` jest wołany albo stoi na liście długu.**
+   Nowy builder bez producenta wywala test.
+2. **Lista długu nie gnije w drugą stronę** — wpis, który już jest podpięty,
+   musi z niej zniknąć.
+3. **Każdy `run*Sweep` z `functions/` jest w tablicy `RULES`.** K1.3 zrobiło
+   z pulsu tablicę właśnie po to, żeby nowa reguła była jedną pozycją —
+   jedną pozycją, o której łatwo zapomnieć.
+4. **Powód „bramka prawna" jest związany z `flags.ts`.** Powód wpisany ręcznie
+   potrafi skłamać; ten test wiąże go z jedynym miejscem, które o blokadzie
+   decyduje. Gdy prawnik zapali zielone światło i ktoś zdejmie blokadę,
+   test powie, że wpis długu przestał być prawdą.
+
+### Stan na dziś: 17 podpiętych, 15 długu
+
+Dług dzieli się na dwie **bardzo różne** kategorie:
+
+| kategoria | ile | co znaczy |
+|---|---|---|
+| bramka prawna | 5 | funkcja gotowa, ale rodzaj stoi w `flags.ts` — podpięcie byłoby BŁĘDEM, nie postępem |
+| brak producenta | 10 | nikt nie tworzy karty; zwykły dług planu, ta sama robota co K1.8–K1.11 |
+
+Bramka prawna: `contractor.foreign`, `payment.score`, `tax.relief`,
+`tax.setaside`, `tax.limit`. Brak producenta: kontrola kontrahenta,
+podpowiedzi o funkcjach, podsumowanie importu, P-02 (paczka szkiców),
+faktura końcowa, kamienie milowe, podwyżka stawki i trzy buildery B-01.
+
+### Dwie pułapki, które trzeba było obejść
+
+**Builder wołany przez sąsiada w tym samym pliku jest podpięty.** Tak działa
+W-03 (`buildRuleProposal` ← `proposeRuleAfterReview`) i K-01 (builder zbiorczy
+← builder jednej faktury). Naiwna reguła „wołany z innego pliku" krzyczałaby
+na kod w pełni podpięty. Stąd pojęcie modułu ŻYWEGO: takiego, z którego
+cokolwiek jest wołane z zewnątrz.
+
+**Komentarze wycinamy przed szukaniem nazw.** Bez tego zdanie „docelowo
+zawoła tu `buildRateRaiseProposal`" w komentarzu zupełnie innego pliku
+liczyłoby się jako podpięcie — czyli strażnik milkłby dokładnie w chwili,
+w której ktoś opisuje plany.
+
+### Weryfikacja
+
+Strażnik, który nigdy nie pada, jest ozdobą — więc mutowany był **kod
+produkcyjny**, nie test:
+
+| mutacja | wynik |
+|---|---|
+| dopisany builder, którego nikt nie woła | złapana |
+| producent wypadł z tablicy `RULES` | złapana |
+| builder przestał być wołany przez producenta | złapana |
+| rodzaj odblokowany w `flags.ts`, powód nadal mówi „bramka prawna" | złapana |
+| dług podpięty, wpis został na liście | złapana |
+| wzmianka w KOMENTARZU | **przeżyła — i o to chodziło** |
+
+`tsc --noEmit` czysto · eslint 0 błędów · vitest **1357 zielonych,
+7 pominiętych**.
+
+### Czego to NIE łapie
+
+Kodu, który jest podpięty i **nie działa** — X-05 pytający o nieistniejące
+kolumny przeszedłby tego strażnika bez mrugnięcia, bo producent był na
+miejscu. Na to nie ma testu jednostkowego; na to jest kanarek i pierwszy
+przebieg na prawdziwych danych.
+## 2026-09-24 · KOREKTA: tryb cichy nie docierał do reguł pulsu
+
+**Wpis wyżej („Tryb cichy wreszcie coś zapisuje") mijał się z prawdą dla
+sześciu rodzajów.** Przegląd całej dotychczasowej roboty znalazł to, zanim
+cokolwiek wyszło na produkcję.
+
+### Co było nie tak
+
+Każdy producent, którego napisałem — K-01, W-03, W-04, O-01, X-05, P-03 —
+miał na wejściu „bramkę przed odczytem":
+
+```ts
+if (!verdict.enabled) return 'disabled';
+```
+
+Rozsądna oszczędność: konto wyłączone nie kosztuje odczytu faktur. Tyle że
+`!verdict.enabled` obejmuje też konto **poza kanarkiem** — czyli dziś KAŻDE
+konto na produkcji. Producent wychodził, zanim cokolwiek policzył, więc do
+`createProposal`, gdzie siedzi zapis trybu cichego, nie docierał nigdy.
+
+Sprawdzone na żywym przebiegu pulsu: konto poza kanarkiem, zaległa faktura,
+świeże konto — **zero wpisów**.
+
+Tryb cichy działał tylko na ścieżkach reakcji (W-01, X-01, X-02, K-02), które
+wołają `createProposal` bez własnej bramki. Dla sześciu reguł zbudowanych
+w tej serii — nie działał wcale.
+
+### Dlaczego testy tego nie złapały
+
+Z dwóch powodów, oba pouczające:
+
+1. Testy trybu cichego wołały `createProposal` bezpośrednio. Funkcja była
+   przetestowana — nikt nie sprawdził, czy puls do niej dochodzi. Dokładnie
+   ten wzorzec, dla którego chwilę później powstał strażnik podpięcia.
+2. **Sześć testów pilnowało błędu.** Po jednym na producenta:
+   „konto poza kanarkiem: nic nie czytamy". Napisane, zanim tryb cichy
+   w ogóle był podpięty — i zabetonowały zasadę, która mu przeczy.
+
+### Naprawa
+
+`shouldCompute(verdict)` w `lib/flo/kind-switch.ts` — jedna reguła w jednym
+miejscu: **licz, gdy funkcja jest włączona albo gdy jedyną przeszkodą jest
+kanarek.** Sześciu producentów i `createProposal` korzystają z tej samej
+funkcji.
+
+Oszczędność „bramka przed odczytem" zostaje — węziej: wyłącznik globalny,
+blokada z kodu i wpis operatora dalej kończą przed odczytem.
+
+Sześć testów dostało nowe znaczenie („konto poza kanarkiem: liczymy do trybu
+cichego, klient nie dostaje karty") i bliźniaka („konto wypisane przez
+operatora: nic nie czytamy"). Doszedł test przez **cały puls**, nie przez
+samo `createProposal`.
+
+Mutacje 5/5 — w tym ta, która przywraca dokładnie pierwotny błąd.
+
+### Co to zmienia w planie — do decyzji
+
+**Koszt.** Konto poza kanarkiem czyta teraz dane tak samo jak konto
+z odsłoniętą funkcją. Sufit kosztu się nie zmienia (to koszt stanu „wszystko
+odsłonięte", do którego plan i tak zmierza), tylko przychodzi wcześniej. Przy
+dzisiejszej liczbie kont — pomijalne.
+
+**K-01 w trybie cichym widzi tylko pierwszą fakturę w kolejce.** Reguła pyta
+o jedną zaległość naraz, a następna pojawia się dopiero po odpowiedzi na
+poprzednią. W trybie cichym odpowiedzi nie ma, więc druga zaległość trafi do
+wpisów dopiero, gdy pierwsza sama zniknie z listy (zapłacona). Próbka K-01
+będzie przez to mniejsza, niż wynikałoby z liczby zaległości.
+
+**Bramka gotowości dalej nie zapali się na zielono** — bez rozstrzygania
+wpisów (`settleShadow`) nic się tu nie zmienia. Zmienia się to, że kolumna
+„Zebrane" w panelu pokaże wreszcie prawdziwe liczby dla wszystkich reguł.
