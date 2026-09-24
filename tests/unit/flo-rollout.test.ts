@@ -457,7 +457,11 @@ describe('skarga zatrzymuje odsłanianie — na każdej drodze', () => {
     // więc bez tego warunku dwa kliknięcia — „schowaj", potem „odsłoń" —
     // wyzerowałyby mechanizm, dla którego on w ogóle istnieje. Wyglądałoby
     // to przy tym na zwykłe wycofanie i ponowne wydanie.
-    const poSkardze = { stage: 10, halted: true, haltReason: 'zły odbiorca' };
+    const poSkardze: Partial<RolloutState> = {
+      stage: 10,
+      halted: true,
+      haltReason: 'zły odbiorca',
+    };
 
     expect(verdictFor(0, poSkardze)).toMatchObject({ allowed: true, direction: 'hide' });
     // ...a po schowaniu wiersz nadal niesie wstrzymanie:

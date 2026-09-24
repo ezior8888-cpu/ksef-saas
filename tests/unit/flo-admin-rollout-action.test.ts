@@ -15,7 +15,9 @@ const fake = vi.hoisted(() => ({ client: null as unknown }));
 const auth = vi.hoisted(() => ({
   requireAdmin: vi.fn(async () => ({ userId: 'admin-1', email: 'admin@faktflow.pl' })),
 }));
-const audit = vi.hoisted(() => ({ logAuditSystem: vi.fn(async () => {}) }));
+const audit = vi.hoisted(() => ({
+  logAuditSystem: vi.fn(async (_entry: unknown) => {}),
+}));
 
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@/lib/auth/admin-guard', () => auth);
@@ -161,7 +163,9 @@ describe('co akcja zapisuje', () => {
   it('ślad w audycie należy do platformy, nie do konta klienta', async () => {
     await setRolloutStageAction(KIND, 10);
 
-    const entry = audit.logAuditSystem.mock.calls[0]![0] as { tenantId: unknown };
+    const entry = audit.logAuditSystem.mock.calls[0]![0] as {
+      tenantId: unknown;
+    };
     expect(entry.tenantId).toBeNull();
   });
 });
