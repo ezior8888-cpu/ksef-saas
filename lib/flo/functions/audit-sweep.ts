@@ -28,6 +28,7 @@
 import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
 import { buildAuditProposal, findAuditIssues } from '@/lib/flo/functions/ksef-audit';
@@ -64,14 +65,19 @@ export async function runKsefAuditSweep(
     /** Globalny wyłącznik — wstrzykiwany tylko w testach. */
     readGlobalKill?: () => Promise<boolean>;
     logger?: Pick<JobLogger, 'error'>;
+    cap?: DailyCap;
   } = {},
 ): Promise<AuditSweepResult> {
   const periodKey = now.toISOString().slice(0, 7);
   const result: AuditSweepResult = { created: 0, failed: 0 };
 
+  // Audyt chodzi raz w miesiącu, ale trafia w ten sam poranek co reguły
+  // codzienne — więc liczy się do tego samego dziennego limitu (K1.4).
+  const cap = options.cap ?? unlimitedCap();
+
   for (const tenantId of tenantIds) {
     try {
-      if (await auditTenant(tenantId, periodKey, now, db, options.readGlobalKill)) {
+      if (await auditTenant(tenantId, periodKey, now, db, cap, options.readGlobalKill)) {
         result.created++;
       }
     } catch (e) {
@@ -95,6 +101,7 @@ async function auditTenant(
   periodKey: string,
   now: Date,
   db: FloDbClient,
+  cap: DailyCap,
   readGlobalKill?: () => Promise<boolean>,
 ): Promise<boolean> {
   const verdict = await isKindEnabledForTenant(KIND, tenantId, db, readGlobalKill);
@@ -180,7 +187,13 @@ async function auditTenant(
   const proposal = buildAuditProposal({ tenantId, issues, periodKey, now });
   if (!proposal) return false;
 
+  // Limit sprawdzamy dopiero TUTAJ, gdy wiadomo, że karta naprawdę by
+  // powstała. Wcześniej licznik zatrzymanych kart rósłby przy kontach, które
+  // i tak nie miały nic do zgłoszenia.
+  if (!cap.canAsk(tenantId)) return false;
+
   const created = await createProposal(proposal, db, readGlobalKill);
+  if (created.status === 'created') cap.spend(tenantId);
   return created.status === 'created';
 }
 

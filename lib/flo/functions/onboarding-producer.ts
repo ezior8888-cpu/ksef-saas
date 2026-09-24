@@ -23,6 +23,7 @@
 import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient, type FloProposalRow } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
 import {
@@ -137,6 +138,8 @@ export async function produceOnboardingStep(
   now: Date,
   db: FloDbClient,
   sources: OnboardingSources,
+  /** Dzienny limit nowych kart na konto — patrz `daily-cap.ts`. */
+  cap: DailyCap = unlimitedCap(),
 ): Promise<OnboardingOutcome> {
   const verdict = await isKindEnabledForTenant(
     KIND,
@@ -165,6 +168,11 @@ export async function produceOnboardingStep(
   const proposal = buildOnboardingProposal({ tenantId, state: account, now });
   if (!proposal) return 'nothing';
 
+  // Limit obejmuje NOWĄ kartę; odświeżenie istniejącej już nie — to ta sama
+  // sprawa, o którą raz już zapytaliśmy, a cisza w połowie rozmowy byłaby
+  // gorsza niż jedna karta ponad limit.
+  if (!live && !cap.canAsk(tenantId)) return 'nothing';
+
   const result = await createProposal(
     // Termin ważności ustala pierwsza karta. Odświeżanie go przy każdym
     // kroku sprawiłoby, że kreator na porzuconym koncie nie wygaśnie nigdy.
@@ -175,6 +183,7 @@ export async function produceOnboardingStep(
 
   switch (result.status) {
     case 'created':
+      cap.spend(tenantId);
       return 'created';
     case 'updated':
       return 'refreshed';
@@ -236,12 +245,13 @@ export async function runOnboardingSweep(
   db: FloDbClient = floDb(),
   sources: OnboardingSources = productionOnboardingSources(),
   logger?: Pick<JobLogger, 'error'>,
+  cap: DailyCap = unlimitedCap(),
 ): Promise<OnboardingSweepResult> {
   const result: OnboardingSweepResult = { guided: 0, finished: 0, failed: 0 };
 
   for (const tenantId of tenantIds) {
     try {
-      const outcome = await produceOnboardingStep(tenantId, now, db, sources);
+      const outcome = await produceOnboardingStep(tenantId, now, db, sources, cap);
       if (outcome === 'created') result.guided++;
       if (outcome === 'finished') result.finished++;
     } catch (e) {

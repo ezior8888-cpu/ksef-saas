@@ -3655,3 +3655,86 @@ Wszystko ciche do świadomej decyzji o odsłonięciu.
   odsłonięciu kilku naraz konto może dostać kilka kart jednego ranka.
   Każda reguła pilnuje się dziś sama, ale nikt nie pilnuje sumy.
 - K1.3 — ujednolicenie wyniku `runFloTick` (dziś osiem płaskich liczników).
+
+## 2026-09-24 · Plan FLO 2, K1.4 — wspólny dzienny limit kart
+
+W pulsie są cztery reguły i audyt. Każda pilnuje się sama — K-01 pyta o jedną
+fakturę, W-04 stawia jedną kartę na miesiąc, P-03 jedną na kontrahenta, O-01
+jedną na konto — ale **nikt nie pilnuje sumy, a klient widzi właśnie sumę**.
+Po odsłonięciu kilku funkcji naraz konto mogło dostać pięć kart jednego ranka.
+Lawina kart to najczęstszy powód, dla którego ludzie wyłączają takiego agenta;
+wtedy tracimy nie jedną kartę, tylko wszystkie.
+
+`lib/flo/daily-cap.ts` — jeden limit na CAŁY przebieg pulsu, wspólny dla
+wszystkich reguł. Sufit: **5 nowych kart na konto na dobę**
+(`FLO_DAILY_NEW_CARDS_CAP`). To sufit, nie cel — przy dzisiejszych regułach
+normalny dzień to zero albo jedna karta.
+
+### Co limit obejmuje, a czego nie
+
+| Zdarzenie | Pod limitem? | Dlaczego |
+|---|---|---|
+| nowa karta z pulsu | **tak** | o to klient nie prosił |
+| odświeżenie żywej karty (W-04, O-01) | nie | ta sama sprawa, o którą raz już zapytaliśmy |
+| zamknięcie nieaktualnej karty | nie | domknięcie rozmowy, którą agent sam zaczął |
+| reakcja na działanie klienta (status wysyłki, odczyt paragonu, awaria MF) | nie i nie może | cisza w odpowiedzi na kliknięcie jest gorsza niż nadmiar kart |
+
+**Limit nie odwraca hierarchii reguł.** Kolejność w pulsie jest kolejnością
+ważności: pieniądze przed prowadzeniem za rękę. Ostatnie wolne miejsce dostaje
+reguła, która jest wyżej — osobny test to przybija.
+
+### Trzy decyzje
+
+| Decyzja | Dlaczego |
+|---|---|
+| limit **dzienny**, nie na przebieg | punktem wyjścia są karty, które konto dostało dziś. Inaczej drugie uruchomienie pulsu (ponowienie zadania) dawałoby drugą porcję |
+| **bez kolejki zaległych** | reguła, która się nie zmieściła, spróbuje jutro — jej warunki i tak liczą się od nowa. Rejestr „kart odłożonych" byłby drugim źródłem prawdy o tym, o co agent chce zapytać |
+| limit sprawdzany **tuż przed zapisem**, nie na wejściu do reguły | wcześniej licznik zatrzymanych rósłby przy kontach, które i tak nie miały o czym pisać, i operator czytałby fałszywą lawinę |
+
+### Dwie rzeczy, które trzeba było naprawić przy okazji
+
+**Granica doby leciała po UTC.** Pierwsza wersja liczyła „dzisiaj" od północy
+UTC. W czasie letnim polska doba zaczyna się o 22:00 UTC dnia poprzedniego,
+więc karta z 00:30 czasu polskiego wpadałaby do wczoraj — i konto dostawało
+tego dnia o jedną kartę za dużo. `warsawDayStart()` wyznacza granicę
+w kalendarzu klienta, bez wpisanego na sztywno przesunięcia strefy (zmienia
+się dwa razy w roku).
+
+**Odczyt dzisiejszych kart nie był stronicowany.** Ucięta odpowiedź PostgREST-a
+znaczyłaby limit policzony z niepełnych danych — czyli limit cicho przeciekający,
+przy zapytaniu, które wygląda na udane. Teraz czyta stronami po 1000, jak
+`readActiveTenantIds`. Wymagało to `range()` w atrapie bazy (`flo-fake-db.ts`)
+i w `FloFilter` — atrapa tnie **po** filtrach, tak jak PostgREST.
+
+### Nowe w wyniku pulsu
+
+`FloTickResult.withheld` — ile kart limit zatrzymał. Zero to stan normalny;
+liczba rosnąca z dnia na dzień znaczy, że reguły chcą mówić częściej, niż
+klient jest w stanie słuchać. **To jest sygnał do przycinania reguł, nie do
+podnoszenia sufitu.**
+
+### Weryfikacja
+
+- `flo-daily-cap.test.ts` — 14 testów: liczenie, granica doby (lato i zima),
+  odczyt z bazy, cztery przebiegi pulsu.
+- Test mutacyjny **8/8 złapanych za pierwszym podejściem**: limit nieobowiązujący,
+  liczenie od zera, limit wspólny dla kont, doba po UTC, licznik zatrzymanych
+  zawsze zero, limit blokujący zamykanie kart, karta niezużywająca miejsca,
+  puls nieczytający dzisiejszych kart.
+- `tsc --noEmit` czysto; eslint 0/0; vitest **1293 zielonych, 7 pominiętych,
+  zero czerwonych**; `tsx --test` (XML) 66/66.
+
+> `pnpm run ci` nie przechodzi w worktree — brak `node_modules`, więc `tsc`
+> nie jest na ścieżce. Te same cztery kroki puszczone przez `npx`, każdy
+> zielony.
+
+### Bez zmian
+
+Migracji nie ma. Kontraktu `types/flo.ts` nie ruszałem. Nic nie wdrażam.
+
+### Następny krok
+
+- **K1.3 — ujednolicenie wyniku `runFloTick`.** Dziś to dziewięć płaskich
+  liczników (`confirmAsked`, `confirmClosed`, `missingDocsAsked`, …) plus
+  `withheld`. Każda nowa reguła dokłada dwa kolejne pola i nikt tego nie
+  czyta poza testami.

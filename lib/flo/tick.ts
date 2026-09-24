@@ -13,6 +13,7 @@
  */
 
 import { logAuditSystem } from '@/lib/audit/log-system';
+import { createDailyCap, readTodayCardCounts } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient } from '@/lib/flo/db-types';
 import { runKsefAuditSweep } from '@/lib/flo/functions/audit-sweep';
 import {
@@ -69,6 +70,12 @@ export interface FloTickResult {
   /** O-01: kreatory zamknięte, bo pierwsza faktura poszła. */
   onboardingFinished: number;
   /**
+   * Ile kart zatrzymał dzienny limit (K1.4). Zero to stan normalny; liczba
+   * rosnąca z dnia na dzień znaczy, że reguły chcą mówić częściej, niż
+   * klient jest w stanie słuchać — i że limit trzyma lawinę.
+   */
+  withheld: number;
+  /**
    * Nieudane przebiegi reguł na kontach — każda reguła liczona osobno, więc
    * konto, na którym padły dwie, liczy się dwa razy. Puls za każdym razem
    * szedł dalej.
@@ -112,6 +119,12 @@ export async function runFloTick(
   // nigdy.
   const tenantIds = await sources.listTenantIds();
 
+  // Jeden limit na CAŁY przebieg, wspólny dla wszystkich reguł (K1.4).
+  // Osobne limity per reguła nie zatrzymałyby lawiny, bo to właśnie suma
+  // reguł zalewa konto. Punkt wyjścia to karty, które konto dostało już
+  // dzisiaj — inaczej drugie uruchomienie pulsu dałoby drugą porcję.
+  const cap = createDailyCap(await readTodayCardCounts(tenantIds, now, db));
+
   // Audyt porządku (X-05) chodzi RAZ W MIESIĄCU, nie codziennie: to jest
   // przegląd papierów, a nie sprawa bieżąca. Codzienne przypominanie o tych
   // samych zaległościach zamieniłoby go w listę zarzutów.
@@ -119,6 +132,7 @@ export async function runFloTick(
     ? await runKsefAuditSweep(tenantIds, now, db, {
         readGlobalKill: sources.readGlobalKill,
         logger: ctx?.logger,
+        cap,
       })
     : { created: 0, failed: 0 };
 
@@ -131,6 +145,7 @@ export async function runFloTick(
     db,
     sources.paymentConfirm,
     ctx?.logger,
+    cap,
   );
 
   // W-04 (K1.9): „co miesiąc masz tu koszt, a w tym miesiącu nie widzę
@@ -142,6 +157,7 @@ export async function runFloTick(
     db,
     sources.expenseMissing,
     ctx?.logger,
+    cap,
   );
 
   // P-03 (K1.10): „zwykle fakturujesz ich około 10., w tym miesiącu nie
@@ -152,6 +168,7 @@ export async function runFloTick(
     db,
     sources.invoiceMissing,
     ctx?.logger,
+    cap,
   );
 
   // O-01 (K1.11): pierwsze kroki na nowym koncie. NA KOŃCU, bo to najmiększa
@@ -163,6 +180,7 @@ export async function runFloTick(
     db,
     sources.onboarding,
     ctx?.logger,
+    cap,
   );
 
   // ── miejsce na kolejne reguły ──────────────────────────────
@@ -182,6 +200,7 @@ export async function runFloTick(
     missingInvoicesAsked: missingInvoices.asked,
     onboardingGuided: onboarding.guided,
     onboardingFinished: onboarding.finished,
+    withheld: cap.withheld,
     failedTenants:
       audit.failed +
       confirm.failed +

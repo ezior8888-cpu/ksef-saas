@@ -27,6 +27,7 @@
 import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient } from '@/lib/flo/db-types';
 import { isMuted, readDecisionRows } from '@/lib/flo/decisions';
 import { buildMissingInvoiceProposal } from '@/lib/flo/functions/invoice-batch';
@@ -187,6 +188,8 @@ export async function produceMissingInvoice(
   now: Date,
   db: FloDbClient,
   sources: InvoiceMissingSources,
+  /** Dzienny limit nowych kart na konto — patrz `daily-cap.ts`. */
+  cap: DailyCap = unlimitedCap(),
 ): Promise<MissingInvoiceOutcome> {
   const verdict = await isKindEnabledForTenant(
     KIND,
@@ -241,8 +244,15 @@ export async function produceMissingInvoice(
 
     if (!proposal) continue;
 
+    // Każda karta P-03 jest nowa (klucz per kontrahent), więc limit
+    // sprawdzamy tuż przed zapisem.
+    if (!cap.canAsk(tenantId)) return 'nothing';
+
     const result = await createProposal(proposal, db, sources.readGlobalKill);
-    if (result.status === 'created') return 'created';
+    if (result.status === 'created') {
+      cap.spend(tenantId);
+      return 'created';
+    }
   }
 
   return 'nothing';
@@ -279,12 +289,13 @@ export async function runMissingInvoiceSweep(
   db: FloDbClient = floDb(),
   sources: InvoiceMissingSources = productionInvoiceMissingSources(),
   logger?: Pick<JobLogger, 'error'>,
+  cap: DailyCap = unlimitedCap(),
 ): Promise<MissingInvoiceSweepResult> {
   const result: MissingInvoiceSweepResult = { asked: 0, failed: 0 };
 
   for (const tenantId of tenantIds) {
     try {
-      if ((await produceMissingInvoice(tenantId, now, db, sources)) === 'created') {
+      if ((await produceMissingInvoice(tenantId, now, db, sources, cap)) === 'created') {
         result.asked++;
       }
     } catch (e) {

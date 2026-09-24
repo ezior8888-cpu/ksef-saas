@@ -66,8 +66,18 @@ export function createFakeDb(seed: Partial<Tables> = {}): FakeDb {
   };
   const state = { writes: 0 };
 
-  function makeQuery(rows: Row[], filters: Filter[], mode: 'read' | 'update' | 'delete', patch?: Row) {
-    const apply = () => rows.filter((row) => filters.every((f) => f(row)));
+  function makeQuery(
+    rows: Row[],
+    filters: Filter[],
+    mode: 'read' | 'update' | 'delete',
+    patch?: Row,
+    /** Zakres z `range()` — granice włączne, jak w PostgREST. */
+    bounds?: [number, number],
+  ) {
+    const apply = () => {
+      const matched = rows.filter((row) => filters.every((f) => f(row)));
+      return bounds ? matched.slice(bounds[0], bounds[1] + 1) : matched;
+    };
 
     const run = async (): Promise<{ data: Row[] | null; error: null }> => {
       await yieldToOthers();
@@ -88,24 +98,27 @@ export function createFakeDb(seed: Partial<Tables> = {}): FakeDb {
 
     const builder = {
       eq: (col: string, value: unknown) =>
-        makeQuery(rows, [...filters, (r) => r[col] === value], mode, patch),
+        makeQuery(rows, [...filters, (r) => r[col] === value], mode, patch, bounds),
       neq: (col: string, value: unknown) =>
-        makeQuery(rows, [...filters, (r) => r[col] !== value], mode, patch),
+        makeQuery(rows, [...filters, (r) => r[col] !== value], mode, patch, bounds),
       in: (col: string, values: readonly unknown[]) =>
-        makeQuery(rows, [...filters, (r) => values.includes(r[col])], mode, patch),
+        makeQuery(rows, [...filters, (r) => values.includes(r[col])], mode, patch, bounds),
       is: (col: string, value: unknown) =>
-        makeQuery(rows, [...filters, (r) => (r[col] ?? null) === value], mode, patch),
+        makeQuery(rows, [...filters, (r) => (r[col] ?? null) === value], mode, patch, bounds),
       lt: (col: string, value: string | number) =>
-        makeQuery(rows, [...filters, (r) => String(r[col]) < String(value)], mode, patch),
+        makeQuery(rows, [...filters, (r) => String(r[col]) < String(value)], mode, patch, bounds),
       lte: (col: string, value: string | number) =>
-        makeQuery(rows, [...filters, (r) => String(r[col]) <= String(value)], mode, patch),
+        makeQuery(rows, [...filters, (r) => String(r[col]) <= String(value)], mode, patch, bounds),
       gt: (col: string, value: string | number) =>
-        makeQuery(rows, [...filters, (r) => String(r[col] ?? '') > String(value)], mode, patch),
+        makeQuery(rows, [...filters, (r) => String(r[col] ?? '') > String(value)], mode, patch, bounds),
       gte: (col: string, value: string | number) =>
-        makeQuery(rows, [...filters, (r) => String(r[col] ?? '') >= String(value)], mode, patch),
+        makeQuery(rows, [...filters, (r) => String(r[col] ?? '') >= String(value)], mode, patch, bounds),
       order: () => builder,
       limit: () => builder,
-      select: () => makeQuery(rows, filters, mode, patch),
+      /** Stronicowanie — tnie PO filtrach, tak jak robi to PostgREST. */
+      range: (from: number, to: number) =>
+        makeQuery(rows, filters, mode, patch, [from, to]),
+      select: () => makeQuery(rows, filters, mode, patch, bounds),
       maybeSingle: async () => {
         const { data } = await run();
         return { data: data?.[0] ?? null, error: null };

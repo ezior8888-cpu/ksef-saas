@@ -265,6 +265,8 @@ export interface FloFilter<Row> extends PromiseLike<FloResult<Row[] | null>> {
   gte(column: string, value: string | number): FloFilter<Row>;
   order(column: string, opts?: { ascending?: boolean }): FloFilter<Row>;
   limit(count: number): FloFilter<Row>;
+  /** Stronicowanie — granice włączne, jak w PostgREST. */
+  range(from: number, to: number): FloFilter<Row>;
   maybeSingle(): Promise<FloResult<Row | null>>;
   single(): Promise<FloResult<Row>>;
 }

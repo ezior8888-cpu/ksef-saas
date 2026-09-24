@@ -39,6 +39,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 
+import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient, type FloProposalRow } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
 import { buyerName, readState, type FloState } from '@/lib/flo/fingerprint';
@@ -182,6 +183,8 @@ export async function producePaymentConfirm(
   now: Date,
   db: FloDbClient,
   sources: PaymentConfirmSources,
+  /** Dzienny limit nowych kart na konto — patrz `daily-cap.ts`. */
+  cap: DailyCap = unlimitedCap(),
 ): Promise<PaymentConfirmResult> {
   const verdict = await isKindEnabledForTenant(
     KIND,
@@ -251,8 +254,13 @@ export async function producePaymentConfirm(
   for (const entry of selection) {
     if (asked.has(entry.invoice.id)) continue;
 
+    // Limit dotyczy WYŁĄCZNIE nowych pytań. Zamykanie nieaktualnych kart
+    // i odświeżanie żywych dzieje się wyżej i nie zależy od niego.
+    if (!cap.canAsk(tenantId)) return { outcome: 'nothing', closed };
+
     const outcome = await askAbout(tenantId, entry.invoice.id, now, db, sources);
     if (outcome === 'skipped') continue;
+    if (outcome === 'created') cap.spend(tenantId);
     return { outcome, closed };
   }
 
@@ -379,6 +387,7 @@ export async function runPaymentConfirmSweep(
   db: FloDbClient = floDb(),
   sources: PaymentConfirmSources = productionPaymentConfirmSources(),
   logger?: Pick<JobLogger, 'error'>,
+  cap: DailyCap = unlimitedCap(),
 ): Promise<PaymentConfirmSweepResult> {
   const result: PaymentConfirmSweepResult = { asked: 0, closed: 0, failed: 0 };
 
@@ -389,6 +398,7 @@ export async function runPaymentConfirmSweep(
         now,
         db,
         sources,
+        cap,
       );
       if (outcome === 'created') result.asked++;
       result.closed += closed;

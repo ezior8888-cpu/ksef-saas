@@ -29,6 +29,7 @@
 import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient, type FloProposalRow } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
 import {
@@ -124,6 +125,8 @@ export async function produceMissingDocs(
   now: Date,
   db: FloDbClient,
   sources: ExpenseMissingSources,
+  /** Dzienny limit nowych kart na konto — patrz `daily-cap.ts`. */
+  cap: DailyCap = unlimitedCap(),
 ): Promise<MissingDocsResult> {
   if (now.getUTCDate() < ASK_FROM_DAY) {
     return { outcome: 'too_early', closed: 0 };
@@ -162,6 +165,11 @@ export async function produceMissingDocs(
   const proposal = buildMissingDocsProposal({ tenantId, missing, month, now });
   if (!proposal) return { outcome: 'nothing', closed: 0 };
 
+  // Limit obejmuje NOWĄ kartę; odświeżenie istniejącej już nie — to ta sama
+  // sprawa, o którą raz już zapytaliśmy, a cisza w połowie rozmowy byłaby
+  // gorsza niż jedna karta ponad limit.
+  if (!live && !cap.canAsk(tenantId)) return { outcome: 'nothing', closed: 0 };
+
   const result = await createProposal(
     // Termin ważności ustala karta przy pierwszym przebiegu. Odświeżanie go
     // co dzień sprawiłoby, że przemilczane pytanie nie wygaśnie nigdy.
@@ -172,6 +180,7 @@ export async function produceMissingDocs(
 
   switch (result.status) {
     case 'created':
+      cap.spend(tenantId);
       return { outcome: 'created', closed: 0 };
     case 'updated':
       return { outcome: 'refreshed', closed: 0 };
@@ -235,6 +244,7 @@ export async function runMissingDocsSweep(
   db: FloDbClient = floDb(),
   sources: ExpenseMissingSources = productionExpenseMissingSources(),
   logger?: Pick<JobLogger, 'error'>,
+  cap: DailyCap = unlimitedCap(),
 ): Promise<MissingDocsSweepResult> {
   const result: MissingDocsSweepResult = { asked: 0, closed: 0, failed: 0 };
 
@@ -248,6 +258,7 @@ export async function runMissingDocsSweep(
         now,
         db,
         sources,
+        cap,
       );
       if (outcome === 'created') result.asked++;
       result.closed += closed;
