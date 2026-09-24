@@ -1,0 +1,190 @@
+═══ 3.1 Co może rola `anon` (niezalogowany gość) ═══
+           tabela           |                          uprawnienia                          
+----------------------------+---------------------------------------------------------------
+ gdpr_deletion_requests     | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ global_feature_flags       | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ mfa_recovery_codes         | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ newsletter_subscribers     | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ tenant_verification_status | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+(5 rows)
+
+
+═══ 3.2 Co może rola `authenticated` (dowolny zalogowany) ═══
+           tabela           |                          uprawnienia                          
+----------------------------+---------------------------------------------------------------
+ accountant_access          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ accountant_settings        | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ audit_logs                 | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ categorization_rules       | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ contractors                | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ email_preferences          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ error_translations         | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ expenses                   | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ export_files               | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ export_jobs                | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ flo_approvals              | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ flo_decisions              | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ flo_kind_flags             | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ flo_prefs                  | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ flo_proposals              | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ flo_rollout                | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ flo_shadow                 | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ flo_usage                  | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ gdpr_deletion_requests     | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ global_feature_flags       | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ import_jobs                | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ inngest_run_log            | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ invoice_line_items         | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ invoices                   | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ invoices_overdue           | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ kpir_entries               | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ kpir_global_rules          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ ksef_inbox_cursor          | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ ksef_offline_queue         | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ ksef_sessions              | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ ksef_submissions           | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ memberships                | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ mfa_recovery_codes         | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ newsletter_subscribers     | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ ocr_jobs                   | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ organization_invitations   | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ organization_join_requests | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ payment_imports            | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ payment_reminders          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ payments                   | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ products                   | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ push_subscriptions         | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ reminder_settings          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ reminder_templates         | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ stripe_payments            | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ stripe_refunds             | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ subscriptions              | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ support_conversations      | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ support_messages           | REFERENCES, SELECT, TRIGGER, TRUNCATE
+ tenant_feature_flags       | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ tenant_verification_status | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ tenants                    | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ upo_receipts               | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ users                      | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ validation_cache           | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ xml_documents              | REFERENCES, SELECT, TRIGGER, TRUNCATE
+(56 rows)
+
+
+═══ 3.3 Uprawnienia do funkcji ═══
+               funkcja                |    tryb     | wlasciciel |       uprawnienia        
+--------------------------------------+-------------+------------+--------------------------
+ accept_organization_invitation       | DEFINER (!) | postgres   | =X/postgres             +
+                                      |             |            | postgres=X/postgres     +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ admin_database_size                  | DEFINER (!) | postgres   | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ admin_table_sizes                    | DEFINER (!) | postgres   | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ anonymize_user_audit_logs            | DEFINER (!) | postgres   | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ approve_join_request                 | DEFINER (!) | postgres   | =X/postgres             +
+                                      |             |            | postgres=X/postgres     +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ auth_email_registered                | DEFINER (!) | postgres   | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ change_membership_role               | DEFINER (!) | postgres   | =X/postgres             +
+                                      |             |            | postgres=X/postgres     +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ claim_ksef_nip_ownership             | DEFINER (!) | postgres   | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ cleanup_old_audit_logs               | DEFINER (!) | postgres   | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ create_organization_with_owner       | DEFINER (!) | postgres   | =X/postgres             +
+                                      |             |            | postgres=X/postgres     +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ deny_join_request                    | DEFINER (!) | postgres   | =X/postgres             +
+                                      |             |            | postgres=X/postgres     +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ get_current_tenant_id                | DEFINER (!) | postgres   | =X/postgres             +
+                                      |             |            | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ handle_new_user                      | DEFINER (!) | postgres   | =X/postgres             +
+                                      |             |            | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ has_org_role                         | DEFINER (!) | postgres   | =X/postgres             +
+                                      |             |            | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ increment_push_failed_count          | DEFINER (!) | postgres   | postgres=X/postgres     +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ is_member_of                         | DEFINER (!) | postgres   | =X/postgres             +
+                                      |             |            | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ is_nip_ksef_claimed                  | DEFINER (!) | postgres   | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ list_public_tables                   | DEFINER (!) | postgres   | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ recalculate_invoice_paid_amount      | DEFINER (!) | postgres   | =X/postgres             +
+                                      |             |            | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ refresh_dashboard_materialized_views | DEFINER (!) | postgres   | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ revoke_membership                    | DEFINER (!) | postgres   | =X/postgres             +
+                                      |             |            | postgres=X/postgres     +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+ shares_active_org_with               | DEFINER (!) | postgres   | postgres=X/postgres     +
+                                      |             |            | anon=X/postgres         +
+                                      |             |            | authenticated=X/postgres+
+                                      |             |            | service_role=X/postgres
+(22 rows)
+
+
+═══ 3.4 Kto jest w jakiej roli ═══
+            rola            | superuzytkownik | omija_rls | moze_sie_logowac |                                                             dziedziczy_po                                                             
+----------------------------+-----------------+-----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------
+ supabase_admin             | t               | t         | t                | —
+ postgres                   | f               | t         | t                | pg_read_all_data, pg_monitor, pg_signal_backend, supabase_functions_admin, authenticated, anon, service_role, supabase_realtime_admin
+ service_role               | f               | t         | f                | —
+ supabase_read_only_user    | f               | t         | t                | pg_read_all_data
+ anon                       | f               | f         | f                | —
+ authenticated              | f               | f         | f                | —
+ authenticator              | f               | f         | t                | authenticated, anon, service_role
+ dashboard_user             | f               | f         | f                | —
+ pgbouncer                  | f               | f         | t                | —
+ supabase_auth_admin        | f               | f         | t                | —
+ supabase_functions_admin   | f               | f         | t                | —
+ supabase_realtime_admin    | f               | f         | f                | —
+ supabase_replication_admin | f               | f         | t                | —
+ supabase_storage_admin     | f               | f         | t                | authenticator
+(14 rows)
+

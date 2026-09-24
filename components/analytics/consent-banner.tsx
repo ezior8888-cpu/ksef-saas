@@ -1,41 +1,43 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import posthog from 'posthog-js';
 import { X } from 'lucide-react';
 
-import { isBrowserPosthogReady } from '@/lib/analytics/browser-posthog';
 import {
+  ANALYTICS_CONSENT_EVENT,
+  CONSENT_KEY,
   getAnalyticsConsent,
   isAnalyticsConfigured,
   setAnalyticsConsent,
 } from '@/lib/analytics/consent';
 
+function subscribeConsent(onChange: () => void): () => void {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === CONSENT_KEY || event.key === null) onChange();
+  };
+  window.addEventListener(ANALYTICS_CONSENT_EVENT, onChange);
+  window.addEventListener('storage', onStorage);
+  return () => {
+    window.removeEventListener(ANALYTICS_CONSENT_EVENT, onChange);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+
 export function ConsentBanner() {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (!isAnalyticsConfigured()) return;
-    if (getAnalyticsConsent() === 'unset') setVisible(true);
-  }, []);
-
+  const visible = useSyncExternalStore(
+    subscribeConsent,
+    () => isAnalyticsConfigured() && getAnalyticsConsent() === 'unset',
+    () => false,
+  );
   if (!visible) return null;
 
   const grant = () => {
     setAnalyticsConsent(true);
-    if (isBrowserPosthogReady()) {
-      posthog.opt_in_capturing();
-    }
-    setVisible(false);
   };
 
   const deny = () => {
     setAnalyticsConsent(false);
-    if (isBrowserPosthogReady()) {
-      posthog.opt_out_capturing();
-    }
-    setVisible(false);
   };
 
   return (
@@ -44,7 +46,7 @@ export function ConsentBanner() {
         <div className="flex-1 text-sm">
           <p className="font-medium">Analityka i pomoc w rozwoju produktu</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Zbieramy anonimowe statystyki użycia (PostHog, hostowane w EU),
+            Za Twoją zgodą zbieramy statystyki użycia (PostHog, hostowane w EU),
             żeby naprawiać błędy i ulepszać FaktFlow. Szczegóły:{' '}
             <Link
               href="/legal/polityka-prywatnosci"

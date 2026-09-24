@@ -2,6 +2,7 @@ import { withSentryConfig } from '@sentry/nextjs';
 import withSerwistInit from '@serwist/next';
 import createMDX from '@next/mdx';
 import type { NextConfig } from 'next';
+import { buildContentSecurityPolicy } from './lib/security/csp';
 
 const withMDX = createMDX({
   extension: /\.mdx?$/,
@@ -11,52 +12,18 @@ const withSerwist = withSerwistInit({
   // Ścieżka do service worker (pełna implementacja: zadanie 17.3)
   swSrc: 'app/sw.ts',
   swDest: 'public/sw.js',
+  cacheOnNavigation: false,
   // W dev SW jest wyłączony (nie blokuje hot reload)
   disable: process.env.NODE_ENV === 'development',
   // Dynamiczny re-rejestr SW po powrocie online
   reloadOnOnline: true,
 });
 
-/**
- * CSP w trybie Report-Only jako pierwszy krok roll-outu.
- *
- * Audyt #29: dopóki nie zbierzemy raportów z prod (przez `report-uri`) i nie
- * potwierdzimy, że żaden legitny flow nie jest blokowany, NIE przełączamy na
- * `Content-Security-Policy` (enforced). Po ~tygodniu na prod bez naruszeń —
- * wymień nazwę nagłówka i ten komentarz.
- *
- * Allowlist:
- *   - 'self' wszędzie poza fetchami zewnętrznymi.
- *   - script/style 'unsafe-inline' jest niezbędne dla Next.js inline bootstrap
- *     (theme boot, Sentry init, RSC hydration). Można później zacieśnić przez
- *     nonce'y, ale to wymaga osobnej iteracji w `app/layout.tsx`.
- *   - connect-src obejmuje Supabase REST + Realtime (WebSocket).
- *     Sentry leci przez tunnelRoute "/monitoring", więc 'self' wystarcza.
- *     R2 i Resend są używane wyłącznie po stronie serwera — nie dodajemy ich
- *     do client-side connect-src.
- *   - frame-ancestors 'none' = niemożliwe wbudowanie naszego dashboardu w iframe
- *     (chroni przed clickjackingiem; X-Frame-Options to legacy odpowiednik).
- */
-// SEC-3 (audyt przedlaunchowy): allowlist enforce-ready. Turnstile ładuje
-// challenges.cloudflare.com (script + iframe) — bez tego enforce CSP wywala
-// bot-protection. Google Fonts (Material Symbols + gstatic). Stripe jest
-// server-side (redirect do Checkout) → CSP go nie wymaga. PostHog leci przez
-// rewrite /ingest (same-origin). Sentry przez tunnelRoute /monitoring.
-const CSP_DIRECTIVES = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "img-src 'self' blob: data: https:",
-  "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com",
-  "frame-src 'self' https://challenges.cloudflare.com",
-  "worker-src 'self' blob:",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-  "upgrade-insecure-requests",
-].join('; ');
+// Enforced policy; the self-hosted backend must be configured at build time.
+const CSP_DIRECTIVES = buildContentSecurityPolicy({
+  production: process.env.NODE_ENV === 'production',
+  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+});
 
 const SECURITY_HEADERS: { key: string; value: string }[] = [
   // Audyt #7 / #29: Referrer-Policy globalny — potwierdzamy intencję z layoutu
@@ -76,8 +43,8 @@ const SECURITY_HEADERS: { key: string; value: string }[] = [
     value:
       'camera=(), microphone=(), geolocation=(), browsing-topics=(), interest-cohort=()',
   },
-  // Report-Only — zbieramy violation reports zanim wymusimy CSP.
-  { key: 'Content-Security-Policy-Report-Only', value: CSP_DIRECTIVES },
+  // Egzekwowanie polityki; inline bootstrap Next pozostaje do osobnego wdrożenia nonce.
+  { key: 'Content-Security-Policy', value: CSP_DIRECTIVES },
 ];
 
 const PROD_ONLY_HEADERS: { key: string; value: string }[] = [
@@ -91,6 +58,7 @@ const PROD_ONLY_HEADERS: { key: string; value: string }[] = [
 ];
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   pageExtensions: ['ts', 'tsx', 'js', 'jsx', 'md', 'mdx'],
 
   // Praca w git worktree: dwa `pnpm-workspace.yaml` — bez tego Next zgaduje root.

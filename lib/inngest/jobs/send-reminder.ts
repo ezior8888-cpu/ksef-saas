@@ -257,7 +257,7 @@ export async function runSendReminder(data: Parameters<typeof remindersSendReque
 
       let attachmentBuffer: Buffer | null = null;
       if (pdfPath) {
-        attachmentBuffer = await downloadFromR2(pdfPath);
+        attachmentBuffer = await downloadFromR2(pdfPath, reminder.tenant_id);
       }
 
       const safeInvoiceFile = invoiceLabel.replace(/\//g, '-');

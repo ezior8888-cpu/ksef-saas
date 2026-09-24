@@ -1,0 +1,118 @@
+═══ 2.1 Tabele z niepełnym pokryciem operacji ═══
+           tabela           | ma_select | ma_insert | ma_update | ma_delete | polityk 
+----------------------------+-----------+-----------+-----------+-----------+---------
+ audit_logs                 | t         | f         | t         | t         |       3
+ email_preferences          | t         | t         | f         | t         |       3
+ error_translations         | t         | f         | f         | f         |       1
+ flo_approvals              | t         | f         | f         | f         |       1
+ flo_decisions              | t         | f         | f         | f         |       1
+ flo_kind_flags             | t         | f         | f         | f         |       1
+ flo_prefs                  | t         | f         | f         | f         |       1
+ flo_proposals              | t         | f         | f         | f         |       1
+ gdpr_deletion_requests     | t         | f         | f         | f         |       1
+ inngest_run_log            | t         | f         | f         | f         |       1
+ kpir_global_rules          | t         | f         | f         | f         |       1
+ ksef_submissions           | t         | f         | f         | f         |       1
+ memberships                | t         | f         | f         | f         |       1
+ mfa_recovery_codes         | t         | f         | f         | f         |       1
+ organization_invitations   | t         | f         | f         | f         |       1
+ organization_join_requests | t         | t         | f         | f         |       2
+ stripe_payments            | t         | f         | f         | f         |       1
+ stripe_refunds             | t         | f         | f         | f         |       1
+ subscriptions              | t         | f         | f         | f         |       1
+ support_conversations      | t         | f         | f         | f         |       1
+ support_messages           | t         | f         | f         | f         |       1
+ tenant_feature_flags       | t         | f         | f         | f         |       1
+ tenants                    | t         | f         | t         | f         |       2
+ users                      | t         | f         | t         | f         |       2
+ validation_cache           | t         | f         | f         | f         |       1
+ xml_documents              | t         | f         | f         | f         |       1
+(26 rows)
+
+
+═══ 2.2 Pełna treść polityk ═══
+           tabela           |                polityka                 | operacja |    typ     |     role      |                                                warunek_using                                                 |                                              warunek_with_check                                              
+----------------------------+-----------------------------------------+----------+------------+---------------+--------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------
+ accountant_access          | accountant_access_owner_manage          | ALL      | PERMISSIVE | authenticated | ((tenant_id = get_current_tenant_id()) AND has_org_role(tenant_id, 'owner'::text))                           | ((tenant_id = get_current_tenant_id()) AND has_org_role(tenant_id, 'owner'::text))
+ accountant_settings        | accountant_settings_tenant_isolation    | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ audit_logs                 | audit_logs_no_delete                    | DELETE   | PERMISSIVE | authenticated | false                                                                                                        | 
+ audit_logs                 | audit_logs_no_update                    | UPDATE   | PERMISSIVE | authenticated | false                                                                                                        | 
+ audit_logs                 | audit_logs_select_own_tenant            | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ categorization_rules       | categorization_rules_delete_own_tenant  | DELETE   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ categorization_rules       | categorization_rules_insert_own_tenant  | INSERT   | PERMISSIVE | authenticated |                                                                                                              | (tenant_id = get_current_tenant_id())
+ categorization_rules       | categorization_rules_select_own_tenant  | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ categorization_rules       | categorization_rules_update_own_tenant  | UPDATE   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ contractors                | contractors_tenant_isolation            | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ email_preferences          | email_preferences_delete_own            | DELETE   | PERMISSIVE | authenticated | (user_id = ( SELECT auth.uid() AS uid))                                                                      | 
+ email_preferences          | email_preferences_insert_own            | INSERT   | PERMISSIVE | authenticated |                                                                                                              | (user_id = ( SELECT auth.uid() AS uid))
+ email_preferences          | email_preferences_select_own            | SELECT   | PERMISSIVE | authenticated | (user_id = ( SELECT auth.uid() AS uid))                                                                      | 
+ error_translations         | error_translations_select_authenticated | SELECT   | PERMISSIVE | authenticated | true                                                                                                         | 
+ expenses                   | expenses_delete_own_tenant              | DELETE   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ expenses                   | expenses_insert_own_tenant              | INSERT   | PERMISSIVE | authenticated |                                                                                                              | ((tenant_id = get_current_tenant_id()) AND (created_by = auth.uid()))
+ expenses                   | expenses_select_own_tenant              | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ expenses                   | expenses_update_own_tenant              | UPDATE   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ export_files               | export_files_tenant_isolation           | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ export_jobs                | export_jobs_tenant_isolation            | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ flo_approvals              | flo_approvals_tenant_select             | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ flo_decisions              | flo_decisions_tenant_select             | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ flo_kind_flags             | flo_kind_flags_tenant_select            | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ flo_prefs                  | flo_prefs_tenant_select                 | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ flo_proposals              | flo_proposals_tenant_select             | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ gdpr_deletion_requests     | gdpr_deletion_own_select                | SELECT   | PERMISSIVE | authenticated | (user_id = auth.uid())                                                                                       | 
+ import_jobs                | import_jobs_tenant_isolation            | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ inngest_run_log            | inngest_run_log_select_own_tenant       | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ invoice_line_items         | line_items_delete_via_invoice           | DELETE   | PERMISSIVE | authenticated | (EXISTS ( SELECT 1                                                                                          +| 
+                            |                                         |          |            |               |    FROM invoices                                                                                            +| 
+                            |                                         |          |            |               |   WHERE ((invoices.id = invoice_line_items.invoice_id) AND (invoices.tenant_id = get_current_tenant_id())))) | 
+ invoice_line_items         | line_items_insert_via_invoice           | INSERT   | PERMISSIVE | authenticated |                                                                                                              | (EXISTS ( SELECT 1                                                                                          +
+                            |                                         |          |            |               |                                                                                                              |    FROM invoices                                                                                            +
+                            |                                         |          |            |               |                                                                                                              |   WHERE ((invoices.id = invoice_line_items.invoice_id) AND (invoices.tenant_id = get_current_tenant_id()))))
+ invoice_line_items         | line_items_select_via_invoice           | SELECT   | PERMISSIVE | authenticated | (EXISTS ( SELECT 1                                                                                          +| 
+                            |                                         |          |            |               |    FROM invoices                                                                                            +| 
+                            |                                         |          |            |               |   WHERE ((invoices.id = invoice_line_items.invoice_id) AND (invoices.tenant_id = get_current_tenant_id())))) | 
+ invoice_line_items         | line_items_update_via_invoice           | UPDATE   | PERMISSIVE | authenticated | (EXISTS ( SELECT 1                                                                                          +| 
+                            |                                         |          |            |               |    FROM invoices                                                                                            +| 
+                            |                                         |          |            |               |   WHERE ((invoices.id = invoice_line_items.invoice_id) AND (invoices.tenant_id = get_current_tenant_id())))) | 
+ invoices                   | invoices_delete_own_tenant_draft_only   | DELETE   | PERMISSIVE | authenticated | ((tenant_id = get_current_tenant_id()) AND ((ksef_status)::text = 'draft'::text))                            | 
+ invoices                   | invoices_insert_own_tenant              | INSERT   | PERMISSIVE | authenticated |                                                                                                              | (tenant_id = get_current_tenant_id())
+ invoices                   | invoices_select_own_tenant              | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ invoices                   | invoices_update_own_tenant              | UPDATE   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ kpir_entries               | kpir_entries_own_tenant                 | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ kpir_global_rules          | kpir_global_rules_select_authenticated  | SELECT   | PERMISSIVE | authenticated | true                                                                                                         | 
+ ksef_offline_queue         | offline_queue_tenant_isolation          | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ ksef_sessions              | ksef_sessions_own_tenant                | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ ksef_submissions           | ksef_submissions_select_own_tenant      | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ memberships                | memberships_select_self_or_org          | SELECT   | PERMISSIVE | authenticated | ((user_id = auth.uid()) OR is_member_of(organization_id))                                                    | 
+ mfa_recovery_codes         | mfa_recovery_codes_own_select           | SELECT   | PERMISSIVE | authenticated | (user_id = auth.uid())                                                                                       | 
+ ocr_jobs                   | ocr_jobs_delete_own_tenant              | DELETE   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ ocr_jobs                   | ocr_jobs_insert_own_tenant              | INSERT   | PERMISSIVE | authenticated |                                                                                                              | ((tenant_id = get_current_tenant_id()) AND (created_by = auth.uid()))
+ ocr_jobs                   | ocr_jobs_select_own_tenant              | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ ocr_jobs                   | ocr_jobs_update_own_tenant              | UPDATE   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ organization_invitations   | org_invitations_select_org_members      | SELECT   | PERMISSIVE | authenticated | is_member_of(organization_id)                                                                                | 
+ organization_join_requests | join_requests_insert_self               | INSERT   | PERMISSIVE | authenticated |                                                                                                              | (requested_by_user_id = auth.uid())
+ organization_join_requests | join_requests_select_self_or_org        | SELECT   | PERMISSIVE | authenticated | ((requested_by_user_id = auth.uid()) OR is_member_of(organization_id))                                       | 
+ payment_imports            | payment_imports_tenant_isolation        | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ payment_reminders          | payment_reminders_tenant_isolation      | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ payments                   | payments_tenant_isolation               | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ products                   | products_tenant_isolation               | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ push_subscriptions         | Users manage own push subscriptions     | ALL      | PERMISSIVE | authenticated | ((user_id = auth.uid()) AND (tenant_id = get_current_tenant_id()))                                           | ((user_id = auth.uid()) AND (tenant_id = get_current_tenant_id()))
+ push_subscriptions         | Users see own push subscriptions        | SELECT   | PERMISSIVE | authenticated | ((user_id = auth.uid()) AND (tenant_id = get_current_tenant_id()))                                           | 
+ reminder_settings          | reminder_settings_tenant_isolation      | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ reminder_templates         | reminder_templates_tenant_isolation     | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ stripe_payments            | stripe_payments_select_own_tenant       | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ stripe_refunds             | stripe_refunds_select_own_tenant        | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ subscriptions              | subscriptions_select_own_tenant         | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ support_conversations      | support_conv_own_select                 | SELECT   | PERMISSIVE | authenticated | (user_id = auth.uid())                                                                                       | 
+ support_messages           | support_msg_own_select                  | SELECT   | PERMISSIVE | authenticated | (EXISTS ( SELECT 1                                                                                          +| 
+                            |                                         |          |            |               |    FROM support_conversations c                                                                             +| 
+                            |                                         |          |            |               |   WHERE ((c.id = support_messages.conversation_id) AND (c.user_id = auth.uid()))))                           | 
+ tenant_feature_flags       | tenant_feature_flags_select             | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+ tenants                    | tenants_select_member_of                | SELECT   | PERMISSIVE | authenticated | is_member_of(id)                                                                                             | 
+ tenants                    | tenants_update_own_owner                | UPDATE   | PERMISSIVE | authenticated | ((id = get_current_tenant_id()) AND has_org_role(id, 'owner'::text))                                         | (id = get_current_tenant_id())
+ upo_receipts               | upo_receipts_tenant_isolation           | ALL      | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | (tenant_id = get_current_tenant_id())
+ users                      | users_select_self_or_org_member         | SELECT   | PERMISSIVE | authenticated | ((id = auth.uid()) OR shares_active_org_with(id))                                                            | 
+ users                      | users_update_self                       | UPDATE   | PERMISSIVE | authenticated | (id = auth.uid())                                                                                            | (id = auth.uid())
+ validation_cache           | validation_cache_authenticated_select   | SELECT   | PERMISSIVE | authenticated | true                                                                                                         | 
+ xml_documents              | xml_documents_select_own_tenant         | SELECT   | PERMISSIVE | authenticated | (tenant_id = get_current_tenant_id())                                                                        | 
+(71 rows)
+

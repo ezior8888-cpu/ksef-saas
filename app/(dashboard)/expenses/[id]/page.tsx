@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { ExpenseEditForm } from '@/components/expenses/expense-edit-form';
 import { createClient } from '@/lib/supabase/server';
 import { getExpensePhotoUrl } from '@/lib/storage/expenses';
+import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,8 +24,12 @@ export default async function ExpenseDetailPage({
   if (error || !expense) notFound();
 
   let photoUrl: string | null = null;
-  if (expense.source === 'ocr_photo' && expense.source_file_path) {
-    photoUrl = await getExpensePhotoUrl(expense.source_file_path);
+  if (
+    expense.source === 'ocr_photo' &&
+    expense.source_file_path &&
+    isTenantStoragePath(expense.source_file_path, expense.tenant_id)
+  ) {
+    photoUrl = await getExpensePhotoUrl(expense.source_file_path, expense.tenant_id);
   }
 
   return <ExpenseEditForm expense={expense} photoUrl={photoUrl} />;

@@ -1,71 +1,46 @@
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/server';
+import type { createClient } from '@/lib/supabase/server';
 
-/**
- * 14 dni cooling-off — ustalone w Q2 planowania Fazy 28. User dostaje email
- * z linkiem cancel, ma czas na zmianę decyzji.
- */
 export const GDPR_COOLING_OFF_DAYS = 14;
 
+type GdprStatus = 'pending' | 'processing' | 'canceled' | 'executed' | 'failed';
 interface GdprRequestRow {
   id: string;
   user_id: string | null;
   user_email: string;
-  requested_at: string;
   scheduled_for: string;
-  status: 'pending' | 'canceled' | 'executed' | 'failed';
-  cancel_token: string;
+  status: GdprStatus;
+  cancel_token_hash: string;
+  processing_started_at: string | null;
   executed_at: string | null;
   failure_reason: string | null;
   cancel_reason: string | null;
   ip_address: string | null;
   user_agent: string | null;
 }
-
+interface QueryResult<T> {
+  data: T | null;
+  error: { message: string; code?: string } | null;
+}
+interface GdprSelectChain extends PromiseLike<QueryResult<GdprRequestRow[]>> {
+  eq: (key: string, value: string) => GdprSelectChain;
+  in: (key: string, values: string[]) => GdprSelectChain;
+  lte: (key: string, value: string) => GdprSelectChain;
+  maybeSingle: () => Promise<QueryResult<GdprRequestRow>>;
+}
+interface GdprUpdateChain extends PromiseLike<QueryResult<GdprRequestRow[]>> {
+  eq: (key: string, value: string) => GdprUpdateChain;
+  lte: (key: string, value: string) => GdprUpdateChain;
+  select: (columns: string) => GdprSelectChain;
+}
 interface GdprTable {
-  from: (n: 'gdpr_deletion_requests') => {
-    select: (c: string) => {
-      eq: (
-        k: string,
-        v: string,
-      ) => {
-        maybeSingle: () => Promise<{
-          data: GdprRequestRow | null;
-          error: { message: string } | null;
-        }>;
-        order: (
-          k: string,
-          opts?: { ascending: boolean },
-        ) => Promise<{
-          data: GdprRequestRow[] | null;
-          error: { message: string } | null;
-        }>;
-      };
-      lte: (
-        k: string,
-        v: string,
-      ) => Promise<{
-        data: GdprRequestRow[] | null;
-        error: { message: string } | null;
-      }>;
-    };
+  from: (name: 'gdpr_deletion_requests') => {
+    select: (columns: string) => GdprSelectChain;
     insert: (rows: Array<Partial<GdprRequestRow>>) => {
-      select: (c: string) => {
-        maybeSingle: () => Promise<{
-          data: GdprRequestRow | null;
-          error: { message: string } | null;
-        }>;
-      };
+      select: (columns: string) => GdprSelectChain;
     };
-    update: (patch: Partial<GdprRequestRow>) => {
-      eq: (
-        k: string,
-        v: string,
-      ) => Promise<{
-        data: GdprRequestRow | null;
-        error: { message: string } | null;
-      }>;
-    };
+    update: (patch: Partial<GdprRequestRow>) => GdprUpdateChain;
   };
 }
 
@@ -75,180 +50,138 @@ export interface CreateGdprRequestInput {
   ipAddress?: string;
   userAgent?: string;
 }
-
 export interface CreatedGdprRequest {
   id: string;
   scheduledFor: Date;
-  cancelToken: string;
+  /** Tylko dla nowego żądania; istniejącego tokenu nie odzyskujemy ani nie obracamy. */
+  cancelToken: string | null;
+  alreadyScheduled: boolean;
+}
+export type ActiveGdprRequest = Pick<GdprRequestRow, 'id' | 'scheduled_for'> & {
+  status: 'pending' | 'processing';
+};
+
+async function readActiveRequest(admin: GdprTable, userId: string): Promise<ActiveGdprRequest | null> {
+  const result = await admin.from('gdpr_deletion_requests')
+    .select('id, scheduled_for, status')
+    .eq('user_id', userId)
+    .in('status', ['pending', 'processing'])
+    .maybeSingle();
+  // Duplikaty w starej bazie też powodują błąd maybeSingle: nie tworzymy następnego.
+  if (result.error) throw new Error('gdpr_request_lookup_failed');
+  if (!result.data) return null;
+  if (result.data.status !== 'pending' && result.data.status !== 'processing') {
+    throw new Error('gdpr_request_invalid_state');
+  }
+  return { id: result.data.id, scheduled_for: result.data.scheduled_for, status: result.data.status };
 }
 
-/**
- * Tworzy GDPR deletion request. Sprawdza, czy user nie ma już pending
- * requestu — jeśli tak, zwraca istniejący (idempotency).
- */
-export async function createGdprRequest(
-  input: CreateGdprRequestInput,
-): Promise<CreatedGdprRequest> {
+/** userId musi pochodzić ze zweryfikowanej sesji wywołującego. */
+export async function getActiveGdprRequest(
+  supabase: Awaited<ReturnType<typeof createClient>>, userId: string,
+): Promise<ActiveGdprRequest | null> {
+  return readActiveRequest(supabase as unknown as GdprTable, userId);
+}
+
+function existingRequest(request: ActiveGdprRequest): CreatedGdprRequest {
+  if (request.status === 'processing') throw new Error('gdpr_request_processing');
+  return { id: request.id, scheduledFor: new Date(request.scheduled_for), cancelToken: null, alreadyScheduled: true };
+}
+
+/** Wymaga UNIQUE aktywnego user_id z propozycji schematu GDPR dla właściciela repo. */
+export async function createGdprRequest(input: CreateGdprRequestInput): Promise<CreatedGdprRequest> {
   const admin = createAdminClient() as unknown as GdprTable;
-
-  // Idempotency: jeśli istnieje pending request dla usera, zwróć go zamiast
-  // tworzyć duplikat (user kliknął dwa razy / refresh).
-  const existing = await admin
-    .from('gdpr_deletion_requests')
-    .select('id, scheduled_for, cancel_token, status')
-    .eq('user_id', input.userId)
-    .order('requested_at', { ascending: false });
-
-  const pending = existing.data?.find((r) => r.status === 'pending');
-  if (pending) {
-    return {
-      id: pending.id,
-      scheduledFor: new Date(pending.scheduled_for),
-      cancelToken: pending.cancel_token,
-    };
-  }
+  const existing = await readActiveRequest(admin, input.userId);
+  if (existing) return existingRequest(existing);
 
   const cancelToken = randomBytes(32).toString('hex');
-  const scheduledFor = new Date(
-    Date.now() + GDPR_COOLING_OFF_DAYS * 24 * 60 * 60 * 1000,
-  );
+  const scheduledFor = new Date(Date.now() + GDPR_COOLING_OFF_DAYS * 24 * 60 * 60 * 1000);
+  const inserted = await admin.from('gdpr_deletion_requests').insert([{
+    user_id: input.userId,
+    user_email: input.userEmail,
+    scheduled_for: scheduledFor.toISOString(),
+    cancel_token_hash: createHash('sha256').update(cancelToken).digest('hex'),
+    ip_address: input.ipAddress ?? null,
+    user_agent: input.userAgent ?? null,
+  }]).select('id, scheduled_for').maybeSingle();
 
-  const ins = await admin
-    .from('gdpr_deletion_requests')
-    .insert([
-      {
-        user_id: input.userId,
-        user_email: input.userEmail,
-        scheduled_for: scheduledFor.toISOString(),
-        cancel_token: cancelToken,
-        ip_address: input.ipAddress ?? null,
-        user_agent: input.userAgent ?? null,
-      },
-    ])
-    .select('id, scheduled_for, cancel_token')
-    .maybeSingle();
-
-  if (ins.error || !ins.data) {
-    throw new Error(`gdpr_request_insert_failed: ${ins.error?.message}`);
+  if (inserted.error?.code === '23505') {
+    // Inne równoległe żądanie wygrało UNIQUE. Nie podmieniamy jego tokenu.
+    const winner = await readActiveRequest(admin, input.userId);
+    if (winner) return existingRequest(winner);
+    throw new Error('gdpr_request_conflict_retry');
   }
-
-  return {
-    id: ins.data.id,
-    scheduledFor: new Date(ins.data.scheduled_for),
-    cancelToken: ins.data.cancel_token,
-  };
+  if (inserted.error || !inserted.data) throw new Error('gdpr_request_insert_failed');
+  return { id: inserted.data.id, scheduledFor: new Date(inserted.data.scheduled_for), cancelToken, alreadyScheduled: false };
 }
 
-export async function cancelGdprRequest(
-  cancelToken: string,
-  reason: string | null,
-): Promise<{ ok: boolean; userEmail?: string }> {
+type CancelResult = { ok: true; requestId: string } | { ok: false };
+export async function cancelGdprRequest(cancelToken: string, reason: string | null): Promise<CancelResult> {
+  if (!/^[a-f0-9]{64}$/.test(cancelToken)) return { ok: false };
   const admin = createAdminClient() as unknown as GdprTable;
+  const result = await admin.from('gdpr_deletion_requests')
+    .update({ status: 'canceled', cancel_reason: reason })
+    .eq('cancel_token_hash', createHash('sha256').update(cancelToken).digest('hex'))
+    .eq('status', 'pending').select('id').maybeSingle();
+  if (result.error || !result.data) return { ok: false };
+  return { ok: true, requestId: result.data.id };
+}
 
-  const find = await admin
-    .from('gdpr_deletion_requests')
-    .select('id, user_email, status, cancel_token')
-    .eq('cancel_token', cancelToken)
-    .maybeSingle();
+/** Wyłącznie po uwierzytelnieniu userId i ponownym potwierdzeniu hasła w akcji. */
+export async function cancelOwnGdprRequest(userId: string): Promise<CancelResult> {
+  const admin = createAdminClient() as unknown as GdprTable;
+  const result = await admin.from('gdpr_deletion_requests')
+    .update({ status: 'canceled', cancel_reason: 'authenticated_user_confirmed' })
+    .eq('user_id', userId).eq('status', 'pending').select('id').maybeSingle();
+  if (result.error || !result.data) return { ok: false };
+  return { ok: true, requestId: result.data.id };
+}
 
-  if (find.error || !find.data) return { ok: false };
-  if (find.data.status !== 'pending') return { ok: false };
-
-  const upd = await admin
-    .from('gdpr_deletion_requests')
-    .update({ status: 'canceled', cancel_reason: reason ?? null })
-    .eq('id', find.data.id);
-
-  if (upd.error) return { ok: false };
-  return { ok: true, userEmail: find.data.user_email };
+export async function findDueGdprRequests(): Promise<Array<Pick<GdprRequestRow, 'id' | 'scheduled_for' | 'status'>>> {
+  const admin = createAdminClient() as unknown as GdprTable;
+  const result = await admin.from('gdpr_deletion_requests')
+    .select('id, scheduled_for, status')
+    .eq('status', 'pending').lte('scheduled_for', new Date().toISOString());
+  if (result.error) throw new Error('gdpr_due_requests_lookup_failed');
+  return result.data ?? [];
 }
 
 /**
- * Wykonuje delete dla wszystkich pending requestów z `scheduled_for <= now()`.
- * Wywoływane przez Inngest cron co godzinę.
+ * Tylko zwycięzca atomowego pending -> processing może usuwać dane.
+ * Anulowanie też wymaga pending. Osierocony processing wymaga ręcznej kontroli;
+ * automatyczne ponowienie byłoby niebezpieczne po częściowo wykonanym usunięciu.
  */
-export async function findDueGdprRequests(): Promise<GdprRequestRow[]> {
-  const admin = createAdminClient() as unknown as GdprTable;
-  const now = new Date().toISOString();
-  const res = await admin
-    .from('gdpr_deletion_requests')
-    .select('id, user_id, user_email, scheduled_for, status, cancel_token')
-    .lte('scheduled_for', now);
-
-  return (res.data ?? []).filter((r) => r.status === 'pending');
-}
-
-/**
- * Hard delete dla pojedynczego pending requestu.
- *
- * Kolejność:
- *   1. Anonimizacja audit_logs (user_id NULL, ip_address NULL).
- *   2. Delete memberships (CASCADE z auth.users, ale robimy jawnie).
- *   3. supabase.auth.admin.deleteUser() — kaskadowo zruje public.users,
- *      mfa_recovery_codes, push_subscriptions, email_preferences.
- *   4. UPDATE status='executed' lub 'failed' z reason.
- */
-export async function executeGdprRequest(requestId: string): Promise<{
-  ok: boolean;
-  error?: string;
-}> {
+export async function executeGdprRequest(requestId: string): Promise<{ ok: boolean; error?: string }> {
   const admin = createAdminClient();
-
-  // 1. Załaduj request
-  const findRes = await (admin as unknown as GdprTable)
-    .from('gdpr_deletion_requests')
-    .select('id, user_id, user_email, status')
-    .eq('id', requestId)
-    .maybeSingle();
-
-  if (findRes.error || !findRes.data) {
-    return { ok: false, error: 'request_not_found' };
-  }
-  if (findRes.data.status !== 'pending') {
-    return { ok: false, error: 'not_pending' };
-  }
-  const userId = findRes.data.user_id;
-  if (!userId) {
-    return { ok: false, error: 'user_id_missing' };
-  }
+  const now = new Date().toISOString();
+  const claimed = await (admin as unknown as GdprTable).from('gdpr_deletion_requests')
+    .update({ status: 'processing', processing_started_at: now })
+    .eq('id', requestId).eq('status', 'pending').lte('scheduled_for', now)
+    .select('id, user_id').maybeSingle();
+  if (claimed.error) return { ok: false, error: 'request_claim_failed' };
+  if (!claimed.data) return { ok: false, error: 'request_not_pending_or_not_due' };
 
   try {
-    // 2. Anonimizuj audit_logs przez RPC z opt-in dla append-only trigger
-    //    (migracja 00052). Bez tego trigger zablokowałby UPDATE.
+    const userId = claimed.data.user_id;
+    if (!userId) throw new Error('user_id_missing');
     const anonRpc = await (
       admin.rpc as unknown as (
-        fn: 'anonymize_user_audit_logs',
-        args: { p_user_id: string },
+        fn: 'anonymize_user_audit_logs', args: { p_user_id: string },
       ) => Promise<{ data: unknown; error: { message: string } | null }>
     )('anonymize_user_audit_logs', { p_user_id: userId });
-    if (anonRpc.error) {
-      throw new Error(`audit_anonymize_failed: ${anonRpc.error.message}`);
-    }
-
-    // 3. Hard-delete usera w Supabase Auth → kaskaduje do public.users
-    //    przez FK w pozostałych tabelach (memberships, mfa_recovery_codes,
-    //    push_subscriptions, email_preferences mają ON DELETE CASCADE).
+    if (anonRpc.error) throw new Error('audit_anonymize_failed');
     const { error: authDelErr } = await admin.auth.admin.deleteUser(userId);
-    if (authDelErr) {
-      throw new Error(`auth_delete_failed: ${authDelErr.message}`);
-    }
-
-    // 4. Mark executed (user_id już NULL bo ON DELETE SET NULL).
-    await (admin as unknown as GdprTable)
-      .from('gdpr_deletion_requests')
-      .update({
-        status: 'executed',
-        executed_at: new Date().toISOString(),
-      })
-      .eq('id', requestId);
-
+    if (authDelErr) throw new Error('auth_delete_failed');
+    const completed = await (admin as unknown as GdprTable).from('gdpr_deletion_requests')
+      .update({ status: 'executed', executed_at: new Date().toISOString() })
+      .eq('id', requestId).eq('status', 'processing').select('id').maybeSingle();
+    if (completed.error || !completed.data) throw new Error('request_completion_failed');
     return { ok: true };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'unknown_error';
-    await (admin as unknown as GdprTable)
-      .from('gdpr_deletion_requests')
-      .update({ status: 'failed', failure_reason: msg })
-      .eq('id', requestId);
-    return { ok: false, error: msg };
+    const message = err instanceof Error ? err.message : 'unknown_error';
+    await (admin as unknown as GdprTable).from('gdpr_deletion_requests')
+      .update({ status: 'failed', failure_reason: message })
+      .eq('id', requestId).eq('status', 'processing');
+    return { ok: false, error: message };
   }
 }

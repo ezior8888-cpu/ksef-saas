@@ -1,0 +1,82 @@
+═══ 1.1 Tabele: RLS włączony, RLS wymuszony, liczba polityk ═══
+           tabela           | rls_wlaczony | wymuszony_rls | liczba_polityk | wlasciciel 
+----------------------------+--------------+---------------+----------------+------------
+ admin_user_notes           | t            | f             |              0 | postgres
+ backup_log                 | t            | f             |              0 | postgres
+ billing_notifications      | t            | f             |              0 | postgres
+ email_bounces              | t            | f             |              0 | postgres
+ flo_rollout                | t            | f             |              0 | postgres
+ flo_shadow                 | t            | f             |              0 | postgres
+ flo_usage                  | t            | f             |              0 | postgres
+ global_feature_flags       | t            | f             |              0 | postgres
+ ksef_health_log            | t            | f             |              0 | postgres
+ ksef_inbox_cursor          | t            | f             |              0 | postgres
+ newsletter_subscribers     | t            | f             |              0 | postgres
+ stripe_webhook_events      | t            | f             |              0 | postgres
+ accountant_access          | t            | f             |              1 | postgres
+ accountant_settings        | t            | f             |              1 | postgres
+ contractors                | t            | f             |              1 | postgres
+ error_translations         | t            | f             |              1 | postgres
+ export_files               | t            | f             |              1 | postgres
+ export_jobs                | t            | f             |              1 | postgres
+ flo_approvals              | t            | f             |              1 | postgres
+ flo_decisions              | t            | f             |              1 | postgres
+ flo_kind_flags             | t            | f             |              1 | postgres
+ flo_prefs                  | t            | f             |              1 | postgres
+ flo_proposals              | t            | f             |              1 | postgres
+ gdpr_deletion_requests     | t            | f             |              1 | postgres
+ import_jobs                | t            | f             |              1 | postgres
+ inngest_run_log            | t            | f             |              1 | postgres
+ kpir_entries               | t            | f             |              1 | postgres
+ kpir_global_rules          | t            | f             |              1 | postgres
+ ksef_offline_queue         | t            | f             |              1 | postgres
+ ksef_sessions              | t            | f             |              1 | postgres
+ ksef_submissions           | t            | f             |              1 | postgres
+ memberships                | t            | f             |              1 | postgres
+ mfa_recovery_codes         | t            | f             |              1 | postgres
+ organization_invitations   | t            | f             |              1 | postgres
+ payment_imports            | t            | f             |              1 | postgres
+ payment_reminders          | t            | f             |              1 | postgres
+ payments                   | t            | f             |              1 | postgres
+ products                   | t            | f             |              1 | postgres
+ reminder_settings          | t            | f             |              1 | postgres
+ reminder_templates         | t            | f             |              1 | postgres
+ stripe_payments            | t            | f             |              1 | postgres
+ stripe_refunds             | t            | f             |              1 | postgres
+ subscriptions              | t            | f             |              1 | postgres
+ support_conversations      | t            | f             |              1 | postgres
+ support_messages           | t            | f             |              1 | postgres
+ tenant_feature_flags       | t            | f             |              1 | postgres
+ upo_receipts               | t            | f             |              1 | postgres
+ validation_cache           | t            | f             |              1 | postgres
+ xml_documents              | t            | f             |              1 | postgres
+ organization_join_requests | t            | f             |              2 | postgres
+ push_subscriptions         | t            | f             |              2 | postgres
+ tenants                    | t            | f             |              2 | postgres
+ users                      | t            | f             |              2 | postgres
+ audit_logs                 | t            | f             |              3 | postgres
+ email_preferences          | t            | f             |              3 | postgres
+ categorization_rules       | t            | f             |              4 | postgres
+ expenses                   | t            | f             |              4 | postgres
+ invoice_line_items         | t            | f             |              4 | postgres
+ invoices                   | t            | f             |              4 | postgres
+ ocr_jobs                   | t            | f             |              4 | postgres
+(60 rows)
+
+
+═══ 1.2 Podsumowanie liczbowe ═══
+ tabel_razem | z_rls | bez_rls | z_wymuszonym_rls 
+-------------+-------+---------+------------------
+          60 |    60 |       0 |                0
+(1 row)
+
+
+═══ 1.3 Widoki — RLS ich nie dotyczy ═══
+            widok            | wlasciciel |   security_invoker   
+-----------------------------+------------+----------------------
+ invoices_overdue            | postgres   | brak (czyli DEFINER)
+ mv_tenant_dashboard_summary | postgres   | brak (czyli DEFINER)
+ mv_tenant_monthly_stats     | postgres   | brak (czyli DEFINER)
+ tenant_verification_status  | postgres   | true
+(4 rows)
+

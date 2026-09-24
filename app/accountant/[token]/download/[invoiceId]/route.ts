@@ -4,6 +4,7 @@ import { hashToken } from '@/lib/accountant/tokens';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { createAdminClient } from '@/lib/supabase/server';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
+import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 
 export async function GET(
   _request: Request,
@@ -40,7 +41,11 @@ export async function GET(
     .eq('tenant_id', access.tenant_id as string)
     .maybeSingle();
 
-  if (invErr || !invoice?.xml_storage_path) {
+  if (
+    invErr ||
+    !invoice?.xml_storage_path ||
+    !isTenantStoragePath(invoice.xml_storage_path, access.tenant_id as string)
+  ) {
     return NextResponse.json({ error: 'XML not found' }, { status: 404 });
   }
 
@@ -48,6 +53,8 @@ export async function GET(
     .from('xml_documents')
     .select('sha256_hash')
     .eq('storage_path', invoice.xml_storage_path)
+    .eq('tenant_id', access.tenant_id as string)
+    .eq('invoice_id', invoice.id as string)
     .maybeSingle();
 
   if (xmlErr || !xmlDoc?.sha256_hash) {
@@ -58,7 +65,8 @@ export async function GET(
   try {
     xml = await downloadInvoiceXml(
       invoice.xml_storage_path,
-      xmlDoc.sha256_hash as string
+      xmlDoc.sha256_hash as string,
+      access.tenant_id as string,
     );
   } catch (e) {
     console.error('[accountant/download-xml]', e);
@@ -82,6 +90,7 @@ export async function GET(
     headers: {
       'Content-Type': 'application/xml; charset=utf-8',
       'Content-Disposition': `attachment; filename="${baseName}.xml"`,
+      'Cache-Control': 'private, no-store',
     },
   });
 }

@@ -376,7 +376,8 @@ export async function runCoPilotSendPackage(data: Parameters<typeof exportsCoPil
       const { data: files, error } = await supabase
         .from('export_files')
         .select('*')
-        .in('export_job_id', jobIds);
+        .in('export_job_id', jobIds)
+        .eq('tenant_id', tenantId);
 
       if (error) throw new Error(error.message);
       if (!files || files.length === 0) {
@@ -396,13 +397,13 @@ export async function runCoPilotSendPackage(data: Parameters<typeof exportsCoPil
 
       if (totalBytes <= MAX_TOTAL_ATTACHMENT_BYTES) {
         for (const file of files) {
-          const buffer = await downloadFromR2(file.r2_path);
+          const buffer = await downloadFromR2(file.r2_path, tenantId);
           attachments.push({ filename: file.filename, content: buffer });
         }
       } else {
         const ttlSeconds = 7 * 24 * 3600;
         for (const file of files) {
-          const url = await getSignedInvoiceUrl(file.r2_path, ttlSeconds);
+          const url = await getSignedInvoiceUrl(file.r2_path, tenantId, ttlSeconds);
           downloadLinks.push({ filename: file.filename, url });
         }
       }

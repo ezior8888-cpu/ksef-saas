@@ -19,18 +19,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Wersja MUSI zgadzać się z `packageManager` w `package.json`.
+      # Wersja pnpm MUSI zgadzać się z `packageManager` w `package.json`.
       # Rozjazd wywalał CI przed pierwszym testem: pnpm 9 czyta
       # `pnpm-workspace.yaml` (od pnpm 10 mieszkają tam ustawienia, nie tylko
       # lista pakietów) i odmawia z „packages field missing or empty".
       # Od 14.09.2026 czerwone były przez to WSZYSTKIE przebiegi, także na main.
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       # Cztery testy XSD w `lib/xml/fa3-generator.test.ts` walidują fakturę
@@ -46,14 +46,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high
+
       # `pnpm run ci` (a nie `pnpm ci`) — żeby nie kolidowało z wbudowanym
       # `pnpm ci` (alias na install --frozen-lockfile w nowszych pnpm).
       - name: Run typecheck + lint + tests
         run: pnpm run ci
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        # Zestaw lokalny nie potrzebuje żadnych sekretów ani dostępu do bazy.
 
   # E2E job opcjonalny — uruchamiany gdy repo ma ustawione `vars.RUN_E2E_ON_CI=true`.
   # Wymaga Supabase staging (sekrety w GitHub) + Playwright browsers.
@@ -71,13 +71,13 @@ jobs:
       - uses: actions/checkout@v4
 
       # Ta sama wersja co wyżej i co w `package.json`.
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
