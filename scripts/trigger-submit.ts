@@ -17,7 +17,7 @@
  *   4. inngest.send(invoiceSubmitRequested.create({...}))
  *   5. Printuje event_id - można śledzić w Inngest UI
  *
- * Uruchom:  pnpm trigger:submit              # czyta z /tmp/ksef-test-invoice-id.txt
+ * Uruchom:  pnpm trigger:submit              # czyta z .tmp/ksef-test-invoice-id.txt
  * Uruchom:  pnpm trigger:submit <uuid>       # override argumentem
  */
 
@@ -27,6 +27,7 @@ import { config } from 'dotenv';
 
 import type { Invoice } from '../types/invoice';
 
+import { scratchFile } from './_scratch';
 import { createScriptAdminClient } from './_supabase';
 
 // Kolejność ładowania env dla Inngest klienta:
@@ -52,7 +53,7 @@ const step = (m: string) => console.log(`${YELLOW}→${RESET} ${m}`);
 const fail = (m: string) => console.error(`${RED}✘${RESET} ${m}`);
 const info = (m: string) => console.log(`${DIM}${m}${RESET}`);
 
-const INVOICE_ID_FILE = '/tmp/ksef-test-invoice-id.txt';
+const INVOICE_ID_FILE = scratchFile('ksef-test-invoice-id.txt');
 
 const SENDABLE_STATUSES = ['draft', 'queued', 'failed', 'rejected'];
 

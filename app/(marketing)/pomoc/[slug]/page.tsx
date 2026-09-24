@@ -109,7 +109,7 @@ export default async function HelpArticlePage({ params }: PageProps) {
               {related.map((r) => (
                 <li key={r.slug}>
                   <Link
-                    href={`/pomoc/${r.slug}`}
+                    href={`/pomoc/${encodeURIComponent(r.slug)}`}
                     className="block rounded-2xl border border-glass-border bg-glass-white p-4 backdrop-blur-glass transition-colors hover:bg-foreground/5"
                   >
                     <p className="text-sm font-medium">{r.title}</p>

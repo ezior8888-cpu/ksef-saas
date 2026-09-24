@@ -6,7 +6,7 @@
  *   2. Upsertuje tenanta w `public.tenants` (po UNIQUE nip)
  *   3. Szyfruje `{ type: 'token', nip, token }` z KSEF_TEST_TOKEN
  *   4. Zapisuje blob w `tenants.ksef_credentials_encrypted` (BYTEA)
- *   5. Drukuje tenant.id na stdout + zapisuje do `/tmp/ksef-test-tenant-id.txt`
+ *   5. Drukuje tenant.id na stdout + zapisuje do `.tmp/ksef-test-tenant-id.txt`
  *      (używane przez seed-test-invoice.ts i trigger-submit.ts)
  *
  * Idempotent - możesz uruchamiać wielokrotnie (update'uje credentials).
@@ -20,6 +20,7 @@ import { config } from 'dotenv';
 
 import { encryptCredentials } from '../lib/ksef/credentials-crypto';
 
+import { scratchFile } from './_scratch';
 import { bufferToByteaLiteral, createScriptAdminClient } from './_supabase';
 
 config({ path: '.env.local' });
@@ -35,7 +36,7 @@ const step = (m: string) => console.log(`${YELLOW}→${RESET} ${m}`);
 const fail = (m: string) => console.error(`${RED}✘${RESET} ${m}`);
 const info = (m: string) => console.log(`${DIM}${m}${RESET}`);
 
-const TENANT_ID_FILE = '/tmp/ksef-test-tenant-id.txt';
+const TENANT_ID_FILE = scratchFile('ksef-test-tenant-id.txt');
 
 function assertEnv(value: string | undefined, name: string): asserts value is string {
   if (!value) {

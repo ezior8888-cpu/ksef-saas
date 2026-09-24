@@ -20,6 +20,7 @@ import { writeFileSync } from 'node:fs';
 import { config } from 'dotenv';
 
 import { submitInvoiceFullFlow } from '../lib/ksef/submit-invoice-full';
+import { scratchFile } from './_scratch';
 import { deleteInvoiceXml } from '../lib/storage/r2';
 import type { Invoice } from '../types/invoice';
 
@@ -153,7 +154,7 @@ async function main() {
     console.log(`  ${DIM}xmlSha256Hash:${RESET}         ${result.xmlSha256Hash}`);
 
     // Zapisz JSON z wynikiem, żeby było co podejrzeć / załączyć do issue.
-    const snapshotPath = '/tmp/ksef-submit-full-result.json';
+    const snapshotPath = scratchFile('ksef-submit-full-result.json');
     writeFileSync(
       snapshotPath,
       JSON.stringify({ invoice: invoice.internalNumber, ...result }, null, 2),

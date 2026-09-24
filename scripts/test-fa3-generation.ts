@@ -18,6 +18,7 @@ import { writeFileSync } from 'node:fs';
 import { config } from 'dotenv';
 
 import { generateFA3Xml } from '../lib/xml/fa3-generator';
+import { scratchFile } from './_scratch';
 import { validateInvoiceXml } from '../lib/xml/validator';
 import { deleteInvoiceXml, uploadInvoiceXml } from '../lib/storage/r2';
 import type { Invoice } from '../types/invoice';
@@ -101,7 +102,7 @@ async function main() {
   // Błędy walidacji biznesowej (NIP/IBAN/arytmetyka) rzuca generator,
   // outer main().catch() je złapie i wypisze z pełnym stack trace.
   const xml = generateFA3Xml(invoice, { prettyPrint: true });
-  const xmlPath = '/tmp/test-invoice.xml';
+  const xmlPath = scratchFile('test-invoice.xml');
   writeFileSync(xmlPath, xml, 'utf8');
   ok(`generateFA3Xml: ${xml.length} B → ${xmlPath}`);
 

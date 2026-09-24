@@ -19,10 +19,12 @@
  *   - Invoice z poprzedniego run'u powinna mieć `ksef_status='failed'`.
  */
 
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import { config } from 'dotenv';
 
+import { scratchFile } from './_scratch';
 import { createScriptAdminClient } from './_supabase';
 
 config({ path: '.env.local' });
@@ -41,8 +43,8 @@ const info = (m: string) => console.log(`${DIM}  ${m}${RESET}`);
 const header = (m: string) =>
   console.log(`\n${BLUE}═══ ${m} ═══${RESET}`);
 
-const TENANT_ID_FILE = '/tmp/ksef-test-tenant-id.txt';
-const INVOICE_ID_FILE = '/tmp/ksef-test-invoice-id.txt';
+const TENANT_ID_FILE = scratchFile('ksef-test-tenant-id.txt');
+const INVOICE_ID_FILE = scratchFile('ksef-test-invoice-id.txt');
 
 const INNGEST_DEV_URL = 'http://localhost:8288';
 
@@ -190,7 +192,7 @@ async function main() {
       const { data: created, error: createErr } =
         await supabase.auth.admin.createUser({
           email: TEST_OWNER_EMAIL,
-          password: `Test_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          password: `Test_${randomBytes(18).toString('base64url')}`,
           email_confirm: true,
         });
       if (createErr || !created?.user) {
