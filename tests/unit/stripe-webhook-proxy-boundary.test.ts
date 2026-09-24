@@ -51,7 +51,7 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', '');
   mocks.claims.mockResolvedValue({ data: null, error: null });
   mocks.create.mockReturnValue({ auth: { getClaims: mocks.claims } });
-  mocks.claim.mockResolvedValue({ claimed: true });
+  mocks.claim.mockResolvedValue({ state: 'claimed', token: '11111111-1111-4111-8111-111111111111' });
   mocks.finalize.mockResolvedValue(undefined);
   mocks.handler.mockResolvedValue(undefined);
   mocks.network.mockImplementation(() => { throw new Error('Unexpected network request in local test'); });
@@ -89,7 +89,7 @@ describe('Stripe webhook through the real application proxy', () => {
     expect(await response.json()).toEqual({ received: true, eventId: event.id });
     expect(mocks.claim).toHaveBeenCalledWith(event.id, event.type, event);
     expect(mocks.handler).toHaveBeenCalledWith(event.data.object, true);
-    expect(mocks.finalize).toHaveBeenCalledWith(event.id, 'processed');
+    expect(mocks.finalize).toHaveBeenCalledWith(event.id, '11111111-1111-4111-8111-111111111111', 'processed');
     expect(mocks.mfa).not.toHaveBeenCalled();
   });
 

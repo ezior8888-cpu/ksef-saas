@@ -28,8 +28,6 @@ vi.mock('@/lib/analytics/events', () => ({
 vi.mock('@/lib/inngest/client', () => ({
   billingPaymentSucceeded: { create: (data: unknown) => ({ name: 'billing/payment.succeeded', data }) },
   billingPaymentFailed: { create: (data: unknown) => ({ name: 'billing/payment.failed', data }) },
-  billingSubscriptionCanceled: { create: vi.fn() },
-  billingTrialWillEnd: { create: vi.fn() },
 }));
 
 import {
@@ -53,7 +51,7 @@ beforeEach(() => {
   });
   mocks.paymentStatusRead.mockResolvedValue({ data: { status: 'refunded' }, error: null });
   mocks.upsert.mockReturnValue({
-    select: async () => ({ data: [{ id: 'payment-local' }], error: null }),
+    select: async () => ({ data: [{ id: 'payment-local', status: 'succeeded' }], error: null }),
   });
   mocks.from.mockImplementation((table: string) => {
     if (table !== 'stripe_payments') throw new Error('Unexpected table: ' + table);
@@ -109,7 +107,10 @@ describe('late Stripe invoice webhooks after a refund', () => {
     ['succeeded', handleInvoicePaymentSucceeded],
     ['failed', handleInvoicePaymentFailed],
   ])('skips %s side effects when refund wins after the initial read', async (_eventType, handler) => {
-    mocks.paymentStatusRead.mockResolvedValue({ data: { status: 'succeeded' }, error: null });
+    mocks.paymentStatusRead.mockResolvedValue({
+      data: { status: _eventType === 'failed' ? 'failed' : 'succeeded' },
+      error: null,
+    });
     mocks.upsert.mockReturnValue({
       select: async () => ({ data: [{ id: 'payment-local', status: 'refunded' }], error: null }),
     });
@@ -122,7 +123,9 @@ describe('late Stripe invoice webhooks after a refund', () => {
   });
 
   it('skips side effects when the database trigger suppresses a stale upsert', async () => {
-    mocks.paymentStatusRead.mockResolvedValue({ data: { status: 'succeeded' }, error: null });
+    mocks.paymentStatusRead
+      .mockResolvedValueOnce({ data: { status: 'succeeded' }, error: null })
+      .mockResolvedValueOnce({ data: { status: 'refunded' }, error: null });
     mocks.upsert.mockReturnValue({
       select: async () => ({ data: [], error: null }),
     });

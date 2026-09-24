@@ -8,13 +8,12 @@
  *   - invoice.payment_succeeded   → INSERT stripe_payments + Inngest event
  *                                   (Krok 4 self-invoicing trigger)
  *   - invoice.payment_failed      → INSERT stripe_payments + Inngest dunning
- *   - customer.subscription.trial_will_end → Inngest event (Krok 5 email)
+ *   - customer.subscription.trial_will_end → audit (trial emails run from a cron)
  *
  * Każdy handler jest idempotent: `subscriptions.stripe_subscription_id`
  * jest UNIQUE, więc UPSERT z onConflict załatwia ponowne odpalenia.
  */
 
-import * as Sentry from '@sentry/nextjs';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 import type Stripe from 'stripe';
 
@@ -24,9 +23,7 @@ import { logAuditSystem } from '@/lib/audit/log-system';
 import {
   billingPaymentFailed,
   billingPaymentSucceeded,
-  billingSubscriptionCanceled,
-  billingTrialWillEnd,
-  } from '@/lib/inngest/client';
+} from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import {
@@ -39,10 +36,10 @@ import {
  * Late invoice payment events must not reopen an already refunded payment.
  * The database trigger in 00075 also covers a race after this read.
  */
-async function isRefundedStripePayment(
+async function readStripePaymentStatus(
   supabase: ReturnType<typeof createAdminClient>,
   stripeInvoiceId: string,
-): Promise<boolean> {
+): Promise<string | null> {
   const { data, error } = await supabase
     .from('stripe_payments')
     .select('status')
@@ -51,7 +48,11 @@ async function isRefundedStripePayment(
   if (error) {
     throw new Error('stripe payment status read failed: ' + error.message);
   }
-  return data?.status === 'refunded' || data?.status === 'partially_refunded';
+  return data?.status ?? null;
+}
+
+function isRefundedPaymentStatus(status: string | null): boolean {
+  return status === 'refunded' || status === 'partially_refunded';
 }
 // ─── 1. subscription.created / updated ────────────────────────────────
 
@@ -60,25 +61,32 @@ export async function handleSubscriptionUpserted(
   isCreate: boolean,
 ): Promise<void> {
   const tenantId = await resolveTenantIdFromSubscription(subscription);
-  if (!tenantId) {
-    Sentry.captureMessage('Stripe subscription bez tenantId metadata', {
-      level: 'warning',
-      extra: { subscriptionId: subscription.id },
-    });
-    return;
-  }
-
   const supabase = createAdminClient();
   const row = mapSubscriptionToRow(subscription, tenantId);
 
-  const { error } = await supabase
+  const { data: persistedRows, error } = await supabase
     .from('subscriptions')
     // Cast — tabela poza typed gen do regeneracji.
-    .upsert(row as never, { onConflict: 'stripe_subscription_id' });
+    .upsert(row as never, { onConflict: 'stripe_subscription_id' })
+    .select('status');
 
   if (error) {
     throw new Error(`subscription upsert failed: ${error.message}`);
   }
+  const persisted = persistedRows?.[0];
+  if (!persisted) {
+    // The DB guard can suppress an older update after cancellation. Verify
+    // the terminal state; an unexplained zero-row write must remain retryable.
+    const { data: current, error: readError } = await supabase
+      .from('subscriptions')
+      .select('status')
+      .eq('stripe_subscription_id', subscription.id)
+      .maybeSingle();
+    if (readError) throw new Error(`subscription status read failed: ${readError.message}`);
+    if (current?.status === 'canceled' && row.status !== 'canceled') return;
+    throw new Error(`subscription upsert affected no row: ${subscription.id}`);
+  }
+  if (persisted.status === 'canceled' && row.status !== 'canceled') return;
 
   await logAuditSystem({
     action: isCreate ? 'billing.subscription.created' : 'billing.subscription.updated',
@@ -112,25 +120,65 @@ export async function handleSubscriptionDeleted(
   subscription: Stripe.Subscription,
 ): Promise<void> {
   const tenantId = await resolveTenantIdFromSubscription(subscription);
-  if (!tenantId) return;
-
   const supabase = createAdminClient();
   const canceledAt = subscription.canceled_at
     ? new Date(subscription.canceled_at * 1000).toISOString()
     : new Date().toISOString();
 
-  const { error } = await supabase
+  const canceledRow = {
+    status: 'canceled',
+    canceled_at: canceledAt,
+    cancel_at_period_end: false,
+    last_webhook_at: new Date().toISOString(),
+  };
+  const updateOwned = async () => supabase
     .from('subscriptions')
-    .update({
-      status: 'canceled',
-      canceled_at: canceledAt,
-      cancel_at_period_end: false,
-      last_webhook_at: new Date().toISOString(),
-    } as never)
-    .eq('stripe_subscription_id', subscription.id);
+    .update(canceledRow as never)
+    .eq('stripe_subscription_id', subscription.id)
+    .eq('tenant_id', tenantId)
+    .select('id, status')
+    .maybeSingle();
 
-  if (error) {
-    throw new Error(`subscription delete update failed: ${error.message}`);
+  const { data: initiallyUpdated, error } = await updateOwned();
+  let updated = initiallyUpdated;
+  if (error) throw new Error(`subscription delete update failed: ${error.message}`);
+  if (!updated) {
+    // A deleted webhook can precede created. Insert a canceled tombstone without
+    // updating an existing subscription's tenant or customer on conflict.
+    const mapped = mapSubscriptionToRow(subscription, tenantId);
+    if (!subscription.id || mapped.tenant_id !== tenantId ||
+        mapped.stripe_subscription_id !== subscription.id ||
+        typeof mapped.stripe_customer_id !== 'string' || !mapped.stripe_customer_id ||
+        typeof mapped.stripe_price_id !== 'string' || !mapped.stripe_price_id) {
+      throw new Error(`subscription delete snapshot is incomplete: ${subscription.id}`);
+    }
+    const { data: inserted, error: insertError } = await supabase
+      .from('subscriptions')
+      .upsert({ ...mapped, ...canceledRow } as never, {
+        onConflict: 'stripe_subscription_id',
+        ignoreDuplicates: true,
+      })
+      .select('id, tenant_id, status');
+    if (insertError) throw new Error(`subscription delete insert failed: ${insertError.message}`);
+
+    if (inserted?.length) {
+      const tombstone = inserted[0];
+      if (tombstone.tenant_id !== tenantId || tombstone.status !== 'canceled') {
+        throw new Error(`subscription delete tombstone mismatch: ${subscription.id}`);
+      }
+      updated = tombstone;
+    } else {
+      // created may have won the unique-key race. Cancel only a row owned by
+      // the resolved tenant; a mismatched owner is a manual reconciliation.
+      const retried = await updateOwned();
+      if (retried.error) {
+        throw new Error(`subscription delete update failed: ${retried.error.message}`);
+      }
+      updated = retried.data;
+    }
+  }
+  if (!updated || updated.status !== 'canceled') {
+    throw new Error(`subscription delete not persisted for tenant: ${subscription.id}`);
   }
 
   await logAuditSystem({
@@ -141,16 +189,6 @@ export async function handleSubscriptionDeleted(
     entityId: subscription.id,
     metadata: { canceledAt },
   });
-
-  // Inngest event — konsumenci re-engagement campaign mogą zaplanować
-  // sequence emaili "wracaj do nas".
-  await sendJobEvent(
-    billingSubscriptionCanceled.create({
-      tenantId,
-      subscriptionId: subscription.id,
-      canceledAt,
-    }),
-  );
 
   await trackServer({
     distinctId: tenantId,
@@ -169,7 +207,7 @@ export async function handleInvoicePaymentSucceeded(
   if (!mapping) return;
 
   const supabase = createAdminClient();
-  if (await isRefundedStripePayment(supabase, invoice.id)) return;
+  if (isRefundedPaymentStatus(await readStripePaymentStatus(supabase, invoice.id))) return;
   // Cast — `stripe_payments` poza typed gen.
   const { data, error } = await (supabase as unknown as {
     from: (n: string) => {
@@ -192,9 +230,19 @@ export async function handleInvoicePaymentSucceeded(
     throw new Error(`stripe_payments upsert failed: ${error.message}`);
   }
 
-  const paymentId = data?.[0]?.id;
-  if (!paymentId || data?.[0]?.status === 'refunded' ||
-      data?.[0]?.status === 'partially_refunded') return;
+  const persistedPayment = data?.[0];
+  if (!persistedPayment) {
+    // A refund guard can suppress the upsert. Any other zero-row result leaves
+    // the payment event unpersisted and must be retried.
+    const currentStatus = await readStripePaymentStatus(supabase, invoice.id);
+    if (isRefundedPaymentStatus(currentStatus)) return;
+    throw new Error(`stripe payment success upsert affected no row: ${invoice.id}`);
+  }
+  if (isRefundedPaymentStatus(persistedPayment.status)) return;
+  if (persistedPayment.status !== 'succeeded') {
+    throw new Error(`stripe payment success not persisted: ${invoice.id}`);
+  }
+  const paymentId = persistedPayment.id;
 
   await logAuditSystem({
     action: 'billing.payment.succeeded',
@@ -250,7 +298,8 @@ export async function handleInvoicePaymentFailed(
   if (!mapping) return;
 
   const supabase = createAdminClient();
-  if (await isRefundedStripePayment(supabase, invoice.id)) return;
+  const existingStatus = await readStripePaymentStatus(supabase, invoice.id);
+  if (existingStatus === 'succeeded' || isRefundedPaymentStatus(existingStatus)) return;
   const { data, error } = await (supabase as unknown as {
     from: (n: string) => {
       upsert: (
@@ -272,9 +321,18 @@ export async function handleInvoicePaymentFailed(
     throw new Error(`stripe_payments failed upsert: ${error.message}`);
   }
 
-  const paymentId = data?.[0]?.id;
-  if (!paymentId || data?.[0]?.status === 'refunded' ||
-      data?.[0]?.status === 'partially_refunded') return;
+  const persistedPayment = data?.[0];
+  if (!persistedPayment) {
+    const currentStatus = await readStripePaymentStatus(supabase, invoice.id);
+    if (currentStatus === 'succeeded' || isRefundedPaymentStatus(currentStatus)) return;
+    throw new Error(`stripe payment failure upsert affected no row: ${invoice.id}`);
+  }
+  if (persistedPayment.status === 'succeeded' ||
+      isRefundedPaymentStatus(persistedPayment.status)) return;
+  if (persistedPayment.status !== 'failed') {
+    throw new Error(`stripe payment failure not persisted: ${invoice.id}`);
+  }
+  const paymentId = persistedPayment.id;
 
   const failureReason =
     (mapping.row.failure_reason as string | null | undefined) ?? null;
@@ -320,8 +378,6 @@ export async function handleTrialWillEnd(
   subscription: Stripe.Subscription,
 ): Promise<void> {
   const tenantId = await resolveTenantIdFromSubscription(subscription);
-  if (!tenantId) return;
-
   const trialEndIso = subscription.trial_end
     ? new Date(subscription.trial_end * 1000).toISOString()
     : new Date().toISOString();
@@ -334,12 +390,4 @@ export async function handleTrialWillEnd(
     entityId: subscription.id,
     metadata: { trialEnd: trialEndIso },
   });
-
-  await sendJobEvent(
-    billingTrialWillEnd.create({
-      tenantId,
-      subscriptionId: subscription.id,
-      trialEnd: trialEndIso,
-    }),
-  );
 }

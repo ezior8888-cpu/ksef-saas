@@ -17,6 +17,7 @@ import type Stripe from 'stripe';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import type { ActiveSubscription } from './subscription';
+import { RetryablePreEffectWebhookError } from './webhook-errors';
 
 type SubscriptionStatus = ActiveSubscription['status'];
 type SubscriptionPlan = ActiveSubscription['plan'];
@@ -56,34 +57,49 @@ function isoFromUnix(unix: number | null | undefined): string | null {
 }
 
 /**
- * Wyciąga tenantId z `subscription.metadata.tenantId`. Fallback: lookup
- * po `customer.metadata.tenantId` (gdy subscription stworzona bez metadata).
- *
- * Zwraca `null` gdy nie da się ustalić — handler loguje warning i skip'uje
- * event (lepsze niż wpisanie do "unknown tenant").
+ * Resolve tenant before any local write. An unavailable customer lookup or
+ * missing metadata must not turn a subscription event into a processed receipt.
  */
 export async function resolveTenantIdFromSubscription(
   subscription: Stripe.Subscription,
-): Promise<string | null> {
-  const fromMetadata = subscription.metadata?.tenantId;
+): Promise<string> {
+  const fromMetadata = subscription.metadata?.tenantId?.trim();
   if (fromMetadata) return fromMetadata;
 
-  // Fallback: zapytaj Stripe o customer'a (rzadko ale klasyk).
   const customerRef =
     typeof subscription.customer === 'string'
       ? subscription.customer
       : subscription.customer?.id;
+  if (!customerRef) {
+    throw new RetryablePreEffectWebhookError(
+      'tenant_id_missing',
+      `subscription ${subscription.id} has no customer reference or tenant metadata`,
+    );
+  }
 
-  if (!customerRef) return null;
-
-  const { getStripe } = await import('./client');
-  const stripe = getStripe();
   try {
-    const customer = await stripe.customers.retrieve(customerRef);
-    if (customer.deleted) return null;
-    return customer.metadata?.tenantId ?? null;
-  } catch {
-    return null;
+    const { getStripe } = await import('./client');
+    const customer = await getStripe().customers.retrieve(customerRef);
+    if (customer.deleted) {
+      throw new RetryablePreEffectWebhookError(
+        'tenant_id_missing',
+        `subscription ${subscription.id} customer was deleted`,
+      );
+    }
+    const fromCustomer = customer.metadata?.tenantId?.trim();
+    if (!fromCustomer) {
+      throw new RetryablePreEffectWebhookError(
+        'tenant_id_missing',
+        `subscription ${subscription.id} customer has no tenant metadata`,
+      );
+    }
+    return fromCustomer;
+  } catch (error) {
+    if (error instanceof RetryablePreEffectWebhookError) throw error;
+    throw new RetryablePreEffectWebhookError(
+      'tenant_lookup_failed',
+      `subscription ${subscription.id} customer lookup failed`,
+    );
   }
 }
 
@@ -128,9 +144,42 @@ export function mapSubscriptionToRow(
   };
 }
 
+type SubscriptionReference = string | { id?: string } | null | undefined;
+
+function subscriptionId(value: SubscriptionReference): string | null {
+  if (typeof value === 'string') return value || null;
+  return value?.id || null;
+}
+
+function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
+  const shape = invoice as Stripe.Invoice & {
+    subscription?: SubscriptionReference;
+    parent?: {
+      type?: string;
+      subscription_details?: { subscription?: SubscriptionReference } | null;
+    } | null;
+  };
+  const legacy = subscriptionId(shape.subscription);
+  const parent = shape.parent;
+  if (parent?.type === 'subscription_details') {
+    const current = subscriptionId(parent.subscription_details?.subscription);
+    if (!current) {
+      throw new Error(`subscription parent has no reference on invoice ${invoice.id}`);
+    }
+    if (legacy && legacy !== current) {
+      throw new Error(`conflicting subscription references on invoice ${invoice.id}`);
+    }
+    return current;
+  }
+  if (parent && parent.type && legacy) {
+    throw new Error(`conflicting subscription parent type on invoice ${invoice.id}`);
+  }
+  return legacy;
+}
+
 /**
  * Invoice (succeeded/failed) → row dla `stripe_payments`.
- * Returns `null` gdy invoice nie jest powiązany z subscription (np. one-time charge).
+ * Returns `null` only for an actual one-time invoice without a subscription.
  */
 export interface PaymentRowResult {
   tenantId: string;
@@ -141,15 +190,8 @@ export async function mapInvoiceToPaymentRow(
   invoice: Stripe.Invoice,
   status: 'succeeded' | 'failed',
 ): Promise<PaymentRowResult | null> {
-  // Wyciągamy tenantId z subscription metadata. Bez subscription = one-time
-  // charge (rzadkie w naszym modelu), skip.
-  const subscriptionRef =
-    typeof (invoice as unknown as { subscription?: string | Stripe.Subscription })
-      .subscription === 'string'
-      ? ((invoice as unknown as { subscription: string }).subscription)
-      : ((invoice as unknown as { subscription?: Stripe.Subscription })
-          .subscription?.id ?? null);
-
+  // Acacia sends top-level subscription; Basil+ uses parent.subscription_details.
+  const subscriptionRef = invoiceSubscriptionId(invoice);
   if (!subscriptionRef) return null;
 
   const supabase = createAdminClient();
@@ -173,8 +215,18 @@ export async function mapInvoiceToPaymentRow(
     .eq('stripe_subscription_id', subscriptionRef)
     .maybeSingle());
 
+  if (subResult.error) {
+    throw new RetryablePreEffectWebhookError(
+      'subscription_lookup_failed',
+      `subscription lookup failed: ${subResult.error.message}`,
+    );
+  }
   if (!subResult.data) {
-    return null;
+    // The subscription.created webhook may arrive after the invoice webhook.
+    throw new RetryablePreEffectWebhookError(
+      'subscription_not_found',
+      `subscription ${subscriptionRef} not found for invoice ${invoice.id}`,
+    );
   }
 
   const invoiceWithIds = invoice as unknown as {
