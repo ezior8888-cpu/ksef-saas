@@ -473,6 +473,20 @@ Na prośbę Igora wznowiono i dokończono lokalne naprawy na bazie f3ca0d4 (PR #
 
 **Status wydania:** dwa commity kodu i szczegółowe dokumenty są lokalne. Dziennik jest osobnym zapisem po pełnej walidacji; wyniki GitHub CI/Security dla nowego HEAD będą potwierdzone i zapisane w opisie roboczego PR po publikacji. Zielony build lokalny nie zastępuje testu rzeczywistej konfiguracji produkcji.
 
+## 2026-09-24 — granica dowodów wpłat i przypomnień (CYB-F03-24)
+
+**Autor, zgoda i punkt wyjścia:** Codex po dyspozycji Igora „zatwierdzam lecisz dalej”. Osobna gałąź `codex/security-payment-ledger` od dokładnego HEAD roboczego PR #26, `7fae5e4aafb7a6b2c85d6c252a88ec064f0d9491`. PR #26 nadal otwarty, bez merge; jego zielone kontrole nie są dowodem dla tej gałęzi. Główny checkout i zmiany użytkownika nietknięte.
+
+**Problem i źródło:** w `00014` rola `authenticated` ma bezpośredni zapis/usuń dla `payments`, `payment_imports` i `payment_reminders`; RLS filtruje tylko firmę. Klient mógł więc przerobić dowód wpłaty lub stan wysyłki. Równolegle można było bezpośrednio zmienić saldo/status faktury, a pojedyncze FK po ID pozwalały na relacje różnych firm. Stary trigger `SECURITY DEFINER` mógł przeliczyć saldo wskazanej obcej faktury. Ustalenie ze statycznego przeglądu kodu i migracji, bez stwierdzonego incydentu na serwerze.
+
+**Wykonana zmiana:** [zakres, kolejność i plan odbioru](GRANICA-DOWODOW-WPLAT-2026-09-24.md). `00073` dodaje wąskie, sesyjne RPC do pauzy przypomnień, złożone FK firma–faktura/wpłata jako `NOT VALID`, guard stanu płatności i zaakceptowanej faktury oraz przeliczenie salda w tej samej firmie po każdej istotnej zmianie wpłaty. Akcja webowa korzysta z RPC zamiast dwóch niezależnych zapisów. `00074` po wdrożeniu nowego webu i workera odbiera klientom DML do trzech tabel, zostawia sesyjny odczyt statusu przypomnień i jawne prawa `service_role`. Dodano regresje akcji oraz scenariusz dwóch firm dla osobnej bazy PostgREST. Commit kodu, migracji, testów i planu: `283c604ed7b85c5b280be7b7250738b6241808c1`.
+
+**Weryfikacja:** 148 plików / 2728 testów Vitest PASS po końcowej poprawce; 66 XML i 67 testów narzędzi PASS; typecheck i lint zmienionego TS PASS. Pełny Next.js build --webpack PASS w izolowanej kopii 1303 plików bez plików env/sekretów, z tymczasowym aliasem jsdom i ograniczeniem pamięci/CPU; bez standalone/Dockera. Gitleaks 8.30.1: 8 zmienionych plików łącznie z dziennikiem, brak trafień. `git diff --cached --check` PASS. Dwa niezależne przeglądy statyczne po poprawieniu delimitera funkcji SQL nie znalazły blokera. Dowody lokalne: TEMP/faktflow-payment-ledger-build-0c8fa8f7 (odcisk kopii `4a04625cedfc11ba0e35ae2717d46bf7b96c32831a9652cefe155ddebdd0a32f`), TEMP/faktflow-payment-ledger-scan-07d201f1.
+
+**Status i ograniczenie:** kod gotowy do przeglądu; SQL i migracji **nie uruchamiano**, brak testu rzeczywistego PostgREST, merge, produkcyjnego wdrożenia i potwierdzenia danych historycznych. `NOT VALID` chroni nowe zapisy, ale starych relacji nie uzdrawia. Między `00073` a `00074` stare prawa klienta nadal obowiązują; nie oznaczać naprawy jako wdrożonej przed końcem sekwencji.
+
+**Bartek — warunek odbioru:** przed zmianą sprawdzić realne granty/RLS, liczby obcych powiązań i niespójnych sald, indeksy/rozmiary, działającą kopię i restore. Wykonać `00073` → rollout dokładnie tego webu i workera → `00074`, test dwóch firm na jednorazowej bazie i kontrolę obu backendów kolejek. Po rozliczeniu starych danych zwalidować trzy nowe FK. Każdą historyczną obcą wpłatę/saldo rozliczyć z dowodem bankowym i śladem audytu; nie robić automatycznego backfillu. Szczegóły i licznikowe zapytania są w dokumencie odbioru. Następny odrębny przegląd: współbieżne webhooki Stripe i trwała idempotencja refundów; nie są naprawione w tym pakiecie.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:
