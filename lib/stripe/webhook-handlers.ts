@@ -35,6 +35,24 @@ import {
   resolveTenantIdFromSubscription,
 } from './event-mapping';
 
+/**
+ * Late invoice payment events must not reopen an already refunded payment.
+ * The database trigger in 00075 also covers a race after this read.
+ */
+async function isRefundedStripePayment(
+  supabase: ReturnType<typeof createAdminClient>,
+  stripeInvoiceId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('stripe_payments')
+    .select('status')
+    .eq('stripe_invoice_id', stripeInvoiceId)
+    .maybeSingle();
+  if (error) {
+    throw new Error('stripe payment status read failed: ' + error.message);
+  }
+  return data?.status === 'refunded' || data?.status === 'partially_refunded';
+}
 // ─── 1. subscription.created / updated ────────────────────────────────
 
 export async function handleSubscriptionUpserted(
@@ -151,6 +169,7 @@ export async function handleInvoicePaymentSucceeded(
   if (!mapping) return;
 
   const supabase = createAdminClient();
+  if (await isRefundedStripePayment(supabase, invoice.id)) return;
   // Cast — `stripe_payments` poza typed gen.
   const { data, error } = await (supabase as unknown as {
     from: (n: string) => {
@@ -159,7 +178,7 @@ export async function handleInvoicePaymentSucceeded(
         opts: { onConflict: string },
       ) => {
         select: (c: string) => Promise<{
-          data: Array<{ id: string }> | null;
+          data: Array<{ id: string; status: string }> | null;
           error: { message: string } | null;
         }>;
       };
@@ -167,14 +186,15 @@ export async function handleInvoicePaymentSucceeded(
   })
     .from('stripe_payments')
     .upsert(mapping.row, { onConflict: 'stripe_invoice_id' })
-    .select('id');
+    .select('id, status');
 
   if (error) {
     throw new Error(`stripe_payments upsert failed: ${error.message}`);
   }
 
   const paymentId = data?.[0]?.id;
-  if (!paymentId) return;
+  if (!paymentId || data?.[0]?.status === 'refunded' ||
+      data?.[0]?.status === 'partially_refunded') return;
 
   await logAuditSystem({
     action: 'billing.payment.succeeded',
@@ -230,6 +250,7 @@ export async function handleInvoicePaymentFailed(
   if (!mapping) return;
 
   const supabase = createAdminClient();
+  if (await isRefundedStripePayment(supabase, invoice.id)) return;
   const { data, error } = await (supabase as unknown as {
     from: (n: string) => {
       upsert: (
@@ -237,7 +258,7 @@ export async function handleInvoicePaymentFailed(
         opts: { onConflict: string },
       ) => {
         select: (c: string) => Promise<{
-          data: Array<{ id: string }> | null;
+          data: Array<{ id: string; status: string }> | null;
           error: { message: string } | null;
         }>;
       };
@@ -245,14 +266,15 @@ export async function handleInvoicePaymentFailed(
   })
     .from('stripe_payments')
     .upsert(mapping.row, { onConflict: 'stripe_invoice_id' })
-    .select('id');
+    .select('id, status');
 
   if (error) {
     throw new Error(`stripe_payments failed upsert: ${error.message}`);
   }
 
   const paymentId = data?.[0]?.id;
-  if (!paymentId) return;
+  if (!paymentId || data?.[0]?.status === 'refunded' ||
+      data?.[0]?.status === 'partially_refunded') return;
 
   const failureReason =
     (mapping.row.failure_reason as string | null | undefined) ?? null;

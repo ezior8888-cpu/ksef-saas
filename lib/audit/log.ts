@@ -90,6 +90,7 @@ export type AuditAction =
   | 'billing.payment.succeeded'
   | 'billing.payment.failed'
   | 'billing.refund.issued'
+  | 'billing.refund.reconciliation_required'
   | 'billing.trial.will_end'
   | 'billing.vat_invoice.queued'
   | 'accountant.token_created'

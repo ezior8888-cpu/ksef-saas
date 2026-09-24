@@ -66,6 +66,7 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
                   id: string;
                   tenant_id: string;
                   amount_cents: number;
+                  status: string;
                   paid_at: string | null;
                   vat_invoice_id: string | null;
                   subscription_id: string | null;
@@ -78,7 +79,7 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
       })
         .from('stripe_payments')
         .select(
-          'id, tenant_id, amount_cents, paid_at, vat_invoice_id, subscription_id',
+          'id, tenant_id, amount_cents, status, paid_at, vat_invoice_id, subscription_id',
         )
         .eq('id', paymentId)
         .maybeSingle();
@@ -86,6 +87,14 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
       if (!data) throw new NonRetriableError(`Payment ${paymentId} nie istnieje`);
       return data;
     });
+
+    if (paymentRow.status !== 'succeeded') {
+      logger.info('payment no longer succeeded — self-invoicing skipped', {
+        paymentId,
+        status: paymentRow.status,
+      });
+      return { skipped: true as const, reason: 'payment-not-succeeded' as const };
+    }
 
     if (paymentRow.vat_invoice_id) {
       logger.info('vat_invoice_id already set — skip', { paymentId });
@@ -120,6 +129,31 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
 
     // 3 + 4. Build draft + insert (idempotent po unique internal_number).
     const insertResult = await step.run('build-and-insert', async () => {
+      // Inngest może odtworzyć zapamiętany krok load-payment po zwrocie.
+      // Odczyt w tym kroku sprawdza bieżący stan przed utworzeniem faktury.
+      const supabase = createAdminClient();
+      const { data: currentPayment, error: statusError } = await (supabase as unknown as {
+        from: (n: string) => {
+          select: (c: string) => {
+            eq: (k: string, v: string) => {
+              maybeSingle: () => Promise<{
+                data: { status: string } | null;
+                error: { message: string } | null;
+              }>;
+            };
+          };
+        };
+      })
+        .from('stripe_payments')
+        .select('status')
+        .eq('id', paymentId)
+        .maybeSingle();
+      if (statusError) throw new Error('payment status read failed: ' + statusError.message);
+      if (!currentPayment) throw new NonRetriableError('Payment ' + paymentId + ' nie istnieje');
+      if (currentPayment.status !== 'succeeded') {
+        return { skipped: true as const, reason: 'payment-not-succeeded' as const };
+      }
+
       const draft = await buildSelfInvoiceDraft(tenantId, {
         grossCents: paymentRow.amount_cents,
         paidAt: paymentRow.paid_at ?? paidAt,
@@ -145,6 +179,11 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
         invoice: draft.invoice,
       };
     });
+
+    if ('skipped' in insertResult) {
+      logger.info('payment no longer succeeded before invoice creation — skip', { paymentId });
+      return insertResult;
+    }
 
     // 5. Link payment → faktura. UPDATE jest fail-soft: nawet jak nie zadziała,
     // faktura i tak została wystawiona, link można naprawić ręcznie z admin panelu.

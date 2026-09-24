@@ -11,19 +11,22 @@ const mocks = vi.hoisted(() => ({
   getUserById: vi.fn(),
   health: vi.fn(),
   redirect: vi.fn(),
+  issueRefund: vi.fn(),
+  audit: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.session }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/ksef/health-status', () => ({ getKsefHealthSnapshot: mocks.health }));
 vi.mock('next/navigation', () => ({ redirect: mocks.redirect }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('@/lib/admin/refunds', () => ({ issueRefund: vi.fn() }));
-vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: vi.fn() }));
+vi.mock('@/lib/admin/refunds', () => ({ issueRefund: mocks.issueRefund }));
+vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mocks.audit }));
 
 // requireAdmin remains real: the tests exercise verified identity and the allowlist.
 import { listAdminUsers, getAdminUserDetail } from '@/lib/admin/users';
 import { getAdminOverviewMetrics } from '@/lib/admin/metrics';
-import { listUserPayments } from '@/app/admin/users/[userId]/billing-actions';
+import { issueRefundAction, listUserPayments } from '@/app/admin/users/[userId]/billing-actions';
+import { STALE_REFUND_OPERATION_MS } from '@/lib/billing/refund-operations';
 
 const operator = { id: 'operator-fixture', email: 'operator@example.test', email_confirmed_at: '2026-09-14T00:00:00Z', factors: [{ id: 'factor-fixture', factor_type: 'totp', status: 'verified' }] };
 const member = { id: 'member-fixture', email: 'member@example.test' };
@@ -53,7 +56,8 @@ const rows: Record<string, object[]> = {
     id: 'payment-fixture', tenant_id: 'tenant-a', stripe_invoice_id: null, amount_cents: 12000,
     currency: 'pln', status: 'paid', paid_at: '2026-09-04T10:00:00.000Z', tenants: { name: 'Company a' },
   }],
-  stripe_refunds: [{ payment_id: 'payment-fixture', amount_cents: 2500 }],
+  stripe_refunds: [{ payment_id: 'payment-fixture', amount_cents: 2500, status: 'succeeded' }],
+  stripe_refund_operations: [],
   tenants: [{}, {}],
   organization_join_requests: [{}],
 };
@@ -65,6 +69,7 @@ function query(table: string) {
     select: vi.fn(() => chain), eq: vi.fn(() => chain), in: vi.fn(() => chain),
     is: vi.fn(() => chain), not: vi.fn(() => chain), gte: vi.fn(() => chain),
     order: vi.fn(() => chain), limit: vi.fn(() => chain),
+    maybeSingle: vi.fn(async () => ({ data: data[0] ?? null, error: null })),
     then: <T>(resolve: (value: typeof result) => T | PromiseLike<T>) => Promise.resolve(result).then(resolve),
   };
   return chain;
@@ -91,7 +96,10 @@ beforeEach(() => {
   mocks.health.mockResolvedValue(null);
 });
 
-afterEach(() => { vi.unstubAllEnvs(); });
+afterEach(() => {
+  vi.unstubAllEnvs();
+  rows.stripe_refund_operations = [];
+});
 
 const readers = [
   { name: 'user listing', read: () => listAdminUsers() },
@@ -199,5 +207,79 @@ describe('authorized admin reads retain their results', () => {
     })]);
     expect(mocks.from).toHaveBeenCalledWith('stripe_payments');
     expect(mocks.from).toHaveBeenCalledWith('stripe_refunds');
+    expect(mocks.from).toHaveBeenCalledWith('stripe_refund_operations');
   });
+
+  it('counts only Stripe-confirmed refunds, not pending or failed attempts', async () => {
+    rows.stripe_refunds = [
+      { payment_id: 'payment-fixture', amount_cents: 2500, status: 'succeeded' },
+      { payment_id: 'payment-fixture', amount_cents: 5000, status: 'pending' },
+      { payment_id: 'payment-fixture', amount_cents: 4500, status: 'failed' },
+    ];
+    try {
+      const result = await listUserPayments(user.id);
+      expect(result[0].refundedAmountCents).toBe(2500);
+    } finally {
+      rows.stripe_refunds = [{ payment_id: 'payment-fixture', amount_cents: 2500, status: 'succeeded' }];
+    }
+  });
+
+  it('records an ambiguous refund for operator reconciliation without claiming success', async () => {
+    mocks.issueRefund.mockResolvedValue({
+      success: false, error: 'Wymaga uzgodnienia', reconciliationRequired: true,
+    });
+    const result = await issueRefundAction('payment-fixture', 'Niepewny zwrot');
+    expect(result).toEqual({
+      success: false, error: 'Wymaga uzgodnienia', reconciliationRequired: true,
+    });
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'billing.refund.reconciliation_required',
+      tenantId: 'tenant-a',
+      entityId: 'payment-fixture',
+    }));
+  });
+
+  it('does not call an in-flight duplicate refund a reconciliation incident', async () => {
+    mocks.issueRefund.mockResolvedValue({
+      success: false, error: 'Zwrot już trwa', operationPending: true,
+    });
+    const result = await issueRefundAction('payment-fixture', null);
+    expect(result).toEqual({
+      success: false, error: 'Zwrot już trwa', operationPending: true,
+      reconciliationRequired: undefined,
+    });
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  it('shows an existing refund operation so the admin cannot offer another refund', async () => {
+    rows.stripe_refund_operations = [{
+      payment_id: 'payment-fixture', status: 'reconciliation_required', created_at: '2026-09-24T10:00:00.000Z',
+    }];
+    const result = await listUserPayments(user.id);
+    expect(result[0].refundOperationStatus).toBe('reconciliation_required');
+  });
+
+  it('flags an abandoned processing claim for manual review without reopening the action', async () => {
+    rows.stripe_refund_operations = [{
+      payment_id: 'payment-fixture', status: 'processing',
+      created_at: new Date(Date.now() - STALE_REFUND_OPERATION_MS - 1000).toISOString(),
+    }];
+    const result = await listUserPayments(user.id);
+    expect(result[0]).toMatchObject({
+      refundOperationStatus: 'processing', refundOperationStale: true,
+    });
+  });
+
+  it.each(['stripe_refunds', 'stripe_refund_operations'])(
+    'fails closed when %s cannot be read', async (failedTable) => {
+      mocks.from.mockImplementation((table: string) => table === failedTable ? {
+        select: () => ({ in: async () => ({ data: null, error: { message: 'read failed' } }) }),
+      } : query(table));
+      await expect(listUserPayments(user.id)).rejects.toThrow(
+        failedTable === 'stripe_refunds'
+          ? 'Nie można potwierdzić zapisanych zwrotów.'
+          : 'Nie można potwierdzić stanu operacji zwrotu.',
+      );
+    },
+  );
 });

@@ -159,4 +159,7 @@ export const KNOWN_AUDIT_ACTIONS = [
   'admin.note.created',
   'admin.note.archived',
   'admin.flag.toggled',
+  // Stripe refunds
+  'billing.refund.issued',
+  'billing.refund.reconciliation_required',
 ] as const;

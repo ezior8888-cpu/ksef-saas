@@ -10,6 +10,7 @@
  *   2. **Offline24 queue rośnie** — > 50 pending invoices
  *   3. **Inngest job failures** — > 10 failed runs w ostatnich 5 min
  *   4. **Payment failures** — > 5 failed Stripe payments w ostatniej godzinie
+ *   5. **Stale refunds** — operacje processing starsze niż 15 min
  *
  * Wszystkie progi konserwatywne — wolimy false-positive niż przegapić
  * critical incident. Operator może zignorować, ale nie chcemy gubić alertów.
@@ -19,6 +20,7 @@ import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
 import { alertCritical } from '@/lib/alerts/slack';
+import { STALE_REFUND_OPERATION_MS } from '@/lib/billing/refund-operations';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -187,6 +189,42 @@ async function checkPaymentFailures(): Promise<AlertCheckResult> {
   return { type: 'payment_failures', fired: true };
 }
 
+/** Zwrot po timeout/proces crash zostaje zablokowany; operator musi go uzgodnić. */
+export async function checkStaleRefundOperations(): Promise<AlertCheckResult> {
+  const supabase = createAdminClient();
+  const cutoffIso = new Date(Date.now() - STALE_REFUND_OPERATION_MS).toISOString();
+  const { count, error } = await supabase
+    .from('stripe_refund_operations')
+    .select('payment_id', { count: 'exact', head: true })
+    .eq('status', 'processing')
+    .lt('created_at', cutoffIso);
+
+  if (error || count === null) {
+    throw error ?? new Error('Stale refund operation count unavailable');
+  }
+  if (count === 0) return { type: 'stale_refund_operations', fired: false };
+
+  const claimed = await tryClaimAlert('stale_refund_operations');
+  if (!claimed) return { type: 'stale_refund_operations', fired: false, reason: 'dedup' };
+
+  await alertCritical(
+    'Zwroty Stripe wymagają uzgodnienia',
+    'Co najmniej jedna operacja zwrotu pozostaje w processing ponad 15 minut. Sprawdź płatność i zwroty w Stripe przed jakąkolwiek kolejną próbą; nie odblokowuj automatycznie.',
+    {
+      fields: [
+        { label: 'Operacje > 15 min', value: String(count) },
+        { label: 'Próg', value: '15 min' },
+      ],
+      link: {
+        label: 'Otwórz panel administratora',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/support',
+      },
+    },
+  );
+
+  return { type: 'stale_refund_operations', fired: true };
+}
+
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
@@ -202,6 +240,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-payments', () =>
         checkPaymentFailures().catch(captureAndReturn('payment_failures')),
+      ),
+      step.run('check-stale-refunds', () =>
+        checkStaleRefundOperations().catch(captureAndReturn('stale_refund_operations')),
       ),
     ]);
 

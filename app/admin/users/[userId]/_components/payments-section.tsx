@@ -91,7 +91,8 @@ function PaymentRow({ payment }: { payment: UserPaymentRow }) {
   const fullyRefunded =
     payment.status === 'refunded' ||
     payment.refundedAmountCents >= payment.amountCents;
-  const canRefund = payment.status === 'succeeded' && !fullyRefunded;
+  const canRefund = payment.status === 'succeeded' && !fullyRefunded
+    && payment.refundOperationStatus === null;
 
   const handleRefund = () => {
     startTransition(async () => {
@@ -103,6 +104,10 @@ function PaymentRow({ payment }: { payment: UserPaymentRow }) {
         router.refresh();
       } else {
         toast.error(result.error);
+        if (result.reconciliationRequired || result.operationPending) {
+          setDialogOpen(false);
+          router.refresh();
+        }
       }
     });
   };
@@ -143,6 +148,17 @@ function PaymentRow({ payment }: { payment: UserPaymentRow }) {
         >
           {payment.status}
         </Badge>
+        {payment.refundOperationStatus === 'processing' ? (
+          <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+            {payment.refundOperationStale ? 'Wymaga uzgodnienia w Stripe (ponad 15 min)' : 'Zwrot w trakcie'}
+          </div>
+        ) : payment.refundOperationStatus === 'reconciliation_required' ? (
+          <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+            Wymaga uzgodnienia w Stripe
+          </div>
+        ) : payment.refundOperationStatus === 'completed' ? (
+          <div className="mt-1 text-xs text-muted-foreground">Zwrot potwierdzony</div>
+        ) : null}
       </td>
       <td className="px-4 py-2.5 text-right">
         {canRefund ? (
