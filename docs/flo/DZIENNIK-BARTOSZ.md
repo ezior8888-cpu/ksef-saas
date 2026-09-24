@@ -4051,3 +4051,87 @@ próbkę.
 
 Przy okazji: poprawione ostrzeżenie lintera, które sam wprowadziłem
 w testach przycisku odsłaniania.
+
+## 2026-09-24 · Strażnik podpięcia: „zbudowane i niepodłączone" ma wywalać test
+
+W tej sesji **cztery razy** trafiliśmy na ten sam wzorzec:
+
+| kiedy | co było napisane, otestowane i niepodpięte |
+|---|---|
+| 17.09 | X-05 pytał o nieistniejące kolumny — zero kart na produkcji |
+| 17.09 | wykonawca K-01 pisał do kolumn, których `payments` nie ma |
+| 23.09 | ekran wyciszeń pokazywał atrapę zamiast prawdziwych danych |
+| 24.09 | tryb cichy nie zapisał ani jednego wpisu od dnia powstania |
+
+Za każdym razem testy jednostkowe były **zielone** — bo testowały funkcję,
+a nie to, czy ktokolwiek jej używa. Za każdym razem znalazł to człowiek,
+przypadkiem, tygodnie później.
+
+`tests/unit/flo-wiring.test.ts` zamienia „ktoś zauważy" na „test nie
+przejdzie". Nie sprawdza, czy kod działa — od tego są testy funkcji.
+Sprawdza, czy jest PODŁĄCZONY, a jeśli nie, to czy ktoś to świadomie zapisał.
+
+### Co pilnuje
+
+1. **Każdy `build*Proposal` jest wołany albo stoi na liście długu.**
+   Nowy builder bez producenta wywala test.
+2. **Lista długu nie gnije w drugą stronę** — wpis, który już jest podpięty,
+   musi z niej zniknąć.
+3. **Każdy `run*Sweep` z `functions/` jest w tablicy `RULES`.** K1.3 zrobiło
+   z pulsu tablicę właśnie po to, żeby nowa reguła była jedną pozycją —
+   jedną pozycją, o której łatwo zapomnieć.
+4. **Powód „bramka prawna" jest związany z `flags.ts`.** Powód wpisany ręcznie
+   potrafi skłamać; ten test wiąże go z jedynym miejscem, które o blokadzie
+   decyduje. Gdy prawnik zapali zielone światło i ktoś zdejmie blokadę,
+   test powie, że wpis długu przestał być prawdą.
+
+### Stan na dziś: 17 podpiętych, 15 długu
+
+Dług dzieli się na dwie **bardzo różne** kategorie:
+
+| kategoria | ile | co znaczy |
+|---|---|---|
+| bramka prawna | 5 | funkcja gotowa, ale rodzaj stoi w `flags.ts` — podpięcie byłoby BŁĘDEM, nie postępem |
+| brak producenta | 10 | nikt nie tworzy karty; zwykły dług planu, ta sama robota co K1.8–K1.11 |
+
+Bramka prawna: `contractor.foreign`, `payment.score`, `tax.relief`,
+`tax.setaside`, `tax.limit`. Brak producenta: kontrola kontrahenta,
+podpowiedzi o funkcjach, podsumowanie importu, P-02 (paczka szkiców),
+faktura końcowa, kamienie milowe, podwyżka stawki i trzy buildery B-01.
+
+### Dwie pułapki, które trzeba było obejść
+
+**Builder wołany przez sąsiada w tym samym pliku jest podpięty.** Tak działa
+W-03 (`buildRuleProposal` ← `proposeRuleAfterReview`) i K-01 (builder zbiorczy
+← builder jednej faktury). Naiwna reguła „wołany z innego pliku" krzyczałaby
+na kod w pełni podpięty. Stąd pojęcie modułu ŻYWEGO: takiego, z którego
+cokolwiek jest wołane z zewnątrz.
+
+**Komentarze wycinamy przed szukaniem nazw.** Bez tego zdanie „docelowo
+zawoła tu `buildRateRaiseProposal`" w komentarzu zupełnie innego pliku
+liczyłoby się jako podpięcie — czyli strażnik milkłby dokładnie w chwili,
+w której ktoś opisuje plany.
+
+### Weryfikacja
+
+Strażnik, który nigdy nie pada, jest ozdobą — więc mutowany był **kod
+produkcyjny**, nie test:
+
+| mutacja | wynik |
+|---|---|
+| dopisany builder, którego nikt nie woła | złapana |
+| producent wypadł z tablicy `RULES` | złapana |
+| builder przestał być wołany przez producenta | złapana |
+| rodzaj odblokowany w `flags.ts`, powód nadal mówi „bramka prawna" | złapana |
+| dług podpięty, wpis został na liście | złapana |
+| wzmianka w KOMENTARZU | **przeżyła — i o to chodziło** |
+
+`tsc --noEmit` czysto · eslint 0 błędów · vitest **1357 zielonych,
+7 pominiętych**.
+
+### Czego to NIE łapie
+
+Kodu, który jest podpięty i **nie działa** — X-05 pytający o nieistniejące
+kolumny przeszedłby tego strażnika bez mrugnięcia, bo producent był na
+miejscu. Na to nie ma testu jednostkowego; na to jest kanarek i pierwszy
+przebieg na prawdziwych danych.
