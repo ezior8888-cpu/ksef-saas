@@ -1,37 +1,28 @@
-import { createHash } from 'crypto';
-import { getRedis, isRedisConfigured } from '@/lib/cache/redis';
+import { createHash } from 'node:crypto';
 
 /**
- * Pwned Passwords (haveibeenpwned.com) — k-anonymity API.
+ * Pwned Passwords range lookup: SHA-1 is required by the HIBP protocol,
+ * not used to store or authenticate account passwords.
+ * Only its first five hex characters leave this process; compare locally.
+ * https://haveibeenpwned.com/API/v3#SearchingPwnedPasswordsByRange
  *
- * Protokół (privacy-preserving):
- *   1. Liczymy SHA-1 hasła.
- *   2. Wysyłamy tylko pierwsze 5 znaków hashu (HEX).
- *   3. Otrzymujemy ~700-800 sufiksów + countów dla wszystkich hashów
- *      zaczynających się od tego prefixu.
- *   4. Sprawdzamy lokalnie czy nasz suffix tam jest.
+ * Do not persist a password-derived cache key (even a hash of its suffix):
+ * it would allow offline guessing against a cache snapshot. The range
+ * request explicitly bypasses the Next.js fetch cache as well.
+ * Add-Padding adds dummy zero-count entries, not a fixed response size.
  *
- * Hasło NIGDY nie opuszcza naszego serwera. SHA-1 jest słaby kryptograficznie,
- * ale tu używamy go tylko jako lookup key — nie do storage.
- *
- * `Add-Padding: true` powoduje że HIBP wymusza identyczną długość odpowiedzi
- * niezależnie od prefixu — utrudnia analizę traffic timing.
- *
- * Cache: 24h w Redis pod kluczem SHA-256(suffix). Trafia top haseł szybko —
- * w pierwszym tygodniu prod ~80% requestów hituje cache.
- *
- * Fail-open: jeśli HIBP padnie / timeout, NIE blokujemy registracji.
- * Strength check już odrzucił najgorsze hasła, więc nawet bez HIBP mamy
- * sensowny baseline.
+ * Preserve the existing fail-open contract when this supplementary check
+ * is unavailable; callers still enforce the local password policy.
  */
 const HIBP_API_BASE = 'https://api.pwnedpasswords.com/range/';
-const CACHE_TTL_SECONDS = 24 * 60 * 60;
 const REQUEST_TIMEOUT_MS = 3000;
+// Application safety limit, not a claimed maximum in the HIBP protocol.
+const MAX_RESPONSE_BYTES = 256 * 1024;
 
 export interface BreachCheckResult {
   breached: boolean;
   occurrences: number;
-  /** True gdy HIBP nie odpowiedział i przechodzimy w fail-open. */
+  /** True when the check is unavailable, not proof the password is safe. */
   fallback?: boolean;
 }
 
@@ -43,72 +34,76 @@ export async function checkPasswordBreach(
   const sha1 = createHash('sha1').update(password).digest('hex').toUpperCase();
   const prefix = sha1.slice(0, 5);
   const suffix = sha1.slice(5);
-
-  const cached = await readCache(suffix);
-  if (cached !== null) {
-    return { breached: cached > 0, occurrences: cached };
-  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    const res = await fetch(`${HIBP_API_BASE}${prefix}`, {
+    const response = await fetch(HIBP_API_BASE + prefix, {
       headers: {
         'Add-Padding': 'true',
         'User-Agent': 'ksef-saas-password-check',
       },
+      cache: 'no-store',
+      credentials: 'omit',
+      redirect: 'error',
       signal: controller.signal,
     });
-    clearTimeout(timeout);
+    if (response.status !== 200) throw new Error('Unavailable password check');
 
-    if (!res.ok) {
-      return { breached: false, occurrences: 0, fallback: true };
-    }
-
-    const body = await res.text();
+    const body = await readBoundedBody(response);
     const occurrences = parseOccurrences(body, suffix);
-    await writeCache(suffix, occurrences);
     return { breached: occurrences > 0, occurrences };
-  } catch (err) {
-    console.error('[breach-check] HIBP error, fail-open:', err);
+  } catch {
+    // Never log the exception, request URL, hash, response or password.
+    console.warn('[breach-check] Password breach check unavailable');
     return { breached: false, occurrences: 0, fallback: true };
+  } finally {
+    clearTimeout(timeout);
+    // Also close a rejected/non-200 response without consuming its body.
+    controller.abort();
+  }
+}
+
+async function readBoundedBody(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Missing password check response');
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  let size = 0;
+  let body = '';
+  let complete = false;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        complete = true;
+        return body + decoder.decode();
+      }
+      size += value.byteLength;
+      if (size > MAX_RESPONSE_BYTES) throw new Error('Password check response too large');
+      body += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    if (!complete) void reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
 }
 
 function parseOccurrences(body: string, suffix: string): number {
-  for (const line of body.split('\n')) {
-    const [hashSuffix, count] = line.trim().split(':');
-    if (hashSuffix === suffix) {
-      return Number.parseInt(count ?? '0', 10) || 0;
+  const lines = body.split(/\r?\n/);
+  if (lines.at(-1) === '') lines.pop();
+  if (lines.length === 0) throw new Error('Empty password check response');
+  const seen = new Set<string>();
+  let occurrences = 0;
+  for (const line of lines) {
+    const match = /^([A-F0-9]{35}):(0|[1-9][0-9]{0,15})$/.exec(line);
+    if (!match) throw new Error('Invalid password check response');
+    const [, hashSuffix, count] = match;
+    const value = Number(count);
+    if (!Number.isSafeInteger(value) || seen.has(hashSuffix)) {
+      throw new Error('Invalid password check response');
     }
+    seen.add(hashSuffix);
+    if (hashSuffix === suffix) occurrences = value;
   }
-  return 0;
-}
-
-async function readCache(suffix: string): Promise<number | null> {
-  if (!isRedisConfigured()) return null;
-  try {
-    const redis = getRedis();
-    const value = await redis.get<number>(cacheKey(suffix));
-    return value ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function writeCache(suffix: string, occurrences: number): Promise<void> {
-  if (!isRedisConfigured()) return;
-  try {
-    const redis = getRedis();
-    await redis.set(cacheKey(suffix), occurrences, { ex: CACHE_TTL_SECONDS });
-  } catch {
-    // ignore — cache miss przy następnej weryfikacji to nie blokada
-  }
-}
-
-function cacheKey(suffix: string): string {
-  // Hashujemy suffix przed kluczem żeby snapshot Redisa nie wyciekał
-  // bezpośrednio fragmentów SHA-1 popularnych haseł.
-  const h = createHash('sha256').update(suffix).digest('hex').slice(0, 32);
-  return `hibp:${h}`;
+  return occurrences;
 }

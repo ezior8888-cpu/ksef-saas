@@ -35,6 +35,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative, extname } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { findBundleMatchLocation, formatBundleReportCode } from './bundle-report-metadata.mjs';
 
 const ROOT = process.cwd();
 const OUT_MD = 'docs/security/audyt/04-bundle.md';
@@ -79,7 +80,7 @@ function parseEnv(path: string): Map<string, string> {
 }
 
 const env = parseEnv(envArg);
-console.log(`Wczytano ${env.size} zmiennych z ${envArg} (wartości nie są nigdzie zapisywane).`);
+console.log(`Wczytano ${env.size} zmiennych. Raport pomija wartości i treść pakietu.`);
 
 // ═══════════════════════════════════════════════════════════════
 // Które wartości w ogóle nadają się do szukania
@@ -112,9 +113,9 @@ function jestPubliczna(key: string): boolean {
  * Zmienne, które NIE SĄ sekretami mimo braku przedrostka `NEXT_PUBLIC_`.
  *
  * Pierwszy przebieg zgłosił trzy takie trafienia i wszystkie okazały się
- * nieszkodliwe — ale ustalenie tego wymagało ręcznego oglądania fragmentów
- * pakietu. Lista poniżej plus automatyczne wyciąganie kontekstu (funkcja
- * `kontekstWokol`) zdejmują tę robotę z człowieka.
+ * nieszkodliwe. Lista poniżej rozdziela je od sekretów. Raport zawiera
+ * wyłącznie lokalizacje: otoczenie trafienia mogłoby ujawnić inny sekret,
+ * więc nigdy nie kopiujemy fragmentów pakietu do raportu.
  *
  * `SENTRY_DSN` jest tu celowo: adres DSN z założenia trafia do przeglądarki,
  * bo bez niego klient nie wyśle raportu o błędzie. Pozwala obcemu wysyłać
@@ -132,23 +133,6 @@ const NIE_SEKRETY = new Set([
   'AWS_ARCHIVE_BUCKET',
   'NODE_ENV',
 ]);
-
-/**
- * Fragment pakietu WOKÓŁ trafienia, z samą wartością zamaskowaną nazwą
- * zmiennej. Bez tego każde trafienie wymaga ręcznego grepowania po pakiecie,
- * żeby odróżnić prawdziwe wstawienie sekretu od przypadkowej zbieżności.
- *
- * Przykład z pierwszego przebiegu — `AWS_REGION` wyglądało na wyciek,
- * a kontekst pokazał, że to wbudowany w bibliotekę spis nazw regionów:
- *   …i.CaCentral1="ca-central-1",i.EuCentral1="⟪AWS_REGION⟫",i.EuWest1=…
- */
-function kontekstWokol(tresc: string, wartosc: string, nazwa: string): string {
-  const i = tresc.indexOf(wartosc);
-  if (i < 0) return '';
-  const przed = tresc.slice(Math.max(0, i - 70), i);
-  const po = tresc.slice(i + wartosc.length, i + wartosc.length + 45);
-  return (przed + '⟪' + nazwa + '⟫' + po).replace(/\s+/g, ' ').replace(/\|/g, '\\|');
-}
 
 /**
  * Waga trafienia. Nie każde jest równie groźne — i mieszanie ich w jedną
@@ -230,9 +214,8 @@ interface Trafienie {
   zmienna: string;
   publiczna: boolean;
   waga: string;
-  pliki: string[];
-  /** Fragment pakietu wokół trafienia, z wartością zamaskowaną. */
-  kontekst: string;
+  /** Maksymalnie 10 lokalizacji; bez wartości ani otoczenia trafienia. */
+  pliki: Array<{ file: string; offset: number }>;
 }
 
 const trafienia = new Map<string, Trafienie>();
@@ -246,18 +229,18 @@ for (const f of pliki) {
     continue; // plik binarny — pomijamy
   }
   for (const [key, val] of doSzukania) {
-    if (!tresc.includes(val)) continue;
     const rel = relative(ROOT, f).split('\\').join('/');
+    const lokalizacja = findBundleMatchLocation(tresc, val, rel);
+    if (!lokalizacja) continue;
     const istn = trafienia.get(key);
     if (istn) {
-      if (istn.pliki.length < 10 && !istn.pliki.includes(rel)) istn.pliki.push(rel);
+      if (istn.pliki.length < 10 && !istn.pliki.some((p) => p.file === rel)) istn.pliki.push(lokalizacja);
     } else {
       trafienia.set(key, {
         zmienna: key,
         publiczna: jestPubliczna(key),
         waga: jestPubliczna(key) ? 'oczekiwane' : wagaDla(key, val),
-        pliki: [rel],
-        kontekst: kontekstWokol(tresc, val, key),
+        pliki: [lokalizacja],
       });
     }
   }
@@ -286,9 +269,9 @@ L.push('# 04 — Sekrety w pakiecie przeglądarki');
 L.push('');
 L.push('Wygenerowane przez `scripts/security/audit-client-bundle.ts`. **Nie edytuj ręcznie.**');
 L.push('');
-L.push('> **Ten plik NIE ZAWIERA żadnych wartości sekretów** — wyłącznie nazwy zmiennych');
-L.push('> i ścieżki plików, w których ich wartości wystąpiły. Tak samo działa wyjście');
-L.push('> skryptu na ekranie.');
+L.push('> Raport pomija wartości sekretów i całe otoczenie trafień. Zapisuje nazwy zmiennych,');
+L.push('> ścieżki plików i offset pierwszego wystąpienia (indeks UTF-16 liczony od zera).');
+L.push('> Treści pakietu nie są kopiowane do raportu ani podsumowania na ekranie.');
 L.push('');
 L.push(`Data przebiegu: ${new Date().toISOString().slice(0, 10)}`);
 L.push('');
@@ -308,7 +291,7 @@ if (publiczneZnalezione.length === 0) {
   L.push('`NEXT_PUBLIC_*`, czyli wyszukiwanie działa i patrzy we właściwe pliki.');
   L.push('');
   L.push('Znalezione zmienne publiczne (obecność oczekiwana): ' +
-    publiczneZnalezione.map((t) => '`' + t.zmienna + '`').join(', '));
+    publiczneZnalezione.map((t) => formatBundleReportCode(t.zmienna)).join(', '));
 }
 L.push('');
 L.push('## Wynik');
@@ -318,11 +301,11 @@ if (sekretyZnalezione.length === 0) {
 } else {
   L.push(`🔴 **Znaleziono ${sekretyZnalezione.length} zmiennych serwerowych w pakiecie klienta.**`);
   L.push('');
-  L.push('| Waga | Zmienna | Plik(i) | Kontekst w pakiecie |');
-  L.push('|---|---|---|---|');
+  L.push('| Waga | Zmienna | Plik(i) i offset |');
+  L.push('|---|---|---|');
   for (const t of sekretyZnalezione.sort((a, b) => a.waga.localeCompare(b.waga))) {
     L.push(
-      `| ${t.waga} | \`${t.zmienna}\` | ${t.pliki.map((p) => '`' + p + '`').join('<br>')} | \`${t.kontekst}\` |`,
+      `| ${t.waga} | ${formatBundleReportCode(t.zmienna)} | ${t.pliki.map((p) => formatBundleReportCode(p.file) + ' @ ' + p.offset).join('<br>')} |`,
     );
   }
   L.push('');
@@ -334,17 +317,16 @@ L.push('');
 L.push('## Zmienne bez przedrostka `NEXT_PUBLIC_`, które sekretami nie są');
 L.push('');
 L.push('Trafienia na liście `NIE_SEKRETY` w skrypcie. Pokazujemy je, bo *obecność* jest');
-L.push('faktem, ale nie są znaleziskiem. Kolumna „kontekst" mówi, dlaczego wartość');
-L.push('znalazła się w pakiecie — czasem to celowe wstawienie, a czasem zwykła');
-L.push('zbieżność z tekstem, który i tak tam był.');
+L.push('faktem, ale nie jest dowodem wycieku sekretu. Lokalizacja pozwala na ręczną');
+L.push('weryfikację pochodzenia trafienia bez kopiowania zawartości pakietu do raportu.');
 L.push('');
 if (nieSekretyZnalezione.length === 0) {
   L.push('_Brak._');
 } else {
-  L.push('| Zmienna | Plik | Kontekst w pakiecie |');
+  L.push('| Zmienna | Plik | Offset |');
   L.push('|---|---|---|');
   for (const t of nieSekretyZnalezione) {
-    L.push(`| \`${t.zmienna}\` | \`${t.pliki[0]}\` | \`${t.kontekst}\` |`);
+    L.push(`| ${formatBundleReportCode(t.zmienna)} | ${formatBundleReportCode(t.pliki[0].file)} | ${t.pliki[0].offset} |`);
   }
 }
 L.push('');
@@ -360,7 +342,7 @@ if (mapy.length === 0) {
   L.push('**Pytanie do dnia 5:** czy te pliki są dostępne publicznie na produkcji.');
   L.push('Obecność w lokalnym buildzie tego nie przesądza — sprawdza to `audit-headers.ts`.');
   L.push('');
-  for (const m of mapy.slice(0, 20)) L.push('- `' + m + '`');
+  for (const m of mapy.slice(0, 20)) L.push('- ' + formatBundleReportCode(m));
   if (mapy.length > 20) L.push(`- _...i ${mapy.length - 20} więcej_`);
 }
 L.push('');
@@ -379,7 +361,7 @@ writeFileSync(join(ROOT, OUT_MD), L.join('\n') + '\n', 'utf8');
 console.log('');
 console.log(`Zmienne publiczne znalezione w pakiecie: ${publiczneZnalezione.length} (test ${publiczneZnalezione.length ? 'wiarygodny' : 'NIEWIARYGODNY'})`);
 console.log(`Zmienne serwerowe znalezione w pakiecie: ${sekretyZnalezione.length}`);
-for (const t of sekretyZnalezione) console.log(`  [${t.waga}] ${t.zmienna} → ${t.pliki[0]}`);
-console.log(`Znane nie-sekrety w pakiecie: ${nieSekretyZnalezione.length} (${nieSekretyZnalezione.map((t) => t.zmienna).join(', ') || '—'})`);
+for (const t of sekretyZnalezione) console.log(`  [${t.waga}] ${JSON.stringify(t.zmienna)} → ${JSON.stringify(t.pliki[0].file)} @ ${t.pliki[0].offset}`);
+console.log(`Znane nie-sekrety w pakiecie: ${nieSekretyZnalezione.length} (${nieSekretyZnalezione.map((t) => JSON.stringify(t.zmienna)).join(', ') || '—'})`);
 console.log(`Mapy źródeł: ${mapy.length}`);
 console.log(`→ ${OUT_MD}`);

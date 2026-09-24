@@ -4,7 +4,7 @@
  * Pipeline:
  *   1. Load `stripe_payments` row — jeśli `vat_invoice_id` już ustawione,
  *      skip (idempotency po retry webhook'a).
- *   2. Load subscription żeby wyciągnąć `plan` (monthly/annual) i tenantId.
+ *   2. Zweryfikuj firmę i wyznacz plan z opłaconej faktury Stripe.
  *   3. `buildSelfInvoiceDraft(...)` — Invoice obiekt z poprawnym numerowaniem.
  *   4. `insertSelfInvoice(...)` — INSERT do `invoices` + `invoice_line_items`.
  *      Idempotent przez UNIQUE `(tenant_id, internal_number)`.
@@ -32,6 +32,7 @@ import {
 } from '@/lib/billing/self-invoice';
 import { isSelfInvoicingConfigured } from '@/lib/billing/operator-config';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { deriveBilledPlanFromPaidInvoice } from '@/lib/stripe/billed-plan';
 
 import {
   billingPaymentSucceeded,
@@ -66,6 +67,10 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
                   id: string;
                   tenant_id: string;
                   amount_cents: number;
+                  currency: string;
+                  stripe_invoice_id: string;
+                  last_webhook_payload: unknown;
+                  status: string;
                   paid_at: string | null;
                   vat_invoice_id: string | null;
                   subscription_id: string | null;
@@ -78,7 +83,7 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
       })
         .from('stripe_payments')
         .select(
-          'id, tenant_id, amount_cents, paid_at, vat_invoice_id, subscription_id',
+          'id, tenant_id, amount_cents, currency, stripe_invoice_id, last_webhook_payload, status, paid_at, vat_invoice_id, subscription_id',
         )
         .eq('id', paymentId)
         .maybeSingle();
@@ -86,6 +91,14 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
       if (!data) throw new NonRetriableError(`Payment ${paymentId} nie istnieje`);
       return data;
     });
+
+    if (paymentRow.status !== 'succeeded') {
+      logger.info('payment no longer succeeded — self-invoicing skipped', {
+        paymentId,
+        status: paymentRow.status,
+      });
+      return { skipped: true as const, reason: 'payment-not-succeeded' as const };
+    }
 
     if (paymentRow.vat_invoice_id) {
       logger.info('vat_invoice_id already set — skip', { paymentId });
@@ -96,30 +109,79 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
       };
     }
 
-    // 2. Load subscription żeby dostać plan.
-    const plan = await step.run('load-plan', async () => {
-      if (!paymentRow.subscription_id) return 'monthly' as const;
+    // 2. Bind the plan to the paid Stripe invoice snapshot saved with this
+    // payment, not to the subscription's current plan. A later plan change
+    // must not relabel an earlier VAT invoice.
+    const plan = await step.run('load-billed-plan-v3', async () => {
+      if (paymentRow.tenant_id !== tenantId ||
+          paymentRow.stripe_invoice_id !== stripeInvoiceId) {
+        throw new Error('Payment identity requires reconciliation');
+      }
+      if (!paymentRow.subscription_id) {
+        throw new Error('Payment subscription reference missing; manual reconciliation required');
+      }
       const supabase = createAdminClient();
-      const { data } = await (supabase as unknown as {
+      const { data: subscription, error } = await (supabase as unknown as {
         from: (n: string) => {
           select: (c: string) => {
             eq: (k: string, v: string) => {
               maybeSingle: () => Promise<{
-                data: { plan: 'monthly' | 'annual' } | null;
+                data: {
+                  tenant_id: string;
+                  stripe_subscription_id: string;
+                  stripe_customer_id: string;
+                } | null;
+                error: { message: string } | null;
               }>;
             };
           };
         };
       })
         .from('subscriptions')
-        .select('plan')
+        .select('tenant_id, stripe_subscription_id, stripe_customer_id')
         .eq('id', paymentRow.subscription_id)
         .maybeSingle();
-      return data?.plan ?? 'monthly';
+      if (error) throw new Error('Subscription binding lookup failed: ' + error.message);
+      if (!subscription || subscription.tenant_id !== tenantId ||
+          !subscription.stripe_subscription_id || !subscription.stripe_customer_id) {
+        throw new Error('Payment subscription binding requires reconciliation');
+      }
+      return deriveBilledPlanFromPaidInvoice({
+        snapshot: paymentRow.last_webhook_payload,
+        stripeInvoiceId: paymentRow.stripe_invoice_id,
+        stripeSubscriptionId: subscription.stripe_subscription_id,
+        stripeCustomerId: subscription.stripe_customer_id,
+        amountCents: paymentRow.amount_cents,
+        currency: paymentRow.currency,
+      });
     });
-
     // 3 + 4. Build draft + insert (idempotent po unique internal_number).
     const insertResult = await step.run('build-and-insert', async () => {
+      // Inngest może odtworzyć zapamiętany krok load-payment po zwrocie.
+      // Odczyt w tym kroku sprawdza bieżący stan przed utworzeniem faktury.
+      const supabase = createAdminClient();
+      const { data: currentPayment, error: statusError } = await (supabase as unknown as {
+        from: (n: string) => {
+          select: (c: string) => {
+            eq: (k: string, v: string) => {
+              maybeSingle: () => Promise<{
+                data: { status: string } | null;
+                error: { message: string } | null;
+              }>;
+            };
+          };
+        };
+      })
+        .from('stripe_payments')
+        .select('status')
+        .eq('id', paymentId)
+        .maybeSingle();
+      if (statusError) throw new Error('payment status read failed: ' + statusError.message);
+      if (!currentPayment) throw new NonRetriableError('Payment ' + paymentId + ' nie istnieje');
+      if (currentPayment.status !== 'succeeded') {
+        return { skipped: true as const, reason: 'payment-not-succeeded' as const };
+      }
+
       const draft = await buildSelfInvoiceDraft(tenantId, {
         grossCents: paymentRow.amount_cents,
         paidAt: paymentRow.paid_at ?? paidAt,
@@ -132,7 +194,9 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
         );
       }
 
-      const inserted = await insertSelfInvoice(draft.invoice, draft.operator.tenantId);
+      const inserted = await insertSelfInvoice(
+        draft.invoice, draft.operator.tenantId, stripeInvoiceId,
+      );
       if (!inserted) {
         throw new Error('insertSelfInvoice returned null');
       }
@@ -145,6 +209,11 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
         invoice: draft.invoice,
       };
     });
+
+    if ('skipped' in insertResult) {
+      logger.info('payment no longer succeeded before invoice creation — skip', { paymentId });
+      return insertResult;
+    }
 
     // 5. Link payment → faktura. UPDATE jest fail-soft: nawet jak nie zadziała,
     // faktura i tak została wystawiona, link można naprawić ręcznie z admin panelu.

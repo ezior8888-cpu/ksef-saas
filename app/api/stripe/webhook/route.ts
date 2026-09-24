@@ -8,15 +8,14 @@
  * Bezpieczeństwo:
  *   1. **Signature verification** przez `stripe.webhooks.constructEvent` z raw body.
  *      Bez tego ktoś z internetu mógłby spamować nasze handlery payload'ami.
- *   2. **Idempotency** przez `stripe_webhook_events.id = evt_*` — UNIQUE,
- *      ponowne dostarczenie się pomija.
- *   3. **Runtime: nodejs** — edge runtime nie ma Buffer/raw body access.
+ *   2. **Idempotency** przez atomowy claim zdarzenia + token właściciela.
+ *      Przetworzone duplikaty pomijamy; zajęte zgłaszamy do ponowienia.
+ *   3. **Runtime: nodejs** — weryfikacja podpisu wymaga surowego body.
  *
  * Performance:
  *   - Stripe oczekuje 200 OK w < 5s — handlery powinny być szybkie. Długie
  *     operacje (self-invoicing przez KSeF — Krok 4) idą do Inngest async.
- *   - Idempotency check jest pierwszą operacją (1 DB hit) — szybko zwracamy
- *     200 OK dla duplikatów.
+ *   - Podpis sprawdzamy przed dotknięciem bazy. Claim wykonujemy przed handlerem.
  */
 
 import { NextResponse } from 'next/server';
@@ -25,6 +24,7 @@ import type Stripe from 'stripe';
 import * as Sentry from '@sentry/nextjs';
 
 import { getStripe } from '@/lib/stripe/client';
+import { RetryablePreEffectWebhookError } from '@/lib/stripe/webhook-errors';
 import {
   handleInvoicePaymentFailed,
   handleInvoicePaymentSucceeded,
@@ -38,8 +38,7 @@ import {
 } from '@/lib/stripe/webhook-store';
 
 export const runtime = 'nodejs';
-// Stripe nie wysyła GET preflight, ale `dynamic: 'force-dynamic'` chroni
-// przed cache'owaniem Vercel Edge przy ewentualnym GET probe.
+// Webhook zawsze odczytuje bieżące żądanie i nie może być cachowany.
 export const dynamic = 'force-dynamic';
 
 const HANDLED_EVENTS = new Set([
@@ -91,47 +90,69 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ skipped: true, type: event.type });
   }
 
-  // Idempotency claim — pierwszy raz = dostajemy `claimed: true`. Powtórka =
-  // `false`, zwracamy 200 OK natychmiast bez ponownego procesowania.
-  let claim: { claimed: boolean };
+  // Claim w bazie jest atomowy. Zajętej próby nie wykonujemy drugi raz, ale
+  // nie potwierdzamy jej Stripe jako zakończonej.
+  let claim: Awaited<ReturnType<typeof tryClaimWebhookEvent>>;
   try {
     claim = await tryClaimWebhookEvent(event.id, event.type, event);
   } catch (err) {
     const errorId = Sentry.captureException(err, { tags: { area: 'stripe.webhook.idempotency' } });
     return NextResponse.json({ error: 'Idempotency check failed', errorId }, { status: 500 });
   }
-  if (!claim.claimed) {
+  if (claim.state === 'processed') {
     return NextResponse.json({ duplicate: true, eventId: event.id });
   }
+  if (claim.state === 'busy') {
+    return NextResponse.json(
+      { error: 'Webhook processing in progress' },
+      { status: 503, headers: { 'Retry-After': '60' } },
+    );
+  }
 
-  // Dispatch po typie eventu. Każdy handler ma własną tabelę audytu +
-  // ewentualny Inngest event do downstream.
+  // Błąd handlera może oznaczać częściowe skutki uboczne. Zapisujemy bezpieczny
+  // kod błędu i oddajemy 500, by Stripe ponowił dostawę.
   try {
     await dispatch(event);
-    await finalizeWebhookEvent(event.id, 'processed');
-    return NextResponse.json({ received: true, eventId: event.id });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
     const errorId = Sentry.captureException(err, {
       tags: { area: 'stripe.webhook.dispatch', eventType: event.type },
       extra: { eventId: event.id },
     });
     try {
-      await finalizeWebhookEvent(event.id, 'failed', message);
+      await finalizeWebhookEvent(
+        event.id,
+        claim.token,
+        err instanceof RetryablePreEffectWebhookError ? 'retryable' : 'failed',
+        err instanceof RetryablePreEffectWebhookError ? err.code : 'handler_failed',
+      );
     } catch (finalizeError) {
       Sentry.captureException(finalizeError, {
         tags: { area: 'stripe.webhook.finalize' },
         extra: { eventId: event.id },
       });
     }
-    // **WAŻNE**: zwracamy 500 żeby Stripe ponowił dostawę (retry policy
-    // Stripe = exponential backoff przez 3 dni). Idempotency tabela
-    // sprawi że duplikat się nie wpisze drugi raz, więc retry jest safe.
     return NextResponse.json(
       { error: 'Handler failed', errorId },
       { status: 500 },
     );
   }
+
+  // Finalizacja po udanym handlerze jest odrębną granicą. Jej błąd nie może
+  // zmienić poprawnie wykonanego handlera na failed i uruchomić go ponownie.
+  try {
+    await finalizeWebhookEvent(event.id, claim.token, 'processed');
+  } catch (err) {
+    const errorId = Sentry.captureException(err, {
+      tags: { area: 'stripe.webhook.finalize' },
+      extra: { eventId: event.id },
+    });
+    return NextResponse.json(
+      { error: 'Finalization failed', errorId },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ received: true, eventId: event.id });
 }
 
 async function dispatch(event: Stripe.Event): Promise<void> {

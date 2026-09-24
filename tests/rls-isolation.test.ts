@@ -379,4 +379,153 @@ describe.skipIf(!hasDatabase)('RLS isolation in multi-org model', () => {
         .eq('token_hash', tokenHash);
     }
   });
+  it('chroni dowody wpłaty i pauzę przypomnień przez PostgREST w dwóch firmach', async () => {
+    const { randomUUID } = await import('node:crypto');
+    const ids = { payA: randomUUID(), payB: randomUUID(), clientPay: randomUUID(),
+      reminder: randomUUID(), clientReminder: randomUUID(), crossReminder: randomUUID(),
+      crossPay: randomUUID(), import: randomUUID(), clientImport: randomUUID(),
+      crossImport: randomUUID() };
+    try {
+      const ownPayment = { tenant_id: TENANT_A_ID, invoice_id: INVOICE_A_ID,
+        amount: 1000, payment_date: '2026-09-24' };
+      expect((await clientA.from('payments').insert({ ...ownPayment, id: ids.clientPay }))
+        .error?.code).toBe('42501');
+      expect((await clientA.from('payment_imports').insert({
+        id: ids.clientImport, tenant_id: TENANT_A_ID, account_iban: 'PLTEST',
+        transaction_id: randomUUID(), transaction_date: '2026-09-24', amount: 1,
+      })).error?.code).toBe('42501');
+      expect((await clientA.from('payment_reminders').insert({
+        id: ids.clientReminder, tenant_id: TENANT_A_ID, invoice_id: INVOICE_A_ID,
+        stage: 'stage_2', scheduled_for: new Date().toISOString(),
+      })).error?.code).toBe('42501');
+
+      expect((await admin.from('payments').insert({ ...ownPayment,
+        id: ids.crossPay, invoice_id: INVOICE_B_ID,
+      })).error?.code).toBe('23503');
+      expect((await admin.from('payment_reminders').insert({
+        id: ids.crossReminder, tenant_id: TENANT_A_ID, invoice_id: INVOICE_B_ID,
+        stage: 'stage_2', scheduled_for: new Date().toISOString(),
+      })).error?.code).toBe('23503');
+
+      const payB = await admin.from('payments').insert({
+        id: ids.payB, tenant_id: TENANT_B_ID, invoice_id: INVOICE_B_ID,
+        amount: 1, payment_date: '2026-09-24', is_confirmed: true,
+      });
+      if (payB.error) throw payB.error;
+      expect((await admin.from('payment_imports').insert({
+        id: ids.crossImport, tenant_id: TENANT_A_ID, account_iban: 'PLTEST',
+        transaction_id: randomUUID(), transaction_date: '2026-09-24',
+        amount: 1, matched_payment_id: ids.payB,
+      })).error?.code).toBe('23503');
+
+      const payA = await admin.from('payments').insert({ ...ownPayment,
+        id: ids.payA, is_auto_matched: true, is_confirmed: false,
+      });
+      if (payA.error) throw payA.error;
+      const before = await admin.from('invoices').select('paid_amount')
+        .eq('id', INVOICE_A_ID).single();
+      if (before.error) throw before.error;
+      expect(Number(before.data.paid_amount)).toBe(0);
+
+      const confirmed = await admin.from('payments')
+        .update({ is_auto_matched: false }).eq('id', ids.payA);
+      if (confirmed.error) throw confirmed.error;
+      const paid = await admin.from('invoices').select('paid_amount, payment_status, paid_at')
+        .eq('id', INVOICE_A_ID).single();
+      if (paid.error) throw paid.error;
+      expect(Number(paid.data.paid_amount)).toBe(1000);
+      expect(paid.data.payment_status).toBe('paid');
+      expect(paid.data.paid_at).not.toBeNull();
+
+      expect((await clientA.from('payments').update({ amount: 1 })
+        .eq('id', ids.payA)).error?.code).toBe('42501');
+      expect((await clientA.from('payments').delete()
+        .eq('id', ids.payA)).error?.code).toBe('42501');
+      expect((await clientA.from('payments').select('id')).error?.code).toBe('42501');
+      expect((await clientA.from('invoices').update({ paid_amount: 0 })
+        .eq('id', INVOICE_A_ID)).error?.code).toBe('42501');
+      expect((await clientA.from('invoices').update({ payment_status: 'overdue' })
+        .eq('id', INVOICE_A_ID)).error?.code).toBe('42501');
+      expect((await clientA.from('invoices').update({ paid_at: null })
+        .eq('id', INVOICE_A_ID)).error?.code).toBe('42501');
+
+      const bankImport = await admin.from('payment_imports').insert({
+        id: ids.import, tenant_id: TENANT_A_ID, account_iban: 'PLTEST',
+        transaction_id: randomUUID(), transaction_date: '2026-09-24', amount: 1,
+      });
+      if (bankImport.error) throw bankImport.error;
+      expect((await clientA.from('payment_imports').update({ ignored: true })
+        .eq('id', ids.import)).error?.code).toBe('42501');
+      expect((await clientA.from('payment_imports').delete()
+        .eq('id', ids.import)).error?.code).toBe('42501');
+      expect((await clientA.from('payment_imports').select('id')).error?.code).toBe('42501');
+
+      const reminder = await admin.from('payment_reminders').insert({
+        id: ids.reminder, tenant_id: TENANT_A_ID, invoice_id: INVOICE_A_ID,
+        stage: 'stage_1', scheduled_for: new Date().toISOString(),
+      });
+      if (reminder.error) throw reminder.error;
+      expect((await clientA.from('payment_reminders').update({ status: 'sent' })
+        .eq('id', ids.reminder)).error?.code).toBe('42501');
+      expect((await clientA.from('payment_reminders').delete()
+        .eq('id', ids.reminder)).error?.code).toBe('42501');
+      const ownRead = await clientA.from('payment_reminders').select('id')
+        .eq('id', ids.reminder);
+      if (ownRead.error) throw ownRead.error;
+      expect(ownRead.data).toEqual([{ id: ids.reminder }]);
+      const foreignRead = await clientB.from('payment_reminders').select('id')
+        .eq('id', ids.reminder);
+      if (foreignRead.error) throw foreignRead.error;
+      expect(foreignRead.data).toEqual([]);
+
+      const foreignPause = await clientB.rpc('set_invoice_reminders_paused', {
+        p_invoice_id: INVOICE_A_ID, p_paused: true, p_reason: null,
+      });
+      expect(foreignPause.error).toBeNull();
+      expect(foreignPause.data).toBe(false);
+      const pause = await clientA.rpc('set_invoice_reminders_paused', {
+        p_invoice_id: INVOICE_A_ID, p_paused: true, p_reason: 'test',
+      });
+      if (pause.error) throw pause.error;
+      expect(pause.data).toBe(true);
+      const paused = await admin.from('payment_reminders').select('status')
+        .eq('id', ids.reminder).single();
+      if (paused.error) throw paused.error;
+      expect(paused.data.status).toBe('cancelled');
+      const resume = await clientA.rpc('set_invoice_reminders_paused', {
+        p_invoice_id: INVOICE_A_ID, p_paused: false, p_reason: null,
+      });
+      if (resume.error) throw resume.error;
+      expect(resume.data).toBe(true);
+
+      const accepted = await admin.from('invoices').update({ ksef_status: 'accepted' })
+        .eq('id', INVOICE_A_ID);
+      if (accepted.error) throw accepted.error;
+      expect((await clientA.from('invoices').update({ buyer_nip: NIP_A })
+        .eq('id', INVOICE_A_ID)).error?.code).toBe('42501');
+      expect((await clientA.from('invoices').update({
+        payment_data: { bankAccount: 'PL-ATTACKER-TEST' },
+      }).eq('id', INVOICE_A_ID)).error?.code).toBe('42501');
+
+      const reversed = await admin.from('payments').update({ is_auto_matched: true })
+        .eq('id', ids.payA);
+      if (reversed.error) throw reversed.error;
+      const unpaid = await admin.from('invoices')
+        .select('paid_amount, payment_status, paid_at').eq('id', INVOICE_A_ID).single();
+      if (unpaid.error) throw unpaid.error;
+      expect(Number(unpaid.data.paid_amount)).toBe(0);
+      expect(unpaid.data.payment_status).not.toBe('paid');
+      expect(unpaid.data.paid_at).toBeNull();
+    } finally {
+      await admin.from('payment_imports').delete().in('id',
+        [ids.import, ids.clientImport, ids.crossImport]);
+      await admin.from('payment_reminders').delete().in('id',
+        [ids.reminder, ids.clientReminder, ids.crossReminder]);
+      await admin.from('payments').delete().in('id',
+        [ids.payA, ids.payB, ids.clientPay, ids.crossPay]);
+      await admin.from('invoices').update({ ksef_status: 'draft',
+        reminders_paused: false, reminders_paused_reason: null }).eq('id', INVOICE_A_ID);
+    }
+  });
+
 });

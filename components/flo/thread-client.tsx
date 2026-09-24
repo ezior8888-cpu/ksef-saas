@@ -11,6 +11,8 @@ import {
 import type { FloAction, FloApproveInput, FloProposalView } from '@/types/flo';
 
 import { FloThread } from './thread';
+import { ReminderConsentDialog } from '@/components/reminders/reminder-consent-dialog';
+import { toast } from 'sonner';
 
 /**
  * Wątek z wpiętymi akcjami (kroki 16–20 toru B).
@@ -45,6 +47,7 @@ export function FloThreadClient({
   className?: string;
 }) {
   const router = useRouter();
+  const [reminderSource, setReminderSource] = useState<FloProposalView | null>(null);
   const params = useSearchParams();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [notices, setNotices] = useState<Record<string, string>>({});
@@ -92,7 +95,7 @@ export function FloThreadClient({
             action.scope === 'subject' ? 'never_subject' : 'never',
           );
         } else {
-          const result = await approveProposal(view.id, input);
+          const result = await approveProposal(view.id, view.approvalVersion ?? '', input);
 
           if (!result.ok) {
             // Bezpiecznik zadziałał. To dobra wiadomość i tak ma zabrzmieć.
@@ -169,12 +172,16 @@ export function FloThreadClient({
     if (target) void handleUndo(target);
   }, [undoParam, proposals, router, handleUndo]);
 
+  const currentReminderSource = reminderSource && proposals.find((item) => item.id === reminderSource.id && item.approvalVersion === reminderSource.approvalVersion);
+
   return (
+    <>
     <FloThread
       proposals={proposals}
       className={className}
       cardProps={(proposal) => ({
         notice: notices[proposal.id],
+        onPrepareReminder: setReminderSource,
         pending: pendingId === proposal.id,
         onAction: (action, view, input) => {
           void handleAction(action, view, input);
@@ -184,5 +191,14 @@ export function FloThreadClient({
         },
       })}
     />
+    {currentReminderSource?.reminder && currentReminderSource.approvalVersion ? (
+      <ReminderConsentDialog
+        key={currentReminderSource.id + ':' + currentReminderSource.approvalVersion}
+        source={{ ...currentReminderSource.reminder, sourceProposalId: currentReminderSource.id, sourceVersion: currentReminderSource.approvalVersion }}
+        onClose={() => setReminderSource(null)}
+        onSent={() => { toast.success('Przypomnienie przekazane do wysyłki'); refresh(); }}
+      />
+    ) : null}
+    </>
   );
 }

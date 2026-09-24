@@ -5,8 +5,9 @@ on:
   push:
     branches: [main]
 
-# Anuluj poprzednie runy tej samej gałęzi/PR-a — oszczędza minuty CI
-# i daje feedback od najświeższego commitu.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -14,121 +15,64 @@ concurrency:
 jobs:
   ci:
     name: Typecheck + Lint + Unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
-      # Wersja pnpm MUSI zgadzać się z `packageManager` w `package.json`.
-      # Rozjazd wywalał CI przed pierwszym testem: pnpm 9 czyta
-      # `pnpm-workspace.yaml` (od pnpm 10 mieszkają tam ustawienia, nie tylko
-      # lista pakietów) i odmawia z „packages field missing or empty".
-      # Od 14.09.2026 czerwone były przez to WSZYSTKIE przebiegi, także na main.
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.33.0
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
-
-      # Cztery testy XSD w `lib/xml/fa3-generator.test.ts` walidują fakturę
-      # oficjalnym schematem FA(3) przez SYSTEMOWY `xmllint` — to inny program
-      # niż `xmllint-wasm` z zależności, którego używa kod produkcyjny.
-      # Bez tego pakietu te testy padają na maszynie CI (i tylko tam).
       - name: Install XML schema validator
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends libxml2-utils
           xmllint --version
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high
-
-      # `pnpm run ci` (a nie `pnpm ci`) — żeby nie kolidowało z wbudowanym
-      # `pnpm ci` (alias na install --frozen-lockfile w nowszych pnpm).
       - name: Run typecheck + lint + tests
         run: pnpm run ci
-        # Zestaw lokalny nie potrzebuje żadnych sekretów ani dostępu do bazy.
+        # Bez sekretów aplikacji i bez dostępu do bazy.
+      - name: Test CodeQL gate and safe diagnostics
+        run: node --test scripts/security/check-codeql-results.test.mjs scripts/security/print-codeql-locations.test.mjs
 
-  # E2E job opcjonalny — uruchamiany gdy repo ma ustawione `vars.RUN_E2E_ON_CI=true`.
-  # Wymaga Supabase staging (sekrety w GitHub) + Playwright browsers.
-  # Sharding na 2 workers, każdy testuje wszystkie projekty (chromium/firefox/webkit/mobile).
-  e2e:
-    name: Playwright E2E (shard ${{ matrix.shard }}/2)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: ${{ vars.RUN_E2E_ON_CI == 'true' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
+  offline-inventory:
+    name: Offline security inventory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-
-      # Ta sama wersja co wyżej i co w `package.json`.
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          version: 10.33.0
-
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-          cache: pnpm
+      - name: Test isolated report generation
+        run: node --test scripts/security/offline-audit-output.test.mjs
+      - name: Generate inventories without application services
+        run: |
+          node scripts/security/audit-service-role.ts --output-dir "$RUNNER_TEMP/security-inventory/service-role"
+          node scripts/security/inventory-entrypoints.ts --output-dir "$RUNNER_TEMP/security-inventory/entrypoints"
+        # Bez zależności aplikacji, sekretów i publikacji surowych raportów.
+        # Sukces oznacza wygenerowanie spisu, nie brak podatności.
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
-
-      - name: Run Playwright tests
-        env:
-          CI: '1'
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          KSEF_CREDENTIALS_ENCRYPTION_KEY: ${{ secrets.KSEF_CREDENTIALS_ENCRYPTION_KEY }}
-        run: pnpm test:e2e --shard=${{ matrix.shard }}/2
-
-      - name: Upload Playwright HTML report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-shard-${{ matrix.shard }}
-          path: playwright-report/
-          retention-days: 14
-
-      - name: Upload trace + screenshots (failures)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-failures-shard-${{ matrix.shard }}
-          path: test-results/
-          retention-days: 14
-
-  # Lekka bramka: dependency review pokazuje w PR, czy wprowadzamy nowe paczki
-  # z otwartymi CVE (snapshot vs base). Nie blokuje merge'a — tylko sygnał
-  # do code-review.
+  # Job może zakończyć się błędem; wymaganie go przed merge ustawia ruleset.
   dependency-review:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
         with:
           fail-on-severity: high
-          comment-summary-in-pr: on-failure
+          comment-summary-in-pr: never

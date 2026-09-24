@@ -1,70 +1,45 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import { createClient } from '@/lib/supabase/client';
+import { finishSignInFromFragment, type FinishSignInResult } from '@/lib/auth/finish-sign-in';
 
 import '@/styles/zova.css';
 
 /**
- * Dokończenie logowania z linku, w którym token siedzi w KOTWICY adresu.
- *
- * GoTrue odsyła tu z `#access_token=...&refresh_token=...` przy linkach
- * generowanych administracyjnie, magic linkach i części resetów hasła.
- * Kotwica NIE jest wysyłana na serwer, więc trasa `/auth/callback` nigdy
- * jej nie widziała i kończyła komunikatem o braku kodu. Stąd nie działał
- * reset hasła ani zaproszenia.
- *
- * Kotwica przeżywa przekierowanie 3xx, o ile cel sam jej nie ma — dlatego
- * `/auth/callback` może tu przekierować bez utraty tokenu.
+ * Czyści historyczne linki z tokenami w kotwicy bez zmiany bieżącej sesji.
+ * Nowe logowania i reset hasła kończą się przez PKCE w /auth/callback.
  */
-function Finish() {
-  const router = useRouter();
-  const params = useSearchParams();
+export default function FinishPage() {
   const [blad, setBlad] = useState<string | null>(null);
+  const completion = useRef<Promise<FinishSignInResult> | null>(null);
 
   useEffect(() => {
-    const hash = window.location.hash.replace(/^#/, '');
-    const h = new URLSearchParams(hash);
-
-    const opis = h.get('error_description');
-    if (opis) {
-      setBlad(opis);
-      return;
-    }
-
-    const access_token = h.get('access_token');
-    const refresh_token = h.get('refresh_token');
-    if (!access_token || !refresh_token) {
-      router.replace('/login?error=auth_callback_missing_code');
-      return;
-    }
-
-    const dokad = params.get('next') || '/dashboard';
-
-    void (async () => {
-      const supabase = createClient();
-      const { error } = await supabase.auth.setSession({
-        access_token,
-        refresh_token,
+    let active = true;
+    // StrictMode replays the effect. Reuse the result after URL cleanup.
+    if (!completion.current) {
+      completion.current = finishSignInFromFragment({
+        fragment: window.location.hash,
+        clearFragment: () => window.history.replaceState(null, '', window.location.pathname),
       });
-      if (error) {
-        setBlad(error.message);
-        return;
-      }
-      // czyścimy kotwicę, żeby token nie został w historii przeglądarki
-      window.history.replaceState(null, '', window.location.pathname);
-      router.replace(dokad);
-    })();
-  }, [params, router]);
+    }
+    void completion.current.then((result) => {
+      if (!active) return;
+      setBlad(result.error === 'legacy_link'
+        ? 'Ten link logowania nie jest już obsługiwany. Zaloguj się standardowo lub poproś o nowy link do zmiany hasła.'
+        : 'Nie udało się potwierdzić linku. Zaloguj się lub poproś o nowy link do zmiany hasła.');
+    }).catch(() => {
+      if (active) setBlad('Nie udało się dokończyć logowania. Spróbuj ponownie.');
+    });
+    return () => { active = false; };
+  }, []);
 
   return (
     <div className="zova flex min-h-screen items-center justify-center px-5 text-center">
       <div className="flex max-w-[420px] flex-col items-center gap-4">
         {blad ? (
           <>
-            <h1 className="z-h4">Link wygasł albo był już użyty</h1>
+            <h1 className="z-h4">Nie udało się dokończyć logowania</h1>
             <p className="z-body text-[var(--z-muted)]">{blad}</p>
             <a
               href="/login"
@@ -72,19 +47,14 @@ function Finish() {
             >
               Wróć do logowania
             </a>
+            <a href="/forgot-password" className="z-body text-[var(--z-muted)] underline">
+              Poproś o nowy link do zmiany hasła
+            </a>
           </>
         ) : (
-          <p className="z-lead text-[var(--z-muted)]">Loguję Cię…</p>
+          <p className="z-lead text-[var(--z-muted)]">Sprawdzam link…</p>
         )}
       </div>
     </div>
-  );
-}
-
-export default function FinishPage() {
-  return (
-    <Suspense fallback={null}>
-      <Finish />
-    </Suspense>
   );
 }

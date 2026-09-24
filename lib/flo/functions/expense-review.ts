@@ -308,10 +308,16 @@ interface ExpensesClient {
       };
     };
     update: (patch: Record<string, unknown>) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => Promise<{ error: { message: string } | null }>;
+      eq(column: string, value: string): {
+        eq(column: string, value: string): {
+          select(columns: string): {
+            maybeSingle(): Promise<{
+              data: { id: string } | null;
+              error: { message: string } | null;
+            }>;
+          };
+        };
+      };
     };
   };
 }
@@ -364,12 +370,16 @@ registerFloHandler('expense.review', async (ctx) => {
   }
 
   const client = createAdminClient() as unknown as ExpensesClient;
-  const { error } = await client
+  const { data, error } = await client
     .from('expenses')
     .update({ is_reviewed: true })
-    .eq('id', expenseId);
+    .eq('id', expenseId)
+    .eq('tenant_id', ctx.proposal.tenant_id)
+    .select('id')
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!data) throw new Error('Wydatek nie należy do organizacji albo już nie istnieje');
 
   // W-03 (plan FLO 2, K1.8): drugi raz ten sam sprzedawca → pytanie o regułę.
   // Tu, a nie w pulsie: reguła ma się brać z decyzji człowieka, którą właśnie

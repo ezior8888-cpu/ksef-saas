@@ -4,148 +4,71 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * K-02 — wykonawca ponagleń: okno bezpieczeństwa i zapis przypomnienia.
  *
  * To jest funkcja o największym promieniu w agencie: wiadomość do OBCEJ firmy,
- * bez cofnięcia. Najważniejszy test w pliku: „wpłata od tego kontrahenta na
- * INNĄ fakturę wczoraj — nie wysyłamy". Poprzednia wersja pytała o wpłaty
- * tylko do tej jednej faktury i do tego o kolumnę `payments.paid_at`, której
- * tabela nie ma — więc okno nie działało w ogóle.
+ * bez cofnięcia.
  *
- * Atrapą jest wyłącznie klient administracyjny. Zachowuje się jak PostgREST
- * tam, gdzie wykonawca się wykładał: nieznana kolumna to błąd zapytania,
- * a wpłaty są złączone z fakturami po `invoice_id`.
+ * Od wydania 25.09 okno bezpieczeństwa (plan FLO 2, 1.1b) liczy
+ * `assertReminderSendable` z `lib/reminders/delivery-safety.ts` — ten sam
+ * odczyt robi też worker tuż przed wysyłką. Scenariusze, które ten plik
+ * sprawdzał na starym wykonawcy, mają teraz swoje odpowiedniki przy workerze
+ * w `reminder-dispatch.test.ts`:
+ *
+ * | stary scenariusz                                   | test w reminder-dispatch                                         |
+ * |----------------------------------------------------|------------------------------------------------------------------|
+ * | wpłata kontrahenta na INNĄ fakturę wczoraj         | blocks a recent payment assigned to another invoice ...          |
+ * | wyciąg zaimportowany dziś ze starym przelewem      | blocks a newly recorded payment with an older payment date       |
+ * | wpłata INNEGO kontrahenta / z INNEGO konta         | does not treat a different buyer or tenant as the same contractor|
+ * | wpłata sprzed tygodnia nie blokuje                 | does not block on a same-contractor payment older than ...       |
+ * | faktura bez NIP-u                                  | rejects a target invoice without a verifiable buyer NIP (SUROWIEJ)|
+ * | faktura z innego konta                             | flo-tenant-boundaries: chase rejects a foreign target ...        |
+ *
+ * Faktura bez NIP-u: dawniej liczyły się wpłaty do niej samej, dziś
+ * ponaglenie jest wstrzymane, bo nie da się wiarygodnie sprawdzić wpłat
+ * kontrahenta. Świadomie surowiej — zapisane w dzienniku wydania.
+ *
+ * Tu zostaje to, czego tamten plik nie sprawdza: KOLEJNOŚĆ w samym
+ * wykonawcy FLO. Okno ma zadziałać, zanim powstanie wiersz przypomnienia
+ * i zanim cokolwiek trafi do kolejki.
  */
 
 const store = vi.hoisted(() => ({
-  invoices: [] as Array<Record<string, unknown>>,
-  payments: [] as Array<Record<string, unknown>>,
   reminders: [] as Array<Record<string, unknown>>,
+  order: [] as string[],
 }));
 
 const sendJobEvent = vi.hoisted(() =>
   vi.fn<(event: unknown) => Promise<{ ok: boolean }>>(async () => ({ ok: true })),
 );
+const safety = vi.hoisted(() => ({
+  assertReminderSendable: vi.fn<(delivery: unknown) => Promise<void>>(async () => undefined),
+}));
+const consent = vi.hoisted(() => ({
+  approvedReminderDelivery: vi.fn(),
+  hasReminderDispatch: vi.fn(async () => false),
+  authorizeReminderDispatch: vi.fn(async () => undefined),
+}));
 
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent }));
-
-vi.mock('@/lib/supabase/admin', () => {
-  // Kolumny z migracji 00014 (`payments`, `payment_reminders`) i z typów
-  // `invoices` — tylko te, które mają tu znaczenie, plus kilka sąsiednich,
-  // żeby literówka nie trafiła przypadkiem w istniejącą nazwę.
-  const COLUMNS: Record<string, Set<string>> = {
-    payments: new Set([
-      'id', 'tenant_id', 'invoice_id', 'amount', 'payment_date', 'payment_method',
-      'is_auto_matched', 'is_confirmed', 'notes', 'created_at', 'updated_at',
-    ]),
-    invoices: new Set([
-      'id', 'tenant_id', 'buyer_nip', 'buyer_data', 'gross_total', 'paid_amount',
-      'paid_at', 'payment_due_date', 'origin', 'direction',
-    ]),
-    payment_reminders: new Set([
-      'id', 'tenant_id', 'invoice_id', 'stage', 'channel', 'scheduled_for',
-      'status', 'sent_at', 'created_at', 'failure_reason',
-    ]),
-  };
-
-  const missing = (table: string, column: string) => ({
-    data: null,
-    error: { code: '42703', message: `column ${table}.${column} does not exist` },
-  });
-
-  /** „a, b, invoices!inner(c)" → [[tabela, kolumna], …] */
-  function columnsOf(table: string, select: string): Array<[string, string]> {
-    const out: Array<[string, string]> = [];
-    for (const part of select.split(/,(?![^(]*\))/).map((p) => p.trim())) {
-      const embedded = /^(\w+)!inner\((.+)\)$/.exec(part);
-      if (embedded) {
-        for (const col of embedded[2]!.split(',')) out.push([embedded[1]!, col.trim()]);
-      } else {
-        out.push([table, part]);
-      }
-    }
-    return out;
-  }
-
-  function invoiceOf(payment: Record<string, unknown>) {
-    return store.invoices.find((i) => i.id === payment.invoice_id);
-  }
-
-  return {
-    createAdminClient: () => ({
-      from: (table: string) => ({
-        select: (select: string) => {
-          let bad = columnsOf(table, select).find(([t, c]) => !COLUMNS[t]?.has(c));
-          const eqs: Array<[string, unknown]> = [];
-          const ors: Array<[string, string]> = [];
-          let orderBy: string | null = null;
-
-          const run = () => {
-            if (bad) return missing(bad[0], bad[1]);
-            if (orderBy && !COLUMNS[table]!.has(orderBy)) return missing(table, orderBy);
-
-            if (table === 'invoices') {
-              const row = store.invoices.find((r) => eqs.every(([c, v]) => r[c] === v));
-              return { data: row ? { buyer_nip: row.buyer_nip } : null, error: null };
-            }
-
-            const rows = store.payments
-              .filter((p) =>
-                eqs.every(([c, v]) =>
-                  c === 'invoices.buyer_nip' ? invoiceOf(p)?.buyer_nip === v : p[c] === v,
-                ),
-              )
-              .filter(
-                (p) =>
-                  ors.length === 0 ||
-                  ors.some(([c, v]) => String(p[c] ?? '') >= v),
-              )
-              .map((p) => ({
-                payment_date: p.payment_date,
-                created_at: p.created_at,
-                invoices: { buyer_nip: invoiceOf(p)?.buyer_nip ?? null },
-              }));
-            return { data: rows, error: null };
-          };
-
-          const builder = {
-            eq: (column: string, value: unknown) => {
-              eqs.push([column, value]);
-              return builder;
-            },
-            or: (filter: string) => {
-              for (const clause of filter.split(',')) {
-                const [column, op, ...rest] = clause.split('.');
-                if (op !== 'gte') throw new Error(`atrapa nie zna operatora ${op}`);
-                if (!COLUMNS[table]!.has(column!)) bad ??= [table, column!];
-                ors.push([column!, rest.join('.')]);
-              }
-              return builder;
-            },
-            order: (column: string) => {
-              orderBy = column;
-              return builder;
-            },
-            limit: () => builder,
-            maybeSingle: async () => run(),
-            then: (resolve: (v: unknown) => unknown) => Promise.resolve(run()).then(resolve),
-          };
-          return builder;
-        },
-        insert: (row: Record<string, unknown>) => ({
-          select: () => ({
-            maybeSingle: async () => {
-              const unknownColumn = Object.keys(row).find(
-                (key) => !COLUMNS[table]?.has(key),
-              );
-              if (unknownColumn) return missing(table, unknownColumn);
-              const inserted = { id: `rem-${store.reminders.length + 1}`, ...row };
-              store.reminders.push(inserted);
-              return { data: { id: inserted.id }, error: null };
-            },
-          }),
+vi.mock('@/lib/reminders/delivery-safety', () => safety);
+vi.mock('@/lib/reminders/delivery-consent', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/reminders/delivery-consent')>();
+  consent.approvedReminderDelivery.mockImplementation(original.approvedReminderDelivery);
+  return { ...original, ...consent };
+});
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: () => ({
+    from: () => ({
+      insert: (row: Record<string, unknown>) => ({
+        select: () => ({
+          maybeSingle: async () => {
+            store.order.push('insert');
+            store.reminders.push(row);
+            return { data: { id: row.id }, error: null };
+          },
         }),
       }),
     }),
-  };
-});
+  }),
+}));
 
 import type { FloProposalRow } from '@/lib/flo/db-types';
 import {
@@ -158,27 +81,9 @@ import { getFloHandler } from '@/lib/flo/handlers';
 
 const NOW = new Date('2026-09-17T12:00:00.000Z');
 const TENANT = 'ten-1';
+const DELIVERY = { tenantId: TENANT, invoiceId: 'inv-1', stage: 'stage_1' };
 
-function invoice(id: string, buyerNip: string | null, tenantId = TENANT) {
-  store.invoices.push({ id, tenant_id: tenantId, buyer_nip: buyerNip });
-}
-
-function payment(
-  invoiceId: string,
-  dates: { paymentDate: string; createdAt: string },
-  tenantId = TENANT,
-) {
-  store.payments.push({
-    id: `pay-${store.payments.length + 1}`,
-    tenant_id: tenantId,
-    invoice_id: invoiceId,
-    amount: 1000,
-    payment_date: dates.paymentDate,
-    created_at: dates.createdAt,
-  });
-}
-
-function proposal(overrides: Record<string, unknown> = {}): FloProposalRow {
+function proposal(payload: Record<string, unknown> = {}): FloProposalRow {
   return {
     id: 'prop-1',
     tenant_id: TENANT,
@@ -188,12 +93,7 @@ function proposal(overrides: Record<string, unknown> = {}): FloProposalRow {
     priority: 10,
     title: 'Nowak nie zapłacił',
     body: '4 300,00 zł po terminie',
-    payload: {
-      invoiceId: 'inv-1',
-      stage: 'stage_1',
-      facts: { grossTotal: 4300, paidAmount: 0, remindersPaused: 0 },
-      ...overrides,
-    },
+    payload: { invoiceId: 'inv-1', stage: 'stage_1', ...payload },
     evidence: [],
     fingerprint: 'x',
     expires_at: '2026-09-19T00:00:00.000Z',
@@ -219,10 +119,20 @@ async function chase(row: FloProposalRow = proposal()) {
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
-  store.invoices.length = 0;
-  store.payments.length = 0;
   store.reminders.length = 0;
+  store.order.length = 0;
   sendJobEvent.mockClear();
+  sendJobEvent.mockImplementation(async () => {
+    store.order.push('send');
+    return { ok: true };
+  });
+  safety.assertReminderSendable.mockReset().mockImplementation(async () => {
+    store.order.push('safety');
+  });
+  consent.hasReminderDispatch.mockReset().mockResolvedValue(false);
+  consent.authorizeReminderDispatch.mockReset().mockImplementation(async () => {
+    store.order.push('authorize');
+  });
 });
 
 afterEach(() => {
@@ -272,102 +182,51 @@ describe('K-02 — chwila ostatniej wpłaty', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// Wykonawca
+// Wykonawca — kolejność
 // ═══════════════════════════════════════════════════════════════
 
 describe('K-02 — okno bezpieczeństwa w wykonawcy', () => {
-  it('AWARIA: wpłata od tego kontrahenta na INNĄ fakturę wczoraj — nie wysyłamy', async () => {
-    invoice('inv-1', '1234567890');
-    invoice('inv-2', '1234567890');
-    payment('inv-2', { paymentDate: '2026-09-16', createdAt: '2026-09-16T08:00:00.000Z' });
+  it('AWARIA: ostatni odczyt widzi świeżą wpłatę kontrahenta — ani wiersza, ani kolejki', async () => {
+    consent.approvedReminderDelivery.mockReturnValueOnce(DELIVERY);
+    safety.assertReminderSendable.mockRejectedValueOnce(
+      new Error('Kontrahent wpłacił coś w ciągu ostatnich dwóch dni'),
+    );
 
-    await expect(chase()).rejects.toThrow(/wpłacił coś w ciągu ostatnich dwóch dni/);
+    await expect(chase()).rejects.toThrow(/wpłacił/);
+    expect(safety.assertReminderSendable).toHaveBeenCalledWith(DELIVERY);
     expect(store.reminders).toHaveLength(0);
     expect(sendJobEvent).not.toHaveBeenCalled();
   });
 
-  it('wyciąg zaimportowany dziś ze starym przelewem — nie wysyłamy', async () => {
-    invoice('inv-1', '1234567890');
-    payment('inv-1', { paymentDate: '2026-09-02', createdAt: '2026-09-17T06:00:00.000Z' });
-
-    await expect(chase()).rejects.toThrow(/wpłacił coś/);
-    expect(sendJobEvent).not.toHaveBeenCalled();
-  });
-
-  it('wpłata INNEGO kontrahenta nie blokuje — ponaglenie idzie z żetonem zgody', async () => {
-    invoice('inv-1', '1234567890');
-    invoice('inv-3', '9876543210');
-    payment('inv-3', { paymentDate: '2026-09-17', createdAt: '2026-09-17T09:00:00.000Z' });
+  it('ponaglenie idzie z żetonem zgody — okno PRZED zapisem i kolejką', async () => {
+    consent.approvedReminderDelivery.mockReturnValueOnce(DELIVERY);
 
     const result = await chase();
 
-    expect(result.summary).toContain('stage_1');
+    expect(store.order).toEqual(['safety', 'insert', 'authorize', 'send']);
+    // Żeton zgody jest też kluczem przypomnienia: jedna zgoda, jeden wiersz.
     expect(store.reminders).toEqual([
-      expect.objectContaining({
-        tenant_id: TENANT,
-        invoice_id: 'inv-1',
-        stage: 'stage_1',
-        channel: 'email',
-        status: 'pending',
-        scheduled_for: NOW.toISOString(),
-      }),
+      expect.objectContaining({ id: 'appr-1', tenant_id: TENANT, invoice_id: 'inv-1', stage: 'stage_1' }),
     ]);
     expect(sendJobEvent).toHaveBeenCalledTimes(1);
-    expect(sendJobEvent.mock.calls[0]![0]).toMatchObject({
-      data: { reminderId: 'rem-1', approvalId: 'appr-1' },
-    });
+    expect(JSON.stringify(sendJobEvent.mock.calls[0]![0])).toContain('appr-1');
+    expect(result.details).toMatchObject({ invoiceId: 'inv-1', reminderId: 'appr-1' });
   });
 
-  it('wpłata sprzed tygodnia nie blokuje', async () => {
-    invoice('inv-1', '1234567890');
-    payment('inv-1', { paymentDate: '2026-09-09', createdAt: '2026-09-09T10:00:00.000Z' });
+  it('etap już zlecony — odmowa bez drugiego wiersza i bez wysyłki', async () => {
+    consent.approvedReminderDelivery.mockReturnValueOnce(DELIVERY);
+    consent.hasReminderDispatch.mockResolvedValueOnce(true);
 
-    await expect(chase()).resolves.toBeDefined();
-    expect(sendJobEvent).toHaveBeenCalledTimes(1);
-  });
-
-  it('wpłata z INNEGO konta o tym samym NIP-ie nie blokuje', async () => {
-    // Ten sam kontrahent bywa klientem dwóch naszych kont. Jego wpłata u kogoś
-    // innego nie jest informacją dla tego konta — i nie może nią być.
-    invoice('inv-1', '1234567890');
-    invoice('obca', '1234567890', 'ten-2');
-    payment(
-      'obca',
-      { paymentDate: '2026-09-17', createdAt: '2026-09-17T09:00:00.000Z' },
-      'ten-2',
-    );
-
-    await expect(chase()).resolves.toBeDefined();
-    expect(sendJobEvent).toHaveBeenCalledTimes(1);
-  });
-
-  it('faktura bez NIP-u: liczą się wpłaty do niej samej', async () => {
-    // Konsument nie ma NIP-u, więc nie ma jak powiązać jego innych faktur.
-    // Wpłata innego konsumenta nie może blokować, wpłata do tej faktury musi.
-    invoice('inv-1', null);
-    invoice('inv-inna', null);
-    payment('inv-inna', { paymentDate: '2026-09-17', createdAt: '2026-09-17T09:00:00.000Z' });
-
-    await expect(chase()).resolves.toBeDefined();
-
-    payment('inv-1', { paymentDate: '2026-09-17', createdAt: '2026-09-17T10:00:00.000Z' });
-    await expect(chase()).rejects.toThrow(/wpłacił coś/);
-  });
-
-  it('BEZPIECZEŃSTWO: faktura z innego konta — odmowa bez zapisu i bez wysyłki', async () => {
-    invoice('inv-1', '1234567890', 'ten-2');
-
-    await expect(chase()).rejects.toThrow(/nie ma na tym koncie/);
+    await expect(chase()).rejects.toThrow(/już zlecony/);
     expect(store.reminders).toHaveLength(0);
     expect(sendJobEvent).not.toHaveBeenCalled();
   });
 
   it('nieznany etap ponaglenia — odmowa, zanim cokolwiek zostanie zapisane', async () => {
-    invoice('inv-1', '1234567890');
-
-    await expect(chase(proposal({ stage: 'stage_9' }))).rejects.toThrow(
-      /bez kompletu danych/,
-    );
+    // Prawdziwy `approvedReminderDelivery`: ładunek bez zamrożonej wiadomości
+    // albo z nieznanym etapem nie przechodzi schematu.
+    await expect(chase(proposal({ stage: 'stage_9' }))).rejects.toThrow();
+    expect(safety.assertReminderSendable).not.toHaveBeenCalled();
     expect(store.reminders).toHaveLength(0);
     expect(sendJobEvent).not.toHaveBeenCalled();
   });

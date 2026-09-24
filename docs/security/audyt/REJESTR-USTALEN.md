@@ -125,3 +125,8 @@ To uzupełnienie zmienia status kodu, nie historyczne dowody z tabeli. Nie oznac
 - **SEC-E-05 (średnia, proces):** domyślne testy ładowały env aplikacji i testy RLS. Osobny konfigurator RLS wymaga jawnych RLS_TEST_SUPABASE_*; zwykłe CI bez sekretów i RLS.
 
 Wyniki i dalsze działania: [DZIENNIK-NAPRAW-ASTRA.md](../DZIENNIK-NAPRAW-ASTRA.md).
+
+
+## Korekta zakresu z 23.09.2026 — logi workera
+
+Historyczny wpis „Logi i PII (4.6) — Czysto” powyżej nie obejmuje całego loggera workera. `lib/jobs/logger.ts` nie wyłącza `info` w produkcji, a `inbox-polling.ts` przekazuje NIP. Nie potwierdzono nowego zewnętrznego wycieku; nie należy przedstawiać poprzedniego wniosku jako audytu wszystkich logów. Ograniczenie zostało wykryte w [przeglądzie 16.09](../PRZEGLAD-CALOSCI-2026-09-16.md); przegląd pozostałych logów to otwarte zadanie. Powyższe ustalenia pozostają zapisem historycznej weryfikacji.

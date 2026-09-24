@@ -17,12 +17,23 @@ const updates = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: () => ({
-      update: (patch: Record<string, unknown>) => ({
-        eq: async (_column: string, id: string) => {
-          updates.push({ ...patch, id });
-          return { error: null };
-        },
-      }),
+      // Wykonawca oznacza koszt warunkiem `id` ORAZ `tenant_id` i żąda
+      // zwrotu wiersza — brak wiersza znaczy „nie Twój koszt".
+      update: (patch: Record<string, unknown>) => {
+        const where: Record<string, unknown> = {};
+        const builder = {
+          eq: (column: string, value: unknown) => {
+            where[column] = value;
+            return builder;
+          },
+          select: () => builder,
+          maybeSingle: async () => {
+            updates.push({ ...patch, id: where.id, tenant_id: where.tenant_id });
+            return { data: { id: where.id }, error: null };
+          },
+        };
+        return builder;
+      },
     }),
   }),
 }));
@@ -85,7 +96,7 @@ describe('W-01 → W-03', () => {
 
     const result = await confirmExpense();
 
-    expect(updates).toEqual([{ is_reviewed: true, id: 'exp-2' }]);
+    expect(updates).toEqual([{ is_reviewed: true, id: 'exp-2', tenant_id: TENANT }]);
     expect(proposeRuleAfterReview).toHaveBeenCalledTimes(1);
     const [tenantId, expenseId] = proposeRuleAfterReview.mock.calls[0]!;
     expect(tenantId).toBe(TENANT);
@@ -101,6 +112,6 @@ describe('W-01 → W-03', () => {
     expect(result.summary).toBe('koszt potwierdzony przez klienta');
     expect(result.details).toMatchObject({ rule: 'failed' });
     // Najważniejsze: koszt ZOSTAŁ oznaczony jako przejrzany.
-    expect(updates).toEqual([{ is_reviewed: true, id: 'exp-2' }]);
+    expect(updates).toEqual([{ is_reviewed: true, id: 'exp-2', tenant_id: TENANT }]);
   });
 });

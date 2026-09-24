@@ -116,7 +116,8 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
   // Resend dropuje email do skrzynki — bierzemy najnowszego usera z tym
   // adresem. Edge case: 2 useri kiedyś mieli ten sam email (po deletion +
   // reuse). Bierzemy ostatnio aktywnego.
-  const { data } = await supabase.auth.admin.listUsers({ page: 1, perPage: 200 });
+  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 200 });
+  if (error || !data) throw new Error('email_opt_out_identity_unavailable');
   const normalized = email.toLowerCase().trim();
   const match = data?.users
     .filter((u) => u.email?.toLowerCase() === normalized)
@@ -149,7 +150,7 @@ async function handleBounce(payload: ResendWebhookPayload, eventId: string) {
   if (error && error.code !== '23505') {
     throw new Error(`bounce insert failed: ${error.message}`);
   }
-  if (error?.code === '23505') return; // already processed
+  // Retry opt-out writes even if the receipt was stored by an earlier attempt.
 
   if (bounceType === 'hard') {
     // Hard bounce → unsubscribe od product_updates + marketing.
@@ -191,7 +192,7 @@ async function handleComplaint(payload: ResendWebhookPayload, eventId: string) {
   if (error && error.code !== '23505') {
     throw new Error(`complaint insert failed: ${error.message}`);
   }
-  if (error?.code === '23505') return;
+  // Duplicate receipts still retry the idempotent preference writes.
 
   // Complaint = user kliknął "Spam" → INSTANT total unsubscribe.
   // Transactional też wyłączamy — reputacja domeny > convenience.

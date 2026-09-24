@@ -6,6 +6,9 @@
  * - DB stats — `pg_total_relation_size` przez SECURITY DEFINER RPC
  */
 
+import 'server-only';
+
+import { requireAdmin } from '@/lib/auth/admin-guard';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { KsefEnvironment } from '@/types/ksef';
 
@@ -24,6 +27,7 @@ export async function getKsefHealthHistory(
   env: KsefEnvironment,
   hours = 24,
 ): Promise<HealthLogEntry[]> {
+  await requireAdmin();
   const supabase = createAdminClient();
   const cutoffIso = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
@@ -64,6 +68,7 @@ export interface InngestJobStat {
 export async function getInngestJobStats(
   hours = 24,
 ): Promise<InngestJobStat[]> {
+  await requireAdmin();
   const supabase = createAdminClient();
   const cutoffIso = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
@@ -142,6 +147,7 @@ export interface DbStats {
 }
 
 export async function getDbStats(): Promise<DbStats> {
+  await requireAdmin();
   const supabase = createAdminClient();
 
   // Cast: RPC nie ma typed gen dopóki nie regenerujemy types/database.ts
@@ -195,6 +201,7 @@ export interface OfflineQueueSnapshot {
 }
 
 export async function getOfflineQueueSnapshot(): Promise<OfflineQueueSnapshot> {
+  await requireAdmin();
   const supabase = createAdminClient();
 
   const [pendingRes, failedRes, oldestRes] = await Promise.all([

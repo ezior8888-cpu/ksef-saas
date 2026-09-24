@@ -22,7 +22,6 @@
 export const EVENT_QUEUE_MAP = {
   'billing/payment.failed': ['billing.payment.failed'],
   'billing/payment.succeeded': ['billing.payment.succeeded'],
-  'billing/subscription.canceled': ['billing.subscription.canceled'],
   'email/trial-day-1': ['email.trial-day-1'],
   'email/trial-day-4': ['email.trial-day-4'],
   'email/trial-day-8': ['email.trial-day-8'],

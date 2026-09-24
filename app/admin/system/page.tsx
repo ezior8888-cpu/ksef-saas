@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/auth/admin-guard';
 import { AlertTriangle, CheckCircle2, Cloud, Cog, Database } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -35,23 +36,16 @@ function formatBytes(bytes: number): string {
 }
 
 export default async function AdminSystemPage() {
+  await requireAdmin();
+
   const env = currentKsefEnv();
 
   const [healthHistory, jobStats, dbStats, offline, backups] = await Promise.all([
-    getKsefHealthHistory(env, WINDOW_HOURS).catch(() => []),
-    getInngestJobStats(WINDOW_HOURS).catch(() => []),
-    getDbStats().catch(() => ({ totalDatabaseBytes: 0, tables: [] })),
-    getOfflineQueueSnapshot().catch(() => ({
-      pending: 0,
-      failed: 0,
-      oldestDeadline: null,
-    })),
-    getBackupOverview().catch(() => ({
-      lastDaily: null,
-      lastWeekly: null,
-      hoursSinceLastSuccess: null,
-      hasRecentFailure: false,
-    })),
+    getKsefHealthHistory(env, WINDOW_HOURS),
+    getInngestJobStats(WINDOW_HOURS),
+    getDbStats(),
+    getOfflineQueueSnapshot(),
+    getBackupOverview(),
   ]);
 
   return (

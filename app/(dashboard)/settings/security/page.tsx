@@ -1,13 +1,17 @@
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import { countRemainingRecoveryCodes } from '@/lib/auth/mfa-recovery';
 import { createClient } from '@/lib/supabase/server';
 import { PasswordChangeCard } from './_components/password-change-card';
 import { TwoFactorCard } from './_components/two-factor-card';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SecuritySettingsPage() {
+export default async function SecuritySettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ notice?: string }>;
+}) {
+  const { notice } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -17,9 +21,6 @@ export default async function SecuritySettingsPage() {
   const { data: factorsRes } = await supabase.auth.mfa.listFactors();
   const verifiedTotp = factorsRes?.totp?.find((f) => f.status === 'verified');
   const isTotpEnabled = Boolean(verifiedTotp);
-  const remainingRecovery = isTotpEnabled
-    ? await countRemainingRecoveryCodes(user.id)
-    : 0;
 
   return (
     <div className="space-y-8 max-w-4xl">
@@ -31,6 +32,13 @@ export default async function SecuritySettingsPage() {
           Hasło, weryfikacja dwuetapowa i sesje
         </p>
       </div>
+
+      {notice === 'admin_mfa_required' && (
+        <p role="status" className="rounded-xl border border-glass-border bg-foreground/5 p-4 text-sm">
+          Panel administratora wymaga weryfikacji dwuetapowej. Włącz 2FA poniżej,
+          potwierdź kod z aplikacji TOTP i wróć do panelu administratora.
+        </p>
+      )}
 
       <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
         <div className="flex items-start gap-4">
@@ -67,10 +75,7 @@ export default async function SecuritySettingsPage() {
                 1Password, Authy). Chroni konto nawet jeśli hasło wycieknie.
               </p>
             </div>
-            <TwoFactorCard
-              isEnabled={isTotpEnabled}
-              remainingRecoveryCodes={remainingRecovery}
-            />
+            <TwoFactorCard isEnabled={isTotpEnabled} />
           </div>
         </div>
       </div>

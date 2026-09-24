@@ -1,428 +1,104 @@
-// Wysyłka pojedynczego przypomnienia (email + ewentualnie PDF)
-
 import { NonRetriableError } from 'inngest';
 import { Resend } from 'resend';
-
+import { z } from 'zod';
 import { inngest, remindersSendRequested } from '@/lib/inngest/client';
 import { requireApprovalId } from '@/lib/flo/approval';
+import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
+import { getGlobalFlagForExecution } from '@/lib/feature-flags/global-flags';
+import { isKindEnabled } from '@/lib/flo/flags';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { generateDemandLetterPdf } from '@/lib/reminders/pdf-demand-letter';
-import {
-  DEFAULT_TEMPLATES,
-  formatDatePl,
-  formatPln,
-  resolveTemplate,
-} from '@/lib/reminders/templates';
-import { uploadToR2, downloadFromR2 } from '@/lib/storage/r2';
-import type { Database, Json } from '@/types/database';
+import { assertDeliveryDeadline, readReminderDispatch, recordReminderReceipt } from '@/lib/reminders/delivery-consent';
+import { assertReminderSendable } from '@/lib/reminders/delivery-safety';
+import { ReminderConsentDenied } from '@/lib/reminders/delivery-errors';
+import { deliveryHtml } from '@/lib/reminders/delivery-schema';
+import { uploadToR2 } from '@/lib/storage/r2';
 
-type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
-type TenantPick = Pick<
-  Database['public']['Tables']['tenants']['Row'],
-  'name' | 'nip' | 'address_json'
->;
-type ReminderRow = Database['public']['Tables']['payment_reminders']['Row'];
-type ReminderStage = Database['public']['Enums']['reminder_stage_enum'];
-
-type ReminderWithRelations = ReminderRow & {
-  invoices:
-    | (InvoiceRow & {
-        tenants: TenantPick | null;
-      })
-    | null;
-};
-
-const DEFAULT_FALLBACK_DOMAIN = 'twoja-domena.pl';
-
-const DEV_TO_OVERRIDE = process.env.RESEND_DEV_TO_OVERRIDE?.trim() || null;
-
-function isReminderStagePdf(stage: ReminderStage): boolean {
-  return stage === 'stage_3' || stage === 'stage_4';
-}
-
-/**
- * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
- * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
- */
 export async function runSendReminder(data: Parameters<typeof remindersSendRequested.create>[0], { step }: JobContext) {
-    const { reminderId, approvalId } = data;
-
-    // ŻETON ZGODY (krok 6 planu agenta FLO).
-    //
-    // Ta funkcja wysyła wiadomość do kontrahenta klienta — czyli robi coś
-    // nieodwracalnego, w cudzym imieniu, na zewnątrz. Bez identyfikatora
-    // zgody nie wykonuje się w ogóle, nawet gdyby ktoś zawołał ją z crona.
-    // Rzucamy błąd nieponawialny, bo brak zgody nie naprawi się przy kolejnej
-    // próbie — to nie jest awaria sieci, tylko brakująca decyzja człowieka.
-    //
-    // Druga połowa — sprawdzenie w `flo_approvals`, że żeton istnieje, dotyczy
-    // tej sprawy, nie został zużyty i nie wygasł — należy do wykonawcy
-    // propozycji (krok 11), bo to on zna identyfikator propozycji. Tutaj
-    // pilnujemy warunku, który da się sprawdzić bez bazy: że zgoda w ogóle
-    // istnieje.
+  const { reminderId, approvalId } = data;
+  try {
+    requireApprovalId(approvalId, 'Wysyłka przypomnienia');
+    if (!z.string().uuid().safeParse(reminderId).success || reminderId !== approvalId) throw new Error();
+  } catch {
+    throw new NonRetriableError('Brak zapisanej zgody na tę wysyłkę. Przygotuj nowy podgląd.');
+  }
+  const supabase = createAdminClient();
+  // New step name intentionally invalidates the legacy sender's cached state.
+  // All live authorization reads occur INSIDE the same callback as the send.
+  // Inngest may restore a completed send; pg-boss reruns it with the SAME key.
+  const outcome = await step.run('send-approved-reminder-v2', async () => {
+    let dispatch;
+    try { dispatch = await readReminderDispatch(approvalId); }
+    catch (error) {
+      if (error instanceof ReminderConsentDenied || error instanceof z.ZodError) throw new NonRetriableError('Nie można potwierdzić zapisanej zgody na tę wiadomość.');
+      throw new Error('Odczyt zgody jest chwilowo niedostępny.');
+    }
+    const { approval, delivery } = dispatch;
+    // Receipt is in the service-only ledger, not the client-writable reminder.
+    // A confirmed delivery needs bookkeeping, not new sending permission.
+    if (dispatch.receipt) return { skipped: false as const, delivery, ...dispatch.receipt };
+    const loaded = await supabase.from('payment_reminders').select('id, tenant_id, invoice_id, stage, channel, status')
+      .eq('id', reminderId).eq('tenant_id', delivery.tenantId).eq('invoice_id', delivery.invoiceId).maybeSingle();
+    if (loaded.error) throw new Error('Odczyt przypomnienia jest chwilowo niedostępny.');
+    if (!loaded.data || loaded.data.id !== reminderId || loaded.data.tenant_id !== delivery.tenantId ||
+        loaded.data.invoice_id !== delivery.invoiceId || loaded.data.stage !== delivery.stage || loaded.data.channel !== 'email') {
+      throw new NonRetriableError('Przypomnienie nie należy do zatwierdzonej organizacji i faktury.');
+    }
+    if (loaded.data.status !== 'pending') return { skipped: true as const, reason: 'already-' + loaded.data.status };
     try {
-      requireApprovalId(approvalId, `Wysyłka ponaglenia ${reminderId}`);
-    } catch (e) {
-      throw new NonRetriableError(
-        e instanceof Error
-          ? `${e.message} Każda wiadomość do kontrahenta wymaga kliknięcia w aplikacji.`
-          : 'Brak zgody człowieka — odmawiam wysyłki.',
-      );
+      if (!['executing', 'done', 'approved'].includes(dispatch.proposal.status)) throw new ReminderConsentDenied('Zgoda na wysyłkę została wycofana.');
+      const member = await supabase.from('memberships').select('user_id')
+        .eq('user_id', approval.user_id).eq('organization_id', delivery.tenantId).eq('status', 'active').maybeSingle();
+      if (member.error) throw new Error('Nie można sprawdzić dostępu do organizacji.');
+      if (!member.data) throw new ReminderConsentDenied('Osoba zatwierdzająca nie ma już dostępu do organizacji.');
+      if (!isKindEnabled('payment.chase') || !(await isKindEnabledForTenant('payment.chase', delivery.tenantId, undefined, () => getGlobalFlagForExecution('killFloAgent'))).enabled) {
+        throw new ReminderConsentDenied('Wysyłka przypomnień została wstrzymana.');
+      }
+      await assertReminderSendable(delivery);
+      // At most 30 minutes, strictly inside Resend's documented 24h key retention.
+      // Do not reset this clock on retry, including after an ambiguous response.
+      assertDeliveryDeadline(approval, delivery);
+    } catch (error) {
+      if (error instanceof ReminderConsentDenied || error instanceof z.ZodError) throw new NonRetriableError(error instanceof ReminderConsentDenied ? error.message : 'Nieprawidłowe dane zgody.');
+      throw new Error('Weryfikacja warunków wysyłki jest chwilowo niedostępna.');
     }
-
-    const supabase = createAdminClient();
-
-    const reminder = await step.run('fetch-reminder', async () => {
-      const { data, error } = await supabase
-        .from('payment_reminders')
-        .select('*, invoices(*, tenants(name, nip, address_json))')
-        .eq('id', reminderId)
-        .single();
-
-      if (error || !data) {
-        throw new NonRetriableError(`Reminder ${reminderId} not found`);
-      }
-      return data as ReminderWithRelations;
-    });
-
-    if (reminder.status !== 'pending') {
-      return {
-        skipped: true as const,
-        reason: `already-${reminder.status}` as const,
-      };
-    }
-
-    const stillNeedsReminder = await step.run('verify-still-needed', async () => {
-      const invoice = reminder.invoices;
-      if (!invoice) return false;
-      const gross = Number(invoice.gross_total ?? 0);
-      const paid = Number(invoice.paid_amount ?? 0);
-      const stillUnpaid = paid < gross;
-      const notPaused = !invoice.reminders_paused;
-      return stillUnpaid && notPaused;
-    });
-
-    if (!stillNeedsReminder) {
-      await step.run('mark-cancelled', async () => {
-        const invoice = reminder.invoices;
-        const failureReason =
-          invoice?.reminders_paused === true
-            ? 'Przypomnienia zapauzowane'
-            : 'Faktura zapłacona przed wysyłką';
-        const { error } = await supabase
-          .from('payment_reminders')
-          .update({
-            status: 'cancelled',
-            failure_reason: failureReason,
-          })
-          .eq('id', reminderId);
-        if (error) throw new Error(error.message);
-      });
-      return { skipped: true as const, reason: 'no-longer-needed' as const };
-    }
-
-    const invoice = reminder.invoices;
-    if (!invoice) {
-      throw new NonRetriableError('Brak faktury dla przypomnienia');
-    }
-    const tenant = invoice.tenants;
-    if (!tenant) {
-      throw new NonRetriableError('Brak tenanta dla przypomnienia');
-    }
-
-    const settings = await step.run('fetch-settings', async () => {
-      const { data, error } = await supabase
-        .from('reminder_settings')
-        .select('*')
-        .eq('tenant_id', reminder.tenant_id)
-        .maybeSingle();
-      if (error) throw new Error(error.message);
-      return data;
-    });
-
-    const templateSource = await step.run('fetch-template', async () => {
-      const { data: row, error } = await supabase
-        .from('reminder_templates')
-        .select('email_subject, email_body')
-        .eq('tenant_id', reminder.tenant_id)
-        .eq('stage', reminder.stage)
-        .eq('is_default', false)
-        .maybeSingle();
-
-      if (error) throw new Error(error.message);
-
-      if (
-        row &&
-        row.email_subject?.trim()?.length &&
-        row.email_body?.trim()?.length
-      ) {
-        return { subject: row.email_subject, body: row.email_body };
-      }
-
-      const def = DEFAULT_TEMPLATES[reminder.stage];
-      if (!def) {
-        throw new NonRetriableError(`Brak szablonu dla etapu ${reminder.stage}`);
-      }
-      return def;
-    });
-
-    const daysOverdue = calendarDaysOverdue(invoice.payment_due_date);
-
-    const amountDue = Math.max(
-      0,
-      Number(invoice.gross_total ?? 0) - Number(invoice.paid_amount ?? 0),
-    );
-
-    const buyer = readBuyerParty(invoice.buyer_data);
-    const invoiceLabel =
-      invoice.internal_number ??
-      invoice.ksef_number ??
-      'bez numeru';
-
-    const variables = {
-      numerFaktury: invoiceLabel,
-      kwota: formatPln(Number(invoice.gross_total ?? 0)),
-      kwotaDoZaplaty: formatPln(amountDue),
-      dataWystawienia: formatDatePl(invoice.issue_date),
-      terminPlatnosci: invoice.payment_due_date
-        ? formatDatePl(invoice.payment_due_date)
-        : '—',
-      dniPoTerminie: daysOverdue,
-      nazwaFirmy: tenant.name,
-      nazwaKontrahenta: buyer?.name ?? '',
-      rachunekBankowy: readBankAccountFromPayment(invoice.payment_data),
-      imieNadawcy: settings?.sender_name?.trim() || tenant.name,
-    };
-
-    const resolved = resolveTemplate(templateSource, variables);
-
-    const pdfPath = await step.run('persist-demand-letter-pdf', async () => {
-      if (!isReminderStagePdf(reminder.stage)) return null;
-
-      const buf = await generateDemandLetterPdf({
-        sellerName: tenant.name,
-        sellerNip: tenant.nip,
-        sellerAddress: formatAddressJson(tenant.address_json),
-        buyerName: buyer?.name ?? '',
-        buyerNip: buyer?.nip ?? invoice.buyer_nip ?? undefined,
-        buyerAddress: formatBuyerAddressLines(buyer?.address),
-        invoiceNumber: invoiceLabel,
-        issueDate: invoice.issue_date,
-        dueDate: invoice.payment_due_date ?? invoice.issue_date,
-        grossAmount: Number(invoice.gross_total ?? 0),
-        paidAmount: Number(invoice.paid_amount ?? 0),
-        amountDue,
-        bankAccount: readBankAccountFromPayment(invoice.payment_data),
-        daysOverdue,
-        senderName: settings?.sender_name?.trim() || tenant.name,
-        senderEmail:
-          settings?.reply_to_email?.trim() ??
-          `kontakt@${getDomainFromTenant()}`,
-        placeOfIssue: extractCityFromAddressJson(tenant.address_json),
-        letterDate: new Date().toISOString().slice(0, 10),
-      });
-
-      const path = `reminders/${reminder.tenant_id}/${reminder.id}.pdf`;
-      await uploadToR2(path, buf, 'application/pdf');
-      return path;
-    });
-
-    const emailResult = await step.run('send-email', async () => {
-      const apiKey = process.env.RESEND_API_KEY;
-      if (!apiKey || apiKey.startsWith('re_xxxx')) {
-        throw new NonRetriableError('RESEND nie skonfigurowany — brak klucza');
-      }
-
-      const resend = new Resend(apiKey);
-
-      const buyerEmail = buyer?.email?.trim();
-      if (!buyerEmail) {
-        throw new NonRetriableError('Brak emaila kontrahenta');
-      }
-
-      const fromEmail =
-        settings?.sender_email?.trim() ??
-        process.env.RESEND_FROM_EMAIL?.trim() ??
-        '';
-
-      if (!fromEmail) {
-        throw new NonRetriableError(
-          'Brak nadawcy: ustaw sender_email w reminder_settings lub RESEND_FROM_EMAIL',
-        );
-      }
-
-      const fromName = settings?.sender_name?.trim() ?? tenant.name;
-
-      let attachmentBuffer: Buffer | null = null;
-      if (pdfPath) {
-        attachmentBuffer = await downloadFromR2(pdfPath, reminder.tenant_id);
-      }
-
-      const safeInvoiceFile = invoiceLabel.replace(/\//g, '-');
-      const attachments = attachmentBuffer
-        ? [
-            {
-              filename: `Wezwanie-${safeInvoiceFile}.pdf`,
-              content: attachmentBuffer,
-            },
-          ]
-        : undefined;
-
-      const to = DEV_TO_OVERRIDE ?? buyerEmail;
-      const subject = DEV_TO_OVERRIDE
-        ? `[DEV → ${buyerEmail}] ${resolved.subject}`
-        : resolved.subject;
-
-      const result = await resend.emails.send({
-        from: `${fromName} <${fromEmail}>`,
-        to,
-        replyTo: settings?.reply_to_email ?? undefined,
-        subject,
-        html: resolved.bodyHtml,
-        text: resolved.bodyText,
-        attachments,
-      });
-
-      if (result.error) {
-        throw new Error(`Resend error: ${result.error.message}`);
-      }
-
-      return { messageId: result.data?.id };
-    });
-
-    await step.run('mark-sent', async () => {
-      const { error } = await supabase
-        .from('payment_reminders')
-        .update({
-          status: 'sent',
-          sent_at: new Date().toISOString(),
-          email_message_id: emailResult.messageId ?? null,
-          email_subject: resolved.subject,
-          email_body: resolved.bodyText,
-          pdf_attachment_path: pdfPath,
-          days_overdue_at_send: daysOverdue,
-        })
-        .eq('id', reminderId);
-      if (error) throw new Error(error.message);
-    });
-
-    return {
-      success: true as const,
-      stage: reminder.stage,
-      messageId: emailResult.messageId,
-      hasPdf: !!pdfPath,
-    };
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey || apiKey.startsWith('re_xxxx')) throw new NonRetriableError('Brak konfiguracji dostawcy poczty.');
+    const result = await new Resend(apiKey).emails.send({
+      from: delivery.from, to: delivery.to, replyTo: delivery.replyTo ?? undefined,
+      subject: delivery.subject, text: delivery.text, html: deliveryHtml(delivery.text),
+      attachments: delivery.attachment ? [{ filename: delivery.attachment.filename,
+        content: delivery.attachment.contentBase64 }] : undefined,
+    }, { idempotencyKey: 'reminder/' + approvalId });
+    if (result.error || !result.data?.id) throw new Error('Nie można potwierdzić przyjęcia wiadomości przez dostawcę poczty.');
+    const sentAt = new Date().toISOString();
+    await recordReminderReceipt(approval, delivery, result.data.id, sentAt);
+    return { skipped: false as const, messageId: result.data.id, delivery, sentAt };
+  });
+  if (outcome.skipped) return outcome;
+  const { delivery, messageId, sentAt } = outcome;
+  // Once delivery is confirmed, finish bookkeeping even if the consent expires.
+  const pdfPath = await step.run('archive-approved-reminder-pdf-v2', async () => {
+    if (!delivery.attachment) return null;
+    const path = 'reminders/' + delivery.tenantId + '/' + reminderId + '.pdf';
+    await uploadToR2(path, Buffer.from(delivery.attachment.contentBase64, 'base64'), 'application/pdf');
+    return path;
+  });
+  await step.run('record-approved-reminder-v2', async () => {
+    const written = await supabase.from('payment_reminders').update({
+      status: 'sent', sent_at: sentAt, email_message_id: messageId,
+      email_subject: delivery.subject, email_body: delivery.text,
+      pdf_attachment_path: pdfPath, days_overdue_at_send: delivery.daysOverdue,
+    }).eq('id', reminderId).eq('tenant_id', delivery.tenantId).eq('invoice_id', delivery.invoiceId)
+      .eq('stage', delivery.stage).eq('channel', 'email').select('id').maybeSingle();
+    if (written.error || !written.data) throw new Error('Nie udało się zapisać potwierdzenia wysyłki.');
+  });
+  return { success: true as const, messageId, stage: delivery.stage, hasPdf: !!pdfPath };
 }
 
-export const sendReminderJob = inngest.createFunction(
-  {
-    id: 'send-reminder',
-    name: 'Wkurzacz: wysyłka emaila',
-    retries: 3,
-    concurrency: { limit: 5 },
-    triggers: [remindersSendRequested],
-  },
-  async ({ event, step, logger, attempt }) =>
-    runSendReminder(event.data as Parameters<typeof remindersSendRequested.create>[0], toJobContext({ step, logger, attempt })),
-);
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-interface BuyerPartySnippet {
-  name?: string;
-  email?: string;
-  nip?: string;
-  address?: {
-    addressLine1?: string;
-    addressLine2?: string;
-  };
-}
-
-function readBuyerParty(json: Json | null): BuyerPartySnippet | null {
-  if (!json || typeof json !== 'object') return null;
-  const b = json as Record<string, unknown>;
-  const name = typeof b.name === 'string' ? b.name : undefined;
-  const email = typeof b.email === 'string' ? b.email : undefined;
-  const nipVal = typeof b.nip === 'string' ? b.nip : undefined;
-  const addrRaw = b.address;
-  let address: BuyerPartySnippet['address'];
-  if (addrRaw && typeof addrRaw === 'object' && addrRaw !== null) {
-    const a = addrRaw as Record<string, unknown>;
-    address = {
-      addressLine1:
-        typeof a.addressLine1 === 'string' ? a.addressLine1 : undefined,
-      addressLine2:
-        typeof a.addressLine2 === 'string' ? a.addressLine2 : undefined,
-    };
-  }
-  return { name, email, nip: nipVal, address };
-}
-
-function readBankAccountFromPayment(paymentData: Json | null): string {
-  if (!paymentData || typeof paymentData !== 'object') return '';
-  const p = paymentData as { bankAccount?: string };
-  return (p.bankAccount ?? '').trim();
-}
-
-function formatAddressJson(address: Json | null): string {
-  if (!address) return '';
-  if (typeof address === 'string') return address;
-  const a = address as { addressLine1?: string; addressLine2?: string };
-  return [a.addressLine1, a.addressLine2].filter(Boolean).join(', ');
-}
-
-function formatBuyerAddressLines(
-  address: BuyerPartySnippet['address'] | undefined,
-): string {
-  if (!address) return '';
-  return [address.addressLine1, address.addressLine2]
-    .filter(Boolean)
-    .join(', ');
-}
-
-function extractCityFromAddressJson(address: Json | null): string {
-  if (!address) return 'Polska';
-  let line2: string | undefined;
-  if (typeof address === 'string') {
-    line2 = address;
-  } else {
-    const a = address as { addressLine2?: string };
-    line2 = a.addressLine2;
-  }
-  if (!line2) return 'Polska';
-  const match = line2.match(/\d{2}-\d{3}\s+(.+)/);
-  return match?.[1]?.trim() ?? line2;
-}
-
-function getDomainFromTenant(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_DOMAIN?.replace(/^https?:\/\//, '').replace(
-      /\/.*$/,
-      '',
-    ) ?? DEFAULT_FALLBACK_DOMAIN
-  );
-}
-
-function calendarDaysOverdue(dueDate: string | null): number {
-  if (!dueDate) return 0;
-  const due = parseDateUtcMidnight(dueDate);
-  if (!due) return 0;
-  const today = new Date();
-  const t0 = Date.UTC(
-    today.getUTCFullYear(),
-    today.getUTCMonth(),
-    today.getUTCDate(),
-  );
-  return Math.floor((t0 - due.getTime()) / 86400000);
-}
-
-function parseDateUtcMidnight(isoDate: string): Date | null {
-  const day = isoDate.trim().slice(0, 10);
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
-  if (!m) return null;
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-}
+export const sendReminderJob = inngest.createFunction({
+  id: 'send-reminder', name: 'Wkurzacz: wysyłka emaila', retries: 3,
+  concurrency: { limit: 5 }, triggers: [remindersSendRequested],
+}, async ({ event, step, logger, attempt }) =>
+  runSendReminder(event.data as Parameters<typeof remindersSendRequested.create>[0], toJobContext({ step, logger, attempt })));

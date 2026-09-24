@@ -226,6 +226,10 @@ export interface FloListItem {
  */
 export interface FloProposalView {
   id: string;
+  /** Version of the displayed operation; legacy cards require a refresh. */
+  approvalVersion?: string;
+  /** Source for preparing an exact reminder preview; does not authorize sending. */
+  reminder?: { invoiceId: string; stage: 'stage_1' | 'stage_2' | 'stage_3' | 'stage_4' };
   kind: FloProposalKind;
   variant: FloCardVariant;
   /** Liczby JUŻ podstawione przez serwer. */

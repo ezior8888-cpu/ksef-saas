@@ -1,5 +1,5 @@
 /**
- * 206 wywołań omijających RLS — krok 2 audytu bezpieczeństwa.
+ * Inwentaryzacja wywołań omijających RLS — krok 2 audytu bezpieczeństwa.
  *
  * PO CO: `createAdminClient()` łączy się rolą `service_role`, dla której
  * Postgres NIE STOSUJE polityk RLS. W tych miejscach baza nie chroni już
@@ -37,17 +37,20 @@
  * plikami i nie rozumie przypisań pośrednich. Jego wynik to lista do
  * przeczytania, nie werdykt.
  *
- * TYLKO ODCZYT.
+ * Odczyt lokalnego kodu; zapis wyłącznie nowych raportów w jawnym --output-dir.
+ * Bez odczytu .env i połączeń z usługami. Kod 0 nie oznacza braku podatności.
  *
- * Uruchomienie:  node scripts/security/audit-service-role.ts
+ * Uruchomienie: node scripts/security/audit-service-role.ts --output-dir <lokalny-katalog>
  */
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { configureOfflineAudit } from './offline-audit-output.mjs';
 
 const ROOT = process.cwd();
-const OUT_MD = 'docs/security/audyt/02-service-role.md';
-const OUT_JSON = 'docs/security/audyt/02-service-role.json';
+const { markdownPath: OUT_MD, jsonPath: OUT_JSON, writeReports } = configureOfflineAudit({
+  args: process.argv.slice(2), root: ROOT, reportName: '02-service-role', script: 'audit-service-role.ts',
+});
 
 // ═══════════════════════════════════════════════════════════════
 // Krok 1: które tabele należą do najemcy
@@ -511,6 +514,7 @@ L.push('');
 L.push('Wygenerowane przez `scripts/security/audit-service-role.ts`. **Nie edytuj ręcznie.**');
 L.push('');
 L.push(`Data przebiegu: ${new Date().toISOString().slice(0, 10)}`);
+L.push('Klasyfikacje są heurystyczną listą do ręcznej oceny, nie potwierdzonymi podatnościami.');
 L.push('');
 L.push('## O czym jest ten plik');
 L.push('');
@@ -577,12 +581,11 @@ L.push('3. **Nie rozumie przypisań pośrednich** (`const t = ctx.tenantId`).');
 L.push('4. **Kolumny czyta z plików migracji**, nie z produkcji. Jeśli produkcja');
 L.push('   rozjechała się z repozytorium (SEC-C-01), rozjedzie się i ta analiza.');
 
-mkdirSync(join(ROOT, 'docs/security/audyt'), { recursive: true });
-writeFileSync(join(ROOT, OUT_MD), L.join('\n') + '\n', 'utf8');
-writeFileSync(join(ROOT, OUT_JSON), JSON.stringify(zapytania, null, 2), 'utf8');
+writeReports(L.join('\n') + '\n', JSON.stringify(zapytania, null, 2));
 
 console.log(`Zapytań omijających RLS: ${zapytania.length}`);
 for (const r of ['krytyczne', 'wysokie', 'średnie', 'do-przejrzenia', 'ok'] as Ryzyko[]) {
   console.log(`  ${r.padEnd(16)} ${ile(r)}`);
 }
 console.log(`→ ${OUT_MD}`);
+console.log(`→ ${OUT_JSON}`);

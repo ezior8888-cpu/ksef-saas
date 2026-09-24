@@ -25,9 +25,9 @@ export async function logAuditSystem(entry: AuditLogEntry): Promise<void> {
     });
 
     if (error) {
-      console.error('[audit/system] Failed to log:', error.message, entry);
+      console.error('[audit/system] write_failed');
     }
-  } catch (error) {
-    console.error('[audit/system] Unexpected error:', error);
+  } catch {
+    console.error('[audit/system] write_failed');
   }
 }

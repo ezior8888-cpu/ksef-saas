@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/auth/admin-guard';
 import Link from 'next/link';
 import { Building2, Flag, ShieldCheck } from 'lucide-react';
 
@@ -19,6 +20,8 @@ interface SearchParams {
 export default async function AdminFlagsPage(props: {
   searchParams: Promise<SearchParams>;
 }) {
+  await requireAdmin();
+
   const params = await props.searchParams;
   const page = Math.max(0, Number.parseInt(params.page ?? '0', 10) || 0);
 

@@ -10,6 +10,9 @@
  * pierwszą stronę, a UX z numerami stron jest czytelniejszy w panelu.
  */
 
+import 'server-only';
+
+import { requireAdmin } from '@/lib/auth/admin-guard';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export interface AuditLogRow {
@@ -45,6 +48,8 @@ const MAX_PAGE_SIZE = 500;
 export async function searchAuditLogs(
   opts: AuditLogSearchOptions = {},
 ): Promise<{ items: AuditLogRow[]; total: number; page: number; pageSize: number }> {
+  // Autoryzacja przy danych: layout nie gwarantuje kolejności odczytów potomka.
+  await requireAdmin();
   const supabase = createAdminClient();
   const page = opts.page ?? 0;
   const pageSize = Math.min(opts.pageSize ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
@@ -154,4 +159,7 @@ export const KNOWN_AUDIT_ACTIONS = [
   'admin.note.created',
   'admin.note.archived',
   'admin.flag.toggled',
+  // Stripe refunds
+  'billing.refund.issued',
+  'billing.refund.reconciliation_required',
 ] as const;

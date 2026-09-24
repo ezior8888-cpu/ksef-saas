@@ -1,5 +1,7 @@
 # Propozycje zmian schematu dla właściciela repo
 
+**Aktualizacja 15.09.2026:** poniższy projekt i jego numery są historyczne. Właściciel przygotował właściwe pliki: 00070 processing, 00071 jedno aktywne żądanie, 00072 hash tokenu. Aktualnym źródłem kolejności i stanu jest [PLAN-WYDANIA-GDPR.md](PLAN-WYDANIA-GDPR.md). Nie wykonywać dawnych propozycji obok tych migracji. Ten dopisek nie zmienia SQL.
+
 Stan: 2026-09-10. To dokument projektowy, nie migracje do automatycznego uruchomienia.
 
 Kod GDPR w tej gałęzi wymaga zmian opisanych poniżej. Bartosz powinien przygotować własne pliki migracji, uzgodnić ich numery z aktualną bazą i skoordynować wydanie aplikacji oraz workera. Nie uruchomiono SQL ani nie wdrożono kodu. Po zmianie na hash stara wersja aplikacji nie obsługuje nowej kolumny.

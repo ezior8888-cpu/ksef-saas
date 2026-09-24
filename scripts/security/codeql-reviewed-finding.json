@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "ruleId": "js/insufficient-password-hash",
+  "path": "lib/auth/breach-check.ts",
+  "startLine": 34,
+  "sourceSha256": "74b53285ee125ef0e5be187700a69f854f457282fbf8df9ec042138518891d0b",
+  "maxOccurrences": 1,
+  "reviewedAt": "2026-09-15",
+  "reviewBy": "2026-12-15",
+  "reason": "Reviewed HIBP range lookup, not account password storage or authentication. The protocol requires SHA-1; only its five-character prefix is sent to the fixed HTTPS endpoint and the suffix is compared locally. The complete reviewed module has no password-derived cache or raw exception logging. Keep the raw alert visible; any source change, additional finding or expired review restores blocking until reviewed again.",
+  "reference": "https://haveibeenpwned.com/API/v3#SearchingPwnedPasswordsByRange"
+}

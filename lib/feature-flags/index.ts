@@ -55,8 +55,8 @@ export async function isGlobalFlagEnabled(flag: GlobalFlag): Promise<boolean> {
  * Per-tenant feature flag z 10min Redis cache. Domyślnie false (opt-in roll-out).
  *
  * `tenantId` powinien pochodzić z zwalidowanej sesji (np. `getPageContext()`) —
- * funkcja NIE waliduje że user ma dostęp do tenantu, bo zakłada call z server
- * context gdzie RLS i tak by zablokował obce dane.
+ * funkcja NIE waliduje że user ma dostęp do tenantu, bo uprawnienia musi sprawdzić wywołujący.
+ * Klient administracyjny omija RLS; sam format identyfikatora nie daje dostępu.
  */
 export async function getTenantFlag(
   tenantId: string,

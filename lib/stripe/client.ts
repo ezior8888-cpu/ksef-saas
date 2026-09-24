@@ -3,7 +3,7 @@
  *
  * Lazy init — bez tego `next build` padałby przy importowaniu łańcucha
  * (np. server action → billing helper → ...), nawet gdy build nie woła
- * Stripe API. Na Vercel trzeba ustawić `STRIPE_SECRET_KEY` w env projektu.
+ * Stripe API. W Coolify trzeba ustawić `STRIPE_SECRET_KEY` w env projektu.
  *
  * `apiVersion` przypięty explicit — bez tego `stripe-node` używa "latest"
  * i odpowiedzi się zmieniają cicho. Pinujemy `2024-11-20.acacia` (stabilny

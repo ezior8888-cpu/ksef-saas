@@ -8,6 +8,9 @@
  *   - Pending join requests — czekają na zatwierdzenie ownerów
  */
 
+import 'server-only';
+
+import { requireAdmin } from '@/lib/auth/admin-guard';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 // ─── 1. Recent signups ─────────────────────────────────────────────
@@ -29,6 +32,7 @@ export async function getRecentSignups(
   hours = 24,
   limit = 100,
 ): Promise<RecentSignup[]> {
+  await requireAdmin();
   const supabase = createAdminClient();
   const cutoff = Date.now() - hours * 60 * 60 * 1000;
 
@@ -100,6 +104,7 @@ export async function getInactiveUsers(
   days = 14,
   limit = 100,
 ): Promise<InactiveUser[]> {
+  await requireAdmin();
   const supabase = createAdminClient();
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
 
@@ -159,6 +164,7 @@ export async function getRecentlyFailedInvoices(
   hours = 24,
   limit = 50,
 ): Promise<FailedInvoice[]> {
+  await requireAdmin();
   const supabase = createAdminClient();
   const cutoffIso = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
@@ -218,6 +224,7 @@ export interface PendingJoinRequest {
 export async function getPendingJoinRequests(
   limit = 50,
 ): Promise<PendingJoinRequest[]> {
+  await requireAdmin();
   const supabase = createAdminClient();
 
   const { data, error } = await supabase
@@ -285,6 +292,7 @@ interface SupportConvRow {
 export async function getSupportConversations(
   limit = 25,
 ): Promise<AdminSupportConversation[]> {
+  await requireAdmin();
   const supabase = createAdminClient();
   const res = await (
     supabase as unknown as {

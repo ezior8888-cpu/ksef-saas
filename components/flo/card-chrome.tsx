@@ -28,6 +28,7 @@ export type FloActionHandler = (
 export interface FloVariantProps {
   view: FloProposalView;
   onAction?: FloActionHandler;
+  onPrepareReminder?: (view: FloProposalView) => void;
   showTime?: boolean;
   className?: string;
   /**

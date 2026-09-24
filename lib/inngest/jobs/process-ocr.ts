@@ -1,3 +1,4 @@
+import { requireTenantMember } from './tenant-boundary';
 /**
  * Inngest: OCR zdjęcia wydatku (R2 → Claude Vision → kategoria KPiR → `expenses`).
  */
@@ -88,6 +89,7 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         }
 
         const jobRow = row as OcrJobRow;
+        await requireTenantMember(jobRow.created_by, tenantId);
         if (!jobRow.source_file_path || jobRow.source_file_path === 'pending') {
           throw new NonRetriableError('Brak pliku źródłowego dla joba OCR');
         }
@@ -127,6 +129,7 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         if (error) throw new Error(error.message);
       });
 
+      await requireTenantMember(job.created_by, tenantId);
       await sendPushToUser(job.created_by, 'invoice_rejected', {
         title: '❌ Nie udało się rozpoznać paragonu',
         body:
@@ -241,6 +244,7 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
     });
 
     await step.run('notify-user', async () => {
+      await requireTenantMember(job.created_by, tenantId);
       await sendPushToUser(job.created_by, 'invoice_accepted', {
         title: '📸 Wydatek rozpoznany',
         body: `${extractedData.seller_name} • ${extractedData.gross_amount.toFixed(2)} PLN`,

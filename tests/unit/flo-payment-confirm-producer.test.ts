@@ -17,14 +17,22 @@ const invoiceRows = vi.hoisted(() => new Map<string, Record<string, unknown>>())
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: () => ({
-      select: () => ({
-        eq: (_column: string, id: string) => ({
-          maybeSingle: async () => ({
-            data: invoiceRows.has(id) ? { ...invoiceRows.get(id) } : null,
-            error: null,
-          }),
-        }),
-      }),
+      // Odczyt faktury pyta o `id` ORAZ `tenant_id` — atrapa sprawdza oba.
+      select: () => {
+        const where: Record<string, unknown> = {};
+        const builder = {
+          eq: (column: string, value: unknown) => {
+            where[column] = value;
+            return builder;
+          },
+          maybeSingle: async () => {
+            const row = [...invoiceRows.values()].find((r) =>
+              Object.entries(where).every(([column, value]) => r[column] === value));
+            return { data: row ? { ...row } : null, error: null };
+          },
+        };
+        return builder;
+      },
     }),
   }),
 }));
@@ -57,6 +65,7 @@ function putInvoice(
 ) {
   invoiceRows.set(id, {
     id,
+    tenant_id: TENANT,
     internal_number: `FV/${id}`,
     buyer_data: { name: 'Nowak Sp. z o.o.' },
     ksef_status: 'accepted',
@@ -264,7 +273,7 @@ describe('K-01 w pulsie — jedno pytanie', () => {
 
     await expect(
       assertFresh(
-        { kind: bulk.kind, payload: bulk.payload ?? {}, fingerprint: bulk.fingerprint },
+        { tenant_id: TENANT, kind: bulk.kind, payload: bulk.payload ?? {}, fingerprint: bulk.fingerprint },
         NOW,
       ),
     ).rejects.toThrow(FloStaleError);

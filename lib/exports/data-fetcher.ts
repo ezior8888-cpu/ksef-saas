@@ -75,8 +75,8 @@ export async function fetchInvoicesForExport(
   // Mapowanie rows → JpkInvoice też idzie równolegle dla obu kierunków
   // (każde robi swoje SELECT-y na liniach + parentach).
   const [issuedInvoices, receivedInvoices] = await Promise.all([
-    mapRowsToJpkInvoices(supabase, issuedRows),
-    mapRowsToJpkInvoices(supabase, receivedRows),
+    mapRowsToJpkInvoices(supabase, issuedRows, params.tenantId),
+    mapRowsToJpkInvoices(supabase, receivedRows, params.tenantId),
   ]);
 
   return { issuer, issuedInvoices, receivedInvoices };
@@ -96,7 +96,7 @@ async function fetchInvoiceRows(
     .from('invoices')
     .select('*')
     .eq('tenant_id', params.tenantId)
-    .eq('direction', params.direction)
+    .eq('direction', params.direction === 'issued' ? 'outgoing' : 'incoming')
     .eq('ksef_status', 'accepted')
     .gte('issue_date', params.periodStart)
     .lte('issue_date', params.periodEnd)
@@ -118,6 +118,7 @@ async function fetchInvoiceRows(
 async function mapRowsToJpkInvoices(
   supabase: ReturnType<typeof createAdminClient>,
   rows: InvoiceRow[],
+  tenantId: string,
 ): Promise<JpkInvoice[]> {
   if (rows.length === 0) return [];
 
@@ -125,7 +126,7 @@ async function mapRowsToJpkInvoices(
   // jeden SELECT po `invoices`, drugi po `invoice_line_items`. Promise.all
   // ścina latencję per direction o ~50% przy paczkach miesięcznych.
   const [parentNumberById, linesByInvoiceId] = await Promise.all([
-    fetchParentInvoiceNumbers(supabase, rows),
+    fetchParentInvoiceNumbers(supabase, rows, tenantId),
     resolveLinesForInvoices(supabase, rows),
   ]);
 
@@ -137,6 +138,7 @@ async function mapRowsToJpkInvoices(
 async function fetchParentInvoiceNumbers(
   supabase: ReturnType<typeof createAdminClient>,
   rows: InvoiceRow[],
+  tenantId: string,
 ): Promise<Map<string, string>> {
   const ids = [
     ...new Set(
@@ -151,12 +153,18 @@ async function fetchParentInvoiceNumbers(
   const { data, error } = await supabase
     .from('invoices')
     .select('id, internal_number, ksef_number')
+    .eq('tenant_id', tenantId)
     .in('id', ids);
 
   if (error) throw new Error(error.message);
 
   for (const p of data ?? []) {
     map.set(p.id, p.internal_number ?? p.ksef_number ?? '');
+  }
+  // A parent UUID is writable invoice data, not proof of ownership.
+  // Missing/foreign parents must not produce an incomplete accounting export.
+  if (map.size !== ids.length) {
+    throw new Error('Linked invoice not found in organization');
   }
   return map;
 }

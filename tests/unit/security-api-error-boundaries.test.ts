@@ -77,7 +77,7 @@ beforeEach(() => {
   vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'fake-stripe-secret');
   vi.stubEnv('RESEND_WEBHOOK_SECRET', 'whsec_' + svixKey.toString('base64'));
   mocks.captureException.mockReturnValue(ERROR_ID);
-  mocks.claim.mockResolvedValue({ claimed: true });
+  mocks.claim.mockResolvedValue({ state: 'claimed', token: '11111111-1111-4111-8111-111111111111' });
   mocks.finalize.mockResolvedValue(undefined);
   mocks.handler.mockResolvedValue(undefined);
   mocks.constructEvent.mockReturnValue({
@@ -104,7 +104,7 @@ describe('SEC-A-01: HTTP responses never expose internal exception messages', ()
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: 'Handler failed', errorId: ERROR_ID });
     expect(mocks.captureException).toHaveBeenCalledWith(expect.any(Error), expect.any(Object));
-    expect(mocks.finalize).toHaveBeenCalledWith('evt_test', 'failed', PRIVATE_ERROR);
+    expect(mocks.finalize).toHaveBeenCalledWith('evt_test', '11111111-1111-4111-8111-111111111111', 'failed', 'handler_failed');
   });
 
   it('preserves a safe retry response when recording a Stripe handler failure also fails', async () => {

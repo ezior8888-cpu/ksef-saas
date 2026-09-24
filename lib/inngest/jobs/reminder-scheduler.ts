@@ -66,6 +66,7 @@ export async function runReminderScheduler({ step }: JobContext) {
         const { state } = await computeFingerprint(
           'payment.chase',
           payload,
+          invoice.tenant_id,
         );
 
         const outstanding =

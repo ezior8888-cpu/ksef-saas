@@ -1,0 +1,6 @@
+title = "FaktFlow secret scanning"
+
+# Pełny zestaw reguł dostawcy. Bez wykluczania całych testów lub dokumentacji.
+# Każdy przyszły wyjątek wymaga konkretnego trafienia i uzasadnienia w dzienniku.
+[extend]
+useDefault = true

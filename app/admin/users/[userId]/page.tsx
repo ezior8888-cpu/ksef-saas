@@ -49,7 +49,7 @@ export default async function AdminUserDetailPage(props: {
   const { userId } = await props.params;
   const [detail, payments] = await Promise.all([
     getAdminUserDetail(userId),
-    listUserPayments(userId).catch(() => []),
+    listUserPayments(userId),
   ]);
   if (!detail) notFound();
 

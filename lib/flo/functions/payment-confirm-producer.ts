@@ -84,7 +84,7 @@ export interface PaymentConfirmSources {
    * Fakty faktury do odcisku. Produkcyjnie to `readState` z `fingerprint.ts`,
    * czyli dokładnie ten odczyt, który zrobi re-walidacja przy kliknięciu.
    */
-  readInvoiceState: (invoiceId: string) => Promise<FloState>;
+  readInvoiceState: (invoiceId: string, tenantId: string) => Promise<FloState>;
   /** Globalny wyłącznik — wstrzykiwany tylko w testach. */
   readGlobalKill?: () => Promise<boolean>;
 }
@@ -92,7 +92,7 @@ export interface PaymentConfirmSources {
 export function productionPaymentConfirmSources(): PaymentConfirmSources {
   return {
     readOverdueInvoices,
-    readInvoiceState: (invoiceId) => readState(KIND, { invoiceId }),
+    readInvoiceState: (invoiceId, tenantId) => readState(KIND, { invoiceId }, tenantId),
   };
 }
 
@@ -288,7 +288,7 @@ async function askAbout(
   sources: PaymentConfirmSources,
   keepExpiresAt?: Date,
 ): Promise<'created' | 'disabled' | 'muted' | 'skipped'> {
-  const state = await sources.readInvoiceState(invoiceId);
+  const state = await sources.readInvoiceState(invoiceId, tenantId);
 
   // `null`, gdy według tego odczytu nie ma o co pytać: faktura zniknęła,
   // została opłacona, wstrzymana albo przestała być przyjęta przez KSeF.
