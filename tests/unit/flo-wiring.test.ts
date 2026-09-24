@@ -245,6 +245,30 @@ describe('dług „bramka prawna" zgadza się z kodem', () => {
   });
 });
 
+describe('bramka przed odczytem nie wycina trybu cichego', () => {
+  it('żaden producent nie kończy na gołym `!verdict.enabled`', () => {
+    // 24.09: sześciu producentów miało `if (!verdict.enabled) return` przed
+    // odczytem danych. Oszczędność rozsądna — tylko że obejmowała też konto
+    // POZA KANARKIEM, czyli dziś każde konto na produkcji. Tryb cichy nie
+    // zapisał dla tych reguł ani jednego wpisu, a testy były zielone.
+    //
+    // Testy producentów łapią powrót błędu w ISTNIEJĄCYCH regułach. Ten
+    // łapie go w regule, której jeszcze nie ma: bramka ma iść przez
+    // `shouldCompute`, które przepuszcza kanarka do liczenia.
+    const goleBramki = /if\s*\(\s*!\s*verdict\.enabled\s*\)/;
+
+    const winni = PLIKI_FLO.filter((plik) => plik.startsWith('lib/flo/functions/')).filter(
+      (plik) => goleBramki.test(KOD.get(plik) ?? ''),
+    );
+
+    expect(
+      winni,
+      'Bramka przed odczytem wycina też kanarka — użyj shouldCompute(verdict) ' +
+        'z lib/flo/kind-switch.ts, inaczej tryb cichy tej reguły nie zbierze nic.',
+    ).toEqual([]);
+  });
+});
+
 describe('każdy przebieg reguły jest w pulsie', () => {
   it('nowy producent bez wpisu w tablicy RULES nie przejdzie', () => {
     // K1.3 zrobiło z pulsu tablicę, żeby nowa reguła była jedną pozycją.
