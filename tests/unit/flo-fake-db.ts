@@ -51,6 +51,11 @@ const yieldToOthers = () => Promise.resolve();
  */
 const INSERT_DEFAULTS: Partial<Record<keyof Tables, Row>> = {
   flo_proposals: { status: 'open' },
+  // Postgres daje tu NULL, nie brak pola. Atrapa zostawiająca `undefined`
+  // sprawiała, że `summarizeShadow` (porównuje `=== null`) liczyła wpis
+  // oczekujący jako rozstrzygnięty i nietrafiony — czyli test pokazywałby
+  // 0% trafności tam, gdzie produkcja pokazuje „jeszcze nie wiadomo".
+  flo_shadow: { matched: null, actual: null },
 };
 
 export function createFakeDb(seed: Partial<Tables> = {}): FakeDb {

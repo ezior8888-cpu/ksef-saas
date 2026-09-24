@@ -16,7 +16,7 @@ const auth = vi.hoisted(() => ({
   requireAdmin: vi.fn(async () => ({ userId: 'admin-1', email: 'admin@faktflow.pl' })),
 }));
 const audit = vi.hoisted(() => ({
-  logAuditSystem: vi.fn(async (_entry: unknown) => {}),
+  logAuditSystem: vi.fn<(entry: unknown) => Promise<void>>(),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));

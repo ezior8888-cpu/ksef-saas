@@ -3931,3 +3931,123 @@ Nic automatycznie. Odsłonięcie O-01 dalej wymaga najpierw scalenia stosu
 i wdrożenia — producenta nie ma na `main`. Zmienia się tylko to, że gdy już
 tam będzie, odsłonięcie jest kliknięciem w panelu, a nie `INSERT`-em na
 produkcji.
+
+## 2026-09-24 · Tryb cichy wreszcie coś zapisuje
+
+Przy okazji przycisku odsłaniania wyszło, że **`recordShadow` i `settleShadow`
+wołały wyłącznie testy.** Tabela `flo_shadow` stała pusta od powstania, panel
+pokazywał „Tryb cichy nie zebrał jeszcze ani jednej propozycji", a bramka
+gotowości (`isReadyToReveal`) liczyła trafność z zera — przy progu 100
+propozycji dla promienia 1 nie mogła zapalić się na zielono **nigdy i dla
+żadnej funkcji.**
+
+Domykało to kółko: rodzaj na etapie 0 nie zostawia śladu (celowo — `disabled`
+przed jakimkolwiek zapisem), więc funkcja w kanarku nie mogła zebrać danych,
+które są warunkiem wyjścia z kanarka.
+
+### Granica: które milczenie wolno zmierzyć
+
+Agent milczy z czterech różnych powodów i **tylko jeden z nich da się
+zmierzyć**:
+
+| powód milczenia | mierzymy? | dlaczego |
+|---|---|---|
+| konto poza kanarkiem | **tak** | agent wie, co by powiedział, i milczy wyłącznie dlatego, że funkcja nie wyszła z ukrycia |
+| wyłącznik globalny | nie | mierzylibyśmy awarię, nie trafność |
+| blokada z kodu (prawo) | nie | nie mamy prawa nawet POLICZYĆ, co byśmy powiedzieli |
+| operator wypisał konto | nie | to decyzja człowieka |
+| klient wyciszył rodzaj | nie | cisza jest prawdziwą odpowiedzią, nie brakiem danych |
+
+`SwitchVerdict.decidedBy` już to rozróżniał — wystarczyło z tego skorzystać:
+`shadowOnly = !verdict.enabled && verdict.decidedBy === 'canary'`.
+
+Wpis powstaje **po** bramce podatkowej i **po** wyciszeniu, nie zaraz po
+kanarku. Zapis wyżej liczyłby propozycje, których agent i tak by nie
+postawił, i zawyżał próbkę o przypadki, w których prawdziwą odpowiedzią
+jest milczenie.
+
+### To NIE jest złamanie zasady „bez śladu w bazie klienta"
+
+`flo_shadow` jest tabelą operatorską: klucz tematu i odcisk, bez tytułu, bez
+treści karty, bez nazwy kontrahenta. Żaden jej wiersz nigdy nie stanie się
+kartą w wątku klienta — a zasada z `createProposal` mówi właśnie o kartach,
+które po włączeniu funkcji wysypałyby się lawiną sprzed tygodni.
+
+### Jedna sprawa to jeden wpis
+
+Puls chodzi codziennie, a zaległa faktura potrafi wisieć miesiąc. Bez
+deduplikacji jedna zaległość dałaby trzydzieści wpisów, a **„sto propozycji"
+z bramki gotowości oznaczałoby trzy sprawy widziane trzydzieści razy** —
+próbka wyglądałaby na dużą i nie mówiła nic.
+
+Powtórkę rozpoznajemy po kluczu tematu wśród wpisów **nierozstrzygniętych**:
+ten sam kontrahent zalegający drugi raz w roku to druga sprawa, nie duplikat.
+
+### Atrapa bazy kłamała
+
+`summarizeShadow` porównuje `matched === null`, a atrapa zostawiała po
+wstawieniu `undefined`. Efekt: wpis oczekujący liczył się jako
+**rozstrzygnięty i nietrafiony** — test pokazywałby 0% trafności tam, gdzie
+produkcja pokazuje „jeszcze nie wiadomo". Atrapa ma teraz `matched: null`
+i `actual: null` w wartościach domyślnych, jak Postgres.
+
+Poprawiony został jeden zastany test (`toBeUndefined` → `toBeNull`).
+
+### `accuracyByKind` czytało bez stronicowania
+
+Ta tabela urośnie jako pierwsza w całym agencie — dostaje wpis z każdego
+przebiegu pulsu na każdym koncie poza kanarkiem. Ucięta odpowiedź PostgREST-a
+zaniżałaby trafność po cichu. Teraz strony po 1000, jak `readActiveTenantIds`
+i `readTodayCardCounts`. Osobny test na 1200 wpisach.
+
+### Panel
+
+Doszła kolumna **„Zebrane"** (rozstrzygnięte + oczekujące). Bez niej operator
+przez najbliższe tygodnie widziałby same zera i „za mała próbka", nie
+wiedząc, czy tryb cichy w ogóle działa.
+
+### CZEGO TO NIE ROBI — przeczytaj, zanim uznasz temat za zamknięty
+
+**Bramka gotowości nadal nie zapali się na zielono.** To jest połowa roboty:
+wpisy powstają (`pending` rośnie), ale nikt ich nie rozstrzyga, więc
+`settled` zostaje zerem.
+
+Druga połowa to `settleShadow` i zadanie porównujące: „czy klient zrobił to
+sam?". To jest robota z decyzjami produktowymi, nie techniczna:
+
+- ile czekamy, zanim uznamy „nie zrobił" (tydzień? do końca miesiąca?),
+- co liczy się jako „to samo" dla każdej reguły z osobna,
+- skąd bierzemy kwotę i encję do porównania — dziś wpis ma sam klucz tematu
+  i odcisk, bo `topicKey` i tak niesie identyfikator faktury
+  (`payment.confirm:${invoiceId}`), a zgadywanie kwoty przy zapisie byłoby
+  wpisaniem do bazy czegoś, czego nikt nie sprawdził.
+
+**To jest pozycja planu do decyzji Bartosza, nie rzecz do dopisania po cichu.**
+
+### Koszt
+
+Na konto poza kanarkiem dochodzi, przy sprawie, o której agent chciałby
+powiedzieć: jeden odczyt wyciszeń, jeden odczyt deduplikacji i ewentualnie
+jeden zapis. Ograniczone tym, ile reguł ma dziennie coś do powiedzenia —
+dziś najwyżej jedna karta na regułę na konto, czyli ≤5 dodatkowych zapytań
+na konto na dobę.
+
+Drobiazg do zapamiętania: producenci sprawdzają dzienny limit PRZED
+`createProposal`, więc konto pod sufitem limitu nie zapisze też wpisu trybu
+cichego. Dziś bez znaczenia (nic nie jest odsłonięte, więc limit się nie
+zapełnia), ale po odsłonięciu pierwszej funkcji to zacznie lekko zaniżać
+próbkę.
+
+### Weryfikacja
+
+- `flo-shadow-wiring.test.ts` — 14 testów: granica „które milczenie",
+  zawartość wpisu, deduplikacja, stronicowanie.
+- Test mutacyjny **9/9 za pierwszym podejściem**: mierzenie każdego milczenia,
+  brak zapisu, zapis mimo wyciszenia, brak deduplikacji, deduplikacja bez
+  klucza tematu / obejmująca rozstrzygnięte / ignorująca konto, treść karty
+  we wpisie, czytanie tylko pierwszej strony.
+- `tsc --noEmit` czysto · eslint 0 błędów (29 ostrzeżeń, wszystkie zastane) ·
+  vitest **1348 zielonych, 7 pominiętych** · `next build` przechodzi.
+
+Przy okazji: poprawione ostrzeżenie lintera, które sam wprowadziłem
+w testach przycisku odsłaniania.

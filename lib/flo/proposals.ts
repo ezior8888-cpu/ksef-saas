@@ -30,6 +30,7 @@ import { isSilenced } from '@/lib/flo/decisions';
 import { isKindEnabled } from '@/lib/flo/flags';
 import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
 import { FLO_KIND_VARIANT } from '@/lib/flo/kind-variant';
+import { recordShadow } from '@/lib/flo/shadow';
 import { isTaxKind, taxGateOpen } from '@/lib/flo/tax-profile';
 import {
   isFloProposalKind,
@@ -103,7 +104,23 @@ export async function createProposal(
     db,
     readGlobalKill,
   );
-  if (!verdict.enabled) {
+
+  // TRYB CICHY (krok 35 toru B). Konto poza kanarkiem to JEDYNY powód
+  // wyłączenia, przy którym agent chciałby mówić i wie dokładnie co —
+  // a milczy wyłącznie dlatego, że funkcja nie wyszła jeszcze z ukrycia.
+  // Tylko tam da się zmierzyć trafność PRZED odsłonięciem.
+  //
+  // Pozostałych powodów mierzyć nie wolno: przy blokadzie prawnej nie mamy
+  // prawa nawet policzyć, co byśmy powiedzieli, a przy wyłączniku globalnym
+  // i wypisaniu konta przez operatora liczylibyśmy decyzję człowieka.
+  //
+  // To NIE jest złamanie zasady „funkcja wyłączona nie zostawia śladu
+  // w bazie klienta". `flo_shadow` jest tabelą operatorską: nie ma treści
+  // karty, nie ma danych kontrahenta i żaden jej wiersz nigdy nie stanie
+  // się kartą w wątku klienta.
+  const shadowOnly = !verdict.enabled && verdict.decidedBy === 'canary';
+
+  if (!verdict.enabled && !shadowOnly) {
     return { status: 'disabled' };
   }
 
@@ -126,6 +143,25 @@ export async function createProposal(
   );
   if (silence.silenced) {
     return { status: 'muted' };
+  }
+
+  // Wpis trybu cichego powstaje DOPIERO TUTAJ — po bramce podatkowej
+  // i po wyciszeniu. Zapis wyżej liczyłby propozycje, których agent i tak
+  // by nie postawił, i zawyżałby próbkę bramki gotowości o przypadki,
+  // w których prawdziwą odpowiedzią jest milczenie.
+  if (shadowOnly) {
+    await recordShadow(
+      {
+        tenantId: input.tenantId,
+        kind: input.kind,
+        proposal: {
+          topicKey: input.topicKey,
+          fingerprint: input.fingerprint,
+        },
+      },
+      db,
+    );
+    return { status: 'disabled' };
   }
 
   const existing = await db

@@ -167,6 +167,7 @@ export default async function AdminFloPage() {
               <tr>
                 <th className="p-2 font-medium">Funkcja</th>
                 <th className="p-2 font-medium">Promień</th>
+                <th className="p-2 text-right font-medium">Zebrane</th>
                 <th className="p-2 text-right font-medium">Rozstrzygnięte</th>
                 <th className="p-2 text-right font-medium">Trafność</th>
                 <th className="p-2 font-medium">Werdykt</th>
@@ -175,7 +176,7 @@ export default async function AdminFloPage() {
             <tbody>
               {accuracy.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-4 text-muted-foreground">
+                  <td colSpan={6} className="p-4 text-muted-foreground">
                     Tryb cichy nie zebrał jeszcze ani jednej propozycji.
                   </td>
                 </tr>
@@ -187,6 +188,9 @@ export default async function AdminFloPage() {
                       <td className="p-2">{floKindLabel(stat.kind)}</td>
                       <td className="p-2 tabular-nums">
                         {stat.radius}
+                      </td>
+                      <td className="p-2 text-right tabular-nums">
+                        {stat.settled + stat.pending}
                       </td>
                       <td className="p-2 text-right tabular-nums">
                         {stat.settled}
