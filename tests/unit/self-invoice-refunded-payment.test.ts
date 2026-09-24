@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   insert: vi.fn(),
   audit: vi.fn(),
   capture: vi.fn(),
+  derivePlan: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: mocks.from }) }));
@@ -16,6 +17,7 @@ vi.mock('@/lib/billing/self-invoice', () => ({
   insertSelfInvoice: mocks.insert,
 }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mocks.audit }));
+vi.mock('@/lib/stripe/billed-plan', () => ({ deriveBilledPlanFromPaidInvoice: mocks.derivePlan }));
 vi.mock('@sentry/nextjs', () => ({ captureException: mocks.capture }));
 vi.mock('@/lib/jobs/inngest-adapter', () => ({ toJobContext: vi.fn() }));
 vi.mock('@/lib/inngest/client', () => ({
@@ -38,6 +40,11 @@ const event = {
 
 let paymentStatus: string;
 let statusReadError: boolean;
+let subscriptionPlan: string | null;
+let subscriptionTenantId: string;
+let paymentStripeInvoiceId: string;
+let subscriptionStripeId: string;
+let subscriptionCustomerId: string;
 const sentEvent = vi.fn();
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 const context: JobContext = {
@@ -55,7 +62,30 @@ beforeEach(() => {
   vi.clearAllMocks();
   paymentStatus = 'succeeded';
   statusReadError = false;
+  subscriptionPlan = 'annual';
+  subscriptionTenantId = event.tenantId;
+  paymentStripeInvoiceId = event.stripeInvoiceId;
+  subscriptionStripeId = 'sub_stripe_1';
+  subscriptionCustomerId = 'cus_stripe_1';
+  mocks.derivePlan.mockResolvedValue('monthly');
   mocks.from.mockImplementation((table: string) => {
+    if (table === 'subscriptions') {
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: subscriptionPlan === null ? null : {
+                plan: subscriptionPlan,
+                tenant_id: subscriptionTenantId,
+                stripe_subscription_id: subscriptionStripeId,
+                stripe_customer_id: subscriptionCustomerId,
+              },
+              error: null,
+            }),
+          }),
+        }),
+      };
+    }
     if (table !== 'stripe_payments') throw new Error('Unexpected table: ' + table);
     return {
       select: (columns: string) => ({
@@ -71,7 +101,14 @@ beforeEach(() => {
               status: paymentStatus,
               paid_at: event.paidAt,
               vat_invoice_id: null,
-              subscription_id: null,
+              subscription_id: 'subscription-1',
+              stripe_invoice_id: paymentStripeInvoiceId,
+              currency: event.currency,
+              last_webhook_payload: {
+                id: paymentStripeInvoiceId,
+                currency: event.currency,
+                amount_paid: event.amountCents,
+              },
             },
             error: null,
           };
@@ -115,7 +152,14 @@ describe('VAT self-invoice for a delayed payment job', () => {
       status: 'succeeded',
       paid_at: event.paidAt,
       vat_invoice_id: null,
-      subscription_id: null,
+      subscription_id: 'subscription-1',
+      stripe_invoice_id: event.stripeInvoiceId,
+      currency: event.currency,
+      last_webhook_payload: {
+        id: event.stripeInvoiceId,
+        currency: event.currency,
+        amount_paid: event.amountCents,
+      },
     };
     const resumedContext: JobContext = {
       ...context,
@@ -144,6 +188,123 @@ describe('VAT self-invoice for a delayed payment job', () => {
     expect(mocks.build).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
     expect(sentEvent).not.toHaveBeenCalled();
+  });
+
+  it('stops before drafting a VAT invoice when payment lacks a subscription', async () => {
+    const missingSubscriptionContext: JobContext = {
+      ...context,
+      step: {
+        ...context.step,
+        run: async <T>(name: string, fn: () => Promise<T> | T): Promise<T> =>
+          name === 'load-payment'
+            ? {
+                id: event.paymentId,
+                tenant_id: event.tenantId,
+                amount_cents: event.amountCents,
+                status: 'succeeded',
+                paid_at: event.paidAt,
+                vat_invoice_id: null,
+                subscription_id: null,
+                stripe_invoice_id: event.stripeInvoiceId,
+                currency: event.currency,
+                last_webhook_payload: {
+                  id: event.stripeInvoiceId,
+                  currency: event.currency,
+                  amount_paid: event.amountCents,
+                },
+              } as T
+            : fn(),
+      },
+    };
+
+    await expect(runSelfInvoicePayment(event, missingSubscriptionContext)).rejects.toThrow(
+      'Payment subscription reference missing',
+    );
+    expect(mocks.build).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(sentEvent).not.toHaveBeenCalled();
+  });
+
+  it('stops before drafting a VAT invoice when the subscription row is missing', async () => {
+    subscriptionPlan = null;
+    await expect(runSelfInvoicePayment(event, context)).rejects.toThrow(
+      'Payment subscription binding requires reconciliation',
+    );
+    expect(mocks.derivePlan).not.toHaveBeenCalled();
+    expect(mocks.build).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(sentEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects a subscription bound to a different tenant', async () => {
+    subscriptionTenantId = 'other-tenant';
+    await expect(runSelfInvoicePayment(event, context)).rejects.toThrow(
+      'Payment subscription binding requires reconciliation',
+    );
+    expect(mocks.derivePlan).not.toHaveBeenCalled();
+    expect(mocks.build).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it.each(['subscription', 'customer'])(
+    'rejects a missing Stripe %s identifier before invoice drafting',
+    async (identifier) => {
+      if (identifier === 'subscription') subscriptionStripeId = '';
+      else subscriptionCustomerId = '';
+      await expect(runSelfInvoicePayment(event, context)).rejects.toThrow(
+        'Payment subscription binding requires reconciliation',
+      );
+      expect(mocks.derivePlan).not.toHaveBeenCalled();
+      expect(mocks.build).not.toHaveBeenCalled();
+      expect(mocks.insert).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a payment invoice ID that differs from the queued event', async () => {
+    paymentStripeInvoiceId = 'in_other';
+    await expect(runSelfInvoicePayment(event, context)).rejects.toThrow(
+      'Payment identity requires reconciliation',
+    );
+    expect(mocks.derivePlan).not.toHaveBeenCalled();
+    expect(mocks.build).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it('uses the paid invoice plan even when the current subscription is annual', async () => {
+    subscriptionPlan = 'annual';
+    mocks.derivePlan.mockResolvedValue('monthly');
+
+    await expect(runSelfInvoicePayment(event, context)).resolves.toMatchObject({
+      success: true,
+    });
+
+    expect(mocks.derivePlan).toHaveBeenCalledWith({
+      snapshot: {
+        id: event.stripeInvoiceId,
+        currency: event.currency,
+        amount_paid: event.amountCents,
+      },
+      stripeInvoiceId: event.stripeInvoiceId,
+      stripeSubscriptionId: subscriptionStripeId,
+      stripeCustomerId: subscriptionCustomerId,
+      amountCents: event.amountCents,
+      currency: event.currency,
+    });
+    expect(mocks.build).toHaveBeenCalledWith(
+      event.tenantId,
+      expect.objectContaining({ plan: 'monthly' }),
+    );
+  });
+
+  it('stops before drafting when the invoice snapshot cannot establish a plan', async () => {
+    mocks.derivePlan.mockImplementation(() => {
+      throw new Error('Paid Stripe invoice requires manual reconciliation');
+    });
+    await expect(runSelfInvoicePayment(event, context)).rejects.toThrow(
+      'Paid Stripe invoice requires manual reconciliation',
+    );
+    expect(mocks.build).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
   });
 
   it('still creates and queues a VAT invoice for a succeeded payment', async () => {

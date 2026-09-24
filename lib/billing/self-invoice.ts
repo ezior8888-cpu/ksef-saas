@@ -179,13 +179,14 @@ export interface InsertResult {
  * Zapisuje fakturę self-invoicing do `invoices` + `invoice_line_items`.
  * Tenant_id = operator (sprzedawca). Buyer_data zawiera customer.
  *
- * Idempotency: PK `uq_invoices_tenant_internal_number` (00028) chroni przed
- * duplikatami — przy ponownym wywołaniu z tym samym `internalNumber`
- * dostajemy 23505 error → wracamy `null`.
+ * Idempotency: a duplicate number is reused only after verifying the full
+ * Stripe invoice ID, amount, buyer and saved line item. Other collisions
+ * stop for manual reconciliation.
  */
 export async function insertSelfInvoice(
   invoice: Invoice,
   operatorTenantId: string,
+  stripeInvoiceId: string,
 ): Promise<InsertResult | null> {
   const supabase = createAdminClient();
 
@@ -218,18 +219,58 @@ export async function insertSelfInvoice(
     .single();
 
   if (invErr || !inserted) {
-    // 23505 = duplikat internalNumber = już wystawiony (retry przy webhook).
-    // Lookup existing i return jego ID.
+    // A number collision is not proof that this Stripe invoice was already
+    // billed: the human-readable number contains only the last eight ID chars.
     if (invErr?.code === '23505') {
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('invoices')
-        .select('id')
+        .select('id, notes, fa3_data, gross_total, buyer_nip')
         .eq('tenant_id', operatorTenantId)
         .eq('internal_number', invoice.internalNumber)
         .maybeSingle();
-      return existing
-        ? { invoiceId: existing.id, internalNumber: invoice.internalNumber }
-        : null;
+      if (existingError || !existing) {
+        throw new Error('Self-invoice number collision requires reconciliation');
+      }
+
+      const expectedNote = `Faktura za subskrypcję FaktFlow. Płatność Stripe: ${stripeInvoiceId}.`;
+      const storedDraft = existing.fa3_data;
+      const storedBuyer = storedDraft !== null && typeof storedDraft === 'object' &&
+        !Array.isArray(storedDraft) ? storedDraft.buyer : null;
+      const storedBuyerNip = storedBuyer !== null && typeof storedBuyer === 'object' &&
+        !Array.isArray(storedBuyer) ? storedBuyer.nip : null;
+      if (!stripeInvoiceId.startsWith('in_') || invoice.notes !== expectedNote ||
+          existing.notes !== expectedNote ||
+          storedDraft === null || typeof storedDraft !== 'object' || Array.isArray(storedDraft) ||
+          storedDraft.notes !== expectedNote ||
+          storedDraft.internalNumber !== invoice.internalNumber ||
+          storedDraft.grossTotal !== invoice.grossTotal ||
+          storedBuyerNip !== (invoice.buyer.nip ?? null) ||
+          existing.gross_total !== invoice.grossTotal ||
+          existing.buyer_nip !== (invoice.buyer.nip ?? null)) {
+        throw new Error('Self-invoice number collision requires reconciliation');
+      }
+
+      // A prior attempt may have saved the invoice but failed to save its line.
+      const { data: existingLines, error: linesReadError } = await supabase
+        .from('invoice_line_items')
+        .select('gross_amount, net_amount, vat_amount, quantity, name, vat_rate, unit_price_net, unit')
+        .eq('invoice_id', existing.id)
+        .limit(2);
+      const expectedLine = invoice.lines[0];
+      const existingLine = existingLines?.[0];
+      if (linesReadError || !expectedLine || invoice.lines.length !== 1 ||
+          existingLines?.length !== 1 || !existingLine ||
+          existingLine.gross_amount !== expectedLine.grossAmount ||
+          existingLine.net_amount !== expectedLine.netAmount ||
+          existingLine.vat_amount !== expectedLine.vatAmount ||
+          existingLine.quantity !== expectedLine.quantity ||
+          existingLine.name !== expectedLine.name ||
+          existingLine.vat_rate !== expectedLine.vatRate ||
+          existingLine.unit_price_net !== expectedLine.unitPriceNet ||
+          existingLine.unit !== expectedLine.unit) {
+        throw new Error('Self-invoice number collision requires reconciliation');
+      }
+      return { invoiceId: existing.id, internalNumber: invoice.internalNumber };
     }
     throw new Error(`self-invoice insert failed: ${invErr?.message}`);
   }

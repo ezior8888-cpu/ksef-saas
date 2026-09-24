@@ -6,7 +6,11 @@ export type RetryablePreEffectWebhookCode =
   | 'subscription_lookup_failed'
   | 'subscription_not_found'
   | 'tenant_lookup_failed'
-  | 'tenant_id_missing';
+  | 'tenant_id_missing'
+  | 'subscription_sync_invalid'
+  | 'subscription_sync_claim_failed'
+  | 'subscription_sync_busy'
+  | 'subscription_sync_lookup_failed';
 
 export class RetryablePreEffectWebhookError extends Error {
   readonly code: RetryablePreEffectWebhookCode;

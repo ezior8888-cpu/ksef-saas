@@ -5,13 +5,8 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   paymentRead: vi.fn(),
   paymentUpsert: vi.fn(),
-  subscriptionRead: vi.fn(),
-  subscriptionUpsert: vi.fn(),
-  subscriptionUpdate: vi.fn(),
-  subscriptionDeleteResult: vi.fn(),
   mapInvoice: vi.fn(),
-  mapSubscription: vi.fn(),
-  resolveTenant: vi.fn(),
+  syncSubscription: vi.fn(),
   sendJob: vi.fn(),
   audit: vi.fn(),
   track: vi.fn(),
@@ -22,8 +17,9 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/stripe/event-mapping', () => ({
   mapInvoiceToPaymentRow: mocks.mapInvoice,
-  mapSubscriptionToRow: mocks.mapSubscription,
-  resolveTenantIdFromSubscription: mocks.resolveTenant,
+}));
+vi.mock('@/lib/stripe/subscription-sync', () => ({
+  syncCurrentStripeSubscription: mocks.syncSubscription,
 }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: mocks.sendJob }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mocks.audit }));
@@ -70,42 +66,20 @@ beforeEach(() => {
     tenantId: 'tenant-a',
     row: { stripe_invoice_id: invoice.id, status: 'failed', failure_reason: 'card declined' },
   });
-  mocks.mapSubscription.mockReturnValue({
-    tenant_id: 'tenant-a',
-    stripe_subscription_id: subscription.id,
-    stripe_customer_id: 'cus_ordered',
-    stripe_price_id: 'price_monthly',
+  mocks.syncSubscription.mockResolvedValue({
+    subscription,
+    tenantId: 'tenant-a',
     status: 'active',
   });
-  mocks.resolveTenant.mockResolvedValue('tenant-a');
   mocks.paymentRead.mockResolvedValue({ data: null, error: null });
   mocks.paymentUpsert.mockReturnValue({
     select: async () => ({ data: [{ id: 'payment-local', status: 'failed' }], error: null }),
-  });
-  mocks.subscriptionRead.mockResolvedValue({ data: { status: 'canceled' }, error: null });
-  mocks.subscriptionUpsert.mockReturnValue({
-    select: async () => ({ data: [{ status: 'active' }], error: null }),
-  });
-  mocks.subscriptionDeleteResult.mockResolvedValue({
-    data: { id: 'local-subscription', status: 'canceled' }, error: null,
-  });
-  mocks.subscriptionUpdate.mockReturnValue({
-    eq: () => ({
-      eq: () => ({ select: () => ({ maybeSingle: mocks.subscriptionDeleteResult }) }),
-    }),
   });
   mocks.from.mockImplementation((table: string) => {
     if (table === 'stripe_payments') {
       return {
         select: () => ({ eq: () => ({ maybeSingle: mocks.paymentRead }) }),
         upsert: mocks.paymentUpsert,
-      };
-    }
-    if (table === 'subscriptions') {
-      return {
-        select: () => ({ eq: () => ({ maybeSingle: mocks.subscriptionRead }) }),
-        upsert: mocks.subscriptionUpsert,
-        update: mocks.subscriptionUpdate,
       };
     }
     throw new Error('Unexpected table: ' + table);
@@ -190,100 +164,83 @@ describe('Stripe webhook event ordering', () => {
     expect(mocks.track).toHaveBeenCalledOnce();
   });
 
-  it('creates a canceled tombstone when deleted arrives before created', async () => {
-    mocks.subscriptionDeleteResult.mockResolvedValue({ data: null, error: null });
-    mocks.subscriptionUpsert.mockReturnValue({
-      select: async () => ({
-        data: [{ id: 'local-subscription', tenant_id: 'tenant-a', status: 'canceled' }],
-        error: null,
+  it('uses a fresh canceled state for a delayed created event without false activation analytics', async () => {
+    const freshCanceled = {
+      ...subscription,
+      status: 'canceled',
+      items: { data: [{ price: { id: 'price_annual' } }] },
+    } as Stripe.Subscription;
+    mocks.syncSubscription.mockResolvedValue({
+      subscription: freshCanceled,
+      tenantId: 'tenant-a',
+      status: 'canceled',
+    });
+
+    await handleSubscriptionUpserted(subscription, true);
+
+    expect(mocks.syncSubscription).toHaveBeenCalledExactlyOnceWith(subscription.id);
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'billing.subscription.synced',
+      metadata: expect.objectContaining({
+        sourceEvent: 'created',
+        status: 'canceled',
+        priceId: 'price_annual',
       }),
+    }));
+    expect(mocks.track).not.toHaveBeenCalled();
+    expect(mocks.sendJob).not.toHaveBeenCalled();
+  });
+
+  it('tracks a created subscription only when the fetched state is live', async () => {
+    await handleSubscriptionUpserted(subscription, true);
+
+    expect(mocks.audit).toHaveBeenCalledOnce();
+    expect(mocks.track).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'subscription_created',
+      properties: expect.objectContaining({ status: 'active' }),
+    }));
+  });
+
+  it('records an update without announcing a new subscription', async () => {
+    await handleSubscriptionUpserted(subscription, false);
+
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ sourceEvent: 'updated' }),
+    }));
+    expect(mocks.track).not.toHaveBeenCalled();
+  });
+
+  it('records deletion only after syncing a currently canceled subscription', async () => {
+    mocks.syncSubscription.mockResolvedValue({
+      subscription: { ...subscription, status: 'canceled' },
+      tenantId: 'tenant-a',
+      status: 'canceled',
     });
 
     await handleSubscriptionDeleted(subscription);
 
-    expect(mocks.subscriptionUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({ tenant_id: 'tenant-a', status: 'canceled' }),
-      { onConflict: 'stripe_subscription_id', ignoreDuplicates: true },
-    );
+    expect(mocks.syncSubscription).toHaveBeenCalledExactlyOnceWith(subscription.id);
     expect(mocks.audit).toHaveBeenCalledOnce();
+    expect(mocks.track).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'subscription_canceled',
+    }));
     expect(mocks.sendJob).not.toHaveBeenCalled();
   });
 
-  it('does not emit cancellation effects for an existing other-tenant subscription', async () => {
-    mocks.subscriptionDeleteResult.mockResolvedValue({ data: null, error: null });
-    mocks.subscriptionUpsert.mockReturnValue({
-      select: async () => ({ data: [], error: null }),
-    });
-
+  it('does not announce cancellation when Stripe currently reports a live subscription', async () => {
     await expect(handleSubscriptionDeleted(subscription))
-      .rejects.toThrow('subscription delete not persisted for tenant');
-    expect(mocks.audit).not.toHaveBeenCalled();
-    expect(mocks.sendJob).not.toHaveBeenCalled();
-    expect(mocks.track).not.toHaveBeenCalled();
-  });
-
-  it('cancels a same-tenant row created during the tombstone race', async () => {
-    mocks.subscriptionDeleteResult
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({ data: { id: 'local-subscription', status: 'canceled' }, error: null });
-    mocks.subscriptionUpsert.mockReturnValue({
-      select: async () => ({ data: [], error: null }),
-    });
-
-    await handleSubscriptionDeleted(subscription);
-
-    expect(mocks.subscriptionDeleteResult).toHaveBeenCalledTimes(2);
-    expect(mocks.audit).toHaveBeenCalledOnce();
-  });
-
-  it('processes deletion only after updating the stored subscription', async () => {
-    await handleSubscriptionDeleted(subscription);
-
-    expect(mocks.audit).toHaveBeenCalledOnce();
-    expect(mocks.track).toHaveBeenCalledOnce();
-    expect(mocks.sendJob).not.toHaveBeenCalled();
-  });
-
-  it('suppresses a stale subscription update after persisted cancellation', async () => {
-    mocks.subscriptionUpsert.mockReturnValue({
-      select: async () => ({ data: [], error: null }),
-    });
-
-    await handleSubscriptionUpserted(subscription, false);
-
-    expect(mocks.subscriptionRead).toHaveBeenCalledOnce();
+      .rejects.toThrow('Deleted subscription event does not match current Stripe state');
     expect(mocks.audit).not.toHaveBeenCalled();
     expect(mocks.track).not.toHaveBeenCalled();
   });
 
-  it('retries an unexplained zero-row subscription upsert', async () => {
-    mocks.subscriptionUpsert.mockReturnValue({
-      select: async () => ({ data: [], error: null }),
-    });
-    mocks.subscriptionRead.mockResolvedValue({ data: null, error: null });
-
-    await expect(handleSubscriptionUpserted(subscription, false))
-      .rejects.toThrow('subscription upsert affected no row');
-    expect(mocks.audit).not.toHaveBeenCalled();
-  });
-
-  it('checks a returned terminal status before auditing a stale update', async () => {
-    mocks.subscriptionUpsert.mockReturnValue({
-      select: async () => ({ data: [{ status: 'canceled' }], error: null }),
-    });
-
-    await handleSubscriptionUpserted(subscription, false);
-
-    expect(mocks.audit).not.toHaveBeenCalled();
-    expect(mocks.track).not.toHaveBeenCalled();
-  });
   it.each([
     ['created', () => handleSubscriptionUpserted(subscription, true)],
     ['updated', () => handleSubscriptionUpserted(subscription, false)],
     ['deleted', () => handleSubscriptionDeleted(subscription)],
     ['trial ending', () => handleTrialWillEnd(subscription)],
-  ])('propagates a retryable missing-tenant failure before %s effects', async (_event, invoke) => {
-    mocks.resolveTenant.mockRejectedValue(new RetryablePreEffectWebhookError(
+  ])('propagates a retryable sync failure before %s effects', async (_event, invoke) => {
+    mocks.syncSubscription.mockRejectedValue(new RetryablePreEffectWebhookError(
       'tenant_id_missing', 'tenant not resolved',
     ));
 
@@ -295,12 +252,62 @@ describe('Stripe webhook event ordering', () => {
     expect(mocks.sendJob).not.toHaveBeenCalled();
   });
 
+  it('audits a trial-ending signal using the current Stripe trial date', async () => {
+    const liveTrial = {
+      ...subscription,
+      status: 'trialing',
+      trial_end: 1780003600,
+    } as Stripe.Subscription;
+    mocks.syncSubscription.mockResolvedValue({
+      subscription: liveTrial,
+      tenantId: 'tenant-a',
+      status: 'trialing',
+    });
+
+    await handleTrialWillEnd(subscription);
+
+    expect(mocks.syncSubscription).toHaveBeenCalledExactlyOnceWith(subscription.id);
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'billing.trial.will_end',
+      tenantId: 'tenant-a',
+      entityId: subscription.id,
+      metadata: { trialEnd: new Date(1780003600 * 1000).toISOString() },
+    }));
+    expect(mocks.track).not.toHaveBeenCalled();
+  });
+
+  it('ignores a delayed trial-ending signal after the current subscription was canceled', async () => {
+    mocks.syncSubscription.mockResolvedValue({
+      subscription: { ...subscription, status: 'canceled', trial_end: 1780003600 },
+      tenantId: 'tenant-a',
+      status: 'canceled',
+    });
+
+    await handleTrialWillEnd(subscription);
+
+    expect(mocks.syncSubscription).toHaveBeenCalledExactlyOnceWith(subscription.id);
+    expect(mocks.audit).not.toHaveBeenCalled();
+    expect(mocks.track).not.toHaveBeenCalled();
+    expect(mocks.sendJob).not.toHaveBeenCalled();
+  });
+
   it.each(['inngest', 'pgboss'] as const)(
     'finishes canceled and trial-ending webhook handlers without phantom queue events on %s',
     async (backend) => {
       vi.stubEnv('JOBS_BACKEND', backend);
       mocks.sendJob.mockRejectedValue(new Error('enqueue must not happen'));
 
+      mocks.syncSubscription
+        .mockResolvedValueOnce({
+          subscription: { ...subscription, status: 'canceled' },
+          tenantId: 'tenant-a',
+          status: 'canceled',
+        })
+        .mockResolvedValueOnce({
+          subscription: { ...subscription, status: 'trialing', trial_end: 1780003600 },
+          tenantId: 'tenant-a',
+          status: 'trialing',
+        });
       await expect(handleSubscriptionDeleted(subscription)).resolves.toBeUndefined();
       await expect(handleTrialWillEnd(subscription)).resolves.toBeUndefined();
 

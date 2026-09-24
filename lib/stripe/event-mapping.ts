@@ -37,7 +37,7 @@ export function mapSubscriptionStatus(raw: string | null | undefined): Subscript
   if (raw && VALID_SUBSCRIPTION_STATUSES.includes(raw as SubscriptionStatus)) {
     return raw as SubscriptionStatus;
   }
-  return 'incomplete';
+  throw new Error('Stripe subscription has an unrecognized status');
 }
 
 /**
@@ -45,10 +45,23 @@ export function mapSubscriptionStatus(raw: string | null | undefined): Subscript
  * (`STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_ANNUAL`) — bez tego nie wiemy
  * który Price ID = który plan.
  */
+export function getConfiguredStripePriceIds(): { monthly: string; annual: string } {
+  const monthly = process.env.STRIPE_PRICE_MONTHLY?.trim();
+  const annual = process.env.STRIPE_PRICE_ANNUAL?.trim();
+  if (!monthly || !annual) {
+    throw new Error('Stripe monthly and annual Price IDs must both be configured');
+  }
+  if (monthly === annual) {
+    throw new Error('Stripe monthly and annual Price IDs must be distinct');
+  }
+  return { monthly, annual };
+}
+
 export function mapPriceIdToPlan(priceId: string | null | undefined): SubscriptionPlan {
-  if (!priceId) return 'monthly';
-  if (priceId === process.env.STRIPE_PRICE_ANNUAL) return 'annual';
-  return 'monthly';
+  const configured = getConfiguredStripePriceIds();
+  if (priceId === configured.monthly) return 'monthly';
+  if (priceId === configured.annual) return 'annual';
+  throw new Error('Stripe subscription has an unrecognized Price ID');
 }
 
 function isoFromUnix(unix: number | null | undefined): string | null {
@@ -112,9 +125,14 @@ export function mapSubscriptionToRow(
   tenantId: string,
 ): Record<string, unknown> {
   // Stripe-node v22: typy `current_period_start/end` są na items[*]. Bierzemy
-  // z pierwszego item'a (subscription ma 1 line w naszym modelu).
-  const item = subscription.items.data[0];
-  const priceId = item?.price.id ?? '';
+  // z jedynego item'a. Każdy inny układ wymaga osobnego modelu faktury.
+  const items = subscription.items;
+  if (!items || items.has_more !== false || items.data.length !== 1 ||
+      items.data[0]?.quantity !== 1) {
+    throw new Error('Stripe subscription items are outside the single-unit plan model');
+  }
+  const item = items.data[0];
+  const priceId = item.price.id;
 
   const customerId =
     typeof subscription.customer === 'string'

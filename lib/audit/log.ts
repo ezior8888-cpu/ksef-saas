@@ -86,6 +86,7 @@ export type AuditAction =
   | 'billing.checkout.session_created'
   | 'billing.subscription.created'
   | 'billing.subscription.updated'
+  | 'billing.subscription.synced'
   | 'billing.subscription.canceled'
   | 'billing.payment.succeeded'
   | 'billing.payment.failed'

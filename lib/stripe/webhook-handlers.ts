@@ -10,8 +10,8 @@
  *   - invoice.payment_failed      → INSERT stripe_payments + Inngest dunning
  *   - customer.subscription.trial_will_end → audit (trial emails run from a cron)
  *
- * Każdy handler jest idempotent: `subscriptions.stripe_subscription_id`
- * jest UNIQUE, więc UPSERT z onConflict załatwia ponowne odpalenia.
+ * Odbiór zdarzenia używa atomowego claimu, a mirror subskrypcji
+ * synchronizuje aktualny obiekt Stripe pod dzierżawą z fencingiem.
  */
 
 import { sendJobEvent } from '@/lib/jobs/enqueue';
@@ -28,9 +28,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 
 import {
   mapInvoiceToPaymentRow,
-  mapSubscriptionToRow,
-  resolveTenantIdFromSubscription,
 } from './event-mapping';
+import { syncCurrentStripeSubscription } from './subscription-sync';
 
 /**
  * Late invoice payment events must not reopen an already refunded payment.
@@ -57,56 +56,34 @@ function isRefundedPaymentStatus(status: string | null): boolean {
 // ─── 1. subscription.created / updated ────────────────────────────────
 
 export async function handleSubscriptionUpserted(
-  subscription: Stripe.Subscription,
+  eventSnapshot: Stripe.Subscription,
   isCreate: boolean,
 ): Promise<void> {
-  const tenantId = await resolveTenantIdFromSubscription(subscription);
-  const supabase = createAdminClient();
-  const row = mapSubscriptionToRow(subscription, tenantId);
+  const { subscription, tenantId, status } =
+    await syncCurrentStripeSubscription(eventSnapshot.id);
 
-  const { data: persistedRows, error } = await supabase
-    .from('subscriptions')
-    // Cast — tabela poza typed gen do regeneracji.
-    .upsert(row as never, { onConflict: 'stripe_subscription_id' })
-    .select('status');
-
-  if (error) {
-    throw new Error(`subscription upsert failed: ${error.message}`);
-  }
-  const persisted = persistedRows?.[0];
-  if (!persisted) {
-    // The DB guard can suppress an older update after cancellation. Verify
-    // the terminal state; an unexplained zero-row write must remain retryable.
-    const { data: current, error: readError } = await supabase
-      .from('subscriptions')
-      .select('status')
-      .eq('stripe_subscription_id', subscription.id)
-      .maybeSingle();
-    if (readError) throw new Error(`subscription status read failed: ${readError.message}`);
-    if (current?.status === 'canceled' && row.status !== 'canceled') return;
-    throw new Error(`subscription upsert affected no row: ${subscription.id}`);
-  }
-  if (persisted.status === 'canceled' && row.status !== 'canceled') return;
-
+  // A delayed "created" event may arrive after cancellation. Record the
+  // current state, but never announce a new active plan from stale payload.
   await logAuditSystem({
-    action: isCreate ? 'billing.subscription.created' : 'billing.subscription.updated',
+    action: 'billing.subscription.synced',
     tenantId,
     userId: null,
     entityType: 'subscription',
     entityId: subscription.id,
     metadata: {
-      status: subscription.status,
+      sourceEvent: isCreate ? 'created' : 'updated',
+      status,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       priceId: subscription.items.data[0]?.price.id ?? null,
     },
   });
 
-  if (isCreate) {
+  if (isCreate && status !== 'canceled' && status !== 'incomplete_expired') {
     await trackServer({
       distinctId: tenantId,
       event: ANALYTICS_EVENTS.subscriptionCreated,
       properties: {
-        status: subscription.status,
+        status,
         price_id: subscription.items.data[0]?.price.id ?? null,
       },
       setPersonProperties: { plan: 'active' },
@@ -117,68 +94,15 @@ export async function handleSubscriptionUpserted(
 // ─── 2. subscription.deleted ──────────────────────────────────────────
 
 export async function handleSubscriptionDeleted(
-  subscription: Stripe.Subscription,
+  eventSnapshot: Stripe.Subscription,
 ): Promise<void> {
-  const tenantId = await resolveTenantIdFromSubscription(subscription);
-  const supabase = createAdminClient();
-  const canceledAt = subscription.canceled_at
-    ? new Date(subscription.canceled_at * 1000).toISOString()
-    : new Date().toISOString();
+  const { subscription, tenantId, status } =
+    await syncCurrentStripeSubscription(eventSnapshot.id);
 
-  const canceledRow = {
-    status: 'canceled',
-    canceled_at: canceledAt,
-    cancel_at_period_end: false,
-    last_webhook_at: new Date().toISOString(),
-  };
-  const updateOwned = async () => supabase
-    .from('subscriptions')
-    .update(canceledRow as never)
-    .eq('stripe_subscription_id', subscription.id)
-    .eq('tenant_id', tenantId)
-    .select('id, status')
-    .maybeSingle();
-
-  const { data: initiallyUpdated, error } = await updateOwned();
-  let updated = initiallyUpdated;
-  if (error) throw new Error(`subscription delete update failed: ${error.message}`);
-  if (!updated) {
-    // A deleted webhook can precede created. Insert a canceled tombstone without
-    // updating an existing subscription's tenant or customer on conflict.
-    const mapped = mapSubscriptionToRow(subscription, tenantId);
-    if (!subscription.id || mapped.tenant_id !== tenantId ||
-        mapped.stripe_subscription_id !== subscription.id ||
-        typeof mapped.stripe_customer_id !== 'string' || !mapped.stripe_customer_id ||
-        typeof mapped.stripe_price_id !== 'string' || !mapped.stripe_price_id) {
-      throw new Error(`subscription delete snapshot is incomplete: ${subscription.id}`);
-    }
-    const { data: inserted, error: insertError } = await supabase
-      .from('subscriptions')
-      .upsert({ ...mapped, ...canceledRow } as never, {
-        onConflict: 'stripe_subscription_id',
-        ignoreDuplicates: true,
-      })
-      .select('id, tenant_id, status');
-    if (insertError) throw new Error(`subscription delete insert failed: ${insertError.message}`);
-
-    if (inserted?.length) {
-      const tombstone = inserted[0];
-      if (tombstone.tenant_id !== tenantId || tombstone.status !== 'canceled') {
-        throw new Error(`subscription delete tombstone mismatch: ${subscription.id}`);
-      }
-      updated = tombstone;
-    } else {
-      // created may have won the unique-key race. Cancel only a row owned by
-      // the resolved tenant; a mismatched owner is a manual reconciliation.
-      const retried = await updateOwned();
-      if (retried.error) {
-        throw new Error(`subscription delete update failed: ${retried.error.message}`);
-      }
-      updated = retried.data;
-    }
-  }
-  if (!updated || updated.status !== 'canceled') {
-    throw new Error(`subscription delete not persisted for tenant: ${subscription.id}`);
+  if (status !== 'canceled') {
+    // The current Stripe object and the terminal event disagree. The mirror
+    // was updated from Stripe, but acknowledging the event needs review.
+    throw new Error('Deleted subscription event does not match current Stripe state');
   }
 
   await logAuditSystem({
@@ -187,7 +111,11 @@ export async function handleSubscriptionDeleted(
     userId: null,
     entityType: 'subscription',
     entityId: subscription.id,
-    metadata: { canceledAt },
+    metadata: {
+      canceledAt: subscription.canceled_at
+        ? new Date(subscription.canceled_at * 1000).toISOString()
+        : null,
+    },
   });
 
   await trackServer({
@@ -197,7 +125,6 @@ export async function handleSubscriptionDeleted(
     setPersonProperties: { plan: 'canceled' },
   });
 }
-
 // ─── 3. invoice.payment_succeeded ─────────────────────────────────────
 
 export async function handleInvoicePaymentSucceeded(
@@ -375,12 +302,18 @@ export async function handleInvoicePaymentFailed(
 // ─── 5. subscription.trial_will_end ───────────────────────────────────
 
 export async function handleTrialWillEnd(
-  subscription: Stripe.Subscription,
+  eventSnapshot: Stripe.Subscription,
 ): Promise<void> {
-  const tenantId = await resolveTenantIdFromSubscription(subscription);
-  const trialEndIso = subscription.trial_end
-    ? new Date(subscription.trial_end * 1000).toISOString()
-    : new Date().toISOString();
+  // Trial notices must use the same verified Customer -> tenant binding as
+  // subscription writes. Metadata on an old event is not tenant authority.
+  const { subscription, tenantId, status } =
+    await syncCurrentStripeSubscription(eventSnapshot.id);
+  if (status !== 'trialing') return;
+
+  if (!subscription.trial_end) {
+    throw new Error('Current Stripe trial has no end date');
+  }
+  const trialEndIso = new Date(subscription.trial_end * 1000).toISOString();
 
   await logAuditSystem({
     action: 'billing.trial.will_end',
