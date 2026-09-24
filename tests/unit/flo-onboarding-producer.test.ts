@@ -118,14 +118,31 @@ describe('O-01 — kogo prowadzimy', () => {
     expect(accountAgeDays('', NOW)).toBe(Number.POSITIVE_INFINITY);
   });
 
-  it('konto poza kanarkiem: stanu nawet nie czytamy', async () => {
+  it('konto poza kanarkiem: liczymy do trybu cichego, klient nie dostaje karty', async () => {
+    // Do 24.09 ten test brzmiał „konto poza kanarkiem: nic nie czytamy"
+    // i pilnował BŁĘDU: bramka przed odczytem wycinała też kanarka, więc tryb
+    // cichy nie zapisał dla tej reguły ani jednego wpisu. Konto poza
+    // kanarkiem ma liczyć — klient nie dostaje karty, operator dostaje wpis.
     const db = createFakeDb();
     const src = sources();
 
     expect(await produceOnboardingStep(TENANT, NOW, db.client, src.value)).toBe(
       'disabled',
     );
+    expect(src.calls.account).toBeGreaterThan(0);
+    expect(db.tables.flo_proposals).toHaveLength(0);
+    expect(db.tables.flo_shadow).toHaveLength(1);
+  });
+
+  it('konto wypisane przez operatora: stanu nawet nie czytamy', async () => {
+    const db = createFakeDb({ flo_kind_flags: [{ tenant_id: TENANT, kind: 'onboarding.step', enabled: false, reason: 'klient poprosił' }] });
+    const src = sources();
+
+    expect(await produceOnboardingStep(TENANT, NOW, db.client, src.value)).toBe(
+      'disabled',
+    );
     expect(src.calls.account).toBe(0);
+    expect(db.tables.flo_shadow).toHaveLength(0);
   });
 
   it('konta nie ma — odmowa bez śladu', async () => {

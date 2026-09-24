@@ -107,6 +107,29 @@ export function resolveSwitch(input: {
   return { enabled: true, decidedBy: null };
 }
 
+/**
+ * Czy producent ma LICZYĆ, co by zaproponował.
+ *
+ * TAK, gdy funkcja jest włączona — albo gdy jedyną przeszkodą jest kanarek.
+ * Wtedy producent czyta dane i buduje propozycję, a `createProposal` zapisuje
+ * ją w trybie cichym zamiast karty. To jedyny sposób, żeby zmierzyć trafność
+ * funkcji, zanim zobaczy ją ktokolwiek.
+ *
+ * NIE przy wyłączniku globalnym, blokadzie z kodu i wypisaniu konta przez
+ * operatora: tam liczyć nie wolno albo nie ma po co, więc odczyt danych
+ * klienta byłby czystym kosztem.
+ *
+ * DLACZEGO TO JEST OSOBNA FUNKCJA. Pierwsza wersja producentów miała
+ * `if (!verdict.enabled) return` przed odczytem — rozsądna oszczędność,
+ * która po cichu wycinała też kanarka. Skutek: tryb cichy nie zapisał ani
+ * jednego wpisu dla sześciu reguł, a sześć testów „konto poza kanarkiem:
+ * nic nie czytamy" pilnowało dokładnie tego błędu. Jedna funkcja w jednym
+ * miejscu, bo ta sama pomyłka w sześciu kopiach to sześć miejsc do naprawy.
+ */
+export function shouldCompute(verdict: SwitchVerdict): boolean {
+  return verdict.enabled || verdict.decidedBy === 'canary';
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Odczyt
 // ═══════════════════════════════════════════════════════════════

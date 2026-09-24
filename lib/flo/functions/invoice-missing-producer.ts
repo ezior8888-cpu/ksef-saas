@@ -30,7 +30,7 @@ import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient } from '@/lib/flo/db-types';
 import { isMuted, readDecisionRows } from '@/lib/flo/decisions';
 import { buildMissingInvoiceProposal } from '@/lib/flo/functions/invoice-batch';
-import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
+import { isKindEnabledForTenant, shouldCompute } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
 import {
   detectRhythm,
@@ -197,7 +197,7 @@ export async function produceMissingInvoice(
     db,
     sources.readGlobalKill,
   );
-  if (!verdict.enabled) return 'disabled';
+  if (!shouldCompute(verdict)) return 'disabled';
   if (await isMuted(tenantId, KIND, now, db)) return 'disabled';
 
   const invoices = await sources.readIssuedInvoices(tenantId, now);

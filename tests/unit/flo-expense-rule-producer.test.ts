@@ -211,16 +211,30 @@ describe('W-03 — kiedy agent pyta o regułę', () => {
 });
 
 describe('W-03 — bramki', () => {
-  it('konto poza kanarkiem: kosztów nawet nie czytamy', async () => {
+  it('konto poza kanarkiem: liczymy do trybu cichego, klient nie dostaje karty', async () => {
     // Tak wygląda dziś każde konto na produkcji: `flo_rollout` jest puste.
+    // Do 24.09 ten test brzmiał „konto poza kanarkiem: nic nie czytamy"
+    // i pilnował BŁĘDU: bramka przed odczytem wycinała też kanarka, więc tryb
+    // cichy nie zapisał dla tej reguły ani jednego wpisu. Konto poza
+    // kanarkiem ma liczyć — klient nie dostaje karty, operator dostaje wpis.
     const db = createFakeDb();
+    const src = sources();
+
+    const outcome = await proposeRuleAfterReview(TENANT, EXPENSE, NOW, db.client, src.value);
+
+    expect(outcome).not.toBe('created');
+    expect(src.calls.expense + src.calls.history + src.calls.rules).toBeGreaterThan(0);
+    expect(db.tables.flo_proposals).toHaveLength(0);
+  });
+
+  it('konto wypisane przez operatora: kosztów nawet nie czytamy', async () => {
+    const db = createFakeDb({ flo_kind_flags: [{ tenant_id: TENANT, kind: 'expense.rule', enabled: false, reason: 'klient poprosił' }] });
     const src = sources();
 
     const outcome = await proposeRuleAfterReview(TENANT, EXPENSE, NOW, db.client, src.value);
 
     expect(outcome).toBe('disabled');
     expect(src.calls).toEqual({ expense: 0, history: 0, rules: 0 });
-    expect(db.tables.flo_proposals).toHaveLength(0);
   });
 
   it('„nigdy więcej takich": cisza bez odczytu', async () => {

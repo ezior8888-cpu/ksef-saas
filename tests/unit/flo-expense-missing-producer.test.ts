@@ -108,8 +108,23 @@ describe('W-04 — kiedy agent milczy', () => {
     expect(db.tables.flo_proposals).toHaveLength(0);
   });
 
-  it('konto poza kanarkiem: kosztów nawet nie czytamy', async () => {
+  it('konto poza kanarkiem: liczymy do trybu cichego, klient nie dostaje karty', async () => {
+    // Do 24.09 ten test brzmiał „konto poza kanarkiem: nic nie czytamy"
+    // i pilnował BŁĘDU: bramka przed odczytem wycinała też kanarka, więc tryb
+    // cichy nie zapisał dla tej reguły ani jednego wpisu. Konto poza
+    // kanarkiem ma liczyć — klient nie dostaje karty, operator dostaje wpis.
     const db = createFakeDb();
+    const src = sources();
+
+    const result = await produceMissingDocs(TENANT, NOW, db.client, src.value);
+
+    expect(result.outcome).not.toBe('created');
+    expect(src.calls.expenses).toBeGreaterThan(0);
+    expect(db.tables.flo_proposals).toHaveLength(0);
+  });
+
+  it('konto wypisane przez operatora: kosztów nawet nie czytamy', async () => {
+    const db = createFakeDb({ flo_kind_flags: [{ tenant_id: TENANT, kind: 'expense.missing', enabled: false, reason: 'klient poprosił' }] });
     const src = sources();
 
     const result = await produceMissingDocs(TENANT, NOW, db.client, src.value);

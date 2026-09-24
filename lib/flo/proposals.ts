@@ -28,7 +28,7 @@ import {
 } from '@/lib/flo/db-types';
 import { isSilenced } from '@/lib/flo/decisions';
 import { isKindEnabled } from '@/lib/flo/flags';
-import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
+import { isKindEnabledForTenant, shouldCompute } from '@/lib/flo/kind-switch';
 import { FLO_KIND_VARIANT } from '@/lib/flo/kind-variant';
 import { recordShadow } from '@/lib/flo/shadow';
 import { isTaxKind, taxGateOpen } from '@/lib/flo/tax-profile';
@@ -118,7 +118,7 @@ export async function createProposal(
   // w bazie klienta". `flo_shadow` jest tabelą operatorską: nie ma treści
   // karty, nie ma danych kontrahenta i żaden jej wiersz nigdy nie stanie
   // się kartą w wątku klienta.
-  const shadowOnly = !verdict.enabled && verdict.decidedBy === 'canary';
+  const shadowOnly = !verdict.enabled && shouldCompute(verdict);
 
   if (!verdict.enabled && !shadowOnly) {
     return { status: 'disabled' };

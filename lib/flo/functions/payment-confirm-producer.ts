@@ -23,11 +23,12 @@
  *    wyciągu, ręczne oznaczenie), otwarta karta o nią znika przy najbliższym
  *    przebiegu, a nie wisi do kliknięcia albo do wygaśnięcia za miesiąc.
  *
- * 4. KONTO WYŁĄCZONE NIE KOSZTUJE ODCZYTU FAKTUR. Bramki (wyłącznik, kanarek,
- *    wyciszenie) sprawdzamy PRZED zapytaniem o faktury. `createProposal`
- *    sprawdzi je jeszcze raz przed zapisem — to nie jest dublowanie, tylko
- *    oszczędność: dziś K-01 jest w kanarku na etapie 0, czyli wyłączone na
- *    każdym koncie, a puls chodzi codziennie po wszystkich.
+ * 4. KONTO WYŁĄCZONE NIE KOSZTUJE ODCZYTU FAKTUR — chyba że jedyną
+ *    przeszkodą jest kanarek. Wyłącznik, blokadę z kodu, wpis operatora
+ *    i wyciszenie sprawdzamy PRZED zapytaniem o faktury. Konto poza
+ *    kanarkiem idzie dalej: agent liczy, o co by zapytał, a `createProposal`
+ *    zapisuje to w trybie cichym zamiast karty (`shouldCompute`). Bez tego
+ *    nie da się zmierzyć trafności przed odsłonięciem.
  *
  * ŚWIADOMIE BEZ ROZSYŁANIA PO KOLEJCE `flo.tick.tenant`. Plan (1A) opisuje
  * to jako docelowy wzorzec, ale nowa kolejka zmienia układ workera i jest
@@ -46,7 +47,7 @@ import {
   selectOverdueForConfirmation,
   type OverdueInvoice,
 } from '@/lib/flo/functions/payment-confirm';
-import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
+import { isKindEnabledForTenant, shouldCompute } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
 import { runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
@@ -156,7 +157,11 @@ async function readOverdueInvoices(
 // ═══════════════════════════════════════════════════════════════
 
 export type PaymentConfirmOutcome =
-  /** Wyłącznik, blokada, kanarek — faktur nawet nie czytaliśmy. */
+  /**
+   * Wyłącznik, blokada, wpis operatora — faktur nawet nie czytaliśmy.
+   * Konto poza kanarkiem też kończy tutaj, ale PO odczycie: pytanie trafiło
+   * do trybu cichego, nie do klienta.
+   */
   | 'disabled'
   /** Klient wyciszył te pytania — faktur nawet nie czytaliśmy. */
   | 'muted'
@@ -191,7 +196,7 @@ export async function producePaymentConfirm(
     db,
     sources.readGlobalKill,
   );
-  if (!verdict.enabled) return { outcome: 'disabled', closed: 0 };
+  if (!shouldCompute(verdict)) return { outcome: 'disabled', closed: 0 };
   if (await isMuted(tenantId, KIND, now, db)) {
     return { outcome: 'muted', closed: 0 };
   }
