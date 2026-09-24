@@ -81,6 +81,8 @@ export type AuditAction =
   | 'admin.note.created'
   | 'admin.note.archived'
   | 'admin.flag.toggled'
+  /** Odsłonięcie, rozwinięcie albo schowanie funkcji agenta w kanarku. */
+  | 'admin.flo.rollout.changed'
   // Faza 25 — Stripe billing lifecycle.
   | 'billing.customer.created'
   | 'billing.checkout.session_created'

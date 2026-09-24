@@ -3834,3 +3834,100 @@ zmieniły się nazwy pól i miejsce pętli, nie decyzje.
 Lista producentów z K1.B jest zamknięta, cap i wynik pulsu uporządkowane.
 Do decyzji, co dalej: **odsłonięcie pierwszej funkcji w kanarku** (O-01
 albo W-04) czy kolejne pozycje planu.
+
+## 2026-09-24 · Panel operatora dostaje przycisk odsłaniania
+
+Do dziś kanarka dało się przestawić **wyłącznie ręcznym SQL-em na
+produkcyjnej bazie**. Panel `/admin/flo` odpowiadał na pytanie „która funkcja
+jest gotowa wyjść z ukrycia" i nie dawał żadnego sposobu, żeby to zrobić.
+
+To zawężało decyzję produktową do jednej osoby — tej z dostępem do `db-1` —
+i zamieniało ruch z natury odwracalny w operację, przy której łatwiej
+o literówkę niż o pomyłkę w ocenie.
+
+### Trzy ruchy, trzy różne zasady
+
+| ruch | zasada |
+|---|---|
+| odsłonięcie (0 → 10%) | zawsze od dziesięciu procent, nigdy od razu szerzej |
+| rozwinięcie (10 → 50 → 100) | pełne `canAdvance`: tydzień na etapie, zero skarg |
+| schowanie (w dół, też do zera) | **ZAWSZE wolno, natychmiast, bez potwierdzenia** |
+
+Asymetria jest świadoma. Odsłanianie ma być trudne, chowanie ma być jednym
+kliknięciem — bo w chwili, w której operator chce coś schować, zwykle właśnie
+dzieje się coś złego, a kazanie mu wtedy czekać albo szukać SQL-a to najgorszy
+możliwy moment na tarcie.
+
+### Luka, którą trzeba było zamknąć od razu
+
+Skoro schowanie jest zawsze dozwolone, to **„schowaj i odsłoń jeszcze raz"
+byłoby praniem skargi**: dwa kliknięcia i wstrzymanie znika, a w historii
+wygląda to na zwykłe wycofanie i ponowne wydanie. Dlatego wstrzymanie blokuje
+KAŻDE podnoszenie etapu, także pierwsze odsłonięcie z zera. Licznik skarg
+zeruje się świadomie i poza panelem.
+
+To jest najważniejszy test w `flo-rollout.test.ts` i osobna mutacja
+w zestawie.
+
+### Gdzie co siedzi
+
+- `canSetStage()` w `lib/flo/rollout.ts` — **cała** logika decyzji, funkcja
+  czysta, testowana bez bazy i bez sesji. Blokadę z `flags.ts` dostaje
+  parametrem, żeby nie wciągać flag do modułu kanarka.
+- `app/admin/flo/actions.ts` — wyłącznie wiązanie: kto pyta, czy dane są tym,
+  za co się podają, zapis, ślad w audycie (`admin.flo.rollout.changed`,
+  `tenantId: null` — to decyzja o platformie, nie o koncie).
+- `app/admin/flo/_components/rollout-controls.tsx` — trzy przyciski. Werdykty
+  liczy serwer tą samą funkcją, którą sprawdzi akcja; przeglądarka dostaje
+  gotowe „wolno / nie wolno i dlaczego". **Zablokowany przycisk zawsze mówi
+  powód** — wyszarzone „rozwiń" bez wyjaśnienia jest gorsze niż jego brak,
+  bo operator nie wie, czy czekać, czy coś naprawić.
+
+### Rzecz, o którą łatwo się potknąć
+
+`requireAdmin()` stoi w PIERWSZEJ linii akcji i to nie jest ozdoba.
+**Akcja serwerowa to zwykły endpoint POST** pod wygenerowanym adresem —
+guard z `app/admin/layout.tsx` chroni renderowanie strony, nie to wywołanie.
+Bez tej linii wystarczyłoby znać adres akcji, żeby odsłonić funkcję wszystkim
+klientom. Osobny test to sprawdza, osobna mutacja próbuje to usunąć.
+
+Rodzaj i etap przechodzą przez białą listę (`ROLLOUT_ORDER`, `ROLLOUT_STAGES`),
+a nie przez sam strażnik typu: argumenty przychodzą z przeglądarki, więc są
+danymi, nie deklaracją.
+
+### Czego panel NIE przeskoczy
+
+Rodzaj zablokowany w `lib/flo/flags.ts` nie odsłoni się kliknięciem — panel
+mówi wprost „Włączenie wymaga commita z uzasadnieniem", a przycisk, który to
+omija, kasowałby tę zasadę po cichu. Schować zablokowany rodzaj wolno zawsze.
+Promień 3 dalej czeka na prawnika.
+
+### Weryfikacja
+
+- 19 nowych testów reguły w `flo-rollout.test.ts` (42 w pliku), 9 testów akcji
+  w `flo-admin-rollout-action.test.ts`.
+- Test mutacyjny **10/10 za pierwszym podejściem**: akcja bez sprawdzenia
+  admina, bez białej listy rodzajów, bez białej listy etapów, ignorująca
+  werdykt, bez audytu; reguła ze schowaniem pod warunkami, z luką „schowaj
+  i odsłoń", z wyjściem z zera na dowolny etap, z przeskakiwaniem etapów,
+  z pominiętą blokadą z kodu.
+- `tsc --noEmit` czysto · eslint 0 błędów · vitest **1334 zielonych,
+  7 pominiętych** · **`next build` przechodzi** (ważne przy `'use server'` —
+  typecheck tego nie łapie).
+
+### Czego NIE zweryfikowałem
+
+**Wyglądu strony w przeglądarce.** Dwa niezależne powody: w worktree nie ma
+`node_modules`, więc `next dev` (Turbopack) nie wstaje, a lokalnie nie jest
+ustawione `ADMIN_EMAILS` — pusta lista adminów blokuje `/admin/*` w całości,
+i tak ma być. Zalogowanie się na konto admina wymagałoby cudzych haseł.
+
+Build i testy pokrywają logikę i kompilację; **układ przycisków obejrzyj sam
+po wdrożeniu.**
+
+### Co to zmienia dla O-01
+
+Nic automatycznie. Odsłonięcie O-01 dalej wymaga najpierw scalenia stosu
+i wdrożenia — producenta nie ma na `main`. Zmienia się tylko to, że gdy już
+tam będzie, odsłonięcie jest kliknięciem w panelu, a nie `INSERT`-em na
+produkcji.
