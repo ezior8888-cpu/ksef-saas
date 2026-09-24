@@ -168,6 +168,11 @@ export async function toggleInvoiceRemindersAction(
   paused: boolean,
   reason?: string,
 ): Promise<{ success: boolean; error?: string }> {
+  if (!z.string().uuid().safeParse(invoiceId).success ||
+      typeof paused !== 'boolean' ||
+      (reason !== undefined && (typeof reason !== 'string' || reason.length > 500))) {
+    return { success: false, error: 'Nieprawidłowe dane przypomnienia.' };
+  }
   let ctx;
   try {
     ctx = await requireUserAndTenant();
@@ -177,35 +182,20 @@ export async function toggleInvoiceRemindersAction(
     }
     throw e;
   }
-  const { supabase, tenantId } = ctx;
 
-  const { error } = await supabase
-    .from('invoices')
-    .update({
-      reminders_paused: paused,
-      reminders_paused_reason: paused ? (reason ?? null) : null,
-    })
-    .eq('id', invoiceId)
-    .eq('tenant_id', tenantId);
-
-  if (error) return { success: false, error: error.message };
-
-  if (paused) {
-    const { error: cancelErr } = await supabase
-      .from('payment_reminders')
-      .update({
-        status: 'cancelled',
-        failure_reason: 'Wstrzymane przez użytkownika',
-      })
-      .eq('invoice_id', invoiceId)
-      .eq('tenant_id', tenantId)
-      .eq('status', 'pending');
-    if (cancelErr) return { success: false, error: cancelErr.message };
+  // The RPC checks the active organization again and changes the invoice plus
+  // pending reminders atomically. Direct client writes are removed in 00074.
+  const { data, error } = await ctx.supabase.rpc('set_invoice_reminders_paused', {
+    p_invoice_id: invoiceId,
+    p_paused: paused,
+    p_reason: paused ? (reason ?? null) : null,
+  });
+  if (error || data !== true) {
+    return { success: false, error: 'Nie udało się zmienić stanu przypomnień. Spróbuj ponownie.' };
   }
 
-  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath('/invoices/' + invoiceId);
   revalidatePath('/payments/overdue');
-
   return { success: true };
 }
 
