@@ -19,6 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Wersja pnpm MUSI zgadzać się z `packageManager` w `package.json`.
+      # Rozjazd wywalał CI przed pierwszym testem: pnpm 9 czyta
+      # `pnpm-workspace.yaml` (od pnpm 10 mieszkają tam ustawienia, nie tylko
+      # lista pakietów) i odmawia z „packages field missing or empty".
+      # Od 14.09.2026 czerwone były przez to WSZYSTKIE przebiegi, także na main.
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
@@ -27,6 +32,16 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+
+      # Cztery testy XSD w `lib/xml/fa3-generator.test.ts` walidują fakturę
+      # oficjalnym schematem FA(3) przez SYSTEMOWY `xmllint` — to inny program
+      # niż `xmllint-wasm` z zależności, którego używa kod produkcyjny.
+      # Bez tego pakietu te testy padają na maszynie CI (i tylko tam).
+      - name: Install XML schema validator
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libxml2-utils
+          xmllint --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -55,6 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Ta sama wersja co wyżej i co w `package.json`.
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.0

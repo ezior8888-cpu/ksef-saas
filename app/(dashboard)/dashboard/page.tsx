@@ -7,12 +7,8 @@ import { FloScreen } from '@/components/flo/flo-screen';
 import { FloScheduledPanel } from '@/components/flo/scheduled-panel';
 import { FloWelcome } from '@/components/dashboard/flo-welcome';
 import DashboardVerificationBanner from '@/app/(dashboard)/_components/dashboard-verification-banner';
-import {
-  formatPlInt,
-  formatPlMoney,
-  getMonthlyFigures,
-  type MonthlyFigures,
-} from '@/lib/dashboard/monthly-figures';
+import { MonthlyFiguresCard } from '@/components/dashboard/monthly-figures-card';
+import { getMonthlyFigures } from '@/lib/dashboard/monthly-figures';
 import { FLO_FIXTURES, FLO_SCHEDULED_FIXTURES } from '@/lib/flo/fixtures';
 import { isLocalDevEnv } from '@/lib/security/environment';
 import { getPageContext } from '@/lib/supabase/page-context';
@@ -34,6 +30,12 @@ import type { FloProposalView, FloScheduledView } from '@/types/flo';
  * Nagłówek agenta jest wyłączony (`showHeader={false}`) — panel ma własny
  * pasek tytułu z „Dashboard” i miesiącem, a dwa nagłówki jeden nad drugim
  * to szum. Licznik spraw wraca do wątku razem z krokiem 39 Masła.
+ *
+ * WYSOKOŚĆ: `h-full`, nie `calc(100vh - 5rem)`. Blokada trasy z `globals.css`
+ * (`html.ff-route-dashboard`) daje temu drzewu pełną wysokość okna pomniejszoną
+ * o nagłówek i dolną nawigację, licząc z tokenów `--ff-header-h`
+ * i `--ff-bottom-nav-h`. Ręcznie wpisane 5rem rozjeżdżało się przy każdej
+ * zmianie nagłówka i nie wiedziało nic o pasku domowym telefonu.
  *
  * Pełna mapa: `docs/flo/UKLAD-DASHBOARDU.md`.
  */
@@ -60,7 +62,7 @@ export default async function DashboardHomePage() {
 
   if (!agent.ok) {
     return (
-      <div className="grid h-[calc(100vh-5rem)] grid-cols-1 items-start gap-4 py-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid h-full grid-cols-1 items-start gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section
           role="status"
           className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-[22px] py-5"
@@ -77,16 +79,16 @@ export default async function DashboardHomePage() {
 
   if (agent.proposals.length === 0) {
     return (
-      <div className="flex h-[calc(100vh-5rem)] min-h-0 flex-col gap-3 py-4">
+      <div className="flex h-full min-h-0 flex-col gap-3 py-4">
         {agent.fixtures ? <PasekAtrap /> : null}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex min-h-0 flex-col gap-3">
             <div className="flex min-h-0 flex-1 rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)]">
               <FloWelcome />
             </div>
             <FloComposer />
           </div>
-          <aside className="flex min-h-0 flex-col gap-4 xl:overflow-y-auto">
+          <aside className="flex min-h-0 flex-col gap-4 lg:overflow-y-auto">
             {szyna}
             <FloScheduledPanel
               scheduled={agent.scheduled}
@@ -99,7 +101,7 @@ export default async function DashboardHomePage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-5rem)] min-h-0 flex-col gap-3 py-4">
+    <div className="flex h-full min-h-0 flex-col gap-3 py-4">
       {agent.fixtures ? <PasekAtrap /> : null}
 
       <SectionErrorBoundary label="Flo" fallback={szyna}>
@@ -174,114 +176,6 @@ async function loadAgent(): Promise<AgentData> {
 
     return { ok: false };
   }
-}
-
-/** Karta „liczby miesiąca” — góra prawej kolumny, jak na makiecie. */
-function MonthlyFiguresCard({ figures }: { figures: MonthlyFigures }) {
-  return (
-    <section className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-4 py-4">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-[var(--ff-text-muted)]">
-        {figures.monthName}
-      </h2>
-
-      <dl className="mt-3.5 flex flex-col gap-3.5">
-        <StatRow
-          icon="description"
-          label="Wystawione faktury"
-          sublabel={
-            figures.hasPrevMonth
-              ? `Poprzedni miesiąc: ${formatPlInt(figures.prevIssuedCount)}`
-              : 'Pierwszy miesiąc'
-          }
-          value={formatPlInt(figures.issuedCount)}
-          accent
-        />
-        <StatRow
-          icon="check_circle"
-          label="Przyjęte przez KSeF"
-          sublabel={`${formatPlInt(figures.pendingCount)} oczekuje`}
-          value={formatPlInt(figures.acceptedCount)}
-          accent
-        />
-        <StatRow
-          icon="credit_card"
-          label="VAT należny"
-          sublabel="JPK_V7"
-          value={formatPlMoney(figures.totalVat)}
-          tone="warn"
-        />
-        <StatRow
-          icon="trending_up"
-          label="Sprzedaż brutto"
-          sublabel={
-            figures.isBestMonthOfYear
-              ? 'Najlepszy wynik w roku'
-              : figures.hasPrevMonth
-                ? `${figures.momGrossPct >= 0 ? '+' : ''}${figures.momGrossPct}% m/m`
-                : 'Pierwszy miesiąc ze sprzedażą'
-          }
-          value={formatPlMoney(figures.totalGross)}
-        />
-      </dl>
-
-      <div className="mt-4 flex items-center justify-between gap-3 border-t border-[var(--ff-border)] pt-3.5">
-        <span className="text-[12.5px] font-medium text-[var(--ff-text-soft)]">
-          Termin VAT · {figures.vatDueLabel}
-        </span>
-        <span className="shrink-0 rounded-full bg-[var(--ff-warn-tint)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ff-warn)]">
-          {figures.daysToVatDue} {figures.daysToVatDue === 1 ? 'dzień' : 'dni'}
-        </span>
-      </div>
-    </section>
-  );
-}
-
-/** Wiersz szyny: ikona, etykieta z podetykietą, liczba po prawej. */
-function StatRow({
-  icon,
-  label,
-  sublabel,
-  value,
-  accent = false,
-  tone,
-}: {
-  icon: string;
-  label: string;
-  sublabel: string;
-  value: string;
-  accent?: boolean;
-  tone?: 'warn';
-}) {
-  const valueColor =
-    tone === 'warn'
-      ? 'text-[var(--ff-warn)]'
-      : accent
-        ? 'text-[var(--ff-accent)]'
-        : 'text-[var(--ff-text-strong)]';
-
-  return (
-    <div className="flex items-center gap-2.5">
-      <span
-        className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-[var(--ff-surface-chip)] text-[var(--ff-text-muted)]"
-        aria-hidden
-      >
-        <span className="material-symbols-outlined text-[18px]">{icon}</span>
-      </span>
-      <div className="min-w-0 flex-1">
-        <dt className="truncate text-[13px] font-medium text-[var(--ff-text-soft)]">
-          {label}
-        </dt>
-        <dd className="truncate text-[11.5px] text-[var(--ff-text-dim)]">
-          {sublabel}
-        </dd>
-      </div>
-      <span
-        className={`shrink-0 text-[17px] font-semibold tabular-nums ${valueColor}`}
-      >
-        {value}
-      </span>
-    </div>
-  );
 }
 
 /** Uczciwa adnotacja, że na ekranie są atrapy, a nie sprawy klienta. */

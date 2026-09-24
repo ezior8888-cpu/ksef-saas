@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { countLabel, FLO_FORMS } from '@/components/flo/format';
 
 /**
@@ -19,33 +21,48 @@ import { countLabel, FLO_FORMS } from '@/components/flo/format';
 export function FloHeader({
   todayTasks,
   usingFixtures = false,
+  extraBadges,
 }: {
   todayTasks: number;
   usingFixtures?: boolean;
+  /**
+   * Dodatkowe odznaki obok licznika spraw — gniazdo dodane we wrześniu 2026
+   * dla wejścia do kolejki na telefonie. Zmiana przez DODANIE: bez tego propa
+   * nagłówek zachowuje się dokładnie jak wcześniej.
+   */
+  extraBadges?: ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-center gap-3">
-      <span
-        aria-hidden
-        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--ff-accent-tint)] text-lg font-semibold text-[var(--ff-accent)]"
-      >
-        F
-      </span>
+    /* UKŁAD NA WĄSKIM EKRANIE. Było `flex flex-wrap items-center gap-3` na
+     * jednym poziomie — na 375 px łamało się na TRZY wiersze (awatar, tekst,
+     * odznaki) i zjadało 230 px wysokości, czyli jedną trzecią ekranu przy
+     * zablokowanej wysokości dashboardu. Teraz awatar i tekst są jedną
+     * nierozdzielną grupą, a odznaki schodzą pod nią; od `sm` wszystko wraca
+     * do jednego rzędu. */
+    <header className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          aria-hidden
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--ff-accent-tint)] text-lg font-semibold text-[var(--ff-accent)]"
+        >
+          F
+        </span>
 
-      <div className="min-w-0">
-        <h1 className="text-base font-semibold text-[var(--ff-text-strong)]">
-          Flo
-        </h1>
-        <p className="flex items-center gap-1.5 text-xs text-[var(--ff-text-muted)]">
-          <span
-            aria-hidden
-            className="size-1.5 rounded-full bg-[var(--ff-accent)]"
-          />
-          Robi sam to, co da się cofnąć. Pyta przed każdą wysyłką.
-        </p>
+        <div className="min-w-0">
+          <h1 className="text-base font-semibold text-[var(--ff-text-strong)]">
+            Flo
+          </h1>
+          <p className="flex items-start gap-1.5 text-xs leading-snug text-[var(--ff-text-muted)]">
+            <span
+              aria-hidden
+              className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--ff-accent)]"
+            />
+            Robi sam to, co da się cofnąć. Pyta przed każdą wysyłką.
+          </p>
+        </div>
       </div>
 
-      <div className="ml-auto flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
         {usingFixtures ? (
           <span className="rounded-full border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-2.5 py-1 text-xs text-[var(--ff-warn-text)]">
             Dane przykładowe
@@ -62,6 +79,8 @@ export function FloHeader({
           {/* „1 zadanie dziś”, „2 zadania dziś”, „5 zadań dziś”, „0 zadań dziś” */}
           {countLabel(todayTasks, FLO_FORMS.zadanie)} dziś
         </span>
+
+        {extraBadges}
       </div>
     </header>
   );

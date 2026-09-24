@@ -18,8 +18,36 @@ import { getRlsTestEnvironment } from './helpers/rls-environment';
  * tak jak robi to runtime aplikacji.
  */
 
-const { url, anonKey, serviceRoleKey: serviceRole } = getRlsTestEnvironment();
-const admin = createClient(url, serviceRole);
+/**
+ * TEN TEST WYMAGA OSOBNEJ BAZY TESTOWEJ — zakłada konta, loguje się i pisze
+ * przez `service_role`. Dlatego bierze zmienne `RLS_TEST_*`, a NIE tych,
+ * których używa aplikacja: pomyłka w konfiguracji nie może skończyć się
+ * przebiegiem destrukcyjnego testu na bazie, na której pracują ludzie.
+ *
+ * Bez tych zmiennych zestaw jest POMIJANY — widocznie, jako „skipped", a nie
+ * cicho wycięty. Wcześniej cały plik wywalał się już przy imporcie
+ * („supabaseUrl is required") i barwił CI na czerwono niezależnie od tego,
+ * co ktoś zmienił w kodzie; czerwone CI, które jest czerwone zawsze,
+ * przestaje cokolwiek znaczyć. Gdy zmienne są, zestaw uruchomi się sam.
+ * Osobno woła go `pnpm test:rls`.
+ */
+const hasDatabase = Boolean(
+  process.env.RLS_TEST_SUPABASE_URL?.trim() &&
+    process.env.RLS_TEST_SUPABASE_ANON_KEY?.trim() &&
+    process.env.RLS_TEST_SUPABASE_SERVICE_ROLE_KEY?.trim(),
+);
+
+// `getRlsTestEnvironment()` waliduje adres i RZUCA przy brakach, więc wołamy
+// je dopiero wtedy, gdy wiadomo, że jest co walidować.
+const environment = hasDatabase ? getRlsTestEnvironment() : null;
+
+const url = environment?.url ?? '';
+const anonKey = environment?.anonKey ?? '';
+const serviceRole = environment?.serviceRoleKey ?? '';
+
+const admin: SupabaseClient = environment
+  ? createClient(environment.url, environment.serviceRoleKey)
+  : (null as unknown as SupabaseClient);
 
 const TENANT_A_ID = '11111111-1111-1111-1111-111111111111';
 const TENANT_B_ID = '22222222-2222-2222-2222-222222222222';
@@ -87,7 +115,7 @@ async function signInClient(
   return c;
 }
 
-describe('RLS isolation in multi-org model', () => {
+describe.skipIf(!hasDatabase)('RLS isolation in multi-org model', () => {
   beforeAll(async () => {
     if (!anonKey) {
       throw new Error('Brak RLS_TEST_SUPABASE_ANON_KEY — potrzebne do logowania w teście RLS.');

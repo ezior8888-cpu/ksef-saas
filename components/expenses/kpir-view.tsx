@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Download, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
+import { formatPlMoney } from '@/lib/format/pl';
 
 export type KpirExpenseRow = Database['public']['Tables']['expenses']['Row'];
 
@@ -45,12 +46,6 @@ function buyerName(buyerData: KpirInvoiceRow['buyer_data']): string {
   return typeof name === 'string' && name.trim() ? name : '—';
 }
 
-function formatPlMoney(n: number): string {
-  return n.toLocaleString('pl-PL', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 function formatPlDate(iso: string): string {
   const day = iso.slice(0, 10);

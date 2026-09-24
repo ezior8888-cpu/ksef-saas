@@ -77,9 +77,15 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  /**
+   * Te same kolory co `--ff-bg` w `app/globals.css` i co `theme_color`
+   * w `app/manifest.ts`. Do września 2026 były trzy różne zestawy w trzech
+   * plikach (`#f4f4f5` tutaj, `#000000` w manifeście, `#f7f8fa` w arkuszu),
+   * więc pasek stanu telefonu miał inny odcień niż tło strony pod nim.
+   */
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f4f4f5' },
-    { media: '(prefers-color-scheme: dark)', color: '#12131a' },
+    { media: '(prefers-color-scheme: light)', color: '#f7f8fa' },
+    { media: '(prefers-color-scheme: dark)', color: '#0d1117' },
   ],
   width: 'device-width',
   initialScale: 1,

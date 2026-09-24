@@ -31,7 +31,7 @@ export function InstallPrompt() {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 100, opacity: 0 }}
         transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-        className="fixed bottom-4 left-4 right-4 z-50 lg:left-auto lg:right-6 lg:w-96"
+        className="fixed bottom-[calc(1rem+var(--ff-bottom-nav-h)+var(--ff-safe-b))] left-4 right-4 z-50 lg:left-auto lg:right-6 lg:w-96"
       >
         <div
           className="rounded-3xl border border-glass-border bg-glass-white-strong backdrop-blur-glass-lg shadow-glass-lg p-5"

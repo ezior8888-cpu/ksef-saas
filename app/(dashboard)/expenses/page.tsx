@@ -87,7 +87,7 @@ export default async function ExpensesPage({
         />
       )}
 
-      <div className="fixed bottom-6 right-6 z-30 lg:hidden">
+      <div className="fixed bottom-[calc(1.5rem+var(--ff-bottom-nav-h)+var(--ff-safe-b))] right-6 z-30 lg:hidden">
         <CaptureButton />
       </div>
     </div>

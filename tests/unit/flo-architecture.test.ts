@@ -98,7 +98,15 @@ for (const dir of SCAN_DIRS) {
   }
 }
 
-const IMPORT_RE = /(?:from\s+|import\s*\(\s*)['"]([^'"]+)['"]/g;
+/**
+ * Trzy formy importu: `from '…'`, `import('…')` i GOŁE `import '…'`.
+ *
+ * Trzecia doszła 17.09.2026 (plan FLO 2, zadanie 1.1). Tak właśnie rejestrują
+ * się wykonawcy agenta (`lib/flo/functions/index.ts`), a bez niej graf nie
+ * widział krawędzi rejestr → wykonawca ponagleń → wysyłka. Po dopisaniu W1
+ * nadal jest zielony — ale od teraz z powodu kodu, a nie ślepej plamki.
+ */
+const IMPORT_RE = /(?:from\s+|import\s*\(\s*|^import\s+)['"]([^'"]+)['"]/gm;
 
 function resolveImport(spec: string, from: string): string | null {
   let candidate: string;
@@ -254,5 +262,13 @@ describe('W1 — nic nie wychodzi bez kliknięcia człowieka', () => {
     // To jest wynik kroku 6. Gdyby ktoś przywrócił stare zachowanie, ta
     // asercja pada jako pierwsza i wskazuje dokładnie ten plik.
     expect(pathToSink('lib/inngest/jobs/reminder-scheduler.ts')).toBeNull();
+  });
+
+  it('puls agenta jest odcięty od wysyłki', () => {
+    // `cron.flo-tick` chodzi wyłącznie na pg-boss (`lib/jobs/queues.ts`), więc
+    // nie ma w nim `cron(` i pętla po `cronFiles` go nie widzi. A to właśnie
+    // tu dopisujemy producentów kart (plan FLO 2, faza 1) — jeden nieostrożny
+    // import wykonawcy wychodzącego i puls wysyłałby sam.
+    expect(pathToSink('lib/flo/tick.ts')).toBeNull();
   });
 });

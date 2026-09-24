@@ -24,6 +24,7 @@ import { floDb, type FloDbClient, type FloProposalRow } from '@/lib/flo/db-types
 import { assertFresh, FloStaleError } from '@/lib/flo/fingerprint';
 import { getFloHandler } from '@/lib/flo/handlers';
 import { recordDecision } from '@/lib/flo/decisions';
+import { undoableUntil } from '@/lib/flo/undo';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import type { AuditAction } from '@/lib/audit/log';
 import { isFloProposalKind, type FloApproveInput, type FloApproveResult } from '@/types/flo';
@@ -170,9 +171,24 @@ export async function executeProposal(
       input: args.input,
     });
 
+    // Zapis cofnięcia ląduje w ładunku razem z zamknięciem karty — w jednym
+    // zapisie, żeby nie było chwili, w której czynność jest zrobiona, a nie
+    // da się jej cofnąć.
     await db
       .from('flo_proposals')
-      .update({ status: 'done', executed_at: now.toISOString() })
+      .update({
+        status: 'done',
+        executed_at: now.toISOString(),
+        ...(result.undo
+          ? {
+              payload: {
+                ...(claimedRow.payload ?? {}),
+                undo: result.undo,
+                undoableUntil: undoableUntil(result.undo),
+              },
+            }
+          : {}),
+      })
       .eq('id', proposalId);
 
     await audit(claimedRow, userId, approvalId, 'flo.proposal.executed', {

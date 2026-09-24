@@ -19,7 +19,11 @@ import {
   calculateInvoiceTotals,
 } from '@/lib/xml/invoice-calculator';
 import type { InvoiceLineItem } from '@/types/invoice';
-import { saveAndSendInvoiceAction, saveDraftAction } from './actions';
+import {
+  saveAndSendInvoiceAction,
+  saveDraftAction,
+  type PrefillFromLastInvoice,
+} from './actions';
 import { BuyerLookup } from './buyer-lookup';
 import { VatStatusBadge } from '@/components/validation/vat-status-badge';
 import type { CachedValidationResult } from '@/lib/validation/cache';
@@ -35,7 +39,11 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AlertCircle, Plus, Trash2, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { AlertCircle, ChevronLeft, Plus, Trash2, Loader2 } from 'lucide-react';
+import { InvoiceTotals } from '@/components/invoices/invoice-totals';
+import { formatPlMoney } from '@/lib/format/pl';
+import { ffSettingsPanel } from '@/lib/dashboard/ff-surface-classes';
 import { BUYER_ID_TYPE_LABELS } from '@/types/invoice-types';
 
 const defaultLine: InvoiceFormValues['lines'][number] = {
@@ -68,12 +76,32 @@ function firstValidationMessage(errors: FieldErrors<InvoiceFormValues>): string 
 }
 
 const labelClass =
-  'text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block';
+  'text-xs font-medium text-[var(--ff-text-muted)] uppercase tracking-wider mb-1.5 block';
+
+/**
+ * Sekcja formularza.
+ *
+ * DO WRZEŚNIA 2026 TO BYŁ OSTATNI EKRAN NA STARYM „SZKLE”. Pięć sekcji miało
+ * wpisane na sztywno `bg-white/45 backdrop-blur-[24px] border-white/55` razem
+ * z wariantami `dark:` — czyli paletę sprzed przemalowania panelu na biało
+ * (30.08.2026). W jasnym motywie ratował je wyłącznie zestaw łatek
+ * `html:not(.dark) .ff-dashboard [class*='bg-white/5']` w `globals.css`.
+ *
+ * Teraz to jest zwykły panel na tokenach, taki sam jak w ustawieniach
+ * i w tabelach. Odstęp wewnętrzny schodzi na telefonie z 28 px do 16 px —
+ * przy szerokości 375 px stare `p-7` zabierało siódmą część ekranu.
+ */
+const sectionClass = `${ffSettingsPanel} space-y-5 p-4 sm:p-6 lg:p-8`;
 
 /** Tailwind `lg` — musi być zgodne z breakpointem ukrywania/pokazywania pozycji. */
 const LINES_LAYOUT_LG_MEDIA = '(min-width: 1024px)';
 
-export function InvoiceForm() {
+export function InvoiceForm({
+  prefill = null,
+}: {
+  /** Podkład z ostatniej faktury — `null`, gdy tenant nie ma jeszcze żadnej. */
+  prefill?: PrefillFromLastInvoice | null;
+} = {}) {
   const router = useRouter();
   const [isSaving, startSaving] = useTransition();
   const [isSending, startSending] = useTransition();
@@ -133,7 +161,7 @@ export function InvoiceForm() {
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
     name: 'lines',
   });
@@ -146,26 +174,79 @@ export function InvoiceForm() {
     name: 'buyerConsumerIdType',
   });
 
-  const totals = calculateInvoiceTotals(
-    ((watchedLines ?? []) as InvoiceFormValues['lines']).map<InvoiceLineItem>(
-      (line, idx) => {
-        const calc = calculateLineItem({
-          quantity: Number(line?.quantity) || 0,
-          unitPriceNet: Number(line?.unitPriceNet) || 0,
-          vatRate: line?.vatRate ?? '23',
-        });
-        return {
-          ordinal: idx + 1,
-          name: line?.name ?? '',
-          unit: line?.unit ?? 'szt',
-          quantity: Number(line?.quantity) || 0,
-          unitPriceNet: Number(line?.unitPriceNet) || 0,
-          vatRate: line?.vatRate ?? '23',
-          ...calc,
-        };
-      }
-    )
-  );
+  // Wyciągnięte do zmiennej, bo tej samej tablicy potrzebuje `InvoiceTotals`
+  // do rozbicia VAT-u na stawki. Wcześniej mapowanie żyło wyłącznie w argumencie
+  // `calculateInvoiceTotals`, więc podsumowanie nie miało jak zobaczyć stawek
+  // i liczyło VAT jako `brutto − netto`.
+  const lineItems = (
+    (watchedLines ?? []) as InvoiceFormValues['lines']
+  ).map<InvoiceLineItem>((line, idx) => {
+    const calc = calculateLineItem({
+      quantity: Number(line?.quantity) || 0,
+      unitPriceNet: Number(line?.unitPriceNet) || 0,
+      vatRate: line?.vatRate ?? '23',
+    });
+    return {
+      ordinal: idx + 1,
+      name: line?.name ?? '',
+      unit: line?.unit ?? 'szt',
+      quantity: Number(line?.quantity) || 0,
+      unitPriceNet: Number(line?.unitPriceNet) || 0,
+      vatRate: line?.vatRate ?? '23',
+      ...calc,
+    };
+  });
+
+  const totals = calculateInvoiceTotals(lineItems);
+
+  // Podtytuł nagłówka na telefonie („wrzesień 2026 · KSeF”). Liczony przy
+  // renderze, a nie wpisany na stałe — ten sam wzorzec co w pasku panelu
+  // (`lib/dashboard-page-title.ts`).
+  const miesiacRok = new Date().toLocaleDateString('pl-PL', {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const [prefillUzyty, setPrefillUzyty] = useState(false);
+
+  /**
+   * Wypełnienie z ostatniej faktury.
+   *
+   * NIE RUSZAMY numeru ani żadnej daty — te pola formularz wypełnił sam
+   * wartościami na dziś i przepisanie starych byłoby cofnięciem faktury
+   * w czasie. Reszta to podmiana wartości: nabywca, pozycje i sposób zapłaty.
+   */
+  const wypelnijZOstatniej = () => {
+    if (!prefill) return;
+    const v = prefill.values;
+    form.setValue('buyerIsConsumer', false);
+    form.setValue('buyerNip', v.buyerNip, { shouldValidate: true });
+    form.setValue('buyerName', v.buyerName);
+    form.setValue('buyerAddressLine1', v.buyerAddressLine1);
+    form.setValue('buyerAddressLine2', v.buyerAddressLine2);
+    form.setValue('buyerEmail', v.buyerEmail);
+    form.setValue('paymentMethod', v.paymentMethod);
+    if (v.bankAccount) form.setValue('bankAccount', v.bankAccount);
+    replace(v.lines);
+    setPrefillUzyty(true);
+    toast.success(`Wypełniłem na podstawie faktury dla ${prefill.contractorName}`);
+  };
+
+  /**
+   * Pigułki terminu: „14 dni” zamiast wybierania daty z kalendarza.
+   * Liczone od daty wystawienia z formularza, nie od dzisiaj — inaczej przy
+   * fakturze wystawionej wstecz termin wypadałby przed datą wystawienia,
+   * a schemat to odrzuca (`paymentDueDate >= issueDate`).
+   */
+  const ustawTermin = (dni: number) => {
+    const bazowa = form.getValues('issueDate');
+    const d = bazowa ? new Date(`${bazowa}T00:00:00`) : new Date();
+    if (Number.isNaN(d.getTime())) return;
+    d.setDate(d.getDate() + dni);
+    form.setValue('paymentDueDate', d.toISOString().slice(0, 10), {
+      shouldValidate: true,
+    });
+  };
 
   const handleSaveDraft = form.handleSubmit(
     (values) => {
@@ -273,23 +354,78 @@ export function InvoiceForm() {
 
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-8 pb-32">
-      {/* Page header */}
-      <div>
+      {/* NAGŁÓWEK — dwa układy.
+          Na telefonie pasek z makiety: strzałka wstecz, tytuł z podtytułem,
+          „Szkic” po prawej. Zapis szkicu wchodzi tu z dolnego paska, żeby
+          zostawić mu miejsce na dwa przyciski zamiast trzech.
+          Od `sm` zostaje duży tytuł, jak było. */}
+      <div className="flex items-center gap-2 sm:hidden">
+        <Link
+          href="/invoices/new"
+          aria-label="Wróć do wyboru rodzaju faktury"
+          className="-ml-2 flex size-10 shrink-0 items-center justify-center rounded-lg text-[var(--ff-text-muted)] transition-colors hover:bg-[var(--ff-row-hover)]"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </Link>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-[20px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
+            Nowa faktura
+          </h1>
+          <p className="truncate text-[13px] text-[var(--ff-text-muted)]">
+            {miesiacRok} · KSeF
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleSaveDraft}
+          disabled={isSaving || isSending}
+          className="shrink-0 rounded-lg px-2 py-2 text-sm font-semibold text-[var(--ff-accent)] transition-opacity disabled:opacity-50"
+        >
+          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Szkic'}
+        </button>
+      </div>
+
+      <div className="hidden sm:block">
         <h1 className="text-4xl font-semibold tracking-tight">Nowa faktura</h1>
         <p className="mt-2 text-muted-foreground">
           Wystaw fakturę B2B lub B2C i wyślij do KSeF jednym kliknięciem
         </p>
       </div>
 
+      {/* PODPOWIEDŹ FLO — tylko gdy jest z czego wypełniać.
+          Zniknie po użyciu: baner, który po kliknięciu zostaje, wygląda jakby
+          nic się nie stało, a formularz jest już wypełniony. */}
+      {prefill && !prefillUzyty ? (
+        <div className="flex items-start gap-3 rounded-2xl border border-[var(--ff-accent)]/25 bg-[var(--ff-accent-tint)] p-4">
+          <span
+            aria-hidden
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--ff-primary)] text-sm font-semibold text-[var(--ff-on-primary)]"
+          >
+            F
+          </span>
+          <p className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-[var(--ff-text)]">
+            Mogę wypełnić to za Ciebie na podstawie ostatniej faktury dla{' '}
+            <span className="font-semibold">{prefill.contractorName}</span>.{' '}
+            <button
+              type="button"
+              onClick={wypelnijZOstatniej}
+              className="font-semibold text-[var(--ff-accent)] underline-offset-4 hover:underline"
+            >
+              Wypełnij →
+            </button>
+          </p>
+        </div>
+      ) : null}
+
       {/* SECTION: Dane faktury */}
-      <section className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-7 lg:p-8 space-y-5">
+      <section className={sectionClass}>
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Dane faktury</h2>
           <p className="text-sm text-muted-foreground mt-1">
             Numer i data wystawienia
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="internalNumber" className={labelClass}>
               Numer faktury
@@ -331,7 +467,7 @@ export function InvoiceForm() {
       </section>
 
       {/* SECTION: Nabywca */}
-      <section className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-7 lg:p-8 space-y-5">
+      <section className={sectionClass}>
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Nabywca</h2>
           <p className="text-sm text-muted-foreground mt-1">
@@ -340,7 +476,7 @@ export function InvoiceForm() {
               : 'Wyszukaj po NIP w bazie GUS lub wprowadź ręcznie'}
           </p>
         </div>
-        <div className="flex items-start gap-3 rounded-2xl border border-white/45 bg-white/30 p-4 dark:border-white/12 dark:bg-white/[0.04]">
+        <div className="flex items-start gap-3 rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface-container-low)] p-4">
           <Checkbox
             id="buyer-is-consumer"
             checked={!!buyerIsConsumer}
@@ -475,7 +611,7 @@ export function InvoiceForm() {
             ) : null}
           </div>
         ) : null}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label className={labelClass}>Nazwa firmy</Label>
             <Input {...form.register('buyerName')} />
@@ -488,7 +624,7 @@ export function InvoiceForm() {
             <Label className={labelClass}>Adres (linia 2)</Label>
             <Input {...form.register('buyerAddressLine2')} />
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <Label className={labelClass}>Email (opcjonalnie)</Label>
             <Input
               type="email"
@@ -503,7 +639,7 @@ export function InvoiceForm() {
 
       {/* SECTION: Pozycje — tabela vs karty wg `linesDesktopLayout` (1024px, jak Tailwind lg) */}
       <section
-        className="space-y-5 rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-5 lg:p-8"
+        className={sectionClass}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -532,7 +668,7 @@ export function InvoiceForm() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-glass-border text-left text-muted-foreground">
+              <tr className="border-b border-[var(--ff-border)] text-left text-[var(--ff-text-muted)]">
                 <th className="w-8 py-3 text-xs font-medium uppercase tracking-wider">
                   #
                 </th>
@@ -571,7 +707,7 @@ export function InvoiceForm() {
                 return (
                   <tr
                     key={field.id}
-                    className="border-b border-glass-border/50 last:border-0"
+                    className="border-b border-[var(--ff-row-divider)] last:border-0"
                   >
                     <td className="py-3 text-muted-foreground">{index + 1}</td>
                     <td className="py-3 pr-2">
@@ -610,7 +746,7 @@ export function InvoiceForm() {
                     </td>
                     <td className="py-3 pr-2">
                       <select
-                        className="h-9 w-full rounded-lg border border-glass-border bg-white/50 px-2 text-sm backdrop-blur-glass-sm dark:bg-white/[0.05]"
+                        className="h-9 w-full rounded-lg border border-[var(--ff-border)] bg-[var(--ff-surface)] px-2 text-sm text-[var(--ff-text)]"
                         {...form.register(`lines.${index}.vatRate`)}
                       >
                         <option value="23">23%</option>
@@ -622,10 +758,10 @@ export function InvoiceForm() {
                       </select>
                     </td>
                     <td className="py-3 text-right tabular-nums">
-                      {calc.netAmount.toFixed(2)}
+                      {formatPlMoney(calc.netAmount)}
                     </td>
                     <td className="py-3 text-right tabular-nums font-medium">
-                      {calc.grossAmount.toFixed(2)}
+                      {formatPlMoney(calc.grossAmount)}
                     </td>
                     <td className="py-3">
                       <Button
@@ -643,20 +779,6 @@ export function InvoiceForm() {
                 );
               })}
             </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-glass-border/80">
-                <td colSpan={6} className="py-4 text-right font-medium">
-                  RAZEM
-                </td>
-                <td className="py-4 text-right font-medium tabular-nums">
-                  {totals.netTotal.toFixed(2)}
-                </td>
-                <td className="py-4 text-right text-base font-bold tabular-nums">
-                  {totals.grossTotal.toFixed(2)} PLN
-                </td>
-                <td />
-              </tr>
-            </tfoot>
           </table>
         </div>
         ) : (
@@ -671,7 +793,7 @@ export function InvoiceForm() {
             return (
               <div
                 key={field.id}
-                className="space-y-3 rounded-2xl border border-glass-border/50 bg-foreground/2 p-4"
+                className="space-y-3 rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface-container-low)] p-4"
               >
                 <div className="flex items-center justify-between">
                   <span
@@ -739,7 +861,7 @@ export function InvoiceForm() {
                   <div>
                     <Label className={labelClass}>Stawka VAT</Label>
                     <select
-                      className="h-12 w-full rounded-xl border border-glass-border bg-white/50 px-3 text-base backdrop-blur-glass-sm dark:bg-white/[0.05]"
+                      className="h-12 w-full rounded-xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-3 text-base text-[var(--ff-text)]"
                       {...form.register(`lines.${index}.vatRate`)}
                     >
                       <option value="23">23%</option>
@@ -752,16 +874,16 @@ export function InvoiceForm() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-glass-border/50 pt-3">
+                <div className="flex items-center justify-between border-t border-[var(--ff-row-divider)] pt-3">
                   <span className="text-xs uppercase tracking-wider text-muted-foreground">
                     Brutto
                   </span>
                   <div className="text-right">
                     <p className="text-base font-bold tabular-nums">
-                      {calc.grossAmount.toFixed(2)} PLN
+                      {formatPlMoney(calc.grossAmount)} PLN
                     </p>
                     <p className="text-xs tabular-nums text-muted-foreground">
-                      Netto: {calc.netAmount.toFixed(2)}
+                      Netto: {formatPlMoney(calc.netAmount)}
                     </p>
                   </div>
                 </div>
@@ -769,33 +891,22 @@ export function InvoiceForm() {
             );
           })}
 
-          <div className="mt-4 rounded-2xl border border-foreground/20 bg-foreground/5 p-5 backdrop-blur-glass-sm">
-            <div className="flex items-center justify-between">
-              <span className="font-medium">RAZEM</span>
-              <div className="text-right">
-                <p className="font-display text-2xl font-bold tabular-nums tracking-tighter-display">
-                  {totals.grossTotal.toFixed(2)} PLN
-                </p>
-                <p className="text-xs tabular-nums text-muted-foreground">
-                  Netto: {totals.netTotal.toFixed(2)} • VAT:{' '}
-                  {(totals.grossTotal - totals.netTotal).toFixed(2)}
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
         )}
+
+        {/* Jedno podsumowanie pod oboma układami pozycji — tabelą i kartami. */}
+        <InvoiceTotals totals={totals} lines={lineItems} />
       </section>
 
       {/* SECTION: Płatność */}
-      <section className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-7 lg:p-8 space-y-5">
+      <section className={sectionClass}>
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Płatność</h2>
           <p className="text-sm text-muted-foreground mt-1">
             Sposób i termin zapłaty
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label className={labelClass}>Metoda płatności</Label>
             <Select
@@ -825,8 +936,23 @@ export function InvoiceForm() {
               className="h-12 text-base"
               {...form.register('paymentDueDate')}
             />
+            {/* Skróty zamiast kalendarza: na telefonie wybranie daty
+                z natywnego okna to cztery dotknięcia, a „14 dni” jedno.
+                Liczone od daty WYSTAWIENIA, nie od dzisiaj. */}
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[7, 14, 30].map((dni) => (
+                <button
+                  key={dni}
+                  type="button"
+                  onClick={() => ustawTermin(dni)}
+                  className="min-h-9 rounded-full border border-[var(--ff-border)] px-3 text-xs text-[var(--ff-text-muted)] transition-colors hover:border-[var(--ff-border-strong)] hover:text-[var(--ff-text)]"
+                >
+                  {dni} dni
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <Label className={labelClass}>Numer rachunku (dla przelewu)</Label>
             <Input
               {...form.register('bankAccount')}
@@ -837,23 +963,31 @@ export function InvoiceForm() {
       </section>
 
       {/* SECTION: Uwagi */}
-      <section className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/45 dark:bg-[rgba(15,10,30,0.45)] backdrop-blur-[24px] shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] p-7 lg:p-8">
+      <section className={sectionClass}>
         <Label className={labelClass}>Uwagi</Label>
         <Textarea rows={3} {...form.register('notes')} />
       </section>
 
       {/* STICKY FOOTER — przyciski bez tła/bluru (tylko „pływające” nad treścią) */}
-      <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-30 px-6 py-4 lg:left-[280px]">
-        <div className="mx-auto flex max-w-7xl justify-end gap-3 pointer-events-auto">
+      <div className="ff-sticky-actions pointer-events-none">
+        {/* Na telefonie wysyłka jest szeroka i pierwsza (kciuk trafia w nią bez
+            celowania), a „Zapisz” wąskie obok — układ z makiety. Od `sm`
+            wracają dwa przyciski o naturalnej szerokości, dosunięte do prawej.
+            Na telefonie „Zapisz” niesie tę samą akcję co „Szkic” w nagłówku;
+            to nie jest dubel do usunięcia, tylko ten sam wybór w zasięgu kciuka
+            i w zasięgu wzroku. */}
+        <div className="pointer-events-auto mx-auto flex max-w-7xl gap-3 sm:justify-end">
           <Button
             type="button"
             variant="glass"
             size="lg"
             onClick={handleSaveDraft}
             disabled={isSaving || isSending}
+            className="order-2 flex-1 sm:order-1 sm:flex-none"
           >
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Zapisz szkic
+            <span className="sm:hidden">Zapisz</span>
+            <span className="hidden sm:inline">Zapisz szkic</span>
           </Button>
           <Button
             type="button"
@@ -861,9 +995,11 @@ export function InvoiceForm() {
             size="lg"
             onClick={handleSend}
             disabled={isSaving || isSending}
+            className="order-1 flex-[2] sm:order-2 sm:flex-none"
           >
             {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Wystaw i wyślij do KSeF
+            <span className="sm:hidden">Wyślij do KSeF</span>
+            <span className="hidden sm:inline">Wystaw i wyślij do KSeF</span>
           </Button>
         </div>
       </div>

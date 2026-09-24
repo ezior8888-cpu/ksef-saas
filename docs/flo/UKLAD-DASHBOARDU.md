@@ -194,3 +194,76 @@ content/flo/                                 treści 32 rodzajów spraw
 lib/i18n/plural.ts                           odmiana przez liczebnik
 e2e/tests/flo-*.spec.ts                      testy przeglądarkowe
 ```
+
+---
+
+## TELEFON — wrzesień 2026
+
+**Data:** 6 września 2026 · **Napisał:** tor silnika · **Dla kogo:** każdy, kto
+siada do panelu na wąskim ekranie.
+
+Do 6 września 2026 panel na telefonie **nie istniał**: proxy przekierowywało
+każdy telefon na `/mobile` („aplikacja mobilna w przygotowaniu"). Ta sekcja
+opisuje, co się zmieniło, i — ważniejsze — czego NIE wolno cofnąć.
+
+### Przełącznik wpuszczania
+
+`lib/mobile-access.ts` + `NEXT_PUBLIC_MOBILE_PANEL` (`off` | `allowlist` | `on`)
+i `NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST` (identyfikatory `sub` po przecinku).
+Brak zmiennej = `off` = zachowanie sprzed zmiany.
+
+**Prefiks `NEXT_PUBLIC_` nie jest pomyłką.** `proxy.ts` idzie pod Edge, gdzie
+Next wstawia wartości `process.env` w czasie BUDOWANIA, a `Dockerfile`
+przekazuje do builda wyłącznie argumenty `NEXT_PUBLIC_*`. Zmienna bez tego
+prefiksu byłaby w obrazie `undefined` i blokada nigdy by nie zeszła — bez
+żadnego komunikatu, który by na to wskazywał.
+
+W trybie `allowlist` telefon zawsze dociera do `/login` i `/register`, bo
+o wstępie decyduje `userId`, a tego przed zalogowaniem nie ma. Bez tej furtki
+konto z listy nie miałoby jak się zalogować.
+
+### Co gdzie mieszka na wąskim ekranie
+
+| Element | Komputer (`lg`+) | Telefon |
+|---|---|---|
+| Nawigacja | sidebar 280 px | dolny pasek: Flo · Faktury · **Nowa** · Miesiąc · Więcej |
+| Tytuł w pasku | „Dashboard" + miesiąc | wordmark FaktFlow |
+| Przełącznik organizacji | kartonik + rozwijka | pigułka „● Nazwa" + arkusz z dołu |
+| Wylogowanie | ikona w pasku | arkusz „Więcej" |
+| Pomoc | pływający bąbelek | arkusz „Więcej" (bąbelek siadał na „Zapisz") |
+| Nagłówek agenta | ukryty (pasek ma tytuł) | **widoczny** — inaczej agent nigdzie się nie przedstawia |
+| Prawa szyna | jest | **nie ma** |
+| Liczby miesiąca | prawa szyna | `/przeplywy`, zakładka „Miesiąc" |
+| Zatwierdzone + historia | prawa szyna | odznaka w nagłówku Flo → arkusz |
+| Baner certyfikatu | wariant szeroki, w szynie na `/dashboard` | wariant wąski na górze, do zamknięcia na dobę |
+
+**Dlaczego szyna schodzi, a nie zjeżdża pod wątek.** Ekran agenta ma
+zablokowaną wysokość (`html.ff-route-dashboard`), więc szyna pod wątkiem
+lądowała poza ekranem i nie dało się do niej doscrollować. Panel
+„Zatwierdzone" niesie `approvedAtLabel` — jedyny ślad zgody klienta — więc
+schowanie go bez zastępnika było wykluczone. Stąd arkusz.
+
+### Czego NADAL nie ma i nie będzie
+
+Wszystko z sekcji „Czego z makiety NIE WOLNO przepisać" obowiązuje bez zmian.
+Makieta telefonu pokazuje odznakę **„TRYB 3"** i podpis **„Pracuje sam ·
+informuje"** — oba zostały odrzucone przez właściciela produktu i decyzja
+została **potwierdzona ponownie 6 września 2026**, przy okazji tej przebudowy.
+Nagłówek na telefonie ma awatar, imię, uczciwy podpis i dwie odznaki
+(licznik spraw + kolejka). Żadnych trybów.
+
+### Tokeny, o których trzeba wiedzieć
+
+`--ff-safe-{t,b,l,r}` (bezpieczne obszary), `--ff-header-h` (56/80 px),
+`--ff-bottom-nav-h` (64/0 px), `--ff-sidebar-w` (0/280 px) — wszystkie
+w `app/globals.css`, przełączane jednym `@media (min-width: 1024px)`.
+Klasa `.ff-sticky-actions` zastąpiła dziesięć kopii `fixed bottom-0 …
+lg:left-[280px]`; jeśli zmienia się wysokość nawigacji, zmienia się w jednym
+miejscu.
+
+**Pułapka, która kosztowała pół dnia:** `.ff-route-template` miał
+`animation: … both`. `both` utrzymuje `transform` po zakończeniu animacji,
+a niezerowy `transform` tworzy blok zawierający dla `position: fixed` — więc
+WSZYSTKIE przyklejone paski były przypięte do pudełka trasy, nie do okna
+(zmierzone: 112 px nad dolną krawędzią). Jest `backwards`. Nie zmieniaj tego
+z powrotem.

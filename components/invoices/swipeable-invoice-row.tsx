@@ -22,6 +22,7 @@ import { StatusBadge } from './status-badge';
 
 import type { InvoiceRow } from './invoice-row-types';
 import { saveBlob } from '@/lib/download';
+import { formatPlMoney } from '@/lib/format/pl';
 
 export type SwipeableInvoiceRowInvoice = InvoiceRow;
 
@@ -160,7 +161,7 @@ export function SwipeableInvoiceRow({ invoice }: Props) {
             </div>
             <p className="shrink-0 text-sm font-medium tabular-nums">
               {invoice.gross_total != null
-                ? `${Number(invoice.gross_total).toFixed(2)} PLN`
+                ? `${formatPlMoney(Number(invoice.gross_total))} PLN`
                 : '—'}
             </p>
           </div>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  captureInsertUndo,
   captureUndo,
   evaluateUndo,
   readUndoRecord,
@@ -9,7 +10,7 @@ import {
   UNDO_WINDOW_MS,
   type UndoRecord,
 } from '@/lib/flo/undo';
-import { runFloTick } from '@/lib/flo/tick';
+import { runFloTick, type FloTickSources } from '@/lib/flo/tick';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -91,6 +92,26 @@ describe('cofnięcie — reguła', () => {
     expect(readUndoRecord({ undo: { at: 'x' } })).toBeNull();
     expect(readUndoRecord({ undo: { ...record(), table: 'audit_logs' } })).toBeNull();
     expect(readUndoRecord({ undo: record() })).not.toBeNull();
+  });
+
+  it('usunięcie wiersza tylko tam, gdzie jest dokładnym odwróceniem wstawienia', () => {
+    const insert = captureInsertUndo(
+      'payments',
+      'pay-1',
+      { tenant_id: 'ten-1', invoice_id: 'inv-1', amount: 3300 },
+      NOW,
+    );
+    expect(readUndoRecord({ undo: insert })).toMatchObject({ op: 'delete', table: 'payments' });
+
+    // Podrzucony do ładunku zapis „usuń fakturę" nie jest cofnięciem.
+    expect(readUndoRecord({ undo: { ...insert, table: 'invoices' } })).toBeNull();
+    // Usunięcie bez warunku „wiersz dalej jest taki, jak go wstawiliśmy".
+    expect(readUndoRecord({ undo: { ...insert, after: {} } })).toBeNull();
+    // Wpłatę agent tylko wstawia — „przywracanie" jej pól nie ma sensu.
+    expect(readUndoRecord({ undo: { ...insert, op: 'restore' } })).toBeNull();
+    expect(readUndoRecord({ undo: { ...insert, op: 'truncate' } })).toBeNull();
+    // Zapisy sprzed wprowadzenia `op` dalej działają jak przywrócenie.
+    expect(readUndoRecord({ undo: record() })).toMatchObject({ op: 'restore' });
   });
 
   it('zapisuje stan sprzed i po zmianie', () => {
@@ -184,6 +205,17 @@ describe('cofnięcie — wykonanie', () => {
 });
 
 describe('puls agenta', () => {
+  // Te testy dotyczą sprzątania. Reguły funkcji mają własne testy
+  // (np. `flo-payment-confirm-producer.test.ts`), więc tutaj puls nie widzi
+  // żadnego konta — inaczej sięgnąłby po bazę z `.env.local`.
+  const NO_TENANTS: FloTickSources = {
+    listTenantIds: async () => [],
+    paymentConfirm: {
+      readOverdueInvoices: async () => [],
+      readInvoiceState: async () => ({ facts: {}, context: {} }),
+    },
+  };
+
   it('wygasza przeterminowane propozycje', async () => {
     const db = createFakeDb({
       flo_proposals: [
@@ -192,7 +224,7 @@ describe('puls agenta', () => {
       ],
     });
 
-    const result = await runFloTick(undefined, NOW, db.client);
+    const result = await runFloTick(undefined, NOW, db.client, NO_TENANTS);
 
     expect(result.expired).toBe(1);
     expect(db.tables.flo_proposals[0]!.status).toBe('expired');
@@ -218,7 +250,7 @@ describe('puls agenta', () => {
       ],
     });
 
-    const result = await runFloTick(undefined, NOW, db.client);
+    const result = await runFloTick(undefined, NOW, db.client, NO_TENANTS);
 
     expect(result.released).toBe(1);
     // Wraca do „zatwierdzona”, nie do „otwarta”: człowiek już się zgodził,
@@ -240,7 +272,7 @@ describe('puls agenta', () => {
       ],
     });
 
-    const result = await runFloTick(undefined, NOW, db.client);
+    const result = await runFloTick(undefined, NOW, db.client, NO_TENANTS);
 
     expect(result.released).toBe(0);
     expect(db.tables.flo_proposals[0]!.status).toBe('executing');

@@ -3,8 +3,8 @@
  *
  * Codziennie o 07:30 czasu polskiego — czyli zanim ktokolwiek otworzy
  * aplikację, ale już po ciszy nocnej. Ten cron jest miejscem, w którym
- * agent „patrzy na dane”: dziś sprząta po sobie, a od bloku 3 będą się tu
- * dokładać reguły kolejnych funkcji.
+ * agent „patrzy na dane”: sprząta po sobie, a potem przechodzi reguły
+ * funkcji — pierwszą codzienną jest K-01 (plan FLO 2, zadanie 1.1).
  *
  * ŚWIADOMIE NIE MA TU DRUGIEJ DEFINICJI DLA INNGESTA. Produkcja pracuje na
  * pg-boss od 18 sierpnia, a Inngest jest w trakcie odpinania — dokładanie
@@ -15,8 +15,14 @@
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { floDb, type FloDbClient } from '@/lib/flo/db-types';
 import { runKsefAuditSweep } from '@/lib/flo/functions/audit-sweep';
+import {
+  productionPaymentConfirmSources,
+  runPaymentConfirmSweep,
+  type PaymentConfirmSources,
+} from '@/lib/flo/functions/payment-confirm-producer';
 import { expireStale } from '@/lib/flo/proposals';
 import type { JobContext } from '@/lib/jobs/registry';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
  * Po tylu minutach propozycja w stanie „wykonuję” jest uznana za porzuconą.
@@ -33,34 +39,122 @@ export interface FloTickResult {
   expired: number;
   released: number;
   audited: number;
+  /** K-01: nowe pytania „zapłacił?". */
+  confirmAsked: number;
+  /** K-01: otwarte pytania zamknięte, bo faktura przestała być zaległa. */
+  confirmClosed: number;
+  /**
+   * Nieudane przebiegi reguł na kontach (X-05 i K-01 liczone osobno — konto,
+   * na którym padły obie, liczy się dwa razy). Puls za każdym razem szedł dalej.
+   */
+  failedTenants: number;
+}
+
+/**
+ * Skąd puls bierze dane poza tabelami agenta.
+ *
+ * Wstrzykiwalne z tego samego powodu co `db`: testy pulsu mają chodzić na
+ * atrapie, a nie po bazie z `.env.local`.
+ */
+export interface FloTickSources {
+  /** Konta, na które puls patrzy. */
+  listTenantIds: () => Promise<string[]>;
+  paymentConfirm: PaymentConfirmSources;
+  /**
+   * Globalny wyłącznik dla reguł, które nie mają własnych źródeł (X-05).
+   * Wstrzykiwany tylko w testach.
+   */
+  readGlobalKill?: () => Promise<boolean>;
 }
 
 export async function runFloTick(
-  _ctx?: JobContext,
+  ctx?: JobContext,
   now: Date = new Date(),
   db: FloDbClient = floDb(),
+  sources: FloTickSources = productionTickSources(),
 ): Promise<FloTickResult> {
   const expired = await expireStale(now, db);
   const released = await releaseStuck(now, db);
 
   // ── reguły funkcji ─────────────────────────────────────────
   //
+  // Jedna lista kont dla wszystkich reguł. Audyt miał kiedyś własne
+  // `limit(200)` bez sortowania — konta ponad dwusetne mogły go nie dostać
+  // nigdy.
+  const tenantIds = await sources.listTenantIds();
+
   // Audyt porządku (X-05) chodzi RAZ W MIESIĄCU, nie codziennie: to jest
   // przegląd papierów, a nie sprawa bieżąca. Codzienne przypominanie o tych
   // samych zaległościach zamieniłoby go w listę zarzutów.
-  const audited = isFirstBusinessDay(now)
-    ? await runKsefAuditSweep(now)
-    : 0;
+  const audit = isFirstBusinessDay(now)
+    ? await runKsefAuditSweep(tenantIds, now, db, {
+        readGlobalKill: sources.readGlobalKill,
+        logger: ctx?.logger,
+      })
+    : { created: 0, failed: 0 };
 
-  // ── miejsce na reguły funkcji ──────────────────────────────
+  // K-01 (zadanie 1.1 planu FLO 2): „zapłacił?" dobę po terminie.
+  // Idzie PRZED regułami, które coś proponują: agent najpierw ustala, co
+  // wpłynęło, a dopiero potem ma prawo cokolwiek na tej podstawie sugerować.
+  const confirm = await runPaymentConfirmSweep(
+    tenantIds,
+    now,
+    db,
+    sources.paymentConfirm,
+    ctx?.logger,
+  );
+
+  // ── miejsce na kolejne reguły ──────────────────────────────
   //
-  // Od bloku 3 każda funkcja agenta dokłada tu swoje pytanie do danych:
-  // W-04 szuka zgubionych dokumentów, P-01 rytmu fakturowania, T-02
-  // przelicza limit. Kolejność będzie miała znaczenie (najpierw fakty,
-  // potem propozycje), więc nowe reguły dopisujemy NA KOŃCU, a nie
-  // wciskamy między istniejące.
+  // W-04 szuka zgubionych dokumentów, P-03 brakującej faktury, O-01
+  // prowadzi nowe konto. Kolejność ma znaczenie (najpierw fakty, potem
+  // propozycje, na końcu miękkie podpowiedzi), więc nowe reguły dopisujemy
+  // NA KOŃCU, a nie wciskamy między istniejące.
 
-  return { expired, released, audited };
+  return {
+    expired,
+    released,
+    audited: audit.created,
+    confirmAsked: confirm.asked,
+    confirmClosed: confirm.closed,
+    failedTenants: audit.failed + confirm.failed,
+  };
+}
+
+export function productionTickSources(): FloTickSources {
+  return {
+    listTenantIds: readActiveTenantIds,
+    paymentConfirm: productionPaymentConfirmSources(),
+  };
+}
+
+/** Rozmiar strony przy czytaniu kont — PostgREST i tak tnie duże odpowiedzi. */
+const TENANT_PAGE = 500;
+
+/**
+ * Aktywne, nieusunięte konta — ta sama definicja co w metrykach panelu.
+ *
+ * Czytane stronami do końca. Stały limit bez stronicowania oznaczałby, że
+ * konto numer 501 nie dostaje pytań nigdy, i nikt by tego nie zauważył.
+ */
+async function readActiveTenantIds(): Promise<string[]> {
+  const supabase = createAdminClient();
+  const ids: string[] = [];
+
+  for (let from = 0; ; from += TENANT_PAGE) {
+    const { data, error } = await supabase
+      .from('tenants')
+      .select('id')
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .order('id')
+      .range(from, from + TENANT_PAGE - 1);
+
+    if (error) throw new Error(error.message);
+    const page = data ?? [];
+    ids.push(...page.map((row) => row.id));
+    if (page.length < TENANT_PAGE) return ids;
+  }
 }
 
 /**

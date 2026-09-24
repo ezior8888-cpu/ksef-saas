@@ -51,6 +51,13 @@ export const ROLLOUT_ORDER: readonly {
   { feature: 'W-01', kind: 'expense.review' },
   { feature: 'W-02', kind: 'expense.rule' },
   { feature: 'K-01', kind: 'payment.confirm' },
+  // X-05 ma promień 2 — pomyłka zostaje w koncie — a mimo to idzie przez
+  // kanarka. Decyzja właściciela produktu z 17.09.2026: do tego dnia audyt
+  // na produkcji nie znalazł niczego (zapytania o nieistniejące kolumny),
+  // więc jego naprawa to pierwsze w historii karty audytu. Bez kanarka
+  // dostałyby je wszystkie konta jednego dnia, a nikt nie widział jeszcze,
+  // jak ten audyt wygląda na prawdziwych danych.
+  { feature: 'X-05', kind: 'ksef.audit' },
   { feature: 'X-01', kind: 'ksef.status' },
   { feature: 'X-02', kind: 'ksef.fix' },
   { feature: 'B-01', kind: 'accountant.package' },

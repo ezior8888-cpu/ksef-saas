@@ -390,7 +390,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
         <Textarea rows={2} {...form.register('notes')} />
       </section>
 
-      <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-30 px-6 py-4 lg:left-[280px]">
+      <div className="ff-sticky-actions pointer-events-none">
         <div className="mx-auto flex max-w-7xl justify-end gap-3 pointer-events-auto">
           <Button type="button" variant="glass" disabled={busy} size="lg" onClick={onSave}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

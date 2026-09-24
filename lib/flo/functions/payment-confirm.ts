@@ -28,13 +28,21 @@
  *    momentu wszystkie dane byłyby fałszywe.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 import { renderCopy } from '@/lib/flo/copy';
-import { fingerprintOf } from '@/lib/flo/fingerprint';
+import {
+  fingerprintOf,
+  warsawIsoDate,
+  type FloState,
+} from '@/lib/flo/fingerprint';
 import { registerFloHandler } from '@/lib/flo/handlers';
-import { formatDays, formatPlnPlain } from '@/lib/flo/money';
+import { formatDays, formatPlnPlain, parsePlnAmount } from '@/lib/flo/money';
 import type { CreateProposalInput } from '@/lib/flo/proposals';
-import { captureUndo } from '@/lib/flo/undo';
+import { captureInsertUndo } from '@/lib/flo/undo';
 import { createAdminClient } from '@/lib/supabase/admin';
+import type { Database, TablesInsert } from '@/types/database';
+import type { FloApproveInput } from '@/types/flo';
 
 /** Dobę po terminie, nie w dniu terminu. Przelew bywa w drodze. */
 const ASK_AFTER_DAYS = 1;
@@ -168,6 +176,129 @@ export function buildPaymentConfirmProposal(input: {
   };
 }
 
+/**
+ * Karta o JEDNEJ fakturze — tę buduje producent w pulsie (zadanie 1.1
+ * planu FLO 2, `payment-confirm-producer.ts`).
+ *
+ * DLACZEGO NIE KARTA ZBIORCZA Z FUNKCJI WYŻEJ. Przy wpinaniu producenta
+ * wyszły trzy rzeczy, których tamta funkcja nie widzi, bo żyją w innych
+ * plikach:
+ *
+ * 1. Wariant `choice` NIE RYSUJE LISTY faktur. Karta „Sprawdźmy 3 zaległe
+ *    płatności" ma jeden przycisk „Tak", a wykonawca zamyka nim PIERWSZĄ
+ *    fakturę z ładunku — tę, której człowiek na ekranie nie widział. To jest
+ *    dokładnie awaria nr 1 z nagłówka tego pliku.
+ *
+ * 2. Re-walidacja (`fingerprint.ts`) czyta fakty faktury po `payload.invoiceId`.
+ *    Karta zbiorcza go nie ma, więc przy kliknięciu odcisk liczy się z etykiet
+ *    ładunku i nie zgadza się z zapisanym NIGDY — każde kliknięcie kończyłoby
+ *    się komunikatem „dane się zmieniły".
+ *
+ * 3. Klucz tematu z datą dnia daje NOWĄ kartę przy każdym przebiegu pulsu,
+ *    bo wczorajsza ma inny klucz. Po tygodniu: siedem kart o to samo.
+ *
+ * Tekst i dowody zostają z funkcji zbiorczej. Zmieniają się rzeczy, które
+ * zależą od tożsamości faktury, i akcje: „Tak", „Jeszcze nie", „Częściowo".
+ *
+ * KWOTY I ODCISK Z JEDNEGO ODCZYTU. Funkcja nie przyjmuje osobno „faktury
+ * z listy" i „faktów do odcisku", bo to były dwa odczyty bazy w dwóch
+ * różnych chwilach. Wpłata, która wpadła między nimi, dawała kartę ze starą
+ * kwotą i ze ŚWIEŻYM odciskiem — czyli taką, która przechodzi re-walidację
+ * i każe zapisać wpłatę na kwotę, której już nikt nie jest winien. Teraz
+ * wszystko, co widać na karcie, pochodzi z `state` — tego samego odczytu,
+ * który daje odcisk.
+ *
+ * Zwraca `null`, gdy według tego odczytu faktura nie jest już zaległa
+ * (opłacona, wstrzymana, termin przesunięty, zniknęła). Pytać wtedy nie ma
+ * o co.
+ */
+export function buildInvoiceConfirmProposal(input: {
+  tenantId: string;
+  invoiceId: string;
+  /**
+   * Stan faktury z `readState` — TĄ SAMĄ drogą, którą pójdzie re-walidacja
+   * przy kliknięciu. Fakty zbudowane tu po swojemu dawałyby odcisk, który
+   * nie zgadza się nigdy.
+   */
+  state: FloState;
+  now?: Date;
+}): CreateProposalInput | null {
+  const now = input.now ?? new Date();
+  const entry = overdueEntryFromState(input.invoiceId, input.state, now);
+  if (!entry) return null;
+
+  // Jednoelementowy wybór zawsze daje kartę — `null` jest tylko dla pustego.
+  const base = buildPaymentConfirmProposal({
+    tenantId: input.tenantId,
+    selection: [entry],
+    now,
+  })!;
+
+  return {
+    ...base,
+    // Jedna faktura = jeden temat. Kolejny przebieg pulsu aktualizuje tę
+    // samą kartę, zamiast stawiać obok drugą.
+    topicKey: `payment.confirm:${input.invoiceId}`,
+    fingerprint: fingerprintOf(input.state.facts),
+    // Ładunek składany od zera, a nie z funkcji zbiorczej: jej `invoices`,
+    // `snoozeDays` i `inputLabel` na najwyższym poziomie opisywały kartę,
+    // której ta nie jest („Nie teraz" nie odkłada tu o tydzień — zamyka temat).
+    payload: {
+      invoiceId: input.invoiceId,
+      // Kontekst do meldunku po wykonaniu. Kwot tu nie ma: wykonawca liczy
+      // należność z `facts`, które re-walidacja właśnie potwierdziła.
+      number: entry.invoice.number,
+      contractorName: entry.invoice.contractorName,
+      // Stan „przed" dla zdania o zmianie. Muszą to być te same klucze, które
+      // policzy `readState` — inaczej komunikat re-walidacji byłby o niczym.
+      facts: input.state.facts,
+      primaryLabel: 'Tak, zapłacił',
+      // Trzy odpowiedzi, bo rzeczywistość nie jest binarna (awaria nr 3
+      // z nagłówka). Wzór: atrapa `fx-choice-payment`.
+      secondary: [
+        { label: 'Jeszcze nie', intent: 'dismiss' },
+        {
+          label: 'Częściowo',
+          intent: 'input',
+          inputLabel: 'Ile wpłynęło?',
+          inputKind: 'amount',
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * Faktura po terminie zbudowana ze stanu z `readState` — funkcja czysta.
+ *
+ * Reguły „zaległa czy nie" są te same co przy pierwszym odczycie
+ * (`selectOverdueForConfirmation`), plus status KSeF: producent czyta tylko
+ * faktury przyjęte, więc faktura, która w międzyczasie przestała nią być,
+ * też nie jest pytaniem.
+ */
+export function overdueEntryFromState(
+  invoiceId: string,
+  state: FloState,
+  now: Date,
+): OverdueSelection | null {
+  const { facts, context } = state;
+  if ('missing' in facts) return null;
+  if (facts.status !== 'accepted') return null;
+  if (typeof facts.dueDate !== 'string') return null;
+
+  const invoice: OverdueInvoice = {
+    id: invoiceId,
+    number: context.invoiceNumber ?? 'bez numeru',
+    contractorName: context.contractorName ?? 'Kontrahent',
+    grossTotal: Number(facts.grossTotal ?? 0),
+    paidAmount: Number(facts.paidAmount ?? 0),
+    dueDate: facts.dueDate,
+    remindersPaused: facts.remindersPaused === 1,
+  };
+
+  return selectOverdueForConfirmation([invoice], now)[0] ?? null;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Zapis odpowiedzi
 // ═══════════════════════════════════════════════════════════════
@@ -195,28 +326,79 @@ export function classifyConfirmation(
   return input.amount >= input.outstanding - 0.01 ? 'full' : 'partial';
 }
 
-interface PaymentsClient {
-  from: (table: 'payments' | 'invoices') => {
-    insert: (row: Record<string, unknown>) => Promise<{
-      error: { message: string } | null;
-    }>;
-    select: (columns: string) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => {
-        maybeSingle: () => Promise<{
-          data: Record<string, unknown> | null;
-          error: { message: string } | null;
-        }>;
-      };
-    };
-    update: (patch: Record<string, unknown>) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => Promise<{ error: { message: string } | null }>;
-    };
+/** Ślad w `payments.notes` — skąd wzięła się wpłata bez wyciągu z banku. */
+export const CONFIRMATION_NOTE = 'Potwierdzone przez klienta w karcie FLO';
+
+export interface PaymentConfirmPlan {
+  invoiceId: string;
+  amount: number;
+  kind: Exclude<ConfirmationKind, 'invalid'>;
+  /** Numer faktury do meldunku. */
+  number: string;
+}
+
+/**
+ * Co zapisać po kliknięciu — funkcja czysta, cała logika wykonawcy bez bazy.
+ *
+ * TRZY ZASADY:
+ *
+ * 1. FAKTURA WYŁĄCZNIE Z ŁADUNKU. `selectedIds` przychodzi z przeglądarki,
+ *    a zapis idzie klientem administracyjnym, z pominięciem RLS. Wcześniej
+ *    wykonawca brał identyfikator właśnie stamtąd — podmieniony w żądaniu
+ *    dopisywał wpłatę do dowolnej faktury, także cudzego konta, a trigger
+ *    (SECURITY DEFINER) przeliczał jej `paid_amount`. Karta dotyczy jednej
+ *    faktury i tylko tę wolno zamknąć.
+ *
+ * 2. NALEŻNOŚĆ Z `facts`. To są fakty, które re-walidacja sprawdziła
+ *    z bazą tuż przed wywołaniem wykonawcy — nie kwota wpisana w ładunek
+ *    w chwili tworzenia karty.
+ *
+ * 3. KWOTA WPISANA PRZEZ CZŁOWIEKA JEST NAPISEM. „1 234,56" czyta
+ *    `parsePlnAmount`; napis, którego nie rozumiemy, to odmowa, nie zero.
+ */
+export function planPaymentConfirmation(
+  payload: Record<string, unknown>,
+  input?: FloApproveInput,
+): PaymentConfirmPlan {
+  const invoiceId =
+    typeof payload.invoiceId === 'string' && payload.invoiceId.length > 0
+      ? payload.invoiceId
+      : null;
+  if (!invoiceId) throw new Error('Propozycja bez identyfikatora faktury');
+
+  const selected = input?.selectedIds ?? [];
+  if (selected.some((id) => id !== invoiceId)) {
+    throw new Error('Karta dotyczy innej faktury niż wskazana');
+  }
+
+  const facts =
+    typeof payload.facts === 'object' && payload.facts !== null
+      ? (payload.facts as Record<string, unknown>)
+      : {};
+  const grossTotal = Number(facts.grossTotal);
+  const paidAmount = Number(facts.paidAmount);
+  if (!Number.isFinite(grossTotal) || !Number.isFinite(paidAmount)) {
+    throw new Error('Propozycja bez kwot faktury');
+  }
+  const outstanding = round2(grossTotal - paidAmount);
+
+  let amount = outstanding;
+  if (input?.value !== undefined) {
+    const parsed = parsePlnAmount(input.value);
+    if (parsed === null) throw new Error('Nie rozumiem wpisanej kwoty');
+    amount = parsed;
+  }
+
+  const kind = classifyConfirmation({ invoiceId, amount, outstanding });
+  if (kind === 'invalid') {
+    throw new Error('Kwota poza zakresem należności');
+  }
+
+  return {
+    invoiceId,
+    amount,
+    kind,
+    number: typeof payload.number === 'string' ? payload.number : 'bez numeru',
   };
 }
 
@@ -226,65 +408,64 @@ interface PaymentsClient {
  * Czynność odwracalna wewnątrz konta, więc ma cofnięcie. Zapis idzie do
  * `payments` — tej samej tabeli, z której korzysta import wyciągów — żeby
  * potwierdzenie ręczne i wpłata z banku znaczyły dokładnie to samo.
+ * `invoices.paid_amount` przelicza trigger `recalculate_invoice_paid_amount`
+ * jako sumę wpłat; wykonawca go nie dotyka.
+ *
+ * KLIENT TYPOWANY, NIE RZUTOWANY. Poprzednia wersja rzutowała klienta na
+ * ręcznie napisany interfejs, który przyjmował dowolny obiekt — i wstawiała
+ * `paid_at`, `source`, `note`, których tabela nie ma, bez `payment_date`,
+ * który jest NOT NULL. Typecheck milczał, a każde „Tak" kończyło się błędem
+ * PostgREST-a. Wiersz typu `TablesInsert<'payments'>` nie skompiluje się
+ * z nieistniejącą kolumną ani bez wymaganej.
  */
 registerFloHandler('payment.confirm', async (ctx) => {
-  const payload = ctx.proposal.payload ?? {};
-  const list = Array.isArray(payload.invoices) ? payload.invoices : [];
-  const first = list[0] as Record<string, unknown> | undefined;
+  const now = new Date();
+  const plan = planPaymentConfirmation(ctx.proposal.payload ?? {}, ctx.input);
 
-  const invoiceId =
-    typeof ctx.input?.selectedIds?.[0] === 'string'
-      ? ctx.input.selectedIds[0]
-      : typeof first?.invoiceId === 'string'
-        ? first.invoiceId
-        : null;
-
-  if (!invoiceId) throw new Error('Propozycja bez identyfikatora faktury');
-
-  const entry = list.find(
-    (item) =>
-      typeof item === 'object' &&
-      item !== null &&
-      (item as Record<string, unknown>).invoiceId === invoiceId,
-  ) as Record<string, unknown> | undefined;
-
-  const outstanding = Number(entry?.outstanding ?? 0);
-  const declared = ctx.input?.value ? Number(ctx.input.value) : outstanding;
-
-  const kind = classifyConfirmation({ invoiceId, amount: declared, outstanding });
-  if (kind === 'invalid') {
-    throw new Error('Kwota poza zakresem należności');
-  }
-
-  const client = createAdminClient() as unknown as PaymentsClient;
-
-  const { error } = await client.from('payments').insert({
+  const row: TablesInsert<'payments'> = {
     tenant_id: ctx.proposal.tenant_id,
-    invoice_id: invoiceId,
-    amount: declared,
-    paid_at: new Date().toISOString(),
-    source: 'flo_confirmation',
-    note: 'potwierdzone przez klienta w karcie FLO',
-  });
+    invoice_id: plan.invoiceId,
+    amount: plan.amount,
+    // Kolumna `DATE` — dzień w polskiej strefie, nie w strefie serwera.
+    payment_date: warsawIsoDate(now),
+    // Człowiek sam potwierdził wpłatę. Bez tego wiersz wyglądałby jak
+    // niepotwierdzone dopasowanie z banku.
+    is_confirmed: true,
+    notes: CONFIRMATION_NOTE,
+  };
+
+  const client: SupabaseClient<Database> = createAdminClient();
+  const { data, error } = await client
+    .from('payments')
+    .insert(row)
+    .select('id')
+    .single();
 
   if (error) throw new Error(error.message);
 
   return {
     summary:
-      kind === 'full'
-        ? `faktura ${String(entry?.number ?? '')} oznaczona jako zapłacona`
-        : `zapisano wpłatę częściową ${formatPlnPlain(declared)}`,
+      plan.kind === 'full'
+        ? `faktura ${plan.number} oznaczona jako zapłacona`
+        : `zapisano wpłatę częściową ${formatPlnPlain(plan.amount)}`,
     details: {
-      invoiceId,
-      amount: declared,
-      kind,
-      // Stan sprzed zmiany — podstawa cofnięcia przez dziesięć minut.
-      undo: captureUndo(
-        'invoices',
-        invoiceId,
-        { paid_amount: Number(payload.previousPaid ?? 0) },
-        { paid_amount: declared },
-      ),
+      invoiceId: plan.invoiceId,
+      paymentId: data.id,
+      amount: plan.amount,
+      kind: plan.kind,
     },
+    // Cofnięcie = usunięcie TEGO wiersza. Trigger sam przeliczy fakturę.
+    // Pola w `after` pilnują, żeby nie skasować wpłaty, którą człowiek
+    // w międzyczasie poprawił ręcznie.
+    undo: captureInsertUndo(
+      'payments',
+      data.id,
+      {
+        tenant_id: row.tenant_id,
+        invoice_id: row.invoice_id,
+        amount: row.amount,
+      },
+      now,
+    ),
   };
 });

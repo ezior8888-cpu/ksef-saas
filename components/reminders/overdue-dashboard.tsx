@@ -1,5 +1,9 @@
 'use client';
 
+import {
+  ResponsiveTable,
+  ResponsiveTableCard,
+} from '@/components/dashboard/responsive-table';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
@@ -11,6 +15,7 @@ import {
   triggerManualReminderAction,
 } from '@/app/actions/reminders';
 import { cn } from '@/lib/utils';
+import { formatPlInt, formatPlMoney } from '@/lib/format/pl';
 
 export interface OverdueInvoice {
   id: string;
@@ -35,16 +40,7 @@ interface Props {
   };
 }
 
-function formatPlMoney(n: number): string {
-  return n.toLocaleString('pl-PL', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
-function formatPlInt(n: number): string {
-  return n.toLocaleString('pl-PL', { maximumFractionDigits: 0 });
-}
 
 export function OverdueDashboard({ overdueInvoices, stats }: Props) {
   return (
@@ -143,15 +139,10 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
           </p>
         </div>
       ) : (
-        <div className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
-          <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
-            <h2 className="text-[15px] font-semibold text-[var(--ff-text-strong)]">Lista zaległości</h2>
-            <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
-              {formatPlInt(overdueInvoices.length)} pozycji (max. 100) • sortowanie
-              wg dni po terminie
-            </p>
-          </div>
-          <div className="overflow-x-auto">
+        <ResponsiveTable
+          title="Lista zaległości"
+          subtitle={`${formatPlInt(overdueInvoices.length)} pozycji (max. 100) • sortowanie wg dni po terminie`}
+          table={
             <table className="w-full min-w-[880px] text-left text-[14px]">
               <thead>
                 <tr className="border-b border-[var(--ff-border)]">
@@ -182,14 +173,31 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
                 ))}
               </tbody>
             </table>
-          </div>
-        </div>
+          }
+          cards={overdueInvoices.map((inv) => (
+            <OverdueRow key={inv.id} invoice={inv} variant="card" />
+          ))}
+        />
       )}
     </div>
   );
 }
 
-function OverdueRow({ invoice }: { invoice: OverdueInvoice }) {
+/**
+ * Jedna zaległość — jako wiersz tabeli (od `lg`) albo jako karta (telefon).
+ *
+ * JEDEN KOMPONENT, DWA WYJŚCIA. Stan wysyłki, wstrzymania i oba uchwyty są
+ * wspólne; różni się wyłącznie znacznik. Rozbicie tego na dwa komponenty
+ * znaczyłoby dwie kopie `handleSendReminder` i `handleTogglePause` — czyli
+ * dwie okazje, żeby poprawić błąd tylko w jednej z nich.
+ */
+function OverdueRow({
+  invoice,
+  variant = 'row',
+}: {
+  invoice: OverdueInvoice;
+  variant?: 'row' | 'card';
+}) {
   const router = useRouter();
   const [isSending, startSending] = useTransition();
   const [isPausing, startPausing] = useTransition();
@@ -252,6 +260,93 @@ function OverdueRow({ invoice }: { invoice: OverdueInvoice }) {
 
   const iconBtn =
     'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_6%,transparent)] text-[var(--ff-on-surface)] transition-colors hover:border-white/20 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] disabled:pointer-events-none disabled:opacity-40';
+
+  const odznakaOpoznienia = (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold',
+        badgeClass,
+      )}
+    >
+      {invoice.days_overdue} dni
+    </span>
+  );
+
+  const przyciski = (
+    <>
+      <button
+        type="button"
+        onClick={handleSendReminder}
+        disabled={
+          isSending || invoice.reminders_paused || !(invoice.buyer_email?.trim())
+        }
+        className={iconBtn}
+        title="Wyślij przypomnienie teraz"
+        aria-label="Wyślij przypomnienie teraz"
+      >
+        {isSending ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        ) : (
+          <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
+            send
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={handleTogglePause}
+        disabled={isPausing}
+        className={iconBtn}
+        title={
+          invoice.reminders_paused
+            ? 'Wznów przypomnienia'
+            : 'Wstrzymaj przypomnienia'
+        }
+        aria-label={
+          invoice.reminders_paused
+            ? 'Wznów przypomnienia'
+            : 'Wstrzymaj przypomnienia'
+        }
+      >
+        {isPausing ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        ) : (
+          <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
+            {invoice.reminders_paused ? 'play_arrow' : 'pause'}
+          </span>
+        )}
+      </button>
+    </>
+  );
+
+  if (variant === 'card') {
+    return (
+      <ResponsiveTableCard
+        title={invoice.buyer_name || '—'}
+        subtitle={invoice.buyer_nip ? `NIP ${invoice.buyer_nip}` : undefined}
+        amount={`${formatPlMoney(invoice.amount_due)} PLN`}
+        meta={
+          <>
+            {odznakaOpoznienia}
+            <Link
+              href={`/invoices/${invoice.id}`}
+              className="font-mono font-semibold text-[var(--ff-primary)] underline-offset-2 hover:underline"
+            >
+              {invoice.internal_number || '—'}
+            </Link>
+            <span>Termin {dueLabel}</span>
+            <span className="inline-flex items-center gap-1">
+              <span className="material-symbols-outlined text-[15px] leading-none" aria-hidden>
+                mail
+              </span>
+              {invoice.reminders_sent_count}/3
+            </span>
+          </>
+        }
+        actions={przyciski}
+      />
+    );
+  }
 
   return (
     <tr className="border-b border-[var(--ff-row-divider)] transition-colors last:border-0 hover:bg-[var(--ff-row-hover)]">
