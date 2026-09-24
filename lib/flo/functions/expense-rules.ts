@@ -30,7 +30,7 @@ import type { FloDbClient } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
 import { fingerprintOf } from '@/lib/flo/fingerprint';
 import { registerFloHandler } from '@/lib/flo/handlers';
-import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
+import { isKindEnabledForTenant, shouldCompute } from '@/lib/flo/kind-switch';
 import { formatPlnPlain } from '@/lib/flo/money';
 import { createProposal, type CreateProposalInput } from '@/lib/flo/proposals';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -290,7 +290,7 @@ export async function proposeRuleAfterReview(
     db,
     sources.readGlobalKill,
   );
-  if (!verdict.enabled) return 'disabled';
+  if (!shouldCompute(verdict)) return 'disabled';
   if (await isMuted(tenantId, KIND, now, db)) return 'disabled';
 
   const expense = await sources.readReviewedExpense(tenantId, expenseId);

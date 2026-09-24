@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { muteKind } from '@/lib/flo/decisions';
 import { createProposal, type CreateProposalInput } from '@/lib/flo/proposals';
 import { accuracyByKind, recordShadow } from '@/lib/flo/shadow';
+import { runFloTick } from '@/lib/flo/tick';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -192,6 +193,71 @@ describe('jedna sprawa to jeden wpis', () => {
     await createProposal(proposal({ tenantId: 'ten-2' }), db.client, noKill);
 
     expect(db.tables.flo_shadow).toHaveLength(2);
+  });
+});
+
+describe('tryb cichy przez CAŁY puls, nie tylko przez createProposal', () => {
+  it('konto poza kanarkiem: puls zapisuje wpisy dla K-01 i O-01, klient nie dostaje nic', async () => {
+    // TEN TEST ISTNIEJE, BO PIERWSZA WERSJA TEGO PLIKU TESTOWAŁA TYLKO
+    // `createProposal` — a producenci pulsu nigdy do niego nie docierali.
+    // Każdy z nich miał „bramkę przed odczytem", która wycinała też kanarka.
+    // Testy `createProposal` były zielone, a tryb cichy dla sześciu reguł
+    // nie zapisał ani jednego wpisu. Dokładnie ten wzorzec — przetestowana
+    // funkcja, której nikt naprawdę nie woła — ten plik miał łapać.
+    const db = createFakeDb({}); // pusty `flo_rollout` = stan całej produkcji
+
+    const result = await runFloTick(undefined, new Date('2026-09-17T05:30:00.000Z'), db.client, {
+      listTenantIds: async () => [TENANT],
+      readGlobalKill: noKill,
+      paymentConfirm: {
+        readOverdueInvoices: async () => [
+          {
+            id: 'inv-1',
+            number: 'FV/1',
+            contractorName: 'Nowak',
+            grossTotal: 4300,
+            paidAmount: 0,
+            dueDate: '2026-09-10',
+            remindersPaused: false,
+          },
+        ],
+        readInvoiceState: async () => ({
+          facts: {
+            status: 'accepted',
+            dueDate: '2026-09-10',
+            grossTotal: 4300,
+            paidAmount: 0,
+            remindersPaused: 0,
+          },
+          context: { invoiceNumber: 'FV/1', contractorName: 'Nowak' },
+        }),
+        readGlobalKill: noKill,
+      },
+      expenseMissing: { readRecentExpenses: async () => [], readGlobalKill: noKill },
+      invoiceMissing: { readIssuedInvoices: async () => [], readGlobalKill: noKill },
+      onboarding: {
+        readAccount: async () => ({
+          createdAt: '2026-09-10T09:00:00.000Z',
+          hasNip: false,
+          hasKsefCertificate: false,
+          hasTaxProfile: false,
+          hasContractor: false,
+          hasFirstInvoice: false,
+          firstInvoiceDelivered: false,
+        }),
+        readGlobalKill: noKill,
+      },
+    });
+
+    expect(db.tables.flo_proposals).toHaveLength(0);
+    expect(db.tables.flo_shadow.map((row) => row.kind).sort()).toEqual([
+      'onboarding.step',
+      'payment.confirm',
+    ]);
+    // Wpis w trybie cichym to nie jest „zadane pytanie" — licznik pulsu
+    // i dzienny limit o nim nie wiedzą.
+    expect(result.rules.every((rule) => rule.asked === 0)).toBe(true);
+    expect(result.withheld).toBe(0);
   });
 });
 

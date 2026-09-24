@@ -31,7 +31,7 @@ import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
 import { buildAuditProposal, findAuditIssues } from '@/lib/flo/functions/ksef-audit';
-import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
+import { isKindEnabledForTenant, shouldCompute } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
 import { runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
@@ -99,7 +99,7 @@ async function auditTenant(
   readGlobalKill?: () => Promise<boolean>,
 ): Promise<boolean> {
   const verdict = await isKindEnabledForTenant(KIND, tenantId, db, readGlobalKill);
-  if (!verdict.enabled) return false;
+  if (!shouldCompute(verdict)) return false;
   if (await isMuted(tenantId, KIND, now, db)) return false;
 
   const supabase: SupabaseClient<Database> = createAdminClient();

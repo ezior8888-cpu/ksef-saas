@@ -22,8 +22,9 @@
  *    kompletny — otwarte pytanie zamykamy przy najbliższym przebiegu.
  *    Pytanie o coś, co system już widzi, traktuje klienta jak niekompetentnego.
  *
- * 4. KONTO WYŁĄCZONE NIE KOSZTUJE ODCZYTU KOSZTÓW. Bramki przed zapytaniem;
- *    `createProposal` sprawdza je jeszcze raz przed zapisem.
+ * 4. KONTO WYŁĄCZONE NIE KOSZTUJE ODCZYTU KOSZTÓW — chyba że jedyną
+ *    przeszkodą jest kanarek; wtedy liczymy do trybu cichego
+ *    (`shouldCompute`). `createProposal` sprawdza bramki jeszcze raz.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -37,7 +38,7 @@ import {
   findMissingThisMonth,
   type ExpenseRecord,
 } from '@/lib/flo/functions/expense-missing';
-import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
+import { isKindEnabledForTenant, shouldCompute } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
 import { emptySweep, runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
@@ -138,7 +139,7 @@ export async function produceMissingDocs(
     db,
     sources.readGlobalKill,
   );
-  if (!verdict.enabled) return { outcome: 'disabled', closed: 0 };
+  if (!shouldCompute(verdict)) return { outcome: 'disabled', closed: 0 };
   if (await isMuted(tenantId, KIND, now, db)) {
     return { outcome: 'disabled', closed: 0 };
   }

@@ -4135,3 +4135,74 @@ Kodu, który jest podpięty i **nie działa** — X-05 pytający o nieistniejąc
 kolumny przeszedłby tego strażnika bez mrugnięcia, bo producent był na
 miejscu. Na to nie ma testu jednostkowego; na to jest kanarek i pierwszy
 przebieg na prawdziwych danych.
+## 2026-09-24 · KOREKTA: tryb cichy nie docierał do reguł pulsu
+
+**Wpis wyżej („Tryb cichy wreszcie coś zapisuje") mijał się z prawdą dla
+sześciu rodzajów.** Przegląd całej dotychczasowej roboty znalazł to, zanim
+cokolwiek wyszło na produkcję.
+
+### Co było nie tak
+
+Każdy producent, którego napisałem — K-01, W-03, W-04, O-01, X-05, P-03 —
+miał na wejściu „bramkę przed odczytem":
+
+```ts
+if (!verdict.enabled) return 'disabled';
+```
+
+Rozsądna oszczędność: konto wyłączone nie kosztuje odczytu faktur. Tyle że
+`!verdict.enabled` obejmuje też konto **poza kanarkiem** — czyli dziś KAŻDE
+konto na produkcji. Producent wychodził, zanim cokolwiek policzył, więc do
+`createProposal`, gdzie siedzi zapis trybu cichego, nie docierał nigdy.
+
+Sprawdzone na żywym przebiegu pulsu: konto poza kanarkiem, zaległa faktura,
+świeże konto — **zero wpisów**.
+
+Tryb cichy działał tylko na ścieżkach reakcji (W-01, X-01, X-02, K-02), które
+wołają `createProposal` bez własnej bramki. Dla sześciu reguł zbudowanych
+w tej serii — nie działał wcale.
+
+### Dlaczego testy tego nie złapały
+
+Z dwóch powodów, oba pouczające:
+
+1. Testy trybu cichego wołały `createProposal` bezpośrednio. Funkcja była
+   przetestowana — nikt nie sprawdził, czy puls do niej dochodzi. Dokładnie
+   ten wzorzec, dla którego chwilę później powstał strażnik podpięcia.
+2. **Sześć testów pilnowało błędu.** Po jednym na producenta:
+   „konto poza kanarkiem: nic nie czytamy". Napisane, zanim tryb cichy
+   w ogóle był podpięty — i zabetonowały zasadę, która mu przeczy.
+
+### Naprawa
+
+`shouldCompute(verdict)` w `lib/flo/kind-switch.ts` — jedna reguła w jednym
+miejscu: **licz, gdy funkcja jest włączona albo gdy jedyną przeszkodą jest
+kanarek.** Sześciu producentów i `createProposal` korzystają z tej samej
+funkcji.
+
+Oszczędność „bramka przed odczytem" zostaje — węziej: wyłącznik globalny,
+blokada z kodu i wpis operatora dalej kończą przed odczytem.
+
+Sześć testów dostało nowe znaczenie („konto poza kanarkiem: liczymy do trybu
+cichego, klient nie dostaje karty") i bliźniaka („konto wypisane przez
+operatora: nic nie czytamy"). Doszedł test przez **cały puls**, nie przez
+samo `createProposal`.
+
+Mutacje 5/5 — w tym ta, która przywraca dokładnie pierwotny błąd.
+
+### Co to zmienia w planie — do decyzji
+
+**Koszt.** Konto poza kanarkiem czyta teraz dane tak samo jak konto
+z odsłoniętą funkcją. Sufit kosztu się nie zmienia (to koszt stanu „wszystko
+odsłonięte", do którego plan i tak zmierza), tylko przychodzi wcześniej. Przy
+dzisiejszej liczbie kont — pomijalne.
+
+**K-01 w trybie cichym widzi tylko pierwszą fakturę w kolejce.** Reguła pyta
+o jedną zaległość naraz, a następna pojawia się dopiero po odpowiedzi na
+poprzednią. W trybie cichym odpowiedzi nie ma, więc druga zaległość trafi do
+wpisów dopiero, gdy pierwsza sama zniknie z listy (zapłacona). Próbka K-01
+będzie przez to mniejsza, niż wynikałoby z liczby zaległości.
+
+**Bramka gotowości dalej nie zapali się na zielono** — bez rozstrzygania
+wpisów (`settleShadow`) nic się tu nie zmienia. Zmienia się to, że kolumna
+„Zebrane" w panelu pokaże wreszcie prawdziwe liczby dla wszystkich reguł.

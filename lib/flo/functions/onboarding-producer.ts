@@ -30,7 +30,7 @@ import {
   nextOnboardingStep,
   type AccountState,
 } from '@/lib/flo/functions/onboarding';
-import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
+import { isKindEnabledForTenant, shouldCompute } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
 import { runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
@@ -147,7 +147,7 @@ export async function produceOnboardingStep(
     db,
     sources.readGlobalKill,
   );
-  if (!verdict.enabled) return 'disabled';
+  if (!shouldCompute(verdict)) return 'disabled';
   if (await isMuted(tenantId, KIND, now, db)) return 'disabled';
 
   const account = await sources.readAccount(tenantId);
