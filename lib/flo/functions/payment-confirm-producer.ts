@@ -37,8 +37,6 @@
  * koncie, więc przyszłe zadanie per konto zawoła ją bez zmian.
  */
 
-import * as Sentry from '@sentry/nextjs';
-
 import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient, type FloProposalRow } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
@@ -50,6 +48,7 @@ import {
 } from '@/lib/flo/functions/payment-confirm';
 import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
+import { runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -374,12 +373,6 @@ function invoiceIdOf(card: HistoryRow): string {
 // Wszystkie konta
 // ═══════════════════════════════════════════════════════════════
 
-export interface PaymentConfirmSweepResult {
-  asked: number;
-  closed: number;
-  /** Konta, na których reguła padła. Puls poszedł dalej. */
-  failed: number;
-}
 
 export async function runPaymentConfirmSweep(
   tenantIds: readonly string[],
@@ -388,11 +381,11 @@ export async function runPaymentConfirmSweep(
   sources: PaymentConfirmSources = productionPaymentConfirmSources(),
   logger?: Pick<JobLogger, 'error'>,
   cap: DailyCap = unlimitedCap(),
-): Promise<PaymentConfirmSweepResult> {
-  const result: PaymentConfirmSweepResult = { asked: 0, closed: 0, failed: 0 };
-
-  for (const tenantId of tenantIds) {
-    try {
+): Promise<FloSweepResult> {
+  return runSweep(
+    KIND,
+    tenantIds,
+    async (tenantId) => {
       const { outcome, closed } = await producePaymentConfirm(
         tenantId,
         now,
@@ -400,23 +393,8 @@ export async function runPaymentConfirmSweep(
         sources,
         cap,
       );
-      if (outcome === 'created') result.asked++;
-      result.closed += closed;
-    } catch (e) {
-      // Jedno konto z uszkodzonymi danymi nie może zabrać pytań wszystkim
-      // pozostałym. Błąd idzie do Sentry i logów workera z identyfikatorem
-      // konta i rodzaju — bez treści faktur, bo to nie jest miejsce na dane
-      // klientów.
-      result.failed++;
-      Sentry.captureException(e, {
-        tags: { job: 'flo-tick', kind: KIND, tenant_id: tenantId },
-      });
-      const message = e instanceof Error ? e.message : 'nieznany błąd';
-      (logger ?? console).error(
-        `[flo.tick] ${KIND} padło na koncie ${tenantId}: ${message}`,
-      );
-    }
-  }
-
-  return result;
+      return { asked: outcome === 'created' ? 1 : 0, closed };
+    },
+    logger,
+  );
 }

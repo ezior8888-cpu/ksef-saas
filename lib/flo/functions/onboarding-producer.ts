@@ -20,7 +20,6 @@
  *    wygląda, jakby agent nie zauważył sukcesu.
  */
 
-import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
@@ -33,6 +32,7 @@ import {
 } from '@/lib/flo/functions/onboarding';
 import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
+import { runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/types/database';
@@ -232,12 +232,6 @@ async function closeFinished(id: string, db: FloDbClient): Promise<boolean> {
 // Wszystkie konta
 // ═══════════════════════════════════════════════════════════════
 
-export interface OnboardingSweepResult {
-  guided: number;
-  finished: number;
-  /** Konta, na których reguła padła. Puls poszedł dalej. */
-  failed: number;
-}
 
 export async function runOnboardingSweep(
   tenantIds: readonly string[],
@@ -246,25 +240,19 @@ export async function runOnboardingSweep(
   sources: OnboardingSources = productionOnboardingSources(),
   logger?: Pick<JobLogger, 'error'>,
   cap: DailyCap = unlimitedCap(),
-): Promise<OnboardingSweepResult> {
-  const result: OnboardingSweepResult = { guided: 0, finished: 0, failed: 0 };
-
-  for (const tenantId of tenantIds) {
-    try {
+): Promise<FloSweepResult> {
+  return runSweep(
+    KIND,
+    tenantIds,
+    async (tenantId) => {
       const outcome = await produceOnboardingStep(tenantId, now, db, sources, cap);
-      if (outcome === 'created') result.guided++;
-      if (outcome === 'finished') result.finished++;
-    } catch (e) {
-      result.failed++;
-      Sentry.captureException(e, {
-        tags: { job: 'flo-tick', kind: KIND, tenant_id: tenantId },
-      });
-      const message = e instanceof Error ? e.message : 'nieznany błąd';
-      (logger ?? console).error(
-        `[flo.tick] ${KIND} padło na koncie ${tenantId}: ${message}`,
-      );
-    }
-  }
-
-  return result;
+      // „Skończony kreator" to karta zamknięta, bo sprawa się rozwiązała —
+      // to samo, co zamknięcie pytania o zapłaconą fakturę.
+      return {
+        asked: outcome === 'created' ? 1 : 0,
+        closed: outcome === 'finished' ? 1 : 0,
+      };
+    },
+    logger,
+  );
 }

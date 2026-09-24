@@ -26,7 +26,6 @@
  *    `createProposal` sprawdza je jeszcze raz przed zapisem.
  */
 
-import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
@@ -40,6 +39,7 @@ import {
 } from '@/lib/flo/functions/expense-missing';
 import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
+import { emptySweep, runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/types/database';
@@ -231,12 +231,6 @@ async function closeFound(id: string, db: FloDbClient): Promise<boolean> {
 // Wszystkie konta
 // ═══════════════════════════════════════════════════════════════
 
-export interface MissingDocsSweepResult {
-  asked: number;
-  closed: number;
-  /** Konta, na których reguła padła. Puls poszedł dalej. */
-  failed: number;
-}
 
 export async function runMissingDocsSweep(
   tenantIds: readonly string[],
@@ -245,14 +239,14 @@ export async function runMissingDocsSweep(
   sources: ExpenseMissingSources = productionExpenseMissingSources(),
   logger?: Pick<JobLogger, 'error'>,
   cap: DailyCap = unlimitedCap(),
-): Promise<MissingDocsSweepResult> {
-  const result: MissingDocsSweepResult = { asked: 0, closed: 0, failed: 0 };
-
+): Promise<FloSweepResult> {
   // Przed dziesiątym dniem miesiąca nie ma po co wchodzić w pętlę po kontach.
-  if (now.getUTCDate() < ASK_FROM_DAY) return result;
+  if (now.getUTCDate() < ASK_FROM_DAY) return emptySweep();
 
-  for (const tenantId of tenantIds) {
-    try {
+  return runSweep(
+    KIND,
+    tenantIds,
+    async (tenantId) => {
       const { outcome, closed } = await produceMissingDocs(
         tenantId,
         now,
@@ -260,19 +254,8 @@ export async function runMissingDocsSweep(
         sources,
         cap,
       );
-      if (outcome === 'created') result.asked++;
-      result.closed += closed;
-    } catch (e) {
-      result.failed++;
-      Sentry.captureException(e, {
-        tags: { job: 'flo-tick', kind: KIND, tenant_id: tenantId },
-      });
-      const message = e instanceof Error ? e.message : 'nieznany błąd';
-      (logger ?? console).error(
-        `[flo.tick] ${KIND} padło na koncie ${tenantId}: ${message}`,
-      );
-    }
-  }
-
-  return result;
+      return { asked: outcome === 'created' ? 1 : 0, closed };
+    },
+    logger,
+  );
 }

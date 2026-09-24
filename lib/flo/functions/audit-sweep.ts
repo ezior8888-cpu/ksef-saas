@@ -25,7 +25,6 @@
  * kanarkiem nie kosztuje ani jednego zapytania o faktury.
  */
 
-import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
@@ -34,6 +33,7 @@ import { isMuted } from '@/lib/flo/decisions';
 import { buildAuditProposal, findAuditIssues } from '@/lib/flo/functions/ksef-audit';
 import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
+import { runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/types/database';
@@ -51,11 +51,6 @@ const DOCUMENT_LIMIT = 500;
  */
 const UPO_CHUNK = 100;
 
-export interface AuditSweepResult {
-  created: number;
-  /** Konta, na których audyt padł. Pozostałe przeszły normalnie. */
-  failed: number;
-}
 
 export async function runKsefAuditSweep(
   tenantIds: readonly string[],
@@ -67,32 +62,31 @@ export async function runKsefAuditSweep(
     logger?: Pick<JobLogger, 'error'>;
     cap?: DailyCap;
   } = {},
-): Promise<AuditSweepResult> {
+): Promise<FloSweepResult> {
   const periodKey = now.toISOString().slice(0, 7);
-  const result: AuditSweepResult = { created: 0, failed: 0 };
 
   // Audyt chodzi raz w miesiącu, ale trafia w ten sam poranek co reguły
   // codzienne — więc liczy się do tego samego dziennego limitu (K1.4).
   const cap = options.cap ?? unlimitedCap();
 
-  for (const tenantId of tenantIds) {
-    try {
-      if (await auditTenant(tenantId, periodKey, now, db, cap, options.readGlobalKill)) {
-        result.created++;
-      }
-    } catch (e) {
-      result.failed++;
-      Sentry.captureException(e, {
-        tags: { job: 'flo-tick', kind: KIND, tenant_id: tenantId },
-      });
-      const message = e instanceof Error ? e.message : 'nieznany błąd';
-      (options.logger ?? console).error(
-        `[flo.tick] ${KIND} padło na koncie ${tenantId}: ${message}`,
+  return runSweep(
+    KIND,
+    tenantIds,
+    async (tenantId) => {
+      const created = await auditTenant(
+        tenantId,
+        periodKey,
+        now,
+        db,
+        cap,
+        options.readGlobalKill,
       );
-    }
-  }
-
-  return result;
+      // Audyt niczego nie zamyka sam: przegląd papierów kończy człowiek,
+      // a karta wygasa normalną drogą.
+      return { asked: created ? 1 : 0 };
+    },
+    options.logger,
+  );
 }
 
 /** Audyt jednego konta. `true`, gdy powstała nowa karta. */

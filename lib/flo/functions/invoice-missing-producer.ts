@@ -24,7 +24,6 @@
  * o straconym kliencie, jest okrutny bez powodu.
  */
 
-import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
@@ -39,6 +38,7 @@ import {
   missedCycles,
   type InvoiceForRhythm,
 } from '@/lib/flo/rhythm';
+import { runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/types/database';
@@ -277,11 +277,6 @@ async function readAskedTopics(
 // Wszystkie konta
 // ═══════════════════════════════════════════════════════════════
 
-export interface MissingInvoiceSweepResult {
-  asked: number;
-  /** Konta, na których reguła padła. Puls poszedł dalej. */
-  failed: number;
-}
 
 export async function runMissingInvoiceSweep(
   tenantIds: readonly string[],
@@ -290,25 +285,16 @@ export async function runMissingInvoiceSweep(
   sources: InvoiceMissingSources = productionInvoiceMissingSources(),
   logger?: Pick<JobLogger, 'error'>,
   cap: DailyCap = unlimitedCap(),
-): Promise<MissingInvoiceSweepResult> {
-  const result: MissingInvoiceSweepResult = { asked: 0, failed: 0 };
-
-  for (const tenantId of tenantIds) {
-    try {
-      if ((await produceMissingInvoice(tenantId, now, db, sources, cap)) === 'created') {
-        result.asked++;
-      }
-    } catch (e) {
-      result.failed++;
-      Sentry.captureException(e, {
-        tags: { job: 'flo-tick', kind: KIND, tenant_id: tenantId },
-      });
-      const message = e instanceof Error ? e.message : 'nieznany błąd';
-      (logger ?? console).error(
-        `[flo.tick] ${KIND} padło na koncie ${tenantId}: ${message}`,
-      );
-    }
-  }
-
-  return result;
+): Promise<FloSweepResult> {
+  return runSweep(
+    KIND,
+    tenantIds,
+    async (tenantId) => {
+      const outcome = await produceMissingInvoice(tenantId, now, db, sources, cap);
+      // P-03 niczego nie zamyka: pytanie „wystawiłeś ją gdzie indziej?"
+      // rozstrzyga człowiek, nie kolejny przebieg pulsu.
+      return { asked: outcome === 'created' ? 1 : 0 };
+    },
+    logger,
+  );
 }

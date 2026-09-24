@@ -10,7 +10,7 @@ import {
   type IssuedInvoice,
 } from '@/lib/flo/functions/invoice-missing-producer';
 import { recordSubjectDismissal } from '@/lib/flo/decisions';
-import { runFloTick } from '@/lib/flo/tick';
+import { ruleRun, runFloTick } from '@/lib/flo/tick';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -284,7 +284,7 @@ describe('P-03 — wszystkie konta', () => {
       { error: (message: string) => errors.push(message) },
     );
 
-    expect(result).toEqual({ asked: 1, failed: 1 });
+    expect(result).toEqual({ asked: 1, closed: 0, failed: 1 });
     expect(errors[0]).toContain('ten-bad');
   });
 
@@ -304,6 +304,12 @@ describe('P-03 — wszystkie konta', () => {
       onboarding: { readAccount: async () => null },
     });
 
-    expect(result).toMatchObject({ missingInvoicesAsked: 1, failedTenants: 0 });
+    expect(ruleRun(result, 'invoice.draft')).toEqual({
+      kind: 'invoice.draft',
+      asked: 1,
+      closed: 0,
+      failed: 0,
+    });
+    expect(result.failedTenants).toBe(0);
   });
 });

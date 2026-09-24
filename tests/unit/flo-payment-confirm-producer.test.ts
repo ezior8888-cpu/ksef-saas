@@ -42,7 +42,7 @@ import {
   runPaymentConfirmSweep,
   type PaymentConfirmSources,
 } from '@/lib/flo/functions/payment-confirm-producer';
-import { runFloTick } from '@/lib/flo/tick';
+import { ruleRun, runFloTick } from '@/lib/flo/tick';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -525,7 +525,13 @@ describe('K-01 w pulsie — wszystkie konta', () => {
     onboarding: { readAccount: async () => null },
     });
 
-    expect(result).toMatchObject({ confirmAsked: 1, confirmClosed: 0, failedTenants: 0 });
+    expect(ruleRun(result, 'payment.confirm')).toEqual({
+      kind: 'payment.confirm',
+      asked: 1,
+      closed: 0,
+      failed: 0,
+    });
+    expect(result.failedTenants).toBe(0);
     expect(db.tables.flo_proposals).toHaveLength(1);
   });
 });

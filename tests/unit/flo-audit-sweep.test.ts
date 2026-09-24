@@ -116,7 +116,7 @@ vi.mock('@/lib/supabase/admin', () => {
 });
 
 import { runKsefAuditSweep } from '@/lib/flo/functions/audit-sweep';
-import { runFloTick } from '@/lib/flo/tick';
+import { ruleRun, runFloTick } from '@/lib/flo/tick';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -185,7 +185,7 @@ describe('X-05 — kanarek', () => {
 
     const result = await runKsefAuditSweep([TENANT], NOW, db.client, { readGlobalKill: noKill });
 
-    expect(result).toEqual({ created: 0, failed: 0 });
+    expect(result).toEqual({ asked: 0, closed: 0, failed: 0 });
     expect(store.queries).toBe(0);
     expect(db.tables.flo_proposals).toHaveLength(0);
   });
@@ -198,7 +198,7 @@ describe('X-05 — audyt naprawdę coś znajduje', () => {
 
     const result = await runKsefAuditSweep([TENANT], NOW, db.client, { readGlobalKill: noKill });
 
-    expect(result).toEqual({ created: 1, failed: 0 });
+    expect(result).toEqual({ asked: 1, closed: 0, failed: 0 });
     expect(captureException).not.toHaveBeenCalled();
     expect(db.tables.flo_proposals[0]!.topic_key).toBe('ksef.audit:2026-10');
     expect(labels(db)).toContain('Faktura FV/A bez poświadczenia odbioru');
@@ -216,7 +216,7 @@ describe('X-05 — audyt naprawdę coś znajduje', () => {
       logger: { error: (message: string) => errors.push(message) },
     });
 
-    expect(result).toEqual({ created: 1, failed: 1 });
+    expect(result).toEqual({ asked: 1, closed: 0, failed: 1 });
     expect(captureException).toHaveBeenCalledTimes(1);
     expect(captureException.mock.calls[0]![1]).toMatchObject({
       tags: { kind: 'ksef.audit', tenant_id: 'ten-bad' },
@@ -265,7 +265,7 @@ describe('X-05 — bez fałszywych zarzutów', () => {
 
     expect(store.upoBatches).toEqual([100, 100, 50]);
     // Wszystkie mają UPO i numerację bez luk — nie ma o czym pisać.
-    expect(result).toEqual({ created: 0, failed: 0 });
+    expect(result).toEqual({ asked: 0, closed: 0, failed: 0 });
   });
 });
 
@@ -287,6 +287,12 @@ describe('X-05 — w pulsie', () => {
       onboarding: { readAccount: async () => null, readGlobalKill: noKill },
     });
 
-    expect(result).toMatchObject({ audited: 1, failedTenants: 0 });
+    expect(ruleRun(result, 'ksef.audit')).toEqual({
+      kind: 'ksef.audit',
+      asked: 1,
+      closed: 0,
+      failed: 0,
+    });
+    expect(result.failedTenants).toBe(0);
   });
 });

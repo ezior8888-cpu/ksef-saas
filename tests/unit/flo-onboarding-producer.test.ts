@@ -8,7 +8,7 @@ import {
   type OnboardingAccount,
   type OnboardingSources,
 } from '@/lib/flo/functions/onboarding-producer';
-import { runFloTick } from '@/lib/flo/tick';
+import { ruleRun, runFloTick } from '@/lib/flo/tick';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -247,8 +247,32 @@ describe('O-01 — wszystkie konta', () => {
       { error: (message: string) => errors.push(message) },
     );
 
-    expect(result).toEqual({ guided: 1, finished: 0, failed: 1 });
+    expect(result).toEqual({ asked: 1, closed: 0, failed: 1 });
     expect(errors[0]).toContain('ten-bad');
+  });
+
+  it('skończony kreator liczy się jako karta ZAMKNIĘTA, nie postawiona', async () => {
+    // Wspólne słownictwo przebiegu (K1.3): „kreator skończony" to to samo
+    // co zamknięcie pytania o zapłaconą fakturę — sprawa się rozwiązała.
+    // Policzenie tego jako `asked` kazałoby operatorowi czytać zamknięcia
+    // jako nowe karty.
+    const db = createFakeDb({
+      flo_kind_flags: [alphaFlag()],
+      flo_proposals: [liveCard()],
+    });
+
+    const result = await runOnboardingSweep([TENANT], NOW, db.client, {
+      readAccount: async () =>
+        account({
+          hasNip: true,
+          hasContractor: true,
+          hasFirstInvoice: true,
+          firstInvoiceDelivered: true,
+        }),
+      readGlobalKill: async () => false,
+    });
+
+    expect(result).toEqual({ asked: 0, closed: 1, failed: 0 });
   });
 
   it('puls prowadzi nowe konto i zwraca liczby', async () => {
@@ -267,10 +291,12 @@ describe('O-01 — wszystkie konta', () => {
       onboarding: sources().value,
     });
 
-    expect(result).toMatchObject({
-      onboardingGuided: 1,
-      onboardingFinished: 0,
-      failedTenants: 0,
+    expect(ruleRun(result, 'onboarding.step')).toEqual({
+      kind: 'onboarding.step',
+      asked: 1,
+      closed: 0,
+      failed: 0,
     });
+    expect(result.failedTenants).toBe(0);
   });
 });

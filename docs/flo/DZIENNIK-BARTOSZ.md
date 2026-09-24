@@ -3738,3 +3738,99 @@ Migracji nie ma. Kontraktu `types/flo.ts` nie ruszałem. Nic nie wdrażam.
   liczników (`confirmAsked`, `confirmClosed`, `missingDocsAsked`, …) plus
   `withheld`. Każda nowa reguła dokłada dwa kolejne pola i nikt tego nie
   czyta poza testami.
+
+## 2026-09-24 · Plan FLO 2, K1.3 — jeden kształt wyniku pulsu
+
+Wynik `runFloTick` urósł do jedenastu płaskich liczników (`confirmAsked`,
+`confirmClosed`, `missingDocsAsked`, `onboardingGuided`, …). Każda nowa
+reguła dokładała dwa kolejne pola i osobny blok w `runFloTick`. Przy okazji
+wyszły dwie rzeczy gorsze od brzydoty.
+
+### Rzecz pierwsza: pięć kopii izolacji awarii
+
+Każda reguła miała WŁASNĄ pętlę po kontach z własnym `try/catch`, zgłoszeniem
+do Sentry i logiem — pięć kopii tych samych dwudziestu linii. To nie jest
+kwestia estetyki: **izolacja awarii jednego konta jest wymaganiem
+bezpieczeństwa**, a wymaganie skopiowane pięć razy jest spełnione dokładnie
+do chwili, w której ktoś napisze szóstą regułę i zapomni o `try`. Wtedy jedno
+konto z uszkodzonymi danymi zabiera karty wszystkim pozostałym — i nikt tego
+nie zauważy do pierwszej awarii.
+
+Teraz jest jedno miejsce: `runSweep()` w `lib/flo/sweep.ts`. Reguła podaje
+tylko to, co robi na JEDNYM koncie.
+
+### Rzecz druga: wynik pulsu nie trafiał NIGDZIE
+
+`lib/jobs/worker.ts` robi `await def.handler(...)` i **zwrotkę wyrzuca**.
+Nikt jej nie logował, nie zapisywał, nie liczył. Wszystkie te liczniki
+czytały wyłącznie testy.
+
+Doszła jedna linia na stdout (Coolify ją zbiera):
+
+```
+[flo.tick] wygasłe 3 · podniesione 0 · payment.confirm +2/-1 · expense.missing +0/-0 (awarie 2) · limit zatrzymał 4
+```
+
+Reguły, które nic nie zrobiły, są pomijane — ale **reguła z samymi awariami
+zostaje**, bo to najważniejszy przypadek do zobaczenia: wygląda jak cisza,
+a jest zepsutą regułą. Sprzątanie jest zawsze, jako dowód, że puls się odbył.
+`summarizeTick()` jest funkcją czystą, więc testuje się bez odpalania pulsu.
+
+> To wykracza poza literalne „ujednolicenie wyniku". Zrobiłem, bo bez tego
+> ujednolicony wynik dalej szedłby do kosza. **Do cofnięcia jednym commitem,
+> jeśli uznasz, że to nie ta gałąź.**
+
+### Jedno słownictwo zamiast trzech
+
+Audyt liczył `created`, O-01 `guided` i `finished`, reszta `asked` i `closed`
+— trzy słowniki na to samo. Teraz każda reguła mówi tak samo:
+
+| pole | znaczy |
+|---|---|
+| `asked` | ile NOWYCH kart postawiła |
+| `closed` | ile zamknęła, bo sprawa przestała być aktualna |
+| `failed` | na ilu kontach padła (puls i tak poszedł dalej) |
+
+Reguła, która niczego nie zamyka (P-03, audyt), zgłasza zero. **To jest
+informacja, a nie brak:** „ta reguła nigdy nie sprząta po sobie sama".
+
+### Tablica reguł
+
+`runFloTick` nie ma już pięciu bloków pod rząd — ma tablicę `RULES`.
+Kolejność tablicy jest kolejnością pulsu (najpierw fakty, potem propozycje,
+na końcu miękkie podpowiedzi) i decyduje też o tym, kto dostaje ostatnie
+wolne miejsce pod dziennym limitem z K1.4.
+
+**Nowa reguła to JEDNA pozycja dopisana na końcu tablicy** — nie dwa pola
+w wyniku i nie kolejny blok w funkcji. Po to to powstało.
+
+Wynik: `rules: FloRuleRun[]`, jedna pozycja na regułę, plus `expired`,
+`released`, `withheld` i `failedTenants`. Reguła, która dziś nie startowała
+(audyt poza pierwszym dniem roboczym miesiąca), **ma w wyniku swoje zera** —
+brak pozycji znaczyłby „nie ma takiej reguły", a to co innego niż „przeszła
+i nie miała nic do powiedzenia". Do czytania jest `ruleRun(result, kind)`.
+
+### Weryfikacja
+
+- `flo-sweep.test.ts` — 14 nowych testów: izolacja awarii, kształt wyniku,
+  kolejność reguł, linia do logów.
+- Test mutacyjny **10/10**, ale **9/10 za pierwszym podejściem**. Przeżyła
+  jedna: „skończony kreator nie liczy się jako karta zamknięta" (O-01).
+  Żaden test nie pilnował, że `finished` stało się `closed` — czyli dokładnie
+  ta zmiana nazwy, która mogła przejść niezauważona. Dopisany test, mutacja
+  łapana.
+- `tsc --noEmit` czysto; eslint **0 błędów** (29 ostrzeżeń, wszystkie
+  zastane, żadnego w plikach zadania); vitest **1308 zielonych, 7 pominiętych**;
+  `tsx --test` (XML) 66/66.
+
+### Bez zmian
+
+Migracji nie ma. `types/flo.ts` nietknięty — `FloProposalKind` tylko
+zaimportowany. Nic nie wdrażam. Zachowanie reguł jest identyczne:
+zmieniły się nazwy pól i miejsce pętli, nie decyzje.
+
+### Następny krok
+
+Lista producentów z K1.B jest zamknięta, cap i wynik pulsu uporządkowane.
+Do decyzji, co dalej: **odsłonięcie pierwszej funkcji w kanarku** (O-01
+albo W-04) czy kolejne pozycje planu.

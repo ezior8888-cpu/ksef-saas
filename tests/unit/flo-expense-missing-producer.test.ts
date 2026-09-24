@@ -7,7 +7,7 @@ import {
   type ExpenseMissingSources,
 } from '@/lib/flo/functions/expense-missing-producer';
 import type { ExpenseRecord } from '@/lib/flo/functions/expense-missing';
-import { runFloTick } from '@/lib/flo/tick';
+import { ruleRun, runFloTick } from '@/lib/flo/tick';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -293,10 +293,12 @@ describe('W-04 — wszystkie konta', () => {
     onboarding: { readAccount: async () => null },
     });
 
-    expect(result).toMatchObject({
-      missingDocsAsked: 1,
-      missingDocsClosed: 0,
-      failedTenants: 0,
+    expect(ruleRun(result, 'expense.missing')).toEqual({
+      kind: 'expense.missing',
+      asked: 1,
+      closed: 0,
+      failed: 0,
     });
+    expect(result.failedTenants).toBe(0);
   });
 });

@@ -8,7 +8,7 @@ import {
   warsawDayStart,
 } from '@/lib/flo/daily-cap';
 import type { FloDbClient } from '@/lib/flo/db-types';
-import { runFloTick, type FloTickSources } from '@/lib/flo/tick';
+import { ruleRun, runFloTick, type FloTickSources } from '@/lib/flo/tick';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -253,8 +253,8 @@ describe('Dzienny limit w pulsie', () => {
       }),
     );
 
-    expect(result.confirmAsked).toBe(0);
-    expect(result.onboardingGuided).toBe(0);
+    expect(ruleRun(result, 'payment.confirm').asked).toBe(0);
+    expect(ruleRun(result, 'onboarding.step').asked).toBe(0);
     // Dwie reguły miały o co zapytać i obie zostały zatrzymane — licznik
     // mówi operatorowi, ile agent przemilczał.
     expect(result.withheld).toBe(2);
@@ -286,8 +286,8 @@ describe('Dzienny limit w pulsie', () => {
       }),
     );
 
-    expect(result.confirmAsked).toBe(1);
-    expect(result.onboardingGuided).toBe(0);
+    expect(ruleRun(result, 'payment.confirm').asked).toBe(1);
+    expect(ruleRun(result, 'onboarding.step').asked).toBe(0);
     expect(result.withheld).toBe(1);
   });
 
@@ -311,7 +311,7 @@ describe('Dzienny limit w pulsie', () => {
       }),
     );
 
-    expect(result.confirmAsked).toBe(1);
+    expect(ruleRun(result, 'payment.confirm').asked).toBe(1);
     expect(result.withheld).toBe(1);
     expect(
       db.tables.flo_proposals.filter((r) => r.tenant_id === 'ten-2'),
@@ -342,7 +342,7 @@ describe('Dzienny limit w pulsie', () => {
     // Faktura przestała być zaległa — została opłacona.
     const result = await runFloTick(undefined, NOW, db.client, tickSources());
 
-    expect(result.confirmClosed).toBe(1);
+    expect(ruleRun(result, 'payment.confirm').closed).toBe(1);
     expect(result.withheld).toBe(0);
     const closed = db.tables.flo_proposals.find((r) => r.id === 'stare-pytanie');
     expect(closed?.status).not.toBe('open');
