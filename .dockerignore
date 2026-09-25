@@ -14,6 +14,9 @@ playwright-report
 test-results
 playwright.config.ts
 vitest.config.ts
+# Importuje vitest.config.ts, którego tu nie ma — `next build` sprawdza typy
+# każdego *.ts w kontekście i wywracał build obrazu (wdrożenie 36, 25.09).
+vitest.rls.config.ts
 
 # Dokumentacja i materiały wewnętrzne.
 docs
