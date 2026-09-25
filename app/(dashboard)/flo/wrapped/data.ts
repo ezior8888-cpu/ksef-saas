@@ -92,7 +92,7 @@ export async function readWrappedInput(
         'issue_date, gross_total, ksef_status, paid_at, payment_due_date, buyer_nip, buyer_data, origin',
       )
       .eq('tenant_id', tenantId)
-      .eq('direction', 'issued')
+      .eq('direction', 'outgoing')
       .gte('issue_date', from)
       .lt('issue_date', to),
     // Osobne, lekkie zapytanie po całą historię: „najdłuższa współpraca”
@@ -101,7 +101,7 @@ export async function readWrappedInput(
       .from('invoices')
       .select('issue_date, buyer_nip, buyer_data')
       .eq('tenant_id', tenantId)
-      .eq('direction', 'issued')
+      .eq('direction', 'outgoing')
       .order('issue_date', { ascending: true })
       .limit(10_000),
   ]);

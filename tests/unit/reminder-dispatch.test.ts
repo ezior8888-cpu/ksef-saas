@@ -124,7 +124,7 @@ function durableContext(): JobContext {
 }
 function invoice(): ReminderInvoiceSource {
   return { id: INVOICE, tenant_id: TENANT, gross_total: 123, paid_amount: 0, currency: 'PLN',
-    payment_status: 'unpaid', direction: 'issued', ksef_status: 'accepted', payment_due_date: '2026-09-01',
+    payment_status: 'unpaid', direction: 'outgoing', ksef_status: 'accepted', payment_due_date: '2026-09-01',
     issue_date: '2026-08-01', internal_number: 'TEST-1', ksef_number: 'TEST-KSEF',
     buyer_data: { name: 'Buyer test', email: 'buyer@example.test' }, buyer_nip: '1234567890',
     payment_data: { bankAccount: 'TEST-ACCOUNT' }, seller_data: { name: 'Seller test' }, reminders_paused: false };

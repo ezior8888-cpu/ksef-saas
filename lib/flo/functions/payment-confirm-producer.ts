@@ -99,7 +99,9 @@ export function productionPaymentConfirmSources(): PaymentConfirmSources {
 /**
  * Ta sama definicja „faktury po terminie" co w cronie ponagleń
  * (`findInvoicesRequiringReminders`): wystawiona, przyjęta przez KSeF,
- * nieopłacona. Inaczej K-01 i K-02 spierałyby się o to, co jest zaległe.
+ * nieopłacona. „Wystawiona" to w bazie `direction = 'outgoing'` — do 25.09
+ * stało tu 'issued' (nazwa z API KSeF), którego tabela faktur nie zna,
+ * więc reguła nie znajdowała ani jednej faktury. Inaczej K-01 i K-02 spierałyby się o to, co jest zaległe.
  *
  * Plus jeden warunek własny: `origin = 'app'`. Import historii nie
  * odblokowuje pytań wstecz (plan FLO 2, 1.19) — zaciągnięte z KSeF faktury
@@ -122,7 +124,7 @@ async function readOverdueInvoices(
       'id, internal_number, buyer_data, gross_total, paid_amount, payment_due_date, reminders_paused',
     )
     .eq('tenant_id', tenantId)
-    .eq('direction', 'issued')
+    .eq('direction', 'outgoing')
     .eq('origin', 'app')
     .eq('ksef_status', 'accepted')
     .in('payment_status', ['unpaid', 'partial', 'overdue'])
