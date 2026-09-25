@@ -9,6 +9,8 @@ const db = vi.hoisted(() => ({
   filterError: null as { message: string } | null,
   filterChunks: [] as string[][],
   inserts: [] as Row[][],
+  sellerRows: [] as Row[],
+  classify: vi.fn((_docs: unknown, _known: ReadonlySet<string>) => [] as unknown[]),
 }));
 
 vi.mock('@/lib/supabase/admin-queries', () => ({ getTenantKsefCredentials: vi.fn(async () => ({})) }));
@@ -16,7 +18,7 @@ vi.mock('@/lib/ksef/inbox', () => ({ queryReceivedInvoices: vi.fn() }));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: vi.fn() }));
 vi.mock('@/lib/flo/functions/expense-inbox', () => ({
   buildInboxSummaryProposal: () => null,
-  classifyInboxDocuments: () => [],
+  classifyInboxDocuments: (docs: unknown, known: ReadonlySet<string>) => db.classify(docs, known),
   evaluateContinuity: () => ({ status: 'complete' }),
 }));
 vi.mock('@/lib/flo/functions/inbox-cursor', () => ({
@@ -31,6 +33,7 @@ vi.mock('@/lib/supabase/server', () => ({
       let op: 'select' | 'insert' = 'select';
       let rows: Row[] = [];
       let inList: string[] | null = null;
+      let sellerList: string[] | null = null;
       const q = {
         select: () => q,
         eq: () => q,
@@ -39,6 +42,7 @@ vi.mock('@/lib/supabase/server', () => ({
         limit: () => q,
         in: (col: string, list: string[]) => {
           if (col === 'ksef_number') inList = list;
+          if (col === 'seller_nip') sellerList = list;
           return q;
         },
         insert: (r: Row[]) => {
@@ -51,6 +55,9 @@ vi.mock('@/lib/supabase/server', () => ({
           if (op === 'insert') {
             db.inserts.push(rows);
             result = { data: rows.map((r, i) => ({ id: `id-${i}`, ksef_number: r.ksef_number })), error: null };
+          } else if (sellerList) {
+            const lista = sellerList;
+            result = { data: db.sellerRows.filter((r) => lista.includes(r.seller_nip as string)), error: null };
           } else if (inList) {
             db.filterChunks.push(inList);
             result = db.filterError
@@ -82,14 +89,14 @@ const ctx: JobContext = {
 };
 const DATA = { tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', nip: '1234567890' };
 
-function faktura(n: number) {
+function faktura(n: number, sellerNip = '5260001246') {
   const numer = `1234567890-20260925-${String(n).padStart(12, '0')}-00`;
   return {
     ksefNumber: numer,
     invoiceNumber: `FV ${n}/2026`,
     acquisitionDate: '2026-09-25T10:00:00Z',
     issueDate: '2026-09-25',
-    seller: { nip: '5260001246', name: 'Dostawca' },
+    seller: { nip: sellerNip, name: 'Dostawca' },
     buyer: { identifier: { type: 'Nip', value: '1234567890' } },
     currency: 'PLN',
     grossAmount: 123,
@@ -104,6 +111,8 @@ beforeEach(() => {
   db.filterError = null;
   db.filterChunks = [];
   db.inserts = [];
+  db.sellerRows = [];
+  db.classify.mockClear();
 });
 
 describe('skrzynka KSeF: filtr już zapisanych faktur', () => {
@@ -142,5 +151,24 @@ describe('skrzynka KSeF: filtr już zapisanych faktur', () => {
 
     await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ newlyAdded: 0 });
     expect(db.inserts).toEqual([]);
+  });
+});
+
+describe('skrzynka KSeF: sito nieznanego sprzedawcy', () => {
+  // Recenzja ChatGPT nr 2 (25.09): zapytanie o znanych sprzedawców szło po
+  // zapisie i widziało właśnie wstawione faktury — każdy wyglądał na znanego.
+  it('„znany” to widziany PRZED tym przebiegiem, nie właśnie zapisany', async () => {
+    vi.mocked(queryReceivedInvoices).mockResolvedValue([faktura(1, '1111111111'), faktura(2, '2222222222')] as never);
+    db.sellerRows = [
+      { id: 'dawna-faktura', seller_nip: '1111111111' },
+      // Wiersze z bieżącego zapisu (atrapa nadaje im id-0, id-1):
+      { id: 'id-0', seller_nip: '1111111111' },
+      { id: 'id-1', seller_nip: '2222222222' },
+    ];
+
+    await runInboxPollTenant(DATA, ctx);
+
+    const known = db.classify.mock.calls[0]![1];
+    expect([...known]).toEqual(['1111111111']);
   });
 });

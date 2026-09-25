@@ -304,18 +304,36 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
         // Sprzedawcy, których klient już u siebie widział. Nieznany
         // sprzedawca powyżej progu nie trafia sam do księgi — to jest sito
         // na fakturę wystawioną przez pomyłkę na cudzy NIP.
-        const { data: seen } = await supabase
-          .from('invoices')
-          .select('seller_nip')
-          .eq('tenant_id', tenantId)
-          .eq('direction', 'incoming')
-          .limit(500);
-
-        const known = new Set(
-          (seen ?? [])
-            .map((row) => (row as { seller_nip: string | null }).seller_nip)
-            .filter((nip): nip is string => Boolean(nip)),
-        );
+        //
+        // „Widział” = PRZED tym przebiegiem. Ten krok idzie po zapisie, więc
+        // bez wykluczenia właśnie wstawionych faktur każdy sprzedawca z paczki
+        // wyglądał na znanego i sito nie działało nigdy (recenzja ChatGPT nr 2).
+        // Pytamy tylko o sprzedawców z paczki — dawne `limit(500)` z całej
+        // historii gubiło znanych u większych firm. Błąd = nikt nieznany:
+        // karta zapyta o więcej, zamiast przepuścić coś po cichu.
+        const justInserted = new Set(insertedInvoices.map((row) => row.id as string));
+        const batchSellers = [
+          ...new Set(
+            freshInvoices
+              .map((inv) => inv.seller?.nip)
+              .filter((nip): nip is string => Boolean(nip)),
+          ),
+        ];
+        const known = new Set<string>();
+        for (let i = 0; i < batchSellers.length; i += KSEF_NUMBERS_PER_QUERY) {
+          const { data: seen, error: seenErr } = await supabase
+            .from('invoices')
+            .select('id, seller_nip')
+            .eq('tenant_id', tenantId)
+            .eq('direction', 'incoming')
+            .in('seller_nip', batchSellers.slice(i, i + KSEF_NUMBERS_PER_QUERY))
+            .limit(1000);
+          if (seenErr) break;
+          for (const row of seen ?? []) {
+            const nip = (row as { seller_nip: string | null }).seller_nip;
+            if (nip && !justInserted.has(row.id as string)) known.add(nip);
+          }
+        }
 
         const byKsefNumber = new Map(
           insertedInvoices.map((row) => [row.ksef_number as string, row.id as string]),
