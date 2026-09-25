@@ -229,7 +229,7 @@ export async function getPendingJoinRequests(
 
   const { data, error } = await supabase
     .from('organization_join_requests')
-    .select('id, requester_user_id, organization_id, message, created_at, tenants(name, nip)')
+    .select('id, requested_by_user_id, organization_id, message, created_at, tenants(name, nip)')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
     .limit(limit);
@@ -240,7 +240,7 @@ export async function getPendingJoinRequests(
 
   type Row = {
     id: string;
-    requester_user_id: string;
+    requested_by_user_id: string;
     organization_id: string;
     message: string | null;
     created_at: string;
@@ -251,7 +251,10 @@ export async function getPendingJoinRequests(
     const t = Array.isArray(row.tenants) ? row.tenants[0] : row.tenants;
     return {
       id: row.id,
-      requesterUserId: row.requester_user_id,
+      // Kolumna nazywa się `requested_by_user_id` (migracja 00036). Do 25.09
+      // zapytanie pytało o `requester_user_id` — PostgREST odrzucał je, a lista
+      // próśb o dołączenie w panelu wsparcia kończyła się wyjątkiem.
+      requesterUserId: row.requested_by_user_id,
       organizationId: row.organization_id,
       organizationName: t?.name ?? null,
       organizationNip: t?.nip ?? null,
