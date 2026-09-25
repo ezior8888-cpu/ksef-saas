@@ -137,7 +137,7 @@ function invoice(
   store.rows.invoices!.push({
     id,
     tenant_id: tenantId,
-    direction: 'issued',
+    direction: 'outgoing',
     internal_number: overrides.number ?? `FV/${id}`,
     issue_date: '2026-09-15',
     ksef_status: 'accepted',

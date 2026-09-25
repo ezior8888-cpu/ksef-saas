@@ -11,7 +11,7 @@ const invoiceId = '22222222-2222-4222-8222-222222222222';
 const otherId = '33333333-3333-4333-8333-333333333333';
 const invoiceFixture: ReminderInvoiceSource = {
   id: invoiceId, tenant_id: tenantId, gross_total: 123, paid_amount: 23, currency: 'PLN',
-  payment_status: 'partial', direction: 'issued', ksef_status: 'accepted',
+  payment_status: 'partial', direction: 'outgoing', ksef_status: 'accepted',
   payment_due_date: '2026-09-01', issue_date: '2026-08-20', internal_number: 'FV/1/2026', ksef_number: null,
   buyer_data: { name: 'Fixture buyer', email: 'buyer@example.test', address: { addressLine1: 'Test 1', addressLine2: '00-001 Miasto' } },
   buyer_nip: '1234567890', payment_data: { bankAccount: 'PL-fixture-bank' }, seller_data: { name: 'Fixture seller' }, reminders_paused: false,
@@ -89,7 +89,7 @@ describe('read-only reminder preview preparation', () => {
   });
   it.each([
     { paid_amount: 123 }, { paid_amount: null }, { reminders_paused: true }, { gross_total: null }, { gross_total: NaN },
-    { payment_status: 'paid' as const }, { direction: 'received' }, { ksef_status: 'rejected' },
+    { payment_status: 'paid' as const }, { direction: 'incoming' }, { ksef_status: 'rejected' },
     { currency: 'EUR' }, { payment_due_date: '2026-02-31' }, { payment_due_date: '2026-10-01' },
   ])('rejects unsafe or malformed source state %#', async (patch) => {
     patchInvoice(patch);

@@ -103,7 +103,7 @@ async function readIssuedInvoices(
     .from('invoices')
     .select('id, issue_date, gross_total, buyer_nip, buyer_data, fa3_data')
     .eq('tenant_id', tenantId)
-    .eq('direction', 'issued')
+    .eq('direction', 'outgoing')
     .gte('issue_date', since.toISOString().slice(0, 10))
     .order('issue_date', { ascending: false })
     .limit(INVOICE_LIMIT);

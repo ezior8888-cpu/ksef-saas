@@ -83,7 +83,7 @@ async function readAccount(tenantId: string): Promise<OnboardingAccount | null> 
       .from('invoices')
       .select('id, pdf_generated_at, ksef_accepted_at')
       .eq('tenant_id', tenantId)
-      .eq('direction', 'issued')
+      .eq('direction', 'outgoing')
       .limit(50),
   ]);
 

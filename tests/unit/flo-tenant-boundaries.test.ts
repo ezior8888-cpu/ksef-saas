@@ -68,7 +68,7 @@ function chaseContext(foreignInvoice = false, missingNip = false) {
   const invoice: ReminderInvoiceSource = {
     id: invoiceId, tenant_id: foreignInvoice ? '55555555-5555-4555-8555-555555555555' : tenantId,
     gross_total: 100, paid_amount: 0, currency: 'PLN', payment_status: 'unpaid',
-    direction: 'issued', ksef_status: 'accepted', payment_due_date: '2026-09-01',
+    direction: 'outgoing', ksef_status: 'accepted', payment_due_date: '2026-09-01',
     issue_date: '2026-08-20', internal_number: 'FV/fixture', ksef_number: null,
     buyer_data: missingNip
       ? { name: 'Fixture buyer', email: 'buyer@example.test' }

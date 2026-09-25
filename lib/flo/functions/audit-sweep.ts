@@ -109,7 +109,7 @@ async function auditTenant(
       .from('invoices')
       .select('id, internal_number, issue_date, ksef_status, origin')
       .eq('tenant_id', tenantId)
-      .eq('direction', 'issued')
+      .eq('direction', 'outgoing')
       // Najnowsze, a nie przypadkowe pięćset: ciągłość numeracji liczona na
       // wyrywkowym podzbiorze zgłaszałaby luki, których nie ma.
       .order('issue_date', { ascending: false })
