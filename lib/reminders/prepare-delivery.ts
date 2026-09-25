@@ -27,6 +27,11 @@ function date(iso: string | null): Date {
   if (!Number.isFinite(value.getTime()) || value.toISOString().slice(0, 10) !== iso) throw new Error('Nieprawidłowa data faktury.');
   return value;
 }
+/** Nasz nadawca: `RESEND_FROM_TRANSACTIONAL` („Nazwa <adres>”) albo `RESEND_FROM_EMAIL` — ta sama kolejność co `lib/email/send.ts`. */
+function platformSenderAddress(): string {
+  const raw = (process.env.RESEND_FROM_TRANSACTIONAL ?? process.env.RESEND_FROM_EMAIL ?? '').trim();
+  return raw.match(/<([^<>]+)>\s*$/)?.[1] ?? raw;
+}
 function email(value: unknown): string {
   const result = z.email().max(254).safeParse(text(value, 254));
   if (!result.success) throw new Error('Brak poprawnego adresu email dla przypomnienia.');
@@ -68,8 +73,14 @@ export async function buildReminderDelivery(
   const buyerEmail = email(recipientEmail ?? buyer.email); const to = devTo ? email(devTo) : buyerEmail;
   const senderName = text(settings?.sender_name, 200) || text(tenant.name, 200);
   if (!senderName || /[<>\r\n\x00-\x1f\x7f]/.test(senderName)) throw new Error('Nieprawidłowa nazwa nadawcy.');
-  const fromEmail = email(text(settings?.sender_email) || process.env.RESEND_FROM_EMAIL);
-  const replyTo = settings?.reply_to_email?.trim() ? email(settings.reply_to_email) : null;
+  // „Od:” zawsze z NASZEJ zweryfikowanej domeny. Resend wysyła tylko z domen
+  // zweryfikowanych na koncie FaktFlow: adres firmy klienta (formularz
+  // podpowiadał „faktury@twoja-firma.pl”) kończył się odmową dostawcy
+  // i spaloną jednorazową zgodą na etap, a adres w naszej domenie pozwalał
+  // firmie podszyć się pod FaktFlow. Adres firmy idzie do Reply-To.
+  const fromEmail = email(platformSenderAddress());
+  const replyToRaw = text(settings?.reply_to_email, 254) || text(settings?.sender_email, 254);
+  const replyTo = replyToRaw ? email(replyToRaw) : null;
   const invoiceLabel = text(invoice.internal_number, 150) || text(invoice.ksef_number, 150) || 'bez numeru';
   const bankAccount = text(payment.bankAccount, 100);
   const source = template ? { subject: text(template.email_subject, 998), body: text(template.email_body, 20000) } : DEFAULT_TEMPLATES[stage];
