@@ -14,6 +14,7 @@
 import * as Sentry from '@sentry/nextjs';
 import type Stripe from 'stripe';
 
+import { isSelfInvoicingConfigured } from '@/lib/billing/operator-config';
 import { sendRefundIssuedEmail } from '@/lib/email/send';
 import { getStripe } from '@/lib/stripe/client';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -41,6 +42,16 @@ type Payment = {
 
 type RefundOperation = {
   status: 'processing' | 'reconciliation_required' | 'completed';
+};
+
+type ClaimedRefundOperation = RefundOperation & {
+  payment_id: string;
+  tenant_id: string;
+  amount_cents: number;
+  currency: string;
+  stripe_payment_reference: string | null;
+  idempotency_key: string;
+  requested_by_user_id: string | null;
 };
 
 const RECONCILIATION_ERROR =
@@ -143,44 +154,90 @@ export async function issueRefund(input: RefundPaymentInput): Promise<RefundResu
     return needsReconciliation();
   }
 
-  // PRIMARY KEY(payment_id) is the cross-request claim. An existing processing
-  // row blocks retries even after Stripe has pruned the idempotency key.
-  const idempotencyKey = 'admin-full-refund-v1:' + payment.id;
-  const { error: claimError } = await supabase
-    .from('stripe_refund_operations')
-    .insert({
-      payment_id: payment.id,
-      tenant_id: payment.tenant_id,
-      idempotency_key: idempotencyKey,
-      amount_cents: payment.amount_cents,
-      currency: payment.currency,
-      stripe_payment_reference: payment.stripe_payment_intent_id ?? payment.stripe_charge_id,
-      status: 'processing',
-      requested_by_user_id: input.adminUserId,
-      reason: input.reason ?? null,
-    })
-    .select('payment_id')
-    .single();
-
-  if (claimError) {
-    if (claimError.code === '23505') {
-      const { data: existing, error: readError } = await supabase
-        .from('stripe_refund_operations')
-        .select('status')
-        .eq('payment_id', payment.id)
-        .maybeSingle();
-      if (readError || !existing) return needsReconciliation();
-      if ((existing as RefundOperation).status === 'completed') {
-        return { success: false, error: 'Zwrot tej płatności został już wykonany' };
-      }
-      if ((existing as RefundOperation).status === 'processing') {
-        return operationPending();
-      }
-      return needsReconciliation();
-    }
-    return { success: false, error: 'Nie udało się zabezpieczyć operacji zwrotu' };
+  const operatorTenantId = process.env.FAKTFLOW_OPERATOR_TENANT_ID?.trim();
+  if (!isSelfInvoicingConfigured() || !operatorTenantId) {
+    return {
+      success: false,
+      error: 'Brak potwierdzonej konfiguracji operatora faktur; zwrot wymaga uzgodnienia',
+      reconciliationRequired: true,
+    };
   }
 
+  // This RPC locks the payment row shared with VAT creation. Only one of
+  // invoice creation or refund claim can win; no Stripe call precedes it.
+  const { data: claimResult, error: claimError } = await (
+    supabase as unknown as {
+      rpc: (
+        name: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: string | null; error: { message: string } | null }>;
+    }
+  ).rpc('claim_admin_refund_uninvoiced', {
+    p_payment_id: payment.id,
+    p_tenant_id: payment.tenant_id,
+    p_operator_tenant_id: operatorTenantId,
+    p_admin_user_id: input.adminUserId,
+    p_reason: input.reason ?? null,
+  });
+  if (claimError || !claimResult) {
+    return { success: false, error: 'Nie udało się zabezpieczyć operacji zwrotu' };
+  }
+  if (claimResult === 'invoice_exists') {
+    return {
+      success: false,
+      error: 'Faktura VAT już istnieje. Zwrot wymaga uzgodnienia i decyzji o korekcie.',
+      reconciliationRequired: true,
+    };
+  }
+  if (claimResult === 'not_succeeded') {
+    return { success: false, error: 'Płatność nie jest już w stanie succeeded' };
+  }
+  if (claimResult === 'invalid_payment') {
+    return { success: false, error: 'Płatność wymaga ręcznego uzgodnienia przed zwrotem' };
+  }
+  if (claimResult === 'already_claimed') {
+    const { data: existing, error: readError } = await supabase
+      .from('stripe_refund_operations')
+      .select('status')
+      .eq('payment_id', payment.id)
+      .maybeSingle();
+    if (readError || !existing) return needsReconciliation();
+    if ((existing as RefundOperation).status === 'completed') {
+      return { success: false, error: 'Zwrot tej płatności został już wykonany' };
+    }
+    if ((existing as RefundOperation).status === 'processing') {
+      return operationPending();
+    }
+    return needsReconciliation();
+  }
+  if (claimResult !== 'claimed') {
+    return { success: false, error: 'Nieznany wynik zabezpieczenia zwrotu' };
+  }
+
+  // Use the durable snapshot written while holding the row lock. A stale
+  // preflight read must never decide the amount or Stripe payment reference.
+  const { data: operationData, error: operationError } = await supabase
+    .from('stripe_refund_operations')
+    .select(
+      'payment_id, tenant_id, amount_cents, currency, stripe_payment_reference, idempotency_key, status, requested_by_user_id',
+    )
+    .eq('payment_id', payment.id)
+    .maybeSingle();
+  const operation = operationData as ClaimedRefundOperation | null;
+  if (operationError || !operation ||
+      operation.status !== 'processing' ||
+      operation.payment_id !== payment.id ||
+      operation.tenant_id !== payment.tenant_id ||
+      operation.requested_by_user_id !== input.adminUserId ||
+      operation.amount_cents !== payment.amount_cents ||
+      operation.currency !== payment.currency ||
+      operation.stripe_payment_reference !==
+        (payment.stripe_payment_intent_id ?? payment.stripe_charge_id) ||
+      operation.idempotency_key !== 'admin-full-refund-v1:' + payment.id) {
+    await markForReconciliation(supabase, payment.id, 'claimed_snapshot_mismatch');
+    return needsReconciliation();
+  }
+  const idempotencyKey = operation.idempotency_key;
   // Explicit full amount: an external partial refund must not silently turn
   // this request into a refund of only the remaining balance.
   let refund: Stripe.Refund;

@@ -133,6 +133,12 @@ export async function handleInvoicePaymentSucceeded(
   const mapping = await mapInvoiceToPaymentRow(invoice, 'succeeded');
   if (!mapping) return;
 
+  const signedPaidAt = mapping.row.paid_at;
+  if (typeof signedPaidAt !== 'string' ||
+      !Number.isFinite(Date.parse(signedPaidAt))) {
+    throw new Error('Stripe paid invoice has no valid authoritative paid_at');
+  }
+
   const supabase = createAdminClient();
   if (isRefundedPaymentStatus(await readStripePaymentStatus(supabase, invoice.id))) return;
   // Cast — `stripe_payments` poza typed gen.
@@ -143,7 +149,7 @@ export async function handleInvoicePaymentSucceeded(
         opts: { onConflict: string },
       ) => {
         select: (c: string) => Promise<{
-          data: Array<{ id: string; status: string }> | null;
+          data: Array<{ id: string; status: string; paid_at: string | null }> | null;
           error: { message: string } | null;
         }>;
       };
@@ -151,7 +157,7 @@ export async function handleInvoicePaymentSucceeded(
   })
     .from('stripe_payments')
     .upsert(mapping.row, { onConflict: 'stripe_invoice_id' })
-    .select('id, status');
+    .select('id, status, paid_at');
 
   if (error) {
     throw new Error(`stripe_payments upsert failed: ${error.message}`);
@@ -168,6 +174,11 @@ export async function handleInvoicePaymentSucceeded(
   if (isRefundedPaymentStatus(persistedPayment.status)) return;
   if (persistedPayment.status !== 'succeeded') {
     throw new Error(`stripe payment success not persisted: ${invoice.id}`);
+  }
+  const persistedPaidAt = persistedPayment.paid_at;
+  if (!persistedPaidAt || !Number.isFinite(Date.parse(persistedPaidAt)) ||
+      Date.parse(persistedPaidAt) !== Date.parse(signedPaidAt)) {
+    throw new Error(`stripe payment paid_at not confirmed: ${invoice.id}`);
   }
   const paymentId = persistedPayment.id;
 
@@ -196,10 +207,7 @@ export async function handleInvoicePaymentSucceeded(
       amountCents: invoice.amount_paid,
       taxCents: ((invoice as unknown as { total_taxes?: Array<{ amount?: number | null }> | null }).total_taxes ?? []).reduce((s, t) => s + (t.amount ?? 0), 0),
       currency: (invoice.currency ?? 'pln').toLowerCase(),
-      paidAt:
-        invoice.status_transitions?.paid_at
-          ? new Date(invoice.status_transitions.paid_at * 1000).toISOString()
-          : new Date().toISOString(),
+      paidAt: persistedPaidAt,
     }),
   });
 

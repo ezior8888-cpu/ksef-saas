@@ -69,6 +69,18 @@ function isoFromUnix(unix: number | null | undefined): string | null {
   return new Date(unix * 1000).toISOString();
 }
 
+function paidAtFromInvoice(invoice: Stripe.Invoice): string {
+  const unix = invoice.status_transitions?.paid_at;
+  if (typeof unix !== 'number' || !Number.isSafeInteger(unix) || unix <= 0) {
+    throw new Error('Stripe paid invoice ' + invoice.id + ' has no valid paid_at');
+  }
+  const paidAt = new Date(unix * 1000);
+  if (!Number.isFinite(paidAt.getTime())) {
+    throw new Error('Stripe paid invoice ' + invoice.id + ' has no valid paid_at');
+  }
+  return paidAt.toISOString();
+}
+
 /**
  * Resolve tenant before any local write. An unavailable customer lookup or
  * missing metadata must not turn a subscription event into a processed receipt.
@@ -212,6 +224,10 @@ export async function mapInvoiceToPaymentRow(
   const subscriptionRef = invoiceSubscriptionId(invoice);
   if (!subscriptionRef) return null;
 
+  // The signed Stripe invoice is the authority for the payment date. A
+  // delivery without it cannot create a payment row or schedule a VAT job.
+  const paidAt = status === 'succeeded' ? paidAtFromInvoice(invoice) : null;
+
   const supabase = createAdminClient();
 
   // Subscription row musi już istnieć (created przed payment_succeeded).
@@ -273,7 +289,7 @@ export async function mapInvoiceToPaymentRow(
       amount_cents: status === 'succeeded' ? invoice.amount_paid : invoice.amount_due,
       currency: (invoice.currency ?? 'pln').toLowerCase(),
       tax_cents: taxCents,
-      paid_at: status === 'succeeded' ? isoFromUnix(invoice.status_transitions?.paid_at) : null,
+      paid_at: paidAt,
       failure_reason:
         status === 'failed'
           ? ((invoice as unknown as { last_finalization_error?: { message?: string } })

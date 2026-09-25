@@ -2,20 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Invoice } from '@/types/invoice';
 
-const mocks = vi.hoisted(() => ({ from: vi.fn() }));
+const mocks = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn() }));
 vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: () => ({ from: mocks.from }),
+  createAdminClient: () => ({ rpc: mocks.rpc, from: mocks.from }),
 }));
 
 import { insertSelfInvoice } from '@/lib/billing/self-invoice';
 
-const firstStripeInvoiceId = 'in_firstABCDEFGH';
-const secondStripeInvoiceId = 'in_secondABCDEFGH';
-const collisionError = 'Self-invoice number collision requires reconciliation';
+const stripeInvoiceId = 'in_firstABCDEFGH';
+const paymentId = '11111111-1111-4111-8111-111111111111';
+const customerTenantId = '22222222-2222-4222-8222-222222222222';
+const operatorTenantId = '33333333-3333-4333-8333-333333333333';
+const internalNumber = 'FF/2026/09/ABCDEFGH';
 
-function invoiceFor(stripeInvoiceId: string): Invoice {
+function invoiceFor(id: string): Invoice {
   return {
-    internalNumber: 'FF/2026/09/ABCDEFGH',
+    internalNumber,
     type: 'VAT',
     issueDate: '2026-09-24',
     seller: {
@@ -30,7 +32,7 @@ function invoiceFor(stripeInvoiceId: string): Invoice {
     },
     lines: [{
       ordinal: 1,
-      name: 'FaktFlow — subskrypcja miesięczna',
+      name: 'FaktFlow — subskrypcja miesięczna (wrzesień 2026)',
       unit: 'usł.',
       quantity: 1,
       unitPriceNet: 47.97,
@@ -43,143 +45,103 @@ function invoiceFor(stripeInvoiceId: string): Invoice {
     vatTotal: 11.03,
     grossTotal: 59,
     payment: { amountDue: 59, currency: 'PLN', dueDate: '2026-09-24', method: 'card' },
-    notes: 'Faktura za subskrypcję FaktFlow. Płatność Stripe: ' + stripeInvoiceId + '.',
+    notes: 'Faktura za subskrypcję FaktFlow. Płatność Stripe: ' + id + '.',
   };
 }
 
-let storedInvoice: {
-  id: string;
-  notes: string | null;
-  fa3_data: Record<string, unknown> | null;
-  gross_total: number | null;
-  buyer_nip: string | null;
-};
-let storedLines: Array<{
-  gross_amount: number;
-  net_amount: number;
-  vat_amount: number;
-  quantity: number;
-  name: string;
-  vat_rate: string;
-  unit_price_net: number;
-  unit: string;
-}>;
+function insert(invoice: Invoice = invoiceFor(stripeInvoiceId), id = stripeInvoiceId) {
+  return insertSelfInvoice(
+    invoice, operatorTenantId, id, paymentId, customerTenantId,
+  );
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
-  const original = invoiceFor(firstStripeInvoiceId);
-  storedInvoice = {
-    id: 'existing-vat-invoice',
-    notes: original.notes ?? null,
-    fa3_data: original as unknown as Record<string, unknown>,
-    gross_total: original.grossTotal,
-    buyer_nip: original.buyer.nip ?? null,
-  };
-  storedLines = [{
-    gross_amount: original.lines[0].grossAmount,
-    net_amount: original.lines[0].netAmount,
-    vat_amount: original.lines[0].vatAmount,
-    quantity: original.lines[0].quantity,
-    name: original.lines[0].name,
-    vat_rate: original.lines[0].vatRate,
-    unit_price_net: original.lines[0].unitPriceNet,
-    unit: original.lines[0].unit,
-  }];
   mocks.from.mockImplementation((table: string) => {
-    if (table === 'invoices') {
-      return {
-        insert: () => ({
-          select: () => ({
-            single: async () => ({
-              data: null,
-              error: { code: '23505', message: 'duplicate key' },
-            }),
-          }),
-        }),
-        select: () => ({
-          eq: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({ data: storedInvoice, error: null }),
-            }),
-          }),
-        }),
-      };
-    }
-    if (table === 'invoice_line_items') {
-      return {
-        select: () => ({
-          eq: () => ({
-            limit: async () => ({ data: storedLines, error: null }),
-          }),
-        }),
-      };
-    }
-    throw new Error('Unexpected table: ' + table);
+    throw new Error('Direct billing table access is forbidden: ' + table);
+  });
+  mocks.rpc.mockResolvedValue({
+    data: [{ invoice_id: 'vat-invoice', internal_number: internalNumber, created: true }],
+    error: null,
   });
 });
 
-describe('self-invoice number collision guard', () => {
-  it('reuses a complete invoice for the exact same full Stripe invoice ID', async () => {
-    await expect(insertSelfInvoice(
-      invoiceFor(firstStripeInvoiceId), 'operator-tenant', firstStripeInvoiceId,
-    )).resolves.toEqual({
-      invoiceId: 'existing-vat-invoice',
-      internalNumber: 'FF/2026/09/ABCDEFGH',
+describe('atomic billing VAT invoice RPC contract', () => {
+  it('passes the complete payment, tenant, Stripe ID and draft to one RPC', async () => {
+    const invoice = invoiceFor(stripeInvoiceId);
+
+    await expect(insert(invoice)).resolves.toEqual({
+      invoiceId: 'vat-invoice',
+      internalNumber,
+      created: true,
     });
+
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith(
+      'create_billing_vat_invoice',
+      {
+        p_payment_id: paymentId,
+        p_customer_tenant_id: customerTenantId,
+        p_operator_tenant_id: operatorTenantId,
+        p_stripe_invoice_id: stripeInvoiceId,
+        p_invoice: invoice,
+      },
+    );
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it('rejects two different Stripe IDs with the same eight-character suffix', async () => {
-    await expect(insertSelfInvoice(
-      invoiceFor(secondStripeInvoiceId), 'operator-tenant', secondStripeInvoiceId,
-    )).rejects.toThrow(collisionError);
-    expect(mocks.from).not.toHaveBeenCalledWith('invoice_line_items');
+  it('returns an existing exact invoice only when the RPC verifies it', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: [{ invoice_id: 'existing-vat-invoice', internal_number: internalNumber, created: false }],
+      error: null,
+    });
+
+    await expect(insert()).resolves.toEqual({
+      invoiceId: 'existing-vat-invoice',
+      internalNumber,
+      created: false,
+    });
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it('rejects a missing or conflicting stored full ID', async () => {
-    storedInvoice.fa3_data = null;
-    await expect(insertSelfInvoice(
-      invoiceFor(firstStripeInvoiceId), 'operator-tenant', firstStripeInvoiceId,
-    )).rejects.toThrow(collisionError);
+  it('fails closed on an RPC rejection without trying direct inserts', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'Refund requires VAT reconciliation' },
+    });
 
-    storedInvoice.fa3_data = invoiceFor(firstStripeInvoiceId) as unknown as Record<string, unknown>;
-    storedInvoice.notes = null;
-    await expect(insertSelfInvoice(
-      invoiceFor(firstStripeInvoiceId), 'operator-tenant', firstStripeInvoiceId,
-    )).rejects.toThrow(collisionError);
+    await expect(insert()).rejects.toThrow('Self-invoice transaction failed');
+    expect(mocks.rpc).toHaveBeenCalledOnce();
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it('rejects a matching ID with a different amount or buyer', async () => {
-    storedInvoice.gross_total = 60;
-    await expect(insertSelfInvoice(
-      invoiceFor(firstStripeInvoiceId), 'operator-tenant', firstStripeInvoiceId,
-    )).rejects.toThrow(collisionError);
+  it.each([
+    null,
+    [],
+    [
+      { invoice_id: 'first', internal_number: internalNumber, created: true },
+      { invoice_id: 'second', internal_number: internalNumber, created: true },
+    ],
+    [{ invoice_id: null, internal_number: internalNumber, created: true }],
+    [{ invoice_id: 'vat-invoice', internal_number: 'other-number', created: true }],
+    [{ invoice_id: 'vat-invoice', internal_number: internalNumber, created: null }],
+  ])('rejects an incomplete or ambiguous RPC result: %j', async (data) => {
+    mocks.rpc.mockResolvedValue({ data, error: null });
 
-    storedInvoice.gross_total = 59;
-    storedInvoice.buyer_nip = '1111111111';
-    await expect(insertSelfInvoice(
-      invoiceFor(firstStripeInvoiceId), 'operator-tenant', firstStripeInvoiceId,
-    )).rejects.toThrow(collisionError);
+    await expect(insert()).rejects.toThrow('invalid result');
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it('rejects an incomplete existing invoice without its line item', async () => {
-    storedLines = [];
-    await expect(insertSelfInvoice(
-      invoiceFor(firstStripeInvoiceId), 'operator-tenant', firstStripeInvoiceId,
-    )).rejects.toThrow(collisionError);
-  });
+  it('rejects an incomplete local identity before contacting the database', async () => {
+    await expect(insert(invoiceFor('bad-id'), 'bad-id')).rejects.toThrow(
+      'Self-invoice identity requires reconciliation',
+    );
+    const invoice = invoiceFor(stripeInvoiceId);
+    invoice.lines.push({ ...invoice.lines[0], ordinal: 2 });
+    await expect(insert(invoice)).rejects.toThrow(
+      'Self-invoice identity requires reconciliation',
+    );
 
-  it('rejects a saved line with a different tax rate, unit price or unit', async () => {
-    for (const change of [
-      { vat_rate: '8' },
-      { unit_price_net: 48 },
-      { unit: 'szt.' },
-    ]) {
-      const original = { ...storedLines[0] };
-      storedLines[0] = { ...original, ...change };
-      await expect(insertSelfInvoice(
-        invoiceFor(firstStripeInvoiceId), 'operator-tenant', firstStripeInvoiceId,
-      )).rejects.toThrow(collisionError);
-      storedLines[0] = original;
-    }
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 });

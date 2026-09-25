@@ -109,6 +109,52 @@ describe('Stripe invoice subscription ordering', () => {
         },
       });
   });
+  it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['zero', 0],
+    ['negative', -1],
+    ['fractional', 1.5],
+    ['not finite', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
+    ['outside the Date range', 8_640_000_000_001],
+  ])('rejects a paid subscription invoice with %s paid_at before DB access', async (_label, paidAt) => {
+    const invalid = {
+      ...invoice('sub_ready'),
+      status_transitions: { paid_at: paidAt },
+    } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(invalid, 'succeeded'))
+      .rejects.toThrow('has no valid paid_at');
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('persists the signed paid_at rather than the webhook receipt time', async () => {
+    mocks.subscriptionRead.mockResolvedValue({
+      data: { id: 'local-subscription', tenant_id: 'tenant-a' },
+      error: null,
+    });
+
+    await expect(mapInvoiceToPaymentRow(invoice('sub_ready'), 'succeeded'))
+      .resolves.toMatchObject({
+        row: { paid_at: new Date(1780000000 * 1000).toISOString() },
+      });
+  });
+
+  it('does not require paid_at on an unsuccessful invoice', async () => {
+    mocks.subscriptionRead.mockResolvedValue({
+      data: { id: 'local-subscription', tenant_id: 'tenant-a' },
+      error: null,
+    });
+    const failed = {
+      ...invoice('sub_ready'),
+      status_transitions: { paid_at: null },
+    } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(failed, 'failed'))
+      .resolves.toMatchObject({ row: { paid_at: null } });
+  });
+
   it('uses tenant metadata without a Stripe customer lookup', async () => {
     const source = { id: 'sub_direct', metadata: { tenantId: 'tenant-a' } } as unknown as Stripe.Subscription;
 

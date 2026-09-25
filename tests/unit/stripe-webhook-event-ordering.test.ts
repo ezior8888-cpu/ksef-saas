@@ -64,7 +64,12 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.mapInvoice.mockResolvedValue({
     tenantId: 'tenant-a',
-    row: { stripe_invoice_id: invoice.id, status: 'failed', failure_reason: 'card declined' },
+    row: {
+      stripe_invoice_id: invoice.id,
+      status: 'failed',
+      failure_reason: 'card declined',
+      paid_at: new Date(1780000000 * 1000).toISOString(),
+    },
   });
   mocks.syncSubscription.mockResolvedValue({
     subscription,

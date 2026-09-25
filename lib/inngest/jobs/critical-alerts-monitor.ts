@@ -13,6 +13,7 @@
  *   5. **Stale refunds** — operacje processing starsze niż 15 min
  *   6. **Stale Stripe webhooks** — processing > 15 min lub failed
  *   7. **Stale dunning notifications** — sending starsze niż 15 min
+ *   8. **Stale VAT enqueue** — faktura powiązana, ale brak potwierdzenia emisji > 15 min
  *
  * Wszystkie progi konserwatywne — wolimy false-positive niż przegapić
  * critical incident. Operator może zignorować, ale nie chcemy gubić alertów.
@@ -285,6 +286,49 @@ export async function checkStaleStripeWebhookEvents(): Promise<AlertCheckResult>
   return { type: 'stale_stripe_webhooks', fired: true };
 }
 
+/** A linked VAT draft without a confirmed enqueue must never be resent blindly. */
+export async function checkStaleBillingVatEnqueues(): Promise<AlertCheckResult> {
+  const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  // The invoice and payment link are created in one DB transaction. Invoice
+  // created_at is stable; payment.updated_at can move on later webhooks.
+  const { count, error } = await createAdminClient()
+    .from('stripe_payments')
+    .select(
+      'id, invoices!stripe_payments_vat_invoice_id_fkey!inner(created_at)',
+      { count: 'exact', head: true },
+    )
+    .not('vat_invoice_id', 'is', null)
+    .is('vat_invoice_submitted_at', null)
+    .lt('invoices.created_at', cutoffIso);
+
+  if (error || count === null) {
+    throw error ?? new Error('Stale billing VAT enqueue count unavailable');
+  }
+  if (count === 0) return { type: 'stale_billing_vat_enqueues', fired: false };
+
+  const claimed = await tryClaimAlert('stale_billing_vat_enqueues');
+  if (!claimed) {
+    return { type: 'stale_billing_vat_enqueues', fired: false, reason: 'dedup' };
+  }
+
+  await alertCritical(
+    'Faktury VAT Stripe wymagają uzgodnienia z KSeF',
+    'Co najmniej jedna płatność ma powiązaną fakturę VAT starszą niż 15 minut bez potwierdzenia emisji zlecenia. Ręcznie uzgodnij stan kolejki i KSeF przed zmianą znacznika; nie wysyłaj zlecenia automatycznie ponownie.',
+    {
+      fields: [
+        { label: 'Faktury > 15 min', value: String(count) },
+        { label: 'Próg', value: '15 min' },
+      ],
+      link: {
+        label: 'Otwórz panel administratora',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/support',
+      },
+    },
+  );
+
+  return { type: 'stale_billing_vat_enqueues', fired: true };
+}
+
 /** An uncertain email send must be reconciled before any new delivery. */
 export async function checkStaleDunningNotifications(): Promise<AlertCheckResult> {
   const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
@@ -347,6 +391,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-stale-dunning-notifications', () =>
         checkStaleDunningNotifications().catch(captureAndReturn('stale_dunning_notifications')),
+      ),
+      step.run('check-stale-billing-vat-enqueues', () =>
+        checkStaleBillingVatEnqueues().catch(captureAndReturn('stale_billing_vat_enqueues')),
       ),
     ]);
 

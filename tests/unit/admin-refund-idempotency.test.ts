@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createRefund: vi.fn(),
@@ -31,6 +31,8 @@ type State = {
   failCompletion: boolean;
   emailOwner: boolean;
   nullPriorRefundRead: boolean;
+  invoiceAppearsBeforeClaim: boolean;
+  claimError: boolean;
 };
 
 let state: State;
@@ -39,6 +41,7 @@ const input = {
   adminUserId: '22222222-2222-4222-8222-222222222222',
   reason: 'Customer request',
 };
+const operatorTenantId = '44444444-4444-4444-8444-444444444444';
 const stripeResponse = {
   id: 're_local',
   amount: 12000,
@@ -112,10 +115,7 @@ class FakeQuery {
           : ok(null);
       }
       if (this.mode === 'insert') {
-        state.calls.push('operation-claim');
-        if (state.operation) return failure('duplicate operation', '23505');
-        state.operation = { ...this.row };
-        return ok({ payment_id: state.operation.payment_id });
+        throw new Error('Refund operation must be claimed through the atomic RPC');
       }
       state.calls.push('operation-update');
       if (!state.operation || this.filters.payment_id !== state.operation.payment_id ||
@@ -135,6 +135,7 @@ class FakeQuery {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv('FAKTFLOW_OPERATOR_TENANT_ID', operatorTenantId);
   state = {
     payment: {
       id: input.paymentId,
@@ -154,19 +155,57 @@ beforeEach(() => {
     failCompletion: false,
     emailOwner: false,
     nullPriorRefundRead: false,
+    invoiceAppearsBeforeClaim: false,
+    claimError: false,
   };
   mocks.adminClient.mockImplementation(() => ({
     from: (table: string) => new FakeQuery(table),
+    rpc: async (name: string, args: Row): Promise<Result> => {
+      if (name !== 'claim_admin_refund_uninvoiced') {
+        throw new Error('Unexpected RPC: ' + name);
+      }
+      state.calls.push('operation-claim-rpc');
+      expect(args).toMatchObject({
+        p_payment_id: input.paymentId,
+        p_tenant_id: state.payment.tenant_id,
+        p_admin_user_id: input.adminUserId,
+        p_reason: input.reason,
+        p_operator_tenant_id: operatorTenantId,
+      });
+      if (state.claimError) return failure('refund claim failed');
+      if (state.invoiceAppearsBeforeClaim) {
+        state.payment.vat_invoice_id = 'vat-invoice';
+      }
+      if (state.payment.vat_invoice_id) return ok('invoice_exists');
+      if (state.payment.status !== 'succeeded') return ok('not_succeeded');
+      if (state.operation) return ok('already_claimed');
+      state.operation = {
+        payment_id: state.payment.id,
+        tenant_id: state.payment.tenant_id,
+        idempotency_key: 'admin-full-refund-v1:' + input.paymentId,
+        amount_cents: state.payment.amount_cents,
+        currency: state.payment.currency,
+        stripe_payment_reference: state.payment.stripe_payment_intent_id ?? state.payment.stripe_charge_id,
+        status: 'processing',
+        requested_by_user_id: input.adminUserId,
+        reason: input.reason,
+      };
+      return ok('claimed');
+    },
     auth: { admin: { getUserById: async () => ({ data: { user: { email: 'owner@example.test' } } }) } },
   }));
   mocks.createRefund.mockResolvedValue({ ...stripeResponse });
   mocks.sendEmail.mockResolvedValue(undefined);
 });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe('admin full refund idempotency', () => {
   it('claims before Stripe, uses a stable key and explicit full amount, then records success', async () => {
     mocks.createRefund.mockImplementation(async () => {
-      expect(state.calls).toContain('operation-claim');
+      expect(state.calls).toContain('operation-claim-rpc');
       expect(state.operation?.status).toBe('processing');
       return { ...stripeResponse };
     });
@@ -211,6 +250,38 @@ describe('admin full refund idempotency', () => {
     expect((await first).success).toBe(true);
     expect((await issueRefund(input)).success).toBe(false);
     expect(mocks.createRefund).toHaveBeenCalledOnce();
+  });
+
+  it('refuses a refund when a VAT invoice is already linked', async () => {
+    state.payment.vat_invoice_id = 'vat-invoice';
+
+    const result = await issueRefund(input);
+
+    expect(result.success).toBe(false);
+    expect(state.operation).toBeNull();
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+  });
+
+  it('refuses a refund if the VAT invoice appears after the initial payment read', async () => {
+    state.invoiceAppearsBeforeClaim = true;
+
+    const result = await issueRefund(input);
+
+    expect(result.success).toBe(false);
+    expect(state.calls).toContain('operation-claim-rpc');
+    expect(state.operation).toBeNull();
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+  });
+
+  it('fails closed without the operator tenant configuration', async () => {
+    vi.stubEnv('FAKTFLOW_OPERATOR_TENANT_ID', undefined);
+
+    const result = await issueRefund(input);
+
+    expect(result.success).toBe(false);
+    expect(state.calls).not.toContain('operation-claim-rpc');
+    expect(state.operation).toBeNull();
+    expect(mocks.createRefund).not.toHaveBeenCalled();
   });
 
   it('keeps a lost Stripe response blocked for reconciliation', async () => {

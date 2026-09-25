@@ -173,128 +173,58 @@ export async function buildSelfInvoiceDraft(
 export interface InsertResult {
   invoiceId: string;
   internalNumber: string;
+  created: boolean;
 }
 
 /**
- * Zapisuje fakturę self-invoicing do `invoices` + `invoice_line_items`.
- * Tenant_id = operator (sprzedawca). Buyer_data zawiera customer.
- *
- * Idempotency: a duplicate number is reused only after verifying the full
- * Stripe invoice ID, amount, buyer and saved line item. Other collisions
- * stop for manual reconciliation.
+ * Tworzy fakturę, jej pozycję i powiązanie z płatnością w jednej transakcji
+ * SQL. RPC blokuje wiersz płatności także dla równoległego zwrotu.
  */
 export async function insertSelfInvoice(
   invoice: Invoice,
   operatorTenantId: string,
   stripeInvoiceId: string,
-): Promise<InsertResult | null> {
-  const supabase = createAdminClient();
-
-  const { data: inserted, error: invErr } = await supabase
-    .from('invoices')
-    .insert({
-      tenant_id: operatorTenantId,
-      direction: 'outgoing',
-      ksef_status: 'draft',
-      invoice_kind: 'regular',
-      internal_number: invoice.internalNumber,
-      invoice_type: invoice.type,
-      issue_date: invoice.issueDate,
-      sale_date: invoice.saleDate ?? null,
-      seller_nip: invoice.seller.nip,
-      buyer_nip: invoice.buyer.nip ?? null,
-      seller_data: invoice.seller,
-      buyer_data: invoice.buyer,
-      payment_data: invoice.payment,
-      payment_due_date: invoice.payment.dueDate,
-      currency: invoice.payment.currency,
-      notes: invoice.notes ?? null,
-      net_total: invoice.netTotal,
-      vat_total: invoice.vatTotal,
-      gross_total: invoice.grossTotal,
-      is_b2c: false,
-      fa3_data: invoice,
-    })
-    .select('id')
-    .single();
-
-  if (invErr || !inserted) {
-    // A number collision is not proof that this Stripe invoice was already
-    // billed: the human-readable number contains only the last eight ID chars.
-    if (invErr?.code === '23505') {
-      const { data: existing, error: existingError } = await supabase
-        .from('invoices')
-        .select('id, notes, fa3_data, gross_total, buyer_nip')
-        .eq('tenant_id', operatorTenantId)
-        .eq('internal_number', invoice.internalNumber)
-        .maybeSingle();
-      if (existingError || !existing) {
-        throw new Error('Self-invoice number collision requires reconciliation');
-      }
-
-      const expectedNote = `Faktura za subskrypcję FaktFlow. Płatność Stripe: ${stripeInvoiceId}.`;
-      const storedDraft = existing.fa3_data;
-      const storedBuyer = storedDraft !== null && typeof storedDraft === 'object' &&
-        !Array.isArray(storedDraft) ? storedDraft.buyer : null;
-      const storedBuyerNip = storedBuyer !== null && typeof storedBuyer === 'object' &&
-        !Array.isArray(storedBuyer) ? storedBuyer.nip : null;
-      if (!stripeInvoiceId.startsWith('in_') || invoice.notes !== expectedNote ||
-          existing.notes !== expectedNote ||
-          storedDraft === null || typeof storedDraft !== 'object' || Array.isArray(storedDraft) ||
-          storedDraft.notes !== expectedNote ||
-          storedDraft.internalNumber !== invoice.internalNumber ||
-          storedDraft.grossTotal !== invoice.grossTotal ||
-          storedBuyerNip !== (invoice.buyer.nip ?? null) ||
-          existing.gross_total !== invoice.grossTotal ||
-          existing.buyer_nip !== (invoice.buyer.nip ?? null)) {
-        throw new Error('Self-invoice number collision requires reconciliation');
-      }
-
-      // A prior attempt may have saved the invoice but failed to save its line.
-      const { data: existingLines, error: linesReadError } = await supabase
-        .from('invoice_line_items')
-        .select('gross_amount, net_amount, vat_amount, quantity, name, vat_rate, unit_price_net, unit')
-        .eq('invoice_id', existing.id)
-        .limit(2);
-      const expectedLine = invoice.lines[0];
-      const existingLine = existingLines?.[0];
-      if (linesReadError || !expectedLine || invoice.lines.length !== 1 ||
-          existingLines?.length !== 1 || !existingLine ||
-          existingLine.gross_amount !== expectedLine.grossAmount ||
-          existingLine.net_amount !== expectedLine.netAmount ||
-          existingLine.vat_amount !== expectedLine.vatAmount ||
-          existingLine.quantity !== expectedLine.quantity ||
-          existingLine.name !== expectedLine.name ||
-          existingLine.vat_rate !== expectedLine.vatRate ||
-          existingLine.unit_price_net !== expectedLine.unitPriceNet ||
-          existingLine.unit !== expectedLine.unit) {
-        throw new Error('Self-invoice number collision requires reconciliation');
-      }
-      return { invoiceId: existing.id, internalNumber: invoice.internalNumber };
-    }
-    throw new Error(`self-invoice insert failed: ${invErr?.message}`);
+  paymentId: string,
+  customerTenantId: string,
+): Promise<InsertResult> {
+  if (!stripeInvoiceId.startsWith('in_') || invoice.lines.length !== 1) {
+    throw new Error('Self-invoice identity requires reconciliation');
   }
 
-  const { error: linesErr } = await supabase.from('invoice_line_items').insert(
-    invoice.lines.map((line) => ({
-      invoice_id: inserted.id,
-      ordinal: line.ordinal,
-      name: line.name,
-      unit: line.unit,
-      quantity: line.quantity,
-      unit_price_net: line.unitPriceNet,
-      net_amount: line.netAmount,
-      vat_rate: line.vatRate,
-      vat_amount: line.vatAmount,
-      gross_amount: line.grossAmount,
-    })),
-  );
+  const supabase = createAdminClient() as unknown as {
+    rpc: (
+      name: string,
+      args: Record<string, unknown>,
+    ) => Promise<{
+      data: Array<{
+        invoice_id: string;
+        internal_number: string;
+        created: boolean;
+      }> | null;
+      error: { message: string } | null;
+    }>;
+  };
+  const { data, error } = await supabase.rpc('create_billing_vat_invoice', {
+    p_payment_id: paymentId,
+    p_customer_tenant_id: customerTenantId,
+    p_operator_tenant_id: operatorTenantId,
+    p_stripe_invoice_id: stripeInvoiceId,
+    p_invoice: invoice,
+  });
 
-  if (linesErr) {
-    // Rollback best-effort — bez transakcji klienckich.
-    await supabase.from('invoices').delete().eq('id', inserted.id);
-    throw new Error(`self-invoice lines insert failed: ${linesErr.message}`);
+  if (error) {
+    throw new Error('Self-invoice transaction failed: ' + error.message);
+  }
+  if (!Array.isArray(data) || data.length !== 1 ||
+      typeof data[0].invoice_id !== 'string' ||
+      data[0].internal_number !== invoice.internalNumber ||
+      typeof data[0].created !== 'boolean') {
+    throw new Error('Self-invoice transaction returned an invalid result');
   }
 
-  return { invoiceId: inserted.id, internalNumber: invoice.internalNumber };
+  return {
+    invoiceId: data[0].invoice_id,
+    internalNumber: data[0].internal_number,
+    created: data[0].created,
+  };
 }
