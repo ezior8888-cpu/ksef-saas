@@ -164,6 +164,53 @@ export async function submitInvoice(
   });
 }
 
+/** Kod statusu faktury „Duplikat faktury” (seller NIP + RodzajFaktury + P_2). */
+export const KSEF_DUPLICATE_INVOICE = 440;
+
+/** Od 500 w górę status faktury to błąd systemu KSeF (np. 550), nie odrzucenie. */
+export const KSEF_SYSTEM_STATUS_MIN = 500;
+
+/**
+ * KSeF przyjął plik, ale odrzucił fakturę w statusie (kod 400–499).
+ *
+ * To decyzja o TREŚCI, nie awaria łącza — ponowienie wysłałoby tę samą
+ * fakturę jeszcze raz, a po wyczerpaniu prób job zaparkowałby ją w Offline24
+ * jak przy awarii (z kodami QR offline dla dokumentu, którego KSeF nie chce).
+ *
+ * Szczególny przypadek to 440: faktura o tym numerze JUŻ jest w KSeF.
+ * Najczęściej to nasza wcześniejsza wysyłka, której wyniku nie doczekaliśmy
+ * (polling skończył się po 60 s, a KSeF przyjął fakturę później). Wtedy
+ * komunikat podaje numer KSeF oryginału — bez tego faktura wisiałaby jako
+ * błąd, choć w KSeF jest przyjęta.
+ */
+export class KsefInvoiceRejectedError extends Error {
+  readonly code: number;
+  readonly originalKsefNumber: string | null;
+  readonly originalSessionReferenceNumber: string | null;
+
+  constructor(code: number, status: InvoiceStatusResponse['status']) {
+    const details = status.details?.join('; ') ?? '';
+    const original = status.extensions?.originalKsefNumber ?? null;
+    const originalSession = status.extensions?.originalSessionReferenceNumber ?? null;
+    super(
+      code === KSEF_DUPLICATE_INVOICE
+        ? `KSeF ma już fakturę o tym numerze${original ? ` — numer KSeF ${original}` : ''}` +
+            `${originalSession ? ` (sesja ${originalSession})` : ''}. Najpewniej to ta sama ` +
+            'faktura z wcześniejszej próby: sprawdź ją w KSeF, zanim wystawisz ją ponownie. ' +
+            `Szczegóły: ${details}`
+        : `KSeF odrzucił fakturę: ${status.description}. Szczegóły: ${details}`,
+    );
+    this.name = 'KsefInvoiceRejectedError';
+    this.code = code;
+    this.originalKsefNumber = original;
+    this.originalSessionReferenceNumber = originalSession;
+  }
+
+  get isDuplicate(): boolean {
+    return this.code === KSEF_DUPLICATE_INVOICE;
+  }
+}
+
 /**
  * Polling statusu faktury co 2 sekundy aż do akceptacji / odrzucenia.
  */
@@ -196,11 +243,17 @@ async function pollInvoiceStatus(
     if (code === INVOICE_STATUS.ACCEPTED) {
       return status;
     }
-    if (Number.isFinite(code) && code >= INVOICE_STATUS.REJECTED) {
-      const details = status.status.details?.join('; ') ?? '';
+    if (Number.isFinite(code) && code >= KSEF_SYSTEM_STATUS_MIN) {
+      // 5xx w statusie to przerwanie po stronie KSeF, nie ocena treści. 550:
+      // „Przetwarzanie zostało przerwane z przyczyn wewnętrznych systemu.
+      // Spróbuj ponownie.” (CIRFMF/ksef-docs, RC5.7). Zwykły Error = ponowienie;
+      // jeśli faktura jednak weszła, następna wysyłka dostanie 440 z jej numerem.
       throw new Error(
-        `KSeF odrzucił fakturę: ${status.status.description}. Szczegóły: ${details}`
+        `KSeF przerwał przetwarzanie faktury (status ${code}): ${status.status.description}`,
       );
+    }
+    if (Number.isFinite(code) && code >= INVOICE_STATUS.REJECTED) {
+      throw new KsefInvoiceRejectedError(code, status.status);
     }
 
     // Status 150 (QUEUED) lub nieznany kod < 400 — czekamy

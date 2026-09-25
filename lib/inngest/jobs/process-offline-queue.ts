@@ -340,6 +340,27 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
 
       const attempts = row.attempts ?? 1;
 
+      // Błąd kończący: KSeF odrzucił treść albo brak danych dokumentu.
+      // Ponowienie nic nie zmieni — zamykamy wpis i zostawiamy fakturze
+      // status ustawiony przez job wysyłki ('rejected'), zamiast nadpisywać
+      // go na 'offline_queued'.
+      if (data.terminal) {
+        const { error: closeErr } = await supabase
+          .from('ksef_offline_queue')
+          .update({
+            status: 'failed',
+            last_error:
+              errorMessage.length > 2000
+                ? `${errorMessage.slice(0, 1997)}...`
+                : errorMessage,
+          })
+          .eq('id', row.id)
+          .eq('tenant_id', tenantId)
+          .eq('invoice_id', invoiceId);
+        if (closeErr) throw new Error(closeErr.message);
+        return { closedTerminal: true as const };
+      }
+
       const { error: updQ } = await supabase
         .from('ksef_offline_queue')
         .update({
