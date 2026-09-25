@@ -17,7 +17,7 @@ import type Stripe from 'stripe';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import type { ActiveSubscription } from './subscription';
-import { RetryablePreEffectWebhookError } from './webhook-errors';
+import { ReconciliationRequiredWebhookError, RetryablePreEffectWebhookError } from './webhook-errors';
 
 type SubscriptionStatus = ActiveSubscription['status'];
 type SubscriptionPlan = ActiveSubscription['plan'];
@@ -208,8 +208,47 @@ function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
 }
 
 /**
- * Invoice (succeeded/failed) → row dla `stripe_payments`.
- * Returns `null` only for an actual one-time invoice without a subscription.
+ * Legacy invoice snapshots sometimes carry one direct payment reference.
+ * Basil+ exposes invoice payments in another shape; we do not infer that
+ * structure here without a verified contract. If neither legacy field can
+ * prove the payment identity, the signed event requires reconciliation before writes.
+ * Both valid legacy references may coexist in a signed invoice; retain both
+ * for reconciliation without deriving tenant identity from either alone.
+ */
+function legacyInvoicePaymentReferences(
+  invoice: Stripe.Invoice,
+  requireReference: boolean,
+): { paymentIntentId: string | null; chargeId: string | null } {
+  const refs = invoice as unknown as {
+    payment_intent?: unknown;
+    charge?: unknown;
+  };
+  const paymentIntent = refs.payment_intent;
+  const charge = refs.charge;
+  const hasPaymentIntent = paymentIntent !== null && paymentIntent !== undefined;
+  const hasCharge = charge !== null && charge !== undefined;
+
+  if ((hasPaymentIntent &&
+       (typeof paymentIntent !== 'string' ||
+        !/^pi_[A-Za-z0-9]{8,}$/.test(paymentIntent))) ||
+      (hasCharge &&
+       (typeof charge !== 'string' ||
+        !/^ch_[A-Za-z0-9]{8,}$/.test(charge))) ||
+      (requireReference && !hasPaymentIntent && !hasCharge)) {
+    throw new ReconciliationRequiredWebhookError(
+      'Stripe invoice payment reference missing or invalid',
+    );
+  }
+
+  return {
+    paymentIntentId: hasPaymentIntent ? paymentIntent as string : null,
+    chargeId: hasCharge ? charge as string : null,
+  };
+}
+
+/**
+ * Invoice (succeeded/failed) to a stripe_payments row.
+ * Returns null only for an actual one-time invoice without a subscription.
  */
 export interface PaymentRowResult {
   tenantId: string;
@@ -227,6 +266,10 @@ export async function mapInvoiceToPaymentRow(
   // The signed Stripe invoice is the authority for the payment date. A
   // delivery without it cannot create a payment row or schedule a VAT job.
   const paidAt = status === 'succeeded' ? paidAtFromInvoice(invoice) : null;
+  const paymentRefs = legacyInvoicePaymentReferences(
+    invoice,
+    status === 'succeeded',
+  );
 
   const supabase = createAdminClient();
 
@@ -263,11 +306,6 @@ export async function mapInvoiceToPaymentRow(
     );
   }
 
-  const invoiceWithIds = invoice as unknown as {
-    payment_intent?: string | null;
-    charge?: string | null;
-  };
-
   // Stripe v22: `invoice.tax` zostało zastąpione przez `total_taxes` (Array<{amount}>)
   // — sumujemy żeby dostać total VAT w cents.
   const totalTaxes = (invoice as unknown as {
@@ -282,9 +320,9 @@ export async function mapInvoiceToPaymentRow(
     row: {
       tenant_id: subResult.data.tenant_id,
       subscription_id: subResult.data.id,
-      stripe_payment_intent_id: invoiceWithIds.payment_intent ?? null,
+      stripe_payment_intent_id: paymentRefs.paymentIntentId,
       stripe_invoice_id: invoice.id,
-      stripe_charge_id: invoiceWithIds.charge ?? null,
+      stripe_charge_id: paymentRefs.chargeId,
       status,
       amount_cents: status === 'succeeded' ? invoice.amount_paid : invoice.amount_due,
       currency: (invoice.currency ?? 'pln').toLowerCase(),

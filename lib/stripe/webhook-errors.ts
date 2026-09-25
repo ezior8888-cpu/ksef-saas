@@ -21,3 +21,13 @@ export class RetryablePreEffectWebhookError extends Error {
     this.code = code;
   }
 }
+
+/** A signed event is incomplete for automation and needs an operator, not replay. */
+export class ReconciliationRequiredWebhookError extends Error {
+  readonly code = 'payment_reference_missing_or_invalid';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'ReconciliationRequiredWebhookError';
+  }
+}

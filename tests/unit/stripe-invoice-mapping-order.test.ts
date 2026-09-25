@@ -18,12 +18,13 @@ import {
   mapInvoiceToPaymentRow,
   resolveTenantIdFromSubscription,
 } from '@/lib/stripe/event-mapping';
-import { RetryablePreEffectWebhookError } from '@/lib/stripe/webhook-errors';
+import { ReconciliationRequiredWebhookError, RetryablePreEffectWebhookError } from '@/lib/stripe/webhook-errors';
 
 function invoice(subscription: string | null): Stripe.Invoice {
   return {
     id: 'in_ordered',
     subscription,
+    payment_intent: 'pi_ValidReference123',
     amount_paid: 12000,
     amount_due: 12000,
     currency: 'pln',
@@ -105,9 +106,70 @@ describe('Stripe invoice subscription ordering', () => {
         row: {
           subscription_id: 'local-subscription',
           stripe_invoice_id: 'in_ordered',
+          stripe_payment_intent_id: 'pi_ValidReference123',
+          stripe_charge_id: null,
           status: 'succeeded',
         },
       });
+  });
+  it('accepts a signed paid invoice with only a valid charge reference', async () => {
+    mocks.subscriptionRead.mockResolvedValue({
+      data: { id: 'local-subscription', tenant_id: 'tenant-a' },
+      error: null,
+    });
+    const withCharge = {
+      ...invoice('sub_ready'),
+      payment_intent: null,
+      charge: 'ch_ValidReference123',
+    } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(withCharge, 'succeeded'))
+      .resolves.toMatchObject({
+        row: {
+          stripe_payment_intent_id: null,
+          stripe_charge_id: 'ch_ValidReference123',
+        },
+      });
+  });
+
+  it('preserves both valid legacy references when both are present', async () => {
+    mocks.subscriptionRead.mockResolvedValue({
+      data: { id: 'local-subscription', tenant_id: 'tenant-a' },
+      error: null,
+    });
+    const withBoth = {
+      ...invoice('sub_ready'),
+      charge: 'ch_ValidReference123',
+    } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(withBoth, 'succeeded'))
+      .resolves.toMatchObject({
+        row: {
+          stripe_payment_intent_id: 'pi_ValidReference123',
+          stripe_charge_id: 'ch_ValidReference123',
+        },
+      });
+  });
+
+  it.each([
+    ['missing both', { payment_intent: null, charge: null }],
+    ['empty PI', { payment_intent: '' }],
+    ['wrong PI prefix', { payment_intent: 'ch_WrongReference123' }],
+    ['short PI', { payment_intent: 'pi_x' }],
+    ['expanded PI object', { payment_intent: { id: 'pi_ValidReference123' } }],
+    ['empty charge', { payment_intent: null, charge: '' }],
+    ['wrong charge prefix', { payment_intent: null, charge: 'pi_WrongReference123' }],
+    ['short charge', { payment_intent: null, charge: 'ch_x' }],
+    ['invalid second reference', { charge: 'pi_WrongReference123' }],
+  ])('rejects a paid subscription invoice with %s before DB access', async (_label, refs) => {
+    const invalid = { ...invoice('sub_ready'), ...refs } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(invalid, 'succeeded'))
+      .rejects.toMatchObject({
+        name: 'ReconciliationRequiredWebhookError',
+        code: 'payment_reference_missing_or_invalid',
+      } satisfies Partial<ReconciliationRequiredWebhookError>);
+    expect(mocks.from).not.toHaveBeenCalled();
   });
   it.each([
     ['missing', undefined],
@@ -148,6 +210,7 @@ describe('Stripe invoice subscription ordering', () => {
     });
     const failed = {
       ...invoice('sub_ready'),
+      payment_intent: null,
       status_transitions: { paid_at: null },
     } as unknown as Stripe.Invoice;
 

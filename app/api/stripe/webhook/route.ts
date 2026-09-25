@@ -24,7 +24,7 @@ import type Stripe from 'stripe';
 import * as Sentry from '@sentry/nextjs';
 
 import { getStripe } from '@/lib/stripe/client';
-import { RetryablePreEffectWebhookError } from '@/lib/stripe/webhook-errors';
+import { ReconciliationRequiredWebhookError, RetryablePreEffectWebhookError } from '@/lib/stripe/webhook-errors';
 import {
   handleInvoicePaymentFailed,
   handleInvoicePaymentSucceeded,
@@ -123,7 +123,9 @@ export async function POST(req: Request): Promise<Response> {
         event.id,
         claim.token,
         err instanceof RetryablePreEffectWebhookError ? 'retryable' : 'failed',
-        err instanceof RetryablePreEffectWebhookError ? err.code : 'handler_failed',
+        err instanceof RetryablePreEffectWebhookError ||
+        err instanceof ReconciliationRequiredWebhookError
+          ? err.code : 'handler_failed',
       );
     } catch (finalizeError) {
       Sentry.captureException(finalizeError, {

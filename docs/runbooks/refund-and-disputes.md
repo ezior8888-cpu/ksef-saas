@@ -1,127 +1,145 @@
-# Refunds & Stripe Disputes Runbook (Faza 35)
+# Zwroty i spory Stripe — procedura operacyjna
 
-Procedura zwrotów (refund) i obsługi dispute'ów (chargeback) z Stripe.
-Pełna polityka biznesowa: [docs/support/refund-policy.md](../support/refund-policy.md).
-Tutaj — mechanika operacyjna.
+Ten dokument opisuje ręczne uzgadnianie płatności, zwrotów i sporów. Zasady
+biznesowe są w [polityce zwrotów](../support/refund-policy.md); jej ostateczną
+wersję i skutki podatkowe musi zatwierdzić właściwa osoba. Przed użyciem
+funkcji administracyjnej potwierdź, jaki obraz aplikacji i które migracje
+faktycznie działają na serwerze. Samo scalenie kodu nie potwierdza wdrożenia
+ani stanu bazy.
 
-## TL;DR
+**Granica obecnej automatyzacji:** webhook obsługuje płatności i subskrypcje,
+ale refund.created, refund.updated, refund.failed, charge.refunded oraz
+charge.dispute.* pomija bez zapisu. Zwrot wykonany w Stripe Dashboard i spór
+mogą więc nie pojawić się w lokalnych tabelach i nie wywołają obiecanego tu
+wcześniej alertu, maila ani korekty. Do czasu odbioru osobnej obsługi tych
+zdarzeń Stripe Dashboard i ręczne uzgodnienie są obowiązkowe. Nie zakładaj,
+że migracja 00078 lub 00079 jest na produkcji bez potwierdzenia właściciela
+bazy.
 
-- **Refund** = my zwracamy kasę dobrowolnie (np. niezadowolony klient).
-- **Dispute / chargeback** = klient idzie do swojego banku i kwestionuje
-  płatność. Bank zabiera nam pieniądze + opłatę manipulacyjną. Walczymy
-  o evidence w Stripe Dashboard albo akceptujemy stratę.
+## Zasady przed każdą operacją
 
-## 1. Refund (zwrot dobrowolny)
+1. Ustal pełne identyfikatory: lokalny payment ID i tenant ID oraz identyfikatory
+   Stripe invoice, PaymentIntent lub Charge. Sam email, ostatnie znaki numeru
+   faktury albo metadata Stripe nie wystarczają do przypisania płatności.
+2. Sprawdź w Stripe **aktualny** stan płatności, wszystkie refundy, ewentualny
+   dispute, kwoty i walutę. W bazie porównaj stripe_payments, stripe_refunds,
+   stripe_refund_operations oraz powiązaną fakturę VAT i jej status KSeF.
+3. Jeżeli stan Stripe i bazy się różni, jest zwrot pending/requires_action,
+   niepewny claim, spór lub faktura VAT, zatrzymaj nowy automatyczny zwrot.
+   Zapisz sprawę do uzgodnienia z identyfikatorami i czasem odczytu; nie
+   ponawiaj refunds.create ani nie usuwaj claimu lub rekordu webhooka.
+4. Zwrotu nie uznawaj za wykonany tylko dlatego, że wysłano żądanie. Do sumy
+   środków zwróconych wliczaj wyłącznie refundy ze statusem succeeded. Stany
+   pending/requires_action wymagają obserwacji, a failed/canceled wyjaśnienia.
+   Pełny i częściowy zwrot rozróżniaj po sumie potwierdzonych kwot w Stripe.
+5. Nie zmieniaj ręcznie statusu płatności ani faktury na podstawie samego
+   runbooka. Korektę danych i dokumentu VAT ustala uprawniona osoba na
+   podstawie dowodów Stripe, księgowych i KSeF, z zapisem audytowym.
 
-### Kiedy zwracamy
+## Zwrot z panelu administratora
 
-Zgodnie z [refund-policy.md](../support/refund-policy.md):
-- Trial — wszystko, zawsze (user nie zapłacił).
-- < 14 dni od pierwszej płatności — refund 100% na prośbę.
-- > 14 dni — refund pro-rata za niewykorzystany okres.
-- W razie naszego błędu (downtime, zgubione faktury) — pełen + przeprosiny.
+Panel administratora oferuje **pełny** zwrot płatności. Częściowy zwrot nie
+jest jego funkcją. Przed kliknięciem sprawdź identyfikatory i historię jak
+wyżej oraz upewnij się, że wdrożona wersja ma trwały claim zwrotu i zgodną
+migrację. Jeżeli akcja pokazuje processing, reconciliation_required, brak
+konfiguracji operatora lub istniejącą fakturę VAT, nie próbuj obejść blokady
+w Stripe Dashboard bez odrębnej decyzji i planu uzgodnienia.
 
-### Procedura
+Po akcji zapisz identyfikator refundu z odpowiedzi, sprawdź jego bieżący
+status w Stripe i porównaj z wpisem stripe_refunds, stanem
+stripe_refund_operations i stripe_payments. Potwierdzenie dla klienta
+przekaż dopiero po stanie succeeded i sprawdzeniu, czy wcześniejszy mail już
+wyszedł. W razie błędu aplikacji lub niepewnej odpowiedzi Stripe najpierw
+szukaj istniejącego refundu po PaymentIntent/Charge, kwocie i czasie
+operacji; kolejny klik może oznaczać drugi przepływ finansowy.
 
-```
-1. /admin/users → wyszukaj user-a po email
-2. User detail → tab "Billing" → przycisk "Refund payment"
-3. Wybierz płatność z listy `stripe_payments`
-4. Kwota (default: pełna) + powód (wybór z dropdownu)
-5. Submit → akcja `refundPaymentAction` (lib/billing/billing-action-errors.ts)
-```
+## Zwrot wykonany poza aplikacją
 
-Backend:
-- Wywołuje `stripe.refunds.create({ payment_intent, amount, reason })`.
-- Stripe webhook `charge.refunded` przyjdzie → handler zapisze `stripe_refunds`.
-- Inngest job emituje email `RefundIssued` (Resend, template z Fazy 26).
+Gdy uprawniony operator musi użyć Stripe Dashboard, najpierw sprawdza tam
+wszystkie dotychczasowe refundy i dispute dla dokładnej płatności, zatwierdzoną
+kwotę oraz potrzebę korekty VAT. Po operacji zapisuje pełny refund ID, kwotę,
+walutę, status i czas. Następnie porównuje je z lokalnym payment ID,
+stripe_refunds oraz stripe_refund_operations. **Nie oczekuj automatycznego
+odzwierciedlenia zewnętrznego zwrotu w bazie ani automatycznego maila.**
 
-### Co jeśli admin panel nie działa
+Jeżeli lokalna płatność nadal ma status succeeded, nie traktuj go jako dowodu,
+że pieniądze nie zostały zwrócone. Oznacz rozbieżność do ręcznego uzgodnienia;
+powstrzymaj kolejne zwroty i przekaż identyfikator płatności osobie
+obsługującej kolejkę, aby sprawdziła ewentualny job fakturowania przed
+wysyłką do KSeF. Zaplanuj kontrolowaną korektę lokalnych danych, jeżeli
+uprawniony właściciel bazy ją zatwierdzi. Gdy refund jest pending, sprawdzaj
+go ponownie do stanu końcowego; nie dopisuj go jako potwierdzonej kwoty.
+Poinformuj klienta o rzeczywistym stanie, bez obietnicy zakończenia zwrotu.
 
-Awaryjnie — przez Stripe Dashboard:
-1. https://dashboard.stripe.com/payments → znajdź charge po email.
-2. "Refund payment" → wpisz kwotę + powód.
-3. Stripe wyśle nasz webhook automatycznie — wszystko spinte.
-4. **Powiadom user-a ręcznie emailem** (template RefundIssued — gotowy w
-   `lib/email/templates/`).
+## Faktura VAT a zwrot
 
-### Refund self-invoice (faktura naszej firmy do klienta)
+Zwrot nie kasuje wystawionej faktury VAT ani wysyłki do KSeF. Sprawdź, czy
+stripe_payments.vat_invoice_id prowadzi do dokumentu, czy dokument mógł
+powstać bez linku oraz jaki ma stan KSeF. Decyzję o potrzebie, zakresie i
+momencie korekty podejmuje księgowy lub uprawniony operator na podstawie
+rzeczywistego zwrotu. Nie twórz automatycznie drugiej faktury ani korekty
+bez potwierdzenia tożsamości płatności i dokumentu. Przy niepewnej wysyłce
+do KSeF najpierw uzgodnij kolejkę i KSeF; ponowne wysłanie mogłoby zdublować
+dokument.
 
-Refund odwraca płatność, ale **nie kasuje wystawionej faktury VAT**
-(self-invoicing z [ADR-0003](../adr/0003-self-invoicing-przez-wlasny-ksef.md)).
-Procedura:
+## Dispute / chargeback
 
-1. Refund w Stripe (jak wyżej).
-2. **Wystaw fakturę korygującą** (KSeF) — w `/admin/users/<userId>` → tab
-   "Self-invoices" → "Issue correction". Powód: "Zwrot środków".
-3. Korekta idzie do KSeF normalnym pipeline'm + leci email user-owi.
+Nie polegaj na webhooku ani alercie Slack jako jedynym źródle zgłoszeń.
+Sprawdzaj powiadomienia i listę sporów bezpośrednio w Stripe Dashboard,
+szczególnie po zgłoszeniu klienta lub rozbieżności salda. Dla każdego sporu
+zapisz dispute ID, Charge/PaymentIntent, kwotę, walutę, aktualny status,
+termin odpowiedzi i dostępne dowody. Termin, opłata i wpływ na saldo są
+zależne od konkretnej sprawy — odczytaj je w Stripe, zamiast używać stałych
+kwot lub dni z dawnej instrukcji.
 
-Bez kroku 2 — faktura VAT zostaje "ważna", a ksiega firmowa będzie się nie
-zgadzać.
+Właściciel sprawy decyduje, czy przedstawić dowody czy zaakceptować spór.
+Zbieraj tylko potrzebne, wiarygodne materiały i ogranicz dane osobowe.
+Zweryfikuj rozliczenie płatności, refundy i fakturę VAT przed działaniem.
+Nie blokuj konta ani nie anuluj subskrypcji automatycznie wyłącznie z powodu
+otwarcia sporu; oceń ryzyko dostępu i podejmij udokumentowaną decyzję.
+Po zamknięciu sprawdź w Stripe ostateczny status i przepływ środków, a
+następnie uzgodnij bazę i decyzję o ewentualnej korekcie księgowej. Spór
+nie jest zwykłym wpisem stripe_refunds i nie należy go tak oznaczać.
 
-## 2. Stripe Dispute (chargeback)
+## Warunek wdrożenia mapowania płatności
 
-### Co się dzieje
+Przed wdrożeniem kodu, który wymaga PaymentIntent lub Charge dla opłaconej
+faktury subskrypcyjnej, Bartek sprawdza wersję API endpointu Stripe oraz
+reprezentatywne podpisane invoice.payment_succeeded w test mode i danych
+historycznych. Jeśli brak starszych pól payment_intent i charge, automat
+celowo zatrzyma zapis płatności i faktury VAT z kodem
+payment_reference_missing_or_invalid. Wpis webhooka failed nie odzyska claimu
+samoczynnie; trzeba ręcznie ustalić pełną referencję przez Invoice Payments,
+naprawić mapowanie, a potem kontrolowanie uzgodnić lokalną płatność, job i
+dokument VAT. Nie kasuj wpisu evt_* ani nie ponawiaj KSeF bez dowodu skutków.
+Sprawdź także, czy monitor działa i czy alarm rzeczywiście dociera do
+dyżurującego operatora; sam zapis do Sentry lub Slack nie dowodzi dostarczenia.
+## Lista uzgodnienia Stripe ↔ baza
 
-1. Klient idzie do swojego banku: "ta transakcja jest niezadowalająca / fraud".
-2. Bank zgłasza chargeback do Stripe.
-3. Stripe **od razu zabiera nam pieniądze** + nalicza opłatę manipulacyjną
-   ($15 standard, $25 fraud).
-4. Webhook `charge.dispute.created` przychodzi → my dostajemy alert
-   Slack `#urgent` (Faza 27).
-5. Mamy **7-10 dni** (zależnie od typu) na response z evidence.
+Dla każdej rozbieżności osoba prowadząca sprawę zapisuje poza publicznym repo:
 
-### Procedura — 0-24h od alertu
+- źródło zgłoszenia, datę/czas i pełne identyfikatory Stripe oraz lokalnego
+  payment/tenant; dane klienta ogranicza do niezbędnego minimum;
+- stan Stripe: płatność, każdy refund osobno (ID, kwota, waluta, status)
+  oraz dispute; sumę wyłącznie refundów succeeded;
+- stan bazy: stripe_payments.status i referencje Stripe,
+  stripe_refunds, stripe_refund_operations, odpowiednie
+  stripe_webhook_events oraz powiązaną fakturę i stan KSeF;
+- różnicę, osobę odpowiedzialną, uzgodnioną decyzję, dowód jej wykonania
+  i ponowną kontrolę po zmianie stanu Stripe.
 
-1. **Sprawdź typ disputu** w Stripe Dashboard:
-   - `fraudulent` — klient mówi że nie autoryzował (kradzież karty?).
-   - `subscription_canceled` — twierdzi że anulował, my wciąż pobieraliśmy.
-   - `product_unacceptable` — produkt nie spełnił oczekiwań.
-   - `unrecognized` — nie pamięta nas (najczęściej legit ale leniwy).
-   - `duplicate` — dwukrotne obciążenie (sprawdź czy faktycznie).
-   - `credit_not_processed` — obiecaliśmy refund, nie wykonaliśmy.
+Webhook ze stanem processing lub failed może mieć już skutki uboczne. Nie
+kasuj jego wpisu i nie wymuszaj replay bez sprawdzenia bazy, kolejki,
+Stripe i KSeF. Cyklicznie porównuj nowe refundy i spory w Stripe z lokalnymi
+płatnościami do czasu potwierdzonego odbioru automatycznej synchronizacji.
 
-2. **Zdecyduj: walczyć czy zaakceptować?**
-   - Walcz, jeśli MAMY evidence (user aktywnie korzystał z konta, jest jego
-     IP w `audit_logs`, faktury VAT na jego firmę wystawione i nie kwestionowane).
-   - Zaakceptuj (`accept dispute` w Stripe), jeśli:
-     - Klient ewidentnie nie używał konta po pierwszej płatności (< 1 d aktywności).
-     - Trial period nie był wyraźnie zaznaczony i klient ma rację.
-     - Koszt zebrania evidence > kwota disputu.
+## Powiązany kod i dokumenty
 
-### Procedura — gathering evidence
-
-W `/admin/users/<userId>` zbierz:
-1. **Aktywność konta** — `audit_logs` ostatnie 30 d: loginy, wystawione
-   faktury, użyte OCR. Eksport do PDF.
-2. **Faktury VAT** wystawione naszej firmy do klienta — dowód że klient
-   akceptował usługę.
-3. **Email confirmations** — Welcome, Trial Ending T-3, Subscription Activated
-   (z `email_bounces` jeśli nie zostały delivered).
-4. **Czas korzystania** — z PostHog: sesje, pageviews.
-
-Wgraj evidence do Stripe Dashboard → Dispute detail → Submit evidence.
-
-### Procedura — gdy przegrasz dispute
-
-1. `dispute.lost` webhook przychodzi.
-2. **Zablokuj konto user-a** — `/admin/users/<userId>` → Suspend.
-3. **Anuluj subskrypcję** — w Stripe Customer Portal (lub `/admin` action).
-4. **Wystaw fakturę korygującą** w KSeF (jak przy refundzie).
-5. Dodaj user-a do internal blocklist (notatka w `admin_user_notes`),
-   żeby nie przyjąć ponownej rejestracji od tego samego email/firmy.
-
-## 3. Metryki & alerty
-
-- Dispute rate > 1% transakcji/mies. → red flag (Stripe może podnieść opłaty).
-- Refund rate > 5% → audyt: jaki segment klientów się skarży?
-- Daily Slack digest (Faza 27) pokazuje refunds + disputes w `#metrics`.
-
-## Powiązany kod / dokumenty
-
-- [docs/support/refund-policy.md](../support/refund-policy.md) — pełna polityka biznesowa
-- [docs/architecture/billing-flow.md](../architecture/billing-flow.md) — flow billing
-- [ADR-0003](../adr/0003-self-invoicing-przez-wlasny-ksef.md) — self-invoicing
-- `app/admin/users/[userId]/billing-actions.ts` — akcje admin
-- `app/api/stripe/webhook/route.ts` — handler `charge.refunded` / `dispute.*`
-- Tabele: `stripe_payments`, `stripe_refunds`, `stripe_webhook_events`
+- [Polityka zwrotów](../support/refund-policy.md) — zasady robocze,
+  wymagające przeglądu prawnego.
+- [Odbiór granicy faktura–zwrot](../security/VAT-STRIPE-ZWROTY-ODBIOR-2026-09-25.md)
+  — warunki migracji 00079 i testów.
+- [Akcja admina](../../app/admin/users/[userId]/billing-actions.ts) oraz
+  [obsługa refundu](../../lib/admin/refunds.ts) — pełny zwrot z aplikacji.
+- [Endpoint Stripe](../../app/api/stripe/webhook/route.ts) — aktualną listę
+  obsługiwanych zdarzeń sprawdź przed poleganiem na synchronizacji.
