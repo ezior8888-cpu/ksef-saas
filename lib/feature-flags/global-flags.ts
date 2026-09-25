@@ -79,6 +79,25 @@ export async function getGlobalFlag(flag: GlobalFlag): Promise<boolean> {
 }
 
 /**
+ * Authoritative read before FLO side effects. An outage must not disable a kill
+ * switch silently, and stale cache must not allow an already disabled action.
+ * A successful lookup without a row keeps the existing default (flag=false).
+ */
+export async function getGlobalFlagForExecution(flag: GlobalFlag): Promise<boolean> {
+  const { data, error } = await createAdminClient()
+    .from('global_feature_flags')
+    .select('enabled')
+    .eq('flag', flag)
+    .maybeSingle();
+  if (error) throw new Error('Nie udało się sprawdzić wyłącznika funkcji');
+  if (data === null) return false;
+  if (!data || typeof data.enabled !== 'boolean') {
+    throw new Error('Nieprawidłowy stan wyłącznika funkcji');
+  }
+  return data.enabled;
+}
+
+/**
  * Wszystkie flagi naraz — dla miejsc, które sprawdzają kilka w jednym
  * przebiegu (np. bramka trybu przerwy technicznej).
  */

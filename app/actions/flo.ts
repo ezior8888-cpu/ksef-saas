@@ -26,9 +26,19 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { approvedReminderDelivery } from '@/lib/reminders/delivery-consent';
 import { createApproval } from '@/lib/flo/approval';
+import { approvalOperationHash, isApprovalVersion, parseApprovalInput, proposalApprovalVersion } from '@/lib/flo/approval-version';
 import { floDb, type FloProposalRow } from '@/lib/flo/db-types';
-import { muteKind, recordDecision } from '@/lib/flo/decisions';
+import {
+  muteKind,
+  muteSubject,
+  readDecisionRows,
+  recordSubjectDismissal,
+  unmuteKind,
+} from '@/lib/flo/decisions';
+import { buildSilencedList, type SilencedEntry } from '@/lib/flo/silenced';
+import { floKindLabel } from '@/components/flo/kind-labels';
 import { executeProposal } from '@/lib/flo/execute';
 // Skutek uboczny: rejestracja wykonawców propozycji. NIE USUWAĆ.
 import '@/lib/flo/functions';
@@ -103,9 +113,18 @@ export async function listScheduled(): Promise<FloScheduledView[]> {
  */
 export async function approveProposal(
   id: string,
+  expectedVersion: string,
   input?: FloApproveInput,
 ): Promise<FloApproveResult> {
   const { tenantId, user } = await requireUserAndActiveOrg();
+  if (!isApprovalVersion(expectedVersion)) {
+    return { ok: false, reason: 'stale', message: 'Odśwież propozycję i sprawdź ją przed zatwierdzeniem.' };
+  }
+  try {
+    input = parseApprovalInput(input);
+  } catch {
+    return { ok: false, reason: 'blocked', message: 'Sprawdź wprowadzone dane.' };
+  }
 
   const loaded = await floDb()
     .from('flo_proposals')
@@ -127,6 +146,19 @@ export async function approveProposal(
     };
   }
 
+  if (proposalApprovalVersion(proposal) !== expectedVersion) {
+    return { ok: false, reason: 'stale', message: 'Propozycja zmieniła się. Sprawdź ją ponownie przed zatwierdzeniem.' };
+  }
+
+  if (proposal.kind === 'payment.chase') {
+    try {
+      if (proposal.payload.preparedBy !== user.id) throw new Error('wrong-previewer');
+      approvedReminderDelivery(proposal, input);
+    } catch {
+      return { ok: false, reason: 'blocked', message: 'Przygotuj nowy podgląd przypomnienia. Zachowaj informację o płatności, która mogła już zostać wykonana.' };
+    }
+  }
+
   let approvalId: string;
   try {
     approvalId = await createApproval({
@@ -134,6 +166,9 @@ export async function approveProposal(
       tenantId,
       userId: user.id,
       snapshot: {
+        approvalVersion: 1,
+        proposalVersion: expectedVersion,
+        operationHash: approvalOperationHash(expectedVersion, input),
         title: proposal.title,
         body: proposal.body,
         kind: proposal.kind,
@@ -154,8 +189,10 @@ export async function approveProposal(
 
   const result = await executeProposal({
     proposalId: id,
+    tenantId,
     userId: user.id,
     approvalId,
+    proposalVersion: expectedVersion,
     input,
   });
 
@@ -200,9 +237,18 @@ export async function dismissProposal(
   if (error) throw new Error(error.message);
 
   if (mode === 'never') {
+    // Jasna prośba o ciszę w całym rodzaju — jedyne miejsce, w którym
+    // odpowiedź o jednej karcie zamyka wszystkie.
     await muteKind(tenantId, proposal.kind);
+  } else if (mode === 'never_subject') {
+    // „Skończyliśmy współpracę z tym klientem" — koniec pytań o TĘ sprawę,
+    // bez czekania na drugie „nie" i bez ruszania pozostałych.
+    await muteSubject(tenantId, proposal.topic_key);
   } else {
-    await recordDecision(tenantId, proposal.kind, 'dismissed');
+    // „Nie teraz" dotyczy TEJ sprawy — tej faktury, tego sprzedawcy, tego
+    // miesiąca. Wcześniej liczyło się na poziomie rodzaju, więc dwie takie
+    // odpowiedzi o dwóch RÓŻNYCH sprawach uciszały funkcję na kwartał.
+    await recordSubjectDismissal(tenantId, proposal.topic_key);
   }
 
   revalidatePath('/flo');
@@ -227,7 +273,7 @@ export async function undoAction(proposalId: string): Promise<{
   if (owned.error) throw new Error(owned.error.message);
   if (!owned.data) return { ok: false, message: 'Tej zmiany nie da się cofnąć.' };
 
-  const result = await undoProposalAction(proposalId, user.id);
+  const result = await undoProposalAction(proposalId, user.id, tenantId);
 
   revalidatePath('/flo');
   revalidatePath('/dashboard');
@@ -323,6 +369,77 @@ export async function savePrefs(next: Partial<FloPrefs>): Promise<void> {
   );
 
   if (error) throw new Error(error.message);
+  revalidatePath('/settings/flo');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Wyciszenia
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Czego agent nie mówi i dlaczego — do ekranu ustawień.
+ *
+ * Czyta PAMIĘĆ DECYZJI (`flo_decisions`), czyli to, co naprawdę zamyka mu
+ * usta. Ekran czytał wcześniej `flo_prefs.muted_kinds` — tablicę, której nic
+ * nigdy nie zapisywało, więc zawsze mówił „nic nie jest wyciszone", nawet gdy
+ * agent milczał w pięciu sprawach.
+ *
+ * Sprawy podpisujemy TYTUŁEM OSTATNIEJ KARTY, nie kluczem z bazy.
+ */
+export async function listSilenced(): Promise<SilencedEntry[]> {
+  const { tenantId } = await requireUserAndActiveOrg();
+  const db = floDb();
+  const now = new Date();
+
+  const rows = await readDecisionRows(tenantId, db);
+  const subjectKeys = rows
+    .filter((row) => row.kind.includes(':'))
+    .map((row) => row.kind);
+
+  const titles = new Map<string, string>();
+  if (subjectKeys.length > 0) {
+    const { data, error } = await db
+      .from('flo_proposals')
+      .select('topic_key, title, created_at')
+      .eq('tenant_id', tenantId)
+      .in('topic_key', subjectKeys)
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error(error.message);
+    // Pierwszy wiersz każdego tematu to ten najnowszy — kolejność z bazy.
+    for (const row of data ?? []) {
+      if (!titles.has(row.topic_key)) titles.set(row.topic_key, row.title);
+    }
+  }
+
+  return buildSilencedList({
+    rows,
+    titles,
+    labelOfKind: (kind) => floKindLabel(kind),
+    now,
+  });
+}
+
+/**
+ * „Przywróć" — agent znowu może mówić w tej sprawie albo w tym rodzaju.
+ *
+ * Jeden klucz obsługuje oba poziomy, bo pamięć decyzji trzyma je w tej samej
+ * kolumnie. Filtr po organizacji jest w zapytaniu, nie tylko w RLS.
+ */
+export async function restoreSilenced(key: string): Promise<void> {
+  const { tenantId } = await requireUserAndActiveOrg();
+
+  await unmuteKind(tenantId, key);
+
+  // Sprzątanie po starym ekranie: rodzaje wpisane ręcznie do
+  // `flo_prefs.muted_kinds` nic nie uciszały, ale zostałyby na liście.
+  const prefs = await getPrefs();
+  if (prefs.mutedKinds.some((kind) => kind === key)) {
+    await savePrefs({
+      mutedKinds: prefs.mutedKinds.filter((kind) => kind !== key),
+    });
+  }
+
   revalidatePath('/settings/flo');
 }
 

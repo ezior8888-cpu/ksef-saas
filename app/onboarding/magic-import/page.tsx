@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 
 import { MagicImportForm } from '@/components/onboarding/magic-import-form';
-import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
+import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 
 export default async function MagicImportPage({
@@ -10,13 +11,7 @@ export default async function MagicImportPage({
   searchParams: Promise<{ tenantId?: string }>;
 }) {
   const params = await searchParams;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect('/login');
+  const { user } = await requireVerifiedUserForPage('/onboarding/magic-import' + (params.tenantId ? '?tenantId=' + encodeURIComponent(params.tenantId) : ''));
   if (!params.tenantId?.trim()) redirect('/onboarding/import-source');
 
   const tenantId = params.tenantId.trim();

@@ -82,3 +82,9 @@ backup_*.sql
 docs/launch/
 .env*.local
 LINK-LOGOWANIA-DEV.txt
+
+# Lokalne dane operacyjne agentów (adresy serwerów, identyfikatory kontenerów)
+.agents/
+
+# pliki robocze skryptów deweloperskich (scripts/_scratch.ts)
+.tmp/

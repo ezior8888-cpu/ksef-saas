@@ -1,8 +1,8 @@
 import { createHash } from 'crypto';
-import { redirect } from 'next/navigation';
 
 import { InviteAcceptForm } from '@/components/invite/invite-accept-form';
-import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
+import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -20,6 +20,7 @@ export default async function InviteLandingPage({ params }: PageProps) {
     );
   }
 
+  const { user } = await requireVerifiedUserForPage('/invite/' + encodeURIComponent(token));
   const tokenHash = createHash('sha256').update(token).digest('hex');
 
   // Pobranie metadanych zaproszenia bypassem RLS — w tym widoku nie jesteśmy
@@ -68,18 +69,6 @@ export default async function InviteLandingPage({ params }: PageProps) {
         body="Linki do zaproszeń są ważne 7 dni. Poproś osobę, która Cię zaprosiła, o nowe zaproszenie."
       />
     );
-  }
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Niezalogowany — zachowujemy token w `next` i wracamy tu po loginie /
-  // rejestracji.
-  if (!user) {
-    const next = `/invite/${encodeURIComponent(token)}`;
-    redirect(`/login?redirect=${encodeURIComponent(next)}`);
   }
 
   const tenant = Array.isArray(invitation.tenants)

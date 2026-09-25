@@ -7,6 +7,7 @@ import {
 } from '@aws-sdk/client-s3';
 
 import { getSignedInvoiceUrl } from '@/lib/storage/r2';
+import { assertTenantStoragePath } from '@/lib/storage/tenant-path';
 import { getR2Client, getR2Config } from '@/lib/storage/r2-client';
 
 /**
@@ -62,7 +63,7 @@ export async function uploadExpensePhoto(
       Key: key,
       Body: buffer,
       ContentType: mimeType,
-      CacheControl: 'public, max-age=31536000, immutable',
+      CacheControl: 'private, no-store',
     })
   );
 
@@ -72,16 +73,18 @@ export async function uploadExpensePhoto(
 /**
  * Wygeneruj signed URL do podglądu zdjęcia (1h ważności).
  */
-export async function getExpensePhotoUrl(key: string): Promise<string> {
-  return getSignedInvoiceUrl(key, 3600);
+export async function getExpensePhotoUrl(key: string, tenantId: string): Promise<string> {
+  return getSignedInvoiceUrl(key, tenantId, 3600);
 }
 
 /**
  * Pobierz zdjęcie jako Buffer (dla OCR).
  */
 export async function downloadExpensePhoto(
-  key: string
+  key: string,
+  tenantId: string,
 ): Promise<{ buffer: Buffer; mimeType: string }> {
+  assertTenantStoragePath(key, tenantId);
   const { bucketName } = getR2Config();
   const client = getR2Client();
 

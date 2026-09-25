@@ -2,12 +2,12 @@
  * Seed testowej faktury do `public.invoices`.
  *
  * Co robi:
- *   1. Czyta tenant_id z `/tmp/ksef-test-tenant-id.txt` (produkowane przez seed-tenant.ts)
+ *   1. Czyta tenant_id z `.tmp/ksef-test-tenant-id.txt` (produkowane przez seed-tenant.ts)
  *   2. Buduje obiekt Invoice (ten sam kształt co test-submit-full.ts)
  *   3. INSERT do `public.invoices` z:
  *       - fa3_data = pełny Invoice jako JSONB (source-of-truth dla Inngest job)
  *       - direction='outgoing', ksef_status='draft', kolumny denormalizowane
- *   4. Drukuje invoice_id i zapisuje do `/tmp/ksef-test-invoice-id.txt`
+ *   4. Drukuje invoice_id i zapisuje do `.tmp/ksef-test-invoice-id.txt`
  *
  * Uruchom:  pnpm seed:invoice
  */
@@ -18,6 +18,7 @@ import { config } from 'dotenv';
 
 import type { Invoice } from '../types/invoice';
 
+import { scratchFile } from './_scratch';
 import { createScriptAdminClient } from './_supabase';
 
 config({ path: '.env.local' });
@@ -33,8 +34,8 @@ const step = (m: string) => console.log(`${YELLOW}→${RESET} ${m}`);
 const fail = (m: string) => console.error(`${RED}✘${RESET} ${m}`);
 const info = (m: string) => console.log(`${DIM}${m}${RESET}`);
 
-const TENANT_ID_FILE = '/tmp/ksef-test-tenant-id.txt';
-const INVOICE_ID_FILE = '/tmp/ksef-test-invoice-id.txt';
+const TENANT_ID_FILE = scratchFile('ksef-test-tenant-id.txt');
+const INVOICE_ID_FILE = scratchFile('ksef-test-invoice-id.txt');
 
 function buildInvoice(sellerNip: string): Invoice {
   // Numer globalnie unikalny (KSeF odrzuca duplikaty)

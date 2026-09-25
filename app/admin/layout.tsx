@@ -14,9 +14,9 @@ export const metadata: Metadata = {
 };
 
 /**
- * Admin layout (Faza 24). Server Component — gatekeeping przez `requireAdmin()`
- * dzieje się ZANIM dziecko zostanie wyrenderowane. Każda strona pod `/admin/*`
- * automatycznie dziedziczy ten guard, nie trzeba dublować w każdym `page.tsx`.
+ * Admin layout (Faza 24). Kontroluje dostęp do interfejsu przez `requireAdmin()`.
+ * Nie gwarantuje kolejności wykonania odczytów w komponentach potomnych.
+ * Funkcje odczytu danych i akcje muszą sprawdzać uprawnienia przed użyciem service_role.
  *
  * Renderujemy własny header/footer (NIE używamy `(dashboard)/layout.tsx`),
  * żeby admin nie widział org-switchera, baneru weryfikacji KSeF i innych

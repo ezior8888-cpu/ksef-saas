@@ -13,13 +13,15 @@
  * Ponaglenie wysłane komuś, kto zapłacił trzy dni temu, kompromituje klienta
  * przed jego własnym kontrahentem — i winą obciąży narzędzie, nie siebie.
  *
- * Sprawdzenie jest czterowarstwowe: żeton musi istnieć, dotyczyć TEJ
- * propozycji, nie być zużyty i nie być przeterminowany. Zużycie jest atomowe
+ * Żeton musi istnieć, dotyczyć tej firmy, osoby i wersji operacji,
+ * nie być zużyty ani przeterminowany. Zużycie jest atomowe
  * (jeden UPDATE z warunkami), więc dwa równoległe kliknięcia nie przepuszczą
  * dwóch wysyłek.
  */
 
 import { floDb, type FloApprovalRow, type FloDbClient } from '@/lib/flo/db-types';
+import { approvalOperationHash, hasApprovalBinding, isApprovalVersion, parseApprovalInput } from './approval-version';
+import type { FloApproveInput } from '@/types/flo';
 
 // ═══════════════════════════════════════════════════════════════
 // Błędy
@@ -30,6 +32,7 @@ export type FloApprovalDenial =
   | 'not_found' // żeton nie istnieje
   | 'wrong_proposal' // żeton dotyczy innej sprawy
   | 'already_used' // ktoś już go zużył
+  | 'version_changed'
   | 'expired'; // zgoda sprzed pół godziny nie jest zgodą na teraz
 
 export class FloApprovalError extends Error {
@@ -44,6 +47,7 @@ export class FloApprovalError extends Error {
 
 /** Komunikaty po polsku — trafiają do dziennika i do zgłoszeń wsparcia. */
 const DENIAL_MESSAGE: Record<FloApprovalDenial, string> = {
+  version_changed: 'Zgoda dotyczy innej wersji lub danych operacji. Sprawdź propozycję i zatwierdź ponownie.',
   missing: 'Brak zgody człowieka — odmawiam wykonania.',
   not_found: 'Zgoda nie istnieje albo została już usunięta.',
   wrong_proposal: 'Zgoda dotyczy innej sprawy niż ta, którą próbuję wykonać.',
@@ -91,7 +95,7 @@ export function evaluateApproval(
   if (!row) return 'not_found';
   if (row.proposal_id !== expectedProposalId) return 'wrong_proposal';
   if (row.consumed_at !== null) return 'already_used';
-  if (Date.parse(row.expires_at) <= now.getTime()) return 'expired';
+  if (!Number.isFinite(Date.parse(row.expires_at)) || Date.parse(row.expires_at) <= now.getTime()) return 'expired';
   return 'ok';
 }
 
@@ -124,49 +128,56 @@ export async function createApproval(
   input: CreateApprovalInput,
   db: FloDbClient = floDb(),
 ): Promise<string> {
-  const expiresAt = new Date(
-    Date.now() + (input.ttlMinutes ?? 30) * 60_000,
-  ).toISOString();
-
-  const inserted = await db
-    .from('flo_approvals')
-    .insert({
-      proposal_id: input.proposalId,
-      tenant_id: input.tenantId,
-      user_id: input.userId,
-      snapshot: input.snapshot,
-      expires_at: expiresAt,
-    })
-    .select('id')
-    .maybeSingle();
-
-  if (!inserted.error && inserted.data) return inserted.data.id;
-
-  if (inserted.error && !isUniqueViolation(inserted.error)) {
-    throw new Error(inserted.error.message);
+  const version = input.snapshot.proposalVersion;
+  const approvedInput = parseApprovalInput(input.snapshot.input ?? undefined);
+  if (!isApprovalVersion(version) || !hasApprovalBinding(input.snapshot, version, approvedInput)) {
+    throw new FloApprovalError('version_changed', DENIAL_MESSAGE.version_changed);
   }
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + (input.ttlMinutes ?? 30) * 60_000).toISOString();
 
-  const existing = await db
-    .from('flo_approvals')
-    .select('id')
-    .eq('proposal_id', input.proposalId)
-    .is('consumed_at', null)
-    .maybeSingle();
+  // The partial unique index includes expired tokens. Retire those first;
+  // a live token issued by another user must never be reused or overwritten.
+  const expired = await db.from('flo_approvals')
+    .update({ consumed_at: now.toISOString() })
+    .eq('proposal_id', input.proposalId).eq('tenant_id', input.tenantId)
+    .is('consumed_at', null).lte('expires_at', now.toISOString());
+  if (expired.error) throw new Error('Nie udało się przygotować zgody.');
 
-  if (existing.error) throw new Error(existing.error.message);
-  if (!existing.data) {
-    // Żeton zniknął między naszym INSERT-em a SELECT-em (ktoś go w tej chwili
-    // zużył). Nie zgadujemy — odmawiamy i pozwalamy człowiekowi kliknąć raz
-    // jeszcze na świeżej propozycji.
-    throw new FloApprovalError('already_used', DENIAL_MESSAGE.already_used);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const inserted = await db.from('flo_approvals').insert({
+      proposal_id: input.proposalId, tenant_id: input.tenantId, user_id: input.userId,
+      snapshot: input.snapshot, expires_at: expiresAt,
+    }).select('id').maybeSingle();
+    if (!inserted.error && inserted.data) return inserted.data.id;
+    if (inserted.error && !isUniqueViolation(inserted.error)) {
+      throw new Error('Nie udało się zapisać zgody.');
+    }
+
+    const existing = await db.from('flo_approvals').select('*')
+      .eq('proposal_id', input.proposalId).eq('tenant_id', input.tenantId)
+      .eq('user_id', input.userId).is('consumed_at', null).maybeSingle();
+    if (existing.error) throw new Error('Nie udało się sprawdzić zgody.');
+    if (!existing.data) break;
+    if (hasApprovalBinding(existing.data.snapshot, version, approvedInput) &&
+        Date.parse(existing.data.expires_at) > now.getTime()) {
+      return existing.data.id;
+    }
+    // Preserve the old snapshot for audit. A new click can authorize the new
+    // operation, but the old token can never authorize the new content/input.
+    const retired = await db.from('flo_approvals').update({ consumed_at: now.toISOString() })
+      .eq('id', existing.data.id).eq('proposal_id', input.proposalId)
+      .eq('tenant_id', input.tenantId).eq('user_id', input.userId)
+      .is('consumed_at', null);
+    if (retired.error) throw new Error('Nie udało się odwołać poprzedniej zgody.');
   }
-  return existing.data.id;
+  throw new FloApprovalError('already_used', DENIAL_MESSAGE.already_used);
 }
 
 /**
  * Zużywa żeton i zwraca migawkę tego, co człowiek zatwierdzał.
  *
- * Zużycie jest ATOMOWE — wszystkie cztery warunki są w jednym UPDATE.
+ * Zużycie jest ATOMOWE — tożsamość, wersja, dane i ważność są w jednym UPDATE.
  * Gdyby sprawdzać je osobno przed zapisem, między sprawdzeniem a zapisem
  * mieściłby się wyścig, w którym dwa równoległe kliknięcia przepuszczają
  * dwie wysyłki tej samej faktury do rejestru państwowego.
@@ -174,6 +185,10 @@ export async function createApproval(
 export async function consumeApproval(
   approvalId: string,
   expectedProposalId: string,
+  expectedTenantId: string,
+  expectedUserId: string,
+  expectedVersion: string,
+  expectedInput: FloApproveInput | undefined,
   now: Date = new Date(),
   db: FloDbClient = floDb(),
 ): Promise<Record<string, unknown>> {
@@ -184,14 +199,19 @@ export async function consumeApproval(
     .update({ consumed_at: nowIso })
     .eq('id', approvalId)
     .eq('proposal_id', expectedProposalId)
+    .eq('tenant_id', expectedTenantId)
+    .eq('user_id', expectedUserId)
+    .eq('snapshot->>approvalVersion', '1')
+    .eq('snapshot->>proposalVersion', expectedVersion)
+    .eq('snapshot->>operationHash', approvalOperationHash(expectedVersion, expectedInput))
     .is('consumed_at', null)
     .gt('expires_at', nowIso)
     .select('*');
 
-  if (claimed.error) throw new Error(claimed.error.message);
+  if (claimed.error) throw new Error('Nie udało się sprawdzić zgody.');
 
   const row = (claimed.data ?? [])[0];
-  if (row) return row.snapshot;
+  if (row && hasApprovalBinding(row.snapshot, expectedVersion, expectedInput)) return row.snapshot;
 
   // UPDATE nic nie zmienił — dociekamy dlaczego, żeby komunikat był konkretny.
   // „Coś poszło nie tak” w tym miejscu jest bezużyteczne i dla klienta,
@@ -200,14 +220,16 @@ export async function consumeApproval(
     .from('flo_approvals')
     .select('*')
     .eq('id', approvalId)
+    .eq('tenant_id', expectedTenantId)
+    .eq('user_id', expectedUserId)
     .maybeSingle();
 
-  if (lookup.error) throw new Error(lookup.error.message);
+  if (lookup.error) throw new Error('Nie udało się sprawdzić zgody.');
 
   const reason = evaluateApproval(lookup.data, expectedProposalId, now);
   throw new FloApprovalError(
-    reason === 'ok' ? 'not_found' : reason,
-    DENIAL_MESSAGE[reason === 'ok' ? 'not_found' : reason],
+    reason === 'ok' ? 'version_changed' : reason,
+    DENIAL_MESSAGE[reason === 'ok' ? 'version_changed' : reason],
   );
 }
 

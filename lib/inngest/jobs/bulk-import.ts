@@ -1,3 +1,4 @@
+import { requireImportJobTenant } from './tenant-boundary';
 /**
  * Inngest: import z wgranego pliku (JPK_FA, CSV).
  */
@@ -21,12 +22,13 @@ import { importFileUploaded, inngest } from '../client';
  * żeby pasek postępu w UI nie wisiał w nieskończoność.
  */
 export async function onBulkImportExhausted(
-  failureErr: Error,
-  data: { importJobId: string },
+  _failureErr: Error,
+  data: { importJobId: string; tenantId: string },
 ): Promise<void> {
-  const { importJobId } = data;
+  const { importJobId, tenantId } = data;
+  await requireImportJobTenant(importJobId, tenantId);
   const supabase = createAdminClient();
-  const failureMsg = `${failureErr.name}: ${failureErr.message}`.slice(0, 900);
+  const failureMsg = 'Nie udało się zakończyć importu. Spróbuj ponownie.';
   const { error } = await supabase
     .from('import_jobs')
     .update({
@@ -35,7 +37,8 @@ export async function onBulkImportExhausted(
       progress_percent: 100,
       progress_message: failureMsg,
     })
-    .eq('id', importJobId);
+    .eq('id', importJobId)
+    .eq('tenant_id', tenantId);
   if (error) throw new Error(error.message);
 }
 
@@ -45,6 +48,7 @@ export async function onBulkImportExhausted(
  */
 export async function runBulkImportFile(data: Parameters<typeof importFileUploaded.create>[0], { step }: JobContext) {
     const { importJobId, tenantId, filePath, source } = data;
+    await requireImportJobTenant(importJobId, tenantId, source, filePath);
 
     const supabase = createAdminClient();
 
@@ -57,12 +61,13 @@ export async function runBulkImportFile(data: Parameters<typeof importFileUpload
           progress_message: 'Wczytujemy plik...',
           progress_percent: 10,
         })
-        .eq('id', importJobId);
+        .eq('id', importJobId)
+        .eq('tenant_id', tenantId);
       if (error) throw new Error(error.message);
     });
 
     const fileContent = await step.run('download-file', async () => {
-      const buffer = await downloadImportFile(filePath);
+      const buffer = await downloadImportFile(filePath, tenantId);
       return buffer.toString('utf-8');
     });
 
@@ -103,7 +108,8 @@ export async function runBulkImportFile(data: Parameters<typeof importFileUpload
           status: 'extracting',
           warnings: parseResult.warnings,
         })
-        .eq('id', importJobId);
+        .eq('id', importJobId)
+        .eq('tenant_id', tenantId);
       if (error) throw new Error(error.message);
     });
 
@@ -115,7 +121,8 @@ export async function runBulkImportFile(data: Parameters<typeof importFileUpload
           progress_percent: 75,
           progress_message: 'Analizujemy kontrahentów i produkty...',
         })
-        .eq('id', importJobId);
+        .eq('id', importJobId)
+        .eq('tenant_id', tenantId);
       if (statusErr) throw new Error(statusErr.message);
 
       return processImportedInvoices({
@@ -140,7 +147,8 @@ export async function runBulkImportFile(data: Parameters<typeof importFileUpload
           products_created: processResult.productsCreated,
           warnings: [...parseResult.warnings, ...processResult.warnings],
         })
-        .eq('id', importJobId);
+        .eq('id', importJobId)
+        .eq('tenant_id', tenantId);
       if (error) throw new Error(error.message);
     });
 
@@ -160,7 +168,7 @@ export const bulkImportFileJob = inngest.createFunction(
     onFailure: async ({ error: failureErr, event }) =>
       onBulkImportExhausted(
         failureErr,
-        (event.data.event as { data: { importJobId: string } }).data,
+        (event.data.event as { data: { importJobId: string; tenantId: string } }).data,
       ),
   },
   async ({ event, step, logger, attempt }) =>

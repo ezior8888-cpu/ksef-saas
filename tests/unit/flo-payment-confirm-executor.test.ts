@@ -16,6 +16,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *   sumę wpłat, tak jak trigger `recalculate_invoice_paid_amount` (00014).
  */
 
+vi.mock('@/lib/feature-flags/global-flags', () => ({
+  getGlobalFlagForExecution: vi.fn(async () => false),
+  getGlobalFlag: vi.fn(async () => false),
+}));
+
 const store = vi.hoisted(() => ({
   invoices: new Map<string, Record<string, unknown>>(),
   payments: [] as Array<Record<string, unknown>>,
@@ -53,20 +58,49 @@ vi.mock('@/lib/supabase/admin', () => {
       .reduce((sum, p) => sum + Number(p.amount), 0);
   };
 
+  type Row = Record<string, unknown>;
+  const rowsOf = (table: string): Row[] =>
+    table === 'invoices' ? [...store.invoices.values()] : store.payments;
+
+  // Zapytanie z łańcuchem warunków `eq`/`is` — wykonawca i cofnięcie od
+  // granicy firm pytają zawsze o `id` ORAZ `tenant_id`, a cofnięcie dokłada
+  // warunki compare-and-set na polach wstawionego wiersza.
+  const query = (table: string, mode: 'read' | 'delete' | 'update') => {
+    const filters: Array<(row: Row) => boolean> = [];
+    const run = () => {
+      const matched = rowsOf(table).filter((row) => filters.every((f) => f(row)));
+      if (mode === 'update') store.calls.update++;
+      if (mode === 'delete') {
+        store.calls.delete++;
+        for (const row of matched) {
+          const index = store.payments.indexOf(row);
+          if (index >= 0) store.payments.splice(index, 1);
+          recalculate(row.invoice_id);
+        }
+      }
+      return matched.map((row) => ({ ...row }));
+    };
+    const builder = {
+      eq: (column: string, value: unknown) => {
+        filters.push((row) => row[column] === value);
+        return builder;
+      },
+      is: (column: string, value: null) => {
+        filters.push((row) => (row[column] ?? null) === value);
+        return builder;
+      },
+      select: () => builder,
+      maybeSingle: async () => ({ data: run()[0] ?? null, error: null }),
+      then: (resolve: (v: { data: Row[]; error: null }) => unknown) =>
+        Promise.resolve({ data: run(), error: null }).then(resolve),
+    };
+    return builder;
+  };
+
   return {
     createAdminClient: () => ({
       from: (table: string) => ({
-        select: () => ({
-          eq: (_column: string, id: string) => ({
-            maybeSingle: async () => {
-              const row =
-                table === 'invoices'
-                  ? store.invoices.get(id)
-                  : store.payments.find((p) => p.id === id);
-              return { data: row ? { ...row } : null, error: null };
-            },
-          }),
-        }),
+        select: () => query(table, 'read'),
         insert: (row: Record<string, unknown>) => ({
           select: () => ({
             single: async () => {
@@ -96,23 +130,8 @@ vi.mock('@/lib/supabase/admin', () => {
             },
           }),
         }),
-        update: () => ({
-          eq: async () => {
-            store.calls.update++;
-            return { error: null };
-          },
-        }),
-        delete: () => ({
-          eq: async (_column: string, id: string) => {
-            store.calls.delete++;
-            const index = store.payments.findIndex((p) => p.id === id);
-            if (index >= 0) {
-              const [removed] = store.payments.splice(index, 1);
-              recalculate(removed!.invoice_id);
-            }
-            return { error: null };
-          },
-        }),
+        update: () => query(table, 'update'),
+        delete: () => query(table, 'delete'),
       }),
     }),
   };
@@ -121,6 +140,7 @@ vi.mock('@/lib/supabase/admin', () => {
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isValueValid } from '@/components/flo/gating';
 import type { FloProposalRow } from '@/lib/flo/db-types';
+import { approvalOperationHash, proposalApprovalVersion } from '@/lib/flo/approval-version';
 import { executeProposal } from '@/lib/flo/execute';
 import { readState } from '@/lib/flo/fingerprint';
 import { FLO_FIXTURES } from '@/lib/flo/fixtures';
@@ -145,6 +165,7 @@ const TENANT = 'ten-1';
 function seedInvoice(id = 'A') {
   store.invoices.set(id, {
     id,
+    tenant_id: TENANT,
     internal_number: `FV/${id}`,
     buyer_data: { name: 'Nowak Sp. z o.o.' },
     ksef_status: 'accepted',
@@ -164,7 +185,7 @@ function seedInvoice(id = 'A') {
 
 /** Karta dokładnie taka, jaką postawi producent w pulsie. */
 async function cardFor(invoiceId = 'A') {
-  const state = await readState('payment.confirm', { invoiceId });
+  const state = await readState('payment.confirm', { invoiceId }, TENANT);
   const card = buildInvoiceConfirmProposal({
     tenantId: TENANT,
     invoiceId,
@@ -197,13 +218,19 @@ function proposalRow(card: Awaited<ReturnType<typeof cardFor>>) {
   };
 }
 
-function approval() {
+/** Zgoda związana z dokładnie tą wersją karty (bez wpisanej kwoty). */
+function approval(row: ReturnType<typeof proposalRow>) {
+  const version = proposalApprovalVersion(row);
   return {
     id: 'apr-1',
     proposal_id: 'prop-1',
     tenant_id: TENANT,
     user_id: 'usr-1',
-    snapshot: {},
+    snapshot: {
+      approvalVersion: 1,
+      proposalVersion: version,
+      operationHash: approvalOperationHash(version),
+    },
     created_at: '2026-09-16T22:29:00.000Z',
     consumed_at: null,
     expires_at: '2026-09-16T22:50:00.000Z',
@@ -289,6 +316,8 @@ describe('K-01 — zapis wpłaty', () => {
       // 00:30 w Warszawie to już 17 września, choć w UTC dalej 16.
       payment_date: '2026-09-17',
       is_confirmed: true,
+      // Odróżnia potwierdzenie z karty od dopasowania z wyciągu.
+      match_method: 'flo_confirmation',
       notes: CONFIRMATION_NOTE,
     });
     // Należność zamknięta przez trigger, nie przez wykonawcę.
@@ -367,13 +396,32 @@ describe('K-01 — cała droga: „Tak" → cofnij', () => {
   async function approveCard() {
     seedInvoice();
     const card = await cardFor();
+    const row = proposalRow(card);
     const db = createFakeDb({
-      flo_proposals: [proposalRow(card)],
-      flo_approvals: [approval()],
+      flo_proposals: [row],
+      flo_approvals: [approval(row)],
+      // Wykonawca od granicy firm sprawdza kanarek także przy istniejącej
+      // karcie — karta K-01 istnieje tylko tam, gdzie funkcję odsłonięto.
+      flo_rollout: [
+        {
+          kind: 'payment.confirm',
+          stage: 100,
+          stage_since: '2026-09-01T00:00:00.000Z',
+          complaints: 0,
+          halted: false,
+          halt_reason: null,
+        },
+      ],
     });
 
     const result = await executeProposal(
-      { proposalId: 'prop-1', userId: 'usr-1', approvalId: 'apr-1' },
+      {
+        proposalId: 'prop-1',
+        tenantId: TENANT,
+        userId: 'usr-1',
+        approvalId: 'apr-1',
+        proposalVersion: proposalApprovalVersion(row),
+      },
       NOW,
       db.client,
     );
@@ -404,6 +452,7 @@ describe('K-01 — cała droga: „Tak" → cofnij', () => {
     const undone = await undoAction(
       'prop-1',
       'usr-1',
+      TENANT,
       new Date(NOW.getTime() + 5 * 60_000),
       db.client,
       createAdminClient() as never,
@@ -428,6 +477,7 @@ describe('K-01 — cała droga: „Tak" → cofnij', () => {
     const undone = await undoAction(
       'prop-1',
       'usr-1',
+      TENANT,
       new Date(NOW.getTime() + 5 * 60_000),
       db.client,
       createAdminClient() as never,
@@ -443,6 +493,7 @@ describe('K-01 — cała droga: „Tak" → cofnij', () => {
     const undone = await undoAction(
       'prop-1',
       'usr-1',
+      TENANT,
       new Date(NOW.getTime() + UNDO_WINDOW_MS + 1),
       db.client,
       createAdminClient() as never,

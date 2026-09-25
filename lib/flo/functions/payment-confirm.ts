@@ -16,7 +16,7 @@
  * 1. POMYŁKOWE „TAK". Klient klika w biegu, myląc dwie faktury tego samego
  *    kontrahenta. Należność zamknięta, pieniędzy nie ma. Dlatego karta
  *    pokazuje NUMER, KWOTĘ I DATĘ każdej faktury — nigdy samą nazwę firmy —
- *    a oznaczenie ma cofnięcie przez dziesięć minut.
+ *    a cofnięcie musi odwrócić wpis płatności, nie tylko sumę na fakturze.
  *
  * 2. PYTANIE ZA WCZEŚNIE. Termin minął wczoraj, przelew jest w drodze,
  *    klient dobrze o tym wie. Pytamy dopiero dobę po terminie, zbiorczo,
@@ -321,7 +321,8 @@ export type ConfirmationKind = 'full' | 'partial' | 'invalid';
 export function classifyConfirmation(
   input: ConfirmationInput,
 ): ConfirmationKind {
-  if (!Number.isFinite(input.amount) || input.amount <= 0) return 'invalid';
+  if (!Number.isFinite(input.amount) || input.amount <= 0 ||
+      !Number.isFinite(input.outstanding) || input.outstanding <= 0) return 'invalid';
   if (input.amount > input.outstanding + 0.01) return 'invalid';
   return input.amount >= input.outstanding - 0.01 ? 'full' : 'partial';
 }
@@ -405,8 +406,7 @@ export function planPaymentConfirmation(
 /**
  * „Tak, zapłacił" albo „częściowo, tyle a tyle".
  *
- * Czynność odwracalna wewnątrz konta, więc ma cofnięcie. Zapis idzie do
- * `payments` — tej samej tabeli, z której korzysta import wyciągów — żeby
+ * Zapis idzie do `payments` — tej samej tabeli, z której korzysta import wyciągów — żeby
  * potwierdzenie ręczne i wpłata z banku znaczyły dokładnie to samo.
  * `invoices.paid_amount` przelicza trigger `recalculate_invoice_paid_amount`
  * jako sumę wpłat; wykonawca go nie dotyka.
@@ -422,6 +422,27 @@ registerFloHandler('payment.confirm', async (ctx) => {
   const now = new Date();
   const plan = planPaymentConfirmation(ctx.proposal.payload ?? {}, ctx.input);
 
+  const client: SupabaseClient<Database> = createAdminClient();
+
+  // Klient administracyjny omija RLS, a identyfikator propozycji nie dowodzi
+  // własności faktury z ładunku. Fakty z karty mówią, o co pytaliśmy; ile
+  // WOLNO zapisać, mówi bieżące saldo faktury tego konta.
+  const invoice = await client
+    .from('invoices')
+    .select('id, gross_total, paid_amount')
+    .eq('id', plan.invoiceId)
+    .eq('tenant_id', ctx.proposal.tenant_id)
+    .maybeSingle();
+  if (invoice.error || !invoice.data) {
+    throw new Error('Nie można potwierdzić tej faktury');
+  }
+  const balance = round2(
+    Number(invoice.data.gross_total) - Number(invoice.data.paid_amount),
+  );
+  if (!Number.isFinite(balance) || balance <= 0 || plan.amount > balance + 0.005) {
+    throw new Error('Kwota poza zakresem aktualnej należności');
+  }
+
   const row: TablesInsert<'payments'> = {
     tenant_id: ctx.proposal.tenant_id,
     invoice_id: plan.invoiceId,
@@ -431,10 +452,10 @@ registerFloHandler('payment.confirm', async (ctx) => {
     // Człowiek sam potwierdził wpłatę. Bez tego wiersz wyglądałby jak
     // niepotwierdzone dopasowanie z banku.
     is_confirmed: true,
+    match_method: 'flo_confirmation',
     notes: CONFIRMATION_NOTE,
   };
 
-  const client: SupabaseClient<Database> = createAdminClient();
   const { data, error } = await client
     .from('payments')
     .insert(row)

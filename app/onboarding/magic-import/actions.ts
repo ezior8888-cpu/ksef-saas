@@ -10,7 +10,7 @@ import {
   } from '@/lib/inngest/client';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import { uploadImportFile } from '@/lib/import/file-storage';
-import { createClient } from '@/lib/supabase/server';
+import { ActionAuthError, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 
 // ============================================================================
 // Magiczny Import z KSeF
@@ -38,17 +38,15 @@ export async function startMagicImportAction(
   tenantId: string,
   arg: MagicImportSecondArg = 6,
 ): Promise<MagicImportResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let context;
+  try {
+    context = await requireUserAndActiveOrg();
+  } catch (error) {
+    if (error instanceof ActionAuthError) return { success: false, error: error.message };
+    throw error;
+  }
+  const { supabase, user, tenantId: activeOrg } = context;
 
-  if (!user) return { success: false, error: 'Niezalogowany' };
-
-  const { getActiveOrgIdFromCookies } = await import(
-    '@/lib/supabase/active-org'
-  );
-  const activeOrg = await getActiveOrgIdFromCookies();
   if (activeOrg !== tenantId) {
     return { success: false, error: 'Brak uprawnień' };
   }
@@ -179,12 +177,14 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export async function startFileImportAction(
   formData: FormData,
 ): Promise<FileImportActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { success: false, error: 'Niezalogowany' };
+  let context;
+  try {
+    context = await requireUserAndActiveOrg();
+  } catch (error) {
+    if (error instanceof ActionAuthError) return { success: false, error: error.message };
+    throw error;
+  }
+  const { supabase, user, tenantId: activeOrg } = context;
 
   const file = formData.get('file');
   const sourceRaw = formData.get('source');
@@ -211,10 +211,6 @@ export async function startFileImportAction(
     return { success: false, error: 'Plik za duży (max 10 MB)' };
   }
 
-  const { getActiveOrgIdFromCookies } = await import(
-    '@/lib/supabase/active-org'
-  );
-  const activeOrg = await getActiveOrgIdFromCookies();
   if (activeOrg !== tenantId) {
     return { success: false, error: 'Brak uprawnień' };
   }

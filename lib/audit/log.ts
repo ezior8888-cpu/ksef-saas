@@ -81,15 +81,19 @@ export type AuditAction =
   | 'admin.note.created'
   | 'admin.note.archived'
   | 'admin.flag.toggled'
+  /** Odsłonięcie, rozwinięcie albo schowanie funkcji agenta w kanarku. */
+  | 'admin.flo.rollout.changed'
   // Faza 25 — Stripe billing lifecycle.
   | 'billing.customer.created'
   | 'billing.checkout.session_created'
   | 'billing.subscription.created'
   | 'billing.subscription.updated'
+  | 'billing.subscription.synced'
   | 'billing.subscription.canceled'
   | 'billing.payment.succeeded'
   | 'billing.payment.failed'
   | 'billing.refund.issued'
+  | 'billing.refund.reconciliation_required'
   | 'billing.trial.will_end'
   | 'billing.vat_invoice.queued'
   | 'accountant.token_created'
@@ -138,9 +142,9 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
     });
 
     if (error) {
-      console.error('[audit] Failed to log:', error.message, entry);
+      console.error('[audit] write_failed');
     }
-  } catch (error) {
-    console.error('[audit] Unexpected error:', error);
+  } catch {
+    console.error('[audit] write_failed');
   }
 }

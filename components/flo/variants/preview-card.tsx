@@ -38,6 +38,7 @@ import { approveInputFor, EMPTY_CARD_STATE, primaryLock } from '../gating';
 export function FloPreviewCard({
   view,
   onAction,
+  onPrepareReminder,
   showTime,
   className,
   notice,
@@ -61,7 +62,7 @@ export function FloPreviewCard({
       pending={pending}
       onUndo={onUndo}
     >
-      {view.preview ? (
+      {!view.reminder && view.preview ? (
         <FloPreviewPanel
           preview={view.preview}
           onOpened={() => setPreviewSeen(true)}
@@ -72,17 +73,17 @@ export function FloPreviewCard({
 
       <FloSecondaryRow view={view} onAction={onAction} disabled={inert}>
         <FloPrimaryButton
-          label={view.primary.label}
-          disabled={inert || lock.locked}
-          lockReason={lock.locked ? lock.reason : undefined}
+          label={view.reminder ? 'Przygotuj przypomnienie' : view.primary.label}
+          disabled={inert || (view.reminder ? !onPrepareReminder : lock.locked)}
+          lockReason={!view.reminder && lock.locked ? lock.reason : undefined}
           lockId={lockId}
           onClick={() =>
-            onAction?.(view.primary, view, approveInputFor(view, state))
+            view.reminder ? onPrepareReminder?.(view) : onAction?.(view.primary, view, approveInputFor(view, state))
           }
         />
       </FloSecondaryRow>
 
-      <FloLockNote id={lockId} reason={lock.locked ? lock.reason : undefined} />
+      <FloLockNote id={lockId} reason={!view.reminder && lock.locked ? lock.reason : undefined} />
     </FloCardShell>
   );
 }

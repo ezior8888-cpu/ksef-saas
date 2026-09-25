@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 
 import { ImportSourceSelector } from '@/components/onboarding/import-source-selector';
-import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
+import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 
 /**
@@ -13,12 +14,7 @@ import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
  * z powrotem na /onboarding (pętla).
  */
 export default async function ImportSourcePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect('/login');
+  const { user } = await requireVerifiedUserForPage('/onboarding/import-source');
 
   const tenantId = await getActiveOrgIdFromCookies();
   if (!tenantId) redirect('/onboarding');

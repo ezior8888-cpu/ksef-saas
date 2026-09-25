@@ -195,7 +195,7 @@ describe('zapis w trybie cichym', () => {
     ).then(() => {
       expect(db.tables.flo_shadow).toHaveLength(1);
       expect(db.tables.flo_proposals).toHaveLength(0);
-      expect(db.tables.flo_shadow[0]!.matched).toBeUndefined();
+      expect(db.tables.flo_shadow[0]!.matched).toBeNull();
     });
   });
 

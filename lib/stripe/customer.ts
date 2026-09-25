@@ -27,6 +27,32 @@ export interface EnsureCustomerInput {
   nip?: string;
 }
 
+async function verifyStripeCustomerTenant(
+  customerId: string,
+  tenantId: string,
+): Promise<void> {
+  let customer: Stripe.Customer | Stripe.DeletedCustomer;
+  try {
+    customer = await getStripe().customers.retrieve(customerId);
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { area: 'stripe.customer.verify' },
+      extra: { tenantId, customerId },
+    });
+    throw new Error('Stripe customer verification failed');
+  }
+
+  // A stale or manually edited DB reference must not open another tenant's
+  // billing portal. Legacy customers without tenantId require manual review.
+  if (customer.deleted || customer.metadata?.tenantId !== tenantId) {
+    Sentry.captureMessage('Stripe customer tenant binding mismatch', {
+      level: 'error',
+      extra: { tenantId, customerId },
+    });
+    throw new Error('Stripe customer tenant binding requires manual reconciliation');
+  }
+}
+
 export async function ensureStripeCustomer(
   input: EnsureCustomerInput,
 ): Promise<{ customerId: string; created: boolean }> {
@@ -43,7 +69,11 @@ export async function ensureStripeCustomer(
   if (selErr) {
     throw new Error(`tenant lookup failed: ${selErr.message}`);
   }
-  if (tenant?.stripe_customer_id) {
+  if (!tenant) {
+    throw new Error('tenant not found for Stripe customer');
+  }
+  if (tenant.stripe_customer_id) {
+    await verifyStripeCustomerTenant(tenant.stripe_customer_id, input.tenantId);
     return { customerId: tenant.stripe_customer_id, created: false };
   }
 
@@ -71,27 +101,46 @@ export async function ensureStripeCustomer(
       : {}),
   });
 
-  // Persist customer_id na tenant. Race condition: jeśli dwa serwery
-  // równolegle wywołują ensureStripeCustomer, może powstać duplikat Customer'a.
-  // UNIQUE index `uq_tenants_stripe_customer` chroni przed zapisaniem
-  // duplicate'u, ale Customer w Stripe zostanie sierota — trzeba ręcznie
-  // cleanup'ować. Akceptowalne ryzyko dla MVP (rzadkie race).
-  const { error: updErr } = await supabase
+  // Claim the tenant mapping only if it is still empty. Two requests can both
+  // create a Stripe Customer, but only the DB winner may use its own ID.
+  const { data: assigned, error: updErr } = await supabase
     .from('tenants')
     .update({ stripe_customer_id: customer.id })
-    .eq('id', input.tenantId);
+    .eq('id', input.tenantId)
+    .is('stripe_customer_id', null)
+    .select('stripe_customer_id')
+    .maybeSingle();
+
+  if (!updErr && assigned?.stripe_customer_id === customer.id) {
+    await verifyStripeCustomerTenant(customer.id, input.tenantId);
+    return { customerId: customer.id, created: true };
+  }
 
   if (updErr) {
     Sentry.captureException(updErr, {
       tags: { area: 'stripe.customer.create' },
       extra: { tenantId: input.tenantId, customerId: customer.id },
     });
-    // Stripe Customer został utworzony ale persist failnął — wciąż zwracamy ID,
-    // żeby caller mógł go użyć w tym requeście. Kolejne wywołanie zrobi insert.
-    throw new Error(
-      `Stripe customer created (${customer.id}) ale UPDATE tenant failnął: ${updErr.message}`,
-    );
   }
 
-  return { customerId: customer.id, created: true };
+  // A lost CAS or an ambiguous DB response must never return the newly created
+  // ID unless a fresh read confirms that it is actually assigned to this tenant.
+  const { data: current, error: rereadErr } = await supabase
+    .from('tenants')
+    .select('stripe_customer_id')
+    .eq('id', input.tenantId)
+    .maybeSingle();
+
+  if (rereadErr) {
+    throw new Error('Stripe customer assignment could not be verified');
+  }
+  if (current?.stripe_customer_id) {
+    await verifyStripeCustomerTenant(current.stripe_customer_id, input.tenantId);
+    return {
+      customerId: current.stripe_customer_id,
+      created: current.stripe_customer_id === customer.id,
+    };
+  }
+
+  throw new Error('Stripe customer is not assigned to tenant');
 }

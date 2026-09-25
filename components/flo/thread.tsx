@@ -57,7 +57,7 @@ export function FloThread({
 
           {group.items.map((proposal) => (
             <div
-              key={proposal.id}
+              key={proposal.id + ':' + (proposal.approvalVersion ?? 'legacy')}
               id={proposal.id}
               className="scroll-mt-4 sm:flex sm:gap-3"
             >

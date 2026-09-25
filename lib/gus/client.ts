@@ -1,5 +1,6 @@
 import { request as httpsRequest, type RequestOptions } from 'node:https';
 import { XMLParser } from 'fast-xml-parser';
+import { decodeSoapXml } from './xml-entities';
 
 /**
  * Klient GUS REGON - autouzupełnianie danych firmy po NIP.
@@ -157,16 +158,6 @@ function extractBirError(
   return null;
 }
 
-/** Dekoduje encje XML (&gt; → >, itp.) — GUS zwraca wewnętrzny XML zescape'owany. */
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
-}
-
 // ═══════════════════════════════════════════════════════════════
 // Public API
 // ═══════════════════════════════════════════════════════════════
@@ -251,7 +242,7 @@ export async function lookupCompanyByNip(
       }
 
       // 3) Parse - wewnętrzny XML jest escape'owany w SOAP-ie
-      const decoded = decodeEntities(innerXml);
+      const decoded = decodeSoapXml(innerXml);
       const parsed = xmlParser.parse(decoded) as {
         root?: { dane?: Record<string, unknown> };
       };

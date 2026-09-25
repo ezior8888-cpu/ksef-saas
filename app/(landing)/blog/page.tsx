@@ -106,7 +106,7 @@ export default function BlogPage() {
               // Oryginał animuje karty samym zanikiem, bez przesunięcia.
               <Rise key={p.slug} delay={i * 0.06}>
                 <Link
-                  href={`/blog/${p.slug}`}
+                  href={`/blog/${encodeURIComponent(p.slug)}`}
                   className="group flex h-full flex-col gap-5"
                 >
                   <div className="overflow-hidden rounded-[14px] bg-[var(--z-50)]">

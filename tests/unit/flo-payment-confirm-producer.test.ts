@@ -17,14 +17,22 @@ const invoiceRows = vi.hoisted(() => new Map<string, Record<string, unknown>>())
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: () => ({
-      select: () => ({
-        eq: (_column: string, id: string) => ({
-          maybeSingle: async () => ({
-            data: invoiceRows.has(id) ? { ...invoiceRows.get(id) } : null,
-            error: null,
-          }),
-        }),
-      }),
+      // Odczyt faktury pyta o `id` ORAZ `tenant_id` — atrapa sprawdza oba.
+      select: () => {
+        const where: Record<string, unknown> = {};
+        const builder = {
+          eq: (column: string, value: unknown) => {
+            where[column] = value;
+            return builder;
+          },
+          maybeSingle: async () => {
+            const row = [...invoiceRows.values()].find((r) =>
+              Object.entries(where).every(([column, value]) => r[column] === value));
+            return { data: row ? { ...row } : null, error: null };
+          },
+        };
+        return builder;
+      },
     }),
   }),
 }));
@@ -42,7 +50,7 @@ import {
   runPaymentConfirmSweep,
   type PaymentConfirmSources,
 } from '@/lib/flo/functions/payment-confirm-producer';
-import { runFloTick } from '@/lib/flo/tick';
+import { ruleRun, runFloTick } from '@/lib/flo/tick';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -57,6 +65,7 @@ function putInvoice(
 ) {
   invoiceRows.set(id, {
     id,
+    tenant_id: TENANT,
     internal_number: `FV/${id}`,
     buyer_data: { name: 'Nowak Sp. z o.o.' },
     ksef_status: 'accepted',
@@ -122,8 +131,12 @@ beforeEach(() => {
 // ═══════════════════════════════════════════════════════════════
 
 describe('K-01 w pulsie — bramki', () => {
-  it('konto poza kanarkiem: faktur nawet nie czytamy i nie zostaje ślad', async () => {
+  it('konto poza kanarkiem: liczymy do trybu cichego, klient nie dostaje karty', async () => {
     // Tak wygląda dziś KAŻDE konto na produkcji: `flo_rollout` jest puste.
+    // Do 24.09 ten test brzmiał „konto poza kanarkiem: nic nie czytamy"
+    // i pilnował BŁĘDU: bramka przed odczytem wycinała też kanarka, więc tryb
+    // cichy nie zapisał dla tej reguły ani jednego wpisu. Konto poza
+    // kanarkiem ma liczyć — klient nie dostaje karty, operator dostaje wpis.
     putInvoice('A');
     const db = createFakeDb();
     const src = sources();
@@ -131,8 +144,23 @@ describe('K-01 w pulsie — bramki', () => {
     const result = await producePaymentConfirm(TENANT, NOW, db.client, src.value);
 
     expect(result.outcome).toBe('disabled');
-    expect(src.calls.overdue).toBe(0);
+    expect(src.calls.overdue).toBeGreaterThan(0);
     expect(db.tables.flo_proposals).toHaveLength(0);
+    expect(db.tables.flo_shadow).toHaveLength(1);
+  });
+
+  it('konto wypisane przez operatora: faktur nawet nie czytamy', async () => {
+    // Oszczędność „bramka przed odczytem" zostaje tam, gdzie liczenie
+    // niczemu nie służy: wpis operatora to decyzja człowieka, nie pomiar.
+    putInvoice('A');
+    const db = createFakeDb({ flo_kind_flags: [{ tenant_id: TENANT, kind: 'payment.confirm', enabled: false, reason: 'klient poprosił' }] });
+    const src = sources();
+
+    const result = await producePaymentConfirm(TENANT, NOW, db.client, src.value);
+
+    expect(result.outcome).toBe('disabled');
+    expect(src.calls.overdue).toBe(0);
+    expect(db.tables.flo_shadow).toHaveLength(0);
   });
 
   it('„nigdy więcej takich": cisza bez odczytu faktur', async () => {
@@ -245,7 +273,7 @@ describe('K-01 w pulsie — jedno pytanie', () => {
 
     await expect(
       assertFresh(
-        { kind: bulk.kind, payload: bulk.payload ?? {}, fingerprint: bulk.fingerprint },
+        { tenant_id: TENANT, kind: bulk.kind, payload: bulk.payload ?? {}, fingerprint: bulk.fingerprint },
         NOW,
       ),
     ).rejects.toThrow(FloStaleError);
@@ -520,9 +548,18 @@ describe('K-01 w pulsie — wszystkie konta', () => {
     const result = await runFloTick(undefined, NOW, db.client, {
       listTenantIds: async () => [TENANT],
       paymentConfirm: sources().value,
+      expenseMissing: { readRecentExpenses: async () => [] },
+    invoiceMissing: { readIssuedInvoices: async () => [] },
+    onboarding: { readAccount: async () => null },
     });
 
-    expect(result).toMatchObject({ confirmAsked: 1, confirmClosed: 0, failedTenants: 0 });
+    expect(ruleRun(result, 'payment.confirm')).toEqual({
+      kind: 'payment.confirm',
+      asked: 1,
+      closed: 0,
+      failed: 0,
+    });
+    expect(result.failedTenants).toBe(0);
     expect(db.tables.flo_proposals).toHaveLength(1);
   });
 });

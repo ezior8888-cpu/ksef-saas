@@ -17,6 +17,7 @@ import { inngest } from '@/lib/inngest/client';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { floDb } from '@/lib/flo/db-types';
 
 /**
  * Próg dla `export_jobs` — generowanie typowego eksportu (JPK_FA, KPiR Excel,
@@ -26,18 +27,52 @@ import { createAdminClient } from '@/lib/supabase/admin';
 const STUCK_EXPORT_THRESHOLD_MINUTES = 15;
 
 /**
- * Próg dla `payment_reminders` — `reminder-scheduler` chodzi co 15 min,
- * `send-reminder` ma retries: 3 z exp backoff (zazwyczaj <30 min na całość).
- * 1 godzina = już minęły wszystkie retry i mailing został pominięty.
+ * Nowa zgoda na wysyłkę trwa najwyżej 30 minut od jej utworzenia (często
+ * krócej). Po tym czasie brak potwierdzenia Resend wymaga ręcznego rozliczenia,
+ * a ponowienie maila jest blokowane. Cron co 15 minut wykrywa przypadek
+ * po około 30–45 minutach od zaplanowania.
  */
-const STUCK_REMINDER_THRESHOLD_MINUTES = 60;
+const STUCK_REMINDER_THRESHOLD_MINUTES = 30;
 
 /**
- * Limit wierszy zwracanych z DB — chronimy się przed eksplozją alertów,
- * gdyby cała kolejka się zatkała. 50 to wystarczy do oceny skali; reszta
- * pokaże się przy następnym tickecie watchdoga.
+ * Limit szczegółów w alercie — chronimy się przed eksplozją danych.
+ * Starsze pending mogą trwale zajmować te same 50 miejsc, dlatego osobno
+ * liczymy całą pulę i jawnie oznaczamy obcięcie.
  */
 const MAX_ALERTS_PER_RUN = 50;
+
+type ReminderRecoveryState =
+  | 'receipt_marker_recorded'
+  | 'dispatch_without_receipt'
+  | 'missing_dispatch_or_legacy'
+  | 'approval_lookup_unavailable';
+
+/** Read only approval IDs and JSON marker presence. The snapshot can contain
+ * the full email and PDF, so neither it nor database errors enter Sentry. */
+async function classifyPendingReminders(ids: string[]): Promise<Record<string, ReminderRecoveryState>> {
+  // Durable steps persist JSON; Map would deserialize as an empty object.
+  const result: Record<string, ReminderRecoveryState> = {};
+  if (ids.length === 0) return result;
+  const db = floDb();
+  const [approvals, missingDispatch, missingReceipt] = await Promise.all([
+    db.from('flo_approvals').select('id').in('id', ids),
+    db.from('flo_approvals').select('id').in('id', ids).is('snapshot->>reminderDispatch', null),
+    db.from('flo_approvals').select('id').in('id', ids).is('snapshot->>reminderReceipt', null),
+  ]);
+  if (approvals.error || missingDispatch.error || missingReceipt.error ||
+      !approvals.data || !missingDispatch.data || !missingReceipt.data) {
+    for (const id of ids) result[id] = 'approval_lookup_unavailable';
+    return result;
+  }
+  const present = new Set(approvals.data.map((row) => row.id));
+  const noDispatch = new Set(missingDispatch.data.map((row) => row.id));
+  const noReceipt = new Set(missingReceipt.data.map((row) => row.id));
+  for (const id of ids) {
+    result[id] = !present.has(id) || noDispatch.has(id) ? 'missing_dispatch_or_legacy'
+      : noReceipt.has(id) ? 'dispatch_without_receipt' : 'receipt_marker_recorded';
+  }
+  return result;
+}
 
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
@@ -63,24 +98,31 @@ export async function runJobsWatchdog({ step, logger }: JobContext) {
       return data ?? [];
     });
 
-    const stuckReminders = await step.run('find-stuck-reminders', async () => {
+    const reminderScan = await step.run('find-stuck-reminders-v2', async () => {
       const cutoff = new Date(
         Date.now() - STUCK_REMINDER_THRESHOLD_MINUTES * 60 * 1000,
       ).toISOString();
 
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from('payment_reminders')
-        .select('id, tenant_id, invoice_id, stage, status, scheduled_for')
+        .select('id, stage, scheduled_for', { count: 'exact' })
         .eq('status', 'pending')
         .lt('scheduled_for', cutoff)
         .order('scheduled_for', { ascending: true })
         .limit(MAX_ALERTS_PER_RUN);
 
-      if (error) throw new Error(`stuck-reminders query: ${error.message}`);
-      return data ?? [];
+      if (error) throw new Error('stuck-reminders query unavailable');
+      const rows = data ?? [];
+      const countVerified = Number.isInteger(count) && count !== null && count >= rows.length;
+      return { rows, total: countVerified ? count : null, countVerified,
+        truncated: !countVerified || count > rows.length };
     });
+    const stuckReminders = reminderScan.rows;
 
-    if (stuckExports.length === 0 && stuckReminders.length === 0) {
+    const reminderRecovery = await step.run('classify-stuck-reminders', () =>
+      classifyPendingReminders(stuckReminders.map((reminder) => reminder.id)));
+
+    if (stuckExports.length === 0 && reminderScan.total === 0) {
       logger.info('Watchdog: brak zawieszonych jobów');
       return {
         ok: true as const,
@@ -114,22 +156,28 @@ export async function runJobsWatchdog({ step, logger }: JobContext) {
       });
     }
 
-    if (stuckReminders.length > 0) {
-      logger.error(`Watchdog: ${stuckReminders.length} pendingowanych przypomnień`);
+    if (reminderScan.total !== 0) {
+      logger.error(reminderScan.countVerified
+        ? `Watchdog: ${reminderScan.total} pendingowanych przypomnień wymaga weryfikacji`
+        : 'Watchdog: nie można potwierdzić liczby oczekujących przypomnień');
       Sentry.captureMessage('jobs-watchdog: stuck payment_reminders', {
         level: 'error',
         tags: {
           watchdog: 'payment_reminders',
-          count: String(stuckReminders.length),
+          count: reminderScan.total === null ? 'unknown' : String(reminderScan.total),
+          countVerified: String(reminderScan.countVerified),
+          truncated: String(reminderScan.truncated),
         },
         extra: {
           thresholdMinutes: STUCK_REMINDER_THRESHOLD_MINUTES,
+          totalPending: reminderScan.total,
+          shown: stuckReminders.length,
+          truncated: reminderScan.truncated,
           reminders: stuckReminders.map((r) => ({
             id: r.id,
-            tenantId: r.tenant_id,
-            invoiceId: r.invoice_id,
             stage: r.stage,
             scheduledFor: r.scheduled_for,
+            recoveryState: reminderRecovery[r.id] ?? 'approval_lookup_unavailable',
           })),
         },
       });
@@ -138,7 +186,7 @@ export async function runJobsWatchdog({ step, logger }: JobContext) {
     return {
       ok: true as const,
       stuckExports: stuckExports.length,
-      stuckReminders: stuckReminders.length,
+      stuckReminders: reminderScan.total ?? stuckReminders.length,
     };
 }
 

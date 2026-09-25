@@ -1,12 +1,11 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 
 import { BrandWordmark } from '@/components/brand/brand-wordmark';
 import { OnboardingForm } from '@/components/onboarding/form';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
-import { createClient } from '@/lib/supabase/server';
+import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
 
 interface OnboardingPageProps {
   searchParams: Promise<{
@@ -33,12 +32,11 @@ interface OnboardingPageProps {
  */
 export default async function OnboardingPage(props: OnboardingPageProps) {
   const sp = await props.searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect('/login');
+  const query = new URLSearchParams();
+  if (sp.invite) query.set('invite', sp.invite);
+  if (sp.action) query.set('action', sp.action);
+  const returnTo = '/onboarding' + (query.size ? '?' + query.toString() : '');
+  await requireVerifiedUserForPage(returnTo);
 
   const cookieStore = await cookies();
   const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;

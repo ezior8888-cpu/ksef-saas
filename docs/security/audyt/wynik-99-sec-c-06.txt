@@ -1,0 +1,3 @@
+=== SEC-C-06: RPC bez tokenu, p_user_id = 0000... (nie istnieje, nic nie ruszy) ===
+{"updated_rows":0} = anon MOŻE wywołać (potwierdza); 401/403/42501 = nie może
+{"updated_rows": 0}

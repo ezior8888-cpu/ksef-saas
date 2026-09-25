@@ -6,13 +6,13 @@ import {
 } from '@/components/dashboard/responsive-table';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
+import { ReminderConsentDialog } from './reminder-consent-dialog';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
   toggleInvoiceRemindersAction,
-  triggerManualReminderAction,
 } from '@/app/actions/reminders';
 import { cn } from '@/lib/utils';
 import { formatPlInt, formatPlMoney } from '@/lib/format/pl';
@@ -29,6 +29,7 @@ export interface OverdueInvoice {
   buyer_email: string | null;
   reminders_paused: boolean;
   reminders_sent_count: number;
+  reminder_status: 'none' | 'pending' | 'review' | 'unavailable';
 }
 
 interface Props {
@@ -43,6 +44,8 @@ interface Props {
 
 
 export function OverdueDashboard({ overdueInvoices, stats }: Props) {
+  const router = useRouter();
+  const [reminderInvoice, setReminderInvoice] = useState<OverdueInvoice | null>(null);
   return (
     <div className="pb-10 text-[var(--ff-on-surface)]">
       <div className="mb-10">
@@ -50,7 +53,7 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
           Przeterminowane
         </h1>
         <p className="text-sm text-[var(--ff-text-muted)]">
-          Faktury po terminie płatności • przypomnienia e-mail
+          Faktury po terminie płatności • przypomnienia e-mail. Stan przypomnień jest orientacyjny.
         </p>
       </div>
 
@@ -162,23 +165,29 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
                     Do zapłaty
                   </th>
                   <th className="px-6 py-3.5 text-center text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Wysłane
+                    Stan orientacyjny
                   </th>
                   <th className="px-6 py-3.5 sm:px-8" aria-hidden />
                 </tr>
               </thead>
               <tbody>
                 {overdueInvoices.map((inv) => (
-                  <OverdueRow key={inv.id} invoice={inv} />
+                  <OverdueRow key={inv.id} invoice={inv} onPrepare={() => setReminderInvoice(inv)} />
                 ))}
               </tbody>
             </table>
           }
           cards={overdueInvoices.map((inv) => (
-            <OverdueRow key={inv.id} invoice={inv} variant="card" />
+            <OverdueRow key={inv.id} invoice={inv} variant="card" onPrepare={() => setReminderInvoice(inv)} />
           ))}
         />
       )}
+      {reminderInvoice ? (
+        <ReminderConsentDialog key={reminderInvoice.id}
+          source={{ invoiceId: reminderInvoice.id, recipientEmail: reminderInvoice.buyer_email ?? undefined }}
+          onClose={() => setReminderInvoice(null)}
+          onSent={() => { toast.success('Przypomnienie przekazane do wysyłki'); router.refresh(); }} />
+      ) : null}
     </div>
   );
 }
@@ -194,12 +203,13 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
 function OverdueRow({
   invoice,
   variant = 'row',
+  onPrepare,
 }: {
   invoice: OverdueInvoice;
   variant?: 'row' | 'card';
+  onPrepare: () => void;
 }) {
   const router = useRouter();
-  const [isSending, startSending] = useTransition();
   const [isPausing, startPausing] = useTransition();
 
   const severity =
@@ -211,17 +221,24 @@ function OverdueRow({
           ? 'medium'
           : 'low';
 
-  const handleSendReminder = () => {
-    startSending(async () => {
-      const result = await triggerManualReminderAction(invoice.id);
-      if (result.success) {
-        toast.success('Przypomnienie wysłane');
-        router.refresh();
-      } else {
-        toast.error(result.error);
-      }
-    });
-  };
+  const handleSendReminder = onPrepare;
+  const reminderNotice = invoice.reminder_status === 'pending'
+    ? 'Oczekuje na wysyłkę'
+    : invoice.reminder_status === 'review'
+      ? 'Wymaga weryfikacji wysyłki'
+      : invoice.reminder_status === 'unavailable'
+        ? 'Stan wysyłki niedostępny'
+        : null;
+  const canPrepareReminder = !invoice.reminders_paused && invoice.reminder_status === 'none';
+  const prepareLabel = invoice.reminder_status === 'review'
+    ? 'Wysyłka wymaga weryfikacji'
+    : invoice.reminder_status === 'pending'
+      ? 'Przypomnienie już zlecone'
+      : invoice.reminder_status === 'unavailable'
+        ? 'Stan wysyłki niedostępny'
+        : 'Przygotuj przypomnienie';
+  const reminderNoticeClass = invoice.reminder_status === 'review'
+    ? 'text-amber-300' : 'text-[var(--ff-text-muted)]';
 
   const handleTogglePause = () => {
     startPausing(async () => {
@@ -277,20 +294,14 @@ function OverdueRow({
       <button
         type="button"
         onClick={handleSendReminder}
-        disabled={
-          isSending || invoice.reminders_paused || !(invoice.buyer_email?.trim())
-        }
+        disabled={!canPrepareReminder}
         className={iconBtn}
-        title="Wyślij przypomnienie teraz"
-        aria-label="Wyślij przypomnienie teraz"
+        title={prepareLabel}
+        aria-label={prepareLabel}
       >
-        {isSending ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-        ) : (
-          <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
+        <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
             send
           </span>
-        )}
       </button>
       <button
         type="button"
@@ -339,8 +350,9 @@ function OverdueRow({
               <span className="material-symbols-outlined text-[15px] leading-none" aria-hidden>
                 mail
               </span>
-              {invoice.reminders_sent_count}/3
+              Stan orientacyjny: {invoice.reminders_sent_count}/3
             </span>
+            {reminderNotice ? <span className={cn('text-xs', reminderNoticeClass)}>{reminderNotice}</span> : null}
           </>
         }
         actions={przyciski}
@@ -388,34 +400,27 @@ function OverdueRow({
         </span>
       </td>
       <td className="px-6 py-4 text-center sm:px-8">
-        <span className="inline-flex items-center justify-center gap-1 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-          <span className="material-symbols-outlined text-[16px] leading-none">
-            mail
+        <div className="flex flex-col items-center gap-1">
+          <span className="inline-flex items-center justify-center gap-1 text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+            <span className="material-symbols-outlined text-[16px] leading-none">mail</span>
+            {invoice.reminders_sent_count}/3
           </span>
-          {invoice.reminders_sent_count}/3
-        </span>
+          {reminderNotice ? <span className={cn('text-xs', reminderNoticeClass)}>{reminderNotice}</span> : null}
+        </div>
       </td>
       <td className="px-6 py-4 sm:px-8">
         <div className="flex items-center justify-end gap-1.5">
           <button
             type="button"
             onClick={handleSendReminder}
-            disabled={
-              isSending ||
-              invoice.reminders_paused ||
-              !(invoice.buyer_email?.trim())
-            }
+            disabled={!canPrepareReminder}
             className={iconBtn}
-            title="Wyślij przypomnienie teraz"
-            aria-label="Wyślij przypomnienie teraz"
+            title={prepareLabel}
+            aria-label={prepareLabel}
           >
-            {isSending ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
+            <span className="material-symbols-outlined text-[18px] leading-none" aria-hidden>
                 send
               </span>
-            )}
           </button>
           <button
             type="button"

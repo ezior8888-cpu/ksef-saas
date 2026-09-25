@@ -50,6 +50,16 @@ export const ROLLOUT_ORDER: readonly {
 }[] = [
   { feature: 'W-01', kind: 'expense.review' },
   { feature: 'W-02', kind: 'expense.rule' },
+  // W-04 ma promień 2, ale idzie przez kanarka z tego samego powodu co X-05
+  // (decyzja z 17.09): to pytanie, którego nikt jeszcze nie widział na
+  // prawdziwych danych, a rytm kosztów wykrywa się z historii — pierwszy
+  // przebieg po dziesiątym dniu miesiąca zapytałby naraz wszystkie konta.
+  { feature: 'W-04', kind: 'expense.missing' },
+  // O-01 pierwsze kroki: promień 1, karta tylko prowadzi do miejsca w apce.
+  // W kanarku z tego samego powodu co W-04 i X-05 — nikt nie widział tego
+  // kreatora na prawdziwym koncie, a trafia w najwrażliwszy moment, pierwszy
+  // dzień klienta. Najlepszy kandydat do odsłonięcia jako pierwszy w alfie.
+  { feature: 'O-01', kind: 'onboarding.step' },
   { feature: 'K-01', kind: 'payment.confirm' },
   // X-05 ma promień 2 — pomyłka zostaje w koncie — a mimo to idzie przez
   // kanarka. Decyzja właściciela produktu z 17.09.2026: do tego dnia audyt
@@ -202,6 +212,131 @@ export function canAdvance(
 export function nextStage(stage: RolloutStage): RolloutStage {
   const index = ROLLOUT_STAGES.indexOf(stage);
   return ROLLOUT_STAGES[Math.min(index + 1, ROLLOUT_STAGES.length - 1)]!;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Zmiana etapu ręką operatora
+// ═══════════════════════════════════════════════════════════════
+
+export type StageChangeBlocker =
+  | AdvanceBlocker
+  | 'blocked_in_code'
+  | 'start_at_ten'
+  | 'one_stage_at_a_time'
+  | 'no_change';
+
+export type StageChangeDirection = 'reveal' | 'advance' | 'hide';
+
+export type StageChangeVerdict =
+  | {
+      allowed: true;
+      from: RolloutStage;
+      to: RolloutStage;
+      direction: StageChangeDirection;
+    }
+  | { allowed: false; reason: StageChangeBlocker; detail: string };
+
+/**
+ * Czy operator może ustawić funkcji ten etap — funkcja czysta.
+ *
+ * `canAdvance` odpowiada na węższe pytanie: „czy wolno rozwinąć DALEJ".
+ * Panel pozwala na trzy różne ruchy i tylko jeden z nich jest rozwijaniem:
+ *
+ * | ruch | zasada |
+ * |---|---|
+ * | odsłonięcie (0 → 10) | zawsze od dziesięciu procent, nigdy od razu szerzej |
+ * | rozwinięcie (10 → 50 → 100) | pełne `canAdvance`: tydzień na etapie, zero skarg |
+ * | schowanie (w dół, też do zera) | ZAWSZE wolno, natychmiast |
+ *
+ * SCHOWANIE JEST ZAWSZE DOZWOLONE i to jest świadoma asymetria. Odsłanianie
+ * ma być trudne, chowanie ma być jednym kliknięciem — bo w chwili, w której
+ * operator chce coś schować, zwykle właśnie dzieje się coś złego, a kazanie
+ * mu wtedy czekać albo szukać SQL-a to najgorszy możliwy moment na tarcie.
+ *
+ * PODNOSZENIE PRZY WSTRZYMANIU JEST ZABLOKOWANE NA KAŻDEJ DRODZE, również
+ * przez „schowaj i odsłoń jeszcze raz". Bez tego dwa kliknięcia prałyby
+ * skargę, dla której cały ten mechanizm istnieje — a wyglądałoby to na
+ * zwykłe wycofanie i ponowne wydanie.
+ */
+export function canSetStage(input: {
+  state: RolloutState | null;
+  kind: FloProposalKind;
+  to: RolloutStage;
+  now: Date;
+  /**
+   * Powód blokady z `lib/flo/flags.ts`; `null`, gdy rodzaj nie jest
+   * zablokowany. Podawany z zewnątrz, żeby ta funkcja została czysta.
+   */
+  blockedInCode?: string | null;
+}): StageChangeVerdict {
+  const from: RolloutStage = input.state?.stage ?? 0;
+
+  if (input.to === from) {
+    return {
+      allowed: false,
+      reason: 'no_change',
+      detail: `Funkcja jest już na etapie ${from}%.`,
+    };
+  }
+
+  // Chowanie: bez pytań, bez czekania, bez patrzenia na skargi.
+  if (input.to < from) {
+    return { allowed: true, from, to: input.to, direction: 'hide' };
+  }
+
+  // ── dalej wyłącznie podnoszenie ────────────────────────────
+
+  if (input.blockedInCode) {
+    return {
+      allowed: false,
+      reason: 'blocked_in_code',
+      detail: `Rodzaj zablokowany w kodzie: ${input.blockedInCode}. Odblokowanie wymaga commita z uzasadnieniem, nie kliknięcia w panelu.`,
+    };
+  }
+
+  if (KIND_RADIUS[input.kind] === 3 && !TAX_TOPIC_APPROVED) {
+    return {
+      allowed: false,
+      reason: 'needs_lawyer',
+      detail:
+        'Promień 3 czeka na zielone światło prawnika — kanarek tego nie zastąpi.',
+    };
+  }
+
+  if (input.state?.halted || (input.state?.complaints ?? 0) > 0) {
+    return {
+      allowed: false,
+      reason: 'halted_by_complaint',
+      detail:
+        input.state?.haltReason ??
+        `${input.state?.complaints ?? 0} zgłoszenie wstrzymuje odsłanianie. Licznik zeruje się świadomie, poza panelem.`,
+    };
+  }
+
+  // Pierwsze odsłonięcie. `canAdvance` odpowiada tu 'not_started', bo dla
+  // niego etap 0 to brak wdrożenia — więc tę drogę obsługujemy osobno.
+  if (from === 0) {
+    return input.to === 10
+      ? { allowed: true, from, to: 10, direction: 'reveal' }
+      : {
+          allowed: false,
+          reason: 'start_at_ten',
+          detail: 'Pierwsze odsłonięcie idzie na 10% kont, nie szerzej.',
+        };
+  }
+
+  const verdict = canAdvance(input.state, input.kind, input.now);
+  if (!verdict.can) {
+    return { allowed: false, reason: verdict.reason, detail: verdict.detail };
+  }
+
+  return verdict.to === input.to
+    ? { allowed: true, from, to: input.to, direction: 'advance' }
+    : {
+        allowed: false,
+        reason: 'one_stage_at_a_time',
+        detail: `Następny etap to ${verdict.to}%, nie ${input.to}%. Etapy przechodzi się po kolei.`,
+      };
 }
 
 // ═══════════════════════════════════════════════════════════════

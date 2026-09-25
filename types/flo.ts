@@ -185,6 +185,14 @@ export interface FloAction {
    */
   intent: 'approve' | 'dismiss' | 'snooze' | 'mute' | 'input' | 'open' | 'correct';
   /**
+   * Zasięg wyciszenia dla `mute` (dodane 23.09.2026, K2.16).
+   *
+   * `kind` (domyślnie) — „nigdy więcej takich kart". `subject` — tylko ta
+   * sprawa: ten kontrahent, ten sprzedawca. Karta, która pyta o konkretną
+   * relację, musi umieć zamknąć właśnie ją.
+   */
+  scope?: 'kind' | 'subject';
+  /**
    * true = wykonanie wymaga wcześniejszego otwarcia podglądu (promień 4).
    * Interfejs trzyma przycisk zablokowany, dopóki człowiek nie zobaczy,
    * co dokładnie poleci.
@@ -218,6 +226,10 @@ export interface FloListItem {
  */
 export interface FloProposalView {
   id: string;
+  /** Version of the displayed operation; legacy cards require a refresh. */
+  approvalVersion?: string;
+  /** Source for preparing an exact reminder preview; does not authorize sending. */
+  reminder?: { invoiceId: string; stage: 'stage_1' | 'stage_2' | 'stage_3' | 'stage_4' };
   kind: FloProposalKind;
   variant: FloCardVariant;
   /** Liczby JUŻ podstawione przez serwer. */
@@ -352,5 +364,13 @@ export interface FloApproveInput {
   editedBody?: string;
 }
 
-/** Sposób odrzucenia propozycji. */
-export type FloDismissMode = 'not_now' | 'never';
+/**
+ * Sposób odrzucenia propozycji.
+ *
+ * `never_subject` (dodane 23.09.2026, K2.16): „skończyliśmy współpracę
+ * z TYM kontrahentem", „nie chcę reguły akurat u TEGO sprzedawcy". Cisza
+ * obejmuje jedną sprawę, nie cały rodzaj — bez tego jedna zakończona
+ * współpraca zamykałaby funkcję dla wszystkich klientów. Kartę oznacza
+ * `scope: 'subject'` przy akcji `mute`.
+ */
+export type FloDismissMode = 'not_now' | 'never' | 'never_subject';

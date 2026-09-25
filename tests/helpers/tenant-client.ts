@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getRlsTestEnvironment } from './rls-environment';
 
 /**
  * Klient Supabase z kluczem **anon** i JWT zalogowanego użytkownika —
@@ -8,13 +9,7 @@ import { createClient } from '@supabase/supabase-js';
  * `hashed_token` → `access_token` do nagłówka `Authorization`.
  */
 export async function createUserScopedClient(userId: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !anonKey || !serviceRole) {
-    throw new Error('Missing Supabase env vars');
-  }
+  const { url, anonKey, serviceRoleKey: serviceRole } = getRlsTestEnvironment();
 
   const admin = createClient(url, serviceRole);
 

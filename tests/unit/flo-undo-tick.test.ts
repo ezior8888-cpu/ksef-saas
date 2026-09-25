@@ -129,24 +129,18 @@ describe('cofnięcie — reguła', () => {
 
 describe('cofnięcie — wykonanie', () => {
   function fakeRows(row: Record<string, unknown> | null) {
-    const state = { row, updated: null as Record<string, unknown> | null };
-    const client = {
-      from: () => ({
-        select: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({ data: state.row, error: null }),
-          }),
-        }),
-        update: (patch: Record<string, unknown>) => ({
-          eq: async () => {
-            state.updated = patch;
-            if (state.row) Object.assign(state.row, patch);
-            return { error: null };
-          },
-        }),
-      }),
+    const db = createFakeDb({ expenses: row ? [{ id: 'exp-1', tenant_id: 'ten-1', ...row }] : [] });
+    return {
+      client: db.client,
+      state: {
+        get updated() {
+          const current = db.tables.expenses[0];
+          return db.writes && current
+            ? { kpir_column: current.kpir_column, is_reviewed: current.is_reviewed }
+            : null;
+        },
+      },
     };
-    return { client, state };
   }
 
   const proposal = {
@@ -173,7 +167,7 @@ describe('cofnięcie — wykonanie', () => {
     const db = createFakeDb({ flo_proposals: [{ ...proposal }] });
     const rows = fakeRows({ kpir_column: 'col_13', is_reviewed: true });
 
-    const result = await undoAction('prop-1', 'usr-1', NOW, db.client, rows.client as never);
+    const result = await undoAction('prop-1', 'usr-1', 'ten-1', NOW, db.client, rows.client as never);
 
     expect(result.ok).toBe(true);
     expect(rows.state.updated).toEqual({ kpir_column: null, is_reviewed: false });
@@ -187,7 +181,7 @@ describe('cofnięcie — wykonanie', () => {
     const db = createFakeDb({ flo_proposals: [{ ...proposal }] });
     const rows = fakeRows({ kpir_column: 'col_13', is_reviewed: true });
 
-    await undoAction('prop-1', 'usr-1', NOW, db.client, rows.client as never);
+    await undoAction('prop-1', 'usr-1', 'ten-1', NOW, db.client, rows.client as never);
 
     expect(db.tables.flo_proposals[0]!.dismissed_reason).toBe('undone');
     expect(db.tables.flo_proposals[0]!.dismissed_reason).not.toBe('not_now');
@@ -197,7 +191,7 @@ describe('cofnięcie — wykonanie', () => {
     const db = createFakeDb({ flo_proposals: [{ ...proposal }] });
     const rows = fakeRows({ kpir_column: 'col_10', is_reviewed: true });
 
-    const result = await undoAction('prop-1', 'usr-1', NOW, db.client, rows.client as never);
+    const result = await undoAction('prop-1', 'usr-1', 'ten-1', NOW, db.client, rows.client as never);
 
     expect(result).toMatchObject({ ok: false, reason: 'changed' });
     expect(rows.state.updated).toBeNull();
@@ -214,6 +208,9 @@ describe('puls agenta', () => {
       readOverdueInvoices: async () => [],
       readInvoiceState: async () => ({ facts: {}, context: {} }),
     },
+    expenseMissing: { readRecentExpenses: async () => [] },
+    invoiceMissing: { readIssuedInvoices: async () => [] },
+    onboarding: { readAccount: async () => null },
   };
 
   it('wygasza przeterminowane propozycje', async () => {

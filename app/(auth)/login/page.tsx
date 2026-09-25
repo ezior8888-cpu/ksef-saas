@@ -35,9 +35,9 @@ const SUCCESS_MESSAGES: Record<string, string> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; success?: string; redirect?: string; retry?: string }>;
+  searchParams: Promise<{ error?: string; success?: string; redirect?: string; retry?: string; notice?: string }>;
 }) {
-  const { error, success, retry } = await searchParams;
+  const { error, success, retry, notice } = await searchParams;
   const retryMinutes = retry ? Math.ceil(Number(retry) / 60) : null;
   const errorMsg = error
     ? error === 'rate_limited' && retryMinutes
@@ -57,6 +57,11 @@ export default async function LoginPage({
 
       {successMsg && <div className={authAlertSuccessClass}>{successMsg}</div>}
       {errorMsg && <div className={authAlertErrorClass}>{errorMsg}</div>}
+      {notice === 'logout_local_only' && (
+        <div role="status" className={authAlertSuccessClass}>
+          Wylogowaliśmy tę przeglądarkę. Nie udało się potwierdzić wylogowania na pozostałych urządzeniach.
+        </div>
+      )}
 
       <form action={loginWithGoogle}>
         <Button

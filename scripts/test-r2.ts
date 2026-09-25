@@ -115,6 +115,7 @@ async function main() {
     const downloaded = await downloadInvoiceXml(
       invoicePath,
       invoiceResult.sha256Hash,
+      tenantId,
     );
     if (downloaded !== invoiceXml) {
       fail(`download mismatch: got ${downloaded.length}B, expected ${invoiceXml.length}B`);
@@ -123,7 +124,7 @@ async function main() {
 
     // ─── download z ZŁYM hashem → musi rzucić ───────────────────
     try {
-      await downloadInvoiceXml(invoicePath, '0'.repeat(64));
+      await downloadInvoiceXml(invoicePath, '0'.repeat(64), tenantId);
       fail('downloadInvoiceXml powinno rzucić przy złym hashu');
     } catch (err) {
       if (!(err instanceof Error) || !err.message.includes('hash mismatch')) {
@@ -133,7 +134,7 @@ async function main() {
     }
 
     // ─── signed URL ─────────────────────────────────────────────
-    const signedUrl = await getSignedInvoiceUrl(invoicePath, 60);
+    const signedUrl = await getSignedInvoiceUrl(invoicePath, tenantId, 60);
     if (!signedUrl.startsWith('https://') || !signedUrl.includes(invoiceId)) {
       fail(`signed URL wygląda źle: ${signedUrl.slice(0, 120)}`);
     }

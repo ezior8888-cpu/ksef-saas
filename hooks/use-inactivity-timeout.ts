@@ -55,6 +55,7 @@ export function useInactivityTimeout(
   const timeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const firedRef = useRef(false);
+  const warningRef = useRef(false);
 
   const clearTimers = useCallback(() => {
     if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
@@ -65,10 +66,12 @@ export function useInactivityTimeout(
   const scheduleTimers = useCallback(() => {
     clearTimers();
     firedRef.current = false;
+    warningRef.current = false;
     setIsWarning(false);
     setSecondsLeft(Math.floor(warningMs / 1000));
 
     warningTimerRef.current = setTimeout(() => {
+      warningRef.current = true;
       setIsWarning(true);
       const startedAt = Date.now();
       countdownRef.current = setInterval(() => {
@@ -81,6 +84,8 @@ export function useInactivityTimeout(
     timeoutTimerRef.current = setTimeout(() => {
       if (firedRef.current) return;
       firedRef.current = true;
+      clearTimers();
+      setSecondsLeft(0);
       onTimeoutRef.current();
     }, timeoutMs);
   }, [timeoutMs, warningMs, clearTimers]);
@@ -98,7 +103,7 @@ export function useInactivityTimeout(
       // W fazie warning user musi explicit kliknąć "Pozostań" — sam ruch
       // myszką może być przypadkowy (kot na klawiaturze). Inaczej user
       // nigdy nie zobaczyłby wylogowania.
-      if (isWarning) return;
+      if (warningRef.current || firedRef.current) return;
 
       const now = Date.now();
       if (now - lastResetRef.current < 1000) return; // throttle 1s
@@ -115,7 +120,8 @@ export function useInactivityTimeout(
       }
       clearTimers();
     };
-  }, [scheduleTimers, clearTimers, isWarning]);
+  // Displaying the warning must not restart the inactivity deadline.
+  }, [scheduleTimers, clearTimers]);
 
   return { isWarning, secondsLeft, reset };
 }

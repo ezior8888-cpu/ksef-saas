@@ -23,11 +23,12 @@
  *    wyciągu, ręczne oznaczenie), otwarta karta o nią znika przy najbliższym
  *    przebiegu, a nie wisi do kliknięcia albo do wygaśnięcia za miesiąc.
  *
- * 4. KONTO WYŁĄCZONE NIE KOSZTUJE ODCZYTU FAKTUR. Bramki (wyłącznik, kanarek,
- *    wyciszenie) sprawdzamy PRZED zapytaniem o faktury. `createProposal`
- *    sprawdzi je jeszcze raz przed zapisem — to nie jest dublowanie, tylko
- *    oszczędność: dziś K-01 jest w kanarku na etapie 0, czyli wyłączone na
- *    każdym koncie, a puls chodzi codziennie po wszystkich.
+ * 4. KONTO WYŁĄCZONE NIE KOSZTUJE ODCZYTU FAKTUR — chyba że jedyną
+ *    przeszkodą jest kanarek. Wyłącznik, blokadę z kodu, wpis operatora
+ *    i wyciszenie sprawdzamy PRZED zapytaniem o faktury. Konto poza
+ *    kanarkiem idzie dalej: agent liczy, o co by zapytał, a `createProposal`
+ *    zapisuje to w trybie cichym zamiast karty (`shouldCompute`). Bez tego
+ *    nie da się zmierzyć trafności przed odsłonięciem.
  *
  * ŚWIADOMIE BEZ ROZSYŁANIA PO KOLEJCE `flo.tick.tenant`. Plan (1A) opisuje
  * to jako docelowy wzorzec, ale nowa kolejka zmienia układ workera i jest
@@ -37,8 +38,7 @@
  * koncie, więc przyszłe zadanie per konto zawoła ją bez zmian.
  */
 
-import * as Sentry from '@sentry/nextjs';
-
+import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient, type FloProposalRow } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
 import { buyerName, readState, type FloState } from '@/lib/flo/fingerprint';
@@ -47,8 +47,9 @@ import {
   selectOverdueForConfirmation,
   type OverdueInvoice,
 } from '@/lib/flo/functions/payment-confirm';
-import { isKindEnabledForTenant } from '@/lib/flo/kind-switch';
+import { isKindEnabledForTenant, shouldCompute } from '@/lib/flo/kind-switch';
 import { createProposal } from '@/lib/flo/proposals';
+import { runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -83,7 +84,7 @@ export interface PaymentConfirmSources {
    * Fakty faktury do odcisku. Produkcyjnie to `readState` z `fingerprint.ts`,
    * czyli dokładnie ten odczyt, który zrobi re-walidacja przy kliknięciu.
    */
-  readInvoiceState: (invoiceId: string) => Promise<FloState>;
+  readInvoiceState: (invoiceId: string, tenantId: string) => Promise<FloState>;
   /** Globalny wyłącznik — wstrzykiwany tylko w testach. */
   readGlobalKill?: () => Promise<boolean>;
 }
@@ -91,7 +92,7 @@ export interface PaymentConfirmSources {
 export function productionPaymentConfirmSources(): PaymentConfirmSources {
   return {
     readOverdueInvoices,
-    readInvoiceState: (invoiceId) => readState(KIND, { invoiceId }),
+    readInvoiceState: (invoiceId, tenantId) => readState(KIND, { invoiceId }, tenantId),
   };
 }
 
@@ -156,7 +157,11 @@ async function readOverdueInvoices(
 // ═══════════════════════════════════════════════════════════════
 
 export type PaymentConfirmOutcome =
-  /** Wyłącznik, blokada, kanarek — faktur nawet nie czytaliśmy. */
+  /**
+   * Wyłącznik, blokada, wpis operatora — faktur nawet nie czytaliśmy.
+   * Konto poza kanarkiem też kończy tutaj, ale PO odczycie: pytanie trafiło
+   * do trybu cichego, nie do klienta.
+   */
   | 'disabled'
   /** Klient wyciszył te pytania — faktur nawet nie czytaliśmy. */
   | 'muted'
@@ -182,6 +187,8 @@ export async function producePaymentConfirm(
   now: Date,
   db: FloDbClient,
   sources: PaymentConfirmSources,
+  /** Dzienny limit nowych kart na konto — patrz `daily-cap.ts`. */
+  cap: DailyCap = unlimitedCap(),
 ): Promise<PaymentConfirmResult> {
   const verdict = await isKindEnabledForTenant(
     KIND,
@@ -189,7 +196,7 @@ export async function producePaymentConfirm(
     db,
     sources.readGlobalKill,
   );
-  if (!verdict.enabled) return { outcome: 'disabled', closed: 0 };
+  if (!shouldCompute(verdict)) return { outcome: 'disabled', closed: 0 };
   if (await isMuted(tenantId, KIND, now, db)) {
     return { outcome: 'muted', closed: 0 };
   }
@@ -251,8 +258,13 @@ export async function producePaymentConfirm(
   for (const entry of selection) {
     if (asked.has(entry.invoice.id)) continue;
 
+    // Limit dotyczy WYŁĄCZNIE nowych pytań. Zamykanie nieaktualnych kart
+    // i odświeżanie żywych dzieje się wyżej i nie zależy od niego.
+    if (!cap.canAsk(tenantId)) return { outcome: 'nothing', closed };
+
     const outcome = await askAbout(tenantId, entry.invoice.id, now, db, sources);
     if (outcome === 'skipped') continue;
+    if (outcome === 'created') cap.spend(tenantId);
     return { outcome, closed };
   }
 
@@ -276,7 +288,7 @@ async function askAbout(
   sources: PaymentConfirmSources,
   keepExpiresAt?: Date,
 ): Promise<'created' | 'disabled' | 'muted' | 'skipped'> {
-  const state = await sources.readInvoiceState(invoiceId);
+  const state = await sources.readInvoiceState(invoiceId, tenantId);
 
   // `null`, gdy według tego odczytu nie ma o co pytać: faktura zniknęła,
   // została opłacona, wstrzymana albo przestała być przyjęta przez KSeF.
@@ -366,12 +378,6 @@ function invoiceIdOf(card: HistoryRow): string {
 // Wszystkie konta
 // ═══════════════════════════════════════════════════════════════
 
-export interface PaymentConfirmSweepResult {
-  asked: number;
-  closed: number;
-  /** Konta, na których reguła padła. Puls poszedł dalej. */
-  failed: number;
-}
 
 export async function runPaymentConfirmSweep(
   tenantIds: readonly string[],
@@ -379,34 +385,21 @@ export async function runPaymentConfirmSweep(
   db: FloDbClient = floDb(),
   sources: PaymentConfirmSources = productionPaymentConfirmSources(),
   logger?: Pick<JobLogger, 'error'>,
-): Promise<PaymentConfirmSweepResult> {
-  const result: PaymentConfirmSweepResult = { asked: 0, closed: 0, failed: 0 };
-
-  for (const tenantId of tenantIds) {
-    try {
+  cap: DailyCap = unlimitedCap(),
+): Promise<FloSweepResult> {
+  return runSweep(
+    KIND,
+    tenantIds,
+    async (tenantId) => {
       const { outcome, closed } = await producePaymentConfirm(
         tenantId,
         now,
         db,
         sources,
+        cap,
       );
-      if (outcome === 'created') result.asked++;
-      result.closed += closed;
-    } catch (e) {
-      // Jedno konto z uszkodzonymi danymi nie może zabrać pytań wszystkim
-      // pozostałym. Błąd idzie do Sentry i logów workera z identyfikatorem
-      // konta i rodzaju — bez treści faktur, bo to nie jest miejsce na dane
-      // klientów.
-      result.failed++;
-      Sentry.captureException(e, {
-        tags: { job: 'flo-tick', kind: KIND, tenant_id: tenantId },
-      });
-      const message = e instanceof Error ? e.message : 'nieznany błąd';
-      (logger ?? console).error(
-        `[flo.tick] ${KIND} padło na koncie ${tenantId}: ${message}`,
-      );
-    }
-  }
-
-  return result;
+      return { asked: outcome === 'created' ? 1 : 0, closed };
+    },
+    logger,
+  );
 }

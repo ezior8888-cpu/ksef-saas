@@ -39,8 +39,8 @@ export async function uploadInvoicePdf(
   await uploadToR2(key, pdf, 'application/pdf');
 }
 
-export async function downloadInvoicePdf(key: string): Promise<Buffer> {
-  return downloadFromR2(key);
+export async function downloadInvoicePdf(key: string, tenantId: string): Promise<Buffer> {
+  return downloadFromR2(key, tenantId);
 }
 
 export async function invoicePdfExists(key: string): Promise<boolean> {

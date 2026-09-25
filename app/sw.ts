@@ -1,8 +1,8 @@
 // app/sw.ts
 // Service worker dla KSeF SaaS — offline caching + push notifications
-import { defaultCache } from '@serwist/next/worker';
 import type { PrecacheEntry, SerwistGlobalConfig } from 'serwist';
-import { Serwist } from 'serwist';
+import { CacheFirst, ExpirationPlugin, NetworkOnly, Serwist } from 'serwist';
+import { deleteLegacyRuntimeCaches, isPublicStaticAsset } from '@/lib/security/service-worker-cache';
 
 // Augmentacja typów — SW ma własny scope globalny (`injectionPoint` domyślnie `self.__SW_MANIFEST`)
 declare global {
@@ -14,11 +14,31 @@ declare global {
 declare const self: ServiceWorkerGlobalScope;
 
 const serwist = new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
+  precacheEntries: (self.__SW_MANIFEST ?? []).filter((entry) =>
+    isPublicStaticAsset(new URL(typeof entry === 'string' ? entry : entry.url, self.location.origin), self.location.origin),
+  ),
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
-  runtimeCaching: defaultCache,
+  runtimeCaching: [
+    {
+      matcher: ({ url, request }) =>
+        request.method === 'GET' &&
+        !request.headers.has('authorization') &&
+        !request.headers.has('RSC') &&
+        isPublicStaticAsset(url, self.location.origin),
+      handler: new CacheFirst({
+        cacheName: 'faktflow-public-static-v1',
+        plugins: [new ExpirationPlugin({ maxEntries: 128, maxAgeSeconds: 7 * 24 * 60 * 60 })],
+      }),
+    },
+    // No offline fallback to a previous user's page or document after logout.
+    { matcher: () => true, handler: new NetworkOnly() },
+  ],
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(deleteLegacyRuntimeCaches(self.caches));
 });
 
 // Push notification handler (subskrypcja — zadanie 17.7)

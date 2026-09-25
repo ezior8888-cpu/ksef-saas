@@ -83,21 +83,46 @@ Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (K
 Ta sekcja jest tu, bo `AGENTS.md` czyta KAŻDA sesja agenta. Bez niej nowy czat
 nie wie, że serwery istnieją, i odbija się od zadań operacyjnych.
 
+### Najpierw: skąd wziąć adresy
+
+**Repozytorium jest publiczne**, więc konkretne adresy IP, nazwy kontenerów
+i prefiksy Coolify NIE są w tym pliku. Leżą w `.agents/infra.env`, który jest
+poza gitem. Każda komenda niżej używa zmiennych, więc sesję operacyjną
+zaczynasz od:
+
+```bash
+source .agents/infra.env
+```
+
+Daje to `$K` (klucz SSH), `$APP`, `$OPS`, `$DB` (serwery), `$PGC`, `$RESTC`
+(kontenery) oraz `$APP_PREFIX`, `$WORKER_PREFIX` (prefiksy Coolify).
+
+Jeśli tego pliku nie masz — świeży klon, worktree, sesja w chmurze — poproś
+Bartosza. Nie odtwarzaj adresów z historii gita i nie wpisuj ich z powrotem
+do śledzonych plików.
+
+Zastrzeżenie, żeby nie budować fałszywego poczucia bezpieczeństwa: adresy były
+w tym pliku wcześniej i **zostały w publicznej historii repozytorium**. To
+ograniczenie dalszego wycieku, nie jego cofnięcie. Realną ochroną hostów jest
+logowanie root wyłącznie kluczem (żadne konto nie ma ustawionego hasła) oraz
+zapora chmurowa Hetznera — `ufw` na serwerach jest nieaktywny, więc to jedna
+warstwa, nie dwie.
+
 ### Serwery (Hetzner, region NBG1)
 
 | Rola | IP | Co tam działa |
 |---|---|---|
-| `app-1` | `116.203.71.134` | aplikacja Next.js + worker pg-boss |
-| `ops-1` | `91.98.134.85` | panel Coolify (port 8000, dostęp filtrowany po IP) |
-| `db-1` | `178.104.128.144` | Supabase self-hosted: Postgres, GoTrue, Kong, MinIO |
+| `app-1` | `$APP` | aplikacja Next.js + worker pg-boss |
+| `ops-1` | `$OPS` | panel Coolify (port 8000, dostęp filtrowany po IP) |
+| `db-1` | `$DB` | Supabase self-hosted: Postgres, GoTrue, Kong, MinIO |
 
-Klucz SSH: `~/.ssh/hetzner_faktflow_ed25519`, użytkownik `root`.
+Klucz SSH w `$K` (`~/.ssh/hetzner_faktflow_ed25519`), użytkownik `root`.
 
 ```bash
-ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@178.104.128.144
+ssh -i $K root@$DB
 ```
 
-Kontener Postgresa: `supabase-db-ovrhjbsdpjdlnmkle1ulid4s`.
+Kontener Postgresa: `$PGC`.
 
 ### CO GDZIE ROBISZ — przeczytaj to, zanim cokolwiek wgrasz
 
@@ -152,8 +177,7 @@ NAJPIERW przeczytaj plik migracji i sprawdź, czy nie ma `DROP`, `TRUNCATE`
 ani `DELETE FROM`. Dopiero potem uruchamiaj.
 
 ```bash
-DB=178.104.128.144; K=~/.ssh/hetzner_faktflow_ed25519
-PGC=supabase-db-ovrhjbsdpjdlnmkle1ulid4s
+source .agents/infra.env          # daje $K, $DB, $PGC
 M=00063_nazwa
 
 scp -i $K supabase/migrations/$M.sql root@$DB:/tmp/
@@ -206,7 +230,7 @@ przez adres kontenera, bo sam kontener nie ma `curl`:
 ```bash
 ssh -i $K root@$DB 'IP=$(docker inspect -f \
   "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" \
-  supabase-rest-ovrhjbsdpjdlnmkle1ulid4s)
+  $RESTC)
 curl -s "http://$IP:3000/nazwa_tabeli?limit=1"'
 ```
 
@@ -224,7 +248,7 @@ Kod PHP podajemy na WEJŚCIU, przez heredoc w apostrofach — nie przez
 `--execute`:
 
 ```bash
-ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@91.98.134.85 \
+ssh -i $K root@$OPS \
   'docker exec -i coolify php artisan tinker' <<'PHP'
 $a = App\Models\Application::find(1);
 queue_application_deployment(application: $a,
@@ -252,7 +276,7 @@ Ten sam wzorzec działa do wszystkiego, co robimy tinkerem — na przykład
 do sprawdzenia, co jest w kolejce wdrożeń:
 
 ```bash
-ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@91.98.134.85 \
+ssh -i $K root@$OPS \
   'docker exec -i coolify php artisan tinker' <<'PHP'
 foreach (App\Models\ApplicationDeploymentQueue::orderBy('id','desc')->take(4)->get() as $d) {
   echo $d->id . " | " . $d->application_name . " | " . $d->status . " | " . $d->commit . "\n";
@@ -272,7 +296,7 @@ Build trwa 12-18 minut, więc odpytuj co minutę, a nie w pętli bez przerwy.
 Wyciągnij logi — bez nich zgadujesz:
 
 ```bash
-ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@91.98.134.85 \
+ssh -i $K root@$OPS \
   'docker exec -i coolify php artisan tinker' <<'PHP'
 $d = App\Models\ApplicationDeploymentQueue::find(NUMER);
 $logs = json_decode($d->logs, true) ?? [];
@@ -296,26 +320,28 @@ każdym wdrożeniu — nie wpisuj ich z pamięci, wyszukaj:
 K=~/.ssh/hetzner_faktflow_ed25519
 
 # 1. co działa, na jakim commicie, czy healthy
-ssh -i $K root@116.203.71.134 \
+ssh -i $K root@$APP \
   'docker ps --format "{{.Names}}\t{{.Status}}\t{{.Image}}" | grep -v coolify-'
 
 # 2. aplikacja odpowiada (nazwa kontenera znaleziona automatycznie)
-ssh -i $K root@116.203.71.134 'C=$(docker ps --format "{{.Names}}" \
-  | grep "^gpcs70aai71any6dnf8w69l8"); docker exec $C \
+ssh -i $K root@$APP 'C=$(docker ps --format "{{.Names}}" \
+  | grep "^$APP_PREFIX"); docker exec $C \
   curl -s -o /dev/null -w "app: HTTP %{http_code} w %{time_total}s\n" \
   http://localhost:3000/api/health'
 
-# 3. strona publiczna (apex przekierowuje na www — to normalne)
+# 3. strona publiczna — apex i www serwują tę samą aplikację wprost,
+#    bez przekierowania. Oba rekordy A celują w app-1 w trybie "DNS only",
+#    a Coolify ma oba hosty w `fqdn`. Oczekiwane: 200 na obu.
 curl -s -L -o /dev/null -w "%{http_code} %{url_effective}\n" https://faktflow.pl
 
 # 4. błędy w logach obu kontenerów
-ssh -i $K root@116.203.71.134 'for C in $(docker ps --format "{{.Names}}" \
-  | grep -E "^gpcs70aai71any6dnf8w69l8|^chy9lasi0mcbuy0i54a1hr3t"); do
+ssh -i $K root@$APP 'for C in $(docker ps --format "{{.Names}}" \
+  | grep -E "^$APP_PREFIX|^$WORKER_PREFIX"); do
   echo "--- $C"; docker logs --since 10m $C 2>&1 | grep -i error | head -5; done'
 ```
 
-Prefiksy nazw: aplikacja `gpcs70aai71any6dnf8w69l8`, worker
-`chy9lasi0mcbuy0i54a1hr3t` — to identyfikatory aplikacji w Coolify i one
+Prefiksy nazw: aplikacja `$APP_PREFIX`, worker
+`$WORKER_PREFIX` — to identyfikatory aplikacji w Coolify i one
 się nie zmieniają, zmienia się tylko sufiks po myślniku.
 
 W logach aplikacji ostrzeżenia `Using the user object as returned from
@@ -334,7 +360,7 @@ jako problemu.
 - **`proxy.ts` przepuszcza tylko wymienione rozszerzenia.** Czego nie ma we
   wzorcu, leci przez bramkę auth i kończy przekierowaniem na `/login`.
   Dla wideo objawia się to wyłącznie cichym błędem dekodera.
-- **Lokalny `.env.local` celuje w INNĄ bazę** (`utuzzxstfcnglppplvlw.supabase.co`)
+- **Lokalny `.env.local` celuje w INNĄ bazę** (`$LOCAL_SUPABASE_REF.supabase.co`)
   niż produkcja. To celowe. Nie podmieniaj bez uzgodnienia.
 - **Build padający z `exit code 137` to zabójca OOM, nie błąd kodu.** `pnpm build`
   na `app-1` potrzebuje więcej pamięci, niż maszyna ma fizycznie: pułap sterty
@@ -343,7 +369,7 @@ jako problemu.
   **`app-1` musi mieć ≥ 8 GB swapu** — przy 4 GB wdrożenie ginie. Sprawdzenie:
 
   ```bash
-  ssh -i ~/.ssh/hetzner_faktflow_ed25519 root@116.203.71.134 'swapon --show'
+  ssh -i $K root@$APP 'swapon --show'
   ```
 
   Potwierdzenie diagnozy w logach jądra `app-1`:
@@ -356,7 +382,7 @@ jako problemu.
   Zamiast dopisywać zmienny domowy adres do zapory — tunel:
 
   ```bash
-  ssh -i ~/.ssh/hetzner_faktflow_ed25519 -N -L 8000:localhost:8000 root@91.98.134.85
+  ssh -i $K -N -L 8000:localhost:8000 root@$OPS
   ```
 
   Potem `http://localhost:8000`. Działa, bo `APP_URL` Coolify jest puste

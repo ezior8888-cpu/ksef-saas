@@ -20,8 +20,10 @@ import type Stripe from 'stripe';
 
 import { logAuditSystem } from '@/lib/audit/log-system';
 
+import { getActiveSubscription } from './subscription';
 import { getStripe } from './client';
 import { ensureStripeCustomer } from './customer';
+import { getConfiguredStripePriceIds } from './event-mapping';
 
 export type CheckoutPlan = 'monthly' | 'annual';
 
@@ -39,22 +41,24 @@ export interface CreateCheckoutInput {
 }
 
 function resolvePriceId(plan: CheckoutPlan): string {
-  const id =
-    plan === 'monthly'
-      ? process.env.STRIPE_PRICE_MONTHLY
-      : process.env.STRIPE_PRICE_ANNUAL;
-  if (!id) {
-    throw new Error(
-      `STRIPE_PRICE_${plan.toUpperCase()} env var missing — utwórz Price w Stripe Dashboard`,
-    );
+  if (plan !== 'monthly' && plan !== 'annual') {
+    throw new Error('Invalid Stripe checkout plan');
   }
-  return id;
+  return getConfiguredStripePriceIds()[plan];
 }
 
 export async function createCheckoutSession(
   input: CreateCheckoutInput,
 ): Promise<{ sessionId: string; url: string }> {
+  // Fail before creating a Customer or Session when the plan or configuration is invalid.
+  const priceId = resolvePriceId(input.plan);
   const stripe = getStripe();
+
+  // A local row can already exist even while Stripe is unavailable. Any
+  // nonterminal subscription blocks another trial/paid Checkout.
+  if (await getActiveSubscription(input.tenantId)) {
+    throw new Error('Tenant already has a nonterminal subscription');
+  }
 
   // 1. Ensure customer (idempotent — nie tworzy duplikatu).
   const { customerId } = await ensureStripeCustomer({
@@ -64,7 +68,27 @@ export async function createCheckoutSession(
     nip: input.nip,
   });
 
-  // 2. Create Checkout Session.
+  // The webhook mirror can lag behind Stripe. Fail closed if Stripe has a
+  // subscription for this Customer, including incomplete or paused statuses.
+  const existing = await stripe.subscriptions.list({
+    customer: customerId,
+    status: 'all',
+    limit: 100,
+  });
+  if (existing.has_more || existing.data.some(
+    (subscription) =>
+      subscription.status !== 'canceled' &&
+      subscription.status !== 'incomplete_expired',
+  )) {
+    throw new Error('Stripe customer already has a nonterminal subscription');
+  }
+
+  // 2. Create Checkout Session. Stripe deduplicates same-tenant requests
+  // within an hour; a different plan in that window conflicts rather than
+  // silently creating another session. This is not a durable cross-window
+  // lock: only a database claim can close that remaining race.
+  const idempotencyKey =
+    `faktflow-checkout-v1:${input.tenantId}:${Math.floor(Date.now() / 3_600_000)}`;
   const session: Stripe.Checkout.Session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     customer: customerId,
@@ -72,7 +96,7 @@ export async function createCheckoutSession(
     // ale karta jest już zapisana = brak ghost-trials.
     line_items: [
       {
-        price: resolvePriceId(input.plan),
+        price: priceId,
         quantity: 1,
       },
     ],
@@ -105,7 +129,7 @@ export async function createCheckoutSession(
     // Faktura/invoice w Stripe dla user'a — pomocnicze dla księgowości operatora.
     // Self-invoicing (Krok 4) generuje OSOBNĄ fakturę VAT w naszym KSeF.
     invoice_creation: undefined, // mode=subscription już generuje invoice
-  });
+  }, { idempotencyKey });
 
   if (!session.url) {
     throw new Error('Stripe Checkout Session bez url — unexpected response');

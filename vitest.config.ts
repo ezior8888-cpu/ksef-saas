@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';
 
 export default defineConfig({
+  // Vite też potrafi ładować pliki .env; testy lokalne nie dziedziczą sekretów apki.
+  envDir: false,
   // Path alias `@/*` zgodny z tsconfig.json (`baseUrl: ".", paths: { "@/*": ["./*"] }`).
   // Bez tego testy nie mogą importować z `@/lib/...` — vitest sam tego nie czyta z tsconfig.
   resolve: {
@@ -15,11 +17,12 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.test.{ts,tsx}'],
+    exclude: ['tests/rls-isolation.test.ts'],
     environment: 'node',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
     pool: 'forks',
-    // Vitest 4.1+: brak `poolOptions` w typach InlineConfig — serializacja pod RLS:
+    // Jeden worker utrzymuje stabilny profil pamięci testów lokalnych.
     fileParallelism: false,
     maxWorkers: 1,
   },

@@ -49,6 +49,13 @@ export type FloProposalStatus =
 export type FloDismissedReason =
   | 'not_now'
   | 'never'
+  /**
+   * „Skończyliśmy współpracę z TYM kontrahentem" (K2.16) — cisza w jednej
+   * sprawie, nie w całym rodzaju. Osobna wartość, bo panel operatora inaczej
+   * nie odróżni „klient nie chce tej funkcji" od „ta jedna relacja się
+   * skończyła", a to są dwa różne wnioski o produkcie.
+   */
+  | 'never_subject'
   | 'auto_expired'
   /** Re-walidacja odmówiła wykonania: dane zmieniły się po pokazaniu karty. */
   | 'stale'
@@ -250,6 +257,7 @@ export interface FloResult<T> {
 export interface FloFilter<Row> extends PromiseLike<FloResult<Row[] | null>> {
   eq(column: string, value: string | number | boolean): FloFilter<Row>;
   neq(column: string, value: string | number | boolean): FloFilter<Row>;
+  not(column: string, operator: 'like', value: string): FloFilter<Row>;
   in(column: string, values: readonly (string | number)[]): FloFilter<Row>;
   is(column: string, value: null | boolean): FloFilter<Row>;
   lt(column: string, value: string | number): FloFilter<Row>;
@@ -258,6 +266,8 @@ export interface FloFilter<Row> extends PromiseLike<FloResult<Row[] | null>> {
   gte(column: string, value: string | number): FloFilter<Row>;
   order(column: string, opts?: { ascending?: boolean }): FloFilter<Row>;
   limit(count: number): FloFilter<Row>;
+  /** Stronicowanie — granice włączne, jak w PostgREST. */
+  range(from: number, to: number): FloFilter<Row>;
   maybeSingle(): Promise<FloResult<Row | null>>;
   single(): Promise<FloResult<Row>>;
 }
@@ -277,6 +287,7 @@ export interface FloFilteredMutation<Row>
   ): FloFilteredMutation<Row>;
   is(column: string, value: null | boolean): FloFilteredMutation<Row>;
   lt(column: string, value: string | number): FloFilteredMutation<Row>;
+  lte(column: string, value: string | number): FloFilteredMutation<Row>;
   // `gt` jest potrzebne do atomowego zużycia żetonu zgody: warunek „jeszcze
   // nie wygasł” musi być częścią tego samego UPDATE-u, a nie osobnym
   // sprawdzeniem przed nim (inaczej między jednym a drugim mieści się wyścig).

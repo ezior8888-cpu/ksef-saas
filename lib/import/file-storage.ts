@@ -27,6 +27,6 @@ export async function uploadImportFile(
   return path;
 }
 
-export async function downloadImportFile(path: string): Promise<Buffer> {
-  return downloadFromR2(path);
+export async function downloadImportFile(path: string, tenantId: string): Promise<Buffer> {
+  return downloadFromR2(path, tenantId);
 }

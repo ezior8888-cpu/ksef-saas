@@ -23,12 +23,18 @@
  *    ważność, zamiast dalej robić swoje na nieaktualnym założeniu.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 import { renderCopy } from '@/lib/flo/copy';
+import type { FloDbClient } from '@/lib/flo/db-types';
+import { isMuted } from '@/lib/flo/decisions';
 import { fingerprintOf } from '@/lib/flo/fingerprint';
 import { registerFloHandler } from '@/lib/flo/handlers';
+import { isKindEnabledForTenant, shouldCompute } from '@/lib/flo/kind-switch';
 import { formatPlnPlain } from '@/lib/flo/money';
-import type { CreateProposalInput } from '@/lib/flo/proposals';
+import { createProposal, type CreateProposalInput } from '@/lib/flo/proposals';
 import { createAdminClient } from '@/lib/supabase/admin';
+import type { Database } from '@/types/database';
 
 // ═══════════════════════════════════════════════════════════════
 // Widełki
@@ -168,6 +174,11 @@ export function buildRuleProposal(
       kpirColumn: input.kpirColumn,
       minAmount: bounds.minAmount,
       maxAmount: bounds.maxAmount,
+      // Wariant `choice` bez własnych etykiet dałby „Tak" i „Nie teraz" —
+      // a to pytanie o trwałą decyzję, nie o odłożenie sprawy. Komentarz
+      // w `kind-variant.ts` zapowiada dokładnie te dwie odpowiedzi.
+      primaryLabel: 'Tak, zawsze tak księguj',
+      secondary: [{ label: 'Pytaj za każdym razem', intent: 'dismiss' }],
     },
     evidence: [
       { label: 'Wydatki tego sprzedawcy', href: '/expenses' },
@@ -175,6 +186,206 @@ export function buildRuleProposal(
     ],
   };
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Producent: pytanie po potwierdzeniu kategorii (plan FLO 2, K1.8)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * KTO I KIEDY PYTA O REGUŁĘ.
+ *
+ * Nie puls, tylko moment, w którym człowiek WŁAŚNIE potwierdził kategorię
+ * u tego sprzedawcy (wykonawca W-01). Reguła nauczona z pytania jest oparta
+ * na decyzji człowieka, a nie na zgadywaniu odczytu — i pada w chwili, gdy
+ * klient ma tę sprawę w głowie, a nie tydzień później.
+ *
+ * CZTERY POWODY, DLA KTÓRYCH AGENT MILCZY MIMO DRUGIEGO WYSTĄPIENIA:
+ *
+ * 1. Koszt bez kategorii (`kpir_column` puste) — nie ma czego utrwalać.
+ * 2. Historia niespójna: ten sam sprzedawca był już księgowany inaczej.
+ *    Reguła z takiej historii byłaby zgadywaniem, które z dwóch księgowań
+ *    jest tym właściwym — a pomyłka szłaby dalej cicho, miesiącami.
+ * 3. Reguła dla tego sprzedawcy już istnieje.
+ * 4. Bramki agenta (wyłącznik, kanarek, wyciszenie) — sprawdzane PRZED
+ *    odczytem kosztów, żeby wyłączona funkcja nie kosztowała zapytań.
+ */
+
+const KIND = 'expense.rule' as const;
+
+/** Koszt, który klient właśnie potwierdził. */
+export interface ReviewedExpense {
+  sellerName: string;
+  sellerNip: string | null;
+  kpirColumn: string;
+  categoryLabel: string;
+}
+
+/** Dokument tego samego sprzedawcy — do widełek i do kontroli spójności. */
+export interface SellerExpense {
+  grossAmount: number;
+  kpirColumn: string | null;
+}
+
+export interface RuleLearningSources {
+  readReviewedExpense: (
+    tenantId: string,
+    expenseId: string,
+  ) => Promise<ReviewedExpense | null>;
+  readSellerExpenses: (
+    tenantId: string,
+    sellerName: string,
+  ) => Promise<SellerExpense[]>;
+  /** Czy klient ma już regułę dla tego sprzedawcy (po NIP-ie albo nazwie). */
+  hasRuleFor: (tenantId: string, matchValues: readonly string[]) => Promise<boolean>;
+  /** Globalny wyłącznik — wstrzykiwany tylko w testach. */
+  readGlobalKill?: () => Promise<boolean>;
+}
+
+export type RuleLearningOutcome =
+  | 'created'
+  /** Wyłącznik, blokada w kodzie, kanarek albo wyciszenie rodzaju. */
+  | 'disabled'
+  /** Kosztu nie ma albo nie należy do tego konta. */
+  | 'missing'
+  | 'no_category'
+  /** Mniej niż `LEARN_AFTER_OCCURRENCES` dokumentów tego sprzedawcy. */
+  | 'too_few'
+  /** Ten sprzedawca bywał księgowany różnie — reguła byłaby zgadywaniem. */
+  | 'mixed_history'
+  | 'rule_exists';
+
+/**
+ * Kwoty sprzedawcy i wyrok o spójności — funkcja czysta.
+ *
+ * Kwoty biorą się ze WSZYSTKICH dokumentów sprzedawcy, bo widełki mają
+ * opisywać to, ile u niego zwykle płacimy. Spójność liczy się tylko
+ * z dokumentów, które mają już kolumnę księgi — koszt jeszcze nieprzejrzany
+ * niczemu nie przeczy.
+ */
+export function collectSellerAmounts(
+  expenses: readonly SellerExpense[],
+  kpirColumn: string,
+): { amounts: number[]; mixed: boolean } {
+  const amounts = expenses
+    .map((e) => e.grossAmount)
+    .filter((a) => Number.isFinite(a) && a > 0);
+
+  const mixed = expenses.some(
+    (e) => e.kpirColumn !== null && e.kpirColumn !== kpirColumn,
+  );
+
+  return { amounts, mixed };
+}
+
+export async function proposeRuleAfterReview(
+  tenantId: string,
+  expenseId: string,
+  now: Date,
+  db: FloDbClient,
+  sources: RuleLearningSources,
+): Promise<RuleLearningOutcome> {
+  const verdict = await isKindEnabledForTenant(
+    KIND,
+    tenantId,
+    db,
+    sources.readGlobalKill,
+  );
+  if (!shouldCompute(verdict)) return 'disabled';
+  if (await isMuted(tenantId, KIND, now, db)) return 'disabled';
+
+  const expense = await sources.readReviewedExpense(tenantId, expenseId);
+  if (!expense) return 'missing';
+  if (!expense.kpirColumn || !expense.sellerName) return 'no_category';
+
+  const seller = expense.sellerNip?.trim() || expense.sellerName;
+  if (await sources.hasRuleFor(tenantId, [seller, expense.sellerName])) {
+    return 'rule_exists';
+  }
+
+  const history = await sources.readSellerExpenses(tenantId, expense.sellerName);
+  const { amounts, mixed } = collectSellerAmounts(history, expense.kpirColumn);
+
+  if (mixed) return 'mixed_history';
+  if (amounts.length < LEARN_AFTER_OCCURRENCES) return 'too_few';
+
+  const proposal = buildRuleProposal({
+    tenantId,
+    sellerName: expense.sellerName,
+    sellerNip: expense.sellerNip,
+    categoryLabel: expense.categoryLabel,
+    kpirColumn: expense.kpirColumn,
+    amounts,
+    now,
+  });
+  if (!proposal) return 'too_few';
+
+  const result = await createProposal(proposal, db, sources.readGlobalKill);
+  return result.status === 'created' || result.status === 'updated'
+    ? 'created'
+    : 'disabled';
+}
+
+export function productionRuleLearningSources(): RuleLearningSources {
+  return {
+    readReviewedExpense: async (tenantId, expenseId) => {
+      const client: SupabaseClient<Database> = createAdminClient();
+      const { data, error } = await client
+        .from('expenses')
+        .select('seller_name, seller_nip, kpir_column, category_label')
+        // Klient administracyjny omija RLS — przynależność do konta
+        // sprawdzamy jawnie.
+        .eq('tenant_id', tenantId)
+        .eq('id', expenseId)
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+      if (!data?.seller_name || !data.kpir_column) return null;
+
+      return {
+        sellerName: data.seller_name,
+        sellerNip: data.seller_nip,
+        kpirColumn: data.kpir_column,
+        categoryLabel: data.category_label ?? data.kpir_column,
+      };
+    },
+
+    readSellerExpenses: async (tenantId, sellerName) => {
+      const client: SupabaseClient<Database> = createAdminClient();
+      const { data, error } = await client
+        .from('expenses')
+        .select('gross_amount, kpir_column')
+        .eq('tenant_id', tenantId)
+        .eq('seller_name', sellerName)
+        .limit(SELLER_HISTORY_LIMIT);
+
+      if (error) throw new Error(error.message);
+
+      return data.map((row) => ({
+        grossAmount: Number(row.gross_amount ?? 0),
+        kpirColumn: row.kpir_column,
+      }));
+    },
+
+    hasRuleFor: async (tenantId, matchValues) => {
+      const values = [...new Set(matchValues.filter((v) => v.length > 0))];
+      if (values.length === 0) return false;
+
+      const client: SupabaseClient<Database> = createAdminClient();
+      const { data, error } = await client
+        .from('categorization_rules')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .in('match_value', values)
+        .limit(1);
+
+      if (error) throw new Error(error.message);
+      return data.length > 0;
+    },
+  };
+}
+
+/** Ile dokumentów sprzedawcy czytamy do widełek. Wystarczy z nawiązką. */
+const SELLER_HISTORY_LIMIT = 200;
 
 // ═══════════════════════════════════════════════════════════════
 // Unieważnianie po zmianie profilu podatkowego

@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Email preferences API (Faza 26).
  *
@@ -43,12 +45,13 @@ export async function isSubscribed(
   category: EmailCategory,
 ): Promise<boolean> {
   const supabase = createAdminClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('email_preferences')
     .select('id')
     .eq('user_id', userId)
     .eq('category', category)
     .maybeSingle();
+  if (error) throw new Error('email_preferences_unavailable');
   return !data;
 }
 
@@ -64,7 +67,7 @@ export async function isEmailBlocked(email: string): Promise<{
   const supabase = createAdminClient();
   const normalizedEmail = email.toLowerCase().trim();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('email_bounces')
     .select('bounce_type')
     .eq('email', normalizedEmail)
@@ -73,6 +76,7 @@ export async function isEmailBlocked(email: string): Promise<{
     .limit(1)
     .maybeSingle();
 
+  if (error) throw new Error('email_suppression_unavailable');
   if (!data) return { blocked: false };
   return {
     blocked: true,
@@ -88,7 +92,7 @@ export async function isEmailBlocked(email: string): Promise<{
  */
 export async function unsubscribe(input: UnsubscribeInput): Promise<void> {
   const supabase = createAdminClient();
-  await supabase.from('email_preferences').upsert(
+  const { error } = await supabase.from('email_preferences').upsert(
     {
       user_id: input.userId,
       category: input.category,
@@ -98,6 +102,7 @@ export async function unsubscribe(input: UnsubscribeInput): Promise<void> {
     },
     { onConflict: 'user_id,category', ignoreDuplicates: false },
   );
+  if (error) throw new Error('email_preference_write_failed');
 }
 
 /**
@@ -109,11 +114,12 @@ export async function resubscribe(
   category: EmailCategory,
 ): Promise<void> {
   const supabase = createAdminClient();
-  await supabase
+  const { error } = await supabase
     .from('email_preferences')
     .delete()
     .eq('user_id', userId)
     .eq('category', category);
+  if (error) throw new Error('email_preference_write_failed');
 }
 
 /**
@@ -124,10 +130,11 @@ export async function getUnsubscribedCategories(
   userId: string,
 ): Promise<EmailCategory[]> {
   const supabase = createAdminClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('email_preferences')
     .select('category')
     .eq('user_id', userId);
+  if (error) throw new Error('email_preferences_unavailable');
   return (data ?? []).map((r) => r.category as EmailCategory);
 }
 
@@ -146,6 +153,7 @@ export async function canSendTo(
   userId: string | null,
   category: EmailCategory,
 ): Promise<{ ok: boolean; reason?: string }> {
+  // Failed reads throw: callers retry, rather than sending past an unknown opt-out.
   // Layer 1: bounce check (zawsze).
   const bounce = await isEmailBlocked(email);
   if (bounce.blocked) {

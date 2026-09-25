@@ -21,9 +21,16 @@
  *    niezależnie od wyniku, więc dokument nigdy nie ginie.
  */
 
+import * as Sentry from '@sentry/nextjs';
+
 import { formatPlnPlain } from '@/lib/flo/money';
 import { renderCopyVariant } from '@/lib/flo/copy';
+import { floDb } from '@/lib/flo/db-types';
 import { fingerprintOf } from '@/lib/flo/fingerprint';
+import {
+  productionRuleLearningSources,
+  proposeRuleAfterReview,
+} from '@/lib/flo/functions/expense-rules';
 import { registerFloHandler } from '@/lib/flo/handlers';
 import type { CreateProposalInput } from '@/lib/flo/proposals';
 import { captureUndo } from '@/lib/flo/undo';
@@ -301,10 +308,16 @@ interface ExpensesClient {
       };
     };
     update: (patch: Record<string, unknown>) => {
-      eq: (
-        column: string,
-        value: string,
-      ) => Promise<{ error: { message: string } | null }>;
+      eq(column: string, value: string): {
+        eq(column: string, value: string): {
+          select(columns: string): {
+            maybeSingle(): Promise<{
+              data: { id: string } | null;
+              error: { message: string } | null;
+            }>;
+          };
+        };
+      };
     };
   };
 }
@@ -357,14 +370,51 @@ registerFloHandler('expense.review', async (ctx) => {
   }
 
   const client = createAdminClient() as unknown as ExpensesClient;
-  const { error } = await client
+  const { data, error } = await client
     .from('expenses')
     .update({ is_reviewed: true })
-    .eq('id', expenseId);
+    .eq('id', expenseId)
+    .eq('tenant_id', ctx.proposal.tenant_id)
+    .select('id')
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!data) throw new Error('Wydatek nie należy do organizacji albo już nie istnieje');
 
-  return { summary: 'koszt potwierdzony przez klienta', details: { expenseId } };
+  // W-03 (plan FLO 2, K1.8): drugi raz ten sam sprzedawca → pytanie o regułę.
+  // Tu, a nie w pulsie: reguła ma się brać z decyzji człowieka, którą właśnie
+  // podjął, i pytanie pada, gdy ma sprawę w głowie.
+  //
+  // W OSOBNYM `try`, bo to jest dodatek do czynności, o którą prosił klient.
+  // Gdyby pytanie o regułę wywróciło wykonanie, człowiek zobaczyłby „nie udało
+  // mi się tego dokończyć" przy koszcie, który JEST już potwierdzony — i tę
+  // samą kartę do kliknięcia jeszcze raz.
+  const ruleOutcome = await proposeRuleAfterReview(
+    ctx.proposal.tenant_id,
+    expenseId,
+    new Date(),
+    floDb(),
+    productionRuleLearningSources(),
+  ).catch((e: unknown) => {
+    Sentry.captureException(e, {
+      tags: {
+        job: 'flo.expense.review',
+        kind: 'expense.rule',
+        tenant_id: ctx.proposal.tenant_id,
+      },
+    });
+    console.error(
+      `[flo] W-03 nie zapytało o regułę dla kosztu ${expenseId}: ${
+        e instanceof Error ? e.message : 'nieznany błąd'
+      }`,
+    );
+    return 'failed' as const;
+  });
+
+  return {
+    summary: 'koszt potwierdzony przez klienta',
+    details: { expenseId, rule: ruleOutcome },
+  };
 });
 
 // ═══════════════════════════════════════════════════════════════

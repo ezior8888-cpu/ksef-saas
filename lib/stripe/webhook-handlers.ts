@@ -8,13 +8,12 @@
  *   - invoice.payment_succeeded   → INSERT stripe_payments + Inngest event
  *                                   (Krok 4 self-invoicing trigger)
  *   - invoice.payment_failed      → INSERT stripe_payments + Inngest dunning
- *   - customer.subscription.trial_will_end → Inngest event (Krok 5 email)
+ *   - customer.subscription.trial_will_end → audit (trial emails run from a cron)
  *
- * Każdy handler jest idempotent: `subscriptions.stripe_subscription_id`
- * jest UNIQUE, więc UPSERT z onConflict załatwia ponowne odpalenia.
+ * Odbiór zdarzenia używa atomowego claimu, a mirror subskrypcji
+ * synchronizuje aktualny obiekt Stripe pod dzierżawą z fencingiem.
  */
 
-import * as Sentry from '@sentry/nextjs';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 import type Stripe from 'stripe';
 
@@ -24,63 +23,67 @@ import { logAuditSystem } from '@/lib/audit/log-system';
 import {
   billingPaymentFailed,
   billingPaymentSucceeded,
-  billingSubscriptionCanceled,
-  billingTrialWillEnd,
-  } from '@/lib/inngest/client';
+} from '@/lib/inngest/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import {
   mapInvoiceToPaymentRow,
-  mapSubscriptionToRow,
-  resolveTenantIdFromSubscription,
 } from './event-mapping';
+import { syncCurrentStripeSubscription } from './subscription-sync';
 
+/**
+ * Late invoice payment events must not reopen an already refunded payment.
+ * The database trigger in 00075 also covers a race after this read.
+ */
+async function readStripePaymentStatus(
+  supabase: ReturnType<typeof createAdminClient>,
+  stripeInvoiceId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('stripe_payments')
+    .select('status')
+    .eq('stripe_invoice_id', stripeInvoiceId)
+    .maybeSingle();
+  if (error) {
+    throw new Error('stripe payment status read failed: ' + error.message);
+  }
+  return data?.status ?? null;
+}
+
+function isRefundedPaymentStatus(status: string | null): boolean {
+  return status === 'refunded' || status === 'partially_refunded';
+}
 // ─── 1. subscription.created / updated ────────────────────────────────
 
 export async function handleSubscriptionUpserted(
-  subscription: Stripe.Subscription,
+  eventSnapshot: Stripe.Subscription,
   isCreate: boolean,
 ): Promise<void> {
-  const tenantId = await resolveTenantIdFromSubscription(subscription);
-  if (!tenantId) {
-    Sentry.captureMessage('Stripe subscription bez tenantId metadata', {
-      level: 'warning',
-      extra: { subscriptionId: subscription.id },
-    });
-    return;
-  }
+  const { subscription, tenantId, status } =
+    await syncCurrentStripeSubscription(eventSnapshot.id);
 
-  const supabase = createAdminClient();
-  const row = mapSubscriptionToRow(subscription, tenantId);
-
-  const { error } = await supabase
-    .from('subscriptions')
-    // Cast — tabela poza typed gen do regeneracji.
-    .upsert(row as never, { onConflict: 'stripe_subscription_id' });
-
-  if (error) {
-    throw new Error(`subscription upsert failed: ${error.message}`);
-  }
-
+  // A delayed "created" event may arrive after cancellation. Record the
+  // current state, but never announce a new active plan from stale payload.
   await logAuditSystem({
-    action: isCreate ? 'billing.subscription.created' : 'billing.subscription.updated',
+    action: 'billing.subscription.synced',
     tenantId,
     userId: null,
     entityType: 'subscription',
     entityId: subscription.id,
     metadata: {
-      status: subscription.status,
+      sourceEvent: isCreate ? 'created' : 'updated',
+      status,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       priceId: subscription.items.data[0]?.price.id ?? null,
     },
   });
 
-  if (isCreate) {
+  if (isCreate && status !== 'canceled' && status !== 'incomplete_expired') {
     await trackServer({
       distinctId: tenantId,
       event: ANALYTICS_EVENTS.subscriptionCreated,
       properties: {
-        status: subscription.status,
+        status,
         price_id: subscription.items.data[0]?.price.id ?? null,
       },
       setPersonProperties: { plan: 'active' },
@@ -91,28 +94,15 @@ export async function handleSubscriptionUpserted(
 // ─── 2. subscription.deleted ──────────────────────────────────────────
 
 export async function handleSubscriptionDeleted(
-  subscription: Stripe.Subscription,
+  eventSnapshot: Stripe.Subscription,
 ): Promise<void> {
-  const tenantId = await resolveTenantIdFromSubscription(subscription);
-  if (!tenantId) return;
+  const { subscription, tenantId, status } =
+    await syncCurrentStripeSubscription(eventSnapshot.id);
 
-  const supabase = createAdminClient();
-  const canceledAt = subscription.canceled_at
-    ? new Date(subscription.canceled_at * 1000).toISOString()
-    : new Date().toISOString();
-
-  const { error } = await supabase
-    .from('subscriptions')
-    .update({
-      status: 'canceled',
-      canceled_at: canceledAt,
-      cancel_at_period_end: false,
-      last_webhook_at: new Date().toISOString(),
-    } as never)
-    .eq('stripe_subscription_id', subscription.id);
-
-  if (error) {
-    throw new Error(`subscription delete update failed: ${error.message}`);
+  if (status !== 'canceled') {
+    // The current Stripe object and the terminal event disagree. The mirror
+    // was updated from Stripe, but acknowledging the event needs review.
+    throw new Error('Deleted subscription event does not match current Stripe state');
   }
 
   await logAuditSystem({
@@ -121,18 +111,12 @@ export async function handleSubscriptionDeleted(
     userId: null,
     entityType: 'subscription',
     entityId: subscription.id,
-    metadata: { canceledAt },
+    metadata: {
+      canceledAt: subscription.canceled_at
+        ? new Date(subscription.canceled_at * 1000).toISOString()
+        : null,
+    },
   });
-
-  // Inngest event — konsumenci re-engagement campaign mogą zaplanować
-  // sequence emaili "wracaj do nas".
-  await sendJobEvent(
-    billingSubscriptionCanceled.create({
-      tenantId,
-      subscriptionId: subscription.id,
-      canceledAt,
-    }),
-  );
 
   await trackServer({
     distinctId: tenantId,
@@ -141,7 +125,6 @@ export async function handleSubscriptionDeleted(
     setPersonProperties: { plan: 'canceled' },
   });
 }
-
 // ─── 3. invoice.payment_succeeded ─────────────────────────────────────
 
 export async function handleInvoicePaymentSucceeded(
@@ -151,6 +134,7 @@ export async function handleInvoicePaymentSucceeded(
   if (!mapping) return;
 
   const supabase = createAdminClient();
+  if (isRefundedPaymentStatus(await readStripePaymentStatus(supabase, invoice.id))) return;
   // Cast — `stripe_payments` poza typed gen.
   const { data, error } = await (supabase as unknown as {
     from: (n: string) => {
@@ -159,7 +143,7 @@ export async function handleInvoicePaymentSucceeded(
         opts: { onConflict: string },
       ) => {
         select: (c: string) => Promise<{
-          data: Array<{ id: string }> | null;
+          data: Array<{ id: string; status: string }> | null;
           error: { message: string } | null;
         }>;
       };
@@ -167,14 +151,25 @@ export async function handleInvoicePaymentSucceeded(
   })
     .from('stripe_payments')
     .upsert(mapping.row, { onConflict: 'stripe_invoice_id' })
-    .select('id');
+    .select('id, status');
 
   if (error) {
     throw new Error(`stripe_payments upsert failed: ${error.message}`);
   }
 
-  const paymentId = data?.[0]?.id;
-  if (!paymentId) return;
+  const persistedPayment = data?.[0];
+  if (!persistedPayment) {
+    // A refund guard can suppress the upsert. Any other zero-row result leaves
+    // the payment event unpersisted and must be retried.
+    const currentStatus = await readStripePaymentStatus(supabase, invoice.id);
+    if (isRefundedPaymentStatus(currentStatus)) return;
+    throw new Error(`stripe payment success upsert affected no row: ${invoice.id}`);
+  }
+  if (isRefundedPaymentStatus(persistedPayment.status)) return;
+  if (persistedPayment.status !== 'succeeded') {
+    throw new Error(`stripe payment success not persisted: ${invoice.id}`);
+  }
+  const paymentId = persistedPayment.id;
 
   await logAuditSystem({
     action: 'billing.payment.succeeded',
@@ -230,6 +225,8 @@ export async function handleInvoicePaymentFailed(
   if (!mapping) return;
 
   const supabase = createAdminClient();
+  const existingStatus = await readStripePaymentStatus(supabase, invoice.id);
+  if (existingStatus === 'succeeded' || isRefundedPaymentStatus(existingStatus)) return;
   const { data, error } = await (supabase as unknown as {
     from: (n: string) => {
       upsert: (
@@ -237,7 +234,7 @@ export async function handleInvoicePaymentFailed(
         opts: { onConflict: string },
       ) => {
         select: (c: string) => Promise<{
-          data: Array<{ id: string }> | null;
+          data: Array<{ id: string; status: string }> | null;
           error: { message: string } | null;
         }>;
       };
@@ -245,14 +242,24 @@ export async function handleInvoicePaymentFailed(
   })
     .from('stripe_payments')
     .upsert(mapping.row, { onConflict: 'stripe_invoice_id' })
-    .select('id');
+    .select('id, status');
 
   if (error) {
     throw new Error(`stripe_payments failed upsert: ${error.message}`);
   }
 
-  const paymentId = data?.[0]?.id;
-  if (!paymentId) return;
+  const persistedPayment = data?.[0];
+  if (!persistedPayment) {
+    const currentStatus = await readStripePaymentStatus(supabase, invoice.id);
+    if (currentStatus === 'succeeded' || isRefundedPaymentStatus(currentStatus)) return;
+    throw new Error(`stripe payment failure upsert affected no row: ${invoice.id}`);
+  }
+  if (persistedPayment.status === 'succeeded' ||
+      isRefundedPaymentStatus(persistedPayment.status)) return;
+  if (persistedPayment.status !== 'failed') {
+    throw new Error(`stripe payment failure not persisted: ${invoice.id}`);
+  }
+  const paymentId = persistedPayment.id;
 
   const failureReason =
     (mapping.row.failure_reason as string | null | undefined) ?? null;
@@ -295,14 +302,18 @@ export async function handleInvoicePaymentFailed(
 // ─── 5. subscription.trial_will_end ───────────────────────────────────
 
 export async function handleTrialWillEnd(
-  subscription: Stripe.Subscription,
+  eventSnapshot: Stripe.Subscription,
 ): Promise<void> {
-  const tenantId = await resolveTenantIdFromSubscription(subscription);
-  if (!tenantId) return;
+  // Trial notices must use the same verified Customer -> tenant binding as
+  // subscription writes. Metadata on an old event is not tenant authority.
+  const { subscription, tenantId, status } =
+    await syncCurrentStripeSubscription(eventSnapshot.id);
+  if (status !== 'trialing') return;
 
-  const trialEndIso = subscription.trial_end
-    ? new Date(subscription.trial_end * 1000).toISOString()
-    : new Date().toISOString();
+  if (!subscription.trial_end) {
+    throw new Error('Current Stripe trial has no end date');
+  }
+  const trialEndIso = new Date(subscription.trial_end * 1000).toISOString();
 
   await logAuditSystem({
     action: 'billing.trial.will_end',
@@ -312,12 +323,4 @@ export async function handleTrialWillEnd(
     entityId: subscription.id,
     metadata: { trialEnd: trialEndIso },
   });
-
-  await sendJobEvent(
-    billingTrialWillEnd.create({
-      tenantId,
-      subscriptionId: subscription.id,
-      trialEnd: trialEndIso,
-    }),
-  );
 }

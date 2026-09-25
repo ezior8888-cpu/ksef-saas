@@ -1,0 +1,18 @@
+=== SEC-C-05: widok invoices_overdue jako rola authenticated (bez kontekstu JWT) ===
+(wierszy_widocznych i roznych_najemcow > 1  =  WYCIEK MIĘDZY NAJEMCAMI potwierdzony)
+SET
+ wierszy_widocznych | roznych_najemcow 
+--------------------+------------------
+                  0 |                0
+(1 row)
+
+RESET
+
+=== dla porownania: to samo bezposrednio na tabeli invoices (RLS powinien odciac) ===
+SET
+ invoices_widocznych_bez_kontekstu 
+-----------------------------------
+                                 0
+(1 row)
+
+RESET

@@ -106,17 +106,50 @@ export interface ShadowProposal {
   entityId?: string | null;
 }
 
+/**
+ * Zapis propozycji, której klient nie zobaczy.
+ *
+ * JEDNA SPRAWA = JEDEN WPIS. Puls chodzi codziennie, a sprawa — zaległa
+ * faktura, brakujący dokument — trwa tygodniami. Bez warunku niżej jedna
+ * zaległość dałaby trzydzieści wpisów w miesiąc, a „sto propozycji" z bramki
+ * gotowości oznaczałoby trzy sprawy widziane trzydzieści razy. Próbka
+ * wyglądałaby na dużą i nie mówiłaby nic.
+ *
+ * Powtórkę rozpoznajemy po kluczu tematu wśród wpisów jeszcze
+ * nierozstrzygniętych: sprawa zamknięta i wracająca po miesiącach to nowa
+ * sprawa, nie duplikat.
+ *
+ * Zwraca `false`, gdy wpis był już wcześniej — do liczenia w testach
+ * i w logach, nie do sterowania czymkolwiek.
+ */
 export async function recordShadow(
   input: { tenantId: string; kind: FloProposalKind; proposal: ShadowProposal },
   db: FloDbClient = floDb(),
-): Promise<void> {
-  const { error } = await db.from('flo_shadow').insert({
+): Promise<boolean> {
+  const { data, error } = await db
+    .from('flo_shadow')
+    .select('id, proposal')
+    .eq('tenant_id', input.tenantId)
+    .eq('kind', input.kind)
+    .is('matched', null);
+
+  if (error) throw new Error(error.message);
+
+  const juzMamy = (data ?? []).some(
+    (row) =>
+      (row.proposal as { topicKey?: unknown } | null)?.topicKey ===
+      input.proposal.topicKey,
+  );
+  if (juzMamy) return false;
+
+  const insert = await db.from('flo_shadow').insert({
     tenant_id: input.tenantId,
     kind: input.kind,
     proposal: { ...input.proposal },
   });
 
-  if (error) throw new Error(error.message);
+  if (insert.error) throw new Error(insert.error.message);
+  return true;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -268,13 +301,31 @@ export function summarizeShadow(
   });
 }
 
+/** Rozmiar strony przy czytaniu wpisów trybu cichego. */
+const SHADOW_PAGE = 1000;
+
 export async function accuracyByKind(
   db: FloDbClient = floDb(),
 ): Promise<AccuracyStats[]> {
-  const { data, error } = await db.from('flo_shadow').select('kind, matched');
-  if (error) throw new Error(error.message);
+  const rows: { kind: string; matched: boolean | null }[] = [];
 
-  return summarizeShadow(
-    (data ?? []).map((row) => ({ kind: row.kind, matched: row.matched })),
-  );
+  // Czytane stronami do końca. Ta tabela rośnie z każdym przebiegiem pulsu
+  // na każdym koncie poza kanarkiem, więc pierwsza wersja bez stronicowania
+  // zaczęłaby po cichu zaniżać trafność w dniu, w którym tryb cichy
+  // naprawdę ruszy — przy zapytaniu wyglądającym na udane.
+  for (let from = 0; ; from += SHADOW_PAGE) {
+    const { data, error } = await db
+      .from('flo_shadow')
+      .select('kind, matched')
+      .order('id')
+      .range(from, from + SHADOW_PAGE - 1);
+
+    if (error) throw new Error(error.message);
+
+    const page = data ?? [];
+    rows.push(...page.map((row) => ({ kind: row.kind, matched: row.matched })));
+    if (page.length < SHADOW_PAGE) break;
+  }
+
+  return summarizeShadow(rows);
 }

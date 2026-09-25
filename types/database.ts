@@ -2628,6 +2628,10 @@ export type Database = {
         Args: { p_membership_id: string }
         Returns: undefined
       }
+      set_invoice_reminders_paused: {
+        Args: { p_invoice_id: string; p_paused: boolean; p_reason?: string | null }
+        Returns: boolean
+      }
     }
     Enums: {
       buyer_id_type_enum: "nip" | "pesel" | "id_card" | "passport" | "no_id"

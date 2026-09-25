@@ -37,7 +37,7 @@ export async function downloadUpoXml(
   invoiceId: string,
 ): Promise<string> {
   const path = getUpoXmlPath(tenantId, invoiceId);
-  const buffer = await downloadFromR2(path);
+  const buffer = await downloadFromR2(path, tenantId);
   return buffer.toString('utf-8');
 }
 
@@ -46,5 +46,5 @@ export async function downloadUpoPdf(
   invoiceId: string,
 ): Promise<Buffer> {
   const path = getUpoPdfPath(tenantId, invoiceId);
-  return downloadFromR2(path);
+  return downloadFromR2(path, tenantId);
 }

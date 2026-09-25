@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { logAudit } from '@/lib/audit/log';
-import { createClient } from '@/lib/supabase/server';
+import { signOutCurrentSession } from '@/lib/auth/sign-out';
 
 /**
  * Server Action wywoływana z `IdleWatcher` po 60 min idle.
@@ -14,27 +14,18 @@ import { createClient } from '@/lib/supabase/server';
  *   - redirect leci do `/login?success=session_expired` z komunikatem
  *     "wylogowaliśmy Cię dla bezpieczeństwa", a nie zwykłe `/login`.
  */
-export async function forceSignOutInactive(): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (user) {
-    const { data: row } = await supabase
-      .from('users')
-      .select('last_active_tenant_id')
-      .eq('id', user.id)
-      .maybeSingle();
+export async function forceSignOutInactive(): Promise<{ ok: false; error: 'local_logout_failed' }> {
+  const result = await signOutCurrentSession();
+  if (!result.localSessionCleared) return { ok: false, error: 'local_logout_failed' };
+  if (result.userId) {
     await logAudit({
-      action: 'auth.logout',
-      tenantId: row?.last_active_tenant_id ?? null,
-      userId: user.id,
-      metadata: { reason: 'inactivity_timeout' },
+      action: 'auth.logout', tenantId: null, userId: result.userId,
+      metadata: {
+        reason: 'inactivity_timeout', local_session_cleared: true,
+        global_sign_out_confirmed: result.globalSignOutConfirmed,
+      },
     });
   }
-
-  await supabase.auth.signOut();
   revalidatePath('/', 'layout');
-  redirect('/login?success=session_expired');
+  redirect('/login?success=session_expired' + (result.globalSignOutConfirmed ? '' : '&notice=logout_local_only'));
 }

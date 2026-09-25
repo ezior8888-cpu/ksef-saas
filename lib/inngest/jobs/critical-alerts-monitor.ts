@@ -10,6 +10,9 @@
  *   2. **Offline24 queue rośnie** — > 50 pending invoices
  *   3. **Inngest job failures** — > 10 failed runs w ostatnich 5 min
  *   4. **Payment failures** — > 5 failed Stripe payments w ostatniej godzinie
+ *   5. **Stale refunds** — operacje processing starsze niż 15 min
+ *   6. **Stale Stripe webhooks** — processing > 15 min lub failed
+ *   7. **Stale dunning notifications** — sending starsze niż 15 min
  *
  * Wszystkie progi konserwatywne — wolimy false-positive niż przegapić
  * critical incident. Operator może zignorować, ale nie chcemy gubić alertów.
@@ -19,6 +22,7 @@ import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
 import { alertCritical } from '@/lib/alerts/slack';
+import { STALE_REFUND_OPERATION_MS } from '@/lib/billing/refund-operations';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -187,6 +191,138 @@ async function checkPaymentFailures(): Promise<AlertCheckResult> {
   return { type: 'payment_failures', fired: true };
 }
 
+/** Zwrot po timeout/proces crash zostaje zablokowany; operator musi go uzgodnić. */
+export async function checkStaleRefundOperations(): Promise<AlertCheckResult> {
+  const supabase = createAdminClient();
+  const cutoffIso = new Date(Date.now() - STALE_REFUND_OPERATION_MS).toISOString();
+  const { count, error } = await supabase
+    .from('stripe_refund_operations')
+    .select('payment_id', { count: 'exact', head: true })
+    .eq('status', 'processing')
+    .lt('created_at', cutoffIso);
+
+  if (error || count === null) {
+    throw error ?? new Error('Stale refund operation count unavailable');
+  }
+  if (count === 0) return { type: 'stale_refund_operations', fired: false };
+
+  const claimed = await tryClaimAlert('stale_refund_operations');
+  if (!claimed) return { type: 'stale_refund_operations', fired: false, reason: 'dedup' };
+
+  await alertCritical(
+    'Zwroty Stripe wymagają uzgodnienia',
+    'Co najmniej jedna operacja zwrotu pozostaje w processing ponad 15 minut. Sprawdź płatność i zwroty w Stripe przed jakąkolwiek kolejną próbą; nie odblokowuj automatycznie.',
+    {
+      fields: [
+        { label: 'Operacje > 15 min', value: String(count) },
+        { label: 'Próg', value: '15 min' },
+      ],
+      link: {
+        label: 'Otwórz panel administratora',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/support',
+      },
+    },
+  );
+
+  return { type: 'stale_refund_operations', fired: true };
+}
+
+/** A stopped webhook may already have emitted jobs. Never reset it automatically. */
+export async function checkStaleStripeWebhookEvents(): Promise<AlertCheckResult> {
+  const supabase = createAdminClient();
+  const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const [processingResult, failedResult, retryableResult] = await Promise.all([
+    supabase
+      .from('stripe_webhook_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('processing_status', 'processing')
+      .lt('received_at', cutoffIso),
+    supabase
+      .from('stripe_webhook_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('processing_status', 'failed'),
+    supabase
+      .from('stripe_webhook_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('processing_status', 'retryable')
+      .lt('received_at', cutoffIso),
+  ]);
+
+  if (processingResult.error || failedResult.error || retryableResult.error ||
+      processingResult.count === null || failedResult.count === null ||
+      retryableResult.count === null) {
+    throw processingResult.error ?? failedResult.error ?? retryableResult.error ??
+      new Error('Stripe webhook receipt count unavailable');
+  }
+  const staleProcessing = processingResult.count;
+  const failed = failedResult.count;
+  const staleRetryable = retryableResult.count;
+  if (staleProcessing + failed + staleRetryable === 0) {
+    return { type: 'stale_stripe_webhooks', fired: false };
+  }
+
+  const claimed = await tryClaimAlert('stale_stripe_webhooks');
+  if (!claimed) {
+    return { type: 'stale_stripe_webhooks', fired: false, reason: 'dedup' };
+  }
+
+  await alertCritical(
+    'Webhooki Stripe wymagają uzgodnienia',
+    'Co najmniej jeden webhook Stripe utknął w processing/retryable ponad 15 minut lub ma status failed. Nie resetuj claimu i nie ponawiaj handlera bez sprawdzenia skutków w bazie, kolejce i Stripe.',
+    {
+      fields: [
+        { label: 'Processing > 15 min', value: String(staleProcessing) },
+        { label: 'Failed', value: String(failed) },
+        { label: 'Retryable > 15 min', value: String(staleRetryable) },
+      ],
+      link: {
+        label: 'Otwórz panel administratora',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/support',
+      },
+    },
+  );
+
+  return { type: 'stale_stripe_webhooks', fired: true };
+}
+
+/** An uncertain email send must be reconciled before any new delivery. */
+export async function checkStaleDunningNotifications(): Promise<AlertCheckResult> {
+  const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const { count, error } = await createAdminClient()
+    .from('billing_notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('kind', 'payment_failed')
+    .eq('status', 'sending')
+    .lt('sent_at', cutoffIso);
+
+  if (error || count === null) {
+    throw error ?? new Error('Stale dunning notification count unavailable');
+  }
+  if (count === 0) return { type: 'stale_dunning_notifications', fired: false };
+
+  const claimed = await tryClaimAlert('stale_dunning_notifications');
+  if (!claimed) {
+    return { type: 'stale_dunning_notifications', fired: false, reason: 'dedup' };
+  }
+
+  await alertCritical(
+    'Powiadomienia o nieudanej płatności wymagają uzgodnienia',
+    'Co najmniej jedna próba wysyłki pozostaje w sending ponad 15 minut. Sprawdź aktualną płatność i wynik wysyłki w Resend przed zmianą statusu; nie ponawiaj wysyłki automatycznie.',
+    {
+      fields: [
+        { label: 'Próby > 15 min', value: String(count) },
+        { label: 'Próg', value: '15 min' },
+      ],
+      link: {
+        label: 'Otwórz panel administratora',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/support',
+      },
+    },
+  );
+
+  return { type: 'stale_dunning_notifications', fired: true };
+}
+
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
@@ -202,6 +338,15 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-payments', () =>
         checkPaymentFailures().catch(captureAndReturn('payment_failures')),
+      ),
+      step.run('check-stale-refunds', () =>
+        checkStaleRefundOperations().catch(captureAndReturn('stale_refund_operations')),
+      ),
+      step.run('check-stale-webhooks', () =>
+        checkStaleStripeWebhookEvents().catch(captureAndReturn('stale_stripe_webhooks')),
+      ),
+      step.run('check-stale-dunning-notifications', () =>
+        checkStaleDunningNotifications().catch(captureAndReturn('stale_dunning_notifications')),
       ),
     ]);
 

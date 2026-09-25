@@ -1,0 +1,13 @@
+=== GROUND TRUTH: ile danych i jakie opcje widoku (jako postgres, bez RLS) ===
+ invoices_total | overdue_total | overdue_tenants 
+----------------+---------------+-----------------
+              2 |             0 |               0
+(1 row)
+
+
+=== opcje widoku invoices_overdue (security_invoker?) ===
+     relname      | reloptions 
+------------------+------------
+ invoices_overdue | 
+(1 row)
+

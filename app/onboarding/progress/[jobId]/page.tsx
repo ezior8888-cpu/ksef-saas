@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 
 import { ImportProgressView } from '@/components/onboarding/import-progress-view';
-import { createClient } from '@/lib/supabase/server';
+import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 
 interface Props {
   params: Promise<{ jobId: string }>;
@@ -9,9 +10,11 @@ interface Props {
 
 export default async function ProgressPage({ params }: Props) {
   const { jobId } = await params;
-  const supabase = await createClient();
+  const { supabase } = await requireVerifiedUserForPage('/onboarding/progress/' + encodeURIComponent(jobId));
+  const tenantId = await getActiveOrgIdFromCookies();
+  if (!tenantId) redirect('/onboarding');
 
-  const { data: job } = await supabase.from('import_jobs').select('*').eq('id', jobId).single();
+  const { data: job } = await supabase.from('import_jobs').select('*').eq('id', jobId).eq('tenant_id', tenantId).single();
 
   if (!job) redirect('/dashboard');
 

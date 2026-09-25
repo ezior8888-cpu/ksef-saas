@@ -2,6 +2,7 @@
 // Synchronous endpoint dla portalu księgowej (zwraca plik bezpośrednio, bez kolejki Inngest).
 
 import { NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { z } from 'zod';
 
 import { hashToken } from '@/lib/accountant/tokens';
@@ -26,8 +27,6 @@ function safeNipSegment(nip: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = createAdminClient();
-
   try {
     const accountantToken =
       req.headers.get('x-accountant-token')?.trim() ??
@@ -38,6 +37,7 @@ export async function POST(req: NextRequest) {
     }
 
     const tokenHash = hashToken(accountantToken);
+    const supabase = createAdminClient();
 
     const { data: accessRow, error: accessErr } = await supabase
       .from('accountant_access')
@@ -165,11 +165,13 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (e) {
-    console.error('Portal export error:', e);
+    const errorId = Sentry.captureException(e, {
+      tags: { area: 'accountant.portal_export' },
+    });
     return NextResponse.json(
       {
-        error:
-          e instanceof Error ? e.message : 'Nieznany błąd generowania pliku',
+        error: 'Nie udało się wygenerować pliku. Spróbuj ponownie później.',
+        errorId,
       },
       { status: 500 },
     );

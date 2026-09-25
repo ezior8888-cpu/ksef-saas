@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { logAudit } from '@/lib/audit/log';
+import { getVerifiedUserContext } from '@/lib/auth/verified-user';
 import { sendEmail } from '@/lib/email/send';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
@@ -226,13 +227,9 @@ export async function setActiveOrganizationAction(
 export async function createOrganizationAction(
   company: OrganizationCompanyInput,
 ): Promise<ActionFail> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { success: false, error: 'Niezalogowany' };
-  }
+  const context = await getVerifiedUserContext();
+  if (!context.ok) return { success: false, error: context.error };
+  const { user } = context;
 
   if (!/^\d{10}$/.test(company.nip)) {
     return { success: false, error: 'NIP musi zawierać 10 cyfr' };
@@ -347,13 +344,9 @@ export async function createOrganizationAction(
  * W razie sukcesu nie returnsuje (NEXT_REDIRECT).
  */
 export async function skipOnboardingWithoutNipAction(): Promise<ActionFail> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { success: false, error: 'Niezalogowany' };
-  }
+  const context = await getVerifiedUserContext();
+  if (!context.ok) return { success: false, error: context.error };
+  const { user } = context;
 
   const admin = createAdminClient();
 
@@ -690,11 +683,9 @@ export async function acceptInvitationAction(
     return { success: false, error: 'Nieprawidłowy token' };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Niezalogowany' };
+  const context = await getVerifiedUserContext();
+  if (!context.ok) return { success: false, error: context.error };
+  const { supabase, user } = context;
 
   const tokenHash = createHash('sha256').update(token).digest('hex');
 
@@ -751,11 +742,9 @@ export async function requestJoinAction(params: {
     return { success: false, error: 'Nieprawidłowa organizacja' };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Niezalogowany' };
+  const context = await getVerifiedUserContext();
+  if (!context.ok) return { success: false, error: context.error };
+  const { supabase, user } = context;
 
   // Czy user już jest członkiem? Wtedy nie wysyłamy requestu.
   const { data: existing } = await supabase
