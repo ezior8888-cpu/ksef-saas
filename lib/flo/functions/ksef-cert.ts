@@ -179,6 +179,12 @@ export function buildCertProposal(input: {
       alarm: verdict.alarm,
       primaryIntent: 'open',
       primaryLabel: 'Wgraj certyfikat',
+      // Jeden przycisk poza głównym — celowo bez domyślnego „Nigdy więcej
+      // takich”. Przy ostrzeżeniu, bez którego faktura nie trafi do KSeF,
+      // zapraszałby do wyłączenia jedynego sygnału w aplikacji. I obiecywałby
+      // coś, czego nie spełnimy: mail i push przy każdym progu idą dalej.
+      // Do 25.09 nikt tego przycisku nie widział, bo karta nie powstawała.
+      secondary: [{ label: 'Nie teraz', intent: 'snooze' }],
     },
     evidence: [{ label: 'Ustawienia KSeF', href: '/settings/ksef' }],
   };

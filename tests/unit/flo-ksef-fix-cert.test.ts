@@ -18,6 +18,8 @@ import {
   needsOperatorAttention,
   type RejectionContext,
 } from '@/lib/flo/functions/ksef-fix';
+import type { FloProposalRow } from '@/lib/flo/db-types';
+import { toProposalView } from '@/lib/flo/proposals';
 
 /**
  * X-02 tłumacz odrzuceń (krok 27) i X-03 opiekun certyfikatu (krok 28).
@@ -275,6 +277,46 @@ describe('X-03 — progi', () => {
     expect(zadanie).toContain('certExpiryWindow(days, now)');
     expect(zadanie).toContain('threshold: days');
     expect(zadanie).not.toContain('[30, 14, 7]');
+  });
+
+  it('karta nigdy nie proponuje „Nigdy więcej takich” — w żadnym stanie', () => {
+    // Sprawdzamy przyciski, które zobaczy KLIENT, a nie sam ładunek karty:
+    // domyślne akcje dokłada `toProposalView`, więc test ładunku by ich
+    // nie zobaczył. Brak certyfikatu, nieudane logowanie i wygasanie to trzy
+    // sytuacje, w których wyłączenie ostrzeżenia kończy się niewysłaną fakturą.
+    const stany = [
+      evaluateCert({ lastAuthOk: null, lastAuthAt: null, expiresAt: null }, NOW),
+      evaluateCert(cert({ lastAuthOk: false }), NOW),
+      evaluateCert(cert({ expiresAt: at(13.5) }), NOW),
+    ];
+
+    for (const verdict of stany) {
+      const card = buildCertProposal({ tenantId: 't', verdict, now: NOW, threshold: 14 });
+      expect(card, verdict.state).not.toBeNull();
+
+      const view = toProposalView({
+        id: 'c',
+        tenant_id: 't',
+        kind: card!.kind,
+        topic_key: card!.topicKey,
+        status: 'open',
+        priority: card!.priority ?? 50,
+        title: card!.title,
+        body: card!.body,
+        payload: card!.payload ?? {},
+        evidence: card!.evidence ?? [],
+        fingerprint: card!.fingerprint,
+        expires_at: card!.expiresAt.toISOString(),
+        created_at: NOW.toISOString(),
+        approved_at: null,
+        approved_by: null,
+        executed_at: null,
+        dismissed_reason: null,
+      } as FloProposalRow)!;
+
+      expect(view.secondary.map((a) => a.intent), verdict.state).not.toContain('mute');
+      expect(view.secondary, verdict.state).toEqual([{ label: 'Nie teraz', intent: 'snooze' }]);
+    }
   });
 
   it('próg spoza listy nie otwiera karty', () => {
