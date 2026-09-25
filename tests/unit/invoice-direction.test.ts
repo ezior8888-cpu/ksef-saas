@@ -37,10 +37,8 @@ const DOZWOLONE = SCHEMAT.wartosci.get('invoices.direction') ?? new Set<string>(
  * Znany dług. Klucz: miejsce + wartość. Widok w bazie naprawia się migracją,
  * a migracje są działką właściciela repo — stąd lista, nie poprawka.
  */
-const ZNANE: Record<string, string> = {
-  "widok invoices_overdue direction='issued'":
-    'strona „Zaległe płatności" zawsze pusta — wymaga migracji (CREATE OR REPLACE VIEW … outgoing)',
-};
+// Widok invoices_overdue naprawiony migracją 00082 — lista pusta.
+const ZNANE: Record<string, string> = {};
 
 /** Ostatnia definicja widoku w migracjach (późniejsze zastępują wcześniejsze). */
 function aktualnyWidok(nazwa: string): string | null {
