@@ -131,7 +131,15 @@ function alpha(tenantId = TENANT) {
 
 function invoice(
   id: string,
-  overrides: { number?: string; origin?: string; upo?: boolean; tenantId?: string } = {},
+  overrides: {
+    number?: string;
+    origin?: string;
+    /** `false` = brak rekordu; napis = rekord w tym stanie (domyślnie 'downloaded'). */
+    upo?: false | 'downloaded' | 'archived' | 'pending' | 'failed';
+    /** Rekord UPO zapisany pod INNĄ firmą niż faktura. */
+    upoTenantId?: string;
+    tenantId?: string;
+  } = {},
 ) {
   const tenantId = overrides.tenantId ?? TENANT;
   store.rows.invoices!.push({
@@ -144,7 +152,13 @@ function invoice(
     origin: overrides.origin ?? 'app',
   });
   if (overrides.upo !== false) {
-    store.rows.upo_receipts!.push({ invoice_id: id, tenant_id: tenantId });
+    // Realny rekord ma stan — atrapa bez niego ukryła, że audyt liczył
+    // 'pending' i 'failed' jako pobrane UPO (recenzja ChatGPT nr 5).
+    store.rows.upo_receipts!.push({
+      invoice_id: id,
+      tenant_id: overrides.upoTenantId ?? tenantId,
+      status: overrides.upo ?? 'downloaded',
+    });
   }
 }
 
@@ -218,6 +232,30 @@ describe('X-05 — audyt naprawdę coś znajduje', () => {
     expect(captureException).not.toHaveBeenCalled();
     expect(db.tables.flo_proposals[0]!.topic_key).toBe('ksef.audit:2026-10');
     expect(labels(db)).toContain('Faktura FV/A bez poświadczenia odbioru');
+  });
+
+  // Recenzja ChatGPT nr 5 (25.09): rekord `pending` powstaje przed próbą
+  // pobrania, `failed` zostaje po porażce — żaden nie jest poświadczeniem.
+  it.each([
+    ['nieudane pobranie (failed)', { upo: 'failed' as const }],
+    ['pobranie w toku (pending)', { upo: 'pending' as const }],
+    ['rekord zapisany pod inną firmą', { upoTenantId: 'ten-obca' }],
+  ])('UPO niepobrane — %s — to nadal brak poświadczenia', async (_opis, upo) => {
+    invoice('A', upo);
+    const db = createFakeDb({ flo_kind_flags: [alpha()] });
+
+    await runKsefAuditSweep([TENANT], NOW, db.client, { readGlobalKill: noKill });
+
+    expect(labels(db)).toContain('Faktura FV/A bez poświadczenia odbioru');
+  });
+
+  it('UPO zarchiwizowane liczy się jak pobrane', async () => {
+    invoice('A', { upo: 'archived' });
+    const db = createFakeDb({ flo_kind_flags: [alpha()] });
+
+    const result = await runKsefAuditSweep([TENANT], NOW, db.client, { readGlobalKill: noKill });
+
+    expect(result).toEqual({ asked: 0, closed: 0, failed: 0 });
   });
 
   it('błąd zapytania to NIE „zero faktur": zgłoszenie, a następne konto dostaje audyt', async () => {

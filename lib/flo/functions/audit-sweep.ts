@@ -145,6 +145,7 @@ async function auditTenant(
 
   const withUpo = await readInvoicesWithUpo(
     supabase,
+    tenantId,
     rows.map((r) => r.id),
   );
 
@@ -191,8 +192,16 @@ async function auditTenant(
   return created.status === 'created';
 }
 
+/**
+ * UPO jest „na miejscu” dopiero po pobraniu. Rekord `pending` powstaje
+ * PRZED próbą, a `failed` zostaje po porażce (`download-upo.ts`) — sam fakt,
+ * że wiersz istnieje, nic nie mówi o poświadczeniu.
+ */
+const UPO_PRESENT: ReadonlySet<string> = new Set(['downloaded', 'archived']);
+
 async function readInvoicesWithUpo(
   supabase: SupabaseClient<Database>,
+  tenantId: string,
   invoiceIds: readonly string[],
 ): Promise<Set<string>> {
   const withUpo = new Set<string>();
@@ -200,11 +209,14 @@ async function readInvoicesWithUpo(
   for (let i = 0; i < invoiceIds.length; i += UPO_CHUNK) {
     const { data, error } = await supabase
       .from('upo_receipts')
-      .select('invoice_id')
+      .select('invoice_id, status')
+      .eq('tenant_id', tenantId)
       .in('invoice_id', invoiceIds.slice(i, i + UPO_CHUNK));
 
     if (error) throw new Error(`poświadczenia UPO: ${error.message}`);
-    for (const row of data) withUpo.add(row.invoice_id);
+    for (const row of data) {
+      if (UPO_PRESENT.has(row.status)) withUpo.add(row.invoice_id);
+    }
   }
 
   return withUpo;
