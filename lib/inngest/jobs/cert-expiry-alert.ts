@@ -8,7 +8,12 @@ import {
 } from '@/lib/supabase/admin-queries';
 import { sendCertExpiryAlert } from '@/lib/email/send';
 import { createProposal } from '@/lib/flo/proposals';
-import { buildCertProposal, evaluateCert } from '@/lib/flo/functions/ksef-cert';
+import {
+  buildCertProposal,
+  certExpiryWindow,
+  evaluateCert,
+  WARN_THRESHOLDS,
+} from '@/lib/flo/functions/ksef-cert';
 import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/server';
 
@@ -25,6 +30,10 @@ import { createAdminClient } from '@/lib/supabase/server';
  * Każdy próg filtruje tylko okno 1-dniowe [days-1, days], żeby jeden tenant
  * nie dostawał 3 emaili jednego dnia (dostanie 3 emaile przez tydzień).
  *
+ * Progi i okno pochodzą z `ksef-cert.ts` — tego samego miejsca, z którego
+ * korzysta karta agenta. Do 25.09.2026 zadanie miało własną listę i własne
+ * okno, a karta X-03 przez to nie powstała ani razu.
+ *
  * Pętla `for (days of thresholds)` iteruje sekwencyjnie - każdy próg jako
  * osobny step.run (audit trail w Inngest UI + memoizacja przy retry).
  */
@@ -34,7 +43,7 @@ import { createAdminClient } from '@/lib/supabase/server';
  */
 export async function runCertExpiryAlert({ step, logger }: JobContext) {
     const now = new Date();
-    const thresholds = [30, 14, 7] as const;
+    const thresholds = WARN_THRESHOLDS;
     let totalAlerts = 0;
 
     for (const days of thresholds) {
@@ -44,12 +53,7 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
         // Okno 1-dniowe: [now + (days-1)d, now + days d].
         // Dzięki temu dokładnie jeden dzień tygodnia wpada w każdy próg,
         // więc dokładnie jeden email per próg per tenant.
-        const lowerBound = new Date(
-          now.getTime() + (days - 1) * 24 * 60 * 60 * 1000,
-        );
-        const upperBound = new Date(
-          now.getTime() + days * 24 * 60 * 60 * 1000,
-        );
+        const { from: lowerBound, to: upperBound } = certExpiryWindow(days, now);
 
         const { data, error } = await supabase
           .from('tenants')
@@ -94,7 +98,14 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
             now,
           );
 
-          const proposal = buildCertProposal({ tenantId: tenant.id, verdict, now });
+          // Próg przekazany wprost: w tym oknie `verdict.daysLeft` wynosi
+          // `days - 1`, więc bez niego karta nie powstałaby nigdy.
+          const proposal = buildCertProposal({
+            tenantId: tenant.id,
+            verdict,
+            now,
+            threshold: days,
+          });
           if (proposal) await createProposal(proposal);
         });
 
