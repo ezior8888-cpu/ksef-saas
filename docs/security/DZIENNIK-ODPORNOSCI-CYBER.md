@@ -575,6 +575,18 @@ Na prośbę Igora wznowiono i dokończono lokalne naprawy na bazie f3ca0d4 (PR #
 
 **Aktualizacja po publikacji:** commity b09739ca338568d23aa598bafd4f0817b963c656 i 334c2f7d02816690fc6972efc5eaf752f52f95ad opublikowano jako roboczy PR #43 (codex/security-stripe-external-events względem dokładnego HEAD PR #42). Dla opublikowanego kodu 7/7 kontroli GitHuba PASS: pełny CI z audytem produkcyjnych zależności, secret scan, CodeQL JS/TS i actions, dependency-review oraz offline inventory. PR jest otwarty i nie został scalony. Publikacja nie oznacza wykonania 00080, konfiguracji Stripe ani wdrożenia na Coolify.
 
+## 2026-09-25 — trwałość reguł bezpieczeństwa pnpm (CYB-F03-31)
+
+**Dyspozycja i stan:** Po publikacji PR #43 Igor polecił kontynuować. Codex przygotował osobną gałąź codex/security-pnpm-override-enforcement od caa2382377ff6b438ad6d2c185bafec78815f48a, bez dotykania głównego checkoutu. Lokalny commit 29b7ab17406670d821ee5e8e8ede79b7bb49e94e zawiera wyłącznie zmianę konfiguracji; nie jest opublikowany ani wdrożony.
+
+**Ustalenie i dowód:** GitHub pokazuje na default main 51 otwartych alertów Dependabot (27 high, 20 medium, 4 low). Nie ma bezpośredniego podatnego pakietu produkcyjnego: 47 alertów jest oznaczonych runtime i wszystkie są pośrednie; jedno bezpośrednie ostrzeżenie dotyczy deweloperskiego Vitest. Main ma m.in. stare fast-uri 4.1.0, ip-address 10.2.0, js-yaml 3.15.0/4.3.0 i postcss 8.5.16. Lockfile stosu PR #43 zawiera już odpowiednio 4.1.4, 10.7.0, 3.15.2/4.3.2 i 8.5.23/8.5.28, więc ich ponowne podnoszenie byłoby zbędne. Oznaczenie runtime nie dowodzi osiągalności podatnego kodu ani stanu obrazu na Coolify.
+
+**Luka:** Wersja pnpm 10.33.0 używana w CI ostrzegała, że pomija blok pnpm w package.json. Odczyt konfiguracji pokazał overrides=undefined i peerDependencyRules=undefined, mimo 40 zapisanych reguł; przyszła regeneracja lockfile mogła więc przywrócić podatne wersje. Efektywna allowlista skryptów instalacyjnych zawierała tylko msw z pnpm-workspace.yaml. [Dokumentacja pnpm 10.x](https://pnpm.io/10.x/settings#overrides) wskazuje pnpm-workspace.yaml jako miejsce tych ustawień.
+
+**Zmiana i weryfikacja:** Przeniesiono 1:1 40 reguł overrides oraz regułę peer do pnpm-workspace.yaml i usunięto nieczytany blok z package.json. Zachowano efektywną allowlistę msw; wpis inngest-cli z ignorowanego bloku nie został aktywowany bez przeglądu jego skryptu instalacyjnego. Pnpm config get zwraca teraz dokładnie 40/40 wcześniejszych reguł, właściwą regułę peer i tę samą allowlistę msw. Offline frozen lockfile-only install z wyłączonymi skryptami PASS; hash pnpm-lock.yaml pozostał identyczny. Diff check PASS. Nie instalowano pakietów, nie zmieniono kodu aplikacji ani SQL.
+
+**Stan i następny odbiór:** Pakiet jest lokalny. Do publikacji jako osobny roboczy PR potrzebna jest zgoda na nową publiczną gałąź; po publikacji trzeba sprawdzić pełne CI na pnpm 10.33. Alerty GitHuba na main pozostaną, dopóki bezpieczny lockfile nie znajdzie się na gałęzi domyślnej i GitHub nie przeliczy wyników. Bartek musi potwierdzić dokładny SHA użyty na Coolify; samo zielone CI ani alerty main nie dowodzą stanu wdrożenia. Osobno ocenić, czy Inngest CLI rzeczywiście potrzebuje zaufanego install script i czy warto migrować deprecated onlyBuiltDependencies do allowBuilds.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:
