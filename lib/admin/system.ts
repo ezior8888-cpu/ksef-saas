@@ -6,9 +6,12 @@
  * - DB stats — `pg_total_relation_size` przez SECURITY DEFINER RPC
  */
 
-import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { KsefEnvironment } from '@/types/ksef';
+
+// Osobno, pod importami typów: wydanie 25.09 dokłada 'server-only' i
+// requireAdmin tuż nad klientem — rozdzielenie oszczędza konfliktu.
+import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
 
 // ─── 1. KSeF health 24h ────────────────────────────────────────────────
 
