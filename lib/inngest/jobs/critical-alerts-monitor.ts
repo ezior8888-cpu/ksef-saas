@@ -240,6 +240,51 @@ export async function checkStaleRefundOperations(): Promise<AlertCheckResult> {
   return { type: 'stale_refund_operations', fired: true };
 }
 
+/** Review cases are independent of webhook receipts; processed means durably recorded. */
+export async function checkOpenStripeFinancialCases(): Promise<AlertCheckResult> {
+  const supabase = createAdminClient();
+  const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const countCases = () => supabase
+    .from('stripe_financial_cases')
+    .select('stripe_object_id', { count: 'exact', head: true });
+  const [quarantined, open, awaitingAdmin] = await Promise.all([
+    countCases().eq('case_state', 'quarantined'),
+    countCases().eq('case_state', 'open'),
+    countCases().eq('case_state', 'awaiting_admin').lt('first_seen_at', cutoffIso),
+  ]);
+
+  if (quarantined.error || open.error || awaitingAdmin.error ||
+      quarantined.count === null || open.count === null ||
+      awaitingAdmin.count === null) {
+    throw quarantined.error ?? open.error ?? awaitingAdmin.error ??
+      new Error('Stripe financial case counts unavailable');
+  }
+  if (quarantined.count + open.count + awaitingAdmin.count === 0) {
+    return { type: 'open_stripe_financial_cases', fired: false };
+  }
+
+  const claimed = await tryClaimAlert('open_stripe_financial_cases');
+  if (!claimed) {
+    return { type: 'open_stripe_financial_cases', fired: false, reason: 'dedup' };
+  }
+
+  await alertCritical(
+    'Zwroty lub spory Stripe wymagają uzgodnienia',
+    'Przejrzyj sprawy finansowe po pełnym ID w Stripe i bazie. Kwarantanna oznacza brak pewnego powiązania; nie zgaduj firmy, nie ponawiaj zwrotu i nie usuwaj blokady bez udokumentowanej decyzji.',
+    {
+      fields: [
+        { label: 'Bez powiązania', value: String(quarantined.count) },
+        { label: 'Powiązane, otwarte', value: String(open.count) },
+        { label: 'Admin > 15 min', value: String(awaitingAdmin.count) },
+      ],
+      link: {
+        label: 'Otwórz panel administratora',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/support',
+      },
+    },
+  );
+  return { type: 'open_stripe_financial_cases', fired: true };
+}
 /** A stopped webhook may already have emitted jobs. Never reset it automatically. */
 export async function checkStaleStripeWebhookEvents(): Promise<AlertCheckResult> {
   const supabase = createAdminClient();
@@ -400,6 +445,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-stale-webhooks', () =>
         checkStaleStripeWebhookEvents().catch(captureAndReturn('stale_stripe_webhooks')),
+      ),
+      step.run('check-financial-cases', () =>
+        checkOpenStripeFinancialCases().catch(captureAndReturn('open_stripe_financial_cases')),
       ),
       step.run('check-stale-dunning-notifications', () =>
         checkStaleDunningNotifications().catch(captureAndReturn('stale_dunning_notifications')),

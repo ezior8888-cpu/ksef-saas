@@ -152,11 +152,91 @@ describe('Stripe invoice subscription ordering', () => {
   });
 
   it.each([
+    [
+      'an expanded PaymentIntent',
+      { payment_intent: { object: 'payment_intent', id: 'pi_ValidReference123' } },
+      { stripe_payment_intent_id: 'pi_ValidReference123', stripe_charge_id: null },
+    ],
+    [
+      'an expanded Charge',
+      {
+        payment_intent: null,
+        charge: { object: 'charge', id: 'ch_ValidReference123' },
+      },
+      { stripe_payment_intent_id: null, stripe_charge_id: 'ch_ValidReference123' },
+    ],
+    [
+      'matching expanded PaymentIntent and Charge',
+      {
+        payment_intent: {
+          object: 'payment_intent',
+          id: 'pi_ValidReference123',
+          latest_charge: { object: 'charge', id: 'ch_ValidReference123' },
+        },
+        charge: {
+          object: 'charge',
+          id: 'ch_ValidReference123',
+          payment_intent: { object: 'payment_intent', id: 'pi_ValidReference123' },
+        },
+      },
+      {
+        stripe_payment_intent_id: 'pi_ValidReference123',
+        stripe_charge_id: 'ch_ValidReference123',
+      },
+    ],
+  ])('maps %s from an Acacia invoice', async (_label, refs, expected) => {
+    mocks.subscriptionRead.mockResolvedValue({
+      data: { id: 'local-subscription', tenant_id: 'tenant-a' },
+      error: null,
+    });
+    const expanded = { ...invoice('sub_ready'), ...refs } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(expanded, 'succeeded'))
+      .resolves.toMatchObject({ row: expected });
+  });
+
+  it.each([
+    [
+      'PaymentIntent latest_charge',
+      {
+        payment_intent: {
+          object: 'payment_intent',
+          id: 'pi_ValidReference123',
+          latest_charge: 'ch_DifferentCharge123',
+        },
+        charge: 'ch_ValidReference123',
+      },
+    ],
+    [
+      'Charge payment_intent',
+      {
+        payment_intent: 'pi_ValidReference123',
+        charge: {
+          object: 'charge',
+          id: 'ch_ValidReference123',
+          payment_intent: 'pi_DifferentIntent123',
+        },
+      },
+    ],
+  ])('rejects conflicting %s before DB access', async (_label, refs) => {
+    const invalid = { ...invoice('sub_ready'), ...refs } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(invalid, 'succeeded'))
+      .rejects.toMatchObject({
+        name: 'ReconciliationRequiredWebhookError',
+        code: 'payment_reference_missing_or_invalid',
+      } satisfies Partial<ReconciliationRequiredWebhookError>);
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+  it.each([
     ['missing both', { payment_intent: null, charge: null }],
     ['empty PI', { payment_intent: '' }],
     ['wrong PI prefix', { payment_intent: 'ch_WrongReference123' }],
     ['short PI', { payment_intent: 'pi_x' }],
-    ['expanded PI object', { payment_intent: { id: 'pi_ValidReference123' } }],
+    ['expanded PI without type', { payment_intent: { id: 'pi_ValidReference123' } }],
+    ['expanded PI with wrong type', { payment_intent: { object: 'charge', id: 'pi_ValidReference123' } }],
+    ['expanded PI without ID', { payment_intent: { object: 'payment_intent' } }],
+    ['expanded charge with wrong type', { payment_intent: null, charge: { object: 'payment_intent', id: 'ch_ValidReference123' } }],
     ['empty charge', { payment_intent: null, charge: '' }],
     ['wrong charge prefix', { payment_intent: null, charge: 'pi_WrongReference123' }],
     ['short charge', { payment_intent: null, charge: 'ch_x' }],

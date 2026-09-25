@@ -1,6 +1,6 @@
 # Stripe: zewnętrzne zwroty i spory — plan domknięcia granicy (2026-09-25)
 
-**Status:** projekt wdrożenia, nie opis działającej ochrony. Nie uruchomiono SQL ani nie sprawdzono konfiguracji Stripe/Coolify/db-1. Dopóki Bartek nie potwierdzi 00078, traktujemy ją i zależne 00079 jako niewdrożone.
+**Status:** historyczny plan sporządzony przed lokalnym pakietem 00080; opis endpointu i zakresu bieżącego pakietu poniżej dotyczą stanu PR #42. Implementację i warunki odbioru opisuje [runbook 00080](STRIPE-SPRAWY-FINANSOWE-ODBIOR-2026-09-25.md). Nie uruchomiono SQL ani nie sprawdzono konfiguracji Stripe/Coolify/db-1. Dopóki Bartek nie potwierdzi 00078, traktujemy ją i zależne 00079 jako niewdrożone.
 
 ## Ustalenie z kodu
 
@@ -8,7 +8,7 @@ Endpoint /api/stripe/webhook obsługuje sześć zdarzeń subskrypcji i faktur. P
 
 W mapowaniu invoice.payment_succeeded referencje PI/charge pochodzą tylko ze starszych pól faktury. Gdy podpisany payload ich nie zawiera, wiersz płatności może nie mieć klucza potrzebnego do jednoznacznego połączenia zewnętrznego zwrotu z tenantem. Wersja API klienta ustawiona w aplikacji nie dowodzi wersji snapshotu konkretnego webhooka. Trzeba sprawdzić event.api_version i prawdziwe payloady endpointu.
 
-## Zakres bieżącego pakietu
+## Zakres wcześniejszego pakietu PR #42
 
 Kod lokalny liczy w monitorze zarówno processing starsze niż 15 minut, jak
 i każde reconciliation_required. Opłacony invoice subskrypcji bez poprawnego
@@ -44,7 +44,7 @@ failed, a monitor liczy te wpisy stale. Każdy zwrot — także wykonany prawid�
 przez aplikację — tworzyłby trwały błąd i powtarzany alarm. Pełne wdrożenie
 wymaga oddzielnego stanu sprawy, idempotentnego powiązania ze zwrotem admina,
 kontrolowanego zamknięcia po dowodach oraz sprawdzonego dostarczenia alarmu.
-Z tego powodu ten pakiet nie subskrybuje nowych typów i nie udaje, że je
+Z tego powodu wcześniejszy pakiet PR #42 nie subskrybował nowych typów i nie udawał, że je
 obsługuje.
 ## Granice gwarancji
 

@@ -33,6 +33,14 @@ type State = {
   nullPriorRefundRead: boolean;
   invoiceAppearsBeforeClaim: boolean;
   claimError: boolean;
+  financialCase: Row | null;
+  settlementError: boolean;
+  settlementThrows: boolean;
+  settlementResult: string | null;
+  preflightResult: string;
+  preflightError: boolean;
+  preflightThrows: boolean;
+  caseBeforePreflight: boolean;
 };
 
 let state: State;
@@ -157,10 +165,56 @@ beforeEach(() => {
     nullPriorRefundRead: false,
     invoiceAppearsBeforeClaim: false,
     claimError: false,
+    financialCase: null,
+    settlementError: false,
+    settlementThrows: false,
+    settlementResult: null,
+    preflightResult: 'clear',
+    preflightError: false,
+    preflightThrows: false,
+    caseBeforePreflight: false,
   };
   mocks.adminClient.mockImplementation(() => ({
     from: (table: string) => new FakeQuery(table),
     rpc: async (name: string, args: Row): Promise<Result> => {
+      if (name === 'admin_refund_financial_preflight') {
+        state.calls.push('financial-preflight-rpc');
+        expect(args).toEqual({ p_payment_id: input.paymentId });
+        expect(state.operation?.status).toBe('processing');
+        if (state.caseBeforePreflight) {
+          state.financialCase = {
+            stripe_refund_id: 're_external',
+            case_state: 'open',
+            hold_active: true,
+          };
+        }
+        if (state.preflightThrows) throw new Error('preflight response lost');
+        if (state.preflightError) return failure('preflight database error');
+        if (state.financialCase?.hold_active) return ok('held');
+        return ok(state.preflightResult);
+      }
+      if (name === 'settle_admin_refund_case') {
+        state.calls.push('case-settle-rpc');
+        expect(args).toEqual({
+          p_payment_id: input.paymentId,
+          p_stripe_refund_id: stripeResponse.id,
+        });
+        if (state.settlementThrows) throw new Error('settlement transport lost');
+        if (state.settlementError) return failure('settlement RPC failed');
+        if (state.settlementResult !== null) return ok(state.settlementResult);
+        if (!state.financialCase) return ok('missing_case');
+        if (state.financialCase.stripe_refund_id !== stripeResponse.id ||
+            state.operation?.status !== 'completed' ||
+            state.payment.status !== 'refunded' ||
+            !state.refunds.some((row) =>
+              row.stripe_refund_id === stripeResponse.id &&
+              row.payment_id === input.paymentId && row.status === 'succeeded')) {
+          return ok('needs_reconciliation');
+        }
+        state.financialCase.case_state = 'settled';
+        // The database hold is historical and remains active after alert closure.
+        return ok('settled');
+      }
       if (name !== 'claim_admin_refund_uninvoiced') {
         throw new Error('Unexpected RPC: ' + name);
       }
@@ -234,6 +288,123 @@ describe('admin full refund idempotency', () => {
     });
     expect(state.payment.status).toBe('refunded');
     expect(state.refunds).toHaveLength(1);
+  });
+
+  it('stops before Stripe when an external case lands after the admin claim', async () => {
+    state.caseBeforePreflight = true;
+
+    const result = await issueRefund(input);
+
+    expect(result).toMatchObject({ success: false, reconciliationRequired: true });
+    expect(state.calls.indexOf('operation-claim-rpc'))
+      .toBeLessThan(state.calls.indexOf('financial-preflight-rpc'));
+    expect(state.financialCase).toMatchObject({ case_state: 'open', hold_active: true });
+    expect(state.operation).toMatchObject({
+      status: 'reconciliation_required',
+      reconciliation_reason: 'financial_case_before_stripe',
+    });
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+    expect((await issueRefund(input)).success).toBe(false);
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+  });
+
+  it.each(['busy', 'missing_reference', 'missing_payment', 'unexpected'])(
+    'fails closed when financial preflight returns %s', async (status) => {
+      state.preflightResult = status;
+
+      const result = await issueRefund(input);
+
+      expect(result).toMatchObject({ success: false, reconciliationRequired: true });
+      expect(state.operation).toMatchObject({
+        status: 'reconciliation_required',
+        reconciliation_reason: 'financial_preflight_unconfirmed',
+      });
+      expect(mocks.createRefund).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['error', 'throws'] as const)(
+    'fails closed when financial preflight RPC has %s', async (failureMode) => {
+      state.preflightError = failureMode === 'error';
+      state.preflightThrows = failureMode === 'throws';
+
+      const result = await issueRefund(input);
+
+      expect(result).toMatchObject({ success: false, reconciliationRequired: true });
+      expect(state.operation).toMatchObject({
+        status: 'reconciliation_required',
+        reconciliation_reason: 'financial_preflight_unconfirmed',
+      });
+      expect(mocks.createRefund).not.toHaveBeenCalled();
+    },
+  );
+
+  it('settles a webhook case received before the admin Stripe response and keeps its hold', async () => {
+    mocks.createRefund.mockImplementation(async () => {
+      expect(state.operation?.status).toBe('processing');
+      state.financialCase = {
+        stripe_refund_id: stripeResponse.id,
+        case_state: 'awaiting_admin',
+        hold_active: true,
+      };
+      return { ...stripeResponse };
+    });
+
+    const result = await issueRefund(input);
+
+    expect(result.success).toBe(true);
+    expect(state.financialCase).toMatchObject({
+      case_state: 'settled', hold_active: true,
+    });
+    expect(state.calls.lastIndexOf('operation-update'))
+      .toBeLessThan(state.calls.indexOf('case-settle-rpc'));
+    expect(mocks.captureException).not.toHaveBeenCalled();
+  });
+
+  it.each(['error', 'throws', 'unexpected'] as const)(
+    'keeps a completed refund successful when settlement RPC returns %s',
+    async (failureMode) => {
+      mocks.createRefund.mockImplementation(async () => {
+        state.financialCase = {
+          stripe_refund_id: stripeResponse.id,
+          case_state: 'awaiting_admin',
+          hold_active: true,
+        };
+        return { ...stripeResponse };
+      });
+      state.settlementError = failureMode === 'error';
+      state.settlementThrows = failureMode === 'throws';
+      state.settlementResult = failureMode === 'unexpected'
+        ? 'needs_reconciliation' : null;
+
+      const result = await issueRefund(input);
+
+      expect(result).toMatchObject({ success: true, stripeRefundId: stripeResponse.id });
+      expect(state.payment.status).toBe('refunded');
+      expect(state.operation?.status).toBe('completed');
+      expect(state.financialCase).toMatchObject({
+        case_state: 'awaiting_admin', hold_active: true,
+      });
+      expect(mocks.captureException).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Financial case settlement was not confirmed' }),
+        expect.objectContaining({ tags: { area: 'billing.refund.case_settlement' } }),
+      );
+      expect((await issueRefund(input)).success).toBe(false);
+      expect(mocks.createRefund).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('does not reverse a completed refund if alert delivery itself fails', async () => {
+    state.settlementError = true;
+    mocks.captureException.mockImplementation(() => {
+      throw new Error('Sentry unavailable');
+    });
+
+    await expect(issueRefund(input)).resolves.toMatchObject({
+      success: true, stripeRefundId: stripeResponse.id,
+    });
+    expect(state.operation?.status).toBe('completed');
+    expect(mocks.createRefund).toHaveBeenCalledOnce();
   });
 
   it('blocks concurrent and later repeats without another Stripe request', async () => {

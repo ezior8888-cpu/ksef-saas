@@ -10,7 +10,8 @@ export type RetryablePreEffectWebhookCode =
   | 'subscription_sync_invalid'
   | 'subscription_sync_claim_failed'
   | 'subscription_sync_busy'
-  | 'subscription_sync_lookup_failed';
+  | 'subscription_sync_lookup_failed'
+  | 'financial_object_lookup_failed';
 
 export class RetryablePreEffectWebhookError extends Error {
   readonly code: RetryablePreEffectWebhookCode;

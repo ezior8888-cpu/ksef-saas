@@ -99,6 +99,39 @@ async function markForReconciliation(
   }
 }
 
+/** A webhook may record the same refund before the admin request completes. */
+async function settleFinancialCaseAfterRefund(
+  supabase: ReturnType<typeof createAdminClient>,
+  paymentId: string,
+  stripeRefundId: string,
+): Promise<void> {
+  try {
+    const { data, error } = await (supabase as unknown as {
+      rpc: (
+        name: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: string | null; error: { message: string } | null }>;
+    }).rpc('settle_admin_refund_case', {
+      p_payment_id: paymentId,
+      p_stripe_refund_id: stripeRefundId,
+    });
+    if (error || (data !== 'settled' && data !== 'missing_case')) {
+      throw new Error('Financial case settlement was not confirmed');
+    }
+  } catch {
+    // Stripe and all local refund writes already succeeded. A missed case
+    // settlement needs attention, but must not prompt a second refund call.
+    try {
+      Sentry.captureException(new Error('Financial case settlement was not confirmed'), {
+        tags: { area: 'billing.refund.case_settlement' },
+        extra: { paymentId, stripeRefundId },
+      });
+    } catch {
+      // Even failed alert delivery cannot reverse the completed refund.
+    }
+  }
+}
+
 export async function issueRefund(input: RefundPaymentInput): Promise<RefundResult> {
   const supabase = createAdminClient();
 
@@ -237,6 +270,33 @@ export async function issueRefund(input: RefundPaymentInput): Promise<RefundResu
     await markForReconciliation(supabase, payment.id, 'claimed_snapshot_mismatch');
     return needsReconciliation();
   }
+  // The signed webhook may have recorded an external refund or dispute after
+  // the admin claim was inserted. Recheck the durable financial hold directly
+  // before Stripe; only an exact clear response permits an outgoing refund.
+  let financialPreflight: string | null = null;
+  try {
+    const { data, error } = await (supabase as unknown as {
+      rpc: (
+        name: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: string | null; error: { message: string } | null }>;
+    }).rpc('admin_refund_financial_preflight', {
+      p_payment_id: payment.id,
+    });
+    if (!error) financialPreflight = data;
+  } catch {
+    // A lost response is not proof that the safety check passed.
+  }
+  if (financialPreflight !== 'clear') {
+    await markForReconciliation(
+      supabase,
+      payment.id,
+      financialPreflight === 'held'
+        ? 'financial_case_before_stripe'
+        : 'financial_preflight_unconfirmed',
+    );
+    return needsReconciliation();
+  }
   const idempotencyKey = operation.idempotency_key;
   // Explicit full amount: an external partial refund must not silently turn
   // this request into a refund of only the remaining balance.
@@ -344,6 +404,7 @@ export async function issueRefund(input: RefundPaymentInput): Promise<RefundResu
     await markForReconciliation(supabase, payment.id, 'post_stripe_storage_exception');
     return needsReconciliation();
   }
+  await settleFinancialCaseAfterRefund(supabase, payment.id, refund.id);
   await notifyCustomerOfRefund({
     tenantId: payment.tenant_id,
     amountCents: refund.amount,

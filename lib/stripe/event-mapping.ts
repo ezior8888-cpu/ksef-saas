@@ -207,8 +207,29 @@ function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
   return legacy;
 }
 
+/** Accept a typed Acacia reference or a validated Stripe expansion. */
+function acaciaInvoicePaymentReference(
+  value: unknown,
+  objectType: 'payment_intent' | 'charge',
+  idPattern: RegExp,
+): string | null {
+  if (value === null || value === undefined) return null;
+
+  let id: unknown = value;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const expanded = value as Record<string, unknown>;
+    id = expanded.object === objectType ? expanded.id : null;
+  }
+  if (typeof id !== 'string' || !idPattern.test(id)) {
+    throw new ReconciliationRequiredWebhookError(
+      'Stripe invoice ' + objectType + ' reference missing or invalid',
+    );
+  }
+  return id;
+}
+
 /**
- * Legacy invoice snapshots sometimes carry one direct payment reference.
+ * Acacia invoice snapshots sometimes carry one direct payment reference.
  * Basil+ exposes invoice payments in another shape; we do not infer that
  * structure here without a verified contract. If neither legacy field can
  * prove the payment identity, the signed event requires reconciliation before writes.
@@ -223,27 +244,50 @@ function legacyInvoicePaymentReferences(
     payment_intent?: unknown;
     charge?: unknown;
   };
-  const paymentIntent = refs.payment_intent;
-  const charge = refs.charge;
-  const hasPaymentIntent = paymentIntent !== null && paymentIntent !== undefined;
-  const hasCharge = charge !== null && charge !== undefined;
+  const paymentIntentId = acaciaInvoicePaymentReference(
+    refs.payment_intent, 'payment_intent', /^pi_[A-Za-z0-9]{8,}$/,
+  );
+  const chargeId = acaciaInvoicePaymentReference(
+    refs.charge, 'charge', /^ch_[A-Za-z0-9]{8,}$/,
+  );
 
-  if ((hasPaymentIntent &&
-       (typeof paymentIntent !== 'string' ||
-        !/^pi_[A-Za-z0-9]{8,}$/.test(paymentIntent))) ||
-      (hasCharge &&
-       (typeof charge !== 'string' ||
-        !/^ch_[A-Za-z0-9]{8,}$/.test(charge))) ||
-      (requireReference && !hasPaymentIntent && !hasCharge)) {
+  if (requireReference && !paymentIntentId && !chargeId) {
     throw new ReconciliationRequiredWebhookError(
       'Stripe invoice payment reference missing or invalid',
     );
   }
 
-  return {
-    paymentIntentId: hasPaymentIntent ? paymentIntent as string : null,
-    chargeId: hasCharge ? charge as string : null,
-  };
+  // Expanded references may expose their relationship. Reject contradictions
+  // instead of storing unrelated PaymentIntent and Charge IDs on one row.
+  if (paymentIntentId && chargeId) {
+    const expandedPi = refs.payment_intent;
+    if (expandedPi && typeof expandedPi === 'object' && !Array.isArray(expandedPi)) {
+      const latestCharge = (expandedPi as Record<string, unknown>).latest_charge;
+      if (latestCharge !== undefined && latestCharge !== null &&
+          acaciaInvoicePaymentReference(
+            latestCharge, 'charge', /^ch_[A-Za-z0-9]{8,}$/,
+          ) !== chargeId) {
+        throw new ReconciliationRequiredWebhookError(
+          'Stripe invoice payment references conflict',
+        );
+      }
+    }
+
+    const expandedCharge = refs.charge;
+    if (expandedCharge && typeof expandedCharge === 'object' && !Array.isArray(expandedCharge)) {
+      const chargePaymentIntent = (expandedCharge as Record<string, unknown>).payment_intent;
+      if (chargePaymentIntent !== undefined && chargePaymentIntent !== null &&
+          acaciaInvoicePaymentReference(
+            chargePaymentIntent, 'payment_intent', /^pi_[A-Za-z0-9]{8,}$/,
+          ) !== paymentIntentId) {
+        throw new ReconciliationRequiredWebhookError(
+          'Stripe invoice payment references conflict',
+        );
+      }
+    }
+  }
+
+  return { paymentIntentId, chargeId };
 }
 
 /**
