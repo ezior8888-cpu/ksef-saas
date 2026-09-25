@@ -18,6 +18,7 @@ import {
 } from '@/lib/supabase/admin-queries';
 import { createAdminClient } from '@/lib/supabase/server';
 import { KsefApiError } from '@/lib/ksef/client';
+import { KsefInvoiceRejectedError } from '@/lib/ksef/submit';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
@@ -486,6 +487,24 @@ export async function runSubmitInvoice(
             `KSeF odrzucił fakturę (HTTP ${error.status}): ${error.message}`,
             { cause: error },
           );
+        }
+        // Odrzucenie w STATUSIE faktury (HTTP 200, kod ≥ 400) — ta sama decyzja
+        // o treści co wyżej. Wcześniej leciało jako zwykły Error: 5 ponownych
+        // wysyłek, potem Offline24. Przy 440 (duplikat) faktura już JEST w KSeF.
+        if (error instanceof KsefInvoiceRejectedError) {
+          Sentry.captureException(error, {
+            tags: {
+              job: 'submit-invoice',
+              kind: error.isDuplicate ? 'ksef-duplicate' : 'ksef-rejection',
+            },
+            extra: {
+              tenantId,
+              invoiceId,
+              ksefStatusCode: error.code,
+              originalKsefNumber: error.originalKsefNumber,
+            },
+          });
+          throw new NonRetriableError(error.message, { cause: error });
         }
         // Retry-owalne — 5xx, 429, timeout, ECONNRESET. Zamiast pozwolić
         // Inngestowi użyć defaultowego exponential backoff (10s/30s/1m/5m/15m),
