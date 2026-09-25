@@ -10,6 +10,7 @@ import {
 } from '@/lib/auth/ksef-verification-guard';
 import { createClient } from '@/lib/supabase/server';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
+import { specialInvoiceResendMessage } from '@/lib/ksef/special-invoice-data';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
@@ -191,6 +192,16 @@ export async function resendInvoiceAction(
         success: false,
         error: 'Ponowną wysyłkę można uruchomić tylko dla odrzuconych/błędnych faktur.',
       };
+    }
+
+    // Korekta/zaliczka/rozliczenie potrzebują danych, których nie ma w bazie
+    // (patrz lib/ksef/special-invoice-data.ts). Mówimy od razu, zamiast
+    // przestawiać status na 'queued' dla joba, który i tak odmówi.
+    const specialMessage = specialInvoiceResendMessage(
+      (inv.invoice_type as string | null) ?? (inv.fa3_data as Invoice | null)?.type,
+    );
+    if (specialMessage) {
+      return { success: false, error: specialMessage };
     }
 
     const tenantRow = Array.isArray(inv.tenants) ? inv.tenants[0] : inv.tenants;

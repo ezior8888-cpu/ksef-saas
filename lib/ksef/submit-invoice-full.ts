@@ -7,6 +7,7 @@ import {
   generateFinalInvoiceXml,
 } from '@/lib/ksef/fa3-advance-generator';
 import { generateFA3Xml } from '@/lib/xml/fa3-generator';
+import { assertSpecialInvoiceData } from '@/lib/ksef/special-invoice-data';
 import { validateInvoiceXml } from '@/lib/xml/validator';
 import { invoiceXmlExistsForId, uploadInvoiceXml } from '@/lib/storage/r2';
 
@@ -53,6 +54,10 @@ export async function submitInvoiceFullFlow(
     | null,
 ): Promise<FullSubmitResult> {
   await requireKsefVerificationForBackgroundJob(tenantId);
+
+  // 0. Korekta/zaliczka/rozliczenie bez swoich danych zbudowałyby się jako
+  //    zwykła faktura z RodzajFaktury=KOR/ZAL/ROZ — XSD to przepuszcza.
+  assertSpecialInvoiceData(invoice.type, { correctionData, advanceData, finalPayload });
 
   // 1. Generuj XML (faktura VAT albo faktura korygująca FA(3)).
   const xml =
