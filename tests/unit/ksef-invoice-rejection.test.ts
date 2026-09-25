@@ -126,6 +126,22 @@ describe('submitInvoice: odrzucenie w statusie faktury', () => {
   });
 });
 
+describe('submitInvoice: błąd systemu KSeF (5xx w statusie) to nie odrzucenie', () => {
+  // 550: „Przetwarzanie zostało przerwane z przyczyn wewnętrznych systemu.
+  // Spróbuj ponownie.” (CIRFMF/ksef-docs, RC5.7). Uwaga recenzji nr 4.
+  it.each([
+    [550, 'Operacja została anulowana przez system'],
+    [500, 'Nieznany błąd'],
+  ])('%i → zwykły Error (ponowienie), nie KsefInvoiceRejectedError', async (code, description) => {
+    ksefZwraca({ code, description });
+    const blad = await submitInvoice('<xml/>', {} as KsefAuth, 'test').catch((e: unknown) => e);
+
+    expect(blad).toBeInstanceOf(Error);
+    expect(blad).not.toBeInstanceOf(KsefInvoiceRejectedError);
+    expect((blad as Error).message).toContain(`status ${code}`);
+  });
+});
+
 describe('job wysyłki: odrzucenie w statusie kończy się bez ponowień', () => {
   const ctx: JobContext = {
     attempt: 0,

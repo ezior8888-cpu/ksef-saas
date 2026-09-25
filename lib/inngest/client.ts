@@ -87,6 +87,12 @@ export const invoiceSubmitFailed = eventType('invoice/submit.failed', {
     invoiceId: string;
     error: string;
     fromOfflineQueue?: boolean;
+    /**
+     * Błąd kończący (odrzucenie treści, brak danych dokumentu) — kolejka
+     * Offline24 NIE może takiej faktury ponawiać. Brak pola = jak dotąd
+     * (ponowienie), żeby zdarzenia sprzed zmiany działały bez zmian.
+     */
+    terminal?: boolean;
   }>(),
 });
 

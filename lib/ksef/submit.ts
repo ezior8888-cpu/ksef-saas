@@ -167,8 +167,11 @@ export async function submitInvoice(
 /** Kod statusu faktury „Duplikat faktury” (seller NIP + RodzajFaktury + P_2). */
 export const KSEF_DUPLICATE_INVOICE = 440;
 
+/** Od 500 w górę status faktury to błąd systemu KSeF (np. 550), nie odrzucenie. */
+export const KSEF_SYSTEM_STATUS_MIN = 500;
+
 /**
- * KSeF przyjął plik, ale odrzucił fakturę w statusie (kod ≥ 400).
+ * KSeF przyjął plik, ale odrzucił fakturę w statusie (kod 400–499).
  *
  * To decyzja o TREŚCI, nie awaria łącza — ponowienie wysłałoby tę samą
  * fakturę jeszcze raz, a po wyczerpaniu prób job zaparkowałby ją w Offline24
@@ -239,6 +242,15 @@ async function pollInvoiceStatus(
     const code = ksefNumericStatusCode(status.status?.code);
     if (code === INVOICE_STATUS.ACCEPTED) {
       return status;
+    }
+    if (Number.isFinite(code) && code >= KSEF_SYSTEM_STATUS_MIN) {
+      // 5xx w statusie to przerwanie po stronie KSeF, nie ocena treści. 550:
+      // „Przetwarzanie zostało przerwane z przyczyn wewnętrznych systemu.
+      // Spróbuj ponownie.” (CIRFMF/ksef-docs, RC5.7). Zwykły Error = ponowienie;
+      // jeśli faktura jednak weszła, następna wysyłka dostanie 440 z jej numerem.
+      throw new Error(
+        `KSeF przerwał przetwarzanie faktury (status ${code}): ${status.status.description}`,
+      );
     }
     if (Number.isFinite(code) && code >= INVOICE_STATUS.REJECTED) {
       throw new KsefInvoiceRejectedError(code, status.status);

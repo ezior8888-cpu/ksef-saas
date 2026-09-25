@@ -204,6 +204,9 @@ export async function onSubmitInvoiceExhausted(
           tenantId,
           error: `${error.name}: ${error.message}`,
           fromOfflineQueue: data.fromOfflineQueue,
+          // Bez tego kolejka Offline24 przywracała odrzuconą fakturę do
+          // 'queued' i ponawiała ją do upływu terminu.
+          terminal: isBusinessRejection,
         },
       });
 
