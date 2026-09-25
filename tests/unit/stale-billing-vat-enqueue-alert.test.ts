@@ -133,6 +133,7 @@ describe('stale billing VAT enqueue alert', () => {
     const result = await runCriticalAlertsMonitor({ step } as JobContext);
 
     expect(step.run).toHaveBeenCalledWith('check-stale-billing-vat-enqueues', expect.any(Function));
-    expect(result).toMatchObject({ checked: 9, fired: 0 });
+    expect(step.run).toHaveBeenCalledWith('check-checkout-attempts', expect.any(Function));
+    expect(result).toMatchObject({ checked: 10, fired: 0 });
   });
 });

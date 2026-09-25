@@ -13,7 +13,8 @@
  *   5. **Refund reconciliation** — processing > 15 min lub reconciliation_required
  *   6. **Stale Stripe webhooks** — processing > 15 min lub failed
  *   7. **Stale dunning notifications** — sending starsze niż 15 min
- *   8. **Stale VAT enqueue** — faktura powiązana, ale brak potwierdzenia emisji > 15 min
+ *   8. **Checkout claims** — creating > 15 min albo uncertain/held
+ *   9. **Stale VAT enqueue** — faktura powiązana, ale brak potwierdzenia emisji > 15 min
  *
  * Wszystkie progi konserwatywne — wolimy false-positive niż przegapić
  * critical incident. Operator może zignorować, ale nie chcemy gubić alertów.
@@ -36,16 +37,21 @@ const ALERT_DEDUP_KEY_PREFIX = 'alerts:critical:lastsent';
 
 /**
  * Sprawdza czy ten typ alertu wysyłaliśmy w ciągu ostatnich 30 min.
- * Jeśli tak — skip (deduplication). Inaczej claimuje i zwraca true.
+ * Jeśli tak — pomiń. Nowy znacznik zapisujemy dopiero po potwierdzonym 2xx.
  */
-async function tryClaimAlert(alertKey: string): Promise<boolean> {
+async function shouldSendAlert(alertKey: string): Promise<boolean> {
   const cacheKey = `${ALERT_DEDUP_KEY_PREFIX}:${alertKey}`;
   const existing = await cacheGet<string>(cacheKey);
-  if (existing) return false;
-  await cacheSet(cacheKey, new Date().toISOString(), ALERT_DEDUP_TTL_SECONDS);
-  return true;
+  return !existing;
 }
 
+/** Cache dedup only after the critical transport confirms a 2xx response. */
+async function markAlertDelivered(alertKey: string): Promise<void> {
+  const cacheKey = ALERT_DEDUP_KEY_PREFIX + ':' + alertKey;
+  // Cache is fail-soft: a failed write can duplicate a later alert, but never
+  // suppress a retry of an undelivered one.
+  await cacheSet(cacheKey, new Date().toISOString(), ALERT_DEDUP_TTL_SECONDS);
+}
 interface AlertCheckResult {
   type: string;
   fired: boolean;
@@ -77,8 +83,8 @@ async function checkKsefDowntime(): Promise<AlertCheckResult> {
 
   if (downtimeMin < 5) return { type: 'ksef_down', fired: false };
 
-  const claimed = await tryClaimAlert('ksef_down');
-  if (!claimed) return { type: 'ksef_down', fired: false, reason: 'dedup' };
+  const shouldSend = await shouldSendAlert('ksef_down');
+  if (!shouldSend) return { type: 'ksef_down', fired: false, reason: 'dedup' };
 
   await alertCritical(
     `KSeF API niedostępny: ${downtimeMin} min w ostatnich 10 minutach`,
@@ -95,6 +101,7 @@ async function checkKsefDowntime(): Promise<AlertCheckResult> {
     },
   );
 
+  await markAlertDelivered('ksef_down');
   return { type: 'ksef_down', fired: true };
 }
 
@@ -108,8 +115,8 @@ async function checkOfflineQueueBacklog(): Promise<AlertCheckResult> {
   const pending = count ?? 0;
   if (pending < 50) return { type: 'offline_backlog', fired: false };
 
-  const claimed = await tryClaimAlert('offline_backlog');
-  if (!claimed) return { type: 'offline_backlog', fired: false, reason: 'dedup' };
+  const shouldSend = await shouldSendAlert('offline_backlog');
+  if (!shouldSend) return { type: 'offline_backlog', fired: false, reason: 'dedup' };
 
   await alertCritical(
     `Offline24 queue rośnie: ${pending} pending invoices`,
@@ -123,6 +130,7 @@ async function checkOfflineQueueBacklog(): Promise<AlertCheckResult> {
     },
   );
 
+  await markAlertDelivered('offline_backlog');
   return { type: 'offline_backlog', fired: true };
 }
 
@@ -138,8 +146,8 @@ async function checkInngestFailures(): Promise<AlertCheckResult> {
   const failures = count ?? 0;
   if (failures < 10) return { type: 'inngest_failures', fired: false };
 
-  const claimed = await tryClaimAlert('inngest_failures');
-  if (!claimed) return { type: 'inngest_failures', fired: false, reason: 'dedup' };
+  const shouldSend = await shouldSendAlert('inngest_failures');
+  if (!shouldSend) return { type: 'inngest_failures', fired: false, reason: 'dedup' };
 
   await alertCritical(
     `${failures} Inngest job failures w ostatnich 5 min`,
@@ -156,6 +164,7 @@ async function checkInngestFailures(): Promise<AlertCheckResult> {
     },
   );
 
+  await markAlertDelivered('inngest_failures');
   return { type: 'inngest_failures', fired: true };
 }
 
@@ -171,8 +180,8 @@ async function checkPaymentFailures(): Promise<AlertCheckResult> {
   const failures = count ?? 0;
   if (failures < 5) return { type: 'payment_failures', fired: false };
 
-  const claimed = await tryClaimAlert('payment_failures');
-  if (!claimed) return { type: 'payment_failures', fired: false, reason: 'dedup' };
+  const shouldSend = await shouldSendAlert('payment_failures');
+  if (!shouldSend) return { type: 'payment_failures', fired: false, reason: 'dedup' };
 
   await alertCritical(
     `${failures} Stripe payment failures w ostatniej godzinie`,
@@ -189,6 +198,7 @@ async function checkPaymentFailures(): Promise<AlertCheckResult> {
     },
   );
 
+  await markAlertDelivered('payment_failures');
   return { type: 'payment_failures', fired: true };
 }
 
@@ -219,8 +229,8 @@ export async function checkStaleRefundOperations(): Promise<AlertCheckResult> {
     return { type: 'stale_refund_operations', fired: false };
   }
 
-  const claimed = await tryClaimAlert('stale_refund_operations');
-  if (!claimed) return { type: 'stale_refund_operations', fired: false, reason: 'dedup' };
+  const shouldSend = await shouldSendAlert('stale_refund_operations');
+  if (!shouldSend) return { type: 'stale_refund_operations', fired: false, reason: 'dedup' };
 
   await alertCritical(
     'Zwroty Stripe wymagają uzgodnienia',
@@ -237,6 +247,7 @@ export async function checkStaleRefundOperations(): Promise<AlertCheckResult> {
     },
   );
 
+  await markAlertDelivered('stale_refund_operations');
   return { type: 'stale_refund_operations', fired: true };
 }
 
@@ -263,8 +274,8 @@ export async function checkOpenStripeFinancialCases(): Promise<AlertCheckResult>
     return { type: 'open_stripe_financial_cases', fired: false };
   }
 
-  const claimed = await tryClaimAlert('open_stripe_financial_cases');
-  if (!claimed) {
+  const shouldSend = await shouldSendAlert('open_stripe_financial_cases');
+  if (!shouldSend) {
     return { type: 'open_stripe_financial_cases', fired: false, reason: 'dedup' };
   }
 
@@ -283,7 +294,55 @@ export async function checkOpenStripeFinancialCases(): Promise<AlertCheckResult>
       },
     },
   );
+  await markAlertDelivered('open_stripe_financial_cases');
   return { type: 'open_stripe_financial_cases', fired: true };
+}
+/** A Checkout create can succeed at Stripe even when its response is lost. */
+export async function checkStaleStripeCheckoutAttempts(): Promise<AlertCheckResult> {
+  const supabase = createAdminClient();
+  const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const countAttempts = () => supabase
+    .from('stripe_checkout_attempts')
+    .select('id', { count: 'exact', head: true });
+  const [creating, uncertain, held, expiredOpen] = await Promise.all([
+    countAttempts().eq('status', 'creating').lt('created_at', cutoffIso),
+    countAttempts().eq('status', 'uncertain'),
+    countAttempts().eq('status', 'held'),
+    countAttempts().eq('status', 'open').lt('session_expires_at', cutoffIso),
+  ]);
+
+  if (creating.error || uncertain.error || held.error || expiredOpen.error ||
+      creating.count === null || uncertain.count === null ||
+      held.count === null || expiredOpen.count === null) {
+    throw creating.error ?? uncertain.error ?? held.error ?? expiredOpen.error ??
+      new Error('Stripe Checkout attempt counts unavailable');
+  }
+  if (creating.count + uncertain.count + held.count + expiredOpen.count === 0) {
+    return { type: 'stale_stripe_checkout_attempts', fired: false };
+  }
+
+  const shouldSend = await shouldSendAlert('stale_stripe_checkout_attempts');
+  if (!shouldSend) {
+    return { type: 'stale_stripe_checkout_attempts', fired: false, reason: 'dedup' };
+  }
+  await alertCritical(
+    'Checkout Stripe wymaga uzgodnienia',
+    'Trwała próba Checkout utknęła, ma niepewny wynik lub minęła zapisana data wygaśnięcia. Świeży stan sesji potwierdź w Stripe. Nie usuwaj claimu ani nie ponawiaj utworzenia sesji bez dowodu.',
+    {
+      fields: [
+        { label: 'Creating > 15 min', value: String(creating.count) },
+        { label: 'Niepewne', value: String(uncertain.count) },
+        { label: 'Wstrzymane', value: String(held.count) },
+        { label: 'Open po terminie > 15 min', value: String(expiredOpen.count) },
+      ],
+      link: {
+        label: 'Otwórz panel administratora',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/support',
+      },
+    },
+  );
+  await markAlertDelivered('stale_stripe_checkout_attempts');
+  return { type: 'stale_stripe_checkout_attempts', fired: true };
 }
 /** A stopped webhook may already have emitted jobs. Never reset it automatically. */
 export async function checkStaleStripeWebhookEvents(): Promise<AlertCheckResult> {
@@ -319,8 +378,8 @@ export async function checkStaleStripeWebhookEvents(): Promise<AlertCheckResult>
     return { type: 'stale_stripe_webhooks', fired: false };
   }
 
-  const claimed = await tryClaimAlert('stale_stripe_webhooks');
-  if (!claimed) {
+  const shouldSend = await shouldSendAlert('stale_stripe_webhooks');
+  if (!shouldSend) {
     return { type: 'stale_stripe_webhooks', fired: false, reason: 'dedup' };
   }
 
@@ -340,6 +399,7 @@ export async function checkStaleStripeWebhookEvents(): Promise<AlertCheckResult>
     },
   );
 
+  await markAlertDelivered('stale_stripe_webhooks');
   return { type: 'stale_stripe_webhooks', fired: true };
 }
 
@@ -363,8 +423,8 @@ export async function checkStaleBillingVatEnqueues(): Promise<AlertCheckResult> 
   }
   if (count === 0) return { type: 'stale_billing_vat_enqueues', fired: false };
 
-  const claimed = await tryClaimAlert('stale_billing_vat_enqueues');
-  if (!claimed) {
+  const shouldSend = await shouldSendAlert('stale_billing_vat_enqueues');
+  if (!shouldSend) {
     return { type: 'stale_billing_vat_enqueues', fired: false, reason: 'dedup' };
   }
 
@@ -383,6 +443,7 @@ export async function checkStaleBillingVatEnqueues(): Promise<AlertCheckResult> 
     },
   );
 
+  await markAlertDelivered('stale_billing_vat_enqueues');
   return { type: 'stale_billing_vat_enqueues', fired: true };
 }
 
@@ -401,8 +462,8 @@ export async function checkStaleDunningNotifications(): Promise<AlertCheckResult
   }
   if (count === 0) return { type: 'stale_dunning_notifications', fired: false };
 
-  const claimed = await tryClaimAlert('stale_dunning_notifications');
-  if (!claimed) {
+  const shouldSend = await shouldSendAlert('stale_dunning_notifications');
+  if (!shouldSend) {
     return { type: 'stale_dunning_notifications', fired: false, reason: 'dedup' };
   }
 
@@ -421,6 +482,7 @@ export async function checkStaleDunningNotifications(): Promise<AlertCheckResult
     },
   );
 
+  await markAlertDelivered('stale_dunning_notifications');
   return { type: 'stale_dunning_notifications', fired: true };
 }
 
@@ -448,6 +510,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-financial-cases', () =>
         checkOpenStripeFinancialCases().catch(captureAndReturn('open_stripe_financial_cases')),
+      ),
+      step.run('check-checkout-attempts', () =>
+        checkStaleStripeCheckoutAttempts().catch(captureAndReturn('stale_stripe_checkout_attempts')),
       ),
       step.run('check-stale-dunning-notifications', () =>
         checkStaleDunningNotifications().catch(captureAndReturn('stale_dunning_notifications')),
