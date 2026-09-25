@@ -37,7 +37,11 @@ import type { KsefEnvironment } from '@/types/ksef';
  * Idempotencja:
  *   - KSeF zwraca tę samą fakturę przy kolejnych pollach jeśli w zakresie dat
  *   - `filter-existing` step odrzuca te które już mamy w DB po (tenant_id, ksef_number)
- *   - Index `idx_inv_ksef_number` jest unique per (tenant_id, ksef_number)
+ *   - UWAGA: baza tego NIE pilnuje. `idx_inv_ksef_number` (00001) i
+ *     `idx_invoices_ksef_number_unique` (00004) to zwykłe indeksy, nie UNIQUE —
+ *     `filter-existing` jest jedyną ochroną, więc przy błędzie musi rzucać.
+ *     Indeks unikalny (tenant_id, ksef_number) wymaga migracji i sprzątnięcia
+ *     ewentualnych istniejących duplikatów.
  *
  * UWAGA schema: KSeF inbox daje tylko METADANE - pełnego XML tu nie pobieramy.
  * Zapisujemy dane do `fa3_data JSONB` z `_source: 'inbox-metadata'` żeby
@@ -47,6 +51,9 @@ import type { KsefEnvironment } from '@/types/ksef';
 
 const KSEF_ENV: KsefEnvironment =
   (process.env.KSEF_ENV as KsefEnvironment) ?? 'test';
+
+/** Numer KSeF ma ~35 znaków — 100 w `in.(…)` to ~3,6 KB adresu. */
+export const KSEF_NUMBERS_PER_QUERY = 100;
 
 // ═══════════════════════════════════════════════════════════════
 // CRON: wybór aktywnych tenantów + fan-out
@@ -178,18 +185,34 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
 
     const freshInvoices = await step.run('filter-existing', async () => {
       const supabase = await createAdminClient();
-      const ksefNumbers = newInvoices.map((inv) => inv.ksefNumber);
 
-      const { data: existing } = await supabase
-        .from('invoices')
-        .select('ksef_number')
-        .eq('tenant_id', tenantId)
-        .in('ksef_number', ksefNumbers);
+      // Okno 48 h: każde pobranie (co 15 min) widzi te same faktury ponownie,
+      // a baza NIE pilnuje unikalności numeru KSeF (`idx_invoices_ksef_number_unique`
+      // mimo nazwy to zwykły indeks). To zapytanie jest więc jedyną ochroną przed
+      // duplikatami — błąd nie może znaczyć „nic nie ma”. Inaczej wszystkie faktury
+      // z 48 h wchodzą drugi raz, a auto-kategoryzacja robi z każdej kopii osobny
+      // wydatek w KPiR. Paczki, bo pełna lista `in.(…)` w adresie potrafi
+      // przekroczyć limit długości URL.
+      const unique = [...new Map(newInvoices.map((inv) => [inv.ksefNumber, inv])).values()];
+      const ksefNumbers = unique.map((inv) => inv.ksefNumber);
+      const existingSet = new Set<string>();
 
-      const existingSet = new Set(
-        (existing ?? []).map((e) => e.ksef_number as string),
-      );
-      return newInvoices.filter((inv) => !existingSet.has(inv.ksefNumber));
+      for (let i = 0; i < ksefNumbers.length; i += KSEF_NUMBERS_PER_QUERY) {
+        const { data: existing, error } = await supabase
+          .from('invoices')
+          .select('ksef_number')
+          .eq('tenant_id', tenantId)
+          .in('ksef_number', ksefNumbers.slice(i, i + KSEF_NUMBERS_PER_QUERY));
+
+        if (error) {
+          throw new Error(
+            `Nie można sprawdzić, które faktury już są w bazie: ${error.message}`,
+          );
+        }
+        for (const row of existing ?? []) existingSet.add(row.ksef_number as string);
+      }
+
+      return unique.filter((inv) => !existingSet.has(inv.ksefNumber));
     });
 
     if (freshInvoices.length === 0) {
