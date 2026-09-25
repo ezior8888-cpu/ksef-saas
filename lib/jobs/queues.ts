@@ -32,7 +32,9 @@ export const EVENT_QUEUE_MAP = {
   'import/file.uploaded': ['import.file.uploaded'],
   'import/ksef-history.requested': ['import.ksef-history.requested'],
   'inbox/invoice-received': ['inbox.invoice-received'],
-  'inbox/invoice.received': ['inbox.invoice.received'],
+  // Brak odbiorcy — na Inngest też nikt tego nie słucha. Pusta lista =
+  // wysyłka nic nie publikuje (pg-boss rzuca na kolejce bez `createQueue`).
+  'inbox/invoice.received': [],
   'inbox/poll.tenant': ['inbox.poll.tenant'],
   'invoice/payment.received': ['invoice.payment.received'],
   // fan-out: powiadomienie + obsługa kolejki Offline24
