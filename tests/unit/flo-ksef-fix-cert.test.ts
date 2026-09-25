@@ -1,10 +1,14 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   buildCertProposal,
+  certExpiryWindow,
   evaluateCert,
   shouldHoldApprovedSubmissions,
   shouldWarn,
+  WARN_THRESHOLDS,
   type CertSnapshot,
 } from '@/lib/flo/functions/ksef-cert';
 import {
@@ -14,6 +18,8 @@ import {
   needsOperatorAttention,
   type RejectionContext,
 } from '@/lib/flo/functions/ksef-fix';
+import type { FloProposalRow } from '@/lib/flo/db-types';
+import { toProposalView } from '@/lib/flo/proposals';
 
 /**
  * X-02 tłumacz odrzuceń (krok 27) i X-03 opiekun certyfikatu (krok 28).
@@ -205,11 +211,122 @@ describe('X-03 — progi', () => {
 
   it('odzywa się na trzech progach, nie codziennie', () => {
     // Ostrzeganie codziennie przez miesiąc uczy ignorowania.
+    //
+    // Do 25.09 ten test mówił „3 tak, 7 nie" — a zadanie wysyłało maile na
+    // 30/14/7. Próg 3 dni nie zadziałał na produkcji ani razu. Progi są
+    // teraz wyrównane do tego, co klienci faktycznie dostawali.
     expect(shouldWarn(30)).toBe(true);
     expect(shouldWarn(14)).toBe(true);
-    expect(shouldWarn(3)).toBe(true);
+    expect(shouldWarn(7)).toBe(true);
     expect(shouldWarn(29)).toBe(false);
-    expect(shouldWarn(7)).toBe(false);
+    expect(shouldWarn(3)).toBe(false);
+    expect(WARN_THRESHOLDS).toEqual([30, 14, 7]);
+  });
+
+  it('SZEW: w oknie zadania karta powstaje na każdym progu', () => {
+    // NAJWAŻNIEJSZY TEST W TYM BLOKU. Każda połowa była przetestowana
+    // osobno — `shouldWarn(30)` zielone, okno zadania poprawne — a razem
+    // nie dawały ani jednej karty. W oknie `[próg−1, próg]` `evaluateCert`
+    // liczy `próg−1` dni, a `shouldWarn` przepuszczał tylko równe progi.
+    // Ten test idzie dokładnie drogą zadania: okno → ocena → karta.
+    const DAY = 86_400_000;
+
+    for (const days of WARN_THRESHOLDS) {
+      const { from, to } = certExpiryWindow(days, NOW);
+
+      for (const pozycja of [0.01, 0.5, 0.99]) {
+        const expiresAt = new Date(
+          from.getTime() + pozycja * (to.getTime() - from.getTime()),
+        ).toISOString();
+        const verdict = evaluateCert(cert({ expiresAt }), NOW);
+
+        expect(verdict.state, `próg ${days}, pozycja ${pozycja}`).toBe('expiring');
+        expect(verdict.daysLeft).toBe(days - 1);
+
+        const card = buildCertProposal({
+          tenantId: 't',
+          verdict,
+          now: NOW,
+          threshold: days,
+        });
+        expect(card, `próg ${days}, pozycja ${pozycja}`).not.toBeNull();
+      }
+
+      expect(to.getTime() - from.getTime()).toBe(DAY);
+    }
+  });
+
+  it('bez progu z zadania liczy się daysLeft — jak dotąd', () => {
+    // Wywołanie spoza zadania (bez `threshold`) zachowuje się po staremu:
+    // 29 dni to nie próg, więc karty nie ma.
+    const verdict = evaluateCert(cert({ expiresAt: at(29.5) }), NOW);
+
+    expect(verdict.daysLeft).toBe(29);
+    expect(buildCertProposal({ tenantId: 't', verdict, now: NOW })).toBeNull();
+  });
+
+  it('zadanie cert-expiry-alert idzie przez to samo okno i przekazuje próg', () => {
+    // Test szwu wyżej pilnuje modułu. Ten pilnuje zadania: to w nim brakowało
+    // jednej linijki — przekazania progu — i przez to karta X-03 nie powstała
+    // ani razu. Zadanie trudno odpalić w teście (kolejka, baza, mail, push),
+    // więc sprawdzamy tekst: własna lista progów albo własne okno znaczyłyby
+    // powrót dwóch źródeł prawdy.
+    const zadanie = readFileSync('lib/inngest/jobs/cert-expiry-alert.ts', 'utf8');
+
+    expect(zadanie).toContain('const thresholds = WARN_THRESHOLDS;');
+    expect(zadanie).toContain('certExpiryWindow(days, now)');
+    expect(zadanie).toContain('threshold: days');
+    expect(zadanie).not.toContain('[30, 14, 7]');
+  });
+
+  it('karta nigdy nie proponuje „Nigdy więcej takich” — w żadnym stanie', () => {
+    // Sprawdzamy przyciski, które zobaczy KLIENT, a nie sam ładunek karty:
+    // domyślne akcje dokłada `toProposalView`, więc test ładunku by ich
+    // nie zobaczył. Brak certyfikatu, nieudane logowanie i wygasanie to trzy
+    // sytuacje, w których wyłączenie ostrzeżenia kończy się niewysłaną fakturą.
+    const stany = [
+      evaluateCert({ lastAuthOk: null, lastAuthAt: null, expiresAt: null }, NOW),
+      evaluateCert(cert({ lastAuthOk: false }), NOW),
+      evaluateCert(cert({ expiresAt: at(13.5) }), NOW),
+    ];
+
+    for (const verdict of stany) {
+      const card = buildCertProposal({ tenantId: 't', verdict, now: NOW, threshold: 14 });
+      expect(card, verdict.state).not.toBeNull();
+
+      const view = toProposalView({
+        id: 'c',
+        tenant_id: 't',
+        kind: card!.kind,
+        topic_key: card!.topicKey,
+        status: 'open',
+        priority: card!.priority ?? 50,
+        title: card!.title,
+        body: card!.body,
+        payload: card!.payload ?? {},
+        evidence: card!.evidence ?? [],
+        fingerprint: card!.fingerprint,
+        expires_at: card!.expiresAt.toISOString(),
+        created_at: NOW.toISOString(),
+        approved_at: null,
+        approved_by: null,
+        executed_at: null,
+        dismissed_reason: null,
+      } as FloProposalRow)!;
+
+      expect(view.secondary.map((a) => a.intent), verdict.state).not.toContain('mute');
+      expect(view.secondary, verdict.state).toEqual([{ label: 'Nie teraz', intent: 'snooze' }]);
+    }
+  });
+
+  it('próg spoza listy nie otwiera karty', () => {
+    // `threshold` nie jest przepustką: zadanie z wymyślonym progiem dalej
+    // przechodzi przez `shouldWarn`.
+    const verdict = evaluateCert(cert({ expiresAt: at(20.5) }), NOW);
+
+    expect(
+      buildCertProposal({ tenantId: 't', verdict, now: NOW, threshold: 21 }),
+    ).toBeNull();
   });
 
   it('trwały pasek dopiero poniżej dwóch tygodni', () => {
