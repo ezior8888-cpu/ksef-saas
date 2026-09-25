@@ -24,7 +24,8 @@ import type Stripe from 'stripe';
 import * as Sentry from '@sentry/nextjs';
 
 import { getStripe } from '@/lib/stripe/client';
-import { RetryablePreEffectWebhookError } from '@/lib/stripe/webhook-errors';
+import { handleFinancialStripeEvent } from '@/lib/stripe/financial-events';
+import { ReconciliationRequiredWebhookError, RetryablePreEffectWebhookError } from '@/lib/stripe/webhook-errors';
 import {
   handleInvoicePaymentFailed,
   handleInvoicePaymentSucceeded,
@@ -48,6 +49,15 @@ const HANDLED_EVENTS = new Set([
   'customer.subscription.trial_will_end',
   'invoice.payment_succeeded',
   'invoice.payment_failed',
+  'refund.created',
+  'refund.updated',
+  'refund.failed',
+  'charge.refund.updated',
+  'charge.dispute.created',
+  'charge.dispute.updated',
+  'charge.dispute.closed',
+  'charge.dispute.funds_withdrawn',
+  'charge.dispute.funds_reinstated',
 ]);
 
 export async function POST(req: Request): Promise<Response> {
@@ -123,7 +133,9 @@ export async function POST(req: Request): Promise<Response> {
         event.id,
         claim.token,
         err instanceof RetryablePreEffectWebhookError ? 'retryable' : 'failed',
-        err instanceof RetryablePreEffectWebhookError ? err.code : 'handler_failed',
+        err instanceof RetryablePreEffectWebhookError ||
+        err instanceof ReconciliationRequiredWebhookError
+          ? err.code : 'handler_failed',
       );
     } catch (finalizeError) {
       Sentry.captureException(finalizeError, {
@@ -174,6 +186,17 @@ async function dispatch(event: Stripe.Event): Promise<void> {
       return;
     case 'invoice.payment_failed':
       await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+      return;
+    case 'refund.created':
+    case 'refund.updated':
+    case 'refund.failed':
+    case 'charge.refund.updated':
+    case 'charge.dispute.created':
+    case 'charge.dispute.updated':
+    case 'charge.dispute.closed':
+    case 'charge.dispute.funds_withdrawn':
+    case 'charge.dispute.funds_reinstated':
+      await handleFinancialStripeEvent(event);
       return;
   }
 }

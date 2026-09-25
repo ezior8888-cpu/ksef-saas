@@ -29,7 +29,7 @@ vi.mock('@/lib/stripe/webhook-handlers', () => ({
 }));
 
 import { POST } from '@/app/api/stripe/webhook/route';
-import { RetryablePreEffectWebhookError } from '@/lib/stripe/webhook-errors';
+import { ReconciliationRequiredWebhookError, RetryablePreEffectWebhookError } from '@/lib/stripe/webhook-errors';
 
 const token = '11111111-1111-4111-8111-111111111111';
 const event = {
@@ -115,6 +115,19 @@ describe('Stripe webhook claim ownership', () => {
     );
   });
 
+  it('keeps a malformed paid invoice for manual reconciliation without replay', async () => {
+    mocks.handler.mockRejectedValue(new ReconciliationRequiredWebhookError(
+      'Stripe invoice payment reference missing or invalid',
+    ));
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(500);
+    expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith(
+      event.id, token, 'failed', 'payment_reference_missing_or_invalid',
+    );
+    expect(mocks.handler).toHaveBeenCalledOnce();
+  });
   it('does not relabel successful dispatch as failed after finalization error', async () => {
     mocks.finalize.mockRejectedValue(new Error('database response lost'));
 
