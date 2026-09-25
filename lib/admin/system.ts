@@ -12,6 +12,10 @@ import { requireAdmin } from '@/lib/auth/admin-guard';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { KsefEnvironment } from '@/types/ksef';
 
+// Osobno, pod importami typów: wydanie 25.09 dokłada 'server-only' i
+// requireAdmin tuż nad klientem — rozdzielenie oszczędza konfliktu.
+import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
+
 // ─── 1. KSeF health 24h ────────────────────────────────────────────────
 
 export interface HealthLogEntry {
@@ -208,7 +212,7 @@ export async function getOfflineQueueSnapshot(): Promise<OfflineQueueSnapshot> {
     supabase
       .from('ksef_offline_queue')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending'),
+      .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]),
     supabase
       .from('ksef_offline_queue')
       .select('*', { count: 'exact', head: true })
@@ -216,11 +220,18 @@ export async function getOfflineQueueSnapshot(): Promise<OfflineQueueSnapshot> {
     supabase
       .from('ksef_offline_queue')
       .select('deadline')
-      .eq('status', 'pending')
+      .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES])
       .order('deadline', { ascending: true })
       .limit(1)
       .maybeSingle(),
   ]);
+
+  // Błąd zapytania to NIE zero. Do 25.09 panel pokazywał tu zawsze 0,
+  // bo pytał o status, którego enum nie ma — i nikt nie widział, że liczba
+  // jest fałszywa.
+  for (const res of [pendingRes, failedRes, oldestRes]) {
+    if (res.error) throw new Error(`kolejka Offline24: ${res.error.message}`);
+  }
 
   return {
     pending: pendingRes.count ?? 0,

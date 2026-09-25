@@ -24,6 +24,7 @@ import * as Sentry from '@sentry/nextjs';
 import { alertCritical } from '@/lib/alerts/slack';
 import { STALE_REFUND_OPERATION_MS } from '@/lib/billing/refund-operations';
 import { cacheGet, cacheSet } from '@/lib/cache';
+import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import { inngest } from '../client';
@@ -99,10 +100,15 @@ async function checkKsefDowntime(): Promise<AlertCheckResult> {
 
 async function checkOfflineQueueBacklog(): Promise<AlertCheckResult> {
   const supabase = createAdminClient();
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from('ksef_offline_queue')
     .select('*', { count: 'exact', head: true })
-    .eq('status', 'pending');
+    .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]);
+
+  // Błąd zapytania to NIE „pusta kolejka". Do 25.09 ten alarm pytał o status
+  // 'pending', którego enum nie ma, więc nie mógł wystrzelić nigdy. Wyjątek
+  // łapie wywołujący — osobno dla każdego sprawdzenia — i zgłasza do Sentry.
+  if (error) throw new Error(`kolejka Offline24: ${error.message}`);
 
   const pending = count ?? 0;
   if (pending < 50) return { type: 'offline_backlog', fired: false };
