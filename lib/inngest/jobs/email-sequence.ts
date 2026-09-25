@@ -206,19 +206,25 @@ export async function runEmailDay1(data: Parameters<typeof emailTrialDay1.create
 
     const firstInvoice = await step.run('check-first-invoice', async () => {
       const supabase = createAdminClient();
+      // `users.tenant_id` NIE ISTNIEJE od migracji 00036 (model wielu firm:
+      // powiązanie idzie przez `memberships`). Następcą jest
+      // `last_active_tenant_id` — migracja wypełniła je z usuwanej kolumny,
+      // a założenie firmy (akcja i RPC `create_organization_with_owner`)
+      // ustawia je od razu. Do 25.09 te zapytania padały błędem 42703 przy
+      // KAŻDYM nowym koncie, więc maile próbne z tego pliku nie wychodziły.
       const { data: userRow, error: userErr } = await supabase
         .from('users')
-        .select('tenant_id')
+        .select('last_active_tenant_id')
         .eq('id', userId)
         .maybeSingle();
 
       if (userErr) throw userErr;
-      if (!userRow?.tenant_id) return null;
+      if (!userRow?.last_active_tenant_id) return null;
 
       const { data: inv, error: invErr } = await supabase
         .from('invoices')
         .select('id')
-        .eq('tenant_id', userRow.tenant_id)
+        .eq('tenant_id', userRow.last_active_tenant_id)
         .limit(1)
         .maybeSingle();
 
@@ -300,24 +306,24 @@ export async function runEmailDay8(data: Parameters<typeof emailTrialDay8.create
       const supabase = createAdminClient();
       const { data: userRow, error: userErr } = await supabase
         .from('users')
-        .select('tenant_id')
+        .select('last_active_tenant_id')
         .eq('id', userId)
         .maybeSingle();
 
       if (userErr) throw userErr;
-      if (!userRow?.tenant_id) return { invoicesCount: 0, expensesCount: 0 };
+      if (!userRow?.last_active_tenant_id) return { invoicesCount: 0, expensesCount: 0 };
 
       const { count: invoicesCount, error: invCountErr } = await supabase
         .from('invoices')
         .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', userRow.tenant_id);
+        .eq('tenant_id', userRow.last_active_tenant_id);
 
       if (invCountErr) throw invCountErr;
 
       const { count: expensesCount, error: expCountErr } = await supabase
         .from('expenses')
         .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', userRow.tenant_id);
+        .eq('tenant_id', userRow.last_active_tenant_id);
 
       if (expCountErr) throw expCountErr;
 
@@ -396,17 +402,17 @@ export async function runEmailDay14(data: Parameters<typeof emailTrialDay14.crea
       const supabase = createAdminClient();
       const { data: userRow, error: userErr } = await supabase
         .from('users')
-        .select('tenant_id')
+        .select('last_active_tenant_id')
         .eq('id', userId)
         .maybeSingle();
 
       if (userErr) throw userErr;
-      if (!userRow?.tenant_id) return false;
+      if (!userRow?.last_active_tenant_id) return false;
 
       const { data: tenant, error: tenantErr } = await supabase
         .from('tenants')
         .select('subscription_tier')
-        .eq('id', userRow.tenant_id)
+        .eq('id', userRow.last_active_tenant_id)
         .maybeSingle();
 
       if (tenantErr) throw tenantErr;
