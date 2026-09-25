@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { cron } from 'inngest';
 
 import { inngest } from '../client';
@@ -74,41 +75,9 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
       // Sekwencyjnie żeby nie DDOS-ować Resend - 3 progi × max kilkadziesiąt
       // tenantów każdy, nie ma sensu paralelizować.
       for (const tenant of tenants) {
-        // Karta agenta (X-03). Stan liczony z REALNEJ próby autoryzacji,
-        // nie z pola z datą: klient, który odnowił certyfikat u wystawcy,
-        // ale go nie wgrał, dalej ma o tym słyszeć — bo wysyłka i tak nie
-        // zadziała. A ten, który wgrał, przestaje słyszeć natychmiast.
-        await step.run(`flo-cert-card-${tenant.id}-${days}d`, async () => {
-          const supabase = await createAdminClient();
-          const { data: probe } = await supabase
-            .from('ksef_health_log')
-            .select('status, checked_at')
-            .eq('tenant_id', tenant.id)
-            .order('checked_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          const verdict = evaluateCert(
-            {
-              lastAuthOk:
-                probe?.status === undefined ? null : probe.status === 'ok',
-              lastAuthAt: (probe?.checked_at as string | undefined) ?? null,
-              expiresAt: tenant.ksef_certificate_expiry as string | null,
-            },
-            now,
-          );
-
-          // Próg przekazany wprost: w tym oknie `verdict.daysLeft` wynosi
-          // `days - 1`, więc bez niego karta nie powstałaby nigdy.
-          const proposal = buildCertProposal({
-            tenantId: tenant.id,
-            verdict,
-            now,
-            threshold: days,
-          });
-          if (proposal) await createProposal(proposal);
-        });
-
+        // Najpierw mail i push — to jest ostrzeżenie krytyczne (okno trwa
+        // jeden dzień). Karta Flo idzie po nich i jej awaria nie może
+        // zatrzymać ani tych kanałów, ani kolejnych firm.
         await step.run(`alert-${tenant.id}-${days}d`, async () => {
           let emailed = false as boolean;
           let emailReason: string | undefined;
@@ -142,6 +111,53 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
             push,
             skippedWithoutEmail: !email,
           };
+        });
+
+        // Karta agenta (X-03). Stan liczony z REALNEJ próby autoryzacji,
+        // nie z pola z datą: klient, który odnowił certyfikat u wystawcy,
+        // ale go nie wgrał, dalej ma o tym słyszeć — bo wysyłka i tak nie
+        // zadziała. A ten, który wgrał, przestaje słyszeć natychmiast.
+        await step.run(`flo-cert-card-${tenant.id}-${days}d`, async () => {
+          try {
+            const supabase = await createAdminClient();
+            const { data: probe } = await supabase
+              .from('ksef_health_log')
+              .select('status, checked_at')
+              .eq('tenant_id', tenant.id)
+              .order('checked_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            const verdict = evaluateCert(
+              {
+                lastAuthOk:
+                  probe?.status === undefined ? null : probe.status === 'ok',
+                lastAuthAt: (probe?.checked_at as string | undefined) ?? null,
+                expiresAt: tenant.ksef_certificate_expiry as string | null,
+              },
+              now,
+            );
+
+            // Próg przekazany wprost: w tym oknie `verdict.daysLeft` wynosi
+            // `days - 1`, więc bez niego karta nie powstałaby nigdy.
+            const proposal = buildCertProposal({
+              tenantId: tenant.id,
+              verdict,
+              now,
+              threshold: days,
+            });
+            if (proposal) await createProposal(proposal);
+            return { card: proposal ? ('asked' as const) : ('none' as const) };
+          } catch (e) {
+            Sentry.captureException(e, {
+              tags: { job: 'cert-expiry-alert', kind: 'flo-card', tenant_id: tenant.id },
+            });
+            logger.error('Karta Flo o certyfikacie nie powstała', {
+              tenantId: tenant.id,
+              error: e instanceof Error ? e.message : String(e),
+            });
+            return { card: 'failed' as const };
+          }
         });
         totalAlerts += 1;
       }
