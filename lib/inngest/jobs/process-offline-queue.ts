@@ -8,6 +8,7 @@ import type { JobContext } from '@/lib/jobs/registry';
 
 import { createAdminClient } from '@/lib/supabase/server';
 import { checkKsefAvailability } from '@/lib/ksef/health-check';
+import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
 import { createProposal } from '@/lib/flo/proposals';
 import {
   buildDeadlineProposal,
@@ -45,10 +46,18 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
       await step.run('flo-outage-card', async () => {
         const supabase = createAdminClient();
 
-        const { data: queued } = await supabase
+        const { data: queued, error: queueError } = await supabase
           .from('ksef_offline_queue')
           .select('tenant_id, deadline')
-          .eq('status', 'pending');
+          .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]);
+
+        // Błąd zapytania to NIE „pusta kolejka". Do 25.09 zapytanie pytało
+        // o status 'pending', którego ten enum nie ma: Postgres je odrzucał,
+        // błąd ginął, a karta awarii i ostrzeżenie o terminie nie powstały
+        // ani razu.
+        if (queueError) {
+          throw new Error(`kolejka Offline24: ${queueError.message}`);
+        }
 
         const byTenant = new Map<string, string[]>();
         for (const row of queued ?? []) {
