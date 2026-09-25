@@ -1,6 +1,8 @@
 # GitHub — wymagane kontrole przed zmianą main (REV-04)
 
-Status na **2026-09-23, 17:00 UTC**: przygotowano konfigurację do zastosowania przez Bartka. **Nie zmieniono ustawień GitHuba. REV-04 pozostaje otwarty do włączenia reguł i sprawdzenia ich działania.**
+Status na **2026-09-25**: **reguły włączone przez Bartka** w wariancie bez obowiązkowej recenzji (decyzja właściciela: w zespole dwuosobowym wymóg akceptacji drugiej osoby tworzył stosy PR-ów). Ruleset `23339700`: `deletion`, `non_fast_forward`, `pull_request` (0 akceptacji), `required_status_checks` (6 kontroli poniżej, App ID 15368, `strict`); lista wyjątków pusta — także admin zmienia `main` wyłącznie przez PR. Próba blokady: PR z wpisem wydania 25.09.
+
+Historyczny stan z 2026-09-23, 17:00 UTC: przygotowano konfigurację do zastosowania przez Bartka; ustawień GitHuba wtedy nie zmieniano.
 
 ## Potwierdzony stan
 

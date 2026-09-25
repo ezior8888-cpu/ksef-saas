@@ -611,6 +611,48 @@ Na prośbę Igora wznowiono i dokończono lokalne naprawy na bazie f3ca0d4 (PR #
 
 **Granice i odbiór:** kod i testy są lokalne; brak publikacji, nowych wyników GitHub CI/Security, merge, uruchomienia SQL/migracji i wdrożenia. Bartek ma najpierw potwierdzić rzeczywisty stan 00075–00080 na db-1, w szczególności 00078, kopię i próbę odtworzenia. Na kopii bazy należy sprawdzić granty/RLS oraz równoległe claimy i webhook, a w Stripe test mode sesje stare i nowe, ukończenie, wygaśnięcie, timeout, listę stronicowaną i zmianę planu. Przed rolloutem trzeba wstrzymać nowe Checkout i stare instancje, zinwentaryzować wszystkie istniejące otwarte sesje Customer i je uzgodnić lub wygasić po potwierdzeniu u Stripe; dopiero wtedy 00081 i zgodny web/worker. Stan uncertain/held oraz completed bez rozliczonej subskrypcji wymaga ręcznego potwierdzenia, nie automatycznego zwolnienia. Dodatkowy istniejący dług: równoległe pierwsze wywołania ensureStripeCustomer mogą utworzyć osierocone Customer z danymi osobowymi; wymaga osobnego idempotentnego protokołu i uzgodnienia RODO. Szczegóły cofnięcia i obserwacji są w runbooku.
 
+## 2026-09-25 — Wydanie 25.09: pakiety security i Stripe na produkcji
+
+**Autor:** Bartosz (sesja Claude Code). **Zakres zgody:** właściciel zatwierdził wydanie całości w jednym przebiegu: #1–#35 i #39–#46 razem z pracą FLO, migracje 00072–00082, wdrożenie app + worker, REV-04 w wariancie bez obowiązkowej recenzji. Scalenia PR #36, #51 i #52 wykonał właściciel.
+
+**Stan wyjściowy:** produkcja na `b9c3703` (app i worker), schemat `00071`. Liczniki przed wydaniem (wyłącznie odczyt): `payments`, `payment_imports`, `payment_reminders`, `subscriptions`, `stripe_payments`, `stripe_refunds`, `stripe_webhook_events`, `billing_notifications`, `gdpr_deletion_requests`, `tenants.stripe_customer_id`, niespójne salda — **wszystkie 0**. 1 firma, 2 faktury. Okna serwisowe z odbiorów PR #29–#46 (503 na webhooku, wstrzymane zwroty i Checkout, rozliczanie historii przed `VALIDATE`) nie miały czego chronić.
+
+**Kopia:** `pg_dump -Fc` → `/root/backups/pre-wydanie-2026-09-25.dump` na db-1 (2,9 MB, 116 tabel z danymi). Odtworzenia nie ćwiczono.
+
+**Próba generalna:** 00072 → 00073 → 00075 → … → 00082 → 00074 w jednej transakcji na produkcyjnym schemacie, zakończonej `ROLLBACK`. Bez błędów.
+
+**Wykonanie:**
+
+| krok | wynik |
+|---|---|
+| 00072, 00073, 00075–00082 | każda osobnym `psql --single-transaction`, wpis w `schema_migrations`, `NOTIFY pgrst` |
+| wdrożenie 36 (app) | **failed** — `next build` w obrazie: `vitest.rls.config.ts` importuje wyłączony z kontekstu `vitest.config.ts`. Coolify zostawił starą wersję. Naprawa: PR #52 (`.dockerignore`) |
+| wdrożenie 37 (app), 38 (worker) | finished, oba `41ee941`, healthy |
+| 00074 | po wymianie obu procesów |
+| `VALIDATE CONSTRAINT` | wszystkie 7 ograniczeń `NOT VALID` z 00073/00075/00076/00077; `convalidated = true` dla wszystkich |
+
+**Weryfikacja po wdrożeniu:**
+
+- `service_role` bez INSERT/UPDATE/DELETE na `subscriptions`; `authenticated` bez DML na `payments`/`payment_imports`/`payment_reminders`.
+- `invoices_overdue`: `security_invoker = true` zachowane po 00082.
+- PostgREST przez adres kontenera: `stripe_refund_operations`, `stripe_subscription_sync_leases`, `stripe_financial_cases`, `stripe_checkout_attempts`, `invoices_overdue` → `42501` (widzi, odmawia bez tokenu), nie `PGRST205`.
+- `/api/health` 200: baza OK, Redis OK. Worker: 48 kolejek, 23/23 cronów; w pierwszych 20 minutach 0 nieudanych jobów (m.in. `critical-alerts-monitor` ×4, `gdpr-process-deletions` na `cancel_token_hash`).
+- CSP wymuszone (`connect-src` i `form-action` z `https://db.faktflow.pl`); `/` i `/login` bez naruszeń w konsoli, Turnstile działa.
+
+**REV-04:** ruleset `23339700` rozszerzony o `pull_request` (0 wymaganych akceptacji) i `required_status_checks` (6 kontroli, App ID 15368, `strict`). Nazwa, zakres, `enforcement` i pusta lista wyjątków bez zmian — kopia sprzed zmiany poza repo. Pierwszy PR po zmianie (ten wpis) jest próbą blokady.
+
+**Czego nie sprawdzono:**
+
+- RLS dwóch firm przez PostgREST na jednorazowej bazie (`tests/rls-isolation.test.ts` — guard wymaga loopbacka, na maszynie operatora nie ma Dockera).
+- Stripe test mode end-to-end.
+- Rzeczywisty Resend.
+- GoTrue PKCE/recovery i wymuszone TOTP admina na koncie testowym.
+- Próba odtworzenia kopii.
+
+Przy pustej produkcji ryzyko jest niskie, ale odbiory pozostają otwarte. Właściciele: Masło (lokalny `supabase start`) i Bartosz (klucze Stripe test mode). **Po 00080 trzeba włączyć w panelu Stripe nowe typy zdarzeń dla endpointu webhooka** — zob. `STRIPE-SPRAWY-FINANSOWE-ODBIOR-2026-09-25.md`.
+
+**Wycofanie:** kod przez ponowne wdrożenie `b9c3703` — GDPR, zapis subskrypcji, Checkout i zapis wpłat nie zadziałają na starym kodzie; dziś bez ruchu. Baza z kopii w ostateczności.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:
