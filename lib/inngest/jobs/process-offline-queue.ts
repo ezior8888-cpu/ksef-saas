@@ -15,6 +15,7 @@ import {
   buildOutageProposal,
   evaluateDeadline,
   evaluateOutage,
+  nearestFutureDeadline,
 } from '@/lib/flo/functions/ksef-outage';
 import { calculateNextRetry } from '@/lib/ksef/idempotency';
 import {
@@ -87,11 +88,12 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
           });
           if (outage) await createProposal(outage);
 
-          // Najbliższy termin decyduje o alarmie — po nim zostaje tylko
-          // droga papierowa.
-          const soonest = deadlines.sort()[0];
+          // Najbliższy PRZYSZŁY termin decyduje o alarmie — po nim zostaje
+          // tylko droga papierowa. Najstarszy bywa już przekroczony i wtedy
+          // zasłaniałby alarm (recenzja ChatGPT nr 7).
+          const soonest = nearestFutureDeadline(deadlines, now);
           if (soonest) {
-            const alert = evaluateDeadline(new Date(soonest), now);
+            const alert = evaluateDeadline(soonest, now);
             const deadlineCard = buildDeadlineProposal({
               tenantId,
               alert,
