@@ -37,7 +37,11 @@ import type { KsefEnvironment } from '@/types/ksef';
  * Idempotencja:
  *   - KSeF zwraca tę samą fakturę przy kolejnych pollach jeśli w zakresie dat
  *   - `filter-existing` step odrzuca te które już mamy w DB po (tenant_id, ksef_number)
- *   - Index `idx_inv_ksef_number` jest unique per (tenant_id, ksef_number)
+ *   - UWAGA: baza tego NIE pilnuje. `idx_inv_ksef_number` (00001) i
+ *     `idx_invoices_ksef_number_unique` (00004) to zwykłe indeksy, nie UNIQUE —
+ *     `filter-existing` jest jedyną ochroną, więc przy błędzie musi rzucać.
+ *     Indeks unikalny (tenant_id, ksef_number) wymaga migracji i sprzątnięcia
+ *     ewentualnych istniejących duplikatów.
  *
  * UWAGA schema: KSeF inbox daje tylko METADANE - pełnego XML tu nie pobieramy.
  * Zapisujemy dane do `fa3_data JSONB` z `_source: 'inbox-metadata'` żeby
@@ -47,6 +51,9 @@ import type { KsefEnvironment } from '@/types/ksef';
 
 const KSEF_ENV: KsefEnvironment =
   (process.env.KSEF_ENV as KsefEnvironment) ?? 'test';
+
+/** Numer KSeF ma ~35 znaków — 100 w `in.(…)` to ~3,6 KB adresu. */
+export const KSEF_NUMBERS_PER_QUERY = 100;
 
 // ═══════════════════════════════════════════════════════════════
 // CRON: wybór aktywnych tenantów + fan-out
@@ -178,18 +185,34 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
 
     const freshInvoices = await step.run('filter-existing', async () => {
       const supabase = await createAdminClient();
-      const ksefNumbers = newInvoices.map((inv) => inv.ksefNumber);
 
-      const { data: existing } = await supabase
-        .from('invoices')
-        .select('ksef_number')
-        .eq('tenant_id', tenantId)
-        .in('ksef_number', ksefNumbers);
+      // Okno 48 h: każde pobranie (co 15 min) widzi te same faktury ponownie,
+      // a baza NIE pilnuje unikalności numeru KSeF (`idx_invoices_ksef_number_unique`
+      // mimo nazwy to zwykły indeks). To zapytanie jest więc jedyną ochroną przed
+      // duplikatami — błąd nie może znaczyć „nic nie ma”. Inaczej wszystkie faktury
+      // z 48 h wchodzą drugi raz, a auto-kategoryzacja robi z każdej kopii osobny
+      // wydatek w KPiR. Paczki, bo pełna lista `in.(…)` w adresie potrafi
+      // przekroczyć limit długości URL.
+      const unique = [...new Map(newInvoices.map((inv) => [inv.ksefNumber, inv])).values()];
+      const ksefNumbers = unique.map((inv) => inv.ksefNumber);
+      const existingSet = new Set<string>();
 
-      const existingSet = new Set(
-        (existing ?? []).map((e) => e.ksef_number as string),
-      );
-      return newInvoices.filter((inv) => !existingSet.has(inv.ksefNumber));
+      for (let i = 0; i < ksefNumbers.length; i += KSEF_NUMBERS_PER_QUERY) {
+        const { data: existing, error } = await supabase
+          .from('invoices')
+          .select('ksef_number')
+          .eq('tenant_id', tenantId)
+          .in('ksef_number', ksefNumbers.slice(i, i + KSEF_NUMBERS_PER_QUERY));
+
+        if (error) {
+          throw new Error(
+            `Nie można sprawdzić, które faktury już są w bazie: ${error.message}`,
+          );
+        }
+        for (const row of existing ?? []) existingSet.add(row.ksef_number as string);
+      }
+
+      return unique.filter((inv) => !existingSet.has(inv.ksefNumber));
     });
 
     if (freshInvoices.length === 0) {
@@ -281,18 +304,36 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
         // Sprzedawcy, których klient już u siebie widział. Nieznany
         // sprzedawca powyżej progu nie trafia sam do księgi — to jest sito
         // na fakturę wystawioną przez pomyłkę na cudzy NIP.
-        const { data: seen } = await supabase
-          .from('invoices')
-          .select('seller_nip')
-          .eq('tenant_id', tenantId)
-          .eq('direction', 'incoming')
-          .limit(500);
-
-        const known = new Set(
-          (seen ?? [])
-            .map((row) => (row as { seller_nip: string | null }).seller_nip)
-            .filter((nip): nip is string => Boolean(nip)),
-        );
+        //
+        // „Widział” = PRZED tym przebiegiem. Ten krok idzie po zapisie, więc
+        // bez wykluczenia właśnie wstawionych faktur każdy sprzedawca z paczki
+        // wyglądał na znanego i sito nie działało nigdy (recenzja ChatGPT nr 2).
+        // Pytamy tylko o sprzedawców z paczki — dawne `limit(500)` z całej
+        // historii gubiło znanych u większych firm. Błąd = nikt nieznany:
+        // karta zapyta o więcej, zamiast przepuścić coś po cichu.
+        const justInserted = new Set(insertedInvoices.map((row) => row.id as string));
+        const batchSellers = [
+          ...new Set(
+            freshInvoices
+              .map((inv) => inv.seller?.nip)
+              .filter((nip): nip is string => Boolean(nip)),
+          ),
+        ];
+        const known = new Set<string>();
+        for (let i = 0; i < batchSellers.length; i += KSEF_NUMBERS_PER_QUERY) {
+          const { data: seen, error: seenErr } = await supabase
+            .from('invoices')
+            .select('id, seller_nip')
+            .eq('tenant_id', tenantId)
+            .eq('direction', 'incoming')
+            .in('seller_nip', batchSellers.slice(i, i + KSEF_NUMBERS_PER_QUERY))
+            .limit(1000);
+          if (seenErr) break;
+          for (const row of seen ?? []) {
+            const nip = (row as { seller_nip: string | null }).seller_nip;
+            if (nip && !justInserted.has(row.id as string)) known.add(nip);
+          }
+        }
 
         const byKsefNumber = new Map(
           insertedInvoices.map((row) => [row.ksef_number as string, row.id as string]),

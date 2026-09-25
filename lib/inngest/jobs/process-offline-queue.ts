@@ -9,12 +9,14 @@ import type { JobContext } from '@/lib/jobs/registry';
 
 import { createAdminClient } from '@/lib/supabase/server';
 import { checkKsefAvailability } from '@/lib/ksef/health-check';
+import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
 import { createProposal } from '@/lib/flo/proposals';
 import {
   buildDeadlineProposal,
   buildOutageProposal,
   evaluateDeadline,
   evaluateOutage,
+  nearestFutureDeadline,
 } from '@/lib/flo/functions/ksef-outage';
 import { calculateNextRetry } from '@/lib/ksef/idempotency';
 import {
@@ -46,10 +48,18 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
       await step.run('flo-outage-card', async () => {
         const supabase = createAdminClient();
 
-        const { data: queued } = await supabase
+        const { data: queued, error: queueError } = await supabase
           .from('ksef_offline_queue')
           .select('tenant_id, deadline')
-          .eq('status', 'pending');
+          .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]);
+
+        // Błąd zapytania to NIE „pusta kolejka". Do 25.09 zapytanie pytało
+        // o status 'pending', którego ten enum nie ma: Postgres je odrzucał,
+        // błąd ginął, a karta awarii i ostrzeżenie o terminie nie powstały
+        // ani razu.
+        if (queueError) {
+          throw new Error(`kolejka Offline24: ${queueError.message}`);
+        }
 
         const byTenant = new Map<string, string[]>();
         for (const row of queued ?? []) {
@@ -79,11 +89,12 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
           });
           if (outage) await createProposal(outage);
 
-          // Najbliższy termin decyduje o alarmie — po nim zostaje tylko
-          // droga papierowa.
-          const soonest = deadlines.sort()[0];
+          // Najbliższy PRZYSZŁY termin decyduje o alarmie — po nim zostaje
+          // tylko droga papierowa. Najstarszy bywa już przekroczony i wtedy
+          // zasłaniałby alarm (recenzja ChatGPT nr 7).
+          const soonest = nearestFutureDeadline(deadlines, now);
           if (soonest) {
-            const alert = evaluateDeadline(new Date(soonest), now);
+            const alert = evaluateDeadline(soonest, now);
             const deadlineCard = buildDeadlineProposal({
               tenantId,
               alert,
@@ -328,6 +339,27 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
       }
 
       const attempts = row.attempts ?? 1;
+
+      // Błąd kończący: KSeF odrzucił treść albo brak danych dokumentu.
+      // Ponowienie nic nie zmieni — zamykamy wpis i zostawiamy fakturze
+      // status ustawiony przez job wysyłki ('rejected'), zamiast nadpisywać
+      // go na 'offline_queued'.
+      if (data.terminal) {
+        const { error: closeErr } = await supabase
+          .from('ksef_offline_queue')
+          .update({
+            status: 'failed',
+            last_error:
+              errorMessage.length > 2000
+                ? `${errorMessage.slice(0, 1997)}...`
+                : errorMessage,
+          })
+          .eq('id', row.id)
+          .eq('tenant_id', tenantId)
+          .eq('invoice_id', invoiceId);
+        if (closeErr) throw new Error(closeErr.message);
+        return { closedTerminal: true as const };
+      }
 
       const { error: updQ } = await supabase
         .from('ksef_offline_queue')

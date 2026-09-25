@@ -53,8 +53,11 @@ registerJob<Parameters<typeof runProcessOcr>[0]>({
 });
 
 // ── Auto-kategoryzacja faktur ze skrzynki ──
+// Myślnik, nie kropka: zdarzenie `inbox/invoice-received` (z invoiceId).
+// Kropkowe `inbox/invoice.received` to powiadomienie bez invoiceId — nie
+// ma odbiorcy (patrz EVENT_QUEUE_MAP).
 registerJob<Parameters<typeof runAutoCategorizeInbox>[0]>({
-  queue: 'inbox.invoice.received',
+  queue: 'inbox.invoice-received',
   maxRetries: 2,
   batchSize: 10,
   handler: (data, ctx) => runAutoCategorizeInbox(data, ctx),

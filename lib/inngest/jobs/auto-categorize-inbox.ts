@@ -206,13 +206,20 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     });
 
     await step.run('create-expense', async () => {
-      const { data: existing } = await supabase
+      // Jedyna ochrona przed drugim wydatkiem z tej samej faktury — indeks na
+      // `expenses.ksef_invoice_id` nie jest UNIQUE. Błąd nie może znaczyć
+      // „nie ma”: przy ponowieniu (pg-boss bez pamięci kroków) albo podwójnym
+      // doręczeniu zdarzenia powstałby drugi koszt w KPiR.
+      const { data: existing, error: existingErr } = await supabase
         .from('expenses')
         .select('id')
         .eq('tenant_id', tenantId)
         .eq('ksef_invoice_id', invoiceId)
         .maybeSingle();
 
+      if (existingErr) {
+        throw new Error(`Nie można sprawdzić, czy wydatek już istnieje: ${existingErr.message}`);
+      }
       if (existing) {
         return { skipped: true as const, expenseId: existing.id };
       }

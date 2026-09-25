@@ -20,7 +20,6 @@
  * job loguje warning i kończy bez fakturowania (Stripe receipt = fallback).
  */
 
-import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError } from 'inngest';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
@@ -45,7 +44,7 @@ import {
  * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
  */
 export async function runSelfInvoicePayment(data: Parameters<typeof billingPaymentSucceeded.create>[0], { step, logger }: JobContext) {
-    const { tenantId, paymentId, stripeInvoiceId, paidAt } = data;
+    const { tenantId, paymentId, stripeInvoiceId } = data;
 
     if (!isSelfInvoicingConfigured()) {
       logger.warn(
@@ -73,6 +72,7 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
                   status: string;
                   paid_at: string | null;
                   vat_invoice_id: string | null;
+                  vat_invoice_submitted_at: string | null;
                   subscription_id: string | null;
                 } | null;
                 error: { message: string } | null;
@@ -83,7 +83,7 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
       })
         .from('stripe_payments')
         .select(
-          'id, tenant_id, amount_cents, currency, stripe_invoice_id, last_webhook_payload, status, paid_at, vat_invoice_id, subscription_id',
+          'id, tenant_id, amount_cents, currency, stripe_invoice_id, last_webhook_payload, status, paid_at, vat_invoice_id, vat_invoice_submitted_at, subscription_id',
         )
         .eq('id', paymentId)
         .maybeSingle();
@@ -101,12 +101,20 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
     }
 
     if (paymentRow.vat_invoice_id) {
+      if (!paymentRow.vat_invoice_submitted_at) {
+        throw new Error('VAT invoice linked without confirmed KSeF enqueue; manual reconciliation required');
+      }
       logger.info('vat_invoice_id already set — skip', { paymentId });
       return {
         skipped: true as const,
         reason: 'already-invoiced' as const,
         existingInvoiceId: paymentRow.vat_invoice_id,
       };
+    }
+
+    const authoritativePaidAt = paymentRow.paid_at;
+    if (!authoritativePaidAt || Number.isNaN(Date.parse(authoritativePaidAt))) {
+      throw new Error('Payment paid_at missing or invalid; manual reconciliation required');
     }
 
     // 2. Bind the plan to the paid Stripe invoice snapshot saved with this
@@ -156,7 +164,7 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
       });
     });
     // 3 + 4. Build draft + insert (idempotent po unique internal_number).
-    const insertResult = await step.run('build-and-insert', async () => {
+    const insertResult = await step.run('build-and-insert-atomic-v2', async () => {
       // Inngest może odtworzyć zapamiętany krok load-payment po zwrocie.
       // Odczyt w tym kroku sprawdza bieżący stan przed utworzeniem faktury.
       const supabase = createAdminClient();
@@ -184,7 +192,7 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
 
       const draft = await buildSelfInvoiceDraft(tenantId, {
         grossCents: paymentRow.amount_cents,
-        paidAt: paymentRow.paid_at ?? paidAt,
+        paidAt: authoritativePaidAt,
         stripeInvoiceId,
         plan,
       });
@@ -195,10 +203,10 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
       }
 
       const inserted = await insertSelfInvoice(
-        draft.invoice, draft.operator.tenantId, stripeInvoiceId,
+        draft.invoice, draft.operator.tenantId, stripeInvoiceId, paymentId, tenantId,
       );
-      if (!inserted) {
-        throw new Error('insertSelfInvoice returned null');
+      if (!inserted.created) {
+        throw new Error('VAT invoice transaction already committed; reconcile KSeF enqueue before retry');
       }
 
       return {
@@ -215,27 +223,6 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
       return insertResult;
     }
 
-    // 5. Link payment → faktura. UPDATE jest fail-soft: nawet jak nie zadziała,
-    // faktura i tak została wystawiona, link można naprawić ręcznie z admin panelu.
-    await step.run('link-payment-to-invoice', async () => {
-      const supabase = createAdminClient();
-      const { error } = await supabase
-        .from('stripe_payments')
-        .update({
-          vat_invoice_id: insertResult.invoiceId,
-          vat_invoice_submitted_at: new Date().toISOString(),
-        })
-        .eq('id', paymentId);
-
-      if (error) {
-        Sentry.captureException(error, {
-          tags: { area: 'billing.self-invoice.link' },
-          extra: { paymentId, invoiceId: insertResult.invoiceId },
-        });
-        // Nie throw — kontynuujemy do emit submit.
-      }
-    });
-
     // 6. Emit submit event do istniejącego KSeF pipeline'u (Faza 23).
     await step.sendEvent('emit-ksef-submit', {
       name: 'invoice/submit.requested',
@@ -247,6 +234,22 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
       }).data,
     });
 
+    // Enqueue KSeF jest poza transakcją faktury. Brak znacznika po 15 min
+    // zgłasza monitor i wymaga ręcznego ustalenia, czy event dotarł.
+    await step.run('mark-ksef-event-emitted', async () => {
+      const supabase = createAdminClient();
+      const { data: marked, error } = await supabase
+        .from('stripe_payments')
+        .update({ vat_invoice_submitted_at: new Date().toISOString() })
+        .eq('id', paymentId)
+        .eq('vat_invoice_id', insertResult.invoiceId)
+        .is('vat_invoice_submitted_at', null)
+        .select('id')
+        .maybeSingle();
+      if (error || !marked) {
+        throw error ?? new Error('KSeF enqueue marker requires reconciliation');
+      }
+    });
     // 7. Audit log z prefixem `billing.vat_invoice.queued`.
     await step.run('audit', async () => {
       await logAuditSystem({

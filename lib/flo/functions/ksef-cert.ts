@@ -22,8 +22,22 @@
 import { fingerprintOf } from '@/lib/flo/fingerprint';
 import type { CreateProposalInput } from '@/lib/flo/proposals';
 
-/** Progi ostrzeżeń w dniach. */
-export const WARN_THRESHOLDS = [30, 14, 3] as const;
+/**
+ * Progi ostrzeżeń w dniach — JEDNO źródło dla karty, maila i pusha.
+ *
+ * Do 25.09.2026 były dwie listy: tu [30, 14, 3], a w `cert-expiry-alert`
+ * [30, 14, 7]. Zadanie szukało certyfikatów w oknach 30/14/7, liczyło z nich
+ * 29/13/6 dni (zaokrąglenie w dół), a karta przepuszczała wyłącznie 30/14/3.
+ * Skutek: karta X-03 dla wygasającego certyfikatu NIE POWSTAŁA NIGDY, a oba
+ * pliki miały zielone testy, bo każdy sprawdzał tylko swoją połowę.
+ *
+ * Lista wyrównana do tego, co klienci FAKTYCZNIE dostawali mailem i pushem
+ * (7, nie 3). Próg 3 dni nie istniał na produkcji ani przez chwilę, więc
+ * nikomu nic nie znika. Czy ostatnie ostrzeżenie ma być na 7, czy na 3 dni —
+ * decyzja produktowa; teraz zmienia się ją w jednym miejscu, dla wszystkich
+ * kanałów naraz.
+ */
+export const WARN_THRESHOLDS = [30, 14, 7] as const;
 
 /** Poniżej tylu dni interfejs pokazuje trwały pasek, nie tylko kartę. */
 export const BANNER_BELOW_DAYS = 14;
@@ -92,11 +106,30 @@ export function evaluateCert(snapshot: CertSnapshot, now: Date): CertVerdict {
  *
  * Ostrzeganie codziennie przez miesiąc uczy ignorowania. Odzywamy się na
  * trzech progach i tyle — każdy z nich znaczy co innego: „zaplanuj",
- * „zrób to w tym tygodniu", „to jest dziś".
+ * „zrób to w tym tygodniu", „ostatnie dni".
  */
 export function shouldWarn(daysLeft: number | null): boolean {
   if (daysLeft === null) return false;
   return WARN_THRESHOLDS.includes(daysLeft as (typeof WARN_THRESHOLDS)[number]);
+}
+
+/**
+ * Okno, w którym zadanie szuka certyfikatów na danym progu: `[próg−1, próg]`
+ * dni od teraz. Jednodniowe, żeby jeden próg trafiał jednego dnia, a nie
+ * codziennie przez tydzień.
+ *
+ * Tutaj, a nie w zadaniu, bo z tym oknem musi się zgadzać karta: w tym oknie
+ * `evaluateCert` policzy `próg−1` dni (zaokrąglenie w dół), więc karta nie
+ * może pytać `shouldWarn` o `daysLeft` — musi dostać próg, na którym
+ * wywołało ją zadanie. Test szwu w `flo-ksef-fix-cert.test.ts` pilnuje obu
+ * stron naraz.
+ */
+export function certExpiryWindow(days: number, now: Date): { from: Date; to: Date } {
+  const DAY = 86_400_000;
+  return {
+    from: new Date(now.getTime() + (days - 1) * DAY),
+    to: new Date(now.getTime() + days * DAY),
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -107,12 +140,24 @@ export function buildCertProposal(input: {
   tenantId: string;
   verdict: CertVerdict;
   now?: Date;
+  /**
+   * Próg, na którym wywołało nas zadanie (`WARN_THRESHOLDS`). Zadanie już
+   * wybrało certyfikat po oknie, więc to próg decyduje, czy się odezwać —
+   * `verdict.daysLeft` w tym oknie wynosi `próg−1` i nie trafiłby nigdy.
+   * Bez progu (wywołanie spoza zadania) liczy się `daysLeft`.
+   */
+  threshold?: number;
 }): CreateProposalInput | null {
   const now = input.now ?? new Date();
   const { verdict } = input;
 
   if (verdict.state === 'working') return null;
-  if (verdict.state === 'expiring' && !shouldWarn(verdict.daysLeft)) return null;
+  if (
+    verdict.state === 'expiring' &&
+    !shouldWarn(input.threshold ?? verdict.daysLeft)
+  ) {
+    return null;
+  }
 
   const base = {
     tenantId: input.tenantId,
@@ -134,6 +179,12 @@ export function buildCertProposal(input: {
       alarm: verdict.alarm,
       primaryIntent: 'open',
       primaryLabel: 'Wgraj certyfikat',
+      // Jeden przycisk poza głównym — celowo bez domyślnego „Nigdy więcej
+      // takich”. Przy ostrzeżeniu, bez którego faktura nie trafi do KSeF,
+      // zapraszałby do wyłączenia jedynego sygnału w aplikacji. I obiecywałby
+      // coś, czego nie spełnimy: mail i push przy każdym progu idą dalej.
+      // Do 25.09 nikt tego przycisku nie widział, bo karta nie powstawała.
+      secondary: [{ label: 'Nie teraz', intent: 'snooze' }],
     },
     evidence: [{ label: 'Ustawienia KSeF', href: '/settings/ksef' }],
   };

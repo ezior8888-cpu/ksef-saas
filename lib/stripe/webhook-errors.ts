@@ -10,7 +10,8 @@ export type RetryablePreEffectWebhookCode =
   | 'subscription_sync_invalid'
   | 'subscription_sync_claim_failed'
   | 'subscription_sync_busy'
-  | 'subscription_sync_lookup_failed';
+  | 'subscription_sync_lookup_failed'
+  | 'financial_object_lookup_failed';
 
 export class RetryablePreEffectWebhookError extends Error {
   readonly code: RetryablePreEffectWebhookCode;
@@ -19,5 +20,15 @@ export class RetryablePreEffectWebhookError extends Error {
     super(message);
     this.name = 'RetryablePreEffectWebhookError';
     this.code = code;
+  }
+}
+
+/** A signed event is incomplete for automation and needs an operator, not replay. */
+export class ReconciliationRequiredWebhookError extends Error {
+  readonly code = 'payment_reference_missing_or_invalid';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'ReconciliationRequiredWebhookError';
   }
 }

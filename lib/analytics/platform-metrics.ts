@@ -88,12 +88,12 @@ export async function collectPlatformOverviewMetrics(): Promise<PlatformOverview
     supabase
       .from('invoices')
       .select('*', { count: 'exact', head: true })
-      .eq('direction', 'issued')
+      .eq('direction', 'outgoing')
       .gte('created_at', day1Iso),
     supabase
       .from('invoices')
       .select('*', { count: 'exact', head: true })
-      .eq('direction', 'issued')
+      .eq('direction', 'outgoing')
       .eq('ksef_status', 'accepted')
       .gte('created_at', day1Iso),
     supabase

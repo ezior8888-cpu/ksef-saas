@@ -34,6 +34,16 @@ describe('rejestr jobów', () => {
     expect(unknown, 'kolejki spoza queues.ts (literówka?)').toEqual([]);
   });
 
+  it('każda kolejka zdarzeń ma handlera', () => {
+    // Kierunek odwrotny do testu wyżej. Literówka trafiająca w INNĄ istniejącą
+    // kolejkę przechodzi tamten test, a zostawia własną bez konsumenta — worker
+    // jej nie tworzy, więc `boss.send` rzuca „Queue … does not exist”.
+    // Tak auto-kategoryzacja skrzynki słuchała `inbox.invoice.received`
+    // zamiast `inbox.invoice-received` od 17.08 do 25.09.2026.
+    const bezHandlera = allEventQueues().filter((q) => !queues.includes(q));
+    expect(bezHandlera, 'kolejki zdarzeń bez zarejestrowanego joba').toEqual([]);
+  });
+
   it('paczka A: 12 cronów utrzymaniowych', () => {
     const packageA = [
       'cron.archive-old-invoices',
@@ -99,7 +109,7 @@ describe('rejestr jobów', () => {
     const packageC = [
       'cron.co-pilot-monthly',
       'ocr.process-photo',
-      'inbox.invoice.received',
+      'inbox.invoice-received',
       'import.file.uploaded',
       'validation.bulk-contractors.requested',
       'import.ksef-history.requested',
@@ -172,7 +182,7 @@ describe('rejestr jobów', () => {
   it('parytet limitów równoległości paczki C', () => {
     const byQueue = new Map(registered.map((j) => [j.queue, j]));
     expect(byQueue.get('ocr.process-photo')?.batchSize).toBe(5);
-    expect(byQueue.get('inbox.invoice.received')?.batchSize).toBe(10);
+    expect(byQueue.get('inbox.invoice-received')?.batchSize).toBe(10);
     expect(byQueue.get('validation.bulk-contractors.requested')?.batchSize).toBe(3);
     // magic-import: limit per NIP (grupa), nie globalny batch
     expect(byQueue.get('import.ksef-history.requested')?.groupConcurrency).toBe(3);

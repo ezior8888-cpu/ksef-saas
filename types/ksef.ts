@@ -156,6 +156,15 @@ export interface InvoiceStatusResponse {
     code: number;
     description: string;
     details?: string[];
+    /**
+     * Od API 2.0.0 RC6.0 przy kodzie 440 („Duplikat faktury”): numer KSeF
+     * i sesja faktury, która JUŻ jest w systemie (CIRFMF/ksef-docs,
+     * api-changelog.md).
+     */
+    extensions?: {
+      originalKsefNumber?: string;
+      originalSessionReferenceNumber?: string;
+    };
   };
   /** Data akceptacji faktury przez KSeF */
   acquisitionTimestamp?: string;

@@ -117,6 +117,20 @@ function isWeekend(date: Date): boolean {
  * terminie zostaje mu przekroczony obowiązek ustawowy z powodu narzędzia,
  * które miało go przed tym chronić.
  */
+/**
+ * Najbliższy termin, który JESZCZE nie minął. Najstarszy z listy bywa już
+ * przekroczony (podczas awarii taki wpis zostaje w kolejce), a
+ * `evaluateDeadline` milczy o przeszłych — wtedy zasłaniałby alarm dla
+ * faktury, której termin mija za dwie godziny.
+ */
+export function nearestFutureDeadline(deadlines: readonly string[], now: Date): Date | null {
+  const future = deadlines
+    .map((d) => new Date(d))
+    .filter((d) => Number.isFinite(d.getTime()) && d.getTime() > now.getTime())
+    .sort((a, b) => a.getTime() - b.getTime());
+  return future[0] ?? null;
+}
+
 export function evaluateDeadline(deadline: Date, now: Date): DeadlineAlert {
   const hoursLeft = (deadline.getTime() - now.getTime()) / 3_600_000;
   if (hoursLeft <= 0) return { kind: 'none' };

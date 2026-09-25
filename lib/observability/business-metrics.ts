@@ -67,12 +67,12 @@ export async function getDailyMetrics(hours = 24): Promise<DailyMetrics> {
     supabase
       .from('invoices')
       .select('id', { count: 'exact', head: true })
-      .eq('direction', 'issued')
+      .eq('direction', 'outgoing')
       .gte('created_at', fromIso),
     supabase
       .from('invoices')
       .select('id', { count: 'exact', head: true })
-      .eq('direction', 'issued')
+      .eq('direction', 'outgoing')
       .eq('ksef_status', 'accepted')
       .gte('created_at', fromIso),
     supabase

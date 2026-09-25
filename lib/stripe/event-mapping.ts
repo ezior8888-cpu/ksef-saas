@@ -17,7 +17,7 @@ import type Stripe from 'stripe';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import type { ActiveSubscription } from './subscription';
-import { RetryablePreEffectWebhookError } from './webhook-errors';
+import { ReconciliationRequiredWebhookError, RetryablePreEffectWebhookError } from './webhook-errors';
 
 type SubscriptionStatus = ActiveSubscription['status'];
 type SubscriptionPlan = ActiveSubscription['plan'];
@@ -67,6 +67,18 @@ export function mapPriceIdToPlan(priceId: string | null | undefined): Subscripti
 function isoFromUnix(unix: number | null | undefined): string | null {
   if (!unix) return null;
   return new Date(unix * 1000).toISOString();
+}
+
+function paidAtFromInvoice(invoice: Stripe.Invoice): string {
+  const unix = invoice.status_transitions?.paid_at;
+  if (typeof unix !== 'number' || !Number.isSafeInteger(unix) || unix <= 0) {
+    throw new Error('Stripe paid invoice ' + invoice.id + ' has no valid paid_at');
+  }
+  const paidAt = new Date(unix * 1000);
+  if (!Number.isFinite(paidAt.getTime())) {
+    throw new Error('Stripe paid invoice ' + invoice.id + ' has no valid paid_at');
+  }
+  return paidAt.toISOString();
 }
 
 /**
@@ -195,9 +207,92 @@ function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
   return legacy;
 }
 
+/** Accept a typed Acacia reference or a validated Stripe expansion. */
+function acaciaInvoicePaymentReference(
+  value: unknown,
+  objectType: 'payment_intent' | 'charge',
+  idPattern: RegExp,
+): string | null {
+  if (value === null || value === undefined) return null;
+
+  let id: unknown = value;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const expanded = value as Record<string, unknown>;
+    id = expanded.object === objectType ? expanded.id : null;
+  }
+  if (typeof id !== 'string' || !idPattern.test(id)) {
+    throw new ReconciliationRequiredWebhookError(
+      'Stripe invoice ' + objectType + ' reference missing or invalid',
+    );
+  }
+  return id;
+}
+
 /**
- * Invoice (succeeded/failed) → row dla `stripe_payments`.
- * Returns `null` only for an actual one-time invoice without a subscription.
+ * Acacia invoice snapshots sometimes carry one direct payment reference.
+ * Basil+ exposes invoice payments in another shape; we do not infer that
+ * structure here without a verified contract. If neither legacy field can
+ * prove the payment identity, the signed event requires reconciliation before writes.
+ * Both valid legacy references may coexist in a signed invoice; retain both
+ * for reconciliation without deriving tenant identity from either alone.
+ */
+function legacyInvoicePaymentReferences(
+  invoice: Stripe.Invoice,
+  requireReference: boolean,
+): { paymentIntentId: string | null; chargeId: string | null } {
+  const refs = invoice as unknown as {
+    payment_intent?: unknown;
+    charge?: unknown;
+  };
+  const paymentIntentId = acaciaInvoicePaymentReference(
+    refs.payment_intent, 'payment_intent', /^pi_[A-Za-z0-9]{8,}$/,
+  );
+  const chargeId = acaciaInvoicePaymentReference(
+    refs.charge, 'charge', /^ch_[A-Za-z0-9]{8,}$/,
+  );
+
+  if (requireReference && !paymentIntentId && !chargeId) {
+    throw new ReconciliationRequiredWebhookError(
+      'Stripe invoice payment reference missing or invalid',
+    );
+  }
+
+  // Expanded references may expose their relationship. Reject contradictions
+  // instead of storing unrelated PaymentIntent and Charge IDs on one row.
+  if (paymentIntentId && chargeId) {
+    const expandedPi = refs.payment_intent;
+    if (expandedPi && typeof expandedPi === 'object' && !Array.isArray(expandedPi)) {
+      const latestCharge = (expandedPi as Record<string, unknown>).latest_charge;
+      if (latestCharge !== undefined && latestCharge !== null &&
+          acaciaInvoicePaymentReference(
+            latestCharge, 'charge', /^ch_[A-Za-z0-9]{8,}$/,
+          ) !== chargeId) {
+        throw new ReconciliationRequiredWebhookError(
+          'Stripe invoice payment references conflict',
+        );
+      }
+    }
+
+    const expandedCharge = refs.charge;
+    if (expandedCharge && typeof expandedCharge === 'object' && !Array.isArray(expandedCharge)) {
+      const chargePaymentIntent = (expandedCharge as Record<string, unknown>).payment_intent;
+      if (chargePaymentIntent !== undefined && chargePaymentIntent !== null &&
+          acaciaInvoicePaymentReference(
+            chargePaymentIntent, 'payment_intent', /^pi_[A-Za-z0-9]{8,}$/,
+          ) !== paymentIntentId) {
+        throw new ReconciliationRequiredWebhookError(
+          'Stripe invoice payment references conflict',
+        );
+      }
+    }
+  }
+
+  return { paymentIntentId, chargeId };
+}
+
+/**
+ * Invoice (succeeded/failed) to a stripe_payments row.
+ * Returns null only for an actual one-time invoice without a subscription.
  */
 export interface PaymentRowResult {
   tenantId: string;
@@ -211,6 +306,14 @@ export async function mapInvoiceToPaymentRow(
   // Acacia sends top-level subscription; Basil+ uses parent.subscription_details.
   const subscriptionRef = invoiceSubscriptionId(invoice);
   if (!subscriptionRef) return null;
+
+  // The signed Stripe invoice is the authority for the payment date. A
+  // delivery without it cannot create a payment row or schedule a VAT job.
+  const paidAt = status === 'succeeded' ? paidAtFromInvoice(invoice) : null;
+  const paymentRefs = legacyInvoicePaymentReferences(
+    invoice,
+    status === 'succeeded',
+  );
 
   const supabase = createAdminClient();
 
@@ -247,11 +350,6 @@ export async function mapInvoiceToPaymentRow(
     );
   }
 
-  const invoiceWithIds = invoice as unknown as {
-    payment_intent?: string | null;
-    charge?: string | null;
-  };
-
   // Stripe v22: `invoice.tax` zostało zastąpione przez `total_taxes` (Array<{amount}>)
   // — sumujemy żeby dostać total VAT w cents.
   const totalTaxes = (invoice as unknown as {
@@ -266,14 +364,14 @@ export async function mapInvoiceToPaymentRow(
     row: {
       tenant_id: subResult.data.tenant_id,
       subscription_id: subResult.data.id,
-      stripe_payment_intent_id: invoiceWithIds.payment_intent ?? null,
+      stripe_payment_intent_id: paymentRefs.paymentIntentId,
       stripe_invoice_id: invoice.id,
-      stripe_charge_id: invoiceWithIds.charge ?? null,
+      stripe_charge_id: paymentRefs.chargeId,
       status,
       amount_cents: status === 'succeeded' ? invoice.amount_paid : invoice.amount_due,
       currency: (invoice.currency ?? 'pln').toLowerCase(),
       tax_cents: taxCents,
-      paid_at: status === 'succeeded' ? isoFromUnix(invoice.status_transitions?.paid_at) : null,
+      paid_at: paidAt,
       failure_reason:
         status === 'failed'
           ? ((invoice as unknown as { last_finalization_error?: { message?: string } })

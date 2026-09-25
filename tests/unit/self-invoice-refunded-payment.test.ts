@@ -114,14 +114,31 @@ beforeEach(() => {
           };
         } }),
       }),
-      update: () => ({ eq: async () => ({ error: null }) }),
+      update: (values: Record<string, unknown>) => {
+        if ('vat_invoice_id' in values) {
+          throw new Error('Payment-to-invoice link must be committed by the billing RPC');
+        }
+        expect(values).toHaveProperty('vat_invoice_submitted_at');
+        expect(sentEvent).toHaveBeenCalledOnce();
+        return {
+          eq: () => ({
+            eq: () => ({
+              is: () => ({
+                select: () => ({
+                  maybeSingle: async () => ({ data: { id: event.paymentId }, error: null }),
+                }),
+              }),
+            }),
+          }),
+        };
+      },
     };
   });
   mocks.build.mockResolvedValue({
     operator: { tenantId: 'operator-tenant', nip: '1234567890' },
     invoice: { id: 'draft-invoice' },
   });
-  mocks.insert.mockResolvedValue({ invoiceId: 'vat-invoice', internalNumber: 'VAT-1' });
+  mocks.insert.mockResolvedValue({ invoiceId: 'vat-invoice', internalNumber: 'VAT-1', created: true });
   mocks.audit.mockResolvedValue(undefined);
 });
 
@@ -307,6 +324,24 @@ describe('VAT self-invoice for a delayed payment job', () => {
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
+  it('does not enqueue KSeF when the atomic invoice claim loses to a refund', async () => {
+    mocks.insert.mockRejectedValue(new Error('VAT invoice blocked by refund operation'));
+
+    await expect(runSelfInvoicePayment(event, context)).rejects.toThrow(
+      'VAT invoice blocked by refund operation',
+    );
+
+    expect(mocks.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      'operator-tenant',
+      event.stripeInvoiceId,
+      event.paymentId,
+      event.tenantId,
+    );
+    expect(sentEvent).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
   it('still creates and queues a VAT invoice for a succeeded payment', async () => {
     await expect(runSelfInvoicePayment(event, context)).resolves.toMatchObject({
       success: true,
@@ -315,6 +350,13 @@ describe('VAT self-invoice for a delayed payment job', () => {
 
     expect(mocks.build).toHaveBeenCalledOnce();
     expect(mocks.insert).toHaveBeenCalledOnce();
+    expect(mocks.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      'operator-tenant',
+      event.stripeInvoiceId,
+      event.paymentId,
+      event.tenantId,
+    );
     expect(sentEvent).toHaveBeenCalledOnce();
     expect(mocks.audit).toHaveBeenCalledOnce();
   });

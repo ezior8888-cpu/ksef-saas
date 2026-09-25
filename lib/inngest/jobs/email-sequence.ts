@@ -14,6 +14,39 @@ import {
 
 const APP_BASE = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 
+/**
+ * Firma, której danych wolno użyć w mailu: `last_active_tenant_id` TYLKO
+ * przy aktywnym członkostwie. Odebranie dostępu nie czyści tego wskaźnika,
+ * a mail czyta bazę kluczem serwisowym (bez RLS) — bez tej bramki były
+ * członek dostawałby statystyki dawnej firmy. Sprawdzane w każdym kroku
+ * od nowa, więc ponowienie też widzi aktualny stan.
+ */
+async function activeTenantIdOf(
+  supabase: ReturnType<typeof createAdminClient>,
+  userId: string,
+): Promise<string | null> {
+  const { data: userRow, error: userErr } = await supabase
+    .from('users')
+    .select('last_active_tenant_id')
+    .eq('id', userId)
+    .maybeSingle();
+  if (userErr) throw userErr;
+
+  const tenantId = userRow?.last_active_tenant_id as string | null | undefined;
+  if (!tenantId) return null;
+
+  const { data: member, error: memberErr } = await supabase
+    .from('memberships')
+    .select('user_id')
+    .eq('user_id', userId)
+    .eq('organization_id', tenantId)
+    .eq('status', 'active')
+    .maybeSingle();
+  if (memberErr) throw memberErr;
+
+  return member ? tenantId : null;
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -206,19 +239,19 @@ export async function runEmailDay1(data: Parameters<typeof emailTrialDay1.create
 
     const firstInvoice = await step.run('check-first-invoice', async () => {
       const supabase = createAdminClient();
-      const { data: userRow, error: userErr } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (userErr) throw userErr;
-      if (!userRow?.tenant_id) return null;
+      // `users.tenant_id` NIE ISTNIEJE od migracji 00036 (model wielu firm:
+      // powiązanie idzie przez `memberships`). Następcą jest
+      // `last_active_tenant_id` — migracja wypełniła je z usuwanej kolumny,
+      // a założenie firmy (akcja i RPC `create_organization_with_owner`)
+      // ustawia je od razu. Do 25.09 te zapytania padały błędem 42703 przy
+      // KAŻDYM nowym koncie, więc maile próbne z tego pliku nie wychodziły.
+      const tenantId = await activeTenantIdOf(supabase, userId);
+      if (!tenantId) return null;
 
       const { data: inv, error: invErr } = await supabase
         .from('invoices')
         .select('id')
-        .eq('tenant_id', userRow.tenant_id)
+        .eq('tenant_id', tenantId)
         .limit(1)
         .maybeSingle();
 
@@ -298,26 +331,20 @@ export async function runEmailDay8(data: Parameters<typeof emailTrialDay8.create
 
     const stats = await step.run('compute-stats', async () => {
       const supabase = createAdminClient();
-      const { data: userRow, error: userErr } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (userErr) throw userErr;
-      if (!userRow?.tenant_id) return { invoicesCount: 0, expensesCount: 0 };
+      const tenantId = await activeTenantIdOf(supabase, userId);
+      if (!tenantId) return { invoicesCount: 0, expensesCount: 0 };
 
       const { count: invoicesCount, error: invCountErr } = await supabase
         .from('invoices')
         .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', userRow.tenant_id);
+        .eq('tenant_id', tenantId);
 
       if (invCountErr) throw invCountErr;
 
       const { count: expensesCount, error: expCountErr } = await supabase
         .from('expenses')
         .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', userRow.tenant_id);
+        .eq('tenant_id', tenantId);
 
       if (expCountErr) throw expCountErr;
 
@@ -394,19 +421,13 @@ export async function runEmailDay14(data: Parameters<typeof emailTrialDay14.crea
 
     const subscribed = await step.run('check-subscription', async () => {
       const supabase = createAdminClient();
-      const { data: userRow, error: userErr } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (userErr) throw userErr;
-      if (!userRow?.tenant_id) return false;
+      const tenantId = await activeTenantIdOf(supabase, userId);
+      if (!tenantId) return false;
 
       const { data: tenant, error: tenantErr } = await supabase
         .from('tenants')
         .select('subscription_tier')
-        .eq('id', userRow.tenant_id)
+        .eq('id', tenantId)
         .maybeSingle();
 
       if (tenantErr) throw tenantErr;

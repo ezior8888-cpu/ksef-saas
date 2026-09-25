@@ -35,6 +35,8 @@ import {
   handleInvoicePaymentSucceeded,
 } from '@/lib/stripe/webhook-handlers';
 
+const PAID_AT = new Date(1780000000 * 1000).toISOString();
+
 const invoice = {
   id: 'in_local',
   amount_paid: 12000,
@@ -47,11 +49,11 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.mapInvoice.mockResolvedValue({
     tenantId: 'tenant-local',
-    row: { stripe_invoice_id: 'in_local', status: 'succeeded' },
+    row: { stripe_invoice_id: 'in_local', status: 'succeeded', paid_at: PAID_AT },
   });
   mocks.paymentStatusRead.mockResolvedValue({ data: { status: 'refunded' }, error: null });
   mocks.upsert.mockReturnValue({
-    select: async () => ({ data: [{ id: 'payment-local', status: 'succeeded' }], error: null }),
+    select: async () => ({ data: [{ id: 'payment-local', status: 'succeeded', paid_at: PAID_AT }], error: null }),
   });
   mocks.from.mockImplementation((table: string) => {
     if (table !== 'stripe_payments') throw new Error('Unexpected table: ' + table);
@@ -91,6 +93,55 @@ describe('late Stripe invoice webhooks after a refund', () => {
 
     expect(mocks.upsert).toHaveBeenCalledOnce();
     expect(mocks.sendJob).toHaveBeenCalledOnce();
+  });
+
+  it('passes the persisted paid_at to the VAT job', async () => {
+    const persistedPaidAt = PAID_AT.replace('Z', '+00:00');
+    mocks.paymentStatusRead.mockResolvedValue({ data: { status: 'succeeded' }, error: null });
+    mocks.upsert.mockReturnValue({
+      select: async () => ({
+        data: [{ id: 'payment-local', status: 'succeeded', paid_at: persistedPaidAt }],
+        error: null,
+      }),
+    });
+
+    await handleInvoicePaymentSucceeded(invoice);
+
+    expect(mocks.sendJob).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ paidAt: persistedPaidAt }),
+    }));
+  });
+
+  it.each([null, 'not-a-date', '2026-01-01T00:00:00.000Z'])(
+    'blocks VAT side effects when persisted paid_at is %s', async (persistedPaidAt) => {
+      mocks.paymentStatusRead.mockResolvedValue({ data: { status: 'succeeded' }, error: null });
+      mocks.upsert.mockReturnValue({
+        select: async () => ({
+          data: [{ id: 'payment-local', status: 'succeeded', paid_at: persistedPaidAt }],
+          error: null,
+        }),
+      });
+
+      await expect(handleInvoicePaymentSucceeded(invoice))
+        .rejects.toThrow('stripe payment paid_at not confirmed');
+      expect(mocks.audit).not.toHaveBeenCalled();
+      expect(mocks.sendJob).not.toHaveBeenCalled();
+      expect(mocks.track).not.toHaveBeenCalled();
+    },
+  );
+
+  it('blocks all effects if the mapped paid_at is absent before a payment write', async () => {
+    mocks.mapInvoice.mockResolvedValue({
+      tenantId: 'tenant-local',
+      row: { stripe_invoice_id: 'in_local', status: 'succeeded', paid_at: null },
+    });
+
+    await expect(handleInvoicePaymentSucceeded(invoice))
+      .rejects.toThrow('no valid authoritative paid_at');
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+    expect(mocks.sendJob).not.toHaveBeenCalled();
   });
 
   it('fails for retry if the existing payment status cannot be read', async () => {

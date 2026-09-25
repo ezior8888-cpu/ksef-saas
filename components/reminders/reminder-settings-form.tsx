@@ -24,7 +24,11 @@ export interface Settings {
   stage_3_enabled: boolean;
   stage_3_days_after_due: number;
   sender_name: string | null;
-  /** Adres From (Resend) — wymagany do wysyłki; brak w DB = null */
+  /**
+   * Dawne „Adres From”. Nie trafia już do „Od:” (Resend wysyła tylko z domen
+   * FaktFlow) — służy jako Reply-To, gdy `reply_to_email` jest pusty. Pola nie
+   * ma w formularzu; kolumna zostaje, bo część kont ma ją wypełnioną.
+   */
   sender_email: string | null;
   reply_to_email: string | null;
   pause_on_reply: boolean;
@@ -332,7 +336,9 @@ export function ReminderSettingsForm({
             Dane nadawcy
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pojawi się w stopce emaila i jako „Od:”
+            Nazwa pojawi się w stopce emaila i jako „Od:”. Wysyłamy z adresu
+            FaktFlow w imieniu Twojej firmy — odpowiedzi klientów trafią na
+            adres poniżej.
           </p>
         </div>
 
@@ -353,28 +359,6 @@ export function ReminderSettingsForm({
               )
             }
             placeholder={tenantName}
-          />
-        </div>
-
-        <div>
-          <Label
-            htmlFor="sender-email"
-            className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground"
-          >
-            Adres From (email wysyłki)
-          </Label>
-          <Input
-            id="sender-email"
-            type="email"
-            autoComplete="off"
-            value={settings.sender_email ?? ''}
-            onChange={(e) =>
-              update(
-                'sender_email',
-                e.target.value === '' ? null : e.target.value,
-              )
-            }
-            placeholder="faktury@twoja-firma.pl"
           />
         </div>
 
