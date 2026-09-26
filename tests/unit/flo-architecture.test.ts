@@ -271,4 +271,10 @@ describe('W1 — nic nie wychodzi bez kliknięcia człowieka', () => {
     // import wykonawcy wychodzącego i puls wysyłałby sam.
     expect(pathToSink('lib/flo/tick.ts')).toBeNull();
   });
+
+  it('rozstrzyganie trybu cichego jest odcięte od wysyłki', () => {
+    // Ten sam powód co wyżej: `cron.flo-shadow-settle` chodzi tylko na pg-boss.
+    // Porównuje i zapisuje wynik — nie ma prawa niczego wysłać.
+    expect(pathToSink('lib/flo/shadow-settle.ts')).toBeNull();
+  });
 });
