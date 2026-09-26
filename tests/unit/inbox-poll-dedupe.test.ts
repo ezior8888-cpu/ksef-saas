@@ -5,12 +5,17 @@ import type { JobContext } from '@/lib/jobs/registry';
 type Row = Record<string, unknown>;
 
 const db = vi.hoisted(() => ({
-  existing: new Set<string>(),
+  existing: [] as Row[],
   filterError: null as { message: string } | null,
   filterChunks: [] as string[][],
   inserts: [] as Row[][],
+  raceRows: null as Row[] | null,
   sellerRows: [] as Row[],
-  classify: vi.fn((_docs: unknown, _known: ReadonlySet<string>) => [] as unknown[]),
+  classify: vi.fn((docs: unknown, known: ReadonlySet<string>) => {
+    void docs;
+    void known;
+    return [] as unknown[];
+  }),
 }));
 
 vi.mock('@/lib/supabase/admin-queries', () => ({ getTenantKsefCredentials: vi.fn(async () => ({})) }));
@@ -34,9 +39,13 @@ vi.mock('@/lib/supabase/server', () => ({
       let rows: Row[] = [];
       let inList: string[] | null = null;
       let sellerList: string[] | null = null;
+      const filters = new Map<string, unknown>();
       const q = {
         select: () => q,
-        eq: () => q,
+        eq: (col: string, value: unknown) => {
+          filters.set(col, value);
+          return q;
+        },
         not: () => q,
         neq: () => q,
         limit: () => q,
@@ -54,15 +63,30 @@ vi.mock('@/lib/supabase/server', () => ({
           let result: unknown = { data: [], error: null };
           if (op === 'insert') {
             db.inserts.push(rows);
-            result = { data: rows.map((r, i) => ({ id: `id-${i}`, ksef_number: r.ksef_number })), error: null };
+            if (db.raceRows) {
+              db.existing.push(...db.raceRows);
+              db.raceRows = null;
+              result = { data: null, error: { code: '23505', message: 'unique violation' } };
+            } else if (rows.some((r) => db.existing.some((e) =>
+              e.tenant_id === r.tenant_id && e.direction === r.direction &&
+              e.ksef_environment === r.ksef_environment && e.ksef_number === r.ksef_number))) {
+              result = { data: null, error: { code: '23505', message: 'unique violation' } };
+            } else {
+              const inserted: Row[] = rows.map((r, i) => ({ ...r, id: `id-${db.existing.length + i}` }));
+              db.existing.push(...inserted);
+              result = { data: inserted.map((r) => ({ id: r.id, ksef_number: r.ksef_number })), error: null };
+            }
           } else if (sellerList) {
             const lista = sellerList;
             result = { data: db.sellerRows.filter((r) => lista.includes(r.seller_nip as string)), error: null };
           } else if (inList) {
-            db.filterChunks.push(inList);
+            const numbers = inList;
+            db.filterChunks.push(numbers);
             result = db.filterError
               ? { data: null, error: db.filterError }
-              : { data: inList.filter((n) => db.existing.has(n)).map((n) => ({ ksef_number: n })), error: null };
+              : { data: db.existing.filter((r) =>
+                numbers.includes(r.ksef_number as string) &&
+                [...filters].every(([col, value]) => r[col] === value)), error: null };
           }
           return Promise.resolve(result).then(ok, fail);
         },
@@ -75,12 +99,7 @@ vi.mock('@/lib/supabase/server', () => ({
 import { queryReceivedInvoices } from '@/lib/ksef/inbox';
 import { KSEF_NUMBERS_PER_QUERY, runInboxPollTenant } from '@/lib/inngest/jobs/inbox-polling';
 
-/**
- * Okno 48 h: każde pobranie (co 15 min) widzi te same faktury ponownie,
- * a baza nie ma unikalności na numer KSeF. `filter-existing` to jedyna
- * ochrona przed duplikatem — a duplikat to podwójny koszt w KPiR (osobny
- * wydatek z auto-kategoryzacji dla każdej kopii).
- */
+/** Okno 48 h powoduje nakładające się importy; 00089 rozstrzyga wyścig w DB. */
 
 const ctx: JobContext = {
   attempt: 0,
@@ -105,13 +124,30 @@ function faktura(n: number, sellerNip = '5260001246') {
   };
 }
 
+function storedInvoice(n: number, env: string | null = 'test', patch: Row = {}): Row {
+  const invoice = faktura(n);
+  return {
+    id: `stored-${n}`,
+    tenant_id: DATA.tenantId,
+    direction: 'incoming',
+    ksef_environment: env,
+    ksef_number: invoice.ksefNumber,
+    seller_nip: invoice.seller.nip,
+    issue_date: invoice.issueDate,
+    gross_total: invoice.grossAmount,
+    fa3_data: {},
+    ...patch,
+  };
+}
+
 beforeEach(() => {
   vi.stubEnv('KSEF_ENV', 'test');
   vi.clearAllMocks();
-  db.existing = new Set();
+  db.existing = [];
   db.filterError = null;
   db.filterChunks = [];
   db.inserts = [];
+  db.raceRows = null;
   db.sellerRows = [];
   db.classify.mockClear();
 });
@@ -132,7 +168,7 @@ describe('skrzynka KSeF: filtr już zapisanych faktur', () => {
   it('pytamy paczkami, żeby adres nie przekroczył limitu, i zapisujemy tylko nowe', async () => {
     const wszystkie = Array.from({ length: 250 }, (_, i) => faktura(i));
     vi.mocked(queryReceivedInvoices).mockResolvedValue(wszystkie as never);
-    db.existing = new Set([wszystkie[0]!.ksefNumber, wszystkie[120]!.ksefNumber, wszystkie[249]!.ksefNumber]);
+    db.existing = [storedInvoice(0), storedInvoice(120), storedInvoice(249)];
 
     await runInboxPollTenant(DATA, ctx);
 
@@ -152,9 +188,56 @@ describe('skrzynka KSeF: filtr już zapisanych faktur', () => {
 
   it('wszystko już zapisane — żadnego insertu', async () => {
     vi.mocked(queryReceivedInvoices).mockResolvedValue([faktura(1)] as never);
-    db.existing = new Set([faktura(1).ksefNumber]);
+    db.existing = [storedInvoice(1)];
 
     await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ newlyAdded: 0 });
+    expect(db.inserts).toEqual([]);
+  });
+
+  it('różni sprzedawcy mogą mieć ten sam własny numer FV/1', async () => {
+    const first = faktura(1, '1111111111');
+    const second = { ...faktura(2, '2222222222'), invoiceNumber: first.invoiceNumber };
+    vi.mocked(queryReceivedInvoices).mockResolvedValue([first, second] as never);
+
+    await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ newlyAdded: 2 });
+    expect(db.inserts[0]!.map((r) => r.internal_number)).toEqual([first.invoiceNumber, first.invoiceNumber]);
+    expect(db.inserts[0]!.every((r) => r.origin === 'ksef_inbox')).toBe(true);
+  });
+
+  it('po konflikcie równoległego batcha ponawia tylko nowe faktury i tylko je ogłasza', async () => {
+    vi.mocked(queryReceivedInvoices).mockResolvedValue([faktura(1), faktura(2)] as never);
+    db.raceRows = [storedInvoice(1)];
+
+    await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ newlyAdded: 1 });
+    expect(db.inserts.map((attempt) => attempt.map((row) => row.ksef_number))).toEqual([
+      [faktura(1).ksefNumber, faktura(2).ksefNumber],
+      [faktura(2).ksefNumber],
+    ]);
+    const invoiceFanout = vi.mocked(ctx.step.sendEvent).mock.calls.find(([name]) => name === 'fan-out-new-invoices');
+    expect(invoiceFanout?.[1]).toHaveLength(1);
+    expect((invoiceFanout?.[1] as Array<{ data: { ksefNumber: string } }>)[0]?.data.ksefNumber).toBe(faktura(2).ksefNumber);
+  });
+
+  it('ten sam numer KSeF w innym środowisku nie blokuje bieżącego importu', async () => {
+    vi.mocked(queryReceivedInvoices).mockResolvedValue([faktura(1)] as never);
+    db.existing = [storedInvoice(1, 'production')];
+
+    await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ newlyAdded: 1 });
+  });
+
+  it('historyczne nieznane środowisko zatrzymuje import bez zgadywania', async () => {
+    vi.mocked(queryReceivedInvoices).mockResolvedValue([faktura(1)] as never);
+    db.existing = [storedInvoice(1, null)];
+
+    await expect(runInboxPollTenant(DATA, ctx)).rejects.toThrow(/bez środowiska/);
+    expect(db.inserts).toEqual([]);
+  });
+
+  it('konflikt skrótu treści nie jest cicho pomijany', async () => {
+    vi.mocked(queryReceivedInvoices).mockResolvedValue([{ ...faktura(1), invoiceHash: 'new-hash' }] as never);
+    db.existing = [storedInvoice(1, 'test', { fa3_data: { invoiceHash: 'old-hash' } })];
+
+    await expect(runInboxPollTenant(DATA, ctx)).rejects.toThrow(/Konflikt tożsamości/);
     expect(db.inserts).toEqual([]);
   });
 });
