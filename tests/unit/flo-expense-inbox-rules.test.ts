@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import type { FloProposalRow } from '@/lib/flo/db-types';
+import { createProposal, toProposalView } from '@/lib/flo/proposals';
+import { createFakeDb } from './flo-fake-db';
 import {
   buildInboxSummaryProposal,
   classifyInboxDocuments,
@@ -378,5 +381,45 @@ describe('W-03 — zmiana profilu podatkowego', () => {
     // Nie wolno kasować cudzej pracy na podstawie niewiedzy.
     expect(invalidatesRules(null, { form: 'skala', vat: true })).toBe(false);
     expect(invalidatesRules({ form: 'skala', vat: true }, null)).toBe(false);
+  });
+});
+
+describe('W-02 — przycisk karty skrzynki', () => {
+  // Karta dzieli rodzaj `expense.review` z W-01, a wykonawca W-01 wymaga
+  // `expenseId`. Domyślne „Zgadza się” (zatwierdzenie) kończyło się więc
+  // ZAWSZE błędem „Propozycja bez identyfikatora wydatku” (recenzja 25.09).
+  it('główny przycisk prowadzi do skrzynki, nie uruchamia wykonawcy W-01', async () => {
+    const documents = classifyInboxDocuments(
+      [doc({ id: 'a' }), doc({ id: 'c', sellerNip: '1111111111', grossAmount: 900 })],
+      known,
+    );
+    const input = buildInboxSummaryProposal({
+      tenantId: 'ten-1',
+      documents,
+      periodKey: '2026-08-26',
+      now: NOW,
+    })!;
+
+    // Cała droga: zapis przez createProposal przy odsłoniętym rodzaju → widok.
+    const db = createFakeDb({
+      flo_rollout: [{ kind: 'expense.review', stage: 100, stage_since: '2026-08-01T00:00:00.000Z' }],
+    });
+    const created = await createProposal(input, db.client, async () => false);
+    expect(created.status).toBe('created');
+
+    const view = toProposalView(db.tables.flo_proposals[0] as unknown as FloProposalRow)!;
+    expect(view.primary.intent).toBe('open');
+    expect(view.primary.label).toBe('Przejrzyj dokumenty');
+    expect(view.evidence[0]?.href).toBe('/inbox');
+  });
+
+  it('wszystko rozpoznane — ten sam przycisk, spokojniejsza etykieta', () => {
+    const input = buildInboxSummaryProposal({
+      tenantId: 'ten-1',
+      documents: classifyInboxDocuments([doc({ id: 'a' })], known),
+      periodKey: '2026-08-26',
+      now: NOW,
+    })!;
+    expect(input.payload).toMatchObject({ primaryIntent: 'open', primaryLabel: 'Otwórz skrzynkę' });
   });
 });

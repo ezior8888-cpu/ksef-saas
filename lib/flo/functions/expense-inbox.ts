@@ -129,6 +129,12 @@ export function buildInboxSummaryProposal(input: {
       periodKey: input.periodKey,
       documentIds: input.documents.map((d) => d.id),
       needsDecisionIds: toDecide.map((d) => d.id),
+      // Karta dzieli rodzaj `expense.review` z W-01, ale nie jest decyzją
+      // o JEDNYM koszcie: wykonawca W-01 wymaga `expenseId`, którego tu nie
+      // ma, więc domyślne „Zgadza się” kończyło się zawsze błędem. Karta
+      // prowadzi do skrzynki — tam człowiek przegląda dokumenty.
+      primaryIntent: 'open',
+      primaryLabel: toDecide.length > 0 ? 'Przejrzyj dokumenty' : 'Otwórz skrzynkę',
     },
     evidence: [
       { label: 'Skrzynka odbiorcza', href: '/inbox' },
