@@ -4206,3 +4206,94 @@ będzie przez to mniejsza, niż wynikałoby z liczby zaległości.
 **Bramka gotowości dalej nie zapali się na zielono** — bez rozstrzygania
 wpisów (`settleShadow`) nic się tu nie zmienia. Zmienia się to, że kolumna
 „Zebrane" w panelu pokaże wreszcie prawdziwe liczby dla wszystkich reguł.
+
+---
+
+## 2026-09-25 · Wydanie 25.09 — cała otwarta praca na produkcji
+
+Wpis Bartosza (sesja Claude Code). Wszystko, co było otwarte, weszło jednym
+wydaniem w trzech PR-ach, merge commitem — głowy PR-ów są w historii `main`,
+więc każdy PR oznaczył się jako scalony:
+
+| PR | co | migracje |
+|---|---|---|
+| [#36](https://github.com/ezior8888-cpu/ksef-saas/pull/36) | #7, #9, stos FLO #18 → #33, stos security #1 → #35 | 00072–00078 |
+| [#51](https://github.com/ezior8888-cpu/ksef-saas/pull/51) | #37, #38, #40, #41, #47–#50, stos Stripe #39 → #46 | 00079–00081 + **00082** |
+| [#52](https://github.com/ezior8888-cpu/ksef-saas/pull/52) | `vitest.rls.config.ts` w `.dockerignore` | — |
+
+**Produkcja:** aplikacja i worker na `41ee941`, oba healthy. Baza na `00082`,
+wszystkie 7 ograniczeń `NOT VALID` zwalidowane (tabele były puste, nie było
+historii do rozliczania). Worker: 48 kolejek, 23/23 cronów, pierwsze
+20 minut bez ani jednego nieudanego joba. `/api/health`: baza i Redis OK.
+CSP wymuszone — `/` i `/login` bez naruszeń.
+
+### Konflikty między stosami — jak rozstrzygnięte
+
+Stos security odbił od `b9c3703`, zanim na `main` weszły K-01 i K-02 (1.1–1.1c),
+więc oba łatały te same wykonawce. Zasada: żadna ochrona z żadnej strony nie
+ginie.
+
+| plik | wynik |
+|---|---|
+| `payment-confirm.ts` | ładunek K-01 z pulsu i cofnięcie przez `captureInsertUndo` (Twoje) **+** ponowny odczyt faktury z `tenant_id`, kwota ograniczona do BIEŻĄCEGO salda, `match_method: 'flo_confirmation'` (security) |
+| `undo.ts` | `delete` dla `payments` (Twoje) **+** filtr `tenant_id`, compare-and-set po `after` i lista dozwolonych pól (security) — dla restore i delete. `delete` przyjmuje tylko pola `tenant_id`, `invoice_id`, `amount` |
+| `execute.ts` | zapis `undo` w ładunku (Twoje) **+** `.eq('tenant_id')` (security) |
+| `payment-chase-handler.ts` | wersja security — okno K-02 liczy teraz `assertReminderSendable` |
+| `proposals.ts` | `isSilenced` (K2.16) + `proposalApprovalVersion` |
+
+### Co się zmieniło w zachowaniu — przeczytaj
+
+1. **Faktura bez NIP-u nie dostanie ponaglenia.** Dawniej (1.1b) liczyły się
+   wpłaty do niej samej; security wstrzymuje wysyłkę, bo bez NIP-u nie da się
+   sprawdzić wpłat kontrahenta. Świadomie surowiej.
+2. **Ręczne przypomnienia są pod kanarkiem K-02** (#23). Przy pustym
+   `flo_rollout` przycisk „wyślij przypomnienie" nie działa nikomu. Decyzja
+   Bartosza: tak zostaje do alfy.
+3. **Istniejąca karta rodzaju ukrytego w kanarku nie wykona się** — wykonawca
+   sprawdza przełączniki także przy kliknięciu (security #13).
+4. `latestPaymentMoment` i `paymentDateWindowStart` z 1.1b nie mają już
+   wywołań w kodzie — tylko testy. Do usunięcia albo do użycia w
+   `delivery-safety.ts`; decyzja Twoja.
+
+### Testy, które przepiąłem
+
+- `flo-payment-confirm-executor`, `flo-payment-confirm-producer`,
+  `flo-expense-review-rule-hook`: atrapy obsługują łańcuch warunków
+  (`id` + `tenant_id`), zgoda jest związana z wersją karty, kanarek K-01
+  odsłonięty w teście całej drogi.
+- `flo-tenant-boundaries` (security): ładunek K-01 w nowym kształcie; test
+  cofnięcia sprawdza, że `undo` usuwa WPŁATĘ, a nie przywraca `paid_amount`.
+- `flo-payment-chase-handler`: czyste funkcje bez zmian; scenariusze okna mają
+  odpowiedniki w `reminder-dispatch.test.ts` (tabela w nagłówku pliku),
+  dopisany brakujący „wpłata sprzed tygodnia nie blokuje". W pliku zostały
+  testy KOLEJNOŚCI w wykonawcy: okno przed zapisem i kolejką.
+
+### Z Twoich PR-ów, które wymagały bazy
+
+- **#41 → migracja 00082.** `invoices_overdue` filtruje teraz
+  `direction = 'outgoing'`, z `security_invoker = true` podanym wprost
+  (sprawdzone po wgraniu). Wpis długu w `invoice-direction.test.ts` usunięty.
+- Pełny skan CodeQL (pierwszy PR z `security.yml` do `main`) znalazł
+  7 zastanych trafień „high" — poprawione w `abb176f`. Skrypty piszą teraz
+  do `.tmp/` w repo zamiast `/tmp` — działa też na Windows.
+
+### Przyjęte bez zmian z Twoich „do decyzji"
+
+W-04 w kanarku · próg tłumu 4 sprawy / 30 dni · cisza sprawy 90 dni ·
+`flo_rollout` pusty — nic nie odsłonięte. `settleShadow` (rozstrzyganie trybu
+cichego) to Twoje następne zadanie; bez niego bramka gotowości nie zapali się
+na zielono. Pierwsze wpisy w `flo_shadow` pojawią się przy najbliższym
+`cron.flo-tick` (7:30).
+
+### Od teraz — jak pracujemy
+
+- **`main` wymaga PR-a i 6 zielonych kontroli** (REV-04, wariant bez
+  obowiązkowej recenzji — decyzja Bartosza). Wyjątków nie ma, także dla admina.
+- **Scalasz swoje zielone PR-y sam, każdy od `main`.** Bez stosów: stos
+  15 PR-ów rozjechał się z `main` w 9 plikach i trzeba go było łączyć ręcznie.
+- **Merge commitem**, nie squashem.
+- Wdrożenia i migracje nadal robi Bartosz. Plik migracji w PR-ze to prośba,
+  nie wykonanie — opisz w PR-ze kolejność względem kodu.
+- Build obrazu sprawdza typy **bez** plików z `.dockerignore`. Nowy `*.ts`
+  poza `tests/`, który importuje coś wyłączonego, wywróci wdrożenie mimo
+  zielonego CI (tak padło wdrożenie 36).
