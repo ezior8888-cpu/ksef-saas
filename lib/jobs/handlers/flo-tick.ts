@@ -11,6 +11,7 @@
  * i tak powstaną, a podwójne alerty do operatora tylko zaszumią obraz.
  */
 
+import { runShadowSettle } from '@/lib/flo/shadow-settle';
 import { runFloTick } from '@/lib/flo/tick';
 // Skutek uboczny: rejestracja wykonawców propozycji. Bez tego worker
 // potrafiłby stworzyć propozycję, ale nie umiałby jej wykonać.
@@ -22,4 +23,13 @@ registerJob<Record<string, never>>({
   queue: 'cron.flo-tick',
   maxRetries: 0,
   handler: (_data, ctx: JobContext) => runFloTick(ctx),
+});
+
+// Rozstrzyganie trybu cichego (K3.2). Bez retry z tego samego powodu co
+// puls: przebieg jest idempotentny (bierze tylko `matched IS NULL`), a błąd
+// pojedynczego wpisu i tak idzie do Sentry bez zatrzymywania reszty.
+registerJob<Record<string, never>>({
+  queue: 'cron.flo-shadow-settle',
+  maxRetries: 0,
+  handler: (_data, ctx: JobContext) => runShadowSettle({ logger: ctx.logger }),
 });

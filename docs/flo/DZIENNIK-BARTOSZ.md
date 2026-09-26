@@ -4297,3 +4297,57 @@ na zielono. Pierwsze wpisy w `flo_shadow` pojawią się przy najbliższym
 - Build obrazu sprawdza typy **bez** plików z `.dockerignore`. Nowy `*.ts`
   poza `tests/`, który importuje coś wyłączonego, wywróci wdrożenie mimo
   zielonego CI (tak padło wdrożenie 36).
+
+## 2026-09-26 · Tryb cichy rozstrzyga — K3.2, z odstępstwem od planu
+
+Wpis Masła (sesja Claude Code). Twoje „następne zadanie” z wydania 25.09.
+
+**Co doszło.** `cron.flo-shadow-settle` (poniedziałek 06:00, przed pulsem):
+wpisy `matched IS NULL` starsze niż 7 dni → „co klient zrobił naprawdę” →
+`settleShadow`. Kod w `lib/flo/shadow-settle.ts`, rejestracja obok pulsu
+w `lib/jobs/handlers/flo-tick.ts`. Tylko pg-boss, jak puls. Bez migracji —
+`flo_shadow.proposal` to JSONB.
+
+**Moja pomyłka z 24.09.** Podpinając tryb cichy (#31) zapisywałem wyłącznie
+`topicKey` i odcisk — bez PRZEWIDYWANIA. Rozstrzyganie nie miałoby z czym
+porównać. Teraz `shadowSubject()` dopisuje per rodzaj wąski wyciąg (W-01:
+id kosztu i kolumna KPiR), a rodzaj bez definicji trafienia nie zapisuje nic
+„na zapas” — dane kontrahenta z ładunku K-01 nadal nie trafiają do tabeli
+operatorskiej. Wpisy sprzed tej zmiany zostają nierozstrzygnięte.
+
+**Odstępstwo od planu — dlaczego nie K-01 najpierw.** Plan (K3.2) stawia
+na początku K-01, W-01, K-02. Sprawdziłem, skąd miałaby przyjść prawda:
+
+| rodzaj | niezależny sygnał w kodzie | skutek dla trybu cichego |
+|---|---|---|
+| W-01 `expense.review` | człowiek przegląda i zmienia kolumnę KPiR w ekranie kosztów | **rozstrzygalny** — zrobione |
+| K-01 `payment.confirm` | brak: jedyny zapis do `payments` to wykonawca K-01 (`payment-confirm.ts`), 00073 blokuje inne zmiany stanu wpłaty | każda sprawa wyszłaby na „chybienie” — bramka czerwona z definicji |
+| K-02 `payment.chase` | brak: jedyna wysyłka przypomnień to wykonawca K-02 | jak wyżej |
+
+K-01 i K-02 są w `NO_INDEPENDENT_SIGNAL` z powodem i zostają otwarte.
+**Decyzja dla Was dwóch:** ich trafność musi przyjść z DECYZJI w kanarku
+(zatwierdzone / odrzucone na `flo_proposals`), nie z trybu cichego. Przy
+pustym `flo_rollout` to znaczy: bramka dla K-01/K-02 nie zapali się,
+dopóki ktoś świadomie nie odsłoni ich na 10%.
+
+**Dwie zasady wpisane w kod.**
+- Brak decyzji człowieka ≠ chybienie: koszt nieprzejrzany, usunięty albo
+  wpis bez zapisanego przewidywania zostaje „czeka”.
+- Stronicowanie po `id`, nie przesunięciem: wpisy „czeka” nie wypadają
+  z filtra `matched IS NULL`. Przy mutacji bez tego przebieg zapętlał się
+  i po 88 s kładł worker testowy — timeout testu tego nie łapał. Doszedł
+  bezpiecznik postępu: strona, która nie przesuwa odczytu, kończy przebieg
+  błędem, zamiast zająć worker na zawsze.
+
+**Testy.** `flo-shadow-settle.test.ts` (12): trafienie, chybienie, „czeka”
+w trzech odmianach, próg tygodnia, K-01 bez definicji, izolacja błędu
+z Sentry, 1203 wpisy w trzech stronach, 1100 otwartych bez zapętlenia, zapis
+przewidywania przez `createProposal`. `flo-architecture`: rozstrzyganie nie ma
+drogi do wysyłki. `jobs-foundation`: 23 → 24 crony. Mutacje: bez zapisu
+przewidywania, „nieprzejrzany = chybienie”, bez stronicowania po id, bez
+progu tygodnia — każda czerwona.
+
+**Kolejne definicje (bez zgadywania):** P-03 `invoice.draft` (czy wystawiono
+fakturę temu kontrahentowi w okresie) i O-01 `onboarding.step` (czy krok
+zrobiono) mają niezależny sygnał — wymagają zapisania przewidywania tak jak
+W-01, więc idą osobnymi PR-ami.
