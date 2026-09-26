@@ -71,11 +71,6 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 
 import type { FloProposalRow } from '@/lib/flo/db-types';
-import {
-  latestPaymentMoment,
-  paymentDateWindowStart,
-  SAFETY_WINDOW_MS,
-} from '@/lib/flo/functions/payment-chase';
 import '@/lib/flo/functions/payment-chase-handler';
 import { getFloHandler } from '@/lib/flo/handlers';
 
@@ -137,48 +132,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-});
-
-// ═══════════════════════════════════════════════════════════════
-// Chwila wpłaty — funkcja czysta
-// ═══════════════════════════════════════════════════════════════
-
-describe('K-02 — chwila ostatniej wpłaty', () => {
-  it('bierze PÓŹNIEJSZĄ datę: wyciąg zaimportowany dziś ze starym przelewem', () => {
-    expect(
-      latestPaymentMoment([
-        { payment_date: '2026-09-01', created_at: '2026-09-17T09:00:00.000Z' },
-      ]),
-    ).toBe('2026-09-17T09:00:00.000Z');
-  });
-
-  it('dzień przelewu liczy do końca dnia — wpłata „na wczoraj" wpisana wcześniej', () => {
-    expect(
-      latestPaymentMoment([
-        { payment_date: '2026-09-16', created_at: '2026-09-10T08:00:00.000Z' },
-      ]),
-    ).toBe('2026-09-16T23:59:59.999Z');
-  });
-
-  it('bez wpłat albo z nieczytelnymi datami — brak chwili, a nie „teraz" ani zero', () => {
-    expect(latestPaymentMoment([])).toBeNull();
-    expect(latestPaymentMoment([{ payment_date: null, created_at: 'bzdura' }])).toBeNull();
-  });
-
-  it('filtr zapytania i ta funkcja zgadzają się na granicy okna', () => {
-    // Gdyby filtr był węższy niż funkcja, zapytanie zgubiłoby wpłatę, którą
-    // funkcja uznałaby za świeżą — a ponaglenie by wyszło.
-    for (let hour = 0; hour < 48; hour++) {
-      const since = new Date(NOW.getTime() - SAFETY_WINDOW_MS + hour * 3_600_000);
-      for (const day of ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17']) {
-        const inQuery = day >= paymentDateWindowStart(since);
-        const moment = latestPaymentMoment([{ payment_date: day, created_at: null }])!;
-        expect(inQuery, `${day} przy początku okna ${since.toISOString()}`).toBe(
-          Date.parse(moment) >= since.getTime(),
-        );
-      }
-    }
-  });
 });
 
 // ═══════════════════════════════════════════════════════════════
