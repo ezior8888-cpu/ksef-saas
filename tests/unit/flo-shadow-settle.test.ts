@@ -51,11 +51,11 @@ beforeEach(() => vi.clearAllMocks());
 
 describe('W-01 — kategoria kosztu', () => {
   it('przejrzany z tą samą kolumną: trafienie', async () => {
-    const db = createFakeDb({ flo_shadow: [wpisW01('s1', 'exp-1', 'k13_other')] });
+    const db = createFakeDb({ flo_shadow: [wpisW01('s1', 'exp-1', 'col_13')] });
     const wynik = await runShadowSettle({
       now: NOW,
       db: db.client,
-      sources: zrodla({ 'exp-1': { kpirColumn: 'k13_other', isReviewed: true } }),
+      sources: zrodla({ 'exp-1': { kpirColumn: 'col_13', isReviewed: true } }),
     });
 
     expect(wynik).toMatchObject({ settled: 1, matched: 1 });
@@ -66,22 +66,22 @@ describe('W-01 — kategoria kosztu', () => {
   });
 
   it('przejrzany, ale człowiek zmienił kolumnę: chybienie', async () => {
-    const db = createFakeDb({ flo_shadow: [wpisW01('s1', 'exp-1', 'k13_other')] });
+    const db = createFakeDb({ flo_shadow: [wpisW01('s1', 'exp-1', 'col_13')] });
     await runShadowSettle({
       now: NOW,
       db: db.client,
-      sources: zrodla({ 'exp-1': { kpirColumn: 'k10_goods', isReviewed: true } }),
+      sources: zrodla({ 'exp-1': { kpirColumn: 'col_10', isReviewed: true } }),
     });
 
     expect(db.tables.flo_shadow[0]!.matched).toBe(false);
   });
 
   it('nieprzejrzany: czeka — brak decyzji człowieka to nie chybienie', async () => {
-    const db = createFakeDb({ flo_shadow: [wpisW01('s1', 'exp-1', 'k13_other')] });
+    const db = createFakeDb({ flo_shadow: [wpisW01('s1', 'exp-1', 'col_13')] });
     const wynik = await runShadowSettle({
       now: NOW,
       db: db.client,
-      sources: zrodla({ 'exp-1': { kpirColumn: 'k13_other', isReviewed: false } }),
+      sources: zrodla({ 'exp-1': { kpirColumn: 'col_13', isReviewed: false } }),
     });
 
     expect(wynik).toMatchObject({ settled: 0, stillOpen: 1 });
@@ -90,12 +90,12 @@ describe('W-01 — kategoria kosztu', () => {
 
   it('koszt usunięty albo wpis sprzed zapisu przewidywania: czeka', async () => {
     const db = createFakeDb({
-      flo_shadow: [wpisW01('s1', 'exp-usuniety', 'k13_other'), wpisW01('s2', 'exp-2', null)],
+      flo_shadow: [wpisW01('s1', 'exp-usuniety', 'col_13'), wpisW01('s2', 'exp-2', null)],
     });
     const wynik = await runShadowSettle({
       now: NOW,
       db: db.client,
-      sources: zrodla({ 'exp-2': { kpirColumn: 'k13_other', isReviewed: true } }),
+      sources: zrodla({ 'exp-2': { kpirColumn: 'col_13', isReviewed: true } }),
     });
 
     expect(wynik).toMatchObject({ settled: 0, stillOpen: 2 });
@@ -104,11 +104,11 @@ describe('W-01 — kategoria kosztu', () => {
 
 describe('granice przebiegu', () => {
   it('wpisy młodsze niż tydzień nie są ruszane', async () => {
-    const db = createFakeDb({ flo_shadow: [wpisW01('s1', 'exp-1', 'k13_other', SWIEZY)] });
+    const db = createFakeDb({ flo_shadow: [wpisW01('s1', 'exp-1', 'col_13', SWIEZY)] });
     const wynik = await runShadowSettle({
       now: NOW,
       db: db.client,
-      sources: zrodla({ 'exp-1': { kpirColumn: 'k13_other', isReviewed: true } }),
+      sources: zrodla({ 'exp-1': { kpirColumn: 'col_13', isReviewed: true } }),
     });
 
     expect(wynik).toEqual({ settled: 0, matched: 0, stillOpen: 0, noDefinition: 0, failed: 0 });
@@ -127,7 +127,7 @@ describe('granice przebiegu', () => {
 
   it('błąd jednego wpisu nie zatrzymuje reszty i idzie do Sentry', async () => {
     const db = createFakeDb({
-      flo_shadow: [wpisW01('s1', 'exp-zly', 'k13_other'), wpisW01('s2', 'exp-2', 'k13_other')],
+      flo_shadow: [wpisW01('s1', 'exp-zly', 'col_13'), wpisW01('s2', 'exp-2', 'col_13')],
     });
     const wynik = await runShadowSettle({
       now: NOW,
@@ -135,7 +135,7 @@ describe('granice przebiegu', () => {
       sources: {
         readExpense: async (_t, id) => {
           if (id === 'exp-zly') throw new Error('timeout');
-          return { kpirColumn: 'k13_other', isReviewed: true };
+          return { kpirColumn: 'col_13', isReviewed: true };
         },
       },
     });
@@ -146,13 +146,13 @@ describe('granice przebiegu', () => {
 
   it('czyta stronami do końca — rozstrzygnięte wiersze nie przesuwają okna', async () => {
     const wpisy = Array.from({ length: 1203 }, (_, i) =>
-      wpisW01(`s${String(i).padStart(5, '0')}`, `exp-${i}`, 'k13_other'),
+      wpisW01(`s${String(i).padStart(5, '0')}`, `exp-${i}`, 'col_13'),
     );
     const db = createFakeDb({ flo_shadow: wpisy });
     const wynik = await runShadowSettle({
       now: NOW,
       db: db.client,
-      sources: { readExpense: async () => ({ kpirColumn: 'k13_other', isReviewed: true }) },
+      sources: { readExpense: async () => ({ kpirColumn: 'col_13', isReviewed: true }) },
     });
 
     expect(wynik.settled).toBe(1203);
@@ -165,13 +165,13 @@ describe('przebieg się kończy', () => {
     // Otwarte wpisy NIE wypadają z filtra `matched IS NULL` — bez stronicowania
     // po id przebieg czytałby w kółko tę samą pierwszą stronę.
     const wpisy = Array.from({ length: 1100 }, (_, i) =>
-      wpisW01(`s${String(i).padStart(5, '0')}`, `exp-${i}`, 'k13_other'),
+      wpisW01(`s${String(i).padStart(5, '0')}`, `exp-${i}`, 'col_13'),
     );
     const db = createFakeDb({ flo_shadow: wpisy });
     const wynik = await runShadowSettle({
       now: NOW,
       db: db.client,
-      sources: { readExpense: async () => ({ kpirColumn: 'k13_other', isReviewed: false }) },
+      sources: { readExpense: async () => ({ kpirColumn: 'col_13', isReviewed: false }) },
     });
 
     expect(wynik.stillOpen).toBe(1100);
@@ -183,9 +183,9 @@ describe('zapis przewidywania w trybie cichym', () => {
     expect(
       shadowSubject({
         kind: 'expense.review',
-        payload: { expenseId: 'exp-1', facts: { kpirColumn: 'k13_other', grossTotal: 123 }, issues: ['x'] },
+        payload: { expenseId: 'exp-1', facts: { kpirColumn: 'col_13', grossTotal: 123 }, issues: ['x'] },
       }),
-    ).toEqual({ entityId: 'exp-1', expected: { kpirColumn: 'k13_other' } });
+    ).toEqual({ entityId: 'exp-1', expected: { kpirColumn: 'col_13' } });
   });
 
   it('rodzaj bez definicji trafienia nie zapisuje niczego „na zapas” (np. dane kontrahenta)', () => {
@@ -204,7 +204,7 @@ describe('zapis przewidywania w trybie cichym', () => {
       body: 'Przypisałem kolumnę',
       fingerprint: 'odcisk',
       expiresAt: new Date('2026-10-28T00:00:00.000Z'),
-      payload: { expenseId: 'exp-1', facts: { kpirColumn: 'k13_other' } },
+      payload: { expenseId: 'exp-1', facts: { kpirColumn: 'col_13' } },
     };
     const wynik = await createProposal(input, db.client, async () => false);
 
@@ -213,7 +213,7 @@ describe('zapis przewidywania w trybie cichym', () => {
       topicKey: 'expense.review:exp-1',
       fingerprint: 'odcisk',
       entityId: 'exp-1',
-      expected: { kpirColumn: 'k13_other' },
+      expected: { kpirColumn: 'col_13' },
     });
   });
 });
