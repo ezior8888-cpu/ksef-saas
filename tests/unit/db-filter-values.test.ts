@@ -93,12 +93,6 @@ function bledyWartosci(l: Lancuch): Blad[] {
  * nie może rosnąć po cichu ani trzymać wpisów już naprawionych.
  */
 const ZNANE: Record<string, string> = {
-  // Kolejka Offline24 pytana o 'pending' (enum: queued/sending/…) — naprawione
-  // w PR #38 (baza: main). Wpisy znikną, gdy #38 trafi do tej gałęzi.
-  "lib/admin/system.ts ksef_offline_queue.status='pending'": 'naprawione w #38',
-  "lib/inngest/jobs/critical-alerts-monitor.ts ksef_offline_queue.status='pending'": 'naprawione w #38',
-  "lib/inngest/jobs/process-offline-queue.ts ksef_offline_queue.status='pending'": 'naprawione w #38',
-
   // X-03: ksef_health_log jest globalny — nie ma tenant_id ani checked_at.
   // Stan „nie mogę zalogować się Twoim certyfikatem” nie ma źródła per konto.
   'lib/inngest/jobs/cert-expiry-alert.ts ksef_health_log.tenant_id': 'X-03: brak per-konto śladu logowania',
