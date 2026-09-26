@@ -407,7 +407,7 @@ describe('W-02 — przycisk karty skrzynki', () => {
     const created = await createProposal(input, db.client, async () => false);
     expect(created.status).toBe('created');
 
-    const view = toProposalView(db.tables.flo_proposals[0] as FloProposalRow)!;
+    const view = toProposalView(db.tables.flo_proposals[0] as unknown as FloProposalRow)!;
     expect(view.primary.intent).toBe('open');
     expect(view.primary.label).toBe('Przejrzyj dokumenty');
     expect(view.evidence[0]?.href).toBe('/inbox');
