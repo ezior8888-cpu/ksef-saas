@@ -24,6 +24,11 @@ export interface Schemat {
   widoki: Set<string>;
   /** "tabela.kolumna" → dozwolone wartości (enum albo CHECK IN) */
   wartosci: Map<string, Set<string>>;
+  /**
+   * Kolumny typu ENUM. Różnica ma znaczenie: zła wartość przy enumie WYWALA
+   * zapytanie, przy kolumnie tekstowej z CHECK — po prostu nie pasuje.
+   */
+  enumowe: Set<string>;
 }
 
 const NAZWA = '"?([a-z_][a-z0-9_]*)"?';
@@ -90,11 +95,15 @@ export function schematZMigracji(root: string = process.cwd()): Schemat {
   const widoki = new Set<string>();
   const wartosci = new Map<string, Set<string>>();
   const enumy = new Map<string, Set<string>>();
+  const enumowe = new Set<string>();
 
   /** Kolumna o typie będącym enumem dziedziczy jego wartości (ten sam obiekt). */
   function typKolumny(tabela: string, kolumna: string, typ: string) {
     const e = enumy.get(bezSchematu(typ));
-    if (e) wartosci.set(`${tabela}.${kolumna}`, e);
+    if (e) {
+      wartosci.set(`${tabela}.${kolumna}`, e);
+      enumowe.add(`${tabela}.${kolumna}`);
+    }
   }
 
   /** CHECK (kolumna IN ('a', 'b')) w dowolnym miejscu fragmentu. */
@@ -105,7 +114,10 @@ export function schematZMigracji(root: string = process.cwd()): Schemat {
       // Tylko CHECK na napisach. Liczbowy (np. etapy kanarka 0/10/50/100)
       // pomijamy — pusty zbiór uznawałby każdą wartość za błędną.
       const w = literaly(m[2]!);
-      if (w.length > 0) wartosci.set(`${tabela}.${m[1]!.toLowerCase()}`, new Set(w));
+      if (w.length > 0) {
+        wartosci.set(`${tabela}.${m[1]!.toLowerCase()}`, new Set(w));
+        enumowe.delete(`${tabela}.${m[1]!.toLowerCase()}`);
+      }
     }
   }
 
@@ -225,7 +237,7 @@ export function schematZMigracji(root: string = process.cwd()): Schemat {
     }
   }
 
-  return { tabele, widoki, wartosci };
+  return { tabele, widoki, wartosci, enumowe };
 }
 
 /** Pliki .ts/.tsx pod katalogiem (bez node_modules i .next). */
