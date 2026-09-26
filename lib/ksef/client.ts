@@ -4,12 +4,40 @@ import type { KsefEnvironment, KsefErrorResponse } from '@/types/ksef';
  * Zwraca bazowy URL API KSeF dla danego środowiska.
  */
 export function getKsefBaseUrl(env: KsefEnvironment = 'test'): string {
-  const envMap: Record<KsefEnvironment, string> = {
-    test: process.env.KSEF_TEST_URL ?? 'https://api-test.ksef.mf.gov.pl/v2',
-    demo: process.env.KSEF_DEMO_URL ?? 'https://api-demo.ksef.mf.gov.pl/v2',
-    production: process.env.KSEF_PROD_URL ?? 'https://api.ksef.mf.gov.pl/v2',
+  const officialUrls: Record<KsefEnvironment, string> = {
+    test: 'https://api-test.ksef.mf.gov.pl/v2',
+    demo: 'https://api-demo.ksef.mf.gov.pl/v2',
+    production: 'https://api.ksef.mf.gov.pl/v2',
   };
-  return envMap[env];
+  const envMap: Record<KsefEnvironment, string> = {
+    test: process.env.KSEF_TEST_URL ?? officialUrls.test,
+    demo: process.env.KSEF_DEMO_URL ?? officialUrls.demo,
+    production: process.env.KSEF_PROD_URL ?? officialUrls.production,
+  };
+  const raw = envMap[env];
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('Invalid KSeF API URL');
+  }
+  // A mistaken TEST/DEMO override must not send credentials or invoices to
+  // PROD. Other remote overrides are also unsafe: they could receive bearer
+  // tokens. Loopback HTTP is reserved for local development mocks only.
+  if (env !== 'production' && url.hostname.toLowerCase().replace(/\.$/, '') === 'api.ksef.mf.gov.pl') {
+    throw new Error('Test or demo KSeF environment points at production API');
+  }
+  if (env === 'production' && raw !== officialUrls.production) {
+    throw new Error('Production KSeF environment requires the official API URL');
+  }
+  if (raw !== officialUrls[env]) {
+    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+    if (env === 'production' || process.env.NODE_ENV === 'production' ||
+        url.protocol !== 'http:' || !loopback) {
+      throw new Error('KSeF API URL must match the official environment endpoint');
+    }
+  }
+  return raw;
 }
 
 /** Pełna baza URL API KSeF (`…/v2`) — alias pod health-check i jawny `fetch`. */
@@ -244,6 +272,7 @@ export async function ksefFetch<TResponse = unknown>(
         headers: requestHeaders,
         body: serializedBody,
         signal: controller.signal,
+        redirect: 'error',
       });
       clearTimeout(timeoutHandle);
       responseStatus = response.status;

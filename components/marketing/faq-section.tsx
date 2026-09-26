@@ -9,7 +9,7 @@ const FAQS = [
   },
   {
     q: 'Co dzieje się gdy MF/KSeF jest niedostępny?',
-    a: 'Mamy tryb Offline24 — zapisujemy fakturę lokalnie i kolejkujemy do wysyłki gdy KSeF wróci. Generujemy QR Code dla nabywcy zgodny z rozporządzeniem MF. Klient nie widzi żadnej różnicy.',
+    a: 'Jeśli KSeF jest niedostępny, możesz zachować fakturę jako szkic. Szkic nie jest wystawioną fakturą i nie należy przekazywać go nabywcy. Produkcyjny Offline24 jest wstrzymany do czasu wdrożenia kodów QR zgodnych z wymaganiami MF. Po powrocie KSeF możesz ponowić wysyłkę szkicu.',
   },
   {
     q: 'Co się dzieje z moimi danymi po anulowaniu subskrypcji?',

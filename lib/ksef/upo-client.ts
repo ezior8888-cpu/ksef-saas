@@ -135,6 +135,7 @@ export async function downloadUpoFromKsef(
           Accept: 'application/xml',
         },
         signal: controller.signal,
+        redirect: 'error',
       });
     } finally {
       clearTimeout(timeoutHandle);

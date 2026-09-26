@@ -12,7 +12,10 @@ const OFFICIAL_PRODUCTION_URL = 'https://api.ksef.mf.gov.pl/v2';
 export function configuredKsefEnvironment(): KsefEnvironment | null {
   const env = process.env.KSEF_ENV;
   if (env !== 'test' && env !== 'demo' && env !== 'production') return null;
-  if (env === 'production' && getKsefBaseUrl('production') !== OFFICIAL_PRODUCTION_URL) {
+  try {
+    if (env === 'production' && getKsefBaseUrl(env) !== OFFICIAL_PRODUCTION_URL) return null;
+    if (env !== 'production') getKsefBaseUrl(env);
+  } catch {
     return null;
   }
   return env;

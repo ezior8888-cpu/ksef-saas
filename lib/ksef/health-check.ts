@@ -20,20 +20,21 @@ export async function checkKsefAvailability(
   env?: KsefEnvironment,
 ): Promise<KsefHealthResult> {
   const startTime = Date.now();
-  const apiUrl = getKsefApiUrl(env);
-  const healthEndpoint = `${apiUrl.replace(/\/+$/, '')}/health`;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
   try {
+    const apiUrl = getKsefApiUrl(env);
+    const healthEndpoint = `${apiUrl.replace(/\/+$/, '')}/health`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     const response = await fetch(healthEndpoint, {
       method: 'GET',
       signal: controller.signal,
       headers: { Accept: 'application/json' },
+      redirect: 'error',
     });
 
-    clearTimeout(timeoutId);
     const responseTime = Date.now() - startTime;
 
     if (response.ok) {
@@ -60,6 +61,8 @@ export async function checkKsefAvailability(
       error: message,
       isMfOutage: false,
     };
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
 }
 
