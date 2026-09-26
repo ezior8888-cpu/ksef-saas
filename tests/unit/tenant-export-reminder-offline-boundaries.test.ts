@@ -106,6 +106,25 @@ describe('tenant boundaries for accounting exports', () => {
     await expect(fetchInvoicesForExport(exportParams)).rejects.toThrow('Linked invoice not found in organization');
   });
 
+  it('received invoice from the KSeF inbox carries its SELLER (from fa3_data metadata)', async () => {
+    // Skrzynka zapisuje fakturę bez seller_data/buyer_data — strony są tylko
+    // w metadanych. Do 26.09 eksport znał tylko nabywcę, więc zakup miał
+    // jako kontrahenta naszą firmę (albo pustkę).
+    tables.invoices.push({
+      ...invoice('inbox-a', 'tenant-a', 'incoming'),
+      buyer_data: null, buyer_nip: null, seller_nip: '5260001246',
+      fa3_data: {
+        _source: 'inbox-metadata',
+        seller: { nip: '5260001246', name: 'Dostawca Sp. z o.o.' },
+        buyer: { identifier: { type: 'Nip', value: '1234567890' }, name: 'A' },
+      },
+    });
+    const data = await fetchInvoicesForExport(exportParams);
+    expect(data.receivedInvoices.find(row => row.invoiceNumber === 'inbox-a')).toMatchObject({
+      sellerName: 'Dostawca Sp. z o.o.', sellerNip: '5260001246', buyerName: 'A', buyerNip: '1234567890',
+    });
+  });
+
   it('uses line item IDs derived from own invoices', async () => {
     tables.invoice_line_items = [
       { invoice_id: 'invoice-a', ordinal: 1, name: 'OWN', quantity: 1, unit_price_net: 100, net_amount: 100, vat_rate: '23' },
