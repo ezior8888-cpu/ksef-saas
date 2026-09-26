@@ -220,10 +220,30 @@ function mapInvoiceRow(
   lines: JpkInvoiceLine[],
   parentNumberById: Map<string, string>,
 ): JpkInvoice {
+  // Obie strony dokumentu. Faktury ze skrzynki KSeF nie mają `seller_data`
+  // ani `buyer_data` — strony leżą w metadanych w `fa3_data` (seller:
+  // { nip, name }, buyer: { identifier: { value }, name }).
+  const fa3 = readBuyerDataJson(row.fa3_data) as Record<string, unknown>;
+  const fa3Seller = readBuyerDataJson((fa3.seller ?? null) as Json | null);
+  const fa3Buyer = (fa3.buyer ?? {}) as { name?: unknown; identifier?: { value?: unknown } };
+
   const buyerData = readBuyerDataJson(row.buyer_data);
   const nipFromJson =
     typeof buyerData.nip === 'string' ? buyerData.nip.trim() : undefined;
-  const buyerNip = nipFromJson || row.buyer_nip?.trim() || undefined;
+  const fa3BuyerNip =
+    typeof fa3Buyer.identifier?.value === 'string' ? fa3Buyer.identifier.value.trim() : undefined;
+  const buyerNip = nipFromJson || row.buyer_nip?.trim() || fa3BuyerNip || undefined;
+  const buyerName =
+    buyerData.name ?? (typeof fa3Buyer.name === 'string' ? fa3Buyer.name : '');
+
+  const sellerData = readBuyerDataJson(row.seller_data);
+  const sellerNip =
+    (typeof sellerData.nip === 'string' ? sellerData.nip.trim() : '') ||
+    row.seller_nip?.trim() ||
+    (typeof fa3Seller.nip === 'string' ? fa3Seller.nip.trim() : '') ||
+    undefined;
+  const sellerName = sellerData.name ?? fa3Seller.name ?? '';
+  const sellerAddress = formatBuyerAddress(sellerData) || undefined;
 
   let correctedNumber: string | undefined;
   if (row.invoice_kind === 'correction' && row.parent_invoice_id) {
@@ -239,8 +259,11 @@ function mapInvoiceRow(
     paymentDueDate: row.payment_due_date ?? undefined,
 
     buyerNip,
-    buyerName: buyerData.name ?? '',
+    buyerName,
     buyerAddress: formatBuyerAddress(buyerData),
+    sellerNip,
+    sellerName,
+    sellerAddress,
 
     netTotal: Number(row.net_total ?? 0),
     vatTotal: Number(row.vat_total ?? 0),
