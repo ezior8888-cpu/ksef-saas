@@ -127,13 +127,14 @@ export async function POST(req: NextRequest) {
       filename = `JPK_FA_${nipSeg}_${periodStart}_${periodEnd}.xml`;
       contentType = 'application/xml; charset=utf-8';
     } else {
-      // `generateKpirXlsx` przyjmuje issued + received osobno (nie pojedyncza tablica invoices).
+      // Przychody z faktur wystawionych, koszty z listy wydatków — to samo
+      // źródło co KPiR w aplikacji (do 26.09 koszty szły z faktur otrzymanych).
       buffer = await generateKpirXlsx({
         issuer: data.issuer,
         periodStart,
         periodEnd,
         issuedInvoices: data.issuedInvoices,
-        receivedInvoices: data.receivedInvoices,
+        expenses: data.expenses,
       });
       filename = `KPiR_${nipSeg}_${periodStart}_${periodEnd}.xlsx`;
       contentType =

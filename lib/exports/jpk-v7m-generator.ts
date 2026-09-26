@@ -11,6 +11,7 @@
 // wariantem 2 (obowiązuje od 2021/2022).
 
 import { create } from 'xmlbuilder2';
+import type { ExportExpense } from './data-fetcher';
 import type { JpkInvoice } from './jpk-fa-generator';
 
 const JPK_V7M_NAMESPACE = 'http://crd.gov.pl/wzor/2021/12/27/11148/';
@@ -27,7 +28,11 @@ export interface JpkV7mInputData {
   periodStart: string; // YYYY-MM-DD
   periodEnd: string;
   issuedInvoices: JpkInvoice[];
-  receivedInvoices?: JpkInvoice[];
+  /**
+   * Koszty z `expenses` — źródło zakupów (ewidencja + P_44/P_48). Do 26.09
+   * zakupy szły z faktur otrzymanych, z NASZYM NIP-em jako dostawcą.
+   */
+  expenses?: ExportExpense[];
   /** Kod urzędu skarbowego (4 cyfry). Bez tego pliku nie da się złożyć. */
   kodUrzedu?: string;
   /** 1 = złożenie, 2 = korekta. */
@@ -133,16 +138,34 @@ export interface JpkV7mSummary {
   purchaseCount: number;
 }
 
+/**
+ * Dokumenty dające prawo do odliczenia VAT: faktura i faktura uproszczona
+ * (paragon z NIP nabywcy do 450 zł brutto). Paragon bez NIP i „inne” — nie.
+ */
+const VAT_DEDUCTIBLE_DOCUMENTS: ReadonlySet<string> = new Set(['invoice', 'simplified_invoice']);
+
+/**
+ * Zakupy do ewidencji VAT: koszty, które klient uznał za koszt, na
+ * dokumencie z prawem do odliczenia, z niezerowym VAT do odliczenia.
+ * Kwota VAT to `vatDeductibleAmount`, nie cały VAT z dokumentu.
+ */
+export function vatPurchases(expenses: readonly ExportExpense[]): ExportExpense[] {
+  return expenses.filter(
+    (e) => VAT_DEDUCTIBLE_DOCUMENTS.has(e.documentType) && e.vatDeductibleAmount > 0,
+  );
+}
+
 export function summarizeJpkV7m(data: JpkV7mInputData): JpkV7mSummary {
   const issued = data.issuedInvoices;
-  const received = data.receivedInvoices ?? [];
+  const purchases = vatPurchases(data.expenses ?? []);
   const sales = aggregateSales(issued);
 
   const vatDue = round2(sales.vat23 + sales.vat8 + sales.vat5);
 
-  // Zakupy: VAT naliczony do odliczenia — suma vatTotal faktur kosztowych.
-  const purchaseNet = round2(received.reduce((s, inv) => s + inv.netTotal, 0));
-  const vatDeductible = round2(received.reduce((s, inv) => s + inv.vatTotal, 0));
+  // Zakupy: z kosztów, nie z faktur otrzymanych (do 26.09 szło z faktur —
+  // także takich, które klient uznał za „nie koszt”).
+  const purchaseNet = round2(purchases.reduce((s, e) => s + e.netAmount, 0));
+  const vatDeductible = round2(purchases.reduce((s, e) => s + e.vatDeductibleAmount, 0));
 
   return {
     vatDue,
@@ -150,7 +173,7 @@ export function summarizeJpkV7m(data: JpkV7mInputData): JpkV7mSummary {
     purchaseNet,
     balance: round2(vatDue - vatDeductible),
     salesCount: issued.length,
-    purchaseCount: received.length,
+    purchaseCount: purchases.length,
   };
 }
 
@@ -162,7 +185,7 @@ export function summarizeJpkV7m(data: JpkV7mInputData): JpkV7mSummary {
  */
 export function generateJpkV7m(data: JpkV7mInputData): string {
   const issued = data.issuedInvoices;
-  const received = data.receivedInvoices ?? [];
+  const purchases = vatPurchases(data.expenses ?? []);
   const sales = aggregateSales(issued);
 
   const {
@@ -278,21 +301,22 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
     .txt(money(vatNalezny))
     .up();
 
-  received.forEach((inv, idx) => {
+  purchases.forEach((exp, idx) => {
     const z = ewid.ele('ZakupWiersz');
     z.ele('LpZakupu').txt(String(idx + 1)).up();
-    z.ele('NrDostawcy').txt(inv.buyerNip ?? 'BRAK').up();
-    z.ele('NazwaDostawcy').txt(inv.buyerName).up();
-    z.ele('DowodZakupu').txt(inv.invoiceNumber).up();
-    z.ele('DataZakupu').txt(inv.issueDate).up();
-    z.ele('K_42').txt(money(inv.netTotal)).up();
-    z.ele('K_43').txt(money(inv.vatTotal)).up();
+    // Dostawca to SPRZEDAWCA — dawniej trafiał tu nabywca, czyli my.
+    z.ele('NrDostawcy').txt(exp.sellerNip ?? 'BRAK').up();
+    z.ele('NazwaDostawcy').txt(exp.sellerName).up();
+    z.ele('DowodZakupu').txt(exp.documentNumber || 'BRAK').up();
+    z.ele('DataZakupu').txt(exp.issueDate).up();
+    z.ele('K_42').txt(money(exp.netAmount)).up();
+    z.ele('K_43').txt(money(exp.vatDeductibleAmount)).up();
   });
 
   ewid
     .ele('ZakupCtrl')
     .ele('LiczbaWierszyZakupow')
-    .txt(String(received.length))
+    .txt(String(purchases.length))
     .up()
     .ele('PodatekNaliczony')
     .txt(money(vatNaliczony))
