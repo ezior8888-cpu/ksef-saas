@@ -11,6 +11,7 @@ import {
 } from '@/lib/flo/functions/tax-deadline';
 import { formatPln } from '@/lib/flo/money';
 import { generateJpkV7m, summarizeJpkV7m } from '@/lib/exports/jpk-v7m-generator';
+import type { ExportExpense } from '@/lib/exports/data-fetcher';
 import type { JpkInvoice } from '@/lib/exports/jpk-fa-generator';
 import type { JpkV7mInputData } from '@/lib/exports/jpk-v7m-generator';
 import type { JpkV7mSummary } from '@/lib/exports/jpk-v7m-generator';
@@ -48,16 +49,23 @@ function jpkInvoice(overrides: Partial<JpkInvoice> = {}): JpkInvoice {
   };
 }
 
-function jpkPurchase(): JpkInvoice {
-  return jpkInvoice({
-    invoiceNumber: 'ZAK/1',
+/** Zakup = koszt z listy wydatków (od 26.09 źródło zakupów w JPK_V7M). */
+function jpkPurchase(): ExportExpense {
+  return {
+    id: 'exp-1',
     issueDate: '2026-08-12',
-    buyerName: 'Dostawca',
-    netTotal: 1_000,
-    vatTotal: 230,
-    grossTotal: 1_230,
-    lines: [],
-  });
+    documentNumber: 'ZAK/1',
+    documentType: 'invoice',
+    sellerName: 'Dostawca',
+    sellerNip: '5260001246',
+    sellerAddress: null,
+    netAmount: 1_000,
+    vatAmount: 230,
+    grossAmount: 1_230,
+    vatDeductibleAmount: 230,
+    kpirColumn: 'col_13',
+    categoryLabel: 'Usługi',
+  };
 }
 
 function jpkData(overrides: Partial<JpkV7mInputData> = {}): JpkV7mInputData {
@@ -66,7 +74,7 @@ function jpkData(overrides: Partial<JpkV7mInputData> = {}): JpkV7mInputData {
     periodStart: '2026-08-01',
     periodEnd: '2026-08-31',
     issuedInvoices: [jpkInvoice()],
-    receivedInvoices: [jpkPurchase()],
+    expenses: [jpkPurchase()],
     ...overrides,
   };
 }
