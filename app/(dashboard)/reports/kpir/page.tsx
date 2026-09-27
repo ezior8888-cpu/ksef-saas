@@ -3,7 +3,7 @@ import { getPageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
-import { readCompletePages } from '@/lib/supabase/read-complete-pages';
+import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 
 export const dynamic = 'force-dynamic';
 
