@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
-import { createClient } from '@/lib/supabase/server';
+import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
@@ -60,17 +60,7 @@ async function tenantContext(): Promise<{
   userId: string;
   tenant: TenantSnap;
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Brak sesji użytkownika');
-
-  const { getActiveOrgIdFromCookies } = await import(
-    '@/lib/supabase/active-org'
-  );
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) throw new Error('Użytkownik nie jest przypisany do firmy');
+  const { supabase, user, tenantId } = await requireUserAndActiveOrg();
 
   const { data: raw, error } = await supabase
     .from('tenants')
@@ -391,7 +381,7 @@ export async function saveAndSendFinalAction(raw: unknown): Promise<ActionResult
     return {
       success: true,
       invoiceId,
-      offline: enq.mode === 'offline_queued',
+      offline: false,
     };
   } catch (e) {
     return {
