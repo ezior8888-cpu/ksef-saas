@@ -151,7 +151,9 @@ const VAT_DEDUCTIBLE_DOCUMENTS: ReadonlySet<string> = new Set(['invoice', 'simpl
  */
 export function vatPurchases(expenses: readonly ExportExpense[]): ExportExpense[] {
   return expenses.filter(
-    (e) => VAT_DEDUCTIBLE_DOCUMENTS.has(e.documentType) && e.vatDeductibleAmount > 0,
+    // `!== 0`, nie `> 0`: korekta zakupu „in minus” ma ujemny VAT do
+    // odliczenia i musi go zmniejszyć (#68).
+    (e) => VAT_DEDUCTIBLE_DOCUMENTS.has(e.documentType) && e.vatDeductibleAmount !== 0,
   );
 }
 

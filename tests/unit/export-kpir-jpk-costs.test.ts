@@ -161,6 +161,13 @@ describe('JPK_V7M — zakupy z kosztów', () => {
     expect(wybrane.map((e) => e.id)).toEqual(['fv', 'upr']);
   });
 
+  it('korekta zakupu „in minus” zmniejsza VAT do odliczenia (P_48)', () => {
+    const korekta = koszt({ id: 'kor', netAmount: -100, vatAmount: -23, grossAmount: -123, vatDeductibleAmount: -23 });
+    expect(vatPurchases([korekta]).map((e) => e.id)).toEqual(['kor']);
+    const xml = generateJpkV7m(dane([koszt({ netAmount: 1000, vatAmount: 230, vatDeductibleAmount: 230 }), korekta]));
+    expect(xml).toContain('<P_48>207.00</P_48>');
+  });
+
   it('K_43 i P_48 to VAT DO ODLICZENIA, nie cały VAT z dokumentu (np. auto 50%)', () => {
     const data = dane([koszt({ netAmount: 1000, vatAmount: 230, vatDeductibleAmount: 115 })]);
     const xml = generateJpkV7m(data);
