@@ -9,8 +9,12 @@ import {
  *
  * Reużywa generycznych helperów z `lib/storage/r2.ts` (ten sam bucket
  * co XML faktur). Konwencja klucza spójna z XML — `.pdf` zamiast `.xml`:
- *   {tenantId}/{YYYY}/{MM}/{invoiceId}.pdf
+ *   {tenantId}/{YYYY}/{MM}/{invoiceId}.v{rendererVersion}.pdf
  */
+
+// A renderer change must invalidate old PDFs even when invoice.updated_at
+// remains unchanged. v2 includes the VAT exemption basis on zw invoices.
+const PDF_RENDERER_VERSION = 2;
 
 function parseYearMonth(issueDate: string): { year: string; month: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
@@ -29,7 +33,7 @@ export function buildInvoicePdfKey(
   issueDate: string,
 ): string {
   const { year, month } = parseYearMonth(issueDate);
-  return `${tenantId}/${year}/${month}/${invoiceId}.pdf`;
+  return `${tenantId}/${year}/${month}/${invoiceId}.v${PDF_RENDERER_VERSION}.pdf`;
 }
 
 export async function uploadInvoicePdf(
