@@ -56,6 +56,8 @@ interface InvoiceRow {
   vat_total: number | null;
   gross_total: number | null;
   notes: string | null;
+  /** `fa3_data->annotations` — sama gałąź, nie cały snapshot. */
+  annotations: unknown;
   updated_at: string | null;
   pdf_storage_path: string | null;
   pdf_generated_at: string | null;
@@ -69,6 +71,7 @@ const SELECT = `
   id, tenant_id, internal_number, invoice_type, issue_date, sale_date,
   ksef_number, net_total, vat_total, gross_total, notes, updated_at,
   pdf_storage_path, pdf_generated_at, seller_data, buyer_data, payment_data,
+  annotations:fa3_data->annotations,
   invoice_line_items(
     ordinal, name, unit, quantity, unit_price_net,
     net_amount, vat_rate, vat_amount, gross_amount
@@ -97,6 +100,13 @@ function mapLine(row: LineItemRow): InvoiceLineItem {
     vatAmount: Number(row.vat_amount ?? 0),
     grossAmount: Number(row.gross_amount ?? 0),
   };
+}
+
+/** Adnotacje FA(3) ze snapshotu — dziś tylko podstawa zwolnienia z VAT (P_19A). */
+function readAnnotations(raw: unknown): Invoice['annotations'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const basis = (raw as Record<string, unknown>).vatExemptionBasis;
+  return typeof basis === 'string' && basis.trim() ? { vatExemptionBasis: basis.trim() } : undefined;
 }
 
 /**
@@ -154,6 +164,7 @@ export async function loadInvoiceForPdf(
     grossTotal: Number(row.gross_total ?? 0),
     payment: row.payment_data as PaymentInfo,
     notes: row.notes ?? undefined,
+    annotations: readAnnotations(row.annotations),
   };
 
   return {
