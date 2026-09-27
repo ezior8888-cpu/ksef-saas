@@ -100,7 +100,7 @@ describe('podstawa zwolnienia — ustawienie firmy', () => {
     expect(normalizeExemptionBasis(null)).toBeNull();
   });
 
-  it('odrzuca śmieci — te same granice co CHECK w 00083', () => {
+  it('odrzuca śmieci — te same granice co CHECK w 00091', () => {
     expect(() => normalizeExemptionBasis('ab')).toThrow();
     expect(() => normalizeExemptionBasis('x'.repeat(257))).toThrow();
     expect(() => normalizeExemptionBasis('art. <script>')).toThrow();

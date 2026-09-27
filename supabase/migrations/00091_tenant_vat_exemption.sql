@@ -1,4 +1,4 @@
--- 00083 — zwolnienie z VAT na poziomie firmy (PROŚBA: wgrywa Bartosz).
+-- 00091 — zwolnienie z VAT na poziomie firmy (PROŚBA: wgrywa Bartosz).
 --
 -- Po co: firma zwolniona z VAT (art. 113 — typowa mikrofirma do 200 000 zł,
 -- albo zwolnienie przedmiotowe art. 43) nie mogła wystawić poprawnej faktury:

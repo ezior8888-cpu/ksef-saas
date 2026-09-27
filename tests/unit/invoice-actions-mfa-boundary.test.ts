@@ -44,7 +44,7 @@ let aal: string;
 let factor: string | null;
 let member: boolean;
 let selectedOrg: string | null;
-/** `tenants.vat_exemption_basis` (00083) — null = czynny podatnik VAT. */
+/** `tenants.vat_exemption_basis` (00091) — null = czynny podatnik VAT. */
 let vatBasis: string | null;
 
 function query(table: string) {

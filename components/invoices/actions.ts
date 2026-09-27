@@ -483,7 +483,7 @@ export async function saveDraftAction(
 ): Promise<InvoiceActionResult> {
   try {
     const { supabase, tenant, userId } = await getTenantContext();
-    // Odpornie: przed wgraniem 00083 kolumny nie ma — zwykła faktura nie może
+    // Odpornie: przed wgraniem 00091 kolumny nie ma — zwykła faktura nie może
     // od niej zależeć.
     const vatExemptionBasis = await readTenantVatExemption(supabase, tenant.id);
     const invoice = buildInvoiceFromForm(values, tenant, vatExemptionBasis);
@@ -517,7 +517,7 @@ export async function saveAndSendInvoiceAction(
 ): Promise<InvoiceActionResult> {
   try {
     const { supabase, tenant, userId } = await getTenantContext();
-    // Odpornie: przed wgraniem 00083 kolumny nie ma — zwykła faktura nie może
+    // Odpornie: przed wgraniem 00091 kolumny nie ma — zwykła faktura nie może
     // od niej zależeć.
     const vatExemptionBasis = await readTenantVatExemption(supabase, tenant.id);
     const invoice = buildInvoiceFromForm(values, tenant, vatExemptionBasis);

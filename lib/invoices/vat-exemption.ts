@@ -7,7 +7,7 @@
  * a generator rzucał błędem — firma zwolniona albo nie wystawiała faktury,
  * albo wybierała „0%”/„np”, czyli stawkę niezgodną z przepisami.
  *
- * Kolumna `tenants.vat_exemption_basis` (migracja 00083): NULL = czynny
+ * Kolumna `tenants.vat_exemption_basis` (migracja 00091): NULL = czynny
  * podatnik VAT.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -26,7 +26,7 @@ export const VAT_EXEMPTION_PRESETS = [
 
 /**
  * Podstawa po oczyszczeniu albo `null` („czynny podatnik VAT”). Te same
- * granice co CHECK w 00083: 3–256 znaków, bez znaków sterujących.
+ * granice co CHECK w 00091: 3–256 znaków, bez znaków sterujących.
  */
 export function normalizeExemptionBasis(input: unknown): string | null {
   if (typeof input !== 'string') return null;
@@ -41,7 +41,7 @@ export function normalizeExemptionBasis(input: unknown): string | null {
   return value;
 }
 
-/** Kod PostgREST/Postgres „nie ma takiej kolumny” — przed wgraniem 00083. */
+/** Kod PostgREST/Postgres „nie ma takiej kolumny” — przed wgraniem 00091. */
 const UNDEFINED_COLUMN = '42703';
 
 /**

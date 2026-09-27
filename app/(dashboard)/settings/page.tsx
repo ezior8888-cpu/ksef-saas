@@ -32,7 +32,7 @@ export default async function SettingsPage() {
       .eq('id', tenantId)
       .maybeSingle(),
     supabase.auth.getUser(),
-    // Osobno i odpornie — przed migracją 00083 kolumny nie ma.
+    // Osobno i odpornie — przed migracją 00091 kolumny nie ma.
     readTenantVatExemption(supabase, tenantId),
   ]);
 

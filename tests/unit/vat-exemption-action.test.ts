@@ -102,7 +102,7 @@ describe('ustawienie zwolnienia z VAT', () => {
     expect(mocks.updates).toEqual([]);
   });
 
-  it('przed migracją 00083: czytelny komunikat, bez wpisu do audytu', async () => {
+  it('przed migracją 00091: czytelny komunikat, bez wpisu do audytu', async () => {
     mocks.updateError = { code: '42703', message: 'column does not exist' };
     const result = await updateVatExemptionAction('art. 113 ust. 1 ustawy o VAT');
     expect(result).toMatchObject({ success: false });
