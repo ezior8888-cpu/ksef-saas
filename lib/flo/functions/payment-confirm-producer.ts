@@ -52,6 +52,7 @@ import { createProposal } from '@/lib/flo/proposals';
 import { runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { CHASEABLE_INVOICE_KINDS } from '@/lib/reminders/scheduler';
 
 const KIND = 'payment.confirm' as const;
 const TOPIC_PREFIX = `${KIND}:`;
@@ -127,6 +128,8 @@ async function readOverdueInvoices(
     .eq('direction', 'outgoing')
     .eq('origin', 'app')
     .eq('ksef_status', 'accepted')
+    // Korekta nie jest osobnym długiem — jak w cronie ponagleń.
+    .in('invoice_kind', [...CHASEABLE_INVOICE_KINDS])
     .in('payment_status', ['unpaid', 'partial', 'overdue'])
     .lt('payment_due_date', today)
     .gte('payment_due_date', since)

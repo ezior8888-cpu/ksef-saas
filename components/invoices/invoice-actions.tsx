@@ -2,14 +2,11 @@
 
 import { useTransition } from 'react';
 import { toast } from 'sonner';
-import { Download, FileText, Loader2, RefreshCw } from 'lucide-react';
+import { Download, FileText, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { EmailInvoiceButton } from './email-invoice-button';
-import {
-  downloadInvoiceXmlAction,
-  resendInvoiceAction,
-} from './actions-detail';
+import { downloadInvoiceXmlAction } from './actions-detail';
 import { saveBlob } from '@/lib/download';
 
 interface Props {
@@ -23,11 +20,8 @@ interface Props {
 export function InvoiceActions({ invoice }: Props) {
   const [isDownloading, startDownloading] = useTransition();
   const [isDownloadingPdf, startDownloadingPdf] = useTransition();
-  const [isResending, startResending] = useTransition();
 
   const canDownload = !!invoice.xml_storage_path;
-  const canResend =
-    invoice.ksef_status === 'rejected' || invoice.ksef_status === 'failed';
 
   const handleDownload = () => {
     startDownloading(async () => {
@@ -99,26 +93,10 @@ export function InvoiceActions({ invoice }: Props) {
           Pobierz XML
         </Button>
       )}
-      {canResend && (
-        <Button
-          variant="glass-primary"
-          size="lg"
-          disabled={isResending}
-          onClick={() => {
-            startResending(async () => {
-              const result = await resendInvoiceAction(invoice.id);
-              if (result.success) toast.success('Ponowna wysyłka rozpoczęta');
-              else toast.error(result.error);
-            });
-          }}
-        >
-          {isResending ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4 mr-2" />
-          )}
-          Wyślij ponownie
-        </Button>
+      {(invoice.ksef_status === 'rejected' || invoice.ksef_status === 'failed') && (
+        <p className="w-full text-right text-sm text-[var(--ff-text-muted)]">
+          Przed kolejną wysyłką potrzebne jest ręczne uzgodnienie z KSeF.
+        </p>
       )}
     </div>
   );

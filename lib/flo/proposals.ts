@@ -31,7 +31,7 @@ import { isSilenced } from '@/lib/flo/decisions';
 import { isKindEnabled } from '@/lib/flo/flags';
 import { isKindEnabledForTenant, shouldCompute } from '@/lib/flo/kind-switch';
 import { FLO_KIND_VARIANT } from '@/lib/flo/kind-variant';
-import { recordShadow } from '@/lib/flo/shadow';
+import { recordShadow, shadowSubject } from '@/lib/flo/shadow';
 import { isTaxKind, taxGateOpen } from '@/lib/flo/tax-profile';
 import {
   isFloProposalKind,
@@ -158,6 +158,7 @@ export async function createProposal(
         proposal: {
           topicKey: input.topicKey,
           fingerprint: input.fingerprint,
+          ...shadowSubject({ kind: input.kind, payload: input.payload }),
         },
       },
       db,

@@ -7,6 +7,7 @@ import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
 import { formatPlMoney } from '@/lib/format/pl';
+import { kpirCostAmount } from '@/lib/categorization/kpir-cost';
 
 export type CashFlowInvoiceRow = Pick<
   Database['public']['Tables']['invoices']['Row'],
@@ -15,7 +16,13 @@ export type CashFlowInvoiceRow = Pick<
 
 export type CashFlowExpenseRow = Pick<
   Database['public']['Tables']['expenses']['Row'],
-  'issue_date' | 'net_amount' | 'gross_amount' | 'kpir_column'
+  | 'issue_date'
+  | 'net_amount'
+  | 'gross_amount'
+  | 'vat_amount'
+  | 'vat_deductible_amount'
+  | 'document_type'
+  | 'kpir_column'
 >;
 
 interface CashFlowDashboardProps {
@@ -58,7 +65,9 @@ export function CashFlowDashboard({
           0,
         );
         const expense = monthExpenses.reduce(
-          (s, e) => s + Number(e.net_amount ?? 0),
+          // Jak w KPiR: VAT bez prawa do odliczenia (paragon) jest kosztem —
+          // inaczej zysk i szacowany podatek wychodzą za wysokie.
+          (s, e) => s + kpirCostAmount(e),
           0,
         );
         return {
@@ -98,7 +107,7 @@ export function CashFlowDashboard({
           Przepływy pieniężne
         </h1>
         <p className="text-sm text-[var(--ff-text-muted)]">
-          Przychód i koszty (netto) • ostatnie 6 miesięcy • faktury zaakceptowane w
+          Przychód netto i koszty jak w KPiR • ostatnie 6 miesięcy • faktury zaakceptowane w
           KSeF
         </p>
       </div>
