@@ -49,10 +49,14 @@ function bledyKolumn(l: Lancuch): Blad[] {
   for (const m of l.tekst.matchAll(new RegExp(`\\.(${FILTRY})\\(\\s*'([^']+)'`, 'g'))) {
     const [operacja, k] = [m[1]!, kolumnaFiltra(m[2]!)];
     if (!k || kolumny.has(k)) continue;
-    // PostgREST uses `.is('relation', null)` as an anti-join, but only when
-    // that existing relation was explicitly embedded in this SELECT.
-    if (operacja === 'is' && SCHEMAT.tabele.has(k) &&
-        new RegExp(`\\.select\\(\\s*'[^']*\\b${k}\\(\\)[^']*'\\s*\\)`).test(l.tekst)) continue;
+    // Migration 00015 links upo_receipts.invoice_id to invoices.id. PostgREST
+    // treats a selected empty embed and an exact null filter as an anti-join.
+    // Keep the exception scoped to that proven relation.
+    const upoAntiJoin = operacja === 'is' && l.tabela === 'invoices' &&
+      k === 'upo_receipts' && SCHEMAT.tabele.has(k) &&
+      /^\s*,\s*null\s*\)/.test(l.tekst.slice(m.index! + m[0].length)) &&
+      /\.select\(\s*'[^']*\bupo_receipts\(\)[^']*'\s*\)/.test(l.tekst);
+    if (upoAntiJoin) continue;
     out.push({
       klucz: `${l.plik} ${l.tabela}.${k}`,
       gdzie: `${l.plik}:${l.linia}`,
@@ -133,6 +137,9 @@ describe('filtry pytają o to, co istnieje', () => {
       plik: 'test', linia: 1, tabela: 'invoices', tekst,
     });
     expect(bledyKolumn(lancuch(".select('id, upo_receipts()').is('upo_receipts', null)"))).toEqual([]);
+    expect(bledyKolumn(lancuch(".select('id, upo_receipts()').is('upo_receipts', false)"))).toHaveLength(1);
+    expect(SCHEMAT.tabele.has('stripe_webhook_events')).toBe(true);
+    expect(bledyKolumn(lancuch(".select('id, stripe_webhook_events()').is('stripe_webhook_events', null)"))).toHaveLength(1);
     expect(bledyKolumn(lancuch(".select('id').is('upo_receipts', null)"))).toHaveLength(1);
     expect(bledyKolumn(lancuch(".select('id, unknown_receipts()').is('unknown_receipts', null)"))).toHaveLength(1);
   });
