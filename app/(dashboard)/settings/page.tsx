@@ -13,8 +13,11 @@ import {
   Mail,
   Plus,
   Lock,
+  Receipt,
 } from 'lucide-react';
 import { DeleteAccountSection } from '@/components/settings/delete-account';
+import { VatExemptionForm } from '@/components/settings/vat-exemption-form';
+import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -22,13 +25,15 @@ export const dynamic = 'force-dynamic';
 export default async function SettingsPage() {
   const { supabase, user, tenantId, role } = await getPageContext();
 
-  const [{ data: tenant }, { data: authUser }] = await Promise.all([
+  const [{ data: tenant }, { data: authUser }, vatExemptionBasis] = await Promise.all([
     supabase
       .from('tenants')
       .select('name, nip, address_json')
       .eq('id', tenantId)
       .maybeSingle(),
     supabase.auth.getUser(),
+    // Osobno i odpornie — przed migracją 00083 kolumny nie ma.
+    readTenantVatExemption(supabase, tenantId),
   ]);
 
   // `user` z `getPageContext` ma email + id; created_at potrzebne tylko tutaj.
@@ -243,6 +248,31 @@ export default async function SettingsPage() {
                   </div>
                 )}
             </dl>
+          </div>
+        </div>
+      </div>
+
+      {/* Podatek VAT — zwolnienie (FA(3) P_19A) */}
+      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
+        <div className="flex items-start gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
+            <Receipt className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <div className="flex-1 min-w-0 space-y-4">
+            <div>
+              <h2 className="text-lg font-display font-semibold tracking-tighter-text">
+                Podatek VAT
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                {vatExemptionBasis
+                  ? `Zwolniona z VAT — ${vatExemptionBasis}`
+                  : 'Czynny podatnik VAT'}
+              </p>
+            </div>
+            <VatExemptionForm
+              initialBasis={vatExemptionBasis}
+              canEdit={role === 'owner' || role === 'admin'}
+            />
           </div>
         </div>
       </div>
