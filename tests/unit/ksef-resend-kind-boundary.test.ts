@@ -1,128 +1,64 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createClient: vi.fn(), sendJobEvent: vi.fn(), requireKsefVerification: vi.fn(),
-  logAudit: vi.fn(), requireAuth: vi.fn(),
+  requireAuth: vi.fn(),
+  from: vi.fn(),
+  select: vi.fn(),
+  eq: vi.fn(),
+  update: vi.fn(),
+  sendJobEvent: vi.fn(),
+  logAudit: vi.fn(),
+  row: { ksef_status: 'rejected', invoice_kind: 'correction' },
 }));
-vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.createClient }));
+
 vi.mock('@/lib/supabase/auth-context', () => ({
   ActionAuthError: class ActionAuthError extends Error {},
   requireUserAndActiveOrg: mocks.requireAuth,
 }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: mocks.sendJobEvent }));
-vi.mock('@/lib/auth/ksef-verification-guard', () => ({
-  KsefNotVerifiedError: class extends Error {},
-  requireKsefVerification: mocks.requireKsefVerification,
-}));
 vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.logAudit }));
-vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/storage/r2', () => ({ downloadInvoiceXml: vi.fn() }));
 vi.mock('@/lib/pdf/invoice-pdf', () => ({ generateInvoicePdf: vi.fn() }));
 vi.mock('@/lib/pdf/invoice-data', () => ({ loadInvoiceForPdf: vi.fn() }));
 vi.mock('@/lib/email/send', () => ({ sendInvoiceEmail: vi.fn() }));
 
 import { resendInvoiceAction } from '@/components/invoices/actions-detail';
-import { finalizeInvoice } from '@/lib/xml/invoice-calculator';
-import type { Invoice } from '@/types/invoice';
 
-const VAT_SNAPSHOT = JSON.parse(JSON.stringify(finalizeInvoice({
-  internalNumber: 'FV 1/2026',
-  type: 'VAT',
-  issueDate: '2026-09-25',
-  saleDate: '2026-09-25',
-  seller: {
-    nip: '1234567890', name: 'Sprzedawca',
-    address: { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' },
-  },
-  buyer: {
-    nip: '1111111111', name: 'Nabywca',
-    address: { countryCode: 'PL', addressLine1: 'ul. Testowa 2', addressLine2: '00-002 Warszawa' },
-  },
-  lines: [{
-    ordinal: 1, name: 'Usługa programistyczna', classificationCode: '62.01',
-    unit: 'usł.', quantity: 1, unitPriceNet: 100, vatRate: '23',
-  }],
-  payment: { currency: 'PLN', dueDate: '2026-10-09', method: 'transfer' },
-  notes: 'Zakres prac za wrzesień',
-}))) as Invoice;
-
-let invoiceKind: string;
-let invoiceType: 'VAT' | 'KOR' | 'ZAL' | 'ROZ';
-let invoiceStatus: string;
-const select = vi.fn();
-const from = vi.fn(() => {
-  const chain = {
-    select: (...args: unknown[]) => { select(...args); return chain; },
-    eq: () => chain,
-    single: async () => ({
-      data: {
-        id: '11111111-1111-4111-8111-111111111111',
-        tenant_id: '22222222-2222-4222-8222-222222222222',
-        invoice_kind: invoiceKind,
-        invoice_type: invoiceType,
-        internal_number: VAT_SNAPSHOT.internalNumber,
-        issue_date: VAT_SNAPSHOT.issueDate,
-        sale_date: VAT_SNAPSHOT.saleDate,
-        seller_data: VAT_SNAPSHOT.seller,
-        buyer_data: VAT_SNAPSHOT.buyer,
-        payment_data: VAT_SNAPSHOT.payment,
-        notes: VAT_SNAPSHOT.notes,
-        net_total: VAT_SNAPSHOT.netTotal,
-        vat_total: VAT_SNAPSHOT.vatTotal,
-        gross_total: VAT_SNAPSHOT.grossTotal,
-        fa3_data: invoiceType === 'VAT' ? VAT_SNAPSHOT : { type: invoiceType },
-        invoice_line_items: VAT_SNAPSHOT.lines,
-        ksef_status: invoiceStatus,
-        tenants: { nip: '1234567890', ksef_credentials_encrypted: 'fixture' },
-      },
-      error: null,
-    }),
-    update: () => chain,
-    then: (ok: (value: { error: null }) => unknown) => Promise.resolve({ error: null }).then(ok),
-  };
-  return chain;
-});
+const invoiceId = '11111111-1111-4111-8111-111111111111';
+const tenantId = '22222222-2222-4222-8222-222222222222';
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  vi.stubEnv('KSEF_ENV', 'test');
-  invoiceKind = 'correction';
-  invoiceType = 'KOR';
-  invoiceStatus = 'rejected';
-  mocks.createClient.mockResolvedValue({
-    auth: { getUser: async () => ({ data: { user: { id: 'fixture-user' } } }) },
-    from,
-  });
-  mocks.requireAuth.mockImplementation(async () => ({
-    supabase: await mocks.createClient(),
+  vi.resetAllMocks();
+  mocks.row = { ksef_status: 'rejected', invoice_kind: 'correction' };
+  const query = {
+    select: (columns: string) => { mocks.select(columns); return query; },
+    eq: (key: string, value: unknown) => { mocks.eq(key, value); return query; },
+    maybeSingle: async () => ({ data: mocks.row, error: null }),
+    update: (patch: unknown) => { mocks.update(patch); return query; },
+  };
+  mocks.from.mockReturnValue(query);
+  mocks.requireAuth.mockResolvedValue({
+    supabase: { from: mocks.from },
     user: { id: 'fixture-user' },
-    tenantId: '22222222-2222-4222-8222-222222222222',
-  }));
+    tenantId,
+  });
 });
 
-afterEach(() => vi.unstubAllEnvs());
+it.each([
+  ['correction', 'rejected'],
+  ['advance', 'rejected'],
+  ['final', 'rejected'],
+  ['regular', 'failed'],
+])('blocks historical %s/%s resend before any job or status update', async (kind, status) => {
+  mocks.row = { ksef_status: status, invoice_kind: kind };
 
-it.each(['correction', 'advance', 'final'])(
-  'blocks generic VAT resend of a rejected %s invoice before enqueue',
-  async (kind) => {
-    invoiceKind = kind;
-    invoiceType = kind === 'correction' ? 'KOR' : kind === 'advance' ? 'ZAL' : 'ROZ';
-    const result = await resendInvoiceAction('11111111-1111-4111-8111-111111111111');
-    expect(result).toMatchObject({ success: false, error: expect.stringContaining('dedykowanej ścieżki') });
-    expect(select.mock.calls[0]?.[0]).toContain('invoice_kind');
-    expect(mocks.requireKsefVerification).not.toHaveBeenCalled();
-    expect(mocks.sendJobEvent).not.toHaveBeenCalled();
-    expect(mocks.logAudit).not.toHaveBeenCalled();
-  },
-);
+  const result = await resendInvoiceAction(invoiceId);
 
-it('leaves the ordinary VAT resend path available', async () => {
-  invoiceKind = 'regular';
-  invoiceType = 'VAT';
-  const result = await resendInvoiceAction('11111111-1111-4111-8111-111111111111');
-  expect(result).toEqual({ success: true });
-  expect(mocks.requireKsefVerification).toHaveBeenCalled();
-  expect(mocks.sendJobEvent).toHaveBeenCalledWith(expect.objectContaining({
-    data: expect.objectContaining({ environment: 'test', invoice: VAT_SNAPSHOT }),
-  }));
+  expect(result).toMatchObject({ success: false, error: expect.stringContaining('uzgodnić') });
+  expect(mocks.select).toHaveBeenCalledWith('ksef_status');
+  expect(mocks.eq).toHaveBeenCalledWith('id', invoiceId);
+  expect(mocks.eq).toHaveBeenCalledWith('tenant_id', tenantId);
+  expect(mocks.sendJobEvent).not.toHaveBeenCalled();
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(mocks.logAudit).not.toHaveBeenCalled();
 });
