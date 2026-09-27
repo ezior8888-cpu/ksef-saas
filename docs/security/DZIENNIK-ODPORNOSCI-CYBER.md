@@ -767,6 +767,16 @@ Przegląd [specyfikacji QR MF](https://github.com/CIRFMF/ksef-api/blob/main/kody
 **Otwarty wynik recenzji:** `lib/inngest/jobs/inbox-polling.ts` sprawdza istnienie numeru KSeF przed osobnym INSERT, ale w bazie nie ma odpowiedniego unikalnego ograniczenia. Dwa równoległe przebiegi mogą zapisać ten sam dokument dwa razy. Potrzebne jest osobne uzgodnienie historycznych duplikatów, constraint i bezpieczna obsługa konfliktu; tego pakiet nie naprawia.
 
 
+## 2026-09-27 — dostęp do faktur w akcjach szczegółów (CYB-INT-05)
+
+**Zakres i źródło:** kontynuacja przeglądu bezpieczeństwa w zależnym PR #63. Niezależna recenzja kodu wykazała możliwość wysłania PDF obcej organizacji: `emailInvoiceAction` sprawdzała tylko sesję i poprawność UUID cookie `ksef.active_org`, a generator pobierał fakturę klientem `service_role` po samym ID i porównywał jej organizację z tym niezweryfikowanym cookie. Zalogowany użytkownik znający ID faktury i UUID obcej organizacji mógł podać własny adres e-mail. To potwierdzona ścieżka w kodzie, nie stwierdzony incydent na serwerze. Dodatkowo pobranie XML i ponowna wysyłka KSeF nie korzystały ze wspólnej granicy weryfikacji MFA i aktywnego członkostwa; odczyt XML używał RLS, więc nie potwierdzono tam analogicznego wycieku między organizacjami.
+
+**Poprawka:** commit `41233e3` — wszystkie trzy akcje szczegółów wymagają `requireUserAndActiveOrg()` przed odczytem lub skutkiem. E-mail i ponowna wysyłka używają zweryfikowanego `tenantId`; XML i resend filtrują fakturę także w zapytaniu. Odczyt PDF przez `service_role` wymaga teraz `tenantId` i filtruje po nim w bazie; akcja e-mail sprawdza ponownie organizację zwróconego dokumentu przed wysłaniem. Audit pobrania XML używa tożsamości ze zweryfikowanego kontekstu. Testy odtwarzają odmowę przy braku MFA/członkostwa przed użyciem PDF, maila, XML i joba oraz filtr organizacji w odczycie admina. Nie dodano migracji.
+
+**Weryfikacja:** testy celowane akcji i PDF przeszły (4 pliki / 24 testy oraz bezpośredni test loadera 2/2). Pełny `pnpm run ci` PASS: typecheck, lint bez błędów, 66 testów XML, 220 plików / 3577 testów Vitest. `pnpm build` PASS: 82/82 stron. Brak próby na prawdziwym PostgREST/Resend/MinIO i przeglądarce, brak dowodu na stan wdrożenia. Testy akcji używają atrapy granicy auth; osobny istniejący `auth-context-mfa.test.ts` sprawdza rzeczywistą implementację helpera wobec sfałszowanego cookie, AAL1 i braku aktywnego membership.
+
+**Pozostałe ryzyka i przekazanie:** resend nadal wykonuje `SELECT → enqueue → UPDATE` bez atomowego claimu i może nadać dwa joby przy równoległych żądaniach. Bezpośredni DML `authenticated` może ustawić `ksef_status=queued` i pola diagnostyczne bez joba; potrzebny trwały claim/outbox oraz migracja ograniczająca te zapisy. Fan-out importu Inbox do FLO/kosztów/push nie jest transakcyjny. Akcja e-mail nie ma limitu liczby wysyłek per konto/organizacja/faktura, co naraża limit i reputację Resend; następna poprawka powinna użyć fail-closed limitera oraz monitoringu masowej wysyłki. PR #62 → #63 → #64 i otwarty PR #60 (migracja 00091) wymagają skoordynowanego odbioru. Bartek musi potwierdzić faktyczny stan db-1, wykonać testy na kopii i osobno zaplanować wdrożenie; Codex nie wykonał SQL, migracji, merge ani deployu.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:
