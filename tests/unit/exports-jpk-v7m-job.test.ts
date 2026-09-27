@@ -4,8 +4,6 @@ import type { JobContext } from '@/lib/jobs/registry';
 import type { ExportExpense } from '@/lib/exports/data-fetcher';
 import type { JpkInvoice } from '@/lib/exports/jpk-fa-generator';
 
-type Row = Record<string, unknown>;
-
 const db = vi.hoisted(() => ({
   office: '1433' as string | null,
   owner: 'u-1' as string | null,
