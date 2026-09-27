@@ -1,9 +1,10 @@
 import PDFDocument from 'pdfkit';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   row: null as Record<string, unknown> | null,
   select: vi.fn(),
+  eq: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -11,7 +12,12 @@ vi.mock('@/lib/supabase/server', () => ({
     from: () => ({
       select: (cols: string) => {
         mocks.select(cols);
-        return { eq: () => ({ maybeSingle: async () => ({ data: mocks.row, error: null }) }) };
+        const query = {
+          eq: mocks.eq,
+          maybeSingle: async () => ({ data: mocks.row, error: null }),
+        };
+        mocks.eq.mockReturnValue(query);
+        return query;
       },
     }),
   }),
@@ -67,6 +73,10 @@ function faktura(vatRate: 'zw' | '23', annotations?: Invoice['annotations']): In
   } as Invoice;
 }
 
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -110,14 +120,15 @@ describe('podstawa zwolnienia na PDF faktury', () => {
       annotations: { vatExemptionBasis: ` ${PODSTAWA} ` },
       invoice_line_items: [],
     };
-    const data = await loadInvoiceForPdf('inv-1');
+    const data = await loadInvoiceForPdf('inv-1', 'ten-1');
     expect(mocks.select.mock.calls[0]![0]).toContain('annotations:fa3_data->annotations');
+    expect(mocks.eq).toHaveBeenCalledWith('tenant_id', 'ten-1');
     expect(data?.invoice.annotations).toEqual({ vatExemptionBasis: PODSTAWA });
   });
 
   it('loader: śmieci w adnotacjach nie trafiają na PDF', async () => {
-    mocks.row = { ...(mocks.row as Record<string, unknown>), annotations: { vatExemptionBasis: 42 } };
-    const data = await loadInvoiceForPdf('inv-1');
+    mocks.row = { id: 'inv-1', tenant_id: 'ten-1', issue_date: '2026-09-25', annotations: { vatExemptionBasis: 42 } };
+    const data = await loadInvoiceForPdf('inv-1', 'ten-1');
     expect(data?.invoice.annotations).toBeUndefined();
   });
 });

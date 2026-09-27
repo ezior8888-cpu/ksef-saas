@@ -110,11 +110,12 @@ function readAnnotations(raw: unknown): Invoice['annotations'] {
 }
 
 /**
- * Ładuje fakturę z DB i mapuje do `Invoice`. Zwraca `null` gdy nie istnieje.
- * Weryfikację tenanta (ownership) robi caller — tu zwracamy `tenantId`.
+ * Ładuje fakturę z DB i mapuje do `Invoice`. Klient omija RLS, dlatego
+ * wymagamy identyfikatora organizacji już w zapytaniu, nie po odczycie.
  */
 export async function loadInvoiceForPdf(
   invoiceId: string,
+  tenantId: string,
 ): Promise<InvoicePdfData | null> {
   const admin = createAdminClient();
   const res = await (
@@ -125,10 +126,12 @@ export async function loadInvoiceForPdf(
             k: string,
             v: string,
           ) => {
-            maybeSingle: () => Promise<{
-              data: InvoiceRow | null;
-              error: { message: string } | null;
-            }>;
+            eq: (k: string, v: string) => {
+              maybeSingle: () => Promise<{
+                data: InvoiceRow | null;
+                error: { message: string } | null;
+              }>;
+            };
           };
         };
       };
@@ -137,6 +140,7 @@ export async function loadInvoiceForPdf(
     .from('invoices')
     .select(SELECT)
     .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
     .maybeSingle();
 
   if (res.error || !res.data) return null;

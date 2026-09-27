@@ -1,30 +1,11 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
-import { sendJobEvent } from '@/lib/jobs/enqueue';
-
 import { logAudit } from '@/lib/audit/log';
-import {
-  KsefNotVerifiedError,
-  requireKsefVerification,
-} from '@/lib/auth/ksef-verification-guard';
-import { createClient } from '@/lib/supabase/server';
+import { ActionAuthError, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
-import { specialInvoiceResendMessage } from '@/lib/ksef/special-invoice-data';
-import { formatInngestSendError } from '@/lib/inngest/error-message';
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
 import { sendInvoiceEmail } from '@/lib/email/send';
-import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
-import type {
-  Address,
-  BuyerParty,
-  Invoice,
-  InvoiceLineItem,
-  PaymentInfo,
-  SellerParty,
-  VatRate,
-} from '@/types/invoice';
 
 // ═══════════════════════════════════════════════════════════════
 // downloadInvoiceXmlAction
@@ -37,9 +18,8 @@ export type DownloadXmlResult =
 /**
  * Pobiera XML faktury z R2 i oddaje jego treść do klienta (Blob → <a download>).
  *
- * Bezpieczeństwo: routing przez zwykły `createClient()` (z RLS) -
- * user dostanie `invoices` tylko swojego tenanta. `xml_documents` też
- * ma RLS (przez tenant_id), więc odczyt hasha jest bezpieczny.
+ * Bezpieczeństwo: wymagamy zweryfikowanej sesji MFA i aktywnego członkostwa,
+ * a odczyt przez RLS dodatkowo zawężamy do aktywnej organizacji.
  *
  * Weryfikujemy SHA-256 z `xml_documents` - niezgodność oznaczałaby
  * korupcję plików w R2 (lub rozjazd DB↔R2), wtedy zwracamy błąd
@@ -49,12 +29,13 @@ export async function downloadInvoiceXmlAction(
   invoiceId: string
 ): Promise<DownloadXmlResult> {
   try {
-    const supabase = await createClient();
+    const { supabase, user, tenantId } = await requireUserAndActiveOrg();
 
     const { data: inv, error: invErr } = await supabase
       .from('invoices')
       .select('internal_number, xml_storage_path, tenant_id')
       .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
       .maybeSingle();
 
     if (invErr) return { success: false, error: invErr.message };
@@ -92,20 +73,14 @@ export async function downloadInvoiceXmlAction(
       '-'
     );
 
-    const {
-      data: { user: dlUser },
-    } = await supabase.auth.getUser();
-    const tenantId = inv.tenant_id as string | null | undefined;
-    if (dlUser && tenantId) {
-      await logAudit({
-        action: 'invoice.xml_downloaded',
-        tenantId,
-        userId: dlUser.id,
-        entityType: 'invoice',
-        entityId: invoiceId,
-        metadata: { internalNumber: inv.internal_number },
-      });
-    }
+    await logAudit({
+      action: 'invoice.xml_downloaded',
+      tenantId,
+      userId: user.id,
+      entityType: 'invoice',
+      entityId: invoiceId,
+      metadata: { internalNumber: inv.internal_number },
+    });
 
     return {
       success: true,
@@ -129,247 +104,46 @@ export type ResendResult =
   | { success: false; error: string; code?: 'KSEF_NOT_VERIFIED' };
 
 /**
- * Ponawia wysyłkę faktury do KSeF. Działa tylko dla statusów
- * 'rejected' i 'failed' (status guard po stronie UI - `InvoiceActions`).
- *
- * Odtwarzamy pełny obiekt `Invoice` z DB (snapshot w `fa3_data` lub
- * rekonstrukcja z `seller_data/buyer_data/payment_data` + line_items),
- * resetujemy status na 'queued' i publikujemy event `invoice/submit.requested`.
- * Dalszy flow taki sam jak przy pierwszej wysyłce.
+ * Historical failed/rejected rows do not prove whether an earlier KSeF POST
+ * succeeded. Until a durable per-attempt identity and operator reconciliation
+ * flow exists, even a null submitted_to_ksef_at is not evidence for safe replay.
  */
 export async function resendInvoiceAction(
   invoiceId: string
 ): Promise<ResendResult> {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: 'Brak sesji' };
-
-    const { data: inv, error } = await supabase
+    const { supabase, tenantId } = await requireUserAndActiveOrg();
+    const { data: invoice, error } = await supabase
       .from('invoices')
-      .select(
-        `
-        id,
-        tenant_id,
-        internal_number,
-        invoice_type,
-        issue_date,
-        sale_date,
-        seller_data,
-        buyer_data,
-        payment_data,
-        notes,
-        net_total,
-        vat_total,
-        gross_total,
-        ksef_status,
-        fa3_data,
-        invoice_line_items(
-          ordinal,
-          name,
-          unit,
-          quantity,
-          unit_price_net,
-          vat_rate,
-          net_amount,
-          vat_amount,
-          gross_amount
-        ),
-        tenants(nip, ksef_credentials_encrypted)
-      `
-      )
+      .select('ksef_status')
       .eq('id', invoiceId)
-      .single();
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
 
-    if (error || !inv) {
-      return { success: false, error: error?.message ?? 'Faktura nie istnieje' };
+    if (error || !invoice) {
+      return { success: false, error: 'Nie można znaleźć faktury w tej organizacji.' };
     }
-
-    if (inv.ksef_status !== 'rejected' && inv.ksef_status !== 'failed') {
+    if (invoice.ksef_status !== 'rejected' && invoice.ksef_status !== 'failed') {
       return {
         success: false,
         error: 'Ponowną wysyłkę można uruchomić tylko dla odrzuconych/błędnych faktur.',
       };
     }
 
-    // Korekta/zaliczka/rozliczenie potrzebują danych, których nie ma w bazie
-    // (patrz lib/ksef/special-invoice-data.ts). Mówimy od razu, zamiast
-    // przestawiać status na 'queued' dla joba, który i tak odmówi.
-    const specialMessage = specialInvoiceResendMessage(
-      (inv.invoice_type as string | null) ?? (inv.fa3_data as Invoice | null)?.type,
-    );
-    if (specialMessage) {
-      return { success: false, error: specialMessage };
-    }
-
-    const tenantRow = Array.isArray(inv.tenants) ? inv.tenants[0] : inv.tenants;
-    const tenantNip = (tenantRow?.nip as string | undefined) ?? '';
-    if (!tenantNip) {
-      return { success: false, error: 'Brak NIP tenanta (kontekst jobu)' };
-    }
-
-    if (!tenantRow?.ksef_credentials_encrypted) {
-      return {
-        success: false,
-        error:
-          'Najpierw wgraj certyfikat KSeF w Ustawienia KSeF — bez niego ponowna wysyłka nie jest możliwa.',
-      };
-    }
-
-    try {
-      await requireKsefVerification(inv.tenant_id as string);
-    } catch (e) {
-      if (e instanceof KsefNotVerifiedError) {
-        return {
-          success: false,
-          code: 'KSEF_NOT_VERIFIED',
-          error:
-            'Twoja organizacja musi najpierw zweryfikować certyfikat KSeF w Ustawieniach → KSeF.',
-        };
-      }
-      throw e;
-    }
-
-    // Preferujemy `fa3_data` (pełny snapshot zapisany przy save), a line-items
-    // tak czy inaczej ciągniemy z relacji na wypadek edycji pozycji w szkicu.
-    const snapshot = (inv.fa3_data as Invoice | null) ?? null;
-
-    const rawLines = (inv.invoice_line_items ?? []) as Array<{
-      ordinal: number;
-      name: string;
-      unit: string;
-      quantity: string | number;
-      unit_price_net: string | number;
-      vat_rate: string;
-      net_amount: string | number;
-      vat_amount: string | number;
-      gross_amount: string | number;
-    }>;
-
-    const lines: InvoiceLineItem[] = rawLines
-      .slice()
-      .sort((a, b) => a.ordinal - b.ordinal)
-      .map((l) => ({
-        ordinal: l.ordinal,
-        name: l.name,
-        unit: l.unit,
-        quantity: Number(l.quantity),
-        unitPriceNet: Number(l.unit_price_net),
-        netAmount: Number(l.net_amount),
-        vatRate: l.vat_rate as VatRate,
-        vatAmount: Number(l.vat_amount),
-        grossAmount: Number(l.gross_amount),
-      }));
-
-    const seller = (inv.seller_data ?? snapshot?.seller) as SellerParty | undefined;
-    const buyer = (inv.buyer_data ?? snapshot?.buyer) as BuyerParty | undefined;
-    const payment = (inv.payment_data ?? snapshot?.payment) as
-      | PaymentInfo
-      | undefined;
-
-    if (!seller || !buyer || !payment) {
-      return {
-        success: false,
-        error: 'Uszkodzony snapshot faktury - brak danych sprzedawcy/nabywcy/płatności.',
-      };
-    }
-
-    // Gwarantujemy wymagane pole address (SellerParty/BuyerParty typy).
-    const ensureAddress = (addr: Address | null | undefined): Address => ({
-      countryCode: addr?.countryCode ?? 'PL',
-      addressLine1: addr?.addressLine1 ?? '',
-      addressLine2: addr?.addressLine2 ?? '',
-    });
-
-    const rebuiltInvoice: Invoice = {
-      internalNumber: (inv.internal_number as string | null) ?? snapshot?.internalNumber ?? '',
-      type:
-        (inv.invoice_type as Invoice['type'] | null) ??
-        snapshot?.type ??
-        'VAT',
-      issueDate:
-        (inv.issue_date as string | null) ?? snapshot?.issueDate ?? '',
-      saleDate:
-        (inv.sale_date as string | null) ?? snapshot?.saleDate ?? undefined,
-      seller: {
-        ...seller,
-        address: ensureAddress(seller.address),
-      },
-      buyer: {
-        ...buyer,
-        address: ensureAddress(buyer.address),
-      },
-      lines,
-      netTotal: Number(inv.net_total ?? snapshot?.netTotal ?? 0),
-      vatTotal: Number(inv.vat_total ?? snapshot?.vatTotal ?? 0),
-      grossTotal: Number(inv.gross_total ?? snapshot?.grossTotal ?? 0),
-      payment,
-      notes: (inv.notes as string | null) ?? snapshot?.notes ?? undefined,
-      // Podstawa zwolnienia z VAT (P_19A) jest tylko w snapshocie — bez niej
-      // ponowna wysyłka faktury „zw” pada na walidacji generatora FA(3).
-      annotations: snapshot?.annotations,
+    return {
+      success: false,
+      error: 'Automatyczna ponowna wysyłka jest wstrzymana. Najpierw trzeba ręcznie uzgodnić fakturę z KSeF.',
     };
-
-    await sendJobEvent({
-      groupId: inv.tenant_id as string,
-      name: 'invoice/submit.requested',
-      data: {
-        tenantId: inv.tenant_id as string,
-        invoiceId,
-        invoice: rebuiltInvoice,
-        nip: tenantNip,
-      },
-    });
-
-    const { error: updErr } = await supabase
-      .from('invoices')
-      .update({
-        ksef_status: 'queued',
-        last_error: null,
-        last_error_code: null,
-        last_error_field: null,
-        last_error_suggestion: null,
-      })
-      .eq('id', invoiceId);
-
-    if (updErr) {
-      console.error('[resendInvoiceAction] queued update failed', updErr);
-    }
-
-    revalidatePath('/invoices');
-    revalidatePath(`/invoices/${invoiceId}`);
-
-    await logAudit({
-      action: 'invoice.resubmit_requested',
-      tenantId: inv.tenant_id as string,
-      userId: user.id,
-      entityType: 'invoice',
-      entityId: invoiceId,
-      metadata: { internalNumber: inv.internal_number },
-    });
-
-    return { success: true };
   } catch (err) {
-    if (err instanceof KsefNotVerifiedError) {
-      return {
-        success: false,
-        code: 'KSEF_NOT_VERIFIED',
-        error:
-          'Twoja organizacja musi najpierw zweryfikować certyfikat KSeF w Ustawieniach → KSeF.',
-      };
+    if (err instanceof ActionAuthError) {
+      return { success: false, error: err.message };
     }
     return {
       success: false,
-      error:
-        err instanceof Error
-          ? formatInngestSendError(err)
-          : 'Błąd ponownej wysyłki',
+      error: 'Nie można sprawdzić możliwości ponownej wysyłki. Spróbuj później.',
     };
   }
 }
-
 // ═══════════════════════════════════════════════════════════════
 // emailInvoiceAction — wysyłka faktury do nabywcy z PDF (Faza 33 Krok 8)
 // ═══════════════════════════════════════════════════════════════
@@ -389,24 +163,26 @@ export async function emailInvoiceAction(
     return { success: false, error: 'Nieprawidłowy adres email.' };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Sesja wygasła.' };
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    return { success: false, error: 'Brak aktywnej organizacji.' };
+  let context: Awaited<ReturnType<typeof requireUserAndActiveOrg>>;
+  try {
+    // PDF uses a service-role loader, so the tenant must come from live
+    // membership verification, never from the caller-controlled org cookie.
+    context = await requireUserAndActiveOrg();
+  } catch (err) {
+    if (err instanceof ActionAuthError) {
+      return { success: false, error: err.message };
+    }
+    throw err;
   }
+  const { user, tenantId } = context;
 
   const pdfResult = await generateInvoicePdf(invoiceId, tenantId);
   if (!pdfResult.success) {
     return { success: false, error: pdfResult.error };
   }
 
-  const data = await loadInvoiceForPdf(invoiceId);
-  if (!data) {
+  const data = await loadInvoiceForPdf(invoiceId, tenantId);
+  if (!data || data.tenantId !== tenantId) {
     return { success: false, error: 'Faktura nie istnieje.' };
   }
 
