@@ -857,3 +857,29 @@ Dopisz wpis dopiero po faktycznym działaniu:
 - Status osobno dla kodu, testów i wdrożenia; czego nie sprawdzono.
 - Skutki uboczne, zależności, możliwość wycofania; przy incydencie ochrona dowodów.
 - Właściciel pozostałych działań, konkretne następne zadanie i termin przeglądu wyjątku, jeśli istnieje.
+
+## 2026-09-27 — hotfix granicy faktury po scaleniu PR #70 (CYB-MAIN-01)
+
+**Autor i stan wyjściowy:** Codex, izolowana gałąź `codex/security-main-invoice-access-hotfix` od `main` 054ea256 (merge PR #70). Zakres: pilna poprawka kodu i testów; bez SQL, migracji, merge i wdrożenia. Nie wiadomo, czy SHA z PR #70 pracuje w Coolify ani czy pliki 00091–00092 wykonano na db-1.
+
+**Scenariusz:** W `resendInvoiceAction` historyczne `failed/rejected` publikowało job KSeF przed zapisem `queued`, a błąd zapisu był tylko logowany. Utrata odpowiedzi z KSeF mogła więc skończyć się powtórną wysyłką bez trwałej tożsamości próby. `emailInvoiceAction` brało organizację z cookie, które potwierdzało jedynie format UUID, a loader PDF przez `service_role` czytał fakturę po samym ID; znany identyfikator faktury i obcej organizacji otwierał ścieżkę do wysyłki cudzego PDF. Są to ustalenia z kodu i testów, nie potwierdzony incydent produkcyjny.
+
+**Zmiana:** Po stronie serwera wstrzymano ponowną wysyłkę `failed/rejected` do ręcznego uzgodnienia z KSeF, a przycisk i gest ponowienia usunięto z widoków. Pobranie XML i wysłanie PDF wymagają zweryfikowanej sesji, MFA jeśli włączono czynnik, oraz aktywnego członkostwa. Odczyt PDF przez `service_role` wymaga `tenant_id` już w zapytaniu; akcja e-mailowa sprawdza też organizację wyniku przed wysłaniem. Kanoniczny klucz cache PDF ma wersję v2 i tylko dokładnie ten klucz dopuszcza trafienie cache: stare PDF-y, także faktury `zw` bez podstawy P_19A, zostaną wyrenderowane ponownie przy pierwszym pobraniu. Adnotacje P_19A dodane w PR #70 pozostają w loaderze.
+
+**Weryfikacja lokalna:** 24/24 testy celowane, w tym obca faktura, odmowa przy braku MFA/członkostwa, brak joba resend, zachowanie P_19A i regeneracja starego lub niekanonicznego PDF; pełny `pnpm run ci`: 66/66 testów XML oraz 224 pliki/3491 testów Vitest, TypeScript i lint bez błędów (wcześniejsze ostrzeżenia poza tym diffem). Produkcyjny `pnpm build`: kompilacja i 82/82 strony. Niezależny przegląd po poprawce cache: brak nowego ustalenia blokującego, osobne 13/13 testów PDF PASS. Nie było testu na prawdziwym KSeF, Resend, MinIO ani produkcyjnej bazie.
+
+**Pozostałe granice:** Ten hotfix nie tworzy jeszcze trwałego protokołu ponownej próby KSeF — zależny PR #71 i migracja 00093 pozostają do odbioru. Wielokrotna wysyłka własnego PDF na arbitralny adres nie ma jeszcze limitu tempa; wymaga osobnego PR z alarmem na nadużycia. Osobno trzeba poprawić skan zaległych UPO, który może ukryć pełną kolejkę. Po wdrożeniu pierwsze pobranie starych PDF-ów kosztuje dodatkowy render i zapis w MinIO; starych obiektów nie usuwano ze względu na retencję.
+
+**Odbiór operatora:** Potwierdzić rzeczywisty SHA webu/workera w Coolify oraz stan PR #70 na serwerze. Po przeglądzie i scaleniu hotfixu wdrożyć zgodny kod, sprawdzić pobranie PDF `zw`, odmowę ponownej wysyłki oraz brak nowych jobów dla historycznych `failed/rejected`. Takie faktury uzgadniać ręcznie z KSeF. Osobno rozliczyć otwarty stos PR #62 → #63 → #64 → #71 i stan migracji na db-1; nie wnioskować o wykonaniu SQL z obecności plików w `main`.
+
+**Dowód kodu:** commit 6fe83ece46d9f8e9ad93ea58ac452a1ad371b894 (12 plików); dziennik w odrębnym commicie na tej samej gałęzi.
+
+## 2026-09-27 — lokalna integracja #71 z poprawioną granicą faktury (CYB-INT-09)
+
+**Stan i zakres:** wyłącznie lokalna gałąź `codex/security-pr71-integration-local`, łącząca opublikowany head #71 `9a1ff45` z bazą integracyjną #64 `4711b5a`. Baza obejmuje już kod z `main` po #70 oraz poprawkę PDF/resend/MFA z #77. Wcześniejszy wpis CYB-INT-08 opisuje stan #70 z chwili jego powstania; #70 jest już scalony do `main`, a ten wpis dotyczy nowszego obrazu. Nie jest to publikacja PR, merge do `main`, migracja ani wdrożenie.
+
+**Wynik połączenia:** jeden konflikt tekstowy dotyczył testu historycznego resend. Zachowano nowszy test z #77, który dla `failed/rejected` sprawdza odmowę przed publikacją joba i zmianą statusu oraz filtr `tenant_id`. W scalonym kodzie akcja e-mailowa i loader PDF nadal wymagają zweryfikowanej organizacji; loader zachowuje podstawę zwolnienia VAT P_19A z #70, a klucz cache PDF v2 wymusza ponowny render starego pliku. Akcje KOR/ZAL/ROZ z #71 wymagają MFA/aktywnego członkostwa, historyczny resend i Offline24 pozostają wstrzymane, a plik `00093` jest obecny po `00091/00092`.
+
+**Weryfikacja lokalna:** 22 ukierunkowane pliki / 313 testów PASS dla KSeF, Offline24, UPO, resend, PDF, e-mail i MFA; `pnpm typecheck` PASS; `pnpm lint` 0 błędów, 29 ostrzeżeń obecnych poza tym rozwiązaniem konfliktu. Pełne CI i build scalonego obrazu pozostają do wykonania; testy nie sprawdzają produkcyjnego db-1, PostgREST, KSeF ani Coolify.
+
+**Bramka wdrożenia:** obecność `00093` w drzewie nie dowodzi wykonania SQL. Bartek musi potwierdzić datowany stan migracji `00083–00093` na db-1 oraz możliwość zatrzymania automatycznego wdrożenia webu i workerów przy merge do `main`. Bez próby na odizolowanej kopii, uzgodnienia historycznych prób i okna baza → zgodny web/worker ten stos pozostaje lokalnie przygotowany, a nie gotowy do wdrożenia.

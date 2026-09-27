@@ -12,7 +12,9 @@ import {
   calculateInvoiceTotals,
   calculateLineItem,
   validateNipChecksum,
+  ZW_WITHOUT_BASIS_MESSAGE,
 } from '@/lib/xml/invoice-calculator';
+import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
 import type {
   Address,
@@ -203,7 +205,9 @@ export async function lookupBuyerAction(
 
 function buildInvoiceFromForm(
   values: InvoiceFormValues,
-  tenant: TenantSnapshot
+  tenant: TenantSnapshot,
+  /** Podstawa zwolnienia z VAT (P_19A) — `null` = czynny podatnik VAT. */
+  vatExemptionBasis: string | null,
 ): Invoice {
   const lines: InvoiceLineItem[] = values.lines.map((line, idx) => {
     const calc = calculateLineItem({
@@ -332,6 +336,10 @@ function buildInvoiceFromForm(
     vatTotal: totals.vatTotal,
     grossTotal: totals.grossTotal,
     payment,
+    // P_19A tylko przy pozycji zwolnionej — inaczej FA(3) dostaje P_19N.
+    annotations: lines.some((l) => l.vatRate === 'zw') && vatExemptionBasis
+      ? { vatExemptionBasis }
+      : undefined,
     notes: values.notes && values.notes.length ? values.notes : undefined,
   };
 }
@@ -475,7 +483,10 @@ export async function saveDraftAction(
 ): Promise<InvoiceActionResult> {
   try {
     const { supabase, tenant, userId } = await getTenantContext();
-    const invoice = buildInvoiceFromForm(values, tenant);
+    // Odpornie: przed wgraniem 00091 kolumny nie ma — zwykła faktura nie może
+    // od niej zależeć.
+    const vatExemptionBasis = await readTenantVatExemption(supabase, tenant.id);
+    const invoice = buildInvoiceFromForm(values, tenant, vatExemptionBasis);
 
     const result = await insertInvoiceAndLines(supabase, tenant.id, invoice, values);
     if (result.success && result.invoiceId) {
@@ -506,8 +517,15 @@ export async function saveAndSendInvoiceAction(
 ): Promise<InvoiceActionResult> {
   try {
     const { supabase, tenant, userId } = await getTenantContext();
-    const invoice = buildInvoiceFromForm(values, tenant);
-
+    // Odpornie: przed wgraniem 00091 kolumny nie ma — zwykła faktura nie może
+    // od niej zależeć.
+    const vatExemptionBasis = await readTenantVatExemption(supabase, tenant.id);
+    const invoice = buildInvoiceFromForm(values, tenant, vatExemptionBasis);
+    // 0) „zw” bez podstawy zwolnienia: mówimy od razu, zanim faktura pójdzie do
+    //    kolejki KSeF i wróci jako odrzucona. Szkic da się zapisać bez tego.
+    if (invoice.lines.some((l) => l.vatRate === 'zw') && !invoice.annotations?.vatExemptionBasis) {
+      return { success: false, error: ZW_WITHOUT_BASIS_MESSAGE };
+    }
     // 1) Najpierw draft - jeśli DB padnie, nie publikujemy eventu-sieroty.
     const saved = await insertInvoiceAndLines(supabase, tenant.id, invoice, values);
     if (!saved.success) return saved;

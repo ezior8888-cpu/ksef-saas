@@ -104,6 +104,34 @@ export interface ShadowProposal {
   amount?: number | null;
   /** Identyfikator encji, której dotyczyła propozycja (faktura, kontrahent). */
   entityId?: string | null;
+  /**
+   * Sama PRZEWIDYWANA wartość, z którą zadanie porównujące zestawi to, co
+   * klient zrobił (np. kolumna KPiR dla W-01). Bez niej rozstrzygnięcie nie
+   * ma z czym porównać — tak było od 24.09 do wprowadzenia tego pola.
+   */
+  expected?: Record<string, string | number | null>;
+}
+
+/**
+ * Wąski wyciąg z propozycji do trybu cichego — per rodzaj, tylko to, czego
+ * potrzebuje definicja trafienia w `shadow-settle.ts`. Rodzaj bez definicji
+ * dostaje pusty obiekt: nic nie zapisujemy „na zapas”.
+ */
+export function shadowSubject(input: {
+  kind: FloProposalKind;
+  payload?: Record<string, unknown> | null;
+}): Pick<ShadowProposal, 'entityId' | 'expected'> {
+  const payload = input.payload ?? {};
+
+  if (input.kind === 'expense.review') {
+    const expenseId = typeof payload.expenseId === 'string' ? payload.expenseId : null;
+    const facts = (payload.facts ?? null) as { kpirColumn?: unknown } | null;
+    const kpirColumn = typeof facts?.kpirColumn === 'string' ? facts.kpirColumn : null;
+    if (!expenseId || !kpirColumn) return {};
+    return { entityId: expenseId, expected: { kpirColumn } };
+  }
+
+  return {};
 }
 
 /**
