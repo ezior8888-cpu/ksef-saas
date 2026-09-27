@@ -134,6 +134,7 @@ describe('stale billing VAT enqueue alert', () => {
 
     expect(step.run).toHaveBeenCalledWith('check-stale-billing-vat-enqueues', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-checkout-attempts', expect.any(Function));
-    expect(result).toMatchObject({ checked: 10, fired: 0 });
+    expect(step.run).toHaveBeenCalledWith('check-customer-attempts', expect.any(Function));
+    expect(result).toMatchObject({ checked: 11, fired: 0 });
   });
 });

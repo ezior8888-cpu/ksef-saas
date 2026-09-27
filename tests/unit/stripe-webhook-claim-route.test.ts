@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   claim: vi.fn(),
   finalize: vi.fn(),
   handler: vi.fn(),
+  checkoutEvent: vi.fn(),
   constructEvent: vi.fn(),
   captureException: vi.fn(),
   captureMessage: vi.fn(),
@@ -15,6 +16,9 @@ vi.mock('@sentry/nextjs', () => ({
 }));
 vi.mock('@/lib/stripe/client', () => ({
   getStripe: () => ({ webhooks: { constructEvent: mocks.constructEvent } }),
+}));
+vi.mock('@/lib/stripe/checkout-reconcile', () => ({
+  handleCheckoutSessionStateEvent: mocks.checkoutEvent,
 }));
 vi.mock('@/lib/stripe/webhook-store', () => ({
   tryClaimWebhookEvent: mocks.claim,
@@ -52,6 +56,7 @@ beforeEach(() => {
   mocks.constructEvent.mockReturnValue(event);
   mocks.claim.mockResolvedValue({ state: 'claimed', token });
   mocks.handler.mockResolvedValue(undefined);
+  mocks.checkoutEvent.mockResolvedValue(undefined);
   mocks.finalize.mockResolvedValue(undefined);
   mocks.captureException.mockReturnValue('synthetic-error-id');
 });
@@ -59,6 +64,29 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); });
 
 describe('Stripe webhook claim ownership', () => {
+  it.each(['checkout.session.completed', 'checkout.session.expired'])(
+    'dispatches a signed %s event through the claimed webhook', async (type) => {
+      const checkoutSession = { id: 'cs_test_TestA' };
+      mocks.constructEvent.mockReturnValueOnce({
+        id: 'evt_checkout_fixture', type, data: { object: checkoutSession },
+      });
+      const response = await POST(request());
+      expect(response.status).toBe(200);
+      expect(mocks.checkoutEvent).toHaveBeenCalledExactlyOnceWith(checkoutSession);
+      expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith(
+        'evt_checkout_fixture', token, 'processed',
+      );
+    },
+  );
+
+  it('does not reconcile Checkout when its webhook signature fails', async () => {
+    mocks.constructEvent.mockImplementationOnce(() => { throw new Error('bad signature'); });
+    const response = await POST(request());
+    expect(response.status).toBe(400);
+    expect(mocks.checkoutEvent).not.toHaveBeenCalled();
+    expect(mocks.claim).not.toHaveBeenCalled();
+  });
+
   it('does not acknowledge an in-flight delivery or run its handler twice', async () => {
     let finishHandler!: () => void;
     mocks.handler.mockReturnValue(new Promise<void>((resolve) => {
@@ -112,6 +140,37 @@ describe('Stripe webhook claim ownership', () => {
     expect(response.status).toBe(500);
     expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith(
       event.id, token, 'retryable', 'subscription_not_found',
+    );
+  });
+
+  it.each([
+    'checkout_session_lookup_failed',
+    'checkout_attempt_lookup_failed',
+  ] as const)('releases a Checkout pre-effect read failure for retry: %s', async (code) => {
+    mocks.constructEvent.mockReturnValueOnce({
+      id: 'evt_checkout_retry', type: 'checkout.session.completed',
+      data: { object: { id: 'cs_test_TestA' } },
+    });
+    mocks.checkoutEvent.mockRejectedValueOnce(new RetryablePreEffectWebhookError(
+      code, 'synthetic read timeout',
+    ));
+    const response = await POST(request());
+    expect(response.status).toBe(500);
+    expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith(
+      'evt_checkout_retry', token, 'retryable', code,
+    );
+  });
+
+  it('keeps an uncertain Checkout write failed for operator reconciliation', async () => {
+    mocks.constructEvent.mockReturnValueOnce({
+      id: 'evt_checkout_uncertain', type: 'checkout.session.completed',
+      data: { object: { id: 'cs_test_TestA' } },
+    });
+    mocks.checkoutEvent.mockRejectedValueOnce(new Error('ambiguous Checkout RPC response'));
+    const response = await POST(request());
+    expect(response.status).toBe(500);
+    expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith(
+      'evt_checkout_uncertain', token, 'failed', 'handler_failed',
     );
   });
 

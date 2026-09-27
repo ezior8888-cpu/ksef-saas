@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   paymentRead: vi.fn(),
   paymentUpsert: vi.fn(),
   mapInvoice: vi.fn(),
+  proof: vi.fn(),
   syncSubscription: vi.fn(),
   sendJob: vi.fn(),
   audit: vi.fn(),
@@ -20,6 +21,9 @@ vi.mock('@/lib/stripe/event-mapping', () => ({
 }));
 vi.mock('@/lib/stripe/subscription-sync', () => ({
   syncCurrentStripeSubscription: mocks.syncSubscription,
+}));
+vi.mock('@/lib/stripe/payment-reference-proof', () => ({
+  verifyPaidInvoicePaymentReferences: mocks.proof,
 }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: mocks.sendJob }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mocks.audit }));
@@ -62,6 +66,10 @@ const subscription = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.proof.mockResolvedValue({
+    paymentIntentId: 'pi_ValidIntent123',
+    chargeId: 'ch_ValidCharge123',
+  });
   mocks.mapInvoice.mockResolvedValue({
     tenantId: 'tenant-a',
     row: {

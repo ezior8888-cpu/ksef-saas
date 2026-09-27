@@ -128,7 +128,7 @@ async function inspectOpenAttempt(
   claim: ExistingCheckoutClaim,
   input: CreateCheckoutInput,
   customerId: string,
-): Promise<{ sessionId: string; url: string } | 'expired'> {
+): Promise<{ sessionId: string; url: string } | 'expired' | 'completed'> {
   if (claim.customerId !== customerId || !claim.sessionId) {
     throw new Error('Existing Checkout attempt Customer or Session mismatch');
   }
@@ -147,14 +147,23 @@ async function inspectOpenAttempt(
   }
   if (session.status === 'complete') {
     await settleCheckoutSession(claim.attemptId, session.id, 'completed');
-    throw new Error('Checkout completed; subscription reconciliation required');
+    return 'completed';
   }
   if (session.status !== 'open' || !hasCheckoutUrl(session.url)) {
     await holdCheckoutAttempt(claim.attemptId, 'open', 'held');
     throw new Error('Existing Stripe Checkout Session requires reconciliation');
   }
   if (claim.plan !== input.plan || claim.priceId !== resolvePriceId(input.plan)) {
-    throw new Error('Another Checkout plan is already in progress');
+    // A deliberate plan switch expires the old provider Session first. If
+    // Stripe times out or the Session completes concurrently, keep the claim.
+    const expired = await stripe.checkout.sessions.expire(session.id);
+    if (!matchesCheckoutSession(expired, claim, input, customerId) ||
+        expired.status !== 'expired') {
+      await holdCheckoutAttempt(claim.attemptId, 'open', 'held');
+      throw new Error('Stripe Checkout Session expiry was not verified');
+    }
+    await settleCheckoutSession(claim.attemptId, session.id, 'expired');
+    return 'expired';
   }
   return { sessionId: session.id, url: session.url };
 }
@@ -347,7 +356,7 @@ export async function createCheckoutSession(
     }
     if (claim.state === 'open') {
       const existing = await inspectOpenAttempt(stripe, claim, input, customerId);
-      if (existing !== 'expired') return existing;
+      if (existing !== 'expired' && existing !== 'completed') return existing;
       continue;
     }
     if (claim.state === 'completed') {
