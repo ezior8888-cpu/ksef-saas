@@ -9,6 +9,7 @@ import { hashToken } from '@/lib/accountant/tokens';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import { generateJpkFa } from '@/lib/exports/jpk-fa-generator';
+import { MissingTaxOfficeError, readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -116,8 +117,12 @@ export async function POST(req: NextRequest) {
     let contentType: string;
 
     if (format === 'jpk_fa') {
+      const taxOfficeCode = await readTenantTaxOffice(supabase, tenantId);
+      if (!taxOfficeCode) {
+        return NextResponse.json({ error: new MissingTaxOfficeError().message }, { status: 422 });
+      }
       const xml = generateJpkFa({
-        issuer: data.issuer,
+        issuer: { ...data.issuer, taxOfficeCode },
         periodStart,
         periodEnd,
         issuedInvoices: data.issuedInvoices,
