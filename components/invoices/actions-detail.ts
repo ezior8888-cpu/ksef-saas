@@ -307,6 +307,9 @@ export async function resendInvoiceAction(
       grossTotal: Number(inv.gross_total ?? snapshot?.grossTotal ?? 0),
       payment,
       notes: (inv.notes as string | null) ?? snapshot?.notes ?? undefined,
+      // Podstawa zwolnienia z VAT (P_19A) jest tylko w snapshocie — bez niej
+      // ponowna wysyłka faktury „zw” pada na walidacji generatora FA(3).
+      annotations: snapshot?.annotations,
     };
 
     await sendJobEvent({

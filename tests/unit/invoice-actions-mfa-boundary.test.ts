@@ -189,7 +189,9 @@ describe('zwolnienie z VAT przy wystawianiu (stawka zw)', () => {
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
-  it('szkic bez podstawy wolno zapisać — podstawę można ustawić przed wysyłką', async () => {
+  // Szkic nie idzie do KSeF (w aplikacji nie ma wysyłki szkicu) — blokada
+  // dotyczy tylko wysyłki.
+  it('szkic bez podstawy wolno zapisać', async () => {
     await expect(saveDraftAction(zw)).resolves.toMatchObject({ success: true });
   });
 
