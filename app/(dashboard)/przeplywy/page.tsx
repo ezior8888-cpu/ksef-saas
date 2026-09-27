@@ -42,7 +42,7 @@ export default async function PrzeplywyPage() {
 
   const { data: expenses } = await supabase
     .from('expenses')
-    .select('issue_date, net_amount, gross_amount, kpir_column')
+    .select('issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column')
     .eq('tenant_id', tenantId)
     .eq('is_deductible', true)
     .gte('issue_date', sixMonthsAgo)
