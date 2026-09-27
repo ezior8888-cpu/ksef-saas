@@ -44,13 +44,15 @@ let aal: string;
 let factor: string | null;
 let member: boolean;
 let selectedOrg: string | null;
+/** `tenants.vat_exemption_basis` (00083) — null = czynny podatnik VAT. */
+let vatBasis: string | null;
 
 function query(table: string) {
   const record: QueryLog = { table, filters: {}, operation: 'select' };
   queries.push(record);
   const result = () => {
     let data: unknown = null;
-    if (table === 'tenants') data = { id: org, nip: '1234567890', name: 'Fixture seller', address_json: { countryCode: 'PL' } };
+    if (table === 'tenants') data = { id: org, nip: '1234567890', name: 'Fixture seller', address_json: { countryCode: 'PL' }, vat_exemption_basis: vatBasis };
     if (table === 'contractors') data = { nip: buyer.nip, name: buyer.name, address: buyer.address };
     if (table === 'invoices') data = record.operation === 'insert' ? { id: 'new-invoice' } : {
       id: 'last-invoice',
@@ -70,7 +72,7 @@ function query(table: string) {
   return chain;
 }
 beforeEach(() => {
-  vi.resetAllMocks(); queries = []; aal = 'aal2'; factor = 'totp'; member = true; selectedOrg = org;
+  vi.resetAllMocks(); queries = []; aal = 'aal2'; factor = 'totp'; member = true; selectedOrg = org; vatBasis = null;
   mocks.getSession.mockResolvedValue({ data: { session: { access_token: token, user: { id: 'forged-cookie-user', factors: [] } } }, error: null });
   mocks.getUser.mockImplementation(async () => ({ data: { user: {
     id: userId, email: 'user@example.test',
@@ -161,4 +163,39 @@ it.each(['draft', 'send'])('a verified user can still save %s through the sessio
     table: 'invoices', operation: 'insert', payload: expect.objectContaining({ tenant_id: org }),
   }));
   expect(mocks.enqueue).toHaveBeenCalledTimes(action === 'send' ? 1 : 0);
+});
+
+describe('zwolnienie z VAT przy wystawianiu (stawka zw)', () => {
+  // Do 26.09 formularz nie miał „zw”, a generator FA(3) rzucał błędem —
+  // firma zwolniona nie mogła wystawić poprawnej faktury.
+  const zw: InvoiceFormValues = {
+    ...form,
+    lines: [{ name: 'Usługa zwolniona', unit: 'szt', quantity: 1, unitPriceNet: 100, vatRate: 'zw' }],
+  };
+
+  it('podstawa z ustawień firmy trafia do faktury (P_19A) i faktura idzie do kolejki', async () => {
+    vatBasis = 'art. 113 ust. 1 ustawy o VAT';
+    await expect(saveAndSendInvoiceAction(zw)).resolves.toMatchObject({ success: true });
+    const invoice = mocks.enqueue.mock.calls[0]![0].invoice;
+    expect(invoice.annotations).toEqual({ vatExemptionBasis: 'art. 113 ust. 1 ustawy o VAT' });
+    expect(invoice.lines[0].vatRate).toBe('zw');
+  });
+
+  it('bez podstawy: odmowa od razu — bez zapisu faktury i bez kolejki KSeF', async () => {
+    const result = await saveAndSendInvoiceAction(zw);
+    expect(result).toMatchObject({ success: false });
+    expect(result.success === false && result.error).toContain('podstawy prawnej zwolnienia');
+    expect(queries.some((q) => q.table === 'invoices' && q.operation === 'insert')).toBe(false);
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('szkic bez podstawy wolno zapisać — podstawę można ustawić przed wysyłką', async () => {
+    await expect(saveDraftAction(zw)).resolves.toMatchObject({ success: true });
+  });
+
+  it('faktura bez „zw” nie dostaje P_19A, nawet gdy firma ma podstawę', async () => {
+    vatBasis = 'art. 113 ust. 1 ustawy o VAT';
+    await saveAndSendInvoiceAction(form);
+    expect(mocks.enqueue.mock.calls[0]![0].invoice.annotations).toBeUndefined();
+  });
 });
