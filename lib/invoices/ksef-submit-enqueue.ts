@@ -1,6 +1,6 @@
 /**
- * Jedna ścieżka po zapisie szkicu: kolejka Inngest (online) lub tryb Offline24,
- * jeśli KSeF jest niedostępny i tenant ma para certyfikat+klucz (XAdES).
+ * Jedna ścieżka po zapisie szkicu: kolejka online. Gdy KSeF jest niedostępny,
+ * pozostawiamy szkic; automatyczny Offline24 czeka na trwałą tożsamość próby.
  *
  * UWAGA: generacji XML ani uploadu R2 nie robimy w Server Action — robi to
  * `submitInvoiceFullFlow` w jobie Inngest (spójnie dla VAT / ZAL / ROZ / korekta).
@@ -18,7 +18,6 @@ import {
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
-import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 import type { Invoice } from '@/types/invoice';
@@ -29,7 +28,7 @@ import type {
 } from '@/types/invoice-types';
 
 export type KsefSubmitEnqueueResult =
-  | { ok: true; mode: 'online_queued' | 'offline_queued' }
+  | { ok: true; mode: 'online_queued' }
   | { ok: false; error: string; code?: 'KSEF_NOT_VERIFIED' };
 
 export interface EnqueueKsefSubmitParams {
@@ -117,9 +116,8 @@ export async function enqueueKsefSubmitAfterDraft(
     return { ok: false, error: missingCredentialsMessage(auditKind) };
   }
 
-  let decrypted: ReturnType<typeof decryptCredentials>;
   try {
-    decrypted = decryptCredentials(credentialsBuffer(tenantKsef.ksef_credentials_encrypted));
+    decryptCredentials(credentialsBuffer(tenantKsef.ksef_credentials_encrypted));
   } catch {
     return { ok: false, error: 'Nie można odczytać credentials KSeF.' };
   }
@@ -140,52 +138,11 @@ export async function enqueueKsefSubmitAfterDraft(
 
   const health = await shouldUseOfflineMode(env);
 
-  if (health.offline && env === 'production') {
+  if (health.offline) {
     return {
       ok: false,
-      error: 'KSeF jest niedostępny. Offline24 w PROD jest wstrzymany do zgodności kodów QR z MF; dokument zapisano jako szkic.',
+      error: 'KSeF jest niedostępny. Automatyczny Offline24 jest wstrzymany do uzgodnienia historii wysyłek; dokument zapisano jako szkic.',
     };
-  }
-
-  // The Offline24 row stores only an invoice id. Its replay cannot reconstruct
-  // KOR/ZAL/ROZ-specific legal XML, so never report those drafts as queued.
-  if (health.offline && auditKind !== 'regular') {
-    return {
-      ok: false,
-      error: 'KSeF jest niedostępny. Dokument specjalny zapisano jako szkic; ponów wysyłkę po przywróceniu KSeF.',
-    };
-  }
-
-  if (health.offline && decrypted.type === 'xades') {
-    try {
-      await addToOfflineQueue({
-        tenantId,
-        invoiceId,
-        isMfOutage: health.isMfOutage,
-        certificate: decrypted.certificatePem,
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Nie udało się dodać do kolejki offline';
-      return { ok: false, error: msg };
-    }
-
-    await logAudit({
-      action: 'invoice.submit_requested',
-      tenantId,
-      userId,
-      entityType: 'invoice',
-      entityId: invoiceId,
-      metadata: {
-        nip: nipNorm,
-        kind: auditKind,
-        mode: 'offline_queued',
-        internalNumber: internalNumberForAudit ?? invoice.internalNumber,
-      },
-    });
-
-    revalidatePath('/invoices');
-    revalidatePath(`/invoices/${invoiceId}`);
-    return { ok: true, mode: 'offline_queued' };
   }
 
   try {
@@ -213,7 +170,10 @@ export async function enqueueKsefSubmitAfterDraft(
   const { error: queueErr } = await supabase
     .from('invoices')
     .update({ ksef_status: 'queued' })
-    .eq('id', invoiceId);
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .eq('ksef_status', 'draft')
+    .is('submitted_to_ksef_at', null);
 
   if (queueErr) {
     console.error('[enqueueKsefSubmitAfterDraft] queued status update failed', queueErr);

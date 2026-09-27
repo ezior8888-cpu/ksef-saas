@@ -3,10 +3,10 @@
  * (step.run / step.sleep / step.sendEvent), żeby ciała jobów przenosiły się
  * niemal bez diffa i audytowana logika została nietknięta.
  *
- * RÓŻNICA vs Inngest: brak memoizacji stepów przy retry. Bezpieczne, bo
- * retry wykonuje CAŁY handler, a idempotencję gwarantują istniejące warstwy
- * domenowe (guard ksef_status, R2 IfNoneMatch, unikalność P_2 w MF,
- * billing_notifications, upserty) — potwierdzone audytem 18 lip 2026.
+ * RÓŻNICA vs Inngest: brak memoizacji stepów przy retry. Retry wykonuje
+ * CAŁY handler. Dla KSeF ponowienie po możliwym POST jest niebezpieczne:
+ * wysyłka musi zostać zatrzymana do uzgodnienia, aż trwały claim/outbox
+ * rozdzieli wznowienie rezultatu od ponownego POST.
  */
 
 import { parseDurationMs } from './duration';

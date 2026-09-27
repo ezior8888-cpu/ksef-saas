@@ -14,15 +14,21 @@ import {
   requireKsefVerificationForBackgroundJob,
 } from '@/lib/auth/ksef-verification-guard';
 import {
+  claimInvoiceForKsefSend,
   getTenantKsefCredentials,
+  InvoiceStatusConflictError,
   updateInvoiceStatus,
 } from '@/lib/supabase/admin-queries';
 import { createAdminClient } from '@/lib/supabase/server';
 import { KsefApiError } from '@/lib/ksef/client';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { KsefInvoiceRejectedError } from '@/lib/ksef/submit';
+import {
+  hasKsefDuplicateMarker,
+  isKsefDuplicateFailure,
+  KSEF_DUPLICATE_RECONCILIATION_CODE,
+} from '@/lib/ksef/submit-reconciliation';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
-import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
 import {
   getKsefRetryDelay,
@@ -42,9 +48,9 @@ import {
  * - Custom backoff: 30s → 2min → 5min → 15min → 1h przez `RetryAfterError`.
  *   Override Inngest defaultu (10s/30s/1m/5m/15m), dający MF ponad godzinę
  *   na recovery po większej awarii.
- * - Błędy 5xx i 429 — retry z opóźnieniem.
- * - Błędy 4xx (walidacja, auth, 404) — `NonRetriableError`, leci do
- *   `onFailure` → faktura `rejected`.
+ * - Przed atomowym claimem bezpieczne błędy mogą mieć retry z opóźnieniem.
+ * - Po claimie każdy niepewny wynik kończy się ręcznym uzgodnieniem. Nie
+ *   ponawiamy POST, ponieważ poprzednia próba mogła dotrzeć do KSeF.
  *
  * Concurrency + throttle (Faza 23 sekcja 2):
  * - Per-tenant concurrency: max 100 równoległych submit'ów. Wyższy limit
@@ -58,7 +64,7 @@ import {
 async function readCurrentInvoiceKsefState(invoiceId: string, tenantId: string) {
   const { data, error } = await createAdminClient()
     .from('invoices')
-    .select('ksef_status, ksef_number, ksef_environment, invoice_kind')
+    .select('direction, ksef_status, ksef_number, ksef_environment, invoice_kind, submitted_to_ksef_at, last_error_code, last_error')
     .eq('id', invoiceId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -71,9 +77,8 @@ async function readCurrentInvoiceKsefState(invoiceId: string, tenantId: string) 
 /**
  * Obsługa po wyczerpaniu prób (Etap 7) — wspólna dla Inngest `onFailure`
  * i pg-boss `onExhausted`. Klasyfikuje porażkę na trzy ścieżki:
- * `rejected` (walidacja / 4xx — KSeF i tak nie przyjmie), `offline_queued`
- * (błąd przejściowy → parking w trybie Offline24) oraz `failed`
- * (Offline24 niedostępny albo wracaliśmy już z niego).
+ * `rejected` (pewna odmowa przed kontaktem) lub `failed` (wynik wymagający
+ * uzgodnienia). Automatyczny parking i replay Offline24 są wstrzymane.
  */
 export async function onSubmitInvoiceExhausted(
   error: Error,
@@ -99,6 +104,39 @@ export async function onSubmitInvoiceExhausted(
       }
       await requireInvoiceTenant(invoiceId, tenantId);
       const current = await readCurrentInvoiceKsefState(invoiceId, tenantId);
+      if (current.direction === 'incoming') {
+        logger.error('KSeF submit failure callback targets an incoming invoice; no invoice state changed', {
+          tenantId,
+          invoiceId,
+        });
+        return { handled: false, reason: 'invoice-direction-mismatch' };
+      }
+      const observedKsefStatus = current.ksef_status;
+      const fromOfflineQueue = Boolean(parsed.data.fromOfflineQueue);
+      // A historical Offline24 callback must never turn an unrelated draft,
+      // queued, sending or accepted invoice into failed. Close its old queue
+      // reference through the dedicated handler; only offline_queued may have
+      // its invoice state changed below.
+      if (fromOfflineQueue && current.ksef_status !== 'offline_queued') {
+        logger.error('Legacy Offline24 event is detached from invoice state; queue requires reconciliation', {
+          tenantId,
+          invoiceId,
+          currentStatus: current.ksef_status,
+        });
+        await step.sendEvent('emit-failure', {
+          name: 'invoice/submit.failed',
+          data: {
+            invoiceId,
+            tenantId,
+            error: 'Legacy Offline24 event requires manual reconciliation',
+            environment: parsed.data.environment,
+            fromOfflineQueue: true,
+            offlineQueueId: parsed.data.offlineQueueId,
+            terminal: true,
+          },
+        });
+        return { handled: false, reason: 'offline-state-mismatch' };
+      }
       if (current.ksef_status === 'accepted') {
         logger.error('KSeF accepted invoice was not changed by failed submit callback; manual reconciliation required', {
           invoiceId,
@@ -107,22 +145,67 @@ export async function onSubmitInvoiceExhausted(
         });
         return { handled: false, reason: 'accepted-reconciliation' };
       }
-      const fromOfflineQueue = Boolean(data.fromOfflineQueue);
-
+      if (error.message.includes('KSEF_SUBMIT_CLAIM_LOST')) {
+        logger.warn('KSeF submit claim belongs to another worker; ignoring duplicate callback', {
+          tenantId,
+          invoiceId,
+        });
+        return { handled: false, reason: 'claim-lost' };
+      }
+      if (error.message.includes('KSEF_RESULT_CAS_CONFLICT')) {
+        logger.error('KSeF accepted result no longer owns its invoice claim; operator reconciliation required', {
+          tenantId,
+          invoiceId,
+        });
+        return { handled: false, reason: 'result-claim-conflict' };
+      }
+      // A different worker may have acquired this claim after this event
+      // failed before its own claim. A status-only CAS cannot identify the
+      // owner of `sending`, so do not change it from a generic callback.
+      if (current.ksef_status === 'sending') {
+        const duplicate = isKsefDuplicateFailure(error.message);
+        logger.error('KSeF sending claim remains pending after failure; operator reconciliation required', {
+          tenantId,
+          invoiceId,
+          duplicate,
+        });
+        Sentry.captureMessage('KSeF sending claim requires reconciliation', {
+          level: 'error',
+          tags: { job: 'submit-invoice', kind: duplicate ? 'duplicate-reconciliation' : 'sending-reconciliation' },
+          extra: { tenantId, invoiceId },
+        });
+        return { handled: false, reason: duplicate ? 'duplicate-reconciliation' : 'sending-reconciliation' };
+      }
+      if (hasKsefDuplicateMarker(current) &&
+          !isKsefDuplicateFailure(error.message)) {
+        logger.warn('KSeF duplicate marker remains pending; ignoring stale failure callback', {
+          tenantId,
+          invoiceId,
+        });
+        return { handled: false, reason: 'duplicate-reconciliation' };
+      }
+      // An old callback must not rewrite the diagnostics of a terminal row.
+      // A status-only CAS cannot detect another callback adding the 440 marker
+      // while this callback is awaiting a step.
+      if ((current.ksef_status === 'failed' || current.ksef_status === 'rejected') &&
+          !isKsefDuplicateFailure(error.message)) {
+        return { handled: false, reason: 'historical-reconciliation' };
+      }
       // Klasyfikacja błędu (Faza 23 sekcja 3):
-      //   - `NonRetriableError` → walidacja / 4xx → 'rejected' (nie ma sensu
-      //     parkować w Offline24, KSeF nigdy tego nie zaakceptuje).
-      //   - Inny (RetryAfterError po wyczerpaniu retries, generic Error) →
-      //     transient outage → Offline24 fallback.
-      //   - Z Offline24 (`fromOfflineQueue=true`) — już parkowane, nie
-      //     duplikujemy. Mark 'failed' i emit event.
+      //   - pewna odmowa przed kontaktem → rejected;
+      //   - niepewny wynik i stare Offline24 → failed/manual reconciliation.
+      // Nie tworzymy nowej kolejki offline po wyczerpaniu prób.
       // A pre-submit integrity guard on a special document is not a KSeF
       // rejection. Keep it visible as failed/manual reconciliation.
+      const duplicateNeedsReconciliation = isKsefDuplicateFailure(error.message);
+      const requiresManualReconciliation = Boolean(current.submitted_to_ksef_at) ||
+        duplicateNeedsReconciliation ||
+        error.message.includes('manual reconciliation');
       const isBusinessRejection = error.name === 'NonRetriableError' &&
         current.invoice_kind === 'regular' &&
-        !error.message.includes('manual reconciliation') &&
+        !requiresManualReconciliation &&
         !(fromOfflineQueue && parsed.data.environment === 'production');
-      const isTransientFailure = !isBusinessRejection;
+      const isTransientFailure = !isBusinessRejection && !requiresManualReconciliation;
 
       logger.error('Job wysyłki padł — klasyfikacja błędu', {
         tenantId,
@@ -133,84 +216,27 @@ export async function onSubmitInvoiceExhausted(
         errorMessage: error.message,
         isBusinessRejection,
         isTransientFailure,
+        requiresManualReconciliation,
         fromOfflineQueue,
       });
 
-      // Outcome zapisujemy po decyzji o ścieżce (rejected/offline_queued/failed).
-      let finalStatus: 'rejected' | 'failed' | 'offline_queued' = isBusinessRejection
+      // Without durable attempt provenance, no failed submit enters Offline24.
+      const finalStatus: 'rejected' | 'failed' = isBusinessRejection
         ? 'rejected'
         : 'failed';
 
+      try {
       if (fromOfflineQueue) {
         // Już byliśmy w offline queue — nie zapętlamy parkingu. Mark final.
         await step.run('mark-as-failed-from-offline', async () => {
           await updateInvoiceStatus(invoiceId, {
             ksef_status: finalStatus,
             last_error: `${error.name}: ${error.message}`,
-            last_error_code: null,
+            last_error_code: duplicateNeedsReconciliation ? KSEF_DUPLICATE_RECONCILIATION_CODE : null,
             last_error_field: null,
             last_error_suggestion: null,
-          }, tenantId);
+          }, tenantId, observedKsefStatus);
         });
-      } else if (isTransientFailure && current.invoice_kind === 'regular' &&
-                 parsed.data.environment !== 'production') {
-        // Faza 23 sekcja 3: po wyczerpaniu 5 retries z błędem retry-owalnym
-        // (5xx, 429, timeout, RetryAfterError) → parking w Offline24 queue.
-        // Trzy QR kody zostają wygenerowane przez `addToOfflineQueue` i jako
-        // efekt uboczny ustawiają `invoices.ksef_status = 'offline_queued'`.
-        const offlineResult = await step.run('try-offline-queue', async () => {
-          try {
-            const { getTenantKsefCredentials } = await import('@/lib/supabase/admin-queries');
-            const { addToOfflineQueue } = await import('@/lib/ksef/offline-queue');
-
-            const creds = await getTenantKsefCredentials(tenantId);
-            // Offline24 QR wymaga PEM certyfikatu — token auth (dev/test)
-            // nie ma takiego. W tym przypadku jedziemy klasycznym 'failed'.
-            if (creds.type !== 'xades') {
-              return {
-                queued: false as const,
-                reason: 'token-auth-no-cert' as const,
-              };
-            }
-
-            await addToOfflineQueue({
-              tenantId,
-              invoiceId,
-              certificate: creds.certificatePem,
-              // Best-effort: jeśli ostatni błąd to 503, traktujemy jako MF outage
-              // (deadline 7 dni zamiast 24h zgodnie ze spec Fazy 11).
-              isMfOutage: error.message.includes('503') || error.message.includes('MF'),
-            });
-
-            return { queued: true as const };
-          } catch (e) {
-            return {
-              queued: false as const,
-              reason: 'offline-queue-error' as const,
-              errorMessage: e instanceof Error ? e.message : 'unknown',
-            };
-          }
-        });
-
-        if (offlineResult.queued) {
-          finalStatus = 'offline_queued';
-          logger.info('Faktura zaparkowana w Offline24 queue po wyczerpaniu retries', {
-            tenantId,
-            invoiceId,
-            attempts: KSEF_MAX_RETRIES + 1,
-          });
-        } else {
-          // Fallback do klasycznego 'failed' gdy Offline24 niedostępne.
-          await step.run('mark-as-failed', async () => {
-            await updateInvoiceStatus(invoiceId, {
-              ksef_status: 'failed',
-              last_error: `${error.name}: ${error.message} (Offline24 ${offlineResult.reason})`,
-              last_error_code: null,
-              last_error_field: null,
-              last_error_suggestion: null,
-            }, tenantId);
-          });
-        }
       } else {
         // Unsupported special documents stay failed for manual reconciliation;
         // an ordinary business rejection keeps its rejected status.
@@ -218,11 +244,21 @@ export async function onSubmitInvoiceExhausted(
           await updateInvoiceStatus(invoiceId, {
             ksef_status: finalStatus,
             last_error: `${error.name}: ${error.message}`,
-            last_error_code: null,
+            last_error_code: duplicateNeedsReconciliation ? KSEF_DUPLICATE_RECONCILIATION_CODE : null,
             last_error_field: null,
             last_error_suggestion: null,
-          }, tenantId);
+          }, tenantId, observedKsefStatus);
         });
+      }
+      } catch (statusError) {
+        if (statusError instanceof InvoiceStatusConflictError) {
+          logger.warn('KSeF invoice changed while processing a failed callback; ignoring stale outcome', {
+            tenantId,
+            invoiceId,
+          });
+          return { handled: false, reason: 'status-changed' };
+        }
+        throw statusError;
       }
 
       await step.run('audit-submit-failed', async () => {
@@ -251,11 +287,9 @@ export async function onSubmitInvoiceExhausted(
           environment: parsed.data.environment,
           fromOfflineQueue: data.fromOfflineQueue,
           offlineQueueId: parsed.data.offlineQueueId,
-          // Bez tego kolejka Offline24 przywracała odrzuconą fakturę do
-          // 'queued' i ponawiała ją do upływu terminu.
-          // Any NonRetriableError (including a pre-submit integrity guard)
-          // must close the old Offline24 row instead of retrying its payload.
-          terminal: error.name === 'NonRetriableError',
+          // Legacy handler closes every old Offline24 row; terminal also
+          // states that this outcome must never be retried automatically.
+          terminal: requiresManualReconciliation || error.name === 'NonRetriableError',
         },
       });
 
@@ -289,6 +323,13 @@ export async function runSubmitInvoice(
     if (parsed.data.fromOfflineQueue && env === 'production') {
       throw new NonRetriableError('Legacy PROD Offline24 QR requires manual reconciliation');
     }
+    // Historical Offline24 rows have no durable attempt generation. A queued
+    // row plus a null timestamp does not prove that an old KSeF POST never
+    // happened. Keep all automatic replay disabled until provenance is stored
+    // and old rows have been reconciled; this applies to TEST/demo as well.
+    if (parsed.data.fromOfflineQueue) {
+      throw new NonRetriableError('Offline24 automatic replay requires manual reconciliation');
+    }
     await requireInvoiceTenant(invoiceId, tenantId);
     const fromOfflineQueue = Boolean(parsed.data.fromOfflineQueue);
     if (fromOfflineQueue) {
@@ -314,9 +355,16 @@ export async function runSubmitInvoice(
     // istniejący wynik. To uzupełnia: deterministyczny generator FA(3) (ten sam
     // XML), idempotencję R2 (HEAD + IfNoneMatch) oraz unikalność numeru P_2 po
     // stronie MF. Trzy niezależne warstwy ochrony przed duplikatem w KSeF.
-    // Fresh read outside step.run: a cached result could predate another worker's
-    // acceptance and allow a replay to send the invoice again.
-    const alreadyDone = await readCurrentInvoiceKsefState(invoiceId, tenantId);
+    // Inngest restarts the function body after each completed step. Memoize
+    // this initial decision for this run so a successful submit step can reach
+    // save-ksef-number on replay. A *new* run observes the current DB state;
+    // the submit step itself always re-reads before its atomic claim.
+    const alreadyDone = await step.run('read-existing-invoice', () =>
+      readCurrentInvoiceKsefState(invoiceId, tenantId),
+    );
+    if (alreadyDone.direction === 'incoming') {
+      throw new NonRetriableError('KSeF incoming invoice requires manual reconciliation');
+    }
     if (alreadyDone?.ksef_status === 'accepted' && alreadyDone.ksef_environment !== env) {
       logger.error('KSeF accepted invoice environment requires manual reconciliation', {
         invoiceId,
@@ -330,23 +378,59 @@ export async function runSubmitInvoice(
         invoiceId,
         ksefNumber: alreadyDone.ksef_number,
       });
+      // pg-boss has no step memoization. A crash after the accepted DB write
+      // but before the UPO event otherwise leaves no upo_receipts row, which
+      // the stale-UPO retry cron cannot discover. Re-emit only if absent.
+      const { data: upo, error: upoError } = await createAdminClient()
+        .from('upo_receipts')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('invoice_id', invoiceId)
+        .eq('ksef_number', alreadyDone.ksef_number)
+        .maybeSingle();
+      if (upoError) throw new Error('Nie można sprawdzić rekordu UPO zaakceptowanej faktury');
+      if (!upo) {
+        await step.sendEvent('recover-upo-after-accepted', {
+          name: 'invoice/upo.requested',
+          data: {
+            invoiceId,
+            tenantId,
+            nip,
+            ksefNumber: alreadyDone.ksef_number,
+            environment: env,
+          },
+        });
+      }
       return {
         alreadyAccepted: true as const,
         ksefNumber: alreadyDone.ksef_number,
       };
     }
+    // A fresh event or a pg-boss retry cannot distinguish a crash after the
+    // KSeF POST from a crash before it. Stop until an operator reconciles it.
+    if (hasKsefDuplicateMarker(alreadyDone) ||
+        alreadyDone.submitted_to_ksef_at ||
+        alreadyDone.ksef_status === 'sending' ||
+        alreadyDone.ksef_status === 'failed' ||
+        alreadyDone.ksef_status === 'rejected') {
+      throw new NonRetriableError(
+        'KSeF prior submission may have reached the authority; manual reconciliation required',
+      );
+    }
 
-    const documentKind = await assertSubmitReferences({
-      supabase: createAdminClient(),
-      tenantId,
-      invoiceId,
-      invoice,
-      environment: env,
-      correctionData: parsed.data.correctionData,
-      advanceData: parsed.data.advanceData,
-      finalData: parsed.data.finalData,
-      finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
-    });
+    await step.run('validate-submit-references', () =>
+      assertSubmitReferences({
+        supabase: createAdminClient(),
+        tenantId,
+        invoiceId,
+        invoice,
+        environment: env,
+        correctionData: parsed.data.correctionData,
+        advanceData: parsed.data.advanceData,
+        finalData: parsed.data.finalData,
+        finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
+      }),
+    );
 
     logger.info('Rozpoczynam wysyłkę faktury', {
       tenantId,
@@ -357,89 +441,18 @@ export async function runSubmitInvoice(
       attempt,
     });
 
-    // Re-emisja po odebraniu z kolejki offline — nie blokuj kolejnym probingiem `/health`,
-    // tylko idź klasyczną ścieżką online submit.
-    if (!fromOfflineQueue) {
-      const health = await step.run('check-ksef-health', async () =>
-        shouldUseOfflineMode(env),
-      );
-
+    // Throw *inside* the step so an outage is not memoized as a permanent
+    // `offline=true` result. A successful preflight may be memoized; the
+    // submit callback checks health again immediately before the claim.
+    await step.run('preflight-ksef-health', async () => {
+      const health = await shouldUseOfflineMode(env);
       if (health.offline) {
-        if (env === 'production') {
-          throw new RetryAfterError(
-            'KSeF unavailable; PROD Offline24 QR generation is disabled',
-            getKsefRetryDelay(attempt),
-          );
-        }
-        if (documentKind !== 'regular') {
-          throw new RetryAfterError(
-            'KSeF unavailable; special invoice cannot be replayed from Offline24',
-            getKsefRetryDelay(attempt),
-          );
-        }
-        const redirected = await step.run(
-          'try-redirect-offline-queue',
-          async (): Promise<boolean> => {
-            try {
-              await requireKsefVerificationForBackgroundJob(tenantId);
-            } catch (e) {
-              if (e instanceof KsefNotVerifiedError) {
-                throw new NonRetriableError(
-                  'Organizacja nie ma zweryfikowanego certyfikatu KSeF — tryb offline nie jest dostępny.',
-                  { cause: e },
-                );
-              }
-              throw e;
-            }
-
-            const creds = await getTenantKsefCredentials(tenantId);
-            if (creds.type !== 'xades') {
-              logger.warn('KSeF offline — pomijam kolejkę offline (brak PEM / token)', {
-                tenantId,
-                invoiceId,
-                authType: creds.type,
-              });
-              return false;
-            }
-
-            await addToOfflineQueue({
-              tenantId,
-              invoiceId,
-              isMfOutage: health.isMfOutage,
-              certificate: creds.certificatePem,
-            });
-            return true;
-          },
+        throw new RetryAfterError(
+          'KSeF unavailable; automatic Offline24 is paused pending reconciliation',
+          getKsefRetryDelay(attempt),
         );
-
-        if (redirected) {
-          await step.run('audit-redirect-offline', async () => {
-            await logAuditSystem({
-              action: 'invoice.submit_redirected_offline',
-              tenantId,
-              entityType: 'invoice',
-              entityId: invoiceId,
-              metadata: {
-                reason: health.reason,
-                isMfOutage: health.isMfOutage,
-                internalNumber: invoice.internalNumber,
-              },
-            });
-          });
-
-          logger.info('KSeF niedostępny — faktura przekierowana do trybu Offline24', {
-            invoiceId,
-            reason: health.reason,
-          });
-
-          return {
-            redirected: 'offline',
-            reason: health.reason,
-            isMfOutage: health.isMfOutage,
-          };
-        }
       }
-    }
+    });
 
     // Krok 1: walidacja credentials PRZED `sending` — jeśli brak certyfikatu /
     // decrypt padnie (NonRetriableError), `onFailure` oznaczy fakturę jako
@@ -479,42 +492,6 @@ export async function runSubmitInvoice(
       }
     });
 
-    // Krok 1.5: pre-flight check KSeF health (Faza 23 sekcja 1+2).
-    // Jeśli health monitor wcześniej zaobserwował `down` (3+ consecutive
-    // failures lub HTTP 503 z MF), nie spalamy retry-budgetu na zapowiedzianą
-    // porażkę — od razu rzucamy RetryAfterError z naszego schedule'a.
-    //
-    // Dla `attempt === 0` skip — pierwsza próba zawsze powinna sięgnąć
-    // KSeF, żeby zweryfikować że monitor nie był stale (TTL Redis 90s).
-    if (attempt > 0) {
-      const { isKsefHealthy } = await import('@/lib/ksef/health-status');
-      const healthy = await step.run('health-check', () => isKsefHealthy(env));
-      if (!healthy) {
-        const delay = getKsefRetryDelay(attempt);
-        logger.warn('KSeF zgłaszany jako down — odkładam próbę', {
-          tenantId,
-          invoiceId,
-          attempt,
-          retryAfter: delay,
-        });
-        throw new RetryAfterError(
-          'KSeF health monitor zgłasza down — odkładam wysyłkę',
-          delay,
-        );
-      }
-    }
-
-    // Krok 2: status 'sending' + timestamp — dopiero gdy wiemy, że job może
-    // realnie pogadać z KSeF.
-    await step.run('mark-as-sending', async () => {
-      const now = new Date().toISOString();
-      await updateInvoiceStatus(invoiceId, {
-        ksef_status: 'sending',
-        submitted_to_ksef_at: now,
-        last_attempt_at: now,
-      }, tenantId);
-    });
-
     await step.run('audit-start', async () => {
       await logAuditSystem({
         action: 'invoice.submit_requested',
@@ -531,31 +508,75 @@ export async function runSubmitInvoice(
     // wyniku (ksefNumber, hash, path), więc nic wrażliwego nie wycieka do
     // Inngest store'u.
     //
-    // Ten step ma własny retry — błąd sieciowy retryuje TYLKO jego, nie
-    // wcześniejszych (status w DB już 'sending'). Przy retry credentials
-    // wczytamy ponownie z DB — koszt: jeden dodatkowy SELECT + decrypt,
-    // zysk: brak wycieku PEM-a do zewnętrznego storage'u.
+    // The claim is INSIDE this step callback, immediately before KSeF I/O.
+    // Inngest may replay the callback after a crash before its checkpoint;
+    // a replay must lose the DB claim rather than perform a second POST.
+    // Credentials stay out of the event and durable step result.
     const result = await step.run('submit-to-ksef', async () => {
+      // Health gates belong inside the submit callback. A cached outage must
+      // be rechecked on pre-claim retry, while a durable successful submit
+      // result must reach save-ksef-number even if health later turns red.
+      const health = await shouldUseOfflineMode(env);
+      if (health.offline) {
+        throw new RetryAfterError(
+          'KSeF unavailable; automatic Offline24 is paused pending reconciliation',
+          getKsefRetryDelay(attempt),
+        );
+      }
+      if (attempt > 0) {
+        const { isKsefHealthy } = await import('@/lib/ksef/health-status');
+        const healthy = await isKsefHealthy(env);
+        if (!healthy) {
+          const delay = getKsefRetryDelay(attempt);
+          logger.warn('KSeF zgłaszany jako down — odkładam próbę', {
+            tenantId,
+            invoiceId,
+            attempt,
+            retryAfter: delay,
+          });
+          throw new RetryAfterError(
+            'KSeF health monitor zgłasza down — odkładam wysyłkę',
+            delay,
+          );
+        }
+      }
       // Re-read immediately before KSeF I/O: earlier steps may be memoized or
       // another worker may have accepted this invoice in the meantime.
       const fresh = await readCurrentInvoiceKsefState(invoiceId, tenantId);
       if (fresh.ksef_status === 'accepted') {
         throw new NonRetriableError('KSeF invoice was accepted before submit; manual reconciliation required');
       }
-      await assertSubmitReferences({
-        supabase: createAdminClient(),
-        tenantId,
-        invoiceId,
-        invoice,
-        environment: env,
-        correctionData: parsed.data.correctionData,
-        advanceData: parsed.data.advanceData,
-        finalData: parsed.data.finalData,
-        finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
-      });
+      if (hasKsefDuplicateMarker(fresh) ||
+          fresh.submitted_to_ksef_at ||
+          fresh.ksef_status === 'sending' ||
+          fresh.ksef_status === 'failed' ||
+          fresh.ksef_status === 'rejected') {
+        throw new NonRetriableError(
+          'KSeF prior submission may have reached the authority; manual reconciliation required',
+        );
+      }
       const credentials = await getTenantKsefCredentials(tenantId);
+      const claimTimestamp = await claimInvoiceForKsefSend(invoiceId, tenantId, fromOfflineQueue);
+      if (!claimTimestamp) {
+        throw new NonRetriableError('KSEF_SUBMIT_CLAIM_LOST: manual reconciliation required');
+      }
 
       try {
+        // The claim moves draft/queued -> sending. Migration 00088 freezes
+        // legal content at that transition, so compare the persisted document
+        // with the event *after* the claim and before any KSeF POST. If the
+        // comparison fails, leave sending for operator reconciliation.
+        await assertSubmitReferences({
+          supabase: createAdminClient(),
+          tenantId,
+          invoiceId,
+          invoice,
+          environment: env,
+          correctionData: parsed.data.correctionData,
+          advanceData: parsed.data.advanceData,
+          finalData: parsed.data.finalData,
+          finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
+        });
         // Po refaktorze na zodEvent korzystamy z `parsed.data` (zwalidowanego),
         // a nie z surowego `data` — typy są pewne, bez `as` casta.
         const finalPayload =
@@ -568,7 +589,7 @@ export async function runSubmitInvoice(
               }
             : null;
 
-        return await submitInvoiceFullFlow(
+        const submitted = await submitInvoiceFullFlow(
           tenantId,
           invoiceId,
           invoice,
@@ -578,6 +599,7 @@ export async function runSubmitInvoice(
           parsed.data.advanceData ?? null,
           finalPayload,
         );
+        return { ...submitted, claimTimestamp };
       } catch (error) {
         if (error instanceof KsefNotVerifiedError) {
           throw new NonRetriableError(
@@ -619,16 +641,16 @@ export async function runSubmitInvoice(
               originalKsefNumber: error.originalKsefNumber,
             },
           });
-          throw new NonRetriableError(error.message, { cause: error });
+          throw new NonRetriableError(
+            error.isDuplicate
+              ? `${KSEF_DUPLICATE_RECONCILIATION_CODE}: ${error.message}`
+              : error.message,
+            { cause: error },
+          );
         }
-        // Retry-owalne — 5xx, 429, timeout, ECONNRESET. Zamiast pozwolić
-        // Inngestowi użyć defaultowego exponential backoff (10s/30s/1m/5m/15m),
-        // rzucamy `RetryAfterError` z naszym custom schedule:
-        // 30s → 2min → 5min → 15min → 1h (Faza 23 sekcja 2).
-        //
-        // KsefApiError 429 może mieć `Retry-After` header — jeśli MF mówi
-        // nam konkretnie ile czekać, słuchamy. Inaczej trzymamy się schedule'a.
-        const customDelay = getKsefRetryDelay(attempt);
+        // Claim was persisted before KSeF I/O. Even if this error
+        // happened locally before POST, we cannot safely infer that from a
+        // serialized job failure or a restarted pg-boss process.
         const isKsefApi = error instanceof KsefApiError;
         const errorLabel = isKsefApi
           ? `KSeF HTTP ${error.status}: ${error.message}`
@@ -636,23 +658,21 @@ export async function runSubmitInvoice(
             ? `${error.name}: ${error.message}`
             : 'Nieznany błąd';
 
-        logger.warn('Retry-owalny błąd KSeF — planuję ponowną próbę', {
+        logger.error('Niepewny wynik wysyłki KSeF — wymagane ręczne uzgodnienie', {
           tenantId,
           invoiceId,
           attempt,
-          maxRetries: KSEF_MAX_RETRIES,
-          retryAfter: customDelay,
           errorLabel,
         });
 
         Sentry.addBreadcrumb({
           category: 'ksef.submit',
           level: 'warning',
-          message: 'KSeF retry scheduled',
-          data: { tenantId, invoiceId, attempt, retryAfter: customDelay, errorLabel },
+          message: 'KSeF submission requires reconciliation',
+          data: { tenantId, invoiceId, attempt, errorLabel },
         });
 
-        throw new RetryAfterError(errorLabel, customDelay, {
+        throw new NonRetriableError(`KSeF send result uncertain; manual reconciliation required: ${errorLabel}`, {
           cause: error instanceof Error ? error : undefined,
         });
       }
@@ -660,20 +680,59 @@ export async function runSubmitInvoice(
 
     // Krok 4: zapisz numer KSeF i timestamp akceptacji do bazy.
     await step.run('save-ksef-number', async () => {
-      await updateInvoiceStatus(invoiceId, {
-        ksef_status: 'accepted',
-        ksef_number: result.ksefNumber,
-        ksef_environment: env,
-        ksef_accepted_at: result.acquisitionTimestamp,
-        xml_storage_path: result.xmlStoragePath,
-        last_error: null,
-        last_error_code: null,
-        last_error_field: null,
-        last_error_suggestion: null,
-      }, tenantId);
+      try {
+        await updateInvoiceStatus(invoiceId, {
+          ksef_status: 'accepted',
+          ksef_number: result.ksefNumber,
+          ksef_environment: env,
+          ksef_accepted_at: result.acquisitionTimestamp,
+          xml_storage_path: result.xmlStoragePath,
+          last_error: null,
+          last_error_code: null,
+          last_error_field: null,
+          last_error_suggestion: null,
+        }, tenantId, 'sending', result.claimTimestamp);
+      } catch (error) {
+        if (error instanceof InvoiceStatusConflictError) {
+          const current = await readCurrentInvoiceKsefState(invoiceId, tenantId);
+          const sameAttempt = Boolean(current.submitted_to_ksef_at) &&
+            new Date(current.submitted_to_ksef_at).getTime() ===
+              new Date(result.claimTimestamp).getTime();
+          if (sameAttempt &&
+              current.ksef_status === 'accepted' &&
+              current.ksef_number === result.ksefNumber &&
+              current.ksef_environment === env) {
+            // The DB write succeeded but the Inngest step checkpoint did not.
+            // Complete downstream UPO/audit/success steps without another POST.
+          } else {
+            throw new NonRetriableError(
+              'KSEF_RESULT_CAS_CONFLICT: accepted result requires manual reconciliation',
+              { cause: error },
+            );
+          }
+        } else {
+          throw error;
+        }
+      }
 
-      // Faza 22: faktura zaakceptowana → dashboard KPI się zmieniają.
-      // Czyścimy cache żeby user widział świeży count zamiast czekać na 5min TTL.
+    });
+
+    // UPO is the legal receipt. Cache and analytics must not delay its request.
+    await step.sendEvent('trigger-upo-download', {
+      name: 'invoice/upo.requested',
+      data: {
+        invoiceId,
+        tenantId,
+        // `nip` powędruje do `downloadUpoJob` jako klucz concurrency
+        // (`{ key: 'data.nip', limit: 3 }`) — limit per-tenant zapobiega
+        // zalaniu KSeF /upo żądaniami z jednego podmiotu.
+        nip,
+        ksefNumber: result.ksefNumber,
+        environment: env,
+      },
+    });
+
+    await step.run('invalidate-tenant-dashboard', async () => {
       const { invalidateTenantDashboard } = await import('@/lib/cache/invalidation');
       await invalidateTenantDashboard(tenantId);
     });
@@ -687,20 +746,6 @@ export async function runSubmitInvoice(
           internal_number: invoice.internalNumber ?? null,
         },
       });
-    });
-
-    await step.sendEvent('trigger-upo-download', {
-      name: 'invoice/upo.requested',
-      data: {
-        invoiceId,
-        tenantId,
-        // `nip` powędruje do `downloadUpoJob` jako klucz concurrency
-        // (`{ key: 'data.nip', limit: 3 }`) — limit per-tenant zapobiega
-        // zalaniu KSeF /upo żądaniami z jednego podmiotu.
-        nip,
-        ksefNumber: result.ksefNumber,
-        environment: env,
-      },
     });
 
     await step.run('audit-success', async () => {

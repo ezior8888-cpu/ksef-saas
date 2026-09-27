@@ -135,10 +135,11 @@ describe('stale billing VAT enqueue alert', () => {
     const result = await runCriticalAlertsMonitor({ step } as JobContext);
 
     expect(step.run).toHaveBeenCalledWith('check-stale-billing-vat-enqueues', expect.any(Function));
+    expect(step.run).toHaveBeenCalledWith('check-stale-ksef-sending-invoices', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-checkout-attempts', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-customer-attempts', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-offline-environment', expect.any(Function));
-    expect(result).toMatchObject({ checked: 12, fired: 0 });
+    expect(result).toMatchObject({ checked: 13, fired: 0 });
     expect(result.details).toContainEqual({ type: 'offline_environment_blocked', fired: false });
   });
 });

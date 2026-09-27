@@ -8,6 +8,15 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   fullFlow: vi.fn(),
   offline: vi.fn(),
+  status: vi.fn(),
+  claim: vi.fn(),
+  current: {
+    ksef_status: 'queued',
+    submitted_to_ksef_at: null as string | null,
+    ksef_number: null as string | null,
+    ksef_environment: 'test',
+  },
+  storedInvoice: { internalNumber: 'FV 1/2026', type: 'VAT' } as Record<string, unknown>,
 }));
 
 // ── Część 1: submitInvoice na atrapie API KSeF ──
@@ -43,7 +52,9 @@ vi.mock('@/lib/auth/ksef-verification-guard', () => ({
 }));
 vi.mock('@/lib/supabase/admin-queries', () => ({
   getTenantKsefCredentials: vi.fn(async () => ({ type: 'token' })),
-  updateInvoiceStatus: vi.fn(),
+  claimInvoiceForKsefSend: mocks.claim,
+  InvoiceStatusConflictError: class InvoiceStatusConflictError extends Error {},
+  updateInvoiceStatus: mocks.status,
 }));
 vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: () => {
@@ -52,9 +63,12 @@ vi.mock('@/lib/supabase/server', () => ({
       eq: () => q,
       maybeSingle: async () => ({ data: {
         id: '11111111-1111-4111-8111-111111111111',
-        ksef_status: 'queued', ksef_number: null, ksef_environment: 'test',
+        ksef_status: mocks.current.ksef_status,
+        submitted_to_ksef_at: mocks.current.submitted_to_ksef_at,
+        ksef_number: mocks.current.ksef_number,
+        ksef_environment: mocks.current.ksef_environment,
         invoice_kind: 'regular', invoice_type: 'VAT', internal_number: 'FV 1/2026',
-        fa3_data: { internalNumber: 'FV 1/2026', type: 'VAT' },
+        fa3_data: mocks.storedInvoice,
       }, error: null }),
     };
     return { from: () => q };
@@ -65,7 +79,9 @@ vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), addBreadcrumb: vi.fn() }));
 
 import { KsefInvoiceRejectedError, submitInvoice } from '@/lib/ksef/submit';
-import { runSubmitInvoice } from '@/lib/inngest/jobs/submit-invoice';
+import { onSubmitInvoiceExhausted, runSubmitInvoice } from '@/lib/inngest/jobs/submit-invoice';
+import { KSEF_DUPLICATE_RECONCILIATION_CODE } from '@/lib/ksef/submit-reconciliation';
+import { InvoiceStatusConflictError } from '@/lib/supabase/admin-queries';
 import type { KsefAuth } from '@/lib/ksef/auth';
 
 /**
@@ -79,6 +95,7 @@ import type { KsefAuth } from '@/lib/ksef/auth';
 
 const ORYGINAL = '5265877635-20250626-010080DD2B5E-26';
 const SESJA = '20250626-SO-2F14610000-242991F8C9-B4';
+const CLAIMED_AT = '2026-09-27T10:00:00.000Z';
 
 function ksefZwraca(status: Record<string, unknown>) {
   mocks.fetch.mockImplementation(async (url: string) => {
@@ -99,6 +116,12 @@ const DUPLIKAT = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('KSEF_ENV', 'test');
+  mocks.current.ksef_status = 'queued';
+  mocks.current.submitted_to_ksef_at = null;
+  mocks.current.ksef_number = null;
+  mocks.current.ksef_environment = 'test';
+  mocks.storedInvoice = { internalNumber: 'FV 1/2026', type: 'VAT' };
+  mocks.claim.mockResolvedValue(CLAIMED_AT);
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -179,10 +202,177 @@ describe('job wysyłki: odrzucenie w statusie kończy się bez ponowień', () =>
     mocks.fullFlow.mockRejectedValue(new KsefInvoiceRejectedError(440, DUPLIKAT));
     const blad = (await runSubmitInvoice(zdarzenie, ctx).catch((e: unknown) => e)) as Error;
     expect(blad.message).toContain(ORYGINAL);
+    expect(blad.message).toContain(KSEF_DUPLICATE_RECONCILIATION_CODE);
   });
 
-  it('awaria sieci nadal jest ponawiana', async () => {
+  it('zserializowany błąd 440 parkuje fakturę do uzgodnienia bez Offline24 i bez prawa do zwykłego resend', async () => {
+    const error = Object.assign(
+      new Error(`${KSEF_DUPLICATE_RECONCILIATION_CODE}: KSeF ma już fakturę o tym numerze.`),
+      { name: 'NonRetriableError' },
+    );
+    const result = await onSubmitInvoiceExhausted(error, zdarzenie, ctx);
+
+    expect(result).toMatchObject({ handled: true, finalStatus: 'failed' });
+    expect(mocks.status).toHaveBeenCalledWith(
+      zdarzenie.invoiceId,
+      expect.objectContaining({
+        ksef_status: 'failed',
+        last_error_code: KSEF_DUPLICATE_RECONCILIATION_CODE,
+      }),
+      zdarzenie.tenantId,
+      'queued',
+    );
+    expect(mocks.offline).not.toHaveBeenCalled();
+  });
+
+  it('po claimie awaria sieci wymaga uzgodnienia bez ponownego POST', async () => {
     mocks.fullFlow.mockRejectedValue(new Error('ECONNRESET'));
-    await expect(runSubmitInvoice(zdarzenie, ctx)).rejects.toBeInstanceOf(RetryAfterError);
+    await expect(runSubmitInvoice(zdarzenie, ctx)).rejects.toMatchObject({
+      name: 'NonRetriableError',
+      message: expect.stringContaining('manual reconciliation'),
+    });
+  });
+
+  it('edycja draftu po preflight, lecz przed claimem, nie może zaakceptować starego XML', async () => {
+    const racingContext: JobContext = {
+      ...ctx,
+      step: {
+        ...ctx.step,
+        run: async <T,>(name: string, fn: () => Promise<T> | T): Promise<T> => {
+          if (name === 'submit-to-ksef') {
+            mocks.storedInvoice = {
+              internalNumber: 'FV 1/2026', type: 'VAT', buyer: { name: 'Inny nabywca' },
+            };
+          }
+          return fn();
+        },
+      },
+    };
+    await expect(runSubmitInvoice(zdarzenie, racingContext)).rejects.toThrow('manual reconciliation');
+    expect(mocks.claim).toHaveBeenCalledTimes(1);
+    expect(mocks.fullFlow).not.toHaveBeenCalled();
+  });
+
+  it('nie ponawia POST, gdy Inngest odtwarza submit-to-ksef po utracie checkpointu', async () => {
+    mocks.fullFlow.mockResolvedValue({ ksefNumber: 'TEST-NUMBER' });
+    mocks.claim.mockImplementation(async () => {
+      mocks.current.ksef_status = 'sending';
+      mocks.current.submitted_to_ksef_at = CLAIMED_AT;
+      return CLAIMED_AT;
+    });
+    const replayContext: JobContext = {
+      ...ctx,
+      step: {
+        ...ctx.step,
+        run: async <T,>(name: string, fn: () => Promise<T> | T): Promise<T> => {
+          if (name === 'submit-to-ksef') {
+            await fn(); // KSeF POST succeeded; checkpoint was lost.
+            return fn(); // Inngest re-executes the same callback.
+          }
+          return fn();
+        },
+      },
+    };
+    await expect(runSubmitInvoice(zdarzenie, replayContext))
+      .rejects.toThrow('manual reconciliation');
+    expect(mocks.fullFlow).toHaveBeenCalledTimes(1);
+    expect(mocks.claim).toHaveBeenCalledTimes(1);
+  });
+
+  it('Inngest wznawia zapis accepted po utracie procesu po udanym POST', async () => {
+    mocks.fullFlow.mockResolvedValue({
+      ksefNumber: 'TEST-NUMBER',
+      acquisitionTimestamp: '2026-09-27T10:01:00.000Z',
+      xmlStoragePath: 'invoices/test.xml',
+    });
+    mocks.claim.mockImplementation(async () => {
+      mocks.current.ksef_status = 'sending';
+      mocks.current.submitted_to_ksef_at = CLAIMED_AT;
+      return CLAIMED_AT;
+    });
+    const completed = new Map<string, unknown>();
+    let crashBeforeSave = true;
+    const replayContext: JobContext = {
+      ...ctx,
+      step: {
+        ...ctx.step,
+        run: async <T,>(name: string, fn: () => Promise<T> | T): Promise<T> => {
+          if (completed.has(name)) return completed.get(name) as T;
+          if (name === 'save-ksef-number' && crashBeforeSave) {
+            crashBeforeSave = false;
+            throw new Error('simulated process crash before DB save');
+          }
+          const value = await fn();
+          completed.set(name, value);
+          return value;
+        },
+      },
+    };
+    await expect(runSubmitInvoice(zdarzenie, replayContext)).rejects.toThrow('simulated process crash');
+    await expect(runSubmitInvoice(zdarzenie, replayContext)).resolves.toMatchObject({
+      success: true,
+      ksefNumber: 'TEST-NUMBER',
+    });
+    expect(mocks.fullFlow).toHaveBeenCalledTimes(1);
+    expect(mocks.claim).toHaveBeenCalledTimes(1);
+    expect(mocks.status).toHaveBeenCalledWith(
+      zdarzenie.invoiceId,
+      expect.objectContaining({ ksef_status: 'accepted', ksef_number: 'TEST-NUMBER' }),
+      zdarzenie.tenantId,
+      'sending',
+      CLAIMED_AT,
+    );
+    expect(replayContext.step.sendEvent).toHaveBeenCalledWith('trigger-upo-download', expect.any(Object));
+  });
+
+  it('utrata checkpointu po zapisie accepted rozpoznaje własny wynik i domyka UPO', async () => {
+    mocks.fullFlow.mockResolvedValue({
+      ksefNumber: 'TEST-NUMBER',
+      acquisitionTimestamp: '2026-09-27T10:01:00.000Z',
+      xmlStoragePath: 'invoices/test.xml',
+    });
+    mocks.claim.mockImplementation(async () => {
+      mocks.current.ksef_status = 'sending';
+      mocks.current.submitted_to_ksef_at = CLAIMED_AT;
+      return CLAIMED_AT;
+    });
+    mocks.status.mockImplementationOnce(async () => {
+      mocks.current.ksef_status = 'accepted';
+      mocks.current.ksef_number = 'TEST-NUMBER';
+    }).mockRejectedValueOnce(new InvoiceStatusConflictError());
+    const replayContext: JobContext = {
+      ...ctx,
+      step: {
+        ...ctx.step,
+        run: async <T,>(name: string, fn: () => Promise<T> | T): Promise<T> => {
+          if (name === 'save-ksef-number') {
+            await fn(); // DB write succeeded, but the step checkpoint was lost.
+            return fn();
+          }
+          return fn();
+        },
+      },
+    };
+    await expect(runSubmitInvoice(zdarzenie, replayContext)).resolves.toMatchObject({
+      success: true, ksefNumber: 'TEST-NUMBER',
+    });
+    expect(mocks.fullFlow).toHaveBeenCalledTimes(1);
+    expect(mocks.status).toHaveBeenCalledTimes(2);
+    expect(replayContext.step.sendEvent).toHaveBeenCalledWith('trigger-upo-download', expect.any(Object));
+  });
+
+  it('stary event Offline24 nie psuje bieżącego draftu ani kolejki online', async () => {
+    mocks.current.ksef_status = 'queued';
+    const result = await onSubmitInvoiceExhausted(
+      new Error('Offline24 automatic replay requires manual reconciliation'),
+      { ...zdarzenie, fromOfflineQueue: true, offlineQueueId: '22222222-2222-4222-8222-222222222222' },
+      ctx,
+    );
+    expect(result).toMatchObject({ handled: false, reason: 'offline-state-mismatch' });
+    expect(mocks.status).not.toHaveBeenCalled();
+    expect(ctx.step.sendEvent).toHaveBeenCalledWith('emit-failure', expect.objectContaining({
+      name: 'invoice/submit.failed',
+      data: expect.objectContaining({ terminal: true, fromOfflineQueue: true }),
+    }));
   });
 });

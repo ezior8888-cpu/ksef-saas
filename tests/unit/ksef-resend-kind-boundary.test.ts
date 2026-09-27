@@ -54,6 +54,7 @@ const from = vi.fn(() => {
   const chain = {
     select: (...args: unknown[]) => { select(...args); return chain; },
     eq: () => chain,
+    is: () => chain,
     single: async () => ({
       data: {
         id: '11111111-1111-4111-8111-111111111111',
@@ -75,6 +76,10 @@ const from = vi.fn(() => {
         ksef_status: invoiceStatus,
         tenants: { nip: '1234567890', ksef_credentials_encrypted: 'fixture' },
       },
+      error: null,
+    }),
+    maybeSingle: async () => ({
+      data: { ksef_status: invoiceStatus },
       error: null,
     }),
     update: () => chain,
@@ -108,21 +113,19 @@ it.each(['correction', 'advance', 'final'])(
     invoiceKind = kind;
     invoiceType = kind === 'correction' ? 'KOR' : kind === 'advance' ? 'ZAL' : 'ROZ';
     const result = await resendInvoiceAction('11111111-1111-4111-8111-111111111111');
-    expect(result).toMatchObject({ success: false, error: expect.stringContaining('dedykowanej ścieżki') });
-    expect(select.mock.calls[0]?.[0]).toContain('invoice_kind');
+    expect(result).toMatchObject({ success: false, error: expect.stringContaining('uzgodnić') });
+    expect(select.mock.calls[0]?.[0]).toContain('ksef_status');
     expect(mocks.requireKsefVerification).not.toHaveBeenCalled();
     expect(mocks.sendJobEvent).not.toHaveBeenCalled();
     expect(mocks.logAudit).not.toHaveBeenCalled();
   },
 );
 
-it('leaves the ordinary VAT resend path available', async () => {
+it('blocks historical ordinary VAT resend until it is reconciled', async () => {
   invoiceKind = 'regular';
   invoiceType = 'VAT';
   const result = await resendInvoiceAction('11111111-1111-4111-8111-111111111111');
-  expect(result).toEqual({ success: true });
-  expect(mocks.requireKsefVerification).toHaveBeenCalled();
-  expect(mocks.sendJobEvent).toHaveBeenCalledWith(expect.objectContaining({
-    data: expect.objectContaining({ environment: 'test', invoice: VAT_SNAPSHOT }),
-  }));
+  expect(result).toMatchObject({ success: false, error: expect.stringContaining('uzgodnić') });
+  expect(mocks.requireKsefVerification).not.toHaveBeenCalled();
+  expect(mocks.sendJobEvent).not.toHaveBeenCalled();
 });

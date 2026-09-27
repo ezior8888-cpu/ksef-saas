@@ -33,7 +33,7 @@ vi.mock('@/lib/auth/ksef-verification-guard', () => ({
 vi.mock('@/lib/xml/fa3-generator', () => ({ InvoiceValidationError: class InvoiceValidationError extends Error {} }));
 
 import { requireInvoiceTenant, requireImportJobTenant } from '@/lib/inngest/jobs/tenant-boundary';
-import { getInvoiceForSubmit, updateInvoiceStatus } from '@/lib/supabase/admin-queries';
+import { claimInvoiceForKsefSend, getInvoiceForSubmit, updateInvoiceStatus } from '@/lib/supabase/admin-queries';
 import { onBulkImportExhausted, runBulkImportFile } from '@/lib/inngest/jobs/bulk-import';
 import { onMagicImportExhausted, runMagicImportKsef } from '@/lib/inngest/jobs/magic-import-ksef';
 import { runNotifySuccess, runNotifyFailure } from '@/lib/inngest/jobs/notify-user';
@@ -59,10 +59,12 @@ function client() {
     let maxRows = Infinity;
     let head = false;
     let orPredicate: ((row: Row) => boolean) | null = null;
+    const extraPredicates: Array<(row: Row) => boolean> = [];
     const execute = () => {
       if (errors.has(table)) return { data: null, error: { message: 'private-db-error' } };
       const rows = (tables[table] ?? []).filter((row) =>
         q.filters.every(([key, val]) => row[key] === val) &&
+        extraPredicates.every((predicate) => predicate(row)) &&
         (!orPredicate || orPredicate(row))).slice(0, maxRows);
       if (q.operation === 'update') rows.forEach((row) => Object.assign(row, q.patch));
       if (q.operation === 'insert') { (tables[table] ??= []).push({ ...q.patch }); }
@@ -71,6 +73,14 @@ function client() {
     const builder = {
       select: (_columns?: string, options?: { head?: boolean }) => { head = Boolean(options?.head); return builder; },
       eq: (key: string, val: unknown) => { q.filters.push([key, val]); return builder; },
+      in: (key: string, values: unknown[]) => {
+        extraPredicates.push((row) => values.includes(row[key]));
+        return builder;
+      },
+      is: (key: string, value: unknown) => {
+        extraPredicates.push((row) => value === null ? row[key] == null : row[key] === value);
+        return builder;
+      },
       or: (filter: string) => {
         const match = /^ksef_environment\.is\.null,ksef_environment\.neq\.(test|demo|production)$/.exec(filter);
         if (!match) throw new Error(`Unexpected OR filter ${filter}`);
@@ -113,6 +123,37 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('service-role job boundaries', () => {
+  it('atomically gives the KSeF sending claim to only one worker', async () => {
+    tables.invoices = [{ id: ID, tenant_id: A, direction: 'outgoing', ksef_status: 'queued',
+      submitted_to_ksef_at: null, submission_attempts: 0, ksef_environment: null }];
+    expect(await claimInvoiceForKsefSend(ID, A, false)).toEqual(expect.any(String));
+    expect(await claimInvoiceForKsefSend(ID, A, false)).toBeNull();
+    expect(tables.invoices[0].ksef_status).toBe('sending');
+    expect(tables.invoices[0].submitted_to_ksef_at).toEqual(expect.any(String));
+    expect(writes()).toHaveLength(2);
+  });
+  it('never claims an incoming draft even if its delivery state looks fresh', async () => {
+    tables.invoices = [{ id: ID, tenant_id: A, direction: 'incoming', ksef_status: 'draft',
+      submitted_to_ksef_at: null, submission_attempts: 0, ksef_environment: null }];
+    expect(await claimInvoiceForKsefSend(ID, A, false)).toBeNull();
+    expect(tables.invoices[0].ksef_status).toBe('draft');
+  });
+  it.each(['failed', 'rejected'])('does not claim a historical %s row with no timestamp', async (status) => {
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: status, submitted_to_ksef_at: null }];
+    expect(await claimInvoiceForKsefSend(ID, A, false)).toBeNull();
+    expect(tables.invoices[0].ksef_status).toBe(status);
+  });
+  it('does not claim a historical Offline24 row even with no timestamp', async () => {
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'offline_queued', submitted_to_ksef_at: null }];
+    expect(await claimInvoiceForKsefSend(ID, A, true)).toBeNull();
+    expect(writes()).toEqual([]);
+  });
+  it('does not claim a historical draft with an earlier attempt trace', async () => {
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'draft', submitted_to_ksef_at: null,
+      submission_attempts: 0, last_attempt_at: '2026-09-01T10:00:00Z', ksef_environment: null }];
+    expect(await claimInvoiceForKsefSend(ID, A, false)).toBeNull();
+    expect(tables.invoices[0].ksef_status).toBe('draft');
+  });
   it('confirms a matching invoice update and normalizes empty timestamps', async () => {
     tables.invoices = [{ id: ID, tenant_id: A }];
     await updateInvoiceStatus(ID, { ksef_status: 'sending', submitted_to_ksef_at: '' }, A);
@@ -127,7 +168,8 @@ describe('service-role job boundaries', () => {
   });
   it('quarantines a full malicious batch so a valid row is not starved on the next run', async () => {
     tables.invoices = [{ id: ID, tenant_id: B }, {
-      id: OTHER, tenant_id: A, invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
+      id: OTHER, tenant_id: A, ksef_status: 'offline_queued', submitted_to_ksef_at: null,
+      invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
     }];
     tables.ksef_offline_queue = Array.from({ length: 10 }, (_, index) => ({
       id: '44444444-4444-4444-8444-' + String(index).padStart(12, '0'),
@@ -259,27 +301,83 @@ describe('service-role job boundaries', () => {
   it('expires a valid offline row and scopes both updates', async () => {
     tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued', ksef_environment: 'test', deadline: '2000-01-01' }];
     tables.invoices = [{
-      id: ID, tenant_id: A, invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
+      id: ID, tenant_id: A, ksef_status: 'offline_queued', submitted_to_ksef_at: null,
+      invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
     }];
     await runProcessOfflineQueue(ctx);
     expect(tables.ksef_offline_queue[0].status).toBe('expired');
     expect(tables.invoices[0].ksef_status).toBe('failed');
     for (const q of writes()) expect(q.filters).toContainEqual(['tenant_id', A]);
   });
+  it('does not mark accepted invoice failed when Offline24 deadline races with acceptance', async () => {
+    tables.ksef_offline_queue = [{
+      id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued',
+      ksef_environment: 'test', deadline: '2000-01-01',
+    }];
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'offline_queued', submitted_to_ksef_at: null,
+      invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
+    }];
+    const racingContext: JobContext = {
+      ...ctx,
+      step: {
+        ...ctx.step,
+        run: async <T,>(name: string, fn: () => Promise<T> | T): Promise<T> => {
+          if (name.startsWith('expire-offline-queue-')) {
+            tables.invoices[0].ksef_status = 'accepted';
+            tables.invoices[0].ksef_number = 'TEST-KSEF-NUMBER';
+          }
+          return fn();
+        },
+      },
+    };
+    await expect(runProcessOfflineQueue(racingContext))
+      .resolves.toMatchObject({ processed: 1, results: [{ status: 'expired-reconciliation' }] });
+    expect(tables.invoices[0]).toMatchObject({
+      ksef_status: 'accepted', ksef_number: 'TEST-KSEF-NUMBER',
+    });
+    expect(tables.ksef_offline_queue[0].status).toBe('expired');
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+  it('expires a historical queue row without changing a sending invoice', async () => {
+    tables.ksef_offline_queue = [{
+      id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued',
+      ksef_environment: 'test', deadline: '2000-01-01',
+    }];
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'sending',
+      submitted_to_ksef_at: '2026-09-27T00:00:00.000Z',
+    }];
+    await expect(runProcessOfflineQueue(ctx)).resolves.toMatchObject({
+      processed: 1, results: [{ status: 'expired-reconciliation' }],
+    });
+    expect(tables.ksef_offline_queue[0].status).toBe('expired');
+    expect(tables.invoices[0]).toMatchObject({
+      ksef_status: 'sending', submitted_to_ksef_at: '2026-09-27T00:00:00.000Z',
+    });
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
 
-  it('leaves legacy PROD Offline24 rows untouched for manual QR reconciliation', async () => {
+  it('quarantines legacy PROD Offline24 rows without probing KSeF or sending', async () => {
     vi.stubEnv('KSEF_ENV', 'production');
     tables.ksef_offline_queue = [{
       id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued',
       ksef_environment: 'production', deadline: '2099-01-01',
     }];
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'offline_queued', submitted_to_ksef_at: null,
+      invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
+    }];
     await expect(runProcessOfflineQueue(ctx)).resolves.toMatchObject({
-      skipped: true, reason: 'PROD Offline24 QR requires manual reconciliation',
+      processed: 1, results: [{ status: 'production-reconciliation' }],
     });
-    expect(tables.ksef_offline_queue[0].status).toBe('queued');
+    expect(tables.ksef_offline_queue[0].status).toBe('failed');
+    expect(tables.invoices[0]).toMatchObject({
+      ksef_status: 'offline_queued', last_error_code: 'OFFLINE_PROD_QR_UNVERIFIED',
+    });
     expect(mocks.health).not.toHaveBeenCalled();
     expect(sendEvent).not.toHaveBeenCalled();
-    expect(writes()).toEqual([]);
+    expect(writes()).toHaveLength(2);
     expect(ctx.logger.error).toHaveBeenCalledWith(
       'PROD Offline24 QR is unverified; queued rows require manual reconciliation',
       { environment: 'production', queuedCount: 1 },
@@ -297,7 +395,125 @@ describe('service-role job boundaries', () => {
     const result = await runProcessOfflineQueue(ctx);
     expect(result).toMatchObject({ processed: 1, results: [{ status: 'special-reconciliation' }] });
     expect(tables.ksef_offline_queue[0].status).toBe('failed');
-    expect(tables.invoices[0].ksef_status).toBe('failed');
+    expect(tables.invoices[0]).toMatchObject({
+      ksef_status: 'offline_queued', last_error_code: 'OFFLINE_SPECIAL_DOCUMENT',
+    });
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+  it('closes a regular unexpired Offline24 row without creating a sending attempt', async () => {
+    tables.ksef_offline_queue = [{
+      id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued',
+      ksef_environment: 'test', deadline: '2099-01-01', attempts: 0,
+    }];
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'offline_queued', submitted_to_ksef_at: null,
+      invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
+    }];
+    await expect(runProcessOfflineQueue(ctx)).resolves.toMatchObject({
+      processed: 1, results: [{ status: 'paused-reconciliation' }],
+    });
+    expect(tables.ksef_offline_queue[0]).toMatchObject({
+      status: 'failed', attempts: 0, last_error: 'OFFLINE_REPLAY_PAUSED_REQUIRES_RECONCILIATION',
+    });
+    expect(tables.invoices[0]).toMatchObject({
+      ksef_status: 'offline_queued', submitted_to_ksef_at: null,
+      last_error_code: 'OFFLINE_REPLAY_PAUSED',
+    });
+    expect(writes().some((query) => query.patch?.status === 'sending')).toBe(false);
+    expect(sendEvent).not.toHaveBeenCalled();
+    await expect(runProcessOfflineQueue(ctx)).resolves.toMatchObject({ skipped: true, reason: 'Empty queue' });
+  });
+  it('completes an invoice marker after a previous attempt already quarantined the queue', async () => {
+    tables.ksef_offline_queue = [{
+      id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued',
+      ksef_environment: 'test', deadline: '2099-01-01',
+    }];
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'offline_queued', submitted_to_ksef_at: null,
+      invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
+    }];
+    const retryContext: JobContext = {
+      ...ctx,
+      step: {
+        ...ctx.step,
+        run: async <T,>(name: string, fn: () => Promise<T> | T): Promise<T> => {
+          const result = await fn();
+          if (name.startsWith('fetch-queue-items-')) {
+            tables.ksef_offline_queue[0].status = 'failed';
+            tables.ksef_offline_queue[0].last_error = 'OFFLINE_REPLAY_PAUSED_REQUIRES_RECONCILIATION';
+          }
+          return result;
+        },
+      },
+    };
+    await runProcessOfflineQueue(retryContext);
+    expect(tables.invoices[0]).toMatchObject({ last_error_code: 'OFFLINE_REPLAY_PAUSED' });
+    expect(tables.ksef_offline_queue[0].status).toBe('failed');
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+  it.each(['accepted', 'sending'] as const)(
+    'quarantines an unexpired row without touching a %s invoice', async (status) => {
+      tables.ksef_offline_queue = [{
+        id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued',
+        ksef_environment: 'test', deadline: '2099-01-01',
+      }];
+      tables.invoices = [{
+        id: ID, tenant_id: A, ksef_status: status,
+        submitted_to_ksef_at: '2026-09-27T00:00:00.000Z', ksef_number: 'TEST-NUMBER',
+      }];
+      await runProcessOfflineQueue(ctx);
+      expect(tables.ksef_offline_queue[0].status).toBe('failed');
+      expect(tables.invoices[0]).toMatchObject({
+        ksef_status: status, submitted_to_ksef_at: '2026-09-27T00:00:00.000Z',
+        ksef_number: 'TEST-NUMBER',
+      });
+      expect(writes().filter((query) => query.table === 'invoices')).toEqual([]);
+      expect(sendEvent).not.toHaveBeenCalled();
+    },
+  );
+  it('quarantines queued Offline24 work even while KSeF health reports an outage', async () => {
+    mocks.health.mockResolvedValue({ available: false, error: 'KSeF unavailable', isMfOutage: false });
+    tables.ksef_offline_queue = [{
+      id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued',
+      ksef_environment: 'test', deadline: '2099-01-01',
+    }];
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'offline_queued', submitted_to_ksef_at: null,
+      invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
+    }];
+    await expect(runProcessOfflineQueue(ctx)).resolves.toMatchObject({
+      processed: 1, results: [{ status: 'paused-reconciliation' }],
+    });
+    expect(tables.ksef_offline_queue[0].status).toBe('failed');
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+  it('does not overwrite a newly sending invoice while quarantining its old queue row', async () => {
+    tables.ksef_offline_queue = [{
+      id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued',
+      ksef_environment: 'test', deadline: '2099-01-01',
+    }];
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'offline_queued', submitted_to_ksef_at: null,
+      invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
+    }];
+    const racingContext: JobContext = {
+      ...ctx,
+      step: {
+        ...ctx.step,
+        run: async <T,>(name: string, fn: () => Promise<T> | T): Promise<T> => {
+          if (name.startsWith('quarantine-paused-offline-')) {
+            tables.invoices[0].ksef_status = 'sending';
+            tables.invoices[0].submitted_to_ksef_at = '2026-09-27T00:00:00.000Z';
+          }
+          return fn();
+        },
+      },
+    };
+    await runProcessOfflineQueue(racingContext);
+    expect(tables.ksef_offline_queue[0].status).toBe('failed');
+    expect(tables.invoices[0]).toMatchObject({
+      ksef_status: 'sending', submitted_to_ksef_at: '2026-09-27T00:00:00.000Z',
+    });
     expect(sendEvent).not.toHaveBeenCalled();
   });
   it.each(['success', 'failure'] as const)('rejects mismatched offline %s callbacks', async (kind) => {
@@ -325,6 +541,25 @@ describe('service-role job boundaries', () => {
     await expect(onSubmitInvoiceExhausted(new Error('failed'), {} as typeof submitEvent, ctx)).resolves.toMatchObject({ handled: false });
     expect(mocks.admin).not.toHaveBeenCalled(); expect(sendEvent).not.toHaveBeenCalled();
   });
+  it('does not rewrite an incoming draft when its submit job fails', async () => {
+    tables.invoices = [{ id: ID, tenant_id: A, direction: 'incoming', ksef_status: 'draft',
+      invoice_kind: 'regular', submitted_to_ksef_at: null }];
+    await expect(onSubmitInvoiceExhausted(new Error('manual reconciliation'), submitEvent, ctx))
+      .resolves.toMatchObject({ handled: false, reason: 'invoice-direction-mismatch' });
+    expect(tables.invoices[0].ksef_status).toBe('draft');
+    expect(writes()).toEqual([]);
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+  it('rejects an incoming draft with a matching event document before KSeF I/O', async () => {
+    const invoice = { type: 'VAT', internalNumber: 'TEST-1' } as Invoice;
+    tables.invoices = [{ id: ID, tenant_id: A, direction: 'incoming', ksef_status: 'draft',
+      invoice_kind: 'regular', invoice_type: 'VAT', internal_number: 'TEST-1',
+      fa3_data: invoice, submitted_to_ksef_at: null, submission_attempts: 0 }];
+    await expect(runSubmitInvoice({ ...submitEvent, invoice }, ctx)).rejects.toThrow('manual reconciliation');
+    expect(mocks.health).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(writes()).toEqual([]);
+  });
   it.each(['correction', 'advance', 'final'])('does not send an incomplete %s event as ordinary VAT', async (invoiceKind) => {
     tables.invoices = [{
       id: ID, tenant_id: A, ksef_status: 'draft', invoice_kind: invoiceKind,
@@ -338,7 +573,7 @@ describe('service-role job boundaries', () => {
   it('retries an advance on KSeF outage without claiming Offline24 success', async () => {
     const advanceInvoice = { type: 'ZAL', internalNumber: 'TEST-1' } as Invoice;
     tables.invoices = [{
-      id: ID, tenant_id: A, ksef_status: 'draft', invoice_kind: 'advance',
+      id: ID, tenant_id: A, direction: 'outgoing', ksef_status: 'draft', invoice_kind: 'advance',
       invoice_type: 'ZAL', internal_number: 'TEST-1', advance_invoice_ids: [],
       fa3_data: advanceInvoice,
     }];
@@ -348,7 +583,7 @@ describe('service-role job boundaries', () => {
       invoice: advanceInvoice,
       advanceData: { invoiceType: 'advance', internalNumber: 'TEST-1' } as AdvanceInvoiceData,
     };
-    await expect(runSubmitInvoice(specialEvent, ctx)).rejects.toThrow('cannot be replayed');
+    await expect(runSubmitInvoice(specialEvent, ctx)).rejects.toThrow('automatic Offline24 is paused');
     expect(mocks.offlineAdd).not.toHaveBeenCalled();
     expect(mocks.submit).not.toHaveBeenCalled();
     expect(writes()).toEqual([]);
@@ -357,13 +592,13 @@ describe('service-role job boundaries', () => {
     vi.stubEnv('KSEF_ENV', 'production');
     const regularInvoice = { type: 'VAT', internalNumber: 'TEST-1' } as Invoice;
     tables.invoices = [{
-      id: ID, tenant_id: A, ksef_status: 'draft', invoice_kind: 'regular',
+      id: ID, tenant_id: A, direction: 'outgoing', ksef_status: 'draft', invoice_kind: 'regular',
       invoice_type: 'VAT', internal_number: 'TEST-1', fa3_data: regularInvoice,
     }];
     mocks.health.mockResolvedValue({ offline: true, reason: 'KSeF down', isMfOutage: true });
     await expect(runSubmitInvoice({
       ...submitEvent, environment: 'production', invoice: regularInvoice,
-    }, ctx)).rejects.toThrow('PROD Offline24 QR generation is disabled');
+    }, ctx)).rejects.toThrow('automatic Offline24 is paused');
     expect(mocks.offlineAdd).not.toHaveBeenCalled();
     expect(mocks.submit).not.toHaveBeenCalled();
     expect(writes()).toEqual([]);
@@ -395,27 +630,142 @@ describe('service-role job boundaries', () => {
     expect(mocks.submit).not.toHaveBeenCalled();
     expect(writes()).toEqual([]);
   });
-  it('marks a regular PROD submit failed after retries without parking it in Offline24', async () => {
+  it('leaves a claimed PROD submit pending for reconciliation without Offline24', async () => {
     vi.stubEnv('KSEF_ENV', 'production');
     tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'sending', invoice_kind: 'regular' }];
     const result = await onSubmitInvoiceExhausted(new Error('timeout'), {
       ...submitEvent, environment: 'production',
     }, ctx);
-    expect(result).toMatchObject({ handled: true, finalStatus: 'failed' });
-    expect(tables.invoices[0].ksef_status).toBe('failed');
+    expect(result).toMatchObject({ handled: false, reason: 'sending-reconciliation' });
+    expect(tables.invoices[0].ksef_status).toBe('sending');
     expect(mocks.offlineAdd).not.toHaveBeenCalled();
+  });
+  it('never parks a possibly sent TEST invoice in Offline24 after exhaustion', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'sending', invoice_kind: 'regular',
+      submitted_to_ksef_at: '2026-09-27T10:00:00.000Z',
+    }];
+    const result = await onSubmitInvoiceExhausted(new Error('ECONNRESET'), submitEvent, ctx);
+    expect(result).toMatchObject({ handled: false, reason: 'sending-reconciliation' });
+    expect(tables.invoices[0].ksef_status).toBe('sending');
+    expect(mocks.offlineAdd).not.toHaveBeenCalled();
+  });
+  it('keeps a previously recorded 440 when a stale callback later fails', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'failed', invoice_kind: 'regular',
+      submitted_to_ksef_at: '2026-09-27T10:00:00.000Z',
+      last_error_code: 'KSEF_DUPLICATE_440',
+      last_error: 'KSeF ma już fakturę o tym numerze — numer KSeF TEST.',
+    }];
+    const result = await onSubmitInvoiceExhausted(new Error('manual reconciliation'), submitEvent, ctx);
+    expect(result).toMatchObject({ handled: false, reason: 'duplicate-reconciliation' });
+    expect(tables.invoices[0].last_error_code).toBe('KSEF_DUPLICATE_440');
+    expect(writes()).toEqual([]);
+  });
+  it('does not let an old 440 callback overwrite a newer sending claim', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'sending', invoice_kind: 'regular',
+      submitted_to_ksef_at: '2026-09-27T10:00:00.000Z', last_error_code: null,
+    }];
+    expect(await onSubmitInvoiceExhausted(
+      new Error('KSEF_DUPLICATE_440: KSeF ma już fakturę o tym numerze.'), submitEvent, ctx,
+    )).toMatchObject({ handled: false, reason: 'duplicate-reconciliation' });
+    expect(tables.invoices[0]).toMatchObject({ ksef_status: 'sending', last_error_code: null });
+    expect(writes()).toEqual([]);
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+  it('cannot clear a 440 marker from a terminal row after reading it without one', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'failed', invoice_kind: 'regular',
+      submitted_to_ksef_at: null, last_error_code: null,
+    }];
+    expect(await onSubmitInvoiceExhausted(new Error('older timeout'), submitEvent, ctx))
+      .toMatchObject({ handled: false, reason: 'historical-reconciliation' });
+    expect(writes()).toEqual([]);
+    await onSubmitInvoiceExhausted(new Error('KSEF_DUPLICATE_440: KSeF ma już fakturę o tym numerze.'), submitEvent, ctx);
+    expect(tables.invoices[0].last_error_code).toBe('KSEF_DUPLICATE_440');
+    await onSubmitInvoiceExhausted(new Error('older timeout'), submitEvent, ctx);
+    expect(tables.invoices[0].last_error_code).toBe('KSEF_DUPLICATE_440');
+  });
+  it('rejects a historical TEST Offline24 submit before KSeF I/O even with a queued invoice', async () => {
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'offline_queued', submitted_to_ksef_at: null }];
+    tables.ksef_offline_queue = [{
+      id: OTHER, tenant_id: A, invoice_id: ID, status: 'sending', ksef_environment: 'test',
+    }];
+    await expect(runSubmitInvoice({
+      ...submitEvent, fromOfflineQueue: true, offlineQueueId: OTHER,
+    }, ctx)).rejects.toThrow('Offline24 automatic replay requires manual reconciliation');
+    expect(mocks.admin).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(writes()).toEqual([]);
+  });
+  it('does not let a stale failure callback replace a concurrent KSeF acceptance', async () => {
+    vi.stubEnv('KSEF_ENV', 'production');
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'queued', invoice_kind: 'regular',
+      submitted_to_ksef_at: null,
+    }];
+    const racingContext: JobContext = {
+      ...ctx,
+      step: {
+        ...ctx.step,
+        run: async <T,>(name: string, fn: () => Promise<T> | T): Promise<T> => {
+          if (name === 'mark-as-final') {
+            tables.invoices[0].ksef_status = 'accepted';
+            tables.invoices[0].ksef_number = 'TEST-KSEF-NUMBER';
+          }
+          return fn();
+        },
+      },
+    };
+    const result = await onSubmitInvoiceExhausted(new Error('timeout'), {
+      ...submitEvent, environment: 'production',
+    }, racingContext);
+    expect(result).toMatchObject({ handled: false, reason: 'status-changed' });
+    expect(tables.invoices[0]).toMatchObject({
+      ksef_status: 'accepted', ksef_number: 'TEST-KSEF-NUMBER',
+    });
+    expect(sendEvent).not.toHaveBeenCalled();
   });
   it('does not park a special document after retry exhaustion', async () => {
     tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'sending', invoice_kind: 'advance' }];
     const result = await onSubmitInvoiceExhausted(new Error('timeout'), submitEvent, ctx);
-    expect(result).toMatchObject({ handled: true, finalStatus: 'failed' });
-    expect(tables.invoices[0].ksef_status).toBe('failed');
+    expect(result).toMatchObject({ handled: false, reason: 'sending-reconciliation' });
+    expect(tables.invoices[0].ksef_status).toBe('sending');
     expect(mocks.offlineAdd).not.toHaveBeenCalled();
   });
-  it('preserves submit idempotency for the matching tenant', async () => {
+  it('recovers missing UPO after a pg-boss restart on an accepted invoice without another POST', async () => {
     tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'accepted', ksef_number: 'TEST', ksef_environment: 'test' }];
     await expect(runSubmitInvoice(submitEvent, ctx)).resolves.toEqual({ alreadyAccepted: true, ksefNumber: 'TEST' });
     expect(writes()).toEqual([]); expect(mocks.submit).not.toHaveBeenCalled();
+    expect(sendEvent).toHaveBeenCalledWith('recover-upo-after-accepted', expect.objectContaining({
+      name: 'invoice/upo.requested',
+      data: expect.objectContaining({ invoiceId: ID, tenantId: A, ksefNumber: 'TEST' }),
+    }));
+  });
+  it('does not request UPO or POST for an accepted incoming invoice on a replayed submit event', async () => {
+    tables.invoices = [{ id: ID, tenant_id: A, direction: 'incoming', ksef_status: 'accepted',
+      ksef_number: 'TEST', ksef_environment: 'test' }];
+    await expect(runSubmitInvoice(submitEvent, ctx)).rejects.toThrow('incoming invoice');
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(sendEvent).not.toHaveBeenCalled();
+    expect(writes()).toEqual([]);
+  });
+  it('does not duplicate a present UPO record on an accepted replay', async () => {
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'accepted', ksef_number: 'TEST', ksef_environment: 'test' }];
+    tables.upo_receipts = [{ id: OTHER, tenant_id: A, invoice_id: ID, ksef_number: 'TEST' }];
+    await expect(runSubmitInvoice(submitEvent, ctx)).resolves.toEqual({ alreadyAccepted: true, ksefNumber: 'TEST' });
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+  it('does not POST to KSeF after a prior sending step when a worker restarts', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'sending', invoice_kind: 'regular',
+      submitted_to_ksef_at: '2026-09-27T10:00:00.000Z',
+    }];
+    await expect(runSubmitInvoice(submitEvent, ctx)).rejects.toThrow('manual reconciliation');
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(writes()).toEqual([]);
   });
   it.each([null, 'demo'] as const)('keeps accepted invoice with stored environment %s for reconciliation', async (storedEnvironment) => {
     tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'accepted', ksef_number: 'HISTORICAL', ksef_environment: storedEnvironment }];
@@ -446,6 +796,53 @@ describe('service-role job boundaries', () => {
       .rejects.toThrow('accepted invoice requires reconciliation');
     expect(tables.invoices[0].ksef_status).toBe('accepted');
     expect(tables.ksef_offline_queue[0].status).toBe('failed');
+  });
+  it('does not requeue an invoice accepted after the Offline24 failure read', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'failed', ksef_environment: 'test',
+      invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
+      submitted_to_ksef_at: null,
+    }];
+    tables.ksef_offline_queue = [{
+      id: OTHER, tenant_id: A, invoice_id: ID, status: 'sending', ksef_environment: 'test', attempts: 1,
+    }];
+    const racingContext: JobContext = {
+      ...ctx,
+      step: {
+        ...ctx.step,
+        run: async <T,>(name: string, fn: () => Promise<T> | T): Promise<T> => {
+          if (name === 'rollback-queue-status') {
+            tables.invoices[0].ksef_status = 'accepted';
+            tables.invoices[0].ksef_number = 'TEST-KSEF-NUMBER';
+          }
+          return fn();
+        },
+      },
+    };
+    expect(await runOfflineQueueFailure({
+      invoiceId: ID, tenantId: A, fromOfflineQueue: true, offlineQueueId: OTHER,
+      environment: 'test', error: 'old failure', terminal: false,
+    }, racingContext)).toMatchObject({ success: false, reason: 'manual-reconciliation' });
+    expect(tables.invoices[0]).toMatchObject({
+      ksef_status: 'accepted', ksef_number: 'TEST-KSEF-NUMBER',
+    });
+    expect(tables.ksef_offline_queue[0].status).toBe('failed');
+  });
+  it('quarantines a legacy nonterminal Offline24 callback for failed invoice without a timestamp', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'failed', submitted_to_ksef_at: null,
+      invoice_kind: 'regular', invoice_type: 'VAT', fa3_data: { type: 'VAT' },
+    }];
+    tables.ksef_offline_queue = [{
+      id: OTHER, tenant_id: A, invoice_id: ID, status: 'sending', ksef_environment: 'test', attempts: 1,
+    }];
+    expect(await runOfflineQueueFailure({
+      invoiceId: ID, tenantId: A, fromOfflineQueue: true, offlineQueueId: OTHER,
+      environment: 'test', error: 'old timeout', terminal: false,
+    }, ctx)).toMatchObject({ success: false, reason: 'manual-reconciliation' });
+    expect(tables.invoices[0].ksef_status).toBe('failed');
+    expect(tables.ksef_offline_queue[0].status).toBe('failed');
+    expect(sendEvent).not.toHaveBeenCalled();
   });
   it('quarantines a historical regular PROD Offline24 failure instead of requeueing it', async () => {
     vi.stubEnv('KSEF_ENV', 'production');

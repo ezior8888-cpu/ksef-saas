@@ -106,10 +106,13 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               (row.xml_storage_path as string | null | undefined) ??
               prev.xml_storage_path,
             last_error:
-              (row.last_error as string | null | undefined) ?? prev.last_error,
+              'last_error' in row
+                ? row.last_error as string | null
+                : prev.last_error,
             last_error_code:
-              (row.last_error_code as string | null | undefined) ??
-              prev.last_error_code,
+              'last_error_code' in row
+                ? row.last_error_code as string | null
+                : prev.last_error_code,
             last_error_field:
               (row.last_error_field as string | null | undefined) ??
               prev.last_error_field,

@@ -20,6 +20,8 @@ vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({
 }));
 vi.mock('@/lib/supabase/admin-queries', () => ({
   updateInvoiceStatus: mocks.status,
+  claimInvoiceForKsefSend: vi.fn(async () => true),
+  InvoiceStatusConflictError: class InvoiceStatusConflictError extends Error {},
   getInvoiceForSubmit: vi.fn(),
   getTenantKsefCredentials: vi.fn(),
 }));
@@ -38,6 +40,7 @@ vi.mock('@/lib/supabase/server', () => ({
     Object.assign(q, {
       select: () => q,
       eq: () => q,
+      is: () => q,
       update: (p: Row) => {
         patch = p;
         return q;
@@ -85,7 +88,7 @@ beforeEach(() => {
   vi.stubEnv('KSEF_ENV', 'test');
   db.queueRow = { id: QUEUE, attempts: 2, status: 'sending' };
   db.invoiceRow = {
-    id: INV, ksef_status: 'failed', invoice_kind: 'regular', invoice_type: 'VAT',
+    id: INV, ksef_status: 'offline_queued', invoice_kind: 'regular', invoice_type: 'VAT',
     fa3_data: { type: 'VAT' }, ksef_environment: 'test',
   };
   db.updates = [];
@@ -104,18 +107,18 @@ describe('kolejka Offline24 po nieudanej wysyłce', () => {
     expect(mocks.status).not.toHaveBeenCalled();
   });
 
-  it('błąd przejściowy: wraca do kolejki jak dotąd', async () => {
+  it('błąd przejściowy: nie wznawia starej kolejki bez tożsamości próby', async () => {
     await runOfflineQueueFailure(
       { invoiceId: INV, tenantId: TEN, error: 'ECONNRESET', fromOfflineQueue: true, terminal: false, environment: 'test', offlineQueueId: QUEUE },
       ctx,
     );
-    expect(db.updates[0]?.patch.status).toBe('queued');
-    expect(mocks.status).toHaveBeenCalledWith(INV, expect.objectContaining({ ksef_status: 'offline_queued' }), TEN);
+    expect(db.updates[0]?.patch.status).toBe('failed');
+    expect(db.updates.some((update) => update.table === 'invoices')).toBe(false);
   });
 
-  it('zdarzenie sprzed zmiany (bez pola terminal) zachowuje się jak dotąd', async () => {
+  it('zdarzenie sprzed zmiany (bez pola terminal) też jest izolowane', async () => {
     await runOfflineQueueFailure({ invoiceId: INV, tenantId: TEN, error: 'x', fromOfflineQueue: true, environment: 'test', offlineQueueId: QUEUE }, ctx);
-    expect(db.updates[0]?.patch.status).toBe('queued');
+    expect(db.updates[0]?.patch.status).toBe('failed');
   });
 });
 
@@ -140,11 +143,25 @@ describe('job wysyłki mówi kolejce, czy błąd jest kończący', () => {
   it('integrity failure stays failed yet closes the Offline24 row', async () => {
     await onSubmitInvoiceExhausted(new NonRetriableError('KSeF document kind requires manual reconciliation'), zdarzenie, ctx);
     expect(wyslane().data.terminal).toBe(true);
-    expect(mocks.status).toHaveBeenCalledWith(INV, expect.objectContaining({ ksef_status: 'failed' }), TEN);
+    expect(mocks.status).toHaveBeenCalledWith(INV, expect.objectContaining({ ksef_status: 'failed' }), TEN, 'offline_queued');
   });
 
   it('inny błąd po wyczerpaniu prób → terminal: false', async () => {
     await onSubmitInvoiceExhausted(new Error('ECONNRESET'), zdarzenie, ctx);
     expect(wyslane().data.terminal).toBe(false);
+  });
+
+  it('nie ponawia Offline24 po możliwym kontakcie z KSeF mimo zwykłego Error', async () => {
+    db.invoiceRow = { ...db.invoiceRow, submitted_to_ksef_at: '2026-09-27T10:00:00.000Z' };
+    await onSubmitInvoiceExhausted(new Error('ECONNRESET'), zdarzenie, ctx);
+    expect(wyslane().data.terminal).toBe(true);
+  });
+
+  it('zamyka stary event kolejki bez ruszania cudzego sending claimu', async () => {
+    db.invoiceRow = { ...db.invoiceRow, ksef_status: 'sending', submitted_to_ksef_at: '2026-09-27T10:00:00.000Z' };
+    expect(await onSubmitInvoiceExhausted(new Error('ECONNRESET'), zdarzenie, ctx))
+      .toMatchObject({ handled: false, reason: 'offline-state-mismatch' });
+    expect(mocks.status).not.toHaveBeenCalled();
+    expect(wyslane().data.terminal).toBe(true);
   });
 });

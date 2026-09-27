@@ -61,17 +61,17 @@ describe('special invoice enqueue under KSeF outage', () => {
     },
   );
 
-  it('preserves ordinary VAT Offline24 routing', async () => {
+  it('keeps an ordinary VAT draft instead of promising an unavailable Offline24 replay', async () => {
     const result = await enqueueKsefSubmitAfterDraft({ ...base, auditKind: 'regular' });
-    expect(result).toEqual({ ok: true, mode: 'offline_queued' });
-    expect(mocks.offlineAdd).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('Offline24 jest wstrzymany') });
+    expect(mocks.offlineAdd).not.toHaveBeenCalled();
     expect(mocks.send).not.toHaveBeenCalled();
   });
 
   it('keeps an ordinary VAT draft on a PROD outage without issuing an Offline24 QR', async () => {
     mocks.environment.mockReturnValue('production');
     const result = await enqueueKsefSubmitAfterDraft({ ...base, auditKind: 'regular' });
-    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('Offline24 w PROD') });
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('Offline24 jest wstrzymany') });
     expect(mocks.health).toHaveBeenCalledWith('production');
     expect(mocks.offlineAdd).not.toHaveBeenCalled();
     expect(mocks.send).not.toHaveBeenCalled();

@@ -30,7 +30,9 @@ function database() {
       select(selection = '*', options?: { count?: string; head?: boolean }) { op.selection = selection; count = !!options?.count; head = !!options?.head; return query; },
       insert(value: Row) { op.mode = 'insert'; patch = value; return query; },
       update(value: Row) { op.mode = 'update'; patch = value; return query; },
+      delete() { op.mode = 'delete'; return query; },
       eq(key: string, value: unknown) { op.filters.push([key, value]); predicates.push(row => row[key] === value); return query; },
+      is(key: string, value: null) { op.filters.push([`${key} IS`, value]); predicates.push(row => row[key] == null); return query; },
       neq(key: string, value: unknown) { op.filters.push([`${key} !=`, value]); predicates.push(row => row[key] !== value); return query; },
       in(key: string, values: unknown[]) { op.filters.push([key, values]); predicates.push(row => values.includes(row[key])); return query; },
       or(filter: string) {
@@ -54,6 +56,7 @@ function database() {
         const rows = (tables[table] ?? []).filter(row => predicates.every(p => p(row)));
         if (op.mode === 'insert') { const inserted = { id: 'new-queue', ...patch }; (tables[table] ??= []).push(inserted); rows.splice(0, rows.length, inserted); }
         if (op.mode === 'update') rows.forEach(row => Object.assign(row, patch));
+        if (op.mode === 'delete') tables[table] = (tables[table] ?? []).filter(row => !rows.includes(row));
         return Promise.resolve({ data: head ? null : singular ? rows[0] ?? null : rows, count: count ? rows.length : undefined, error: null }).then(resolve, reject);
       },
     };
@@ -64,6 +67,8 @@ function database() {
 function invoice(id: string, tenant = 'tenant-a', direction = 'outgoing'): Row {
   return {
     id, tenant_id: tenant, direction, invoice_kind: 'regular', ksef_status: 'accepted', ksef_environment: 'test',
+    submitted_to_ksef_at: null, offline_idempotency_key: null,
+    offline_qr_offline: null, offline_qr_certyfikat: null,
     internal_number: id, issue_date: '2026-01-01', created_at: '2026-01-01T12:00:00Z',
     buyer_data: { email: 'buyer@example.test' }, buyer_nip: null, seller_nip: '1234567890',
     gross_total: 100, paid_amount: 0, payment_due_date: '2025-01-01',
@@ -256,8 +261,17 @@ describe('offline helper tenant ownership', () => {
     expect(result.tenant_id).toBe('tenant-a');
     expect(result.ksef_environment).toBe('test');
     expect(tables.invoices[0].ksef_status).toBe('offline_queued');
+    expect(tables.invoices[0].offline_qr_offline).toBe('offline-fixture');
     expect(tables.invoices[1].ksef_status).toBe('accepted');
-    expect(operations.find(op => op.table === 'invoices' && op.mode === 'update')?.filters).toContainEqual(['tenant_id', 'tenant-a']);
+    const claims = operations.filter(op => op.table === 'invoices' && op.mode === 'update');
+    expect(claims[0].filters).toContainEqual(['tenant_id', 'tenant-a']);
+    expect(claims[0].filters).toContainEqual(['ksef_status', 'draft']);
+    expect(claims[0].filters).toContainEqual(['submitted_to_ksef_at IS', null]);
+    expect(claims[1].filters).toContainEqual(['submitted_to_ksef_at IS', null]);
+    expect(operations.findIndex(op => op.table === 'invoices' && op.mode === 'update'))
+      .toBeLessThan(operations.findIndex(op => op.table === 'ksef_offline_queue' && op.mode === 'insert'));
+    expect(operations.findIndex(op => op.table === 'ksef_offline_queue' && op.mode === 'insert'))
+      .toBeLessThan(operations.findLastIndex(op => op.table === 'invoices' && op.mode === 'update'));
   });
 
   it.each([
@@ -287,11 +301,14 @@ describe('offline helper tenant ownership', () => {
   it('preserves idempotent retries of an owned queue row', async () => {
     conflict = true;
     tables.invoices[0].ksef_status = 'offline_queued';
+    tables.invoices[0].offline_idempotency_key = generateIdempotencyKey('tenant-a', 'invoice-a', new Date('2026-01-01T12:00:00Z'));
     tables.ksef_offline_queue.push({
       id: 'existing-queue', tenant_id: 'tenant-a', invoice_id: 'invoice-a', ksef_environment: 'test', status: 'queued',
       idempotency_key: generateIdempotencyKey('tenant-a', 'invoice-a', new Date('2026-01-01T12:00:00Z')),
     });
     expect((await addToOfflineQueue(offlineParams)).id).toBe('existing-queue');
+    expect(mocks.qr).not.toHaveBeenCalled();
+    expect(operations.some(op => op.mode !== 'select')).toBe(false);
   });
 
   it('does not claim success from a dead idempotent queue row', async () => {
@@ -304,6 +321,37 @@ describe('offline helper tenant ownership', () => {
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('requires reconciliation');
     expect(tables.invoices[0].ksef_status).toBe('draft');
   });
+
+  it('does not claim success from an active row without a matching invoice claim', async () => {
+    conflict = true;
+    tables.ksef_offline_queue.push({
+      id: 'orphan-queue', tenant_id: 'tenant-a', invoice_id: 'invoice-a',
+      ksef_environment: 'test', status: 'queued',
+      idempotency_key: generateIdempotencyKey('tenant-a', 'invoice-a', new Date('2026-01-01T12:00:00Z')),
+    });
+    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('no matching invoice claim');
+    expect(tables.invoices[0].ksef_status).toBe('draft');
+    expect(tables.invoices[0].offline_qr_offline).toBeNull();
+  });
+
+  it('rejects a prior KSeF contact marker before QR generation', async () => {
+    tables.invoices[0].submitted_to_ksef_at = '2026-09-27T10:00:00.000Z';
+    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('requires reconciliation');
+    expect(mocks.qr).not.toHaveBeenCalled();
+    expect(operations.some(op => op.mode !== 'select')).toBe(false);
+  });
+
+  it.each(['failed', 'rejected'])(
+    'does not park historical %s status even with no KSeF submission timestamp',
+    async status => {
+      tables.invoices[0].ksef_status = status;
+      await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('requires reconciliation');
+      expect(mocks.qr).not.toHaveBeenCalled();
+      expect(tables.ksef_offline_queue).toEqual([]);
+      expect(operations.some(op => op.mode !== 'select')).toBe(false);
+      expect(tables.invoices[0].ksef_status).toBe(status);
+    },
+  );
 
   it('does not claim success when invoice ownership changes before the write', async () => {
     mocks.qr.mockImplementation(async () => {
@@ -321,5 +369,56 @@ describe('offline helper tenant ownership', () => {
     });
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
     expect(tables.invoices[0].ksef_status).toBe('accepted');
+    expect(tables.invoices[0].offline_qr_offline).toBeNull();
+    expect(tables.ksef_offline_queue).toEqual([]);
+  });
+
+  it('does not publish a queue row or QR when online sending claims during QR generation', async () => {
+    mocks.qr.mockImplementation(async () => {
+      tables.invoices[0].ksef_status = 'sending';
+      tables.invoices[0].submitted_to_ksef_at = '2026-09-27T10:00:00.000Z';
+      return { offlinePayload: 'offline-fixture', certyfikatPayload: 'certificate-fixture' };
+    });
+    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
+    expect(tables.invoices[0].ksef_status).toBe('sending');
+    expect(tables.invoices[0].offline_qr_offline).toBeNull();
+    expect(tables.ksef_offline_queue).toEqual([]);
+    expect(operations.some(op => op.table === 'ksef_offline_queue' && op.mode === 'insert')).toBe(false);
+  });
+
+  it('requires the observed status even when the online claim has no timestamp yet', async () => {
+    mocks.qr.mockImplementation(async () => {
+      tables.invoices[0].ksef_status = 'queued';
+      return { offlinePayload: 'offline-fixture', certyfikatPayload: 'certificate-fixture' };
+    });
+    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
+    expect(tables.invoices[0].ksef_status).toBe('queued');
+    expect(tables.ksef_offline_queue).toEqual([]);
+  });
+
+  it('rolls back its claim when the queue insert fails', async () => {
+    errorFor = op => op.table === 'ksef_offline_queue' && op.mode === 'insert';
+    await expect(addToOfflineQueue(offlineParams)).rejects.toMatchObject({ code: 'XX000' });
+    expect(tables.invoices[0]).toMatchObject({
+      ksef_status: 'draft', offline_idempotency_key: null,
+      offline_qr_offline: null, offline_qr_certyfikat: null,
+    });
+    expect(tables.ksef_offline_queue).toEqual([]);
+  });
+
+  it('removes its queue row without reviving the invoice if sending begins before QR cache write', async () => {
+    errorFor = op => {
+      if (op.table === 'invoices' && op.mode === 'update' &&
+          operations.filter(item => item.table === 'invoices' && item.mode === 'update').length === 2) {
+        tables.invoices[0].ksef_status = 'sending';
+        tables.invoices[0].submitted_to_ksef_at = '2026-09-27T10:00:00.000Z';
+      }
+      return false;
+    };
+    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
+    expect(tables.invoices[0].ksef_status).toBe('sending');
+    expect(tables.invoices[0].submitted_to_ksef_at).toBe('2026-09-27T10:00:00.000Z');
+    expect(tables.invoices[0].offline_qr_offline).toBeNull();
+    expect(tables.ksef_offline_queue).toEqual([]);
   });
 });

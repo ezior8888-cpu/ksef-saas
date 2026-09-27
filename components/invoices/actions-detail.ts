@@ -1,23 +1,11 @@
 'use server';
 
-import { isDeepStrictEqual } from 'node:util';
-import { revalidatePath } from 'next/cache';
-import { sendJobEvent } from '@/lib/jobs/enqueue';
-
 import { logAudit } from '@/lib/audit/log';
-import {
-  KsefNotVerifiedError,
-  requireKsefVerification,
-} from '@/lib/auth/ksef-verification-guard';
 import { ActionAuthError, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
-import { specialInvoiceResendMessage } from '@/lib/ksef/special-invoice-data';
-import { formatInngestSendError } from '@/lib/inngest/error-message';
-import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
 import { sendInvoiceEmail } from '@/lib/email/send';
-import type { Invoice } from '@/types/invoice';
 
 // ═══════════════════════════════════════════════════════════════
 // downloadInvoiceXmlAction
@@ -116,197 +104,46 @@ export type ResendResult =
   | { success: false; error: string; code?: 'KSEF_NOT_VERIFIED' };
 
 /**
- * Ponawia wysyłkę faktury do KSeF. Działa tylko dla statusów
- * 'rejected' i 'failed' (status guard po stronie UI - `InvoiceActions`).
- *
- * Wysyłamy dokładny snapshot `fa3_data` po sprawdzeniu kolumn nagłówka,
- * resetujemy status na 'queued' i publikujemy event `invoice/submit.requested`.
- * Dalszy flow taki sam jak przy pierwszej wysyłce.
+ * Historical failed/rejected rows do not prove whether an earlier KSeF POST
+ * succeeded. Until a durable per-attempt identity and operator reconciliation
+ * flow exists, even a null submitted_to_ksef_at is not evidence for safe replay.
  */
 export async function resendInvoiceAction(
   invoiceId: string
 ): Promise<ResendResult> {
   try {
-    // Server Actions are callable directly: verify MFA and live membership
-    // before reading the invoice or publishing another KSeF job.
-    const { supabase, user, tenantId } = await requireUserAndActiveOrg();
-
-    const { data: inv, error } = await supabase
+    const { supabase, tenantId } = await requireUserAndActiveOrg();
+    const { data: invoice, error } = await supabase
       .from('invoices')
-      .select(
-        `
-        id,
-        tenant_id,
-        internal_number,
-        invoice_type,
-        invoice_kind,
-        issue_date,
-        sale_date,
-        seller_data,
-        buyer_data,
-        payment_data,
-        notes,
-        net_total,
-        vat_total,
-        gross_total,
-        ksef_status,
-        fa3_data,
-        tenants(nip, ksef_credentials_encrypted)
-      `
-      )
+      .select('ksef_status')
       .eq('id', invoiceId)
       .eq('tenant_id', tenantId)
-      .single();
+      .maybeSingle();
 
-    if (error || !inv) {
-      return { success: false, error: error?.message ?? 'Faktura nie istnieje' };
+    if (error || !invoice) {
+      return { success: false, error: 'Nie można znaleźć faktury w tej organizacji.' };
     }
-
-    if (inv.ksef_status !== 'rejected' && inv.ksef_status !== 'failed') {
+    if (invoice.ksef_status !== 'rejected' && invoice.ksef_status !== 'failed') {
       return {
         success: false,
         error: 'Ponowną wysyłkę można uruchomić tylko dla odrzuconych/błędnych faktur.',
       };
     }
-    // This path rebuilds only the ordinary VAT payload. Replaying KOR/ZAL/ROZ
-    // here would silently emit a different legal document than the original.
-    if (inv.invoice_kind !== 'regular') {
-      return {
-        success: false,
-        error: 'Ponowna wysyłka tego typu faktury wymaga ręcznego uzgodnienia i dedykowanej ścieżki.',
-      };
-    }
 
-    // Korekta/zaliczka/rozliczenie potrzebują danych, których nie ma w bazie
-    // (patrz lib/ksef/special-invoice-data.ts). Mówimy od razu, zamiast
-    // przestawiać status na 'queued' dla joba, który i tak odmówi.
-    const storedType = inv.invoice_type as string | null;
-    const payloadType = (inv.fa3_data as Invoice | null)?.type;
-    const specialMessage = specialInvoiceResendMessage(storedType) ??
-      specialInvoiceResendMessage(payloadType);
-    if (specialMessage) {
-      return { success: false, error: specialMessage };
-    }
-    if ((storedType !== 'VAT' && storedType !== 'UPR') || payloadType !== storedType) {
-      return {
-        success: false,
-        error: 'Typ faktury w bazie i kopii XML jest niespójny; wymagane ręczne uzgodnienie.',
-      };
-    }
-    // The legal XML can contain line attributes absent from invoice_line_items
-    // (for example classificationCode). Rebuilding it would change the legal
-    // document while still reporting the resend as queued.
-    const snapshot = inv.fa3_data as Invoice | null;
-    if (!snapshot || !Array.isArray(snapshot.lines) || !snapshot.lines.length ||
-        !snapshot.seller || !snapshot.buyer || !snapshot.payment ||
-        snapshot.internalNumber !== inv.internal_number ||
-        snapshot.issueDate !== inv.issue_date ||
-        (snapshot.saleDate ?? null) !== (inv.sale_date ?? null) ||
-        !isDeepStrictEqual(snapshot.seller, inv.seller_data) ||
-        !isDeepStrictEqual(snapshot.buyer, inv.buyer_data) ||
-        !isDeepStrictEqual(snapshot.payment, inv.payment_data) ||
-        inv.net_total == null || inv.vat_total == null || inv.gross_total == null ||
-        snapshot.netTotal !== Number(inv.net_total) ||
-        snapshot.vatTotal !== Number(inv.vat_total) ||
-        snapshot.grossTotal !== Number(inv.gross_total) ||
-        (snapshot.notes ?? null) !== (inv.notes ?? null)) {
-      return {
-        success: false,
-        error: 'Kopia faktury i zapisane dane są niekompletne lub niespójne; wymagane ręczne uzgodnienie.',
-      };
-    }
-
-    const tenantRow = Array.isArray(inv.tenants) ? inv.tenants[0] : inv.tenants;
-    const tenantNip = (tenantRow?.nip as string | undefined) ?? '';
-    if (!tenantNip) {
-      return { success: false, error: 'Brak NIP tenanta (kontekst jobu)' };
-    }
-
-    if (!tenantRow?.ksef_credentials_encrypted) {
-      return {
-        success: false,
-        error:
-          'Najpierw wgraj certyfikat KSeF w Ustawienia KSeF — bez niego ponowna wysyłka nie jest możliwa.',
-      };
-    }
-
-    try {
-      await requireKsefVerification(inv.tenant_id as string);
-    } catch (e) {
-      if (e instanceof KsefNotVerifiedError) {
-        return {
-          success: false,
-          code: 'KSEF_NOT_VERIFIED',
-          error:
-            'Twoja organizacja musi najpierw zweryfikować certyfikat KSeF w Ustawieniach → KSeF.',
-        };
-      }
-      throw e;
-    }
-
-    await sendJobEvent({
-      groupId: inv.tenant_id as string,
-      name: 'invoice/submit.requested',
-      data: {
-        tenantId: inv.tenant_id as string,
-        invoiceId,
-        invoice: snapshot,
-        nip: tenantNip,
-        environment: requireConfiguredKsefEnvironment(),
-      },
-    });
-
-    const { error: updErr } = await supabase
-      .from('invoices')
-      .update({
-        ksef_status: 'queued',
-        last_error: null,
-        last_error_code: null,
-        last_error_field: null,
-        last_error_suggestion: null,
-      })
-      .eq('id', invoiceId)
-      .eq('tenant_id', tenantId);
-
-    if (updErr) {
-      console.error('[resendInvoiceAction] queued update failed', updErr);
-    }
-
-    revalidatePath('/invoices');
-    revalidatePath(`/invoices/${invoiceId}`);
-
-    await logAudit({
-      action: 'invoice.resubmit_requested',
-      tenantId: inv.tenant_id as string,
-      userId: user.id,
-      entityType: 'invoice',
-      entityId: invoiceId,
-      metadata: { internalNumber: inv.internal_number },
-    });
-
-    return { success: true };
+    return {
+      success: false,
+      error: 'Automatyczna ponowna wysyłka jest wstrzymana. Najpierw trzeba ręcznie uzgodnić fakturę z KSeF.',
+    };
   } catch (err) {
     if (err instanceof ActionAuthError) {
       return { success: false, error: err.message };
     }
-    if (err instanceof KsefNotVerifiedError) {
-      return {
-        success: false,
-        code: 'KSEF_NOT_VERIFIED',
-        error:
-          'Twoja organizacja musi najpierw zweryfikować certyfikat KSeF w Ustawieniach → KSeF.',
-      };
-    }
     return {
       success: false,
-      error:
-        err instanceof Error
-          ? formatInngestSendError(err)
-          : 'Błąd ponownej wysyłki',
+      error: 'Nie można sprawdzić możliwości ponownej wysyłki. Spróbuj później.',
     };
   }
 }
-
 // ═══════════════════════════════════════════════════════════════
 // emailInvoiceAction — wysyłka faktury do nabywcy z PDF (Faza 33 Krok 8)
 // ═══════════════════════════════════════════════════════════════
