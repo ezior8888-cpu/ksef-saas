@@ -426,6 +426,7 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
           inboxInvoiceReceivedAutoCategorize.create({
             invoiceId: row.id,
             tenantId,
+            environment: env,
           }),
         ),
       );

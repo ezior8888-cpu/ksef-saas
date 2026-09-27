@@ -2,6 +2,7 @@ import { KpirView } from '@/components/expenses/kpir-view';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
+import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,9 @@ export default async function KpirPage({
     .gte('issue_date', periodStart)
     .lte('issue_date', periodEnd)
     .order('issue_date', { ascending: true });
+  const visibleExpenses = expensesError
+    ? []
+    : await filterExpensesForKsefEnvironment(supabase, tenantId, environment, expenses ?? []);
 
   const { data: invoices, error: invoicesError } = await supabase
     .from('invoices')
@@ -69,7 +73,7 @@ export default async function KpirPage({
       <KpirView
         month={month}
         year={year}
-        expenses={expenses ?? []}
+        expenses={visibleExpenses}
         invoices={invoices ?? []}
       />
     </div>

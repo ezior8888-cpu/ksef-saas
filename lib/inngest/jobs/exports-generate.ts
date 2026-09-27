@@ -262,10 +262,15 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
         periodEnd: job.period_end,
         direction,
         includeCorrections: job.include_corrections,
+        includeExpenses: job.format === 'kpir_excel' || String(job.format) === 'jpk_v7m',
       });
     });
 
-    if (data.issuedInvoices.length === 0 && data.receivedInvoices.length === 0) {
+    const hasExpensesForFormat =
+      (job.format === 'kpir_excel' || String(job.format) === 'jpk_v7m') &&
+      data.expenses.length > 0;
+    if (data.issuedInvoices.length === 0 && data.receivedInvoices.length === 0 &&
+        !hasExpensesForFormat) {
       await step.run('mark-empty', async () => {
         const { error } = await supabase
           .from('export_jobs')

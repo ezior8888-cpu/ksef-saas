@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
 
@@ -35,6 +35,7 @@ vi.mock('@/lib/supabase/admin', () => ({
           return { data: insertRow ? { id: 'exp-1' } : null, error: null };
         },
         maybeSingle: async () => {
+          if (table === 'invoices') return { data: db.invoice, error: null };
           if (table === 'memberships') return { data: { user_id: 'u-1' }, error: null };
           return { data: null, error: null };
         },
@@ -61,6 +62,7 @@ const ctx: JobContext = {
 const DANE = {
   invoiceId: '11111111-1111-4111-8111-111111111111',
   tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  environment: 'test' as const,
 };
 
 // Tak zapisuje skrzynka (inbox-polling): kwoty z metadanych KSeF, bez pozycji.
@@ -69,6 +71,9 @@ function faktura(o: Row): Row {
     id: DANE.invoiceId,
     tenant_id: DANE.tenantId,
     direction: 'incoming',
+    origin: 'ksef_inbox',
+    ksef_status: 'accepted',
+    ksef_environment: 'test',
     ksef_number: '5260001246-20260925-000000000001-00',
     internal_number: 'KOR 1/09/2026',
     issue_date: '2026-09-25',
@@ -81,9 +86,11 @@ function faktura(o: Row): Row {
 }
 
 beforeEach(() => {
+  vi.stubEnv('KSEF_ENV', 'test');
   db.inserts = [];
   db.categorized = [];
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('korekta zakupu „in minus” ze skrzynki KSeF', () => {
   it('powstaje ujemny koszt — obniża KPiR i VAT do odliczenia', async () => {

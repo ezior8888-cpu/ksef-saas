@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
 
@@ -11,6 +11,7 @@ const db = vi.hoisted(() => ({
   insertConflict: false,
   concurrentExpense: null as Row | null,
   expenseReads: 0,
+  currentInvoice: null as Row | null,
 }));
 
 vi.mock('@/lib/categorization', () => ({
@@ -26,9 +27,10 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: (table: string) => {
       const q: Record<string, unknown> = {};
       let insertRow: Row | null = null;
+      const filters = new Map<string, unknown>();
       Object.assign(q, {
         select: () => q,
-        eq: () => q,
+        eq: (column: string, value: unknown) => { filters.set(column, value); return q; },
         limit: () => q,
         insert: (r: Row) => {
           insertRow = r;
@@ -62,6 +64,10 @@ vi.mock('@/lib/supabase/admin', () => ({
           return { data: insertRow ? { id: 'exp-1' } : null, error: null };
         },
         maybeSingle: async () => {
+          if (table === 'invoices') {
+            const row = db.currentInvoice;
+            return { data: row && [...filters].every(([key, value]) => row[key] === value) ? row : null, error: null };
+          }
           if (table === 'expenses') {
             db.expenseReads++;
             return {
@@ -90,16 +96,23 @@ const ctx: JobContext = {
 const DANE = {
   invoiceId: '11111111-1111-4111-8111-111111111111',
   tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  environment: 'test' as const,
 };
 
 beforeEach(() => {
+  vi.stubEnv('KSEF_ENV', 'test');
   db.existing = null;
   db.existingError = null;
   db.inserts = [];
   db.insertConflict = false;
   db.concurrentExpense = null;
   db.expenseReads = 0;
+  db.currentInvoice = {
+    id: DANE.invoiceId, tenant_id: DANE.tenantId, direction: 'incoming',
+    origin: 'ksef_inbox', ksef_status: 'accepted', ksef_environment: 'test',
+  };
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('auto-kategoryzacja: drugi wydatek z tej samej faktury', () => {
   it('błąd sprawdzenia NIE znaczy „nie ma” — job pada, nic się nie zapisuje', async () => {
@@ -132,5 +145,17 @@ describe('auto-kategoryzacja: drugi wydatek z tej samej faktury', () => {
     db.insertConflict = true;
 
     await expect(runAutoCategorizeInbox(DANE, ctx)).rejects.toThrow(/Konflikt UNIQUE/);
+  });
+
+  it('odrzuca opóźniony event TEST po przełączeniu workera na PROD', async () => {
+    vi.stubEnv('KSEF_ENV', 'production');
+    await expect(runAutoCategorizeInbox(DANE, ctx)).rejects.toThrow('environment');
+    expect(db.inserts).toEqual([]);
+  });
+
+  it('sprawdza bieżącą fakturę także po wcześniejszym fetch-invoice', async () => {
+    db.currentInvoice = { ...db.currentInvoice, ksef_environment: 'production' };
+    await expect(runAutoCategorizeInbox(DANE, ctx)).rejects.toThrow('identity');
+    expect(db.inserts).toEqual([]);
   });
 });

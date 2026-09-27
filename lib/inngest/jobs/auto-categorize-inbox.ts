@@ -12,6 +12,7 @@ import {
   type ExtractedInvoice,
 } from '@/lib/ocr/schema';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { Database, Json } from '@/types/database';
 
 import { inboxInvoiceReceivedAutoCategorize, inngest } from '../client';
@@ -180,9 +181,12 @@ export function unsignedForCategorization(extracted: ExtractedInvoice): Extracte
  * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
  */
 export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoiceReceivedAutoCategorize.create>[0], { step }: JobContext) {
-    const { invoiceId, tenantId } = inboxInvoiceReceivedAutoCategorize.parse(
+    const { invoiceId, tenantId, environment } = inboxInvoiceReceivedAutoCategorize.parse(
       data,
     );
+    if (environment !== requireConfiguredKsefEnvironment()) {
+      throw new NonRetriableError('KSeF expense event environment requires reconciliation');
+    }
     const supabase = createAdminClient();
 
     const extracted = await step.run('fetch-invoice', async () => {
@@ -229,6 +233,26 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     });
 
     await step.run('create-expense', async () => {
+      // fetch-invoice may have been memoized before a deployment switched the
+      // KSeF environment. Recheck the actual invoice before the financial write.
+      if (environment !== requireConfiguredKsefEnvironment()) {
+        throw new NonRetriableError('KSeF expense event environment requires reconciliation');
+      }
+      const { data: current, error: currentError } = await supabase
+        .from('invoices')
+        .select('id')
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .eq('direction', 'incoming')
+        .eq('origin', 'ksef_inbox')
+        .eq('ksef_status', 'accepted')
+        .eq('ksef_environment', environment)
+        .maybeSingle();
+      if (currentError) throw new Error('Cannot verify current KSeF expense invoice');
+      if (!current) {
+        throw new NonRetriableError('KSeF expense invoice identity requires reconciliation');
+      }
+
       // Odczyt oszczędza ponownego insertu, ale nie rozstrzyga wyścigu.
       // Indeks 00090 gwarantuje jeden koszt na fakturę, a 23505 wymaga
       // ponownego odczytu dokładnie w tym tenancie.

@@ -148,6 +148,7 @@ describe('tenant boundaries for accounting exports', () => {
     // Od 26.09 koszty w KPiR/JPK_V7M idą z `expenses`, nie z faktur otrzymanych.
     const expense = (id: string, tenant: string, isDeductible: boolean): Row => ({
       id, tenant_id: tenant, issue_date: '2026-01-10', document_number: id, document_type: 'invoice',
+      source: 'manual', ksef_invoice_id: null,
       seller_name: 'Dostawca', seller_nip: '5260001246', seller_address: null,
       net_amount: 100, vat_amount: 23, gross_amount: 123, vat_deductible_amount: 23,
       kpir_column: 'col_13', category_label: 'Usługi', is_deductible: isDeductible,
@@ -162,10 +163,61 @@ describe('tenant boundaries for accounting exports', () => {
     expect(data.expenses[0]).toMatchObject({ sellerName: 'Dostawca', sellerNip: '5260001246', vatDeductibleAmount: 23 });
   });
 
+  it('keeps manual costs and only linked costs from the configured KSeF environment', async () => {
+    tables.invoices.push(
+      { ...invoice('test-source', 'tenant-a', 'incoming'), issue_date: '2025-12-31' },
+      { ...invoice('prod-source', 'tenant-a', 'incoming'), issue_date: '2025-12-31', ksef_environment: 'production' },
+    );
+    const expense = (id: string, link: string | null, source: string): Row => ({
+      id, tenant_id: 'tenant-a', source, ksef_invoice_id: link,
+      issue_date: '2026-01-10', document_number: id, document_type: 'invoice',
+      seller_name: 'Seller', net_amount: 100, vat_amount: 23, gross_amount: 123,
+      vat_deductible_amount: 23, is_deductible: true,
+    });
+    tables.expenses.push(
+      expense('manual', null, 'manual'),
+      expense('ocr-cost', null, 'ocr_photo'),
+      expense('test-cost', 'test-source', 'ksef_inbox'),
+      expense('prod-cost', 'prod-source', 'ksef_inbox'),
+    );
+
+    const result = await fetchInvoicesForExport(exportParams);
+    expect(result.expenses.map(row => row.id)).toEqual(['manual', 'ocr-cost', 'test-cost']);
+  });
+
+  it.each(['missing', 'foreign', 'unknown', 'unlinked'])('blocks ambiguous KSeF expense: %s', async kind => {
+    const linkedId = kind === 'missing' ? 'missing-invoice' : 'linked-invoice';
+    if (kind !== 'missing' && kind !== 'unlinked') {
+      tables.invoices.push({
+        ...invoice(linkedId, kind === 'foreign' ? 'tenant-b' : 'tenant-a', 'incoming'),
+        issue_date: '2025-12-31',
+        ksef_environment: kind === 'unknown' ? null : 'test',
+      });
+    }
+    tables.expenses.push({
+      id: 'ambiguous', tenant_id: 'tenant-a', source: 'ksef_inbox',
+      ksef_invoice_id: kind === 'unlinked' ? null : linkedId,
+      issue_date: '2026-01-10', is_deductible: true,
+    });
+    await expect(fetchInvoicesForExport(exportParams)).rejects.toThrow(/KSeF expense/);
+  });
+
   it('issued-only export does not read expenses at all', async () => {
     const data = await fetchInvoicesForExport({ ...exportParams, direction: 'issued' });
     expect(data.expenses).toEqual([]);
     expect(operations.some(op => op.table === 'expenses')).toBe(false);
+  });
+
+  it('can fetch costs for KPiR while omitting received invoice rows', async () => {
+    tables.expenses.push({
+      id: 'manual-cost', tenant_id: 'tenant-a', source: 'manual', ksef_invoice_id: null,
+      issue_date: '2026-01-10', is_deductible: true,
+    });
+    const data = await fetchInvoicesForExport({
+      ...exportParams, direction: 'issued', includeExpenses: true,
+    });
+    expect(data.receivedInvoices).toEqual([]);
+    expect(data.expenses.map(row => row.id)).toEqual(['manual-cost']);
   });
 
   it('preserves a same-tenant correction parent outside the exported date period', async () => {

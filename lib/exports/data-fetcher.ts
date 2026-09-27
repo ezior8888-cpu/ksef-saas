@@ -4,6 +4,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
+import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
 import type { KsefEnvironment } from '@/types/ksef';
 import type { Database, Json } from '@/types/database';
 
@@ -18,6 +19,8 @@ export interface FetchInvoicesParams {
   periodEnd: string;
   direction: 'issued' | 'received' | 'both';
   includeCorrections?: boolean;
+  /** KPiR/JPK_V7M need deductible costs even when received invoices are omitted. */
+  includeExpenses?: boolean;
 }
 
 /**
@@ -65,6 +68,7 @@ export async function fetchInvoicesForExport(
     params.direction === 'issued' || params.direction === 'both';
   const needReceived =
     params.direction === 'received' || params.direction === 'both';
+  const needExpenses = params.includeExpenses ?? needReceived;
 
   await assertAcceptedInvoiceEnvironmentComplete(supabase, {
     tenantId: params.tenantId,
@@ -121,8 +125,8 @@ export async function fetchInvoicesForExport(
   const [issuedInvoices, receivedInvoices, expenses] = await Promise.all([
     mapRowsToJpkInvoices(supabase, issuedRows, params.tenantId, environment),
     mapRowsToJpkInvoices(supabase, receivedRows, params.tenantId, environment),
-    needReceived
-      ? fetchExpensesForExport(supabase, params)
+    needExpenses
+      ? fetchExpensesForExport(supabase, params, environment)
       : Promise.resolve<ExportExpense[]>([]),
   ]);
 
@@ -139,13 +143,17 @@ const EXPENSE_PAGE = 1000;
 async function fetchExpensesForExport(
   supabase: ReturnType<typeof createAdminClient>,
   params: FetchInvoicesParams,
+  environment: KsefEnvironment,
 ): Promise<ExportExpense[]> {
-  const out: ExportExpense[] = [];
+  const rows: Array<Record<string, unknown> & {
+    source: unknown;
+    ksef_invoice_id: unknown;
+  }> = [];
   for (let from = 0; ; from += EXPENSE_PAGE) {
     const { data, error } = await supabase
       .from('expenses')
       .select(
-        'id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, ' +
+        'id, source, ksef_invoice_id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, ' +
           'net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label',
       )
       .eq('tenant_id', params.tenantId)
@@ -157,27 +165,32 @@ async function fetchExpensesForExport(
       .range(from, from + EXPENSE_PAGE - 1);
     if (error) throw new Error(`expenses: ${error.message}`);
 
-    const page = (data ?? []) as unknown as Array<Record<string, unknown>>;
-    for (const row of page) {
-      out.push({
-        id: String(row.id),
-        issueDate: String(row.issue_date),
-        documentNumber: typeof row.document_number === 'string' ? row.document_number : '',
-        documentType: typeof row.document_type === 'string' ? row.document_type : 'invoice',
-        sellerName: typeof row.seller_name === 'string' ? row.seller_name : '',
-        sellerNip: typeof row.seller_nip === 'string' && row.seller_nip.trim() ? row.seller_nip.trim() : null,
-        sellerAddress: typeof row.seller_address === 'string' ? row.seller_address : null,
-        netAmount: Number(row.net_amount ?? 0),
-        vatAmount: Number(row.vat_amount ?? 0),
-        grossAmount: Number(row.gross_amount ?? 0),
-        vatDeductibleAmount: Number(row.vat_deductible_amount ?? 0),
-        kpirColumn: typeof row.kpir_column === 'string' ? row.kpir_column : null,
-        categoryLabel: typeof row.category_label === 'string' ? row.category_label : null,
-      });
-    }
+    const page = (data ?? []) as unknown as typeof rows;
+    rows.push(...page);
     if (page.length < EXPENSE_PAGE) break;
   }
-  return out;
+
+  const eligible = await filterExpensesForKsefEnvironment(
+    supabase,
+    params.tenantId,
+    environment,
+    rows,
+  );
+  return eligible.map((row) => ({
+    id: String(row.id),
+    issueDate: String(row.issue_date),
+    documentNumber: typeof row.document_number === 'string' ? row.document_number : '',
+    documentType: typeof row.document_type === 'string' ? row.document_type : 'invoice',
+    sellerName: typeof row.seller_name === 'string' ? row.seller_name : '',
+    sellerNip: typeof row.seller_nip === 'string' && row.seller_nip.trim() ? row.seller_nip.trim() : null,
+    sellerAddress: typeof row.seller_address === 'string' ? row.seller_address : null,
+    netAmount: Number(row.net_amount ?? 0),
+    vatAmount: Number(row.vat_amount ?? 0),
+    grossAmount: Number(row.gross_amount ?? 0),
+    vatDeductibleAmount: Number(row.vat_deductible_amount ?? 0),
+    kpirColumn: typeof row.kpir_column === 'string' ? row.kpir_column : null,
+    categoryLabel: typeof row.category_label === 'string' ? row.category_label : null,
+  }));
 }
 
 async function fetchInvoiceRows(
