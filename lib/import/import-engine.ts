@@ -5,6 +5,7 @@
 
 import { createAdminClient } from '@/lib/supabase/server';
 import type { Json } from '@/types/database';
+import type { KsefEnvironment } from '@/types/ksef';
 import type { BuyerParty, PaymentInfo, SellerParty } from '@/types/invoice';
 import type { ParsedInvoice, ParsedLine, ParsedParty } from './fa3-parser';
 
@@ -20,6 +21,8 @@ export interface ImportEngineParams {
    * Historia z KSeF — zwykle `accepted` (faktury już w systemie KSeF).
    */
   invoiceKsefStatus?: string | null;
+  /** Required provenance when importing invoices already accepted by KSeF. */
+  ksefEnvironment?: KsefEnvironment;
 }
 
 export interface ImportEngineResult {
@@ -35,6 +38,10 @@ type AdminSupabase = ReturnType<typeof createAdminClient>;
 export async function processImportedInvoices(
   params: ImportEngineParams,
 ): Promise<ImportEngineResult> {
+  const invoiceKsefStatus = params.invoiceKsefStatus ?? 'draft';
+  if (invoiceKsefStatus === 'accepted' && !params.ksefEnvironment) {
+    throw new Error('Accepted KSeF import requires verified environment provenance');
+  }
   const supabase = createAdminClient();
   const warnings: string[] = [];
 
@@ -65,7 +72,8 @@ export async function processImportedInvoices(
     params.source,
     params.importJobId,
     invoiceDirection,
-    params.invoiceKsefStatus ?? 'draft',
+    invoiceKsefStatus,
+    params.ksefEnvironment ?? null,
     warnings,
   );
 
@@ -332,6 +340,7 @@ async function insertInvoices(
   importJobId: string,
   invoiceDirection: 'outgoing' | 'incoming',
   invoiceKsefStatus: string,
+  ksefEnvironment: KsefEnvironment | null,
   warnings: string[],
 ): Promise<number> {
   if (invoices.length === 0) return 0;
@@ -431,6 +440,7 @@ async function insertInvoices(
         direction: invoiceDirection,
         internal_number: num,
         ksef_status: invoiceKsefStatus,
+        ksef_environment: ksefEnvironment,
         ksef_accepted_at: acceptedNow,
         ksef_number: ksefNorm ?? null,
         invoice_kind: invoiceKind,

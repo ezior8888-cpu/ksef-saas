@@ -10,6 +10,7 @@ import 'server-only';
 
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { KsefEnvironment } from '@/types/ksef';
 
 // Osobno, pod importami typów: wydanie 25.09 dokłada 'server-only' i
@@ -199,43 +200,62 @@ export async function getDbStats(): Promise<DbStats> {
 // ─── 4. Offline queue snapshot ────────────────────────────────────────
 
 export interface OfflineQueueSnapshot {
+  /** Queued rows for the configured KSeF environment. */
   pending: number;
   failed: number;
   oldestDeadline: string | null;
+  blockedByEnvironment: number;
+  nearestBlockedDeadline: string | null;
 }
 
 export async function getOfflineQueueSnapshot(): Promise<OfflineQueueSnapshot> {
   await requireAdmin();
+  const environment = requireConfiguredKsefEnvironment();
+  const blockedFilter = 'ksef_environment.is.null,ksef_environment.neq.' + environment;
   const supabase = createAdminClient();
-
-  const [pendingRes, failedRes, oldestRes] = await Promise.all([
-    supabase
-      .from('ksef_offline_queue')
-      .select('*', { count: 'exact', head: true })
-      .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]),
-    supabase
-      .from('ksef_offline_queue')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'failed'),
-    supabase
-      .from('ksef_offline_queue')
+  const [pendingRes, failedRes, oldestRes, blockedRes, blockedDeadlineRes] = await Promise.all([
+    supabase.from('ksef_offline_queue')
+      .select('id', { count: 'exact', head: true })
+      .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES])
+      .eq('ksef_environment', environment),
+    supabase.from('ksef_offline_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'failed').eq('ksef_environment', environment),
+    supabase.from('ksef_offline_queue')
       .select('deadline')
       .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES])
-      .order('deadline', { ascending: true })
-      .limit(1)
-      .maybeSingle(),
+      .eq('ksef_environment', environment)
+      .order('deadline', { ascending: true }).limit(1).maybeSingle(),
+    supabase.from('ksef_offline_queue')
+      .select('id', { count: 'exact', head: true })
+      .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]).or(blockedFilter),
+    supabase.from('ksef_offline_queue')
+      .select('deadline')
+      .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]).or(blockedFilter)
+      .order('deadline', { ascending: true }).limit(1).maybeSingle(),
   ]);
-
-  // Błąd zapytania to NIE zero. Do 25.09 panel pokazywał tu zawsze 0,
-  // bo pytał o status, którego enum nie ma — i nikt nie widział, że liczba
-  // jest fałszywa.
-  for (const res of [pendingRes, failedRes, oldestRes]) {
-    if (res.error) throw new Error(`kolejka Offline24: ${res.error.message}`);
+  // Failed queries are not an empty queue. Keep unknown provenance visible to
+  // the operator rather than mixing another KSeF environment into the count.
+  if (pendingRes.error || failedRes.error || oldestRes.error ||
+      blockedRes.error || blockedDeadlineRes.error ||
+      typeof pendingRes.count !== 'number' ||
+      typeof failedRes.count !== 'number' ||
+      typeof blockedRes.count !== 'number') {
+    throw pendingRes.error ?? failedRes.error ?? oldestRes.error ??
+      blockedRes.error ?? blockedDeadlineRes.error ??
+      new Error('Offline24 queue snapshot unavailable');
   }
-
+  if (pendingRes.count > 0 && !oldestRes.data?.deadline) {
+    throw new Error('Open Offline24 deadline unavailable');
+  }
+  if (blockedRes.count > 0 && !blockedDeadlineRes.data?.deadline) {
+    throw new Error('Blocked Offline24 deadline unavailable');
+  }
   return {
-    pending: pendingRes.count ?? 0,
-    failed: failedRes.count ?? 0,
+    pending: pendingRes.count,
+    failed: failedRes.count,
     oldestDeadline: oldestRes.data?.deadline ?? null,
+    blockedByEnvironment: blockedRes.count,
+    nearestBlockedDeadline: blockedDeadlineRes.data?.deadline ?? null,
   };
 }

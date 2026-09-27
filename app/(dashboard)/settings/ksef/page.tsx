@@ -9,7 +9,7 @@ import { getPageContext } from '@/lib/supabase/page-context';
 export const dynamic = 'force-dynamic';
 
 export default async function KsefSettingsPage() {
-  const { supabase, tenantId } = await getPageContext();
+  const { supabase, tenantId, role } = await getPageContext();
 
   const { data: tenant } = await supabase
     .from('tenants')
@@ -125,11 +125,23 @@ export default async function KsefSettingsPage() {
         <div className="rounded-2xl bg-blue-500/5 border border-blue-500/20 p-4 flex items-start gap-3">
           <Lock className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
           <p className="text-sm text-foreground leading-relaxed">
-            Certyfikat i klucz prywatny są szyfrowane AES-256-GCM i przechowywane
-            wyłącznie we Frankfurcie (RODO).
+            Certyfikat i klucz prywatny są szyfrowane AES-256-GCM przed zapisem
+            w bazie. Ich zmianę zatwierdza właściciel po weryfikacji dwuetapowej.
           </p>
         </div>
-        <CertificateUpload />
+        {role === 'owner' ? (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Do zmiany certyfikatu potrzebujesz potwierdzonego logowania dwuetapowego.
+              <Link href="/settings/security" className="underline ml-1">Ustaw 2FA</Link>
+            </p>
+            <CertificateUpload />
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Certyfikat KSeF może zmienić wyłącznie właściciel organizacji.
+          </p>
+        )}
       </div>
 
       <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8 space-y-4">

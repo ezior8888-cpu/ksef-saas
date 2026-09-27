@@ -17,6 +17,7 @@ import {
 
 import type { KsefAuth } from './auth';
 import { submitInvoice } from './submit';
+import { requireMatchingKsefEnvironment } from './claim-environment';
 
 /**
  * FULL FLOW: od modelu domenowego faktury do numeru KSeF.
@@ -53,6 +54,7 @@ export async function submitInvoiceFullFlow(
     | { finalData: FinalInvoiceData; advanceSettlementRows: AdvanceInvoiceSettlementRow[] }
     | null,
 ): Promise<FullSubmitResult> {
+  const configuredEnv = requireMatchingKsefEnvironment(env);
   await requireKsefVerificationForBackgroundJob(tenantId);
 
   // 0. Korekta/zaliczka/rozliczenie bez swoich danych zbudowałyby się jako
@@ -111,7 +113,7 @@ export async function submitInvoiceFullFlow(
   // 4. Wysyłka do KSeF (rate-limited, z enkrypcją i auto-close sesji).
   //    `auditContext` propaguje się do każdego `ksefFetch` w środku — dzięki
   //    temu każdy request do MF wpisuje się do `audit_logs` (Faza 23 sekcja 3).
-  const submitResult = await submitInvoice(xml, auth, env, {
+  const submitResult = await submitInvoice(xml, auth, configuredEnv, {
     tenantId,
     invoiceId,
   });

@@ -6,14 +6,17 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { createClient } from '@/lib/supabase/server';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
   correctionInvoiceSchema,
+  invoiceLineSchema,
   type CorrectionInvoiceSchemaIn,
   type InvoiceLineSchema,
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
-import { calculateLineItem, calculateInvoiceTotals } from '@/lib/xml/invoice-calculator';
+import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
+import { calculateLineItem, calculateInvoiceTotals, roundToCents } from '@/lib/xml/invoice-calculator';
 import type { Invoice, InvoiceLineItem, BuyerParty, PaymentMethod, SellerParty } from '@/types/invoice';
 import type { BuyerB2B, BuyerData, CorrectionInvoiceData, InvoiceLine, SellerData } from '@/types/invoice-types';
 
@@ -101,11 +104,11 @@ function vatRateFromDbForCorrectionLine(raw: unknown): InvoiceLineSchema['vatRat
     case 'np':
       return s;
     default:
-      return '23';
+      throw new Error('Faktura pierwotna ma stawkę VAT nieobsługiwaną w korekcie. Wymagane ręczne uzgodnienie.');
   }
 }
 
-function buyerDataFromParty(bp: BuyerParty): BuyerData {
+function buyerDataFromParty(bp: BuyerParty): BuyerB2B {
   if (bp.nip) {
     const b: BuyerB2B = {
       type: 'b2b',
@@ -151,25 +154,24 @@ async function fetchParentInvoiceLines(
     throw new Error('Brak pozycji na fakturze pierwotnej lub błąd odczytu.');
   }
 
-  return data.map((row) => ({
-    name: row.name ?? '',
-    unit: row.unit ?? 'szt',
-    quantity: Number(row.quantity) || 0,
-    unitPriceNet: Number(row.unit_price_net) || 0,
-    vatRate: vatRateFromDbForCorrectionLine(row.vat_rate),
-  }));
-}
-
-/** Uzupełnia `linesBefore` dla typu cancellation, jeśli użytkownik nie załączył tabeli. */
-async function augmentCancellationLines(
-  supabase: SupabaseClient,
-  data: CorrectionInvoiceSchemaIn,
-): Promise<CorrectionInvoiceSchemaIn> {
-  if (data.correctionType !== 'cancellation') return data;
-  if (data.linesBefore?.length) return data;
-
-  const lines = await fetchParentInvoiceLines(supabase, data.parentInvoiceId);
-  return { ...data, linesBefore: lines };
+  return data.map((row) => {
+    if (row.quantity == null || row.unit_price_net == null ||
+        !Number.isFinite(Number(row.quantity)) ||
+        !Number.isFinite(Number(row.unit_price_net))) {
+      throw new Error('Niepełne kwoty pozycji faktury pierwotnej; wymagane ręczne uzgodnienie.');
+    }
+    const parsed = invoiceLineSchema.safeParse({
+      name: row.name,
+      unit: row.unit,
+      quantity: Number(row.quantity),
+      unitPriceNet: Number(row.unit_price_net),
+      vatRate: vatRateFromDbForCorrectionLine(row.vat_rate),
+    });
+    if (!parsed.success) {
+      throw new Error('Niepoprawne pozycje faktury pierwotnej; wymagane ręczne uzgodnienie.');
+    }
+    return parsed.data;
+  });
 }
 
 function buildCorrectionEnvelope(parsed: CorrectionInvoiceSchemaIn): CorrectionInvoiceData {
@@ -227,22 +229,14 @@ function linesToStoredItems(correctionData: CorrectionInvoiceData): InvoiceLineI
 
   if (correctionType === 'amount_change' && correctionData.amountChange) {
     const ac = correctionData.amountChange;
-    const pct =
-      Math.abs(ac.netDelta) > 1e-9 ? Math.round((ac.vatDelta / ac.netDelta) * 100) : null;
-    const rate =
-      pct === 8 ? '8' : pct === 5 ? '5' : pct === 0 ? '0' : '23';
+    const rate = resolveAmountChangeVatRate(ac);
     const line: InvoiceLine = {
       name: ac.description,
       unit: 'szt.',
       quantity: 1,
       unitPriceNet: ac.netDelta,
-      vatRate: rate as InvoiceLine['vatRate'],
+      vatRate: rate,
     };
-    const calc = calculateLineItem({
-      quantity: 1,
-      unitPriceNet: line.unitPriceNet,
-      vatRate: line.vatRate,
-    });
     return [
       {
         ordinal: 1,
@@ -363,7 +357,6 @@ async function insertCorrection(
   lines: InvoiceLineItem[],
 ): Promise<CorrectionActionResult> {
   const ghost = ghostInvoice(correctionEnvelope, lines);
-  const totals = calculateCorrectionTotals(correctionEnvelope);
 
   const { data: inserted, error } = await supabase
     .from('invoices')
@@ -385,9 +378,9 @@ async function insertCorrection(
       payment_data: ghost.payment,
       payment_due_date: ghost.payment.dueDate,
       currency: 'PLN',
-      net_total: totals.netAfter,
-      vat_total: totals.vatAfter,
-      gross_total: totals.grossAfter,
+      net_total: ghost.netTotal,
+      vat_total: ghost.vatTotal,
+      gross_total: ghost.grossTotal,
       notes: correctionEnvelope.notes ?? null,
       fa3_data: ghost,
     })
@@ -422,14 +415,111 @@ async function insertCorrection(
   return { success: true, invoiceId };
 }
 
+async function readAcceptedCorrectionParent(
+  supabase: SupabaseClient,
+  tenantId: string,
+  parentId: string,
+) {
+  const environment = requireConfiguredKsefEnvironment();
+  const { data: row, error } = await supabase
+    .from('invoices')
+    .select('id, tenant_id, issue_date, internal_number, ksef_number, net_total, vat_total, gross_total, seller_data, buyer_data')
+    .eq('id', parentId)
+    .eq('tenant_id', tenantId)
+    .eq('direction', 'outgoing')
+    .eq('invoice_kind', 'regular')
+    .eq('ksef_status', 'accepted')
+    .eq('ksef_environment', environment)
+    .maybeSingle();
+
+  if (error || !row?.id || !row.ksef_number?.trim()) {
+    throw new Error('Faktura pierwotna nie ma potwierdzonego numeru KSeF w bieżącym środowisku tej firmy.');
+  }
+  return row;
+}
+
 async function normalizePayload(
   supabase: SupabaseClient,
+  tenant: TenantSnap,
   raw: CorrectionInvoiceSchemaIn,
 ): Promise<CorrectionInvoiceSchemaIn | { error: string }> {
-  const augmented = await augmentCancellationLines(supabase, raw);
-  const parsed = correctionInvoiceSchema.safeParse(augmented);
+  const parsed = correctionInvoiceSchema.safeParse(raw);
   if (!parsed.success) return { error: zodIssuesMessage(parsed.error) };
-  return parsed.data;
+
+  // Server Actions can be invoked without the form. Never trust parent identifiers
+  // or invoice metadata supplied by the browser when building a legal KSeF XML.
+  const parent = await readAcceptedCorrectionParent(supabase, tenant.id, parsed.data.parentInvoiceId);
+  const parentNumber = parent.internal_number as string | null;
+  const parentIssueDate = parent.issue_date as string | null;
+  const parentKsefNumber = (parent.ksef_number as string | null) ?? null;
+  const seller = parent.seller_data as SellerParty | null;
+  const compactNip = (nip: string) => nip.replace(/\s+/g, '');
+  if (!parentNumber || !parentIssueDate || !parentKsefNumber?.trim() ||
+      parsed.data.parentInvoiceNumber !== parentNumber ||
+      parsed.data.parentInvoiceIssueDate !== parentIssueDate ||
+      (parsed.data.parentKsefNumber?.trim() || null) !== parentKsefNumber ||
+      !seller?.nip ||
+      compactNip(seller.nip) !== compactNip(tenant.nip) ||
+      compactNip(parsed.data.seller.nip) !== compactNip(seller.nip)) {
+    return { error: 'Dane faktury pierwotnej zmieniły się lub nie należą do tej firmy. Wybierz ją ponownie.' };
+  }
+
+  // MVP corrections change amounts or lines, never the legal buyer identity.
+  const originalBuyer = parent.buyer_data as BuyerParty | null;
+  if (!originalBuyer?.nip) {
+    return { error: 'Korekta wymaga zweryfikowanego nabywcy faktury pierwotnej.' };
+  }
+  const authoritativeBuyer = buyerDataFromParty(originalBuyer);
+  if (parsed.data.buyer.type !== 'b2b' ||
+      parsed.data.buyer.nip.replace(/\s+/g, '') !== authoritativeBuyer.nip ||
+      parsed.data.buyer.name !== authoritativeBuyer.name ||
+      parsed.data.buyer.address.countryCode !== authoritativeBuyer.address.countryCode ||
+      parsed.data.buyer.address.addressLine1 !== authoritativeBuyer.address.addressLine1 ||
+      parsed.data.buyer.address.addressLine2 !== authoritativeBuyer.address.addressLine2) {
+    return { error: 'Korekta musi wskazywać nabywcę zaakceptowanej faktury pierwotnej.' };
+  }
+
+  let linesBefore = parsed.data.linesBefore;
+  if (parsed.data.correctionType === 'cancellation' ||
+      parsed.data.correctionType === 'before_after') {
+    const original = await fetchParentInvoiceLines(supabase, parent.id as string);
+    const storedRaw = [parent.net_total, parent.vat_total, parent.gross_total];
+    const stored = storedRaw.map(Number);
+    const calculated = original.map((line, index) => ({
+      ...line,
+      ordinal: index + 1,
+      ...calculateLineItem(line),
+    }));
+    const totals = calculateInvoiceTotals(calculated);
+    if (storedRaw.some((amount) => amount == null) ||
+        stored.some((amount) => !Number.isFinite(amount)) ||
+        roundToCents(stored[0]!) !== totals.netTotal ||
+        roundToCents(stored[1]!) !== totals.vatTotal ||
+        roundToCents(stored[2]!) !== totals.grossTotal) {
+      return { error: 'Pozycje faktury pierwotnej nie zgadzają się z zaakceptowaną kwotą; wymagane ręczne uzgodnienie.' };
+    }
+    const supplied = parsed.data.linesBefore;
+    if (supplied?.length && (
+      supplied.length !== original.length ||
+      supplied.some((line, index) => {
+        const source = original[index]!;
+        return line.name !== source.name || line.unit !== source.unit ||
+          line.quantity !== source.quantity || line.unitPriceNet !== source.unitPriceNet ||
+          line.vatRate !== source.vatRate;
+      })
+    )) {
+      return { error: 'Korekta musi odzwierciedlać pozycje zaakceptowanej faktury pierwotnej.' };
+    }
+    linesBefore = original;
+  }
+  return {
+    ...parsed.data,
+    linesBefore,
+    buyer: authoritativeBuyer,
+    parentInvoiceNumber: parentNumber,
+    parentInvoiceIssueDate: parentIssueDate,
+    parentKsefNumber: parentKsefNumber ?? undefined,
+  };
 }
 
 export async function getCorrectionParentContextAction(parentId: string): Promise<
@@ -449,17 +539,7 @@ export async function getCorrectionParentContextAction(parentId: string): Promis
   try {
     const { supabase, tenant } = await tenantContext();
 
-    const { data: row, error } = await supabase
-      .from('invoices')
-      .select('id, tenant_id, issue_date, internal_number, ksef_number, gross_total, seller_data, buyer_data')
-      .eq('id', parentId)
-      .eq('tenant_id', tenant.id)
-      .eq('direction', 'outgoing')
-      .eq('invoice_kind', 'regular')
-      .eq('ksef_status', 'accepted')
-      .maybeSingle();
-
-    if (error || !row?.id) return { success: false, error: 'Nie znaleziono faktury pierwotnej.' };
+    const row = await readAcceptedCorrectionParent(supabase, tenant.id, parentId);
 
     const sellerRow = row.seller_data as SellerParty | null;
     const buyerRow = row.buyer_data as BuyerParty | null;
@@ -489,7 +569,7 @@ export async function saveCorrectionDraftAction(
 ): Promise<CorrectionActionResult> {
   try {
     const { supabase, tenant, userId } = await tenantContext();
-    const normalized = await normalizePayload(supabase, raw);
+    const normalized = await normalizePayload(supabase, tenant, raw);
     if ('error' in normalized && typeof normalized.error === 'string') {
       return { success: false, error: normalized.error };
     }
@@ -518,8 +598,16 @@ export async function saveAndSendCorrectionAction(
   raw: CorrectionInvoiceSchemaIn,
 ): Promise<CorrectionActionResult> {
   try {
+    // Original XML and the cumulative state after earlier KOR are not yet
+    // independently proven. A draft is allowed; legal PROD submit is not.
+    if (requireConfiguredKsefEnvironment() === 'production') {
+      return {
+        success: false,
+        error: 'Wysyłka korekt w PROD jest wstrzymana do uzgodnienia oryginału i wcześniejszych korekt. Możesz zapisać szkic.',
+      };
+    }
     const { supabase, tenant, userId } = await tenantContext();
-    const normalized = await normalizePayload(supabase, raw);
+    const normalized = await normalizePayload(supabase, tenant, raw);
     if ('error' in normalized && typeof normalized.error === 'string') {
       return { success: false, error: normalized.error };
     }

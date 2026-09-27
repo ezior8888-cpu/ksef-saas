@@ -10,6 +10,7 @@ import { getVerifiedUserContext } from '@/lib/auth/verified-user';
 import { sendEmail } from '@/lib/email/send';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
+import { hasConfiguredKsefProof } from '@/lib/ksef/claim-environment';
 import {
   ActionAuthError,
   requireOrgRole,
@@ -241,14 +242,14 @@ export async function createOrganizationAction(
   const admin = createAdminClient();
   const { data: nipMatches } = await admin
     .from('tenants')
-    .select('id, ksef_verified_at')
+    .select('id, ksef_verified_at, ksef_verified_environment')
     .eq('nip', company.nip)
     .limit(5);
 
   const duplicates = nipMatches ?? [];
   const nipDuplicate = duplicates.length > 0;
   const ksefVerifiedDuplicate = duplicates.some(
-    (t) => t.ksef_verified_at !== null,
+    (t) => hasConfiguredKsefProof(t.ksef_verified_at, t.ksef_verified_environment),
   );
 
   const addressLine1 = `${company.street} ${company.buildingNumber}${

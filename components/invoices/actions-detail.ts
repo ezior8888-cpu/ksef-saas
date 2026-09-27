@@ -1,5 +1,6 @@
 'use server';
 
+import { isDeepStrictEqual } from 'node:util';
 import { revalidatePath } from 'next/cache';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 
@@ -12,19 +13,12 @@ import { createClient } from '@/lib/supabase/server';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
 import { specialInvoiceResendMessage } from '@/lib/ksef/special-invoice-data';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
 import { sendInvoiceEmail } from '@/lib/email/send';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
-import type {
-  Address,
-  BuyerParty,
-  Invoice,
-  InvoiceLineItem,
-  PaymentInfo,
-  SellerParty,
-  VatRate,
-} from '@/types/invoice';
+import type { Invoice } from '@/types/invoice';
 
 // ═══════════════════════════════════════════════════════════════
 // downloadInvoiceXmlAction
@@ -132,8 +126,7 @@ export type ResendResult =
  * Ponawia wysyłkę faktury do KSeF. Działa tylko dla statusów
  * 'rejected' i 'failed' (status guard po stronie UI - `InvoiceActions`).
  *
- * Odtwarzamy pełny obiekt `Invoice` z DB (snapshot w `fa3_data` lub
- * rekonstrukcja z `seller_data/buyer_data/payment_data` + line_items),
+ * Wysyłamy dokładny snapshot `fa3_data` po sprawdzeniu kolumn nagłówka,
  * resetujemy status na 'queued' i publikujemy event `invoice/submit.requested`.
  * Dalszy flow taki sam jak przy pierwszej wysyłce.
  */
@@ -155,6 +148,7 @@ export async function resendInvoiceAction(
         tenant_id,
         internal_number,
         invoice_type,
+        invoice_kind,
         issue_date,
         sale_date,
         seller_data,
@@ -166,17 +160,6 @@ export async function resendInvoiceAction(
         gross_total,
         ksef_status,
         fa3_data,
-        invoice_line_items(
-          ordinal,
-          name,
-          unit,
-          quantity,
-          unit_price_net,
-          vat_rate,
-          net_amount,
-          vat_amount,
-          gross_amount
-        ),
         tenants(nip, ksef_credentials_encrypted)
       `
       )
@@ -193,15 +176,52 @@ export async function resendInvoiceAction(
         error: 'Ponowną wysyłkę można uruchomić tylko dla odrzuconych/błędnych faktur.',
       };
     }
+    // This path rebuilds only the ordinary VAT payload. Replaying KOR/ZAL/ROZ
+    // here would silently emit a different legal document than the original.
+    if (inv.invoice_kind !== 'regular') {
+      return {
+        success: false,
+        error: 'Ponowna wysyłka tego typu faktury wymaga ręcznego uzgodnienia i dedykowanej ścieżki.',
+      };
+    }
 
     // Korekta/zaliczka/rozliczenie potrzebują danych, których nie ma w bazie
     // (patrz lib/ksef/special-invoice-data.ts). Mówimy od razu, zamiast
     // przestawiać status na 'queued' dla joba, który i tak odmówi.
-    const specialMessage = specialInvoiceResendMessage(
-      (inv.invoice_type as string | null) ?? (inv.fa3_data as Invoice | null)?.type,
-    );
+    const storedType = inv.invoice_type as string | null;
+    const payloadType = (inv.fa3_data as Invoice | null)?.type;
+    const specialMessage = specialInvoiceResendMessage(storedType) ??
+      specialInvoiceResendMessage(payloadType);
     if (specialMessage) {
       return { success: false, error: specialMessage };
+    }
+    if ((storedType !== 'VAT' && storedType !== 'UPR') || payloadType !== storedType) {
+      return {
+        success: false,
+        error: 'Typ faktury w bazie i kopii XML jest niespójny; wymagane ręczne uzgodnienie.',
+      };
+    }
+    // The legal XML can contain line attributes absent from invoice_line_items
+    // (for example classificationCode). Rebuilding it would change the legal
+    // document while still reporting the resend as queued.
+    const snapshot = inv.fa3_data as Invoice | null;
+    if (!snapshot || !Array.isArray(snapshot.lines) || !snapshot.lines.length ||
+        !snapshot.seller || !snapshot.buyer || !snapshot.payment ||
+        snapshot.internalNumber !== inv.internal_number ||
+        snapshot.issueDate !== inv.issue_date ||
+        (snapshot.saleDate ?? null) !== (inv.sale_date ?? null) ||
+        !isDeepStrictEqual(snapshot.seller, inv.seller_data) ||
+        !isDeepStrictEqual(snapshot.buyer, inv.buyer_data) ||
+        !isDeepStrictEqual(snapshot.payment, inv.payment_data) ||
+        inv.net_total == null || inv.vat_total == null || inv.gross_total == null ||
+        snapshot.netTotal !== Number(inv.net_total) ||
+        snapshot.vatTotal !== Number(inv.vat_total) ||
+        snapshot.grossTotal !== Number(inv.gross_total) ||
+        (snapshot.notes ?? null) !== (inv.notes ?? null)) {
+      return {
+        success: false,
+        error: 'Kopia faktury i zapisane dane są niekompletne lub niespójne; wymagane ręczne uzgodnienie.',
+      };
     }
 
     const tenantRow = Array.isArray(inv.tenants) ? inv.tenants[0] : inv.tenants;
@@ -232,91 +252,15 @@ export async function resendInvoiceAction(
       throw e;
     }
 
-    // Preferujemy `fa3_data` (pełny snapshot zapisany przy save), a line-items
-    // tak czy inaczej ciągniemy z relacji na wypadek edycji pozycji w szkicu.
-    const snapshot = (inv.fa3_data as Invoice | null) ?? null;
-
-    const rawLines = (inv.invoice_line_items ?? []) as Array<{
-      ordinal: number;
-      name: string;
-      unit: string;
-      quantity: string | number;
-      unit_price_net: string | number;
-      vat_rate: string;
-      net_amount: string | number;
-      vat_amount: string | number;
-      gross_amount: string | number;
-    }>;
-
-    const lines: InvoiceLineItem[] = rawLines
-      .slice()
-      .sort((a, b) => a.ordinal - b.ordinal)
-      .map((l) => ({
-        ordinal: l.ordinal,
-        name: l.name,
-        unit: l.unit,
-        quantity: Number(l.quantity),
-        unitPriceNet: Number(l.unit_price_net),
-        netAmount: Number(l.net_amount),
-        vatRate: l.vat_rate as VatRate,
-        vatAmount: Number(l.vat_amount),
-        grossAmount: Number(l.gross_amount),
-      }));
-
-    const seller = (inv.seller_data ?? snapshot?.seller) as SellerParty | undefined;
-    const buyer = (inv.buyer_data ?? snapshot?.buyer) as BuyerParty | undefined;
-    const payment = (inv.payment_data ?? snapshot?.payment) as
-      | PaymentInfo
-      | undefined;
-
-    if (!seller || !buyer || !payment) {
-      return {
-        success: false,
-        error: 'Uszkodzony snapshot faktury - brak danych sprzedawcy/nabywcy/płatności.',
-      };
-    }
-
-    // Gwarantujemy wymagane pole address (SellerParty/BuyerParty typy).
-    const ensureAddress = (addr: Address | null | undefined): Address => ({
-      countryCode: addr?.countryCode ?? 'PL',
-      addressLine1: addr?.addressLine1 ?? '',
-      addressLine2: addr?.addressLine2 ?? '',
-    });
-
-    const rebuiltInvoice: Invoice = {
-      internalNumber: (inv.internal_number as string | null) ?? snapshot?.internalNumber ?? '',
-      type:
-        (inv.invoice_type as Invoice['type'] | null) ??
-        snapshot?.type ??
-        'VAT',
-      issueDate:
-        (inv.issue_date as string | null) ?? snapshot?.issueDate ?? '',
-      saleDate:
-        (inv.sale_date as string | null) ?? snapshot?.saleDate ?? undefined,
-      seller: {
-        ...seller,
-        address: ensureAddress(seller.address),
-      },
-      buyer: {
-        ...buyer,
-        address: ensureAddress(buyer.address),
-      },
-      lines,
-      netTotal: Number(inv.net_total ?? snapshot?.netTotal ?? 0),
-      vatTotal: Number(inv.vat_total ?? snapshot?.vatTotal ?? 0),
-      grossTotal: Number(inv.gross_total ?? snapshot?.grossTotal ?? 0),
-      payment,
-      notes: (inv.notes as string | null) ?? snapshot?.notes ?? undefined,
-    };
-
     await sendJobEvent({
       groupId: inv.tenant_id as string,
       name: 'invoice/submit.requested',
       data: {
         tenantId: inv.tenant_id as string,
         invoiceId,
-        invoice: rebuiltInvoice,
+        invoice: snapshot,
         nip: tenantNip,
+        environment: requireConfiguredKsefEnvironment(),
       },
     });
 

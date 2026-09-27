@@ -17,6 +17,7 @@ import {
 } from '@/lib/auth/ksef-verification-guard';
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
@@ -123,9 +124,37 @@ export async function enqueueKsefSubmitAfterDraft(
     return { ok: false, error: 'Nie można odczytać credentials KSeF.' };
   }
 
-  const env = (process.env.KSEF_ENV as 'test' | 'demo' | 'production' | undefined) ?? 'test';
+  const env = requireConfiguredKsefEnvironment();
+  if (auditKind === 'correction' && env === 'production') {
+    return {
+      ok: false,
+      error: 'Wysyłka korekt w PROD jest wstrzymana do uzgodnienia oryginału i wcześniejszych korekt. Dokument zapisano jako szkic.',
+    };
+  }
+  if (auditKind === 'final' && env === 'production') {
+    return {
+      ok: false,
+      error: 'Wysyłka faktury rozliczającej w PROD jest wstrzymana do czasu atomowego rozliczania zaliczek. Dokument zapisano jako szkic.',
+    };
+  }
 
   const health = await shouldUseOfflineMode(env);
+
+  if (health.offline && env === 'production') {
+    return {
+      ok: false,
+      error: 'KSeF jest niedostępny. Offline24 w PROD jest wstrzymany do zgodności kodów QR z MF; dokument zapisano jako szkic.',
+    };
+  }
+
+  // The Offline24 row stores only an invoice id. Its replay cannot reconstruct
+  // KOR/ZAL/ROZ-specific legal XML, so never report those drafts as queued.
+  if (health.offline && auditKind !== 'regular') {
+    return {
+      ok: false,
+      error: 'KSeF jest niedostępny. Dokument specjalny zapisano jako szkic; ponów wysyłkę po przywróceniu KSeF.',
+    };
+  }
 
   if (health.offline && decrypted.type === 'xades') {
     try {
@@ -170,6 +199,7 @@ export async function enqueueKsefSubmitAfterDraft(
         invoiceId,
         invoice,
         nip: nipNorm,
+        environment: env,
         correctionData,
         advanceData,
         finalData,

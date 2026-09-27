@@ -9,7 +9,8 @@ export type RateLimitBucket =
   | 'gdpr_request'
   | 'support_chat'
   | 'newsletter'
-  | 'reminder_preview';
+  | 'reminder_preview'
+  | 'ksef_certificate';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */

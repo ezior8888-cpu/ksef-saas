@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   exists: vi.fn(),
@@ -63,10 +63,12 @@ function kopia(type: InvoiceInput['type']) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv('KSEF_ENV', 'test');
   mocks.exists.mockResolvedValue(false);
   mocks.upload.mockResolvedValue({ storagePath: 'x.xml', sha256Hash: 'h' });
   mocks.submit.mockResolvedValue({ ksefNumber: 'K', acquisitionTimestamp: '2026-09-25T10:00:00Z' });
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('ponowna wysyłka dokumentów specjalnych z samej kopii', () => {
   it.each(['KOR', 'ZAL', 'ROZ'] as const)(

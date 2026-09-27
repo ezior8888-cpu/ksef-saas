@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   guard: vi.fn(),
@@ -82,6 +82,7 @@ function emptyQuery() {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv('KSEF_ENV', 'test');
   mocks.guard.mockResolvedValue(operator);
   mocks.from.mockImplementation(emptyQuery);
   mocks.rpc.mockImplementation(async (name: string) => ({
@@ -96,6 +97,7 @@ beforeEach(() => {
   });
   mocks.backup.mockResolvedValue(null);
 });
+afterEach(() => vi.unstubAllEnvs());
 
 function expectNoPrivilegedWork() {
   for (const mock of [
@@ -116,7 +118,7 @@ const readers = [
   { name: 'KSeF health history', read: () => getKsefHealthHistory('test'), expected: [] },
   { name: 'job statistics', read: () => getInngestJobStats(), expected: [] },
   { name: 'database statistics', read: () => getDbStats(), expected: { totalDatabaseBytes: 1024, tables: [] } },
-  { name: 'offline queue', read: () => getOfflineQueueSnapshot(), expected: { pending: 0, failed: 0, oldestDeadline: null } },
+  { name: 'offline queue', read: () => getOfflineQueueSnapshot(), expected: { pending: 0, failed: 0, oldestDeadline: null, blockedByEnvironment: 0, nearestBlockedDeadline: null } },
   { name: 'backup overview', read: () => getBackupOverview(), expected: { lastDaily: null, lastWeekly: null, hoursSinceLastSuccess: null, hasRecentFailure: false } },
 ];
 

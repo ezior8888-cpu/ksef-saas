@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { createClient } from '@/lib/supabase/server';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 import {
@@ -352,6 +353,10 @@ export async function saveFinalAction(raw: unknown): Promise<ActionResult> {
 
 export async function saveAndSendFinalAction(raw: unknown): Promise<ActionResult> {
   try {
+    // ROZ needs an atomic one-time claim per KSeF advance document before PROD.
+    if (requireConfiguredKsefEnvironment() === 'production') {
+      return { success: false, error: 'Wysyłka faktury rozliczającej w PROD jest wstrzymana do czasu wdrożenia atomowego rozliczania zaliczek.' };
+    }
     const { supabase, tenant, userId } = await tenantContext();
     const parsed = finalInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };

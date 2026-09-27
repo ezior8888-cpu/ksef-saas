@@ -1,6 +1,7 @@
 import { createAdminClient } from './server';
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
 import type { KsefAuth } from '@/lib/ksef/auth';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { Invoice } from '@/types/invoice';
 
 /**
@@ -37,15 +38,19 @@ function parseBytea(raw: unknown): Buffer {
 export async function getTenantKsefCredentials(
   tenantId: string,
 ): Promise<KsefAuth> {
+  const environment = requireConfiguredKsefEnvironment();
   const supabase = await createAdminClient();
 
   const { data, error } = await supabase
     .from('tenants')
-    .select('nip, ksef_credentials_encrypted')
+    .select('nip, ksef_credentials_encrypted, ksef_verified_at, ksef_verified_environment')
     .eq('id', tenantId)
     .single();
 
   if (error) throw new Error(`Tenant ${tenantId} not found: ${error.message}`);
+  if (!data.ksef_verified_at || data.ksef_verified_environment !== environment) {
+    throw new Error('KSeF NIP is not verified for configured environment');
+  }
   if (!data.ksef_credentials_encrypted) {
     throw new Error(
       `Tenant ${tenantId} nie ma skonfigurowanych credentials KSeF`,
@@ -54,10 +59,11 @@ export async function getTenantKsefCredentials(
 
   const encryptedBlob = parseBytea(data.ksef_credentials_encrypted);
   const decrypted = decryptCredentials(encryptedBlob);
+  if (decrypted.nip !== data.nip) {
+    throw new Error("KSeF credential NIP differs from verified NIP");
+  }
 
-  // NIP z DB może się różnić od NIP w zaszyfrowanych credentials (np. po zmianie
-  // firmy) - używamy tego z DB jako source-of-truth. Token/cert nie zawiera NIP
-  // w sposób kryptograficznie związany, więc to bezpieczne.
+  // Używamy NIP-u z bazy tylko po potwierdzeniu zgodności z szyfrogramem.
   switch (decrypted.type) {
     case 'xades':
       return {
@@ -166,6 +172,7 @@ export interface InvoiceStatusUpdates {
     | 'received'
     | 'failed';
   ksef_number?: string;
+  ksef_environment?: 'test' | 'demo' | 'production';
   submitted_to_ksef_at?: string;
   ksef_accepted_at?: string;
   xml_storage_path?: string;

@@ -9,6 +9,7 @@ import {
   importKsefHistoryRequested,
   } from '@/lib/inngest/client';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { uploadImportFile } from '@/lib/import/file-storage';
 import { ActionAuthError, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 
@@ -115,6 +116,7 @@ export async function startMagicImportAction(
         dateFrom,
         dateTo,
         direction,
+        environment: requireConfiguredKsefEnvironment(),
       }),
     });
   } catch (e) {

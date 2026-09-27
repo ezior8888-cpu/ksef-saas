@@ -11,7 +11,7 @@ import {
   type InngestJobStat,
 } from '@/lib/admin/system';
 import { cn } from '@/lib/utils';
-import type { KsefEnvironment } from '@/types/ksef';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 
 import { BackupStatusCard } from './_components/backup-status-card';
 import { HealthTimeline } from './_components/health-timeline';
@@ -19,14 +19,6 @@ import { HealthTimeline } from './_components/health-timeline';
 export const dynamic = 'force-dynamic';
 
 const WINDOW_HOURS = 24;
-
-function currentKsefEnv(): KsefEnvironment {
-  const env = process.env.KSEF_ENV ?? 'test';
-  if (env === 'production' || env === 'test' || env === 'demo') {
-    return env;
-  }
-  return 'test';
-}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -38,7 +30,7 @@ function formatBytes(bytes: number): string {
 export default async function AdminSystemPage() {
   await requireAdmin();
 
-  const env = currentKsefEnv();
+  const env = requireConfiguredKsefEnvironment();
 
   const [healthHistory, jobStats, dbStats, offline, backups] = await Promise.all([
     getKsefHealthHistory(env, WINDOW_HOURS),
@@ -75,6 +67,8 @@ export default async function AdminSystemPage() {
           pending={offline.pending}
           failed={offline.failed}
           oldestDeadline={offline.oldestDeadline}
+          blockedByEnvironment={offline.blockedByEnvironment}
+          nearestBlockedDeadline={offline.nearestBlockedDeadline}
         />
         <Kpi
           icon={Database}
@@ -180,12 +174,16 @@ function OfflineQueueCard({
   pending,
   failed,
   oldestDeadline,
+  blockedByEnvironment,
+  nearestBlockedDeadline,
 }: {
   pending: number;
   failed: number;
   oldestDeadline: string | null;
+  blockedByEnvironment: number;
+  nearestBlockedDeadline: string | null;
 }) {
-  const hasIssue = pending > 0 || failed > 0;
+  const hasIssue = pending > 0 || failed > 0 || blockedByEnvironment > 0;
   return (
     <div
       className={cn(
@@ -214,7 +212,12 @@ function OfflineQueueCard({
       <p className="mt-1 text-xs text-muted-foreground">
         {oldestDeadline
           ? `Najstarszy deadline: ${new Date(oldestDeadline).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
-          : 'Brak zaległości — wszystko płynie'}
+          : 'Brak aktywnych wpisów kolejki'}
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {blockedByEnvironment > 0
+          ? `${blockedByEnvironment} wpisów wymaga uzgodnienia środowiska; najbliższy deadline: ${nearestBlockedDeadline ?? 'nieznany'}`
+          : 'Brak wpisów z niepotwierdzonym środowiskiem'}
       </p>
     </div>
   );

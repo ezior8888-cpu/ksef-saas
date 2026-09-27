@@ -23,7 +23,7 @@ import {
 } from '@/lib/flo/functions/inbox-cursor';
 import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/server';
-import type { KsefEnvironment } from '@/types/ksef';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 
 /**
  * Polling skrzynki KSeF - dwa joby:
@@ -49,8 +49,6 @@ import type { KsefEnvironment } from '@/types/ksef';
  * pełnym Invoice po parsowaniu XML.
  */
 
-const KSEF_ENV: KsefEnvironment =
-  (process.env.KSEF_ENV as KsefEnvironment) ?? 'test';
 
 /** Numer KSeF ma ~35 znaków — 100 w `in.(…)` to ~3,6 KB adresu. */
 export const KSEF_NUMBERS_PER_QUERY = 100;
@@ -64,15 +62,16 @@ export const KSEF_NUMBERS_PER_QUERY = 100;
  * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
  */
 export async function runInboxPolling({ step, logger }: JobContext) {
-    // "Aktywny" = ma uzupełnione credentials. Schemat `tenants` z 00001 nie ma
-    // kolumny `is_active` - używamy `ksef_credentials_encrypted IS NOT NULL`
-    // jako sygnatury "tenant skończył onboarding KSeF".
+    const env = requireConfiguredKsefEnvironment();
+    // Polling wymaga certyfikatu oraz znacznika zweryfikowanego NIP-u.
     const tenants = await step.run('list-active-tenants', async () => {
       const supabase = await createAdminClient();
       const { data, error } = await supabase
         .from('tenants')
         .select('id, nip')
-        .not('ksef_credentials_encrypted', 'is', null);
+        .not('ksef_credentials_encrypted', 'is', null)
+        .not('ksef_verified_at', 'is', null)
+        .eq('ksef_verified_environment', env);
 
       if (error) throw new Error(`Failed to list tenants: ${error.message}`);
       return data ?? [];
@@ -90,6 +89,7 @@ export async function runInboxPolling({ step, logger }: JobContext) {
       inboxPollTenant.create({
         tenantId: tenant.id,
         nip: tenant.nip,
+        environment: env,
       }),
     );
 
@@ -118,6 +118,10 @@ export const inboxPollingJob = inngest.createFunction(
  */
 export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant.create>[0], { step, logger }: JobContext) {
     const { tenantId, nip } = data;
+    const env = requireConfiguredKsefEnvironment();
+    if (data.environment !== env) {
+      throw new Error('KSeF inbox event environment does not match configured environment');
+    }
 
     // Okno czasowe: ostatnie 48h. Cron chodzi co 15min, więc teoretycznie
     // wystarczyłby bufor ~2h, ale 48h daje nam samonaprawę przy outage
@@ -140,7 +144,7 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
         credentials,
         dateFrom,
         dateTo,
-        KSEF_ENV,
+        env,
         { tenantId },
         {
           resumeToken: cursor.continuationToken ?? undefined,
@@ -245,6 +249,7 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
         internal_number: inv.invoiceNumber,
         ksef_number: inv.ksefNumber,
         ksef_status: 'accepted',
+        ksef_environment: env,
         ksef_accepted_at: inv.acquisitionDate,
         invoice_type: 'VAT',
         issue_date: inv.issueDate,

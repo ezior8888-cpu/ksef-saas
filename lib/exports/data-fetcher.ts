@@ -2,6 +2,9 @@
 // Pobieranie danych z DB do eksportów (uniform interface)
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
+import type { KsefEnvironment } from '@/types/ksef';
 import type { Database, Json } from '@/types/database';
 
 import type { JpkFaInputData, JpkInvoice, JpkInvoiceLine } from './jpk-fa-generator';
@@ -26,12 +29,22 @@ export interface FetchedInvoiceData {
 export async function fetchInvoicesForExport(
   params: FetchInvoicesParams,
 ): Promise<FetchedInvoiceData> {
+  const environment = requireConfiguredKsefEnvironment();
   const supabase = createAdminClient();
 
   const needIssued =
     params.direction === 'issued' || params.direction === 'both';
   const needReceived =
     params.direction === 'received' || params.direction === 'both';
+
+  await assertAcceptedInvoiceEnvironmentComplete(supabase, {
+    tenantId: params.tenantId,
+    periodStart: params.periodStart,
+    periodEnd: params.periodEnd,
+    direction: params.direction === 'issued' ? 'outgoing' :
+      params.direction === 'received' ? 'incoming' : 'both',
+    environment,
+  });
 
   // Trzy zapytania niezależne od siebie — odpalane równolegle.
   // Wcześniej szły sekwencyjnie (tenant → issued → received), co dla okresu
@@ -45,6 +58,7 @@ export async function fetchInvoicesForExport(
     needIssued
       ? fetchInvoiceRows(supabase, {
           tenantId: params.tenantId,
+          environment,
           direction: 'issued',
           periodStart: params.periodStart,
           periodEnd: params.periodEnd,
@@ -54,6 +68,7 @@ export async function fetchInvoicesForExport(
     needReceived
       ? fetchInvoiceRows(supabase, {
           tenantId: params.tenantId,
+          environment,
           direction: 'received',
           periodStart: params.periodStart,
           periodEnd: params.periodEnd,
@@ -75,8 +90,8 @@ export async function fetchInvoicesForExport(
   // Mapowanie rows → JpkInvoice też idzie równolegle dla obu kierunków
   // (każde robi swoje SELECT-y na liniach + parentach).
   const [issuedInvoices, receivedInvoices] = await Promise.all([
-    mapRowsToJpkInvoices(supabase, issuedRows, params.tenantId),
-    mapRowsToJpkInvoices(supabase, receivedRows, params.tenantId),
+    mapRowsToJpkInvoices(supabase, issuedRows, params.tenantId, environment),
+    mapRowsToJpkInvoices(supabase, receivedRows, params.tenantId, environment),
   ]);
 
   return { issuer, issuedInvoices, receivedInvoices };
@@ -86,6 +101,7 @@ async function fetchInvoiceRows(
   supabase: ReturnType<typeof createAdminClient>,
   params: {
     tenantId: string;
+    environment: KsefEnvironment;
     direction: 'issued' | 'received';
     periodStart: string;
     periodEnd: string;
@@ -98,6 +114,7 @@ async function fetchInvoiceRows(
     .eq('tenant_id', params.tenantId)
     .eq('direction', params.direction === 'issued' ? 'outgoing' : 'incoming')
     .eq('ksef_status', 'accepted')
+    .eq('ksef_environment', params.environment)
     .gte('issue_date', params.periodStart)
     .lte('issue_date', params.periodEnd)
     .order('issue_date', { ascending: true });
@@ -119,6 +136,7 @@ async function mapRowsToJpkInvoices(
   supabase: ReturnType<typeof createAdminClient>,
   rows: InvoiceRow[],
   tenantId: string,
+  environment: KsefEnvironment,
 ): Promise<JpkInvoice[]> {
   if (rows.length === 0) return [];
 
@@ -126,7 +144,7 @@ async function mapRowsToJpkInvoices(
   // jeden SELECT po `invoices`, drugi po `invoice_line_items`. Promise.all
   // ścina latencję per direction o ~50% przy paczkach miesięcznych.
   const [parentNumberById, linesByInvoiceId] = await Promise.all([
-    fetchParentInvoiceNumbers(supabase, rows, tenantId),
+    fetchParentInvoiceNumbers(supabase, rows, tenantId, environment),
     resolveLinesForInvoices(supabase, rows),
   ]);
 
@@ -139,6 +157,7 @@ async function fetchParentInvoiceNumbers(
   supabase: ReturnType<typeof createAdminClient>,
   rows: InvoiceRow[],
   tenantId: string,
+  environment: KsefEnvironment,
 ): Promise<Map<string, string>> {
   const ids = [
     ...new Set(
@@ -154,6 +173,9 @@ async function fetchParentInvoiceNumbers(
     .from('invoices')
     .select('id, internal_number, ksef_number')
     .eq('tenant_id', tenantId)
+    .eq('direction', rows[0]!.direction)
+    .eq('ksef_status', 'accepted')
+    .eq('ksef_environment', environment)
     .in('id', ids);
 
   if (error) throw new Error(error.message);

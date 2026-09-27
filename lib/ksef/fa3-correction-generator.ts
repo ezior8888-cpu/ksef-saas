@@ -15,6 +15,7 @@ import {
   summarizeVatPerRate,
 } from '@/lib/xml/invoice-calculator';
 import type { CorrectionInvoiceData, InvoiceLine } from '@/types/invoice-types';
+import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
 
 const FA3_NAMESPACE = 'http://crd.gov.pl/wzor/2025/06/25/13775/';
 const ETD_NAMESPACE =
@@ -90,16 +91,6 @@ function requireText(value: string | undefined | null, field: string): string {
     throw new Error(`FA(3) KOR: wymagane pole "${field}" jest puste.`);
   }
   return value;
-}
-
-function guessVatRateForAmountChange(netDelta: number, vatDelta: number): VatRate {
-  const net = Math.abs(netDelta);
-  if (net < Number.EPSILON) return '23';
-  const pct = Math.round((vatDelta / net) * 100);
-  if (pct === 8) return '8';
-  if (pct === 5) return '5';
-  if (pct === 0) return '0';
-  return '23';
 }
 
 function domainLinesForCorrection(data: CorrectionInvoiceData): InvoiceLine[] {
@@ -297,7 +288,7 @@ export function generateCorrectionInvoiceXml(
   let preparedLines: InvoiceLineItem[];
   if (data.correctionType === 'amount_change' && data.amountChange) {
     const ac = data.amountChange;
-    const rate = guessVatRateForAmountChange(roundToCents(ac.netDelta), roundToCents(ac.vatDelta));
+    const rate = resolveAmountChangeVatRate(ac);
     preparedLines = [
       {
         ordinal: 1,

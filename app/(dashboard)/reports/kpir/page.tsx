@@ -1,5 +1,7 @@
 import { KpirView } from '@/components/expenses/kpir-view';
 import { getPageContext } from '@/lib/supabase/page-context';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +24,7 @@ export default async function KpirPage({
 }) {
   const sp = await searchParams;
   const { supabase, tenantId } = await getPageContext();
+  const environment = requireConfiguredKsefEnvironment();
 
   const now = new Date();
   const month = clampMonth(Number(sp.month ?? now.getMonth() + 1));
@@ -29,6 +32,10 @@ export default async function KpirPage({
 
   const periodStart = new Date(year, month - 1, 1).toISOString().slice(0, 10);
   const periodEnd = new Date(year, month, 0).toISOString().slice(0, 10);
+
+  await assertAcceptedInvoiceEnvironmentComplete(supabase, {
+    tenantId, periodStart, periodEnd, direction: 'outgoing', environment,
+  });
 
   const { data: expenses, error: expensesError } = await supabase
     .from('expenses')
@@ -45,6 +52,7 @@ export default async function KpirPage({
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
+    .eq('ksef_environment', environment)
     .gte('issue_date', periodStart)
     .lte('issue_date', periodEnd)
     .order('issue_date', { ascending: true });

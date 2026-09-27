@@ -32,6 +32,7 @@ import {
 import { isSelfInvoicingConfigured } from '@/lib/billing/operator-config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { deriveBilledPlanFromPaidInvoice } from '@/lib/stripe/billed-plan';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 
 import {
   billingPaymentSucceeded,
@@ -231,6 +232,7 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
         invoiceId: insertResult.invoiceId,
         invoice: insertResult.invoice,
         nip: insertResult.operatorNip,
+        environment: requireConfiguredKsefEnvironment(),
       }).data,
     });
 

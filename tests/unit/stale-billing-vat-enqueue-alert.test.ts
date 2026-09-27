@@ -43,6 +43,7 @@ function queryResult(count: number | null, error: Error | null = null) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv('KSEF_ENV', 'test');
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-25T12:00:00.000Z'));
   mocks.cacheGet.mockResolvedValue(null);
@@ -51,6 +52,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 
@@ -117,12 +119,12 @@ describe('stale billing VAT enqueue alert', () => {
     const query = {
       select: vi.fn(), eq: vi.fn(), not: vi.fn(), is: vi.fn(),
       in: vi.fn(), gte: vi.fn(), lt: vi.fn(), order: vi.fn(),
-      then: vi.fn(),
+      or: vi.fn(), limit: vi.fn(), maybeSingle: vi.fn(), then: vi.fn(),
     };
-    for (const name of ['select', 'eq', 'not', 'is', 'in', 'gte', 'lt'] as const) {
+    for (const name of ['select', 'eq', 'not', 'is', 'in', 'gte', 'lt', 'or', 'limit', 'order'] as const) {
       query[name].mockReturnValue(query);
     }
-    query.order.mockResolvedValue({ data: [], error: null });
+    query.maybeSingle.mockResolvedValue({ data: null, error: null });
     query.then.mockImplementation((resolve: (value: unknown) => void) =>
       Promise.resolve({ count: 0, error: null, data: [] }).then(resolve));
     mocks.from.mockReturnValue(query);
@@ -135,6 +137,8 @@ describe('stale billing VAT enqueue alert', () => {
     expect(step.run).toHaveBeenCalledWith('check-stale-billing-vat-enqueues', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-checkout-attempts', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-customer-attempts', expect.any(Function));
-    expect(result).toMatchObject({ checked: 11, fired: 0 });
+    expect(step.run).toHaveBeenCalledWith('check-offline-environment', expect.any(Function));
+    expect(result).toMatchObject({ checked: 12, fired: 0 });
+    expect(result.details).toContainEqual({ type: 'offline_environment_blocked', fired: false });
   });
 });

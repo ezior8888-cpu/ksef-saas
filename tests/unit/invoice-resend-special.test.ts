@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Invoice } from '@/types/invoice';
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
@@ -48,34 +49,73 @@ import { resendInvoiceAction } from '@/components/invoices/actions-detail';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 
-function faktura(invoice_type: string | null, fa3Type = invoice_type ?? 'VAT') {
+const VAT_SNAPSHOT: Invoice = {
+  internalNumber: 'FV 1/2026',
+  type: 'VAT',
+  issueDate: '2026-09-25',
+  saleDate: '2026-09-25',
+  seller: {
+    nip: '1234567890',
+    name: 'Sprzedawca Testowy',
+    address: { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' },
+  },
+  buyer: {
+    nip: '1111111111',
+    name: 'Nabywca Testowy',
+    address: { countryCode: 'PL', addressLine1: 'ul. Przykładowa 2', addressLine2: '00-002 Warszawa' },
+  },
+  lines: [{
+    ordinal: 1,
+    name: 'Usługa testowa',
+    classificationCode: 'PKWiU 62.01.11.0',
+    unit: 'usł.',
+    quantity: 1,
+    unitPriceNet: 100,
+    netAmount: 100,
+    vatRate: '23',
+    vatAmount: 23,
+    grossAmount: 123,
+  }],
+  netTotal: 100,
+  vatTotal: 23,
+  grossTotal: 123,
+  payment: { amountDue: 123, currency: 'PLN', dueDate: '2026-10-09', method: 'transfer', bankAccount: 'PL61109010140000071219812874' },
+  annotations: { splitPayment: 2 },
+  notes: 'Warunki zapisane w kopii faktury',
+};
+
+function faktura(invoice_type: Invoice['type'] | null, fa3Type: Invoice['type'] = invoice_type ?? 'VAT') {
+  const snapshot = { ...VAT_SNAPSHOT, type: fa3Type };
   return {
     id: ID,
     tenant_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    internal_number: 'X 1',
+    internal_number: VAT_SNAPSHOT.internalNumber,
+    invoice_kind: 'regular',
     invoice_type,
-    issue_date: '2026-09-25',
-    sale_date: '2026-09-25',
-    seller_data: { nip: '5260001246', name: 'S', address: { countryCode: 'PL', addressLine1: 'a', addressLine2: 'b' } },
-    buyer_data: { nip: '5252241585', name: 'B', address: { countryCode: 'PL', addressLine1: 'a', addressLine2: 'b' } },
-    payment_data: { currency: 'PLN', dueDate: '2026-10-09', method: 'transfer' },
-    notes: null,
-    net_total: 100,
-    vat_total: 23,
-    gross_total: 123,
+    issue_date: VAT_SNAPSHOT.issueDate,
+    sale_date: VAT_SNAPSHOT.saleDate,
+    seller_data: VAT_SNAPSHOT.seller,
+    buyer_data: VAT_SNAPSHOT.buyer,
+    payment_data: VAT_SNAPSHOT.payment,
+    notes: VAT_SNAPSHOT.notes,
+    net_total: VAT_SNAPSHOT.netTotal,
+    vat_total: VAT_SNAPSHOT.vatTotal,
+    gross_total: VAT_SNAPSHOT.grossTotal,
     ksef_status: 'rejected',
-    fa3_data: { type: fa3Type },
-    invoice_line_items: [],
-    tenants: { nip: '5260001246', ksef_credentials_encrypted: 'x' },
+    fa3_data: snapshot,
+    invoice_line_items: [{ ordinal: 1, name: 'Usługa testowa', unit: 'usł.', quantity: 1, unit_price_net: 100, vat_rate: '23', net_amount: 100, vat_amount: 23, gross_amount: 123 }],
+    tenants: { nip: VAT_SNAPSHOT.seller.nip, ksef_credentials_encrypted: 'x' },
   };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv('KSEF_ENV', 'test');
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('„Wyślij ponownie” dla dokumentów specjalnych', () => {
-  it.each(['KOR', 'ZAL', 'ROZ'])('%s: odmowa od razu, bez joba i bez zmiany statusu', async (type) => {
+  it.each(['KOR', 'ZAL', 'ROZ'] as const)('%s: odmowa od razu, bez joba i bez zmiany statusu', async (type) => {
     mocks.row = faktura(type);
     const wynik = await resendInvoiceAction(ID);
     expect(wynik.success).toBe(false);
@@ -90,9 +130,34 @@ describe('„Wyślij ponownie” dla dokumentów specjalnych', () => {
     expect(mocks.send).not.toHaveBeenCalled();
   });
 
-  it('zwykła faktura VAT nadal idzie do kolejki', async () => {
-    mocks.row = faktura('VAT');
-    await resendInvoiceAction(ID);
+  it('nie raportuje sukcesu przy rozbieżnym typie kolumny i zapisanej kopii', async () => {
+    mocks.row = faktura('VAT', 'KOR');
+    const wynik = await resendInvoiceAction(ID);
+    expect(wynik.success).toBe(false);
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it('zwykła faktura VAT trafia do kolejki z dokładną kopią, w tym classificationCode', async () => {
+    const row = faktura('VAT');
+    mocks.row = row;
+    expect(await resendInvoiceAction(ID)).toEqual({ success: true });
     expect(mocks.send).toHaveBeenCalledTimes(1);
+    const event = mocks.send.mock.calls[0]?.[0];
+    expect(event?.data?.invoice).toBe(row.fa3_data);
+    expect(event?.data?.invoice).toEqual(VAT_SNAPSHOT);
+    expect(event?.data?.invoice?.lines[0]?.classificationCode).toBe('PKWiU 62.01.11.0');
+    expect(event?.data?.environment).toBe('test');
+  });
+
+  it.each([
+    ['kwota', { gross_total: 124 }],
+    ['nabywca', { buyer_data: { ...VAT_SNAPSHOT.buyer, name: 'Inny nabywca' } }],
+  ])('odmawia przy rozbieżności %s między kolumnami i kopią', async (_label, changed) => {
+    mocks.row = { ...faktura('VAT'), ...changed };
+    const wynik = await resendInvoiceAction(ID);
+    expect(wynik).toMatchObject({ success: false, error: expect.stringContaining('niekompletne lub niespójne') });
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 });

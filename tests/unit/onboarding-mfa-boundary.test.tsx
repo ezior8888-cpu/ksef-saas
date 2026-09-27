@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(), createAdminClient: vi.fn(), cookies: vi.fn(), setCookie: vi.fn(),
@@ -91,6 +91,7 @@ function query(table: string) {
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv('KSEF_ENV', 'test');
   aal = 'aal2'; factorType = 'totp'; selectedOrg = org; activeMember = true; queries = [];
   mocks.getSession.mockResolvedValue({ data: { session: { access_token: token, user: { id: 'forged', factors: [] } } }, error: null });
   mocks.getUser.mockImplementation(async () => ({ data: { user: {
@@ -239,4 +240,8 @@ it('the bootstrap helper does not read an organization or instantiate service-ro
 it('progress explicitly scopes the job to the active organization', async () => {
   await ProgressPage({ params: Promise.resolve({ jobId: 'job' }) });
   expect(queries).toContainEqual(expect.objectContaining({ table: 'import_jobs', filters: { id: 'job', tenant_id: org } }));
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
