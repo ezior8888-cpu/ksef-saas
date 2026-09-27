@@ -62,6 +62,12 @@ export const invoiceFormSchema = z
     paymentDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     bankAccount: z.string().optional(),
     notes: z.string().max(3500).optional(),
+    /** P_18A — mechanizm podzielonej płatności (art. 106e ust. 1 pkt 18a). */
+    splitPayment: z.boolean().optional(),
+  })
+  .refine((d) => !d.splitPayment || (d.paymentMethod === 'transfer' && !!d.bankAccount?.trim()), {
+    message: 'Mechanizm podzielonej płatności wymaga przelewu — podaj numer rachunku',
+    path: ['splitPayment'],
   })
   .refine(
     (d) =>

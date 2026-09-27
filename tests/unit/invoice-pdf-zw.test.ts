@@ -115,6 +115,12 @@ describe('podstawa zwolnienia na PDF faktury', () => {
     expect(data?.invoice.annotations).toEqual({ vatExemptionBasis: PODSTAWA });
   });
 
+  it('loader: MPP z adnotacji (P_18A) trafia na PDF', async () => {
+    mocks.row = { ...(mocks.row as Record<string, unknown>), annotations: { splitPayment: 1 } };
+    const data = await loadInvoiceForPdf('inv-1');
+    expect(data?.invoice.annotations).toEqual({ splitPayment: 1 });
+  });
+
   it('loader: śmieci w adnotacjach nie trafiają na PDF', async () => {
     mocks.row = { ...(mocks.row as Record<string, unknown>), annotations: { vatExemptionBasis: 42 } };
     const data = await loadInvoiceForPdf('inv-1');
