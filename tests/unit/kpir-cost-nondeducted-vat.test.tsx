@@ -50,6 +50,10 @@ describe('kpirCostAmount — reguła', () => {
     ['odliczenie częściowe (samochód 50%): netto + reszta VAT', polowa, 446, 46],
     ['dokument „inny” nie daje odliczenia', wydatek({ document_type: 'other', net_amount: 100, vat_amount: 23, vat_deductible_amount: 23 }), 123, 23],
     ['odliczenie większe niż VAT nie obniża kosztu poniżej netto', wydatek({ net_amount: 100, vat_amount: 23, vat_deductible_amount: 50 }), 100, 0],
+    // Korekty zakupu „in minus” (#68) — ze znakiem.
+    ['korekta z pełnym odliczeniem: koszt −netto', wydatek({ net_amount: -100, vat_amount: -23, vat_deductible_amount: -23 }), -100, 0],
+    ['korekta bez odliczenia (firma zwolniona): koszt −brutto', wydatek({ net_amount: -100, vat_amount: -23, vat_deductible_amount: 0 }), -123, -23],
+    ['korekta: odliczenie ze złym znakiem nie zawyża kosztu', wydatek({ net_amount: -100, vat_amount: -23, vat_deductible_amount: 23 }), -123, -23],
     ['kwoty z bazy jako tekst (NUMERIC)', wydatek({ document_type: 'receipt', net_amount: '10.10' as unknown as number, vat_amount: '2.32' as unknown as number }), 12.42, 2.32],
   ])('%s', (_opis, e, koszt, vatWKoszcie) => {
     expect(kpirCostAmount(e)).toBe(koszt);

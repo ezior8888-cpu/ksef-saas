@@ -20,13 +20,20 @@ export interface KpirCostInput {
   document_type: string | null;
 }
 
-/** VAT z dokumentu, którego nie odliczamy — wchodzi w koszt. */
+/**
+ * VAT z dokumentu, którego nie odliczamy — wchodzi w koszt.
+ *
+ * Ze znakiem: korekta zakupu „in minus” (#68) ma ujemny VAT, a bez prawa do
+ * odliczenia (np. firma zwolniona) ma obniżyć koszt o brutto, nie o netto.
+ */
 export function nonDeductedVat(e: KpirCostInput): number {
   const vat = Number(e.vat_amount ?? 0);
-  if (!(vat > 0)) return 0;
-  const deducted = VAT_DEDUCTIBLE_DOCUMENTS.has(e.document_type ?? 'invoice')
-    ? Math.min(vat, Math.max(0, Number(e.vat_deductible_amount ?? 0)))
+  if (!Number.isFinite(vat) || vat === 0) return 0;
+  const raw = VAT_DEDUCTIBLE_DOCUMENTS.has(e.document_type ?? 'invoice')
+    ? Number(e.vat_deductible_amount ?? 0)
     : 0;
+  // Odliczenie ma znak VAT-u i nie przekracza go co do wartości.
+  const deducted = vat > 0 ? Math.min(vat, Math.max(0, raw)) : Math.max(vat, Math.min(0, raw));
   return round2(vat - deducted);
 }
 
