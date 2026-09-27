@@ -157,6 +157,12 @@ export interface InvoiceAnnotations {
   splitPayment?: 1 | 2;
   /** P_23 - procedura uproszczona (drugi w kolejności podatnik, art. 135) */
   simplifiedProcedure?: 1 | 2;
+  /**
+   * P_19A - podstawa prawna zwolnienia (np. „art. 113 ust. 1 ustawy o VAT”).
+   * Wymagana, gdy którakolwiek pozycja ma stawkę 'zw'. Pochodzi z ustawień
+   * firmy (`tenants.vat_exemption_basis`), nie z formularza faktury.
+   */
+  vatExemptionBasis?: string;
 }
 
 export interface Invoice {
