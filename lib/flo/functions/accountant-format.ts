@@ -26,6 +26,7 @@
 
 import { fingerprintOf } from '@/lib/flo/fingerprint';
 import type { CreateProposalInput } from '@/lib/flo/proposals';
+import { isExportFormatSuspended } from '@/lib/exports/suspended-formats';
 
 const DAY_MS = 86_400_000;
 
@@ -87,6 +88,9 @@ export function packageFormats(input: {
   chosen: AccountantFormat;
   isFirstPackage: boolean;
 }): AccountantFormat[] {
+  // Wstrzymany format (JPK_V7M do czasu wersji 3) — księgowa dostaje sam
+  // uniwersalny CSV, a nie plik, którego nie złoży.
+  if (isExportFormatSuspended(input.chosen)) return [FALLBACK_FORMAT];
   if (!input.isFirstPackage) return [input.chosen];
   if (input.chosen === FALLBACK_FORMAT) return [FALLBACK_FORMAT];
   return [input.chosen, FALLBACK_FORMAT];
@@ -185,7 +189,9 @@ export function buildFormatQuestion(input: {
     priority: 25,
     payload: {
       periodKey: input.periodKey,
-      options: Object.entries(ACCOUNTANT_FORMATS).map(([value, descriptor]) => ({
+      options: Object.entries(ACCOUNTANT_FORMATS)
+        .filter(([value]) => !isExportFormatSuspended(value))
+        .map(([value, descriptor]) => ({
         value,
         label: descriptor.label,
       })),
