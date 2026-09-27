@@ -105,8 +105,13 @@ function mapLine(row: LineItemRow): InvoiceLineItem {
 /** Adnotacje FA(3) ze snapshotu — dziś tylko podstawa zwolnienia z VAT (P_19A). */
 function readAnnotations(raw: unknown): Invoice['annotations'] {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
-  const basis = (raw as Record<string, unknown>).vatExemptionBasis;
-  return typeof basis === 'string' && basis.trim() ? { vatExemptionBasis: basis.trim() } : undefined;
+  const o = raw as Record<string, unknown>;
+  const annotations: NonNullable<Invoice['annotations']> = {};
+  if (typeof o.vatExemptionBasis === 'string' && o.vatExemptionBasis.trim()) {
+    annotations.vatExemptionBasis = o.vatExemptionBasis.trim();
+  }
+  if (o.splitPayment === 1) annotations.splitPayment = 1;
+  return Object.keys(annotations).length > 0 ? annotations : undefined;
 }
 
 /**

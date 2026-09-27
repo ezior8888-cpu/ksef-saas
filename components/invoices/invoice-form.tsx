@@ -42,6 +42,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
 import { AlertCircle, ChevronLeft, Plus, Trash2, Loader2 } from 'lucide-react';
 import { InvoiceTotals } from '@/components/invoices/invoice-totals';
+import { suggestsSplitPayment } from '@/lib/invoices/annotations';
 import { formatPlMoney } from '@/lib/format/pl';
 import { ffSettingsPanel } from '@/lib/dashboard/ff-surface-classes';
 import { BUYER_ID_TYPE_LABELS } from '@/types/invoice-types';
@@ -167,6 +168,7 @@ export function InvoiceForm({
       paymentDueDate: in14days,
       bankAccount: '',
       notes: '',
+      splitPayment: false,
     },
   });
 
@@ -207,6 +209,8 @@ export function InvoiceForm({
   });
 
   const totals = calculateInvoiceTotals(lineItems);
+  const splitPayment = useWatch({ control: form.control, name: 'splitPayment' });
+  const podpowiedzMpp = !splitPayment && suggestsSplitPayment(totals.grossTotal, buyerIsConsumer);
 
   // Podtytuł nagłówka na telefonie („wrzesień 2026 · KSeF”). Liczony przy
   // renderze, a nie wpisany na stałe — ten sam wzorzec co w pasku panelu
@@ -969,6 +973,21 @@ export function InvoiceForm({
               {...form.register('bankAccount')}
               placeholder="12 3456 7890 ..."
             />
+          </div>
+          <div className="sm:col-span-2 space-y-1.5">
+            <label className="flex items-center gap-3 text-sm">
+              <input type="checkbox" className="h-4 w-4" {...form.register('splitPayment')} />
+              Mechanizm podzielonej płatności (MPP)
+            </label>
+            {podpowiedzMpp ? (
+              <p className="text-xs text-[var(--ff-text-muted)]">
+                Faktura dla firmy na co najmniej 15 000 zł brutto. Jeśli sprzedajesz towary lub usługi z załącznika 15
+                do ustawy o VAT (np. roboty budowlane, elektronika, paliwa), MPP jest obowiązkowy.
+              </p>
+            ) : null}
+            {form.formState.errors.splitPayment ? (
+              <p className="text-xs text-red-400">{form.formState.errors.splitPayment.message}</p>
+            ) : null}
           </div>
         </div>
       </section>
