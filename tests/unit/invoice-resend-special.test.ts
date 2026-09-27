@@ -1,98 +1,89 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  requireAuth: vi.fn(),
+  row: { ksef_status: 'failed' } as { ksef_status: string } | null,
+  eq: vi.fn(),
   send: vi.fn(),
-  update: vi.fn(),
-  row: null as Record<string, unknown> | null,
 }));
 
-vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('@/lib/supabase/auth-context', () => ({
+  requireUserAndActiveOrg: mocks.requireAuth,
+  ActionAuthError: class ActionAuthError extends Error {},
+}));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: mocks.send }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: vi.fn() }));
-vi.mock('@/lib/auth/ksef-verification-guard', () => ({
-  requireKsefVerification: vi.fn(async () => undefined),
-  KsefNotVerifiedError: class KsefNotVerifiedError extends Error {},
-}));
 vi.mock('@/lib/storage/r2', () => ({ downloadInvoiceXml: vi.fn() }));
-vi.mock('@/lib/inngest/error-message', () => ({ formatInngestSendError: (e: unknown) => String(e) }));
 vi.mock('@/lib/pdf/invoice-pdf', () => ({ generateInvoicePdf: vi.fn() }));
 vi.mock('@/lib/pdf/invoice-data', () => ({ loadInvoiceForPdf: vi.fn() }));
 vi.mock('@/lib/email/send', () => ({ sendInvoiceEmail: vi.fn() }));
-vi.mock('@/lib/supabase/active-org', () => ({ getActiveOrgIdFromCookies: vi.fn() }));
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: { id: 'u' } } }) },
-    from: () => {
-      const q = {
-        select: () => q,
-        eq: () => q,
-        single: async () => ({ data: mocks.row, error: null }),
-        update: (patch: unknown) => {
-          mocks.update(patch);
-          return q;
-        },
-        then: (ok: (v: { error: null }) => unknown) => Promise.resolve({ error: null }).then(ok),
-      };
-      return q;
-    },
-  }),
-}));
 
 import { resendInvoiceAction } from '@/components/invoices/actions-detail';
+import { ActionAuthError } from '@/lib/supabase/auth-context';
 
-/**
- * „Wyślij ponownie” odtwarza fakturę z bazy — bez danych korekty/zaliczki,
- * których tam nie ma. Dla KOR/ZAL/ROZ odmawiamy od razu, zanim status
- * przeskoczy na 'queued' i zanim powstanie job skazany na odmowę.
- */
-
-const ID = '11111111-1111-4111-8111-111111111111';
-
-function faktura(invoice_type: string | null, fa3Type = invoice_type ?? 'VAT') {
-  return {
-    id: ID,
-    tenant_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    internal_number: 'X 1',
-    invoice_type,
-    issue_date: '2026-09-25',
-    sale_date: '2026-09-25',
-    seller_data: { nip: '5260001246', name: 'S', address: { countryCode: 'PL', addressLine1: 'a', addressLine2: 'b' } },
-    buyer_data: { nip: '5252241585', name: 'B', address: { countryCode: 'PL', addressLine1: 'a', addressLine2: 'b' } },
-    payment_data: { currency: 'PLN', dueDate: '2026-10-09', method: 'transfer' },
-    notes: null,
-    net_total: 100,
-    vat_total: 23,
-    gross_total: 123,
-    ksef_status: 'rejected',
-    fa3_data: { type: fa3Type },
-    invoice_line_items: [],
-    tenants: { nip: '5260001246', ksef_credentials_encrypted: 'x' },
-  };
-}
+const INVOICE_ID = '11111111-1111-4111-8111-111111111111';
+const TENANT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.row = { ksef_status: 'failed' };
+  mocks.requireAuth.mockImplementation(async () => {
+    const query = {
+      select: () => query,
+      eq: (column: string, value: unknown) => {
+        mocks.eq(column, value);
+        return query;
+      },
+      maybeSingle: async () => ({ data: mocks.row, error: null }),
+    };
+    return {
+      supabase: { from: () => query },
+      tenantId: TENANT_ID,
+      user: { id: 'user' },
+    };
+  });
 });
 
-describe('„Wyślij ponownie” dla dokumentów specjalnych', () => {
-  it.each(['KOR', 'ZAL', 'ROZ'])('%s: odmowa od razu, bez joba i bez zmiany statusu', async (type) => {
-    mocks.row = faktura(type);
-    const wynik = await resendInvoiceAction(ID);
-    expect(wynik.success).toBe(false);
-    expect(wynik.success === false && wynik.error).toMatch(/Wystaw dokument ponownie z formularza/);
-    expect(mocks.send).not.toHaveBeenCalled();
-    expect(mocks.update).not.toHaveBeenCalled();
-  });
-
-  it('typ z kopii fa3_data liczy się, gdy kolumna jest pusta', async () => {
-    mocks.row = faktura(null, 'KOR');
-    expect((await resendInvoiceAction(ID)).success).toBe(false);
+describe('historical KSeF resend boundary', () => {
+  it.each(['failed', 'rejected'])('blocks %s even without a submission timestamp', async (status) => {
+    mocks.row = { ksef_status: status };
+    expect(await resendInvoiceAction(INVOICE_ID)).toMatchObject({
+      success: false,
+      error: expect.stringContaining('uzgodnić'),
+    });
+    expect(mocks.eq).toHaveBeenCalledWith('tenant_id', TENANT_ID);
     expect(mocks.send).not.toHaveBeenCalled();
   });
 
-  it('zwykła faktura VAT nadal idzie do kolejki', async () => {
-    mocks.row = faktura('VAT');
-    await resendInvoiceAction(ID);
-    expect(mocks.send).toHaveBeenCalledTimes(1);
+  it('does not access the invoice or enqueue when MFA or membership fails', async () => {
+    mocks.requireAuth.mockRejectedValueOnce(new ActionAuthError('Wymagana weryfikacja dwuetapowa'));
+    expect(await resendInvoiceAction(INVOICE_ID)).toEqual({
+      success: false,
+      error: 'Wymagana weryfikacja dwuetapowa',
+    });
+    expect(mocks.eq).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it('does not disclose a foreign invoice or publish a job', async () => {
+    mocks.row = null;
+    expect(await resendInvoiceAction(INVOICE_ID)).toMatchObject({
+      success: false,
+      error: 'Nie można znaleźć faktury w tej organizacji.',
+    });
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it('rejects replay from other statuses before publishing', async () => {
+    mocks.row = { ksef_status: 'accepted' };
+    expect((await resendInvoiceAction(INVOICE_ID)).success).toBe(false);
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+  it('does not disclose an unexpected DB error to the caller', async () => {
+    mocks.requireAuth.mockRejectedValueOnce(new Error('PRIVATE-DB-DIAGNOSTIC'));
+    expect(await resendInvoiceAction(INVOICE_ID)).toEqual({
+      success: false,
+      error: 'Nie można sprawdzić możliwości ponownej wysyłki. Spróbuj później.',
+    });
   });
 });

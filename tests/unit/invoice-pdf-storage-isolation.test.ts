@@ -8,8 +8,8 @@ vi.mock('@/lib/pdf/invoice-data', () => ({
   loadInvoiceForPdf: mocks.load, saveInvoicePdfPath: mocks.save,
 }));
 vi.mock('@/lib/pdf/invoice-renderer', () => ({ renderInvoicePdf: mocks.render }));
-vi.mock('@/lib/pdf/pdf-storage', () => ({
-  buildInvoicePdfKey: (tenantId: string, invoiceId: string) => tenantId + '/2026/09/' + invoiceId + '.pdf',
+vi.mock('@/lib/pdf/pdf-storage', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/pdf/pdf-storage')>(),
   invoicePdfExists: mocks.exists, downloadInvoicePdf: mocks.download, uploadInvoicePdf: mocks.upload,
 }));
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
@@ -21,7 +21,7 @@ beforeEach(() => {
   mocks.render.mockResolvedValue(Buffer.from('generated-own-document'));
   mocks.load.mockResolvedValue({
     invoice: { internalNumber: 'FV/1' }, tenantId: 'tenant-a', issueDate: '2026-09-09',
-    pdfStoragePath: 'tenant-a/2026/09/invoice.pdf',
+    pdfStoragePath: 'tenant-a/2026/09/invoice.v2.pdf',
     pdfGeneratedAt: '2026-09-09T13:00:00Z', updatedAt: '2026-09-09T12:00:00Z',
   });
 });
@@ -37,14 +37,41 @@ describe('PDF cache ownership', () => {
     expect(result).toMatchObject({ success: true, pdf: Buffer.from('generated-own-document') });
     expect(mocks.exists).not.toHaveBeenCalled();
     expect(mocks.download).not.toHaveBeenCalled();
-    expect(mocks.upload).toHaveBeenCalledWith('tenant-a/2026/09/invoice.pdf', Buffer.from('generated-own-document'));
+    expect(mocks.upload).toHaveBeenCalledWith('tenant-a/2026/09/invoice.v2.pdf', Buffer.from('generated-own-document'));
   });
 
   it('preserves a valid tenant cache hit with an explicit tenant argument', async () => {
     const result = await generateInvoicePdf('invoice', 'tenant-a');
     expect(result).toMatchObject({ success: true, pdf: Buffer.from('cached-private-document') });
-    expect(mocks.download).toHaveBeenCalledWith('tenant-a/2026/09/invoice.pdf', 'tenant-a');
+    expect(mocks.download).toHaveBeenCalledWith('tenant-a/2026/09/invoice.v2.pdf', 'tenant-a');
     expect(mocks.render).not.toHaveBeenCalled();
+  });
+
+  it('regenerates an old PDF cache after the renderer adds the VAT exemption basis', async () => {
+    mocks.load.mockResolvedValue({
+      invoice: { internalNumber: 'FV/1', annotations: { vatExemptionBasis: 'fixture basis' } },
+      tenantId: 'tenant-a', issueDate: '2026-09-09',
+      pdfStoragePath: 'tenant-a/2026/09/invoice.pdf',
+      pdfGeneratedAt: '2026-09-09T13:00:00Z', updatedAt: '2026-09-09T12:00:00Z',
+    });
+
+    const result = await generateInvoicePdf('invoice', 'tenant-a');
+    expect(result).toMatchObject({ success: true, pdf: Buffer.from('generated-own-document') });
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(mocks.render).toHaveBeenCalledOnce();
+    expect(mocks.upload).toHaveBeenCalledWith('tenant-a/2026/09/invoice.v2.pdf', Buffer.from('generated-own-document'));
+  });
+
+  it('ignores an unrelated PDF path from the same tenant', async () => {
+    mocks.load.mockResolvedValue({
+      invoice: { internalNumber: 'FV/1' }, tenantId: 'tenant-a', issueDate: '2026-09-09',
+      pdfStoragePath: 'tenant-a/2026/09/other-invoice.v2.pdf',
+      pdfGeneratedAt: '2026-09-09T13:00:00Z', updatedAt: '2026-09-09T12:00:00Z',
+    });
+
+    await generateInvoicePdf('invoice', 'tenant-a');
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(mocks.render).toHaveBeenCalledOnce();
   });
 
   it('rejects an invoice belonging to another tenant before looking up its PDF', async () => {
