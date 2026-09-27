@@ -128,7 +128,8 @@ describe('podstawa zwolnienia na PDF faktury', () => {
 
   it('loader: MPP z adnotacji (P_18A) trafia na PDF', async () => {
     mocks.row = { ...(mocks.row as Record<string, unknown>), annotations: { splitPayment: 1 } };
-    const data = await loadInvoiceForPdf('inv-1');
+    // Od #77 loader wymaga firmy — dostęp do PDF ograniczony do tenanta.
+    const data = await loadInvoiceForPdf('inv-1', 'ten-1');
     expect(data?.invoice.annotations).toEqual({ splitPayment: 1 });
   });
 
