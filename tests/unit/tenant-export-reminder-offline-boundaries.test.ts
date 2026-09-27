@@ -142,6 +142,9 @@ describe('reminder decisions distrust invoice-only foreign relationships', () =>
   });
 
   it('finds outgoing database rows for the global scheduler', async () => {
+    // Faktury wystawione w aplikacji (`origin`, 00065) — import historii
+    // odpada z cronu ponagleń (reminders-kandydaci.test.ts).
+    for (const row of tables.invoices) row.origin = 'app';
     tables.invoices.push(invoice('incoming-a', 'tenant-a', 'incoming'));
     const candidates = await findInvoicesRequiringReminders();
     expect(candidates.map(row => row.id)).toEqual(['invoice-a', 'invoice-b']);
