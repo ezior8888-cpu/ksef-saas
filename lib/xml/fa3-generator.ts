@@ -6,6 +6,7 @@ import {
   calculateInvoiceTotals,
   summarizeVatPerRate,
   validateInvoice,
+  ZW_WITHOUT_BASIS_MESSAGE,
 } from './invoice-calculator';
 
 // ═══════════════════════════════════════════════════════════════
@@ -412,19 +413,22 @@ function buildAdnotacje(
   // P_18A - MPP
   adn.ele('P_18A').txt(String(a.splitPayment ?? 2));
 
-  // Zwolnienie – choice: (P_19 + P_19A|B|C) LUB P_19N
-  // MVP wymusza P_19N=1 (brak stawki zw). Jeśli ktoś doda linię zw bez
-  // podstawy prawnej, validateInvoice powinno to odrzucić – na dziś
-  // zachowujemy prostotę: zw w MVP nie jest wspierane.
+  // Zwolnienie – choice (XSD): (P_19=1 + jedno z P_19A|B|C) LUB P_19N=1.
+  // Stawka 'zw' → P_19 + P_19A (przepis ustawy) z ustawień firmy.
+  // Brak podstawy odrzuca validateInvoice wcześniej, z komunikatem dla
+  // człowieka; tu tylko bezpiecznik.
   const hasZwLine = invoice.lines.some((l) => l.vatRate === 'zw');
   const zwolnienie = adn.ele('Zwolnienie');
   if (hasZwLine) {
-    // P_19 wymaga jednej z P_19A/B/C – MVP nie zna tych danych, rzucamy.
-    throw new Error(
-      'FA(3): linia ze stawką "zw" wymaga podstawy prawnej (P_19A/B/C), która nie jest obsługiwana w MVP.',
-    );
+    const basis = a.vatExemptionBasis?.trim();
+    if (!basis) {
+      throw new InvoiceValidationError([ZW_WITHOUT_BASIS_MESSAGE]);
+    }
+    zwolnienie.ele('P_19').txt('1');
+    zwolnienie.ele('P_19A').txt(basis);
+  } else {
+    zwolnienie.ele('P_19N').txt('1');
   }
-  zwolnienie.ele('P_19N').txt('1');
 
   // NoweSrodkiTransportu – choice: (P_22 + P_42_5 + NowySrodekTransportu) LUB P_22N
   // MVP zawsze P_22N=1.

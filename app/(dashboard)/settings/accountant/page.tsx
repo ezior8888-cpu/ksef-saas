@@ -3,6 +3,8 @@ import {
   type AccountantAccessPublicRow,
 } from '@/components/settings/accountant-list';
 import { CoPilotSettingsForm } from '@/components/exports/co-pilot-settings-form';
+import { TaxOfficeForm } from '@/components/settings/tax-office-form';
+import { readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { getPageContextWithRole } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +31,7 @@ export default async function AccountantAccessPage() {
     '/settings',
   );
 
-  const [{ data: settings }, { data: recentJobs }, { data: raw }] =
+  const [{ data: settings }, { data: recentJobs }, { data: raw }, taxOfficeCode] =
     await Promise.all([
       supabase
         .from('accountant_settings')
@@ -52,6 +54,8 @@ export default async function AccountantAccessPage() {
         .order('created_at', {
           ascending: false,
         }),
+      // Osobno i odpornie — przed migracją 00092 kolumny nie ma.
+      readTenantTaxOffice(supabase, tenantId),
     ]);
 
   const accesses = toPublicAccesses(raw ?? []);
@@ -67,6 +71,16 @@ export default async function AccountantAccessPage() {
           rachunkowemu i — jako właściciel — skonfiguruj automatyczny Co-Pilot
           miesięczny.
         </p>
+      </div>
+
+      <div className="max-w-3xl ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Urząd skarbowy</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Trafia do nagłówka plików JPK (KodUrzedu).
+          </p>
+        </div>
+        <TaxOfficeForm initialCode={taxOfficeCode} />
       </div>
 
       <div className="max-w-3xl ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8">

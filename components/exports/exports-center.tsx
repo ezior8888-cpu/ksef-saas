@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { Constants, type Tables } from '@/types/database';
 import { saveBlob } from '@/lib/download';
+import { isExportFormatSuspended, SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
 
 /** Wiersz joba + pliki z nested select (historia ręcznych eksportów). */
 export type ManualExportJobWithFiles = Tables<'export_jobs'> & {
@@ -36,11 +37,17 @@ export type ManualExportJobWithFiles = Tables<'export_jobs'> & {
 type ExportFormat = Tables<'export_jobs'>['format'] | 'jpk_v7m';
 type JobStatus = Tables<'export_jobs'>['status'];
 
-const EXPORT_FORMATS: ExportFormat[] = [
+const ALL_EXPORT_FORMATS: ExportFormat[] = [
   'jpk_fa',
   'jpk_v7m',
   ...Constants.public.Enums.export_format_enum.filter((f) => f !== 'jpk_fa'),
 ];
+
+/** Do wyboru tylko formaty niewstrzymane — wstrzymane opisuje notka pod listą. */
+const EXPORT_FORMATS = ALL_EXPORT_FORMATS.filter((f) => !isExportFormatSuspended(f));
+const SUSPENDED_NOTES = ALL_EXPORT_FORMATS.filter(isExportFormatSuspended).map(
+  (f) => SUSPENDED_EXPORT_FORMATS[f]!,
+);
 
 const FORMAT_LABELS: Record<ExportFormat, string> = {
   jpk_fa: 'JPK_FA(4)',
@@ -206,6 +213,11 @@ export function NewExportForm() {
             </button>
           ))}
         </div>
+        {SUSPENDED_NOTES.map((note) => (
+          <p key={note} className="mt-2 text-[12px] text-[var(--ff-text-muted)]">
+            {note}
+          </p>
+        ))}
       </div>
 
       <div>

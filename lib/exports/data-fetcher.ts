@@ -17,10 +17,39 @@ export interface FetchInvoicesParams {
   includeCorrections?: boolean;
 }
 
+/**
+ * Koszt w eksporcie — z `expenses`, tego samego źródła, z którego liczy KPiR
+ * w aplikacji (`app/(dashboard)/reports/kpir`). Do 26.09 eksport brał koszty
+ * z faktur otrzymanych: bez paragonów, wszystko w kol. 13, z naszą firmą jako
+ * „kontrahentem” i bez decyzji klienta (`is_deductible`). Faktura ze skrzynki
+ * istnieje jako faktura I jako koszt — koszty z jednego źródła, więc bez
+ * podwójnego liczenia.
+ */
+export interface ExportExpense {
+  id: string;
+  issueDate: string;
+  documentNumber: string;
+  /** invoice | simplified_invoice | receipt | other */
+  documentType: string;
+  sellerName: string;
+  sellerNip: string | null;
+  sellerAddress: string | null;
+  netAmount: number;
+  vatAmount: number;
+  grossAmount: number;
+  /** VAT, który klient może odliczyć — nie zawsze cały `vatAmount`. */
+  vatDeductibleAmount: number;
+  /** col_10 | col_11 | col_12 | col_13 | col_15 (B+R w aplikacji) | … */
+  kpirColumn: string | null;
+  categoryLabel: string | null;
+}
+
 export interface FetchedInvoiceData {
   issuer: JpkFaInputData['issuer'];
   issuedInvoices: JpkInvoice[];
   receivedInvoices: JpkInvoice[];
+  /** Koszty do KPiR i JPK_V7M — tylko gdy eksport obejmuje stronę kosztów. */
+  expenses: ExportExpense[];
 }
 
 export async function fetchInvoicesForExport(
@@ -74,12 +103,66 @@ export async function fetchInvoicesForExport(
 
   // Mapowanie rows → JpkInvoice też idzie równolegle dla obu kierunków
   // (każde robi swoje SELECT-y na liniach + parentach).
-  const [issuedInvoices, receivedInvoices] = await Promise.all([
+  const [issuedInvoices, receivedInvoices, expenses] = await Promise.all([
     mapRowsToJpkInvoices(supabase, issuedRows, params.tenantId),
     mapRowsToJpkInvoices(supabase, receivedRows, params.tenantId),
+    needReceived
+      ? fetchExpensesForExport(supabase, params)
+      : Promise.resolve<ExportExpense[]>([]),
   ]);
 
-  return { issuer, issuedInvoices, receivedInvoices };
+  return { issuer, issuedInvoices, receivedInvoices, expenses };
+}
+
+const EXPENSE_PAGE = 1000;
+
+/**
+ * Koszty okresu, które klient uznał za koszt (`is_deductible`) — ten sam
+ * filtr co KPiR w aplikacji. Czytane stronami: PostgREST ucina odpowiedź
+ * na 1000 wierszach, a ucięta lista kosztów wyglądałaby na udany eksport.
+ */
+async function fetchExpensesForExport(
+  supabase: ReturnType<typeof createAdminClient>,
+  params: FetchInvoicesParams,
+): Promise<ExportExpense[]> {
+  const out: ExportExpense[] = [];
+  for (let from = 0; ; from += EXPENSE_PAGE) {
+    const { data, error } = await supabase
+      .from('expenses')
+      .select(
+        'id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, ' +
+          'net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label',
+      )
+      .eq('tenant_id', params.tenantId)
+      .eq('is_deductible', true)
+      .gte('issue_date', params.periodStart)
+      .lte('issue_date', params.periodEnd)
+      .order('issue_date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + EXPENSE_PAGE - 1);
+    if (error) throw new Error(`expenses: ${error.message}`);
+
+    const page = (data ?? []) as unknown as Array<Record<string, unknown>>;
+    for (const row of page) {
+      out.push({
+        id: String(row.id),
+        issueDate: String(row.issue_date),
+        documentNumber: typeof row.document_number === 'string' ? row.document_number : '',
+        documentType: typeof row.document_type === 'string' ? row.document_type : 'invoice',
+        sellerName: typeof row.seller_name === 'string' ? row.seller_name : '',
+        sellerNip: typeof row.seller_nip === 'string' && row.seller_nip.trim() ? row.seller_nip.trim() : null,
+        sellerAddress: typeof row.seller_address === 'string' ? row.seller_address : null,
+        netAmount: Number(row.net_amount ?? 0),
+        vatAmount: Number(row.vat_amount ?? 0),
+        grossAmount: Number(row.gross_amount ?? 0),
+        vatDeductibleAmount: Number(row.vat_deductible_amount ?? 0),
+        kpirColumn: typeof row.kpir_column === 'string' ? row.kpir_column : null,
+        categoryLabel: typeof row.category_label === 'string' ? row.category_label : null,
+      });
+    }
+    if (page.length < EXPENSE_PAGE) break;
+  }
+  return out;
 }
 
 async function fetchInvoiceRows(
@@ -220,10 +303,30 @@ function mapInvoiceRow(
   lines: JpkInvoiceLine[],
   parentNumberById: Map<string, string>,
 ): JpkInvoice {
+  // Obie strony dokumentu. Faktury ze skrzynki KSeF nie mają `seller_data`
+  // ani `buyer_data` — strony leżą w metadanych w `fa3_data` (seller:
+  // { nip, name }, buyer: { identifier: { value }, name }).
+  const fa3 = readBuyerDataJson(row.fa3_data) as Record<string, unknown>;
+  const fa3Seller = readBuyerDataJson((fa3.seller ?? null) as Json | null);
+  const fa3Buyer = (fa3.buyer ?? {}) as { name?: unknown; identifier?: { value?: unknown } };
+
   const buyerData = readBuyerDataJson(row.buyer_data);
   const nipFromJson =
     typeof buyerData.nip === 'string' ? buyerData.nip.trim() : undefined;
-  const buyerNip = nipFromJson || row.buyer_nip?.trim() || undefined;
+  const fa3BuyerNip =
+    typeof fa3Buyer.identifier?.value === 'string' ? fa3Buyer.identifier.value.trim() : undefined;
+  const buyerNip = nipFromJson || row.buyer_nip?.trim() || fa3BuyerNip || undefined;
+  const buyerName =
+    buyerData.name ?? (typeof fa3Buyer.name === 'string' ? fa3Buyer.name : '');
+
+  const sellerData = readBuyerDataJson(row.seller_data);
+  const sellerNip =
+    (typeof sellerData.nip === 'string' ? sellerData.nip.trim() : '') ||
+    row.seller_nip?.trim() ||
+    (typeof fa3Seller.nip === 'string' ? fa3Seller.nip.trim() : '') ||
+    undefined;
+  const sellerName = sellerData.name ?? fa3Seller.name ?? '';
+  const sellerAddress = formatBuyerAddress(sellerData) || undefined;
 
   let correctedNumber: string | undefined;
   if (row.invoice_kind === 'correction' && row.parent_invoice_id) {
@@ -239,8 +342,11 @@ function mapInvoiceRow(
     paymentDueDate: row.payment_due_date ?? undefined,
 
     buyerNip,
-    buyerName: buyerData.name ?? '',
+    buyerName,
     buyerAddress: formatBuyerAddress(buyerData),
+    sellerNip,
+    sellerName,
+    sellerAddress,
 
     netTotal: Number(row.net_total ?? 0),
     vatTotal: Number(row.vat_total ?? 0),

@@ -8,8 +8,11 @@ import {
 // rolnika ryczałtowego). Trzymamy się tego samego zestawu, żeby
 // calculateLineItem/getVatPercentage nie traciły type-safety. '3' da się
 // dodać jednym punktem w types/invoice.ts + mapping w invoice-calculator.
-/** Bez `zw` — wymaga P_19A/B/C w FA(3); wróci z UI na podstawę prawną. */
-export const vatRateEnum = z.enum(['23', '8', '5', '0', 'oo', 'np']);
+/**
+ * `zw` — sprzedaż zwolniona. FA(3) wymaga wtedy P_19A (podstawy prawnej),
+ * którą faktura bierze z ustawień firmy (`tenants.vat_exemption_basis`).
+ */
+export const vatRateEnum = z.enum(['23', '8', '5', '0', 'zw', 'oo', 'np']);
 
 export const buyerConsumerIdTypeEnum = z.enum([
   'pesel',

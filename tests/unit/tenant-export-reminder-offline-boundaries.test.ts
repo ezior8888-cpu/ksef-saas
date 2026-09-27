@@ -25,7 +25,9 @@ function database() {
     let patch: Row = {};
     let count = false;
     let singular = false;
+    let window: [number, number] | null = null;
     const query = {
+      range(from: number, to: number) { window = [from, to]; return query; },
       select(selection = '*', options?: { count?: string }) { op.selection = selection; count = !!options?.count; return query; },
       insert(value: Row) { op.mode = 'insert'; patch = value; return query; },
       update(value: Row) { op.mode = 'update'; patch = value; return query; },
@@ -43,7 +45,8 @@ function database() {
         if (errorFor(op) || (conflict && op.mode === 'insert' && table === 'ksef_offline_queue')) {
           return Promise.resolve({ data: null, error: { code: conflict ? '23505' : 'XX000', message: 'fixture failure' } }).then(resolve, reject);
         }
-        const rows = (tables[table] ?? []).filter(row => predicates.every(p => p(row)));
+        const matching = (tables[table] ?? []).filter(row => predicates.every(p => p(row)));
+        const rows = window ? matching.slice(window[0], window[1] + 1) : matching;
         if (op.mode === 'insert') { const inserted = { id: 'new-queue', ...patch }; (tables[table] ??= []).push(inserted); rows.splice(0, rows.length, inserted); }
         if (op.mode === 'update') rows.forEach(row => Object.assign(row, patch));
         return Promise.resolve({ data: singular ? rows[0] ?? null : rows, count: count ? rows.length : undefined, error: null }).then(resolve, reject);
@@ -73,7 +76,7 @@ beforeEach(() => {
   tables = {
     tenants: [{ id: 'tenant-a', name: 'A', nip: '1234567890', address_json: null }],
     invoices: [invoice('invoice-a'), invoice('invoice-b', 'tenant-b')],
-    invoice_line_items: [], ksef_offline_queue: [], payment_reminders: [],
+    invoice_line_items: [], ksef_offline_queue: [], payment_reminders: [], expenses: [],
     reminder_settings: [{
       tenant_id: 'tenant-a', enabled: true, max_reminders_per_invoice: 3,
       stage_1_enabled: true, stage_2_enabled: true, stage_3_enabled: true,
@@ -94,6 +97,30 @@ describe('tenant boundaries for accounting exports', () => {
     expect(data.receivedInvoices.map(row => row.invoiceNumber)).toEqual(['incoming-a']);
   });
 
+  it('costs come from own expenses the tenant accepted as a cost — never another tenant', async () => {
+    // Od 26.09 koszty w KPiR/JPK_V7M idą z `expenses`, nie z faktur otrzymanych.
+    const expense = (id: string, tenant: string, isDeductible: boolean): Row => ({
+      id, tenant_id: tenant, issue_date: '2026-01-10', document_number: id, document_type: 'invoice',
+      seller_name: 'Dostawca', seller_nip: '5260001246', seller_address: null,
+      net_amount: 100, vat_amount: 23, gross_amount: 123, vat_deductible_amount: 23,
+      kpir_column: 'col_13', category_label: 'Usługi', is_deductible: isDeductible,
+    });
+    tables.expenses.push(
+      expense('exp-a', 'tenant-a', true),
+      expense('exp-a-not-a-cost', 'tenant-a', false),
+      expense('exp-b', 'tenant-b', true),
+    );
+    const data = await fetchInvoicesForExport(exportParams);
+    expect(data.expenses.map(row => row.id)).toEqual(['exp-a']);
+    expect(data.expenses[0]).toMatchObject({ sellerName: 'Dostawca', sellerNip: '5260001246', vatDeductibleAmount: 23 });
+  });
+
+  it('issued-only export does not read expenses at all', async () => {
+    const data = await fetchInvoicesForExport({ ...exportParams, direction: 'issued' });
+    expect(data.expenses).toEqual([]);
+    expect(operations.some(op => op.table === 'expenses')).toBe(false);
+  });
+
   it('preserves a same-tenant correction parent outside the exported date period', async () => {
     Object.assign(tables.invoices[0], { invoice_kind: 'correction', parent_invoice_id: 'parent-a' });
     tables.invoices.push({ ...invoice('parent-a'), issue_date: '2025-01-01', internal_number: 'ORIGINAL-A' });
@@ -104,6 +131,25 @@ describe('tenant boundaries for accounting exports', () => {
   it.each(['invoice-b', 'missing-parent'])('rejects foreign or missing correction parents: %s', async parent => {
     Object.assign(tables.invoices[0], { invoice_kind: 'correction', parent_invoice_id: parent });
     await expect(fetchInvoicesForExport(exportParams)).rejects.toThrow('Linked invoice not found in organization');
+  });
+
+  it('received invoice from the KSeF inbox carries its SELLER (from fa3_data metadata)', async () => {
+    // Skrzynka zapisuje fakturę bez seller_data/buyer_data — strony są tylko
+    // w metadanych. Do 26.09 eksport znał tylko nabywcę, więc zakup miał
+    // jako kontrahenta naszą firmę (albo pustkę).
+    tables.invoices.push({
+      ...invoice('inbox-a', 'tenant-a', 'incoming'),
+      buyer_data: null, buyer_nip: null, seller_nip: '5260001246',
+      fa3_data: {
+        _source: 'inbox-metadata',
+        seller: { nip: '5260001246', name: 'Dostawca Sp. z o.o.' },
+        buyer: { identifier: { type: 'Nip', value: '1234567890' }, name: 'A' },
+      },
+    });
+    const data = await fetchInvoicesForExport(exportParams);
+    expect(data.receivedInvoices.find(row => row.invoiceNumber === 'inbox-a')).toMatchObject({
+      sellerName: 'Dostawca Sp. z o.o.', sellerNip: '5260001246', buyerName: 'A', buyerNip: '1234567890',
+    });
   });
 
   it('uses line item IDs derived from own invoices', async () => {
@@ -142,6 +188,9 @@ describe('reminder decisions distrust invoice-only foreign relationships', () =>
   });
 
   it('finds outgoing database rows for the global scheduler', async () => {
+    // Faktury wystawione w aplikacji (`origin`, 00065) — import historii
+    // odpada z cronu ponagleń (reminders-kandydaci.test.ts).
+    for (const row of tables.invoices) row.origin = 'app';
     tables.invoices.push(invoice('incoming-a', 'tenant-a', 'incoming'));
     const candidates = await findInvoicesRequiringReminders();
     expect(candidates.map(row => row.id)).toEqual(['invoice-a', 'invoice-b']);
