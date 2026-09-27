@@ -12,6 +12,7 @@ import {
   exportsGenerateRequested,
   inngest,
 } from '@/lib/inngest/client';
+import { readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { downloadFromR2, getSignedInvoiceUrl } from '@/lib/storage/r2';
 import type { Database } from '@/types/database';
@@ -59,6 +60,18 @@ function isExportFormat(v: string): v is ExportFormat {
 
 function parseFormats(formats: string[] | null | undefined): ExportFormat[] {
   return [...new Set((formats ?? []).filter(isExportFormat))];
+}
+
+/**
+ * Bez urzędu skarbowego firmy JPK_FA odmawia (#67) — w paczce zastępuje go
+ * uniwersalny CSV, zamiast wywracać całą paczkę dla księgowej.
+ */
+export function formatsWithoutUnaddressedJpkFa<F extends string>(
+  formats: readonly F[],
+  taxOfficeCode: string | null,
+): F[] {
+  if (taxOfficeCode || !formats.includes('jpk_fa' as F)) return [...formats];
+  return [...new Set(formats.map((f) => (f === 'jpk_fa' ? ('csv_universal' as F) : f)))];
 }
 
 /** Dzień miesiąca (1–31) w kalendarzu Europe/Warsaw. */
@@ -274,6 +287,13 @@ export async function runCoPilotSendPackage(data: Parameters<typeof exportsCoPil
       throw new NonRetriableError('Brak formatów eksportu (Co-Pilot)');
     }
 
+    // JPK_FA bez urzędu firmy odmawia — a jeden nieudany format wywraca całą
+    // paczkę. Bez urzędu księgowa dostaje zamiast JPK_FA uniwersalny CSV.
+    const taxOfficeCode = formats.includes('jpk_fa')
+      ? await step.run('read-tax-office', () => readTenantTaxOffice(supabase, tenantId))
+      : null;
+    const packageFormats = formatsWithoutUnaddressedJpkFa(formats, taxOfficeCode);
+
     const toEmail = accountantEmail.trim() || settingsRow?.accountant_email?.trim();
     if (!toEmail) {
       throw new NonRetriableError('Brak adresu email księgowego');
@@ -288,8 +308,8 @@ export async function runCoPilotSendPackage(data: Parameters<typeof exportsCoPil
 
     const jobIds: string[] = [];
 
-    for (let i = 0; i < formats.length; i++) {
-      const format = formats[i];
+    for (let i = 0; i < packageFormats.length; i++) {
+      const format = packageFormats[i];
       const id = await step.run(`create-job-${format}-${i}`, async () => {
         const { data, error } = await supabase
           .from('export_jobs')

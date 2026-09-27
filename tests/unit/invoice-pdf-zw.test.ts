@@ -126,6 +126,13 @@ describe('podstawa zwolnienia na PDF faktury', () => {
     expect(data?.invoice.annotations).toEqual({ vatExemptionBasis: PODSTAWA });
   });
 
+  it('loader: MPP z adnotacji (P_18A) trafia na PDF', async () => {
+    mocks.row = { ...(mocks.row as Record<string, unknown>), annotations: { splitPayment: 1 } };
+    // Od #77 loader wymaga firmy — dostęp do PDF ograniczony do tenanta.
+    const data = await loadInvoiceForPdf('inv-1', 'ten-1');
+    expect(data?.invoice.annotations).toEqual({ splitPayment: 1 });
+  });
+
   it('loader: śmieci w adnotacjach nie trafiają na PDF', async () => {
     mocks.row = { id: 'inv-1', tenant_id: 'ten-1', issue_date: '2026-09-25', annotations: { vatExemptionBasis: 42 } };
     const data = await loadInvoiceForPdf('inv-1', 'ten-1');
