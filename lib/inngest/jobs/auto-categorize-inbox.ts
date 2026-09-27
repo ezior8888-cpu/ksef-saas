@@ -11,6 +11,7 @@ import {
   extractedInvoiceSchema,
   type ExtractedInvoice,
 } from '@/lib/ocr/schema';
+import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database, Json } from '@/types/database';
 
@@ -272,6 +273,10 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
         throw new NonRetriableError('Brak użytkownika w tenancie — nie tworzę expense');
       }
 
+      // Firma zwolniona z VAT (#60) nie odlicza VAT-u: koszt w KPiR wychodzi
+      // wtedy brutto (#65), a JPK nic nie odlicza. Odczyt odporny przed 00091.
+      const vatExempt = (await readTenantVatExemption(supabase, tenantId)) !== null;
+
       const { data: expense, error } = await supabase
         .from('expenses')
         .insert({
@@ -288,7 +293,7 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
           vat_amount: extracted.vat_amount,
           gross_amount: extracted.gross_amount,
           vat_rate: extracted.vat_rate,
-          vat_deductible_amount: extracted.vat_amount,
+          vat_deductible_amount: vatExempt ? 0 : extracted.vat_amount,
           kpir_column: categorization.kpir_column,
           category_label: categorization.category_label,
           categorization_method: categorization.method,

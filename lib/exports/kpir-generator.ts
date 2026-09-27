@@ -2,6 +2,8 @@
 // Generator KPiR Excel zgodny z rozporządzeniem MF (17 kolumn)
 
 import ExcelJS from 'exceljs';
+import { kpirCostAmount, nonDeductedVat } from '@/lib/categorization/kpir-cost';
+
 import type { ExportExpense } from './data-fetcher';
 import type { JpkInvoice } from './jpk-fa-generator';
 
@@ -182,7 +184,17 @@ function buildKpirSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
       ].filter(Boolean).join('; ');
     } else {
       const exp = entry.expense;
-      const net = exp.netAmount;
+      // Koszt jak w KPiR w aplikacji (#65): netto + VAT bez prawa do odliczenia
+      // (paragon, firma zwolniona, samochód 50%) — ta sama funkcja, żeby plik
+      // dla księgowej i ekran klienta się nie rozjechały.
+      const costInput = {
+        net_amount: exp.netAmount,
+        vat_amount: exp.vatAmount,
+        vat_deductible_amount: exp.vatDeductibleAmount,
+        document_type: exp.documentType,
+      };
+      const net = kpirCostAmount(costInput);
+      const vatInCost = nonDeductedVat(costInput);
       const col = kpirCostColumn(exp.kpirColumn);
       cells[2] = exp.documentNumber;
       // Kontrahent kosztu to SPRZEDAWCA — dawniej trafiała tu nasza firma.
@@ -192,6 +204,7 @@ function buildKpirSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
 
       const uwagi: string[] = [];
       if (exp.documentType === 'receipt') uwagi.push('paragon');
+      if (vatInCost !== 0) uwagi.push(`w tym VAT bez odliczenia ${vatInCost.toFixed(2)} zł`);
       if (exp.kpirColumn === null) uwagi.push('bez kategorii — sprawdź');
       if (col === null) {
         uwagi.push(`oznaczony kolumną przychodu (${exp.kpirColumn}) — nie liczony, sprawdź kategorię`);

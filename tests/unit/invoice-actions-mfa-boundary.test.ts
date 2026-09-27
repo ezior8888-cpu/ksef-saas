@@ -201,3 +201,18 @@ describe('zwolnienie z VAT przy wystawianiu (stawka zw)', () => {
     expect(mocks.enqueue.mock.calls[0]![0].invoice.annotations).toBeUndefined();
   });
 });
+
+describe('mechanizm podzielonej płatności (MPP, P_18A)', () => {
+  const mpp: InvoiceFormValues = { ...form, bankAccount: 'PL61109010140000071219812874', splitPayment: true };
+
+  it('zaznaczony MPP trafia do faktury w kolejce KSeF', async () => {
+    await expect(saveAndSendInvoiceAction(mpp)).resolves.toMatchObject({ success: true });
+    expect(mocks.enqueue.mock.calls[0]![0].invoice.annotations).toEqual({ splitPayment: 1 });
+  });
+
+  it('MPP bez rachunku — odmowa także na serwerze, bez kolejki', async () => {
+    const result = await saveAndSendInvoiceAction({ ...mpp, bankAccount: '' });
+    expect(result).toMatchObject({ success: false });
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+  });
+});

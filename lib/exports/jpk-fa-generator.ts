@@ -4,16 +4,18 @@
 
 import { create } from 'xmlbuilder2';
 
+import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
+import { isKnownTaxOffice } from '@/lib/exports/tax-offices';
+
 export interface JpkFaInputData {
   // Wystawca (tenant)
   issuer: {
     nip: string;
     name: string;
     /**
-     * Kod Urzędu Skarbowego (4 cyfry, KodUrzedu w JPK_FA). Pochodzi z profilu
-     * tenanta (właściwy US wg miejsca zamieszkania/siedziby). Gdy brak/niepoprawny
-     * — używamy domyślnego (zob. `resolveTaxOfficeCode`). Po dodaniu kolumny
-     * `tenants.tax_office_code` caller przekazuje ją tutaj.
+     * Kod Urzędu Skarbowego (KodUrzedu w JPK_FA) — `tenants.tax_office_code`
+     * (Ustawienia → Księgowa). Brak albo kod spoza słownika MF → błąd
+     * `MissingTaxOfficeError` (zob. `resolveTaxOfficeCode`).
      */
     taxOfficeCode?: string;
     address?: {
@@ -339,18 +341,18 @@ function normalizeVatRate(rate: string): string {
   return map[r] ?? '23';
 }
 
-/** Domyślny kod US, gdy tenant nie ma jeszcze ustawionego własnego. */
-export const DEFAULT_TAX_OFFICE_CODE = '1408'; // Pierwszy Mazowiecki US Warszawa-Mokotów
-
 /**
- * Zwraca kod Urzędu Skarbowego do KodUrzedu. Kod US to dokładnie 4 cyfry.
- * Gdy tenant przekazał poprawny kod (z profilu) — używamy go; w przeciwnym
- * razie fallback do domyślnego, żeby JPK_FA pozostał walidowalny przez schemę MF
- * (pusty/niepoprawny KodUrzedu = odrzucenie pliku przez bramkę).
+ * Kod Urzędu Skarbowego do KodUrzedu — tylko ze słownika MF.
+ *
+ * Do 27.09 brak kodu zamieniał się w „1408”, opisany jako Warszawa-Mokotów,
+ * a według słownika MF to Urząd Skarbowy w KOZIENICACH — każdy plik wskazywał
+ * ten urząd. Plik przechodził walidację, więc nikt tego nie widział. Teraz
+ * brak urzędu to błąd z komunikatem, nie cichy zamiennik.
  */
 export function resolveTaxOfficeCode(code: string | null | undefined): string {
   const trimmed = (code ?? '').trim();
-  return /^\d{4}$/.test(trimmed) ? trimmed : DEFAULT_TAX_OFFICE_CODE;
+  if (!isKnownTaxOffice(trimmed)) throw new MissingTaxOfficeError();
+  return trimmed;
 }
 
 /** Adres wystawcy z pól tenanta — do P_3B/P_3D, gdy dokument go nie zapisał. */
