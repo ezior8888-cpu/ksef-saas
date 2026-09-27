@@ -1,4 +1,5 @@
 import type { PageContext } from '@/lib/supabase/page-context';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 
 /**
  * WŁAŚCICIEL: Bartosz (tor silnika) — rama panelu.
@@ -57,20 +58,28 @@ export async function getMonthlyFigures(
     .toISOString()
     .slice(0, 10);
   const yearStartIso = `${now.getFullYear()}-01-01`;
+  const environment = requireConfiguredKsefEnvironment();
+  // Local drafts and queued invoices still count as issued. An accepted invoice
+  // counts only in the KSeF environment that accepted it. `ksef_status` is
+  // nullable, so include NULL explicitly rather than losing old local drafts.
+  const visibleInvoices =
+    `ksef_status.neq.accepted,ksef_status.is.null,ksef_environment.eq.${environment}`;
 
-  const [{ data: monthInvoices }, { data: prevInvoices }, { data: ytdInvoices }] =
+  const [monthResult, prevResult, ytdResult] =
     await Promise.all([
       supabase
         .from('invoices')
         .select('gross_total, net_total, vat_total, ksef_status')
         .eq('tenant_id', tenantId)
         .eq('direction', OUTGOING)
+        .or(visibleInvoices)
         .gte('issue_date', startOfMonthIso),
       supabase
         .from('invoices')
         .select('gross_total')
         .eq('tenant_id', tenantId)
         .eq('direction', OUTGOING)
+        .or(visibleInvoices)
         .gte('issue_date', prevMonthStartIso)
         .lt('issue_date', startOfMonthIso),
       supabase
@@ -78,8 +87,14 @@ export async function getMonthlyFigures(
         .select('gross_total, issue_date')
         .eq('tenant_id', tenantId)
         .eq('direction', OUTGOING)
+        .or(visibleInvoices)
         .gte('issue_date', yearStartIso),
     ]);
+  const readError = monthResult.error ?? prevResult.error ?? ytdResult.error;
+  if (readError) throw new Error('Nie można odczytać liczb miesiąca');
+  const monthInvoices = monthResult.data;
+  const prevInvoices = prevResult.data;
+  const ytdInvoices = ytdResult.data;
 
   const issuedCount = monthInvoices?.length ?? 0;
   const acceptedCount =
@@ -188,22 +203,31 @@ export async function getSalesSeries(
 
   const windowStartIso = `${months[0]!.key}-01`;
   const prevYearStartIso = `${months[0]!.prevKey}-01`;
+  const environment = requireConfiguredKsefEnvironment();
+  const visibleInvoices =
+    `ksef_status.neq.accepted,ksef_status.is.null,ksef_environment.eq.${environment}`;
 
-  const [{ data: current }, { data: previous }] = await Promise.all([
+  const [currentResult, previousResult] = await Promise.all([
     supabase
       .from('invoices')
       .select('gross_total, issue_date')
       .eq('tenant_id', tenantId)
       .eq('direction', OUTGOING)
+      .or(visibleInvoices)
       .gte('issue_date', windowStartIso),
     supabase
       .from('invoices')
       .select('gross_total, issue_date')
       .eq('tenant_id', tenantId)
       .eq('direction', OUTGOING)
+      .or(visibleInvoices)
       .gte('issue_date', prevYearStartIso)
       .lt('issue_date', windowStartIso),
   ]);
+  const readError = currentResult.error ?? previousResult.error;
+  if (readError) throw new Error('Nie można odczytać wykresu sprzedaży');
+  const current = currentResult.data;
+  const previous = previousResult.data;
 
   const sumByMonth = (
     rows: { gross_total: number | string | null; issue_date: string }[] | null,

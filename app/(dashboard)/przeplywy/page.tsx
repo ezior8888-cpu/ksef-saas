@@ -7,6 +7,7 @@ import {
   getMonthlyFigures,
   getSalesSeries,
 } from '@/lib/dashboard/monthly-figures';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 /**
@@ -25,20 +26,23 @@ export const dynamic = 'force-dynamic';
 
 export default async function PrzeplywyPage() {
   const { supabase, tenantId } = await getPageContext();
+  const environment = requireConfiguredKsefEnvironment();
 
   const now = new Date();
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
     .toISOString()
     .slice(0, 10);
 
-  const { data: invoices } = await supabase
+  const { data: invoices, error: invoicesError } = await supabase
     .from('invoices')
     .select('issue_date, net_total, gross_total')
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
+    .eq('ksef_environment', environment)
     .gte('issue_date', sixMonthsAgo)
     .order('issue_date', { ascending: true });
+  if (invoicesError) throw new Error('Nie można odczytać faktur do przepływów');
 
   const { data: expenses } = await supabase
     .from('expenses')
