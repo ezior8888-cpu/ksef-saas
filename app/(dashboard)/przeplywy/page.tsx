@@ -17,11 +17,10 @@ import { getPageContext } from '@/lib/supabase/page-context';
  * Od 30.08.2026 stoją tu też podsumowanie VAT i wykres sprzedaży, przeniesione
  * z dashboardu, który oddał całą powierzchnię agentowi FLO.
  *
- * Zapytania celowo NIE są łączone z tymi wyżej: `CashFlowDashboard` liczy
- * przepływ, więc bierze wyłącznie faktury PRZYJĘTE przez KSeF
- * (`ksef_status = 'accepted'`), a podsumowanie VAT i wykres sprzedaży mają
- * pokazywać wszystko, co zostało wystawione. Sklejenie tych filtrów zaniżyłoby
- * VAT o faktury czekające w kolejce.
+ * Kwoty w podsumowaniu VAT i na wykresie sprzedaży pochodzą wyłącznie
+ * z faktur przyjętych w aktywnym środowisku KSeF. Szkice lokalne mają
+ * oddzielny licznik, a kolejki bez potwierdzonej proweniencji nie powiększają
+ * wartości podatkowych.
  */
 export const dynamic = 'force-dynamic';
 

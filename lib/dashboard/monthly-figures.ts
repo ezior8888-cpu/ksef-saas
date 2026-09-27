@@ -1,5 +1,6 @@
 import type { PageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import type { KsefEnvironment } from '@/types/ksef';
 
 /**
  * WŁAŚCICIEL: Bartosz (tor silnika) — rama panelu.
@@ -16,18 +17,19 @@ import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
  */
 
 const OUTGOING = 'outgoing' as const;
+const PAGE_SIZE = 1000;
 
 export interface MonthlyFigures {
   /** „sierpień 2026" */
   monthName: string;
-  issuedCount: number;
-  prevIssuedCount: number;
+  prevAcceptedCount: number;
   acceptedCount: number;
-  pendingCount: number;
+  /** Niezłożone szkice bez przypisanego środowiska KSeF. */
+  draftCount: number;
   totalNet: number;
   totalVat: number;
   totalGross: number;
-  /** Zmiana LICZBY faktur miesiąc do miesiąca, w procentach. */
+  /** Zmiana LICZBY przyjętych faktur miesiąc do miesiąca, w procentach. */
   momCountPct: number;
   /** Zmiana KWOTY sprzedaży brutto miesiąc do miesiąca, w procentach. */
   momGrossPct: number;
@@ -36,8 +38,104 @@ export interface MonthlyFigures {
   daysToVatDue: number;
   /** Bieżący miesiąc jest najlepszy w roku pod względem sprzedaży brutto. */
   isBestMonthOfYear: boolean;
-  /** Czy poprzedni miesiąc ma jakąkolwiek fakturę — bez tego procent nie istnieje. */
+  /** Czy poprzedni miesiąc ma przyjętą fakturę — bez tego procent nie istnieje. */
   hasPrevMonth: boolean;
+}
+
+type InvoiceSummary = {
+  id: string;
+  issue_date: string;
+  gross_total: number | string | null;
+  net_total: number | string | null;
+  vat_total: number | string | null;
+};
+
+/** Local calendar dates must not shift to the previous day in European time zones. */
+function monthStartIso(year: number, monthIndex: number): string {
+  const date = new Date(year, monthIndex, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+/**
+ * An accepted invoice with no stored environment could belong to TEST or
+ * production. A zero-only dashboard would hide that historical ambiguity.
+ * Known invoices in another environment are excluded by the monetary query.
+ */
+async function assertAcceptedEnvironmentKnown(
+  supabase: PageContext['supabase'],
+  tenantId: string,
+  start: string,
+  endExclusive: string,
+): Promise<void> {
+  const { count, error } = await supabase
+    .from('invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .eq('direction', OUTGOING)
+    .eq('ksef_status', 'accepted')
+    .is('ksef_environment', null)
+    .gte('issue_date', start)
+    .lt('issue_date', endExclusive);
+  if (error || typeof count !== 'number') {
+    throw new Error('Nie można sprawdzić środowiska faktur KSeF');
+  }
+  if (count > 0) {
+    throw new Error('Przyjęte faktury wymagają uzgodnienia środowiska KSeF');
+  }
+}
+
+/**
+ * PostgREST can cap one response at 1000 rows. Stable ordering and explicit
+ * pages keep large months from silently understating VAT and sales.
+ */
+async function fetchAcceptedInvoices(
+  supabase: PageContext['supabase'],
+  tenantId: string,
+  environment: KsefEnvironment,
+  start: string,
+  endExclusive: string,
+  errorMessage: string,
+): Promise<InvoiceSummary[]> {
+  const rows: InvoiceSummary[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('id, issue_date, gross_total, net_total, vat_total')
+      .eq('tenant_id', tenantId)
+      .eq('direction', OUTGOING)
+      .eq('ksef_status', 'accepted')
+      .eq('ksef_environment', environment)
+      .gte('issue_date', start)
+      .lt('issue_date', endExclusive)
+      .order('issue_date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error || !data) throw new Error(errorMessage);
+    rows.push(...data);
+    if (data.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+async function countLocalDrafts(
+  supabase: PageContext['supabase'],
+  tenantId: string,
+  start: string,
+  endExclusive: string,
+): Promise<number> {
+  const { count, error } = await supabase
+    .from('invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .eq('direction', OUTGOING)
+    .eq('ksef_status', 'draft')
+    .is('ksef_environment', null)
+    .gte('issue_date', start)
+    .lt('issue_date', endExclusive);
+  if (error || typeof count !== 'number') {
+    throw new Error('Nie można odczytać liczby szkiców');
+  }
+  return count;
 }
 
 /**
@@ -53,69 +151,48 @@ export async function getMonthlyFigures(
   now: Date = new Date(),
 ): Promise<MonthlyFigures> {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfMonthIso = startOfMonth.toISOString().slice(0, 10);
-  const prevMonthStartIso = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    .toISOString()
-    .slice(0, 10);
-  const yearStartIso = `${now.getFullYear()}-01-01`;
+  const startOfMonthIso = monthStartIso(now.getFullYear(), now.getMonth());
+  const prevMonthStartIso = monthStartIso(now.getFullYear(), now.getMonth() - 1);
+  const nextMonthStartIso = monthStartIso(now.getFullYear(), now.getMonth() + 1);
+  const yearStartIso = monthStartIso(now.getFullYear(), 0);
+  const readStartIso = prevMonthStartIso < yearStartIso ? prevMonthStartIso : yearStartIso;
   const environment = requireConfiguredKsefEnvironment();
-  // Local drafts and queued invoices still count as issued. An accepted invoice
-  // counts only in the KSeF environment that accepted it. `ksef_status` is
-  // nullable, so include NULL explicitly rather than losing old local drafts.
-  const visibleInvoices =
-    `ksef_status.neq.accepted,ksef_status.is.null,ksef_environment.eq.${environment}`;
 
-  const [monthResult, prevResult, ytdResult] =
-    await Promise.all([
-      supabase
-        .from('invoices')
-        .select('gross_total, net_total, vat_total, ksef_status')
-        .eq('tenant_id', tenantId)
-        .eq('direction', OUTGOING)
-        .or(visibleInvoices)
-        .gte('issue_date', startOfMonthIso),
-      supabase
-        .from('invoices')
-        .select('gross_total')
-        .eq('tenant_id', tenantId)
-        .eq('direction', OUTGOING)
-        .or(visibleInvoices)
-        .gte('issue_date', prevMonthStartIso)
-        .lt('issue_date', startOfMonthIso),
-      supabase
-        .from('invoices')
-        .select('gross_total, issue_date')
-        .eq('tenant_id', tenantId)
-        .eq('direction', OUTGOING)
-        .or(visibleInvoices)
-        .gte('issue_date', yearStartIso),
-    ]);
-  const readError = monthResult.error ?? prevResult.error ?? ytdResult.error;
-  if (readError) throw new Error('Nie można odczytać liczb miesiąca');
-  const monthInvoices = monthResult.data;
-  const prevInvoices = prevResult.data;
-  const ytdInvoices = ytdResult.data;
+  await assertAcceptedEnvironmentKnown(
+    supabase, tenantId, readStartIso, nextMonthStartIso,
+  );
+  const [acceptedInvoices, draftCount] = await Promise.all([
+    fetchAcceptedInvoices(
+      supabase, tenantId, environment, readStartIso, nextMonthStartIso,
+      'Nie można odczytać liczb miesiąca',
+    ),
+    countLocalDrafts(supabase, tenantId, startOfMonthIso, nextMonthStartIso),
+  ]);
+  const monthInvoices = acceptedInvoices.filter((invoice) =>
+    invoice.issue_date >= startOfMonthIso);
+  const prevInvoices = acceptedInvoices.filter((invoice) =>
+    invoice.issue_date >= prevMonthStartIso && invoice.issue_date < startOfMonthIso);
+  const ytdInvoices = acceptedInvoices.filter((invoice) =>
+    invoice.issue_date >= yearStartIso);
 
-  const issuedCount = monthInvoices?.length ?? 0;
-  const acceptedCount =
-    monthInvoices?.filter((i) => i.ksef_status === 'accepted').length ?? 0;
+  const acceptedCount = monthInvoices.length;
   const totalNet =
-    monthInvoices?.reduce((sum, i) => sum + Number(i.net_total ?? 0), 0) ?? 0;
+    monthInvoices.reduce((sum, invoice) => sum + Number(invoice.net_total ?? 0), 0);
   const totalVat =
-    monthInvoices?.reduce((sum, i) => sum + Number(i.vat_total ?? 0), 0) ?? 0;
+    monthInvoices.reduce((sum, invoice) => sum + Number(invoice.vat_total ?? 0), 0);
   const totalGross =
-    monthInvoices?.reduce((sum, i) => sum + Number(i.gross_total ?? 0), 0) ?? 0;
+    monthInvoices.reduce((sum, invoice) => sum + Number(invoice.gross_total ?? 0), 0);
 
   const ytdByMonth = new Map<string, number>();
-  ytdInvoices?.forEach((inv) => {
+  ytdInvoices.forEach((inv) => {
     const key = inv.issue_date.slice(0, 7);
     ytdByMonth.set(key, (ytdByMonth.get(key) ?? 0) + Number(inv.gross_total ?? 0));
   });
   const maxYtdMonthGross = Math.max(0, ...Array.from(ytdByMonth.values()));
 
-  const prevIssuedCount = prevInvoices?.length ?? 0;
+  const prevAcceptedCount = prevInvoices.length;
   const prevGross =
-    prevInvoices?.reduce((sum, i) => sum + Number(i.gross_total ?? 0), 0) ?? 0;
+    prevInvoices.reduce((sum, i) => sum + Number(i.gross_total ?? 0), 0);
 
   /**
    * Zmiana procentowa liczona osobno dla liczby faktur i dla kwoty — te dwie
@@ -149,16 +226,15 @@ export async function getMonthlyFigures(
       month: 'long',
       year: 'numeric',
     }),
-    issuedCount,
-    prevIssuedCount,
+    prevAcceptedCount,
     acceptedCount,
-    pendingCount: Math.max(0, issuedCount - acceptedCount),
+    draftCount,
     totalNet,
     totalVat,
     totalGross,
-    momCountPct: zmiana(issuedCount, prevIssuedCount) ?? 0,
+    momCountPct: zmiana(acceptedCount, prevAcceptedCount) ?? 0,
     momGrossPct: zmiana(totalGross, prevGross) ?? 0,
-    hasPrevMonth: prevIssuedCount > 0,
+    hasPrevMonth: prevAcceptedCount > 0,
     vatDueLabel: vatDueDate.toLocaleDateString('pl-PL', {
       day: '2-digit',
       month: '2-digit',
@@ -203,37 +279,33 @@ export async function getSalesSeries(
 
   const windowStartIso = `${months[0]!.key}-01`;
   const prevYearStartIso = `${months[0]!.prevKey}-01`;
+  const nextMonthStartIso = monthStartIso(now.getFullYear(), now.getMonth() + 1);
+  const prevYearEndIso = monthStartIso(now.getFullYear() - 1, now.getMonth() + 1);
   const environment = requireConfiguredKsefEnvironment();
-  const visibleInvoices =
-    `ksef_status.neq.accepted,ksef_status.is.null,ksef_environment.eq.${environment}`;
-
-  const [currentResult, previousResult] = await Promise.all([
-    supabase
-      .from('invoices')
-      .select('gross_total, issue_date')
-      .eq('tenant_id', tenantId)
-      .eq('direction', OUTGOING)
-      .or(visibleInvoices)
-      .gte('issue_date', windowStartIso),
-    supabase
-      .from('invoices')
-      .select('gross_total, issue_date')
-      .eq('tenant_id', tenantId)
-      .eq('direction', OUTGOING)
-      .or(visibleInvoices)
-      .gte('issue_date', prevYearStartIso)
-      .lt('issue_date', windowStartIso),
+  await Promise.all([
+    assertAcceptedEnvironmentKnown(
+      supabase, tenantId, windowStartIso, nextMonthStartIso,
+    ),
+    assertAcceptedEnvironmentKnown(
+      supabase, tenantId, prevYearStartIso, prevYearEndIso,
+    ),
   ]);
-  const readError = currentResult.error ?? previousResult.error;
-  if (readError) throw new Error('Nie można odczytać wykresu sprzedaży');
-  const current = currentResult.data;
-  const previous = previousResult.data;
+  const [current, previous] = await Promise.all([
+    fetchAcceptedInvoices(
+      supabase, tenantId, environment, windowStartIso, nextMonthStartIso,
+      'Nie można odczytać wykresu sprzedaży',
+    ),
+    fetchAcceptedInvoices(
+      supabase, tenantId, environment, prevYearStartIso, prevYearEndIso,
+      'Nie można odczytać wykresu sprzedaży',
+    ),
+  ]);
 
   const sumByMonth = (
-    rows: { gross_total: number | string | null; issue_date: string }[] | null,
+    rows: InvoiceSummary[],
   ) => {
     const map = new Map<string, number>();
-    rows?.forEach((inv) => {
+    rows.forEach((inv) => {
       const key = inv.issue_date.slice(0, 7);
       map.set(key, (map.get(key) ?? 0) + Number(inv.gross_total ?? 0));
     });

@@ -34,7 +34,7 @@ export function VatSummaryCard({
             Podsumowanie podatku VAT
           </h2>
           <p className="mt-1.5 text-[13px] text-[var(--ff-text-muted)]">
-            {monthName} · deklaracja JPK_V7
+            {monthName} · faktury przyjęte w bieżącym środowisku KSeF
           </p>
         </div>
         <DashboardExportsPdfLink />
