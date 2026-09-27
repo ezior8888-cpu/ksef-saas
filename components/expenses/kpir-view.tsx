@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
 import { formatPlMoney } from '@/lib/format/pl';
+import { kpirCostAmount, nonDeductedVat } from '@/lib/categorization/kpir-cost';
 
 export type KpirExpenseRow = Database['public']['Tables']['expenses']['Row'];
 
@@ -78,19 +79,19 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
     col_8: 0,
     col_10: expenses
       .filter((e) => e.kpir_column === 'col_10')
-      .reduce((s, e) => s + Number(e.net_amount ?? 0), 0),
+      .reduce((s, e) => s + kpirCostAmount(e), 0),
     col_11: expenses
       .filter((e) => e.kpir_column === 'col_11')
-      .reduce((s, e) => s + Number(e.net_amount ?? 0), 0),
+      .reduce((s, e) => s + kpirCostAmount(e), 0),
     col_12: expenses
       .filter((e) => e.kpir_column === 'col_12')
-      .reduce((s, e) => s + Number(e.net_amount ?? 0), 0),
+      .reduce((s, e) => s + kpirCostAmount(e), 0),
     col_13: expenses
       .filter((e) => e.kpir_column === 'col_13')
-      .reduce((s, e) => s + Number(e.net_amount ?? 0), 0),
+      .reduce((s, e) => s + kpirCostAmount(e), 0),
     col_15: expenses
       .filter((e) => e.kpir_column === 'col_15')
-      .reduce((s, e) => s + Number(e.net_amount ?? 0), 0),
+      .reduce((s, e) => s + kpirCostAmount(e), 0),
   };
 
   const totalRevenue = sums.col_7 + sums.col_8;
@@ -294,7 +295,7 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
                     Kol.
                   </th>
                   <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Netto
+                    Koszt
                   </th>
                   <th className="w-12 px-6 py-3.5 sm:px-8" aria-hidden />
                 </tr>
@@ -323,10 +324,15 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
                       {exp.kpir_column?.replace('col_', '') ?? '—'}
                     </td>
                     <td className="px-6 py-3.5 text-right font-semibold tabular-nums text-[var(--ff-on-surface)] sm:px-8">
-                      {formatPlMoney(Number(exp.net_amount ?? 0))}{' '}
+                      {formatPlMoney(kpirCostAmount(exp))}{' '}
                       <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
                         PLN
                       </span>
+                      {nonDeductedVat(exp) > 0 ? (
+                        <p className="text-[11px] font-normal text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+                          w tym VAT bez odliczenia {formatPlMoney(nonDeductedVat(exp))}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-6 py-3.5 sm:px-8">
                       <Link

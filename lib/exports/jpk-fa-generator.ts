@@ -48,10 +48,16 @@ export interface JpkInvoice {
   saleDate?: string;
   paymentDueDate?: string;
 
-  // Strony
+  // Strony — OBIE. Kontrahentem sprzedaży jest nabywca, zakupu — sprzedawca
+  // (`counterpartyOf`). Do 26.09 była tylko strona nabywcy, więc przy
+  // zakupach „kontrahentem” wychodziła nasza firma.
   buyerNip?: string;
   buyerName: string;
   buyerAddress?: string;
+  sellerNip?: string;
+  /** Pusty przy sprzedaży bez `seller_data` — wtedy sprzedawcą jest wystawca pliku. */
+  sellerName?: string;
+  sellerAddress?: string;
 
   // Kwoty (sumaryczne)
   netTotal: number;
@@ -67,6 +73,24 @@ export interface JpkInvoice {
 
   // Numer KSeF (informacyjnie)
   ksefNumber?: string;
+}
+
+export interface ExportParty {
+  name: string;
+  nip?: string;
+  address?: string;
+}
+
+/**
+ * Druga strona dokumentu z perspektywy podatnika: przy sprzedaży nabywca,
+ * przy zakupie sprzedawca. Wszystkie eksporty „z kontrahentem” (CSV, Optima)
+ * idą przez tę funkcję.
+ */
+export function counterpartyOf(inv: JpkInvoice, direction: 'issued' | 'received'): ExportParty {
+  if (direction === 'received') {
+    return { name: inv.sellerName ?? '', nip: inv.sellerNip, address: inv.sellerAddress };
+  }
+  return { name: inv.buyerName, nip: inv.buyerNip, address: inv.buyerAddress };
 }
 
 export interface JpkInvoiceLine {
@@ -95,7 +119,7 @@ export function generateJpkFa(data: JpkFaInputData): string {
   buildIssuer(root, data.issuer);
 
   data.issuedInvoices.forEach((inv) => {
-    buildFaktura(root, inv, 'sale');
+    buildFaktura(root, inv, 'sale', data.issuer);
   });
 
   data.issuedInvoices.forEach((inv) => {
@@ -106,7 +130,7 @@ export function generateJpkFa(data: JpkFaInputData): string {
 
   if (data.receivedInvoices && data.receivedInvoices.length > 0) {
     data.receivedInvoices.forEach((inv) => {
-      buildFaktura(root, inv, 'purchase');
+      buildFaktura(root, inv, 'purchase', data.issuer);
     });
 
     data.receivedInvoices.forEach((inv) => {
@@ -186,6 +210,7 @@ function buildFaktura(
   root: ReturnType<typeof create>,
   inv: JpkInvoice,
   direction: 'sale' | 'purchase',
+  issuer: JpkFaInputData['issuer'],
 ): void {
   const faktura = root.ele('Faktura', {
     typ: direction === 'sale' ? 'G' : 'Z',
@@ -194,12 +219,27 @@ function buildFaktura(
   faktura.ele('KodWaluty').txt('PLN');
   faktura.ele('P_1').txt(inv.issueDate);
   faktura.ele('P_2A').txt(inv.invoiceNumber);
-  faktura.ele('P_3A').txt(inv.buyerName);
+  // Strony wg broszury MF do JPK_FA(4): P_3A/P_3B nabywca, P_3C/P_3D
+  // sprzedawca, P_4B NIP sprzedawcy, P_5B NIP nabywcy. Do 26.09 w P_4B szedł
+  // NIP NABYWCY, P_5B był pusty, a sprzedawcy nie było wcale. Strona, której
+  // dokument nie zapisał, to wystawca pliku (sprzedaż: sprzedawca; zakup
+  // ze skrzynki: nabywca).
+  const us: ExportParty = { name: issuer.name, nip: issuer.nip, address: formatIssuerAddress(issuer.address) };
+  const seller: ExportParty =
+    direction === 'sale'
+      ? { name: inv.sellerName || us.name, nip: inv.sellerNip || us.nip, address: inv.sellerAddress || us.address }
+      : { name: inv.sellerName ?? '', nip: inv.sellerNip, address: inv.sellerAddress };
+  const buyer: ExportParty =
+    direction === 'purchase'
+      ? { name: inv.buyerName || us.name, nip: inv.buyerNip || us.nip, address: inv.buyerAddress || us.address }
+      : { name: inv.buyerName, nip: inv.buyerNip, address: inv.buyerAddress };
 
-  if (inv.buyerAddress) faktura.ele('P_3B').txt(inv.buyerAddress);
-  if (inv.buyerNip) faktura.ele('P_4B').txt(inv.buyerNip);
-
-  faktura.ele('P_5B').txt('');
+  faktura.ele('P_3A').txt(buyer.name);
+  if (buyer.address) faktura.ele('P_3B').txt(buyer.address);
+  faktura.ele('P_3C').txt(seller.name);
+  if (seller.address) faktura.ele('P_3D').txt(seller.address);
+  if (seller.nip) faktura.ele('P_4B').txt(seller.nip);
+  faktura.ele('P_5B').txt(buyer.nip ?? '');
 
   if (inv.saleDate && inv.saleDate !== inv.issueDate) {
     faktura.ele('P_6').txt(inv.saleDate);
@@ -311,4 +351,13 @@ export const DEFAULT_TAX_OFFICE_CODE = '1408'; // Pierwszy Mazowiecki US Warszaw
 export function resolveTaxOfficeCode(code: string | null | undefined): string {
   const trimmed = (code ?? '').trim();
   return /^\d{4}$/.test(trimmed) ? trimmed : DEFAULT_TAX_OFFICE_CODE;
+}
+
+/** Adres wystawcy z pól tenanta — do P_3B/P_3D, gdy dokument go nie zapisał. */
+function formatIssuerAddress(address: JpkFaInputData['issuer']['address']): string | undefined {
+  if (!address) return undefined;
+  const street = [address.street, address.buildingNumber].filter(Boolean).join(' ');
+  const streetFull = address.apartmentNumber ? `${street}/${address.apartmentNumber}` : street;
+  const city = [address.postCode, address.city].filter(Boolean).join(' ');
+  return [streetFull, city].filter(Boolean).join(', ') || undefined;
 }

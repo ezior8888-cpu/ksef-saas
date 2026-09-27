@@ -92,12 +92,13 @@ async function generateExportFile(
 
   switch (format) {
     case 'jpk_v7m': {
+      // Zakupy z listy wydatków, nie z faktur otrzymanych (zob. data-fetcher).
       const xml = generateJpkV7m({
         issuer: data.issuer,
         periodStart: job.period_start,
         periodEnd: job.period_end,
         issuedInvoices: data.issuedInvoices,
-        receivedInvoices: data.receivedInvoices,
+        expenses: data.expenses,
       });
       return {
         buffer: Buffer.from(xml, 'utf8'),
@@ -125,7 +126,7 @@ async function generateExportFile(
         periodStart: job.period_start,
         periodEnd: job.period_end,
         issuedInvoices: data.issuedInvoices,
-        receivedInvoices: data.receivedInvoices,
+        expenses: data.expenses,
       });
       return {
         buffer,

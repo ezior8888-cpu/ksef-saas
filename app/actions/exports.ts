@@ -14,6 +14,7 @@ import {
   requireUserAndTenant,
 } from '@/lib/supabase/auth-context';
 import { downloadFromR2 } from '@/lib/storage/r2';
+import { isExportFormatSuspended, SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
 import type { Database } from '@/types/database';
 
 export type ExportFormatParam =
@@ -45,7 +46,7 @@ function isExportDbFormat(
 }
 
 function parsePreferredFormats(formats: string[]) {
-  const out = formats.filter(isExportDbFormat);
+  const out = formats.filter(isExportDbFormat).filter((f) => !isExportFormatSuspended(f));
   return [...new Set(out)];
 }
 
@@ -91,6 +92,11 @@ export async function startExportAction(params: {
 
   if (!isExportDbFormat(params.format)) {
     return { success: false, error: 'Nieobsługiwany format eksportu' };
+  }
+  // Przed zapisem joba: wstrzymany format nie może powstać także z pominięciem
+  // interfejsu.
+  if (isExportFormatSuspended(params.format)) {
+    return { success: false, error: SUSPENDED_EXPORT_FORMATS[params.format]! };
   }
 
   const startDay = params.periodStart.trim().slice(0, 10);

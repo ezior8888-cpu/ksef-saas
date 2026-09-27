@@ -421,5 +421,15 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
     }
   }
 
+  // ── Zwolnienie z VAT ───────────────────────────────────────
+  // FA(3): stawka 'zw' wymaga P_19 + podstawy prawnej (P_19A).
+  if (invoice.lines.some((l) => l.vatRate === 'zw') && !invoice.annotations?.vatExemptionBasis?.trim()) {
+    errors.push(ZW_WITHOUT_BASIS_MESSAGE);
+  }
+
   return errors;
 }
+
+/** Wspólny komunikat walidacji i generatora — człowiek wie, gdzie to ustawić. */
+export const ZW_WITHOUT_BASIS_MESSAGE =
+  'Pozycja ze stawką „zw” wymaga podstawy prawnej zwolnienia z VAT. Ustaw ją w Ustawieniach → Podatek VAT (np. „art. 113 ust. 1 ustawy o VAT”).';

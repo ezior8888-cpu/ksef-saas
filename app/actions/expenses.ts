@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 
 import { learnFromCorrection } from '@/lib/categorization';
+import { deductibleAfterVatChange } from '@/lib/categorization/vat-deduction';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
   ocrProcessPhotoRequested,
@@ -203,7 +204,7 @@ export async function reviewExpenseAction(
 
   const { data: existing } = await supabase
     .from('expenses')
-    .select('seller_nip, seller_name, kpir_column, category_label')
+    .select('seller_nip, seller_name, kpir_column, category_label, vat_amount, vat_deductible_amount')
     .eq('id', expenseId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -221,6 +222,16 @@ export async function reviewExpenseAction(
   const categoryChanged = kpirChanged || labelChanged;
 
   const patch = buildExpenseUpdatePatch(updates, categoryChanged);
+
+  // Formularz wysyła VAT zawsze — odliczenie liczymy od nowa tylko przy
+  // faktycznej zmianie, inaczej JPK_V7M odliczałby odczyt OCR.
+  const vatBefore = Number(existing.vat_amount ?? 0);
+  if (updates.vat_amount !== undefined && updates.vat_amount !== vatBefore) {
+    patch.vat_deductible_amount = deductibleAfterVatChange(
+      { vat: vatBefore, deductible: Number(existing.vat_deductible_amount ?? 0) },
+      updates.vat_amount,
+    );
+  }
 
   const { data: updated, error } = await supabase
     .from('expenses')

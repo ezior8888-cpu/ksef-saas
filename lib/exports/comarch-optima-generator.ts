@@ -3,7 +3,7 @@
 // Format: Comarch Optima Faktury
 
 import { create } from 'xmlbuilder2';
-import type { JpkFaInputData, JpkInvoice, JpkInvoiceLine } from './jpk-fa-generator';
+import { counterpartyOf, type JpkFaInputData, type JpkInvoice, type JpkInvoiceLine } from './jpk-fa-generator';
 
 export interface OptimaExportInput {
   issuer: JpkFaInputData['issuer'];
@@ -81,11 +81,13 @@ function buildFaktura(
     naglowek.ele('NumerKSeF').txt(inv.ksefNumber);
   }
 
-  // Kontrahent
+  // Kontrahent: przy zakupie (FZSP) SPRZEDAWCA — do 26.09 szła tu nasza
+  // firma (pole nabywcy faktury otrzymanej).
+  const party = counterpartyOf(inv, docType === 'FZSP' ? 'received' : 'issued');
   const kontrahent = naglowek.ele('Kontrahent');
-  if (inv.buyerNip) kontrahent.ele('NIP').txt(inv.buyerNip);
-  kontrahent.ele('Nazwa1').txt(inv.buyerName);
-  if (inv.buyerAddress) kontrahent.ele('Adres').txt(inv.buyerAddress);
+  if (party.nip) kontrahent.ele('NIP').txt(party.nip);
+  kontrahent.ele('Nazwa1').txt(party.name);
+  if (party.address) kontrahent.ele('Adres').txt(party.address);
 
   // Wystawca
   naglowek.ele('Wystawca').txt(issuerName);

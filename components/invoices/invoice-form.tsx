@@ -98,10 +98,19 @@ const LINES_LAYOUT_LG_MEDIA = '(min-width: 1024px)';
 
 export function InvoiceForm({
   prefill = null,
+  vatExempt = false,
 }: {
   /** Podkład z ostatniej faktury — `null`, gdy tenant nie ma jeszcze żadnej. */
   prefill?: PrefillFromLastInvoice | null;
+  /**
+   * Firma zwolniona z VAT (ustawiona podstawa w Ustawieniach → Podatek VAT).
+   * Nowe pozycje dostają wtedy „zw” — inaczej z przyzwyczajenia wpada 23%.
+   */
+  vatExempt?: boolean;
 } = {}) {
+  const newLine: InvoiceFormValues['lines'][number] = vatExempt
+    ? { ...defaultLine, vatRate: 'zw' }
+    : defaultLine;
   const router = useRouter();
   const [isSaving, startSaving] = useTransition();
   const [isSending, startSending] = useTransition();
@@ -153,7 +162,7 @@ export function InvoiceForm({
       buyerConsumerIdType: undefined,
       buyerPesel: '',
       buyerIdDocument: '',
-      lines: [defaultLine],
+      lines: [newLine],
       paymentMethod: 'transfer',
       paymentDueDate: in14days,
       bankAccount: '',
@@ -654,7 +663,7 @@ export function InvoiceForm({
             type="button"
             variant="glass"
             size="sm"
-            onClick={() => append(defaultLine)}
+            onClick={() => append(newLine)}
             className="shrink-0"
           >
             <Plus className="mr-1.5 h-4 w-4" />
@@ -753,6 +762,7 @@ export function InvoiceForm({
                         <option value="8">8%</option>
                         <option value="5">5%</option>
                         <option value="0">0%</option>
+                        <option value="zw">zw</option>
                         <option value="oo">oo</option>
                         <option value="np">np</option>
                       </select>
@@ -868,6 +878,7 @@ export function InvoiceForm({
                       <option value="8">8%</option>
                       <option value="5">5%</option>
                       <option value="0">0%</option>
+                      <option value="zw">zw — zwolniona</option>
                       <option value="oo">oo — odwrotne obciążenie</option>
                       <option value="np">np — nie podlega</option>
                     </select>

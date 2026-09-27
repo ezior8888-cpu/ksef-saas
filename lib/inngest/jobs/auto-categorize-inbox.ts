@@ -96,8 +96,9 @@ function inferVatRate(invoice: InvoiceWithLines): ExtractedInvoice['vat_rate'] {
     }
   }
 
-  const net = Number(invoice.net_total ?? 0);
-  const vat = Number(invoice.vat_total ?? 0);
+  // Bez znaku: korekta „in minus” ma ujemne netto i VAT, a stawka ta sama.
+  const net = Math.abs(Number(invoice.net_total ?? 0));
+  const vat = Math.abs(Number(invoice.vat_total ?? 0));
   if (net <= 0 && vat <= 0) return '0';
   if (vat <= 0) return '0';
   const ratio = vat / net;
@@ -124,8 +125,12 @@ function invoiceToExtracted(invoice: InvoiceWithLines): ExtractedInvoice {
   const net = Number(invoice.net_total ?? 0);
   const vat = Number(invoice.vat_total ?? 0);
 
-  if (!(gross > 0)) {
-    throw new NonRetriableError('Brak dodatniej kwoty brutto — pomijam expense');
+  // Korekta „in minus” (dostawca obniża cenę) ma ujemne kwoty. Zwykła faktura
+  // ich mieć nie może, więc sam znak wystarcza — bez zgadywania typu z KSeF.
+  // Do 27.09 taka korekta była pomijana: koszt w KPiR i VAT do odliczenia
+  // zostawały zawyżone.
+  if (!Number.isFinite(gross) || gross === 0) {
+    throw new NonRetriableError('Brak kwoty brutto — pomijam expense');
   }
 
   const docNo =
@@ -140,16 +145,34 @@ function invoiceToExtracted(invoice: InvoiceWithLines): ExtractedInvoice {
     document_number: docNo,
     document_type: 'invoice' as const,
     issue_date: invoice.issue_date,
-    net_amount: net,
-    vat_amount: vat,
-    gross_amount: gross,
+    // Schemat OCR przyjmuje kwoty nieujemne — walidujemy bez znaku, znak
+    // wraca niżej.
+    net_amount: Math.abs(net),
+    vat_amount: Math.abs(vat),
+    gross_amount: Math.abs(gross),
     vat_rate: inferVatRate(invoice),
     line_items: buildLineItems(invoice.invoice_line_items),
     ocr_confidence: 1,
     notes: null,
   };
 
-  return extractedInvoiceSchema.parse(draft);
+  const parsed = extractedInvoiceSchema.parse(draft);
+  return gross < 0
+    ? { ...parsed, net_amount: net, vat_amount: vat, gross_amount: gross }
+    : parsed;
+}
+
+/**
+ * Kwoty bez znaku do kategoryzacji: reguły mają progi kwotowe, a korekta ma
+ * trafić do tej samej kategorii co faktura, którą poprawia.
+ */
+export function unsignedForCategorization(extracted: ExtractedInvoice): ExtractedInvoice {
+  return {
+    ...extracted,
+    net_amount: Math.abs(extracted.net_amount),
+    vat_amount: Math.abs(extracted.vat_amount),
+    gross_amount: Math.abs(extracted.gross_amount),
+  };
 }
 
 /**
@@ -202,7 +225,7 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     });
 
     const categorization = await step.run('categorize', async () => {
-      return categorizeExpense(tenantId, extracted);
+      return categorizeExpense(tenantId, unsignedForCategorization(extracted));
     });
 
     await step.run('create-expense', async () => {

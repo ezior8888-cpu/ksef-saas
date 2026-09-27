@@ -202,9 +202,12 @@ describe('pytanie o format', () => {
     now: d('2026-09-02'),
   });
 
-  it('podaje wszystkie osiem formatów', () => {
+  // Osiem formatów minus wstrzymany JPK_V7M (do czasu wersji 3, 27.09.2026 —
+  // lib/exports/suspended-formats.ts). Po przebudowie wraca do ośmiu.
+  it('podaje wszystkie formaty poza wstrzymanymi', () => {
     const options = question.payload?.options as { value: string }[];
-    expect(options).toHaveLength(8);
+    expect(options).toHaveLength(7);
+    expect(options.map((option) => option.value)).not.toContain('jpk_v7m');
     expect(options.every((option) => isAccountantFormat(option.value))).toBe(true);
   });
 
