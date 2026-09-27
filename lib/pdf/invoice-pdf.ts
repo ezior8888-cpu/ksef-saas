@@ -41,7 +41,7 @@ export async function generateInvoicePdf(
   // testowego nie mógł pobrać żadnego PDF (zwracało 403 KSEF_NOT_VERIFIED).
   // Renderer obsługuje brak numeru KSeF (`ksefNumber ?? null`) i dokleja
   // watermark „WERSJA TESTOWA". Ownership (tenant) nadal sprawdzamy niżej.
-  const data = await loadInvoiceForPdf(invoiceId);
+  const data = await loadInvoiceForPdf(invoiceId, tenantId);
   if (!data) {
     return { success: false, error: 'Faktura nie istnieje.', code: 'NOT_FOUND' };
   }

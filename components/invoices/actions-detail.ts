@@ -9,7 +9,7 @@ import {
   KsefNotVerifiedError,
   requireKsefVerification,
 } from '@/lib/auth/ksef-verification-guard';
-import { createClient } from '@/lib/supabase/server';
+import { ActionAuthError, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
 import { specialInvoiceResendMessage } from '@/lib/ksef/special-invoice-data';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
@@ -17,7 +17,6 @@ import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
 import { sendInvoiceEmail } from '@/lib/email/send';
-import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import type { Invoice } from '@/types/invoice';
 
 // ═══════════════════════════════════════════════════════════════
@@ -31,9 +30,8 @@ export type DownloadXmlResult =
 /**
  * Pobiera XML faktury z R2 i oddaje jego treść do klienta (Blob → <a download>).
  *
- * Bezpieczeństwo: routing przez zwykły `createClient()` (z RLS) -
- * user dostanie `invoices` tylko swojego tenanta. `xml_documents` też
- * ma RLS (przez tenant_id), więc odczyt hasha jest bezpieczny.
+ * Bezpieczeństwo: wymagamy zweryfikowanej sesji MFA i aktywnego członkostwa,
+ * a odczyt przez RLS dodatkowo zawężamy do aktywnej organizacji.
  *
  * Weryfikujemy SHA-256 z `xml_documents` - niezgodność oznaczałaby
  * korupcję plików w R2 (lub rozjazd DB↔R2), wtedy zwracamy błąd
@@ -43,12 +41,13 @@ export async function downloadInvoiceXmlAction(
   invoiceId: string
 ): Promise<DownloadXmlResult> {
   try {
-    const supabase = await createClient();
+    const { supabase, user, tenantId } = await requireUserAndActiveOrg();
 
     const { data: inv, error: invErr } = await supabase
       .from('invoices')
       .select('internal_number, xml_storage_path, tenant_id')
       .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
       .maybeSingle();
 
     if (invErr) return { success: false, error: invErr.message };
@@ -86,20 +85,14 @@ export async function downloadInvoiceXmlAction(
       '-'
     );
 
-    const {
-      data: { user: dlUser },
-    } = await supabase.auth.getUser();
-    const tenantId = inv.tenant_id as string | null | undefined;
-    if (dlUser && tenantId) {
-      await logAudit({
-        action: 'invoice.xml_downloaded',
-        tenantId,
-        userId: dlUser.id,
-        entityType: 'invoice',
-        entityId: invoiceId,
-        metadata: { internalNumber: inv.internal_number },
-      });
-    }
+    await logAudit({
+      action: 'invoice.xml_downloaded',
+      tenantId,
+      userId: user.id,
+      entityType: 'invoice',
+      entityId: invoiceId,
+      metadata: { internalNumber: inv.internal_number },
+    });
 
     return {
       success: true,
@@ -134,11 +127,9 @@ export async function resendInvoiceAction(
   invoiceId: string
 ): Promise<ResendResult> {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: 'Brak sesji' };
+    // Server Actions are callable directly: verify MFA and live membership
+    // before reading the invoice or publishing another KSeF job.
+    const { supabase, user, tenantId } = await requireUserAndActiveOrg();
 
     const { data: inv, error } = await supabase
       .from('invoices')
@@ -164,6 +155,7 @@ export async function resendInvoiceAction(
       `
       )
       .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
       .single();
 
     if (error || !inv) {
@@ -273,7 +265,8 @@ export async function resendInvoiceAction(
         last_error_field: null,
         last_error_suggestion: null,
       })
-      .eq('id', invoiceId);
+      .eq('id', invoiceId)
+      .eq('tenant_id', tenantId);
 
     if (updErr) {
       console.error('[resendInvoiceAction] queued update failed', updErr);
@@ -293,6 +286,9 @@ export async function resendInvoiceAction(
 
     return { success: true };
   } catch (err) {
+    if (err instanceof ActionAuthError) {
+      return { success: false, error: err.message };
+    }
     if (err instanceof KsefNotVerifiedError) {
       return {
         success: false,
@@ -330,24 +326,26 @@ export async function emailInvoiceAction(
     return { success: false, error: 'Nieprawidłowy adres email.' };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Sesja wygasła.' };
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    return { success: false, error: 'Brak aktywnej organizacji.' };
+  let context: Awaited<ReturnType<typeof requireUserAndActiveOrg>>;
+  try {
+    // PDF uses a service-role loader, so the tenant must come from live
+    // membership verification, never from the caller-controlled org cookie.
+    context = await requireUserAndActiveOrg();
+  } catch (err) {
+    if (err instanceof ActionAuthError) {
+      return { success: false, error: err.message };
+    }
+    throw err;
   }
+  const { user, tenantId } = context;
 
   const pdfResult = await generateInvoicePdf(invoiceId, tenantId);
   if (!pdfResult.success) {
     return { success: false, error: pdfResult.error };
   }
 
-  const data = await loadInvoiceForPdf(invoiceId);
-  if (!data) {
+  const data = await loadInvoiceForPdf(invoiceId, tenantId);
+  if (!data || data.tenantId !== tenantId) {
     return { success: false, error: 'Faktura nie istnieje.' };
   }
 

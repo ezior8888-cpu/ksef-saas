@@ -2,9 +2,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(), sendJobEvent: vi.fn(), requireKsefVerification: vi.fn(),
-  logAudit: vi.fn(),
+  logAudit: vi.fn(), requireAuth: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.createClient }));
+vi.mock('@/lib/supabase/auth-context', () => ({
+  ActionAuthError: class ActionAuthError extends Error {},
+  requireUserAndActiveOrg: mocks.requireAuth,
+}));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: mocks.sendJobEvent }));
 vi.mock('@/lib/auth/ksef-verification-guard', () => ({
   KsefNotVerifiedError: class extends Error {},
@@ -89,6 +93,11 @@ beforeEach(() => {
     auth: { getUser: async () => ({ data: { user: { id: 'fixture-user' } } }) },
     from,
   });
+  mocks.requireAuth.mockImplementation(async () => ({
+    supabase: await mocks.createClient(),
+    user: { id: 'fixture-user' },
+    tenantId: '22222222-2222-4222-8222-222222222222',
+  }));
 });
 
 afterEach(() => vi.unstubAllEnvs());

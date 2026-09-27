@@ -4,6 +4,8 @@ import type { Invoice } from '@/types/invoice';
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   update: vi.fn(),
+  eq: vi.fn(),
+  requireAuth: vi.fn(),
   row: null as Record<string, unknown> | null,
 }));
 
@@ -20,13 +22,20 @@ vi.mock('@/lib/pdf/invoice-pdf', () => ({ generateInvoicePdf: vi.fn() }));
 vi.mock('@/lib/pdf/invoice-data', () => ({ loadInvoiceForPdf: vi.fn() }));
 vi.mock('@/lib/email/send', () => ({ sendInvoiceEmail: vi.fn() }));
 vi.mock('@/lib/supabase/active-org', () => ({ getActiveOrgIdFromCookies: vi.fn() }));
+vi.mock('@/lib/supabase/auth-context', () => ({
+  ActionAuthError: class ActionAuthError extends Error {},
+  requireUserAndActiveOrg: mocks.requireAuth,
+}));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: 'u' } } }) },
     from: () => {
       const q = {
         select: () => q,
-        eq: () => q,
+        eq: (column: string, value: unknown) => {
+          mocks.eq(column, value);
+          return q;
+        },
         single: async () => ({ data: mocks.row, error: null }),
         update: (patch: unknown) => {
           mocks.update(patch);
@@ -40,6 +49,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 import { resendInvoiceAction } from '@/components/invoices/actions-detail';
+import { ActionAuthError } from '@/lib/supabase/auth-context';
 
 /**
  * „Wyślij ponownie” odtwarza fakturę z bazy — bez danych korekty/zaliczki,
@@ -111,10 +121,31 @@ function faktura(invoice_type: Invoice['type'] | null, fa3Type: Invoice['type'] 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('KSEF_ENV', 'test');
+  mocks.requireAuth.mockImplementation(async () => ({
+    supabase: await (await import('@/lib/supabase/server')).createClient(),
+    user: { id: 'u' },
+    tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  }));
 });
 afterEach(() => vi.unstubAllEnvs());
 
 describe('„Wyślij ponownie” dla dokumentów specjalnych', () => {
+  it.each([
+    'Wymagana weryfikacja dwuetapowa',
+    'Brak dostępu do aktywnej organizacji',
+  ])('odmawia przed odczytem i jobem: %s', async (reason) => {
+    mocks.row = faktura('VAT');
+    mocks.requireAuth.mockRejectedValueOnce(new ActionAuthError(reason));
+
+    expect(await resendInvoiceAction(ID)).toEqual({
+      success: false,
+      error: reason,
+    });
+    expect(mocks.eq).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
   it.each(['KOR', 'ZAL', 'ROZ'] as const)('%s: odmowa od razu, bez joba i bez zmiany statusu', async (type) => {
     mocks.row = faktura(type);
     const wynik = await resendInvoiceAction(ID);
@@ -148,6 +179,7 @@ describe('„Wyślij ponownie” dla dokumentów specjalnych', () => {
     expect(event?.data?.invoice).toEqual(VAT_SNAPSHOT);
     expect(event?.data?.invoice?.lines[0]?.classificationCode).toBe('PKWiU 62.01.11.0');
     expect(event?.data?.environment).toBe('test');
+    expect(mocks.eq).toHaveBeenCalledWith('tenant_id', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
   });
 
   it.each([
