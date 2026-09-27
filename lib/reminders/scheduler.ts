@@ -287,38 +287,77 @@ function rollToWeekdayUtc(scheduledFor: Date, sendHour: number): Date {
 // Bulk — kandydaci do kolejnego przebiegu crona Inngest
 // ============================================================================
 
+const CANDIDATE_PAGE = 500;
+
+/**
+ * Rodzaje faktur, które są osobnym długiem kontrahenta. Korekta NIE jest —
+ * płatność rozlicza faktura pierwotna. Lista dozwolonych, nie „wszystko poza
+ * korektą”: nowy rodzaj dokumentu nie dostaje ponagleń domyślnie.
+ */
+export const CHASEABLE_INVOICE_KINDS = ['regular', 'advance', 'final'] as const;
+
+/**
+ * Faktury po terminie — kandydaci do ponaglenia, dla WSZYSTKICH firm.
+ *
+ * Czytane stronami po `id`: do 27.09 stał tu jeden `limit(500)` bez
+ * sortowania na całą platformę, więc przy ponad 500 zaległych fakturach część
+ * firm po cichu przestawała dostawać przypomnienia. (Na Inngest przebieg ma
+ * limit kroków — produkcja chodzi na pg-boss, gdzie go nie ma.)
+ */
 export async function findInvoicesRequiringReminders(): Promise<
   InvoiceForScheduling[]
 > {
   const supabase = createAdminClient();
 
   const todaySlice = new Date().toISOString().slice(0, 10);
+  const out: InvoiceForScheduling[] = [];
+  let lastId: string | null = null;
 
-  const { data, error } = await supabase
-    .from('invoices')
-    .select(
-      'id, tenant_id, internal_number, payment_due_date, gross_total, paid_amount, buyer_data, buyer_nip, reminders_paused',
-    )
-    .eq('direction', 'outgoing')
-    .eq('ksef_status', 'accepted')
-    .in('payment_status', ['unpaid', 'partial', 'overdue'])
-    .lt('payment_due_date', todaySlice)
-    .eq('reminders_paused', false)
-    .limit(500);
+  for (;;) {
+    let query = supabase
+      .from('invoices')
+      .select(
+        'id, tenant_id, internal_number, payment_due_date, gross_total, paid_amount, buyer_data, buyer_nip, reminders_paused',
+      )
+      .eq('direction', 'outgoing')
+      .eq('ksef_status', 'accepted')
+      // Bez korekt: kontrahent dostawał ponaglenie za FV i drugie za jej KOR.
+      .in('invoice_kind', [...CHASEABLE_INVOICE_KINDS])
+      // Import historii nie zna wpłat: zaciągnięte faktury są „nieopłacone"
+      // tylko dlatego. Ta sama reguła co K-01 (payment-confirm-producer).
+      .eq('origin', 'app')
+      .in('payment_status', ['unpaid', 'partial', 'overdue'])
+      .lt('payment_due_date', todaySlice)
+      .eq('reminders_paused', false)
+      .order('id', { ascending: true })
+      .limit(CANDIDATE_PAGE);
+    if (lastId !== null) query = query.gt('id', lastId);
 
-  if (error) throw new Error(error.message);
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
 
-  return (
-    data?.map((row) => ({
-      id: row.id,
-      tenant_id: row.tenant_id,
-      internal_number: row.internal_number ?? null,
-      payment_due_date: row.payment_due_date ?? null,
-      gross_total: row.gross_total,
-      paid_amount: row.paid_amount,
-      buyer_data: row.buyer_data,
-      buyer_nip: row.buyer_nip ?? null,
-      reminders_paused: row.reminders_paused,
-    })) ?? []
-  );
+    const page = data ?? [];
+    for (const row of page) {
+      out.push({
+        id: row.id,
+        tenant_id: row.tenant_id,
+        internal_number: row.internal_number ?? null,
+        payment_due_date: row.payment_due_date ?? null,
+        gross_total: row.gross_total,
+        paid_amount: row.paid_amount,
+        buyer_data: row.buyer_data,
+        buyer_nip: row.buyer_nip ?? null,
+        reminders_paused: row.reminders_paused,
+      });
+    }
+    if (page.length < CANDIDATE_PAGE) break;
+
+    const nextId: string = page[page.length - 1]!.id;
+    if (lastId !== null && nextId <= lastId) {
+      throw new Error('przypomnienia: stronicowanie nie posuwa się naprzód');
+    }
+    lastId = nextId;
+  }
+
+  return out;
 }
