@@ -26,9 +26,12 @@ let expenseRows: Row[];
 const from = vi.fn((table: string) => {
   let head = false;
   let count = false;
+  let window: [number, number] | null = null;
+  const ordering: Array<{ key: string; ascending: boolean }> = [];
   const filters: Array<(row: Row) => boolean> = [];
   const query = {
     select: (_columns: string, options?: { count?: string; head?: boolean }) => { count = !!options?.count; head = !!options?.head; return query; },
+    range: (from: number, to: number) => { window = [from, to]; return query; },
     eq: (key: string, value: unknown) => { filters.push((row) => row[key] === value); return query; },
     in: (key: string, values: unknown[]) => { filters.push((row) => values.includes(row[key])); return query; },
     or: (filter: string) => {
@@ -39,10 +42,21 @@ const from = vi.fn((table: string) => {
     },
     gte: (key: string, value: string) => { filters.push((row) => String(row[key]) >= value); return query; },
     lte: (key: string, value: string) => { filters.push((row) => String(row[key]) <= value); return query; },
-    order: () => query,
+    order: (key: string, options?: { ascending?: boolean }) => {
+      ordering.push({ key, ascending: options?.ascending !== false });
+      return query;
+    },
     then: <T,>(resolve: (value: { data: Row[] | null; count: number | null; error: null }) => T) => {
       const selected = (table === 'invoices' ? rows : expenseRows).filter((row) => filters.every((filter) => filter(row)));
-      return Promise.resolve({ data: head ? null : selected, count: count ? selected.length : null, error: null as null }).then(resolve);
+      selected.sort((a, b) => {
+        for (const { key, ascending } of ordering) {
+          const comparison = String(a[key] ?? '').localeCompare(String(b[key] ?? ''));
+          if (comparison !== 0) return ascending ? comparison : -comparison;
+        }
+        return 0;
+      });
+      const page = window ? selected.slice(window[0], window[1] + 1) : selected.slice(0, 1000);
+      return Promise.resolve({ data: head ? null : page, count: count ? selected.length : null, error: null as null }).then(resolve);
     },
   };
   return query;
@@ -119,5 +133,26 @@ describe('KPiR KSeF provenance', () => {
     }];
     await expect(KpirPage({ searchParams: Promise.resolve({ month: '9', year: '2026' }) }))
       .rejects.toThrow('provenance is malformed');
+  });
+
+  it('includes all 1200 monthly expenses and invoices beyond the PostgREST cap', async () => {
+    rows = Array.from({ length: 1200 }, (_, i) => ({
+      ...rows[0], id: `invoice-${String(i).padStart(4, '0')}`,
+      internal_number: `INVOICE-${String(i).padStart(4, '0')}`,
+    })).reverse();
+    expenseRows = Array.from({ length: 1200 }, (_, i) => ({
+      id: `expense-${String(i).padStart(4, '0')}`, tenant_id: 'tenant-a',
+      source: 'manual', ksef_invoice_id: null, is_deductible: true,
+      issue_date: '2026-09-10',
+    })).reverse();
+
+    const page = await KpirPage({ searchParams: Promise.resolve({ month: '9', year: '2026' }) });
+    const html = renderToStaticMarkup(page);
+    expect(html).toContain('INVOICE-1199');
+    expect(html).toContain('expense-1199');
+    expect((html.match(/INVOICE-/g) ?? [])).toHaveLength(1200);
+    expect((html.match(/expense-/g) ?? [])).toHaveLength(1200);
+    expect(html.indexOf('INVOICE-0000')).toBeLessThan(html.indexOf('INVOICE-1199'));
+    expect(html.indexOf('expense-0000')).toBeLessThan(html.indexOf('expense-1199'));
   });
 });

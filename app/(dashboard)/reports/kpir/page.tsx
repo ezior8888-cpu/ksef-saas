@@ -3,6 +3,7 @@ import { getPageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
+import { readCompletePages } from '@/lib/supabase/read-complete-pages';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,43 +39,40 @@ export default async function KpirPage({
     tenantId, periodStart, periodEnd, direction: 'outgoing', environment,
   });
 
-  const { data: expenses, error: expensesError } = await supabase
+  const expenses = await readCompletePages('expenses', (from, to) => supabase
     .from('expenses')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('tenant_id', tenantId)
     .eq('is_deductible', true)
     .gte('issue_date', periodStart)
     .lte('issue_date', periodEnd)
-    .order('issue_date', { ascending: true });
-  const visibleExpenses = expensesError
-    ? []
-    : await filterExpensesForKsefEnvironment(supabase, tenantId, environment, expenses ?? []);
+    .order('issue_date', { ascending: true })
+    .order('id', { ascending: true })
+    .range(from, to));
+  const visibleExpenses = await filterExpensesForKsefEnvironment(
+    supabase, tenantId, environment, expenses,
+  );
 
-  const { data: invoices, error: invoicesError } = await supabase
+  const invoices = await readCompletePages('invoices', (from, to) => supabase
     .from('invoices')
-    .select('id, internal_number, issue_date, gross_total, net_total, buyer_data')
+    .select('id, internal_number, issue_date, gross_total, net_total, buyer_data', { count: 'exact' })
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
     .eq('ksef_environment', environment)
     .gte('issue_date', periodStart)
     .lte('issue_date', periodEnd)
-    .order('issue_date', { ascending: true });
-
-  const loadError = expensesError?.message ?? invoicesError?.message ?? null;
+    .order('issue_date', { ascending: true })
+    .order('id', { ascending: true })
+    .range(from, to));
 
   return (
     <div className="space-y-6 pb-10 text-[var(--ff-on-surface)]">
-      {loadError ? (
-        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] border border-red-400/25 bg-[color-mix(in_srgb,#f87171_10%,transparent)] p-4 text-sm text-red-200">
-          {loadError}
-        </div>
-      ) : null}
       <KpirView
         month={month}
         year={year}
         expenses={visibleExpenses}
-        invoices={invoices ?? []}
+        invoices={invoices}
       />
     </div>
   );

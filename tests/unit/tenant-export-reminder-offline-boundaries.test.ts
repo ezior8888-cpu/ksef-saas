@@ -27,6 +27,7 @@ function database() {
     let head = false;
     let singular = false;
     let window: [number, number] | null = null;
+    const ordering: Array<{ key: string; ascending: boolean }> = [];
     const query = {
       range(from: number, to: number) { window = [from, to]; return query; },
       select(selection = '*', options?: { count?: string; head?: boolean }) { op.selection = selection; count = !!options?.count; head = !!options?.head; return query; },
@@ -46,7 +47,10 @@ function database() {
       gte(key: string, value: string) { predicates.push(row => String(row[key]) >= value); return query; },
       lte(key: string, value: string) { predicates.push(row => String(row[key]) <= value); return query; },
       lt(key: string, value: string) { predicates.push(row => String(row[key]) < value); return query; },
-      order() { return query; },
+      order(key: string, options?: { ascending?: boolean }) {
+        ordering.push({ key, ascending: options?.ascending !== false });
+        return query;
+      },
       limit() { return query; },
       single() { singular = true; return query; },
       maybeSingle() { singular = true; return query; },
@@ -56,11 +60,21 @@ function database() {
           return Promise.resolve({ data: null, error: { code: conflict ? '23505' : 'XX000', message: 'fixture failure' } }).then(resolve, reject);
         }
         const matching = (tables[table] ?? []).filter(row => predicates.every(p => p(row)));
-        const rows = window ? matching.slice(window[0], window[1] + 1) : matching;
+        matching.sort((a, b) => {
+          for (const { key, ascending } of ordering) {
+            const left = a[key];
+            const right = b[key];
+            const comparison = typeof left === 'number' && typeof right === 'number'
+              ? left - right : String(left ?? '').localeCompare(String(right ?? ''));
+            if (comparison !== 0) return ascending ? comparison : -comparison;
+          }
+          return 0;
+        });
+        const rows = window ? matching.slice(window[0], window[1] + 1) : matching.slice(0, 1000);
         if (op.mode === 'insert') { const inserted = { id: 'new-queue', ...patch }; (tables[table] ??= []).push(inserted); rows.splice(0, rows.length, inserted); }
         if (op.mode === 'update') rows.forEach(row => Object.assign(row, patch));
         if (op.mode === 'delete') tables[table] = (tables[table] ?? []).filter(row => !rows.includes(row));
-        return Promise.resolve({ data: head ? null : singular ? rows[0] ?? null : rows, count: count ? rows.length : undefined, error: null }).then(resolve, reject);
+        return Promise.resolve({ data: head ? null : singular ? rows[0] ?? null : rows, count: count ? matching.length : undefined, error: null }).then(resolve, reject);
       },
     };
     return query;
@@ -273,6 +287,58 @@ describe('tenant boundaries for accounting exports', () => {
     ];
     const data = await fetchInvoicesForExport(exportParams);
     expect(data.issuedInvoices[0].lines.map(row => row.name)).toEqual(['OWN']);
+  });
+
+  it('exports all 1200 accepted invoices in one period', async () => {
+    tables.invoices = Array.from({ length: 1200 }, (_, i) =>
+      invoice(`invoice-${String(i).padStart(4, '0')}`));
+
+    const data = await fetchInvoicesForExport({ ...exportParams, direction: 'issued' });
+    expect(data.issuedInvoices).toHaveLength(1200);
+    expect(data.issuedInvoices.at(-1)?.invoiceNumber).toBe('invoice-1199');
+    expect(operations.filter(op => op.table === 'invoices' && op.selection === '*')).toHaveLength(3);
+  });
+
+  it('fetches all 1200 correction parents outside the export period', async () => {
+    tables.invoices = Array.from({ length: 1200 }, (_, i) => ({
+      ...invoice(`correction-${String(i).padStart(4, '0')}`),
+      invoice_kind: 'correction', parent_invoice_id: `parent-${String(i).padStart(4, '0')}`,
+    }));
+    tables.invoices.push(...Array.from({ length: 1200 }, (_, i) => ({
+      ...invoice(`parent-${String(i).padStart(4, '0')}`),
+      internal_number: `ORIGINAL-${String(i).padStart(4, '0')}`,
+      issue_date: '2025-01-01',
+    })));
+
+    const data = await fetchInvoicesForExport({ ...exportParams, direction: 'issued' });
+    expect(data.issuedInvoices).toHaveLength(1200);
+    expect(data.issuedInvoices.at(-1)?.correctedInvoiceNumber).toBe('ORIGINAL-1199');
+    expect(operations.filter(op => op.table === 'invoices' &&
+      op.selection === 'id, internal_number, ksef_number')).toHaveLength(12);
+  });
+
+  it('exports all 1200 fallback line items for one invoice', async () => {
+    tables.invoices = [invoice('invoice-a')];
+    tables.invoice_line_items = Array.from({ length: 1200 }, (_, i) => ({
+      id: `line-${String(i).padStart(4, '0')}`, invoice_id: 'invoice-a',
+      ordinal: i + 1, name: `LINE-${i + 1}`, quantity: 1,
+      unit_price_net: 1, net_amount: 1, vat_rate: '23',
+    }));
+
+    const data = await fetchInvoicesForExport({ ...exportParams, direction: 'issued' });
+    expect(data.issuedInvoices[0]?.lines).toHaveLength(1200);
+    expect(data.issuedInvoices[0]?.lines.at(-1)?.name).toBe('LINE-1200');
+    expect(operations.filter(op => op.table === 'invoice_line_items')).toHaveLength(3);
+  });
+
+  it('fails the export if a later invoice page cannot be read', async () => {
+    tables.invoices = Array.from({ length: 1200 }, (_, i) =>
+      invoice(`invoice-${String(i).padStart(4, '0')}`));
+    let invoicePages = 0;
+    errorFor = op => op.table === 'invoices' && op.selection === '*' && ++invoicePages === 2;
+
+    await expect(fetchInvoicesForExport({ ...exportParams, direction: 'issued' }))
+      .rejects.toThrow('invoices: fixture failure');
   });
 });
 
