@@ -5,9 +5,16 @@ const mocks = vi.hoisted(() => ({ row: null as Record<string, unknown> | null })
 
 vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: () => ({
-    from: () => ({
-      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: mocks.row, error: null }) }) }),
-    }),
+    from: () => {
+      // Łańcuch filtrów jak w PostgREST — loader filtruje po fakturze i firmie (#77).
+      const q: Record<string, unknown> = {};
+      Object.assign(q, {
+        select: () => q,
+        eq: () => q,
+        maybeSingle: async () => ({ data: mocks.row, error: null }),
+      });
+      return q;
+    },
   }),
 }));
 
@@ -107,7 +114,7 @@ describe('FA(3) i PDF z metodą kasową', () => {
       annotations: { cashMethod: 1 },
       invoice_line_items: [],
     };
-    const data = await loadInvoiceForPdf('inv-1');
+    const data = await loadInvoiceForPdf('inv-1', 'ten-1');
     expect(data?.invoice.annotations).toEqual({ cashMethod: 1 });
   });
 });
