@@ -2,6 +2,7 @@ import { MonthlyFiguresCard } from '@/components/dashboard/monthly-figures-card'
 import { SalesChartCard } from '@/components/dashboard/sales-chart-card';
 import { VatSummaryCard } from '@/components/dashboard/vat-summary-card';
 import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
+import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
 import {
   formatPlMoney,
   getMonthlyFigures,
@@ -44,13 +45,17 @@ export default async function PrzeplywyPage() {
     .order('issue_date', { ascending: true });
   if (invoicesError) throw new Error('Nie można odczytać faktur do przepływów');
 
-  const { data: expenses } = await supabase
+  const { data: expenses, error: expensesError } = await supabase
     .from('expenses')
-    .select('issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column')
+    .select('source, ksef_invoice_id, issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column')
     .eq('tenant_id', tenantId)
     .eq('is_deductible', true)
     .gte('issue_date', sixMonthsAgo)
     .order('issue_date', { ascending: true });
+  if (expensesError || !expenses) throw new Error('Nie można odczytać kosztów do przepływów');
+  const visibleExpenses = await filterExpensesForKsefEnvironment(
+    supabase, tenantId, environment, expenses,
+  );
 
   const { count: pendingReviewCount } = await supabase
     .from('expenses')
@@ -75,7 +80,7 @@ export default async function PrzeplywyPage() {
 
       <CashFlowDashboard
         invoices={invoices ?? []}
-        expenses={expenses ?? []}
+        expenses={visibleExpenses}
         pendingReviewCount={pendingReviewCount ?? 0}
       />
 
