@@ -2,6 +2,7 @@
 // Generator KPiR Excel zgodny z rozporządzeniem MF (17 kolumn)
 
 import ExcelJS from 'exceljs';
+import type { ExportExpense } from './data-fetcher';
 import type { JpkInvoice } from './jpk-fa-generator';
 
 export interface KpirInputData {
@@ -10,8 +11,40 @@ export interface KpirInputData {
   periodEnd: string;
   /** Faktury wystawione (przychód) */
   issuedInvoices: JpkInvoice[];
-  /** Faktury otrzymane (wydatek) */
-  receivedInvoices: JpkInvoice[];
+  /**
+   * Koszty z `expenses` (`is_deductible`) — to samo źródło co KPiR
+   * w aplikacji. Do 26.09 koszty szły z faktur otrzymanych: bez paragonów,
+   * wszystko w kol. 13, z NASZĄ firmą jako kontrahentem.
+   */
+  expenses: ExportExpense[];
+}
+
+/**
+ * Kolumna kosztu w KPiR (rozporządzenie MF, 17 kolumn) z kategorii kosztu.
+ *
+ * W aplikacji `col_15` nazywa się „Koszty B+R”, a we wzorze urzędowym B+R to
+ * kolumna 16 (15 jest wolna) — przenosimy po ZNACZENIU, nie po numerze.
+ * Koszt bez kategorii aplikacja pomija w sumach, ale księgowa musi go
+ * zobaczyć: trafia do 13 z uwagą. Kolumna przychodu (7/8) na dokumencie
+ * kosztowym → `null`: wiersz widoczny, bez kwot (w aplikacji też się nie liczy).
+ */
+export function kpirCostColumn(kpirColumn: string | null): 10 | 11 | 12 | 13 | 16 | null {
+  switch (kpirColumn) {
+    case 'col_10':
+      return 10;
+    case 'col_11':
+      return 11;
+    case 'col_12':
+      return 12;
+    case 'col_13':
+    case null:
+      return 13;
+    case 'col_15':
+    case 'col_16':
+      return 16;
+    default:
+      return null;
+  }
 }
 
 // ============================================================================
@@ -52,45 +85,55 @@ function buildInfoSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
   sheet.getCell('A5').value = 'Okres:';
   sheet.getCell('B5').value = `${formatPlDate(data.periodStart)} — ${formatPlDate(data.periodEnd)}`;
 
-  const total = data.issuedInvoices.length + data.receivedInvoices.length;
+  const total = data.issuedInvoices.length + data.expenses.length;
   sheet.getCell('A7').value = 'Liczba operacji:';
   sheet.getCell('B7').value = total;
 
   sheet.getCell('A8').value = 'Przychody (faktury wystawione):';
   sheet.getCell('B8').value = data.issuedInvoices.length;
-  sheet.getCell('A9').value = 'Wydatki (faktury otrzymane):';
-  sheet.getCell('B9').value = data.receivedInvoices.length;
+  sheet.getCell('A9').value = 'Wydatki (uznane za koszt):';
+  sheet.getCell('B9').value = data.expenses.length;
+
+  sheet.getCell('A11').value =
+    'Koszty pochodzą z listy wydatków (faktury kosztowe i paragony) — w kolumnach wg kategorii, tak jak KPiR w aplikacji.';
 }
 
 // ============================================================================
 // ARKUSZ: KPiR (17 kolumn)
 // ============================================================================
 
-type KpirEntry = JpkInvoice & { direction: 'issued' | 'received' };
+type KpirEntry =
+  | { kind: 'sale'; date: string; invoice: JpkInvoice }
+  | { kind: 'cost'; date: string; expense: ExportExpense };
+
+const SUM_COLS = [7, 9, 10, 11, 12, 13, 14, 16] as const;
+const AMOUNT_COLS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 
 function buildKpirSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
   const sheet = workbook.addWorksheet('KPiR', {
     views: [{ state: 'frozen', xSplit: 0, ySplit: 1 }],
   });
 
+  // Układ wzoru MF: 15 — kolumna wolna, 16 — koszty B+R, 17 — uwagi.
+  // Numer KSeF faktury sprzedaży idzie do uwag (wzór nie ma na niego kolumny).
   const headers = [
-    'L.p.',                         // 1
-    'Data zdarzenia',               // 2
-    'Numer dowodu',                 // 3
-    'Kontrahent',                   // 4
-    'Adres kontrahenta',            // 5
-    'Opis zdarzenia',               // 6
-    'Sprzedaż towarów (7)',         // 7
-    'Pozostałe przychody (8)',      // 8
-    'Razem przychód (9)',           // 9
-    'Zakup towarów (10)',           // 10
-    'Koszty uboczne (11)',          // 11
-    'Wynagrodzenia (12)',           // 12
-    'Pozostałe wydatki (13)',       // 13
-    'Razem wydatki (14)',           // 14
-    'Wartość spisu z natury (15)', // 15
-    'Uwagi (16)',                   // 16
-    'Numer KSeF',                   // 17
+    'L.p.',                                        // 1
+    'Data zdarzenia',                              // 2
+    'Numer dowodu',                                // 3
+    'Kontrahent',                                  // 4
+    'Adres kontrahenta',                           // 5
+    'Opis zdarzenia',                              // 6
+    'Wartość sprzedanych towarów i usług (7)',     // 7
+    'Pozostałe przychody (8)',                     // 8
+    'Razem przychód (9)',                          // 9
+    'Zakup towarów handlowych i materiałów (10)',  // 10
+    'Koszty uboczne zakupu (11)',                  // 11
+    'Wynagrodzenia (12)',                          // 12
+    'Pozostałe wydatki (13)',                      // 13
+    'Razem wydatki 12+13 (14)',                    // 14
+    '(15)',                                        // 15
+    'Koszty działalności B+R (16)',                // 16
+    'Uwagi (17)',                                  // 17
   ];
 
   const headerRow = sheet.addRow(headers);
@@ -104,46 +147,66 @@ function buildKpirSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
   headerRow.height = 40;
   applyBorderToRow(headerRow, 'thin');
 
-  const widths = [5, 12, 18, 35, 35, 30, 16, 16, 16, 16, 16, 16, 16, 16, 16, 20, 20];
+  const widths = [5, 12, 18, 35, 35, 30, 16, 16, 16, 16, 16, 16, 16, 16, 10, 16, 30];
   widths.forEach((w, i) => { sheet.getColumn(i + 1).width = w; });
 
   const entries: KpirEntry[] = [
-    ...data.issuedInvoices.map((inv) => ({ ...inv, direction: 'issued' as const })),
-    ...data.receivedInvoices.map((inv) => ({ ...inv, direction: 'received' as const })),
-  ].sort((a, b) => a.issueDate.localeCompare(b.issueDate));
+    ...data.issuedInvoices.map((invoice) => ({ kind: 'sale' as const, date: invoice.issueDate, invoice })),
+    ...data.expenses.map((expense) => ({ kind: 'cost' as const, date: expense.issueDate, expense })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
 
+  const sums = new Map<number, number>(SUM_COLS.map((c) => [c, 0]));
+  const add = (col: number, value: number) => sums.set(col, (sums.get(col) ?? 0) + value);
   let lp = 1;
-  let totalIncome = 0;
-  let totalCost = 0;
-  const AMOUNT_COLS = [7, 8, 9, 10, 11, 12, 13, 14, 15];
 
-  for (const inv of entries) {
-    const isSale = inv.direction === 'issued';
-    const net = inv.netTotal;
+  for (const entry of entries) {
+    // Indeks tablicy = numer kolumny − 1.
+    const cells: Array<string | number | null> = new Array<string | number | null>(17).fill(null);
+    cells[0] = lp;
+    cells[1] = formatPlDate(entry.date);
 
-    const rowValues = [
-      lp,
-      formatPlDate(inv.issueDate),
-      inv.invoiceNumber,
-      inv.buyerName,
-      inv.buyerAddress ?? '',
-      describeInvoice(inv),
-      isSale ? net : null,    // 7: sprzedaż towarów/usług
-      null,                    // 8: pozostałe przychody
-      isSale ? net : null,    // 9: razem przychód
-      null,                    // 10: zakup towarów
-      null,                    // 11: koszty uboczne
-      null,                    // 12: wynagrodzenia
-      !isSale ? net : null,   // 13: pozostałe wydatki
-      !isSale ? net : null,   // 14: razem wydatki
-      null,                    // 15: spis z natury
-      inv.invoiceType === 'correction'
-        ? `Korekta do ${inv.correctedInvoiceNumber ?? '—'}`
-        : '',                  // 16: uwagi
-      inv.ksefNumber ?? '',   // 17: numer KSeF
-    ];
+    if (entry.kind === 'sale') {
+      const inv = entry.invoice;
+      const net = inv.netTotal;
+      cells[2] = inv.invoiceNumber;
+      cells[3] = inv.buyerName;
+      cells[4] = inv.buyerAddress ?? '';
+      cells[5] = describeInvoice(inv);
+      cells[6] = net; // 7
+      cells[8] = net; // 9
+      add(7, net);
+      add(9, net);
+      cells[16] = [
+        inv.invoiceType === 'correction' ? `Korekta do ${inv.correctedInvoiceNumber ?? '—'}` : '',
+        inv.ksefNumber ? `KSeF: ${inv.ksefNumber}` : '',
+      ].filter(Boolean).join('; ');
+    } else {
+      const exp = entry.expense;
+      const net = exp.netAmount;
+      const col = kpirCostColumn(exp.kpirColumn);
+      cells[2] = exp.documentNumber;
+      // Kontrahent kosztu to SPRZEDAWCA — dawniej trafiała tu nasza firma.
+      cells[3] = exp.sellerNip ? `${exp.sellerName} (NIP ${exp.sellerNip})` : exp.sellerName;
+      cells[4] = exp.sellerAddress ?? '';
+      cells[5] = exp.categoryLabel ?? 'Wydatek';
 
-    const dataRow = sheet.addRow(rowValues);
+      const uwagi: string[] = [];
+      if (exp.documentType === 'receipt') uwagi.push('paragon');
+      if (exp.kpirColumn === null) uwagi.push('bez kategorii — sprawdź');
+      if (col === null) {
+        uwagi.push(`oznaczony kolumną przychodu (${exp.kpirColumn}) — nie liczony, sprawdź kategorię`);
+      } else {
+        cells[col - 1] = net;
+        add(col, net);
+        if (col === 12 || col === 13) {
+          cells[13] = net; // 14 = 12 + 13
+          add(14, net);
+        }
+      }
+      cells[16] = uwagi.join('; ');
+    }
+
+    const dataRow = sheet.addRow(cells);
 
     AMOUNT_COLS.forEach((col) => {
       const cell = dataRow.getCell(col);
@@ -153,23 +216,24 @@ function buildKpirSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
     });
 
     applyBorderToRow(dataRow, 'hair', 'FFCCCCCC');
-
-    if (isSale) totalIncome += net;
-    else totalCost += net;
-
     lp++;
   }
 
+  const total = (col: number) => Math.round((sums.get(col) ?? 0) * 100) / 100;
   const summaryRow = sheet.addRow([
     null, null, null, null, null,
     'PODSUMOWANIE OKRESU',
-    totalIncome,   // 7
-    null,
-    totalIncome,   // 9
-    null, null, null,
-    totalCost,     // 13
-    totalCost,     // 14
-    null, null, null,
+    total(7),    // 7
+    null,        // 8
+    total(9),    // 9
+    total(10),   // 10
+    total(11),   // 11
+    total(12),   // 12
+    total(13),   // 13
+    total(14),   // 14
+    null,        // 15
+    total(16),   // 16
+    null,        // 17
   ]);
 
   summaryRow.font = { bold: true };
@@ -179,7 +243,7 @@ function buildKpirSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
     fgColor: { argb: 'FFFFF0E0' },
   };
 
-  [7, 9, 13, 14].forEach((col) => {
+  SUM_COLS.forEach((col) => {
     summaryRow.getCell(col).numFmt = '#,##0.00 "zł"';
   });
 
