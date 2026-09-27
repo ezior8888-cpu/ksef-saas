@@ -789,6 +789,16 @@ Przegląd [specyfikacji QR MF](https://github.com/CIRFMF/ksef-api/blob/main/kody
 
 **Następne granice:** Bartek ma potwierdzić aktualny obraz i `schema_migrations` na db-1, backup z próbą restore, preflight duplikatów i obcych FK oraz wykonać próby wszystkich ośmiu migracji na odizolowanej kopii, szczególnie granty `00083`, blokadę zaakceptowanych importów `00088`, wyścigi `00089–00090` i późniejsze `VALIDATE` FK. Bez tego i bez uzgodnienia historycznych `NULL` nie ma zgody na PROD. W kodzie pozostaje luka fan-out po INSERT faktury przed eventem; następny pakiet powinien zaprojektować trwały outbox bez odtwarzania celowo usuniętych kosztów.
 
+## 2026-09-27 — równoległa numeracja migracji Claude/Codex (CYB-INT-04)
+
+**Stan i dowód:** `origin/main` pozostawał na `c3f33e1`; szkicowe PR-y #62–#64 Codexa zawierają `00083–00090`. PR Claude #60 początkowo zawierał osobny plik `00083_tenant_vat_exemption.sql`, co dawało kolizję wersji przy połączeniu. W czasie lokalnej korekty Claude opublikował commit `6fff79c`, przenosząc swój plik na `00091_tenant_vat_exemption.sql` i opisując go jako następujący po bloku Codexa. Ostatni odczyt PR #60: otwarty, bez merge, nie-draft. Nie ma dowodu, że którakolwiek z nowych migracji działa na db-1.
+
+**Działanie Codexa:** przygotowano w odizolowanym worktree przenumerowanie własnego bloku na `00084–00091` i poprawki runbooków; statyczna kontrola prefiksów oraz `pnpm run ci` przeszły (66 XML, 219 plików / 3583 testy Vitest). Gdy #60 zmienił numer na `00091`, powstałaby nowa kolizja. **Żadnego z tych commitów nie opublikowano.** Zapisano odtwarzalny lokalny punkt `refs/backup/security-renumber-collision-20260927`, a gałęzie #62–#64 przywrócono dokładnie do ich już opublikowanych końców `582f4c0`, `c0eda21`, `8123aef`. Główny checkout użytkownika pozostał nietknięty. W aktualnych PR-ach numeracja Codexa jest ponownie `00083–00090`, Claude ma `00091`.
+
+**Bramka integracji:** przy obecnej numeracji najpierw przejrzeć i scalać #62 → #63 → #64 z zachowaniem zależnej historii, potem #60 jako `00091`; przed wykonaniem SQL Bartek ma odczytowo potwierdzić `schema_migrations` na db-1 oraz sprawdzić całą sekwencję i zgodny obraz na odizolowanej kopii. Napis „niezależnie” w opisie #60 oznacza niezależność jego kolumny od SQL Codexa, **nie jest dowodem** bezpieczeństwa wgrania wersji `00091` przed niewykonanymi `00083–00090`. Jeśli produkt wymaga #60 wcześniej, operatorzy muszą ustalić nową numerację i kolejność zanim wykonają jakąkolwiek z tych migracji. Nie wykonano SQL, merge ani wdrożenia.
+
+**Pozostałe granice bezpieczeństwa:** statyczny przegląd `00088` i RLS wykazał, że `authenticated` może bez rzeczywistego zadania przestawić własną fakturę na `queued` lub fałszować próby/błędy KSeF; potrzebny jest osobny serwerowy claim i blokada bezpośrednich zmian stanu. Po INSERT faktury przychodzącej fan-out FLO/koszt/push pozostaje poza transakcją; crash przed wysyłką nie jest naprawiany przez retry, a brak kosztu może oznaczać celowe usunięcie. Potrzebny jest outbox i trwały stan `cancelled`, bez automatycznego odtwarzania historycznych braków. To ustalenia z kodu, nie próba na PostgreSQL/PostgREST. Bartek powinien je traktować jako otwarte przed szerszym uruchomieniem.
+
 ## Format następnego wpisu
 
 Dopisz wpis dopiero po faktycznym działaniu:

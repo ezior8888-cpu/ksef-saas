@@ -2,6 +2,8 @@
 
 Stan na 2026-09-26: `00089_incoming_ksef_identity.sql` i `00090_expense_ksef_invoice_identity.sql` są wyłącznie lokalnymi plikami. Nie uruchomiono SQL ani migracji. Według dziennika wydania Bartka db-1 ma migracje do `00082`; Codex nie odczytał tej bazy. `00083`–`00090` i odpowiadający im kod wymagają spójnego odbioru na kopii oraz kontrolowanego wydania. Ten dokument nie jest potwierdzeniem wdrożenia.
 
+Aktualizacja 2026-09-27: pliki są opublikowane do przeglądu w szkicowym PR #64, nadal bez wykonania SQL. Otwarty PR #60 przeniósł swoją niezależną migrację zwolnienia VAT na `00091`. Przy zachowaniu tej numeracji kolejność integracji schematu to #62 (`00083–00085`) → #63 (`00086–00088`) → #64 (`00089–00090`) → #60 (`00091`). Przed każdą próbą Bartek musi odczytowo potwierdzić historię db-1; nie wgrywać `00091` wcześniej jako „niezależnej”, jeśli późniejsze uzupełnienie `00083–00090` nie zostało sprawdzone na kopii i uzgodnione z narzędziem migracji. Jeśli #60 musi wejść wcześniej, numerację należy wspólnie rozstrzygnąć przed scaleniem. Ten wpis nie stanowi zgody na wdrożenie.
+
 ## Dlaczego ta zmiana jest potrzebna
 
 `inbox-polling` sprawdzał numer KSeF przed osobnym zbiorczym INSERT. Indeksy nazwane jak unikalne w `00001`/`00004` nie były UNIQUE. Stary indeks `00028` przypadkowo blokował część wyścigów przez `(tenant_id, internal_number)`, ale blokował też **różne** faktury przychodzące od dwóch wystawców używających np. `FV/1`. Błąd jednego wiersza odrzucał cały batch. Po upływie 48-godzinnego okna polling nie musi odzyskać pominiętego dokumentu.
