@@ -46,9 +46,13 @@ function kolumnaFiltra(surowa: string): string | null {
 function bledyKolumn(l: Lancuch): Blad[] {
   const kolumny = SCHEMAT.tabele.get(l.tabela)!;
   const out: Blad[] = [];
-  for (const m of l.tekst.matchAll(new RegExp(`\\.(?:${FILTRY})\\(\\s*'([^']+)'`, 'g'))) {
-    const k = kolumnaFiltra(m[1]!);
+  for (const m of l.tekst.matchAll(new RegExp(`\\.(${FILTRY})\\(\\s*'([^']+)'`, 'g'))) {
+    const [operacja, k] = [m[1]!, kolumnaFiltra(m[2]!)];
     if (!k || kolumny.has(k)) continue;
+    // PostgREST uses `.is('relation', null)` as an anti-join, but only when
+    // that existing relation was explicitly embedded in this SELECT.
+    if (operacja === 'is' && SCHEMAT.tabele.has(k) &&
+        new RegExp(`\\.select\\(\\s*'[^']*\\b${k}\\(\\)[^']*'\\s*\\)`).test(l.tekst)) continue;
     out.push({
       klucz: `${l.plik} ${l.tabela}.${k}`,
       gdzie: `${l.plik}:${l.linia}`,
@@ -123,6 +127,15 @@ describe('schemat z migracji — wartości', () => {
 
 describe('filtry pytają o to, co istnieje', () => {
   const wszystko = () => LANCUCHY.flatMap((l) => [...bledyKolumn(l), ...bledyWartosci(l)]);
+
+  it('rozpoznaje anti-join tylko dla istniejącej i wybranej relacji', () => {
+    const lancuch = (tekst: string): Lancuch => ({
+      plik: 'test', linia: 1, tabela: 'invoices', tekst,
+    });
+    expect(bledyKolumn(lancuch(".select('id, upo_receipts()').is('upo_receipts', null)"))).toEqual([]);
+    expect(bledyKolumn(lancuch(".select('id').is('upo_receipts', null)"))).toHaveLength(1);
+    expect(bledyKolumn(lancuch(".select('id, unknown_receipts()').is('unknown_receipts', null)"))).toHaveLength(1);
+  });
 
   it('żaden filtr nie pyta o kolumnę albo wartość, której baza nie zna', () => {
     const nowe = wszystko().filter((b) => !(b.klucz in ZNANE));
