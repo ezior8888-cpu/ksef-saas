@@ -39,7 +39,8 @@ import {
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import { generateJpkFa } from '@/lib/exports/jpk-fa-generator';
 import { MissingTaxOfficeError, readTenantTaxOffice } from '@/lib/exports/tax-office';
-import { generateJpkV7m } from '@/lib/exports/jpk-v7m-generator';
+import { readTaxpayerEmail } from '@/lib/exports/taxpayer-email';
+import { generateJpkV7m, MissingTaxpayerEmailError } from '@/lib/exports/jpk-v7m-generator';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { r2ObjectExists, uploadToR2 } from '@/lib/storage/r2';
@@ -222,7 +223,7 @@ function buildR2Path(job: ExportJobRow, exportJobId: string, filename: string) {
 // ============================================================================
 
 /** Komunikaty, które wolno pokazać człowiekowi — reszta to szczegóły techniczne. */
-const HUMAN_EXPORT_ERRORS = [new MissingTaxOfficeError().message];
+const HUMAN_EXPORT_ERRORS = [new MissingTaxOfficeError().message, new MissingTaxpayerEmailError().message];
 
 /**
  * Po wyczerpaniu prób (Inngest `onFailure`, pg-boss `onExhausted`): eksport
@@ -305,16 +306,26 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
       return { success: true as const, count: 0 };
     }
 
-    // Urząd firmy tylko dla JPK_FA — odpornie przed migracją 00092. Ten sam
+    // Urząd firmy dla plików JPK — odpornie przed migracją 00092. Ten sam
     // wkład trafia do OBU generowań (sumy kontrolnej i wysyłki do R2) — inaczej
-    // drugie generowanie nie znałoby urzędu i JPK_FA padałby przy wysyłce.
+    // drugie generowanie nie znałoby urzędu i plik padałby przy wysyłce.
+    const format = job.format as ExportJobRow['format'] | 'jpk_v7m';
     const taxOfficeCode =
-      job.format === 'jpk_fa'
+      format === 'jpk_fa' || format === 'jpk_v7m'
         ? await step.run('read-tax-office', () => readTenantTaxOffice(supabase, job.tenant_id))
+        : null;
+    // JPK_V7M(3) wymaga e-maila podatnika — adres właściciela firmy.
+    const taxpayerEmail =
+      format === 'jpk_v7m'
+        ? await step.run('read-taxpayer-email', () => readTaxpayerEmail(supabase, job.tenant_id))
         : null;
     const fileData = {
       ...data,
-      issuer: { ...data.issuer, taxOfficeCode: taxOfficeCode ?? undefined },
+      issuer: {
+        ...data.issuer,
+        taxOfficeCode: taxOfficeCode ?? undefined,
+        email: taxpayerEmail ?? undefined,
+      },
     };
 
     // Step 1: generate-buffer
@@ -330,7 +341,9 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
           generated = await generateExportFile(job, fileData);
         } catch (e) {
           // Ponowienie nic nie da — urząd ustawia człowiek.
-          if (e instanceof MissingTaxOfficeError) throw new NonRetriableError(e.message);
+          if (e instanceof MissingTaxOfficeError || e instanceof MissingTaxpayerEmailError) {
+            throw new NonRetriableError(e.message);
+          }
           throw e;
         }
         const fileHash = createHash('sha256')
