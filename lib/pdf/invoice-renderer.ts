@@ -116,6 +116,17 @@ export async function renderInvoicePdf(
 
 type Doc = InstanceType<typeof PDFDocument>;
 
+/**
+ * Podstawa zwolnienia z VAT na fakturze z pozycją „zw” — obowiązkowy element
+ * faktury (art. 106e ust. 1 pkt 19 ustawy o VAT). W XML to P_19A; PDF to
+ * kopia, którą nabywca spoza KSeF dostaje mailem.
+ */
+export function exemptionBasisLine(invoice: Invoice): string | null {
+  if (!invoice.lines.some((l) => l.vatRate === 'zw')) return null;
+  const basis = invoice.annotations?.vatExemptionBasis?.trim();
+  return basis ? `Zwolnienie z VAT — podstawa prawna: ${basis}` : null;
+}
+
 function drawHeader(
   doc: Doc,
   invoice: Invoice,
@@ -367,6 +378,12 @@ function drawFooter(
   left: number,
   width: number,
 ): void {
+  const exemption = exemptionBasisLine(invoice);
+  if (exemption) {
+    doc.font('body').fontSize(8).fillColor('#444444');
+    doc.text(exemption, left, doc.y, { width });
+    doc.y += 4;
+  }
   if (invoice.notes) {
     doc.font('body').fontSize(8).fillColor('#666666');
     doc.text(`Uwagi: ${invoice.notes}`, left, doc.y, { width });

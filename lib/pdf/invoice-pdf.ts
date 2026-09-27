@@ -54,10 +54,11 @@ export async function generateInvoicePdf(
   }
 
   const filename = `Faktura_${sanitizeFilename(data.invoice.internalNumber)}.pdf`;
+  const key = buildInvoicePdfKey(tenantId, invoiceId, data.issueDate);
 
   // Cache hit: PDF istnieje i jest świeższy niż ostatnia zmiana faktury.
   const cacheValid =
-    data.pdfStoragePath &&
+    data.pdfStoragePath === key &&
     isTenantStoragePath(data.pdfStoragePath, tenantId) &&
     data.pdfGeneratedAt &&
     (!data.updatedAt ||
@@ -81,7 +82,6 @@ export async function generateInvoicePdf(
     testWatermark: (process.env.KSEF_ENV ?? 'test') === 'test',
   });
 
-  const key = buildInvoicePdfKey(tenantId, invoiceId, data.issueDate);
   try {
     await uploadInvoicePdf(key, pdf);
     await saveInvoicePdfPath(invoiceId, key);

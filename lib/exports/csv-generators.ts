@@ -3,7 +3,7 @@
 
 import Papa from 'papaparse';
 import iconv from 'iconv-lite';
-import type { JpkInvoice } from './jpk-fa-generator';
+import { counterpartyOf, type ExportParty, type JpkInvoice } from './jpk-fa-generator';
 
 export interface CsvExportInput {
   issuer: { nip: string; name: string };
@@ -22,11 +22,11 @@ export interface CsvExportInput {
 export function generateInsertSubiektCsv(data: CsvExportInput): Buffer {
   const invoices = allInvoices(data);
 
-  const rows = invoices.map((inv) => ({
+  const rows = invoices.map(({ inv, party }) => ({
     Numer: inv.invoiceNumber,
     Data: formatPlDate(inv.issueDate),
-    Klient: inv.buyerName,
-    NIP: inv.buyerNip ?? '',
+    Klient: party.name,
+    NIP: party.nip ?? '',
     Netto: inv.netTotal.toFixed(2).replace('.', ','),
     VAT: inv.vatTotal.toFixed(2).replace('.', ','),
     Brutto: inv.grossTotal.toFixed(2).replace('.', ','),
@@ -48,14 +48,14 @@ export function generateInsertSubiektCsv(data: CsvExportInput): Buffer {
 export function generateSymfoniaCsv(data: CsvExportInput): Buffer {
   const invoices = allInvoices(data);
 
-  const rows = invoices.map((inv, idx) => ({
+  const rows = invoices.map(({ inv, party }, idx) => ({
     'Lp.': idx + 1,
     NumerDokumentu: inv.invoiceNumber,
     DataWystawienia: formatPlDate(inv.issueDate),
     DataSprzedazy: formatPlDate(inv.saleDate ?? inv.issueDate),
-    Kontrahent: inv.buyerName,
-    NIP: inv.buyerNip ?? '',
-    Adres: inv.buyerAddress ?? '',
+    Kontrahent: party.name,
+    NIP: party.nip ?? '',
+    Adres: party.address ?? '',
     WartoscNetto: inv.netTotal.toFixed(2).replace('.', ','),
     WartoscVAT: inv.vatTotal.toFixed(2).replace('.', ','),
     WartoscBrutto: inv.grossTotal.toFixed(2).replace('.', ','),
@@ -83,14 +83,14 @@ export function generateSymfoniaCsv(data: CsvExportInput): Buffer {
 export function generateWaproCsv(data: CsvExportInput): Buffer {
   const invoices = allInvoices(data);
 
-  const rows = invoices.map((inv, idx) => ({
+  const rows = invoices.map(({ inv, party }, idx) => ({
     lp: idx + 1,
     numer: inv.invoiceNumber,
     data: formatPlDate(inv.issueDate),
     data_sprzedazy: formatPlDate(inv.saleDate ?? inv.issueDate),
-    nabywca: inv.buyerName,
-    nip: inv.buyerNip ?? '',
-    adres: inv.buyerAddress ?? '',
+    nabywca: party.name,
+    nip: party.nip ?? '',
+    adres: party.address ?? '',
     netto: inv.netTotal.toFixed(2).replace('.', ','),
     vat: inv.vatTotal.toFixed(2).replace('.', ','),
     brutto: inv.grossTotal.toFixed(2).replace('.', ','),
@@ -114,12 +114,12 @@ export function generateWaproCsv(data: CsvExportInput): Buffer {
 export function generateUniversalCsv(data: CsvExportInput): Buffer {
   const invoices = allInvoices(data);
 
-  const rows = invoices.map((inv, idx) => ({
+  const rows = invoices.map(({ inv, party }, idx) => ({
     Lp: idx + 1,
     Numer: inv.invoiceNumber,
     DataWystawienia: formatPlDate(inv.issueDate),
-    Kontrahent: inv.buyerName,
-    NIP: inv.buyerNip ?? '',
+    Kontrahent: party.name,
+    NIP: party.nip ?? '',
     Netto: inv.netTotal.toFixed(2).replace('.', ','),
     VAT: inv.vatTotal.toFixed(2).replace('.', ','),
     Brutto: inv.grossTotal.toFixed(2).replace('.', ','),
@@ -137,10 +137,15 @@ export function generateUniversalCsv(data: CsvExportInput): Buffer {
 // Helpers
 // ============================================================================
 
-function allInvoices(data: CsvExportInput): JpkInvoice[] {
-  return [...data.issuedInvoices, ...data.receivedInvoices].sort((a, b) =>
-    a.issueDate.localeCompare(b.issueDate),
-  );
+/**
+ * Faktury z KONTRAHENTEM wg kierunku: sprzedaż → nabywca, zakup → sprzedawca.
+ * Do 26.09 zakupy miały tu nabywcę, czyli naszą firmę.
+ */
+function allInvoices(data: CsvExportInput): Array<{ inv: JpkInvoice; party: ExportParty }> {
+  return [
+    ...data.issuedInvoices.map((inv) => ({ inv, party: counterpartyOf(inv, 'issued') })),
+    ...data.receivedInvoices.map((inv) => ({ inv, party: counterpartyOf(inv, 'received') })),
+  ].sort((a, b) => a.inv.issueDate.localeCompare(b.inv.issueDate));
 }
 
 function formatPlDate(iso: string): string {

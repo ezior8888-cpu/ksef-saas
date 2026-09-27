@@ -94,57 +94,6 @@ export function evaluateChaseSafety(input: ChaseSafetyInput): ChaseSafety {
   return { ok: true };
 }
 
-export interface PaymentMomentRow {
-  /** `payments.payment_date` (DATE) — dzień przelewu z wyciągu albo z deklaracji. */
-  payment_date: string | null;
-  /** `payments.created_at` — chwila, w której system dowiedział się o wpłacie. */
-  created_at: string | null;
-}
-
-/**
- * Chwila ostatniej wpłaty — wejście okna bezpieczeństwa. Funkcja czysta.
- *
- * WIERSZ WPŁATY MA DWIE DATY I BIERZEMY PÓŹNIEJSZĄ. Wyciąg zaimportowany dziś
- * z przelewem sprzed tygodnia to świeża wiadomość „ten kontrahent właśnie się
- * rozlicza" — dokładnie ta chwila, w której ponaglenie najłatwiej trafia do
- * kogoś, kto zapłacił. Tu fałszywa blokada kosztuje dwa dni zwłoki, a fałszywa
- * wysyłka kompromituje klienta przed obcą firmą.
- *
- * `payment_date` liczymy jako KONIEC dnia w UTC (23:59:59.999Z). Koniec dnia
- * w Warszawie wypada godzinę albo dwie wcześniej, więc okno wychodzi odrobinę
- * dłuższe, nigdy krótsze. Ten sam koniec dnia wyznacza filtr zapytania
- * w wykonawcy — inaczej zapytanie mogłoby zgubić wpłatę, którą ta funkcja
- * uznałaby za świeżą.
- */
-export function latestPaymentMoment(
-  rows: readonly PaymentMomentRow[],
-): string | null {
-  let latest = Number.NEGATIVE_INFINITY;
-
-  for (const row of rows) {
-    const recorded = row.created_at ? Date.parse(row.created_at) : Number.NaN;
-    const paid = row.payment_date
-      ? Date.parse(`${row.payment_date.slice(0, 10)}T23:59:59.999Z`)
-      : Number.NaN;
-
-    for (const moment of [recorded, paid]) {
-      if (!Number.isNaN(moment) && moment > latest) latest = moment;
-    }
-  }
-
-  return Number.isFinite(latest) ? new Date(latest).toISOString() : null;
-}
-
-/**
- * Od którego dnia `payment_date` wpłata może jeszcze wpaść w okno.
- *
- * Para dla `latestPaymentMoment`: dzień D kończy się o 23:59:59.999Z, więc
- * mieści się w oknie wtedy i tylko wtedy, gdy D ≥ data UTC początku okna.
- */
-export function paymentDateWindowStart(since: Date): string {
-  return since.toISOString().slice(0, 10);
-}
-
 // ═══════════════════════════════════════════════════════════════
 // Adresat — funkcja czysta
 // ═══════════════════════════════════════════════════════════════
