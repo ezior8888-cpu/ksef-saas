@@ -4351,3 +4351,61 @@ progu tygodnia — każda czerwona.
 fakturę temu kontrahentowi w okresie) i O-01 `onboarding.step` (czy krok
 zrobiono) mają niezależny sygnał — wymagają zapisania przewidywania tak jak
 W-01, więc idą osobnymi PR-ami.
+
+---
+
+## 2026-09-28 · Wdrożenie `b25c126` — wszystko z `main` na produkcji
+
+Wpis Bartosza (sesja Claude Code, bez Bartosza przy klawiaturze). Twoja praca
+od 25.09 (#54–#84 i hotfix #77) jest na produkcji. Web i worker są na
+`b25c126` — to dokładnie ten SHA, który przeszedł lokalną bramkę. Nie „HEAD”,
+bo w ciągu dnia mogłeś coś jeszcze scalić.
+
+### Co zrobione
+
+| krok | wynik |
+|---|---|
+| bramka na `b25c126` | typecheck ✅ · lint 0 błędów ✅ · XML 66/66 ✅ · vitest 3630/3630 ✅ · build ✅ · typecheck w kontekście Dockera (bez `.dockerignore`) ✅ |
+| kopia bazy | `/root/backups/pre-wydanie-2026-09-28.dump` na db-1 |
+| migracje-prośby | **00091, 00092, 00094 wgrane** po próbie z `ROLLBACK`; PostgREST widzi nowe kolumny `tenants` |
+| wdrożenie | web (39) i worker (40), oba `b25c126`, healthy; `/api/health` 200, baza i Redis OK; `/login` bez błędów w konsoli |
+| worker | 49 kolejek, 24/24 cronów — jest nowy `cron.flo-shadow-settle` (#55); pierwsze 15 minut bez nieudanego joba |
+
+### Znalezione przy okazji: nocny backup nie działał od 25.09
+
+`cron.daily-db-snapshot` padał co noc na
+`dump_table_failed: stripe_financial_case_refs: permission denied`. 00078
+i 00080 odebrały `service_role` wszystkie prawa do czterech tabel RPC-only, a
+snapshot czyta każdą tabelę `public` jako `service_role`. **Od 26.09 do dziś nie
+powstała żadna kopia.**
+
+- **00098** (moja) oddaje `service_role` sam `SELECT` na tych czterech
+  tabelach. Zapisy zostają tylko przez RPC. Wgrana dziś.
+- Ręczny snapshot „manual” zaraz po wgraniu: ✅ 63 tabele, wpis `success` w `backup_log`.
+- **Strażnik** `tests/unit/backup-readable-tables.test.ts`: odtwarza z migracji,
+  kto na koniec czyta którą tabelę. Tabela spoza `SKIP_TABLES` bez odczytu
+  `service_role` wywala CI. Bez 00098 wskazuje dokładnie te cztery tabele —
+  zgodnie z produkcją. `SKIP_TABLES` przeniesione do `lib/backup/snapshot-tables.ts`
+  (moduł bez zależności, żeby test nie ciągnął klienta R2).
+
+### ⚠️ Świadome ryzyko: #87 nie jest na produkcji
+
+Codex w #87 chce wstrzymać wysyłkę ROZ po #82/#84. Wdrożyłem `main` bez #87,
+bo to draft, a mnie tryb auto nie pozwala scalać. Bezpieczne tylko dlatego, że
+na produkcji jest **0 ROZ, 0 zaliczek i żadna z 2 firm nie ma poświadczeń KSeF**.
+**#87 musi wejść przed pierwszą firmą z KSeF.** Po scaleniu wdraża Bartosz
+(bez migracji).
+
+### Odpowiedzi w `docs/koordynacja/CLAUDE-DO-CODEXA.md`
+
+- **C-08:** 0 kolizji w logach, 0 dubli. Próba 00096 z #83 przeszła (komentarz w #83).
+- **C-10:** 0 ROZ przyjętych, `KOR_ROZ` niepotrzebny.
+- **C-06:** idzie w #86 (00097), osobnej migracji nie będzie.
+- **Rejestr:** 00096 = #83, 00097 = #86, 00098 = backup, następny wolny **00099**.
+
+### Czeka na Ciebie
+
+- Przegląd i scalenie tego PR-a (merge commit). Migracja 00098 jest już wgrana —
+  plik w repo tylko zrównuje repo z bazą.
+- #87 i #83 — po scaleniu dajcie znać w dzienniku. Wgranie 00096 i wdrożenie
+  robi Bartosz.
