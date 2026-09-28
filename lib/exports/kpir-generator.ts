@@ -3,6 +3,7 @@
 
 import ExcelJS from 'exceljs';
 import { kpirCostAmount, nonDeductedVat } from '@/lib/categorization/kpir-cost';
+import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
 
 import type { ExportExpense } from './data-fetcher';
 import type { JpkInvoice } from './jpk-fa-generator';
@@ -169,7 +170,13 @@ function buildKpirSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
 
     if (entry.kind === 'sale') {
       const inv = entry.invoice;
-      const net = inv.netTotal;
+      // ROZ: tylko reszta ponad zaliczki, które są już w KPiR (ta sama reguła
+      // co KPiR w aplikacji — `kpirRevenueNet`).
+      const net = kpirRevenueNet({
+        kind: inv.invoiceType,
+        net: inv.netTotal,
+        settledAdvancesNet: inv.settledAdvancesNet,
+      });
       cells[2] = inv.invoiceNumber;
       cells[3] = inv.buyerName;
       cells[4] = inv.buyerAddress ?? '';
@@ -180,6 +187,9 @@ function buildKpirSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
       add(9, net);
       cells[16] = [
         inv.invoiceType === 'correction' ? `Korekta do ${inv.correctedInvoiceNumber ?? '—'}` : '',
+        inv.invoiceType === 'final'
+          ? `ROZ: wartość zamówienia ${inv.netTotal.toFixed(2)} zł, rozliczone zaliczki ${(inv.settledAdvancesNet ?? 0).toFixed(2)} zł — w przychodzie reszta`
+          : '',
         inv.ksefNumber ? `KSeF: ${inv.ksefNumber}` : '',
       ].filter(Boolean).join('; ');
     } else {

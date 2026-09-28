@@ -94,7 +94,7 @@ describe('KPiR w aplikacji', () => {
 describe('Przepływy: zysk i szacowany podatek jak w KPiR', () => {
   const html = renderToStaticMarkup(
     <CashFlowDashboard
-      invoices={[{ issue_date: `${ym}-05`, net_total: 5000, gross_total: 6150 }]}
+      invoices={[{ issue_date: `${ym}-05`, net_total: 5000, gross_total: 6150, invoice_kind: 'regular' }]}
       expenses={[paragon]}
       pendingReviewCount={0}
     />,

@@ -75,6 +75,9 @@ export interface JpkInvoice {
 
   // Numer KSeF (informacyjnie)
   ksefNumber?: string;
+
+  /** ROZ: suma netto rozliczonych zaliczek, które KPiR już liczy (`kpirRevenueNet`). */
+  settledAdvancesNet?: number;
 }
 
 export interface ExportParty {
