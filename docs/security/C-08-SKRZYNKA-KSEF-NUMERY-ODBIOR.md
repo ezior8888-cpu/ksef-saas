@@ -1,7 +1,7 @@
 # C-08 — kolizje numerów faktur odebranych w skrzynce KSeF
 
 Stan przygotowania: 28.09.2026. Dotyczy `main` `4770099` i proponowanej migracji
-`00097_incoming_invoice_number_boundary.sql`. Plik SQL **nie został wykonany**.
+`00096_incoming_invoice_number_boundary.sql`. Plik SQL **nie został wykonany**.
 Nie potwierdzono historii migracji ani wersji workera na db-1.
 
 ## Problem i skutek
@@ -74,9 +74,9 @@ duplikat wychodzącej po `(tenant_id, internal_number)` jest odrzucony; różne
 firmy nie kolidują. Sprawdzić faktyczny czas blokady zapisów przy budowie
 indeksów oraz brak nieoczekiwanych duplikatów po operacji.
 
-`00097` tworzy dwa indeksy zastępcze w jednej transakcji i dopiero potem usuwa
+`00096` tworzy dwa indeksy zastępcze w jednej transakcji i dopiero potem usuwa
 stary. Gdy indeks tożsamości z `00089` już istnieje, nie dodaje mocniejszego
-klucza między środowiskami. **Numer 00097 jest wyższy od otwartych 00083–00096.**
+klucza między środowiskami. **Numer 00096 jest wyższy od otwartych 00083–00095.**
 Przed użyciem runnera Bartosz musi sprawdzić kolejność/historię migracji,
 przećwiczyć ją na kopii i ustalić okno bez zapisów. Nie wykonywać masowego
 `db push` bez tego planu. Kod z #64 `00089` uzupełniono w commicie `1158076`,

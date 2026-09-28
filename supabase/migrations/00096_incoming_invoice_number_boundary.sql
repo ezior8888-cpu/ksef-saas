@@ -19,7 +19,7 @@ BEGIN
       GROUP BY tenant_id, internal_number HAVING count(*) > 1
     ) AS duplicates
   ) THEN
-    RAISE EXCEPTION 'Duplicate outgoing invoice numbers require manual reconciliation before 00097';
+    RAISE EXCEPTION 'Duplicate outgoing invoice numbers require manual reconciliation before 00096';
   END IF;
 
   IF pg_catalog.to_regclass('public.uq_invoices_incoming_ksef_identity') IS NULL
@@ -31,7 +31,7 @@ BEGIN
          GROUP BY tenant_id, ksef_number HAVING count(*) > 1
        ) AS duplicates
      ) THEN
-    RAISE EXCEPTION 'Duplicate incoming KSeF numbers require manual reconciliation before 00097';
+    RAISE EXCEPTION 'Duplicate incoming KSeF numbers require manual reconciliation before 00096';
   END IF;
 
   -- 00089 may already be present on a server even though it is not on main.
