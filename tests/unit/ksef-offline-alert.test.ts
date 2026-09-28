@@ -22,6 +22,7 @@ function query(result: { count?: number | null; data?: { deadline: string } | nu
   const builder = {
     select: vi.fn(() => builder),
     eq: vi.fn(() => builder),
+    in: vi.fn(() => builder),
     is: vi.fn(() => builder),
     lt: vi.fn(() => builder),
     or: vi.fn(() => builder),
@@ -49,14 +50,15 @@ afterEach(() => {
 });
 
 describe('blocked Offline24 environment alert', () => {
-  it('alerts on one legacy row with count and nearest deadline, excluding invoice data', async () => {
+  it('alerts on a legacy queued or sending row with nearest deadline, excluding invoice data', async () => {
     const count = query({ count: 1, error: null });
     const nearest = query({ data: { deadline: '2026-09-26T10:00:00Z' }, error: null });
     mocks.from.mockReturnValueOnce(count).mockReturnValueOnce(nearest);
     await expect(checkBlockedKsefOfflineQueue()).resolves.toEqual({
       type: 'offline_environment_blocked', fired: true,
     });
-    expect(count.eq).toHaveBeenCalledWith('status', 'queued');
+    expect(count.in).toHaveBeenCalledWith('status', ['queued', 'sending']);
+    expect(nearest.in).toHaveBeenCalledWith('status', ['queued', 'sending']);
     expect(count.or).toHaveBeenCalledWith('ksef_environment.is.null,ksef_environment.neq.production');
     expect(mocks.cacheSet).toHaveBeenCalledWith(
       'alerts:critical:lastsent:offline_environment_blocked:production',

@@ -153,10 +153,10 @@ export async function checkBlockedKsefOfflineQueue(): Promise<AlertCheckResult> 
   const [blocked, nearest] = await Promise.all([
     supabase.from('ksef_offline_queue')
       .select('id', { count: 'exact', head: true })
-      .eq('status', 'queued').or(filter),
+      .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]).or(filter),
     supabase.from('ksef_offline_queue')
       .select('deadline')
-      .eq('status', 'queued').or(filter)
+      .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]).or(filter)
       .order('deadline', { ascending: true }).limit(1).maybeSingle(),
   ]);
   if (blocked.error || nearest.error || blocked.count === null) {
@@ -171,7 +171,7 @@ export async function checkBlockedKsefOfflineQueue(): Promise<AlertCheckResult> 
   }
   await alertCritical(
     'Offline24 wymaga uzgodnienia środowiska',
-    'Co najmniej jeden oczekujący wpis Offline24 nie ma potwierdzonego środowiska lub dotyczy innego środowiska. Nie wznawiaj go automatycznie; uzgodnij z KSeF i kolejkami przed zmianą konfiguracji.',
+    'Co najmniej jeden oczekujący lub rozpoczęty wpis Offline24 nie ma potwierdzonego środowiska lub dotyczy innego środowiska. Nie wznawiaj go automatycznie; uzgodnij z KSeF i kolejkami przed zmianą konfiguracji.',
     {
       fields: [
         { label: 'Zablokowane', value: String(blocked.count) },
