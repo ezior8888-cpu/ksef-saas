@@ -49,6 +49,8 @@ export interface ExportExpense {
   /** col_10 | col_11 | col_12 | col_13 | col_15 (B+R w aplikacji) | … */
   kpirColumn: string | null;
   categoryLabel: string | null;
+  /** Numer KSeF faktury, z której powstał koszt (skrzynka) — JPK_V7M(3) NrKSeF. */
+  ksefNumber?: string | null;
 }
 
 export interface FetchedInvoiceData {
@@ -177,7 +179,7 @@ async function fetchExpensesForExport(
     environment,
     rows,
   );
-  return eligible.map((row) => ({
+  const out = eligible.map((row) => ({
     id: String(row.id),
     issueDate: String(row.issue_date),
     documentNumber: typeof row.document_number === 'string' ? row.document_number : '',
@@ -192,6 +194,48 @@ async function fetchExpensesForExport(
     kpirColumn: typeof row.kpir_column === 'string' ? row.kpir_column : null,
     categoryLabel: typeof row.category_label === 'string' ? row.category_label : null,
   }));
+  /** Only the reconciled costs may contribute a NrKSeF to the exported file. */
+  const linked = new Map<string, string>();
+  for (const row of eligible) {
+    if (typeof row.ksef_invoice_id === 'string') {
+      linked.set(String(row.id), row.ksef_invoice_id);
+    }
+  }
+  await attachKsefNumbers(supabase, params.tenantId, out, linked);
+  return out;
+}
+
+const KSEF_LOOKUP_CHUNK = 200;
+
+/**
+ * Numer KSeF faktury, z której powstał koszt (skrzynka) — JPK_V7M(3) wymaga
+ * go w wierszu zakupu (NrKSeF), inaczej BFK. Osobne zapytanie zamiast
+ * osadzenia: między `expenses` a `invoices` jest więcej niż jeden klucz obcy.
+ */
+export async function attachKsefNumbers(
+  supabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  expenses: ExportExpense[],
+  linked: ReadonlyMap<string, string>,
+): Promise<void> {
+  const invoiceIds = [...new Set(linked.values())];
+  const numbers = new Map<string, string>();
+  for (let i = 0; i < invoiceIds.length; i += KSEF_LOOKUP_CHUNK) {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('id, ksef_number')
+      .eq('tenant_id', tenantId)
+      .in('id', invoiceIds.slice(i, i + KSEF_LOOKUP_CHUNK));
+    // Błąd to nie „brak numeru” — inaczej plik po cichu dostałby BFK.
+    if (error) throw new Error(`invoices (numery KSeF kosztów): ${error.message}`);
+    for (const row of (data ?? []) as Array<{ id: string; ksef_number: string | null }>) {
+      if (row.ksef_number?.trim()) numbers.set(row.id, row.ksef_number.trim());
+    }
+  }
+  for (const expense of expenses) {
+    const invoiceId = linked.get(expense.id);
+    expense.ksefNumber = invoiceId ? (numbers.get(invoiceId) ?? null) : null;
+  }
 }
 
 async function fetchInvoiceRows(

@@ -111,6 +111,7 @@ function readAnnotations(raw: unknown): Invoice['annotations'] {
     annotations.vatExemptionBasis = o.vatExemptionBasis.trim();
   }
   if (o.splitPayment === 1) annotations.splitPayment = 1;
+  if (o.cashMethod === 1) annotations.cashMethod = 1;
   return Object.keys(annotations).length > 0 ? annotations : undefined;
 }
 
