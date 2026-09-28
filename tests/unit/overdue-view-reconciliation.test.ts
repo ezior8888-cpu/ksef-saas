@@ -7,7 +7,7 @@ function migration(name: string): string {
 }
 
 const previous = migration('00082_invoices_overdue_outgoing.sql');
-const guarded = migration('00096_invoices_overdue_reconciliation_guard.sql');
+const guarded = migration('00097_invoices_overdue_reconciliation_guard.sql');
 
 function projection(sql: string): string {
   const match = /CREATE OR REPLACE VIEW public\.invoices_overdue\s+WITH\s*\(security_invoker\s*=\s*true\)\s+AS\s+SELECT\s+([\s\S]*?)\s+FROM public\.invoices i\b/i.exec(sql);
