@@ -21,7 +21,15 @@ vi.mock('@/lib/exports/data-fetcher', () => ({
   fetchInvoicesForExport: mocks.fetch,
 }));
 vi.mock('@/lib/exports/kpir-generator', () => ({ generateKpirXlsx: mocks.kpir }));
-vi.mock('@/lib/exports/jpk-v7m-generator', () => ({ generateJpkV7m: mocks.jpkV7m }));
+vi.mock('@/lib/exports/tax-office', async (original) => ({
+  ...(await original<typeof import('@/lib/exports/tax-office')>()),
+  readTenantTaxOffice: async () => '1433',
+}));
+vi.mock('@/lib/exports/taxpayer-email', () => ({ readTaxpayerEmail: async () => 'owner@example.test' }));
+vi.mock('@/lib/exports/jpk-v7m-generator', async (original) => ({
+  ...(await original<typeof import('@/lib/exports/jpk-v7m-generator')>()),
+  generateJpkV7m: mocks.jpkV7m,
+}));
 vi.mock('@/lib/storage/r2', () => ({
   uploadToR2IfAbsent: async () => {
     await mocks.uploaded();

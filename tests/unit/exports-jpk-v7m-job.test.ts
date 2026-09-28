@@ -58,6 +58,10 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/storage/r2', () => ({
   r2ObjectExists: async () => false,
+  uploadToR2IfAbsent: async (_p: string, buffer: Buffer) => {
+    db.uploads.push(buffer.toString('utf8'));
+    return true;
+  },
   uploadToR2: async (_p: string, buffer: Buffer) => {
     db.uploads.push(buffer.toString('utf8'));
   },

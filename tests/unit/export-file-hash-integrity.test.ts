@@ -23,7 +23,8 @@ vi.mock('@/lib/exports/jpk-fa-generator', () => ({
     return `<JPK_FA generated="${++state.generation}"/>`;
   },
 }));
-vi.mock('@/lib/exports/jpk-v7m-generator', () => ({
+vi.mock('@/lib/exports/jpk-v7m-generator', async (original) => ({
+  ...(await original<typeof import('@/lib/exports/jpk-v7m-generator')>()),
   generateJpkV7m: () => {
     state.generationCount++;
     return `<JPK_V7M generated="${++state.generation}"/>`;
@@ -41,6 +42,7 @@ vi.mock('@/lib/exports/tax-office', () => ({
   },
   readTenantTaxOffice: async () => '1433',
 }));
+vi.mock('@/lib/exports/taxpayer-email', () => ({ readTaxpayerEmail: async () => 'owner@example.test' }));
 vi.mock('@/lib/exports/data-fetcher', () => ({
   fetchInvoicesForExport: async () => ({
     issuer: { nip: '1234567890', name: 'Firma' },
