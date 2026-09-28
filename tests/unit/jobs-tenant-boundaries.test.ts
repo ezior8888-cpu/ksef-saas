@@ -579,10 +579,14 @@ describe('service-role job boundaries', () => {
     };
     const taxAnnotations = { cashMethod: 2, splitPayment: 2 } as const;
     const sellerParty = JSON.parse(JSON.stringify(sellerPartyFromSellerData(seller)));
+    const advanceData = {
+      invoiceType: 'advance', internalNumber: 'TEST-1', seller, taxAnnotations,
+      paymentMethod: 'transfer', paymentDueDate: '2026-09-28', bankAccount: '11111111111111111111111111',
+    } as AdvanceInvoiceData;
     const advanceInvoice = {
       type: 'ZAL', internalNumber: 'TEST-1', seller: sellerParty,
       payment: { method: 'transfer', dueDate: '2026-09-28', bankAccount: '11111111111111111111111111' },
-      annotations: taxAnnotations,
+      annotations: taxAnnotations, advanceEnvelope: advanceData,
     } as Invoice;
     tables.tenants = [{ id: A, nip: seller.nip, name: seller.name, address_json: seller.address }];
     tables.invoices = [{
@@ -595,10 +599,7 @@ describe('service-role job boundaries', () => {
       ...submitEvent,
       nip: seller.nip,
       invoice: advanceInvoice,
-      advanceData: {
-        invoiceType: 'advance', internalNumber: 'TEST-1', seller, taxAnnotations,
-        paymentMethod: 'transfer', paymentDueDate: '2026-09-28', bankAccount: '11111111111111111111111111',
-      } as AdvanceInvoiceData,
+      advanceData,
     };
     await expect(runSubmitInvoice(specialEvent, ctx)).rejects.toThrow('automatic Offline24 is paused');
     expect(mocks.offlineAdd).not.toHaveBeenCalled();
