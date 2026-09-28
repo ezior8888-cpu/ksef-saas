@@ -162,11 +162,15 @@ describe('read-only reminder preview preparation', () => {
   });
   it.each([
     ['regular', 'VAT'], ['regular', 'UPR'], ['advance', 'ZAL'], ['final', 'ROZ'],
-    ['regular', 'ZAL'], ['regular', 'ROZ'], // These fixtures still have origin=app; imports are rejected above.
   ])('prepares an ordinary %s/%s invoice', async (kind, type) => {
     patchInvoice({ invoice_kind: kind, invoice_type: type });
     await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).resolves.toMatchObject({ invoiceId });
   });
+  it.each([['regular', 'ZAL'], ['regular', 'ROZ'], ['advance', 'VAT'], ['final', 'VAT']])
+    ('rejects an inconsistent app invoice classification %s/%s', async (kind, type) => {
+      patchInvoice({ invoice_kind: kind, invoice_type: type });
+      await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).rejects.toThrow('nie może otrzymać przypomnienia');
+    });
   it.each([
     { paid_amount: 123 }, { paid_amount: null }, { reminders_paused: true }, { gross_total: null }, { gross_total: NaN },
     { payment_status: 'paid' as const }, { direction: 'incoming' }, { ksef_status: 'rejected' },

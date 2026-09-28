@@ -10,10 +10,11 @@ export const REMINDER_INVOICE_SELECT = 'id,tenant_id,gross_total,paid_amount,cur
 /** Imported corrections can have invoice_kind=regular, so both stored classifications must be safe. */
 export function isReminderInvoiceChaseable(invoice: { origin?: unknown; invoice_kind?: unknown; invoice_type?: unknown }): boolean {
   // Imported history has no trustworthy payment reconciliation.
-  return invoice.origin === 'app' &&
-    (invoice.invoice_kind === 'regular' || invoice.invoice_kind === 'advance' || invoice.invoice_kind === 'final') &&
-    (invoice.invoice_type === 'VAT' || invoice.invoice_type === 'UPR' ||
-      invoice.invoice_type === 'ZAL' || invoice.invoice_type === 'ROZ');
+  return invoice.origin === 'app' && (
+    (invoice.invoice_kind === 'regular' && (invoice.invoice_type === 'VAT' || invoice.invoice_type === 'UPR')) ||
+    (invoice.invoice_kind === 'advance' && invoice.invoice_type === 'ZAL') ||
+    (invoice.invoice_kind === 'final' && invoice.invoice_type === 'ROZ')
+  );
 }
 
 const email = z.string().min(3).max(254).email().refine((value) => value === value.trim());

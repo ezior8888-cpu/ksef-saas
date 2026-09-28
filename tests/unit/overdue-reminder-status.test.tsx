@@ -19,11 +19,13 @@ let rows: Record<string, Row[]>;
 let queries: Query[];
 let failReminderRead: boolean;
 let missingCount: boolean;
+let failRelatedRead: boolean;
+let missingRelatedCount: boolean;
 let serverCap: number;
 let injectUnexpectedReminder: boolean;
 function invoice(id: string, tenantId: string): Row & { id: string; tenant_id: string } {
   return { id, tenant_id: tenantId, internal_number: id === INVOICE ? 'VISIBLE-1' : 'FOREIGN-1',
-    payment_due_date: '2026-09-01', gross_total: 100, amount_due: 100,
+    payment_due_date: '2026-09-01', gross_total: 100, paid_amount: 0, amount_due: 100,
     days_overdue: 22, buyer_name: 'Buyer', buyer_nip: null, buyer_email: 'buyer@example.test',
     reminders_paused: false, reminders_sent_count: 0 };
 }
@@ -41,9 +43,13 @@ function client() {
       if (table === 'payment_reminders' && failReminderRead) {
         return { data: null, error: { message: 'PRIVATE ERROR' } };
       }
+      if (table === 'invoices' && query.selection === 'id, tenant_id, parent_invoice_id' && failRelatedRead) {
+        return { data: null, error: { message: 'PRIVATE ERROR' }, count: null };
+      }
       const source: Row[] = table === 'invoices' && !rows.invoices
         ? (rows.invoices_overdue ?? []).map((row) => ({
             id: row.id, tenant_id: row.tenant_id, ksef_environment: 'production',
+            origin: 'app', invoice_kind: 'regular', invoice_type: 'VAT', currency: 'PLN',
           }))
         : (rows[table] ?? []);
       const matching = source.filter((row) => filters.every((test) => test(row)));
@@ -52,7 +58,9 @@ function client() {
       }
       const data = matching.slice(minimum, minimum + Math.min(maximum, serverCap)).map((row) => structuredClone(row));
       return { data, error: null, count: query.exactCount
-        ? (table === 'payment_reminders' && missingCount ? null : matching.length) : null };
+        ? ((table === 'payment_reminders' && missingCount) ||
+          (table === 'invoices' && query.selection === 'id, tenant_id, parent_invoice_id' && missingRelatedCount)
+          ? null : matching.length) : null };
     };
     const builder = {
       select: (selection: string, options?: { count?: 'exact' }) => { query.selection = selection; query.exactCount = options?.count === 'exact'; return builder; },
@@ -73,7 +81,8 @@ async function markup() { return renderToStaticMarkup(await OverduePage()); }
 beforeEach(() => {
   vi.clearAllMocks(); vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-09-23T12:00:00.000Z'));
-  queries = []; failReminderRead = false; missingCount = false; serverCap = Infinity;
+  queries = []; failReminderRead = false; missingCount = false; failRelatedRead = false;
+  missingRelatedCount = false; serverCap = Infinity;
   injectUnexpectedReminder = false;
   rows = { invoices_overdue: [invoice(INVOICE, TENANT)], payment_reminders: [] };
   mocks.client.mockResolvedValue(client());
@@ -82,6 +91,73 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('overdue reminder status', () => {
+  it('shows only app invoices without linked corrections in the displayed sum', async () => {
+    const importedId = '22222222-2222-4222-8222-222222222222';
+    const correctionId = '33333333-3333-4333-8333-333333333333';
+    const correctedId = '44444444-4444-4444-8444-444444444444';
+    rows.invoices_overdue = [invoice(INVOICE, TENANT),
+      { ...invoice(importedId, TENANT), internal_number: 'IMPORTED' },
+      { ...invoice(correctionId, TENANT), internal_number: 'CORRECTION' },
+      { ...invoice(correctedId, TENANT), internal_number: 'CORRECTED-ORIGINAL' }];
+    rows.invoices = [
+      { id: INVOICE, tenant_id: TENANT, ksef_environment: 'production', origin: 'app',
+        invoice_kind: 'regular', invoice_type: 'VAT', currency: 'PLN' },
+      { id: importedId, tenant_id: TENANT, ksef_environment: 'production', origin: 'ksef_import',
+        invoice_kind: 'regular', invoice_type: 'VAT', currency: 'PLN' },
+      { id: correctionId, tenant_id: TENANT, ksef_environment: 'production', origin: 'app',
+        invoice_kind: 'correction', invoice_type: 'KOR', currency: 'PLN' },
+      { id: correctedId, tenant_id: TENANT, ksef_environment: 'production', origin: 'app',
+        invoice_kind: 'regular', invoice_type: 'VAT', currency: 'PLN' },
+      { id: 'child', tenant_id: TENANT, parent_invoice_id: correctedId,
+        invoice_kind: 'correction', invoice_type: 'KOR', ksef_status: 'accepted', gross_total: 110.70 },
+    ];
+    const page = await OverduePage();
+    const props = page.props as { overdueInvoices: Array<{ id: string }>; stats: { totalAmount: number } };
+    expect(props.overdueInvoices.map((item) => item.id)).toEqual([INVOICE]);
+    expect(props.stats.totalAmount).toBe(100);
+    const html = renderToStaticMarkup(page);
+    expect(html).toContain('Importy i dokumenty wymagające uzgodnienia nie wchodzą do tej sumy');
+    expect(html).toContain('Suma pokazanych pozycji');
+    expect(html).not.toContain('Suma do odzyskania');
+    expect(html).not.toContain('IMPORTED');
+    expect(html).not.toContain('CORRECTED-ORIGINAL');
+    const related = queries.find((query) => query.selection === 'id, tenant_id, parent_invoice_id');
+    expect(related?.exactCount).toBe(true);
+    expect(related?.filters).toEqual([['tenant_id', TENANT], ['parent_invoice_id', [INVOICE, correctedId]]]);
+  });
+
+  it('fails closed when linked children are truncated or their exact count is unavailable', async () => {
+    rows.invoices = [
+      { id: INVOICE, tenant_id: TENANT, ksef_environment: 'production', origin: 'app',
+        invoice_kind: 'regular', invoice_type: 'VAT', currency: 'PLN' },
+      { id: 'child-1', tenant_id: TENANT, parent_invoice_id: INVOICE },
+      { id: 'child-2', tenant_id: TENANT, parent_invoice_id: INVOICE },
+    ];
+    serverCap = 1;
+    expect(await markup()).toContain('Nie można potwierdzić faktur powiązanych z korektami');
+    expect(queries.some((query) => query.table === 'payment_reminders')).toBe(false);
+    serverCap = Infinity; missingRelatedCount = true; queries = [];
+    expect(await markup()).toContain('Nie można potwierdzić faktur powiązanych z korektami');
+    expect(queries.some((query) => query.table === 'payment_reminders')).toBe(false);
+    missingRelatedCount = false; failRelatedRead = true; queries = [];
+    expect(await markup()).toContain('Nie można potwierdzić faktur powiązanych z korektami');
+  });
+
+  it('excludes inconsistent app classification and foreign currency before showing a PLN sum', async () => {
+    const malformedId = '22222222-2222-4222-8222-222222222222';
+    const euroId = '33333333-3333-4333-8333-333333333333';
+    rows.invoices_overdue = [invoice(INVOICE, TENANT), invoice(malformedId, TENANT), invoice(euroId, TENANT)];
+    rows.invoices = [
+      { id: INVOICE, tenant_id: TENANT, ksef_environment: 'production', origin: 'app', invoice_kind: 'regular', invoice_type: 'VAT', currency: 'PLN' },
+      { id: malformedId, tenant_id: TENANT, ksef_environment: 'production', origin: 'app', invoice_kind: 'regular', invoice_type: 'ZAL', currency: 'PLN' },
+      { id: euroId, tenant_id: TENANT, ksef_environment: 'production', origin: 'app', invoice_kind: 'regular', invoice_type: 'VAT', currency: 'EUR' },
+    ];
+    const page = await OverduePage();
+    const props = page.props as { overdueInvoices: Array<{ id: string }>; stats: { totalAmount: number } };
+    expect(props.overdueInvoices.map((item) => item.id)).toEqual([INVOICE]);
+    expect(props.stats.totalAmount).toBe(100);
+  });
+
   it('keeps 100 production debts after older TEST and DEMO invoices are excluded', async () => {
     const testRows = Array.from({ length: 110 }, (_, index) => ({
       ...invoice('test-' + index, TENANT), internal_number: 'TEST-' + index,
@@ -92,9 +168,11 @@ describe('overdue reminder status', () => {
     rows.invoices_overdue = [...testRows, ...productionRows];
     rows.invoices = [
       ...testRows.map((row, index) => ({ id: row.id, tenant_id: TENANT,
-        ksef_environment: index % 2 === 0 ? 'test' : 'demo' })),
+        ksef_environment: index % 2 === 0 ? 'test' : 'demo',
+        origin: 'app', invoice_kind: 'regular', invoice_type: 'VAT', currency: 'PLN' })),
       ...productionRows.map((row) => ({ id: row.id, tenant_id: TENANT,
-        ksef_environment: 'production' })),
+        ksef_environment: 'production', origin: 'app', invoice_kind: 'regular',
+        invoice_type: 'VAT', currency: 'PLN' })),
     ];
 
     const page = await OverduePage();
@@ -106,8 +184,8 @@ describe('overdue reminder status', () => {
     expect(props.overdueInvoices.every((row) => row.id.startsWith('prod-'))).toBe(true);
     expect(props.stats.totalAmount).toBe(10_000);
     expect(queries.filter((query) => query.table === 'invoices_overdue')).toHaveLength(3);
-    expect(queries.filter((query) => query.table === 'invoices').every((query) =>
-      query.selection === 'id, ksef_environment' && query.exactCount)).toBe(true);
+    expect(queries.filter((query) => query.table === 'invoices' && query.selection.includes('ksef_environment'))
+      .every((query) => query.selection === 'id, ksef_environment, origin, invoice_kind, invoice_type, currency' && query.exactCount)).toBe(true);
   });
 
   it('shows reconciliation error for an overdue accepted invoice with unknown environment', async () => {
