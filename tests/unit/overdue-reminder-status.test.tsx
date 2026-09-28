@@ -107,8 +107,15 @@ describe('overdue reminder status', () => {
     expect(props.stats.totalAmount).toBe(10_000);
     expect(queries.filter((query) => query.table === 'invoices_overdue')).toHaveLength(3);
     expect(queries.filter((query) => query.table === 'invoices').every((query) =>
-      query.filters.some(([column, value]) =>
-        column === 'ksef_environment' && value === 'production'))).toBe(true);
+      query.selection === 'id, ksef_environment' && query.exactCount)).toBe(true);
+  });
+
+  it('shows reconciliation error for an overdue accepted invoice with unknown environment', async () => {
+    rows.invoices = [{ id: INVOICE, tenant_id: TENANT, ksef_environment: null }];
+    const html = await markup();
+    expect(html).toContain('wymagają uzgodnienia środowiska KSeF');
+    expect(html).not.toContain('Brak zaległych płatności');
+    expect(queries.some((query) => query.table === 'payment_reminders')).toBe(false);
   });
 
   it('shows pending only for a visible invoice of the validated active tenant', async () => {

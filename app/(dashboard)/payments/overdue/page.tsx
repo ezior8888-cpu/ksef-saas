@@ -75,17 +75,25 @@ export default async function OverduePage() {
     }
     const matching = await supabase
       .from('invoices')
-      .select('id', { count: 'exact' })
+      .select('id, ksef_environment', { count: 'exact' })
       .eq('tenant_id', tenantId)
-      .eq('ksef_environment', environment)
       .in('id', ids);
     if (matching.error || !matching.data || matching.count === null ||
-        matching.count !== matching.data.length ||
+        matching.count !== ids.length || matching.data.length !== ids.length ||
         matching.data.some((invoice) => !ids.includes(invoice.id))) {
       overdueError = 'Nie można potwierdzić środowiska zaległych faktur';
       break;
     }
-    const visibleIds = new Set(matching.data.map((invoice) => invoice.id));
+    if (matching.data.some((invoice) =>
+      invoice.ksef_environment !== 'test' &&
+      invoice.ksef_environment !== 'demo' &&
+      invoice.ksef_environment !== 'production')) {
+      overdueError = 'Zaległe faktury wymagają uzgodnienia środowiska KSeF';
+      break;
+    }
+    const visibleIds = new Set(matching.data
+      .filter((invoice) => invoice.ksef_environment === environment)
+      .map((invoice) => invoice.id));
     overdueRows.push(...page.data.filter((row) => row.id && visibleIds.has(row.id)));
     if (offset + page.data.length >= page.count) break;
   }
