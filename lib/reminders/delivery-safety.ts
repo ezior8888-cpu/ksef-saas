@@ -3,6 +3,7 @@ import { ReminderConsentDenied } from './delivery-errors';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { evaluateChaseSafety, SAFETY_WINDOW_MS } from '@/lib/flo/functions/payment-chase';
 import { isReminderInvoiceChaseable, reminderInvoiceFingerprint } from './delivery-schema';
+import { assertNoRelatedInvoice } from './reconciliation-guard';
 import type { ReminderDelivery } from '@/types/reminder-delivery';
 
 // PostgREST can silently truncate result sets. Every bounded read below also
@@ -54,6 +55,7 @@ export async function assertReminderSendable(delivery: ReminderDelivery) {
   if (reminderInvoiceFingerprint(row) !== delivery.sourceFingerprint) {
     throw new ReminderConsentDenied('Dane faktury zmieniły się po przygotowaniu wiadomości. Wysyłka wstrzymana.');
   }
+  await assertNoRelatedInvoice(client, delivery.tenantId, delivery.invoiceId);
   const recent = await client.from('payments').select('payment_date')
     .eq('tenant_id', delivery.tenantId).eq('invoice_id', delivery.invoiceId)
     .order('payment_date', { ascending: false }).limit(1);

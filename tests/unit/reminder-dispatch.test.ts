@@ -7,7 +7,7 @@ import type { JobContext } from '@/lib/jobs/registry';
 
 type Row = Record<string, unknown>;
 type Query = { table: string; action: 'select' | 'update'; filters: Array<[string, unknown]>;
-  columns?: string; count?: 'exact'; limit?: number; or?: string;
+  columns?: string; count?: 'exact'; head?: boolean; limit?: number; or?: string;
   notEqual?: Array<[string, unknown]>; patch?: Row };
 const mocks = vi.hoisted(() => ({ db: vi.fn(), send: vi.fn(), upload: vi.fn(), kind: vi.fn(), tenantKind: vi.fn(), globalFlag: vi.fn() }));
 vi.mock('@/lib/flo/db-types', () => ({ floDb: mocks.db }));
@@ -42,6 +42,7 @@ let tables: Record<string, Row[]>;
 let calls: Query[];
 let fail: ((query: Query) => boolean) | undefined;
 let truncate: ((query: Query, rows: Row[]) => Row[]) | undefined;
+let missingCount: ((query: Query) => boolean) | undefined;
 function field(row: Row, key: string): unknown {
   const parts = key.replaceAll('->>', '->').split('->');
   let value: unknown = row;
@@ -58,16 +59,16 @@ function db() {
     const execute = () => {
       if (fail?.(q)) return { data: null, error: { message: 'PRIVATE-DATABASE-DIAGNOSTIC' } };
       let rows = (tables[table] ?? []).filter((row) => filters.every((check) => check(row)));
-      const count = q.count === 'exact' ? rows.length : null;
+      const count = q.count === 'exact' && !missingCount?.(q) ? rows.length : null;
       if (order) rows = rows.toSorted((a, b) => String(b[order!]).localeCompare(String(a[order!])));
       rows = rows.slice(0, limit);
       if (truncate) rows = truncate(q, rows);
       if (q.action === 'update') rows.forEach((row) => Object.assign(row, structuredClone(q.patch)));
-      return { data: structuredClone(one ? rows[0] ?? null : rows), error: null, count };
+      return { data: q.head ? null : structuredClone(one ? rows[0] ?? null : rows), error: null, count };
     };
     const builder = {
-      select: (columns: string, options?: { count?: 'exact' }) => {
-        q.columns = columns; q.count = options?.count; return builder;
+      select: (columns: string, options?: { count?: 'exact'; head?: boolean }) => {
+        q.columns = columns; q.count = options?.count; q.head = options?.head; return builder;
       },
       update: (patch: Row) => { q.action = 'update'; q.patch = patch; return builder; },
       eq: (key: string, value: unknown) => { q.filters.push([key, value]); filters.push((r) => field(r, key) === value); return builder; },
@@ -124,7 +125,7 @@ function durableContext(): JobContext {
 }
 function invoice(): ReminderInvoiceSource {
   return { id: INVOICE, tenant_id: TENANT, gross_total: 123, paid_amount: 0, currency: 'PLN',
-    payment_status: 'unpaid', direction: 'outgoing', ksef_status: 'accepted', invoice_kind: 'regular', invoice_type: 'VAT', payment_due_date: '2026-09-01',
+    payment_status: 'unpaid', direction: 'outgoing', ksef_status: 'accepted', origin: 'app', invoice_kind: 'regular', invoice_type: 'VAT', payment_due_date: '2026-09-01',
     issue_date: '2026-08-01', internal_number: 'TEST-1', ksef_number: 'TEST-KSEF',
     buyer_data: { name: 'Buyer test', email: 'buyer@example.test' }, buyer_nip: '1234567890',
     payment_data: { bankAccount: 'TEST-ACCOUNT' }, seller_data: { name: 'Seller test' }, reminders_paused: false };
@@ -174,7 +175,7 @@ function snapshot(): Row { return tables.flo_approvals[0].snapshot as Row; }
 function expectNoSend() { expect(mocks.send).not.toHaveBeenCalled(); expect(mocks.upload).not.toHaveBeenCalled(); }
 beforeEach(() => {
   vi.clearAllMocks(); vi.useFakeTimers(); vi.setSystemTime(NOW); vi.stubEnv('RESEND_API_KEY', 're_synthetic_test_key');
-  tables = {}; calls = []; fail = undefined; truncate = undefined;
+  tables = {}; calls = []; fail = undefined; truncate = undefined; missingCount = undefined;
   mocks.db.mockImplementation(db); mocks.kind.mockReturnValue(true);
   mocks.tenantKind.mockResolvedValue({ enabled: true }); mocks.globalFlag.mockResolvedValue(false);
   mocks.send.mockResolvedValue({ data: { id: 'mail-accepted-test' }, error: null }); mocks.upload.mockResolvedValue(undefined);
@@ -235,6 +236,33 @@ describe('delayed reminder dispatch guards', () => {
   it('treats a confirmed changed invoice as a permanent denial rather than a retryable outage', async () => {
     await seed(); tables.invoices[0].reminders_paused = true;
     await expect(runSendReminder(jobData, context)).rejects.toBeInstanceOf(NonRetriableError); expectNoSend();
+  });
+  it('stops a queued 123 PLN demand after a linked correction lowers the legal amount to 110.70 PLN', async () => {
+    await seed({ attachment: true });
+    tables.invoices.push({ id: OTHER_INVOICE, tenant_id: TENANT, parent_invoice_id: INVOICE,
+      invoice_kind: 'correction', invoice_type: 'KOR', ksef_status: 'accepted', gross_total: 110.70 });
+    await expect(runSendReminder(jobData, context)).rejects.toBeInstanceOf(NonRetriableError);
+    const childRead = calls.find((q) => q.table === 'invoices' && q.head);
+    expect(childRead).toMatchObject({ count: 'exact', head: true,
+      filters: [['tenant_id', TENANT], ['parent_invoice_id', INVOICE]] });
+    expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();
+    expect(tables.payment_reminders[0].status).toBe('pending');
+  });
+  it('does not accept an unknown related-invoice count as proof of no corrections', async () => {
+    await seed({ attachment: true }); missingCount = (q) => q.table === 'invoices' && q.head === true;
+    const result: unknown = await runSendReminder(jobData, context).catch((error: unknown) => error);
+    expect(result).toBeInstanceOf(Error); expect(result).not.toBeInstanceOf(NonRetriableError);
+    expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();
+  });
+  it('ignores a child linked from another tenant while checking the current tenant explicitly', async () => {
+    await seed(); tables.invoices.push({ id: OTHER_INVOICE, tenant_id: FOREIGN, parent_invoice_id: INVOICE });
+    await expect(runSendReminder(jobData, context)).resolves.toMatchObject({ success: true });
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+  });
+  it('rejects an invoice changed to imported origin after approval without sending', async () => {
+    await seed(); tables.invoices[0].origin = 'ksef_import';
+    await expect(runSendReminder(jobData, context)).rejects.toBeInstanceOf(NonRetriableError);
+    expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();
   });
   it.each([
     { invoice_kind: 'correction', invoice_type: 'KOR' },

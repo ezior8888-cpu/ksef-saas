@@ -11,14 +11,16 @@ const invoiceId = '22222222-2222-4222-8222-222222222222';
 const otherId = '33333333-3333-4333-8333-333333333333';
 const invoiceFixture: ReminderInvoiceSource = {
   id: invoiceId, tenant_id: tenantId, gross_total: 123, paid_amount: 23, currency: 'PLN',
-  payment_status: 'partial', direction: 'outgoing', ksef_status: 'accepted', invoice_kind: 'regular', invoice_type: 'VAT',
+  payment_status: 'partial', direction: 'outgoing', ksef_status: 'accepted', origin: 'app', invoice_kind: 'regular', invoice_type: 'VAT',
   payment_due_date: '2026-09-01', issue_date: '2026-08-20', internal_number: 'FV/1/2026', ksef_number: null,
   buyer_data: { name: 'Fixture buyer', email: 'buyer@example.test', address: { addressLine1: 'Test 1', addressLine2: '00-001 Miasto' } },
   buyer_nip: '1234567890', payment_data: { bankAccount: 'PL-fixture-bank' }, seller_data: { name: 'Fixture seller' }, reminders_paused: false,
 };
 let rows: Record<string, unknown>;
 let failures: Set<string>;
-let queries: Array<{ table: string; filters: Array<[string, unknown]> }>;
+let relatedInvoices: Array<{ tenant_id: string; parent_invoice_id: string }>;
+let relatedCountOverride: number | null | undefined;
+let queries: Array<{ table: string; filters: Array<[string, unknown]>; head?: boolean; count?: 'exact' }>;
 beforeEach(() => {
   vi.resetAllMocks(); vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-23T12:00:00Z'));
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected external request'); }));
@@ -29,11 +31,22 @@ beforeEach(() => {
     reminder_settings: { tenant_id: tenantId, sender_name: 'Fixture sender', sender_email: 'sender@example.test', reply_to_email: 'reply@example.test' },
     reminder_templates: null,
   };
-  queries = []; failures = new Set();
+  queries = []; failures = new Set(); relatedInvoices = []; relatedCountOverride = undefined;
   mocks.client.mockReturnValue({ from: (table: string) => {
     const call = { table, filters: [] as Array<[string, unknown]> }; queries.push(call);
-    const query = { select: () => query, eq: (key: string, value: unknown) => { call.filters.push([key, value]); return query; },
+    const query = { select: (_columns: string, options?: { count?: 'exact'; head?: boolean }) => {
+      if (options?.count) Object.assign(call, { count: options.count });
+      if (options?.head) Object.assign(call, { head: options.head });
+      return query;
+    }, eq: (key: string, value: unknown) => { call.filters.push([key, value]); return query; },
       maybeSingle: async () => ({ data: rows[table] ? structuredClone(rows[table]) : null, error: failures.has(table) ? { message: 'private-database-detail' } : null }),
+      then: (resolve: (value: { data: null; count: number | null; error: { message: string } | null }) => unknown,
+        reject?: (reason: unknown) => unknown) => {
+        const filters = new Map(call.filters);
+        const count = relatedCountOverride !== undefined ? relatedCountOverride : relatedInvoices.filter((row) =>
+          row.tenant_id === filters.get('tenant_id') && row.parent_invoice_id === filters.get('parent_invoice_id')).length;
+        return Promise.resolve({ data: null, count, error: failures.has('invoice_children') ? { message: 'private-database-detail' } : null }).then(resolve, reject);
+      },
     }; return query;
   } });
   mocks.pdf.mockResolvedValue(Buffer.from('%PDF-1.4\nfixture'));
@@ -54,6 +67,7 @@ describe('read-only reminder preview preparation', () => {
     expect(delivery.sourceFingerprint).toBe(reminderInvoiceFingerprint(invoiceFixture));
     expect(queries).toEqual([
       { table: 'invoices', filters: [['id', invoiceId], ['tenant_id', tenantId]] },
+      { table: 'invoices', filters: [['tenant_id', tenantId], ['parent_invoice_id', invoiceId]], count: 'exact', head: true },
       { table: 'tenants', filters: [['id', tenantId]] },
       { table: 'reminder_settings', filters: [['tenant_id', tenantId]] },
       { table: 'reminder_templates', filters: [['tenant_id', tenantId], ['stage', 'stage_1'], ['is_default', false]] },
@@ -96,9 +110,9 @@ describe('read-only reminder preview preparation', () => {
     await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).rejects.toThrow('niedozwolone');
     expect(mocks.client).not.toHaveBeenCalled();
   });
-  it.each(['invoices', 'tenants', 'reminder_settings', 'reminder_templates'])('does not hide a failed %s read behind defaults', async (table) => {
+  it.each(['invoices', 'invoice_children', 'tenants', 'reminder_settings', 'reminder_templates'])('does not hide a failed %s read behind defaults', async (table) => {
     failures.add(table);
-    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).rejects.toThrow(/Nie udało się/);
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).rejects.toThrow(/Nie (udało się|można)/);
     expect(mocks.pdf).not.toHaveBeenCalled();
   });
   it.each(['invoices', 'tenants', 'reminder_settings', 'reminder_templates'])('rejects a foreign %s row even if a broken query returned it', async (table) => {
@@ -123,9 +137,32 @@ describe('read-only reminder preview preparation', () => {
     expect(mocks.pdf).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
   });
+  it('blocks an original 123 PLN invoice with a linked 110.70 PLN correction before generating the demand-letter PDF', async () => {
+    patchInvoice({ gross_total: 123, paid_amount: 0 });
+    relatedInvoices = [{ tenant_id: tenantId, parent_invoice_id: invoiceId }];
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_3')).rejects.toThrow('Uzgodnij saldo');
+    expect(queries[1]).toMatchObject({ table: 'invoices', count: 'exact', head: true,
+      filters: [['tenant_id', tenantId], ['parent_invoice_id', invoiceId]] });
+    expect(mocks.pdf).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+  });
+  it('does not block a child in another tenant', async () => {
+    relatedInvoices = [{ tenant_id: otherId, parent_invoice_id: invoiceId }];
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).resolves.toMatchObject({ invoiceId });
+  });
+  it('fails closed when the exact related-invoice count is unavailable', async () => {
+    relatedCountOverride = null;
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_3')).rejects.toThrow('Nie można potwierdzić braku korekt');
+    expect(mocks.pdf).not.toHaveBeenCalled();
+  });
+  it.each(['ksef_import', 'ksef_inbox', 'file_import', 'ocr', null, undefined])('does not prepare an imported or unknown-origin invoice: %s', async (origin) => {
+    patchInvoice({ origin });
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_3')).rejects.toThrow('nie może otrzymać przypomnienia');
+    expect(queries.map((query) => query.table)).toEqual(['invoices']);
+    expect(mocks.pdf).not.toHaveBeenCalled();
+  });
   it.each([
     ['regular', 'VAT'], ['regular', 'UPR'], ['advance', 'ZAL'], ['final', 'ROZ'],
-    ['regular', 'ZAL'], ['regular', 'ROZ'], // Imported non-corrections keep invoice_kind=regular.
+    ['regular', 'ZAL'], ['regular', 'ROZ'], // These fixtures still have origin=app; imports are rejected above.
   ])('prepares an ordinary %s/%s invoice', async (kind, type) => {
     patchInvoice({ invoice_kind: kind, invoice_type: type });
     await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).resolves.toMatchObject({ invoiceId });
@@ -203,7 +240,7 @@ describe('strict immutable envelope and source fingerprint', () => {
     for (const patch of [{ gross_total: 124 }, { paid_amount: 24 }, { tenant_id: otherId }, { id: otherId },
       { buyer_data: { name: 'Fixture buyer', email: 'different@example.test' } }, { payment_data: { bankAccount: 'different' } },
       { internal_number: 'FV/2/2026' }, { reminders_paused: true }, { currency: 'EUR' },
-      { invoice_kind: 'correction' }, { invoice_type: 'KOR' }] as const) {
+      { invoice_kind: 'correction' }, { invoice_type: 'KOR' }, { origin: 'ksef_import' }] as const) {
       expect(reminderInvoiceFingerprint({ ...invoiceFixture, ...patch })).not.toBe(original);
     }
   });
