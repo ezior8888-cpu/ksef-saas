@@ -20,5 +20,5 @@ export interface ReminderDelivery {
 
 export type ReminderInvoiceSource = Pick<Database['public']['Tables']['invoices']['Row'],
   'id' | 'tenant_id' | 'gross_total' | 'paid_amount' | 'currency' | 'payment_status' |
-  'direction' | 'ksef_status' | 'payment_due_date' | 'issue_date' | 'internal_number' |
+  'direction' | 'ksef_status' | 'invoice_kind' | 'invoice_type' | 'payment_due_date' | 'issue_date' | 'internal_number' |
   'ksef_number' | 'buyer_data' | 'buyer_nip' | 'payment_data' | 'seller_data' | 'reminders_paused'>;

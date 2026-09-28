@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { DISCLAIMER } from '@/lib/flo/functions/payment-chase';
 import { generateDemandLetterPdf } from './pdf-demand-letter';
 import { DEFAULT_TEMPLATES, formatDatePl, formatPln } from './templates';
-import { MAX_REMINDER_PDF_BYTES, REMINDER_DELIVERY_TTL_MS, reminderDeliverySchema, reminderInvoiceFingerprint } from './delivery-schema';
+import { MAX_REMINDER_PDF_BYTES, REMINDER_DELIVERY_TTL_MS, reminderDeliverySchema, reminderInvoiceFingerprint, isReminderInvoiceChaseable } from './delivery-schema';
 import type { ReminderDelivery, ReminderDeliveryStage } from '@/types/reminder-delivery';
 import type { Json } from '@/types/database';
 
@@ -50,6 +50,7 @@ export async function buildReminderDelivery(
   const invoiceResult = await client.from('invoices').select('*').eq('id', invoiceId).eq('tenant_id', tenantId).maybeSingle();
   const invoice = invoiceResult.data;
   if (invoiceResult.error || !invoice || invoice.id !== invoiceId || invoice.tenant_id !== tenantId) throw new Error('Nie udało się odczytać faktury tej organizacji.');
+  if (!isReminderInvoiceChaseable(invoice)) throw new Error('Korekta lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.');
   const gross = Number(invoice.gross_total); const paid = Number(invoice.paid_amount);
   if (invoice.gross_total === null || invoice.paid_amount === null || !Number.isFinite(gross) || !Number.isFinite(paid) || gross <= 0 || paid < 0 || paid >= gross ||
       invoice.reminders_paused || invoice.direction !== 'outgoing' || invoice.ksef_status !== 'accepted' || invoice.payment_status === 'paid') {
