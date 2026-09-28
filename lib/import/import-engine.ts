@@ -28,6 +28,8 @@ export interface ImportEngineParams {
 
 export interface ImportEngineResult {
   invoicesImported: number;
+  /** Dokumenty nieutrwalone wskutek braku numeru albo błędu INSERT/pozycji; duplikaty nie są awarią. */
+  invoicesFailed: number;
   contractorsCreated: number;
   contractorsUpdated: number;
   productsCreated: number;
@@ -70,7 +72,7 @@ export async function processImportedInvoices(
   const productsMap = extractUniqueProducts(params.invoices);
   const productsCreated = await upsertProducts(supabase, params.tenantId, productsMap, warnings);
 
-  const invoicesImported = await insertInvoices(
+  const invoiceResult = await insertInvoices(
     supabase,
     params.tenantId,
     params.invoices,
@@ -83,7 +85,8 @@ export async function processImportedInvoices(
   );
 
   return {
-    invoicesImported,
+    invoicesImported: invoiceResult.imported,
+    invoicesFailed: invoiceResult.failed,
     contractorsCreated: contractorResult.created,
     contractorsUpdated: contractorResult.updated,
     productsCreated,
@@ -347,8 +350,8 @@ async function insertInvoices(
   invoiceKsefStatus: string,
   ksefEnvironment: KsefEnvironment | null,
   warnings: string[],
-): Promise<number> {
-  if (invoices.length === 0) return 0;
+): Promise<{ imported: number; failed: number }> {
+  if (invoices.length === 0) return { imported: 0, failed: 0 };
   const origin: InvoiceOrigin = source === 'ksef_history' ? 'ksef_import'
     : source === 'ksef_inbox' ? 'ksef_inbox'
     : source === 'ocr_photo' ? 'ocr'
@@ -407,12 +410,14 @@ async function insertInvoices(
   const seenInBatch = new Set<string>();
   const seenKsefInBatch = new Set<string>();
   let imported = 0;
+  let failed = 0;
 
   for (const inv of invoices) {
     const num = inv.invoiceNumber.trim();
 
     if (!num) {
       warnings.push('Pominięto fakturę bez numeru');
+      failed++;
       continue;
     }
 
@@ -492,6 +497,7 @@ async function insertInvoices(
 
     if (invErr || !inserted?.id) {
       warnings.push(`Błąd zapisu faktury ${num}: ${invErr?.message ?? 'unknown'}`);
+      failed++;
       continue;
     }
 
@@ -516,6 +522,7 @@ async function insertInvoices(
     if (linesErr) {
       warnings.push(`Faktura ${num}: błąd pozycji — ${linesErr.message}`);
       await supabase.from('invoices').delete().eq('id', inserted.id);
+      failed++;
       continue;
     }
 
@@ -524,7 +531,7 @@ async function insertInvoices(
     if (ksefNorm) existingKsef.add(ksefNorm);
   }
 
-  return imported;
+  return { imported, failed };
 }
 
 /** Korekty / zaliczki / final wymagają powiązań w DB — przy imporcie zapis jako `regular` + komunikat. */
