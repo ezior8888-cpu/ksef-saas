@@ -128,6 +128,30 @@ export function exemptionBasisLine(invoice: Invoice): string | null {
   return basis ? `Zwolnienie z VAT — podstawa prawna: ${basis}` : null;
 }
 
+/**
+ * Kwota „Do zapłaty” na PDF. Faktura rozliczająca (ROZ) ma w `grossTotal`
+ * pełną wartość zamówienia — do zapłaty jest reszta po zaliczkach
+ * (`payment.amountDue`, liczona przy wystawieniu; w XML to P_15). Do 28.09
+ * PDF pokazywał nabywcy pełną kwotę, jakby zaliczek nie było.
+ */
+export function amountDueOnPdf(invoice: Invoice): number {
+  if (invoice.type === 'ROZ') {
+    const due = Number(invoice.payment?.amountDue);
+    if (Number.isFinite(due) && due >= 0 && due <= invoice.grossTotal + 0.005) return due;
+  }
+  return invoice.grossTotal;
+}
+
+/**
+ * Dopisek na ROZ: skąd różnica między wartością zamówienia a „Do zapłaty”.
+ * Na innych fakturach `amountDueOnPdf` = brutto, więc dopisku nie ma.
+ */
+export function settledAdvancesLine(invoice: Invoice): string | null {
+  const advances = Math.round((invoice.grossTotal - amountDueOnPdf(invoice)) * 100) / 100;
+  if (advances <= 0) return null;
+  return `Wartość zamówienia ${money(invoice.grossTotal)} PLN, rozliczone zaliczki ${money(advances)} PLN`;
+}
+
 function drawHeader(
   doc: Doc,
   invoice: Invoice,
@@ -322,7 +346,9 @@ function drawVatSummary(
   let y = doc.y;
 
   doc.font('bold').fontSize(8).fillColor('#888888');
-  doc.text('PODSUMOWANIE VAT', boxX, y);
+  // ROZ: pozycje i to podsumowanie pokazują całe zamówienie (tak każe FA(3)
+  // dla FaWiersz); podatek po odjęciu zaliczek jest w XML (P_13_x/P_14_x).
+  doc.text(invoice.type === 'ROZ' ? 'PODSUMOWANIE VAT ZAMÓWIENIA' : 'PODSUMOWANIE VAT', boxX, y);
   y += 13;
 
   doc.font('body').fontSize(8).fillColor('#333333');
@@ -337,8 +363,13 @@ function drawVatSummary(
   }
 
   y += 4;
+  const advancesLine = settledAdvancesLine(invoice);
+  if (advancesLine) {
+    doc.text(advancesLine, boxX, y, { width: boxW, align: 'right' });
+    y += 12;
+  }
   doc.font('bold').fontSize(11).fillColor('#111111');
-  doc.text(`Do zapłaty: ${money(invoice.grossTotal)} PLN`, boxX, y, {
+  doc.text(`Do zapłaty: ${money(amountDueOnPdf(invoice))} PLN`, boxX, y, {
     width: boxW,
     align: 'right',
   });
