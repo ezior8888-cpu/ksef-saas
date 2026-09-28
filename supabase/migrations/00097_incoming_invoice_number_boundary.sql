@@ -38,13 +38,13 @@ BEGIN
   -- In that case keep its environment-aware index instead of adding a more
   -- restrictive cross-environment key.
   IF pg_catalog.to_regclass('public.uq_invoices_tenant_outgoing_internal_number') IS NULL THEN
-    EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS uq_invoices_tenant_outgoing_internal_number_c08
+    EXECUTE 'CREATE UNIQUE INDEX uq_invoices_tenant_outgoing_internal_number_c08
       ON public.invoices (tenant_id, internal_number)
       WHERE direction = ''outgoing'' AND internal_number IS NOT NULL';
   END IF;
 
   IF pg_catalog.to_regclass('public.uq_invoices_incoming_ksef_identity') IS NULL THEN
-    EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS uq_invoices_tenant_incoming_ksef_number_c08
+    EXECUTE 'CREATE UNIQUE INDEX uq_invoices_tenant_incoming_ksef_number_c08
       ON public.invoices (tenant_id, ksef_number)
       WHERE direction = ''incoming'' AND ksef_number IS NOT NULL';
   END IF;

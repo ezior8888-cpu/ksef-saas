@@ -21,10 +21,13 @@ To scenariusz potwierdzony przez kod i indeks, nie stwierdzony incydent db-1.
 
 1. Potwierdzić rzeczywisty SHA workera, historię migracji i definicje indeksów
    `invoices` na db-1. Sam plik na `main` nie potwierdza wykonania migracji.
-2. Policzyć duplikaty `(tenant_id, ksef_number)` dla przychodzących faktur z
-   niepustym numerem KSeF oraz duplikaty `(tenant_id, internal_number)` dla
-   wychodzących. W razie wyniku niezerowego uzgodnić źródłowe XML i historię;
-   migracja celowo się zatrzyma, bez usuwania danych.
+2. Jeśli indeks środowiskowy z `00089` **nie** istnieje, policzyć duplikaty
+   `(tenant_id, ksef_number)` dla przychodzących faktur z niepustym numerem
+   KSeF. Jeśli istnieje, sprawdzić duplikaty dopiero po
+   `(tenant_id, ksef_environment, ksef_number)`; ten sam numer w TEST i PROD
+   jest wtedy dopuszczalny. Niezależnie policzyć duplikaty
+   `(tenant_id, internal_number)` dla wychodzących. Niezgodne wyniki uzgodnić
+   ze źródłowymi XML; migracja zatrzymuje się przed zmianą indeksu.
 3. Sprawdzić logi workera pod kątem `23505` i
    `uq_invoices_tenant_internal_number`, a potem porównać listę dokumentów KSeF
    w dotkniętych oknach z zapisanymi numerami KSeF. Nie zakładać, że kolejny
@@ -44,10 +47,17 @@ WHERE schemaname = 'public' AND tablename = 'invoices'
     'uq_invoices_tenant_incoming_ksef_number_c08'
   );
 
+-- Tylko gdy NIE ma uq_invoices_incoming_ksef_identity (00089):
 SELECT tenant_id, ksef_number, count(*)
 FROM public.invoices
 WHERE direction = 'incoming' AND ksef_number IS NOT NULL
 GROUP BY tenant_id, ksef_number HAVING count(*) > 1;
+
+-- Gdy 00089 działa: ten odczyt uwzględnia środowisko.
+SELECT tenant_id, ksef_environment, ksef_number, count(*)
+FROM public.invoices
+WHERE direction = 'incoming' AND ksef_number IS NOT NULL
+GROUP BY tenant_id, ksef_environment, ksef_number HAVING count(*) > 1;
 
 SELECT tenant_id, internal_number, count(*)
 FROM public.invoices
