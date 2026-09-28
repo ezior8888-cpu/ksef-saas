@@ -70,7 +70,7 @@ describe('prepare reminder action', () => {
     expect(mocks.build).not.toHaveBeenCalled(); expect(db.writes).toBe(0);
   });
   it.each([
-    ['correction', 'KOR'], ['regular', 'KOR'], ['regular', 'KOR_ZAL'],
+    ['correction', 'KOR'], ['regular', 'KOR'], ['regular', 'KOR_ZAL'], ['final', 'ROZ'],
     ['regular', null], [null, 'VAT'], ['regular', undefined],
   ])('does not create a preview, reminder or dispatch for %s/%s', async (kind, type) => {
     Object.assign(db.tables.invoices[0]!, { invoice_kind: kind, invoice_type: type });

@@ -22,11 +22,15 @@ describe('overdue view reconciliation migration', () => {
     expect(guarded).toMatch(/GRANT SELECT ON public\.invoices_overdue TO authenticated/);
   });
 
-  it('fails closed for imports, mismatched types and every same-tenant child', () => {
+  it('fails closed for imports, final ROZ, mismatched types and every same-tenant child', () => {
     expect(guarded).toMatch(/i\.origin\s*=\s*'app'/);
     expect(guarded).toMatch(/i\.invoice_kind\s*=\s*'regular'\s+AND\s+i\.invoice_type IN \('VAT', 'UPR'\)/);
     expect(guarded).toMatch(/i\.invoice_kind\s*=\s*'advance'\s+AND\s+i\.invoice_type\s*=\s*'ZAL'/);
-    expect(guarded).toMatch(/i\.invoice_kind\s*=\s*'final'\s+AND\s+i\.invoice_type\s*=\s*'ROZ'/);
+    expect(guarded).not.toMatch(/i\.invoice_kind\s*=\s*'final'/);
+    expect(guarded).not.toMatch(/i\.invoice_type\s*=\s*'ROZ'/);
+    // 1000 PLN gross with a 300 PLN settled advance may leave 700 PLN, but the
+    // unchanged projection would report 1000 PLN when paid_amount is zero.
+    expect(guarded).toMatch(/i\.gross_total\s*-\s*COALESCE\(i\.paid_amount,\s*0\)::NUMERIC AS amount_due/);
     const childPredicate = /AND NOT EXISTS \(\s*SELECT 1\s+FROM public\.invoices child\s+WHERE child\.tenant_id\s*=\s*i\.tenant_id\s+AND \(child\.parent_invoice_id\s*=\s*i\.id\s+OR i\.id\s*=\s*ANY\(child\.advance_invoice_ids\)\)\s*\)/.exec(guarded);
     expect(childPredicate).not.toBeNull();
     expect(childPredicate?.[0]).not.toMatch(/child\.(payment_status|ksef_status|invoice_kind|invoice_type)/);

@@ -127,7 +127,7 @@ export async function prepareReminderAction(input: {
       .eq('id', args.invoiceId).eq('tenant_id', tenantId).maybeSingle();
     if (error || !invoice) return { success: false, error: 'Faktura nie znaleziona.' };
     if (!isReminderInvoiceChaseable(invoice)) return { success: false,
-      error: 'Korekta lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.' };
+      error: 'Korekta, faktura rozliczeniowa lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.' };
     let stage = args.stage;
     if (!stage) {
       const buyer = invoice.buyer_data && typeof invoice.buyer_data === 'object' && !Array.isArray(invoice.buyer_data)

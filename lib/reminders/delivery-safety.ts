@@ -51,7 +51,7 @@ export async function assertReminderSendable(delivery: ReminderDelivery) {
   if (!invoice.data || invoice.data.tenant_id !== delivery.tenantId ||
       invoice.data.id !== delivery.invoiceId) throw new ReminderConsentDenied('Faktura nie należy do organizacji przypomnienia.');
   const row = invoice.data;
-  if (!isReminderInvoiceChaseable(row)) throw new ReminderConsentDenied('Korekta lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.');
+  if (!isReminderInvoiceChaseable(row)) throw new ReminderConsentDenied('Korekta, faktura rozliczeniowa lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.');
   if (reminderInvoiceFingerprint(row) !== delivery.sourceFingerprint) {
     throw new ReminderConsentDenied('Dane faktury zmieniły się po przygotowaniu wiadomości. Wysyłka wstrzymana.');
   }

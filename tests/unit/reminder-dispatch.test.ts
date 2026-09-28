@@ -267,6 +267,14 @@ describe('delayed reminder dispatch guards', () => {
     expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();
     expect(tables.payment_reminders[0].status).toBe('pending');
   });
+  it('stops an approved final ROZ demand whose 1000 PLN gross can leave only 700 PLN after an advance', async () => {
+    await seed({ attachment: true, invoicePatch: {
+      invoice_kind: 'final', invoice_type: 'ROZ', gross_total: 1000, paid_amount: 0,
+    } });
+    await expect(runSendReminder(jobData, context)).rejects.toBeInstanceOf(NonRetriableError);
+    expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();
+    expect(tables.payment_reminders[0].status).toBe('pending');
+  });
   it('does not accept an unknown related-invoice count as proof of no corrections', async () => {
     await seed({ attachment: true }); missingCount = (q) => q.table === 'invoices' && q.head === true;
     const result: unknown = await runSendReminder(jobData, context).catch((error: unknown) => error);
@@ -306,8 +314,8 @@ describe('delayed reminder dispatch guards', () => {
     expect(snapshot().reminderReceipt).toBeUndefined();
     expect(tables.payment_reminders[0].status).toBe('pending');
   });
-  it.each([['regular', 'VAT'], ['regular', 'UPR'], ['advance', 'ZAL'], ['final', 'ROZ']] as const)
-    ('permits a current ordinary %s/%s invoice', async (kind, type) => {
+  it.each([['regular', 'VAT'], ['regular', 'UPR'], ['advance', 'ZAL']] as const)
+    ('permits a current supported %s/%s invoice', async (kind, type) => {
       await seed();
       const source = { ...invoice(), invoice_kind: kind, invoice_type: type };
       tables.invoices = [{ ...source }];

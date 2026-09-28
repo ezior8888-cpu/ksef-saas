@@ -3,6 +3,8 @@
 -- trustworthy payment balance. Until C-01 reconciles the legal amount after
 -- corrections, also omit any original with a linked child (even a draft or
 -- rejected child), including advances settled through advance_invoice_ids.
+-- Final/ROZ is held until advance settlement is represented in a trusted
+-- balance: gross_total - paid_amount can overstate its remaining claim.
 -- This intentionally understates total receivables; the UI
 -- labels the sum as the displayed, provisional subset.
 --
@@ -36,8 +38,7 @@ WHERE i.direction = 'outgoing'
   AND i.origin = 'app'
   AND (
     (i.invoice_kind = 'regular' AND i.invoice_type IN ('VAT', 'UPR')) OR
-    (i.invoice_kind = 'advance' AND i.invoice_type = 'ZAL') OR
-    (i.invoice_kind = 'final' AND i.invoice_type = 'ROZ')
+    (i.invoice_kind = 'advance' AND i.invoice_type = 'ZAL')
   )
   AND i.payment_status IN ('unpaid', 'partial', 'overdue')
   AND i.payment_due_date IS NOT NULL
@@ -59,5 +60,5 @@ GRANT SELECT ON public.invoices_overdue TO authenticated;
 
 COMMENT ON VIEW public.invoices_overdue IS
   'Tylko prowizorycznie kwalifikowane pozycje do przypomnienia: app, bez '
-  'powiązanych dokumentów, z security_invoker=true. Nie jest pełnym saldem '
+  'powiązanych dokumentów, bez ROZ, z security_invoker=true. Nie jest pełnym saldem '
   'należności po korektach ani po imporcie.';

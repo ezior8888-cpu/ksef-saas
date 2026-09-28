@@ -7,13 +7,14 @@ export const MAX_REMINDER_PDF_BYTES = 512 * 1024;
 export const REMINDER_DELIVERY_TTL_MS = 30 * 60 * 1000;
 export const REMINDER_INVOICE_SELECT = 'id,tenant_id,gross_total,paid_amount,currency,payment_status,direction,ksef_status,origin,invoice_kind,invoice_type,payment_due_date,issue_date,internal_number,ksef_number,buyer_data,buyer_nip,payment_data,seller_data,reminders_paused';
 
-/** Imported corrections can have invoice_kind=regular, so both stored classifications must be safe. */
+/** Imported corrections can have invoice_kind=regular, so both stored classifications must be safe.
+ * Final/ROZ stays on hold until the advance settlement is reflected in a trusted balance.
+ */
 export function isReminderInvoiceChaseable(invoice: { origin?: unknown; invoice_kind?: unknown; invoice_type?: unknown }): boolean {
   // Imported history has no trustworthy payment reconciliation.
   return invoice.origin === 'app' && (
     (invoice.invoice_kind === 'regular' && (invoice.invoice_type === 'VAT' || invoice.invoice_type === 'UPR')) ||
-    (invoice.invoice_kind === 'advance' && invoice.invoice_type === 'ZAL') ||
-    (invoice.invoice_kind === 'final' && invoice.invoice_type === 'ROZ')
+    (invoice.invoice_kind === 'advance' && invoice.invoice_type === 'ZAL')
   );
 }
 

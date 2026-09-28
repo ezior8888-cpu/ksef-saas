@@ -168,6 +168,16 @@ describe('read-only reminder preview preparation', () => {
       filters: [['tenant_id', tenantId], ['advance_invoice_ids', [invoiceId]]] });
     expect(mocks.pdf).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
   });
+  it('does not demand 1000 PLN on a final ROZ whose settled advance leaves only 700 PLN due', async () => {
+    const finalGross = 1000; const settledAdvance = 300;
+    patchInvoice({ invoice_kind: 'final', invoice_type: 'ROZ', gross_total: finalGross, paid_amount: 0 });
+    // paid_amount does not include the advance, so the stored due calculation overstates the claim.
+    expect(finalGross - Number((rows.invoices as ReminderInvoiceSource).paid_amount)).toBe(1000);
+    expect(finalGross - settledAdvance).toBe(700);
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_3')).rejects.toThrow('faktura rozliczeniowa');
+    expect(queries.map((query) => query.table)).toEqual(['invoices']);
+    expect(mocks.pdf).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+  });
   it('does not block an advance settled by a final invoice in another tenant', async () => {
     patchInvoice({ invoice_kind: 'advance', invoice_type: 'ZAL' });
     relatedInvoices = [{ tenant_id: otherId, parent_invoice_id: null, advance_invoice_ids: [invoiceId] }];
@@ -191,8 +201,8 @@ describe('read-only reminder preview preparation', () => {
     expect(mocks.pdf).not.toHaveBeenCalled();
   });
   it.each([
-    ['regular', 'VAT'], ['regular', 'UPR'], ['advance', 'ZAL'], ['final', 'ROZ'],
-  ])('prepares an ordinary %s/%s invoice', async (kind, type) => {
+    ['regular', 'VAT'], ['regular', 'UPR'], ['advance', 'ZAL'],
+  ])('prepares a supported %s/%s invoice', async (kind, type) => {
     patchInvoice({ invoice_kind: kind, invoice_type: type });
     await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).resolves.toMatchObject({ invoiceId });
   });
