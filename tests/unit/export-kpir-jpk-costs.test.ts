@@ -15,7 +15,8 @@ import { generateKpirXlsx, kpirCostColumn } from '@/lib/exports/kpir-generator';
  * - faktura uznana przez klienta za „nie koszt” szła do odliczenia VAT.
  */
 
-const ISSUER = { nip: '1234567890', name: 'Moja Firma' };
+// JPK_V7M(3) wymaga urzędu skarbowego i e-maila podatnika.
+const ISSUER = { nip: '1234567890', name: 'Moja Firma', taxOfficeCode: '1433', email: 'biuro@example.test' };
 
 function koszt(o: Partial<ExportExpense> = {}): ExportExpense {
   return {
@@ -165,14 +166,14 @@ describe('JPK_V7M — zakupy z kosztów', () => {
     const korekta = koszt({ id: 'kor', netAmount: -100, vatAmount: -23, grossAmount: -123, vatDeductibleAmount: -23 });
     expect(vatPurchases([korekta]).map((e) => e.id)).toEqual(['kor']);
     const xml = generateJpkV7m(dane([koszt({ netAmount: 1000, vatAmount: 230, vatDeductibleAmount: 230 }), korekta]));
-    expect(xml).toContain('<P_48>207.00</P_48>');
+    expect(xml).toContain('<P_48>207</P_48>'); // deklaracja: pełne złote
   });
 
   it('K_43 i P_48 to VAT DO ODLICZENIA, nie cały VAT z dokumentu (np. auto 50%)', () => {
     const data = dane([koszt({ netAmount: 1000, vatAmount: 230, vatDeductibleAmount: 115 })]);
     const xml = generateJpkV7m(data);
     expect(xml).toContain('<K_43>115.00</K_43>');
-    expect(xml).toContain('<P_48>115.00</P_48>');
+    expect(xml).toContain('<P_48>115</P_48>');
     expect(summarizeJpkV7m(data).vatDeductible).toBe(115);
   });
 
