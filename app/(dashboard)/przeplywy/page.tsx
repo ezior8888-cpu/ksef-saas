@@ -9,6 +9,7 @@ import {
   getSalesSeries,
 } from '@/lib/dashboard/monthly-figures';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 /**
@@ -33,25 +34,32 @@ export default async function PrzeplywyPage() {
     .toISOString()
     .slice(0, 10);
 
-  const { data: invoices, error: invoicesError } = await supabase
-    .from('invoices')
-    .select('issue_date, net_total, gross_total')
-    .eq('tenant_id', tenantId)
-    .eq('direction', 'outgoing')
-    .eq('ksef_status', 'accepted')
-    .eq('ksef_environment', environment)
-    .gte('issue_date', sixMonthsAgo)
-    .order('issue_date', { ascending: true });
-  if (invoicesError) throw new Error('Nie można odczytać faktur do przepływów');
-
-  const { data: expenses, error: expensesError } = await supabase
-    .from('expenses')
-    .select('source, ksef_invoice_id, issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column')
-    .eq('tenant_id', tenantId)
-    .eq('is_deductible', true)
-    .gte('issue_date', sixMonthsAgo)
-    .order('issue_date', { ascending: true });
-  if (expensesError || !expenses) throw new Error('Nie można odczytać kosztów do przepływów');
+  const [invoices, expenses] = await Promise.all([
+    readCompletePages('cash-flow invoices', (from, to) =>
+      supabase
+        .from('invoices')
+        .select('id, issue_date, net_total, gross_total', { count: 'exact' })
+        .eq('tenant_id', tenantId)
+        .eq('direction', 'outgoing')
+        .eq('ksef_status', 'accepted')
+        .eq('ksef_environment', environment)
+        .gte('issue_date', sixMonthsAgo)
+        .order('issue_date', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to),
+    ),
+    readCompletePages('cash-flow expenses', (from, to) =>
+      supabase
+        .from('expenses')
+        .select('id, source, ksef_invoice_id, issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column', { count: 'exact' })
+        .eq('tenant_id', tenantId)
+        .eq('is_deductible', true)
+        .gte('issue_date', sixMonthsAgo)
+        .order('issue_date', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to),
+    ),
+  ]);
   const visibleExpenses = await filterExpensesForKsefEnvironment(
     supabase, tenantId, environment, expenses,
   );
@@ -78,7 +86,7 @@ export default async function PrzeplywyPage() {
       </div>
 
       <CashFlowDashboard
-        invoices={invoices ?? []}
+        invoices={invoices}
         expenses={visibleExpenses}
         pendingReviewCount={pendingReviewCount ?? 0}
       />

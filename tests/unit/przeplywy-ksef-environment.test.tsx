@@ -30,21 +30,36 @@ function expense(source: string, invoiceId: string | null, gross: number): Row {
     document_type: 'invoice', kpir_column: 'col_13' };
 }
 
-function client(options: { expenses?: Row[]; incomingInvoices?: Row[] } = {}) {
+function client(options: {
+  expenses?: Row[];
+  incomingInvoices?: Row[];
+  outgoingInvoices?: Row[];
+  serverCap?: number;
+  withholdExactCount?: boolean;
+} = {}) {
   const invoices: Row[] = [
     { tenant_id: TENANT, direction: 'outgoing', ksef_status: 'accepted',
       ksef_environment: 'test', issue_date: '2026-09-02', net_total: 1_000, gross_total: 1_230 },
     { tenant_id: TENANT, direction: 'outgoing', ksef_status: 'accepted',
       ksef_environment: 'production', issue_date: '2026-09-03', net_total: 100, gross_total: 123 },
     ...(options.incomingInvoices ?? []),
+    ...(options.outgoingInvoices ?? []),
   ];
   const invoiceFilters: Array<[string, unknown]> = [];
+  const ranges: Array<{ table: string; from: number; to: number }> = [];
   return {
     invoiceFilters,
+    ranges,
     from(table: string) {
       const filters: Array<(row: Row) => boolean> = [];
+      const ordering: string[] = [];
+      let countRequested = false;
+      let range: [number, number] | null = null;
       const builder = {
-        select: () => builder,
+        select: (_columns: string, options?: { count?: string }) => {
+          countRequested = options?.count === 'exact';
+          return builder;
+        },
         eq: (column: string, value: unknown) => {
           if (table === 'invoices') invoiceFilters.push([column, value]);
           filters.push((row) => row[column] === value);
@@ -58,15 +73,37 @@ function client(options: { expenses?: Row[]; incomingInvoices?: Row[] } = {}) {
           filters.push((row) => values.includes(String(row[column])));
           return builder;
         },
-        order: () => builder,
-        then: <T = { data: Row[]; count: number; error: null }, E = never>(
-          resolve?: ((value: { data: Row[]; count: number; error: null }) => T | PromiseLike<T>) | null,
+        order: (column: string) => {
+          ordering.push(column);
+          return builder;
+        },
+        range: (from: number, to: number) => {
+          range = [from, to];
+          ranges.push({ table, from, to });
+          return builder;
+        },
+        then: <T = { data: Row[]; count: number | null; error: null }, E = never>(
+          resolve?: ((value: { data: Row[]; count: number | null; error: null }) => T | PromiseLike<T>) | null,
           reject?: ((reason: unknown) => E | PromiseLike<E>) | null,
         ) => {
           const source = table === 'invoices' ? invoices : (options.expenses ?? []);
-          const data = source.filter((row) =>
+          const matching = source.filter((row) =>
             filters.every((filter) => filter(row)));
-          return Promise.resolve({ data, count: data.length, error: null }).then(resolve, reject);
+          matching.sort((a, b) => {
+            for (const column of ordering) {
+              const comparison = String(a[column] ?? '').localeCompare(String(b[column] ?? ''));
+              if (comparison !== 0) return comparison;
+            }
+            return 0;
+          });
+          const start = range?.[0] ?? 0;
+          const requested = range ? range[1] - range[0] + 1 : Infinity;
+          const data = matching.slice(start, start + Math.min(requested, options.serverCap ?? Infinity));
+          return Promise.resolve({
+            data,
+            count: countRequested && !options.withholdExactCount ? matching.length : null,
+            error: null,
+          }).then(resolve, reject);
         },
       };
       return builder;
@@ -145,5 +182,57 @@ describe('cash flow after switching from TEST to PROD', () => {
     await expect(PrzeplywyPage()).rejects.toThrow(
       'KSeF expense invoice requires environment reconciliation',
     );
+  });
+
+  it('includes all accepted invoices and deductible expenses beyond the PostgREST cap', async () => {
+    const supabase = client({
+      outgoingInvoices: Array.from({ length: 1200 }, (_, index) => ({
+        id: `prod-${String(index).padStart(4, '0')}`,
+        tenant_id: TENANT,
+        direction: 'outgoing',
+        ksef_status: 'accepted',
+        ksef_environment: 'production',
+        issue_date: '2026-09-05',
+        net_total: 1,
+        gross_total: 1.23,
+      })),
+      expenses: Array.from({ length: 1200 }, (_, index) => ({
+        ...expense('manual', null, 1),
+        id: `expense-${String(index).padStart(4, '0')}`,
+      })),
+      serverCap: 1000,
+    });
+    mocks.context.mockResolvedValue({ supabase, tenantId: TENANT });
+
+    const page = await PrzeplywyPage();
+    const cashFlow = Children.toArray(page.props.children)[1] as ReactElement<{
+      invoices: Array<{ gross_total: number }>;
+      expenses: Array<{ gross_amount: number }>;
+    }>;
+
+    expect(cashFlow.props.invoices).toHaveLength(1201);
+    expect(cashFlow.props.expenses).toHaveLength(1200);
+    expect(supabase.ranges).toContainEqual({ table: 'invoices', from: 1000, to: 1499 });
+    expect(supabase.ranges).toContainEqual({ table: 'expenses', from: 1000, to: 1499 });
+  });
+
+  it('rejects an incomplete page instead of showing partial cash-flow totals', async () => {
+    const supabase = client({
+      expenses: Array.from({ length: 500 }, (_, index) => ({
+        ...expense('manual', null, 1),
+        id: `expense-${index}`,
+      })),
+      serverCap: 400,
+    });
+    mocks.context.mockResolvedValue({ supabase, tenantId: TENANT });
+
+    await expect(PrzeplywyPage()).rejects.toThrow('niepełna strona danych');
+  });
+
+  it('rejects a response without an exact count', async () => {
+    const supabase = client({ withholdExactCount: true });
+    mocks.context.mockResolvedValue({ supabase, tenantId: TENANT });
+
+    await expect(PrzeplywyPage()).rejects.toThrow('nie można potwierdzić liczby rekordów');
   });
 });
