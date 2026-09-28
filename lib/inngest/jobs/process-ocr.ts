@@ -20,6 +20,7 @@ import {
   type ExtractedInvoice,
 } from '@/lib/ocr/schema';
 import { sendPushToUser } from '@/lib/push/sender';
+import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { downloadExpensePhoto } from '@/lib/storage/expenses';
 import type { Database, Json } from '@/types/database';
@@ -159,6 +160,9 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
       const data = extractedData;
       const docType =
         data.document_type === 'simplified_invoice' ? 'invoice' : data.document_type;
+      // Firma zwolniona z VAT (#60) nie odlicza VAT-u: koszt w KPiR wychodzi
+      // wtedy brutto (#65), a JPK nic nie odlicza. Odczyt odporny przed 00091.
+      const vatExempt = (await readTenantVatExemption(supabase, tenantId)) !== null;
 
       const { data: expense, error } = await supabase
         .from('expenses')
@@ -177,7 +181,7 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
           vat_amount: data.vat_amount,
           gross_amount: data.gross_amount,
           vat_rate: data.vat_rate,
-          vat_deductible_amount: data.vat_amount,
+          vat_deductible_amount: vatExempt ? 0 : data.vat_amount,
           kpir_column: categorization.kpir_column,
           category_label: categorization.category_label,
           categorization_method: categorization.method,

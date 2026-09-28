@@ -25,7 +25,7 @@ import {
   runCoPilotMonthly,
   runCoPilotSendPackage,
 } from '../../inngest/jobs/co-pilot-monthly';
-import { runExportsGenerate } from '../../inngest/jobs/exports-generate';
+import { onExportsGenerateExhausted, runExportsGenerate } from '../../inngest/jobs/exports-generate';
 import {
   onMagicImportExhausted,
   runMagicImportKsef,
@@ -95,6 +95,7 @@ registerJob<Parameters<typeof runExportsGenerate>[0]>({
   maxRetries: 2,
   batchSize: 5,
   handler: (data, ctx) => runExportsGenerate(data, ctx),
+  onExhausted: onExportsGenerateExhausted,
 });
 
 // ── Wysyłka paczki do księgowego ──
