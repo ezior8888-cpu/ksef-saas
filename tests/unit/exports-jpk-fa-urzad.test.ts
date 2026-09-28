@@ -10,6 +10,12 @@ const db = vi.hoisted(() => ({
   updates: [] as Array<{ table: string; patch: Row; statusIn?: unknown[] }>,
   uploads: [] as string[],
   orderedFormats: [] as string[],
+  /** Liczba korekt w okresie (zapytanie `jpkFaBlocker`). */
+  corrections: 0,
+  /** Adres z GUS — `null` = GUS nie zna firmy. */
+  gusKnowsCompany: true,
+  /** GUS chwilowo nie odpowiada. */
+  gusDown: false,
 }));
 
 /** Atrapa klienta: zlecenie eksportu, urząd firmy, zapis pliku. */
@@ -17,10 +23,13 @@ function builder(table: string) {
   let patch: Row | null = null;
   let statusIn: unknown[] | undefined;
   let inserted = false;
+  let counting = false;
   const q: Record<string, unknown> = {};
   Object.assign(q, {
-    select: () => q,
+    select: (_cols?: string, opts?: { count?: string }) => ((counting = !!opts?.count), q),
     eq: () => q,
+    gte: () => q,
+    lte: () => q,
     in: (col: string, vals: unknown[]) => {
       if (col === 'status') statusIn = vals;
       return q;
@@ -48,10 +57,11 @@ function builder(table: string) {
     }),
     maybeSingle: async () =>
       table === 'tenants'
-        ? { data: { tax_office_code: db.office }, error: null }
+        ? { data: { tax_office_code: db.office, nip: '5260001246' }, error: null }
         : { data: null, error: null },
-    then: (ok: (v: { error: null }) => unknown) => {
+    then: (ok: (v: { error: null; count?: number }) => unknown) => {
       if (patch) db.updates.push({ table, patch, statusIn });
+      if (counting && table === 'invoices') return Promise.resolve({ error: null, count: db.corrections }).then(ok);
       return Promise.resolve({ error: null }).then(ok);
     },
   });
@@ -65,24 +75,39 @@ vi.mock('@/lib/storage/r2', () => ({
     db.uploads.push(buffer.toString('utf8'));
   },
 }));
+// Adres z GUS bez sieci — test jednostkowy nie może dzwonić do BIR.
+vi.mock('@/lib/exports/issuer-address', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/exports/issuer-address')>()),
+  readIssuerRegisteredAddress: async () => {
+    if (db.gusDown) throw new Error('GUS: timeout');
+    return db.gusKnowsCompany
+      ? {
+          voivodeship: 'MAZOWIECKIE', county: 'Warszawa', commune: 'Mokotów', street: 'ul. Puławska',
+          buildingNumber: '12', city: 'Warszawa', postCode: '02-566',
+        }
+      : null;
+  },
+}));
+const faktura = (o: Partial<JpkInvoice> = {}): JpkInvoice =>
+  ({
+    invoiceNumber: 'FV/1',
+    invoiceType: 'regular',
+    issueDate: '2026-08-10',
+    buyerName: 'Klient',
+    buyerNip: '5252241585',
+    buyerAddress: 'ul. Klienta 10, 02-001 Warszawa',
+    netTotal: 100,
+    vatTotal: 23,
+    grossTotal: 123,
+    lines: [{ position: 1, name: 'Usługa', unit: 'szt.', quantity: 1, unitPriceNet: 100, netAmount: 100, vatRate: '23' }],
+    ...o,
+  }) as JpkInvoice;
+const fetched = vi.hoisted(() => ({ issued: null as unknown[] | null, received: [] as unknown[] }));
 vi.mock('@/lib/exports/data-fetcher', () => ({
   fetchInvoicesForExport: async () => ({
     issuer: { nip: '5260001246', name: 'Moja Firma' },
-    issuedInvoices: [
-      {
-        invoiceNumber: 'FV/1',
-        invoiceType: 'regular',
-        issueDate: '2026-08-10',
-        buyerName: 'Klient',
-        buyerNip: '5252241585',
-        buyerAddress: 'ul. Klienta 10, 02-001 Warszawa',
-        netTotal: 100,
-        vatTotal: 23,
-        grossTotal: 123,
-        lines: [{ position: 1, name: 'Usługa', unit: 'szt.', quantity: 1, unitPriceNet: 100, netAmount: 100, vatRate: '23' }],
-      } as JpkInvoice,
-    ],
-    receivedInvoices: [],
+    issuedInvoices: fetched.issued ?? [faktura()],
+    receivedInvoices: fetched.received,
     expenses: [],
   }),
 }));
@@ -90,6 +115,8 @@ vi.mock('@/lib/exports/data-fetcher', () => ({
 import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/inngest/jobs/exports-generate';
 import { formatsWithoutUnaddressedJpkFa, runCoPilotSendPackage } from '@/lib/inngest/jobs/co-pilot-monthly';
 import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
+import { MissingIssuerAddressError } from '@/lib/exports/issuer-address';
+import { JpkFaCorrectionNotSupportedError } from '@/lib/exports/jpk-fa-generator';
 
 /**
  * JPK_FA z urzędem skarbowym FIRMY (#67) — cały job eksportu, nie sam
@@ -109,6 +136,11 @@ beforeEach(() => {
   db.updates = [];
   db.uploads = [];
   db.orderedFormats = [];
+  db.corrections = 0;
+  db.gusKnowsCompany = true;
+  db.gusDown = false;
+  fetched.issued = null;
+  fetched.received = [];
 });
 
 describe('job eksportu JPK_FA', () => {
@@ -126,6 +158,36 @@ describe('job eksportu JPK_FA', () => {
     await expect(run).rejects.toThrow(/Ustawienia → Księgowa/);
     expect(db.uploads).toEqual([]);
   });
+
+  it('faktury zakupu nie trafiają do JPK_FA (plik faktur wystawionych)', async () => {
+    db.office = '1433';
+    fetched.received = [faktura({ invoiceNumber: 'ZAK/7', sellerName: 'Dostawca' })];
+    await runExportsGenerate({ exportJobId: 'job-1' }, ctx);
+    expect(db.uploads[0]).toContain('<P_2A>FV/1</P_2A>');
+    expect(db.uploads[0]).not.toContain('ZAK/7');
+    expect(db.uploads[0]).toContain('<LiczbaFaktur>1</LiczbaFaktur>');
+  });
+
+  it('same zakupy w okresie: „brak faktur”, bez pliku', async () => {
+    db.office = '1433';
+    fetched.issued = [];
+    fetched.received = [faktura({ invoiceNumber: 'ZAK/7' })];
+    await runExportsGenerate({ exportJobId: 'job-1' }, ctx);
+    expect(db.uploads).toEqual([]);
+    expect(db.updates.some((u) => u.patch.status === 'completed' && u.patch.invoices_count === 0)).toBe(true);
+  });
+
+  it.each([
+    ['korekta w okresie', () => { fetched.issued = [faktura(), faktura({ invoiceNumber: 'KOR/1', invoiceType: 'correction' })]; }, /faktura korygująca/],
+    ['GUS nie zna firmy', () => { db.gusKnowsCompany = false; }, /rejestrze GUS/],
+  ])('%s: koniec bez ponawiania, z komunikatem — i bez pliku', async (_opis, ustaw, komunikat) => {
+    db.office = '1433';
+    ustaw();
+    const run = runExportsGenerate({ exportJobId: 'job-1' }, ctx);
+    await expect(run).rejects.toMatchObject({ name: 'NonRetriableError' });
+    await expect(run).rejects.toThrow(komunikat);
+    expect(db.uploads).toEqual([]);
+  });
 });
 
 describe('eksport po wyczerpaniu prób — „nieudany” z powodem, nie wieczne „generuje się”', () => {
@@ -138,6 +200,14 @@ describe('eksport po wyczerpaniu prób — „nieudany” z powodem, nie wieczne
         statusIn: ['pending', 'generating'],
       },
     ]);
+  });
+
+  it.each([
+    ['brak adresu w GUS', new MissingIssuerAddressError().message],
+    ['korekta w JPK_FA', new JpkFaCorrectionNotSupportedError().message],
+  ])('%s: klient widzi powód', async (_opis, komunikat) => {
+    await onExportsGenerateExhausted(new Error(komunikat), { exportJobId: 'job-1' });
+    expect(db.updates[0]!.patch.error_message).toBe(komunikat);
   });
 
   it('inny błąd: ogólny komunikat, bez szczegółów technicznych', async () => {
@@ -183,5 +253,39 @@ describe('Co-Pilot zamawia eksporty z listy po zamianie', () => {
     db.office = '1433';
     await expect(runCoPilotSendPackage(paczka, stop)).rejects.toThrow('STOP');
     expect(db.orderedFormats).toEqual(['jpk_fa', 'kpir_excel']);
+  });
+
+  // JPK_FA odmawia przy korekcie (C-01) i bez adresu z GUS — a jeden nieudany
+  // format wywraca całą paczkę. Księgowa dostaje CSV zamiast niczego.
+  it('korekta w okresie: CSV zamiast JPK_FA', async () => {
+    db.office = '1433';
+    db.corrections = 1;
+    await expect(runCoPilotSendPackage(paczka, stop)).rejects.toThrow('STOP');
+    expect(db.orderedFormats).toEqual(['csv_universal', 'kpir_excel']);
+  });
+
+  it('korekta, ale paczka bez korekt: JPK_FA nie jest blokowany', async () => {
+    // Eksport „bez korekt” w ogóle ich nie czyta — korekta w okresie nie przeszkadza.
+    db.corrections = 1;
+    const { jpkFaBlocker } = await import('@/lib/exports/jpk-fa-readiness');
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const powod = await jpkFaBlocker(createAdminClient() as never, {
+      tenantId: 'ten-1', periodStart: '2026-08-01', periodEnd: '2026-08-31', includeCorrections: false,
+    });
+    expect(powod).toBeNull();
+  });
+
+  it('GUS chwilowo nie odpowiada: paczka i tak idzie — z CSV zamiast JPK_FA', async () => {
+    db.office = '1433';
+    db.gusDown = true;
+    await expect(runCoPilotSendPackage(paczka, stop)).rejects.toThrow('STOP');
+    expect(db.orderedFormats).toEqual(['csv_universal', 'kpir_excel']);
+  });
+
+  it('GUS nie zna firmy: CSV zamiast JPK_FA', async () => {
+    db.office = '1433';
+    db.gusKnowsCompany = false;
+    await expect(runCoPilotSendPackage(paczka, stop)).rejects.toThrow('STOP');
+    expect(db.orderedFormats).toEqual(['csv_universal', 'kpir_excel']);
   });
 });

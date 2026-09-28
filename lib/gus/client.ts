@@ -38,6 +38,9 @@ export interface GusCompanyData {
   buildingNumber: string;
   localNumber?: string;
   voivodeship: string;
+  /** Powiat i gmina — JPK_FA(4) wymaga ich w adresie podatnika (`etd:TAdresPolski1`). */
+  county: string;
+  commune: string;
 }
 
 export type GusLookupResult =
@@ -201,6 +204,8 @@ export async function lookupCompanyByNip(
         buildingNumber: '1',
         localNumber: undefined,
         voivodeship: 'MAZOWIECKIE',
+        county: 'Warszawa',
+        commune: 'Śródmieście',
       },
     };
   }
@@ -277,6 +282,8 @@ export async function lookupCompanyByNip(
           buildingNumber: r.NrNieruchomosci ?? '',
           localNumber: r.NrLokalu || undefined,
           voivodeship: r.Wojewodztwo ?? '',
+          county: r.Powiat ?? '',
+          commune: r.Gmina ?? '',
         },
       };
     } catch (err) {
