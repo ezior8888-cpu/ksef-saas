@@ -199,6 +199,22 @@ describe('tenant boundaries for accounting exports', () => {
     expect(result.expenses.map(row => row.id)).toEqual(['manual', 'ocr-cost', 'test-cost']);
   });
 
+  it('reads every deductible cost and restores accounting date order after stable ID pages', async () => {
+    tables.expenses = Array.from({ length: 1200 }, (_, index) => ({
+      id: `expense-${String(index).padStart(4, '0')}`,
+      tenant_id: 'tenant-a', source: 'manual', ksef_invoice_id: null,
+      issue_date: index === 0 ? '2026-01-31' : '2026-01-10',
+      is_deductible: true,
+    }));
+    const result = await fetchInvoicesForExport({
+      ...exportParams, direction: 'issued', includeExpenses: true,
+    });
+    expect(result.expenses).toHaveLength(1200);
+    expect(result.expenses[0]?.id).toBe('expense-0001');
+    expect(result.expenses.at(-1)?.id).toBe('expense-0000');
+    expect(operations.filter(op => op.table === 'expenses')).toHaveLength(3);
+  });
+
   it.each(['missing', 'foreign', 'unknown', 'unlinked'])('blocks ambiguous KSeF expense: %s', async kind => {
     const linkedId = kind === 'missing' ? 'missing-invoice' : 'linked-invoice';
     if (kind !== 'missing' && kind !== 'unlinked') {
@@ -282,8 +298,8 @@ describe('tenant boundaries for accounting exports', () => {
 
   it('uses line item IDs derived from own invoices', async () => {
     tables.invoice_line_items = [
-      { invoice_id: 'invoice-a', ordinal: 1, name: 'OWN', quantity: 1, unit_price_net: 100, net_amount: 100, vat_rate: '23' },
-      { invoice_id: 'invoice-b', ordinal: 1, name: 'PRIVATE', quantity: 1, unit_price_net: 100, net_amount: 100, vat_rate: '23' },
+      { id: 'line-a', invoice_id: 'invoice-a', ordinal: 1, name: 'OWN', quantity: 1, unit_price_net: 100, net_amount: 100, vat_rate: '23' },
+      { id: 'line-b', invoice_id: 'invoice-b', ordinal: 1, name: 'PRIVATE', quantity: 1, unit_price_net: 100, net_amount: 100, vat_rate: '23' },
     ];
     const data = await fetchInvoicesForExport(exportParams);
     expect(data.issuedInvoices[0].lines.map(row => row.name)).toEqual(['OWN']);

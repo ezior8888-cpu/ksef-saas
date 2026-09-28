@@ -136,8 +136,6 @@ export async function fetchInvoicesForExport(
   return { issuer, issuedInvoices, receivedInvoices, expenses };
 }
 
-const EXPENSE_PAGE = 1000;
-
 /**
  * Koszty okresu, które klient uznał za koszt (`is_deductible`) — ten sam
  * filtr co KPiR w aplikacji. Czytane stronami: PostgREST ucina odpowiedź
@@ -148,30 +146,17 @@ async function fetchExpensesForExport(
   params: FetchInvoicesParams,
   environment: KsefEnvironment,
 ): Promise<ExportExpense[]> {
-  const rows: Array<Record<string, unknown> & {
-    source: unknown;
-    ksef_invoice_id: unknown;
-  }> = [];
-  for (let from = 0; ; from += EXPENSE_PAGE) {
-    const { data, error } = await supabase
+  const rows = await readCompletePages('expenses', (from, to) =>
+    supabase
       .from('expenses')
-      .select(
-        'id, source, ksef_invoice_id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, ' +
-          'net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label',
-      )
+      .select('id, source, ksef_invoice_id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label', { count: 'exact' })
       .eq('tenant_id', params.tenantId)
       .eq('is_deductible', true)
       .gte('issue_date', params.periodStart)
       .lte('issue_date', params.periodEnd)
-      .order('issue_date', { ascending: true })
       .order('id', { ascending: true })
-      .range(from, from + EXPENSE_PAGE - 1);
-    if (error) throw new Error(`expenses: ${error.message}`);
-
-    const page = (data ?? []) as unknown as typeof rows;
-    rows.push(...page);
-    if (page.length < EXPENSE_PAGE) break;
-  }
+      .range(from, to),
+  );
 
   const eligible = await filterExpensesForKsefEnvironment(
     supabase,
@@ -179,6 +164,8 @@ async function fetchExpensesForExport(
     environment,
     rows,
   );
+  eligible.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
   const out = eligible.map((row) => ({
     id: String(row.id),
     issueDate: String(row.issue_date),
@@ -249,7 +236,7 @@ async function fetchInvoiceRows(
     includeCorrections?: boolean;
   },
 ): Promise<InvoiceRow[]> {
-  return readCompletePages('invoices', (from, to) => {
+  const rows = await readCompletePages('invoices', (from, to) => {
     let query = supabase
       .from('invoices')
       .select('*', { count: 'exact' })
@@ -259,7 +246,6 @@ async function fetchInvoiceRows(
       .eq('ksef_environment', params.environment)
       .gte('issue_date', params.periodStart)
       .lte('issue_date', params.periodEnd)
-      .order('issue_date', { ascending: true })
       .order('id', { ascending: true });
 
     if (params.includeCorrections === false) {
@@ -267,6 +253,8 @@ async function fetchInvoiceRows(
     }
     return query.range(from, to);
   });
+  return rows.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 }
 
 // ============================================================================
@@ -367,11 +355,12 @@ async function resolveLinesForInvoices(
             { count: 'exact' },
           )
           .in('invoice_id', batch)
-          .order('invoice_id', { ascending: true })
-          .order('ordinal', { ascending: true })
           .order('id', { ascending: true })
           .range(pageFrom, pageTo),
       );
+      dbLines.sort((a, b) =>
+        a.invoice_id.localeCompare(b.invoice_id) ||
+        a.ordinal - b.ordinal || a.id.localeCompare(b.id));
       for (const item of dbLines) {
         if (!batch.includes(item.invoice_id)) throw new Error('Invoice line belongs to another invoice');
         const list = grouped.get(item.invoice_id) ?? [];

@@ -1,5 +1,6 @@
 import type { PageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import type { KsefEnvironment } from '@/types/ksef';
 
 /**
@@ -17,7 +18,6 @@ import type { KsefEnvironment } from '@/types/ksef';
  */
 
 const OUTGOING = 'outgoing' as const;
-const PAGE_SIZE = 1000;
 
 export interface MonthlyFigures {
   /** „sierpień 2026" */
@@ -85,8 +85,8 @@ async function assertAcceptedEnvironmentKnown(
 }
 
 /**
- * PostgREST can cap one response at 1000 rows. Stable ordering and explicit
- * pages keep large months from silently understating VAT and sales.
+ * PostgREST can cap a successful response. Counted pages make an incomplete
+ * month a visible error instead of silently understating VAT and sales.
  */
 async function fetchAcceptedInvoices(
   supabase: PageContext['supabase'],
@@ -96,25 +96,17 @@ async function fetchAcceptedInvoices(
   endExclusive: string,
   errorMessage: string,
 ): Promise<InvoiceSummary[]> {
-  const rows: InvoiceSummary[] = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await supabase
+  return readCompletePages(errorMessage, (from, to) => supabase
       .from('invoices')
-      .select('id, issue_date, gross_total, net_total, vat_total')
+      .select('id, issue_date, gross_total, net_total, vat_total', { count: 'exact' })
       .eq('tenant_id', tenantId)
       .eq('direction', OUTGOING)
       .eq('ksef_status', 'accepted')
       .eq('ksef_environment', environment)
       .gte('issue_date', start)
       .lt('issue_date', endExclusive)
-      .order('issue_date', { ascending: true })
       .order('id', { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
-    if (error || !data) throw new Error(errorMessage);
-    rows.push(...data);
-    if (data.length < PAGE_SIZE) break;
-  }
-  return rows;
+      .range(from, to));
 }
 
 async function countLocalDrafts(

@@ -46,12 +46,13 @@ export default async function KpirPage({
     .eq('is_deductible', true)
     .gte('issue_date', periodStart)
     .lte('issue_date', periodEnd)
-    .order('issue_date', { ascending: true })
     .order('id', { ascending: true })
     .range(from, to));
   const visibleExpenses = await filterExpensesForKsefEnvironment(
     supabase, tenantId, environment, expenses,
   );
+  visibleExpenses.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 
   const invoices = await readCompletePages('invoices', (from, to) => supabase
     .from('invoices')
@@ -62,9 +63,10 @@ export default async function KpirPage({
     .eq('ksef_environment', environment)
     .gte('issue_date', periodStart)
     .lte('issue_date', periodEnd)
-    .order('issue_date', { ascending: true })
     .order('id', { ascending: true })
     .range(from, to));
+  invoices.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 
   return (
     <div className="space-y-6 pb-10 text-[var(--ff-on-surface)]">

@@ -44,7 +44,6 @@ export default async function PrzeplywyPage() {
         .eq('ksef_status', 'accepted')
         .eq('ksef_environment', environment)
         .gte('issue_date', sixMonthsAgo)
-        .order('issue_date', { ascending: true })
         .order('id', { ascending: true })
         .range(from, to),
     ),
@@ -55,7 +54,6 @@ export default async function PrzeplywyPage() {
         .eq('tenant_id', tenantId)
         .eq('is_deductible', true)
         .gte('issue_date', sixMonthsAgo)
-        .order('issue_date', { ascending: true })
         .order('id', { ascending: true })
         .range(from, to),
     ),
@@ -63,6 +61,10 @@ export default async function PrzeplywyPage() {
   const visibleExpenses = await filterExpensesForKsefEnvironment(
     supabase, tenantId, environment, expenses,
   );
+  invoices.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
+  visibleExpenses.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 
   const { count: pendingReviewCount } = await supabase
     .from('expenses')

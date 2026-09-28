@@ -45,6 +45,9 @@ function client(options: {
     ...(options.incomingInvoices ?? []),
     ...(options.outgoingInvoices ?? []),
   ];
+  invoices.forEach((row, index) => {
+    row.id ??= `invoice-${String(index).padStart(4, '0')}`;
+  });
   const invoiceFilters: Array<[string, unknown]> = [];
   const ranges: Array<{ table: string; from: number; to: number }> = [];
   return {
@@ -86,7 +89,9 @@ function client(options: {
           resolve?: ((value: { data: Row[]; count: number | null; error: null }) => T | PromiseLike<T>) | null,
           reject?: ((reason: unknown) => E | PromiseLike<E>) | null,
         ) => {
-          const source = table === 'invoices' ? invoices : (options.expenses ?? []);
+          const source = table === 'invoices' ? invoices : (options.expenses ?? []).map((row, index) => ({
+            ...row, id: row.id ?? `expense-${String(index).padStart(4, '0')}`,
+          }));
           const matching = source.filter((row) =>
             filters.every((filter) => filter(row)));
           matching.sort((a, b) => {
@@ -212,6 +217,8 @@ describe('cash flow after switching from TEST to PROD', () => {
 
     expect(cashFlow.props.invoices).toHaveLength(1201);
     expect(cashFlow.props.expenses).toHaveLength(1200);
+    expect(supabase.ranges).toContainEqual({ table: 'invoices', from: 500, to: 999 });
+    expect(supabase.ranges).toContainEqual({ table: 'expenses', from: 500, to: 999 });
     expect(supabase.ranges).toContainEqual({ table: 'invoices', from: 1000, to: 1499 });
     expect(supabase.ranges).toContainEqual({ table: 'expenses', from: 1000, to: 1499 });
   });

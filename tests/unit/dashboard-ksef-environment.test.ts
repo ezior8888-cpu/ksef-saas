@@ -51,10 +51,12 @@ function queryClient(source: Invoice[], failRangeStart?: number) {
       const filters: Array<[string, unknown]> = [];
       const orders: string[] = [];
       let head = false;
+      let exactCount = false;
       let range: [number, number] | null = null;
       const builder = {
-        select: (_columns: string, options?: { head?: boolean }) => {
+        select: (_columns: string, options?: { head?: boolean; count?: 'exact' }) => {
           head = options?.head ?? false;
+          exactCount = options?.count === 'exact';
           return builder;
         },
         eq: (column: keyof Invoice, value: string) => {
@@ -90,12 +92,18 @@ function queryClient(source: Invoice[], failRangeStart?: number) {
         ) => {
           invoiceQueries.push({ filters, orders });
           const matching = source.filter((row) => predicates.every((p) => p(row)))
-            .sort((a, b) => a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
+            .sort((a, b) => {
+              for (const column of orders) {
+                const difference = String(a[column as keyof Invoice]).localeCompare(String(b[column as keyof Invoice]));
+                if (difference) return difference;
+              }
+              return 0;
+            });
           const result = failRangeStart !== undefined && range?.[0] === failRangeStart
             ? { data: null, count: null, error: { message: 'read failure' } }
             : head
               ? { data: null, count: matching.length, error: null }
-              : { data: matching.slice(range?.[0] ?? 0, Math.min((range?.[1] ?? 999) + 1, (range?.[0] ?? 0) + 1000)), count: null, error: null };
+              : { data: matching.slice(range?.[0] ?? 0, Math.min((range?.[1] ?? 999) + 1, (range?.[0] ?? 0) + 1000)), count: exactCount ? matching.length : null, error: null };
           return Promise.resolve(result).then(resolve, reject);
         },
       };
@@ -149,7 +157,7 @@ describe('dashboard figures after a KSeF environment switch', () => {
       query.filters.some(([column, value]) =>
         column === 'ksef_status' && value === 'accepted'))).toBe(true);
     expect(monetaryQueries.every((query) =>
-      query.orders.join(',') === 'issue_date,id')).toBe(true);
+      query.orders.join(',') === 'id')).toBe(true);
   });
 
   it('also excludes PROD accepted invoices when switched back to TEST', async () => {
@@ -207,14 +215,15 @@ describe('dashboard figures after a KSeF environment switch', () => {
       totalGross: 12000,
     });
     expect(series.currentSeries.at(-1)).toBe(12000);
-    expect(ranges).toContainEqual([0, 999]);
-    expect(ranges).toContainEqual([1000, 1999]);
+    expect(ranges).toContainEqual([0, 499]);
+    expect(ranges).toContainEqual([500, 999]);
+    expect(ranges).toContainEqual([1000, 1499]);
   });
 
   it('fails the monthly amount instead of returning the first page after a later read error', async () => {
     const bulk = Array.from({ length: 1200 }, (_, index) =>
       invoice('2026-09-10', 'accepted', 'production', 10, String(index).padStart(4, '0')));
-    const { client } = queryClient(bulk, 1000);
+    const { client } = queryClient(bulk, 500);
 
     await expect(getMonthlyFigures(
       client, TENANT, new Date('2026-09-15T12:00:00Z'),
