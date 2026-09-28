@@ -3,7 +3,7 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 
 import type { Invoice, InvoiceLineItem, VatRate } from '@/types/invoice';
-import { SPLIT_PAYMENT_LABEL } from '@/lib/invoices/annotations';
+import { CASH_METHOD_LABEL, SPLIT_PAYMENT_LABEL } from '@/lib/invoices/annotations';
 
 /**
  * Renderer PDF faktury FA(3) (Faza 33 Krok 1-2).
@@ -379,6 +379,12 @@ function drawFooter(
   left: number,
   width: number,
 ): void {
+  // Art. 106e ust. 1 pkt 16 — obowiązkowe wyrazy przy metodzie kasowej.
+  if (invoice.annotations?.cashMethod === 1) {
+    doc.font('bold').fontSize(9).fillColor('#222222');
+    doc.text(CASH_METHOD_LABEL, left, doc.y, { width });
+    doc.y += 4;
+  }
   // Art. 106e ust. 1 pkt 18a — obowiązkowe wyrazy przy MPP.
   if (invoice.annotations?.splitPayment === 1) {
     doc.font('bold').fontSize(9).fillColor('#222222');

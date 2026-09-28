@@ -46,13 +46,15 @@ let member: boolean;
 let selectedOrg: string | null;
 /** `tenants.vat_exemption_basis` (00091) — null = czynny podatnik VAT. */
 let vatBasis: string | null;
+/** `tenants.vat_cash_method` (00094) — false = metoda memoriałowa. */
+let cashMethod: boolean;
 
 function query(table: string) {
   const record: QueryLog = { table, filters: {}, operation: 'select' };
   queries.push(record);
   const result = () => {
     let data: unknown = null;
-    if (table === 'tenants') data = { id: org, nip: '1234567890', name: 'Fixture seller', address_json: { countryCode: 'PL' }, vat_exemption_basis: vatBasis };
+    if (table === 'tenants') data = { id: org, nip: '1234567890', name: 'Fixture seller', address_json: { countryCode: 'PL' }, vat_exemption_basis: vatBasis, vat_cash_method: cashMethod };
     if (table === 'contractors') data = { nip: buyer.nip, name: buyer.name, address: buyer.address };
     if (table === 'invoices') data = record.operation === 'insert' ? { id: 'new-invoice' } : {
       id: 'last-invoice',
@@ -72,7 +74,7 @@ function query(table: string) {
   return chain;
 }
 beforeEach(() => {
-  vi.resetAllMocks(); queries = []; aal = 'aal2'; factor = 'totp'; member = true; selectedOrg = org; vatBasis = null;
+  vi.resetAllMocks(); queries = []; aal = 'aal2'; factor = 'totp'; member = true; selectedOrg = org; vatBasis = null; cashMethod = false;
   mocks.getSession.mockResolvedValue({ data: { session: { access_token: token, user: { id: 'forged-cookie-user', factors: [] } } }, error: null });
   mocks.getUser.mockImplementation(async () => ({ data: { user: {
     id: userId, email: 'user@example.test',
@@ -214,5 +216,25 @@ describe('mechanizm podzielonej płatności (MPP, P_18A)', () => {
     const result = await saveAndSendInvoiceAction({ ...mpp, bankAccount: '' });
     expect(result).toMatchObject({ success: false });
     expect(mocks.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe('metoda kasowa firmy (P_16)', () => {
+  it('firma na metodzie kasowej: P_16 w fakturze w kolejce KSeF', async () => {
+    cashMethod = true;
+    await expect(saveAndSendInvoiceAction(form)).resolves.toMatchObject({ success: true });
+    expect(mocks.enqueue.mock.calls[0]![0].invoice.annotations).toEqual({ cashMethod: 1 });
+  });
+
+  it('firma zwolniona z VAT: metoda kasowa jej nie dotyczy — bez P_16', async () => {
+    cashMethod = true;
+    vatBasis = 'art. 113 ust. 1 ustawy o VAT';
+    await saveAndSendInvoiceAction(form);
+    expect(mocks.enqueue.mock.calls[0]![0].invoice.annotations).toBeUndefined();
+  });
+
+  it('metoda memoriałowa: bez P_16', async () => {
+    await saveAndSendInvoiceAction(form);
+    expect(mocks.enqueue.mock.calls[0]![0].invoice.annotations).toBeUndefined();
   });
 });
