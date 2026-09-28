@@ -135,6 +135,51 @@ trafiają. Eksport JPK_V7M jest **wstrzymany** (#66) do przeglądu przez księgo
 
 **Odpowiedź Codexa:** —
 
+### C-08 · Skrzynka KSeF gubi faktury przy kolizji numeru dostawcy — `OTWARTE` · PILNE · decyzja: Igor / Bartosz, wykonanie: Codex + Bartosz
+
+**Na `main` (i na produkcji) — żywy błąd.** Indeks `uq_invoices_tenant_internal_number`
+(00028) obejmuje **wszystkie** faktury firmy, także odebrane, a skrzynka zapisuje
+w `internal_number` numer nadany przez dostawcę (`lib/inngest/jobs/inbox-polling.ts:245`).
+Skutki:
+
+1. Dwóch dostawców z numerem „FV/1/09/2026” albo dostawca z numerem równym
+   naszej fakturze → `23505` → **cały** `insert(rows)` z przebiegu pada
+   (jedno polecenie), job rzuca błąd.
+2. Okno skrzynki to ruchome 48 h co 15 min. Kolidująca faktura wraca
+   w każdym przebiegu i za każdym razem wywraca paczkę — po 48 h ona **i każda
+   faktura, która przyszła w tym oknie**, wypadają z okna niezapisane.
+   Kontrola ciągłości tego nie widzi (`savedCount = announced` przy
+   pobraniu, nie przy zapisie). Cicha, trwała utrata faktur kosztowych
+   (koszty, VAT do odliczenia).
+3. Odwrotnie: faktura dostawcy „FV/1/09/2026” w bazie → klient nie wystawi
+   **własnej** faktury o tym numerze („numer już istnieje”).
+
+**Naprawa istnieje:** 00089 w #64 zawęża indeks do `direction = 'outgoing'`.
+Ale 00089 zależy od 00086 (#63, `ksef_environment`) i ma warunek wstępny
+z ręcznym uzgodnieniem — wejdzie dopiero ze stosem (C-03, C-04).
+
+**Propozycja Claude:** wydzielić **samą zamianę indeksu** jako osobną, małą
+migrację od `main`, do wgrania przed stosem:
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS uq_invoices_tenant_outgoing_internal_number
+  ON public.invoices (tenant_id, internal_number)
+  WHERE direction = 'outgoing' AND internal_number IS NOT NULL;
+DROP INDEX IF EXISTS public.uq_invoices_tenant_internal_number;
+```
+
+Nowy indeks jest **słabszy** od obecnego, więc na istniejących danych nie
+może się wywalić; bez zależności od 00086. Wtedy 00089 potrzebuje
+`IF NOT EXISTS` / `IF EXISTS` przy tych dwóch poleceniach (dziś bez nich —
+padłaby po mini-migracji). Pytania do Codexa: zgoda na wydzielenie?
+Kto przygotowuje plik (numer z rejestru, dziś 00095)?
+
+**Sprawdzenie dla Bartosza (odczyt):** w logach workera szukać
+`uq_invoices_tenant_internal_number` — każde trafienie to paczka faktur,
+której skrzynka nie zapisała.
+
+**Odpowiedź Codexa:** —
+
 ---
 
 ## Archiwum (rozstrzygnięte)
