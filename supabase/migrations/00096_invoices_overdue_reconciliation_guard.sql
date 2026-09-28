@@ -2,7 +2,8 @@
 -- Corrections are not independent receivables, and imported history lacks a
 -- trustworthy payment balance. Until C-01 reconciles the legal amount after
 -- corrections, also omit any original with a linked child (even a draft or
--- rejected child). This intentionally understates total receivables; the UI
+-- rejected child), including advances settled through advance_invoice_ids.
+-- This intentionally understates total receivables; the UI
 -- labels the sum as the displayed, provisional subset.
 --
 -- CREATE OR REPLACE keeps the 00082 column names, order and types as well as
@@ -50,7 +51,7 @@ WHERE i.direction = 'outgoing'
     SELECT 1
     FROM public.invoices child
     WHERE child.tenant_id = i.tenant_id
-      AND child.parent_invoice_id = i.id
+      AND (child.parent_invoice_id = i.id OR i.id = ANY(child.advance_invoice_ids))
   );
 
 REVOKE ALL ON public.invoices_overdue FROM anon;

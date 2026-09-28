@@ -18,8 +18,10 @@ const invoiceFixture: ReminderInvoiceSource = {
 };
 let rows: Record<string, unknown>;
 let failures: Set<string>;
-let relatedInvoices: Array<{ tenant_id: string; parent_invoice_id: string }>;
+let relatedInvoices: Array<{ tenant_id: string; parent_invoice_id?: string | null; advance_invoice_ids?: string[];
+  invoice_kind?: string; invoice_type?: string; ksef_status?: string }>;
 let relatedCountOverride: number | null | undefined;
+let advanceCountOverride: number | null | undefined;
 let queries: Array<{ table: string; filters: Array<[string, unknown]>; head?: boolean; count?: 'exact' }>;
 beforeEach(() => {
   vi.resetAllMocks(); vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-23T12:00:00Z'));
@@ -31,7 +33,7 @@ beforeEach(() => {
     reminder_settings: { tenant_id: tenantId, sender_name: 'Fixture sender', sender_email: 'sender@example.test', reply_to_email: 'reply@example.test' },
     reminder_templates: null,
   };
-  queries = []; failures = new Set(); relatedInvoices = []; relatedCountOverride = undefined;
+  queries = []; failures = new Set(); relatedInvoices = []; relatedCountOverride = undefined; advanceCountOverride = undefined;
   mocks.client.mockReturnValue({ from: (table: string) => {
     const call = { table, filters: [] as Array<[string, unknown]> }; queries.push(call);
     const query = { select: (_columns: string, options?: { count?: 'exact'; head?: boolean }) => {
@@ -39,13 +41,20 @@ beforeEach(() => {
       if (options?.head) Object.assign(call, { head: options.head });
       return query;
     }, eq: (key: string, value: unknown) => { call.filters.push([key, value]); return query; },
+      contains: (key: string, value: string[]) => { call.filters.push([key, value]); return query; },
       maybeSingle: async () => ({ data: rows[table] ? structuredClone(rows[table]) : null, error: failures.has(table) ? { message: 'private-database-detail' } : null }),
       then: (resolve: (value: { data: null; count: number | null; error: { message: string } | null }) => unknown,
         reject?: (reason: unknown) => unknown) => {
         const filters = new Map(call.filters);
-        const count = relatedCountOverride !== undefined ? relatedCountOverride : relatedInvoices.filter((row) =>
-          row.tenant_id === filters.get('tenant_id') && row.parent_invoice_id === filters.get('parent_invoice_id')).length;
-        return Promise.resolve({ data: null, count, error: failures.has('invoice_children') ? { message: 'private-database-detail' } : null }).then(resolve, reject);
+        const advanceIds = filters.get('advance_invoice_ids') as string[] | undefined;
+        const count = advanceIds
+          ? (advanceCountOverride !== undefined ? advanceCountOverride : relatedInvoices.filter((row) =>
+            row.tenant_id === filters.get('tenant_id') &&
+            advanceIds.every((id) => row.advance_invoice_ids?.includes(id))).length)
+          : (relatedCountOverride !== undefined ? relatedCountOverride : relatedInvoices.filter((row) =>
+            row.tenant_id === filters.get('tenant_id') && row.parent_invoice_id === filters.get('parent_invoice_id')).length);
+        const failed = failures.has(advanceIds ? 'advance_invoice_children' : 'invoice_children');
+        return Promise.resolve({ data: null, count, error: failed ? { message: 'private-database-detail' } : null }).then(resolve, reject);
       },
     }; return query;
   } });
@@ -68,6 +77,7 @@ describe('read-only reminder preview preparation', () => {
     expect(queries).toEqual([
       { table: 'invoices', filters: [['id', invoiceId], ['tenant_id', tenantId]] },
       { table: 'invoices', filters: [['tenant_id', tenantId], ['parent_invoice_id', invoiceId]], count: 'exact', head: true },
+      { table: 'invoices', filters: [['tenant_id', tenantId], ['advance_invoice_ids', [invoiceId]]], count: 'exact', head: true },
       { table: 'tenants', filters: [['id', tenantId]] },
       { table: 'reminder_settings', filters: [['tenant_id', tenantId]] },
       { table: 'reminder_templates', filters: [['tenant_id', tenantId], ['stage', 'stage_1'], ['is_default', false]] },
@@ -110,7 +120,7 @@ describe('read-only reminder preview preparation', () => {
     await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).rejects.toThrow('niedozwolone');
     expect(mocks.client).not.toHaveBeenCalled();
   });
-  it.each(['invoices', 'invoice_children', 'tenants', 'reminder_settings', 'reminder_templates'])('does not hide a failed %s read behind defaults', async (table) => {
+  it.each(['invoices', 'invoice_children', 'advance_invoice_children', 'tenants', 'reminder_settings', 'reminder_templates'])('does not hide a failed %s read behind defaults', async (table) => {
     failures.add(table);
     await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).rejects.toThrow(/Nie (udało się|można)/);
     expect(mocks.pdf).not.toHaveBeenCalled();
@@ -148,6 +158,26 @@ describe('read-only reminder preview preparation', () => {
   it('does not block a child in another tenant', async () => {
     relatedInvoices = [{ tenant_id: otherId, parent_invoice_id: invoiceId }];
     await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).resolves.toMatchObject({ invoiceId });
+  });
+  it('blocks an accepted ZAL settled by ROZ without parent_invoice_id before generating a PDF', async () => {
+    patchInvoice({ invoice_kind: 'advance', invoice_type: 'ZAL', gross_total: 123, paid_amount: 0 });
+    relatedInvoices = [{ tenant_id: tenantId, parent_invoice_id: null, advance_invoice_ids: [invoiceId],
+      invoice_kind: 'final', invoice_type: 'ROZ', ksef_status: 'accepted' }];
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_3')).rejects.toThrow('Uzgodnij saldo');
+    expect(queries[2]).toMatchObject({ table: 'invoices', count: 'exact', head: true,
+      filters: [['tenant_id', tenantId], ['advance_invoice_ids', [invoiceId]]] });
+    expect(mocks.pdf).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+  });
+  it('does not block an advance settled by a final invoice in another tenant', async () => {
+    patchInvoice({ invoice_kind: 'advance', invoice_type: 'ZAL' });
+    relatedInvoices = [{ tenant_id: otherId, parent_invoice_id: null, advance_invoice_ids: [invoiceId] }];
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).resolves.toMatchObject({ invoiceId });
+  });
+  it('fails closed when the exact advance settlement count is unavailable', async () => {
+    patchInvoice({ invoice_kind: 'advance', invoice_type: 'ZAL' });
+    advanceCountOverride = null;
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_3')).rejects.toThrow('Nie można potwierdzić braku faktur rozliczających zaliczkę');
+    expect(mocks.pdf).not.toHaveBeenCalled();
   });
   it('fails closed when the exact related-invoice count is unavailable', async () => {
     relatedCountOverride = null;

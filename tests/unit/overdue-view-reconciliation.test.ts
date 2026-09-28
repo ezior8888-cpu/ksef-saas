@@ -27,8 +27,9 @@ describe('overdue view reconciliation migration', () => {
     expect(guarded).toMatch(/i\.invoice_kind\s*=\s*'regular'\s+AND\s+i\.invoice_type IN \('VAT', 'UPR'\)/);
     expect(guarded).toMatch(/i\.invoice_kind\s*=\s*'advance'\s+AND\s+i\.invoice_type\s*=\s*'ZAL'/);
     expect(guarded).toMatch(/i\.invoice_kind\s*=\s*'final'\s+AND\s+i\.invoice_type\s*=\s*'ROZ'/);
-    const childPredicate = /AND NOT EXISTS \(\s*SELECT 1\s+FROM public\.invoices child\s+WHERE child\.tenant_id\s*=\s*i\.tenant_id\s+AND child\.parent_invoice_id\s*=\s*i\.id\s*\)/.exec(guarded);
+    const childPredicate = /AND NOT EXISTS \(\s*SELECT 1\s+FROM public\.invoices child\s+WHERE child\.tenant_id\s*=\s*i\.tenant_id\s+AND \(child\.parent_invoice_id\s*=\s*i\.id\s+OR i\.id\s*=\s*ANY\(child\.advance_invoice_ids\)\)\s*\)/.exec(guarded);
     expect(childPredicate).not.toBeNull();
+    expect(childPredicate?.[0]).not.toMatch(/child\.(payment_status|ksef_status|invoice_kind|invoice_type)/);
     expect(guarded).toMatch(/i\.gross_total\s*>\s*0[\s\S]*i\.paid_amount\s*<\s*i\.gross_total/);
   });
 });

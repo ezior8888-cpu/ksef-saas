@@ -74,6 +74,12 @@ function db() {
       eq: (key: string, value: unknown) => { q.filters.push([key, value]); filters.push((r) => field(r, key) === value); return builder; },
       is: (key: string, value: unknown) => { q.filters.push([key, value]); filters.push((r) => field(r, key) === value); return builder; },
       in: (key: string, values: unknown[]) => { q.filters.push([key, values]); filters.push((r) => values.includes(field(r, key))); return builder; },
+      contains: (key: string, values: string[]) => {
+        q.filters.push([key, values]);
+        filters.push((r) => Array.isArray(field(r, key)) &&
+          values.every((value) => (field(r, key) as string[]).includes(value)));
+        return builder;
+      },
       gt: (key: string, value: number | string) => {
         q.filters.push([key, value]);
         filters.push((r) => typeof value === 'number'
@@ -151,8 +157,10 @@ function delivery(attachment = false): ReminderDelivery {
     attachment: attachment ? { filename: 'Approved-TEST-1.pdf', contentBase64: pdf.toString('base64') } : null,
     daysOverdue: 22 };
 }
-async function seed(options: { attachment?: boolean; input?: FloApproveInput; authorize?: boolean } = {}) {
+async function seed(options: { attachment?: boolean; input?: FloApproveInput; authorize?: boolean;
+  invoicePatch?: Partial<ReminderInvoiceSource> } = {}) {
   const source = delivery(options.attachment);
+  if (options.invoicePatch) source.sourceFingerprint = reminderInvoiceFingerprint({ ...invoice(), ...options.invoicePatch });
   const proposal: FloProposalRow = { id: PROPOSAL, tenant_id: TENANT, kind: 'payment.chase', topic_key: 'reminder-preview:' + PROPOSAL,
     status: 'executing', priority: 10, title: 'Approved reminder', body: source.text,
     payload: { invoiceId: INVOICE, stage: source.stage, delivery: source, preparedBy: USER }, evidence: [], fingerprint: 'invoice-facts',
@@ -164,7 +172,7 @@ async function seed(options: { attachment?: boolean; input?: FloApproveInput; au
     snapshot: { approvalVersion: 1, proposalVersion: version, operationHash: approvalOperationHash(version, options.input),
       input: options.input ?? null, payload: structuredClone(proposal.payload) } };
   tables.flo_proposals = [{ ...proposal }]; tables.flo_approvals = [{ ...approval }];
-  tables.invoices = [{ ...invoice() }]; tables.payments = []; tables.payment_imports = []; tables.contractors = [];
+  tables.invoices = [{ ...invoice(), ...options.invoicePatch }]; tables.payments = []; tables.payment_imports = []; tables.contractors = [];
   tables.memberships = [{ user_id: USER, organization_id: TENANT, status: 'active' }];
   tables.payment_reminders = [{ id: APPROVAL, tenant_id: TENANT, invoice_id: INVOICE, stage: source.stage, channel: 'email', status: 'pending' }];
   if (options.authorize !== false) await authorizeReminderDispatch({ proposal, userId: USER, approvalId: APPROVAL, snapshot: approval.snapshot, input: options.input });
@@ -248,8 +256,26 @@ describe('delayed reminder dispatch guards', () => {
     expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();
     expect(tables.payment_reminders[0].status).toBe('pending');
   });
+  it('stops an approved ZAL demand after an accepted ROZ links it through advance_invoice_ids', async () => {
+    await seed({ attachment: true, invoicePatch: { invoice_kind: 'advance', invoice_type: 'ZAL' } });
+    tables.invoices.push({ id: OTHER_INVOICE, tenant_id: TENANT, parent_invoice_id: null,
+      advance_invoice_ids: [INVOICE], invoice_kind: 'final', invoice_type: 'ROZ', ksef_status: 'accepted' });
+    await expect(runSendReminder(jobData, context)).rejects.toBeInstanceOf(NonRetriableError);
+    expect(calls.find((q) => q.table === 'invoices' && q.filters.some(([key]) => key === 'advance_invoice_ids')))
+      .toMatchObject({ count: 'exact', head: true,
+        filters: [['tenant_id', TENANT], ['advance_invoice_ids', [INVOICE]]] });
+    expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();
+    expect(tables.payment_reminders[0].status).toBe('pending');
+  });
   it('does not accept an unknown related-invoice count as proof of no corrections', async () => {
     await seed({ attachment: true }); missingCount = (q) => q.table === 'invoices' && q.head === true;
+    const result: unknown = await runSendReminder(jobData, context).catch((error: unknown) => error);
+    expect(result).toBeInstanceOf(Error); expect(result).not.toBeInstanceOf(NonRetriableError);
+    expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();
+  });
+  it('does not send when the exact advance settlement count is unavailable', async () => {
+    await seed({ invoicePatch: { invoice_kind: 'advance', invoice_type: 'ZAL' } });
+    missingCount = (q) => q.table === 'invoices' && q.filters.some(([key]) => key === 'advance_invoice_ids');
     const result: unknown = await runSendReminder(jobData, context).catch((error: unknown) => error);
     expect(result).toBeInstanceOf(Error); expect(result).not.toBeInstanceOf(NonRetriableError);
     expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();

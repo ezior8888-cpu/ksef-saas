@@ -96,10 +96,10 @@ export default async function OverduePage() {
       overdueError = 'Zaległe faktury wymagają uzgodnienia środowiska KSeF';
       break;
     }
-    const eligibleIds = new Set(matching.data
-      .filter((invoice) => invoice.ksef_environment === environment && isReminderInvoiceChaseable(invoice) &&
-        (invoice.currency === null || invoice.currency === 'PLN'))
-      .map((invoice) => invoice.id));
+    const eligibleInvoices = matching.data.filter((invoice) =>
+      invoice.ksef_environment === environment && isReminderInvoiceChaseable(invoice) &&
+      (invoice.currency === null || invoice.currency === 'PLN'));
+    const eligibleIds = new Set(eligibleInvoices.map((invoice) => invoice.id));
     const relatedParents = new Set<string>();
     if (eligibleIds.size > 0) {
       // One bounded complete read per page. A server cap or failed exact count
@@ -119,6 +119,31 @@ export default async function OverduePage() {
         break;
       }
       for (const row of related.data) relatedParents.add(row.parent_invoice_id!);
+
+      // A final invoice settles advances through advance_invoice_ids rather
+      // than parent_invoice_id. Exact HEAD counts cannot be silently truncated.
+      const advances = eligibleInvoices.filter((invoice) =>
+        invoice.invoice_kind === 'advance' && invoice.invoice_type === 'ZAL');
+      try {
+        const settledCounts = await Promise.all(advances.map(async (invoice) => {
+          const result = await supabase.from('invoices')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', tenantId)
+            .contains('advance_invoice_ids', [invoice.id]);
+          return { id: invoice.id, ...result };
+        }));
+        if (settledCounts.some(({ error, count }) => error || count === null ||
+            !Number.isSafeInteger(count) || count < 0)) {
+          overdueError = 'Nie można potwierdzić faktur rozliczających zaliczki';
+          break;
+        }
+        for (const { id, count } of settledCounts) {
+          if (count! > 0) relatedParents.add(id);
+        }
+      } catch {
+        overdueError = 'Nie można potwierdzić faktur rozliczających zaliczki';
+        break;
+      }
     }
     const safeRows = page.data.filter((row) => row.id && eligibleIds.has(row.id) && !relatedParents.has(row.id));
     if (safeRows.some((row) => {
