@@ -132,7 +132,9 @@ export async function assertSubmitReferences(
       if (!advanceData || correctionData || finalData ||
           advanceData.invoiceType !== 'advance' ||
           invoice.internal_number !== advanceData.internalNumber) invalidPayload();
-      if (!advanceData.taxAnnotations ||
+      if (!input.invoice.advanceEnvelope ||
+          !isDeepStrictEqual(plainJson(input.invoice.advanceEnvelope), plainJson(advanceData)) ||
+          !advanceData.taxAnnotations ||
           (advanceData.taxAnnotations.cashMethod !== 1 && advanceData.taxAnnotations.cashMethod !== 2) ||
           (advanceData.taxAnnotations.splitPayment !== 1 && advanceData.taxAnnotations.splitPayment !== 2) ||
           input.invoice.annotations?.cashMethod !== advanceData.taxAnnotations.cashMethod ||

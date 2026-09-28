@@ -166,6 +166,7 @@ function ghostAdvanceInvoice(envelope: AdvanceInvoiceData): Invoice {
     },
     annotations: envelope.taxAnnotations,
     notes: envelope.notes,
+    advanceEnvelope: envelope,
   };
 }
 

@@ -27,6 +27,12 @@ const correction = {
 } as CorrectionInvoiceData;
 const advance = {
   invoiceType: 'advance', internalNumber: 'ZAL/1', seller,
+  issueDate: '2026-09-28', advanceAmount: 123, totalContractAmount: 1000,
+  vatRate: '23', description: 'Zaliczka na usługę',
+  buyer: {
+    type: 'b2b', idType: 'nip', nip: '9876543210', name: 'Fixture buyer',
+    address: { countryCode: 'PL', addressLine1: 'ul. Odbiorcy 2', addressLine2: '00-002 Warszawa' },
+  },
   paymentMethod: 'transfer', paymentDueDate: '2026-09-28', bankAccount: '11111111111111111111111111',
   taxAnnotations: { cashMethod: 2, splitPayment: 2 },
 } as AdvanceInvoiceData;
@@ -78,6 +84,7 @@ function setDocument(internalNumber: string, type: Invoice['type']) {
   eventInvoice = {
     internalNumber, type, seller: sellerParty,
     ...(type === 'ZAL' ? {
+      advanceEnvelope: advance,
       annotations: advance.taxAnnotations,
       payment: {
         method: 'transfer', dueDate: advance.paymentDueDate,
@@ -233,6 +240,52 @@ describe('KSeF submit reference boundary', () => {
         ...input(), correctionData: undefined, advanceData: { ...advance, ...patch },
       })).rejects.toThrow('manual reconciliation');
     }
+  });
+
+  it('rejects a ZAL XML envelope with changed amount, buyer, or other payment description', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    const changed = [
+      { ...advance, advanceAmount: 200 },
+      { ...advance, buyer: { ...advance.buyer, name: 'Inny nabywca' } },
+      { ...advance, paymentMethod: 'other' as const },
+    ];
+    for (const advanceData of changed) {
+      await expect(assertSubmitReferences({
+        ...input(), correctionData: undefined, advanceData,
+      })).rejects.toThrow('manual reconciliation');
+    }
+    reads = [];
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined, advanceData: advance,
+    })).resolves.toBe('advance');
+  });
+
+  it('rejects changing ZAL payment description from other to compensation', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    const otherAdvance: AdvanceInvoiceData = { ...advance, paymentMethod: 'other' };
+    eventInvoice.advanceEnvelope = otherAdvance;
+    eventInvoice.payment.method = 'other';
+    invoice.fa3_data = JSON.parse(JSON.stringify(eventInvoice));
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined,
+      advanceData: { ...otherAdvance, paymentMethod: 'compensation' },
+    })).rejects.toThrow('manual reconciliation');
+    reads = [];
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined, advanceData: otherAdvance,
+    })).resolves.toBe('advance');
+  });
+
+  it('rejects legacy ZAL documents without a frozen XML envelope', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    delete eventInvoice.advanceEnvelope;
+    invoice.fa3_data = JSON.parse(JSON.stringify(eventInvoice));
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined, advanceData: advance,
+    })).rejects.toThrow('manual reconciliation');
   });
 
   it('rejects a stored or tenant seller NIP that differs from the special snapshot', async () => {
