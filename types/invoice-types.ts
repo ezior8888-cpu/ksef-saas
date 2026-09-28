@@ -148,6 +148,8 @@ export interface AdvanceInvoiceData extends InvoiceCommonFields {
   invoiceType: 'advance';
   seller: SellerData;
   buyer: BuyerData;
+  /** Frozen legal FA(3) flags. They must be present even when both are 2. */
+  taxAnnotations: { cashMethod: 1 | 2; splitPayment: 1 | 2 };
 
   // Zaliczka jest na konkretną przyszłą dostawę/usługę
   advanceAmount: number; // kwota zaliczki (brutto)

@@ -161,8 +161,11 @@ function emitVatSummariesFromMap(
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildAdnotacjeStandard(fa: any, lines: InvoiceLineItem[]): void {
+function buildAdnotacjeStandard(
+  fa: XMLBuilder,
+  lines: InvoiceLineItem[],
+  taxAnnotations?: AdvanceInvoiceData['taxAnnotations'],
+): void {
   const adn = fa.ele('Adnotacje');
   const hasOoLine = lines.some((l) => l.vatRate === 'oo');
   const p18 = hasOoLine ? 1 : 2;
@@ -173,15 +176,29 @@ function buildAdnotacjeStandard(fa: any, lines: InvoiceLineItem[]): void {
     );
   }
 
-  adn.ele('P_16').txt('2');
+  adn.ele('P_16').txt(String(taxAnnotations?.cashMethod ?? 2));
   adn.ele('P_17').txt('2');
   adn.ele('P_18').txt(String(p18));
-  adn.ele('P_18A').txt('2');
+  adn.ele('P_18A').txt(String(taxAnnotations?.splitPayment ?? 2));
   const zwolnienie = adn.ele('Zwolnienie');
   zwolnienie.ele('P_19N').txt('1');
   adn.ele('NoweSrodkiTransportu').ele('P_22N').txt('1');
   adn.ele('P_23').txt('2');
   adn.ele('PMarzy').ele('P_PMarzyN').txt('1');
+}
+
+function requireAdvanceTaxAnnotations(data: AdvanceInvoiceData): AdvanceInvoiceData['taxAnnotations'] {
+  const flags = data.taxAnnotations;
+  if (!flags || (flags.cashMethod !== 1 && flags.cashMethod !== 2) ||
+      (flags.splitPayment !== 1 && flags.splitPayment !== 2)) {
+    throw new Error('FA(3) ZAL: brak zweryfikowanych adnotacji P_16/P_18A.');
+  }
+  if (flags.splitPayment === 1 &&
+      (data.paymentMethod !== 'transfer' ||
+        typeof data.bankAccount !== 'string' || !data.bankAccount.trim())) {
+    throw new Error('FA(3) ZAL: MPP wymaga przelewu i numeru rachunku.');
+  }
+  return flags;
 }
 
 function buildHeader(
@@ -360,6 +377,7 @@ export function generateAdvanceInvoiceXml(
   data: AdvanceInvoiceData,
   options: GenerateAdvanceXmlOptions = {},
 ): string {
+  const taxAnnotations = requireAdvanceTaxAnnotations(data);
   const {
     generatedAt = new Date(),
     prettyPrint = true,
@@ -386,7 +404,7 @@ export function generateAdvanceInvoiceXml(
   emitVatSummariesFromMap(fa, summaries, FULL_VAT_RATE_MAP);
   fa.ele('P_15').txt(formatDecimal(advanceLine.grossAmount));
 
-  buildAdnotacjeStandard(fa, [advanceLine]);
+  buildAdnotacjeStandard(fa, [advanceLine], taxAnnotations);
 
   fa.ele('RodzajFaktury').txt('ZAL');
 

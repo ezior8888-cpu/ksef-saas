@@ -28,3 +28,26 @@ export async function readTenantCashMethod(
   }
   return (data as { vat_cash_method?: unknown } | null)?.vat_cash_method === true;
 }
+
+/** Issuing a legal document cannot infer "not cash method" from missing 00094. */
+export async function readTenantCashMethodForIssuance(
+  client: SupabaseClient,
+  tenantId: string,
+): Promise<boolean> {
+  const { data, error } = await client
+    .from('tenants')
+    .select('vat_cash_method')
+    .eq('id', tenantId)
+    .maybeSingle();
+  if (error) {
+    if (error.code === UNDEFINED_COLUMN) {
+      throw new Error('Nie można wystawić zaliczki: brak migracji 00094 metody kasowej VAT.');
+    }
+    throw new Error(`Nie można potwierdzić metody kasowej VAT firmy: ${error.message}`);
+  }
+  const enabled = (data as { vat_cash_method?: unknown } | null)?.vat_cash_method;
+  if (typeof enabled !== 'boolean') {
+    throw new Error('Nie można wystawić zaliczki: nieznana metoda rozliczania VAT firmy.');
+  }
+  return enabled;
+}

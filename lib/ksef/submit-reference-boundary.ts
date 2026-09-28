@@ -31,6 +31,12 @@ function plainJson(value: unknown): unknown {
   }
 }
 
+function frozenBankAccount(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined;
+  if (typeof value !== 'string') invalidPayload();
+  return value.replace(/\s+/g, '') || undefined;
+}
+
 /** A special XML uses its separate envelope, so it must have the frozen seller. */
 async function assertSpecialSeller(
   input: SubmitReferenceInput,
@@ -126,6 +132,21 @@ export async function assertSubmitReferences(
       if (!advanceData || correctionData || finalData ||
           advanceData.invoiceType !== 'advance' ||
           invoice.internal_number !== advanceData.internalNumber) invalidPayload();
+      if (!advanceData.taxAnnotations ||
+          (advanceData.taxAnnotations.cashMethod !== 1 && advanceData.taxAnnotations.cashMethod !== 2) ||
+          (advanceData.taxAnnotations.splitPayment !== 1 && advanceData.taxAnnotations.splitPayment !== 2) ||
+          input.invoice.annotations?.cashMethod !== advanceData.taxAnnotations.cashMethod ||
+          input.invoice.annotations?.splitPayment !== advanceData.taxAnnotations.splitPayment ||
+          (advanceData.taxAnnotations.splitPayment === 1 &&
+            (advanceData.paymentMethod !== 'transfer' ||
+              typeof advanceData.bankAccount !== 'string' || !advanceData.bankAccount.trim())) ||
+          input.invoice.payment?.dueDate !== advanceData.paymentDueDate ||
+          input.invoice.payment?.method !==
+            (advanceData.paymentMethod === 'compensation' ? 'other' : advanceData.paymentMethod) ||
+          frozenBankAccount(input.invoice.payment?.bankAccount) !==
+            frozenBankAccount(advanceData.bankAccount)) {
+        invalidPayload();
+      }
       await assertSpecialSeller(input, invoice, advanceData.seller);
       return 'advance';
     case 'final': {

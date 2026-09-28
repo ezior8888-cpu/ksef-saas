@@ -25,7 +25,11 @@ const correction = {
   parentInvoiceNumber: 'VAT/1', parentInvoiceIssueDate: '2026-09-01',
   parentKsefNumber: 'KSEF-PROD-1', seller: { nip },
 } as CorrectionInvoiceData;
-const advance = { invoiceType: 'advance', internalNumber: 'ZAL/1', seller } as AdvanceInvoiceData;
+const advance = {
+  invoiceType: 'advance', internalNumber: 'ZAL/1', seller,
+  paymentMethod: 'transfer', paymentDueDate: '2026-09-28', bankAccount: '11111111111111111111111111',
+  taxAnnotations: { cashMethod: 2, splitPayment: 2 },
+} as AdvanceInvoiceData;
 const final = { invoiceType: 'final', internalNumber: 'ROZ/1', advanceInvoiceIds: [parentId], seller } as FinalInvoiceData;
 
 type Row = Record<string, unknown>;
@@ -71,7 +75,16 @@ beforeEach(() => {
 });
 
 function setDocument(internalNumber: string, type: Invoice['type']) {
-  eventInvoice = { internalNumber, type, seller: sellerParty } as Invoice;
+  eventInvoice = {
+    internalNumber, type, seller: sellerParty,
+    ...(type === 'ZAL' ? {
+      annotations: advance.taxAnnotations,
+      payment: {
+        method: 'transfer', dueDate: advance.paymentDueDate,
+        bankAccount: advance.bankAccount,
+      },
+    } : {}),
+  } as Invoice;
   invoice.internal_number = internalNumber;
   invoice.invoice_type = type;
   invoice.fa3_data = JSON.parse(JSON.stringify(eventInvoice));
@@ -195,6 +208,32 @@ describe('KSeF submit reference boundary', () => {
       expect(reads).toHaveLength(1);
     },
   );
+
+  it('rejects an old ZAL event without flags and a tampered flag after enqueue', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined,
+      advanceData: { ...advance, taxAnnotations: undefined as unknown as AdvanceInvoiceData['taxAnnotations'] },
+    })).rejects.toThrow('manual reconciliation');
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined,
+      advanceData: { ...advance, taxAnnotations: { cashMethod: 1, splitPayment: 2 } },
+    })).rejects.toThrow('manual reconciliation');
+  });
+
+  it('rejects a ZAL bank account or payment date changed in the queued envelope', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    for (const patch of [
+      { bankAccount: '22222222222222222222222222' },
+      { paymentDueDate: '2026-09-29' },
+    ]) {
+      await expect(assertSubmitReferences({
+        ...input(), correctionData: undefined, advanceData: { ...advance, ...patch },
+      })).rejects.toThrow('manual reconciliation');
+    }
+  });
 
   it('rejects a stored or tenant seller NIP that differs from the special snapshot', async () => {
     invoice.invoice_kind = 'advance';

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice } from '@/types/invoice';
 import type { AdvanceInvoiceData } from '@/types/invoice-types';
+import { sellerPartyFromSellerData } from '@/lib/invoices/map-buyer-party';
 
 type Row = Record<string, unknown>;
 type Query = { table: string; operation: string; filters: Array<[string, unknown]>; patch?: Row };
@@ -571,17 +572,33 @@ describe('service-role job boundaries', () => {
     expect(mocks.health).not.toHaveBeenCalled();
   });
   it('retries an advance on KSeF outage without claiming Offline24 success', async () => {
-    const advanceInvoice = { type: 'ZAL', internalNumber: 'TEST-1' } as Invoice;
+    const seller = {
+      // Clearly fictitious, while satisfying the local checksum-only fixture guard.
+      nip: '0000000000', name: 'Test seller',
+      address: { countryCode: 'PL', addressLine1: 'Testowa 1', addressLine2: '00-000 Test' },
+    };
+    const taxAnnotations = { cashMethod: 2, splitPayment: 2 } as const;
+    const sellerParty = JSON.parse(JSON.stringify(sellerPartyFromSellerData(seller)));
+    const advanceInvoice = {
+      type: 'ZAL', internalNumber: 'TEST-1', seller: sellerParty,
+      payment: { method: 'transfer', dueDate: '2026-09-28', bankAccount: '11111111111111111111111111' },
+      annotations: taxAnnotations,
+    } as Invoice;
+    tables.tenants = [{ id: A, nip: seller.nip, name: seller.name, address_json: seller.address }];
     tables.invoices = [{
       id: ID, tenant_id: A, direction: 'outgoing', ksef_status: 'draft', invoice_kind: 'advance',
       invoice_type: 'ZAL', internal_number: 'TEST-1', advance_invoice_ids: [],
-      fa3_data: advanceInvoice,
+      seller_nip: seller.nip, seller_data: sellerParty, fa3_data: advanceInvoice,
     }];
     mocks.health.mockResolvedValue({ offline: true, reason: 'KSeF down', isMfOutage: true });
     const specialEvent = {
       ...submitEvent,
+      nip: seller.nip,
       invoice: advanceInvoice,
-      advanceData: { invoiceType: 'advance', internalNumber: 'TEST-1' } as AdvanceInvoiceData,
+      advanceData: {
+        invoiceType: 'advance', internalNumber: 'TEST-1', seller, taxAnnotations,
+        paymentMethod: 'transfer', paymentDueDate: '2026-09-28', bankAccount: '11111111111111111111111111',
+      } as AdvanceInvoiceData,
     };
     await expect(runSubmitInvoice(specialEvent, ctx)).rejects.toThrow('automatic Offline24 is paused');
     expect(mocks.offlineAdd).not.toHaveBeenCalled();

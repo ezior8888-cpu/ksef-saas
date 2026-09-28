@@ -32,6 +32,11 @@ import {
   saveFinalAction,
   saveAndSendFinalAction,
 } from '@/components/invoices/final-actions';
+import { generateAdvanceInvoiceXml } from '@/lib/ksef/fa3-advance-generator';
+import { validateInvoiceXml } from '@/lib/xml/validator';
+import { advanceInvoiceSchema } from '@/lib/validators/invoice-validators';
+import type { AdvanceInvoiceData } from '@/types/invoice-types';
+import type { Invoice } from '@/types/invoice';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -74,6 +79,7 @@ const common = {
 const advanceInput = {
   ...common, invoiceType: 'advance' as const, advanceAmount: 123,
   totalContractAmount: 1000, vatRate: '23' as const, description: 'Testowa zaliczka na usługę',
+  splitPayment: false,
 };
 const finalInput = {
   ...common, invoiceType: 'final' as const, advanceInvoiceIds: [advanceId],
@@ -81,15 +87,21 @@ const finalInput = {
   lines: [{ name: 'Testowa usługa', unit: 'szt', quantity: 1, unitPriceNet: 1000, vatRate: '23' as const }],
 };
 
-type Query = { table: string; operation: 'select' | 'insert' | 'delete'; payload?: unknown };
+type Query = { table: string; operation: 'select' | 'insert' | 'delete'; columns?: string; payload?: unknown };
 let tenantRow: Record<string, unknown>;
 let queries: Query[];
+let cashMethodError: { code: string; message: string } | null;
 
 function from(table: string) {
   const query: Query = { table, operation: 'select' };
   queries.push(query);
   const result = () => {
-    if (table === 'tenants') return { data: tenantRow, error: null };
+    if (table === 'tenants') {
+      if (query.columns === 'vat_cash_method' && cashMethodError) {
+        return { data: null, error: cashMethodError };
+      }
+      return { data: tenantRow, error: null };
+    }
     if (table === 'invoices' && query.operation === 'insert') {
       return { data: { id: invoiceId }, error: null };
     }
@@ -101,7 +113,7 @@ function from(table: string) {
     return { data: null, error: null };
   };
   const chain = {
-    select: () => chain,
+    select: (columns?: string) => { query.columns = columns; return chain; },
     eq: () => chain,
     in: () => chain,
     insert: (payload: unknown) => { query.operation = 'insert'; query.payload = payload; return chain; },
@@ -115,8 +127,10 @@ function from(table: string) {
 
 describe('ZAL/ROZ seller authority', () => {
   beforeEach(() => {
-    tenantRow = { id: tenantId, nip: seller.nip, name: seller.name, address_json: address };
+    tenantRow = { id: tenantId, nip: seller.nip, name: seller.name,
+      address_json: address, vat_cash_method: false };
     queries = [];
+    cashMethodError = null;
     mocks.requireAuth.mockResolvedValue({
       supabase: { from }, user: { id: 'fixture-user' }, tenantId, role: 'member',
     });
@@ -174,5 +188,59 @@ describe('ZAL/ROZ seller authority', () => {
       expect(queries.some((q) => q.table === 'invoices')).toBe(false);
       expect(mocks.enqueue).not.toHaveBeenCalled();
     }
+  });
+
+  it.each([
+    ['cash method and MPP', true, true, '<P_16>1</P_16>', '<P_18A>1</P_18A>'],
+    ['ordinary VAT and no MPP', false, false, '<P_16>2</P_16>', '<P_18A>2</P_18A>'],
+  ])('freezes %s in draft/event and valid FA(3) XML', async (_label, cash, mpp, p16, p18a) => {
+    tenantRow.vat_cash_method = cash;
+    const result = await saveAndSendAdvanceAction({ ...advanceInput, splitPayment: mpp });
+    expect(result).toMatchObject({ success: true, invoiceId });
+    const event = mocks.enqueue.mock.calls[0]?.[0] as
+      | { invoice: Invoice; advanceData: AdvanceInvoiceData }
+      | undefined;
+    expect(event).toBeDefined();
+    expect(event?.invoice.annotations).toEqual({ cashMethod: cash ? 1 : 2, splitPayment: mpp ? 1 : 2 });
+    expect(event?.advanceData.taxAnnotations).toEqual(event?.invoice.annotations);
+    const inserted = queries.find((q) => q.table === 'invoices' && q.operation === 'insert');
+    expect(inserted?.payload).toMatchObject({
+      fa3_data: { annotations: event?.invoice.annotations },
+    });
+    const xml = generateAdvanceInvoiceXml(event!.advanceData);
+    expect(xml).toContain(p16);
+    expect(xml).toContain(p18a);
+    const validation = await validateInvoiceXml(xml);
+    expect(validation.valid).toBe(true);
+    expect(validation.errors).toEqual([]);
+    expect(() => generateAdvanceInvoiceXml({
+      ...event!.advanceData,
+      taxAnnotations: undefined as unknown as AdvanceInvoiceData['taxAnnotations'],
+    })).toThrow('P_16/P_18A');
+  });
+
+  it('requires an explicit MPP answer and a bank transfer when MPP applies', async () => {
+    const noAnswer: Partial<typeof advanceInput> = { ...advanceInput };
+    delete noAnswer.splitPayment;
+    expect(advanceInvoiceSchema.safeParse(noAnswer).success).toBe(false);
+    expect(await saveAndSendAdvanceAction(noAnswer)).toMatchObject({ success: false });
+    expect(await saveAndSendAdvanceAction({ ...advanceInput, splitPayment: true, bankAccount: '' }))
+      .toMatchObject({ success: false });
+    expect(await saveAndSendAdvanceAction({ ...advanceInput, splitPayment: true, paymentMethod: 'cash' }))
+      .toMatchObject({ success: false });
+    expect(queries.some((q) => q.table === 'invoices')).toBe(false);
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing 00094 or an unreadable cash-method value before INSERT/queue', async () => {
+    cashMethodError = { code: '42703', message: 'missing vat_cash_method' };
+    expect(await saveAndSendAdvanceAction(advanceInput)).toMatchObject({
+      success: false, error: expect.stringContaining('00094'),
+    });
+    cashMethodError = null;
+    tenantRow.vat_cash_method = null;
+    expect(await saveAndSendAdvanceAction(advanceInput)).toMatchObject({ success: false });
+    expect(queries.some((q) => q.table === 'invoices')).toBe(false);
+    expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 });
