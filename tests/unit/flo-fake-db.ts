@@ -140,6 +140,11 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
       },
       in: (col: string, values: readonly unknown[]) =>
         makeQuery(rows, [...filters, (r) => values.includes(r[col])], mode, patch, options),
+      contains: (col: string, values: readonly unknown[]) =>
+        makeQuery(rows, [...filters, (r) => {
+          const actual = columnValue(r, col);
+          return Array.isArray(actual) && values.every((value) => actual.includes(value));
+        }], mode, patch, options),
       is: (col: string, value: unknown) =>
         makeQuery(rows, [...filters, (r) => (r[col] ?? null) === value], mode, patch, options),
       lt: (col: string, value: string | number) =>

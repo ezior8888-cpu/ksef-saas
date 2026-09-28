@@ -9,6 +9,7 @@ import { FloWelcome } from '@/components/dashboard/flo-welcome';
 import DashboardVerificationBanner from '@/app/(dashboard)/_components/dashboard-verification-banner';
 import { MonthlyFiguresCard } from '@/components/dashboard/monthly-figures-card';
 import { getMonthlyFigures } from '@/lib/dashboard/monthly-figures';
+import { CorrectionReconciliationError } from '@/lib/ksef/accounting-provenance';
 import { FLO_FIXTURES, FLO_SCHEDULED_FIXTURES } from '@/lib/flo/fixtures';
 import { isLocalDevEnv } from '@/lib/security/environment';
 import { getPageContext } from '@/lib/supabase/page-context';
@@ -47,7 +48,10 @@ export default async function DashboardHomePage() {
   // Liczby miesiąca są niezależne od agenta — pobierane równolegle, żeby
   // wolniejsza strona nie czekała na drugą.
   const [figures, agent] = await Promise.all([
-    getMonthlyFigures(supabase, tenantId),
+    getMonthlyFigures(supabase, tenantId).catch((error: unknown) => {
+      if (!(error instanceof CorrectionReconciliationError)) throw error;
+      return null;
+    }),
     loadAgent(),
   ]);
 
@@ -56,7 +60,14 @@ export default async function DashboardHomePage() {
       <Suspense fallback={null}>
         <DashboardVerificationBanner variant="rail" />
       </Suspense>
-      <MonthlyFiguresCard figures={figures} />
+      {figures ? <MonthlyFiguresCard figures={figures} /> : (
+        <section role="alert" className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] p-4">
+          <h2 className="font-semibold">Kwoty wymagają uzgodnienia</h2>
+          <p className="mt-2 text-sm text-[var(--ff-text-muted)]">
+            W tym okresie są korekty faktur. Liczby miesiąca są wstrzymane do uzgodnienia ich kwot.
+          </p>
+        </section>
+      )}
     </>
   );
 
@@ -68,8 +79,7 @@ export default async function DashboardHomePage() {
           className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-[22px] py-5"
         >
           <p className="text-[13px] text-[var(--ff-text-muted)]">
-            Nie mogę teraz sięgnąć po Twoje sprawy. Liczby miesiąca obok są
-            aktualne — spróbuj odświeżyć za chwilę.
+            Nie mogę teraz sięgnąć po Twoje sprawy. Spróbuj odświeżyć za chwilę.
           </p>
         </section>
         {szyna}
