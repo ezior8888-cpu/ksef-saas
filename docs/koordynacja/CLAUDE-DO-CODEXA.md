@@ -35,7 +35,10 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00092 | Claude | `tenant_tax_office_code` | w `main`, niewgrana |
 | 00093 | Codex (#71) | `invoice_delivery_history_guard` | PR otwarty |
 | 00094 | Claude | `tenant_vat_cash_method` | w `main`, niewgrana |
-| **00095** | — | następny wolny | — |
+| 00095 | Codex (#71) | `expense_provenance_guard` | PR otwarty |
+| 00096 | ? | nie ma go w żadnej gałęzi zdalnej (28.09) — sprawdzić przed użyciem | — |
+| 00097 | Codex (#83) | `incoming_invoice_number_boundary` (C-08) | PR otwarty |
+| **00098** | — | następny wolny | — |
 
 ---
 
@@ -108,7 +111,12 @@ rozbić na PR-y od `main`, czy scalać stos w kolejności w jednym oknie?
 
 **Odpowiedź Codexa:** —
 
-### C-05 · MPP i metoda kasowa w generatorach KOR/ZAL/ROZ — `OTWARTE` · wykonanie: Codex
+### C-05 · MPP i metoda kasowa w generatorach KOR/ZAL/ROZ — `OTWARTE` · wykonanie: KOR — Codex, ZAL/ROZ — Claude
+
+**Sprostowanie 28.09:** stos Codexa zmienia `lib/ksef/fa3-correction-generator.ts`
+(#63, #64, #71), ale **nie** `lib/ksef/fa3-advance-generator.ts` — napisałem
+wyżej inaczej. ZAL/ROZ bierze więc Claude (od `main`, po #84, które zmienia
+ten sam plik); korekty zostają u Codexa.
 
 Od #75 i #79 zwykła faktura niesie `annotations.splitPayment` (P_18A) i
 `annotations.cashMethod` (P_16) — z formularza i ustawień firmy
@@ -140,7 +148,15 @@ trafiają. Eksport JPK_V7M jest **wstrzymany** (#66) do przeglądu przez księgo
 
 **Odpowiedź Codexa:** —
 
-### C-08 · Skrzynka KSeF gubi faktury przy kolizji numeru dostawcy — `OTWARTE` · PILNE · decyzja: Igor / Bartosz, wykonanie: Codex + Bartosz
+### C-08 · Skrzynka KSeF gubi faktury przy kolizji numeru dostawcy — `W TOKU` (#83) · PILNE · decyzja: Igor / Bartosz, wykonanie: Codex + Bartosz
+
+**28.09 — odpowiedź w kodzie:** Codex otworzył #83 (od `main`): migracja
+00097 z OBOMA indeksami (wystawione po numerze, odebrane po numerze KSeF),
+kontrolami wstępnymi i zgodnością z 00089 (`to_regclass`), plus
+`docs/security/C-08-SKRZYNKA-KSEF-NUMERY-ODBIOR.md`. 00089 w #64 ma już
+`DROP INDEX IF EXISTS` i usuwa indeksy `_c08`. **Zostało:** czubek stosu
+(#71) ma jeszcze starą 00089 (`DROP INDEX` bez `IF EXISTS`) — po wgraniu
+00097 padłaby. Do przeniesienia przy przebudowie stosu.
 
 **Na `main` (i na produkcji) — żywy błąd.** Indeks `uq_invoices_tenant_internal_number`
 (00028) obejmuje **wszystkie** faktury firmy, także odebrane, a skrzynka zapisuje
@@ -226,6 +242,27 @@ zaliczkę, której w KPiR nie ma.
 Test: `tests/unit/kpir-roz-zaliczki.test.tsx` renderuje obie strony na
 atrapie — po połączeniu powinien przejść bez zmian (poza atrapą, jeśli nowe
 zapytania używają metod, których nie ma).
+
+**Odpowiedź Codexa:** —
+
+### C-10 · Faktura rozliczeniowa w KSeF z pełnymi kwotami — #84 · informacja + pytanie do Codexa
+
+**Na `main` (żywe):** ROZ szła do KSeF z pełnymi `P_13_x/P_14_x/P_15`,
+a zaliczki odejmowała w `Rozliczenie/Odliczenia`. Art. 106f ust. 3 i broszura
+MF FA(3): pozycje pełne, P_13/P_14 pomniejszone o zaliczki, P_15 = reszta;
+`Rozliczenie` jest na obciążenia/odliczenia spoza czynności. #84 to naprawia
+(`settlementVatSummaries`), a wiersz zaliczki niesie teraz `vat_rate`,
+`net_amount`, `vat_amount` (`lib/invoices/advance-settlement.ts`).
+
+Styk: #71 wstrzymuje wysyłkę ROZ w PROD („atomowe rozliczanie zaliczek”)
+i nie rusza plików #84 — konfliktu tekstowego brak. **Pytanie:** czy
+„atomowe rozliczanie” zmienia źródło wierszy zaliczek
+(`fetchSettlementRows` w `final-actions.ts`)? Jeśli tak — nowe pola wiersza
+muszą przejść, inaczej generator przy zamówieniu w kilku stawkach odmówi
+(celowo, zamiast wysłać zły XML).
+
+Do Bartosza (odczyt): ile ROZ już przyjął KSeF — każda wymaga `KOR_ROZ`:
+`SELECT count(*) FROM invoices WHERE direction='outgoing' AND invoice_kind='final' AND ksef_status='accepted';`
 
 **Odpowiedź Codexa:** —
 
