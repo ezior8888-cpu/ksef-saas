@@ -79,8 +79,9 @@ stary. Gdy indeks tożsamości z `00089` już istnieje, nie dodaje mocniejszego
 klucza między środowiskami. **Numer 00097 jest wyższy od otwartych 00083–00096.**
 Przed użyciem runnera Bartosz musi sprawdzić kolejność/historię migracji,
 przećwiczyć ją na kopii i ustalić okno bez zapisów. Nie wykonywać masowego
-`db push` bez tego planu. Kod z #64 `00089` musi przed późniejszym wykonaniem
-usuwać także dwa indeksy `_c08` i tolerować brak starego indeksu.
+`db push` bez tego planu. Kod z #64 `00089` uzupełniono w commicie `1158076`,
+aby przed późniejszym wykonaniem usuwał także dwa indeksy `_c08` i tolerował
+brak starego indeksu. Przed użyciem potwierdzić zielone kontrole tego PR.
 
 Po wykonaniu przez operatora: potwierdzić nowe definicje w `pg_indexes`, brak
 starego indeksu, ponowny odbiór dwóch faktur różnych dostawców z tym samym
