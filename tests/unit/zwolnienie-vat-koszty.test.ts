@@ -46,6 +46,7 @@ vi.mock('@/lib/storage/expenses', () => ({
 vi.mock('@/lib/push/sender', () => ({ sendPushToUser: vi.fn() }));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: vi.fn() }));
 vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({ requireTenantMember: vi.fn(async () => undefined) }));
+vi.mock('@/lib/ksef/claim-environment', () => ({ requireConfiguredKsefEnvironment: () => 'test' }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
@@ -91,6 +92,7 @@ vi.mock('@/lib/supabase/admin', () => ({
           return { data: insertRow ? { id: 'exp-1' } : null, error: null };
         },
         maybeSingle: async () => {
+          if (table === 'invoices') return { data: { id: INVOICE }, error: null };
           if (table === 'tenants') return { data: { vat_exemption_basis: db.basis }, error: null };
           if (table === 'memberships') return { data: { user_id: USER }, error: null };
           return { data: null, error: null };
@@ -123,7 +125,7 @@ beforeEach(() => {
 });
 
 describe.each([
-  ['skrzynka KSeF', () => runAutoCategorizeInbox({ invoiceId: INVOICE, tenantId: TENANT }, ctx)],
+  ['skrzynka KSeF', () => runAutoCategorizeInbox({ invoiceId: INVOICE, tenantId: TENANT, environment: 'test' }, ctx)],
   ['zdjęcie (OCR)', () => runProcessOcr({ ocrJobId: OCR_JOB, tenantId: TENANT }, ctx)],
 ])('koszt ze ścieżki: %s', (_opis, run) => {
   it('firma zwolniona z VAT: VAT do odliczenia 0', async () => {
