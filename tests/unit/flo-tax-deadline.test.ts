@@ -70,7 +70,7 @@ function jpkPurchase(): ExportExpense {
 
 function jpkData(overrides: Partial<JpkV7mInputData> = {}): JpkV7mInputData {
   return {
-    issuer: { nip: '1234567890', name: 'Test' },
+    issuer: { nip: '1234567890', name: 'Test', taxOfficeCode: '1433', email: 'test@example.test' },
     periodStart: '2026-08-01',
     periodEnd: '2026-08-31',
     issuedInvoices: [jpkInvoice()],
@@ -127,17 +127,20 @@ describe('kwota pochodzi z generatora JPK, nie z osobnego wzoru', () => {
     const result = summarizeJpkV7m(data);
     const xml = generateJpkV7m(data);
 
-    expect(xml).toContain(`<P_38>${result.vatDue.toFixed(2)}</P_38>`);
-    expect(xml).toContain(`<P_48>${result.vatDeductible.toFixed(2)}</P_48>`);
-    expect(xml).toContain(`<P_44>${result.purchaseNet.toFixed(2)}</P_44>`);
-    expect(xml).toContain(`<P_51>${result.balance.toFixed(2)}</P_51>`);
+    // JPK_V7M(3): deklaracja w pełnych złotych, zakupy w P_42 (P_44 to korekty).
+    expect(xml).toContain(`<P_38>${result.vatDue}</P_38>`);
+    expect(xml).toContain(`<P_48>${result.vatDeductible}</P_48>`);
+    expect(xml).toContain(`<P_42>${result.purchaseNet}</P_42>`);
+    expect(xml).toContain(`<P_51>${result.balance}</P_51>`);
   });
 
   it('nadwyżka idzie do P_53, nie do P_51', () => {
     const data = jpkData({ issuedInvoices: [] });
 
     expect(summarizeJpkV7m(data).balance).toBe(-230);
-    expect(generateJpkV7m(data)).toContain('<P_53>230.00</P_53>');
+    const xml = generateJpkV7m(data);
+    expect(xml).toContain('<P_51>0</P_51>');
+    expect(xml).toContain('<P_53>230</P_53>');
   });
 });
 
