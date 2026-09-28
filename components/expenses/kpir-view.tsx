@@ -9,13 +9,25 @@ import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
 import { formatPlMoney } from '@/lib/format/pl';
 import { kpirCostAmount, nonDeductedVat } from '@/lib/categorization/kpir-cost';
+import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
 
 export type KpirExpenseRow = Database['public']['Tables']['expenses']['Row'];
 
 export type KpirInvoiceRow = Pick<
   Database['public']['Tables']['invoices']['Row'],
-  'id' | 'internal_number' | 'issue_date' | 'gross_total' | 'net_total' | 'buyer_data'
->;
+  'id' | 'internal_number' | 'issue_date' | 'gross_total' | 'net_total' | 'buyer_data' | 'invoice_kind'
+> & {
+  /** ROZ: suma netto zaliczek, które KPiR już liczy (`fetchSettledAdvancesNet`). */
+  settled_advances_net?: number | null;
+};
+
+function revenueOf(inv: KpirInvoiceRow): number {
+  return kpirRevenueNet({
+    kind: inv.invoice_kind,
+    net: inv.net_total,
+    settledAdvancesNet: inv.settled_advances_net,
+  });
+}
 
 const MONTHS = [
   'Styczeń',
@@ -75,7 +87,7 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
   };
 
   const sums = {
-    col_7: invoices.reduce((s, i) => s + Number(i.net_total ?? 0), 0),
+    col_7: invoices.reduce((s, i) => s + revenueOf(i), 0),
     col_8: 0,
     col_10: expenses
       .filter((e) => e.kpir_column === 'col_10')
@@ -245,10 +257,16 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
                       {buyerName(inv.buyer_data)}
                     </td>
                     <td className="px-6 py-3.5 text-right font-semibold tabular-nums text-[var(--ff-on-surface)] sm:px-8">
-                      {formatPlMoney(Number(inv.net_total ?? 0))}{' '}
+                      {formatPlMoney(revenueOf(inv))}{' '}
                       <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
                         PLN
                       </span>
+                      {inv.invoice_kind === 'final' ? (
+                        <p className="text-[11px] font-normal text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+                          zamówienie {formatPlMoney(Number(inv.net_total ?? 0))}, minus zaliczki{' '}
+                          {formatPlMoney(Number(inv.settled_advances_net ?? 0))}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-6 py-3.5 sm:px-8">
                       <Link

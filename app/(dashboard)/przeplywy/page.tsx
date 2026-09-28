@@ -2,6 +2,7 @@ import { MonthlyFiguresCard } from '@/components/dashboard/monthly-figures-card'
 import { SalesChartCard } from '@/components/dashboard/sales-chart-card';
 import { VatSummaryCard } from '@/components/dashboard/vat-summary-card';
 import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
+import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import {
   formatPlMoney,
   getMonthlyFigures,
@@ -33,12 +34,21 @@ export default async function PrzeplywyPage() {
 
   const { data: invoices } = await supabase
     .from('invoices')
-    .select('issue_date, net_total, gross_total')
+    .select('id, issue_date, net_total, gross_total, invoice_kind, advance_invoice_ids')
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
     .gte('issue_date', sixMonthsAgo)
     .order('issue_date', { ascending: true });
+
+  // Przychód jak w KPiR: ROZ bez zaliczek, które już są w przychodzie
+  // (`kpirRevenueNet`). Błąd odczytu leci do `error.tsx` — zerowa suma
+  // zaliczek zawyżyłaby dochód i szacowany podatek.
+  const settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices ?? []);
+  const invoiceRows = (invoices ?? []).map((inv) => ({
+    ...inv,
+    settled_advances_net: settled.get(inv.id) ?? null,
+  }));
 
   const { data: expenses } = await supabase
     .from('expenses')
@@ -70,7 +80,7 @@ export default async function PrzeplywyPage() {
       </div>
 
       <CashFlowDashboard
-        invoices={invoices ?? []}
+        invoices={invoiceRows}
         expenses={expenses ?? []}
         pendingReviewCount={pendingReviewCount ?? 0}
       />

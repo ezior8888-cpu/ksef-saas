@@ -8,11 +8,15 @@ import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
 import { formatPlMoney } from '@/lib/format/pl';
 import { kpirCostAmount } from '@/lib/categorization/kpir-cost';
+import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
 
 export type CashFlowInvoiceRow = Pick<
   Database['public']['Tables']['invoices']['Row'],
-  'issue_date' | 'net_total' | 'gross_total'
->;
+  'issue_date' | 'net_total' | 'gross_total' | 'invoice_kind'
+> & {
+  /** ROZ: suma netto zaliczek, które już są w przychodzie (`fetchSettledAdvancesNet`). */
+  settled_advances_net?: number | null;
+};
 
 export type CashFlowExpenseRow = Pick<
   Database['public']['Tables']['expenses']['Row'],
@@ -61,7 +65,14 @@ export function CashFlowDashboard({
         const monthInvoices = invoices.filter((i) => i.issue_date.startsWith(m.key));
         const monthExpenses = expenses.filter((e) => e.issue_date.startsWith(m.key));
         const revenue = monthInvoices.reduce(
-          (s, i) => s + Number(i.net_total ?? 0),
+          // Jak w KPiR: ROZ wnosi tylko resztę ponad policzone już zaliczki.
+          (s, i) =>
+            s +
+            kpirRevenueNet({
+              kind: i.invoice_kind,
+              net: i.net_total,
+              settledAdvancesNet: i.settled_advances_net,
+            }),
           0,
         );
         const expense = monthExpenses.reduce(

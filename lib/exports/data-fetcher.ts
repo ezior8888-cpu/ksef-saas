@@ -1,6 +1,7 @@
 // lib/exports/data-fetcher.ts
 // Pobieranie danych z DB do eksportów (uniform interface)
 
+import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database, Json } from '@/types/database';
 
@@ -105,13 +106,21 @@ export async function fetchInvoicesForExport(
 
   // Mapowanie rows → JpkInvoice też idzie równolegle dla obu kierunków
   // (każde robi swoje SELECT-y na liniach + parentach).
-  const [issuedInvoices, receivedInvoices, expenses] = await Promise.all([
+  const [issuedInvoices, receivedInvoices, expenses, settledAdvances] = await Promise.all([
     mapRowsToJpkInvoices(supabase, issuedRows, params.tenantId),
     mapRowsToJpkInvoices(supabase, receivedRows, params.tenantId),
     needReceived
       ? fetchExpensesForExport(supabase, params)
       : Promise.resolve<ExportExpense[]>([]),
+    fetchSettledAdvancesNet(supabase, params.tenantId, issuedRows),
   ]);
+
+  // ROZ niesie pełną wartość zamówienia; KPiR odejmuje zaliczki, które już
+  // policzył. `mapRowsToJpkInvoices` zachowuje kolejność wierszy.
+  issuedRows.forEach((row, i) => {
+    const settled = settledAdvances.get(row.id);
+    if (settled !== undefined) issuedInvoices[i].settledAdvancesNet = settled;
+  });
 
   return { issuer, issuedInvoices, receivedInvoices, expenses };
 }
