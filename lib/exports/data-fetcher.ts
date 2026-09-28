@@ -42,6 +42,8 @@ export interface ExportExpense {
   /** col_10 | col_11 | col_12 | col_13 | col_15 (B+R w aplikacji) | … */
   kpirColumn: string | null;
   categoryLabel: string | null;
+  /** Numer KSeF faktury, z której powstał koszt (skrzynka) — JPK_V7M(3) NrKSeF. */
+  ksefNumber?: string | null;
 }
 
 export interface FetchedInvoiceData {
@@ -126,12 +128,14 @@ async function fetchExpensesForExport(
   params: FetchInvoicesParams,
 ): Promise<ExportExpense[]> {
   const out: ExportExpense[] = [];
+  /** id kosztu → id faktury ze skrzynki KSeF (`expenses.ksef_invoice_id`). */
+  const linked = new Map<string, string>();
   for (let from = 0; ; from += EXPENSE_PAGE) {
     const { data, error } = await supabase
       .from('expenses')
       .select(
         'id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, ' +
-          'net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label',
+          'net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label, ksef_invoice_id',
       )
       .eq('tenant_id', params.tenantId)
       .eq('is_deductible', true)
@@ -159,10 +163,45 @@ async function fetchExpensesForExport(
         kpirColumn: typeof row.kpir_column === 'string' ? row.kpir_column : null,
         categoryLabel: typeof row.category_label === 'string' ? row.category_label : null,
       });
+      if (typeof row.ksef_invoice_id === 'string') linked.set(String(row.id), row.ksef_invoice_id);
     }
     if (page.length < EXPENSE_PAGE) break;
   }
+  await attachKsefNumbers(supabase, params.tenantId, out, linked);
   return out;
+}
+
+const KSEF_LOOKUP_CHUNK = 200;
+
+/**
+ * Numer KSeF faktury, z której powstał koszt (skrzynka) — JPK_V7M(3) wymaga
+ * go w wierszu zakupu (NrKSeF), inaczej BFK. Osobne zapytanie zamiast
+ * osadzenia: między `expenses` a `invoices` jest więcej niż jeden klucz obcy.
+ */
+export async function attachKsefNumbers(
+  supabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  expenses: ExportExpense[],
+  linked: ReadonlyMap<string, string>,
+): Promise<void> {
+  const invoiceIds = [...new Set(linked.values())];
+  const numbers = new Map<string, string>();
+  for (let i = 0; i < invoiceIds.length; i += KSEF_LOOKUP_CHUNK) {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('id, ksef_number')
+      .eq('tenant_id', tenantId)
+      .in('id', invoiceIds.slice(i, i + KSEF_LOOKUP_CHUNK));
+    // Błąd to nie „brak numeru” — inaczej plik po cichu dostałby BFK.
+    if (error) throw new Error(`invoices (numery KSeF kosztów): ${error.message}`);
+    for (const row of (data ?? []) as Array<{ id: string; ksef_number: string | null }>) {
+      if (row.ksef_number?.trim()) numbers.set(row.id, row.ksef_number.trim());
+    }
+  }
+  for (const expense of expenses) {
+    const invoiceId = linked.get(expense.id);
+    expense.ksefNumber = invoiceId ? (numbers.get(invoiceId) ?? null) : null;
+  }
 }
 
 async function fetchInvoiceRows(
