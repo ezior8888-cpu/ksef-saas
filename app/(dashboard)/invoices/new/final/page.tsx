@@ -1,12 +1,11 @@
-import { redirect } from 'next/navigation';
-
 import { FinalInvoiceForm } from '@/components/invoices/final-form';
+import { SellerProfileBlock } from '@/components/invoices/seller-profile-block';
 import { createClient } from '@/lib/supabase/server';
 import { loadTenantSellerForForms } from '@/lib/invoices/load-tenant-seller';
 
 export default async function NewFinalInvoicePage() {
   const seller = await loadTenantSellerForForms();
-  if (!seller) redirect('/onboarding');
+  if (!seller) return <SellerProfileBlock />;
 
   const supabase = await createClient();
   const { data: advances } = await supabase
