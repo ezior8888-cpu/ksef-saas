@@ -260,6 +260,45 @@ describe('service-role job boundaries', () => {
     await expect(runSubmitInvoice(submitEvent, ctx)).resolves.toEqual({ alreadyAccepted: true, ksefNumber: 'TEST' });
     expect(writes()).toEqual([]); expect(mocks.submit).not.toHaveBeenCalled();
   });
+  it('stops a queued ROZ from an older event even when the event calls it VAT', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'queued', ksef_number: null,
+      invoice_kind: 'final', invoice_type: 'ROZ',
+    }];
+    await expect(runSubmitInvoice({
+      ...submitEvent,
+      invoice: { ...submitEvent.invoice, type: 'VAT' },
+    }, ctx)).rejects.toThrow(/Wysyłka faktur rozliczających jest tymczasowo wstrzymana/);
+    expect(writes()).toEqual([]);
+    expect(mocks.health).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+  it('never parks a queued ROZ in Offline24 after a transient submit failure', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'queued', ksef_number: null,
+      invoice_kind: 'final', invoice_type: 'ROZ',
+    }];
+    const result = await onSubmitInvoiceExhausted(new Error('ECONNRESET'), {
+      ...submitEvent,
+      invoice: { ...submitEvent.invoice, type: 'VAT' },
+    }, ctx);
+    expect(result).toMatchObject({ handled: true, finalStatus: 'rejected' });
+    expect(tables.invoices[0].ksef_status).toBe('rejected');
+    expect(tables.ksef_offline_queue).toBeUndefined();
+  });
+  it('does not downgrade an already accepted ROZ when its event is replayed', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'accepted', ksef_number: 'TEST',
+      invoice_kind: 'final', invoice_type: 'ROZ',
+    }];
+    await expect(runSubmitInvoice({
+      ...submitEvent,
+      invoice: { ...submitEvent.invoice, type: 'ROZ' },
+    }, ctx)).resolves.toEqual({ alreadyAccepted: true, ksefNumber: 'TEST' });
+    expect(writes()).toEqual([]);
+    expect(mocks.submit).not.toHaveBeenCalled();
+  });
   it('invoice read/write helpers require tenant and never affect a foreign row', async () => {
     tables.invoices = [{ id: ID, tenant_id: B, fa3_data: { internalNumber: 'PRIVATE' }, ksef_status: 'accepted' }];
     await expect(getInvoiceForSubmit(ID, A)).rejects.toThrow('no fa3_data');

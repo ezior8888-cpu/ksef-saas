@@ -20,6 +20,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { KsefApiError } from '@/lib/ksef/client';
 import { KsefInvoiceRejectedError } from '@/lib/ksef/submit';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
+import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
 import {
@@ -53,6 +54,28 @@ import {
  *   bulk import, nawet jeśli concurrency 100 da chwilowy spike.
  */
 
+/** Fresh DB read outside Inngest steps, so a cached step cannot bypass the hold. */
+async function isHeldRozSubmission(
+  data: Parameters<typeof invoiceSubmitRequested.create>[0],
+): Promise<boolean> {
+  const { data: stored, error } = await (await createAdminClient())
+    .from('invoices')
+    .select('invoice_type, invoice_kind')
+    .eq('id', data.invoiceId)
+    .eq('tenant_id', data.tenantId)
+    .maybeSingle();
+
+  if (error || !stored) throw new Error('Nie można sprawdzić rodzaju faktury');
+
+  return isRozSubmission({
+    invoiceType: data.invoice.type,
+    storedInvoiceType: stored.invoice_type,
+    invoiceKind: stored.invoice_kind,
+    finalData: data.finalData,
+    finalAdvanceSettlementRows: data.finalAdvanceSettlementRows,
+  });
+}
+
 /**
  * Obsługa po wyczerpaniu prób (Etap 7) — wspólna dla Inngest `onFailure`
  * i pg-boss `onExhausted`. Klasyfikuje porażkę na trzy ścieżki:
@@ -78,7 +101,8 @@ export async function onSubmitInvoiceExhausted(
       //     transient outage → Offline24 fallback.
       //   - Z Offline24 (`fromOfflineQueue=true`) — już parkowane, nie
       //     duplikujemy. Mark 'failed' i emit event.
-      const isBusinessRejection = error.name === 'NonRetriableError';
+      const isBusinessRejection = error.name === 'NonRetriableError'
+        || await isHeldRozSubmission(parsed.data);
       const isTransientFailure = !isBusinessRejection;
 
       logger.error('Job wysyłki padł — klasyfikacja błędu', {
@@ -246,12 +270,13 @@ export async function runSubmitInvoice(
     // stronie MF. Trzy niezależne warstwy ochrony przed duplikatem w KSeF.
     const alreadyDone = await step.run('idempotency-guard', async () => {
       const supabase = await createAdminClient();
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('invoices')
         .select('ksef_status, ksef_number')
         .eq('id', invoiceId)
         .eq('tenant_id', tenantId)
         .maybeSingle();
+      if (error || !data) throw new Error('Nie można sprawdzić statusu faktury');
       return data;
     });
     if (alreadyDone?.ksef_status === 'accepted' && alreadyDone.ksef_number) {
@@ -263,6 +288,12 @@ export async function runSubmitInvoice(
         alreadyAccepted: true as const,
         ksefNumber: alreadyDone.ksef_number,
       };
+    }
+
+    // Fresh, non-memoized read: an older Inngest idempotency step can be
+    // restored after deployment. Check the stored kind as well as the event.
+    if (await isHeldRozSubmission(parsed.data)) {
+      throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
     }
 
     logger.info('Rozpoczynam wysyłkę faktury', {
@@ -307,6 +338,9 @@ export async function runSubmitInvoice(
               return false;
             }
 
+            if (await isHeldRozSubmission(parsed.data)) {
+              throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
+            }
             await addToOfflineQueue({
               tenantId,
               invoiceId,
@@ -441,6 +475,9 @@ export async function runSubmitInvoice(
     // wczytamy ponownie z DB — koszt: jeden dodatkowy SELECT + decrypt,
     // zysk: brak wycieku PEM-a do zewnętrznego storage'u.
     const result = await step.run('submit-to-ksef', async () => {
+      if (await isHeldRozSubmission(parsed.data)) {
+        throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
+      }
       const credentials = await getTenantKsefCredentials(tenantId);
 
       try {

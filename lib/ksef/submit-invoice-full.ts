@@ -6,8 +6,9 @@ import {
   generateAdvanceInvoiceXml,
   generateFinalInvoiceXml,
 } from '@/lib/ksef/fa3-advance-generator';
-import { generateFA3Xml } from '@/lib/xml/fa3-generator';
+import { generateFA3Xml, InvoiceValidationError } from '@/lib/xml/fa3-generator';
 import { assertSpecialInvoiceData } from '@/lib/ksef/special-invoice-data';
+import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { validateInvoiceXml } from '@/lib/xml/validator';
 import { invoiceXmlExistsForId, uploadInvoiceXml } from '@/lib/storage/r2';
 
@@ -53,6 +54,16 @@ export async function submitInvoiceFullFlow(
     | { finalData: FinalInvoiceData; advanceSettlementRows: AdvanceInvoiceSettlementRow[] }
     | null,
 ): Promise<FullSubmitResult> {
+  // Last backstop for direct callers and a ROZ that reaches this flow from an
+  // older queue event. Stop before XML generation, archive upload or KSeF POST.
+  if (isRozSubmission({
+    invoiceType: invoice.type,
+    finalData: finalPayload?.finalData,
+    finalAdvanceSettlementRows: finalPayload?.advanceSettlementRows,
+  })) {
+    throw new InvoiceValidationError([ROZ_SUBMISSION_HOLD_MESSAGE]);
+  }
+
   await requireKsefVerificationForBackgroundJob(tenantId);
 
   // 0. Korekta/zaliczka/rozliczenie bez swoich danych zbudowałyby się jako

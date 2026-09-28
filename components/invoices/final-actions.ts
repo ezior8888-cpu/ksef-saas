@@ -8,7 +8,7 @@ import {
   settlementRowFromAdvance,
   type AdvanceInvoiceDbRow,
 } from '@/lib/invoices/advance-settlement';
-import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
+import { ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { createClient } from '@/lib/supabase/server';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
@@ -365,42 +365,13 @@ export async function saveFinalAction(raw: unknown): Promise<ActionResult> {
 
 export async function saveAndSendFinalAction(raw: unknown): Promise<ActionResult> {
   try {
-    const { supabase, tenant, userId } = await tenantContext();
+    await tenantContext();
     const parsed = finalInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 
-    const payload = await resolveFinalPayload(supabase, tenant.id, parsed.data);
-    if ('error' in payload) return { success: false, error: payload.error };
-
-    const ghost = ghostFinalInvoice(payload.envelope);
-
-    const saved = await insertFinalDraft(supabase, tenant.id, ghost, payload.envelope);
-    if (!saved.success) return saved;
-
-    const invoiceId = saved.invoiceId;
-
-    const enq = await enqueueKsefSubmitAfterDraft({
-      supabase,
-      tenantId: tenant.id,
-      userId,
-      invoiceId,
-      nip: tenant.nip,
-      invoice: ghost,
-      finalData: payload.envelope,
-      finalAdvanceSettlementRows: payload.settlement,
-      auditKind: 'final',
-      internalNumberForAudit: ghost.internalNumber,
-    });
-
-    if (!enq.ok) {
-      return { success: false, error: enq.error, invoiceId };
-    }
-
-    return {
-      success: true,
-      invoiceId,
-      offline: enq.mode === 'offline_queued',
-    };
+    // No accepted advance carries trustworthy KSeF environment provenance yet.
+    // Keep the draft action available, but stop send before inserting a new ROZ.
+    return { success: false, error: ROZ_SUBMISSION_HOLD_MESSAGE };
   } catch (e) {
     return {
       success: false,

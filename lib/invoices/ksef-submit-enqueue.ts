@@ -17,6 +17,7 @@ import {
 } from '@/lib/auth/ksef-verification-guard';
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
+import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
@@ -82,6 +83,17 @@ export async function enqueueKsefSubmitAfterDraft(
     auditKind,
     internalNumberForAudit,
   } = params;
+
+  // Covers existing ROZ drafts and callers that bypass the final invoice action.
+  // Do this before both online and Offline24 enqueue paths.
+  if (isRozSubmission({
+    invoiceType: invoice.type,
+    auditKind,
+    finalData,
+    finalAdvanceSettlementRows,
+  })) {
+    return { ok: false, error: ROZ_SUBMISSION_HOLD_MESSAGE };
+  }
 
   const nipNorm = nip.replace(/\s+/g, '');
 

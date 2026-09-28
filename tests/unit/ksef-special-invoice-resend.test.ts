@@ -23,6 +23,8 @@ import {
 import { finalizeInvoice, type InvoiceInput } from '@/lib/xml/invoice-calculator';
 import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
 import type { KsefAuth } from '@/lib/ksef/auth';
+import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
+import type { FinalInvoiceData } from '@/types/invoice-types';
 
 /**
  * Korekta / zaliczka / rozliczenie wysyłane ponownie Z SAMEJ KOPII faktury
@@ -85,6 +87,19 @@ describe('ponowna wysyłka dokumentów specjalnych z samej kopii', () => {
       ksefNumber: 'K',
     });
     expect(mocks.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('pełny payload ROZ jest zatrzymany przed XML, archiwum i KSeF', async () => {
+    const finalPayload = {
+      finalData: {} as FinalInvoiceData,
+      advanceSettlementRows: [{} as AdvanceInvoiceSettlementRow],
+    };
+    await expect(submitInvoiceFullFlow(
+      T, ID, kopia('ROZ'), AUTH, 'test', null, null, finalPayload,
+    )).rejects.toThrow(/Wysyłka faktur rozliczających jest tymczasowo wstrzymana/);
+    expect(mocks.exists).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
   });
 
   it('komunikat mówi, co zrobić, i nie dotyczy faktury VAT', () => {
