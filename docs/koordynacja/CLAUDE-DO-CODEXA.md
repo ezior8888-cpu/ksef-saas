@@ -31,14 +31,15 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00083–00085 | Codex (#62) | `stripe_customer_claim`, `stripe_failed_payment_reference_rotation`, `stripe_checkout_session_id` | PR otwarty |
 | 00086–00088 | Codex (#63) | `ksef_certificate_claim_guard`, `correction_parent_boundary`, `invoice_pending_content_freeze` | PR otwarty |
 | 00089–00090 | Codex (#64) | `incoming_ksef_identity`, `expense_ksef_invoice_identity` | PR otwarty |
-| 00091 | Claude | `tenant_vat_exemption` | w `main`, niewgrana |
-| 00092 | Claude | `tenant_tax_office_code` | w `main`, niewgrana |
+| 00091 | Claude | `tenant_vat_exemption` | w `main`, **wgrana 28.09** |
+| 00092 | Claude | `tenant_tax_office_code` | w `main`, **wgrana 28.09** |
 | 00093 | Codex (#71) | `invoice_delivery_history_guard` | PR otwarty |
-| 00094 | Claude | `tenant_vat_cash_method` | w `main`, niewgrana |
+| 00094 | Claude | `tenant_vat_cash_method` | w `main`, **wgrana 28.09** |
 | 00095 | Codex (#71) | `expense_provenance_guard` | PR otwarty |
-| 00096 | Codex (#83) → Claude przeniósł 1:1 na `main` (01.10) | `incoming_invoice_number_boundary` (C-08) | PR `claude/c08-skrzynka-numery`; wgranie na db-1 po scaleniu |
-| 00097 | Codex (#86) | `invoices_overdue_reconciliation_guard` | PR otwarty |
-| **00098** | — | następny wolny | — |
+| 00096 | Codex (#83) → Claude przeniósł na `main` przez #117 (01.10) | `incoming_invoice_number_boundary` (C-08) | stan db-1 po scaleniu niepotwierdzony; próba Bartosza z 28.09 nie dowodzi obecnej wersji |
+| 00097 | Codex (#86) | `invoices_overdue_reconciliation_guard` (C-06) | PR otwarty |
+| 00098 | Bartosz (#90, uzgodnienie #115) | `backup_read_stripe_service_tables` — odczyt `service_role` dla nocnego backupu | Bartosz zgłosił wgranie 28.09; brak niezależnego odczytu schematu |
+| **00099** | — | następny numer po planowanych 00097–00098 | — |
 
 ---
 
@@ -128,7 +129,9 @@ bez obowiązkowej adnotacji.
 
 **Odpowiedź Codexa:** —
 
-### C-06 · Widok „Zaległe płatności” pokazuje korekty — `OTWARTE` · migracja: Bartosz
+### C-06 · Widok „Zaległe płatności” pokazuje korekty — `W TOKU` (#86, migracja 00097) · migracja: Bartosz
+
+**28.09 (Bartosz):** Codex robi to w #86 (`00097_invoices_overdue_reconciliation_guard`: tylko faktury ścigalne, bez korekt i bez ROZ do czasu C-01). Osobnej migracji Bartosza nie będzie — wgrywam 00097 po scaleniu #86.
 
 Widok `invoices_overdue` (00082) bierze każdą zaakceptowaną, nieopłaconą
 fakturę sprzedaży po terminie — także **korektę**. Ponaglenia i K-01 już
@@ -338,6 +341,8 @@ wydzielenie? Kto przygotowuje plik (numer z rejestru, dziś 00095)?
 `uq_invoices_tenant_internal_number` — każde trafienie to paczka faktur,
 której skrzynka nie zapisała.
 
+**Odpowiedź Bartosza (odczyt 28.09):** w logach workera od wdrożenia 25.09 — **0** trafień `uq_invoices_tenant_internal_number`. Żadna z 2 firm na produkcji nie ma poświadczeń KSeF, więc skrzynka nic nie pobiera i dziś nic nie ginie. Dublety `(tenant_id, ksef_number)` odebranych: **0**, `(tenant_id, internal_number)` wystawionych: **0**. Próba 00096 z #83 w transakcji z `ROLLBACK` na produkcyjnym schemacie — bez błędów. Wydzielenie z #83 (od `main`) wystarcza; wgrywam po scaleniu.
+
 **Odpowiedź Codexa:** —
 
 ### C-09 · #82 (ROZ bez dubla zaliczek) a przebudowa stron w #71 — `OTWARTE` · rozwiązuje: kto scala drugi
@@ -384,6 +389,8 @@ muszą przejść, inaczej generator przy zamówieniu w kilku stawkach odmówi
 
 Do Bartosza (odczyt): ile ROZ już przyjął KSeF — każda wymaga `KOR_ROZ`:
 `SELECT count(*) FROM invoices WHERE direction='outgoing' AND invoice_kind='final' AND ksef_status='accepted';`
+
+**Odpowiedź Bartosza (odczyt 28.09):** ROZ przyjętych przez KSeF: **0**, ROZ w ogóle: **0**, zaliczek: **0**. `KOR_ROZ` nie jest potrzebny. Produkcja od 28.09 stoi na `b25c126` (z #82/#84, bez #87) — bezpieczne wyłącznie dlatego, że żadna firma nie ma poświadczeń KSeF; **#87 musi wejść przed pierwszą firmą z KSeF**.
 
 **Odpowiedź Codexa:** —
 
