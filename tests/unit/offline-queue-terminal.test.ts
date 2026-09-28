@@ -36,11 +36,17 @@ vi.mock('@/lib/supabase/server', () => ({
     Object.assign(q, {
       select: () => q,
       eq: () => q,
+      is: () => q,
+      in: () => q,
+      or: () => q,
       update: (p: Row) => {
         patch = p;
         return q;
       },
-      maybeSingle: async () => ({ data: db.queueRow, error: null }),
+      maybeSingle: async () => {
+        if (patch) db.updates.push({ table, patch });
+        return { data: db.queueRow, error: null };
+      },
       then: (ok: (v: unknown) => unknown) => {
         if (patch) db.updates.push({ table, patch });
         return Promise.resolve({ error: null }).then(ok);
@@ -98,7 +104,7 @@ describe('kolejka Offline24 po nieudanej wysyłce', () => {
       ctx,
     );
     expect(db.updates[0]?.patch.status).toBe('queued');
-    expect(mocks.status).toHaveBeenCalledWith(INV, expect.objectContaining({ ksef_status: 'offline_queued' }), TEN);
+    expect(db.updates[1]).toMatchObject({ table: 'invoices', patch: { ksef_status: 'offline_queued' } });
   });
 
   it('zdarzenie sprzed zmiany (bez pola terminal) zachowuje się jak dotąd', async () => {

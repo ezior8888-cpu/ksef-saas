@@ -54,19 +54,34 @@ import {
  *   bulk import, nawet jeśli concurrency 100 da chwilowy spike.
  */
 
-/** Fresh DB read outside Inngest steps, so a cached step cannot bypass the hold. */
-async function isHeldRozSubmission(
+const ROZ_RECONCILIATION_MESSAGE =
+  'Wysyłka faktury rozliczającej została wstrzymana. Przed kolejną próbą ręcznie uzgodnij jej status z KSeF.';
+
+/** Fresh DB read outside Inngest steps, including the accepted status. */
+async function currentSubmissionState(
   data: Parameters<typeof invoiceSubmitRequested.create>[0],
-): Promise<boolean> {
+): Promise<{
+  ksef_status: string | null;
+  ksef_number: string | null;
+  invoice_type: string | null;
+  invoice_kind: string | null;
+}> {
   const { data: stored, error } = await (await createAdminClient())
     .from('invoices')
-    .select('invoice_type, invoice_kind')
+    .select('ksef_status, ksef_number, invoice_type, invoice_kind')
     .eq('id', data.invoiceId)
     .eq('tenant_id', data.tenantId)
     .maybeSingle();
 
   if (error || !stored) throw new Error('Nie można sprawdzić rodzaju faktury');
 
+  return stored;
+}
+
+function isHeldRozSubmission(
+  data: Parameters<typeof invoiceSubmitRequested.create>[0],
+  stored: Awaited<ReturnType<typeof currentSubmissionState>>,
+): boolean {
   return isRozSubmission({
     invoiceType: data.invoice.type,
     storedInvoiceType: stored.invoice_type,
@@ -74,6 +89,20 @@ async function isHeldRozSubmission(
     finalData: data.finalData,
     finalAdvanceSettlementRows: data.finalAdvanceSettlementRows,
   });
+}
+
+/** Reconcile an accepted invoice even if the success event was lost. */
+async function reconcileAcceptedOfflineQueue(
+  data: Parameters<typeof invoiceSubmitRequested.create>[0],
+): Promise<void> {
+  if (!data.fromOfflineQueue) return;
+  const { error } = await (await createAdminClient())
+    .from('ksef_offline_queue')
+    .update({ status: 'sent', last_error: null })
+    .eq('invoice_id', data.invoiceId)
+    .eq('tenant_id', data.tenantId)
+    .in('status', ['queued', 'sending', 'failed', 'expired']);
+  if (error) throw new Error('Nie można uzgodnić zaakceptowanej faktury z kolejką Offline24');
 }
 
 /**
@@ -93,6 +122,12 @@ export async function onSubmitInvoiceExhausted(
       const { tenantId, invoiceId, nip, invoice } = parsed.data;
       await requireInvoiceTenant(invoiceId, tenantId);
       const fromOfflineQueue = Boolean(data.fromOfflineQueue);
+      const current = await currentSubmissionState(parsed.data);
+      if (current.ksef_status === 'accepted' && current.ksef_number) {
+        await reconcileAcceptedOfflineQueue(parsed.data);
+        return { handled: true, alreadyAccepted: true, ksefNumber: current.ksef_number };
+      }
+      const heldRoz = isHeldRozSubmission(parsed.data, current);
 
       // Klasyfikacja błędu (Faza 23 sekcja 3):
       //   - `NonRetriableError` → walidacja / 4xx → 'rejected' (nie ma sensu
@@ -101,9 +136,11 @@ export async function onSubmitInvoiceExhausted(
       //     transient outage → Offline24 fallback.
       //   - Z Offline24 (`fromOfflineQueue=true`) — już parkowane, nie
       //     duplikujemy. Mark 'failed' i emit event.
-      const isBusinessRejection = error.name === 'NonRetriableError'
-        || await isHeldRozSubmission(parsed.data);
-      const isTransientFailure = !isBusinessRejection;
+      const isBusinessRejection = !heldRoz && error.name === 'NonRetriableError';
+      const isTransientFailure = !isBusinessRejection && !heldRoz;
+      const failureMessage = heldRoz
+        ? ROZ_RECONCILIATION_MESSAGE
+        : `${error.name}: ${error.message}`;
 
       logger.error('Job wysyłki padł — klasyfikacja błędu', {
         tenantId,
@@ -112,6 +149,7 @@ export async function onSubmitInvoiceExhausted(
         internalNumber: invoice.internalNumber,
         errorName: error.name,
         errorMessage: error.message,
+        heldRoz,
         isBusinessRejection,
         isTransientFailure,
         fromOfflineQueue,
@@ -122,7 +160,36 @@ export async function onSubmitInvoiceExhausted(
         ? 'rejected'
         : 'failed';
 
-      if (fromOfflineQueue) {
+      if (heldRoz) {
+        // A local safety hold is not a rejection from KSeF. A conditional
+        // update cannot overwrite a concurrent acceptance by another worker.
+        const marked = await step.run('mark-as-failed-roz-hold', async () => {
+          const { data: updated, error: updateError } = await (await createAdminClient())
+            .from('invoices')
+            .update({
+              ksef_status: 'failed',
+              last_error: ROZ_RECONCILIATION_MESSAGE,
+              last_error_code: 'ROZ_HOLD_RECONCILE',
+              last_error_field: null,
+              last_error_suggestion: null,
+            })
+            .eq('id', invoiceId)
+            .eq('tenant_id', tenantId)
+            .or('ksef_status.is.null,ksef_status.neq.accepted')
+            .select('id')
+            .maybeSingle();
+          if (updateError) throw new Error('Nie można oznaczyć ROZ do uzgodnienia');
+          return updated?.id === invoiceId;
+        });
+        if (!marked) {
+          const latest = await currentSubmissionState(parsed.data);
+          if (latest.ksef_status === 'accepted' && latest.ksef_number) {
+            await reconcileAcceptedOfflineQueue(parsed.data);
+            return { handled: true, alreadyAccepted: true, ksefNumber: latest.ksef_number };
+          }
+          throw new Error('Nie można potwierdzić stanu ROZ po wstrzymaniu');
+        }
+      } else if (fromOfflineQueue) {
         // Już byliśmy w offline queue — nie zapętlamy parkingu. Mark final.
         await step.run('mark-as-failed-from-offline', async () => {
           await updateInvoiceStatus(invoiceId, {
@@ -216,21 +283,33 @@ export async function onSubmitInvoiceExhausted(
             finalStatus,
             isBusinessRejection,
             wasFromOfflineQueue: fromOfflineQueue,
-            error: `${error.name}: ${error.message}`,
+            error: failureMessage,
           },
         });
       });
+
+      // An older worker may have completed KSeF after our conditional hold.
+      // This fresh read avoids a stale failure event in that common race;
+      // consumers still verify current state because acceptance can happen later.
+      if (heldRoz) {
+        const latest = await currentSubmissionState(parsed.data);
+        if (latest.ksef_status === 'accepted' && latest.ksef_number) {
+          await reconcileAcceptedOfflineQueue(parsed.data);
+          return { handled: true, alreadyAccepted: true, ksefNumber: latest.ksef_number };
+        }
+      }
 
       await step.sendEvent('emit-failure', {
         name: 'invoice/submit.failed',
         data: {
           invoiceId,
           tenantId,
-          error: `${error.name}: ${error.message}`,
+          error: failureMessage,
           fromOfflineQueue: data.fromOfflineQueue,
           // Bez tego kolejka Offline24 przywracała odrzuconą fakturę do
           // 'queued' i ponawiała ją do upływu terminu.
-          terminal: isBusinessRejection,
+          terminal: isBusinessRejection || heldRoz,
+          manualReconciliationRequired: heldRoz,
         },
       });
 
@@ -284,6 +363,7 @@ export async function runSubmitInvoice(
         invoiceId,
         ksefNumber: alreadyDone.ksef_number,
       });
+      await reconcileAcceptedOfflineQueue(parsed.data);
       return {
         alreadyAccepted: true as const,
         ksefNumber: alreadyDone.ksef_number,
@@ -292,7 +372,12 @@ export async function runSubmitInvoice(
 
     // Fresh, non-memoized read: an older Inngest idempotency step can be
     // restored after deployment. Check the stored kind as well as the event.
-    if (await isHeldRozSubmission(parsed.data)) {
+    const current = await currentSubmissionState(parsed.data);
+    if (current.ksef_status === 'accepted' && current.ksef_number) {
+      await reconcileAcceptedOfflineQueue(parsed.data);
+      return { alreadyAccepted: true as const, ksefNumber: current.ksef_number };
+    }
+    if (isHeldRozSubmission(parsed.data, current)) {
       throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
     }
 
@@ -338,7 +423,9 @@ export async function runSubmitInvoice(
               return false;
             }
 
-            if (await isHeldRozSubmission(parsed.data)) {
+            const current = await currentSubmissionState(parsed.data);
+            if ((current.ksef_status === 'accepted' && current.ksef_number) ||
+                isHeldRozSubmission(parsed.data, current)) {
               throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
             }
             await addToOfflineQueue({
@@ -445,14 +532,33 @@ export async function runSubmitInvoice(
 
     // Krok 2: status 'sending' + timestamp — dopiero gdy wiemy, że job może
     // realnie pogadać z KSeF.
-    await step.run('mark-as-sending', async () => {
+    const markedSending = await step.run('mark-as-sending', async () => {
       const now = new Date().toISOString();
-      await updateInvoiceStatus(invoiceId, {
-        ksef_status: 'sending',
-        submitted_to_ksef_at: now,
-        last_attempt_at: now,
-      }, tenantId);
+      const { data: updated, error: updateError } = await (await createAdminClient())
+        .from('invoices')
+        .update({
+          ksef_status: 'sending',
+          submitted_to_ksef_at: now,
+          last_attempt_at: now,
+        })
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .or('ksef_status.is.null,ksef_status.neq.accepted')
+        .select('id')
+        .maybeSingle();
+      if (updateError) throw new Error('Nie można oznaczyć faktury jako wysyłanej');
+      return updated?.id === invoiceId;
     });
+    // Pre-hotfix Inngest checkpoints stored `undefined` for this step. Only
+    // explicit false from the new conditional update denotes a lost race.
+    if (markedSending === false) {
+      const latest = await currentSubmissionState(parsed.data);
+      if (latest.ksef_status === 'accepted' && latest.ksef_number) {
+        await reconcileAcceptedOfflineQueue(parsed.data);
+        return { alreadyAccepted: true as const, ksefNumber: latest.ksef_number };
+      }
+      throw new Error('Nie można potwierdzić statusu faktury przed wysyłką');
+    }
 
     await step.run('audit-start', async () => {
       await logAuditSystem({
@@ -475,7 +581,9 @@ export async function runSubmitInvoice(
     // wczytamy ponownie z DB — koszt: jeden dodatkowy SELECT + decrypt,
     // zysk: brak wycieku PEM-a do zewnętrznego storage'u.
     const result = await step.run('submit-to-ksef', async () => {
-      if (await isHeldRozSubmission(parsed.data)) {
+      const current = await currentSubmissionState(parsed.data);
+      if ((current.ksef_status === 'accepted' && current.ksef_number) ||
+          isHeldRozSubmission(parsed.data, current)) {
         throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
       }
       const credentials = await getTenantKsefCredentials(tenantId);

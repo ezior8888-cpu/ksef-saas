@@ -155,6 +155,22 @@ export const notifySuccessJob = inngest.createFunction(
 // BŁĄD: faktura odrzucona lub retries wyczerpane
 // ═══════════════════════════════════════════════════════════════
 
+async function failureNotificationSuppression(
+  invoiceId: string,
+  tenantId: string,
+): Promise<'already-accepted' | 'manual-reconciliation' | null> {
+  const { data, error } = await createAdminClient()
+    .from('invoices')
+    .select('ksef_status, ksef_number, last_error_code')
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  if (error || !data) throw new Error('Nie można sprawdzić statusu faktury przed powiadomieniem');
+  if (data.ksef_status === 'accepted' && data.ksef_number) return 'already-accepted';
+  if (data.last_error_code === 'ROZ_HOLD_RECONCILE') return 'manual-reconciliation';
+  return null;
+}
+
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
@@ -163,9 +179,20 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
     const { tenantId, invoiceId, error, fromOfflineQueue } = data;
     await requireInvoiceTenant(invoiceId, tenantId);
 
+    // A local ROZ hold is a manual reconciliation state, not KSeF rejection.
+    // Suppress all rejection messages: an older worker may still accept it.
+    if (data.manualReconciliationRequired) {
+      return { skipped: true as const, reason: 'manual-reconciliation' as const };
+    }
+    const suppression = await failureNotificationSuppression(invoiceId, tenantId);
+    if (suppression) {
+      return { skipped: true as const, reason: suppression };
+    }
+
     // Karta agenta (X-02). Tłumaczy odrzucenie i — gdy rozwiązanie jest
     // jedno — pokazuje gotową poprawkę z podglądem różnicy.
     await step.run('flo-fix-card', async () => {
+      if (await failureNotificationSuppression(invoiceId, tenantId)) return;
       const supabase = createAdminClient();
       const { data: invoice } = await supabase
         .from('invoices')
@@ -213,6 +240,10 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
     );
 
     const result = await step.run('send-email', async () => {
+      const suppression = await failureNotificationSuppression(invoiceId, tenantId);
+      if (suppression) {
+        return { sent: false as const, reason: suppression };
+      }
       if (!email) {
         return {
           sent: false as const,
@@ -230,6 +261,10 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
     }
 
     const pushResult = await step.run('send-push', async () => {
+      const suppression = await failureNotificationSuppression(invoiceId, tenantId);
+      if (suppression) {
+        return { skipped: true as const, reason: suppression };
+      }
       const ownerId = await getTenantOwnerUserId(tenantId);
       if (!ownerId) {
         return { skipped: true as const, reason: 'no-owner' as const };
