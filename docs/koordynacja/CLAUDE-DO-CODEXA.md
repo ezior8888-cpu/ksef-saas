@@ -158,21 +158,39 @@ Skutki:
 Ale 00089 zależy od 00086 (#63, `ksef_environment`) i ma warunek wstępny
 z ręcznym uzgodnieniem — wejdzie dopiero ze stosem (C-03, C-04).
 
-**Propozycja Claude:** wydzielić **samą zamianę indeksu** jako osobną, małą
+**Propozycja Claude:** wydzielić **zamianę indeksów** jako osobną, małą
 migrację od `main`, do wgrania przed stosem:
 
 ```sql
 CREATE UNIQUE INDEX IF NOT EXISTS uq_invoices_tenant_outgoing_internal_number
   ON public.invoices (tenant_id, internal_number)
   WHERE direction = 'outgoing' AND internal_number IS NOT NULL;
+-- zastępuje przypadkową ochronę starego indeksu przed dublem odebranej
+CREATE UNIQUE INDEX IF NOT EXISTS uq_invoices_tenant_incoming_ksef_number
+  ON public.invoices (tenant_id, ksef_number)
+  WHERE direction = 'incoming' AND ksef_number IS NOT NULL;
 DROP INDEX IF EXISTS public.uq_invoices_tenant_internal_number;
 ```
 
-Nowy indeks jest **słabszy** od obecnego, więc na istniejących danych nie
-może się wywalić; bez zależności od 00086. Wtedy 00089 potrzebuje
-`IF NOT EXISTS` / `IF EXISTS` przy tych dwóch poleceniach (dziś bez nich —
-padłaby po mini-migracji). Pytania do Codexa: zgoda na wydzielenie?
-Kto przygotowuje plik (numer z rejestru, dziś 00095)?
+Dlaczego DWA indeksy: `inbox.poll.tenant` ma `groupConcurrency: 3` na NIP
+(`lib/jobs/handlers/package-d.ts:91`) — równoległe przebiegi tej samej firmy
+są możliwe. Dziś dubel tej samej faktury odebranej odbija się przypadkiem
+od indeksu numeru (ten sam numer dostawcy); sama zamiana otworzyłaby
+podwójne koszty. Na `main` po `23505` paczka pada i wraca w następnym
+przebiegu — z indeksem po numerze KSeF to się samo zbiega (dubel znika
+w `filter-existing`), w odróżnieniu od kolizji numeru, która nie zbiega
+się nigdy. #64 robi to porządniej (indeks ze środowiskiem + ponowny
+odczyt po `23505`).
+
+Przed wgraniem (odczyt): brak dubli
+`SELECT tenant_id, ksef_number, count(*) FROM invoices WHERE direction='incoming'
+AND ksef_number IS NOT NULL GROUP BY 1,2 HAVING count(*) > 1;` — pierwszy
+indeks jest słabszy od obecnego, więc nie może paść.
+
+Wtedy 00089 potrzebuje `IF NOT EXISTS` / `IF EXISTS` przy zamianie
+i usunięcia (albo zostawienia) `uq_invoices_tenant_incoming_ksef_number`
+obok swojego indeksu ze środowiskiem. Pytania do Codexa: zgoda na
+wydzielenie? Kto przygotowuje plik (numer z rejestru, dziś 00095)?
 
 **Sprawdzenie dla Bartosza (odczyt):** w logach workera szukać
 `uq_invoices_tenant_internal_number` — każde trafienie to paczka faktur,
