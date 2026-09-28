@@ -8,6 +8,7 @@ import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue'
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import { calculateAdvanceTotals } from '@/lib/invoices/calculator';
+import { matchesTenantSeller, sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
 import {
   buyerPartyFromBuyerData,
   sellerPartyFromSellerData,
@@ -81,6 +82,21 @@ function normalizeBank(raw: string | undefined): string | undefined {
 function paymentMethodFa(m: AdvanceInvoiceSchemaIn['paymentMethod']): PaymentMethod {
   if (m === 'compensation') return 'other';
   return m as PaymentMethod;
+}
+
+function requireTenantSeller(supplied: SellerData, tenant: TenantSnap): SellerData {
+  const seller = sellerFromTenantProfile({
+    nip: tenant.nip,
+    name: tenant.name,
+    address_json: tenant.address,
+  });
+  if (!seller) {
+    throw new Error('Uzupełnij poprawne dane sprzedawcy w ustawieniach firmy przed wystawieniem faktury.');
+  }
+  if (!matchesTenantSeller(supplied, seller)) {
+    throw new Error('Dane sprzedawcy zmieniły się lub nie należą do tej firmy. Odśwież formularz.');
+  }
+  return seller;
 }
 
 function buildAdvanceEnvelope(parsed: AdvanceInvoiceSchemaIn): AdvanceInvoiceData {
@@ -215,7 +231,8 @@ export async function saveAdvanceAction(raw: unknown): Promise<ActionResult> {
     const parsed = advanceInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 
-    const envelope = buildAdvanceEnvelope(parsed.data);
+    const seller = requireTenantSeller(parsed.data.seller, tenant);
+    const envelope = buildAdvanceEnvelope({ ...parsed.data, seller });
     const ghost = ghostAdvanceInvoice(envelope);
 
     const result = await insertAdvanceDraft(supabase, tenant.id, ghost, envelope);
@@ -242,7 +259,8 @@ export async function saveAndSendAdvanceAction(raw: unknown): Promise<ActionResu
     const parsed = advanceInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 
-    const envelope = buildAdvanceEnvelope(parsed.data);
+    const seller = requireTenantSeller(parsed.data.seller, tenant);
+    const envelope = buildAdvanceEnvelope({ ...parsed.data, seller });
     const ghost = ghostAdvanceInvoice(envelope);
 
     const saved = await insertAdvanceDraft(supabase, tenant.id, ghost, envelope);

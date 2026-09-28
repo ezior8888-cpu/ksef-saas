@@ -13,6 +13,7 @@ import {
   calculateFinalInvoiceTotals,
   calculateInvoiceTotals,
 } from '@/lib/invoices/calculator';
+import { matchesTenantSeller, sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
 import {
   buyerPartyFromBuyerData,
   sellerPartyFromSellerData,
@@ -90,6 +91,21 @@ function normalizeBank(raw: string | undefined): string | undefined {
 function paymentMethodFa(m: FinalInvoiceSchemaIn['paymentMethod']): PaymentMethod {
   if (m === 'compensation') return 'other';
   return m as PaymentMethod;
+}
+
+function requireTenantSeller(supplied: SellerData, tenant: TenantSnap): SellerData {
+  const seller = sellerFromTenantProfile({
+    nip: tenant.nip,
+    name: tenant.name,
+    address_json: tenant.address,
+  });
+  if (!seller) {
+    throw new Error('Uzupełnij poprawne dane sprzedawcy w ustawieniach firmy przed wystawieniem faktury.');
+  }
+  if (!matchesTenantSeller(supplied, seller)) {
+    throw new Error('Dane sprzedawcy zmieniły się lub nie należą do tej firmy. Odśwież formularz.');
+  }
+  return seller;
 }
 
 function invoiceLineItemsFromDomain(lines: InvoiceLine[]): InvoiceLineItem[] {
@@ -318,7 +334,8 @@ export async function saveFinalAction(raw: unknown): Promise<ActionResult> {
     const parsed = finalInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 
-    const payload = await resolveFinalPayload(supabase, tenant.id, parsed.data);
+    const seller = requireTenantSeller(parsed.data.seller, tenant);
+    const payload = await resolveFinalPayload(supabase, tenant.id, { ...parsed.data, seller });
     if ('error' in payload) return { success: false, error: payload.error };
 
     const ghost = ghostFinalInvoice(payload.envelope);
@@ -351,7 +368,8 @@ export async function saveAndSendFinalAction(raw: unknown): Promise<ActionResult
     const parsed = finalInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 
-    const payload = await resolveFinalPayload(supabase, tenant.id, parsed.data);
+    const seller = requireTenantSeller(parsed.data.seller, tenant);
+    const payload = await resolveFinalPayload(supabase, tenant.id, { ...parsed.data, seller });
     if ('error' in payload) return { success: false, error: payload.error };
 
     const ghost = ghostFinalInvoice(payload.envelope);

@@ -1,6 +1,7 @@
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import type { SellerData } from '@/types/invoice-types';
+import { sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
 
 /**
  * Dane sprzedawcy z profilu aktywnej organizacji dla formularzy FA
@@ -39,23 +40,5 @@ export async function loadTenantSellerForForms(): Promise<SellerData | null> {
 
   if (error || !raw) return null;
 
-  const nip = String(raw.nip ?? '').replace(/\D/g, '');
-  const addr = (raw.address_json as {
-    countryCode?: string;
-    addressLine1?: string;
-    addressLine2?: string;
-  } | null) ?? null;
-
-  const line1 = (addr?.addressLine1 ?? '').trim() || '—';
-  const line2 = (addr?.addressLine2 ?? '').trim() || '—';
-
-  return {
-    nip,
-    name: String(raw.name ?? '').trim() || '—',
-    address: {
-      countryCode: (addr?.countryCode ?? 'PL').slice(0, 2).toUpperCase() || 'PL',
-      addressLine1: line1,
-      addressLine2: line2,
-    },
-  };
+  return sellerFromTenantProfile(raw);
 }
