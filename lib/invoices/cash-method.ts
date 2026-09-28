@@ -10,8 +10,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 const UNDEFINED_COLUMN = '42703';
 
 /**
- * Odczyt odporny na kolejność wdrożenia: przed migracją brak kolumny znaczy
- * „metoda memoriałowa”, a nie wywrócona strona. Każdy inny błąd — rzuca.
+ * Odczyt tylko dla widoku ustawień: przed migracją pokazuje domyślne false,
+ * aby strona nie przestała działać. Nie używać do wystawiania faktur.
+ * Każdy błąd inny niż brak kolumny — rzuca.
  */
 export async function readTenantCashMethod(
   client: SupabaseClient,
@@ -41,13 +42,13 @@ export async function readTenantCashMethodForIssuance(
     .maybeSingle();
   if (error) {
     if (error.code === UNDEFINED_COLUMN) {
-      throw new Error('Nie można wystawić zaliczki: brak migracji 00094 metody kasowej VAT.');
+      throw new Error('Nie można wystawić faktury: brak migracji 00094 metody kasowej VAT.');
     }
     throw new Error(`Nie można potwierdzić metody kasowej VAT firmy: ${error.message}`);
   }
   const enabled = (data as { vat_cash_method?: unknown } | null)?.vat_cash_method;
   if (typeof enabled !== 'boolean') {
-    throw new Error('Nie można wystawić zaliczki: nieznana metoda rozliczania VAT firmy.');
+    throw new Error('Nie można wystawić faktury: nieznana metoda rozliczania VAT firmy.');
   }
   return enabled;
 }

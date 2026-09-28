@@ -16,7 +16,7 @@ import {
 } from '@/lib/xml/invoice-calculator';
 import { buildInvoiceAnnotations } from '@/lib/invoices/annotations';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
-import { readTenantCashMethod } from '@/lib/invoices/cash-method';
+import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
 import { invoiceFormSchema, type InvoiceFormValues } from '@/lib/schemas/invoice-form';
 import type {
   Address,
@@ -492,8 +492,8 @@ export async function saveDraftAction(
     // Odpornie: przed wgraniem 00091 kolumny nie ma — zwykła faktura nie może
     // od niej zależeć.
     const vatExemptionBasis = await readTenantVatExemption(supabase, tenant.id);
-    // Odpornie: przed wgraniem 00094 kolumny nie ma — metoda memoriałowa.
-    const cashMethod = await readTenantCashMethod(supabase, tenant.id);
+    // Bez 00094 nie znamy prawnej adnotacji P_16; nie zapisujemy dokumentu.
+    const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
     const invoice = buildInvoiceFromForm(values, tenant, vatExemptionBasis, cashMethod);
 
     const result = await insertInvoiceAndLines(supabase, tenant.id, invoice, values);
@@ -535,8 +535,8 @@ export async function saveAndSendInvoiceAction(
     // Odpornie: przed wgraniem 00091 kolumny nie ma — zwykła faktura nie może
     // od niej zależeć.
     const vatExemptionBasis = await readTenantVatExemption(supabase, tenant.id);
-    // Odpornie: przed wgraniem 00094 kolumny nie ma — metoda memoriałowa.
-    const cashMethod = await readTenantCashMethod(supabase, tenant.id);
+    // Bez 00094 nie znamy prawnej adnotacji P_16; nie zapisujemy dokumentu.
+    const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
     const invoice = buildInvoiceFromForm(values, tenant, vatExemptionBasis, cashMethod);
     // 0) „zw” bez podstawy zwolnienia: mówimy od razu, zanim faktura pójdzie do
     //    kolejki KSeF i wróci jako odrzucona. Szkic da się zapisać bez tego.
