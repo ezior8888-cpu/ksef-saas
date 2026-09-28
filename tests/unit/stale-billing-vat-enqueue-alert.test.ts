@@ -23,8 +23,68 @@ vi.mock('@/lib/inngest/client', () => ({
 
 import {
   checkStaleBillingVatEnqueues,
+  checkKsefReconciliationAnomalies,
   runCriticalAlertsMonitor,
 } from '@/lib/inngest/jobs/critical-alerts-monitor';
+
+interface InvoiceFixture {
+  id: string;
+  direction: 'incoming' | 'outgoing';
+  ksef_status: string | null;
+  ksef_number: string | null;
+  last_error_code: string | null;
+}
+
+type InvoiceCountResult = { count: number | null; error: Error | null };
+
+function invoiceCountQueries(
+  rows: InvoiceFixture[],
+  resultOverride?: (queryIndex: number) => InvoiceCountResult,
+) {
+  const queries: Array<{
+    select: ReturnType<typeof vi.fn>;
+    eq: ReturnType<typeof vi.fn>;
+    not: ReturnType<typeof vi.fn>;
+    or: ReturnType<typeof vi.fn>;
+  }> = [];
+  mocks.from.mockImplementation((table: string) => {
+    if (table !== 'invoices') throw new Error(`Unexpected table: ${table}`);
+    const queryIndex = queries.length;
+    const filters: Array<(row: InvoiceFixture) => boolean> = [];
+    const query = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      not: vi.fn(),
+      or: vi.fn(),
+      then: vi.fn(),
+    };
+    query.select.mockReturnValue(query);
+    query.eq.mockImplementation((column: keyof InvoiceFixture, value: string) => {
+      filters.push((row) => row[column] === value);
+      return query;
+    });
+    query.not.mockImplementation((column: keyof InvoiceFixture, operator: string, value: null) => {
+      if (operator !== 'is' || value !== null) throw new Error('Unexpected not filter');
+      filters.push((row) => row[column] !== null);
+      return query;
+    });
+    query.or.mockImplementation((expression: string) => {
+      if (expression !== 'ksef_status.is.null,ksef_status.neq.accepted') {
+        throw new Error(`Unexpected OR filter: ${expression}`);
+      }
+      filters.push((row) => row.ksef_status === null || row.ksef_status !== 'accepted');
+      return query;
+    });
+    query.then.mockImplementation((resolve: (value: InvoiceCountResult) => void) =>
+      Promise.resolve(resultOverride?.(queryIndex) ?? {
+        count: rows.filter((row) => filters.every((filter) => filter(row))).length,
+        error: null,
+      }).then(resolve));
+    queries.push(query);
+    return query;
+  });
+  return queries;
+}
 
 function queryResult(count: number | null, error: Error | null = null) {
   const query = {
@@ -116,10 +176,10 @@ describe('stale billing VAT enqueue alert', () => {
   it('runs the VAT check in the shared monitor used by both job backends', async () => {
     const query = {
       select: vi.fn(), eq: vi.fn(), not: vi.fn(), is: vi.fn(),
-      in: vi.fn(), gte: vi.fn(), lt: vi.fn(), order: vi.fn(),
+      in: vi.fn(), gte: vi.fn(), lt: vi.fn(), order: vi.fn(), or: vi.fn(),
       then: vi.fn(),
     };
-    for (const name of ['select', 'eq', 'not', 'is', 'in', 'gte', 'lt'] as const) {
+    for (const name of ['select', 'eq', 'not', 'is', 'in', 'gte', 'lt', 'or'] as const) {
       query[name].mockReturnValue(query);
     }
     query.order.mockResolvedValue({ data: [], error: null });
@@ -133,7 +193,107 @@ describe('stale billing VAT enqueue alert', () => {
     const result = await runCriticalAlertsMonitor({ step } as JobContext);
 
     expect(step.run).toHaveBeenCalledWith('check-stale-billing-vat-enqueues', expect.any(Function));
+    expect(step.run).toHaveBeenCalledWith('check-ksef-reconciliation', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-checkout-attempts', expect.any(Function));
-    expect(result).toMatchObject({ checked: 10, fired: 0 });
+    expect(result).toMatchObject({ checked: 11, fired: 0 });
+  });
+});
+
+describe('KSeF reconciliation alert', () => {
+  it('is quiet when there is nothing to reconcile', async () => {
+    invoiceCountQueries([]);
+
+    await expect(checkKsefReconciliationAnomalies()).resolves.toEqual({
+      type: 'ksef_reconciliation', fired: false,
+    });
+    expect(mocks.alertCritical).not.toHaveBeenCalled();
+    expect(mocks.cacheSet).not.toHaveBeenCalled();
+  });
+
+  it('counts outgoing invoices with a KSeF number and failed or legacy NULL status, plus held ROZ', async () => {
+    const queries = invoiceCountQueries([
+      { id: 'outgoing-failed', direction: 'outgoing', ksef_status: 'failed', ksef_number: 'KSEF-1', last_error_code: null },
+      { id: 'outgoing-null', direction: 'outgoing', ksef_status: null, ksef_number: 'KSEF-2', last_error_code: null },
+      { id: 'incoming-received', direction: 'incoming', ksef_status: 'received', ksef_number: 'KSEF-3', last_error_code: null },
+      { id: 'outgoing-accepted', direction: 'outgoing', ksef_status: 'accepted', ksef_number: 'KSEF-4', last_error_code: null },
+      { id: 'held-roz', direction: 'outgoing', ksef_status: 'failed', ksef_number: null, last_error_code: 'ROZ_HOLD_RECONCILE' },
+      { id: 'both-signals', direction: 'outgoing', ksef_status: 'failed', ksef_number: 'KSEF-5', last_error_code: 'ROZ_HOLD_RECONCILE' },
+    ]);
+
+    await expect(checkKsefReconciliationAnomalies()).resolves.toEqual({
+      type: 'ksef_reconciliation', fired: true,
+    });
+    expect(mocks.from).toHaveBeenCalledTimes(2);
+    for (const query of queries) {
+      expect(query.select).toHaveBeenCalledExactlyOnceWith('id', { count: 'exact', head: true });
+    }
+    expect(queries.some((query) =>
+      query.eq.mock.calls.some(([column, value]) => column === 'direction' && value === 'outgoing') &&
+      query.not.mock.calls.some(([column, operator, value]) => column === 'ksef_number' && operator === 'is' && value === null) &&
+      query.or.mock.calls.some(([expression]) => expression === 'ksef_status.is.null,ksef_status.neq.accepted'),
+    )).toBe(true);
+    expect(queries.some((query) =>
+      query.eq.mock.calls.some(([column, value]) => column === 'last_error_code' && value === 'ROZ_HOLD_RECONCILE'),
+    )).toBe(true);
+    expect(mocks.alertCritical).toHaveBeenCalledOnce();
+    const alert = mocks.alertCritical.mock.calls[0];
+    expect(alert?.[2]?.fields.map((field: { value: string }) => field.value))
+      .toEqual(['3', '2']);
+    const serialized = JSON.stringify(alert);
+    expect(serialized).toMatch(/ręczn/i);
+    expect(serialized).not.toContain('outgoing-failed');
+    expect(serialized).not.toContain('KSEF-1');
+    expect(mocks.cacheSet).toHaveBeenCalledOnce();
+  });
+
+  it('does not send again while the delivered alert is deduplicated', async () => {
+    invoiceCountQueries([{ id: 'held', direction: 'outgoing', ksef_status: 'failed', ksef_number: null, last_error_code: 'ROZ_HOLD_RECONCILE' }]);
+    mocks.cacheGet.mockResolvedValue('already-delivered');
+
+    await expect(checkKsefReconciliationAnomalies()).resolves.toEqual({
+      type: 'ksef_reconciliation', fired: false, reason: 'dedup',
+    });
+    expect(mocks.alertCritical).not.toHaveBeenCalled();
+    expect(mocks.cacheSet).not.toHaveBeenCalled();
+  });
+
+  it('alerts immediately when a second anomaly category appears', async () => {
+    const delivered = new Set<string>();
+    mocks.cacheGet.mockImplementation(async (key: string) => delivered.has(key) ? 'sent' : null);
+    mocks.cacheSet.mockImplementation(async (key: string) => { delivered.add(key); });
+    invoiceCountQueries([{ id: 'held', direction: 'outgoing', ksef_status: 'failed', ksef_number: null, last_error_code: 'ROZ_HOLD_RECONCILE' }]);
+
+    await expect(checkKsefReconciliationAnomalies()).resolves.toMatchObject({ fired: true });
+    invoiceCountQueries([{ id: 'held-with-number', direction: 'outgoing', ksef_status: 'failed', ksef_number: 'KSEF-1', last_error_code: 'ROZ_HOLD_RECONCILE' }]);
+    await expect(checkKsefReconciliationAnomalies()).resolves.toMatchObject({ fired: true });
+
+    expect(mocks.alertCritical).toHaveBeenCalledTimes(2);
+    expect([...delivered]).toEqual([
+      'alerts:critical:lastsent:ksef_reconciliation:none:roz',
+      'alerts:critical:lastsent:ksef_reconciliation:number:roz',
+    ]);
+  });
+
+  it.each([0, 1])('does not treat failed database count %i as a clean state', async (failingIndex) => {
+    const failure = new Error('database unavailable');
+    invoiceCountQueries([], (index) => index === failingIndex
+      ? { count: null, error: failure }
+      : { count: 0, error: null });
+
+    await expect(checkKsefReconciliationAnomalies()).rejects.toBe(failure);
+    expect(mocks.alertCritical).not.toHaveBeenCalled();
+    expect(mocks.cacheSet).not.toHaveBeenCalled();
+  });
+
+  it('deduplicates only after Slack confirms delivery', async () => {
+    invoiceCountQueries([{ id: 'held', direction: 'outgoing', ksef_status: 'failed', ksef_number: null, last_error_code: 'ROZ_HOLD_RECONCILE' }]);
+    mocks.alertCritical.mockRejectedValueOnce(new Error('Slack delivery unconfirmed'));
+
+    await expect(checkKsefReconciliationAnomalies()).rejects.toThrow('Slack delivery unconfirmed');
+    expect(mocks.cacheSet).not.toHaveBeenCalled();
+
+    await expect(checkKsefReconciliationAnomalies()).resolves.toMatchObject({ fired: true });
+    expect(mocks.alertCritical).toHaveBeenCalledTimes(2);
+    expect(mocks.cacheSet).toHaveBeenCalledOnce();
   });
 });

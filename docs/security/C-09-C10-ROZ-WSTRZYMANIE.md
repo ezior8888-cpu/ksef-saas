@@ -19,7 +19,7 @@ Po wyczerpaniu starego zadania ROZ status lokalny jest `failed` z kodem `ROZ_HOL
 1. Potwierdzić datowany SHA i godzinę uruchomienia osobno dla webu i workera w Coolify. Sam merge nie dowodzi wdrożenia.
 2. Sprawdzić, czy stary worker ma aktywne zadania ROZ. Nowy kod nie zatrzyma POST-u, który stary proces już rozpoczął.
 3. Odczytowo ustalić liczbę zaakceptowanych i oczekujących ROZ na db-1 oraz zweryfikować ręcznie ich XML, zaliczki i środowisko; do raportu wystarczą liczby i wynik, bez danych faktur.
-4. Po wdrożeniu monitorować faktury z `last_error_code=ROZ_HOLD_RECONCILE` i odpowiadające im wpisy audytu. Hotfix nie wysyła e-maila ani pusha mówiącego, że KSeF odrzucił dokument, ponieważ to wstrzymanie lokalne i stary worker może jeszcze zapisać akceptację. Brak aktywnego neutralnego alarmu jest otwartym zadaniem.
+4. Po wdrożeniu monitorować faktury z `last_error_code=ROZ_HOLD_RECONCILE` i odpowiadające im wpisy audytu. Hotfix nie wysyła e-maila ani pusha mówiącego, że KSeF odrzucił dokument, ponieważ to wstrzymanie lokalne i stary worker może jeszcze zapisać akceptację. Zależny [alarm uzgodnienia](KSEF-ALARM-UZGODNIENIA-2026-09-28.md) powiadamia operatora przez Slack po wdrożeniu właściwej wersji workera; przed potwierdzeniem wdrożenia pozostaje ręczny odczyt.
 5. Przed późniejszym zniesieniem blokady przećwiczyć na kopii trwałą proweniencję środowiska, kanoniczne powiązanie pełnych danych ROZ z XML oraz atomowy claim zaliczki przez jedną ROZ. Stare zdarzenia bez pełnej migawki uzgadniać ręcznie.
 
 Hotfix nie wymaga wykonania SQL. Codex nie uruchamiał migracji, nie scalał do `main` i nie wdrażał serwera.
