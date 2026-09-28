@@ -49,7 +49,12 @@ ALTER TABLE public.invoices
   ADD CONSTRAINT invoices_incoming_ksef_environment_required
   CHECK (direction <> 'incoming' OR ksef_number IS NULL OR ksef_environment IS NOT NULL);
 
-DROP INDEX public.uq_invoices_tenant_internal_number;
+-- C-08 may have replaced 00028 earlier in an independent hotfix. Remove its
+-- temporary, environment-agnostic keys only after both canonical indexes and
+-- the environment constraint above exist. Without C-08 these are no-ops.
+DROP INDEX IF EXISTS public.uq_invoices_tenant_internal_number;
+DROP INDEX IF EXISTS public.uq_invoices_tenant_outgoing_internal_number_c08;
+DROP INDEX IF EXISTS public.uq_invoices_tenant_incoming_ksef_number_c08;
 
 COMMENT ON INDEX public.uq_invoices_tenant_outgoing_internal_number IS
   'One issued invoice number per tenant; incoming numbers belong to different sellers.';
