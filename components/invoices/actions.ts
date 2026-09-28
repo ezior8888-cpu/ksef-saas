@@ -14,8 +14,9 @@ import {
   validateNipChecksum,
   ZW_WITHOUT_BASIS_MESSAGE,
 } from '@/lib/xml/invoice-calculator';
+import { buildInvoiceAnnotations } from '@/lib/invoices/annotations';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
-import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
+import { invoiceFormSchema, type InvoiceFormValues } from '@/lib/schemas/invoice-form';
 import type {
   Address,
   BuyerParty,
@@ -336,10 +337,11 @@ function buildInvoiceFromForm(
     vatTotal: totals.vatTotal,
     grossTotal: totals.grossTotal,
     payment,
-    // P_19A tylko przy pozycji zwolnionej — inaczej FA(3) dostaje P_19N.
-    annotations: lines.some((l) => l.vatRate === 'zw') && vatExemptionBasis
-      ? { vatExemptionBasis }
-      : undefined,
+    annotations: buildInvoiceAnnotations({
+      lines,
+      vatExemptionBasis,
+      splitPayment: values.splitPayment === true,
+    }),
     notes: values.notes && values.notes.length ? values.notes : undefined,
   };
 }
@@ -515,6 +517,13 @@ export async function saveDraftAction(
 export async function saveAndSendInvoiceAction(
   values: InvoiceFormValues
 ): Promise<InvoiceActionResult> {
+  // Ten sam schemat co formularz (AGENTS.md: walidacja klient + serwer). Bez
+  // tego wszystko, co pilnuje formularz — NIP z sumą kontrolną, pozycje, MPP
+  // z rachunkiem — dało się ominąć wywołaniem akcji wprost.
+  const parsed = invoiceFormSchema.safeParse(values);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Nieprawidłowe dane faktury' };
+  }
   try {
     const { supabase, tenant, userId } = await getTenantContext();
     // Odpornie: przed wgraniem 00091 kolumny nie ma — zwykła faktura nie może

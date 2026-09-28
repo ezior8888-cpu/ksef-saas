@@ -38,6 +38,7 @@ import {
 } from '@/lib/exports/csv-generators';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import { generateJpkFa } from '@/lib/exports/jpk-fa-generator';
+import { MissingTaxOfficeError, readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { generateJpkV7m } from '@/lib/exports/jpk-v7m-generator';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -220,6 +221,29 @@ function buildR2Path(job: ExportJobRow, exportJobId: string, filename: string) {
 
 // ============================================================================
 
+/** Komunikaty, które wolno pokazać człowiekowi — reszta to szczegóły techniczne. */
+const HUMAN_EXPORT_ERRORS = [new MissingTaxOfficeError().message];
+
+/**
+ * Po wyczerpaniu prób (Inngest `onFailure`, pg-boss `onExhausted`): eksport
+ * „nieudany” z powodem. Do 27.09 zostawał w „generating” na zawsze — Centrum
+ * eksportu kręciło się bez końca, a Co-Pilot czekał do limitu czasu.
+ */
+export async function onExportsGenerateExhausted(
+  failure: Error,
+  data: { exportJobId: string },
+): Promise<void> {
+  const message = HUMAN_EXPORT_ERRORS.includes(failure.message)
+    ? failure.message
+    : 'Nie udało się wygenerować pliku. Spróbuj ponownie albo napisz do nas.';
+  const { error } = await createAdminClient()
+    .from('export_jobs')
+    .update({ status: 'failed', error_message: message })
+    .eq('id', data.exportJobId)
+    .in('status', ['pending', 'generating']);
+  if (error) throw new Error(error.message);
+}
+
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
@@ -286,6 +310,18 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
       return { success: true as const, count: 0 };
     }
 
+    // Urząd firmy tylko dla JPK_FA — odpornie przed migracją 00092. Ten sam
+    // wkład trafia do OBU generowań (sumy kontrolnej i wysyłki do R2) — inaczej
+    // drugie generowanie nie znałoby urzędu i JPK_FA padałby przy wysyłce.
+    const taxOfficeCode =
+      job.format === 'jpk_fa'
+        ? await step.run('read-tax-office', () => readTenantTaxOffice(supabase, job.tenant_id))
+        : null;
+    const fileData = {
+      ...data,
+      issuer: { ...data.issuer, taxOfficeCode: taxOfficeCode ?? undefined },
+    };
+
     // Step 1: generate-buffer
     // ─────────────────────────────────────────────────────────────
     // Pamięciowy generate + SHA-256. Buffer NIE jest zwracany ze stepu
@@ -294,7 +330,14 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
     const fileMeta: GeneratedExportMeta = await step.run(
       'generate-buffer',
       async () => {
-        const generated = await generateExportFile(job, data);
+        let generated: Awaited<ReturnType<typeof generateExportFile>>;
+        try {
+          generated = await generateExportFile(job, fileData);
+        } catch (e) {
+          // Ponowienie nic nie da — urząd ustawia człowiek.
+          if (e instanceof MissingTaxOfficeError) throw new NonRetriableError(e.message);
+          throw e;
+        }
         const fileHash = createHash('sha256')
           .update(generated.buffer)
           .digest('hex');
@@ -319,7 +362,7 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
       const exists = await r2ObjectExists(r2Path);
       if (exists) return { skipped: true as const };
 
-      const generated = await generateExportFile(job, data);
+      const generated = await generateExportFile(job, fileData);
       await uploadToR2(r2Path, generated.buffer, generated.mimeType);
       return { skipped: false as const };
     });
@@ -392,6 +435,11 @@ export const exportsGenerateJob = inngest.createFunction(
     retries: 2,
     concurrency: { limit: 5 },
     triggers: [exportsGenerateRequested],
+    onFailure: async ({ error: failure, event }) =>
+      onExportsGenerateExhausted(
+        failure,
+        (event.data.event as { data: { exportJobId: string } }).data,
+      ),
   },
   async ({ event, step, logger, attempt }) =>
     runExportsGenerate(event.data as Parameters<typeof exportsGenerateRequested.create>[0], toJobContext({ step, logger, attempt })),

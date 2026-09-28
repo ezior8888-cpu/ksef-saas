@@ -25,6 +25,19 @@ export function normalizeTaxOfficeCode(input: string | null | undefined): string
   return code;
 }
 
+/**
+ * Plik JPK bez urzędu firmy — zamiast dawnego „1408” (Kozienice) wpisywanego
+ * każdemu. Nazwa klasy służy do rozpoznania w jobach (jak `NonRetriableError`).
+ */
+export class MissingTaxOfficeError extends Error {
+  constructor() {
+    super(
+      'Ustaw urząd skarbowy firmy (Ustawienia → Księgowa) — bez niego plik JPK wskazywałby przypadkowy urząd.',
+    );
+    this.name = 'MissingTaxOfficeError';
+  }
+}
+
 /** Kod PostgREST/Postgres „nie ma takiej kolumny” — przed wgraniem 00092. */
 const UNDEFINED_COLUMN = '42703';
 

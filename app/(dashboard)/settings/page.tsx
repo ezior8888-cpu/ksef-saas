@@ -18,6 +18,8 @@ import {
 import { DeleteAccountSection } from '@/components/settings/delete-account';
 import { VatExemptionForm } from '@/components/settings/vat-exemption-form';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
+import { CashMethodForm } from '@/components/settings/cash-method-form';
+import { readTenantCashMethod } from '@/lib/invoices/cash-method';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +27,7 @@ export const dynamic = 'force-dynamic';
 export default async function SettingsPage() {
   const { supabase, user, tenantId, role } = await getPageContext();
 
-  const [{ data: tenant }, { data: authUser }, vatExemptionBasis] = await Promise.all([
+  const [{ data: tenant }, { data: authUser }, vatExemptionBasis, vatCashMethod] = await Promise.all([
     supabase
       .from('tenants')
       .select('name, nip, address_json')
@@ -34,6 +36,8 @@ export default async function SettingsPage() {
     supabase.auth.getUser(),
     // Osobno i odpornie — przed migracją 00091 kolumny nie ma.
     readTenantVatExemption(supabase, tenantId),
+    // Odpornie — przed migracją 00094 kolumny nie ma.
+    readTenantCashMethod(supabase, tenantId),
   ]);
 
   // `user` z `getPageContext` ma email + id; created_at potrzebne tylko tutaj.
@@ -266,11 +270,17 @@ export default async function SettingsPage() {
               <p className="text-sm text-muted-foreground mt-1">
                 {vatExemptionBasis
                   ? `Zwolniona z VAT — ${vatExemptionBasis}`
-                  : 'Czynny podatnik VAT'}
+                  : vatCashMethod
+                    ? 'Czynny podatnik VAT — metoda kasowa'
+                    : 'Czynny podatnik VAT'}
               </p>
             </div>
             <VatExemptionForm
               initialBasis={vatExemptionBasis}
+              canEdit={role === 'owner' || role === 'admin'}
+            />
+            <CashMethodForm
+              initialEnabled={vatCashMethod}
               canEdit={role === 'owner' || role === 'admin'}
             />
           </div>
