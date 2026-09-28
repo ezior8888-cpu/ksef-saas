@@ -16,6 +16,8 @@ type Invoice = {
   issue_date: string;
   ksef_status: string | null;
   ksef_environment: string | null;
+  invoice_kind: string | null;
+  invoice_type: string | null;
   gross_total: number;
   net_total: number;
   vat_total: number;
@@ -35,6 +37,8 @@ function invoice(
     issue_date: issueDate,
     ksef_status: status,
     ksef_environment: environment,
+    invoice_kind: 'regular',
+    invoice_type: 'VAT',
     gross_total: gross,
     net_total: gross / 2,
     vat_total: gross / 10,
@@ -67,6 +71,14 @@ function queryClient(source: Invoice[], failRangeStart?: number) {
         is: (column: keyof Invoice, value: null) => {
           filters.push([column, value]);
           predicates.push((row) => row[column] === value);
+          return builder;
+        },
+        or: (filter: string) => {
+          if (filter !== 'invoice_kind.eq.correction,invoice_type.in.(KOR,KOR_ZAL,KOR_ROZ)') {
+            throw new Error(`Unexpected OR filter ${filter}`);
+          }
+          predicates.push((row) => row.invoice_kind === 'correction' ||
+            ['KOR', 'KOR_ZAL', 'KOR_ROZ'].includes(row.invoice_type ?? ''));
           return builder;
         },
         gte: (column: 'issue_date', value: string) => {
@@ -151,7 +163,7 @@ describe('dashboard figures after a KSeF environment switch', () => {
     expect(series.prevSeries.at(-1)).toBe(80);
     const monetaryQueries = invoiceQueries.filter((query) =>
       query.filters.some(([column, value]) =>
-        column === 'ksef_environment' && value === 'production'));
+        column === 'ksef_environment' && value === 'production') && query.orders.length > 0);
     expect(monetaryQueries).toHaveLength(3);
     expect(monetaryQueries.every((query) =>
       query.filters.some(([column, value]) =>
@@ -171,6 +183,22 @@ describe('dashboard figures after a KSeF environment switch', () => {
       totalGross: 1_000,
       totalVat: 100,
     });
+  });
+
+  it.each([
+    ['native', { invoice_kind: 'correction', invoice_type: 'KOR' }],
+    ['imported', { invoice_kind: 'regular', invoice_type: 'KOR' }],
+  ])('blocks the 123 + 110.70 double count from a %s correction', async (_label, classification) => {
+    const original = invoice('2026-09-04', 'accepted', 'production', 123, 'parent');
+    const after = {
+      ...invoice('2026-09-05', 'accepted', 'production', 110.70, 'kor'),
+      ...classification,
+    };
+    const { client } = queryClient([original, after]);
+    const now = new Date('2026-09-15T12:00:00Z');
+
+    await expect(getMonthlyFigures(client, TENANT, now)).rejects.toThrow('Kwoty przyjętych korekt wymagają uzgodnienia');
+    await expect(getSalesSeries(client, TENANT, now)).rejects.toThrow('Kwoty przyjętych korekt wymagają uzgodnienia');
   });
 
   it('stops both monetary views when an accepted historical invoice has no environment', async () => {

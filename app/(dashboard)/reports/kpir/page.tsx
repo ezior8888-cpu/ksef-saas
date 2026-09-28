@@ -1,7 +1,12 @@
 import { KpirView } from '@/components/expenses/kpir-view';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
-import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
+import {
+  assertAcceptedInvoiceEnvironmentComplete,
+  assertOutgoingCorrectionsReconciled,
+  CorrectionReconciliationError,
+  isUnreconciledCorrectionRow,
+} from '@/lib/ksef/accounting-provenance';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 
@@ -19,7 +24,7 @@ function clampYear(y: number, fallback: number): number {
   return yi;
 }
 
-export default async function KpirPage({
+async function renderKpirPage({
   searchParams,
 }: {
   searchParams: Promise<{ month?: string; year?: string }>;
@@ -38,7 +43,6 @@ export default async function KpirPage({
   await assertAcceptedInvoiceEnvironmentComplete(supabase, {
     tenantId, periodStart, periodEnd, direction: 'outgoing', environment,
   });
-
   const expenses = await readCompletePages('expenses', (from, to) => supabase
     .from('expenses')
     .select('*', { count: 'exact' })
@@ -56,7 +60,7 @@ export default async function KpirPage({
 
   const invoices = await readCompletePages('invoices', (from, to) => supabase
     .from('invoices')
-    .select('id, internal_number, issue_date, gross_total, net_total, buyer_data', { count: 'exact' })
+    .select('id, internal_number, issue_date, gross_total, net_total, buyer_data, invoice_kind, invoice_type', { count: 'exact' })
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
@@ -65,6 +69,12 @@ export default async function KpirPage({
     .lte('issue_date', periodEnd)
     .order('id', { ascending: true })
     .range(from, to));
+  await assertOutgoingCorrectionsReconciled(supabase, {
+    tenantId, periodStart, periodEnd, endBound: 'inclusive', environment,
+  });
+  if (invoices.some(isUnreconciledCorrectionRow)) {
+    throw new CorrectionReconciliationError();
+  }
   invoices.sort((a, b) =>
     a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 
@@ -78,4 +88,20 @@ export default async function KpirPage({
       />
     </div>
   );
+}
+
+export default async function KpirPage(props: {
+  searchParams: Promise<{ month?: string; year?: string }>;
+}) {
+  try {
+    return await renderKpirPage(props);
+  } catch (error) {
+    if (!(error instanceof CorrectionReconciliationError)) throw error;
+    return (
+      <section role="alert" className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] p-6">
+        <h1 className="font-semibold">Kwoty wymagają uzgodnienia</h1>
+        <p>W tym okresie są korekty faktur. Raport KPiR jest wstrzymany do uzgodnienia ich kwot.</p>
+      </section>
+    );
+  }
 }

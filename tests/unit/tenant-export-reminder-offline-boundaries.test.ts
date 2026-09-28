@@ -40,8 +40,14 @@ function database() {
       in(key: string, values: unknown[]) { op.filters.push([key, values]); predicates.push(row => values.includes(row[key])); return query; },
       or(filter: string) {
         const match = /^ksef_environment\.is\.null,ksef_environment\.neq\.(test|demo|production)$/.exec(filter);
-        if (!match) throw new Error(`Unexpected OR filter ${filter}`);
-        predicates.push(row => row.ksef_environment == null || row.ksef_environment !== match[1]);
+        if (match) {
+          predicates.push(row => row.ksef_environment == null || row.ksef_environment !== match[1]);
+        } else if (filter === 'invoice_kind.eq.correction,invoice_type.in.(KOR,KOR_ZAL,KOR_ROZ)') {
+          predicates.push(row => row.invoice_kind === 'correction' ||
+            ['KOR', 'KOR_ZAL', 'KOR_ROZ'].includes(String(row.invoice_type)));
+        } else {
+          throw new Error(`Unexpected OR filter ${filter}`);
+        }
         return query;
       },
       gte(key: string, value: string) { predicates.push(row => String(row[key]) >= value); return query; },
@@ -83,7 +89,7 @@ function database() {
 
 function invoice(id: string, tenant = 'tenant-a', direction = 'outgoing'): Row {
   return {
-    id, tenant_id: tenant, direction, invoice_kind: 'regular', ksef_status: 'accepted', ksef_environment: 'test',
+    id, tenant_id: tenant, direction, invoice_kind: 'regular', invoice_type: 'VAT', ksef_status: 'accepted', ksef_environment: 'test',
     submitted_to_ksef_at: null, offline_idempotency_key: null,
     offline_qr_offline: null, offline_qr_certyfikat: null,
     internal_number: id, issue_date: '2026-01-01', created_at: '2026-01-01T12:00:00Z',
@@ -199,6 +205,25 @@ describe('tenant boundaries for accounting exports', () => {
     expect(result.expenses.map(row => row.id)).toEqual(['manual', 'ocr-cost', 'test-cost']);
   });
 
+  it.each([
+    ['native', { invoice_kind: 'correction', invoice_type: 'KOR' }],
+    ['imported', { invoice_kind: 'regular', invoice_type: 'KOR' }],
+  ])('does not return accounting data for a %s 110.70 KOR alongside its 123 parent', async (_label, classification) => {
+    tables.invoices[0].gross_total = 123;
+    tables.invoices.push({ ...invoice('kor'), gross_total: 110.70, ...classification });
+    await expect(fetchInvoicesForExport({ ...exportParams, includeCorrections: false }))
+      .rejects.toThrow('Kwoty przyjętych korekt wymagają uzgodnienia');
+    expect(operations.some(op => op.table === 'invoice_line_items')).toBe(false);
+  });
+
+  it('does not block a received-only export because of an unrelated outgoing KOR', async () => {
+    tables.invoices[0].invoice_kind = 'correction';
+    tables.invoices[0].invoice_type = 'KOR';
+    tables.invoices.push(invoice('inbox', 'tenant-a', 'incoming'));
+    const data = await fetchInvoicesForExport({ ...exportParams, direction: 'received' });
+    expect(data.receivedInvoices.map(row => row.invoiceNumber)).toEqual(['inbox']);
+  });
+
   it('reads every deductible cost and restores accounting date order after stable ID pages', async () => {
     tables.expenses = Array.from({ length: 1200 }, (_, index) => ({
       id: `expense-${String(index).padStart(4, '0')}`,
@@ -251,30 +276,30 @@ describe('tenant boundaries for accounting exports', () => {
   });
 
   it('preserves a same-tenant correction parent outside the exported date period', async () => {
-    Object.assign(tables.invoices[0], { invoice_kind: 'correction', parent_invoice_id: 'parent-a' });
-    tables.invoices.push({ ...invoice('parent-a'), issue_date: '2025-01-01', internal_number: 'ORIGINAL-A' });
-    const data = await fetchInvoicesForExport(exportParams);
-    expect(data.issuedInvoices[0].correctedInvoiceNumber).toBe('ORIGINAL-A');
+    Object.assign(tables.invoices[0], { direction: 'incoming', invoice_kind: 'correction', parent_invoice_id: 'parent-a' });
+    tables.invoices.push({ ...invoice('parent-a', 'tenant-a', 'incoming'), issue_date: '2025-01-01', internal_number: 'ORIGINAL-A' });
+    const data = await fetchInvoicesForExport({ ...exportParams, direction: 'received' });
+    expect(data.receivedInvoices[0].correctedInvoiceNumber).toBe('ORIGINAL-A');
   });
 
   it('rejects a correction whose parent was accepted in another KSeF environment', async () => {
-    Object.assign(tables.invoices[0], { invoice_kind: 'correction', parent_invoice_id: 'parent-a' });
-    tables.invoices.push({ ...invoice('parent-a'), issue_date: '2025-01-01', internal_number: 'TEST-PARENT', ksef_environment: 'production' });
-    await expect(fetchInvoicesForExport(exportParams)).rejects.toThrow('Linked invoice not found in organization');
+    Object.assign(tables.invoices[0], { direction: 'incoming', invoice_kind: 'correction', parent_invoice_id: 'parent-a' });
+    tables.invoices.push({ ...invoice('parent-a', 'tenant-a', 'incoming'), issue_date: '2025-01-01', internal_number: 'TEST-PARENT', ksef_environment: 'production' });
+    await expect(fetchInvoicesForExport({ ...exportParams, direction: 'received' })).rejects.toThrow('Linked invoice not found in organization');
   });
 
   it.each([
     { ksef_status: 'draft' },
-    { direction: 'incoming' },
+    { direction: 'outgoing' },
   ])('rejects a correction parent that is not an accepted invoice in the same direction: %j', async patch => {
-    Object.assign(tables.invoices[0], { invoice_kind: 'correction', parent_invoice_id: 'parent-a' });
-    tables.invoices.push({ ...invoice('parent-a'), internal_number: 'INVALID-PARENT', ...patch });
-    await expect(fetchInvoicesForExport(exportParams)).rejects.toThrow('Linked invoice not found in organization');
+    Object.assign(tables.invoices[0], { direction: 'incoming', invoice_kind: 'correction', parent_invoice_id: 'parent-a' });
+    tables.invoices.push({ ...invoice('parent-a', 'tenant-a', 'incoming'), internal_number: 'INVALID-PARENT', ...patch });
+    await expect(fetchInvoicesForExport({ ...exportParams, direction: 'received' })).rejects.toThrow('Linked invoice not found in organization');
   });
 
   it.each(['invoice-b', 'missing-parent'])('rejects foreign or missing correction parents: %s', async parent => {
-    Object.assign(tables.invoices[0], { invoice_kind: 'correction', parent_invoice_id: parent });
-    await expect(fetchInvoicesForExport(exportParams)).rejects.toThrow('Linked invoice not found in organization');
+    Object.assign(tables.invoices[0], { direction: 'incoming', invoice_kind: 'correction', parent_invoice_id: parent });
+    await expect(fetchInvoicesForExport({ ...exportParams, direction: 'received' })).rejects.toThrow('Linked invoice not found in organization');
   });
 
   it('received invoice from the KSeF inbox carries its SELLER (from fa3_data metadata)', async () => {
@@ -318,17 +343,18 @@ describe('tenant boundaries for accounting exports', () => {
   it('fetches all 1200 correction parents outside the export period', async () => {
     tables.invoices = Array.from({ length: 1200 }, (_, i) => ({
       ...invoice(`correction-${String(i).padStart(4, '0')}`),
-      invoice_kind: 'correction', parent_invoice_id: `parent-${String(i).padStart(4, '0')}`,
+      direction: 'incoming', invoice_kind: 'correction', parent_invoice_id: `parent-${String(i).padStart(4, '0')}`,
     }));
     tables.invoices.push(...Array.from({ length: 1200 }, (_, i) => ({
       ...invoice(`parent-${String(i).padStart(4, '0')}`),
       internal_number: `ORIGINAL-${String(i).padStart(4, '0')}`,
       issue_date: '2025-01-01',
+      direction: 'incoming',
     })));
 
-    const data = await fetchInvoicesForExport({ ...exportParams, direction: 'issued' });
-    expect(data.issuedInvoices).toHaveLength(1200);
-    expect(data.issuedInvoices.at(-1)?.correctedInvoiceNumber).toBe('ORIGINAL-1199');
+    const data = await fetchInvoicesForExport({ ...exportParams, direction: 'received' });
+    expect(data.receivedInvoices).toHaveLength(1200);
+    expect(data.receivedInvoices.at(-1)?.correctedInvoiceNumber).toBe('ORIGINAL-1199');
     expect(operations.filter(op => op.table === 'invoices' &&
       op.selection === 'id, internal_number, ksef_number')).toHaveLength(12);
   });

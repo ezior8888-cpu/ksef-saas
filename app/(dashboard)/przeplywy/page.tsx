@@ -9,6 +9,11 @@ import {
   getSalesSeries,
 } from '@/lib/dashboard/monthly-figures';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import {
+  assertOutgoingCorrectionsReconciled,
+  CorrectionReconciliationError,
+  isUnreconciledCorrectionRow,
+} from '@/lib/ksef/accounting-provenance';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { getPageContext } from '@/lib/supabase/page-context';
 
@@ -25,7 +30,7 @@ import { getPageContext } from '@/lib/supabase/page-context';
  */
 export const dynamic = 'force-dynamic';
 
-export default async function PrzeplywyPage() {
+async function renderPrzeplywyPage() {
   const { supabase, tenantId } = await getPageContext();
   const environment = requireConfiguredKsefEnvironment();
 
@@ -38,7 +43,7 @@ export default async function PrzeplywyPage() {
     readCompletePages('cash-flow invoices', (from, to) =>
       supabase
         .from('invoices')
-        .select('id, issue_date, net_total, gross_total', { count: 'exact' })
+        .select('id, issue_date, net_total, gross_total, invoice_kind, invoice_type', { count: 'exact' })
         .eq('tenant_id', tenantId)
         .eq('direction', 'outgoing')
         .eq('ksef_status', 'accepted')
@@ -61,6 +66,16 @@ export default async function PrzeplywyPage() {
   const visibleExpenses = await filterExpensesForKsefEnvironment(
     supabase, tenantId, environment, expenses,
   );
+  // Cash flow has its own invoice read; protect it even if the cards below
+  // are later removed. Count after the read so a newly accepted KOR is caught.
+  await assertOutgoingCorrectionsReconciled(supabase, {
+    tenantId,
+    environment,
+    periodStart: sixMonthsAgo,
+  });
+  if (invoices.some(isUnreconciledCorrectionRow)) {
+    throw new CorrectionReconciliationError();
+  }
   invoices.sort((a, b) =>
     a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
   visibleExpenses.sort((a, b) =>
@@ -111,4 +126,18 @@ export default async function PrzeplywyPage() {
       />
     </div>
   );
+}
+
+export default async function PrzeplywyPage() {
+  try {
+    return await renderPrzeplywyPage();
+  } catch (error) {
+    if (!(error instanceof CorrectionReconciliationError)) throw error;
+    return (
+      <section role="alert" className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] p-6">
+        <h1 className="font-semibold">Kwoty wymagają uzgodnienia</h1>
+        <p>W tym okresie są korekty faktur. Podsumowanie finansowe jest wstrzymane do uzgodnienia ich kwot.</p>
+      </section>
+    );
+  }
 }

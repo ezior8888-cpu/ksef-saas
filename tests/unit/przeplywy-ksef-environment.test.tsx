@@ -1,4 +1,5 @@
 import { Children, type ReactElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ context: vi.fn() }));
@@ -39,9 +40,11 @@ function client(options: {
 } = {}) {
   const invoices: Row[] = [
     { tenant_id: TENANT, direction: 'outgoing', ksef_status: 'accepted',
-      ksef_environment: 'test', issue_date: '2026-09-02', net_total: 1_000, gross_total: 1_230 },
+      ksef_environment: 'test', issue_date: '2026-09-02', net_total: 1_000, gross_total: 1_230,
+      invoice_kind: 'regular', invoice_type: 'VAT' },
     { tenant_id: TENANT, direction: 'outgoing', ksef_status: 'accepted',
-      ksef_environment: 'production', issue_date: '2026-09-03', net_total: 100, gross_total: 123 },
+      ksef_environment: 'production', issue_date: '2026-09-03', net_total: 100, gross_total: 123,
+      invoice_kind: 'regular', invoice_type: 'VAT' },
     ...(options.incomingInvoices ?? []),
     ...(options.outgoingInvoices ?? []),
   ];
@@ -70,6 +73,14 @@ function client(options: {
         },
         gte: (column: string, value: string) => {
           filters.push((row) => String(row[column]) >= value);
+          return builder;
+        },
+        or: (filter: string) => {
+          if (filter !== 'invoice_kind.eq.correction,invoice_type.in.(KOR,KOR_ZAL,KOR_ROZ)') {
+            throw new Error(`Unexpected OR filter ${filter}`);
+          }
+          filters.push((row) => row.invoice_kind === 'correction' ||
+            ['KOR', 'KOR_ZAL', 'KOR_ROZ'].includes(String(row.invoice_type)));
           return builder;
         },
         in: (column: string, values: string[]) => {
@@ -124,6 +135,20 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('cash flow after switching from TEST to PROD', () => {
+  it('shows a reconciliation notice instead of summing an imported KOR as another sale', async () => {
+    const supabase = client({ outgoingInvoices: [{
+      tenant_id: TENANT, direction: 'outgoing', ksef_status: 'accepted',
+      ksef_environment: 'production', issue_date: '2026-09-04',
+      invoice_kind: 'regular', invoice_type: 'KOR', net_total: 90, gross_total: 110.70,
+    }] });
+    mocks.context.mockResolvedValue({ supabase, tenantId: TENANT });
+
+    const html = renderToStaticMarkup(await PrzeplywyPage());
+    expect(html).toContain('Kwoty wymagają uzgodnienia');
+    expect(html).not.toContain('CashFlowDashboard');
+    expect(html).not.toContain('110.7');
+  });
+
   it('passes only accepted production invoices to the revenue calculation', async () => {
     const supabase = client();
     mocks.context.mockResolvedValue({ supabase, tenantId: TENANT });

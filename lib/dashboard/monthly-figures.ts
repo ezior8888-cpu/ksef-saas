@@ -1,5 +1,10 @@
 import type { PageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import {
+  assertOutgoingCorrectionsReconciled,
+  CorrectionReconciliationError,
+  isUnreconciledCorrectionRow,
+} from '@/lib/ksef/accounting-provenance';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import type { KsefEnvironment } from '@/types/ksef';
 
@@ -45,6 +50,8 @@ export interface MonthlyFigures {
 type InvoiceSummary = {
   id: string;
   issue_date: string;
+  invoice_kind: string | null;
+  invoice_type: string | null;
   gross_total: number | string | null;
   net_total: number | string | null;
   vat_total: number | string | null;
@@ -96,9 +103,9 @@ async function fetchAcceptedInvoices(
   endExclusive: string,
   errorMessage: string,
 ): Promise<InvoiceSummary[]> {
-  return readCompletePages(errorMessage, (from, to) => supabase
+  const rows = await readCompletePages(errorMessage, (from, to) => supabase
       .from('invoices')
-      .select('id, issue_date, gross_total, net_total, vat_total', { count: 'exact' })
+      .select('id, issue_date, gross_total, net_total, vat_total, invoice_kind, invoice_type', { count: 'exact' })
       .eq('tenant_id', tenantId)
       .eq('direction', OUTGOING)
       .eq('ksef_status', 'accepted')
@@ -107,6 +114,17 @@ async function fetchAcceptedInvoices(
       .lt('issue_date', endExclusive)
       .order('id', { ascending: true })
       .range(from, to));
+  await assertOutgoingCorrectionsReconciled(supabase, {
+    tenantId,
+    environment,
+    periodStart: start,
+    periodEnd: endExclusive,
+    endBound: 'exclusive',
+  });
+  if (rows.some(isUnreconciledCorrectionRow)) {
+    throw new CorrectionReconciliationError();
+  }
+  return rows;
 }
 
 async function countLocalDrafts(

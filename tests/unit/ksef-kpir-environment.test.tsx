@@ -17,9 +17,9 @@ import KpirPage from '@/app/(dashboard)/reports/kpir/page';
 
 type Row = Record<string, unknown>;
 const fixtureRows: Row[] = [
-  { id: 'test', tenant_id: 'tenant-a', internal_number: 'TEST-DOCUMENT', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: 'test', issue_date: '2026-09-10' },
-  { id: 'prod', tenant_id: 'tenant-a', internal_number: 'PROD-DOCUMENT', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: 'production', issue_date: '2026-09-10' },
-  { id: 'legacy', tenant_id: 'tenant-a', internal_number: 'LEGACY-DOCUMENT', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: null, issue_date: '2026-09-10' },
+  { id: 'test', tenant_id: 'tenant-a', internal_number: 'TEST-DOCUMENT', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: 'test', issue_date: '2026-09-10', invoice_kind: 'regular', invoice_type: 'VAT' },
+  { id: 'prod', tenant_id: 'tenant-a', internal_number: 'PROD-DOCUMENT', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: 'production', issue_date: '2026-09-10', invoice_kind: 'regular', invoice_type: 'VAT' },
+  { id: 'legacy', tenant_id: 'tenant-a', internal_number: 'LEGACY-DOCUMENT', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: null, issue_date: '2026-09-10', invoice_kind: 'regular', invoice_type: 'VAT' },
 ];
 let rows: Row[];
 let expenseRows: Row[];
@@ -36,8 +36,14 @@ const from = vi.fn((table: string) => {
     in: (key: string, values: unknown[]) => { filters.push((row) => values.includes(row[key])); return query; },
     or: (filter: string) => {
       const match = /^ksef_environment\.is\.null,ksef_environment\.neq\.(test|demo|production)$/.exec(filter);
-      if (!match) throw new Error(`Unexpected OR filter ${filter}`);
-      filters.push((row) => row.ksef_environment == null || row.ksef_environment !== match[1]);
+      if (match) {
+        filters.push((row) => row.ksef_environment == null || row.ksef_environment !== match[1]);
+      } else if (filter === 'invoice_kind.eq.correction,invoice_type.in.(KOR,KOR_ZAL,KOR_ROZ)') {
+        filters.push((row) => row.invoice_kind === 'correction' ||
+          ['KOR', 'KOR_ZAL', 'KOR_ROZ'].includes(String(row.invoice_type)));
+      } else {
+        throw new Error(`Unexpected OR filter ${filter}`);
+      }
       return query;
     },
     gte: (key: string, value: string) => { filters.push((row) => String(row[key]) >= value); return query; },
@@ -85,6 +91,21 @@ describe('KPiR KSeF provenance', () => {
     await expect(KpirPage({ searchParams: Promise.resolve({ month: '9', year: '2026' }) }))
       .rejects.toThrow('require KSeF environment reconciliation');
     expect(from).toHaveBeenCalledExactlyOnceWith('invoices');
+  });
+
+  it.each([
+    ['native', { invoice_kind: 'correction', invoice_type: 'KOR' }],
+    ['imported', { invoice_kind: 'regular', invoice_type: 'KOR' }],
+  ])('shows no KPiR amounts for a %s KOR after an original 123 invoice', async (_label, classification) => {
+    rows = [
+      { ...rows[0], id: 'parent', internal_number: 'ORIGINAL', gross_total: 123 },
+      { ...rows[0], id: 'kor', internal_number: 'CORRECTION', gross_total: 110.70, ...classification },
+    ];
+    const page = await KpirPage({ searchParams: Promise.resolve({ month: '9', year: '2026' }) });
+    const html = renderToStaticMarkup(page);
+    expect(html).toContain('Kwoty wymagają uzgodnienia');
+    expect(html).not.toContain('ORIGINAL');
+    expect(html).not.toContain('CORRECTION');
   });
 
   it('rejects an unset environment before reading accounting rows', async () => {

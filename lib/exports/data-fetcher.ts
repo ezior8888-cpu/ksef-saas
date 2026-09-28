@@ -3,7 +3,12 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
-import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
+import {
+  assertAcceptedInvoiceEnvironmentComplete,
+  assertOutgoingCorrectionsReconciled,
+  CorrectionReconciliationError,
+  isUnreconciledCorrectionRow,
+} from '@/lib/ksef/accounting-provenance';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import type { KsefEnvironment } from '@/types/ksef';
@@ -253,6 +258,19 @@ async function fetchInvoiceRows(
     }
     return query.range(from, to);
   });
+
+  if (params.direction === 'issued') {
+    await assertOutgoingCorrectionsReconciled(supabase, {
+      tenantId: params.tenantId,
+      periodStart: params.periodStart,
+      periodEnd: params.periodEnd,
+      endBound: 'inclusive',
+      environment: params.environment,
+    });
+    if (rows.some(isUnreconciledCorrectionRow)) {
+      throw new CorrectionReconciliationError();
+    }
+  }
   return rows.sort((a, b) =>
     a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 }

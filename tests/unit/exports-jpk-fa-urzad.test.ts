@@ -10,6 +10,7 @@ const db = vi.hoisted(() => ({
   updates: [] as Array<{ table: string; patch: Row; statusIn?: unknown[] }>,
   uploads: [] as string[],
   orderedFormats: [] as string[],
+  fetchBlocked: false,
 }));
 
 /** Atrapa klienta: zlecenie eksportu, urząd firmy, zapis pliku. */
@@ -66,7 +67,9 @@ vi.mock('@/lib/storage/r2', () => ({
   },
 }));
 vi.mock('@/lib/exports/data-fetcher', () => ({
-  fetchInvoicesForExport: async () => ({
+  fetchInvoicesForExport: async () => {
+    if (db.fetchBlocked) throw new Error('Kwoty przyjętych korekt wymagają uzgodnienia przed pokazaniem raportu');
+    return {
     issuer: { nip: '5260001246', name: 'Moja Firma' },
     issuedInvoices: [
       {
@@ -84,7 +87,8 @@ vi.mock('@/lib/exports/data-fetcher', () => ({
     ],
     receivedInvoices: [],
     expenses: [],
-  }),
+    };
+  },
 }));
 
 import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/inngest/jobs/exports-generate';
@@ -108,6 +112,7 @@ beforeEach(() => {
   db.updates = [];
   db.uploads = [];
   db.orderedFormats = [];
+  db.fetchBlocked = false;
 });
 
 describe('job eksportu JPK_FA', () => {
@@ -124,6 +129,15 @@ describe('job eksportu JPK_FA', () => {
     await expect(run).rejects.toMatchObject({ name: 'NonRetriableError' });
     await expect(run).rejects.toThrow(/Ustawienia → Księgowa/);
     expect(db.uploads).toEqual([]);
+  });
+
+  it('nie tworzy ani nie wysyła pliku, gdy odczyt faktur zatrzymuje nieuzgodnioną KOR', async () => {
+    db.office = '1433';
+    db.fetchBlocked = true;
+    await expect(runExportsGenerate({ exportJobId: 'job-1' }, ctx))
+      .rejects.toThrow('Kwoty przyjętych korekt wymagają uzgodnienia');
+    expect(db.uploads).toEqual([]);
+    expect(db.updates.some((u) => u.table === 'export_jobs' && u.patch.status === 'completed')).toBe(false);
   });
 });
 
