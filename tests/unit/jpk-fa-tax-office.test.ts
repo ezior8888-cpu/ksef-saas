@@ -1,31 +1,49 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  DEFAULT_TAX_OFFICE_CODE,
-  resolveTaxOfficeCode,
-} from '@/lib/exports/jpk-fa-generator';
+import { generateJpkFa, resolveTaxOfficeCode } from '@/lib/exports/jpk-fa-generator';
+import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
 
 /**
- * QA-3 (audyt przedlaunchowy): KodUrzedu w JPK_FA musi być 4-cyfrowy, inaczej
- * bramka MF odrzuca cały plik. Fallback do domyślnego US, gdy tenant nie ma
- * jeszcze ustawionego własnego kodu.
+ * KodUrzedu w JPK_FA — urząd skarbowy FIRMY (Ustawienia → Księgowa, #67).
+ *
+ * Do 27.09 brak kodu zamieniał się w „1408”, opisany w kodzie jako Warszawa-
+ * Mokotów — według słownika MF to Urząd Skarbowy w Kozienicach. Każdy plik
+ * wskazywał ten urząd i przechodził walidację, więc nikt tego nie widział.
+ * Teraz brak urzędu to błąd z komunikatem, nie cichy zamiennik.
  */
 describe('resolveTaxOfficeCode', () => {
-  it('poprawny 4-cyfrowy kod przechodzi', () => {
+  it('kod ze słownika MF przechodzi', () => {
     expect(resolveTaxOfficeCode('1471')).toBe('1471');
     expect(resolveTaxOfficeCode('0271')).toBe('0271');
-  });
-
-  it('trim whitespace', () => {
     expect(resolveTaxOfficeCode('  1471  ')).toBe('1471');
   });
 
-  it('niepoprawny ⇒ domyślny (chroni walidację JPK)', () => {
-    expect(resolveTaxOfficeCode(undefined)).toBe(DEFAULT_TAX_OFFICE_CODE);
-    expect(resolveTaxOfficeCode(null)).toBe(DEFAULT_TAX_OFFICE_CODE);
-    expect(resolveTaxOfficeCode('')).toBe(DEFAULT_TAX_OFFICE_CODE);
-    expect(resolveTaxOfficeCode('14')).toBe(DEFAULT_TAX_OFFICE_CODE); // za krótki
-    expect(resolveTaxOfficeCode('14080')).toBe(DEFAULT_TAX_OFFICE_CODE); // za długi
-    expect(resolveTaxOfficeCode('14AB')).toBe(DEFAULT_TAX_OFFICE_CODE); // nie-cyfry
+  it.each([undefined, null, '', '14', '14080', '14AB', '9999'])(
+    'brak albo kod spoza słownika (%j) — błąd, nie „Kozienice”',
+    (code) => {
+      expect(() => resolveTaxOfficeCode(code)).toThrow(MissingTaxOfficeError);
+    },
+  );
+
+  it('komunikat mówi, gdzie ustawić urząd', () => {
+    expect(() => resolveTaxOfficeCode(null)).toThrow(/Ustawienia → Księgowa/);
+  });
+});
+
+describe('generateJpkFa — KodUrzedu', () => {
+  const dane = (taxOfficeCode?: string) => ({
+    issuer: { nip: '5260001246', name: 'Moja Firma', taxOfficeCode },
+    periodStart: '2026-08-01',
+    periodEnd: '2026-08-31',
+    issuedInvoices: [],
+    receivedInvoices: [],
+  });
+
+  it('urząd firmy trafia do nagłówka', () => {
+    expect(generateJpkFa(dane('1433'))).toContain('<KodUrzedu>1433</KodUrzedu>');
+  });
+
+  it('bez urzędu plik nie powstaje', () => {
+    expect(() => generateJpkFa(dane())).toThrow(MissingTaxOfficeError);
   });
 });

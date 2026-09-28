@@ -13,7 +13,8 @@ import { counterpartyOf, generateJpkFa, type JpkInvoice } from '@/lib/exports/jp
  * Znaczenie pól wg broszury MF do JPK_FA(4).
  */
 
-const MY = { nip: '1234567890', name: 'Moja Firma', address: { street: 'Główna', buildingNumber: '1', postCode: '00-001', city: 'Warszawa' } };
+// Urząd skarbowy firmy (#67) — bez niego JPK_FA nie powstaje (zamiast „1408”).
+const MY = { nip: '1234567890', name: 'Moja Firma', taxOfficeCode: '1433', address: { street: 'Główna', buildingNumber: '1', postCode: '00-001', city: 'Warszawa' } };
 
 function faktura(o: Partial<JpkInvoice> = {}): JpkInvoice {
   return {
