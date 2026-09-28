@@ -23,8 +23,10 @@ vi.mock('@/lib/exports/data-fetcher', () => ({
 vi.mock('@/lib/exports/kpir-generator', () => ({ generateKpirXlsx: mocks.kpir }));
 vi.mock('@/lib/exports/jpk-v7m-generator', () => ({ generateJpkV7m: mocks.jpkV7m }));
 vi.mock('@/lib/storage/r2', () => ({
-  r2ObjectExists: vi.fn(async () => false),
-  uploadToR2: mocks.uploaded,
+  uploadToR2IfAbsent: async () => {
+    await mocks.uploaded();
+    return true;
+  },
 }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({

@@ -60,9 +60,9 @@ function builder(table: string) {
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: builder }) }));
 vi.mock('@/lib/storage/r2', () => ({
-  r2ObjectExists: async () => false,
-  uploadToR2: async (_path: string, buffer: Buffer) => {
+  uploadToR2IfAbsent: async (_path: string, buffer: Buffer) => {
     db.uploads.push(buffer.toString('utf8'));
+    return true;
   },
 }));
 vi.mock('@/lib/exports/data-fetcher', () => ({
@@ -93,8 +93,7 @@ import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
 
 /**
  * JPK_FA z urzędem skarbowym FIRMY (#67) — cały job eksportu, nie sam
- * generator: plik generuje się DWA razy (suma kontrolna, potem wysyłka do R2)
- * i obie ścieżki muszą znać urząd. Do 27.09 każdy plik wskazywał „1408”
+ * generator: plik wysyłany do R2 musi znać urząd. Do 27.09 każdy plik wskazywał „1408”
  * (według słownika MF — US w Kozienicach).
  */
 

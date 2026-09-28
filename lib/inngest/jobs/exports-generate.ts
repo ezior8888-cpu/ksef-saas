@@ -1,21 +1,18 @@
 // lib/inngest/jobs/exports-generate.ts
 // Inngest: generuje plik exportu i zapisuje w R2.
 //
-// Flow rozbity na trzy memoizowane przez Inngest stepy:
+// Flow rozbity na dwa memoizowane przez Inngest stepy:
 //
-//   1. generate-buffer — generuje plik w pamięci, liczy SHA-256, zwraca tylko
-//      meta-dane (filename / mimeType / sizeBytes / fileHash). Buffer NIE jest
+//   1. generate-upload — generuje plik raz, wysyła dokładnie te bajty i liczy
+//      SHA-256 zapisanych bajtów. Zwraca tylko metadane. Buffer NIE jest
 //      serializowany do Inngest store'u (default limit ~64 KB na step memo,
 //      a XML/Excel/CSV potrafią mieć MB-y; do tego niepotrzebnie wystawiamy
 //      treść biznesową w cudzej bazie).
 //
-//   2. upload-r2 — HEAD do R2, jeśli klucz już istnieje pomijamy upload (retry-
-//      safe), w przeciwnym razie regenerujemy bufor (deterministycznie z DB)
-//      i wgrywamy. Step jest idempotentny: dwa równoległe runy nie nadpiszą
-//      się nawzajem niczym z innym hashem (deterministyczny generator), a
-//      drugi run kończy się no-op.
+//      Warunkowy PUT chroni pierwszy obiekt przed równoległym nadpisaniem.
+//      Gdy istnieje po wcześniejszej próbie, hash liczymy z jego treści.
 //
-//   3. persist — UPSERT export_files z ON CONFLICT (export_job_id, filename)
+//   2. persist — UPSERT export_files z ON CONFLICT (export_job_id, filename)
 //      + UPDATE export_jobs.status = 'completed'. Wymaga unique indexu
 //      `uq_export_files_job_filename` z migracji 00026.
 
@@ -43,7 +40,7 @@ import { readTaxpayerEmail } from '@/lib/exports/taxpayer-email';
 import { generateJpkV7m, MissingTaxpayerEmailError } from '@/lib/exports/jpk-v7m-generator';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { r2ObjectExists, uploadToR2 } from '@/lib/storage/r2';
+import { downloadFromR2, uploadToR2IfAbsent } from '@/lib/storage/r2';
 
 import type { Database } from '@/types/database';
 import type { FetchedInvoiceData } from '@/lib/exports/data-fetcher';
@@ -74,13 +71,7 @@ function safeNip(nip: string): string {
   return nip.replace(/\D/g, '').slice(0, 14) || 'braknip';
 }
 
-/**
- * Pure: model -> Buffer + metadane. Wywoływane DWA razy w cold-path (raz
- * w `generate-buffer` dla policzenia hashu, raz w `upload-r2` przy faktycznym
- * uploadzie). Generatory są deterministyczne — ten sam input daje ten sam
- * SHA-256, więc HEAD-then-skip + ewentualny IfNoneMatch w R2 trzymają nas
- * po bezpiecznej stronie.
- */
+/** Builds the bytes for one export attempt. Some formats include current time. */
 async function generateExportFile(
   job: ExportJobRow,
   data: FetchedInvoiceData,
@@ -311,9 +302,7 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
       return { success: true as const, count: 0 };
     }
 
-    // Urząd firmy dla plików JPK — odpornie przed migracją 00092. Ten sam
-    // wkład trafia do OBU generowań (sumy kontrolnej i wysyłki do R2) — inaczej
-    // drugie generowanie nie znałoby urzędu i plik padałby przy wysyłce.
+    // Urząd firmy dla plików JPK — odpornie przed migracją 00092.
     const format = job.format as ExportJobRow['format'] | 'jpk_v7m';
     const taxOfficeCode =
       format === 'jpk_fa' || format === 'jpk_v7m'
@@ -333,13 +322,13 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
       },
     };
 
-    // Step 1: generate-buffer
+    // Step 1: generate and upload exactly one byte sequence
     // ─────────────────────────────────────────────────────────────
-    // Pamięciowy generate + SHA-256. Buffer NIE jest zwracany ze stepu
-    // (Inngest serializuje return-value, a multi-MB JSON byłby kosztowny
-    // i niepotrzebnie eksponowałby treść faktur w event store).
+    // Buffer NIE jest zwracany ze stepu (Inngest serializuje return-value).
+    // Po udanym PUT to jego bajty wyznaczają hash. Jeśli poprzednia próba
+    // zdążyła zapisać obiekt, czytamy jego rzeczywistą treść do metadanych.
     const fileMeta: GeneratedExportMeta = await step.run(
-      'generate-buffer',
+      'generate-upload',
       async () => {
         let generated: Awaited<ReturnType<typeof generateExportFile>>;
         try {
@@ -351,13 +340,22 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
           }
           throw e;
         }
+        const r2Path = buildR2Path(job, exportJobId, generated.filename);
+        const uploaded = await uploadToR2IfAbsent(
+          r2Path,
+          generated.buffer,
+          generated.mimeType,
+        );
+        const storedBytes = uploaded
+          ? generated.buffer
+          : await downloadFromR2(r2Path, job.tenant_id);
         const fileHash = createHash('sha256')
-          .update(generated.buffer)
+          .update(storedBytes)
           .digest('hex');
         return {
           filename: generated.filename,
           mimeType: generated.mimeType,
-          sizeBytes: generated.buffer.length,
+          sizeBytes: storedBytes.length,
           fileHash,
         };
       },
@@ -365,22 +363,7 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
 
     const r2Path = buildR2Path(job, exportJobId, fileMeta.filename);
 
-    // Step 2: upload-r2 (idempotent przez HEAD)
-    // ─────────────────────────────────────────────────────────────
-    // HEAD najpierw — jeśli klucz już istnieje (np. po retry po crashu
-    // pomiędzy uploadem a persist), nie wgrywamy ponownie. Generatory
-    // FA(3)/JPK_FA są deterministyczne (ten sam input → ten sam SHA-256),
-    // więc istniejący obiekt ma identyczną zawartość.
-    await step.run('upload-r2', async () => {
-      const exists = await r2ObjectExists(r2Path);
-      if (exists) return { skipped: true as const };
-
-      const generated = await generateExportFile(job, fileData);
-      await uploadToR2(r2Path, generated.buffer, generated.mimeType);
-      return { skipped: false as const };
-    });
-
-    // Step 3: persist (UPSERT + UPDATE)
+    // Step 2: persist (UPSERT + UPDATE)
     // ─────────────────────────────────────────────────────────────
     // UPSERT z ON CONFLICT na (export_job_id, filename) — wymaga unique
     // indexu z migracji 00026. Bez niego retry tego stepu po częściowym
