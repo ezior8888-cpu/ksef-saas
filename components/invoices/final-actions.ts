@@ -4,10 +4,17 @@ import { revalidatePath } from 'next/cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logAudit } from '@/lib/audit/log';
+import {
+  settlementRowFromAdvance,
+  type AdvanceInvoiceDbRow,
+} from '@/lib/invoices/advance-settlement';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { createClient } from '@/lib/supabase/server';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
-import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
+import {
+  settlementVatSummaries,
+  type AdvanceInvoiceSettlementRow,
+} from '@/lib/ksef/fa3-advance-generator';
 import {
   calculateFinalInvoiceTotals,
   calculateInvoiceTotals,
@@ -191,7 +198,7 @@ async function fetchSettlementRows(
   const { data, error } = await supabase
     .from('invoices')
     .select(
-      'id, internal_number, ksef_number, issue_date, advance_amount, gross_total, invoice_kind',
+      'id, internal_number, ksef_number, issue_date, advance_amount, gross_total, net_total, vat_total, fa3_data, invoice_kind',
     )
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
@@ -224,12 +231,8 @@ async function fetchSettlementRows(
     if (!(amt > 0)) {
       return { error: `Faktura zaliczkowa ${r.internal_number ?? id} nie ma kwoty rozliczenia.` };
     }
-    rows.push({
-      internal_number: (r.internal_number as string | null) ?? id.slice(0, 13),
-      ksef_number: r.ksef_number as string | null | undefined,
-      advance_amount: roundToCents(amt),
-      issue_date: r.issue_date as string,
-    });
+    // Ze stawką i rozbiciem — ROZ odejmuje zaliczkę w jej stawce (art. 106f ust. 3).
+    rows.push(settlementRowFromAdvance(r as AdvanceInvoiceDbRow));
   }
 
   return rows;
@@ -318,6 +321,16 @@ async function resolveFinalPayload(
   }
 
   const envelope = buildFinalEnvelope(parsed, advancesSumRounded);
+
+  // Rozbicie reszty na stawki robi generator przy wysyłce — tu sprawdzamy je
+  // od razu, żeby „zaliczka w stawce, której nie ma w zamówieniu” wróciła
+  // do formularza, a nie wywróciła joba po zapisie szkicu.
+  try {
+    settlementVatSummaries(invoiceLineItemsFromDomain(envelope.lines), settlement);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message.replace(/^FA\(3\) ROZ: /, '') : 'Nie można rozliczyć zaliczek.' };
+  }
+
   return { envelope, settlement };
 }
 

@@ -1,7 +1,7 @@
 /**
  * Generator XML FA(3) dla faktur zaliczkowych (`ZAL`) i rozliczających (`ROZ`).
  * Sekwencje i nazwy jak w `lib/xml/schemas/fa3/schemat.xsd`
- * (`FakturaZaliczkowa`, `Rozliczenie/Odliczenia`, `DoZaplaty`).
+ * (`FakturaZaliczkowa`, `DodatkowyOpis`, `FaWiersz`).
  */
 
 import { create } from 'xmlbuilder2';
@@ -94,10 +94,19 @@ const PAYMENT_METHOD_MAP: Record<'transfer' | 'cash' | 'card', string> = {
 export interface AdvanceInvoiceSettlementRow {
   internal_number: string;
   ksef_number?: string | null;
-  /** Kwota zaliczki (brutto), trafia do `<Rozliczenie>/<Odliczenia>/<Kwota>`. */
+  /** Kwota zaliczki brutto. */
   advance_amount: number;
-  /** Dla tekstu pola `Powód` przy odliczeniu. */
   issue_date: string;
+  /**
+   * Stawka i rozbicie zaliczki z faktury zaliczkowej — ROZ pomniejsza o nie
+   * P_13_x/P_14_x w tej stawce (`settlementVatSummaries`). Opcjonalne tylko
+   * dla zdarzeń zakolejkowanych przed 28.09: wtedy stawka musi wynikać
+   * z zamówienia w jednej stawce, a rozbicie liczy się jak w
+   * `calculateAdvanceTotals`.
+   */
+  vat_rate?: string | null;
+  net_amount?: number | null;
+  vat_amount?: number | null;
 }
 
 export interface GenerateAdvanceXmlOptions {
@@ -417,6 +426,75 @@ export function generateAdvanceInvoiceXml(
   return root.end({ prettyPrint, headless: false });
 }
 
+/**
+ * P_13_x / P_14_x faktury rozliczającej (art. 106f ust. 3 ustawy o VAT):
+ * wartość i podatek PEŁNEGO zamówienia w podziale na stawki, pomniejszone
+ * o zaliczki — każda w swojej stawce. Pozycje (`FaWiersz`) zostają pełne,
+ * a P_15 to kwota pozostała do zapłaty (broszura MF FA(3): opis P_15
+ * i elementu FaWiersz dla faktur z art. 106f ust. 3).
+ *
+ * Do 28.09 generator wpisywał tu pełne zamówienie, a zaliczki odejmował
+ * w `Rozliczenie/Odliczenia` — elemencie na obciążenia i odliczenia SPOZA
+ * czynności (broszura: zwrot opłat, saldo klienta, różnice z korekt).
+ * Faktura w KSeF wykazywała więc VAT zaliczek drugi raz.
+ */
+export function settlementVatSummaries(
+  lines: InvoiceLineItem[],
+  advances: readonly AdvanceInvoiceSettlementRow[],
+): ReturnType<typeof summarizeVatPerRate> {
+  const summaries = summarizeVatPerRate(lines);
+  const byRate = new Map(summaries.map((s) => [s.rate, { ...s }]));
+
+  for (const adv of advances) {
+    const { rate, net, vat } = advanceSplit(adv, [...byRate.keys()]);
+    const bucket = byRate.get(rate);
+    if (!bucket) {
+      throw new Error(
+        `FA(3) ROZ: zaliczka ${adv.internal_number} jest w stawce ${rate}, a zamówienie nie ma pozycji w tej stawce.`,
+      );
+    }
+    bucket.netSum = roundToCents(bucket.netSum - net);
+    bucket.vatSum = roundToCents(bucket.vatSum - vat);
+    if (bucket.netSum < 0 || bucket.vatSum < 0) {
+      throw new Error(`FA(3) ROZ: zaliczki przekraczają wartość zamówienia w stawce ${rate}.`);
+    }
+  }
+
+  return summaries.map((s) => byRate.get(s.rate) ?? s);
+}
+
+function isVatRate(value: string): value is VatRate {
+  return Object.prototype.hasOwnProperty.call(FULL_VAT_RATE_MAP, value);
+}
+
+function advanceSplit(
+  adv: AdvanceInvoiceSettlementRow,
+  orderRates: readonly VatRate[],
+): { rate: VatRate; net: number; vat: number } {
+  const declared = adv.vat_rate?.trim();
+  let rate: VatRate;
+  if (declared) {
+    if (!isVatRate(declared)) {
+      throw new Error(`FA(3) ROZ: nieznana stawka "${declared}" zaliczki ${adv.internal_number}.`);
+    }
+    rate = declared;
+  } else if (orderRates.length === 1) {
+    rate = orderRates[0];
+  } else {
+    throw new Error(
+      `FA(3) ROZ: brak stawki zaliczki ${adv.internal_number}, a zamówienie ma kilka stawek — nie da się rozbić podatku.`,
+    );
+  }
+
+  if (adv.net_amount != null && adv.vat_amount != null) {
+    return { rate, net: Number(adv.net_amount), vat: Number(adv.vat_amount) };
+  }
+  // Jak `calculateAdvanceTotals`: netto = brutto / (1 + stawka), VAT = reszta.
+  const pct = rate === '23' || rate === '8' || rate === '5' ? Number(rate) : 0;
+  const net = roundToCents(adv.advance_amount / (1 + pct / 100));
+  return { rate, net, vat: roundToCents(adv.advance_amount - net) };
+}
+
 /** Faktura rozliczająca zaliczki — `RodzajFaktury` = `ROZ`. */
 export function generateFinalInvoiceXml(
   data: FinalInvoiceData,
@@ -438,12 +516,15 @@ export function generateFinalInvoiceXml(
     throw new Error('FA(3) ROZ: brak pozycji faktury końcowej.');
   }
 
-  const summaries = summarizeVatPerRate(preparedLines);
+  // P_13_x/P_14_x i P_15 — po odjęciu zaliczek; FaWiersz — pełne zamówienie.
+  const summaries = settlementVatSummaries(preparedLines, advanceInvoices);
   const totals = calculateInvoiceTotals(preparedLines);
   const sumAdvancesRound = roundToCents(
     advanceInvoices.reduce((s, a) => s + roundToCents(a.advance_amount), 0),
   );
 
+  // Zaliczki ponad zamówienie zatrzymuje już `settlementVatSummaries` (stawka
+  // spadłaby poniżej zera), więc P_15 nie wyjdzie ujemne.
   const finalTotals = calculateFinalInvoiceTotals(data.lines, sumAdvancesRound);
 
   const root = create({ version: '1.0', encoding: 'UTF-8' }).ele('Faktura', {
@@ -461,11 +542,20 @@ export function generateFinalInvoiceXml(
   fa.ele('P_2').txt(requireText(data.internalNumber, 'internalNumber'));
 
   emitVatSummariesFromMap(fa, summaries, FULL_VAT_RATE_MAP);
-  fa.ele('P_15').txt(formatDecimal(totals.grossTotal));
+  fa.ele('P_15').txt(formatDecimal(finalTotals.amountDue));
 
   buildAdnotacjeStandard(fa, preparedLines);
 
   fa.ele('RodzajFaktury').txt('ROZ');
+
+  // Kwoty dla człowieka czytającego fakturę — pełne zamówienie i suma
+  // zaliczek. Na pola podatkowe nie wpływają (te są już po odjęciu).
+  const orderOpis = fa.ele('DodatkowyOpis');
+  orderOpis.ele('Klucz').txt('Wartość_zamówienia_brutto_PLN');
+  orderOpis.ele('Wartosc').txt(formatDecimal(totals.grossTotal));
+  const advancesOpis = fa.ele('DodatkowyOpis');
+  advancesOpis.ele('Klucz').txt('Rozliczone_zaliczki_brutto_PLN');
+  advancesOpis.ele('Wartosc').txt(formatDecimal(sumAdvancesRound));
 
   for (const adv of advanceInvoices) {
     const fz = fa.ele('FakturaZaliczkowa');
@@ -482,17 +572,8 @@ export function generateFinalInvoiceXml(
     appendFaWiersz(fa, line);
   }
 
-  const roz = fa.ele('Rozliczenie');
-  for (const adv of advanceInvoices) {
-    const o = roz.ele('Odliczenia');
-    o.ele('Kwota').txt(formatDecimal(roundToCents(adv.advance_amount)));
-    o.ele('Powod').txt(
-      `Zaliczka nr ${adv.internal_number} z dnia ${formatDate(adv.issue_date)}` +
-        (adv.ksef_number?.trim() ? ` (KSeF: ${adv.ksef_number.trim()})` : ''),
-    );
-  }
-  roz.ele('SumaOdliczen').txt(formatDecimal(sumAdvancesRound));
-  roz.ele('DoZaplaty').txt(formatDecimal(finalTotals.amountDue));
+  // Bez `Rozliczenie`: zaliczki są już odjęte w P_13_x/P_14_x/P_15, a
+  // `DoZaplaty = P_15 − Odliczenia` odjęłoby je drugi raz.
 
   buildPlatnoscFa(fa, data);
 
