@@ -681,3 +681,36 @@ Dopisz wpis dopiero po faktycznym działaniu:
 **Odbiór operatora:** Potwierdzić rzeczywisty SHA webu/workera w Coolify oraz stan PR #70 na serwerze. Po przeglądzie i scaleniu hotfixu wdrożyć zgodny kod, sprawdzić pobranie PDF `zw`, odmowę ponownej wysyłki oraz brak nowych jobów dla historycznych `failed/rejected`. Takie faktury uzgadniać ręcznie z KSeF. Osobno rozliczyć otwarty stos PR #62 → #63 → #64 → #71 i stan migracji na db-1; nie wnioskować o wykonaniu SQL z obecności plików w `main`.
 
 **Dowód kodu:** commit 6fe83ece46d9f8e9ad93ea58ac452a1ad371b894 (12 plików); dziennik w odrębnym commicie na tej samej gałęzi.
+
+## 2026-09-28 — regresja nocnego backupu po 00078/00080 i jej naprawa (00098)
+
+**Autor:** Bartosz (sesja Claude Code). **Zakres zgody:** właściciel zatwierdził dzień pracy operacyjnej: migracje-prośby, wdrożenie `main` i naprawy znalezione po drodze.
+
+**Problem.** Od wdrożenia 25.09 każdy przebieg `cron.daily-db-snapshot` kończył się `dump_table_failed: stripe_financial_case_refs: permission denied` (26, 27 i 28.09, po 5 próbach każdej nocy). 00078 i 00080 wykonują `REVOKE ALL … FROM … service_role` na czterech tabelach obsługiwanych przez RPC:
+- `stripe_subscription_sync_leases`;
+- `stripe_financial_case_refs`;
+- `stripe_financial_case_reopenings`;
+- `stripe_financial_case_reviews`.
+
+Tylko `stripe_financial_cases` dostało z powrotem `SELECT`. `lib/backup/db-snapshot.ts` czyta każdą tabelę `public` jako `service_role`, więc wywracał się na pierwszej z nich. Przez trzy noce nie powstała żadna kopia. CI tego nie łapało.
+
+**Zmiana.** `00098_backup_read_stripe_service_tables.sql` nadaje `service_role` wyłącznie `SELECT` na tych czterech tabelach. `INSERT`/`UPDATE`/`DELETE` pozostają odebrane — zapis nadal tylko przez funkcje `SECURITY DEFINER`. `anon` i `authenticated` bez zmian. Strażnik `tests/unit/backup-readable-tables.test.ts` odtwarza z migracji stan praw `service_role` i wymaga odczytu każdej tabeli spoza `SKIP_TABLES`.
+
+**Weryfikacja.**
+
+| kontrola | wynik |
+|---|---|
+| próba 00091/00092/00094/00098 w transakcji z `ROLLBACK` | bez błędów |
+| tabele `public` bez `SELECT` dla `service_role` — przed / po | 4 / **0** |
+| `SET LOCAL ROLE service_role` + odczyt czterech tabel | przechodzi |
+| `service_role` INSERT na `stripe_financial_case_refs`; `authenticated` SELECT | `false` / `false` |
+| ręczny snapshot `manual` 18:27 UTC | `success`, 63 tabele, klucz `db/2026/09/28-182733.json.gz` |
+| strażnik bez 00098 | wskazuje dokładnie te 4 tabele (zgodne z `has_table_privilege` na produkcji) |
+
+**Czego nie sprawdzono:** pierwszego nocnego przebiegu po poprawce (29.09, 00:00 UTC) i odtworzenia snapshotu JSON.
+
+**Wycofanie:** `REVOKE SELECT` przywróciłoby awarię backupu, więc wycofanie nie ma sensu bez zmiany mechanizmu snapshotu. Szerszego odczytu niż `service_role` ta migracja nie daje.
+
+**Kopia przed zmianami:** `/root/backups/pre-wydanie-2026-09-28.dump`.
+
+**Wdrożenie tego dnia:** web i worker na `b25c126` (z #77, #82, #84). **#87 (wstrzymanie ROZ) nie jest wdrożony** — draft. Na produkcji jest 0 ROZ, 0 zaliczek, a żadna firma nie ma poświadczeń KSeF. Warunek: #87 przed pierwszą firmą z KSeF.
