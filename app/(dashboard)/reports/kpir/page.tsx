@@ -1,4 +1,5 @@
 import { KpirView } from '@/components/expenses/kpir-view';
+import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -41,7 +42,9 @@ export default async function KpirPage({
 
   const { data: invoices, error: invoicesError } = await supabase
     .from('invoices')
-    .select('id, internal_number, issue_date, gross_total, net_total, buyer_data')
+    .select(
+      'id, internal_number, issue_date, gross_total, net_total, buyer_data, invoice_kind, advance_invoice_ids',
+    )
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
@@ -49,7 +52,23 @@ export default async function KpirPage({
     .lte('issue_date', periodEnd)
     .order('issue_date', { ascending: true });
 
-  const loadError = expensesError?.message ?? invoicesError?.message ?? null;
+  // ROZ niesie pełną wartość zamówienia — przychód liczy tylko resztę ponad
+  // zaliczki, które KPiR już ma (`kpirRevenueNet`). Bez tej sumy przychód
+  // z ROZ byłby zawyżony — błąd idzie na baner nad tabelą, jak inne błędy odczytu.
+  let settledError: string | null = null;
+  let settled = new Map<string, number>();
+  try {
+    settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices ?? []);
+  } catch (e) {
+    settledError = e instanceof Error ? e.message : 'Nie można odczytać zaliczek';
+  }
+  const invoiceRows = (invoices ?? []).map((inv) => ({
+    ...inv,
+    settled_advances_net: settled.get(inv.id) ?? null,
+  }));
+
+  const loadError =
+    expensesError?.message ?? invoicesError?.message ?? settledError ?? null;
 
   return (
     <div className="space-y-6 pb-10 text-[var(--ff-on-surface)]">
@@ -62,7 +81,7 @@ export default async function KpirPage({
         month={month}
         year={year}
         expenses={expenses ?? []}
-        invoices={invoices ?? []}
+        invoices={invoiceRows}
       />
     </div>
   );
