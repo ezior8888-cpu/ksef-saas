@@ -63,7 +63,12 @@ po scaleniu #63?
 
 **Odpowiedź Codexa:** —
 
-### C-02 · Filtr środowiska KSeF dla kosztów — `OTWARTE` · decyzja: Codex (wykonanie po #63)
+### C-02 · Filtr środowiska KSeF dla kosztów — `W TOKU` (#71) · wykonanie: Codex
+
+**28.09, sprawdzone w gałęzi #71:** `lib/expenses/ksef-environment.ts`
+(`filterExpensesForKsefEnvironment`) działa w KPiR w aplikacji, „Przepływach”
+i `data-fetcher.ts` — sprawa zamknie się ze scaleniem #71. Opis niżej
+zostaje dla śladu.
 
 #63 filtruje faktury w KPiR i eksporcie po `ksef_environment` (kwarantanna
 danych z okresu TEST). **Koszty (`expenses`) nie są filtrowane** — ani w KPiR
@@ -195,6 +200,32 @@ wydzielenie? Kto przygotowuje plik (numer z rejestru, dziś 00095)?
 **Sprawdzenie dla Bartosza (odczyt):** w logach workera szukać
 `uq_invoices_tenant_internal_number` — każde trafienie to paczka faktur,
 której skrzynka nie zapisała.
+
+**Odpowiedź Codexa:** —
+
+### C-09 · #82 (ROZ bez dubla zaliczek) a przebudowa stron w #71 — `OTWARTE` · rozwiązuje: kto scala drugi
+
+#82 naprawia przychód z faktury rozliczeniowej: ROZ zapisuje pełną wartość
+zamówienia, a zaliczki są w KPiR osobno → KPiR, eksport i „Przepływy” liczyły
+je dwa razy. #71 przebudowuje te same miejsca (środowisko KSeF,
+`readCompletePages`):
+
+| Plik | Co dokłada #82 | Jak połączyć z #71 |
+|---|---|---|
+| `app/(dashboard)/reports/kpir/page.tsx` | `invoice_kind, advance_invoice_ids` w zapytaniu faktur; `fetchSettledAdvancesNet` → `settled_advances_net` w wierszach; błąd na banerze | dopisać kolumny do nowego zapytania, mapowanie po odfiltrowaniu środowiska |
+| `app/(dashboard)/przeplywy/page.tsx` | `id, invoice_kind, advance_invoice_ids`; to samo mapowanie; błąd do `error.tsx` | jw. |
+| `lib/exports/data-fetcher.ts` | 4. element `Promise.all` w `fetchInvoicesForExport` + doklejenie `settledAdvancesNet` po indeksie wiersza | zachować; zależy tylko od `issuedRows` i kolejności `mapRowsToJpkInvoices` |
+
+Pytanie do Codexa: czy zaliczki z **innego środowiska** KSeF mogą być
+rozliczane ROZ z aktywnego? `fetchSettledAdvancesNet` filtruje po firmie,
+kierunku, rodzaju i `ksef_status = 'accepted'`, nie po `ksef_environment`
+(kolumny na `main` nie ma). Jeśli ROZ z PROD rozlicza zaliczkę z TEST
+(której KPiR po #71 nie pokaże), trzeba dodać ten filtr — inaczej odejmiemy
+zaliczkę, której w KPiR nie ma.
+
+Test: `tests/unit/kpir-roz-zaliczki.test.tsx` renderuje obie strony na
+atrapie — po połączeniu powinien przejść bez zmian (poza atrapą, jeśli nowe
+zapytania używają metod, których nie ma).
 
 **Odpowiedź Codexa:** —
 
