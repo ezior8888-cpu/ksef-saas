@@ -3,7 +3,7 @@
 
 import ExcelJS from 'exceljs';
 import { kpirCostAmount, nonDeductedVat } from '@/lib/categorization/kpir-cost';
-import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
+import { earlierSaleRemark, kpirRevenueNet, kpirSaleEventDate } from '@/lib/categorization/kpir-revenue';
 
 import type { ExportExpense } from './data-fetcher';
 import type { JpkInvoice } from './jpk-fa-generator';
@@ -154,7 +154,8 @@ function buildKpirSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
   widths.forEach((w, i) => { sheet.getColumn(i + 1).width = w; });
 
   const entries: KpirEntry[] = [
-    ...data.issuedInvoices.map((invoice) => ({ kind: 'sale' as const, date: invoice.issueDate, invoice })),
+    // Kol. 2 — data zdarzenia gospodarczego: dla sprzedaży dzień sprzedaży (P_6).
+    ...data.issuedInvoices.map((invoice) => ({ kind: 'sale' as const, date: kpirSaleEventDate(invoice), invoice })),
     ...data.expenses.map((expense) => ({ kind: 'cost' as const, date: expense.issueDate, expense })),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
@@ -186,6 +187,7 @@ function buildKpirSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
       add(7, net);
       add(9, net);
       cells[16] = [
+        earlierSaleRemark(inv, data.periodStart) ?? '',
         inv.invoiceType === 'correction' ? `Korekta do ${inv.correctedInvoiceNumber ?? '—'}` : '',
         inv.invoiceType === 'final'
           ? `ROZ: wartość zamówienia ${inv.netTotal.toFixed(2)} zł, rozliczone zaliczki ${(inv.settledAdvancesNet ?? 0).toFixed(2)} zł — w przychodzie reszta`
