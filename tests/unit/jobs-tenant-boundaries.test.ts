@@ -509,7 +509,55 @@ describe('service-role job boundaries', () => {
       ...submitEvent,
       invoice: { ...submitEvent.invoice, type: 'ROZ' },
     }, ctx)).resolves.toMatchObject({ handled: true, alreadyAccepted: true, ksefNumber: 'TEST' });
-    expect(writes()).toEqual([]);
+    expect(writes().filter((q) => q.table === 'invoices')).toEqual([]);
+    expect(writes()).toEqual([expect.objectContaining({
+      table: 'ksef_offline_queue', patch: { status: 'sent', last_error: null },
+    })]);
+    expect(sendEvent).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+  it.each([
+    { error: new Error('old timeout'), fromOfflineQueue: true, attemptedStatus: 'failed' },
+    { error: Object.assign(new Error('KSeF rejected'), { name: 'NonRetriableError' }), fromOfflineQueue: false, attemptedStatus: 'rejected' },
+  ])('preserves an ordinary VAT acceptance racing with a $attemptedStatus update', async ({ error, fromOfflineQueue, attemptedStatus }) => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'sending', ksef_number: null,
+      invoice_kind: 'regular', invoice_type: 'VAT',
+    }];
+    beforeUpdate = () => {
+      tables.invoices[0].ksef_status = 'accepted';
+      tables.invoices[0].ksef_number = 'TEST';
+      beforeUpdate = null;
+    };
+
+    await expect(onSubmitInvoiceExhausted(error, {
+      ...submitEvent,
+      invoice: { ...submitEvent.invoice, type: 'VAT' },
+      fromOfflineQueue,
+    }, ctx)).resolves.toMatchObject({ handled: true, alreadyAccepted: true, ksefNumber: 'TEST' });
+
+    expect(tables.invoices[0]).toMatchObject({ ksef_status: 'accepted', ksef_number: 'TEST' });
+    const statusUpdate = writes().find((q) => q.table === 'invoices' && q.patch?.ksef_status === attemptedStatus);
+    expect(statusUpdate?.nullableNonAccepted).toBe(true);
+    expect(sendEvent).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+  it('preserves VAT acceptance racing with the failed fallback after Offline24 is unavailable', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'sending', ksef_number: null,
+      invoice_kind: 'regular', invoice_type: 'VAT',
+    }];
+    beforeUpdate = () => {
+      tables.invoices[0].ksef_status = 'accepted';
+      tables.invoices[0].ksef_number = 'TEST';
+      beforeUpdate = null;
+    };
+    await expect(onSubmitInvoiceExhausted(new Error('old timeout'), {
+      ...submitEvent,
+      invoice: { ...submitEvent.invoice, type: 'VAT' },
+    }, ctx)).resolves.toMatchObject({ handled: true, alreadyAccepted: true, ksefNumber: 'TEST' });
+    expect(tables.invoices[0]).toMatchObject({ ksef_status: 'accepted', ksef_number: 'TEST' });
+    expect(writes().find((q) => q.table === 'invoices')?.nullableNonAccepted).toBe(true);
     expect(sendEvent).not.toHaveBeenCalled();
     expect(mocks.audit).not.toHaveBeenCalled();
   });

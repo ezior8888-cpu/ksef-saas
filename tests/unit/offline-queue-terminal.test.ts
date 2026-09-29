@@ -45,7 +45,12 @@ vi.mock('@/lib/supabase/server', () => ({
       },
       maybeSingle: async () => {
         if (patch) db.updates.push({ table, patch });
-        return { data: db.queueRow, error: null };
+        return {
+          data: patch && table === 'invoices'
+            ? { id: '11111111-1111-4111-8111-111111111111' }
+            : db.queueRow,
+          error: null,
+        };
       },
       then: (ok: (v: unknown) => unknown) => {
         if (patch) db.updates.push({ table, patch });
