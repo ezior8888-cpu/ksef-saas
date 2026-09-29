@@ -19,6 +19,9 @@ import {
   extractedInvoiceSchema,
   type ExtractedInvoice,
 } from '@/lib/ocr/schema';
+import type { RateStamp } from '@/lib/flo/nbp';
+import { nbpRateForCost } from '@/lib/nbp/client';
+import { costInPln, documentCurrency, HOME_CURRENCY } from '@/lib/ocr/currency';
 import { sendPushToUser } from '@/lib/push/sender';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -29,8 +32,8 @@ import { inngest, ocrProcessPhotoRequested } from '../client';
 
 type OcrJobRow = Database['public']['Tables']['ocr_jobs']['Row'];
 
-function extractedInvoiceToJson(data: ExtractedInvoice): Json {
-  return JSON.parse(JSON.stringify(data)) as Json;
+function extractedInvoiceToJson(data: ExtractedInvoice, fx: RateStamp | null = null): Json {
+  return JSON.parse(JSON.stringify(fx ? { ...data, fx } : data)) as Json;
 }
 
 /**
@@ -152,6 +155,20 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
 
     const extractedData = extractedInvoiceSchema.parse(ocrResult.data);
 
+    // Dokument w walucie obcej → kurs średni NBP z ostatniego dnia roboczego
+    // PRZED datą dokumentu (art. 11a ust. 2 PIT). Błąd sieci rzuca (ponowienie);
+    // brak tabeli albo nieznana waluta to wynik — koszt nie wejdzie do KPiR.
+    const currency = documentCurrency(extractedData);
+    const fxLookup =
+      currency === HOME_CURRENCY
+        ? null
+        : await step.run('nbp-rate', () => nbpRateForCost(currency, extractedData.issue_date));
+    const cost = costInPln(extractedData, extractedData.issue_date, fxLookup);
+    const plnOrDocument =
+      cost.kind === 'pln'
+        ? { net: cost.net, vat: cost.vat, gross: cost.gross }
+        : { net: extractedData.net_amount, vat: extractedData.vat_amount, gross: extractedData.gross_amount };
+
     const categorization = await step.run('categorize', async () => {
       return categorizeExpense(tenantId, extractedData);
     });
@@ -177,18 +194,25 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
           document_number: data.document_number,
           document_type: docType,
           issue_date: data.issue_date,
-          net_amount: data.net_amount,
-          vat_amount: data.vat_amount,
-          gross_amount: data.gross_amount,
+          // Złote: z dokumentu albo przeliczone kursem NBP (`costInPln`).
+          net_amount: plnOrDocument.net,
+          vat_amount: plnOrDocument.vat,
+          gross_amount: plnOrDocument.gross,
           vat_rate: data.vat_rate,
-          vat_deductible_amount: vatExempt ? 0 : data.vat_amount,
+          // Waluta obca: VAT z dokumentu nie idzie do odliczenia automatycznie.
+          vat_deductible_amount:
+            cost.kind === 'missing_rate' ? 0 : (cost.vatDeductible ?? (vatExempt ? 0 : data.vat_amount)),
+          // Bez kursu kwoty są w walucie dokumentu — nie wolno ich liczyć do KPiR.
+          ...(cost.kind === 'missing_rate' ? { is_deductible: false } : {}),
+          notes: cost.note,
           kpir_column: categorization.kpir_column,
           category_label: categorization.category_label,
           categorization_method: categorization.method,
           categorization_confidence: categorization.confidence,
           source_file_path: job.source_file_path,
           source_file_mime: job.source_file_mime,
-          ocr_extracted_data: extractedInvoiceToJson(data),
+          // Oryginał z dokumentu + ślad kursu (tabela, data) — do obrony przy kontroli.
+          ocr_extracted_data: extractedInvoiceToJson(data, cost.kind === 'pln' ? cost.fx : null),
           is_reviewed: false,
         })
         .select('id')
@@ -231,9 +255,9 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
           facts: {
             sellerName: extractedData.seller_name,
             sellerNip: extractedData.seller_nip,
-            netAmount: extractedData.net_amount,
-            vatAmount: extractedData.vat_amount,
-            grossAmount: extractedData.gross_amount,
+            netAmount: plnOrDocument.net,
+            vatAmount: plnOrDocument.vat,
+            grossAmount: plnOrDocument.gross,
             issueDate: extractedData.issue_date,
             confidence: extractedData.ocr_confidence,
             categoryLabel: categorization.category_label,
@@ -251,7 +275,9 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
       await requireTenantMember(job.created_by, tenantId);
       await sendPushToUser(job.created_by, 'invoice_accepted', {
         title: '📸 Wydatek rozpoznany',
-        body: `${extractedData.seller_name} • ${extractedData.gross_amount.toFixed(2)} PLN`,
+        body: `${extractedData.seller_name} • ${
+          cost.kind === 'pln' ? `${cost.gross.toFixed(2)} PLN` : `${extractedData.gross_amount.toFixed(2)} ${currency} (bez kursu)`
+        }`,
         url: `/expenses/${expenseId}`,
         tag: `ocr-${ocrJobId}`,
       });
