@@ -9,8 +9,13 @@
  * tej pozycji w `fa3_data`.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
+
+/** Tyle identyfikatorów na jedno `.in()` — długość adresu zapytania PostgREST. */
+const LOOKUP_CHUNK = 100;
 
 export interface AdvanceInvoiceDbRow {
   id: string;
@@ -54,4 +59,47 @@ export function settlementRowFromAdvance(row: AdvanceInvoiceDbRow): AdvanceInvoi
     net_amount: consistent ? net : null,
     vat_amount: consistent ? vat : null,
   };
+}
+
+/**
+ * Wiersze zaliczek dla każdej faktury ROZ z listy (klucz: id ROZ), w kolejności
+ * z `advance_invoice_ids`. Te same zaliczki, które liczy KPiR
+ * (`fetchSettledAdvancesNet`): tej firmy, wystawione, przyjęte przez KSeF —
+ * cudzy albo nieprzyjęty identyfikator nic nie odejmie.
+ *
+ * Błąd odczytu rzuca: plik z „zerem zaliczek” miałby zawyżone P_13/P_14/P_15.
+ */
+export async function fetchAdvanceSettlementRows(
+  client: SupabaseClient,
+  tenantId: string,
+  invoices: ReadonlyArray<{ id: string; invoice_kind?: string | null; advance_invoice_ids?: string[] | null }>,
+): Promise<Map<string, AdvanceInvoiceSettlementRow[]>> {
+  const finals = invoices.filter(
+    (inv) => inv.invoice_kind === 'final' && (inv.advance_invoice_ids?.length ?? 0) > 0,
+  );
+  const result = new Map<string, AdvanceInvoiceSettlementRow[]>();
+  if (finals.length === 0) return result;
+
+  const ids = [...new Set(finals.flatMap((inv) => inv.advance_invoice_ids ?? []))];
+  const byId = new Map<string, AdvanceInvoiceSettlementRow>();
+  for (let i = 0; i < ids.length; i += LOOKUP_CHUNK) {
+    const { data, error } = await client
+      .from('invoices')
+      .select('id, internal_number, ksef_number, issue_date, advance_amount, gross_total, net_total, vat_total, fa3_data')
+      .eq('tenant_id', tenantId)
+      .eq('direction', 'outgoing')
+      .eq('invoice_kind', 'advance')
+      .eq('ksef_status', 'accepted')
+      .in('id', ids.slice(i, i + LOOKUP_CHUNK));
+    if (error) throw new Error(`Nie można odczytać zaliczek rozliczonych fakturą końcową: ${error.message}`);
+    for (const row of (data ?? []) as AdvanceInvoiceDbRow[]) byId.set(row.id, settlementRowFromAdvance(row));
+  }
+
+  for (const inv of finals) {
+    const rows = [...new Set(inv.advance_invoice_ids ?? [])]
+      .map((id) => byId.get(id))
+      .filter((row): row is AdvanceInvoiceSettlementRow => row !== undefined);
+    result.set(inv.id, rows);
+  }
+  return result;
 }

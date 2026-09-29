@@ -9,13 +9,13 @@ import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
 import { formatPlMoney } from '@/lib/format/pl';
 import { kpirCostAmount, nonDeductedVat } from '@/lib/categorization/kpir-cost';
-import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
+import { earlierSaleRemark, kpirRevenueNet, kpirSaleEventDate } from '@/lib/categorization/kpir-revenue';
 
 export type KpirExpenseRow = Database['public']['Tables']['expenses']['Row'];
 
 export type KpirInvoiceRow = Pick<
   Database['public']['Tables']['invoices']['Row'],
-  'id' | 'internal_number' | 'issue_date' | 'gross_total' | 'net_total' | 'buyer_data' | 'invoice_kind'
+  'id' | 'internal_number' | 'issue_date' | 'sale_date' | 'gross_total' | 'net_total' | 'buyer_data' | 'invoice_kind'
 > & {
   /** ROZ: suma netto zaliczek, które KPiR już liczy (`fetchSettledAdvancesNet`). */
   settled_advances_net?: number | null;
@@ -78,6 +78,7 @@ const tableLinkClass =
 
 export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
   const router = useRouter();
+  const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
 
   const navigate = (deltaMonths: number) => {
     const d = new Date(year, month - 1 + deltaMonths, 1);
@@ -248,7 +249,13 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
                     className="border-b border-[var(--ff-row-divider)] transition-colors last:border-0 hover:bg-[var(--ff-row-hover)]"
                   >
                     <td className="px-6 py-3.5 text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_70%,transparent)] sm:px-8">
-                      {formatPlDate(inv.issue_date)}
+                      {/* Data zdarzenia gospodarczego — dzień sprzedaży, jak kol. 2 w eksporcie. */}
+                      {formatPlDate(kpirSaleEventDate({ saleDate: inv.sale_date, issueDate: inv.issue_date }))}
+                      {earlierSaleRemark({ saleDate: inv.sale_date, issueDate: inv.issue_date }, periodStart) ? (
+                        <p className="text-[11px] font-normal text-amber-300/80">
+                          {earlierSaleRemark({ saleDate: inv.sale_date, issueDate: inv.issue_date }, periodStart)}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-6 py-3.5 font-mono text-[13px] sm:px-8">
                       {inv.internal_number ?? '—'}

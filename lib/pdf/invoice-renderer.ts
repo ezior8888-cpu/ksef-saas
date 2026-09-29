@@ -23,8 +23,13 @@ const PAGE_MARGIN = 42;
 export interface RenderInvoiceOptions {
   /** Numer KSeF — drukowany w stopce gdy faktura zaakceptowana. */
   ksefNumber?: string | null;
-  /** Treść do zakodowania w QR (numer KSeF lub kod offline). Brak = bez QR. */
+  /**
+   * Link KOD I do zakodowania w QR (`lib/ksef/qr-verification.ts`) — nie sam
+   * numer KSeF. Brak = bez QR.
+   */
   qrPayload?: string | null;
+  /** Napis pod kodem QR: numer KSeF albo „OFFLINE” (specyfikacja MF). */
+  qrLabel?: string | null;
   /** Nadrukuj watermark „WERSJA TESTOWA" (środowisko KSeF test). */
   testWatermark?: boolean;
 }
@@ -100,7 +105,8 @@ export async function renderInvoicePdf(
       doc.page.width - PAGE_MARGIN * 2;
     const left = PAGE_MARGIN;
 
-    drawHeader(doc, invoice, qrBuffer, left, pageWidth);
+    // Napis rysuje się tylko razem z kodem (warunek w `drawHeader`).
+    drawHeader(doc, invoice, qrBuffer, opts.qrLabel ?? null, left, pageWidth);
     drawParties(doc, invoice, left, pageWidth);
     drawLineItems(doc, invoice, left, pageWidth);
     drawVatSummary(doc, invoice, left, pageWidth);
@@ -156,6 +162,7 @@ function drawHeader(
   doc: Doc,
   invoice: Invoice,
   qr: Buffer | null,
+  qrCaption: string | null,
   left: number,
   width: number,
 ): void {
@@ -179,17 +186,23 @@ function drawHeader(
     );
   }
 
-  // QR w prawym górnym rogu.
+  // KOD I w prawym górnym rogu, pod nim numer KSeF albo „OFFLINE”.
+  const QR_SIZE = 72;
   if (qr) {
-    doc.image(qr, left + width - 90, PAGE_MARGIN, { width: 90 });
+    doc.image(qr, left + width - QR_SIZE, PAGE_MARGIN, { width: QR_SIZE });
+    if (qrCaption) {
+      doc.font('body').fontSize(6.5).fillColor('#444444');
+      doc.text(qrCaption, left + width - 200, PAGE_MARGIN + QR_SIZE + 3, { width: 200, align: 'right' });
+    }
   }
 
+  const ruleY = PAGE_MARGIN + (qr ? QR_SIZE + 16 : 78);
   doc
-    .moveTo(left, PAGE_MARGIN + 78)
-    .lineTo(left + width, PAGE_MARGIN + 78)
+    .moveTo(left, ruleY)
+    .lineTo(left + width, ruleY)
     .strokeColor('#dddddd')
     .stroke();
-  doc.y = PAGE_MARGIN + 92;
+  doc.y = ruleY + 14;
 }
 
 function drawParties(

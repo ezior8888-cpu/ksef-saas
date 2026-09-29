@@ -37,12 +37,14 @@ import {
   generateWaproCsv,
 } from '@/lib/exports/csv-generators';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
-import { generateJpkFa } from '@/lib/exports/jpk-fa-generator';
+import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
+import { generateJpkFa, JpkFaCorrectionNotSupportedError } from '@/lib/exports/jpk-fa-generator';
 import { MissingTaxOfficeError, readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { readTaxpayerEmail } from '@/lib/exports/taxpayer-email';
 import { generateJpkV7m, MissingTaxpayerEmailError } from '@/lib/exports/jpk-v7m-generator';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isExportFormatSuspended, SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
 import { r2ObjectExists, uploadToR2 } from '@/lib/storage/r2';
 
 import type { Database } from '@/types/database';
@@ -109,12 +111,12 @@ async function generateExportFile(
       };
     }
     case 'jpk_fa': {
+      // JPK_FA obejmuje faktury WYSTAWIONE przez podatnika — zakupy nie.
       const xml = generateJpkFa({
         issuer: data.issuer,
         periodStart: job.period_start,
         periodEnd: job.period_end,
         issuedInvoices: data.issuedInvoices,
-        receivedInvoices: data.receivedInvoices,
       });
       return {
         buffer: Buffer.from(xml, 'utf8'),
@@ -223,7 +225,12 @@ function buildR2Path(job: ExportJobRow, exportJobId: string, filename: string) {
 // ============================================================================
 
 /** Komunikaty, które wolno pokazać człowiekowi — reszta to szczegóły techniczne. */
-const HUMAN_EXPORT_ERRORS = [new MissingTaxOfficeError().message, new MissingTaxpayerEmailError().message];
+const HUMAN_EXPORT_ERRORS = [
+  new MissingTaxOfficeError().message,
+  new MissingTaxpayerEmailError().message,
+  new MissingIssuerAddressError().message,
+  new JpkFaCorrectionNotSupportedError().message,
+];
 
 /**
  * Po wyczerpaniu prób (Inngest `onFailure`, pg-boss `onExhausted`): eksport
@@ -234,7 +241,10 @@ export async function onExportsGenerateExhausted(
   failure: Error,
   data: { exportJobId: string },
 ): Promise<void> {
-  const message = HUMAN_EXPORT_ERRORS.includes(failure.message)
+  const human =
+    HUMAN_EXPORT_ERRORS.includes(failure.message) ||
+    Object.values(SUSPENDED_EXPORT_FORMATS).includes(failure.message);
+  const message = human
     ? failure.message
     : 'Nie udało się wygenerować pliku. Spróbuj ponownie albo napisz do nas.';
   const { error } = await createAdminClient()
@@ -266,6 +276,12 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
       return data as ExportJobRow;
     });
 
+    // Format wstrzymany (np. zlecony przed wstrzymaniem albo z ustawień paczki)
+    // — bez pliku, z powodem dla człowieka zamiast pliku, którego nikt nie użyje.
+    if (isExportFormatSuspended(job.format)) {
+      throw new NonRetriableError(SUSPENDED_EXPORT_FORMATS[job.format]!);
+    }
+
     await step.run('mark-generating', async () => {
       const { error } = await supabase
         .from('export_jobs')
@@ -290,7 +306,14 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
       });
     });
 
-    if (data.issuedInvoices.length === 0 && data.receivedInvoices.length === 0) {
+    const format = job.format as ExportJobRow['format'] | 'jpk_v7m';
+    // JPK_FA bez faktur wystawionych nie istnieje (schemat wymaga co najmniej
+    // jednej) — same zakupy w okresie to też „brak faktur” dla tego pliku.
+    const empty =
+      format === 'jpk_fa'
+        ? data.issuedInvoices.length === 0
+        : data.issuedInvoices.length === 0 && data.receivedInvoices.length === 0;
+    if (empty) {
       await step.run('mark-empty', async () => {
         const { error } = await supabase
           .from('export_jobs')
@@ -309,7 +332,6 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
     // Urząd firmy dla plików JPK — odpornie przed migracją 00092. Ten sam
     // wkład trafia do OBU generowań (sumy kontrolnej i wysyłki do R2) — inaczej
     // drugie generowanie nie znałoby urzędu i plik padałby przy wysyłce.
-    const format = job.format as ExportJobRow['format'] | 'jpk_v7m';
     const taxOfficeCode =
       format === 'jpk_fa' || format === 'jpk_v7m'
         ? await step.run('read-tax-office', () => readTenantTaxOffice(supabase, job.tenant_id))
@@ -319,12 +341,20 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
       format === 'jpk_v7m'
         ? await step.run('read-taxpayer-email', () => readTaxpayerEmail(supabase, job.tenant_id))
         : null;
+    // JPK_FA(4) wymaga adresu z województwem, powiatem i gminą — z rejestru GUS.
+    // Błąd GUS rzuca (ponowienie ma sens); „nie znaleziono” to `null`, a
+    // generator zamienia go w komunikat dla człowieka.
+    const registeredAddress =
+      format === 'jpk_fa'
+        ? await step.run('read-registered-address', () => readIssuerRegisteredAddress(data.issuer.nip))
+        : null;
     const fileData = {
       ...data,
       issuer: {
         ...data.issuer,
         taxOfficeCode: taxOfficeCode ?? undefined,
         email: taxpayerEmail ?? undefined,
+        registeredAddress: registeredAddress ?? undefined,
       },
     };
 
@@ -340,8 +370,14 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
         try {
           generated = await generateExportFile(job, fileData);
         } catch (e) {
-          // Ponowienie nic nie da — urząd ustawia człowiek.
-          if (e instanceof MissingTaxOfficeError || e instanceof MissingTaxpayerEmailError) {
+          // Ponowienie nic nie da — urząd ustawia człowiek, adresu GUS nie ma,
+          // a korekt JPK_FA nie obsługuje (C-01).
+          if (
+            e instanceof MissingTaxOfficeError ||
+            e instanceof MissingTaxpayerEmailError ||
+            e instanceof MissingIssuerAddressError ||
+            e instanceof JpkFaCorrectionNotSupportedError
+          ) {
             throw new NonRetriableError(e.message);
           }
           throw e;

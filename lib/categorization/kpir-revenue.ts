@@ -28,6 +28,38 @@ export function kpirRevenueNet(inv: KpirRevenueInput): number {
   return round2(net - Number(inv.settledAdvancesNet ?? 0));
 }
 
+/**
+ * Data zdarzenia gospodarczego (kol. 2 KPiR) dla sprzedaży: dzień dostawy /
+ * wykonania usługi, czyli data sprzedaży z faktury (P_6), a bez niej — data
+ * wystawienia. Przychód powstaje w dniu sprzedaży, nie później niż w dniu
+ * wystawienia faktury (art. 14 ust. 1c PIT); formularz nie pozwala na datę
+ * sprzedaży późniejszą niż wystawienie.
+ */
+export function kpirSaleEventDate(inv: { saleDate?: string | null; issueDate: string }): string {
+  const sale = inv.saleDate?.trim();
+  return sale && sale < inv.issueDate ? sale : inv.issueDate;
+}
+
+/**
+ * Faktura wystawiona w okresie za sprzedaż z WCZEŚNIEJSZEGO okresu (np. usługa
+ * 31.08, faktura 3.09). KPiR okresu jej nie gubi — pokazuje ją z datą
+ * sprzedaży i tą uwagą, żeby księgowa ujęła przychód we właściwym miesiącu.
+ * `null`, gdy sprzedaż mieści się w okresie.
+ */
+export function earlierSaleRemark(
+  inv: { saleDate?: string | null; issueDate: string },
+  periodStart: string,
+): string | null {
+  const event = kpirSaleEventDate(inv);
+  if (event >= periodStart) return null;
+  return `sprzedaż z ${plDate(event)}, faktura z ${plDate(inv.issueDate)} — przychód okresu sprzedaży (art. 14 ust. 1c PIT)`;
+}
+
+function plDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }

@@ -8,7 +8,8 @@ import { z } from 'zod';
 import { hashToken } from '@/lib/accountant/tokens';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
-import { generateJpkFa } from '@/lib/exports/jpk-fa-generator';
+import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
+import { generateJpkFa, JpkFaCorrectionNotSupportedError } from '@/lib/exports/jpk-fa-generator';
 import { MissingTaxOfficeError, readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -121,13 +122,29 @@ export async function POST(req: NextRequest) {
       if (!taxOfficeCode) {
         return NextResponse.json({ error: new MissingTaxOfficeError().message }, { status: 422 });
       }
-      const xml = generateJpkFa({
-        issuer: { ...data.issuer, taxOfficeCode },
-        periodStart,
-        periodEnd,
-        issuedInvoices: data.issuedInvoices,
-        receivedInvoices: data.receivedInvoices,
-      });
+      // JPK_FA(4): adres podatnika z województwem, powiatem i gminą — z GUS.
+      const registeredAddress = await readIssuerRegisteredAddress(data.issuer.nip);
+      if (!registeredAddress) {
+        return NextResponse.json({ error: new MissingIssuerAddressError().message }, { status: 422 });
+      }
+      if (data.issuedInvoices.length === 0) {
+        return NextResponse.json({ error: 'Brak faktur wystawionych w wybranym okresie.' }, { status: 422 });
+      }
+      let xml: string;
+      try {
+        // Tylko faktury WYSTAWIONE — JPK_FA nie obejmuje zakupów.
+        xml = generateJpkFa({
+          issuer: { ...data.issuer, taxOfficeCode, registeredAddress },
+          periodStart,
+          periodEnd,
+          issuedInvoices: data.issuedInvoices,
+        });
+      } catch (e) {
+        if (e instanceof JpkFaCorrectionNotSupportedError) {
+          return NextResponse.json({ error: e.message }, { status: 422 });
+        }
+        throw e;
+      }
       buffer = Buffer.from(xml, 'utf8');
       filename = `JPK_FA_${nipSeg}_${periodStart}_${periodEnd}.xml`;
       contentType = 'application/xml; charset=utf-8';

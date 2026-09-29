@@ -14,7 +14,10 @@ import {
 
 // A renderer change must invalidate old PDFs even when invoice.updated_at
 // remains unchanged. v2 includes the VAT exemption basis on zw invoices.
-const PDF_RENDERER_VERSION = 2;
+// v3 (29.09): KOD I wg specyfikacji MF (link weryfikacyjny zamiast samego
+// numeru KSeF) — obejmuje też wcześniejsze zmiany bez podbicia wersji
+// (MPP, metoda kasowa, „Do zapłaty” przy ROZ).
+const PDF_RENDERER_VERSION = 3;
 
 function parseYearMonth(issueDate: string): { year: string; month: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {

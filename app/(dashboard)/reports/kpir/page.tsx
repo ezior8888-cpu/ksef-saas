@@ -43,7 +43,7 @@ export default async function KpirPage({
   const { data: invoices, error: invoicesError } = await supabase
     .from('invoices')
     .select(
-      'id, internal_number, issue_date, gross_total, net_total, buyer_data, invoice_kind, advance_invoice_ids',
+      'id, internal_number, issue_date, sale_date, gross_total, net_total, buyer_data, invoice_kind, advance_invoice_ids',
     )
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')

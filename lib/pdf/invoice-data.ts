@@ -1,3 +1,4 @@
+import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import { createAdminClient } from '@/lib/supabase/server';
 import type {
   Invoice,
@@ -26,6 +27,9 @@ export interface InvoicePdfData {
   /** Do budowy klucza R2 (YYYY-MM-DD). */
   issueDate: string;
   ksefNumber: string | null;
+  /** NIP sprzedawcy i SHA-256 pliku XML (hex) — do KOD I (`qr-verification.ts`). */
+  sellerNip: string | null;
+  xmlSha256Hex: string | null;
   /** Cache: PDF jest ważny gdy pdf_generated_at >= updated_at. */
   updatedAt: string | null;
   pdfStoragePath: string | null;
@@ -52,6 +56,8 @@ interface InvoiceRow {
   issue_date: string;
   sale_date: string | null;
   ksef_number: string | null;
+  seller_nip: string | null;
+  xml_storage_path: string | null;
   net_total: number | null;
   vat_total: number | null;
   gross_total: number | null;
@@ -69,7 +75,7 @@ interface InvoiceRow {
 
 const SELECT = `
   id, tenant_id, internal_number, invoice_type, issue_date, sale_date,
-  ksef_number, net_total, vat_total, gross_total, notes, updated_at,
+  ksef_number, seller_nip, xml_storage_path, net_total, vat_total, gross_total, notes, updated_at,
   pdf_storage_path, pdf_generated_at, seller_data, buyer_data, payment_data,
   annotations:fa3_data->annotations,
   invoice_line_items(
@@ -183,10 +189,48 @@ export async function loadInvoiceForPdf(
     invoiceId: row.id,
     issueDate: row.issue_date,
     ksefNumber: row.ksef_number,
+    sellerNip: row.seller_nip ?? (invoice.seller as { nip?: string } | null)?.nip ?? null,
+    xmlSha256Hex: await readXmlHash(admin, row),
     updatedAt: row.updated_at,
     pdfStoragePath: row.pdf_storage_path,
     pdfGeneratedAt: row.pdf_generated_at,
   };
+}
+
+/**
+ * SHA-256 pliku XML faktury (ten sam plik, który poszedł do KSeF) — jak trasa
+ * pobierania XML w portalu księgowej: po ścieżce zapisanej przy fakturze,
+ * z filtrem firmy i faktury. Brak pliku (szkic) albo błąd → `null`: PDF
+ * powstaje bez kodu QR zamiast z kodem, który prowadzi donikąd.
+ */
+async function readXmlHash(
+  admin: ReturnType<typeof createAdminClient>,
+  row: Pick<InvoiceRow, 'id' | 'tenant_id' | 'xml_storage_path'>,
+): Promise<string | null> {
+  if (!row.xml_storage_path || !isTenantStoragePath(row.xml_storage_path, row.tenant_id)) return null;
+  const { data, error } = await (
+    admin as unknown as {
+      from: (n: string) => {
+        select: (c: string) => {
+          eq: (k: string, v: string) => {
+            eq: (k: string, v: string) => {
+              eq: (k: string, v: string) => {
+                maybeSingle: () => Promise<{ data: { sha256_hash: string | null } | null; error: unknown }>;
+              };
+            };
+          };
+        };
+      };
+    }
+  )
+    .from('xml_documents')
+    .select('sha256_hash')
+    .eq('storage_path', row.xml_storage_path)
+    .eq('tenant_id', row.tenant_id)
+    .eq('invoice_id', row.id)
+    .maybeSingle();
+  if (error || !data?.sha256_hash) return null;
+  return data.sha256_hash;
 }
 
 /** Zapisuje ścieżkę PDF + timestamp po wygenerowaniu (cache). */

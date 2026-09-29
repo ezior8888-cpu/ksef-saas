@@ -35,16 +35,17 @@ describe('pierwsza paczka niesie zapas', () => {
   it('wybrany format PLUS uniwersalny CSV', () => {
     // Klient zgaduje, w czym pracuje jego księgowa, i ma prawo zgadnąć źle.
     // Z jednym plikiem zła odpowiedź kosztuje tydzień telefonów.
-    expect(packageFormats({ chosen: 'comarch_optima', isFirstPackage: true })).toEqual([
-      'comarch_optima',
+    // (Symfonia, nie Optima — Optima jest wstrzymana od 29.09 i idzie jako CSV.)
+    expect(packageFormats({ chosen: 'symfonia', isFirstPackage: true })).toEqual([
+      'symfonia',
       'csv_universal',
     ]);
   });
 
   it('kolejne paczki już bez zapasu', () => {
     // Skoro poprzednia weszła, drugi plik jest tylko zaśmiecaniem skrzynki.
-    expect(packageFormats({ chosen: 'comarch_optima', isFirstPackage: false })).toEqual([
-      'comarch_optima',
+    expect(packageFormats({ chosen: 'symfonia', isFirstPackage: false })).toEqual([
+      'symfonia',
     ]);
   });
 
@@ -202,12 +203,13 @@ describe('pytanie o format', () => {
     now: d('2026-09-02'),
   });
 
-  // Osiem formatów minus wstrzymany JPK_V7M (do czasu wersji 3, 27.09.2026 —
-  // lib/exports/suspended-formats.ts). Po przebudowie wraca do ośmiu.
+  // Osiem formatów minus wstrzymane: JPK_V7M (do czasu wersji 3, 27.09.2026)
+  // i Comarch Optima (zły układ pliku, 29.09.2026) — lib/exports/suspended-formats.ts.
   it('podaje wszystkie formaty poza wstrzymanymi', () => {
     const options = question.payload?.options as { value: string }[];
-    expect(options).toHaveLength(7);
+    expect(options).toHaveLength(6);
     expect(options.map((option) => option.value)).not.toContain('jpk_v7m');
+    expect(options.map((option) => option.value)).not.toContain('comarch_optima');
     expect(options.every((option) => isAccountantFormat(option.value))).toBe(true);
   });
 
