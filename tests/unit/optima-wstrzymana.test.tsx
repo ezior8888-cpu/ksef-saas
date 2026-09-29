@@ -70,8 +70,17 @@ describe('Comarch Optima — wstrzymana', () => {
     [['comarch_optima', 'kpir_excel'], ['csv_universal', 'kpir_excel']],
     [['comarch_optima', 'csv_universal'], ['csv_universal']],
     [['jpk_fa', 'kpir_excel'], ['jpk_fa', 'kpir_excel']],
-  ])('paczka Co-Pilot z ustawień %j → %j (Optima zamienia się w CSV)', (zapisane, oczekiwane) => {
+    // 29.09: Symfonia/Wapro → JPK_FA (to importują), Subiekt → CSV (EDI++).
+    [['symfonia', 'kpir_excel'], ['jpk_fa', 'kpir_excel']],
+    [['wapro', 'jpk_fa'], ['jpk_fa']],
+    [['insert_subiekt'], ['csv_universal']],
+  ])('paczka Co-Pilot z ustawień %j → %j', (zapisane, oczekiwane) => {
     expect(parseFormats(zapisane)).toEqual(oczekiwane);
+  });
+
+  it.each(['symfonia', 'wapro', 'insert_subiekt'])('%s wstrzymany, z powodem i wskazaniem, czego użyć', (f) => {
+    expect(isExportFormatSuspended(f)).toBe(true);
+    expect(SUSPENDED_EXPORT_FORMATS[f]).toMatch(/JPK_FA|CSV/);
   });
 
   it('FLO: wybrana Optima → sam CSV', () => {
@@ -91,14 +100,17 @@ describe('Comarch Optima — wstrzymana', () => {
     expect(db.updates[0]!.patch).toMatchObject({ status: 'failed', error_message: POWOD });
   });
 
-  it('formularz paczki nie oferuje Optimy, a zapisany wcześniej wybór nie wraca', () => {
+  it('formularz paczki nie oferuje wstrzymanych, a zapisany wcześniej wybór nie wraca', () => {
     const html = renderToStaticMarkup(
       <CoPilotSettingsForm
-        initialSettings={{ preferred_formats: ['comarch_optima', 'kpir_excel'] } as never}
+        initialSettings={{ preferred_formats: ['comarch_optima', 'symfonia', 'kpir_excel'] } as never}
         recentJobs={[]}
       />,
     );
-    expect(html).not.toContain('Comarch Optima');
+    for (const nazwa of ['Comarch Optima', 'Symfonia', 'Wapro', 'Insert Subiekt']) {
+      expect(html).not.toContain(nazwa);
+    }
     expect(html).toContain('KPiR Excel');
+    expect(html).toContain('JPK_FA(4)');
   });
 });

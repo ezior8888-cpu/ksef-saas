@@ -14,7 +14,7 @@ import {
 } from '@/lib/inngest/client';
 import { jpkFaBlocker } from '@/lib/exports/jpk-fa-readiness';
 import { readTenantTaxOffice } from '@/lib/exports/tax-office';
-import { isExportFormatSuspended } from '@/lib/exports/suspended-formats';
+import { replacementForFormat } from '@/lib/exports/suspended-formats';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { downloadFromR2, getSignedInvoiceUrl } from '@/lib/storage/r2';
 import type { Database } from '@/types/database';
@@ -62,15 +62,18 @@ function isExportFormat(v: string): v is ExportFormat {
 
 /**
  * Formaty z ustawień paczki. Wstrzymany format (`suspended-formats.ts`)
- * zamienia się w uniwersalny CSV — ustawienia zapisane przed wstrzymaniem
- * nie mogą wysłać księgowej pliku, którego jej program nie przyjmie.
+ * zamienia się w to, co program księgowej naprawdę importuje (Symfonia,
+ * Wapro → JPK_FA; reszta → uniwersalny CSV) — ustawienia zapisane przed
+ * wstrzymaniem nie mogą wysłać pliku, którego program nie przyjmie. JPK_FA
+ * przechodzi dalej przez bramki gotowości i w razie odmowy staje się CSV.
  */
 export function parseFormats(formats: string[] | null | undefined): ExportFormat[] {
   return [
     ...new Set(
       (formats ?? [])
         .filter(isExportFormat)
-        .map((f) => (isExportFormatSuspended(f) ? ('csv_universal' as const) : f)),
+        // Symfonia/Wapro → JPK_FA (to importują), reszta wstrzymanych → CSV.
+        .map((f) => replacementForFormat(f)),
     ),
   ];
 }

@@ -26,7 +26,7 @@
 
 import { fingerprintOf } from '@/lib/flo/fingerprint';
 import type { CreateProposalInput } from '@/lib/flo/proposals';
-import { isExportFormatSuspended } from '@/lib/exports/suspended-formats';
+import { isExportFormatSuspended, replacementForFormat } from '@/lib/exports/suspended-formats';
 
 const DAY_MS = 86_400_000;
 
@@ -90,7 +90,12 @@ export function packageFormats(input: {
 }): AccountantFormat[] {
   // Wstrzymany format (JPK_V7M do czasu wersji 3) — księgowa dostaje sam
   // uniwersalny CSV, a nie plik, którego nie złoży.
-  if (isExportFormatSuspended(input.chosen)) return [FALLBACK_FORMAT];
+  // Symfonia/Wapro → JPK_FA(4) (to importują) z CSV jako zapasem, bo JPK_FA
+  // może odmówić (urząd, korekta, GUS); pozostałe wstrzymane → sam CSV.
+  if (isExportFormatSuspended(input.chosen)) {
+    const replacement = replacementForFormat(input.chosen) as AccountantFormat;
+    return replacement === FALLBACK_FORMAT ? [FALLBACK_FORMAT] : [replacement, FALLBACK_FORMAT];
+  }
   if (!input.isFirstPackage) return [input.chosen];
   if (input.chosen === FALLBACK_FORMAT) return [FALLBACK_FORMAT];
   return [input.chosen, FALLBACK_FORMAT];
