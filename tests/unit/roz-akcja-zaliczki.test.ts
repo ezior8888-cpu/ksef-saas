@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ db: vi.fn(), enqueue: vi.fn() }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -7,8 +7,8 @@ vi.mock('@/lib/supabase/active-org', () => ({ getActiveOrgIdFromCookies: async (
 vi.mock('@/lib/invoices/ksef-submit-enqueue', () => ({ enqueueKsefSubmitAfterDraft: mocks.enqueue }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: vi.fn() }));
 
-import { saveAndSendFinalAction } from '@/components/invoices/final-actions';
-import { generateFinalInvoiceXml } from '@/lib/ksef/fa3-advance-generator';
+import { saveAndSendFinalAction, saveFinalAction } from '@/components/invoices/final-actions';
+import { ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 
 /**
  * Akcja „Wystaw i wyślij” faktury rozliczającej: wiersze zaliczek muszą nieść
@@ -89,6 +89,8 @@ function formularz(advanceInvoiceIds: string[], totalAdvances: number) {
   };
 }
 
+afterEach(() => vi.unstubAllEnvs());
+
 beforeEach(() => {
   tables = {
     tenants: [{ id: 'firma-a', nip: '5260001246', name: 'ACME', address_json: null }],
@@ -103,28 +105,38 @@ beforeEach(() => {
   mocks.enqueue.mockReset().mockResolvedValue({ ok: true, mode: 'queued' });
 });
 
-describe('saveAndSendFinalAction — zaliczki ze stawką', () => {
-  it('kolejka dostaje wiersze zaliczek ze stawką i rozbiciem; XML z nich ma resztę', async () => {
-    const wynik = await saveAndSendFinalAction(formularz([ZAL_23, ZAL_8], 13380));
+describe('faktura rozliczeniowa — zaliczki ze stawką', () => {
+  it('można zapisać szkic z zaakceptowanymi zaliczkami', async () => {
+    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380));
     expect(wynik).toMatchObject({ success: true });
-
-    const arg = mocks.enqueue.mock.calls[0][0];
-    expect(arg.finalAdvanceSettlementRows).toEqual([
-      expect.objectContaining({ advance_amount: 12300, vat_rate: '23', net_amount: 10000, vat_amount: 2300 }),
-      expect.objectContaining({ advance_amount: 1080, vat_rate: '8', net_amount: 1000, vat_amount: 80 }),
-    ]);
-
-    const xml = generateFinalInvoiceXml(arg.finalData, arg.finalAdvanceSettlementRows);
-    expect(xml).toContain('<P_13_1>20000.00</P_13_1>');
-    expect(xml).toContain('<P_14_1>4600.00</P_14_1>');
-    expect(xml).toContain('<P_15>24600.00</P_15>');
+    expect(inserts[0]).toMatchObject({
+      table: 'invoices',
+      value: { invoice_kind: 'final', invoice_type: 'ROZ', advance_invoice_ids: [ZAL_23, ZAL_8] },
+    });
+    expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
   it('zaliczka w stawce spoza zamówienia wraca do formularza — bez szkicu i bez wysyłki', async () => {
-    const wynik = await saveAndSendFinalAction(formularz([ZAL_23, ZAL_5], 13350));
+    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_5], 13350));
     expect(wynik).toMatchObject({ success: false });
     expect((wynik as { error: string }).error).toMatch(/nie ma pozycji w tej stawce/);
     expect(inserts).toEqual([]);
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
+
+  it.each(['test', 'production'])(
+    'wstrzymuje wysyłkę ROZ przy KSEF_ENV=%s, zanim zapisze szkic lub zleci job',
+    async (env) => {
+      vi.stubEnv('KSEF_ENV', env);
+      // Prior-period accepted ZAL can come from the other environment; the
+      // existing invoice row does not record its KSeF environment.
+      tables.invoices[0].issue_date = '2026-08-01';
+      tables.invoices[0].ksef_number = '5260001246-20260801-0000000000-00';
+
+      const wynik = await saveAndSendFinalAction(formularz([ZAL_23], 12300));
+      expect(wynik).toEqual({ success: false, error: ROZ_SUBMISSION_HOLD_MESSAGE });
+      expect(inserts).toEqual([]);
+      expect(mocks.enqueue).not.toHaveBeenCalled();
+    },
+  );
 });

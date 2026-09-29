@@ -28,7 +28,7 @@ export async function addToOfflineQueue(
   const { data: invoiceRow, error: invErr } = await supabase
     .from('invoices')
     .select(
-      'tenant_id, internal_number, issue_date, gross_total, buyer_data, buyer_nip, seller_nip, created_at, tenants(nip)',
+      'tenant_id, internal_number, issue_date, gross_total, buyer_data, buyer_nip, seller_nip, created_at, ksef_status, ksef_number, tenants(nip)',
     )
     .eq('id', params.invoiceId)
     .eq('tenant_id', params.tenantId)
@@ -40,6 +40,9 @@ export async function addToOfflineQueue(
 
   if (invoiceRow.tenant_id !== params.tenantId) {
     throw new Error('Invoice tenant mismatch for offline queue');
+  }
+  if (invoiceRow.ksef_status === 'accepted') {
+    throw new Error('Invoice already accepted before offline queueing');
   }
 
   const idempotencySource = invoiceRow.created_at
@@ -105,6 +108,16 @@ export async function addToOfflineQueue(
       if (fetchErr || !existing) {
         throw new Error('Offline queue conflict could not be verified');
       }
+      const { data: current, error: currentError } = await supabase
+        .from('invoices')
+        .select('ksef_status')
+        .eq('id', params.invoiceId)
+        .eq('tenant_id', params.tenantId)
+        .maybeSingle();
+      if (currentError || !current) throw new Error('Invoice status unavailable after offline queue conflict');
+      if (current.ksef_status === 'accepted') {
+        throw new Error('Invoice already accepted during offline queueing');
+      }
       return existing as OfflineQueueRow;
     }
     throw error;
@@ -120,10 +133,31 @@ export async function addToOfflineQueue(
     })
     .eq('id', params.invoiceId)
     .eq('tenant_id', params.tenantId)
+    .or('ksef_status.is.null,ksef_status.neq.accepted')
     .select('id')
-    .single();
+    .maybeSingle();
 
-  if (updErr || !updated) throw new Error('Invoice could not be updated for offline queue');
+  if (updErr) throw new Error('Invoice could not be updated for offline queue');
+  if (!updated) {
+    const { data: current, error: currentError } = await supabase
+      .from('invoices')
+      .select('ksef_status, ksef_number')
+      .eq('id', params.invoiceId)
+      .eq('tenant_id', params.tenantId)
+      .maybeSingle();
+    if (currentError || !current) throw new Error('Invoice status unavailable after offline queue insert');
+    if (current.ksef_status === 'accepted' && current.ksef_number) {
+      const { error: reconcileError } = await supabase
+        .from('ksef_offline_queue')
+        .update({ status: 'sent', last_error: null })
+        .eq('id', row.id)
+        .eq('tenant_id', params.tenantId)
+        .eq('invoice_id', params.invoiceId)
+        .eq('status', 'queued');
+      if (reconcileError) throw new Error('Accepted invoice queue could not be reconciled');
+    }
+    throw new Error('Invoice could not be updated for offline queue');
+  }
 
   return row as OfflineQueueRow;
 }

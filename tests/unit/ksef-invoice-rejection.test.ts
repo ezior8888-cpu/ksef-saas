@@ -47,10 +47,18 @@ vi.mock('@/lib/supabase/admin-queries', () => ({
 }));
 vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: async () => {
+    let isUpdate = false;
     const q = {
       select: () => q,
       eq: () => q,
-      maybeSingle: async () => ({ data: { ksef_status: 'queued', ksef_number: null }, error: null }),
+      or: () => q,
+      update: () => { isUpdate = true; return q; },
+      maybeSingle: async () => ({
+        data: isUpdate
+          ? { id: '11111111-1111-4111-8111-111111111111' }
+          : { ksef_status: 'queued', ksef_number: null },
+        error: null,
+      }),
     };
     return { from: () => q };
   },

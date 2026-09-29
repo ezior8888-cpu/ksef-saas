@@ -15,6 +15,7 @@
  *   7. **Stale dunning notifications** — sending starsze niż 15 min
  *   8. **Checkout claims** — creating > 15 min albo uncertain/held
  *   9. **Stale VAT enqueue** — faktura powiązana, ale brak potwierdzenia emisji > 15 min
+ *  10. **KSeF reconciliation** — numer KSeF przy niezaakceptowanym statusie lub ROZ hold
  *
  * Wszystkie progi konserwatywne — wolimy false-positive niż przegapić
  * critical incident. Operator może zignorować, ale nie chcemy gubić alertów.
@@ -453,6 +454,62 @@ export async function checkStaleBillingVatEnqueues(): Promise<AlertCheckResult> 
   return { type: 'stale_billing_vat_enqueues', fired: true };
 }
 
+/**
+ * A KSeF number must not coexist with an unaccepted outgoing invoice. A ROZ
+ * hold is an operator reconciliation state, not a rejection from KSeF. Count
+ * both independently: one invoice can satisfy both predicates.
+ */
+export async function checkKsefReconciliationAnomalies(): Promise<AlertCheckResult> {
+  const supabase = createAdminClient();
+  const countOutgoing = () => supabase
+    .from('invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('direction', 'outgoing');
+  const [acceptedMismatch, rozHold] = await Promise.all([
+    countOutgoing()
+      .not('ksef_number', 'is', null)
+      .or('ksef_status.is.null,ksef_status.neq.accepted'),
+    countOutgoing()
+      .eq('last_error_code', 'ROZ_HOLD_RECONCILE')
+      .or('ksef_status.is.null,ksef_status.neq.accepted'),
+  ]);
+
+  if (acceptedMismatch.error || rozHold.error ||
+      acceptedMismatch.count === null || rozHold.count === null) {
+    throw acceptedMismatch.error ?? rozHold.error ??
+      new Error('KSeF reconciliation counts unavailable');
+  }
+  if (acceptedMismatch.count === 0 && rozHold.count === 0) {
+    return { type: 'ksef_reconciliation', fired: false };
+  }
+
+  // A newly appearing category must alert immediately even if the other one
+  // was delivered within the 30-minute dedup window.
+  const alertKey = `ksef_reconciliation:${acceptedMismatch.count > 0 ? 'number' : 'none'}:${rozHold.count > 0 ? 'roz' : 'none'}`;
+  const shouldSend = await shouldSendAlert(alertKey);
+  if (!shouldSend) {
+    return { type: 'ksef_reconciliation', fired: false, reason: 'dedup' };
+  }
+
+  await alertCritical(
+    'Faktury wymagają ręcznego uzgodnienia z KSeF',
+    'Numer KSeF przy statusie innym niż accepted lub lokalna blokada ROZ wymaga sprawdzenia dokumentu i stanu w KSeF. Nie oznacza to odrzucenia przez KSeF. Nie ponawiaj wysyłki ani nie zmieniaj statusu przed ręcznym uzgodnieniem.',
+    {
+      fields: [
+        { label: 'Numer KSeF, status niezaakceptowany', value: String(acceptedMismatch.count) },
+        { label: 'ROZ wstrzymane', value: String(rozHold.count) },
+      ],
+      link: {
+        label: 'Otwórz panel administratora',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/support',
+      },
+    },
+  );
+
+  await markAlertDelivered(alertKey);
+  return { type: 'ksef_reconciliation', fired: true };
+}
+
 /** An uncertain email send must be reconciled before any new delivery. */
 export async function checkStaleDunningNotifications(): Promise<AlertCheckResult> {
   const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
@@ -525,6 +582,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-stale-billing-vat-enqueues', () =>
         checkStaleBillingVatEnqueues().catch(captureAndReturn('stale_billing_vat_enqueues')),
+      ),
+      step.run('check-ksef-reconciliation', () =>
+        checkKsefReconciliationAnomalies().catch(captureAndReturn('ksef_reconciliation')),
       ),
     ]);
 

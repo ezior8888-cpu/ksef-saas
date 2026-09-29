@@ -12,11 +12,12 @@ import { generateIdempotencyKey } from '@/lib/ksef/idempotency';
 
 type Row = Record<string, unknown>;
 type Result = { data: Row[] | Row | null; count?: number; error: { code: string; message: string } | null };
-type Operation = { table: string; mode: string; selection: string; filters: Array<[string, unknown]> };
+type Operation = { table: string; mode: string; selection: string; filters: Array<[string, unknown]>; nullableNonAccepted?: boolean };
 let tables: Record<string, Row[]>;
 let operations: Operation[];
 let errorFor: (op: Operation) => boolean;
 let conflict = false;
+let beforeUpdate: ((op: Operation) => void) | null;
 
 function database() {
   return { from(table: string) {
@@ -32,6 +33,12 @@ function database() {
       insert(value: Row) { op.mode = 'insert'; patch = value; return query; },
       update(value: Row) { op.mode = 'update'; patch = value; return query; },
       eq(key: string, value: unknown) { op.filters.push([key, value]); predicates.push(row => row[key] === value); return query; },
+      or(expression: string) {
+        if (expression !== 'ksef_status.is.null,ksef_status.neq.accepted') throw new Error('unsupported test OR clause');
+        op.nullableNonAccepted = true;
+        predicates.push(row => row.ksef_status == null || row.ksef_status !== 'accepted');
+        return query;
+      },
       in(key: string, values: unknown[]) { op.filters.push([key, values]); predicates.push(row => values.includes(row[key])); return query; },
       gte(key: string, value: string) { predicates.push(row => String(row[key]) >= value); return query; },
       lte(key: string, value: string) { predicates.push(row => String(row[key]) <= value); return query; },
@@ -45,6 +52,7 @@ function database() {
         if (errorFor(op) || (conflict && op.mode === 'insert' && table === 'ksef_offline_queue')) {
           return Promise.resolve({ data: null, error: { code: conflict ? '23505' : 'XX000', message: 'fixture failure' } }).then(resolve, reject);
         }
+        if (op.mode === 'update') beforeUpdate?.(op);
         const matching = (tables[table] ?? []).filter(row => predicates.every(p => p(row)));
         const rows = window ? matching.slice(window[0], window[1] + 1) : matching;
         if (op.mode === 'insert') { const inserted = { id: 'new-queue', ...patch }; (tables[table] ??= []).push(inserted); rows.splice(0, rows.length, inserted); }
@@ -84,7 +92,7 @@ beforeEach(() => {
       send_hour: 10, send_on_weekdays_only: false,
     }],
   };
-  operations = []; errorFor = () => false; conflict = false;
+  operations = []; errorFor = () => false; conflict = false; beforeUpdate = null;
   mocks.admin.mockReset().mockImplementation(database);
   mocks.qr.mockReset().mockResolvedValue({ offlinePayload: 'offline-fixture', certyfikatPayload: 'certificate-fixture' });
 });
@@ -205,6 +213,7 @@ describe('offline helper tenant ownership', () => {
   });
 
   it('enqueues and updates only the owned invoice', async () => {
+    tables.invoices[0].ksef_status = 'sending';
     const result = await addToOfflineQueue(offlineParams);
     expect(result.tenant_id).toBe('tenant-a');
     expect(tables.invoices[0].ksef_status).toBe('offline_queued');
@@ -216,16 +225,18 @@ describe('offline helper tenant ownership', () => {
     { tenant_id: 'tenant-b', invoice_id: 'invoice-a' },
     { tenant_id: 'tenant-a', invoice_id: 'invoice-b' },
   ])('rejects a conflicting row with mismatched ownership: %j', async relationship => {
+    tables.invoices[0].ksef_status = 'sending';
     conflict = true;
     tables.ksef_offline_queue.push({
       id: 'foreign-queue', ...relationship,
       idempotency_key: generateIdempotencyKey('tenant-a', 'invoice-a', new Date('2026-01-01T12:00:00Z')),
     });
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Offline queue conflict could not be verified');
-    expect(tables.invoices[0].ksef_status).toBe('accepted');
+    expect(tables.invoices[0].ksef_status).toBe('sending');
   });
 
   it('preserves idempotent retries of an owned queue row', async () => {
+    tables.invoices[0].ksef_status = 'sending';
     conflict = true;
     tables.ksef_offline_queue.push({
       id: 'existing-queue', tenant_id: 'tenant-a', invoice_id: 'invoice-a',
@@ -235,11 +246,33 @@ describe('offline helper tenant ownership', () => {
   });
 
   it('does not claim success when invoice ownership changes before the write', async () => {
+    tables.invoices[0].ksef_status = 'sending';
     mocks.qr.mockImplementation(async () => {
       tables.invoices[0].tenant_id = 'tenant-b';
       return { offlinePayload: 'offline-fixture', certyfikatPayload: 'certificate-fixture' };
     });
+    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice status unavailable after offline queue insert');
+    expect(tables.invoices[0].ksef_status).toBe('sending');
+  });
+  it('rejects an already accepted invoice before generating QR codes or a queue row', async () => {
+    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice already accepted');
+    expect(mocks.qr).not.toHaveBeenCalled();
+    expect(operations.some(op => op.mode !== 'select')).toBe(false);
+  });
+  it('preserves acceptance that lands just before the offline status update', async () => {
+    tables.invoices[0].ksef_status = 'sending';
+    beforeUpdate = op => {
+      if (op.table !== 'invoices') return;
+      tables.invoices[0].ksef_status = 'accepted';
+      tables.invoices[0].ksef_number = 'TEST';
+      beforeUpdate = null;
+    };
+
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
-    expect(tables.invoices[0].ksef_status).toBe('accepted');
+
+    expect(tables.invoices[0]).toMatchObject({ ksef_status: 'accepted', ksef_number: 'TEST' });
+    expect(tables.invoices[0].offline_qr_offline).toBeUndefined();
+    expect(tables.ksef_offline_queue).toMatchObject([{ status: 'sent', tenant_id: 'tenant-a', invoice_id: 'invoice-a' }]);
+    expect(operations.find(op => op.table === 'invoices' && op.mode === 'update')?.nullableNonAccepted).toBe(true);
   });
 });

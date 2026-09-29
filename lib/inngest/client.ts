@@ -93,6 +93,8 @@ export const invoiceSubmitFailed = eventType('invoice/submit.failed', {
      * (ponowienie), żeby zdarzenia sprzed zmiany działały bez zmian.
      */
     terminal?: boolean;
+    /** Local ROZ safety hold: requires reconciliation, not a KSeF rejection. */
+    manualReconciliationRequired?: boolean;
   }>(),
 });
 

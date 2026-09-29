@@ -19,6 +19,7 @@ import {
   nearestFutureDeadline,
 } from '@/lib/flo/functions/ksef-outage';
 import { calculateNextRetry } from '@/lib/ksef/idempotency';
+import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import {
   getInvoiceForSubmit,
   updateInvoiceStatus,
@@ -157,31 +158,91 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
         results.push({ invoiceId: item.invoice_id, queueId: item.id, status: 'ownership-mismatch' });
         continue;
       }
+
+      // An accepted invoice may have missed its success event. Heal the
+      // durable queue row instead of submitting the same document again.
+      const supabase = createAdminClient();
+      const { data: invoiceState, error: invoiceStateError } = await supabase
+        .from('invoices')
+        .select('ksef_status, ksef_number, invoice_type, invoice_kind, last_error_code')
+        .eq('id', item.invoice_id)
+        .eq('tenant_id', item.tenant_id)
+        .maybeSingle();
+      if (invoiceStateError || !invoiceState) throw new Error('Nie można sprawdzić statusu faktury Offline24');
+      if (invoiceState.ksef_status === 'accepted' && invoiceState.ksef_number) {
+        const { error: reconcileError } = await supabase
+          .from('ksef_offline_queue')
+          .update({ status: 'sent', last_error: null })
+          .eq('id', item.id)
+          .eq('tenant_id', item.tenant_id)
+          .eq('invoice_id', item.invoice_id)
+          .eq('status', 'queued');
+        if (reconcileError) throw new Error(reconcileError.message);
+        results.push({ invoiceId: item.invoice_id, queueId: item.id, status: 'already-accepted' });
+        continue;
+      }
+      if (isRozSubmission({
+        storedInvoiceType: invoiceState.invoice_type,
+        invoiceKind: invoiceState.invoice_kind,
+      }) || invoiceState.last_error_code === 'ROZ_HOLD_RECONCILE') {
+        const { error: holdError } = await supabase
+          .from('ksef_offline_queue')
+          .update({ status: 'failed', last_error: ROZ_SUBMISSION_HOLD_MESSAGE })
+          .eq('id', item.id)
+          .eq('tenant_id', item.tenant_id)
+          .eq('invoice_id', item.invoice_id)
+          .eq('status', 'queued');
+        if (holdError) throw new Error(holdError.message);
+        const { error: invoiceHoldError } = await supabase
+          .from('invoices')
+          .update({
+            ksef_status: 'failed',
+            last_error: ROZ_SUBMISSION_HOLD_MESSAGE,
+            last_error_code: 'ROZ_HOLD_RECONCILE',
+          })
+          .eq('id', item.invoice_id)
+          .eq('tenant_id', item.tenant_id)
+          .or('ksef_status.is.null,ksef_status.neq.accepted');
+        if (invoiceHoldError) throw new Error(invoiceHoldError.message);
+        results.push({ invoiceId: item.invoice_id, queueId: item.id, status: 'held-roz' });
+        continue;
+      }
       const deadlinePassed = await step.run(
         `deadline-check-${item.id}`,
         () => new Date(item.deadline).getTime() < Date.now(),
       );
 
       if (deadlinePassed) {
-        await step.run(`expire-offline-queue-${item.id}`, async () => {
+        const expired = await step.run(`expire-offline-queue-${item.id}`, async () => {
           const supabase = createAdminClient();
-          const { error } = await supabase
+          const { data: updated, error } = await supabase
             .from('ksef_offline_queue')
             .update({ status: 'expired', last_error: 'OFFLINE_DEADLINE_EXCEEDED' })
             .eq('id', item.id)
             .eq('tenant_id', item.tenant_id)
-            .eq('invoice_id', item.invoice_id);
+            .eq('invoice_id', item.invoice_id)
+            .eq('status', 'queued')
+            .select('id')
+            .maybeSingle();
           if (error) throw new Error(error.message);
+          if (!updated) return false;
 
-          await updateInvoiceStatus(item.invoice_id, {
-            ksef_status: 'failed',
-            last_error: 'Przekroczono deadline Offline24',
-            last_error_code: 'OFFLINE_DEADLINE_EXCEEDED',
-            last_error_field: null,
-            last_error_suggestion: null,
-          }, item.tenant_id);
+          const { error: invoiceUpdateError } = await supabase
+            .from('invoices')
+            .update({
+              ksef_status: 'failed',
+              last_error: 'Przekroczono deadline Offline24',
+              last_error_code: 'OFFLINE_DEADLINE_EXCEEDED',
+              last_error_field: null,
+              last_error_suggestion: null,
+            })
+            .eq('id', item.invoice_id)
+            .eq('tenant_id', item.tenant_id)
+            .or('ksef_status.is.null,ksef_status.neq.accepted');
+          if (invoiceUpdateError) throw new Error(invoiceUpdateError.message);
+          return true;
         });
-        results.push({ invoiceId: item.invoice_id, status: 'expired' });
+        results.push({ invoiceId: item.invoice_id, status: expired === false ? 'state-changed' : 'expired' });
         continue;
       }
 
@@ -212,11 +273,11 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
           };
         });
 
-        await step.run(`mark-offline-queue-sending-${item.id}`, async () => {
+        const claimed = await step.run(`mark-offline-queue-sending-${item.id}`, async () => {
           const supabase = createAdminClient();
           const attempts = ((item.attempts as number | null | undefined) ?? 0) + 1;
 
-          const { error } = await supabase
+          const { data: updated, error } = await supabase
             .from('ksef_offline_queue')
             .update({
               status: 'sending',
@@ -226,9 +287,28 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
             })
             .eq('id', item.id)
             .eq('tenant_id', item.tenant_id)
-            .eq('invoice_id', item.invoice_id);
+            .eq('invoice_id', item.invoice_id)
+            .eq('status', 'queued')
+            .select('id')
+            .maybeSingle();
           if (error) throw new Error(error.message);
+          return updated?.id === item.id;
         });
+
+        // Old Inngest checkpoints stored no return value for this step. A
+        // fresh read also prevents a replay from sending after late success.
+        const { data: queueState, error: queueStateError } = await createAdminClient()
+          .from('ksef_offline_queue')
+          .select('status')
+          .eq('id', item.id)
+          .eq('tenant_id', item.tenant_id)
+          .eq('invoice_id', item.invoice_id)
+          .maybeSingle();
+        if (queueStateError) throw new Error(queueStateError.message);
+        if (claimed === false || queueState?.status !== 'sending') {
+          results.push({ invoiceId: item.invoice_id, queueId: item.id, status: 'state-changed' });
+          continue;
+        }
 
         await step.sendEvent(
           `submit-from-offline-${item.id}`,
@@ -293,7 +373,8 @@ export async function runOfflineQueueSuccess(data: Parameters<typeof invoiceSubm
         .update({ status: 'sent', last_error: null })
         .eq('invoice_id', invoiceId)
         .eq('tenant_id', tenantId)
-        .eq('status', 'sending');
+        // A late success must repair a row closed by an earlier failure event.
+        .in('status', ['sending', 'failed', 'queued']);
       if (error) throw new Error(error.message);
     });
 
@@ -326,12 +407,32 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
     await step.run('rollback-queue-status', async () => {
       const supabase = createAdminClient();
 
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .select('ksef_status, ksef_number, last_error_code')
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      if (invoiceError || !invoice) throw new Error('Nie można sprawdzić statusu faktury Offline24');
+      if (invoice.ksef_status === 'accepted' && invoice.ksef_number) {
+        const { error: reconcileError } = await supabase
+          .from('ksef_offline_queue')
+          .update({ status: 'sent', last_error: null })
+          .eq('invoice_id', invoiceId)
+          .eq('tenant_id', tenantId)
+          .in('status', ['queued', 'sending', 'failed', 'expired']);
+        if (reconcileError) throw new Error(reconcileError.message);
+        return { skippedAccepted: true as const };
+      }
+
+      const heldRoz = data.manualReconciliationRequired || invoice.last_error_code === 'ROZ_HOLD_RECONCILE';
+
       const { data: row, error: selErr } = await supabase
         .from('ksef_offline_queue')
         .select('id, attempts, status')
         .eq('invoice_id', invoiceId)
         .eq('tenant_id', tenantId)
-        .eq('status', 'sending')
+        .in('status', heldRoz ? ['sending', 'queued'] : ['sending'])
         .maybeSingle();
       if (selErr) throw new Error(selErr.message);
       if (!row?.id) {
@@ -344,7 +445,7 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
       // Ponowienie nic nie zmieni — zamykamy wpis i zostawiamy fakturze
       // status ustawiony przez job wysyłki ('rejected'), zamiast nadpisywać
       // go na 'offline_queued'.
-      if (data.terminal) {
+      if (data.terminal || heldRoz) {
         const { error: closeErr } = await supabase
           .from('ksef_offline_queue')
           .update({
@@ -356,12 +457,13 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
           })
           .eq('id', row.id)
           .eq('tenant_id', tenantId)
-          .eq('invoice_id', invoiceId);
+          .eq('invoice_id', invoiceId)
+          .in('status', heldRoz ? ['sending', 'queued'] : ['sending']);
         if (closeErr) throw new Error(closeErr.message);
         return { closedTerminal: true as const };
       }
 
-      const { error: updQ } = await supabase
+      const { data: queued, error: updQ } = await supabase
         .from('ksef_offline_queue')
         .update({
           status: 'queued',
@@ -373,19 +475,66 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
         })
         .eq('id', row.id)
         .eq('tenant_id', tenantId)
-        .eq('invoice_id', invoiceId);
+        .eq('invoice_id', invoiceId)
+        .eq('status', 'sending')
+        .select('id')
+        .maybeSingle();
       if (updQ) throw new Error(updQ.message);
+      if (!queued) return { skippedQueueChanged: true as const };
 
-      await updateInvoiceStatus(invoiceId, {
-        ksef_status: 'offline_queued',
-        last_error:
-          errorMessage.length > 5000
-            ? `${errorMessage.slice(0, 4997)}...`
-            : errorMessage,
-        last_error_code: 'OFFLINE_SUBMIT_RETRY',
-        last_error_field: null,
-        last_error_suggestion: null,
-      }, tenantId);
+      // Another worker can record acceptance after the read above. Do not
+      // turn an accepted invoice back into a queued one.
+      const invoiceUpdate = supabase
+        .from('invoices')
+        .update({
+          ksef_status: 'offline_queued',
+          last_error:
+            errorMessage.length > 5000
+              ? `${errorMessage.slice(0, 4997)}...`
+              : errorMessage,
+          last_error_code: 'OFFLINE_SUBMIT_RETRY',
+          last_error_field: null,
+          last_error_suggestion: null,
+        })
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .or('ksef_status.is.null,ksef_status.neq.accepted');
+      // Compare the error code read above. A newer ROZ hold must win over
+      // an older transient failure event, including when it lands mid-handler.
+      if (invoice.last_error_code == null) {
+        invoiceUpdate.is('last_error_code', null);
+      } else {
+        invoiceUpdate.eq('last_error_code', invoice.last_error_code);
+      }
+      const { data: updatedInvoice, error: invoiceUpdateError } = await invoiceUpdate
+        .select('id')
+        .maybeSingle();
+      if (invoiceUpdateError) throw new Error(invoiceUpdateError.message);
+      if (!updatedInvoice) {
+        const { data: latest, error: latestError } = await supabase
+          .from('invoices')
+          .select('ksef_status, ksef_number, last_error_code')
+          .eq('id', invoiceId)
+          .eq('tenant_id', tenantId)
+          .maybeSingle();
+        if (latestError || !latest) throw new Error('Nie można uzgodnić statusu faktury Offline24');
+        const resolvedStatus = latest.ksef_status === 'accepted' && latest.ksef_number
+          ? 'sent'
+          : latest.last_error_code === 'ROZ_HOLD_RECONCILE'
+            ? 'failed'
+            : null;
+        if (resolvedStatus) {
+          const { error: reconcileError } = await supabase
+            .from('ksef_offline_queue')
+            .update({ status: resolvedStatus })
+            .eq('id', row.id)
+            .eq('tenant_id', tenantId)
+            .eq('invoice_id', invoiceId)
+            .eq('status', 'queued');
+          if (reconcileError) throw new Error(reconcileError.message);
+        }
+        return { skippedStateChanged: true as const };
+      }
     });
 
     return { success: true as const };
