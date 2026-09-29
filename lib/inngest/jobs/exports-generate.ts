@@ -44,6 +44,7 @@ import { readTaxpayerEmail } from '@/lib/exports/taxpayer-email';
 import { generateJpkV7m, MissingTaxpayerEmailError } from '@/lib/exports/jpk-v7m-generator';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isExportFormatSuspended, SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
 import { r2ObjectExists, uploadToR2 } from '@/lib/storage/r2';
 
 import type { Database } from '@/types/database';
@@ -240,7 +241,10 @@ export async function onExportsGenerateExhausted(
   failure: Error,
   data: { exportJobId: string },
 ): Promise<void> {
-  const message = HUMAN_EXPORT_ERRORS.includes(failure.message)
+  const human =
+    HUMAN_EXPORT_ERRORS.includes(failure.message) ||
+    Object.values(SUSPENDED_EXPORT_FORMATS).includes(failure.message);
+  const message = human
     ? failure.message
     : 'Nie udało się wygenerować pliku. Spróbuj ponownie albo napisz do nas.';
   const { error } = await createAdminClient()
@@ -271,6 +275,12 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
       }
       return data as ExportJobRow;
     });
+
+    // Format wstrzymany (np. zlecony przed wstrzymaniem albo z ustawień paczki)
+    // — bez pliku, z powodem dla człowieka zamiast pliku, którego nikt nie użyje.
+    if (isExportFormatSuspended(job.format)) {
+      throw new NonRetriableError(SUSPENDED_EXPORT_FORMATS[job.format]!);
+    }
 
     await step.run('mark-generating', async () => {
       const { error } = await supabase
