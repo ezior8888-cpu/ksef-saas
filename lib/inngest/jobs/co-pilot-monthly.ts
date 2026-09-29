@@ -13,6 +13,7 @@ import {
   inngest,
 } from '@/lib/inngest/client';
 import { readTenantTaxOffice } from '@/lib/exports/tax-office';
+import { isExportFormatSuspended } from '@/lib/exports/suspended-formats';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { downloadFromR2, getSignedInvoiceUrl } from '@/lib/storage/r2';
 import type { Database } from '@/types/database';
@@ -58,8 +59,19 @@ function isExportFormat(v: string): v is ExportFormat {
   return (VALID_FORMATS as readonly string[]).includes(v);
 }
 
-function parseFormats(formats: string[] | null | undefined): ExportFormat[] {
-  return [...new Set((formats ?? []).filter(isExportFormat))];
+/**
+ * Formaty z ustawień paczki. Wstrzymany format (`suspended-formats.ts`)
+ * zamienia się w uniwersalny CSV — ustawienia zapisane przed wstrzymaniem
+ * nie mogą wysłać księgowej pliku, którego jej program nie przyjmie.
+ */
+export function parseFormats(formats: string[] | null | undefined): ExportFormat[] {
+  return [
+    ...new Set(
+      (formats ?? [])
+        .filter(isExportFormat)
+        .map((f) => (isExportFormatSuspended(f) ? ('csv_universal' as const) : f)),
+    ),
+  ];
 }
 
 /**

@@ -62,6 +62,14 @@ vi.mock('@/lib/storage/r2', () => ({
     db.uploads.push(buffer.toString('utf8'));
   },
 }));
+// Ścieżka „na potem”: JPK_V7M jest wstrzymany (#66), a od 29.09 job odmawia
+// wstrzymanych formatów. Tu udajemy odblokowanie, żeby sprawdzić sam plik;
+// odmowę sprawdza osobny test na końcu.
+const wstrzymanie = vi.hoisted(() => ({ aktywne: false }));
+vi.mock('@/lib/exports/suspended-formats', async (orig) => {
+  const prawdziwe = await orig<typeof import('@/lib/exports/suspended-formats')>();
+  return { ...prawdziwe, isExportFormatSuspended: (f: string) => wstrzymanie.aktywne && prawdziwe.isExportFormatSuspended(f) };
+});
 vi.mock('@/lib/exports/data-fetcher', async (orig) => ({
   ...(await orig<typeof import('@/lib/exports/data-fetcher')>()),
   fetchInvoicesForExport: async () => ({
@@ -132,6 +140,18 @@ describe('job eksportu JPK_V7M(3)', () => {
   it('bez urzędu: koniec bez ponawiania', async () => {
     db.office = null;
     await expect(runExportsGenerate({ exportJobId: 'job-1' }, ctx)).rejects.toMatchObject({ name: 'NonRetriableError' });
+  });
+
+  it('DZIŚ (wstrzymany): zlecenie JPK_V7M kończy się bez pliku, z powodem', async () => {
+    wstrzymanie.aktywne = true;
+    try {
+      const run = runExportsGenerate({ exportJobId: 'job-1' }, ctx);
+      await expect(run).rejects.toMatchObject({ name: 'NonRetriableError' });
+      await expect(run).rejects.toThrow(/JPK_V7M jest chwilowo wyłączony/);
+      expect(db.uploads).toEqual([]);
+    } finally {
+      wstrzymanie.aktywne = false;
+    }
   });
 });
 

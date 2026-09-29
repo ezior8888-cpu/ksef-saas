@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { isExportFormatSuspended } from '@/lib/exports/suspended-formats';
 import type { Tables } from '@/types/database';
 
 type SettingsRow = Tables<'accountant_settings'>;
@@ -79,7 +80,14 @@ const FORMAT_OPTIONS: {
   },
 ];
 
-const ALLOWED_VALUES = new Set(FORMAT_OPTIONS.map((o) => o.value));
+/**
+ * Do wyboru tylko formaty, które działają — wstrzymany (np. Comarch Optima,
+ * `suspended-formats.ts`) znika z listy, a zapisany wcześniej wybór nie
+ * wraca na formularz. Paczka i tak zamienia go na CSV (`parseFormats`).
+ */
+const SELECTABLE_OPTIONS = FORMAT_OPTIONS.filter((o) => !isExportFormatSuspended(o.value));
+
+const ALLOWED_VALUES = new Set(SELECTABLE_OPTIONS.map((o) => o.value));
 
 function normalizePreferredFormats(fromDb: unknown): ExportFormat[] {
   const arr = Array.isArray(fromDb) ? fromDb : [];
@@ -309,7 +317,7 @@ export function CoPilotSettingsForm({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {FORMAT_OPTIONS.map((opt) => (
+          {SELECTABLE_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
