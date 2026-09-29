@@ -12,6 +12,7 @@ import {
   exportsGenerateRequested,
   inngest,
 } from '@/lib/inngest/client';
+import { jpkFaBlocker } from '@/lib/exports/jpk-fa-readiness';
 import { readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { downloadFromR2, getSignedInvoiceUrl } from '@/lib/storage/r2';
@@ -70,7 +71,12 @@ export function formatsWithoutUnaddressedJpkFa<F extends string>(
   formats: readonly F[],
   taxOfficeCode: string | null,
 ): F[] {
-  if (taxOfficeCode || !formats.includes('jpk_fa' as F)) return [...formats];
+  return taxOfficeCode ? [...formats] : formatsWithCsvInsteadOfJpkFa(formats);
+}
+
+/** JPK_FA → uniwersalny CSV (bez dubla, gdy CSV już jest w paczce). */
+export function formatsWithCsvInsteadOfJpkFa<F extends string>(formats: readonly F[]): F[] {
+  if (!formats.includes('jpk_fa' as F)) return [...formats];
   return [...new Set(formats.map((f) => (f === 'jpk_fa' ? ('csv_universal' as F) : f)))];
 }
 
@@ -292,7 +298,20 @@ export async function runCoPilotSendPackage(data: Parameters<typeof exportsCoPil
     const taxOfficeCode = formats.includes('jpk_fa')
       ? await step.run('read-tax-office', () => readTenantTaxOffice(supabase, tenantId))
       : null;
-    const packageFormats = formatsWithoutUnaddressedJpkFa(formats, taxOfficeCode);
+    const addressedFormats = formatsWithoutUnaddressedJpkFa(formats, taxOfficeCode);
+    // JPK_FA odmawia też przy korekcie w okresie (C-01) i bez adresu w GUS —
+    // sprawdzone tutaj z tego samego powodu: paczka ma dojść do księgowej.
+    const jpkFaBlocked = addressedFormats.includes('jpk_fa')
+      ? await step.run('check-jpk-fa', () =>
+          jpkFaBlocker(supabase, {
+            tenantId,
+            periodStart,
+            periodEnd,
+            includeCorrections: settingsRow?.include_corrections ?? true,
+          }),
+        )
+      : null;
+    const packageFormats = jpkFaBlocked ? formatsWithCsvInsteadOfJpkFa(addressedFormats) : addressedFormats;
 
     const toEmail = accountantEmail.trim() || settingsRow?.accountant_email?.trim();
     if (!toEmail) {

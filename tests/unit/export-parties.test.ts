@@ -54,21 +54,19 @@ describe('kontrahent wg kierunku', () => {
 });
 
 describe('JPK_FA — strony wg MF (P_3A/B nabywca, P_3C/D sprzedawca, P_4B NIP sprzedawcy, P_5B NIP nabywcy)', () => {
+  // JPK_FA(4) obejmuje faktury WYSTAWIONE przez podatnika — faktur zakupu
+  // w nim nie ma (od 28.09; test „zakup ze skrzynki” usunięty razem z nimi).
   it('sprzedaż: sprzedawcą jest wystawca pliku, P_4B = nasz NIP, P_5B = NIP nabywcy', () => {
-    const xml = generateJpkFa({ ...input, issuedInvoices: [faktura()] });
+    const registeredAddress = {
+      voivodeship: 'MAZOWIECKIE', county: 'Warszawa', commune: 'Śródmieście',
+      street: 'Główna', buildingNumber: '1', city: 'Warszawa', postCode: '00-001',
+    };
+    const xml = generateJpkFa({ ...input, issuer: { ...MY, registeredAddress }, issuedInvoices: [faktura()] });
     expect(xml).toContain('<P_3A>Klient Sp. z o.o.</P_3A>');
     expect(xml).toContain('<P_3C>Moja Firma</P_3C>');
     expect(xml).toContain('<P_3D>Główna 1, 00-001 Warszawa</P_3D>');
     expect(xml).toContain('<P_4B>1234567890</P_4B>');
     expect(xml).toContain('<P_5B>5252241585</P_5B>');
-  });
-
-  it('zakup ze skrzynki: sprzedawcą dostawca, nabywcą my', () => {
-    const xml = generateJpkFa({ ...input, issuedInvoices: [], receivedInvoices: [zakup()] });
-    expect(xml).toContain('<P_3A>Moja Firma</P_3A>');
-    expect(xml).toContain('<P_3C>Dostawca Sp. z o.o.</P_3C>');
-    expect(xml).toContain('<P_4B>5260001246</P_4B>');
-    expect(xml).toContain('<P_5B>1234567890</P_5B>');
   });
 });
 

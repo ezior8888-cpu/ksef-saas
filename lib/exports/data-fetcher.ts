@@ -1,6 +1,7 @@
 // lib/exports/data-fetcher.ts
 // Pobieranie danych z DB do eksportów (uniform interface)
 
+import { fetchAdvanceSettlementRows } from '@/lib/invoices/advance-settlement';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database, Json } from '@/types/database';
@@ -106,20 +107,24 @@ export async function fetchInvoicesForExport(
 
   // Mapowanie rows → JpkInvoice też idzie równolegle dla obu kierunków
   // (każde robi swoje SELECT-y na liniach + parentach).
-  const [issuedInvoices, receivedInvoices, expenses, settledAdvances] = await Promise.all([
+  const [issuedInvoices, receivedInvoices, expenses, settledAdvances, advanceRows] = await Promise.all([
     mapRowsToJpkInvoices(supabase, issuedRows, params.tenantId),
     mapRowsToJpkInvoices(supabase, receivedRows, params.tenantId),
     needReceived
       ? fetchExpensesForExport(supabase, params)
       : Promise.resolve<ExportExpense[]>([]),
     fetchSettledAdvancesNet(supabase, params.tenantId, issuedRows),
+    fetchAdvanceSettlementRows(supabase, params.tenantId, issuedRows),
   ]);
 
   // ROZ niesie pełną wartość zamówienia; KPiR odejmuje zaliczki, które już
-  // policzył. `mapRowsToJpkInvoices` zachowuje kolejność wierszy.
+  // policzył, a JPK_FA — jak faktura w KSeF — wykazuje kwoty po ich odjęciu.
+  // `mapRowsToJpkInvoices` zachowuje kolejność wierszy.
   issuedRows.forEach((row, i) => {
     const settled = settledAdvances.get(row.id);
     if (settled !== undefined) issuedInvoices[i].settledAdvancesNet = settled;
+    const rows = advanceRows.get(row.id);
+    if (rows !== undefined) issuedInvoices[i].advanceSettlement = rows;
   });
 
   return { issuer, issuedInvoices, receivedInvoices, expenses };
@@ -320,7 +325,7 @@ async function resolveLinesForInvoices(
     const { data: dbLines, error } = await supabase
       .from('invoice_line_items')
       .select(
-        'invoice_id, ordinal, name, unit, quantity, unit_price_net, net_amount, vat_rate',
+        'invoice_id, ordinal, name, unit, quantity, unit_price_net, net_amount, vat_rate, vat_amount',
       )
       .in('invoice_id', missingIds)
       .order('ordinal', { ascending: true });
@@ -405,7 +410,23 @@ function mapInvoiceRow(
     correctedInvoiceNumber: correctedNumber,
     correctionReason: row.correction_reason ?? undefined,
     ksefNumber: row.ksef_number ?? undefined,
+    annotations: annotationsFromFa3(row.fa3_data),
   };
+}
+
+/** Adnotacje z `fa3_data.annotations` (#60, #75, #79) — JPK_FA: P_16, P_18A, P_19A. */
+export function annotationsFromFa3(fa3: Json | null): JpkInvoice['annotations'] {
+  if (!fa3 || typeof fa3 !== 'object' || Array.isArray(fa3)) return undefined;
+  const raw = (fa3 as Record<string, unknown>).annotations;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  const out: NonNullable<JpkInvoice['annotations']> = {};
+  if (o.splitPayment === 1) out.splitPayment = true;
+  if (o.cashMethod === 1) out.cashMethod = true;
+  if (typeof o.vatExemptionBasis === 'string' && o.vatExemptionBasis.trim()) {
+    out.vatExemptionBasis = o.vatExemptionBasis.trim();
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function mapInvoiceKind(
@@ -432,6 +453,7 @@ function mapDbLineItemToJpk(item: LineItemRow): JpkInvoiceLine {
     unitPriceNet: Number(item.unit_price_net ?? 0),
     netAmount: Number(item.net_amount ?? 0),
     vatRate: String(item.vat_rate ?? '23'),
+    vatAmount: item.vat_amount == null ? undefined : Number(item.vat_amount),
   };
 }
 
@@ -465,6 +487,8 @@ function linesFromFa3Data(fa3: Json | null): JpkInvoiceLine[] {
           ? o.netAmount
           : Number(o.netAmount) || 0,
       vatRate: String(o.vatRate ?? '23'),
+      vatAmount:
+        typeof o.vatAmount === 'number' && Number.isFinite(o.vatAmount) ? o.vatAmount : undefined,
     });
   }
   return out;

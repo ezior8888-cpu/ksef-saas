@@ -31,12 +31,26 @@ describe('resolveTaxOfficeCode', () => {
 });
 
 describe('generateJpkFa — KodUrzedu', () => {
+  // JPK_FA(4): co najmniej jedna faktura i adres z GUS (województwo, powiat, gmina).
   const dane = (taxOfficeCode?: string) => ({
-    issuer: { nip: '5260001246', name: 'Moja Firma', taxOfficeCode },
+    issuer: {
+      nip: '5260001246',
+      name: 'Moja Firma',
+      taxOfficeCode,
+      registeredAddress: {
+        voivodeship: 'MAZOWIECKIE', county: 'Warszawa', commune: 'Mokotów',
+        buildingNumber: '1', city: 'Warszawa', postCode: '00-001',
+      },
+    },
     periodStart: '2026-08-01',
     periodEnd: '2026-08-31',
-    issuedInvoices: [],
-    receivedInvoices: [],
+    issuedInvoices: [
+      {
+        invoiceNumber: 'FV/1', invoiceType: 'regular' as const, issueDate: '2026-08-10', buyerName: 'Klient',
+        netTotal: 100, vatTotal: 23, grossTotal: 123,
+        lines: [{ position: 1, name: 'Usługa', unit: 'szt.', quantity: 1, unitPriceNet: 100, netAmount: 100, vatRate: '23' }],
+      },
+    ],
   });
 
   it('urząd firmy trafia do nagłówka', () => {
