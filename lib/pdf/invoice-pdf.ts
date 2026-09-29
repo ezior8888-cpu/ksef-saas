@@ -6,6 +6,7 @@ import {
   uploadInvoicePdf,
 } from './pdf-storage';
 import { renderInvoicePdf } from './invoice-renderer';
+import { invoiceVerificationUrl, ksefEnvForQr, qrLabel } from '@/lib/ksef/qr-verification';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 
 export type GenerateInvoicePdfResult =
@@ -27,8 +28,9 @@ export type GenerateInvoicePdfResult =
  *      zwróć go bez regeneracji.
  *   5. W przeciwnym razie: render (pdfkit) → upload R2 → zapis ścieżki.
  *
- * Watermark „WERSJA TESTOWA" gdy `KSEF_ENV=test`. QR koduje numer KSeF
- * (gdy faktura zaakceptowana).
+ * Watermark „WERSJA TESTOWA" gdy `KSEF_ENV=test`. QR = KOD I (link weryfikacyjny
+ * MF z NIP-u, daty i SHA-256 pliku XML), pod nim numer KSeF albo „OFFLINE”;
+ * szkic bez pliku XML — bez kodu.
  */
 export async function generateInvoicePdf(
   invoiceId: string,
@@ -76,9 +78,17 @@ export async function generateInvoicePdf(
   }
 
   // Regeneracja.
+  // KOD I wg specyfikacji MF: link weryfikacyjny z NIP-u, daty i SHA-256
+  // pliku XML — nie sam numer KSeF. Szkic bez pliku → bez kodu.
   const pdf = await renderInvoicePdf(data.invoice, {
     ksefNumber: data.ksefNumber,
-    qrPayload: data.ksefNumber ?? null,
+    qrPayload: invoiceVerificationUrl({
+      env: ksefEnvForQr(),
+      sellerNip: data.sellerNip,
+      issueDate: data.issueDate,
+      sha256Hex: data.xmlSha256Hex,
+    }),
+    qrLabel: qrLabel(data.ksefNumber),
     testWatermark: (process.env.KSEF_ENV ?? 'test') === 'test',
   });
 
