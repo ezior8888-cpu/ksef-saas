@@ -288,4 +288,26 @@ describe('Co-Pilot zamawia eksporty z listy po zamianie', () => {
     await expect(runCoPilotSendPackage(paczka, stop)).rejects.toThrow('STOP');
     expect(db.orderedFormats).toEqual(['csv_universal', 'kpir_excel']);
   });
+
+  // 29.09: księgowa z Symfonią dostaje JPK_FA(4) — to jej program importuje —
+  // a gdy JPK_FA nie może powstać, CSV (te same bramki co przy wyborze JPK_FA).
+  const zSymfonia = { ...paczka, formats: ['symfonia', 'kpir_excel'] } as typeof paczka;
+
+  it('Symfonia w ustawieniach: JPK_FA zamiast martwego CSV „Symfonia”', async () => {
+    db.office = '1433';
+    await expect(runCoPilotSendPackage(zSymfonia, stop)).rejects.toThrow('STOP');
+    expect(db.orderedFormats).toEqual(['jpk_fa', 'kpir_excel']);
+  });
+
+  it('Symfonia, ale bez urzędu: CSV', async () => {
+    await expect(runCoPilotSendPackage(zSymfonia, stop)).rejects.toThrow('STOP');
+    expect(db.orderedFormats).toEqual(['csv_universal', 'kpir_excel']);
+  });
+
+  it('Symfonia, korekta w okresie: CSV', async () => {
+    db.office = '1433';
+    db.corrections = 1;
+    await expect(runCoPilotSendPackage(zSymfonia, stop)).rejects.toThrow('STOP');
+    expect(db.orderedFormats).toEqual(['csv_universal', 'kpir_excel']);
+  });
 });

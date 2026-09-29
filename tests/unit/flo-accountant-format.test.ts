@@ -35,18 +35,30 @@ describe('pierwsza paczka niesie zapas', () => {
   it('wybrany format PLUS uniwersalny CSV', () => {
     // Klient zgaduje, w czym pracuje jego księgowa, i ma prawo zgadnąć źle.
     // Z jednym plikiem zła odpowiedź kosztuje tydzień telefonów.
-    // (Symfonia, nie Optima — Optima jest wstrzymana od 29.09 i idzie jako CSV.)
-    expect(packageFormats({ chosen: 'symfonia', isFirstPackage: true })).toEqual([
-      'symfonia',
+    // (KPiR — formaty „programowe” są od 29.09 wstrzymane, patrz niżej.)
+    expect(packageFormats({ chosen: 'kpir_excel', isFirstPackage: true })).toEqual([
+      'kpir_excel',
       'csv_universal',
     ]);
   });
 
   it('kolejne paczki już bez zapasu', () => {
     // Skoro poprzednia weszła, drugi plik jest tylko zaśmiecaniem skrzynki.
-    expect(packageFormats({ chosen: 'symfonia', isFirstPackage: false })).toEqual([
-      'symfonia',
+    expect(packageFormats({ chosen: 'kpir_excel', isFirstPackage: false })).toEqual([
+      'kpir_excel',
     ]);
+  });
+
+  // 29.09: Symfonia/Wapro/Subiekt/Optima wstrzymane — księgowa dostaje to, co
+  // jej program importuje (Symfonia FK, WAPRO Kaper → JPK_FA(4)), z CSV zapasem.
+  it.each([
+    ['symfonia', ['jpk_fa', 'csv_universal']],
+    ['wapro', ['jpk_fa', 'csv_universal']],
+    ['insert_subiekt', ['csv_universal']],
+    ['comarch_optima', ['csv_universal']],
+  ] as const)('wstrzymany %s → %j', (chosen, oczekiwane) => {
+    expect(packageFormats({ chosen, isFirstPackage: false })).toEqual(oczekiwane);
+    expect(packageFormats({ chosen, isFirstPackage: true })).toEqual(oczekiwane);
   });
 
   it('wybór uniwersalnego CSV nie dubluje pliku', () => {
@@ -203,13 +215,12 @@ describe('pytanie o format', () => {
     now: d('2026-09-02'),
   });
 
-  // Osiem formatów minus wstrzymane: JPK_V7M (do czasu wersji 3, 27.09.2026)
-  // i Comarch Optima (zły układ pliku, 29.09.2026) — lib/exports/suspended-formats.ts.
+  // Osiem formatów minus wstrzymane: JPK_V7M (do czasu wersji 3, 27.09.2026),
+  // Comarch Optima, Symfonia, Wapro, Insert Subiekt (pliki, których te programy
+  // nie importują, 29.09.2026) — lib/exports/suspended-formats.ts.
   it('podaje wszystkie formaty poza wstrzymanymi', () => {
     const options = question.payload?.options as { value: string }[];
-    expect(options).toHaveLength(6);
-    expect(options.map((option) => option.value)).not.toContain('jpk_v7m');
-    expect(options.map((option) => option.value)).not.toContain('comarch_optima');
+    expect(options.map((option) => option.value)).toEqual(['jpk_fa', 'kpir_excel', 'csv_universal']);
     expect(options.every((option) => isAccountantFormat(option.value))).toBe(true);
   });
 
