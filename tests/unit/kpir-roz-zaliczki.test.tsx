@@ -220,8 +220,8 @@ describe('KPiR w aplikacji i „Przepływy”', () => {
   const now = new Date();
   const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const wiersze = [
-    { id: 'roz', internal_number: 'ROZ/1', issue_date: `${ym}-10`, net_total: 35000, gross_total: 43050, buyer_data: null, invoice_kind: 'final' as const, settled_advances_net: 10000 },
-    { id: 'fv', internal_number: 'FV/1', issue_date: `${ym}-12`, net_total: 1000, gross_total: 1230, buyer_data: null, invoice_kind: 'regular' as const, settled_advances_net: null },
+    { id: 'roz', internal_number: 'ROZ/1', issue_date: `${ym}-10`, sale_date: null, net_total: 35000, gross_total: 43050, buyer_data: null, invoice_kind: 'final' as const, settled_advances_net: 10000 },
+    { id: 'fv', internal_number: 'FV/1', issue_date: `${ym}-12`, sale_date: null, net_total: 1000, gross_total: 1230, buyer_data: null, invoice_kind: 'regular' as const, settled_advances_net: null },
   ];
 
   it('KPiR: przychód okresu 26 000 (25 000 reszty ROZ + 1 000), wiersz ROZ z rozbiciem', () => {
