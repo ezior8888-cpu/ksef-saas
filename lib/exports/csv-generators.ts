@@ -3,7 +3,7 @@
 
 import Papa from 'papaparse';
 import iconv from 'iconv-lite';
-import { counterpartyOf, type ExportParty, type JpkInvoice } from './jpk-fa-generator';
+import { amountsOf, counterpartyOf, type ExportParty, type JpkInvoice } from './jpk-fa-generator';
 
 export interface CsvExportInput {
   issuer: { nip: string; name: string };
@@ -22,14 +22,14 @@ export interface CsvExportInput {
 export function generateInsertSubiektCsv(data: CsvExportInput): Buffer {
   const invoices = allInvoices(data);
 
-  const rows = invoices.map(({ inv, party }) => ({
+  const rows = invoices.map(({ inv, party, totals }) => ({
     Numer: inv.invoiceNumber,
     Data: formatPlDate(inv.issueDate),
     Klient: party.name,
     NIP: party.nip ?? '',
-    Netto: inv.netTotal.toFixed(2).replace('.', ','),
-    VAT: inv.vatTotal.toFixed(2).replace('.', ','),
-    Brutto: inv.grossTotal.toFixed(2).replace('.', ','),
+    Netto: totals.net.toFixed(2).replace('.', ','),
+    VAT: totals.vat.toFixed(2).replace('.', ','),
+    Brutto: totals.gross.toFixed(2).replace('.', ','),
     Typ: mapInvoiceTypeSubiekt(inv.invoiceType),
     ...(inv.ksefNumber ? { KSeF: inv.ksefNumber } : {}),
   }));
@@ -48,7 +48,7 @@ export function generateInsertSubiektCsv(data: CsvExportInput): Buffer {
 export function generateSymfoniaCsv(data: CsvExportInput): Buffer {
   const invoices = allInvoices(data);
 
-  const rows = invoices.map(({ inv, party }, idx) => ({
+  const rows = invoices.map(({ inv, party, totals }, idx) => ({
     'Lp.': idx + 1,
     NumerDokumentu: inv.invoiceNumber,
     DataWystawienia: formatPlDate(inv.issueDate),
@@ -56,9 +56,9 @@ export function generateSymfoniaCsv(data: CsvExportInput): Buffer {
     Kontrahent: party.name,
     NIP: party.nip ?? '',
     Adres: party.address ?? '',
-    WartoscNetto: inv.netTotal.toFixed(2).replace('.', ','),
-    WartoscVAT: inv.vatTotal.toFixed(2).replace('.', ','),
-    WartoscBrutto: inv.grossTotal.toFixed(2).replace('.', ','),
+    WartoscNetto: totals.net.toFixed(2).replace('.', ','),
+    WartoscVAT: totals.vat.toFixed(2).replace('.', ','),
+    WartoscBrutto: totals.gross.toFixed(2).replace('.', ','),
     Waluta: 'PLN',
     TerminPlatnosci: inv.paymentDueDate
       ? formatPlDate(inv.paymentDueDate)
@@ -83,7 +83,7 @@ export function generateSymfoniaCsv(data: CsvExportInput): Buffer {
 export function generateWaproCsv(data: CsvExportInput): Buffer {
   const invoices = allInvoices(data);
 
-  const rows = invoices.map(({ inv, party }, idx) => ({
+  const rows = invoices.map(({ inv, party, totals }, idx) => ({
     lp: idx + 1,
     numer: inv.invoiceNumber,
     data: formatPlDate(inv.issueDate),
@@ -91,9 +91,9 @@ export function generateWaproCsv(data: CsvExportInput): Buffer {
     nabywca: party.name,
     nip: party.nip ?? '',
     adres: party.address ?? '',
-    netto: inv.netTotal.toFixed(2).replace('.', ','),
-    vat: inv.vatTotal.toFixed(2).replace('.', ','),
-    brutto: inv.grossTotal.toFixed(2).replace('.', ','),
+    netto: totals.net.toFixed(2).replace('.', ','),
+    vat: totals.vat.toFixed(2).replace('.', ','),
+    brutto: totals.gross.toFixed(2).replace('.', ','),
     waluta: 'PLN',
     termin_platnosci: inv.paymentDueDate
       ? formatPlDate(inv.paymentDueDate)
@@ -114,15 +114,15 @@ export function generateWaproCsv(data: CsvExportInput): Buffer {
 export function generateUniversalCsv(data: CsvExportInput): Buffer {
   const invoices = allInvoices(data);
 
-  const rows = invoices.map(({ inv, party }, idx) => ({
+  const rows = invoices.map(({ inv, party, totals }, idx) => ({
     Lp: idx + 1,
     Numer: inv.invoiceNumber,
     DataWystawienia: formatPlDate(inv.issueDate),
     Kontrahent: party.name,
     NIP: party.nip ?? '',
-    Netto: inv.netTotal.toFixed(2).replace('.', ','),
-    VAT: inv.vatTotal.toFixed(2).replace('.', ','),
-    Brutto: inv.grossTotal.toFixed(2).replace('.', ','),
+    Netto: totals.net.toFixed(2).replace('.', ','),
+    VAT: totals.vat.toFixed(2).replace('.', ','),
+    Brutto: totals.gross.toFixed(2).replace('.', ','),
     Waluta: 'PLN',
     Rodzaj: mapInvoiceTypeSubiekt(inv.invoiceType),
     KSeF: inv.ksefNumber ?? '',
@@ -141,11 +141,40 @@ export function generateUniversalCsv(data: CsvExportInput): Buffer {
  * Faktury z KONTRAHENTEM wg kierunku: sprzedaż → nabywca, zakup → sprzedawca.
  * Do 26.09 zakupy miały tu nabywcę, czyli naszą firmę.
  */
-function allInvoices(data: CsvExportInput): Array<{ inv: JpkInvoice; party: ExportParty }> {
+function allInvoices(
+  data: CsvExportInput,
+): Array<{ inv: JpkInvoice; party: ExportParty; totals: DocumentTotals }> {
   return [
-    ...data.issuedInvoices.map((inv) => ({ inv, party: counterpartyOf(inv, 'issued') })),
-    ...data.receivedInvoices.map((inv) => ({ inv, party: counterpartyOf(inv, 'received') })),
+    ...data.issuedInvoices.map((inv) => ({ inv, party: counterpartyOf(inv, 'issued'), totals: issuedTotals(inv) })),
+    ...data.receivedInvoices.map((inv) => ({
+      inv,
+      party: counterpartyOf(inv, 'received'),
+      totals: { net: inv.netTotal, vat: inv.vatTotal, gross: inv.grossTotal },
+    })),
   ].sort((a, b) => a.inv.issueDate.localeCompare(b.inv.issueDate));
+}
+
+interface DocumentTotals {
+  net: number;
+  vat: number;
+  gross: number;
+}
+
+/**
+ * Kwoty wystawionej faktury tak, jak są na fakturze w KSeF. Faktura
+ * rozliczeniowa (ROZ, art. 106f ust. 3): wartość i VAT po odjęciu zaliczek,
+ * brutto = kwota pozostała do zapłaty (`amountsOf` — to samo co JPK_FA).
+ * Do 29.09 CSV podawał pełną wartość zamówienia, więc po imporcie VAT zaliczek
+ * był w rejestrze drugi raz.
+ */
+function issuedTotals(inv: JpkInvoice): DocumentTotals {
+  if (inv.invoiceType !== 'final') return { net: inv.netTotal, vat: inv.vatTotal, gross: inv.grossTotal };
+  const { rates, p15 } = amountsOf(inv);
+  return {
+    net: rates.reduce((s, r) => s + r.net, 0),
+    vat: rates.reduce((s, r) => s + r.vat, 0),
+    gross: p15,
+  };
 }
 
 function formatPlDate(iso: string): string {
