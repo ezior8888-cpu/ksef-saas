@@ -61,6 +61,12 @@ const ZNANE: Record<string, string> = {
   // > 30 min = „sprawdź, czy wiadomość wyszła”). Decyzja produktowa: albo sam
   // push z `payment.confirm`, albo usunięcie joba i przełącznika w ustawieniach.
   'invoice/payment.received': 'martwy: brak nadawcy, patrz komentarz',
+  // Maile triala z dnia 12 i 14 wstrzymane 01.10.2026 (sprzeczne z regulaminem
+  // i retencją — `email-sequence.ts`, `runEmailDay8`). Kolejki zostają, żeby
+  // odebrać zdarzenia zaplanowane przed wdrożeniem; po ~14 dniach od wdrożenia
+  // można usunąć kolejki, joby i te dwa wpisy.
+  'email/trial-day-12': 'wstrzymany 01.10.2026 — tylko odbiór starych zdarzeń',
+  'email/trial-day-14': 'wstrzymany 01.10.2026 — tylko odbiór starych zdarzeń',
 };
 
 describe('każde zdarzenie z kolejką ma nadawcę', () => {
