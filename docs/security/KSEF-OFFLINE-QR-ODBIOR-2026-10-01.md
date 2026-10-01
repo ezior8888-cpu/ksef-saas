@@ -16,3 +16,32 @@ Kolejka zapisuje znacznik na fakturze przed wstawieniem wiersza, a po konflikcie
 4. Wcześniej wydane PDF lub wiadomości e-mail z nieprawidłowym QR wymagają osobnego odczytu i decyzji operatora; ta zmiana nie cofa ich automatycznie.
 
 Nie uruchamiano SQL, migracji, wdrożenia ani testów na żywym KSeF.
+
+## Bloker R6 po recenzji Claude — nie scalać PR #122
+
+Odczyt kodu potwierdził, że obecny loader KODU I wymaga `invoices.xml_storage_path` i pasującego wiersza `xml_documents` z SHA-256. Zwykła wysyłka zwraca hash z uploadu XML, ale zapis akceptacji utrwala tylko ścieżkę przy fakturze; w aplikacji nie ma INSERT do `xml_documents`. Import historii KSeF przed zapisem faktury odrzuca surowy XML i nie utrwala nawet ścieżki. W rezultacie blokada z PR #122 może zwrócić 409 również dla poprawnie przyjętej faktury i zatrzymać całą paczkę ZIP. To scenariusz potwierdzony statycznie, nie liczba przypadków na db-1. Zielone CI/Security nie weryfikuje dostępności produkcyjnych PDF.
+
+Bartek może wykonać **wyłącznie odczytowy** agregat poniżej i przekazać same liczby z datą, bez identyfikatorów firm, faktur i XML. Codex go nie uruchamiał. `matching_docs > 1` oznacza duplikat, a `all_docs > matching_docs` wiersze o innej ścieżce.
+
+```sql
+WITH accepted AS (
+  SELECT i.id, i.tenant_id, i.xml_storage_path,
+    CASE WHEN i.fa3_data #>> '{import,source}' = 'ksef_history'
+      THEN 'ksef_history' ELSE 'other' END AS origin,
+    (SELECT count(*) FROM public.xml_documents d
+      WHERE d.tenant_id = i.tenant_id AND d.invoice_id = i.id
+        AND d.storage_path = i.xml_storage_path) AS matching_docs,
+    (SELECT count(*) FROM public.xml_documents d
+      WHERE d.tenant_id = i.tenant_id AND d.invoice_id = i.id) AS all_docs
+  FROM public.invoices i
+  WHERE i.ksef_status = 'accepted' AND NULLIF(i.ksef_number, '') IS NOT NULL
+)
+SELECT origin, count(*) AS accepted,
+  count(*) FILTER (WHERE xml_storage_path IS NULL) AS missing_path,
+  count(*) FILTER (WHERE xml_storage_path IS NOT NULL AND matching_docs = 0) AS missing_doc,
+  count(*) FILTER (WHERE matching_docs > 1) AS duplicate_doc,
+  count(*) FILTER (WHERE all_docs > matching_docs) AS unrelated_doc
+FROM accepted GROUP BY origin;
+```
+
+Ten licznik nie sprawdza istnienia obiektu MinIO. Bezpieczny backfill wymaga potwierdzenia dokładnych bajtów XML: dla wysyłki porównania istniejącego archiwum z dowodem uploadu, dla importu ponownego pobrania oryginału z KSeF we właściwym kontekście firmy i sprawdzenia danych identyfikujących fakturę. Hash liczyć z oryginalnych bajtów, nie z odtworzonego XML ani `parsed` JSON. Przy sprzecznych/duplikowanych wpisach wstrzymać i zbadać ręcznie. Przyszły zapis ścieżki i hasha musi być idempotentny oraz odporny na częściową awarię między MinIO a bazą; potrzebuje preflightu historii i testów współbieżności. Nie pomijać po cichu takich faktur w ZIP i nie wydawać PDF z niezweryfikowanym QR. Dopiero po tej naprawie, odbiorze na kopii i testach KSeF TEST można rozważać scalenie PR #122.
