@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/nextjs';
 import { NextResponse } from 'next/server';
 
 import { getRedis, isRedisConfigured } from '@/lib/cache/redis';
+import { resolveJobsBackend } from '@/lib/jobs/config';
 import { createAdminClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -20,13 +21,18 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const checks: Record<string, { status: 'ok' | 'fail' }> = {};
 
+  // Backend jobów musi być ustawiony jawnie (krok 5). Klucz Inngest jest
+  // potrzebny tylko wtedy, gdy joby rzeczywiście idą przez Inngest — przy
+  // pg-boss jego brak nie może kłaść health checku.
+  const jobsBackend = resolveJobsBackend();
   const requiredEnvs = [
     'NEXT_PUBLIC_SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE_KEY',
     'KSEF_CREDENTIALS_ENCRYPTION_KEY',
-    'INNGEST_EVENT_KEY',
+    ...(jobsBackend === 'inngest' ? ['INNGEST_EVENT_KEY'] : []),
   ];
   const missing = requiredEnvs.filter((env) => !process.env[env]);
+  if (!jobsBackend) missing.push('JOBS_BACKEND');
   checks.env = missing.length === 0 ? { status: 'ok' } : { status: 'fail' };
   if (missing.length > 0) {
     Sentry.captureMessage('health.env.missing', {

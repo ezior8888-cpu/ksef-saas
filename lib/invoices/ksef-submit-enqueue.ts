@@ -19,6 +19,13 @@ import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
+import {
+  isCorrectionHeldForEnv,
+  isCorrectionSubmission,
+  isKsefSubmissionPaused,
+  KOR_HOLD_MESSAGE,
+  KSEF_PAUSED_MESSAGE,
+} from '@/lib/ksef/submission-holds';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 import type { Invoice } from '@/types/invoice';
@@ -93,6 +100,27 @@ export async function enqueueKsefSubmitAfterDraft(
     finalAdvanceSettlementRows,
   })) {
     return { ok: false, error: ROZ_SUBMISSION_HOLD_MESSAGE };
+  }
+
+  // Krok 5: korekty wstrzymane na KSeF produkcyjnym (AUD-03/04) i globalny
+  // wyłącznik operatora (AUD-63) — przed kolejką i przed Offline24.
+  const ksefEnv = (process.env.KSEF_ENV as 'test' | 'demo' | 'production' | undefined) ?? 'test';
+  if (
+    isCorrectionHeldForEnv(ksefEnv) &&
+    isCorrectionSubmission({ invoiceType: invoice.type, auditKind, correctionData })
+  ) {
+    return { ok: false, error: KOR_HOLD_MESSAGE };
+  }
+  try {
+    if (await isKsefSubmissionPaused()) {
+      return { ok: false, error: KSEF_PAUSED_MESSAGE };
+    }
+  } catch {
+    // Bez pewności, że wyłącznik jest zdjęty, nie kolejkujemy (fail-closed).
+    return {
+      ok: false,
+      error: 'Nie można sprawdzić, czy wysyłka do KSeF jest dostępna. Faktura została zapisana — spróbuj ponownie za chwilę.',
+    };
   }
 
   const nipNorm = nip.replace(/\s+/g, '');

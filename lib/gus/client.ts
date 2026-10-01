@@ -1,5 +1,6 @@
 import { request as httpsRequest, type RequestOptions } from 'node:https';
 import { XMLParser } from 'fast-xml-parser';
+import { isBypassAllowedEnv } from '@/lib/security/environment';
 import { decodeSoapXml } from './xml-entities';
 
 /**
@@ -189,7 +190,8 @@ function isRealApiKey(v: string | undefined): v is string {
  * „stare, zanonimizowane dane”. Mock E2E to osobny tryb, nie sandbox.
  */
 export function gusUsesSandbox(env: Record<string, string | undefined> = process.env): boolean {
-  return env.E2E_MOCK_GUS !== '1' && !isRealApiKey(env.GUS_API_KEY);
+  const mocked = env.E2E_MOCK_GUS === '1' && isBypassAllowedEnv();
+  return !mocked && !isRealApiKey(env.GUS_API_KEY);
 }
 
 export async function lookupCompanyByNip(
@@ -197,9 +199,8 @@ export async function lookupCompanyByNip(
 ): Promise<GusLookupResult> {
   // E2E mock — sandbox GUS bywa wolny/flaky, w testach blokuje cały flow
   // onboardingu. Aktywowane przez `E2E_MOCK_GUS=1` w `playwright.config.ts`.
-  // Sprawdzamy dynamicznie (bez `import { isGusMocked }`) żeby nie wciągać
-  // `lib/test-mode.ts` do bundla produkcyjnego.
-  if (process.env.E2E_MOCK_GUS === '1') {
+  // Tylko poza produkcją (AUD-20) — sama zmienna na produkcji jest ignorowana.
+  if (process.env.E2E_MOCK_GUS === '1' && isBypassAllowedEnv()) {
     return {
       kind: 'found',
       data: {

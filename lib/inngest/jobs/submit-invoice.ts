@@ -26,6 +26,14 @@ import {
   markKsefSubmission,
 } from '@/lib/ksef/submission-log';
 import { invoiceXmlKey } from '@/lib/storage/r2';
+import {
+  heldErrorMessage,
+  isCorrectionHeldForEnv,
+  isCorrectionSubmission,
+  isKsefSubmissionPaused,
+  KOR_HOLD,
+  KSEF_PAUSED,
+} from '@/lib/ksef/submission-holds';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
@@ -47,6 +55,13 @@ import {
  * „odrzucona”. Znacznik w treści błędu, bo przechodzi przez oba backendy jobów.
  */
 export const KSEF_DUPLICATE_RECONCILE = 'KSEF_DUPLICATE_RECONCILE';
+
+/**
+ * Znaczniki neutralnych blokad w treści błędu joba. Handler wyczerpania prób
+ * zamienia każdą na status `failed` z kodem znacznika i
+ * `manualReconciliationRequired` — bez komunikatu „odrzucona”.
+ */
+const NEUTRAL_HOLD_CODES = [KSEF_DUPLICATE_RECONCILE, KSEF_PAUSED, KOR_HOLD] as const;
 
 /** Wynik wysyłki niezależnie od drogi: nowa wysyłka, uzgodnienie albo własny duplikat. */
 interface SubmitOutcome {
@@ -119,6 +134,32 @@ function isHeldRozSubmission(
   });
 }
 
+/**
+ * Hamulce (krok 5): korekty na KSeF produkcyjnym i globalny wyłącznik.
+ * Rzuca neutralny NonRetriableError ze znacznikiem; odczyt wyłącznika jest
+ * autorytatywny, więc awaria bazy kończy się ponowieniem, nie wysyłką.
+ */
+async function assertSubmissionNotHeld(
+  data: Parameters<typeof invoiceSubmitRequested.create>[0],
+  stored: Awaited<ReturnType<typeof currentSubmissionState>>,
+  env: 'test' | 'demo' | 'production',
+): Promise<void> {
+  if (
+    isCorrectionHeldForEnv(env) &&
+    isCorrectionSubmission({
+      invoiceType: data.invoice.type,
+      storedInvoiceType: stored.invoice_type,
+      invoiceKind: stored.invoice_kind,
+      correctionData: data.correctionData,
+    })
+  ) {
+    throw new NonRetriableError(heldErrorMessage(KOR_HOLD));
+  }
+  if (await isKsefSubmissionPaused()) {
+    throw new NonRetriableError(heldErrorMessage(KSEF_PAUSED));
+  }
+}
+
 /** Reconcile an accepted invoice even if the success event was lost. */
 async function reconcileAcceptedOfflineQueue(
   data: Parameters<typeof invoiceSubmitRequested.create>[0],
@@ -181,8 +222,10 @@ export async function onSubmitInvoiceExhausted(
         return { handled: true, alreadyAccepted: true, ksefNumber: current.ksef_number };
       }
       const heldRoz = isHeldRozSubmission(parsed.data, current);
-      const duplicateReconcile = !heldRoz && error.message.includes(KSEF_DUPLICATE_RECONCILE);
-      const reconcileHold = heldRoz || duplicateReconcile;
+      const markedHold = heldRoz
+        ? null
+        : NEUTRAL_HOLD_CODES.find((code) => error.message.includes(`[${code}]`)) ?? null;
+      const reconcileHold = heldRoz || markedHold !== null;
 
       // Klasyfikacja błędu (Faza 23 sekcja 3):
       //   - `NonRetriableError` → walidacja / 4xx → 'rejected' (nie ma sensu
@@ -195,8 +238,8 @@ export async function onSubmitInvoiceExhausted(
       const isTransientFailure = !isBusinessRejection && !reconcileHold;
       const failureMessage = heldRoz
         ? ROZ_RECONCILIATION_MESSAGE
-        : duplicateReconcile
-          ? error.message.replace(`[${KSEF_DUPLICATE_RECONCILE}] `, '')
+        : markedHold
+          ? error.message.replace(`[${markedHold}] `, '')
           : `${error.name}: ${error.message}`;
 
       logger.error('Job wysyłki padł — klasyfikacja błędu', {
@@ -207,7 +250,7 @@ export async function onSubmitInvoiceExhausted(
         errorName: error.name,
         errorMessage: error.message,
         heldRoz,
-        duplicateReconcile,
+        markedHold,
         isBusinessRejection,
         isTransientFailure,
         fromOfflineQueue,
@@ -220,16 +263,17 @@ export async function onSubmitInvoiceExhausted(
       let statusWriteLost = false;
 
       if (reconcileHold) {
-        // A local safety hold (ROZ) or a 440 we cannot attribute to our own
-        // earlier submission is not a rejection from KSeF. A conditional
-        // update cannot overwrite a concurrent acceptance by another worker.
-        const marked = await step.run(heldRoz ? 'mark-as-failed-roz-hold' : 'mark-as-duplicate-reconcile', async () => {
+        // A local safety hold (ROZ, paused submissions, held corrections) or a
+        // 440 we cannot attribute to our own earlier submission is not a
+        // rejection from KSeF. A conditional update cannot overwrite a
+        // concurrent acceptance by another worker.
+        const marked = await step.run(heldRoz ? 'mark-as-failed-roz-hold' : 'mark-as-neutral-hold', async () => {
           const { data: updated, error: updateError } = await (await createAdminClient())
             .from('invoices')
             .update({
               ksef_status: 'failed',
               last_error: failureMessage,
-              last_error_code: heldRoz ? 'ROZ_HOLD_RECONCILE' : KSEF_DUPLICATE_RECONCILE,
+              last_error_code: heldRoz ? 'ROZ_HOLD_RECONCILE' : markedHold,
               last_error_field: null,
               last_error_suggestion: null,
             })
@@ -437,6 +481,8 @@ export async function runSubmitInvoice(
     if (isHeldRozSubmission(parsed.data, current)) {
       throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
     }
+    // Przed sondą zdrowia i Offline24 — wstrzymanej faktury nie wolno też zaparkować.
+    await assertSubmissionNotHeld(parsed.data, current, env);
 
     logger.info('Rozpoczynam wysyłkę faktury', {
       tenantId,
@@ -695,6 +741,8 @@ export async function runSubmitInvoice(
           isHeldRozSubmission(parsed.data, current)) {
         throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
       }
+      // Ponownie tuż przed wysyłką: wyłącznik mógł zostać włączony między krokami.
+      await assertSubmissionNotHeld(parsed.data, current, env);
       const credentials = await getTenantKsefCredentials(tenantId);
 
       try {
