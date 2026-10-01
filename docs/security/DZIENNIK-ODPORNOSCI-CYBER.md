@@ -750,7 +750,7 @@ Dopisz wpis dopiero po faktycznym działaniu:
 
 **Zmiana robocza:** gałąź `codex/offline-qr-spec` usuwa pozorne payloady, sprawdza kolejkę przed cache PDF, utrwala znacznik przed insertem i domyka status po konflikcie. PDF/e-mail/ZIP nie wydają faktury offline bez numeru i KODU II, również po przejściu do `failed`/`rejected` i przy osieroconym wpisie. PDF z numerem KSeF wymaga z kolei poprawnego KODU I; bez danych do URL również odmawia. Dla zwykłego szkicu PDF pozostaje dostępny. Szczegóły i odbiór są w [runbooku C-12](KSEF-OFFLINE-QR-ODBIOR-2026-10-01.md). Brak certyfikatu typu Offline oznacza, że pełna obsługa PDF przed numerem nadal nie jest gotowa.
 
-**Weryfikacja:** testy odtwarzają częściowy zapis, retry/konflikt kolejki, statusy terminalne, stare cache, brak hasha po nadaniu numeru i ścieżki pojedynczą/zbiorczą. Przed wpisem w dzienniku po ostatnim rebase przeszły 134 testy celowane, TypeScript i kontrola lint; wcześniejszy pełny zestaw na tej gałęzi: 66 XML i 3919 Vitest. Końcowe CI/Security dla opublikowanej wersji należy sprawdzić osobno. Bez SQL, merge, wdrożenia i testu na prawdziwym KSeF.
+**Weryfikacja:** testy odtwarzają częściowy zapis, retry/konflikt kolejki, statusy terminalne, stare cache, brak hasha po nadaniu numeru i ścieżki pojedynczą/zbiorczą. Na bazie `main` po #119 pełne `pnpm run ci` przeszło: TypeScript, lint, 66 XML i 262 pliki / 3933 testy Vitest. Produkcyjny `pnpm build` na Next 16.3.8 przeszedł, w tym 82/82 stron. Końcowe CI/Security dla opublikowanej wersji należy sprawdzić osobno. Bez SQL, merge, wdrożenia i testu na prawdziwym KSeF.
 
 ## 2026-09-28 — kolizja numerów dostawców w skrzynce KSeF (CYB-C08)
 
