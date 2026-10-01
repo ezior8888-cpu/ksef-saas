@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cancelOwnGdprDeletionAction, requestGdprDeletionAction } from '@/app/(dashboard)/settings/account/actions';
 import { GdprSection } from '@/app/(dashboard)/settings/account/_components/gdpr-section';
+import { GdprDeletionBlockedError } from '@/lib/gdpr/deletion-blockers';
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(), getUser: vi.fn(), getClaims: vi.fn(), createClient: vi.fn(), reauthenticateWithPassword: vi.fn(),
@@ -130,6 +131,17 @@ describe('GDPR account actions', () => {
     expect(await requestGdprDeletionAction(form())).toMatchObject({ ok: true, emailSent: false });
     mocks.sendGdprDeletionScheduledEmail.mockRejectedValueOnce(new Error('mail unavailable'));
     expect(await requestGdprDeletionAction(form())).toMatchObject({ ok: true, emailSent: false });
+  });
+
+  it('names the companies whose subscription blocks deletion, without email or audit entry', async () => {
+    mocks.createGdprRequest.mockRejectedValue(new GdprDeletionBlockedError(['Firma Testowa']));
+    expect(await requestGdprDeletionAction(form())).toEqual({
+      ok: false, error: 'active_subscription', organizations: ['Firma Testowa'],
+    });
+    expect(mocks.sendGdprDeletionScheduledEmail).not.toHaveBeenCalled();
+    expect(mocks.logAudit).not.toHaveBeenCalled();
+    mocks.createGdprRequest.mockRejectedValue(new Error('gdpr_blocker_lookup_failed'));
+    expect(await requestGdprDeletionAction(form())).toEqual({ ok: false, error: 'request_failed' });
   });
 
   it('does not resend or rotate the token for an already scheduled request', async () => {

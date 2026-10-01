@@ -18,7 +18,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_email: 'Twoje konto nie ma przypisanego emaila.',
   request_failed: 'Nie udało się potwierdzić operacji. Odśwież stronę i sprawdź stan żądania.',
   not_pending: 'Żądanie zostało zakończone albo usuwanie konta już się rozpoczęło. Odśwież stronę.',
+  active_subscription: 'Jesteś jedyną osobą, która może zarządzać subskrypcją firmy. Po usunięciu konta opłaty pobierałyby się dalej, a nikt nie mógłby ich zatrzymać. Najpierw anuluj subskrypcję w „Subskrypcja i rozliczenia” albo nadaj innej osobie rolę właściciela lub administratora.',
 };
+const blockedOrganizations = (result: GdprDeletionResult | null) =>
+  result && !result.ok && result.organizations?.length ? ` Dotyczy: ${result.organizations.join(', ')}.` : '';
 type ScheduledRequest = { scheduledFor: string; status: 'pending' | 'processing' };
 
 export function GdprSection({ initialRequest = null }: { initialRequest?: ScheduledRequest | null }) {
@@ -96,7 +99,7 @@ export function GdprSection({ initialRequest = null }: { initialRequest?: Schedu
             ) : (
               <form action={requestDeletion} className="space-y-3 max-w-sm">
                 <Input name="current_password" type="password" required autoComplete="current-password" placeholder="Aktualne hasło" />
-                {result && !result.ok && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{ERROR_MESSAGES[result.error]}</p>}
+                {result && !result.ok && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{ERROR_MESSAGES[result.error]}{blockedOrganizations(result)}</p>}
                 <div className="flex gap-2">
                   <Button type="submit" variant="destructive" disabled={isPending}>{isPending ? 'Zapisywanie...' : 'Potwierdź żądanie'}</Button>
                   <Button type="button" variant="outline" disabled={isPending} onClick={() => setConfirming(false)}>Wróć</Button>
