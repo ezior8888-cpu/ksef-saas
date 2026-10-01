@@ -68,7 +68,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 import { runOfflineQueueFailure } from '@/lib/inngest/jobs/process-offline-queue';
-import { onSubmitInvoiceExhausted } from '@/lib/inngest/jobs/submit-invoice';
+import { KSEF_DUPLICATE_RECONCILE, onSubmitInvoiceExhausted } from '@/lib/inngest/jobs/submit-invoice';
 
 /**
  * Faktura wysłana z kolejki Offline24 i odrzucona na stałe (treść, brak
@@ -137,5 +137,19 @@ describe('job wysyłki mówi kolejce, czy błąd jest kończący', () => {
   it('inny błąd po wyczerpaniu prób → terminal: false', async () => {
     await onSubmitInvoiceExhausted(new Error('ECONNRESET'), zdarzenie, ctx);
     expect(wyslane().data.terminal).toBe(false);
+  });
+
+  it('440 spoza naszej historii → „do uzgodnienia”, bez komunikatu o odrzuceniu (krok 4)', async () => {
+    await onSubmitInvoiceExhausted(
+      new NonRetriableError(`[${KSEF_DUPLICATE_RECONCILE}] KSeF ma już fakturę o tym numerze`),
+      zdarzenie,
+      ctx,
+    );
+    expect(wyslane().data).toMatchObject({ terminal: true, manualReconciliationRequired: true });
+    expect(db.updates.find((u) => u.table === 'invoices')?.patch).toMatchObject({
+      ksef_status: 'failed',
+      last_error: 'KSeF ma już fakturę o tym numerze',
+      last_error_code: KSEF_DUPLICATE_RECONCILE,
+    });
   });
 });

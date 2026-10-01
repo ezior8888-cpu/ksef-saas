@@ -36,9 +36,11 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00093 | Codex (#71) | `invoice_delivery_history_guard` | PR otwarty |
 | 00094 | Claude | `tenant_vat_cash_method` | w `main`, niewgrana |
 | 00095 | Codex (#71) | `expense_provenance_guard` | PR otwarty |
-| 00096 | Codex (#83) → Claude przeniósł 1:1 na `main` (01.10) | `incoming_invoice_number_boundary` (C-08) | PR `claude/c08-skrzynka-numery`; wgranie na db-1 po scaleniu |
+| 00096 | Codex (#83) → Claude przeniósł 1:1 na `main` (01.10) | `incoming_invoice_number_boundary` (C-08) | w `main` (#117), **wgrana na db-1 01.10** |
 | 00097 | Codex (#86) | `invoices_overdue_reconciliation_guard` | PR otwarty |
-| **00098** | — | następny wolny | — |
+| 00098 | Bartosz (#90) | `backup_read_stripe_service_tables` | wgrana na db-1 (28.09), w `main` jeszcze nie |
+| 00099 | Claude | `ksef_submission_references` (C-18) | PR `claude/ksef-niepewny-wynik`; wgranie PRZED wdrożeniem kodu |
+| **00100** | — | następny wolny | — |
 
 ---
 
@@ -237,6 +239,32 @@ w `lib/xml/fa3-generator.ts`. Oba pliki są w Twoich PR-ach.
 
 **Odpowiedź Codexa:** —
 
+### C-18 · Niepewny wynik wysyłki KSeF i UPO — #71 a mały PR Claude — `W TOKU` · decyzja: Bartosz (01.10), wykonanie: Claude + Codex
+
+**01.10 — decyzja Bartosza:** stos #62→#63→#64→#71 (~14 tys. linii, szkice z 28.09,
+podstawa #62 w konflikcie z `main`) nie wchodzi teraz w całości. Claude robi na `main`
+mały PR z tym, czego #71 nie robi; **Codex przebudowuje stos na aktualny `main`**.
+
+**PR Claude `claude/ksef-niepewny-wynik` (migracja 00099):**
+- `ksef_submissions` dostaje `session_reference_number` / `invoice_reference_number`;
+  zapis zaraz po przyjęciu pliku (`submitInvoice` → hook `onInvoiceSent`);
+- job wysyłki: krok `reconcile-previous-submission` — gdy jest otwarta wysyłka,
+  status po numerze referencyjnym zamiast ponownego POST (AUD-01);
+- 440 z numerem sesji z NASZEJ historii → akceptacja z `originalKsefNumber`;
+  440 spoza historii → neutralny `KSEF_DUPLICATE_RECONCILE` (jak `ROZ_HOLD_RECONCILE`,
+  `manualReconciliationRequired: true`, bez „odrzucona”);
+- 408 do ponowienia, 401 → unieważnienie sesji i ponowienie;
+- UPO ze ścieżki `/sessions/{ref}/invoices/ksef/{numer}/upo` (AUD-17 — stara ścieżka
+  nie istnieje w API); numer sesji w zdarzeniu `invoice/upo.requested` albo z historii.
+
+**Dla Codexa przy przebudowie stosu:** `submit-invoice.ts` zmieni się w obu miejscach —
+konflikt rozwiązuje ten, kto scala drugi. `claimInvoiceForKsefSend` z #71 i krok
+uzgadniania z tego PR się uzupełniają: claim chroni przed dwoma jobami naraz, uzgadnianie —
+przed ponowną wysyłką po niepewnym wyniku. Przy konflikcie zachować oba. Atomowe
+przejęcie wysyłki (AUD-10) zostaje po stronie #71.
+
+**Odpowiedź Codexa:** —
+
 ### C-16 · ROZ w płatnościach liczona od całego zamówienia — `W TOKU` częściowo (#86) · migracja: Bartosz · PRZED zdjęciem wstrzymania ROZ
 
 `gross_total` ROZ to **pełne zamówienie** (#82 na tym stoi), a do zapłaty
@@ -279,6 +307,25 @@ Propozycja: opcjonalne pole „data otrzymania zaliczki” (domyślnie data
 wystawienia, nie później niż ona), zapis w danych faktury, `P_6` w XML, gdy
 różna od `P_1`, ten sam wiersz na PDF i `saleDate` dla JPK. Pliki formularza,
 akcji i generatora są w Twoim #85 — dlatego zgłaszam, a nie zmieniam.
+
+**Odpowiedź Codexa:** —
+
+### C-18 · Przepływy: dane od 1 stycznia dla szacunku podatku — `OTWARTE` · wykonanie: Codex (`app/(dashboard)/przeplywy/page.tsx` w Twoim stosie)
+
+Kafelek „Szac. podatek YTD” liczył zysk z okna wykresu (6 miesięcy) — w
+październiku gubił styczeń–kwiecień, w lutym doliczał zeszły rok. Claude
+naprawił liczenie w `components/expenses/cash-flow-dashboard.tsx`
+(`lib/dashboard/tax-estimate.ts`): tylko bieżący rok, a gdy dane zaczynają
+się później niż 1 stycznia, etykieta mówi „od 1 maja · bez wcześniejszych
+miesięcy roku”.
+
+Pełny rok wymaga, żeby strona ładowała faktury i wydatki od
+`min(sześć miesięcy wstecz, 1 stycznia)` — dziś zapytania biorą
+`gte('issue_date', sixMonthsAgo)`. Plik przepisujesz w #63+ (środowisko KSeF,
+`readCompletePages`), więc zmiana zakresu powinna wejść tam, razem
+z przekazaniem faktycznego początku danych: `<CashFlowDashboard dataFrom=…>`
+(prop już jest; bez niego komponent przyjmuje początek okna wykresu).
+Wykres zostaje na sześciu miesiącach.
 
 **Odpowiedź Codexa:** —
 

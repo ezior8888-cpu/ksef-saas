@@ -47,7 +47,8 @@ function parseYearMonth(issueDate: string): { year: string; month: string } {
   return { year, month };
 }
 
-function invoiceXmlKey(
+/** Klucz XML faktury w magazynie — deterministyczny, więc uzgodniona wysyłka zna ścieżkę bez ponownego uploadu. */
+export function invoiceXmlKey(
   tenantId: string,
   invoiceId: string,
   issueDate: string,

@@ -39,12 +39,14 @@ export class KsefApiError extends Error {
    *
    * Reguła (Faza 23 sekcja 2):
    *   - 429 — retry z DELAY (KSeF mówi nam „zwolnij")
+   *   - 408 — nasz timeout żądania: brak odpowiedzi to nie odrzucenie; przy
+   *     wysyłce ponowienie najpierw uzgadnia status po numerze referencyjnym
    *   - 5xx (>=500, <600) — retry, KSeF leży po stronie MF
    *   - 4xx (<500) — NonRetryable, błąd walidacji / autoryzacji po naszej stronie
    *     (KSeF nie zaakceptuje tej samej faktury bez zmiany payloadu).
    */
   get isRetryable(): boolean {
-    if (this.status === 429) return true;
+    if (this.status === 429 || this.status === 408) return true;
     return this.status >= 500 && this.status < 600;
   }
 

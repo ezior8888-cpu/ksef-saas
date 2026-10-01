@@ -5,6 +5,7 @@ import type { JobContext } from '@/lib/jobs/registry';
 
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { downloadUpoFromKsef } from '@/lib/ksef/upo-client';
+import { findSessionReferenceForKsefNumber } from '@/lib/ksef/submission-log';
 import { generateUpoPdf } from '@/lib/ksef/upo-pdf-generator';
 import { uploadUpoPdf, uploadUpoXml } from '@/lib/ksef/upo-storage';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -72,7 +73,12 @@ export async function runDownloadUpo(data: Parameters<typeof invoiceUpoRequested
 
   const downloadResult = await step.run('download-from-ksef', async () => {
     await requireUpoBoundary(identity, upoRecord.id);
-    return downloadUpoFromKsef(tenantId, ksefNumber, { invoiceId });
+    // Numer sesji ze zdarzenia, a dla starszych zdarzeń i ponowień
+    // z `upo-retry-stale` — z historii wysyłek (AUD-17).
+    const sessionReferenceNumber =
+      data.sessionReferenceNumber ??
+      (await findSessionReferenceForKsefNumber(tenantId, invoiceId, ksefNumber));
+    return downloadUpoFromKsef(tenantId, ksefNumber, { invoiceId, sessionReferenceNumber });
   });
   if (!downloadResult.success) {
     await step.run('mark-failed', async () => {
