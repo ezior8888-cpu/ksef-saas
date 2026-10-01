@@ -8,6 +8,7 @@ import {
   unenrollTotpAction,
   verifyTotpEnrollmentAction,
 } from '../actions';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 interface Props {
   isEnabled: boolean;
@@ -34,7 +35,7 @@ function RecoveryUnavailableNotice() {
       Utrata dostępu do aplikacji TOTP może zablokować logowanie.
       Samodzielne odzyskiwanie dostępu, także kodami ratunkowymi, jest obecnie
       niedostępne. W razie utraty dostępu{' '}
-      <a href="mailto:support@faktflow.pl" className="underline underline-offset-4">
+      <a href={`mailto:${SUPPORT_EMAIL}`} className="underline underline-offset-4">
         skontaktuj się z pomocą
       </a>.
     </p>

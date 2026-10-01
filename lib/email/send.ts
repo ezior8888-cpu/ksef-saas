@@ -123,6 +123,7 @@ import {
   createUnsubscribeToken,
   isUnsubscribeConfigured,
 } from './unsubscribe-token';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 async function sendViaResend(opts: {
   to: string;
@@ -171,6 +172,8 @@ async function sendViaResend(opts: {
 
   const { data, error } = await getResend().emails.send({
     from: getFromEmail(category),
+    // Nadawca to no-reply@ — bez tego odpowiedź klienta ginie (MAN-18).
+    replyTo: SUPPORT_EMAIL,
     to: [finalTo],
     subject: finalSubject,
     html: opts.html,
@@ -419,7 +422,7 @@ export async function sendAccountDeletionConfirmationEmail(
   const html = await render(
     AccountDeletionConfirmation({
       ...payload,
-      supportEmail: payload.supportEmail ?? 'pomoc@faktflow.pl',
+      supportEmail: payload.supportEmail ?? SUPPORT_EMAIL,
     }),
   );
   return sendViaResend({
@@ -449,7 +452,7 @@ export async function sendGdprDeletionScheduledEmail(
   const html = await render(
     GdprDeletionScheduled({
       ...payload,
-      supportEmail: payload.supportEmail ?? 'pomoc@faktflow.pl',
+      supportEmail: payload.supportEmail ?? SUPPORT_EMAIL,
     }),
   );
   return sendViaResend({

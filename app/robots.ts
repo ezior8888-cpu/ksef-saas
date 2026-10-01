@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next';
 
+import { siteUrl } from '@/lib/site';
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
@@ -9,6 +11,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/dashboard/', '/api/', '/login', '/register'],
       },
     ],
-    sitemap: 'https://ksef-saas.pl/sitemap.xml',
+    sitemap: `${siteUrl()}/sitemap.xml`,
   };
 }

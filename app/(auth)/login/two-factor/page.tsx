@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { safeRedirectPath } from '@/lib/auth/safe-redirect';
 import { verifyMfaChallengeAction } from './actions';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,7 +84,7 @@ export default async function TwoFactorChallengePage({
       <p className="text-center text-xs text-[color-mix(in_srgb,var(--ff-on-surface-variant)_50%,transparent)]">
         Samodzielne odzyskiwanie dostępu po utracie aplikacji TOTP jest obecnie
         niedostępne. Jeśli nie masz do niej dostępu,{' '}
-        <a href="mailto:support@faktflow.pl" className={authLinkClass}>
+        <a href={`mailto:${SUPPORT_EMAIL}`} className={authLinkClass}>
           skontaktuj się z pomocą
         </a>.
       </p>

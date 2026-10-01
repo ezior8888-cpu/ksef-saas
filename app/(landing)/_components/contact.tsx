@@ -8,10 +8,11 @@ import { asset } from '../_assets';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Pop } from './anim';
 import { Container, Icon } from './ui';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 const DETAILS = [
   { icon: '986463349', value: '+48 22 123 45 67' },
-  { icon: '4022663340', value: 'kontakt@faktflow.pl' },
+  { icon: '4022663340', value: SUPPORT_EMAIL },
   { icon: '1743809183', value: 'ul. Piękna 15/3\n00-549 Warszawa' },
 ];
 

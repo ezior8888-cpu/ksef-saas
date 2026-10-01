@@ -8,6 +8,7 @@ vi.mock('next/navigation', () => ({ redirect: mocks.redirect }));
 vi.mock('@/app/(auth)/login/two-factor/actions', () => ({ verifyMfaChallengeAction: vi.fn() }));
 
 import TwoFactorChallengePage from '@/app/(auth)/login/two-factor/page';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -53,7 +54,7 @@ it.each([
   expect(markup).toContain('role="alert"');
   expect(markup).toContain(message);
   expect(markup).toContain('name="redirect" value="/admin"');
-  expect(markup).toContain('href="mailto:support@faktflow.pl"');
+  expect(markup).toContain(`href="mailto:${SUPPORT_EMAIL}"`);
   expect(mocks.redirect).not.toHaveBeenCalled();
 });
 

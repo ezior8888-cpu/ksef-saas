@@ -12,6 +12,7 @@ import { AnalyticsProvider } from '@/components/analytics/analytics-provider';
 import { SentryClientInit } from '@/components/sentry-client-init';
 import { Toaster } from '@/components/ui/sonner';
 import { THEME_BOOT_SCRIPT } from '@/lib/theme/theme';
+import { siteUrl } from '@/lib/site';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -54,9 +55,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL ?? 'https://ksef-saas.pl',
-  ),
+  metadataBase: new URL(siteUrl()),
   title: 'KSeF SaaS',
   description: 'Faktury KSeF dla mikrofirm',
   // PWA / iOS (Safari) — manifest z `app/manifest.ts` nie wystarczy na iOS

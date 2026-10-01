@@ -9,6 +9,7 @@ import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { bufferToByteaLiteral } from '@/lib/supabase/bytea';
 import { revalidatePath } from 'next/cache';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 /** Wynik wgrywania certyfikatu KSeF (claim NIP jest atomowy w DB). */
 export type UploadCertificateResult =
@@ -108,7 +109,7 @@ export async function uploadCertificateAction(data: {
         success: false,
         code: 'NIP_ALREADY_CLAIMED',
         error:
-          'Ten NIP jest już zweryfikowany przez inną organizację w FaktFlow. Jeśli uważasz, że to błąd, skontaktuj się z supportem: support@ksef-saas.pl',
+          `Ten NIP jest już zweryfikowany przez inną organizację w FaktFlow. Jeśli uważasz, że to błąd, napisz na ${SUPPORT_EMAIL}`,
       };
     }
 
