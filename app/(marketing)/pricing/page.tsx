@@ -137,7 +137,8 @@ export default function PricingPage() {
             <p className="text-[10px] uppercase tracking-[0.25em] text-[var(--marketing-muted)]">
               Plan podstawowy
             </p>
-            <p className="mt-6 font-editorial text-[7rem] font-medium leading-[0.85]">
+            {/* „29,99 zł” jest szersze niż dawne „49 zł” — rozmiar od szerokości, w jednej linii. */}
+            <p className="mt-6 whitespace-nowrap font-editorial text-[clamp(3.5rem,17vw,7rem)] font-medium leading-[0.85] lg:text-[clamp(3.5rem,7.5vw,7rem)]">
               <span className="italic text-[var(--marketing-accent)]">{PRICE_GROSS}</span>
             </p>
             <p className="mt-2 font-editorial text-xl italic text-[var(--marketing-muted)]">
