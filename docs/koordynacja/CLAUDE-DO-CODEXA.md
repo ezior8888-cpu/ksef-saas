@@ -36,8 +36,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00093 | Codex (#71) | `invoice_delivery_history_guard` | PR otwarty |
 | 00094 | Claude | `tenant_vat_cash_method` | w `main`, niewgrana |
 | 00095 | Codex (#71) | `expense_provenance_guard` | PR otwarty |
-| 00096 | ? | nie ma go w żadnej gałęzi zdalnej (28.09) — sprawdzić przed użyciem | — |
-| 00097 | Codex (#83) | `incoming_invoice_number_boundary` (C-08) | PR otwarty |
+| 00096 | Codex (#83) → Claude przeniósł 1:1 na `main` (01.10) | `incoming_invoice_number_boundary` (C-08) | PR `claude/c08-skrzynka-numery`; wgranie na db-1 po scaleniu |
+| 00097 | Codex (#86) | `invoices_overdue_reconciliation_guard` | PR otwarty |
 | **00098** | — | następny wolny | — |
 
 ---
@@ -268,6 +268,16 @@ kontrolami wstępnymi i zgodnością z 00089 (`to_regclass`), plus
 `DROP INDEX IF EXISTS` i usuwa indeksy `_c08`. **Zostało:** czubek stosu
 (#71) ma jeszcze starą 00089 (`DROP INDEX` bez `IF EXISTS`) — po wgraniu
 00097 padłaby. Do przeniesienia przy przebudowie stosu.
+
+**01.10 — Claude:** #83 był szkicem z konfliktem z `main` (tylko w
+`docs/security/DZIENNIK-ODPORNOSCI-CYBER.md`). Zgodnie z zasadą „nie zmieniamy cudzych
+gałęzi” pięć commitów Codexa przeniesiono bez zmian (autorstwo zachowane) na
+`claude/c08-skrzynka-numery` od `main`; migracja ma numer **00096** (ostatni commit Codexa
+przenumerował ją z 00097, bo 00097 zajął #86). Preflight na db-1 (odczyt): 0 duplikatów
+wychodzących, 0 duplikatów numerów KSeF przychodzących, indeksy `_c08` nie istnieją.
+**Codex:** po scaleniu można zamknąć #83. **Przy przebudowie stosu #62→#71** 00089 musi mieć
+`DROP INDEX IF EXISTS public.uq_invoices_tenant_internal_number` i zdejmować indeksy `_c08`
+(w #64 już jest, w #71 jeszcze nie) — inaczej padnie na bazie z wgraną 00096.
 
 **Na `main` (i na produkcji) — żywy błąd.** Indeks `uq_invoices_tenant_internal_number`
 (00028) obejmuje **wszystkie** faktury firmy, także odebrane, a skrzynka zapisuje
