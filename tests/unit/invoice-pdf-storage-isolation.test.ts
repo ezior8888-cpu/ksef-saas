@@ -95,11 +95,39 @@ describe('PDF: kod QR weryfikacji w KSeF', () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it('zaakceptowana: link weryfikacyjny w kodzie, numer KSeF pod kodem', async () => {
-    mocks.load.mockResolvedValue({ ...bazowe, ksefNumber: '1111111111-20260201-ABC-01', xmlSha256Hex: HEX });
+    mocks.load.mockResolvedValue({ ...bazowe, ksefStatus: 'accepted', ksefNumber: '1111111111-20260201-ABC-01', xmlSha256Hex: HEX });
     await generateInvoicePdf('invoice', 'tenant-a');
     expect(mocks.render.mock.calls[0]![1]).toMatchObject({
       qrPayload: 'https://qr-test.ksef.mf.gov.pl/invoice/1111111111/01-02-2026/UtQp9Gpc51y-u3xApZjIjgkpZ01js-J8KflSPW8WzIE',
       qrLabel: '1111111111-20260201-ABC-01',
+    });
+  });
+
+  it.each([
+    ['świeży PDF', null],
+    ['PDF z cache', 'tenant-a/2026/02/invoice.v4.pdf'],
+  ])('offline_queued bez numeru: blokuje %s przed wydaniem jednostkowym i w paczce', async (_label, pdfStoragePath) => {
+    mocks.load.mockResolvedValue({
+      ...bazowe,
+      ksefStatus: 'offline_queued', ksefNumber: null, xmlSha256Hex: HEX,
+      pdfStoragePath, pdfGeneratedAt: '2026-02-02T13:00:00Z', updatedAt: '2026-02-01T12:00:00Z',
+    });
+
+    expect(await generateInvoicePdf('invoice', 'tenant-a')).toMatchObject({
+      success: false, code: 'OFFLINE_QR_UNAVAILABLE',
+    });
+    expect(mocks.exists).not.toHaveBeenCalled();
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(mocks.render).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+
+  it('po nadaniu numeru KSeF dopuszcza pojedynczy KOD I', async () => {
+    mocks.load.mockResolvedValue({ ...bazowe, ksefStatus: 'accepted', ksefNumber: '1234567890-20260201-ABC-01', xmlSha256Hex: HEX });
+    expect(await generateInvoicePdf('invoice', 'tenant-a')).toMatchObject({ success: true });
+    expect(mocks.render.mock.calls[0]![1]).toMatchObject({
+      qrLabel: '1234567890-20260201-ABC-01',
+      qrPayload: expect.stringContaining('/invoice/1111111111/01-02-2026/'),
     });
   });
 

@@ -43,6 +43,8 @@ export function BatchPdfDownload() {
               ? 'Brak faktur w tym miesiącu.'
               : body.error === 'too_many'
                 ? 'Za dużo faktur w miesiącu (limit 100). Skontaktuj się z pomocą.'
+                : body.error === 'offline_qr_unavailable'
+                  ? 'Paczka zawiera fakturę offline bez wymaganego kodu CERTYFIKAT. Pobierz ją po nadaniu numeru KSeF.'
                 : 'Nie udało się przygotować paczki ZIP.',
           );
           return;

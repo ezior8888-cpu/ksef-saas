@@ -37,6 +37,8 @@ export async function GET(
             ? 403
             : result.code === 'KSEF_NOT_VERIFIED'
               ? 403
+              : result.code === 'OFFLINE_QR_UNAVAILABLE'
+                ? 409
               : 400;
       return NextResponse.json({ error: result.error }, { status });
     }

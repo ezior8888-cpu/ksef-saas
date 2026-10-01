@@ -92,7 +92,7 @@ describe('loader PDF — skrót pliku XML', () => {
     mocks.filters = [];
     mocks.invoiceRow = {
       id: 'inv-1', tenant_id: 'ten-1', internal_number: 'FV/1', invoice_type: 'VAT', issue_date: '2026-02-01',
-      sale_date: null, ksef_number: null, seller_nip: '1111111111', xml_storage_path: 'ten-1/2026/02/inv-1.xml',
+      sale_date: null, ksef_number: null, ksef_status: 'draft', seller_nip: '1111111111', xml_storage_path: 'ten-1/2026/02/inv-1.xml',
       net_total: 100, vat_total: 23, gross_total: 123, notes: null, annotations: null, updated_at: null,
       pdf_storage_path: null, pdf_generated_at: null, seller_data: { nip: '1111111111' }, buyer_data: {}, payment_data: {},
       invoice_line_items: [],
@@ -102,7 +102,7 @@ describe('loader PDF — skrót pliku XML', () => {
 
   it('skrót z xml_documents po ścieżce, firmie i fakturze', async () => {
     const dane = await loadInvoiceForPdf('inv-1', 'ten-1');
-    expect(dane).toMatchObject({ sellerNip: '1111111111', xmlSha256Hex: HASH_HEX });
+    expect(dane).toMatchObject({ sellerNip: '1111111111', xmlSha256Hex: HASH_HEX, ksefStatus: 'draft' });
     expect(mocks.filters.filter(([t]) => t === 'xml_documents')).toEqual([
       ['xml_documents', 'storage_path', 'ten-1/2026/02/inv-1.xml'],
       ['xml_documents', 'tenant_id', 'ten-1'],

@@ -14,7 +14,7 @@ export type GenerateInvoicePdfResult =
   | {
       success: false;
       error: string;
-      code?: 'KSEF_NOT_VERIFIED' | 'NOT_FOUND' | 'FORBIDDEN';
+      code?: 'KSEF_NOT_VERIFIED' | 'NOT_FOUND' | 'FORBIDDEN' | 'OFFLINE_QR_UNAVAILABLE';
     };
 
 /**
@@ -52,6 +52,17 @@ export async function generateInvoicePdf(
       success: false,
       error: 'Brak dostępu do tej faktury.',
       code: 'FORBIDDEN',
+    };
+  }
+
+  // Przed nadaniem numeru KSeF wizualizacja faktury offline wymaga także
+  // KODU II z certyfikatem typu Offline. Blokada stoi przed cache, bo starszy
+  // PDF mógł zawierać tylko KOD I. Po nadaniu numeru wystarczy sam KOD I.
+  if (data.ksefStatus === 'offline_queued' && !data.ksefNumber) {
+    return {
+      success: false,
+      code: 'OFFLINE_QR_UNAVAILABLE',
+      error: 'PDF faktury offline przed nadaniem numeru KSeF wymaga dwóch kodów QR, w tym certyfikatu KSeF typu Offline. Wydanie PDF jest obecnie niedostępne.',
     };
   }
 

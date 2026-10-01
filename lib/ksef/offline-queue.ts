@@ -7,14 +7,11 @@ import type { Database } from '@/types/database';
 import { createAdminClient } from '@/lib/supabase/server';
 
 import { calculateOfflineDeadline, generateIdempotencyKey } from './idempotency';
-import { generateOfflineQrCodes } from './qr-codes';
 
 export interface AddToOfflineQueueParams {
   tenantId: string;
   invoiceId: string;
   isMfOutage: boolean;
-  /** PEM certyfikatu (do skrótu w payloadzie QR CERTYFIKAT). */
-  certificate: string;
 }
 
 type OfflineQueueRow = Database['public']['Tables']['ksef_offline_queue']['Row'];
@@ -28,7 +25,7 @@ export async function addToOfflineQueue(
   const { data: invoiceRow, error: invErr } = await supabase
     .from('invoices')
     .select(
-      'tenant_id, internal_number, issue_date, gross_total, buyer_data, buyer_nip, seller_nip, created_at, ksef_status, ksef_number, tenants(nip)',
+      'tenant_id, created_at, ksef_status, ksef_number',
     )
     .eq('id', params.invoiceId)
     .eq('tenant_id', params.tenantId)
@@ -56,29 +53,6 @@ export async function addToOfflineQueue(
   );
   const deadline = calculateOfflineDeadline(now, params.isMfOutage);
 
-  const tenants = invoiceRow.tenants as
-    | { nip: string }
-    | { nip: string }[]
-    | null;
-  const tenantNipRow = Array.isArray(tenants) ? tenants[0] : tenants;
-  const sellerNip = tenantNipRow?.nip ?? invoiceRow.seller_nip ?? '';
-
-  type BuyerSnap = { nip?: unknown };
-  const buyerNipRaw = invoiceRow.buyer_data as BuyerSnap | null;
-  const buyerNipFromJson =
-    typeof buyerNipRaw?.nip === 'string' ? buyerNipRaw.nip : '';
-  const buyerNip = invoiceRow.buyer_nip ?? buyerNipFromJson;
-
-  const qrCodes = await generateOfflineQrCodes({
-    invoiceNumber: invoiceRow.internal_number?.trim() ?? '',
-    issueDate: invoiceRow.issue_date,
-    grossAmount: Number(invoiceRow.gross_total ?? 0),
-    sellerNip,
-    buyerNip,
-    certificate: params.certificate,
-    idempotencyKey,
-  });
-
   const { data: row, error } = await supabase
     .from('ksef_offline_queue')
     .insert({
@@ -90,8 +64,10 @@ export async function addToOfflineQueue(
       is_mf_outage: params.isMfOutage,
       attempts: 0,
       next_attempt_at: now.toISOString(),
-      qr_offline_payload: qrCodes.offlinePayload,
-      qr_certyfikat_payload: qrCodes.certyfikatPayload,
+      // Brak certyfikatu KSeF typu Offline i skrótu utrwalonego XML: nie
+      // zapisujemy niezgodnych ze specyfikacją MF, pozornych payloadów QR.
+      qr_offline_payload: null,
+      qr_certyfikat_payload: null,
     })
     .select()
     .single();
@@ -127,8 +103,8 @@ export async function addToOfflineQueue(
     .from('invoices')
     .update({
       ksef_status: 'offline_queued',
-      offline_qr_offline: qrCodes.offlinePayload,
-      offline_qr_certyfikat: qrCodes.certyfikatPayload,
+      offline_qr_offline: null,
+      offline_qr_certyfikat: null,
       offline_idempotency_key: idempotencyKey,
     })
     .eq('id', params.invoiceId)

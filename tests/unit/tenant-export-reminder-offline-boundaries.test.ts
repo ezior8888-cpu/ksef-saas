@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ admin: vi.fn(), qr: vi.fn() }));
+const mocks = vi.hoisted(() => ({ admin: vi.fn() }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/supabase/server', () => ({ createAdminClient: mocks.admin }));
-vi.mock('@/lib/ksef/qr-codes', () => ({ generateOfflineQrCodes: mocks.qr }));
 
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import { decideNextReminder, findInvoicesRequiringReminders } from '@/lib/reminders/scheduler';
@@ -18,6 +17,7 @@ let operations: Operation[];
 let errorFor: (op: Operation) => boolean;
 let conflict = false;
 let beforeUpdate: ((op: Operation) => void) | null;
+let beforeInsert: ((op: Operation) => void) | null;
 
 function database() {
   return { from(table: string) {
@@ -53,6 +53,7 @@ function database() {
           return Promise.resolve({ data: null, error: { code: conflict ? '23505' : 'XX000', message: 'fixture failure' } }).then(resolve, reject);
         }
         if (op.mode === 'update') beforeUpdate?.(op);
+        if (op.mode === 'insert') beforeInsert?.(op);
         const matching = (tables[table] ?? []).filter(row => predicates.every(p => p(row)));
         const rows = window ? matching.slice(window[0], window[1] + 1) : matching;
         if (op.mode === 'insert') { const inserted = { id: 'new-queue', ...patch }; (tables[table] ??= []).push(inserted); rows.splice(0, rows.length, inserted); }
@@ -78,7 +79,7 @@ const scheduleInput = {
   id: 'invoice-a', tenant_id: 'tenant-a', internal_number: 'A', gross_total: 100, paid_amount: 0,
   payment_due_date: '2025-01-01', reminders_paused: false, buyer_data: { email: 'buyer@example.test' },
 };
-const offlineParams = { tenantId: 'tenant-a', invoiceId: 'invoice-a', certificate: 'fake-certificate', isMfOutage: false };
+const offlineParams = { tenantId: 'tenant-a', invoiceId: 'invoice-a', isMfOutage: false };
 
 beforeEach(() => {
   tables = {
@@ -92,9 +93,8 @@ beforeEach(() => {
       send_hour: 10, send_on_weekdays_only: false,
     }],
   };
-  operations = []; errorFor = () => false; conflict = false; beforeUpdate = null;
+  operations = []; errorFor = () => false; conflict = false; beforeUpdate = null; beforeInsert = null;
   mocks.admin.mockReset().mockImplementation(database);
-  mocks.qr.mockReset().mockResolvedValue({ offlinePayload: 'offline-fixture', certyfikatPayload: 'certificate-fixture' });
 });
 
 describe('tenant boundaries for accounting exports', () => {
@@ -206,9 +206,8 @@ describe('reminder decisions distrust invoice-only foreign relationships', () =>
 });
 
 describe('offline helper tenant ownership', () => {
-  it('rejects a foreign invoice before QR generation or writes', async () => {
+  it('rejects a foreign invoice before writes', async () => {
     await expect(addToOfflineQueue({ ...offlineParams, invoiceId: 'invoice-b' })).rejects.toThrow('Invoice not found');
-    expect(mocks.qr).not.toHaveBeenCalled();
     expect(operations.some(op => op.mode !== 'select')).toBe(false);
   });
 
@@ -219,6 +218,8 @@ describe('offline helper tenant ownership', () => {
     expect(tables.invoices[0].ksef_status).toBe('offline_queued');
     expect(tables.invoices[1].ksef_status).toBe('accepted');
     expect(operations.find(op => op.table === 'invoices' && op.mode === 'update')?.filters).toContainEqual(['tenant_id', 'tenant-a']);
+    expect(tables.ksef_offline_queue[0]).toMatchObject({ qr_offline_payload: null, qr_certyfikat_payload: null });
+    expect(tables.invoices[0]).toMatchObject({ offline_qr_offline: null, offline_qr_certyfikat: null });
   });
 
   it.each([
@@ -247,16 +248,14 @@ describe('offline helper tenant ownership', () => {
 
   it('does not claim success when invoice ownership changes before the write', async () => {
     tables.invoices[0].ksef_status = 'sending';
-    mocks.qr.mockImplementation(async () => {
+    beforeInsert = () => {
       tables.invoices[0].tenant_id = 'tenant-b';
-      return { offlinePayload: 'offline-fixture', certyfikatPayload: 'certificate-fixture' };
-    });
+    };
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice status unavailable after offline queue insert');
     expect(tables.invoices[0].ksef_status).toBe('sending');
   });
-  it('rejects an already accepted invoice before generating QR codes or a queue row', async () => {
+  it('rejects an already accepted invoice before creating a queue row', async () => {
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice already accepted');
-    expect(mocks.qr).not.toHaveBeenCalled();
     expect(operations.some(op => op.mode !== 'select')).toBe(false);
   });
   it('preserves acceptance that lands just before the offline status update', async () => {

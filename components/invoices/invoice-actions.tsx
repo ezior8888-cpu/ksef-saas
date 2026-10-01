@@ -48,6 +48,8 @@ export function InvoiceActions({ invoice }: Props) {
           toast.error(
             body.error === 'pdf_generation_failed'
               ? 'Nie udało się wygenerować PDF. Spróbuj ponownie.'
+              : res.status === 409
+                ? body.error ?? 'PDF faktury offline jest obecnie niedostępny.'
               : 'Nie udało się pobrać PDF faktury.',
           );
           return;
