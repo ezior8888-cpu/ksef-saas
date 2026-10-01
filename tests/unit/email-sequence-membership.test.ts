@@ -72,7 +72,7 @@ describe('maile próbne a członkostwo w firmie', () => {
 
   it('dzień 1 i 14 też patrzą tylko na firmę z aktywnym członkostwem', async () => {
     await runEmailDay1(DANE, ctx);
-    await runEmailDay14(DANE, ctx);
+    await runEmailDay14(DANE);
 
     expect(db.tables).not.toContain('invoices');
     expect(db.tables).not.toContain('tenants');
