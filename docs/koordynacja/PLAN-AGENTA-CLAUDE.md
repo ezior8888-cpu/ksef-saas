@@ -81,7 +81,7 @@ się od nowa?*
 | `retention-delete`, `archive-old-invoices` | ✅ ponowienie bezpieczne (aktualizacje idempotentne) — reszta w 3.2 |
 | `exports-generate` | ✅ nazwa pliku deterministyczna, HEAD przed wgraniem do R2, upsert `export_files`. Drobiazg: JPK ma znacznik czasu, więc po ponowieniu `file_hash`/`size_bytes` mogą nie pasować do pliku w R2 — nikt ich nie weryfikuje |
 | `email-sequence` | ❌→✅ TREŚĆ: maile dnia 12 i 14 („2 dni do końca trialu”, „trial zakończony, read-only, dane usuwane po 30 dniach”) przeczyły regulaminowi (trial 30 dni), retencji i aplikacji; dzień 14 szedł do płacących — wstrzymane (#118). Ponowienia: powitalny mail może pójść drugi raz, gdy padnie planowanie dnia 1 — drobne |
-| `daily-summary-email` | ✅ raport dla operatora, bez skutku dla klientów. ALE: wskaźnik „błędy jobów” czyta `inngest_run_log`, do której NIKT nie pisze (także panel `/admin/system`) — zawsze 0; patrz następny krok |
+| `daily-summary-email` | ✅ raport dla operatora, bez skutku dla klientów. ALE: wskaźnik „błędy jobów” czytał `inngest_run_log`, do której NIKT nie pisał (także panel `/admin/system`) — zawsze 0; naprawione w PR „zapis przebiegów” (worker zapisuje każdy przebieg) |
 | `magic-import-ksef` | stos Codexa (#63–#86) — tylko czytać |
 | `send-reminder`, `reminder-scheduler`, `bulk-import` | ⬜ |
 | `submit-invoice`, `inbox-polling`, `self-invoice-payment`, `process-offline-queue` | Codex (stos #62–#86) — tylko czytać, uwagi przez C-xx |
@@ -121,10 +121,13 @@ z #106–#110, oraz:
 | #114 | Worker pg-boss inicjalizuje Sentry — alerty z jobów wcześniej nie wychodziły wcale |
 | #116 | Co-Pilot (paczka): ponowienie nie wysyła księgowej drugiego maila; zapis `emailed_at` |
 | #118 | Wstrzymane maile triala z dnia 12 i 14 (sprzeczne z regulaminem i retencją) |
+| PR „zapis przebiegów” | Worker zapisuje przebiegi jobów do `inngest_run_log` — panel i raport „błędy jobów” przestają pokazywać zawsze 0 |
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak (stan po #118).
+Brak (stan po PR „zapis przebiegów”).
+
+Na `main` od innych od 01.10: #117 (C-08, migracja `00096` — wgranie po stronie Bartosza).
 
 Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
 Scalone cudze od 01.10: Bartosz #113 (health-check KSeF).
@@ -154,10 +157,6 @@ Scalone cudze od 01.10: Bartosz #113 (health-check KSeF).
 
 ## 5. Następny krok
 
-1. Ślepy panel jobów: `inngest_run_log` czytają `/admin/system`, metryki
-   biznesowe i raport dzienny, ale nic do niej nie pisze. Sprawdzić schemat
-   (00003) i dopisać zapis przebiegu w workerze pg-boss (`wrapHandler`) —
-   bez migracji, jeśli kolumny wystarczą; uwaga na wolumen cronów.
-2. Tabela 3.1, wiersze ⬜: `reminder-scheduler`, `bulk-import`, `send-reminder`
+1. Tabela 3.1, wiersze ⬜: `reminder-scheduler`, `bulk-import`, `send-reminder`
    (logika ponagleń to stos Codexa #86 — zmiany tylko przez C-xx).
-3. E8: import, portal księgowej, walidatory, powiadomienia.
+2. E8: import, portal księgowej, walidatory, powiadomienia.
