@@ -59,7 +59,7 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E1 | Eksporty: KPiR (koszty z wydatków, strony, odliczenie VAT), JPK_FA(4) wg XSD, JPK_V7M(3), CSV, eksporty programowe | ✅ / ⏳ | #58–#61, #91, #93, #97, #98, #99; wstrzymania #66, #93 |
 | E2 | Faktury: adnotacje FA(3) (MPP, metoda kasowa, „odwrotne obciążenie”), ROZ po zaliczkach, PDF korekty, kod QR, mail z kwotą do zapłaty | ✅ / ⏳ C-05 | #75, #76, #79, #84, #95, #102, #103 |
 | E3 | OCR i waluty: koszt w walucie obcej po kursie NBP | ✅ | #94 |
-| E4 | Joby pg-boss: ponowienie wykonuje CAŁY job od nowa (brak pamięci kroków) — każdy zapis musi być odporny na powtórkę | 🔄 | #109 (OCR), #112 (Co-Pilot cron), #113 (Sentry w workerze); lista w 3.1 |
+| E4 | Joby pg-boss: ponowienie wykonuje CAŁY job od nowa (brak pamięci kroków) — każdy zapis musi być odporny na powtórkę | 🔄 | #109 (OCR), #112 (Co-Pilot cron), #114 (Sentry w workerze); lista w 3.1 |
 | E5 | RODO / konto: usunięcie konta a subskrypcja i klucze obce | ✅ kod / ⏳ migracja B3 | #108 |
 | E6 | Konfiguracja produkcji bez cichych zastępstw (GUS sandbox, brak kluczy) | ✅ / ⏳ B2 | #107 |
 | E7 | Retencja 10 lat: joby `retention-delete`, `archive-old-invoices` — czy nic nie kasuje faktur przed terminem | ✅ sprawdzone 01.10 | uwagi w 3.2 |
@@ -114,13 +114,14 @@ z #106–#110, oraz:
 | #109 | OCR: ponowienie joba nie dubluje wydatku w KPiR |
 | #110 | Ten plan + wskaźnik w `AGENTS.md` |
 | #112 | Co-Pilot (cron): ponowienie nie gubi miesięcznej paczki dla księgowej |
-| #113 | Worker pg-boss inicjalizuje Sentry — alerty z jobów wcześniej nie wychodziły wcale |
+| #114 | Worker pg-boss inicjalizuje Sentry — alerty z jobów wcześniej nie wychodziły wcale |
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak (stan po #113).
+Brak (stan po #114).
 
-Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
+Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90,
+#113 (health-check KSeF).
 
 ### 4.3. Prośby do Bartosza (migracje, produkcja)
 
@@ -131,7 +132,7 @@ Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
 | B3 | Migracja: klucze obce `expenses.created_by`, `ocr_jobs.created_by`, `accountant_access.created_by_user_id` → `ON DELETE SET NULL` (dziś blokują usunięcie konta RODO) | #108 |
 | B4 | Odczyt: czy na produkcji są zdublowane wydatki z OCR (SQL w #109); potem `UNIQUE (tenant_id, ocr_job_id)` | #109 |
 | B5 | C-16: płatności/ponaglenia ROZ liczone od pełnej kwoty — migracja przed zdjęciem wstrzymania ROZ | `CLAUDE-DO-CODEXA.md` |
-| B6 | Po wdrożeniu workera: w logach startu ma być „Sentry: alerty z jobów włączone”; jeśli „WYŁĄCZONE” — dodać `SENTRY_DSN` do zmiennych workera (Coolify id=2) | #113 |
+| B6 | Po wdrożeniu workera: w logach startu ma być „Sentry: alerty z jobów włączone”; jeśli „WYŁĄCZONE” — dodać `SENTRY_DSN` do zmiennych workera (Coolify id=2) | #114 |
 
 ### 4.4. Czeka na decyzję / kogoś innego
 
@@ -148,7 +149,7 @@ Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
 
 1. Co-Pilot (paczka, `runCoPilotSendPackage`): ponowienie po wysłanym mailu
    nie może wysłać go drugi raz ani tworzyć nowych `export_jobs`; nieudana
-   paczka → alert (od #113 wyczerpany job idzie do Sentry sam). Znacznik:
+   paczka → alert (od #114 wyczerpany job idzie do Sentry sam). Znacznik:
    `export_jobs.emailed_at` — UI go czyta, ale nikt go nie zapisuje.
 2. Dalej tabela 3.1 od góry (wiersze ⬜).
 3. E8: import, portal księgowej, walidatory, powiadomienia.
