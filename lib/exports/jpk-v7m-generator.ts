@@ -52,6 +52,22 @@ export class MissingTaxpayerEmailError extends Error {
   }
 }
 
+/**
+ * Sprzedaż w odwrotnym obciążeniu (stawka „oo”, FA(3) P_13_10). W JPK_V7M(3)
+ * K_31/P_31 to podstawa NABYWCY (art. 17 ust. 1 pkt 5), a pola dla sprzedawcy
+ * nie ustaliliśmy — do decyzji księgowej. Do 01.10.2026 taka sprzedaż po
+ * cichu wypadała z pliku: ewidencja bez faktury, która jest w KSeF.
+ */
+export class JpkV7mReverseChargeNotSupportedError extends Error {
+  constructor() {
+    super(
+      'W okresie jest faktura z odwrotnym obciążeniem („oo”) — JPK_V7M jeszcze jej nie obsługuje. ' +
+        'Plik nie powstał, żeby nie pominąć tej sprzedaży; przygotuj ewidencję z księgową.',
+    );
+    this.name = 'JpkV7mReverseChargeNotSupportedError';
+  }
+}
+
 /** Sumy netto/VAT wg stawki — w groszach, bez zaokrągleń pośrednich. */
 interface RateBucket {
   net23: number;
@@ -62,10 +78,12 @@ interface RateBucket {
   vat5: number;
   net0: number;
   netZw: number;
+  /** „np” — FA(3) P_13_8: poza terytorium kraju, bez art. 100 ust. 1 pkt 4 → K_11/P_11. */
+  netNp: number;
 }
 
 function emptyBucket(): RateBucket {
-  return { net23: 0, vat23: 0, net8: 0, vat8: 0, net5: 0, vat5: 0, net0: 0, netZw: 0 };
+  return { net23: 0, vat23: 0, net8: 0, vat8: 0, net5: 0, vat5: 0, net0: 0, netZw: 0, netNp: 0 };
 }
 
 function round2(n: number): number {
@@ -116,9 +134,14 @@ function aggregateSales(invoices: readonly JpkInvoice[]): RateBucket {
         case 'zw':
           b.netZw += net;
           break;
-        default:
-          // oo / np — poza podstawową ewidencją krajową (osobne pola; do rozszerzenia)
+        case 'np':
+          b.netNp += net;
           break;
+        case 'oo':
+          throw new JpkV7mReverseChargeNotSupportedError();
+        default:
+          // `amountsOf` przepuszcza tylko stawki z pól JPK_FA — tu nie dochodzi.
+          throw new Error(`JPK_V7M: stawka "${rate}" nie ma pola w ewidencji.`);
       }
     }
   }
@@ -161,6 +184,7 @@ export interface JpkV7mSummary {
 
 interface Declaration {
   P_10: number;
+  P_11: number;
   P_13: number;
   P_15: number;
   P_16: number;
@@ -183,6 +207,7 @@ function declaration(data: JpkV7mInputData): Declaration {
   const s = aggregateSales(data.issuedInvoices);
   const purchases = vatPurchases(data.expenses ?? []);
   const P_10 = wholeZloty(s.netZw);
+  const P_11 = wholeZloty(s.netNp);
   const P_13 = wholeZloty(s.net0);
   const P_15 = wholeZloty(s.net5);
   const P_16 = wholeZloty(s.vat5);
@@ -191,7 +216,7 @@ function declaration(data: JpkV7mInputData): Declaration {
   const P_19 = wholeZloty(s.net23);
   const P_20 = wholeZloty(s.vat23);
   // P_37 = suma podstaw; P_38 = suma podatku należnego (z pól już zaokrąglonych).
-  const P_37 = P_10 + P_13 + P_15 + P_17 + P_19;
+  const P_37 = P_10 + P_11 + P_13 + P_15 + P_17 + P_19;
   const P_38 = P_16 + P_18 + P_20;
   const P_39 = wholeZloty(Math.max(0, data.previousSurplus ?? 0));
   const P_42 = wholeZloty(purchases.reduce((sum, e) => sum + e.netAmount, 0));
@@ -202,7 +227,7 @@ function declaration(data: JpkV7mInputData): Declaration {
   const P_53 = P_51 > 0 ? 0 : Math.max(0, P_48 - P_38);
   // Bez zwrotu na rachunek (P_54) cała nadwyżka przechodzi na następny okres.
   const P_62 = P_53;
-  return { P_10, P_13, P_15, P_16, P_17, P_18, P_19, P_20, P_37, P_38, P_39, P_42, P_43, P_48, P_51, P_53, P_62 };
+  return { P_10, P_11, P_13, P_15, P_16, P_17, P_18, P_19, P_20, P_37, P_38, P_39, P_42, P_43, P_48, P_51, P_53, P_62 };
 }
 
 export function summarizeJpkV7m(data: JpkV7mInputData): JpkV7mSummary {
@@ -232,8 +257,10 @@ function ksefMarker(row: ReturnType<typeof create>, ksefNumber: string | null | 
 
 /**
  * Generuje XML JPK_V7M(3). Deklaracja obejmuje sprzedaż krajową wg stawek
- * (23/8/5/0/zw) i nabycia pozostałe (P_42/P_43). Pola specjalne (WDT,
- * eksport, import usług, środki trwałe, ulgi) — do rozszerzenia.
+ * (23/8/5/0/zw), sprzedaż poza krajem („np”, K_11/P_11) i nabycia pozostałe
+ * (P_42/P_43). Odwrotne obciążenie („oo”) — odmowa
+ * (`JpkV7mReverseChargeNotSupportedError`). Pola specjalne (WDT, eksport,
+ * import usług, środki trwałe, ulgi) — do rozszerzenia.
  */
 export function generateJpkV7m(data: JpkV7mInputData): string {
   const taxOffice = (data.issuer.taxOfficeCode ?? '').trim();
@@ -282,6 +309,7 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
   const poz = dekl.ele('PozycjeSzczegolowe');
   const put = (name: string, value: number) => poz.ele(name).txt(String(value)).up();
   if (d.P_10) put('P_10', d.P_10);
+  if (d.P_11) put('P_11', d.P_11);
   if (d.P_13) put('P_13', d.P_13);
   if (d.P_15 || d.P_16) {
     put('P_15', d.P_15);
@@ -325,6 +353,7 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
 
     const b = aggregateSales([inv]);
     if (b.netZw) s.ele('K_10').txt(money(b.netZw)).up();
+    if (b.netNp) s.ele('K_11').txt(money(b.netNp)).up();
     if (b.net0) s.ele('K_13').txt(money(b.net0)).up();
     if (b.net5 || b.vat5) {
       s.ele('K_15').txt(money(b.net5)).up();
