@@ -1,10 +1,21 @@
 /**
- * Sprawdza dostępność KSeF API z timeoutem (prosty GET — endpoint weryfikować
- * w dokumentacji MF: `/health` vs `/status`).
+ * Sprawdza dostępność KSeF API z timeoutem.
+ *
+ * KSeF 2.0 nie ma publicznego endpointu zdrowia: `GET /v2/health` odpowiada
+ * 401 na TEST i PROD (sprawdzone 01.10.2026), a dokumentacja MF
+ * (CIRFMF/ksef-api) żadnego endpointu stanu nie opisuje. Wcześniejsza sonda
+ * pytała właśnie o `/health`, więc monitor tygodniami zgłaszał „down”, a każda
+ * wysyłka z certyfikatem XAdES trafiała do Offline24 zamiast do KSeF.
+ *
+ * Sondujemy publiczny, udokumentowany `GET /security/public-key-certificates`
+ * — bez logowania, lekki, i potrzebny do szyfrowania każdej sesji, więc jego
+ * dostępność realnie oznacza „da się wysłać fakturę”.
  */
 
 import { getKsefApiUrl } from './client';
 import type { KsefEnvironment } from '@/types/ksef';
+
+export const KSEF_HEALTH_PROBE_PATH = '/security/public-key-certificates';
 
 export interface KsefHealthResult {
   available: boolean;
@@ -21,13 +32,13 @@ export async function checkKsefAvailability(
 ): Promise<KsefHealthResult> {
   const startTime = Date.now();
   const apiUrl = getKsefApiUrl(env);
-  const healthEndpoint = `${apiUrl.replace(/\/+$/, '')}/health`;
+  const probeUrl = `${apiUrl.replace(/\/+$/, '')}${KSEF_HEALTH_PROBE_PATH}`;
 
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-    const response = await fetch(healthEndpoint, {
+    const response = await fetch(probeUrl, {
       method: 'GET',
       signal: controller.signal,
       headers: { Accept: 'application/json' },
@@ -35,16 +46,30 @@ export async function checkKsefAvailability(
 
     clearTimeout(timeoutId);
     const responseTime = Date.now() - startTime;
+    // Treść certyfikatów nie jest potrzebna — zwalniamy połączenie od razu.
+    await response.body?.cancel().catch(() => undefined);
 
     if (response.ok) {
       return { available: true, responseTime };
     }
 
+    // 5xx i 429 to sygnał po stronie MF — zachowanie jak dotąd (Offline24 / rate limit).
+    if (response.status >= 500 || response.status === 429) {
+      return {
+        available: false,
+        responseTime,
+        error: `KSeF returned ${response.status}`,
+        isMfOutage: response.status === 503,
+      };
+    }
+
+    // Inne 4xx: serwer KSeF odpowiedział, więc jest osiągalny — zła odpowiedź
+    // sondy (np. MF przeniósł endpoint) nie może przełączać faktur w Offline24.
+    // Błąd zostaje w snapshocie, żeby operator zobaczył go w `ksef_health_log`.
     return {
-      available: false,
+      available: true,
       responseTime,
-      error: `KSeF returned ${response.status}`,
-      isMfOutage: response.status === 503,
+      error: `Sonda zdrowia KSeF dostała HTTP ${response.status} — sprawdź KSEF_HEALTH_PROBE_PATH`,
     };
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
