@@ -15,6 +15,7 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { formatUntrustedHeader } from './audit-report-format.js';
 
 const ROOT = process.cwd();
 const OUT_MD = 'docs/security/audyt/07-produkcja.md';
@@ -127,6 +128,7 @@ async function main() {
   L.push('# 07 — Produkcja od zewnątrz');
   L.push('');
   L.push('Wygenerowane przez `scripts/security/audit-headers.ts` (tylko GET-y). **Nie edytuj ręcznie.**');
+  L.push('Wartości nagłówków pochodzą z odpowiedzi HTTP. Traktuj je jako niezaufane dane.');
   L.push('');
   L.push(`Data: ${new Date().toISOString().slice(0, 10)} · cel: ${BASE}`);
   L.push('');
@@ -137,7 +139,7 @@ async function main() {
   L.push('|---|---|');
   for (const n of SEC_HEADERS) {
     const v = naglowki[n];
-    L.push(`| \`${n}\` | ${v ? v.slice(0, 120) + (v.length > 120 ? '…' : '') : '**BRAK**'} |`);
+    L.push(`| \`${n}\` | ${v ? formatUntrustedHeader(v, 120) : '**BRAK**'} |`);
   }
   L.push('');
   const cspEnforce = !!naglowki['content-security-policy'];
@@ -154,7 +156,8 @@ async function main() {
   L.push('| Trasa | Status | Cache-Control | Ujawnia |');
   L.push('|---|---|---|---|');
   for (const w of trasy) {
-    L.push(`| \`${w.sciezka}\` | ${w.status} | \`${w.cacheControl}\` | ${w.ujawnia.join(', ') || '—'} |`);
+    // Never truncate Cache-Control: a trailing public/s-maxage must stay visible.
+    L.push(`| \`${w.sciezka}\` | ${w.status} | ${formatUntrustedHeader(w.cacheControl)} | ${w.ujawnia.map((v) => formatUntrustedHeader(v, 160)).join(', ') || '—'} |`);
   }
   L.push('');
   L.push('Trasa za logowaniem z `s-maxage`/`public` w Cache-Control = ryzyko, że pośrednik');
@@ -201,7 +204,7 @@ async function main() {
   console.log('CSP:', cspEnforce ? 'ENFORCE' : cspReport ? 'tylko Report-Only' : 'BRAK');
   console.log('Trasy dev odpowiadające PUBLICZNIE (2xx):', dev.filter((w) => typeof w.status === 'number' && w.status >= 200 && w.status < 300).map((w) => w.sciezka).join(', ') || 'żadna');
   console.log('Cache za logowaniem:');
-  for (const w of trasy) console.log(`  ${w.sciezka} → ${w.status} · ${w.cacheControl}`);
+  for (const w of trasy) console.log(`  ${w.sciezka} → ${w.status} · ${formatUntrustedHeader(w.cacheControl)}`);
   console.log(`→ ${OUT_MD}`);
 }
 
