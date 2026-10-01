@@ -29,6 +29,12 @@ import {
 } from './registry';
 import { ATTEMPT_KEY, decideRetry, readAttempt } from './retry';
 import { createJobStep } from './step-shim';
+import {
+  flushWorkerSentry,
+  initWorkerSentry,
+  reportExhaustedJob,
+  reportWorkerStartupFailure,
+} from './sentry';
 
 // Rejestracje paczek (side-effect imports) — Etapy 3-6 planu.
 import './handlers/package-a';
@@ -101,6 +107,7 @@ function wrapHandler(def: JobDefinition<never>) {
         }
 
         jobLog.error(`wyczerpane próby (${decision.reason})`, error);
+        reportExhaustedJob(def.queue, error, decision.reason);
         try {
           await def.onExhausted?.(error, data as never, {
             step: createJobStep(jobLog),
@@ -119,6 +126,11 @@ function wrapHandler(def: JobDefinition<never>) {
 
 async function main(): Promise<void> {
   log.info(`Worker startuje (JOBS_BACKEND=${getJobsBackend()})`);
+  if (initWorkerSentry()) {
+    log.info('Sentry: alerty z jobów włączone');
+  } else {
+    log.warn('Sentry: alerty z jobów WYŁĄCZONE (brak SENTRY_DSN albo NODE_ENV≠production)');
+  }
 
   const boss = await startBoss();
   boss.on('error', (err) => log.error('pg-boss error', err));
@@ -198,6 +210,7 @@ async function main(): Promise<void> {
     try {
       await stopBoss();
     } finally {
+      await flushWorkerSentry();
       process.exit(0);
     }
   };
@@ -207,5 +220,6 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   log.error('Worker padł przy starcie', err);
-  process.exit(1);
+  reportWorkerStartupFailure(err);
+  void flushWorkerSentry().finally(() => process.exit(1));
 });
