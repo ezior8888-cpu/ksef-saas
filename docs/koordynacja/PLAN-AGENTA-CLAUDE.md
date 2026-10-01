@@ -88,6 +88,7 @@ się od nowa?*
 | `bulk-import` | ✅ deduplikacja po numerze i numerze KSeF + UNIQUE `(tenant_id, internal_number)`; kolizje numerów faktur odebranych to C-08 (#117) |
 | `nightly-validation-recheck`, `bulk-validate-contractors` | ❌→✅ awaria API Białej Listy/VIES (timeout, limit zapytań) zapisywała kontrahentowi „nieznany” i pustą listę rachunków na 7 dni i truła cache na 24 h — #123 |
 | `cert-expiry-alert` | ✅ data wygaśnięcia zapisywana przy wgraniu certyfikatu; progi 30/14/7 w oknach jednodniowych |
+| `cleanup-old-backups` | ❌→✅ retencja samą datą kasowała ostatnie DOBRE kopie, gdy nowe od miesiąca się nie udawały — zostaje zawsze 7 najnowszych udanych (PR „kopie zapasowe”) |
 | `submit-invoice`, `inbox-polling`, `self-invoice-payment`, `process-offline-queue` | Codex (stos #62–#86) — tylko czytać, uwagi przez C-xx |
 
 ### 3.2. Retencja (E7) — wynik przeglądu 01.10.2026
@@ -126,19 +127,20 @@ z #106–#110, oraz:
 | #116 | Co-Pilot (paczka): ponowienie nie wysyła księgowej drugiego maila; zapis `emailed_at` |
 | #118 | Wstrzymane maile triala z dnia 12 i 14 (sprzeczne z regulaminem i retencją) |
 | #119 | Worker zapisuje przebiegi jobów do `inngest_run_log` — panel i raport „błędy jobów” przestają pokazywać zawsze 0 |
+| #121 | C-17 w kanale z Codexem (tylko dokumentacja) |
+| #123 | Awaria API Białej Listy/VIES nie kasuje statusu VAT i rachunków kontrahenta ani nie truje cache |
 
 ### 4.2. Otwarte PR-y Claude
 
-Scalone też: #121 (C-17, tylko dokumentacja koordynacji).
-
 | PR | Co | Stan |
 |---|---|---|
-| #123 | Awaria API Białej Listy/VIES nie kasuje statusu VAT i rachunków kontrahenta ani nie truje cache | w tym PR |
+| PR „kopie zapasowe” | Retencja kopii bazy zostawia zawsze 7 najnowszych udanych | w tym PR |
 
-Na `main` od innych od 01.10: #117 (C-08, migracja `00096` — wgranie po stronie Bartosza).
+Na `main` od innych od 01.10: #113 (Bartosz, health-check KSeF), #117 (C-08,
+migracja `00096` — wgranie po stronie Bartosza).
 
-Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
-Scalone cudze od 01.10: Bartosz #113 (health-check KSeF).
+Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104, #122 (PDF bez
+poprawnych kodów QR); Bartosz #90, #120 (alerty Telegram + heartbeat workera).
 
 ### 4.3. Prośby do Bartosza (migracje, produkcja)
 
@@ -166,9 +168,11 @@ Scalone cudze od 01.10: Bartosz #113 (health-check KSeF).
 
 ## 5. Następny krok
 
-1. Joby z małą stawką: `cleanup-*`, `refresh-materialized-views`,
-   `weekly-business-review`, `daily-analytics-digest` (`ksef-health-check`
-   przerobił Bartosz w #113) — przejrzeć szybko pod kątem cichych błędów.
+1. Kopie zapasowe dalej: `daily-db-snapshot` i `verify-backup` — czy
+   nieudana kopia daje alert (od #114 Sentry działa), czy weryfikacja
+   naprawdę odtwarza dane (uwaga: #90 Bartosza zmienia `db-snapshot` —
+   tylko czytać). Potem `cleanup-audit-logs`, `refresh-materialized-views`,
+   `weekly-business-review`, `daily-analytics-digest`.
    Przy okazji: `validateMultipleNips` (`lib/validation/cache.ts`) i walidacja
    w formularzu (`app/actions/validation.ts`, góra pliku) — jak pokazują wynik
    `unavailable`.
