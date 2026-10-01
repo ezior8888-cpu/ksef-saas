@@ -171,7 +171,7 @@ describe('alertCritical — Slack + Telegram', () => {
       fields: [{ label: 'Próg', value: '>= 50' }],
     });
 
-    const telegramCall = fetchMock.mock.calls.find(([url]) => url.includes('api.telegram.org'));
+    const telegramCall = fetchMock.mock.calls.find(([url]) => new URL(url).hostname === 'api.telegram.org');
     const text = (JSON.parse((telegramCall as unknown as [string, { body: string }])[1].body) as { text: string }).text;
     expect(text).toContain('<b>Kolejka &lt;offline&gt;</b>');
     expect(text).toContain('Faktur: 12');
