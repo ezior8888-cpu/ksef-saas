@@ -22,11 +22,34 @@ import type { JobContext } from '@/lib/jobs/registry';
 const DAILY_RETENTION_DAYS = 30;
 const WEEKLY_RETENTION_DAYS = 56;
 
+/**
+ * Tyle najnowszych UDANYCH kopii zostaje zawsze, niezależnie od wieku.
+ * Retencja liczona samą datą kasowała ostatnie dobre kopie, gdy nowe od
+ * miesiąca się nie udawały — a alerty z workera do 01.10.2026 nie wychodziły
+ * (#114). Po 30 dniach cichej awarii nie zostałaby żadna kopia bazy.
+ */
+const KEEP_LATEST_SUCCESSFUL = 7;
+
 interface BackupLogRow {
   id: string;
   kind: 'daily' | 'weekly' | 'manual';
   r2_key: string | null;
   started_at: string;
+}
+
+interface AdminBackupKeep {
+  from: (n: 'backup_log') => {
+    select: (c: 'id') => {
+      eq: (k: 'status', v: 'success') => {
+        order: (k: 'started_at', o: { ascending: false }) => {
+          limit: (n: number) => Promise<{
+            data: Array<{ id: string }> | null;
+            error: { message: string } | null;
+          }>;
+        };
+      };
+    };
+  };
 }
 
 interface AdminBackupCleanup {
@@ -82,10 +105,22 @@ export async function runCleanupOldBackups({ step }: JobContext) {
         .eq('kind', 'weekly')
         .lt('started_at', weeklyCutoff.toISOString());
 
+      // Bez pewności, które kopie są ostatnimi dobrymi, nic nie kasujemy.
+      const keepRes = await (admin as unknown as AdminBackupKeep)
+        .from('backup_log')
+        .select('id')
+        .eq('status', 'success')
+        .order('started_at', { ascending: false })
+        .limit(KEEP_LATEST_SUCCESSFUL);
+      if (keepRes.error) {
+        throw new Error(`backup_keep_lookup_failed: ${keepRes.error.message}`);
+      }
+      const keep = new Set((keepRes.data ?? []).map((r) => r.id));
+
       return [
         ...(dailyRes.data ?? []),
         ...(weeklyRes.data ?? []),
-      ];
+      ].filter((r) => !keep.has(r.id));
     });
 
     if (toRemove.length === 0) {
