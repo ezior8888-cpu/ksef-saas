@@ -134,13 +134,13 @@ z #106–#110, oraz:
 | #121 | C-17 w kanale z Codexem (tylko dokumentacja) |
 | #123 | Awaria API Białej Listy/VIES nie kasuje statusu VAT i rachunków kontrahenta ani nie truje cache |
 | #124 | Retencja kopii bazy zostawia zawsze 7 najnowszych udanych |
-| #127 | Plan: E10/E11 przejrzane, E12 samochód do decyzji (scalony razem z PR „podatek od stycznia”) |
+| #127 | Plan: E10/E11 przejrzane, E12 samochód do decyzji (scalony razem z #129) |
 
 ### 4.2. Otwarte PR-y Claude
 
 | PR | Co | Stan |
 |---|---|---|
-| PR „podatek od stycznia” | Kafelek „Szac. podatek” na przepływach liczy od 1 stycznia (był: ostatnie 6 miesięcy, także z zeszłego roku) + C-18 | w tym PR |
+| #129 | Kafelek „Szac. podatek” na przepływach liczy od 1 stycznia (był: ostatnie 6 miesięcy, także z zeszłego roku) + C-18 | w tym PR |
 
 Na `main` od innych od 01.10: Bartosz #113 (health-check KSeF), #117 (C-08,
 migracja `00096`), #120 (alerty Telegram + heartbeat workera), #126
@@ -181,7 +181,7 @@ poprawnych kodów QR); Bartosz #90.
 
 ## 5. Następny krok
 
-1. E13: przepływy naprawione (PR „podatek od stycznia”, C-18). Funkcje
+1. E13: przepływy naprawione (#129, C-18). Funkcje
    podatkowe Flo (grupa T: `tax.setaside`, `tax.limit`, `tax.deadline`,
    `tax.relief`, `tax.simulate`) są WYŁĄCZONE bramką
    (`lib/flo/tax-params.ts`: `PARAMS_VERIFIED = false`) — przegląd ROZ,
