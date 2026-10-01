@@ -7,7 +7,7 @@
  */
 
 import { XMLParser } from 'fast-xml-parser';
-import type { ParsedInvoice, ParsedLine, ParsedParty } from './fa3-parser';
+import { assertPlnCurrency, type ParsedInvoice, type ParsedLine, type ParsedParty } from './fa3-parser';
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -170,6 +170,9 @@ function buildParsedInvoiceFromJpk(
   invoiceNumber: string,
 ): ParsedInvoice {
   const warnings: string[] = [];
+
+  // Waluta obca → wyjątek, pętla wyżej zamienia go w „Pominięto fakturę X: …”.
+  assertPlnCurrency(fa.KodWaluty);
 
   const issueDate = String(fa.P_1 ?? '').slice(0, 10);
   const invoiceType = mapJpkRodzajFaktury(fa.RodzajFaktury);
