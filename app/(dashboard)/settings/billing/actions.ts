@@ -45,6 +45,12 @@ export async function startCheckoutAction(plan: CheckoutPlan): Promise<void> {
     redirect('/settings/billing?error=forbidden');
   }
 
+  // Sprzedajemy wyłącznie plan miesięczny (lib/billing/pricing.ts). Stara
+  // karta w otwartej zakładce nie może założyć subskrypcji rocznej.
+  if (plan !== 'monthly') {
+    redirect('/settings/billing?error=plan-unavailable');
+  }
+
   if (!isStripeConfigured()) {
     redirect('/settings/billing?error=not-configured');
   }

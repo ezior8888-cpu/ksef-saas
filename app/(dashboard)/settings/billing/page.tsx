@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { PRICE_PER_MONTH, PRICE_PER_MONTH_WITH_NET } from '@/lib/billing/pricing';
 import { isStripeConfigured } from '@/lib/stripe/client';
 import {
   getActiveSubscription,
@@ -38,7 +39,9 @@ function fmtDate(iso: string | null): string {
 }
 
 function fmtPlan(plan: ActiveSubscription['plan']): string {
-  return plan === 'monthly' ? 'Miesięczny (59 zł/mc)' : 'Roczny (49 zł/mc, 588 zł rocznie)';
+  // Plan roczny nie jest już sprzedawany (decyzja z 1 października 2026);
+  // etykieta zostaje dla subskrypcji założonych wcześniej.
+  return plan === 'monthly' ? `Miesięczny (${PRICE_PER_MONTH})` : 'Roczny (plan wycofany)';
 }
 
 function statusLabel(status: ActiveSubscription['status']): {
@@ -73,6 +76,7 @@ const ERROR_MESSAGES: Record<string, string> = {
     'Tylko właściciel lub admin organizacji może zarządzać subskrypcją.',
   unexpected: 'Coś poszło nie tak. Spróbuj ponownie za chwilę.',
   'tenant-not-found': 'Nie znaleziono organizacji.',
+  'plan-unavailable': 'Ten plan nie jest już dostępny. Wybierz plan miesięczny.',
 };
 
 export default async function BillingPage(props: {
@@ -133,7 +137,7 @@ export default async function BillingPage(props: {
           tone="warning"
           title="Stripe nie skonfigurowany"
           description={
-            'Aby włączyć subskrypcje, ustaw STRIPE_SECRET_KEY, STRIPE_PRICE_MONTHLY i STRIPE_PRICE_ANNUAL w env vars. Po wdrożeniu odśwież stronę.'
+            'Aby włączyć subskrypcje, ustaw STRIPE_SECRET_KEY, STRIPE_PRICE_MONTHLY i STRIPE_PRICE_ANNUAL w env vars (roczny nie jest sprzedawany, ale mapowanie cen Stripe wciąż go wymaga). Po wdrożeniu odśwież stronę.'
           }
         />
       ) : null}
@@ -248,8 +252,8 @@ function ActiveSubscriptionCard({
             value={subscription.plan === 'monthly' ? 'Miesięczny' : 'Roczny'}
             sublabel={
               subscription.plan === 'monthly'
-                ? '59 zł / mc + VAT'
-                : '588 zł / rok + VAT'
+                ? PRICE_PER_MONTH_WITH_NET
+                : 'plan wycofany'
             }
           />
           <Stat

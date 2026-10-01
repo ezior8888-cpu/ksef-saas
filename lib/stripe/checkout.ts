@@ -7,6 +7,7 @@
  */
 
 import * as Sentry from '@sentry/nextjs';
+import { TRIAL_DAYS } from '@/lib/billing/pricing';
 import type Stripe from 'stripe';
 
 import { logAuditSystem } from '@/lib/audit/log-system';
@@ -25,8 +26,6 @@ import {
 } from './checkout-store';
 
 export type CheckoutPlan = 'monthly' | 'annual';
-
-const TRIAL_DAYS = 30;
 
 export interface CreateCheckoutInput {
   tenantId: string;

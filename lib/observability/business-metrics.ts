@@ -6,6 +6,7 @@
  * cronów jest 2 dziennie/tydzień, freshness > performance.
  */
 
+import { MONTHLY_NET_PLN } from '@/lib/billing/pricing';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export interface DailyMetrics {
@@ -201,10 +202,11 @@ export async function getWeeklyMetrics(): Promise<WeeklyMetrics> {
   const active = subs.filter((s) => s.status === 'active').length;
   const trialing = subs.filter((s) => s.status === 'trialing').length;
 
-  // MRR: monthly @ 49 PLN, annual @ 49 PLN (annual / 12).
+  // MRR netto z jednej ceny (lib/billing/pricing.ts). Plan roczny wycofany —
+  // ewentualne starsze subskrypcje roczne liczymy po tej samej stawce.
   const monthlyCount = subs.filter((s) => s.status === 'active' && s.plan === 'monthly').length;
   const annualCount = subs.filter((s) => s.status === 'active' && s.plan === 'annual').length;
-  const mrrPln = monthlyCount * 49 + annualCount * 49; // 49 zł/mc effective dla obu
+  const mrrPln = Math.round((monthlyCount + annualCount) * MONTHLY_NET_PLN * 100) / 100;
 
   // Churn — canceled w ostatnich 7 dniach.
   const fromIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
