@@ -38,8 +38,11 @@ function resolveEnv(env?: KsefEnvironment): KsefEnvironment {
 
 /**
  * Pobiera UPO z KSeF API.
- * Ścieżka względem bazy `{getKsefBaseUrl(env)}/invoices/{ksefNumber}/upo`
- * (baza kończy się na `/v2`).
+ *
+ * KSeF 2.0 udostępnia UPO pojedynczej faktury wyłącznie w zasobach sesji:
+ * `GET /sessions/{sessionRef}/invoices/ksef/{ksefNumber}/upo`
+ * (CIRFMF/ksef-api, „sesja — sprawdzenie stanu i pobranie UPO”). Wcześniejsza
+ * ścieżka `/invoices/{ksefNumber}/upo` nie istnieje w API (AUD-17).
  */
 export async function downloadUpoFromKsef(
   tenantId: string,
@@ -49,8 +52,20 @@ export async function downloadUpoFromKsef(
     timeoutMs?: number;
     /** Faza 23 sekcja 3: zapis do audit_logs (fire-and-forget). */
     invoiceId?: string;
+    /** Numer sesji KSeF, w której faktura dostała numer. Bez niego UPO nie da się pobrać. */
+    sessionReferenceNumber?: string | null;
   },
 ): Promise<UpoDownloadResponse> {
+  if (!opts?.sessionReferenceNumber) {
+    return {
+      success: false,
+      error:
+        'Brak numeru sesji KSeF dla tej faktury — UPO trzeba pobrać ręcznie w Aplikacji Podatnika KSeF',
+      errorCode: 'NO_SESSION_REFERENCE',
+      retryable: false,
+    };
+  }
+  const sessionReferenceNumber = opts.sessionReferenceNumber;
   const env = resolveEnv(opts?.env);
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const auditStart = Date.now();
@@ -120,7 +135,7 @@ export async function downloadUpoFromKsef(
     }
 
     const baseUrl = getKsefBaseUrl(env);
-    const upoEndpoint = `${baseUrl}/invoices/${encodeURIComponent(ksefNumber)}/upo`;
+    const upoEndpoint = `${baseUrl}/sessions/${encodeURIComponent(sessionReferenceNumber)}/invoices/ksef/${encodeURIComponent(ksefNumber)}/upo`;
 
     const controller = new AbortController();
     const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);

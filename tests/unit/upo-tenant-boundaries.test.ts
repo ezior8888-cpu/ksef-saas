@@ -4,6 +4,13 @@ import type { JobContext } from '@/lib/jobs/registry';
 type Row = Record<string, unknown>;
 type Query = { table: string; operation: 'select' | 'insert' | 'update'; filters: Array<[string, unknown]>; patch?: Row };
 const mocks = vi.hoisted(() => ({ admin: vi.fn(), download: vi.fn(), xml: vi.fn(), pdf: vi.fn(), render: vi.fn(), audit: vi.fn(), sentry: vi.fn() }));
+vi.mock('@/lib/ksef/submission-log', () => ({
+  recordKsefSubmissionSent: vi.fn(),
+  markKsefSubmission: vi.fn(),
+  findOpenKsefSubmission: vi.fn(async () => null),
+  isOwnKsefSession: vi.fn(async () => false),
+  findSessionReferenceForKsefNumber: vi.fn(async () => 'SESJA-TEST'),
+}));
 vi.mock('@/lib/supabase/server', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/ksef/upo-client', () => ({ downloadUpoFromKsef: mocks.download }));
@@ -168,7 +175,8 @@ describe('UPO worker boundaries', () => {
   });
   it('downloads and finalizes a valid receipt with every update scoped to all identity fields', async () => {
     await expect(runDownloadUpo(event, context)).resolves.toMatchObject({ success: true });
-    expect(mocks.download).toHaveBeenCalledWith(A, REF, { invoiceId: ID });
+    // Numer sesji spoza zdarzenia — z historii wysyłek (AUD-17).
+    expect(mocks.download).toHaveBeenCalledWith(A, REF, { invoiceId: ID, sessionReferenceNumber: 'SESJA-TEST' });
     expect(mocks.render).toHaveBeenCalledWith(expect.objectContaining({ sellerName: 'Test seller', buyerName: 'Test buyer' }));
     expect(tables.upo_receipts[0].status).toBe('downloaded');
     expect(mocks.audit).toHaveBeenCalledTimes(1);
