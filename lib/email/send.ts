@@ -468,7 +468,10 @@ export interface InvoiceEmailPayload {
   to: string;
   invoiceNumber: string;
   sellerName: string;
-  grossTotalLabel: string;
+  /** Opis kwoty — „Kwota brutto”, przy ROZ „Do zapłaty (po zaliczkach)”. */
+  amountCaption: string;
+  /** Kwota z walutą, ta sama co „Do zapłaty” na PDF (`amountDueOnPdf`). */
+  amountLabel: string;
   dueDate: string;
   pdf: Buffer;
   pdfFilename: string;
@@ -491,7 +494,7 @@ export async function sendInvoiceEmail(
       <p>W załączniku przesyłamy fakturę <strong>${escapeHtml(payload.invoiceNumber)}</strong>
       od <strong>${escapeHtml(payload.sellerName)}</strong>.</p>
       <table style="margin:16px 0;font-size:14px">
-        <tr><td style="color:#6b7280;padding-right:16px">Kwota brutto</td><td><strong>${escapeHtml(payload.grossTotalLabel)}</strong></td></tr>
+        <tr><td style="color:#6b7280;padding-right:16px">${escapeHtml(payload.amountCaption)}</td><td><strong>${escapeHtml(payload.amountLabel)}</strong></td></tr>
         <tr><td style="color:#6b7280;padding-right:16px">Termin płatności</td><td>${escapeHtml(payload.dueDate)}</td></tr>
       </table>
       <p style="color:#9ca3af;font-size:12px">Wiadomość wysłana przez FaktFlow.</p>
