@@ -1,5 +1,10 @@
 # KSeF SaaS — Agent Instructions
 
+> **„Kontynuuj plan z agentem”** (sesje Igora z Claude): przeczytaj
+> [`docs/koordynacja/PLAN-AGENTA-CLAUDE.md`](docs/koordynacja/PLAN-AGENTA-CLAUDE.md),
+> zrób checklistę startową i pracuj od sekcji „Następny krok”. Po każdym
+> etapie aktualizuj w tym pliku stan i następny krok.
+
 ## Projekt
 
 Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (Krajowy System e-Faktur, Polska). Multi-tenant, solo-founder MVP, target: mikroprzedsiębiorcy i księgowi.

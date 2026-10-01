@@ -9,7 +9,7 @@
  * który ma wszystkie wymagane pola.
  */
 
-import { lookupCompanyByNip, type GusLookupResult } from '@/lib/gus/client';
+import { gusUsesSandbox, lookupCompanyByNip, type GusLookupResult } from '@/lib/gus/client';
 
 export interface RegisteredAddress {
   voivodeship: string;
@@ -63,6 +63,20 @@ export function registeredAddressFrom(result: GusLookupResult): RegisteredAddres
   return required.every(Boolean) ? address : null;
 }
 
-export async function readIssuerRegisteredAddress(nip: string): Promise<RegisteredAddress | null> {
+/**
+ * Adres siedziby do JPK_FA. Bez klucza GUS klient po cichu pyta TESTOWĄ bazę
+ * („stare, zanonimizowane dane”) — przy produkcyjnym KSeF taki adres nie może
+ * trafić do pliku dla urzędu. Wtedy `null`: JPK_FA odmawia jak przy braku
+ * adresu (job bez ponawiania, portal 422, Co-Pilot → CSV), a log mówi
+ * administratorowi, że brakuje `GUS_API_KEY`.
+ */
+export async function readIssuerRegisteredAddress(
+  nip: string,
+  env: Record<string, string | undefined> = process.env,
+): Promise<RegisteredAddress | null> {
+  if (env.KSEF_ENV === 'production' && gusUsesSandbox(env)) {
+    console.error('[jpk-fa] brak GUS_API_KEY — adres z testowej bazy GUS odrzucony, JPK_FA nie powstanie');
+    return null;
+  }
   return registeredAddressFrom(await lookupCompanyByNip(nip));
 }

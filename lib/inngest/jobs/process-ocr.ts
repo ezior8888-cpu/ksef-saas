@@ -47,6 +47,27 @@ export async function onProcessOcrExhausted(
 ): Promise<void> {
   const { ocrJobId, tenantId } = data;
   const supabase = createAdminClient();
+
+  // Wydatek mógł już powstać, a na stałe padł dopiero krok po zapisie (karta
+  // agenta, powiadomienie — np. autor zdjęcia odszedł z firmy). „Nieudane”
+  // kazałoby klientowi wpisać paragon ręcznie, czyli drugi raz do KPiR.
+  // Wtedy zadanie kończy się wskazaniem na zapisany wydatek.
+  const { data: saved } = await supabase
+    .from('expenses')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('ocr_job_id', ocrJobId)
+    .limit(1)
+    .maybeSingle();
+  if (saved) {
+    await supabase
+      .from('ocr_jobs')
+      .update({ status: 'completed', expense_id: saved.id, completed_at: new Date().toISOString() })
+      .eq('id', ocrJobId)
+      .eq('tenant_id', tenantId);
+    return;
+  }
+
   await supabase
     .from('ocr_jobs')
     .update({
@@ -174,6 +195,23 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
     });
 
     const expenseId = await step.run('create-expense', async () => {
+      // Ponowienie (pg-boss bez pamięci kroków) wykonuje cały job od nowa.
+      // Gdy zapis się udał, a padł późniejszy krok (oznaczenie zadania, karta
+      // agenta, powiadomienie), drugi przebieg dopisywał ten sam paragon
+      // jeszcze raz — koszt w KPiR liczył się podwójnie. `ocr_job_id` nie jest
+      // UNIQUE; `limit(1)`, bo dawne duble nie mogą zablokować joba.
+      const { data: existing, error: existingErr } = await supabase
+        .from('expenses')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('ocr_job_id', ocrJobId)
+        .limit(1)
+        .maybeSingle();
+      if (existingErr) {
+        throw new Error(`Nie można sprawdzić, czy wydatek już istnieje: ${existingErr.message}`);
+      }
+      if (existing) return existing.id;
+
       const data = extractedData;
       const docType =
         data.document_type === 'simplified_invoice' ? 'invoice' : data.document_type;
