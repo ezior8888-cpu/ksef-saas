@@ -88,7 +88,7 @@ się od nowa?*
 | `bulk-import` | ✅ deduplikacja po numerze i numerze KSeF + UNIQUE `(tenant_id, internal_number)`; kolizje numerów faktur odebranych to C-08 (#117) |
 | `nightly-validation-recheck`, `bulk-validate-contractors` | ❌→✅ awaria API Białej Listy/VIES (timeout, limit zapytań) zapisywała kontrahentowi „nieznany” i pustą listę rachunków na 7 dni i truła cache na 24 h — #123 |
 | `cert-expiry-alert` | ✅ data wygaśnięcia zapisywana przy wgraniu certyfikatu; progi 30/14/7 w oknach jednodniowych |
-| `cleanup-old-backups` | ❌→✅ retencja samą datą kasowała ostatnie DOBRE kopie, gdy nowe od miesiąca się nie udawały — zostaje zawsze 7 najnowszych udanych (PR „kopie zapasowe”) |
+| `cleanup-old-backups` | ❌→✅ retencja samą datą kasowała ostatnie DOBRE kopie, gdy nowe od miesiąca się nie udawały — zostaje zawsze 7 najnowszych udanych (#124) |
 | `submit-invoice`, `inbox-polling`, `self-invoice-payment`, `process-offline-queue` | Codex (stos #62–#86) — tylko czytać, uwagi przez C-xx |
 
 ### 3.2. Retencja (E7) — wynik przeglądu 01.10.2026
@@ -134,7 +134,7 @@ z #106–#110, oraz:
 
 | PR | Co | Stan |
 |---|---|---|
-| PR „kopie zapasowe” | Retencja kopii bazy zostawia zawsze 7 najnowszych udanych | w tym PR |
+| #124 | Retencja kopii bazy zostawia zawsze 7 najnowszych udanych | w tym PR |
 
 Na `main` od innych od 01.10: #113 (Bartosz, health-check KSeF), #117 (C-08,
 migracja `00096` — wgranie po stronie Bartosza).
