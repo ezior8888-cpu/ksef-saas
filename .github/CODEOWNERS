@@ -1,0 +1,57 @@
+# Obszary wrażliwe (krok 7 planu automatyzacji, docs/runbooks/agent-kodu.md).
+#
+# Dwa zastosowania:
+# 1. GitHub prosi wymienione osoby o recenzję PR, który zmienia te ścieżki.
+# 2. scripts/ci/agent-guard.mjs czyta TEN plik z gałęzi bazowej. PR agenta kodu
+#    (gałąź agent/* albo commity claude[bot]), który dotyka tych ścieżek,
+#    wymaga etykiety `zgoda:obszar-wrazliwy` nadanej przez osobę z tej listy.
+#    Zgoda wygasa przy każdym nowym pushu.
+#
+# Recenzja właściciela NIE jest wymagana w rulesecie: w zespole dwuosobowym
+# autor nie może zatwierdzić własnego PR, więc blokowałoby to zwykłą pracę.
+# Twardą bramką jest agent-guard, który dotyczy wyłącznie PR agenta.
+
+# Konfiguracja repo, CI i instrukcje dla agentów — agent nie zmienia własnych reguł
+/.github/                    @ezior8888-cpu
+/scripts/ci/                 @ezior8888-cpu
+/scripts/security/           @ezior8888-cpu
+/AGENTS.md                   @ezior8888-cpu
+/CLAUDE.md                   @ezior8888-cpu
+/renovate.json               @ezior8888-cpu
+/docs/runbooks/agent-kodu.md  @ezior8888-cpu
+
+# Łańcuch dostaw i wdrożenie
+/package.json                @ezior8888-cpu
+/pnpm-lock.yaml              @ezior8888-cpu
+/Dockerfile                  @ezior8888-cpu
+/.dockerignore               @ezior8888-cpu
+/next.config.ts              @ezior8888-cpu
+/scripts/hetzner/            @ezior8888-cpu
+
+# Baza, uprawnienia, granice dostępu
+/supabase/migrations/        @ezior8888-cpu
+/lib/supabase/               @ezior8888-cpu
+/lib/security/               @ezior8888-cpu
+/lib/auth/                   @ezior8888-cpu
+/lib/admin/                  @ezior8888-cpu
+/lib/gdpr/                   @ezior8888-cpu
+/proxy.ts                    @ezior8888-cpu
+/app/admin/                  @ezior8888-cpu
+/app/api/                    @ezior8888-cpu
+
+# KSeF, faktury, pieniądze
+/lib/ksef/                   @ezior8888-cpu
+/lib/xml/                    @ezior8888-cpu
+/lib/billing/                @ezior8888-cpu
+/lib/stripe/                 @ezior8888-cpu
+/lib/exports/                @ezior8888-cpu
+
+# Joby, kopie, wyłączniki, alarmy
+/lib/jobs/                   @ezior8888-cpu
+/lib/inngest/                @ezior8888-cpu
+/lib/backup/                 @ezior8888-cpu
+/lib/feature-flags/          @ezior8888-cpu
+/lib/alerts/                 @ezior8888-cpu
+
+# Agent FLO (wyłączniki, budżet, narzędzia)
+/lib/flo/                    @ezior8888-cpu @masloigor

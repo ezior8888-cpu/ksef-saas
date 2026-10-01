@@ -42,6 +42,78 @@ jobs:
         # Bez sekretów aplikacji i bez dostępu do bazy.
       - name: Test CodeQL gate and safe diagnostics
         run: node --test scripts/security/check-codeql-results.test.mjs scripts/security/print-codeql-locations.test.mjs
+      - name: Test agent guard rules
+        run: node --test scripts/ci/agent-guard.test.mjs
+
+  # AUD-108: błąd builda (np. plik 'use server' eksportujący nie-funkcję) wychodził
+  # dopiero przy 12–18-minutowym wdrożeniu w Coolify. Typecheck tego nie łapie.
+  build:
+    name: Next build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        # Bez sekretów aplikacji — build ma przechodzić bez nich (jak lokalnie).
+
+  # Krok 7 planu automatyzacji: testy z PR agenta kodu muszą PAŚĆ na kodzie
+  # bazowym (scripts/ci/test-first.sh). PR ludzi: job kończy się od razu.
+  test-first:
+    name: Test-first (agent)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Detect agent PR
+        id: detect
+        run: node scripts/ci/agent-guard.mjs detect
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        if: steps.detect.outputs.run == 'true'
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.detect.outputs.run == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libxml2-utils
+          pnpm install --frozen-lockfile
+      - name: New tests must fail on base
+        if: steps.detect.outputs.run == 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          TESTS: ${{ steps.detect.outputs.tests }}
+        # TESTS zawiera wyłącznie ścieżki przefiltrowane przez agent-guard.mjs.
+        run: |
+          read -r -a files <<< "$TESTS"
+          ./scripts/ci/test-first.sh "$BASE_SHA" "${files[@]}"
 
   offline-inventory:
     name: Offline security inventory
