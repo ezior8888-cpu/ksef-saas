@@ -29,6 +29,7 @@ import {
 } from './registry';
 import { ATTEMPT_KEY, decideRetry, readAttempt } from './retry';
 import { createJobStep } from './step-shim';
+import { recordJobRun } from './run-log';
 import {
   flushWorkerSentry,
   initWorkerSentry,
@@ -83,14 +84,17 @@ function wrapHandler(def: JobDefinition<never>) {
         data = parsed.data;
       }
 
+      const startedAt = Date.now();
       try {
         await def.handler(data as never, {
           step: createJobStep(jobLog),
           logger: jobLog,
           attempt,
         });
+        await recordJobRun({ queue: def.queue, runId: job.id, status: 'succeeded', durationMs: Date.now() - startedAt });
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
+        await recordJobRun({ queue: def.queue, runId: job.id, status: 'failed', durationMs: Date.now() - startedAt, error });
         const decision = decideRetry(error, attempt, policy);
 
         if (decision.action === 'retry') {

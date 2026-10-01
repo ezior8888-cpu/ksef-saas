@@ -110,7 +110,9 @@ export async function getInngestJobStats(
         lastRunAt: row.created_at,
       };
     bucket.total++;
-    if (row.status === 'success' || row.status === 'completed') {
+    // CHECK w 00003 dopuszcza tylko 'started' | 'succeeded' | 'failed';
+    // 'succeeded' zapisuje worker pg-boss (`lib/jobs/run-log.ts`).
+    if (row.status === 'succeeded' || row.status === 'success' || row.status === 'completed') {
       bucket.success++;
     } else if (row.status === 'error' || row.status === 'failed') {
       bucket.error++;

@@ -59,7 +59,7 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E1 | Eksporty: KPiR (koszty z wydatków, strony, odliczenie VAT), JPK_FA(4) wg XSD, JPK_V7M(3), CSV, eksporty programowe | ✅ / ⏳ | #58–#61, #91, #93, #97, #98, #99; wstrzymania #66, #93 |
 | E2 | Faktury: adnotacje FA(3) (MPP, metoda kasowa, „odwrotne obciążenie”), ROZ po zaliczkach, PDF korekty, kod QR, mail z kwotą do zapłaty | ✅ / ⏳ C-05 | #75, #76, #79, #84, #95, #102, #103 |
 | E3 | OCR i waluty: koszt w walucie obcej po kursie NBP | ✅ | #94 |
-| E4 | Joby pg-boss: ponowienie wykonuje CAŁY job od nowa (brak pamięci kroków) — każdy zapis musi być odporny na powtórkę | 🔄 | #109 (OCR), #112 (Co-Pilot cron), #114 (Sentry w workerze); lista w 3.1 |
+| E4 | Joby pg-boss: ponowienie wykonuje CAŁY job od nowa (brak pamięci kroków) — każdy zapis musi być odporny na powtórkę | ✅ | #109 (OCR), #112/#116 (Co-Pilot), #114 (Sentry w workerze), #118 (maile triala), #119 (zapis przebiegów); lista w 3.1 |
 | E5 | RODO / konto: usunięcie konta a subskrypcja i klucze obce | ✅ kod / ⏳ migracja B3 | #108 |
 | E6 | Konfiguracja produkcji bez cichych zastępstw (GUS sandbox, brak kluczy) | ✅ / ⏳ B2 | #107 |
 | E7 | Retencja 10 lat: joby `retention-delete`, `archive-old-invoices` — czy nic nie kasuje faktur przed terminem | ✅ sprawdzone 01.10 | uwagi w 3.2 |
@@ -81,9 +81,11 @@ się od nowa?*
 | `retention-delete`, `archive-old-invoices` | ✅ ponowienie bezpieczne (aktualizacje idempotentne) — reszta w 3.2 |
 | `exports-generate` | ✅ nazwa pliku deterministyczna, HEAD przed wgraniem do R2, upsert `export_files`. Drobiazg: JPK ma znacznik czasu, więc po ponowieniu `file_hash`/`size_bytes` mogą nie pasować do pliku w R2 — nikt ich nie weryfikuje |
 | `email-sequence` | ❌→✅ TREŚĆ: maile dnia 12 i 14 („2 dni do końca trialu”, „trial zakończony, read-only, dane usuwane po 30 dniach”) przeczyły regulaminowi (trial 30 dni), retencji i aplikacji; dzień 14 szedł do płacących — wstrzymane (#118). Ponowienia: powitalny mail może pójść drugi raz, gdy padnie planowanie dnia 1 — drobne |
-| `daily-summary-email` | ✅ raport dla operatora, bez skutku dla klientów. ALE: wskaźnik „błędy jobów” czyta `inngest_run_log`, do której NIKT nie pisze (także panel `/admin/system`) — zawsze 0; patrz następny krok |
+| `daily-summary-email` | ✅ raport dla operatora, bez skutku dla klientów. ALE: wskaźnik „błędy jobów” czytał `inngest_run_log`, do której NIKT nie pisał (także panel `/admin/system`) — zawsze 0; naprawione w #119 (worker zapisuje każdy przebieg) |
 | `magic-import-ksef` | stos Codexa (#63–#86) — tylko czytać |
-| `send-reminder`, `reminder-scheduler`, `bulk-import` | ⬜ |
+| `reminder-scheduler` | ✅ propozycje deduplikowane po `topic_key` (wyścig: 23505) |
+| `send-reminder` | ✅ mail z `idempotencyKey: 'reminder/' + approvalId` |
+| `bulk-import` | ✅ deduplikacja po numerze i numerze KSeF + UNIQUE `(tenant_id, internal_number)`; kolizje numerów faktur odebranych to C-08 (#117) |
 | `submit-invoice`, `inbox-polling`, `self-invoice-payment`, `process-offline-queue` | Codex (stos #62–#86) — tylko czytać, uwagi przez C-xx |
 
 ### 3.2. Retencja (E7) — wynik przeglądu 01.10.2026
@@ -121,10 +123,13 @@ z #106–#110, oraz:
 | #114 | Worker pg-boss inicjalizuje Sentry — alerty z jobów wcześniej nie wychodziły wcale |
 | #116 | Co-Pilot (paczka): ponowienie nie wysyła księgowej drugiego maila; zapis `emailed_at` |
 | #118 | Wstrzymane maile triala z dnia 12 i 14 (sprzeczne z regulaminem i retencją) |
+| #119 | Worker zapisuje przebiegi jobów do `inngest_run_log` — panel i raport „błędy jobów” przestają pokazywać zawsze 0 |
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak (stan po #118).
+Brak (stan po #121 — C-17, tylko dokumentacja koordynacji).
+
+Na `main` od innych od 01.10: #117 (C-08, migracja `00096` — wgranie po stronie Bartosza).
 
 Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
 Scalone cudze od 01.10: Bartosz #113 (health-check KSeF).
@@ -146,6 +151,7 @@ Scalone cudze od 01.10: Bartosz #113 (health-check KSeF).
 | Sprawa | Kto |
 |---|---|
 | C-05: adnotacje P_16/P_18A dla ROZ | Claude, po scaleniu #85 (Codex) |
+| C-17: faktura zaliczkowa bez daty otrzymania zapłaty (`P_6`, art. 106e ust. 1 pkt 6) — formularz, generator i JPK | Codex (#85 — pliki ZAL w jego stosie) |
 | JPK_V7M: pole dla „oo” (odwrotne obciążenie) i okres według daty sprzedaży | księgowa |
 | JPK_FA: korekty (C-01, konwencja kwot) | Igor + Codex |
 | Ochrona przed brakiem `KSEF_ENV` (`claim-environment`) | Codex (stos #63/#64) |
@@ -154,10 +160,10 @@ Scalone cudze od 01.10: Bartosz #113 (health-check KSeF).
 
 ## 5. Następny krok
 
-1. Ślepy panel jobów: `inngest_run_log` czytają `/admin/system`, metryki
-   biznesowe i raport dzienny, ale nic do niej nie pisze. Sprawdzić schemat
-   (00003) i dopisać zapis przebiegu w workerze pg-boss (`wrapHandler`) —
-   bez migracji, jeśli kolumny wystarczą; uwaga na wolumen cronów.
-2. Tabela 3.1, wiersze ⬜: `reminder-scheduler`, `bulk-import`, `send-reminder`
-   (logika ponagleń to stos Codexa #86 — zmiany tylko przez C-xx).
-3. E8: import, portal księgowej, walidatory, powiadomienia.
+1. E4 zamknięte (tabela 3.1 bez ⬜). Zostają joby z małą stawką
+   (`cleanup-*`, `refresh-materialized-views`, `weekly-business-review`,
+   `daily-analytics-digest`, `nightly-validation-recheck`, `cert-expiry-alert`,
+   `ksef-health-check`) — przejrzeć szybko pod kątem cichych błędów.
+2. E8: import (Magiczny Import — stos Codexa, tylko czytać), portal księgowej,
+   walidatory formularzy (`lib/validators/invoice-validators.ts` — gdzie
+   używane?), powiadomienia push.

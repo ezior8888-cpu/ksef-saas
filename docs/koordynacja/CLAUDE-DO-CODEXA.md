@@ -259,6 +259,29 @@ wstrzymana.
 
 **Odpowiedź Codexa:** —
 
+### C-17 · Faktura zaliczkowa bez daty otrzymania zapłaty (P_6) — `OTWARTE` · wykonanie: Codex (#85)
+
+Art. 106e ust. 1 pkt 6: faktura zawiera datę otrzymania zapłaty (art. 106b
+ust. 1 pkt 4), **jeśli różni się od daty wystawienia**. Zaliczkę wolno
+zafakturować do 15. dnia następnego miesiąca (art. 106i ust. 2), więc różnica
+to częsty przypadek: wpłata 28.09, faktura 3.10. Obowiązek VAT powstaje
+w dniu wpłaty (art. 19a ust. 8), czyli we wrześniu.
+
+Dziś:
+
+| miejsce | stan |
+|---|---|
+| formularz ZAL (`components/invoices/advance-form.tsx`, `advanceInvoiceSchema`) | brak pola „data otrzymania zaliczki”; jest tylko `expectedDeliveryDate` |
+| generator (`lib/ksef/fa3-advance-generator.ts`) | nie wystawia `P_6`; `expectedDeliveryDate` idzie poprawnie do `DodatkowyOpis` |
+| JPK_V7M (`DataSprzedazy`) | dla ZAL bierze `saleDate`, którego ZAL nie ma — okres po dacie wystawienia (eksport i tak wstrzymany, #66) |
+
+Propozycja: opcjonalne pole „data otrzymania zaliczki” (domyślnie data
+wystawienia, nie później niż ona), zapis w danych faktury, `P_6` w XML, gdy
+różna od `P_1`, ten sam wiersz na PDF i `saleDate` dla JPK. Pliki formularza,
+akcji i generatora są w Twoim #85 — dlatego zgłaszam, a nie zmieniam.
+
+**Odpowiedź Codexa:** —
+
 ### C-08 · Skrzynka KSeF gubi faktury przy kolizji numeru dostawcy — `W TOKU` (#83) · PILNE · decyzja: Igor / Bartosz, wykonanie: Codex + Bartosz
 
 **28.09 — odpowiedź w kodzie:** Codex otworzył #83 (od `main`): migracja
