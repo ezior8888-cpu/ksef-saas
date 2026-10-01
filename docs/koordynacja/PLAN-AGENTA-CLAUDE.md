@@ -134,16 +134,21 @@ z #106–#110, oraz:
 | #121 | C-17 w kanale z Codexem (tylko dokumentacja) |
 | #123 | Awaria API Białej Listy/VIES nie kasuje statusu VAT i rachunków kontrahenta ani nie truje cache |
 | #124 | Retencja kopii bazy zostawia zawsze 7 najnowszych udanych |
+| #127 | Plan: E10/E11 przejrzane, E12 samochód do decyzji (scalony razem z PR „podatek od stycznia”) |
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak (ten PR to tylko aktualizacja planu).
+| PR | Co | Stan |
+|---|---|---|
+| PR „podatek od stycznia” | Kafelek „Szac. podatek” na przepływach liczy od 1 stycznia (był: ostatnie 6 miesięcy, także z zeszłego roku) + C-18 | w tym PR |
 
-Na `main` od innych od 01.10: #113 (Bartosz, health-check KSeF), #117 (C-08,
-migracja `00096` — wgranie po stronie Bartosza).
+Na `main` od innych od 01.10: Bartosz #113 (health-check KSeF), #117 (C-08,
+migracja `00096`), #120 (alerty Telegram + heartbeat workera), #126
+(uzgadnianie niepewnego wyniku KSeF, migracja `00099`) — wgranie migracji po
+stronie Bartosza.
 
 Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104, #122 (PDF bez
-poprawnych kodów QR); Bartosz #90, #120 (alerty Telegram + heartbeat workera).
+poprawnych kodów QR); Bartosz #90.
 
 ### 4.3. Prośby do Bartosza (migracje, produkcja)
 
@@ -163,6 +168,8 @@ poprawnych kodów QR); Bartosz #90, #120 (alerty Telegram + heartbeat workera).
 |---|---|
 | C-05: adnotacje P_16/P_18A dla ROZ | Claude, po scaleniu #85 (Codex) |
 | C-17: faktura zaliczkowa bez daty otrzymania zapłaty (`P_6`, art. 106e ust. 1 pkt 6) — formularz, generator i JPK | Codex (#85 — pliki ZAL w jego stosie) |
+| C-18: strona przepływów ma ładować dane od 1 stycznia i przekazać `dataFrom` — wtedy szacunek podatku obejmie cały rok | Codex (`przeplywy/page.tsx` w jego stosie) |
+| Szacunek podatku zakłada 19% liniowy dla każdego (podpisane na kafelku); skala 12/32% i ryczałt dałyby inne kwoty, brak też odliczenia składki zdrowotnej — Flo ma profil podatkowy (`taxGateOpen`), z którego można by brać formę | decyzja produktowa (Bartosz — właściciel strony) |
 | JPK_V7M: pole dla „oo” (odwrotne obciążenie) i okres według daty sprzedaży | księgowa |
 | JPK_FA: korekty (C-01, konwencja kwot) | Igor + Codex |
 | Ochrona przed brakiem `KSEF_ENV` (`claim-environment`) | Codex (stos #63/#64) |
@@ -174,11 +181,10 @@ poprawnych kodów QR); Bartosz #90, #120 (alerty Telegram + heartbeat workera).
 
 ## 5. Następny krok
 
-1. E13 (nowy): szacunki podatków pokazywane klientowi — przepływy
-   (`app/(dashboard)/przeplywy`, `components/expenses/cash-flow-dashboard.tsx`)
-   i funkcje podatkowe Flo (grupa T, `isTaxKind`) — czy VAT/PIT „do odłożenia”
-   liczą się poprawnie dla ROZ (zaliczki), korekt, „zw”, kosztów w walucie
-   i paragonów. Klient na tej podstawie odkłada pieniądze na podatek.
+1. E13 dalej: przepływy naprawione (PR „podatek od stycznia”, C-18).
+   Zostają funkcje podatkowe Flo (grupa T, `isTaxKind` w `lib/flo`) — czy
+   VAT/PIT „do odłożenia” liczą się poprawnie dla ROZ (zaliczki), korekt,
+   „zw”, kosztów w walucie i paragonów, i od 1 stycznia.
 2. Po decyzji Igora/księgowej: E12 (samochód 50%/75%).
 3. Po scaleniu #85 (Codex): C-05 — adnotacje P_16/P_18A dla ROZ.
 4. Po scaleniu #90 (Bartosz): przegląd snapshotu i weryfikacji kopii (dziś
