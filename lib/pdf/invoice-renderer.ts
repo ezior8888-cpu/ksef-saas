@@ -3,7 +3,7 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 
 import type { Invoice, InvoiceLineItem, VatRate } from '@/types/invoice';
-import { CASH_METHOD_LABEL, SPLIT_PAYMENT_LABEL } from '@/lib/invoices/annotations';
+import { CASH_METHOD_LABEL, REVERSE_CHARGE_LABEL, SPLIT_PAYMENT_LABEL } from '@/lib/invoices/annotations';
 
 /**
  * Renderer PDF faktury FA(3) (Faza 33 Krok 1-2).
@@ -427,6 +427,14 @@ function drawFooter(
   if (invoice.annotations?.cashMethod === 1) {
     doc.font('bold').fontSize(9).fillColor('#222222');
     doc.text(CASH_METHOD_LABEL, left, doc.y, { width });
+    doc.y += 4;
+  }
+  // Art. 106e ust. 1 pkt 18 — podatek rozlicza nabywca. Jak w XML (P_18=1):
+  // każda pozycja „oo”. W kolumnie stawki jest tylko skrót „o.o.”, a nabywca
+  // spoza KSeF (np. zagraniczny) dostaje wyłącznie ten PDF.
+  if (invoice.lines.some((l) => l.vatRate === 'oo')) {
+    doc.font('bold').fontSize(9).fillColor('#222222');
+    doc.text(REVERSE_CHARGE_LABEL, left, doc.y, { width });
     doc.y += 4;
   }
   // Art. 106e ust. 1 pkt 18a — obowiązkowe wyrazy przy MPP.

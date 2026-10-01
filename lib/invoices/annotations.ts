@@ -19,6 +19,12 @@ export const CASH_METHOD_LABEL = 'metoda kasowa';
 /** Obowiązkowe wyrazy na fakturze z MPP (art. 106e ust. 1 pkt 18a). */
 export const SPLIT_PAYMENT_LABEL = 'mechanizm podzielonej płatności';
 
+/**
+ * Obowiązkowe wyrazy, gdy podatek rozlicza nabywca (art. 106e ust. 1 pkt 18).
+ * W XML to P_18=1, wymuszane każdą pozycją „oo” (`lib/xml/fa3-generator.ts`).
+ */
+export const REVERSE_CHARGE_LABEL = 'odwrotne obciążenie';
+
 export function suggestsSplitPayment(grossTotal: number, buyerIsConsumer: boolean): boolean {
   return !buyerIsConsumer && grossTotal >= SPLIT_PAYMENT_THRESHOLD_PLN;
 }

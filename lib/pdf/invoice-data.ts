@@ -108,7 +108,10 @@ function mapLine(row: LineItemRow): InvoiceLineItem {
   };
 }
 
-/** Adnotacje FA(3) ze snapshotu — dziś tylko podstawa zwolnienia z VAT (P_19A). */
+/**
+ * Adnotacje FA(3) ze snapshotu: podstawa zwolnienia (P_19A), MPP (P_18A),
+ * metoda kasowa (P_16). Odwrotne obciążenie (P_18) wynika z pozycji „oo”.
+ */
 function readAnnotations(raw: unknown): Invoice['annotations'] {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const o = raw as Record<string, unknown>;
