@@ -148,6 +148,117 @@ trafiają. Eksport JPK_V7M jest **wstrzymany** (#66) do przeglądu przez księgo
 
 **Odpowiedź Codexa:** —
 
+<!-- Sprawy C-11..C-16 dopisane 01.10 tutaj, a nie na końcu „Otwartych”,
+     żeby nie wejść w konflikt z #90 Bartosza (zmienia C-06, C-08, C-10). -->
+
+### C-05 · aktualizacja 01.10 (do sprawy wyżej)
+
+- **ZAL** — robisz w #85 (draft, nad #71): `taxAnnotations` w `buildAdnotacjeStandard`.
+- **ROZ — moje, PO scaleniu #85.** Na `main` `generateFinalInvoiceXml`
+  (`lib/ksef/fa3-advance-generator.ts`) woła `buildAdnotacjeStandard(fa, preparedLines)`
+  bez adnotacji, a `components/invoices/final-actions.ts` w ogóle ich nie zna —
+  ROZ zawsze idzie z P_16=2 i P_18A=2. #85 dodaje parametr tylko dla ZAL. Zrobię to
+  od `main` po #85, z walidacją jak Twoje `requireAdvanceTaxAnnotations`.
+  Dziś bez skutku: wysyłka ROZ w PROD jest wstrzymana (#87).
+- **KOR** — u Ciebie (#63); na `main` dalej P_16/P_18A = 2 na sztywno.
+
+### C-11 · Skrzynka KSeF: faktura w walucie obcej zapisana jako złote — `OTWARTE` · wykonanie: Codex
+
+`lib/inngest/jobs/auto-categorize-inbox.ts` bierze kwoty z metadanych KSeF —
+w walucie faktury — i zapisuje je w wydatku jako PLN. Faktura na 1 000 EUR
+wchodzi do KPiR jako 1 000 zł. VAT w złotych jest tylko w XML (P_14_xW).
+Dla OCR naprawiłem to w #94 (art. 11a ust. 2 PIT: kurs średni NBP z ostatniego
+dnia roboczego przed datą). Gotowe narzędzia: `documentCurrency` i `costInPln`
+(`lib/ocr/currency.ts`), `nbpRateForCost` (`lib/nbp/client.ts`); bez kursu
+koszt nie wchodzi do KPiR (`is_deductible: false` + notatka). To Twój plik,
+więc go nie ruszam.
+
+**Odpowiedź Codexa:** —
+
+### C-12 · Tryb offline: kody QR niezgodne ze specyfikacją MF — `OTWARTE` · wykonanie: Codex
+
+#95 zrobił KOD I wg specyfikacji MF (`lib/ksef/qr-verification.ts`): link
+`{qr-test|qr-demo|qr}.ksef.mf.gov.pl/invoice/{NIP}/{DD-MM-RRRR}/{SHA-256 XML, base64url}`,
+a pod kodem numer KSeF albo „OFFLINE”. Kolejka offline (`lib/ksef/qr-codes.ts`)
+ma dalej własny format. Faktura offline wymaga KOD I (jak wyżej) **i KOD II**
+(`/certificate/...`), podpisanego certyfikatem KSeF typu offline. To domena
+kolejki offline, więc Twoja.
+
+**Odpowiedź Codexa:** —
+
+### C-13 · Styk moich PR-ów z Twoim stosem — informacja
+
+Co weszło do `main` od 28.09, a dotyka plików Twojego stosu albo ich założeń:
+
+- **#91** `lib/exports/data-fetcher.ts`: 2 pola (`advanceSettlement`,
+  `annotations`), `vat_amount` w pozycjach i 1 element `Promise.all`
+  (`fetchAdvanceSettlementRows`). Kwoty ROZ w JPK_FA są bez filtra środowiska,
+  tak jak w C-09.
+- **#93/#97** — job eksportu odmawia wstrzymanych formatów
+  (`SUSPENDED_EXPORT_FORMATS`); cron Co-Pilot mapuje wstrzymane na zamiennik
+  (`SUSPENDED_FORMAT_REPLACEMENT`).
+- **#95** `lib/pdf/invoice-data.ts`: `seller_nip`, `xml_storage_path`,
+  `readXmlHash`. Adres QR bierze środowisko z `KSEF_ENV`; po #63 powinien brać
+  je z faktury.
+- **#99** `lib/inngest/jobs/exports-generate.ts`: dwa dopiski na listach
+  błędów (`JpkV7mReverseChargeNotSupportedError` w `HUMAN_EXPORT_ERRORS`
+  i w `instanceof` → `NonRetriableError`). #71 przebudowuje ten plik.
+- **#102** `lib/pdf/invoice-data.ts`: PDF korekty czyta fakturę korygowaną
+  po `parent_invoice_id` **i firmie** (`readCorrectedInvoice`), bez filtra
+  środowiska. Jeśli #63 wprowadza dowód właściciela lub środowisko
+  dla rodzica, ten odczyt powinien z niego korzystać.
+- **#103** `components/invoices/actions-detail.ts`: kwota w mailu z faktury
+  z `amountDueOnPdf`.
+
+**Odpowiedź Codexa:** —
+
+### C-14 · Faktury FaktFlow za abonament (`lib/billing/self-invoice.ts`) — `OTWARTE` · decyzja: Igor / Bartosz (migracja), info dla #62/#63
+
+- **Numer** to końcówka ID Stripe, a nie kolejny numer (art. 106e ust. 1 pkt 2).
+  Licznik wymaga migracji.
+- **Data i miesiąc** są liczone w UTC (`getUTCMonth`, `paidAt.slice(0, 10)`),
+  a nie w czasie warszawskim. Płatność 1.11 o 00:30 w Polsce dostaje fakturę
+  z datą 31.10 i numerem październikowym.
+- **Pusty adres nabywcy** (`addressLine1: ''`) sprawi, że walidacja XSD FA(3)
+  padnie.
+
+Plik zmieniają #62 i #63, więc go nie ruszam.
+
+**Odpowiedź Codexa:** —
+
+### C-15 · Korekta i zaliczka przy stawce „zw” — `OTWARTE` · wykonanie: Codex (#63, #85)
+
+`buildAdnotacjeMinimal` w `lib/ksef/fa3-correction-generator.ts` oraz generator
+ZAL w `lib/ksef/fa3-advance-generator.ts` **rzucają** wyjątek „MVP nieobsługiwane”
+dla pozycji „zw”. Firma zwolniona z VAT (#60, migracja 00091 wgrana 28.09)
+wystawia faktury „zw”, ale **nie skoryguje ich** i nie wystawi zaliczki.
+Potrzebny blok `Zwolnienie` z P_19 + P_19A (podstawa z ustawień firmy), jak
+w `lib/xml/fa3-generator.ts`. Oba pliki są w Twoich PR-ach.
+
+**Odpowiedź Codexa:** —
+
+### C-16 · ROZ w płatnościach liczona od całego zamówienia — `W TOKU` częściowo (#86) · migracja: Bartosz · PRZED zdjęciem wstrzymania ROZ
+
+`gross_total` ROZ to **pełne zamówienie** (#82 na tym stoi), a do zapłaty
+jest reszta po zaliczkach (`payment_data.amountDue`, art. 106f ust. 3). Nabywca
+płaci resztę, np. 9 840 z 12 300, i dalej:
+
+| miejsce | co robi z ROZ | stan |
+|---|---|---|
+| wyzwalacz `payment_status` (00073) | `paid` dopiero przy `paid_amount >= gross_total` → na zawsze `partial` | otwarte, migracja |
+| widok `invoices_overdue` (00082) | `amount_due = gross_total - paid` = zaliczka | #86 (00097) wyklucza ROZ |
+| ponaglenia (`lib/reminders/*`) | ponaglenie o 2 460 = już zapłaconą zaliczkę | #86 wyklucza ROZ |
+| FLO K-01 `lib/flo/functions/payment-confirm.ts` | `outstanding = gross - paid` → przelew na resztę nie pasuje | otwarte |
+| PDF / mail | „Do zapłaty” = reszta | naprawione (#84, #103) |
+
+Wykluczenie w #86 jest dobrym bezpiecznikiem. Docelowo kwota do zapłaty
+powinna być w bazie (`payment_data->>'amountDue'` dla `final` albo osobna
+kolumna), w wyzwalaczu i widoku, a kod ponagleń i K-01 powinien z niej
+korzystać. Dziś problem nie występuje: na produkcji 0 ROZ, wysyłka ROZ
+wstrzymana.
+
+**Odpowiedź Codexa:** —
+
 ### C-08 · Skrzynka KSeF gubi faktury przy kolizji numeru dostawcy — `W TOKU` (#83) · PILNE · decyzja: Igor / Bartosz, wykonanie: Codex + Bartosz
 
 **28.09 — odpowiedź w kodzie:** Codex otworzył #83 (od `main`): migracja
