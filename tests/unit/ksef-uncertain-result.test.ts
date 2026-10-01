@@ -55,6 +55,8 @@ vi.mock('@/lib/ksef/submission-log', () => ({
   findSessionReferenceForKsefNumber: vi.fn(async () => null),
 }));
 vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn() }));
+// Krok 5: job czyta wyłącznik wysyłek autorytatywnie — tu zdjęty.
+vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: async () => false }));
 vi.mock('@/lib/ksef/submit-invoice-full', () => ({ submitInvoiceFullFlow: mocks.fullFlow }));
 vi.mock('@/lib/ksef/health-check', () => ({ shouldUseOfflineMode: async () => ({ offline: false }) }));
 vi.mock('@/lib/ksef/offline-queue', () => ({ addToOfflineQueue: vi.fn() }));
