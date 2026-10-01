@@ -74,7 +74,7 @@ się od nowa?*
 |---|---|
 | `process-ocr` | ❌→✅ dubel wydatku w KPiR — #109 |
 | `co-pilot-monthly` (cron) | ❌→✅ rezerwacja okresu przed wysłaniem zdarzenia; ponowienie pomijało firmy → paczka za miesiąc nie wychodziła — #112 |
-| `co-pilot-monthly` (paczka) | ⚠️ ponowienie po wysłaniu maila tworzy nowe eksporty i wysyła mail drugi raz; nieudana paczka zostaje „zarezerwowana” bez alertu — do zrobienia po cronie |
+| `co-pilot-monthly` (paczka) | ❌→✅ ponowienie po wysłanym mailu tworzyło nowe eksporty i wysyłało mail drugi raz; `emailed_at` nikt nie zapisywał — PR „paczka raz”; nieudana paczka → Sentry od #114 |
 | `auto-categorize-inbox` | ✅ sprawdza istniejący wydatek po `ksef_invoice_id` |
 | `download-upo` | ✅ odczyt/aktualizacja istniejącego rekordu |
 | `dunning-payment-failed`, `trial-countdown-emails` | ✅ claim w `billing_notifications` |
@@ -115,10 +115,11 @@ z #106–#110, oraz:
 | #110 | Ten plan + wskaźnik w `AGENTS.md` |
 | #112 | Co-Pilot (cron): ponowienie nie gubi miesięcznej paczki dla księgowej |
 | #114 | Worker pg-boss inicjalizuje Sentry — alerty z jobów wcześniej nie wychodziły wcale |
+| PR „paczka raz” | Co-Pilot (paczka): ponowienie nie wysyła księgowej drugiego maila; zapis `emailed_at` |
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak (stan po #114).
+Brak (stan po PR „paczka raz”).
 
 Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90,
 #113 (health-check KSeF).
@@ -147,9 +148,8 @@ Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90,
 
 ## 5. Następny krok
 
-1. Co-Pilot (paczka, `runCoPilotSendPackage`): ponowienie po wysłanym mailu
-   nie może wysłać go drugi raz ani tworzyć nowych `export_jobs`; nieudana
-   paczka → alert (od #114 wyczerpany job idzie do Sentry sam). Znacznik:
-   `export_jobs.emailed_at` — UI go czyta, ale nikt go nie zapisuje.
-2. Dalej tabela 3.1 od góry (wiersze ⬜).
-3. E8: import, portal księgowej, walidatory, powiadomienia.
+1. Tabela 3.1, wiersze ⬜: `exports-generate`, `email-sequence`,
+   `reminder-scheduler`, `magic-import-ksef`, `bulk-import`,
+   `daily-summary-email` (`send-reminder` — tylko czytać, ponaglenia to stos
+   Codexa #86).
+2. E8: import, portal księgowej, walidatory, powiadomienia.
