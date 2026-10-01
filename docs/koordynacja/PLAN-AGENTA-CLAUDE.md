@@ -127,7 +127,7 @@ z #106–#110, oraz:
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak (stan po #119).
+PR „C-17” (tylko dokumentacja koordynacji).
 
 Na `main` od innych od 01.10: #117 (C-08, migracja `00096` — wgranie po stronie Bartosza).
 
@@ -151,6 +151,7 @@ Scalone cudze od 01.10: Bartosz #113 (health-check KSeF).
 | Sprawa | Kto |
 |---|---|
 | C-05: adnotacje P_16/P_18A dla ROZ | Claude, po scaleniu #85 (Codex) |
+| C-17: faktura zaliczkowa bez daty otrzymania zapłaty (`P_6`, art. 106e ust. 1 pkt 6) — formularz, generator i JPK | Codex (#85 — pliki ZAL w jego stosie) |
 | JPK_V7M: pole dla „oo” (odwrotne obciążenie) i okres według daty sprzedaży | księgowa |
 | JPK_FA: korekty (C-01, konwencja kwot) | Igor + Codex |
 | Ochrona przed brakiem `KSEF_ENV` (`claim-environment`) | Codex (stos #63/#64) |
