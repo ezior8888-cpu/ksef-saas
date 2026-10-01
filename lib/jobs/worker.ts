@@ -43,6 +43,7 @@ import './handlers/package-b';
 import './handlers/package-c';
 import './handlers/package-d';
 import './handlers/flo-tick';
+import './handlers/ops-heartbeat';
 
 const log = createJobLogger('worker');
 

@@ -18,7 +18,14 @@ import {
 } from '@/lib/supabase/admin-queries';
 import { createAdminClient } from '@/lib/supabase/server';
 import { KsefApiError } from '@/lib/ksef/client';
-import { KsefInvoiceRejectedError } from '@/lib/ksef/submit';
+import { checkInvoiceStatusByReference, KsefInvoiceRejectedError } from '@/lib/ksef/submit';
+import { ksefSessionCache } from '@/lib/ksef/session-cache';
+import {
+  findOpenKsefSubmission,
+  isOwnKsefSession,
+  markKsefSubmission,
+} from '@/lib/ksef/submission-log';
+import { invoiceXmlKey } from '@/lib/storage/r2';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
@@ -30,6 +37,27 @@ import {
   KSEF_TENANT_THROTTLE_LIMIT,
   KSEF_TENANT_THROTTLE_PERIOD,
 } from '../retry-schedule';
+
+/**
+ * Odpowiedź 440 „duplikat”, której NIE da się przypisać do naszej wcześniejszej
+ * wysyłki tej faktury (inny numer sesji albo brak historii). KSeF wykrywa
+ * duplikat po numerze faktury sprzedawcy, a ten numer mógł zostać użyty poza
+ * FaktFlow — przypięcie cudzego numeru KSeF byłoby błędnym zapisem prawnym.
+ * Stan neutralny „do uzgodnienia” (jak wstrzymana ROZ), bez komunikatu
+ * „odrzucona”. Znacznik w treści błędu, bo przechodzi przez oba backendy jobów.
+ */
+export const KSEF_DUPLICATE_RECONCILE = 'KSEF_DUPLICATE_RECONCILE';
+
+/** Wynik wysyłki niezależnie od drogi: nowa wysyłka, uzgodnienie albo własny duplikat. */
+interface SubmitOutcome {
+  ksefNumber: string;
+  xmlStoragePath: string;
+  acquisitionTimestamp?: string;
+  sessionReferenceNumber?: string;
+  invoiceReferenceNumber?: string;
+  /** Skąd wiemy o akceptacji — do audytu. */
+  via: 'submit' | 'reference-reconcile' | 'own-duplicate';
+}
 
 /**
  * Job wysyłki faktury do KSeF.
@@ -153,6 +181,8 @@ export async function onSubmitInvoiceExhausted(
         return { handled: true, alreadyAccepted: true, ksefNumber: current.ksef_number };
       }
       const heldRoz = isHeldRozSubmission(parsed.data, current);
+      const duplicateReconcile = !heldRoz && error.message.includes(KSEF_DUPLICATE_RECONCILE);
+      const reconcileHold = heldRoz || duplicateReconcile;
 
       // Klasyfikacja błędu (Faza 23 sekcja 3):
       //   - `NonRetriableError` → walidacja / 4xx → 'rejected' (nie ma sensu
@@ -161,11 +191,13 @@ export async function onSubmitInvoiceExhausted(
       //     transient outage → Offline24 fallback.
       //   - Z Offline24 (`fromOfflineQueue=true`) — już parkowane, nie
       //     duplikujemy. Mark 'failed' i emit event.
-      const isBusinessRejection = !heldRoz && error.name === 'NonRetriableError';
-      const isTransientFailure = !isBusinessRejection && !heldRoz;
+      const isBusinessRejection = !reconcileHold && error.name === 'NonRetriableError';
+      const isTransientFailure = !isBusinessRejection && !reconcileHold;
       const failureMessage = heldRoz
         ? ROZ_RECONCILIATION_MESSAGE
-        : `${error.name}: ${error.message}`;
+        : duplicateReconcile
+          ? error.message.replace(`[${KSEF_DUPLICATE_RECONCILE}] `, '')
+          : `${error.name}: ${error.message}`;
 
       logger.error('Job wysyłki padł — klasyfikacja błędu', {
         tenantId,
@@ -175,6 +207,7 @@ export async function onSubmitInvoiceExhausted(
         errorName: error.name,
         errorMessage: error.message,
         heldRoz,
+        duplicateReconcile,
         isBusinessRejection,
         isTransientFailure,
         fromOfflineQueue,
@@ -186,16 +219,17 @@ export async function onSubmitInvoiceExhausted(
         : 'failed';
       let statusWriteLost = false;
 
-      if (heldRoz) {
-        // A local safety hold is not a rejection from KSeF. A conditional
+      if (reconcileHold) {
+        // A local safety hold (ROZ) or a 440 we cannot attribute to our own
+        // earlier submission is not a rejection from KSeF. A conditional
         // update cannot overwrite a concurrent acceptance by another worker.
-        const marked = await step.run('mark-as-failed-roz-hold', async () => {
+        const marked = await step.run(heldRoz ? 'mark-as-failed-roz-hold' : 'mark-as-duplicate-reconcile', async () => {
           const { data: updated, error: updateError } = await (await createAdminClient())
             .from('invoices')
             .update({
               ksef_status: 'failed',
-              last_error: ROZ_RECONCILIATION_MESSAGE,
-              last_error_code: 'ROZ_HOLD_RECONCILE',
+              last_error: failureMessage,
+              last_error_code: heldRoz ? 'ROZ_HOLD_RECONCILE' : KSEF_DUPLICATE_RECONCILE,
               last_error_field: null,
               last_error_suggestion: null,
             })
@@ -204,7 +238,7 @@ export async function onSubmitInvoiceExhausted(
             .or('ksef_status.is.null,ksef_status.neq.accepted')
             .select('id')
             .maybeSingle();
-          if (updateError) throw new Error('Nie można oznaczyć ROZ do uzgodnienia');
+          if (updateError) throw new Error('Nie można oznaczyć faktury do uzgodnienia');
           return updated?.id === invoiceId;
         });
         if (!marked) {
@@ -213,7 +247,7 @@ export async function onSubmitInvoiceExhausted(
             await reconcileAcceptedOfflineQueue(parsed.data, true);
             return { handled: true, alreadyAccepted: true, ksefNumber: latest.ksef_number };
           }
-          throw new Error('Nie można potwierdzić stanu ROZ po wstrzymaniu');
+          throw new Error('Nie można potwierdzić stanu faktury do uzgodnienia');
         }
       } else if (fromOfflineQueue) {
         // Już byliśmy w offline queue — nie zapętlamy parkingu. Mark final.
@@ -331,8 +365,8 @@ export async function onSubmitInvoiceExhausted(
           fromOfflineQueue: data.fromOfflineQueue,
           // Bez tego kolejka Offline24 przywracała odrzuconą fakturę do
           // 'queued' i ponawiała ją do upływu terminu.
-          terminal: isBusinessRejection || heldRoz,
-          manualReconciliationRequired: heldRoz,
+          terminal: isBusinessRejection || reconcileHold,
+          manualReconciliationRequired: reconcileHold,
         },
       });
 
@@ -603,7 +637,59 @@ export async function runSubmitInvoice(
     // wcześniejszych (status w DB już 'sending'). Przy retry credentials
     // wczytamy ponownie z DB — koszt: jeden dodatkowy SELECT + decrypt,
     // zysk: brak wycieku PEM-a do zewnętrznego storage'u.
-    const result = await step.run('submit-to-ksef', async () => {
+    // Krok 2.5 (AUD-01): jeśli wcześniejsza próba dotarła do KSeF (mamy jej
+    // numery referencyjne), pytamy o status TEJ wysyłki zamiast wysyłać fakturę
+    // drugi raz. Bez tego timeout pollingu, 5xx albo padnięty worker kończyły
+    // się ponowną wysyłką, odpowiedzią 440 i fałszywym „odrzucona”.
+    const reconciled = await step.run('reconcile-previous-submission', async (): Promise<SubmitOutcome | null> => {
+      const previous = await findOpenKsefSubmission(tenantId, invoiceId);
+      if (!previous) return null;
+      const credentials = await getTenantKsefCredentials(tenantId);
+      try {
+        const status = await checkInvoiceStatusByReference(previous, credentials, env, {
+          tenantId,
+          invoiceId,
+        });
+        if (status.state === 'processing') {
+          throw new RetryAfterError(
+            'KSeF nadal przetwarza wcześniejszą wysyłkę tej faktury — czekam zamiast wysyłać ponownie',
+            getKsefRetryDelay(attempt),
+          );
+        }
+        return {
+          ksefNumber: status.ksefNumber,
+          acquisitionTimestamp: status.acquisitionTimestamp,
+          xmlStoragePath: invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
+          sessionReferenceNumber: previous.sessionReferenceNumber,
+          invoiceReferenceNumber: previous.invoiceReferenceNumber,
+          via: 'reference-reconcile',
+        };
+      } catch (error) {
+        if (error instanceof RetryAfterError) throw error;
+        if (error instanceof KsefInvoiceRejectedError && !error.isDuplicate) {
+          await markKsefSubmission({
+            tenantId,
+            invoiceId,
+            invoiceReferenceNumber: previous.invoiceReferenceNumber,
+            status: 'rejected',
+            errorCode: String(error.code),
+            errorMessage: error.message,
+          });
+          throw new NonRetriableError(error.message, { cause: error });
+        }
+        if (error instanceof KsefApiError && error.status === 401) {
+          ksefSessionCache.invalidate(credentials.nip, env);
+        }
+        // Awaria łącza albo KSeF: ponawiamy UZGADNIANIE, nigdy wysyłkę.
+        throw new RetryAfterError(
+          `Uzgadnianie wcześniejszej wysyłki KSeF nieudane: ${error instanceof Error ? error.message : 'nieznany błąd'}`,
+          getKsefRetryDelay(attempt),
+          { cause: error instanceof Error ? error : undefined },
+        );
+      }
+    });
+
+    const result: SubmitOutcome = reconciled ?? await step.run('submit-to-ksef', async (): Promise<SubmitOutcome> => {
       const current = await currentSubmissionState(parsed.data);
       if ((current.ksef_status === 'accepted' && current.ksef_number) ||
           isHeldRozSubmission(parsed.data, current)) {
@@ -624,7 +710,7 @@ export async function runSubmitInvoice(
               }
             : null;
 
-        return await submitInvoiceFullFlow(
+        const submitted = await submitInvoiceFullFlow(
           tenantId,
           invoiceId,
           invoice,
@@ -634,6 +720,7 @@ export async function runSubmitInvoice(
           parsed.data.advanceData ?? null,
           finalPayload,
         );
+        return { ...submitted, via: 'submit' };
       } catch (error) {
         if (error instanceof KsefNotVerifiedError) {
           throw new NonRetriableError(
@@ -646,6 +733,16 @@ export async function runSubmitInvoice(
         if (error instanceof InvoiceValidationError) {
           throw new NonRetriableError(
             `Faktura nie przeszła walidacji: ${error.message}`,
+            { cause: error },
+          );
+        }
+        // 401: wygasła sesja z pamięci podręcznej — to nie odrzucenie faktury.
+        // Ponowienie zacznie od uzgodnienia, jeśli plik zdążył dotrzeć do KSeF.
+        if (error instanceof KsefApiError && error.status === 401) {
+          ksefSessionCache.invalidate(credentials.nip, env);
+          throw new RetryAfterError(
+            'Sesja KSeF wygasła — ponowię z nową sesją',
+            getKsefRetryDelay(attempt),
             { cause: error },
           );
         }
@@ -662,6 +759,29 @@ export async function runSubmitInvoice(
         // Odrzucenie w STATUSIE faktury (HTTP 200, kod ≥ 400) — ta sama decyzja
         // o treści co wyżej. Wcześniej leciało jako zwykły Error: 5 ponownych
         // wysyłek, potem Offline24. Przy 440 (duplikat) faktura już JEST w KSeF.
+        if (error instanceof KsefInvoiceRejectedError && error.isDuplicate) {
+          // 440: KSeF ma już fakturę o tym numerze. Jeśli to NASZA wcześniejsza
+          // wysyłka tej faktury (numer sesji z odpowiedzi jest w historii),
+          // przyjmujemy jej numer KSeF zamiast oznaczać fakturę jako odrzuconą.
+          const ownSession =
+            error.originalKsefNumber && error.originalSessionReferenceNumber
+              ? await isOwnKsefSession(tenantId, invoiceId, error.originalSessionReferenceNumber)
+              : false;
+          if (ownSession && error.originalKsefNumber && error.originalSessionReferenceNumber) {
+            return {
+              ksefNumber: error.originalKsefNumber,
+              xmlStoragePath: invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
+              sessionReferenceNumber: error.originalSessionReferenceNumber,
+              via: 'own-duplicate',
+            };
+          }
+          Sentry.captureException(error, {
+            tags: { job: 'submit-invoice', kind: 'ksef-duplicate' },
+            extra: { tenantId, invoiceId, ksefStatusCode: error.code, originalKsefNumber: error.originalKsefNumber },
+          });
+          // Nie wiemy, czyja to faktura — do uzgodnienia, nie „odrzucona”.
+          throw new NonRetriableError(`[${KSEF_DUPLICATE_RECONCILE}] ${error.message}`, { cause: error });
+        }
         if (error instanceof KsefInvoiceRejectedError) {
           Sentry.captureException(error, {
             tags: {
@@ -727,6 +847,25 @@ export async function runSubmitInvoice(
         last_error_suggestion: null,
       }, tenantId);
 
+      // Historia prób: wpis zamykamy po zapisie akceptacji. Fail-soft — błąd tu
+      // nie może cofnąć akceptacji ani zablokować zdarzenia UPO niżej.
+      if (result.invoiceReferenceNumber) {
+        try {
+          await markKsefSubmission({
+            tenantId,
+            invoiceId,
+            invoiceReferenceNumber: result.invoiceReferenceNumber,
+            status: 'accepted',
+            ksefNumber: result.ksefNumber,
+          });
+        } catch (e) {
+          logger.warn('Nie zamknięto wpisu historii wysyłki KSeF', {
+            invoiceId,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+
       // Faza 22: faktura zaakceptowana → dashboard KPI się zmieniają.
       // Czyścimy cache żeby user widział świeży count zamiast czekać na 5min TTL.
       const { invalidateTenantDashboard } = await import('@/lib/cache/invalidation');
@@ -754,6 +893,8 @@ export async function runSubmitInvoice(
         // zalaniu KSeF /upo żądaniami z jednego podmiotu.
         nip,
         ksefNumber: result.ksefNumber,
+        // KSeF 2.0 trzyma UPO w zasobach sesji (AUD-17).
+        sessionReferenceNumber: result.sessionReferenceNumber,
       },
     });
 
@@ -763,7 +904,7 @@ export async function runSubmitInvoice(
         tenantId,
         entityType: 'invoice',
         entityId: invoiceId,
-        metadata: { ksefNumber: result.ksefNumber },
+        metadata: { ksefNumber: result.ksefNumber, via: result.via },
       });
     });
 
