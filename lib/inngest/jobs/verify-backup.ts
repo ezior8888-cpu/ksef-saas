@@ -5,11 +5,14 @@
 // dla każdego: download + checksum + parse + row count drift.
 //
 // Cel: wykrycie bit-rot, corrupted gzip, R2 storage drift. RPO defense.
+// Plus świeżość najnowszej kopii (AUD-37) — codziennie pilnuje jej też
+// monitor krytycznych alarmów (`checkStaleBackup`).
 
 import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
 import { sendSlackAlert } from '@/lib/alerts/slack';
+import { backupAgeHours, isBackupStale, MAX_BACKUP_AGE_HOURS } from '@/lib/backup/freshness';
 import { verifySnapshot } from '@/lib/backup/verify';
 import { createAdminClient } from '@/lib/supabase/server';
 import { inngest } from '@/lib/inngest/client';
@@ -118,6 +121,19 @@ export async function runVerifyBackup({ step }: JobContext) {
       }
     }
 
+    // AUD-37: 7 ostatnich udanych kopii może pochodzić sprzed tygodni, gdy
+    // nocny snapshot stoi. Wtedy „wszystkie OK” byłoby fałszywym spokojem.
+    const newestAt = recent[0]?.started_at ?? null;
+    const stale = isBackupStale(newestAt);
+    const newestAgeHours = backupAgeHours(newestAt);
+    if (stale) {
+      await sendSlackAlert({
+        channel: 'urgent',
+        text: `❌ Backup verify: najnowsza udana kopia ma ${Math.floor(newestAgeHours ?? 0)} h (próg ${MAX_BACKUP_AGE_HOURS} h) — nocny snapshot nie działa`,
+        context: { verified, failed, newest_started_at: newestAt ?? 'brak' },
+      });
+    }
+
     if (failed > 0) {
       await sendSlackAlert({
         channel: 'urgent',
@@ -129,7 +145,7 @@ export async function runVerifyBackup({ step }: JobContext) {
           failed_ids: failures.map((f) => f.id.slice(0, 8)).join(', '),
         },
       });
-    } else {
+    } else if (!stale) {
       await sendSlackAlert({
         channel: 'metrics',
         text: `✅ Backup verify: ${verified}/${recent.length} snapshotów OK`,
@@ -137,7 +153,7 @@ export async function runVerifyBackup({ step }: JobContext) {
       });
     }
 
-    return { verified, failed };
+    return { verified, failed, stale };
 }
 
 export const verifyBackupJob = inngest.createFunction(
