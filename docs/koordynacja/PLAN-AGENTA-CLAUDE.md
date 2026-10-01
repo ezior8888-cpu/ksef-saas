@@ -86,7 +86,7 @@ się od nowa?*
 | `reminder-scheduler` | ✅ propozycje deduplikowane po `topic_key` (wyścig: 23505) |
 | `send-reminder` | ✅ mail z `idempotencyKey: 'reminder/' + approvalId` |
 | `bulk-import` | ✅ deduplikacja po numerze i numerze KSeF + UNIQUE `(tenant_id, internal_number)`; kolizje numerów faktur odebranych to C-08 (#117) |
-| `nightly-validation-recheck`, `bulk-validate-contractors` | ❌→✅ awaria API Białej Listy/VIES (timeout, limit zapytań) zapisywała kontrahentowi „nieznany” i pustą listę rachunków na 7 dni i truła cache na 24 h — PR „biała lista” |
+| `nightly-validation-recheck`, `bulk-validate-contractors` | ❌→✅ awaria API Białej Listy/VIES (timeout, limit zapytań) zapisywała kontrahentowi „nieznany” i pustą listę rachunków na 7 dni i truła cache na 24 h — #123 |
 | `cert-expiry-alert` | ✅ data wygaśnięcia zapisywana przy wgraniu certyfikatu; progi 30/14/7 w oknach jednodniowych |
 | `submit-invoice`, `inbox-polling`, `self-invoice-payment`, `process-offline-queue` | Codex (stos #62–#86) — tylko czytać, uwagi przez C-xx |
 
@@ -133,7 +133,7 @@ Scalone też: #121 (C-17, tylko dokumentacja koordynacji).
 
 | PR | Co | Stan |
 |---|---|---|
-| PR „biała lista” | Awaria API Białej Listy/VIES nie kasuje statusu VAT i rachunków kontrahenta ani nie truje cache | w tym PR |
+| #123 | Awaria API Białej Listy/VIES nie kasuje statusu VAT i rachunków kontrahenta ani nie truje cache | w tym PR |
 
 Na `main` od innych od 01.10: #117 (C-08, migracja `00096` — wgranie po stronie Bartosza).
 
