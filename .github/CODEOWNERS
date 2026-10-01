@@ -27,6 +27,7 @@
 /.dockerignore               @ezior8888-cpu
 /next.config.ts              @ezior8888-cpu
 /scripts/hetzner/            @ezior8888-cpu
+/ops/                        @ezior8888-cpu
 
 # Baza, uprawnienia, granice dostępu
 /supabase/migrations/        @ezior8888-cpu

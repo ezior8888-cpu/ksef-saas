@@ -40,7 +40,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00097 | Codex (#86) | `invoices_overdue_reconciliation_guard` | PR otwarty |
 | 00098 | Bartosz (#90) | `backup_read_stripe_service_tables` | wgrana na db-1 (28.09), w `main` jeszcze nie |
 | 00099 | Claude | `ksef_submission_references` (C-18) | PR `claude/ksef-niepewny-wynik`; wgranie PRZED wdrożeniem kodu |
-| **00100** | — | następny wolny | — |
+| 00100 | Claude | `ops_gate` (bramka Telegram: rola `ops_actor`, schemat `ops`) | PR `claude/bramka-telegram`; wgranie PRZED uruchomieniem bramki |
+| **00101** | — | następny wolny | — |
 
 ---
 
