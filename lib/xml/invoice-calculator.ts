@@ -224,13 +224,25 @@ export function validatePeselChecksum(pesel: string): boolean {
 }
 
 /**
+ * Numer rachunku w postaci IBAN: bez spacji i myślników, wielkie litery,
+ * a polski NRB (26 cyfr — tak go wpisuje większość klientów i tak podpowiada
+ * formularz) dostaje „PL”. Do 01.10.2026 walidacja faktury wymagała kodu
+ * kraju, więc zwykły numer rachunku przechodził formularz i dopiero wysyłka
+ * do KSeF padała na „nieprawidłowy format IBAN”.
+ */
+export function normalizeIban(raw: string): string {
+  const clean = raw.replace(/[\s-]/g, '').toUpperCase();
+  return /^\d{26}$/.test(clean) ? `PL${clean}` : clean;
+}
+
+/**
  * Walidacja IBAN (dowolny kraj, ale zoptymalizowane pod PL).
  * Format: 2 litery kraju + 2 cyfry kontrolne + BBAN (max 30 znaków).
  * Algorytm mod-97: przesuwamy 4 pierwsze znaki na koniec, zamieniamy litery
  * na liczby (A=10, B=11, ...), cała wartość mod 97 musi dać 1.
  */
 export function validateIban(iban: string): boolean {
-  const clean = iban.replace(/\s/g, '').toUpperCase();
+  const clean = normalizeIban(iban);
   if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(clean)) return false;
 
   const rearranged = clean.slice(4) + clean.slice(0, 4);
@@ -279,6 +291,26 @@ const FA3_MIN_ISSUE_DATE = new Date('2025-09-01T00:00:00Z');
 /** Maksymalne wyprzedzenie daty wystawienia względem today (30 dni). */
 const MAX_ISSUE_DATE_AHEAD_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * Zakres daty wystawienia — wspólny dla `validateInvoice` (wysyłka do KSeF)
+ * i formularza. Reguła sprawdzana tylko przy wysyłce przepuszczała fakturę
+ * przez zapis, a job oznaczał ją jako nieudaną bez możliwości poprawki.
+ */
+export function issueDateRangeErrors(issueDateIso: string, now: Date = new Date()): string[] {
+  const issueDate = parseIsoDate(issueDateIso);
+  if (!issueDate) {
+    return [`Data wystawienia "${issueDateIso}" ma nieprawidłowy format (oczekiwane RRRR-MM-DD).`];
+  }
+  const errors: string[] = [];
+  if (issueDate < FA3_MIN_ISSUE_DATE) {
+    errors.push(`Data wystawienia ${issueDateIso} jest wcześniejsza niż minimalna data FA(3) (2025-09-01).`);
+  }
+  if (issueDate.getTime() - now.getTime() > MAX_ISSUE_DATE_AHEAD_MS) {
+    errors.push(`Data wystawienia ${issueDateIso} jest więcej niż 30 dni w przyszłości.`);
+  }
+  return errors;
+}
+
 export function validateInvoice(invoice: Invoice, now: Date = new Date()): string[] {
   const errors: string[] = [];
 
@@ -312,20 +344,7 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
 
   // ── Daty ───────────────────────────────────────────────────
   const issueDate = parseIsoDate(invoice.issueDate);
-  if (!issueDate) {
-    errors.push(`Data wystawienia "${invoice.issueDate}" ma nieprawidłowy format (oczekiwane RRRR-MM-DD).`);
-  } else {
-    if (issueDate < FA3_MIN_ISSUE_DATE) {
-      errors.push(
-        `Data wystawienia ${invoice.issueDate} jest wcześniejsza niż minimalna data FA(3) (2025-09-01).`
-      );
-    }
-    if (issueDate.getTime() - now.getTime() > MAX_ISSUE_DATE_AHEAD_MS) {
-      errors.push(
-        `Data wystawienia ${invoice.issueDate} jest więcej niż 30 dni w przyszłości.`
-      );
-    }
-  }
+  errors.push(...issueDateRangeErrors(invoice.issueDate, now));
 
   if (invoice.saleDate !== undefined) {
     const saleDate = parseIsoDate(invoice.saleDate);

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import {
+  issueDateRangeErrors,
+  validateIban,
   validateNipChecksum,
   validatePeselChecksum,
 } from '@/lib/xml/invoice-calculator';
@@ -115,6 +117,24 @@ export const invoiceFormSchema = z
       message: 'Data sprzedaży nie może być późniejsza niż data wystawienia',
       path: ['saleDate'],
     },
-  );
+  )
+  // Te same reguły co `validateInvoice` przy wysyłce do KSeF. Sprawdzane tylko
+  // tam przepuszczały fakturę przez zapis, a job oznaczał ją jako nieudaną —
+  // bez możliwości poprawki (ponowna wysyłka jest wstrzymana).
+  .superRefine((d, ctx) => {
+    for (const message of issueDateRangeErrors(d.issueDate)) {
+      ctx.addIssue({ code: 'custom', message, path: ['issueDate'] });
+    }
+    const account = d.bankAccount?.trim() ?? '';
+    if (d.paymentMethod === 'transfer' && !account) {
+      ctx.addIssue({ code: 'custom', message: 'Przy przelewie podaj numer rachunku', path: ['bankAccount'] });
+    } else if (account && !validateIban(account)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Nieprawidłowy numer rachunku — 26 cyfr (albo IBAN z kodem kraju); sprawdź, czy nie ma literówki',
+        path: ['bankAccount'],
+      });
+    }
+  });
 
 export type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
