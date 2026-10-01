@@ -63,7 +63,10 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E5 | RODO / konto: usunięcie konta a subskrypcja i klucze obce | ✅ kod / ⏳ migracja B3 | #108 |
 | E6 | Konfiguracja produkcji bez cichych zastępstw (GUS sandbox, brak kluczy) | ✅ / ⏳ B2 | #107 |
 | E7 | Retencja 10 lat: joby `retention-delete`, `archive-old-invoices` — czy nic nie kasuje faktur przed terminem | ✅ sprawdzone 01.10 | uwagi w 3.2 |
-| E8 | Pozostałe obszary: import (Magiczny Import), portal księgowej, walidatory formularzy, powiadomienia | ⬜ | — |
+| E8 | Pozostałe obszary: import (Magiczny Import), portal księgowej, walidatory formularzy, powiadomienia | ✅ przegląd 01.10 | portal: token jako hash, wygaśnięcie, odwołanie, firma i ścieżka XML sprawdzane; push tylko do aktywnych członków; walidator ZAL bez „zw” = C-15; import = stos Codexa |
+| E9 | Flo — funkcje zapisujące dane (`payment.confirm`, `expense.review`, `expense.rule`, `payment.chase`) | ✅ przegląd 01.10 | `expense.*` bez skutków wstecz; `payment.confirm` — uwaga o dacie wpłaty w 4.4; `payment.chase` = ponaglenia (stos Codexa) |
+| E10 | Formularze faktur VAT/KOR/ZAL/ROZ — przypadki brzegowe dat i kwot (art. 106i, 106e) | ⬜ | pliki KOR/ZAL/ROZ w stosie Codexa — zgłoszenia przez C-xx |
+| E11 | Ustawienia firmy i KSeF — zmiana NIP, danych sprzedawcy, certyfikatu; co dzieje się z wystawionymi fakturami | ⬜ | — |
 
 ### 3.1. Audyt jobów pod ponowienia (E4)
 
@@ -129,12 +132,11 @@ z #106–#110, oraz:
 | #119 | Worker zapisuje przebiegi jobów do `inngest_run_log` — panel i raport „błędy jobów” przestają pokazywać zawsze 0 |
 | #121 | C-17 w kanale z Codexem (tylko dokumentacja) |
 | #123 | Awaria API Białej Listy/VIES nie kasuje statusu VAT i rachunków kontrahenta ani nie truje cache |
+| #124 | Retencja kopii bazy zostawia zawsze 7 najnowszych udanych |
 
 ### 4.2. Otwarte PR-y Claude
 
-| PR | Co | Stan |
-|---|---|---|
-| #124 | Retencja kopii bazy zostawia zawsze 7 najnowszych udanych | w tym PR |
+Brak (ten PR to tylko aktualizacja planu).
 
 Na `main` od innych od 01.10: #113 (Bartosz, health-check KSeF), #117 (C-08,
 migracja `00096` — wgranie po stronie Bartosza).
@@ -165,17 +167,21 @@ poprawnych kodów QR); Bartosz #90, #120 (alerty Telegram + heartbeat workera).
 | Ochrona przed brakiem `KSEF_ENV` (`claim-environment`) | Codex (stos #63/#64) |
 | Autouzupełnianie kontrahentów z testowej bazy GUS bez klucza | zgłoszone, decyzja produktowa |
 | Pulpit `monthly-figures` i FLO sumują `gross_total` ROZ | Bartosz |
+| Flo `payment.confirm` zapisuje `payment_date` = dzień KLIKNIĘCIA, nie wpływu pieniędzy (karta pyta dobę po terminie, zbiorczo). Dziś czytają to tylko zabezpieczenia ponagleń — ale zanim VAT metodą kasową (#76) zacznie liczyć okres z wpłat, karta musi pytać o datę wpływu | przyszłość, decyzja przy JPK_V7M dla metody kasowej |
 
 ## 5. Następny krok
 
-1. Kopie zapasowe dalej: `daily-db-snapshot` i `verify-backup` — czy
-   nieudana kopia daje alert (od #114 Sentry działa), czy weryfikacja
-   naprawdę odtwarza dane (uwaga: #90 Bartosza zmienia `db-snapshot` —
-   tylko czytać). Potem `cleanup-audit-logs`, `refresh-materialized-views`,
-   `weekly-business-review`, `daily-analytics-digest`.
-   Przy okazji: `validateMultipleNips` (`lib/validation/cache.ts`) i walidacja
-   w formularzu (`app/actions/validation.ts`, góra pliku) — jak pokazują wynik
-   `unavailable`.
-2. E8: import (Magiczny Import — stos Codexa, tylko czytać), portal księgowej,
-   walidatory formularzy (`lib/validators/invoice-validators.ts` — gdzie
-   używane?), powiadomienia push.
+1. E11: ustawienia firmy i KSeF (`components/settings/actions.ts`,
+   `app/actions/organizations.ts`) — czy zmiana danych sprzedawcy/NIP nie
+   zmienia wstecz wystawionych faktur (PDF, ponowna wysyłka, eksporty biorą
+   dane sprzedawcy z faktury czy z bieżących ustawień?).
+2. E10: formularz faktury VAT (`components/invoices/invoice-form.tsx`, mój
+   obszar) — daty (sprzedaż vs wystawienie, termin), kwoty, waluta;
+   KOR/ZAL/ROZ tylko czytać, uwagi przez C-xx.
+3. Snapshot/weryfikacja kopii: przegląd po scaleniu #90 Bartosza (dziś tylko
+   przeczytane: alert przy awarii jest — Sentry + kanał „urgent”).
+
+Sprawdzone 01.10 bez zmian: `daily-db-snapshot`, `verify-backup` (suma
+kontrolna, rozpakowanie, liczby wierszy), `cleanup-audit-logs` (logi > 12 mies.,
+`inngest_run_log` > 3 mies.), `refresh-materialized-views`,
+`weekly-business-review`, `daily-analytics-digest`.
