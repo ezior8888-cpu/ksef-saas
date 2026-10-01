@@ -1,3 +1,5 @@
+import { PRICE_PER_MONTH, TRIAL_DAYS } from '@/lib/billing/pricing';
+
 const FAQS = [
   {
     q: 'Co to jest KSeF i czy muszę go używać?',
@@ -24,8 +26,8 @@ const FAQS = [
     a: 'Tak — używamy Claude Vision API specjalnie wytrenowanego pod polskie faktury i paragony. Rozpoznaje polskie NIP-y, polskie nazwy firm, formaty dat, polskie stawki VAT (23/8/5/0/zw/oo). Confidence score dla każdego pola — wiesz co wymaga sprawdzenia.',
   },
   {
-    q: 'Jak działa 60-day money-back?',
-    a: 'Przez pierwsze 60 dni płatnej subskrypcji możesz zażądać pełnego zwrotu bez podawania powodu. Pisz na support@ksef-saas.pl — zwracamy w 5 dni roboczych. Po 60 dniach zwrot proporcjonalny do niewykorzystanego okresu.',
+    q: 'Jak działa okres próbny?',
+    a: `${TRIAL_DAYS} dni za darmo, z pełnym dostępem. Kartę podajesz przy starcie subskrypcji, pierwsza płatność (${PRICE_PER_MONTH}) dopiero po ${TRIAL_DAYS} dniach. Zrezygnujesz wcześniej — nie płacisz nic. Subskrypcja jest miesięczna, bez umowy na rok.`,
   },
   {
     q: 'Mam nieuczynione 50 faktur sprzed lutego 2026 - co z nimi?',

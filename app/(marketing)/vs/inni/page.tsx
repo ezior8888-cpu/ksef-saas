@@ -133,12 +133,6 @@ const COMPARISON_ROWS = [
     competitor: { status: 'no' as const, note: 'OCR osobno' },
   },
   {
-    category: 'Cennik',
-    feature: 'Money-back guarantee',
-    ksefSaas: { status: 'yes' as const, note: '60 dni' },
-    competitor: { status: 'no' as const },
-  },
-  {
     category: 'Hosting',
     feature: 'Bank EU (GDPR-compliant)',
     ksefSaas: { status: 'yes' as const, note: 'Frankfurt 🇪🇺' },

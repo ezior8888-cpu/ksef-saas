@@ -1,8 +1,9 @@
 /**
  * Bezpiecznik kosztowy agenta (krok 16 planu, mechanizm M10).
  *
- * PO CO: przy cenie 39,99 zł brutto (32,51 zł netto) agent ma kosztować około
- * 0,95 zł na klienta miesięcznie. Marża nie jest zagrożona przez model —
+ * PO CO: przy cenie 29,99 zł brutto (24,38 zł netto, lib/billing/pricing.ts
+ * od 1 października 2026; limity niżej liczono jeszcze od 39,99 zł) agent ma
+ * kosztować około 0,95 zł na klienta miesięcznie. Marża nie jest zagrożona przez model —
  * jest zagrożona przez BRAK LIMITU. Jedno konto z tysiącem dokumentów albo
  * jedna pętla ponowień potrafi zjeść miesięczny zysk z kilkudziesięciu kont,
  * i zrobi to w dwa dni, zanim ktokolwiek zajrzy do rachunku.
@@ -27,10 +28,10 @@ import { floDb, type FloDbClient, type FloUsageRow } from '@/lib/flo/db-types';
  */
 export const USD_PLN = 3.6;
 
-/** Cel: tyle agent ma kosztować u typowego klienta (≈3% ceny netto). */
+/** Cel: tyle agent ma kosztować u typowego klienta (≈4% ceny netto przy 29,99 zł). */
 export const MONTHLY_TARGET_PLN = 0.95;
 
-/** Twarda granica: 3 zł to ≈9% ceny netto. Powyżej marża zaczyna boleć. */
+/** Twarda granica: 3 zł to ≈12% ceny netto przy 29,99 zł (było ≈9% przy 39,99 zł). */
 export const MONTHLY_HARD_LIMIT_PLN = 3.0;
 
 /**

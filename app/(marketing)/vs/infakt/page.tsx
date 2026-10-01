@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { PRICE_PER_MONTH, TRIAL_DAYS } from '@/lib/billing/pricing';
+
 import { ComparisonTable, type ComparisonRow } from '@/components/marketing/comparison-table';
 import {
   VsHero,
@@ -119,7 +121,7 @@ const COMPARISON_ROWS = [
   {
     category: 'Cennik',
     feature: 'Stawka „wszystko w jednym”',
-    ksefSaas: { status: 'note' as const, note: '49 zł/mc' },
+    ksefSaas: { status: 'note' as const, note: PRICE_PER_MONTH },
     competitor: { status: 'note' as const, note: 'wyższy pakiet + add-ony' },
   },
   {
@@ -127,12 +129,6 @@ const COMPARISON_ROWS = [
     feature: 'Pełne AI-OCR w cenie bazowej',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'no' as const, note: 'wyższy tier / limit' },
-  },
-  {
-    category: 'Cennik',
-    feature: '60 dni money-back',
-    ksefSaas: { status: 'yes' as const },
-    competitor: { status: 'partial' as const, note: 'warunki regulaminu' },
   },
   {
     category: 'Integracje',
@@ -268,7 +264,7 @@ export default function InfaktPage() {
             AI-OCR z kolei nie może być &bdquo;ładną ikonką&rdquo; w cenniku. Musi radzić sobie z krzywym skanem, drugą stroną faktury z regulaminem na odwrocie i tabelą pozycji, gdzie każda linia ma inną stawkę VAT. Ograniczenia modelu — limit stron, brak confidence score, brak uczenia z poprawek — przekładają się bezpośrednio na godziny Twojej pracy albo koszt księgowej. Dlatego w tabeli porównawczej celowo eksponujemy wiersze, które bolą najczęściej w rozmowach z naszymi beta-użytkownikami.
           </p>
           <p>
-            Trzeci filar to cena całkowita posiadania (TCO): nawet jeśli pakiet startowy wygląda atrakcyjnie, suma add-onów za OCR, dodatkowe firmy czy wyższe limity dokumentów bywa nieprzewidywalna. FaktFlow trzyma prostą zasadę: funkcje potrzebne do domknięcia KPiR i KSeF nie są zakładką &bdquo;Pro+&rdquo;, tylko rdzeniem produktu — stąd nacisk na jedną stawkę i money-back jako realny hedge ryzyka dla mikrofirmy.
+            Trzeci filar to cena całkowita posiadania (TCO): nawet jeśli pakiet startowy wygląda atrakcyjnie, suma add-onów za OCR, dodatkowe firmy czy wyższe limity dokumentów bywa nieprzewidywalna. FaktFlow trzyma prostą zasadę: funkcje potrzebne do domknięcia KPiR i KSeF nie są zakładką &bdquo;Pro+&rdquo;, tylko rdzeniem produktu — stąd nacisk na jedną stawkę i {TRIAL_DAYS} dni za darmo jako realny hedge ryzyka dla mikrofirmy.
           </p>
         </section>
 
@@ -299,7 +295,7 @@ export default function InfaktPage() {
               { k: 'Baza (najczęściej reklamowana stawka)', v: 'proste faktury sprzedaży, podstawowe rozliczenia, często sensowny start dla jednoosobowej działalności bez dużej skrzynki kosztowej.' },
               { k: 'Wyższe pakiety', v: 'więcej dokumentów, wielofirmowość, rozbudowane uprawnienia dla biura — tu cena rośnie skokowo, bo łączy się z limitami API i raportowania.' },
               { k: 'AI / OCR / automatyzacje', v: 'często jako osobny moduł albo feature-gating — dokładnie te elementy, które w FaktFlow traktujemy jako standard przy mikrofirmie z dużą liczbą kosztów.' },
-              { k: 'FaktFlow (referencja)', v: 'jedna stawka ok. 49 zł/mc, pełny OCR w pakiecie, Magiczny Import, Wkurzacz, Co-Pilot księgowego i 60 dni money-back — bez tajnych „upgrade’ów”, żeby domknąć miesiąc.' },
+              { k: 'FaktFlow (referencja)', v: `jedna stawka ${PRICE_PER_MONTH}, pełny OCR w pakiecie, Magiczny Import, Wkurzacz, Co-Pilot księgowego i ${TRIAL_DAYS} dni za darmo — bez tajnych „upgrade’ów”, żeby domknąć miesiąc.` },
             ].map((item, i) => (
               <li
                 key={item.k}
@@ -398,7 +394,7 @@ export default function InfaktPage() {
             >
               cennikiem
             </Link>{' '}
-            oraz regulaminem money-back. Dla biur rachunkowych przygotowujemy osobny scenariusz wielomiesięczny (tokeny księgowe, pakiet eksportów) —{' '}
+            oraz regulaminem. Dla biur rachunkowych przygotowujemy osobny scenariusz wielomiesięczny (tokeny księgowe, pakiet eksportów) —{' '}
             <Link
               href="/kontakt"
               className="font-editorial italic underline decoration-emerald-400 decoration-2 underline-offset-[4px] transition-all hover:decoration-[3px]"

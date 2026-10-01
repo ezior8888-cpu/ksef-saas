@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
+import { PRICE_PER_MONTH } from '@/lib/billing/pricing';
 import { sendEmail } from '@/lib/email/send';
 import {
   emailTrialDay1,
@@ -156,7 +157,7 @@ ${baseStyle}
   <p style="margin: 5px 0 0 0; color: #666;">zaoszczędzonego czasu</p>
 </div>
 <p>Jeśli Twoja stawka godzinowa to 150 PLN, to już <strong>${plnSaved} PLN</strong> oszczędności.</p>
-<p>Subskrypcja KSeF SaaS to 49 zł/mc. Pełny rok = 588 PLN. Już teraz zwróciło się.</p>
+<p>Subskrypcja kosztuje ${PRICE_PER_MONTH}. Już teraz się zwróciła.</p>
 <p style="text-align: center; margin: 30px 0;">
   <a href="${APP_BASE}/settings" class="button">Przejdź do rozliczeń / ustawień →</a>
 </p>

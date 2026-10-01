@@ -3,50 +3,28 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 
+import { PRICE_GROSS, TRIAL_DAYS } from '@/lib/billing/pricing';
+
 import { Nudge } from './anim';
 import { Container, Icon, SectionHeading } from './ui';
 
+// Jeden plan dla wszystkich (decyzja z 1 października 2026) — cena
+// z lib/billing/pricing.ts.
 const PLANS = [
   {
-    name: 'Start',
-    body: 'Dla jednoosobowej firmy, która dopiero zaczyna.',
-    price: '0 zł',
-    suffix: '',
-    featured: false,
-    features: [
-      'Do 10 faktur miesięcznie',
-      'Wysyłka do KSeF i pobieranie UPO',
-      'Podstawowe zestawienia',
-      'Eksport do pliku',
-      'Pomoc mailowa',
-    ],
-  },
-  {
-    name: 'Firma',
-    body: 'Dla firm, które fakturują regularnie.',
-    price: '49 zł',
-    suffix: '/mies.',
+    name: 'FaktFlow',
+    body: 'Jeden plan dla firm i księgowych. Wszystkie funkcje od pierwszego dnia.',
+    price: PRICE_GROSS,
+    suffix: '/mies. z VAT',
     featured: true,
     features: [
       'Faktury bez limitu',
+      'Wysyłka do KSeF i pobieranie UPO',
       'Zdjęcie paragonu do KPiR',
       'Przypomnienia o płatnościach',
       'Paczka dla księgowej',
-      'Pomoc na czacie',
-    ],
-  },
-  {
-    name: 'Biuro',
-    body: 'Dla księgowych prowadzących wielu klientów.',
-    price: '99 zł',
-    suffix: '/mies.',
-    featured: false,
-    features: [
-      'Wielu klientów na jednym koncie',
       'Import z Fakturowni i inFaktu',
-      'Uprawnienia dla zespołu',
-      'Powiadomienia o błędach wysyłki',
-      'Opiekun konta',
+      `${TRIAL_DAYS} dni za darmo`,
     ],
   },
 ];
@@ -59,10 +37,10 @@ export function Pricing() {
           align="left"
           nowrap
           title="Cennik bez gwiazdek"
-          lead="Płacisz za to, ile faktur wystawiasz. Bez umów na rok."
+          lead="Jedna cena, wszystkie funkcje. Płacisz co miesiąc, bez umów na rok."
         />
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="grid max-w-[480px] grid-cols-1 gap-6">
           {PLANS.map((p, i) => (
             <motion.div
               key={p.name}

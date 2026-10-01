@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
+import { PRICE_PER_MONTH } from '@/lib/billing/pricing';
 
 /**
  * Wspólny układ podstron /vs/* — ciemny motyw marketingu (BUG-002 fix).
@@ -166,7 +167,7 @@ export function VsMigrationCta({ competitorName, copy }: VsMigrationCtaProps) {
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
             <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-950/70">
-              + 60 dni money-back guarantee
+              Potem {PRICE_PER_MONTH} · bez umowy na rok
             </p>
           </div>
         </div>

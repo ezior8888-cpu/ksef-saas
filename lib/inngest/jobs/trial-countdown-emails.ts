@@ -19,6 +19,7 @@
 import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
+import { PRICE_PER_MONTH_WITH_NET } from '@/lib/billing/pricing';
 import { sendTrialEndingEmail } from '@/lib/email/send';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -34,8 +35,9 @@ interface TrialingSubscription {
 }
 
 const PLAN_LABELS: Record<TrialingSubscription['plan'], { plan: string; price: string }> = {
-  monthly: { plan: 'Miesięczny', price: '59 zł / miesiąc (+ VAT 23%)' },
-  annual: { plan: 'Roczny', price: '588 zł / rok (49 zł / mc + VAT 23%)' },
+  monthly: { plan: 'Miesięczny', price: PRICE_PER_MONTH_WITH_NET },
+  // Plan roczny wycofany 1 października 2026 — etykieta dla starszych subskrypcji.
+  annual: { plan: 'Roczny', price: 'według planu rocznego z Twojej subskrypcji' },
 };
 
 type Stage = { days: 14 | 7 | 3 | 1; kind: string; min: number; max: number };

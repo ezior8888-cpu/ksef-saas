@@ -5,7 +5,7 @@ import { ArrowRight, Check, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { PRICE_GROSS, PRICE_NET, TRIAL_DAYS } from '@/lib/billing/pricing';
 
 import { startCheckoutAction } from '../actions';
 
@@ -21,65 +21,57 @@ const FEATURES = [
 ];
 
 interface PlanCardProps {
-  plan: 'monthly' | 'annual';
-  highlighted?: boolean;
   isPending: boolean;
-  onSelect: (plan: 'monthly' | 'annual') => void;
+  onSelect: () => void;
 }
 
-function PlanCard({ plan, highlighted, isPending, onSelect }: PlanCardProps) {
-  const isMonthly = plan === 'monthly';
-
+/**
+ * Jeden plan miesięczny (decyzja z 1 października 2026, lib/billing/pricing.ts).
+ * Plan roczny nie jest sprzedawany — akcja zakupu też go odrzuca.
+ */
+function PlanCard({ isPending, onSelect }: PlanCardProps) {
   return (
-    <div
-      className={cn(
-        'ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 relative',
-        highlighted
-          ? 'border-emerald-500/40 bg-emerald-500/5 shadow-glass-lg'
-          : 'border-glass-border',
-      )}
-    >
-      {highlighted ? (
-        <div className="absolute -top-3 right-6 rounded-full bg-emerald-500/90 px-3 py-1 text-xs font-semibold text-white">
-          <Sparkles className="mr-1 inline h-3 w-3" />
-          Oszczędzasz 20%
-        </div>
-      ) : null}
+    <div className="ff-glass-pane relative rounded-[var(--ff-radius-lg)] border-emerald-500/40 bg-emerald-500/5 p-6 shadow-glass-lg">
+      <div className="absolute -top-3 right-6 rounded-full bg-emerald-500/90 px-3 py-1 text-xs font-semibold text-white">
+        <Sparkles className="mr-1 inline h-3 w-3" />
+        {TRIAL_DAYS} dni za darmo
+      </div>
 
       <h3 className="font-display text-2xl font-semibold tracking-tighter-display">
-        {isMonthly ? 'Miesięcznie' : 'Rocznie'}
+        Miesięcznie
       </h3>
       <p className="mt-1 text-sm text-muted-foreground">
-        {isMonthly
-          ? 'Płać co miesiąc, anuluj kiedy chcesz'
-          : '2 miesiące w prezencie · 1 płatność rocznie'}
+        Płać co miesiąc, anuluj kiedy chcesz
       </p>
 
       <div className="mt-6 flex items-baseline gap-1">
         <p className="font-display text-5xl font-bold tracking-tighter-display">
-          {isMonthly ? '59' : '49'}
+          {PRICE_GROSS}
           <span className="ml-1 text-lg font-normal text-muted-foreground">
-            zł / mc
+            / mc
           </span>
         </p>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        {isMonthly ? '+ VAT 23%' : `588 zł / rok + VAT 23%`}
+        z VAT · {PRICE_NET} netto
       </p>
 
       <Button
         size="lg"
-        variant={highlighted ? 'glass-primary' : 'glass'}
+        variant="glass-primary"
         className="mt-6 w-full"
         disabled={isPending}
-        onClick={() => onSelect(plan)}
+        onClick={onSelect}
       >
         {isPending ? (
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         ) : null}
-        Zacznij 30 dni za darmo
+        Zacznij {TRIAL_DAYS} dni za darmo
         <ArrowRight className="ml-2 h-4 w-4" />
       </Button>
+      <p className="mt-2 text-center text-xs text-muted-foreground">
+        Kartę podajesz teraz, pierwsza płatność po {TRIAL_DAYS} dniach.
+      </p>
 
       <ul className="mt-6 space-y-2">
         {FEATURES.map((f) => (
@@ -96,10 +88,10 @@ function PlanCard({ plan, highlighted, isPending, onSelect }: PlanCardProps) {
 export function PlanCards() {
   const [isPending, startTransition] = useTransition();
 
-  const handleSelect = (plan: 'monthly' | 'annual') => {
+  const handleSelect = () => {
     startTransition(async () => {
       try {
-        await startCheckoutAction(plan);
+        await startCheckoutAction('monthly');
         // `startCheckoutAction` rzuca NEXT_REDIRECT — kod tu nie dotrze przy
         // sukcesie. Toast wyląduje gdy redirect wróci z `?error=...`.
       } catch (e) {
@@ -113,18 +105,8 @@ export function PlanCards() {
   };
 
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <PlanCard
-        plan="monthly"
-        isPending={isPending}
-        onSelect={handleSelect}
-      />
-      <PlanCard
-        plan="annual"
-        highlighted
-        isPending={isPending}
-        onSelect={handleSelect}
-      />
+    <div className="max-w-md">
+      <PlanCard isPending={isPending} onSelect={handleSelect} />
     </div>
   );
 }

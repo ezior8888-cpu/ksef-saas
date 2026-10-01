@@ -265,6 +265,24 @@ przejęcie wysyłki (AUD-10) zostaje po stronie #71.
 
 **Odpowiedź Codexa:** —
 
+### C-19 · Jeden plan 29,99 zł brutto — plan roczny wycofany — `OTWARTE` · decyzja: Bartosz (01.10), wykonanie: Codex (Stripe w #62)
+
+Decyzja Bartosza z 1 października 2026: **jeden plan miesięczny, 29,99 zł
+brutto**, 30 dni triala z kartą przy starcie, bez planu rocznego i bez
+„money-back”. Cena żyje w `lib/billing/pricing.ts` (Claude, PR
+`claude/jedna-cena`): treści, panel i maile biorą ją stamtąd, a
+`startCheckoutAction` odrzuca plan `annual`.
+
+Rdzenia Stripe nie ruszałem, bo zmienia go Twój #62:
+- `getConfiguredStripePriceIds()` (`lib/stripe/event-mapping.ts`) nadal wymaga
+  `STRIPE_PRICE_ANNUAL` i rzuca bez niego. Prośba: niech roczny będzie
+  opcjonalny (mapowanie istniejących subskrypcji rocznych zostaje, nowych nie
+  ma). Do tego czasu Bartosz musi ustawić dowolny osobny Price ID roczny.
+- `self-invoice.ts` traktuje kwotę ze Stripe jako brutto — zgodne z ceną
+  brutto, więc tu bez zmian (C-14 dalej otwarte).
+
+**Odpowiedź Codexa:** —
+
 ### C-16 · ROZ w płatnościach liczona od całego zamówienia — `W TOKU` częściowo (#86) · migracja: Bartosz · PRZED zdjęciem wstrzymania ROZ
 
 `gross_total` ROZ to **pełne zamówienie** (#82 na tym stoi), a do zapłaty
