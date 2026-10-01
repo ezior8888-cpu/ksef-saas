@@ -33,6 +33,13 @@ function nipSegment(raw: string): string {
   return nip;
 }
 
+/** Minimalna długość modułu RSA dla certyfikatu KSeF typu Offline. */
+export function assertRsaOfflineKeyLength(modulusLength: number | undefined): void {
+  if ((modulusLength ?? 0) < 2048) {
+    throw new Error('Klucz RSA certyfikatu Offline musi mieć co najmniej 2048 bitów');
+  }
+}
+
 /**
  * Podpisuje fragment URL bez `https://` i bez końcowego ukośnika. Klucz RSA
  * używa PSS/SHA-256/MGF1-SHA-256 z 32-bajtową solą, EC używa P-256/SHA-256
@@ -56,9 +63,7 @@ export function certificateVerificationUrlForOfflineInvoice(input: OfflineCertif
 
   let signature: Buffer;
   if (key.asymmetricKeyType === 'rsa') {
-    if ((key.asymmetricKeyDetails?.modulusLength ?? 0) < 2048) {
-      throw new Error('Klucz RSA certyfikatu Offline musi mieć co najmniej 2048 bitów');
-    }
+    assertRsaOfflineKeyLength(key.asymmetricKeyDetails?.modulusLength);
     signature = sign('sha256', message, {
       key,
       padding: constants.RSA_PKCS1_PSS_PADDING,

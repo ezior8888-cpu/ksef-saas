@@ -75,3 +75,24 @@ describe('PDF faktury z numerem KSeF bez KODU I', () => {
     expect(mocks.zip).not.toHaveBeenCalled();
   });
 });
+
+describe('Zmiana stanu faktury podczas przygotowania PDF', () => {
+  beforeEach(() => {
+    mocks.pdf.mockResolvedValue({ success: false, code: 'PDF_STATE_CHANGED', error: 'Stan faktury zmienił się' });
+  });
+
+  it('pojedyncze pobranie zwraca 409', async () => {
+    const response = await getSinglePdf(
+      new Request('https://example.test/api/invoices/accepted/pdf'),
+      { params: Promise.resolve({ id: 'accepted' }) },
+    );
+    expect(response.status).toBe(409);
+  });
+
+  it('paczka nie pomija faktury, której stan zmienił się w trakcie renderowania', async () => {
+    const response = await getBatchPdf(new Request('https://example.test/api/invoices/batch-pdf?from=2026-02-01&to=2026-02-28'));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'pdf_state_changed' });
+    expect(mocks.zip).not.toHaveBeenCalled();
+  });
+});

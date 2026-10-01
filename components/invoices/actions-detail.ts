@@ -3,7 +3,7 @@
 import { logAudit } from '@/lib/audit/log';
 import { ActionAuthError, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
-import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
+import { generateInvoicePdf, verifyInvoicePdfDeliveryState } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
 import { invoiceEmailAmount } from '@/lib/email/invoice-email-amount';
 import { sendInvoiceEmail } from '@/lib/email/send';
@@ -189,6 +189,10 @@ export async function emailInvoiceAction(
 
   const inv = data.invoice;
   const amount = invoiceEmailAmount(inv);
+  const deliveryFailure = await verifyInvoicePdfDeliveryState(invoiceId, tenantId, pdfResult.qrStateKey);
+  if (deliveryFailure) {
+    return { success: false, error: deliveryFailure.error };
+  }
   const send = await sendInvoiceEmail({
     to: email,
     invoiceNumber: inv.internalNumber,

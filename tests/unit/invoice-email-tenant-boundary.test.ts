@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   generatePdf: vi.fn(),
+  verifyPdf: vi.fn(),
   loadInvoice: vi.fn(),
   sendEmail: vi.fn(),
   audit: vi.fn(),
@@ -12,7 +13,10 @@ vi.mock('@/lib/supabase/auth-context', () => ({
   requireUserAndActiveOrg: mocks.requireAuth,
   ActionAuthError: class ActionAuthError extends Error {},
 }));
-vi.mock('@/lib/pdf/invoice-pdf', () => ({ generateInvoicePdf: mocks.generatePdf }));
+vi.mock('@/lib/pdf/invoice-pdf', () => ({
+  generateInvoicePdf: mocks.generatePdf,
+  verifyInvoicePdfDeliveryState: mocks.verifyPdf,
+}));
 vi.mock('@/lib/pdf/invoice-data', () => ({ loadInvoiceForPdf: mocks.loadInvoice }));
 vi.mock('@/lib/email/send', () => ({ sendInvoiceEmail: mocks.sendEmail }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.audit }));
@@ -28,7 +32,8 @@ const foreignTenant = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.requireAuth.mockResolvedValue({ user: { id: 'user-1' }, tenantId });
-  mocks.generatePdf.mockResolvedValue({ success: true, pdf: Buffer.from('pdf'), filename: 'invoice.pdf' });
+  mocks.generatePdf.mockResolvedValue({ success: true, pdf: Buffer.from('pdf'), filename: 'invoice.pdf', qrStateKey: 'qr-state' });
+  mocks.verifyPdf.mockResolvedValue(null);
   mocks.loadInvoice.mockResolvedValue({
     tenantId,
     invoice: {
@@ -58,6 +63,7 @@ describe('wysyłka PDF faktury e-mailem', () => {
     expect(await emailInvoiceAction(invoiceId, 'buyer@example.test')).toEqual({ success: true });
     expect(mocks.generatePdf).toHaveBeenCalledExactlyOnceWith(invoiceId, tenantId);
     expect(mocks.loadInvoice).toHaveBeenCalledExactlyOnceWith(invoiceId, tenantId);
+    expect(mocks.verifyPdf).toHaveBeenCalledExactlyOnceWith(invoiceId, tenantId, 'qr-state');
     expect(mocks.sendEmail).toHaveBeenCalledOnce();
     expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ tenantId, entityId: invoiceId }));
   });
@@ -70,6 +76,17 @@ describe('wysyłka PDF faktury e-mailem', () => {
     expect(await emailInvoiceAction(invoiceId, 'buyer@example.test')).toEqual({
       success: false,
       error: 'Faktura nie istnieje.',
+    });
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  it('nie wysyła PDF, gdy faktura wejdzie do Offline24 tuż przed wysyłką', async () => {
+    mocks.verifyPdf.mockResolvedValueOnce({
+      success: false, code: 'OFFLINE_QR_UNAVAILABLE', error: 'Brak KODU II',
+    });
+    expect(await emailInvoiceAction(invoiceId, 'buyer@example.test')).toEqual({
+      success: false, error: 'Brak KODU II',
     });
     expect(mocks.sendEmail).not.toHaveBeenCalled();
     expect(mocks.audit).not.toHaveBeenCalled();

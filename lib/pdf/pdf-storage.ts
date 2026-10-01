@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import {
   downloadFromR2,
   r2ObjectExists,
@@ -19,7 +21,9 @@ import {
 // (MPP, metoda kasowa, „Do zapłaty” przy ROZ).
 // v4 (01.10): wyrazy „odwrotne obciążenie” przy pozycjach „oo”; na korekcie
 // numer, data i numer KSeF faktury korygowanej (art. 106j ust. 2).
-const PDF_RENDERER_VERSION = 4;
+// v5: identyfikator cache zależy od KODU I i podpisu pod nim. Uzupełnienie
+// hasha XML lub nadanie numeru KSeF nie może zwrócić starego PDF bez QR.
+const PDF_RENDERER_VERSION = 5;
 
 function parseYearMonth(issueDate: string): { year: string; month: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
@@ -36,9 +40,15 @@ export function buildInvoicePdfKey(
   tenantId: string,
   invoiceId: string,
   issueDate: string,
+  qrPayload: string | null = null,
+  ksefNumber: string | null = null,
 ): string {
   const { year, month } = parseYearMonth(issueDate);
-  return `${tenantId}/${year}/${month}/${invoiceId}.v${PDF_RENDERER_VERSION}.pdf`;
+  const qrState = createHash('sha256')
+    .update(JSON.stringify([qrPayload, ksefNumber]))
+    .digest('hex')
+    .slice(0, 32);
+  return `${tenantId}/${year}/${month}/${invoiceId}.v${PDF_RENDERER_VERSION}.${qrState}.pdf`;
 }
 
 export async function uploadInvoicePdf(

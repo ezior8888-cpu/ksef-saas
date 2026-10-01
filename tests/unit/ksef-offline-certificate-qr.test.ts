@@ -1,8 +1,8 @@
-import { constants, createHash, createPublicKey, generateKeyPairSync, verify } from 'node:crypto';
+import { constants, createHash, createPublicKey, generateKeyPairSync, verify, type KeyObject } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import { certificateVerificationUrlForOfflineInvoice } from '@/lib/ksef/qr-codes';
+import { assertRsaOfflineKeyLength, certificateVerificationUrlForOfflineInvoice } from '@/lib/ksef/qr-codes';
 
 const HASH_HEX = createHash('sha256').update('<Faktura>test</Faktura>', 'utf8').digest('hex');
 const HASH_B64URL = Buffer.from(HASH_HEX, 'hex').toString('base64url');
@@ -65,12 +65,14 @@ describe('KSeF KOD II — link certyfikatu Offline', () => {
   });
 
   it('odrzuca błędne dane i niewłaściwe klucze bez zastępczego podpisu', () => {
-    const rsa1024 = generateKeyPairSync('rsa', { modulusLength: 1024 }).privateKey;
+    const rsa2048 = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey;
     const ec384 = generateKeyPairSync('ec', { namedCurve: 'secp384r1' }).privateKey;
-    const pem = (key: typeof rsa1024) => key.export({ type: 'pkcs8', format: 'pem' }).toString();
-    const base = input(pem(rsa1024));
+    const pem = (key: KeyObject) => key.export({ type: 'pkcs8', format: 'pem' }).toString();
+    const base = input(pem(rsa2048));
 
-    expect(() => certificateVerificationUrlForOfflineInvoice(base)).toThrow('2048');
+    expect(() => assertRsaOfflineKeyLength(1024)).toThrow('2048');
+    expect(() => assertRsaOfflineKeyLength(undefined)).toThrow('2048');
+    expect(() => assertRsaOfflineKeyLength(2048)).not.toThrow();
     expect(() => certificateVerificationUrlForOfflineInvoice(input(pem(ec384)))).toThrow('P-256');
     expect(() => certificateVerificationUrlForOfflineInvoice({ ...base, privateKeyPem: 'not a key' })).toThrow();
     expect(() => certificateVerificationUrlForOfflineInvoice({ ...base, contextNip: '1234567890/evil' })).toThrow('NIP');
