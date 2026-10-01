@@ -130,7 +130,7 @@ W przeglądarce (ręcznie):
 **Najgorszy scenariusz** — migracje są nieodwracalne (chyba że masz down
 migration, której zwykle nie piszemy).
 
-1. Sprawdź `docs/runbooks/backup-restore.md` — last snapshot z R2.
+1. Sprawdź `docs/runbooks/backup-restore.md` — najnowszy zrzut `pg_dump` w `/root/backups/daily` na `db-1`.
 2. Jeśli zmiana jest dodawanie (ADD COLUMN, CREATE TABLE) — nie zrywamy, kod
    może działać bez nowych kolumn jeśli ich nie używał. Zrób revert kodu
    (powyżej) i ZOSTAW migrację — naprawisz na spokojnie.
@@ -156,6 +156,6 @@ Napraw SQL, ponów. Nic nie potrzeba odkręcać.
 
 ## Powiązane runbooki
 
-- [backup-restore.md](./backup-restore.md) — restore z R2 snapshotu
+- [backup-restore.md](./backup-restore.md) — odtworzenie bazy ze zrzutu `pg_dump`
 - [disaster-recovery.md](./disaster-recovery.md) — 7 scenariuszy awarii
 - [scaling-triggers.md](./scaling-triggers.md) — gdy deploy ujawnia bottleneck
