@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 
 import { BrandWordmark } from '@/components/brand/brand-wordmark';
 import { OnboardingForm } from '@/components/onboarding/form';
+import { FIRST_COMPANY_CLOSED_MESSAGE, isSignupClosed } from '@/lib/feature-flags/signups';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
 import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
 
@@ -42,6 +43,8 @@ export default async function OnboardingPage(props: OnboardingPageProps) {
   const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
   const hasActiveOrg = isUuid(activeOrg);
   const showActiveOrgBanner = hasActiveOrg && sp.action === 'new';
+  // Wyłącznik rejestracji — sama blokada siedzi w akcjach zakładania firmy.
+  const showSignupsClosed = !hasActiveOrg && (await isSignupClosed());
 
   return (
     <div className="ff-dashboard relative flex min-h-screen items-center justify-center overflow-hidden p-4 text-[var(--ff-on-surface)]">
@@ -70,6 +73,12 @@ export default async function OnboardingPage(props: OnboardingPageProps) {
               <ArrowLeft className="h-3.5 w-3.5" />
               Dashboard
             </Link>
+          </div>
+        ) : null}
+
+        {showSignupsClosed ? (
+          <div className="ff-glass-pane rounded-2xl px-5 py-3 text-sm" role="status">
+            {FIRST_COMPANY_CLOSED_MESSAGE}
           </div>
         ) : null}
 

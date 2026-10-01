@@ -9,6 +9,7 @@ import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { trackServer } from '@/lib/analytics/server';
 import { getClientIp } from '@/lib/auth/get-client-ip';
 import { validatePassword } from '@/lib/auth/password';
+import { isSignupClosed } from '@/lib/feature-flags/signups';
 import { checkRegisterRateLimit } from '@/lib/rate-limit/auth';
 import { verifyTurnstile } from '@/lib/security/turnstile';
 import { userRegistered } from '@/lib/inngest/client';
@@ -25,6 +26,11 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
 
   if (!email || !password) {
     redirect('/register?error=missing_fields');
+  }
+
+  // Wyłącznik z bramki (`/wylacz rejestracja`) — przed Turnstile i HIBP.
+  if (await isSignupClosed()) {
+    redirect('/register?error=signups_disabled');
   }
 
   const ip = await getClientIp();

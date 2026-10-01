@@ -14,6 +14,7 @@ import {
   authTitleClass,
 } from '@/components/auth/auth-form-styles';
 import { TurnstileWidget } from '@/components/auth/turnstile-widget';
+import { isSignupClosed, SIGNUPS_CLOSED_MESSAGE } from '@/lib/feature-flags/signups';
 import { loginWithGoogle } from '../login/actions';
 import { signupWithEmail } from './actions';
 
@@ -29,6 +30,7 @@ const ERROR_MESSAGES: Record<string, string> = {
     'Nie udało się potwierdzić, że nie jesteś botem. Odśwież stronę i spróbuj ponownie.',
   'email rate limit exceeded':
     'Przekroczono limit wysyłki maili. Poczekaj kilka minut i spróbuj ponownie.',
+  signups_disabled: SIGNUPS_CLOSED_MESSAGE,
 };
 
 export default async function RegisterPage({
@@ -43,6 +45,25 @@ export default async function RegisterPage({
       ? `Zbyt wiele prób rejestracji. Spróbuj ponownie za ~${retryMinutes} min.`
       : (ERROR_MESSAGES[error] ?? error)
     : null;
+
+  // Wyłącznik `/wylacz rejestracja`: bez formularza i bez Google, bo pierwsze
+  // logowanie Google zakłada konto.
+  if (await isSignupClosed()) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className={authTitleClass}>Utwórz konto</h2>
+        </div>
+        <div className={authAlertErrorClass} role="status">{SIGNUPS_CLOSED_MESSAGE}</div>
+        <p className={`text-center ${authMutedTextClass}`}>
+          Masz już konto?{' '}
+          <Link href="/login" className={authLinkClass}>
+            Zaloguj się
+          </Link>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
