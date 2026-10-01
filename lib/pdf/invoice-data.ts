@@ -29,6 +29,8 @@ export interface InvoicePdfData {
   issueDate: string;
   ksefNumber: string | null;
   ksefStatus: string | null;
+  /** Trwały ślad wejścia do kolejki Offline24, również po statusie failed/rejected. */
+  offlineIdempotencyKey: string | null;
   /** NIP sprzedawcy i SHA-256 pliku XML (hex) — do KOD I (`qr-verification.ts`). */
   sellerNip: string | null;
   xmlSha256Hex: string | null;
@@ -61,6 +63,7 @@ interface InvoiceRow {
   sale_date: string | null;
   ksef_number: string | null;
   ksef_status: string | null;
+  offline_idempotency_key: string | null;
   seller_nip: string | null;
   xml_storage_path: string | null;
   net_total: number | null;
@@ -82,7 +85,8 @@ interface InvoiceRow {
 
 const SELECT = `
   id, tenant_id, internal_number, invoice_type, issue_date, sale_date,
-  ksef_number, ksef_status, seller_nip, xml_storage_path, net_total, vat_total, gross_total, notes, updated_at,
+  ksef_number, ksef_status, offline_idempotency_key, seller_nip, xml_storage_path,
+  net_total, vat_total, gross_total, notes, updated_at,
   parent_invoice_id, correction_reason,
   pdf_storage_path, pdf_generated_at, seller_data, buyer_data, payment_data,
   annotations:fa3_data->annotations,
@@ -201,6 +205,7 @@ export async function loadInvoiceForPdf(
     issueDate: row.issue_date,
     ksefNumber: row.ksef_number,
     ksefStatus: row.ksef_status,
+    offlineIdempotencyKey: row.offline_idempotency_key,
     sellerNip: row.seller_nip ?? (invoice.seller as { nip?: string } | null)?.nip ?? null,
     xmlSha256Hex: await readXmlHash(admin, row),
     correctedInvoice: await readCorrectedInvoice(admin, row),

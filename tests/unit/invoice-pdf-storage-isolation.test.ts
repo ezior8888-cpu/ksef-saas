@@ -90,6 +90,7 @@ describe('PDF: kod QR weryfikacji w KSeF', () => {
   const bazowe = {
     invoice: { internalNumber: 'FV/1' }, tenantId: 'tenant-a', issueDate: '2026-02-01',
     pdfStoragePath: null, pdfGeneratedAt: null, updatedAt: null, sellerNip: '1111111111',
+    ksefStatus: 'draft', offlineIdempotencyKey: null,
   };
   beforeEach(() => vi.stubEnv('KSEF_ENV', 'test'));
   afterEach(() => vi.unstubAllEnvs());
@@ -123,13 +124,40 @@ describe('PDF: kod QR weryfikacji w KSeF', () => {
   });
 
   it('po nadaniu numeru KSeF dopuszcza pojedynczy KOD I', async () => {
-    mocks.load.mockResolvedValue({ ...bazowe, ksefStatus: 'accepted', ksefNumber: '1234567890-20260201-ABC-01', xmlSha256Hex: HEX });
+    mocks.load.mockResolvedValue({
+      ...bazowe, ksefStatus: 'accepted', offlineIdempotencyKey: 'offline-key',
+      ksefNumber: '1234567890-20260201-ABC-01', xmlSha256Hex: HEX,
+    });
     expect(await generateInvoicePdf('invoice', 'tenant-a')).toMatchObject({ success: true });
     expect(mocks.render.mock.calls[0]![1]).toMatchObject({
       qrLabel: '1234567890-20260201-ABC-01',
       qrPayload: expect.stringContaining('/invoice/1111111111/01-02-2026/'),
     });
   });
+
+  it.each(['failed', 'rejected'])(
+    'po przejściu offline_queued → %s nadal blokuje PDF także z cache',
+    async (ksefStatus) => {
+      const persistedOffline = {
+        ...bazowe, offlineIdempotencyKey: 'offline-key', ksefNumber: null,
+        xmlSha256Hex: HEX, pdfStoragePath: 'tenant-a/2026/02/invoice.v4.pdf',
+        pdfGeneratedAt: '2026-02-02T13:00:00Z', updatedAt: '2026-02-01T12:00:00Z',
+      };
+      mocks.load.mockResolvedValueOnce({ ...persistedOffline, ksefStatus: 'offline_queued' });
+      mocks.load.mockResolvedValueOnce({ ...persistedOffline, ksefStatus });
+
+      expect(await generateInvoicePdf('invoice', 'tenant-a')).toMatchObject({
+        success: false, code: 'OFFLINE_QR_UNAVAILABLE',
+      });
+      expect(await generateInvoicePdf('invoice', 'tenant-a')).toMatchObject({
+        success: false, code: 'OFFLINE_QR_UNAVAILABLE',
+      });
+      expect(mocks.exists).not.toHaveBeenCalled();
+      expect(mocks.download).not.toHaveBeenCalled();
+      expect(mocks.render).not.toHaveBeenCalled();
+      expect(mocks.upload).not.toHaveBeenCalled();
+    },
+  );
 
   it('wysłana, bez numeru: ten sam link, napis OFFLINE', async () => {
     mocks.load.mockResolvedValue({ ...bazowe, ksefNumber: null, xmlSha256Hex: HEX });
@@ -140,7 +168,7 @@ describe('PDF: kod QR weryfikacji w KSeF', () => {
 
   it('szkic bez pliku XML: bez kodu', async () => {
     mocks.load.mockResolvedValue({ ...bazowe, ksefNumber: null, xmlSha256Hex: null });
-    await generateInvoicePdf('invoice', 'tenant-a');
+    expect(await generateInvoicePdf('invoice', 'tenant-a')).toMatchObject({ success: true });
     expect(mocks.render.mock.calls[0]![1]).toMatchObject({ qrPayload: null });
   });
 });

@@ -55,10 +55,11 @@ export async function generateInvoicePdf(
     };
   }
 
-  // Przed nadaniem numeru KSeF wizualizacja faktury offline wymaga także
-  // KODU II z certyfikatem typu Offline. Blokada stoi przed cache, bo starszy
-  // PDF mógł zawierać tylko KOD I. Po nadaniu numeru wystarczy sam KOD I.
-  if (data.ksefStatus === 'offline_queued' && !data.ksefNumber) {
+  // Wejście do kolejki zostawia offline_idempotency_key również po przejściu
+  // statusu na failed/rejected (np. deadline lub ROZ hold). Przed numerem KSeF
+  // wizualizacja nadal wymaga KODU II. Blokada stoi przed cache, bo starszy
+  // PDF mógł zawierać tylko KOD I; zwykły szkic nie ma tego śladu.
+  if (!data.ksefNumber && (data.offlineIdempotencyKey?.trim() || data.ksefStatus === 'offline_queued')) {
     return {
       success: false,
       code: 'OFFLINE_QR_UNAVAILABLE',

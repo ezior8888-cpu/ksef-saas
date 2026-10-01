@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   invoiceRow: null as Record<string, unknown> | null,
   xmlRow: null as Record<string, unknown> | null,
   filters: [] as Array<[string, string, unknown]>,
+  selections: [] as Array<[string, string]>,
 }));
 
 // Loader PDF czyta fakturę i skrót XML przez klienta admina — atrapa zwraca
@@ -16,7 +17,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
       const q = {
-        select: () => q,
+        select: (columns: string) => (mocks.selections.push([table, columns]), q),
         eq: (k: string, v: unknown) => (mocks.filters.push([table, k, v]), q),
         maybeSingle: async () => ({ data: table === 'invoices' ? mocks.invoiceRow : mocks.xmlRow, error: null }),
       };
@@ -90,9 +91,11 @@ describe('KOD I — link weryfikacyjny', () => {
 describe('loader PDF — skrót pliku XML', () => {
   beforeEach(() => {
     mocks.filters = [];
+    mocks.selections = [];
     mocks.invoiceRow = {
       id: 'inv-1', tenant_id: 'ten-1', internal_number: 'FV/1', invoice_type: 'VAT', issue_date: '2026-02-01',
-      sale_date: null, ksef_number: null, ksef_status: 'draft', seller_nip: '1111111111', xml_storage_path: 'ten-1/2026/02/inv-1.xml',
+      sale_date: null, ksef_number: null, ksef_status: 'draft', offline_idempotency_key: null,
+      seller_nip: '1111111111', xml_storage_path: 'ten-1/2026/02/inv-1.xml',
       net_total: 100, vat_total: 23, gross_total: 123, notes: null, annotations: null, updated_at: null,
       pdf_storage_path: null, pdf_generated_at: null, seller_data: { nip: '1111111111' }, buyer_data: {}, payment_data: {},
       invoice_line_items: [],
@@ -102,12 +105,25 @@ describe('loader PDF — skrót pliku XML', () => {
 
   it('skrót z xml_documents po ścieżce, firmie i fakturze', async () => {
     const dane = await loadInvoiceForPdf('inv-1', 'ten-1');
-    expect(dane).toMatchObject({ sellerNip: '1111111111', xmlSha256Hex: HASH_HEX, ksefStatus: 'draft' });
+    expect(dane).toMatchObject({
+      sellerNip: '1111111111', xmlSha256Hex: HASH_HEX,
+      ksefStatus: 'draft', offlineIdempotencyKey: null,
+    });
     expect(mocks.filters.filter(([t]) => t === 'xml_documents')).toEqual([
       ['xml_documents', 'storage_path', 'ten-1/2026/02/inv-1.xml'],
       ['xml_documents', 'tenant_id', 'ten-1'],
       ['xml_documents', 'invoice_id', 'inv-1'],
     ]);
+  });
+
+  it('przekazuje trwały ślad offline po zmianie statusu faktury na failed', async () => {
+    mocks.invoiceRow = {
+      ...mocks.invoiceRow!, ksef_status: 'failed', offline_idempotency_key: 'offline-key',
+    };
+    expect(await loadInvoiceForPdf('inv-1', 'ten-1')).toMatchObject({
+      ksefStatus: 'failed', offlineIdempotencyKey: 'offline-key',
+    });
+    expect(mocks.selections.find(([table]) => table === 'invoices')?.[1]).toContain('offline_idempotency_key');
   });
 
   it('ścieżka spoza firmy (zapisywalne pole) — bez skrótu i bez zapytania', async () => {
