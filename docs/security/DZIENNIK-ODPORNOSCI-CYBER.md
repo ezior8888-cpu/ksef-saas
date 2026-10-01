@@ -744,6 +744,14 @@ Dopisz wpis dopiero po faktycznym działaniu:
 
 **Kontrola po uzgodnieniu:** ponowne `pnpm audit --prod` zwróciło „No known vulnerabilities found”. Wyniki pełnego CI i builda z poprzedniego wpisu dotyczą identycznego drzewa przed dopisaniem tej notatki; końcowe kontrole GitHub dla opublikowanej wersji PR #100 wymagają osobnego odbioru przed scaleniem. Nie uruchamiano migracji ani wdrożenia. Po scaleniu Bartek nadal musi potwierdzić SHA webu i workera w Coolify.
 
+## 2026-10-01 — blokada nieprawidłowych kodów QR Offline24 (C-12 / CYB-KSEF-QR-01)
+
+**Dowód:** [specyfikacja MF](https://github.com/CIRFMF/ksef-api/blob/main/kody-qr.md) wymaga KODU I z hashem XML oraz podpisanego certyfikatem Offline KODU II przed nadaniem numeru. W kodzie znajdowały się własny adres weryfikacji `/web/verify?d=` i fallback `HASH:`. Recenzja wykryła także wyścig: wpis kolejki mógł powstać bez znacznika na fakturze, przez co nawet nowa blokada PDF oparta na statusie mogła przepuścić dokument. To ustalenia z kodu i testów, bez potwierdzonego incydentu na serwerze.
+
+**Zmiana robocza:** gałąź `codex/offline-qr-spec` usuwa pozorne payloady, sprawdza kolejkę przed cache PDF, utrwala znacznik przed insertem i domyka status po konflikcie. PDF/e-mail/ZIP nie wydają faktury offline bez numeru i KODU II, również po przejściu do `failed`/`rejected` i przy osieroconym wpisie. PDF z numerem KSeF wymaga z kolei poprawnego KODU I; bez danych do URL również odmawia. Dla zwykłego szkicu PDF pozostaje dostępny. Szczegóły i odbiór są w [runbooku C-12](KSEF-OFFLINE-QR-ODBIOR-2026-10-01.md). Brak certyfikatu typu Offline oznacza, że pełna obsługa PDF przed numerem nadal nie jest gotowa.
+
+**Weryfikacja:** testy odtwarzają częściowy zapis, retry/konflikt kolejki, statusy terminalne, stare cache, brak hasha po nadaniu numeru i ścieżki pojedynczą/zbiorczą. Przed wpisem w dzienniku po ostatnim rebase przeszły 134 testy celowane, TypeScript i kontrola lint; wcześniejszy pełny zestaw na tej gałęzi: 66 XML i 3919 Vitest. Końcowe CI/Security dla opublikowanej wersji należy sprawdzić osobno. Bez SQL, merge, wdrożenia i testu na prawdziwym KSeF.
+
 ## 2026-09-28 — kolizja numerów dostawców w skrzynce KSeF (CYB-C08)
 
 **Źródło i stan:** sprawa C-08 w [kolejce Claude, PR #81](https://github.com/ezior8888-cpu/ksef-saas/pull/81), zweryfikowana na `main` `4770099`. `00028` wymusza unikalność numeru wewnętrznego w całej firmie, a `lib/inngest/jobs/inbox-polling.ts` zapisuje w tym polu numer dostawcy i wykonuje zbiorczy `INSERT`. Kolizja dwóch różnych numerów KSeF z takim samym numerem dostawcy odrzuca paczkę; 48-godzinne przesuwające się okno może sprawić, że dokumenty przestaną być pobierane. W kursorze `savedCount` rośnie przy pobraniu metadanych, nie po zapisie. To potwierdzony scenariusz w kodzie; nie potwierdzono incydentu ani schematu na db-1.
