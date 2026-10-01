@@ -59,8 +59,8 @@ const SPECS: VarSpec[] = [
   { name: 'KSEF_PROD_URL', feature: 'KSeF', level: 'optional', note: 'wymagany dopiero przy KSEF_ENV=production' },
 
   // ── Kolejka jobów (Inngest — do Etapu 7 migracji) ──
-  { name: 'INNGEST_EVENT_KEY', feature: 'Joby w tle (Inngest)', level: 'required', note: 'bez tego ŻADEN job nie startuje (wysyłka KSeF, maile, OCR)' },
-  { name: 'INNGEST_SIGNING_KEY', feature: 'Joby w tle (Inngest)', level: 'required' },
+  { name: 'INNGEST_EVENT_KEY', feature: 'Joby w tle (Inngest)', level: 'optional', note: 'tylko przy JOBS_BACKEND=inngest (rollback); produkcja chodzi na pg-boss' },
+  { name: 'INNGEST_SIGNING_KEY', feature: 'Joby w tle (Inngest)', level: 'optional', note: 'tylko przy JOBS_BACKEND=inngest (rollback)' },
 
   // ── Pliki (R2 / MinIO po Etapie 5) ──
   { name: 'R2_ACCOUNT_ID', feature: 'Pliki XML/PDF (R2)', level: 'required' },
@@ -118,8 +118,8 @@ const SPECS: VarSpec[] = [
   { name: 'ADMIN_EMAILS', feature: 'Panel admina', level: 'required', note: 'pusty = /admin zablokowany + brak daily summary (fail-closed)' },
 
   // ── Joby w tle (pg-boss — Etap 7 migracji) ──
-  { name: 'JOBS_BACKEND', feature: 'Joby w tle (pg-boss)', level: 'optional', note: 'inngest (default) | pgboss — przełączane przy cutover Etapu 9' },
-  { name: 'DATABASE_URL', feature: 'Joby w tle (pg-boss)', level: 'optional', note: 'wymagany od cutover: Postgres db-1 przez sieć prywatną (worker + enqueue)' },
+  { name: 'JOBS_BACKEND', feature: 'Joby w tle (pg-boss)', level: 'required', note: 'pgboss na produkcji (apka i worker); inngest tylko przy rollbacku. Brak = zlecenia odrzucane, worker nie startuje' },
+  { name: 'DATABASE_URL', feature: 'Joby w tle (pg-boss)', level: 'required', note: 'Postgres db-1 przez sieć prywatną (worker + enqueue przy JOBS_BACKEND=pgboss)' },
 
   // ── ODŁOŻONE świadomie (nie blokują startu) ──
   { name: 'STRIPE_SECRET_KEY', feature: 'Billing (Stripe)', level: 'deferred', note: 'Faza 37 — wymaga firmy; UI degraduje gracefully' },
