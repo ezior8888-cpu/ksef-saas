@@ -59,7 +59,7 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E1 | Eksporty: KPiR (koszty z wydatków, strony, odliczenie VAT), JPK_FA(4) wg XSD, JPK_V7M(3), CSV, eksporty programowe | ✅ / ⏳ | #58–#61, #91, #93, #97, #98, #99; wstrzymania #66, #93 |
 | E2 | Faktury: adnotacje FA(3) (MPP, metoda kasowa, „odwrotne obciążenie”), ROZ po zaliczkach, PDF korekty, kod QR, mail z kwotą do zapłaty | ✅ / ⏳ C-05 | #75, #76, #79, #84, #95, #102, #103 |
 | E3 | OCR i waluty: koszt w walucie obcej po kursie NBP | ✅ | #94 |
-| E4 | Joby pg-boss: ponowienie wykonuje CAŁY job od nowa (brak pamięci kroków) — każdy zapis musi być odporny na powtórkę | 🔄 | #109 (OCR), Co-Pilot w toku; lista w 3.1 |
+| E4 | Joby pg-boss: ponowienie wykonuje CAŁY job od nowa (brak pamięci kroków) — każdy zapis musi być odporny na powtórkę | 🔄 | #109 (OCR), #112 (Co-Pilot cron); lista w 3.1 |
 | E5 | RODO / konto: usunięcie konta a subskrypcja i klucze obce | ✅ kod / ⏳ migracja B3 | #108 |
 | E6 | Konfiguracja produkcji bez cichych zastępstw (GUS sandbox, brak kluczy) | ✅ / ⏳ B2 | #107 |
 | E7 | Retencja 10 lat: joby `retention-delete`, `archive-old-invoices` — czy nic nie kasuje faktur przed terminem | ⬜ | — |
@@ -73,7 +73,7 @@ się od nowa?*
 | Job | Wynik |
 |---|---|
 | `process-ocr` | ❌→✅ dubel wydatku w KPiR — #109 |
-| `co-pilot-monthly` (cron) | ❌ rezerwacja okresu przed wysłaniem zdarzenia; ponowienie pomija firmy → paczka za miesiąc nie wychodzi — 🔄 |
+| `co-pilot-monthly` (cron) | ❌→✅ rezerwacja okresu przed wysłaniem zdarzenia; ponowienie pomijało firmy → paczka za miesiąc nie wychodziła — #112 |
 | `co-pilot-monthly` (paczka) | ⚠️ ponowienie po wysłaniu maila tworzy nowe eksporty i wysyła mail drugi raz; nieudana paczka zostaje „zarezerwowana” bez alertu — do zrobienia po cronie |
 | `auto-categorize-inbox` | ✅ sprawdza istniejący wydatek po `ksef_invoice_id` |
 | `download-upo` | ✅ odczyt/aktualizacja istniejącego rekordu |
@@ -89,7 +89,8 @@ się od nowa?*
 ### 4.1. Scalone do `main`, NIEWDROŻONE
 
 Main od `b25c126` czeka na wdrożenie (aplikacja + worker, bez migracji):
-#91–#97, #100, #101, #105 (= #98, #99, #102, #103), wydanie #106–#110:
+#91–#97, #100, #101, #105 (= #98, #99, #102, #103), wydanie #111 (`7a9f49a`)
+z #106–#110, oraz:
 
 | PR | Co |
 |---|---|
@@ -98,12 +99,11 @@ Main od `b25c126` czeka na wdrożenie (aplikacja + worker, bez migracji):
 | #108 | RODO: usunięcie konta nie zostawia płatnej subskrypcji bez opiekuna |
 | #109 | OCR: ponowienie joba nie dubluje wydatku w KPiR |
 | #110 | Ten plan + wskaźnik w `AGENTS.md` |
+| #112 | Co-Pilot (cron): ponowienie nie gubi miesięcznej paczki dla księgowej |
 
 ### 4.2. Otwarte PR-y Claude
 
-| PR | Co | Stan |
-|---|---|---|
-| — | Co-Pilot: rezerwacja okresu nie gubi paczki przy ponowieniu | w toku (gałąź `claude/co-pilot-rezerwacja`) |
+Brak (stan po #112).
 
 Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
 
@@ -130,10 +130,8 @@ Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
 
 ## 5. Następny krok
 
-1. Dokończyć PR Co-Pilota (cron): rezerwacja okresu i wysłanie zdarzenia
-   w jednym kroku, zwolnienie rezerwacji, gdy zdarzenie nie wyszło; test
-   ponowienia; mutacje; `pnpm run ci`; PR; scalić po zielonym CI.
-2. Co-Pilot (paczka): ponowienie po wysłanym mailu nie może wysłać go drugi
-   raz; nieudana paczka → alert zamiast cichej rezerwacji.
-3. E7: retencja — przeczytać `retention-delete` i `archive-old-invoices`.
-4. Dalej tabela 3.1 od góry (wiersze ⬜).
+1. Co-Pilot (paczka, `runCoPilotSendPackage`): ponowienie po wysłanym mailu
+   nie może wysłać go drugi raz ani tworzyć nowych `export_jobs`; nieudana
+   paczka → alert zamiast cichej rezerwacji.
+2. E7: retencja — przeczytać `retention-delete` i `archive-old-invoices`.
+3. Dalej tabela 3.1 od góry (wiersze ⬜).
