@@ -360,7 +360,14 @@ export async function deleteExpenseAction(expenseId: string) {
     .eq('id', expenseId)
     .eq('tenant_id', tenantId);
 
-  if (error) return { success: false as const, error: error.message };
+  if (error) {
+    return {
+      success: false as const,
+      error: error.code === '42501'
+        ? 'Koszt powiązany z KSeF pozostaje jako ślad faktury. Możesz wyłączyć go z KPiR.'
+        : error.message,
+    };
+  }
   if (count === 0) {
     return { success: false as const, error: 'Wydatek nie istnieje' };
   }

@@ -496,20 +496,22 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
 
       <div className="ff-sticky-actions border-t border-glass-border bg-glass-white-strong backdrop-blur-glass-lg">
         <div className="mx-auto flex max-w-7xl justify-between gap-3">
-          <Button
-            variant="ghost"
-            size="lg"
-            onClick={handleDelete}
-            disabled={isDeleting || isSaving}
-            className="text-red-600 hover:bg-red-500/10"
-          >
-            {isDeleting ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="mr-2 h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">Usuń</span>
-          </Button>
+          {expense.source !== 'ksef_inbox' && expense.ksef_invoice_id === null ? (
+            <Button
+              variant="ghost"
+              size="lg"
+              onClick={handleDelete}
+              disabled={isDeleting || isSaving}
+              className="text-red-600 hover:bg-red-500/10"
+            >
+              {isDeleting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">Usuń</span>
+            </Button>
+          ) : <span />}
           <Button
             variant="glass-primary"
             size="lg"
