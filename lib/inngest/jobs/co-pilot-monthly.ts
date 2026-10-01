@@ -4,6 +4,7 @@
 
 import { NonRetriableError, cron } from 'inngest';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import { sendJobEvent } from '@/lib/jobs/enqueue';
 import type { JobContext } from '@/lib/jobs/registry';
 import { Resend } from 'resend';
 
@@ -170,8 +171,7 @@ export async function runCoPilotMonthly({ step }: JobContext) {
 
     const { periodStart, periodEnd } = previousMonthRangeWarsaw(new Date());
 
-    type CoPilotEvent = ReturnType<typeof exportsCoPilotSendPackage.create>;
-    const eventsToSend: CoPilotEvent[] = [];
+    let triggered = 0;
 
     for (const settings of tenantsToProcess) {
       const email = settings.accountant_email?.trim();
@@ -191,8 +191,17 @@ export async function runCoPilotMonthly({ step }: JobContext) {
       // Drugi wykonujący się równolegle nie znajdzie wiersza i zwróci 0 rekordów —
       // wtedy `reserved=false` i pomijamy fan-out. Zwycięzca wyścigu wysyła paczkę,
       // przegrany mija.
-      const reserved = await step.run(
-        `reserve-${settings.tenant_id}`,
+      //
+      // Rezerwacja i wysłanie zdarzenia idą w JEDNYM kroku. pg-boss ponawia
+      // cały job od nowa (bez pamięci kroków): gdy rezerwacje szły osobno,
+      // a zdarzenia jednym wysłaniem na końcu, błąd po drodze (chwilowy błąd
+      // bazy przy kolejnej firmie, nieudane wysłanie) zostawiał okres
+      // zarezerwowany bez zdarzenia. Ponowienie widziało rezerwację i pomijało
+      // firmę — paczka za ten miesiąc nie wychodziła wcale (do 01.10.2026).
+      // Teraz zdarzenie wychodzi zaraz po rezerwacji, a gdy wysłanie się nie
+      // uda, rezerwacja wraca do poprzedniego okresu i ponowienie próbuje znowu.
+      const sent = await step.run(
+        `reserve-and-send-${settings.tenant_id}`,
         async (): Promise<boolean> => {
           const { data, error } = await supabase
             .from('accountant_settings')
@@ -213,34 +222,48 @@ export async function runCoPilotMonthly({ step }: JobContext) {
             .select('tenant_id');
 
           if (error) throw new Error(error.message);
-          return Boolean(data && data.length > 0);
+          if (!data || data.length === 0) return false;
+
+          try {
+            await sendJobEvent(
+              exportsCoPilotSendPackage.create({
+                tenantId: settings.tenant_id,
+                periodStart,
+                periodEnd,
+                formats,
+                accountantEmail: email,
+                accountantName: settings.accountant_name,
+                manual: false,
+              }),
+            );
+          } catch (sendError) {
+            const { error: releaseError } = await supabase
+              .from('accountant_settings')
+              .update({
+                last_sent_period_start: settings.last_sent_period_start,
+                last_sent_period_end: settings.last_sent_period_end,
+              })
+              .eq('tenant_id', settings.tenant_id)
+              .eq('last_sent_period_start', periodStart)
+              .eq('last_sent_period_end', periodEnd);
+            if (releaseError) {
+              console.error('[co-pilot] nie udało się zwolnić rezerwacji okresu — paczka nie wyjdzie', {
+                tenantId: settings.tenant_id,
+                periodStart,
+              });
+            }
+            throw sendError;
+          }
+          return true;
         },
       );
 
-      if (!reserved) continue;
-
-      eventsToSend.push(
-        exportsCoPilotSendPackage.create({
-          tenantId: settings.tenant_id,
-          periodStart,
-          periodEnd,
-          formats,
-          accountantEmail: email,
-          accountantName: settings.accountant_name,
-          manual: false,
-        }),
-      );
-    }
-
-    // Batch fan-out — wszystkie eventy lecą w jednym round-tripie do Inngest
-    // (per-event step.sendEvent dla 1000 tenantów to 1000 round-tripów).
-    if (eventsToSend.length > 0) {
-      await step.sendEvent('co-pilot-fanout', eventsToSend);
+      if (sent) triggered++;
     }
 
     return {
       processed: tenantsToProcess.length,
-      triggered: eventsToSend.length,
+      triggered,
       periodStart,
       periodEnd,
     };
