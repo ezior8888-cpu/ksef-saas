@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 
+import { PRICE_GROSS, TRIAL_DAYS, VAT_RATE_PERCENT } from '@/lib/billing/pricing';
+
 // Faza 22: regulamin to dokument prawny — zmienia się rzadko, cache na dobę.
 export const revalidate = 86400;
 
@@ -53,22 +55,19 @@ export default function TermsPage() {
           2. Konto może założyć osoba fizyczna pełnoletnia lub osoba prawna.
         </p>
         <p>
-          3. Trial trwa 30 dni od daty rejestracji. Nie wymaga podania danych
-          płatniczych.
+          3. Okres próbny trwa {TRIAL_DAYS} dni od rozpoczęcia subskrypcji. Przy
+          rozpoczęciu Użytkownik podaje kartę płatniczą; pierwsza płatność
+          następuje po zakończeniu okresu próbnego. Rezygnacja przed jego końcem
+          nie powoduje opłaty.
         </p>
 
         <h2>§4. Płatności</h2>
         <p>
-          1. Płatności przyjmujemy przez Stripe (rozliczenie w EUR przeliczane na
-          PLN po kursie dziennym NBP).
+          1. Płatności przyjmujemy przez Stripe, w złotych polskich (PLN).
         </p>
         <p>
-          2. Subskrypcja roczna: 588 PLN brutto (49 zł/mc · 12). Subskrypcja
-          miesięczna: 59 zł brutto/mc.
-        </p>
-        <p>
-          3. <strong>60-day money-back guarantee:</strong> w ciągu 60 dni od
-          pierwszej płatności Użytkownik może żądać pełnego zwrotu.
+          2. Subskrypcja miesięczna: {PRICE_GROSS} brutto za miesiąc (w tym
+          {VAT_RATE_PERCENT}% VAT), płatna z góry za każdy miesiąc.
         </p>
 
         <h2>§5. Odpowiedzialność</h2>

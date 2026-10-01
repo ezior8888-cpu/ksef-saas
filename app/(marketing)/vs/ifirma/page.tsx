@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { PRICE_PER_MONTH, TRIAL_DAYS } from '@/lib/billing/pricing';
+
 import { ComparisonTable, type ComparisonRow } from '@/components/marketing/comparison-table';
 import {
   VsHero,
@@ -131,14 +133,8 @@ const COMPARISON_ROWS = [
   {
     category: 'Cennik',
     feature: 'Jedna stawka „KSeF + OCR + workflow”',
-    ksefSaas: { status: 'note' as const, note: '49 zł/mc' },
+    ksefSaas: { status: 'note' as const, note: PRICE_PER_MONTH },
     competitor: { status: 'note' as const, note: 'pakiety modułowe' },
-  },
-  {
-    category: 'Cennik',
-    feature: '60 dni money-back',
-    ksefSaas: { status: 'yes' as const },
-    competitor: { status: 'partial' as const },
   },
   {
     category: 'Integracje',
@@ -302,7 +298,7 @@ export default function IfirmaPage() {
               { k: 'Warstwa wejścia', v: 'często atrakcyjna dla prostych faktur sprzedaży, ale bez pełnego stacku mobilnego i push.' },
               { k: 'Warstwa rozszerzeń', v: 'dodatkowe moduły, wyższe limity, integracje — koszt skokowy przy wzroście skali biura.' },
               { k: 'Koszty ukryte', v: 'czas pracy na szkoleniu nowych osób w złożonym UI oraz czas na ręczne sprawdzanie statusów, jeśli brak push.' },
-              { k: 'FaktFlow', v: 'jedna stawka ok. 49 zł/mc, push + OCR + KSeF w jednym worku, money-back 60 dni — czyli prostszy TCO dla mikrofirmy.' },
+              { k: 'FaktFlow', v: `jedna stawka ${PRICE_PER_MONTH}, push + OCR + KSeF w jednym worku, ${TRIAL_DAYS} dni za darmo — czyli prostszy TCO dla mikrofirmy.` },
             ].map((item, i) => (
               <li
                 key={item.k}

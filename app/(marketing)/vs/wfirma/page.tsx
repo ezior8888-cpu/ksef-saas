@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { PRICE_PER_MONTH, TRIAL_DAYS } from '@/lib/billing/pricing';
+
 import { ComparisonTable, type ComparisonRow } from '@/components/marketing/comparison-table';
 import {
   VsHero,
@@ -125,18 +127,12 @@ const COMPARISON_ROWS = [
   {
     category: 'Cennik',
     feature: 'Przejrzysta stawka „wszystko w jednym”',
-    ksefSaas: { status: 'note' as const, note: '49 zł/mc' },
+    ksefSaas: { status: 'note' as const, note: PRICE_PER_MONTH },
     competitor: { status: 'note' as const, note: 'pakiety wg skali' },
   },
   {
     category: 'Cennik',
     feature: 'OCR / AI bez osobnej faktury',
-    ksefSaas: { status: 'yes' as const },
-    competitor: { status: 'partial' as const },
-  },
-  {
-    category: 'Cennik',
-    feature: '60 dni money-back',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'partial' as const },
   },
@@ -308,7 +304,7 @@ export default function WfirmaPage() {
               { k: 'Warstwa podstawowa', v: 'rozliczenia, faktury, często sensowny start bez pełnej „maszyny mobilnej”.' },
               { k: 'Warstwa rozszerzeń', v: 'dodatkowe firmy, wyższe limity dokumentów, integracje — koszt skokowy przy wzroście skali.' },
               { k: 'Kadry i płace', v: 'mocna strona wFirma — jeśli tego potrzebujesz, może to uzasadniać wyższy abonament nawet przy słabszym mobile OCR.' },
-              { k: 'FaktFlow', v: 'jedna stawka ok. 49 zł/mc, mobile + OCR + KSeF w jednym worku, money-back 60 dni — czyli przewidywalny TCO dla mikrofirmy bez działu IT.' },
+              { k: 'FaktFlow', v: `jedna stawka ${PRICE_PER_MONTH}, mobile + OCR + KSeF w jednym worku, ${TRIAL_DAYS} dni za darmo — czyli przewidywalny TCO dla mikrofirmy bez działu IT.` },
             ].map((item, i) => (
               <li
                 key={item.k}

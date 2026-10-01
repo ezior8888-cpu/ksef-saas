@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { PRICE_PER_MONTH, TRIAL_DAYS } from '@/lib/billing/pricing';
 import '@/styles/zova.css';
 
 /**
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
   title:
     'FaktFlow — faktury KSeF 2026 dla mikrofirm | Zdjęcie paragonu = wpis do KPiR',
   description:
-    'Wystawiaj faktury i wysyłaj do KSeF jednym kliknięciem. Zdjęcie paragonu trafia automatycznie do KPiR. 30 dni za darmo, 60 dni gwarancji zwrotu.',
+    `Wystawiaj faktury i wysyłaj do KSeF jednym kliknięciem. Zdjęcie paragonu trafia automatycznie do KPiR. ${TRIAL_DAYS} dni za darmo, potem ${PRICE_PER_MONTH}.`,
 };
 
 export default function LandingLayout({

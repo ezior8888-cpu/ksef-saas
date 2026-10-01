@@ -2,13 +2,21 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 
+import {
+  PRICE_GROSS,
+  PRICE_NET,
+  PRICE_PER_MONTH,
+  PRICE_VAT,
+  TRIAL_DAYS,
+} from '@/lib/billing/pricing';
+
 // Faza 22: cennik się rzadko zmienia — godzinny revalidate na edge.
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'Cennik FaktFlow — 49 zł/mc, wszystkie funkcje, 60 dni gwarancji',
+  title: `Cennik FaktFlow — ${PRICE_PER_MONTH}, wszystkie funkcje, ${TRIAL_DAYS} dni za darmo`,
   description:
-    'Jeden plan dla wszystkich. 49 zł/mc rocznie lub 59 zł/mc miesięcznie. OCR, KSeF 2.0, KPiR, Wkurzacz Dłużników w cenie. Bez ukrytych dodatków.',
+    `Jeden plan dla wszystkich: ${PRICE_PER_MONTH}, płatne co miesiąc. ${TRIAL_DAYS} dni za darmo. OCR, KSeF 2.0, KPiR, Wkurzacz Dłużników w cenie. Bez ukrytych dodatków.`,
 };
 
 const FEATURES = [
@@ -77,7 +85,7 @@ const FEATURES = [
   {
     category: 'Bezpieczeństwo',
     items: [
-      'Hosting Frankfurt EU 🇪🇺',
+      'Hosting w UE (Niemcy) 🇪🇺',
       'GDPR-compliant',
       'Retencja 10 lat (zgodnie z prawem)',
       'Eksport pełnych danych',
@@ -92,7 +100,6 @@ const FEATURES = [
       'Dokumentacja w pl',
       'Live chat (godziny biurowe)',
       'Onboarding pomoc',
-      '60 dni money-back',
     ],
   },
 ];
@@ -120,8 +127,7 @@ export default function PricingPage() {
             </span>
           </h1>
           <p className="mt-8 max-w-xl font-editorial text-2xl leading-snug text-[var(--marketing-muted)]">
-            Bez tierów. Bez &bdquo;premium&rdquo; toggle. Bez kart kredytowych
-            żeby zacząć.
+            Bez tierów. Bez &bdquo;premium&rdquo; toggle. Bez umowy na rok.
           </p>
         </div>
 
@@ -132,58 +138,50 @@ export default function PricingPage() {
               Plan podstawowy
             </p>
             <p className="mt-6 font-editorial text-[7rem] font-medium leading-[0.85]">
-              <span className="italic text-[var(--marketing-accent)]">49 zł</span>
+              <span className="italic text-[var(--marketing-accent)]">{PRICE_GROSS}</span>
             </p>
             <p className="mt-2 font-editorial text-xl italic text-[var(--marketing-muted)]">
-              / miesiąc · płatne rocznie
+              / miesiąc · z VAT
             </p>
             <p className="mt-4 text-sm text-[var(--marketing-muted)]">
-              588 zł / rok · faktura VAT 23%
-            </p>
-            <p className="mt-1 text-xs text-[var(--marketing-muted)]">
-              Lub 59 zł/mc miesięcznie (708 zł/rok)
+              {PRICE_NET} netto + {PRICE_VAT} VAT · faktura VAT co miesiąc
             </p>
 
             <Link
               href="/register"
               className="mt-10 inline-flex w-full items-center justify-center gap-3 border border-emerald-500/40 bg-emerald-500 px-6 py-3.5 text-sm font-medium tracking-wide text-emerald-950 transition-all hover:border-emerald-400 hover:bg-emerald-400"
             >
-              Wypróbuj 30 dni za darmo
+              Wypróbuj {TRIAL_DAYS} dni za darmo
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
             <p className="mt-3 text-center text-[10px] uppercase tracking-[0.22em] text-[var(--marketing-muted)]">
-              Bez karty kredytowej · Anuluj kiedy chcesz
+              Pierwsza płatność po {TRIAL_DAYS} dniach · Bez umowy na rok
             </p>
           </div>
 
           {/* Marginalia z 3 obietnicami */}
           <div className="flex flex-col justify-center">
-            <p className="editorial-section-num mb-6 text-sm">— Trzy obietnice</p>
+            <p className="editorial-section-num mb-6 text-sm">— Dwie obietnice</p>
             <div className="space-y-8">
               <Promise
                 num="01"
-                value="30 dni"
-                label="Trial bez karty kredytowej. Pełen dostęp do wszystkich funkcji od pierwszej sekundy."
+                value={`${TRIAL_DAYS} dni`}
+                label={`Pełen dostęp do wszystkich funkcji. Kartę podajesz na starcie, pierwsza płatność dopiero po ${TRIAL_DAYS} dniach.`}
               />
               <Promise
                 num="02"
-                value="30 dni"
+                value={`${TRIAL_DAYS} dni`}
                 label="Parallel Run — możesz używać równolegle z poprzednią apką, by porównać przed migracją."
-              />
-              <Promise
-                num="03"
-                value="60 dni"
-                label="Money-back guarantee. Bez podawania powodu. Zwrot w 5 dni roboczych."
               />
             </div>
           </div>
         </div>
 
-        {/* Co dostajesz w 49 zł — hairline grid */}
+        {/* Co dostajesz w cenie — hairline grid */}
         <div className="mb-10 flex items-baseline gap-4 border-b border-white/10 pb-4">
           <span className="editorial-section-num text-3xl">02.</span>
           <span className="text-[10px] uppercase tracking-[0.25em] text-[var(--marketing-muted)]">
-            Co dostajesz w 49 zł
+            Co dostajesz w {PRICE_GROSS}
           </span>
         </div>
 
