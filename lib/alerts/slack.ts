@@ -2,7 +2,12 @@
  * Minimal Slack incoming-webhook transport.
  * Critical alerts require a confirmed 2xx response; bugs and metrics keep
  * the existing fail-soft behavior so Slack downtime cannot break user flows.
+ *
+ * Critical alerts are mirrored to Telegram when it is configured
+ * (`lib/alerts/telegram.ts`) — Slack alone does not wake anyone at night.
  */
+
+import { escapeTelegramHtml, isTelegramConfigured, sendTelegramMessage } from './telegram';
 
 export type SlackChannel = 'urgent' | 'bugs' | 'metrics';
 
@@ -105,7 +110,42 @@ export async function alertCritical(
   if (rich.link) {
     context[rich.link.label] = rich.link.url;
   }
-  await postSlackAlert({ channel: 'urgent', text, context }, true);
+
+  if (!isTelegramConfigured()) {
+    await postSlackAlert({ channel: 'urgent', text, context }, true);
+    return;
+  }
+
+  // Dwa kanały: alarm jest dostarczony, jeśli potwierdził go choć jeden.
+  // Deduplikacja w monitorze zapisuje się dopiero po tym potwierdzeniu.
+  const [slack, telegram] = await Promise.allSettled([
+    postSlackAlert({ channel: 'urgent', text, context }, true),
+    sendTelegramMessage(formatCriticalForTelegram(title, bodyMrkdwn, rich), {
+      requireDelivery: true,
+    }),
+  ]);
+  if (slack.status === 'rejected' && telegram.status === 'rejected') {
+    throw new Error('Critical alert delivery was not confirmed on any channel');
+  }
+}
+
+/** Slack mrkdwn → zwykły tekst w HTML Telegrama (gwiazdki pogrubienia znikają). */
+function formatCriticalForTelegram(
+  title: string,
+  bodyMrkdwn: string,
+  rich: SlackAlertRichContext,
+): string {
+  const lines = [
+    `🚨 <b>${escapeTelegramHtml(title)}</b>`,
+    escapeTelegramHtml(bodyMrkdwn.replace(/\*/g, '')),
+  ];
+  for (const field of rich.fields) {
+    lines.push(`• ${escapeTelegramHtml(field.label)}: ${escapeTelegramHtml(field.value)}`);
+  }
+  if (rich.link) {
+    lines.push(`${escapeTelegramHtml(rich.link.label)}: ${escapeTelegramHtml(rich.link.url)}`);
+  }
+  return lines.join('\n');
 }
 
 export async function alertMetrics(

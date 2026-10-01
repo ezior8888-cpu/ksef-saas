@@ -101,6 +101,9 @@ const SPECS: VarSpec[] = [
   { name: 'SLACK_WEBHOOK_URGENT', feature: 'Alerty Slack', level: 'required', note: 'krytyczne alerty (Faza 27) — bez tego brak powiadomień o awariach' },
   { name: 'SLACK_WEBHOOK_BUGS', feature: 'Alerty Slack', level: 'required' },
   { name: 'SLACK_WEBHOOK_METRICS', feature: 'Alerty Slack', level: 'required' },
+  { name: 'TELEGRAM_BOT_TOKEN', feature: 'Alerty Telegram', level: 'optional', note: 'token z @BotFather; kopia alertów krytycznych + raport dzienny (lib/alerts/telegram.ts)' },
+  { name: 'TELEGRAM_ALERT_CHAT_IDS', feature: 'Alerty Telegram', level: 'optional', note: 'ID czatów prywatnych po przecinku; bez tego kanał wyłączony' },
+  { name: 'OPS_HEARTBEAT_URL', feature: 'Heartbeat workera', level: 'optional', note: 'URL pinga Uptime Kuma push / Healthchecks.io — tylko worker (lib/jobs/heartbeat.ts)' },
 
   // ── Analityka ──
   { name: 'NEXT_PUBLIC_POSTHOG_KEY', feature: 'Analityka (PostHog)', level: 'required' },
