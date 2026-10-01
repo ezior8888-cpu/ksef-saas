@@ -33,4 +33,18 @@ describe('kafelek szacowanego podatku', () => {
     expect(html).toContain('Szac. podatek od 1 maja');
     expect(html).toContain('bez wcześniejszych miesięcy roku');
   });
+
+  it('strona z danymi od 1 stycznia (C-18): pełny rok mimo sześciu miesięcy na wykresie', () => {
+    vi.setSystemTime(new Date('2026-10-10T12:00:00'));
+    const html = renderToStaticMarkup(
+      <CashFlowDashboard
+        invoices={[fv('2026-02-01', 10_000), fv('2026-06-01', 1_000)]}
+        expenses={[]}
+        pendingReviewCount={0}
+        dataFrom="2026-01-01"
+      />,
+    );
+    expect(html).toContain('Szac. podatek od 1 stycznia');
+    expect(html).toMatch(/2[\s ]?090/); // 11 000 × 19%
+  });
 });

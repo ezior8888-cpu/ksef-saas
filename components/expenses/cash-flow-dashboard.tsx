@@ -34,6 +34,12 @@ interface CashFlowDashboardProps {
   invoices: CashFlowInvoiceRow[];
   expenses: CashFlowExpenseRow[];
   pendingReviewCount: number;
+  /**
+   * Pierwszy dzień załadowanych danych (`RRRR-MM-DD`). Domyślnie początek
+   * okna wykresu (6 miesięcy); gdy strona załaduje dane od 1 stycznia,
+   * szacunek podatku obejmie cały rok (C-18).
+   */
+  dataFrom?: string;
 }
 
 /** Neon (wykres / wskaźniki) — zgodne z prośbą: zielony + czerwony. */
@@ -45,6 +51,7 @@ export function CashFlowDashboard({
   invoices,
   expenses,
   pendingReviewCount,
+  dataFrom,
 }: CashFlowDashboardProps) {
   const [hoveredMonthKey, setHoveredMonthKey] = useState<string | null>(null);
 
@@ -102,7 +109,7 @@ export function CashFlowDashboard({
     : 0;
 
   // PIT liczy się od 1 stycznia, nie z okna sześciu miesięcy wykresu.
-  const taxEstimate = estimateIncomeTaxThisYear(invoices, expenses, now, `${monthsRange[0].key}-01`);
+  const taxEstimate = estimateIncomeTaxThisYear(invoices, expenses, now, dataFrom ?? `${monthsRange[0].key}-01`);
 
   const pendingLabel =
     pendingReviewCount === 1

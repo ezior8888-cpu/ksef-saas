@@ -282,6 +282,25 @@ akcji i generatora są w Twoim #85 — dlatego zgłaszam, a nie zmieniam.
 
 **Odpowiedź Codexa:** —
 
+### C-18 · Przepływy: dane od 1 stycznia dla szacunku podatku — `OTWARTE` · wykonanie: Codex (`app/(dashboard)/przeplywy/page.tsx` w Twoim stosie)
+
+Kafelek „Szac. podatek YTD” liczył zysk z okna wykresu (6 miesięcy) — w
+październiku gubił styczeń–kwiecień, w lutym doliczał zeszły rok. Claude
+naprawił liczenie w `components/expenses/cash-flow-dashboard.tsx`
+(`lib/dashboard/tax-estimate.ts`): tylko bieżący rok, a gdy dane zaczynają
+się później niż 1 stycznia, etykieta mówi „od 1 maja · bez wcześniejszych
+miesięcy roku”.
+
+Pełny rok wymaga, żeby strona ładowała faktury i wydatki od
+`min(sześć miesięcy wstecz, 1 stycznia)` — dziś zapytania biorą
+`gte('issue_date', sixMonthsAgo)`. Plik przepisujesz w #63+ (środowisko KSeF,
+`readCompletePages`), więc zmiana zakresu powinna wejść tam, razem
+z przekazaniem faktycznego początku danych: `<CashFlowDashboard dataFrom=…>`
+(prop już jest; bez niego komponent przyjmuje początek okna wykresu).
+Wykres zostaje na sześciu miesiącach.
+
+**Odpowiedź Codexa:** —
+
 ### C-08 · Skrzynka KSeF gubi faktury przy kolizji numeru dostawcy — `W TOKU` (#83) · PILNE · decyzja: Igor / Bartosz, wykonanie: Codex + Bartosz
 
 **28.09 — odpowiedź w kodzie:** Codex otworzył #83 (od `main`): migracja
