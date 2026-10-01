@@ -3,9 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   load: vi.fn(), save: vi.fn(), render: vi.fn(),
   exists: vi.fn(), download: vi.fn(), upload: vi.fn(),
+  offlineQueueEntry: vi.fn(),
 }));
 vi.mock('@/lib/pdf/invoice-data', () => ({
   loadInvoiceForPdf: mocks.load, saveInvoicePdfPath: mocks.save,
+  invoiceHasOfflineQueueEntry: mocks.offlineQueueEntry,
 }));
 vi.mock('@/lib/pdf/invoice-renderer', () => ({ renderInvoicePdf: mocks.render }));
 vi.mock('@/lib/pdf/pdf-storage', async (importOriginal) => ({
@@ -19,6 +21,7 @@ beforeEach(() => {
   mocks.exists.mockResolvedValue(true);
   mocks.download.mockResolvedValue(Buffer.from('cached-private-document'));
   mocks.render.mockResolvedValue(Buffer.from('generated-own-document'));
+  mocks.offlineQueueEntry.mockResolvedValue(false);
   mocks.load.mockResolvedValue({
     invoice: { internalNumber: 'FV/1' }, tenantId: 'tenant-a', issueDate: '2026-09-09',
     pdfStoragePath: 'tenant-a/2026/09/invoice.v4.pdf',
@@ -133,6 +136,38 @@ describe('PDF: kod QR weryfikacji w KSeF', () => {
       qrLabel: '1234567890-20260201-ABC-01',
       qrPayload: expect.stringContaining('/invoice/1111111111/01-02-2026/'),
     });
+    expect(mocks.offlineQueueEntry).not.toHaveBeenCalled();
+  });
+
+  it('osierocony wpis kolejki bez znacznika blokuje nawet świeży PDF z cache', async () => {
+    mocks.load.mockResolvedValue({
+      ...bazowe, ksefNumber: null, offlineIdempotencyKey: null,
+      pdfStoragePath: 'tenant-a/2026/02/invoice.v4.pdf',
+      pdfGeneratedAt: '2026-02-02T13:00:00Z', updatedAt: '2026-02-01T12:00:00Z',
+    });
+    mocks.offlineQueueEntry.mockResolvedValue(true);
+
+    expect(await generateInvoicePdf('invoice', 'tenant-a')).toMatchObject({
+      success: false, code: 'OFFLINE_QR_UNAVAILABLE',
+    });
+    expect(mocks.offlineQueueEntry).toHaveBeenCalledWith('invoice', 'tenant-a');
+    expect(mocks.exists).not.toHaveBeenCalled();
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(mocks.render).not.toHaveBeenCalled();
+  });
+
+  it('błąd odczytu kolejki nie wydaje PDF ani z cache, ani z renderera', async () => {
+    mocks.load.mockResolvedValue({
+      ...bazowe, ksefNumber: null,
+      pdfStoragePath: 'tenant-a/2026/02/invoice.v4.pdf',
+      pdfGeneratedAt: '2026-02-02T13:00:00Z', updatedAt: '2026-02-01T12:00:00Z',
+    });
+    mocks.offlineQueueEntry.mockRejectedValue(new Error('queue unavailable'));
+
+    await expect(generateInvoicePdf('invoice', 'tenant-a')).rejects.toThrow('queue unavailable');
+    expect(mocks.exists).not.toHaveBeenCalled();
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(mocks.render).not.toHaveBeenCalled();
   });
 
   it.each(['failed', 'rejected'])(
@@ -170,6 +205,7 @@ describe('PDF: kod QR weryfikacji w KSeF', () => {
     mocks.load.mockResolvedValue({ ...bazowe, ksefNumber: null, xmlSha256Hex: null });
     expect(await generateInvoicePdf('invoice', 'tenant-a')).toMatchObject({ success: true });
     expect(mocks.render.mock.calls[0]![1]).toMatchObject({ qrPayload: null });
+    expect(mocks.offlineQueueEntry).toHaveBeenCalledWith('invoice', 'tenant-a');
   });
 });
 

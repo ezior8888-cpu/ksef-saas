@@ -216,6 +216,25 @@ export async function loadInvoiceForPdf(
 }
 
 /**
+ * Starsze, przerwane zapisy mogły zostawić wpis kolejki bez znacznika na
+ * fakturze. Błąd odczytu nie może być interpretowany jako brak wpisu.
+ */
+export async function invoiceHasOfflineQueueEntry(
+  invoiceId: string,
+  tenantId: string,
+): Promise<boolean> {
+  const { data, error } = await createAdminClient()
+    .from('ksef_offline_queue')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('invoice_id', invoiceId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error('Could not verify offline queue before invoice PDF');
+  return data !== null;
+}
+
+/**
  * SHA-256 pliku XML faktury (ten sam plik, który poszedł do KSeF) — jak trasa
  * pobierania XML w portalu księgowej: po ścieżce zapisanej przy fakturze,
  * z filtrem firmy i faktury. Brak pliku (szkic) albo błąd → `null`: PDF

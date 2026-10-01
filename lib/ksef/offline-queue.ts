@@ -53,7 +53,34 @@ export async function addToOfflineQueue(
   );
   const deadline = calculateOfflineDeadline(now, params.isMfOutage);
 
-  const { data: row, error } = await supabase
+  // Najpierw utrwalamy ślad offline na fakturze. Gdy zapis kolejki lub procesu
+  // przerwie się później, PDF nadal pozostanie zablokowany przed numerem KSeF.
+  const { data: marked, error: markErr } = await supabase
+    .from('invoices')
+    .update({
+      offline_qr_offline: null,
+      offline_qr_certyfikat: null,
+      offline_idempotency_key: idempotencyKey,
+    })
+    .eq('id', params.invoiceId)
+    .eq('tenant_id', params.tenantId)
+    .or('ksef_status.is.null,ksef_status.neq.accepted')
+    .select('id')
+    .maybeSingle();
+  if (markErr) throw new Error('Invoice could not be marked for offline queue');
+  if (!marked) {
+    const { data: current, error: currentError } = await supabase
+      .from('invoices')
+      .select('ksef_status')
+      .eq('id', params.invoiceId)
+      .eq('tenant_id', params.tenantId)
+      .maybeSingle();
+    if (currentError || !current) throw new Error('Invoice status unavailable before offline queue insert');
+    if (current.ksef_status === 'accepted') throw new Error('Invoice already accepted during offline queueing');
+    throw new Error('Invoice could not be marked for offline queue');
+  }
+
+  const { data: inserted, error } = await supabase
     .from('ksef_offline_queue')
     .insert({
       tenant_id: params.tenantId,
@@ -72,6 +99,7 @@ export async function addToOfflineQueue(
     .select()
     .single();
 
+  let row: OfflineQueueRow;
   if (error) {
     if (error.code === '23505') {
       const { data: existing, error: fetchErr } = await supabase
@@ -94,18 +122,22 @@ export async function addToOfflineQueue(
       if (current.ksef_status === 'accepted') {
         throw new Error('Invoice already accepted during offline queueing');
       }
-      return existing as OfflineQueueRow;
+      row = existing as OfflineQueueRow;
+      // Retry po częściowym zapisie domyka status, ale nie ożywia wpisów
+      // terminalnych (failed/expired/sent). Znacznik został naprawiony wyżej.
+      if (row.status !== 'queued' && row.status !== 'sending') return row;
+    } else {
+      throw error;
     }
-    throw error;
+  } else {
+    if (!inserted) throw new Error('Offline queue insert returned no row');
+    row = inserted as OfflineQueueRow;
   }
 
   const { data: updated, error: updErr } = await supabase
     .from('invoices')
     .update({
       ksef_status: 'offline_queued',
-      offline_qr_offline: null,
-      offline_qr_certyfikat: null,
-      offline_idempotency_key: idempotencyKey,
     })
     .eq('id', params.invoiceId)
     .eq('tenant_id', params.tenantId)

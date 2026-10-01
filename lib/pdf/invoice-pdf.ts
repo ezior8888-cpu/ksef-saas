@@ -1,4 +1,4 @@
-import { loadInvoiceForPdf, saveInvoicePdfPath } from './invoice-data';
+import { invoiceHasOfflineQueueEntry, loadInvoiceForPdf, saveInvoicePdfPath } from './invoice-data';
 import {
   buildInvoicePdfKey,
   downloadInvoicePdf,
@@ -55,11 +55,15 @@ export async function generateInvoicePdf(
     };
   }
 
-  // Wejście do kolejki zostawia offline_idempotency_key również po przejściu
-  // statusu na failed/rejected (np. deadline lub ROZ hold). Przed numerem KSeF
-  // wizualizacja nadal wymaga KODU II. Blokada stoi przed cache, bo starszy
-  // PDF mógł zawierać tylko KOD I; zwykły szkic nie ma tego śladu.
-  if (!data.ksefNumber && (data.offlineIdempotencyKey?.trim() || data.ksefStatus === 'offline_queued')) {
+  // Stary/przerwany zapis mógł zostawić kolejkę bez znacznika na fakturze.
+  // Przed numerem KSeF również taki przypadek wymaga KODU II. Sprawdzamy
+  // kolejkę przed cache, a błąd odczytu przerywa wydanie PDF.
+  const requiresOfflineQr = !data.ksefNumber && (
+    !!data.offlineIdempotencyKey?.trim() ||
+    data.ksefStatus === 'offline_queued' ||
+    await invoiceHasOfflineQueueEntry(invoiceId, tenantId)
+  );
+  if (requiresOfflineQr) {
     return {
       success: false,
       code: 'OFFLINE_QR_UNAVAILABLE',

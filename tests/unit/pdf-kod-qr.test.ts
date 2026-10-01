@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   render: vi.fn(),
   invoiceRow: null as Record<string, unknown> | null,
   xmlRow: null as Record<string, unknown> | null,
+  queueRow: null as Record<string, unknown> | null,
+  queueError: false,
   filters: [] as Array<[string, string, unknown]>,
   selections: [] as Array<[string, string]>,
 }));
@@ -19,14 +21,18 @@ vi.mock('@/lib/supabase/server', () => ({
       const q = {
         select: (columns: string) => (mocks.selections.push([table, columns]), q),
         eq: (k: string, v: unknown) => (mocks.filters.push([table, k, v]), q),
-        maybeSingle: async () => ({ data: table === 'invoices' ? mocks.invoiceRow : mocks.xmlRow, error: null }),
+        limit: () => q,
+        maybeSingle: async () => ({
+          data: table === 'invoices' ? mocks.invoiceRow : table === 'ksef_offline_queue' ? mocks.queueRow : mocks.xmlRow,
+          error: table === 'ksef_offline_queue' && mocks.queueError ? { message: 'unavailable' } : null,
+        }),
       };
       return q;
     },
   }),
 }));
 
-import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
+import { invoiceHasOfflineQueueEntry, loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
 import { renderInvoicePdf } from '@/lib/pdf/invoice-renderer';
 import { hexToBase64Url, invoiceVerificationUrl, ksefEnvForQr, qrLabel } from '@/lib/ksef/qr-verification';
 import type { Invoice } from '@/types/invoice';
@@ -92,6 +98,8 @@ describe('loader PDF — skrót pliku XML', () => {
   beforeEach(() => {
     mocks.filters = [];
     mocks.selections = [];
+    mocks.queueRow = null;
+    mocks.queueError = false;
     mocks.invoiceRow = {
       id: 'inv-1', tenant_id: 'ten-1', internal_number: 'FV/1', invoice_type: 'VAT', issue_date: '2026-02-01',
       sale_date: null, ksef_number: null, ksef_status: 'draft', offline_idempotency_key: null,
@@ -124,6 +132,20 @@ describe('loader PDF — skrót pliku XML', () => {
       ksefStatus: 'failed', offlineIdempotencyKey: 'offline-key',
     });
     expect(mocks.selections.find(([table]) => table === 'invoices')?.[1]).toContain('offline_idempotency_key');
+  });
+
+  it('szuka osieroconego wpisu kolejki tylko po fakturze i firmie, a błąd blokuje PDF', async () => {
+    expect(await invoiceHasOfflineQueueEntry('inv-1', 'ten-1')).toBe(false);
+    mocks.queueRow = { id: 'queue-1' };
+    expect(await invoiceHasOfflineQueueEntry('inv-1', 'ten-1')).toBe(true);
+    expect(mocks.filters.filter(([table]) => table === 'ksef_offline_queue')).toEqual([
+      ['ksef_offline_queue', 'tenant_id', 'ten-1'],
+      ['ksef_offline_queue', 'invoice_id', 'inv-1'],
+      ['ksef_offline_queue', 'tenant_id', 'ten-1'],
+      ['ksef_offline_queue', 'invoice_id', 'inv-1'],
+    ]);
+    mocks.queueError = true;
+    await expect(invoiceHasOfflineQueueEntry('inv-1', 'ten-1')).rejects.toThrow('Could not verify offline queue');
   });
 
   it('ścieżka spoza firmy (zapisywalne pole) — bez skrótu i bez zapytania', async () => {

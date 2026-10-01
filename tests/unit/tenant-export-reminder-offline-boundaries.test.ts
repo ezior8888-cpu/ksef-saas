@@ -213,6 +213,10 @@ describe('offline helper tenant ownership', () => {
 
   it('enqueues and updates only the owned invoice', async () => {
     tables.invoices[0].ksef_status = 'sending';
+    beforeInsert = () => {
+      expect(tables.invoices[0].offline_idempotency_key).toBeTruthy();
+      expect(tables.invoices[0].ksef_status).toBe('sending');
+    };
     const result = await addToOfflineQueue(offlineParams);
     expect(result.tenant_id).toBe('tenant-a');
     expect(tables.invoices[0].ksef_status).toBe('offline_queued');
@@ -220,6 +224,30 @@ describe('offline helper tenant ownership', () => {
     expect(operations.find(op => op.table === 'invoices' && op.mode === 'update')?.filters).toContainEqual(['tenant_id', 'tenant-a']);
     expect(tables.ksef_offline_queue[0]).toMatchObject({ qr_offline_payload: null, qr_certyfikat_payload: null });
     expect(tables.invoices[0]).toMatchObject({ offline_qr_offline: null, offline_qr_certyfikat: null });
+    expect(operations.findIndex(op => op.table === 'invoices' && op.mode === 'update'))
+      .toBeLessThan(operations.findIndex(op => op.table === 'ksef_offline_queue' && op.mode === 'insert'));
+  });
+
+  it('po błędzie insert znacznik na fakturze pozostaje i retry tworzy kolejkę', async () => {
+    tables.invoices[0].ksef_status = 'sending';
+    errorFor = op => op.table === 'ksef_offline_queue' && op.mode === 'insert';
+    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow();
+    expect(tables.ksef_offline_queue).toHaveLength(0);
+    expect(tables.invoices[0].offline_idempotency_key).toBeTruthy();
+    expect(tables.invoices[0].ksef_status).toBe('sending');
+
+    errorFor = () => false;
+    await addToOfflineQueue(offlineParams);
+    expect(tables.invoices[0].ksef_status).toBe('offline_queued');
+    expect(tables.ksef_offline_queue).toHaveLength(1);
+  });
+
+  it('błąd zapisu znacznika nie może utworzyć wpisu kolejki', async () => {
+    tables.invoices[0].ksef_status = 'sending';
+    errorFor = op => op.table === 'invoices' && op.mode === 'update';
+    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be marked');
+    expect(tables.ksef_offline_queue).toHaveLength(0);
+    expect(tables.invoices[0].offline_idempotency_key).toBeUndefined();
   });
 
   it.each([
@@ -242,8 +270,31 @@ describe('offline helper tenant ownership', () => {
     tables.ksef_offline_queue.push({
       id: 'existing-queue', tenant_id: 'tenant-a', invoice_id: 'invoice-a',
       idempotency_key: generateIdempotencyKey('tenant-a', 'invoice-a', new Date('2026-01-01T12:00:00Z')),
+      status: 'queued',
     });
     expect((await addToOfflineQueue(offlineParams)).id).toBe('existing-queue');
+    expect(tables.invoices[0]).toMatchObject({
+      ksef_status: 'offline_queued',
+      offline_idempotency_key: tables.ksef_offline_queue[0].idempotency_key,
+    });
+  });
+
+  it('po częściowym insercie retry konfliktu naprawia status i zachowuje znacznik', async () => {
+    tables.invoices[0].ksef_status = 'sending';
+    let invoiceUpdates = 0;
+    errorFor = op => op.table === 'invoices' && op.mode === 'update' && ++invoiceUpdates === 2;
+    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
+    expect(tables.ksef_offline_queue).toHaveLength(1);
+    expect(tables.invoices[0].offline_idempotency_key).toBeTruthy();
+    expect(tables.invoices[0].ksef_status).toBe('sending');
+
+    errorFor = () => false;
+    conflict = true;
+    expect((await addToOfflineQueue(offlineParams)).id).toBe('new-queue');
+    expect(tables.invoices[0]).toMatchObject({
+      ksef_status: 'offline_queued',
+      offline_idempotency_key: tables.ksef_offline_queue[0].idempotency_key,
+    });
   });
 
   it('does not claim success when invoice ownership changes before the write', async () => {
@@ -260,8 +311,10 @@ describe('offline helper tenant ownership', () => {
   });
   it('preserves acceptance that lands just before the offline status update', async () => {
     tables.invoices[0].ksef_status = 'sending';
+    let invoiceUpdates = 0;
     beforeUpdate = op => {
       if (op.table !== 'invoices') return;
+      if (++invoiceUpdates !== 2) return;
       tables.invoices[0].ksef_status = 'accepted';
       tables.invoices[0].ksef_number = 'TEST';
       beforeUpdate = null;
@@ -270,7 +323,8 @@ describe('offline helper tenant ownership', () => {
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
 
     expect(tables.invoices[0]).toMatchObject({ ksef_status: 'accepted', ksef_number: 'TEST' });
-    expect(tables.invoices[0].offline_qr_offline).toBeUndefined();
+    expect(tables.invoices[0].offline_qr_offline).toBeNull();
+    expect(tables.invoices[0].offline_idempotency_key).toBeTruthy();
     expect(tables.ksef_offline_queue).toMatchObject([{ status: 'sent', tenant_id: 'tenant-a', invoice_id: 'invoice-a' }]);
     expect(operations.find(op => op.table === 'invoices' && op.mode === 'update')?.nullableNonAccepted).toBe(true);
   });
