@@ -413,7 +413,7 @@ export async function runSubmitInvoice(
       attempt,
     });
 
-    // Re-emisja po odebraniu z kolejki offline — nie blokuj kolejnym probingiem `/health`,
+    // Re-emisja po odebraniu z kolejki offline — nie blokuj kolejną sondą zdrowia KSeF,
     // tylko idź klasyczną ścieżką online submit.
     if (!fromOfflineQueue) {
       const health = await step.run('check-ksef-health', async () =>
