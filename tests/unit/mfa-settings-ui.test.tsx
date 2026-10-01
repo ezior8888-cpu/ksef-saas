@@ -27,6 +27,7 @@ vi.mock('@/app/(dashboard)/settings/security/actions', () => ({
 
 import SecuritySettingsPage from '@/app/(dashboard)/settings/security/page';
 import { TwoFactorCard } from '@/app/(dashboard)/settings/security/_components/two-factor-card';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -45,7 +46,7 @@ it('explains the risk of losing TOTP before offering enrollment', () => {
   expect(markup).toContain('Utrata dostępu do aplikacji TOTP może zablokować logowanie.');
   expect(markup).toContain('Samodzielne odzyskiwanie dostępu, także kodami ratunkowymi, jest obecnie');
   expect(markup).toContain('niedostępne.');
-  expect(markup).toContain('href="mailto:support@faktflow.pl"');
+  expect(markup).toContain(`href="mailto:${SUPPORT_EMAIL}"`);
   expect(markup.indexOf('Utrata dostępu')).toBeLessThan(markup.indexOf('Włącz 2FA'));
   expect(mocks.enroll).not.toHaveBeenCalled();
 });
@@ -62,7 +63,7 @@ it.each([true, false])('does not offer recovery generation when MFA is enabled=%
 it('still offers turning off active MFA and provides a support contact', () => {
   const markup = renderToStaticMarkup(<TwoFactorCard isEnabled />);
   expect(markup).toContain('Wyłącz aplikację TOTP');
-  expect(markup).toContain('href="mailto:support@faktflow.pl"');
+  expect(markup).toContain(`href="mailto:${SUPPORT_EMAIL}"`);
   expect(markup).toContain('niedostępne.');
 });
 

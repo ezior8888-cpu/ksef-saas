@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { PRICE_GROSS, TRIAL_DAYS, VAT_RATE_PERCENT } from '@/lib/billing/pricing';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 // Faza 22: regulamin to dokument prawny — zmienia się rzadko, cache na dobę.
 export const revalidate = 86400;
@@ -35,7 +36,7 @@ export default function TermsPage() {
             Ministerstwo Finansów
           </li>
           <li>
-            <strong>Usługa</strong> — KSeF SaaS dostępny pod adresem ksef-saas.pl
+            <strong>Usługa</strong> — FaktFlow dostępny pod adresem faktflow.pl
           </li>
           <li>
             <strong>Użytkownik</strong> — osoba fizyczna lub prawna korzystająca z
@@ -105,7 +106,7 @@ export default function TermsPage() {
         <p>
           2. Spory rozstrzyga sąd właściwy dla siedziby Usługodawcy (Poznań).
         </p>
-        <p>3. Kontakt: support@ksef-saas.pl</p>
+        <p>3. Kontakt: {SUPPORT_EMAIL}</p>
       </div>
     </article>
   );

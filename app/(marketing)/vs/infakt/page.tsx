@@ -11,6 +11,7 @@ import {
   VsChooseColumns,
   VsMigrationCta,
 } from '@/components/marketing/vs-page-chrome';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 // Faza 22: comparison page — SEO ważne, cache na godzinę.
 export const revalidate = 3600;
@@ -367,7 +368,7 @@ export default function InfaktPage() {
           ))}
         </ol>
         <p className="mt-6 font-editorial text-sm italic leading-relaxed text-[var(--marketing-muted)]">
-          Jeśli potrzebujesz checklisty PDF lub wsparcia przy imporcie wielofirmowym, zostaw zgłoszenie na support@ksef-saas.pl — dopasujemy scenariusz do Twojej skali.
+          Jeśli potrzebujesz checklisty PDF lub wsparcia przy imporcie wielofirmowym, zostaw zgłoszenie na {SUPPORT_EMAIL} — dopasujemy scenariusz do Twojej skali.
         </p>
 
         <VsSectionHeader

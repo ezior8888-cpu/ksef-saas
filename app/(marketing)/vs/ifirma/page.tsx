@@ -11,6 +11,7 @@ import {
   VsChooseColumns,
   VsMigrationCta,
 } from '@/components/marketing/vs-page-chrome';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 // Faza 22: comparison page — SEO ważne, cache na godzinę.
 export const revalidate = 3600;
@@ -404,7 +405,7 @@ export default function IfirmaPage() {
             , żeby zbudować graf wewnętrznych powiązań tematycznych.
           </p>
           <p>
-            Jeśli jesteś biurem rachunkowym i chcesz zaproponować klientom hybrydę (część na iFirma, część na FaktFlow), przygotujemy dla Ciebie szablon komunikatu RODO oraz harmonogram techniczny migracji paczkowej — napisz na support@ksef-saas.pl z informacją o liczbie podmiotów.
+            Jeśli jesteś biurem rachunkowym i chcesz zaproponować klientom hybrydę (część na iFirma, część na FaktFlow), przygotujemy dla Ciebie szablon komunikatu RODO oraz harmonogram techniczny migracji paczkowej — napisz na {SUPPORT_EMAIL} z informacją o liczbie podmiotów.
           </p>
         </section>
       </div>

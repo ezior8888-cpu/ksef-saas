@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server';
 
 import { unsubscribe } from '@/lib/email/preferences';
 import { verifyUnsubscribeToken } from '@/lib/email/unsubscribe-token';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -104,7 +105,7 @@ async function handleUnsubscribe(
     }
     return htmlResponse({
       title: 'Błąd',
-      body: '<p>Wystąpił błąd. Spróbuj ponownie za chwilę albo skontaktuj się: pomoc@faktflow.pl</p>',
+      body: `<p>Wystąpił błąd. Spróbuj ponownie za chwilę albo skontaktuj się: ${SUPPORT_EMAIL}</p>`,
       ok: false,
     });
   }

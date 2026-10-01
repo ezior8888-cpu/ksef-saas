@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 // Faza 22: polityka prywatności — dokument prawny, cache na dobę.
 export const revalidate = 86400;
@@ -19,7 +20,7 @@ export default function PrivacyPage() {
           Administratorem Twoich danych osobowych jest [nazwa firmy], NIP
           [TWÓJ_NIP], z siedzibą w Poznaniu.
         </p>
-        <p>Email kontaktowy w sprawach RODO: privacy@ksef-saas.pl</p>
+        <p>Email kontaktowy w sprawach RODO: {SUPPORT_EMAIL}</p>
 
         <h2>2. Jakie dane zbieramy</h2>
         <p>
@@ -162,7 +163,7 @@ export default function PrivacyPage() {
         <p>
           W sprawach <strong>art. 17 RODO</strong> (usunięcie danych nieobjętych
           dalszym obowiązkiem prawnym) możesz złożyć wniosek na adres{' '}
-          <strong>privacy@ksef-saas.pl</strong>. Dla <strong>usunięcia konta /
+          <strong>{SUPPORT_EMAIL}</strong>. Dla <strong>usunięcia konta /
           organizacji z poziomu aplikacji</strong> (właściciel, po weryfikacji
           m.in. NIP) zapisujemy moment żądania oraz termin <strong>twardego
           usunięcia</strong> danych podlegających skasowaniu —{' '}
@@ -205,7 +206,7 @@ export default function PrivacyPage() {
           <li>Sprzeciwu (możesz w każdej chwili zrezygnować)</li>
           <li>Skargi do Prezesa UODO (uodo.gov.pl)</li>
         </ul>
-        <p>Wniosek do realizacji prawa: privacy@ksef-saas.pl</p>
+        <p>Wniosek do realizacji prawa: {SUPPORT_EMAIL}</p>
 
         <h2>11. Dzienniki audytu (retencja, tryb dopisywania, anonimizacja)</h2>
         <p>

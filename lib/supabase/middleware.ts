@@ -55,6 +55,11 @@ const STATIC_PUBLIC_EXACT = [
   '/manifest.webmanifest',
   '/sw.js',
   '/monitoring', // Sentry `tunnelRoute`
+  // Dla wyszukiwarek i podglądów linków. Bez tego (do 1.10.2026) wszystkie trzy
+  // kończyły się przekierowaniem na /login.
+  '/robots.txt',
+  '/sitemap.xml',
+  '/opengraph-image',
 ] as const;
 
 export function isMarketingPath(pathname: string): boolean {

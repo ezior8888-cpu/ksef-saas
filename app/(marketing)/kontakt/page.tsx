@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Mail, MapPin, MessageCircle } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 // Faza 22: kontakt to czysto statyczna strona — cache na dobę.
 export const revalidate = 86400;
@@ -31,24 +32,23 @@ export default function ContactPage() {
           <ContactCard
             icon={Mail}
             title="Email"
-            value="hello@ksef-saas.pl"
-            href="mailto:hello@ksef-saas.pl"
+            value={SUPPORT_EMAIL}
+            href={`mailto:${SUPPORT_EMAIL}`}
             note="Odpowiedź w 24h"
           />
           <ContactCard
             icon={MessageCircle}
             title="Live Chat"
             value="W aplikacji"
-            href="https://app.ksef-saas.pl"
+            href="/login"
             note="Pon–Pt 9:00–17:00"
-            external
           />
           <ContactCard
             icon={Mail}
-            title="Wsparcie techniczne"
-            value="support@ksef-saas.pl"
-            href="mailto:support@ksef-saas.pl"
-            note="Odpowiedź w 24h"
+            title="Centrum pomocy"
+            value="Instrukcje krok po kroku"
+            href="/pomoc"
+            note="KSeF, faktury, import, konto"
           />
           <ContactCard
             icon={MapPin}

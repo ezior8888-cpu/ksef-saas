@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 // Faza 22: RODO — dokument prawny, cache na dobę.
 export const revalidate = 86400;
@@ -53,7 +54,7 @@ export default function GdprPage() {
         <p>
           Jako podmiot przetwarzający Twoje dane, oferujemy DPA dla każdej
           umowy. Pobierz pdf z{' '}
-          <a href="mailto:legal@ksef-saas.pl">legal@ksef-saas.pl</a>.
+          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
         </p>
 
         <h2>Incydenty bezpieczeństwa</h2>
@@ -64,7 +65,7 @@ export default function GdprPage() {
 
         <h2>Kontakt RODO</h2>
         <p>
-          Email: <a href="mailto:privacy@ksef-saas.pl">privacy@ksef-saas.pl</a>
+          Email: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
         </p>
       </div>
     </article>

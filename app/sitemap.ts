@@ -3,8 +3,10 @@ import path from 'path';
 
 import type { MetadataRoute } from 'next';
 
+import { siteUrl } from '@/lib/site';
+
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://ksef-saas.pl';
+  const baseUrl = siteUrl();
 
   const staticPages: MetadataRoute.Sitemap = [
     { url: `${baseUrl}/`, priority: 1.0, changeFrequency: 'weekly' },
