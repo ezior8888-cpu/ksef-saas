@@ -46,11 +46,15 @@ function dane(issuedInvoices: JpkInvoice[]): JpkV7mInputData {
   };
 }
 
-/** Pola wiersza sprzedaży o danym numerze dowodu. */
+/** Pola wiersza sprzedaży o danym numerze dowodu (bez wyrażeń regularnych z danych). */
 function wiersz(xml: string, nr: string): string {
-  const m = new RegExp(`<SprzedazWiersz>(?:(?!</SprzedazWiersz>)[\\s\\S])*<DowodSprzedazy>${nr.replace(/\//g, '\\/')}</DowodSprzedazy>[\\s\\S]*?</SprzedazWiersz>`).exec(xml);
-  if (!m) throw new Error(`brak wiersza ${nr}`);
-  return m[0];
+  const w = xml
+    .split('<SprzedazWiersz>')
+    .slice(1)
+    .map((s) => s.split('</SprzedazWiersz>')[0]!)
+    .find((s) => s.includes(`<DowodSprzedazy>${nr}</DowodSprzedazy>`));
+  if (w === undefined) throw new Error(`brak wiersza ${nr}`);
+  return w;
 }
 
 describe('JPK_V7M: ROZ po odjęciu zaliczek', () => {
