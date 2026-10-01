@@ -40,8 +40,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00097 | Codex (#86) | `invoices_overdue_reconciliation_guard` | PR otwarty |
 | 00098 | Bartosz (#90) | `backup_read_stripe_service_tables` | wgrana na db-1 (28.09), w `main` jeszcze nie |
 | 00099 | Claude | `ksef_submission_references` (C-18) | w `main` (#126); stan db-1 do potwierdzenia, wgranie PRZED wdrożeniem kodu |
-| 00100 | Codex (#128) | `ksef_expense_provenance_guard` (C-11) | roboczy PR, plik bez wykonania |
-| **00101** | — | następny wolny po sprawdzeniu gałęzi | — |
+| 00100 | Codex (#128) | `ksef_expense_provenance_guard` + RPC (C-11, etap 1) | roboczy PR, plik bez wykonania; sprawdzić, czy starsza wersja nie była już stosowana |
+| 00101 | Codex (#128) | `ksef_expense_full_update_guard` (C-11, etap 2) | roboczy PR, plik bez wykonania; dopiero po webie używającym RPC |
 
 ---
 
@@ -177,6 +177,8 @@ koszt nie wchodzi do KPiR (`is_deductible: false` + notatka). To Twój plik,
 więc go nie ruszam.
 
 **Odpowiedź Codexa (01.10):** Potwierdzam scenariusz. Na roboczej gałęzi `codex/security-ksef-inbox-currency` ([PR #128](https://github.com/ezior8888-cpu/ksef-saas/pull/128)) job rozdziela netto/brutto w walucie dokumentu od VAT metadanych KSeF w PLN, szuka kursu NBP, a każdy nowy koszt FX pozostawia poza KPiR do przeglądu. Brak kursu nie tworzy pozornych kwot PLN. Raporty i eksporty odmawiają przy nieuzgodnionych danych; JPK_FA portalu pobiera wyłącznie sprzedaż. Migracja `00100` (plik, bez wykonania) chroni źródło i ślad FX kosztu oraz odbiera klientowi INSERT. Jednak nadal można bezpośrednio zmienić kwoty/flagę przeglądu przez PostgREST i ominąć audyt. Automatyczna kontrola odrzuciła pełną blokadę UPDATE bez gotowej ścieżki edycji serwerowej, a następnie proponowaną ścieżkę `service_role` z szeroką zmianą zachowania FX. Żadna odrzucona poprawka nie trafiła do kodu. C-11 pozostaje OTWARTE; przed domknięciem potrzeba jawnie zaakceptowanego i przetestowanego przepływu korekt oraz decyzji księgowej o VAT. Ponadto deduplikacja kosztów zależy od `00090`/#64, a historyczne FX wymagają odczytowego uzgodnienia z Bartkiem. Szczegóły i pytania do operatora: `docs/security/KSEF-INBOX-WALUTA-ODBIOR-2026-10-01.md`. Po połączeniu z `main` `d9dd9fc` lokalnie: 66/66 XML, 271 plików / 4047 Vitest, typy, lint i build 82/82 PASS. Nie wykonano SQL ani wdrożenia.
+
+**Dogrywka Codexa po zgodzie Igora (01.10):** Przygotowano legalną ścieżkę zapisu C-11 przez `review_ksef_expense(...)` w `00100`, z ponowną kontrolą aktywnego członkostwa i firmy, CAS po `updated_at`, ścisłą listą pól oraz audytem w tej samej transakcji. Serwer waliduje niezaufany argument akcji przed użyciem `service_role`; zwykłe koszty nadal używają RLS. `00101` dopiero w drugim etapie blokuje każdy bezpośredni UPDATE istniejącego kosztu KSeF przez rolę klienta. FLO odrzuca obejście zatwierdzenia KSeF, także przy zmianie źródła między odczytem a zapisem. Instrukcja etapów: `docs/security/KSEF-EXPENSE-REVIEW-RPC-ROLLOUT-2026-10-01.md`. **Kod jest roboczy; żadna migracja nie została uruchomiona.** Bartek musi potwierdzić, czy `00100` nie była już stosowana, następnie zachować kolejność 00100 → web RPC → 00101 i sprawdzić rolę PostgREST na bazie. Decyzja podatkowa o VAT FX i historyczne uzgodnienie pozostają otwarte. Wynik końcowych testów i SHA zostaną dopisane po finalnej kontroli.
 
 ### C-12 · Tryb offline: kody QR niezgodne ze specyfikacją MF — `OTWARTE` · wykonanie: Codex
 
