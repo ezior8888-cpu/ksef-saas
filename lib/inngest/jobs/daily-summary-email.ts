@@ -15,6 +15,7 @@
 import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
+import { escapeTelegramHtml, isTelegramConfigured, sendTelegramMessage } from '@/lib/alerts/telegram';
 import { sendEmail } from '@/lib/email/send';
 import { getDailyMetrics, type DailyMetrics } from '@/lib/observability/business-metrics';
 
@@ -135,12 +136,26 @@ function buildHtml(metrics: DailyMetrics): string {
  */
 export async function runDailySummaryEmail({ step, logger }: JobContext) {
     const recipients = parseAdminEmails();
-    if (recipients.length === 0) {
-      logger.warn('ADMIN_EMAILS pusty — daily summary skipped');
+    const telegram = isTelegramConfigured();
+    if (recipients.length === 0 && !telegram) {
+      logger.warn('ADMIN_EMAILS pusty i brak Telegrama — daily summary skipped');
       return { skipped: true, reason: 'no-recipients' };
     }
 
     const metrics = await step.run('aggregate', () => getDailyMetrics(24));
+
+    // Telegram: te same liczby co w mailu, bez dźwięku — to raport, nie alarm.
+    // Fail-soft: brak dostarczenia nie blokuje maila.
+    const telegramDelivered = telegram
+      ? await step.run('send-telegram', () =>
+          sendTelegramMessage(buildTelegramReport(metrics), { silent: true }),
+        )
+      : 0;
+
+    if (recipients.length === 0) {
+      return { recipients: 0, sent: 0, failed: 0, telegramDelivered };
+    }
+
     const html = buildHtml(metrics);
     const subject = `📊 FaktFlow daily: ${metrics.invoicesIssued} faktur, ${metrics.paymentsSucceeded} płatności`;
 
@@ -170,7 +185,31 @@ export async function runDailySummaryEmail({ step, logger }: JobContext) {
       recipients: recipients.length,
       sent: results.filter((r) => r.ok).length,
       failed: results.filter((r) => !r.ok).length,
+      telegramDelivered,
     };
+}
+
+/**
+ * Raport dzienny dla Telegrama — wyłącznie agregaty (bez nazw firm, e-maili,
+ * NIP-ów), bo wiadomość trafia na serwery Telegrama.
+ */
+export function buildTelegramReport(metrics: DailyMetrics): string {
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' });
+  const ksef =
+    metrics.ksefDowntimeMinutes > 0
+      ? `⚠️ ${fmtNum(metrics.ksefDowntimeMinutes)} min niedostępności (maks. ${fmtNum(metrics.ksefMaxConsecutiveFailures)} nieudanych prób z rzędu)`
+      : '✅ dostępny przez całą dobę';
+  const header = `📊 <b>FaktFlow — raport dzienny</b> (${day(metrics.period.from)} → ${day(metrics.period.to)})`;
+  const body = [
+    `Rejestracje: ${fmtNum(metrics.signups)} · nowe firmy: ${fmtNum(metrics.newTenants)} · pierwsza faktura: ${fmtNum(metrics.firstInvoiceCount)}`,
+    `Faktury: wystawione ${fmtNum(metrics.invoicesIssued)}, przyjęte ${fmtNum(metrics.invoicesAccepted)}, nieudane ${fmtNum(metrics.invoicesFailed)}, offline ${fmtNum(metrics.invoicesOfflineQueued)}`,
+    `KSeF: ${ksef}`,
+    `Płatności: udane ${fmtNum(metrics.paymentsSucceeded)} (${fmtPln(metrics.paymentsTotalGrossPln)}), nieudane ${fmtNum(metrics.paymentsFailed)}`,
+    `Błędy: audyt ${fmtNum(metrics.totalAuditErrors)}, joby ${fmtNum(metrics.totalInngestFailures)}`,
+  ];
+  // Nagłówek składamy z liczb i dat, więc nie ma w nim treści do escapowania.
+  return [header, '', ...body.map(escapeTelegramHtml)].join('\n');
 }
 
 export const dailySummaryEmailJob = inngest.createFunction(
