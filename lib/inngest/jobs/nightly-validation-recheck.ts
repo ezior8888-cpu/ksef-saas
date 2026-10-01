@@ -4,6 +4,7 @@ import { cron } from 'inngest';
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { validateNipCached } from '@/lib/validation/cache';
+import { contractorValidationPatch } from '@/lib/validation/contractor-update';
 
 import { inngest } from '../client';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
@@ -69,18 +70,17 @@ export async function runNightlyValidationRecheck({ step }: JobContext) {
               forceRefresh: true,
             });
 
+            // API niedostępne (limit zapytań przy setkach kontrahentów, timeout):
+            // zostawiamy ostatni dobry status i rachunki, następna noc spróbuje.
+            const patch = contractorValidationPatch(result);
+            if (!patch) continue;
+
             const prevStatus = c.vat_status;
             const statusChangedBatch = result.vatStatus !== prevStatus;
 
             await supabase
               .from('contractors')
-              .update({
-                vat_status: result.vatStatus,
-                last_validation_at: new Date().toISOString(),
-                last_validation_source: result.source,
-                bank_accounts_validated: result.bankAccounts,
-                validation_warning: result.warning ?? null,
-              })
+              .update(patch)
               .eq('id', c.id)
               .eq('tenant_id', c.tenant_id);
 

@@ -43,7 +43,18 @@ export interface CachedValidationResult {
   cachedAt?: string;
   source: 'whitelist' | 'vies';
   warning?: string;
+  /**
+   * API chwilowo niedostępne (timeout, limit zapytań, błąd serwera). Taki
+   * wynik to „nie wiemy”, nie „nieaktywny bez rachunków”: nie trafia do
+   * cache, a zapis do kontrahenta go pomija (`contractorValidationPatch`).
+   * Do 01.10.2026 jedna awaria API kasowała status VAT i zweryfikowane
+   * rachunki kontrahenta na 7 dni (nocna re-walidacja) i truła cache na 24 h.
+   */
+  unavailable?: boolean;
 }
+
+const TRANSIENT_WHITELIST_ERRORS = new Set(['RATE_LIMIT', 'API_ERROR', 'TIMEOUT']);
+const TRANSIENT_VIES_ERRORS = new Set(['API_ERROR', 'TIMEOUT', 'SERVICE_DOWN']);
 
 type DbVatStatus = Database['public']['Enums']['vat_status_enum'];
 type ValidationCacheRow = Database['public']['Tables']['validation_cache']['Row'];
@@ -105,7 +116,9 @@ export async function validateNipCached(
           .gt('expires_at', new Date().toISOString())
           .maybeSingle();
 
-        if (!dbCached) return null;
+        // „unknown” w cache to ślad dawnej awarii API (przed 01.10.2026) —
+        // pytamy API jeszcze raz zamiast oddawać „nie wiemy” przez 24 h.
+        if (!dbCached || dbCached.vat_status === 'unknown') return null;
 
         // Inkrement hit_count tylko gdy Redis miss (Redis hit = już policzone
         // pośrednio). Zapisuje "ostatnio rzeczywiście użyto" semantykę.
@@ -118,7 +131,7 @@ export async function validateNipCached(
       },
     );
 
-    if (redisHit) return redisHit;
+    if (redisHit && redisHit.vatStatus !== 'unknown') return redisHit;
   } else {
     // forceRefresh: czyścimy Redis, żeby kolejne calls nie dostały starego.
     await cacheDel(redisKey);
@@ -133,6 +146,8 @@ export async function validateNipCached(
     const apiResult = await checkVatInVies(normalizedCountry, cleanNip);
     result = mapViesToCacheResult(apiResult, normalizedCountry, cleanNip);
   }
+
+  if (result.unavailable) return result;
 
   const insertRow: Database['public']['Tables']['validation_cache']['Insert'] =
     {
@@ -208,6 +223,7 @@ function mapWhitelistToCacheResult(
       fromCache: false,
       source: 'whitelist',
       warning: apiResult.error,
+      unavailable: TRANSIENT_WHITELIST_ERRORS.has(apiResult.errorCode),
     };
   }
 
@@ -262,6 +278,7 @@ function mapViesToCacheResult(
       fromCache: false,
       source: 'vies',
       warning: apiResult.error,
+      unavailable: TRANSIENT_VIES_ERRORS.has(apiResult.errorCode),
     };
   }
 

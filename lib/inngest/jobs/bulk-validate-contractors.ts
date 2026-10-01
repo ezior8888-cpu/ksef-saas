@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { validateNipCached } from '@/lib/validation/cache';
+import { contractorValidationPatch } from '@/lib/validation/contractor-update';
 
 import { inngest, validationBulkContractorsRequested } from '../client';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
@@ -57,15 +58,13 @@ export async function runBulkValidateContractors(data: Parameters<typeof validat
               forceRefresh,
             });
 
+            // API niedostępne: status i rachunki kontrahenta zostają bez zmian.
+            const patch = contractorValidationPatch(result);
+            if (!patch) continue;
+
             await supabase
               .from('contractors')
-              .update({
-                vat_status: result.vatStatus,
-                last_validation_at: new Date().toISOString(),
-                last_validation_source: result.source,
-                bank_accounts_validated: result.bankAccounts,
-                validation_warning: result.warning ?? null,
-              })
+              .update(patch)
               .eq('id', c.id)
               .eq('tenant_id', tenantId);
 
