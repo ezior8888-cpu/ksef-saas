@@ -12,7 +12,7 @@ import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
 import { isKnownTaxOffice } from '@/lib/exports/tax-offices';
 
 import type { ExportExpense } from './data-fetcher';
-import type { JpkInvoice } from './jpk-fa-generator';
+import { amountsOf, type JpkInvoice } from './jpk-fa-generator';
 
 const JPK_V7M_NAMESPACE = 'http://crd.gov.pl/wzor/2025/12/19/14090/';
 const ETD_NAMESPACE = 'http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/';
@@ -86,31 +86,35 @@ export function wholeZloty(n: number): number {
   return Math.sign(n) * Math.floor((cents + 50) / 100);
 }
 
-/** Agreguje pozycje faktur sprzedaży wg stawek VAT. */
+/**
+ * Sumuje sprzedaż wg stawek VAT — kwoty z faktury tak, jak są w KSeF
+ * (`amountsOf`, to samo co JPK_FA). Faktura rozliczeniowa (ROZ) wchodzi
+ * po odjęciu zaliczek (art. 106f ust. 3): zaliczki są już w ewidencji
+ * z własnych faktur, a do 01.10.2026 ROZ dokładała je drugi raz. VAT
+ * pozycji jest ten z faktury, a nie przeliczany od nowa z netto.
+ */
 function aggregateSales(invoices: readonly JpkInvoice[]): RateBucket {
   const b = emptyBucket();
   for (const inv of invoices) {
-    for (const line of inv.lines) {
-      const rate = line.vatRate === '23' ? 0.23 : line.vatRate === '8' ? 0.08 : line.vatRate === '5' ? 0.05 : 0;
-      const vat = round2(line.netAmount * rate);
-      switch (line.vatRate) {
+    for (const { rate, net, vat } of amountsOf(inv).rates) {
+      switch (rate) {
         case '23':
-          b.net23 += line.netAmount;
+          b.net23 += net;
           b.vat23 += vat;
           break;
         case '8':
-          b.net8 += line.netAmount;
+          b.net8 += net;
           b.vat8 += vat;
           break;
         case '5':
-          b.net5 += line.netAmount;
+          b.net5 += net;
           b.vat5 += vat;
           break;
         case '0':
-          b.net0 += line.netAmount;
+          b.net0 += net;
           break;
         case 'zw':
-          b.netZw += line.netAmount;
+          b.netZw += net;
           break;
         default:
           // oo / np — poza podstawową ewidencją krajową (osobne pola; do rozszerzenia)
