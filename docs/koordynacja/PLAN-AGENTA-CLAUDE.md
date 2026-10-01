@@ -136,12 +136,11 @@ z #106–#110, oraz:
 | #124 | Retencja kopii bazy zostawia zawsze 7 najnowszych udanych |
 | #127 | Plan: E10/E11 przejrzane, E12 samochód do decyzji (scalony razem z #129) |
 | #129 | Kafelek „Szac. podatek” na przepływach liczy od 1 stycznia (był: ostatnie 6 miesięcy, także z zeszłego roku) + C-18 |
+| #130 | Import FA(3)/JPK_FA odmawia faktury w walucie obcej (kwoty szły jak złote do KPiR) |
 
 ### 4.2. Otwarte PR-y Claude
 
-| PR | Co | Stan |
-|---|---|---|
-| #130 | Import FA(3)/JPK_FA odmawia faktury w walucie obcej (kwoty szły jak złote do KPiR) | w tym PR |
+Brak (ten PR to tylko aktualizacja planu).
 
 Na `main` od innych od 01.10: Bartosz #113 (health-check KSeF), #117 (C-08,
 migracja `00096`), #120 (alerty Telegram + heartbeat workera), #126
@@ -178,6 +177,7 @@ poprawnych kodów QR); Bartosz #90.
 | Pulpit `monthly-figures` i FLO sumują `gross_total` ROZ | Bartosz |
 | Flo `payment.confirm` zapisuje `payment_date` = dzień KLIKNIĘCIA, nie wpływu pieniędzy (karta pyta dobę po terminie, zbiorczo). Dziś czytają to tylko zabezpieczenia ponagleń — ale zanim VAT metodą kasową (#76) zacznie liczyć okres z wpłat, karta musi pytać o datę wpływu | przyszłość, decyzja przy JPK_V7M dla metody kasowej |
 | **E12 — samochód osobowy.** Paliwo i inne wydatki na auto idą z odliczeniem 100% VAT (OCR, skrzynka KSeF), a użytkownik nie ma jak ustawić 50%. W typowej mikrofirmie (użytek mieszany): VAT tylko 50% (art. 86a ust. 1), nieodliczona połowa do kosztu, koszt PIT max 75% (art. 23 ust. 1 pkt 46a); leasing ma osobne limity (pkt 47a). Dziś KPiR zaniża koszt o połowę VAT i nie stosuje limitu 75% (JPK_V7M zawyżyłby odliczenie, ale jest wstrzymany). Propozycja: ustawienie firmy „samochód: brak / mieszany / 100% firmowy (VAT-26)”, rozpoznanie wydatków samochodowych (paliwo, serwis, ubezpieczenie) i proporcja odliczenia przy zapisie wydatku | Igor + księgowa (decyzja, co liczyć), potem Claude |
+| Import: Magiczny Import z KSeF zapisuje faktury jako `accepted` (wchodzą do KPiR i eksportów), a import pliku JPK_FA/CSV jako `draft` (nie wchodzą). Spójne z celem „historia z innego programu, który już zaksięgował”? Szkiców z importu nie da się wysłać do KSeF (wysyłka tylko z formularza „zapisz i wyślij”). Wszystkie importy zapisują `invoice_kind = regular` z kwotami z pliku (ROZ = reszta po zaliczkach, KOR = różnica) — w KPiR bez dubli | decyzja produktowa (Igor/Bartosz) |
 | Formularz faktury nie pozwala na datę sprzedaży PO dacie wystawienia (art. 106i ust. 7 dopuszcza fakturę do 60 dni przed dostawą) i nie ostrzega o spóźnionym wystawieniu (po 15. dniu następnego miesiąca, art. 106i ust. 1) — ograniczenie, nie błąd danych | decyzja produktowa |
 
 ## 5. Następny krok
