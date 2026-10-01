@@ -17,8 +17,9 @@ Deprecated / Superseded by ADR-XXXX.
 | [0004](./0004-ksef-retry-i-offline24.md) | KSeF retry schedule + Offline24 fallback | Accepted |
 | [0005](./0005-2fa-supabase-mfa-native.md) | 2FA przez Supabase MFA native (nie custom) | Accepted |
 | [0006](./0006-gdpr-14d-cooling-off.md) | GDPR delete = 14-dniowy cooling-off | Accepted |
-| [0007](./0007-backup-free-tier-first.md) | Backup: free-tier R2 first (PITR odłożone) | Accepted |
+| [0007](./0007-backup-free-tier-first.md) | Backup: free-tier R2 first (PITR odłożone) | Częściowo zastąpione przez ADR-0009 |
 | [0008](./0008-ocr-polling-nie-sse.md) | Polling statusu OCR (nie SSE) | Accepted |
+| [0009](./0009-pg-dump-na-db-1-i-storage-box.md) | Kopie bazy: pg_dump na db-1 + Storage Box | Proposed |
 
 ## Kiedy pisać nowy ADR
 

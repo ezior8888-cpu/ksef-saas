@@ -1,6 +1,6 @@
 # ADR-0007: Backup — free-tier R2 first (PITR odłożone)
 
-- **Status:** Accepted
+- **Status:** Accepted — „Faza 2” (Supabase PITR) zastąpiona przez [ADR-0009](./0009-pg-dump-na-db-1-i-storage-box.md) po przeprowadzce na Hetznera
 - **Data:** 2026-04-22
 - **Faza:** 29
 

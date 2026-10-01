@@ -33,9 +33,10 @@ Cel: **RTO < 2h, RPO < 1h** (pełna definicja w
   (raz w przyszłości) lub krótkookresowy throttling Inngest jobs.
 
 **Scenario A3 — Data corruption**: → [backup-restore.md](backup-restore.md).
-  **Future**: po upgrade Supabase Pro + PITR → 1-click restore do
-  punktu N godzin wstecz. Aktualnie: restore z naszego R2 snapshotu
-  (max RPO = 24h, snapshot 02:00 PL daily).
+  Odtworzenie ze zrzutu `pg_dump` z `db-1` (albo z Storage Box), procedura
+  sprawdzona próbą 1 października 2026. Max RPO = 24 h (zrzut co noc).
+  Supabase PITR nie istnieje po przeprowadzce na self-hosted
+  ([ADR-0009](../adr/0009-pg-dump-na-db-1-i-storage-box.md)).
 
 ### Comms
 - T+15: status page banner "Investigation"
