@@ -55,3 +55,13 @@ ORDER BY 1;
 Brak waluty zatrzymuje job bez utworzenia kosztu. Ponieważ obecny watchdog nie liczy tej klasy błędów, Bartek powinien okresowo odczytać samą liczbę faktur przychodzących bez powiązanego wydatku, rozdzielając dokumenty celowo pominięte od błędów joba. Dopiero po ustaleniu kryterium oczekiwanego kosztu można dodać alarm, który nie będzie fałszywie zgłaszał faktur niebędących kosztem firmy.
 
 Wycofanie kodu jest możliwe przez ponowne wdrożenie poprzedniego obrazu, ale przywróci ryzyko błędnego automatycznego księgowania nowych faktur walutowych. Historyczne wiersze wymagają osobnego rozliczenia; ponowienie joba nie naprawia istniejącego kosztu, bo działa ochrona przed duplikatem.
+
+## Dogrywka po niezależnym przeglądzie (1 października)
+
+- Portal księgowej pobiera dla JPK_FA tylko sprzedaż. Nieprawidłowy koszt KSeF nadal zatrzymuje KPiR, ale nie blokuje niezwiązanego JPK_FA. Zawieszony obecnie generator Comarch Optima także odmawia przy EUR lub braku waluty przed oznaczeniem wartości jako PLN.
+- Migracja `00099` pozostaje częściową ochroną. Klient z rolą `authenticated` nadal może bezpośrednio zmienić kwoty i flagi istniejącego kosztu KSeF. Poprawka zamykająca wszystkie takie UPDATE wymaga równoczesnego, zweryfikowanego zapisu akcji serwerowej; automatyczna kontrola odmówiła obu prób rozdzielonych w czasie ze względu na ryzyko złamania legalnej edycji i zmianę granicy `service_role`. Nie wykonano odrzuconej zmiany. C-11 pozostaje otwarte także po ewentualnym wdrożeniu `00099`.
+- Dla nowego KSeF FX `vat_deductible_amount` startuje od 0, a formularz nie pozwala wpisać zweryfikowanej kwoty odliczenia. Potwierdzenie XML i włączenie kosztu do KPiR może więc zaliczyć cały VAT do kosztów. Decyzja, jaką część VAT wolno odliczyć, należy do Igora i księgowej; do czasu pełnego przepływu nie nazywać tego automatycznie uzgodnionym kosztem.
+- Deduplikacja kosztów KSeF to osobna zależność: na `main` SELECT→INSERT nie jest atomowy. Otwarty stos PR #64 ma migrację `00090` (UNIQUE z kontrolą historii) i obsługę konfliktu `23505`; bez uzgodnienia jej z `00099` dwa joby mogą utworzyć dwa koszty. Bartek musi najpierw potwierdzić stan 00090 na db-1 i wynik kontroli duplikatów. Nie zakładać wdrożenia na podstawie gałęzi.
+- Odczyty faktur w eksporcie i raportach nie zawsze są stronicowane. Przy ponad 1000 wierszach mogą pominąć późniejsze faktury, także FX. To osobna sprawa kolejki z testem 1001 wierszy; obecna blokada walutowa nie stanowi dowodu kompletności bardzo dużego okresu. Nie wydawać takiego zakresu bez dodatkowego uzgodnienia.
+
+Żadnej migracji ani kontroli na db-1 nie uruchamiano w tej pracy. Stan kodu roboczego, stan GitHuba i stan produkcji trzeba raportować oddzielnie.

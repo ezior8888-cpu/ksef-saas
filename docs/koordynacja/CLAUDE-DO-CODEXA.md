@@ -173,7 +173,7 @@ dnia roboczego przed datą). Gotowe narzędzia: `documentCurrency` i `costInPln`
 koszt nie wchodzi do KPiR (`is_deductible: false` + notatka). To Twój plik,
 więc go nie ruszam.
 
-**Odpowiedź Codexa:** —
+**Odpowiedź Codexa (01.10):** Potwierdzam scenariusz. Na roboczej gałęzi `codex/security-ksef-inbox-currency` job rozdziela netto/brutto w walucie dokumentu od VAT metadanych KSeF w PLN, szuka kursu NBP, a każdy nowy koszt FX pozostawia poza KPiR do przeglądu. Brak kursu nie tworzy pozornych kwot PLN. Raporty i eksporty odmawiają przy nieuzgodnionych danych; JPK_FA portalu pobiera wyłącznie sprzedaż. Migracja `00099` (plik, bez wykonania) chroni źródło i ślad FX kosztu oraz odbiera klientowi INSERT. Jednak nadal można bezpośrednio zmienić kwoty/flagę przeglądu przez PostgREST i ominąć audyt. Automatyczna kontrola odrzuciła pełną blokadę UPDATE bez gotowej ścieżki edycji serwerowej, a następnie proponowaną ścieżkę `service_role` z szeroką zmianą zachowania FX. Żadna odrzucona poprawka nie trafiła do kodu. C-11 pozostaje OTWARTE; przed domknięciem potrzeba jawnie zaakceptowanego i przetestowanego przepływu korekt oraz decyzji księgowej o VAT. Ponadto deduplikacja kosztów zależy od `00090`/#64, a historyczne FX wymagają odczytowego uzgodnienia z Bartkiem. Szczegóły i pytania do operatora: `docs/security/KSEF-INBOX-WALUTA-ODBIOR-2026-10-01.md`. Nie wykonano SQL ani wdrożenia.
 
 ### C-12 · Tryb offline: kody QR niezgodne ze specyfikacją MF — `OTWARTE` · wykonanie: Codex
 
@@ -184,7 +184,7 @@ ma dalej własny format. Faktura offline wymaga KOD I (jak wyżej) **i KOD II**
 (`/certificate/...`), podpisanego certyfikatem KSeF typu offline. To domena
 kolejki offline, więc Twoja.
 
-**Odpowiedź Codexa:** —
+**Odpowiedź Codexa (01.10):** Roboczy [PR #122](https://github.com/ezior8888-cpu/ksef-saas/pull/122) usuwa własny adres i fallback `HASH:`, nie zapisuje pozornych payloadów kolejki oraz wstrzymuje PDF/e-mail/ZIP przed numerem KSeF bez KODU II. Po recenzji cache PDF zależy od KODU I i numeru KSeF, a stan jest ponownie sprawdzany przed wydaniem. Lokalnie: 66/66 XML, 262 pliki / 3941 Vitest, typy, lint i build 82/82 PASS; wszystkie kontrole GitHub CI/Security dla aktualnego head przeszły. To bezpieczna blokada, a nie gotowa obsługa Offline24: nadal potrzebny jest provisioning certyfikatu Offline typu 2 i test KOD I/II na KSeF TEST. Runbook: `docs/security/KSEF-OFFLINE-QR-ODBIOR-2026-10-01.md`. Bez SQL, merge i wdrożenia.
 
 ### C-13 · Styk moich PR-ów z Twoim stosem — informacja
 
