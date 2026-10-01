@@ -84,7 +84,7 @@ export interface CronJobDef {
 
 const TZ = 'Europe/Warsaw';
 
-/** Wszystkie 22 crony z inwentaryzacji (17 sie 2026) — 1:1 z Inngest. */
+/** 22 crony z inwentaryzacji (17 sie 2026, 1:1 z Inngest) + pg-bossowe: puls FLO, tryb cichy, heartbeat. */
 export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.archive-old-invoices', cron: '0 3 * * *', tz: TZ },
   { queue: 'cron.cert-expiry-alert', cron: '0 8 * * *', tz: TZ },
@@ -106,6 +106,9 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.inbox-polling', cron: '*/15 * * * *', tz: TZ },
   { queue: 'cron.jobs-watchdog', cron: '*/15 * * * *', tz: TZ },
   { queue: 'cron.ksef-health-check', cron: '* * * * *', tz: TZ },
+  // Heartbeat dla zewnętrznego strażnika (lib/jobs/heartbeat.ts): ping co minutę
+  // tylko wtedy, gdy harmonogram, worker i baza działają. Brak pinga = alarm.
+  { queue: 'cron.ops-heartbeat', cron: '* * * * *', tz: TZ },
   { queue: 'cron.nightly-validation-recheck', cron: '0 4 * * *', tz: TZ },
   { queue: 'cron.process-offline-queue', cron: '*/5 * * * *', tz: TZ },
   { queue: 'cron.refresh-materialized-views', cron: '0 * * * *', tz: TZ },
