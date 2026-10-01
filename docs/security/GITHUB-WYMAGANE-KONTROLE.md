@@ -2,6 +2,8 @@
 
 Status na **2026-09-25**: **reguły włączone przez Bartka** w wariancie bez obowiązkowej recenzji (decyzja właściciela: w zespole dwuosobowym wymóg akceptacji drugiej osoby tworzył stosy PR-ów). Ruleset `23339700`: `deletion`, `non_fast_forward`, `pull_request` (0 akceptacji), `required_status_checks` (6 kontroli poniżej, App ID 15368, `strict`); lista wyjątków pusta — także admin zmienia `main` wyłącznie przez PR. Próba blokady: PR z wpisem wydania 25.09.
 
+**Krok 7 planu automatyzacji (2026-10-01):** do wymaganych kontroli mają dojść trzy nowe joby, wszystkie z `github-actions` (App ID `15368`): `Next build` (AUD-108), `Test-first (agent)` i `Agent guard` (bramka PR agenta kodu, [agent-kodu.md](../runbooks/agent-kodu.md)). Dopisać je dopiero, gdy pojawią się na pierwszym PR po scaleniu, bo kontrola, której GitHub jeszcze nie widział, blokuje wszystkie PR. Reszta rulesetu bez zmian.
+
 Historyczny stan z 2026-09-23, 17:00 UTC: przygotowano konfigurację do zastosowania przez Bartka; ustawień GitHuba wtedy nie zmieniano.
 
 ## Potwierdzony stan

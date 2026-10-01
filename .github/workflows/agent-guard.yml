@@ -1,0 +1,41 @@
+name: Agent guard
+
+# Krok 7 planu automatyzacji (docs/runbooks/agent-kodu.md). PR agenta kodu,
+# który zmienia obszar z .github/CODEOWNERS albo kod bez testu, wymaga zgody
+# człowieka (etykiety). Zgoda wygasa przy każdym nowym pushu.
+#
+# pull_request_target: workflow i skrypt pochodzą z gałęzi bazowej, więc PR
+# nie może osłabić własnej kontroli. Kod z PR NIE jest tu pobierany ani
+# uruchamiany — skrypt czyta tylko listę plików, commity i etykiety przez API.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  agent-guard:
+    name: Agent guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write # zdjęcie etykiet zgody po nowym pushu agenta
+      issues: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          # Domyślnie gałąź bazowa — świadomie NIE ref z PR.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Check agent PR approvals
+        run: node scripts/ci/agent-guard.mjs guard
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

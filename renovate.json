@@ -39,7 +39,11 @@
         "@aws-sdk/client-s3",
         "@aws-sdk/s3-request-presigner",
         "xml-crypto",
-        "xades",
+        "xadesjs",
+        "@peculiar/webcrypto",
+        "stripe",
+        "pg-boss",
+        "@anthropic-ai/sdk",
         "xmllint-wasm",
         "@xmldom/xmldom",
         "fast-xml-parser"
