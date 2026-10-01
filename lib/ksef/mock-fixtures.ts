@@ -133,7 +133,7 @@ export const FIXTURE_UPO_XML_OK: MockResponse = {
 
 export const FIXTURE_INBOX_QUERY_EMPTY: MockResponse = {
   status: 200,
-  body: { invoices: [], continuationToken: undefined },
+  body: { invoices: [], hasMore: false, isTruncated: false, permanentStorageHwmDate: null },
   delayMs: 70,
 };
 
@@ -157,7 +157,14 @@ export function resolveFixture(
     return FIXTURE_SESSION_CLOSE_OK;
   }
   if (path.includes('/upo')) return FIXTURE_UPO_XML_OK;
-  if (path.includes('/invoices/query/metadata')) return FIXTURE_INBOX_QUERY_EMPTY;
+  if (path.includes('/invoices/query/metadata')) {
+    // HWM „teraz” — jak w KSeF dla najnowszego okresu; pozwala skrzynce
+    // przesunąć okno także na atrapie.
+    return {
+      ...FIXTURE_INBOX_QUERY_EMPTY,
+      body: { invoices: [], hasMore: false, isTruncated: false, permanentStorageHwmDate: new Date().toISOString() },
+    };
+  }
   return null;
 }
 

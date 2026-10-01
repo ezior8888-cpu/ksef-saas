@@ -14,13 +14,8 @@ import { createProposal } from '@/lib/flo/proposals';
 import {
   buildInboxSummaryProposal,
   classifyInboxDocuments,
-  evaluateContinuity,
 } from '@/lib/flo/functions/expense-inbox';
-import {
-  readInboxCursor,
-  saveInboxCursor,
-  clearInboxCursor,
-} from '@/lib/flo/functions/inbox-cursor';
+import { readInboxHwm, saveInboxHwm } from '@/lib/flo/functions/inbox-cursor';
 import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/server';
 import type { KsefEnvironment } from '@/types/ksef';
@@ -55,6 +50,28 @@ const KSEF_ENV: KsefEnvironment =
 /** Numer KSeF ma ~35 znaków — 100 w `in.(…)` to ~3,6 KB adresu. */
 export const KSEF_NUMBERS_PER_QUERY = 100;
 
+/** Pierwszy przebieg firmy: tyle wstecz (wcześniejszą historię bierze import z KSeF). */
+export const INBOX_INITIAL_LOOKBACK_MS = 48 * 60 * 60 * 1000;
+
+/** API przyjmuje do 100 dni na zapytanie — zostawiamy zapas. */
+export const INBOX_MAX_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
+
+/**
+ * Okno zapytania skrzynki (AUD-18): od HWM ostatniego pełnego przebiegu,
+ * więc przerwa dowolnej długości jest nadrabiana; bez HWM — 48 h wstecz.
+ * Zaległość ponad 90 dni nadrabiają kolejne przebiegi. `null` = nie ma
+ * czego pytać (HWM nie starszy niż „teraz”).
+ */
+export function inboxQueryWindow(
+  hwm: string | null,
+  now: Date,
+): { from: string; to: string } | null {
+  const from = hwm ? new Date(hwm) : new Date(now.getTime() - INBOX_INITIAL_LOOKBACK_MS);
+  if (Number.isNaN(from.getTime()) || from.getTime() >= now.getTime()) return null;
+  const to = new Date(Math.min(now.getTime(), from.getTime() + INBOX_MAX_WINDOW_MS));
+  return { from: from.toISOString(), to: to.toISOString() };
+}
+
 // ═══════════════════════════════════════════════════════════════
 // CRON: wybór aktywnych tenantów + fan-out
 // ═══════════════════════════════════════════════════════════════
@@ -86,12 +103,16 @@ export async function runInboxPolling({ step, logger }: JobContext) {
 
     // Fan-out - Inngest dystrybuuje eventy równolegle z `concurrency.limit`
     // w per-tenant jobie poniżej.
-    const events = tenants.map((tenant) =>
-      inboxPollTenant.create({
+    // `groupId` = NIP: bez niego limit „jeden przebieg na NIP” w pg-boss nie
+    // działa, a dwa równoległe przebiegi tej samej firmy dublują powiadomienia
+    // (AUD-91).
+    const events = tenants.map((tenant) => ({
+      ...inboxPollTenant.create({
         tenantId: tenant.id,
         nip: tenant.nip,
       }),
-    );
+      groupId: tenant.nip,
+    }));
 
     await step.sendEvent('fan-out-polling', events);
 
@@ -119,78 +140,54 @@ export const inboxPollingJob = inngest.createFunction(
 export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant.create>[0], { step, logger }: JobContext) {
     const { tenantId, nip } = data;
 
-    // Okno czasowe: ostatnie 48h. Cron chodzi co 15min, więc teoretycznie
-    // wystarczyłby bufor ~2h, ale 48h daje nam samonaprawę przy outage
-    // (cron padł na noc → nie gubimy faktur). Duplikaty odsiewa `filter-existing`,
-    // więc nakładające się okna nie powodują dubli w DB.
-    const dateTo = new Date();
-    const dateFrom = new Date(dateTo.getTime() - 48 * 60 * 60 * 1000);
+    const window = await step.run('inbox-window', async () =>
+      inboxQueryWindow(await readInboxHwm(tenantId), new Date()),
+    );
+    if (!window) {
+      logger.info('Skrzynka: brak okna do pobrania (HWM nie starszy niż teraz)', { tenantId });
+      return { fetched: 0, newlyAdded: 0 };
+    }
 
-    const newInvoices = await step.run('query-ksef', async () => {
+    const { invoices: newInvoices, hwm } = await step.run('query-ksef', async () => {
       const credentials = await getTenantKsefCredentials(tenantId);
-
-      // Kursor z poprzedniego, przerwanego przebiegu — ale tylko wtedy, gdy
-      // dotyczy TEGO SAMEGO okna dat. Token z innego zapytania dałby wyniki
-      // z innego zakresu i cichą lukę w danych.
-      const cursor = await readInboxCursor(tenantId, dateFrom, dateTo);
-      let announced = cursor.announcedCount;
-
       // Faza 23 sekcja 3: audit log każdej query do KSeF /invoices/query/metadata.
-      const invoices = await queryReceivedInvoices(
+      return queryReceivedInvoices(
         credentials,
-        dateFrom,
-        dateTo,
+        new Date(window.from),
+        new Date(window.to),
         KSEF_ENV,
         { tenantId },
-        {
-          resumeToken: cursor.continuationToken ?? undefined,
-          onPage: async (page, token) => {
-            announced += page.length;
-            await saveInboxCursor(tenantId, {
-              continuationToken: token,
-              windowFrom: dateFrom,
-              windowTo: dateTo,
-              announcedCount: announced,
-              savedCount: announced,
-            });
-          },
-        },
       );
-
-      return invoices;
     });
 
-    // Kontrola ciągłości: token wyczerpany, więc pobieranie doszło do końca.
-    // Rozjazd liczb oznacza zgubione dokumenty i jest JEDYNYM sygnałem,
-    // jaki dostaniemy — nikt się o tym nie dowie z drugiej strony.
-    await step.run('check-continuity', async () => {
-      const cursor = await readInboxCursor(tenantId, dateFrom, dateTo);
-      const verdict = evaluateContinuity(cursor);
-      if (verdict.status === 'incomplete') {
-        logger.error('Niekompletne pobranie skrzynki KSeF', {
-          tenantId,
-          missing: verdict.missing,
-          message: verdict.message,
-        });
+    // HWM przesuwamy dopiero po zapisie faktur — na każdej ścieżce, także bez
+    // nowych faktur. Błąd wcześniej = HWM stoi, kolejny przebieg zapyta o to
+    // samo okno, a duble odsieje `filter-existing`.
+    const finish = async (fetched: number, newlyAdded: number) => {
+      if (!hwm) {
+        logger.warn('KSeF nie podał HWM skrzynki — okno zostaje na miejscu', { tenantId });
+        return { fetched, newlyAdded };
       }
-      if (verdict.status === 'complete') {
-        await clearInboxCursor(tenantId);
-      }
-    });
+      const nextHwm = Date.parse(hwm) > Date.parse(window.from) ? hwm : window.from;
+      await step.run('advance-hwm', () =>
+        saveInboxHwm(tenantId, { windowFrom: window.from, hwm: nextHwm, fetched, saved: newlyAdded }),
+      );
+      return { fetched, newlyAdded };
+    };
 
     if (newInvoices.length === 0) {
       logger.info('Brak faktur w oknie czasu', { tenantId, nip });
-      return { fetched: 0, newlyAdded: 0 };
+      return finish(0, 0);
     }
 
     const freshInvoices = await step.run('filter-existing', async () => {
       const supabase = await createAdminClient();
 
-      // Okno 48 h: każde pobranie (co 15 min) widzi te same faktury ponownie,
-      // a baza NIE pilnuje unikalności numeru KSeF (`idx_invoices_ksef_number_unique`
+      // Okno od HWM: przebieg po nieudanym poprzednim widzi te same faktury
+      // ponownie, a baza NIE pilnuje unikalności numeru KSeF (`idx_invoices_ksef_number_unique`
       // mimo nazwy to zwykły indeks). To zapytanie jest więc jedyną ochroną przed
       // duplikatami — błąd nie może znaczyć „nic nie ma”. Inaczej wszystkie faktury
-      // z 48 h wchodzą drugi raz, a auto-kategoryzacja robi z każdej kopii osobny
+      // z okna wchodzą drugi raz, a auto-kategoryzacja robi z każdej kopii osobny
       // wydatek w KPiR. Paczki, bo pełna lista `in.(…)` w adresie potrafi
       // przekroczyć limit długości URL.
       const unique = [...new Map(newInvoices.map((inv) => [inv.ksefNumber, inv])).values()];
@@ -220,7 +217,7 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
         tenantId,
         fetched: newInvoices.length,
       });
-      return { fetched: newInvoices.length, newlyAdded: 0 };
+      return finish(newInvoices.length, 0);
     }
 
     const insertedInvoices = await step.run('save-received-invoices', async () => {
@@ -409,10 +406,7 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
       { tenantId, fetched: newInvoices.length },
     );
 
-    return {
-      fetched: newInvoices.length,
-      newlyAdded: freshInvoices.length,
-    };
+    return finish(newInvoices.length, freshInvoices.length);
 }
 
 export const inboxPollTenantJob = inngest.createFunction(
@@ -425,7 +419,8 @@ export const inboxPollTenantJob = inngest.createFunction(
     // niezależnie od liczby instancji Vercela (in-memory `ksefRateLimiter` z
     // `lib/ksef/rate-limiter.ts` jest per-process, więc na multi-instance
     // hostingu nie wystarcza).
-    concurrency: { key: 'event.data.nip', limit: 3 },
+    // Jeden przebieg na NIP: stan skrzynki (HWM) jest per firma (AUD-91).
+    concurrency: { key: 'event.data.nip', limit: 1 },
     // Faza 23 sekcja 3: throttle per-NIP. Inbox polling cron leci co 15min,
     // czyli 4 razy / godzinę / tenant — limit 8/h zostawia bufor na manual
     // refresh z UI (przycisk "Odśwież" w `/inbox`) bez zalewania MF.
