@@ -116,3 +116,16 @@ describe('PDF: kod QR weryfikacji w KSeF', () => {
     expect(mocks.render.mock.calls[0]![1]).toMatchObject({ qrPayload: null });
   });
 });
+
+// Korekta: dane faktury korygowanej (art. 106j ust. 2) z loadera do renderera.
+describe('PDF korekty: faktura korygowana', () => {
+  it('loader → renderer bez zmian', async () => {
+    const correctedInvoice = { number: 'FV/9/09', issueDate: '2026-09-05', ksefNumber: null, reason: 'Błędna cena' };
+    mocks.load.mockResolvedValue({
+      invoice: { internalNumber: 'KOR/1' }, tenantId: 'tenant-a', issueDate: '2026-10-01',
+      pdfStoragePath: null, pdfGeneratedAt: null, updatedAt: null, correctedInvoice,
+    });
+    await generateInvoicePdf('invoice', 'tenant-a');
+    expect(mocks.render.mock.calls[0]![1]).toMatchObject({ correctedInvoice });
+  });
+});

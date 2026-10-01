@@ -17,7 +17,8 @@ import {
 // v3 (29.09): KOD I wg specyfikacji MF (link weryfikacyjny zamiast samego
 // numeru KSeF) — obejmuje też wcześniejsze zmiany bez podbicia wersji
 // (MPP, metoda kasowa, „Do zapłaty” przy ROZ).
-// v4 (01.10): wyrazy „odwrotne obciążenie” przy pozycjach „oo”.
+// v4 (01.10): wyrazy „odwrotne obciążenie” przy pozycjach „oo”; na korekcie
+// numer, data i numer KSeF faktury korygowanej (art. 106j ust. 2).
 const PDF_RENDERER_VERSION = 4;
 
 function parseYearMonth(issueDate: string): { year: string; month: string } {

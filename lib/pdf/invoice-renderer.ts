@@ -32,6 +32,29 @@ export interface RenderInvoiceOptions {
   qrLabel?: string | null;
   /** Nadrukuj watermark „WERSJA TESTOWA" (środowisko KSeF test). */
   testWatermark?: boolean;
+  /** Faktura korygowana — tylko dla korekt (`lib/pdf/invoice-data.ts`). */
+  correctedInvoice?: CorrectedInvoiceRef | null;
+}
+
+/** Dane faktury, której dotyczy korekta (w XML: `DaneFaKorygowanej`). */
+export interface CorrectedInvoiceRef {
+  number: string;
+  issueDate: string;
+  ksefNumber: string | null;
+  reason: string | null;
+}
+
+/**
+ * Wiersze „której faktury dotyczy korekta” — art. 106j ust. 2 ustawy o VAT
+ * (numer i data faktury korygowanej, w KSeF jej numer KSeF). XML ma to
+ * w `DaneFaKorygowanej`; do 01.10.2026 PDF korekty miał sam tytuł.
+ */
+export function correctedInvoiceLines(ref: CorrectedInvoiceRef | null | undefined): string[] {
+  if (!ref) return [];
+  const lines = [`Korekta faktury nr ${ref.number} z dnia ${fmtDate(ref.issueDate)}`];
+  if (ref.ksefNumber) lines.push(`Numer KSeF faktury korygowanej: ${ref.ksefNumber}`);
+  if (ref.reason) lines.push(`Przyczyna korekty: ${ref.reason}`);
+  return lines;
 }
 
 const INVOICE_TYPE_LABEL: Record<string, string> = {
@@ -107,6 +130,7 @@ export async function renderInvoicePdf(
 
     // Napis rysuje się tylko razem z kodem (warunek w `drawHeader`).
     drawHeader(doc, invoice, qrBuffer, opts.qrLabel ?? null, left, pageWidth);
+    drawCorrectedInvoice(doc, opts.correctedInvoice, left, pageWidth);
     drawParties(doc, invoice, left, pageWidth);
     drawLineItems(doc, invoice, left, pageWidth);
     drawVatSummary(doc, invoice, left, pageWidth);
@@ -203,6 +227,23 @@ function drawHeader(
     .strokeColor('#dddddd')
     .stroke();
   doc.y = ruleY + 14;
+}
+
+function drawCorrectedInvoice(
+  doc: Doc,
+  ref: CorrectedInvoiceRef | null | undefined,
+  left: number,
+  width: number,
+): void {
+  const lines = correctedInvoiceLines(ref);
+  if (lines.length === 0) return;
+  doc.font('bold').fontSize(9).fillColor('#222222');
+  doc.text(lines[0]!, left, doc.y, { width });
+  doc.font('body').fontSize(8.5).fillColor('#444444');
+  for (const line of lines.slice(1)) {
+    doc.text(line, left, doc.y + 2, { width });
+  }
+  doc.y += 12;
 }
 
 function drawParties(

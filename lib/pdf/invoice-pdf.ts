@@ -89,6 +89,7 @@ export async function generateInvoicePdf(
       sha256Hex: data.xmlSha256Hex,
     }),
     qrLabel: qrLabel(data.ksefNumber),
+    correctedInvoice: data.correctedInvoice,
     testWatermark: (process.env.KSEF_ENV ?? 'test') === 'test',
   });
 
