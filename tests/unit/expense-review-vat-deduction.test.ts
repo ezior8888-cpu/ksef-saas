@@ -37,6 +37,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 import { reviewExpenseAction } from '@/app/actions/expenses';
+import { learnFromCorrection } from '@/lib/categorization';
 import { deductibleAfterVatChange } from '@/lib/categorization/vat-deduction';
 
 /**
@@ -78,6 +79,28 @@ describe('odliczenie VAT po ręcznej poprawce wydatku', () => {
     mocks.existing = wydatek(23, 0);
     await reviewExpenseAction('exp-1', { vat_amount: 46 });
     expect(mocks.patches[0]).toMatchObject({ vat_amount: 46, vat_deductible_amount: 0 });
+  });
+});
+
+describe('błąd uczenia kategorii', () => {
+  it('nie zapisuje treści wyjątku z danych użytkownika w logu i zachowuje zapis wydatku', async () => {
+    mocks.existing = wydatek(46, 46);
+    const forgedLine = '\n[ERROR] forged log entry: prywatne dane';
+    vi.mocked(learnFromCorrection).mockRejectedValueOnce(new Error(forgedLine));
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      await expect(
+        reviewExpenseAction('exp-1', { category_label: 'Nowa kategoria' }),
+      ).resolves.toEqual({ success: true });
+      expect(learnFromCorrection).toHaveBeenCalledOnce();
+      expect(errorLog).toHaveBeenCalledWith('[expenses] learnFromCorrection failed');
+      const loggedText = errorLog.mock.calls.flat().map(String).join('\n');
+      expect(loggedText).not.toContain(forgedLine);
+      expect(loggedText).not.toContain('prywatne dane');
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 });
 

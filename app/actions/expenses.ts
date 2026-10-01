@@ -262,8 +262,9 @@ export async function reviewExpenseAction(
         kpir_column: resolvedKpir,
         category_label: resolvedLabel,
       });
-    } catch (err) {
-      console.error('learnFromCorrection:', err);
+    } catch {
+      // Wyjątek może zawierać dane formularza lub odpowiedź bazy.
+      console.error('[expenses] learnFromCorrection failed');
     }
   }
 
