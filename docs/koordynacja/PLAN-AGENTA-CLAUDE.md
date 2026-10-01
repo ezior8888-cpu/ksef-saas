@@ -181,10 +181,12 @@ poprawnych kodów QR); Bartosz #90.
 
 ## 5. Następny krok
 
-1. E13 dalej: przepływy naprawione (PR „podatek od stycznia”, C-18).
-   Zostają funkcje podatkowe Flo (grupa T, `isTaxKind` w `lib/flo`) — czy
-   VAT/PIT „do odłożenia” liczą się poprawnie dla ROZ (zaliczki), korekt,
-   „zw”, kosztów w walucie i paragonów, i od 1 stycznia.
+1. E13: przepływy naprawione (PR „podatek od stycznia”, C-18). Funkcje
+   podatkowe Flo (grupa T: `tax.setaside`, `tax.limit`, `tax.deadline`,
+   `tax.relief`, `tax.simulate`) są WYŁĄCZONE bramką
+   (`lib/flo/tax-params.ts`: `PARAMS_VERIFIED = false`) — przegląd ROZ,
+   korekt, „zw”, waluty i paragonów zrobić PRZED ich włączeniem, razem
+   z weryfikacją tabeli parametrów przez księgowa.
 2. Po decyzji Igora/księgowej: E12 (samochód 50%/75%).
 3. Po scaleniu #85 (Codex): C-05 — adnotacje P_16/P_18A dla ROZ.
 4. Po scaleniu #90 (Bartosz): przegląd snapshotu i weryfikacji kopii (dziś
