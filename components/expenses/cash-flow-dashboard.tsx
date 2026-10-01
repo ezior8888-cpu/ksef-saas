@@ -9,6 +9,7 @@ import type { Database } from '@/types/database';
 import { formatPlMoney } from '@/lib/format/pl';
 import { kpirCostAmount } from '@/lib/categorization/kpir-cost';
 import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
+import { estimateIncomeTaxThisYear } from '@/lib/dashboard/tax-estimate';
 
 export type CashFlowInvoiceRow = Pick<
   Database['public']['Tables']['invoices']['Row'],
@@ -33,6 +34,12 @@ interface CashFlowDashboardProps {
   invoices: CashFlowInvoiceRow[];
   expenses: CashFlowExpenseRow[];
   pendingReviewCount: number;
+  /**
+   * Pierwszy dzień załadowanych danych (`RRRR-MM-DD`). Domyślnie początek
+   * okna wykresu (6 miesięcy); gdy strona załaduje dane od 1 stycznia,
+   * szacunek podatku obejmie cały rok (C-18).
+   */
+  dataFrom?: string;
 }
 
 /** Neon (wykres / wskaźniki) — zgodne z prośbą: zielony + czerwony. */
@@ -44,6 +51,7 @@ export function CashFlowDashboard({
   invoices,
   expenses,
   pendingReviewCount,
+  dataFrom,
 }: CashFlowDashboardProps) {
   const [hoveredMonthKey, setHoveredMonthKey] = useState<string | null>(null);
 
@@ -100,8 +108,8 @@ export function CashFlowDashboard({
     ? ((current.revenue - previous.revenue) / previous.revenue) * 100
     : 0;
 
-  const cumulativeProfit = monthlyData.reduce((s, m) => s + m.profit, 0);
-  const estimatedTax = Math.max(0, cumulativeProfit * 0.19);
+  // PIT liczy się od 1 stycznia, nie z okna sześciu miesięcy wykresu.
+  const taxEstimate = estimateIncomeTaxThisYear(invoices, expenses, now, dataFrom ?? `${monthsRange[0].key}-01`);
 
   const pendingLabel =
     pendingReviewCount === 1
@@ -166,11 +174,11 @@ export function CashFlowDashboard({
           valueTone={current.profit >= 0 ? 'positive' : 'negative'}
         />
         <KpiCard
-          label="Szac. podatek YTD"
-          value={estimatedTax}
+          label={taxEstimate.label}
+          value={taxEstimate.amount}
           icon="receipt_long"
           accent="muted"
-          subtitle="19% liniowy"
+          subtitle={taxEstimate.subtitle}
         />
       </div>
 
