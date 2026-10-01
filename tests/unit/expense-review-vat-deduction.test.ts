@@ -45,6 +45,8 @@ import { reviewExpenseAction } from '@/app/actions/expenses';
 import { logAudit } from '@/lib/audit/log';
 import { learnFromCorrection } from '@/lib/categorization';
 import { deductibleAfterVatChange } from '@/lib/categorization/vat-deduction';
+import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
+import { createClient } from '@/lib/supabase/server';
 
 /**
  * JPK_V7M odlicza `vat_deductible_amount` (K_43), nie `vat_amount`. OCR
@@ -66,6 +68,12 @@ beforeEach(() => {
   mocks.existing = null;
   mocks.invoiceCurrency = 'PLN';
   vi.mocked(logAudit).mockClear();
+  vi.mocked(requireUserAndActiveOrg).mockImplementation(async () => ({
+    supabase: await createClient(),
+    user: { id: 'u-1' },
+    tenantId: 'ten-1',
+    role: 'member',
+  }));
 });
 
 describe('ręczne zatwierdzenie walutowej faktury KSeF', () => {

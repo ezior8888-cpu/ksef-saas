@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
       tenantId,
       periodStart,
       periodEnd,
-      direction: 'both',
+      direction: format === 'jpk_fa' ? 'issued' : 'both',
       includeCorrections: true,
     });
 

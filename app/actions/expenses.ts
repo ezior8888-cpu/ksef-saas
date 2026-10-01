@@ -195,16 +195,13 @@ export async function reviewExpenseAction(
   expenseId: string,
   updates: ExpenseReviewUpdates,
 ) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false as const, error: 'Brak autoryzacji' };
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    return { success: false as const, error: 'Brak aktywnej organizacji' };
+  let auth;
+  try {
+    auth = await requireUserAndActiveOrg();
+  } catch {
+    return { success: false as const, error: 'Brak autoryzacji' };
   }
+  const { supabase, user, tenantId } = auth;
 
   const { data: existing } = await supabase
     .from('expenses')

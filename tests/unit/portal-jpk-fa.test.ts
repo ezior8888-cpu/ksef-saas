@@ -5,7 +5,8 @@ const mocks = vi.hoisted(() => ({
   issued: [] as unknown[],
   received: [] as unknown[],
   gusKnowsCompany: true,
-  fetchError: null as Error | null,
+  receivedError: null as Error | null,
+  lastDirection: null as string | null,
 }));
 
 vi.mock('@sentry/nextjs', () => ({ captureException: () => 'err-1' }));
@@ -26,8 +27,9 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 vi.mock('@/lib/exports/data-fetcher', () => ({
-  fetchInvoicesForExport: async () => {
-    if (mocks.fetchError) throw mocks.fetchError;
+  fetchInvoicesForExport: async (params: { direction: string }) => {
+    mocks.lastDirection = params.direction;
+    if (mocks.receivedError && params.direction !== 'issued') throw mocks.receivedError;
     return {
       issuer: { nip: '5260001246', name: 'ACME' },
       issuedInvoices: mocks.issued,
@@ -78,7 +80,8 @@ beforeEach(() => {
   mocks.issued = [faktura()];
   mocks.received = [];
   mocks.gusKnowsCompany = true;
-  mocks.fetchError = null;
+  mocks.receivedError = null;
+  mocks.lastDirection = null;
 });
 
 describe('portal: KPiR', () => {
@@ -93,18 +96,27 @@ describe('portal: KPiR', () => {
   });
 
   it('koszt KSeF bez potwierdzonej waluty → 422 z powodem', async () => {
-    mocks.fetchError = new KsefExpenseCurrencyNotSupportedError();
+    mocks.receivedError = new KsefExpenseCurrencyNotSupportedError();
     const odp = await pobierz('kpir_excel');
     expect(odp.status).toBe(422);
-    expect(await odp.json()).toEqual({ error: mocks.fetchError.message });
+    expect(mocks.lastDirection).toBe('both');
+    expect(await odp.json()).toEqual({ error: mocks.receivedError.message });
   });
 });
 
 describe('portal: JPK_FA(4)', () => {
+  it('nie pobiera niepowiązanych wydatków blokujących KPiR', async () => {
+    mocks.receivedError = new KsefExpenseCurrencyNotSupportedError();
+    const odp = await pobierz();
+    expect(odp.status).toBe(200);
+    expect(mocks.lastDirection).toBe('issued');
+  });
+
   it('plik zgodny z XSD, bez faktur zakupu', async () => {
     mocks.received = [faktura({ invoiceNumber: 'ZAK/7' })];
     const odp = await pobierz();
     expect(odp.status).toBe(200);
+    expect(mocks.lastDirection).toBe('issued');
     const xml = await odp.text();
     expect(xml).not.toContain('ZAK/7');
     expect((await validateJpkFa(xml)).valid).toBe(true);
