@@ -4,6 +4,7 @@
 import ExcelJS from 'exceljs';
 import { kpirCostAmount, nonDeductedVat } from '@/lib/categorization/kpir-cost';
 import { earlierSaleRemark, kpirRevenueNet, kpirSaleEventDate } from '@/lib/categorization/kpir-revenue';
+import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
 
 import type { ExportExpense } from './data-fetcher';
 import type { JpkInvoice } from './jpk-fa-generator';
@@ -55,6 +56,7 @@ export function kpirCostColumn(kpirColumn: string | null): 10 | 11 | 12 | 13 | 1
 // ============================================================================
 
 export async function generateKpirXlsx(data: KpirInputData): Promise<Buffer> {
+  assertOutgoingInvoicesInPln(data.issuedInvoices);
   const workbook = new ExcelJS.Workbook();
 
   workbook.creator = 'KSeF SaaS';

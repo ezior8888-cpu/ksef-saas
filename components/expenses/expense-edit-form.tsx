@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { hasKsefCurrencyRate } from '@/lib/expenses/ksef-currency-review';
 import type { ExpenseRow } from '@/components/expenses/expenses-list';
 import type { Database } from '@/types/database';
 
@@ -60,6 +61,7 @@ function normalizeKpirColumn(raw: string | null): KpirColumn {
 interface ExpenseEditFormProps {
   expense: ExpenseRow;
   photoUrl: string | null;
+  ksefCurrency: string | null;
 }
 
 interface FormState {
@@ -92,11 +94,21 @@ function buildInitialForm(expense: ExpenseRow): FormState {
   };
 }
 
-export function ExpenseEditForm({ expense, photoUrl }: ExpenseEditFormProps) {
+export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEditFormProps) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => buildInitialForm(expense));
+  const [confirmedForeignCurrency, setConfirmedForeignCurrency] = useState(false);
   const [isSaving, startSave] = useTransition();
   const [isDeleting, startDelete] = useTransition();
+
+  const currency = ksefCurrency?.trim().toUpperCase();
+  const ksefCurrencyUnknown = expense.source === 'ksef_inbox' && (!currency || !/^[A-Z]{3}$/.test(currency));
+  const foreignKsef = expense.source === 'ksef_inbox' && !ksefCurrencyUnknown && currency !== 'PLN';
+  const hasKsefRate = foreignKsef && hasKsefCurrencyRate(
+    expense.ocr_extracted_data,
+    currency ?? '',
+    form.issue_date,
+  );
 
   const confidence = Number(expense.categorization_confidence ?? 0);
   const method = expense.categorization_method;
@@ -117,11 +129,12 @@ export function ExpenseEditForm({ expense, photoUrl }: ExpenseEditFormProps) {
         kpir_column: form.kpir_column,
         category_label: form.category_label,
         is_deductible: form.is_deductible,
+        confirmForeignCurrencyReview: foreignKsef && confirmedForeignCurrency,
         notes: form.notes.trim() ? form.notes.trim() : undefined,
       });
 
       if (result.success) {
-        toast.success('Zapisano - apka się nauczyła Twojej preferencji');
+        toast.success('Zapisano wydatek');
         router.push('/expenses');
       } else {
         toast.error(result.error);
@@ -162,6 +175,40 @@ export function ExpenseEditForm({ expense, photoUrl }: ExpenseEditFormProps) {
             : 'Wprowadź zmiany w wydatku'}
         </p>
       </div>
+
+      {ksefCurrencyUnknown ? (
+        <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm">
+          Nie można potwierdzić waluty faktury KSeF. Sprawdź dane źródłowe.
+          Jeśli ten koszt jest już w KPiR, możesz go wyłączyć i zostawić do ręcznego wyjaśnienia.
+        </div>
+      ) : null}
+
+      {foreignKsef ? (
+        <div role="alert" className="space-y-3 rounded-2xl border border-orange-500/30 bg-orange-500/10 p-4 text-sm">
+          <p className="font-medium">Faktura w {currency} wymaga ręcznego uzgodnienia.</p>
+          <p>
+            Kwoty na ekranie mogą nie sumować się do brutto: KSeF podaje VAT już w PLN,
+            a netto i brutto w walucie faktury. Porównaj oryginalny XML, kurs NBP i kwoty PLN
+            przed włączeniem wydatku do KPiR.
+          </p>
+          {!hasKsefRate ? (
+            <p className="font-medium">
+              Brak potwierdzonego kursu przy tym koszcie. Kwoty netto i brutto mogą nadal być w {currency};
+              nie można włączyć ich do KPiR. Możesz zapisać wydatek poza KPiR, aby pozostał do sprawdzenia.
+            </p>
+          ) : (
+            <label className="flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                checked={confirmedForeignCurrency}
+                onChange={(event) => setConfirmedForeignCurrency(event.target.checked)}
+                className="mt-1"
+              />
+              <span>Sprawdziłem XML, kurs i kwoty PLN; świadomie zatwierdzam ten wydatek.</span>
+            </label>
+          )}
+        </div>
+      ) : null}
 
       {wasAutoClassified ? (
         <div
@@ -406,6 +453,7 @@ export function ExpenseEditForm({ expense, photoUrl }: ExpenseEditFormProps) {
 
             <button
               type="button"
+              disabled={(foreignKsef && !hasKsefRate && !form.is_deductible) || (ksefCurrencyUnknown && !form.is_deductible)}
               onClick={() =>
                 setForm({ ...form, is_deductible: !form.is_deductible })
               }
@@ -466,14 +514,16 @@ export function ExpenseEditForm({ expense, photoUrl }: ExpenseEditFormProps) {
             variant="glass-primary"
             size="lg"
             onClick={handleSave}
-            disabled={isSaving || isDeleting}
+            disabled={isSaving || isDeleting || (ksefCurrencyUnknown && form.is_deductible) || (foreignKsef && form.is_deductible && (!hasKsefRate || !confirmedForeignCurrency))}
           >
             {isSaving ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Save className="mr-2 h-4 w-4" />
             )}
-            {!expense.is_reviewed ? 'Zaakceptuj' : 'Zapisz zmiany'}
+            {(foreignKsef || ksefCurrencyUnknown) && !form.is_deductible && !confirmedForeignCurrency
+              ? 'Zapisz poza KPiR'
+              : !expense.is_reviewed ? 'Zaakceptuj' : 'Zapisz zmiany'}
           </Button>
         </div>
       </div>

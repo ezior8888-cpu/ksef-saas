@@ -123,6 +123,36 @@ describe('tenant boundaries for accounting exports', () => {
     expect(data.expenses[0]).toMatchObject({ sellerName: 'Dostawca', sellerNip: '5260001246', vatDeductibleAmount: 23 });
   });
 
+  it('odmawia eksportu historycznego kosztu EUR z KSeF ustawionego jako koszt bez przeliczenia', async () => {
+    tables.invoices.push({ ...invoice('inv-eur', 'tenant-a', 'incoming'), currency: 'EUR' });
+    tables.expenses.push({
+      id: 'exp-eur', tenant_id: 'tenant-a', issue_date: '2026-01-10',
+      document_number: 'FV/EUR', document_type: 'invoice',
+      seller_name: 'Dostawca', net_amount: 100, vat_amount: 23, gross_amount: 123,
+      vat_deductible_amount: 23, is_deductible: true, is_reviewed: true,
+      source: 'ksef_inbox', ksef_invoice_id: 'inv-eur', ocr_extracted_data: null,
+    });
+    await expect(fetchInvoicesForExport(exportParams)).rejects.toThrow('Raport wstrzymany');
+  });
+
+  it('pozwala wyeksportować koszt EUR dopiero po śladzie kursu i przeglądzie', async () => {
+    tables.invoices.push({ ...invoice('inv-eur', 'tenant-a', 'incoming'), currency: 'EUR' });
+    tables.expenses.push({
+      id: 'exp-eur', tenant_id: 'tenant-a', issue_date: '2026-01-10',
+      document_number: 'FV/EUR', document_type: 'invoice',
+      seller_name: 'Dostawca', net_amount: 425, vat_amount: 98.75, gross_amount: 522.75,
+      vat_deductible_amount: 0, is_deductible: true, is_reviewed: true,
+      source: 'ksef_inbox', ksef_invoice_id: 'inv-eur',
+      ocr_extracted_data: {
+        source: 'ksef_inbox', currency: 'EUR',
+        fx: { currency: 'EUR', mid: 4.25, tableNo: '006/A/NBP/2026', effectiveDate: '2026-01-09', appliedFor: '2026-01-10' },
+      },
+    });
+    const data = await fetchInvoicesForExport(exportParams);
+    expect(data.expenses.map((row) => row.id)).toEqual(['exp-eur']);
+    expect(data.receivedInvoices.find((row) => row.invoiceNumber === 'inv-eur')).toMatchObject({ currency: 'EUR' });
+  });
+
   it('issued-only export does not read expenses at all', async () => {
     const data = await fetchInvoicesForExport({ ...exportParams, direction: 'issued' });
     expect(data.expenses).toEqual([]);

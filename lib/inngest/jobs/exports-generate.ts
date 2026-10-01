@@ -30,15 +30,18 @@ import {
   inngest,
 } from '@/lib/inngest/client';
 import { generateComarchOptimaXml } from '@/lib/exports/comarch-optima-generator';
+import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
 import {
+  CsvForeignCurrencyNotSupportedError,
   generateInsertSubiektCsv,
   generateSymfoniaCsv,
   generateUniversalCsv,
   generateWaproCsv,
 } from '@/lib/exports/csv-generators';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
+import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
-import { generateJpkFa, JpkFaCorrectionNotSupportedError } from '@/lib/exports/jpk-fa-generator';
+import { generateJpkFa, JpkFaCorrectionNotSupportedError, JpkFaForeignCurrencyNotSupportedError } from '@/lib/exports/jpk-fa-generator';
 import { MissingTaxOfficeError, readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { readTaxpayerEmail } from '@/lib/exports/taxpayer-email';
 import {
@@ -234,6 +237,10 @@ const HUMAN_EXPORT_ERRORS = [
   new MissingTaxpayerEmailError().message,
   new MissingIssuerAddressError().message,
   new JpkFaCorrectionNotSupportedError().message,
+  new JpkFaForeignCurrencyNotSupportedError().message,
+  new CsvForeignCurrencyNotSupportedError().message,
+  new OutgoingInvoiceCurrencyNotSupportedError().message,
+  new KsefExpenseCurrencyNotSupportedError().message,
   new JpkV7mReverseChargeNotSupportedError().message,
 ];
 
@@ -300,15 +307,24 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
       if (error) throw new Error(error.message);
     });
 
-    const data = await step.run('fetch-invoices', async () => {
+    // Nowe ID od pobrania do zapisu: Inngest nie może użyć memoizowanych
+    // wyników sprzed kontroli waluty przy wznowieniu starszego eksportu.
+    const data = await step.run('fetch-invoices-currency-guard', async () => {
       const direction = resolveExportDirection(job);
-      return fetchInvoicesForExport({
-        tenantId: job.tenant_id,
-        periodStart: job.period_start,
-        periodEnd: job.period_end,
-        direction,
-        includeCorrections: job.include_corrections,
-      });
+      try {
+        return await fetchInvoicesForExport({
+          tenantId: job.tenant_id,
+          periodStart: job.period_start,
+          periodEnd: job.period_end,
+          direction,
+          includeCorrections: job.include_corrections,
+        });
+      } catch (error) {
+        if (error instanceof KsefExpenseCurrencyNotSupportedError) {
+          throw new NonRetriableError(error.message);
+        }
+        throw error;
+      }
     });
 
     const format = job.format as ExportJobRow['format'] | 'jpk_v7m';
@@ -369,7 +385,7 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
     // (Inngest serializuje return-value, a multi-MB JSON byłby kosztowny
     // i niepotrzebnie eksponowałby treść faktur w event store).
     const fileMeta: GeneratedExportMeta = await step.run(
-      'generate-buffer',
+      'generate-buffer-currency-guard',
       async () => {
         let generated: Awaited<ReturnType<typeof generateExportFile>>;
         try {
@@ -382,6 +398,9 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
             e instanceof MissingTaxpayerEmailError ||
             e instanceof MissingIssuerAddressError ||
             e instanceof JpkFaCorrectionNotSupportedError ||
+            e instanceof JpkFaForeignCurrencyNotSupportedError ||
+            e instanceof CsvForeignCurrencyNotSupportedError ||
+            e instanceof OutgoingInvoiceCurrencyNotSupportedError ||
             e instanceof JpkV7mReverseChargeNotSupportedError
           ) {
             throw new NonRetriableError(e.message);
@@ -408,7 +427,7 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
     // pomiędzy uploadem a persist), nie wgrywamy ponownie. Generatory
     // FA(3)/JPK_FA są deterministyczne (ten sam input → ten sam SHA-256),
     // więc istniejący obiekt ma identyczną zawartość.
-    await step.run('upload-r2', async () => {
+    await step.run('upload-r2-currency-guard', async () => {
       const exists = await r2ObjectExists(r2Path);
       if (exists) return { skipped: true as const };
 
@@ -422,7 +441,7 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
     // UPSERT z ON CONFLICT na (export_job_id, filename) — wymaga unique
     // indexu z migracji 00026. Bez niego retry tego stepu po częściowym
     // sukcesie (insert OK, update timeout) zwracałby 23505.
-    const persistResult = await step.run('persist', async () => {
+    const persistResult = await step.run('persist-currency-guard', async () => {
       const { error: insertErr } = await supabase
         .from('export_files')
         .upsert(

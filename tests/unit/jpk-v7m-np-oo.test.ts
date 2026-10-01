@@ -88,6 +88,7 @@ function linia(netAmount: number, vatRate: string) {
 function faktura(o: Partial<JpkInvoice>): JpkInvoice {
   return {
     invoiceNumber: 'FV/1/09',
+    currency: 'PLN',
     invoiceType: 'regular',
     issueDate: '2026-09-10',
     buyerName: 'Klient',

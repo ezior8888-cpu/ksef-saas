@@ -19,6 +19,7 @@ const MY = { nip: '1234567890', name: 'Moja Firma', taxOfficeCode: '1433', addre
 function faktura(o: Partial<JpkInvoice> = {}): JpkInvoice {
   return {
     invoiceNumber: 'FV/1',
+    currency: 'PLN',
     invoiceType: 'regular',
     issueDate: '2026-08-10',
     buyerName: 'Klient Sp. z o.o.',

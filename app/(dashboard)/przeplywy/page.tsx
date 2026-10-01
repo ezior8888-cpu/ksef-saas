@@ -2,6 +2,8 @@ import { MonthlyFiguresCard } from '@/components/dashboard/monthly-figures-card'
 import { SalesChartCard } from '@/components/dashboard/sales-chart-card';
 import { VatSummaryCard } from '@/components/dashboard/vat-summary-card';
 import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
+import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
+import { assertKsefExpensesReadyForPln } from '@/lib/expenses/ksef-currency-review';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import {
   formatPlMoney,
@@ -32,14 +34,16 @@ export default async function PrzeplywyPage() {
     .toISOString()
     .slice(0, 10);
 
-  const { data: invoices } = await supabase
+  const { data: invoices, error: invoicesError } = await supabase
     .from('invoices')
-    .select('id, issue_date, net_total, gross_total, invoice_kind, advance_invoice_ids')
+    .select('id, issue_date, net_total, gross_total, invoice_kind, advance_invoice_ids, currency')
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
     .gte('issue_date', sixMonthsAgo)
     .order('issue_date', { ascending: true });
+  if (invoicesError) throw new Error('Nie można odczytać sprzedaży do przepływów');
+  assertOutgoingInvoicesInPln(invoices ?? []);
 
   // Przychód jak w KPiR: ROZ bez zaliczek, które już są w przychodzie
   // (`kpirRevenueNet`). Błąd odczytu leci do `error.tsx` — zerowa suma
@@ -50,13 +54,23 @@ export default async function PrzeplywyPage() {
     settled_advances_net: settled.get(inv.id) ?? null,
   }));
 
-  const { data: expenses } = await supabase
+  const { data: expenses, error: expensesError } = await supabase
     .from('expenses')
-    .select('issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column')
+    .select('issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column, source, ksef_invoice_id, is_reviewed, ocr_extracted_data')
     .eq('tenant_id', tenantId)
     .eq('is_deductible', true)
     .gte('issue_date', sixMonthsAgo)
     .order('issue_date', { ascending: true });
+  if (expensesError) throw new Error('Nie można odczytać kosztów do przepływów');
+  await assertKsefExpensesReadyForPln(expenses ?? [], async (ids) => {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('id, currency')
+      .eq('tenant_id', tenantId)
+      .in('id', ids);
+    if (error) throw new Error('Nie można sprawdzić walut faktur KSeF');
+    return new Map((data ?? []).map((row) => [row.id, row.currency]));
+  });
 
   const { count: pendingReviewCount } = await supabase
     .from('expenses')

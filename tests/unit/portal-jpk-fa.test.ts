@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   issued: [] as unknown[],
   received: [] as unknown[],
   gusKnowsCompany: true,
+  fetchError: null as Error | null,
 }));
 
 vi.mock('@sentry/nextjs', () => ({ captureException: () => 'err-1' }));
@@ -25,12 +26,15 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 vi.mock('@/lib/exports/data-fetcher', () => ({
-  fetchInvoicesForExport: async () => ({
-    issuer: { nip: '5260001246', name: 'ACME' },
-    issuedInvoices: mocks.issued,
-    receivedInvoices: mocks.received,
-    expenses: [],
-  }),
+  fetchInvoicesForExport: async () => {
+    if (mocks.fetchError) throw mocks.fetchError;
+    return {
+      issuer: { nip: '5260001246', name: 'ACME' },
+      issuedInvoices: mocks.issued,
+      receivedInvoices: mocks.received,
+      expenses: [],
+    };
+  },
 }));
 // Adres z GUS bez sieci.
 vi.mock('@/lib/exports/issuer-address', async (importOriginal) => ({
@@ -42,8 +46,10 @@ vi.mock('@/lib/exports/issuer-address', async (importOriginal) => ({
 }));
 
 import { POST } from '@/app/api/portal/exports/generate/route';
+import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
+import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import { MissingIssuerAddressError } from '@/lib/exports/issuer-address';
-import { JpkFaCorrectionNotSupportedError, type JpkInvoice } from '@/lib/exports/jpk-fa-generator';
+import { JpkFaCorrectionNotSupportedError, JpkFaForeignCurrencyNotSupportedError, type JpkInvoice } from '@/lib/exports/jpk-fa-generator';
 import { validateJpkFa } from '@/lib/exports/jpk-fa-validator';
 
 /**
@@ -55,23 +61,43 @@ import { validateJpkFa } from '@/lib/exports/jpk-fa-validator';
 const TENANT = '11111111-1111-4111-8111-111111111111';
 
 const faktura = (o: Partial<JpkInvoice> = {}): JpkInvoice => ({
-  invoiceNumber: 'FV/1', invoiceType: 'regular', issueDate: '2026-09-10', buyerName: 'Klient', buyerNip: '5252241585',
+  invoiceNumber: 'FV/1', currency: 'PLN', invoiceType: 'regular', issueDate: '2026-09-10', buyerName: 'Klient', buyerNip: '5252241585',
   netTotal: 100, vatTotal: 23, grossTotal: 123,
   lines: [{ position: 1, name: 'Usługa', unit: 'szt.', quantity: 1, unitPriceNet: 100, netAmount: 100, vatRate: '23', vatAmount: 23 }],
   ...o,
 });
 
-const pobierz = () =>
+const pobierz = (format: 'jpk_fa' | 'kpir_excel' = 'jpk_fa') =>
   POST(new NextRequest('https://app.example.test/api/portal/exports/generate', {
     method: 'POST',
     headers: { 'x-accountant-token': 'token-ksiegowej' },
-    body: JSON.stringify({ tenantId: TENANT, format: 'jpk_fa', periodStart: '2026-09-01', periodEnd: '2026-09-30' }),
+    body: JSON.stringify({ tenantId: TENANT, format, periodStart: '2026-09-01', periodEnd: '2026-09-30' }),
   }));
 
 beforeEach(() => {
   mocks.issued = [faktura()];
   mocks.received = [];
   mocks.gusKnowsCompany = true;
+  mocks.fetchError = null;
+});
+
+describe('portal: KPiR', () => {
+  it.each([
+    ['EUR', 'EUR'],
+    ['brak waluty', undefined],
+  ] as const)('%s → 422 z powodem zamiast pliku PLN', async (_opis, currency) => {
+    mocks.issued = [faktura({ currency })];
+    const odp = await pobierz('kpir_excel');
+    expect(odp.status).toBe(422);
+    expect(await odp.json()).toEqual({ error: new OutgoingInvoiceCurrencyNotSupportedError().message });
+  });
+
+  it('koszt KSeF bez potwierdzonej waluty → 422 z powodem', async () => {
+    mocks.fetchError = new KsefExpenseCurrencyNotSupportedError();
+    const odp = await pobierz('kpir_excel');
+    expect(odp.status).toBe(422);
+    expect(await odp.json()).toEqual({ error: mocks.fetchError.message });
+  });
 });
 
 describe('portal: JPK_FA(4)', () => {
@@ -87,6 +113,8 @@ describe('portal: JPK_FA(4)', () => {
   it.each([
     ['GUS nie zna firmy', () => { mocks.gusKnowsCompany = false; }, new MissingIssuerAddressError().message],
     ['korekta w okresie', () => { mocks.issued = [faktura(), faktura({ invoiceNumber: 'KOR/1', invoiceType: 'correction' })]; }, new JpkFaCorrectionNotSupportedError().message],
+    ['faktura EUR', () => { mocks.issued = [faktura({ currency: 'EUR' })]; }, new JpkFaForeignCurrencyNotSupportedError().message],
+    ['brak waluty', () => { mocks.issued = [faktura({ currency: undefined })]; }, new JpkFaForeignCurrencyNotSupportedError().message],
     ['same zakupy', () => { mocks.issued = []; mocks.received = [faktura({ invoiceNumber: 'ZAK/7' })]; }, 'Brak faktur wystawionych w wybranym okresie.'],
   ])('%s → 422 z powodem', async (_opis, ustaw, komunikat) => {
     ustaw();

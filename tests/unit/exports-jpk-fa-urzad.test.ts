@@ -91,6 +91,7 @@ vi.mock('@/lib/exports/issuer-address', async (importOriginal) => ({
 const faktura = (o: Partial<JpkInvoice> = {}): JpkInvoice =>
   ({
     invoiceNumber: 'FV/1',
+    currency: 'PLN',
     invoiceType: 'regular',
     issueDate: '2026-08-10',
     buyerName: 'Klient',
@@ -116,7 +117,7 @@ import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/inngest/jo
 import { formatsWithoutUnaddressedJpkFa, runCoPilotSendPackage } from '@/lib/inngest/jobs/co-pilot-monthly';
 import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
 import { MissingIssuerAddressError } from '@/lib/exports/issuer-address';
-import { JpkFaCorrectionNotSupportedError } from '@/lib/exports/jpk-fa-generator';
+import { JpkFaCorrectionNotSupportedError, JpkFaForeignCurrencyNotSupportedError } from '@/lib/exports/jpk-fa-generator';
 
 /**
  * JPK_FA z urzędem skarbowym FIRMY (#67) — cały job eksportu, nie sam
@@ -180,6 +181,8 @@ describe('job eksportu JPK_FA', () => {
   it.each([
     ['korekta w okresie', () => { fetched.issued = [faktura(), faktura({ invoiceNumber: 'KOR/1', invoiceType: 'correction' })]; }, /faktura korygująca/],
     ['GUS nie zna firmy', () => { db.gusKnowsCompany = false; }, /rejestrze GUS/],
+    ['EUR', () => { fetched.issued = [faktura({ currency: 'EUR' })]; }, /JPK_FA wstrzymany/],
+    ['brak waluty', () => { fetched.issued = [faktura({ currency: undefined })]; }, /JPK_FA wstrzymany/],
   ])('%s: koniec bez ponawiania, z komunikatem — i bez pliku', async (_opis, ustaw, komunikat) => {
     db.office = '1433';
     ustaw();
@@ -205,6 +208,7 @@ describe('eksport po wyczerpaniu prób — „nieudany” z powodem, nie wieczne
   it.each([
     ['brak adresu w GUS', new MissingIssuerAddressError().message],
     ['korekta w JPK_FA', new JpkFaCorrectionNotSupportedError().message],
+    ['waluta obca lub brak waluty w JPK_FA', new JpkFaForeignCurrencyNotSupportedError().message],
   ])('%s: klient widzi powód', async (_opis, komunikat) => {
     await onExportsGenerateExhausted(new Error(komunikat), { exportJobId: 'job-1' });
     expect(db.updates[0]!.patch.error_message).toBe(komunikat);

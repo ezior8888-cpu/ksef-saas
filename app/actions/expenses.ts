@@ -1,10 +1,12 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { logAudit } from '@/lib/audit/log';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 
 import { learnFromCorrection } from '@/lib/categorization';
 import { deductibleAfterVatChange } from '@/lib/categorization/vat-deduction';
+import { hasKsefCurrencyRate } from '@/lib/expenses/ksef-currency-review';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
   ocrProcessPhotoRequested,
@@ -28,6 +30,8 @@ type ExpenseReviewUpdates = {
   net_amount?: number;
   vat_amount?: number;
   gross_amount?: number;
+  /** Potwierdzenie porównania walutowej faktury KSeF z XML i kwotami PLN. */
+  confirmForeignCurrencyReview?: boolean;
 };
 
 function buildExpenseUpdatePatch(
@@ -204,13 +208,60 @@ export async function reviewExpenseAction(
 
   const { data: existing } = await supabase
     .from('expenses')
-    .select('seller_nip, seller_name, kpir_column, category_label, vat_amount, vat_deductible_amount')
+    .select('seller_nip, seller_name, kpir_column, category_label, vat_amount, vat_deductible_amount, is_deductible, source, ksef_invoice_id, issue_date, ocr_extracted_data')
     .eq('id', expenseId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
 
   if (!existing) {
     return { success: false as const, error: 'Wydatek nie istnieje' };
+  }
+
+  // Dotyczy także historycznych kosztów bez nowego śladu FX: źródłem prawdy
+  // jest waluta powiązanej faktury, a nie opcjonalny JSON przy wydatku.
+  let reviewedForeignCurrency: string | null = null;
+  let excludedWithoutCurrencyReview = false;
+  let missingKsefFxRate = false;
+  if (existing.source === 'ksef_inbox') {
+    const { data: invoice, error: invoiceError } = existing.ksef_invoice_id
+      ? await supabase
+        .from('invoices')
+        .select('currency')
+        .eq('id', existing.ksef_invoice_id)
+        .eq('tenant_id', tenantId)
+        .maybeSingle()
+      : { data: null, error: null };
+    const currency = invoice?.currency?.trim().toUpperCase();
+    if (invoiceError || !currency || !/^[A-Z]{3}$/.test(currency)) {
+      // Bez źródłowej waluty dopuszczamy wyłącznie bezpieczne wyłączenie
+      // historycznego kosztu z KPiR; dalsze zatwierdzanie czeka na operatora.
+      if (updates.is_deductible !== false) {
+        return { success: false as const, error: 'Nie można potwierdzić waluty faktury KSeF' };
+      }
+      reviewedForeignCurrency = 'unknown';
+      excludedWithoutCurrencyReview = true;
+    } else if (currency !== 'PLN') {
+      reviewedForeignCurrency = currency;
+      missingKsefFxRate = !hasKsefCurrencyRate(
+        existing.ocr_extracted_data,
+        currency,
+        updates.issue_date ?? existing.issue_date,
+      );
+      excludedWithoutCurrencyReview = updates.is_deductible === false
+        && (missingKsefFxRate || updates.confirmForeignCurrencyReview !== true);
+      if (!excludedWithoutCurrencyReview && updates.confirmForeignCurrencyReview !== true) {
+        return {
+          success: false as const,
+          error: 'Przed zatwierdzeniem wydatku walutowego sprawdź XML, kurs i kwoty PLN oraz potwierdź to w formularzu',
+        };
+      }
+      if ((updates.is_deductible ?? existing.is_deductible) === true && missingKsefFxRate) {
+        return {
+          success: false as const,
+          error: 'Brak potwierdzonego kursu przy tym koszcie KSeF. Nie można włączyć kwot w walucie obcej do KPiR.',
+        };
+      }
+    }
   }
 
   const kpirChanged =
@@ -222,6 +273,7 @@ export async function reviewExpenseAction(
   const categoryChanged = kpirChanged || labelChanged;
 
   const patch = buildExpenseUpdatePatch(updates, categoryChanged);
+  if (excludedWithoutCurrencyReview || missingKsefFxRate) patch.is_reviewed = false;
 
   // Formularz wysyła VAT zawsze — odliczenie liczymy od nowa tylko przy
   // faktycznej zmianie, inaczej JPK_V7M odliczałby odczyt OCR.
@@ -244,6 +296,22 @@ export async function reviewExpenseAction(
   if (error) return { success: false as const, error: error.message };
   if (!updated) {
     return { success: false as const, error: 'Wydatek nie istnieje' };
+  }
+
+  if (reviewedForeignCurrency) {
+    await logAudit({
+      action: (excludedWithoutCurrencyReview || missingKsefFxRate)
+        ? 'expense.foreign_currency_excluded'
+        : 'expense.foreign_currency_reviewed',
+      tenantId,
+      userId: user.id,
+      entityType: 'expense',
+      entityId: expenseId,
+      metadata: {
+        currency: reviewedForeignCurrency,
+        includedInKpir: updates.is_deductible ?? existing.is_deductible,
+      },
+    });
   }
 
   const resolvedKpir = updates.kpir_column ?? existing.kpir_column;

@@ -1,4 +1,5 @@
 import type { PageContext } from '@/lib/supabase/page-context';
+import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
 
 /**
  * WŁAŚCICIEL: Bartosz (tor silnika) — rama panelu.
@@ -58,28 +59,41 @@ export async function getMonthlyFigures(
     .slice(0, 10);
   const yearStartIso = `${now.getFullYear()}-01-01`;
 
-  const [{ data: monthInvoices }, { data: prevInvoices }, { data: ytdInvoices }] =
+  const [
+    { data: monthInvoices, error: monthError },
+    { data: prevInvoices, error: prevError },
+    { data: ytdInvoices, error: ytdError },
+  ] =
     await Promise.all([
       supabase
         .from('invoices')
-        .select('gross_total, net_total, vat_total, ksef_status')
+        .select('gross_total, net_total, vat_total, ksef_status, currency')
         .eq('tenant_id', tenantId)
         .eq('direction', OUTGOING)
         .gte('issue_date', startOfMonthIso),
       supabase
         .from('invoices')
-        .select('gross_total')
+        .select('gross_total, currency')
         .eq('tenant_id', tenantId)
         .eq('direction', OUTGOING)
         .gte('issue_date', prevMonthStartIso)
         .lt('issue_date', startOfMonthIso),
       supabase
         .from('invoices')
-        .select('gross_total, issue_date')
+        .select('gross_total, issue_date, currency')
         .eq('tenant_id', tenantId)
         .eq('direction', OUTGOING)
         .gte('issue_date', yearStartIso),
     ]);
+
+  if (monthError || prevError || ytdError) {
+    throw new Error('Nie można odczytać sprzedaży do podsumowania miesiąca');
+  }
+  assertOutgoingInvoicesInPln([
+    ...(monthInvoices ?? []),
+    ...(prevInvoices ?? []),
+    ...(ytdInvoices ?? []),
+  ]);
 
   const issuedCount = monthInvoices?.length ?? 0;
   const acceptedCount =
@@ -189,21 +203,29 @@ export async function getSalesSeries(
   const windowStartIso = `${months[0]!.key}-01`;
   const prevYearStartIso = `${months[0]!.prevKey}-01`;
 
-  const [{ data: current }, { data: previous }] = await Promise.all([
+  const [
+    { data: current, error: currentError },
+    { data: previous, error: previousError },
+  ] = await Promise.all([
     supabase
       .from('invoices')
-      .select('gross_total, issue_date')
+      .select('gross_total, issue_date, currency')
       .eq('tenant_id', tenantId)
       .eq('direction', OUTGOING)
       .gte('issue_date', windowStartIso),
     supabase
       .from('invoices')
-      .select('gross_total, issue_date')
+      .select('gross_total, issue_date, currency')
       .eq('tenant_id', tenantId)
       .eq('direction', OUTGOING)
       .gte('issue_date', prevYearStartIso)
       .lt('issue_date', windowStartIso),
   ]);
+
+  if (currentError || previousError) {
+    throw new Error('Nie można odczytać sprzedaży do wykresu');
+  }
+  assertOutgoingInvoicesInPln([...(current ?? []), ...(previous ?? [])]);
 
   const sumByMonth = (
     rows: { gross_total: number | string | null; issue_date: string }[] | null,

@@ -76,6 +76,7 @@ vi.mock('@/lib/supabase/admin', () => ({
                 gross_total: 123,
                 net_total: 100,
                 vat_total: 23,
+                currency: 'PLN',
                 fa3_data: {},
                 invoice_line_items: [],
               },
