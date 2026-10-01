@@ -37,9 +37,10 @@ wdrożenia, decyzje księgowe).
 2. **Bez migracji.** Nie tworzymy plików w `supabase/migrations/`. Potrzebna
    zmiana schematu → prośba do Bartosza w opisie PR (gotowy SQL + co
    sprawdzić przed) i wpis w sekcji 4.3.
-3. **Scalanie tylko za wyraźną zgodą Igora, z numerami PR** (pytanie
-   z listą PR-ów). Ogólne „dalej / lecisz” to NIE zgoda na scalenie.
-   Merge commit, nigdy `--admin`.
+3. **Scalanie:** od 01.10.2026 Claude scala **swoje** PR-y (`claude/*`) sam,
+   po zielonym CI i lokalnym `pnpm run ci` (zgoda Igora). Merge commit,
+   nigdy `--admin`. Cudzych PR-ów (Codex, Bartosz) nie scala bez wyraźnego
+   polecenia. Scalenie to nie wdrożenie — zasada 1 obowiązuje dalej.
 4. **PR od `origin/main`, bez stosów.** Kilka gotowych PR-ów naraz → gałąź
    „wydanie” łącząca je, jedno CI, jedno scalenie.
 5. **Każda poprawka:** test, który bez poprawki pada; testy mutacyjne
@@ -59,8 +60,8 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E2 | Faktury: adnotacje FA(3) (MPP, metoda kasowa, „odwrotne obciążenie”), ROZ po zaliczkach, PDF korekty, kod QR, mail z kwotą do zapłaty | ✅ / ⏳ C-05 | #75, #76, #79, #84, #95, #102, #103 |
 | E3 | OCR i waluty: koszt w walucie obcej po kursie NBP | ✅ | #94 |
 | E4 | Joby pg-boss: ponowienie wykonuje CAŁY job od nowa (brak pamięci kroków) — każdy zapis musi być odporny na powtórkę | 🔄 | #109 (OCR), Co-Pilot w toku; lista w 3.1 |
-| E5 | RODO / konto: usunięcie konta a subskrypcja i klucze obce | 🔄 | #108 + prośba o migrację |
-| E6 | Konfiguracja produkcji bez cichych zastępstw (GUS sandbox, brak kluczy) | 🔄 | #107 |
+| E5 | RODO / konto: usunięcie konta a subskrypcja i klucze obce | ✅ kod / ⏳ migracja B3 | #108 |
+| E6 | Konfiguracja produkcji bez cichych zastępstw (GUS sandbox, brak kluczy) | ✅ / ⏳ B2 | #107 |
 | E7 | Retencja 10 lat: joby `retention-delete`, `archive-old-invoices` — czy nic nie kasuje faktur przed terminem | ⬜ | — |
 | E8 | Pozostałe obszary: import (Magiczny Import), portal księgowej, walidatory formularzy, powiadomienia | ⬜ | — |
 
@@ -88,16 +89,20 @@ się od nowa?*
 ### 4.1. Scalone do `main`, NIEWDROŻONE
 
 Main od `b25c126` czeka na wdrożenie (aplikacja + worker, bez migracji):
-#91–#97, #100, #101, #105 (= #98, #99, #102, #103).
+#91–#97, #100, #101, #105 (= #98, #99, #102, #103), wydanie #106–#110:
+
+| PR | Co |
+|---|---|
+| #106 | Koordynacja: C-05 (aktualizacja), C-11…C-16 |
+| #107 | JPK_FA: bez `GUS_API_KEY` w produkcji odmowa zamiast adresu z testowej bazy GUS |
+| #108 | RODO: usunięcie konta nie zostawia płatnej subskrypcji bez opiekuna |
+| #109 | OCR: ponowienie joba nie dubluje wydatku w KPiR |
+| #110 | Ten plan + wskaźnik w `AGENTS.md` |
 
 ### 4.2. Otwarte PR-y Claude
 
 | PR | Co | Stan |
 |---|---|---|
-| #106 | Koordynacja: C-05 (aktualizacja), C-11…C-16 | CI zielone, czeka na zgodę na scalenie |
-| #107 | JPK_FA: bez `GUS_API_KEY` w produkcji odmowa zamiast adresu z testowej bazy GUS | CI zielone, czeka na zgodę |
-| #108 | RODO: usunięcie konta nie zostawia płatnej subskrypcji bez opiekuna | CI zielone, czeka na zgodę |
-| #109 | OCR: ponowienie joba nie dubluje wydatku w KPiR | CI w toku |
 | — | Co-Pilot: rezerwacja okresu nie gubi paczki przy ponowieniu | w toku (gałąź `claude/co-pilot-rezerwacja`) |
 
 Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
@@ -127,9 +132,8 @@ Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
 
 1. Dokończyć PR Co-Pilota (cron): rezerwacja okresu i wysłanie zdarzenia
    w jednym kroku, zwolnienie rezerwacji, gdy zdarzenie nie wyszło; test
-   ponowienia; mutacje; `pnpm run ci`; PR.
-2. Zapytać Igora o scalenie gotowych PR-ów (lista z numerami).
-3. Co-Pilot (paczka): ponowienie po wysłanym mailu nie może wysłać go drugi
+   ponowienia; mutacje; `pnpm run ci`; PR; scalić po zielonym CI.
+2. Co-Pilot (paczka): ponowienie po wysłanym mailu nie może wysłać go drugi
    raz; nieudana paczka → alert zamiast cichej rezerwacji.
-4. E7: retencja — przeczytać `retention-delete` i `archive-old-invoices`.
-5. Dalej tabela 3.1 od góry (wiersze ⬜).
+3. E7: retencja — przeczytać `retention-delete` i `archive-old-invoices`.
+4. Dalej tabela 3.1 od góry (wiersze ⬜).
