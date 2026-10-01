@@ -11,6 +11,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 // ── Część 1: submitInvoice na atrapie API KSeF ──
+vi.mock('@/lib/ksef/submission-log', () => ({
+  recordKsefSubmissionSent: vi.fn(),
+  markKsefSubmission: vi.fn(),
+  findOpenKsefSubmission: vi.fn(async () => null),
+  isOwnKsefSession: vi.fn(async () => false),
+  findSessionReferenceForKsefNumber: vi.fn(async () => 'SESJA-TEST'),
+}));
 vi.mock('@/lib/ksef/client', async (orig) => ({
   ...(await orig<typeof import('@/lib/ksef/client')>()),
   ksefFetch: mocks.fetch,

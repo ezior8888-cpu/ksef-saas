@@ -152,6 +152,12 @@ export const invoiceUpoRequested = eventType('invoice/upo.requested', {
     /** NIP tenanta — klucz concurrency w `downloadUpoJob`. */
     nip: string;
     ksefNumber: string;
+    /**
+     * Numer sesji KSeF, w której faktura dostała numer — UPO w KSeF 2.0 leży
+     * w zasobach sesji (AUD-17). Opcjonalny: starsze zdarzenia i ponowienia
+     * z `upo-retry-stale` biorą go z `ksef_submissions`.
+     */
+    sessionReferenceNumber?: string;
   }>(),
 });
 

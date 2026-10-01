@@ -54,11 +54,24 @@ export interface SubmitAuditContext {
  * 7. Zamknij sesję
  * 8. Zwróć numer KSeF
  */
+export interface SubmitInvoiceHooks {
+  /**
+   * Zaraz po przyjęciu pliku przez KSeF, przed odpytywaniem statusu — moment,
+   * od którego ponowna wysyłka byłaby duplikatem. Błąd hooka nie przerywa
+   * wysyłki (faktura już jest w KSeF), tylko zostaje zalogowany.
+   */
+  onInvoiceSent?: (references: {
+    sessionReferenceNumber: string;
+    invoiceReferenceNumber: string;
+  }) => Promise<void>;
+}
+
 export async function submitInvoice(
   invoiceXml: string,
   auth: KsefAuth,
   env?: KsefEnvironment,
   auditContext?: SubmitAuditContext,
+  hooks?: SubmitInvoiceHooks,
 ): Promise<SubmitInvoiceResult> {
   return ksefRateLimiter.enqueue(auth.nip, async () => {
     // 1. Sesja auth (cache dispatcha na XAdES albo token wg auth.type).
@@ -121,6 +134,20 @@ export async function submitInvoice(
             : undefined,
         }
       );
+
+      if (hooks?.onInvoiceSent) {
+        try {
+          await hooks.onInvoiceSent({
+            sessionReferenceNumber: session.referenceNumber,
+            invoiceReferenceNumber: sendResult.referenceNumber,
+          });
+        } catch (e) {
+          console.error(
+            '[ksef.submit] zapis numerów referencyjnych nieudany',
+            e instanceof Error ? e.message : String(e),
+          );
+        }
+      }
 
       // 6. Polling statusu
       const invoiceStatus = await pollInvoiceStatus(
@@ -212,6 +239,75 @@ export class KsefInvoiceRejectedError extends Error {
 }
 
 /**
+ * Rozstrzyga pojedynczy status faktury — wspólne dla pollingu i uzgadniania
+ * po numerze referencyjnym, żeby obie drogi decydowały identycznie.
+ * Akceptacja → status; w toku → null; odrzucenie albo awaria KSeF → wyjątek.
+ */
+function settleInvoiceStatus(status: InvoiceStatusResponse): InvoiceStatusResponse | null {
+  const code = ksefNumericStatusCode(status.status?.code);
+  if (code === INVOICE_STATUS.ACCEPTED) {
+    return status;
+  }
+  if (Number.isFinite(code) && code >= KSEF_SYSTEM_STATUS_MIN) {
+    // 5xx w statusie to przerwanie po stronie KSeF, nie ocena treści. 550:
+    // „Przetwarzanie zostało przerwane z przyczyn wewnętrznych systemu.
+    // Spróbuj ponownie.” (CIRFMF/ksef-docs, RC5.7). Zwykły Error = ponowienie;
+    // ponowienie najpierw uzgadnia status po numerze referencyjnym.
+    throw new Error(
+      `KSeF przerwał przetwarzanie faktury (status ${code}): ${status.status.description}`,
+    );
+  }
+  if (Number.isFinite(code) && code >= INVOICE_STATUS.REJECTED) {
+    throw new KsefInvoiceRejectedError(code, status.status);
+  }
+  return null;
+}
+
+export type InvoiceReferenceStatus =
+  | { state: 'accepted'; ksefNumber: string; acquisitionTimestamp?: string }
+  | { state: 'processing' };
+
+/**
+ * Jednorazowe sprawdzenie statusu faktury wysłanej wcześniej, po numerach
+ * referencyjnych z `ksef_submissions` — zamiast wysyłać ją drugi raz.
+ * Odrzucenie (400–499) rzuca `KsefInvoiceRejectedError`, awaria KSeF — Error.
+ */
+export async function checkInvoiceStatusByReference(
+  references: { sessionReferenceNumber: string; invoiceReferenceNumber: string },
+  auth: KsefAuth,
+  env?: KsefEnvironment,
+  auditContext?: SubmitAuditContext,
+): Promise<InvoiceReferenceStatus> {
+  return ksefRateLimiter.enqueue(auth.nip, async () => {
+    const authSession = await ksefSessionCache.getSession(auth, env);
+    const status = await ksefFetch<InvoiceStatusResponse>(
+      `/sessions/${encodeURIComponent(references.sessionReferenceNumber)}/invoices/${encodeURIComponent(references.invoiceReferenceNumber)}`,
+      {
+        accessToken: authSession.accessToken,
+        env,
+        audit: auditContext
+          ? {
+              ...auditContext,
+              action: 'invoice.reconcile',
+              metadata: { sessionRef: references.sessionReferenceNumber },
+            }
+          : undefined,
+      },
+    );
+    const settled = settleInvoiceStatus(status);
+    if (!settled) return { state: 'processing' };
+    if (!settled.ksefNumber) {
+      throw new Error('KSeF: faktura przyjęta bez numeru KSeF w statusie');
+    }
+    return {
+      state: 'accepted',
+      ksefNumber: settled.ksefNumber,
+      acquisitionTimestamp: settled.acquisitionTimestamp,
+    };
+  });
+}
+
+/**
  * Polling statusu faktury co 2 sekundy aż do akceptacji / odrzucenia.
  */
 async function pollInvoiceStatus(
@@ -239,22 +335,8 @@ async function pollInvoiceStatus(
       }
     );
 
-    const code = ksefNumericStatusCode(status.status?.code);
-    if (code === INVOICE_STATUS.ACCEPTED) {
-      return status;
-    }
-    if (Number.isFinite(code) && code >= KSEF_SYSTEM_STATUS_MIN) {
-      // 5xx w statusie to przerwanie po stronie KSeF, nie ocena treści. 550:
-      // „Przetwarzanie zostało przerwane z przyczyn wewnętrznych systemu.
-      // Spróbuj ponownie.” (CIRFMF/ksef-docs, RC5.7). Zwykły Error = ponowienie;
-      // jeśli faktura jednak weszła, następna wysyłka dostanie 440 z jej numerem.
-      throw new Error(
-        `KSeF przerwał przetwarzanie faktury (status ${code}): ${status.status.description}`,
-      );
-    }
-    if (Number.isFinite(code) && code >= INVOICE_STATUS.REJECTED) {
-      throw new KsefInvoiceRejectedError(code, status.status);
-    }
+    const settled = settleInvoiceStatus(status);
+    if (settled) return settled;
 
     // Status 150 (QUEUED) lub nieznany kod < 400 — czekamy
     await new Promise((resolve) => setTimeout(resolve, intervalMs));

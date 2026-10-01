@@ -17,6 +17,7 @@ import {
 } from '@/lib/auth/ksef-verification-guard';
 
 import type { KsefAuth } from './auth';
+import { recordKsefSubmissionSent } from './submission-log';
 import { submitInvoice } from './submit';
 
 /**
@@ -39,6 +40,10 @@ export interface FullSubmitResult {
   xmlSha256Hash: string;
   /** ISO 8601 timestamp akceptacji; `undefined` jeśli KSeF nie zwrócił go w statusie. */
   acquisitionTimestamp?: string;
+  /** Numer sesji KSeF — potrzebny do pobrania UPO (KSeF 2.0 trzyma je w zasobach sesji). */
+  sessionReferenceNumber?: string;
+  /** Numer referencyjny faktury w sesji — do zamknięcia wpisu w `ksef_submissions`. */
+  invoiceReferenceNumber?: string;
 }
 
 export async function submitInvoiceFullFlow(
@@ -122,15 +127,30 @@ export async function submitInvoiceFullFlow(
   // 4. Wysyłka do KSeF (rate-limited, z enkrypcją i auto-close sesji).
   //    `auditContext` propaguje się do każdego `ksefFetch` w środku — dzięki
   //    temu każdy request do MF wpisuje się do `audit_logs` (Faza 23 sekcja 3).
-  const submitResult = await submitInvoice(xml, auth, env, {
-    tenantId,
-    invoiceId,
-  });
+  //    Numery referencyjne zapisujemy zaraz po przyjęciu pliku — od tej chwili
+  //    ponowienie uzgadnia status zamiast wysyłać fakturę drugi raz (AUD-01).
+  const submitResult = await submitInvoice(
+    xml,
+    auth,
+    env,
+    { tenantId, invoiceId },
+    {
+      onInvoiceSent: (references) =>
+        recordKsefSubmissionSent({
+          tenantId,
+          invoiceId,
+          references,
+          payloadHash: uploadResult.sha256Hash,
+        }),
+    },
+  );
 
   return {
     ksefNumber: submitResult.ksefNumber,
     xmlStoragePath: uploadResult.storagePath,
     xmlSha256Hash: uploadResult.sha256Hash,
     acquisitionTimestamp: submitResult.acquisitionTimestamp,
+    sessionReferenceNumber: submitResult.sessionReferenceNumber,
+    invoiceReferenceNumber: submitResult.invoiceReferenceNumber,
   };
 }
