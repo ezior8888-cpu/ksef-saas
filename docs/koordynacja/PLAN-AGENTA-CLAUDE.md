@@ -59,10 +59,10 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E1 | Eksporty: KPiR (koszty z wydatków, strony, odliczenie VAT), JPK_FA(4) wg XSD, JPK_V7M(3), CSV, eksporty programowe | ✅ / ⏳ | #58–#61, #91, #93, #97, #98, #99; wstrzymania #66, #93 |
 | E2 | Faktury: adnotacje FA(3) (MPP, metoda kasowa, „odwrotne obciążenie”), ROZ po zaliczkach, PDF korekty, kod QR, mail z kwotą do zapłaty | ✅ / ⏳ C-05 | #75, #76, #79, #84, #95, #102, #103 |
 | E3 | OCR i waluty: koszt w walucie obcej po kursie NBP | ✅ | #94 |
-| E4 | Joby pg-boss: ponowienie wykonuje CAŁY job od nowa (brak pamięci kroków) — każdy zapis musi być odporny na powtórkę | 🔄 | #109 (OCR), #112 (Co-Pilot cron); lista w 3.1 |
+| E4 | Joby pg-boss: ponowienie wykonuje CAŁY job od nowa (brak pamięci kroków) — każdy zapis musi być odporny na powtórkę | 🔄 | #109 (OCR), #112 (Co-Pilot cron), #113 (Sentry w workerze); lista w 3.1 |
 | E5 | RODO / konto: usunięcie konta a subskrypcja i klucze obce | ✅ kod / ⏳ migracja B3 | #108 |
 | E6 | Konfiguracja produkcji bez cichych zastępstw (GUS sandbox, brak kluczy) | ✅ / ⏳ B2 | #107 |
-| E7 | Retencja 10 lat: joby `retention-delete`, `archive-old-invoices` — czy nic nie kasuje faktur przed terminem | ⬜ | — |
+| E7 | Retencja 10 lat: joby `retention-delete`, `archive-old-invoices` — czy nic nie kasuje faktur przed terminem | ✅ sprawdzone 01.10 | uwagi w 3.2 |
 | E8 | Pozostałe obszary: import (Magiczny Import), portal księgowej, walidatory formularzy, powiadomienia | ⬜ | — |
 
 ### 3.1. Audyt jobów pod ponowienia (E4)
@@ -78,9 +78,23 @@ się od nowa?*
 | `auto-categorize-inbox` | ✅ sprawdza istniejący wydatek po `ksef_invoice_id` |
 | `download-upo` | ✅ odczyt/aktualizacja istniejącego rekordu |
 | `dunning-payment-failed`, `trial-countdown-emails` | ✅ claim w `billing_notifications` |
-| `retention-delete`, `archive-old-invoices` | ⬜ (razem z E7) |
+| `retention-delete`, `archive-old-invoices` | ✅ ponowienie bezpieczne (aktualizacje idempotentne) — reszta w 3.2 |
 | `exports-generate`, `email-sequence`, `send-reminder`, `reminder-scheduler`, `magic-import-ksef`, `bulk-import`, `daily-summary-email` | ⬜ |
 | `submit-invoice`, `inbox-polling`, `self-invoice-payment`, `process-offline-queue` | Codex (stos #62–#86) — tylko czytać, uwagi przez C-xx |
+
+### 3.2. Retencja (E7) — wynik przeglądu 01.10.2026
+
+Nic nie kasuje faktur przed terminem: archiwum (Glacier) bierze faktury
+starsze niż 2 lata od daty wystawienia i planuje usunięcie za 8 lat, czyli
+najwcześniej 10 lat od wystawienia (ustawowo wystarczy 5 lat od końca roku
+terminu płatności podatku). Bez konfiguracji AWS archiwum rzuca błąd, nic
+nie oznacza. Uwagi, bez pilności:
+
+| Uwaga | Kiedy zaboli |
+|---|---|
+| `retention-delete` kasuje paczką 100 faktur; korekta (`parent_invoice_id … ON DELETE RESTRICT`) albo wydatek (`expenses.ksef_invoice_id`) blokuje całą paczkę i job staje codziennie na tych samych wierszach | ~2034 |
+| `archive-old-invoices`: jedna faktura z brakującym XML w R2 zatrzymuje archiwizację wszystkich (te same 500 kandydatów co dzień) | gdy pierwszy XML zginie |
+| Faktury bez XML (import CSV) nigdy nie dostają terminu usunięcia | RODO, po 10 latach |
 
 ## 4. Stan — aktualizuj po każdym etapie
 
@@ -100,10 +114,11 @@ z #106–#110, oraz:
 | #109 | OCR: ponowienie joba nie dubluje wydatku w KPiR |
 | #110 | Ten plan + wskaźnik w `AGENTS.md` |
 | #112 | Co-Pilot (cron): ponowienie nie gubi miesięcznej paczki dla księgowej |
+| #113 | Worker pg-boss inicjalizuje Sentry — alerty z jobów wcześniej nie wychodziły wcale |
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak (stan po #112).
+Brak (stan po #113).
 
 Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
 
@@ -116,6 +131,7 @@ Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
 | B3 | Migracja: klucze obce `expenses.created_by`, `ocr_jobs.created_by`, `accountant_access.created_by_user_id` → `ON DELETE SET NULL` (dziś blokują usunięcie konta RODO) | #108 |
 | B4 | Odczyt: czy na produkcji są zdublowane wydatki z OCR (SQL w #109); potem `UNIQUE (tenant_id, ocr_job_id)` | #109 |
 | B5 | C-16: płatności/ponaglenia ROZ liczone od pełnej kwoty — migracja przed zdjęciem wstrzymania ROZ | `CLAUDE-DO-CODEXA.md` |
+| B6 | Po wdrożeniu workera: w logach startu ma być „Sentry: alerty z jobów włączone”; jeśli „WYŁĄCZONE” — dodać `SENTRY_DSN` do zmiennych workera (Coolify id=2) | #113 |
 
 ### 4.4. Czeka na decyzję / kogoś innego
 
@@ -132,6 +148,7 @@ Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
 
 1. Co-Pilot (paczka, `runCoPilotSendPackage`): ponowienie po wysłanym mailu
    nie może wysłać go drugi raz ani tworzyć nowych `export_jobs`; nieudana
-   paczka → alert zamiast cichej rezerwacji.
-2. E7: retencja — przeczytać `retention-delete` i `archive-old-invoices`.
-3. Dalej tabela 3.1 od góry (wiersze ⬜).
+   paczka → alert (od #113 wyczerpany job idzie do Sentry sam). Znacznik:
+   `export_jobs.emailed_at` — UI go czyta, ale nikt go nie zapisuje.
+2. Dalej tabela 3.1 od góry (wiersze ⬜).
+3. E8: import, portal księgowej, walidatory, powiadomienia.
