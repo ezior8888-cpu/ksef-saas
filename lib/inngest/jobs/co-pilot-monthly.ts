@@ -322,6 +322,30 @@ export async function runCoPilotSendPackage(data: Parameters<typeof exportsCoPil
       return data as AccountantSettingsRow | null;
     });
 
+    // Paczka z crona wychodzi raz na okres. pg-boss ponawia job od nowa: gdy
+    // mail już wyszedł, a padł późniejszy krok (licznik paczek, ustawienia),
+    // drugi przebieg tworzył nowe eksporty i wysyłał księgowej tę samą paczkę
+    // jeszcze raz (do 01.10.2026). Znacznik wysyłki: `export_jobs.emailed_at`.
+    // Ręczne wysłanie z ustawień zawsze idzie — to świadoma decyzja klienta.
+    if (!manual) {
+      const alreadyEmailed = await step.run('check-already-emailed', async () => {
+        const { data, error } = await supabase
+          .from('export_jobs')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('trigger_source', 'co_pilot_monthly')
+          .eq('period_start', periodStart)
+          .eq('period_end', periodEnd)
+          .not('emailed_at', 'is', null)
+          .limit(1);
+        if (error) throw new Error(error.message);
+        return (data ?? []).length > 0;
+      });
+      if (alreadyEmailed) {
+        return { success: true as const, skipped: 'already-emailed' as const };
+      }
+    }
+
     const formats =
       rawFormats.length > 0
         ? parseFormats(rawFormats)
@@ -571,6 +595,18 @@ export async function runCoPilotSendPackage(data: Parameters<typeof exportsCoPil
 
       if (result.error) {
         throw new Error(result.error.message);
+      }
+
+      // Znacznik dla ponowienia (patrz `check-already-emailed`) i dla historii
+      // paczek w ustawieniach — UI czytało `emailed_at`, ale nikt go nie
+      // zapisywał. Mail już wyszedł, więc błąd zapisu tylko logujemy.
+      const { error: markError } = await supabase
+        .from('export_jobs')
+        .update({ emailed_at: new Date().toISOString() })
+        .in('id', jobIds)
+        .eq('tenant_id', tenantId);
+      if (markError) {
+        console.error('[co-pilot] paczka wysłana, ale nie zapisano emailed_at', { tenantId, periodStart });
       }
 
       return {
