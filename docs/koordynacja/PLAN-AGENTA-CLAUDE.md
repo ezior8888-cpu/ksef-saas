@@ -65,8 +65,9 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E7 | Retencja 10 lat: joby `retention-delete`, `archive-old-invoices` — czy nic nie kasuje faktur przed terminem | ✅ sprawdzone 01.10 | uwagi w 3.2 |
 | E8 | Pozostałe obszary: import (Magiczny Import), portal księgowej, walidatory formularzy, powiadomienia | ✅ przegląd 01.10 | portal: token jako hash, wygaśnięcie, odwołanie, firma i ścieżka XML sprawdzane; push tylko do aktywnych członków; walidator ZAL bez „zw” = C-15; import = stos Codexa |
 | E9 | Flo — funkcje zapisujące dane (`payment.confirm`, `expense.review`, `expense.rule`, `payment.chase`) | ✅ przegląd 01.10 | `expense.*` bez skutków wstecz; `payment.confirm` — uwaga o dacie wpłaty w 4.4; `payment.chase` = ponaglenia (stos Codexa) |
-| E10 | Formularze faktur VAT/KOR/ZAL/ROZ — przypadki brzegowe dat i kwot (art. 106i, 106e) | ⬜ | pliki KOR/ZAL/ROZ w stosie Codexa — zgłoszenia przez C-xx |
-| E11 | Ustawienia firmy i KSeF — zmiana NIP, danych sprzedawcy, certyfikatu; co dzieje się z wystawionymi fakturami | ⬜ | — |
+| E10 | Formularze faktur VAT/KOR/ZAL/ROZ — przypadki brzegowe dat i kwot (art. 106i, 106e) | ✅ przegląd 01.10 | błędów danych brak; ograniczenia produktowe w 4.4 (data sprzedaży po wystawieniu, brak ostrzeżenia o spóźnionej fakturze); pliki formularzy w stosie Codexa |
+| E11 | Ustawienia firmy i KSeF — zmiana NIP, danych sprzedawcy, certyfikatu; co dzieje się z wystawionymi fakturami | ✅ przegląd 01.10 | PDF bierze sprzedawcę z migawki faktury (`seller_data`); NIP firmy ustawia się tylko w szkicu; ponowna wysyłka wstrzymana do ręcznego uzgodnienia |
+| E12 | Koszty samochodu osobowego (50% VAT, 75% PIT) — aplikacja odlicza 100% VAT i nie stosuje limitu | ⏳ decyzja | 4.4 |
 
 ### 3.1. Audyt jobów pod ponowienia (E4)
 
@@ -168,20 +169,24 @@ poprawnych kodów QR); Bartosz #90, #120 (alerty Telegram + heartbeat workera).
 | Autouzupełnianie kontrahentów z testowej bazy GUS bez klucza | zgłoszone, decyzja produktowa |
 | Pulpit `monthly-figures` i FLO sumują `gross_total` ROZ | Bartosz |
 | Flo `payment.confirm` zapisuje `payment_date` = dzień KLIKNIĘCIA, nie wpływu pieniędzy (karta pyta dobę po terminie, zbiorczo). Dziś czytają to tylko zabezpieczenia ponagleń — ale zanim VAT metodą kasową (#76) zacznie liczyć okres z wpłat, karta musi pytać o datę wpływu | przyszłość, decyzja przy JPK_V7M dla metody kasowej |
+| **E12 — samochód osobowy.** Paliwo i inne wydatki na auto idą z odliczeniem 100% VAT (OCR, skrzynka KSeF), a użytkownik nie ma jak ustawić 50%. W typowej mikrofirmie (użytek mieszany): VAT tylko 50% (art. 86a ust. 1), nieodliczona połowa do kosztu, koszt PIT max 75% (art. 23 ust. 1 pkt 46a); leasing ma osobne limity (pkt 47a). Dziś KPiR zaniża koszt o połowę VAT i nie stosuje limitu 75% (JPK_V7M zawyżyłby odliczenie, ale jest wstrzymany). Propozycja: ustawienie firmy „samochód: brak / mieszany / 100% firmowy (VAT-26)”, rozpoznanie wydatków samochodowych (paliwo, serwis, ubezpieczenie) i proporcja odliczenia przy zapisie wydatku | Igor + księgowa (decyzja, co liczyć), potem Claude |
+| Formularz faktury nie pozwala na datę sprzedaży PO dacie wystawienia (art. 106i ust. 7 dopuszcza fakturę do 60 dni przed dostawą) i nie ostrzega o spóźnionym wystawieniu (po 15. dniu następnego miesiąca, art. 106i ust. 1) — ograniczenie, nie błąd danych | decyzja produktowa |
 
 ## 5. Następny krok
 
-1. E11: ustawienia firmy i KSeF (`components/settings/actions.ts`,
-   `app/actions/organizations.ts`) — czy zmiana danych sprzedawcy/NIP nie
-   zmienia wstecz wystawionych faktur (PDF, ponowna wysyłka, eksporty biorą
-   dane sprzedawcy z faktury czy z bieżących ustawień?).
-2. E10: formularz faktury VAT (`components/invoices/invoice-form.tsx`, mój
-   obszar) — daty (sprzedaż vs wystawienie, termin), kwoty, waluta;
-   KOR/ZAL/ROZ tylko czytać, uwagi przez C-xx.
-3. Snapshot/weryfikacja kopii: przegląd po scaleniu #90 Bartosza (dziś tylko
+1. E13 (nowy): szacunki podatków pokazywane klientowi — przepływy
+   (`app/(dashboard)/przeplywy`, `components/expenses/cash-flow-dashboard.tsx`)
+   i funkcje podatkowe Flo (grupa T, `isTaxKind`) — czy VAT/PIT „do odłożenia”
+   liczą się poprawnie dla ROZ (zaliczki), korekt, „zw”, kosztów w walucie
+   i paragonów. Klient na tej podstawie odkłada pieniądze na podatek.
+2. Po decyzji Igora/księgowej: E12 (samochód 50%/75%).
+3. Po scaleniu #85 (Codex): C-05 — adnotacje P_16/P_18A dla ROZ.
+4. Po scaleniu #90 (Bartosz): przegląd snapshotu i weryfikacji kopii (dziś
    przeczytane: alert przy awarii jest — Sentry + kanał „urgent”).
 
 Sprawdzone 01.10 bez zmian: `daily-db-snapshot`, `verify-backup` (suma
 kontrolna, rozpakowanie, liczby wierszy), `cleanup-audit-logs` (logi > 12 mies.,
 `inngest_run_log` > 3 mies.), `refresh-materialized-views`,
-`weekly-business-review`, `daily-analytics-digest`.
+`weekly-business-review`, `daily-analytics-digest`. Analityka PostHog:
+lista dozwolonych zdarzeń i właściwości, identyfikatory tylko UUID, host UE,
+zgoda — bez uwag.
