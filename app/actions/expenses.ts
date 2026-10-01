@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { logAudit } from '@/lib/audit/log';
+import { z } from 'zod';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 
 import { learnFromCorrection } from '@/lib/categorization';
@@ -33,6 +33,28 @@ type ExpenseReviewUpdates = {
   /** Potwierdzenie porównania walutowej faktury KSeF z XML i kwotami PLN. */
   confirmForeignCurrencyReview?: boolean;
 };
+
+// Server Action arguments are untrusted at runtime. This schema is applied
+// before any service-role KSeF write; the ordinary RLS expense path is unchanged.
+const moneySchema = z.number().finite().min(-999_999_999_999.99).max(999_999_999_999.99);
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((date) => {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+});
+const ksefReviewSchema = z.strictObject({
+  kpir_column: z.enum(['col_7', 'col_8', 'col_10', 'col_11', 'col_12', 'col_13', 'col_15', 'col_16']).optional(),
+  category_label: z.string().max(200).optional(),
+  is_deductible: z.boolean().optional(),
+  notes: z.string().max(10_000).optional(),
+  seller_name: z.string().trim().min(1).max(500).optional(),
+  seller_nip: z.string().max(32).nullable().optional(),
+  document_number: z.string().max(200).optional(),
+  issue_date: dateSchema.optional(),
+  net_amount: moneySchema.optional(),
+  vat_amount: moneySchema.optional(),
+  gross_amount: moneySchema.optional(),
+  confirmForeignCurrencyReview: z.boolean().optional(),
+});
 
 function buildExpenseUpdatePatch(
   updates: ExpenseReviewUpdates,
@@ -205,7 +227,7 @@ export async function reviewExpenseAction(
 
   const { data: existing } = await supabase
     .from('expenses')
-    .select('seller_nip, seller_name, kpir_column, category_label, vat_amount, vat_deductible_amount, is_deductible, source, ksef_invoice_id, issue_date, ocr_extracted_data')
+    .select('seller_nip, seller_name, kpir_column, category_label, vat_amount, vat_deductible_amount, is_deductible, source, ksef_invoice_id, issue_date, ocr_extracted_data, updated_at')
     .eq('id', expenseId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -214,9 +236,20 @@ export async function reviewExpenseAction(
     return { success: false as const, error: 'Wydatek nie istnieje' };
   }
 
+  const isKsefExpense = existing.source === 'ksef_inbox' || existing.ksef_invoice_id != null;
+  if (isKsefExpense) {
+    const parsed = ksefReviewSchema.safeParse(updates);
+    if (!parsed.success) {
+      return { success: false as const, error: 'Nieprawidłowe dane wydatku KSeF' };
+    }
+    updates = parsed.data;
+    if (existing.source !== 'ksef_inbox') {
+      return { success: false as const, error: 'Niespójne powiązanie kosztu KSeF. Wymagane uzgodnienie przez operatora.' };
+    }
+  }
+
   // Dotyczy także historycznych kosztów bez nowego śladu FX: źródłem prawdy
   // jest waluta powiązanej faktury, a nie opcjonalny JSON przy wydatku.
-  let reviewedForeignCurrency: string | null = null;
   let excludedWithoutCurrencyReview = false;
   let missingKsefFxRate = false;
   if (existing.source === 'ksef_inbox') {
@@ -235,10 +268,8 @@ export async function reviewExpenseAction(
       if (updates.is_deductible !== false) {
         return { success: false as const, error: 'Nie można potwierdzić waluty faktury KSeF' };
       }
-      reviewedForeignCurrency = 'unknown';
       excludedWithoutCurrencyReview = true;
     } else if (currency !== 'PLN') {
-      reviewedForeignCurrency = currency;
       missingKsefFxRate = !hasKsefCurrencyRate(
         existing.ocr_extracted_data,
         currency,
@@ -282,33 +313,36 @@ export async function reviewExpenseAction(
     );
   }
 
-  const { data: updated, error } = await supabase
-    .from('expenses')
-    .update(patch)
-    .eq('id', expenseId)
-    .eq('tenant_id', tenantId)
-    .select('id')
-    .maybeSingle();
-
-  if (error) return { success: false as const, error: error.message };
-  if (!updated) {
-    return { success: false as const, error: 'Wydatek nie istnieje' };
-  }
-
-  if (reviewedForeignCurrency) {
-    await logAudit({
-      action: (excludedWithoutCurrencyReview || missingKsefFxRate)
-        ? 'expense.foreign_currency_excluded'
-        : 'expense.foreign_currency_reviewed',
-      tenantId,
-      userId: user.id,
-      entityType: 'expense',
-      entityId: expenseId,
-      metadata: {
-        currency: reviewedForeignCurrency,
-        includedInKpir: updates.is_deductible ?? existing.is_deductible,
-      },
+  if (isKsefExpense) {
+    // The only privileged write path for a KSeF expense. The service-role-only
+    // RPC repeats membership and tenant checks, compares updated_at, and writes
+    // the audit row in the same database transaction as the expense update.
+    const { data: updatedId, error } = await createAdminClient().rpc('review_ksef_expense', {
+      p_tenant_id: tenantId,
+      p_expense_id: expenseId,
+      p_actor_user_id: user.id,
+      p_expected_updated_at: existing.updated_at,
+      p_patch: patch,
     });
+    if (error) {
+      return { success: false as const, error: 'Nie udało się bezpiecznie zapisać kosztu KSeF' };
+    }
+    if (updatedId !== expenseId) {
+      return { success: false as const, error: 'Wydatek zmienił się w międzyczasie. Odśwież stronę.' };
+    }
+  } else {
+    const { data: updated, error } = await supabase
+      .from('expenses')
+      .update(patch)
+      .eq('id', expenseId)
+      .eq('tenant_id', tenantId)
+      .select('id')
+      .maybeSingle();
+
+    if (error) return { success: false as const, error: error.message };
+    if (!updated) {
+      return { success: false as const, error: 'Wydatek nie istnieje' };
+    }
   }
 
   const resolvedKpir = updates.kpir_column ?? existing.kpir_column;

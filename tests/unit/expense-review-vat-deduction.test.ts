@@ -4,15 +4,23 @@ const mocks = vi.hoisted(() => ({
   existing: null as Record<string, unknown> | null,
   invoiceCurrency: 'PLN' as string | null,
   patches: [] as Record<string, unknown>[],
+  adminCalls: [] as { fn: string; args: Record<string, unknown> }[],
+  adminResponse: { data: 'exp-1' as string | null, error: null as { message: string } | null },
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('@/lib/audit/log', () => ({ logAudit: vi.fn() }));
 vi.mock('@/lib/categorization', () => ({ learnFromCorrection: vi.fn() }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: vi.fn() }));
 vi.mock('@/lib/inngest/client', () => ({ ocrProcessPhotoRequested: { create: vi.fn() } }));
 vi.mock('@/lib/inngest/error-message', () => ({ formatInngestSendError: vi.fn() }));
-vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }));
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: () => ({
+    rpc: async (fn: string, args: Record<string, unknown>) => {
+      mocks.adminCalls.push({ fn, args });
+      return mocks.adminResponse;
+    },
+  }),
+}));
 vi.mock('@/lib/supabase/auth-context', () => ({ requireUserAndActiveOrg: vi.fn() }));
 vi.mock('@/lib/storage/expenses', () => ({ uploadExpensePhoto: vi.fn(), deleteExpensePhoto: vi.fn() }));
 vi.mock('@/lib/supabase/active-org', () => ({ getActiveOrgIdFromCookies: async () => 'ten-1' }));
@@ -42,7 +50,6 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 import { reviewExpenseAction } from '@/app/actions/expenses';
-import { logAudit } from '@/lib/audit/log';
 import { learnFromCorrection } from '@/lib/categorization';
 import { deductibleAfterVatChange } from '@/lib/categorization/vat-deduction';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
@@ -65,9 +72,10 @@ const wydatek = (vat: number, deductible: number) => ({
 
 beforeEach(() => {
   mocks.patches = [];
+  mocks.adminCalls = [];
+  mocks.adminResponse = { data: 'exp-1', error: null };
   mocks.existing = null;
   mocks.invoiceCurrency = 'PLN';
-  vi.mocked(logAudit).mockClear();
   vi.mocked(requireUserAndActiveOrg).mockImplementation(async () => ({
     supabase: await createClient(),
     user: { id: 'u-1' },
@@ -82,6 +90,7 @@ describe('ręczne zatwierdzenie walutowej faktury KSeF', () => {
     source: 'ksef_inbox',
     ksef_invoice_id: 'inv-1',
     is_deductible: false,
+    updated_at: '2026-10-01T00:00:00Z',
     issue_date: '2026-09-25',
     ocr_extracted_data: {
       source: 'ksef_inbox',
@@ -99,6 +108,7 @@ describe('ręczne zatwierdzenie walutowej faktury KSeF', () => {
     const result = await reviewExpenseAction('exp-1', { is_deductible: true });
     expect(result).toMatchObject({ success: false });
     expect(mocks.patches).toEqual([]);
+    expect(mocks.adminCalls).toEqual([]);
   });
 
   it('po jawnym potwierdzeniu XML i kwot pozwala zapisać decyzję klienta', async () => {
@@ -109,14 +119,18 @@ describe('ręczne zatwierdzenie walutowej faktury KSeF', () => {
       confirmForeignCurrencyReview: true,
     });
     expect(result).toMatchObject({ success: true });
-    expect(mocks.patches[0]).toMatchObject({ is_deductible: true, is_reviewed: true });
-    expect(mocks.patches[0]).not.toHaveProperty('confirmForeignCurrencyReview');
-    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'expense.foreign_currency_reviewed',
-      tenantId: 'ten-1',
-      entityId: 'exp-1',
-      metadata: { currency: 'EUR', includedInKpir: true },
-    }));
+    expect(mocks.patches).toEqual([]);
+    expect(mocks.adminCalls).toEqual([{
+      fn: 'review_ksef_expense',
+      args: expect.objectContaining({
+        p_tenant_id: 'ten-1',
+        p_expense_id: 'exp-1',
+        p_actor_user_id: 'u-1',
+        p_expected_updated_at: '2026-10-01T00:00:00Z',
+        p_patch: expect.objectContaining({ is_deductible: true, is_reviewed: true }),
+      }),
+    }]);
+    expect(mocks.adminCalls[0].args.p_patch).not.toHaveProperty('confirmForeignCurrencyReview');
   });
 
   it('brak waluty powiązanej faktury blokuje zatwierdzenie', async () => {
@@ -135,14 +149,14 @@ describe('ręczne zatwierdzenie walutowej faktury KSeF', () => {
     mocks.invoiceCurrency = null;
     const result = await reviewExpenseAction('exp-1', { is_deductible: false });
     expect(result).toMatchObject({ success: true });
-    expect(mocks.patches[0]).toMatchObject({ is_deductible: false, is_reviewed: false });
+    expect(mocks.adminCalls[0].args.p_patch).toMatchObject({ is_deductible: false, is_reviewed: false });
   });
 
   it('brak powiązanej faktury KSeF pozwala wyłącznie wyłączyć koszt z KPiR', async () => {
     mocks.existing = { ...ksefExpense(), ksef_invoice_id: null, is_deductible: true };
     const result = await reviewExpenseAction('exp-1', { is_deductible: false });
     expect(result).toMatchObject({ success: true });
-    expect(mocks.patches[0]).toMatchObject({ is_deductible: false, is_reviewed: false });
+    expect(mocks.adminCalls[0].args.p_patch).toMatchObject({ is_deductible: false, is_reviewed: false });
   });
 
   it('faktura PLN zachowuje dotychczasową ścieżkę bez potwierdzenia FX', async () => {
@@ -182,7 +196,7 @@ describe('ręczne zatwierdzenie walutowej faktury KSeF', () => {
       is_deductible: false,
     });
     expect(result).toMatchObject({ success: true });
-    expect(mocks.patches[0]).toMatchObject({ issue_date: '2026-09-26', is_deductible: false, is_reviewed: false });
+    expect(mocks.adminCalls[0].args.p_patch).toMatchObject({ issue_date: '2026-09-26', is_deductible: false, is_reviewed: false });
   });
 
   it('historyczny koszt EUR można wyłączyć z KPiR bez potwierdzania nieznanego kursu', async () => {
@@ -190,11 +204,7 @@ describe('ręczne zatwierdzenie walutowej faktury KSeF', () => {
     mocks.invoiceCurrency = 'EUR';
     const result = await reviewExpenseAction('exp-1', { is_deductible: false });
     expect(result).toMatchObject({ success: true });
-    expect(mocks.patches[0]).toMatchObject({ is_deductible: false, is_reviewed: false });
-    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'expense.foreign_currency_excluded',
-      metadata: { currency: 'EUR', includedInKpir: false },
-    }));
+    expect(mocks.adminCalls[0].args.p_patch).toMatchObject({ is_deductible: false, is_reviewed: false });
   });
 
   it('brak pola is_deductible nie obchodzi blokady historycznego kosztu bez kursu', async () => {
@@ -202,6 +212,57 @@ describe('ręczne zatwierdzenie walutowej faktury KSeF', () => {
     mocks.invoiceCurrency = 'EUR';
     const result = await reviewExpenseAction('exp-1', { confirmForeignCurrencyReview: true });
     expect(result).toMatchObject({ success: false });
+    expect(mocks.patches).toEqual([]);
+    expect(mocks.adminCalls).toEqual([]);
+  });
+
+  it('odrzuca nowe pola spoza listy przed wywołaniem service_role', async () => {
+    mocks.existing = ksefExpense();
+    const forged = { is_deductible: true, source: 'manual' } as Parameters<typeof reviewExpenseAction>[1];
+    const result = await reviewExpenseAction('exp-1', forged);
+    expect(result).toMatchObject({ success: false, error: 'Nieprawidłowe dane wydatku KSeF' });
+    expect(mocks.adminCalls).toEqual([]);
+  });
+
+  it('odrzuca niepoprawne kwoty i daty przed wywołaniem service_role', async () => {
+    mocks.existing = ksefExpense();
+    const result = await reviewExpenseAction('exp-1', {
+      is_deductible: false,
+      vat_amount: Number.POSITIVE_INFINITY,
+      issue_date: '2026-02-30',
+    });
+    expect(result).toMatchObject({ success: false });
+    expect(mocks.adminCalls).toEqual([]);
+  });
+
+  it('odrzuca niespójny link do KSeF nawet przy zwykłym źródle', async () => {
+    mocks.existing = { ...ksefExpense(), source: 'manual' };
+    const result = await reviewExpenseAction('exp-1', { is_deductible: false });
+    expect(result).toMatchObject({ success: false, error: expect.stringContaining('Niespójne powiązanie') });
+    expect(mocks.adminCalls).toEqual([]);
+    expect(mocks.patches).toEqual([]);
+  });
+
+  it('bez nowego członkostwa lub widocznego wydatku nie uruchamia service_role', async () => {
+    vi.mocked(requireUserAndActiveOrg).mockRejectedValueOnce(new Error('no active org'));
+    expect(await reviewExpenseAction('exp-1', { is_deductible: false })).toMatchObject({ success: false });
+    mocks.existing = null;
+    expect(await reviewExpenseAction('exp-1', { is_deductible: false })).toMatchObject({ success: false });
+    expect(mocks.adminCalls).toEqual([]);
+  });
+
+  it('błąd lub nieaktualna wersja wiersza nie zgłasza sukcesu', async () => {
+    mocks.existing = ksefExpense();
+    mocks.adminResponse = { data: null, error: { message: 'db details' } };
+    expect(await reviewExpenseAction('exp-1', { is_deductible: false })).toMatchObject({
+      success: false,
+      error: 'Nie udało się bezpiecznie zapisać kosztu KSeF',
+    });
+    mocks.adminResponse = { data: null, error: null };
+    expect(await reviewExpenseAction('exp-1', { is_deductible: false })).toMatchObject({
+      success: false,
+      error: expect.stringContaining('Wydatek zmienił się'),
+    });
     expect(mocks.patches).toEqual([]);
   });
 });
