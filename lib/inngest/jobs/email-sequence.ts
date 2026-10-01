@@ -163,40 +163,6 @@ ${baseStyle}
 <p>— Bartek</p>`;
 }
 
-function DAY_12_PUSH_TEMPLATE(name: string) {
-  const safe = escapeHtml(name);
-  return `
-${baseStyle}
-<h1>${safe}, 2 dni do końca trialu</h1>
-<p>Nie chcę, żebyś stracił dostęp. Co dalej?</p>
-<p><strong>Opcja A: Aktywuj subskrypcję</strong></p>
-<p>49 zł/mc rocznie (588 PLN/rok) lub 59 zł/mc miesięcznie (708 PLN/rok). Wszystkie funkcje. Bez upgrade&apos;ów.</p>
-<p style="text-align: center; margin: 20px 0;">
-  <a href="${APP_BASE}/settings" class="button">Aktywuj →</a>
-</p>
-<p><strong>Opcja B: Zostaw mi feedback</strong></p>
-<p>Czego brakuje? Co byś zmienił? Po prostu odpisz na ten email — czytam wszystko sam.</p>
-<p><strong>Opcja C: Pamiętaj o 60 dni money-back</strong></p>
-<p>Jeśli coś nie zagra po aktywacji — pełny zwrot bez pytań. Wystarczy email.</p>
-<p>— Bartek</p>`;
-}
-
-function DAY_14_END_TEMPLATE(name: string) {
-  const safe = escapeHtml(name);
-  return `
-${baseStyle}
-<h1>${safe}, trial zakończony</h1>
-<p>Twoje konto jest teraz w trybie read-only. Możesz pobrać wszystkie dane (faktury, JPK_FA, KPiR Excel), ale nie wystawisz nowych faktur ani nie dodasz wydatków.</p>
-<p><strong>Co możesz zrobić teraz:</strong></p>
-<ul>
-  <li><a href="${APP_BASE}/settings">Aktywuj subskrypcję</a> i kontynuuj</li>
-  <li><a href="${APP_BASE}/reports/exports">Pobierz wszystkie dane</a> (30 dni dostęp)</li>
-  <li>Po 30 dniach dane są usuwane permanentnie (RODO)</li>
-</ul>
-<p>Może niedługo wrócisz. KSeF i tak będzie obowiązkowy w 2026 — mamy jeszcze rok żeby wybrać apkę, do której się przyzwyczaisz.</p>
-<p>— Bartek</p>`;
-}
-
 /** Email 1: Welcome — zaraz po rejestracji (`user/registered`). */
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
@@ -363,7 +329,12 @@ export async function runEmailDay8(data: Parameters<typeof emailTrialDay8.create
       });
     });
 
-    await step.scheduleAfter('schedule-day-12', '4d', emailTrialDay12.create({ userId, email, firstName }));
+    // Dzień 8 kończy sekwencję. Maile z dnia 12 i 14 („2 dni do końca
+    // trialu”, „trial zakończony, konto read-only, dane usuwane po 30 dniach”)
+    // przeczyły regulaminowi (§3 ust. 3: trial 30 dni), retencji faktur
+    // (10 lat) i aplikacji (nie ma trybu tylko do odczytu); szły też do
+    // płacących, bo `subscription_tier` nikt nie aktualizuje. Koniec trialu
+    // z kartą zapowiada `trial-countdown-emails` (Stripe). Wstrzymane 01.10.2026.
 }
 
 export const emailDay8 = inngest.createFunction(
@@ -377,23 +348,15 @@ export const emailDay8 = inngest.createFunction(
     runEmailDay8(event.data as Parameters<typeof emailTrialDay8.create>[0], toJobContext({ step, logger, attempt })),
 );
 
-/** Email 5: dzień 12 — konwersja. */
 /**
- * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Email 5 (dzień 12) — WSTRZYMANY 01.10.2026, powód przy `runEmailDay8`.
+ * Kolejka zostaje: zdarzenia zaplanowane przed wstrzymaniem (rejestracje
+ * z ostatnich dni) muszą zostać odebrane i pominięte, a nie wysłane.
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
  */
-export async function runEmailDay12(rawData: Parameters<typeof emailTrialDay12.create>[0], { step }: JobContext) {
-    const data = emailTrialDay12.parse(rawData);
-
-    await step.run('send-push', async () => {
-      await sendEmail({
-        to: data.email,
-        subject: '2 dni do końca trialu — co dalej?',
-        html: DAY_12_PUSH_TEMPLATE(data.firstName),
-      });
-    });
-
-    await step.scheduleAfter('schedule-day-14', '2d', emailTrialDay14.create(data));
+export async function runEmailDay12(rawData: Parameters<typeof emailTrialDay12.create>[0]) {
+    emailTrialDay12.parse(rawData);
+    return { skipped: 'wstrzymany' as const };
 }
 
 export const emailDay12 = inngest.createFunction(
@@ -403,51 +366,18 @@ export const emailDay12 = inngest.createFunction(
     retries: 2,
     triggers: [emailTrialDay12],
   },
-  async ({ event, step, logger, attempt }) =>
-    runEmailDay12(event.data as Parameters<typeof emailTrialDay12.create>[0], toJobContext({ step, logger, attempt })),
+  async ({ event }) =>
+    runEmailDay12(event.data as Parameters<typeof emailTrialDay12.create>[0]),
 );
 
 /**
- * Email 6: dzień 14 — koniec trialu.
- * Płatność: `tenants.subscription_tier !== 'basic'` traktujemy jako aktywną subskrypcję
- * (do podmiany, gdy pojawi się dedykowany billing / Stripe).
- */
-/**
- * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
+ * Email 6 (dzień 14, „trial zakończony”) — WSTRZYMANY 01.10.2026, powód przy
+ * `runEmailDay8`. Kolejka zostaje dla zdarzeń zaplanowanych wcześniej.
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
  */
-export async function runEmailDay14(data: Parameters<typeof emailTrialDay14.create>[0], { step }: JobContext) {
-    const { email, firstName, userId } = emailTrialDay14.parse(data);
-
-    const subscribed = await step.run('check-subscription', async () => {
-      const supabase = createAdminClient();
-      const tenantId = await activeTenantIdOf(supabase, userId);
-      if (!tenantId) return false;
-
-      const { data: tenant, error: tenantErr } = await supabase
-        .from('tenants')
-        .select('subscription_tier')
-        .eq('id', tenantId)
-        .maybeSingle();
-
-      if (tenantErr) throw tenantErr;
-      const tier = tenant?.subscription_tier ?? 'basic';
-      return tier !== 'basic';
-    });
-
-    if (subscribed) {
-      return { skipped: true as const };
-    }
-
-    await step.run('send-trial-ended', async () => {
-      await sendEmail({
-        to: email,
-        subject: 'Trial zakończony. Chcesz kontynuować?',
-        html: DAY_14_END_TEMPLATE(firstName),
-      });
-    });
-
-    return { sent: true as const };
+export async function runEmailDay14(data: Parameters<typeof emailTrialDay14.create>[0]) {
+    emailTrialDay14.parse(data);
+    return { skipped: 'wstrzymany' as const };
 }
 
 export const emailDay14 = inngest.createFunction(
@@ -457,6 +387,6 @@ export const emailDay14 = inngest.createFunction(
     retries: 2,
     triggers: [emailTrialDay14],
   },
-  async ({ event, step, logger, attempt }) =>
-    runEmailDay14(event.data as Parameters<typeof emailTrialDay14.create>[0], toJobContext({ step, logger, attempt })),
+  async ({ event }) =>
+    runEmailDay14(event.data as Parameters<typeof emailTrialDay14.create>[0]),
 );

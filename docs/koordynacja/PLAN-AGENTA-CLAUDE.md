@@ -80,7 +80,10 @@ się od nowa?*
 | `dunning-payment-failed`, `trial-countdown-emails` | ✅ claim w `billing_notifications` |
 | `retention-delete`, `archive-old-invoices` | ✅ ponowienie bezpieczne (aktualizacje idempotentne) — reszta w 3.2 |
 | `exports-generate` | ✅ nazwa pliku deterministyczna, HEAD przed wgraniem do R2, upsert `export_files`. Drobiazg: JPK ma znacznik czasu, więc po ponowieniu `file_hash`/`size_bytes` mogą nie pasować do pliku w R2 — nikt ich nie weryfikuje |
-| `email-sequence`, `send-reminder`, `reminder-scheduler`, `magic-import-ksef`, `bulk-import`, `daily-summary-email` | ⬜ |
+| `email-sequence` | ❌→✅ TREŚĆ: maile dnia 12 i 14 („2 dni do końca trialu”, „trial zakończony, read-only, dane usuwane po 30 dniach”) przeczyły regulaminowi (trial 30 dni), retencji i aplikacji; dzień 14 szedł do płacących — wstrzymane (#118). Ponowienia: powitalny mail może pójść drugi raz, gdy padnie planowanie dnia 1 — drobne |
+| `daily-summary-email` | ✅ raport dla operatora, bez skutku dla klientów. ALE: wskaźnik „błędy jobów” czyta `inngest_run_log`, do której NIKT nie pisze (także panel `/admin/system`) — zawsze 0; patrz następny krok |
+| `magic-import-ksef` | stos Codexa (#63–#86) — tylko czytać |
+| `send-reminder`, `reminder-scheduler`, `bulk-import` | ⬜ |
 | `submit-invoice`, `inbox-polling`, `self-invoice-payment`, `process-offline-queue` | Codex (stos #62–#86) — tylko czytać, uwagi przez C-xx |
 
 ### 3.2. Retencja (E7) — wynik przeglądu 01.10.2026
@@ -117,13 +120,14 @@ z #106–#110, oraz:
 | #112 | Co-Pilot (cron): ponowienie nie gubi miesięcznej paczki dla księgowej |
 | #114 | Worker pg-boss inicjalizuje Sentry — alerty z jobów wcześniej nie wychodziły wcale |
 | #116 | Co-Pilot (paczka): ponowienie nie wysyła księgowej drugiego maila; zapis `emailed_at` |
+| #118 | Wstrzymane maile triala z dnia 12 i 14 (sprzeczne z regulaminem i retencją) |
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak (stan po #116).
+Brak (stan po #118).
 
-Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90,
-#113 (health-check KSeF).
+Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90.
+Scalone cudze od 01.10: Bartosz #113 (health-check KSeF).
 
 ### 4.3. Prośby do Bartosza (migracje, produkcja)
 
@@ -135,6 +139,7 @@ Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90,
 | B4 | Odczyt: czy na produkcji są zdublowane wydatki z OCR (SQL w #109); potem `UNIQUE (tenant_id, ocr_job_id)` | #109 |
 | B5 | C-16: płatności/ponaglenia ROZ liczone od pełnej kwoty — migracja przed zdjęciem wstrzymania ROZ | `CLAUDE-DO-CODEXA.md` |
 | B6 | Po wdrożeniu workera: w logach startu ma być „Sentry: alerty z jobów włączone”; jeśli „WYŁĄCZONE” — dodać `SENTRY_DSN` do zmiennych workera (Coolify id=2) | #114 |
+| B7 | Decyzja: czy kontom BEZ karty (trial bez danych płatniczych, regulamin §3) potrzebny mail o końcu trialu — nowa treść pod 30 dni, bez obietnic usuwania danych. Kolejki `email.trial-day-12/14` usunąć ~14 dni po wdrożeniu | #118 |
 
 ### 4.4. Czeka na decyzję / kogoś innego
 
@@ -149,8 +154,10 @@ Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90,
 
 ## 5. Następny krok
 
-1. Tabela 3.1, wiersze ⬜: `email-sequence`,
-   `reminder-scheduler`, `magic-import-ksef`, `bulk-import`,
-   `daily-summary-email` (`send-reminder` — tylko czytać, ponaglenia to stos
-   Codexa #86).
-2. E8: import, portal księgowej, walidatory, powiadomienia.
+1. Ślepy panel jobów: `inngest_run_log` czytają `/admin/system`, metryki
+   biznesowe i raport dzienny, ale nic do niej nie pisze. Sprawdzić schemat
+   (00003) i dopisać zapis przebiegu w workerze pg-boss (`wrapHandler`) —
+   bez migracji, jeśli kolumny wystarczą; uwaga na wolumen cronów.
+2. Tabela 3.1, wiersze ⬜: `reminder-scheduler`, `bulk-import`, `send-reminder`
+   (logika ponagleń to stos Codexa #86 — zmiany tylko przez C-xx).
+3. E8: import, portal księgowej, walidatory, powiadomienia.
