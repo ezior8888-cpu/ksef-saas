@@ -5,8 +5,15 @@ import {
   executeGdprRequest, findDueGdprRequests, getActiveGdprRequest,
 } from '@/lib/gdpr/deletion';
 
+import { GdprDeletionBlockedError } from '@/lib/gdpr/deletion-blockers';
+
 const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => mocks);
+const blockers = vi.hoisted(() => ({ find: vi.fn<() => Promise<string[]>>() }));
+vi.mock('@/lib/gdpr/deletion-blockers', async (orig) => ({
+  ...(await orig<typeof import('@/lib/gdpr/deletion-blockers')>()),
+  findOrganizationsBlockingDeletion: blockers.find,
+}));
 
 type Row = Record<string, string | null>;
 type DbResult = { data: Row[] | null; error: { message: string; code?: string } | null };
@@ -78,7 +85,10 @@ function database() {
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 const input = { userId: 'user-1', userEmail: 'owner@example.test' };
 let db: ReturnType<typeof database>;
-beforeEach(() => { vi.clearAllMocks(); db = database(); mocks.createAdminClient.mockReturnValue(db); });
+beforeEach(() => {
+  vi.clearAllMocks(); db = database(); mocks.createAdminClient.mockReturnValue(db);
+  blockers.find.mockReset().mockResolvedValue([]);
+});
 
 function dueRequest() {
   const token = 'ab'.repeat(32);
@@ -139,6 +149,21 @@ describe('GDPR token and request safety', () => {
     dueRequest(); db.rows.push({ ...db.rows[0], id: 'legacy-duplicate' });
     await expect(createGdprRequest(input)).rejects.toThrow('gdpr_request_lookup_failed');
     expect(db.rows).toHaveLength(2);
+  });
+
+  it('refuses a new request while the subscription would keep billing after deletion', async () => {
+    blockers.find.mockResolvedValue(['Firma Testowa']);
+    const refused = await createGdprRequest(input).catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(GdprDeletionBlockedError);
+    expect((refused as GdprDeletionBlockedError).organizations).toEqual(['Firma Testowa']);
+    expect(blockers.find).toHaveBeenCalledWith(db, input.userId);
+    expect(db.rows).toHaveLength(0);
+  });
+
+  it('returns an already scheduled request without re-checking or touching it', async () => {
+    dueRequest(); blockers.find.mockResolvedValue(['Firma Testowa']);
+    expect(await createGdprRequest(input)).toMatchObject({ id: 'due-request', alreadyScheduled: true });
+    expect(db.rows).toHaveLength(1);
   });
 
   it('does not create a new request while deletion is processing', async () => {
@@ -220,6 +245,22 @@ describe('GDPR atomic processing claim', () => {
     dueRequest(); db.rows[0].status = 'processing'; db.rows[0].processing_started_at = '2020-01-01';
     expect((await executeGdprRequest('due-request')).ok).toBe(false);
     expect(db.rows[0].status).toBe('processing');
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(db.auth.admin.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('does not anonymize or delete when the subscription would keep billing nobody', async () => {
+    dueRequest(); blockers.find.mockResolvedValue(['Firma Testowa']);
+    expect(await executeGdprRequest('due-request')).toEqual({ ok: false, error: 'active_subscription_sole_billing_manager' });
+    expect(blockers.find).toHaveBeenCalledWith(db, input.userId);
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(db.auth.admin.deleteUser).not.toHaveBeenCalled();
+    expect(db.rows[0]).toMatchObject({ status: 'failed', failure_reason: 'active_subscription_sole_billing_manager' });
+  });
+
+  it('stops before any effect when the subscription check cannot be read', async () => {
+    dueRequest(); blockers.find.mockRejectedValue(new Error('gdpr_blocker_lookup_failed'));
+    expect(await executeGdprRequest('due-request')).toEqual({ ok: false, error: 'gdpr_blocker_lookup_failed' });
     expect(db.rpc).not.toHaveBeenCalled();
     expect(db.auth.admin.deleteUser).not.toHaveBeenCalled();
   });

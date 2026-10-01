@@ -126,7 +126,7 @@ const SPECS: VarSpec[] = [
   { name: 'STRIPE_API_VERSION', feature: 'Billing (Stripe)', level: 'optional' },
   { name: 'FAKTFLOW_OPERATOR_TENANT_ID', feature: 'Self-invoicing', level: 'deferred', note: 'Faza 37+ (nasza firma jako sprzedawca)' },
   { name: 'FAKTFLOW_OPERATOR_BANK_ACCOUNT', feature: 'Self-invoicing', level: 'deferred' },
-  { name: 'GUS_API_KEY', feature: 'GUS (dane firm)', level: 'deferred', note: 'Faza 40 — bez klucza działa sandbox GUS (dane testowe)' },
+  { name: 'GUS_API_KEY', feature: 'GUS (dane firm)', level: 'required', note: 'bez klucza: sandbox GUS (stare, zanonimizowane dane) — przy KSEF_ENV=production JPK_FA odmawia (adres siedziby z GUS), a podpowiedzi kontrahentów idą z danych testowych' },
   { name: 'AWS_ACCESS_KEY_ID', feature: 'Archiwum Glacier', level: 'deferred', note: 'Faza 2 po launchu — cron nie znajdzie faktur >2 lat do ~2028' },
   { name: 'AWS_SECRET_ACCESS_KEY', feature: 'Archiwum Glacier', level: 'deferred' },
   { name: 'AWS_ARCHIVE_BUCKET', feature: 'Archiwum Glacier', level: 'deferred' },

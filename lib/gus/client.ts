@@ -184,6 +184,14 @@ function isRealApiKey(v: string | undefined): v is string {
   return true;
 }
 
+/**
+ * Czy zapytania idą do TESTOWEJ bazy GUS (brak prawdziwego klucza) — tam są
+ * „stare, zanonimizowane dane”. Mock E2E to osobny tryb, nie sandbox.
+ */
+export function gusUsesSandbox(env: Record<string, string | undefined> = process.env): boolean {
+  return env.E2E_MOCK_GUS !== '1' && !isRealApiKey(env.GUS_API_KEY);
+}
+
 export async function lookupCompanyByNip(
   nip: string
 ): Promise<GusLookupResult> {
