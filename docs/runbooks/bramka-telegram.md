@@ -38,42 +38,71 @@ Postęp przychodzi wiadomościami. Druga osoba dostaje powiadomienie o starcie.
 Kolejność ma znaczenie.
 
 1. **Sieć prywatna.** Hetzner Console → Networks → sieć, w której są `app-1`
-   i `db-1` → *Attach server* → `ops-1`. Dziś `ops-1` jej nie ma, więc bramka
-   nie dosięgnie bazy. Sprawdzenie na `ops-1`: `ip -4 addr | grep 10.0.0`.
-2. **Migracja 00100** — według `AGENTS.md` (po scaleniu PR), z wpisem do
-   `schema_migrations`. Bez `NOTIFY pgrst`: schemat `ops` nie jest w PostgREST.
-3. **Hasło roli** na `db-1`, interaktywnie, żeby hasło nie trafiło do historii powłoki:
-   ```bash
-   source .agents/infra.env
-   ssh -t -i $K root@$DB "docker exec -it $PGC psql -U postgres -c '\password ops_actor'"
-   ssh -i $K root@$DB "docker exec $PGC psql -U postgres -c 'ALTER ROLE ops_actor LOGIN;'"
-   ```
+   i `db-1` → *Attach server* → `ops-1` (zrobione 1.10.2026, `ops-1` = 10.0.0.4).
+
+   **Pułapka Dockera na `ops-1`:** instalator Coolify ustawił w
+   `/etc/docker/daemon.json` pulę `10.0.0.0/8`, więc most `docker0` dostał
+   10.0.0.1/24 i przykrył trasę do sieci prywatnej (ruch do `db-1` szedł do
+   Dockera). Naprawione 1.10.2026: `"bip": "172.17.0.1/16"`, nowe sieci z
+   `10.128.0.0/16`, restart Dockera (16 s); kopia: `daemon.json.bak-2026-10-01`.
+   **Po aktualizacji Coolify sprawdź**, czy nie przywrócił starej puli:
+   `ip route get 10.0.0.2` na `ops-1` musi wskazywać `dev enp7s0`.
+2. **Migracja 00100** — wgrana na `db-1` 1.10.2026 (rola `ops_actor` bez logowania, schemat `ops`).
+3. **Hasło roli `ops_actor`.** Bramka loguje się do bazy jako osobny
+   użytkownik, który umie tylko czytać stan i wyłączać flagi. Migracja
+   utworzyła go bez hasła (repo jest publiczne), więc hasło nadajesz Ty.
+   - Wygeneruj hasło bez znaków specjalnych: `openssl rand -hex 24`.
+   - Ustaw je (wklejasz dwa razy, znaków nie widać, nic nie zostaje w historii):
+     ```bash
+     source .agents/infra.env
+     ssh -t -i $K root@$DB "docker exec -it $PGC psql -U postgres -c '\password ops_actor'"
+     ssh -i $K root@$DB "docker exec $PGC psql -U postgres -c 'ALTER ROLE ops_actor LOGIN;'"
+     ```
+   - Zapisz hasło w menedżerze haseł — wpiszesz je w kroku 7 w `OPS_DATABASE_URL`.
 4. **Token Coolify.** Settings → Advanced → włącz *API Access*. Keys & Tokens →
    nowy token z uprawnieniami **tylko `read` i `deploy`** (bez `write` i `root`).
-5. **Bot.** Ten sam bot co alerty (`TELEGRAM_BOT_TOKEN` z
-   `telegram-heartbeat.md`) albo nowy z @BotFather.
-6. **TOTP.** Lokalnie: `node ops/bramka/totp-setup.mjs`. URI dodaj w aplikacji
-   uwierzytelniającej, a sekret wklej w Coolify (krok 7). Potem wyczyść terminal.
-7. **Aplikacja w Coolify** (serwer `localhost` = `ops-1`): to samo repo, gałąź
-   `main`, Build Pack *Dockerfile*, Base Directory `/ops/bramka`, Dockerfile
-   `/Dockerfile`, **bez domeny i bez portów**, healthcheck wyłączony.
-   Zmienne (`is_preview = false`):
+   Coolify pokazuje token **raz** — jeśli go nie zapisałeś, utwórz nowy.
+5. **Bot.** Ten sam bot co alerty albo nowy: w Telegramie @BotFather → `/newbot`
+   → nazwa → login kończący się na `bot` → dostajesz token. Potem otwórz
+   swojego bota i naciśnij **Start** (bot nie może pisać do kogoś, kto go nie
+   uruchomił).
+6. **TOTP — drugi czynnik do `/wdroz`.** Jak kod z banku: nawet jeśli ktoś
+   przejmie Twój Telegram, nie wdroży bez 6 cyfr z telefonu.
+   - Na Macu, w katalogu repo: `node ops/bramka/totp-setup.mjs` — wypisze
+     `SEKRET` i adres `otpauth://`.
+   - W aplikacji uwierzytelniającej (Google Authenticator, 1Password, Authy):
+     *Dodaj* → *Wpisz klucz ręcznie* → nazwa „FaktFlow bramka”, klucz = `SEKRET`,
+     typ: oparty na czasie.
+   - `SEKRET` wpiszesz w kroku 7. Igor, jeśli ma wdrażać, dodaje ten sam klucz u siebie.
+   - Wyczyść terminal (Cmd+K).
+7. **Aplikacja bramki w Coolify** (po scaleniu PR — Coolify buduje z `main`).
+   Bramka to osobny program, który musi stale działać; uruchamiamy go na `ops-1`.
+   - Projekt FaktFlow → środowisko produkcyjne → *+ New* → *Private Repository
+     (with GitHub App)* → ta sama aplikacja GitHub co web/worker → repo
+     `ezior8888-cpu/ksef-saas`, gałąź `main`, serwer **localhost** (`ops-1`).
+   - Build Pack *Dockerfile*, Base Directory `/ops/bramka`, Dockerfile
+     Location `/Dockerfile`. Domeny puste, healthcheck wyłączony.
+   - Zmienne (`is_preview = false`):
 
    | Zmienna | Wartość |
    |---|---|
-   | `TELEGRAM_BOT_TOKEN` | token bota |
-   | `BRAMKA_USERS` | `twoje_from_id:Bartosz,from_id_Igora:Igor` (pkt 8) |
-   | `BRAMKA_TOTP_SECRET` | sekret z kroku 6 |
-   | `OPS_DATABASE_URL` | `postgresql://ops_actor:HASŁO@10.0.0.2:5432/postgres` |
-   | `COOLIFY_API_URL` | `http://coolify:8080/api/v1` (sieć Dockera `coolify` na `ops-1`) |
+   | `TELEGRAM_BOT_TOKEN` | token z kroku 5 |
+   | `BRAMKA_USERS` | `twoje_id:Bartosz` (krok 8) |
+   | `BRAMKA_TOTP_SECRET` | `SEKRET` z kroku 6 |
+   | `OPS_DATABASE_URL` | `postgresql://ops_actor:HASŁO_Z_KROKU_3@10.0.0.2:5432/postgres` |
+   | `COOLIFY_API_URL` | `http://coolify:8080/api/v1` |
    | `COOLIFY_API_TOKEN` | token z kroku 4 |
-   | `COOLIFY_APP_WEB`, `COOLIFY_APP_WORKER` | UUID aplikacji id=1 i id=2 (z adresu strony aplikacji w Coolify) |
+   | `COOLIFY_APP_WEB`, `COOLIFY_APP_WORKER` | UUID aplikacji id=1 i id=2 (koniec adresu strony aplikacji w Coolify) |
    | `GITHUB_TOKEN` | opcjonalnie: fine-grained, tylko odczyt repo (bez niego limit 60 zapytań/h) |
 
-8. **Identyfikatory osób.** Wdróż z samym swoim ID (np. z @userinfobot) i napisz
-   cokolwiek do bota. Wiadomości spoza listy są ignorowane, a w logach bramki
-   pojawia się `odrzucono wiadomość od from.id=…`. Stamtąd weź ID Igora, dopisz
-   go do `BRAMKA_USERS` i wdróż bramkę ponownie.
+   - *Deploy*. W logach: `start: 1 operator(ów)`, w Telegramie „🟢 Bramka uruchomiona”.
+8. **Kto może pisać do bramki (`BRAMKA_USERS`).** Bramka odpowiada tylko
+   osobom z listy, wszystkich innych ignoruje.
+   - Swój identyfikator: w Telegramie @userinfobot → *Start* → „Id: 123456789”.
+   - Igor robi to samo i podaje Ci swój Id; dopisujesz `,987654321:Igor`
+     i wdrażasz bramkę ponownie (Redeploy).
+   - Albo: Igor pisze do bota, a w logach bramki pojawia się
+     `odrzucono wiadomość od from.id=…`.
 9. **Sprawdzenie.** Po starcie każdy z listy dostaje „🟢 Bramka uruchomiona”.
    Sprawdź `/status`, `/kolejki` i `/wdroz` (bez argumentów).
 
