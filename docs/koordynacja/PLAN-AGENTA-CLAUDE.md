@@ -74,12 +74,13 @@ się od nowa?*
 |---|---|
 | `process-ocr` | ❌→✅ dubel wydatku w KPiR — #109 |
 | `co-pilot-monthly` (cron) | ❌→✅ rezerwacja okresu przed wysłaniem zdarzenia; ponowienie pomijało firmy → paczka za miesiąc nie wychodziła — #112 |
-| `co-pilot-monthly` (paczka) | ❌→✅ ponowienie po wysłanym mailu tworzyło nowe eksporty i wysyłało mail drugi raz; `emailed_at` nikt nie zapisywał — PR „paczka raz”; nieudana paczka → Sentry od #114 |
+| `co-pilot-monthly` (paczka) | ❌→✅ ponowienie po wysłanym mailu tworzyło nowe eksporty i wysyłało mail drugi raz; `emailed_at` nikt nie zapisywał — #116; nieudana paczka → Sentry od #114 |
 | `auto-categorize-inbox` | ✅ sprawdza istniejący wydatek po `ksef_invoice_id` |
 | `download-upo` | ✅ odczyt/aktualizacja istniejącego rekordu |
 | `dunning-payment-failed`, `trial-countdown-emails` | ✅ claim w `billing_notifications` |
 | `retention-delete`, `archive-old-invoices` | ✅ ponowienie bezpieczne (aktualizacje idempotentne) — reszta w 3.2 |
-| `exports-generate`, `email-sequence`, `send-reminder`, `reminder-scheduler`, `magic-import-ksef`, `bulk-import`, `daily-summary-email` | ⬜ |
+| `exports-generate` | ✅ nazwa pliku deterministyczna, HEAD przed wgraniem do R2, upsert `export_files`. Drobiazg: JPK ma znacznik czasu, więc po ponowieniu `file_hash`/`size_bytes` mogą nie pasować do pliku w R2 — nikt ich nie weryfikuje |
+| `email-sequence`, `send-reminder`, `reminder-scheduler`, `magic-import-ksef`, `bulk-import`, `daily-summary-email` | ⬜ |
 | `submit-invoice`, `inbox-polling`, `self-invoice-payment`, `process-offline-queue` | Codex (stos #62–#86) — tylko czytać, uwagi przez C-xx |
 
 ### 3.2. Retencja (E7) — wynik przeglądu 01.10.2026
@@ -115,11 +116,11 @@ z #106–#110, oraz:
 | #110 | Ten plan + wskaźnik w `AGENTS.md` |
 | #112 | Co-Pilot (cron): ponowienie nie gubi miesięcznej paczki dla księgowej |
 | #114 | Worker pg-boss inicjalizuje Sentry — alerty z jobów wcześniej nie wychodziły wcale |
-| PR „paczka raz” | Co-Pilot (paczka): ponowienie nie wysyła księgowej drugiego maila; zapis `emailed_at` |
+| #116 | Co-Pilot (paczka): ponowienie nie wysyła księgowej drugiego maila; zapis `emailed_at` |
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak (stan po PR „paczka raz”).
+Brak (stan po #116).
 
 Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90,
 #113 (health-check KSeF).
@@ -148,7 +149,7 @@ Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104; Bartosz #90,
 
 ## 5. Następny krok
 
-1. Tabela 3.1, wiersze ⬜: `exports-generate`, `email-sequence`,
+1. Tabela 3.1, wiersze ⬜: `email-sequence`,
    `reminder-scheduler`, `magic-import-ksef`, `bulk-import`,
    `daily-summary-email` (`send-reminder` — tylko czytać, ponaglenia to stos
    Codexa #86).
