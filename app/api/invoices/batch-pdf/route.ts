@@ -114,6 +114,9 @@ export async function GET(req: Request): Promise<Response> {
     if (results.some((result) => result && !result.success && result.code === 'OFFLINE_QR_UNAVAILABLE')) {
       return NextResponse.json({ error: 'offline_qr_unavailable' }, { status: 409 });
     }
+    if (results.some((result) => result && !result.success && result.code === 'KSEF_QR_UNAVAILABLE')) {
+      return NextResponse.json({ error: 'ksef_qr_unavailable' }, { status: 409 });
+    }
 
     // Kolejność plików w ZIP = kolejność zapytania (Promise.all zachowuje ją
     // niezależnie od tego, w jakiej kolejności skończyły się rendery).

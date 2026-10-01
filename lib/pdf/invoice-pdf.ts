@@ -14,7 +14,7 @@ export type GenerateInvoicePdfResult =
   | {
       success: false;
       error: string;
-      code?: 'KSEF_NOT_VERIFIED' | 'NOT_FOUND' | 'FORBIDDEN' | 'OFFLINE_QR_UNAVAILABLE';
+      code?: 'KSEF_NOT_VERIFIED' | 'NOT_FOUND' | 'FORBIDDEN' | 'OFFLINE_QR_UNAVAILABLE' | 'KSEF_QR_UNAVAILABLE';
     };
 
 /**
@@ -71,6 +71,22 @@ export async function generateInvoicePdf(
     };
   }
 
+  const qrPayload = invoiceVerificationUrl({
+    env: ksefEnvForQr(),
+    sellerNip: data.sellerNip,
+    issueDate: data.issueDate,
+    sha256Hex: data.xmlSha256Hex,
+  });
+  // Faktura z numerem KSeF udostępniana poza systemem musi mieć KOD I.
+  // Brak skrótu XML lub innych składników URL nie może zwrócić starego cache.
+  if (data.ksefNumber && !qrPayload) {
+    return {
+      success: false,
+      code: 'KSEF_QR_UNAVAILABLE',
+      error: 'Nie można przygotować PDF faktury z numerem KSeF: brakuje danych do kodu weryfikacyjnego KOD I.',
+    };
+  }
+
   const filename = `Faktura_${sanitizeFilename(data.invoice.internalNumber)}.pdf`;
   const key = buildInvoicePdfKey(tenantId, invoiceId, data.issueDate);
 
@@ -98,12 +114,7 @@ export async function generateInvoicePdf(
   // pliku XML — nie sam numer KSeF. Szkic bez pliku → bez kodu.
   const pdf = await renderInvoicePdf(data.invoice, {
     ksefNumber: data.ksefNumber,
-    qrPayload: invoiceVerificationUrl({
-      env: ksefEnvForQr(),
-      sellerNip: data.sellerNip,
-      issueDate: data.issueDate,
-      sha256Hex: data.xmlSha256Hex,
-    }),
+    qrPayload,
     qrLabel: qrLabel(data.ksefNumber),
     correctedInvoice: data.correctedInvoice,
     testWatermark: (process.env.KSEF_ENV ?? 'test') === 'test',

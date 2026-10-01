@@ -51,3 +51,27 @@ describe('PDF faktury offline bez KODU II', () => {
     expect(mocks.zip).not.toHaveBeenCalled();
   });
 });
+
+describe('PDF faktury z numerem KSeF bez KODU I', () => {
+  beforeEach(() => {
+    mocks.pdf.mockImplementation(async (id: string) => id === 'accepted'
+      ? { success: false, code: 'KSEF_QR_UNAVAILABLE', error: 'Brak KODU I' }
+      : { success: true, pdf: Buffer.from('pdf'), filename: 'FV2.pdf' });
+  });
+
+  it('pojedyncze pobranie zwraca 409', async () => {
+    const response = await getSinglePdf(
+      new Request('https://example.test/api/invoices/accepted/pdf'),
+      { params: Promise.resolve({ id: 'accepted' }) },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'Brak KODU I' });
+  });
+
+  it('cała paczka zwraca 409 zamiast niepełnego ZIP', async () => {
+    const response = await getBatchPdf(new Request('https://example.test/api/invoices/batch-pdf?from=2026-02-01&to=2026-02-28'));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'ksef_qr_unavailable' });
+    expect(mocks.zip).not.toHaveBeenCalled();
+  });
+});

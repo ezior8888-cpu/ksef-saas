@@ -139,6 +139,23 @@ describe('PDF: kod QR weryfikacji w KSeF', () => {
     expect(mocks.offlineQueueEntry).not.toHaveBeenCalled();
   });
 
+  it('faktura z numerem KSeF bez skrótu XML nie wydaje PDF także z cache', async () => {
+    mocks.load.mockResolvedValue({
+      ...bazowe, ksefStatus: 'accepted', ksefNumber: '1234567890-20260201-ABC-01',
+      xmlSha256Hex: null, pdfStoragePath: 'tenant-a/2026/02/invoice.v4.pdf',
+      pdfGeneratedAt: '2026-02-02T13:00:00Z', updatedAt: '2026-02-01T12:00:00Z',
+    });
+
+    expect(await generateInvoicePdf('invoice', 'tenant-a')).toMatchObject({
+      success: false, code: 'KSEF_QR_UNAVAILABLE',
+    });
+    expect(mocks.offlineQueueEntry).not.toHaveBeenCalled();
+    expect(mocks.exists).not.toHaveBeenCalled();
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(mocks.render).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+
   it('osierocony wpis kolejki bez znacznika blokuje nawet świeży PDF z cache', async () => {
     mocks.load.mockResolvedValue({
       ...bazowe, ksefNumber: null, offlineIdempotencyKey: null,
