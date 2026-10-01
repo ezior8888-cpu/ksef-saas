@@ -786,3 +786,5 @@ Tylko `stripe_financial_cases` dostało z powrotem `SELECT`. `lib/backup/db-snap
 **Kopia przed zmianami:** operator zgłosił jej wykonanie; ścieżka i dowód odtworzenia pozostają poza publicznym repo.
 
 **Wdrożenie tego dnia:** web i worker na `b25c126` (z #77, #82, #84). **#87 (wstrzymanie ROZ) nie jest wdrożony** — draft. Na produkcji jest 0 ROZ, 0 zaliczek, a żadna firma nie ma poświadczeń KSeF. Warunek: #87 przed pierwszą firmą z KSeF.
+
+**Niezależny odbiór 01.10:** powyższe informacje o db-1, wdrożeniu i ręcznej kopii pochodzą z datowanego raportu Bartosza z 28.09; nie są nowym odczytem produkcji. Strażnik odtwarza uprawnienia statycznie z plików migracji, więc nie zastępuje sprawdzenia rzeczywistych praw bazy. Kod snapshotu kompresuje JSON, liczy SHA-256 i wysyła go do MinIO; w `PutObject` nie ustawia szyfrowania obiektowego, a konfiguracji szyfrowania bucketa i polityki dostępu nie potwierdzono. Przed uznaniem backupu za odebrany Bartek powinien wykazać świeży udany nocny przebieg, odtworzenie i kontrolę sumy oraz szyfrowanie i ograniczenie dostępu do bucketa. Nie wykonywano tu SQL ani restore.
