@@ -21,7 +21,7 @@ beforeEach(() => {
   mocks.render.mockResolvedValue(Buffer.from('generated-own-document'));
   mocks.load.mockResolvedValue({
     invoice: { internalNumber: 'FV/1' }, tenantId: 'tenant-a', issueDate: '2026-09-09',
-    pdfStoragePath: 'tenant-a/2026/09/invoice.v3.pdf',
+    pdfStoragePath: 'tenant-a/2026/09/invoice.v4.pdf',
     pdfGeneratedAt: '2026-09-09T13:00:00Z', updatedAt: '2026-09-09T12:00:00Z',
   });
 });
@@ -37,13 +37,13 @@ describe('PDF cache ownership', () => {
     expect(result).toMatchObject({ success: true, pdf: Buffer.from('generated-own-document') });
     expect(mocks.exists).not.toHaveBeenCalled();
     expect(mocks.download).not.toHaveBeenCalled();
-    expect(mocks.upload).toHaveBeenCalledWith('tenant-a/2026/09/invoice.v3.pdf', Buffer.from('generated-own-document'));
+    expect(mocks.upload).toHaveBeenCalledWith('tenant-a/2026/09/invoice.v4.pdf', Buffer.from('generated-own-document'));
   });
 
   it('preserves a valid tenant cache hit with an explicit tenant argument', async () => {
     const result = await generateInvoicePdf('invoice', 'tenant-a');
     expect(result).toMatchObject({ success: true, pdf: Buffer.from('cached-private-document') });
-    expect(mocks.download).toHaveBeenCalledWith('tenant-a/2026/09/invoice.v3.pdf', 'tenant-a');
+    expect(mocks.download).toHaveBeenCalledWith('tenant-a/2026/09/invoice.v4.pdf', 'tenant-a');
     expect(mocks.render).not.toHaveBeenCalled();
   });
 
@@ -59,13 +59,13 @@ describe('PDF cache ownership', () => {
     expect(result).toMatchObject({ success: true, pdf: Buffer.from('generated-own-document') });
     expect(mocks.download).not.toHaveBeenCalled();
     expect(mocks.render).toHaveBeenCalledOnce();
-    expect(mocks.upload).toHaveBeenCalledWith('tenant-a/2026/09/invoice.v3.pdf', Buffer.from('generated-own-document'));
+    expect(mocks.upload).toHaveBeenCalledWith('tenant-a/2026/09/invoice.v4.pdf', Buffer.from('generated-own-document'));
   });
 
   it('ignores an unrelated PDF path from the same tenant', async () => {
     mocks.load.mockResolvedValue({
       invoice: { internalNumber: 'FV/1' }, tenantId: 'tenant-a', issueDate: '2026-09-09',
-      pdfStoragePath: 'tenant-a/2026/09/other-invoice.v3.pdf',
+      pdfStoragePath: 'tenant-a/2026/09/other-invoice.v4.pdf',
       pdfGeneratedAt: '2026-09-09T13:00:00Z', updatedAt: '2026-09-09T12:00:00Z',
     });
 
@@ -114,5 +114,18 @@ describe('PDF: kod QR weryfikacji w KSeF', () => {
     mocks.load.mockResolvedValue({ ...bazowe, ksefNumber: null, xmlSha256Hex: null });
     await generateInvoicePdf('invoice', 'tenant-a');
     expect(mocks.render.mock.calls[0]![1]).toMatchObject({ qrPayload: null });
+  });
+});
+
+// Korekta: dane faktury korygowanej (art. 106j ust. 2) z loadera do renderera.
+describe('PDF korekty: faktura korygowana', () => {
+  it('loader → renderer bez zmian', async () => {
+    const correctedInvoice = { number: 'FV/9/09', issueDate: '2026-09-05', ksefNumber: null, reason: 'Błędna cena' };
+    mocks.load.mockResolvedValue({
+      invoice: { internalNumber: 'KOR/1' }, tenantId: 'tenant-a', issueDate: '2026-10-01',
+      pdfStoragePath: null, pdfGeneratedAt: null, updatedAt: null, correctedInvoice,
+    });
+    await generateInvoicePdf('invoice', 'tenant-a');
+    expect(mocks.render.mock.calls[0]![1]).toMatchObject({ correctedInvoice });
   });
 });
