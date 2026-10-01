@@ -7,12 +7,13 @@ import { reauthenticateWithPassword } from '@/lib/auth/reauth';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { sendGdprDeletionScheduledEmail } from '@/lib/email/send';
 import { cancelOwnGdprRequest, createGdprRequest } from '@/lib/gdpr/deletion';
+import { GdprDeletionBlockedError } from '@/lib/gdpr/deletion-blockers';
 import { createClient } from '@/lib/supabase/server';
 
-type GdprActionError = 'not_authenticated' | 'mfa_required' | 'session_verification_failed' | 'invalid_password' | 'no_email' | 'request_failed' | 'not_pending' | 'rate_limited' | 'verification_unavailable';
+type GdprActionError = 'not_authenticated' | 'mfa_required' | 'session_verification_failed' | 'invalid_password' | 'no_email' | 'request_failed' | 'not_pending' | 'rate_limited' | 'verification_unavailable' | 'active_subscription';
 export type GdprDeletionResult =
   | { ok: true; scheduledFor: string; alreadyScheduled: boolean; emailSent: boolean }
-  | { ok: false; error: GdprActionError; retryAfter?: number };
+  | { ok: false; error: GdprActionError; retryAfter?: number; organizations?: string[] };
 export type GdprCancellationResult = { ok: true } | { ok: false; error: GdprActionError; retryAfter?: number };
 
 async function confirmGdprPassword(formData: FormData): Promise<Exclude<GdprCancellationResult, { ok: true }> | null> {
@@ -75,7 +76,10 @@ export async function requestGdprDeletionAction(formData: FormData): Promise<Gdp
     }
     revalidatePath('/settings/account');
     return { ok: true, scheduledFor, alreadyScheduled: created.alreadyScheduled, emailSent };
-  } catch {
+  } catch (err) {
+    if (err instanceof GdprDeletionBlockedError) {
+      return { ok: false, error: 'active_subscription', organizations: err.organizations };
+    }
     return { ok: false, error: 'request_failed' };
   }
 }

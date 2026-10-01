@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/server';
 import type { createClient } from '@/lib/supabase/server';
+import { findOrganizationsBlockingDeletion, GdprDeletionBlockedError } from './deletion-blockers';
 
 export const GDPR_COOLING_OFF_DAYS = 14;
 
@@ -88,11 +89,19 @@ function existingRequest(request: ActiveGdprRequest): CreatedGdprRequest {
   return { id: request.id, scheduledFor: new Date(request.scheduled_for), cancelToken: null, alreadyScheduled: true };
 }
 
-/** Wymaga UNIQUE aktywnego user_id z propozycji schematu GDPR dla właściciela repo. */
+/**
+ * Wymaga UNIQUE aktywnego user_id z propozycji schematu GDPR dla właściciela repo.
+ * Rzuca `GdprDeletionBlockedError`, gdy po usunięciu konta subskrypcja firmy
+ * pobierałaby opłaty bez nikogo, kto może ją anulować.
+ */
 export async function createGdprRequest(input: CreateGdprRequestInput): Promise<CreatedGdprRequest> {
-  const admin = createAdminClient() as unknown as GdprTable;
+  const client = createAdminClient();
+  const admin = client as unknown as GdprTable;
   const existing = await readActiveRequest(admin, input.userId);
   if (existing) return existingRequest(existing);
+
+  const blocking = await findOrganizationsBlockingDeletion(client, input.userId);
+  if (blocking.length > 0) throw new GdprDeletionBlockedError(blocking);
 
   const cancelToken = randomBytes(32).toString('hex');
   const scheduledFor = new Date(Date.now() + GDPR_COOLING_OFF_DAYS * 24 * 60 * 60 * 1000);
@@ -164,6 +173,11 @@ export async function executeGdprRequest(requestId: string): Promise<{ ok: boole
   try {
     const userId = claimed.data.user_id;
     if (!userId) throw new Error('user_id_missing');
+    // Subskrypcja mogła wrócić w okresie na wycofanie decyzji. Sprawdzamy
+    // przed jakimkolwiek skutkiem; odmowa zostawia konto nietknięte.
+    if ((await findOrganizationsBlockingDeletion(admin, userId)).length > 0) {
+      throw new Error('active_subscription_sole_billing_manager');
+    }
     const anonRpc = await (
       admin.rpc as unknown as (
         fn: 'anonymize_user_audit_logs', args: { p_user_id: string },
