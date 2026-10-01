@@ -62,10 +62,27 @@ Kolejność ma znaczenie.
 4. **Token Coolify.** Settings → Advanced → włącz *API Access*. Keys & Tokens →
    nowy token z uprawnieniami **tylko `read` i `deploy`** (bez `write` i `root`).
    Coolify pokazuje token **raz** — jeśli go nie zapisałeś, utwórz nowy.
-5. **Bot.** Ten sam bot co alerty albo nowy: w Telegramie @BotFather → `/newbot`
-   → nazwa → login kończący się na `bot` → dostajesz token. Potem otwórz
-   swojego bota i naciśnij **Start** (bot nie może pisać do kogoś, kto go nie
-   uruchomił).
+5. **Bot w Telegramie.** Bot to konto w Telegramie sterowane przez program
+   (bramkę). Zakładasz je raz, przez oficjalnego bota Telegrama — @BotFather.
+   - W Telegramie wyszukaj **BotFather** (niebieski znaczek weryfikacji,
+     login dokładnie `@BotFather`) i naciśnij *Start*.
+   - Wyślij `/newbot`.
+   - Podaj nazwę wyświetlaną, np. `FaktFlow Bramka`.
+   - Podaj login bota — musi kończyć się na `bot` i być wolny, np.
+     `faktflow_bramka_bot` (zajęty? spróbuj `faktflow_ops_bot`).
+   - BotFather odpowie wiadomością z tokenem po słowach „Use this token to
+     access the HTTP API” — wygląda jak `123456789:AAH…` (cyfry, dwukropek,
+     długi ciąg znaków). To jest `TELEGRAM_BOT_TOKEN`. Zapisz go w menedżerze
+     haseł; nie wysyłaj nikomu i nie wklejaj do czatu z Claude.
+   - Opcjonalnie: `/setjoingroups` → wybierz bota → *Disable* (nikt nie doda
+     go do grupy; bramka i tak ignoruje grupy).
+   - Otwórz swojego bota (link `t.me/<login>` w odpowiedzi BotFathera)
+     i naciśnij *Start*. Bez tego bot nie może do Ciebie pisać. Igor robi to samo.
+   - Ten sam token może wysyłać alerty (`docs/runbooks/telegram-heartbeat.md`):
+     w aplikacjach id=1 i id=2 `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALERT_CHAT_IDS`
+     (Twoje Id z kroku 8). Wysyłanie alertów nie koliduje z odbieraniem
+     poleceń przez bramkę.
+   - Wyciek tokenu: BotFather → `/revoke` → wybierz bota → nowy token.
 6. **TOTP — drugi czynnik do `/wdroz`.** Jak kod z banku: nawet jeśli ktoś
    przejmie Twój Telegram, nie wdroży bez 6 cyfr z telefonu.
    - Na Macu, w katalogu repo: `node ops/bramka/totp-setup.mjs` — wypisze
