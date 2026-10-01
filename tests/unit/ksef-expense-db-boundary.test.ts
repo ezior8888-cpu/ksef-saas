@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync(
-  join(process.cwd(), 'supabase/migrations/00099_ksef_expense_provenance_guard.sql'),
+  join(process.cwd(), 'supabase/migrations/00100_ksef_expense_provenance_guard.sql'),
   'utf8',
 ).replace(/--[^\n]*/g, '');
 
