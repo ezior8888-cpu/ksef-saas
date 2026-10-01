@@ -9,6 +9,7 @@ import {
   type CachedValidationResult,
 } from '@/lib/validation/cache';
 import { checkBankAccountInWhitelist } from '@/lib/validation/whitelist-client';
+import { contractorValidationPatch } from '@/lib/validation/contractor-update';
 import { extractCountryFromVatNumber } from '@/lib/validation/vies-client';
 
 // ============================================================================
@@ -195,15 +196,18 @@ export async function getContractorVatStatusAction(
     );
     const status = await validateNipCached(vatNumber, countryCode);
 
+    // API niedostępne: nie nadpisujemy ostatniego dobrego statusu ani rachunków.
+    const patch = contractorValidationPatch(status);
+    if (!patch) {
+      return {
+        success: false,
+        error: `${status.source === 'vies' ? 'VIES' : 'Biała Lista VAT'} chwilowo nie odpowiada — status kontrahenta bez zmian. Spróbuj za kilka minut.`,
+      };
+    }
+
     const { error: upErr } = await supabase
       .from('contractors')
-      .update({
-        vat_status: status.vatStatus,
-        last_validation_at: new Date().toISOString(),
-        last_validation_source: status.source,
-        bank_accounts_validated: status.bankAccounts,
-        validation_warning: status.warning ?? null,
-      })
+      .update(patch)
       .eq('id', contractorId)
       .eq('tenant_id', tenantId);
 

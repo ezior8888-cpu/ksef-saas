@@ -86,6 +86,8 @@ się od nowa?*
 | `reminder-scheduler` | ✅ propozycje deduplikowane po `topic_key` (wyścig: 23505) |
 | `send-reminder` | ✅ mail z `idempotencyKey: 'reminder/' + approvalId` |
 | `bulk-import` | ✅ deduplikacja po numerze i numerze KSeF + UNIQUE `(tenant_id, internal_number)`; kolizje numerów faktur odebranych to C-08 (#117) |
+| `nightly-validation-recheck`, `bulk-validate-contractors` | ❌→✅ awaria API Białej Listy/VIES (timeout, limit zapytań) zapisywała kontrahentowi „nieznany” i pustą listę rachunków na 7 dni i truła cache na 24 h — PR „biała lista” |
+| `cert-expiry-alert` | ✅ data wygaśnięcia zapisywana przy wgraniu certyfikatu; progi 30/14/7 w oknach jednodniowych |
 | `submit-invoice`, `inbox-polling`, `self-invoice-payment`, `process-offline-queue` | Codex (stos #62–#86) — tylko czytać, uwagi przez C-xx |
 
 ### 3.2. Retencja (E7) — wynik przeglądu 01.10.2026
@@ -127,7 +129,11 @@ z #106–#110, oraz:
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak (stan po #121 — C-17, tylko dokumentacja koordynacji).
+Scalone też: #121 (C-17, tylko dokumentacja koordynacji).
+
+| PR | Co | Stan |
+|---|---|---|
+| PR „biała lista” | Awaria API Białej Listy/VIES nie kasuje statusu VAT i rachunków kontrahenta ani nie truje cache | w tym PR |
 
 Na `main` od innych od 01.10: #117 (C-08, migracja `00096` — wgranie po stronie Bartosza).
 
@@ -160,10 +166,12 @@ Scalone cudze od 01.10: Bartosz #113 (health-check KSeF).
 
 ## 5. Następny krok
 
-1. E4 zamknięte (tabela 3.1 bez ⬜). Zostają joby z małą stawką
-   (`cleanup-*`, `refresh-materialized-views`, `weekly-business-review`,
-   `daily-analytics-digest`, `nightly-validation-recheck`, `cert-expiry-alert`,
-   `ksef-health-check`) — przejrzeć szybko pod kątem cichych błędów.
+1. Joby z małą stawką: `cleanup-*`, `refresh-materialized-views`,
+   `weekly-business-review`, `daily-analytics-digest` (`ksef-health-check`
+   przerobił Bartosz w #113) — przejrzeć szybko pod kątem cichych błędów.
+   Przy okazji: `validateMultipleNips` (`lib/validation/cache.ts`) i walidacja
+   w formularzu (`app/actions/validation.ts`, góra pliku) — jak pokazują wynik
+   `unavailable`.
 2. E8: import (Magiczny Import — stos Codexa, tylko czytać), portal księgowej,
    walidatory formularzy (`lib/validators/invoice-validators.ts` — gdzie
    używane?), powiadomienia push.
