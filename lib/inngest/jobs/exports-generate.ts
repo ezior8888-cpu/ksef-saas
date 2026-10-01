@@ -41,7 +41,11 @@ import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/ex
 import { generateJpkFa, JpkFaCorrectionNotSupportedError } from '@/lib/exports/jpk-fa-generator';
 import { MissingTaxOfficeError, readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { readTaxpayerEmail } from '@/lib/exports/taxpayer-email';
-import { generateJpkV7m, MissingTaxpayerEmailError } from '@/lib/exports/jpk-v7m-generator';
+import {
+  generateJpkV7m,
+  JpkV7mReverseChargeNotSupportedError,
+  MissingTaxpayerEmailError,
+} from '@/lib/exports/jpk-v7m-generator';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isExportFormatSuspended, SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
@@ -230,6 +234,7 @@ const HUMAN_EXPORT_ERRORS = [
   new MissingTaxpayerEmailError().message,
   new MissingIssuerAddressError().message,
   new JpkFaCorrectionNotSupportedError().message,
+  new JpkV7mReverseChargeNotSupportedError().message,
 ];
 
 /**
@@ -371,12 +376,13 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
           generated = await generateExportFile(job, fileData);
         } catch (e) {
           // Ponowienie nic nie da — urząd ustawia człowiek, adresu GUS nie ma,
-          // a korekt JPK_FA nie obsługuje (C-01).
+          // korekt JPK_FA nie obsługuje (C-01), a odwrotnego obciążenia JPK_V7M.
           if (
             e instanceof MissingTaxOfficeError ||
             e instanceof MissingTaxpayerEmailError ||
             e instanceof MissingIssuerAddressError ||
-            e instanceof JpkFaCorrectionNotSupportedError
+            e instanceof JpkFaCorrectionNotSupportedError ||
+            e instanceof JpkV7mReverseChargeNotSupportedError
           ) {
             throw new NonRetriableError(e.message);
           }
