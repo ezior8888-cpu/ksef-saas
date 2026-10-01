@@ -5,6 +5,7 @@ import { ActionAuthError, requireUserAndActiveOrg } from '@/lib/supabase/auth-co
 import { downloadInvoiceXml } from '@/lib/storage/r2';
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
+import { invoiceEmailAmount } from '@/lib/email/invoice-email-amount';
 import { sendInvoiceEmail } from '@/lib/email/send';
 
 // ═══════════════════════════════════════════════════════════════
@@ -187,14 +188,13 @@ export async function emailInvoiceAction(
   }
 
   const inv = data.invoice;
+  const amount = invoiceEmailAmount(inv);
   const send = await sendInvoiceEmail({
     to: email,
     invoiceNumber: inv.internalNumber,
     sellerName: inv.seller.name,
-    grossTotalLabel: `${inv.grossTotal.toLocaleString('pl-PL', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })} PLN`,
+    amountCaption: amount.caption,
+    amountLabel: amount.label,
     dueDate: inv.payment.dueDate,
     pdf: pdfResult.pdf,
     pdfFilename: pdfResult.filename,

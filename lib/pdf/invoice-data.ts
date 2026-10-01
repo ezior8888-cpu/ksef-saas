@@ -1,3 +1,4 @@
+import type { CorrectedInvoiceRef } from '@/lib/pdf/invoice-renderer';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import { createAdminClient } from '@/lib/supabase/server';
 import type {
@@ -30,6 +31,8 @@ export interface InvoicePdfData {
   /** NIP sprzedawcy i SHA-256 pliku XML (hex) — do KOD I (`qr-verification.ts`). */
   sellerNip: string | null;
   xmlSha256Hex: string | null;
+  /** Korekta: faktura, której dotyczy (art. 106j ust. 2); inne faktury — `null`. */
+  correctedInvoice: CorrectedInvoiceRef | null;
   /** Cache: PDF jest ważny gdy pdf_generated_at >= updated_at. */
   updatedAt: string | null;
   pdfStoragePath: string | null;
@@ -62,6 +65,8 @@ interface InvoiceRow {
   vat_total: number | null;
   gross_total: number | null;
   notes: string | null;
+  parent_invoice_id: string | null;
+  correction_reason: string | null;
   /** `fa3_data->annotations` — sama gałąź, nie cały snapshot. */
   annotations: unknown;
   updated_at: string | null;
@@ -76,6 +81,7 @@ interface InvoiceRow {
 const SELECT = `
   id, tenant_id, internal_number, invoice_type, issue_date, sale_date,
   ksef_number, seller_nip, xml_storage_path, net_total, vat_total, gross_total, notes, updated_at,
+  parent_invoice_id, correction_reason,
   pdf_storage_path, pdf_generated_at, seller_data, buyer_data, payment_data,
   annotations:fa3_data->annotations,
   invoice_line_items(
@@ -108,7 +114,10 @@ function mapLine(row: LineItemRow): InvoiceLineItem {
   };
 }
 
-/** Adnotacje FA(3) ze snapshotu — dziś tylko podstawa zwolnienia z VAT (P_19A). */
+/**
+ * Adnotacje FA(3) ze snapshotu: podstawa zwolnienia (P_19A), MPP (P_18A),
+ * metoda kasowa (P_16). Odwrotne obciążenie (P_18) wynika z pozycji „oo”.
+ */
 function readAnnotations(raw: unknown): Invoice['annotations'] {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const o = raw as Record<string, unknown>;
@@ -191,6 +200,7 @@ export async function loadInvoiceForPdf(
     ksefNumber: row.ksef_number,
     sellerNip: row.seller_nip ?? (invoice.seller as { nip?: string } | null)?.nip ?? null,
     xmlSha256Hex: await readXmlHash(admin, row),
+    correctedInvoice: await readCorrectedInvoice(admin, row),
     updatedAt: row.updated_at,
     pdfStoragePath: row.pdf_storage_path,
     pdfGeneratedAt: row.pdf_generated_at,
@@ -231,6 +241,48 @@ async function readXmlHash(
     .maybeSingle();
   if (error || !data?.sha256_hash) return null;
   return data.sha256_hash;
+}
+
+/**
+ * Faktura korygowana — z bazy, po `parent_invoice_id` i W OBRĘBIE FIRMY
+ * (klient omija RLS, a `parent_invoice_id` to zapisywalne dane faktury).
+ * Błąd odczytu rzuca: PDF korekty bez danych faktury korygowanej byłby
+ * niepełny, a „brak” nie może udawać „nie dotyczy”.
+ */
+async function readCorrectedInvoice(
+  admin: ReturnType<typeof createAdminClient>,
+  row: Pick<InvoiceRow, 'tenant_id' | 'parent_invoice_id' | 'correction_reason'>,
+): Promise<CorrectedInvoiceRef | null> {
+  if (!row.parent_invoice_id) return null;
+  const { data, error } = await (
+    admin as unknown as {
+      from: (n: string) => {
+        select: (c: string) => {
+          eq: (k: string, v: string) => {
+            eq: (k: string, v: string) => {
+              maybeSingle: () => Promise<{
+                data: { internal_number: string | null; issue_date: string; ksef_number: string | null } | null;
+                error: { message: string } | null;
+              }>;
+            };
+          };
+        };
+      };
+    }
+  )
+    .from('invoices')
+    .select('internal_number, issue_date, ksef_number')
+    .eq('id', row.parent_invoice_id)
+    .eq('tenant_id', row.tenant_id)
+    .maybeSingle();
+  if (error) throw new Error(`PDF korekty: nie udało się odczytać faktury korygowanej (${error.message}).`);
+  if (!data?.internal_number) return null;
+  return {
+    number: data.internal_number,
+    issueDate: data.issue_date,
+    ksefNumber: data.ksef_number?.trim() || null,
+    reason: row.correction_reason?.trim() || null,
+  };
 }
 
 /** Zapisuje ścieżkę PDF + timestamp po wygenerowaniu (cache). */
