@@ -127,7 +127,7 @@ z #106–#110, oraz:
 
 ### 4.2. Otwarte PR-y Claude
 
-PR „C-17” (tylko dokumentacja koordynacji).
+Brak (stan po #121 — C-17, tylko dokumentacja koordynacji).
 
 Na `main` od innych od 01.10: #117 (C-08, migracja `00096` — wgranie po stronie Bartosza).
 
