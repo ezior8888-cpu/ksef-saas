@@ -46,6 +46,8 @@ jobs:
         run: node --test scripts/ci/agent-guard.test.mjs
       - name: Test Telegram gate (ops/bramka)
         run: node --test ops/bramka/test/*.test.mjs
+      - name: Test support mail worker (ops/poczta)
+        run: node --test ops/poczta/worker.test.mjs
 
   # AUD-108: błąd builda (np. plik 'use server' eksportujący nie-funkcję) wychodził
   # dopiero przy 12–18-minutowym wdrożeniu w Coolify. Typecheck tego nie łapie.
