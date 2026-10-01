@@ -16,6 +16,7 @@
  *   8. **Checkout claims** — creating > 15 min albo uncertain/held
  *   9. **Stale VAT enqueue** — faktura powiązana, ale brak potwierdzenia emisji > 15 min
  *  10. **KSeF reconciliation** — numer KSeF przy niezaakceptowanym statusie lub ROZ hold
+ *  11. **Kopia bazy nieaktualna** — najnowsza udana kopia starsza niż 26 h (AUD-37)
  *
  * Wszystkie progi konserwatywne — wolimy false-positive niż przegapić
  * critical incident. Operator może zignorować, ale nie chcemy gubić alertów.
@@ -25,6 +26,7 @@ import { cron } from 'inngest';
 import * as Sentry from '@sentry/nextjs';
 
 import { alertCritical } from '@/lib/alerts/slack';
+import { backupAgeHours, isBackupStale, MAX_BACKUP_AGE_HOURS } from '@/lib/backup/freshness';
 import { STALE_REFUND_OPERATION_MS } from '@/lib/billing/refund-operations';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
@@ -48,11 +50,14 @@ async function shouldSendAlert(alertKey: string): Promise<boolean> {
 }
 
 /** Cache dedup only after the critical transport confirms a 2xx response. */
-async function markAlertDelivered(alertKey: string): Promise<void> {
+async function markAlertDelivered(
+  alertKey: string,
+  ttlSeconds: number = ALERT_DEDUP_TTL_SECONDS,
+): Promise<void> {
   const cacheKey = ALERT_DEDUP_KEY_PREFIX + ':' + alertKey;
   // Cache is fail-soft: a failed write can duplicate a later alert, but never
   // suppress a retry of an undelivered one.
-  await cacheSet(cacheKey, new Date().toISOString(), ALERT_DEDUP_TTL_SECONDS);
+  await cacheSet(cacheKey, new Date().toISOString(), ttlSeconds);
 }
 interface AlertCheckResult {
   type: string;
@@ -549,6 +554,48 @@ export async function checkStaleDunningNotifications(): Promise<AlertCheckResult
   return { type: 'stale_dunning_notifications', fired: true };
 }
 
+/** Nieaktualna kopia nie budzi w nocy co 30 min — przypomnienie raz na 6 h. */
+const STALE_BACKUP_DEDUP_TTL_SECONDS = 6 * 60 * 60;
+
+/**
+ * Najnowsza udana kopia bazy starsza niż 26 h (AUD-37). Łapie też cron, który
+ * przestał się uruchamiać — wtedy snapshot nie zgłasza żadnej porażki.
+ */
+export async function checkStaleBackup(): Promise<AlertCheckResult> {
+  const { data, error } = await createAdminClient()
+    .from('backup_log')
+    .select('started_at')
+    .eq('status', 'success')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+
+  const newestAt = (data as { started_at: string } | null)?.started_at ?? null;
+  if (!isBackupStale(newestAt)) return { type: 'stale_backup', fired: false };
+
+  const shouldSend = await shouldSendAlert('stale_backup');
+  if (!shouldSend) return { type: 'stale_backup', fired: false, reason: 'dedup' };
+
+  const age = backupAgeHours(newestAt);
+  await alertCritical(
+    'Kopia bazy jest nieaktualna',
+    'Nocny snapshot bazy nie powstał. Sprawdź workera (kolejka cron.daily-db-snapshot), wpisy w backup_log i Sentry. Do czasu naprawy zrób kopię ręcznie według docs/runbooks/backup-restore.md.',
+    {
+      fields: [
+        {
+          label: 'Najnowsza udana kopia',
+          value: age === null ? 'brak' : `${Math.floor(age)} h temu`,
+        },
+        { label: 'Próg', value: `${MAX_BACKUP_AGE_HOURS} h` },
+      ],
+    },
+  );
+
+  await markAlertDelivered('stale_backup', STALE_BACKUP_DEDUP_TTL_SECONDS);
+  return { type: 'stale_backup', fired: true };
+}
+
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
@@ -585,6 +632,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-ksef-reconciliation', () =>
         checkKsefReconciliationAnomalies().catch(captureAndReturn('ksef_reconciliation')),
+      ),
+      step.run('check-stale-backup', () =>
+        checkStaleBackup().catch(captureAndReturn('stale_backup')),
       ),
     ]);
 
