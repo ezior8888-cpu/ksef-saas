@@ -18,7 +18,7 @@ import { createServer } from 'node:http';
 import type { Job } from 'pg-boss';
 
 import { ensureQueue, startBoss, stopBoss } from './boss';
-import { getJobsBackend, getWorkerHealthPort } from './config';
+import { assertPgBossWorkerBackend, getWorkerHealthPort } from './config';
 import { createJobLogger } from './logger';
 import { CRON_JOBS, SMOKE_QUEUE } from './queues';
 import {
@@ -130,7 +130,10 @@ function wrapHandler(def: JobDefinition<never>) {
 }
 
 async function main(): Promise<void> {
-  log.info(`Worker startuje (JOBS_BACKEND=${getJobsBackend()})`);
+  // Fail-closed (krok 5): bez jawnego pgboss worker nie startuje wcale —
+  // błąd trafia do Sentry przez reportWorkerStartupFailure niżej.
+  assertPgBossWorkerBackend();
+  log.info('Worker startuje (JOBS_BACKEND=pgboss)');
   if (initWorkerSentry()) {
     log.info('Sentry: alerty z jobów włączone');
   } else {

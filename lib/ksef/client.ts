@@ -1,3 +1,4 @@
+import { isBypassAllowedEnv } from '@/lib/security/environment';
 import type { KsefEnvironment, KsefErrorResponse } from '@/types/ksef';
 
 /**
@@ -155,7 +156,8 @@ async function maybeMockResponse(
   method: string,
   path: string,
 ): Promise<{ status: number; bodyText: string } | null> {
-  if (process.env.E2E_MOCK_KSEF !== '1') return null;
+  // Poza produkcją i tylko jawnie (AUD-20) — patrz `lib/test-mode.ts`.
+  if (process.env.E2E_MOCK_KSEF !== '1' || !isBypassAllowedEnv()) return null;
 
   const { resolveFixture, applyScenario, getMockScenario } = await import(
     './mock-fixtures'

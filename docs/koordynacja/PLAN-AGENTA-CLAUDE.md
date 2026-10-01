@@ -63,7 +63,7 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E5 | RODO / konto: usunięcie konta a subskrypcja i klucze obce | ✅ kod / ⏳ migracja B3 | #108 |
 | E6 | Konfiguracja produkcji bez cichych zastępstw (GUS sandbox, brak kluczy) | ✅ / ⏳ B2 | #107 |
 | E7 | Retencja 10 lat: joby `retention-delete`, `archive-old-invoices` — czy nic nie kasuje faktur przed terminem | ✅ sprawdzone 01.10 | uwagi w 3.2 |
-| E8 | Pozostałe obszary: import (Magiczny Import), portal księgowej, walidatory formularzy, powiadomienia | ✅ przegląd 01.10 | portal: token jako hash, wygaśnięcie, odwołanie, firma i ścieżka XML sprawdzane; push tylko do aktywnych członków; walidator ZAL bez „zw” = C-15; import = stos Codexa |
+| E8 | Pozostałe obszary: import (Magiczny Import), portal księgowej, walidatory formularzy, powiadomienia | ✅ przegląd 01.10 | portal: token jako hash, wygaśnięcie, odwołanie, firma i ścieżka XML sprawdzane; push tylko do aktywnych członków; walidator ZAL bez „zw” = C-15; import: silnik w stosie Codexa, parsery FA(3)/JPK_FA ignorowały walutę — #130. Uwaga dla Codexa: Magiczny Import łapie błąd parsera tylko w logu (`magic-import-ksef.ts`), użytkownik nie widzi powodu pominięcia |
 | E9 | Flo — funkcje zapisujące dane (`payment.confirm`, `expense.review`, `expense.rule`, `payment.chase`) | ✅ przegląd 01.10 | `expense.*` bez skutków wstecz; `payment.confirm` — uwaga o dacie wpłaty w 4.4; `payment.chase` = ponaglenia (stos Codexa) |
 | E10 | Formularze faktur VAT/KOR/ZAL/ROZ — przypadki brzegowe dat i kwot (art. 106i, 106e) | ✅ przegląd 01.10 | błędów danych brak; ograniczenia produktowe w 4.4 (data sprzedaży po wystawieniu, brak ostrzeżenia o spóźnionej fakturze); pliki formularzy w stosie Codexa |
 | E11 | Ustawienia firmy i KSeF — zmiana NIP, danych sprzedawcy, certyfikatu; co dzieje się z wystawionymi fakturami | ✅ przegląd 01.10 | PDF bierze sprzedawcę z migawki faktury (`seller_data`); NIP firmy ustawia się tylko w szkicu; ponowna wysyłka wstrzymana do ręcznego uzgodnienia |
@@ -135,12 +135,12 @@ z #106–#110, oraz:
 | #123 | Awaria API Białej Listy/VIES nie kasuje statusu VAT i rachunków kontrahenta ani nie truje cache |
 | #124 | Retencja kopii bazy zostawia zawsze 7 najnowszych udanych |
 | #127 | Plan: E10/E11 przejrzane, E12 samochód do decyzji (scalony razem z #129) |
+| #129 | Kafelek „Szac. podatek” na przepływach liczy od 1 stycznia (był: ostatnie 6 miesięcy, także z zeszłego roku) + C-18 |
+| #130 | Import FA(3)/JPK_FA odmawia faktury w walucie obcej (kwoty szły jak złote do KPiR) |
 
 ### 4.2. Otwarte PR-y Claude
 
-| PR | Co | Stan |
-|---|---|---|
-| #129 | Kafelek „Szac. podatek” na przepływach liczy od 1 stycznia (był: ostatnie 6 miesięcy, także z zeszłego roku) + C-18 | w tym PR |
+Brak (ten PR to tylko aktualizacja planu).
 
 Na `main` od innych od 01.10: Bartosz #113 (health-check KSeF), #117 (C-08,
 migracja `00096`), #120 (alerty Telegram + heartbeat workera), #126
@@ -177,6 +177,7 @@ poprawnych kodów QR); Bartosz #90.
 | Pulpit `monthly-figures` i FLO sumują `gross_total` ROZ | Bartosz |
 | Flo `payment.confirm` zapisuje `payment_date` = dzień KLIKNIĘCIA, nie wpływu pieniędzy (karta pyta dobę po terminie, zbiorczo). Dziś czytają to tylko zabezpieczenia ponagleń — ale zanim VAT metodą kasową (#76) zacznie liczyć okres z wpłat, karta musi pytać o datę wpływu | przyszłość, decyzja przy JPK_V7M dla metody kasowej |
 | **E12 — samochód osobowy.** Paliwo i inne wydatki na auto idą z odliczeniem 100% VAT (OCR, skrzynka KSeF), a użytkownik nie ma jak ustawić 50%. W typowej mikrofirmie (użytek mieszany): VAT tylko 50% (art. 86a ust. 1), nieodliczona połowa do kosztu, koszt PIT max 75% (art. 23 ust. 1 pkt 46a); leasing ma osobne limity (pkt 47a). Dziś KPiR zaniża koszt o połowę VAT i nie stosuje limitu 75% (JPK_V7M zawyżyłby odliczenie, ale jest wstrzymany). Propozycja: ustawienie firmy „samochód: brak / mieszany / 100% firmowy (VAT-26)”, rozpoznanie wydatków samochodowych (paliwo, serwis, ubezpieczenie) i proporcja odliczenia przy zapisie wydatku | Igor + księgowa (decyzja, co liczyć), potem Claude |
+| Import: Magiczny Import z KSeF zapisuje faktury jako `accepted` (wchodzą do KPiR i eksportów), a import pliku JPK_FA/CSV jako `draft` (nie wchodzą). Spójne z celem „historia z innego programu, który już zaksięgował”? Szkiców z importu nie da się wysłać do KSeF (wysyłka tylko z formularza „zapisz i wyślij”). Wszystkie importy zapisują `invoice_kind = regular` z kwotami z pliku (ROZ = reszta po zaliczkach, KOR = różnica) — w KPiR bez dubli | decyzja produktowa (Igor/Bartosz) |
 | Formularz faktury nie pozwala na datę sprzedaży PO dacie wystawienia (art. 106i ust. 7 dopuszcza fakturę do 60 dni przed dostawą) i nie ostrzega o spóźnionym wystawieniu (po 15. dniu następnego miesiąca, art. 106i ust. 1) — ograniczenie, nie błąd danych | decyzja produktowa |
 
 ## 5. Następny krok

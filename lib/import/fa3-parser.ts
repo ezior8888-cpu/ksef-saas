@@ -114,6 +114,24 @@ const FORMA_PLATNOSCI_MAP: Record<string, string> = {
   '7': 'przelew mobilny',
 };
 
+/**
+ * Import przyjmuje tylko faktury w złotych.
+ *
+ * Kwoty faktury w walucie obcej (P_13_x, P_15, P_11) są w tej walucie, a baza
+ * i KPiR trzymają złote — do 01.10.2026 parser czytał je jak złote: faktura na
+ * 1 000 EUR wchodziła jako 1 000 zł przychodu. Przeliczenie wymaga kursu NBP
+ * z dnia przed przychodem (art. 11a ust. 1 PIT), więc zamiast zgadywać,
+ * odmawiamy z powodem — import JPK_FA pokazuje go w ostrzeżeniach.
+ */
+export function assertPlnCurrency(code: unknown): void {
+  const currency = code == null ? 'PLN' : String(code).trim().toUpperCase();
+  if (currency !== '' && currency !== 'PLN') {
+    throw new Error(
+      `faktura w walucie ${currency} — import obsługuje tylko złote; dodaj ją ręcznie z kwotami przeliczonymi kursem NBP`,
+    );
+  }
+}
+
 export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string }): ParsedInvoice {
   const warnings: string[] = [];
   let parsed: unknown;
@@ -135,6 +153,8 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
   }
 
   const fa = faRaw as Record<string, unknown>;
+
+  assertPlnCurrency(fa.KodWaluty);
 
   const invoiceType = mapRodzajFaktury(String(fa.RodzajFaktury ?? 'VAT'));
 

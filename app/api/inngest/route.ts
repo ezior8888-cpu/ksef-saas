@@ -1,6 +1,6 @@
 import { serve } from 'inngest/next';
 
-import { isPgBossBackend } from '@/lib/jobs/config';
+import { resolveJobsBackend } from '@/lib/jobs/config';
 
 import { inngest } from '@/lib/inngest/client';
 import { submitInvoiceJob } from '@/lib/inngest/jobs/submit-invoice';
@@ -124,7 +124,11 @@ const ALL_FUNCTIONS = [
     criticalAlertsMonitorJob,
 ];
 
-const REGISTERED_FUNCTIONS = isPgBossBackend() ? [] : ALL_FUNCTIONS;
+// Funkcje Inngest rejestrujemy tylko, gdy konfiguracja wskazuje Inngest:
+// jawne `JOBS_BACKEND=inngest` albo lokalny dev bez zmiennej. Poza lokalnym
+// środowiskiem brak zmiennej = pusta lista (fail-closed, krok 5) — bez
+// podwójnych cronów i bez wyjątku przy imporcie, który wywróciłby `next build`.
+const REGISTERED_FUNCTIONS = resolveJobsBackend() === 'inngest' ? ALL_FUNCTIONS : [];
 
 export const { GET, POST, PUT } = serve({
   client: inngest,

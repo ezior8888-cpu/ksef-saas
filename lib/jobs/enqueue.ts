@@ -2,8 +2,10 @@
  * Dispatcher enqueue — JEDYNY punkt, przez który apka wysyła joby.
  *
  * Wg `JOBS_BACKEND`:
- *   - 'inngest' → passthrough do inngest.send (obecne zachowanie, default),
- *   - 'pgboss'  → boss.send do kolejki z EVENT_QUEUE_MAP.
+ *   - 'pgboss'  → boss.send do kolejki z EVENT_QUEUE_MAP (produkcja),
+ *   - 'inngest' → passthrough do inngest.send (rollback, lokalny dev).
+ * Brak zmiennej poza lokalnym środowiskiem = błąd, nie cichy Inngest
+ * (`getJobsBackend`, krok 5 planu automatyzacji).
  *
  * Etap 7 planu podmieni ~14 wywołań `inngest.send` w apce na te funkcje.
  * Dynamic import klientów — worker w trybie pgboss nie dotyka SDK Inngest.

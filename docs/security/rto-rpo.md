@@ -114,10 +114,11 @@ projekt został utracony (rzadkość, ale plan B musi istnieć).
 | Verify backup found broken | 1 wystąpienie | Slack `#urgent` |
 | Backup size dropped > 50% week-over-week | warning | Slack `#metrics` |
 | Backup size grew > 100% week-over-week | warning | Slack `#metrics` (rosną dane lub bug) |
-| Brak success snapshot > 36h | błąd | Slack `#urgent` |
+| Brak udanego snapshotu > 26 h | błąd | Slack `#urgent` + Telegram (monitor krytycznych alarmów co 5 min, przypomnienie co 6 h); tygodniowa weryfikacja też alarmuje zamiast „OK” |
 
 Pierwsze 3 zaimplementowane w Inngest jobs (Krok 3, 5, 6 Fazy 29).
-Pozostałe — dodać w Fazie 27 monitoring (lub uzupełnić w Krok 8).
+Ostatni — `checkStaleBackup` w `lib/inngest/jobs/critical-alerts-monitor.ts`
+(krok 6 planu automatyzacji, 1 października 2026). Progi rozmiaru — nadal do zrobienia.
 
 ---
 
@@ -127,8 +128,10 @@ Monthly DR drill (z [disaster-recovery.md](../runbooks/disaster-recovery.md)):
 1x/mc test restore na staging. Każdy drill aktualizuje ten dokument o
 zmierzone actuals.
 
-Last drill: **none yet** — pierwszy planowany po wgraniu migracji 00053 i
-udanym uruchomieniu `dailyDbSnapshotJob` w prod.
+Last drill: **2026-10-01** — zrzut `pg_dump` z `db-1` wgrany na `ops-1` do
+obrazu identycznego z produkcją: 111/111 tabel z liczbami wierszy zgodnymi
+z produkcją, struktura (RLS, funkcje, indeksy) jak na produkcji, baza gotowa
+w 16 s. Procedura i protokół: [backup-restore.md](../runbooks/backup-restore.md) § 5.
 
 ---
 

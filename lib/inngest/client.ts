@@ -5,6 +5,7 @@ import type { Invoice } from '@/types/invoice';
 import type { CorrectionInvoiceData, AdvanceInvoiceData, FinalInvoiceData } from '@/types/invoice-types';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 
+import { isBypassAllowedEnv } from '@/lib/security/environment';
 import { zodEvent } from './event-schema';
 
 /**
@@ -317,5 +318,6 @@ export const inngest = new Inngest({
   eventKey: process.env.INNGEST_EVENT_KEY,
   signingKey: process.env.INNGEST_SIGNING_KEY,
   // INNGEST_DEV=1 → ignoruj klucze, bij w Inngest Dev Server na localhost:8288.
-  isDev: process.env.INNGEST_DEV === '1',
+  // Tylko poza produkcją (AUD-20): tryb dev wyłącza weryfikację podpisu `/api/inngest`.
+  isDev: process.env.INNGEST_DEV === '1' && isBypassAllowedEnv(),
 });
