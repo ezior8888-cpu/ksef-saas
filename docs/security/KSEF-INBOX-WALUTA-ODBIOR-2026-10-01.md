@@ -1,0 +1,55 @@
+# Waluta kosztów ze skrzynki KSeF — odbiór C-11
+
+Stan kodu na 1 października 2026: skrzynka zapisuje walutę z metadanych KSeF w `invoices.currency`, ale dotychczasowy job tworzący `expenses` nie pobierał tej kolumny. Kwota 100 EUR mogła zostać zapisana jako 100 PLN i trafić do KPiR. To ustalenie z kodu, **nie potwierdzony incydent produkcyjny**; nie mamy datowanego SHA webu i workera ani liczby takich kosztów na db-1.
+
+Poprawka C-11 wymaga poprawnego kodu waluty i obecnej kwoty VAT przed utworzeniem kosztu. [Oficjalny kontrakt KSeF `InvoiceMetadata`](https://raw.githubusercontent.com/CIRFMF/ksef-api/main/open-api.json) określa `vatAmount` jako kwotę **w PLN**, także dla faktury obcowalutowej; netto i brutto są w walucie dokumentu. Dlatego kod zachowuje VAT z metadanych oddzielnie, zamiast przeliczać go drugi raz. Dla waluty obcej pobiera kurs NBP i zapisuje przy koszcie oryginalne netto/brutto, VAT metadanych w PLN, kurs, numer i datę tabeli. **Każdy taki koszt pozostaje poza KPiR i bez odliczenia VAT do ręcznego porównania z XML**, nawet gdy kurs jest dostępny. Gdy kursu brak, kwoty źródłowe zostają z opisem, a VAT PLN pozostaje tylko w śladzie metadanych. Błąd sieci NBP powoduje ponowienie joba bez zapisu kosztu. Korekta ujemna zachowuje znak i symetryczne zaokrąglenie.
+
+Formularz wydatku pokazuje ostrzeżenie o jednostkach i wymaga jawnego potwierdzenia sprawdzenia XML, kursu i kwot PLN. Akcja serwerowa sprawdza walutę powiązanej faktury (także dla historycznych kosztów bez nowego śladu). **Bez poprawnie zapisanego przy koszcie kursu nie pozwala włączyć go do KPiR, nawet po zaznaczeniu potwierdzenia**; samo potwierdzenie nie przelicza kwot. Historyczny koszt można natychmiast wyłączyć z KPiR bez potwierdzenia, także gdy waluta w bazie jest pusta; pozostaje wtedy nieprzejrzany. Po udanym zapisie powstaje wpis w `audit_logs`. Potwierdzenie jest decyzją człowieka, nie automatycznym dowodem poprawności kwot.
+
+Zmiana daty dokumentu unieważnia stary ślad kursu; ponowne włączenie do KPiR wymaga kontrolowanego przeliczenia. Dotyczy to także wierszy, które utraciły powiązanie z fakturą KSeF — można je bezpiecznie wyłączyć, ale nie zatwierdzić. Przy braku kursu job nie uruchamia kategoryzacji zakładającej PLN i nie wysyła danych faktury do zewnętrznego klasyfikatora AI.
+
+Raport KPiR, podsumowanie przepływów i pobieranie kosztów do eksportu odmawiają wyniku, gdy w wybranym okresie jest koszt KSeF oznaczony jako uwzględniony, lecz bez potwierdzonej waluty, zgodnego śladu kursu i przeglądu. Nie pomijają go po cichu, bo plik wyglądałby wtedy na kompletny. Generatory CSV zatrzymują się również przy fakturze walutowej: obecny format oznacza wszystkie kwoty jako PLN, a metadane KSeF mogą mieć netto/brutto w walucie dokumentu i VAT w PLN. To ograniczenie obowiązuje do uzgodnienia sposobu przeliczenia i importu przez księgową.
+
+Analogicznie przychodowe KPiR, miesięczne sumy i wykresy, CSV, JPK_FA oraz generatory KPiR XLSX/JPK_V7M wymagają jawnego PLN na każdej użytej fakturze sprzedaży. Odmowa jest zamierzona: nie ma tu bezpiecznego przeliczenia całej faktury, pozycji i podatku. Portal księgowej zwraca komunikat `422`, a zadanie eksportu kończy się z powodem bez ponawiania. JPK_V7M i kilka integracyjnych formatów są dodatkowo już wstrzymane z innych przyczyn. Po wdrożeniu należy przejrzeć historyczne eksporty, bo pliki wydane przed blokadą nie zostaną naprawione automatycznie.
+
+Kontrola formularza i raportów nie zastępuje ograniczenia zapisu w bazie. Polityka RLS pozwala uprawnionemu użytkownikowi tenanta aktualizować wiersz `expenses`, w tym flagi i ślad FX. Osobna zmiana bazy albo serwerowy, nieedytowalny dowód potwierdzenia będzie potrzebny, jeśli mamy chronić księgowanie także przed celowym obejściem formularza.
+
+## Odbiór operatora bez ujawniania faktur
+
+1. Bartek ustala datowane SHA webu i workera w Coolify oraz backend jobów. Sam merge do `main` nie dowodzi wdrożenia poprawki.
+2. Bartek uruchamia poniższy **wyłącznie odczytowy** licznik na db-1, przez konto z uprawnieniem do odczytu. Do zgłoszenia przekazuje datę, walutę i trzy liczby, bez identyfikatorów firm i kontrahentów. Codex nie uruchamia SQL.
+
+```sql
+SELECT
+  COALESCE(NULLIF(upper(trim(i.currency)), ''), '<brak>') AS waluta,
+  count(*) AS koszty_z_ksef,
+  count(*) FILTER (WHERE e.is_deductible) AS uwzglednione_w_kpir,
+  count(*) FILTER (WHERE e.ocr_extracted_data->>'fx' IS NULL) AS bez_sladu_kursu
+FROM public.expenses AS e
+JOIN public.invoices AS i
+  ON i.id = e.ksef_invoice_id AND i.tenant_id = e.tenant_id
+WHERE e.source = 'ksef_inbox'
+  AND (i.currency IS NULL OR upper(trim(i.currency)) <> 'PLN')
+GROUP BY 1
+ORDER BY 1;
+```
+
+3. Jeśli wynik jest niezerowy, Bartek i księgowa sprawdzają **każdy** historyczny koszt w bezpiecznym środowisku względem oryginalnego XML, właściwej daty i tabeli NBP oraz już wygenerowanych KPiR/JPK. Szczególnie sprawdzają korekty ujemne i kwoty VAT w PLN z faktury walutowej. Nie stosują masowej poprawki SQL na podstawie samego licznika. Ustalenie zasad podatkowych i ewentualnych korekt należy do Igora i księgowej.
+   Historyczny koszt bez śladu kursu nie zyska automatycznie możliwości zaksięgowania. Potrzebny jest osobny, kontrolowany przepływ ręcznego przeliczenia z numerem tabeli i audytem albo bezpieczne odtworzenie kosztu po uzgodnieniu przez księgową. Nie włączać go jednym kliknięciem.
+   Bartek powinien osobno policzyć faktury sprzedaży z walutą inną niż PLN lub pustą walutą, bez wynoszenia danych klientów. Taki wynik wyznacza zakres ręcznego przeglądu uprzednich eksportów i raportów:
+
+```sql
+SELECT
+  COALESCE(NULLIF(upper(trim(currency)), ''), '<brak>') AS waluta,
+  count(*) AS faktury_sprzedazy
+FROM public.invoices
+WHERE direction = 'outgoing'
+  AND (currency IS NULL OR upper(trim(currency)) <> 'PLN')
+GROUP BY 1
+ORDER BY 1;
+```
+4. Przed wydaniem: lokalne testy/CI dla joba, potem kontrolowany test na kopii z dwiema firmami i fakturami PLN, EUR, ujemną korektą, brakiem kursu i błędem NBP. Po wdrożeniu Bartek sprawdza rzeczywisty nowy wpis oraz brak błędnie zaksięgowanych kwot. Nie umieszcza XML ani danych kontrahentów w PR lub logu.
+
+Brak waluty zatrzymuje job bez utworzenia kosztu. Ponieważ obecny watchdog nie liczy tej klasy błędów, Bartek powinien okresowo odczytać samą liczbę faktur przychodzących bez powiązanego wydatku, rozdzielając dokumenty celowo pominięte od błędów joba. Dopiero po ustaleniu kryterium oczekiwanego kosztu można dodać alarm, który nie będzie fałszywie zgłaszał faktur niebędących kosztem firmy.
+
+Wycofanie kodu jest możliwe przez ponowne wdrożenie poprzedniego obrazu, ale przywróci ryzyko błędnego automatycznego księgowania nowych faktur walutowych. Historyczne wiersze wymagają osobnego rozliczenia; ponowienie joba nie naprawia istniejącego kosztu, bo działa ochrona przed duplikatem.
