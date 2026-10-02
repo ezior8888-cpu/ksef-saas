@@ -142,4 +142,19 @@ describe.each([
     await run();
     expect(db.inserts[0]).toMatchObject({ vat_amount: 23, vat_deductible_amount: 23 });
   });
+
+  // AUD-68 (decyzja I2): zeruje tylko zwolnienie podmiotowe z art. 113.
+  // Podstawa z art. 43 (sprzedaż zwolniona przedmiotowo) nie odbiera
+  // czynnemu podatnikowi odliczenia od kosztów.
+  it('podstawa z art. 43: odliczenie zostaje', async () => {
+    db.basis = 'art. 43 ust. 1 pkt 19 ustawy o VAT';
+    await run();
+    expect(db.inserts[0]).toMatchObject({ vat_amount: 23, vat_deductible_amount: 23 });
+  });
+
+  it('art. 113 ust. 9 też zeruje', async () => {
+    db.basis = 'art. 113 ust. 9 ustawy o VAT';
+    await run();
+    expect(db.inserts[0]).toMatchObject({ vat_deductible_amount: 0 });
+  });
 });

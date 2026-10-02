@@ -41,6 +41,18 @@ export function normalizeExemptionBasis(input: unknown): string | null {
   return value;
 }
 
+/**
+ * Zwolnienie PODMIOTOWE (art. 113): firma nie jest czynnym podatnikiem VAT,
+ * więc nie odlicza VAT-u od kosztów i nie stosuje metody kasowej.
+ *
+ * Podstawa z art. 43 (sprzedaż zwolniona przedmiotowo) tego nie znaczy —
+ * czynny podatnik ze sprzedażą zwolnioną zachowuje odliczenie (decyzja I2,
+ * AUD-68). Do 02.10 każda podstawa zerowała odliczenie i wyłączała P_16.
+ */
+export function isSubjectiveVatExemption(basis: string | null | undefined): boolean {
+  return typeof basis === 'string' && /\bart\.?\s*113\b/i.test(basis);
+}
+
 /** Kod PostgREST/Postgres „nie ma takiej kolumny” — przed wgraniem 00091. */
 const UNDEFINED_COLUMN = '42703';
 
