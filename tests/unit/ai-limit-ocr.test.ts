@@ -3,10 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobContext } from '@/lib/jobs/registry';
 
 /**
- * pg-boss ponawia job OCR OD POCZĄTKU (bez pamięci kroków). Do 01.10.2026
- * błąd po zapisie wydatku — oznaczenie zadania, karta agenta, powiadomienie —
- * kończył się drugim (i trzecim) wydatkiem z tego samego paragonu, czyli
- * podwójnym kosztem w KPiR.
+ * AUD-107 (decyzja B7): OCR i klasyfikator AI nie miały limitu na firmę —
+ * jedno konto (także trial) mogło wygenerować dowolny rachunek u Anthropic.
+ * Job OCR pyta o budżet PRZED wywołaniem modelu i zapisuje zużycie po nim.
  */
 
 type Row = Record<string, unknown>;
@@ -15,6 +14,7 @@ const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const OCR_JOB = '22222222-2222-4222-8222-222222222222';
 const USER = '33333333-3333-4333-8333-333333333333';
 
+const budget = vi.hoisted(() => ({ check: vi.fn(), record: vi.fn(), extract: vi.fn() }));
 const state = vi.hoisted(() => ({
   expenses: [] as Record<string, unknown>[],
   jobUpdates: [] as Record<string, unknown>[],
@@ -22,16 +22,15 @@ const state = vi.hoisted(() => ({
   proposal: vi.fn(),
 }));
 
-// AUD-107: budżet AI firmy — tu zawsze w limicie (osobne testy: ai-limit-*).
-vi.mock('@/lib/ai/tenant-ai-budget', () => ({
-  checkTenantAiBudget: async () => ({ allowed: true }),
-  recordTenantAiUsage: async () => undefined,
-}));
 vi.mock('@/lib/categorization', () => ({
   categorizeExpense: async () => ({ kpir_column: 'col_13', category_label: 'Paliwo', method: 'rule', confidence: 0.9 }),
 }));
+vi.mock('@/lib/ai/tenant-ai-budget', () => ({
+  checkTenantAiBudget: budget.check,
+  recordTenantAiUsage: budget.record,
+}));
 vi.mock('@/lib/ocr/engine', () => ({
-  extractInvoiceFromImage: async () => ({
+  extractInvoiceFromImage: budget.extract.mockImplementation(async () => ({
     success: true,
     data: {
       seller_name: 'Stacja Paliw', seller_nip: '5260001246', seller_address: null,
@@ -40,7 +39,7 @@ vi.mock('@/lib/ocr/engine', () => ({
       line_items: null, ocr_confidence: 0.95, notes: null, currency: 'PLN',
     },
     inputTokens: 1, outputTokens: 1, processingTimeMs: 1,
-  }),
+  })),
 }));
 vi.mock('@/lib/storage/expenses', () => ({
   downloadExpensePhoto: async () => ({ buffer: Buffer.from('x'), mimeType: 'image/jpeg' }),
@@ -93,7 +92,8 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { onProcessOcrExhausted, runProcessOcr } from '@/lib/inngest/jobs/process-ocr';
+
+import { runProcessOcr } from '@/lib/inngest/jobs/process-ocr';
 
 const ctx: JobContext = {
   attempt: 0,
@@ -105,51 +105,24 @@ const event = { ocrJobId: OCR_JOB, tenantId: TENANT };
 beforeEach(() => {
   state.expenses = [];
   state.jobUpdates = [];
-  state.lookupError = false;
   state.proposal.mockReset().mockResolvedValue({ status: 'created' });
+  budget.check.mockReset().mockResolvedValue({ allowed: true });
+  budget.record.mockReset().mockResolvedValue(undefined);
+  budget.extract.mockClear();
 });
 
-describe('OCR — ponowienie joba nie dubluje wydatku', () => {
-  it('błąd po zapisie, ponowienie — w KPiR dalej jeden wydatek', async () => {
-    state.proposal.mockRejectedValueOnce(new Error('chwilowy błąd bazy'));
-    await expect(runProcessOcr(event, ctx)).rejects.toThrow('chwilowy błąd bazy');
-    expect(state.expenses).toHaveLength(1);
-
-    expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: 'exp-1' });
-    expect(state.expenses).toHaveLength(1);
+describe('OCR a limit AI firmy', () => {
+  it('limit wyczerpany — model nie jest wywoływany, zadanie kończy się czytelnym komunikatem', async () => {
+    budget.check.mockResolvedValue({ allowed: false, message: 'Wykorzystano dzienny limit rozpoznawania dokumentów.' });
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: false });
+    expect(budget.check).toHaveBeenCalledWith(TENANT, 'ocr');
+    expect(budget.extract).not.toHaveBeenCalled();
+    expect(state.jobUpdates).toContainEqual(expect.objectContaining({ status: 'failed', error_message: 'Wykorzystano dzienny limit rozpoznawania dokumentów.' }));
   });
 
-  it.each([
-    ['innego zadania OCR', { tenant_id: TENANT, ocr_job_id: '99999999-9999-4999-8999-999999999999' }],
-    ['innej firmy', { tenant_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', ocr_job_id: OCR_JOB }],
-  ])('wydatek %s nie zatrzymuje zapisu', async (_label, other) => {
-    state.expenses.push({ id: 'exp-inne', ...other });
-    expect(await runProcessOcr(event, ctx)).toMatchObject({ success: true });
-    expect(state.expenses.filter((e) => e.ocr_job_id === OCR_JOB && e.tenant_id === TENANT)).toHaveLength(1);
-  });
-
-  it('krok po zapisie padł na stałe — zadanie wskazuje zapisany wydatek, nie „nieudane”', async () => {
-    state.proposal.mockRejectedValue(new Error('karta agenta niedostępna'));
-    await expect(runProcessOcr(event, ctx)).rejects.toThrow();
-    state.jobUpdates = [];
-
-    await onProcessOcrExhausted(new Error('karta agenta niedostępna'), event);
-    expect(state.jobUpdates).toEqual([expect.objectContaining({ status: 'completed', expense_id: 'exp-1' })]);
-    expect(state.expenses).toHaveLength(1);
-  });
-
-  it.each([
-    ['innego zadania', { tenant_id: TENANT, ocr_job_id: '99999999-9999-4999-8999-999999999999' }],
-    ['innej firmy', { tenant_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', ocr_job_id: OCR_JOB }],
-  ])('wydatek nie powstał (jest tylko wydatek %s) — po wyczerpaniu prób „nieudane”, jak dotąd', async (_label, other) => {
-    state.expenses.push({ id: 'exp-inne', ...other });
-    await onProcessOcrExhausted(new Error('OCR niedostępny'), event);
-    expect(state.jobUpdates).toEqual([expect.objectContaining({ status: 'failed', error_message: 'OCR niedostępny' })]);
-  });
-
-  it('nie da się sprawdzić, czy wydatek już jest — job rzuca zamiast zapisywać w ciemno', async () => {
-    state.lookupError = true;
-    await expect(runProcessOcr(event, ctx)).rejects.toThrow('Nie można sprawdzić, czy wydatek już istnieje');
-    expect(state.expenses).toHaveLength(0);
+  it('w limicie — wywołanie modelu i zapis zużycia', async () => {
+    await runProcessOcr(event, ctx);
+    expect(budget.extract).toHaveBeenCalledOnce();
+    expect(budget.record).toHaveBeenCalledWith(TENANT, { inputTokens: 1, outputTokens: 1 });
   });
 });
