@@ -498,7 +498,8 @@ describe.skipIf(!hasDatabase)('RLS isolation in multi-org model', () => {
       if (resume.error) throw resume.error;
       expect(resume.data).toBe(true);
 
-      const accepted = await admin.from('invoices').update({ ksef_status: 'accepted' })
+      // Przyjęta faktura wymaga środowiska KSeF (00117, #63).
+      const accepted = await admin.from('invoices').update({ ksef_status: 'accepted', ksef_environment: 'test' })
         .eq('id', INVOICE_A_ID);
       if (accepted.error) throw accepted.error;
       expect((await clientA.from('invoices').update({ buyer_nip: NIP_A })
