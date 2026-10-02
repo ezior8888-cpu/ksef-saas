@@ -38,23 +38,24 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00095 | Codex (#71) | `expense_provenance_guard` | PR otwarty |
 | 00096 | Codex (#83) → Claude przeniósł 1:1 na `main` (01.10) | `incoming_invoice_number_boundary` (C-08) | w `main` (#117), **wgrana na db-1 01.10** |
 | 00097 | Codex (#86) | `invoices_overdue_reconciliation_guard` | PR otwarty |
-| 00098 | Bartosz (#90) | `backup_read_stripe_service_tables` | wgrana na db-1 (28.09), w `main` jeszcze nie; ten sam plik w szkicu #115 — wchodzi przez #90 |
+| 00098 | Bartosz (#90) | `backup_read_stripe_service_tables` | w `main` (#90, 02.10), **wgrana na db-1 28.09** |
 | 00099 | Claude | `ksef_submission_references` (C-18) | PR `claude/ksef-niepewny-wynik`; wgranie PRZED wdrożeniem kodu |
 | 00100 | Claude | `ops_gate` (bramka Telegram: rola `ops_actor`, schemat `ops`) | PR `claude/bramka-telegram`; wgranie PRZED uruchomieniem bramki |
 | 00100–00101 | Codex (#128, szkic) | `ksef_expense_provenance_guard`, `ksef_expense_full_update_guard` | PR otwarty — **00100 koliduje z `00100_ops_gate` na `main`**, do przenumerowania (od 00103) |
-| 00102 | Claude | `signup_gate_hook` (AUD-63) | PR `claude/naprawy-wylaczniki-2`; wgranie PRZED zmiennymi `GOTRUE_HOOK_BEFORE_USER_CREATED_*` |
-| 00103 | Claude | `org_role_guards` (AUD-29: owner nadaje/odbiera tylko owner) | PR `claude/naprawy-migracje`; zgodna wstecz — wgrana na produkcję przed wdrożeniem |
-| 00104 | Claude | `service_function_grants` (AUD-30, AUD-64: EXECUTE tylko service_role) | PR `claude/naprawy-migracje`; zgodna wstecz — wgrana na produkcję przed wdrożeniem |
-| 00105 | Claude | `flo_usage_increment` (AUD-116: atomowy zapis zużycia AI) | PR `claude/naprawy-flo-budzet`; zgodna wstecz — wgrana przed wdrożeniem |
-| 00106 | Claude | `org_rpc_public_revoke` (dopełnienie 00103: EXECUTE bez PUBLIC) | PR `claude/naprawy-flo-budzet`; zgodna wstecz |
-| 00107 | Claude | `invoice_xml_generated_at` (AUD-46: stała DataWytworzeniaFa) | PR `claude/naprawy-ksef-5`; tylko nowa kolumna — przed wdrożeniem |
-| 00108 | Claude | `flag_require_mfa_sensitive` (AUD-65: wiersz flagi, wyłączony) | PR `claude/naprawy-ksef-5`; tylko INSERT — przed wdrożeniem |
-| 00109 | Claude | `stripe_webhook_retention` (AUD-79: porównanie `data`; AUD-81: retencja payloadów 90 dni) | PR `claude/naprawy-billing`; CREATE OR REPLACE — przed wdrożeniem |
-| 00110 | Claude | `billing_invoice_numbering` (AUD-69: kolejny numer, data PL, status paid) | PR `claude/naprawy-billing`; nowa tabela + funkcja — przed wdrożeniem |
-| 00111 | Claude | `tenant_ksef_credentials_flag` (AUD-103: kolumna generowana `has_ksef_credentials`) | PR `claude/naprawy-reszta`; przed wdrożeniem |
-| 00112 | Claude | `tenant_credentials_column_privileges` (AUD-103: bez SELECT blobu KSeF dla ról klienckich) | PR `claude/naprawy-reszta`; **PO wdrożeniu kodu** — nowe kolumny `tenants` wymagają odtąd jawnego GRANT SELECT |
-| 00113 | Claude | `user_deletion_foreign_keys` (AUD-41: autor wydatku, OCR i dostępu księgowej → `ON DELETE SET NULL`; `gdpr_user_deletion_blockers` przed anonimizacją; AUD-81: stare `email_bounces.raw_payload`) | PR `claude/naprawy-rodo-2`; przed wdrożeniem (kod sprawdza funkcję) |
-| **00114** | — | następny wolny | — |
+| 00102 | Claude | `signup_gate_hook` (AUD-63) | w `main`, **wgrana na db-1**; zmienne `GOTRUE_HOOK_BEFORE_USER_CREATED_*` ustawione 02.10 |
+| 00103 | Claude | `org_role_guards` (AUD-29: owner nadaje/odbiera tylko owner) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00104 | Claude | `service_function_grants` (AUD-30, AUD-64: EXECUTE tylko service_role) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00105 | Claude | `flo_usage_increment` (AUD-116: atomowy zapis zużycia AI) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00106 | Claude | `org_rpc_public_revoke` (dopełnienie 00103: EXECUTE bez PUBLIC) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00107 | Claude | `invoice_xml_generated_at` (AUD-46: stała DataWytworzeniaFa) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00108 | Claude | `flag_require_mfa_sensitive` (AUD-65: wiersz flagi, wyłączony) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00109 | Claude | `stripe_webhook_retention` (AUD-79: porównanie `data`; AUD-81: retencja payloadów 90 dni) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00110 | Claude | `billing_invoice_numbering` (AUD-69: kolejny numer, data PL, status paid) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00111 | Claude | `tenant_ksef_credentials_flag` (AUD-103: kolumna generowana `has_ksef_credentials`) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00112 | Claude | `tenant_credentials_column_privileges` (AUD-103: bez SELECT blobu KSeF dla ról klienckich) | w `main` (#156), **wgrana na db-1 02.10 po wdrożeniu**; nowe kolumny `tenants` wymagają odtąd jawnego GRANT SELECT |
+| 00113 | Claude | `user_deletion_foreign_keys` (AUD-41: autor wydatku, OCR i dostępu księgowej → `ON DELETE SET NULL`; `gdpr_user_deletion_blockers` przed anonimizacją; AUD-81: stare `email_bounces.raw_payload`) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00200 | Claude (audyt bloku 1, #166) | `correction_negative_total_paid_check` (F-004: CHECK `check_paid_amount_valid` dopuszcza ujemne brutto korekty, wpłata 0) | w `main` (#166), **wgrana na db-1 02.10**; numer spoza kolejności — kolejne migracje dalej od 00114 |
+| **00114** | — | następny wolny (00200 zajęte) | — |
 
 ---
 
