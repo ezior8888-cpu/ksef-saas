@@ -9,7 +9,10 @@ export type RateLimitBucket =
   | 'gdpr_request'
   | 'support_chat'
   | 'newsletter'
-  | 'reminder_preview';
+  | 'reminder_preview'
+  | 'nip_lookup'
+  | 'ai_ocr'
+  | 'ai_classify';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */
@@ -27,7 +30,11 @@ export interface RateLimitResult {
   remaining: number;
   /** Sekund do najbliższej dozwolonej próby (0 gdy allowed=true). */
   retryAfter: number;
-  /** Gdy Redis nieskonfigurowany lub padł — wpuszczamy ruch, ale flagujemy. */
+  /**
+   * Gdy Redis nieskonfigurowany lub padł — limit liczony w pamięci procesu
+   * (AUD-62). Jedna instancja web, więc działa; przy kilku instancjach każda
+   * liczyłaby osobno. Kto potrzebuje limitu wspólnego, traktuje flagę jak odmowę.
+   */
   fallback?: boolean;
 }
 
@@ -38,19 +45,15 @@ export interface RateLimitResult {
  * Gdy count > limit — odrzucamy bieżący request (został już zapisany, ale
  * to OK, sliding window i tak go wymiotę po `windowSeconds`).
  *
- * Fail-open: brak Redisa nie może blokować logowania. Logujemy do konsoli
- * (Sentry łapie via console hook) i pozwalamy.
+ * Bez Redisa (dziś cała produkcja — Upstash wyłączony) i przy jego awarii
+ * limit liczy pamięć procesu (AUD-62). Wcześniej był wtedy fail-open, czyli
+ * logowanie, rejestracja i reset hasła bez żadnego limitu prób.
  */
 export async function checkRateLimit(
   config: RateLimitConfig,
 ): Promise<RateLimitResult> {
   if (!isRedisConfigured()) {
-    return {
-      allowed: true,
-      remaining: config.limit,
-      retryAfter: 0,
-      fallback: true,
-    };
+    return checkInMemory(config);
   }
 
   const key = `rl:${config.bucket}:${hashIdentifier(config.identifier)}`;
@@ -90,14 +93,34 @@ export async function checkRateLimit(
 
     return { allowed: false, remaining: 0, retryAfter };
   } catch (err) {
-    console.error('[rate-limit] Redis error, fail-open:', err);
-    return {
-      allowed: true,
-      remaining: config.limit,
-      retryAfter: 0,
-      fallback: true,
-    };
+    console.error('[rate-limit] Redis error — limit w pamięci procesu:', err);
+    return checkInMemory(config);
   }
+}
+
+/** Okna w pamięci procesu: klucz → znaczniki czasu żądań w oknie. */
+const memoryWindows = new Map<string, number[]>();
+/** Górna granica kluczy — przy zalewie unikalnych IP najstarsze wypadają. */
+const MAX_MEMORY_KEYS = 20_000;
+
+function checkInMemory(config: RateLimitConfig): RateLimitResult {
+  const key = `${config.bucket}:${hashIdentifier(config.identifier)}`;
+  const now = Date.now();
+  const windowStart = now - config.windowSeconds * 1000;
+  const hits = (memoryWindows.get(key) ?? []).filter((t) => t > windowStart);
+  hits.push(now);
+  memoryWindows.delete(key);
+  memoryWindows.set(key, hits);
+  if (memoryWindows.size > MAX_MEMORY_KEYS) {
+    const oldest = memoryWindows.keys().next().value;
+    if (oldest !== undefined) memoryWindows.delete(oldest);
+  }
+
+  if (hits.length <= config.limit) {
+    return { allowed: true, remaining: config.limit - hits.length, retryAfter: 0, fallback: true };
+  }
+  const retryAfter = Math.max(1, Math.ceil((hits[0]! + config.windowSeconds * 1000 - now) / 1000));
+  return { allowed: false, remaining: 0, retryAfter, fallback: true };
 }
 
 /**

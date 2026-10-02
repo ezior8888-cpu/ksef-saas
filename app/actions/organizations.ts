@@ -8,6 +8,7 @@ import { redirect } from 'next/navigation';
 import { logAudit } from '@/lib/audit/log';
 import { getVerifiedUserContext } from '@/lib/auth/verified-user';
 import { sendEmail } from '@/lib/email/send';
+import { FIRST_COMPANY_CLOSED_MESSAGE, isSignupClosed } from '@/lib/feature-flags/signups';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
 import {
@@ -95,6 +96,27 @@ function formatTenantInsertError(err: {
     );
   }
   return msg;
+}
+
+/**
+ * Wyłącznik `disableSignups` przy zakładaniu PIERWSZEJ firmy (AUD-63).
+ * Konto z Google albo prosto z GoTrue powstaje poza naszym formularzem —
+ * bez firmy nic w aplikacji nie zrobi, więc to tu zamykamy rejestrację.
+ * Klient z aktywnym członkostwem dodaje kolejne firmy jak dotąd.
+ * Błąd odczytu członkostw przy zamkniętej rejestracji = odmowa (fail-closed).
+ */
+async function firstCompanyBlocked(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+): Promise<string | null> {
+  if (!(await isSignupClosed())) return null;
+  const { count, error } = await admin
+    .from('memberships')
+    .select('organization_id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('status', 'active');
+  if (error || !count) return FIRST_COMPANY_CLOSED_MESSAGE;
+  return null;
 }
 
 /**
@@ -239,6 +261,8 @@ export async function createOrganizationAction(
   }
 
   const admin = createAdminClient();
+  const closed = await firstCompanyBlocked(admin, user.id);
+  if (closed) return { success: false, error: closed };
   const { data: nipMatches } = await admin
     .from('tenants')
     .select('id, ksef_verified_at')
@@ -368,6 +392,8 @@ export async function skipOnboardingWithoutNipAction(): Promise<ActionFail> {
   if (draft) {
     orgId = draft.organization_id;
   } else {
+    const closed = await firstCompanyBlocked(admin, user.id);
+    if (closed) return { success: false, error: closed };
     const created = await insertOrganizationAsOwner({
       admin,
       userId: user.id,

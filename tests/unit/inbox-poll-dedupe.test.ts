@@ -19,12 +19,10 @@ vi.mock('@/lib/flo/proposals', () => ({ createProposal: vi.fn() }));
 vi.mock('@/lib/flo/functions/expense-inbox', () => ({
   buildInboxSummaryProposal: () => null,
   classifyInboxDocuments: (docs: unknown, known: ReadonlySet<string>) => db.classify(docs, known),
-  evaluateContinuity: () => ({ status: 'complete' }),
 }));
 vi.mock('@/lib/flo/functions/inbox-cursor', () => ({
-  readInboxCursor: async () => ({ announcedCount: 0, continuationToken: null }),
-  saveInboxCursor: vi.fn(),
-  clearInboxCursor: vi.fn(),
+  readInboxHwm: async () => null,
+  saveInboxHwm: vi.fn(),
 }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToTenant: vi.fn(async () => ({ sent: 0, failed: 0 })) }));
 vi.mock('@/lib/supabase/server', () => ({
@@ -117,7 +115,7 @@ beforeEach(() => {
 
 describe('skrzynka KSeF: filtr już zapisanych faktur', () => {
   it('błąd zapytania NIE znaczy „nic nie ma” — job pada, nic się nie zapisuje', async () => {
-    vi.mocked(queryReceivedInvoices).mockResolvedValue([faktura(1), faktura(2)] as never);
+    vi.mocked(queryReceivedInvoices).mockResolvedValue({ invoices: [faktura(1), faktura(2)], hwm: null } as never);
     db.filterError = { message: 'URI Too Long' };
 
     await expect(runInboxPollTenant(DATA, ctx)).rejects.toThrow(/Nie można sprawdzić/);
@@ -126,7 +124,7 @@ describe('skrzynka KSeF: filtr już zapisanych faktur', () => {
 
   it('pytamy paczkami, żeby adres nie przekroczył limitu, i zapisujemy tylko nowe', async () => {
     const wszystkie = Array.from({ length: 250 }, (_, i) => faktura(i));
-    vi.mocked(queryReceivedInvoices).mockResolvedValue(wszystkie as never);
+    vi.mocked(queryReceivedInvoices).mockResolvedValue({ invoices: wszystkie, hwm: null } as never);
     db.existing = new Set([wszystkie[0]!.ksefNumber, wszystkie[120]!.ksefNumber, wszystkie[249]!.ksefNumber]);
 
     await runInboxPollTenant(DATA, ctx);
@@ -138,7 +136,7 @@ describe('skrzynka KSeF: filtr już zapisanych faktur', () => {
   });
 
   it('ta sama faktura dwa razy w jednej paczce z KSeF trafia do bazy raz', async () => {
-    vi.mocked(queryReceivedInvoices).mockResolvedValue([faktura(7), faktura(7), faktura(8)] as never);
+    vi.mocked(queryReceivedInvoices).mockResolvedValue({ invoices: [faktura(7), faktura(7), faktura(8)], hwm: null } as never);
 
     await runInboxPollTenant(DATA, ctx);
 
@@ -146,7 +144,7 @@ describe('skrzynka KSeF: filtr już zapisanych faktur', () => {
   });
 
   it('wszystko już zapisane — żadnego insertu', async () => {
-    vi.mocked(queryReceivedInvoices).mockResolvedValue([faktura(1)] as never);
+    vi.mocked(queryReceivedInvoices).mockResolvedValue({ invoices: [faktura(1)], hwm: null } as never);
     db.existing = new Set([faktura(1).ksefNumber]);
 
     await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ newlyAdded: 0 });
@@ -158,7 +156,7 @@ describe('skrzynka KSeF: sito nieznanego sprzedawcy', () => {
   // Recenzja ChatGPT nr 2 (25.09): zapytanie o znanych sprzedawców szło po
   // zapisie i widziało właśnie wstawione faktury — każdy wyglądał na znanego.
   it('„znany” to widziany PRZED tym przebiegiem, nie właśnie zapisany', async () => {
-    vi.mocked(queryReceivedInvoices).mockResolvedValue([faktura(1, '1111111111'), faktura(2, '2222222222')] as never);
+    vi.mocked(queryReceivedInvoices).mockResolvedValue({ invoices: [faktura(1, '1111111111'), faktura(2, '2222222222')], hwm: null } as never);
     db.sellerRows = [
       { id: 'dawna-faktura', seller_nip: '1111111111' },
       // Wiersze z bieżącego zapisu (atrapa nadaje im id-0, id-1):

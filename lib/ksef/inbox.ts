@@ -14,96 +14,108 @@ export interface InboxAuditContext {
   tenantId: string;
 }
 
-/**
- * Pobiera metadane faktur otrzymanych (subject2 = nabywca) z danego zakresu dat.
- * Obsługuje paginację automatycznie.
- */
-/**
- * Haczyk na każdą pobraną stronę.
- *
- * PO CO: bez utrwalania kursora przerwane pobieranie zaczyna od zera przy
- * następnym przebiegu — a jeśli okno dat zdążyło się przesunąć, część faktur
- * kosztowych NIGDY nie trafia do klienta. Brakujący koszt to zawyżony
- * podatek, o którym nie ma jak się dowiedzieć.
- */
-export interface InboxPageHook {
-  /** Token do wznowienia; `null` gdy to była ostatnia strona. */
-  onPage: (
-    invoices: InvoiceMetadata[],
-    continuationToken: string | null,
-  ) => Promise<void>;
-  /** Token z poprzedniego, przerwanego przebiegu. */
-  resumeToken?: string;
+/** Maksymalna strona `/invoices/query/metadata` (OpenAPI KSeF 2.0: 10–250). */
+export const INBOX_PAGE_SIZE = 250;
+
+/** Bezpiecznik: 400 stron × 250 = 100 tys. faktur w jednym oknie. */
+const MAX_REQUESTS = 400;
+
+export interface ReceivedInvoicesResult {
+  /** Bez dubli po numerze KSeF (zawężanie po `isTruncated` zwraca rekord graniczny). */
+  invoices: InvoiceMetadata[];
+  /**
+   * `permanentStorageHwmDate` z ostatniego zapytania: poniżej tej chwili KSeF
+   * gwarantuje komplet — tu zaczyna się następne okno. `null` = KSeF go nie
+   * podał i okna nie wolno przesunąć.
+   */
+  hwm: string | null;
 }
 
+/**
+ * Faktury otrzymane (subject2) z okna dat — scenariusz przyrostowy MF (AUD-18).
+ *
+ * Kontrakt `POST /invoices/query/metadata` (OpenAPI KSeF 2.0):
+ *   - data `PermanentStorage`, sortowanie `Asc`, `restrictToPermanentStorageHwmDate`
+ *     — wtedy `dateRange.to` nie wychodzi poza HWM, a HWM jest stały dla
+ *     wszystkich stron zapytania,
+ *   - strony przez `pageOffset` (indeks strony) i `pageSize`, dopóki `hasMore`,
+ *   - `isTruncated` (limit 10 000 rekordów) → nowe `from` od daty ostatniego
+ *     rekordu i `pageOffset = 0`.
+ * Wcześniejsza wersja czekała na `continuationToken`, którego ten endpoint
+ * nie zwraca, więc kończyła na pierwszej stronie (domyślnie 10 faktur).
+ */
 export async function queryReceivedInvoices(
   auth: KsefAuth,
   dateFrom: Date,
   dateTo: Date,
   env?: KsefEnvironment,
   auditContext?: InboxAuditContext,
-  pageHook?: InboxPageHook,
-): Promise<InvoiceMetadata[]> {
+): Promise<ReceivedInvoicesResult> {
   return ksefRateLimiter.enqueue(auth.nip, async () => {
     const authSession = await ksefSessionCache.getSession(auth, env);
     const accessToken = authSession.accessToken;
 
-    const allInvoices: InvoiceMetadata[] = [];
-    // Wznowienie po przerwanym przebiegu: token pochodzi z utrwalonego kursora.
-    let continuationToken: string | undefined = pageHook?.resumeToken;
+    const byNumber = new Map<string, InvoiceMetadata>();
+    let from = dateFrom.toISOString();
+    let pageOffset = 0;
+    let hwm: string | null = null;
 
-    do {
-      // UWAGA: KSeF 2.0 nie ma już filtru `Acquisition` (date-of-receipt) -
-      // API `/invoices/query/metadata` akceptuje tylko `Invoicing`/`Issue`.
-      // Polling pracuje z pewnym poślizgiem vs rzeczywiste nadanie w KSeF,
-      // ale w praktyce invoicingDate ≈ acquisitionDate (opóźnienie sekund).
+    for (let request = 0; ; request += 1) {
+      // Rzucamy zamiast przerywać: HWM się wtedy nie przesunie, a alarm
+      // zaległości skrzynki pokaże problem — urwane pobieranie byłoby ciche.
+      if (request >= MAX_REQUESTS) {
+        throw new Error(`KSeF: pobieranie skrzynki przekroczyło ${MAX_REQUESTS} zapytań w jednym oknie`);
+      }
       const req: QueryInvoicesRequest = {
         subjectType: 'subject2',
         dateRange: {
-          dateType: 'Invoicing',
-          from: dateFrom.toISOString(),
+          dateType: 'PermanentStorage',
+          from,
           to: dateTo.toISOString(),
+          restrictToPermanentStorageHwmDate: true,
         },
       };
-
-      const headers: Record<string, string> = {};
-      if (continuationToken) {
-        headers['x-continuation-token'] = continuationToken;
-      }
+      const params = new URLSearchParams({
+        pageOffset: String(pageOffset),
+        pageSize: String(INBOX_PAGE_SIZE),
+        sortOrder: 'Asc',
+      });
 
       const response: QueryInvoicesResponse = await ksefFetch<QueryInvoicesResponse>(
-        '/invoices/query/metadata',
+        `/invoices/query/metadata?${params.toString()}`,
         {
           method: 'POST',
           accessToken,
           body: req,
-          headers,
           env,
           audit: auditContext
             ? {
                 tenantId: auditContext.tenantId,
                 action: 'inbox.poll',
-                metadata: {
-                  dateFrom: dateFrom.toISOString(),
-                  dateTo: dateTo.toISOString(),
-                  hasContinuation: Boolean(continuationToken),
-                },
+                metadata: { dateFrom: from, dateTo: dateTo.toISOString(), pageOffset },
               }
             : undefined,
-        }
+        },
       );
 
-      allInvoices.push(...response.invoices);
-      continuationToken = response.continuationToken;
+      const page = response.invoices ?? [];
+      for (const inv of page) byNumber.set(inv.ksefNumber, inv);
+      hwm = response.permanentStorageHwmDate ?? null;
 
-      // Utrwalenie PO zapisaniu strony, nie przed: token bez zapisanych
-      // danych wskazywałby na miejsce, do którego tak naprawdę nie doszliśmy.
-      if (pageHook) {
-        await pageHook.onPage(response.invoices, continuationToken ?? null);
+      if (!response.hasMore) break;
+      const last = page[page.length - 1];
+      if (response.isTruncated) {
+        if (!last?.permanentStorageDate || Date.parse(last.permanentStorageDate) <= Date.parse(from)) {
+          throw new Error('KSeF: wynik skrzynki ucięty, a okna nie da się zawęzić');
+        }
+        from = last.permanentStorageDate;
+        pageOffset = 0;
+      } else {
+        pageOffset += 1;
       }
-    } while (continuationToken);
+    }
 
-    return allInvoices;
+    return { invoices: [...byNumber.values()], hwm };
   });
 }
 

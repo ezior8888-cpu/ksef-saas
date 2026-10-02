@@ -88,7 +88,9 @@ registerJob<Record<string, never>>({
 registerJob<Parameters<typeof runInboxPollTenant>[0]>({
   queue: 'inbox.poll.tenant',
   maxRetries: 2,
-  groupConcurrency: 3, // per NIP
+  // Jeden przebieg na NIP (`groupId` z fan-outu): stan skrzynki (HWM) jest
+  // per firma, a równoległe przebiegi dublowały powiadomienia (AUD-91).
+  groupConcurrency: 1,
   handler: (data, ctx) => runInboxPollTenant(data, ctx),
 });
 
