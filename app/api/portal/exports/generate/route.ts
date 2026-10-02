@@ -10,6 +10,7 @@ import { logAuditSystem } from '@/lib/audit/log-system';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
 import { generateJpkFa, JpkFaCorrectionNotSupportedError } from '@/lib/exports/jpk-fa-generator';
+import { assertJpkMatchesSchema, JpkSchemaError } from '@/lib/exports/jpk-schema-check';
 import { MissingTaxOfficeError, readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -139,9 +140,18 @@ export async function POST(req: NextRequest) {
           periodEnd,
           issuedInvoices: data.issuedInvoices,
         });
+        await assertJpkMatchesSchema('JPK_FA', xml);
       } catch (e) {
         if (e instanceof JpkFaCorrectionNotSupportedError) {
           return NextResponse.json({ error: e.message }, { status: 422 });
+        }
+        if (e instanceof JpkSchemaError) {
+          // Błąd generatora, nie danych klienta — zgłoszenie do nas, bez treści pliku.
+          const errorId = Sentry.captureException(new Error(`${e.kind}: plik niezgodny z XSD MF`), {
+            tags: { area: 'accountant.portal_export', reason: 'jpk_xsd' },
+            extra: { errors: e.details },
+          });
+          return NextResponse.json({ error: e.message, errorId }, { status: 422 });
         }
         throw e;
       }
