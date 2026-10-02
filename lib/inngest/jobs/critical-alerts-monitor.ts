@@ -40,24 +40,36 @@ const ALERT_DEDUP_TTL_SECONDS = 30 * 60; // 30 min
 const ALERT_DEDUP_KEY_PREFIX = 'alerts:critical:lastsent';
 
 /**
+ * Znaczniki „wysłano” w pamięci procesu — bez Redisa (cała produkcja) cache
+ * nic nie pamiętał i ten sam alarm szedł co 5 minut (N2). Monitor chodzi
+ * w jednym, długo żyjącym procesie workera, więc pamięć procesu wystarcza;
+ * restart workera najwyżej powtórzy alarm raz.
+ */
+const deliveredLocally = new Map<string, number>();
+
+/**
  * Sprawdza czy ten typ alertu wysyłaliśmy w ciągu ostatnich 30 min.
  * Jeśli tak — pomiń. Nowy znacznik zapisujemy dopiero po potwierdzonym 2xx.
  */
-async function shouldSendAlert(alertKey: string): Promise<boolean> {
+export async function shouldSendAlert(alertKey: string): Promise<boolean> {
   const cacheKey = `${ALERT_DEDUP_KEY_PREFIX}:${alertKey}`;
+  const until = deliveredLocally.get(cacheKey);
+  if (until !== undefined && until > Date.now()) return false;
   const existing = await cacheGet<string>(cacheKey);
   return !existing;
 }
 
 /** Cache dedup only after the critical transport confirms a 2xx response. */
-async function markAlertDelivered(
+export async function markAlertDelivered(
   alertKey: string,
   ttlSeconds: number = ALERT_DEDUP_TTL_SECONDS,
 ): Promise<void> {
   const cacheKey = ALERT_DEDUP_KEY_PREFIX + ':' + alertKey;
   // Cache is fail-soft: a failed write can duplicate a later alert, but never
   // suppress a retry of an undelivered one.
-  await cacheSet(cacheKey, new Date().toISOString(), ttlSeconds);
+  const stored = await cacheSet(cacheKey, new Date().toISOString(), ttlSeconds);
+  // Cache niczego nie zapisał (brak Redisa albo jego awaria) — pamięć procesu (N2).
+  if (stored === false) deliveredLocally.set(cacheKey, Date.now() + ttlSeconds * 1000);
 }
 interface AlertCheckResult {
   type: string;
