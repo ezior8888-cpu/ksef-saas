@@ -131,6 +131,12 @@ export interface CorrectionInvoiceData extends InvoiceCommonFields {
   linesBefore?: InvoiceLine[]; // pozycje z faktury pierwotnej
   linesAfter?: InvoiceLine[]; // pozycje po korekcie
 
+  /**
+   * Adnotacje faktury pierwotnej przejmowane przez korektę (AUD-23):
+   * P_16 metoda kasowa, P_18A mechanizm podzielonej płatności (1 = tak, 2 = nie).
+   */
+  annotations?: { cashMethod?: 1 | 2; splitPayment?: 1 | 2 };
+
   // Korekty typu amount_change (zwroty/rabaty)
   amountChange?: {
     netDelta: number; // może być ujemne (zwrot)

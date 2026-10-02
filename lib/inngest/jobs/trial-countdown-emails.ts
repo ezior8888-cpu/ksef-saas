@@ -10,7 +10,10 @@
  *
  * Idempotency: `billing_notifications` z UNIQUE(entity_id, kind). INSERT
  * przed wysyłką = duplikat się nie wpisze, więc kolejne dni nie wyślą
- * tego samego stage.
+ * tego samego stage. Wpis „sent” zamyka stage; „failed”/„sending” (błąd
+ * Resend, przerwany przebieg) wolno przejąć ponownie — do 02.10 zostawał
+ * na zawsze i mail nie wychodził nigdy (AUD-87). Przed dublem przy
+ * przejęciu chroni klucz idempotencji Resend (`trial/<sub>/<stage>`).
  *
  * Email recipient: właściciel pierwszej organizacji (owner role) — bierzemy
  * z `memberships` najwcześniejszego `joined_at` z `role='owner'`.
@@ -32,6 +35,8 @@ interface TrialingSubscription {
   tenant_id: string;
   plan: 'monthly' | 'annual';
   trial_end: string | null;
+  /** Anulowana w trialu — nie zostanie obciążona, mail by kłamał (AUD-75). */
+  cancel_at_period_end?: boolean | null;
 }
 
 const PLAN_LABELS: Record<TrialingSubscription['plan'], { plan: string; price: string }> = {
@@ -91,7 +96,7 @@ export async function runTrialCountdownEmails({ step, logger }: JobContext) {
         };
       })
         .from('subscriptions')
-        .select('id, tenant_id, plan, trial_end')
+        .select('id, tenant_id, plan, trial_end, cancel_at_period_end')
         .eq('status', 'trialing')
         .not('trial_end', 'is', 'null')
         .lte('trial_end', cutoffIso));
@@ -107,9 +112,17 @@ export async function runTrialCountdownEmails({ step, logger }: JobContext) {
     let sent = 0;
     let skipped = 0;
     let failed = 0;
+    // Błędy wysyłki (nie odmowy z preferencji) — zadanie kończy się błędem,
+    // żeby kolejka je ponowiła; wysłane wcześniej stage'e są już „sent”.
+    let toRetry = 0;
 
     for (const sub of subscriptions) {
       if (!sub.trial_end) continue;
+      // Mail mówi „karta zostanie obciążona” — przy anulowanym trialu to nieprawda.
+      if (sub.cancel_at_period_end) {
+        skipped++;
+        continue;
+      }
       const stage = pickStage(new Date(sub.trial_end));
       if (!stage) {
         skipped++;
@@ -127,11 +140,16 @@ export async function runTrialCountdownEmails({ step, logger }: JobContext) {
         else failed++;
       } catch (e) {
         failed++;
+        toRetry++;
         Sentry.captureException(e, {
           tags: { area: 'billing.trial-countdown' },
           extra: { subscriptionId: sub.id, stage: stage.kind },
         });
       }
+    }
+
+    if (toRetry > 0) {
+      throw new Error(`trial-countdown: ${toRetry} wysyłek do ponowienia`);
     }
 
     return { processed: subscriptions.length, sent, skipped, failed };
@@ -190,19 +208,47 @@ async function dispatchTrialEmail(
   });
 
   if (claimRes.error) {
-    if (claimRes.error.code === '23505') return 'duplicate';
-    throw new Error(`notification claim failed: ${claimRes.error.message}`);
+    if (claimRes.error.code !== '23505') {
+      throw new Error(`notification claim failed: ${claimRes.error.message}`);
+    }
+    // Wpis już jest. „sent” = stage zamknięty; nieudana albo przerwana
+    // wysyłka — przejmujemy ją warunkowo (tylko z tych stanów).
+    const { data: retaken, error: retakeError } = await supabase
+      .from('billing_notifications')
+      .update({ status: 'sending', recipient_email: email, error_message: null })
+      .eq('entity_id', sub.id)
+      .eq('kind', stage.kind)
+      .in('status', ['failed', 'sending'])
+      .select('id');
+    if (retakeError) throw new Error(`notification retake failed: ${retakeError.message}`);
+    if (!retaken || retaken.length === 0) return 'duplicate';
   }
 
-  // 4. Wysyłka.
+  // 4. Wysyłka. Klucz zależy od stage'u, nie od próby — przejęcie wpisu
+  //    „sending” po wysyłce, której odpowiedź zginęła, nie zdubluje maila.
   const labels = PLAN_LABELS[sub.plan];
-  const result = await sendTrialEndingEmail(email, {
-    tenantName: tenant?.name ?? email,
-    daysRemaining: stage.days,
-    trialEndDate: fmtDate(sub.trial_end!),
-    planLabel: labels.plan,
-    monthlyPriceLabel: labels.price,
-  });
+  let result: Awaited<ReturnType<typeof sendTrialEndingEmail>>;
+  try {
+    result = await sendTrialEndingEmail(
+      email,
+      {
+        tenantName: tenant?.name ?? email,
+        daysRemaining: stage.days,
+        trialEndDate: fmtDate(sub.trial_end!),
+        planLabel: labels.plan,
+        monthlyPriceLabel: labels.price,
+      },
+      { idempotencyKey: `trial/${sub.id}/${stage.kind}` },
+    );
+  } catch (e) {
+    // Zdjęcie blokady: następna próba może przejąć wpis i wysłać.
+    await supabase
+      .from('billing_notifications')
+      .update({ status: 'failed', error_message: 'send-error' })
+      .eq('entity_id', sub.id)
+      .eq('kind', stage.kind);
+    throw e;
+  }
 
   // 5. Update status.
   await supabase

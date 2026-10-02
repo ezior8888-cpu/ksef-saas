@@ -3,6 +3,20 @@
 
 import PDFDocument from 'pdfkit';
 
+/**
+ * Rekompensata za koszty odzyskiwania należności (art. 10 ust. 1 ustawy
+ * o przeciwdziałaniu nadmiernym opóźnieniom w transakcjach handlowych):
+ * 40 EUR do 5 000 zł, 70 EUR powyżej 5 000 i poniżej 50 000 zł, 100 EUR od
+ * 50 000 zł. Do 02.10 pismo podawało 40 EUR przy każdej kwocie (AUD-99).
+ * Tylko w transakcji handlowej — pismo dodaje ją, gdy dłużnik ma NIP.
+ * [DO WERYFIKACJI — Igor: kwota świadczenia = brutto faktury]
+ */
+export function recoveryCompensationEur(amountPln: number): 40 | 70 | 100 {
+  if (amountPln >= 50_000) return 100;
+  if (amountPln > 5_000) return 70;
+  return 40;
+}
+
 export interface DemandLetterData {
   // Wystawca (Twoja firma)
   sellerName: string;
@@ -189,8 +203,8 @@ export async function generateDemandLetterPdf(
 
 - kosztów postępowania sądowego
 - odsetek ustawowych za opóźnienie w transakcjach handlowych
-- kosztów zastępstwa procesowego (zgodnie z art. 98 KPC)
-- kosztów rekompensaty za odzyskiwanie należności (40 EUR zgodnie z art. 10 ustawy o terminach zapłaty)
+- kosztów zastępstwa procesowego (zgodnie z art. 98 KPC)${data.buyerNip ? `
+- rekompensaty za koszty odzyskiwania należności (${recoveryCompensationEur(data.grossAmount)} EUR zgodnie z art. 10 ust. 1 ustawy o przeciwdziałaniu nadmiernym opóźnieniom w transakcjach handlowych)` : ''}
 
 Mam nadzieję, że niniejsze wezwanie pozwoli polubownie zakończyć sprawę.`;
 

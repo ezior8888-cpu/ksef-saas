@@ -140,8 +140,8 @@ Diagram flow per domena: [ksef-flow](./architecture/ksef-flow.md),
 1. `supabase/migrations/00056_<nazwa>.sql` (kolejny numer).
 2. `CREATE TABLE` + `ENABLE ROW LEVEL SECURITY` + polityka RLS.
 3. Indeksy (przemyśl hot-path).
-4. `pnpm db:push:prod:dry` lokalnie → sprawdź DIFF.
-5. Solo founder push'uje przez `pnpm db:push:prod` w sesji deploy.
+4. Migrację na produkcję wgrywa Bartosz ręcznie — procedura w `AGENTS.md`, „Wgrywanie migracji na produkcję” (`pnpm db:push:prod` NIE działa: to pozostałość po Supabase Cloud).
+5. Najpierw migracja, potem wdrożenie kodu (AGENTS.md, „Kolejność przy pełnym wydaniu”).
 
 ### Dodaj nowy Inngest job
 
@@ -163,7 +163,7 @@ pnpm dev / build / start         # Next
 pnpm typecheck / lint            # Sanity
 pnpm test / test:vitest / test:e2e
 pnpm test:rls                    # Test izolacji tenantów
-pnpm db:push:prod:dry / :prod    # Migracje
+# migracje na produkcję: AGENTS.md (`pnpm db:push:prod` NIE działa)
 pnpm inngest:dev                 # Inngest local dashboard
 pnpm load:smoke / :run / :stress:* / perf:lighthouse   # Loadtesty (Faza 34)
 pnpm ksef:test-auth / :test-token / :submit-full       # KSeF smoke

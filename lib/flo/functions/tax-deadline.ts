@@ -1,3 +1,7 @@
+// NIEAKTYWNE (AUD-115): moduł agenta FLO bez importera w kodzie produkcyjnym —
+// na produkcji nie działa. Podpięcie = przegląd i zdjęcie znacznika
+// (pilnuje tests/unit/flo-nieaktywne.test.ts).
+
 /**
  * T-01 — kalendarz obowiązków z kwotą (krok 36 planu).
  *

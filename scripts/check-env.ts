@@ -86,8 +86,8 @@ const SPECS: VarSpec[] = [
   { name: 'ANTHROPIC_SUPPORT_MODEL', feature: 'AI (OCR + chat)', level: 'optional', note: 'default w kodzie' },
 
   // ── Cache + rate limiting (Upstash → Valkey po Etapie 4) ──
-  { name: 'UPSTASH_REDIS_REST_URL', feature: 'Cache + limity (Redis)', level: 'required', note: 'bez tego rate-limit auth jest FAIL-OPEN (brak limitów!)' },
-  { name: 'UPSTASH_REDIS_REST_TOKEN', feature: 'Cache + limity (Redis)', level: 'required' },
+  { name: 'UPSTASH_REDIS_REST_URL', feature: 'Cache + limity (Redis)', level: 'optional', note: 'poza produkcją od migracji na Hetznera — cache passthrough, limity prób w pamięci procesu (AUD-62)' },
+  { name: 'UPSTASH_REDIS_REST_TOKEN', feature: 'Cache + limity (Redis)', level: 'optional' },
 
   // ── Ochrona przed botami ──
   { name: 'NEXT_PUBLIC_TURNSTILE_SITE_KEY', feature: 'Anty-bot (Turnstile)', level: 'required', note: 'bez tego rejestracja działa BEZ ochrony (fail-open, cicho)' },
@@ -98,9 +98,9 @@ const SPECS: VarSpec[] = [
   { name: 'NEXT_PUBLIC_SENTRY_DSN', feature: 'Monitoring błędów', level: 'required' },
   { name: 'SENTRY_ORG', feature: 'Monitoring błędów', level: 'optional', note: 'source maps przy buildzie' },
   { name: 'SENTRY_PROJECT', feature: 'Monitoring błędów', level: 'optional' },
-  { name: 'SLACK_WEBHOOK_URGENT', feature: 'Alerty Slack', level: 'required', note: 'krytyczne alerty (Faza 27) — bez tego brak powiadomień o awariach' },
-  { name: 'SLACK_WEBHOOK_BUGS', feature: 'Alerty Slack', level: 'required' },
-  { name: 'SLACK_WEBHOOK_METRICS', feature: 'Alerty Slack', level: 'required' },
+  { name: 'SLACK_WEBHOOK_URGENT', feature: 'Alerty Slack', level: 'optional', note: 'alarmy krytyczne idą do Slacka LUB Telegrama — potrzebny przynajmniej jeden kanał' },
+  { name: 'SLACK_WEBHOOK_BUGS', feature: 'Alerty Slack', level: 'optional' },
+  { name: 'SLACK_WEBHOOK_METRICS', feature: 'Alerty Slack', level: 'optional' },
   { name: 'TELEGRAM_BOT_TOKEN', feature: 'Alerty Telegram', level: 'optional', note: 'token z @BotFather; kopia alertów krytycznych + raport dzienny (lib/alerts/telegram.ts)' },
   { name: 'TELEGRAM_ALERT_CHAT_IDS', feature: 'Alerty Telegram', level: 'optional', note: 'ID czatów prywatnych po przecinku; bez tego kanał wyłączony' },
   { name: 'OPS_HEARTBEAT_URL', feature: 'Heartbeat workera', level: 'optional', note: 'URL pinga Uptime Kuma push / Healthchecks.io — tylko worker (lib/jobs/heartbeat.ts)' },
@@ -120,6 +120,9 @@ const SPECS: VarSpec[] = [
   // ── Joby w tle (pg-boss — Etap 7 migracji) ──
   { name: 'JOBS_BACKEND', feature: 'Joby w tle (pg-boss)', level: 'required', note: 'pgboss na produkcji (apka i worker); inngest tylko przy rollbacku. Brak = zlecenia odrzucane, worker nie startuje' },
   { name: 'DATABASE_URL', feature: 'Joby w tle (pg-boss)', level: 'required', note: 'Postgres db-1 przez sieć prywatną (worker + enqueue przy JOBS_BACKEND=pgboss)' },
+  { name: 'WORKER_HEALTH_PORT', feature: 'Joby w tle (pg-boss)', level: 'optional', note: 'tylko worker; port healthchecku Coolify (domyślnie 8080)' },
+  { name: 'WORKER_DISABLE_SCHEDULES', feature: 'Joby w tle (pg-boss)', level: 'optional', note: 'tylko worker; "true" wyłącza crony i czyści zapisany harmonogram' },
+  { name: 'APP_ENV', feature: 'Rdzeń aplikacji', level: 'optional', note: 'serwerowy odpowiednik NEXT_PUBLIC_APP_ENV dla bramek bezpieczeństwa (lib/security/environment.ts)' },
 
   // ── ODŁOŻONE świadomie (nie blokują startu) ──
   { name: 'STRIPE_SECRET_KEY', feature: 'Billing (Stripe)', level: 'deferred', note: 'Faza 37 — wymaga firmy; UI degraduje gracefully' },

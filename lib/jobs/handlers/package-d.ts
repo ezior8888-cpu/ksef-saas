@@ -55,6 +55,8 @@ registerJob<Parameters<typeof runSubmitInvoice>[0]>({
   // używa job na Inngest — jedno źródło prawdy dla obu backendów.
   getDelayMs: (attempt) => parseDurationMs(getKsefRetryDelay(attempt)),
   groupConcurrency: KSEF_TENANT_CONCURRENCY_LIMIT, // limit per tenant
+  // Kilka firm naraz (AUD-36); per firma pilnuje groupConcurrency (groupId = tenantId).
+  localConcurrency: 5,
   handler: (data, ctx) => runSubmitInvoice(data, ctx),
   // Po wyczerpaniu prób: rejected / offline_queued / failed (Offline24).
   onExhausted: (error, data, ctx) => onSubmitInvoiceExhausted(error, data, ctx),
@@ -66,7 +68,8 @@ registerJob<Parameters<typeof runSubmitInvoice>[0]>({
 registerJob<Parameters<typeof runDownloadUpo>[0]>({
   queue: 'invoice.upo.requested',
   maxRetries: 5,
-  groupConcurrency: 3, // per NIP (jak concurrency w Inngest)
+  groupConcurrency: 3, // per NIP (jak concurrency w Inngest) — groupId = NIP (AUD-92)
+  localConcurrency: 3, // AUD-36
   handler: (data, ctx) => runDownloadUpo(data, ctx),
 });
 
@@ -91,6 +94,8 @@ registerJob<Parameters<typeof runInboxPollTenant>[0]>({
   // Jeden przebieg na NIP (`groupId` z fan-outu): stan skrzynki (HWM) jest
   // per firma, a równoległe przebiegi dublowały powiadomienia (AUD-91).
   groupConcurrency: 1,
+  // Kilka skrzynek naraz zamiast firma po firmie (AUD-36).
+  localConcurrency: 4,
   handler: (data, ctx) => runInboxPollTenant(data, ctx),
 });
 

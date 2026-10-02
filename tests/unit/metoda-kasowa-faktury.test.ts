@@ -43,6 +43,8 @@ describe('adnotacja metody kasowej', () => {
     ['metoda kasowa', null, true, { cashMethod: 1 }],
     ['memoriałowa', null, false, undefined],
     ['firma zwolniona — nie dotyczy', 'art. 113 ust. 1 ustawy o VAT', true, undefined],
+    // AUD-68 (I2): zwolnienie przedmiotowe z art. 43 nie wyklucza metody kasowej.
+    ['podstawa z art. 43 — metoda kasowa zostaje', 'art. 43 ust. 1 pkt 19 ustawy o VAT', true, { cashMethod: 1 }],
   ])('%s', (_opis, basis, cash, expected) => {
     expect(
       buildInvoiceAnnotations({ lines: vat23, vatExemptionBasis: basis, splitPayment: false, cashMethod: cash }),

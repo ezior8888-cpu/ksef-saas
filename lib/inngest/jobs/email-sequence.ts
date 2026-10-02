@@ -16,6 +16,14 @@ import {
 const APP_BASE = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 
 /**
+ * Maile o produkcie z sekwencji próbnej (dzień 1, 4, 8): kategoria
+ * `product_updates` — sprawdzenie wypisu i nagłówek List-Unsubscribe.
+ * Do 02.10 szły jako transakcyjne, więc wypis ich nie zatrzymywał (AUD-77).
+ * Powitanie po rejestracji zostaje transakcyjne.
+ */
+const PRODUCT_EMAIL = (userId: string) => ({ category: 'product_updates' as const, userId });
+
+/**
  * Firma, której danych wolno użyć w mailu: `last_active_tenant_id` TYLKO
  * przy aktywnym członkostwie. Odebranie dostępu nie czyści tego wskaźnika,
  * a mail czyta bazę kluczem serwisowym (bez RLS) — bez tej bramki były
@@ -232,6 +240,7 @@ export async function runEmailDay1(data: Parameters<typeof emailTrialDay1.create
           to: email,
           subject: 'Wystawisz pierwszą fakturę w 30 sekund. Krok po kroku.',
           html: DAY_1_HELP_TEMPLATE(firstName),
+          ...PRODUCT_EMAIL(userId),
         });
       });
     } else {
@@ -240,6 +249,7 @@ export async function runEmailDay1(data: Parameters<typeof emailTrialDay1.create
           to: email,
           subject: '✓ Pierwsza faktura wysłana. Teraz spróbuj OCR.',
           html: DAY_1_CONGRATS_TEMPLATE(firstName),
+          ...PRODUCT_EMAIL(userId),
         });
       });
     }
@@ -271,6 +281,7 @@ export async function runEmailDay4(data: Parameters<typeof emailTrialDay4.create
         to: email,
         subject: '[Demo 2 min] Zdjęcie paragonu → wpis do KPiR',
         html: DAY_4_OCR_TEMPLATE(firstName),
+        ...PRODUCT_EMAIL(userId),
       });
     });
 
@@ -327,6 +338,7 @@ export async function runEmailDay8(data: Parameters<typeof emailTrialDay8.create
         to: email,
         subject: `${firstName}, w 8 dni zaoszczędziłeś ${hoursSaved}h pracy`,
         html: DAY_8_STATS_TEMPLATE(firstName, totalDocs, hoursSaved),
+        ...PRODUCT_EMAIL(userId),
       });
     });
 

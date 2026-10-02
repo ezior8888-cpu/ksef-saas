@@ -12,21 +12,26 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/validation/cache', () => ({ validateNipCached: state.validate, validateMultipleNips: vi.fn() }));
-vi.mock('@/lib/supabase/active-org', () => ({ getActiveOrgIdFromCookies: async () => 't1' }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: vi.fn() }));
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: { id: 'u1' } } }) },
-    from: () => {
-      const q: Record<string, unknown> = {};
-      Object.assign(q, {
-        select: () => q,
-        eq: () => q,
-        single: async () => ({ data: { id: 'k1', nip: '5260001246', tenant_id: 't1' }, error: null }),
-        update: (patch: Record<string, unknown>) => { state.updates.push(patch); return q; },
-        then: (ok: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(ok),
-      });
-      return q;
+// Akcja wchodzi przez requireUserAndActiveOrg (AUD-58) — tu firma t1 po MFA.
+vi.mock('@/lib/supabase/auth-context', () => ({
+  ActionAuthError: class ActionAuthError extends Error {},
+  requireUserAndActiveOrg: async () => ({
+    user: { id: 'u1' },
+    tenantId: 't1',
+    role: 'owner',
+    supabase: {
+      from: () => {
+        const q: Record<string, unknown> = {};
+        Object.assign(q, {
+          select: () => q,
+          eq: () => q,
+          single: async () => ({ data: { id: 'k1', nip: '5260001246', tenant_id: 't1' }, error: null }),
+          update: (patch: Record<string, unknown>) => { state.updates.push(patch); return q; },
+          then: (ok: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(ok),
+        });
+        return q;
+      },
     },
   }),
 }));

@@ -94,6 +94,24 @@ export async function requireUserAndActiveOrg(): Promise<AuthContext> {
   };
 }
 
+/**
+ * Zalogowany użytkownik po drugim kroku MFA (gdy go ma), bez organizacji —
+ * dla akcji na danych samego użytkownika (np. własne rozmowy z pomocą).
+ * Sam `getUser()` przepuszczał sesję AAL1 konta z włączonym MFA (AUD-58).
+ */
+export async function requireVerifiedUser(): Promise<Pick<AuthContext, 'supabase' | 'user'>> {
+  const supabase = await createClient();
+  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  if (!state) {
+    throw new ActionAuthError('Nie udało się zweryfikować sesji. Zaloguj się ponownie.');
+  }
+  if (state.status === 'unauthenticated') throw new ActionAuthError('Niezalogowany');
+  if (state.status === 'challenge_required') {
+    throw new ActionAuthError('Wymagana weryfikacja dwuetapowa');
+  }
+  return { supabase, user: { id: state.user.id, email: state.user.email ?? null } };
+}
+
 /** Alias zachowany dla zgodności z istniejącymi wywołaniami w kodzie. */
 export const requireUserAndTenant = requireUserAndActiveOrg;
 

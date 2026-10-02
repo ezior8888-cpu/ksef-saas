@@ -3,8 +3,11 @@
 import { revalidatePath } from 'next/cache';
 
 import { isAllowedPushEndpoint, isValidPushKeys } from '@/lib/push/endpoint';
-import { createClient } from '@/lib/supabase/server';
-import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
+import {
+  ActionAuthError,
+  requireUserAndActiveOrg,
+  requireVerifiedUser,
+} from '@/lib/supabase/auth-context';
 
 interface SubscribeInput {
   endpoint: string;
@@ -16,16 +19,16 @@ interface SubscribeInput {
 }
 
 export async function subscribePushAction(input: SubscribeInput) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false as const, error: 'Brak autoryzacji' };
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    return { success: false as const, error: 'Brak aktywnej organizacji' };
+  // Firma z potwierdzonego członkostwa, nie z samego ciasteczka (AUD-58):
+  // powiadomienia `sendPushToTenant` idą do subskrypcji z tym `tenant_id`.
+  let ctx: Awaited<ReturnType<typeof requireUserAndActiveOrg>>;
+  try {
+    ctx = await requireUserAndActiveOrg();
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { success: false as const, error: e.message };
+    throw e;
   }
+  const { supabase, user, tenantId } = ctx;
 
   // AUD-61: serwer wysyła na ten adres — tylko usługi push przeglądarek.
   if (!isAllowedPushEndpoint(input.endpoint) || !isValidPushKeys(input.p256dh, input.auth)) {
@@ -58,11 +61,9 @@ export async function subscribePushAction(input: SubscribeInput) {
 }
 
 export async function unsubscribePushAction(endpoint: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false as const };
+  const auth = await verifiedUserOrNull();
+  if (!auth) return { success: false as const };
+  const { supabase, user } = auth;
 
   await supabase
     .from('push_subscriptions')
@@ -92,11 +93,9 @@ export async function updatePushPreferencesAction(
     notify_inbox_new: boolean;
   }>,
 ) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false as const };
+  const auth = await verifiedUserOrNull();
+  if (!auth) return { success: false as const };
+  const { supabase, user } = auth;
 
   // AUD-61: tylko pola preferencji — akcja przepuszczała dowolne kolumny.
   const allowed = Object.fromEntries(
@@ -114,4 +113,14 @@ export async function updatePushPreferencesAction(
 
   revalidatePath('/settings/notifications');
   return { success: true as const };
+}
+
+/** Sesja po drugim kroku MFA (gdy konto je ma) — nie sam `getUser()` (AUD-58). */
+async function verifiedUserOrNull() {
+  try {
+    return await requireVerifiedUser();
+  } catch (e) {
+    if (e instanceof ActionAuthError) return null;
+    throw e;
+  }
 }

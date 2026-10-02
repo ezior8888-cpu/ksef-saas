@@ -14,6 +14,7 @@
  */
 
 import { describeMissingRate, stampRate, type RateLookup, type RateStamp } from '@/lib/flo/nbp';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 export const HOME_CURRENCY = 'PLN';
 
@@ -49,7 +50,7 @@ export function documentCurrency(doc: Pick<DocumentAmounts, 'currency'>): string
 }
 
 function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+  return roundToCents(n);
 }
 
 function plMoney(n: number, digits = 2): string {

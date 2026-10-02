@@ -22,6 +22,7 @@ import type { JobContext } from '@/lib/jobs/registry';
 import { computeFingerprint } from '@/lib/flo/fingerprint';
 import { buildChaseProposal } from '@/lib/flo/functions/payment-chase';
 import { createProposal } from '@/lib/flo/proposals';
+import { createAdminClient } from '@/lib/supabase/admin';
 import {
   decideNextReminder,
   findInvoicesRequiringReminders,
@@ -31,7 +32,7 @@ import {
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
  */
-export async function runReminderScheduler({ step }: JobContext) {
+export async function runReminderScheduler({ step, logger }: JobContext) {
   const candidates = await step.run('find-candidates', async () => {
     return findInvoicesRequiringReminders();
   });
@@ -40,10 +41,19 @@ export async function runReminderScheduler({ step }: JobContext) {
     return { processed: 0, proposed: 0, message: 'Brak kandydatów' };
   }
 
+  // Firmy z włączonym Wkurzaczem — jedno zapytanie zamiast pytania o
+  // ustawienia przy każdej z setek faktur co godzinę (AUD-89). Decyzja per
+  // faktura i tak sprawdza ustawienia jeszcze raz; tu tylko odsiew.
+  const enabledTenants = await step.run('load-enabled-tenants', () =>
+    readEnabledTenants([...new Set(candidates.map((c) => c.tenant_id))]),
+  );
+  const enabled = new Set(enabledTenants);
+
   let proposedCount = 0;
   const errors: Array<{ invoiceId: string; error: string }> = [];
 
   for (const invoice of candidates) {
+    if (!enabled.has(invoice.tenant_id)) continue;
     try {
       const decision = await step.run(`decide-${invoice.id}`, async () => {
         return decideNextReminder(invoice);
@@ -95,11 +105,23 @@ export async function runReminderScheduler({ step }: JobContext) {
 
       if (created) proposedCount++;
     } catch (e) {
-      errors.push({
+      const error = e instanceof Error ? e.message : 'Unknown';
+      errors.push({ invoiceId: invoice.id, error });
+      // Do 02.10 błąd był tylko liczony — propozycja ponaglenia nie
+      // powstawała, a w logach nie było śladu dlaczego.
+      logger.warn('Nie udało się przygotować propozycji ponaglenia', {
         invoiceId: invoice.id,
-        error: e instanceof Error ? e.message : 'Unknown',
+        tenantId: invoice.tenant_id,
+        error,
       });
     }
+  }
+
+  if (errors.length > 0) {
+    logger.error('Scheduler ponagleń: faktury z błędem', {
+      errors: errors.length,
+      processed: candidates.length,
+    });
   }
 
   return {
@@ -127,6 +149,26 @@ export const reminderSchedulerJob = inngest.createFunction(
 // dla tekstu, progów i bezpieczników. Tutaj zostaje wyłącznie to, czego
 // scheduler potrzebuje do wyliczeń.
 // ═══════════════════════════════════════════════════════════════
+
+/** Lista uczestnicząca w odsiewie musi być pełna: błąd odczytu rzuca. */
+const SETTINGS_CHUNK = 100;
+
+async function readEnabledTenants(tenantIds: string[]): Promise<string[]> {
+  const supabase = createAdminClient();
+  const out: string[] = [];
+  for (let i = 0; i < tenantIds.length; i += SETTINGS_CHUNK) {
+    const { data, error } = await supabase
+      .from('reminder_settings')
+      .select('tenant_id')
+      .in('tenant_id', tenantIds.slice(i, i + SETTINGS_CHUNK))
+      .eq('enabled', true);
+    // „Nie wiem, kto ma włączone” to nie „nikt” — inaczej awaria bazy
+    // wyglądałaby jak spokojna godzina bez ponagleń.
+    if (error) throw new Error(`Nie można odczytać ustawień ponagleń: ${error.message}`);
+    for (const row of (data ?? []) as Array<{ tenant_id: string }>) out.push(row.tenant_id);
+  }
+  return out;
+}
 
 function daysOverdue(dueDate: string | null): number {
   if (!dueDate) return 0;

@@ -207,7 +207,7 @@ describe('UPO retry cron boundaries', () => {
     tables.upo_receipts = [receipt({ ksef_number }), receipt({ id: OTHER, invoice_id: OTHER })];
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ dispatched: 1, quarantined: 1 });
     expect(tables.upo_receipts[0].last_error).toBe(UPO_IDENTITY_MISMATCH);
-    expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [{ name: 'invoice/upo.requested', data: { ...event, invoiceId: OTHER } }]);
+    expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [{ name: 'invoice/upo.requested', groupId: event.nip, data: { ...event, invoiceId: OTHER } }]);
   });
   it('lets a valid receipt past a full malformed batch on the following run', async () => {
     tables.invoices = [invoice(), invoice({ id: OTHER })];
@@ -228,7 +228,7 @@ describe('UPO retry cron boundaries', () => {
     tables.upo_receipts = [receipt(), receipt({ id: OTHER, invoice_id: OTHER })];
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ dispatched: 1, quarantined: 1 });
     expect(tables.upo_receipts[0]).toMatchObject({ status: 'failed', last_error: UPO_IDENTITY_MISMATCH });
-    expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [{ name: 'invoice/upo.requested', data: { ...event, invoiceId: OTHER } }]);
+    expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [{ name: 'invoice/upo.requested', groupId: event.nip, data: { ...event, invoiceId: OTHER } }]);
     expect(writes()[0].filters).toEqual([['id', RECEIPT], ['tenant_id', A], ['invoice_id', ID], ['ksef_number', REF], ['status', 'pending']]);
   });
   it.each([{ ksef_number: 'OTHER' }, { ksef_status: 'sending' }])('never dispatches a receipt whose invoice changed: %j', async (patch) => {

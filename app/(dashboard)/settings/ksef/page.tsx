@@ -13,11 +13,12 @@ export default async function KsefSettingsPage() {
 
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('name, nip, ksef_credentials_encrypted, ksef_certificate_expiry')
+    .select('name, nip, has_ksef_credentials, ksef_certificate_expiry')
     .eq('id', tenantId)
     .single();
 
-  const hasCredentials = !!tenant?.ksef_credentials_encrypted;
+  // Sama flaga obecności — zaszyfrowany blob nie wychodzi do klienta (AUD-103).
+  const hasCredentials = !!tenant?.has_ksef_credentials;
   const hasNip = !!tenant?.nip?.trim();
 
   // BUG-007: organizacja-szkic (pomiń NIP w onboardingu) — zamiast uploadu

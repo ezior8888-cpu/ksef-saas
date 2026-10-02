@@ -24,7 +24,7 @@ import type { RateStamp } from '@/lib/flo/nbp';
 import { nbpRateForCost } from '@/lib/nbp/client';
 import { costInPln, documentCurrency, HOME_CURRENCY } from '@/lib/ocr/currency';
 import { sendPushToUser } from '@/lib/push/sender';
-import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
+import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { downloadExpensePhoto } from '@/lib/storage/expenses';
 import type { Database, Json } from '@/types/database';
@@ -115,7 +115,10 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         }
 
         const jobRow = row as OcrJobRow;
-        await requireTenantMember(jobRow.created_by, tenantId);
+        // Autor usunął konto (AUD-41: created_by = NULL) — koszt nie ma autora.
+        const createdBy = jobRow.created_by;
+        if (!createdBy) throw new NonRetriableError('Autor zadania OCR usunął konto');
+        await requireTenantMember(createdBy, tenantId);
         if (!jobRow.source_file_path || jobRow.source_file_path === 'pending') {
           throw new NonRetriableError('Brak pliku źródłowego dla joba OCR');
         }
@@ -126,7 +129,7 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         );
 
         return {
-          job: jobRow,
+          job: { ...jobRow, created_by: createdBy },
           imageBase64: buffer.toString('base64'),
           mimeType: mt,
         };
@@ -228,7 +231,8 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         data.document_type === 'simplified_invoice' ? 'invoice' : data.document_type;
       // Firma zwolniona z VAT (#60) nie odlicza VAT-u: koszt w KPiR wychodzi
       // wtedy brutto (#65), a JPK nic nie odlicza. Odczyt odporny przed 00091.
-      const vatExempt = (await readTenantVatExemption(supabase, tenantId)) !== null;
+      // Tylko zwolnienie podmiotowe (art. 113) odbiera odliczenie — I2, AUD-68.
+      const vatExempt = isSubjectiveVatExemption(await readTenantVatExemption(supabase, tenantId));
 
       const { data: expense, error } = await supabase
         .from('expenses')

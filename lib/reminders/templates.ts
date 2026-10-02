@@ -23,6 +23,9 @@ export interface ResolvedTemplate {
 
 // ============================================================================
 // DEFAULT TEMPLATES (po polsku)
+//
+// Zwykły tekst, bez markdown: wysyłka idzie jako tekst + HTML z ucieczką
+// (`deliveryHtml`), więc `**` i `` ` `` klient widział dosłownie (AUD-99).
 // ============================================================================
 
 export const DEFAULT_TEMPLATES: Record<
@@ -34,11 +37,11 @@ export const DEFAULT_TEMPLATES: Record<
     subject: 'Przypomnienie o płatności faktury {numerFaktury}',
     body: `Dzień dobry,
 
-Może umknęło Państwu w skrzynce — wystawiona przez nas faktura **{numerFaktury}** z dnia {dataWystawienia} jest po terminie płatności (termin: {terminPlatnosci}, {dniPoTerminie} dni temu).
+Może umknęło Państwu w skrzynce — wystawiona przez nas faktura {numerFaktury} z dnia {dataWystawienia} jest po terminie płatności (termin: {terminPlatnosci}, {dniPoTerminie} dni temu).
 
-**Kwota do zapłaty: {kwotaDoZaplaty}**
+Kwota do zapłaty: {kwotaDoZaplaty}
 
-Rachunek bankowy: \`{rachunekBankowy}\`
+Rachunek bankowy: {rachunekBankowy}
 
 Jeśli płatność jest już w drodze — proszę zignorować ten email. W razie pytań lub problemów z płatnością, prosimy o kontakt zwrotny.
 
@@ -53,14 +56,14 @@ Pozdrawiam,
       'Pilne przypomnienie - faktura {numerFaktury} po terminie ({dniPoTerminie} dni)',
     body: `Dzień dobry,
 
-Niestety nadal nie odnotowaliśmy zapłaty za fakturę **{numerFaktury}** wystawioną {dataWystawienia}. Termin płatności minął **{dniPoTerminie} dni temu**.
+Niestety nadal nie odnotowaliśmy zapłaty za fakturę {numerFaktury} wystawioną {dataWystawienia}. Termin płatności minął {dniPoTerminie} dni temu.
 
-**Pozostała kwota do zapłaty: {kwotaDoZaplaty}**
+Pozostała kwota do zapłaty: {kwotaDoZaplaty}
 
 Bardzo prosimy o pilne uregulowanie należności na rachunek:
-\`{rachunekBankowy}\`
+{rachunekBankowy}
 
-W tytule przelewu prosimy podać numer faktury: **{numerFaktury}**
+W tytule przelewu prosimy podać numer faktury: {numerFaktury}
 
 Jeśli wystąpiły problemy z płatnością lub potrzebujecie Państwo dłuższego terminu, prosimy o kontakt — wspólnie znajdziemy rozwiązanie.
 
@@ -76,18 +79,18 @@ Pozdrawiam,
     subject: 'Przedsądowe wezwanie do zapłaty - faktura {numerFaktury}',
     body: `Dzień dobry,
 
-Mimo wcześniejszych przypomnień, faktura **{numerFaktury}** z dnia {dataWystawienia} pozostaje nieuregulowana od **{dniPoTerminie} dni** po terminie płatności.
+Mimo wcześniejszych przypomnień, faktura {numerFaktury} z dnia {dataWystawienia} pozostaje nieuregulowana od {dniPoTerminie} dni po terminie płatności.
 
-**Kwota do zapłaty: {kwotaDoZaplaty}**
+Kwota do zapłaty: {kwotaDoZaplaty}
 
-W załączniku znajduje się **przedsądowe wezwanie do zapłaty** zgodne z art. 187 § 1 pkt 3 Kodeksu postępowania cywilnego.
+W załączniku znajduje się przedsądowe wezwanie do zapłaty zgodne z art. 187 § 1 pkt 3 Kodeksu postępowania cywilnego.
 
-W przypadku braku wpłaty w terminie **7 dni** od daty otrzymania niniejszego pisma, sprawa zostanie skierowana na drogę sądową, co wiązać się będzie z dodatkowymi kosztami obciążającymi dłużnika (koszty postępowania, odsetki ustawowe, koszty zastępstwa procesowego).
+W przypadku braku wpłaty w terminie 7 dni od daty otrzymania niniejszego pisma, sprawa zostanie skierowana na drogę sądową, co wiązać się będzie z dodatkowymi kosztami obciążającymi dłużnika (koszty postępowania, odsetki ustawowe, koszty zastępstwa procesowego).
 
-**Numer rachunku bankowego do wpłaty:**
-\`{rachunekBankowy}\`
+Numer rachunku bankowego do wpłaty:
+{rachunekBankowy}
 
-Tytuł przelewu: **{numerFaktury}**
+Tytuł przelewu: {numerFaktury}
 
 Mamy nadzieję na polubowne rozwiązanie sprawy. W razie pytań prosimy o pilny kontakt.
 
@@ -103,11 +106,11 @@ Z poważaniem,
     subject: 'OSTATECZNE wezwanie do zapłaty - faktura {numerFaktury}',
     body: `Dzień dobry,
 
-To jest **ostateczne wezwanie do zapłaty**. Faktura **{numerFaktury}** pozostaje nieuregulowana od **{dniPoTerminie} dni** po terminie.
+To jest ostateczne wezwanie do zapłaty. Faktura {numerFaktury} pozostaje nieuregulowana od {dniPoTerminie} dni po terminie.
 
-**Kwota: {kwotaDoZaplaty}**
+Kwota: {kwotaDoZaplaty}
 
-W przypadku braku wpłaty w ciągu **3 dni roboczych** od otrzymania tego emaila:
+W przypadku braku wpłaty w ciągu 3 dni roboczych od otrzymania tego emaila:
 - sprawa zostanie skierowana do sądu w trybie elektronicznego postępowania upominawczego (e-EPU)
 - zostaną naliczone odsetki ustawowe za opóźnienie
 - koszty postępowania sądowego obciążą dłużnika

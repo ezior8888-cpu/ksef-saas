@@ -1,3 +1,8 @@
+// NIEAKTYWNE (AUD-115): moduł agenta FLO bez importera w kodzie produkcyjnym —
+// na produkcji nie działa. Podpięcie = przegląd i zdjęcie znacznika
+// (pilnuje tests/unit/flo-nieaktywne.test.ts).
+// Przed podpięciem: czyta kolumnę `invoices.source`, której nie ma w migracjach.
+
 /**
  * K-03 — ocena terminowości płatności kontrahenta (krok 25 planu).
  *

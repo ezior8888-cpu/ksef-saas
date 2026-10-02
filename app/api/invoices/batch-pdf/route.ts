@@ -4,6 +4,7 @@ import PQueue from 'p-queue';
 
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { packageZip, type PackagedFile } from '@/lib/exports/zip-packager';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { resolveApiUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { createAdminClient } from '@/lib/supabase/server';
 
@@ -27,6 +28,16 @@ const MAX_INVOICES = 100;
 const PDF_RENDER_CONCURRENCY = 4;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * AUD-119: paczki generuje proces aplikacji, który dzieli pamięć app-1
+ * z workerem. Limit na firmę (3 paczki / 10 min) i na proces (2 naraz) —
+ * dalsze żądania dostają 429 zamiast kolejnych 100 PDF w pamięci.
+ */
+const BATCHES_PER_TENANT = 3;
+const BATCH_WINDOW_SECONDS = 600;
+const MAX_BATCHES_IN_FLIGHT = 2;
+let batchesInFlight = 0;
+
 interface InvoiceRow {
   id: string;
   internal_number: string | null;
@@ -38,6 +49,33 @@ export async function GET(req: Request): Promise<Response> {
     return NextResponse.json({ error: ctx.error }, { status: ctx.status });
   }
   const tenantId = ctx.tenantId;
+
+  // Sprawdzenie i zajęcie miejsca bez `await` pomiędzy — inaczej równoległe
+  // żądania przeszłyby razem przed zwiększeniem licznika.
+  if (batchesInFlight >= MAX_BATCHES_IN_FLIGHT) {
+    return NextResponse.json({ error: 'busy' }, { status: 429, headers: { 'Retry-After': '30' } });
+  }
+  batchesInFlight += 1;
+  try {
+    return await buildBatch(req, tenantId);
+  } finally {
+    batchesInFlight -= 1;
+  }
+}
+
+async function buildBatch(req: Request, tenantId: string): Promise<Response> {
+  const quota = await checkRateLimit({
+    bucket: 'batch_pdf',
+    identifier: tenantId,
+    limit: BATCHES_PER_TENANT,
+    windowSeconds: BATCH_WINDOW_SECONDS,
+  });
+  if (!quota.allowed) {
+    return NextResponse.json(
+      { error: 'rate_limited' },
+      { status: 429, headers: { 'Retry-After': String(Math.max(1, quota.retryAfter)) } },
+    );
+  }
 
   const url = new URL(req.url);
   const from = url.searchParams.get('from') ?? '';

@@ -7,6 +7,7 @@ import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
 import { invoiceEmailAmount } from '@/lib/email/invoice-email-amount';
 import { sendInvoiceEmail } from '@/lib/email/send';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // ═══════════════════════════════════════════════════════════════
 // downloadInvoiceXmlAction
@@ -155,6 +156,9 @@ export type EmailInvoiceResult =
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+/** Ile faktur firma może wysłać mailem w godzinie (AUD-102). */
+const INVOICE_EMAILS_PER_HOUR = 30;
+
 export async function emailInvoiceAction(
   invoiceId: string,
   recipientEmail: string,
@@ -176,6 +180,22 @@ export async function emailInvoiceAction(
     throw err;
   }
   const { user, tenantId } = context;
+
+  // Limit na firmę PRZED generowaniem PDF (AUD-102): wysyłka idzie z domeny
+  // FaktFlow na dowolny adres. Limit w pamięci procesu przy braku Redisa
+  // wystarcza — jedna instancja aplikacji.
+  const quota = await checkRateLimit({
+    bucket: 'invoice_email',
+    identifier: tenantId,
+    limit: INVOICE_EMAILS_PER_HOUR,
+    windowSeconds: 3600,
+  });
+  if (!quota.allowed) {
+    return {
+      success: false,
+      error: `Osiągnięto limit ${INVOICE_EMAILS_PER_HOUR} wysyłek faktur mailem na godzinę. Spróbuj później.`,
+    };
+  }
 
   const pdfResult = await generateInvoicePdf(invoiceId, tenantId);
   if (!pdfResult.success) {

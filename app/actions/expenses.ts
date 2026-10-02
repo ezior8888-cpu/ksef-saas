@@ -13,7 +13,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
-import { deleteExpensePhoto, uploadExpensePhoto } from '@/lib/storage/expenses';
+import { deleteExpensePhoto, detectExpensePhotoType, uploadExpensePhoto } from '@/lib/storage/expenses';
 import type { Database } from '@/types/database';
 
 type ExpenseReviewUpdates = {
@@ -103,6 +103,16 @@ export async function uploadExpensePhotoAction(formData: FormData) {
     return { success: false as const, error: 'Plik za duży (max 10 MB)' };
   }
 
+  // Typ z zawartości, nie z nagłówka przeglądarki (AUD-105).
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const mimeType = detectExpensePhotoType(buffer);
+  if (!mimeType) {
+    return {
+      success: false as const,
+      error: 'Nieobsługiwany format pliku. Wgraj zdjęcie (JPG, PNG, WEBP, GIF) albo PDF.',
+    };
+  }
+
   const admin = createAdminClient();
   const { data: ocrJob, error: jobError } = await admin
     .from('ocr_jobs')
@@ -111,7 +121,7 @@ export async function uploadExpensePhotoAction(formData: FormData) {
       created_by: user.id,
       status: 'pending',
       source_file_path: 'pending',
-      source_file_mime: file.type || 'application/octet-stream',
+      source_file_mime: mimeType,
       source_file_size_bytes: file.size,
     })
     .select('id')
@@ -121,16 +131,10 @@ export async function uploadExpensePhotoAction(formData: FormData) {
     return { success: false as const, error: 'Błąd zapisu joba' };
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
   let r2Key: string | null = null;
 
   try {
-    r2Key = await uploadExpensePhoto(
-      tenantId,
-      ocrJob.id,
-      buffer,
-      file.type || 'application/octet-stream',
-    );
+    r2Key = await uploadExpensePhoto(tenantId, ocrJob.id, buffer, mimeType);
 
     const { error: pathErr } = await admin
       .from('ocr_jobs')
@@ -275,16 +279,15 @@ export async function reviewExpenseAction(
 }
 
 export async function deleteExpenseAction(expenseId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false as const, error: 'Brak autoryzacji' };
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    return { success: false as const, error: 'Brak aktywnej organizacji' };
+  // Sesja po drugim kroku MFA i potwierdzone członkostwo, nie sam `getUser()`
+  // z firmą z ciasteczka (AUD-58).
+  let auth;
+  try {
+    auth = await requireUserAndActiveOrg();
+  } catch {
+    return { success: false as const, error: 'Brak autoryzacji' };
   }
+  const { supabase, tenantId } = auth;
 
   const { error, count } = await supabase
     .from('expenses')

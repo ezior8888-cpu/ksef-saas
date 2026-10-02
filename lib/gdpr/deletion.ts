@@ -178,6 +178,15 @@ export async function executeGdprRequest(requestId: string): Promise<{ ok: boole
     if ((await findOrganizationsBlockingDeletion(admin, userId)).length > 0) {
       throw new Error('active_subscription_sole_billing_manager');
     }
+    // Klucz obcy bez ON DELETE wywróciłby deleteUser PO nieodwracalnej
+    // anonimizacji dziennika (AUD-41). Sprawdzamy przed nią.
+    const fkCheck = await (
+      admin.rpc as unknown as (
+        fn: 'gdpr_user_deletion_blockers', args: { p_user_id: string },
+      ) => Promise<{ data: unknown; error: { message: string } | null }>
+    )('gdpr_user_deletion_blockers', { p_user_id: userId });
+    if (fkCheck.error || !Array.isArray(fkCheck.data)) throw new Error('deletion_blockers_check_failed');
+    if (fkCheck.data.length > 0) throw new Error(`user_still_referenced: ${fkCheck.data.join(', ')}`);
     const anonRpc = await (
       admin.rpc as unknown as (
         fn: 'anonymize_user_audit_logs', args: { p_user_id: string },

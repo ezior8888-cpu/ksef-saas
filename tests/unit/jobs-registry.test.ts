@@ -44,7 +44,7 @@ describe('rejestr jobów', () => {
     expect(bezHandlera, 'kolejki zdarzeń bez zarejestrowanego joba').toEqual([]);
   });
 
-  it('paczka A: 12 cronów utrzymaniowych', () => {
+  it('paczka A: 11 cronów utrzymaniowych (bez odświeżania widoków, AUD-118)', () => {
     const packageA = [
       'cron.archive-old-invoices',
       'cron.cert-expiry-alert',
@@ -55,7 +55,6 @@ describe('rejestr jobów', () => {
       'cron.jobs-watchdog',
       'cron.ksef-health-check',
       'cron.nightly-validation-recheck',
-      'cron.refresh-materialized-views',
       'cron.retention-delete',
       'cron.verify-backup',
     ];
@@ -174,9 +173,10 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('billing.payment.succeeded')?.groupConcurrency).toBe(1);
   });
 
-  it('KOMPLET: 46 jobów z inwentaryzacji + kolejka smoke', () => {
+  it('KOMPLET: 45 jobów z inwentaryzacji + kolejka smoke', () => {
     // Alarm, gdyby któraś paczka wypadła z importów workera.
-    expect(registered.length).toBe(46);
+    // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych.
+    expect(registered.length).toBe(45);
   });
 
   it('parytet limitów równoległości paczki C', () => {

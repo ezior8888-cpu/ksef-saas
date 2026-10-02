@@ -41,8 +41,9 @@ describe('adnotacje faktury', () => {
 
 describe('podpowiedź MPP', () => {
   it.each([
-    [SPLIT_PAYMENT_THRESHOLD_PLN, false, true],
-    [SPLIT_PAYMENT_THRESHOLD_PLN - 0.01, false, false],
+    // AUD-96: art. 108a ust. 1a — należność „przekracza” 15 000 zł.
+    [SPLIT_PAYMENT_THRESHOLD_PLN + 0.01, false, true],
+    [SPLIT_PAYMENT_THRESHOLD_PLN, false, false],
     [50_000, true, false], // konsument — MPP dotyczy firm
   ])('brutto %d, konsument %s → %s', (gross, consumer, expected) => {
     expect(suggestsSplitPayment(gross, consumer)).toBe(expected);

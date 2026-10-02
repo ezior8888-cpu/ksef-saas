@@ -16,7 +16,10 @@ import {
   requireKsefVerification,
 } from '@/lib/auth/ksef-verification-guard';
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { assertSensitiveMfa, SensitiveMfaRequiredError } from '@/lib/auth/sensitive-mfa';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
+import { isOffline24Enabled } from '@/lib/ksef/offline24-policy';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import {
@@ -37,7 +40,7 @@ import type {
 
 export type KsefSubmitEnqueueResult =
   | { ok: true; mode: 'online_queued' | 'offline_queued' }
-  | { ok: false; error: string; code?: 'KSEF_NOT_VERIFIED' };
+  | { ok: false; error: string; code?: 'KSEF_NOT_VERIFIED' | 'MFA_REQUIRED' };
 
 export interface EnqueueKsefSubmitParams {
   supabase: SupabaseClient;
@@ -123,6 +126,16 @@ export async function enqueueKsefSubmitAfterDraft(
     };
   }
 
+  // AAL2 właściciela/admina, gdy flaga `requireMfaForSensitive` jest włączona (AUD-65).
+  try {
+    await assertSensitiveMfa({ tenantId, userId }, 'ksef_submit');
+  } catch (e) {
+    if (e instanceof SensitiveMfaRequiredError) {
+      return { ok: false, code: 'MFA_REQUIRED', error: e.message };
+    }
+    throw e;
+  }
+
   const nipNorm = nip.replace(/\s+/g, '');
 
   try {
@@ -139,7 +152,9 @@ export async function enqueueKsefSubmitAfterDraft(
     throw e;
   }
 
-  const { data: tenantKsef, error: tenantErr } = await supabase
+  // Blob czytamy kluczem serwisowym — rola kliencka nie ma do niego SELECT
+  // (00112, AUD-103). Firma jest już zweryfikowana przez akcję wołającą.
+  const { data: tenantKsef, error: tenantErr } = await createAdminClient()
     .from('tenants')
     .select('ksef_credentials_encrypted')
     .eq('id', tenantId)
@@ -158,14 +173,17 @@ export async function enqueueKsefSubmitAfterDraft(
 
   let decrypted: ReturnType<typeof decryptCredentials>;
   try {
-    decrypted = decryptCredentials(credentialsBuffer(tenantKsef.ksef_credentials_encrypted));
+    decrypted = decryptCredentials(credentialsBuffer(tenantKsef.ksef_credentials_encrypted), tenantId);
   } catch {
     return { ok: false, error: 'Nie można odczytać credentials KSeF.' };
   }
 
   const env = (process.env.KSEF_ENV as 'test' | 'demo' | 'production' | undefined) ?? 'test';
 
-  const health = await shouldUseOfflineMode(env);
+  // AUD-14: na KSeF produkcyjnym bez automatycznego Offline24 (`offline24-policy.ts`).
+  const health = isOffline24Enabled(env)
+    ? await shouldUseOfflineMode(env)
+    : { offline: false as const, isMfOutage: false };
 
   if (health.offline && decrypted.type === 'xades') {
     try {

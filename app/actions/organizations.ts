@@ -6,14 +6,17 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { logAudit } from '@/lib/audit/log';
+import { emailsForUserIds } from '@/lib/auth/auth-users';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { getVerifiedUserContext } from '@/lib/auth/verified-user';
 import { sendEmail } from '@/lib/email/send';
 import { FIRST_COMPANY_CLOSED_MESSAGE, isSignupClosed } from '@/lib/feature-flags/signups';
-import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
 import {
   ActionAuthError,
   requireOrgRole,
+  requireVerifiedUser,
   type UserRole,
 } from '@/lib/supabase/auth-context';
 import {
@@ -198,11 +201,15 @@ export async function setActiveOrganizationAction(
     return { success: false, error: 'Nieprawidłowy identyfikator organizacji' };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Niezalogowany' };
+  // Sesja po drugim kroku MFA, nie sam `getUser()` (AUD-58).
+  let verified: Awaited<ReturnType<typeof requireVerifiedUser>>;
+  try {
+    verified = await requireVerifiedUser();
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { success: false, error: e.message };
+    throw e;
+  }
+  const { supabase, user } = verified;
 
   // Membership check przez admin (deterministyczne) — bezpieczne, bo
   // filtrujemy explicit po user.id zalogowanego.
@@ -431,11 +438,15 @@ export async function skipOnboardingWithoutNipAction(): Promise<ActionFail> {
 export async function completeCompanyNipAction(
   company: OrganizationCompanyInput,
 ): Promise<ActionOk | ActionFail> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Niezalogowany' };
+  // Sesja po drugim kroku MFA (AUD-58); rola właściciela sprawdzana niżej.
+  let verified: Awaited<ReturnType<typeof requireVerifiedUser>>;
+  try {
+    verified = await requireVerifiedUser();
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { success: false, error: e.message };
+    throw e;
+  }
+  const { user } = verified;
 
   const cookieStore = await cookies();
   const orgId = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
@@ -543,6 +554,19 @@ function generateInviteToken(): { token: string; tokenHash: string } {
   return { token, tokenHash };
 }
 
+/** Limity zaproszeń firmy (AUD-32). */
+const MAX_PENDING_INVITATIONS = 20;
+const INVITATIONS_PER_HOUR = 20;
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -579,14 +603,39 @@ export async function inviteMemberAction(params: {
     .eq('status', 'active');
 
   if (existing && existing.length > 0) {
-    const userIds = existing.map((m) => m.user_id);
-    const { data: authUsers } = await admin.auth.admin.listUsers({ perPage: 200 });
-    const matched = authUsers?.users?.find(
-      (u) => userIds.includes(u.id) && (u.email ?? '').toLowerCase() === email,
-    );
-    if (matched) {
+    // E-maile członków po identyfikatorach — nie z pierwszych 200 kont (AUD-125).
+    const emails = await emailsForUserIds(admin, existing.map((m) => m.user_id));
+    if ([...emails.values()].some((e) => e.toLowerCase() === email)) {
       return { success: false, error: 'Ten użytkownik jest już członkiem' };
     }
+  }
+
+  // Limit zaproszeń firmy (AUD-32): mail idzie z domeny FaktFlow na dowolny
+  // adres, z nazwą firmy, którą wpisuje użytkownik.
+  const { count: pending, error: pendingError } = await admin
+    .from('organization_invitations')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', tenantId)
+    .is('accepted_at', null)
+    .is('revoked_at', null)
+    .gt('expires_at', new Date().toISOString());
+  if (pendingError) {
+    return { success: false, error: 'Nie można sprawdzić zaproszeń. Spróbuj ponownie.' };
+  }
+  if ((pending ?? 0) >= MAX_PENDING_INVITATIONS) {
+    return {
+      success: false,
+      error: `Osiągnięto limit ${MAX_PENDING_INVITATIONS} oczekujących zaproszeń. Cofnij nieużywane albo poczekaj na akceptację.`,
+    };
+  }
+  const quota = await checkRateLimit({
+    bucket: 'invitation',
+    identifier: tenantId,
+    limit: INVITATIONS_PER_HOUR,
+    windowSeconds: 3600,
+  });
+  if (!quota.allowed) {
+    return { success: false, error: `Osiągnięto limit ${INVITATIONS_PER_HOUR} zaproszeń na godzinę. Spróbuj później.` };
   }
 
   const { token, tokenHash } = generateInviteToken();
@@ -631,14 +680,18 @@ export async function inviteMemberAction(params: {
     'http://localhost:3000';
   const inviteUrl = `${baseUrl}/invite/${token}`;
   const orgName = org?.name ?? 'organizacja';
+  // Nazwa firmy pochodzi od użytkownika: w HTML escapowana, w temacie bez
+  // znaków sterujących i przycięta (AUD-32).
+  const orgNameHtml = escapeHtml(orgName);
+  const orgNameSubject = orgName.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 80);
 
   try {
     await sendEmail({
       to: email,
-      subject: `Zaproszenie do ${orgName} w FaktFlow`,
+      subject: `Zaproszenie do ${orgNameSubject} w FaktFlow`,
       html: `
         <p>Cześć,</p>
-        <p>Zostałeś/aś zaproszony/a do organizacji <strong>${orgName}</strong> w FaktFlow w roli <strong>${params.role}</strong>.</p>
+        <p>Zostałeś/aś zaproszony/a do organizacji <strong>${orgNameHtml}</strong> w FaktFlow w roli <strong>${params.role}</strong>.</p>
         <p><a href="${inviteUrl}">Kliknij aby zaakceptować zaproszenie</a></p>
         <p>Link wygasa za 7 dni.</p>
         <p style="color:#888;font-size:12px">Jeśli nie spodziewałeś/aś się tego maila, zignoruj go.</p>
@@ -882,11 +935,15 @@ export async function denyJoinRequestAction(
 export async function revokeMembershipAction(
   membershipId: string,
 ): Promise<ActionOk | ActionFail> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Niezalogowany' };
+  // Sesja po drugim kroku MFA (AUD-58); uprawnienia sprawdza RPC (00103).
+  let verified: Awaited<ReturnType<typeof requireVerifiedUser>>;
+  try {
+    verified = await requireVerifiedUser();
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { success: false, error: e.message };
+    throw e;
+  }
+  const { supabase, user } = verified;
 
   const { error } = await supabase.rpc('revoke_membership', {
     p_membership_id: membershipId,
@@ -958,11 +1015,12 @@ export async function changeMembershipRoleAction(params: {
  * zmiany stanu (URL `post_register_import` i tak czyści klient).
  */
 export async function markPostRegisterMagicImportConsumedAction(): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  try {
+    await requireVerifiedUser();
+  } catch (e) {
+    if (e instanceof ActionAuthError) return;
+    throw e;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

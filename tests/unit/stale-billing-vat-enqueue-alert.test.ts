@@ -196,7 +196,9 @@ describe('stale billing VAT enqueue alert', () => {
     expect(step.run).toHaveBeenCalledWith('check-ksef-reconciliation', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-checkout-attempts', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-stale-backup', expect.any(Function));
-    expect(result).toMatchObject({ checked: 13, fired: 0 });
+    // 13 → 14: płatność opłacona bez faktury VAT (AUD-40).
+    expect(step.run).toHaveBeenCalledWith('check-paid-without-vat-invoice', expect.any(Function));
+    expect(result).toMatchObject({ checked: 14, fired: 0 });
   });
 });
 

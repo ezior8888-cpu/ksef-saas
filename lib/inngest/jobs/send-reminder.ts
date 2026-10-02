@@ -14,6 +14,8 @@ import { assertReminderSendable } from '@/lib/reminders/delivery-safety';
 import { ReminderConsentDenied } from '@/lib/reminders/delivery-errors';
 import { deliveryHtml } from '@/lib/reminders/delivery-schema';
 import { uploadToR2 } from '@/lib/storage/r2';
+import { isEmailBlocked } from '@/lib/email/preferences';
+import { REMINDER_TAG } from '@/lib/email/tags';
 
 export async function runSendReminder(data: Parameters<typeof remindersSendRequested.create>[0], { step }: JobContext) {
   const { reminderId, approvalId } = data;
@@ -56,6 +58,12 @@ export async function runSendReminder(data: Parameters<typeof remindersSendReque
         throw new ReminderConsentDenied('Wysyłka przypomnień została wstrzymana.');
       }
       await assertReminderSendable(delivery);
+      // Adres z twardym odbiciem albo skargą („to spam”) — nie wysyłamy,
+      // reputacja domeny jest wspólna dla wszystkich klientów (AUD-80).
+      const blocked = await isEmailBlocked(delivery.to);
+      if (blocked.blocked) {
+        throw new ReminderConsentDenied('Adres kontrahenta odrzuca naszą pocztę (odbicie albo zgłoszenie spamu). Wysyłka wstrzymana.');
+      }
       // At most 30 minutes, strictly inside Resend's documented 24h key retention.
       // Do not reset this clock on retry, including after an ambiguous response.
       assertDeliveryDeadline(approval, delivery);
@@ -70,6 +78,9 @@ export async function runSendReminder(data: Parameters<typeof remindersSendReque
       subject: delivery.subject, text: delivery.text, html: deliveryHtml(delivery.text),
       attachments: delivery.attachment ? [{ filename: delivery.attachment.filename,
         content: delivery.attachment.contentBase64 }] : undefined,
+      // Po tym znaczniku webhook Resend odróżnia skargę kontrahenta od skargi
+      // użytkownika FaktFlow i nie wypisuje użytkownika o tym samym adresie.
+      tags: [{ name: REMINDER_TAG.name, value: REMINDER_TAG.value }],
     }, { idempotencyKey: 'reminder/' + approvalId });
     if (result.error || !result.data?.id) throw new Error('Nie można potwierdzić przyjęcia wiadomości przez dostawcę poczty.');
     const sentAt = new Date().toISOString();

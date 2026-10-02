@@ -336,13 +336,17 @@ async function releaseStuck(now: Date, db: FloDbClient): Promise<number> {
   const rows = stuck.data ?? [];
   if (rows.length === 0) return 0;
 
+  // AUD-111: tylko karty, które NADAL są w „wykonuję” — zakończona w trakcie
+  // tego przebiegu nie może wrócić do zatwierdzenia.
   const { error } = await db
     .from('flo_proposals')
     .update({ status: 'approved' })
     .in(
       'id',
       rows.map((r) => r.id),
-    );
+    )
+    .eq('status', 'executing')
+    .lt('approved_at', cutoff);
   if (error) throw new Error(error.message);
 
   for (const row of rows) {

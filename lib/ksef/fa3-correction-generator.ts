@@ -234,7 +234,11 @@ function emitVatSummaries(fa: XMLBuilder, summaries: ReturnType<typeof summarize
   }
 }
 
-function buildAdnotacjeMinimal(fa: XMLBuilder, lines: InvoiceLineItem[]): void {
+function buildAdnotacjeMinimal(
+  fa: XMLBuilder,
+  lines: InvoiceLineItem[],
+  annotations: CorrectionInvoiceData['annotations'] = {},
+): void {
   const adn = fa.ele('Adnotacje');
   const hasOoLine = lines.some((l) => l.vatRate === 'oo');
   const p18 = hasOoLine ? 1 : 2;
@@ -245,10 +249,11 @@ function buildAdnotacjeMinimal(fa: XMLBuilder, lines: InvoiceLineItem[]): void {
     );
   }
 
-  adn.ele('P_16').txt('2');
+  // P_16 i P_18A z faktury pierwotnej (AUD-23) — do 02.10 zawsze 2.
+  adn.ele('P_16').txt(String(annotations.cashMethod === 1 ? 1 : 2));
   adn.ele('P_17').txt('2');
   adn.ele('P_18').txt(String(p18));
-  adn.ele('P_18A').txt('2');
+  adn.ele('P_18A').txt(String(annotations.splitPayment === 1 ? 1 : 2));
   const zwolnienie = adn.ele('Zwolnienie');
   zwolnienie.ele('P_19N').txt('1');
   adn.ele('NoweSrodkiTransportu').ele('P_22N').txt('1');
@@ -479,7 +484,7 @@ export function generateCorrectionInvoiceXml(
 
   // P_15: „korekta kwoty wynikającej z faktury korygowanej” — różnica.
   fa.ele('P_15').txt(formatDecimal(grossTotal));
-  buildAdnotacjeMinimal(fa, preparedLines);
+  buildAdnotacjeMinimal(fa, preparedLines, data.annotations);
 
   fa.ele('RodzajFaktury').txt('KOR');
 

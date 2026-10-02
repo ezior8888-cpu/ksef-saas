@@ -7,6 +7,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import type { Json } from '@/types/database';
 import type { BuyerParty, PaymentInfo, SellerParty } from '@/types/invoice';
 import type { ParsedInvoice, ParsedLine, ParsedParty } from './fa3-parser';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 export interface ImportEngineParams {
   tenantId: string;
@@ -655,5 +656,5 @@ function lineVatGross(line: ParsedLine): { vatAmount: number; grossAmount: numbe
 }
 
 function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+  return roundToCents(n);
 }

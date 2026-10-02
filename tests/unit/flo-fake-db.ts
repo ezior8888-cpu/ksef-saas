@@ -184,6 +184,25 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
   }
 
   const client = {
+    /** `flo_record_usage` (00105): dodawanie w JEDNYM kroku po oddaniu sterowania — jak w bazie. */
+    async rpc(fn: string, args: Record<string, unknown>) {
+      if (fn !== 'flo_record_usage') throw new Error('Nieobsługiwane RPC w atrapie: ' + fn);
+      await yieldToOthers();
+      state.writes += 1;
+      const row = tables.flo_usage.find((r) => r.tenant_id === args.p_tenant_id && r.day === args.p_day);
+      if (row) {
+        row.input_tokens = Number(row.input_tokens ?? 0) + Number(args.p_input_tokens);
+        row.output_tokens = Number(row.output_tokens ?? 0) + Number(args.p_output_tokens);
+        row.cost_usd = Number(row.cost_usd ?? 0) + Number(args.p_cost_usd);
+        row.calls = Number(row.calls ?? 0) + 1;
+      } else {
+        tables.flo_usage.push({
+          tenant_id: args.p_tenant_id, day: args.p_day, input_tokens: args.p_input_tokens,
+          output_tokens: args.p_output_tokens, cost_usd: args.p_cost_usd, calls: 1,
+        });
+      }
+      return { error: null };
+    },
     from(table: keyof Tables) {
       const rows = tables[table];
       return {

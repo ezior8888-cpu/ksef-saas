@@ -422,7 +422,7 @@ export type Database = {
             | null
           category_label: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           document_number: string | null
           document_type: string
           gross_amount: number
@@ -455,7 +455,7 @@ export type Database = {
             | null
           category_label?: string | null
           created_at?: string
-          created_by: string
+          created_by?: string | null
           document_number?: string | null
           document_type?: string
           gross_amount: number
@@ -488,7 +488,7 @@ export type Database = {
             | null
           category_label?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           document_number?: string | null
           document_type?: string
           gross_amount?: number
@@ -1429,7 +1429,7 @@ export type Database = {
           ai_output_tokens: number | null
           completed_at: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           error_message: string | null
           expense_id: string | null
           extracted_data: Json | null
@@ -1447,7 +1447,7 @@ export type Database = {
           ai_output_tokens?: number | null
           completed_at?: string | null
           created_at?: string
-          created_by: string
+          created_by?: string | null
           error_message?: string | null
           expense_id?: string | null
           extracted_data?: Json | null
@@ -1465,7 +1465,7 @@ export type Database = {
           ai_output_tokens?: number | null
           completed_at?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           error_message?: string | null
           expense_id?: string | null
           extracted_data?: Json | null

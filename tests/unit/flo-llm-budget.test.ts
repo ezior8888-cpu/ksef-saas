@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   assertBudget,
@@ -316,5 +316,25 @@ describe('bezpiecznik kosztowy', () => {
     // Treść jest pełnoprawna — z liczbami, po polsku, gotowa do pokazania.
     expect(result.copy.title).toContain('4 300,00 zł');
     expect(result.copy.body).toContain('5/2026');
+  });
+});
+
+// AUD-116: alarm „konto powyżej dwukrotności celu kosztowego” szedł przez
+// logger.info, który na produkcji nic nie wypisuje — operator nie widział go
+// nigdy. Teraz ostrzeżenie (logi kontenera).
+describe('alarm kosztowy (AUD-116)', () => {
+  it('konto ponad 2× cel — ostrzeżenie w logu, nie cisza', async () => {
+    const db = createFakeDb({
+      flo_usage: [{ tenant_id: 'ten-alarm', day: '2026-08-10', input_tokens: 0, output_tokens: 0, cost_usd: (MONTHLY_TARGET_PLN * 2 + 0.1) / USD_PLN, calls: 1 }],
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await generateCopy(
+      { kind: 'payment.chase', tenantId: 'ten-alarm', values: VALUES },
+      NOW,
+      db.client,
+      async () => ({ text: JSON.stringify({ title: '{{kontrahent}} zwleka', body: 'Faktura {{numer}} czeka {{dni}}.' }), usage: { inputTokens: 1, outputTokens: 1 } }),
+    );
+    expect(warn.mock.calls.join(' ')).toContain('dwukrotności celu');
+    warn.mockRestore();
   });
 });

@@ -8,4 +8,6 @@ export type GlobalFlag =
   | 'maintenanceMode'
   | 'disableSignups'
   /** Zatrzymuje CAŁEGO agenta FLO — pierwszy krok runbooku incydentowego. */
-  | 'killFloAgent';
+  | 'killFloAgent'
+  /** AAL2 dla owner/admin przy KSeF, certyfikacie i płatnościach (AUD-65). */
+  | 'requireMfaForSensitive';

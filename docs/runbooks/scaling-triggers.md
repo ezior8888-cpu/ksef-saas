@@ -1,5 +1,16 @@
 # Scaling Triggers Runbook (Faza 34)
 
+> ## ⚠️ TEN DOKUMENT JEST NIEAKTUALNY
+>
+> Progi i działania dotyczą Vercela, Inngest i Upstash. Produkcja stoi na **Hetznerze pod Coolify**,
+> joby chodzą na **pg-boss**, baza to **Supabase self-hosted** na `db-1`.
+>
+> **Aktualne procedury: `AGENTS.md`, sekcja „Infrastruktura i dostępy",
+> oraz `docs/runbooks/joby-pg-boss.md`.** Nie wykonuj poleceń z tego pliku
+> na produkcji bez sprawdzenia ich tam (AUD-110).
+
+---
+
 Kiedy skalować, co skalować i — najważniejsze — **kiedy przestać płacić za
 zarządzane SaaS-y i przenieść się na Hetznera**.
 

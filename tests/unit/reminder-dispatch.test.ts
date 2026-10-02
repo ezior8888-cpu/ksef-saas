@@ -220,6 +220,24 @@ describe('reminder consent registry with the real helper', () => {
   });
 });
 
+describe('adres kontrahenta na liście odbić (AUD-80)', () => {
+  it.each(['hard', 'complaint'])('%s — wysyłka wstrzymana na stałe, bez maila', async (bounceType) => {
+    await seed();
+    tables.email_bounces = [{ email: 'buyer@example.test', bounce_type: bounceType, occurred_at: '2026-09-01T00:00:00.000Z' }];
+    await expect(runSendReminder(jobData, context)).rejects.toBeInstanceOf(NonRetriableError); expectNoSend();
+  });
+  it('miękkie odbicie nie blokuje', async () => {
+    await seed();
+    tables.email_bounces = [{ email: 'buyer@example.test', bounce_type: 'soft', occurred_at: '2026-09-01T00:00:00.000Z' }];
+    await expect(runSendReminder(jobData, context)).resolves.toMatchObject({ success: true });
+  });
+  it('mail ponaglenia ma znacznik, po którym webhook pozna, że skarga dotyczy kontrahenta', async () => {
+    await seed();
+    await runSendReminder(jobData, context);
+    expect(mocks.send.mock.calls[0][0].tags).toEqual([{ name: 'kind', value: 'payment_reminder' }]);
+  });
+});
+
 describe('delayed reminder dispatch guards', () => {
   it.each(['flo_approvals', 'memberships', 'invoices', 'payments', 'payment_imports', 'contractors'])('retries an unavailable %s query within the original deadline without sending prematurely', async (table) => {
     await seed({ attachment: true }); fail = (q) => q.table === table && q.action === 'select';

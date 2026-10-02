@@ -7,6 +7,7 @@ import { earlierSaleRemark, kpirRevenueNet, kpirSaleEventDate } from '@/lib/cate
 
 import type { ExportExpense } from './data-fetcher';
 import type { JpkInvoice } from './jpk-fa-generator';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 export interface KpirInputData {
   issuer: { nip: string; name: string };
@@ -244,7 +245,7 @@ function buildKpirSheet(workbook: ExcelJS.Workbook, data: KpirInputData): void {
     lp++;
   }
 
-  const total = (col: number) => Math.round((sums.get(col) ?? 0) * 100) / 100;
+  const total = (col: number) => roundToCents(sums.get(col) ?? 0);
   const summaryRow = sheet.addRow([
     null, null, null, null, null,
     'PODSUMOWANIE OKRESU',

@@ -1,3 +1,7 @@
+// NIEAKTYWNE (AUD-115): moduł agenta FLO bez importera w kodzie produkcyjnym —
+// na produkcji nie działa. Podpięcie = przegląd i zdjęcie znacznika
+// (pilnuje tests/unit/flo-nieaktywne.test.ts).
+
 /**
  * Best-effort masking of recognizable identifiers in display text.
  * This is NOT an anonymity guarantee: names and arbitrary prose cannot be

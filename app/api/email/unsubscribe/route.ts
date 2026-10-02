@@ -1,12 +1,14 @@
 /**
  * One-click unsubscribe endpoint (Faza 26, RFC 8058).
  *
- * Obsługuje DWA wywołania:
+ * Obsługuje TRZY wywołania:
  *   1. **GET** `/api/email/unsubscribe?t=<token>` — user klika link w mailu.
- *      Zwraca HTML z potwierdzeniem (server-rendered, bez JS).
- *   2. **POST** `/api/email/unsubscribe?t=<token>` z body `List-Unsubscribe=One-Click`
- *      — Gmail/Outlook one-click button. RFC 8058 wymaga POST z tym body.
- *      Zwraca 200 OK (empty body).
+ *      Zwraca HTML z pytaniem i przyciskiem — BEZ zapisu. Skanery poczty
+ *      i podglądy linków otwierają linki same; do 02.10 GET wypisywał
+ *      i wypisywał ludzi bez ich wiedzy (AUD-97).
+ *   2. **POST** z formularza tej strony (`confirm=1`) — wypis, HTML z potwierdzeniem.
+ *   3. **POST** z body `List-Unsubscribe=One-Click` — Gmail/Outlook one-click
+ *      button. RFC 8058 wymaga POST z tym body. Zwraca JSON.
  *
  * Token jest HMAC-signed (bezstanowy) — nie wymaga DB lookup żeby zweryfikować
  * autentyczność. Sam unsubscribe to upsert do `email_preferences`.
@@ -56,10 +58,39 @@ function htmlResponse(opts: {
   });
 }
 
+/**
+ * Strona z pytaniem: formularz POST na ten sam adres. Token tylko w adresie
+ * (base64url + kropka), więc w atrybucie jest bezpieczny po zakodowaniu.
+ */
+function confirmPage(token: string, categoryLabel: string): Response {
+  const action = `/api/email/unsubscribe?t=${encodeURIComponent(token)}`;
+  return htmlResponse({
+    title: 'Wypisać się?',
+    body: `
+      <p>Przestaniemy wysyłać Ci emaile z kategorii: <strong>${categoryLabel}</strong>.</p>
+      <form method="post" action="${action}">
+        <input type="hidden" name="confirm" value="1" />
+        <button type="submit" style="margin-top:8px;padding:10px 20px;border:0;border-radius:8px;background:#111827;color:#fff;font-size:15px;cursor:pointer">Wypisz mnie</button>
+      </form>
+    `,
+    ok: true,
+  });
+}
+
+function categoryLabelOf(category: string): string {
+  return category === 'transactional'
+    ? 'transakcyjnych (faktury, KSeF, hasła)'
+    : category === 'product_updates'
+      ? 'powiadomień produktowych (welcome, magic import done, paczki dla księgowej)'
+      : 'powiadomień marketingowych';
+}
+
 async function handleUnsubscribe(
   token: string | null,
   source: 'one_click' | 'settings_ui',
   isOneClick: boolean,
+  /** GET: tylko pytanie, bez zapisu. */
+  confirmOnly = false,
 ): Promise<Response> {
   // Każde wejście przechodzi przez weryfikację. Brak tokenu jest również
   // wynikiem odmowy; osobna gałąź poniżej ustala tylko treść odpowiedzi.
@@ -93,6 +124,8 @@ async function handleUnsubscribe(
     });
   }
 
+  if (confirmOnly) return confirmPage(token, categoryLabelOf(verified.category));
+
   try {
     await unsubscribe({
       userId: verified.userId,
@@ -114,12 +147,7 @@ async function handleUnsubscribe(
     return NextResponse.json({ unsubscribed: true });
   }
 
-  const categoryLabel =
-    verified.category === 'transactional'
-      ? 'transakcyjnych (faktury, KSeF, hasła)'
-      : verified.category === 'product_updates'
-        ? 'powiadomień produktowych (welcome, magic import done, paczki dla księgowej)'
-        : 'powiadomień marketingowych';
+  const categoryLabel = categoryLabelOf(verified.category);
 
   return htmlResponse({
     title: 'Wypisano z subskrypcji',
@@ -135,14 +163,19 @@ async function handleUnsubscribe(
 export async function GET(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const token = url.searchParams.get('t');
-  return handleUnsubscribe(token, 'settings_ui', false);
+  return handleUnsubscribe(token, 'settings_ui', false, true);
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const token = url.searchParams.get('t');
+  // Formularz z naszej strony niesie `confirm=1` — odpowiadamy stroną HTML.
+  const body = await req.text().catch(() => '');
+  if (new URLSearchParams(body).get('confirm') === '1') {
+    return handleUnsubscribe(token, 'settings_ui', false);
+  }
   // RFC 8058: Gmail/Outlook one-click — POST z body `List-Unsubscribe=One-Click`.
   // Nie wymagamy ścisłej walidacji body (różne klienty mailowe wysyłają różne
   // formaty), wystarczy że POST przyszedł z poprawnym tokenem.
-  const url = new URL(req.url);
-  const token = url.searchParams.get('t');
   return handleUnsubscribe(token, 'one_click', true);
 }

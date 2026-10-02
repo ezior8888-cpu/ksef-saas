@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError, RetryAfterError } from 'inngest';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
+import type { KsefEnvironment } from '@/types/ksef';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { trackServer } from '@/lib/analytics/server';
 import { logAuditSystem } from '@/lib/audit/log-system';
@@ -35,11 +36,15 @@ import {
   KSEF_PAUSED,
 } from '@/lib/ksef/submission-holds';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
+import { isOffline24Enabled } from '@/lib/ksef/offline24-policy';
+import { recordXmlDocument } from '@/lib/storage/xml-documents';
+import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
 import {
   getKsefRetryDelay,
+  ksefRetryDelayFor,
   KSEF_MAX_RETRIES,
   KSEF_TENANT_CONCURRENCY_LIMIT,
   KSEF_TENANT_THROTTLE_LIMIT,
@@ -67,6 +72,9 @@ const NEUTRAL_HOLD_CODES = [KSEF_DUPLICATE_RECONCILE, KSEF_PAUSED, KOR_HOLD] as 
 interface SubmitOutcome {
   ksefNumber: string;
   xmlStoragePath: string;
+  /** Znane przy świeżej wysyłce; przy uzgodnieniu liczone z pliku w magazynie. */
+  xmlSha256Hash?: string;
+  xmlSizeBytes?: number;
   acquisitionTimestamp?: string;
   sessionReferenceNumber?: string;
   invoiceReferenceNumber?: string;
@@ -304,6 +312,11 @@ export async function onSubmitInvoiceExhausted(
         // Trzy QR kody zostają wygenerowane przez `addToOfflineQueue` i jako
         // efekt uboczny ustawiają `invoices.ksef_status = 'offline_queued'`.
         const offlineResult = await step.run('try-offline-queue', async () => {
+          // AUD-14: na produkcji nie parkujemy — zostaje „do uzgodnienia”.
+          const ksefEnv = (process.env.KSEF_ENV as KsefEnvironment | undefined) ?? 'test';
+          if (!isOffline24Enabled(ksefEnv)) {
+            return { queued: false as const, reason: 'offline24-wylaczony-na-produkcji' as const };
+          }
           try {
             const { getTenantKsefCredentials } = await import('@/lib/supabase/admin-queries');
             const { addToOfflineQueue } = await import('@/lib/ksef/offline-queue');
@@ -495,7 +508,10 @@ export async function runSubmitInvoice(
 
     // Re-emisja po odebraniu z kolejki offline — nie blokuj kolejną sondą zdrowia KSeF,
     // tylko idź klasyczną ścieżką online submit.
-    if (!fromOfflineQueue) {
+    // AUD-14: na KSeF produkcyjnym bez automatycznego Offline24
+    // (`offline24-policy.ts`) — gdy KSeF nie odpowiada, zadziała zwykłe
+    // ponowienie po sondzie zdrowia przed wysyłką.
+    if (!fromOfflineQueue && isOffline24Enabled(env)) {
       const health = await step.run('check-ksef-health', async () =>
         shouldUseOfflineMode(env),
       );
@@ -784,6 +800,14 @@ export async function runSubmitInvoice(
             { cause: error },
           );
         }
+        // AUD-13: KSeF nigdy nie przyjmie XML-a niezgodnego z XSD — ponowienia
+        // i Offline24 tylko odsuwały komunikat o błędzie o kilka dni.
+        if (error instanceof InvoiceXmlSchemaError) {
+          throw new NonRetriableError(
+            `Faktura nie przeszła walidacji schematu FA(3): ${error.errors.slice(0, 3).join('; ')}`,
+            { cause: error },
+          );
+        }
         // 401: wygasła sesja z pamięci podręcznej — to nie odrzucenie faktury.
         // Ponowienie zacznie od uzgodnienia, jeśli plik zdążył dotrzeć do KSeF.
         if (error instanceof KsefApiError && error.status === 401) {
@@ -851,8 +875,8 @@ export async function runSubmitInvoice(
         // 30s → 2min → 5min → 15min → 1h (Faza 23 sekcja 2).
         //
         // KsefApiError 429 może mieć `Retry-After` header — jeśli MF mówi
-        // nam konkretnie ile czekać, słuchamy. Inaczej trzymamy się schedule'a.
-        const customDelay = getKsefRetryDelay(attempt);
+        // nam konkretnie ile czekać, słuchamy (AUD-92). Inaczej harmonogram.
+        const customDelay = ksefRetryDelayFor(error, attempt);
         const isKsefApi = error instanceof KsefApiError;
         const errorLabel = isKsefApi
           ? `KSeF HTTP ${error.status}: ${error.message}`
@@ -914,6 +938,25 @@ export async function runSubmitInvoice(
         }
       }
 
+      // AUD-12: wiersz xml_documents (PDF z kodem KOD I, „Pobierz XML”, portal
+      // księgowej). Fail-soft jak historia wysyłki — akceptacji nie cofamy,
+      // brak wiersza widać w Sentry.
+      try {
+        await recordXmlDocument({
+          tenantId,
+          invoiceId,
+          storagePath: result.xmlStoragePath,
+          sha256Hash: result.xmlSha256Hash,
+          sizeBytes: result.xmlSizeBytes,
+        });
+      } catch (e) {
+        logger.error('Nie zapisano xml_documents dla przyjętej faktury', {
+          invoiceId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        Sentry.captureException(e, { tags: { area: 'ksef.xml-documents' }, extra: { invoiceId } });
+      }
+
       // Faza 22: faktura zaakceptowana → dashboard KPI się zmieniają.
       // Czyścimy cache żeby user widział świeży count zamiast czekać na 5min TTL.
       const { invalidateTenantDashboard } = await import('@/lib/cache/invalidation');
@@ -933,6 +976,8 @@ export async function runSubmitInvoice(
 
     await step.sendEvent('trigger-upo-download', {
       name: 'invoice/upo.requested',
+      // Limit „3 naraz per NIP” w pg-boss działa tylko z grupą (AUD-92).
+      groupId: nip,
       data: {
         invoiceId,
         tenantId,

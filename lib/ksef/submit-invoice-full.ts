@@ -7,9 +7,10 @@ import {
   generateFinalInvoiceXml,
 } from '@/lib/ksef/fa3-advance-generator';
 import { generateFA3Xml, InvoiceValidationError } from '@/lib/xml/fa3-generator';
+import { claimXmlGeneratedAt } from '@/lib/ksef/xml-generated-at';
 import { assertSpecialInvoiceData } from '@/lib/ksef/special-invoice-data';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
-import { validateInvoiceXml } from '@/lib/xml/validator';
+import { InvoiceXmlSchemaError, validateInvoiceXml } from '@/lib/xml/validator';
 import { invoiceXmlExistsForId, uploadInvoiceXml } from '@/lib/storage/r2';
 
 import {
@@ -38,6 +39,7 @@ export interface FullSubmitResult {
   ksefNumber: string;
   xmlStoragePath: string;
   xmlSha256Hash: string;
+  xmlSizeBytes: number;
   /** ISO 8601 timestamp akceptacji; `undefined` jeśli KSeF nie zwrócił go w statusie. */
   acquisitionTimestamp?: string;
   /** Numer sesji KSeF — potrzebny do pobrania UPO (KSeF 2.0 trzyma je w zasobach sesji). */
@@ -76,24 +78,25 @@ export async function submitInvoiceFullFlow(
   assertSpecialInvoiceData(invoice.type, { correctionData, advanceData, finalPayload });
 
   // 1. Generuj XML (faktura VAT albo faktura korygująca FA(3)).
+  //    `DataWytworzeniaFa` z pierwszej próby — ponowienie buduje ten sam plik
+  //    (AUD-46), więc archiwum i skrót odpowiadają temu, co ma KSeF.
+  const generatedAt = await claimXmlGeneratedAt(tenantId, invoiceId);
   const xml =
     correctionData != null
-      ? generateCorrectionInvoiceXml(correctionData)
+      ? generateCorrectionInvoiceXml(correctionData, { generatedAt })
       : advanceData != null
-        ? generateAdvanceInvoiceXml(advanceData)
+        ? generateAdvanceInvoiceXml(advanceData, { generatedAt })
       : finalPayload != null && finalPayload.advanceSettlementRows.length > 0
-        ? generateFinalInvoiceXml(finalPayload.finalData, finalPayload.advanceSettlementRows)
-        : generateFA3Xml(invoice);
+        ? generateFinalInvoiceXml(finalPayload.finalData, finalPayload.advanceSettlementRows, { generatedAt })
+        : generateFA3Xml(invoice, { generatedAt });
 
   // 2. Waliduj XSD - jeśli XML się nie zgadza ze schematem FA(3), KSeF i tak
   //    by go odrzucił. Robimy to lokalnie żeby nie palić sesji KSeF
   //    (limit otwartych sesji per podmiot + czas dostępu do API).
   const validation = await validateInvoiceXml(xml);
   if (!validation.valid) {
-    throw new Error(
-      `XML FA(3) jest niezgodny ze schematem XSD:\n${validation.errors
-        .map((e) => `  Linia ${e.line}: ${e.message}`)
-        .join('\n')}`,
+    throw new InvoiceXmlSchemaError(
+      validation.errors.map((e) => `Linia ${e.line}: ${e.message}`),
     );
   }
 
@@ -149,6 +152,7 @@ export async function submitInvoiceFullFlow(
     ksefNumber: submitResult.ksefNumber,
     xmlStoragePath: uploadResult.storagePath,
     xmlSha256Hash: uploadResult.sha256Hash,
+    xmlSizeBytes: uploadResult.sizeBytes,
     acquisitionTimestamp: submitResult.acquisitionTimestamp,
     sessionReferenceNumber: submitResult.sessionReferenceNumber,
     invoiceReferenceNumber: submitResult.invoiceReferenceNumber,

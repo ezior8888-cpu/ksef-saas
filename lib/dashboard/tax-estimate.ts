@@ -1,5 +1,6 @@
 import { kpirCostAmount, type KpirCostInput } from '@/lib/categorization/kpir-cost';
 import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
  * Szacunek podatku dochodowego na panelu przepływów („ile odłożyć”).
@@ -57,7 +58,7 @@ export function estimateIncomeTaxThisYear(
       0,
     );
   const cost = expenses.filter((e) => inRange(e.issue_date)).reduce((s, e) => s + kpirCostAmount(e), 0);
-  const amount = Math.max(0, Math.round((revenue - cost) * LINEAR_PIT_RATE * 100) / 100);
+  const amount = Math.max(0, roundToCents((revenue - cost) * LINEAR_PIT_RATE));
 
   if (fullYear) {
     return { amount, label: 'Szac. podatek od 1 stycznia', subtitle: '19% liniowy', fullYear };

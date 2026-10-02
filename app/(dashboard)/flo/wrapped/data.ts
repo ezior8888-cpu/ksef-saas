@@ -25,6 +25,7 @@ import type {
  */
 
 interface InvoiceRow {
+  id: string;
   issue_date: string;
   gross_total: number | null;
   ksef_status: string | null;
@@ -77,6 +78,35 @@ function daysToPay(row: InvoiceRow): number | null {
   return Math.round((paid - due) / DAY);
 }
 
+/**
+ * Strona odczytu. PostgREST oddaje najwyżej `max-rows` wierszy (domyślnie
+ * 1000) i NIE zgłasza obcięcia — jedno zapytanie po rok albo historię
+ * ucinało duże konto bez słowa (AUD-120). Strona mniejsza od limitu, więc
+ * strona niepełna znaczy „koniec”, a nie „serwer przyciął”.
+ */
+const WRAPPED_PAGE = 500;
+
+type PageQuery = (
+  from: number,
+  to: number,
+) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>;
+
+/** Wszystkie strony po stałej kolejności (data, id) — bez dziur i dubli. */
+async function readAllPages(query: PageQuery): Promise<InvoiceRow[]> {
+  const out: InvoiceRow[] = [];
+  for (let from = 0; ; from += WRAPPED_PAGE) {
+    const { data, error } = await query(from, from + WRAPPED_PAGE - 1);
+    // BŁĄD ZAPYTANIA TO NIE JEST „BRAK DANYCH”. Odmowa RLS albo nieprzeładowany
+    // schemat PostgREST-a wyglądałyby tu identycznie jak konto bez faktur —
+    // czyli klient z pełnym rokiem pracy zobaczyłby „nie mam z czego zrobić
+    // podsumowania”, a my nie dowiedzielibyśmy się o awarii.
+    if (error) throw new Error(error.message);
+    const page = (data ?? []) as InvoiceRow[];
+    out.push(...page);
+    if (page.length < WRAPPED_PAGE) return out;
+  }
+}
+
 export async function readWrappedInput(
   supabase: SupabaseClient,
   tenantId: string,
@@ -85,35 +115,34 @@ export async function readWrappedInput(
   const from = `${year - 1}-01-01`;
   const to = `${year + 1}-01-01`;
 
-  const [recentResult, historyResult] = await Promise.all([
-    supabase
-      .from('invoices')
-      .select(
-        'issue_date, gross_total, ksef_status, paid_at, payment_due_date, buyer_nip, buyer_data, origin',
-      )
-      .eq('tenant_id', tenantId)
-      .eq('direction', 'outgoing')
-      .gte('issue_date', from)
-      .lt('issue_date', to),
+  const [rows, history] = await Promise.all([
+    readAllPages((pageFrom, pageTo) =>
+      supabase
+        .from('invoices')
+        .select(
+          'id, issue_date, gross_total, ksef_status, paid_at, payment_due_date, buyer_nip, buyer_data, origin',
+        )
+        .eq('tenant_id', tenantId)
+        .eq('direction', 'outgoing')
+        .gte('issue_date', from)
+        .lt('issue_date', to)
+        .order('issue_date', { ascending: true })
+        .order('id', { ascending: true })
+        .range(pageFrom, pageTo),
+    ),
     // Osobne, lekkie zapytanie po całą historię: „najdłuższa współpraca”
     // liczy się od pierwszej faktury w ogóle, nie od pierwszej w tym roku.
-    supabase
-      .from('invoices')
-      .select('issue_date, buyer_nip, buyer_data')
-      .eq('tenant_id', tenantId)
-      .eq('direction', 'outgoing')
-      .order('issue_date', { ascending: true })
-      .limit(10_000),
+    readAllPages((pageFrom, pageTo) =>
+      supabase
+        .from('invoices')
+        .select('id, issue_date, buyer_nip, buyer_data')
+        .eq('tenant_id', tenantId)
+        .eq('direction', 'outgoing')
+        .order('issue_date', { ascending: true })
+        .order('id', { ascending: true })
+        .range(pageFrom, pageTo),
+    ),
   ]);
-
-  // BŁĄD ZAPYTANIA TO NIE JEST „BRAK DANYCH”. Odmowa RLS albo nieprzeładowany
-  // schemat PostgREST-a wyglądałyby tu identycznie jak konto bez faktur —
-  // czyli klient z pełnym rokiem pracy zobaczyłby „nie mam z czego zrobić
-  // podsumowania”, a my nie dowiedzielibyśmy się o awarii.
-  const failure = recentResult.error ?? historyResult.error;
-  if (failure) throw new Error(failure.message);
-
-  const rows = (recentResult.data ?? []) as InvoiceRow[];
   const thisYear = rows.filter((row) => row.issue_date.startsWith(String(year)));
 
   // ── Miesiące ────────────────────────────────────────────────
@@ -139,7 +168,7 @@ export async function readWrappedInput(
 
   // ── Kontrahenci ─────────────────────────────────────────────
   const firstSeen = new Map<string, string>();
-  for (const row of (historyResult.data ?? []) as InvoiceRow[]) {
+  for (const row of history) {
     const key = buyerKey(row);
     if (!firstSeen.has(key)) firstSeen.set(key, row.issue_date.slice(0, 7));
   }

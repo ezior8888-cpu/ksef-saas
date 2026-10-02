@@ -99,7 +99,7 @@ export interface TaxParams {
 export const TAX_PARAMS: readonly TaxParams[] = [
   {
     validFrom: '2026-01-01',
-    vatExemptionLimit: 200_000,
+    vatExemptionLimit: 240_000, // od 1.01.2026 (AUD-129); wcześniej 200 000
     pitScaleLowRate: 0.12,
     pitScaleHighRate: 0.32,
     pitScaleThreshold: 120_000,

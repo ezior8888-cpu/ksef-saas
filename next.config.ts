@@ -78,6 +78,8 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/**': [
       './lib/xml/schemas/**',
+      // XSD JPK: portal księgowej waliduje plik przed wydaniem (AUD-121).
+      './lib/exports/schemas/**',
       './lib/pdf/fonts/**',
       './content/help/**',
     ],
