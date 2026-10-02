@@ -45,7 +45,9 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00102 | Claude | `signup_gate_hook` (AUD-63) | PR `claude/naprawy-wylaczniki-2`; wgranie PRZED zmiennymi `GOTRUE_HOOK_BEFORE_USER_CREATED_*` |
 | 00103 | Claude | `org_role_guards` (AUD-29: owner nadaje/odbiera tylko owner) | PR `claude/naprawy-migracje`; zgodna wstecz — wgrana na produkcję przed wdrożeniem |
 | 00104 | Claude | `service_function_grants` (AUD-30, AUD-64: EXECUTE tylko service_role) | PR `claude/naprawy-migracje`; zgodna wstecz — wgrana na produkcję przed wdrożeniem |
-| **00105** | — | następny wolny | — |
+| 00105 | Claude | `flo_usage_increment` (AUD-116: atomowy zapis zużycia AI) | PR `claude/naprawy-flo-budzet`; zgodna wstecz — wgrana przed wdrożeniem |
+| 00106 | Claude | `org_rpc_public_revoke` (dopełnienie 00103: EXECUTE bez PUBLIC) | PR `claude/naprawy-flo-budzet`; zgodna wstecz |
+| **00107** | — | następny wolny | — |
 
 ---
 

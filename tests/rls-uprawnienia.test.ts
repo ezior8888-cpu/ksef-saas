@@ -99,6 +99,14 @@ describe.skipIf(!hasDatabase)('uprawnienia funkcji i ról (00103, 00104)', () =>
     expect(error?.code).toBe('42501');
   });
 
+  it.each([
+    ['approve_join_request', { p_request_id: '66666666-6666-4666-8666-666666666666', p_role: 'member' }],
+    ['revoke_membership', { p_membership_id: '66666666-6666-4666-8666-666666666666' }],
+  ])('anon nie wywoła %s (00106)', async (fn, args) => {
+    const { error } = await anonClient().rpc(fn, args);
+    expect(error?.code).toBe('42501');
+  });
+
   it('zalogowany członek nie wywoła increment_push_failed_count', async () => {
     const c = await signedIn(ADMIN_EMAIL);
     const { error } = await c.rpc('increment_push_failed_count', { sub_id: '55555555-5555-4555-8555-555555555555' });
