@@ -165,7 +165,7 @@ Commit: `577dc91`
 Sprawdzenie: `pnpm exec vitest run tests/unit/formularz-dane-xsd-baza.test.ts`; w aplikacji: wklejenie nazwy z niewidocznym znakiem sterującym albo jednostki dłuższej niż 50 znaków pokazuje błąd przy polu zamiast odrzucenia po wysyłce.
 
 ### P-13 — Korekta przed/po: pary pozycji według treści, nie kolejności
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-019
 Zmiana: `lib/ksef/fa3-correction-generator.ts` (`beforeAfterRows`):
@@ -173,9 +173,11 @@ Zmiana: `lib/ksef/fa3-correction-generator.ts` (`beforeAfterRows`):
 - zmienione parowane po nazwie (a przy braku dopasowania po kolejności);
 - usunięte → tylko „przed”, dodane → tylko „po”.
 Kryterium: test — usunięcie środkowej z trzech pozycji daje tylko wiersz „przed” tej pozycji; sumy P_13/P_14/P_15 bez zmian; istniejące testy korekt przechodzą.
+Commit: `65cfca9`
+Sprawdzenie: `pnpm exec vitest run tests/unit/korekta-parowanie-pozycji.test.ts` — usunięcie środkowej pozycji daje jeden wiersz „przed”, XML przechodzi XSD; sumy bez zmian.
 
 ### P-14 — PDF: czytelna stawka dla faktur z importu historii
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-067 (część PDF; JPK w PR #128)
 Zmiana: `lib/pdf/invoice-renderer.ts` — etykieta stawki dla kodów FA(3) spoza mapy (np. „0 KR”, „np I”, „0 WDT”) pokazuje sam kod zamiast „undefined”; w podsumowaniu też.
