@@ -325,14 +325,27 @@ describe('validateInvoice', () => {
     assert.ok(errors.some((e) => e.includes('30 dni w przyszłości')));
   });
 
-  it('odrzuca saleDate > issueDate', () => {
+  // Art. 106i ust. 7: fakturę można wystawić najwcześniej 60. dnia przed
+  // dostawą — data sprzedaży do 60 dni PO dacie wystawienia jest poprawna
+  // (F-014, audyt bloku 1; wcześniej ten test wymagał odrzucenia każdej).
+  it('odrzuca saleDate późniejszą niż issueDate + 60 dni', () => {
+    const invoice = finalizeInvoice({
+      ...SAMPLE_INPUT,
+      saleDate: '2026-06-19',
+      issueDate: '2026-04-19',
+    });
+    const errors = validateInvoice(invoice, MOCK_NOW);
+    assert.ok(errors.some((e) => e.includes('sprzedaży')));
+  });
+
+  it('akceptuje saleDate do 60 dni po issueDate', () => {
     const invoice = finalizeInvoice({
       ...SAMPLE_INPUT,
       saleDate: '2026-05-01',
       issueDate: '2026-04-19',
     });
     const errors = validateInvoice(invoice, MOCK_NOW);
-    assert.ok(errors.some((e) => e.includes('sprzedaży')));
+    assert.ok(!errors.some((e) => e.includes('sprzedaży')));
   });
 
   it('odrzuca pustą listę pozycji', () => {

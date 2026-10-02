@@ -4,6 +4,8 @@ import {
   validatePeselChecksum,
 } from '@/lib/xml/invoice-calculator';
 
+import { isSaleDateWithinLimit, SALE_DATE_TOO_LATE_MESSAGE } from '@/lib/invoices/sale-date';
+
 // UWAGA: typ VatRate w types/invoice.ts nie zawiera '3' (stawka ryczałtu
 // rolnika ryczałtowego). Trzymamy się tego samego zestawu, żeby
 // calculateLineItem/getVatPercentage nie traciły type-safety. '3' da się
@@ -110,9 +112,9 @@ export const invoiceFormSchema = z
     (d) =>
       !d.saleDate ||
       d.saleDate === '' ||
-      new Date(d.saleDate).getTime() <= new Date(d.issueDate).getTime(),
+      isSaleDateWithinLimit(d.issueDate, d.saleDate),
     {
-      message: 'Data sprzedaży nie może być późniejsza niż data wystawienia',
+      message: SALE_DATE_TOO_LATE_MESSAGE,
       path: ['saleDate'],
     },
   );
