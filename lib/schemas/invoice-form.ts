@@ -7,6 +7,56 @@ import {
 } from '@/lib/xml/invoice-calculator';
 
 import { isSaleDateWithinLimit, SALE_DATE_TOO_LATE_MESSAGE } from '@/lib/invoices/sale-date';
+import { addressCountryForKodUE, parseVatUe, type KodUE } from '@/lib/invoices/vat-ue';
+
+/**
+ * Kraje adresu nabywcy z UE (AUD-70) — polskie nazwy do formularza.
+ *
+ * Klucze to prefiksy VAT-UE (`KodUE`) bez Polski, więc typ pilnuje, żeby
+ * żadnego państwa z listy XSD nie zabrakło. Kod adresu bierzemy przez
+ * `addressCountryForKodUE` — Grecja ma w numerze VAT `EL`, a w adresie `GR`.
+ */
+const NAZWY_KRAJOW_UE: Record<Exclude<KodUE, 'PL'>, string> = {
+  AT: 'Austria',
+  BE: 'Belgia',
+  BG: 'Bułgaria',
+  CY: 'Cypr',
+  CZ: 'Czechy',
+  DK: 'Dania',
+  EE: 'Estonia',
+  FI: 'Finlandia',
+  FR: 'Francja',
+  DE: 'Niemcy',
+  EL: 'Grecja',
+  HR: 'Chorwacja',
+  HU: 'Węgry',
+  IE: 'Irlandia',
+  IT: 'Włochy',
+  LV: 'Łotwa',
+  LT: 'Litwa',
+  LU: 'Luksemburg',
+  MT: 'Malta',
+  NL: 'Holandia',
+  PT: 'Portugalia',
+  RO: 'Rumunia',
+  SK: 'Słowacja',
+  SI: 'Słowenia',
+  ES: 'Hiszpania',
+  SE: 'Szwecja',
+  XI: 'Irlandia Północna',
+};
+
+export const EU_BUYER_COUNTRIES: ReadonlyArray<{ code: string; name: string }> = (
+  Object.entries(NAZWY_KRAJOW_UE) as Array<[Exclude<KodUE, 'PL'>, string]>
+)
+  .map(([kod, name]) => ({ code: addressCountryForKodUE(kod), name }))
+  .sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+
+const EU_BUYER_COUNTRY_CODES: ReadonlySet<string> = new Set(EU_BUYER_COUNTRIES.map((k) => k.code));
+
+/** Stawka „np. II” (art. 100 ust. 1 pkt 4) bez nabywcy z innego państwa UE. */
+export const NP_II_REQUIRES_EU_BUYER_MESSAGE =
+  'Stawka np. II tylko dla usługi dla firmy z innego kraju UE z numerem VAT-UE — wybierz nabywcę „Firma z UE (VAT-UE)”';
 
 // UWAGA: typ VatRate w types/invoice.ts nie zawiera '3' (stawka ryczałtu
 // rolnika ryczałtowego). Trzymamy się tego samego zestawu, żeby
@@ -87,7 +137,7 @@ export const invoiceFormSchema = z
       z.literal(''),
       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data sprzedaży: RRRR-MM-DD'),
     ]),
-    /** Dla firm — 10 cyfr + checksum (walidacja gdy buyerIsConsumer=false). */
+    /** Dla firm z Polski — 10 cyfr + checksum (gdy nabywca nie jest osobą prywatną ani firmą z UE). */
     buyerNip: z.string(),
     buyerName: z
       .string()
@@ -112,6 +162,16 @@ export const invoiceFormSchema = z
     buyerConsumerIdType: buyerConsumerIdTypeEnum.optional(),
     buyerPesel: z.string(),
     buyerIdDocument: z.string(),
+    /**
+     * AUD-70: firma z innego państwa UE, identyfikowana numerem VAT-UE
+     * (`KodUE` + `NrVatUE` w FA(3)). Wyklucza `buyerIsConsumer`. Pola UE są
+     * opcjonalne, żeby stare wywołania (bez nich) znaczyły „firma z Polski”.
+     */
+    buyerIsEu: z.boolean().optional(),
+    /** Numer VAT-UE z prefiksem kraju, np. `DE123456789` (Grecja: `EL`). */
+    buyerVatUe: z.string().optional(),
+    /** Kraj adresu nabywcy z UE (`TKodKraju`, Grecja `GR`) — z `EU_BUYER_COUNTRIES`. */
+    buyerCountryCode: z.string().optional(),
     lines: z.array(lineItemSchema).min(1, 'Dodaj co najmniej jedną pozycję'),
     paymentMethod: z.enum(['transfer', 'cash', 'card', 'other']),
     paymentDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -133,10 +193,53 @@ export const invoiceFormSchema = z
   .refine(
     (d) =>
       !!d.buyerIsConsumer ||
+      !!d.buyerIsEu ||
       (/^\d{10}$/.test(d.buyerNip) &&
         validateNipChecksum(d.buyerNip)),
     { message: 'NIP firmy — 10 cyfr i suma kontrolna', path: ['buyerNip'] },
   )
+  // AUD-70: nabywca z UE i stawka np. II (art. 100 ust. 1 pkt 4).
+  .superRefine((d, ctx) => {
+    if (d.buyerIsEu && d.buyerIsConsumer) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Nabywca to albo osoba prywatna, albo firma z UE — wybierz jedno',
+        path: ['buyerIsEu'],
+      });
+    }
+    if (d.buyerIsEu) {
+      const vat = parseVatUe(d.buyerVatUe);
+      if (!vat) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Numer VAT-UE — prefiks kraju UE i numer, np. DE123456789 (Grecja: EL)',
+          path: ['buyerVatUe'],
+        });
+      } else if (vat.kodUE === 'PL') {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'To polski numer — dla firmy z Polski wybierz „Firma z Polski (NIP)” i podaj NIP',
+          path: ['buyerVatUe'],
+        });
+      }
+      if (!EU_BUYER_COUNTRY_CODES.has(d.buyerCountryCode ?? '')) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Wybierz kraj nabywcy z UE (poza Polską)',
+          path: ['buyerCountryCode'],
+        });
+      }
+    }
+    // Ważność numeru VAT-UE pilnuje warunek wyżej — tu wystarczy rodzaj nabywcy.
+    const nabywcaZUe = d.buyerIsEu === true && !d.buyerIsConsumer;
+    if (!nabywcaZUe) {
+      d.lines.forEach((l, i) => {
+        if (l.vatRate === 'np_ii') {
+          ctx.addIssue({ code: 'custom', message: NP_II_REQUIRES_EU_BUYER_MESSAGE, path: ['lines', i, 'vatRate'] });
+        }
+      });
+    }
+  })
   .refine((d) => !d.buyerIsConsumer || !!d.buyerConsumerIdType, {
     message: 'Wybierz typ identyfikatora osoby fizycznej',
     path: ['buyerConsumerIdType'],
