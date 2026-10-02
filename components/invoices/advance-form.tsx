@@ -27,7 +27,7 @@ import {
   type AdvanceInvoiceSchemaIn,
 } from '@/lib/validators/invoice-validators';
 import { calculateAdvanceTotals } from '@/lib/invoices/calculator';
-import type { BuyerB2B, BuyerData, SellerData } from '@/types/invoice-types';
+import type { BuyerB2B, SellerData } from '@/types/invoice-types';
 
 import { saveAdvanceAction, saveAndSendAdvanceAction } from './advance-actions';
 
@@ -63,7 +63,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
     };
   }, []);
 
-  const defaults: AdvanceFormIn = {
+  const defaults = {
     invoiceType: 'advance',
     internalNumber: '',
     issueDate: today,
@@ -78,7 +78,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
     expectedDeliveryDate: undefined,
     vatRate: '23',
     description: 'Zaliczka na poczet przyszłej realizacji.',
-  };
+  } satisfies Omit<AdvanceFormIn, 'splitPayment'>;
 
   const form = useForm<AdvanceFormIn, unknown, AdvanceInvoiceSchemaIn>({
     resolver: zodResolver(advanceInvoiceSchema) as Resolver<
@@ -98,19 +98,12 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
   const advanceAmt = Number(useWatch({ control: form.control, name: 'advanceAmount' })) || 0;
   const vatWatch = useWatch({ control: form.control, name: 'vatRate' }) ?? '23';
   const paymentMethodWatch = useWatch({ control: form.control, name: 'paymentMethod' });
+  const splitPaymentWatch = useWatch({ control: form.control, name: 'splitPayment' });
 
   const preview = calculateAdvanceTotals({
-    invoiceType: 'advance',
-    internalNumber: '—',
-    issueDate: today,
-    paymentDueDate: due,
-    paymentMethod: 'transfer',
-    seller: initialSeller,
-    buyer: emptyBuyer as unknown as BuyerData,
     advanceAmount: advanceAmt,
     totalContractAmount: totalContract,
     vatRate: vatWatch as AdvanceInvoiceSchemaIn['vatRate'],
-    description: '—',
   });
 
   function currentBuyer(): BuyerB2B {
@@ -382,6 +375,33 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
               </p>
             ) : null}
           </div>
+          <fieldset className="sm:col-span-2 space-y-2">
+            <legend className={labelClass}>Czy do tej zaliczki stosuje się mechanizm podzielonej płatności (MPP)?</legend>
+            <div className="flex flex-wrap gap-5 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="advance-split-payment"
+                  checked={splitPaymentWatch === true}
+                  onChange={() => form.setValue('splitPayment', true, { shouldValidate: true, shouldDirty: true })}
+                />
+                Tak, MPP
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="advance-split-payment"
+                  checked={splitPaymentWatch === false}
+                  onChange={() => form.setValue('splitPayment', false, { shouldValidate: true, shouldDirty: true })}
+                />
+                Nie dotyczy
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground">Wybierz świadomie dla tej transakcji; sama kwota zaliczki nie rozstrzyga o MPP.</p>
+            {form.formState.errors.splitPayment ? (
+              <p className="text-xs text-red-600">{form.formState.errors.splitPayment.message}</p>
+            ) : null}
+          </fieldset>
         </div>
       </section>
 

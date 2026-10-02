@@ -101,7 +101,8 @@ afterEach(() => vi.unstubAllEnvs());
 
 beforeEach(() => {
   tables = {
-    tenants: [{ id: 'firma-a', nip: '5260001246', name: 'ACME', address_json: null }],
+    // Pełny profil sprzedawcy — #85 bierze sprzedawcę z firmy, nie z formularza.
+    tenants: [{ id: 'firma-a', nip: '5260001246', name: 'ACME', address_json: { addressLine1: 'ul. A 1', addressLine2: '00-001 Warszawa', countryCode: 'PL' } }],
     invoices: [
       zaliczka(ZAL_23, 12300, 10000, 2300, '23'),
       zaliczka(ZAL_8, 1080, 1000, 80, '8'),

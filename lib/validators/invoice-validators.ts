@@ -229,6 +229,8 @@ export const advanceInvoiceSchema = z
     bankAccount: z
       .union([z.literal(''), z.string().regex(/^\d{26}$/, 'Numer konta = 26 cyfr')])
       .optional(),
+    /** The user must answer explicitly; no default to "MPP does not apply". */
+    splitPayment: z.boolean({ message: 'Wybierz, czy do zaliczki stosuje się MPP' }),
     notes: z.string().max(2000).optional(),
 
     seller: sellerSchema,
@@ -243,6 +245,11 @@ export const advanceInvoiceSchema = z
   .refine((data) => data.advanceAmount <= data.totalContractAmount, {
     message: 'Zaliczka nie może być większa niż wartość umowy',
     path: ['advanceAmount'],
+  })
+  .refine((data) => !data.splitPayment ||
+    (data.paymentMethod === 'transfer' && !!data.bankAccount?.trim()), {
+    message: 'MPP wymaga przelewu i numeru rachunku',
+    path: ['splitPayment'],
   })
   .refine((data) => new Date(data.paymentDueDate) >= new Date(data.issueDate), {
     message: 'Termin płatności nie może być przed datą wystawienia',

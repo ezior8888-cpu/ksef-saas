@@ -1,25 +1,48 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Invoice } from '@/types/invoice';
 import type { CorrectionInvoiceData, AdvanceInvoiceData, FinalInvoiceData } from '@/types/invoice-types';
+import { sellerPartyFromSellerData } from '@/lib/invoices/map-buyer-party';
 import { assertSubmitReferences } from '@/lib/ksef/submit-reference-boundary';
+
+vi.mock('@/lib/xml/invoice-calculator', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/xml/invoice-calculator')>(),
+  // The NIP in this fixture is deliberately fictional.
+  validateNipChecksum: () => true,
+}));
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
 const invoiceId = '22222222-2222-4222-8222-222222222222';
 const parentId = '33333333-3333-4333-8333-333333333333';
 const nip = '1234567890';
+const seller = {
+  nip, name: 'Fixture seller',
+  address: { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' },
+};
+const sellerParty = sellerPartyFromSellerData(seller);
 const correction = {
   invoiceType: 'correction', internalNumber: 'KOR/1', parentInvoiceId: parentId,
   parentInvoiceNumber: 'VAT/1', parentInvoiceIssueDate: '2026-09-01',
   parentKsefNumber: 'KSEF-PROD-1', seller: { nip },
 } as CorrectionInvoiceData;
-const advance = { invoiceType: 'advance', internalNumber: 'ZAL/1' } as AdvanceInvoiceData;
-const final = { invoiceType: 'final', internalNumber: 'ROZ/1', advanceInvoiceIds: [parentId] } as FinalInvoiceData;
+const advance = {
+  invoiceType: 'advance', internalNumber: 'ZAL/1', seller,
+  issueDate: '2026-09-28', advanceAmount: 123, totalContractAmount: 1000,
+  vatRate: '23', description: 'Zaliczka na usługę',
+  buyer: {
+    type: 'b2b', idType: 'nip', nip: '9876543210', name: 'Fixture buyer',
+    address: { countryCode: 'PL', addressLine1: 'ul. Odbiorcy 2', addressLine2: '00-002 Warszawa' },
+  },
+  paymentMethod: 'transfer', paymentDueDate: '2026-09-28', bankAccount: '11111111111111111111111111',
+  taxAnnotations: { cashMethod: 2, splitPayment: 2 },
+} as AdvanceInvoiceData;
+const final = { invoiceType: 'final', internalNumber: 'ROZ/1', advanceInvoiceIds: [parentId], seller } as FinalInvoiceData;
 
 type Row = Record<string, unknown>;
 let invoice: Row;
 let eventInvoice: Invoice;
 let parent: Row;
+let tenant: Row;
 let readError: string | null;
 let reads: Array<{ table: string; filters: Record<string, unknown> }>;
 
@@ -31,7 +54,8 @@ function from(table: string) {
     eq: (key: string, value: unknown) => { record.filters[key] = value; return chain; },
     maybeSingle: async () => {
       if (readError === table) return { data: null, error: { message: 'temporary-db-error' } };
-      const row = table === 'invoices' && reads.length === 1 ? invoice : parent;
+      const row = table === 'tenants' ? tenant :
+        table === 'invoices' && reads.length === 1 ? invoice : parent;
       const match = Object.entries(record.filters).every(([key, value]) => row[key] === value);
       return { data: match ? row : null, error: null };
     },
@@ -53,13 +77,26 @@ beforeEach(() => {
     ksef_status: 'accepted', ksef_environment: 'test', internal_number: 'VAT/1',
     issue_date: '2026-09-01', ksef_number: 'KSEF-PROD-1', seller_nip: nip,
   };
+  tenant = { id: tenantId, nip, name: seller.name, address_json: seller.address };
 });
 
 function setDocument(internalNumber: string, type: Invoice['type']) {
-  eventInvoice = { internalNumber, type } as Invoice;
+  eventInvoice = {
+    internalNumber, type, seller: sellerParty,
+    ...(type === 'ZAL' ? {
+      advanceEnvelope: advance,
+      annotations: advance.taxAnnotations,
+      payment: {
+        method: 'transfer', dueDate: advance.paymentDueDate,
+        bankAccount: advance.bankAccount,
+      },
+    } : {}),
+  } as Invoice;
   invoice.internal_number = internalNumber;
   invoice.invoice_type = type;
-  invoice.fa3_data = { internalNumber, type };
+  invoice.fa3_data = JSON.parse(JSON.stringify(eventInvoice));
+  invoice.seller_nip = nip;
+  invoice.seller_data = JSON.parse(JSON.stringify(sellerParty));
 }
 
 const input = () => ({
@@ -157,6 +194,122 @@ describe('KSeF submit reference boundary', () => {
     await expect(assertSubmitReferences({
       ...input(), environment: 'test', correctionData: undefined,
       finalData: final, finalAdvanceSettlementRows: [{}],
+    })).rejects.toThrow('manual reconciliation');
+  });
+
+  it.each(['advance', 'final'] as const)(
+    'rejects a %s envelope seller changed after enqueue before KSeF I/O',
+    async (kind) => {
+      invoice.invoice_kind = kind;
+      setDocument(kind === 'advance' ? 'ZAL/1' : 'ROZ/1', kind === 'advance' ? 'ZAL' : 'ROZ');
+      invoice.advance_invoice_ids = kind === 'final' ? [parentId] : [];
+      const changedSeller = {
+        ...seller, address: { ...seller.address, addressLine1: 'ul. Inna 5' },
+      };
+      await expect(assertSubmitReferences({
+        ...input(), correctionData: undefined,
+        advanceData: kind === 'advance' ? { ...advance, seller: changedSeller } : undefined,
+        finalData: kind === 'final' ? { ...final, seller: changedSeller } : undefined,
+        finalAdvanceSettlementRows: kind === 'final' ? [{}] : undefined,
+      })).rejects.toThrow('manual reconciliation');
+      expect(reads).toHaveLength(1);
+    },
+  );
+
+  it('rejects an old ZAL event without flags and a tampered flag after enqueue', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined,
+      advanceData: { ...advance, taxAnnotations: undefined as unknown as AdvanceInvoiceData['taxAnnotations'] },
+    })).rejects.toThrow('manual reconciliation');
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined,
+      advanceData: { ...advance, taxAnnotations: { cashMethod: 1, splitPayment: 2 } },
+    })).rejects.toThrow('manual reconciliation');
+  });
+
+  it('rejects a ZAL bank account or payment date changed in the queued envelope', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    for (const patch of [
+      { bankAccount: '22222222222222222222222222' },
+      { paymentDueDate: '2026-09-29' },
+    ]) {
+      await expect(assertSubmitReferences({
+        ...input(), correctionData: undefined, advanceData: { ...advance, ...patch },
+      })).rejects.toThrow('manual reconciliation');
+    }
+  });
+
+  it('rejects a ZAL XML envelope with changed amount, buyer, or other payment description', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    const changed = [
+      { ...advance, advanceAmount: 200 },
+      { ...advance, buyer: { ...advance.buyer, name: 'Inny nabywca' } },
+      { ...advance, paymentMethod: 'other' as const },
+    ];
+    for (const advanceData of changed) {
+      await expect(assertSubmitReferences({
+        ...input(), correctionData: undefined, advanceData,
+      })).rejects.toThrow('manual reconciliation');
+    }
+    reads = [];
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined, advanceData: advance,
+    })).resolves.toBe('advance');
+  });
+
+  it('rejects changing ZAL payment description from other to compensation', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    const otherAdvance: AdvanceInvoiceData = { ...advance, paymentMethod: 'other' };
+    eventInvoice.advanceEnvelope = otherAdvance;
+    eventInvoice.payment.method = 'other';
+    invoice.fa3_data = JSON.parse(JSON.stringify(eventInvoice));
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined,
+      advanceData: { ...otherAdvance, paymentMethod: 'compensation' },
+    })).rejects.toThrow('manual reconciliation');
+    reads = [];
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined, advanceData: otherAdvance,
+    })).resolves.toBe('advance');
+  });
+
+  it('rejects legacy ZAL documents without a frozen XML envelope', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    delete eventInvoice.advanceEnvelope;
+    invoice.fa3_data = JSON.parse(JSON.stringify(eventInvoice));
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined, advanceData: advance,
+    })).rejects.toThrow('manual reconciliation');
+  });
+
+  it('rejects a stored or tenant seller NIP that differs from the special snapshot', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    invoice.seller_nip = '9999999999';
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined, advanceData: advance,
+    })).rejects.toThrow('manual reconciliation');
+
+    invoice.seller_nip = nip;
+    tenant.nip = '9999999999';
+    reads = [];
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined, advanceData: advance,
+    })).rejects.toThrow('manual reconciliation');
+  });
+
+  it('rejects a tenant seller address changed before submit, even when event and draft match', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    tenant.address_json = { ...seller.address, addressLine1: 'ul. Nowa 9' };
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined, advanceData: advance,
     })).rejects.toThrow('manual reconciliation');
   });
 

@@ -8,6 +8,8 @@ import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue'
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import { calculateAdvanceTotals } from '@/lib/invoices/calculator';
+import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
+import { matchesTenantSeller, sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
 import {
   buyerPartyFromBuyerData,
   sellerPartyFromSellerData,
@@ -83,7 +85,22 @@ function paymentMethodFa(m: AdvanceInvoiceSchemaIn['paymentMethod']): PaymentMet
   return m as PaymentMethod;
 }
 
-function buildAdvanceEnvelope(parsed: AdvanceInvoiceSchemaIn): AdvanceInvoiceData {
+function requireTenantSeller(supplied: SellerData, tenant: TenantSnap): SellerData {
+  const seller = sellerFromTenantProfile({
+    nip: tenant.nip,
+    name: tenant.name,
+    address_json: tenant.address,
+  });
+  if (!seller) {
+    throw new Error('Uzupełnij poprawne dane sprzedawcy w ustawieniach firmy przed wystawieniem faktury.');
+  }
+  if (!matchesTenantSeller(supplied, seller)) {
+    throw new Error('Dane sprzedawcy zmieniły się lub nie należą do tej firmy. Odśwież formularz.');
+  }
+  return seller;
+}
+
+function buildAdvanceEnvelope(parsed: AdvanceInvoiceSchemaIn, cashMethod: boolean): AdvanceInvoiceData {
   const bankNorm = normalizeBank(parsed.bankAccount ?? '');
   const buyer = parsed.buyer as BuyerData;
   const seller = parsed.seller as SellerData;
@@ -98,6 +115,10 @@ function buildAdvanceEnvelope(parsed: AdvanceInvoiceSchemaIn): AdvanceInvoiceDat
     notes: parsed.notes?.trim()?.length ? parsed.notes.trim() : undefined,
     seller,
     buyer,
+    taxAnnotations: {
+      cashMethod: cashMethod ? 1 : 2,
+      splitPayment: parsed.splitPayment ? 1 : 2,
+    },
     advanceAmount: parsed.advanceAmount,
     totalContractAmount: parsed.totalContractAmount,
     expectedDeliveryDate: parsed.expectedDeliveryDate,
@@ -143,7 +164,9 @@ function ghostAdvanceInvoice(envelope: AdvanceInvoiceData): Invoice {
       method: paymentMethodFa(envelope.paymentMethod),
       bankAccount: normalizeBank(envelope.bankAccount),
     },
+    annotations: envelope.taxAnnotations,
     notes: envelope.notes,
+    advanceEnvelope: envelope,
   };
 }
 
@@ -215,7 +238,9 @@ export async function saveAdvanceAction(raw: unknown): Promise<ActionResult> {
     const parsed = advanceInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 
-    const envelope = buildAdvanceEnvelope(parsed.data);
+    const seller = requireTenantSeller(parsed.data.seller, tenant);
+    const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
+    const envelope = buildAdvanceEnvelope({ ...parsed.data, seller }, cashMethod);
     const ghost = ghostAdvanceInvoice(envelope);
 
     const result = await insertAdvanceDraft(supabase, tenant.id, ghost, envelope);
@@ -242,7 +267,9 @@ export async function saveAndSendAdvanceAction(raw: unknown): Promise<ActionResu
     const parsed = advanceInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 
-    const envelope = buildAdvanceEnvelope(parsed.data);
+    const seller = requireTenantSeller(parsed.data.seller, tenant);
+    const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
+    const envelope = buildAdvanceEnvelope({ ...parsed.data, seller }, cashMethod);
     const ghost = ghostAdvanceInvoice(envelope);
 
     const saved = await insertAdvanceDraft(supabase, tenant.id, ghost, envelope);

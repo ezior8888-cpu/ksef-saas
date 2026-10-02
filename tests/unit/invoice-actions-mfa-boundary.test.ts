@@ -59,11 +59,16 @@ let selectedOrg: string | null;
 let vatBasis: string | null;
 /** `tenants.vat_cash_method` (00094) — false = metoda memoriałowa. */
 let cashMethod: boolean;
+let missingCashMethodColumn: boolean;
 
 function query(table: string) {
   const record: QueryLog = { table, filters: {}, operation: 'select' };
   queries.push(record);
+  let selectedColumns: string | undefined;
   const result = () => {
+    if (table === 'tenants' && selectedColumns === 'vat_cash_method' && missingCashMethodColumn) {
+      return { data: null, error: { code: '42703', message: 'missing vat_cash_method' } };
+    }
     let data: unknown = null;
     if (table === 'tenants') data = { id: org, nip: '1234567890', name: 'Fixture seller', address_json: { countryCode: 'PL' }, vat_exemption_basis: vatBasis, vat_cash_method: cashMethod };
     if (table === 'contractors') data = { nip: buyer.nip, name: buyer.name, address: buyer.address };
@@ -75,7 +80,8 @@ function query(table: string) {
     return { data, error: null };
   };
   const chain = {
-    select: vi.fn(() => chain), order: vi.fn(() => chain), limit: vi.fn(() => chain),
+    select: vi.fn((columns?: string) => { selectedColumns = columns; return chain; }),
+    order: vi.fn(() => chain), limit: vi.fn(() => chain),
     eq: vi.fn((key: string, value: unknown) => { record.filters[key] = value; return chain; }),
     insert: vi.fn((payload: unknown) => { record.operation = 'insert'; record.payload = payload; return chain; }),
     update: vi.fn((payload: unknown) => { record.operation = 'update'; record.payload = payload; return chain; }),
@@ -85,7 +91,7 @@ function query(table: string) {
   return chain;
 }
 beforeEach(() => {
-  vi.resetAllMocks(); queries = []; aal = 'aal2'; factor = 'totp'; member = true; selectedOrg = org; vatBasis = null; cashMethod = false;
+  vi.resetAllMocks(); queries = []; aal = 'aal2'; factor = 'totp'; member = true; selectedOrg = org; vatBasis = null; cashMethod = false; missingCashMethodColumn = false;
   mocks.getSession.mockResolvedValue({ data: { session: { access_token: token, user: { id: 'forged-cookie-user', factors: [] } } }, error: null });
   mocks.getUser.mockImplementation(async () => ({ data: { user: {
     id: userId, email: 'user@example.test',
@@ -231,6 +237,15 @@ describe('mechanizm podzielonej płatności (MPP, P_18A)', () => {
 });
 
 describe('metoda kasowa firmy (P_16)', () => {
+  it.each(['draft', 'send'])('brak 00094 blokuje %s przed zapisem i kolejką', async (action) => {
+    missingCashMethodColumn = true;
+    const result = action === 'draft' ? await saveDraftAction(form) : await saveAndSendInvoiceAction(form);
+    expect(result).toMatchObject({ success: false, error: expect.stringContaining('00094') });
+    expect(queries.some((query) => query.table === 'invoices')).toBe(false);
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
   it('firma na metodzie kasowej: P_16 w fakturze w kolejce KSeF', async () => {
     cashMethod = true;
     await expect(saveAndSendInvoiceAction(form)).resolves.toMatchObject({ success: true });

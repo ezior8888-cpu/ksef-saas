@@ -138,7 +138,9 @@ export interface AdvanceTotals {
   remainingAmount: number;
 }
 
-export function calculateAdvanceTotals(data: AdvanceInvoiceData): AdvanceTotals {
+export function calculateAdvanceTotals(
+  data: Pick<AdvanceInvoiceData, 'vatRate' | 'advanceAmount' | 'totalContractAmount'>,
+): AdvanceTotals {
   const vatRateNum = parseFloat(data.vatRate);
   const vatMultiplier = vatRateNum / 100;
 

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice } from '@/types/invoice';
 import type { AdvanceInvoiceData } from '@/types/invoice-types';
+import { sellerPartyFromSellerData } from '@/lib/invoices/map-buyer-party';
 
 type Row = Record<string, unknown>;
 type Query = {

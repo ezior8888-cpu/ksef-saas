@@ -16,6 +16,8 @@
  * - korekty wielokrotne
  */
 
+import type { AdvanceInvoiceData } from './invoice-types';
+
 // ═══════════════════════════════════════════════════════════════
 // Adresy i kontakty
 // ═══════════════════════════════════════════════════════════════
@@ -195,4 +197,7 @@ export interface Invoice {
 
   /** Uwagi dodatkowe - pole Stopka */
   notes?: string;
+
+  /** Frozen source for ZAL XML; the worker must reject a different queued envelope. */
+  advanceEnvelope?: AdvanceInvoiceData;
 }
