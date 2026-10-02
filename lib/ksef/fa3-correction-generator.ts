@@ -109,10 +109,66 @@ function domainLinesForCorrection(data: CorrectionInvoiceData): InvoiceLine[] {
       quantity: -l.quantity,
     }));
   }
-  if (data.correctionType === 'before_after') {
-    return data.linesAfter ?? [];
-  }
   return [];
+}
+
+/** Wiersz FaWiersz; `stanPrzed` = wiersz wg stanu przed korektą (XSD `StanPrzed`). */
+type CorrectionRow = InvoiceLineItem & { stanPrzed?: true };
+
+function sameLine(a: InvoiceLine, b: InvoiceLine): boolean {
+  return (
+    a.name === b.name &&
+    a.unit === b.unit &&
+    a.quantity === b.quantity &&
+    a.unitPriceNet === b.unitPriceNet &&
+    a.vatRate === b.vatRate &&
+    (a.pkwiuCode ?? '') === (b.pkwiuCode ?? '')
+  );
+}
+
+/**
+ * Korekta „przed/po” (AUD-03). XSD FaWiersz: „dane pozycji korygowanych wg
+ * stanu przed korektą i po korekcie jako osobne wiersze”, wiersz „przed”
+ * ze znacznikiem `StanPrzed`, odrębna numeracja. Pozycja bez zmian nie jest
+ * korygowana, więc do XML nie trafia. Pary po indeksie — formularz zaczyna
+ * od kopii pozycji faktury pierwotnej (`getCorrectionParentContextAction`);
+ * pozycja dopisana ma tylko wiersz „po”, usunięta — tylko „przed”.
+ */
+function beforeAfterRows(before: InvoiceLine[], after: InvoiceLine[]): CorrectionRow[] {
+  const rows: CorrectionRow[] = [];
+  for (let i = 0; i < Math.max(before.length, after.length); i += 1) {
+    const b = before[i];
+    const a = after[i];
+    if (b && a && sameLine(b, a)) continue;
+    if (b) rows.push({ ...toPreparedLineItems([b])[0]!, stanPrzed: true });
+    if (a) rows.push(toPreparedLineItems([a])[0]!);
+  }
+  return rows.map((row, idx) => ({ ...row, ordinal: idx + 1 }));
+}
+
+type VatSummary = ReturnType<typeof summarizeVatPerRate>[number];
+
+/**
+ * P_13_x / P_14_x faktury korygującej = różnica między stanem po i przed
+ * korektą (XSD: „kwota różnicy, o której mowa w art. 106j ust. 2 pkt 5”).
+ * Liczona z PEŁNYCH stanów obu dokumentów, żeby zaokrąglenia VAT były te same
+ * co na fakturze pierwotnej i na fakturze po korekcie. Stawki bez różnicy
+ * nie są wykazywane.
+ */
+function differenceSummaries(before: InvoiceLineItem[], after: InvoiceLineItem[]): VatSummary[] {
+  const byRate = new Map<VatRate, VatSummary>();
+  for (const s of summarizeVatPerRate(after)) byRate.set(s.rate, { ...s });
+  for (const s of summarizeVatPerRate(before)) {
+    const cur = byRate.get(s.rate);
+    byRate.set(s.rate, {
+      rate: s.rate,
+      netSum: (cur?.netSum ?? 0) - s.netSum,
+      vatSum: (cur?.vatSum ?? 0) - s.vatSum,
+    });
+  }
+  return [...byRate.values()]
+    .map((s) => ({ rate: s.rate, netSum: roundToCents(s.netSum), vatSum: roundToCents(s.vatSum) }))
+    .filter((s) => s.netSum !== 0 || s.vatSum !== 0);
 }
 
 function toPreparedLineItems(lines: InvoiceLine[]): InvoiceLineItem[] {
@@ -200,7 +256,7 @@ function buildAdnotacjeMinimal(fa: XMLBuilder, lines: InvoiceLineItem[]): void {
   adn.ele('PMarzy').ele('P_PMarzyN').txt('1');
 }
 
-function appendFaWiersze(fa: XMLBuilder, lines: InvoiceLineItem[]): void {
+function appendFaWiersze(fa: XMLBuilder, lines: CorrectionRow[]): void {
   for (const line of lines) {
     const wiersz = fa.ele('FaWiersz');
 
@@ -226,6 +282,7 @@ function appendFaWiersze(fa: XMLBuilder, lines: InvoiceLineItem[]): void {
       throw new Error(`FA(3) KOR: brak mapowania P_12 dla vatRate "${line.vatRate}".`);
     }
     wiersz.ele('P_12').txt(mapping.p12Value);
+    if (line.stanPrzed) wiersz.ele('StanPrzed').txt('1');
   }
 }
 
@@ -264,6 +321,57 @@ function buildPlatnosc(
   }
 }
 
+/** Wiersze FaWiersz i kwoty różnicy (P_13_x/P_14_x, P_15) wg typu korekty. */
+function correctionAmounts(
+  data: CorrectionInvoiceData,
+  domainLines: InvoiceLine[],
+): { preparedLines: CorrectionRow[]; summaries: VatSummary[]; grossTotal: number } {
+  if (data.correctionType === 'before_after') {
+    const before = toPreparedLineItems(data.linesBefore ?? []);
+    const after = toPreparedLineItems(data.linesAfter ?? []);
+    if (before.length === 0 && after.length === 0) {
+      throw new Error('FA(3) KOR: brak pozycji — uzupełnij linie wg typu korekty.');
+    }
+    const preparedLines = beforeAfterRows(data.linesBefore ?? [], data.linesAfter ?? []);
+    if (preparedLines.length === 0) {
+      throw new Error('FA(3) KOR: korekta przed/po nie zmienia żadnej pozycji — nie ma czego korygować.');
+    }
+    return {
+      preparedLines,
+      summaries: differenceSummaries(before, after),
+      grossTotal: roundToCents(
+        calculateInvoiceTotals(after).grossTotal - calculateInvoiceTotals(before).grossTotal,
+      ),
+    };
+  }
+
+  let preparedLines: CorrectionRow[];
+  if (data.correctionType === 'amount_change' && data.amountChange) {
+    const ac = data.amountChange;
+    const rate = guessVatRateForAmountChange(roundToCents(ac.netDelta), roundToCents(ac.vatDelta));
+    preparedLines = [
+      {
+        ordinal: 1,
+        name: ac.description,
+        unit: 'szt.',
+        quantity: 1,
+        unitPriceNet: roundToCents(ac.netDelta),
+        vatRate: rate,
+        netAmount: roundToCents(ac.netDelta),
+        vatAmount: roundToCents(ac.vatDelta),
+        grossAmount: roundToCents(ac.grossDelta),
+      },
+    ];
+  } else {
+    preparedLines = toPreparedLineItems(domainLines);
+  }
+  return {
+    preparedLines,
+    summaries: summarizeVatPerRate(preparedLines),
+    grossTotal: calculateInvoiceTotals(preparedLines).grossTotal,
+  };
+}
+
 /** XML FA(3) faktury korygującej (`RodzajFaktury` = `KOR`). */
 export function generateCorrectionInvoiceXml(
   data: CorrectionInvoiceData,
@@ -290,33 +398,15 @@ export function generateCorrectionInvoiceXml(
   }
 
   const domainLines = domainLinesForCorrection(data);
-  if (domainLines.length === 0 && data.correctionType !== 'amount_change') {
+  if (
+    domainLines.length === 0 &&
+    data.correctionType !== 'amount_change' &&
+    data.correctionType !== 'before_after'
+  ) {
     throw new Error('FA(3) KOR: brak pozycji — uzupełnij linie wg typu korekty.');
   }
 
-  let preparedLines: InvoiceLineItem[];
-  if (data.correctionType === 'amount_change' && data.amountChange) {
-    const ac = data.amountChange;
-    const rate = guessVatRateForAmountChange(roundToCents(ac.netDelta), roundToCents(ac.vatDelta));
-    preparedLines = [
-      {
-        ordinal: 1,
-        name: ac.description,
-        unit: 'szt.',
-        quantity: 1,
-        unitPriceNet: roundToCents(ac.netDelta),
-        vatRate: rate,
-        netAmount: roundToCents(ac.netDelta),
-        vatAmount: roundToCents(ac.vatDelta),
-        grossAmount: roundToCents(ac.grossDelta),
-      },
-    ];
-  } else {
-    preparedLines = toPreparedLineItems(domainLines);
-  }
-
-  const summaries = summarizeVatPerRate(preparedLines);
-  const totals = calculateInvoiceTotals(preparedLines);
+  const { preparedLines, summaries, grossTotal } = correctionAmounts(data, domainLines);
 
   const root = create({ version: '1.0', encoding: 'UTF-8' }).ele('Faktura', {
     xmlns: FA3_NAMESPACE,
@@ -387,7 +477,8 @@ export function generateCorrectionInvoiceXml(
 
   emitVatSummaries(fa, summaries);
 
-  fa.ele('P_15').txt(formatDecimal(totals.grossTotal));
+  // P_15: „korekta kwoty wynikającej z faktury korygowanej” — różnica.
+  fa.ele('P_15').txt(formatDecimal(grossTotal));
   buildAdnotacjeMinimal(fa, preparedLines);
 
   fa.ele('RodzajFaktury').txt('KOR');
