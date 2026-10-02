@@ -23,9 +23,20 @@ export const SPLIT_PAYMENT_LABEL = 'mechanizm podzielonej płatności';
 
 /**
  * Obowiązkowe wyrazy, gdy podatek rozlicza nabywca (art. 106e ust. 1 pkt 18).
- * W XML to P_18=1, wymuszane każdą pozycją „oo” (`lib/xml/fa3-generator.ts`).
+ * W XML to P_18=1 (`lib/xml/fa3-generator.ts`, JPK_FA P_18=true) przy każdej
+ * pozycji z `REVERSE_CHARGE_RATES`: „oo” (art. 17 ust. 1 pkt 7 i 8) oraz
+ * „np_ii” — usługa z art. 100 ust. 1 pkt 4 (art. 28b), przy której VAT
+ * rozlicza nabywca w swoim państwie UE (AUD-70).
  */
 export const REVERSE_CHARGE_LABEL = 'odwrotne obciążenie';
+
+/** Stawki, przy których podatek rozlicza nabywca — P_18 i wyrazy `REVERSE_CHARGE_LABEL`. */
+export const REVERSE_CHARGE_RATES: ReadonlySet<string> = new Set(['oo', 'np_ii']);
+
+/** Czy faktura wymaga wyrazów „odwrotne obciążenie” — wystarczy jedna pozycja. */
+export function hasReverseChargeLine(lines: ReadonlyArray<{ vatRate: string }>): boolean {
+  return lines.some((l) => REVERSE_CHARGE_RATES.has(l.vatRate));
+}
 
 export function suggestsSplitPayment(grossTotal: number, buyerIsConsumer: boolean): boolean {
   return !buyerIsConsumer && grossTotal > SPLIT_PAYMENT_THRESHOLD_PLN;

@@ -7,6 +7,7 @@ import {
   type KsefExpenseForPlnReport,
 } from '@/lib/expenses/ksef-currency-review';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
+import { parseVatUe } from '@/lib/invoices/vat-ue';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
@@ -428,14 +429,30 @@ function mapInvoiceRow(
   // { nip, name }, buyer: { identifier: { value }, name }).
   const fa3 = readBuyerDataJson(row.fa3_data) as Record<string, unknown>;
   const fa3Seller = readBuyerDataJson((fa3.seller ?? null) as Json | null);
-  const fa3Buyer = (fa3.buyer ?? {}) as { name?: unknown; identifier?: { value?: unknown } };
+  const fa3Buyer = (fa3.buyer ?? {}) as {
+    name?: unknown;
+    vatUeNumber?: unknown;
+    identifier?: { type?: unknown; value?: unknown };
+  };
 
   const buyerData = readBuyerDataJson(row.buyer_data);
   const nipFromJson =
     typeof buyerData.nip === 'string' ? buyerData.nip.trim() : undefined;
+  // Metadane KSeF (import historii) mają typ identyfikatora: „VatUe” to numer
+  // VAT-UE, nie NIP (AUD-70). Numer, którego nie da się rozebrać, zostaje
+  // tam, gdzie był dotąd — w polu NIP.
+  const fa3IdentifierVatUe =
+    fa3Buyer.identifier?.type === 'VatUe' ? vatUeOf(fa3Buyer.identifier.value) : null;
   const fa3BuyerNip =
-    typeof fa3Buyer.identifier?.value === 'string' ? fa3Buyer.identifier.value.trim() : undefined;
+    !fa3IdentifierVatUe && typeof fa3Buyer.identifier?.value === 'string'
+      ? fa3Buyer.identifier.value.trim()
+      : undefined;
   const buyerNip = nipFromJson || row.buyer_nip?.trim() || fa3BuyerNip || undefined;
+  // Nabywca z UE: `buyer_nip` NULL, numer w `buyer_data` (BuyerParty) albo
+  // w kopii faktury w `fa3_data.buyer`. Tylko gdy nie ma NIP-u.
+  const buyerVatUe = buyerNip
+    ? undefined
+    : (vatUeOf(buyerData.vatUeNumber) ?? vatUeOf(fa3Buyer.vatUeNumber) ?? fa3IdentifierVatUe)?.normalized;
   const buyerName =
     buyerData.name ?? (typeof fa3Buyer.name === 'string' ? fa3Buyer.name : '');
 
@@ -463,6 +480,7 @@ function mapInvoiceRow(
     paymentDueDate: row.payment_due_date ?? undefined,
 
     buyerNip,
+    buyerVatUe,
     buyerName,
     buyerAddress: formatBuyerAddress(buyerData),
     sellerNip,
@@ -565,6 +583,8 @@ function linesFromFa3Data(fa3: Json | null): JpkInvoiceLine[] {
 interface BuyerDataJson {
   name?: string;
   nip?: string;
+  /** BuyerParty: numer VAT-UE z prefiksem kraju (nabywca z UE, AUD-70). */
+  vatUeNumber?: unknown;
   address?: {
     addressLine1?: string;
     addressLine2?: string;
@@ -578,6 +598,11 @@ function readBuyerDataJson(json: Json | null): BuyerDataJson {
     return {};
   }
   return json as BuyerDataJson;
+}
+
+/** Numer VAT-UE z JSON-a — tylko poprawny (prefiks z listy UE, wzorzec FA(3)). */
+function vatUeOf(value: unknown): ReturnType<typeof parseVatUe> {
+  return typeof value === 'string' ? parseVatUe(value) : null;
 }
 
 // ============================================================================

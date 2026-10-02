@@ -11,6 +11,7 @@ import { create } from 'xmlbuilder2';
 import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
 import { isKnownTaxOffice } from '@/lib/exports/tax-offices';
 import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
+import { parseVatUe } from '@/lib/invoices/vat-ue';
 
 import type { ExportExpense } from './data-fetcher';
 import { amountsOf, type JpkInvoice } from './jpk-fa-generator';
@@ -80,12 +81,21 @@ interface RateBucket {
   vat5: number;
   net0: number;
   netZw: number;
-  /** „np” — FA(3) P_13_8: poza terytorium kraju, bez art. 100 ust. 1 pkt 4 → K_11/P_11. */
+  /**
+   * Poza terytorium kraju → K_11/P_11: „np” (FA(3) P_13_8) RAZEM z „np_ii”
+   * (P_13_9) — usługi z art. 100 ust. 1 pkt 4 też są świadczone poza krajem.
+   */
   netNp: number;
+  /**
+   * „np_ii” (AUD-70) — usługi z art. 100 ust. 1 pkt 4 → K_12/P_12. To część
+   * K_11/P_11 („w tym”): w XSD P_12 stoi w sekwencji za obowiązkowym P_11,
+   * a P_37 sumuje P_11 bez P_12.
+   */
+  netNpII: number;
 }
 
 function emptyBucket(): RateBucket {
-  return { net23: 0, vat23: 0, net8: 0, vat8: 0, net5: 0, vat5: 0, net0: 0, netZw: 0, netNp: 0 };
+  return { net23: 0, vat23: 0, net8: 0, vat8: 0, net5: 0, vat5: 0, net0: 0, netZw: 0, netNp: 0, netNpII: 0 };
 }
 
 function round2(n: number): number {
@@ -140,6 +150,10 @@ function aggregateSales(invoices: readonly JpkInvoice[]): RateBucket {
         case 'np':
           b.netNp += net;
           break;
+        case 'np_ii':
+          b.netNp += net;
+          b.netNpII += net;
+          break;
         case 'oo':
           throw new JpkV7mReverseChargeNotSupportedError();
         default:
@@ -188,6 +202,7 @@ export interface JpkV7mSummary {
 interface Declaration {
   P_10: number;
   P_11: number;
+  P_12: number;
   P_13: number;
   P_15: number;
   P_16: number;
@@ -211,6 +226,7 @@ function declaration(data: JpkV7mInputData): Declaration {
   const purchases = vatPurchases(data.expenses ?? []);
   const P_10 = wholeZloty(s.netZw);
   const P_11 = wholeZloty(s.netNp);
+  const P_12 = wholeZloty(s.netNpII);
   const P_13 = wholeZloty(s.net0);
   const P_15 = wholeZloty(s.net5);
   const P_16 = wholeZloty(s.vat5);
@@ -219,6 +235,7 @@ function declaration(data: JpkV7mInputData): Declaration {
   const P_19 = wholeZloty(s.net23);
   const P_20 = wholeZloty(s.vat23);
   // P_37 = suma podstaw; P_38 = suma podatku należnego (z pól już zaokrąglonych).
+  // Bez P_12 — to część P_11 (opis P_37 w XSD: P_10, P_11, P_13, P_15, …).
   const P_37 = P_10 + P_11 + P_13 + P_15 + P_17 + P_19;
   const P_38 = P_16 + P_18 + P_20;
   const P_39 = wholeZloty(Math.max(0, data.previousSurplus ?? 0));
@@ -230,7 +247,7 @@ function declaration(data: JpkV7mInputData): Declaration {
   const P_53 = P_51 > 0 ? 0 : Math.max(0, P_48 - P_38);
   // Bez zwrotu na rachunek (P_54) cała nadwyżka przechodzi na następny okres.
   const P_62 = P_53;
-  return { P_10, P_11, P_13, P_15, P_16, P_17, P_18, P_19, P_20, P_37, P_38, P_39, P_42, P_43, P_48, P_51, P_53, P_62 };
+  return { P_10, P_11, P_12, P_13, P_15, P_16, P_17, P_18, P_19, P_20, P_37, P_38, P_39, P_42, P_43, P_48, P_51, P_53, P_62 };
 }
 
 export function summarizeJpkV7m(data: JpkV7mInputData): JpkV7mSummary {
@@ -259,8 +276,23 @@ function ksefMarker(row: ReturnType<typeof create>, ksefNumber: string | null | 
 }
 
 /**
+ * Kontrahent w wierszu sprzedaży: NIP, a nabywca z UE bez NIP-u (AUD-70) —
+ * KodKrajuNadaniaTIN + numer bez prefiksu. Typ TKodKrajuJPK to słownik
+ * krajów z dodanym „EL” i wykluczonym „GR”, więc dla Grecji prefiks VAT-UE
+ * („EL”) jest wprost właściwym kodem.
+ */
+function counterpartyId(inv: JpkInvoice): { country?: string; number: string } {
+  const nip = inv.buyerNip?.trim();
+  if (nip) return { number: nip };
+  const vatUe = parseVatUe(inv.buyerVatUe);
+  if (vatUe) return { country: vatUe.kodUE, number: vatUe.numer };
+  return { number: 'BRAK' };
+}
+
+/**
  * Generuje XML JPK_V7M(3). Deklaracja obejmuje sprzedaż krajową wg stawek
- * (23/8/5/0/zw), sprzedaż poza krajem („np”, K_11/P_11) i nabycia pozostałe
+ * (23/8/5/0/zw), sprzedaż poza krajem („np” i „np_ii”, K_11/P_11; „np_ii”
+ * także w K_12/P_12 — usługi z art. 100 ust. 1 pkt 4) i nabycia pozostałe
  * (P_42/P_43). Odwrotne obciążenie („oo”) — odmowa
  * (`JpkV7mReverseChargeNotSupportedError`). Pola specjalne (WDT, eksport,
  * import usług, środki trwałe, ulgi) — do rozszerzenia.
@@ -312,7 +344,11 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
   const poz = dekl.ele('PozycjeSzczegolowe');
   const put = (name: string, value: number) => poz.ele(name).txt(String(value)).up();
   if (d.P_10) put('P_10', d.P_10);
-  if (d.P_11) put('P_11', d.P_11);
+  // P_12 tylko w sekwencji z P_11 (P_11 w niej obowiązkowe).
+  if (d.P_11 || d.P_12) {
+    put('P_11', d.P_11);
+    if (d.P_12) put('P_12', d.P_12);
+  }
   if (d.P_13) put('P_13', d.P_13);
   if (d.P_15 || d.P_16) {
     put('P_15', d.P_15);
@@ -346,7 +382,9 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
   issued.forEach((inv, idx) => {
     const s = ewid.ele('SprzedazWiersz');
     s.ele('LpSprzedazy').txt(String(idx + 1)).up();
-    s.ele('NrKontrahenta').txt(inv.buyerNip ?? 'BRAK').up();
+    const kontrahent = counterpartyId(inv);
+    if (kontrahent.country) s.ele('KodKrajuNadaniaTIN').txt(kontrahent.country).up();
+    s.ele('NrKontrahenta').txt(kontrahent.number).up();
     s.ele('NazwaKontrahenta').txt(inv.buyerName || 'BRAK').up();
     s.ele('DowodSprzedazy').txt(inv.invoiceNumber).up();
     s.ele('DataWystawienia').txt(inv.issueDate).up();
@@ -357,6 +395,7 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
     const b = aggregateSales([inv]);
     if (b.netZw) s.ele('K_10').txt(money(b.netZw)).up();
     if (b.netNp) s.ele('K_11').txt(money(b.netNp)).up();
+    if (b.netNpII) s.ele('K_12').txt(money(b.netNpII)).up();
     if (b.net0) s.ele('K_13').txt(money(b.net0)).up();
     if (b.net5 || b.vat5) {
       s.ele('K_15').txt(money(b.net5)).up();

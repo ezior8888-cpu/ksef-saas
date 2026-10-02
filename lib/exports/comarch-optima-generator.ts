@@ -162,6 +162,9 @@ function normalizeVatRateOptima(rate: string): string {
     zw: 'zw',
     oo: 'oo',
     np: 'np',
+    // AUD-70: usługa z art. 100 ust. 1 pkt 4 — w Optimie ta sama stawka „np”.
+    // Brak klucza oznaczałby po cichu 23%.
+    np_ii: 'np',
   };
   return map[r] ?? '23%';
 }
