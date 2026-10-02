@@ -176,6 +176,54 @@ describe.skipIf(!hasDatabase)('uprawnienia funkcji i ról (00103, 00104)', () =>
     expect(a.data).toEqual({ created_by_user_id: null });
   });
 
+  it('przejęcie wysyłki KSeF: wyłączność z dzierżawą, ten sam właściciel wraca, klient nie ustawi właściciela (00124, AUD-10)', async () => {
+    const INVOICE = '77777777-7777-4777-8777-777777777777';
+    await admin.from('invoices').delete().eq('id', INVOICE);
+    const { error: insErr } = await admin.from('invoices').insert({
+      id: INVOICE, tenant_id: ORG, direction: 'outgoing', internal_number: 'CLAIM/1', invoice_type: 'VAT',
+      issue_date: '2026-10-01', seller_nip: '9480000014', buyer_nip: '1234567890',
+      gross_total: 123, net_total: 100, vat_total: 23, ksef_status: 'queued',
+      fa3_data: { internalNumber: 'CLAIM/1', type: 'VAT' }, seller_data: { nip: '9480000014' }, buyer_data: { nip: '1234567890' },
+    });
+    expect(insErr).toBeNull();
+    const claim = (owner: string | null) => admin.rpc('claim_ksef_send', {
+      p_invoice_id: INVOICE, p_tenant_id: ORG, p_owner: owner, p_lease_seconds: 900,
+    });
+
+    const first = await claim('proba-A');
+    expect(first.error).toBeNull();
+    expect(first.data).toEqual(expect.any(String));
+
+    // Inna próba w trakcie dzierżawy przegrywa; ta sama wraca (ponowienie).
+    const other = await claim('proba-B');
+    expect(other.error).toBeNull();
+    expect(other.data).toBeNull();
+    const again = await claim('proba-A');
+    expect(again.data).toEqual(expect.any(String));
+
+    // Po wygaśnięciu dzierżawy wygrywa inna próba.
+    await admin.from('invoices').update({ submitted_to_ksef_at: '2026-01-01T00:00:00Z' }).eq('id', INVOICE);
+    const afterLease = await claim('proba-B');
+    expect(afterLease.data).toEqual(expect.any(String));
+    const row = await admin.from('invoices').select('ksef_status, ksef_send_owner').eq('id', INVOICE).single();
+    expect(row.data).toEqual({ ksef_status: 'sending', ksef_send_owner: 'proba-B' });
+
+    // Funkcja tylko dla serwisu; klient nie ustawi właściciela przejęcia.
+    expect((await anonClient().rpc('claim_ksef_send', {
+      p_invoice_id: INVOICE, p_tenant_id: ORG, p_owner: 'x', p_lease_seconds: 900,
+    })).error?.code).toBe('42501');
+    const c = await signedIn(ADMIN_EMAIL);
+    const forged = await c.from('invoices').update({ ksef_send_owner: 'podrobiona' }).eq('id', INVOICE);
+    expect(forged.error?.code).toBe('42501');
+
+    // Sprzątanie: faktura „w wysyłce” jest chroniona przed usunięciem (00119) —
+    // najpierw powrót do szkicu przez serwis.
+    await admin.from('invoices').update({
+      ksef_status: 'draft', submitted_to_ksef_at: null, last_attempt_at: null, ksef_send_owner: null,
+    }).eq('id', INVOICE);
+    await admin.from('invoices').delete().eq('id', INVOICE);
+  });
+
   it('admin nie usunie właściciela', async () => {
     const c = await signedIn(ADMIN_EMAIL);
     const { error } = await c.rpc('revoke_membership', { p_membership_id: ownerMembershipId });

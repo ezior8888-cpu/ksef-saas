@@ -6,6 +6,8 @@
  * `submitInvoiceFullFlow` w jobie Inngest (spójnie dla VAT / ZAL / ROZ / korekta).
  */
 
+import { randomUUID } from 'node:crypto';
+
 import { revalidatePath } from 'next/cache';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -262,6 +264,8 @@ export async function enqueueKsefSubmitAfterDraft(
         advanceData,
         finalData,
         finalAdvanceSettlementRows,
+        // Właściciel przejęcia wysyłki (AUD-10): każde kolejkowanie to nowa próba.
+        sendAttemptId: randomUUID(),
       },
     });
   } catch (e) {

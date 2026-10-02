@@ -63,6 +63,12 @@ const InvoiceSubmitRequestedSchema = z.object({
   fromOfflineQueue: z.boolean().optional(),
   offlineQueueId: z.string().optional(),
   idempotencyKey: z.string().optional(),
+  /**
+   * Identyfikator próby wysyłki — właściciel przejęcia faktury (AUD-10, 00124).
+   * Ponowienia tego samego zdarzenia mają ten sam; nowe kolejkowanie — nowy.
+   * Stare zdarzenia bez niego przejmują fakturę tylko wolną albo po dzierżawie.
+   */
+  sendAttemptId: z.string().uuid().optional(),
 });
 
 /** Użytkownik kliknął "Wyślij fakturę do KSeF" w UI. */
