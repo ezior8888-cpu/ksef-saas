@@ -648,6 +648,12 @@ Faktura walutowa też spełnia kryterium c, ale to duży zakres z decyzjami praw
 - Typ: BŁĄD · Waga: K4 · Pewność: POTWIERDZONE (subagent: cena 100,1234 drukowana jako 100,12 obok wartości 150,19) · PR: brak
 - **Dowód:** `lib/pdf/invoice-renderer.ts:88-93,348-350,294`.
 
+#### F-094 — Szczegóły faktury na ekranie: brak terminu i rachunku płatności, cena i ilość ucięte do 2 miejsc
+- Typ: NIEDOKOŃCZONE · Waga: K4 · Pewność: Z ODCZYTU · PR: kod zmieniany w PR #71 tylko w obsłudze Realtime (`invoice-detail-view.tsx:106-115`)
+- **Skutek:** po otwarciu faktury użytkownik nie widzi, do kiedy klient ma zapłacić, jaką formą ani na jaki rachunek. Te dane są na PDF, a strona pobiera je z bazy (`payment_data`), ale ich nie pokazuje. Cena 100,1234 wyświetla się jako „100.12” (kropka zamiast przecinka, ucięte miejsca), czyli inaczej niż na PDF i w XML. Nabywca z numerem VAT UE albo PESEL nie ma na ekranie żadnego identyfikatora.
+- **Dowód:** `app/(dashboard)/invoices/[id]/page.tsx:41` (pobiera `payment_data`, nie przekazuje go dalej); `components/invoices/invoice-detail-view.tsx:61-64` (`toFixed(2)`), `:233-236` (tylko `buyer.nip`).
+- Uwagi: część ekranowa F-091 (surowy znacznik ISO `ksef_accepted_at`) idzie razem z tą pozycją. Nieczyszczony błąd w nasłuchu Realtime poprawia PR #71.
+
 #### F-070 — Raporty liczą „bieżący miesiąc” w strefie serwera
 - Typ: BŁĄD · Waga: K4 · Pewność: POTWIERDZONE (subagent) · PR: kod zmieniany w PR #63, #71, #86, #128
 - **Dowód:** `app/(dashboard)/reports/kpir/page.tsx:31-32`, `lib/dashboard/monthly-figures.ts:54-58`.
@@ -732,8 +738,9 @@ Faktura walutowa też spełnia kryterium c, ale to duży zakres z decyzjami praw
 - **Dowód:** `app/(dashboard)/expenses/page.tsx:31-35`, `app/(dashboard)/inbox/page.tsx:38-46`.
 
 #### F-088 — Masowa walidacja kontrahentów: najwyżej 1000 wierszy, `.in()` bez podziału na paczki, błędy zapisu ignorowane
-- Typ: BŁĄD · Waga: K3 · Pewność: Z ODCZYTU (UNSURE) · PR: brak
-- **Dowód:** `app/actions/validation.ts:116-120`, `lib/inngest/jobs/bulk-validate-contractors.ts:22-26,66-70`.
+- Typ: BŁĄD · Waga: K3 · Pewność: POTWIERDZONE w dodatkowym obchodzie (test na mocku: job pobiera wszystkich kontrahentów jednym `.in()`, a nieudany zapis liczy jako „zwalidowany”); próg długości adresu, od którego brama odrzuca zapytanie, zależy od konfiguracji Kong i jest Z ODCZYTU · PR: job bez zmian w PR; akcja (`app/actions/validation.ts`) zmieniana w PR #154
+- **Skutek:** przy kilkuset kontrahentach cała walidacja białej listy pada przy pierwszym zapytaniu (lista identyfikatorów idzie w adresie URL, ok. 39 znaków na kontrahenta). Użytkownik widzi tylko „uruchomiono”, a statusy VAT kontrahentów zostają nieaktualne.
+- **Dowód:** `app/actions/validation.ts:116-120`, `lib/inngest/jobs/bulk-validate-contractors.ts:22-26,66-70`; `tests/unit/kontrahenci-walidacja-masowa.test.ts`.
 
 #### F-089 — Import plików: `.in()` bez podziału, waluta CSV i P_6 ignorowane, liczniki produktów podwajane przy ponowieniu
 - Typ: BŁĄD · Waga: K3 · Pewność: Z ODCZYTU · PR: kod zmieniany w PR #63, #64, #86
@@ -750,6 +757,20 @@ Faktura walutowa też spełnia kryterium c, ale to duży zakres z decyzjami praw
 - Martwy `lib/dashboard/aggregates.ts`; push „Faktura opłacona” prowadzi do nieistniejącej strony `/payments`.
 - Status połączenia KSeF zielony po wygaśnięciu certyfikatu.
 - Luki audytu: pauza lub brak weryfikacji KSeF daje szkic bez wpisu w `audit_logs`; `logAudit` po cichu ignoruje błąd zapisu (`lib/audit/log.ts:128-150`).
+
+## Dodatkowy obchód (2.10.2026, po zamknięciu planu)
+
+Plan zamknął się po ok. 2 h 15 min pracy nad poprawkami, więc zgodnie z zadaniem wróciłem do obszarów sprawdzonych pobieżnie i do znalezisk „Z ODCZYTU” bez PR.
+
+| Co sprawdziłem | Wynik |
+|---|---|
+| Szczegóły faktury (ekran) wobec PDF i XML | Nowe znalezisko F-094 (K4) → P-24 |
+| F-088 masowa walidacja kontrahentów (było NIEPEWNE) | Potwierdzone testem → P-23 (job; akcja zostaje dla PR #154) |
+| Numer rachunku w formularzu (suma kontrolna NRB) | Brak walidacji na `main`, ale dodaje ją PR #134 (`tests/unit/rachunek-bankowy-nrb.test.ts`) — bez nowej pozycji |
+| Historia zmian faktury w `audit_logs` | Zapisywane: utworzenie szkicu, żądanie wysyłki, sukces, błąd, przekierowanie do Offline24, e-mail, pobranie XML i UPO, usunięcie szkicu. Luki opisane w F-091 |
+| Status „po terminie” | Liczony na bieżąco w widoku `invoices_overdue` (`days_overdue`), nie zamrażany przy zapisie — działa |
+| Zapis nabywcy jako kontrahenta | Następuje tylko przy pobraniu danych z GUS po NIP (`components/invoices/actions.ts:178`). Nabywca wpisany ręcznie (konsument, firma spoza GUS) nie trafia do bazy kontrahentów — już opisane w F-011; P-18 dał edycję, usuwanie i wyszukiwanie, a ręczne dodawanie zostaje w „Pomysłach na później” |
+| Pozostałe „Z ODCZYTU” bez PR (F-006, F-051, F-052, F-064, F-081, F-090) | Bez zmian: wymagają decyzji Bartka albo są nowymi funkcjami |
 
 ## Poza zakresem (inne bloki audytu)
 

@@ -258,6 +258,27 @@ Sprawdzenie: `pnpm exec vitest run tests/unit/pdf-precyzja-vatue.test.ts`; w apl
 
 ---
 
+### P-23 — Masowa walidacja kontrahentów: zapytania w paczkach, błąd zapisu nie jest sukcesem
+Status: W TOKU
+Typ: NAPRAWA
+Znaleziska: F-088 (dodatkowy obchód)
+Zmiana: `lib/inngest/jobs/bulk-validate-contractors.ts` — kontrahenci pobierani w paczkach po 100 identyfikatorów zamiast jednego `.in()` ze wszystkimi; błąd zapisu wyniku logowany i nieliczony jako „zwalidowany”. Akcja `app/actions/validation.ts` (limit 1000 wierszy) zostaje bez zmian, bo zmienia ją PR #154.
+Kryterium: test joba — 250 kontrahentów: każde zapytanie ma najwyżej 100 identyfikatorów i wszyscy są sprawdzeni; nieudany zapis jednego nie zatrzymuje reszty i nie jest liczony.
+
+### P-24 — Szczegóły faktury: płatność, identyfikator nabywcy, pełna precyzja
+Status: TODO
+Typ: DOKOŃCZENIE
+Znaleziska: F-094, F-091 (część ekranowa: `ksef_accepted_at`)
+Zmiana:
+- `app/(dashboard)/invoices/[id]/page.tsx` przekazuje `payment_data`;
+- `components/invoices/invoice-detail-view.tsx`:
+  - sekcja „Płatność” (forma, termin, rachunek);
+  - ilość i cena w formacie polskim do 4 miejsc, kwoty w formacie polskim;
+  - identyfikator nabywcy z etykietą (NIP, VAT UE, PESEL);
+  - czas przyjęcia w KSeF w strefie Europe/Warsaw.
+- Hunk Realtime (linie 106–115, PR #71) bez zmian.
+Kryterium: test renderu komponentu — termin i rachunek widoczne; 100,1234 w całości; „VAT UE: DE…”; czas przyjęcia po polsku.
+
 ## Poza planem
 
 Każde znalezisko spoza planu z powodem. „Kod zmieniany w PR #N” znaczy, że naprawa kolidowałaby z otwartym PR (ustalenie z 2.10). Wracamy do tych miejsc po scaleniu PR.
@@ -331,7 +352,7 @@ Każde znalezisko spoza planu z powodem. „Kod zmieniany w PR #N” znaczy, że
 | F-083 metadane skrzynki | Kod zmieniany w PR #63, #64. |
 | F-085 `origin` importu | Naprawiane w PR #64. |
 | F-087 (skrzynka) | Strona skrzynki — K3, mniejsza wartość niż wydatki; „Pomysły na później”. |
-| F-088 masowa walidacja kontrahentów | NIEPEWNE; akcja zmieniana w PR #154. |
+| F-088 masowa walidacja kontrahentów (część) | Job w P-23; limit 1000 wierszy w akcji `app/actions/validation.ts` zostaje dla PR #154. |
 | F-089 import plików | Kod zmieniany w PR #63, #64, #86. |
 | F-090 operacje masowe | Nowa funkcja — „Pomysły na później”. |
-| F-091 drobiazgi | K4; podtytuł listy w P-09, reszta w różnych plikach PR. |
+| F-091 drobiazgi | K4; podtytuł listy w P-09, ekran szczegółów w P-24, reszta w różnych plikach PR. |
