@@ -18,7 +18,12 @@ import { buildInvoiceAnnotations } from '@/lib/invoices/annotations';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
-import { invoiceFormSchema, type InvoiceFormValues } from '@/lib/schemas/invoice-form';
+import { addressCountryForKodUE, parseVatUe } from '@/lib/invoices/vat-ue';
+import {
+  EU_BUYER_COUNTRIES,
+  invoiceFormSchema,
+  type InvoiceFormValues,
+} from '@/lib/schemas/invoice-form';
 import type {
   Address,
   BuyerParty,
@@ -261,6 +266,26 @@ function buildInvoiceFromForm(
       addressLine2: values.buyerAddressLine2,
     };
 
+    // AUD-70: firma z innego państwa UE — identyfikuje ją numer VAT-UE
+    // (FA(3): KodUE + NrVatUE), nie NIP; adres ma kraj nabywcy, nie PL.
+    if (values.buyerIsEu) {
+      const vat = parseVatUe(values.buyerVatUe);
+      // Schemat odrzuca taki numer wcześniej — to tylko zawężenie typu.
+      if (!vat) throw new Error('Nieprawidłowy numer VAT-UE nabywcy');
+      return {
+        vatUeNumber: vat.normalized,
+        name: values.buyerName,
+        address: {
+          countryCode: values.buyerCountryCode || addressCountryForKodUE(vat.kodUE),
+          addressLine1: values.buyerAddressLine1,
+          addressLine2: values.buyerAddressLine2,
+        },
+        jst,
+        gv,
+        email: buyerEmail,
+      };
+    }
+
     if (!values.buyerIsConsumer) {
       return {
         nip: values.buyerNip,
@@ -351,17 +376,35 @@ function buildInvoiceFromForm(
   };
 }
 
-/** Kolumny B2C w `public.invoices` (ułatwia raportowanie bez parsowania JSON). */
+/**
+ * Kolumny nabywcy w `public.invoices` (ułatwia raportowanie bez parsowania JSON).
+ *
+ * Firma z UE (AUD-70) zapisuje się jak przy imporcie (`buyerIdentityFromParsed`):
+ * B2B, typ `nip`, ale `buyer_nip` pusty — kolumna to VARCHAR(10) na polski
+ * NIP, a numer VAT-UE leży w `buyer_data` / `fa3_data`.
+ */
 function buyerColumnsFromInvoiceForm(values: InvoiceFormValues): {
   is_b2c: boolean;
   buyer_id_type: 'nip' | 'pesel' | 'id_card' | 'passport' | 'no_id';
+  buyer_nip: string | null;
   buyer_pesel: string | null;
   buyer_id_number: string | null;
 } {
+  if (values.buyerIsEu) {
+    return {
+      is_b2c: false,
+      buyer_id_type: 'nip',
+      buyer_nip: null,
+      buyer_pesel: null,
+      buyer_id_number: null,
+    };
+  }
+
   if (!values.buyerIsConsumer) {
     return {
       is_b2c: false,
       buyer_id_type: 'nip',
+      buyer_nip: values.buyerNip,
       buyer_pesel: null,
       buyer_id_number: null,
     };
@@ -379,6 +422,7 @@ function buyerColumnsFromInvoiceForm(values: InvoiceFormValues): {
   return {
     is_b2c: true,
     buyer_id_type: t,
+    buyer_nip: null,
     buyer_pesel: pes,
     buyer_id_number: idNum,
   };
@@ -416,7 +460,7 @@ async function insertInvoiceAndLines(
       issue_date: invoice.issueDate,
       sale_date: invoice.saleDate ?? null,
       seller_nip: invoice.seller.nip,
-      buyer_nip: invoice.buyer.nip ?? null,
+      buyer_nip: b2c ? b2c.buyer_nip : invoice.buyer.nip ?? null,
       seller_data: invoice.seller,
       buyer_data: invoice.buyer,
       payment_data: invoice.payment,
@@ -632,6 +676,9 @@ export interface PrefillFromLastInvoice {
   values: Pick<
     InvoiceFormValues,
     | 'buyerNip'
+    | 'buyerIsEu'
+    | 'buyerVatUe'
+    | 'buyerCountryCode'
     | 'buyerName'
     | 'buyerAddressLine1'
     | 'buyerAddressLine2'
@@ -705,10 +752,27 @@ export async function prefillFromLastInvoiceAction(): Promise<PrefillFromLastInv
   // klient kliknąłby „Wypełnij" i dostał pusty formularz z samym nabywcą.
   if (lines.length === 0) return null;
 
+  // AUD-70: nabywca z UE wraca jako firma z UE — sam pusty NIP zostawiłby
+  // formularz z błędem „NIP firmy”, a numer VAT-UE przepadłby po drodze.
+  // Kraj adresu ze starej faktury tylko z listy formularza; inaczej z prefiksu.
+  const vatUe = parseVatUe(buyer.vatUeNumber);
+  const krajAdresu = buyer.address?.countryCode ?? '';
+  const nabywcaUe =
+    vatUe && vatUe.kodUE !== 'PL'
+      ? {
+          buyerIsEu: true,
+          buyerVatUe: vatUe.normalized,
+          buyerCountryCode: EU_BUYER_COUNTRIES.some((k) => k.code === krajAdresu)
+            ? krajAdresu
+            : addressCountryForKodUE(vatUe.kodUE),
+        }
+      : null;
+
   return {
     contractorName: buyer.name,
     values: {
-      buyerNip: 'nip' in buyer && buyer.nip ? buyer.nip : '',
+      buyerNip: !nabywcaUe && 'nip' in buyer && buyer.nip ? buyer.nip : '',
+      ...nabywcaUe,
       buyerName: buyer.name,
       buyerAddressLine1: buyer.address?.addressLine1 ?? '',
       buyerAddressLine2: buyer.address?.addressLine2 ?? '',

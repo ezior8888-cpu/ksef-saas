@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition, type ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   useForm,
@@ -11,9 +11,12 @@ import {
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import {
+  EU_BUYER_COUNTRIES,
   invoiceFormSchema,
   type InvoiceFormValues,
 } from '@/lib/schemas/invoice-form';
+import { addressCountryForKodUE, parseVatUe } from '@/lib/invoices/vat-ue';
+import { cn } from '@/lib/utils';
 import {
   calculateLineItem,
   calculateInvoiceTotals,
@@ -38,7 +41,6 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
 import { AlertCircle, ChevronLeft, Plus, Trash2, Loader2 } from 'lucide-react';
 import { InvoiceTotals } from '@/components/invoices/invoice-totals';
@@ -97,6 +99,28 @@ const sectionClass = `${ffSettingsPanel} space-y-5 p-4 sm:p-6 lg:p-8`;
 
 /** Tailwind `lg` — musi być zgodne z breakpointem ukrywania/pokazywania pozycji. */
 const LINES_LAYOUT_LG_MEDIA = '(min-width: 1024px)';
+
+/**
+ * Rodzaj nabywcy (AUD-70). W schemacie to dwie flagi — `buyerIsConsumer`
+ * i `buyerIsEu` — bo starsze wywołania znają tylko pierwszą; w interfejsie
+ * jeden wybór z trzech, żeby nie dało się zaznaczyć obu naraz.
+ *
+ * `buyer-is-consumer` to id dawnego pola wyboru „osoba fizyczna” — zostaje
+ * na opcji „Osoba prywatna”, bo klika w nie test e2e 07.
+ */
+type BuyerKind = 'pl' | 'consumer' | 'eu';
+
+const BUYER_KINDS: ReadonlyArray<{ kind: BuyerKind; id: string; label: string; hint: string }> = [
+  { kind: 'pl', id: 'buyer-kind-pl', label: 'Firma z Polski (NIP)', hint: 'Dane z GUS po numerze NIP' },
+  { kind: 'consumer', id: 'buyer-is-consumer', label: 'Osoba prywatna', hint: 'PESEL, dowód, paszport lub bez identyfikatora' },
+  { kind: 'eu', id: 'buyer-kind-eu', label: 'Firma z UE (VAT-UE)', hint: 'Numer VAT-UE z prefiksem kraju' },
+];
+
+const errorTextClass = 'mt-1.5 flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400';
+
+function euCountryName(code: string): string | undefined {
+  return EU_BUYER_COUNTRIES.find((k) => k.code === code)?.name;
+}
 
 export function InvoiceForm({
   prefill = null,
@@ -166,6 +190,9 @@ export function InvoiceForm({
       buyerConsumerIdType: undefined,
       buyerPesel: '',
       buyerIdDocument: '',
+      buyerIsEu: false,
+      buyerVatUe: '',
+      buyerCountryCode: '',
       lines: [newLine],
       paymentMethod: 'transfer',
       paymentDueDate: in14days,
@@ -187,6 +214,23 @@ export function InvoiceForm({
     control: form.control,
     name: 'buyerConsumerIdType',
   });
+  const buyerIsEu = useWatch({ control: form.control, name: 'buyerIsEu' });
+  const buyerVatUeWatch = useWatch({ control: form.control, name: 'buyerVatUe' }) ?? '';
+  const buyerCountryCode = useWatch({ control: form.control, name: 'buyerCountryCode' }) ?? '';
+  const buyerKind: BuyerKind = buyerIsEu ? 'eu' : buyerIsConsumer ? 'consumer' : 'pl';
+
+  /** Podpowiedź pod polem VAT-UE — na bieżąco, zanim schemat pokaże błąd. */
+  const vatUeParsed = parseVatUe(buyerVatUeWatch);
+  const vatUeHint: { tone: 'muted' | 'warn' | 'ok'; text: string } = !buyerVatUeWatch.trim()
+    ? { tone: 'muted', text: 'Prefiks kraju i numer, np. DE123456789 (Grecja: EL).' }
+    : !vatUeParsed
+      ? { tone: 'warn', text: 'Niepoprawny format — dwuliterowy prefiks kraju UE i do 12 znaków numeru.' }
+      : vatUeParsed.kodUE === 'PL'
+        ? { tone: 'warn', text: 'To polski numer — wybierz „Firma z Polski (NIP)”.' }
+        : {
+            tone: 'ok',
+            text: `${euCountryName(addressCountryForKodUE(vatUeParsed.kodUE)) ?? vatUeParsed.kodUE} · ${vatUeParsed.normalized}`,
+          };
 
   // Wyciągnięte do zmiennej, bo tej samej tablicy potrzebuje `InvoiceTotals`
   // do rozbicia VAT-u na stawki. Wcześniej mapowanie żyło wyłącznie w argumencie
@@ -213,7 +257,8 @@ export function InvoiceForm({
 
   const totals = calculateInvoiceTotals(lineItems);
   const splitPayment = useWatch({ control: form.control, name: 'splitPayment' });
-  const podpowiedzMpp = !splitPayment && suggestsSplitPayment(totals.grossTotal, buyerIsConsumer);
+  // MPP dotyczy firm z Polski — nie osoby prywatnej ani firmy z UE (AUD-70).
+  const podpowiedzMpp = !splitPayment && suggestsSplitPayment(totals.grossTotal, buyerKind !== 'pl');
 
   // Podtytuł nagłówka na telefonie („wrzesień 2026 · KSeF”). Liczony przy
   // renderze, a nie wpisany na stałe — ten sam wzorzec co w pasku panelu
@@ -235,8 +280,14 @@ export function InvoiceForm({
   const wypelnijZOstatniej = () => {
     if (!prefill) return;
     const v = prefill.values;
+    // Nabywca z UE (AUD-70) wraca z numerem VAT-UE i krajem zamiast NIP-u.
+    const ue = v.buyerIsEu === true;
     form.setValue('buyerIsConsumer', false);
-    form.setValue('buyerNip', v.buyerNip, { shouldValidate: true });
+    form.setValue('buyerIsEu', ue);
+    form.setValue('buyerVatUe', ue ? v.buyerVatUe ?? '' : '');
+    form.setValue('buyerCountryCode', ue ? v.buyerCountryCode ?? '' : '');
+    if (ue) setBuyerVatStatus(null);
+    form.setValue('buyerNip', v.buyerNip, { shouldValidate: !ue });
     form.setValue('buyerName', v.buyerName);
     form.setValue('buyerAddressLine1', v.buyerAddressLine1);
     form.setValue('buyerAddressLine2', v.buyerAddressLine2);
@@ -308,8 +359,10 @@ export function InvoiceForm({
         if (!proceed) return;
       }
 
+      // Biała lista zna tylko polskie NIP-y — nie pytamy przy osobie prywatnej
+      // ani firmie z UE.
       if (
-        !buyerIsConsumer &&
+        buyerKind === 'pl' &&
         buyerVatStatus &&
         !buyerVatStatus.isValid
       ) {
@@ -360,6 +413,66 @@ export function InvoiceForm({
     form.setValue('buyerName', data.name);
     form.setValue('buyerAddressLine1', data.addressLine1);
     form.setValue('buyerAddressLine2', data.addressLine2);
+  };
+
+  /**
+   * Zmiana rodzaju nabywcy czyści identyfikatory pozostałych dwóch rodzajów
+   * (NIP, PESEL/dokument, VAT-UE i kraj) — inaczej zostałyby w danych faktury.
+   * Nazwa, adres i e-mail zostają: to częsta poprawka „pomyliłem rodzaj”.
+   */
+  // Odczyt w renderze subskrybuje RHF na zmianę — handlery dostają świeżą wartość.
+  const wyslanoRaz = form.formState.isSubmitted;
+
+  /** Błąd stawki pozycji — np. „np. II” bez nabywcy z UE (AUD-70). */
+  const bladStawki = (index: number): string | undefined =>
+    form.formState.errors.lines?.[index]?.vatRate?.message;
+
+  const zmienRodzajNabywcy = (kind: BuyerKind) => {
+    const opts = { shouldDirty: true } as const;
+    setBuyerVatStatus(null);
+    form.setValue('buyerIsConsumer', kind === 'consumer', opts);
+    form.setValue('buyerIsEu', kind === 'eu', opts);
+    if (kind !== 'pl') form.setValue('buyerNip', '', opts);
+    if (kind === 'consumer') {
+      form.setValue('buyerConsumerIdType', 'pesel', opts);
+    } else {
+      form.setValue('buyerConsumerIdType', undefined, opts);
+      form.setValue('buyerPesel', '', opts);
+      form.setValue('buyerIdDocument', '', opts);
+    }
+    if (kind !== 'eu') {
+      form.setValue('buyerVatUe', '', opts);
+      form.setValue('buyerCountryCode', '', opts);
+    }
+    // Błędy poprzedniego rodzaju znikają od razu. Po pierwszej próbie zapisu
+    // sprawdzamy całość jeszcze raz — np. pozycja „np. II” staje się poprawna,
+    // gdy nabywcą zostaje firma z UE.
+    form.clearErrors([
+      'buyerNip',
+      'buyerIsEu',
+      'buyerVatUe',
+      'buyerCountryCode',
+      'buyerConsumerIdType',
+      'buyerPesel',
+      'buyerIdDocument',
+    ]);
+    if (wyslanoRaz) void form.trigger();
+  };
+
+  /**
+   * Kraj adresu podpowiadamy z prefiksu numeru VAT-UE (Grecja: `EL` → `GR`),
+   * ale tylko gdy prefiks się zmienił — kraju wybranego ręcznie nie
+   * nadpisujemy przy poprawianiu cyfr numeru.
+   */
+  const onVatUeChange = (previous: string, next: string) => {
+    const before = parseVatUe(previous)?.kodUE;
+    const after = parseVatUe(next)?.kodUE;
+    if (after && after !== 'PL' && after !== before) {
+      form.setValue('buyerCountryCode', addressCountryForKodUE(after), {
+        shouldDirty: true,
+        shouldValidate: wyslanoRaz,
+      });
+    }
   };
 
   // react-hook-form: watch() jest celowo niememoizowalny — React Compiler pomija ten hook.
@@ -485,40 +598,140 @@ export function InvoiceForm({
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Nabywca</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            {buyerIsConsumer
+            {buyerKind === 'consumer'
               ? 'Dane osoby fizycznej (bez NIP podatnika)'
-              : 'Wyszukaj po NIP w bazie GUS lub wprowadź ręcznie'}
+              : buyerKind === 'eu'
+                ? 'Firma z innego kraju UE — identyfikuje ją numer VAT-UE'
+                : 'Wyszukaj po NIP w bazie GUS lub wprowadź ręcznie'}
           </p>
         </div>
-        <div className="flex items-start gap-3 rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface-container-low)] p-4">
-          <Checkbox
-            id="buyer-is-consumer"
-            checked={!!buyerIsConsumer}
-            onCheckedChange={(c) => {
-              const on = c === true;
-              form.setValue('buyerIsConsumer', on, { shouldDirty: true });
-              setBuyerVatStatus(null);
-              if (on) {
-                form.setValue('buyerNip', '', { shouldDirty: true });
-                form.setValue('buyerConsumerIdType', 'pesel', { shouldDirty: true });
-              } else {
-                form.setValue('buyerConsumerIdType', undefined, { shouldDirty: true });
-                form.setValue('buyerPesel', '', { shouldDirty: true });
-                form.setValue('buyerIdDocument', '', { shouldDirty: true });
-              }
-              void form.trigger(['buyerNip', 'buyerConsumerIdType', 'buyerPesel', 'buyerIdDocument']);
-            }}
-          />
-          <div className="min-w-0 flex-1 space-y-0.5">
-            <Label htmlFor="buyer-is-consumer" className="text-sm font-medium leading-none">
-              Faktura dla osoby fizycznej (bez NIP)
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Włącz dla B2C: wybierz typ identyfikatora (PESEL, dowód, paszport lub brak).
-            </p>
+        {/* Rodzaj nabywcy — trzy wykluczające się opcje (AUD-70). Natywne
+            pola radio: grupa z klawiatury (strzałki) i czytnik ekranu bez
+            dodatkowej biblioteki; kółko zostaje widoczne, bo klika w nie e2e. */}
+        <fieldset>
+          <legend className={labelClass}>Rodzaj nabywcy</legend>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {BUYER_KINDS.map((opcja) => {
+              const wybrana = buyerKind === opcja.kind;
+              return (
+                <label
+                  key={opcja.kind}
+                  htmlFor={opcja.id}
+                  className={cn(
+                    'flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50',
+                    wybrana
+                      ? 'border-[var(--ff-accent)] bg-[var(--ff-accent-tint)]'
+                      : 'border-[var(--ff-border)] bg-[var(--ff-surface-container-low)] hover:border-[var(--ff-border-strong)]',
+                  )}
+                >
+                  <input
+                    type="radio"
+                    id={opcja.id}
+                    name="buyerKind"
+                    value={opcja.kind}
+                    checked={wybrana}
+                    onChange={() => zmienRodzajNabywcy(opcja.kind)}
+                    className="mt-0.5 size-4 shrink-0 accent-[var(--ff-accent)]"
+                  />
+                  <span className="min-w-0 flex-1 space-y-1">
+                    <span className="block text-sm font-medium leading-none">{opcja.label}</span>
+                    <span className="block text-xs text-muted-foreground">{opcja.hint}</span>
+                  </span>
+                </label>
+              );
+            })}
           </div>
-        </div>
-        {!buyerIsConsumer ? (
+          {form.formState.errors.buyerIsEu ? (
+            <p className={errorTextClass}>
+              <AlertCircle className="h-3 w-3" />
+              {form.formState.errors.buyerIsEu.message}
+            </p>
+          ) : null}
+        </fieldset>
+        {buyerKind === 'eu' ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="buyer-vat-ue" className={labelClass}>
+                Numer VAT-UE nabywcy
+              </Label>
+              <Input
+                id="buyer-vat-ue"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                placeholder="DE123456789"
+                className="uppercase"
+                aria-invalid={form.formState.errors.buyerVatUe ? true : undefined}
+                aria-describedby="buyer-vat-ue-hint"
+                {...form.register('buyerVatUe', {
+                  onChange: (e: ChangeEvent<HTMLInputElement>) =>
+                    onVatUeChange(buyerVatUeWatch, e.target.value),
+                })}
+              />
+              {form.formState.errors.buyerVatUe ? (
+                <p id="buyer-vat-ue-hint" className={errorTextClass}>
+                  <AlertCircle className="h-3 w-3" />
+                  {form.formState.errors.buyerVatUe.message}
+                </p>
+              ) : (
+                <p
+                  id="buyer-vat-ue-hint"
+                  aria-live="polite"
+                  className={cn(
+                    'mt-1.5 text-xs',
+                    vatUeHint.tone === 'warn'
+                      ? 'text-amber-700 dark:text-amber-400'
+                      : vatUeHint.tone === 'ok'
+                        ? 'text-[var(--ff-text)]'
+                        : 'text-muted-foreground',
+                  )}
+                >
+                  {vatUeHint.text}
+                </p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="buyer-country" className={labelClass}>
+                Kraj nabywcy
+              </Label>
+              <Select
+                value={buyerCountryCode}
+                onValueChange={(v) =>
+                  form.setValue('buyerCountryCode', v, {
+                    shouldDirty: true,
+                    shouldValidate: wyslanoRaz,
+                  })
+                }
+              >
+                <SelectTrigger
+                  id="buyer-country"
+                  className="w-full"
+                  aria-invalid={form.formState.errors.buyerCountryCode ? true : undefined}
+                >
+                  <SelectValue placeholder="Wybierz kraj UE" />
+                </SelectTrigger>
+                <SelectContent>
+                  {EU_BUYER_COUNTRIES.map((k) => (
+                    <SelectItem key={k.code} value={k.code}>
+                      {k.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.buyerCountryCode ? (
+                <p className={errorTextClass}>
+                  <AlertCircle className="h-3 w-3" />
+                  {form.formState.errors.buyerCountryCode.message}
+                </p>
+              ) : (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Ustawiamy go z prefiksu numeru — zmień, jeśli adres jest w innym kraju UE.
+                </p>
+              )}
+            </div>
+          </div>
+        ) : null}
+        {buyerKind === 'pl' ? (
           <div className="space-y-2">
             <Label className={labelClass}>NIP nabywcy</Label>
             <BuyerLookup
@@ -554,7 +767,7 @@ export function InvoiceForm({
             ) : null}
           </div>
         ) : null}
-        {buyerIsConsumer ? (
+        {buyerKind === 'consumer' ? (
           <div className="space-y-2">
             <Label className={labelClass}>Typ identyfikatora</Label>
             <Select
@@ -589,7 +802,7 @@ export function InvoiceForm({
             ) : null}
           </div>
         ) : null}
-        {buyerIsConsumer && buyerConsumerIdType === 'pesel' ? (
+        {buyerKind === 'consumer' && buyerConsumerIdType === 'pesel' ? (
           <div>
             <Label className={labelClass}>PESEL</Label>
             <Input
@@ -606,7 +819,7 @@ export function InvoiceForm({
             ) : null}
           </div>
         ) : null}
-        {buyerIsConsumer &&
+        {buyerKind === 'consumer' &&
         (buyerConsumerIdType === 'id_card' || buyerConsumerIdType === 'passport') ? (
           <div>
             <Label className={labelClass}>Numer dokumentu</Label>
@@ -760,7 +973,10 @@ export function InvoiceForm({
                     </td>
                     <td className="py-3 pr-2">
                       <select
-                        className="h-9 w-full rounded-lg border border-[var(--ff-border)] bg-[var(--ff-surface)] px-2 text-sm text-[var(--ff-text)]"
+                        className="h-9 w-full rounded-lg border border-[var(--ff-border)] bg-[var(--ff-surface)] px-2 text-sm text-[var(--ff-text)] aria-invalid:border-red-500/60"
+                        aria-label={`Stawka VAT pozycji ${index + 1}`}
+                        aria-invalid={bladStawki(index) ? true : undefined}
+                        title={bladStawki(index)}
                         {...form.register(`lines.${index}.vatRate`)}
                       >
                         <option value="23">23%</option>
@@ -770,6 +986,7 @@ export function InvoiceForm({
                         <option value="zw">zw</option>
                         <option value="oo">oo</option>
                         <option value="np">np</option>
+                        <option value="np_ii">np. II (usługa dla firmy z UE)</option>
                       </select>
                     </td>
                     <td className="py-3 text-right tabular-nums">
@@ -795,6 +1012,13 @@ export function InvoiceForm({
               })}
             </tbody>
           </table>
+          {/* Komórka stawki jest za wąska na komunikat — jeden pod tabelą. */}
+          {fields.some((_, i) => bladStawki(i)) ? (
+            <p className={errorTextClass}>
+              <AlertCircle className="h-3 w-3" />
+              {fields.map((_, i) => bladStawki(i)).find(Boolean)}
+            </p>
+          ) : null}
         </div>
         ) : (
         <div className="space-y-3">
@@ -874,9 +1098,13 @@ export function InvoiceForm({
                     />
                   </div>
                   <div>
-                    <Label className={labelClass}>Stawka VAT</Label>
+                    <Label htmlFor={`line-${index}-vat-rate`} className={labelClass}>
+                      Stawka VAT
+                    </Label>
                     <select
-                      className="h-12 w-full rounded-xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-3 text-base text-[var(--ff-text)]"
+                      id={`line-${index}-vat-rate`}
+                      className="h-12 w-full rounded-xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-3 text-base text-[var(--ff-text)] aria-invalid:border-red-500/60"
+                      aria-invalid={bladStawki(index) ? true : undefined}
                       {...form.register(`lines.${index}.vatRate`)}
                     >
                       <option value="23">23%</option>
@@ -886,8 +1114,15 @@ export function InvoiceForm({
                       <option value="zw">zw — zwolniona</option>
                       <option value="oo">oo — odwrotne obciążenie</option>
                       <option value="np">np — nie podlega</option>
+                      <option value="np_ii">np. II (usługa dla firmy z UE)</option>
                     </select>
                   </div>
+                  {bladStawki(index) ? (
+                    <p className={cn(errorTextClass, 'col-span-2 mt-0')}>
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      {bladStawki(index)}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="flex items-center justify-between border-t border-[var(--ff-row-divider)] pt-3">
