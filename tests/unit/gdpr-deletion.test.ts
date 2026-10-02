@@ -24,7 +24,11 @@ type Operation = {
 function database() {
   const rows: Row[] = [];
   const operations: Operation[] = [];
-  const rpc = vi.fn(async () => ({ data: null, error: null as { message: string } | null }));
+  // Sprawdzenie blokad (AUD-41) domyślnie: nic nie blokuje.
+  const rpc = vi.fn(async (fn: string, _args?: unknown) => ({
+    data: (fn === 'gdpr_user_deletion_blockers' ? [] : null) as unknown,
+    error: null as { message: string } | null,
+  }));
   const deleteUser = vi.fn<(userId: string) => Promise<{ error: { message: string } | null }>>()
     .mockResolvedValue({ error: null });
   let lookupError = false;
@@ -225,7 +229,10 @@ describe('GDPR atomic processing claim', () => {
     const token = dueRequest();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    db.rpc.mockImplementationOnce(async () => { await gate; return { data: null, error: null }; });
+    db.rpc.mockImplementation(async (fn: string) => {
+      if (fn === 'anonymize_user_audit_logs') await gate;
+      return { data: fn === 'gdpr_user_deletion_blockers' ? [] : null, error: null };
+    });
     const first = executeGdprRequest('due-request');
     await Promise.resolve();
     expect(db.rows[0].status).toBe('processing');
@@ -236,7 +243,7 @@ describe('GDPR atomic processing claim', () => {
     expect(db.auth.admin.deleteUser).not.toHaveBeenCalled();
     release();
     expect(await first).toEqual({ ok: true });
-    expect(db.rpc).toHaveBeenCalledOnce();
+    expect(db.rpc.mock.calls.filter(([fn]) => fn === 'anonymize_user_audit_logs')).toHaveLength(1);
     expect(db.auth.admin.deleteUser).toHaveBeenCalledExactlyOnceWith(input.userId);
     expect(db.rows[0].status).toBe('executed');
   });
@@ -263,6 +270,42 @@ describe('GDPR atomic processing claim', () => {
     expect(await executeGdprRequest('due-request')).toEqual({ ok: false, error: 'gdpr_blocker_lookup_failed' });
     expect(db.rpc).not.toHaveBeenCalled();
     expect(db.auth.admin.deleteUser).not.toHaveBeenCalled();
+  });
+
+  // AUD-41: klucz obcy bez ON DELETE wywracał deleteUser PO nieodwracalnej
+  // anonimizacji dziennika. Sprawdzenie idzie przed anonimizacją.
+  it('does not anonymize when another foreign key would still stop the deletion', async () => {
+    dueRequest();
+    db.rpc.mockImplementation(async (fn: string) => ({
+      data: fn === 'gdpr_user_deletion_blockers' ? ['public.stripe_financial_case_reviews.reviewer_user_id'] : null,
+      error: null,
+    }));
+    expect(await executeGdprRequest('due-request')).toEqual({
+      ok: false, error: 'user_still_referenced: public.stripe_financial_case_reviews.reviewer_user_id',
+    });
+    expect(db.rpc).toHaveBeenCalledWith('gdpr_user_deletion_blockers', { p_user_id: input.userId });
+    expect(db.rpc).not.toHaveBeenCalledWith('anonymize_user_audit_logs', expect.anything());
+    expect(db.auth.admin.deleteUser).not.toHaveBeenCalled();
+    expect(db.rows[0].status).toBe('failed');
+  });
+
+  it.each([
+    ['błąd odczytu', { data: null, error: { message: 'boom' } }],
+    ['odpowiedź nie jest listą', { data: null, error: null }],
+  ])('stops before anonymization when the foreign key check fails (%s)', async (_label, response) => {
+    dueRequest();
+    db.rpc.mockImplementation(async (fn: string) => (
+      fn === 'gdpr_user_deletion_blockers' ? response : { data: null, error: null }
+    ));
+    expect(await executeGdprRequest('due-request')).toEqual({ ok: false, error: 'deletion_blockers_check_failed' });
+    expect(db.rpc).not.toHaveBeenCalledWith('anonymize_user_audit_logs', expect.anything());
+    expect(db.auth.admin.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('checks foreign keys before anonymizing, then deletes', async () => {
+    dueRequest();
+    expect(await executeGdprRequest('due-request')).toEqual({ ok: true });
+    expect(db.rpc.mock.calls.map(([fn]) => fn)).toEqual(['gdpr_user_deletion_blockers', 'anonymize_user_audit_logs']);
   });
 
   it('records an uncertain failure without automatically repeating deletion', async () => {

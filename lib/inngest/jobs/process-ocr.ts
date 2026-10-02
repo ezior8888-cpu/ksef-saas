@@ -115,7 +115,10 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         }
 
         const jobRow = row as OcrJobRow;
-        await requireTenantMember(jobRow.created_by, tenantId);
+        // Autor usunął konto (AUD-41: created_by = NULL) — koszt nie ma autora.
+        const createdBy = jobRow.created_by;
+        if (!createdBy) throw new NonRetriableError('Autor zadania OCR usunął konto');
+        await requireTenantMember(createdBy, tenantId);
         if (!jobRow.source_file_path || jobRow.source_file_path === 'pending') {
           throw new NonRetriableError('Brak pliku źródłowego dla joba OCR');
         }
@@ -126,7 +129,7 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         );
 
         return {
-          job: jobRow,
+          job: { ...jobRow, created_by: createdBy },
           imageBase64: buffer.toString('base64'),
           mimeType: mt,
         };

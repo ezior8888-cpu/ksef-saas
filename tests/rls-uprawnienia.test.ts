@@ -85,6 +85,9 @@ describe.skipIf(!hasDatabase)('uprawnienia funkcji i ról (00103, 00104)', () =>
 
   afterAll(async () => {
     if (!hasDatabase) return;
+    await admin.from('ocr_jobs').delete().eq('tenant_id', ORG);
+    await admin.from('expenses').delete().eq('tenant_id', ORG);
+    await admin.from('accountant_access').delete().eq('tenant_id', ORG);
     await admin.from('organization_join_requests').delete().eq('organization_id', ORG);
     await admin.from('memberships').delete().eq('organization_id', ORG);
     await admin.from('tenants').delete().eq('id', ORG);
@@ -135,6 +138,42 @@ describe.skipIf(!hasDatabase)('uprawnienia funkcji i ról (00103, 00104)', () =>
     const flag = await c.from('tenants').select('name, has_ksef_credentials').eq('id', ORG).single();
     expect(flag.error).toBeNull();
     expect(flag.data).toMatchObject({ name: 'Firma Uprawnienia RLS', has_ksef_credentials: false });
+  });
+
+  it('usunięcie konta: autor wydatku, OCR i dostępu księgowej → NULL; sprawdzenie blokad tylko dla serwisu (00113, AUD-41)', async () => {
+    const goneId = await userId('rls-perm-gdpr@ksef-saas.test');
+    await admin.from('users').upsert({ id: goneId, name: 'Do usunięcia' }, { onConflict: 'id' });
+    const exp = await admin.from('expenses').insert({
+      tenant_id: ORG, created_by: goneId, source: 'manual', seller_name: 'Sprzedawca Testowy',
+      issue_date: '2026-10-01', net_amount: 100, gross_amount: 123,
+    }).select('id').single();
+    expect(exp.error).toBeNull();
+    const ocr = await admin.from('ocr_jobs').insert({
+      tenant_id: ORG, created_by: goneId, source_file_path: 'pending', source_file_mime: 'image/jpeg',
+    }).select('id').single();
+    expect(ocr.error).toBeNull();
+    const acc = await admin.from('accountant_access').insert({
+      tenant_id: ORG, accountant_email: 'ksiegowa@ksef-saas.test', accountant_name: 'Księgowa Testowa',
+      expires_at: '2099-01-01T00:00:00Z', token_hash: 'a'.repeat(64), created_by_user_id: goneId,
+    }).select('id').single();
+    expect(acc.error).toBeNull();
+
+    const asAnon = await anonClient().rpc('gdpr_user_deletion_blockers', { p_user_id: goneId });
+    expect(asAnon.error?.code).toBe('42501');
+    const check = await admin.rpc('gdpr_user_deletion_blockers', { p_user_id: goneId });
+    expect(check.error).toBeNull();
+    expect(check.data).toEqual([]);
+
+    const { error: delErr } = await admin.auth.admin.deleteUser(goneId);
+    expect(delErr).toBeNull();
+    const [e, o, a] = await Promise.all([
+      admin.from('expenses').select('created_by').eq('id', exp.data!.id).single(),
+      admin.from('ocr_jobs').select('created_by').eq('id', ocr.data!.id).single(),
+      admin.from('accountant_access').select('created_by_user_id').eq('id', acc.data!.id).single(),
+    ]);
+    expect(e.data).toEqual({ created_by: null });
+    expect(o.data).toEqual({ created_by: null });
+    expect(a.data).toEqual({ created_by_user_id: null });
   });
 
   it('admin nie usunie właściciela', async () => {

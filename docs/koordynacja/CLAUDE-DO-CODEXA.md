@@ -53,7 +53,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00110 | Claude | `billing_invoice_numbering` (AUD-69: kolejny numer, data PL, status paid) | PR `claude/naprawy-billing`; nowa tabela + funkcja — przed wdrożeniem |
 | 00111 | Claude | `tenant_ksef_credentials_flag` (AUD-103: kolumna generowana `has_ksef_credentials`) | PR `claude/naprawy-reszta`; przed wdrożeniem |
 | 00112 | Claude | `tenant_credentials_column_privileges` (AUD-103: bez SELECT blobu KSeF dla ról klienckich) | PR `claude/naprawy-reszta`; **PO wdrożeniu kodu** — nowe kolumny `tenants` wymagają odtąd jawnego GRANT SELECT |
-| **00113** | — | następny wolny | — |
+| 00113 | Claude | `user_deletion_foreign_keys` (AUD-41: autor wydatku, OCR i dostępu księgowej → `ON DELETE SET NULL`; `gdpr_user_deletion_blockers` przed anonimizacją; AUD-81: stare `email_bounces.raw_payload`) | PR `claude/naprawy-rodo-2`; przed wdrożeniem (kod sprawdza funkcję) |
+| **00114** | — | następny wolny | — |
 
 ---
 
