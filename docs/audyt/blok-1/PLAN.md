@@ -80,14 +80,16 @@ Commit: `f13e21b`
 Sprawdzenie: `bash scripts/verify-migration-00200.sh` (tymczasowy lokalny Postgres 16): przed 00200 INSERT korekty z gross_total -246 jest odrzucany, po 00200 przechodzi; wpłata > brutto nadal odrzucana. Na produkcji: wgrać 00200 przed wdrożeniem kodu.
 
 ### P-07 — Eksport KPiR: koszty dołączone domyślnie
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-058
 Zmiana: `components/exports/exports-center.tsx` — wybór „KPiR Excel” zaznacza „Faktury otrzymane (koszty)”; etykieta mówi, że obejmuje też paragony. Logika domyślności w czystej funkcji.
 Kryterium: test funkcji (`kpir_excel` → koszty włączone; `jpk_fa` → bez zmian) i test komponentu (jsdom), że przełączenie na KPiR zaznacza pole.
+Commit: `9e1ed2a`
+Sprawdzenie: `pnpm exec vitest run tests/unit/eksport-kpir-koszty-domyslnie.test.tsx`; w aplikacji: Raporty → Eksport → „KPiR Excel” zaznacza „Koszty: faktury otrzymane i paragony”. Pusty okres z samymi kosztami nadal kończy się „Brak faktur” — to w exports-generate.ts (PR #71, #128).
 
 ### P-08 — Szkic faktury: wysyłka do KSeF i usunięcie
-Status: TODO
+Status: W TOKU
 Typ: DOKOŃCZENIE
 Znaleziska: F-001, F-042
 Zmiana:
