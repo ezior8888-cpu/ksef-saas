@@ -41,6 +41,17 @@ export function isForeignEuVat(raw: string | null | undefined): boolean {
   return parsed !== null && parsed.kodUE !== 'PL';
 }
 
+/**
+ * Nabywca, dla którego usługa może mieć stawkę „np II” (art. 100 ust. 1 pkt 4,
+ * art. 28b): podatnik z INNEGO państwa członkowskiego. Bez `PL` i bez `XI` —
+ * Irlandia Północna ma numer VAT-UE tylko dla obrotu towarami; usługa dla
+ * firmy z Irlandii Płn. to usługa dla podatnika spoza UE (np I).
+ */
+export function isNpIiBuyerVat(raw: string | null | undefined): boolean {
+  const parsed = parseVatUe(raw);
+  return parsed !== null && parsed.kodUE !== 'PL' && parsed.kodUE !== 'XI';
+}
+
 /** Kod kraju do adresu (ISO, `TKodKraju`) dla prefiksu VAT-UE. */
 export function addressCountryForKodUE(kodUE: KodUE): string {
   return kodUE === 'EL' ? 'GR' : kodUE;

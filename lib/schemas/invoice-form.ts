@@ -7,7 +7,7 @@ import {
 } from '@/lib/xml/invoice-calculator';
 
 import { isSaleDateWithinLimit, SALE_DATE_TOO_LATE_MESSAGE } from '@/lib/invoices/sale-date';
-import { addressCountryForKodUE, parseVatUe, type KodUE } from '@/lib/invoices/vat-ue';
+import { addressCountryForKodUE, parseVatUe, type KodUE, isNpIiBuyerVat } from '@/lib/invoices/vat-ue';
 
 /**
  * Kraje adresu nabywcy z UE (AUD-70) — polskie nazwy do formularza.
@@ -57,6 +57,10 @@ const EU_BUYER_COUNTRY_CODES: ReadonlySet<string> = new Set(EU_BUYER_COUNTRIES.m
 /** Stawka „np. II” (art. 100 ust. 1 pkt 4) bez nabywcy z innego państwa UE. */
 export const NP_II_REQUIRES_EU_BUYER_MESSAGE =
   'Stawka np. II tylko dla usługi dla firmy z innego kraju UE z numerem VAT-UE — wybierz nabywcę „Firma z UE (VAT-UE)”';
+
+/** Irlandia Płn. ma numer VAT-UE tylko dla towarów — usługa nie jest np. II. */
+export const NP_II_NOT_FOR_XI_MESSAGE =
+  'Stawka np. II nie dotyczy firm z Irlandii Północnej (XI) — ich numer VAT-UE obejmuje tylko towary; dla usługi wybierz np. (poza krajem)';
 
 // UWAGA: typ VatRate w types/invoice.ts nie zawiera '3' (stawka ryczałtu
 // rolnika ryczałtowego). Trzymamy się tego samego zestawu, żeby
@@ -230,12 +234,17 @@ export const invoiceFormSchema = z
         });
       }
     }
-    // Ważność numeru VAT-UE pilnuje warunek wyżej — tu wystarczy rodzaj nabywcy.
+    // Ważność numeru VAT-UE pilnuje warunek wyżej. np. II dodatkowo wyklucza
+    // Irlandię Płn. (XI): jej numer VAT-UE dotyczy tylko towarów (`isNpIiBuyerVat`).
     const nabywcaZUe = d.buyerIsEu === true && !d.buyerIsConsumer;
-    if (!nabywcaZUe) {
+    const nabywcaDlaNpII = nabywcaZUe && isNpIiBuyerVat(d.buyerVatUe);
+    if (!nabywcaDlaNpII) {
+      const message = nabywcaZUe && parseVatUe(d.buyerVatUe)?.kodUE === 'XI'
+        ? NP_II_NOT_FOR_XI_MESSAGE
+        : NP_II_REQUIRES_EU_BUYER_MESSAGE;
       d.lines.forEach((l, i) => {
         if (l.vatRate === 'np_ii') {
-          ctx.addIssue({ code: 'custom', message: NP_II_REQUIRES_EU_BUYER_MESSAGE, path: ['lines', i, 'vatRate'] });
+          ctx.addIssue({ code: 'custom', message, path: ['lines', i, 'vatRate'] });
         }
       });
     }

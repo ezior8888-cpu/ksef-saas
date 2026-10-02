@@ -8,7 +8,7 @@ import type {
   InvoiceType,
 } from '@/types/invoice';
 import { isSaleDateWithinLimit, SALE_DATE_TOO_LATE_MESSAGE } from '@/lib/invoices/sale-date';
-import { addressCountryForKodUE, isForeignEuVat, parseVatUe } from '@/lib/invoices/vat-ue';
+import { addressCountryForKodUE, isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
 
 // ═══════════════════════════════════════════════════════════════
 // Zaokrąglanie i konwersje liczbowe
@@ -460,7 +460,7 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
  *   i numer zgodny z `TNrVatUE` — inaczej KSeF odrzuca XML,
  * - „np II” (usługi z art. 100 ust. 1 pkt 4 — art. 28b, VAT rozlicza nabywca)
  *   wymaga nabywcy-podatnika z INNEGO państwa UE, czyli numeru VAT-UE
- *   z prefiksem innym niż „PL”,
+ *   z prefiksem innym niż „PL” i „XI” (`isNpIiBuyerVat`),
  * - nabywca z zagranicznym VAT-UE ma adres za granicą (`Adres/KodKraju` to
  *   kod ISO — dla Grecji „GR”, nie „EL”).
  */
@@ -477,12 +477,13 @@ function buyerVatUeErrors(invoice: Invoice): string[] {
   }
 
   const npIiOrdinals = invoice.lines.filter((l) => l.vatRate === 'np_ii').map((l) => l.ordinal);
-  if (npIiOrdinals.length > 0 && !isForeignEuVat(raw)) {
+  if (npIiOrdinals.length > 0 && !isNpIiBuyerVat(raw)) {
     const label = npIiOrdinals.length === 1 ? 'Pozycja' : 'Pozycje';
     errors.push(
       `${label} ${npIiOrdinals.join(', ')}: stawka „np II” (usługi z art. 100 ust. 1 pkt 4 ustawy o VAT) ` +
         'wymaga nabywcy — podatnika z innego państwa UE — z numerem VAT-UE (np. „DE123456789”). ' +
-        'Dla nabywcy z NIP, z polskim VAT-UE albo bez numeru wybierz inną stawkę.'
+        'Dla nabywcy z NIP, z polskim VAT-UE, z Irlandii Płn. (XI — numer tylko dla towarów) ' +
+        'albo bez numeru wybierz inną stawkę.'
     );
   }
 

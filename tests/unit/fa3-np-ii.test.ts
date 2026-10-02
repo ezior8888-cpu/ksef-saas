@@ -172,6 +172,18 @@ describe('validateInvoice — np II i numer VAT-UE nabywcy (AUD-70)', () => {
     expect(errors.some((e) => VAT_UE_ZLY.test(e))).toBe(false);
   });
 
+  it('np II dla firmy z Irlandii Płn. (XI) — błąd: XI to numer tylko dla towarów', () => {
+    const errors = bledy({
+      buyer: {
+        vatUeNumber: 'XI123456789',
+        name: 'Nabywca testowy',
+        address: { countryCode: 'XI', addressLine1: '1 Test Street', addressLine2: 'BT1 1AA Belfast' },
+      },
+    });
+    expect(errors.some((e) => NP_II.test(e))).toBe(true);
+    expect(errors.some((e) => VAT_UE_ZLY.test(e))).toBe(false);
+  });
+
   it('prefiks „GR” zamiast „EL” — błąd numeru VAT-UE (z podpowiedzią) i błąd np II', () => {
     const errors = bledy({ buyer: { ...NABYWCA_EL, vatUeNumber: 'GR123456789' } });
     const vatUe = errors.find((e) => VAT_UE_ZLY.test(e));

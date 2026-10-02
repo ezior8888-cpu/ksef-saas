@@ -182,6 +182,12 @@ describe('schemat formularza — nabywca z UE i stawka np. II (AUD-70)', () => {
     expect(bledy({ ...firmaUe, buyerCountryCode: kraj }).some((e) => e.startsWith('buyerCountryCode'))).toBe(true);
   });
 
+  it('firma z Irlandii Płn. (XI): np. II odrzucone, inne stawki dozwolone', () => {
+    const xi = { ...firmaUe, buyerVatUe: 'XI123456789', buyerCountryCode: 'XI' };
+    expect(bledy(xi).some((e) => e.startsWith('lines.0.vatRate'))).toBe(true);
+    expect(bledy({ ...xi, lines: firmaPl.lines })).toEqual([]);
+  });
+
   it('Grecja: prefiks EL, kraj adresu GR', () => {
     expect(bledy({ ...firmaUe, buyerVatUe: 'EL123456789', buyerCountryCode: 'GR' })).toEqual([]);
   });

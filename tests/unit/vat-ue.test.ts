@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { KOD_UE, addressCountryForKodUE, isForeignEuVat, parseVatUe } from '@/lib/invoices/vat-ue';
+import { KOD_UE, addressCountryForKodUE, isForeignEuVat, isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
 
 describe('numer VAT-UE nabywcy (AUD-70)', () => {
   it('lista KodUE jest równa TKodyKrajowUE ze schematu FA(3)', () => {
@@ -30,6 +30,16 @@ describe('numer VAT-UE nabywcy (AUD-70)', () => {
     expect(isForeignEuVat('PL1234567890')).toBe(false);
     expect(isForeignEuVat('DE123456789')).toBe(true);
     expect(isForeignEuVat('nie-numer')).toBe(false);
+  });
+
+  it('np II tylko dla podatnika z innego państwa członkowskiego — bez PL i XI', () => {
+    // XI (Irlandia Płn.) ma numer VAT-UE tylko dla towarów; usługa dla firmy
+    // z Irlandii Płn. to usługa dla podatnika spoza UE, nie art. 100 ust. 1 pkt 4.
+    expect(isNpIiBuyerVat('DE123456789')).toBe(true);
+    expect(isNpIiBuyerVat('EL123456789')).toBe(true);
+    expect(isNpIiBuyerVat('XI123456789')).toBe(false);
+    expect(isNpIiBuyerVat('PL1234567890')).toBe(false);
+    expect(isNpIiBuyerVat('zly')).toBe(false);
   });
 
   it('adres Grecji to GR, reszta jak prefiks', () => {
