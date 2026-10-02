@@ -91,8 +91,9 @@ describe('panel /admin/system liczy zapisy workera', () => {
   });
 });
 
-describe('worker.ts zapisuje każdy przebieg', () => {
-  const source = readFileSync(join(process.cwd(), 'lib/jobs/worker.ts'), 'utf8');
+describe('wrapper jobów zapisuje każdy przebieg', () => {
+  // Wrapper przeniesiony z worker.ts do run-job.ts (AUD-35).
+  const source = readFileSync(join(process.cwd(), 'lib/jobs/run-job.ts'), 'utf8');
   const handled = source.slice(source.indexOf('await def.handler('));
 
   it('po udanym handlerze — succeeded, w catch — failed przed decyzją o ponowieniu', () => {

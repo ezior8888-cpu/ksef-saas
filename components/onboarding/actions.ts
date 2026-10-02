@@ -2,6 +2,7 @@
 
 import { lookupCompanyByNip } from '@/lib/gus/client';
 import { getVerifiedUserContext } from '@/lib/auth/verified-user';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { createAdminClient } from '@/lib/supabase/server';
 import { validateNipChecksum } from '@/lib/xml/invoice-calculator';
 
@@ -54,6 +55,18 @@ export async function lookupNipAction(nip: string): Promise<LookupNipResult> {
   }
   if (!validateNipChecksum(nip)) {
     return { success: false, error: 'Nieprawidłowa suma kontrolna NIP.' };
+  }
+
+  // AUD-59: wynik zdradza, które firmy korzystają z FaktFlow (potrzebne do
+  // „poproś o dostęp”) — limit, żeby nie dało się tego przeglądać seryjnie.
+  const budget = await checkRateLimit({
+    bucket: 'nip_lookup',
+    identifier: context.user.id,
+    limit: 20,
+    windowSeconds: 60 * 60,
+  });
+  if (!budget.allowed) {
+    return { success: false, error: 'Zbyt wiele wyszukiwań NIP. Spróbuj ponownie za godzinę.' };
   }
 
   const result = await lookupCompanyByNip(nip);

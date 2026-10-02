@@ -13,6 +13,14 @@ export interface CsvExportInput {
   receivedInvoices: JpkInvoice[];
 }
 
+/**
+ * Tekst, który Excel wykonałby jak formułę (AUD-60): `=`, `+`, `@`, tabulator,
+ * CR albo `-`, za którym nie stoi sama liczba. PapaParse poprzedza taki tekst
+ * apostrofem. Kwoty ujemne („-200,00” z korekt) zostają liczbami — domyślny
+ * wzorzec PapaParse zamieniłby je w tekst i zepsuł import.
+ */
+const FORMULA_START = /^[=+@\t\r]|^-(?![\d\s.,]*$)/;
+
 // ============================================================================
 // Insert Subiekt GT
 // Separator: ;   Encoding: Windows-1250   Bez BOM
@@ -34,7 +42,7 @@ export function generateInsertSubiektCsv(data: CsvExportInput): Buffer {
     ...(inv.ksefNumber ? { KSeF: inv.ksefNumber } : {}),
   }));
 
-  const csv = Papa.unparse(rows, { delimiter: ';', newline: '\r\n' });
+  const csv = Papa.unparse(rows, { delimiter: ';', newline: '\r\n', escapeFormulae: FORMULA_START });
 
   // Insert Subiekt wymaga Windows-1250 dla polskich znaków
   return iconv.encode(csv, 'win1250');
@@ -68,7 +76,7 @@ export function generateSymfoniaCsv(data: CsvExportInput): Buffer {
     FakturaKorygowana: inv.correctedInvoiceNumber ?? '',
   }));
 
-  const csv = Papa.unparse(rows, { delimiter: ';', newline: '\r\n' });
+  const csv = Papa.unparse(rows, { delimiter: ';', newline: '\r\n', escapeFormulae: FORMULA_START });
 
   // UTF-8 BOM (Symfonia rozpoznaje BOM jako marker UTF-8)
   const bom = Buffer.from('\ufeff', 'utf8');
@@ -102,7 +110,7 @@ export function generateWaproCsv(data: CsvExportInput): Buffer {
     ksef: inv.ksefNumber ?? '',
   }));
 
-  const csv = Papa.unparse(rows, { delimiter: '\t', newline: '\r\n' });
+  const csv = Papa.unparse(rows, { delimiter: '\t', newline: '\r\n', escapeFormulae: FORMULA_START });
 
   const bom = Buffer.from('\ufeff', 'utf8');
   return Buffer.concat([bom, Buffer.from(csv, 'utf8')]);
@@ -128,7 +136,7 @@ export function generateUniversalCsv(data: CsvExportInput): Buffer {
     KSeF: inv.ksefNumber ?? '',
   }));
 
-  const csv = Papa.unparse(rows, { delimiter: ';', newline: '\r\n' });
+  const csv = Papa.unparse(rows, { delimiter: ';', newline: '\r\n', escapeFormulae: FORMULA_START });
   const bom = Buffer.from('\ufeff', 'utf8');
   return Buffer.concat([bom, Buffer.from(csv, 'utf8')]);
 }

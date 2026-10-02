@@ -226,7 +226,8 @@ export type PublicKeyCertificatesResponse = PublicKeyCertificate[];
  * Polling skrzynki musi używać `Invoicing` i akceptować opóźnienie między
  * wystawieniem a wpłynięciem (zwykle sekundy, w wyjątkach godziny).
  */
-export type InvoiceQueryDateType = 'Invoicing' | 'Issue';
+/** `PermanentStorage` — jedyna data do pobierania przyrostowego (MF, AUD-18). */
+export type InvoiceQueryDateType = 'Invoicing' | 'Issue' | 'PermanentStorage';
 
 export interface QueryInvoicesRequest {
   /** `subject1` = sprzedawca, `subject2` = nabywca. */
@@ -235,6 +236,8 @@ export interface QueryInvoicesRequest {
     dateType: InvoiceQueryDateType;
     from: string;
     to: string;
+    /** Tylko dla `PermanentStorage`: `to` nie wyjdzie poza HWM. */
+    restrictToPermanentStorageHwmDate?: boolean;
   };
 }
 
@@ -283,11 +286,15 @@ export interface InvoiceMetadata {
   hasAttachment: boolean;
 }
 
+/**
+ * Odpowiedź `/invoices/query/metadata` (OpenAPI KSeF 2.0). Strony przez
+ * `pageOffset`/`pageSize` w adresie — ten endpoint NIE ma tokenu kontynuacji.
+ */
 export interface QueryInvoicesResponse {
   invoices: InvoiceMetadata[];
-  /** Token paginacji - przekaż w następnym request, jeśli niepusty. */
-  continuationToken?: string;
   hasMore: boolean;
-  /** `true` gdy API ucięło wynik przy pierwszym page'u (soft limit MF). */
-  isTruncated?: boolean;
+  /** Osiągnięto limit 10 000 rekordów — trzeba zawęzić `dateRange`. */
+  isTruncated: boolean;
+  /** Tylko dla `PermanentStorage`: poniżej tej chwili dane są kompletne. */
+  permanentStorageHwmDate?: string | null;
 }
