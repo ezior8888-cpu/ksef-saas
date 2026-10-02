@@ -8,6 +8,7 @@ import type {
   InvoiceType,
 } from '@/types/invoice';
 import { isSaleDateWithinLimit, SALE_DATE_TOO_LATE_MESSAGE } from '@/lib/invoices/sale-date';
+import { addressCountryForKodUE, isForeignEuVat, parseVatUe } from '@/lib/invoices/vat-ue';
 
 // ═══════════════════════════════════════════════════════════════
 // Zaokrąglanie i konwersje liczbowe
@@ -343,6 +344,7 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
   if (invoice.buyer.pesel && !validatePeselChecksum(invoice.buyer.pesel)) {
     errors.push(`PESEL nabywcy ma nieprawidłową sumę kontrolną.`);
   }
+  errors.push(...buyerVatUeErrors(invoice));
 
   // ── Daty ───────────────────────────────────────────────────
   const issueDate = parseIsoDate(invoice.issueDate);
@@ -446,6 +448,52 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
   // FA(3): stawka 'zw' wymaga P_19 + podstawy prawnej (P_19A).
   if (invoice.lines.some((l) => l.vatRate === 'zw') && !invoice.annotations?.vatExemptionBasis?.trim()) {
     errors.push(ZW_WITHOUT_BASIS_MESSAGE);
+  }
+
+  return errors;
+}
+
+/**
+ * Numer VAT-UE nabywcy i stawka „np II” (AUD-70).
+ *
+ * - numer musi dać się zapisać w XSD: prefiks z `TKodyKrajowUE` (Grecja „EL”)
+ *   i numer zgodny z `TNrVatUE` — inaczej KSeF odrzuca XML,
+ * - „np II” (usługi z art. 100 ust. 1 pkt 4 — art. 28b, VAT rozlicza nabywca)
+ *   wymaga nabywcy-podatnika z INNEGO państwa UE, czyli numeru VAT-UE
+ *   z prefiksem innym niż „PL”,
+ * - nabywca z zagranicznym VAT-UE ma adres za granicą (`Adres/KodKraju` to
+ *   kod ISO — dla Grecji „GR”, nie „EL”).
+ */
+function buyerVatUeErrors(invoice: Invoice): string[] {
+  const errors: string[] = [];
+  const raw = invoice.buyer.vatUeNumber;
+  const parsed = raw ? parseVatUe(raw) : null;
+
+  if (raw && !parsed) {
+    errors.push(
+      `Numer VAT-UE nabywcy "${raw}" jest nieprawidłowy: oczekiwano prefiksu kraju UE ` +
+        '(Grecja to „EL”, nie „GR”) i do 12 znaków (cyfry, wielkie litery, „+”, „*”), np. „DE123456789”.'
+    );
+  }
+
+  const npIiOrdinals = invoice.lines.filter((l) => l.vatRate === 'np_ii').map((l) => l.ordinal);
+  if (npIiOrdinals.length > 0 && !isForeignEuVat(raw)) {
+    const label = npIiOrdinals.length === 1 ? 'Pozycja' : 'Pozycje';
+    errors.push(
+      `${label} ${npIiOrdinals.join(', ')}: stawka „np II” (usługi z art. 100 ust. 1 pkt 4 ustawy o VAT) ` +
+        'wymaga nabywcy — podatnika z innego państwa UE — z numerem VAT-UE (np. „DE123456789”). ' +
+        'Dla nabywcy z NIP, z polskim VAT-UE albo bez numeru wybierz inną stawkę.'
+    );
+  }
+
+  if (parsed && parsed.kodUE !== 'PL') {
+    const country = (invoice.buyer.address?.countryCode ?? '').trim().toUpperCase();
+    if (!country || country === 'PL') {
+      errors.push(
+        `Nabywca z numerem VAT-UE ${parsed.kodUE} musi mieć kraj w adresie inny niż Polska ` +
+          `(np. „${addressCountryForKodUE(parsed.kodUE)}”).`
+      );
+    }
   }
 
   return errors;
