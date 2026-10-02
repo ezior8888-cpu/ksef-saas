@@ -5,6 +5,8 @@ import { z } from 'zod';
 import type { ExtractedInvoice } from '@/lib/ocr/schema';
 import { createAdminClient } from '@/lib/supabase/admin';
 
+import { checkTenantAiBudget, recordTenantAiUsage } from '@/lib/ai/tenant-ai-budget';
+
 import { classifyByAI } from './ai-classifier';
 import { classifyByHeuristics } from './heuristics';
 import {
@@ -54,8 +56,15 @@ export async function categorizeExpense(
   const heuristicResult = classifyByHeuristics(data);
   if (heuristicResult) return heuristicResult;
 
-  const aiResult = await classifyByAI(data);
-  if (aiResult) return aiResult;
+  // AUD-107: model tylko w budżecie AI firmy; po odmowie kategoria domyślna
+  // do ręcznej poprawki (koszt i tak wymaga przeglądu).
+  const budget = await checkTenantAiBudget(tenantId, 'classify');
+  if (budget.allowed) {
+    let usage: { inputTokens: number; outputTokens: number } | null = null;
+    const aiResult = await classifyByAI(data, (u) => { usage = u; });
+    if (usage) await recordTenantAiUsage(tenantId, usage);
+    if (aiResult) return aiResult;
+  }
 
   return {
     kpir_column: 'col_13',
