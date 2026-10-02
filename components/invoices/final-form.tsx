@@ -28,6 +28,7 @@ import {
   finalInvoiceSchema,
   type FinalInvoiceSchemaIn,
 } from '@/lib/validators/invoice-validators';
+import { dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
 import { calculateLineItem, roundToCents } from '@/lib/xml/invoice-calculator';
 import type { BuyerB2B, InvoiceLine, SellerData } from '@/types/invoice-types';
 
@@ -78,8 +79,9 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
   const [saving, startSave] = useTransition();
   const [sending, startSend] = useTransition();
 
-  const today = new Date().toISOString().slice(0, 10);
-  const due = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  // Daty w czasie polskim, nie UTC (F-013).
+  const today = todayInWarsaw();
+  const due = dueDateFrom(today, 14);
 
   const defaults: FinalFormIn = {
     invoiceType: 'final',

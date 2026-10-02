@@ -45,6 +45,7 @@ import {
   type InvoiceLineSchema,
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
+import { dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
 import { calculateLineItem } from '@/lib/xml/invoice-calculator';
 import { CORRECTION_TYPE_LABELS } from '@/types/invoice-types';
 import type { CorrectionInvoiceData } from '@/types/invoice-types';
@@ -94,12 +95,13 @@ export interface CorrectionInvoiceFormProps {
   preselectedParentId?: string;
 }
 
+// Daty w czasie polskim, nie UTC (F-013).
 function defaultIssueDateIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayInWarsaw();
 }
 
 function defaultPaymentDueIso(): string {
-  return new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  return dueDateFrom(todayInWarsaw(), 14);
 }
 
 function correctionDataFromForm(v: CorrectionFormParsed): CorrectionInvoiceData {
