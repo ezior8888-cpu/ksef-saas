@@ -55,7 +55,10 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00112 | Claude | `tenant_credentials_column_privileges` (AUD-103: bez SELECT blobu KSeF dla ról klienckich) | w `main` (#156), **wgrana na db-1 02.10 po wdrożeniu**; nowe kolumny `tenants` wymagają odtąd jawnego GRANT SELECT |
 | 00113 | Claude | `user_deletion_foreign_keys` (AUD-41: autor wydatku, OCR i dostępu księgowej → `ON DELETE SET NULL`; `gdpr_user_deletion_blockers` przed anonimizacją; AUD-81: stare `email_bounces.raw_payload`) | w `main` (#156), **wgrana na db-1 02.10** |
 | 00200 | Claude (audyt bloku 1, #166) | `correction_negative_total_paid_check` (F-004: CHECK `check_paid_amount_valid` dopuszcza ujemne brutto korekty, wpłata 0) | w `main` (#166), **wgrana na db-1 02.10**; numer spoza kolejności — kolejne migracje dalej od 00114 |
-| **00114** | — | następny wolny (00200 zajęte) | — |
+| 00114 | Codex (#62) → Claude (C-20) | `stripe_customer_claim` (dawniej 00083: trwały claim tworzenia Customer) | PR `claude/codex-62-stripe`; przed wdrożeniem, razem z 00115–00116 |
+| 00115 | Codex (#62) → Claude (C-20) | `stripe_failed_payment_reference_rotation` (dawniej 00084: dowód pary PI–Charge przed skutkami finansowymi) | PR `claude/codex-62-stripe`; przed wdrożeniem |
+| 00116 | Codex (#62) → Claude (C-20) | `stripe_checkout_session_id` (dawniej 00085: realne ID `cs_*`, CAS odzysku `uncertain`) | PR `claude/codex-62-stripe`; przed wdrożeniem |
+| **00117** | — | następny wolny (00200 zajęte) | — |
 
 ---
 

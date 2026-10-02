@@ -1,3 +1,5 @@
+-- Przeniesione 02.10.2026 ze szkicu Codexa #62 (tam 00083) jako 00114 — C-20.
+-- Numeracja: 00083→00114, 00084→00115, 00085→00116.
 -- Durable Customer creation claim. Apply after 00081 while all old Customer
 -- writers are stopped. Never run this migration from an agent workspace.
 --

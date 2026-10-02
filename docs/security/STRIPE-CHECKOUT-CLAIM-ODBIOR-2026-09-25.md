@@ -1,5 +1,8 @@
 # Stripe Checkout — odbiór 00081 oraz lokalnych 00083–00085
 
+> **Numeracja od 02.10.2026 (C-20):** migracje z tego dokumentu weszły do `main` pod nowymi numerami — 00083 → **00114**, 00084 → **00115**, 00085 → **00116**. Treść poniżej zostawiona w brzmieniu z 25.09.
+
+
 Stan pakietu: lokalna gałąź, bez uruchomienia SQL, bez zapytań do żywego Stripe lub bazy, bez merge i wdrożenia. Według wpisu Bartka o wydaniu 25.09 na db-1 wykonano 00075–00082, w tym 00081 oraz odrębną migrację produkcyjną 00082 widoku zaległości; tego nie zweryfikowano tu niezależnym odczytem bazy. Nowy lokalny obraz Checkout i płatności wymaga po potwierdzeniu tej podstawy kolejności 00083 → 00084 → 00085; 00083 dostarcza RPC Customer wywoływane przez każdy nowy Checkout/Portal, a 00084 bramkuje VAT i zwroty dowodem PI–Charge. Korekta 00085 jest wymagana razem z 00081: dopuszcza rzeczywisty format ID sesji Stripe (cs_test_*/cs_live_*) i dodaje CAS odzyskujący stan uncertain tylko po potwierdzeniu dokładnej sesji.
 
 ## Dlaczego potrzebna jest zmiana

@@ -1,5 +1,8 @@
 # Stripe — dowód pary PaymentIntent–Charge przed VAT i zwrotem
 
+> **Numeracja od 02.10.2026 (C-20):** migracje z tego dokumentu weszły do `main` pod nowymi numerami — 00083 → **00114**, 00084 → **00115**, 00085 → **00116**. Treść poniżej zostawiona w brzmieniu z 25.09.
+
+
 Data: 2026-09-25. Stan: lokalny pakiet od roboczego stosu PR #46, bez publikacji,
 SQL, Stripe test mode, merge lub wdrożenia. Według datowanego wpisu Bartka na
 db-1 wykonano 00078–00082 (w tym produkcyjną 00082 widoku zaległości);

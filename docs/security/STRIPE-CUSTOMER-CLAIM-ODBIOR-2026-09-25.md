@@ -1,5 +1,8 @@
 # Stripe Customer — trwały claim i odbiór 00083
 
+> **Numeracja od 02.10.2026 (C-20):** migracje z tego dokumentu weszły do `main` pod nowymi numerami — 00083 → **00114**, 00084 → **00115**, 00085 → **00116**. Treść poniżej zostawiona w brzmieniu z 25.09.
+
+
 Stan: lokalna gałąź; migracja jest tylko plikiem. Codex nie uruchamiał SQL, nie wywoływał żywego Stripe, nie wdrażał i nie publikował tej zmiany. Według datowanego wpisu Bartka na db-1 wykonano 00078–00082, lecz nie sprawdzono tego tu niezależnym odczytem bazy. Tutejsza 00083 Customer pozostaje niewykonanym plikiem i wymaga już istniejącej 00081; produkcyjna 00082 dotyczy widoku zaległości.
 
 ## Problem i granica gwarancji

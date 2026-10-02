@@ -1,4 +1,4 @@
-/** Durable per-tenant Stripe Customer claim. Migration 00083 supplies RPCs. */
+/** Durable per-tenant Stripe Customer claim. Migration 00114 supplies RPCs. */
 import { createAdminClient } from '@/lib/supabase/admin';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

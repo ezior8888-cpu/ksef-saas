@@ -1,3 +1,5 @@
+-- Przeniesione 02.10.2026 ze szkicu Codexa #62 (tam 00085) jako 00116 — C-20.
+-- Numeracja: 00083→00114, 00084→00115, 00085→00116.
 -- Checkout Session IDs from Stripe contain a second underscore (cs_test_*/cs_live_*).
 -- The 00081 constraint and RPC guards rejected real IDs, leaving claims blocked.
 -- Also adds an identity-checked CAS to recover a lost DB response for uncertain.

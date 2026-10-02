@@ -1,5 +1,7 @@
+-- Przeniesione 02.10.2026 ze szkicu Codexa #62 (tam 00084) jako 00115 — C-20.
+-- Numeracja: 00083→00114, 00084→00115, 00085→00116.
 -- Correct the 00080 payment-reference guard for invoice payment retries.
--- Deployment gate: verify main through 00082 and apply 00083 Customer claim first.
+-- Deployment gate: verify main through 00082 and apply 00114 Customer claim first.
 -- If 00080 is already applied, do not rerun it: this file replaces its trigger
 -- function in place. Reconcile receipts failed under that old function and
 -- existing payment references, rehearse on a production copy, then deploy
@@ -27,7 +29,7 @@ BEGIN
   ) IS NULL OR pg_catalog.to_regprocedure(
     'public.stripe_payment_has_financial_hold(uuid)'
   ) IS NULL THEN
-    RAISE EXCEPTION 'Apply 00080 before 00084'
+    RAISE EXCEPTION 'Apply 00080 before 00115'
       USING ERRCODE = '55000';
   END IF;
 END;
