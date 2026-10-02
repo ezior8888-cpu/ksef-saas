@@ -17,14 +17,16 @@ Kryterium każdej pozycji obejmuje też: `pnpm typecheck`, `pnpm test` i `pnpm t
 ---
 
 ### P-01 — Korekta: poprawna nazwa elementu numeru KSeF faktury korygowanej
-Status: TODO
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-049
 Zmiana: `lib/ksef/fa3-correction-generator.ts` — `NumerKSeFFaKorygowanej` → `NrKSeFFaKorygowanej`. Nowy test generuje korektę z numerem KSeF rodzica i waliduje ją lokalnym XSD.
 Kryterium: `pnpm exec vitest run tests/unit/korekta-nr-ksef-xsd.test.ts` — przed zmianą błąd XSD, po zmianie XML poprawny.
+Commit: `9ff3f20`
+Sprawdzenie: `pnpm exec vitest run tests/unit/korekta-nr-ksef-xsd.test.ts` — korekta z numerem KSeF rodzica przechodzi oficjalny XSD (przed poprawką: „Element NumerKSeFFaKorygowanej is not expected”).
 
 ### P-02 — PDF: tabela pozycji z równym nagłówkiem, zawijaniem nazw i łamaniem stron
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-054
 Zmiana: `lib/pdf/invoice-renderer.ts` (tylko rysowanie tabeli):
