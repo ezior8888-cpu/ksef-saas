@@ -222,7 +222,6 @@ export async function enqueueKsefSubmitAfterDraft(
         tenantId,
         invoiceId,
         isMfOutage: health.isMfOutage,
-        certificate: decrypted.certificatePem,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Nie udało się dodać do kolejki offline';

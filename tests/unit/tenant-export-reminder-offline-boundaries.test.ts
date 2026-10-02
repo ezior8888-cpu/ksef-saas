@@ -483,7 +483,11 @@ describe('offline helper tenant ownership', () => {
     expect(result.tenant_id).toBe('tenant-a');
     expect(result.ksef_environment).toBe('test');
     expect(tables.invoices[0].ksef_status).toBe('offline_queued');
-    expect(tables.invoices[0].offline_qr_offline).toBe('offline-fixture');
+    // C-12 (#122): bez certyfikatu Offline i skrótu XML żadnych payloadów QR.
+    expect(tables.invoices[0].offline_qr_offline).toBeNull();
+    expect(tables.invoices[0].offline_qr_certyfikat).toBeNull();
+    expect(tables.ksef_offline_queue[0]).toMatchObject({ qr_offline_payload: null, qr_certyfikat_payload: null });
+    expect(mocks.qr).not.toHaveBeenCalled();
     expect(tables.invoices[1].ksef_status).toBe('accepted');
     const claims = operations.filter(op => op.table === 'invoices' && op.mode === 'update');
     expect(claims[0].filters).toContainEqual(['tenant_id', 'tenant-a']);
@@ -575,19 +579,25 @@ describe('offline helper tenant ownership', () => {
     },
   );
 
+  /** Zmiana stanu faktury między odczytem a przejęciem (dawniej: w trakcie generowania QR). */
+  function raceBeforeClaim(mutate: () => void) {
+    let done = false;
+    beforeUpdate = (op) => {
+      if (!done && op.table === 'invoices') { done = true; mutate(); }
+    };
+  }
+
   it('does not claim success when invoice ownership changes before the write', async () => {
-    mocks.qr.mockImplementation(async () => {
-      tables.invoices[0].tenant_id = 'tenant-b';
-      return { offlinePayload: 'offline-fixture', certyfikatPayload: 'certificate-fixture' };
+    raceBeforeClaim(() => {
+        tables.invoices[0].tenant_id = 'tenant-b';
     });
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
     expect(tables.invoices[0].ksef_status).toBe('draft');
   });
 
-  it('does not relabel an invoice accepted while Offline24 QR was prepared', async () => {
-    mocks.qr.mockImplementation(async () => {
-      tables.invoices[0].ksef_status = 'accepted';
-      return { offlinePayload: 'offline-fixture', certyfikatPayload: 'certificate-fixture' };
+  it('does not relabel an invoice accepted between the read and the claim', async () => {
+    raceBeforeClaim(() => {
+        tables.invoices[0].ksef_status = 'accepted';
     });
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
     expect(tables.invoices[0].ksef_status).toBe('accepted');
@@ -595,11 +605,10 @@ describe('offline helper tenant ownership', () => {
     expect(tables.ksef_offline_queue).toEqual([]);
   });
 
-  it('does not publish a queue row or QR when online sending claims during QR generation', async () => {
-    mocks.qr.mockImplementation(async () => {
-      tables.invoices[0].ksef_status = 'sending';
-      tables.invoices[0].submitted_to_ksef_at = '2026-09-27T10:00:00.000Z';
-      return { offlinePayload: 'offline-fixture', certyfikatPayload: 'certificate-fixture' };
+  it('does not publish a queue row or QR when online sending claims before the offline claim', async () => {
+    raceBeforeClaim(() => {
+        tables.invoices[0].ksef_status = 'sending';
+        tables.invoices[0].submitted_to_ksef_at = '2026-09-27T10:00:00.000Z';
     });
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
     expect(tables.invoices[0].ksef_status).toBe('sending');
@@ -609,9 +618,8 @@ describe('offline helper tenant ownership', () => {
   });
 
   it('requires the observed status even when the online claim has no timestamp yet', async () => {
-    mocks.qr.mockImplementation(async () => {
-      tables.invoices[0].ksef_status = 'queued';
-      return { offlinePayload: 'offline-fixture', certyfikatPayload: 'certificate-fixture' };
+    raceBeforeClaim(() => {
+        tables.invoices[0].ksef_status = 'queued';
     });
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
     expect(tables.invoices[0].ksef_status).toBe('queued');

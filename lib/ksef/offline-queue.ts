@@ -9,14 +9,11 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { calculateOfflineDeadline, generateIdempotencyKey } from './idempotency';
 import { requireConfiguredKsefEnvironment } from './claim-environment';
 import { isOfflineReplayableInvoice } from './offline-replay';
-import { generateOfflineQrCodes } from './qr-codes';
 
 export interface AddToOfflineQueueParams {
   tenantId: string;
   invoiceId: string;
   isMfOutage: boolean;
-  /** PEM certyfikatu (do skrótu w payloadzie QR CERTYFIKAT). */
-  certificate: string;
 }
 
 type OfflineQueueRow = Database['public']['Tables']['ksef_offline_queue']['Row'];
@@ -25,9 +22,9 @@ export async function addToOfflineQueue(
   params: AddToOfflineQueueParams,
 ): Promise<OfflineQueueRow> {
   const environment = requireConfiguredKsefEnvironment();
-  // QR I/II below are a prototype: they do not use the official XML hash,
-  // Offline certificate serial/private key or verification URL. Never issue
-  // them as a production legal document.
+  // C-12 (#122): bez certyfikatu KSeF typu Offline i skrótu utrwalonego XML
+  // nie ma poprawnego KODU II — kolejka nie zapisuje żadnych payloadów QR,
+  // a PDF przed numerem KSeF jest wstrzymany. PROD wyłączony do odbioru.
   if (environment === 'production') {
     throw new Error('Offline24 PROD is disabled until official KSeF QR I/II verification is complete');
   }
@@ -92,7 +89,6 @@ export async function addToOfflineQueue(
       tenantNipRow.ksef_verified_environment !== environment) {
     throw new Error('KSeF offline queue tenant is not verified for configured environment');
   }
-  const sellerNip = tenantNipRow?.nip ?? invoiceRow.seller_nip ?? '';
 
   // An already parked invoice is a read-only retry. In particular, never
   // regenerate its QR payloads or recreate a queue row after online sending.
@@ -127,22 +123,6 @@ export async function addToOfflineQueue(
     }
     return existing as OfflineQueueRow;
   }
-
-  type BuyerSnap = { nip?: unknown };
-  const buyerNipRaw = invoiceRow.buyer_data as BuyerSnap | null;
-  const buyerNipFromJson =
-    typeof buyerNipRaw?.nip === 'string' ? buyerNipRaw.nip : '';
-  const buyerNip = invoiceRow.buyer_nip ?? buyerNipFromJson;
-
-  const qrCodes = await generateOfflineQrCodes({
-    invoiceNumber: invoiceRow.internal_number?.trim() ?? '',
-    issueDate: invoiceRow.issue_date,
-    grossAmount: Number(invoiceRow.gross_total ?? 0),
-    sellerNip,
-    buyerNip,
-    certificate: params.certificate,
-    idempotencyKey,
-  });
 
   // Claim the exact state read above before publishing a replayable queue row.
   // Online sending also claims with submitted_to_ksef_at IS NULL; only one
@@ -196,8 +176,9 @@ export async function addToOfflineQueue(
       is_mf_outage: params.isMfOutage,
       attempts: 0,
       next_attempt_at: now.toISOString(),
-      qr_offline_payload: qrCodes.offlinePayload,
-      qr_certyfikat_payload: qrCodes.certyfikatPayload,
+      // Brak certyfikatu Offline i skrótu XML: żadnych pozornych payloadów QR.
+      qr_offline_payload: null,
+      qr_certyfikat_payload: null,
     })
     .select()
     .single();
@@ -225,13 +206,13 @@ export async function addToOfflineQueue(
     throw error;
   }
 
-  // The queue row now holds the QR payloads. Cache them on the invoice only
-  // while our claim still owns it; a concurrent send must never regain QR.
+  // Confirm our claim still owns the invoice after the queue row is durable;
+  // a concurrent send must not be overwritten. QR fields stay empty (C-12).
   const { data: updated, error: updErr } = await supabase
     .from('invoices')
     .update({
-      offline_qr_offline: qrCodes.offlinePayload,
-      offline_qr_certyfikat: qrCodes.certyfikatPayload,
+      offline_qr_offline: null,
+      offline_qr_certyfikat: null,
     })
     .eq('id', params.invoiceId)
     .eq('tenant_id', params.tenantId)

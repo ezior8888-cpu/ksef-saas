@@ -33,6 +33,11 @@ export interface RenderInvoiceOptions {
   qrLabel?: string | null;
   /** Nadrukuj watermark „WERSJA TESTOWA" (środowisko KSeF test). */
   testWatermark?: boolean;
+  /**
+   * Dopisek pod nagłówkiem, gdy faktura ma numer KSeF, a brak skrótu XML do
+   * KODU I (B14): wydruk jest podglądem, nie wizualizacją dla nabywcy.
+   */
+  previewNotice?: string | null;
   /** Faktura korygowana — tylko dla korekt (`lib/pdf/invoice-data.ts`). */
   correctedInvoice?: CorrectedInvoiceRef | null;
 }
@@ -152,6 +157,7 @@ export async function renderInvoicePdf(
 
     // Napis rysuje się tylko razem z kodem (warunek w `drawHeader`).
     drawHeader(doc, invoice, qrBuffer, opts.qrLabel ?? null, left, pageWidth);
+    drawPreviewNotice(doc, opts.previewNotice, left, pageWidth);
     drawCorrectedInvoice(doc, opts.correctedInvoice, left, pageWidth);
     drawParties(doc, invoice, left, pageWidth);
     drawLineItems(doc, invoice, left, pageWidth);
@@ -249,6 +255,19 @@ function drawHeader(
     .strokeColor('#dddddd')
     .stroke();
   doc.y = ruleY + 14;
+}
+
+function drawPreviewNotice(
+  doc: Doc,
+  notice: string | null | undefined,
+  left: number,
+  width: number,
+): void {
+  if (!notice?.trim()) return;
+  doc.font('bold').fontSize(9).fillColor('#b00020');
+  doc.text(notice.trim(), left, doc.y, { width });
+  doc.fillColor('#222222');
+  doc.y += 10;
 }
 
 function drawCorrectedInvoice(

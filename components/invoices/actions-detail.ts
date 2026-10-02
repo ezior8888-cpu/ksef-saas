@@ -3,7 +3,7 @@
 import { logAudit } from '@/lib/audit/log';
 import { ActionAuthError, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
-import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
+import { generateInvoicePdf, verifyInvoicePdfDeliveryState } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
 import { invoiceEmailAmount } from '@/lib/email/invoice-email-amount';
 import { sendInvoiceEmail } from '@/lib/email/send';
@@ -201,6 +201,13 @@ export async function emailInvoiceAction(
   if (!pdfResult.success) {
     return { success: false, error: pdfResult.error };
   }
+  // B14: podgląd bez KODU I nie jest wizualizacją faktury dla nabywcy.
+  if (pdfResult.missingKodI) {
+    return {
+      success: false,
+      error: 'Nie wysyłamy tej faktury mailem: brak kodu QR KSeF (aplikacja nie ma zapisanego pliku XML). Nabywca znajdzie fakturę w KSeF.',
+    };
+  }
 
   const data = await loadInvoiceForPdf(invoiceId, tenantId);
   if (!data || data.tenantId !== tenantId) {
@@ -209,6 +216,10 @@ export async function emailInvoiceAction(
 
   const inv = data.invoice;
   const amount = invoiceEmailAmount(inv);
+  const deliveryFailure = await verifyInvoicePdfDeliveryState(invoiceId, tenantId, pdfResult.qrStateKey);
+  if (deliveryFailure) {
+    return { success: false, error: deliveryFailure.error };
+  }
   const send = await sendInvoiceEmail({
     to: email,
     invoiceNumber: inv.internalNumber,

@@ -147,6 +147,15 @@ async function buildBatch(req: Request, tenantId: string): Promise<Response> {
       ),
     );
 
+    // Paczka nie może wyglądać na kompletną, gdy choć jedna faktura offline
+    // nie ma jeszcze wymaganych dwóch kodów QR.
+    if (results.some((result) => result && !result.success && result.code === 'OFFLINE_QR_UNAVAILABLE')) {
+      return NextResponse.json({ error: 'offline_qr_unavailable' }, { status: 409 });
+    }
+    if (results.some((result) => result && !result.success && result.code === 'PDF_STATE_CHANGED')) {
+      return NextResponse.json({ error: 'pdf_state_changed' }, { status: 409 });
+    }
+
     // Kolejność plików w ZIP = kolejność zapytania (Promise.all zachowuje ją
     // niezależnie od tego, w jakiej kolejności skończyły się rendery).
     // Pojedyncza faktura, której nie da się wyrenderować, nie blokuje
