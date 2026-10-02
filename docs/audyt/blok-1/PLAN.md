@@ -71,14 +71,16 @@ Commit: `194bda1`
 Sprawdzenie: `pnpm exec vitest run tests/unit/daty-formularzy-warszawa.test.ts`; w aplikacji (przeglądarka w Polsce): data wystawienia 02.10 + przycisk „14 dni” → termin 16.10 (wcześniej 15.10). Formularz zaliczki bez zmian — PR #85.
 
 ### P-06 — Korekta zmniejszająca kwotę daje się zapisać (migracja 00200)
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-004
 Zmiana: nowy plik `supabase/migrations/00200_correction_negative_total_paid_check.sql`. CHECK `check_paid_amount_valid` dopuszcza `gross_total < 0` przy `paid_amount = 0`; dla nieujemnych zostaje warunek `paid_amount <= gross_total`. Migracji nie wgrywam (krok dla Bartka).
 Kryterium: skrypt na czystym Postgresie w Dockerze (tabela z tym samym CHECK). INSERT z `gross_total = -246` pada przed migracją i przechodzi po niej; `paid_amount > gross_total` dla dodatnich nadal pada. Gdy Docker niedostępny — kroki ręczne w `PODSUMOWANIE.md`.
+Commit: `f13e21b`
+Sprawdzenie: `bash scripts/verify-migration-00200.sh` (tymczasowy lokalny Postgres 16): przed 00200 INSERT korekty z gross_total -246 jest odrzucany, po 00200 przechodzi; wpłata > brutto nadal odrzucana. Na produkcji: wgrać 00200 przed wdrożeniem kodu.
 
 ### P-07 — Eksport KPiR: koszty dołączone domyślnie
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-058
 Zmiana: `components/exports/exports-center.tsx` — wybór „KPiR Excel” zaznacza „Faktury otrzymane (koszty)”; etykieta mówi, że obejmuje też paragony. Logika domyślności w czystej funkcji.

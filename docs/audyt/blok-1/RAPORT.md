@@ -265,7 +265,7 @@ Faktura walutowa też spełnia kryterium c, ale to duży zakres z decyzjami praw
 - **Powinno:** blokady zdjęte po usunięciu przyczyn (decyzja Bartka po teście na KSeF TEST).
 
 #### F-004 — Korekta zmniejszająca kwotę (i każde anulowanie) nie zapisze się w bazie
-- Typ: BŁĄD · Waga: **K2** · Pewność: Z ODCZYTU (warunek deterministyczny) · PR: brak
+- Typ: BŁĄD · Waga: **K2** · Pewność: POTWIERDZONE (`scripts/verify-migration-00200.sh` na tymczasowym lokalnym Postgresie: INSERT z `gross_total = -246` odrzucony przez CHECK z 00012) · PR: brak
 - **Skutek:** od commita `aed95eb` (AUD-21, 2.10.2026) suma korekty to różnica, czyli liczba ujemna dla korekty w dół. Ograniczenie `check_paid_amount_valid` wymaga `paid_amount <= gross_total`, a `paid_amount` ma wartość domyślną 0, więc `0 <= -246` nie jest spełnione. INSERT pada, a użytkownik widzi surowy błąd Postgresa.
 - **Dowód:**
   - `supabase/migrations/00012_invoice_types_extension.sql:71` (`paid_amount … DEFAULT 0`) i `:113-118` (CHECK); żadna późniejsza migracja ani PR tego nie zmienia (grep po gałęziach PR).
