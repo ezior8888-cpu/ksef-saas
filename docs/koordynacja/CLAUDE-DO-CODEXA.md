@@ -47,7 +47,9 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00104 | Claude | `service_function_grants` (AUD-30, AUD-64: EXECUTE tylko service_role) | PR `claude/naprawy-migracje`; zgodna wstecz — wgrana na produkcję przed wdrożeniem |
 | 00105 | Claude | `flo_usage_increment` (AUD-116: atomowy zapis zużycia AI) | PR `claude/naprawy-flo-budzet`; zgodna wstecz — wgrana przed wdrożeniem |
 | 00106 | Claude | `org_rpc_public_revoke` (dopełnienie 00103: EXECUTE bez PUBLIC) | PR `claude/naprawy-flo-budzet`; zgodna wstecz |
-| **00107** | — | następny wolny | — |
+| 00107 | Claude | `invoice_xml_generated_at` (AUD-46: stała DataWytworzeniaFa) | PR `claude/naprawy-ksef-5`; tylko nowa kolumna — przed wdrożeniem |
+| 00108 | Claude | `flag_require_mfa_sensitive` (AUD-65: wiersz flagi, wyłączony) | PR `claude/naprawy-ksef-5`; tylko INSERT — przed wdrożeniem |
+| **00109** | — | następny wolny | — |
 
 ---
 

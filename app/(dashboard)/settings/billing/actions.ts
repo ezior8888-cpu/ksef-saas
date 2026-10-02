@@ -8,6 +8,7 @@ import { createCheckoutSession, type CheckoutPlan } from '@/lib/stripe/checkout'
 import { createPortalSession } from '@/lib/stripe/portal';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getPageContext } from '@/lib/supabase/page-context';
+import { assertSensitiveMfa, SensitiveMfaRequiredError } from '@/lib/auth/sensitive-mfa';
 
 /**
  * Server actions dla `/settings/billing` (Faza 25 Krok 2).
@@ -43,6 +44,10 @@ export async function startCheckoutAction(plan: CheckoutPlan): Promise<void> {
 
   if (!canManageBilling(ctx.role)) {
     redirect('/settings/billing?error=forbidden');
+  }
+  // AAL2 przy płatnościach, gdy flaga włączona (AUD-65).
+  if (!(await billingMfaSatisfied(ctx))) {
+    redirect('/settings/billing?error=mfa-required');
   }
 
   // Sprzedajemy wyłącznie plan miesięczny (lib/billing/pricing.ts). Stara
@@ -101,6 +106,10 @@ export async function openCustomerPortalAction(): Promise<void> {
   if (!canManageBilling(ctx.role)) {
     redirect('/settings/billing?error=forbidden');
   }
+  // AAL2 przy płatnościach, gdy flaga włączona (AUD-65).
+  if (!(await billingMfaSatisfied(ctx))) {
+    redirect('/settings/billing?error=mfa-required');
+  }
 
   if (!isStripeConfigured()) {
     redirect('/settings/billing?error=not-configured');
@@ -150,4 +159,14 @@ export async function openCustomerPortalAction(): Promise<void> {
   }
 
   redirect(url);
+}
+
+async function billingMfaSatisfied(ctx: { tenantId: string; user: { id: string } }): Promise<boolean> {
+  try {
+    await assertSensitiveMfa({ tenantId: ctx.tenantId, userId: ctx.user.id }, 'billing');
+    return true;
+  } catch (e) {
+    if (e instanceof SensitiveMfaRequiredError) return false;
+    throw e;
+  }
 }

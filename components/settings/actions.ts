@@ -5,6 +5,7 @@ import { X509Certificate } from 'node:crypto';
 import { logAudit } from '@/lib/audit/log';
 import { authenticateWithXades } from '@/lib/ksef/auth';
 import { encryptCredentials } from '@/lib/ksef/credentials-crypto';
+import { assertSensitiveMfa, SensitiveMfaRequiredError } from '@/lib/auth/sensitive-mfa';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { bufferToByteaLiteral } from '@/lib/supabase/bytea';
@@ -38,6 +39,14 @@ export async function uploadCertificateAction(data: {
     const tenantId = await getActiveOrgIdFromCookies();
     if (!tenantId) {
       return { success: false, error: 'Brak aktywnej organizacji' };
+    }
+
+    // AAL2 właściciela/admina przy certyfikacie, gdy flaga włączona (AUD-65).
+    try {
+      await assertSensitiveMfa({ tenantId, userId: user.id }, 'certificate');
+    } catch (e) {
+      if (e instanceof SensitiveMfaRequiredError) return { success: false, error: e.message };
+      throw e;
     }
 
     const { data: tenantRow } = await supabase
@@ -81,12 +90,15 @@ export async function uploadCertificateAction(data: {
       expiryDate = null;
     }
 
-    const encrypted = encryptCredentials({
-      type: 'xades',
-      nip,
-      certificatePem: data.certPem,
-      privateKeyPem: data.keyPem,
-    });
+    const encrypted = encryptCredentials(
+      {
+        type: 'xades',
+        nip,
+        certificatePem: data.certPem,
+        privateKeyPem: data.keyPem,
+      },
+      tenantId,
+    );
 
     // Atomowy claim NIP (partial unique index + claim_ksef_nip_ownership).
     // WAŻNE: wywołanie MUSI iść przez klienta z sesją użytkownika (JWT),
