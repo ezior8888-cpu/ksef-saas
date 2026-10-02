@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { CaptureButton } from '@/components/expenses/capture-button';
 import { ExpensesList } from '@/components/expenses/expenses-list';
+import { monthLabel, monthRange, parseExpenseMonth, shiftMonth } from '@/lib/expenses/month';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { cn } from '@/lib/utils';
 
@@ -10,17 +11,18 @@ export const dynamic = 'force-dynamic';
 export default async function ExpensesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ filter?: string; miesiac?: string }>;
 }) {
-  const { filter } = await searchParams;
+  const { filter, miesiac } = await searchParams;
   const unreviewedOnly = filter === 'unreviewed';
 
   const { supabase, tenantId } = await getPageContext();
 
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    .toISOString()
-    .slice(0, 10);
+  // Wybrany miesiąc (domyślnie bieżący w czasie polskim) z zakresem od–do
+  // — wcześniej tylko „od początku bieżącego miesiąca” w strefie serwera (F-087).
+  const month = parseExpenseMonth(miesiac);
+  const currentMonth = parseExpenseMonth(undefined);
+  const { from: monthStart, to: monthEnd } = monthRange(month);
 
   let expensesQuery = supabase
     .from('expenses')
@@ -31,7 +33,7 @@ export default async function ExpensesPage({
   if (unreviewedOnly) {
     expensesQuery = expensesQuery.eq('is_reviewed', false).limit(200);
   } else {
-    expensesQuery = expensesQuery.gte('issue_date', monthStart).limit(100);
+    expensesQuery = expensesQuery.gte('issue_date', monthStart).lte('issue_date', monthEnd).limit(500);
   }
 
   const { data: expenses, error } = await expensesQuery;
@@ -56,7 +58,7 @@ export default async function ExpensesPage({
                   : 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_65%,transparent)] hover:text-[var(--ff-on-surface)]',
               )}
             >
-              Bieżący miesiąc
+              Miesiąc
             </Link>
             <Link
               href="/expenses?filter=unreviewed"
@@ -75,6 +77,22 @@ export default async function ExpensesPage({
           <CaptureButton />
         </div>
       </div>
+
+      {!unreviewedOnly && (
+        <nav className="flex items-center justify-between gap-3 text-sm" aria-label="Miesiąc wydatków">
+          <Link className="font-semibold text-[var(--ff-primary)]" href={`/expenses?miesiac=${shiftMonth(month, -1)}`}>
+            ← {monthLabel(shiftMonth(month, -1))}
+          </Link>
+          <span className="font-bold capitalize">{monthLabel(month)}</span>
+          {month < currentMonth ? (
+            <Link className="font-semibold text-[var(--ff-primary)]" href={`/expenses?miesiac=${shiftMonth(month, 1)}`}>
+              {monthLabel(shiftMonth(month, 1))} →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
+      )}
 
       {error ? (
         <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] border border-red-400/25 bg-[color-mix(in_srgb,#f87171_10%,transparent)] p-4 text-sm text-red-200">
