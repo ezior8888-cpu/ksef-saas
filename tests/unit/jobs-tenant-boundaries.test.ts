@@ -57,6 +57,7 @@ let tables: Record<string, Row[]>;
 let errors: Set<string>;
 let calls: Query[];
 let beforeUpdate: (() => void) | null;
+let claimHeldByOther = false;
 const writes = () => calls.filter((q) => q.operation !== 'select');
 function client() {
   return { from(table: string) {
@@ -112,7 +113,21 @@ function client() {
       ) => Promise.resolve(execute()).then(resolve, reject),
     };
     return builder;
-  }, auth: { admin: { getUserById: vi.fn() } } };
+  },
+  // Przejęcie wysyłki (AUD-10, 00124): wolna albo ta sama próba; przyjęta
+  // albo trzymana przez inną próbę (`claimHeldByOther`) — null.
+  rpc: async (fn: string, args: Record<string, unknown>) => {
+    calls.push({ table: `rpc:${fn}`, operation: 'rpc', filters: [], patch: args as Row });
+    if (fn !== 'claim_ksef_send') return { data: null, error: null };
+    beforeUpdate?.();
+    const row = (tables.invoices ?? []).find((r) => r.id === args.p_invoice_id && r.tenant_id === args.p_tenant_id &&
+      (r.direction ?? 'outgoing') === 'outgoing');
+    if (!row || row.ksef_status === 'accepted' || claimHeldByOther) return { data: null, error: null };
+    const now = new Date().toISOString();
+    Object.assign(row, { ksef_status: 'sending', submitted_to_ksef_at: now, ksef_send_owner: args.p_owner ?? null });
+    return { data: now, error: null };
+  },
+  auth: { admin: { getUserById: vi.fn() } } };
 }
 const sendEvent = vi.fn();
 const ctx: JobContext = {
@@ -129,7 +144,7 @@ const submitEvent = { invoiceId: ID, tenantId: A, nip: '1234567890', environment
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('KSEF_ENV', 'test');
-  tables = {}; errors = new Set(); calls = []; beforeUpdate = null;
+  tables = {}; errors = new Set(); calls = []; beforeUpdate = null; claimHeldByOther = false;
   mocks.admin.mockImplementation(client);
   mocks.health.mockResolvedValue({ available: true });
   mocks.metadata.mockResolvedValue({ totalCount: 0, invoices: [] });
@@ -537,6 +552,42 @@ describe('service-role job boundaries', () => {
       invoice: { ...submitEvent.invoice, type: 'ROZ' },
     }, racingCtx)).resolves.toMatchObject({ handled: true, alreadyAccepted: true, ksefNumber: 'TEST' });
     expect(sendEvent).not.toHaveBeenCalled();
+  });
+  // AUD-10 (00124): przejęcie wysyłki z dzierżawą.
+  // Jak w teście „cannot overwrite acceptance…”: pomijamy kroki poświadczeń.
+  const claimCtx: JobContext = {
+    ...ctx,
+    step: {
+      ...ctx.step,
+      run: async <T>(name: string, fn: () => Promise<T> | T): Promise<T> =>
+        name === 'load-credentials-meta' || name === 'verify-ksef-claimed'
+          ? undefined as T
+          : fn(),
+    },
+  };
+  it('waits without sending when another attempt holds the send claim (AUD-10)', async () => {
+    tables.invoices = [{
+      id: ID, tenant_id: A, direction: 'outgoing', ksef_status: 'queued', ksef_number: null,
+      ksef_environment: null, invoice_kind: 'regular', internal_number: 'TEST-1',
+      fa3_data: { internalNumber: 'TEST-1' },
+    }];
+    claimHeldByOther = true;
+    await expect(runSubmitInvoice(submitEvent, claimCtx)).rejects.toMatchObject({ name: 'RetryAfterError' });
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(tables.invoices[0].ksef_status).toBe('queued');
+  });
+  it('claims the send with the event attempt id as owner (AUD-10)', async () => {
+    const SEND_ATTEMPT = '99999999-9999-4999-8999-999999999999';
+    tables.invoices = [{
+      id: ID, tenant_id: A, direction: 'outgoing', ksef_status: 'queued', ksef_number: null,
+      ksef_environment: null, invoice_kind: 'regular', internal_number: 'TEST-1',
+      fa3_data: { internalNumber: 'TEST-1' },
+    }];
+    await runSubmitInvoice({ ...submitEvent, sendAttemptId: SEND_ATTEMPT }, claimCtx).catch(() => undefined);
+    const claim = calls.find((q) => q.table === 'rpc:claim_ksef_send');
+    expect(claim?.patch).toMatchObject({
+      p_invoice_id: ID, p_tenant_id: A, p_owner: SEND_ATTEMPT, p_lease_seconds: 900,
+    });
   });
   it('cannot overwrite acceptance during the status transition to sending', async () => {
     // Faktura w bazie = treść zdarzenia (kontrola z #63).

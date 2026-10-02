@@ -67,6 +67,16 @@ describe('special invoice enqueue under KSeF outage', () => {
     },
   );
 
+  it('each enqueue carries a fresh send attempt id for the send claim (AUD-10)', async () => {
+    mocks.environment.mockReturnValue('test');
+    await enqueueKsefSubmitAfterDraft({ ...base, auditKind: 'regular' }).catch(() => undefined);
+    await enqueueKsefSubmitAfterDraft({ ...base, auditKind: 'regular' }).catch(() => undefined);
+    const ids = mocks.send.mock.calls.map((c) => (c[0] as { data: { sendAttemptId?: string } }).data.sendAttemptId);
+    expect(ids).toHaveLength(2);
+    for (const id of ids) expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(ids[0]).not.toBe(ids[1]);
+  });
+
   // Polityka main (AUD-14, decyzja B3): na PROD bez sondy zdrowia i bez
   // Offline24 — zwykła wysyłka, którą job ponawia. Szkic Codexa z #63 zastąpiony.
   it('PROD: no health probe and no Offline24 QR for an ordinary VAT (AUD-14)', async () => {

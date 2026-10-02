@@ -107,6 +107,14 @@ interface SubmitOutcome {
  *   bulk import, nawet jeśli concurrency 100 da chwilowy spike.
  */
 
+/**
+ * Dzierżawa przejęcia wysyłki (AUD-10): dłuższa niż najdłuższa wysyłka
+ * z odpytywaniem statusu; tyle samo co próg alarmu „faktura w sending”.
+ */
+export const KSEF_SEND_LEASE_SECONDS = 15 * 60;
+/** Gdy wysyłkę trzyma inna próba — ponowienie po 5 min (wynik albo koniec dzierżawy). */
+export const KSEF_SEND_CLAIM_RETRY_MS = 5 * 60 * 1000;
+
 const ROZ_RECONCILIATION_MESSAGE =
   'Wysyłka faktury rozliczającej została wstrzymana. Przed kolejną próbą ręcznie uzgodnij jej status z KSeF.';
 
@@ -760,34 +768,36 @@ export async function runSubmitInvoice(
       }
     }
 
-    // Krok 2: status 'sending' + timestamp — dopiero gdy wiemy, że job może
-    // realnie pogadać z KSeF.
-    const markedSending = await step.run('mark-as-sending', async () => {
-      const now = new Date().toISOString();
-      const { data: updated, error: updateError } = await (await createAdminClient())
-        .from('invoices')
-        .update({
-          ksef_status: 'sending',
-          submitted_to_ksef_at: now,
-          last_attempt_at: now,
-        })
-        .eq('id', invoiceId)
-        .eq('tenant_id', tenantId)
-        .or('ksef_status.is.null,ksef_status.neq.accepted')
-        .select('id')
-        .maybeSingle();
-      if (updateError) throw new Error('Nie można oznaczyć faktury jako wysyłanej');
-      return updated?.id === invoiceId;
+    // Krok 2: przejęcie wysyłki (AUD-10, 00124) — `sending` z wyłącznością.
+    // Wygrywa, gdy faktura jest wolna, gdy trzyma ją ta sama próba (ponowienie
+    // tego samego zdarzenia) albo gdy dzierżawa innej próby wygasła. Ponowienie
+    // najpierw uzgadnia poprzednią wysyłkę po numerze referencyjnym (C-18).
+    const claimed = await step.run('mark-as-sending', async (): Promise<boolean> => {
+      const { data, error: claimError } = await (await createAdminClient()).rpc('claim_ksef_send', {
+        p_invoice_id: invoiceId,
+        p_tenant_id: tenantId,
+        p_owner: parsed.data.sendAttemptId ?? null,
+        p_lease_seconds: KSEF_SEND_LEASE_SECONDS,
+      });
+      if (claimError) throw new Error('Nie można przejąć wysyłki faktury');
+      return typeof data === 'string' && data.length > 0;
     });
-    // Pre-hotfix Inngest checkpoints stored `undefined` for this step. Only
-    // explicit false from the new conditional update denotes a lost race.
-    if (markedSending === false) {
+    // Starsze punkty kontrolne Inngest zapisały tu `undefined` — tylko jawne
+    // `false` oznacza, że wysyłkę trzyma inna próba.
+    if (claimed === false) {
       const latest = await currentSubmissionState(parsed.data);
       if (latest.ksef_status === 'accepted' && latest.ksef_number) {
         await reconcileAcceptedOfflineQueue(parsed.data);
         return { alreadyAccepted: true as const, ksefNumber: latest.ksef_number };
       }
-      throw new Error('Nie można potwierdzić statusu faktury przed wysyłką');
+      logger.warn('Wysyłkę faktury prowadzi inna próba — czekam na jej wynik albo koniec dzierżawy', {
+        invoiceId,
+        attempt,
+      });
+      throw new RetryAfterError(
+        'Wysyłkę tej faktury prowadzi inna próba — ponowię po jej wyniku',
+        KSEF_SEND_CLAIM_RETRY_MS,
+      );
     }
 
     await step.run('audit-start', async () => {

@@ -74,7 +74,8 @@ vi.mock('@/lib/supabase/server', () => ({
         error: null,
       }),
     };
-    return { from: () => q };
+    // Przejęcie wysyłki (AUD-10, 00124) — w tych testach zawsze wolne.
+    return { from: () => q, rpc: async (fn: string) => ({ data: fn === 'claim_ksef_send' ? '2026-10-02T12:00:00.000000+00:00' : null, error: null }), };
   },
 }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: vi.fn() }));

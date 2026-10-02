@@ -20,6 +20,7 @@
  * job loguje warning i kończy bez fakturowania (Stripe receipt = fallback).
  */
 
+import { randomUUID } from 'node:crypto';
 import { NonRetriableError } from 'inngest';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
@@ -234,6 +235,8 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
         invoice: insertResult.invoice,
         nip: insertResult.operatorNip,
         environment: requireConfiguredKsefEnvironment(),
+        // Właściciel przejęcia wysyłki (AUD-10, 00124).
+        sendAttemptId: randomUUID(),
       }).data,
     });
 
