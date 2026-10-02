@@ -65,7 +65,7 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E7 | Retencja 10 lat: joby `retention-delete`, `archive-old-invoices` — czy nic nie kasuje faktur przed terminem | ✅ sprawdzone 01.10 | uwagi w 3.2 |
 | E8 | Pozostałe obszary: import (Magiczny Import), portal księgowej, walidatory formularzy, powiadomienia | ✅ przegląd 01.10 | portal: token jako hash, wygaśnięcie, odwołanie, firma i ścieżka XML sprawdzane; push tylko do aktywnych członków; walidator ZAL bez „zw” = C-15; import: silnik w stosie Codexa, parsery FA(3)/JPK_FA ignorowały walutę — #130. Uwaga dla Codexa: Magiczny Import łapie błąd parsera tylko w logu (`magic-import-ksef.ts`), użytkownik nie widzi powodu pominięcia |
 | E9 | Flo — funkcje zapisujące dane (`payment.confirm`, `expense.review`, `expense.rule`, `payment.chase`) | ✅ przegląd 01.10 | `expense.*` bez skutków wstecz; `payment.confirm` — uwaga o dacie wpłaty w 4.4; `payment.chase` = ponaglenia (stos Codexa) |
-| E10 | Formularze faktur VAT/KOR/ZAL/ROZ — przypadki brzegowe dat i kwot (art. 106i, 106e) | ✅ przegląd 01.10 | błędów danych brak; ograniczenia produktowe w 4.4 (data sprzedaży po wystawieniu, brak ostrzeżenia o spóźnionej fakturze); pliki formularzy w stosie Codexa |
+| E10 | Formularze faktur VAT/KOR/ZAL/ROZ — przypadki brzegowe dat i kwot (art. 106i, 106e) | ✅ przegląd 01.10 + poprawka | KOREKTA przeglądu: reguły sprawdzane tylko przy wysyłce (`validateInvoice` w jobie) — rachunek przy przelewie, format IBAN wymagający „PL” (zwykłe 26 cyfr odrzucane), zakres daty wystawienia — przepuszczały fakturę przez zapis, a wysyłka padała bez możliwości poprawki; #134. Ograniczenia produktowe w 4.4. Formularz i akcje VAT/KOR/ZAL/ROZ w stosie Codexa |
 | E11 | Ustawienia firmy i KSeF — zmiana NIP, danych sprzedawcy, certyfikatu; co dzieje się z wystawionymi fakturami | ✅ przegląd 01.10 | PDF bierze sprzedawcę z migawki faktury (`seller_data`); NIP firmy ustawia się tylko w szkicu; ponowna wysyłka wstrzymana do ręcznego uzgodnienia |
 | E12 | Koszty samochodu osobowego (50% VAT, 75% PIT) — aplikacja odlicza 100% VAT i nie stosuje limitu | ⏳ decyzja | 4.4 |
 
@@ -140,7 +140,9 @@ z #106–#110, oraz:
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak (ten PR to tylko aktualizacja planu).
+| PR | Co | Stan |
+|---|---|---|
+| #134 | Zwykły numer rachunku (26 cyfr) i reguły wysyłki sprawdzane już w formularzu — faktura nie utyka jako nieudana | w tym PR |
 
 Na `main` od innych od 01.10: Bartosz #113 (health-check KSeF), #117 (C-08,
 migracja `00096`), #120 (alerty Telegram + heartbeat workera), #126
@@ -182,6 +184,10 @@ poprawnych kodów QR); Bartosz #90.
 
 ## 5. Następny krok
 
+0. E14 (nowy, z #134): wzorzec „reguła sprawdzana tylko przy
+   wysyłce” w generatorach KOR/ZAL/ROZ (`lib/ksef/fa3-*-generator.ts`,
+   formularze — stos Codexa: zgłoszenie C-xx z listą reguł, których formularz
+   nie sprawdza).
 1. E13: przepływy naprawione (#129, C-18). Funkcje
    podatkowe Flo (grupa T: `tax.setaside`, `tax.limit`, `tax.deadline`,
    `tax.relief`, `tax.simulate`) są WYŁĄCZONE bramką

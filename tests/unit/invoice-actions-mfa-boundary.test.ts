@@ -46,6 +46,7 @@ const form: InvoiceFormValues = {
   buyerNip: buyer.nip, buyerName: buyer.name, buyerAddressLine1: 'Test 1',
   buyerAddressLine2: '00-000 Test', buyerEmail: buyer.email, buyerIsConsumer: false,
   buyerPesel: '', buyerIdDocument: '', paymentMethod: 'transfer', paymentDueDate: '2026-09-22',
+  bankAccount: '61 1090 1014 0000 0712 1981 2874',
   lines: [{ name: 'Fixture service', unit: 'szt', quantity: 2, unitPriceNet: 50, vatRate: '23' }],
 };
 type QueryLog = { table: string; filters: Record<string, unknown>; operation: string; payload?: unknown };

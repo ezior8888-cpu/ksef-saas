@@ -4,6 +4,7 @@ import type { XMLBuilder } from 'xmlbuilder2/lib/interfaces';
 import type { Invoice, InvoiceLineItem, VatRate, BuyerParty } from '@/types/invoice';
 import {
   calculateInvoiceTotals,
+  normalizeIban,
   summarizeVatPerRate,
   validateInvoice,
   ZW_WITHOUT_BASIS_MESSAGE,
@@ -512,7 +513,7 @@ function buildPlatnosc(
     // MVP emituje tylko NrRB i NazwaBanku.
     // NrRB jest typu tns:TNrRB – KSeF oczekuje 26 cyfr (IBAN bez prefiksu PL),
     // ale akceptuje też format IBAN. Normalizujemy spacje.
-    const iban = invoice.payment.bankAccount.replace(/\s+/g, '').toUpperCase();
+    const iban = normalizeIban(invoice.payment.bankAccount);
     const nrRb = iban.startsWith('PL') ? iban.slice(2) : iban;
     const rachunek = platnosc.ele('RachunekBankowy');
     rachunek.ele('NrRB').txt(nrRb);
