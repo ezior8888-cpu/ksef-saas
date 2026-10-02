@@ -93,11 +93,6 @@ function bledyWartosci(l: Lancuch): Blad[] {
  * nie może rosnąć po cichu ani trzymać wpisów już naprawionych.
  */
 const ZNANE: Record<string, string> = {
-  // X-03: ksef_health_log jest globalny — nie ma tenant_id ani checked_at.
-  // Stan „nie mogę zalogować się Twoim certyfikatem” nie ma źródła per konto.
-  'lib/inngest/jobs/cert-expiry-alert.ts ksef_health_log.tenant_id': 'X-03: brak per-konto śladu logowania',
-  'lib/inngest/jobs/cert-expiry-alert.ts ksef_health_log.checked_at': 'X-03: brak per-konto śladu logowania',
-
   // K-03 zablokowane prawnie; przed odblokowaniem: source → origin.
   'lib/flo/functions/payment-score.ts invoices.source': 'K-03 zablokowane: poprawić przed odblokowaniem',
 };

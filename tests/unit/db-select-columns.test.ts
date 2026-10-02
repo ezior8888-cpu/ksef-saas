@@ -266,12 +266,6 @@ const ZNANE: Record<string, string> = {
   // 25.09: faktury nie wchodzą do osobistego eksportu, a błąd już nie
   // udaje zera. Test pilnuje, żeby to nie wróciło.)
 
-  // X-03: ksef_health_log to dziennik GLOBALNY (env, level, recorded_at),
-  // bez tenant_id, status i checked_at. Stan karty „nie mogę zalogować się
-  // Twoim certyfikatem” nie ma w bazie żadnego źródła per konto.
-  'lib/inngest/jobs/cert-expiry-alert.ts ksef_health_log.status': 'X-03: brak per-konto śladu logowania',
-  'lib/inngest/jobs/cert-expiry-alert.ts ksef_health_log.checked_at': 'X-03: brak per-konto śladu logowania',
-
   // K-03 jest zablokowane prawnie (flags.ts), więc i tak nie działa. Przed
   // odblokowaniem: invoices.source → origin (ta sama pomyłka co w X-05).
   'lib/flo/functions/payment-score.ts invoices.source': 'K-03 zablokowane: poprawić przed odblokowaniem',
