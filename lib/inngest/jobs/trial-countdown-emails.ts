@@ -35,6 +35,8 @@ interface TrialingSubscription {
   tenant_id: string;
   plan: 'monthly' | 'annual';
   trial_end: string | null;
+  /** Anulowana w trialu — nie zostanie obciążona, mail by kłamał (AUD-75). */
+  cancel_at_period_end?: boolean | null;
 }
 
 const PLAN_LABELS: Record<TrialingSubscription['plan'], { plan: string; price: string }> = {
@@ -94,7 +96,7 @@ export async function runTrialCountdownEmails({ step, logger }: JobContext) {
         };
       })
         .from('subscriptions')
-        .select('id, tenant_id, plan, trial_end')
+        .select('id, tenant_id, plan, trial_end, cancel_at_period_end')
         .eq('status', 'trialing')
         .not('trial_end', 'is', 'null')
         .lte('trial_end', cutoffIso));
@@ -116,6 +118,11 @@ export async function runTrialCountdownEmails({ step, logger }: JobContext) {
 
     for (const sub of subscriptions) {
       if (!sub.trial_end) continue;
+      // Mail mówi „karta zostanie obciążona” — przy anulowanym trialu to nieprawda.
+      if (sub.cancel_at_period_end) {
+        skipped++;
+        continue;
+      }
       const stage = pickStage(new Date(sub.trial_end));
       if (!stage) {
         skipped++;

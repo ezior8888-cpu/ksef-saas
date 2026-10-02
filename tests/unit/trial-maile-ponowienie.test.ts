@@ -105,4 +105,11 @@ describe('mail o końcu triala — błąd wysyłki nie blokuje go na zawsze (AUD
     await expect(runTrialCountdownEmails(ctx)).resolves.toMatchObject({ sent: 0, skipped: 1 });
     expect(mocks.send).not.toHaveBeenCalled();
   });
+
+  it('trial anulowany (cancel_at_period_end) — bez maila „karta zostanie obciążona” (AUD-75)', async () => {
+    mocks.tables.subscriptions![0]!.cancel_at_period_end = true;
+
+    await expect(runTrialCountdownEmails(ctx)).resolves.toMatchObject({ sent: 0 });
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
 });
