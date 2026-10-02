@@ -31,7 +31,21 @@ import TrialEnding from './templates/TrialEnding';
 // ═══════════════════════════════════════════════════════════════
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-const DEFAULT_FROM = 'KSeF SaaS <onboarding@resend.dev>';
+/**
+ * Domyślny nadawca z domeny FaktFlow (AUD-97). Do 02.10 był to
+ * `onboarding@resend.dev` — domena dostawcy, którą Resend przyjmuje tylko na
+ * koncie testowym. Produkcja ustawia RESEND_FROM_* jawnie.
+ */
+const DEFAULT_FROM = 'FaktFlow <no-reply@app.faktflow.pl>';
+
+/** Pusta zmienna to brak zmiennej — `??` przepuszczał pusty napis. */
+function envSender(...names: string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
 
 /**
  * DEV-only override: Resend na FREE planie (bez weryfikowanej domeny)
@@ -73,17 +87,9 @@ function getResend(): Resend {
  */
 function getFromEmail(category: 'transactional' | 'product_updates' | 'marketing'): string {
   if (category === 'transactional') {
-    return (
-      process.env.RESEND_FROM_TRANSACTIONAL ??
-      process.env.RESEND_FROM_EMAIL ??
-      DEFAULT_FROM
-    );
+    return envSender('RESEND_FROM_TRANSACTIONAL', 'RESEND_FROM_EMAIL') ?? DEFAULT_FROM;
   }
-  return (
-    process.env.RESEND_FROM_MARKETING ??
-    process.env.RESEND_FROM_EMAIL ??
-    DEFAULT_FROM
-  );
+  return envSender('RESEND_FROM_MARKETING', 'RESEND_FROM_EMAIL') ?? DEFAULT_FROM;
 }
 
 // ═══════════════════════════════════════════════════════════════
