@@ -40,6 +40,8 @@ const VAT_RATE_MAP: Record<VatRate, VatRateMapping> = {
   zw: { netElement: 'P_13_7', p12Value: 'zw' },
   oo: { netElement: 'P_13_10', p12Value: 'oo' },
   np: { netElement: 'P_13_8', p12Value: 'np I' },
+  // AUD-70: usługi z art. 100 ust. 1 pkt 4 (nabywca z UE rozlicza VAT).
+  np_ii: { netElement: 'P_13_9', p12Value: 'np II' },
 };
 
 const P_13_ORDER: readonly string[] = [

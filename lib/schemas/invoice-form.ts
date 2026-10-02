@@ -16,7 +16,7 @@ import { isSaleDateWithinLimit, SALE_DATE_TOO_LATE_MESSAGE } from '@/lib/invoice
  * `zw` — sprzedaż zwolniona. FA(3) wymaga wtedy P_19A (podstawy prawnej),
  * którą faktura bierze z ustawień firmy (`tenants.vat_exemption_basis`).
  */
-export const vatRateEnum = z.enum(['23', '8', '5', '0', 'zw', 'oo', 'np']);
+export const vatRateEnum = z.enum(['23', '8', '5', '0', 'zw', 'oo', 'np', 'np_ii']);
 
 export const buyerConsumerIdTypeEnum = z.enum([
   'pesel',

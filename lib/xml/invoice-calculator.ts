@@ -47,7 +47,7 @@ export function roundToDecimals(value: number, decimals: number): number {
 
 /**
  * Mapa stawek VAT na wartości numeryczne do kalkulacji.
- * Stawki niematematyczne (zw, oo, np) zawsze dają VAT=0.
+ * Stawki niematematyczne (zw, oo, np, np_ii) zawsze dają VAT=0.
  */
 export function getVatPercentage(rate: VatRate): number {
   switch (rate) {
@@ -61,6 +61,7 @@ export function getVatPercentage(rate: VatRate): number {
     case 'zw':
     case 'oo':
     case 'np':
+    case 'np_ii':
       return 0;
   }
 }

@@ -88,6 +88,7 @@ const VAT_RATE_LABEL: Record<VatRate, string> = {
   zw: 'zw.',
   oo: 'o.o.',
   np: 'np.',
+  np_ii: 'np.',
 };
 
 /**

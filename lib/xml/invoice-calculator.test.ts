@@ -72,6 +72,7 @@ describe('getVatPercentage', () => {
     assert.equal(getVatPercentage('zw'), 0);
     assert.equal(getVatPercentage('oo'), 0);
     assert.equal(getVatPercentage('np'), 0);
+    assert.equal(getVatPercentage('np_ii'), 0);
   });
 });
 
