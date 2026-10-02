@@ -492,7 +492,9 @@ export function generateCorrectionInvoiceXml(
 
   if (data.parentKsefNumber?.trim()) {
     daneKor.ele('NrKSeF').txt('1');
-    daneKor.ele('NumerKSeFFaKorygowanej').txt(data.parentKsefNumber.trim());
+    // XSD FA(3): `NrKSeFFaKorygowanej` (nie „Numer…”) — inaczej każda korekta
+    // faktury przyjętej w KSeF odpada na lokalnej walidacji (F-049).
+    daneKor.ele('NrKSeFFaKorygowanej').txt(data.parentKsefNumber.trim());
   } else {
     daneKor.ele('NrKSeFN').txt('1');
   }
