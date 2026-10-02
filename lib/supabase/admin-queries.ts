@@ -53,7 +53,7 @@ export async function getTenantKsefCredentials(
   }
 
   const encryptedBlob = parseBytea(data.ksef_credentials_encrypted);
-  const decrypted = decryptCredentials(encryptedBlob);
+  const decrypted = decryptCredentials(encryptedBlob, tenantId);
 
   // NIP z DB może się różnić od NIP w zaszyfrowanych credentials (np. po zmianie
   // firmy) - używamy tego z DB jako source-of-truth. Token/cert nie zawiera NIP

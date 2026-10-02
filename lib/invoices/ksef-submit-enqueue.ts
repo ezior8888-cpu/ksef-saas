@@ -16,6 +16,7 @@ import {
   requireKsefVerification,
 } from '@/lib/auth/ksef-verification-guard';
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
+import { assertSensitiveMfa, SensitiveMfaRequiredError } from '@/lib/auth/sensitive-mfa';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { isOffline24Enabled } from '@/lib/ksef/offline24-policy';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
@@ -38,7 +39,7 @@ import type {
 
 export type KsefSubmitEnqueueResult =
   | { ok: true; mode: 'online_queued' | 'offline_queued' }
-  | { ok: false; error: string; code?: 'KSEF_NOT_VERIFIED' };
+  | { ok: false; error: string; code?: 'KSEF_NOT_VERIFIED' | 'MFA_REQUIRED' };
 
 export interface EnqueueKsefSubmitParams {
   supabase: SupabaseClient;
@@ -124,6 +125,16 @@ export async function enqueueKsefSubmitAfterDraft(
     };
   }
 
+  // AAL2 właściciela/admina, gdy flaga `requireMfaForSensitive` jest włączona (AUD-65).
+  try {
+    await assertSensitiveMfa({ tenantId, userId }, 'ksef_submit');
+  } catch (e) {
+    if (e instanceof SensitiveMfaRequiredError) {
+      return { ok: false, code: 'MFA_REQUIRED', error: e.message };
+    }
+    throw e;
+  }
+
   const nipNorm = nip.replace(/\s+/g, '');
 
   try {
@@ -159,7 +170,7 @@ export async function enqueueKsefSubmitAfterDraft(
 
   let decrypted: ReturnType<typeof decryptCredentials>;
   try {
-    decrypted = decryptCredentials(credentialsBuffer(tenantKsef.ksef_credentials_encrypted));
+    decrypted = decryptCredentials(credentialsBuffer(tenantKsef.ksef_credentials_encrypted), tenantId);
   } catch {
     return { ok: false, error: 'Nie można odczytać credentials KSeF.' };
   }

@@ -102,11 +102,14 @@ async function main() {
   // ─── Szyfruj credentials ─────────────────────────────────
   step('szyfruj credentials (AES-256-GCM)…');
 
-  const blob = encryptCredentials({
-    type: 'token',
-    nip,
-    token,
-  });
+  const blob = encryptCredentials(
+    {
+      type: 'token',
+      nip,
+      token,
+    },
+    tenantId,
+  );
 
   info(`blob size: ${blob.length} bajtów`);
 
