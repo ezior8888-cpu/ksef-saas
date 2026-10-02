@@ -256,7 +256,7 @@ Kryterium: test renderu — cena 100,1234 wypisana w całości; numer VAT-UE z e
 Commit: `2bce837`
 Sprawdzenie: `pnpm exec vitest run tests/unit/pdf-precyzja-vatue.test.ts`; w aplikacji: PDF faktury z ceną 100,1234 pokazuje ją w całości, nabywca z UE ma „VAT UE: …”.
 
----
+<!-- Dodatkowy obchód (2.10, po zamknięciu planu): pozycje dopisane zgodnie z Fazą 4 ZADANIE.md -->
 
 ### P-23 — Masowa walidacja kontrahentów: zapytania w paczkach, błąd zapisu nie jest sukcesem
 Status: ZROBIONE
@@ -280,6 +280,10 @@ Zmiana:
   - czas przyjęcia w KSeF w strefie Europe/Warsaw.
 - Hunk Realtime (linie 106–115, PR #71) bez zmian.
 Kryterium: test renderu komponentu — termin i rachunek widoczne; 100,1234 w całości; „VAT UE: DE…”; czas przyjęcia po polsku.
+Commit: `4ab652c`
+Sprawdzenie: `pnpm exec vitest run tests/unit/szczegoly-faktury-ekran.test.tsx`; w aplikacji: otwórz wystawioną fakturę — sekcja „Płatność” z terminem i rachunkiem, cena z 4 miejscami, czas przyjęcia po polsku.
+
+---
 
 ## Poza planem
 
@@ -358,6 +362,3 @@ Każde znalezisko spoza planu z powodem. „Kod zmieniany w PR #N” znaczy, że
 | F-089 import plików | Kod zmieniany w PR #63, #64, #86. |
 | F-090 operacje masowe | Nowa funkcja — „Pomysły na później”. |
 | F-091 drobiazgi | K4; podtytuł listy w P-09, ekran szczegółów w P-24, reszta w różnych plikach PR. |
-Commit: `4ab652c`
-Sprawdzenie: `pnpm exec vitest run tests/unit/szczegoly-faktury-ekran.test.tsx`; w aplikacji: otwórz wystawioną fakturę — sekcja „Płatność” z terminem i rachunkiem, cena z 4 miejscami, czas przyjęcia po polsku.
-
