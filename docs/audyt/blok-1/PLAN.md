@@ -177,14 +177,16 @@ Commit: `65cfca9`
 Sprawdzenie: `pnpm exec vitest run tests/unit/korekta-parowanie-pozycji.test.ts` — usunięcie środkowej pozycji daje jeden wiersz „przed”, XML przechodzi XSD; sumy bez zmian.
 
 ### P-14 — PDF: czytelna stawka dla faktur z importu historii
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-067 (część PDF; JPK w PR #128)
 Zmiana: `lib/pdf/invoice-renderer.ts` — etykieta stawki dla kodów FA(3) spoza mapy (np. „0 KR”, „np I”, „0 WDT”) pokazuje sam kod zamiast „undefined”; w podsumowaniu też.
 Kryterium: test renderu z pozycją „0 KR” — w tekście PDF nie ma „undefined”.
+Commit: `b1c420a`
+Sprawdzenie: `pnpm exec vitest run tests/unit/pdf-stawka-z-importu.test.ts`; w aplikacji: PDF faktury zaimportowanej z KSeF ze stawką 0 KR pokazuje „0 KR” w tabeli i podsumowaniu.
 
 ### P-15 — Kategorie kosztów: reguły „nazwa sprzedawcy” są stosowane
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-084
 Zmiana: `lib/categorization/rule-engine.ts` — dopasowanie reguł `name_exact` po znormalizowanej nazwie sprzedawcy, gdy brak reguły po NIP; włączenie w kolejność klasyfikacji (`lib/categorization/index.ts`).
