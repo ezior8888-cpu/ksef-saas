@@ -1,5 +1,16 @@
 # Sentry Error Codes Reference (Faza 35)
 
+> ## ⚠️ TEN DOKUMENT JEST NIEAKTUALNY
+>
+> Część sekcji (Inngest dashboard, zmienne w Vercelu) opisuje dawną infrastrukturę; kody błędów i ich znaczenie są aktualne. Produkcja stoi na **Hetznerze pod Coolify**,
+> joby chodzą na **pg-boss**, baza to **Supabase self-hosted** na `db-1`.
+>
+> **Aktualne procedury: `AGENTS.md`, sekcja „Infrastruktura i dostępy",
+> oraz `docs/runbooks/joby-pg-boss.md`.** Nie wykonuj poleceń z tego pliku
+> na produkcji bez sprawdzenia ich tam (AUD-110).
+
+---
+
 Najczęstsze patterny błędów w Sentry + co znaczą + jak naprawić. Lookup
 dla "kolega widzi error w Sentry, nie wie co dalej".
 

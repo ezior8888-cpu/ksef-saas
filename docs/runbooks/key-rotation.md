@@ -1,5 +1,16 @@
 # Key Rotation Runbook (Faza 28)
 
+> ## ⚠️ TEN DOKUMENT JEST NIEAKTUALNY
+>
+> Kroki rotacji odwołują się do zmiennych w Vercelu i jobów Inngest; zmienne ustawia się dziś w Coolify (dwie aplikacje: web i worker, `is_preview = false`). Produkcja stoi na **Hetznerze pod Coolify**,
+> joby chodzą na **pg-boss**, baza to **Supabase self-hosted** na `db-1`.
+>
+> **Aktualne procedury: `AGENTS.md`, sekcja „Infrastruktura i dostępy",
+> oraz `docs/runbooks/joby-pg-boss.md`.** Nie wykonuj poleceń z tego pliku
+> na produkcji bez sprawdzenia ich tam (AUD-110).
+
+---
+
 Procedury rotacji kluczy szyfrowania i sekretów. Wykonuj przy:
 
 - Plotkach o wycieku (proaktywnie),
