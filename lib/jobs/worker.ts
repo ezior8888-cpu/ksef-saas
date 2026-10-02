@@ -7,7 +7,7 @@
  * Co robi:
  *   1. startuje pg-boss (schemat `pgboss` w Postgresie na db-1),
  *   2. tworzy kolejki zarejestrowanych jobów (retryLimit:0 — retry nasze),
- *   3. rejestruje handlery przez wrapper retry (parytet z Inngest),
+ *   3. rejestruje handlery przez wrapper retry (parytet z Inngest, `run-job.ts`),
  *   4. planuje crony TYLKO dla zarejestrowanych kolejek cron.*,
  *   5. wystawia healthcheck HTTP (Coolify) na WORKER_HEALTH_PORT (def. 8080),
  *   6. graceful shutdown na SIGTERM/SIGINT.
@@ -15,25 +15,15 @@
 
 import { createServer } from 'node:http';
 
-import type { Job } from 'pg-boss';
-
-import { ensureQueue, startBoss, stopBoss } from './boss';
+import { ensureQueue, startBoss, stopBoss, enableWorkerRole } from './boss';
 import { assertPgBossWorkerBackend, getWorkerHealthPort } from './config';
 import { createJobLogger } from './logger';
 import { CRON_JOBS, SMOKE_QUEUE } from './queues';
-import {
-  getRegisteredJobs,
-  registerJob,
-  retryPolicyFor,
-  type JobDefinition,
-} from './registry';
-import { ATTEMPT_KEY, decideRetry, readAttempt } from './retry';
-import { createJobStep } from './step-shim';
-import { recordJobRun } from './run-log';
+import { getRegisteredJobs, registerJob } from './registry';
+import { wrapHandler } from './run-job';
 import {
   flushWorkerSentry,
   initWorkerSentry,
-  reportExhaustedJob,
   reportWorkerStartupFailure,
 } from './sentry';
 
@@ -56,79 +46,6 @@ registerJob<{ ping?: number }>({
   },
 });
 
-function wrapHandler(def: JobDefinition<never>) {
-  const policy = retryPolicyFor(def);
-
-  return async (jobs: Job<object>[]): Promise<void> => {
-    for (const job of jobs) {
-      const attempt = readAttempt(job.data);
-      const jobLog = createJobLogger(`${def.queue}#${job.id.slice(0, 8)}`);
-
-      // Walidacja payloadu na granicy (bez klucza technicznego __attempt).
-      let data: unknown = job.data;
-      if (def.schema) {
-        const cleaned = { ...(job.data as Record<string, unknown>) };
-        delete cleaned[ATTEMPT_KEY];
-        const parsed = def.schema.safeParse(cleaned);
-        if (!parsed.success) {
-          jobLog.error('payload nie przeszedł walidacji — onExhausted', {
-            issues: parsed.error.issues.slice(0, 3),
-          });
-          await def.onExhausted?.(
-            new Error(`Niepoprawny payload: ${parsed.error.message}`),
-            job.data as never,
-            { step: createJobStep(jobLog), logger: jobLog, attempt },
-          );
-          continue;
-        }
-        data = parsed.data;
-      }
-
-      const startedAt = Date.now();
-      try {
-        await def.handler(data as never, {
-          step: createJobStep(jobLog),
-          logger: jobLog,
-          attempt,
-        });
-        await recordJobRun({ queue: def.queue, runId: job.id, status: 'succeeded', durationMs: Date.now() - startedAt });
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        await recordJobRun({ queue: def.queue, runId: job.id, status: 'failed', durationMs: Date.now() - startedAt, error });
-        const decision = decideRetry(error, attempt, policy);
-
-        if (decision.action === 'retry') {
-          jobLog.warn(
-            `próba ${attempt + 1} padła — retry za ${decision.delayMs}ms`,
-            error,
-          );
-          const boss = await startBoss();
-          await boss.send(
-            def.queue,
-            { ...(job.data as object), [ATTEMPT_KEY]: decision.nextAttempt },
-            { startAfter: Math.ceil(decision.delayMs / 1000) },
-          );
-          continue;
-        }
-
-        jobLog.error(`wyczerpane próby (${decision.reason})`, error);
-        reportExhaustedJob(def.queue, error, decision.reason);
-        try {
-          await def.onExhausted?.(error, data as never, {
-            step: createJobStep(jobLog),
-            logger: jobLog,
-            attempt,
-          });
-        } catch (exhaustErr) {
-          jobLog.error('onExhausted rzucił błąd', exhaustErr);
-        }
-        // Job kończy się jako "obsłużony" — pg-boss nie retryuje (retryLimit 0),
-        // a decyzja co dalej należała do onExhausted (parytet z Inngest).
-      }
-    }
-  };
-}
-
 async function main(): Promise<void> {
   // Fail-closed (krok 5): bez jawnego pgboss worker nie startuje wcale —
   // błąd trafia do Sentry przez reportWorkerStartupFailure niżej.
@@ -140,6 +57,8 @@ async function main(): Promise<void> {
     log.warn('Sentry: alerty z jobów WYŁĄCZONE (brak SENTRY_DSN albo NODE_ENV≠production)');
   }
 
+  // Harmonogram i nadzór pg-boss prowadzi TYLKO worker (AUD-88).
+  enableWorkerRole();
   const boss = await startBoss();
   boss.on('error', (err) => log.error('pg-boss error', err));
 
@@ -155,6 +74,8 @@ async function main(): Promise<void> {
         ...(def.groupConcurrency !== undefined
           ? { groupConcurrency: def.groupConcurrency }
           : {}),
+        // Każdy job paczki rozliczany osobno (AUD-35, `run-job.ts`).
+        perJobResults: true,
       },
       wrapHandler(def),
     );

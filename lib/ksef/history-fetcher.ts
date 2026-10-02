@@ -12,6 +12,7 @@ import type {
 } from '@/types/ksef';
 
 import { ksefFetch } from './client';
+import { INBOX_PAGE_SIZE } from './inbox';
 import { ksefRateLimiter } from './rate-limiter';
 import { getValidSession, ksefSessionCache } from './session-cache';
 
@@ -71,7 +72,7 @@ function mapInvoiceMetadata(metadata: InvoiceMetadata): KsefInvoiceMetadata {
   };
 }
 
-/** Metadane faktur dla zakresu dat (paginacja `continuationToken` jak w bibliotece MF). */
+/** Metadane faktur dla zakresu dat (strony `pageOffset` + `hasMore`, kontrakt OpenAPI KSeF 2.0). */
 export async function fetchInvoicesMetadata(
   params: FetchHistoryParams,
 ): Promise<FetchHistoryResult> {
@@ -90,9 +91,13 @@ export async function fetchInvoicesMetadata(
   return ksefRateLimiter.enqueue(conn.auth.nip, async () => {
     const allInvoices: KsefInvoiceMetadata[] = [];
     let truncated = false;
-    let continuationToken: string | undefined;
+    // Strony przez `pageOffset` (indeks strony) + `hasMore` — ten endpoint nie
+    // zwraca tokenu kontynuacji, więc pętla po tokenie kończyła się na
+    // pierwszej stronie (domyślnie 10 faktur).
+    let pageOffset = 0;
+    let hasMore = true;
 
-    do {
+    while (hasMore && allInvoices.length < MAX_IMPORT_INVOICES) {
       const req: QueryInvoicesRequest = {
         subjectType,
         dateRange: {
@@ -101,25 +106,25 @@ export async function fetchInvoicesMetadata(
           to: dateTo.toISOString(),
         },
       };
-
-      const headers: Record<string, string> = {};
-      if (continuationToken) {
-        headers['x-continuation-token'] = continuationToken;
-      }
+      const params = new URLSearchParams({
+        pageOffset: String(pageOffset),
+        pageSize: String(INBOX_PAGE_SIZE),
+        sortOrder: 'Asc',
+      });
 
       const session = await ksefSessionCache.getSession(conn.auth, env);
 
       const response: QueryInvoicesResponse = await ksefFetch<QueryInvoicesResponse>(
-        '/invoices/query/metadata',
+        `/invoices/query/metadata?${params.toString()}`,
         {
           method: 'POST',
           accessToken: session.accessToken,
           body: req,
-          headers,
           env,
         },
       );
 
+      // Ponad 10 000 rekordów dla tych filtrów — dalszych stron API nie da.
       if (response.isTruncated) truncated = true;
 
       for (const item of response.invoices) {
@@ -130,9 +135,9 @@ export async function fetchInvoicesMetadata(
         }
       }
 
-      continuationToken =
-        allInvoices.length >= MAX_IMPORT_INVOICES ? undefined : response.continuationToken;
-    } while (continuationToken);
+      hasMore = response.hasMore && !response.isTruncated;
+      pageOffset += 1;
+    }
 
     return {
       invoices: allInvoices,

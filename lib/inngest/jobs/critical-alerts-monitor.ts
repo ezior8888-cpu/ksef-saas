@@ -596,6 +596,67 @@ export async function checkStaleBackup(): Promise<AlertCheckResult> {
   return { type: 'stale_backup', fired: true };
 }
 
+/** Skrzynka KSeF bez pełnego przebiegu dłużej niż tyle godzin = alarm. */
+export const INBOX_STALE_HOURS = 6;
+
+/**
+ * Zaległość skrzynki KSeF (AUD-18). Firma z poświadczeniami, której HWM
+ * skrzynki (`ksef_inbox_cursor.window_to`) jest starszy niż próg, albo która
+ * od podpięcia KSeF nie ma żadnego pełnego przebiegu. Łapie padające
+ * przebiegi, zatrzymany cron i zaległość po stronie MF — wcześniej
+ * niekompletne pobranie było tylko linijką w logu. W alarmie liczby, bez NIP.
+ */
+export async function checkStaleInboxSync(): Promise<AlertCheckResult> {
+  const supabase = createAdminClient();
+  const { data: tenants, error } = await supabase
+    .from('tenants')
+    .select('id, ksef_verified_at')
+    .not('ksef_credentials_encrypted', 'is', null);
+  if (error) throw error;
+  const withKsef = (tenants ?? []) as { id: string; ksef_verified_at: string | null }[];
+  if (withKsef.length === 0) return { type: 'stale_inbox_sync', fired: false };
+
+  const { data: cursors, error: cursorError } = await supabase
+    .from('ksef_inbox_cursor')
+    .select('tenant_id, window_to');
+  if (cursorError) throw cursorError;
+  const hwmByTenant = new Map(
+    ((cursors ?? []) as { tenant_id: string; window_to: string | null }[])
+      .map((row) => [row.tenant_id, row.window_to] as const),
+  );
+
+  const threshold = Date.now() - INBOX_STALE_HOURS * 60 * 60 * 1000;
+  let stale = 0;
+  let neverPolled = 0;
+  for (const tenant of withKsef) {
+    const hwm = hwmByTenant.get(tenant.id);
+    if (hwm) {
+      if (Date.parse(hwm) < threshold) stale += 1;
+    } else if (tenant.ksef_verified_at && Date.parse(tenant.ksef_verified_at) < threshold) {
+      neverPolled += 1;
+    }
+  }
+  if (stale + neverPolled === 0) return { type: 'stale_inbox_sync', fired: false };
+
+  const shouldSend = await shouldSendAlert('stale_inbox_sync');
+  if (!shouldSend) return { type: 'stale_inbox_sync', fired: false, reason: 'dedup' };
+
+  await alertCritical(
+    'Skrzynka KSeF nie pobiera faktur',
+    'Faktury kosztowe z KSeF nie są pobierane. Sprawdź kolejkę inbox.poll.tenant i cron.inbox-polling w workerze, Sentry i logi workera. Po naprawie skrzynka sama nadrobi zaległość od ostatniego pełnego przebiegu.',
+    {
+      fields: [
+        { label: 'Firmy z zaległością', value: String(stale) },
+        { label: 'Firmy bez żadnego przebiegu', value: String(neverPolled) },
+        { label: 'Próg', value: `${INBOX_STALE_HOURS} h` },
+      ],
+    },
+  );
+
+  await markAlertDelivered('stale_inbox_sync');
+  return { type: 'stale_inbox_sync', fired: true };
+}
+
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
@@ -635,6 +696,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-stale-backup', () =>
         checkStaleBackup().catch(captureAndReturn('stale_backup')),
+      ),
+      step.run('check-stale-inbox-sync', () =>
+        checkStaleInboxSync().catch(captureAndReturn('stale_inbox_sync')),
       ),
     ]);
 

@@ -26,7 +26,9 @@ const aiClassificationResponseSchema = z.object({
 });
 
 export async function classifyByAI(
-  data: ExtractedInvoice
+  data: ExtractedInvoice,
+  /** Zużycie tokenów — do budżetu AI firmy (AUD-107). */
+  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void,
 ): Promise<CategorizationResult | null> {
   try {
     const response = await getAnthropic().messages.create({
@@ -62,6 +64,8 @@ ZWRACAJ TYLKO JSON.`,
         },
       ],
     });
+
+    onUsage?.({ inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens });
 
     const textBlock = response.content.find((c) => c.type === 'text');
     if (!textBlock || textBlock.type !== 'text') return null;
