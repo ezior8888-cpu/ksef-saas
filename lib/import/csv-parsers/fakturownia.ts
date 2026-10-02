@@ -7,6 +7,7 @@ import Papa from 'papaparse';
 import type { ParsedInvoice, ParsedLine } from '../fa3-parser';
 import { parseAmount, parseDate, cleanNip } from './csv-helpers';
 import type { CsvParseResult } from './types';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 interface FakturowniaRow extends Record<string, string | undefined> {
   Numer?: string;
@@ -209,7 +210,7 @@ function linesFromPositionsJson(
     );
 
     if (!netAmount) {
-      netAmount = Math.round(quantity * unitPriceNet * 100) / 100;
+      netAmount = roundToCents(quantity * unitPriceNet);
     }
 
     const vatRaw = pickStr(p.vat, p.vat_rate, p.stawka, p.tax_rate);
@@ -266,7 +267,7 @@ function reconcileTotals(
   warnings: string[],
 ): void {
   const sumNet =
-    Math.round(lines.reduce((a, l) => a + l.netAmount, 0) * 100) / 100;
+    roundToCents(lines.reduce((a, l) => a + l.netAmount, 0));
 
   if (headerNet > 0 && Math.abs(sumNet - headerNet) > 0.02) {
     warnings.push(
@@ -275,7 +276,7 @@ function reconcileTotals(
   }
 
   if (headerNet > 0 && headerVat >= 0 && headerGross > 0) {
-    const calcGross = Math.round((headerNet + headerVat) * 100) / 100;
+    const calcGross = roundToCents(headerNet + headerVat);
     if (Math.abs(calcGross - headerGross) > 0.02) {
       warnings.push(
         `Niezgodność: Netto+VAT (${calcGross.toFixed(2)}) ≠ Brutto (${headerGross.toFixed(2)})`,

@@ -15,6 +15,8 @@
  * Normalizujemy więc separator do JEDNEGO, świadomie wybranego znaku.
  */
 
+import { roundToCents } from '@/lib/xml/invoice-calculator';
+
 /**
  * Twarda spacja jako separator tysięcy. Wybór celowy: „22 140,00 zł” nie ma
  * prawa złamać się na końcu linii w mailu ani w PDF, a „22” w jednym wierszu
@@ -81,7 +83,7 @@ export function parsePlnAmount(value: string): number | null {
   if (!AMOUNT_INPUT.test(trimmed)) return null;
 
   const parsed = Number(trimmed.replace(/[  ]/g, '').replace(',', '.'));
-  return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : null;
+  return Number.isFinite(parsed) ? roundToCents(parsed) : null;
 }
 
 /**

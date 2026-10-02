@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 
 import type { Invoice, InvoiceLineItem, VatRate } from '@/types/invoice';
 import { CASH_METHOD_LABEL, REVERSE_CHARGE_LABEL, SPLIT_PAYMENT_LABEL } from '@/lib/invoices/annotations';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
  * Renderer PDF faktury FA(3) (Faza 33 Krok 1-2).
@@ -177,7 +178,7 @@ export function amountDueOnPdf(invoice: Invoice): number {
  * Na innych fakturach `amountDueOnPdf` = brutto, więc dopisku nie ma.
  */
 export function settledAdvancesLine(invoice: Invoice): string | null {
-  const advances = Math.round((invoice.grossTotal - amountDueOnPdf(invoice)) * 100) / 100;
+  const advances = roundToCents(invoice.grossTotal - amountDueOnPdf(invoice));
   if (advances <= 0) return null;
   return `Wartość zamówienia ${money(invoice.grossTotal)} PLN, rozliczone zaliczki ${money(advances)} PLN`;
 }

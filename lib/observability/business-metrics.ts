@@ -8,6 +8,7 @@
 
 import { MONTHLY_NET_PLN } from '@/lib/billing/pricing';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 export interface DailyMetrics {
   /** ISO date range. */
@@ -206,7 +207,7 @@ export async function getWeeklyMetrics(): Promise<WeeklyMetrics> {
   // ewentualne starsze subskrypcje roczne liczymy po tej samej stawce.
   const monthlyCount = subs.filter((s) => s.status === 'active' && s.plan === 'monthly').length;
   const annualCount = subs.filter((s) => s.status === 'active' && s.plan === 'annual').length;
-  const mrrPln = Math.round((monthlyCount + annualCount) * MONTHLY_NET_PLN * 100) / 100;
+  const mrrPln = roundToCents((monthlyCount + annualCount) * MONTHLY_NET_PLN);
 
   // Churn — canceled w ostatnich 7 dniach.
   const fromIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();

@@ -43,6 +43,7 @@ import { captureInsertUndo } from '@/lib/flo/undo';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database, TablesInsert } from '@/types/database';
 import type { FloApproveInput } from '@/types/flo';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /** Dobę po terminie, nie w dniu terminu. Przelew bywa w drodze. */
 const ASK_AFTER_DAYS = 1;
@@ -95,7 +96,7 @@ export function selectOverdueForConfirmation(
 }
 
 function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+  return roundToCents(value);
 }
 
 // ═══════════════════════════════════════════════════════════════
