@@ -16,7 +16,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export const VAT_EXEMPTION_PRESETS = [
   {
     value: 'art. 113 ust. 1 ustawy o VAT',
-    label: 'Zwolnienie podmiotowe — sprzedaż do 200 000 zł rocznie (art. 113 ust. 1)',
+    label: 'Zwolnienie podmiotowe — sprzedaż do 240 000 zł rocznie (art. 113 ust. 1)',
   },
   {
     value: 'art. 113 ust. 9 ustawy o VAT',
@@ -39,6 +39,18 @@ export function normalizeExemptionBasis(input: unknown): string | null {
     throw new Error('Podstawa zwolnienia zawiera niedozwolone znaki.');
   }
   return value;
+}
+
+/**
+ * Zwolnienie PODMIOTOWE (art. 113): firma nie jest czynnym podatnikiem VAT,
+ * więc nie odlicza VAT-u od kosztów i nie stosuje metody kasowej.
+ *
+ * Podstawa z art. 43 (sprzedaż zwolniona przedmiotowo) tego nie znaczy —
+ * czynny podatnik ze sprzedażą zwolnioną zachowuje odliczenie (decyzja I2,
+ * AUD-68). Do 02.10 każda podstawa zerowała odliczenie i wyłączała P_16.
+ */
+export function isSubjectiveVatExemption(basis: string | null | undefined): boolean {
+  return typeof basis === 'string' && /\bart\.?\s*113\b/i.test(basis);
 }
 
 /** Kod PostgREST/Postgres „nie ma takiej kolumny” — przed wgraniem 00091. */

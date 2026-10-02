@@ -1,3 +1,7 @@
+// NIEAKTYWNE (AUD-115): moduł agenta FLO bez importera w kodzie produkcyjnym —
+// na produkcji nie działa. Podpięcie = przegląd i zdjęcie znacznika
+// (pilnuje tests/unit/flo-nieaktywne.test.ts).
+
 /**
  * K-05 — odsetki do wezwania o zapłatę (krok 24 planu).
  *
@@ -20,6 +24,8 @@
  * - w transakcjach handlowych — gdy obie strony to firmy; wyższe.
  * Wybór wynika z tego, KIM jest kontrahent, a nie z tego, co jest korzystniejsze.
  */
+
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 // ═══════════════════════════════════════════════════════════════
 // Tabela stóp
@@ -96,7 +102,7 @@ function rateAt(day: number, kind: InterestKind): number {
 }
 
 function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+  return roundToCents(value);
 }
 
 /**

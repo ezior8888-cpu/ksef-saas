@@ -324,6 +324,17 @@ export interface FloDbClient {
     table: 'flo_kind_flags',
   ): FloTableClient<FloKindFlagRow, FloKindFlagInsert>;
   from(table: 'flo_rollout'): FloTableClient<FloRolloutRow, FloRolloutInsert>;
+  /** Atomowe dodanie zużycia AI (00105, AUD-116). */
+  rpc(
+    fn: 'flo_record_usage',
+    args: {
+      p_tenant_id: string;
+      p_day: string;
+      p_input_tokens: number;
+      p_output_tokens: number;
+      p_cost_usd: number;
+    },
+  ): PromiseLike<{ error: { message: string } | null }>;
 }
 
 /**

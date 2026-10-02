@@ -43,13 +43,24 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00100 | Claude | `ops_gate` (bramka Telegram: rola `ops_actor`, schemat `ops`) | PR `claude/bramka-telegram`; wgranie PRZED uruchomieniem bramki |
 | 00100–00101 | Codex (#128, szkic) | `ksef_expense_provenance_guard`, `ksef_expense_full_update_guard` | PR otwarty — **00100 koliduje z `00100_ops_gate` na `main`**, do przenumerowania (od 00103) |
 | 00102 | Claude | `signup_gate_hook` (AUD-63) | PR `claude/naprawy-wylaczniki-2`; wgranie PRZED zmiennymi `GOTRUE_HOOK_BEFORE_USER_CREATED_*` |
-| **00103** | — | następny wolny | — |
+| 00103 | Claude | `org_role_guards` (AUD-29: owner nadaje/odbiera tylko owner) | PR `claude/naprawy-migracje`; zgodna wstecz — wgrana na produkcję przed wdrożeniem |
+| 00104 | Claude | `service_function_grants` (AUD-30, AUD-64: EXECUTE tylko service_role) | PR `claude/naprawy-migracje`; zgodna wstecz — wgrana na produkcję przed wdrożeniem |
+| 00105 | Claude | `flo_usage_increment` (AUD-116: atomowy zapis zużycia AI) | PR `claude/naprawy-flo-budzet`; zgodna wstecz — wgrana przed wdrożeniem |
+| 00106 | Claude | `org_rpc_public_revoke` (dopełnienie 00103: EXECUTE bez PUBLIC) | PR `claude/naprawy-flo-budzet`; zgodna wstecz |
+| 00107 | Claude | `invoice_xml_generated_at` (AUD-46: stała DataWytworzeniaFa) | PR `claude/naprawy-ksef-5`; tylko nowa kolumna — przed wdrożeniem |
+| 00108 | Claude | `flag_require_mfa_sensitive` (AUD-65: wiersz flagi, wyłączony) | PR `claude/naprawy-ksef-5`; tylko INSERT — przed wdrożeniem |
+| 00109 | Claude | `stripe_webhook_retention` (AUD-79: porównanie `data`; AUD-81: retencja payloadów 90 dni) | PR `claude/naprawy-billing`; CREATE OR REPLACE — przed wdrożeniem |
+| 00110 | Claude | `billing_invoice_numbering` (AUD-69: kolejny numer, data PL, status paid) | PR `claude/naprawy-billing`; nowa tabela + funkcja — przed wdrożeniem |
+| 00111 | Claude | `tenant_ksef_credentials_flag` (AUD-103: kolumna generowana `has_ksef_credentials`) | PR `claude/naprawy-reszta`; przed wdrożeniem |
+| 00112 | Claude | `tenant_credentials_column_privileges` (AUD-103: bez SELECT blobu KSeF dla ról klienckich) | PR `claude/naprawy-reszta`; **PO wdrożeniu kodu** — nowe kolumny `tenants` wymagają odtąd jawnego GRANT SELECT |
+| 00113 | Claude | `user_deletion_foreign_keys` (AUD-41: autor wydatku, OCR i dostępu księgowej → `ON DELETE SET NULL`; `gdpr_user_deletion_blockers` przed anonimizacją; AUD-81: stare `email_bounces.raw_payload`) | PR `claude/naprawy-rodo-2`; przed wdrożeniem (kod sprawdza funkcję) |
+| **00114** | — | następny wolny | — |
 
 ---
 
 ## Otwarte
 
-### C-01 · Konwencja kwot korekty sprzedaży — `OTWARTE` · decyzja: Igor + Codex
+### C-01 · Konwencja kwot korekty sprzedaży — `ROZSTRZYGNIĘTE (02.10.2026, I1: różnica; #146)` · decyzja: Igor + Codex
 
 **Stan na `main`:** korekta zapisuje w `invoices.net_total/vat_total/gross_total`
 wartości `totals.*After` (`components/invoices/correction-actions.ts`):
@@ -70,6 +81,12 @@ Pytanie do Codexa: czy #63 może to ujednolicić, czy konsumentów poprawia Clau
 po scaleniu #63?
 
 **Odpowiedź Codexa:** —
+
+**Rozstrzygnięcie (02.10.2026, Igor/Bartosz — decyzja I1):** dla obu rodzajów
+korekty `invoices.*_total` = **różnica**. Wdrożone w Claude #146
+(`correction-actions.ts`: `totals.*Delta`; generator KOR: P_13/P_14/P_15 =
+różnica, wiersze `StanPrzed`). #63 przy rebase przyjmuje tę konwencję — nie
+przywraca `ghost.netTotal` = wartości po korekcie. Status: `ROZSTRZYGNIĘTE`.
 
 ### C-02 · Filtr środowiska KSeF dla kosztów — `W TOKU` (#71) · wykonanie: Codex
 

@@ -31,7 +31,21 @@ import TrialEnding from './templates/TrialEnding';
 // ═══════════════════════════════════════════════════════════════
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-const DEFAULT_FROM = 'KSeF SaaS <onboarding@resend.dev>';
+/**
+ * Domyślny nadawca z domeny FaktFlow (AUD-97). Do 02.10 był to
+ * `onboarding@resend.dev` — domena dostawcy, którą Resend przyjmuje tylko na
+ * koncie testowym. Produkcja ustawia RESEND_FROM_* jawnie.
+ */
+const DEFAULT_FROM = 'FaktFlow <no-reply@app.faktflow.pl>';
+
+/** Pusta zmienna to brak zmiennej — `??` przepuszczał pusty napis. */
+function envSender(...names: string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
 
 /**
  * DEV-only override: Resend na FREE planie (bez weryfikowanej domeny)
@@ -73,17 +87,9 @@ function getResend(): Resend {
  */
 function getFromEmail(category: 'transactional' | 'product_updates' | 'marketing'): string {
   if (category === 'transactional') {
-    return (
-      process.env.RESEND_FROM_TRANSACTIONAL ??
-      process.env.RESEND_FROM_EMAIL ??
-      DEFAULT_FROM
-    );
+    return envSender('RESEND_FROM_TRANSACTIONAL', 'RESEND_FROM_EMAIL') ?? DEFAULT_FROM;
   }
-  return (
-    process.env.RESEND_FROM_MARKETING ??
-    process.env.RESEND_FROM_EMAIL ??
-    DEFAULT_FROM
-  );
+  return envSender('RESEND_FROM_MARKETING', 'RESEND_FROM_EMAIL') ?? DEFAULT_FROM;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -135,6 +141,12 @@ async function sendViaResend(opts: {
   userId?: string;
   /** Faza 33: załączniki (np. PDF faktury). */
   attachments?: Array<{ filename: string; content: Buffer }>;
+  /**
+   * Klucz idempotencji Resend (nagłówek `Idempotency-Key`, ważny 24 h).
+   * Ten sam klucz przy ponowieniu zadania = Resend nie wyśle drugi raz
+   * (AUD-86). Klucz zależy od zdarzenia, nie od próby.
+   */
+  idempotencyKey?: string;
 }): Promise<EmailStubResult> {
   const category: EmailCategory = opts.category ?? 'transactional';
   const finalTo = DEV_TO_OVERRIDE ?? opts.to;
@@ -170,7 +182,7 @@ async function sendViaResend(opts: {
     }
   }
 
-  const { data, error } = await getResend().emails.send({
+  const message = {
     from: getFromEmail(category),
     // Nadawca to no-reply@ — bez tego odpowiedź klienta ginie (MAN-18).
     replyTo: SUPPORT_EMAIL,
@@ -182,7 +194,11 @@ async function sendViaResend(opts: {
       filename: a.filename,
       content: a.content,
     })),
-  });
+  };
+  // Bez klucza wywołanie jak dotąd — jeden argument.
+  const { data, error } = opts.idempotencyKey
+    ? await getResend().emails.send(message, { idempotencyKey: opts.idempotencyKey })
+    : await getResend().emails.send(message);
   if (error) {
     // Inngest potrzebuje rzuconego błędu żeby ruszyć retry. Serializujemy
     // cały obiekt - Resend wpakowuje tam `name/message/statusCode`.
@@ -195,9 +211,16 @@ async function sendViaResend(opts: {
 // PUBLIC API
 // ═══════════════════════════════════════════════════════════════
 
+/** Opcje wysyłki z zadań, które mogą się powtórzyć (retry). */
+export interface SendOptions {
+  /** Zob. `idempotencyKey` w `sendViaResend`. */
+  idempotencyKey?: string;
+}
+
 export async function sendInvoiceAcceptedEmail(
   email: string,
   payload: InvoiceAcceptedPayload,
+  options: SendOptions = {},
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
     logger.debug(
@@ -213,12 +236,14 @@ export async function sendInvoiceAcceptedEmail(
     to: email,
     subject: `Faktura ${payload.ksefNumber} wysłana do KSeF`,
     html,
+    idempotencyKey: options.idempotencyKey,
   });
 }
 
 export async function sendInvoiceFailedEmail(
   email: string,
   payload: InvoiceFailedPayload,
+  options: SendOptions = {},
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
     logger.debug(
@@ -232,6 +257,7 @@ export async function sendInvoiceFailedEmail(
     to: email,
     subject: 'Faktura odrzucona przez KSeF',
     html,
+    idempotencyKey: options.idempotencyKey,
   });
 }
 
@@ -299,6 +325,7 @@ export interface TrialEndingPayload {
 export async function sendTrialEndingEmail(
   email: string,
   payload: TrialEndingPayload,
+  options: SendOptions = {},
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
     logger.debug(
@@ -316,7 +343,7 @@ export async function sendTrialEndingEmail(
   const subject = isFinalDay
     ? '⏰ Twój trial FaktFlow kończy się jutro'
     : `Twój trial FaktFlow kończy się za ${payload.daysRemaining} dni`;
-  return sendViaResend({ to: email, subject, html });
+  return sendViaResend({ to: email, subject, html, idempotencyKey: options.idempotencyKey });
 }
 
 export interface PaymentFailedPayload {

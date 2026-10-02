@@ -14,6 +14,8 @@
  * sprawa dla księgowej; ta reguła usuwa tylko dubel.
  */
 
+import { roundToCents } from '@/lib/xml/invoice-calculator';
+
 export interface KpirRevenueInput {
   /** `invoices.invoice_kind` albo `JpkInvoice.invoiceType`. */
   kind: string | null | undefined;
@@ -61,5 +63,5 @@ function plDate(iso: string): string {
 }
 
 function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+  return roundToCents(n);
 }

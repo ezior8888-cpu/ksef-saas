@@ -7,7 +7,7 @@
 // na `pending` lub `failed`. UPO to dokument prawny — bez niego klient nie
 // ma dowodu w razie kontroli skarbowej, więc nie odpuszczamy.
 //
-// Trigger: co godzinę o pełnej minucie (synchronicznie z `refresh-materialized-views`,
+// Trigger: co godzinę o pełnej minucie (dawniej synchronicznie z `refresh-materialized-views`,
 // żeby operator widział obie aktywności w jednym oknie monitoringu).
 //
 // Rate limit: max 100 retry per uruchomienie, żeby cron nie zatkał kolejki
@@ -58,7 +58,7 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
   if (!stale.length) return { processed: 0, cutoffIso };
   logger.info('UPO retry: znaleziono zaległości', { count: stale.length, cutoffIso });
 
-  const events: Array<{ name: 'invoice/upo.requested'; data: {
+  const events: Array<{ name: 'invoice/upo.requested'; groupId: string; data: {
     invoiceId: string; tenantId: string; ksefNumber: string; nip: string;
   } }> = [];
   let quarantined = 0;
@@ -114,7 +114,8 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
       Sentry.captureMessage('UPO retry skipped — brak NIP-u dla invoice', { level: 'warning' });
       continue;
     }
-    events.push({ name: 'invoice/upo.requested', data: { ...identity, nip } });
+    // groupId = NIP: limit „3 naraz per NIP” w pg-boss działa tylko z grupą (AUD-92).
+    events.push({ name: 'invoice/upo.requested', groupId: nip, data: { ...identity, nip } });
   }
   if (events.length) await step.sendEvent('re-request-upo', events);
   Sentry.addBreadcrumb({ category: 'ksef.upo', level: 'info', message: 'UPO retry batch dispatched',

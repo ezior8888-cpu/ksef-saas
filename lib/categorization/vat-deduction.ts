@@ -1,3 +1,5 @@
+import { roundToCents } from '@/lib/xml/invoice-calculator';
+
 /**
  * VAT do odliczenia po ręcznej poprawce kwoty VAT wydatku.
  *
@@ -14,5 +16,5 @@ export function deductibleAfterVatChange(
   newVat: number,
 ): number {
   if (before.vat === 0 || before.deductible === before.vat) return newVat;
-  return Math.round(newVat * (before.deductible / before.vat) * 100) / 100;
+  return roundToCents(newVat * (before.deductible / before.vat));
 }

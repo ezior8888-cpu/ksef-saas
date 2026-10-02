@@ -982,7 +982,7 @@ export function InvoiceForm({
             </label>
             {podpowiedzMpp ? (
               <p className="text-xs text-[var(--ff-text-muted)]">
-                Faktura dla firmy na co najmniej 15 000 zł brutto. Jeśli sprzedajesz towary lub usługi z załącznika 15
+                Faktura dla firmy na ponad 15 000 zł brutto. Jeśli sprzedajesz towary lub usługi z załącznika 15
                 do ustawy o VAT (np. roboty budowlane, elektronika, paliwa), MPP jest obowiązkowy.
               </p>
             ) : null}

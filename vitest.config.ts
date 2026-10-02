@@ -17,7 +17,7 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.test.{ts,tsx}'],
-    exclude: ['tests/rls-isolation.test.ts'],
+    exclude: ['tests/rls-isolation.test.ts', 'tests/rls-uprawnienia.test.ts'],
     environment: 'node',
     globals: true,
     setupFiles: ['./tests/setup.ts'],

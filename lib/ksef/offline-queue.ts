@@ -54,7 +54,11 @@ export async function addToOfflineQueue(
     params.invoiceId,
     idempotencySource,
   );
-  const deadline = calculateOfflineDeadline(now, params.isMfOutage);
+  // Termin od daty wystawienia (P_1), w dniach roboczych PL (AUD-15).
+  const deadline = calculateOfflineDeadline(
+    String(invoiceRow.issue_date ?? now.toISOString().slice(0, 10)),
+    params.isMfOutage,
+  );
 
   const tenants = invoiceRow.tenants as
     | { nip: string }

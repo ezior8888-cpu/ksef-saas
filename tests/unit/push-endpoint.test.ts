@@ -11,20 +11,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ upsert: vi.fn(), update: vi.fn(), send: vi.fn(), rows: [] as Record<string, unknown>[] }));
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('@/lib/supabase/active-org', () => ({ getActiveOrgIdFromCookies: async () => '11111111-1111-4111-8111-111111111111' }));
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: { id: 'fixture-user' } } }) },
-    from: () => {
-      const q = {
-        upsert: async (row: unknown) => { mocks.upsert(row); return { error: null }; },
-        update: (patch: unknown) => { mocks.update(patch); return q; },
-        eq: () => q,
-        then: (ok: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(ok),
-      };
-      return q;
-    },
+// Od AUD-58 akcje wchodzą przez auth-context (sesja po MFA, członkostwo firmy).
+const userClient = {
+  from: () => {
+    const q = {
+      upsert: async (row: unknown) => { mocks.upsert(row); return { error: null }; },
+      update: (patch: unknown) => { mocks.update(patch); return q; },
+      eq: () => q,
+      then: (ok: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(ok),
+    };
+    return q;
+  },
+};
+vi.mock('@/lib/supabase/auth-context', () => ({
+  ActionAuthError: class ActionAuthError extends Error {},
+  requireUserAndActiveOrg: async () => ({
+    supabase: userClient, user: { id: 'fixture-user' }, tenantId: '11111111-1111-4111-8111-111111111111', role: 'owner',
   }),
+  requireVerifiedUser: async () => ({ supabase: userClient, user: { id: 'fixture-user' } }),
 }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({

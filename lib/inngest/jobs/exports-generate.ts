@@ -39,6 +39,11 @@ import {
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
 import { generateJpkFa, JpkFaCorrectionNotSupportedError } from '@/lib/exports/jpk-fa-generator';
+import {
+  assertJpkMatchesSchema,
+  JPK_SCHEMA_ERROR_MESSAGES,
+  JpkSchemaError,
+} from '@/lib/exports/jpk-schema-check';
 import { MissingTaxOfficeError, readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { readTaxpayerEmail } from '@/lib/exports/taxpayer-email';
 import {
@@ -108,6 +113,7 @@ async function generateExportFile(
         issuedInvoices: data.issuedInvoices,
         expenses: data.expenses,
       });
+      await assertJpkMatchesSchema('JPK_V7M', xml);
       return {
         buffer: Buffer.from(xml, 'utf8'),
         filename: `JPK_V7M_${nip}_${periodStr}.xml`,
@@ -122,6 +128,7 @@ async function generateExportFile(
         periodEnd: job.period_end,
         issuedInvoices: data.issuedInvoices,
       });
+      await assertJpkMatchesSchema('JPK_FA', xml);
       return {
         buffer: Buffer.from(xml, 'utf8'),
         filename: `JPK_FA_${nip}_${periodStr}.xml`,
@@ -235,6 +242,7 @@ const HUMAN_EXPORT_ERRORS = [
   new MissingIssuerAddressError().message,
   new JpkFaCorrectionNotSupportedError().message,
   new JpkV7mReverseChargeNotSupportedError().message,
+  ...JPK_SCHEMA_ERROR_MESSAGES,
 ];
 
 /**
@@ -264,7 +272,7 @@ export async function onExportsGenerateExhausted(
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
  */
-export async function runExportsGenerate(eventData: Parameters<typeof exportsGenerateRequested.create>[0], { step }: JobContext) {
+export async function runExportsGenerate(eventData: Parameters<typeof exportsGenerateRequested.create>[0], { step, logger }: JobContext) {
     const { exportJobId } = eventData;
     const supabase = createAdminClient();
 
@@ -377,6 +385,15 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
         } catch (e) {
           // Ponowienie nic nie da — urząd ustawia człowiek, adresu GUS nie ma,
           // korekt JPK_FA nie obsługuje (C-01), a odwrotnego obciążenia JPK_V7M.
+          // Plik niezgodny z XSD MF też: ten sam generator zbuduje go znowu.
+          if (e instanceof JpkSchemaError) {
+            logger.error('Plik JPK niezgodny z XSD MF — nie wydany', {
+              exportJobId,
+              kind: e.kind,
+              errors: e.details,
+            });
+            throw new NonRetriableError(e.message);
+          }
           if (
             e instanceof MissingTaxOfficeError ||
             e instanceof MissingTaxpayerEmailError ||

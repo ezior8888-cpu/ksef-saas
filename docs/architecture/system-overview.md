@@ -1,5 +1,16 @@
 # System Overview (Faza 35)
 
+> ## ⚠️ TEN DOKUMENT JEST NIEAKTUALNY
+>
+> Opis architektury z czasów Vercela, Supabase Cloud (Frankfurt), Inngest i Edge Config. Produkcja stoi na **Hetznerze pod Coolify**,
+> joby chodzą na **pg-boss**, baza to **Supabase self-hosted** na `db-1`.
+>
+> **Aktualne procedury: `AGENTS.md`, sekcja „Infrastruktura i dostępy",
+> oraz `docs/runbooks/joby-pg-boss.md`.** Nie wykonuj poleceń z tego pliku
+> na produkcji bez sprawdzenia ich tam (AUD-110).
+
+---
+
 Wysokopoziomowy obraz wszystkich komponentów KSeF SaaS i jak się ze sobą gadają.
 Punkt startowy dla nowego dewa — przeczytaj zanim wskoczysz w kod.
 

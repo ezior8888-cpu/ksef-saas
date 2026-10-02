@@ -5,8 +5,7 @@ import { z } from 'zod';
 
 import { generateAccountantToken } from '@/lib/accountant/tokens';
 import { logAudit } from '@/lib/audit/log';
-import { createClient } from '@/lib/supabase/server';
-import { requireOwner } from '@/lib/supabase/auth-context';
+import { ActionAuthError, requireOwner } from '@/lib/supabase/auth-context';
 
 const createTokenSchema = z.object({
   name: z.string().min(1).max(100),
@@ -89,11 +88,17 @@ export type RevokeAccountantTokenResult =
 export async function revokeAccountantTokenAction(
   accessId: string
 ): Promise<RevokeAccountantTokenResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Brak sesji' };
+  // Jak przy tworzeniu: właściciel aktywnej firmy po drugim kroku MFA.
+  // Do 02.10 wystarczał `getUser()` (AUD-58); RLS i tak wpuszcza tylko
+  // właściciela, ale błąd był wtedy „nie znaleziono wpisu”.
+  let ctx: Awaited<ReturnType<typeof requireOwner>>;
+  try {
+    ctx = await requireOwner();
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { success: false, error: e.message };
+    throw e;
+  }
+  const { supabase, user, tenantId } = ctx;
 
   const { data: row, error: selErr } = await supabase
     .from('accountant_access')
@@ -102,7 +107,7 @@ export async function revokeAccountantTokenAction(
     .maybeSingle();
 
   if (selErr) return { success: false, error: selErr.message };
-  if (!row?.tenant_id) {
+  if (!row?.tenant_id || row.tenant_id !== tenantId) {
     return { success: false, error: 'Nie znaleziono wpisu lub brak uprawnień.' };
   }
 

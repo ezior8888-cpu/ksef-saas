@@ -31,8 +31,9 @@ export default function GdprPage() {
             standardowym (30 dni)
           </li>
           <li>
-            ✅ <strong>Prawo do bycia zapomnianym</strong> — usuwanie wszystkich
-            danych w 30 dni od żądania
+            ✅ <strong>Prawo do bycia zapomnianym</strong> — usunięcie konta
+            najpóźniej w ciągu miesiąca od żądania (14 dni na wycofanie decyzji;
+            faktury po upływie obowiązkowej retencji)
           </li>
           <li>
             ✅ <strong>Audit logs</strong> — kto i kiedy uzyskał dostęp do

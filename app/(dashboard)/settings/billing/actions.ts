@@ -8,6 +8,8 @@ import { createCheckoutSession, type CheckoutPlan } from '@/lib/stripe/checkout'
 import { createPortalSession } from '@/lib/stripe/portal';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getPageContext } from '@/lib/supabase/page-context';
+import { assertSensitiveMfa, SensitiveMfaRequiredError } from '@/lib/auth/sensitive-mfa';
+import { syncStripeCustomerEmail } from '@/lib/stripe/customer-email';
 
 /**
  * Server actions dla `/settings/billing` (Faza 25 Krok 2).
@@ -44,6 +46,10 @@ export async function startCheckoutAction(plan: CheckoutPlan): Promise<void> {
   if (!canManageBilling(ctx.role)) {
     redirect('/settings/billing?error=forbidden');
   }
+  // AAL2 przy płatnościach, gdy flaga włączona (AUD-65).
+  if (!(await billingMfaSatisfied(ctx))) {
+    redirect('/settings/billing?error=mfa-required');
+  }
 
   // Sprzedajemy wyłącznie plan miesięczny (lib/billing/pricing.ts). Stara
   // karta w otwartej zakładce nie może założyć subskrypcji rocznej.
@@ -58,13 +64,14 @@ export async function startCheckoutAction(plan: CheckoutPlan): Promise<void> {
   const admin = createAdminClient();
   const { data: tenant } = await admin
     .from('tenants')
-    .select('name, nip')
+    .select('name, nip, stripe_customer_id')
     .eq('id', ctx.tenantId)
     .maybeSingle();
 
   if (!tenant) {
     redirect('/settings/billing?error=tenant-not-found');
   }
+  await syncBillingEmail(tenant.stripe_customer_id, ctx.user.email, ctx.tenantId);
 
   let url: string;
   try {
@@ -101,6 +108,10 @@ export async function openCustomerPortalAction(): Promise<void> {
   if (!canManageBilling(ctx.role)) {
     redirect('/settings/billing?error=forbidden');
   }
+  // AAL2 przy płatnościach, gdy flaga włączona (AUD-65).
+  if (!(await billingMfaSatisfied(ctx))) {
+    redirect('/settings/billing?error=mfa-required');
+  }
 
   if (!isStripeConfigured()) {
     redirect('/settings/billing?error=not-configured');
@@ -109,13 +120,14 @@ export async function openCustomerPortalAction(): Promise<void> {
   const admin = createAdminClient();
   const { data: tenant } = await admin
     .from('tenants')
-    .select('name, nip')
+    .select('name, nip, stripe_customer_id')
     .eq('id', ctx.tenantId)
     .maybeSingle();
 
   if (!tenant) {
     redirect('/settings/billing?error=tenant-not-found');
   }
+  await syncBillingEmail(tenant.stripe_customer_id, ctx.user.email, ctx.tenantId);
 
   let url: string;
   try {
@@ -150,4 +162,28 @@ export async function openCustomerPortalAction(): Promise<void> {
   }
 
   redirect(url);
+}
+
+async function billingMfaSatisfied(ctx: { tenantId: string; user: { id: string } }): Promise<boolean> {
+  try {
+    await assertSensitiveMfa({ tenantId: ctx.tenantId, userId: ctx.user.id }, 'billing');
+    return true;
+  } catch (e) {
+    if (e instanceof SensitiveMfaRequiredError) return false;
+    throw e;
+  }
+}
+
+/**
+ * Adres osoby zarządzającej płatnościami do klienta Stripe (AUD-78). Błąd
+ * nie blokuje Checkout/Portalu — trafia do Sentry.
+ */
+async function syncBillingEmail(customerId: string | null, email: string | null, tenantId: string): Promise<void> {
+  if (!customerId) return;
+  try {
+    await syncStripeCustomerEmail(customerId, email);
+  } catch (e) {
+    const Sentry = await import('@sentry/nextjs');
+    Sentry.captureException(e, { tags: { area: 'billing.customer-email' }, extra: { tenantId } });
+  }
 }

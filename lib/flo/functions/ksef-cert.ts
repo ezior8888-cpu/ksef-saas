@@ -114,22 +114,24 @@ export function shouldWarn(daysLeft: number | null): boolean {
 }
 
 /**
- * Okno, w którym zadanie szuka certyfikatów na danym progu: `[próg−1, próg]`
- * dni od teraz. Jednodniowe, żeby jeden próg trafiał jednego dnia, a nie
- * codziennie przez tydzień.
+ * Najpilniejszy próg, który certyfikat już przekroczył: wygasa za najwyżej
+ * `próg` dni. `null` — do wygaśnięcia dalej niż najwyższy próg albo już
+ * po terminie.
  *
- * Tutaj, a nie w zadaniu, bo z tym oknem musi się zgadzać karta: w tym oknie
- * `evaluateCert` policzy `próg−1` dni (zaokrąglenie w dół), więc karta nie
- * może pytać `shouldWarn` o `daysLeft` — musi dostać próg, na którym
- * wywołało ją zadanie. Test szwu w `flo-ksef-fix-cert.test.ts` pilnuje obu
- * stron naraz.
+ * Do 02.10 zadanie szukało certyfikatów w jednodniowym oknie `[próg−1, próg]`
+ * — jeden pominięty przebieg (awaria workera, wdrożenie o 8:00) i firma nie
+ * dostawała ostrzeżenia na tym progu wcale (AUD-53). Teraz zadanie nadrabia:
+ * bierze próg stąd i samo pamięta, który już wysłało.
+ *
+ * Karta dostaje ten próg wprost: przy nadrabianiu `evaluateCert` policzy
+ * dowolną liczbę dni poniżej progu, a `shouldWarn` przepuszcza tylko progi.
  */
-export function certExpiryWindow(days: number, now: Date): { from: Date; to: Date } {
-  const DAY = 86_400_000;
-  return {
-    from: new Date(now.getTime() + (days - 1) * DAY),
-    to: new Date(now.getTime() + days * DAY),
-  };
+export function dueCertThreshold(expiresAt: string | null, now: Date): number | null {
+  if (!expiresAt) return null;
+  const msLeft = Date.parse(expiresAt) - now.getTime();
+  if (!Number.isFinite(msLeft) || msLeft <= 0) return null;
+  const crossed = WARN_THRESHOLDS.filter((t) => msLeft <= t * 86_400_000);
+  return crossed.length > 0 ? Math.min(...crossed) : null;
 }
 
 // ═══════════════════════════════════════════════════════════════

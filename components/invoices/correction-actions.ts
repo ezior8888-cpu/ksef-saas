@@ -16,6 +16,7 @@ import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
 import { calculateLineItem, calculateInvoiceTotals, roundToCents } from '@/lib/xml/invoice-calculator';
 import type { Invoice, InvoiceLineItem, BuyerParty, PaymentMethod, SellerParty } from '@/types/invoice';
 import type { BuyerB2B, BuyerData, CorrectionInvoiceData, InvoiceLine, SellerData } from '@/types/invoice-types';
+import { loadParentAnnotations } from '@/lib/invoices/correction-annotations';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Tenant
@@ -497,6 +498,8 @@ export async function saveCorrectionDraftAction(
       return { success: false, error: normalized.error };
     }
     const envelope = buildCorrectionEnvelope(normalized as CorrectionInvoiceSchemaIn);
+    // P_16/P_18A z faktury pierwotnej (AUD-23) — zapis i wysyłka mają te same.
+    envelope.annotations = await loadParentAnnotations(supabase, tenant.id, envelope.parentInvoiceId);
     const lines = linesToStoredItems(envelope);
 
     const result = await insertCorrection(supabase, tenant.id, envelope, lines);
@@ -527,6 +530,8 @@ export async function saveAndSendCorrectionAction(
       return { success: false, error: normalized.error };
     }
     const envelope = buildCorrectionEnvelope(normalized as CorrectionInvoiceSchemaIn);
+    // P_16/P_18A z faktury pierwotnej (AUD-23) — zapis i wysyłka mają te same.
+    envelope.annotations = await loadParentAnnotations(supabase, tenant.id, envelope.parentInvoiceId);
     const lines = linesToStoredItems(envelope);
     const ghost = ghostInvoice(envelope, lines);
 

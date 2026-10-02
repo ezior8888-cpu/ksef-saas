@@ -38,6 +38,11 @@ export interface JobDefinition<TData = unknown> {
   ) => Promise<unknown>;
   /** pg-boss work: ile jobów naraz (globalna równoległość kolejki). Default 1. */
   batchSize?: number;
+  /**
+   * pg-boss 12: ilu workerów pobiera z kolejki naraz w tym procesie.
+   * Default 1 = kolejka szeregowa dla wszystkich firm (AUD-36).
+   */
+  localConcurrency?: number;
   /** pg-boss 12: limit równoległości per grupa (np. per tenant). */
   groupConcurrency?: number;
   handler: (data: TData, ctx: JobContext) => Promise<unknown>;

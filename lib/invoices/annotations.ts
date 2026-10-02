@@ -6,9 +6,11 @@
  */
 import type { Invoice, InvoiceLineItem } from '@/types/invoice';
 
+import { isSubjectiveVatExemption } from './vat-exemption';
+
 /**
- * Próg MPP: faktura na kwotę brutto co najmniej 15 000 zł (art. 108a ust. 1a
- * ustawy o VAT) z towarem/usługą z zał. 15. Aplikacja nie zna zał. 15 —
+ * Próg MPP: kwota należności ogółem PRZEKRACZA 15 000 zł (art. 108a ust. 1a
+ * ustawy o VAT; tak też XSD FA(3)) przy towarze/usłudze z zał. 15 (AUD-96). Aplikacja nie zna zał. 15 —
  * podpowiada przy fakturze dla firmy powyżej progu, decyduje klient.
  */
 export const SPLIT_PAYMENT_THRESHOLD_PLN = 15_000;
@@ -26,7 +28,7 @@ export const SPLIT_PAYMENT_LABEL = 'mechanizm podzielonej płatności';
 export const REVERSE_CHARGE_LABEL = 'odwrotne obciążenie';
 
 export function suggestsSplitPayment(grossTotal: number, buyerIsConsumer: boolean): boolean {
-  return !buyerIsConsumer && grossTotal >= SPLIT_PAYMENT_THRESHOLD_PLN;
+  return !buyerIsConsumer && grossTotal > SPLIT_PAYMENT_THRESHOLD_PLN;
 }
 
 export function buildInvoiceAnnotations(input: {
@@ -44,8 +46,9 @@ export function buildInvoiceAnnotations(input: {
   }
   // P_18A = 1 — mechanizm podzielonej płatności.
   if (input.splitPayment) annotations.splitPayment = 1;
-  // P_16 = 1 — metoda kasowa. Firma zwolniona z VAT nie rozlicza VAT-u, więc
-  // metoda kasowa jej nie dotyczy.
-  if (input.cashMethod && !input.vatExemptionBasis) annotations.cashMethod = 1;
+  // P_16 = 1 — metoda kasowa. Firma zwolniona PODMIOTOWO (art. 113) nie
+  // rozlicza VAT-u, więc metoda kasowa jej nie dotyczy; podstawa z art. 43
+  // (sprzedaż zwolniona przedmiotowo) jej nie wyklucza — I2, AUD-68.
+  if (input.cashMethod && !isSubjectiveVatExemption(input.vatExemptionBasis)) annotations.cashMethod = 1;
   return Object.keys(annotations).length > 0 ? annotations : undefined;
 }

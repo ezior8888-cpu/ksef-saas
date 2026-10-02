@@ -1,5 +1,16 @@
 # Disaster Recovery Runbook (Faza 29)
 
+> ## ⚠️ TEN DOKUMENT JEST NIEAKTUALNY
+>
+> Scenariusze opisują Vercela, Supabase Cloud i Inngest Cloud, z których zrezygnowaliśmy w sierpniu–wrześniu 2026. Produkcja stoi na **Hetznerze pod Coolify**,
+> joby chodzą na **pg-boss**, baza to **Supabase self-hosted** na `db-1`.
+>
+> **Aktualne procedury: `AGENTS.md`, sekcja „Infrastruktura i dostępy",
+> oraz `docs/runbooks/joby-pg-boss.md`.** Nie wykonuj poleceń z tego pliku
+> na produkcji bez sprawdzenia ich tam (AUD-110).
+
+---
+
 Procedury awaryjne dla 7 najbardziej prawdopodobnych scenariuszy. Każdy
 scenariusz ma:
 - **Detection** — jak się dowiadujemy że coś padło

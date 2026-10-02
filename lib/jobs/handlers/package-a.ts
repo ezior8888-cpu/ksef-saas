@@ -18,7 +18,6 @@ import { runGdprProcessDeletions } from '../../inngest/jobs/gdpr-process-deletio
 import { runJobsWatchdog } from '../../inngest/jobs/jobs-watchdog';
 import { runKsefHealthCheck } from '../../inngest/jobs/ksef-health-check';
 import { runNightlyValidationRecheck } from '../../inngest/jobs/nightly-validation-recheck';
-import { runRefreshMaterializedViews } from '../../inngest/jobs/refresh-materialized-views';
 import { runRetentionDelete } from '../../inngest/jobs/retention-delete';
 import { runVerifyBackup } from '../../inngest/jobs/verify-backup';
 import { registerJob, type JobContext } from '../registry';
@@ -51,6 +50,5 @@ cronJob(
   runNightlyValidationRecheck,
   1, // parytet: retries: 1 w konfiguracji Inngest tego joba
 );
-cronJob('cron.refresh-materialized-views', runRefreshMaterializedViews);
 cronJob('cron.retention-delete', runRetentionDelete);
 cronJob('cron.verify-backup', runVerifyBackup);

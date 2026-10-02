@@ -64,8 +64,24 @@ export async function runCleanupAuditLogs({ step }: JobContext) {
       });
     }
 
-    return result ?? { skipped: true as const };
+    // Retencja surowych zdarzeń Stripe: 90 dni od przetworzenia (AUD-81, B9).
+    // Ten sam miesięczny przebieg — bez osobnego crona.
+    const stripePayloadsPruned = await step.run('prune-stripe-payloads', async () => {
+      const { data, error } = await (supabase.rpc as unknown as (
+        fn: string,
+        args: { p_retention_days: number },
+      ) => Promise<{ data: number | null; error: { message: string } | null }>)('prune_stripe_webhook_payloads', {
+        p_retention_days: STRIPE_PAYLOAD_RETENTION_DAYS,
+      });
+      if (error) throw new Error(`prune_stripe_webhook_payloads failed: ${error.message}`);
+      return data ?? 0;
+    });
+
+    return result ? { ...result, stripe_payloads_pruned: stripePayloadsPruned } : { skipped: true as const };
 }
+
+/** Surowe zdarzenia Stripe po przetworzeniu (decyzja B9). */
+const STRIPE_PAYLOAD_RETENTION_DAYS = 90;
 
 export const cleanupAuditLogsJob = inngest.createFunction(
   {

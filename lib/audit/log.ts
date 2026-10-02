@@ -64,6 +64,9 @@ export type AuditAction =
   | 'ksef.credentials_uploaded'
   | 'ksef.credentials_removed'
   | 'ksef.environment_changed'
+  // Ostrzeżenie o wygasającym certyfikacie dostarczone (mail albo push) —
+  // zadanie cert-expiry-alert czyta stąd, które progi już wysłało (AUD-53).
+  | 'ksef.cert_expiry_alert'
   // Faza 23 sekcja 3 — audyt każdej interakcji z KSeF API.
   | 'ksef.session.open'
   | 'ksef.session.close'

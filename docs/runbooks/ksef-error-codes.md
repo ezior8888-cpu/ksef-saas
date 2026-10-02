@@ -150,7 +150,7 @@ Po większym release KSeF (zwykle co kwartał MF publikuje nowe kody):
 2. Diff z `error_translations` w DB.
 3. Nowa migracja `00XXX_ksef_error_codes_<data>.sql` z INSERT-ami /
    UPDATE-ami.
-4. Deploy przez `pnpm db:push:prod`.
+4. Migracja na produkcję ręcznie wg `AGENTS.md`, „Wgrywanie migracji na produkcję” (`pnpm db:push:prod` NIE działa), potem wdrożenie web i worker.
 
 ## Powiązane
 

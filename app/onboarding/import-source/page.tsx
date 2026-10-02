@@ -33,13 +33,13 @@ export default async function ImportSourcePage() {
 
   const { data: tenant } = await admin
     .from('tenants')
-    .select('name, nip, ksef_credentials_encrypted')
+    .select('name, nip, has_ksef_credentials')
     .eq('id', tenantId)
     .maybeSingle();
 
   if (!tenant) redirect('/onboarding');
 
-  const hasCertificate = !!tenant.ksef_credentials_encrypted;
+  const hasCertificate = !!tenant.has_ksef_credentials;
 
   return (
     <div className="ff-dashboard relative flex min-h-screen items-center justify-center overflow-hidden p-4 text-[var(--ff-on-surface)]">

@@ -8,6 +8,7 @@
 
 import { XMLParser } from 'fast-xml-parser';
 import { assertPlnCurrency, type ParsedInvoice, type ParsedLine, type ParsedParty } from './fa3-parser';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -555,5 +556,5 @@ function optionalNum(raw: unknown): number | undefined {
 }
 
 function roundCents(n: number): number {
-  return Math.round(n * 100) / 100;
+  return roundToCents(n);
 }

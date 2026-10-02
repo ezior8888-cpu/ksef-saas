@@ -10,6 +10,8 @@
  * jako 1 000 zł kosztu, a klient przepłacał podatek dochodowy.
  */
 
+import { roundToCents } from '@/lib/xml/invoice-calculator';
+
 /** Dokumenty, z których czynny podatnik odlicza VAT (to samo co JPK_V7M). */
 export const VAT_DEDUCTIBLE_DOCUMENTS: ReadonlySet<string> = new Set(['invoice', 'simplified_invoice']);
 
@@ -42,5 +44,5 @@ export function kpirCostAmount(e: KpirCostInput): number {
 }
 
 function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+  return roundToCents(n);
 }
