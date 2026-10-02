@@ -16,7 +16,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export const VAT_EXEMPTION_PRESETS = [
   {
     value: 'art. 113 ust. 1 ustawy o VAT',
-    label: 'Zwolnienie podmiotowe — sprzedaż do 200 000 zł rocznie (art. 113 ust. 1)',
+    label: 'Zwolnienie podmiotowe — sprzedaż do 240 000 zł rocznie (art. 113 ust. 1)',
   },
   {
     value: 'art. 113 ust. 9 ustawy o VAT',
