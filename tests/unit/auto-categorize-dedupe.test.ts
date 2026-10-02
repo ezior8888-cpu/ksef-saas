@@ -14,6 +14,7 @@ const db = vi.hoisted(() => ({
   currentInvoice: null as Row | null,
 }));
 
+vi.mock('@/lib/ksef/inbox-xml', () => ({ archiveInboxInvoiceXml: async () => ({ archived: false, reason: 'not-applicable' }) }));
 vi.mock('@/lib/categorization', () => ({
   categorizeExpense: async () => ({
     kpir_column: 'k13_other_expenses',
