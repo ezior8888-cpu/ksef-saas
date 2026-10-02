@@ -129,6 +129,21 @@ export const inboxPollingJob = inngest.createFunction(
     runInboxPolling(toJobContext({ step, logger, attempt })),
 );
 
+/**
+ * Początek następnego okna po pełnym przebiegu (F-039). Dokumentacja MF
+ * (pobieranie przyrostowe): kolejne okno zaczyna się w „momencie zakończenia”
+ * poprzedniego, czyli w `dateRange.to`, gdy było podane. `permanentStorageHwmDate`
+ * jest globalny i przy nadrabianiu zaległości bywa późniejszy niż `to` —
+ * start od niego przeskakiwał faktury z przedziału (to, HWM]. Wynik nigdy nie
+ * cofa się przed początek okna i nie wychodzi poza jego koniec.
+ */
+export function nextInboxHwm(hwm: string, window: { from: string; to: string }): string {
+  const hwmMs = Date.parse(hwm);
+  if (!(hwmMs > Date.parse(window.from))) return window.from;
+  if (hwmMs > Date.parse(window.to)) return window.to;
+  return hwm;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // PER-TENANT: polling + diff + insert
 // ═══════════════════════════════════════════════════════════════
@@ -168,7 +183,7 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
         logger.warn('KSeF nie podał HWM skrzynki — okno zostaje na miejscu', { tenantId });
         return { fetched, newlyAdded };
       }
-      const nextHwm = Date.parse(hwm) > Date.parse(window.from) ? hwm : window.from;
+      const nextHwm = nextInboxHwm(hwm, window);
       await step.run('advance-hwm', () =>
         saveInboxHwm(tenantId, { windowFrom: window.from, hwm: nextHwm, fetched, saved: newlyAdded }),
       );
