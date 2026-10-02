@@ -41,14 +41,16 @@ Commit: `f2faffc`
 Sprawdzenie: `pnpm exec vitest run tests/unit/pdf-tabela-pozycji.test.ts` (przed poprawką: 8 różnych Y nagłówka, 40 pozycji = 149 stron); w aplikacji: PDF faktury z 30+ pozycjami ma 2–3 strony z nagłówkiem tabeli na każdej. Wersji cache PDF nie podbijałem (zmienia ją PR #122) — bez #122 stary PDF z cache może się pokazać do zmiany faktury.
 
 ### P-03 — Import FA(3): pola liczbopodobne zachowane jako tekst
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-079
 Zmiana: `lib/import/fa3-parser.ts` (i ten sam wzorzec w `lib/import/jpk-fa-parser.ts`, jeśli dotyczy): parser bez automatycznej konwersji wartości; liczby parsowane jawnie tam, gdzie są kwotami.
 Kryterium: test — NrRB z 26 cyfr, P_2 „000123”, „1e3”, PKWiU „62.10” i NIP wracają bez zmian; kwoty nadal liczbowe; istniejące testy importu przechodzą.
+Commit: `a1e6d87`
+Sprawdzenie: `pnpm exec vitest run tests/unit/import-pola-tekstowe.test.ts` — NrRB, numery „000123”/„1e3” wracają bez zmian, kwoty dalej liczbowe; dotyczy nowych importów (już zaimportowane faktury z popsutym rachunkiem zostają — import ponowny po scaleniu).
 
 ### P-04 — Skrzynka KSeF: kolejne okno od końca poprzedniego, nie od globalnego HWM
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-039
 Zmiana: `lib/inngest/jobs/inbox-polling.ts` — następny punkt startu = `min(HWM, window.to)` (dokumentacja MF: „moment zakończenia = `dateRange.to`, gdy została podana”). Wyliczenie wydzielone do czystej funkcji z testem.
