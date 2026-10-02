@@ -198,10 +198,58 @@ const TIMESTAMPTZ_FIELDS: ReadonlyArray<keyof InvoiceStatusUpdates> = [
   'last_attempt_at',
 ];
 
+export class InvoiceStatusConflictError extends Error {
+  constructor() {
+    super('Stan faktury KSeF zmienił się podczas zapisu wyniku zadania');
+    this.name = 'InvoiceStatusConflictError';
+  }
+}
+
+/** One worker may cross the KSeF I/O boundary for an invoice. A failed claim
+ * means another worker or a previous attempt may already have contacted KSeF.
+ */
+export async function claimInvoiceForKsefSend(
+  invoiceId: string,
+  tenantId: string,
+  fromOfflineQueue: boolean,
+): Promise<string | null> {
+  if (!tenantId) throw new Error('Brak organizacji faktury');
+  if (fromOfflineQueue) return null;
+  const now = new Date().toISOString();
+  const { data, error } = await createAdminClient()
+    .from('invoices')
+    .update({
+      ksef_status: 'sending',
+      submitted_to_ksef_at: now,
+      last_attempt_at: now,
+    })
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .eq('direction', 'outgoing')
+    .in('ksef_status', ['draft', 'queued'])
+    .is('submitted_to_ksef_at', null)
+    .is('last_attempt_at', null)
+    .eq('submission_attempts', 0)
+    .is('last_error', null)
+    .is('last_error_code', null)
+    .is('offline_idempotency_key', null)
+    .is('ksef_number', null)
+    .is('ksef_environment', null)
+    .is('xml_storage_path', null)
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error('Nie udało się atomowo przejąć wysyłki KSeF');
+  // This exact timestamp is the attempt token for the result CAS. It is
+  // persisted in the same conditional UPDATE that acquired the claim.
+  return data?.id === invoiceId ? now : null;
+}
+
 export async function updateInvoiceStatus(
   invoiceId: string,
   updates: InvoiceStatusUpdates,
   tenantId: string,
+  expectedKsefStatus?: NonNullable<InvoiceStatusUpdates['ksef_status']>,
+  expectedSubmittedAt?: string,
 ): Promise<void> {
   if (!tenantId) throw new Error('Brak organizacji faktury');
   const supabase = await createAdminClient();
@@ -212,13 +260,23 @@ export async function updateInvoiceStatus(
     }
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('invoices')
     .update(sanitized)
     .eq('id', invoiceId)
-    .eq('tenant_id', tenantId)
+    .eq('tenant_id', tenantId);
+  if (expectedKsefStatus) {
+    query = query.eq('ksef_status', expectedKsefStatus);
+  }
+  if (expectedSubmittedAt) {
+    query = query.eq('submitted_to_ksef_at', expectedSubmittedAt);
+  }
+  const { data, error } = await query
     .select('id')
     .maybeSingle();
+  if (!error && !data && (expectedKsefStatus || expectedSubmittedAt)) {
+    throw new InvoiceStatusConflictError();
+  }
   if (error || !data || data.id !== invoiceId) {
     throw new Error('Nie udało się zaktualizować faktury w organizacji zadania');
   }

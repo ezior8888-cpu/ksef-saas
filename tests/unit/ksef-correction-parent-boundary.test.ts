@@ -1,14 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createClient: vi.fn(),
-  getActiveOrgIdFromCookies: vi.fn(),
+  requireAuth: vi.fn(),
   logAudit: vi.fn(),
   enqueue: vi.fn(),
 }));
-vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.createClient }));
-vi.mock('@/lib/supabase/active-org', () => ({
-  getActiveOrgIdFromCookies: mocks.getActiveOrgIdFromCookies,
+vi.mock('@/lib/supabase/auth-context', () => ({
+  requireUserAndActiveOrg: mocks.requireAuth,
 }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.logAudit }));
 vi.mock('@/lib/invoices/ksef-submit-enqueue', () => ({
@@ -104,8 +102,12 @@ beforeEach(() => {
     seller_data: seller, buyer_data: buyer, net_total: 100, vat_total: 23, gross_total: 123,
   };
   lines = [{ name: originalLine.name, unit: originalLine.unit, quantity: 1, unit_price_net: 100, vat_rate: '23' }];
-  mocks.getActiveOrgIdFromCookies.mockResolvedValue(tenantId);
-  mocks.createClient.mockResolvedValue({ auth: { getUser: async () => ({ data: { user: { id: 'fixture-user' } } }) }, from });
+  mocks.requireAuth.mockResolvedValue({
+    supabase: { from },
+    user: { id: 'fixture-user' },
+    tenantId,
+    role: 'member',
+  });
   mocks.enqueue.mockResolvedValue({ ok: true, mode: 'online_queued' });
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -116,6 +118,23 @@ function expectNoWrite() {
 }
 
 describe('correction parent boundary', () => {
+  it.each([
+    ['parent context, MFA', () => getCorrectionParentContextAction(parentId), 'Wymagana weryfikacja dwuetapowa'],
+    ['parent context, membership', () => getCorrectionParentContextAction(parentId), 'Brak dostępu do aktywnej organizacji'],
+    ['draft, MFA', () => saveCorrectionDraftAction(basePayload), 'Wymagana weryfikacja dwuetapowa'],
+    ['draft, membership', () => saveCorrectionDraftAction(basePayload), 'Brak dostępu do aktywnej organizacji'],
+    ['send, MFA', () => saveAndSendCorrectionAction(basePayload), 'Wymagana weryfikacja dwuetapowa'],
+    ['send, membership', () => saveAndSendCorrectionAction(basePayload), 'Brak dostępu do aktywnej organizacji'],
+  ])('rejects %s before reading or writing', async (_label, action, reason) => {
+    vi.stubEnv('KSEF_ENV', 'test');
+    mocks.requireAuth.mockRejectedValueOnce(new Error(reason));
+    const result = await action();
+    expect(result).toMatchObject({ success: false, error: reason });
+    expect(queries).toHaveLength(0);
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(mocks.logAudit).not.toHaveBeenCalled();
+  });
+
   it.each(['draft', 'send'])('requires a proven parent before %s', async (kind) => {
     if (kind === 'send') {
       vi.stubEnv('KSEF_ENV', 'test');

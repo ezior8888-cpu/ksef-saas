@@ -11,7 +11,7 @@ const invoiceId = '22222222-2222-4222-8222-222222222222';
 const otherId = '33333333-3333-4333-8333-333333333333';
 const invoiceFixture: ReminderInvoiceSource = {
   id: invoiceId, tenant_id: tenantId, gross_total: 123, paid_amount: 23, currency: 'PLN',
-  payment_status: 'partial', direction: 'outgoing', ksef_status: 'accepted',
+  payment_status: 'partial', direction: 'outgoing', ksef_status: 'accepted', invoice_kind: 'regular', invoice_type: 'VAT',
   payment_due_date: '2026-09-01', issue_date: '2026-08-20', internal_number: 'FV/1/2026', ksef_number: null,
   buyer_data: { name: 'Fixture buyer', email: 'buyer@example.test', address: { addressLine1: 'Test 1', addressLine2: '00-001 Miasto' } },
   buyer_nip: '1234567890', payment_data: { bankAccount: 'PL-fixture-bank' }, seller_data: { name: 'Fixture seller' }, reminders_paused: false,
@@ -108,6 +108,29 @@ describe('read-only reminder preview preparation', () => {
     await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).rejects.toThrow();
   });
   it.each([
+    { invoice_kind: 'correction', invoice_type: 'KOR' },
+    { invoice_kind: 'regular', invoice_type: 'KOR' }, // Imported corrections retain this combination.
+    { invoice_kind: 'regular', invoice_type: 'KOR_ZAL' },
+    { invoice_kind: 'regular', invoice_type: 'KOR_ROZ' },
+    { invoice_kind: null, invoice_type: 'VAT' },
+    { invoice_kind: 'regular', invoice_type: null },
+    { invoice_kind: 'regular', invoice_type: undefined },
+    { invoice_kind: 'regular', invoice_type: 'UNKNOWN' },
+  ])('does not prepare a correction or ambiguous invoice %#', async (patch) => {
+    patchInvoice(patch);
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).rejects.toThrow('nie może otrzymać przypomnienia');
+    expect(queries.map((query) => query.table)).toEqual(['invoices']);
+    expect(mocks.pdf).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['regular', 'VAT'], ['regular', 'UPR'], ['advance', 'ZAL'], ['final', 'ROZ'],
+    ['regular', 'ZAL'], ['regular', 'ROZ'], // Imported non-corrections keep invoice_kind=regular.
+  ])('prepares an ordinary %s/%s invoice', async (kind, type) => {
+    patchInvoice({ invoice_kind: kind, invoice_type: type });
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).resolves.toMatchObject({ invoiceId });
+  });
+  it.each([
     { paid_amount: 123 }, { paid_amount: null }, { reminders_paused: true }, { gross_total: null }, { gross_total: NaN },
     { payment_status: 'paid' as const }, { direction: 'incoming' }, { ksef_status: 'rejected' },
     { currency: 'EUR' }, { payment_due_date: '2026-02-31' }, { payment_due_date: '2026-10-01' },
@@ -179,7 +202,8 @@ describe('strict immutable envelope and source fingerprint', () => {
     expect(reminderInvoiceFingerprint({ ...invoiceFixture, buyer_data: { email: 'buyer@example.test', address: { addressLine2: '00-001 Miasto', addressLine1: 'Test 1' }, name: 'Fixture buyer' } })).toBe(original);
     for (const patch of [{ gross_total: 124 }, { paid_amount: 24 }, { tenant_id: otherId }, { id: otherId },
       { buyer_data: { name: 'Fixture buyer', email: 'different@example.test' } }, { payment_data: { bankAccount: 'different' } },
-      { internal_number: 'FV/2/2026' }, { reminders_paused: true }, { currency: 'EUR' }]) {
+      { internal_number: 'FV/2/2026' }, { reminders_paused: true }, { currency: 'EUR' },
+      { invoice_kind: 'correction' }, { invoice_type: 'KOR' }] as const) {
       expect(reminderInvoiceFingerprint({ ...invoiceFixture, ...patch })).not.toBe(original);
     }
   });

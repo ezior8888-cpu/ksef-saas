@@ -6,6 +6,7 @@ type Query = { table: string; selection: string; exactCount: boolean; filters: A
 const mocks = vi.hoisted(() => ({ client: vi.fn(), activeOrg: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.client }));
 vi.mock('@/lib/dashboard-shell-data', () => ({ getDashboardOrgSwitcherProps: mocks.activeOrg }));
+vi.mock('@/lib/ksef/claim-environment', () => ({ requireConfiguredKsefEnvironment: () => 'production' }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }), redirect: vi.fn() }));
 vi.mock('@/components/reminders/reminder-consent-dialog', () => ({ ReminderConsentDialog: () => null }));
 vi.mock('@/app/actions/reminders', () => ({ toggleInvoiceRemindersAction: vi.fn() }));
@@ -20,7 +21,7 @@ let failReminderRead: boolean;
 let missingCount: boolean;
 let serverCap: number;
 let injectUnexpectedReminder: boolean;
-function invoice(id: string, tenantId: string): Row {
+function invoice(id: string, tenantId: string): Row & { id: string; tenant_id: string } {
   return { id, tenant_id: tenantId, internal_number: id === INVOICE ? 'VISIBLE-1' : 'FOREIGN-1',
     payment_due_date: '2026-09-01', gross_total: 100, amount_due: 100,
     days_overdue: 22, buyer_name: 'Buyer', buyer_nip: null, buyer_email: 'buyer@example.test',
@@ -34,17 +35,24 @@ function client() {
     const query: Query = { table, selection: '*', exactCount: false, filters: [] };
     queries.push(query);
     const filters: Array<(row: Row) => boolean> = [];
+    let minimum = 0;
     let maximum = Infinity;
     const execute = () => {
       if (table === 'payment_reminders' && failReminderRead) {
         return { data: null, error: { message: 'PRIVATE ERROR' } };
       }
-      const matching = (rows[table] ?? []).filter((row) => filters.every((test) => test(row)));
+      const source: Row[] = table === 'invoices' && !rows.invoices
+        ? (rows.invoices_overdue ?? []).map((row) => ({
+            id: row.id, tenant_id: row.tenant_id, ksef_environment: 'production',
+          }))
+        : (rows[table] ?? []);
+      const matching = source.filter((row) => filters.every((test) => test(row)));
       if (table === 'payment_reminders' && injectUnexpectedReminder) {
         matching.push(reminder('unexpected-invoice', TENANT, '2026-09-23T11:00:00.000Z'));
       }
-      const data = matching.slice(0, Math.min(maximum, serverCap)).map((row) => structuredClone(row));
-      return { data, error: null, count: query.exactCount ? (missingCount ? null : matching.length) : null };
+      const data = matching.slice(minimum, minimum + Math.min(maximum, serverCap)).map((row) => structuredClone(row));
+      return { data, error: null, count: query.exactCount
+        ? (table === 'payment_reminders' && missingCount ? null : matching.length) : null };
     };
     const builder = {
       select: (selection: string, options?: { count?: 'exact' }) => { query.selection = selection; query.exactCount = options?.count === 'exact'; return builder; },
@@ -52,6 +60,7 @@ function client() {
       in: (key: string, expected: string[]) => { query.filters.push([key, expected]); filters.push((row) => expected.includes(String(row[key]))); return builder; },
       order: () => builder,
       limit: (count: number) => { maximum = count; return builder; },
+      range: (start: number, end: number) => { minimum = start; maximum = end - start + 1; return builder; },
       then: <T = ReturnType<typeof execute>, E = never>(
         resolve?: ((value: ReturnType<typeof execute>) => T | PromiseLike<T>) | null,
         reject?: ((reason: unknown) => E | PromiseLike<E>) | null,
@@ -73,6 +82,42 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('overdue reminder status', () => {
+  it('keeps 100 production debts after older TEST and DEMO invoices are excluded', async () => {
+    const testRows = Array.from({ length: 110 }, (_, index) => ({
+      ...invoice('test-' + index, TENANT), internal_number: 'TEST-' + index,
+    }));
+    const productionRows = Array.from({ length: 100 }, (_, index) => ({
+      ...invoice('prod-' + index, TENANT), internal_number: 'PROD-' + index,
+    }));
+    rows.invoices_overdue = [...testRows, ...productionRows];
+    rows.invoices = [
+      ...testRows.map((row, index) => ({ id: row.id, tenant_id: TENANT,
+        ksef_environment: index % 2 === 0 ? 'test' : 'demo' })),
+      ...productionRows.map((row) => ({ id: row.id, tenant_id: TENANT,
+        ksef_environment: 'production' })),
+    ];
+
+    const page = await OverduePage();
+    const props = page.props as {
+      overdueInvoices: Array<{ id: string }>;
+      stats: { totalAmount: number };
+    };
+    expect(props.overdueInvoices).toHaveLength(100);
+    expect(props.overdueInvoices.every((row) => row.id.startsWith('prod-'))).toBe(true);
+    expect(props.stats.totalAmount).toBe(10_000);
+    expect(queries.filter((query) => query.table === 'invoices_overdue')).toHaveLength(3);
+    expect(queries.filter((query) => query.table === 'invoices').every((query) =>
+      query.selection === 'id, ksef_environment' && query.exactCount)).toBe(true);
+  });
+
+  it('shows reconciliation error for an overdue accepted invoice with unknown environment', async () => {
+    rows.invoices = [{ id: INVOICE, tenant_id: TENANT, ksef_environment: null }];
+    const html = await markup();
+    expect(html).toContain('wymagają uzgodnienia środowiska KSeF');
+    expect(html).not.toContain('Brak zaległych płatności');
+    expect(queries.some((query) => query.table === 'payment_reminders')).toBe(false);
+  });
+
   it('shows pending only for a visible invoice of the validated active tenant', async () => {
     rows.invoices_overdue.push(invoice('22222222-2222-4222-8222-222222222222', FOREIGN));
     rows.payment_reminders.push(reminder(INVOICE, TENANT, '2026-09-23T11:40:00.000Z'));

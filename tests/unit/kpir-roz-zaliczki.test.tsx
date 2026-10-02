@@ -55,6 +55,7 @@ function database() {
       let singular = false;
       let window: [number, number] | null = null;
       let head = false;
+      let sortKey: string | null = null;
       // Atrapa zwraca TYLKO wybrane kolumny — inaczej brak kolumny w zapytaniu
       // strony (np. `advance_invoice_ids`) byłby niewidoczny w teście.
       let columns: string[] | null = null;
@@ -79,7 +80,7 @@ function database() {
         gte(key: string, value: string) { predicates.push((r) => String(r[key]) >= value); return query; },
         lte(key: string, value: string) { predicates.push((r) => String(r[key]) <= value); return query; },
         gt(key: string, value: string) { predicates.push((r) => String(r[key]) > value); return query; },
-        order() { return query; },
+        order(key?: string) { sortKey = key ?? null; return query; },
         limit() { return query; },
         range(from: number, to: number) { window = [from, to]; return query; },
         single() { singular = true; return query; },
@@ -90,6 +91,7 @@ function database() {
             return Promise.resolve({ data: null, error: { code: 'XX000', message: 'awaria odczytu' } }).then(resolve, reject);
           }
           const matching = (tables[table] ?? []).filter((r) => predicates.every((p) => p(r)));
+          if (sortKey) { const k = sortKey; matching.sort((a, b) => String(a[k]).localeCompare(String(b[k]))); }
           const rows = (window ? matching.slice(window[0], window[1] + 1) : matching).map(project);
           return Promise.resolve({ data: head ? null : singular ? rows[0] ?? null : rows, count: matching.length, error: null }).then(resolve, reject);
         },

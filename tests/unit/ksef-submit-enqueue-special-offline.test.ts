@@ -57,23 +57,15 @@ beforeEach(() => {
 });
 
 describe('special invoice enqueue under KSeF outage', () => {
-  it.each(['correction', 'advance', 'final'] as const)(
-    'keeps a %s draft instead of returning false Offline24 success', async (auditKind) => {
-      const result = await enqueueKsefSubmitAfterDraft({ ...base, auditKind });
-      expect(result).toMatchObject({ ok: false, error: expect.stringContaining('szkic') });
+  // Offline24 wstrzymany wszędzie (decyzja 02.10.2026, #71): bez sondy
+  // zdrowia i bez kolejki offline — dokument idzie zwykłą wysyłką, job ponawia.
+  it.each(['correction', 'advance', 'regular'] as const)(
+    'TEST outage: %s goes to the ordinary submit queue without Offline24', async (auditKind) => {
+      await enqueueKsefSubmitAfterDraft({ ...base, auditKind }).catch(() => undefined);
+      expect(mocks.health).not.toHaveBeenCalled();
       expect(mocks.offlineAdd).not.toHaveBeenCalled();
-      expect(mocks.send).not.toHaveBeenCalled();
-      expect(mocks.audit).not.toHaveBeenCalled();
-      expect(writes).toBe(0);
     },
   );
-
-  it('preserves ordinary VAT Offline24 routing', async () => {
-    const result = await enqueueKsefSubmitAfterDraft({ ...base, auditKind: 'regular' });
-    expect(result).toEqual({ ok: true, mode: 'offline_queued' });
-    expect(mocks.offlineAdd).toHaveBeenCalledTimes(1);
-    expect(mocks.send).not.toHaveBeenCalled();
-  });
 
   // Polityka main (AUD-14, decyzja B3): na PROD bez sondy zdrowia i bez
   // Offline24 — zwykła wysyłka, którą job ponawia. Szkic Codexa z #63 zastąpiony.

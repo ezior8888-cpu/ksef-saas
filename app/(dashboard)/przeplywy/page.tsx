@@ -3,11 +3,14 @@ import { SalesChartCard } from '@/components/dashboard/sales-chart-card';
 import { VatSummaryCard } from '@/components/dashboard/vat-summary-card';
 import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
+import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
 import {
   formatPlMoney,
   getMonthlyFigures,
   getSalesSeries,
 } from '@/lib/dashboard/monthly-figures';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 /**
@@ -16,47 +19,62 @@ import { getPageContext } from '@/lib/supabase/page-context';
  * Od 30.08.2026 stoją tu też podsumowanie VAT i wykres sprzedaży, przeniesione
  * z dashboardu, który oddał całą powierzchnię agentowi FLO.
  *
- * Zapytania celowo NIE są łączone z tymi wyżej: `CashFlowDashboard` liczy
- * przepływ, więc bierze wyłącznie faktury PRZYJĘTE przez KSeF
- * (`ksef_status = 'accepted'`), a podsumowanie VAT i wykres sprzedaży mają
- * pokazywać wszystko, co zostało wystawione. Sklejenie tych filtrów zaniżyłoby
- * VAT o faktury czekające w kolejce.
+ * Kwoty w podsumowaniu VAT i na wykresie sprzedaży pochodzą wyłącznie
+ * z faktur przyjętych w aktywnym środowisku KSeF. Szkice lokalne mają
+ * oddzielny licznik, a kolejki bez potwierdzonej proweniencji nie powiększają
+ * wartości podatkowych.
  */
 export const dynamic = 'force-dynamic';
 
 export default async function PrzeplywyPage() {
   const { supabase, tenantId } = await getPageContext();
+  const environment = requireConfiguredKsefEnvironment();
 
   const now = new Date();
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
     .toISOString()
     .slice(0, 10);
 
-  const { data: invoices } = await supabase
-    .from('invoices')
-    .select('id, issue_date, net_total, gross_total, invoice_kind, advance_invoice_ids')
-    .eq('tenant_id', tenantId)
-    .eq('direction', 'outgoing')
-    .eq('ksef_status', 'accepted')
-    .gte('issue_date', sixMonthsAgo)
-    .order('issue_date', { ascending: true });
+  const [invoices, expenses] = await Promise.all([
+    readCompletePages('cash-flow invoices', (from, to) =>
+      supabase
+        .from('invoices')
+        .select('id, issue_date, net_total, gross_total, invoice_kind, advance_invoice_ids', { count: 'exact' })
+        .eq('tenant_id', tenantId)
+        .eq('direction', 'outgoing')
+        .eq('ksef_status', 'accepted')
+        .eq('ksef_environment', environment)
+        .gte('issue_date', sixMonthsAgo)
+        .order('id', { ascending: true })
+        .range(from, to),
+    ),
+    readCompletePages('cash-flow expenses', (from, to) =>
+      supabase
+        .from('expenses')
+        .select('id, source, ksef_invoice_id, issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column', { count: 'exact' })
+        .eq('tenant_id', tenantId)
+        .eq('is_deductible', true)
+        .gte('issue_date', sixMonthsAgo)
+        .order('id', { ascending: true })
+        .range(from, to),
+    ),
+  ]);
+  const visibleExpenses = await filterExpensesForKsefEnvironment(
+    supabase, tenantId, environment, expenses,
+  );
+  invoices.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
+  visibleExpenses.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 
   // Przychód jak w KPiR: ROZ bez zaliczek, które już są w przychodzie
   // (`kpirRevenueNet`). Błąd odczytu leci do `error.tsx` — zerowa suma
   // zaliczek zawyżyłaby dochód i szacowany podatek.
-  const settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices ?? []);
-  const invoiceRows = (invoices ?? []).map((inv) => ({
+  const settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices);
+  const invoiceRows = invoices.map((inv) => ({
     ...inv,
     settled_advances_net: settled.get(inv.id) ?? null,
   }));
-
-  const { data: expenses } = await supabase
-    .from('expenses')
-    .select('issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column')
-    .eq('tenant_id', tenantId)
-    .eq('is_deductible', true)
-    .gte('issue_date', sixMonthsAgo)
-    .order('issue_date', { ascending: true });
 
   const { count: pendingReviewCount } = await supabase
     .from('expenses')
@@ -81,7 +99,7 @@ export default async function PrzeplywyPage() {
 
       <CashFlowDashboard
         invoices={invoiceRows}
-        expenses={expenses ?? []}
+        expenses={visibleExpenses}
         pendingReviewCount={pendingReviewCount ?? 0}
       />
 

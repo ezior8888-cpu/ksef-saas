@@ -172,10 +172,13 @@ describe('Offline24 na KSeF produkcyjnym (AUD-14)', () => {
     expect(mocks.fullFlow).toHaveBeenCalled();
   });
 
-  it('TEST: zachowanie bez zmian — faktura idzie do Offline24', async () => {
+  // Decyzja 02.10.2026 (#71): Offline24 wstrzymany także na TEST.
+  it('TEST: bez sondy zdrowia i bez Offline24 — zwykła wysyłka', async () => {
     mocks.health.mockResolvedValue({ offline: true, isMfOutage: false, reason: 'ping' });
     await runSubmitInvoice(zdarzenie, ctx);
-    expect(mocks.addOffline).toHaveBeenCalled();
+    expect(mocks.health).not.toHaveBeenCalled();
+    expect(mocks.addOffline).not.toHaveBeenCalled();
+    expect(mocks.fullFlow).toHaveBeenCalled();
   });
 
   it('PROD: po wyczerpaniu prób nie parkuje w Offline24', async () => {

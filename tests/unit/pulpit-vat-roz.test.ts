@@ -22,12 +22,28 @@ function database(): PageContext['supabase'] {
       const predicates: Array<(row: Row) => boolean> = [];
       let columns: string[] | null = null;
       let advanceLookup = false;
+      // Jak PostgREST: liczba rekordów, sortowanie i strony (komplet stron z #71).
+      let head = false;
+      let sortKey: string | null = null;
+      let window: [number, number] | null = null;
       const query = {
-        select(selection = '*') {
+        select(selection = '*', options?: { head?: boolean }) {
           const parts = selection.split(',').map((s) => s.trim()).filter(Boolean);
           columns = parts.includes('*') ? null : parts;
+          head = Boolean(options?.head);
           return query;
         },
+        is(key: string, value: unknown) {
+          predicates.push((r) => (value === null ? r[key] == null : r[key] === value));
+          return query;
+        },
+        or(filter: string) {
+          const m = /^ksef_environment\.is\.null,ksef_environment\.neq\.(test|demo|production)$/.exec(filter);
+          if (!m) throw new Error(`Unexpected OR filter ${filter}`);
+          predicates.push((r) => r.ksef_environment == null || r.ksef_environment !== m[1]);
+          return query;
+        },
+        range(from: number, to: number) { window = [from, to]; return query; },
         eq(key: string, value: unknown) {
           if (key === 'invoice_kind' && value === 'advance') advanceLookup = true;
           predicates.push((r) => r[key] === value);
@@ -36,18 +52,22 @@ function database(): PageContext['supabase'] {
         in(key: string, values: unknown[]) { predicates.push((r) => values.includes(r[key])); return query; },
         gte(key: string, value: string) { predicates.push((r) => String(r[key]) >= value); return query; },
         lt(key: string, value: string) { predicates.push((r) => String(r[key]) < value); return query; },
-        order() { return query; },
+        order(key: string) { sortKey = key; return query; },
         then(resolve: (v: unknown) => unknown) {
-          if (table !== 'invoices') return Promise.resolve({ data: [], error: null }).then(resolve);
+          if (table !== 'invoices') return Promise.resolve({ data: [], count: 0, error: null }).then(resolve);
           if (advanceLookup && failAdvances) {
             return Promise.resolve({ data: null, error: { message: 'timeout' } }).then(resolve);
           }
           // Atrapa zwraca TYLKO wybrane kolumny: brak `advance_invoice_ids`
           // w zapytaniu pulpitu byłby inaczej niewidoczny.
-          const data = rows
-            .filter((r) => predicates.every((p) => p(r)))
-            .map((r) => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : r));
-          return Promise.resolve({ data, error: null }).then(resolve);
+          const matching = rows.filter((r) => predicates.every((p) => p(r)));
+          if (sortKey) {
+            const k = sortKey;
+            matching.sort((a, b) => String(a[k]).localeCompare(String(b[k])));
+          }
+          const page = window ? matching.slice(window[0], window[1] + 1) : matching;
+          const data = page.map((r) => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : r));
+          return Promise.resolve({ data: head ? null : data, count: matching.length, error: null }).then(resolve);
         },
       };
       return query;
@@ -64,6 +84,7 @@ function invoice(id: string, fields: Row): Row {
     tenant_id: TENANT,
     direction: 'outgoing',
     ksef_status: 'accepted',
+    ksef_environment: 'test',
     invoice_kind: 'vat',
     advance_invoice_ids: null,
     ...fields,

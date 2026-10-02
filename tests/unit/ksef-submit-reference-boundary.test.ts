@@ -44,7 +44,7 @@ beforeEach(() => {
   reads = [];
   readError = null;
   invoice = {
-    id: invoiceId, tenant_id: tenantId, invoice_kind: 'correction',
+    id: invoiceId, tenant_id: tenantId, direction: 'outgoing', invoice_kind: 'correction',
     internal_number: 'KOR/1', parent_invoice_id: parentId, advance_invoice_ids: [],
   };
   setDocument('KOR/1', 'KOR');
@@ -71,10 +71,20 @@ describe('KSeF submit reference boundary', () => {
   it('allows a matching correction only after reading the stored parent in the current environment', async () => {
     await expect(assertSubmitReferences(input())).resolves.toBe('correction');
     expect(reads).toHaveLength(2);
+    expect(reads[0]?.filters).toMatchObject({
+      id: invoiceId, tenant_id: tenantId, direction: 'outgoing',
+    });
     expect(reads[1]?.filters).toMatchObject({
       id: parentId, tenant_id: tenantId, ksef_status: 'accepted',
       ksef_environment: 'test', invoice_kind: 'regular', direction: 'outgoing',
     });
+  });
+
+  it('blocks an incoming invoice even when its legal document matches the event', async () => {
+    invoice.direction = 'incoming';
+    await expect(assertSubmitReferences(input())).rejects.toThrow('manual reconciliation');
+    expect(reads).toHaveLength(1);
+    expect(reads[0]?.filters).toMatchObject({ direction: 'outgoing' });
   });
 
   it.each([

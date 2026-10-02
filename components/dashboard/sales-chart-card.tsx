@@ -91,7 +91,7 @@ export function SalesChartCard({
             Sprzedaż w ostatnich 6 miesiącach
           </h2>
           <p className="mt-1.5 text-[13px] text-[var(--ff-text-muted)]">
-            Sumaryczna kwota brutto wystawionych faktur
+            Brutto faktur przyjętych w bieżącym środowisku KSeF
           </p>
         </div>
         <div className="flex gap-2">
@@ -108,7 +108,7 @@ export function SalesChartCard({
 
       {currentSeries.every((v) => v === 0) ? (
         <p className="mt-4 text-center text-xs text-[var(--ff-text-dim)]">
-          Brak faktur w tym okresie — oś pokazuje skalę miesięcy
+          Brak przyjętych faktur w tym okresie — oś pokazuje skalę miesięcy
         </p>
       ) : null}
 

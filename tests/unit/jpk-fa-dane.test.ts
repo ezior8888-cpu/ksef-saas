@@ -27,6 +27,7 @@ function database() {
       let singular = false;
       let window: [number, number] | null = null;
       let head = false;
+      let sortKey: string | null = null;
       const query = {
         // Tylko wybrane kolumny — brak kolumny w zapytaniu ma być widoczny.
         select(selection = '*', options?: { head?: boolean }) {
@@ -47,7 +48,7 @@ function database() {
         gte(k: string, v: string) { predicates.push((r) => String(r[k]) >= v); return query; },
         lte(k: string, v: string) { predicates.push((r) => String(r[k]) <= v); return query; },
         gt(k: string, v: string) { predicates.push((r) => String(r[k]) > v); return query; },
-        order() { return query; },
+        order(key?: string) { sortKey = key ?? null; return query; },
         limit() { return query; },
         range(a: number, b: number) { window = [a, b]; return query; },
         single() { singular = true; return query; },
@@ -58,6 +59,7 @@ function database() {
           }
           const project = (r: Row): Row => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : r);
           const matching = (tables[table] ?? []).filter((r) => predicates.every((p) => p(r)));
+          if (sortKey) { const k = sortKey; matching.sort((a, b) => String(a[k]).localeCompare(String(b[k]))); }
           const rows = (window ? matching.slice(window[0], window[1] + 1) : matching).map(project);
           return Promise.resolve({ data: head ? null : singular ? rows[0] ?? null : rows, count: matching.length, error: null }).then(resolve, reject);
         },
@@ -147,7 +149,7 @@ describe('fetchInvoicesForExport — dane do JPK_FA', () => {
       }),
     );
     tables.invoice_line_items.push({
-      invoice_id: 'fv', ordinal: 1, name: 'Usługa', unit: 'szt.', quantity: 1, unit_price_net: 1000, net_amount: 1000,
+      id: 'line-fv-1', invoice_id: 'fv', ordinal: 1, name: 'Usługa', unit: 'szt.', quantity: 1, unit_price_net: 1000, net_amount: 1000,
       vat_rate: '23', vat_amount: 230.01,
     });
 

@@ -609,7 +609,7 @@ export async function saveAndSendInvoiceAction(
     return {
       success: true,
       invoiceId: saved.invoiceId,
-      offline: enq.mode === 'offline_queued',
+      offline: false,
     };
   } catch (err) {
     return {

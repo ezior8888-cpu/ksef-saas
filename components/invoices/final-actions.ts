@@ -10,6 +10,9 @@ import {
 } from '@/lib/invoices/advance-settlement';
 import { ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { createClient } from '@/lib/supabase/server';
+import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
+import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import {
   settlementVatSummaries,
@@ -66,17 +69,7 @@ async function tenantContext(): Promise<{
   userId: string;
   tenant: TenantSnap;
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Brak sesji użytkownika');
-
-  const { getActiveOrgIdFromCookies } = await import(
-    '@/lib/supabase/active-org'
-  );
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) throw new Error('Użytkownik nie jest przypisany do firmy');
+  const { supabase, user, tenantId } = await requireUserAndActiveOrg();
 
   const { data: raw, error } = await supabase
     .from('tenants')

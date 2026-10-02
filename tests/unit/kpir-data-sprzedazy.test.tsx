@@ -114,6 +114,7 @@ describe('strona KPiR — podpięcie', () => {
           },
           eq() { return query; },
           or() { return query; },
+          range() { return query; },
           in() { return query; },
           gte() { return query; },
           lte() { return query; },
@@ -126,7 +127,7 @@ describe('strona KPiR — podpięcie', () => {
             const project = (r: Record<string, unknown>) => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : r);
             // Kontrola proweniencji (#63): 0 przyjętych faktur bez środowiska KSeF.
             if (head) return Promise.resolve({ data: null, count: 0, error: null }).then(resolve);
-            return Promise.resolve({ data: rows.map(project), error: null }).then(resolve);
+            return Promise.resolve({ data: rows.map(project), count: rows.length, error: null }).then(resolve);
           },
         };
         return query;

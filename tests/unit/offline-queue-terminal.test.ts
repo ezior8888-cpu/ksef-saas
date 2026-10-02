@@ -112,18 +112,18 @@ describe('kolejka Offline24 po nieudanej wysyłce', () => {
     expect(mocks.status).not.toHaveBeenCalled();
   });
 
-  it('błąd przejściowy: wraca do kolejki jak dotąd', async () => {
+  it('błąd przejściowy: nie wznawia starej kolejki bez tożsamości próby', async () => {
     await runOfflineQueueFailure(
       { invoiceId: INV, tenantId: TEN, error: 'ECONNRESET', fromOfflineQueue: true, terminal: false, environment: 'test', offlineQueueId: QUEUE },
       ctx,
     );
-    expect(db.updates[0]?.patch.status).toBe('queued');
-    expect(db.updates[1]).toMatchObject({ table: 'invoices', patch: { ksef_status: 'offline_queued' } });
+    expect(db.updates[0]?.patch.status).toBe('failed');
+    expect(db.updates.some((update) => update.table === 'invoices')).toBe(false);
   });
 
-  it('zdarzenie sprzed zmiany (bez pola terminal) zachowuje się jak dotąd', async () => {
+  it('zdarzenie sprzed zmiany (bez pola terminal) też jest izolowane', async () => {
     await runOfflineQueueFailure({ invoiceId: INV, tenantId: TEN, error: 'x', fromOfflineQueue: true, environment: 'test', offlineQueueId: QUEUE }, ctx);
-    expect(db.updates[0]?.patch.status).toBe('queued');
+    expect(db.updates[0]?.patch.status).toBe('failed');
   });
 });
 

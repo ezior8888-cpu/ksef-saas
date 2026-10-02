@@ -46,9 +46,17 @@ function kolumnaFiltra(surowa: string): string | null {
 function bledyKolumn(l: Lancuch): Blad[] {
   const kolumny = SCHEMAT.tabele.get(l.tabela)!;
   const out: Blad[] = [];
-  for (const m of l.tekst.matchAll(new RegExp(`\\.(?:${FILTRY})\\(\\s*'([^']+)'`, 'g'))) {
-    const k = kolumnaFiltra(m[1]!);
+  for (const m of l.tekst.matchAll(new RegExp(`\\.(${FILTRY})\\(\\s*'([^']+)'`, 'g'))) {
+    const [operacja, k] = [m[1]!, kolumnaFiltra(m[2]!)];
     if (!k || kolumny.has(k)) continue;
+    // Migration 00015 links upo_receipts.invoice_id to invoices.id. PostgREST
+    // treats a selected empty embed and an exact null filter as an anti-join.
+    // Keep the exception scoped to that proven relation.
+    const upoAntiJoin = operacja === 'is' && l.tabela === 'invoices' &&
+      k === 'upo_receipts' && SCHEMAT.tabele.has(k) &&
+      /^\s*,\s*null\s*\)/.test(l.tekst.slice(m.index! + m[0].length)) &&
+      /\.select\(\s*'[^']*\bupo_receipts\(\)[^']*'\s*\)/.test(l.tekst);
+    if (upoAntiJoin) continue;
     out.push({
       klucz: `${l.plik} ${l.tabela}.${k}`,
       gdzie: `${l.plik}:${l.linia}`,
@@ -118,6 +126,18 @@ describe('schemat z migracji — wartości', () => {
 
 describe('filtry pytają o to, co istnieje', () => {
   const wszystko = () => LANCUCHY.flatMap((l) => [...bledyKolumn(l), ...bledyWartosci(l)]);
+
+  it('rozpoznaje anti-join tylko dla istniejącej i wybranej relacji', () => {
+    const lancuch = (tekst: string): Lancuch => ({
+      plik: 'test', linia: 1, tabela: 'invoices', tekst,
+    });
+    expect(bledyKolumn(lancuch(".select('id, upo_receipts()').is('upo_receipts', null)"))).toEqual([]);
+    expect(bledyKolumn(lancuch(".select('id, upo_receipts()').is('upo_receipts', false)"))).toHaveLength(1);
+    expect(SCHEMAT.tabele.has('stripe_webhook_events')).toBe(true);
+    expect(bledyKolumn(lancuch(".select('id, stripe_webhook_events()').is('stripe_webhook_events', null)"))).toHaveLength(1);
+    expect(bledyKolumn(lancuch(".select('id').is('upo_receipts', null)"))).toHaveLength(1);
+    expect(bledyKolumn(lancuch(".select('id, unknown_receipts()').is('unknown_receipts', null)"))).toHaveLength(1);
+  });
 
   it('żaden filtr nie pyta o kolumnę albo wartość, której baza nie zna', () => {
     const nowe = wszystko().filter((b) => !(b.klucz in ZNANE));

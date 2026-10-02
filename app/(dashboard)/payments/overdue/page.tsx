@@ -4,6 +4,7 @@ import {
 } from '@/components/reminders/overdue-dashboard';
 import { createClient } from '@/lib/supabase/server';
 import { getDashboardOrgSwitcherProps } from '@/lib/dashboard-shell-data';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { Database } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +12,8 @@ export const dynamic = 'force-dynamic';
 type OverdueViewRow = Database['public']['Views']['invoices_overdue']['Row'];
 type OverdueInvoiceBase = Omit<OverdueInvoice, 'reminder_status'>;
 const PENDING_REVIEW_AFTER_MS = 30 * 60_000;
+const OVERDUE_PAGE_SIZE = 100;
+const MAX_VISIBLE_INVOICES = 100;
 
 function reminderReviewBefore(): number {
   // Server-only page: evaluate the clock once per request, after the read.
@@ -39,15 +42,63 @@ export default async function OverduePage() {
   // validated active organization instead of trusting a cookie alone.
   const { activeOrgId: tenantId } = await getDashboardOrgSwitcherProps();
   const supabase = await createClient();
+  const environment = requireConfiguredKsefEnvironment();
 
-  const { data: overdueRows, error } = await supabase
-    .from('invoices_overdue')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .order('days_overdue', { ascending: false })
-    .limit(100);
+  // The view has no environment column. Walk its stable order in bounded
+  // pages, retain only invoices proven to belong to this environment, and
+  // take the first 100 *after* filtering. Filtering a single 100-row page
+  // would hide valid production debts behind older TEST/DEMO invoices.
+  const overdueRows: OverdueViewRow[] = [];
+  let overdueError: string | null = null;
+  let totalCandidates: number | null = null;
+  for (let offset = 0; overdueRows.length < MAX_VISIBLE_INVOICES; offset += OVERDUE_PAGE_SIZE) {
+    const page = await supabase
+      .from('invoices_overdue')
+      .select('*', { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .order('days_overdue', { ascending: false })
+      .order('id', { ascending: true })
+      .range(offset, offset + OVERDUE_PAGE_SIZE - 1);
+    if (page.error || !page.data || page.count === null ||
+        (totalCandidates !== null && page.count !== totalCandidates) ||
+        page.data.length !== Math.min(OVERDUE_PAGE_SIZE, Math.max(0, page.count - offset))) {
+      overdueError = 'Nie można potwierdzić pełnej listy zaległych faktur';
+      break;
+    }
+    totalCandidates = page.count;
+    if (page.data.length === 0) break;
 
-  if (error) {
+    const ids = page.data.map((row) => row.id).filter((id): id is string => id !== null);
+    if (ids.length !== page.data.length) {
+      overdueError = 'Nie można potwierdzić tożsamości zaległych faktur';
+      break;
+    }
+    const matching = await supabase
+      .from('invoices')
+      .select('id, ksef_environment', { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .in('id', ids);
+    if (matching.error || !matching.data || matching.count === null ||
+        matching.count !== ids.length || matching.data.length !== ids.length ||
+        matching.data.some((invoice) => !ids.includes(invoice.id))) {
+      overdueError = 'Nie można potwierdzić środowiska zaległych faktur';
+      break;
+    }
+    if (matching.data.some((invoice) =>
+      invoice.ksef_environment !== 'test' &&
+      invoice.ksef_environment !== 'demo' &&
+      invoice.ksef_environment !== 'production')) {
+      overdueError = 'Zaległe faktury wymagają uzgodnienia środowiska KSeF';
+      break;
+    }
+    const visibleIds = new Set(matching.data
+      .filter((invoice) => invoice.ksef_environment === environment)
+      .map((invoice) => invoice.id));
+    overdueRows.push(...page.data.filter((row) => row.id && visibleIds.has(row.id)));
+    if (offset + page.data.length >= page.count) break;
+  }
+
+  if (overdueError) {
     return (
       <div className="pb-10 text-[var(--ff-on-surface)]">
         <div className="mb-10">
@@ -62,13 +113,13 @@ export default async function OverduePage() {
           className="ff-glass-pane rounded-[var(--ff-radius-lg)] border border-red-500/25 p-6 text-[15px] text-red-300"
           role="alert"
         >
-          Nie udało się pobrać listy: {error.message}
+          Nie udało się pobrać listy: {overdueError}
         </div>
       </div>
     );
   }
 
-  const baseInvoices = (overdueRows ?? []).flatMap((row) => {
+  const baseInvoices = overdueRows.slice(0, MAX_VISIBLE_INVOICES).flatMap((row) => {
     const inv = toOverdueInvoice(row);
     return inv ? [inv] : [];
   });

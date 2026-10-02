@@ -37,7 +37,7 @@ export async function addToOfflineQueue(
   const { data: invoiceRow, error: invErr } = await supabase
     .from('invoices')
     .select(
-      'tenant_id, invoice_kind, invoice_type, fa3_data, ksef_status, ksef_number, internal_number, issue_date, gross_total, buyer_data, buyer_nip, seller_nip, created_at, tenants(nip, ksef_verified_at, ksef_verified_environment)',
+      'tenant_id, invoice_kind, invoice_type, fa3_data, ksef_status, submitted_to_ksef_at, offline_idempotency_key, offline_qr_offline, offline_qr_certyfikat, internal_number, issue_date, gross_total, buyer_data, buyer_nip, seller_nip, created_at, tenants(nip, ksef_verified_at, ksef_verified_environment)',
     )
     .eq('id', params.invoiceId)
     .eq('tenant_id', params.tenantId)
@@ -56,6 +56,17 @@ export async function addToOfflineQueue(
   if (invoiceRow.ksef_status === 'accepted') {
     throw new Error('Accepted invoice cannot enter Offline24 queue');
   }
+  const observedStatus = invoiceRow.ksef_status;
+  if (invoiceRow.submitted_to_ksef_at ||
+      (observedStatus !== 'draft' &&
+       observedStatus !== 'queued' &&
+       observedStatus !== 'offline_queued')) {
+    throw new Error('Invoice KSeF submission requires reconciliation before Offline24 queue');
+  }
+  const preClaimStatus = observedStatus;
+  const preClaimOfflineKey = invoiceRow.offline_idempotency_key;
+  const preClaimQrOffline = invoiceRow.offline_qr_offline;
+  const preClaimQrCertyfikat = invoiceRow.offline_qr_certyfikat;
 
   const idempotencySource = invoiceRow.created_at
     ? new Date(invoiceRow.created_at)
@@ -66,7 +77,7 @@ export async function addToOfflineQueue(
     params.invoiceId,
     idempotencySource,
   );
-  // Termin od daty wystawienia (P_1), w dniach roboczych PL (AUD-15).
+  // Termin od daty wystawienia, dni robocze w Polsce (AUD-15, decyzja P1).
   const deadline = calculateOfflineDeadline(
     String(invoiceRow.issue_date ?? now.toISOString().slice(0, 10)),
     params.isMfOutage,
@@ -83,6 +94,40 @@ export async function addToOfflineQueue(
   }
   const sellerNip = tenantNipRow?.nip ?? invoiceRow.seller_nip ?? '';
 
+  // An already parked invoice is a read-only retry. In particular, never
+  // regenerate its QR payloads or recreate a queue row after online sending.
+  if (preClaimStatus === 'offline_queued') {
+    const { data: existing, error: fetchErr } = await supabase
+      .from('ksef_offline_queue')
+      .select('*')
+      .eq('idempotency_key', idempotencyKey)
+      .eq('tenant_id', params.tenantId)
+      .eq('invoice_id', params.invoiceId)
+      .maybeSingle();
+    if (fetchErr || !existing) {
+      throw new Error('Offline queue conflict could not be verified');
+    }
+    if (existing.ksef_environment !== environment) {
+      throw new Error('Offline queue conflict has no matching KSeF environment');
+    }
+    if (existing.status !== 'queued') {
+      throw new Error('Offline queue conflict is not active and requires reconciliation');
+    }
+    const { data: current, error: currentErr } = await supabase
+      .from('invoices')
+      .select('id')
+      .eq('id', params.invoiceId)
+      .eq('tenant_id', params.tenantId)
+      .eq('ksef_status', 'offline_queued')
+      .eq('offline_idempotency_key', idempotencyKey)
+      .is('submitted_to_ksef_at', null)
+      .maybeSingle();
+    if (currentErr || !current) {
+      throw new Error('Offline queue conflict is not active and requires reconciliation');
+    }
+    return existing as OfflineQueueRow;
+  }
+
   type BuyerSnap = { nip?: unknown };
   const buyerNipRaw = invoiceRow.buyer_data as BuyerSnap | null;
   const buyerNipFromJson =
@@ -98,6 +143,46 @@ export async function addToOfflineQueue(
     certificate: params.certificate,
     idempotencyKey,
   });
+
+  // Claim the exact state read above before publishing a replayable queue row.
+  // Online sending also claims with submitted_to_ksef_at IS NULL; only one
+  // transition can win. QR is kept off the invoice until the row is durable.
+  const { data: claimed, error: claimErr } = await supabase
+    .from('invoices')
+    .update({
+      ksef_status: 'offline_queued',
+      offline_idempotency_key: idempotencyKey,
+      offline_qr_offline: null,
+      offline_qr_certyfikat: null,
+    })
+    .eq('id', params.invoiceId)
+    .eq('tenant_id', params.tenantId)
+    .eq('ksef_status', preClaimStatus)
+    .is('submitted_to_ksef_at', null)
+    .select('id')
+    .maybeSingle();
+  if (claimErr || !claimed) {
+    throw new Error('Invoice could not be updated for offline queue');
+  }
+
+  const rollbackClaim = async () => {
+    const { error: rollbackErr } = await supabase
+      .from('invoices')
+      .update({
+        ksef_status: preClaimStatus,
+        offline_idempotency_key: preClaimOfflineKey,
+        offline_qr_offline: preClaimQrOffline,
+        offline_qr_certyfikat: preClaimQrCertyfikat,
+      })
+      .eq('id', params.invoiceId)
+      .eq('tenant_id', params.tenantId)
+      .eq('ksef_status', 'offline_queued')
+      .eq('offline_idempotency_key', idempotencyKey)
+      .is('submitted_to_ksef_at', null);
+    if (rollbackErr) {
+      throw new Error('Offline queue claim rollback requires reconciliation');
+    }
+  };
 
   const { data: row, error } = await supabase
     .from('ksef_offline_queue')
@@ -118,6 +203,7 @@ export async function addToOfflineQueue(
     .single();
 
   if (error) {
+    await rollbackClaim();
     if (error.code === '23505') {
       const { data: existing, error: fetchErr } = await supabase
         .from('ksef_offline_queue')
@@ -132,59 +218,46 @@ export async function addToOfflineQueue(
       if (existing.ksef_environment !== environment) {
         throw new Error('Offline queue conflict has no matching KSeF environment');
       }
-      // Stan świeży, nie z początku funkcji: faktura mogła zostać przyjęta
-      // w międzyczasie (main) albo wpis z kolejki jest już nieaktywny (#63).
-      const { data: current, error: currentError } = await supabase
-        .from('invoices')
-        .select('ksef_status')
-        .eq('id', params.invoiceId)
-        .eq('tenant_id', params.tenantId)
-        .maybeSingle();
-      if (currentError || !current) throw new Error('Invoice status unavailable after offline queue conflict');
-      if (current.ksef_status === 'accepted') {
-        throw new Error('Invoice already accepted during offline queueing');
-      }
-      if (existing.status !== 'queued' || current.ksef_status !== 'offline_queued') {
-        throw new Error('Offline queue conflict is not active and requires reconciliation');
-      }
-      return existing as OfflineQueueRow;
+      throw new Error(existing.status === 'queued'
+        ? 'Offline queue conflict has no matching invoice claim and requires reconciliation'
+        : 'Offline queue conflict is not active and requires reconciliation');
     }
     throw error;
   }
 
+  // The queue row now holds the QR payloads. Cache them on the invoice only
+  // while our claim still owns it; a concurrent send must never regain QR.
   const { data: updated, error: updErr } = await supabase
     .from('invoices')
     .update({
-      ksef_status: 'offline_queued',
       offline_qr_offline: qrCodes.offlinePayload,
       offline_qr_certyfikat: qrCodes.certyfikatPayload,
-      offline_idempotency_key: idempotencyKey,
     })
     .eq('id', params.invoiceId)
     .eq('tenant_id', params.tenantId)
-    .or('ksef_status.is.null,ksef_status.neq.accepted')
+    .eq('ksef_status', 'offline_queued')
+    .eq('offline_idempotency_key', idempotencyKey)
+    .is('submitted_to_ksef_at', null)
     .select('id')
     .maybeSingle();
 
-  if (updErr) throw new Error('Invoice could not be updated for offline queue');
-  if (!updated) {
-    const { data: current, error: currentError } = await supabase
-      .from('invoices')
-      .select('ksef_status, ksef_number')
-      .eq('id', params.invoiceId)
+  if (updErr || !updated) {
+    // A fetched queue row is harmless after this conditional delete: its
+    // worker must claim the still-queued row before sending anything.
+    const { data: removed, error: removeErr } = await supabase
+      .from('ksef_offline_queue')
+      .delete()
+      .eq('id', row.id)
       .eq('tenant_id', params.tenantId)
+      .eq('invoice_id', params.invoiceId)
+      .eq('idempotency_key', idempotencyKey)
+      .eq('status', 'queued')
+      .select('id')
       .maybeSingle();
-    if (currentError || !current) throw new Error('Invoice status unavailable after offline queue insert');
-    if (current.ksef_status === 'accepted' && current.ksef_number) {
-      const { error: reconcileError } = await supabase
-        .from('ksef_offline_queue')
-        .update({ status: 'sent', last_error: null })
-        .eq('id', row.id)
-        .eq('tenant_id', params.tenantId)
-        .eq('invoice_id', params.invoiceId)
-        .eq('status', 'queued');
-      if (reconcileError) throw new Error('Accepted invoice queue could not be reconciled');
+    if (removeErr || !removed) {
+      throw new Error('Offline queue QR cache requires reconciliation');
     }
+    await rollbackClaim();
     throw new Error('Invoice could not be updated for offline queue');
   }
 

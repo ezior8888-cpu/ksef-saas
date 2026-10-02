@@ -142,6 +142,7 @@ export const inboxInvoiceReceivedAutoCategorize = zodEvent(
   z.object({
     invoiceId: z.string().uuid('invoiceId musi być UUID'),
     tenantId: z.string().uuid('tenantId musi być UUID'),
+    environment: z.enum(['test', 'demo', 'production']),
   }),
 );
 

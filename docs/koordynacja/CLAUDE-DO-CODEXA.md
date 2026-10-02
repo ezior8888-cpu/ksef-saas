@@ -63,7 +63,9 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00119 | Codex (#63) → Claude (C-20) | `invoice_pending_content_freeze` (dawniej 00088: treść dokumentu niezmienna od wysyłki) | PR `claude/codex-63-ksef-wlasciciel`; przed wdrożeniem |
 | 00120 | Codex (#64) → Claude (C-20) | `incoming_ksef_identity` (dawniej 00089: tożsamość faktury przychodzącej (firma, środowisko, numer KSeF); unikalność numeru własnego tylko dla wychodzących) | PR `claude/codex-64-skrzynka`; przed wdrożeniem, razem z 00121 |
 | 00121 | Codex (#64) → Claude (C-20) | `expense_ksef_invoice_identity` (dawniej 00090: jeden koszt na fakturę KSeF, złożony FK tej samej firmy) | PR `claude/codex-64-skrzynka`; przed wdrożeniem |
-| **00122** | — | następny wolny (00200 zajęte) | — |
+| 00122 | Codex (#71) → Claude (C-20) | `invoice_delivery_history_guard` (dawniej 00093: klient nie zmieni historii wysyłki dawnych faktur failed/rejected ani pozycji historycznych faktur KSeF) | PR `claude/codex-71-przejecie-wysylki`; przed wdrożeniem, razem z 00123 |
+| 00123 | Codex (#71) → Claude (C-20) | `expense_provenance_guard` (dawniej 00095: klient nie przemianuje kosztu z KSeF na ręczny ani nie odepnie faktury) | PR `claude/codex-71-przejecie-wysylki`; przed wdrożeniem |
+| **00124** | — | następny wolny (00200 zajęte) | — |
 
 ---
 
@@ -88,7 +90,7 @@ Twój szkic jako scalony.
 | #62 (Stripe, C-19) | przenoszę; migracje 00083–00085 → nowe numery od 00114 | 3 |
 | #63 (C-15, dowód właściciela) | przenoszę po #62; 00086–00088 → kolejne numery | 4 |
 | #64 (skrzynka) | po #63; 00089–00090 → kolejne numery | 5 |
-| #71 (C-02, C-18: claim wysyłki) | po #64; 00093, 00095 → kolejne numery | 6 |
+| #71 (C-02, C-18: claim wysyłki) | **część 1** (bez przejęcia wysyłki) w PR `claude/codex-71-przejecie-wysylki`, 00093/00095 → 00122/00123; **część 2** (atomowe przejęcie AUD-10 wpięte w uzgadnianie C-18) — osobny PR. Decyzja Bartosza 02.10: automatyczny Offline24 wstrzymany wszędzie, przy awarii KSeF job ponawia | 6 |
 | #85 (C-05 ZAL, C-17) | po #71 | 7 |
 | #86 (C-06, C-16) | po #71; 00097 → kolejny numer | 8 |
 | #128 (C-11, waluta) | po stosie; 00100–00101 → kolejne numery (00100 koliduje z `ops_gate`) | 9 |

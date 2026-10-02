@@ -4,8 +4,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const mocks = vi.hoisted(() => ({ getPageContext: vi.fn() }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: mocks.getPageContext }));
 vi.mock('@/components/expenses/kpir-view', () => ({
-  KpirView: ({ invoices }: { invoices: Array<{ internal_number: string }> }) =>
-    invoices.map((invoice) => invoice.internal_number).join(','),
+  KpirView: ({ invoices, expenses }: {
+    invoices: Array<{ internal_number: string }>;
+    expenses: Array<{ id: string }>;
+  }) => [
+    ...invoices.map((invoice) => invoice.internal_number),
+    ...expenses.map((expense) => expense.id),
+  ].join(','),
 }));
 
 import KpirPage from '@/app/(dashboard)/reports/kpir/page';
@@ -17,13 +22,18 @@ const fixtureRows: Row[] = [
   { id: 'legacy', tenant_id: 'tenant-a', internal_number: 'LEGACY-DOCUMENT', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: null, issue_date: '2026-09-10' },
 ];
 let rows: Row[];
+let expenseRows: Row[];
 const from = vi.fn((table: string) => {
   let head = false;
   let count = false;
+  let window: [number, number] | null = null;
+  const ordering: Array<{ key: string; ascending: boolean }> = [];
   const filters: Array<(row: Row) => boolean> = [];
   const query = {
     select: (_columns: string, options?: { count?: string; head?: boolean }) => { count = !!options?.count; head = !!options?.head; return query; },
+    range: (from: number, to: number) => { window = [from, to]; return query; },
     eq: (key: string, value: unknown) => { filters.push((row) => row[key] === value); return query; },
+    in: (key: string, values: unknown[]) => { filters.push((row) => values.includes(row[key])); return query; },
     or: (filter: string) => {
       const match = /^ksef_environment\.is\.null,ksef_environment\.neq\.(test|demo|production)$/.exec(filter);
       if (!match) throw new Error(`Unexpected OR filter ${filter}`);
@@ -32,10 +42,21 @@ const from = vi.fn((table: string) => {
     },
     gte: (key: string, value: string) => { filters.push((row) => String(row[key]) >= value); return query; },
     lte: (key: string, value: string) => { filters.push((row) => String(row[key]) <= value); return query; },
-    order: () => query,
+    order: (key: string, options?: { ascending?: boolean }) => {
+      ordering.push({ key, ascending: options?.ascending !== false });
+      return query;
+    },
     then: <T,>(resolve: (value: { data: Row[] | null; count: number | null; error: null }) => T) => {
-      const selected = (table === 'invoices' ? rows : []).filter((row) => filters.every((filter) => filter(row)));
-      return Promise.resolve({ data: head ? null : selected, count: count ? selected.length : null, error: null as null }).then(resolve);
+      const selected = (table === 'invoices' ? rows : expenseRows).filter((row) => filters.every((filter) => filter(row)));
+      selected.sort((a, b) => {
+        for (const { key, ascending } of ordering) {
+          const comparison = String(a[key] ?? '').localeCompare(String(b[key] ?? ''));
+          if (comparison !== 0) return ascending ? comparison : -comparison;
+        }
+        return 0;
+      });
+      const page = window ? selected.slice(window[0], window[1] + 1) : selected.slice(0, 1000);
+      return Promise.resolve({ data: head ? null : page, count: count ? selected.length : null, error: null as null }).then(resolve);
     },
   };
   return query;
@@ -45,6 +66,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('KSEF_ENV', 'test');
   rows = fixtureRows.map((row) => ({ ...row }));
+  expenseRows = [];
   mocks.getPageContext.mockResolvedValue({ tenantId: 'tenant-a', supabase: { from } });
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -70,5 +92,67 @@ describe('KPiR KSeF provenance', () => {
     await expect(KpirPage({ searchParams: Promise.resolve({ month: '9', year: '2026' }) }))
       .rejects.toThrow('not safely configured');
     expect(from).not.toHaveBeenCalled();
+  });
+
+  it('shows manual/OCR costs and matching inbox costs, excluding a linked PROD cost', async () => {
+    rows = [
+      rows[0]!,
+      { id: 'test-source', tenant_id: 'tenant-a', direction: 'incoming', ksef_status: 'accepted', ksef_environment: 'test', issue_date: '2026-08-10' },
+      { id: 'prod-source', tenant_id: 'tenant-a', direction: 'incoming', ksef_status: 'accepted', ksef_environment: 'production', issue_date: '2026-08-10' },
+    ];
+    expenseRows = [
+      { id: 'manual', tenant_id: 'tenant-a', source: 'manual', ksef_invoice_id: null, is_deductible: true, issue_date: '2026-09-10' },
+      { id: 'ocr-cost', tenant_id: 'tenant-a', source: 'ocr_photo', ksef_invoice_id: null, is_deductible: true, issue_date: '2026-09-10' },
+      { id: 'test-cost', tenant_id: 'tenant-a', source: 'ksef_inbox', ksef_invoice_id: 'test-source', is_deductible: true, issue_date: '2026-09-10' },
+      { id: 'prod-cost', tenant_id: 'tenant-a', source: 'ksef_inbox', ksef_invoice_id: 'prod-source', is_deductible: true, issue_date: '2026-09-10' },
+    ];
+
+    const page = await KpirPage({ searchParams: Promise.resolve({ month: '9', year: '2026' }) });
+    const html = renderToStaticMarkup(page);
+    expect(html).toContain('manual');
+    expect(html).toContain('ocr-cost');
+    expect(html).toContain('test-cost');
+    expect(html).not.toContain('prod-cost');
+  });
+
+  it('blocks a KSeF cost without its linked invoice', async () => {
+    rows = [rows[0]!];
+    expenseRows = [{
+      id: 'unlinked', tenant_id: 'tenant-a', source: 'ksef_inbox',
+      ksef_invoice_id: null, is_deductible: true, issue_date: '2026-09-10',
+    }];
+    await expect(KpirPage({ searchParams: Promise.resolve({ month: '9', year: '2026' }) }))
+      .rejects.toThrow('no linked invoice');
+  });
+
+  it('blocks a cost with NULL provenance instead of treating it as manual', async () => {
+    rows = [rows[0]!];
+    expenseRows = [{
+      id: 'unknown-source', tenant_id: 'tenant-a', source: null,
+      ksef_invoice_id: null, is_deductible: true, issue_date: '2026-09-10',
+    }];
+    await expect(KpirPage({ searchParams: Promise.resolve({ month: '9', year: '2026' }) }))
+      .rejects.toThrow('provenance is malformed');
+  });
+
+  it('includes all 1200 monthly expenses and invoices beyond the PostgREST cap', async () => {
+    rows = Array.from({ length: 1200 }, (_, i) => ({
+      ...rows[0], id: `invoice-${String(i).padStart(4, '0')}`,
+      internal_number: `INVOICE-${String(i).padStart(4, '0')}`,
+    })).reverse();
+    expenseRows = Array.from({ length: 1200 }, (_, i) => ({
+      id: `expense-${String(i).padStart(4, '0')}`, tenant_id: 'tenant-a',
+      source: 'manual', ksef_invoice_id: null, is_deductible: true,
+      issue_date: '2026-09-10',
+    })).reverse();
+
+    const page = await KpirPage({ searchParams: Promise.resolve({ month: '9', year: '2026' }) });
+    const html = renderToStaticMarkup(page);
+    expect(html).toContain('INVOICE-1199');
+    expect(html).toContain('expense-1199');
+    expect((html.match(/INVOICE-/g) ?? [])).toHaveLength(1200);
+    expect((html.match(/expense-/g) ?? [])).toHaveLength(1200);
+    expect(html.indexOf('INVOICE-0000')).toBeLessThan(html.indexOf('INVOICE-1199'));
+    expect(html.indexOf('expense-0000')).toBeLessThan(html.indexOf('expense-1199'));
   });
 });

@@ -55,11 +55,13 @@ vi.mock('@/lib/supabase/admin', () => ({
     auth: { admin: { getUserById: async () => ({ data: { user: { email: 'wlasciciel@example.test' } }, error: null }) } },
   }),
 }));
+// Eksport zapisuje obiekt tylko, gdy go nie ma (#71).
 vi.mock('@/lib/storage/r2', () => ({
-  r2ObjectExists: async () => false,
-  uploadToR2: async (_p: string, buffer: Buffer) => {
+  uploadToR2IfAbsent: async (_p: string, buffer: Buffer) => {
     db.uploads.push(buffer.toString('utf8'));
+    return true;
   },
+  downloadFromR2: async () => Buffer.from(''),
 }));
 // JPK_V7M jest wstrzymany (#66) — tu sprawdzamy sam plik, jak w exports-jpk-v7m-job.
 vi.mock('@/lib/exports/suspended-formats', async (orig) => ({
