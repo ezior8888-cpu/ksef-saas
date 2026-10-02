@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   subscriptionRead: vi.fn(),
+  zeroPaymentRead: vi.fn(),
   stripeRetrieve: vi.fn(),
 }));
 
@@ -34,16 +35,134 @@ function invoice(subscription: string | null): Stripe.Invoice {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.from.mockReturnValue({
+  mocks.zeroPaymentRead.mockResolvedValue({ data: null, error: null });
+  mocks.from.mockImplementation((table: string) => ({
     select: () => ({
-      eq: () => ({ maybeSingle: mocks.subscriptionRead }),
+      eq: () => ({
+        maybeSingle: table === 'stripe_payments'
+          ? mocks.zeroPaymentRead
+          : mocks.subscriptionRead,
+      }),
     }),
-  });
+  }));
 });
 
 describe('Stripe invoice subscription ordering', () => {
   it('skips an actual one-time invoice without a subscription reference', async () => {
     await expect(mapInvoiceToPaymentRow(invoice(null), 'succeeded')).resolves.toBeNull();
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges a zero-value subscription invoice without a payment or VAT job', async () => {
+    const freeTrial = {
+      ...invoice('sub_trial'),
+      total: 0,
+      amount_paid: 0,
+      amount_due: 0,
+      payment_intent: null,
+      charge: null,
+      status_transitions: { paid_at: null },
+    } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(freeTrial, 'succeeded')).resolves.toBeNull();
+    expect(mocks.from).toHaveBeenCalledWith('stripe_payments');
+    expect(mocks.from).not.toHaveBeenCalledWith('subscriptions');
+  });
+
+  it('holds a zero-value invoice with a full payment reference for reconciliation', async () => {
+    const changed = {
+      ...invoice('sub_trial'),
+      total: 0,
+      amount_paid: 0,
+      amount_due: 0,
+    } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(changed, 'succeeded'))
+      .rejects.toBeInstanceOf(ReconciliationRequiredWebhookError);
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('holds a zero-value invoice already recorded as a failed payment', async () => {
+    mocks.zeroPaymentRead.mockResolvedValue({
+      data: { id: 'existing-failed-payment' },
+      error: null,
+    });
+    const changed = {
+      ...invoice('sub_trial'),
+      total: 0,
+      amount_paid: 0,
+      amount_due: 0,
+      payment_intent: null,
+      charge: null,
+    } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(changed, 'succeeded'))
+      .rejects.toBeInstanceOf(ReconciliationRequiredWebhookError);
+  });
+
+  it('retries a zero-value invoice when payment history cannot be checked', async () => {
+    mocks.zeroPaymentRead.mockResolvedValue({
+      data: null,
+      error: { message: 'temporary outage' },
+    });
+    const changed = {
+      ...invoice('sub_trial'),
+      total: 0,
+      amount_paid: 0,
+      amount_due: 0,
+      payment_intent: null,
+      charge: null,
+    } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(changed, 'succeeded'))
+      .rejects.toBeInstanceOf(RetryablePreEffectWebhookError);
+  });
+
+  it('retries a rejected zero-value payment-history read before effects', async () => {
+    mocks.zeroPaymentRead.mockRejectedValueOnce(new Error('connection reset'));
+    const changed = {
+      ...invoice('sub_trial'), total: 0, amount_paid: 0, amount_due: 0,
+      payment_intent: null, charge: null,
+    } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(changed, 'succeeded')).rejects.toMatchObject({
+      name: 'RetryablePreEffectWebhookError',
+      code: 'financial_object_lookup_failed',
+    });
+    expect(mocks.from).not.toHaveBeenCalledWith('subscriptions');
+  });
+
+  it.each([
+    ['without refs', { payment_intent: null, charge: null }],
+    ['with an old ref', { payment_intent: 'pi_ValidReference123', charge: null }],
+  ])('requires reconciliation for a positive invoice paid by credit %s', async (_label, refs) => {
+    const paidByCredit = {
+      ...invoice('sub_credit'),
+      total: 12000,
+      amount_paid: 0,
+      amount_due: 0,
+      ...refs,
+    } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(paidByCredit, 'succeeded'))
+      .rejects.toMatchObject({
+        name: 'ReconciliationRequiredWebhookError',
+        code: 'payment_reference_missing_or_invalid',
+      } satisfies Partial<ReconciliationRequiredWebhookError>);
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed references even on a zero-value invoice', async () => {
+    const malformed = {
+      ...invoice('sub_trial'),
+      total: 0,
+      amount_paid: 0,
+      payment_intent: 'not-a-payment-id',
+      charge: null,
+    } as unknown as Stripe.Invoice;
+
+    await expect(mapInvoiceToPaymentRow(malformed, 'succeeded'))
+      .rejects.toBeInstanceOf(ReconciliationRequiredWebhookError);
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
@@ -63,6 +182,18 @@ describe('Stripe invoice subscription ordering', () => {
 
     await expect(mapInvoiceToPaymentRow(invoice('sub_later'), 'failed'))
       .rejects.toThrow('subscription lookup failed: temporary database outage');
+  });
+
+  it('retries a rejected subscription read before payment effects', async () => {
+    mocks.subscriptionRead.mockRejectedValueOnce(new Error('connection reset'));
+
+    await expect(mapInvoiceToPaymentRow(invoice('sub_later'), 'failed'))
+      .rejects.toMatchObject({
+        name: 'RetryablePreEffectWebhookError',
+        code: 'subscription_lookup_failed',
+      });
+    expect(mocks.from).toHaveBeenCalledWith('subscriptions');
+    expect(mocks.from).not.toHaveBeenCalledWith('stripe_payments');
   });
 
   it('reads a Basil+ subscription reference from invoice.parent', async () => {

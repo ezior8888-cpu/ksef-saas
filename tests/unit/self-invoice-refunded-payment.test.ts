@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobContext } from '@/lib/jobs/registry';
 
 const mocks = vi.hoisted(() => ({
@@ -60,6 +60,7 @@ const context: JobContext = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv('KSEF_ENV', 'test');
   paymentStatus = 'succeeded';
   statusReadError = false;
   subscriptionPlan = 'annual';
@@ -360,4 +361,8 @@ describe('VAT self-invoice for a delayed payment job', () => {
     expect(sentEvent).toHaveBeenCalledOnce();
     expect(mocks.audit).toHaveBeenCalledOnce();
   });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });

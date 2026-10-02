@@ -292,7 +292,9 @@ function legacyInvoicePaymentReferences(
 
 /**
  * Invoice (succeeded/failed) to a stripe_payments row.
- * Returns null only for an actual one-time invoice without a subscription.
+ * Returns null for a one-time invoice or a zero-value subscription invoice
+ * which did not collect a payment. A positive invoice paid from customer
+ * credit still requires reconciliation, even if an old ref is present.
  */
 export interface PaymentRowResult {
   tenantId: string;
@@ -307,34 +309,98 @@ export async function mapInvoiceToPaymentRow(
   const subscriptionRef = invoiceSubscriptionId(invoice);
   if (!subscriptionRef) return null;
 
+  // A positive paid invoice settled from customer balance collected no new
+  // money, even if an old payment reference happens to be present. Its VAT
+  // and refund treatment needs an explicit reconciliation decision.
+  if (status === 'succeeded' && invoice.total > 0 && invoice.amount_paid === 0) {
+    throw new ReconciliationRequiredWebhookError(
+      'Stripe positive invoice paid without a new collected amount',
+    );
+  }
+
+  // A trial or 100% discount can produce a signed payment_succeeded event
+  // without a PaymentIntent/Charge. There is no collected payment to mirror,
+  // invoice or refund. Validate any supplied references even on this path;
+  // amount_paid === 0 alone is insufficient (customer credit can pay a
+  // positive invoice without a new card charge).
+  const isZeroValuePaidInvoice = status === 'succeeded' &&
+    invoice.total === 0 && invoice.amount_paid === 0;
+  const paymentRefs = legacyInvoicePaymentReferences(
+    invoice,
+    status === 'succeeded' && !isZeroValuePaidInvoice,
+  );
+  if (isZeroValuePaidInvoice) {
+    // A zero-value snapshot carrying an old payment identity, or one already
+    // recorded locally as failed, is a financial transition to reconcile.
+    // Acknowledging it as a fresh trial would strand the earlier attempt.
+    if (paymentRefs.paymentIntentId || paymentRefs.chargeId) {
+      throw new ReconciliationRequiredWebhookError(
+        'Stripe zero-value invoice carries a payment reference',
+      );
+    }
+    let paymentRead: { data: { id: string } | null; error: { message: string } | null };
+    try {
+      paymentRead = await createAdminClient()
+        .from('stripe_payments')
+        .select('id')
+        .eq('stripe_invoice_id', invoice.id)
+        .maybeSingle();
+    } catch {
+      throw new RetryablePreEffectWebhookError(
+        'financial_object_lookup_failed',
+        'Stripe zero-value invoice payment lookup failed before local effects',
+      );
+    }
+    const { data: existingPayment, error: existingPaymentError } = paymentRead;
+    if (existingPaymentError) {
+      throw new RetryablePreEffectWebhookError(
+        'financial_object_lookup_failed',
+        'Stripe zero-value invoice payment lookup failed: ' + existingPaymentError.message,
+      );
+    }
+    if (existingPayment) {
+      throw new ReconciliationRequiredWebhookError(
+        'Stripe zero-value invoice has an existing local payment',
+      );
+    }
+    return null;
+  }
+
   // The signed Stripe invoice is the authority for the payment date. A
   // delivery without it cannot create a payment row or schedule a VAT job.
   const paidAt = status === 'succeeded' ? paidAtFromInvoice(invoice) : null;
-  const paymentRefs = legacyInvoicePaymentReferences(
-    invoice,
-    status === 'succeeded',
-  );
 
   const supabase = createAdminClient();
 
   // Subscription row musi już istnieć (created przed payment_succeeded).
   // Cast: tabela nie w typed gen.
-  const subResult = (await (supabase as unknown as {
-    from: (n: string) => {
-      select: (c: string) => {
-        eq: (k: string, v: string) => {
-          maybeSingle: () => Promise<{
-            data: { id: string; tenant_id: string } | null;
-            error: { message: string } | null;
-          }>;
+  let subResult: {
+    data: { id: string; tenant_id: string } | null;
+    error: { message: string } | null;
+  };
+  try {
+    subResult = await (supabase as unknown as {
+      from: (n: string) => {
+        select: (c: string) => {
+          eq: (k: string, v: string) => {
+            maybeSingle: () => Promise<{
+              data: { id: string; tenant_id: string } | null;
+              error: { message: string } | null;
+            }>;
+          };
         };
       };
-    };
-  })
-    .from('subscriptions')
-    .select('id, tenant_id')
-    .eq('stripe_subscription_id', subscriptionRef)
-    .maybeSingle());
+    })
+      .from('subscriptions')
+      .select('id, tenant_id')
+      .eq('stripe_subscription_id', subscriptionRef)
+      .maybeSingle();
+  } catch {
+    throw new RetryablePreEffectWebhookError(
+      'subscription_lookup_failed',
+      'Stripe subscription lookup failed before local effects',
+    );
+  }
 
   if (subResult.error) {
     throw new RetryablePreEffectWebhookError(

@@ -1,88 +1,101 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  from: vi.fn(),
+  rpc: vi.fn(),
   createCustomer: vi.fn(),
   retrieveCustomer: vi.fn(),
-  captureException: vi.fn(),
   captureMessage: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: () => ({ from: mocks.from }),
+  createAdminClient: () => ({ rpc: mocks.rpc }),
 }));
 vi.mock('@/lib/stripe/client', () => ({
-  getStripe: () => ({ customers: {
-    create: mocks.createCustomer,
-    retrieve: mocks.retrieveCustomer,
-  } }),
+  getStripe: () => ({
+    customers: {
+      create: mocks.createCustomer,
+      retrieve: mocks.retrieveCustomer,
+    },
+  }),
 }));
 vi.mock('@sentry/nextjs', () => ({
-  captureException: mocks.captureException,
   captureMessage: mocks.captureMessage,
 }));
 
 import { ensureStripeCustomer } from '@/lib/stripe/customer';
 
-const input = { tenantId: 'tenant-test', email: 'owner@example.test', name: 'Firma Testowa' };
+const input = {
+  tenantId: '22222222-2222-4222-8222-222222222222',
+  email: 'owner@example.test',
+  name: 'Firma Testowa',
+  nip: '1234567890',
+};
+const attemptId = '11111111-1111-4111-8111-111111111111';
 
-function fakeTenantStore(initialId: string | null, options?: {
-  tenantExists?: boolean;
-  ambiguousWrite?: boolean;
-  suppressWrite?: boolean;
-}) {
-  let storedId = initialId;
-  const isNull = vi.fn();
-  const update = vi.fn((row: { stripe_customer_id: string }) => ({
-    eq: (column: string, tenantId: string) => ({
-      is: (field: string, value: null) => {
-        expect(column).toBe('id');
-        expect(tenantId).toBe(input.tenantId);
-        expect(field).toBe('stripe_customer_id');
-        isNull(field, value);
-        return {
-          select: () => ({
-            maybeSingle: async () => {
-              if (options?.tenantExists === false || storedId !== null || options?.suppressWrite) {
-                return { data: null, error: null };
-              }
-              storedId = row.stripe_customer_id;
-              return options?.ambiguousWrite
-                ? { data: null, error: { message: 'ambiguous DB response' } }
-                : { data: { stripe_customer_id: storedId }, error: null };
-            },
-          }),
-        };
-      },
-    }),
-  }));
-  const select = vi.fn(() => ({
-    eq: (column: string, tenantId: string) => ({
-      // Capture at call time so simultaneous initial reads both see NULL.
-      maybeSingle: () => {
-        expect(column).toBe('id');
-        expect(tenantId).toBe(input.tenantId);
-        return Promise.resolve({
-          data: options?.tenantExists === false ? null : { stripe_customer_id: storedId },
-          error: null,
-        });
-      },
-    }),
-  }));
-  mocks.from.mockReturnValue({ select, update });
-  return { update, isNull, currentId: () => storedId };
+function fakeCustomerClaimStore(
+  initialCustomerId: string | null = null,
+  options?: { recordCommittedButResponseLost?: boolean; recordRejected?: boolean },
+) {
+  let customerId = initialCustomerId;
+  let status: 'none' | 'creating' | 'uncertain' | 'completed' =
+    initialCustomerId ? 'completed' : 'none';
+  let observedCustomerId: string | null = null;
+  const calls: string[] = [];
+
+  mocks.rpc.mockImplementation(async (
+    name: string,
+    args: Record<string, unknown>,
+  ) => {
+    calls.push(name);
+    expect(args.p_tenant_id).toBe(input.tenantId);
+    if (name === 'claim_stripe_customer_attempt') {
+      if (customerId) {
+        return { data: { state: 'existing', customerId }, error: null };
+      }
+      if (status === 'none') {
+        status = 'creating';
+        return { data: { state: 'claimed', attemptId }, error: null };
+      }
+      return { data: { state: status, attemptId }, error: null };
+    }
+    if (name === 'record_stripe_customer_attempt') {
+      expect(args.p_attempt_id).toBe(attemptId);
+      if (options?.recordRejected) {
+        return { data: false, error: null };
+      }
+      customerId = String(args.p_customer_id);
+      status = 'completed';
+      return options?.recordCommittedButResponseLost
+        ? { data: null, error: { message: 'lost response' } }
+        : { data: true, error: null };
+    }
+    if (name === 'hold_stripe_customer_attempt') {
+      expect(args.p_attempt_id).toBe(attemptId);
+      if (status !== 'creating') return { data: false, error: null };
+      status = 'uncertain';
+      observedCustomerId = args.p_customer_id as string | null;
+      return { data: true, error: null };
+    }
+    throw new Error('Unexpected RPC ' + name);
+  });
+
+  return {
+    calls,
+    current: () => ({ customerId, status, observedCustomerId }),
+  };
 }
 
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.retrieveCustomer.mockImplementation(async (id: string) => ({
-    id, metadata: { tenantId: input.tenantId },
+    id,
+    metadata: { tenantId: input.tenantId },
   }));
 });
 
-describe('ensureStripeCustomer compare-and-set', () => {
-  it('returns the already assigned customer without creating another', async () => {
-    fakeTenantStore('cus_existing');
+describe('durable Stripe Customer claim', () => {
+  it('verifies and reuses an existing mapped Customer', async () => {
+    fakeCustomerClaimStore('cus_existing');
     await expect(ensureStripeCustomer(input)).resolves.toEqual({
       customerId: 'cus_existing', created: false,
     });
@@ -90,88 +103,114 @@ describe('ensureStripeCustomer compare-and-set', () => {
     expect(mocks.retrieveCustomer).toHaveBeenCalledWith('cus_existing');
   });
 
-  it('stores and returns the new customer when it wins the NULL compare-and-set', async () => {
-    const db = fakeTenantStore(null);
-    mocks.createCustomer.mockResolvedValue({ id: 'cus_winner' });
-
+  it('creates once and atomically maps the Customer after verification', async () => {
+    const db = fakeCustomerClaimStore();
+    mocks.createCustomer.mockResolvedValue({ id: 'cus_first' });
     await expect(ensureStripeCustomer(input)).resolves.toEqual({
-      customerId: 'cus_winner', created: true,
+      customerId: 'cus_first', created: true,
     });
-    expect(db.isNull).toHaveBeenCalledWith('stripe_customer_id', null);
-    expect(db.currentId()).toBe('cus_winner');
+    expect(db.current()).toEqual({
+      customerId: 'cus_first', status: 'completed', observedCustomerId: null,
+    });
+    expect(db.calls).toEqual([
+      'claim_stripe_customer_attempt',
+      'record_stripe_customer_attempt',
+    ]);
+    expect(mocks.createCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: input.email,
+        metadata: { tenantId: input.tenantId, customerAttemptId: attemptId, nip: input.nip },
+      }),
+      { idempotencyKey: 'faktflow-customer-v1:' + attemptId },
+    );
   });
 
-  it('returns only the stored winner when two requests create customers concurrently', async () => {
-    const db = fakeTenantStore(null);
-    mocks.createCustomer
-      .mockResolvedValueOnce({ id: 'cus_first' })
-      .mockResolvedValueOnce({ id: 'cus_second' });
+  it('blocks a concurrent first request before a second Stripe create', async () => {
+    const db = fakeCustomerClaimStore();
+    let finishCreate: ((value: { id: string }) => void) | undefined;
+    mocks.createCustomer.mockImplementation(() => new Promise((resolve) => {
+      finishCreate = resolve;
+    }));
 
-    const results = await Promise.all([
-      ensureStripeCustomer(input),
-      ensureStripeCustomer(input),
-    ]);
+    const first = ensureStripeCustomer(input);
+    await vi.waitFor(() => expect(mocks.createCustomer).toHaveBeenCalledOnce());
+    await expect(ensureStripeCustomer(input)).rejects.toThrow('manual reconciliation');
+    expect(mocks.createCustomer).toHaveBeenCalledOnce();
 
-    expect(mocks.createCustomer).toHaveBeenCalledTimes(2);
-    expect(db.isNull).toHaveBeenCalledTimes(2);
-    expect(results).toEqual([
-      { customerId: 'cus_first', created: true },
-      { customerId: 'cus_first', created: false },
-    ]);
-    expect(db.currentId()).toBe('cus_first');
+    finishCreate?.({ id: 'cus_first' });
+    await expect(first).resolves.toEqual({ customerId: 'cus_first', created: true });
+    expect(db.current().customerId).toBe('cus_first');
   });
 
-  it('uses a fresh read after an ambiguous write and returns only the assigned ID', async () => {
-    fakeTenantStore(null, { ambiguousWrite: true });
-    mocks.createCustomer.mockResolvedValue({ id: 'cus_ambiguous' });
+  it('holds an ambiguous provider error indefinitely without another create', async () => {
+    const db = fakeCustomerClaimStore();
+    mocks.createCustomer.mockRejectedValue(new Error('connection reset'));
+    await expect(ensureStripeCustomer(input)).rejects.toThrow('manual reconciliation');
+    expect(db.current()).toEqual({
+      customerId: null, status: 'uncertain', observedCustomerId: null,
+    });
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-27T12:00:00Z'));
+      await expect(ensureStripeCustomer(input)).rejects.toThrow('manual reconciliation');
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(mocks.createCustomer).toHaveBeenCalledOnce();
+  });
 
+  it('stores a returned but unverified Customer ID in the hold', async () => {
+    const db = fakeCustomerClaimStore();
+    mocks.createCustomer.mockResolvedValue({ id: 'cus_unverified' });
+    mocks.retrieveCustomer.mockRejectedValue(new Error('Stripe unavailable'));
+    await expect(ensureStripeCustomer(input)).rejects.toThrow('manual reconciliation');
+    expect(db.current()).toEqual({
+      customerId: null, status: 'uncertain', observedCustomerId: 'cus_unverified',
+    });
+  });
+
+  it('resolves a committed assignment after an RPC response is lost', async () => {
+    fakeCustomerClaimStore(null, { recordCommittedButResponseLost: true });
+    mocks.createCustomer.mockResolvedValue({ id: 'cus_mapped' });
     await expect(ensureStripeCustomer(input)).resolves.toEqual({
-      customerId: 'cus_ambiguous', created: true,
+      customerId: 'cus_mapped', created: true,
     });
-    expect(mocks.captureException).toHaveBeenCalledOnce();
+    expect(mocks.createCustomer).toHaveBeenCalledOnce();
   });
 
-  it('fails closed when its new Stripe customer was not assigned to any tenant', async () => {
-    fakeTenantStore(null, { suppressWrite: true });
-    mocks.createCustomer.mockResolvedValue({ id: 'cus_unassigned' });
-
-    await expect(ensureStripeCustomer(input)).rejects.toThrow('not assigned');
+  it('holds an observed ID when the mapping was not committed', async () => {
+    const db = fakeCustomerClaimStore(null, { recordRejected: true });
+    mocks.createCustomer.mockResolvedValue({ id: 'cus_orphan' });
+    await expect(ensureStripeCustomer(input)).rejects.toThrow(
+      'assignment could not be verified',
+    );
+    expect(db.current()).toEqual({
+      customerId: null, status: 'uncertain', observedCustomerId: 'cus_orphan',
+    });
+    await expect(ensureStripeCustomer(input)).rejects.toThrow('manual reconciliation');
+    expect(mocks.createCustomer).toHaveBeenCalledOnce();
   });
 
   it.each([
-    ['another tenant', { id: 'cus_existing', metadata: { tenantId: 'other-tenant' } }],
-    ['missing legacy metadata', { id: 'cus_existing', metadata: {} }],
-    ['deleted customer', { id: 'cus_existing', deleted: true }],
-  ])('fails closed for an existing customer with %s', async (_label, stripeCustomer) => {
-    fakeTenantStore('cus_existing');
+    ['foreign tenant', { id: 'cus_existing', metadata: { tenantId: 'other' } }],
+    ['deleted', { id: 'cus_existing', deleted: true }],
+    ['wrong returned ID', { id: 'cus_other', metadata: { tenantId: input.tenantId } }],
+  ])('rejects an existing Customer with %s', async (_case, stripeCustomer) => {
+    fakeCustomerClaimStore('cus_existing');
     mocks.retrieveCustomer.mockResolvedValue(stripeCustomer);
-
     await expect(ensureStripeCustomer(input)).rejects.toThrow('manual reconciliation');
     expect(mocks.createCustomer).not.toHaveBeenCalled();
-    expect(mocks.captureMessage).toHaveBeenCalledOnce();
   });
 
-  it('fails closed when the winning CAS ID belongs to a different tenant in Stripe', async () => {
-    fakeTenantStore(null);
-    mocks.createCustomer.mockResolvedValue({ id: 'cus_mismatch' });
-    mocks.retrieveCustomer.mockResolvedValue({
-      id: 'cus_mismatch', metadata: { tenantId: 'other-tenant' },
-    });
-
-    await expect(ensureStripeCustomer(input)).rejects.toThrow('manual reconciliation');
+  it('does not call Stripe when the tenant claim fails', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: 'tenant missing' } });
+    await expect(ensureStripeCustomer(input)).rejects.toThrow('claim failed');
+    expect(mocks.createCustomer).not.toHaveBeenCalled();
   });
 
-  it('fails closed when Stripe cannot confirm the customer binding', async () => {
-    fakeTenantStore('cus_existing');
-    mocks.retrieveCustomer.mockRejectedValue(new Error('temporary Stripe failure'));
-
-    await expect(ensureStripeCustomer(input)).rejects.toThrow('verification failed');
-    expect(mocks.captureException).toHaveBeenCalledOnce();
-  });
-
-  it('does not create a Stripe customer for a missing tenant', async () => {
-    fakeTenantStore(null, { tenantExists: false });
-    await expect(ensureStripeCustomer(input)).rejects.toThrow('tenant not found');
+  it('does not call Stripe on malformed claim responses', async () => {
+    mocks.rpc.mockResolvedValue({ data: { state: 'claimed', attemptId: 'bad' }, error: null });
+    await expect(ensureStripeCustomer(input)).rejects.toThrow('attempt ID');
     expect(mocks.createCustomer).not.toHaveBeenCalled();
   });
 });

@@ -93,6 +93,31 @@ export async function recordCheckoutSession(
   });
 }
 
+/** Only a signed-event handler with a fresh exact Stripe Session may use this. */
+export async function recordVerifiedUncertainCheckoutSession(
+  attemptId: string,
+  tenantId: string,
+  customerId: string,
+  plan: 'monthly' | 'annual',
+  sessionId: string,
+  expiresAt: number,
+): Promise<void> {
+  if (!UUID_PATTERN.test(attemptId) || !UUID_PATTERN.test(tenantId) ||
+      !/^cus_[A-Za-z0-9]+$/.test(customerId) ||
+      !/^cs_[A-Za-z0-9_]+$/.test(sessionId) ||
+      !Number.isSafeInteger(expiresAt) || expiresAt <= 0) {
+    throw new Error('Invalid verified Checkout Session record');
+  }
+  await confirmedTransition('record_verified_uncertain_checkout_session', {
+    p_attempt_id: attemptId,
+    p_tenant_id: tenantId,
+    p_customer_id: customerId,
+    p_plan: plan,
+    p_session_id: sessionId,
+    p_expires_at: new Date(expiresAt * 1000).toISOString(),
+  });
+}
+
 export async function holdCheckoutAttempt(
   attemptId: string,
   expectedStatus: 'creating' | 'open',
