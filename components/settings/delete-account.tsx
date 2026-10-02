@@ -50,7 +50,7 @@ export function DeleteAccountSection({ tenantNip }: { tenantNip: string }) {
         <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
         <div className="text-sm text-foreground space-y-2">
           <p className="font-medium">
-            Ta operacja jest nieodwracalna po 30 dniach.
+            Ta operacja jest nieodwracalna po 14 dniach.
           </p>
           <p className="text-muted-foreground leading-relaxed">
             Wszystkie faktury, kontrahenci, certyfikaty i dane konta zostaną

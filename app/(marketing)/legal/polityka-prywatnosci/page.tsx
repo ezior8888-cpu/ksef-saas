@@ -166,12 +166,12 @@ export default function PrivacyPage() {
           <strong>{SUPPORT_EMAIL}</strong>. Dla <strong>usunięcia konta /
           organizacji z poziomu aplikacji</strong> (właściciel, po weryfikacji
           m.in. NIP) zapisujemy moment żądania oraz termin <strong>twardego
-          usunięcia</strong> danych podlegających skasowaniu —{' '}
-          <strong>obecnie jest to 30 dni</strong> od zapisania żądania (okres
-          odstąpienia / możliwość kontaktu z pomocą techniczną w celu anulowania
-          przed upływem terminu). Po upływie tego okresu dane użytkownika i
-          powiązane rekordy w zakresie objętym usuwaniem są usuwane zgodnie z
-          logiką aplikacji i bazą danych.
+          usunięcia</strong> danych podlegających skasowaniu. Przez{' '}
+          <strong>14 dni</strong> od zapisania żądania możesz je wycofać (z
+          poziomu aplikacji albo linkiem z wiadomości e-mail); po tym okresie
+          dane użytkownika i powiązane rekordy w zakresie objętym usuwaniem są
+          usuwane — <strong>najpóźniej w ciągu miesiąca</strong> od zapisania
+          żądania.
         </p>
         <p>
           <strong>Faktury i inne dane z 10-letnią retencją</strong> (np. wynikającą
@@ -186,13 +186,6 @@ export default function PrivacyPage() {
           <strong>zanonimizowane</strong> (usunięcie lub zastąpienie danych
           identyfikujących przy zachowaniu faktu wystąpienia zdarzenia). Szczegóły
           w sekcji 11.
-        </p>
-        <p>
-          <em>Uwaga planistyczna:</em> dokumentujemy też model{' '}
-          <strong>14-dniowego cooling-off</strong> jako docelowy standard dla
-          części ścieżek samoobsługowych — gdy pełna implementacja 14 dni zostanie
-          wdrożona w interfejsie, niniejsza sekcja zostanie zaktualizowana tak,
-          aby liczba dni w UI i w polityce była spójna.
         </p>
 
         <h2>10. Twoje prawa</h2>
