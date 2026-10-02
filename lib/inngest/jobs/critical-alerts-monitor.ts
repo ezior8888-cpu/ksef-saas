@@ -17,6 +17,8 @@
  *   9. **Stale VAT enqueue** — faktura powiązana, ale brak potwierdzenia emisji > 15 min
  *  10. **KSeF reconciliation** — numer KSeF przy niezaakceptowanym statusie lub ROZ hold
  *  11. **Kopia bazy nieaktualna** — najnowsza udana kopia starsza niż 26 h (AUD-37)
+ *  12. **Skrzynka KSeF zaległa** — firma bez przebiegu skrzynki > 6 h
+ *  13. **Opłacone bez faktury VAT** — płatność Stripe > 60 min bez dokumentu (AUD-40)
  *
  * Wszystkie progi konserwatywne — wolimy false-positive niż przegapić
  * critical incident. Operator może zignorować, ale nie chcemy gubić alertów.
@@ -427,6 +429,49 @@ export async function checkStaleStripeWebhookEvents(): Promise<AlertCheckResult>
   return { type: 'stale_stripe_webhooks', fired: true };
 }
 
+/**
+ * AUD-40: płatność opłacona ponad godzinę temu, a faktury VAT brak — np.
+ * `FAKTFLOW_OPERATOR_TENANT_ID` nieustawione (job kończy „skipped”) albo job
+ * padł przed utworzeniem dokumentu. Klient zapłacił, sprzedaż bez faktury.
+ */
+export async function checkPaidWithoutVatInvoice(): Promise<AlertCheckResult> {
+  const cutoffIso = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count, error } = await createAdminClient()
+    .from('stripe_payments')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'succeeded')
+    .is('vat_invoice_id', null)
+    .lt('paid_at', cutoffIso);
+
+  if (error || count === null) {
+    throw error ?? new Error('Paid-without-VAT count unavailable');
+  }
+  if (count === 0) return { type: 'paid_without_vat_invoice', fired: false };
+
+  const shouldSend = await shouldSendAlert('paid_without_vat_invoice');
+  if (!shouldSend) {
+    return { type: 'paid_without_vat_invoice', fired: false, reason: 'dedup' };
+  }
+
+  await alertCritical(
+    'Opłacone abonamenty bez faktury VAT',
+    'Co najmniej jedna płatność Stripe jest opłacona ponad godzinę, a faktura VAT nie powstała. Sprawdź FAKTFLOW_OPERATOR_TENANT_ID i job self-invoice-payment; fakturę wystaw ręcznie, jeśli zadanie jej nie utworzy.',
+    {
+      fields: [
+        { label: 'Płatności', value: String(count) },
+        { label: 'Próg', value: '60 min' },
+      ],
+      link: {
+        label: 'Otwórz panel administratora',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/support',
+      },
+    },
+  );
+
+  await markAlertDelivered('paid_without_vat_invoice');
+  return { type: 'paid_without_vat_invoice', fired: true };
+}
+
 /** A linked VAT draft without a confirmed enqueue must never be resent blindly. */
 export async function checkStaleBillingVatEnqueues(): Promise<AlertCheckResult> {
   const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
@@ -702,6 +747,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-stale-billing-vat-enqueues', () =>
         checkStaleBillingVatEnqueues().catch(captureAndReturn('stale_billing_vat_enqueues')),
+      ),
+      step.run('check-paid-without-vat-invoice', () =>
+        checkPaidWithoutVatInvoice().catch(captureAndReturn('paid_without_vat_invoice')),
       ),
       step.run('check-ksef-reconciliation', () =>
         checkKsefReconciliationAnomalies().catch(captureAndReturn('ksef_reconciliation')),
