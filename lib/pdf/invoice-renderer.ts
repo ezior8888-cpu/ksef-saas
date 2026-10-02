@@ -84,6 +84,15 @@ const VAT_RATE_LABEL: Record<VatRate, string> = {
   np: 'np.',
 };
 
+/**
+ * Etykieta stawki. Faktury z importu historii KSeF mają surowe kody FA(3)
+ * („0 KR”, „np I”, „0 WDT”), których mapa nie zna — drukujemy sam kod
+ * zamiast pustej komórki i „undefined” w podsumowaniu (F-067).
+ */
+function vatRateLabel(rate: string): string {
+  return VAT_RATE_LABEL[rate as VatRate] ?? rate;
+}
+
 /** Format kwoty w konwencji PL: `1 234,56`. */
 function money(n: number): string {
   return n.toLocaleString('pl-PL', {
@@ -372,7 +381,7 @@ function drawLineItems(
       unit: line.unit,
       price: money(line.unitPriceNet),
       net: money(line.netAmount),
-      vat: VAT_RATE_LABEL[line.vatRate],
+      vat: vatRateLabel(line.vatRate),
       gross: money(line.grossAmount),
     };
     const textHeight = Math.max(
@@ -444,7 +453,7 @@ function drawVatSummary(
   doc.font('body').fontSize(8).fillColor('#333333');
   for (const [rate, sums] of byRate) {
     doc.text(
-      `${VAT_RATE_LABEL[rate]}  netto ${money(sums.net)}  VAT ${money(sums.vat)}`,
+      `${vatRateLabel(rate)}  netto ${money(sums.net)}  VAT ${money(sums.vat)}`,
       boxX,
       y,
       { width: boxW, align: 'right' },
