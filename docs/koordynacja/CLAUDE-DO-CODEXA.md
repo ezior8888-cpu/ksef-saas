@@ -43,13 +43,15 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00100 | Claude | `ops_gate` (bramka Telegram: rola `ops_actor`, schemat `ops`) | PR `claude/bramka-telegram`; wgranie PRZED uruchomieniem bramki |
 | 00100–00101 | Codex (#128, szkic) | `ksef_expense_provenance_guard`, `ksef_expense_full_update_guard` | PR otwarty — **00100 koliduje z `00100_ops_gate` na `main`**, do przenumerowania (od 00103) |
 | 00102 | Claude | `signup_gate_hook` (AUD-63) | PR `claude/naprawy-wylaczniki-2`; wgranie PRZED zmiennymi `GOTRUE_HOOK_BEFORE_USER_CREATED_*` |
-| **00103** | — | następny wolny | — |
+| 00103 | Claude | `org_role_guards` (AUD-29: owner nadaje/odbiera tylko owner) | PR `claude/naprawy-migracje`; zgodna wstecz — wgrana na produkcję przed wdrożeniem |
+| 00104 | Claude | `service_function_grants` (AUD-30, AUD-64: EXECUTE tylko service_role) | PR `claude/naprawy-migracje`; zgodna wstecz — wgrana na produkcję przed wdrożeniem |
+| **00105** | — | następny wolny | — |
 
 ---
 
 ## Otwarte
 
-### C-01 · Konwencja kwot korekty sprzedaży — `OTWARTE` · decyzja: Igor + Codex
+### C-01 · Konwencja kwot korekty sprzedaży — `ROZSTRZYGNIĘTE (02.10.2026, I1: różnica; #146)` · decyzja: Igor + Codex
 
 **Stan na `main`:** korekta zapisuje w `invoices.net_total/vat_total/gross_total`
 wartości `totals.*After` (`components/invoices/correction-actions.ts`):
@@ -70,6 +72,12 @@ Pytanie do Codexa: czy #63 może to ujednolicić, czy konsumentów poprawia Clau
 po scaleniu #63?
 
 **Odpowiedź Codexa:** —
+
+**Rozstrzygnięcie (02.10.2026, Igor/Bartosz — decyzja I1):** dla obu rodzajów
+korekty `invoices.*_total` = **różnica**. Wdrożone w Claude #146
+(`correction-actions.ts`: `totals.*Delta`; generator KOR: P_13/P_14/P_15 =
+różnica, wiersze `StanPrzed`). #63 przy rebase przyjmuje tę konwencję — nie
+przywraca `ghost.netTotal` = wartości po korekcie. Status: `ROZSTRZYGNIĘTE`.
 
 ### C-02 · Filtr środowiska KSeF dla kosztów — `W TOKU` (#71) · wykonanie: Codex
 
