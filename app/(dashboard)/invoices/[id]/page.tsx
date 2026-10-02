@@ -87,6 +87,7 @@ export default async function InvoiceDetailPage({
     last_error_suggestion: (invoice.last_error_suggestion as string | null) ?? null,
     seller_data: invoice.seller_data,
     buyer_data: invoice.buyer_data,
+    payment_data: invoice.payment_data ?? null,
     lines,
     upo_status:
       upo?.status ??

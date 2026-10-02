@@ -46,3 +46,21 @@ export function dueDateFrom(baseIsoDate: string | null | undefined, days: number
   const base = baseIsoDate && addDaysToIsoDate(baseIsoDate, 0) ? baseIsoDate : todayInWarsaw(now);
   return addDaysToIsoDate(base, days) ?? base;
 }
+
+/**
+ * Znacznik czasu (ISO z bazy, w UTC) jako „DD.MM.RRRR, GG:MM” w czasie
+ * polskim — np. moment przyjęcia faktury w KSeF. Niepoprawna wartość
+ * wraca bez zmian.
+ */
+export function formatWarsawDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('pl-PL', {
+    timeZone: 'Europe/Warsaw',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}
