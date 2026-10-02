@@ -29,12 +29,14 @@ describe('separate RLS test configuration', () => {
   it('excludes RLS from the default run and disables automatic .env loading', () => {
     expect(localConfig.envDir).toBe(false);
     expect(localConfig.test?.exclude).toContain('tests/rls-isolation.test.ts');
+    expect(localConfig.test?.exclude).toContain('tests/rls-uprawnienia.test.ts');
     expect(localConfig.test?.setupFiles).toEqual(['./tests/setup.ts']);
   });
 
   it('the explicit config runs only RLS and preserves server module aliases', () => {
     expect(rlsConfig.envDir).toBe(false);
-    expect(rlsConfig.test?.include).toEqual(['tests/rls-isolation.test.ts']);
+    // Od 00103/00104 także testy uprawnień funkcji i ról (AUD-29/30/64).
+    expect(rlsConfig.test?.include).toEqual(['tests/rls-isolation.test.ts', 'tests/rls-uprawnienia.test.ts']);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
     expect(rlsConfig.resolve?.alias).toEqual(localConfig.resolve?.alias);
