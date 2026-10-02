@@ -204,16 +204,18 @@ Commit: `8392351`
 Sprawdzenie: `pnpm exec vitest run tests/unit/ksef-sesja-21184.test.ts` — 400 z kodem 21184 (oba formaty odpowiedzi) daje błąd ponawialny, inne 400 zostają ostateczne.
 
 ### P-17 — Dane firmy: edycja nazwy i adresu przez właściciela
-Status: W TOKU
+Status: ZROBIONE
 Typ: DOKOŃCZENIE
 Znaleziska: F-008
 Zmiana:
 - nowa akcja `app/actions/company-profile.ts`: tylko rola `owner`; walidacja Zod; NIP niezmienny; audyt;
 - formularz w `app/(dashboard)/settings/` (nowy komponent) zamiast danych tylko do odczytu.
 Kryterium: testy akcji — właściciel zapisuje, inna rola odrzucona, pusty adres odrzucony, NIP nie jest zapisywany.
+Commit: `ce4a87c`
+Sprawdzenie: `pnpm exec vitest run tests/unit/dane-firmy-edycja.test.ts`; w aplikacji (właściciel): Ustawienia → Dane firmy → zmiana adresu → nowa faktura ma nowy adres w PDF i XML, stare bez zmian.
 
 ### P-18 — Kontrahenci: wyszukiwanie, edycja i usuwanie
-Status: TODO
+Status: W TOKU
 Typ: DOKOŃCZENIE
 Znaleziska: F-011
 Zmiana:
