@@ -208,7 +208,7 @@ Status: ZROBIONE
 Typ: DOKOŃCZENIE
 Znaleziska: F-008
 Zmiana:
-- nowa akcja `app/actions/company-profile.ts`: tylko rola `owner`; walidacja Zod; NIP niezmienny; audyt;
+- nowa akcja `app/actions/company-profile.ts`: role `owner` i `admin` (jak inne ustawienia firmy); walidacja Zod; NIP niezmienny; audyt;
 - formularz w `app/(dashboard)/settings/` (nowy komponent) zamiast danych tylko do odczytu.
 Kryterium: testy akcji — właściciel zapisuje, inna rola odrzucona, pusty adres odrzucony, NIP nie jest zapisywany.
 Commit: `ce4a87c`
