@@ -12,7 +12,8 @@ export type RateLimitBucket =
   | 'reminder_preview'
   | 'nip_lookup'
   | 'ai_ocr'
-  | 'ai_classify';
+  | 'ai_classify'
+  | 'invoice_email';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */
