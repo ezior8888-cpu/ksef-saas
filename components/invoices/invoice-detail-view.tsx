@@ -93,6 +93,8 @@ function formatNumber(value: string | number | null, maxDigits = 2): string {
 
 function vatRateLabel(rate: string | null): string {
   if (!rate) return '—';
+  // AUD-70: usługa z art. 100 ust. 1 pkt 4 (FA(3) „np II”) — jak na PDF.
+  if (rate === 'np_ii') return 'np. II';
   if (['zw', 'oo', 'np'].includes(rate)) return rate;
   return `${rate}%`;
 }

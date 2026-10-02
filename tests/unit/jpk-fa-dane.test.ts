@@ -164,4 +164,28 @@ describe('fetchInvoicesForExport — dane do JPK_FA', () => {
     expect(po.get('FV/1')?.lines[0]).toMatchObject({ vatAmount: 230.01 });
     expect(po.get('FV/1')?.advanceSettlement).toBeUndefined();
   });
+
+  it('AUD-70: nabywca z UE (buyer_nip NULL) — numer VAT-UE z buyer_data, znormalizowany; NIP pusty', async () => {
+    tables.invoices.push(
+      faktura({
+        id: 'ue', internal_number: 'FV/UE/1', buyer_nip: null,
+        buyer_data: { name: 'Kunde GmbH', vatUeNumber: 'de 123 456 789', address: { countryCode: 'DE', addressLine1: 'Hauptstr. 1', addressLine2: '10115 Berlin' } },
+        fa3_data: { lines: [{ ordinal: 1, name: 'Programowanie', netAmount: 2000, vatRate: 'np_ii', vatAmount: 0 }] },
+      }),
+      faktura({ id: 'pl', internal_number: 'FV/PL/1', buyer_nip: '5252241585', buyer_data: { name: 'Klient', nip: '5252241585' } }),
+      // Import historii KSeF: nabywca tylko w metadanych, identyfikator typu VatUe.
+      faktura({
+        id: 'ksef', internal_number: 'FV/KSEF/1', buyer_nip: null, buyer_data: null,
+        fa3_data: { buyer: { identifier: { type: 'VatUe', value: 'EL094259216' }, name: 'Etairia AE' } },
+      }),
+    );
+
+    const dane = await fetchInvoicesForExport({ tenantId: 'firma-a', periodStart: '2026-09-01', periodEnd: '2026-09-30', direction: 'issued' });
+    const po = new Map(dane.issuedInvoices.map((i) => [i.invoiceNumber, i]));
+
+    expect(po.get('FV/UE/1')).toMatchObject({ buyerNip: undefined, buyerVatUe: 'DE123456789', buyerName: 'Kunde GmbH' });
+    expect(po.get('FV/UE/1')?.lines[0]).toMatchObject({ vatRate: 'np_ii' });
+    expect(po.get('FV/PL/1')).toMatchObject({ buyerNip: '5252241585', buyerVatUe: undefined });
+    expect(po.get('FV/KSEF/1')).toMatchObject({ buyerNip: undefined, buyerVatUe: 'EL094259216', buyerName: 'Etairia AE' });
+  });
 });
