@@ -36,17 +36,10 @@ describe('grosze jak na fakturze (roundToCents)', () => {
 });
 
 /**
- * Pliki, które zmieniają otwarte PR — poprawka po ich scaleniu (dziennik
- * napraw, AUD-94). Lista ma tylko maleć.
+ * Pliki zwolnione ze sprawdzenia — od 02.10 pusto (AUD-94 domknięte).
+ * Lista ma tylko maleć.
  */
-const CZEKA_NA_INNE_PR = new Set([
-  'lib/exports/comarch-optima-generator.ts',
-  'lib/exports/jpk-v7m-generator.ts',
-  'lib/exports/kpir-generator.ts',
-  'lib/flo/interest.ts',
-  'lib/import/import-engine.ts',
-  'lib/ocr/currency.ts',
-]);
+const CZEKA_NA_INNE_PR = new Set<string>([]);
 
 function sourceFiles(root: string, dir: string): string[] {
   return readdirSync(path.join(root, dir)).flatMap((name) => {

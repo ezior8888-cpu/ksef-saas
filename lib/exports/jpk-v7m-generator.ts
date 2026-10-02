@@ -13,6 +13,7 @@ import { isKnownTaxOffice } from '@/lib/exports/tax-offices';
 
 import type { ExportExpense } from './data-fetcher';
 import { amountsOf, type JpkInvoice } from './jpk-fa-generator';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 const JPK_V7M_NAMESPACE = 'http://crd.gov.pl/wzor/2025/12/19/14090/';
 const ETD_NAMESPACE = 'http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/';
@@ -87,7 +88,7 @@ function emptyBucket(): RateBucket {
 }
 
 function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+  return roundToCents(n);
 }
 
 /** Kwota ewidencji (TKwotowy) — z groszami. */

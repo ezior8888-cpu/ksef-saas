@@ -25,6 +25,8 @@
  * Wybór wynika z tego, KIM jest kontrahent, a nie z tego, co jest korzystniejsze.
  */
 
+import { roundToCents } from '@/lib/xml/invoice-calculator';
+
 // ═══════════════════════════════════════════════════════════════
 // Tabela stóp
 // ═══════════════════════════════════════════════════════════════
@@ -100,7 +102,7 @@ function rateAt(day: number, kind: InterestKind): number {
 }
 
 function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+  return roundToCents(value);
 }
 
 /**

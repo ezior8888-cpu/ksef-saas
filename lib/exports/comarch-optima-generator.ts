@@ -4,6 +4,7 @@
 
 import { create } from 'xmlbuilder2';
 import { counterpartyOf, type JpkFaInputData, type JpkInvoice, type JpkInvoiceLine } from './jpk-fa-generator';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 export interface OptimaExportInput {
   issuer: JpkFaInputData['issuer'];
@@ -154,5 +155,5 @@ function calculateVatAmount(line: JpkInvoiceLine): number {
   const r = line.vatRate.trim().toLowerCase();
   const rateMap: Record<string, number> = { '23': 0.23, '8': 0.08, '5': 0.05, '0': 0 };
   const rate = rateMap[r] ?? 0;
-  return Math.round(line.netAmount * rate * 100) / 100;
+  return roundToCents(line.netAmount * rate);
 }
