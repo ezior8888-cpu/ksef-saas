@@ -15,7 +15,10 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: vi.fn() }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.logAudit }));
 vi.mock('@/lib/storage/r2', () => ({ downloadInvoiceXml: mocks.downloadXml }));
-vi.mock('@/lib/pdf/invoice-pdf', () => ({ generateInvoicePdf: mocks.generatePdf }));
+vi.mock('@/lib/pdf/invoice-pdf', () => ({
+  generateInvoicePdf: mocks.generatePdf,
+  verifyInvoicePdfDeliveryState: async () => null,
+}));
 vi.mock('@/lib/pdf/invoice-data', () => ({ loadInvoiceForPdf: mocks.loadPdf }));
 vi.mock('@/lib/email/send', () => ({ sendInvoiceEmail: mocks.sendEmail }));
 vi.mock('@/lib/supabase/auth-context', () => ({

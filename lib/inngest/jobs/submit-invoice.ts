@@ -362,8 +362,9 @@ export async function onSubmitInvoiceExhausted(
       } else if (isTransientFailure) {
         // Faza 23 sekcja 3: po wyczerpaniu 5 retries z błędem retry-owalnym
         // (5xx, 429, timeout, RetryAfterError) → parking w Offline24 queue.
-        // Trzy QR kody zostają wygenerowane przez `addToOfflineQueue` i jako
-        // efekt uboczny ustawiają `invoices.ksef_status = 'offline_queued'`.
+        // `addToOfflineQueue` ustawia `invoices.ksef_status = 'offline_queued'`.
+        // QR II wymaga odrębnego certyfikatu KSeF typu Offline; kolejka nie
+        // zapisuje kodów na podstawie certyfikatu uwierzytelniania.
         const offlineResult = await step.run('try-offline-queue', async () => {
           // AUD-14: na produkcji nie parkujemy — zostaje „do uzgodnienia”.
           const ksefEnv = (process.env.KSEF_ENV as KsefEnvironment | undefined) ?? 'test';
@@ -392,7 +393,6 @@ export async function onSubmitInvoiceExhausted(
             await addToOfflineQueue({
               tenantId,
               invoiceId,
-              certificate: creds.certificatePem,
               // Best-effort: jeśli ostatni błąd to 503, traktujemy jako MF outage
               // (deadline 7 dni zamiast 24h zgodnie ze spec Fazy 11).
               isMfOutage: error.message.includes('503') || error.message.includes('MF'),
@@ -670,7 +670,6 @@ export async function runSubmitInvoice(
               tenantId,
               invoiceId,
               isMfOutage: health.isMfOutage,
-              certificate: creds.certificatePem,
             });
             return true;
           },

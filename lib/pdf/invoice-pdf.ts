@@ -1,4 +1,4 @@
-import { loadInvoiceForPdf, saveInvoicePdfPath } from './invoice-data';
+import { invoiceHasOfflineQueueEntry, loadInvoiceForPdf, saveInvoicePdfPath, type InvoicePdfData } from './invoice-data';
 import {
   buildInvoicePdfKey,
   downloadInvoicePdf,
@@ -10,12 +10,89 @@ import { invoiceVerificationUrl, ksefEnvForQr, qrLabel } from '@/lib/ksef/qr-ver
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 
 export type GenerateInvoicePdfResult =
-  | { success: true; pdf: Buffer; filename: string }
+  | {
+      success: true;
+      pdf: Buffer;
+      filename: string;
+      qrStateKey: string;
+      /** Numer KSeF bez skrótu XML: podgląd bez KODU I — nie dla nabywcy (B14). */
+      missingKodI: boolean;
+    }
   | {
       success: false;
       error: string;
-      code?: 'KSEF_NOT_VERIFIED' | 'NOT_FOUND' | 'FORBIDDEN';
+      code?: 'KSEF_NOT_VERIFIED' | 'NOT_FOUND' | 'FORBIDDEN' | 'OFFLINE_QR_UNAVAILABLE' | 'PDF_STATE_CHANGED';
     };
+
+type PdfFailure = Extract<GenerateInvoicePdfResult, { success: false }>;
+
+const PREVIEW_WITHOUT_KOD_I =
+  'Podgląd bez kodu QR KSeF — aplikacja nie ma zapisanego pliku XML tej faktury. ' +
+  'Nie przekazuj tego wydruku nabywcy jako faktury; oryginał jest w KSeF.';
+
+function pdfStateChanged(): PdfFailure {
+  return {
+    success: false,
+    code: 'PDF_STATE_CHANGED',
+    error: 'Stan faktury zmienił się podczas przygotowania PDF. Spróbuj ponownie.',
+  };
+}
+
+async function checkQrAvailability(
+  data: InvoicePdfData,
+  invoiceId: string,
+  tenantId: string,
+  knownQueueEntry?: boolean,
+): Promise<{ qrPayload: string | null; failure: PdfFailure | null; missingKodI: boolean }> {
+  const requiresOfflineQr = !data.ksefNumber && (
+    !!data.offlineIdempotencyKey?.trim() ||
+    data.ksefStatus === 'offline_queued' ||
+    (knownQueueEntry ?? await invoiceHasOfflineQueueEntry(invoiceId, tenantId))
+  );
+  if (requiresOfflineQr) {
+    return {
+      qrPayload: null,
+      missingKodI: false,
+      failure: {
+        success: false,
+        code: 'OFFLINE_QR_UNAVAILABLE',
+        error: 'PDF faktury offline przed nadaniem numeru KSeF wymaga dwóch kodów QR, w tym certyfikatu KSeF typu Offline. Wydanie PDF jest obecnie niedostępne.',
+      },
+    };
+  }
+
+  const qrPayload = invoiceVerificationUrl({
+    env: ksefEnvForQr(),
+    sellerNip: data.sellerNip,
+    issueDate: data.issueDate,
+    sha256Hex: data.xmlSha256Hex,
+  });
+  // B14 (02.10.2026): faktura z importu historii albo skrzynki nie ma jeszcze
+  // trwałego XML, więc KODU I nie da się zbudować. Do czasu zapisu oryginału
+  // wydajemy podgląd z dopiskiem; wysyłkę nabywcy blokuje akcja e-mail.
+  return { qrPayload, failure: null, missingKodI: !!data.ksefNumber && !qrPayload };
+}
+
+/** Sprawdza stan bezpośrednio przed przekazaniem PDF odbiorcy lub wysyłką. */
+export async function verifyInvoicePdfDeliveryState(
+  invoiceId: string,
+  tenantId: string,
+  expectedQrStateKey: string,
+): Promise<PdfFailure | null> {
+  // Nowa ścieżka Offline24 zapisuje znacznik na fakturze przed insertem kolejki.
+  // Odczyt kolejki musi więc poprzedzać ostatni odczyt faktury: dzięki temu
+  // częściowy zapis między tymi zapytaniami będzie widoczny w drugim odczycie.
+  const queueEntry = await invoiceHasOfflineQueueEntry(invoiceId, tenantId);
+  const current = await loadInvoiceForPdf(invoiceId, tenantId);
+  if (!current) return { success: false, code: 'NOT_FOUND', error: 'Faktura nie istnieje.' };
+  if (current.tenantId !== tenantId) return { success: false, code: 'FORBIDDEN', error: 'Brak dostępu do tej faktury.' };
+  const currentQr = await checkQrAvailability(current, invoiceId, tenantId, queueEntry);
+  if (currentQr.failure) return currentQr.failure;
+  const currentKey = buildInvoicePdfKey(
+    tenantId, invoiceId, current.issueDate, currentQr.qrPayload, current.ksefNumber,
+  );
+  return currentKey === expectedQrStateKey ? null : pdfStateChanged();
+}
 
 /**
  * Generuje (lub zwraca z cache R2) PDF faktury (Faza 33 Krok 4).
@@ -55,8 +132,15 @@ export async function generateInvoicePdf(
     };
   }
 
+  // Stary/przerwany zapis mógł zostawić kolejkę bez znacznika na fakturze.
+  // Przed numerem KSeF również taki przypadek wymaga KODU II. Sprawdzamy
+  // kolejkę przed cache, a błąd odczytu przerywa wydanie PDF.
+  const { qrPayload, failure, missingKodI } = await checkQrAvailability(data, invoiceId, tenantId);
+  if (failure) return failure;
+  // Faktura z numerem KSeF udostępniana poza systemem musi mieć KOD I.
+  // Brak skrótu XML lub innych składników URL nie może zwrócić starego cache.
   const filename = `Faktura_${sanitizeFilename(data.invoice.internalNumber)}.pdf`;
-  const key = buildInvoicePdfKey(tenantId, invoiceId, data.issueDate);
+  const key = buildInvoicePdfKey(tenantId, invoiceId, data.issueDate, qrPayload, data.ksefNumber);
 
   // Cache hit: PDF istnieje i jest świeższy niż ostatnia zmiana faktury.
   const cacheValid =
@@ -66,11 +150,11 @@ export async function generateInvoicePdf(
     (!data.updatedAt ||
       new Date(data.pdfGeneratedAt) >= new Date(data.updatedAt));
 
+  let pdf: Buffer | null = null;
   if (cacheValid && data.pdfStoragePath) {
     try {
       if (await invoicePdfExists(data.pdfStoragePath)) {
-        const cached = await downloadInvoicePdf(data.pdfStoragePath, tenantId);
-        return { success: true, pdf: cached, filename };
+        pdf = await downloadInvoicePdf(data.pdfStoragePath, tenantId);
       }
     } catch {
       // Cache miss / R2 error — spadamy do regeneracji poniżej.
@@ -80,28 +164,32 @@ export async function generateInvoicePdf(
   // Regeneracja.
   // KOD I wg specyfikacji MF: link weryfikacyjny z NIP-u, daty i SHA-256
   // pliku XML — nie sam numer KSeF. Szkic bez pliku → bez kodu.
-  const pdf = await renderInvoicePdf(data.invoice, {
-    ksefNumber: data.ksefNumber,
-    qrPayload: invoiceVerificationUrl({
-      env: ksefEnvForQr(),
-      sellerNip: data.sellerNip,
-      issueDate: data.issueDate,
-      sha256Hex: data.xmlSha256Hex,
-    }),
-    qrLabel: qrLabel(data.ksefNumber),
-    correctedInvoice: data.correctedInvoice,
-    testWatermark: (process.env.KSEF_ENV ?? 'test') === 'test',
-  });
+  if (!pdf) {
+    pdf = await renderInvoicePdf(data.invoice, {
+      ksefNumber: data.ksefNumber,
+      qrPayload,
+      qrLabel: qrLabel(data.ksefNumber),
+      correctedInvoice: data.correctedInvoice,
+      testWatermark: (process.env.KSEF_ENV ?? 'test') === 'test',
+      previewNotice: missingKodI ? PREVIEW_WITHOUT_KOD_I : null,
+    });
 
-  try {
-    await uploadInvoicePdf(key, pdf);
-    await saveInvoicePdfPath(invoiceId, key);
-  } catch (err) {
-    // Upload do cache nieudany — i tak zwracamy świeży PDF userowi.
-    console.error('[invoice-pdf] cache upload failed:', err);
+    try {
+      await uploadInvoicePdf(key, pdf);
+      await saveInvoicePdfPath(invoiceId, key);
+    } catch (err) {
+      // Upload do cache nieudany — i tak zwracamy świeży PDF userowi.
+      console.error('[invoice-pdf] cache upload failed:', err);
+    }
   }
 
-  return { success: true, pdf, filename };
+  // Render, odczyt cache i upload są asynchroniczne. W tym czasie faktura mogła
+  // wejść do Offline24 lub otrzymać numer KSeF. Przed wydaniem ponownie
+  // sprawdzamy trwały znacznik, kolejkę i dokładny stan kodu QR.
+  const finalFailure = await verifyInvoicePdfDeliveryState(invoiceId, tenantId, key);
+  if (finalFailure) return finalFailure;
+
+  return { success: true, pdf, filename, qrStateKey: key, missingKodI };
 }
 
 /** Usuwa znaki niedozwolone w nazwie pliku (np. `/` z `FV 2026/04/001`). */

@@ -1,88 +1,83 @@
 /**
- * Generator kodów QR dla Trybu Offline24 — 2 payloady na fakturę: OFFLINE + CERTYFIKAT.
+ * KOD II dla faktury offline, według specyfikacji MF:
+ * https://github.com/CIRFMF/ksef-api/blob/main/kody-qr.md
  *
- * Dokładny format komunikatów wg aktualnej dokumentacji MF może wymagać dopracowania.
+ * Ten moduł buduje i podpisuje link. Nie dowodzi, że klucz należy do aktywnego
+ * certyfikatu KSeF typu Offline ani że wystawca ma uprawnienia. Do czasu
+ * wdrożenia bezpiecznego provisioningu takiego certyfikatu nie wywołujemy go
+ * w produkcyjnej ścieżce kolejki/PDF.
  */
 
-import { Buffer } from 'node:buffer';
-import { createSign } from 'node:crypto';
+import { constants, createPrivateKey, sign } from 'node:crypto';
 
-export interface QrPayloadData {
-  invoiceNumber: string;
-  issueDate: string;
-  grossAmount: number;
+import { hexToBase64Url, qrVerificationBaseUrl } from './qr-verification';
+import type { KsefEnvironment } from '@/types/ksef';
+
+export interface OfflineCertificateQrInput {
+  env: KsefEnvironment;
+  /** Wąski, obsługiwany przez aplikację kontekst KSeF: Nip. */
+  contextNip: string;
+  /** NIP sprzedawcy z Podmiot1; może się różnić od kontekstu. */
   sellerNip: string;
-  buyerNip: string;
-  /** PEM klucza prywatnego lub para certyfikat+klucz (demo — zob. uwaga w signWithCertificate). */
-  certificate: string;
-  idempotencyKey: string;
+  /** Numer seryjny certyfikatu KSeF typu Offline, wielkimi cyframi hex. */
+  certificateSerialNumber: string;
+  /** SHA-256 dokładnych bajtów XML faktury, zapis szesnastkowy. */
+  sha256Hex: string;
+  /** Klucz prywatny należący do powyższego certyfikatu typu Offline. */
+  privateKeyPem: string;
 }
 
-export interface OfflineQrCodes {
-  /** URL / treść zakodowana w kodzie OFFLINE. */
-  offlinePayload: string;
-  /** Dane dla kodu CERTYFIKAT. */
-  certyfikatPayload: string;
+function nipSegment(raw: string): string {
+  const nip = raw.replace(/[\s-]/g, '');
+  if (!/^\d{10}$/.test(nip)) throw new Error('Niepoprawny NIP w linku QR KSeF');
+  return nip;
+}
+
+/** Minimalna długość modułu RSA dla certyfikatu KSeF typu Offline. */
+export function assertRsaOfflineKeyLength(modulusLength: number | undefined): void {
+  if ((modulusLength ?? 0) < 2048) {
+    throw new Error('Klucz RSA certyfikatu Offline musi mieć co najmniej 2048 bitów');
+  }
 }
 
 /**
- * Generuje payloady dla obu kodów QR wymaganych w Trybie Offline24.
+ * Podpisuje fragment URL bez `https://` i bez końcowego ukośnika. Klucz RSA
+ * używa PSS/SHA-256/MGF1-SHA-256 z 32-bajtową solą, EC używa P-256/SHA-256
+ * i zalecanego formatu IEEE P1363 (R || S).
  */
-export async function generateOfflineQrCodes(
-  data: QrPayloadData,
-): Promise<OfflineQrCodes> {
-  const offlineData = {
-    n: data.invoiceNumber,
-    d: data.issueDate,
-    g: data.grossAmount.toFixed(2),
-    s: data.sellerNip,
-    b: data.buyerNip,
-    k: data.idempotencyKey.slice(0, 16),
-  };
-
-  const encoded = Buffer.from(JSON.stringify(offlineData)).toString('base64url');
-  const offlinePayload = `https://ksef.mf.gov.pl/web/verify?d=${encoded}`;
-
-  const dataToSign = `${data.invoiceNumber}|${data.issueDate}|${data.grossAmount.toFixed(2)}|${data.sellerNip}|${data.buyerNip}`;
-
-  let signature: string;
-  try {
-    signature = await signWithCertificate(dataToSign, data.certificate);
-  } catch {
-    signature = `HASH:${Buffer.from(dataToSign, 'utf8').toString('base64url').slice(0, 64)}`;
+export function certificateVerificationUrlForOfflineInvoice(input: OfflineCertificateQrInput): string {
+  const contextNip = nipSegment(input.contextNip);
+  const sellerNip = nipSegment(input.sellerNip);
+  if (!/^[0-9A-F]+$/.test(input.certificateSerialNumber)) {
+    throw new Error('Niepoprawny numer seryjny certyfikatu KSeF');
+  }
+  if (!/^[0-9a-fA-F]{64}$/.test(input.sha256Hex)) {
+    throw new Error('Niepoprawny SHA-256 XML faktury');
   }
 
-  const certyfikatPayload = `${dataToSign}|${signature.slice(0, 128)}`;
+  const hash = hexToBase64Url(input.sha256Hex);
+  const host = new URL(qrVerificationBaseUrl(input.env)).host;
+  const unsigned = `${host}/certificate/Nip/${contextNip}/${sellerNip}/${input.certificateSerialNumber}/${hash}`;
+  const key = createPrivateKey(input.privateKeyPem);
+  const message = Buffer.from(unsigned, 'utf8');
 
-  return {
-    offlinePayload,
-    certyfikatPayload,
-  };
-}
-
-// ============================================================================
-// Sign with certificate private key (PEM)
-// ============================================================================
-
-/**
- * Zakłada PEM **klucza prywatnego** (RFC 7468 BEGIN PRIVATE KEY...).
- * Sam certyfikat (BEGIN CERTIFICATE...) nie nadaje się do `sign()` — wtedy przejdziesz w fallback HASH.
- *
- * Produkcja: przekazywać osobno `certificatePem` + `privateKeyPem`.
- */
-async function signWithCertificate(
-  data: string,
-  pemMaterial: string,
-): Promise<string> {
-  try {
-    const sign = createSign('RSA-SHA256');
-    sign.update(data);
-    sign.end();
-    const buf = sign.sign(pemMaterial) as Buffer;
-    return buf.toString('base64url');
-  } catch (error) {
-    throw new Error(
-      `Sign failed: ${error instanceof Error ? error.message : 'unknown'}`,
-    );
+  let signature: Buffer;
+  if (key.asymmetricKeyType === 'rsa') {
+    assertRsaOfflineKeyLength(key.asymmetricKeyDetails?.modulusLength);
+    signature = sign('sha256', message, {
+      key,
+      padding: constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: 32,
+    });
+  } else if (key.asymmetricKeyType === 'ec') {
+    const curve = key.asymmetricKeyDetails?.namedCurve;
+    if (curve !== 'prime256v1' && curve !== 'secp256r1') {
+      throw new Error('Klucz EC certyfikatu Offline musi używać krzywej P-256');
+    }
+    signature = sign('sha256', message, { key, dsaEncoding: 'ieee-p1363' });
+  } else {
+    throw new Error('Nieobsługiwany algorytm klucza certyfikatu Offline');
   }
+
+  return `https://${unsigned}/${signature.toString('base64url')}`;
 }

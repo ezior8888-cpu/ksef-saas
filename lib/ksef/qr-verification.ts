@@ -19,6 +19,11 @@ const QR_BASE: Record<KsefEnvironment, string> = {
   production: 'https://qr.ksef.mf.gov.pl',
 };
 
+/** Adres usługi weryfikacyjnej MF dla danego środowiska. */
+export function qrVerificationBaseUrl(env: KsefEnvironment): string {
+  return QR_BASE[env];
+}
+
 /** Środowisko z konfiguracji (`KSEF_ENV`) — domyślnie testowe, jak klient KSeF. */
 export function ksefEnvForQr(raw: string | undefined = process.env.KSEF_ENV): KsefEnvironment {
   return raw === 'production' || raw === 'demo' ? raw : 'test';
@@ -46,7 +51,7 @@ export function invoiceVerificationUrl(input: {
   const hex = input.sha256Hex?.trim().toLowerCase() ?? '';
   const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.issueDate);
   if (nip.length !== 10 || !/^[0-9a-f]{64}$/.test(hex) || !date) return null;
-  return `${QR_BASE[input.env]}/invoice/${nip}/${date[3]}-${date[2]}-${date[1]}/${hexToBase64Url(hex)}`;
+  return `${qrVerificationBaseUrl(input.env)}/invoice/${nip}/${date[3]}-${date[2]}-${date[1]}/${hexToBase64Url(hex)}`;
 }
 
 /** Napis pod kodem QR. */

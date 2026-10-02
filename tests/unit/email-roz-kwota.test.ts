@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   generatePdf: vi.fn(),
+  verifyPdf: vi.fn(),
   loadInvoice: vi.fn(),
   sendEmail: vi.fn(),
 }));
@@ -11,7 +12,10 @@ vi.mock('@/lib/supabase/auth-context', () => ({
   requireUserAndActiveOrg: mocks.requireAuth,
   ActionAuthError: class ActionAuthError extends Error {},
 }));
-vi.mock('@/lib/pdf/invoice-pdf', () => ({ generateInvoicePdf: mocks.generatePdf }));
+vi.mock('@/lib/pdf/invoice-pdf', () => ({
+  generateInvoicePdf: mocks.generatePdf,
+  verifyInvoicePdfDeliveryState: mocks.verifyPdf,
+}));
 vi.mock('@/lib/pdf/invoice-data', () => ({ loadInvoiceForPdf: mocks.loadInvoice }));
 vi.mock('@/lib/email/send', () => ({ sendInvoiceEmail: mocks.sendEmail }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: vi.fn() }));
@@ -53,7 +57,8 @@ const plain = (s: string) => s.replace(/\s/g, ' ');
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.requireAuth.mockResolvedValue({ user: { id: 'user-1' }, tenantId: TENANT });
-  mocks.generatePdf.mockResolvedValue({ success: true, pdf: Buffer.from('pdf'), filename: 'faktura.pdf' });
+  mocks.generatePdf.mockResolvedValue({ success: true, pdf: Buffer.from('pdf'), filename: 'faktura.pdf', qrStateKey: 'qr-state' });
+  mocks.verifyPdf.mockResolvedValue(null);
   mocks.sendEmail.mockResolvedValue({ sent: true });
 });
 
