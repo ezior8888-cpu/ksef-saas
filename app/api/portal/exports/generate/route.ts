@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
       periodEnd,
       direction: 'both',
       includeCorrections: true,
+      includeExpenses: format === 'kpir_excel',
     });
 
     const nipSeg = safeNipSegment(data.issuer.nip);

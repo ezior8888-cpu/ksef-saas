@@ -114,6 +114,7 @@ const ROZ_RECONCILIATION_MESSAGE =
 async function currentSubmissionState(
   data: Parameters<typeof invoiceSubmitRequested.create>[0],
 ): Promise<{
+  direction: string | null;
   ksef_status: string | null;
   ksef_number: string | null;
   ksef_environment: string | null;
@@ -122,7 +123,7 @@ async function currentSubmissionState(
 }> {
   const { data: stored, error } = await (await createAdminClient())
     .from('invoices')
-    .select('ksef_status, ksef_number, ksef_environment, invoice_type, invoice_kind')
+    .select('direction, ksef_status, ksef_number, ksef_environment, invoice_type, invoice_kind')
     .eq('id', data.invoiceId)
     .eq('tenant_id', data.tenantId)
     .maybeSingle();
@@ -244,6 +245,14 @@ export async function onSubmitInvoiceExhausted(
       await requireInvoiceTenant(invoiceId, tenantId);
       const fromOfflineQueue = Boolean(data.fromOfflineQueue);
       const current = await currentSubmissionState(parsed.data);
+      // Faktura przychodząca nie jest wysyłana — zdarzenie o niej to błąd albo
+      // podróbka; stanu nie zmieniamy (#71, Codex).
+      if (current.direction === 'incoming') {
+        logger.error('KSeF submit failure callback targets an incoming invoice; no invoice state changed', {
+          invoiceId,
+        });
+        return { handled: false, reason: 'invoice-direction-mismatch' };
+      }
       if (current.ksef_status === 'accepted') {
         if (current.ksef_number && current.ksef_environment === parsed.data.environment) {
           await reconcileAcceptedOfflineQueue(parsed.data, true);
@@ -501,8 +510,10 @@ export async function runSubmitInvoice(
     if (!env || parsed.data.environment !== env) {
       throw new NonRetriableError('KSeF submit event environment does not match configured environment');
     }
-    if (parsed.data.fromOfflineQueue && env === 'production') {
-      throw new NonRetriableError('Legacy PROD Offline24 QR requires manual reconciliation');
+    // Automatyczny Offline24 wstrzymany (decyzja 02.10.2026, #71): zdarzenie
+    // z kolejki offline to stary wpis — tylko ręczne uzgodnienie.
+    if (parsed.data.fromOfflineQueue) {
+      throw new NonRetriableError('Offline24 automatic replay requires manual reconciliation');
     }
     await requireInvoiceTenant(invoiceId, tenantId);
     const fromOfflineQueue = Boolean(parsed.data.fromOfflineQueue);
@@ -556,6 +567,9 @@ export async function runSubmitInvoice(
     // Fresh, non-memoized read: an older Inngest idempotency step can be
     // restored after deployment. Check the stored kind as well as the event.
     const current = await currentSubmissionState(parsed.data);
+    if (current.direction === 'incoming') {
+      throw new NonRetriableError('KSeF incoming invoice requires manual reconciliation');
+    }
     if (current.ksef_status === 'accepted' && current.ksef_environment !== env) {
       logger.error('KSeF accepted invoice environment requires manual reconciliation', {
         invoiceId,

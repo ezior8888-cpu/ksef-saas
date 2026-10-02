@@ -124,7 +124,7 @@ function durableContext(): JobContext {
 }
 function invoice(): ReminderInvoiceSource {
   return { id: INVOICE, tenant_id: TENANT, gross_total: 123, paid_amount: 0, currency: 'PLN',
-    payment_status: 'unpaid', direction: 'outgoing', ksef_status: 'accepted', payment_due_date: '2026-09-01',
+    payment_status: 'unpaid', direction: 'outgoing', ksef_status: 'accepted', invoice_kind: 'regular', invoice_type: 'VAT', payment_due_date: '2026-09-01',
     issue_date: '2026-08-01', internal_number: 'TEST-1', ksef_number: 'TEST-KSEF',
     buyer_data: { name: 'Buyer test', email: 'buyer@example.test' }, buyer_nip: '1234567890',
     payment_data: { bankAccount: 'TEST-ACCOUNT' }, seller_data: { name: 'Seller test' }, reminders_paused: false };
@@ -254,6 +254,30 @@ describe('delayed reminder dispatch guards', () => {
     await seed(); tables.invoices[0].reminders_paused = true;
     await expect(runSendReminder(jobData, context)).rejects.toBeInstanceOf(NonRetriableError); expectNoSend();
   });
+  it.each([
+    { invoice_kind: 'correction', invoice_type: 'KOR' },
+    { invoice_kind: 'regular', invoice_type: 'KOR' }, // Imported correction.
+    { invoice_kind: 'regular', invoice_type: 'KOR_ZAL' },
+    { invoice_kind: 'regular', invoice_type: 'KOR_ROZ' },
+    { invoice_kind: null, invoice_type: 'VAT' },
+    { invoice_kind: 'regular', invoice_type: null },
+    { invoice_kind: 'regular', invoice_type: undefined },
+    { invoice_kind: 'regular', invoice_type: 'UNKNOWN' },
+  ])('does not send a correction or ambiguous invoice after approval: %j', async (patch) => {
+    await seed(); Object.assign(tables.invoices[0], patch);
+    await expect(runSendReminder(jobData, context)).rejects.toBeInstanceOf(NonRetriableError);
+    expectNoSend();
+    expect(snapshot().reminderReceipt).toBeUndefined();
+    expect(tables.payment_reminders[0].status).toBe('pending');
+  });
+  it.each([['regular', 'VAT'], ['regular', 'UPR'], ['advance', 'ZAL'], ['final', 'ROZ']] as const)
+    ('permits a current ordinary %s/%s invoice', async (kind, type) => {
+      await seed();
+      const source = { ...invoice(), invoice_kind: kind, invoice_type: type };
+      tables.invoices = [{ ...source }];
+      await expect(assertReminderSendable({ ...delivery(), sourceFingerprint: reminderInvoiceFingerprint(source) })).resolves.toBeUndefined();
+      expectNoSend();
+    });
   it('normalizes the column NIP and refuses conflicting invoice identities', async () => {
     await seed();
     const source = { ...invoice(), buyer_nip: '123-456-78-90', buyer_data: { name: 'Buyer', nip: '1234567890', email: 'buyer@example.test' } };

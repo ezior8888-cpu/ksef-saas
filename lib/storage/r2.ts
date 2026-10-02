@@ -284,6 +284,37 @@ export async function uploadToR2(
 }
 
 /**
+ * Store a generated export only if its key is still free. A retry or a
+ * concurrent worker must keep the first complete object instead of replacing
+ * it with a second generation whose timestamp or ZIP metadata may differ.
+ * Returns false when the object already exists.
+ */
+export async function uploadToR2IfAbsent(
+  key: string,
+  body: Buffer,
+  contentType: string,
+): Promise<boolean> {
+  const { bucketName } = getR2Config();
+  const client = getR2Client();
+
+  try {
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+        IfNoneMatch: '*',
+      }),
+    );
+    return true;
+  } catch (error) {
+    if (isPreconditionFailed(error)) return false;
+    throw error;
+  }
+}
+
+/**
  * Generyczny odczyt obiektu z R2 po kluczu.
  */
 export async function downloadFromR2(key: string, tenantId: string): Promise<Buffer> {

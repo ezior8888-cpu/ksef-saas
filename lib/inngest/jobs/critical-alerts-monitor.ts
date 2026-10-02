@@ -19,6 +19,7 @@
  *  11. **Kopia bazy nieaktualna** — najnowsza udana kopia starsza niż 26 h (AUD-37)
  *  12. **Skrzynka KSeF zaległa** — firma bez przebiegu skrzynki > 6 h
  *  13. **Opłacone bez faktury VAT** — płatność Stripe > 60 min bez dokumentu (AUD-40)
+ *  14. **KSeF sending bez wyniku** — faktura w `sending` > 15 min od przejęcia wysyłki (#71)
  *
  * Wszystkie progi konserwatywne — wolimy false-positive niż przegapić
  * critical incident. Operator może zignorować, ale nie chcemy gubić alertów.
@@ -172,10 +173,10 @@ export async function checkBlockedKsefOfflineQueue(): Promise<AlertCheckResult> 
   const [blocked, nearest] = await Promise.all([
     supabase.from('ksef_offline_queue')
       .select('id', { count: 'exact', head: true })
-      .eq('status', 'queued').or(filter),
+      .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]).or(filter),
     supabase.from('ksef_offline_queue')
       .select('deadline')
-      .eq('status', 'queued').or(filter)
+      .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]).or(filter)
       .order('deadline', { ascending: true }).limit(1).maybeSingle(),
   ]);
   if (blocked.error || nearest.error || blocked.count === null) {
@@ -190,7 +191,7 @@ export async function checkBlockedKsefOfflineQueue(): Promise<AlertCheckResult> 
   }
   await alertCritical(
     'Offline24 wymaga uzgodnienia środowiska',
-    'Co najmniej jeden oczekujący wpis Offline24 nie ma potwierdzonego środowiska lub dotyczy innego środowiska. Nie wznawiaj go automatycznie; uzgodnij z KSeF i kolejkami przed zmianą konfiguracji.',
+    'Co najmniej jeden oczekujący lub rozpoczęty wpis Offline24 nie ma potwierdzonego środowiska lub dotyczy innego środowiska. Nie wznawiaj go automatycznie; uzgodnij z KSeF i kolejkami przed zmianą konfiguracji.',
     {
       fields: [
         { label: 'Zablokowane', value: String(blocked.count) },
@@ -568,6 +569,59 @@ export async function checkPaidWithoutVatInvoice(): Promise<AlertCheckResult> {
   return { type: 'paid_without_vat_invoice', fired: true };
 }
 
+/** A KSeF send may have succeeded despite a lost response; never retry it blindly. */
+export async function checkStaleKsefSendingInvoices(): Promise<AlertCheckResult> {
+  const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  // The send claim writes submitted_to_ksef_at together with `sending`.
+  // Invoice updated_at can change later, so it cannot age this claim reliably.
+  // Legacy rows with no claim timestamp violate that invariant and also need
+  // reconciliation, regardless of invoice updated_at or creation time.
+  const supabase = createAdminClient();
+  const [staleResult, missingClaimResult] = await Promise.all([
+    supabase.from('invoices')
+      .select('id', { count: 'exact', head: true })
+      .eq('ksef_status', 'sending')
+      .lt('submitted_to_ksef_at', cutoffIso),
+    supabase.from('invoices')
+      .select('id', { count: 'exact', head: true })
+      .eq('ksef_status', 'sending')
+      .is('submitted_to_ksef_at', null),
+  ]);
+
+  if (staleResult.error || missingClaimResult.error ||
+      typeof staleResult.count !== 'number' ||
+      typeof missingClaimResult.count !== 'number') {
+    throw staleResult.error ?? missingClaimResult.error ??
+      new Error('Stale KSeF sending invoice counts unavailable');
+  }
+  if (staleResult.count + missingClaimResult.count === 0) {
+    return { type: 'stale_ksef_sending_invoices', fired: false };
+  }
+
+  const dedupKey = 'stale_ksef_sending_invoices';
+  if (!(await shouldSendAlert(dedupKey))) {
+    return { type: dedupKey, fired: false, reason: 'dedup' };
+  }
+
+  await alertCritical(
+    'Wysyłka faktur do KSeF wymaga uzgodnienia',
+    'Co najmniej jedna faktura pozostaje w sending ponad 15 minut od przejęcia wysyłki lub nie ma znacznika przejęcia. Sprawdź stan w KSeF i bazie przed zmianą statusu; nie ponawiaj wysyłki automatycznie.',
+    {
+      fields: [
+        { label: 'Faktury > 15 min', value: String(staleResult.count) },
+        { label: 'Brak znacznika wysyłki', value: String(missingClaimResult.count) },
+        { label: 'Próg', value: '15 min' },
+      ],
+      link: {
+        label: 'Otwórz /admin/system',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/system',
+      },
+    },
+  );
+  await markAlertDelivered(dedupKey);
+  return { type: dedupKey, fired: true };
+}
+
 /** A linked VAT draft without a confirmed enqueue must never be resent blindly. */
 export async function checkStaleBillingVatEnqueues(): Promise<AlertCheckResult> {
   const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
@@ -846,6 +900,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-stale-dunning-notifications', () =>
         checkStaleDunningNotifications().catch(captureAndReturn('stale_dunning_notifications')),
+      ),
+      step.run('check-stale-ksef-sending-invoices', () =>
+        checkStaleKsefSendingInvoices().catch(captureAndReturn('stale_ksef_sending_invoices')),
       ),
       step.run('check-stale-billing-vat-enqueues', () =>
         checkStaleBillingVatEnqueues().catch(captureAndReturn('stale_billing_vat_enqueues')),

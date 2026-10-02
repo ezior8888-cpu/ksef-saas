@@ -20,30 +20,33 @@ export function MonthlyFiguresCard({ figures }: { figures: MonthlyFigures }) {
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-[var(--ff-text-muted)]">
         {figures.monthName}
       </h2>
+      <p className="mt-1 text-[11px] text-[var(--ff-text-dim)]">
+        Kwoty z faktur przyjętych w bieżącym środowisku KSeF
+      </p>
 
       <dl className="mt-3.5 flex flex-col gap-3.5">
         <StatRow
           icon="description"
-          label="Wystawione faktury"
+          label="Przyjęte przez KSeF"
           sublabel={
             figures.hasPrevMonth
-              ? `Poprzedni miesiąc: ${formatPlInt(figures.prevIssuedCount)}`
-              : 'Pierwszy miesiąc'
+              ? `Poprzedni miesiąc: ${formatPlInt(figures.prevAcceptedCount)}`
+              : 'Brak przyjętych w poprzednim miesiącu'
           }
-          value={formatPlInt(figures.issuedCount)}
+          value={formatPlInt(figures.acceptedCount)}
           accent
         />
         <StatRow
-          icon="check_circle"
-          label="Przyjęte przez KSeF"
-          sublabel={`${formatPlInt(figures.pendingCount)} oczekuje`}
-          value={formatPlInt(figures.acceptedCount)}
+          icon="edit_note"
+          label="Szkice lokalne"
+          sublabel="Bez przypisanego środowiska"
+          value={formatPlInt(figures.draftCount)}
           accent
         />
         <StatRow
           icon="credit_card"
           label="VAT należny"
-          sublabel="JPK_V7"
+          sublabel="Przyjęte faktury"
           value={formatPlMoney(figures.totalVat)}
           tone="warn"
         />

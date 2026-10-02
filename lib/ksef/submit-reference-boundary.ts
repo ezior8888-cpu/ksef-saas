@@ -30,6 +30,7 @@ export async function assertSubmitReferences(
     .select('id, invoice_kind, invoice_type, internal_number, parent_invoice_id, advance_invoice_ids, fa3_data')
     .eq('id', input.invoiceId)
     .eq('tenant_id', input.tenantId)
+    .eq('direction', 'outgoing')
     .maybeSingle();
   if (error) throw new Error('Cannot read KSeF invoice kind');
   if (!invoice?.id) invalidPayload();

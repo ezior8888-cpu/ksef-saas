@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3ServiceException } from '@aws-sdk/client-s3';
 
 const mocks = vi.hoisted(() => ({ send: vi.fn() }));
 vi.mock('@/lib/storage/r2-client', async () => {
@@ -17,6 +17,7 @@ vi.mock('@/lib/storage/r2-client', async () => {
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import {
   downloadFromR2, downloadInvoiceXml, downloadInvoiceXmlUnchecked, getSignedInvoiceUrl,
+  uploadToR2IfAbsent,
 } from '@/lib/storage/r2';
 import { downloadExpensePhoto, getExpensePhotoUrl, uploadExpensePhoto } from '@/lib/storage/expenses';
 
@@ -87,5 +88,25 @@ describe('storage: database row ownership cannot authorize another tenant object
     expect(command).toBeInstanceOf(PutObjectCommand);
     expect(command.input.CacheControl).toBe('private, no-store');
     expect(command.input.Key).toMatch(/^tenants\/tenant-a\/expenses\//);
+  });
+
+  it('uploads exports with an atomic create-only condition', async () => {
+    const bytes = Buffer.from('export snapshot');
+    await expect(uploadToR2IfAbsent('exports/tenant-a/job/file.xml', bytes, 'application/xml'))
+      .resolves.toBe(true);
+    const command = mocks.send.mock.calls[0]?.[0] as PutObjectCommand;
+    expect(command).toBeInstanceOf(PutObjectCommand);
+    expect(command.input).toMatchObject({
+      Key: 'exports/tenant-a/job/file.xml', Body: bytes, IfNoneMatch: '*',
+    });
+  });
+
+  it('reports a prior upload on S3 precondition failure', async () => {
+    mocks.send.mockRejectedValueOnce(new S3ServiceException({
+      name: 'PreconditionFailed', message: 'Already exists', $fault: 'client',
+      $metadata: { httpStatusCode: 412 },
+    }));
+    await expect(uploadToR2IfAbsent('exports/tenant-a/job/file.xml', Buffer.from('new'), 'application/xml'))
+      .resolves.toBe(false);
   });
 });

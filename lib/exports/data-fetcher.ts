@@ -6,6 +6,8 @@ import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
+import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
+import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import type { KsefEnvironment } from '@/types/ksef';
 import type { Database, Json } from '@/types/database';
 
@@ -20,6 +22,8 @@ export interface FetchInvoicesParams {
   periodEnd: string;
   direction: 'issued' | 'received' | 'both';
   includeCorrections?: boolean;
+  /** KPiR/JPK_V7M need deductible costs even when received invoices are omitted. */
+  includeExpenses?: boolean;
 }
 
 /**
@@ -69,6 +73,7 @@ export async function fetchInvoicesForExport(
     params.direction === 'issued' || params.direction === 'both';
   const needReceived =
     params.direction === 'received' || params.direction === 'both';
+  const needExpenses = params.includeExpenses ?? needReceived;
 
   await assertAcceptedInvoiceEnvironmentComplete(supabase, {
     tenantId: params.tenantId,
@@ -125,8 +130,8 @@ export async function fetchInvoicesForExport(
   const [issuedInvoices, receivedInvoices, expenses, settledAdvances, advanceRows] = await Promise.all([
     mapRowsToJpkInvoices(supabase, issuedRows, params.tenantId, environment),
     mapRowsToJpkInvoices(supabase, receivedRows, params.tenantId, environment),
-    needReceived
-      ? fetchExpensesForExport(supabase, params)
+    needExpenses
+      ? fetchExpensesForExport(supabase, params, environment)
       : Promise.resolve<ExportExpense[]>([]),
     fetchSettledAdvancesNet(supabase, params.tenantId, issuedRows),
     fetchAdvanceSettlementRows(supabase, params.tenantId, issuedRows),
@@ -145,8 +150,6 @@ export async function fetchInvoicesForExport(
   return { issuer, issuedInvoices, receivedInvoices, expenses };
 }
 
-const EXPENSE_PAGE = 1000;
-
 /**
  * Koszty okresu, które klient uznał za koszt (`is_deductible`) — ten sam
  * filtr co KPiR w aplikacji. Czytane stronami: PostgREST ucina odpowiedź
@@ -155,46 +158,49 @@ const EXPENSE_PAGE = 1000;
 async function fetchExpensesForExport(
   supabase: ReturnType<typeof createAdminClient>,
   params: FetchInvoicesParams,
+  environment: KsefEnvironment,
 ): Promise<ExportExpense[]> {
-  const out: ExportExpense[] = [];
-  /** id kosztu → id faktury ze skrzynki KSeF (`expenses.ksef_invoice_id`). */
-  const linked = new Map<string, string>();
-  for (let from = 0; ; from += EXPENSE_PAGE) {
-    const { data, error } = await supabase
+  const rows = await readCompletePages('expenses', (from, to) =>
+    supabase
       .from('expenses')
-      .select(
-        'id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, ' +
-          'net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label, ksef_invoice_id',
-      )
+      .select('id, source, ksef_invoice_id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label', { count: 'exact' })
       .eq('tenant_id', params.tenantId)
       .eq('is_deductible', true)
       .gte('issue_date', params.periodStart)
       .lte('issue_date', params.periodEnd)
-      .order('issue_date', { ascending: true })
       .order('id', { ascending: true })
-      .range(from, from + EXPENSE_PAGE - 1);
-    if (error) throw new Error(`expenses: ${error.message}`);
+      .range(from, to),
+  );
 
-    const page = (data ?? []) as unknown as Array<Record<string, unknown>>;
-    for (const row of page) {
-      out.push({
-        id: String(row.id),
-        issueDate: String(row.issue_date),
-        documentNumber: typeof row.document_number === 'string' ? row.document_number : '',
-        documentType: typeof row.document_type === 'string' ? row.document_type : 'invoice',
-        sellerName: typeof row.seller_name === 'string' ? row.seller_name : '',
-        sellerNip: typeof row.seller_nip === 'string' && row.seller_nip.trim() ? row.seller_nip.trim() : null,
-        sellerAddress: typeof row.seller_address === 'string' ? row.seller_address : null,
-        netAmount: Number(row.net_amount ?? 0),
-        vatAmount: Number(row.vat_amount ?? 0),
-        grossAmount: Number(row.gross_amount ?? 0),
-        vatDeductibleAmount: Number(row.vat_deductible_amount ?? 0),
-        kpirColumn: typeof row.kpir_column === 'string' ? row.kpir_column : null,
-        categoryLabel: typeof row.category_label === 'string' ? row.category_label : null,
-      });
-      if (typeof row.ksef_invoice_id === 'string') linked.set(String(row.id), row.ksef_invoice_id);
+  const eligible = await filterExpensesForKsefEnvironment(
+    supabase,
+    params.tenantId,
+    environment,
+    rows,
+  );
+  eligible.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
+  const out = eligible.map((row) => ({
+    id: String(row.id),
+    issueDate: String(row.issue_date),
+    documentNumber: typeof row.document_number === 'string' ? row.document_number : '',
+    documentType: typeof row.document_type === 'string' ? row.document_type : 'invoice',
+    sellerName: typeof row.seller_name === 'string' ? row.seller_name : '',
+    sellerNip: typeof row.seller_nip === 'string' && row.seller_nip.trim() ? row.seller_nip.trim() : null,
+    sellerAddress: typeof row.seller_address === 'string' ? row.seller_address : null,
+    netAmount: Number(row.net_amount ?? 0),
+    vatAmount: Number(row.vat_amount ?? 0),
+    grossAmount: Number(row.gross_amount ?? 0),
+    vatDeductibleAmount: Number(row.vat_deductible_amount ?? 0),
+    kpirColumn: typeof row.kpir_column === 'string' ? row.kpir_column : null,
+    categoryLabel: typeof row.category_label === 'string' ? row.category_label : null,
+  }));
+  /** Only the reconciled costs may contribute a NrKSeF to the exported file. */
+  const linked = new Map<string, string>();
+  for (const row of eligible) {
+    if (typeof row.ksef_invoice_id === 'string') {
+      linked.set(String(row.id), row.ksef_invoice_id);
     }
-    if (page.length < EXPENSE_PAGE) break;
   }
   await attachKsefNumbers(supabase, params.tenantId, out, linked);
   return out;
@@ -244,24 +250,25 @@ async function fetchInvoiceRows(
     includeCorrections?: boolean;
   },
 ): Promise<InvoiceRow[]> {
-  let query = supabase
-    .from('invoices')
-    .select('*')
-    .eq('tenant_id', params.tenantId)
-    .eq('direction', params.direction === 'issued' ? 'outgoing' : 'incoming')
-    .eq('ksef_status', 'accepted')
-    .eq('ksef_environment', params.environment)
-    .gte('issue_date', params.periodStart)
-    .lte('issue_date', params.periodEnd)
-    .order('issue_date', { ascending: true });
+  const rows = await readCompletePages('invoices', (from, to) => {
+    let query = supabase
+      .from('invoices')
+      .select('*', { count: 'exact' })
+      .eq('tenant_id', params.tenantId)
+      .eq('direction', params.direction === 'issued' ? 'outgoing' : 'incoming')
+      .eq('ksef_status', 'accepted')
+      .eq('ksef_environment', params.environment)
+      .gte('issue_date', params.periodStart)
+      .lte('issue_date', params.periodEnd)
+      .order('id', { ascending: true });
 
-  if (params.includeCorrections === false) {
-    query = query.eq('invoice_kind', 'regular');
-  }
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return (data ?? []) as InvoiceRow[];
+    if (params.includeCorrections === false) {
+      query = query.eq('invoice_kind', 'regular');
+    }
+    return query.range(from, to);
+  });
+  return rows.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 }
 
 // ============================================================================
@@ -305,19 +312,26 @@ async function fetchParentInvoiceNumbers(
   const map = new Map<string, string>();
   if (ids.length === 0) return map;
 
-  const { data, error } = await supabase
-    .from('invoices')
-    .select('id, internal_number, ksef_number')
-    .eq('tenant_id', tenantId)
-    .eq('direction', rows[0]!.direction)
-    .eq('ksef_status', 'accepted')
-    .eq('ksef_environment', environment)
-    .in('id', ids);
-
-  if (error) throw new Error(error.message);
-
-  for (const p of data ?? []) {
-    map.set(p.id, p.internal_number ?? p.ksef_number ?? '');
+  // Bound the IN-list as well as the response; corrections can reference
+  // parents outside the exported period.
+  for (let from = 0; from < ids.length; from += 100) {
+    const batch = ids.slice(from, from + 100);
+    const { data, count, error } = await supabase
+      .from('invoices')
+      .select('id, internal_number, ksef_number', { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .eq('direction', rows[0]!.direction)
+      .eq('ksef_status', 'accepted')
+      .eq('ksef_environment', environment)
+      .in('id', batch);
+    if (error) throw new Error(error.message);
+    if (!data || count !== batch.length || data.length !== batch.length) {
+      throw new Error('Linked invoice not found in organization');
+    }
+    for (const p of data) {
+      if (!batch.includes(p.id)) throw new Error('Linked invoice not found in organization');
+      map.set(p.id, p.internal_number ?? p.ksef_number ?? '');
+    }
   }
   // A parent UUID is writable invoice data, not proof of ownership.
   // Missing/foreign parents must not produce an incomplete accounting export.
@@ -344,21 +358,29 @@ async function resolveLinesForInvoices(
   }
 
   if (missingIds.length > 0) {
-    const { data: dbLines, error } = await supabase
-      .from('invoice_line_items')
-      .select(
-        'invoice_id, ordinal, name, unit, quantity, unit_price_net, net_amount, vat_rate, vat_amount',
-      )
-      .in('invoice_id', missingIds)
-      .order('ordinal', { ascending: true });
-
-    if (error) throw new Error(error.message);
-
     const grouped = new Map<string, LineItemRow[]>();
-    for (const item of dbLines ?? []) {
-      const list = grouped.get(item.invoice_id) ?? [];
-      list.push(item as LineItemRow);
-      grouped.set(item.invoice_id, list);
+    for (let from = 0; from < missingIds.length; from += 100) {
+      const batch = missingIds.slice(from, from + 100);
+      const dbLines = await readCompletePages('invoice_line_items', (pageFrom, pageTo) =>
+        supabase
+          .from('invoice_line_items')
+          .select(
+            'id, invoice_id, ordinal, name, unit, quantity, unit_price_net, net_amount, vat_rate',
+            { count: 'exact' },
+          )
+          .in('invoice_id', batch)
+          .order('id', { ascending: true })
+          .range(pageFrom, pageTo),
+      );
+      dbLines.sort((a, b) =>
+        a.invoice_id.localeCompare(b.invoice_id) ||
+        a.ordinal - b.ordinal || a.id.localeCompare(b.id));
+      for (const item of dbLines) {
+        if (!batch.includes(item.invoice_id)) throw new Error('Invoice line belongs to another invoice');
+        const list = grouped.get(item.invoice_id) ?? [];
+        list.push(item as LineItemRow);
+        grouped.set(item.invoice_id, list);
+      }
     }
 
     for (const id of missingIds) {

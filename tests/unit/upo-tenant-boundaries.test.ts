@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobContext } from '@/lib/jobs/registry';
 
 type Row = Record<string, unknown>;
-type Query = { table: string; operation: 'select' | 'insert' | 'update'; filters: Array<[string, unknown]>; patch?: Row };
+type Query = { table: string; operation: 'select' | 'insert' | 'update'; filters: Array<[string, unknown]>; patch?: Row; columns?: string };
 const mocks = vi.hoisted(() => ({ admin: vi.fn(), download: vi.fn(), xml: vi.fn(), pdf: vi.fn(), render: vi.fn(), audit: vi.fn(), sentry: vi.fn() }));
 vi.mock('@/lib/ksef/submission-log', () => ({
   recordKsefSubmissionSent: vi.fn(),
@@ -32,6 +32,10 @@ const event = { invoiceId: ID, tenantId: A, ksefNumber: REF, nip: '1234567890', 
 const invoice = (patch: Row = {}): Row => ({ id: ID, tenant_id: A, ksef_number: REF, ksef_status: 'accepted', ksef_environment: 'test',
   internal_number: 'TEST-1', issue_date: '2026-01-01', gross_total: 123, buyer_data: { name: 'Test buyer' },
   buyer_nip: '1234567890', seller_nip: '1234567890', tenants: { id: A, name: 'Test seller', nip: '1234567890' }, ...patch });
+const oldInvoice = (patch: Row = {}): Row => invoice({
+  direction: 'outgoing', created_at: '2000-01-01', updated_at: '2000-01-01',
+  ksef_accepted_at: '2000-01-01', submitted_to_ksef_at: '2000-01-01', ...patch,
+});
 const receipt = (patch: Row = {}): Row => ({ id: RECEIPT, tenant_id: A, invoice_id: ID, ksef_number: REF, ksef_environment: 'test',
   status: 'pending', download_attempts: 0, last_error: null, created_at: '2000-01-01', ...patch });
 let tables: Record<string, Row[]>;
@@ -48,11 +52,12 @@ function client() {
     let max = Infinity;
     let joinInvoice = false;
     let ordered = false;
+    let orderBy = 'created_at';
     const execute = () => {
       beforeQuery?.(q);
       if (errors.has(table)) return { data: null, error: { message: 'PRIVATE-DB-DIAGNOSTIC' } };
       let rows = (tables[table] ?? []).filter((r) => predicates.every((check) => check(r)));
-      if (ordered) rows = rows.toSorted((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+      if (ordered) rows = rows.toSorted((a, b) => String(a[orderBy]).localeCompare(String(b[orderBy])));
       rows = rows.slice(0, max);
       if (q.operation === 'insert') {
         // Real schema has UNIQUE(invoice_id), including foreign-tenant records.
@@ -70,15 +75,38 @@ function client() {
       return { data: one ? result[0] ?? null : result, error: null };
     };
     const builder = {
-      select: (cols = '') => { joinInvoice = cols.includes('invoices('); return builder; },
+      select: (cols = '') => { q.columns = cols; joinInvoice = cols.includes('invoices('); return builder; },
       eq: (key: string, value: unknown) => { q.filters.push([key, value]); predicates.push((r) => r[key] === value); return builder; },
+      gt: (key: string, value: string) => { q.filters.push([key, value]); predicates.push((r) => String(r[key]) > value); return builder; },
       in: (key: string, value: unknown[]) => { q.filters.push([key, value]); predicates.push((r) => value.includes(r[key])); return builder; },
       lt: (key: string, value: string) => { predicates.push((r) => String(r[key]) < value); return builder; },
-      or: (filter: string) => {
-        expect(filter).toBe('last_error.is.null,last_error.neq.' + UPO_IDENTITY_MISMATCH);
-        predicates.push((r) => r.last_error == null || r.last_error !== UPO_IDENTITY_MISMATCH); return builder;
+      not: (key: string, operator: string, value: unknown) => {
+        expect(operator).toBe('is'); expect(value).toBeNull();
+        predicates.push((r) => r[key] != null); return builder;
       },
-      order: () => { ordered = true; return builder; },
+      is: (key: string, value: unknown) => {
+        expect(value).toBeNull();
+        if (key === 'upo_receipts') {
+          expect(q.table).toBe('invoices'); expect(q.columns).toContain('upo_receipts()');
+          predicates.push((r) => !(tables.upo_receipts ?? []).some((receiptRow) => receiptRow.invoice_id === r.id));
+        } else if (key === 'ksef_accepted_at') {
+          predicates.push((r) => r.ksef_accepted_at == null);
+        } else throw new Error(`Unexpected is filter: ${key}`);
+        return builder;
+      },
+      or: (filter: string) => {
+        if (filter === 'last_error.is.null,last_error.neq.' + UPO_IDENTITY_MISMATCH) {
+          predicates.push((r) => r.last_error == null || r.last_error !== UPO_IDENTITY_MISMATCH);
+        } else if (filter.startsWith('submitted_to_ksef_at.lt.') && filter.includes(',and(submitted_to_ksef_at.is.null,or(updated_at.lt.')) {
+          const [submittedCutoff, remainder] = filter.slice('submitted_to_ksef_at.lt.'.length).split(',and(submitted_to_ksef_at.is.null,or(updated_at.lt.');
+          const updatedCutoff = remainder.slice(0, -',updated_at.is.null))'.length);
+          predicates.push((r) =>
+            (r.submitted_to_ksef_at != null && String(r.submitted_to_ksef_at) < submittedCutoff) ||
+            (r.submitted_to_ksef_at == null && (r.updated_at == null || String(r.updated_at) < updatedCutoff)));
+        } else throw new Error(`Unexpected or filter: ${filter}`);
+        return builder;
+      },
+      order: (key: string) => { ordered = true; orderBy = key; return builder; },
       limit: (n: number) => { max = n; return builder; },
       update: (patch: Row) => { q.operation = 'update'; q.patch = patch; return builder; },
       insert: (patch: Row) => { q.operation = 'insert'; q.patch = patch; return builder; },
@@ -222,6 +250,171 @@ describe('UPO worker boundaries', () => {
 });
 
 describe('UPO retry cron boundaries', () => {
+  it('finds an old accepted outgoing invoice without a receipt after the submit event was lost', async () => {
+    tables.invoices = [oldInvoice()];
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });
+    expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
+      { name: 'invoice/upo.requested', data: event },
+    ]);
+    expect(writes()).toEqual([]);
+  });
+  it('does not let accepted incoming, foreign-environment or fresh invoices generate UPO events', async () => {
+    tables.invoices = [
+      oldInvoice({ direction: 'incoming' }),
+      oldInvoice({ id: OTHER, ksef_environment: 'demo' }),
+      oldInvoice({ id: RECEIPT, ksef_accepted_at: new Date().toISOString() }),
+    ];
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ dispatched: 0 });
+    expectNoExternalEffects();
+  });
+  it.each([
+    { seller_nip: null },
+    { tenants: { id: A, nip: '9999999999' } },
+  ])('requires a stored seller NIP consistent with the current tenant before emitting: %j', async (patch) => {
+    tables.invoices = [oldInvoice(patch)];
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 0 });
+    expect(sendEvent).not.toHaveBeenCalled();
+    expect(mocks.sentry).toHaveBeenCalledWith(expect.stringContaining('NIP requires reconciliation'),
+      expect.objectContaining({ level: 'warning' }));
+  });
+  it('recovers historical accepted rows with no acceptance timestamp only after their last known timestamp is old', async () => {
+    tables.invoices = [oldInvoice({ ksef_accepted_at: null })];
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ dispatched: 1 });
+    expect(sendEvent).toHaveBeenCalledTimes(1);
+    sendEvent.mockClear();
+    tables.invoices[0].submitted_to_ksef_at = null;
+    tables.invoices[0].updated_at = new Date().toISOString();
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ dispatched: 0 });
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+  it('uses a historical submit timestamp despite daily later updates', async () => {
+    tables.invoices = [oldInvoice({ ksef_accepted_at: null, updated_at: new Date().toISOString() })];
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });
+    expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
+      { name: 'invoice/upo.requested', data: event },
+    ]);
+  });
+  it('filters freshly updated legacy rows before the page limit so they cannot starve an older missing UPO', async () => {
+    tables.invoices = Array.from({ length: 100 }, (_, index) => oldInvoice({
+      id: '44444444-4444-4444-8444-' + String(index).padStart(12, '0'),
+      ksef_accepted_at: null, submitted_to_ksef_at: null, updated_at: new Date().toISOString(),
+    }));
+    tables.invoices.push(oldInvoice({ id: OTHER, ksef_accepted_at: null }));
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });
+    expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
+      { name: 'invoice/upo.requested', data: { ...event, invoiceId: OTHER } },
+    ]);
+  });
+  it('filters a recent historical submit before the page limit even with old created and updated times', async () => {
+    tables.invoices = Array.from({ length: 100 }, (_, index) => oldInvoice({
+      id: '44444444-4444-4444-8444-' + String(index).padStart(12, '0'),
+      ksef_accepted_at: null, submitted_to_ksef_at: new Date().toISOString(),
+    }));
+    tables.invoices.push(oldInvoice({ id: OTHER, ksef_accepted_at: null }));
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });
+    expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
+      { name: 'invoice/upo.requested', data: { ...event, invoiceId: OTHER } },
+    ]);
+  });
+  it('anti-joins receipts before limiting the batch so old completed UPOs do not starve a missing one', async () => {
+    tables.invoices = Array.from({ length: 100 }, (_, index) => oldInvoice({
+      id: '44444444-4444-4444-8444-' + String(index).padStart(12, '0'),
+    }));
+    tables.upo_receipts = tables.invoices.map((row, index) => receipt({
+      id: '55555555-5555-4555-8555-' + String(index).padStart(12, '0'),
+      invoice_id: row.id, status: 'downloaded',
+    }));
+    tables.invoices.push(oldInvoice({ id: OTHER }));
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });
+    expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
+      { name: 'invoice/upo.requested', data: { ...event, invoiceId: OTHER } },
+    ]);
+  });
+  it('reserves dispatch capacity for a missing UPO even when stale receipts fill their page', async () => {
+    tables.invoices = Array.from({ length: 50 }, (_, index) => oldInvoice({
+      id: '44444444-4444-4444-8444-' + String(index).padStart(12, '0'),
+    }));
+    tables.upo_receipts = tables.invoices.map((row, index) => receipt({
+      id: '55555555-5555-4555-8555-' + String(index).padStart(12, '0'),
+      invoice_id: row.id,
+    }));
+    tables.invoices.push(oldInvoice({ id: OTHER }));
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 51 });
+    const batch = sendEvent.mock.calls[0][1] as Array<{ data: { invoiceId: string } }>;
+    expect(batch.some((item) => item.data.invoiceId === OTHER)).toBe(true);
+  });
+  it('reserves a legacy missing-receipt page when known acceptance dates fill their allocation', async () => {
+    tables.invoices = Array.from({ length: 75 }, (_, index) => oldInvoice({
+      id: '44444444-4444-4444-8444-' + String(index).padStart(12, '0'),
+    }));
+    tables.invoices.push(oldInvoice({ id: OTHER, ksef_accepted_at: null }));
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ dispatched: 76 });
+    const batch = sendEvent.mock.calls[0][1] as Array<{ data: { invoiceId: string } }>;
+    expect(batch.some((item) => item.data.invoiceId === OTHER)).toBe(true);
+  });
+  it.each([false, true])('keyset scans past more than one page of wrong NIPs (legacy=%s)', async (legacy) => {
+    const lateId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    tables.invoices = Array.from({ length: 80 }, (_, index) => oldInvoice({
+      id: '44444444-4444-4444-8444-' + String(index).padStart(12, '0'),
+      ksef_accepted_at: legacy ? null : '2000-01-01',
+      seller_nip: null,
+    }));
+    tables.invoices.push(oldInvoice({ id: lateId, ksef_accepted_at: legacy ? null : '2000-01-01' }));
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 81, dispatched: 1, scanTruncated: false });
+    expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
+      { name: 'invoice/upo.requested', data: { ...event, invoiceId: lateId } },
+    ]);
+    expect(mocks.sentry).toHaveBeenCalledTimes(1);
+    expect(mocks.sentry).toHaveBeenCalledWith(expect.stringContaining('NIP requires reconciliation'),
+      expect.objectContaining({ extra: { count: 80 } }));
+  });
+  it('alerts when the bounded missing-receipt scan reaches its limit', async () => {
+    tables.invoices = Array.from({ length: 201 }, (_, index) => oldInvoice({
+      id: '44444444-4444-4444-8444-' + String(index).padStart(12, '0'),
+      seller_nip: null,
+    }));
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({
+      missing: 200, dispatched: 0, scanTruncated: true,
+    });
+    expect(sendEvent).not.toHaveBeenCalled();
+    expect(mocks.sentry).toHaveBeenCalledWith(
+      expect.stringContaining('scan truncated'), expect.objectContaining({ level: 'warning' }),
+    );
+  });
+  it.each([
+    { direction: 'incoming' }, { tenant_id: B }, { ksef_environment: 'demo' },
+    { ksef_status: 'sending' }, { ksef_number: 'DIFFERENT' },
+  ])('rejects a cached missing-receipt candidate after its invoice changes: %j', async (patch) => {
+    const candidate = { id: ID, tenant_id: A, ksef_number: REF };
+    tables.invoices = [oldInvoice(patch)];
+    await expect(runUpoRetryStale(cachedContext({ 'find-accepted-without-upo': [candidate] })))
+      .resolves.toMatchObject({ dispatched: 0 });
+    expectNoExternalEffects();
+  });
+  it('skips a receipt created after the anti-join snapshot, including one from another environment', async () => {
+    tables.invoices = [oldInvoice()];
+    beforeQuery = (q) => {
+      if (q.table === 'upo_receipts' && q.filters.some(([key]) => key === 'invoice_id')) {
+        tables.upo_receipts = [receipt({ ksef_environment: 'demo' })];
+      }
+    };
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 0 });
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+  it('stops a missing-receipt recovery when the invoice or receipt recheck fails', async () => {
+    tables.invoices = [oldInvoice()];
+    beforeQuery = (q) => {
+      if (q.table === 'invoices' && q.filters.some(([key]) => key === 'id')) errors.add('invoices');
+    };
+    await expect(runUpoRetryStale(context)).rejects.toThrow('zaakceptowanej faktury');
+    expect(sendEvent).not.toHaveBeenCalled();
+    beforeQuery = (q) => {
+      if (q.table === 'upo_receipts' && q.filters.some(([key]) => key === 'invoice_id')) errors.add('upo_receipts');
+    };
+    errors.clear();
+    await expect(runUpoRetryStale(context)).rejects.toThrow('rekordu UPO faktury');
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
   it.each(['', ' '.repeat(3), 'X'.repeat(201)])('quarantines a freshly confirmed malformed reference without blocking its valid neighbor', async (ksef_number) => {
     tables.invoices = [invoice(), invoice({ id: OTHER })];
     tables.upo_receipts = [receipt({ ksef_number }), receipt({ id: OTHER, invoice_id: OTHER })];
@@ -229,11 +422,12 @@ describe('UPO retry cron boundaries', () => {
     expect(tables.upo_receipts[0].last_error).toBe(UPO_IDENTITY_MISMATCH);
     expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [{ name: 'invoice/upo.requested', groupId: event.nip, data: { ...event, invoiceId: OTHER } }]);
   });
-  it('lets a valid receipt past a full malformed batch on the following run', async () => {
+  it('lets a valid receipt past malformed pages on a later run', async () => {
     tables.invoices = [invoice(), invoice({ id: OTHER })];
     tables.upo_receipts = Array.from({ length: 100 }, (_, i) => receipt({ id: '44444444-4444-4444-8444-' + String(i).padStart(12, '0'), ksef_number: '' }));
     tables.upo_receipts.push(receipt({ id: OTHER, invoice_id: OTHER }));
-    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ processed: 100, quarantined: 100, dispatched: 0 });
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ processed: 50, quarantined: 50, dispatched: 0 });
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ processed: 50, quarantined: 50, dispatched: 0 });
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ processed: 1, quarantined: 0, dispatched: 1 });
   });
   it('skips impossible cached UUIDs without blocking valid candidates or writing unknown rows', async () => {
@@ -256,11 +450,12 @@ describe('UPO retry cron boundaries', () => {
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ dispatched: 0, quarantined: 1 });
     expect(sendEvent).not.toHaveBeenCalled();
   });
-  it('does not starve a valid receipt behind a full invalid batch on the next run', async () => {
+  it('does not starve a valid receipt behind fully invalid pages', async () => {
     tables.invoices = [invoice({ tenant_id: B }), invoice({ id: OTHER })];
     tables.upo_receipts = Array.from({ length: 100 }, (_, i) => receipt({ id: '44444444-4444-4444-8444-' + String(i).padStart(12, '0') }));
     tables.upo_receipts.push(receipt({ id: OTHER, invoice_id: OTHER }));
-    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ processed: 100, quarantined: 100, dispatched: 0 });
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ processed: 50, quarantined: 50, dispatched: 0 });
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ processed: 50, quarantined: 50, dispatched: 0 });
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ processed: 1, quarantined: 0, dispatched: 1 });
     expect(sendEvent).toHaveBeenCalledTimes(1);
   });

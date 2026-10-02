@@ -64,7 +64,7 @@ export function KsefHealthBannerClient({ initial }: Props) {
     : 'KSeF działa wolno';
 
   const description = isDown
-    ? 'Twoje faktury zostaną automatycznie wysłane gdy API wstanie. W międzyczasie tryb Offline24 jest aktywny — nic nie zginie.'
+    ? 'Nowe faktury pozostaną szkicami. Automatyczny Offline24 jest wstrzymany; po przywróceniu KSeF sprawdź stan dokumentu przed wysyłką.'
     : `Pingi do KSeF trwają ${snapshot.responseTimeMs ?? '?'}ms. Wysyłka faktur może być wolniejsza, ale działa.`;
 
   const handleDismiss = () => {

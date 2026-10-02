@@ -14,7 +14,7 @@ const STATUS_MAP: Record<string, { label: string; tone: FfStatusTone }> = {
   pending: { label: 'W kolejce', tone: 'warning' },
   queued: { label: 'W kolejce', tone: 'warning' },
   sending: { label: 'Wysyłanie', tone: 'info' },
-  offline_queued: { label: 'Offline (oczekuje KSeF)', tone: 'warning' },
+  offline_queued: { label: 'Offline (do uzgodnienia)', tone: 'warning' },
   accepted: { label: 'Zaakceptowana', tone: 'success' },
   rejected: { label: 'Odrzucona', tone: 'danger' },
   failed: { label: 'Błąd', tone: 'danger' },
@@ -37,7 +37,6 @@ export function StatusBadge({ status, isLoading }: StatusBadgeProps) {
     isLoading === true ||
     status === 'queued' ||
     status === 'pending' ||
-    status === 'offline_queued' ||
     status === 'sending';
 
   return (

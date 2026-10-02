@@ -3,6 +3,8 @@ import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
+import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
+import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,19 +40,26 @@ export default async function KpirPage({
     tenantId, periodStart, periodEnd, direction: 'outgoing', environment,
   });
 
-  const { data: expenses, error: expensesError } = await supabase
+  const expenses = await readCompletePages('expenses', (from, to) => supabase
     .from('expenses')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('tenant_id', tenantId)
     .eq('is_deductible', true)
     .gte('issue_date', periodStart)
     .lte('issue_date', periodEnd)
-    .order('issue_date', { ascending: true });
+    .order('id', { ascending: true })
+    .range(from, to));
+  const visibleExpenses = await filterExpensesForKsefEnvironment(
+    supabase, tenantId, environment, expenses,
+  );
+  visibleExpenses.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 
-  const { data: invoices, error: invoicesError } = await supabase
+  const invoices = await readCompletePages('invoices', (from, to) => supabase
     .from('invoices')
     .select(
       'id, internal_number, issue_date, sale_date, gross_total, net_total, buyer_data, invoice_kind, advance_invoice_ids',
+      { count: 'exact' },
     )
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
@@ -58,37 +67,37 @@ export default async function KpirPage({
     .eq('ksef_environment', environment)
     .gte('issue_date', periodStart)
     .lte('issue_date', periodEnd)
-    .order('issue_date', { ascending: true });
+    .order('id', { ascending: true })
+    .range(from, to));
+  invoices.sort((a, b) =>
+    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 
   // ROZ niesie pełną wartość zamówienia — przychód liczy tylko resztę ponad
   // zaliczki, które KPiR już ma (`kpirRevenueNet`). Bez tej sumy przychód
-  // z ROZ byłby zawyżony — błąd idzie na baner nad tabelą, jak inne błędy odczytu.
+  // z ROZ byłby zawyżony — błąd idzie na baner nad tabelą.
   let settledError: string | null = null;
   let settled = new Map<string, number>();
   try {
-    settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices ?? []);
+    settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices);
   } catch (e) {
     settledError = e instanceof Error ? e.message : 'Nie można odczytać zaliczek';
   }
-  const invoiceRows = (invoices ?? []).map((inv) => ({
+  const invoiceRows = invoices.map((inv) => ({
     ...inv,
     settled_advances_net: settled.get(inv.id) ?? null,
   }));
 
-  const loadError =
-    expensesError?.message ?? invoicesError?.message ?? settledError ?? null;
-
   return (
     <div className="space-y-6 pb-10 text-[var(--ff-on-surface)]">
-      {loadError ? (
+      {settledError ? (
         <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] border border-red-400/25 bg-[color-mix(in_srgb,#f87171_10%,transparent)] p-4 text-sm text-red-200">
-          {loadError}
+          {settledError}
         </div>
       ) : null}
       <KpirView
         month={month}
         year={year}
-        expenses={expenses ?? []}
+        expenses={visibleExpenses}
         invoices={invoiceRows}
       />
     </div>

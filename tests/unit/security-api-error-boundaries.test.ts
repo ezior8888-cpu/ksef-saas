@@ -147,6 +147,9 @@ describe('SEC-A-01: HTTP responses never expose internal exception messages', ()
     expect(await response.json()).toEqual({
       error: 'Nie udało się wygenerować pliku. Spróbuj ponownie później.', errorId: ERROR_ID,
     });
+    expect(mocks.exportData).toHaveBeenCalledWith(expect.objectContaining({
+      direction: 'both', includeExpenses: false,
+    }));
   });
 
   it('contains storage initialization errors within the portal response boundary', async () => {

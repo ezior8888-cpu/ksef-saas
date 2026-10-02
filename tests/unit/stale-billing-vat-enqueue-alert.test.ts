@@ -198,6 +198,7 @@ describe('stale billing VAT enqueue alert', () => {
 
     expect(step.run).toHaveBeenCalledWith('check-stale-billing-vat-enqueues', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-ksef-reconciliation', expect.any(Function));
+    expect(step.run).toHaveBeenCalledWith('check-stale-ksef-sending-invoices', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-checkout-attempts', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-stale-backup', expect.any(Function));
     // 14 → 15: osierocone próby utworzenia klienta Stripe (#62, przeniesione 02.10).
@@ -206,7 +207,8 @@ describe('stale billing VAT enqueue alert', () => {
     expect(step.run).toHaveBeenCalledWith('check-paid-without-vat-invoice', expect.any(Function));
     // 15 → 16: kolejka offline w innym środowisku KSeF (#63 Codexa).
     expect(step.run).toHaveBeenCalledWith('check-offline-environment', expect.any(Function));
-    expect(result).toMatchObject({ checked: 16, fired: 0 });
+    // 16 → 17: faktura w `sending` bez wyniku po przejęciu wysyłki (#71).
+    expect(result).toMatchObject({ checked: 17, fired: 0 });
     expect(result.details).toContainEqual({ type: 'offline_environment_blocked', fired: false });
   });
 });

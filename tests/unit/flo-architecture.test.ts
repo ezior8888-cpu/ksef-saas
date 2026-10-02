@@ -13,10 +13,10 @@ import { describe, expect, it } from 'vitest';
  * ze złej woli, tylko ze zwykłego „dopiszę tu szybko wysyłkę, dane i tak mam”.
  *
  * DLACZEGO GRAF ZDARZEŃ, A NIE SAM GRAF IMPORTÓW: zadania w tym projekcie
- * rozmawiają przez kolejkę, nie przez importy. Cron `process-offline-queue`
- * nie importuje wysyłki do KSeF — emituje zdarzenie, które odbiera osobne
- * zadanie. Test oparty wyłącznie na importach byłby zawsze zielony i zawsze
- * bezużyteczny. Dlatego budujemy graf z dwóch rodzajów krawędzi:
+ * rozmawiają przez kolejkę, nie przez importy. Dawniej cron
+ * `process-offline-queue` emitował zdarzenie wysyłki KSeF, choć nie importował
+ * jej kodu bezpośrednio. Automatyczne dosyłanie Offline24 jest wstrzymane,
+ * a test musi wykryć każdą przyszłą zmianę tego stanu. Dlatego budujemy graf:
  *   · import modułu,
  *   · emisja zdarzenia → zadanie, które to zdarzenie obsługuje.
  */
@@ -50,18 +50,6 @@ const OUTGOING_SINKS: Record<string, string> = {
  * wywala test, czyli blokuje scalenie.
  */
 const KNOWN_UNGATED: Record<string, string> = {
-  // Faktury w kolejce offline zostały zatwierdzone przez człowieka PRZED
-  // awarią Ministerstwa — dosłanie po jej ustaniu nie jest nową decyzją.
-  // Brakuje jednak śladu tamtej zgody.
-  // KOREKTA (26.08): krok 11 zbudował wykonawcę, ale TEGO nie zamknął.
-  // Żeton mógłby tu trafić dopiero wtedy, gdy wysyłka faktur zacznie
-  // przechodzić przez propozycje — a to jest P-02, czyli krok 32. Dopisanie
-  // żetonu wcześniej wymagałoby przerobienia ręcznego wystawiania faktur,
-  // które z agentem nie ma nic wspólnego.
-  // ZAMYKA: krok 32 (P-02 — wysyłka faktur przez wykonawcę propozycji).
-  'lib/inngest/jobs/process-offline-queue.ts':
-    'Offline24 — dosyłka faktur zatwierdzonych przed awarią',
-
   // Paczka do księgowej wychodzi z crona, gdy tenant ustawił dzień miesiąca.
   // To jest zgoda przez ustawienie: ktoś włączył to raz i zapomniał — czyli
   // dokładnie ten model, który został odrzucony przy ponagleniach.

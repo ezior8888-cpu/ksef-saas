@@ -2,7 +2,7 @@ import 'server-only';
 import { ReminderConsentDenied } from './delivery-errors';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { evaluateChaseSafety, SAFETY_WINDOW_MS } from '@/lib/flo/functions/payment-chase';
-import { reminderInvoiceFingerprint } from './delivery-schema';
+import { isReminderInvoiceChaseable, reminderInvoiceFingerprint } from './delivery-schema';
 import type { ReminderDelivery } from '@/types/reminder-delivery';
 
 // PostgREST can silently truncate result sets. Every bounded read below also
@@ -50,6 +50,7 @@ export async function assertReminderSendable(delivery: ReminderDelivery) {
   if (!invoice.data || invoice.data.tenant_id !== delivery.tenantId ||
       invoice.data.id !== delivery.invoiceId) throw new ReminderConsentDenied('Faktura nie należy do organizacji przypomnienia.');
   const row = invoice.data;
+  if (!isReminderInvoiceChaseable(row)) throw new ReminderConsentDenied('Korekta lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.');
   if (reminderInvoiceFingerprint(row) !== delivery.sourceFingerprint) {
     throw new ReminderConsentDenied('Dane faktury zmieniły się po przygotowaniu wiadomości. Wysyłka wstrzymana.');
   }
