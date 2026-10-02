@@ -33,6 +33,11 @@ beforeEach(() => {
       { id: 'a1', user_id: USER, action: 'own-action' },
       { id: 'a2', user_id: OTHER, action: PRIVATE },
     ],
+    // Sekcje osobowe z AUD-76 (format 3) — tu puste; zakres sprawdza rodo-eksport-pelny.
+    users: [{ id: USER, name: 'Own' }],
+    email_preferences: [], push_subscriptions: [], support_conversations: [], support_messages: [],
+    organization_join_requests: [], organization_invitations: [], gdpr_deletion_requests: [],
+    newsletter_subscribers: [], email_bounces: [],
   };
   mocks.verified.mockResolvedValue({ ok: true, user: { id: USER } });
   mocks.audit.mockResolvedValue(undefined);
@@ -51,6 +56,7 @@ beforeEach(() => {
           expect(opts.count).toBe('exact'); return query;
         },
         eq: (key: string, value: unknown) => { filters.push([key, value]); return query; },
+        in: () => query,
         order: () => query,
         limit: (value: number) => { limit = value; return query; },
         returns: async () => {
@@ -68,12 +74,14 @@ beforeEach(() => {
 describe('bounded account export', () => {
   it('exports only the verified account, never organizational invoices or other users', async () => {
     const data = await collectUserData(USER);
-    expect(data.format_version).toBe(2);
+    expect(data.format_version).toBe(3);
     expect(data.memberships.map((m) => m.id)).toEqual(['m1', 'm2']);
     expect(data.audit_logs.map((a) => a.id)).toEqual(['a1']);
     expect(data.organizations_owned).toEqual([{ organization_id: 'active-org', role: 'owner' }]);
     expect(data.organization_invoices.included).toBe(false);
-    expect(tablesRead).toEqual(['memberships', 'audit_logs']);
+    // Od formatu 3 (AUD-76) także dane osoby z innych tabel — nadal bez faktur.
+    expect(tablesRead).not.toContain('invoices');
+    expect(tablesRead.slice(0, 2)).toEqual(['memberships', 'audit_logs']);
     expect(JSON.stringify(data)).not.toContain(PRIVATE);
     expect(data).not.toHaveProperty('invoices_count');
   });
@@ -121,7 +129,7 @@ describe('account export endpoint', () => {
     expect(response.headers.get('referrer-policy')).toBe('no-referrer');
     expect((await response.json()).user.id).toBe(USER);
     expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({
-      userId: USER, metadata: expect.objectContaining({ format_version: 2 }),
+      userId: USER, metadata: expect.objectContaining({ format_version: 3 }),
     }));
   });
 
