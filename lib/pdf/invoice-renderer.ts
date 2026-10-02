@@ -311,6 +311,18 @@ const COLS = [
   { key: 'gross', label: 'Brutto', w: 0.14, align: 'right' as const },
 ];
 
+/** Dolna granica treści — poniżej jest tylko stopka strony. */
+function contentBottom(doc: Doc): number {
+  return doc.page.height - PAGE_MARGIN - 24;
+}
+
+/** Nowa strona, gdy blok o wysokości `height` nie zmieści się na bieżącej. */
+function ensureSpace(doc: Doc, height: number): void {
+  if (doc.y + height > contentBottom(doc)) {
+    doc.addPage();
+  }
+}
+
 function drawLineItems(
   doc: Doc,
   invoice: Invoice,
@@ -318,7 +330,8 @@ function drawLineItems(
   width: number,
 ): void {
   const cellPad = 4;
-  const rowHeight = 20;
+  const minRowHeight = 20;
+  const textTop = 6;
 
   const colX: number[] = [];
   let acc = left;
@@ -326,22 +339,32 @@ function drawLineItems(
     colX.push(acc);
     acc += c.w * width;
   }
+  const cellWidth = (i: number) => COLS[i]!.w * width - cellPad * 2;
 
-  // Nagłówek tabeli.
-  doc.rect(left, doc.y, width, rowHeight).fill('#f3f3f3');
-  doc.font('bold').fontSize(8).fillColor('#333333');
-  COLS.forEach((c, i) => {
-    doc.text(c.label, colX[i]! + cellPad, doc.y + 6, {
-      width: c.w * width - cellPad * 2,
-      align: c.align,
+  // Nagłówek tabeli. Wszystkie etykiety od jednej współrzędnej — `doc.text`
+  // przesuwa `doc.y`, więc liczenie od `doc.y` w pętli schodkowało kolumny.
+  const drawHeaderRow = (): void => {
+    const top = doc.y;
+    doc.rect(left, top, width, minRowHeight).fill('#f3f3f3');
+    doc.font('bold').fontSize(8).fillColor('#333333');
+    COLS.forEach((c, i) => {
+      doc.text(c.label, colX[i]! + cellPad, top + textTop, {
+        width: cellWidth(i),
+        align: c.align,
+        lineBreak: false,
+      });
     });
-  });
-  doc.y += rowHeight;
+    doc.y = top + minRowHeight;
+    doc.font('body').fontSize(8).fillColor('#222222');
+  };
 
-  // Wiersze pozycji.
-  doc.font('body').fontSize(8).fillColor('#222222');
+  ensureSpace(doc, minRowHeight * 2);
+  drawHeaderRow();
+
+  // Wiersze pozycji. Wysokość wiersza z najwyższej komórki (długa nazwa się
+  // zawija), a wiersz, który się nie mieści, idzie na nową stronę razem
+  // z powtórzonym nagłówkiem — bez tego pdfkit dokładał stronę na komórkę.
   invoice.lines.forEach((line: InvoiceLineItem, idx: number) => {
-    const rowTop = doc.y;
     const values: Record<string, string> = {
       lp: String(line.ordinal),
       name: line.name,
@@ -352,17 +375,28 @@ function drawLineItems(
       vat: VAT_RATE_LABEL[line.vatRate],
       gross: money(line.grossAmount),
     };
+    const textHeight = Math.max(
+      ...COLS.map((c, i) =>
+        doc.heightOfString(values[c.key] ?? '', { width: cellWidth(i), align: c.align }),
+      ),
+    );
+    const rowHeight = Math.max(minRowHeight, Math.ceil(textHeight) + textTop * 2);
+
+    if (doc.y + rowHeight > contentBottom(doc)) {
+      doc.addPage();
+      drawHeaderRow();
+    }
+
+    const rowTop = doc.y;
     // Zebra dla czytelności.
     if (idx % 2 === 1) {
       doc.rect(left, rowTop, width, rowHeight).fill('#fafafa');
       doc.fillColor('#222222');
     }
     COLS.forEach((c, i) => {
-      doc.text(values[c.key] ?? '', colX[i]! + cellPad, rowTop + 6, {
-        width: c.w * width - cellPad * 2,
+      doc.text(values[c.key] ?? '', colX[i]! + cellPad, rowTop + textTop, {
+        width: cellWidth(i),
         align: c.align,
-        lineBreak: false,
-        ellipsis: true,
       });
     });
     doc.y = rowTop + rowHeight;
@@ -397,6 +431,8 @@ function drawVatSummary(
 
   const boxW = 250;
   const boxX = left + width - boxW;
+  // Nagłówek + stawki + zaliczki + „Do zapłaty” — całość na jednej stronie.
+  ensureSpace(doc, 13 + byRate.size * 12 + 16 + 22);
   let y = doc.y;
 
   doc.font('bold').fontSize(8).fillColor('#888888');
@@ -437,6 +473,7 @@ function drawPayment(
   width: number,
 ): void {
   const p = invoice.payment;
+  ensureSpace(doc, 50);
   doc.font('bold').fontSize(8).fillColor('#888888');
   doc.text('PŁATNOŚĆ', left, doc.y);
   doc.font('body').fontSize(9).fillColor('#444444');
@@ -464,6 +501,8 @@ function drawFooter(
   left: number,
   width: number,
 ): void {
+  // Adnotacje, uwagi i numer KSeF nie mogą wejść na stopkę strony.
+  ensureSpace(doc, 70);
   // Art. 106e ust. 1 pkt 16 — obowiązkowe wyrazy przy metodzie kasowej.
   if (invoice.annotations?.cashMethod === 1) {
     doc.font('bold').fontSize(9).fillColor('#222222');
