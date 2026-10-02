@@ -50,6 +50,16 @@ function database() {
         delete() { return query; },
         eq(k: string, v: unknown) { predicates.push((r) => r[k] === v); return query; },
         in(k: string, vs: unknown[]) { predicates.push((r) => vs.includes(r[k])); return query; },
+        overlaps(k: string, vs: unknown[]) {
+          predicates.push((r) => Array.isArray(r[k]) && (r[k] as unknown[]).some((v) => vs.includes(v)));
+          return query;
+        },
+        // Tylko forma używana przez `findAdvancesAlreadySettled`.
+        or(expr: string) {
+          expect(expr).toBe('ksef_status.is.null,ksef_status.neq.rejected');
+          predicates.push((r) => r.ksef_status == null || r.ksef_status !== 'rejected');
+          return query;
+        },
         single() { singular = true; return query; },
         maybeSingle() { singular = true; return query; },
         then(resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) {
@@ -87,6 +97,7 @@ function formularz(advanceInvoiceIds: string[], totalAdvances: number) {
     bankAccount: '61109010140000071219812874',
     seller: { nip: '5260001246', name: 'ACME', address: { addressLine1: 'ul. A 1', addressLine2: '00-001 Warszawa', countryCode: 'PL' } },
     buyer: { type: 'b2b', idType: 'nip', nip: '5252241585', name: 'Klient', address: { addressLine1: 'ul. K 10', addressLine2: '02-001 Warszawa', countryCode: 'PL' } },
+    splitPayment: false,
     advanceInvoiceIds,
     totalAdvances,
     // Dwie stawki — bez stawki zaliczki z bazy rozbicie musiałoby się wywrócić.
@@ -102,7 +113,7 @@ afterEach(() => vi.unstubAllEnvs());
 beforeEach(() => {
   tables = {
     // Pełny profil sprzedawcy — #85 bierze sprzedawcę z firmy, nie z formularza.
-    tenants: [{ id: 'firma-a', nip: '5260001246', name: 'ACME', address_json: { addressLine1: 'ul. A 1', addressLine2: '00-001 Warszawa', countryCode: 'PL' } }],
+    tenants: [{ id: 'firma-a', nip: '5260001246', name: 'ACME', vat_cash_method: false, address_json: { addressLine1: 'ul. A 1', addressLine2: '00-001 Warszawa', countryCode: 'PL' } }],
     invoices: [
       zaliczka(ZAL_23, 12300, 10000, 2300, '23'),
       zaliczka(ZAL_8, 1080, 1000, 80, '8'),
@@ -123,6 +134,21 @@ describe('faktura rozliczeniowa — zaliczki ze stawką', () => {
       value: { invoice_kind: 'final', invoice_type: 'ROZ', advance_invoice_ids: [ZAL_23, ZAL_8] },
     });
     expect(mocks.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('zaliczka wskazana w innej ROZ nie trafi do drugiej; odrzucona ROZ ją zwalnia (AUD-67)', async () => {
+    const roz = (id: string, status: string): Row => ({
+      id, tenant_id: 'firma-a', direction: 'outgoing', invoice_kind: 'final', ksef_status: status,
+      internal_number: `FR/${id}`, advance_invoice_ids: [ZAL_23],
+    });
+    tables.invoices.push(roz('odrzucona', 'rejected'));
+    expect(await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380))).toMatchObject({ success: true });
+
+    inserts = [];
+    tables.invoices.push(roz('szkic', 'draft'));
+    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380));
+    expect(wynik).toMatchObject({ success: false, error: expect.stringContaining('FR/szkic') });
+    expect(inserts).toEqual([]);
   });
 
   it('zaliczka w stawce spoza zamówienia wraca do formularza — bez szkicu i bez wysyłki', async () => {

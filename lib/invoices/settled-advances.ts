@@ -102,3 +102,46 @@ export async function fetchSettledAdvancesTotals(
   }
   return result;
 }
+
+/**
+ * Zaliczki już wskazane w innej fakturze ROZ tej firmy (AUD-67). Klucz: id
+ * zaliczki, wartość: numer tej ROZ. Liczy się każda ROZ poza odrzuconą przez
+ * KSeF — także szkic, bo wysłany rozliczyłby zaliczkę drugi raz, i `failed`,
+ * bo mógł dotrzeć do KSeF. Tę samą regułę trzyma w bazie wyzwalacz z 00125;
+ * tu jest po to, żeby formularz dostał czytelny komunikat przed zapisem.
+ *
+ * Błąd odczytu rzuca — „nie wiem” to nie „wolna”.
+ */
+export async function findAdvancesAlreadySettled(
+  client: SupabaseClient,
+  tenantId: string,
+  advanceIds: readonly string[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(advanceIds)];
+  const settled = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += LOOKUP_CHUNK) {
+    const chunk = ids.slice(i, i + LOOKUP_CHUNK);
+    const { data, error } = await client
+      .from('invoices')
+      .select('id, internal_number, advance_invoice_ids')
+      .eq('tenant_id', tenantId)
+      .eq('direction', 'outgoing')
+      .eq('invoice_kind', 'final')
+      // Kolumna dopuszcza NULL (00001); `neq` zgubiłby taki wiersz.
+      .or('ksef_status.is.null,ksef_status.neq.rejected')
+      .overlaps('advance_invoice_ids', chunk);
+    if (error) throw new Error(`Nie można sprawdzić, czy zaliczki są już rozliczone: ${error.message}`);
+    for (const row of (data ?? []) as Array<{
+      id: string;
+      internal_number: string | null;
+      advance_invoice_ids: string[] | null;
+    }>) {
+      for (const id of row.advance_invoice_ids ?? []) {
+        if (chunk.includes(id) && !settled.has(id)) {
+          settled.set(id, row.internal_number ?? row.id.slice(0, 8));
+        }
+      }
+    }
+  }
+  return settled;
+}

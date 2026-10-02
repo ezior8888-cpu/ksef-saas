@@ -66,7 +66,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00122 | Codex (#71) → Claude (C-20) | `invoice_delivery_history_guard` (dawniej 00093: klient nie zmieni historii wysyłki dawnych faktur failed/rejected ani pozycji historycznych faktur KSeF) | PR `claude/codex-71-przejecie-wysylki`; przed wdrożeniem, razem z 00123 |
 | 00123 | Codex (#71) → Claude (C-20) | `expense_provenance_guard` (dawniej 00095: klient nie przemianuje kosztu z KSeF na ręczny ani nie odepnie faktury) | PR `claude/codex-71-przejecie-wysylki`; przed wdrożeniem |
 | 00124 | Claude (C-20, #71 część 2) | `ksef_send_claim` (AUD-10: przejęcie wysyłki z dzierżawą 15 min, właściciel = `sendAttemptId` zdarzenia, `claim_ksef_send` tylko dla serwisu) | PR `claude/ksef-przejecie-wysylki`; przed wdrożeniem |
-| **00125** | — | następny wolny (00200 zajęte) | — |
+| 00125 | Claude (partia 15) | `roz_advance_single_settlement` (AUD-67: zaliczka rozliczona najwyżej jedną ROZ firmy, poza odrzuconą; wyzwalacz + blokada doradcza na firmę) | PR `claude/naprawy-partia-15`; przed wdrożeniem |
+| **00126** | — | następny wolny (00200 zajęte) | — |
 
 ---
 

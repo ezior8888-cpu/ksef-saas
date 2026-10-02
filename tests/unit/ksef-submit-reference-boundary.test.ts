@@ -36,7 +36,11 @@ const advance = {
   paymentMethod: 'transfer', paymentDueDate: '2026-09-28', bankAccount: '11111111111111111111111111',
   taxAnnotations: { cashMethod: 2, splitPayment: 2 },
 } as AdvanceInvoiceData;
-const final = { invoiceType: 'final', internalNumber: 'ROZ/1', advanceInvoiceIds: [parentId], seller } as FinalInvoiceData;
+const final = {
+  invoiceType: 'final', internalNumber: 'ROZ/1', advanceInvoiceIds: [parentId], seller,
+  paymentMethod: 'transfer', bankAccount: '11111111111111111111111111',
+  taxAnnotations: { cashMethod: 1, splitPayment: 2 },
+} as FinalInvoiceData;
 
 type Row = Record<string, unknown>;
 let invoice: Row;
@@ -91,6 +95,7 @@ function setDocument(internalNumber: string, type: Invoice['type']) {
         bankAccount: advance.bankAccount,
       },
     } : {}),
+    ...(type === 'ROZ' ? { annotations: final.taxAnnotations } : {}),
   } as Invoice;
   invoice.internal_number = internalNumber;
   invoice.invoice_type = type;
@@ -215,6 +220,22 @@ describe('KSeF submit reference boundary', () => {
       expect(reads).toHaveLength(1);
     },
   );
+
+  it('rejects a ROZ event without frozen flags or with flags differing from the stored document (AUD-23)', async () => {
+    invoice.invoice_kind = 'final';
+    setDocument('ROZ/1', 'ROZ');
+    invoice.advance_invoice_ids = [parentId];
+    const base = { ...input(), environment: 'test' as const, correctionData: undefined, finalAdvanceSettlementRows: [{}] };
+    await expect(assertSubmitReferences({ ...base, finalData: final })).resolves.toBe('final');
+    for (const finalData of [
+      { ...final, taxAnnotations: undefined as unknown as FinalInvoiceData['taxAnnotations'] },
+      { ...final, taxAnnotations: { cashMethod: 2, splitPayment: 2 } as const },
+      { ...final, taxAnnotations: { cashMethod: 1, splitPayment: 1 } as const, paymentMethod: 'cash' as const },
+    ]) {
+      reads = [];
+      await expect(assertSubmitReferences({ ...base, finalData })).rejects.toThrow('manual reconciliation');
+    }
+  });
 
   it('rejects an old ZAL event without flags and a tampered flag after enqueue', async () => {
     invoice.invoice_kind = 'advance';

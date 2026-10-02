@@ -176,6 +176,8 @@ export interface FinalInvoiceData extends InvoiceCommonFields {
   invoiceType: 'final';
   seller: SellerData;
   buyer: BuyerData;
+  /** Frozen legal FA(3) flags (AUD-23): cash method from the tenant, MPP from the form. */
+  taxAnnotations: { cashMethod: 1 | 2; splitPayment: 1 | 2 };
 
   // Zaliczki które rozliczamy
   advanceInvoiceIds: string[]; // UUIDs faktur zaliczkowych

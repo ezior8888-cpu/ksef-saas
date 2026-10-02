@@ -221,7 +221,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
             {...form.register('advanceAmount', { valueAsNumber: true })}
           />
           <p className="text-xs text-muted-foreground">
-            Pozostało rozliczenia brutto:{' '}
+            Wartość umowy po tej zaliczce (bez wcześniejszych zaliczek):{' '}
             <strong className="tabular-nums">{preview.remainingAmount.toFixed(2)} PLN</strong>
           </p>
           {form.formState.errors.advanceAmount ? (

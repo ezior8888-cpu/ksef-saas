@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logAudit } from '@/lib/audit/log';
+import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
+import { findAdvancesAlreadySettled } from '@/lib/invoices/settled-advances';
 import {
   settlementRowFromAdvance,
   type AdvanceInvoiceDbRow,
@@ -139,6 +141,7 @@ function invoiceLineItemsFromDomain(lines: InvoiceLine[]): InvoiceLineItem[] {
 function buildFinalEnvelope(
   parsed: FinalInvoiceSchemaIn,
   advancesSum: number,
+  cashMethod: boolean,
 ): FinalInvoiceData {
   const bankNorm = normalizeBank(parsed.bankAccount ?? '');
   const buyer = parsed.buyer as BuyerData;
@@ -154,6 +157,10 @@ function buildFinalEnvelope(
     notes: parsed.notes?.trim()?.length ? parsed.notes.trim() : undefined,
     seller,
     buyer,
+    taxAnnotations: {
+      cashMethod: cashMethod ? 1 : 2,
+      splitPayment: parsed.splitPayment ? 1 : 2,
+    },
     advanceInvoiceIds: parsed.advanceInvoiceIds,
     totalAdvances: advancesSum,
     lines: parsed.lines.map((l) => ({
@@ -193,6 +200,7 @@ function ghostFinalInvoice(envelope: FinalInvoiceData): Invoice {
       method: paymentMethodFa(envelope.paymentMethod),
       bankAccount: normalizeBank(envelope.bankAccount),
     },
+    annotations: envelope.taxAnnotations,
     notes: envelope.notes,
   };
 }
@@ -320,6 +328,17 @@ async function resolveFinalPayload(
   const settlement = await fetchSettlementRows(supabase, tenantId, parsed.advanceInvoiceIds);
   if ('error' in settlement) return settlement;
 
+  // AUD-67: zaliczka rozliczona już inną ROZ zaniżyłaby przychód drugi raz.
+  const alreadySettled = await findAdvancesAlreadySettled(supabase, tenantId, parsed.advanceInvoiceIds);
+  if (alreadySettled.size > 0) {
+    const rozNumbers = [...new Set(alreadySettled.values())].join(', ');
+    return {
+      error: `Wybrana zaliczka jest już rozliczona fakturą ${rozNumbers}. Usuń tamten szkic albo wybierz inne zaliczki.`,
+    };
+  }
+
+  const cashMethod = await readTenantCashMethodForIssuance(supabase, tenantId);
+
   const advancesSumRounded = settlement.reduce((s, r) => s + roundToCents(r.advance_amount), 0);
 
   if (parsed.totalAdvances > 0) {
@@ -329,7 +348,7 @@ async function resolveFinalPayload(
     }
   }
 
-  const envelope = buildFinalEnvelope(parsed, advancesSumRounded);
+  const envelope = buildFinalEnvelope(parsed, advancesSumRounded, cashMethod);
 
   // Rozbicie reszty na stawki robi generator przy wysyłce — tu sprawdzamy je
   // od razu, żeby „zaliczka w stawce, której nie ma w zamówieniu” wróciła

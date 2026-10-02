@@ -270,6 +270,8 @@ export const finalInvoiceSchema = z
     bankAccount: z
       .union([z.literal(''), z.string().regex(/^\d{26}$/, 'Numer konta = 26 cyfr')])
       .optional(),
+    /** The user must answer explicitly; no default to "MPP does not apply". */
+    splitPayment: z.boolean({ message: 'Wybierz, czy do faktury stosuje się MPP' }),
     notes: z.string().max(2000).optional(),
 
     seller: sellerSchema,
@@ -278,6 +280,11 @@ export const finalInvoiceSchema = z
     advanceInvoiceIds: z.array(z.string().uuid()).min(1, 'Wybierz min. 1 zaliczkę'),
     totalAdvances: z.number().nonnegative(),
     lines: z.array(invoiceLineSchema).min(1).max(100),
+  })
+  .refine((data) => !data.splitPayment ||
+    (data.paymentMethod === 'transfer' && !!data.bankAccount?.trim()), {
+    message: 'MPP wymaga przelewu i numeru rachunku',
+    path: ['splitPayment'],
   })
   .refine((data) => new Date(data.paymentDueDate) >= new Date(data.issueDate), {
     message: 'Termin płatności nie może być przed datą wystawienia',

@@ -34,7 +34,7 @@ import {
 } from '@/components/invoices/final-actions';
 import { generateAdvanceInvoiceXml } from '@/lib/ksef/fa3-advance-generator';
 import { validateInvoiceXml } from '@/lib/xml/validator';
-import { advanceInvoiceSchema } from '@/lib/validators/invoice-validators';
+import { advanceInvoiceSchema, finalInvoiceSchema } from '@/lib/validators/invoice-validators';
 import type { AdvanceInvoiceData } from '@/types/invoice-types';
 import type { Invoice } from '@/types/invoice';
 
@@ -83,7 +83,7 @@ const advanceInput = {
 };
 const finalInput = {
   ...common, invoiceType: 'final' as const, advanceInvoiceIds: [advanceId],
-  totalAdvances: 123,
+  totalAdvances: 123, splitPayment: false,
   lines: [{ name: 'Testowa usługa', unit: 'szt', quantity: 1, unitPriceNet: 1000, vatRate: '23' as const }],
 };
 
@@ -91,6 +91,9 @@ type Query = { table: string; operation: 'select' | 'insert' | 'delete'; columns
 let tenantRow: Record<string, unknown>;
 let queries: Query[];
 let cashMethodError: { code: string; message: string } | null;
+/** ROZ already pointing at an advance (AUD-67). */
+let settlingFinals: Array<{ id: string; internal_number: string; advance_invoice_ids: string[] }>;
+let settledLookupError: { message: string } | null;
 
 function from(table: string) {
   const query: Query = { table, operation: 'select' };
@@ -105,6 +108,10 @@ function from(table: string) {
     if (table === 'invoices' && query.operation === 'insert') {
       return { data: { id: invoiceId }, error: null };
     }
+    if (table === 'invoices' && query.columns?.includes('advance_invoice_ids')) {
+      if (settledLookupError) return { data: null, error: settledLookupError };
+      return { data: settlingFinals, error: null };
+    }
     if (table === 'invoices') {
       return { data: [{ id: advanceId, internal_number: 'ZAL/2026/1',
         ksef_number: 'KSEF-TEST-1', issue_date: '2026-09-20', advance_amount: 123,
@@ -115,7 +122,9 @@ function from(table: string) {
   const chain = {
     select: (columns?: string) => { query.columns = columns; return chain; },
     eq: () => chain,
+    or: () => chain,
     in: () => chain,
+    overlaps: () => chain,
     insert: (payload: unknown) => { query.operation = 'insert'; query.payload = payload; return chain; },
     delete: () => { query.operation = 'delete'; return chain; },
     single: async () => result(),
@@ -131,6 +140,8 @@ describe('ZAL/ROZ seller authority', () => {
       address_json: address, vat_cash_method: false };
     queries = [];
     cashMethodError = null;
+    settlingFinals = [];
+    settledLookupError = null;
     mocks.requireAuth.mockResolvedValue({
       supabase: { from }, user: { id: 'fixture-user' }, tenantId, role: 'member',
     });
@@ -238,6 +249,45 @@ describe('ZAL/ROZ seller authority', () => {
       .toMatchObject({ success: false });
     expect(queries.some((q) => q.table === 'invoices')).toBe(false);
     expect(mocks.enqueue).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['cash method and MPP', true, true],
+    ['ordinary VAT and no MPP', false, false],
+  ])('freezes %s in the ROZ draft (AUD-23)', async (_label, cash, mpp) => {
+    tenantRow.vat_cash_method = cash;
+    const result = await saveFinalAction({ ...finalInput, splitPayment: mpp });
+    expect(result).toMatchObject({ success: true, invoiceId });
+    const inserted = queries.find((q) => q.table === 'invoices' && q.operation === 'insert');
+    expect(inserted?.payload).toMatchObject({
+      fa3_data: { annotations: { cashMethod: cash ? 1 : 2, splitPayment: mpp ? 1 : 2 } },
+    });
+  });
+
+  it('requires an explicit MPP answer on ROZ and a bank transfer when MPP applies (AUD-23)', async () => {
+    const noAnswer: Partial<typeof finalInput> = { ...finalInput };
+    delete noAnswer.splitPayment;
+    expect(finalInvoiceSchema.safeParse(noAnswer).success).toBe(false);
+    expect(await saveFinalAction(noAnswer)).toMatchObject({ success: false });
+    expect(await saveFinalAction({ ...finalInput, splitPayment: true, bankAccount: '' }))
+      .toMatchObject({ success: false });
+    expect(await saveFinalAction({ ...finalInput, splitPayment: true, paymentMethod: 'cash' }))
+      .toMatchObject({ success: false });
+    expect(queries.some((q) => q.table === 'invoices' && q.operation === 'insert')).toBe(false);
+  });
+
+  it('rejects an advance already settled by another ROZ before INSERT (AUD-67)', async () => {
+    settlingFinals = [{ id: 'other-roz', internal_number: 'ROZ/2026/1', advance_invoice_ids: [advanceId] }];
+    const result = await saveFinalAction(finalInput);
+    expect(result).toMatchObject({ success: false, error: expect.stringContaining('ROZ/2026/1') });
+    expect(queries.some((q) => q.table === 'invoices' && q.operation === 'insert')).toBe(false);
+  });
+
+  it('fails closed when the settled-advance lookup errors (AUD-67)', async () => {
+    settledLookupError = { message: 'temporary-db-error' };
+    const result = await saveFinalAction(finalInput);
+    expect(result).toMatchObject({ success: false });
+    expect(queries.some((q) => q.table === 'invoices' && q.operation === 'insert')).toBe(false);
   });
 
   it('rejects missing 00094 or an unreadable cash-method value before INSERT/queue', async () => {

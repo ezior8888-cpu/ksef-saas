@@ -161,6 +161,18 @@ export async function assertSubmitReferences(
           !Array.isArray(finalData.advanceInvoiceIds) ||
           !Array.isArray(input.finalAdvanceSettlementRows) ||
           !input.finalAdvanceSettlementRows.length) invalidPayload();
+      // AUD-23: P_16/P_18A ROZ tylko z dokumentu zapisanego przy wystawieniu.
+      const flags = finalData.taxAnnotations;
+      if (!flags ||
+          (flags.cashMethod !== 1 && flags.cashMethod !== 2) ||
+          (flags.splitPayment !== 1 && flags.splitPayment !== 2) ||
+          input.invoice.annotations?.cashMethod !== flags.cashMethod ||
+          input.invoice.annotations?.splitPayment !== flags.splitPayment ||
+          (flags.splitPayment === 1 &&
+            (finalData.paymentMethod !== 'transfer' ||
+              typeof finalData.bankAccount !== 'string' || !finalData.bankAccount.trim()))) {
+        invalidPayload();
+      }
       const storedIds = invoice.advance_invoice_ids as string[] | null;
       if (!Array.isArray(storedIds) || storedIds.length !== finalData.advanceInvoiceIds.length ||
           storedIds.some((id, index) => id !== finalData.advanceInvoiceIds[index])) invalidPayload();
