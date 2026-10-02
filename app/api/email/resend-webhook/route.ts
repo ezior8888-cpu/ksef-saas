@@ -25,6 +25,8 @@ import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 
 import { ALL_CATEGORIES, unsubscribe } from '@/lib/email/preferences';
+import { REMINDER_TAG } from '@/lib/email/tags';
+import { scanAuthUsers } from '@/lib/auth/auth-users';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
@@ -52,7 +54,18 @@ interface ResendWebhookPayload {
       // Free-text reason ("mailbox_full", "blocked", "no_email", etc.)
       message?: string;
     };
+    /** Znaczniki nadane przy wysyłce (`tags`), np. ponaglenie do kontrahenta. */
+    tags?: Record<string, string>;
   };
+}
+
+/**
+ * Mail z ponagleniem trafia do kontrahenta klienta. Jego odbicie albo skarga
+ * blokuje adres (lista odbić), ale nie wypisuje użytkownika FaktFlow, który
+ * przypadkiem ma ten sam adres (AUD-80).
+ */
+function isReminderToContractor(payload: ResendWebhookPayload): boolean {
+  return payload.data.tags?.[REMINDER_TAG.name] === REMINDER_TAG.value;
 }
 
 /**
@@ -113,20 +126,20 @@ function verifySvixSignature(
 
 async function findUserIdByEmail(email: string): Promise<string | null> {
   const supabase = createAdminClient();
-  // Resend dropuje email do skrzynki — bierzemy najnowszego usera z tym
-  // adresem. Edge case: 2 useri kiedyś mieli ten sam email (po deletion +
-  // reuse). Bierzemy ostatnio aktywnego.
-  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 200 });
-  if (error || !data) throw new Error('email_opt_out_identity_unavailable');
+  // Adres jest unikalny w GoTrue — pierwsze trafienie wystarcza. Wszystkie
+  // strony, nie pierwsze 200 kont (AUD-125).
   const normalized = email.toLowerCase().trim();
-  const match = data?.users
-    .filter((u) => u.email?.toLowerCase() === normalized)
-    .sort(
-      (a, b) =>
-        new Date(b.last_sign_in_at ?? b.created_at).getTime() -
-        new Date(a.last_sign_in_at ?? a.created_at).getTime(),
-    )[0];
-  return match?.id ?? null;
+  let match: string | null = null;
+  try {
+    await scanAuthUsers(supabase, (u) => {
+      if (u.email?.toLowerCase() !== normalized) return false;
+      match = u.id;
+      return true;
+    });
+  } catch {
+    throw new Error('email_opt_out_identity_unavailable');
+  }
+  return match;
 }
 
 async function handleBounce(payload: ResendWebhookPayload, eventId: string) {
@@ -144,7 +157,9 @@ async function handleBounce(payload: ResendWebhookPayload, eventId: string) {
     bounce_type: bounceType,
     reason: payload.data.bounce?.message ?? null,
     resend_event_id: eventId,
-    raw_payload: payload as never,
+    // B9 (AUD-81): adres i typ wystarczą — surowe zdarzenie niosło temat
+    // i nadawcę maila, których nie potrzebujemy przechowywać.
+    raw_payload: null,
   });
 
   if (error && error.code !== '23505') {
@@ -152,7 +167,7 @@ async function handleBounce(payload: ResendWebhookPayload, eventId: string) {
   }
   // Retry opt-out writes even if the receipt was stored by an earlier attempt.
 
-  if (bounceType === 'hard') {
+  if (bounceType === 'hard' && !isReminderToContractor(payload)) {
     // Hard bounce → unsubscribe od product_updates + marketing.
     // Transactional zostają (Resend i tak ich nie wyśle do bounced email'a,
     // ale chcemy żeby user mógł odzyskać konto po naprawie skrzynki).
@@ -186,13 +201,19 @@ async function handleComplaint(payload: ResendWebhookPayload, eventId: string) {
     bounce_type: 'complaint',
     reason: 'Marked as spam by recipient',
     resend_event_id: eventId,
-    raw_payload: payload as never,
+    // B9 (AUD-81): adres i typ wystarczą — surowe zdarzenie niosło temat
+    // i nadawcę maila, których nie potrzebujemy przechowywać.
+    raw_payload: null,
   });
 
   if (error && error.code !== '23505') {
     throw new Error(`complaint insert failed: ${error.message}`);
   }
   // Duplicate receipts still retry the idempotent preference writes.
+
+  // Skarga na ponaglenie pochodzi od kontrahenta — adres jest już na
+  // liście odbić, użytkownika FaktFlow nie wypisujemy.
+  if (isReminderToContractor(payload)) return;
 
   // Complaint = user kliknął "Spam" → INSTANT total unsubscribe.
   // Transactional też wyłączamy — reputacja domeny > convenience.
@@ -268,7 +289,7 @@ export async function POST(req: Request): Promise<Response> {
           bounce_type: 'delivery_delay',
           reason: 'Delivery delayed by recipient mailbox',
           resend_event_id: svixId,
-          raw_payload: payload as never,
+          raw_payload: null,
         });
       }
     }
