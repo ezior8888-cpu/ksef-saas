@@ -89,7 +89,7 @@ Commit: `9e1ed2a`
 Sprawdzenie: `pnpm exec vitest run tests/unit/eksport-kpir-koszty-domyslnie.test.tsx`; w aplikacji: Raporty → Eksport → „KPiR Excel” zaznacza „Koszty: faktury otrzymane i paragony”. Pusty okres z samymi kosztami nadal kończy się „Brak faktur” — to w exports-generate.ts (PR #71, #128).
 
 ### P-08 — Szkic faktury: wysyłka do KSeF i usunięcie
-Status: W TOKU
+Status: ZROBIONE
 Typ: DOKOŃCZENIE
 Znaleziska: F-001, F-042
 Zmiana:
@@ -104,6 +104,18 @@ Kryterium: testy jednostkowe na mockach:
 - błąd walidacji nie kolejkuje;
 - usunięcie działa tylko dla szkicu;
 - zapis szkicu z błędnym NIP jest odrzucony.
+Commit: `07d7686`
+Sprawdzenie: `pnpm exec vitest run tests/unit/szkic-wysylka-usuwanie.test.ts tests/unit/szkic-walidacja-serwerowa.test.ts`; w aplikacji: Nowa faktura → „Zapisz szkic” → w szczególe „Wyślij do KSeF” (status zmienia się na W kolejce) albo „Usuń szkic” (numer wolny do ponownego użycia). Szkic z datą inną niż dziś trzeba wystawić od nowa.
+
+### P-22 — „Wystaw i wyślij” tylko z dzisiejszą datą wystawienia
+Status: W TOKU
+Typ: NAPRAWA
+Znaleziska: F-092 (znalezione w trakcie P-08)
+Zmiana:
+- `components/invoices/actions.ts` (`saveAndSendInvoiceAction`, zaraz po walidacji Zod): data wystawienia różna od dziś (Europe/Warsaw, `lib/format/warsaw-date.ts`) → czytelny błąd bez zapisu; szkic z inną datą nadal można zapisać;
+- formularz pokazuje ten sam komunikat.
+- Korekty, zaliczki i ROZ pomijam: ich akcje zmieniają PR #63, #71, #85.
+Kryterium: test akcji — data jutrzejsza i wczorajsza odrzucone bez zapisu i bez kolejki, dzisiejsza przechodzi; `saveDraftAction` z inną datą nadal zapisuje.
 
 ### P-09 — Lista faktur: wyszukiwanie, filtr statusu i okresu, stronicowanie
 Status: TODO

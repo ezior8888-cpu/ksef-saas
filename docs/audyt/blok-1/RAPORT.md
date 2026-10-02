@@ -69,7 +69,7 @@ Sporą część błędów w obiegu KSeF (Offline24, kody QR, `xml_documents`, po
 | 1 | Założenie firmy (NIP → GUS) i jej dane | CZĘŚCIOWO — tylko z GUS, danych nie da się poprawić | F-008 |
 | 2 | Połączenie z KSeF (certyfikat) | CZĘŚCIOWO — tylko klucz RSA PKCS#8 bez hasła | F-009 |
 | 3 | Kontrahent (baza nabywców) | CZĘŚCIOWO — tylko podręczna pamięć wyszukiwań GUS | F-011 |
-| 4 | Wystawienie faktury VAT krajowej w PLN | CZĘŚCIOWO — działa, ale numer ręczny, termin z przycisków o dzień krótszy, formularz przepuszcza dane odrzucane później | F-013, F-015, F-040, F-041 |
+| 4 | Wystawienie faktury VAT krajowej w PLN | CZĘŚCIOWO — działa, ale numer ręczny, termin z przycisków o dzień krótszy, formularz przepuszcza dane odrzucane później | F-013, F-015, F-040, F-041, F-092 |
 | 5 | Wysyłka do KSeF, numer KSeF | DZIAŁA na ścieżce szczęśliwej; awarie patrz 9–11 | F-028–F-036 |
 | 6 | UPO | DZIAŁA (przypadki brzegowe) | F-037 |
 | 7 | PDF faktury dla klienta | CZĘŚCIOWO — rozjechana tabela, brak KOD I | F-054, F-045, F-069 |
@@ -502,6 +502,15 @@ Faktura walutowa też spełnia kryterium c, ale to duży zakres z decyzjami praw
 #### F-043 — Edycja wydatku bez walidacji serwerowej
 - Typ: BŁĄD · Waga: K3 · Pewność: Z ODCZYTU · PR: kod zmieniany w PR #128 (`app/actions/expenses.ts`)
 - **Skutek:** brak sprawdzenia, czy netto + VAT = brutto, brak kontroli znaku i NIP. Puste pole zamienia się w 0 (`app/actions/expenses.ts:190-247`).
+
+#### F-092 — Data wystawienia inna niż dzień wysyłki: KSeF odrzuci albo uzna fakturę za offline
+- Typ: BŁĄD · Waga: **K2** · Pewność: Z ODCZYTU + dokumentacja MF · PR: reguła zakresu dat przenoszona do formularza w PR #134 (zostaje „do 30 dni naprzód”)
+- Znalezione w trakcie wykonania planu (P-08).
+- **Skutek:** formularz i walidacja przy wysyłce dopuszczają datę wystawienia do 30 dni w przyszłość i dowolnie wstecz (od 2025-09-01).
+  - Datę późniejszą niż dzień przyjęcia KSeF odrzuca („Data wystawienia faktury (`P_1`) nie może być późniejsza niż data przyjęcia dokumentu do systemu KSeF”, CIRFMF `faktury/weryfikacja-faktury.md:35`), więc faktura kończy jako odrzucona i martwa (F-002).
+  - Przy dacie wcześniejszej niż dzień wysyłki KSeF sam oznacza fakturę jako **offline** (`offline/automatyczne-okreslanie-trybu-offline.md`), a aplikacja nie dołącza wtedy kodów QR offline (F-046).
+- **Dowód:** `lib/xml/invoice-calculator.ts:279-328` (`MAX_ISSUE_DATE_AHEAD_MS` = 30 dni); `components/invoices/actions.ts:523-533` (brak kontroli daty względem dnia wysyłki).
+- **Powinno:** „Wystaw i wyślij” przyjmuje datę wystawienia = dziś (czas polski); inną datę można zapisać jako szkic.
 
 #### F-044 — NIP „0000000000” przechodzi sumę kontrolną
 - Typ: BŁĄD · Waga: K4 · Pewność: POTWIERDZONE (subagent) · PR: brak
