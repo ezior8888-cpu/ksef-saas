@@ -215,7 +215,7 @@ Commit: `ce4a87c`
 Sprawdzenie: `pnpm exec vitest run tests/unit/dane-firmy-edycja.test.ts`; w aplikacji (właściciel): Ustawienia → Dane firmy → zmiana adresu → nowa faktura ma nowy adres w PDF i XML, stare bez zmian.
 
 ### P-18 — Kontrahenci: wyszukiwanie, edycja i usuwanie
-Status: W TOKU
+Status: ZROBIONE
 Typ: DOKOŃCZENIE
 Znaleziska: F-011
 Zmiana:
@@ -223,9 +223,11 @@ Zmiana:
 - nowa akcja `app/actions/contractors.ts`: edycja nazwy i adresu, usunięcie; walidacja Zod; sumy kontrolne NIP; audyt;
 - formularz edycji.
 Kryterium: testy akcji (edycja, odrzucenie złego NIP, usunięcie, obca organizacja) i parsowania wyszukiwania.
+Commit: `508f786`
+Sprawdzenie: `pnpm exec vitest run tests/unit/kontrahenci-edycja.test.ts`; w aplikacji: /contractors?q=525 zawęża listę, ikona ołówka otwiera edycję, kosz usuwa kontrahenta (faktury bez zmian).
 
 ### P-19 — Wydatki: wybór miesiąca
-Status: TODO
+Status: W TOKU
 Typ: DOKOŃCZENIE
 Znaleziska: F-087 (część: wydatki)
 Zmiana: `app/(dashboard)/expenses/page.tsx` — parametr `miesiac` (RRRR-MM) w URL, nawigacja poprzedni/następny miesiąc, zakres dat w czasie polskim (P-05).
