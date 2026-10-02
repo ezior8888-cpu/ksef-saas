@@ -17,7 +17,7 @@ const BATCH_SIZE = 10;
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.nightly-validation-recheck).
  */
-export async function runNightlyValidationRecheck({ step }: JobContext) {
+export async function runNightlyValidationRecheck({ step, logger }: JobContext) {
     const cutoffIso = new Date(Date.now() - STALE_AFTER_MS).toISOString();
 
     const deletedRows = await step.run('cleanup-cache', async () => {
@@ -50,6 +50,7 @@ export async function runNightlyValidationRecheck({ step }: JobContext) {
 
     let validated = 0;
     let statusChanged = 0;
+    let failed = 0;
 
     for (let i = 0; i < contractors.length; i += BATCH_SIZE) {
       const batch = contractors.slice(i, i + BATCH_SIZE);
@@ -58,6 +59,7 @@ export async function runNightlyValidationRecheck({ step }: JobContext) {
         const supabase = createAdminClient();
         let bv = 0;
         let sc = 0;
+        let bf = 0;
 
         for (const c of batch) {
           const nip =
@@ -78,24 +80,33 @@ export async function runNightlyValidationRecheck({ step }: JobContext) {
             const prevStatus = c.vat_status;
             const statusChangedBatch = result.vatStatus !== prevStatus;
 
-            await supabase
+            const { error: updateError } = await supabase
               .from('contractors')
               .update(patch)
               .eq('id', c.id)
               .eq('tenant_id', c.tenant_id);
+            // Nieudany zapis to nie „zwalidowany” — do 02.10 liczył się jako sukces.
+            if (updateError) throw new Error(updateError.message);
 
             bv++;
             if (statusChangedBatch) sc++;
-          } catch {
-            // opuszczamy pojedynczego kontrahenta
+          } catch (e) {
+            // Opuszczamy pojedynczego kontrahenta (następna noc spróbuje),
+            // ale ze śladem — do 02.10 catch był pusty (AUD-89).
+            bf++;
+            logger.warn('Nocna re-walidacja: kontrahent pominięty', {
+              contractorId: c.id,
+              error: e instanceof Error ? e.message : String(e),
+            });
           }
         }
 
-        return { validated: bv, statusChanged: sc };
+        return { validated: bv, statusChanged: sc, failed: bf };
       });
 
       validated += batchStats.validated;
       statusChanged += batchStats.statusChanged;
+      failed += batchStats.failed;
 
       if (i + BATCH_SIZE < contractors.length) {
         await step.sleep(`rate-limit-nightly-batch-${i}`, '2s');
@@ -108,6 +119,7 @@ export async function runNightlyValidationRecheck({ step }: JobContext) {
       processed: contractors.length,
       validated,
       statusChanged,
+      failed,
     };
 }
 

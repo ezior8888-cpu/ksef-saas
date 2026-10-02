@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { requireInvoiceTenant } from './tenant-boundary';
 import {
   inngest,
@@ -93,7 +95,12 @@ export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucc
           reason: 'no-admin-email' as const,
         };
       }
-      return sendInvoiceAcceptedEmail(email, { ksefNumber, invoiceId });
+      // Faktura jest przyjmowana raz — ponowienie zadania nie wyśle drugi raz (AUD-86).
+      return sendInvoiceAcceptedEmail(
+        email,
+        { ksefNumber, invoiceId },
+        { idempotencyKey: `invoice-accepted/${invoiceId}` },
+      );
     });
 
     if (!email) {
@@ -250,7 +257,15 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
           reason: 'no-admin-email' as const,
         };
       }
-      return sendInvoiceFailedEmail(email, { invoiceId, errorMessage: error });
+      // Klucz z treści błędu: ponowienie tego samego zdarzenia trafia w ten
+      // sam klucz, a nowe odrzucenie z innym powodem dostaje własny mail.
+      // Ten sam powód drugi raz w ciągu doby (okno Resend) nie dubluje maila.
+      const errorDigest = createHash('sha256').update(error).digest('hex').slice(0, 16);
+      return sendInvoiceFailedEmail(
+        email,
+        { invoiceId, errorMessage: error },
+        { idempotencyKey: `invoice-failed/${invoiceId}/${errorDigest}` },
+      );
     });
 
     if (!email) {
