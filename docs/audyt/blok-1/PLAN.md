@@ -259,14 +259,16 @@ Sprawdzenie: `pnpm exec vitest run tests/unit/pdf-precyzja-vatue.test.ts`; w apl
 ---
 
 ### P-23 — Masowa walidacja kontrahentów: zapytania w paczkach, błąd zapisu nie jest sukcesem
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-088 (dodatkowy obchód)
 Zmiana: `lib/inngest/jobs/bulk-validate-contractors.ts` — kontrahenci pobierani w paczkach po 100 identyfikatorów zamiast jednego `.in()` ze wszystkimi; błąd zapisu wyniku logowany i nieliczony jako „zwalidowany”. Akcja `app/actions/validation.ts` (limit 1000 wierszy) zostaje bez zmian, bo zmienia ją PR #154.
 Kryterium: test joba — 250 kontrahentów: każde zapytanie ma najwyżej 100 identyfikatorów i wszyscy są sprawdzeni; nieudany zapis jednego nie zatrzymuje reszty i nie jest liczony.
+Commit: `2a6eccb`
+Sprawdzenie: `pnpm exec vitest run tests/unit/kontrahenci-walidacja-masowa.test.ts` (250 kontrahentów w paczkach, nieudany zapis nieliczony).
 
 ### P-24 — Szczegóły faktury: płatność, identyfikator nabywcy, pełna precyzja
-Status: TODO
+Status: W TOKU
 Typ: DOKOŃCZENIE
 Znaleziska: F-094, F-091 (część ekranowa: `ksef_accepted_at`)
 Zmiana:
