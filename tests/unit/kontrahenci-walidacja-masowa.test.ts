@@ -49,12 +49,12 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/validation/cache', () => ({
   validateNipCached: async () => ({ vatStatus: 'active', source: 'whitelist', bankAccounts: [], unavailable: false }),
 }));
-vi.mock('@/lib/inngest/client', () => ({
+vi.mock('@/lib/jobs/events', () => ({
   inngest: { createFunction: () => ({}) },
   validationBulkContractorsRequested: { create: (d: unknown) => d },
 }));
 
-import { runBulkValidateContractors } from '@/lib/inngest/jobs/bulk-validate-contractors';
+import { runBulkValidateContractors } from '@/lib/jobs/runners/bulk-validate-contractors';
 import type { JobContext } from '@/lib/jobs/registry';
 
 const ctx = {

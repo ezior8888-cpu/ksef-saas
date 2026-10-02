@@ -1,4 +1,4 @@
-import { NonRetriableError } from 'inngest';
+import { NonRetriableError } from '@/lib/jobs/errors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
@@ -57,7 +57,7 @@ vi.mock('@/lib/ksef/submission-log', () => ({
   isOwnKsefSession: mocks.isOwn,
   findSessionReferenceForKsefNumber: vi.fn(async () => null),
 }));
-vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn() }));
+vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn() }));
 // Krok 5: job czyta wyłącznik wysyłek autorytatywnie — tu zdjęty.
 vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: async () => false }));
 vi.mock('@/lib/ksef/submit-invoice-full', () => ({ submitInvoiceFullFlow: mocks.fullFlow }));
@@ -102,7 +102,7 @@ vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), addBreadcrumb: vi.fn() }));
 
 import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
-import { onSubmitInvoiceExhausted, runSubmitInvoice } from '@/lib/inngest/jobs/submit-invoice';
+import { onSubmitInvoiceExhausted, runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
 import type { KsefAuth } from '@/lib/ksef/auth';
 
 const XADES = { type: 'xades', nip: '1234567890', certificatePem: 'fixture-pem' } as unknown as KsefAuth;

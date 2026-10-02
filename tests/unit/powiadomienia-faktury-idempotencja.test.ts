@@ -11,7 +11,7 @@ vi.mock('@/lib/email/send', () => ({
   sendInvoiceAcceptedEmail: mocks.accepted,
   sendInvoiceFailedEmail: mocks.failed,
 }));
-vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn(async () => undefined) }));
+vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn(async () => undefined) }));
 vi.mock('@/lib/supabase/admin-queries', () => ({
   getTenantAdminEmail: async () => 'wlasciciel@example.test',
   getTenantOwnerUserId: async () => null,
@@ -34,7 +34,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   },
 }));
 
-import { runNotifyFailure, runNotifySuccess } from '@/lib/inngest/jobs/notify-user';
+import { runNotifyFailure, runNotifySuccess } from '@/lib/jobs/runners/notify-user';
 
 /**
  * AUD-86, strona zadania: klucz zależy od zdarzenia, nie od próby —

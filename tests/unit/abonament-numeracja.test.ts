@@ -32,7 +32,7 @@ describe('faktury za abonament (AUD-69)', () => {
   });
 
   it('zdarzenie wysyłki do KSeF niesie numer nadany przez bazę', () => {
-    const job = readFileSync('lib/inngest/jobs/self-invoice-payment.ts', 'utf8');
+    const job = readFileSync('lib/jobs/runners/self-invoice-payment.ts', 'utf8');
     expect(job).toContain('invoice: { ...draft.invoice, internalNumber: inserted.internalNumber }');
   });
 });

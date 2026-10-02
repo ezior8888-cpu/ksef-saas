@@ -30,7 +30,7 @@ vi.mock('@/lib/analytics/server', () => ({ trackServer: mocks.track }));
 vi.mock('@/lib/analytics/events', () => ({
   ANALYTICS_EVENTS: { paymentSucceeded: 'payment_succeeded', paymentFailed: 'payment_failed' },
 }));
-vi.mock('@/lib/inngest/client', () => ({
+vi.mock('@/lib/jobs/events', () => ({
   billingPaymentSucceeded: { create: (data: unknown) => ({ name: 'billing/payment.succeeded', data }) },
   billingPaymentFailed: { create: (data: unknown) => ({ name: 'billing/payment.failed', data }) },
 }));

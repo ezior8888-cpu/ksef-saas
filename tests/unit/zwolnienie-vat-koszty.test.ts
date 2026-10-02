@@ -51,7 +51,7 @@ vi.mock('@/lib/storage/expenses', () => ({
 }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToUser: vi.fn() }));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: vi.fn() }));
-vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({ requireTenantMember: vi.fn(async () => undefined) }));
+vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireTenantMember: vi.fn(async () => undefined) }));
 vi.mock('@/lib/ksef/claim-environment', () => ({ requireConfiguredKsefEnvironment: () => 'test' }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
@@ -111,8 +111,8 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { runAutoCategorizeInbox } from '@/lib/inngest/jobs/auto-categorize-inbox';
-import { runProcessOcr } from '@/lib/inngest/jobs/process-ocr';
+import { runAutoCategorizeInbox } from '@/lib/jobs/runners/auto-categorize-inbox';
+import { runProcessOcr } from '@/lib/jobs/runners/process-ocr';
 
 /**
  * Firma zwolniona z VAT (#60) nie odlicza VAT-u. Nowe koszty dostają VAT do

@@ -52,7 +52,7 @@ vi.mock('@/lib/supabase/server', () => ({
   },
 }));
 
-import { runCertExpiryAlert } from '@/lib/inngest/jobs/cert-expiry-alert';
+import { runCertExpiryAlert } from '@/lib/jobs/runners/cert-expiry-alert';
 
 /**
  * Ostrzeżenie o wygasającym certyfikacie jest krytyczne. Karta Flo

@@ -44,7 +44,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }));
 
-import { nextInboxHwm, runInboxPollTenant } from '@/lib/inngest/jobs/inbox-polling';
+import { nextInboxHwm, runInboxPollTenant } from '@/lib/jobs/runners/inbox-polling';
 
 const ctx: JobContext = {
   attempt: 0,

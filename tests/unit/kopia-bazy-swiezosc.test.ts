@@ -66,8 +66,8 @@ vi.mock('@/lib/backup/verify', () => ({ verifySnapshot: mocks.verifySnapshot }))
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
 
 import { backupAgeHours, isBackupStale, MAX_BACKUP_AGE_HOURS } from '@/lib/backup/freshness';
-import { checkStaleBackup } from '@/lib/inngest/jobs/critical-alerts-monitor';
-import { runVerifyBackup } from '@/lib/inngest/jobs/verify-backup';
+import { checkStaleBackup } from '@/lib/jobs/runners/critical-alerts-monitor';
+import { runVerifyBackup } from '@/lib/jobs/runners/verify-backup';
 
 const ago = (hours: number) => new Date(Date.now() - hours * HOUR).toISOString();
 

@@ -46,15 +46,15 @@ vi.mock('@/lib/auth/ksef-verification-guard', () => ({
 }));
 vi.mock('@/lib/xml/fa3-generator', () => ({ InvoiceValidationError: class InvoiceValidationError extends Error {} }));
 
-import { requireInvoiceTenant, requireImportJobTenant } from '@/lib/inngest/jobs/tenant-boundary';
+import { requireInvoiceTenant, requireImportJobTenant } from '@/lib/jobs/runners/tenant-boundary';
 import { getInvoiceForSubmit, updateInvoiceStatus } from '@/lib/supabase/admin-queries';
-import { onBulkImportExhausted, runBulkImportFile } from '@/lib/inngest/jobs/bulk-import';
-import { onMagicImportExhausted, runMagicImportKsef } from '@/lib/inngest/jobs/magic-import-ksef';
-import { runNotifySuccess, runNotifyFailure } from '@/lib/inngest/jobs/notify-user';
-import { runProcessOcr } from '@/lib/inngest/jobs/process-ocr';
-import { runSendReminder } from '@/lib/inngest/jobs/send-reminder';
-import { runProcessOfflineQueue, runOfflineQueueSuccess, runOfflineQueueFailure } from '@/lib/inngest/jobs/process-offline-queue';
-import { runSubmitInvoice, onSubmitInvoiceExhausted } from '@/lib/inngest/jobs/submit-invoice';
+import { onBulkImportExhausted, runBulkImportFile } from '@/lib/jobs/runners/bulk-import';
+import { onMagicImportExhausted, runMagicImportKsef } from '@/lib/jobs/runners/magic-import-ksef';
+import { runNotifySuccess, runNotifyFailure } from '@/lib/jobs/runners/notify-user';
+import { runProcessOcr } from '@/lib/jobs/runners/process-ocr';
+import { runSendReminder } from '@/lib/jobs/runners/send-reminder';
+import { runProcessOfflineQueue, runOfflineQueueSuccess, runOfflineQueueFailure } from '@/lib/jobs/runners/process-offline-queue';
+import { runSubmitInvoice, onSubmitInvoiceExhausted } from '@/lib/jobs/runners/submit-invoice';
 
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

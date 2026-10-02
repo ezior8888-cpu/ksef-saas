@@ -74,7 +74,7 @@ describe('fan-out skrzynki', () => {
         },
       }),
     }));
-    const { runInboxPolling } = await import('@/lib/inngest/jobs/inbox-polling');
+    const { runInboxPolling } = await import('@/lib/jobs/runners/inbox-polling');
     const sendEvent = vi.fn();
     await runInboxPolling({
       attempt: 0,
@@ -91,13 +91,5 @@ describe('fan-out skrzynki', () => {
     await import('@/lib/jobs/handlers/package-d');
     const job = getRegisteredJobs().find((j) => j.queue === 'inbox.poll.tenant');
     expect(job?.groupConcurrency).toBe(1);
-  });
-
-  it('adapter Inngest nie przekazuje groupId (pojęcie pg-boss) do Inngest', async () => {
-    const { toJobContext } = await import('@/lib/jobs/inngest-adapter');
-    const inngestSend = vi.fn();
-    const ctx = toJobContext({ step: { run: vi.fn(), sleep: vi.fn(), sendEvent: inngestSend }, logger: {}, attempt: 0 });
-    await ctx.step.sendEvent('x', [{ name: 'inbox/poll.tenant', data: { tenantId: 't1' }, groupId: '1234567890' }]);
-    expect(inngestSend).toHaveBeenCalledWith('x', [{ name: 'inbox/poll.tenant', data: { tenantId: 't1' } }]);
   });
 });

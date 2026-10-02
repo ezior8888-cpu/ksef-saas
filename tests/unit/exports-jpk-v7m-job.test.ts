@@ -101,7 +101,7 @@ vi.mock('@/lib/exports/data-fetcher', async (orig) => ({
 import { attachKsefNumbers } from '@/lib/exports/data-fetcher';
 import { validateJpkV7m } from '@/lib/exports/jpk-v7m-validator';
 import { readTaxpayerEmail } from '@/lib/exports/taxpayer-email';
-import { runExportsGenerate } from '@/lib/inngest/jobs/exports-generate';
+import { runExportsGenerate } from '@/lib/jobs/runners/exports-generate';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 /**

@@ -6,7 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
-import { formatInngestSendError } from '@/lib/inngest/error-message';
+import { formatJobSendError } from '@/lib/jobs/error-message';
 import { calculateAdvanceTotals } from '@/lib/invoices/calculator';
 import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
 import { matchesTenantSeller, sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
@@ -301,7 +301,7 @@ export async function saveAndSendAdvanceAction(raw: unknown): Promise<ActionResu
   } catch (e) {
     return {
       success: false,
-      error: e instanceof Error ? formatInngestSendError(e) : 'Nieznany błąd wysyłki',
+      error: e instanceof Error ? formatJobSendError(e) : 'Nieznany błąd wysyłki',
     };
   }
 }

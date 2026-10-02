@@ -48,7 +48,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { runAutoCategorizeInbox } from '@/lib/inngest/jobs/auto-categorize-inbox';
+import { runAutoCategorizeInbox } from '@/lib/jobs/runners/auto-categorize-inbox';
 
 /**
  * Korekta zakupu „in minus” ze skrzynki KSeF (dostawca obniża cenę) ma ujemne

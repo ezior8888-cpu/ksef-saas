@@ -2,7 +2,7 @@
 
 > ## ⚠️ TEN DOKUMENT JEST NIEAKTUALNY
 >
-> Opis stacku (Vercel, Supabase Cloud Frankfurt, Inngest, Upstash, Edge Config, `pnpm db:push:prod`) pochodzi sprzed migracji. Produkcja stoi na **Hetznerze pod Coolify**,
+> Opis stacku (Vercel, Supabase Cloud Frankfurt, Inngest, Upstash, Edge Config, `pnpm db:push:prod`) pochodzi sprzed migracji. Inngest odpięty 02.10.2026 — joby: `lib/jobs/runners/`, kolejki: `lib/jobs/handlers/`, zdarzenia: `lib/jobs/events.ts`. Produkcja stoi na **Hetznerze pod Coolify**,
 > joby chodzą na **pg-boss**, baza to **Supabase self-hosted** na `db-1`.
 >
 > **Aktualne procedury: `AGENTS.md`, sekcja „Infrastruktura i dostępy",

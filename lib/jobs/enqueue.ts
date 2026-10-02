@@ -1,14 +1,7 @@
 /**
- * Dispatcher enqueue — JEDYNY punkt, przez który apka wysyła joby.
- *
- * Wg `JOBS_BACKEND`:
- *   - 'pgboss'  → boss.send do kolejki z EVENT_QUEUE_MAP (produkcja),
- *   - 'inngest' → passthrough do inngest.send (rollback, lokalny dev).
- * Brak zmiennej poza lokalnym środowiskiem = błąd, nie cichy Inngest
- * (`getJobsBackend`, krok 5 planu automatyzacji).
- *
- * Etap 7 planu podmieni ~14 wywołań `inngest.send` w apce na te funkcje.
- * Dynamic import klientów — worker w trybie pgboss nie dotyka SDK Inngest.
+ * Dispatcher enqueue — JEDYNY punkt, przez który apka wysyła joby: boss.send
+ * do kolejek z EVENT_QUEUE_MAP (pg-boss w naszym Postgresie; Inngest odpięty
+ * w etapie 10). Nieznana wartość `JOBS_BACKEND` = błąd, zlecenie nie wychodzi.
  */
 
 import type { Db as IDatabase } from 'pg-boss';
@@ -24,22 +17,18 @@ export interface JobEvent {
    * `concurrency: { key: 'event.data.X' }` w Inngest — tam wyliczany
    * automatycznie z payloadu, tu podawany przy wysyłce).
    * Ustawiany PER EVENT, bo fan-out może dotyczyć wielu tenantów naraz.
-   * Na backendzie Inngest pole jest usuwane przed wysyłką.
    */
   groupId?: string;
 }
 
 export interface SendJobOptions {
-  /** Opóźnij wykonanie (ms) — pg-boss `startAfter`; w Inngest ignorowane (brak użycia). */
+  /** Opóźnij wykonanie (ms) — pg-boss `startAfter`. */
   startAfterMs?: number;
   /** Klucz grupy (per-tenant/per-NIP concurrency w pg-boss 12). */
   groupId?: string;
 }
 
-/**
- * Wynik wysyłki w kształcie zgodnym z `inngest.send` (`{ ids }`), żeby
- * miejsca zwracające userowi „jobId" działały tak samo na obu backendach.
- */
+/** Identyfikatory utworzonych jobów pg-boss (`{ ids }`). */
 export interface SendJobResult {
   ids: string[];
 }
@@ -57,14 +46,7 @@ export async function sendJobEvents(
 ): Promise<SendJobResult> {
   if (events.length === 0) return { ids: [] };
 
-  if (getJobsBackend() === 'inngest') {
-    const { inngest } = await import('../inngest/client');
-    // `groupId` to pojęcie pg-boss — Inngest wylicza klucz z payloadu sam.
-    const res = await inngest.send(
-      events.map((e) => ({ name: e.name, data: e.data })),
-    );
-    return { ids: (res as { ids?: string[] }).ids ?? [] };
-  }
+  getJobsBackend();
 
   const { startBoss } = await import('./boss');
   const boss = await startBoss();
@@ -81,7 +63,7 @@ export async function sendJobEvents(
       ...(groupId ? { group: { id: groupId } } : {}),
     };
     // Fan-out: jeden event może mieć kilku odbiorców (patrz EVENT_QUEUE_MAP) —
-    // publikujemy do KAŻDEJ kolejki, co odtwarza zachowanie Inngest.
+    // publikujemy do KAŻDEJ kolejki.
     const queues = queuesForEvent(e.name);
     const db = boss.getDb() as TransactionalDb;
     if (queues.length > 1 && typeof db.withTransaction === 'function') {

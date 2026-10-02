@@ -4,8 +4,7 @@ import {
   getKsefRetryDelay,
   KSEF_MAX_RETRIES,
   KSEF_TENANT_CONCURRENCY_LIMIT,
-  KSEF_TENANT_THROTTLE_LIMIT,
-} from '@/lib/inngest/retry-schedule';
+} from '@/lib/jobs/retry-schedule';
 
 /**
  * TEST-2 (audyt przedlaunchowy): schedule retry KSeF. Jeśli to się rozjedzie,
@@ -57,6 +56,5 @@ describe('stałe limitów', () => {
 
   it('limity per-tenant zgodne ze spec Fazy 23', () => {
     expect(KSEF_TENANT_CONCURRENCY_LIMIT).toBe(100);
-    expect(KSEF_TENANT_THROTTLE_LIMIT).toBe(60);
   });
 });

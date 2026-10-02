@@ -1,9 +1,9 @@
 /**
  * Paczka C (Etap 7.5): 8 jobów OCR / importy / eksporty.
  *
- * Runnery żyją w lib/inngest/jobs/* (jedno źródło prawdy).
+ * Runnery żyją w lib/jobs/runners/* (jedno źródło prawdy).
  *
- * Parytet 1:1 z konfiguracją Inngest:
+ * Konfiguracja przeniesiona 1:1 z dawnych funkcji Inngest (etap 7):
  *   - retries: OCR 2, auto-kategoryzacja 2, bulk-import 1, walidacja
  *     kontrahentów 1, magic-import 2, eksporty 2, co-pilot 2,
  *   - `concurrency: { limit: N }` (globalne) → `batchSize: N` — worker
@@ -15,25 +15,25 @@
  *     „przetwarzanie".
  */
 
-import { runAutoCategorizeInbox } from '../../inngest/jobs/auto-categorize-inbox';
+import { runAutoCategorizeInbox } from '../runners/auto-categorize-inbox';
 import {
   onBulkImportExhausted,
   runBulkImportFile,
-} from '../../inngest/jobs/bulk-import';
-import { runBulkValidateContractors } from '../../inngest/jobs/bulk-validate-contractors';
+} from '../runners/bulk-import';
+import { runBulkValidateContractors } from '../runners/bulk-validate-contractors';
 import {
   runCoPilotMonthly,
   runCoPilotSendPackage,
-} from '../../inngest/jobs/co-pilot-monthly';
-import { onExportsGenerateExhausted, runExportsGenerate } from '../../inngest/jobs/exports-generate';
+} from '../runners/co-pilot-monthly';
+import { onExportsGenerateExhausted, runExportsGenerate } from '../runners/exports-generate';
 import {
   onMagicImportExhausted,
   runMagicImportKsef,
-} from '../../inngest/jobs/magic-import-ksef';
+} from '../runners/magic-import-ksef';
 import {
   onProcessOcrExhausted,
   runProcessOcr,
-} from '../../inngest/jobs/process-ocr';
+} from '../runners/process-ocr';
 import { registerJob, type JobContext } from '../registry';
 
 // ── Cron: miesięczne paczki dla księgowego ──

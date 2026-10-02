@@ -1,0 +1,156 @@
+// Cron job: cotygodniowa weryfikacja ostatnich snapshotów (Faza 29 Krok 5).
+//
+// Trigger: niedziela 03:00 PL (godzinę po dailyDbSnapshot — czekamy aż się
+// skończy zanim sprawdzamy). Bierze ostatnie 7 successful snapshotów,
+// dla każdego: download + checksum + parse + row count drift.
+//
+// Cel: wykrycie bit-rot, corrupted gzip, R2 storage drift. RPO defense.
+// Plus świeżość najnowszej kopii (AUD-37) — codziennie pilnuje jej też
+// monitor krytycznych alarmów (`checkStaleBackup`).
+
+import * as Sentry from '@sentry/nextjs';
+
+import { sendSlackAlert } from '@/lib/alerts/slack';
+import { backupAgeHours, isBackupStale, MAX_BACKUP_AGE_HOURS } from '@/lib/backup/freshness';
+import { verifySnapshot } from '@/lib/backup/verify';
+import { createAdminClient } from '@/lib/supabase/server';
+
+import type { JobContext } from '@/lib/jobs/registry';
+
+interface BackupLogRow {
+  id: string;
+  kind: 'daily' | 'weekly' | 'manual';
+  r2_key: string | null;
+  checksum: string | null;
+  row_counts: Record<string, number> | null;
+  started_at: string;
+}
+
+interface AdminBackupQuery {
+  from: (n: 'backup_log') => {
+    select: (c: string) => {
+      eq: (
+        k: string,
+        v: string,
+      ) => {
+        not: (
+          k: string,
+          op: 'is',
+          v: null,
+        ) => {
+          order: (
+            k: string,
+            opts: { ascending: boolean },
+          ) => {
+            limit: (
+              n: number,
+            ) => Promise<{
+              data: BackupLogRow[] | null;
+              error: { message: string } | null;
+            }>;
+          };
+        };
+      };
+    };
+  };
+}
+
+const VERIFY_BATCH = 7;
+
+/**
+ * Runner joba (worker pg-boss).
+ * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.verify-backup).
+ */
+export async function runVerifyBackup({ step }: JobContext) {
+    const recent = await step.run('list-recent', async () => {
+      const admin = createAdminClient() as unknown as AdminBackupQuery;
+      const res = await admin
+        .from('backup_log')
+        .select('id, kind, r2_key, checksum, row_counts, started_at')
+        .eq('status', 'success')
+        .not('r2_key', 'is', null)
+        .order('started_at', { ascending: false })
+        .limit(VERIFY_BATCH);
+      return res.data ?? [];
+    });
+
+    if (recent.length === 0) {
+      await sendSlackAlert({
+        channel: 'urgent',
+        text: '⚠️ Brak successful backupów do weryfikacji — sprawdź snapshot job.',
+      });
+      return { verified: 0, failed: 0 };
+    }
+
+    let verified = 0;
+    let failed = 0;
+    const failures: Array<{ id: string; errors: string[]; warnings: string[] }> = [];
+
+    for (const row of recent) {
+      const result = await step.run(`verify-${row.id}`, async () => {
+        try {
+          return await verifySnapshot({
+            r2KeyRelative: row.r2_key!,
+            expectedChecksum: row.checksum ?? '',
+            snapshotRowCounts: row.row_counts ?? {},
+          });
+        } catch (err) {
+          Sentry.captureException(err, {
+            tags: { job: 'verify-backup', backup_id: row.id },
+          });
+          return {
+            ok: false,
+            errors: [`exception: ${err instanceof Error ? err.message : 'unknown'}`],
+            warnings: [],
+            rowCountDiff: [],
+          };
+        }
+      });
+
+      if (result.ok) {
+        verified++;
+      } else {
+        failed++;
+        failures.push({
+          id: row.id,
+          errors: result.errors,
+          warnings: result.warnings,
+        });
+      }
+    }
+
+    // AUD-37: 7 ostatnich udanych kopii może pochodzić sprzed tygodni, gdy
+    // nocny snapshot stoi. Wtedy „wszystkie OK” byłoby fałszywym spokojem.
+    const newestAt = recent[0]?.started_at ?? null;
+    const stale = isBackupStale(newestAt);
+    const newestAgeHours = backupAgeHours(newestAt);
+    if (stale) {
+      await sendSlackAlert({
+        channel: 'urgent',
+        text: `❌ Backup verify: najnowsza udana kopia ma ${Math.floor(newestAgeHours ?? 0)} h (próg ${MAX_BACKUP_AGE_HOURS} h) — nocny snapshot nie działa`,
+        context: { verified, failed, newest_started_at: newestAt ?? 'brak' },
+      });
+    }
+
+    if (failed > 0) {
+      await sendSlackAlert({
+        channel: 'urgent',
+        text: `❌ Backup verify: ${failed}/${recent.length} snapshot(s) BROKEN`,
+        context: {
+          verified,
+          failed,
+          first_error: failures[0]?.errors[0] ?? 'none',
+          failed_ids: failures.map((f) => f.id.slice(0, 8)).join(', '),
+        },
+      });
+    } else if (!stale) {
+      await sendSlackAlert({
+        channel: 'metrics',
+        text: `✅ Backup verify: ${verified}/${recent.length} snapshotów OK`,
+        context: { verified, failed },
+      });
+    }
+
+    return { verified, failed, stale };
+}
+

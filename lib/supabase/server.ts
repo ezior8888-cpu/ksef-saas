@@ -90,7 +90,7 @@ export async function createClientForOrg(orgId: string | null | undefined) {
 
 /**
  * Server client z service_role - OBCHODZI RLS.
- * Używaj WYŁĄCZNIE w Inngest jobs i Server Actions, które świadomie
+ * Używaj WYŁĄCZNIE w jobach pg-boss i Server Actions, które świadomie
  * chcą ominąć RLS (po uprzedniej weryfikacji auth.getUser()).
  *
  * DLACZEGO nie `@supabase/ssr` z cookies:

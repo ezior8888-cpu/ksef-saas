@@ -12,11 +12,10 @@ const mocks = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
-vi.mock('inngest', () => ({ cron: vi.fn((schedule: string) => schedule) }));
 vi.mock('@sentry/nextjs', () => ({ captureException: mocks.captureException }));
 vi.mock('@/lib/alerts/slack', () => ({ alertCritical: mocks.alertCritical }));
 vi.mock('@/lib/cache', () => ({ cacheGet: mocks.cacheGet, cacheSet: mocks.cacheSet }));
-vi.mock('@/lib/inngest/client', () => ({ inngest: { createFunction: vi.fn() } }));
+vi.mock('@/lib/jobs/events', () => ({ inngest: { createFunction: vi.fn() } }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
@@ -30,7 +29,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { checkStaleInboxSync } from '@/lib/inngest/jobs/critical-alerts-monitor';
+import { checkStaleInboxSync } from '@/lib/jobs/runners/critical-alerts-monitor';
 
 const NOW = new Date('2026-10-02T12:00:00Z');
 const T1 = '11111111-1111-4111-8111-111111111111';

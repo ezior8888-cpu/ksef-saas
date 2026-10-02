@@ -59,8 +59,8 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { runNightlyValidationRecheck } from '@/lib/inngest/jobs/nightly-validation-recheck';
-import { runReminderScheduler } from '@/lib/inngest/jobs/reminder-scheduler';
+import { runNightlyValidationRecheck } from '@/lib/jobs/runners/nightly-validation-recheck';
+import { runReminderScheduler } from '@/lib/jobs/runners/reminder-scheduler';
 
 /**
  * AUD-89: scheduler ponagleń łapał błąd każdej faktury i tylko go liczył

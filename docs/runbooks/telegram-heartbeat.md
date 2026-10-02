@@ -1,7 +1,7 @@
 # Runbook: Telegram (alerty + raport dzienny) i heartbeat workera
 
 > Krok 3 planu automatyzacji. Kod: `lib/alerts/telegram.ts`, `lib/alerts/slack.ts`
-> (`alertCritical`), `lib/inngest/jobs/daily-summary-email.ts` (`buildTelegramReport`),
+> (`alertCritical`), `lib/jobs/runners/daily-summary-email.ts` (`buildTelegramReport`),
 > `lib/jobs/heartbeat.ts` + cron `cron.ops-heartbeat`.
 
 ## Co to daje

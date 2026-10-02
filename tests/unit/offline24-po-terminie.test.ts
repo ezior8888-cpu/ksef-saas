@@ -14,7 +14,7 @@ type Row = Record<string, unknown>;
 const db = vi.hoisted(() => ({ item: {} as Row, updates: [] as Array<{ table: string; patch: Row }> }));
 const mocks = vi.hoisted(() => ({ alert: vi.fn(), push: vi.fn(), sendEvent: vi.fn() }));
 
-vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({
+vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({
   requireInvoiceTenant: vi.fn(),
   InvoiceTenantMismatchError: class InvoiceTenantMismatchError extends Error {},
 }));
@@ -62,7 +62,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }));
 
-import { runProcessOfflineQueue } from '@/lib/inngest/jobs/process-offline-queue';
+import { runProcessOfflineQueue } from '@/lib/jobs/runners/process-offline-queue';
 
 const ctx: JobContext = {
   attempt: 0,

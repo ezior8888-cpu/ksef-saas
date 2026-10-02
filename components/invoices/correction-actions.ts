@@ -7,7 +7,7 @@ import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
-import { formatInngestSendError } from '@/lib/inngest/error-message';
+import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
   correctionInvoiceSchema,
   invoiceLineSchema,
@@ -641,7 +641,7 @@ export async function saveAndSendCorrectionAction(
   } catch (e) {
     return {
       success: false,
-      error: e instanceof Error ? formatInngestSendError(e) : 'Nieznany błąd wysyłki',
+      error: e instanceof Error ? formatJobSendError(e) : 'Nieznany błąd wysyłki',
     };
   }
 }

@@ -1,71 +1,34 @@
 /**
- * Konfiguracja backendu jobów (Etap 7: Inngest → pg-boss).
+ * Konfiguracja kolejki jobów.
  *
- * `JOBS_BACKEND`:
- *   - 'pgboss' — enqueue idzie do kolejek pg-boss w naszym Postgresie,
- *     /api/inngest rejestruje pustą listę (crony Inngest Cloud gasną).
- *   - 'inngest' — ścieżka zapasowa: enqueue do Inngest Cloud, /api/inngest
- *     rejestruje pełną listę funkcji. Tylko jawnie.
- *
- * Brak albo literówka (krok 5 planu automatyzacji, AUD-09):
- *   - lokalnie i w testach (jawny sygnał nie-produkcji, `isBypassAllowedEnv`)
- *     → 'inngest' (Inngest Dev Server), jak dotąd;
- *   - wszędzie indziej → BŁĄD przy wysyłce zlecenia i starcie workera.
- *     Dawniej wybierało to Inngest — po odpięciu Inngest Cloud zlecenia
- *     (w tym wysyłki do KSeF) znikałyby po cichu, a faktura wisiałaby
- *     w „W kolejce”. Fail-closed tak jak bramki SEC-1: brak markera
- *     środowiska traktujemy jak produkcję.
- *
- * Rollback = flip env + restart. Nigdy oba backendy naraz — konstrukcyjnie.
+ * Jedyny backend to pg-boss w naszym Postgresie (etap 10, 02.10.2026:
+ * Inngest odpięty — bez ścieżki powrotu). `JOBS_BACKEND` jest opcjonalny;
+ * jeśli ustawiony, musi mieć wartość `pgboss`. Każda inna (także dawne
+ * `inngest`) to błąd konfiguracji: zlecenie nie zostaje wysłane, a worker
+ * nie startuje — zamiast udawać, że zadania gdzieś trafiają.
  */
 
-import { isBypassAllowedEnv } from '@/lib/security/environment';
+export type JobsBackend = 'pgboss';
 
-export type JobsBackend = 'inngest' | 'pgboss';
-
-/** Jawnie ustawiony backend albo `null` — bez wartości domyślnej i bez wyjątku. */
-export function getExplicitJobsBackend(): JobsBackend | null {
-  const raw = process.env.JOBS_BACKEND?.trim();
-  return raw === 'pgboss' || raw === 'inngest' ? raw : null;
-}
-
-/**
- * Backend wynikający z konfiguracji albo `null`, gdy konfiguracja go nie
- * rozstrzyga. Bez wyjątku — dla miejsc, które nie mogą rzucać przy imporcie
- * (`/api/inngest`) albo raportują stan (`/api/health`).
- */
+/** Backend z konfiguracji albo `null` przy nieznanej wartości — bez wyjątku (health). */
 export function resolveJobsBackend(): JobsBackend | null {
-  return getExplicitJobsBackend() ?? (isBypassAllowedEnv() ? 'inngest' : null);
+  const raw = process.env.JOBS_BACKEND?.trim();
+  return !raw || raw === 'pgboss' ? 'pgboss' : null;
 }
 
 export function getJobsBackend(): JobsBackend {
   const resolved = resolveJobsBackend();
   if (resolved) return resolved;
   throw new Error(
-    `JOBS_BACKEND musi być jawnie ustawiony poza lokalnym środowiskiem ('pgboss'); ${
-      process.env.JOBS_BACKEND?.trim() ? 'nieznana wartość' : 'brak zmiennej'
-    }. Zlecenie NIE zostało wysłane.`,
+    "JOBS_BACKEND ma nieobsługiwaną wartość — jedyny backend to 'pgboss' (Inngest odpięty). Zlecenie NIE zostało wysłane.",
   );
 }
 
-export function isPgBossBackend(): boolean {
-  return getJobsBackend() === 'pgboss';
-}
-
-/**
- * Worker pg-boss ma prawo działać tylko przy `JOBS_BACKEND=pgboss`. Przy
- * `inngest` zaplanowałby crony, które prowadzi też Inngest Cloud (podwójne
- * przypomnienia, podwójny polling KSeF), a przy braku zmiennej zostawiałby
- * produkcję w stanie, w którym apka i worker mogą myśleć różnie.
- * Rollback na Inngest = zatrzymanie aplikacji workera w Coolify.
- */
+/** Worker startuje tylko przy poprawnej konfiguracji kolejki. */
 export function assertPgBossWorkerBackend(): void {
-  const explicit = getExplicitJobsBackend();
-  if (explicit !== 'pgboss') {
+  if (!resolveJobsBackend()) {
     throw new Error(
-      `Worker pg-boss wymaga JOBS_BACKEND=pgboss (jest: ${
-        explicit ?? 'brak lub nieznana wartość'
-      }). Przy rollbacku na Inngest zatrzymaj workera zamiast go uruchamiać.`,
+      "Worker pg-boss: JOBS_BACKEND ma nieobsługiwaną wartość (dozwolone: brak albo 'pgboss').",
     );
   }
 }

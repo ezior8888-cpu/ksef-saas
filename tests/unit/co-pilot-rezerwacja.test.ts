@@ -76,7 +76,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { runCoPilotMonthly } from '@/lib/inngest/jobs/co-pilot-monthly';
+import { runCoPilotMonthly } from '@/lib/jobs/runners/co-pilot-monthly';
 
 const ctx: JobContext = {
   attempt: 0,

@@ -95,7 +95,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 import { queryReceivedInvoices } from '@/lib/ksef/inbox';
-import { KSEF_NUMBERS_PER_QUERY, runInboxPollTenant } from '@/lib/inngest/jobs/inbox-polling';
+import { KSEF_NUMBERS_PER_QUERY, runInboxPollTenant } from '@/lib/jobs/runners/inbox-polling';
 
 /** Okno 48 h powoduje nakładające się importy; 00120 rozstrzyga wyścig w DB. */
 

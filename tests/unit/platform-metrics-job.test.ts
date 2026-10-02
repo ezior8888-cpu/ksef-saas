@@ -10,10 +10,10 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/ksef/health-status', () => ({ getKsefHealthSnapshot: mocks.health }));
 vi.mock('@/lib/alerts/slack', () => ({ sendSlackAlert: mocks.slack }));
 vi.mock('@sentry/nextjs', () => ({ captureException: mocks.captureException }));
-vi.mock('@/lib/inngest/client', () => ({ inngest: { createFunction: mocks.createFunction } }));
+vi.mock('@/lib/jobs/events', () => ({ inngest: { createFunction: mocks.createFunction } }));
 
 import { collectPlatformOverviewMetrics } from '@/lib/analytics/platform-metrics';
-import { runDailyAnalyticsDigest } from '@/lib/inngest/jobs/daily-analytics-digest';
+import { runDailyAnalyticsDigest } from '@/lib/jobs/runners/daily-analytics-digest';
 
 const snapshot = {
   level: 'operational', lastCheckedAt: '2026-09-13T10:00:00.000Z', responseTimeMs: 50,

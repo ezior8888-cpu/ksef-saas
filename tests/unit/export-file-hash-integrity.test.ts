@@ -105,7 +105,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { runExportsGenerate } from '@/lib/inngest/jobs/exports-generate';
+import { runExportsGenerate } from '@/lib/jobs/runners/exports-generate';
 
 const context: JobContext = {
   attempt: 0,

@@ -8,9 +8,9 @@ const s = vi.hoisted(() => ({ rpc: vi.fn() }));
 
 vi.mock('@sentry/nextjs', () => ({ addBreadcrumb: vi.fn(), captureMessage: vi.fn() }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ rpc: s.rpc }) }));
-vi.mock('@/lib/inngest/client', () => ({ inngest: { createFunction: vi.fn() } }));
+vi.mock('@/lib/jobs/events', () => ({ inngest: { createFunction: vi.fn() } }));
 
-import { runCleanupAuditLogs } from '@/lib/inngest/jobs/cleanup-audit-logs';
+import { runCleanupAuditLogs } from '@/lib/jobs/runners/cleanup-audit-logs';
 
 /**
  * AUD-79: ponowna dostawa webhooka Stripe porównywała cały payload — pola

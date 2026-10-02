@@ -93,7 +93,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { runCoPilotSendPackage } from '@/lib/inngest/jobs/co-pilot-monthly';
+import { runCoPilotSendPackage } from '@/lib/jobs/runners/co-pilot-monthly';
 
 const ctx: JobContext = {
   attempt: 0,

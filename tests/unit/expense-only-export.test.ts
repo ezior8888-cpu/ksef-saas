@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock('@/lib/inngest/client', () => ({
+vi.mock('@/lib/jobs/events', () => ({
   exportsGenerateRequested: {},
   inngest: { createFunction: vi.fn(() => ({})) },
 }));
@@ -63,7 +63,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { runExportsGenerate } from '@/lib/inngest/jobs/exports-generate';
+import { runExportsGenerate } from '@/lib/jobs/runners/exports-generate';
 
 const context: JobContext = {
   attempt: 0,

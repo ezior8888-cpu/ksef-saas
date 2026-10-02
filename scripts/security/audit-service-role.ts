@@ -186,7 +186,7 @@ function zrodloWartosci(
 type KlasaPliku = 'wejście z internetu' | 'zadanie w tle' | 'biblioteka';
 
 function klasaPliku(p: string): KlasaPliku {
-  if (/^lib\/(inngest\/jobs|jobs|reminders|backup)\//.test(p)) return 'zadanie w tle';
+  if (/^lib\/(jobs|reminders|backup)\//.test(p)) return 'zadanie w tle';
   if (p.startsWith('app/')) return 'wejście z internetu';
   return 'biblioteka';
 }
@@ -442,7 +442,7 @@ interface Wywolujacy { plik: string; zeStraznikiem: boolean; skad: string }
  *    KAŻDA strona w tej gałęzi jest strażona, choć sama nic nie woła.
  *    Zastrzeżenie z dnia 0 nadal obowiązuje: układ chroni STRONY, nie akcje
  *    serwerowe ani route handlery,
- *  • **zegar** — `lib/flo/tick.ts` i joby Inngest uruchamia harmonogram,
+ *  • **zegar** — `lib/flo/tick.ts` i joby pg-boss uruchamia harmonogram,
  *    a nie żądanie z internetu. Przegląd w poprzek najemców jest tam sensem
  *    działania, nie luką.
  */
@@ -454,7 +454,7 @@ function ochronaPliku(plik: string, tresc: string): { chroniony: boolean; skad: 
   if (/^app\/\(dashboard\)\/.*page\.tsx$/.test(plik)) {
     return { chroniony: true, skad: 'układ `app/(dashboard)/layout.tsx` → sesja' };
   }
-  if (/^lib\/(flo\/tick|inngest\/jobs|jobs)\//.test(plik) || plik === 'lib/flo/tick.ts') {
+  if (/^lib\/(flo\/tick|jobs)\//.test(plik) || plik === 'lib/flo/tick.ts') {
     return { chroniony: true, skad: 'uruchamiane zegarem, nie żądaniem' };
   }
   // Webhook nie ma sesji i mieć nie może — uprawnieniem jest podpis nadawcy.

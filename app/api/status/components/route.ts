@@ -9,7 +9,8 @@
  *   - `database`  — Supabase Postgres ping (`SELECT 1`)
  *   - `ksef`      — z Fazy 23 `getKsefHealthSnapshot` (Redis-cached, latency ~5ms)
  *   - `stripe`    — Stripe Charges list (małe API call, sprawdza dostępność)
- *   - `inngest`   — sprawdza `INNGEST_EVENT_KEY` (env-level, bez round-trip)
+ *   - `jobs`      — konfiguracja kolejki pg-boss (env-level, bez round-trip;
+ *                   do 02.10.2026 id `inngest`, Inngest odpięty w etapie 10)
  *
  * Public endpoint — bez auth. Może być cache'owany na CDN 30s (`s-maxage=30`)
  * — Better Uptime sample co 1 min, nie potrzebuje świeżego stanu sekunda-po-sekundzie.
@@ -18,6 +19,7 @@
 import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 
+import { resolveJobsBackend } from '@/lib/jobs/config';
 import { getKsefHealthSnapshot } from '@/lib/ksef/health-status';
 import { isStripeConfigured } from '@/lib/stripe/client';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -158,17 +160,18 @@ async function checkStripe(): Promise<ComponentReport> {
   }
 }
 
-function checkInngest(): ComponentReport {
-  // Inngest nie ma cheap health endpoint — sprawdzamy tylko env config.
-  // Realne issues (event delivery delay) wychodzą w `inngest_run_log`.
-  const configured = Boolean(process.env.INNGEST_EVENT_KEY?.trim());
+function checkJobs(): ComponentReport {
+  // Publiczny endpoint ma być tani — sprawdzamy konfigurację kolejki pg-boss.
+  // Stan wykonania (zaległe/porzucone joby) pilnuje heartbeat workera
+  // (`lib/jobs/jobs-health.ts`), a przebiegi trafiają do `inngest_run_log`.
+  const configured = Boolean(process.env.DATABASE_URL?.trim()) && resolveJobsBackend() !== null;
   return {
-    id: 'inngest',
+    id: 'jobs',
     name: 'Background jobs',
     status: configured ? 'operational' : 'down',
     responseTimeMs: null,
     lastCheckedAt: new Date().toISOString(),
-    detail: configured ? undefined : 'INNGEST_EVENT_KEY missing',
+    detail: configured ? undefined : 'job queue not configured',
   };
 }
 
@@ -178,9 +181,9 @@ export async function GET(): Promise<Response> {
     checkKsef(),
     checkStripe(),
   ]);
-  const inngest = checkInngest();
+  const jobs = checkJobs();
 
-  const components: ComponentReport[] = [database, ksef, stripe, inngest];
+  const components: ComponentReport[] = [database, ksef, stripe, jobs];
 
   // Overall status = worst of all components.
   const overallStatus: ComponentStatus = components.some((c) => c.status === 'down')

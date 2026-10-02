@@ -50,7 +50,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { runTrialCountdownEmails } from '@/lib/inngest/jobs/trial-countdown-emails';
+import { runTrialCountdownEmails } from '@/lib/jobs/runners/trial-countdown-emails';
 
 /**
  * AUD-87: zadanie zapisywało „sending” PRZED wysyłką i nigdy tego nie

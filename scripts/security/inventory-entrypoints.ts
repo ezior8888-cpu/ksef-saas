@@ -137,8 +137,7 @@ type Access =
   | 'czlonek organizacji'
   | 'operator platformy'
   | 'token bez logowania'
-  | 'podpis webhooka'
-  | 'wewnetrzny (Inngest)';
+  | 'podpis webhooka';
 
 interface Entry {
   file: string;
@@ -216,7 +215,6 @@ function paramsOf(rel: string): string[] {
 function expectedAccess(rel: string, src: string): Access {
   const p = rel.split(sep).join('/');
   if (/webhook/i.test(p)) return 'podpis webhooka';
-  if (p.includes('/api/inngest')) return 'wewnetrzny (Inngest)';
   if (p.startsWith('app/admin/')) return 'operator platformy';
   if (/\[token\]/.test(p)) return 'token bez logowania';
   if (p.startsWith('app/(auth)/') || p.startsWith('app/(marketing)/')) {
@@ -392,7 +390,7 @@ function analyse(abs: string): Entry | null {
     raise('krytyczne');
   }
 
-  if (rlsBypass > 0 && !anyGuard && !layoutOnly && expected !== 'wewnetrzny (Inngest)') {
+  if (rlsBypass > 0 && !anyGuard && !layoutOnly) {
     flags.push(
       'OMIJA-RLS-BEZ-STRAŻNIKA: w pliku nie ma żadnego strażnika. Prześledzić, skąd bierze się `tenantId`.',
     );

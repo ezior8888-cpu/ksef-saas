@@ -2,7 +2,7 @@
  * Testy fundamentu lib/jobs/ (Etap 1 planu Etapu 7 — migracja na pg-boss).
  *
  * Krytyczne: parytet decyzji retry z Inngest (w tym schedule KSeF 30s→1h)
- * oraz alarm dryfu mapy eventów względem lib/inngest/client.ts.
+ * oraz alarm dryfu mapy eventów względem lib/jobs/events.ts.
  */
 
 import { readFileSync } from 'node:fs';
@@ -11,11 +11,11 @@ import { resolve } from 'node:path';
 import {
   NonRetriableError as InngestNonRetriableError,
   RetryAfterError as InngestRetryAfterError,
-} from 'inngest';
+} from '@/lib/jobs/errors';
 import { describe, expect, it } from 'vitest';
 
 import { parseDurationMs } from '@/lib/jobs/duration';
-import { NonRetriableJobError, RetryAfterJobError } from '@/lib/jobs/errors';
+import { NonRetriableError, RetryAfterError } from '@/lib/jobs/errors';
 import {
   allEventQueues,
   CRON_JOBS,
@@ -28,7 +28,7 @@ import {
   defaultRetryDelayMs,
   readAttempt,
 } from '@/lib/jobs/retry';
-import { getKsefRetryDelay, KSEF_MAX_RETRIES } from '@/lib/inngest/retry-schedule';
+import { getKsefRetryDelay, KSEF_MAX_RETRIES } from '@/lib/jobs/retry-schedule';
 
 describe('parseDurationMs', () => {
   it('parsuje jednostki z jobów Inngest', () => {
@@ -51,7 +51,7 @@ describe('decideRetry — parytet z Inngest', () => {
   const policy = { maxRetries: 5, getDelayMs: defaultRetryDelayMs };
 
   it('NonRetriable → natychmiast exhausted (odpowiednik onFailure)', () => {
-    const d = decideRetry(new NonRetriableJobError('walidacja'), 0, policy);
+    const d = decideRetry(new NonRetriableError('walidacja'), 0, policy);
     expect(d).toEqual({ action: 'exhausted', reason: 'non-retriable' });
   });
 
@@ -61,7 +61,7 @@ describe('decideRetry — parytet z Inngest', () => {
   });
 
   it('RetryAfter wygrywa z default schedule (jawne opóźnienie)', () => {
-    const d = decideRetry(new RetryAfterJobError('KSeF 503', '2m'), 1, policy);
+    const d = decideRetry(new RetryAfterError('KSeF 503', '2m'), 1, policy);
     expect(d).toEqual({ action: 'retry', delayMs: 120_000, nextAttempt: 2 });
   });
 
@@ -137,10 +137,10 @@ describe('readAttempt', () => {
   });
 });
 
-describe('EVENT_QUEUE_MAP — alarm dryfu względem lib/inngest/client.ts', () => {
-  it('pokrywa DOKŁADNIE eventy zdefiniowane w kliencie Inngest', () => {
+describe('EVENT_QUEUE_MAP — alarm dryfu względem lib/jobs/events.ts', () => {
+  it('pokrywa DOKŁADNIE eventy zdefiniowane w lib/jobs/events.ts', () => {
     const src = readFileSync(
-      resolve(process.cwd(), 'lib/inngest/client.ts'),
+      resolve(process.cwd(), 'lib/jobs/events.ts'),
       'utf8',
     );
     const inClient = new Set(

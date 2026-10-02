@@ -24,9 +24,9 @@ function readSource(relativePath: string): string {
 }
 
 describe('zasada zgody — ponaglenia', () => {
-  const scheduler = readSource('lib/inngest/jobs/reminder-scheduler.ts');
-  const sender = readSource('lib/inngest/jobs/send-reminder.ts');
-  const client = readSource('lib/inngest/client.ts');
+  const scheduler = readSource('lib/jobs/runners/reminder-scheduler.ts');
+  const sender = readSource('lib/jobs/runners/send-reminder.ts');
+  const client = readSource('lib/jobs/events.ts');
 
   it('cron nie emituje zdarzenia wysyłki ponaglenia', () => {
     // Sedno sprawy: harmonogram wolno mu układać, wysyłać — nie.
@@ -49,10 +49,9 @@ describe('zasada zgody — ponaglenia', () => {
   });
 
   it('zdarzenie wysyłki wymaga identyfikatora zgody w schemacie', () => {
-    const eventBlock = client.slice(
-      client.indexOf("eventType('reminders/send.requested'"),
-      client.indexOf("eventType('reminders/send.requested'") + 400,
-    );
+    const start = client.indexOf('export const remindersSendRequested');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const eventBlock = client.slice(start, client.indexOf("('reminders/send.requested')", start) + 40);
     expect(eventBlock).toContain('approvalId: string');
   });
 

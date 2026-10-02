@@ -60,7 +60,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }));
 
-import { runCleanupOldBackups } from '@/lib/inngest/jobs/cleanup-old-backups';
+import { runCleanupOldBackups } from '@/lib/jobs/runners/cleanup-old-backups';
 
 const ctx: JobContext = {
   attempt: 0,

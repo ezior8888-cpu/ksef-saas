@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/categorization', () => ({ learnFromCorrection: vi.fn() }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: vi.fn() }));
-vi.mock('@/lib/inngest/client', () => ({ ocrProcessPhotoRequested: { create: vi.fn() } }));
-vi.mock('@/lib/inngest/error-message', () => ({ formatInngestSendError: vi.fn() }));
+vi.mock('@/lib/jobs/events', () => ({ ocrProcessPhotoRequested: { create: vi.fn() } }));
+vi.mock('@/lib/jobs/error-message', () => ({ formatJobSendError: vi.fn() }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     rpc: async (fn: string, args: Record<string, unknown>) => {

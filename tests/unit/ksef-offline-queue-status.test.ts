@@ -123,7 +123,7 @@ describe('kolejka Offline24 — statusy zgodne z bazą', () => {
     // Zabezpieczenie przed testem, który przechodzi, bo niczego nie znalazł.
     const pliki = new Set(literalyWKodzie().map((u) => u.plik));
     expect(pliki.size).toBeGreaterThan(0);
-    expect([...pliki]).toContain('lib/inngest/jobs/process-offline-queue.ts');
+    expect([...pliki]).toContain('lib/jobs/runners/process-offline-queue.ts');
   });
 
   it('„otwarte" wpisy to czekające i w trakcie wysyłki — oba istnieją w enumie', () => {

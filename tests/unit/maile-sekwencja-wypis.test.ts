@@ -19,7 +19,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   },
 }));
 
-import { runEmailDay1, runEmailDay4, runEmailDay8, runEmailWelcome } from '@/lib/inngest/jobs/email-sequence';
+import { runEmailDay1, runEmailDay4, runEmailDay8, runEmailWelcome } from '@/lib/jobs/runners/email-sequence';
 
 /**
  * AUD-77 (P3): maile z sekwencji próbnej (dzień 1, 4, 8) szły jako

@@ -1,4 +1,4 @@
-import { NonRetriableError } from 'inngest';
+import { NonRetriableError } from '@/lib/jobs/errors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -52,7 +52,7 @@ vi.mock('@/lib/ksef/submission-log', () => ({
   isOwnKsefSession: vi.fn(async () => false),
   findSessionReferenceForKsefNumber: vi.fn(async () => null),
 }));
-vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn() }));
+vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn() }));
 vi.mock('@/lib/supabase/admin-queries', () => ({
   getTenantKsefCredentials: mocks.credentials,
   updateInvoiceStatus: vi.fn(),
@@ -88,7 +88,7 @@ vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), addBreadcrumb: vi.fn() }));
 
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
-import { onSubmitInvoiceExhausted, runSubmitInvoice } from '@/lib/inngest/jobs/submit-invoice';
+import { onSubmitInvoiceExhausted, runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
 import {
   KOR_HOLD_MESSAGE,
   KSEF_PAUSED_MESSAGE,
@@ -270,43 +270,30 @@ describe('wyczerpanie prób po hamulcu = stan „do uzgodnienia”, nie „odrzu
   });
 });
 
-describe('JOBS_BACKEND fail-closed', () => {
-  it('jawna wartość wygrywa wszędzie', () => {
+describe('JOBS_BACKEND — jedyny backend to pg-boss (etap 10)', () => {
+  it('brak zmiennej albo pgboss = pg-boss, także na produkcji', () => {
     vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'production');
-    vi.stubEnv('JOBS_BACKEND', 'pgboss');
-    expect(getJobsBackend()).toBe('pgboss');
-    vi.stubEnv('JOBS_BACKEND', ' inngest ');
-    expect(getJobsBackend()).toBe('inngest');
+    for (const value of ['', 'pgboss', ' pgboss ']) {
+      vi.stubEnv('JOBS_BACKEND', value);
+      expect(getJobsBackend()).toBe('pgboss');
+      expect(resolveJobsBackend()).toBe('pgboss');
+    }
   });
 
-  it.each([undefined, '', 'pg-boss', 'PGBOSS'])('na produkcji brak lub literówka (%s) = błąd, nie Inngest', (value) => {
+  it.each(['inngest', 'pg-boss', 'PGBOSS'])('nieobsługiwana wartość (%s) = błąd, zlecenie nie wychodzi', (value) => {
     vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'production');
-    vi.stubEnv('JOBS_BACKEND', value as string);
+    vi.stubEnv('JOBS_BACKEND', value);
     expect(resolveJobsBackend()).toBeNull();
     expect(() => getJobsBackend()).toThrow(/JOBS_BACKEND/);
   });
 
-  it('build produkcyjny bez markera środowiska też jest traktowany jak produkcja', () => {
-    vi.stubEnv('NEXT_PUBLIC_APP_ENV', '');
-    vi.stubEnv('APP_ENV', '');
-    vi.stubEnv('NODE_ENV', 'production');
-    vi.stubEnv('JOBS_BACKEND', '');
-    expect(() => getJobsBackend()).toThrow(/JOBS_BACKEND/);
-  });
-
-  it('lokalnie (NODE_ENV=test) brak zmiennej = Inngest Dev Server, jak dotąd', () => {
-    vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'development');
-    vi.stubEnv('JOBS_BACKEND', '');
-    expect(getJobsBackend()).toBe('inngest');
-  });
-
-  it('worker startuje wyłącznie przy jawnym pgboss', () => {
+  it('worker startuje przy braku zmiennej albo pgboss, nie przy innej wartości', () => {
     vi.stubEnv('JOBS_BACKEND', 'pgboss');
     expect(() => assertPgBossWorkerBackend()).not.toThrow();
-    vi.stubEnv('JOBS_BACKEND', 'inngest');
-    expect(() => assertPgBossWorkerBackend()).toThrow(/zatrzymaj workera/);
     vi.stubEnv('JOBS_BACKEND', '');
-    expect(() => assertPgBossWorkerBackend()).toThrow(/JOBS_BACKEND=pgboss/);
+    expect(() => assertPgBossWorkerBackend()).not.toThrow();
+    vi.stubEnv('JOBS_BACKEND', 'inngest');
+    expect(() => assertPgBossWorkerBackend()).toThrow(/JOBS_BACKEND/);
   });
 });
 

@@ -62,7 +62,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }));
 
-import { runCertExpiryAlert } from '@/lib/inngest/jobs/cert-expiry-alert';
+import { runCertExpiryAlert } from '@/lib/jobs/runners/cert-expiry-alert';
 
 /**
  * AUD-53: ostrzeżenie o certyfikacie KSeF szło tylko w jednodniowych oknach

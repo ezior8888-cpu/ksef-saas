@@ -37,8 +37,8 @@ vi.mock('@/app/actions/exports', () => ({ triggerCoPilotNowAction: vi.fn(), upda
 import { CoPilotSettingsForm } from '@/components/exports/co-pilot-settings-form';
 import { isExportFormatSuspended, SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
 import { packageFormats } from '@/lib/flo/functions/accountant-format';
-import { parseFormats } from '@/lib/inngest/jobs/co-pilot-monthly';
-import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/inngest/jobs/exports-generate';
+import { parseFormats } from '@/lib/jobs/runners/co-pilot-monthly';
+import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/jobs/runners/exports-generate';
 
 /**
  * Comarch Optima wstrzymana (29.09.2026): generator robił własny układ

@@ -36,7 +36,7 @@ vi.mock('@/lib/analytics/events', () => ({
     subscriptionCanceled: 'subscription_canceled',
   },
 }));
-vi.mock('@/lib/inngest/client', () => ({
+vi.mock('@/lib/jobs/events', () => ({
   billingPaymentSucceeded: { create: (data: unknown) => ({ name: 'billing/payment.succeeded', data }) },
   billingPaymentFailed: { create: (data: unknown) => ({ name: 'billing/payment.failed', data }) },
 
@@ -304,8 +304,8 @@ describe('Stripe webhook event ordering', () => {
     expect(mocks.sendJob).not.toHaveBeenCalled();
   });
 
-  it.each(['inngest', 'pgboss'] as const)(
-    'finishes canceled and trial-ending webhook handlers without phantom queue events on %s',
+  it.each(['pgboss', ''] as const)(
+    'finishes canceled and trial-ending webhook handlers without phantom queue events (JOBS_BACKEND=%s)',
     async (backend) => {
       vi.stubEnv('JOBS_BACKEND', backend);
       mocks.sendJob.mockRejectedValue(new Error('enqueue must not happen'));

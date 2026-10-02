@@ -21,12 +21,12 @@ vi.mock('@/lib/stripe/client', () => ({
   getStripe: () => ({ invoices: { retrieve: mocks.retrieveInvoice } }),
 }));
 vi.mock('@/lib/jobs/inngest-adapter', () => ({ toJobContext: vi.fn() }));
-vi.mock('@/lib/inngest/client', () => ({
+vi.mock('@/lib/jobs/events', () => ({
   billingPaymentFailed: { create: (data: unknown) => ({ data }) },
   inngest: { createFunction: () => ({}) },
 }));
 
-import { runDunningPaymentFailed } from '@/lib/inngest/jobs/dunning-payment-failed';
+import { runDunningPaymentFailed } from '@/lib/jobs/runners/dunning-payment-failed';
 
 const event = {
   tenantId: 'tenant-1', paymentId: 'payment-1',

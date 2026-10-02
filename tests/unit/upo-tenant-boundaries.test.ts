@@ -18,9 +18,9 @@ vi.mock('@/lib/ksef/upo-storage', () => ({ uploadUpoXml: mocks.xml, uploadUpoPdf
 vi.mock('@/lib/ksef/upo-pdf-generator', () => ({ generateUpoPdf: mocks.render }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mocks.audit }));
 vi.mock('@sentry/nextjs', () => ({ captureMessage: mocks.sentry, addBreadcrumb: vi.fn() }));
-import { runDownloadUpo } from '@/lib/inngest/jobs/download-upo';
-import { runUpoRetryStale } from '@/lib/inngest/jobs/upo-retry-stale';
-import { UPO_IDENTITY_MISMATCH } from '@/lib/inngest/jobs/upo-identity';
+import { runDownloadUpo } from '@/lib/jobs/runners/download-upo';
+import { runUpoRetryStale } from '@/lib/jobs/runners/upo-retry-stale';
+import { UPO_IDENTITY_MISMATCH } from '@/lib/jobs/runners/upo-identity';
 
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

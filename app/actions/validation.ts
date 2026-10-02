@@ -1,6 +1,6 @@
 'use server';
 
-import { formatInngestSendError } from '@/lib/inngest/error-message';
+import { formatJobSendError } from '@/lib/jobs/error-message';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 import {
   ActionAuthError,
@@ -128,7 +128,7 @@ export async function bulkValidateContractorsAction(
 
   try {
     const { validationBulkContractorsRequested } = await import(
-      '@/lib/inngest/client'
+      '@/lib/jobs/events'
     );
     const sendResult = await sendJobEvent(
       validationBulkContractorsRequested.create({
@@ -147,7 +147,7 @@ export async function bulkValidateContractorsAction(
   } catch (e) {
     return {
       success: false,
-      error: e instanceof Error ? formatInngestSendError(e) : 'Błąd kolejki',
+      error: e instanceof Error ? formatJobSendError(e) : 'Błąd kolejki',
     };
   }
 }

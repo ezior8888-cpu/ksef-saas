@@ -135,7 +135,7 @@ const ZNANE: Record<string, string> = {
   // Jest tylko /payments/overdue. B-01 bez producenta.
   'lib/flo/functions/month-close.ts /payments': 'nie ma strony /payments',
   // Job bez nadawcy zdarzenia (patrz job-event-senders.test.ts).
-  'lib/inngest/jobs/cancel-reminders-on-payment.ts /payments': 'nie ma strony /payments',
+  'lib/jobs/runners/cancel-reminders-on-payment.ts /payments': 'nie ma strony /payments',
 };
 
 describe('linki wewnętrzne', () => {
