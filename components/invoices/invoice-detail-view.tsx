@@ -344,6 +344,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           id: inv.id,
           ksef_status: inv.ksef_status,
           xml_storage_path: inv.xml_storage_path ?? null,
+          invoice_type: inv.invoice_type,
         }}
       />
     </div>

@@ -6,6 +6,7 @@ import { Download, FileText, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { EmailInvoiceButton } from './email-invoice-button';
+import { DraftInvoiceActions } from './draft-invoice-actions';
 import { downloadInvoiceXmlAction } from './actions-detail';
 import { saveBlob } from '@/lib/download';
 
@@ -14,6 +15,8 @@ interface Props {
     id: string;
     ksef_status: string;
     xml_storage_path: string | null;
+    /** VAT / KOR / ZAL / ROZ — do przycisków szkicu. */
+    invoice_type?: string | null;
   };
 }
 
@@ -92,6 +95,9 @@ export function InvoiceActions({ invoice }: Props) {
           )}
           Pobierz XML
         </Button>
+      )}
+      {invoice.ksef_status === 'draft' && (
+        <DraftInvoiceActions invoiceId={invoice.id} invoiceType={invoice.invoice_type ?? null} />
       )}
       {(invoice.ksef_status === 'rejected' || invoice.ksef_status === 'failed') && (
         <p className="w-full text-right text-sm text-[var(--ff-text-muted)]">

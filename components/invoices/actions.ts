@@ -487,6 +487,12 @@ async function insertInvoiceAndLines(
 export async function saveDraftAction(
   values: InvoiceFormValues
 ): Promise<InvoiceActionResult> {
+  // Ten sam schemat co formularz i „Wystaw i wyślij” — szkic da się później
+  // wysłać do KSeF (F-042), więc nie może omijać walidacji wywołaniem wprost.
+  const parsed = invoiceFormSchema.safeParse(values);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Nieprawidłowe dane faktury' };
+  }
   try {
     const { supabase, tenant, userId } = await getTenantContext();
     // Odpornie: przed wgraniem 00091 kolumny nie ma — zwykła faktura nie może
