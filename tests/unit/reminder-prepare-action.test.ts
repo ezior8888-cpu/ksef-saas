@@ -33,7 +33,7 @@ beforeEach(() => {
   vi.clearAllMocks(); vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(NOW);
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected external request'); }));
   db = createFakeDb({ invoices: [{ id: ID, tenant_id: A, buyer_data: { email: 'buyer@example.invalid' },
-    gross_total: 100, paid_amount: 0, invoice_kind: 'regular', invoice_type: 'VAT' }] });
+    gross_total: 100, paid_amount: 0, origin: 'app', invoice_kind: 'regular', invoice_type: 'VAT' }] });
   mocks.client = db.client; mocks.auth.mockResolvedValue({ tenantId: A, user: { id: USER }, supabase: db.client });
   mocks.enabled.mockResolvedValue({ enabled: true });
   mocks.budget.mockResolvedValue({ allowed: true }); mocks.build.mockResolvedValue(delivery);
@@ -70,7 +70,7 @@ describe('prepare reminder action', () => {
     expect(mocks.build).not.toHaveBeenCalled(); expect(db.writes).toBe(0);
   });
   it.each([
-    ['correction', 'KOR'], ['regular', 'KOR'], ['regular', 'KOR_ZAL'],
+    ['correction', 'KOR'], ['regular', 'KOR'], ['regular', 'KOR_ZAL'], ['final', 'ROZ'],
     ['regular', null], [null, 'VAT'], ['regular', undefined],
   ])('does not create a preview, reminder or dispatch for %s/%s', async (kind, type) => {
     Object.assign(db.tables.invoices[0]!, { invoice_kind: kind, invoice_type: type });
@@ -82,6 +82,16 @@ describe('prepare reminder action', () => {
     expect(db.tables.flo_proposals).toEqual([]);
     expect(db.tables.flo_approvals).toEqual([]);
     expect(db.tables.payment_reminders).toEqual([]);
+  });
+  it('does not create a preview or writes for an imported invoice', async () => {
+    db.tables.invoices[0]!.origin = 'ksef_import';
+    expect(await prepareReminderAction({ invoiceId: ID, stage: 'stage_3' })).toMatchObject({ success: false });
+    expect(mocks.build).not.toHaveBeenCalled(); expect(db.writes).toBe(0);
+  });
+  it('does not create writes when the authoritative child check blocks the preview', async () => {
+    mocks.build.mockRejectedValue(new Error('Faktura ma dokument powiązany.'));
+    expect(await prepareReminderAction({ invoiceId: ID, stage: 'stage_3' })).toMatchObject({ success: false });
+    expect(db.writes).toBe(0); expect(db.tables.flo_proposals).toEqual([]);
   });
   it('requires authentication and does not reflect private errors', async () => {
     mocks.auth.mockRejectedValue(new Error('private-session-detail'));

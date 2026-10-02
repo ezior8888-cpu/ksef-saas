@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice } from '@/types/invoice';
 import type { AdvanceInvoiceData } from '@/types/invoice-types';
+import { sellerPartyFromSellerData } from '@/lib/invoices/map-buyer-party';
 
 type Row = Record<string, unknown>;
 type Query = {
@@ -10,14 +11,15 @@ type Query = {
   nullableNonAccepted?: boolean; patch?: Row;
 };
 const mocks = vi.hoisted(() => ({
-  admin: vi.fn(), download: vi.fn(), metadata: vi.fn(), process: vi.fn(),
+  admin: vi.fn(), download: vi.fn(), metadata: vi.fn(), xml: vi.fn(), parseFa3Xml: vi.fn(), process: vi.fn(),
   photo: vi.fn(), ocr: vi.fn(), push: vi.fn(), email: vi.fn(), proposal: vi.fn(),
   health: vi.fn(), submit: vi.fn(), audit: vi.fn(), credentials: vi.fn(), offlineAdd: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/import/file-storage', () => ({ downloadImportFile: mocks.download }));
-vi.mock('@/lib/ksef/history-fetcher', () => ({ fetchInvoicesMetadata: mocks.metadata, fetchInvoiceXml: vi.fn() }));
+vi.mock('@/lib/ksef/history-fetcher', () => ({ fetchInvoicesMetadata: mocks.metadata, fetchInvoiceXml: mocks.xml }));
+vi.mock('@/lib/import/fa3-parser', () => ({ parseFa3Xml: mocks.parseFa3Xml }));
 vi.mock('@/lib/import/import-engine', () => ({ processImportedInvoices: mocks.process }));
 vi.mock('@/lib/storage/expenses', () => ({ downloadExpensePhoto: mocks.photo }));
 vi.mock('@/lib/ocr/engine', () => ({ extractInvoiceFromImage: mocks.ocr }));
@@ -148,6 +150,8 @@ beforeEach(() => {
   mocks.admin.mockImplementation(client);
   mocks.health.mockResolvedValue({ available: true });
   mocks.metadata.mockResolvedValue({ totalCount: 0, invoices: [] });
+  mocks.xml.mockResolvedValue('<Faktura/>');
+  mocks.parseFa3Xml.mockReturnValue({ invoiceNumber: 'TEST/1/2026' });
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -214,6 +218,41 @@ describe('service-role job boundaries', () => {
     await expect(runMagicImportKsef(magicEvent, ctx)).resolves.toEqual({ success: true, imported: 0 });
     expect(writes().length).toBeGreaterThan(0);
     for (const q of writes()) expect(q.filters).toContainEqual(['tenant_id', A]);
+  });
+  it('marks truncated KSeF metadata failed before fetching XML or completing the import', async () => {
+    tables.import_jobs = [{ id: ID, tenant_id: A, source: 'ksef_history' }];
+    mocks.metadata.mockResolvedValue({ totalCount: 1, invoices: [{ ksefNumber: 'KSEF-TEST-1' }], truncated: true });
+    await expect(runMagicImportKsef(magicEvent, ctx)).resolves.toEqual({ success: false, imported: 0 });
+    expect(tables.import_jobs[0].status).toBe('failed');
+    expect(mocks.xml).not.toHaveBeenCalled();
+    expect(mocks.process).not.toHaveBeenCalled();
+  });
+  it('propagates XML fetch failure instead of silently completing a shorter history', async () => {
+    tables.import_jobs = [{ id: ID, tenant_id: A, source: 'ksef_history' }];
+    mocks.metadata.mockResolvedValue({ totalCount: 1, invoices: [{ ksefNumber: 'KSEF-TEST-1' }] });
+    mocks.xml.mockRejectedValue(new Error('KSeF XML unavailable'));
+    await expect(runMagicImportKsef(magicEvent, ctx)).rejects.toThrow('KSeF XML unavailable');
+    expect(mocks.process).not.toHaveBeenCalled();
+    expect(tables.import_jobs[0].status).not.toBe('completed');
+    await onMagicImportExhausted(new Error('private-error'), { importJobId: ID, tenantId: A });
+    expect(tables.import_jobs[0].status).toBe('failed');
+  });
+  it('marks a rejected invoice failed while allowing benign duplicate warnings', async () => {
+    tables.import_jobs = [{ id: ID, tenant_id: A, source: 'ksef_history' }];
+    mocks.metadata.mockResolvedValue({ totalCount: 1, invoices: [{ ksefNumber: 'KSEF-TEST-1' }] });
+    mocks.process.mockResolvedValueOnce({
+      invoicesImported: 0, invoicesFailed: 1, contractorsCreated: 0,
+      contractorsUpdated: 0, productsCreated: 0, warnings: ['Błąd zapisu KOR'],
+    });
+    await expect(runMagicImportKsef(magicEvent, ctx)).resolves.toEqual({ success: false, imported: 0 });
+    expect(tables.import_jobs[0]).toMatchObject({ status: 'failed', warnings: ['Błąd zapisu KOR'] });
+
+    mocks.process.mockResolvedValueOnce({
+      invoicesImported: 0, invoicesFailed: 0, contractorsCreated: 0,
+      contractorsUpdated: 0, productsCreated: 0, warnings: ['Pominięto duplikat (DB, KSeF)'],
+    });
+    await expect(runMagicImportKsef(magicEvent, ctx)).resolves.toMatchObject({ success: true, imported: 0 });
+    expect(tables.import_jobs[0].status).toBe('completed');
   });
   it.each(['success', 'failure'] as const)('rejects a mismatched %s notification before cards, mail or push', async (kind) => {
     tables.invoices = [{ id: ID, tenant_id: B }];

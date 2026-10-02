@@ -44,6 +44,7 @@ function roz(lines: InvoiceLine[], totalAdvances: number): FinalInvoiceData {
     bankAccount: 'PL61109010140000071219812874',
     seller: SELLER,
     buyer: BUYER,
+    taxAnnotations: { cashMethod: 2, splitPayment: 2 },
     advanceInvoiceIds: ['00000000-0000-0000-0000-000000000001'],
     totalAdvances,
     lines,

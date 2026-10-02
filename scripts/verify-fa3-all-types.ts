@@ -244,6 +244,7 @@ async function main(): Promise<void> {
   // ── FAKTURA ZALICZKOWA ──────────────────────────────────────
   const advance: AdvanceInvoiceData = {
     invoiceType: 'advance',
+    taxAnnotations: { cashMethod: 2, splitPayment: 2 },
     internalNumber: 'FZ 2026/04/001',
     issueDate: '2026-04-19',
     paymentMethod: 'transfer',
@@ -262,6 +263,7 @@ async function main(): Promise<void> {
   // ── FAKTURA ROZLICZAJĄCA (FINAL) ────────────────────────────
   const finalData: FinalInvoiceData = {
     invoiceType: 'final',
+    taxAnnotations: { cashMethod: 2, splitPayment: 2 },
     internalNumber: 'FR 2026/06/001',
     issueDate: '2026-06-05',
     paymentMethod: 'transfer',

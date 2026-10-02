@@ -170,8 +170,11 @@ function emitVatSummariesFromMap(
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildAdnotacjeStandard(fa: any, lines: InvoiceLineItem[]): void {
+function buildAdnotacjeStandard(
+  fa: XMLBuilder,
+  lines: InvoiceLineItem[],
+  taxAnnotations: AdvanceInvoiceData['taxAnnotations'],
+): void {
   const adn = fa.ele('Adnotacje');
   const hasOoLine = lines.some((l) => l.vatRate === 'oo');
   const p18 = hasOoLine ? 1 : 2;
@@ -182,15 +185,33 @@ function buildAdnotacjeStandard(fa: any, lines: InvoiceLineItem[]): void {
     );
   }
 
-  adn.ele('P_16').txt('2');
+  adn.ele('P_16').txt(String(taxAnnotations.cashMethod));
   adn.ele('P_17').txt('2');
   adn.ele('P_18').txt(String(p18));
-  adn.ele('P_18A').txt('2');
+  adn.ele('P_18A').txt(String(taxAnnotations.splitPayment));
   const zwolnienie = adn.ele('Zwolnienie');
   zwolnienie.ele('P_19N').txt('1');
   adn.ele('NoweSrodkiTransportu').ele('P_22N').txt('1');
   adn.ele('P_23').txt('2');
   adn.ele('PMarzy').ele('P_PMarzyN').txt('1');
+}
+
+/** ZAL i ROZ: P_16/P_18A tylko z zamrożonej koperty — brak to błąd, nie „2”. */
+function requireTaxAnnotations(
+  data: AdvanceInvoiceData | FinalInvoiceData,
+  kind: 'ZAL' | 'ROZ',
+): AdvanceInvoiceData['taxAnnotations'] {
+  const flags = data.taxAnnotations;
+  if (!flags || (flags.cashMethod !== 1 && flags.cashMethod !== 2) ||
+      (flags.splitPayment !== 1 && flags.splitPayment !== 2)) {
+    throw new Error(`FA(3) ${kind}: brak zweryfikowanych adnotacji P_16/P_18A.`);
+  }
+  if (flags.splitPayment === 1 &&
+      (data.paymentMethod !== 'transfer' ||
+        typeof data.bankAccount !== 'string' || !data.bankAccount.trim())) {
+    throw new Error(`FA(3) ${kind}: MPP wymaga przelewu i numeru rachunku.`);
+  }
+  return flags;
 }
 
 function buildHeader(
@@ -369,6 +390,7 @@ export function generateAdvanceInvoiceXml(
   data: AdvanceInvoiceData,
   options: GenerateAdvanceXmlOptions = {},
 ): string {
+  const taxAnnotations = requireTaxAnnotations(data, 'ZAL');
   const {
     generatedAt = new Date(),
     prettyPrint = true,
@@ -395,7 +417,7 @@ export function generateAdvanceInvoiceXml(
   emitVatSummariesFromMap(fa, summaries, FULL_VAT_RATE_MAP);
   fa.ele('P_15').txt(formatDecimal(advanceLine.grossAmount));
 
-  buildAdnotacjeStandard(fa, [advanceLine]);
+  buildAdnotacjeStandard(fa, [advanceLine], taxAnnotations);
 
   fa.ele('RodzajFaktury').txt('ZAL');
 
@@ -403,10 +425,9 @@ export function generateAdvanceInvoiceXml(
   contractOpis.ele('Klucz').txt('Wartość_umowy_całkowita_PLN');
   contractOpis.ele('Wartosc').txt(formatDecimal(data.totalContractAmount));
 
-  const totals = calculateAdvanceTotals(data);
-  const pozostaloOpis = fa.ele('DodatkowyOpis');
-  pozostaloOpis.ele('Klucz').txt('Pozostało_do_rozliczenia_PLN');
-  pozostaloOpis.ele('Wartosc').txt(formatDecimal(totals.remainingAmount));
+  // Bez „pozostało do rozliczenia” (AUD-95): ZAL nie wie o wcześniejszych
+  // zaliczkach tej samej umowy, więc kwota bywała zawyżona. Ustawa jej nie
+  // wymaga — wymaga wartości zamówienia (`Zamowienie` niżej).
 
   if (data.expectedDeliveryDate) {
     const d = fa.ele('DodatkowyOpis');
@@ -418,12 +439,40 @@ export function generateAdvanceInvoiceXml(
 
   buildPlatnoscFa(fa, data);
 
+  buildZamowienie(fa, data);
+
   if (data.notes?.trim()) {
     const stopka = root.ele('Stopka');
     stopka.ele('Informacje').ele('StopkaFaktury').txt(data.notes.trim());
   }
 
   return root.end({ prettyPrint, headless: false });
+}
+
+/**
+ * Dane zamówienia lub umowy na fakturze zaliczkowej (art. 106f ust. 1 pkt 4
+ * ustawy o VAT; element `Zamowienie` FA(3), po `Platnosc`) — AUD-71.
+ * Formularz ZAL zna jedną pozycję umowy: opis, wartość brutto i stawkę,
+ * więc wiersz jest jeden, ilość 1, a netto i VAT liczone jak dla zaliczki.
+ */
+function buildZamowienie(fa: XMLBuilder, data: AdvanceInvoiceData): void {
+  const rateCfg = ADVANCE_VAT_RATE_MAP[data.vatRate];
+  const contract = calculateAdvanceTotals({
+    vatRate: data.vatRate,
+    advanceAmount: data.totalContractAmount,
+    totalContractAmount: data.totalContractAmount,
+  });
+  const zamowienie = fa.ele('Zamowienie');
+  zamowienie.ele('WartoscZamowienia').txt(formatDecimal(data.totalContractAmount));
+  const wiersz = zamowienie.ele('ZamowienieWiersz');
+  wiersz.ele('NrWierszaZam').txt('1');
+  wiersz.ele('P_7Z').txt(requireText(data.description, 'description'));
+  wiersz.ele('P_8AZ').txt('szt.');
+  wiersz.ele('P_8BZ').txt(formatDecimal(1, 4));
+  wiersz.ele('P_9AZ').txt(formatDecimal(contract.advanceNet, 4));
+  wiersz.ele('P_11NettoZ').txt(formatDecimal(contract.advanceNet));
+  wiersz.ele('P_11VatZ').txt(formatDecimal(contract.advanceVat));
+  wiersz.ele('P_12Z').txt(rateCfg.p12Value);
 }
 
 /**
@@ -504,6 +553,7 @@ export function generateFinalInvoiceXml(
   if (!advanceInvoices.length) {
     throw new Error('FA(3) ROZ: przekazano pustą listę faktur zaliczkowych.');
   }
+  const taxAnnotations = requireTaxAnnotations(data, 'ROZ');
 
   const {
     generatedAt = new Date(),
@@ -544,7 +594,7 @@ export function generateFinalInvoiceXml(
   emitVatSummariesFromMap(fa, summaries, FULL_VAT_RATE_MAP);
   fa.ele('P_15').txt(formatDecimal(finalTotals.amountDue));
 
-  buildAdnotacjeStandard(fa, preparedLines);
+  buildAdnotacjeStandard(fa, preparedLines, taxAnnotations);
 
   fa.ele('RodzajFaktury').txt('ROZ');
 

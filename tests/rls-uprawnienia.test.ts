@@ -224,6 +224,43 @@ describe.skipIf(!hasDatabase)('uprawnienia funkcji i ról (00103, 00104)', () =>
     await admin.from('invoices').delete().eq('id', INVOICE);
   });
 
+  it('zaliczka rozliczona najwyżej jedną ROZ, odrzucona ROZ ją zwalnia (00125, AUD-67)', async () => {
+    const ADV = '88888888-8888-4888-8888-888888888881';
+    const ADV2 = '88888888-8888-4888-8888-888888888882';
+    const ROZ1 = '88888888-8888-4888-8888-888888888891';
+    const ROZ2 = '88888888-8888-4888-8888-888888888892';
+    const ROZ3 = '88888888-8888-4888-8888-888888888893';
+    const ids = [ROZ1, ROZ2, ROZ3];
+    await admin.from('invoices').delete().in('id', ids);
+    const roz = (id: string, n: string, advances: string[], status = 'draft') => ({
+      id, tenant_id: ORG, direction: 'outgoing', internal_number: n, invoice_type: 'ROZ',
+      invoice_kind: 'final', issue_date: '2026-10-02', seller_nip: '9480000014', buyer_nip: '1234567890',
+      gross_total: 123, net_total: 100, vat_total: 23, ksef_status: status, advance_invoice_ids: advances,
+      fa3_data: { internalNumber: n, type: 'ROZ' }, seller_data: { nip: '9480000014' }, buyer_data: { nip: '1234567890' },
+    });
+
+    // Odrzucona przez KSeF ROZ nie trzyma zaliczki.
+    expect((await admin.from('invoices').insert(roz(ROZ1, 'ROZ-T/1', [ADV], 'rejected'))).error).toBeNull();
+    expect((await admin.from('invoices').insert(roz(ROZ2, 'ROZ-T/2', [ADV]))).error).toBeNull();
+
+    // Druga żywa ROZ z tą samą zaliczką — odmowa dla serwisu i dla klienta.
+    expect((await admin.from('invoices').insert(roz(ROZ3, 'ROZ-T/3', [ADV2, ADV]))).error?.code).toBe('23505');
+    const c = await signedIn(ADMIN_EMAIL);
+    expect((await c.from('invoices').insert(roz(ROZ3, 'ROZ-T/3', [ADV]))).error?.code).toBe('23505');
+    // Ta sama zaliczka dwa razy w jednej ROZ.
+    expect((await c.from('invoices').insert(roz(ROZ3, 'ROZ-T/3', [ADV2, ADV2]))).error?.code).toBe('23505');
+    // Inna zaliczka przechodzi; dopisanie zajętej w edycji szkicu — nie.
+    expect((await c.from('invoices').insert(roz(ROZ3, 'ROZ-T/3', [ADV2]))).error).toBeNull();
+    expect((await c.from('invoices').update({ advance_invoice_ids: [ADV2, ADV] }).eq('id', ROZ3)).error?.code)
+      .toBe('23505');
+
+    // Powrót odrzuconej ROZ do obiegu, gdy zaliczkę trzyma już inna — odmowa.
+    expect((await admin.from('invoices').update({ ksef_status: 'draft' }).eq('id', ROZ1)).error?.code)
+      .toBe('23505');
+
+    await admin.from('invoices').delete().in('id', ids);
+  });
+
   it('admin nie usunie właściciela', async () => {
     const c = await signedIn(ADMIN_EMAIL);
     const { error } = await c.rpc('revoke_membership', { p_membership_id: ownerMembershipId });

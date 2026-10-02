@@ -83,7 +83,8 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
   const today = todayInWarsaw();
   const due = dueDateFrom(today, 14);
 
-  const defaults: FinalFormIn = {
+  // Bez domyślnego MPP — użytkownik odpowiada świadomie (AUD-23).
+  const defaults = {
     invoiceType: 'final',
     internalNumber: '',
     issueDate: today,
@@ -96,7 +97,7 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
     advanceInvoiceIds: [],
     totalAdvances: 0,
     lines: [{ ...defaultLine }],
-  };
+  } satisfies Omit<FinalFormIn, 'splitPayment'>;
 
   const form = useForm<FinalFormIn, unknown, FinalInvoiceSchemaIn>({
     resolver: zodResolver(finalInvoiceSchema) as Resolver<
@@ -197,6 +198,7 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
 
   const nipDisplay = currentBuyer().nip.replace(/\D/g, '');
   const paymentMethodWatch = useWatch({ control: form.control, name: 'paymentMethod' });
+  const splitPaymentWatch = useWatch({ control: form.control, name: 'splitPayment' });
 
   const onSave = form.handleSubmit(
     (data) =>
@@ -542,6 +544,32 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
               </p>
             ) : null}
           </div>
+          <fieldset className="sm:col-span-2 space-y-2">
+            <legend className={labelClass}>Czy do tej faktury stosuje się mechanizm podzielonej płatności (MPP)?</legend>
+            <div className="flex flex-wrap gap-5 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="final-split-payment"
+                  checked={splitPaymentWatch === true}
+                  onChange={() => form.setValue('splitPayment', true, { shouldValidate: true, shouldDirty: true })}
+                />
+                Tak, MPP
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="final-split-payment"
+                  checked={splitPaymentWatch === false}
+                  onChange={() => form.setValue('splitPayment', false, { shouldValidate: true, shouldDirty: true })}
+                />
+                Nie dotyczy
+              </label>
+            </div>
+            {form.formState.errors.splitPayment ? (
+              <p className="text-xs text-red-600">{form.formState.errors.splitPayment.message}</p>
+            ) : null}
+          </fieldset>
         </div>
       </section>
 

@@ -5,6 +5,7 @@ import { DISCLAIMER } from '@/lib/flo/functions/payment-chase';
 import { generateDemandLetterPdf } from './pdf-demand-letter';
 import { DEFAULT_TEMPLATES, formatDatePl, formatPln } from './templates';
 import { MAX_REMINDER_PDF_BYTES, REMINDER_DELIVERY_TTL_MS, reminderDeliverySchema, reminderInvoiceFingerprint, isReminderInvoiceChaseable } from './delivery-schema';
+import { assertNoRelatedInvoice } from './reconciliation-guard';
 import type { ReminderDelivery, ReminderDeliveryStage } from '@/types/reminder-delivery';
 import type { Json } from '@/types/database';
 
@@ -50,7 +51,7 @@ export async function buildReminderDelivery(
   const invoiceResult = await client.from('invoices').select('*').eq('id', invoiceId).eq('tenant_id', tenantId).maybeSingle();
   const invoice = invoiceResult.data;
   if (invoiceResult.error || !invoice || invoice.id !== invoiceId || invoice.tenant_id !== tenantId) throw new Error('Nie udało się odczytać faktury tej organizacji.');
-  if (!isReminderInvoiceChaseable(invoice)) throw new Error('Korekta lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.');
+  if (!isReminderInvoiceChaseable(invoice)) throw new Error('Korekta, faktura rozliczeniowa lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.');
   const gross = Number(invoice.gross_total); const paid = Number(invoice.paid_amount);
   if (invoice.gross_total === null || invoice.paid_amount === null || !Number.isFinite(gross) || !Number.isFinite(paid) || gross <= 0 || paid < 0 || paid >= gross ||
       invoice.reminders_paused || invoice.direction !== 'outgoing' || invoice.ksef_status !== 'accepted' || invoice.payment_status === 'paid') {
@@ -58,6 +59,7 @@ export async function buildReminderDelivery(
   }
   // Existing demand-letter wording and formatter are specifically in PLN.
   if (invoice.currency !== null && invoice.currency !== 'PLN') throw new Error('Podgląd przypomnienia obsługuje obecnie faktury w PLN.');
+  await assertNoRelatedInvoice(client, tenantId, invoiceId);
   const preparedAt = new Date(); const due = date(invoice.payment_due_date); date(invoice.issue_date);
   const today = Date.UTC(preparedAt.getUTCFullYear(), preparedAt.getUTCMonth(), preparedAt.getUTCDate());
   const daysOverdue = Math.floor((today - due.getTime()) / 86400000);

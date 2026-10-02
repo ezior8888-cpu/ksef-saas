@@ -18,16 +18,19 @@ const invoice: ParsedInvoice = {
   warnings: ['Brak pozycji'],
 };
 
-function database() {
+function database(rejectNegativeGross = false) {
   const invoiceInserts: Record<string, unknown>[] = [];
   const client = {
     from(table: string) {
       let operation: 'select' | 'insert' = 'select';
       let inserted: Record<string, unknown> | null = null;
-      const result = () => ({
-        data: operation === 'insert' && table === 'invoices' ? { id: 'stored-invoice' } : [],
-        error: null,
-      });
+      const result = () => rejectNegativeGross && operation === 'insert' &&
+        table === 'invoices' && Number(inserted?.gross_total) < 0
+        ? { data: null, error: { message: 'check_paid_amount_valid' } }
+        : {
+            data: operation === 'insert' && table === 'invoices' ? { id: 'stored-invoice' } : [],
+            error: null,
+          };
       const query = {
         select: () => query,
         eq: () => query,
@@ -38,7 +41,9 @@ function database() {
           if (table === 'invoices') invoiceInserts.push(row);
           return query;
         },
-        single: async () => ({ ...result(), data: table === 'invoices' ? { id: 'stored-invoice' } : inserted }),
+        single: async () => result().error
+          ? result()
+          : { ...result(), data: table === 'invoices' ? { id: 'stored-invoice' } : inserted },
         then: <T>(resolve: (value: ReturnType<typeof result>) => T) => Promise.resolve(result()).then(resolve),
       };
       return query;
@@ -66,11 +71,28 @@ describe('KSeF import environment provenance', () => {
       source: 'ksef_history', invoiceKsefStatus: 'accepted', ksefEnvironment: 'test',
     });
     expect(result.invoicesImported).toBe(1);
+    expect(result.invoicesFailed).toBe(0);
     expect(invoiceInserts).toHaveLength(1);
     expect(invoiceInserts[0]).toMatchObject({
       tenant_id: 'tenant', origin: 'ksef_import', ksef_status: 'accepted', ksef_environment: 'test',
       ksef_number: 'KSEF-TEST-1',
     });
+  });
+
+  it('counts a negative KOR rejected by the paid-amount constraint as an import failure', async () => {
+    const { client, invoiceInserts } = database(true);
+    mocks.createAdminClient.mockReturnValue(client);
+    const result = await processImportedInvoices({
+      tenantId: 'tenant', importJobId: 'job', source: 'ksef_history',
+      invoiceDirection: 'outgoing', invoiceKsefStatus: 'accepted', ksefEnvironment: 'test',
+      invoices: [{
+        ...invoice, invoiceType: 'correction', invoiceNumber: 'KOR/1/2026',
+        totals: { netTotal: -10, vatTotal: -2.3, grossTotal: -12.3 },
+      }],
+    });
+    expect(invoiceInserts).toHaveLength(1);
+    expect(result).toMatchObject({ invoicesImported: 0, invoicesFailed: 1 });
+    expect(result.warnings).toContainEqual(expect.stringContaining('check_paid_amount_valid'));
   });
 
   it('rejects an incoming KSeF number without environment before writing contractors', async () => {
