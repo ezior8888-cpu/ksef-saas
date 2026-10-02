@@ -216,18 +216,63 @@ test('IBAN z prefiksem PL jest normalizowany do 26 cyfr w NrRB', () => {
   assert.match(xml, /<NrRB>61109010140000071219812874<\/NrRB>/);
 });
 
+// Nabywca z innego państwa UE (AUD-70): adres za granicą — walidacja odrzuca
+// zagraniczny VAT-UE z krajem adresu „PL”.
+const BUYER_DE: InvoiceInput['buyer'] = {
+  vatUeNumber: 'DE123456789',
+  name: 'Kunde GmbH',
+  address: {
+    countryCode: 'DE',
+    addressLine1: 'Hauptstrasse 1',
+    addressLine2: '10115 Berlin',
+  },
+};
+
+const BUYER_EL: InvoiceInput['buyer'] = {
+  vatUeNumber: 'EL123456789',
+  name: 'Pelatis A.E.',
+  address: {
+    countryCode: 'GR', // adres: ISO „GR”; prefiks VAT-UE Grecji to „EL”
+    addressLine1: 'Odos Ermou 1',
+    addressLine2: '10563 Athina',
+  },
+};
+
+const NP_II_LINE: InvoiceInput['lines'][number] = {
+  ordinal: 1,
+  name: 'Usługa programistyczna (art. 28b)',
+  unit: 'usł.',
+  quantity: 1,
+  unitPriceNet: 1000,
+  vatRate: 'np_ii',
+};
+
 test('buyer.vatUeNumber rozbija się na KodUE + NrVatUE', () => {
-  const xml = generateFA3Xml(
-    buildInvoice({
-      buyer: {
-        ...baseInvoiceInput().buyer,
-        nip: undefined,
-        vatUeNumber: 'DE123456789',
-      },
-    }),
-  );
+  const xml = generateFA3Xml(buildInvoice({ buyer: BUYER_DE }));
   assert.match(xml, /<KodUE>DE<\/KodUE>/);
   assert.match(xml, /<NrVatUE>123456789<\/NrVatUE>/);
+});
+
+test('stawka "np_ii" emituje P_12 "np II", P_13_9 bez P_14 i wymusza P_18=1', () => {
+  const xml = generateFA3Xml(buildInvoice({ buyer: BUYER_DE, lines: [NP_II_LINE] }));
+  assert.match(xml, /<P_12>np II<\/P_12>/);
+  assert.match(xml, /<P_13_9>1000\.00<\/P_13_9>/);
+  assert.doesNotMatch(xml, /<P_14_/);
+  assert.match(xml, /<P_18>1<\/P_18>/);
+});
+
+test('np II wymaga nabywcy z VAT-UE innego państwa — nabywca z NIP odpada', () => {
+  assert.throws(
+    () => generateFA3Xml(buildInvoice({ lines: [NP_II_LINE] })),
+    InvoiceValidationError,
+  );
+});
+
+test('VAT-UE z prefiksem „GR” (zamiast „EL”) odpada w walidacji', () => {
+  assert.throws(
+    () => generateFA3Xml(buildInvoice({ buyer: { ...BUYER_EL, vatUeNumber: 'GR123456789' } })),
+    InvoiceValidationError,
+  );
 });
 
 test('walidacja wyrzuca InvoiceValidationError gdy dane są niespójne', () => {
@@ -338,6 +383,35 @@ test('XSD walidacja: faktura z wieloma stawkami (23% + 8% + oo)', () => {
       ],
     }),
   );
+  const { ok, stderr } = validateAgainstXsd(xml);
+  assert.ok(ok, `XSD validation failed:\n${stderr}`);
+});
+
+test('XSD walidacja: np II dla nabywcy z DE (KodUE + NrVatUE, P_13_9, P_18=1)', () => {
+  const xml = generateFA3Xml(buildInvoice({ buyer: BUYER_DE, lines: [NP_II_LINE] }));
+  const { ok, stderr } = validateAgainstXsd(xml);
+  assert.ok(ok, `XSD validation failed:\n${stderr}`);
+});
+
+test('XSD walidacja: nabywca z Grecji (KodUE EL, adres GR), 23% + np II', () => {
+  const xml = generateFA3Xml(
+    buildInvoice({
+      buyer: BUYER_EL,
+      lines: [
+        {
+          ordinal: 1,
+          name: 'Licencja',
+          unit: 'szt.',
+          quantity: 1,
+          unitPriceNet: 100,
+          vatRate: '23',
+        },
+        { ...NP_II_LINE, ordinal: 2 },
+      ],
+    }),
+  );
+  assert.match(xml, /<KodUE>EL<\/KodUE>/);
+  assert.match(xml, /<Adres><KodKraju>GR<\/KodKraju>/);
   const { ok, stderr } = validateAgainstXsd(xml);
   assert.ok(ok, `XSD validation failed:\n${stderr}`);
 });

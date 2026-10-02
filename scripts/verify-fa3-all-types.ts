@@ -186,6 +186,31 @@ async function main(): Promise<void> {
     },
   }));
 
+  await verifyRegular('Zwykła · nie podlega w kraju (np I)', baseInput({
+    lines: [{ ordinal: 1, name: 'Montaż za granicą', unit: 'usł.', quantity: 1, unitPriceNet: 2000, vatRate: 'np' }],
+  }));
+
+  // AUD-70: usługa z art. 100 ust. 1 pkt 4 (art. 28b) — P_12 „np II”, P_13_9, P_18=1.
+  await verifyRegular('Zwykła · np II, nabywca z UE (VAT-UE DE)', baseInput({
+    buyer: {
+      vatUeNumber: 'DE123456789', name: 'Auslandische GmbH',
+      address: { countryCode: 'DE', addressLine1: 'Hauptstrasse 1', addressLine2: '10115 Berlin' },
+    },
+    lines: [{ ordinal: 1, name: 'Usługa programistyczna', unit: 'usł.', quantity: 1, unitPriceNet: 3000, vatRate: 'np_ii' }],
+  }));
+
+  // Grecja: prefiks VAT-UE „EL”, a kraj adresu (ISO) „GR”.
+  await verifyRegular('Zwykła · np II + 23%, nabywca z Grecji (EL / adres GR)', baseInput({
+    buyer: {
+      vatUeNumber: 'EL123456789', name: 'Pelatis A.E.',
+      address: { countryCode: 'GR', addressLine1: 'Odos Ermou 1', addressLine2: '10563 Athina' },
+    },
+    lines: [
+      { ordinal: 1, name: 'Licencja', unit: 'szt.', quantity: 2, unitPriceNet: 150, vatRate: '23' },
+      { ordinal: 2, name: 'Konsultacja zdalna', unit: 'godz.', quantity: 4, unitPriceNet: 200, vatRate: 'np_ii' },
+    ],
+  }));
+
   await verifyRegular('Zwykła · nabywca bez ID (konsument)', baseInput({
     buyer: {
       noIdMarker: true, name: 'Konsument',

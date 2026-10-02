@@ -261,8 +261,10 @@ function buildAdnotacjeMinimal(
   annotations: CorrectionInvoiceData['annotations'] = {},
 ): void {
   const adn = fa.ele('Adnotacje');
-  const hasOoLine = lines.some((l) => l.vatRate === 'oo');
-  const p18 = hasOoLine ? 1 : 2;
+  // P_18=1 dla „oo” i „np II” (VAT rozlicza nabywca; AUD-70). „np II” blokuje
+  // dziś `assertNoNpII`, ale adnotacja ma być spójna z pozycjami.
+  const hasReverseChargeLine = lines.some((l) => l.vatRate === 'oo' || l.vatRate === 'np_ii');
+  const p18 = hasReverseChargeLine ? 1 : 2;
   const hasZwLine = lines.some((l) => l.vatRate === 'zw');
   if (hasZwLine) {
     throw new Error(
@@ -280,6 +282,21 @@ function buildAdnotacjeMinimal(
   adn.ele('NoweSrodkiTransportu').ele('P_22N').txt('1');
   adn.ele('P_23').txt('2');
   adn.ele('PMarzy').ele('P_PMarzyN').txt('1');
+}
+
+/**
+ * „np II” (usługi z art. 100 ust. 1 pkt 4, AUD-70) wymaga nabywcy z innego
+ * państwa UE z numerem VAT-UE (KodUE + NrVatUE). Korekta zna tylko nabywcę
+ * z NIP albo B2C (`BuyerData`), więc przerywamy przed budową XML.
+ */
+function assertNoNpII(data: CorrectionInvoiceData): void {
+  const lines = [...(data.linesBefore ?? []), ...(data.linesAfter ?? [])];
+  if (lines.some((l) => l.vatRate === 'np_ii')) {
+    throw new Error(
+      'FA(3) KOR: stawka „np II” (usługi z art. 100 ust. 1 pkt 4 ustawy o VAT) wymaga nabywcy ' +
+        'z innego państwa UE z numerem VAT-UE — faktura korygująca jej nie obsługuje (nabywca z NIP albo B2C).',
+    );
+  }
 }
 
 function appendFaWiersze(fa: XMLBuilder, lines: CorrectionRow[]): void {
@@ -414,6 +431,7 @@ export function generateCorrectionInvoiceXml(
   if (data.correctionType === 'amount_change' && !data.amountChange) {
     throw new Error('FA(3) KOR: typ amount_change wymaga pola amountChange.');
   }
+  assertNoNpII(data);
 
   const parentIssue =
     data.parentInvoiceIssueDate != null && data.parentInvoiceIssueDate !== ''
