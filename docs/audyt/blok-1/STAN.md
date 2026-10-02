@@ -91,3 +91,10 @@ właśnie ten błąd.
   mocki (`lib/ksef/mock-fixtures.ts`), skrypty `ksef:*` nieuruchamiane.
 - **GitHub:** `gh` CLI zainstalowane, ale w tej sesji GitHub obsługuję przez
   narzędzia MCP (tylko odczyt PR).
+
+## Zamknięcie (Faza 5)
+
+- **Plan:** 24 pozycje, wszystkie `ZROBIONE` (P-01–P-22 z planu, P-23 i P-24 z dodatkowego obchodu). Brak `ZABLOKOWANE` i `ODŁOŻONE`.
+- **Plan zamknięty:** ok. 05:42 UTC (2 h 15 min od startu); dodatkowy obchód 05:42–05:54 UTC.
+- **Weryfikacja końcowa:** te same komendy co w stanie zastanym, wszystkie exit 0. Liczby w `PODSUMOWANIE.md` → „Weryfikacja na koniec sesji”. Lint: 32 ostrzeżenia (zastane 33, żadne nowe).
+- **Gałąź:** wszystkie commity wypchnięte na `origin/audyt/blok-1`; bez merge'a i rebase'u `main`.
