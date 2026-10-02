@@ -12,24 +12,83 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  *    i tę samą kartę do kliknięcia po raz drugi.
  */
 
-const updates = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+const db = vi.hoisted(() => ({
+  expense: {
+    id: 'exp-2',
+    tenant_id: 'ten-1',
+    source: 'ocr_photo',
+    ksef_invoice_id: null,
+    is_reviewed: false,
+  } as {
+    id: string;
+    tenant_id: string;
+    source: string;
+    ksef_invoice_id: string | null;
+    is_reviewed: boolean;
+  } | null,
+  reads: [] as Array<Record<string, unknown>>,
+  updates: [] as Array<Record<string, unknown>>,
+  attempts: [] as Array<Record<string, unknown>>,
+  readError: false,
+  raceToKsef: false as false | 'source' | 'link',
+}));
 
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: () => ({
-      // Wykonawca oznacza koszt warunkiem `id` ORAZ `tenant_id` i żąda
-      // zwrotu wiersza — brak wiersza znaczy „nie Twój koszt".
-      update: (patch: Record<string, unknown>) => {
+      select: (columns: string) => {
         const where: Record<string, unknown> = {};
         const builder = {
           eq: (column: string, value: unknown) => {
             where[column] = value;
             return builder;
           },
+          maybeSingle: async () => {
+            db.reads.push({ columns, ...where });
+            if (db.readError) return { data: null, error: { message: 'read failed' } };
+            const row = db.expense;
+            if (!row || where.id !== row.id || where.tenant_id !== row.tenant_id) {
+              return { data: null, error: null };
+            }
+            return {
+              data: { source: row.source, ksef_invoice_id: row.ksef_invoice_id },
+              error: null,
+            };
+          },
+        };
+        return builder;
+      },
+      update: (patch: Record<string, unknown>) => {
+        const equal: Record<string, unknown> = {};
+        const unequal: Record<string, unknown> = {};
+        const is: Record<string, unknown> = {};
+        const builder = {
+          eq: (column: string, value: unknown) => {
+            equal[column] = value;
+            return builder;
+          },
+          neq: (column: string, value: unknown) => {
+            unequal[column] = value;
+            return builder;
+          },
+          is: (column: string, value: unknown) => {
+            is[column] = value;
+            return builder;
+          },
           select: () => builder,
           maybeSingle: async () => {
-            updates.push({ ...patch, id: where.id, tenant_id: where.tenant_id });
-            return { data: { id: where.id }, error: null };
+            db.attempts.push({ ...patch, id: equal.id, tenant_id: equal.tenant_id,
+              source_not: unequal.source, ksef_invoice_id_is: is.ksef_invoice_id });
+            const row = db.expense;
+            if (row && db.raceToKsef === 'source') row.source = 'ksef_inbox';
+            if (row && db.raceToKsef === 'link') row.ksef_invoice_id = 'inv-1';
+            if (!row || equal.id !== row.id || equal.tenant_id !== row.tenant_id ||
+                row.source === unequal.source || row.ksef_invoice_id !== is.ksef_invoice_id) {
+              return { data: null, error: null };
+            }
+            row.is_reviewed = true;
+            db.updates.push({ ...patch, id: equal.id, tenant_id: equal.tenant_id });
+            return { data: { id: row.id }, error: null };
           },
         };
         return builder;
@@ -86,7 +145,15 @@ async function confirmExpense() {
 }
 
 beforeEach(() => {
-  updates.length = 0;
+  db.expense = {
+    id: 'exp-2', tenant_id: TENANT, source: 'ocr_photo',
+    ksef_invoice_id: null, is_reviewed: false,
+  };
+  db.reads.length = 0;
+  db.updates.length = 0;
+  db.attempts.length = 0;
+  db.readError = false;
+  db.raceToKsef = false;
   proposeRuleAfterReview.mockReset();
 });
 
@@ -96,7 +163,12 @@ describe('W-01 → W-03', () => {
 
     const result = await confirmExpense();
 
-    expect(updates).toEqual([{ is_reviewed: true, id: 'exp-2', tenant_id: TENANT }]);
+    expect(db.reads).toEqual([{ columns: 'source, ksef_invoice_id', id: 'exp-2', tenant_id: TENANT }]);
+    expect(db.attempts).toEqual([{
+      is_reviewed: true, id: 'exp-2', tenant_id: TENANT,
+      source_not: 'ksef_inbox', ksef_invoice_id_is: null,
+    }]);
+    expect(db.updates).toEqual([{ is_reviewed: true, id: 'exp-2', tenant_id: TENANT }]);
     expect(proposeRuleAfterReview).toHaveBeenCalledTimes(1);
     const [tenantId, expenseId] = proposeRuleAfterReview.mock.calls[0]!;
     expect(tenantId).toBe(TENANT);
@@ -112,6 +184,40 @@ describe('W-01 → W-03', () => {
     expect(result.summary).toBe('koszt potwierdzony przez klienta');
     expect(result.details).toMatchObject({ rule: 'failed' });
     // Najważniejsze: koszt ZOSTAŁ oznaczony jako przejrzany.
-    expect(updates).toEqual([{ is_reviewed: true, id: 'exp-2', tenant_id: TENANT }]);
+    expect(db.updates).toEqual([{ is_reviewed: true, id: 'exp-2', tenant_id: TENANT }]);
+  });
+
+  it.each([
+    ['źródło KSeF', 'ksef_inbox', null],
+    ['powiązana faktura KSeF', 'ocr_photo', 'inv-1'],
+  ])('nie potwierdza kosztu KSeF przez FLO: %s', async (_case, source, link) => {
+    db.expense = {
+      id: 'exp-2', tenant_id: TENANT, source,
+      ksef_invoice_id: link, is_reviewed: false,
+    };
+
+    await expect(confirmExpense()).rejects.toThrow('Koszt powiązany z KSeF wymaga przeglądu');
+    expect(db.attempts).toEqual([]);
+    expect(db.updates).toEqual([]);
+    expect(proposeRuleAfterReview).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['źródło', 'source'],
+    ['powiązanie', 'link'],
+  ] as const)('odmawia zapisu gdy po odczycie zmienia się %s na KSeF', async (_case, race) => {
+    db.raceToKsef = race;
+
+    await expect(confirmExpense()).rejects.toThrow('Wydatek zmienił się lub wymaga przeglądu');
+    expect(db.attempts).toHaveLength(1);
+    expect(db.updates).toEqual([]);
+    expect(proposeRuleAfterReview).not.toHaveBeenCalled();
+  });
+
+  it('odmawia potwierdzenia, gdy nie może odczytać źródła kosztu', async () => {
+    db.readError = true;
+
+    await expect(confirmExpense()).rejects.toThrow('Nie można sprawdzić źródła wydatku');
+    expect(db.attempts).toEqual([]);
   });
 });

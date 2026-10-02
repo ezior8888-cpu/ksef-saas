@@ -44,7 +44,7 @@ describe('reguła daty', () => {
 
 function sprzedaz(o: Partial<JpkInvoice>): JpkInvoice {
   return {
-    invoiceNumber: 'FV/1', invoiceType: 'regular', issueDate: '2026-09-03', buyerName: 'Klient',
+    invoiceNumber: 'FV/1', currency: 'PLN', invoiceType: 'regular', issueDate: '2026-09-03', buyerName: 'Klient',
     netTotal: 1000, vatTotal: 230, grossTotal: 1230, lines: [], ...o,
   };
 }
@@ -122,7 +122,7 @@ describe('strona KPiR — podpięcie', () => {
           then(resolve: (v: unknown) => unknown) {
             const rows =
               table === 'invoices'
-                ? [{ id: 'fv', internal_number: 'FV/1', issue_date: '2026-09-03', sale_date: '2026-08-31', gross_total: 1230, net_total: 1000, buyer_data: null, invoice_kind: 'regular', advance_invoice_ids: [] }]
+                ? [{ id: 'fv', internal_number: 'FV/1', issue_date: '2026-09-03', sale_date: '2026-08-31', gross_total: 1230, net_total: 1000, currency: 'PLN', buyer_data: null, invoice_kind: 'regular', advance_invoice_ids: [] }]
                 : [];
             const project = (r: Record<string, unknown>) => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : r);
             // Kontrola proweniencji (#63): 0 przyjętych faktur bez środowiska KSeF.

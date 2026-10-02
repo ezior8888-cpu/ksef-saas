@@ -49,10 +49,6 @@ export function documentCurrency(doc: Pick<DocumentAmounts, 'currency'>): string
   return code && /^[A-Z]{3}$/.test(code) ? code : HOME_CURRENCY;
 }
 
-function round2(n: number): number {
-  return roundToCents(n);
-}
-
 function plMoney(n: number, digits = 2): string {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
@@ -75,10 +71,10 @@ export function costInPln(doc: DocumentAmounts, issueDate: string, lookup: RateL
   }
 
   const { rate } = lookup;
-  const net = round2(doc.net_amount * rate.mid);
-  const gross = round2(doc.gross_amount * rate.mid);
+  const net = roundToCents(doc.net_amount * rate.mid);
+  const gross = roundToCents(doc.gross_amount * rate.mid);
   // VAT jako różnica — suma w złotych zgadza się co do grosza.
-  const vat = round2(gross - net);
+  const vat = roundToCents(gross - net);
   return {
     kind: 'pln',
     net,

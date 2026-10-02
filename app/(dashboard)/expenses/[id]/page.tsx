@@ -23,6 +23,17 @@ export default async function ExpenseDetailPage({
 
   if (error || !expense) notFound();
 
+  let ksefCurrency: string | null = null;
+  if (expense.source === 'ksef_inbox' && expense.ksef_invoice_id) {
+    const { data: invoice } = await supabase
+      .from('invoices')
+      .select('currency')
+      .eq('id', expense.ksef_invoice_id)
+      .eq('tenant_id', expense.tenant_id)
+      .maybeSingle();
+    ksefCurrency = invoice?.currency ?? null;
+  }
+
   let photoUrl: string | null = null;
   if (
     expense.source === 'ocr_photo' &&
@@ -32,5 +43,5 @@ export default async function ExpenseDetailPage({
     photoUrl = await getExpensePhotoUrl(expense.source_file_path, expense.tenant_id);
   }
 
-  return <ExpenseEditForm expense={expense} photoUrl={photoUrl} />;
+  return <ExpenseEditForm expense={expense} photoUrl={photoUrl} ksefCurrency={ksefCurrency} />;
 }

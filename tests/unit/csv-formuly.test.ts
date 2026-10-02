@@ -22,6 +22,7 @@ const wroga = '=HYPERLINK("http://example.test/x","Kliknij")';
 function faktura(o: Partial<JpkInvoice> = {}): JpkInvoice {
   return {
     invoiceNumber: '+FV/1',
+    currency: 'PLN',
     invoiceType: 'correction',
     issueDate: '2026-09-20',
     buyerName: wroga,

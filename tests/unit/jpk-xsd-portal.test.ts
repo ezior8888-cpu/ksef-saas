@@ -24,7 +24,7 @@ vi.mock('@/lib/exports/data-fetcher', () => ({
     issuer: { nip: '5260001246', name: 'ACME' },
     issuedInvoices: [
       {
-        invoiceNumber: 'FV/1', invoiceType: 'regular', issueDate: '2026-09-10', buyerName: 'Klient', buyerNip: '5252241585',
+        invoiceNumber: 'FV/1', currency: 'PLN', invoiceType: 'regular', issueDate: '2026-09-10', buyerName: 'Klient', buyerNip: '5252241585',
         netTotal: 100, vatTotal: 23, grossTotal: 123,
         lines: [{ position: 1, name: 'Usługa', unit: 'szt.', quantity: 1, unitPriceNet: 100, netAmount: 100, vatRate: '23', vatAmount: 23 }],
       },

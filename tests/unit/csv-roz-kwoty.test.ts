@@ -2,6 +2,7 @@ import iconv from 'iconv-lite';
 import { describe, expect, it } from 'vitest';
 
 import {
+  CsvForeignCurrencyNotSupportedError,
   generateInsertSubiektCsv,
   generateSymfoniaCsv,
   generateUniversalCsv,
@@ -26,6 +27,7 @@ const zaliczka = { internal_number: 'FZ/1', ksef_number: null, issue_date: '2026
 function faktura(o: Partial<JpkInvoice> = {}): JpkInvoice {
   return {
     invoiceNumber: 'FR/1',
+    currency: 'PLN',
     invoiceType: 'final',
     issueDate: '2026-09-20',
     buyerName: 'Klient Sp. z o.o.',
@@ -104,5 +106,26 @@ describe('CSV: ROZ z kwotami jak na fakturze w KSeF', () => {
     const zakup = faktura({ invoiceNumber: 'DOST/ROZ/1', advanceSettlement: [zaliczka] });
     const [w] = wiersze(generateUniversalCsv(dane({ issuedInvoices: [], receivedInvoices: [zakup] })), ';');
     expect(w).toMatchObject({ Netto: '10000,00', VAT: '2300,00', Brutto: '12300,00' });
+  });
+
+  it.each([
+    ['uniwersalny', generateUniversalCsv],
+    ['Subiekt', generateInsertSubiektCsv],
+    ['Symfonia', generateSymfoniaCsv],
+    ['Wapro', generateWaproCsv],
+  ] as const)('%s: odmawia dokumentów w EUR i bez potwierdzonej waluty', (_n, generate) => {
+    const walutowa = faktura({
+      invoiceNumber: 'EUR/1', invoiceType: 'regular', currency: 'EUR',
+      netTotal: 100, vatTotal: 98.75, grossTotal: 123,
+    });
+    const bezWaluty = faktura({ invoiceNumber: 'UNKNOWN/1', currency: undefined });
+    for (const issuedInvoices of [[walutowa], [bezWaluty]]) {
+      expect(() => generate(dane({ issuedInvoices, receivedInvoices: [] })))
+        .toThrow(CsvForeignCurrencyNotSupportedError);
+    }
+    for (const receivedInvoices of [[walutowa], [bezWaluty]]) {
+      expect(() => generate(dane({ issuedInvoices: [], receivedInvoices })))
+        .toThrow(CsvForeignCurrencyNotSupportedError);
+    }
   });
 });

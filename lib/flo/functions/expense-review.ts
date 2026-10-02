@@ -369,17 +369,34 @@ registerFloHandler('expense.review', async (ctx) => {
     throw new Error('Propozycja bez identyfikatora wydatku');
   }
 
-  const client = createAdminClient() as unknown as ExpensesClient;
+  const client = createAdminClient();
+  const { data: expense, error: readError } = await client
+    .from('expenses')
+    .select('source, ksef_invoice_id')
+    .eq('id', expenseId)
+    .eq('tenant_id', ctx.proposal.tenant_id)
+    .maybeSingle();
+
+  if (readError) throw new Error('Nie można sprawdzić źródła wydatku');
+  if (!expense) throw new Error('Wydatek nie należy do organizacji albo już nie istnieje');
+  if (expense.source === 'ksef_inbox' || expense.ksef_invoice_id !== null) {
+    throw new Error('Koszt powiązany z KSeF wymaga przeglądu w formularzu wydatku');
+  }
+
   const { data, error } = await client
     .from('expenses')
     .update({ is_reviewed: true })
     .eq('id', expenseId)
     .eq('tenant_id', ctx.proposal.tenant_id)
+    // Warunki należą do samego UPDATE, więc zmiana źródła między odczytem a
+    // zapisem nie pozwoli FLO potwierdzić kosztu KSeF przez service_role.
+    .neq('source', 'ksef_inbox')
+    .is('ksef_invoice_id', null)
     .select('id')
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error('Wydatek nie należy do organizacji albo już nie istnieje');
+  if (!data) throw new Error('Wydatek zmienił się lub wymaga przeglądu w formularzu. Odśwież kartę.');
 
   // W-03 (plan FLO 2, K1.8): drugi raz ten sam sprzedawca → pytanie o regułę.
   // Tu, a nie w pulsie: reguła ma się brać z decyzji człowieka, którą właśnie

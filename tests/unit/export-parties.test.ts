@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { generateComarchOptimaXml } from '@/lib/exports/comarch-optima-generator';
+import { generateComarchOptimaXml, OptimaForeignCurrencyNotSupportedError } from '@/lib/exports/comarch-optima-generator';
 import { generateUniversalCsv } from '@/lib/exports/csv-generators';
 import { counterpartyOf, generateJpkFa, type JpkInvoice } from '@/lib/exports/jpk-fa-generator';
 
@@ -19,6 +19,7 @@ const MY = { nip: '1234567890', name: 'Moja Firma', taxOfficeCode: '1433', addre
 function faktura(o: Partial<JpkInvoice> = {}): JpkInvoice {
   return {
     invoiceNumber: 'FV/1',
+    currency: 'PLN',
     invoiceType: 'regular',
     issueDate: '2026-08-10',
     buyerName: 'Klient Sp. z o.o.',
@@ -78,6 +79,16 @@ describe('Comarch Optima — kontrahent faktury zakupu', () => {
     expect(fzsp).toContain('<Nazwa1>Dostawca Sp. z o.o.</Nazwa1>');
     const fasp = xml.slice(xml.indexOf('FASP'), xml.indexOf('FZSP'));
     expect(fasp).toContain('<Nazwa1>Klient Sp. z o.o.</Nazwa1>');
+  });
+
+  it.each([
+    ['wystawiona EUR', [faktura({ currency: 'EUR' })], [zakup()]],
+    ['wystawiona bez waluty', [faktura({ currency: undefined })], [zakup()]],
+    ['odebrana EUR', [faktura()], [{ ...zakup(), currency: 'EUR' }]],
+    ['odebrana bez waluty', [faktura()], [{ ...zakup(), currency: undefined }]],
+  ])('%s: odmawia całego eksportu przed oznaczeniem kwot jako PLN', (_opis, issuedInvoices, receivedInvoices) => {
+    expect(() => generateComarchOptimaXml({ ...input, issuedInvoices, receivedInvoices }))
+      .toThrow(OptimaForeignCurrencyNotSupportedError);
   });
 });
 

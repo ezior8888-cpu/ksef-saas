@@ -79,6 +79,7 @@ describe('pierwsza paczka niesie zapas', () => {
 describe('paczka testowa zawiera oba pliki', () => {
   const invoice: JpkInvoice = {
     invoiceNumber: 'FV/2026/08/1',
+    currency: 'PLN',
     invoiceType: 'regular',
     issueDate: '2026-08-10',
     saleDate: '2026-08-10',

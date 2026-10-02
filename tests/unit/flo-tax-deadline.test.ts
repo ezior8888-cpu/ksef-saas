@@ -28,6 +28,7 @@ const d = (iso: string) => new Date(`${iso}T09:00:00.000Z`);
 function jpkInvoice(overrides: Partial<JpkInvoice> = {}): JpkInvoice {
   return {
     invoiceNumber: 'FV/1',
+    currency: 'PLN',
     invoiceType: 'regular',
     issueDate: '2026-08-10',
     buyerName: 'Klient',

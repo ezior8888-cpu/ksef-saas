@@ -41,7 +41,7 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00098 | Bartosz (#90) | `backup_read_stripe_service_tables` | w `main` (#90, 02.10), **wgrana na db-1 28.09** |
 | 00099 | Claude | `ksef_submission_references` (C-18) | PR `claude/ksef-niepewny-wynik`; wgranie PRZED wdrożeniem kodu |
 | 00100 | Claude | `ops_gate` (bramka Telegram: rola `ops_actor`, schemat `ops`) | PR `claude/bramka-telegram`; wgranie PRZED uruchomieniem bramki |
-| 00100–00101 | Codex (#128, szkic) | `ksef_expense_provenance_guard`, `ksef_expense_full_update_guard` | PR otwarty — **00100 koliduje z `00100_ops_gate` na `main`**, do przenumerowania (od 00103) |
+| 00100–00101 | Codex (#128, szkic) | `ksef_expense_provenance_guard`, `ksef_expense_full_update_guard` — **przeniesione jako 00127–00128** (C-20) | zastąpione |
 | 00102 | Claude | `signup_gate_hook` (AUD-63) | w `main`, **wgrana na db-1**; zmienne `GOTRUE_HOOK_BEFORE_USER_CREATED_*` ustawione 02.10 |
 | 00103 | Claude | `org_role_guards` (AUD-29: owner nadaje/odbiera tylko owner) | w `main` (#156), **wgrana na db-1 02.10** |
 | 00104 | Claude | `service_function_grants` (AUD-30, AUD-64: EXECUTE tylko service_role) | w `main` (#156), **wgrana na db-1 02.10** |
@@ -68,7 +68,9 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00124 | Claude (C-20, #71 część 2) | `ksef_send_claim` (AUD-10: przejęcie wysyłki z dzierżawą 15 min, właściciel = `sendAttemptId` zdarzenia, `claim_ksef_send` tylko dla serwisu) | PR `claude/ksef-przejecie-wysylki`; przed wdrożeniem |
 | 00125 | Claude (partia 15) | `roz_advance_single_settlement` (AUD-67: zaliczka rozliczona najwyżej jedną ROZ firmy, poza odrzuconą; wyzwalacz + blokada doradcza na firmę) | PR `claude/naprawy-partia-15`; przed wdrożeniem |
 | 00126 | Claude (C-20, #86) | `invoices_overdue_reconciliation_guard` (C-06, C-16: widok zaległości tylko z faktur ścigalnych — z aplikacji, VAT/UPR/ZAL, bez korekt, ROZ i dokumentów powiązanych) | PR `claude/codex-86-przypomnienia`; przed wdrożeniem |
-| **00127** | — | następny wolny (00200 zajęte) | — |
+| 00127 | Claude (C-20, #128) | `ksef_expense_provenance_guard` (C-11 etap 1: `review_ksef_expense` tylko dla serwisu, klient nie tworzy ani nie usuwa kosztu KSeF, ślad waluty serwerowy) | PR `claude/codex-128-waluty`; **przed** wdrożeniem |
+| 00128 | Claude (C-20, #128) | `ksef_expense_full_update_guard` (C-11 etap 2: koszt KSeF edytowany tylko przez RPC) | PR `claude/codex-128-waluty`; **PO** wdrożeniu webu z RPC |
+| **00129** | — | następny wolny (00200 zajęte) | — |
 
 ---
 
@@ -96,7 +98,7 @@ Twój szkic jako scalony.
 | #71 (C-02, C-18: claim wysyłki) | **część 1** (bez przejęcia wysyłki) w PR `claude/codex-71-przejecie-wysylki`, 00093/00095 → 00122/00123; **część 2** (atomowe przejęcie AUD-10 wpięte w uzgadnianie C-18) — PR `claude/ksef-przejecie-wysylki`, migracja 00124: dzierżawa 15 min, ta sama próba wraca, wynik po uzgodnieniu (C-18). Decyzja Bartosza 02.10: automatyczny Offline24 wstrzymany wszędzie, przy awarii KSeF job ponawia | 6 |
 | #85 (C-05 ZAL, C-17) | po #71 | 7 |
 | #86 (C-06, C-16) | przeniesiony w PR `claude/codex-86-przypomnienia` (00097 → 00126): przypomnienia i widok zaległości tylko dla faktur ścigalnych, import historii KSeF kończy się `failed` przy niepełnej liście lub konflikcie. **Pominięte:** blokada raportów przy przyjętej korekcie (`assertOutgoingCorrectionsReconciled`) — C-01 rozstrzygnięte (I1: suma korekty = różnica, jak P_13/P_15 KOR w XSD), na produkcji 0 korekt | 8 |
-| #128 (C-11, waluta) | po stosie; 00100–00101 → kolejne numery (00100 koliduje z `ops_gate`) | 9 |
+| #128 (C-11, waluta) | przeniesiony w PR `claude/codex-128-waluty` (00100–00101 → 00127–00128): koszt KSeF w walucie obcej z kursem NBP i poza KPiR do przeglądu, przegląd przez RPC z audytem, raporty/eksporty w PLN zatrzymują się na walucie obcej. Dokumenty operatorskie Codexa zastąpione nagłówkami migracji i opisem PR | 9 |
 
 **Migracje** przenumerowuję od następnego wolnego numeru z rejestru, bo Twoje
 00083–00097 pisane były na schemat sprzed 00091–00113 i w kolejności plików

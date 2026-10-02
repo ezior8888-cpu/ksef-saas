@@ -14,11 +14,26 @@ export interface OptimaExportInput {
   receivedInvoices: JpkInvoice[];
 }
 
+export class OptimaForeignCurrencyNotSupportedError extends Error {
+  constructor() {
+    super('Eksport Comarch Optima wstrzymany: każda faktura musi mieć potwierdzoną walutę PLN.');
+    this.name = 'OptimaForeignCurrencyNotSupportedError';
+  }
+}
+
 // ============================================================================
 // MAIN
 // ============================================================================
 
 export function generateComarchOptimaXml(data: OptimaExportInput): string {
+  // Kwoty źródłowe nie są przeliczane. Walidujemy oba kierunki przed budową
+  // dokumentu, aby nie oznaczyć wartości EUR ani braku waluty jako PLN.
+  if ([...data.issuedInvoices, ...data.receivedInvoices].some(
+    (invoice) => invoice.currency?.trim().toUpperCase() !== 'PLN',
+  )) {
+    throw new OptimaForeignCurrencyNotSupportedError();
+  }
+
   const root = create({ version: '1.0', encoding: 'UTF-8' }).ele('Faktury', {
     xmlns: 'http://www.comarch.pl/cdn/optima/faktury',
     'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance',

@@ -10,6 +10,7 @@ import { create } from 'xmlbuilder2';
 
 import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
 import { isKnownTaxOffice } from '@/lib/exports/tax-offices';
+import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
 
 import type { ExportExpense } from './data-fetcher';
 import { amountsOf, type JpkInvoice } from './jpk-fa-generator';
@@ -113,6 +114,7 @@ export function wholeZloty(n: number): number {
  * pozycji jest ten z faktury, a nie przeliczany od nowa z netto.
  */
 function aggregateSales(invoices: readonly JpkInvoice[]): RateBucket {
+  assertOutgoingInvoicesInPln(invoices);
   const b = emptyBucket();
   for (const inv of invoices) {
     for (const { rate, net, vat } of amountsOf(inv).rates) {

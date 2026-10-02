@@ -67,6 +67,8 @@ export interface JpkFaInputData {
 
 export interface JpkInvoice {
   invoiceNumber: string;
+  /** Waluta kwot dokumentu; brak w starych ręcznie budowanych danych oznacza PLN. */
+  currency?: string | null;
   invoiceType: 'regular' | 'correction' | 'advance' | 'final';
   issueDate: string;
   saleDate?: string;
@@ -106,6 +108,13 @@ export interface JpkInvoice {
 
   /** ROZ: zaliczki ze stawką i rozbiciem — P_13/P_14/P_15 po ich odjęciu i NrFaZaliczkowej. */
   advanceSettlement?: AdvanceInvoiceSettlementRow[];
+}
+
+export class JpkFaForeignCurrencyNotSupportedError extends Error {
+  constructor() {
+    super('JPK_FA wstrzymany: faktura walutowa wymaga poprawnego wykazania waluty dokumentu i VAT w PLN. Przekaż ją księgowej do uzgodnienia.');
+    this.name = 'JpkFaForeignCurrencyNotSupportedError';
+  }
 }
 
 export interface JpkInvoiceAnnotations {
@@ -170,6 +179,11 @@ export function generateJpkFa(data: JpkFaInputData): string {
   if (!address) throw new MissingIssuerAddressError();
   if (data.issuedInvoices.some((inv) => inv.invoiceType === 'correction')) {
     throw new JpkFaCorrectionNotSupportedError();
+  }
+  // Generator zapisuje KodWaluty=PLN i nie emituje P_14_*W dla VAT w PLN
+  // na obcowalutowej fakturze. Do czasu pełnego mapowania odmawia pliku.
+  if (data.issuedInvoices.some((inv) => inv.currency?.trim().toUpperCase() !== 'PLN')) {
+    throw new JpkFaForeignCurrencyNotSupportedError();
   }
   if (data.issuedInvoices.length === 0) {
     // Schemat wymaga co najmniej jednej faktury — pusty okres job oznacza
