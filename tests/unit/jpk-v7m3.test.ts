@@ -18,6 +18,7 @@ const KSEF_ZAKUP = '5252241585-20260806-0100001AF629-B0';
 function faktura(o: Partial<JpkInvoice>): JpkInvoice {
   return {
     invoiceNumber: 'FS/1/08',
+    currency: 'PLN',
     invoiceType: 'regular',
     issueDate: '2026-08-05',
     buyerName: 'Klient Sp. z o.o.',

@@ -7,6 +7,7 @@ vi.mock('@/lib/ksef/claim-environment', () => ({
 }));
 
 import { getMonthlyFigures, getSalesSeries } from '@/lib/dashboard/monthly-figures';
+import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 type Invoice = {
@@ -19,6 +20,7 @@ type Invoice = {
   gross_total: number;
   net_total: number;
   vat_total: number;
+  currency: string | null;
 };
 
 function invoice(
@@ -38,6 +40,7 @@ function invoice(
     gross_total: gross,
     net_total: gross / 2,
     vat_total: gross / 10,
+    currency: 'PLN',
   };
 }
 
@@ -228,5 +231,34 @@ describe('dashboard figures after a KSeF environment switch', () => {
     await expect(getMonthlyFigures(
       client, TENANT, new Date('2026-09-15T12:00:00Z'),
     )).rejects.toThrow('Nie można odczytać liczb miesiąca');
+  });
+});
+
+// C-11 (#128): pulpit sumuje złotówki — przyjęta faktura w walucie obcej
+// albo bez waluty zatrzymuje kartę i wykres zamiast policzyć EUR jak zł.
+describe('dashboard sums only confirmed PLN', () => {
+  const now = new Date('2026-09-15T12:00:00Z');
+  const withCurrency = (row: Invoice, currency: string | null): Invoice => ({ ...row, currency });
+
+  it.each([
+    ['current month in EUR', withCurrency(invoice('2026-09-04', 'accepted', 'production', 100), 'EUR')],
+    ['previous month without currency', withCurrency(invoice('2026-08-03', 'accepted', 'production', 40), null)],
+  ])('monthly card: %s stops aggregation', async (_label, row) => {
+    const { client } = queryClient([...rows.filter((r) => r.id !== row.id), row]);
+    await expect(getMonthlyFigures(client, TENANT, now)).rejects.toThrow(OutgoingInvoiceCurrencyNotSupportedError);
+  });
+
+  it.each([
+    ['current year in EUR', withCurrency(invoice('2026-09-04', 'accepted', 'production', 100), 'EUR')],
+    ['previous year without currency', withCurrency(invoice('2025-09-03', 'accepted', 'production', 80), null)],
+  ])('sales chart: %s stops aggregation', async (_label, row) => {
+    const { client } = queryClient([...rows.filter((r) => r.id !== row.id), row]);
+    await expect(getSalesSeries(client, TENANT, now)).rejects.toThrow(OutgoingInvoiceCurrencyNotSupportedError);
+  });
+
+  it('a foreign-currency invoice from another KSeF environment does not block PROD figures', async () => {
+    const other = withCurrency(invoice('2026-09-02', 'accepted', 'test', 1_000), 'EUR');
+    const { client } = queryClient([...rows.filter((r) => r.id !== other.id), other]);
+    await expect(getMonthlyFigures(client, TENANT, now)).resolves.toBeDefined();
   });
 });

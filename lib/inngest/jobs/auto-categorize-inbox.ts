@@ -12,6 +12,8 @@ import {
   type ExtractedInvoice,
 } from '@/lib/ocr/schema';
 import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
+import { nbpRateForCost } from '@/lib/nbp/client';
+import { costInPln, documentCurrency, HOME_CURRENCY } from '@/lib/ocr/currency';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { Database, Json } from '@/types/database';
@@ -100,7 +102,12 @@ function inferVatRate(invoice: InvoiceWithLines): ExtractedInvoice['vat_rate'] {
 
   // Bez znaku: korekta „in minus” ma ujemne netto i VAT, a stawka ta sama.
   const net = Math.abs(Number(invoice.net_total ?? 0));
-  const vat = Math.abs(Number(invoice.vat_total ?? 0));
+  // Kontrakt KSeF: vatAmount w metadanych jest ZAWSZE w PLN, ale netto/brutto
+  // w walucie faktury. Stawkę z metadanych bez pozycji wolno szacować tylko
+  // z kwot w tej samej jednostce.
+  const vat = invoice.currency?.trim().toUpperCase() === HOME_CURRENCY
+    ? Math.abs(Number(invoice.vat_total ?? 0))
+    : Math.abs(Number(invoice.gross_total ?? 0) - Number(invoice.net_total ?? 0));
   if (net <= 0 && vat <= 0) return '0';
   if (vat <= 0) return '0';
   const ratio = vat / net;
@@ -125,7 +132,22 @@ function buildLineItems(
 function invoiceToExtracted(invoice: InvoiceWithLines): ExtractedInvoice {
   const gross = Number(invoice.gross_total ?? 0);
   const net = Number(invoice.net_total ?? 0);
-  const vat = Number(invoice.vat_total ?? 0);
+  const vatAmountPln = Number(invoice.vat_total);
+  // Metadane skrzynki KSeF zawierają walutę. Brak/niepoprawna wartość nie
+  // może oznaczać PLN — to zamieniłoby np. 100 EUR w 100 zł w KPiR.
+  const currency = invoice.currency?.trim().toUpperCase();
+  if (!currency || !/^[A-Z]{3}$/.test(currency)) {
+    throw new NonRetriableError('Brak poprawnej waluty faktury KSeF — nie tworzę kosztu');
+  }
+  if (invoice.vat_total === null || !Number.isFinite(vatAmountPln)) {
+    throw new NonRetriableError('Brak poprawnej kwoty VAT w metadanych KSeF');
+  }
+  const vatInDocumentCurrency = currency === HOME_CURRENCY
+    ? vatAmountPln
+    : gross - net;
+  if (vatInDocumentCurrency !== 0 && Math.sign(vatInDocumentCurrency) !== Math.sign(gross)) {
+    throw new NonRetriableError('Niespójne kwoty netto i brutto faktury KSeF');
+  }
 
   // Korekta „in minus” (dostawca obniża cenę) ma ujemne kwoty. Zwykła faktura
   // ich mieć nie może, więc sam znak wystarcza — bez zgadywania typu z KSeF.
@@ -147,10 +169,11 @@ function invoiceToExtracted(invoice: InvoiceWithLines): ExtractedInvoice {
     document_number: docNo,
     document_type: 'invoice' as const,
     issue_date: invoice.issue_date,
+    currency,
     // Schemat OCR przyjmuje kwoty nieujemne — walidujemy bez znaku, znak
     // wraca niżej.
     net_amount: Math.abs(net),
-    vat_amount: Math.abs(vat),
+    vat_amount: Math.abs(vatInDocumentCurrency),
     gross_amount: Math.abs(gross),
     vat_rate: inferVatRate(invoice),
     line_items: buildLineItems(invoice.invoice_line_items),
@@ -160,7 +183,7 @@ function invoiceToExtracted(invoice: InvoiceWithLines): ExtractedInvoice {
 
   const parsed = extractedInvoiceSchema.parse(draft);
   return gross < 0
-    ? { ...parsed, net_amount: net, vat_amount: vat, gross_amount: gross }
+    ? { ...parsed, net_amount: net, vat_amount: vatInDocumentCurrency, gross_amount: gross }
     : parsed;
 }
 
@@ -190,7 +213,9 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     }
     const supabase = createAdminClient();
 
-    const extracted = await step.run('fetch-invoice', async () => {
+    // Nowa nazwa kroku wymusza ponowny odczyt waluty także przy wznowieniu
+    // starszego przebiegu Inngest z zapamiętanym wynikiem `fetch-invoice`.
+    const { extracted, vatAmountPln } = await step.run('fetch-invoice-with-currency', async () => {
       const { data, error } = await supabase
         .from('invoices')
         .select(
@@ -206,6 +231,7 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
           gross_total,
           net_total,
           vat_total,
+          currency,
           fa3_data,
           invoice_line_items (*)
         `,
@@ -226,11 +252,39 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
         throw new NonRetriableError('Tylko faktury incoming z inbox');
       }
 
-      return invoiceToExtracted(row);
+      return {
+        extracted: invoiceToExtracted(row),
+        vatAmountPln: Number(row.vat_total),
+      };
     });
 
-    const categorization = await step.run('categorize', async () => {
-      return categorizeExpense(tenantId, unsignedForCategorization(extracted));
+    const currency = documentCurrency(extracted);
+    const fxLookup = currency === HOME_CURRENCY
+      ? null
+      : await step.run('nbp-rate', () => nbpRateForCost(currency, extracted.issue_date));
+    const cost = costInPln(extracted, extracted.issue_date, fxLookup);
+    const needsCurrencyReview = currency !== HOME_CURRENCY;
+    const note = needsCurrencyReview
+      ? `${cost.note ?? ''} VAT z metadanych KSeF: ${vatAmountPln.toFixed(2)} PLN. Sprawdź oryginalny XML i kwoty przed włączeniem kosztu do KPiR.`.trim()
+      : cost.note;
+    const categorization = await step.run('categorize-pln', async () => {
+      // Klasyfikator (także prompt AI) zakłada PLN. Bez kursu nie przekazujemy
+      // mu liczby EUR opisanej jako złotówki ani nie wysyłamy danych dostawcy.
+      if (cost.kind === 'missing_rate') {
+        return {
+          kpir_column: 'col_13' as const,
+          category_label: 'Do weryfikacji waluty',
+          confidence: 0,
+          method: 'manual' as const,
+        };
+      }
+      const amountsForCategory = {
+        ...extracted,
+        net_amount: cost.net,
+        vat_amount: cost.vat,
+        gross_amount: cost.gross,
+      };
+      return categorizeExpense(tenantId, unsignedForCategorization(amountsForCategory));
     });
 
     await step.run('create-expense', async () => {
@@ -313,16 +367,37 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
           document_number: extracted.document_number,
           document_type: 'invoice',
           issue_date: extracted.issue_date,
-          net_amount: extracted.net_amount,
-          vat_amount: extracted.vat_amount,
-          gross_amount: extracted.gross_amount,
+          net_amount: cost.kind === 'pln' ? cost.net : extracted.net_amount,
+          // KSeF vatAmount to PLN. Bez kursu nie mieszamy PLN z kwotami
+          // źródłowymi w jednej kolumnie: VAT zostaje w śladzie metadanych.
+          vat_amount: needsCurrencyReview
+            ? (cost.kind === 'pln' ? vatAmountPln : 0)
+            : extracted.vat_amount,
+          gross_amount: cost.kind === 'pln' ? cost.gross : extracted.gross_amount,
           vat_rate: extracted.vat_rate,
-          vat_deductible_amount: vatExempt ? 0 : extracted.vat_amount,
+          vat_deductible_amount: cost.kind === 'missing_rate'
+            ? 0
+            : (cost.vatDeductible ?? (vatExempt ? 0 : extracted.vat_amount)),
+          // Sam kurs NBP nie potwierdza kwot VAT z XML. Faktura walutowa
+          // czeka poza KPiR na ręczny przegląd także wtedy, gdy kurs znaleziono.
+          ...(needsCurrencyReview ? { is_deductible: false } : {}),
+          notes: note,
+          // Oryginał z KSeF i identyfikowalny kurs zostają przy koszcie.
+          ...(currency !== HOME_CURRENCY ? {
+            ocr_extracted_data: {
+              source: 'ksef_inbox',
+              currency,
+              net_amount: extracted.net_amount,
+              vat_amount_pln_metadata: vatAmountPln,
+              gross_amount: extracted.gross_amount,
+              fx: cost.kind === 'pln' ? cost.fx : null,
+            } as Json,
+          } : {}),
           kpir_column: categorization.kpir_column,
           category_label: categorization.category_label,
           categorization_method: categorization.method,
           categorization_confidence: categorization.confidence,
-          is_reviewed: categorization.confidence > 0.9,
+          is_reviewed: !needsCurrencyReview && categorization.confidence > 0.9,
         })
         .select('id')
         .single();

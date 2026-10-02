@@ -46,7 +46,7 @@ describe('generateJpkFa — KodUrzedu', () => {
     periodEnd: '2026-08-31',
     issuedInvoices: [
       {
-        invoiceNumber: 'FV/1', invoiceType: 'regular' as const, issueDate: '2026-08-10', buyerName: 'Klient',
+        invoiceNumber: 'FV/1', currency: 'PLN', invoiceType: 'regular' as const, issueDate: '2026-08-10', buyerName: 'Klient',
         netTotal: 100, vatTotal: 23, grossTotal: 123,
         lines: [{ position: 1, name: 'Usługa', unit: 'szt.', quantity: 1, unitPriceNet: 100, netAmount: 100, vatRate: '23' }],
       },

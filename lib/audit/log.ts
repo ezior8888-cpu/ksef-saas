@@ -44,6 +44,8 @@ export type AuditAction =
   | 'tenant.user_role_changed'
   | 'tenant.ksef_verified'
   | 'tenant.ksef_nip_ownership_claimed'
+  | 'expense.foreign_currency_reviewed'
+  | 'expense.foreign_currency_excluded'
   // Agent FLO — wykonanie propozycji zatwierdzonej kliknięciem człowieka.
   // Metadane niosą identyfikator żetonu zgody i tytuł, który klient widział
   // na karcie: to jest odpowiedź na reklamację „ja tego nie klikałem”.

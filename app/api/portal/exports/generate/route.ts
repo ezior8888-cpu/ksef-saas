@@ -8,8 +8,10 @@ import { z } from 'zod';
 import { hashToken } from '@/lib/accountant/tokens';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
+import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
+import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
-import { generateJpkFa, JpkFaCorrectionNotSupportedError } from '@/lib/exports/jpk-fa-generator';
+import { generateJpkFa, JpkFaCorrectionNotSupportedError, JpkFaForeignCurrencyNotSupportedError } from '@/lib/exports/jpk-fa-generator';
 import { assertJpkMatchesSchema, JpkSchemaError } from '@/lib/exports/jpk-schema-check';
 import { MissingTaxOfficeError, readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
@@ -108,7 +110,7 @@ export async function POST(req: NextRequest) {
       tenantId,
       periodStart,
       periodEnd,
-      direction: 'both',
+      direction: format === 'jpk_fa' ? 'issued' : 'both',
       includeCorrections: true,
       includeExpenses: format === 'kpir_excel',
     });
@@ -143,7 +145,7 @@ export async function POST(req: NextRequest) {
         });
         await assertJpkMatchesSchema('JPK_FA', xml);
       } catch (e) {
-        if (e instanceof JpkFaCorrectionNotSupportedError) {
+        if (e instanceof JpkFaCorrectionNotSupportedError || e instanceof JpkFaForeignCurrencyNotSupportedError) {
           return NextResponse.json({ error: e.message }, { status: 422 });
         }
         if (e instanceof JpkSchemaError) {
@@ -162,13 +164,20 @@ export async function POST(req: NextRequest) {
     } else {
       // Przychody z faktur wystawionych, koszty z listy wydatków — to samo
       // źródło co KPiR w aplikacji (do 26.09 koszty szły z faktur otrzymanych).
-      buffer = await generateKpirXlsx({
-        issuer: data.issuer,
-        periodStart,
-        periodEnd,
-        issuedInvoices: data.issuedInvoices,
-        expenses: data.expenses,
-      });
+      try {
+        buffer = await generateKpirXlsx({
+          issuer: data.issuer,
+          periodStart,
+          periodEnd,
+          issuedInvoices: data.issuedInvoices,
+          expenses: data.expenses,
+        });
+      } catch (e) {
+        if (e instanceof OutgoingInvoiceCurrencyNotSupportedError) {
+          return NextResponse.json({ error: e.message }, { status: 422 });
+        }
+        throw e;
+      }
       filename = `KPiR_${nipSeg}_${periodStart}_${periodEnd}.xlsx`;
       contentType =
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -199,6 +208,9 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (e) {
+    if (e instanceof KsefExpenseCurrencyNotSupportedError) {
+      return NextResponse.json({ error: e.message }, { status: 422 });
+    }
     const errorId = Sentry.captureException(e, {
       tags: { area: 'accountant.portal_export' },
     });

@@ -92,7 +92,7 @@ function database() {
 
 function invoice(id: string, tenant = 'tenant-a', direction = 'outgoing'): Row {
   return {
-    id, tenant_id: tenant, direction, invoice_kind: 'regular', ksef_status: 'accepted', ksef_environment: 'test',
+    id, tenant_id: tenant, direction, invoice_kind: 'regular', ksef_status: 'accepted', ksef_environment: 'test', currency: 'PLN',
     submitted_to_ksef_at: null, offline_idempotency_key: null,
     offline_qr_offline: null, offline_qr_certyfikat: null,
     internal_number: id, issue_date: '2026-01-01', created_at: '2026-01-01T12:00:00Z',
@@ -239,6 +239,36 @@ describe('tenant boundaries for accounting exports', () => {
       issue_date: '2026-01-10', is_deductible: true,
     });
     await expect(fetchInvoicesForExport(exportParams)).rejects.toThrow(/KSeF expense/);
+  });
+
+  it('odmawia eksportu historycznego kosztu EUR z KSeF ustawionego jako koszt bez przeliczenia', async () => {
+    tables.invoices.push({ ...invoice('inv-eur', 'tenant-a', 'incoming'), currency: 'EUR' });
+    tables.expenses.push({
+      id: 'exp-eur', tenant_id: 'tenant-a', issue_date: '2026-01-10',
+      document_number: 'FV/EUR', document_type: 'invoice',
+      seller_name: 'Dostawca', net_amount: 100, vat_amount: 23, gross_amount: 123,
+      vat_deductible_amount: 23, is_deductible: true, is_reviewed: true,
+      source: 'ksef_inbox', ksef_invoice_id: 'inv-eur', ocr_extracted_data: null,
+    });
+    await expect(fetchInvoicesForExport(exportParams)).rejects.toThrow('Raport wstrzymany');
+  });
+
+  it('pozwala wyeksportować koszt EUR dopiero po śladzie kursu i przeglądzie', async () => {
+    tables.invoices.push({ ...invoice('inv-eur', 'tenant-a', 'incoming'), currency: 'EUR' });
+    tables.expenses.push({
+      id: 'exp-eur', tenant_id: 'tenant-a', issue_date: '2026-01-10',
+      document_number: 'FV/EUR', document_type: 'invoice',
+      seller_name: 'Dostawca', net_amount: 425, vat_amount: 98.75, gross_amount: 522.75,
+      vat_deductible_amount: 0, is_deductible: true, is_reviewed: true,
+      source: 'ksef_inbox', ksef_invoice_id: 'inv-eur',
+      ocr_extracted_data: {
+        source: 'ksef_inbox', currency: 'EUR',
+        fx: { currency: 'EUR', mid: 4.25, tableNo: '006/A/NBP/2026', effectiveDate: '2026-01-09', appliedFor: '2026-01-10' },
+      },
+    });
+    const data = await fetchInvoicesForExport(exportParams);
+    expect(data.expenses.map((row) => row.id)).toEqual(['exp-eur']);
+    expect(data.receivedInvoices.find((row) => row.invoiceNumber === 'inv-eur')).toMatchObject({ currency: 'EUR' });
   });
 
   it('issued-only export does not read expenses at all', async () => {

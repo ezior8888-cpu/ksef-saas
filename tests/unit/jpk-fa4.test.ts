@@ -4,6 +4,7 @@ import { MissingIssuerAddressError, registeredAddressFrom } from '@/lib/exports/
 import {
   generateJpkFa,
   JpkFaCorrectionNotSupportedError,
+  JpkFaForeignCurrencyNotSupportedError,
   type JpkFaInputData,
   type JpkInvoice,
 } from '@/lib/exports/jpk-fa-generator';
@@ -25,7 +26,7 @@ const ADRES = {
 
 function faktura(o: Partial<JpkInvoice> = {}): JpkInvoice {
   return {
-    invoiceNumber: 'FV/1', invoiceType: 'regular', issueDate: '2026-09-10', buyerName: 'Klient Sp. z o.o.',
+    invoiceNumber: 'FV/1', currency: 'PLN', invoiceType: 'regular', issueDate: '2026-09-10', buyerName: 'Klient Sp. z o.o.',
     buyerNip: '5252241585', buyerAddress: 'ul. Klienta 10, 02-001 Warszawa',
     netTotal: 1000, vatTotal: 230, grossTotal: 1230,
     lines: [{ position: 1, name: 'Usługa', unit: 'usł.', quantity: 1, unitPriceNet: 1000, netAmount: 1000, vatRate: '23', vatAmount: 230 }],
@@ -199,6 +200,15 @@ describe('zaliczka i faktura rozliczeniowa', () => {
     expect(() => generateJpkFa(dane([faktura(), faktura({ invoiceNumber: 'KOR/1', invoiceType: 'correction' })]))).toThrow(
       JpkFaCorrectionNotSupportedError,
     );
+  });
+
+  it.each([
+    ['EUR', 'EUR'],
+    ['brak waluty', undefined],
+    ['waluta nieznana', 'XYZ'],
+  ])('%s — odmowa zamiast pliku oznaczonego jako PLN', (_opis, currency) => {
+    expect(() => generateJpkFa(dane([faktura(), faktura({ invoiceNumber: 'FV/2', currency })])))
+      .toThrow(JpkFaForeignCurrencyNotSupportedError);
   });
 });
 

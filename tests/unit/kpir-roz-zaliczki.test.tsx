@@ -107,6 +107,7 @@ function faktura(o: Row): Row {
   return {
     tenant_id: 'firma-a', direction: 'outgoing', invoice_kind: 'regular', ksef_status: 'accepted', ksef_environment: 'test',
     issue_date: '2026-09-10', net_total: 0, vat_total: 0, gross_total: 0,
+    currency: 'PLN',
     advance_invoice_ids: [], fa3_data: null, buyer_data: { name: 'Klient' },
     ...o,
   };
@@ -198,7 +199,7 @@ describe('eksport KPiR', () => {
 
   it('arkusz: ROZ w kol. 7 i 9 tylko resztą, z uwagą; suma okresu bez dubla', async () => {
     const sprzedaz = (o: Partial<JpkInvoice>): JpkInvoice => ({
-      invoiceNumber: 'X', invoiceType: 'regular', issueDate: '2026-09-10', buyerName: 'Klient',
+      invoiceNumber: 'X', currency: 'PLN', invoiceType: 'regular', issueDate: '2026-09-10', buyerName: 'Klient',
       netTotal: 0, vatTotal: 0, grossTotal: 0, lines: [], ...o,
     });
     const buffer = await generateKpirXlsx({
@@ -304,5 +305,20 @@ describe('strony — podpięcie odczytu zaliczek', () => {
   it('Przepływy: błąd odczytu zaliczek idzie do granicy błędu, nie do zera', async () => {
     failWhen = zapytanieOZaliczki;
     await expect(PrzeplywyPage()).rejects.toThrow(/zaliczek/);
+  });
+
+  it('KPiR: faktura sprzedaży EUR wstrzymuje raport z kwotami PLN', async () => {
+    tables.invoices.find((row) => row.id === 'fv-1')!.currency = 'EUR';
+    const page = await KpirPage({
+      searchParams: Promise.resolve({ month: String(now.getMonth() + 1), year: String(now.getFullYear()) }),
+    });
+    const html = renderToStaticMarkup(page);
+    expect(html).toContain('Raport wstrzymany');
+    expect(html).not.toContain(formatPlMoney(30000));
+  });
+
+  it('Przepływy: faktura sprzedaży EUR zatrzymuje obliczenie przychodu', async () => {
+    tables.invoices.find((row) => row.id === 'fv-1')!.currency = 'EUR';
+    await expect(PrzeplywyPage()).rejects.toThrow(/potwierdzonej waluty PLN/);
   });
 });

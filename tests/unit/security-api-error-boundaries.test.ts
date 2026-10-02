@@ -147,8 +147,9 @@ describe('SEC-A-01: HTTP responses never expose internal exception messages', ()
     expect(await response.json()).toEqual({
       error: 'Nie udało się wygenerować pliku. Spróbuj ponownie później.', errorId: ERROR_ID,
     });
+    // JPK_FA to faktury sprzedawcy — portal czyta tylko wystawione (C-11, #128).
     expect(mocks.exportData).toHaveBeenCalledWith(expect.objectContaining({
-      direction: 'both', includeExpenses: false,
+      direction: 'issued', includeExpenses: false,
     }));
   });
 

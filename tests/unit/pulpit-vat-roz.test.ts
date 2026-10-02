@@ -87,6 +87,7 @@ function invoice(id: string, fields: Row): Row {
     ksef_environment: 'test',
     invoice_kind: 'vat',
     advance_invoice_ids: null,
+    currency: 'PLN',
     ...fields,
   };
 }

@@ -146,6 +146,19 @@ describe('schemat OCR — waluta', () => {
 });
 
 describe('costInPln', () => {
+  it('ujemna korekta walutowa odwraca kwotę dodatnią co do grosza', () => {
+    const lookup = { found: true as const, rate: { currency: 'EUR', mid: 4.255, tableNo: '188/A/NBP/2026', effectiveDate: '2026-09-25' }, gapDays: 1 };
+    const plus = costInPln({ currency: 'EUR', net_amount: 1, vat_amount: 0, gross_amount: 1 }, '2026-09-28', lookup);
+    const minus = costInPln({ currency: 'EUR', net_amount: -1, vat_amount: 0, gross_amount: -1 }, '2026-09-28', lookup);
+    expect(plus.kind).toBe('pln');
+    expect(minus.kind).toBe('pln');
+    if (plus.kind === 'pln' && minus.kind === 'pln') {
+      expect(plus.gross).toBe(4.26);
+      expect(minus.gross).toBe(-plus.gross);
+      expect(minus.net).toBe(-plus.net);
+    }
+  });
+
   it('złotówki bez zmian, VAT do odliczenia wg dotychczasowej reguły', () => {
     expect(costInPln({ currency: 'PLN', net_amount: 100, vat_amount: 23, gross_amount: 123 }, '2026-09-28', null)).toMatchObject({
       kind: 'pln', net: 100, vat: 23, gross: 123, vatDeductible: null, fx: null, note: null,

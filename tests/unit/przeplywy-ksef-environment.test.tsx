@@ -38,9 +38,9 @@ function client(options: {
   withholdExactCount?: boolean;
 } = {}) {
   const invoices: Row[] = [
-    { tenant_id: TENANT, direction: 'outgoing', ksef_status: 'accepted',
+    { tenant_id: TENANT, direction: 'outgoing', currency: 'PLN', ksef_status: 'accepted',
       ksef_environment: 'test', issue_date: '2026-09-02', net_total: 1_000, gross_total: 1_230 },
-    { tenant_id: TENANT, direction: 'outgoing', ksef_status: 'accepted',
+    { tenant_id: TENANT, direction: 'outgoing', currency: 'PLN', ksef_status: 'accepted',
       ksef_environment: 'production', issue_date: '2026-09-03', net_total: 100, gross_total: 123 },
     ...(options.incomingInvoices ?? []),
     ...(options.outgoingInvoices ?? []),
@@ -148,11 +148,11 @@ describe('cash flow after switching from TEST to PROD', () => {
         expense('ksef_inbox', 'prod-in', 30),
       ],
       incomingInvoices: [
-        { id: 'test-in', tenant_id: TENANT, direction: 'incoming',
+        { id: 'test-in', tenant_id: TENANT, direction: 'incoming', currency: 'PLN',
           ksef_status: 'accepted', ksef_environment: 'test' },
-        { id: 'demo-in', tenant_id: TENANT, direction: 'incoming',
+        { id: 'demo-in', tenant_id: TENANT, direction: 'incoming', currency: 'PLN',
           ksef_status: 'accepted', ksef_environment: 'demo' },
-        { id: 'prod-in', tenant_id: TENANT, direction: 'incoming',
+        { id: 'prod-in', tenant_id: TENANT, direction: 'incoming', currency: 'PLN',
           ksef_status: 'accepted', ksef_environment: 'production' },
       ],
     });
@@ -179,7 +179,7 @@ describe('cash flow after switching from TEST to PROD', () => {
   it('stops the cash-flow read when a linked invoice has no environment provenance', async () => {
     const supabase = client({
       expenses: [expense('ksef_inbox', 'unknown-env', 500)],
-      incomingInvoices: [{ id: 'unknown-env', tenant_id: TENANT, direction: 'incoming',
+      incomingInvoices: [{ id: 'unknown-env', tenant_id: TENANT, direction: 'incoming', currency: 'PLN',
         ksef_status: 'accepted', ksef_environment: null }],
     });
     mocks.context.mockResolvedValue({ supabase, tenantId: TENANT });
@@ -194,7 +194,7 @@ describe('cash flow after switching from TEST to PROD', () => {
       outgoingInvoices: Array.from({ length: 1200 }, (_, index) => ({
         id: `prod-${String(index).padStart(4, '0')}`,
         tenant_id: TENANT,
-        direction: 'outgoing',
+        direction: 'outgoing', currency: 'PLN',
         ksef_status: 'accepted',
         ksef_environment: 'production',
         issue_date: '2026-09-05',

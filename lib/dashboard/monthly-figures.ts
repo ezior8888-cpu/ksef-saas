@@ -5,6 +5,7 @@ import {
 import type { PageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
+import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
 import type { KsefEnvironment } from '@/types/ksef';
 
 /**
@@ -72,6 +73,7 @@ type InvoiceSummary = {
   gross_total: number | string | null;
   net_total: number | string | null;
   vat_total: number | string | null;
+  currency: string | null;
 };
 
 /** Local calendar dates must not shift to the previous day in European time zones. */
@@ -120,9 +122,9 @@ async function fetchAcceptedInvoices(
   endExclusive: string,
   errorMessage: string,
 ): Promise<InvoiceSummary[]> {
-  return readCompletePages(errorMessage, (from, to) => supabase
+  const rows = await readCompletePages(errorMessage, (from, to) => supabase
       .from('invoices')
-      .select(`issue_date, gross_total, net_total, vat_total, ${SETTLEMENT_COLUMNS}`, { count: 'exact' })
+      .select(`issue_date, gross_total, net_total, vat_total, currency, ${SETTLEMENT_COLUMNS}`, { count: 'exact' })
       .eq('tenant_id', tenantId)
       .eq('direction', OUTGOING)
       .eq('ksef_status', 'accepted')
@@ -131,6 +133,9 @@ async function fetchAcceptedInvoices(
       .lt('issue_date', endExclusive)
       .order('id', { ascending: true })
       .range(from, to));
+  // C-11: sumy w złotych — faktura walutowa albo bez waluty zatrzymuje pulpit.
+  assertOutgoingInvoicesInPln(rows);
+  return rows;
 }
 
 async function countLocalDrafts(

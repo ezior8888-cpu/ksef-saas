@@ -81,6 +81,7 @@ vi.mock('@/lib/exports/data-fetcher', async (orig) => ({
     issuedInvoices: [
       {
         invoiceNumber: 'FS/1/08',
+        currency: 'PLN',
         invoiceType: 'regular',
         issueDate: '2026-08-05',
         buyerName: 'Klient',

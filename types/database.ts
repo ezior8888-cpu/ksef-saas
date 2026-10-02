@@ -2642,6 +2642,16 @@ export type Database = {
         Args: { p_membership_id: string }
         Returns: undefined
       }
+      review_ksef_expense: {
+        Args: {
+          p_actor_user_id: string
+          p_expected_updated_at: string
+          p_expense_id: string
+          p_patch: Json
+          p_tenant_id: string
+        }
+        Returns: string | null
+      }
       set_invoice_reminders_paused: {
         Args: { p_invoice_id: string; p_paused: boolean; p_reason?: string | null }
         Returns: boolean

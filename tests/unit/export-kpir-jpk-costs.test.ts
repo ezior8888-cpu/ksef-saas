@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import { describe, expect, it } from 'vitest';
 
 import type { ExportExpense } from '@/lib/exports/data-fetcher';
+import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
 import type { JpkInvoice } from '@/lib/exports/jpk-fa-generator';
 import { generateJpkV7m, summarizeJpkV7m, vatPurchases } from '@/lib/exports/jpk-v7m-generator';
 import { generateKpirXlsx, kpirCostColumn } from '@/lib/exports/kpir-generator';
@@ -40,6 +41,7 @@ function koszt(o: Partial<ExportExpense> = {}): ExportExpense {
 function sprzedaz(o: Partial<JpkInvoice> = {}): JpkInvoice {
   return {
     invoiceNumber: 'FS/1/08',
+    currency: 'PLN',
     issueDate: '2026-08-05',
     buyerName: 'Klient',
     buyerNip: '5252241585',
@@ -140,6 +142,15 @@ describe('KPiR — arkusz', () => {
     expect(suma(13)).toBe(100);
     expect(suma(14)).toBe(100);
   });
+
+  it.each([
+    ['EUR', 'EUR'],
+    ['brak waluty', undefined],
+    ['waluta nieznana', 'XYZ'],
+  ] as const)('%s: nie zapisuje kwoty sprzedaży jako PLN', async (_opis, currency) => {
+    await expect(arkusz([], [sprzedaz({ currency })]))
+      .rejects.toThrow(OutgoingInvoiceCurrencyNotSupportedError);
+  });
 });
 
 describe('JPK_V7M — zakupy z kosztów', () => {
@@ -189,5 +200,15 @@ describe('JPK_V7M — zakupy z kosztów', () => {
     const xml = generateJpkV7m(data);
     expect(xml).not.toContain('<ZakupWiersz>');
     expect(summarizeJpkV7m(data)).toMatchObject({ purchaseNet: 0, vatDeductible: 0, purchaseCount: 0 });
+  });
+
+  it.each([
+    ['EUR', 'EUR'],
+    ['brak waluty', undefined],
+    ['waluta nieznana', 'XYZ'],
+  ] as const)('%s: nie tworzy ewidencji i podsumowania z kwotami obcej/nieznanej waluty', (_opis, currency) => {
+    const data = { ...dane([]), issuedInvoices: [sprzedaz(), sprzedaz({ invoiceNumber: 'FS/2/08', currency })] };
+    expect(() => generateJpkV7m(data)).toThrow(OutgoingInvoiceCurrencyNotSupportedError);
+    expect(() => summarizeJpkV7m(data)).toThrow(OutgoingInvoiceCurrencyNotSupportedError);
   });
 });

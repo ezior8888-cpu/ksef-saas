@@ -21,6 +21,13 @@ export interface CsvExportInput {
  */
 const FORMULA_START = /^[=+@\t\r]|^-(?![\d\s.,]*$)/;
 
+export class CsvForeignCurrencyNotSupportedError extends Error {
+  constructor() {
+    super('Eksport CSV wstrzymany: faktura walutowa wymaga uzgodnienia kwot PLN z XML.');
+    this.name = 'CsvForeignCurrencyNotSupportedError';
+  }
+}
+
 // ============================================================================
 // Insert Subiekt GT
 // Separator: ;   Encoding: Windows-1250   Bez BOM
@@ -152,14 +159,21 @@ export function generateUniversalCsv(data: CsvExportInput): Buffer {
 function allInvoices(
   data: CsvExportInput,
 ): Array<{ inv: JpkInvoice; party: ExportParty; totals: DocumentTotals }> {
-  return [
+  const invoices = [
     ...data.issuedInvoices.map((inv) => ({ inv, party: counterpartyOf(inv, 'issued'), totals: issuedTotals(inv) })),
     ...data.receivedInvoices.map((inv) => ({
       inv,
       party: counterpartyOf(inv, 'received'),
       totals: { net: inv.netTotal, vat: inv.vatTotal, gross: inv.grossTotal },
     })),
-  ].sort((a, b) => a.inv.issueDate.localeCompare(b.inv.issueDate));
+  ];
+  // Każdy format CSV poniżej zakłada PLN; metadane KSeF mają przy obcej
+  // walucie netto/brutto w walucie dokumentu, ale VAT w PLN. Nie wolno
+  // oznaczyć takiego wiersza jako PLN ani wyeksportować mieszanych jednostek.
+  if (invoices.some(({ inv }) => inv.currency?.trim().toUpperCase() !== 'PLN')) {
+    throw new CsvForeignCurrencyNotSupportedError();
+  }
+  return invoices.sort((a, b) => a.inv.issueDate.localeCompare(b.inv.issueDate));
 }
 
 interface DocumentTotals {

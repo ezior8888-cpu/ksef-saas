@@ -80,7 +80,7 @@ vi.mock('@/lib/exports/data-fetcher', async (orig) => ({
     issuer: { nip: '5260001246', name: 'Moja Firma' },
     issuedInvoices: [
       {
-        invoiceNumber: 'FS/1/08',
+        invoiceNumber: 'FS/1/08', currency: 'PLN',
         invoiceType: 'regular',
         issueDate: '2026-08-05',
         buyerName: 'Klient',

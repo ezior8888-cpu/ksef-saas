@@ -2,6 +2,10 @@
 // Pobieranie danych z DB do eksportów (uniform interface)
 
 import { fetchAdvanceSettlementRows } from '@/lib/invoices/advance-settlement';
+import {
+  assertKsefExpensesReadyForPln,
+  type KsefExpenseForPlnReport,
+} from '@/lib/expenses/ksef-currency-review';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -163,7 +167,7 @@ async function fetchExpensesForExport(
   const rows = await readCompletePages('expenses', (from, to) =>
     supabase
       .from('expenses')
-      .select('id, source, ksef_invoice_id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label', { count: 'exact' })
+      .select('id, source, ksef_invoice_id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label, is_reviewed, ocr_extracted_data', { count: 'exact' })
       .eq('tenant_id', params.tenantId)
       .eq('is_deductible', true)
       .gte('issue_date', params.periodStart)
@@ -202,6 +206,24 @@ async function fetchExpensesForExport(
       linked.set(String(row.id), row.ksef_invoice_id);
     }
   }
+  // C-11: koszt KSeF w walucie obcej trafia do pliku tylko po przeglądzie
+  // i ze śladem kursu — inaczej eksport się zatrzymuje.
+  const currencyRows: KsefExpenseForPlnReport[] = eligible.map((row) => ({
+    source: typeof row.source === 'string' ? row.source : null,
+    ksef_invoice_id: typeof row.ksef_invoice_id === 'string' ? row.ksef_invoice_id : null,
+    issue_date: String(row.issue_date),
+    is_reviewed: row.is_reviewed === true,
+    ocr_extracted_data: (row.ocr_extracted_data ?? null) as Json,
+  }));
+  await assertKsefExpensesReadyForPln(currencyRows, async (ids) => {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('id, currency')
+      .eq('tenant_id', params.tenantId)
+      .in('id', ids);
+    if (error) throw new Error('Nie można sprawdzić walut faktur KSeF w eksporcie');
+    return new Map((data ?? []).map((row) => [row.id, row.currency]));
+  });
   await attachKsefNumbers(supabase, params.tenantId, out, linked);
   return out;
 }
@@ -434,6 +456,7 @@ function mapInvoiceRow(
 
   return {
     invoiceNumber: row.internal_number ?? row.ksef_number ?? '',
+    currency: row.currency,
     invoiceType: mapInvoiceKind(row.invoice_kind),
     issueDate: row.issue_date,
     saleDate: row.sale_date ?? row.issue_date,

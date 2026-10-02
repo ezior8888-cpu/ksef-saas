@@ -1,4 +1,6 @@
 import { KpirView } from '@/components/expenses/kpir-view';
+import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
+import { assertKsefExpensesReadyForPln } from '@/lib/expenses/ksef-currency-review';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -55,10 +57,27 @@ export default async function KpirPage({
   visibleExpenses.sort((a, b) =>
     a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 
+  // C-11: koszt KSeF w walucie obcej wchodzi do KPiR dopiero z przeglądem
+  // i śladem kursu; bez tego raport się zatrzymuje, zamiast liczyć EUR jak zł.
+  let currencyError: string | null = null;
+  try {
+    await assertKsefExpensesReadyForPln(visibleExpenses, async (ids) => {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('id, currency')
+        .eq('tenant_id', tenantId)
+        .in('id', ids);
+      if (error) throw new Error('Nie można sprawdzić walut faktur KSeF');
+      return new Map((data ?? []).map((row) => [row.id as string, row.currency as string | null]));
+    });
+  } catch (error) {
+    currencyError = error instanceof Error ? error.message : 'Nie można potwierdzić walut kosztów KSeF';
+  }
+
   const invoices = await readCompletePages('invoices', (from, to) => supabase
     .from('invoices')
     .select(
-      'id, internal_number, issue_date, sale_date, gross_total, net_total, buyer_data, invoice_kind, advance_invoice_ids',
+      'id, internal_number, issue_date, sale_date, gross_total, net_total, buyer_data, invoice_kind, advance_invoice_ids, currency',
       { count: 'exact' },
     )
     .eq('tenant_id', tenantId)
@@ -72,15 +91,25 @@ export default async function KpirPage({
   invoices.sort((a, b) =>
     a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 
+  let outgoingCurrencyError: string | null = null;
+  try {
+    assertOutgoingInvoicesInPln(invoices);
+  } catch (error) {
+    outgoingCurrencyError = error instanceof Error ? error.message : 'Nie można potwierdzić walut sprzedaży';
+  }
+  const currencyBlocked = currencyError ?? outgoingCurrencyError;
+
   // ROZ niesie pełną wartość zamówienia — przychód liczy tylko resztę ponad
   // zaliczki, które KPiR już ma (`kpirRevenueNet`). Bez tej sumy przychód
   // z ROZ byłby zawyżony — błąd idzie na baner nad tabelą.
   let settledError: string | null = null;
   let settled = new Map<string, number>();
-  try {
-    settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices);
-  } catch (e) {
-    settledError = e instanceof Error ? e.message : 'Nie można odczytać zaliczek';
+  if (!currencyBlocked) {
+    try {
+      settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices);
+    } catch (e) {
+      settledError = e instanceof Error ? e.message : 'Nie można odczytać zaliczek';
+    }
   }
   const invoiceRows = invoices.map((inv) => ({
     ...inv,
@@ -89,17 +118,19 @@ export default async function KpirPage({
 
   return (
     <div className="space-y-6 pb-10 text-[var(--ff-on-surface)]">
-      {settledError ? (
+      {currencyBlocked ?? settledError ? (
         <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] border border-red-400/25 bg-[color-mix(in_srgb,#f87171_10%,transparent)] p-4 text-sm text-red-200">
-          {settledError}
+          {currencyBlocked ?? settledError}
         </div>
       ) : null}
-      <KpirView
-        month={month}
-        year={year}
-        expenses={visibleExpenses}
-        invoices={invoiceRows}
-      />
+      {!currencyBlocked ? (
+        <KpirView
+          month={month}
+          year={year}
+          expenses={visibleExpenses}
+          invoices={invoiceRows}
+        />
+      ) : null}
     </div>
   );
 }

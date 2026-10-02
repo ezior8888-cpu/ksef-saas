@@ -17,9 +17,9 @@ import KpirPage from '@/app/(dashboard)/reports/kpir/page';
 
 type Row = Record<string, unknown>;
 const fixtureRows: Row[] = [
-  { id: 'test', tenant_id: 'tenant-a', internal_number: 'TEST-DOCUMENT', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: 'test', issue_date: '2026-09-10' },
-  { id: 'prod', tenant_id: 'tenant-a', internal_number: 'PROD-DOCUMENT', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: 'production', issue_date: '2026-09-10' },
-  { id: 'legacy', tenant_id: 'tenant-a', internal_number: 'LEGACY-DOCUMENT', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: null, issue_date: '2026-09-10' },
+  { id: 'test', tenant_id: 'tenant-a', internal_number: 'TEST-DOCUMENT', direction: 'outgoing', currency: 'PLN', ksef_status: 'accepted', ksef_environment: 'test', issue_date: '2026-09-10' },
+  { id: 'prod', tenant_id: 'tenant-a', internal_number: 'PROD-DOCUMENT', direction: 'outgoing', currency: 'PLN', ksef_status: 'accepted', ksef_environment: 'production', issue_date: '2026-09-10' },
+  { id: 'legacy', tenant_id: 'tenant-a', internal_number: 'LEGACY-DOCUMENT', direction: 'outgoing', currency: 'PLN', ksef_status: 'accepted', ksef_environment: null, issue_date: '2026-09-10' },
 ];
 let rows: Row[];
 let expenseRows: Row[];
@@ -97,8 +97,8 @@ describe('KPiR KSeF provenance', () => {
   it('shows manual/OCR costs and matching inbox costs, excluding a linked PROD cost', async () => {
     rows = [
       rows[0]!,
-      { id: 'test-source', tenant_id: 'tenant-a', direction: 'incoming', ksef_status: 'accepted', ksef_environment: 'test', issue_date: '2026-08-10' },
-      { id: 'prod-source', tenant_id: 'tenant-a', direction: 'incoming', ksef_status: 'accepted', ksef_environment: 'production', issue_date: '2026-08-10' },
+      { id: 'test-source', tenant_id: 'tenant-a', direction: 'incoming', currency: 'PLN', ksef_status: 'accepted', ksef_environment: 'test', issue_date: '2026-08-10' },
+      { id: 'prod-source', tenant_id: 'tenant-a', direction: 'incoming', currency: 'PLN', ksef_status: 'accepted', ksef_environment: 'production', issue_date: '2026-08-10' },
     ];
     expenseRows = [
       { id: 'manual', tenant_id: 'tenant-a', source: 'manual', ksef_invoice_id: null, is_deductible: true, issue_date: '2026-09-10' },
