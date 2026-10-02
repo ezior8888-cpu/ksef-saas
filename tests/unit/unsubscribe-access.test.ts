@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ unsubscribe: vi.fn() }));
 vi.mock('@/lib/email/preferences', () => ({ unsubscribe: mocks.unsubscribe }));
 
-import { GET, POST } from '@/app/api/email/unsubscribe/route';
+import { POST } from '@/app/api/email/unsubscribe/route';
 import { createUnsubscribeToken } from '@/lib/email/unsubscribe-token';
 
 const userId = '11111111-1111-4111-8111-111111111111';
@@ -18,17 +18,23 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); });
 
+// Od 02.10 (AUD-97) GET tylko pyta; zapis robi POST z formularza strony
+// (`confirm=1`) albo One-Click klienta poczty — oba sprawdzamy tutaj.
+// GET bez zapisu: wypis-potwierdzenie.test.ts.
+const formPost = (req: Request) =>
+  POST(new Request(req.url, { method: 'POST', body: 'confirm=1', headers: { 'content-type': 'application/x-www-form-urlencoded' } }));
+
 describe.each([
-  { method: 'GET', handler: GET, source: 'settings_ui' },
-  { method: 'POST', handler: POST, source: 'one_click' },
-])('unsubscribe $method authorization', ({ method, handler, source }) => {
+  { method: 'POST (formularz strony)', handler: formPost, source: 'settings_ui' },
+  { method: 'POST (One-Click)', handler: POST, source: 'one_click' },
+])('unsubscribe $method authorization', ({ handler, source }) => {
   const request = (token?: string) => {
     const url = new URL('https://example.test/api/email/unsubscribe');
     if (token !== undefined) url.searchParams.set('t', token);
     // Identifiers outside the signed payload must not grant access.
     url.searchParams.set('userId', otherUserId);
     url.searchParams.set('category', 'transactional');
-    return new Request(url, { method });
+    return new Request(url, { method: 'POST' });
   };
 
   it.each([undefined, '', 'malformed.token'])('does not write preferences for absent or invalid token %s', async (token) => {

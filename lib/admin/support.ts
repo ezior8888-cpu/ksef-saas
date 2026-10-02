@@ -10,7 +10,10 @@
 
 import 'server-only';
 
+import type { User } from '@supabase/supabase-js';
+
 import { requireAdmin } from '@/lib/auth/admin-guard';
+import { scanAuthUsers } from '@/lib/auth/auth-users';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 // ─── 1. Recent signups ─────────────────────────────────────────────
@@ -108,15 +111,17 @@ export async function getInactiveUsers(
   const supabase = createAdminClient();
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
 
-  const { data: usersList, error } = await supabase.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000,
-  });
-  if (error) {
-    throw new Error(`auth.admin.listUsers failed: ${error.message}`);
+  // Wszystkie strony, nie pierwsze 1000 kont (AUD-125).
+  const allUsers: User[] = [];
+  try {
+    await scanAuthUsers(supabase, (u) => {
+      allUsers.push(u);
+    });
+  } catch (e) {
+    throw new Error(`auth.admin.listUsers failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  const filtered = usersList.users
+  const filtered = allUsers
     .filter((u) => {
       // Skip nie-potwierdzeni email (nigdy się nie zalogowali = oczekiwane)
       if (!u.email_confirmed_at) return false;

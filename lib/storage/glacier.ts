@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 let cachedClient: S3Client | null = null;
 
@@ -59,4 +59,14 @@ export async function uploadToGlacier(
   );
 
   return key;
+}
+
+/**
+ * Usuwa kopię z archiwum — po upływie retencji (AUD-45). Brak obiektu to
+ * nie błąd (S3 odpowiada sukcesem), więc ponowienie jest bezpieczne.
+ */
+export async function deleteFromGlacier(key: string): Promise<void> {
+  await getGlacierClient().send(
+    new DeleteObjectCommand({ Bucket: getArchiveBucket(), Key: key }),
+  );
 }

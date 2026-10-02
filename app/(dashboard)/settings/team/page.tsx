@@ -1,6 +1,7 @@
 import { Users } from 'lucide-react';
 
 import { TeamManagement } from '@/components/team/team-management';
+import { emailsForUserIds } from '@/lib/auth/auth-users';
 import { getPageContextWithRole } from '@/lib/supabase/page-context';
 import { createAdminClient } from '@/lib/supabase/server';
 
@@ -72,13 +73,8 @@ export default async function TeamSettingsPage() {
     userIds.add(r.requested_by_user_id),
   );
 
-  const emailMap = new Map<string, string>();
-  if (userIds.size > 0) {
-    const { data: list } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    for (const u of list?.users ?? []) {
-      if (userIds.has(u.id)) emailMap.set(u.id, u.email ?? '');
-    }
-  }
+  // Po identyfikatorach, nie z pierwszej strony wszystkich kont (AUD-125).
+  const emailMap = userIds.size > 0 ? await emailsForUserIds(admin, userIds) : new Map<string, string>();
 
   type MembershipRow = {
     id: string;
