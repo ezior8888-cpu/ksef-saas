@@ -42,7 +42,8 @@ export const MONTHLY_HARD_LIMIT_PLN = 3.0;
  */
 export const DAILY_HARD_LIMIT_PLN = 0.6;
 
-export type FloModel = 'claude-haiku-4-5' | 'claude-sonnet-5';
+/** `claude-sonnet-4-6` — OCR i klasyfikator kosztów (budżet AI firmy, AUD-107). */
+export type FloModel = 'claude-haiku-4-5' | 'claude-sonnet-5' | 'claude-sonnet-4-6';
 
 export interface TokenUsage {
   inputTokens: number;
@@ -57,6 +58,7 @@ export interface TokenUsage {
 const PRICE_PER_MTOK: Record<FloModel, { input: number; output: number }> = {
   'claude-haiku-4-5': { input: 1, output: 5 },
   'claude-sonnet-5': { input: 3, output: 15 },
+  'claude-sonnet-4-6': { input: 3, output: 15 },
 };
 
 const CACHE_READ_MULTIPLIER = 0.1;
