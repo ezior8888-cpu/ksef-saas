@@ -349,6 +349,20 @@ znaczy, że PostgREST znalazł tabelę i odmówił dopiero na autoryzacji
 (zapytanie leci bez tokenu). Dopiero `PGRST205` (brak tabeli) albo
 `PGRST204` (brak kolumny) oznaczają nieprzeładowany cache schematu.
 
+**Typy bazy (`types/database.ts`) po migracji zmieniającej schemat** — nie
+poprawiaj ich ręcznie, wygeneruj z produkcji (tylko odczyt schematu, przez
+`postgres-meta` na `db-1`) i dołącz do najbliższego PR:
+
+```bash
+ssh -i $K root@$DB 'C=$(docker ps --format "{{.Names}}" | grep supabase-meta)
+IP=$(docker inspect -f "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" $C)
+curl -sf "http://$IP:8080/generators/typescript?included_schemas=graphql_public,public&detect_one_to_one_relationships=true"' \
+  > /tmp/database.ts
+```
+
+Zachowaj nagłówek pliku i blok `__InternalSupabase` (wersja PostgREST
+z obrazu `$RESTC`), potem `pnpm typecheck`.
+
 ### Wdrożenie produkcji
 
 Wdrożeniami steruje Coolify na `ops-1`. Najpewniejsza droga to `tinker`,
