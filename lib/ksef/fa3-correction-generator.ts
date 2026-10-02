@@ -130,19 +130,47 @@ function sameLine(a: InvoiceLine, b: InvoiceLine): boolean {
  * Korekta „przed/po” (AUD-03). XSD FaWiersz: „dane pozycji korygowanych wg
  * stanu przed korektą i po korekcie jako osobne wiersze”, wiersz „przed”
  * ze znacznikiem `StanPrzed`, odrębna numeracja. Pozycja bez zmian nie jest
- * korygowana, więc do XML nie trafia. Pary po indeksie — formularz zaczyna
- * od kopii pozycji faktury pierwotnej (`getCorrectionParentContextAction`);
- * pozycja dopisana ma tylko wiersz „po”, usunięta — tylko „przed”.
+ * korygowana, więc do XML nie trafia; pozycja dopisana ma tylko wiersz „po”,
+ * usunięta — tylko „przed”.
+ *
+ * Parowanie (F-019): najpierw pozycje identyczne w obu stanach (niezależnie
+ * od kolejności — przesunięcie to nie korekta), potem zmienione po nazwie,
+ * a reszta po kolejności (np. zmieniona nazwa). Samo parowanie po indeksie
+ * po usunięciu środkowej pozycji opisywało inną zmianę („B przed → C po”).
  */
 function beforeAfterRows(before: InvoiceLine[], after: InvoiceLine[]): CorrectionRow[] {
+  const pairOf = new Map<number, number | null>(); // indeks „przed” → indeks „po” albo null (usunięta)
+  const usedAfter = new Set<number>();
+  const unchanged = new Set<number>();
+
+  const claim = (bi: number, match: (a: InvoiceLine) => boolean): boolean => {
+    const ai = after.findIndex((a, i) => !usedAfter.has(i) && match(a));
+    if (ai === -1) return false;
+    usedAfter.add(ai);
+    pairOf.set(bi, ai);
+    return true;
+  };
+
+  before.forEach((b, bi) => {
+    if (claim(bi, (a) => sameLine(b, a))) unchanged.add(bi);
+  });
+  before.forEach((b, bi) => {
+    if (!pairOf.has(bi)) claim(bi, (a) => a.name === b.name);
+  });
+  before.forEach((_b, bi) => {
+    if (!pairOf.has(bi) && !claim(bi, () => true)) pairOf.set(bi, null);
+  });
+
   const rows: CorrectionRow[] = [];
-  for (let i = 0; i < Math.max(before.length, after.length); i += 1) {
-    const b = before[i];
-    const a = after[i];
-    if (b && a && sameLine(b, a)) continue;
-    if (b) rows.push({ ...toPreparedLineItems([b])[0]!, stanPrzed: true });
-    if (a) rows.push(toPreparedLineItems([a])[0]!);
-  }
+  before.forEach((b, bi) => {
+    if (unchanged.has(bi)) return;
+    rows.push({ ...toPreparedLineItems([b])[0]!, stanPrzed: true });
+    const ai = pairOf.get(bi);
+    if (ai != null) rows.push(toPreparedLineItems([after[ai]!])[0]!);
+  });
+  after.forEach((a, ai) => {
+    if (!usedAfter.has(ai)) rows.push(toPreparedLineItems([a])[0]!);
+  });
   return rows.map((row, idx) => ({ ...row, ordinal: idx + 1 }));
 }
 
