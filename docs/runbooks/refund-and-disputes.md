@@ -7,14 +7,15 @@ funkcji administracyjnej potwierdź, jaki obraz aplikacji i które migracje
 faktycznie działają na serwerze. Samo scalenie kodu nie potwierdza wdrożenia
 ani stanu bazy.
 
-**Granica obecnej automatyzacji:** webhook obsługuje płatności i subskrypcje,
-ale refund.created, refund.updated, refund.failed, charge.refunded oraz
-charge.dispute.* pomija bez zapisu. Zwrot wykonany w Stripe Dashboard i spór
-mogą więc nie pojawić się w lokalnych tabelach i nie wywołają obiecanego tu
-wcześniej alertu, maila ani korekty. Do czasu odbioru osobnej obsługi tych
-zdarzeń Stripe Dashboard i ręczne uzgodnienie są obowiązkowe. Nie zakładaj,
-że migracja 00078 lub 00079 jest na produkcji bez potwierdzenia właściciela
-bazy.
+**Granica obecnej automatyzacji:** kod webhooka przyjmuje refund.created,
+refund.updated, refund.failed, charge.refund.updated oraz zdarzenia
+charge.dispute.* i zapisuje sprawę finansową do uzgodnienia. Ta obsługa
+wymaga migracji 00080 i właściwej konfiguracji endpointu Stripe; bez
+potwierdzenia wdrożenia obu nie wolno zakładać, że działa na serwerze.
+charge.refunded nie jest automatycznie rozliczany, a korekta VAT/KSeF nie
+powstaje z samego webhooka. Stripe Dashboard i ręczne porównanie pozostają
+obowiązkowe przy lukach w historii lub niepewnym receipcie. 00078 nadal
+traktujemy jako niewdrożoną do potwierdzenia przez właściciela bazy.
 
 ## Zasady przed każdą operacją
 

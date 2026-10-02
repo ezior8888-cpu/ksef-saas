@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   retrieveSubscription: vi.fn(),
   listSessions: vi.fn(),
   retrieveSession: vi.fn(),
+  expireSession: vi.fn(),
   createSession: vi.fn(),
   claim: vi.fn(),
   record: vi.fn(),
@@ -43,7 +44,7 @@ const tenantId = '11111111-1111-4111-8111-111111111111';
 const attemptId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const nextAttemptId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const customerId = 'cus_TestA';
-const sessionId = 'cs_TestA';
+const sessionId = 'cs_test_TestA';
 const subscriptionId = 'sub_TestA';
 
 const input: CreateCheckoutInput = {
@@ -56,7 +57,7 @@ const input: CreateCheckoutInput = {
 function session(overrides: Record<string, unknown> = {}) {
   return {
     id: sessionId,
-    url: 'https://checkout.stripe.test/cs_TestA',
+    url: 'https://checkout.stripe.test/cs_test_TestA',
     mode: 'subscription',
     status: 'open',
     customer: customerId,
@@ -93,6 +94,7 @@ beforeEach(() => {
     checkout: { sessions: {
       list: mocks.listSessions,
       retrieve: mocks.retrieveSession,
+      expire: mocks.expireSession,
       create: mocks.createSession,
     } },
   });
@@ -104,6 +106,7 @@ beforeEach(() => {
   });
   mocks.listSessions.mockResolvedValue({ data: [], has_more: false });
   mocks.retrieveSession.mockResolvedValue(session());
+  mocks.expireSession.mockResolvedValue(session({ status: 'expired', url: null }));
   mocks.createSession.mockResolvedValue(session());
   mocks.claim.mockResolvedValue({ state: 'claimed', attemptId });
   mocks.record.mockResolvedValue(undefined);
@@ -138,7 +141,7 @@ describe('Stripe Checkout durable claim', () => {
 
   it('claims before Stripe create, uses a random attempt key and records Session', async () => {
     await expect(createCheckoutSession(input)).resolves.toEqual({
-      sessionId, url: 'https://checkout.stripe.test/cs_TestA',
+      sessionId, url: 'https://checkout.stripe.test/cs_test_TestA',
     });
     expect(mocks.claim).toHaveBeenCalledWith(
       tenantId, customerId, 'price_monthly', 'monthly',
@@ -184,12 +187,42 @@ describe('Stripe Checkout durable claim', () => {
     expect(mocks.retrieveSession).toHaveBeenCalledWith(sessionId);
   });
 
-  it('blocks a different plan while the earlier Session is open', async () => {
-    mocks.claim.mockResolvedValue(existingClaim('open'));
+  it('expires the exact old Session before changing the Checkout plan', async () => {
+    mocks.claim
+      .mockResolvedValueOnce(existingClaim('open'))
+      .mockResolvedValueOnce({ state: 'claimed', attemptId: nextAttemptId });
+    mocks.createSession.mockResolvedValueOnce(session({
+      id: 'cs_test_TestB',
+      url: 'https://checkout.stripe.test/cs_test_TestB',
+      client_reference_id: nextAttemptId,
+      metadata: { tenantId, plan: 'annual', attemptId: nextAttemptId },
+    }));
     await expect(createCheckoutSession({ ...input, plan: 'annual' }))
-      .rejects.toThrow('Another Checkout plan is already in progress');
-    expect(mocks.createSession).not.toHaveBeenCalled();
+      .resolves.toMatchObject({ sessionId: 'cs_test_TestB' });
+    expect(mocks.expireSession).toHaveBeenCalledWith(sessionId);
+    expect(mocks.settle).toHaveBeenCalledWith(attemptId, sessionId, 'expired');
+    expect(mocks.createSession).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the old claim if Stripe expiry has an uncertain result', async () => {
+    mocks.claim.mockResolvedValueOnce(existingClaim('open'));
+    mocks.expireSession.mockRejectedValueOnce(new Error('Stripe timeout'));
+    await expect(createCheckoutSession({ ...input, plan: 'annual' }))
+      .rejects.toThrow('Stripe timeout');
     expect(mocks.settle).not.toHaveBeenCalled();
+    expect(mocks.createSession).not.toHaveBeenCalled();
+  });
+
+  it('holds the claim when Stripe expiry returns a mismatched Session', async () => {
+    mocks.claim.mockResolvedValueOnce(existingClaim('open'));
+    mocks.expireSession.mockResolvedValueOnce(session({
+      status: 'expired', customer: 'cus_Other',
+    }));
+    await expect(createCheckoutSession({ ...input, plan: 'annual' }))
+      .rejects.toThrow('expiry was not verified');
+    expect(mocks.hold).toHaveBeenCalledWith(attemptId, 'open', 'held');
+    expect(mocks.settle).not.toHaveBeenCalled();
+    expect(mocks.createSession).not.toHaveBeenCalled();
   });
 
   it('honors the local subscription check repeated inside the atomic DB claim', async () => {
@@ -210,15 +243,26 @@ describe('Stripe Checkout durable claim', () => {
     expect(mocks.record).not.toHaveBeenCalled();
   });
 
-  it('marks an exact completed Session without creating another', async () => {
-    mocks.claim.mockResolvedValueOnce(existingClaim('open'));
-    mocks.retrieveSession.mockResolvedValueOnce(session({
-      status: 'complete', subscription: subscriptionId,
+  it('settles an exact completed Session and creates after terminal cancellation on the first click', async () => {
+    mocks.claim
+      .mockResolvedValueOnce(existingClaim('open'))
+      .mockResolvedValueOnce(existingClaim('completed'))
+      .mockResolvedValueOnce({ state: 'claimed', attemptId: nextAttemptId });
+    mocks.retrieveSession.mockResolvedValue(session({
+      status: 'complete', subscription: subscriptionId, url: null,
     }));
-    await expect(createCheckoutSession(input))
-      .rejects.toThrow('subscription reconciliation required');
+    mocks.createSession.mockResolvedValueOnce(session({
+      id: 'cs_test_TestB',
+      url: 'https://checkout.stripe.test/cs_test_TestB',
+      client_reference_id: nextAttemptId,
+      metadata: { tenantId, plan: 'monthly', attemptId: nextAttemptId },
+    }));
+    await expect(createCheckoutSession(input)).resolves.toMatchObject({
+      sessionId: 'cs_test_TestB',
+    });
     expect(mocks.settle).toHaveBeenCalledWith(attemptId, sessionId, 'completed');
-    expect(mocks.createSession).not.toHaveBeenCalled();
+    expect(mocks.retire).toHaveBeenCalledWith(attemptId, sessionId, subscriptionId);
+    expect(mocks.createSession).toHaveBeenCalledOnce();
   });
   it('holds an ambiguous provider create and never issues a second call', async () => {
     mocks.createSession.mockRejectedValueOnce(new Error('timeout'));
@@ -272,18 +316,18 @@ describe('Stripe Checkout durable claim', () => {
       .mockResolvedValueOnce({ state: 'claimed', attemptId: nextAttemptId });
     mocks.retrieveSession.mockResolvedValueOnce(session({ status: 'expired', url: null }));
     mocks.createSession.mockResolvedValueOnce(session({
-      id: 'cs_TestB',
-      url: 'https://checkout.stripe.test/cs_TestB',
+      id: 'cs_test_TestB',
+      url: 'https://checkout.stripe.test/cs_test_TestB',
       client_reference_id: nextAttemptId,
       metadata: { tenantId, plan: 'monthly', attemptId: nextAttemptId },
     }));
     await expect(createCheckoutSession(input)).resolves.toMatchObject({
-      sessionId: 'cs_TestB',
+      sessionId: 'cs_test_TestB',
     });
     expect(mocks.settle).toHaveBeenCalledWith(attemptId, sessionId, 'expired');
     expect(mocks.createSession).toHaveBeenCalledOnce();
     expect(mocks.record).toHaveBeenCalledWith(
-      nextAttemptId, 'cs_TestB', 2_000_000_000,
+      nextAttemptId, 'cs_test_TestB', 2_000_000_000,
     );
   });
 
@@ -315,13 +359,13 @@ describe('Stripe Checkout durable claim', () => {
       status: 'complete', subscription: subscriptionId,
     }));
     mocks.createSession.mockResolvedValueOnce(session({
-      id: 'cs_TestB',
-      url: 'https://checkout.stripe.test/cs_TestB',
+      id: 'cs_test_TestB',
+      url: 'https://checkout.stripe.test/cs_test_TestB',
       client_reference_id: nextAttemptId,
       metadata: { tenantId, plan: 'monthly', attemptId: nextAttemptId },
     }));
     await expect(createCheckoutSession(input)).resolves.toMatchObject({
-      sessionId: 'cs_TestB',
+      sessionId: 'cs_test_TestB',
     });
     expect(mocks.retire).toHaveBeenCalledWith(
       attemptId, sessionId, subscriptionId,

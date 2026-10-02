@@ -6,11 +6,15 @@ const mocks = vi.hoisted(() => ({
   cacheGet: vi.fn(),
   cacheSet: vi.fn(),
   captureException: vi.fn(),
+  reconcile: vi.fn(),
 }));
 
 vi.mock('inngest', () => ({ cron: vi.fn((schedule: string) => schedule) }));
 vi.mock('@sentry/nextjs', () => ({ captureException: mocks.captureException }));
 vi.mock('@/lib/alerts/slack', () => ({ alertCritical: mocks.alertCritical }));
+vi.mock('@/lib/stripe/checkout-reconcile', () => ({
+  reconcileExpiredOpenCheckoutAttempts: mocks.reconcile,
+}));
 vi.mock('@/lib/cache', () => ({ cacheGet: mocks.cacheGet, cacheSet: mocks.cacheSet }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({ from: mocks.from }),
@@ -47,6 +51,7 @@ beforeEach(() => {
   mocks.cacheGet.mockResolvedValue(null);
   mocks.cacheSet.mockResolvedValue(undefined);
   mocks.alertCritical.mockResolvedValue(undefined);
+  mocks.reconcile.mockResolvedValue(undefined);
 });
 
 afterEach(() => vi.useRealTimers());
@@ -63,6 +68,7 @@ describe('stale Stripe Checkout attempts alert', () => {
     await expect(checkStaleStripeCheckoutAttempts()).resolves.toEqual({
       type: 'stale_stripe_checkout_attempts', fired: true,
     });
+    expect(mocks.reconcile).toHaveBeenCalledWith('2026-09-25T11:45:00.000Z');
     expect(mocks.from).toHaveBeenCalledTimes(4);
     expect(mocks.from).toHaveBeenCalledWith('stripe_checkout_attempts');
     expect(queries.select).toHaveBeenCalledWith(
@@ -89,6 +95,30 @@ describe('stale Stripe Checkout attempts alert', () => {
     });
     expect(JSON.stringify(mocks.alertCritical.mock.calls[0])).not.toContain('cs_');
     expect(JSON.stringify(mocks.alertCritical.mock.calls[0])).not.toContain('cus_');
+  });
+
+  it('stays quiet after provider-confirmed reconciliation clears a stale open claim', async () => {
+    const values = {
+      creating: count(0), uncertain: count(0), held: count(0), open: count(1),
+    };
+    mockCounts(values);
+    mocks.reconcile.mockImplementation(async () => { values.open = count(0); });
+    await expect(checkStaleStripeCheckoutAttempts()).resolves.toEqual({
+      type: 'stale_stripe_checkout_attempts', fired: false,
+    });
+    expect(mocks.alertCritical).not.toHaveBeenCalled();
+  });
+
+  it('keeps alerting on stale open claims when provider reconciliation fails', async () => {
+    mockCounts({
+      creating: count(0), uncertain: count(0), held: count(0), open: count(1),
+    });
+    mocks.reconcile.mockRejectedValue(new Error('Stripe unavailable'));
+    await expect(checkStaleStripeCheckoutAttempts()).resolves.toEqual({
+      type: 'stale_stripe_checkout_attempts', fired: true,
+    });
+    expect(mocks.captureException).toHaveBeenCalledOnce();
+    expect(mocks.alertCritical).toHaveBeenCalledOnce();
   });
 
   it('stays quiet for zero counts or duplicate alert', async () => {

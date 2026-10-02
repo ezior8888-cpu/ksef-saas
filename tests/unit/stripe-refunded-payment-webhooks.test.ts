@@ -1,11 +1,13 @@
 import type Stripe from 'stripe';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { RetryablePreEffectWebhookError } from '@/lib/stripe/webhook-errors';
 
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   upsert: vi.fn(),
   paymentStatusRead: vi.fn(),
   mapInvoice: vi.fn(),
+  proof: vi.fn(),
   sendJob: vi.fn(),
   audit: vi.fn(),
   track: vi.fn(),
@@ -18,6 +20,9 @@ vi.mock('@/lib/stripe/event-mapping', () => ({
   mapInvoiceToPaymentRow: mocks.mapInvoice,
   mapSubscriptionToRow: vi.fn(),
   resolveTenantIdFromSubscription: vi.fn(),
+}));
+vi.mock('@/lib/stripe/payment-reference-proof', () => ({
+  verifyPaidInvoicePaymentReferences: mocks.proof,
 }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: mocks.sendJob }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mocks.audit }));
@@ -47,6 +52,10 @@ const invoice = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.proof.mockResolvedValue({
+    paymentIntentId: 'pi_ValidIntent123',
+    chargeId: 'ch_ValidCharge123',
+  });
   mocks.mapInvoice.mockResolvedValue({
     tenantId: 'tenant-local',
     row: { stripe_invoice_id: 'in_local', status: 'succeeded', paid_at: PAID_AT },
@@ -91,8 +100,24 @@ describe('late Stripe invoice webhooks after a refund', () => {
 
     await handleInvoicePaymentSucceeded(invoice);
 
-    expect(mocks.upsert).toHaveBeenCalledOnce();
+    expect(mocks.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripe_payment_intent_id: 'pi_ValidIntent123',
+        stripe_charge_id: 'ch_ValidCharge123',
+        stripe_payment_refs_verified: true,
+      }),
+      { onConflict: 'stripe_invoice_id' },
+    );
     expect(mocks.sendJob).toHaveBeenCalledOnce();
+  });
+
+  it('does not write a payment or queue VAT without Stripe proof', async () => {
+    mocks.paymentStatusRead.mockResolvedValue({ data: null, error: null });
+    mocks.proof.mockRejectedValue(new Error('Stripe proof missing'));
+
+    await expect(handleInvoicePaymentSucceeded(invoice)).rejects.toThrow('Stripe proof missing');
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(mocks.sendJob).not.toHaveBeenCalled();
   });
 
   it('passes the persisted paid_at to the VAT job', async () => {
@@ -131,7 +156,11 @@ describe('late Stripe invoice webhooks after a refund', () => {
   );
 
   it('blocks all effects if the mapped paid_at is absent before a payment write', async () => {
-    mocks.mapInvoice.mockResolvedValue({
+    mocks.proof.mockResolvedValue({
+    paymentIntentId: 'pi_ValidIntent123',
+    chargeId: 'ch_ValidCharge123',
+  });
+  mocks.mapInvoice.mockResolvedValue({
       tenantId: 'tenant-local',
       row: { stripe_invoice_id: 'in_local', status: 'succeeded', paid_at: null },
     });
@@ -149,11 +178,44 @@ describe('late Stripe invoice webhooks after a refund', () => {
       data: null, error: { message: 'temporary database outage' },
     });
 
-    await expect(handleInvoicePaymentSucceeded(invoice)).rejects.toThrow(
-      'stripe payment status read failed',
-    );
+    await expect(handleInvoicePaymentSucceeded(invoice))
+      .rejects.toBeInstanceOf(RetryablePreEffectWebhookError);
     expect(mocks.upsert).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['succeeded', handleInvoicePaymentSucceeded],
+    ['failed', handleInvoicePaymentFailed],
+  ])('retries a rejected initial status read before %s effects', async (_eventType, handler) => {
+    mocks.paymentStatusRead.mockRejectedValueOnce(new Error('connection reset'));
+
+    await expect(handler(invoice)).rejects.toMatchObject({
+      name: 'RetryablePreEffectWebhookError',
+      code: 'financial_object_lookup_failed',
+    });
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+    expect(mocks.sendJob).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['succeeded', handleInvoicePaymentSucceeded],
+    ['failed', handleInvoicePaymentFailed],
+  ])('does not retry an ambiguous status reread after the %s upsert', async (_eventType, handler) => {
+    mocks.paymentStatusRead
+      .mockResolvedValueOnce({ data: { status: _eventType }, error: null })
+      .mockRejectedValueOnce(new Error('connection reset after write'));
+    mocks.upsert.mockReturnValue({
+      select: async () => ({ data: [], error: null }),
+    });
+
+    const error = await handler(invoice).catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(RetryablePreEffectWebhookError);
+    expect(mocks.upsert).toHaveBeenCalledOnce();
+    expect(mocks.sendJob).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['succeeded', handleInvoicePaymentSucceeded],
     ['failed', handleInvoicePaymentFailed],

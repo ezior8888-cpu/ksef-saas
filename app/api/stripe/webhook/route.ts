@@ -24,6 +24,7 @@ import type Stripe from 'stripe';
 import * as Sentry from '@sentry/nextjs';
 
 import { getStripe } from '@/lib/stripe/client';
+import { handleCheckoutSessionStateEvent } from '@/lib/stripe/checkout-reconcile';
 import { handleFinancialStripeEvent } from '@/lib/stripe/financial-events';
 import { ReconciliationRequiredWebhookError, RetryablePreEffectWebhookError } from '@/lib/stripe/webhook-errors';
 import {
@@ -43,6 +44,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const HANDLED_EVENTS = new Set([
+  'checkout.session.completed',
+  'checkout.session.expired',
   'customer.subscription.created',
   'customer.subscription.updated',
   'customer.subscription.deleted',
@@ -169,6 +172,10 @@ export async function POST(req: Request): Promise<Response> {
 
 async function dispatch(event: Stripe.Event): Promise<void> {
   switch (event.type) {
+    case 'checkout.session.completed':
+    case 'checkout.session.expired':
+      await handleCheckoutSessionStateEvent(event.data.object as Stripe.Checkout.Session);
+      return;
     case 'customer.subscription.created':
       await handleSubscriptionUpserted(event.data.object as Stripe.Subscription, true);
       return;

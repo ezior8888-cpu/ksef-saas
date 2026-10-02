@@ -196,9 +196,11 @@ describe('stale billing VAT enqueue alert', () => {
     expect(step.run).toHaveBeenCalledWith('check-ksef-reconciliation', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-checkout-attempts', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-stale-backup', expect.any(Function));
+    // 14 → 15: osierocone próby utworzenia klienta Stripe (#62, przeniesione 02.10).
+    expect(step.run).toHaveBeenCalledWith('check-customer-attempts', expect.any(Function));
     // 13 → 14: płatność opłacona bez faktury VAT (AUD-40).
     expect(step.run).toHaveBeenCalledWith('check-paid-without-vat-invoice', expect.any(Function));
-    expect(result).toMatchObject({ checked: 14, fired: 0 });
+    expect(result).toMatchObject({ checked: 15, fired: 0 });
   });
 });
 

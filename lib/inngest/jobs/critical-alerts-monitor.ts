@@ -30,6 +30,7 @@ import * as Sentry from '@sentry/nextjs';
 import { alertCritical } from '@/lib/alerts/slack';
 import { backupAgeHours, isBackupStale, MAX_BACKUP_AGE_HOURS } from '@/lib/backup/freshness';
 import { STALE_REFUND_OPERATION_MS } from '@/lib/billing/refund-operations';
+import { reconcileExpiredOpenCheckoutAttempts } from '@/lib/stripe/checkout-reconcile';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -323,10 +324,59 @@ export async function checkOpenStripeFinancialCases(): Promise<AlertCheckResult>
   await markAlertDelivered('open_stripe_financial_cases');
   return { type: 'open_stripe_financial_cases', fired: true };
 }
+/** A Customer create can succeed at Stripe even when its response is lost. */
+export async function checkStaleStripeCustomerAttempts(): Promise<AlertCheckResult> {
+  const supabase = createAdminClient();
+  const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const countAttempts = () => supabase
+    .from('stripe_customer_attempts')
+    .select('id', { count: 'exact', head: true });
+  const [creating, uncertain] = await Promise.all([
+    countAttempts().eq('status', 'creating').lt('created_at', cutoffIso),
+    countAttempts().eq('status', 'uncertain'),
+  ]);
+
+  if (creating.error || uncertain.error ||
+      creating.count === null || uncertain.count === null) {
+    throw creating.error ?? uncertain.error ??
+      new Error('Stripe Customer attempt counts unavailable');
+  }
+  if (creating.count + uncertain.count === 0) {
+    return { type: 'stale_stripe_customer_attempts', fired: false };
+  }
+
+  const shouldSend = await shouldSendAlert('stale_stripe_customer_attempts');
+  if (!shouldSend) {
+    return { type: 'stale_stripe_customer_attempts', fired: false, reason: 'dedup' };
+  }
+  await alertCritical(
+    'Stripe Customer wymaga uzgodnienia',
+    'Tworzenie Customer utknęło albo wynik Stripe jest niepewny. Sprawdź dokładny Customer i przypisanie do firmy; nie zwalniaj claimu ani nie ponawiaj tworzenia na podstawie samego czasu.',
+    {
+      fields: [
+        { label: 'Creating > 15 min', value: String(creating.count) },
+        { label: 'Niepewne', value: String(uncertain.count) },
+      ],
+      link: {
+        label: 'Otwórz panel administratora',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/support',
+      },
+    },
+  );
+  await markAlertDelivered('stale_stripe_customer_attempts');
+  return { type: 'stale_stripe_customer_attempts', fired: true };
+}
 /** A Checkout create can succeed at Stripe even when its response is lost. */
 export async function checkStaleStripeCheckoutAttempts(): Promise<AlertCheckResult> {
   const supabase = createAdminClient();
   const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  try {
+    await reconcileExpiredOpenCheckoutAttempts(cutoffIso);
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { area: 'billing.checkout.reconcile' },
+    });
+  }
   const countAttempts = () => supabase
     .from('stripe_checkout_attempts')
     .select('id', { count: 'exact', head: true });
@@ -741,6 +791,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-checkout-attempts', () =>
         checkStaleStripeCheckoutAttempts().catch(captureAndReturn('stale_stripe_checkout_attempts')),
+      ),
+      step.run('check-customer-attempts', () =>
+        checkStaleStripeCustomerAttempts().catch(captureAndReturn('stale_stripe_customer_attempts')),
       ),
       step.run('check-stale-dunning-notifications', () =>
         checkStaleDunningNotifications().catch(captureAndReturn('stale_dunning_notifications')),

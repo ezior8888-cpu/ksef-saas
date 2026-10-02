@@ -29,7 +29,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import {
   mapInvoiceToPaymentRow,
 } from './event-mapping';
+import { verifyPaidInvoicePaymentReferences } from './payment-reference-proof';
 import { syncCurrentStripeSubscription } from './subscription-sync';
+import { RetryablePreEffectWebhookError } from './webhook-errors';
 
 /**
  * Late invoice payment events must not reopen an already refunded payment.
@@ -38,13 +40,32 @@ import { syncCurrentStripeSubscription } from './subscription-sync';
 async function readStripePaymentStatus(
   supabase: ReturnType<typeof createAdminClient>,
   stripeInvoiceId: string,
+  preEffect = false,
 ): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('stripe_payments')
-    .select('status')
-    .eq('stripe_invoice_id', stripeInvoiceId)
-    .maybeSingle();
+  let result: { data: { status: string } | null; error: { message: string } | null };
+  try {
+    result = await supabase
+      .from('stripe_payments')
+      .select('status')
+      .eq('stripe_invoice_id', stripeInvoiceId)
+      .maybeSingle();
+  } catch {
+    if (preEffect) {
+      throw new RetryablePreEffectWebhookError(
+        'financial_object_lookup_failed',
+        'Stripe payment status read failed before local effects',
+      );
+    }
+    throw new Error('Stripe payment status read failed after a possible write');
+  }
+  const { data, error } = result;
   if (error) {
+    if (preEffect) {
+      throw new RetryablePreEffectWebhookError(
+        'financial_object_lookup_failed',
+        'Stripe payment status read failed before local effects',
+      );
+    }
     throw new Error('stripe payment status read failed: ' + error.message);
   }
   return data?.status ?? null;
@@ -140,7 +161,19 @@ export async function handleInvoicePaymentSucceeded(
   }
 
   const supabase = createAdminClient();
-  if (isRefundedPaymentStatus(await readStripePaymentStatus(supabase, invoice.id))) return;
+  if (isRefundedPaymentStatus(await readStripePaymentStatus(supabase, invoice.id, true))) return;
+  const proof = await verifyPaidInvoicePaymentReferences(invoice, {
+    paymentIntentId: typeof mapping.row.stripe_payment_intent_id === 'string'
+      ? mapping.row.stripe_payment_intent_id : null,
+    chargeId: typeof mapping.row.stripe_charge_id === 'string'
+      ? mapping.row.stripe_charge_id : null,
+  });
+  const verifiedRow = {
+    ...mapping.row,
+    stripe_payment_intent_id: proof.paymentIntentId,
+    stripe_charge_id: proof.chargeId,
+    stripe_payment_refs_verified: true,
+  };
   // Cast — `stripe_payments` poza typed gen.
   const { data, error } = await (supabase as unknown as {
     from: (n: string) => {
@@ -156,7 +189,7 @@ export async function handleInvoicePaymentSucceeded(
     };
   })
     .from('stripe_payments')
-    .upsert(mapping.row, { onConflict: 'stripe_invoice_id' })
+    .upsert(verifiedRow, { onConflict: 'stripe_invoice_id' })
     .select('id, status, paid_at');
 
   if (error) {
@@ -233,7 +266,7 @@ export async function handleInvoicePaymentFailed(
   if (!mapping) return;
 
   const supabase = createAdminClient();
-  const existingStatus = await readStripePaymentStatus(supabase, invoice.id);
+  const existingStatus = await readStripePaymentStatus(supabase, invoice.id, true);
   if (existingStatus === 'succeeded' || isRefundedPaymentStatus(existingStatus)) return;
   const { data, error } = await (supabase as unknown as {
     from: (n: string) => {
