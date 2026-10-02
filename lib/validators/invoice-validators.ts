@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 import { validateNipChecksum, validatePeselChecksum } from '@/lib/xml/invoice-calculator';
+import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
 
 // ============================================================================
 // Helpers walidacyjne
@@ -197,6 +198,18 @@ export const correctionInvoiceSchema = z
       message: 'Wypełnij dane korekty zgodnie z wybranym typem',
     }
   )
+  .refine((data) => {
+    if (data.correctionType !== 'amount_change' || !data.amountChange) return true;
+    try {
+      resolveAmountChangeVatRate(data.amountChange);
+      return true;
+    } catch {
+      return false;
+    }
+  }, {
+    message: 'Kwoty korekty muszą mieć jedną obsługiwaną stawkę VAT i brutto równe netto plus VAT',
+    path: ['amountChange'],
+  })
   .refine((data) => new Date(data.paymentDueDate) >= new Date(data.issueDate), {
     message: 'Termin płatności nie może być przed datą wystawienia',
     path: ['paymentDueDate'],

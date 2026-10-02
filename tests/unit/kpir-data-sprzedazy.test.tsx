@@ -104,13 +104,16 @@ describe('strona KPiR — podpięcie', () => {
     return {
       from(table: string) {
         let columns: string[] | null = null;
+        let head = false;
         const query = {
-          select(selection = '*') {
+          select(selection = '*', options?: { head?: boolean }) {
             const parts = selection.split(',').map((s) => s.trim()).filter(Boolean);
             columns = parts.includes('*') ? null : parts;
+            head = Boolean(options?.head);
             return query;
           },
           eq() { return query; },
+          or() { return query; },
           in() { return query; },
           gte() { return query; },
           lte() { return query; },
@@ -121,6 +124,8 @@ describe('strona KPiR — podpięcie', () => {
                 ? [{ id: 'fv', internal_number: 'FV/1', issue_date: '2026-09-03', sale_date: '2026-08-31', gross_total: 1230, net_total: 1000, buyer_data: null, invoice_kind: 'regular', advance_invoice_ids: [] }]
                 : [];
             const project = (r: Record<string, unknown>) => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : r);
+            // Kontrola proweniencji (#63): 0 przyjętych faktur bez środowiska KSeF.
+            if (head) return Promise.resolve({ data: null, count: 0, error: null }).then(resolve);
             return Promise.resolve({ data: rows.map(project), error: null }).then(resolve);
           },
         };

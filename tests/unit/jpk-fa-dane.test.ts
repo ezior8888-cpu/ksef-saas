@@ -26,11 +26,20 @@ function database() {
       let columns: string[] | null = null;
       let singular = false;
       let window: [number, number] | null = null;
+      let head = false;
       const query = {
         // Tylko wybrane kolumny — brak kolumny w zapytaniu ma być widoczny.
-        select(selection = '*') {
+        select(selection = '*', options?: { head?: boolean }) {
           const parts = selection.split(',').map((s) => s.trim()).filter(Boolean);
           columns = parts.some((p) => p === '*' || /[():]/.test(p)) ? null : parts;
+          head = Boolean(options?.head);
+          return query;
+        },
+        // Kontrola proweniencji (#63): przyjęte faktury bez środowiska KSeF.
+        or(expr: string) {
+          const m = /^ksef_environment\.is\.null,ksef_environment\.neq\.(test|demo|production)$/.exec(expr);
+          if (!m) throw new Error(`Unexpected OR filter ${expr}`);
+          predicates.push((r) => r.ksef_environment == null || r.ksef_environment !== m[1]);
           return query;
         },
         eq(k: string, v: unknown) { filters.push([k, v]); predicates.push((r) => r[k] === v); return query; },
@@ -50,7 +59,7 @@ function database() {
           const project = (r: Row): Row => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : r);
           const matching = (tables[table] ?? []).filter((r) => predicates.every((p) => p(r)));
           const rows = (window ? matching.slice(window[0], window[1] + 1) : matching).map(project);
-          return Promise.resolve({ data: singular ? rows[0] ?? null : rows, error: null }).then(resolve, reject);
+          return Promise.resolve({ data: head ? null : singular ? rows[0] ?? null : rows, count: matching.length, error: null }).then(resolve, reject);
         },
       };
       return query;
@@ -60,7 +69,7 @@ function database() {
 
 function faktura(o: Row): Row {
   return {
-    tenant_id: 'firma-a', direction: 'outgoing', invoice_kind: 'regular', ksef_status: 'accepted',
+    tenant_id: 'firma-a', direction: 'outgoing', invoice_kind: 'regular', ksef_status: 'accepted', ksef_environment: 'test',
     issue_date: '2026-09-10', net_total: 0, vat_total: 0, gross_total: 0, advance_invoice_ids: [],
     fa3_data: null, buyer_data: { name: 'Klient' }, seller_data: null, internal_number: null, ksef_number: null,
     ...o,

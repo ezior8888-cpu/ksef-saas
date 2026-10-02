@@ -141,6 +141,9 @@ async function main() {
   const { inngest, invoiceSubmitRequested } = await import(
     '../lib/inngest/client'
   );
+  const { requireConfiguredKsefEnvironment } = await import(
+    '../lib/ksef/claim-environment'
+  );
 
   // Sanity-check: bez INNGEST_DEV=1 SDK próbuje bić w Inngest Cloud (production)
   // i wymaga realnego event key. W dev chcemy uderzać w lokalny Dev Server.
@@ -161,6 +164,7 @@ async function main() {
       invoiceId: invoiceRow.id,
       invoice,
       nip: tenantRow.nip,
+      environment: requireConfiguredKsefEnvironment(),
     }),
   );
 

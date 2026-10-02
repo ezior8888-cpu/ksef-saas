@@ -1,4 +1,4 @@
-import { InvoiceTenantMismatchError, requireInvoiceTenant } from './tenant-boundary';
+import { assertJobIdentity, InvoiceTenantMismatchError, requireInvoiceTenant } from './tenant-boundary';
 /**
  * Inngest: cykliczna próba wysłania faktur z kolejki Trybu Offline24.
  */
@@ -10,6 +10,7 @@ import type { JobContext } from '@/lib/jobs/registry';
 
 import { createAdminClient } from '@/lib/supabase/server';
 import { checkKsefAvailability } from '@/lib/ksef/health-check';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
 import { createProposal } from '@/lib/flo/proposals';
 import { alertCritical } from '@/lib/alerts/slack';
@@ -23,6 +24,7 @@ import {
 } from '@/lib/flo/functions/ksef-outage';
 import { calculateNextRetry } from '@/lib/ksef/idempotency';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
+import { isOfflineReplayableInvoice } from '@/lib/ksef/offline-replay';
 import {
   getInvoiceForSubmit,
   updateInvoiceStatus,
@@ -34,6 +36,17 @@ import {
   invoiceSubmitRequested,
   invoiceSubmitSucceeded,
 } from '../client';
+
+async function readOfflineInvoiceState(invoiceId: string, tenantId: string) {
+  const { data, error } = await createAdminClient()
+    .from('invoices')
+    .select('ksef_status, ksef_number, ksef_environment, invoice_kind, invoice_type, fa3_data')
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  if (error || !data) throw new Error('Offline24 invoice state requires reconciliation');
+  return data;
+}
 
 /**
  * Jednorazowy alarm o przekroczonym terminie Offline24. Najpierw znacznik
@@ -98,9 +111,39 @@ async function notifyDeadlineExceeded(item: Record<string, unknown>): Promise<bo
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
  */
-export async function runProcessOfflineQueue({ step }: JobContext) {
-    const health = await step.run('check-ksef-health', () =>
-      checkKsefAvailability(),
+export async function runProcessOfflineQueue({ step, logger }: JobContext) {
+    const environment = requireConfiguredKsefEnvironment();
+    const blockedCount = await step.run(`count-environment-blocked-${environment}`, async () => {
+      const { count, error } = await createAdminClient()
+        .from('ksef_offline_queue')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'queued')
+        .or(`ksef_environment.is.null,ksef_environment.neq.${environment}`);
+      if (error || count === null) throw new Error('Could not count KSeF environment-blocked offline rows');
+      return count;
+    });
+    if (blockedCount > 0) {
+      logger.error('Offline24 rows require environment reconciliation', {
+        environment,
+        blockedCount,
+      });
+    }
+    if (environment === 'production') {
+      const { count, error } = await createAdminClient()
+        .from('ksef_offline_queue')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'queued')
+        .eq('ksef_environment', environment);
+      if (error || count === null) throw new Error('Could not inspect PROD Offline24 rows');
+      if (count > 0) {
+        logger.error('PROD Offline24 QR is unverified; queued rows require manual reconciliation', {
+          environment, queuedCount: count,
+        });
+      }
+      return { skipped: true as const, reason: 'PROD Offline24 QR requires manual reconciliation' };
+    }
+    const health = await step.run(`check-ksef-health-${environment}`, () =>
+      checkKsefAvailability(environment),
     );
 
     if (!health.available) {
@@ -108,13 +151,14 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
       // przy DWÓCH źródłach: monitorze i realnym kodzie 5xx z wysyłki.
       // Przy jednym mówimy, co widzimy, bez wskazywania winnego — spokój
       // oparty na kłamstwie kończy się utratą zaufania do wszystkiego.
-      await step.run('flo-outage-card', async () => {
+      await step.run(`flo-outage-card-${environment}`, async () => {
         const supabase = createAdminClient();
 
         const { data: queued, error: queueError } = await supabase
           .from('ksef_offline_queue')
           .select('tenant_id, deadline')
-          .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]);
+          .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES])
+          .eq('ksef_environment', environment);
 
         // Błąd zapytania to NIE „pusta kolejka". Do 25.09 zapytanie pytało
         // o status 'pending', którego ten enum nie ma: Postgres je odrzucał,
@@ -177,13 +221,14 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
     }
 
     const queueItems =
-      (await step.run('fetch-queue-items', async () => {
+      (await step.run(`fetch-queue-items-${environment}`, async () => {
         const supabase = createAdminClient();
         const nowIso = new Date().toISOString();
         const { data, error } = await supabase
           .from('ksef_offline_queue')
           .select('*')
           .eq('status', 'queued')
+          .eq('ksef_environment', environment)
           .lte('next_attempt_at', nowIso)
           .order('next_attempt_at', { ascending: true })
           .limit(10);
@@ -203,6 +248,12 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
     }> = [];
 
     for (const item of queueItems) {
+      // Historical NULL or another environment requires manual reconciliation.
+      // Check even when an Inngest step has replayed an old fetch result.
+      if (item.ksef_environment !== environment) {
+        results.push({ invoiceId: item.invoice_id, queueId: item.id, status: 'environment-review' });
+        continue;
+      }
       // Queue rows are tenant-writable; do not trust their invoice_id.
       try {
         await requireInvoiceTenant(item.invoice_id, item.tenant_id);
@@ -222,25 +273,41 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
       }
 
       // An accepted invoice may have missed its success event. Heal the
-      // durable queue row instead of submitting the same document again.
+      // durable queue row instead of submitting the same document again —
+      // but only when KSeF accepted it in THIS environment. Otherwise the row
+      // waits for manual reconciliation (#63, Codex).
       const supabase = createAdminClient();
       const { data: invoiceState, error: invoiceStateError } = await supabase
         .from('invoices')
-        .select('ksef_status, ksef_number, invoice_type, invoice_kind, last_error_code')
+        .select('ksef_status, ksef_number, ksef_environment, invoice_type, invoice_kind, fa3_data, last_error_code')
         .eq('id', item.invoice_id)
         .eq('tenant_id', item.tenant_id)
         .maybeSingle();
       if (invoiceStateError || !invoiceState) throw new Error('Nie można sprawdzić statusu faktury Offline24');
-      if (invoiceState.ksef_status === 'accepted' && invoiceState.ksef_number) {
+      if (invoiceState.ksef_status === 'accepted') {
+        const healed = Boolean(invoiceState.ksef_number) && invoiceState.ksef_environment === environment;
         const { error: reconcileError } = await supabase
           .from('ksef_offline_queue')
-          .update({ status: 'sent', last_error: null })
+          .update(healed
+            ? { status: 'sent', last_error: null }
+            : { status: 'failed', last_error: 'Accepted invoice requires manual reconciliation' })
           .eq('id', item.id)
           .eq('tenant_id', item.tenant_id)
           .eq('invoice_id', item.invoice_id)
+          .eq('ksef_environment', environment)
           .eq('status', 'queued');
         if (reconcileError) throw new Error(reconcileError.message);
-        results.push({ invoiceId: item.invoice_id, queueId: item.id, status: 'already-accepted' });
+        if (!healed) {
+          logger.error('Offline24 queued row belongs to accepted invoice; manual reconciliation required', {
+            invoiceId: item.invoice_id, environment,
+            storedEnvironment: invoiceState.ksef_environment ?? null,
+          });
+        }
+        results.push({
+          invoiceId: item.invoice_id,
+          queueId: item.id,
+          status: healed ? 'already-accepted' : 'accepted-reconciliation',
+        });
         continue;
       }
       if (isRozSubmission({
@@ -253,6 +320,7 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
           .eq('id', item.id)
           .eq('tenant_id', item.tenant_id)
           .eq('invoice_id', item.invoice_id)
+          .eq('ksef_environment', environment)
           .eq('status', 'queued');
         if (holdError) throw new Error(holdError.message);
         const { error: invoiceHoldError } = await supabase
@@ -267,6 +335,36 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
           .or('ksef_status.is.null,ksef_status.neq.accepted');
         if (invoiceHoldError) throw new Error(invoiceHoldError.message);
         results.push({ invoiceId: item.invoice_id, queueId: item.id, status: 'held-roz' });
+        continue;
+      }
+      // Offline24 stores only the invoice id: a correction or advance cannot be
+      // rebuilt from it. Quarantine instead of sending a plain VAT XML (#63).
+      if (!isOfflineReplayableInvoice(invoiceState)) {
+        const { error: invoiceError } = await supabase
+          .from('invoices')
+          .update({
+            ksef_status: 'failed',
+            last_error: 'Offline24 nie może odtworzyć danych tego dokumentu; wymagane ręczne uzgodnienie.',
+            last_error_code: 'OFFLINE_SPECIAL_DOCUMENT',
+          })
+          .eq('id', item.invoice_id)
+          .eq('tenant_id', item.tenant_id)
+          .eq('ksef_status', 'offline_queued');
+        if (invoiceError) throw new Error('Offline24 special invoice status requires reconciliation');
+        const { data: quarantined, error: quarantineError } = await supabase
+          .from('ksef_offline_queue')
+          .update({ status: 'failed', last_error: 'OFFLINE_SPECIAL_DOCUMENT_REQUIRES_RECONCILIATION' })
+          .eq('id', item.id)
+          .eq('tenant_id', item.tenant_id)
+          .eq('invoice_id', item.invoice_id)
+          .eq('ksef_environment', environment)
+          .eq('status', 'queued')
+          .select('id').maybeSingle();
+        if (quarantineError || !quarantined) throw new Error('Offline24 special invoice quarantine requires reconciliation');
+        logger.error('Offline24 row cannot reconstruct legal invoice XML; manual reconciliation required', {
+          invoiceId: item.invoice_id, queueId: item.id, environment,
+        });
+        results.push({ invoiceId: item.invoice_id, queueId: item.id, status: 'special-reconciliation' });
         continue;
       }
       const deadlinePassed = await step.run(
@@ -324,6 +422,7 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
             .eq('id', item.id)
             .eq('tenant_id', item.tenant_id)
             .eq('invoice_id', item.invoice_id)
+            .eq('ksef_environment', environment)
             .eq('status', 'queued')
             .select('id')
             .maybeSingle();
@@ -352,6 +451,7 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
             tenantId: submitPayload.tenantId,
             invoiceId: submitPayload.invoiceId,
             nip: submitPayload.nip,
+            environment,
             invoice: submitPayload.invoice,
             fromOfflineQueue: true,
             offlineQueueId: submitPayload.offlineQueueId,
@@ -400,15 +500,26 @@ export async function runOfflineQueueSuccess(data: Parameters<typeof invoiceSubm
     }
 
     const { invoiceId, tenantId } = data;
+    const environment = requireConfiguredKsefEnvironment();
+    if (data.environment !== environment) {
+      throw new Error('Offline24 success environment requires reconciliation');
+    }
+    assertJobIdentity(data.offlineQueueId, tenantId);
     await requireInvoiceTenant(invoiceId, tenantId);
+    const invoice = await readOfflineInvoiceState(invoiceId, tenantId);
+    if (invoice.ksef_status !== 'accepted' || invoice.ksef_environment !== environment) {
+      throw new Error('Offline24 success without accepted invoice in this environment requires reconciliation');
+    }
 
     await step.run('mark-queue-sent', async () => {
       const supabase = createAdminClient();
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('ksef_offline_queue')
         .update({ status: 'sent', last_error: null })
+        .eq('id', data.offlineQueueId!)
         .eq('invoice_id', invoiceId)
         .eq('tenant_id', tenantId)
+        .eq('ksef_environment', environment)
         // A late success must repair a row closed by an earlier failure event.
         .in('status', ['sending', 'failed', 'queued']);
       if (error) throw new Error(error.message);
@@ -432,13 +543,76 @@ export const offlineQueueSuccessHandler = inngest.createFunction(
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
  */
-export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubmitFailed.create>[0], { step }: JobContext) {
+export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubmitFailed.create>[0], { step, logger }: JobContext) {
     if (!data.fromOfflineQueue) {
       return { skipped: true as const, reason: 'not-from-offline' };
     }
 
     const { invoiceId, tenantId, error: errorMessage } = data;
+    const environment = requireConfiguredKsefEnvironment();
+    if (data.environment !== environment) {
+      throw new Error('Offline24 failure environment requires reconciliation');
+    }
+    assertJobIdentity(data.offlineQueueId, tenantId);
     await requireInvoiceTenant(invoiceId, tenantId);
+    const invoice = await readOfflineInvoiceState(invoiceId, tenantId);
+    // Przyjęta w TYM środowisku z numerem KSeF: spóźniony błąd jest bez
+    // znaczenia — krok niżej leczy wpis na `sent` (main). Inaczej: ręczne
+    // uzgodnienie (#63, Codex).
+    const acceptedHere = invoice.ksef_status === 'accepted' &&
+      Boolean(invoice.ksef_number) && invoice.ksef_environment === environment;
+    if (invoice.ksef_status === 'accepted' && !acceptedHere) {
+      const { data: quarantined, error: quarantineError } = await createAdminClient()
+        .from('ksef_offline_queue')
+        .update({ status: 'failed', last_error: 'Accepted invoice requires manual reconciliation' })
+        .eq('id', data.offlineQueueId!)
+        .eq('tenant_id', tenantId)
+        .eq('invoice_id', invoiceId)
+        .eq('ksef_environment', environment)
+        .eq('status', 'sending')
+        .select('id').maybeSingle();
+      logger.error('Offline24 stale failure for accepted invoice requires manual reconciliation', {
+        invoiceId, environment, storedEnvironment: invoice.ksef_environment ?? null,
+        queueQuarantined: !quarantineError && Boolean(quarantined),
+      });
+      throw new Error('Offline24 failure for accepted invoice requires reconciliation');
+    }
+    if (!acceptedHere && (environment === 'production' || !isOfflineReplayableInvoice(invoice))) {
+      const code = environment === 'production'
+        ? 'OFFLINE_PROD_QR_UNVERIFIED'
+        : 'OFFLINE_SPECIAL_DOCUMENT';
+      const reason = environment === 'production'
+        ? 'Offline24 PROD wymaga uzgodnienia niezweryfikowanego kodu QR.'
+        : 'Offline24 nie może odtworzyć danych tego dokumentu; wymagane ręczne uzgodnienie.';
+      const supabase = createAdminClient();
+      const { error: invoiceError } = await supabase
+        .from('invoices')
+        .update({
+          ksef_status: 'failed',
+          last_error: reason,
+          last_error_code: code,
+        })
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .eq('ksef_status', 'offline_queued');
+      if (invoiceError) throw new Error('Offline24 special invoice failure status requires reconciliation');
+      const { data: quarantined, error: quarantineError } = await supabase
+        .from('ksef_offline_queue')
+        .update({ status: 'failed', last_error: `${code}_REQUIRES_RECONCILIATION` })
+        .eq('id', data.offlineQueueId!)
+        .eq('tenant_id', tenantId)
+        .eq('invoice_id', invoiceId)
+        .eq('ksef_environment', environment)
+        // Zdarzenie kończące może przyjść po starszym ponowieniu, gdy wpis
+        // wrócił już do `queued` (main) — zamykamy go w obu stanach.
+        .in('status', ['sending', 'queued'])
+        .select('id').maybeSingle();
+      if (quarantineError || !quarantined) throw new Error('Offline24 special invoice failure requires reconciliation');
+      logger.error('Offline24 row cannot be safely retried; manual reconciliation required', {
+        invoiceId, environment, code,
+      });
+      return { success: false as const, reason: 'special-reconciliation' as const };
+    }
 
     await step.run('rollback-queue-status', async () => {
       const supabase = createAdminClient();
@@ -466,6 +640,8 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
       const { data: row, error: selErr } = await supabase
         .from('ksef_offline_queue')
         .select('id, attempts, status')
+        .eq('id', data.offlineQueueId!)
+        .eq('ksef_environment', environment)
         .eq('invoice_id', invoiceId)
         .eq('tenant_id', tenantId)
         .in('status', heldRoz ? ['sending', 'queued'] : ['sending'])
@@ -494,6 +670,7 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
           .eq('id', row.id)
           .eq('tenant_id', tenantId)
           .eq('invoice_id', invoiceId)
+          .eq('ksef_environment', environment)
           .in('status', heldRoz ? ['sending', 'queued'] : ['sending']);
         if (closeErr) throw new Error(closeErr.message);
         return { closedTerminal: true as const };
@@ -512,6 +689,7 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
         .eq('id', row.id)
         .eq('tenant_id', tenantId)
         .eq('invoice_id', invoiceId)
+        .eq('ksef_environment', environment)
         .eq('status', 'sending')
         .select('id')
         .maybeSingle();

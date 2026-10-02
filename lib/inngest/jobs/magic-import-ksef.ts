@@ -13,6 +13,7 @@ import {
 } from '@/lib/ksef/history-fetcher';
 import { processImportedInvoices } from '@/lib/import/import-engine';
 import { createAdminClient } from '@/lib/supabase/server';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 
 import { importKsefHistoryRequested, inngest } from '../client';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
@@ -50,6 +51,10 @@ export async function onMagicImportExhausted(
  */
 export async function runMagicImportKsef(data: Parameters<typeof importKsefHistoryRequested.create>[0], { step }: JobContext) {
     const { importJobId, tenantId, dateFrom, dateTo, direction } = data;
+    const environment = requireConfiguredKsefEnvironment();
+    if (data.environment !== environment) {
+      throw new Error('KSeF history import event environment requires reconciliation');
+    }
     await requireImportJobTenant(importJobId, tenantId, 'ksef_history');
 
     const supabase = createAdminClient();
@@ -170,6 +175,7 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
         source: 'ksef_history',
         invoiceDirection,
         invoiceKsefStatus: 'accepted',
+        ksefEnvironment: environment,
       });
     });
 

@@ -21,6 +21,10 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
+    // Od #63 kod KSeF bez jawnego środowiska zatrzymuje się (brak domyślnego
+    // „test” w produkcji). W testach domyślnie „test”; testy braku zmiennej
+    // i produkcji ustawiają ją same przez vi.stubEnv.
+    env: { KSEF_ENV: 'test' },
     pool: 'forks',
     // Jeden worker utrzymuje stabilny profil pamięci testów lokalnych.
     fileParallelism: false,

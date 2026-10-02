@@ -258,6 +258,7 @@ async function main() {
       tenantId,
       invoiceId,
       ksefNumber: 'FAK-TEST-20260419-NOTIFY-SUCCESS',
+      environment: 'test',
     }),
   );
   ok(`event_id: ${r1.ids[0]}`);
@@ -269,6 +270,7 @@ async function main() {
       invoiceId,
       error:
         'Test błąd: NonRetriableError - KSeF odrzucił fakturę (sync test)',
+      environment: 'test',
     }),
   );
   ok(`event_id: ${r2.ids[0]}`);
@@ -278,6 +280,7 @@ async function main() {
     inboxPollTenant.create({
       tenantId,
       nip: tenRow.nip,
+      environment: 'test',
     }),
   );
   ok(`event_id: ${r3.ids[0]}`);

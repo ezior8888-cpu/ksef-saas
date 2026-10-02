@@ -29,10 +29,23 @@ vi.mock('@/lib/supabase/server', () => ({
         select: () => q,
         eq: () => q,
         order: () => q,
+        // Faktura pierwotna: przyjęta w KSeF, w bieżącym środowisku (#63).
         maybeSingle: async () => ({
-          data: { id: '11111111-1111-4111-8111-111111111111', nip: '1234567890', name: 'Firma testowa', address_json: null },
+          data: table === 'invoices'
+            ? {
+                id: '00000000-0000-4000-8000-000000000001', tenant_id: '11111111-1111-4111-8111-111111111111',
+                issue_date: '2026-09-30', internal_number: 'FV 1/09/2026', ksef_number: 'KSEF-TEST-1',
+                net_total: 1000, vat_total: 230, gross_total: 1230, fa3_data: null,
+                seller_data: { nip: '1234567890', name: 'Firma testowa', address: { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' } },
+                buyer_data: { nip: '1234567890', name: 'Nabywca testowy', address: { countryCode: 'PL', addressLine1: 'ul. Testowa 2', addressLine2: '00-002 Warszawa' } },
+              }
+            : { id: '11111111-1111-4111-8111-111111111111', nip: '1234567890', name: 'Firma testowa', address_json: null },
           error: null,
         }),
+        // Pozycje faktury pierwotnej (#63 czyta je z bazy, nie z formularza).
+        then: (ok: (v: unknown) => unknown) => Promise.resolve(table === 'invoice_line_items'
+          ? { data: [{ name: 'Usługa', unit: 'szt.', quantity: 10, unit_price_net: 100, vat_rate: '23' }], error: null }
+          : { data: [], error: null }).then(ok),
         insert: (payload: Record<string, unknown>) => {
           if (table === 'invoices') st.inserted.push(payload);
           return table === 'invoices'
@@ -47,6 +60,8 @@ vi.mock('@/lib/supabase/server', () => ({
 
 import { saveCorrectionDraftAction } from '@/components/invoices/correction-actions';
 
+vi.stubEnv('KSEF_ENV', 'test');
+
 const line = (o: Record<string, unknown> = {}) => ({ name: 'Usługa', unit: 'szt.', quantity: 10, unitPriceNet: 100, vatRate: '23', ...o });
 
 function payload(o: Record<string, unknown>) {
@@ -59,6 +74,7 @@ function payload(o: Record<string, unknown>) {
     parentInvoiceId: '00000000-0000-4000-8000-000000000001',
     parentInvoiceNumber: 'FV 1/09/2026',
     parentInvoiceIssueDate: '2026-09-30',
+    parentKsefNumber: 'KSEF-TEST-1',
     correctionReason: 'Zmiana ilości po reklamacji',
     typKorekty: '2',
     seller: { nip: '1234567890', name: 'Firma testowa', address: { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' } },

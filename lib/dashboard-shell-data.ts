@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
 import type { UserRole } from '@/lib/supabase/auth-context';
+import { hasConfiguredKsefProof } from '@/lib/ksef/claim-environment';
 
 /** Kształt listy przekazywanej do `OrgSwitcher`. */
 export interface DashboardOrgMembershipPreview {
@@ -23,11 +24,13 @@ type MembershipTenantRow = {
         name: string;
         nip: string;
         ksef_verified_at: string | null;
+        ksef_verified_environment: string | null;
       }
     | Array<{
         name: string;
         nip: string;
         ksef_verified_at: string | null;
+        ksef_verified_environment: string | null;
       }>
     | null;
 };
@@ -50,7 +53,7 @@ async function fetchMembershipRowsWithTenantsFromAdmin(
   const { data, error } = await admin
     .from('memberships')
     .select(
-      'organization_id, role, status, tenants:organization_id(name, nip, ksef_verified_at)',
+      'organization_id, role, status, tenants:organization_id(name, nip, ksef_verified_at, ksef_verified_environment)',
     )
     .eq('user_id', userId)
     .eq('status', 'active');
@@ -88,7 +91,7 @@ export function mapMembershipRowsToOrgSwitcher(
 
 function tenantFromActiveRow(
   row: MembershipTenantRow | undefined,
-): { name: string; nip: string; ksef_verified_at: string | null } | null {
+): { name: string; nip: string; ksef_verified_at: string | null; ksef_verified_environment: string | null } | null {
   if (!row) return null;
   const t = Array.isArray(row.tenants) ? row.tenants[0] : row.tenants;
   if (!t) return null;
@@ -96,6 +99,7 @@ function tenantFromActiveRow(
     name: t.name,
     nip: t.nip,
     ksef_verified_at: t.ksef_verified_at ?? null,
+    ksef_verified_environment: t.ksef_verified_environment ?? null,
   };
 }
 
@@ -178,5 +182,5 @@ export async function getDashboardActiveOrgVerified(): Promise<boolean> {
   const tenant = tenantFromActiveRow(activeRow);
   if (!tenant) return true;
 
-  return tenant.ksef_verified_at !== null;
+  return hasConfiguredKsefProof(tenant.ksef_verified_at, tenant.ksef_verified_environment);
 }

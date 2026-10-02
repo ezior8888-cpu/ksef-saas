@@ -13,6 +13,7 @@ import type {
 
 import { ksefFetch } from './client';
 import { INBOX_PAGE_SIZE } from './inbox';
+import { requireMatchingKsefEnvironment } from './claim-environment';
 import { ksefRateLimiter } from './rate-limiter';
 import { getValidSession, ksefSessionCache } from './session-cache';
 
@@ -49,7 +50,7 @@ export interface FetchHistoryResult {
 }
 
 function resolveEnv(env?: KsefEnvironment): KsefEnvironment {
-  return env ?? (process.env.KSEF_ENV as KsefEnvironment) ?? 'test';
+  return requireMatchingKsefEnvironment(env);
 }
 
 function mapInvoiceMetadata(metadata: InvoiceMetadata): KsefInvoiceMetadata {

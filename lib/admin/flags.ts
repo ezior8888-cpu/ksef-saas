@@ -14,6 +14,7 @@ import 'server-only';
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { PerTenantFlag } from '@/lib/feature-flags';
+import { hasConfiguredKsefProof } from '@/lib/ksef/claim-environment';
 
 export interface TenantWithFlags {
   tenantId: string;
@@ -52,7 +53,7 @@ export async function listTenantsWithFlags(
   let tenantsQuery = supabase
     .from('tenants')
     .select(
-      'id, name, nip, is_active, ksef_verified_at, created_at',
+      'id, name, nip, is_active, ksef_verified_at, ksef_verified_environment, created_at',
       { count: 'exact' },
     )
     .is('deleted_at', null);
@@ -103,7 +104,7 @@ export async function listTenantsWithFlags(
     tenantName: t.name,
     tenantNip: t.nip,
     isActive: t.is_active,
-    ksefVerified: Boolean(t.ksef_verified_at),
+    ksefVerified: hasConfiguredKsefProof(t.ksef_verified_at, t.ksef_verified_environment),
     createdAt: t.created_at,
     flags: flagsByTenant.get(t.id) ?? {
       co_pilot_enabled: false,

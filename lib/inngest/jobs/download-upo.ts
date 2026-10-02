@@ -9,6 +9,7 @@ import { findSessionReferenceForKsefNumber } from '@/lib/ksef/submission-log';
 import { generateUpoPdf } from '@/lib/ksef/upo-pdf-generator';
 import { uploadUpoPdf, uploadUpoXml } from '@/lib/ksef/upo-storage';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 
 import { inngest, invoiceUpoRequested } from '../client';
 import { assertUpoReceipt, readUpoReceipt, requireAcceptedUpoInvoice, requireUpoBoundary } from './upo-identity';
@@ -34,6 +35,9 @@ function stringFromBuyerData(buyerData: Json | null): string {
  */
 export async function runDownloadUpo(data: Parameters<typeof invoiceUpoRequested.create>[0], { step, logger }: JobContext) {
   const { invoiceId, tenantId, ksefNumber } = data;
+  if (data.environment !== requireConfiguredKsefEnvironment()) {
+    throw new NonRetriableError('KSeF UPO event environment requires reconciliation');
+  }
   const identity = { invoiceId, tenantId, ksefNumber };
 
   // Authorization must be fresh on every resume, including cached steps.
@@ -54,15 +58,16 @@ export async function runDownloadUpo(data: Parameters<typeof invoiceUpoRequested
         .eq('id', current.id).eq('tenant_id', tenantId)
         .eq('invoice_id', invoiceId).eq('ksef_number', ksefNumber)
         .in('status', ['pending', 'failed'])
-        .select('id, tenant_id, invoice_id, ksef_number').single();
+        .select('id, tenant_id, invoice_id, ksef_number, ksef_environment').single();
       if (error || !updated) throw new Error('Nie można przygotować rekordu UPO');
       assertUpoReceipt(updated, identity, current.id);
       return updated;
     }
     const { data: inserted, error } = await supabase.from('upo_receipts')
       .insert({ tenant_id: tenantId, invoice_id: invoiceId, ksef_number: ksefNumber,
-        ksef_acceptance_timestamp: new Date().toISOString(), status: 'pending' })
-      .select('id, tenant_id, invoice_id, ksef_number').single();
+        ksef_acceptance_timestamp: new Date().toISOString(), status: 'pending',
+        ksef_environment: data.environment })
+      .select('id, tenant_id, invoice_id, ksef_number, ksef_environment').single();
     if (error || !inserted) throw new Error('Nie można utworzyć rekordu UPO');
     assertUpoReceipt(inserted, identity);
     return inserted;
@@ -89,7 +94,7 @@ export async function runDownloadUpo(data: Parameters<typeof invoiceUpoRequested
         .eq('id', upoRecord.id).eq('tenant_id', tenantId)
         .eq('invoice_id', invoiceId).eq('ksef_number', ksefNumber)
         .in('status', ['pending', 'failed'])
-        .select('id, tenant_id, invoice_id, ksef_number').single();
+        .select('id, tenant_id, invoice_id, ksef_number, ksef_environment').single();
       if (error || !updated) throw new Error('Nie można zapisać nieudanego pobrania UPO');
       assertUpoReceipt(updated, identity, upoRecord.id);
     });
@@ -129,7 +134,7 @@ export async function runDownloadUpo(data: Parameters<typeof invoiceUpoRequested
       .eq('id', upoRecord.id).eq('tenant_id', tenantId)
       .eq('invoice_id', invoiceId).eq('ksef_number', ksefNumber)
       .in('status', ['pending', 'failed', 'downloaded'])
-      .select('id, tenant_id, invoice_id, ksef_number').single();
+      .select('id, tenant_id, invoice_id, ksef_number, ksef_environment').single();
     if (error || !updated) throw new Error('Nie można zakończyć pobrania UPO');
     assertUpoReceipt(updated, identity, upoRecord.id);
   });

@@ -66,7 +66,9 @@ describe('fan-out skrzynki', () => {
         from: () => {
           const q = {
             select: () => q,
-            not: () => Promise.resolve({ data: [{ id: 't1', nip: '1234567890' }, { id: 't2', nip: '5260001246' }], error: null }),
+            // Firmy z certyfikatem i NIP-em zweryfikowanym w bieżącym środowisku (#63).
+            not: () => q,
+            eq: () => Promise.resolve({ data: [{ id: 't1', nip: '1234567890' }, { id: 't2', nip: '5260001246' }], error: null }),
           };
           return q;
         },

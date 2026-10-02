@@ -20,6 +20,7 @@ import * as Sentry from '@sentry/nextjs';
 
 import { inngest } from '../client';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertJobIdentity } from './tenant-boundary';
 import { assertUpoReceipt, matchesUpoInvoice, requireAcceptedUpoInvoice, UpoIdentityMismatchError, UPO_IDENTITY_MISMATCH } from './upo-identity';
 
@@ -31,6 +32,7 @@ interface StaleUpoRow {
   invoice_id: string;
   tenant_id: string;
   ksef_number: string;
+  ksef_environment: string | null;
   status: 'pending' | 'failed';
   download_attempts: number;
   invoices: {
@@ -38,17 +40,20 @@ interface StaleUpoRow {
     tenant_id: string;
     ksef_number: string | null;
     ksef_status: string | null;
+    ksef_environment: string | null;
   } | null;
 }
 
-const RETRY_COLUMNS = 'id, invoice_id, tenant_id, ksef_number, status, download_attempts, invoices(id, tenant_id, ksef_number, ksef_status)' as const;
+const RETRY_COLUMNS = 'id, invoice_id, tenant_id, ksef_number, ksef_environment, status, download_attempts, invoices(id, tenant_id, ksef_number, ksef_status, ksef_environment)' as const;
 
 /** Shared runner for Inngest and pg-boss; no authorization is trusted from step caches. */
 export async function runUpoRetryStale({ step, logger }: JobContext) {
+  const environment = requireConfiguredKsefEnvironment();
   const cutoffIso = new Date(Date.now() - STALE_HOURS * 60 * 60 * 1000).toISOString();
   const stale = await step.run('find-stale-upo', async () => {
     const { data, error } = await createAdminClient().from('upo_receipts')
       .select(RETRY_COLUMNS).in('status', ['pending', 'failed'])
+      .eq('ksef_environment', environment)
       .or('last_error.is.null,last_error.neq.' + UPO_IDENTITY_MISMATCH)
       .lt('created_at', cutoffIso).order('created_at', { ascending: true })
       .limit(MAX_RETRIES_PER_RUN);
@@ -60,6 +65,7 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
 
   const events: Array<{ name: 'invoice/upo.requested'; groupId: string; data: {
     invoiceId: string; tenantId: string; ksefNumber: string; nip: string;
+    environment: 'test' | 'demo' | 'production';
   } }> = [];
   let quarantined = 0;
   for (const candidate of stale) {
@@ -74,6 +80,11 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
     } catch (error) {
       if (!(error instanceof NonRetriableError)) throw error;
       Sentry.captureMessage('UPO retry skipped — malformed candidate identity', { level: 'warning' });
+      continue;
+    }
+    if (candidate.ksef_environment !== environment ||
+        candidate.invoices?.ksef_environment !== environment) {
+      Sentry.captureMessage('UPO retry blocked — invoice environment requires reconciliation', { level: 'warning' });
       continue;
     }
     // A cached candidate can have been repaired, removed, completed or quarantined.
@@ -115,7 +126,7 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
       continue;
     }
     // groupId = NIP: limit „3 naraz per NIP” w pg-boss działa tylko z grupą (AUD-92).
-    events.push({ name: 'invoice/upo.requested', groupId: nip, data: { ...identity, nip } });
+    events.push({ name: 'invoice/upo.requested', groupId: nip, data: { ...identity, nip, environment } });
   }
   if (events.length) await step.sendEvent('re-request-upo', events);
   Sentry.addBreadcrumb({ category: 'ksef.upo', level: 'info', message: 'UPO retry batch dispatched',

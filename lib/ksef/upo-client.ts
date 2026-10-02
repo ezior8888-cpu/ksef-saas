@@ -8,6 +8,7 @@
 import type { KsefEnvironment } from '@/types/ksef';
 
 import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
+import { requireMatchingKsefEnvironment } from './claim-environment';
 
 import { getKsefBaseUrl } from './client';
 import { ksefRateLimiter } from './rate-limiter';
@@ -33,7 +34,7 @@ export interface UpoDownloadError {
 export type UpoDownloadResponse = UpoDownloadResult | UpoDownloadError;
 
 function resolveEnv(env?: KsefEnvironment): KsefEnvironment {
-  return env ?? (process.env.KSEF_ENV as KsefEnvironment) ?? 'test';
+  return requireMatchingKsefEnvironment(env);
 }
 
 /**

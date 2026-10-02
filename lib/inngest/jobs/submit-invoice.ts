@@ -1,4 +1,4 @@
-import { requireInvoiceTenant } from './tenant-boundary';
+import { assertJobIdentity, requireInvoiceTenant } from './tenant-boundary';
 import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError, RetryAfterError } from 'inngest';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
@@ -9,6 +9,8 @@ import { trackServer } from '@/lib/analytics/server';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { inngest, invoiceSubmitRequested } from '../client';
 import { submitInvoiceFullFlow } from '@/lib/ksef/submit-invoice-full';
+import { assertSubmitReferences } from '@/lib/ksef/submit-reference-boundary';
+import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import {
   KsefNotVerifiedError,
   requireKsefVerificationForBackgroundJob,
@@ -114,12 +116,13 @@ async function currentSubmissionState(
 ): Promise<{
   ksef_status: string | null;
   ksef_number: string | null;
+  ksef_environment: string | null;
   invoice_type: string | null;
   invoice_kind: string | null;
 }> {
   const { data: stored, error } = await (await createAdminClient())
     .from('invoices')
-    .select('ksef_status, ksef_number, invoice_type, invoice_kind')
+    .select('ksef_status, ksef_number, ksef_environment, invoice_type, invoice_kind')
     .eq('id', data.invoiceId)
     .eq('tenant_id', data.tenantId)
     .maybeSingle();
@@ -220,14 +223,38 @@ export async function onSubmitInvoiceExhausted(
   { step, logger }: JobContext,
 ) {
       const parsed = invoiceSubmitRequested.safeParse(data);
-      if (!parsed.success) return { handled: false, reason: 'invalid-payload' };
+      if (!parsed.success) {
+        logger.error('KSeF submit event invalid; invoice requires reconciliation', {
+          reason: 'invalid-payload',
+        });
+        return { handled: false, reason: 'invalid-payload' };
+      }
       const { tenantId, invoiceId, nip, invoice } = parsed.data;
+      // Zdarzenie z innego środowiska KSeF niż skonfigurowane — nic nie
+      // zmieniamy, do ręcznego uzgodnienia (#63, Codex).
+      if (parsed.data.environment !== configuredKsefEnvironment()) {
+        logger.error('KSeF submit event environment mismatch; invoice requires reconciliation', {
+          tenantId,
+          invoiceId,
+          eventEnvironment: parsed.data.environment,
+          configuredEnvironment: configuredKsefEnvironment(),
+        });
+        return { handled: false, reason: 'environment-mismatch' };
+      }
       await requireInvoiceTenant(invoiceId, tenantId);
       const fromOfflineQueue = Boolean(data.fromOfflineQueue);
       const current = await currentSubmissionState(parsed.data);
-      if (current.ksef_status === 'accepted' && current.ksef_number) {
-        await reconcileAcceptedOfflineQueue(parsed.data, true);
-        return { handled: true, alreadyAccepted: true, ksefNumber: current.ksef_number };
+      if (current.ksef_status === 'accepted') {
+        if (current.ksef_number && current.ksef_environment === parsed.data.environment) {
+          await reconcileAcceptedOfflineQueue(parsed.data, true);
+          return { handled: true, alreadyAccepted: true, ksefNumber: current.ksef_number };
+        }
+        logger.error('KSeF accepted invoice was not changed by failed submit callback; manual reconciliation required', {
+          invoiceId,
+          eventEnvironment: parsed.data.environment,
+          storedEnvironment: current.ksef_environment ?? null,
+        });
+        return { handled: false, reason: 'accepted-reconciliation' };
       }
       const heldRoz = isHeldRozSubmission(parsed.data, current);
       const markedHold = heldRoz
@@ -242,8 +269,17 @@ export async function onSubmitInvoiceExhausted(
       //     transient outage → Offline24 fallback.
       //   - Z Offline24 (`fromOfflineQueue=true`) — już parkowane, nie
       //     duplikujemy. Mark 'failed' i emit event.
-      const isBusinessRejection = !reconcileHold && error.name === 'NonRetriableError';
-      const isTransientFailure = !isBusinessRejection && !reconcileHold;
+      // Strażnik integralności przed wysyłką dokumentu specjalnego to nie
+      // odrzucenie przez KSeF — zostaje `failed` do ręcznego uzgodnienia (#63).
+      const isBusinessRejection = !reconcileHold && error.name === 'NonRetriableError' &&
+        current.invoice_kind === 'regular' &&
+        !error.message.includes('manual reconciliation') &&
+        !(fromOfflineQueue && parsed.data.environment === 'production');
+      // Strażnik integralności („manual reconciliation”) nie minie przy
+      // ponowieniu ani w Offline24 — kończy się `failed`, bez parkowania.
+      const integrityHold = error.name === 'NonRetriableError' &&
+        error.message.includes('manual reconciliation');
+      const isTransientFailure = !isBusinessRejection && !reconcileHold && !integrityHold;
       const failureMessage = heldRoz
         ? ROZ_RECONCILIATION_MESSAGE
         : markedHold
@@ -317,6 +353,11 @@ export async function onSubmitInvoiceExhausted(
           if (!isOffline24Enabled(ksefEnv)) {
             return { queued: false as const, reason: 'offline24-wylaczony-na-produkcji' as const };
           }
+          // Offline24 zapisuje tylko id faktury — korekty, zaliczki i ROZ nie
+          // da się z niego odtworzyć (#63, Codex).
+          if (current.invoice_kind !== 'regular') {
+            return { queued: false as const, reason: 'dokument-specjalny' as const };
+          }
           try {
             const { getTenantKsefCredentials } = await import('@/lib/supabase/admin-queries');
             const { addToOfflineQueue } = await import('@/lib/ksef/offline-queue');
@@ -369,9 +410,10 @@ export async function onSubmitInvoiceExhausted(
           statusWriteLost = marked === false;
         }
       } else {
-        // Standard 'rejected' flow dla NonRetriableError.
+        // Standard 'rejected' flow dla NonRetriableError; strażnik integralności
+        // dokumentu (#63) zostaje `failed` do ręcznego uzgodnienia.
         const marked = await step.run('mark-as-rejected', () =>
-          markFailureUnlessAccepted(invoiceId, tenantId, 'rejected', failureMessage));
+          markFailureUnlessAccepted(invoiceId, tenantId, isBusinessRejection ? 'rejected' : 'failed', failureMessage));
         statusWriteLost = marked === false;
       }
 
@@ -419,10 +461,13 @@ export async function onSubmitInvoiceExhausted(
           invoiceId,
           tenantId,
           error: failureMessage,
+          environment: parsed.data.environment,
           fromOfflineQueue: data.fromOfflineQueue,
+          offlineQueueId: parsed.data.offlineQueueId,
           // Bez tego kolejka Offline24 przywracała odrzuconą fakturę do
-          // 'queued' i ponawiała ją do upływu terminu.
-          terminal: isBusinessRejection || reconcileHold,
+          // 'queued' i ponawiała ją do upływu terminu. Każdy NonRetriableError
+          // (także strażnik przed wysyłką) zamyka stary wpis Offline24 (#63).
+          terminal: error.name === 'NonRetriableError' || reconcileHold,
           manualReconciliationRequired: reconcileHold,
         },
       });
@@ -450,9 +495,32 @@ export async function runSubmitInvoice(
       );
     }
     const { tenantId, invoiceId, invoice, nip } = parsed.data;
+    // Zdarzenie musi pochodzić z tego samego środowiska KSeF, które jest
+    // skonfigurowane — inaczej faktura trafiłaby do innego KSeF (#63, Codex).
+    const env = configuredKsefEnvironment();
+    if (!env || parsed.data.environment !== env) {
+      throw new NonRetriableError('KSeF submit event environment does not match configured environment');
+    }
+    if (parsed.data.fromOfflineQueue && env === 'production') {
+      throw new NonRetriableError('Legacy PROD Offline24 QR requires manual reconciliation');
+    }
     await requireInvoiceTenant(invoiceId, tenantId);
-    const env = (process.env.KSEF_ENV as 'test' | 'demo' | 'production') ?? 'test';
     const fromOfflineQueue = Boolean(parsed.data.fromOfflineQueue);
+    if (fromOfflineQueue) {
+      assertJobIdentity(parsed.data.offlineQueueId, tenantId);
+      const { data: queueRow, error: queueError } = await (await createAdminClient())
+        .from('ksef_offline_queue')
+        .select('id')
+        .eq('id', parsed.data.offlineQueueId!)
+        .eq('tenant_id', tenantId)
+        .eq('invoice_id', invoiceId)
+        .eq('ksef_environment', env)
+        .eq('status', 'sending')
+        .maybeSingle();
+      if (queueError || !queueRow) {
+        throw new NonRetriableError('Offline24 queue reference requires reconciliation');
+      }
+    }
 
     // IDEMPOTENCJA (audyt przedlaunchowy): backstop przeciw podwójnej wysyłce.
     // Gdyby ten sam event przyszedł dwa razy (double-click „Wyślij", replay
@@ -465,14 +533,15 @@ export async function runSubmitInvoice(
       const supabase = await createAdminClient();
       const { data, error } = await supabase
         .from('invoices')
-        .select('ksef_status, ksef_number')
+        .select('ksef_status, ksef_number, ksef_environment')
         .eq('id', invoiceId)
         .eq('tenant_id', tenantId)
         .maybeSingle();
       if (error || !data) throw new Error('Nie można sprawdzić statusu faktury');
       return data;
     });
-    if (alreadyDone?.ksef_status === 'accepted' && alreadyDone.ksef_number) {
+    if (alreadyDone?.ksef_status === 'accepted' && alreadyDone.ksef_number &&
+        alreadyDone.ksef_environment === env) {
       logger.info('Faktura już zaakceptowana w KSeF — pomijam ponowną wysyłkę', {
         invoiceId,
         ksefNumber: alreadyDone.ksef_number,
@@ -487,6 +556,14 @@ export async function runSubmitInvoice(
     // Fresh, non-memoized read: an older Inngest idempotency step can be
     // restored after deployment. Check the stored kind as well as the event.
     const current = await currentSubmissionState(parsed.data);
+    if (current.ksef_status === 'accepted' && current.ksef_environment !== env) {
+      logger.error('KSeF accepted invoice environment requires manual reconciliation', {
+        invoiceId,
+        environment: env,
+        storedEnvironment: current.ksef_environment ?? null,
+      });
+      throw new NonRetriableError('KSeF accepted invoice environment requires manual reconciliation');
+    }
     if (current.ksef_status === 'accepted' && current.ksef_number) {
       await reconcileAcceptedOfflineQueue(parsed.data);
       return { alreadyAccepted: true as const, ksefNumber: current.ksef_number };
@@ -496,6 +573,20 @@ export async function runSubmitInvoice(
     }
     // Przed sondą zdrowia i Offline24 — wstrzymanej faktury nie wolno też zaparkować.
     await assertSubmissionNotHeld(parsed.data, current, env);
+
+    // Odwołania dokumentu specjalnego (rodzic korekty, zaliczki ROZ) muszą
+    // wskazywać faktury tej firmy przyjęte w tym środowisku KSeF (#63, Codex).
+    const documentKind = await assertSubmitReferences({
+      supabase: await createAdminClient(),
+      tenantId,
+      invoiceId,
+      invoice,
+      environment: env,
+      correctionData: parsed.data.correctionData,
+      advanceData: parsed.data.advanceData,
+      finalData: parsed.data.finalData,
+      finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
+    });
 
     logger.info('Rozpoczynam wysyłkę faktury', {
       tenantId,
@@ -517,6 +608,12 @@ export async function runSubmitInvoice(
       );
 
       if (health.offline) {
+        if (documentKind !== 'regular') {
+          throw new RetryAfterError(
+            'KSeF unavailable; special invoice cannot be replayed from Offline24',
+            getKsefRetryDelay(attempt),
+          );
+        }
         const redirected = await step.run(
           'try-redirect-offline-queue',
           async (): Promise<boolean> => {
@@ -759,6 +856,17 @@ export async function runSubmitInvoice(
       }
       // Ponownie tuż przed wysyłką: wyłącznik mógł zostać włączony między krokami.
       await assertSubmissionNotHeld(parsed.data, current, env);
+      await assertSubmitReferences({
+        supabase: await createAdminClient(),
+        tenantId,
+        invoiceId,
+        invoice,
+        environment: env,
+        correctionData: parsed.data.correctionData,
+        advanceData: parsed.data.advanceData,
+        finalData: parsed.data.finalData,
+        finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
+      });
       const credentials = await getTenantKsefCredentials(tenantId);
 
       try {
@@ -911,6 +1019,7 @@ export async function runSubmitInvoice(
       await updateInvoiceStatus(invoiceId, {
         ksef_status: 'accepted',
         ksef_number: result.ksefNumber,
+        ksef_environment: env,
         ksef_accepted_at: result.acquisitionTimestamp,
         xml_storage_path: result.xmlStoragePath,
         last_error: null,
@@ -968,7 +1077,7 @@ export async function runSubmitInvoice(
         distinctId: tenantId,
         event: ANALYTICS_EVENTS.invoiceAccepted,
         properties: {
-          ksef_env: process.env.KSEF_ENV ?? 'test',
+          ksef_env: env,
           internal_number: invoice.internalNumber ?? null,
         },
       });
@@ -986,6 +1095,7 @@ export async function runSubmitInvoice(
         // zalaniu KSeF /upo żądaniami z jednego podmiotu.
         nip,
         ksefNumber: result.ksefNumber,
+        environment: env,
         // KSeF 2.0 trzyma UPO w zasobach sesji (AUD-17).
         sessionReferenceNumber: result.sessionReferenceNumber,
       },
@@ -1007,7 +1117,9 @@ export async function runSubmitInvoice(
         invoiceId,
         tenantId,
         ksefNumber: result.ksefNumber,
+        environment: env,
         fromOfflineQueue: data.fromOfflineQueue,
+        offlineQueueId: parsed.data.offlineQueueId,
       },
     });
 

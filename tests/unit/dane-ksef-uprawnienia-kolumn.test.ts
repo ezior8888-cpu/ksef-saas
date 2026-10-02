@@ -38,7 +38,7 @@ describe('dane KSeF poza zasięgiem klienta', () => {
     const later = readdirSync(dir).filter((f) => /^\d{5}_/.test(f) && f > '00112');
     for (const file of later) {
       const sql = read(`${dir}/${file}`);
-      const added = [...sql.matchAll(/ALTER TABLE (?:public\.)?tenants[\s\S]*?ADD COLUMN (?:IF NOT EXISTS )?(\w+)/gi)].map((m) => m[1]);
+      const added = [...sql.matchAll(/ALTER TABLE (?:public\.)?tenants[^;]*?ADD COLUMN (?:IF NOT EXISTS )?(\w+)/gi)].map((m) => m[1]);
       for (const col of added) {
         expect(sql, `${file}: kolumna ${col}`).toMatch(new RegExp(`GRANT SELECT \\([^)]*\\b${col}\\b[^)]*\\) ON (?:public\\.)?tenants TO authenticated`, 'i'));
       }

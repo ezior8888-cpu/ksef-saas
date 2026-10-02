@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   eq: vi.fn(),
 }));
-
 vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: () => ({ from: mocks.from }),
 }));

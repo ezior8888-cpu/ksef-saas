@@ -34,6 +34,7 @@ import { reconcileExpiredOpenCheckoutAttempts } from '@/lib/stripe/checkout-reco
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 
 import { inngest } from '../client';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
@@ -128,39 +129,83 @@ async function checkKsefDowntime(): Promise<AlertCheckResult> {
 }
 
 async function checkOfflineQueueBacklog(): Promise<AlertCheckResult> {
-  const supabase = createAdminClient();
-  const { count, error } = await supabase
+  const environment = requireConfiguredKsefEnvironment();
+  const { count, error } = await createAdminClient()
     .from('ksef_offline_queue')
-    .select('*', { count: 'exact', head: true })
-    .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES]);
+    .select('id', { count: 'exact', head: true })
+    .in('status', [...OFFLINE_QUEUE_OPEN_STATUSES])
+    .eq('ksef_environment', environment);
+  // A failed count is not an empty queue. The monitor reports the check error
+  // to Sentry instead of silently hiding invoices with statutory deadlines.
+  if (error || typeof count !== 'number') {
+    throw error ?? new Error('Offline24 queue count unavailable');
+  }
+  if (count < 50) return { type: 'offline_backlog', fired: false };
 
-  // Błąd zapytania to NIE „pusta kolejka". Do 25.09 ten alarm pytał o status
-  // 'pending', którego enum nie ma, więc nie mógł wystrzelić nigdy. Wyjątek
-  // łapie wywołujący — osobno dla każdego sprawdzenia — i zgłasza do Sentry.
-  if (error) throw new Error(`kolejka Offline24: ${error.message}`);
-
-  const pending = count ?? 0;
-  if (pending < 50) return { type: 'offline_backlog', fired: false };
-
-  const shouldSend = await shouldSendAlert('offline_backlog');
-  if (!shouldSend) return { type: 'offline_backlog', fired: false, reason: 'dedup' };
-
+  const dedupKey = 'offline_backlog:' + environment;
+  if (!(await shouldSendAlert(dedupKey))) {
+    return { type: 'offline_backlog', fired: false, reason: 'dedup' };
+  }
   await alertCritical(
-    `Offline24 queue rośnie: ${pending} pending invoices`,
-    `Faktur w Offline24 queue: *${pending}*. Może to znaczyć że KSeF jest dłużej niedostępne niż 5 min, lub że recovery cron padł.`,
+    'Offline24 queue rośnie: ' + count + ' otwartych wpisów',
+    'Faktur czekających lub w trakcie wysyłki Offline24: ' + count + '. Sprawdź dostępność KSeF i recovery cron.',
     {
-      fields: [{ label: 'Pending', value: String(pending) }],
+      fields: [
+        { label: 'Queued + sending', value: String(count) },
+        { label: 'KSeF env', value: environment },
+      ],
       link: {
         label: 'Otwórz /admin/system',
-        url: `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/admin/system`,
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/system',
       },
     },
   );
-
-  await markAlertDelivered('offline_backlog');
+  await markAlertDelivered(dedupKey);
   return { type: 'offline_backlog', fired: true };
 }
 
+/** Legacy or cross-environment queue items must never silently disappear. */
+export async function checkBlockedKsefOfflineQueue(): Promise<AlertCheckResult> {
+  const environment = requireConfiguredKsefEnvironment();
+  const filter = 'ksef_environment.is.null,ksef_environment.neq.' + environment;
+  const supabase = createAdminClient();
+  const [blocked, nearest] = await Promise.all([
+    supabase.from('ksef_offline_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'queued').or(filter),
+    supabase.from('ksef_offline_queue')
+      .select('deadline')
+      .eq('status', 'queued').or(filter)
+      .order('deadline', { ascending: true }).limit(1).maybeSingle(),
+  ]);
+  if (blocked.error || nearest.error || blocked.count === null) {
+    throw blocked.error ?? nearest.error ?? new Error('Blocked Offline24 queue count unavailable');
+  }
+  if (blocked.count === 0) return { type: 'offline_environment_blocked', fired: false };
+  if (!nearest.data?.deadline) throw new Error('Blocked Offline24 deadline unavailable');
+
+  const dedupKey = 'offline_environment_blocked:' + environment;
+  if (!(await shouldSendAlert(dedupKey))) {
+    return { type: 'offline_environment_blocked', fired: false, reason: 'dedup' };
+  }
+  await alertCritical(
+    'Offline24 wymaga uzgodnienia środowiska',
+    'Co najmniej jeden oczekujący wpis Offline24 nie ma potwierdzonego środowiska lub dotyczy innego środowiska. Nie wznawiaj go automatycznie; uzgodnij z KSeF i kolejkami przed zmianą konfiguracji.',
+    {
+      fields: [
+        { label: 'Zablokowane', value: String(blocked.count) },
+        { label: 'Najbliższy deadline', value: nearest.data.deadline },
+        { label: 'KSeF env', value: environment },
+      ],
+      link: {
+        label: 'Otwórz /admin/system',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/system',
+      },
+    },
+  );
+  await markAlertDelivered(dedupKey);
+  return { type: 'offline_environment_blocked', fired: true };
+}
 async function checkInngestFailures(): Promise<AlertCheckResult> {
   const supabase = createAdminClient();
   const cutoffIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -373,6 +418,7 @@ export async function checkStaleStripeCheckoutAttempts(): Promise<AlertCheckResu
   try {
     await reconcileExpiredOpenCheckoutAttempts(cutoffIso);
   } catch (error) {
+    // A failed check must leave the stale rows visible to the alert.
     Sentry.captureException(error, {
       tags: { area: 'billing.checkout.reconcile' },
     });
@@ -773,6 +819,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       step.run('check-ksef', () => checkKsefDowntime().catch(captureAndReturn('ksef_down'))),
       step.run('check-offline', () =>
         checkOfflineQueueBacklog().catch(captureAndReturn('offline_backlog')),
+      ),
+      step.run('check-offline-environment', () =>
+        checkBlockedKsefOfflineQueue().catch(captureAndReturn('offline_environment_blocked')),
       ),
       step.run('check-inngest', () =>
         checkInngestFailures().catch(captureAndReturn('inngest_failures')),

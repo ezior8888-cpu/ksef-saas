@@ -58,7 +58,10 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00114 | Codex (#62) → Claude (C-20) | `stripe_customer_claim` (dawniej 00083: trwały claim tworzenia Customer) | PR `claude/codex-62-stripe`; przed wdrożeniem, razem z 00115–00116 |
 | 00115 | Codex (#62) → Claude (C-20) | `stripe_failed_payment_reference_rotation` (dawniej 00084: dowód pary PI–Charge przed skutkami finansowymi) | PR `claude/codex-62-stripe`; przed wdrożeniem |
 | 00116 | Codex (#62) → Claude (C-20) | `stripe_checkout_session_id` (dawniej 00085: realne ID `cs_*`, CAS odzysku `uncertain`) | PR `claude/codex-62-stripe`; przed wdrożeniem |
-| **00117** | — | następny wolny (00200 zajęte) | — |
+| 00117 | Codex (#63) → Claude (C-20) | `ksef_certificate_claim_guard` (dawniej 00086: proweniencja środowiska KSeF dla firm, faktur, UPO, kolejki Offline24; atomowy claim certyfikatu) | PR `claude/codex-63-ksef-wlasciciel`; przed wdrożeniem, razem z 00118–00119 |
+| 00118 | Codex (#63) → Claude (C-20) | `correction_parent_boundary` (dawniej 00087: rodzic korekty z tej samej firmy i przyjęty w KSeF) | PR `claude/codex-63-ksef-wlasciciel`; przed wdrożeniem |
+| 00119 | Codex (#63) → Claude (C-20) | `invoice_pending_content_freeze` (dawniej 00088: treść dokumentu niezmienna od wysyłki) | PR `claude/codex-63-ksef-wlasciciel`; przed wdrożeniem |
+| **00120** | — | następny wolny (00200 zajęte) | — |
 
 ---
 
