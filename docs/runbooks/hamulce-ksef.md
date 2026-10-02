@@ -66,6 +66,20 @@ Błąd odczytu flagi (baza niedostępna) też blokuje wysyłkę: kolejkowanie
 zwraca komunikat „spróbuj ponownie”, a job ponawia próbę. Awaria bazy nie
 może po cichu zdjąć wyłącznika.
 
+## Rejestracja i przerwa techniczna
+
+Dwie pozostałe flagi globalne, włączane tym samym `UPDATE` co wyżej
+(`flag = 'disableSignups'` albo `'maintenanceMode'`). Rejestrację wyłącza też
+bramka: `/wylacz rejestracja`.
+
+| Flaga | Co blokuje | Błąd odczytu flagi |
+|---|---|---|
+| `disableSignups` | formularz `/register` (bez przycisku Google) i zakładanie **pierwszej** firmy — konto z Google albo prosto z GoTrue bez firmy nic nie może; zaproszenia i kolejne firmy istniejących klientów działają | rejestracja zamknięta |
+| `maintenanceMode` | panel zalogowanego i onboarding → `/przerwa-techniczna`, prywatne API → 503 `maintenance`; działają strony publiczne, logowanie, `/admin`, `/api/health`, webhooki, joby | ostatnia znana wartość, a bez niej panel działa |
+
+`disableSignups` działa od razu (odczyt wprost z bazy). `maintenanceMode`
+proxy pamięta do 30 s w każdym procesie web — tyle trwa włączenie i zdjęcie.
+
 ## Blokada korekt na produkcji
 
 Generator korekt wysyła wartości „po” zamiast różnicy i zamienia `zw` na 23%
