@@ -649,8 +649,8 @@ Faktura walutowa też spełnia kryterium c, ale to duży zakres z decyzjami praw
 - **Dowód:** `lib/pdf/invoice-renderer.ts:88-93,348-350,294`.
 
 #### F-094 — Szczegóły faktury na ekranie: brak terminu i rachunku płatności, cena i ilość ucięte do 2 miejsc
-- Typ: NIEDOKOŃCZONE · Waga: K4 · Pewność: Z ODCZYTU · PR: kod zmieniany w PR #71 tylko w obsłudze Realtime (`invoice-detail-view.tsx:106-115`)
-- **Skutek:** po otwarciu faktury użytkownik nie widzi, do kiedy klient ma zapłacić, jaką formą ani na jaki rachunek. Te dane są na PDF, a strona pobiera je z bazy (`payment_data`), ale ich nie pokazuje. Cena 100,1234 wyświetla się jako „100.12” (kropka zamiast przecinka, ucięte miejsca), czyli inaczej niż na PDF i w XML. Nabywca z numerem VAT UE albo PESEL nie ma na ekranie żadnego identyfikatora.
+- Typ: NIEDOKOŃCZONE · Waga: K4 · Pewność: POTWIERDZONE (test renderu komponentu przed poprawką, `tests/unit/szczegoly-faktury-ekran.test.tsx`) · PR: kod zmieniany w PR #71 tylko w obsłudze Realtime (`invoice-detail-view.tsx:106-115`)
+- **Skutek:** po otwarciu faktury użytkownik nie widzi, do kiedy klient ma zapłacić, jaką formą ani na jaki rachunek. Te dane są na PDF, a strona pobiera je z bazy (`payment_data`), ale ich nie pokazuje. Cena 100,1234 wyświetla się jako „100.12” (kropka zamiast przecinka, ucięte miejsca), czyli inaczej niż na PDF i w XML. Nabywca z numerem VAT UE nie ma na ekranie identyfikatora.
 - **Dowód:** `app/(dashboard)/invoices/[id]/page.tsx:41` (pobiera `payment_data`, nie przekazuje go dalej); `components/invoices/invoice-detail-view.tsx:61-64` (`toFixed(2)`), `:233-236` (tylko `buyer.nip`).
 - Uwagi: część ekranowa F-091 (surowy znacznik ISO `ksef_accepted_at`) idzie razem z tą pozycją. Nieczyszczony błąd w nasłuchu Realtime poprawia PR #71.
 

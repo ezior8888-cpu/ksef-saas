@@ -268,7 +268,7 @@ Commit: `2a6eccb`
 Sprawdzenie: `pnpm exec vitest run tests/unit/kontrahenci-walidacja-masowa.test.ts` (250 kontrahentów w paczkach, nieudany zapis nieliczony).
 
 ### P-24 — Szczegóły faktury: płatność, identyfikator nabywcy, pełna precyzja
-Status: W TOKU
+Status: ZROBIONE
 Typ: DOKOŃCZENIE
 Znaleziska: F-094, F-091 (część ekranowa: `ksef_accepted_at`)
 Zmiana:
@@ -276,7 +276,7 @@ Zmiana:
 - `components/invoices/invoice-detail-view.tsx`:
   - sekcja „Płatność” (forma, termin, rachunek);
   - ilość i cena w formacie polskim do 4 miejsc, kwoty w formacie polskim;
-  - identyfikator nabywcy z etykietą (NIP, VAT UE, PESEL);
+  - identyfikator nabywcy z etykietą (NIP albo VAT UE — jak na PDF; PESEL konsumenta celowo pomijam, PDF też go nie drukuje);
   - czas przyjęcia w KSeF w strefie Europe/Warsaw.
 - Hunk Realtime (linie 106–115, PR #71) bez zmian.
 Kryterium: test renderu komponentu — termin i rachunek widoczne; 100,1234 w całości; „VAT UE: DE…”; czas przyjęcia po polsku.
@@ -358,3 +358,6 @@ Każde znalezisko spoza planu z powodem. „Kod zmieniany w PR #N” znaczy, że
 | F-089 import plików | Kod zmieniany w PR #63, #64, #86. |
 | F-090 operacje masowe | Nowa funkcja — „Pomysły na później”. |
 | F-091 drobiazgi | K4; podtytuł listy w P-09, ekran szczegółów w P-24, reszta w różnych plikach PR. |
+Commit: `4ab652c`
+Sprawdzenie: `pnpm exec vitest run tests/unit/szczegoly-faktury-ekran.test.tsx`; w aplikacji: otwórz wystawioną fakturę — sekcja „Płatność” z terminem i rachunkiem, cena z 4 miejscami, czas przyjęcia po polsku.
+
