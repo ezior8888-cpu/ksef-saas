@@ -184,7 +184,9 @@ describe('stale billing VAT enqueue alert', () => {
     for (const name of ['select', 'eq', 'not', 'is', 'in', 'gte', 'lt', 'or', 'limit', 'order'] as const) {
       query[name].mockReturnValue(query);
     }
-    query.maybeSingle.mockResolvedValue({ data: null, error: null });
+    // Świeża kopia bazy — alarm o kopii ma milczeć (wcześniej test przechodził,
+    // bo zapytanie o kopię padało na braku `limit` w atrapie).
+    query.maybeSingle.mockResolvedValue({ data: { started_at: new Date().toISOString() }, error: null });
     query.then.mockImplementation((resolve: (value: unknown) => void) =>
       Promise.resolve({ count: 0, error: null, data: [] }).then(resolve));
     mocks.from.mockReturnValue(query);

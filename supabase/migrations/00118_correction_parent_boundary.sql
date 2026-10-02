@@ -1,5 +1,7 @@
+-- Przeniesione 02.10.2026 ze szkicu Codexa #63 (tam 00087) jako 00118 — C-20.
+-- Numeracja: 00086→00117, 00087→00118, 00088→00119.
 -- Bind correction parents to the same tenant and a proven KSeF acceptance.
--- Apply only after 00086 and after reconciling historical NULL provenance.
+-- Apply only after 00117 and after reconciling historical NULL provenance.
 -- NOT VALID avoids treating existing cross-tenant links as already audited.
 BEGIN;
 

@@ -245,7 +245,7 @@ describe('service-role job boundaries', () => {
       last_error_code: status === 'failed' ? 'ROZ_HOLD_RECONCILE' : null,
     }];
     await expect(runNotifyFailure({
-      invoiceId: ID, tenantId: A, error: 'old timeout', manualReconciliationRequired,
+      invoiceId: ID, tenantId: A, environment: 'test' as const, error: 'old timeout', manualReconciliationRequired,
     }, ctx)).resolves.toMatchObject({ skipped: true, reason });
     expect(mocks.proposal).not.toHaveBeenCalled();
     expect(mocks.email).not.toHaveBeenCalled();
@@ -378,10 +378,10 @@ describe('service-role job boundaries', () => {
     expect(tables.ksef_offline_queue.map((r) => r.status)).toEqual(['sent', 'sending']);
   });
   it('ignores a late Offline24 failure after the invoice was accepted', async () => {
-    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'accepted', ksef_number: 'TEST' }];
-    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'sending' }];
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_environment: 'test', ksef_status: 'accepted', ksef_number: 'TEST' }];
+    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'sending', ksef_environment: 'test' }];
     await expect(runOfflineQueueFailure({
-      invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, error: 'old timeout',
+      invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, offlineQueueId: OTHER, error: 'old timeout',
       terminal: true, manualReconciliationRequired: true,
     }, ctx)).resolves.toMatchObject({});
     expect(writes()).toHaveLength(1);
@@ -389,36 +389,36 @@ describe('service-role job boundaries', () => {
     expect(tables.ksef_offline_queue[0].status).toBe('sent');
   });
   it('repairs an Offline24 row closed by failure when a late success arrives', async () => {
-    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'accepted', ksef_number: 'TEST' }];
-    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'failed' }];
-    await runOfflineQueueSuccess({ invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, ksefNumber: 'TEST' }, ctx);
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_environment: 'test', ksef_status: 'accepted', ksef_number: 'TEST' }];
+    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'failed', ksef_environment: 'test' }];
+    await runOfflineQueueSuccess({ invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, offlineQueueId: OTHER, ksefNumber: 'TEST' }, ctx);
     expect(tables.ksef_offline_queue[0].status).toBe('sent');
   });
   it('treats a stale nonterminal failure as terminal after the ROZ hold', async () => {
     tables.invoices = [{
-      id: ID, tenant_id: A, ksef_status: 'failed', ksef_number: null,
+      id: ID, tenant_id: A, ksef_environment: 'test', ksef_status: 'failed', ksef_number: null,
       last_error_code: 'ROZ_HOLD_RECONCILE', invoice_type: 'ROZ',
     }];
-    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'sending' }];
+    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'sending', ksef_environment: 'test' }];
     await runOfflineQueueFailure({
-      invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, error: 'old timeout', terminal: false,
+      invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, offlineQueueId: OTHER, error: 'old timeout', terminal: false,
     }, ctx);
     expect(tables.ksef_offline_queue[0].status).toBe('failed');
     expect(tables.invoices[0]).toMatchObject({ ksef_status: 'failed', last_error_code: 'ROZ_HOLD_RECONCILE' });
   });
   it('does not overwrite a ROZ hold written after an old failure handler read', async () => {
     tables.invoices = [{
-      id: ID, tenant_id: A, ksef_status: 'sending', ksef_number: null, last_error_code: null,
+      id: ID, tenant_id: A, ksef_environment: 'test', ksef_status: 'sending', ksef_number: null, last_error_code: null,
       invoice_type: 'ROZ',
     }];
-    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'sending' }];
+    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'sending', ksef_environment: 'test' }];
     beforeUpdate = () => {
       tables.invoices[0].ksef_status = 'failed';
       tables.invoices[0].last_error_code = 'ROZ_HOLD_RECONCILE';
       beforeUpdate = null;
     };
     await runOfflineQueueFailure({
-      invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, error: 'old timeout', terminal: false,
+      invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, offlineQueueId: OTHER, error: 'old timeout', terminal: false,
     }, ctx);
     expect(tables.invoices[0]).toMatchObject({
       ksef_status: 'failed', last_error_code: 'ROZ_HOLD_RECONCILE',
@@ -426,32 +426,32 @@ describe('service-role job boundaries', () => {
     expect(tables.ksef_offline_queue[0].status).toBe('failed');
   });
   it('closes a queued ROZ when its terminal event arrives after an old retry event', async () => {
-    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'offline_queued', ksef_number: null }];
-    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued' }];
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_environment: 'test', ksef_status: 'offline_queued', ksef_number: null }];
+    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued', ksef_environment: 'test' }];
     await runOfflineQueueFailure({
-      invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, error: 'manual check',
+      invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, offlineQueueId: OTHER, error: 'manual check',
       terminal: true, manualReconciliationRequired: true,
     }, ctx);
     expect(tables.ksef_offline_queue[0].status).toBe('failed');
   });
   it('heals an accepted invoice left queued without a success event', async () => {
-    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'accepted', ksef_number: 'TEST' }];
-    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued', deadline: '2099-01-01' }];
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_environment: 'test', ksef_status: 'accepted', ksef_number: 'TEST' }];
+    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued', ksef_environment: 'test', deadline: '2099-01-01' }];
     await runProcessOfflineQueue(ctx);
     expect(tables.ksef_offline_queue[0].status).toBe('sent');
     expect(sendEvent).not.toHaveBeenCalled();
   });
   it('closes an old queued ROZ without emitting a new submit event', async () => {
-    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'offline_queued', invoice_type: 'ROZ' }];
-    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued', deadline: '2099-01-01' }];
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_environment: 'test', ksef_status: 'offline_queued', invoice_type: 'ROZ' }];
+    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued', ksef_environment: 'test', deadline: '2099-01-01' }];
     await runProcessOfflineQueue(ctx);
     expect(tables.ksef_offline_queue[0].status).toBe('failed');
     expect(tables.invoices[0]).toMatchObject({ ksef_status: 'failed', last_error_code: 'ROZ_HOLD_RECONCILE' });
     expect(sendEvent).not.toHaveBeenCalled();
   });
   it('does not reclaim a queue row already marked sent by a late success', async () => {
-    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'offline_queued', invoice_type: 'VAT' }];
-    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued', deadline: '2099-01-01' }];
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_environment: 'test', ksef_status: 'offline_queued', invoice_type: 'VAT', invoice_kind: 'regular', fa3_data: { type: 'VAT' } }];
+    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued', ksef_environment: 'test', deadline: '2099-01-01' }];
     beforeUpdate = () => {
       tables.ksef_offline_queue[0].status = 'sent';
       beforeUpdate = null;
@@ -472,9 +472,9 @@ describe('service-role job boundaries', () => {
     expect(sendEvent).not.toHaveBeenCalled();
   });
   it('does not requeue an invoice accepted during a nonterminal Offline24 failure', async () => {
-    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'sending', ksef_number: null }];
+    tables.invoices = [{ id: ID, tenant_id: A, ksef_environment: 'test', ksef_status: 'sending', ksef_number: null }];
     tables.ksef_offline_queue = [{
-      id: OTHER, tenant_id: A, invoice_id: ID, status: 'sending', attempts: 1,
+      id: OTHER, tenant_id: A, invoice_id: ID, status: 'sending', ksef_environment: 'test', attempts: 1,
     }];
     beforeUpdate = () => {
       tables.invoices[0].ksef_status = 'accepted';
@@ -482,10 +482,10 @@ describe('service-role job boundaries', () => {
       beforeUpdate = null;
     };
     await runOfflineQueueFailure({
-      invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, error: 'timeout',
+      invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, offlineQueueId: OTHER, error: 'timeout',
     }, ctx);
     expect(tables.invoices[0]).toMatchObject({ ksef_status: 'accepted', ksef_number: 'TEST' });
-    await runOfflineQueueSuccess({ invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, ksefNumber: 'TEST' }, ctx);
+    await runOfflineQueueSuccess({ invoiceId: ID, tenantId: A, environment: 'test' as const, fromOfflineQueue: true, offlineQueueId: OTHER, ksefNumber: 'TEST' }, ctx);
     expect(tables.ksef_offline_queue[0].status).toBe('sent');
   });
   it.each(['runner', 'failure'] as const)('rejects mismatched submit %s before any write, mail, KSeF or event', async (kind) => {
@@ -502,7 +502,11 @@ describe('service-role job boundaries', () => {
       id: ID, tenant_id: A, ksef_status: 'draft', invoice_kind: invoiceKind,
       internal_number: 'TEST-1', parent_invoice_id: OTHER, advance_invoice_ids: [OTHER],
     }];
-    await expect(runSubmitInvoice(submitEvent, ctx)).rejects.toThrow('manual reconciliation');
+    // ROZ zatrzymuje wcześniej wstrzymanie z main; korekta i zaliczka — kontrola
+    // dokumentu z #63. W każdym przypadku bez zapisu, sondy i wysyłki.
+    await expect(runSubmitInvoice(submitEvent, ctx)).rejects.toThrow(
+      /manual reconciliation|Wysyłka faktur rozliczających jest tymczasowo wstrzymana/,
+    );
     expect(writes()).toEqual([]);
     expect(mocks.submit).not.toHaveBeenCalled();
     expect(mocks.health).not.toHaveBeenCalled();
@@ -525,7 +529,9 @@ describe('service-role job boundaries', () => {
     expect(mocks.submit).not.toHaveBeenCalled();
     expect(writes()).toEqual([]);
   });
-  it('retries an ordinary PROD submit outage without creating an Offline24 document', async () => {
+  // Polityka main (AUD-14, B3): na PROD bez sondy zdrowia i bez Offline24 —
+  // zwykła wysyłka, którą job ponawia przy awarii.
+  it('does not create an Offline24 document for an ordinary PROD submit (AUD-14)', async () => {
     vi.stubEnv('KSEF_ENV', 'production');
     const regularInvoice = { type: 'VAT', internalNumber: 'TEST-1' } as Invoice;
     tables.invoices = [{
@@ -533,12 +539,11 @@ describe('service-role job boundaries', () => {
       invoice_type: 'VAT', internal_number: 'TEST-1', fa3_data: regularInvoice,
     }];
     mocks.health.mockResolvedValue({ offline: true, reason: 'KSeF down', isMfOutage: true });
-    await expect(runSubmitInvoice({
+    await runSubmitInvoice({
       ...submitEvent, environment: 'production', invoice: regularInvoice,
-    }, ctx)).rejects.toThrow('PROD Offline24 QR generation is disabled');
+    }, ctx).catch(() => undefined);
+    expect(mocks.health).not.toHaveBeenCalled();
     expect(mocks.offlineAdd).not.toHaveBeenCalled();
-    expect(mocks.submit).not.toHaveBeenCalled();
-    expect(writes()).toEqual([]);
   });
   it('rejects a stale event whose legal document differs from stored fa3_data before KSeF I/O', async () => {
     const staleInvoice = {
@@ -772,7 +777,11 @@ describe('service-role job boundaries', () => {
     expect(sendEvent).not.toHaveBeenCalled();
   });
   it('cannot overwrite acceptance during the status transition to sending', async () => {
-    tables.invoices = [{ id: ID, tenant_id: A, ksef_status: 'queued', ksef_number: null, ksef_environment: 'test' }];
+    // Faktura w bazie = treść zdarzenia (kontrola z #63).
+    tables.invoices = [{
+      id: ID, tenant_id: A, ksef_status: 'queued', ksef_number: null, ksef_environment: 'test',
+      invoice_kind: 'regular', internal_number: 'TEST-1', fa3_data: { internalNumber: 'TEST-1' },
+    }];
     beforeUpdate = () => {
       tables.invoices[0].ksef_status = 'accepted';
       tables.invoices[0].ksef_number = 'TEST';

@@ -83,7 +83,12 @@ vi.mock('@/lib/supabase/server', () => ({
       maybeSingle: async () => ({
         data: isUpdate
           ? { id: '11111111-1111-4111-8111-111111111111' }
-          : { ksef_status: 'sending', ksef_number: null },
+          // Faktura w bazie = treść zdarzenia (kontrola z #63), środowisko „test”.
+          : {
+              id: '11111111-1111-4111-8111-111111111111', ksef_status: 'sending', ksef_number: null,
+              ksef_environment: 'test', invoice_kind: 'regular', invoice_type: 'VAT', internal_number: 'FV/1/2026',
+              fa3_data: { internalNumber: 'FV/1/2026', type: 'VAT', issueDate: '2026-10-01' },
+            },
         error: null,
       }),
     };
@@ -161,7 +166,8 @@ describe('Offline24 na KSeF produkcyjnym (AUD-14)', () => {
   it('PROD: zła sonda zdrowia NIE parkuje faktury w Offline24 — idzie zwykła wysyłka', async () => {
     vi.stubEnv('KSEF_ENV', 'production');
     mocks.health.mockResolvedValue({ offline: true, isMfOutage: false, reason: 'ping' });
-    await runSubmitInvoice(zdarzenie, ctx);
+    // Zdarzenie z tego samego środowiska co konfiguracja (#63).
+    await runSubmitInvoice({ ...zdarzenie, environment: 'production' }, ctx);
     expect(mocks.addOffline).not.toHaveBeenCalled();
     expect(mocks.fullFlow).toHaveBeenCalled();
   });

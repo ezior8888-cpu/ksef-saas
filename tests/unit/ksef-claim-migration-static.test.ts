@@ -3,11 +3,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync(
-  join(process.cwd(), 'supabase/migrations/00086_ksef_certificate_claim_guard.sql'),
+  join(process.cwd(), 'supabase/migrations/00117_ksef_certificate_claim_guard.sql'),
   'utf8',
 );
 
-describe('00086 privileged KSeF provenance writes', () => {
+describe('00117 privileged KSeF provenance writes', () => {
   it('revokes tenant-user DML on Offline24 and UPO artifacts', () => {
     expect(migration).toMatch(/REVOKE INSERT, UPDATE, DELETE ON public\.ksef_offline_queue\s+FROM PUBLIC, anon, authenticated;/);
     expect(migration).toMatch(/REVOKE INSERT, UPDATE, DELETE ON public\.upo_receipts\s+FROM PUBLIC, anon, authenticated;/);

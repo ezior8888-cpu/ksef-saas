@@ -1,5 +1,8 @@
 # KSeF Owner claim i proweniencja środowiska — odbiór 00086
 
+> **Numeracja od 02.10.2026 (C-20):** migracje z tego dokumentu weszły do `main` pod nowymi numerami — 00086 → **00117**, 00087 → **00118**, 00088 → **00119**. Treść poniżej zostawiona w brzmieniu z 25.09.
+
+
 Stan na 2026-09-26: lokalny kod w izolowanej gałęzi `codex/security-ksef-claim-hardening`, commit `3dfcd15` nad `6654e9d`. `00086_ksef_certificate_claim_guard.sql` jest **wyłącznie plikiem**; nie wykonano SQL, migracji, testu na db-1 ani wdrożenia. Według datowanego wpisu Bartka produkcja ma migracje do `00082` włącznie, ale tego nie sprawdzono tu niezależnym odczytem db-1; szczegółowy stan `00043` wymaga kontroli. Lokalna `00086` wymaga wcześniejszego ułożenia i sprawdzenia `00083–00085` po produkcyjnej `00082`.
 
 ## Granica bezpieczeństwa

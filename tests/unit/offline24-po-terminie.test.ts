@@ -48,7 +48,7 @@ vi.mock('@/lib/supabase/server', () => ({
             db.updates.push({ table, patch });
             return { data: table === 'ksef_offline_queue' ? { id: db.item.id } : { id: db.item.invoice_id }, error: null };
           }
-          if (table === 'invoices') return { data: { ksef_status: 'offline_queued', ksef_number: null, invoice_type: 'VAT', invoice_kind: 'regular', last_error_code: null }, error: null };
+          if (table === 'invoices') return { data: { ksef_status: 'offline_queued', ksef_number: null, ksef_environment: 'test', invoice_type: 'VAT', invoice_kind: 'regular', fa3_data: { type: 'VAT' }, last_error_code: null }, error: null };
           return { data: { status: 'sending' }, error: null };
         },
         then: (ok: (v: unknown) => unknown) => {
@@ -75,7 +75,7 @@ beforeEach(() => {
   db.updates = [];
   db.item = {
     id: 'q1', tenant_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', invoice_id: '11111111-1111-4111-8111-111111111111',
-    status: 'queued', attempts: 3, deadline: '2026-09-01T21:59:59.999Z', user_notified: false, idempotency_key: 'k',
+    status: 'queued', ksef_environment: 'test', attempts: 3, deadline: '2026-09-01T21:59:59.999Z', user_notified: false, idempotency_key: 'k',
   };
   mocks.alert.mockResolvedValue(undefined);
   mocks.push.mockResolvedValue({ sent: 1, failed: 0 });

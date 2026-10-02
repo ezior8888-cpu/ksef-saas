@@ -1,3 +1,5 @@
+-- Przeniesione 02.10.2026 ze szkicu Codexa #63 (tam 00086) jako 00117 — C-20.
+-- Numeracja: 00086→00117, 00087→00118, 00088→00119.
 -- KSeF certificate ownership is a privileged, proof-backed transition.
 -- 00039 granted authenticated direct EXECUTE on the old claim RPC; 00043
 -- made that RPC delete other unverified tenants with the same NIP. Tenant
@@ -12,7 +14,7 @@ BEGIN
   IF pg_catalog.to_regclass(
     'public.idx_tenants_nip_ksef_unique_verified'
   ) IS NULL THEN
-    RAISE EXCEPTION 'Apply 00039 before 00086'
+    RAISE EXCEPTION 'Apply 00039 before 00117'
       USING ERRCODE = '55000';
   END IF;
 END;
@@ -29,6 +31,9 @@ ALTER TABLE public.tenants
     (ksef_verified_environment IN ('test', 'demo', 'production')
       AND ksef_verified_at IS NOT NULL)
   );
+-- Od 00112 kolumny `tenants` czyta klient tylko po jawnym GRANT (AUD-103);
+-- widok tenant_verification_status (security_invoker) czyta tę kolumnę.
+GRANT SELECT (ksef_verified_environment) ON public.tenants TO authenticated;
 
 -- Keep the 00039 index name for the unique_violation handler. NULL provenance
 -- stays outside this index and does not block a fresh, proof-backed claim.

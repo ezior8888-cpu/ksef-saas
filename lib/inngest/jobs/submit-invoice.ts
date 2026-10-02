@@ -275,7 +275,11 @@ export async function onSubmitInvoiceExhausted(
         current.invoice_kind === 'regular' &&
         !error.message.includes('manual reconciliation') &&
         !(fromOfflineQueue && parsed.data.environment === 'production');
-      const isTransientFailure = !isBusinessRejection && !reconcileHold;
+      // Strażnik integralności („manual reconciliation”) nie minie przy
+      // ponowieniu ani w Offline24 — kończy się `failed`, bez parkowania.
+      const integrityHold = error.name === 'NonRetriableError' &&
+        error.message.includes('manual reconciliation');
+      const isTransientFailure = !isBusinessRejection && !reconcileHold && !integrityHold;
       const failureMessage = heldRoz
         ? ROZ_RECONCILIATION_MESSAGE
         : markedHold
@@ -406,9 +410,10 @@ export async function onSubmitInvoiceExhausted(
           statusWriteLost = marked === false;
         }
       } else {
-        // Standard 'rejected' flow dla NonRetriableError.
+        // Standard 'rejected' flow dla NonRetriableError; strażnik integralności
+        // dokumentu (#63) zostaje `failed` do ręcznego uzgodnienia.
         const marked = await step.run('mark-as-rejected', () =>
-          markFailureUnlessAccepted(invoiceId, tenantId, 'rejected', failureMessage));
+          markFailureUnlessAccepted(invoiceId, tenantId, isBusinessRejection ? 'rejected' : 'failed', failureMessage));
         statusWriteLost = marked === false;
       }
 
@@ -503,7 +508,7 @@ export async function runSubmitInvoice(
     const fromOfflineQueue = Boolean(parsed.data.fromOfflineQueue);
     if (fromOfflineQueue) {
       assertJobIdentity(parsed.data.offlineQueueId, tenantId);
-      const { data: queueRow, error: queueError } = await createAdminClient()
+      const { data: queueRow, error: queueError } = await (await createAdminClient())
         .from('ksef_offline_queue')
         .select('id')
         .eq('id', parsed.data.offlineQueueId!)
@@ -572,7 +577,7 @@ export async function runSubmitInvoice(
     // Odwołania dokumentu specjalnego (rodzic korekty, zaliczki ROZ) muszą
     // wskazywać faktury tej firmy przyjęte w tym środowisku KSeF (#63, Codex).
     const documentKind = await assertSubmitReferences({
-      supabase: createAdminClient(),
+      supabase: await createAdminClient(),
       tenantId,
       invoiceId,
       invoice,
@@ -852,7 +857,7 @@ export async function runSubmitInvoice(
       // Ponownie tuż przed wysyłką: wyłącznik mógł zostać włączony między krokami.
       await assertSubmissionNotHeld(parsed.data, current, env);
       await assertSubmitReferences({
-        supabase: createAdminClient(),
+        supabase: await createAdminClient(),
         tenantId,
         invoiceId,
         invoice,

@@ -142,11 +142,16 @@ beforeEach(() => {
   mocks.health.mockResolvedValue({ offline: false });
   mocks.findOpen.mockResolvedValue(null);
   mocks.credentials.mockResolvedValue({ type: 'token', nip: '1234567890' });
+  // Faktura w bazie = treść zdarzenia `submitEvent()` (kontrola z #63).
   mocks.invoice = {
+    id: ID,
     ksef_status: 'queued',
     ksef_number: null,
+    ksef_environment: 'test',
     invoice_type: 'VAT',
     invoice_kind: 'regular',
+    internal_number: 'FV/1',
+    fa3_data: { type: 'VAT', internalNumber: 'FV/1', issueDate: '2026-10-01' },
   };
   mocks.updates = [];
   vi.stubEnv('KSEF_ENV', 'test');
@@ -232,7 +237,8 @@ describe('hamulce w jobie wysyłki', () => {
     vi.stubEnv('KSEF_ENV', 'production');
     mocks.invoice.invoice_type = 'KOR';
     mocks.invoice.invoice_kind = 'correction';
-    const error = await runSubmitInvoice(submitEvent('VAT'), ctx).catch((e: unknown) => e);
+    const error = await runSubmitInvoice({ ...submitEvent('VAT'), environment: 'production' }, ctx)
+      .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(NonRetriableError);
     expect((error as Error).message).toMatch(/^\[KOR_HOLD\] /);
     expect(mocks.health).not.toHaveBeenCalled();

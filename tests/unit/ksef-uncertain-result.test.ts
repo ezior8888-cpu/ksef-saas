@@ -79,7 +79,12 @@ vi.mock('@/lib/supabase/server', () => ({
       maybeSingle: async () => ({
         data: isUpdate
           ? { id: '11111111-1111-4111-8111-111111111111' }
-          : { ksef_status: 'sending', ksef_number: null },
+          // Faktura w bazie = treść zdarzenia (kontrola z #63), środowisko „test”.
+          : {
+              id: '11111111-1111-4111-8111-111111111111', ksef_status: 'sending', ksef_number: null,
+              ksef_environment: 'test', invoice_kind: 'regular', invoice_type: 'VAT', internal_number: 'FV 1/2026',
+              fa3_data: { internalNumber: 'FV 1/2026', type: 'VAT', issueDate: '2026-10-01' },
+            },
         error: null,
       }),
     };

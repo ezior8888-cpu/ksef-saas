@@ -57,7 +57,7 @@ beforeEach(() => {
 
 describe('powiadomienia o wysyłce faktury — klucz idempotencji', () => {
   it('przyjęta: klucz z numeru faktury, ten sam przy ponowieniu', async () => {
-    const data = { tenantId: TENANT, invoiceId: INVOICE, ksefNumber: '1234567890-20261002-0100001AF629-AF' };
+    const data = { tenantId: TENANT, invoiceId: INVOICE, environment: 'test' as const, ksefNumber: '1234567890-20261002-0100001AF629-AF' };
     await runNotifySuccess(data, ctx);
     await runNotifySuccess(data, { ...ctx, attempt: 1 });
 
@@ -66,9 +66,9 @@ describe('powiadomienia o wysyłce faktury — klucz idempotencji', () => {
   });
 
   it('odrzucona: ten sam błąd — ten sam klucz; inny błąd — inny klucz', async () => {
-    await runNotifyFailure({ tenantId: TENANT, invoiceId: INVOICE, error: 'Błąd 450: niepoprawny NIP' }, ctx);
-    await runNotifyFailure({ tenantId: TENANT, invoiceId: INVOICE, error: 'Błąd 450: niepoprawny NIP' }, { ...ctx, attempt: 1 });
-    await runNotifyFailure({ tenantId: TENANT, invoiceId: INVOICE, error: 'Błąd 440: duplikat' }, ctx);
+    await runNotifyFailure({ tenantId: TENANT, invoiceId: INVOICE, environment: 'test' as const, error: 'Błąd 450: niepoprawny NIP' }, ctx);
+    await runNotifyFailure({ tenantId: TENANT, invoiceId: INVOICE, environment: 'test' as const, error: 'Błąd 450: niepoprawny NIP' }, { ...ctx, attempt: 1 });
+    await runNotifyFailure({ tenantId: TENANT, invoiceId: INVOICE, environment: 'test' as const, error: 'Błąd 440: duplikat' }, ctx);
 
     const keys = mocks.failed.mock.calls.map((c) => (c[2] as { idempotencyKey: string }).idempotencyKey);
     expect(keys[0]).toMatch(new RegExp(`^invoice-failed/${INVOICE}/[0-9a-f]{16}$`));

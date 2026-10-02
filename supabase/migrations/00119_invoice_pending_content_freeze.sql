@@ -1,7 +1,9 @@
+-- Przeniesione 02.10.2026 ze szkicu Codexa #63 (tam 00088) jako 00119 — C-20.
+-- Numeracja: 00086→00117, 00087→00118, 00088→00119.
 -- Freeze legal document content from enqueue/Offline24 onward and prevent
 -- client edits to accepted imports. This file is
 -- for operator review and copy-DB testing only; Codex does not execute SQL.
--- Apply after the renumbered 00087 correction-parent boundary.
+-- Apply after 00118 (correction-parent boundary).
 BEGIN;
 
 CREATE OR REPLACE FUNCTION public.guard_invoice_pending_content()
@@ -110,7 +112,7 @@ CREATE TRIGGER b_guard_invoice_pending_content
 
 -- Lock the parent row before changing legal line content, so a concurrent
 -- enqueue cannot race the line edit. This trigger allows accounting-only
--- changes on pending rows; 00086 separately blocks client DML on accepted lines.
+-- changes on pending rows; 00117 separately blocks client DML on accepted lines.
 CREATE OR REPLACE FUNCTION public.guard_pending_invoice_lines()
 RETURNS trigger
 LANGUAGE plpgsql

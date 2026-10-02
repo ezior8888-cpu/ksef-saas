@@ -148,7 +148,10 @@ describe('job wysyłki mówi kolejce, czy błąd jest kończący', () => {
   it('integrity failure stays failed yet closes the Offline24 row', async () => {
     await onSubmitInvoiceExhausted(new NonRetriableError('KSeF document kind requires manual reconciliation'), zdarzenie, ctx);
     expect(wyslane().data.terminal).toBe(true);
-    expect(mocks.status).toHaveBeenCalledWith(INV, expect.objectContaining({ ksef_status: 'failed' }), TEN);
+    // main zapisuje status warunkowo (bez nadpisania akceptacji), nie przez updateInvoiceStatus.
+    expect(db.updates.find((u) => u.table === 'invoices')?.patch).toMatchObject({ ksef_status: 'failed' });
+    const { addToOfflineQueue } = await import('@/lib/ksef/offline-queue');
+    expect(addToOfflineQueue).not.toHaveBeenCalled();
   });
 
   it('inny błąd po wyczerpaniu prób → terminal: false', async () => {

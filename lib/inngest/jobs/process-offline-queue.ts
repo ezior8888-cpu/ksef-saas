@@ -40,7 +40,7 @@ import {
 async function readOfflineInvoiceState(invoiceId: string, tenantId: string) {
   const { data, error } = await createAdminClient()
     .from('invoices')
-    .select('ksef_status, ksef_environment, invoice_kind, invoice_type, fa3_data')
+    .select('ksef_status, ksef_number, ksef_environment, invoice_kind, invoice_type, fa3_data')
     .eq('id', invoiceId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -556,7 +556,12 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
     assertJobIdentity(data.offlineQueueId, tenantId);
     await requireInvoiceTenant(invoiceId, tenantId);
     const invoice = await readOfflineInvoiceState(invoiceId, tenantId);
-    if (invoice.ksef_status === 'accepted') {
+    // Przyjęta w TYM środowisku z numerem KSeF: spóźniony błąd jest bez
+    // znaczenia — krok niżej leczy wpis na `sent` (main). Inaczej: ręczne
+    // uzgodnienie (#63, Codex).
+    const acceptedHere = invoice.ksef_status === 'accepted' &&
+      Boolean(invoice.ksef_number) && invoice.ksef_environment === environment;
+    if (invoice.ksef_status === 'accepted' && !acceptedHere) {
       const { data: quarantined, error: quarantineError } = await createAdminClient()
         .from('ksef_offline_queue')
         .update({ status: 'failed', last_error: 'Accepted invoice requires manual reconciliation' })
@@ -572,7 +577,7 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
       });
       throw new Error('Offline24 failure for accepted invoice requires reconciliation');
     }
-    if (environment === 'production' || !isOfflineReplayableInvoice(invoice)) {
+    if (!acceptedHere && (environment === 'production' || !isOfflineReplayableInvoice(invoice))) {
       const code = environment === 'production'
         ? 'OFFLINE_PROD_QR_UNVERIFIED'
         : 'OFFLINE_SPECIAL_DOCUMENT';
@@ -598,7 +603,9 @@ export async function runOfflineQueueFailure(data: Parameters<typeof invoiceSubm
         .eq('tenant_id', tenantId)
         .eq('invoice_id', invoiceId)
         .eq('ksef_environment', environment)
-        .eq('status', 'sending')
+        // Zdarzenie kończące może przyjść po starszym ponowieniu, gdy wpis
+        // wrócił już do `queued` (main) — zamykamy go w obu stanach.
+        .in('status', ['sending', 'queued'])
         .select('id').maybeSingle();
       if (quarantineError || !quarantined) throw new Error('Offline24 special invoice failure requires reconciliation');
       logger.error('Offline24 row cannot be safely retried; manual reconciliation required', {

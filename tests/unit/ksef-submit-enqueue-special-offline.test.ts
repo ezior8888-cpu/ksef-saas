@@ -17,6 +17,13 @@ vi.mock('@/lib/ksef/offline-queue', () => ({ addToOfflineQueue: mocks.offlineAdd
 vi.mock('@/lib/ksef/claim-environment', () => ({ requireConfiguredKsefEnvironment: mocks.environment }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: mocks.send }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.audit }));
+// Blob poświadczeń main czyta kluczem serwisowym (AUD-103) — ta sama atrapa.
+vi.mock('@/lib/supabase/server', () => ({ createAdminClient: () => supabase }));
+// Globalny wyłącznik wysyłek (main) — w tym teście wyłączony.
+vi.mock('@/lib/ksef/submission-holds', async (orig) => ({
+  ...(await orig<typeof import('@/lib/ksef/submission-holds')>()),
+  isKsefSubmissionPaused: async () => false,
+}));
 
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 
@@ -68,15 +75,13 @@ describe('special invoice enqueue under KSeF outage', () => {
     expect(mocks.send).not.toHaveBeenCalled();
   });
 
-  it('keeps an ordinary VAT draft on a PROD outage without issuing an Offline24 QR', async () => {
+  // Polityka main (AUD-14, decyzja B3): na PROD bez sondy zdrowia i bez
+  // Offline24 — zwykła wysyłka, którą job ponawia. Szkic Codexa z #63 zastąpiony.
+  it('PROD: no health probe and no Offline24 QR for an ordinary VAT (AUD-14)', async () => {
     mocks.environment.mockReturnValue('production');
-    const result = await enqueueKsefSubmitAfterDraft({ ...base, auditKind: 'regular' });
-    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('Offline24 w PROD') });
-    expect(mocks.health).toHaveBeenCalledWith('production');
+    await enqueueKsefSubmitAfterDraft({ ...base, auditKind: 'regular' }).catch(() => undefined);
+    expect(mocks.health).not.toHaveBeenCalled();
     expect(mocks.offlineAdd).not.toHaveBeenCalled();
-    expect(mocks.send).not.toHaveBeenCalled();
-    expect(mocks.audit).not.toHaveBeenCalled();
-    expect(writes).toBe(0);
   });
 
   it('blocks PROD final settlement before checking health or sending an event', async () => {
