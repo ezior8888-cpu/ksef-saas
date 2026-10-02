@@ -227,14 +227,16 @@ Commit: `508f786`
 Sprawdzenie: `pnpm exec vitest run tests/unit/kontrahenci-edycja.test.ts`; w aplikacji: /contractors?q=525 zawęża listę, ikona ołówka otwiera edycję, kosz usuwa kontrahenta (faktury bez zmian).
 
 ### P-19 — Wydatki: wybór miesiąca
-Status: W TOKU
+Status: ZROBIONE
 Typ: DOKOŃCZENIE
 Znaleziska: F-087 (część: wydatki)
 Zmiana: `app/(dashboard)/expenses/page.tsx` — parametr `miesiac` (RRRR-MM) w URL, nawigacja poprzedni/następny miesiąc, zakres dat w czasie polskim (P-05).
 Kryterium: test parsowania i zakresu miesiąca (grudzień → styczeń, zła wartość → bieżący miesiąc).
+Commit: `67796fa`
+Sprawdzenie: `pnpm exec vitest run tests/unit/wydatki-miesiac.test.ts`; w aplikacji: /expenses → strzałka „← sierpień 2026” pokazuje wydatki z sierpnia.
 
 ### P-20 — Podpowiedź kolejnego numeru faktury
-Status: TODO
+Status: W TOKU
 Typ: NOWA
 Znaleziska: F-015
 Uzasadnienie (kryterium c): numeracja z seriami jest w podstawowym obiegu u wszystkich czterech konkurentów (Fakturownia, inFakt, wFirma, iFirma — źródła w `RAPORT.md`). Ręczne wpisywanie numeru przy każdej fakturze prowadzi do dziur i duplikatów w serii, czyli wprost do problemu z art. 106e ust. 1 pkt 2.
