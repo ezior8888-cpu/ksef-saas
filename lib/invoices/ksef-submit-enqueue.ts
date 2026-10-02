@@ -17,6 +17,7 @@ import {
 } from '@/lib/auth/ksef-verification-guard';
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
+import { isOffline24Enabled } from '@/lib/ksef/offline24-policy';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import {
@@ -165,7 +166,10 @@ export async function enqueueKsefSubmitAfterDraft(
 
   const env = (process.env.KSEF_ENV as 'test' | 'demo' | 'production' | undefined) ?? 'test';
 
-  const health = await shouldUseOfflineMode(env);
+  // AUD-14: na KSeF produkcyjnym bez automatycznego Offline24 (`offline24-policy.ts`).
+  const health = isOffline24Enabled(env)
+    ? await shouldUseOfflineMode(env)
+    : { offline: false as const, isMfOutage: false };
 
   if (health.offline && decrypted.type === 'xades') {
     try {

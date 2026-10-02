@@ -4,6 +4,7 @@ import { InvoiceTenantMismatchError, requireInvoiceTenant } from './tenant-bound
  */
 
 import { cron } from 'inngest';
+import * as Sentry from '@sentry/nextjs';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
 
@@ -11,6 +12,8 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { checkKsefAvailability } from '@/lib/ksef/health-check';
 import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
 import { createProposal } from '@/lib/flo/proposals';
+import { alertCritical } from '@/lib/alerts/slack';
+import { sendPushToTenant } from '@/lib/push/sender';
 import {
   buildDeadlineProposal,
   buildOutageProposal,
@@ -31,6 +34,65 @@ import {
   invoiceSubmitRequested,
   invoiceSubmitSucceeded,
 } from '../client';
+
+/**
+ * Jednorazowy alarm o przekroczonym terminie Offline24. Najpierw znacznik
+ * (warunkowo na `user_notified = false`), potem wiadomości — dwa równoległe
+ * przebiegi nie wyślą alarmu dwa razy. W alarmie operatora bez NIP i numerów.
+ */
+async function notifyDeadlineExceeded(item: Record<string, unknown>): Promise<boolean> {
+  // Nigdy nie rzuca: alarm, który nie doszedł, nie może zatrzymać wysyłki
+  // tej ani pozostałych faktur z kolejki.
+  const scope = { id: item.id as string, tenant: item.tenant_id as string };
+  try {
+    const { data: claimed, error } = await createAdminClient()
+      .from('ksef_offline_queue')
+      .update({ user_notified: true })
+      .eq('id', scope.id)
+      .eq('tenant_id', scope.tenant)
+      .eq('user_notified', false)
+      .select('id')
+      .maybeSingle();
+    if (error || !claimed) return false;
+  } catch {
+    return false;
+  }
+
+  try {
+    await alertCritical(
+      'Offline24: przekroczony termin doesłania faktury do KSeF',
+      'Faktura z trybu offline nie trafiła do KSeF w ustawowym terminie. Kolejka nadal próbuje ją wysłać. Sprawdź kolejkę cron.process-offline-queue, stan KSeF i ksef_offline_queue (status queued, user_notified = true).',
+      {
+        fields: [
+          { label: 'Termin', value: String(item.deadline) },
+          { label: 'Próby', value: String(item.attempts ?? 0) },
+        ],
+      },
+    );
+  } catch (e) {
+    // Alarm nie doszedł — zdejmujemy znacznik, kolejny przebieg spróbuje znowu.
+    Sentry.captureException(e, { tags: { area: 'ksef.offline-deadline-alert' } });
+    await createAdminClient()
+      .from('ksef_offline_queue')
+      .update({ user_notified: false })
+      .eq('id', scope.id)
+      .eq('tenant_id', scope.tenant)
+      .then(() => undefined, () => undefined);
+    return false;
+  }
+
+  try {
+    await sendPushToTenant(scope.tenant, 'invoice_rejected', {
+      title: 'Faktura czeka na wysłanie do KSeF',
+      body: 'Termin doesłania faktury wystawionej w trybie offline minął. Wysyłkę ponawiamy — sprawdź status faktury.',
+      url: `/invoices/${String(item.invoice_id)}`,
+      tag: `offline-deadline-${scope.id}`,
+    });
+  } catch {
+    // Push jest uzupełnieniem; operator dostał już alarm.
+  }
+  return true;
+}
 
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
@@ -212,38 +274,12 @@ export async function runProcessOfflineQueue({ step }: JobContext) {
         () => new Date(item.deadline).getTime() < Date.now(),
       );
 
-      if (deadlinePassed) {
-        const expired = await step.run(`expire-offline-queue-${item.id}`, async () => {
-          const supabase = createAdminClient();
-          const { data: updated, error } = await supabase
-            .from('ksef_offline_queue')
-            .update({ status: 'expired', last_error: 'OFFLINE_DEADLINE_EXCEEDED' })
-            .eq('id', item.id)
-            .eq('tenant_id', item.tenant_id)
-            .eq('invoice_id', item.invoice_id)
-            .eq('status', 'queued')
-            .select('id')
-            .maybeSingle();
-          if (error) throw new Error(error.message);
-          if (!updated) return false;
-
-          const { error: invoiceUpdateError } = await supabase
-            .from('invoices')
-            .update({
-              ksef_status: 'failed',
-              last_error: 'Przekroczono deadline Offline24',
-              last_error_code: 'OFFLINE_DEADLINE_EXCEEDED',
-              last_error_field: null,
-              last_error_suggestion: null,
-            })
-            .eq('id', item.invoice_id)
-            .eq('tenant_id', item.tenant_id)
-            .or('ksef_status.is.null,ksef_status.neq.accepted');
-          if (invoiceUpdateError) throw new Error(invoiceUpdateError.message);
-          return true;
-        });
-        results.push({ invoiceId: item.invoice_id, status: expired === false ? 'state-changed' : 'expired' });
-        continue;
+      // AUD-15 (decyzja P1): po terminie faktury i tak trzeba dosłać do KSeF —
+      // próbujemy dalej. Przy pierwszym przekroczeniu alarm dla operatora
+      // i klienta, raz (`user_notified`); wcześniej wpis szedł w `expired`,
+      // faktura w `failed`, a nikt się o tym nie dowiadywał.
+      if (deadlinePassed && item.user_notified !== true) {
+        await step.run(`deadline-alert-${item.id}`, () => notifyDeadlineExceeded(item));
       }
 
       try {

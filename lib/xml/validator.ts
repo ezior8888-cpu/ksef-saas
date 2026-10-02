@@ -99,6 +99,18 @@ export async function validateFA3(xmlString: string): Promise<ValidationResult> 
 }
 
 /**
+ * XML niezgodny ze schematem XSD FA(3). KSeF takiej faktury nigdy nie
+ * przyjmie, więc to błąd danych, a nie przejściowy — bez ponowień i bez
+ * Offline24 (AUD-13).
+ */
+export class InvoiceXmlSchemaError extends Error {
+  constructor(public readonly errors: string[]) {
+    super(`XML FA(3) jest niezgodny ze schematem XSD:\n${errors.map((e) => `  ${e}`).join('\n')}`);
+    this.name = 'InvoiceXmlSchemaError';
+  }
+}
+
+/**
  * Preferowany entry point przed wysyłką do KSeF.
  *
  * Walidacja biznesowa (NIP checksum, arytmetyka, daty) jest już
