@@ -173,27 +173,15 @@ export async function recordUsage(
   const cost = estimateCostUsd(model, usage);
   const day = dayKey(now);
 
-  const existing = await db
-    .from('flo_usage')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .eq('day', day)
-    .maybeSingle();
-
-  if (existing.error) throw new Error(existing.error.message);
-  const current = existing.data as FloUsageRow | null;
-
-  const { error } = await db.from('flo_usage').upsert(
-    {
-      tenant_id: tenantId,
-      day,
-      input_tokens: (current?.input_tokens ?? 0) + usage.inputTokens,
-      output_tokens: (current?.output_tokens ?? 0) + usage.outputTokens,
-      cost_usd: Number(current?.cost_usd ?? 0) + cost,
-      calls: (current?.calls ?? 0) + 1,
-    },
-    { onConflict: 'tenant_id,day' },
-  );
+  // Dodawanie w bazie jednym poleceniem (00105). Do 02.10 „odczyt → zapis
+  // sumy” z aplikacji gubił zużycie przy równoległych wywołaniach (AUD-116).
+  const { error } = await db.rpc('flo_record_usage', {
+    p_tenant_id: tenantId,
+    p_day: day,
+    p_input_tokens: usage.inputTokens,
+    p_output_tokens: usage.outputTokens,
+    p_cost_usd: cost,
+  });
 
   if (error) throw new Error(error.message);
   return cost;
