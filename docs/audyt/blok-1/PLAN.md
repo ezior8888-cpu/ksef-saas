@@ -59,7 +59,7 @@ Commit: `f4a5298`
 Sprawdzenie: `pnpm exec vitest run tests/unit/skrzynka-hwm-koniec-okna.test.ts` — przy zaległości okno 01.01–01.04 zapisuje 01.04 zamiast HWM 02.10 (na starej logice test pada); bieżące okno dalej idzie do HWM z KSeF.
 
 ### P-05 — Formularze faktur: daty liczone w czasie polskim
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-013
 Zmiana:
@@ -67,9 +67,11 @@ Zmiana:
 - użycie w `components/invoices/invoice-form.tsx` (domyślna data, przyciski terminu), `correction-form.tsx` i `final-form.tsx`;
 - `advance-form.tsx` pomijam — te wiersze zmienia PR #85.
 Kryterium: test helpera przy `TZ=Europe/Warsaw` i `TZ=UTC`: 2026-10-02 + 14 = 2026-10-16; 2026-10-31T23:30Z → „dziś” = 2026-11-01.
+Commit: `194bda1`
+Sprawdzenie: `pnpm exec vitest run tests/unit/daty-formularzy-warszawa.test.ts`; w aplikacji (przeglądarka w Polsce): data wystawienia 02.10 + przycisk „14 dni” → termin 16.10 (wcześniej 15.10). Formularz zaliczki bez zmian — PR #85.
 
 ### P-06 — Korekta zmniejszająca kwotę daje się zapisać (migracja 00200)
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-004
 Zmiana: nowy plik `supabase/migrations/00200_correction_negative_total_paid_check.sql`. CHECK `check_paid_amount_valid` dopuszcza `gross_total < 0` przy `paid_amount = 0`; dla nieujemnych zostaje warunek `paid_amount <= gross_total`. Migracji nie wgrywam (krok dla Bartka).
