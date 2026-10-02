@@ -230,10 +230,9 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     });
 
     await step.run('create-expense', async () => {
-      // Jedyna ochrona przed drugim wydatkiem z tej samej faktury — indeks na
-      // `expenses.ksef_invoice_id` nie jest UNIQUE. Błąd nie może znaczyć
-      // „nie ma”: przy ponowieniu (pg-boss bez pamięci kroków) albo podwójnym
-      // doręczeniu zdarzenia powstałby drugi koszt w KPiR.
+      // Odczyt oszczędza ponownego insertu, ale nie rozstrzyga wyścigu.
+      // Indeks 00121 gwarantuje jeden koszt na fakturę, a 23505 wymaga
+      // ponownego odczytu dokładnie w tym tenancie.
       const { data: existing, error: existingErr } = await supabase
         .from('expenses')
         .select('id')
@@ -304,6 +303,18 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
         .select('id')
         .single();
 
+      if (error?.code === '23505') {
+        const { data: concurrent, error: concurrentError } = await supabase
+          .from('expenses')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('ksef_invoice_id', invoiceId)
+          .maybeSingle();
+        if (concurrentError || !concurrent) {
+          throw new Error('Konflikt UNIQUE nie dotyczy tego kosztu KSeF');
+        }
+        return { skipped: true as const, expenseId: concurrent.id };
+      }
       if (error || !expense) {
         throw new Error(error?.message ?? 'Insert expense failed');
       }

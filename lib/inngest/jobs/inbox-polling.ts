@@ -19,6 +19,7 @@ import { readInboxHwm, saveInboxHwm } from '@/lib/flo/functions/inbox-cursor';
 import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import type { InvoiceMetadata, KsefEnvironment } from '@/types/ksef';
 
 /**
  * Polling skrzynki KSeF - dwa joby:
@@ -31,12 +32,10 @@ import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
  *
  * Idempotencja:
  *   - KSeF zwraca tę samą fakturę przy kolejnych pollach jeśli w zakresie dat
- *   - `filter-existing` step odrzuca te które już mamy w DB po (tenant_id, ksef_number)
- *   - UWAGA: baza tego NIE pilnuje. `idx_inv_ksef_number` (00001) i
- *     `idx_invoices_ksef_number_unique` (00004) to zwykłe indeksy, nie UNIQUE —
- *     `filter-existing` jest jedyną ochroną, więc przy błędzie musi rzucać.
- *     Indeks unikalny (tenant_id, ksef_number) wymaga migracji i sprzątnięcia
- *     ewentualnych istniejących duplikatów.
+ *   - `filter-existing` ogranicza odczyt do tenant + incoming + środowisko.
+ *   - 00120 rozstrzyga wyścig w bazie po (tenant, environment, KSeF number).
+ *     Po konflikcie odczytujemy istniejący dokument i ponawiamy atomowy batch
+ *     bez potwierdzonych duplikatów. Wymaga wdrożenia 00120 przed tym kodem.
  *
  * UWAGA schema: KSeF inbox daje tylko METADANE - pełnego XML tu nie pobieramy.
  * Zapisujemy dane do `fa3_data JSONB` z `_source: 'inbox-metadata'` żeby
@@ -68,6 +67,61 @@ export function inboxQueryWindow(
   if (Number.isNaN(from.getTime()) || from.getTime() >= now.getTime()) return null;
   const to = new Date(Math.min(now.getTime(), from.getTime() + INBOX_MAX_WINDOW_MS));
   return { from: from.toISOString(), to: to.toISOString() };
+}
+
+type InboxClient = Awaited<ReturnType<typeof createAdminClient>>;
+
+function assertSameKsefDocument(
+  row: { fa3_data: unknown; seller_nip: string | null; issue_date: string; gross_total: number | string | null },
+  invoice: InvoiceMetadata,
+): void {
+  const data = row.fa3_data;
+  const hash = data && typeof data === 'object' && !Array.isArray(data)
+    ? (data as Record<string, unknown>).invoiceHash
+    : null;
+  const hashMismatch = typeof hash === 'string' && hash.length > 0 &&
+    typeof invoice.invoiceHash === 'string' && invoice.invoiceHash.length > 0 &&
+    hash !== invoice.invoiceHash;
+  const amountMismatch = row.gross_total !== null && row.gross_total !== undefined &&
+    Math.round(Number(row.gross_total) * 100) !== Math.round(invoice.grossAmount * 100);
+  if (hashMismatch || amountMismatch ||
+      (row.seller_nip && row.seller_nip !== invoice.seller.nip) ||
+      (row.issue_date && row.issue_date !== invoice.issueDate)) {
+    throw new Error('Konflikt tożsamości faktury KSeF: istniejący dokument ma inne dane');
+  }
+}
+
+async function findExistingInboxNumbers(
+  supabase: InboxClient,
+  tenantId: string,
+  env: KsefEnvironment,
+  invoices: InvoiceMetadata[],
+): Promise<Set<string>> {
+  const byNumber = new Map(invoices.map((invoice) => [invoice.ksefNumber, invoice]));
+  const numbers = [...byNumber.keys()];
+  const existingSet = new Set<string>();
+
+  for (let i = 0; i < numbers.length; i += KSEF_NUMBERS_PER_QUERY) {
+    const { data: existing, error } = await supabase
+      .from('invoices')
+      .select('ksef_number, ksef_environment, fa3_data, seller_nip, issue_date, gross_total')
+      .eq('tenant_id', tenantId)
+      .eq('direction', 'incoming')
+      .in('ksef_number', numbers.slice(i, i + KSEF_NUMBERS_PER_QUERY));
+
+    if (error) throw new Error(`Nie można sprawdzić, które faktury już są w bazie: ${error.message}`);
+    for (const row of existing ?? []) {
+      const invoice = byNumber.get(row.ksef_number as string);
+      if (!invoice) continue;
+      if (row.ksef_environment == null) {
+        throw new Error('Historyczna faktura KSeF bez środowiska wymaga ręcznego uzgodnienia');
+      }
+      if (row.ksef_environment !== env) continue;
+      assertSameKsefDocument(row, invoice);
+      existingSet.add(invoice.ksefNumber);
+    }
+  }
+  return existingSet;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -202,32 +256,13 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
     const freshInvoices = await step.run('filter-existing', async () => {
       const supabase = await createAdminClient();
 
-      // Okno od HWM: przebieg po nieudanym poprzednim widzi te same faktury
-      // ponownie, a baza NIE pilnuje unikalności numeru KSeF (`idx_invoices_ksef_number_unique`
-      // mimo nazwy to zwykły indeks). To zapytanie jest więc jedyną ochroną przed
-      // duplikatami — błąd nie może znaczyć „nic nie ma”. Inaczej wszystkie faktury
-      // z okna wchodzą drugi raz, a auto-kategoryzacja robi z każdej kopii osobny
-      // wydatek w KPiR. Paczki, bo pełna lista `in.(…)` w adresie potrafi
-      // przekroczyć limit długości URL.
+      // Okno od HWM (AUD-18): przebieg po nieudanym poprzednim widzi te same
+      // faktury ponownie. Zapytanie oszczędza INSERT-y; ostateczną ochroną przed
+      // wyścigiem jest indeks tożsamości faktury przychodzącej (00120, #64) —
+      // błąd odczytu lub nieustalone historyczne środowisko zatrzymuje job.
+      // Paczki chronią przed zbyt długim URL PostgREST.
       const unique = [...new Map(newInvoices.map((inv) => [inv.ksefNumber, inv])).values()];
-      const ksefNumbers = unique.map((inv) => inv.ksefNumber);
-      const existingSet = new Set<string>();
-
-      for (let i = 0; i < ksefNumbers.length; i += KSEF_NUMBERS_PER_QUERY) {
-        const { data: existing, error } = await supabase
-          .from('invoices')
-          .select('ksef_number')
-          .eq('tenant_id', tenantId)
-          .in('ksef_number', ksefNumbers.slice(i, i + KSEF_NUMBERS_PER_QUERY));
-
-        if (error) {
-          throw new Error(
-            `Nie można sprawdzić, które faktury już są w bazie: ${error.message}`,
-          );
-        }
-        for (const row of existing ?? []) existingSet.add(row.ksef_number as string);
-      }
-
+      const existingSet = await findExistingInboxNumbers(supabase, tenantId, env, unique);
       return unique.filter((inv) => !existingSet.has(inv.ksefNumber));
     });
 
@@ -258,6 +293,7 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
       const rows = freshInvoices.map((inv) => ({
         tenant_id: tenantId,
         direction: 'incoming' as const,
+        origin: 'ksef_inbox' as const,
         internal_number: inv.invoiceNumber,
         ksef_number: inv.ksefNumber,
         ksef_status: 'accepted',
@@ -298,18 +334,40 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
         },
       }));
 
-      const { data: inserted, error } = await supabase
-        .from('invoices')
-        .insert(rows)
-        .select('id, ksef_number');
+      let pending = freshInvoices;
+      for (let attempt = 0; attempt <= freshInvoices.length; attempt++) {
+        const pendingNumbers = new Set(pending.map((inv) => inv.ksefNumber));
+        const pendingRows = rows.filter((row) => pendingNumbers.has(row.ksef_number));
+        const { data: inserted, error } = await supabase
+          .from('invoices')
+          .insert(pendingRows)
+          .select('id, ksef_number');
 
-      if (error) {
-        throw new Error(
-          `Failed to insert incoming invoices: ${error.message}`,
-        );
+        if (!error) {
+          if (!inserted || inserted.length !== pendingRows.length) {
+            throw new Error('Niepełna odpowiedź po zapisie faktur przychodzących');
+          }
+          return inserted;
+        }
+        if (error.code !== '23505') {
+          throw new Error(`Failed to insert incoming invoices: ${error.message}`);
+        }
+
+        // Cały batch INSERT jest atomowy. Po 23505 nowy odczyt rozstrzyga,
+        // które dokumenty wygrał równoległy job. Nie robimy częściowych
+        // zapisów per-row: awaria w połowie zgubiłaby ich fan-out na retry.
+        const existing = await findExistingInboxNumbers(supabase, tenantId, env, pending);
+        if (existing.size === 0) {
+          throw new Error('Konflikt UNIQUE poza tożsamością przychodzącej faktury KSeF');
+        }
+        pending = pending.filter((inv) => !existing.has(inv.ksefNumber));
+        if (pending.length === 0) return [];
       }
-      return inserted ?? [];
+      throw new Error('Nie udało się rozstrzygnąć równoległych zapisów faktur KSeF');
     });
+
+    const insertedNumbers = new Set(insertedInvoices.map((row) => row.ksef_number as string));
+    const newlyAddedInvoices = freshInvoices.filter((inv) => insertedNumbers.has(inv.ksefNumber));
 
     // Jedna zbiorcza karta na cały przebieg. Pięć faktur w nocy to pięć
     // powiadomień o siódmej rano — czyli hałas, przez który ludzie wyłączają
@@ -331,7 +389,7 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
         const justInserted = new Set(insertedInvoices.map((row) => row.id as string));
         const batchSellers = [
           ...new Set(
-            freshInvoices
+            newlyAddedInvoices
               .map((inv) => inv.seller?.nip)
               .filter((nip): nip is string => Boolean(nip)),
           ),
@@ -356,7 +414,7 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
           insertedInvoices.map((row) => [row.ksef_number as string, row.id as string]),
         );
 
-        const documents = freshInvoices
+        const documents = newlyAddedInvoices
           .filter((inv) => byKsefNumber.has(inv.ksefNumber))
           .map((inv) => ({
             id: byKsefNumber.get(inv.ksefNumber)!,
@@ -387,10 +445,10 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
     }
 
     await step.run('push-inbox-new', async () => {
-      const n = freshInvoices.length;
+      const n = newlyAddedInvoices.length;
       if (n === 0) return { skipped: true as const };
 
-      const first = freshInvoices[0];
+      const first = newlyAddedInvoices[0];
       const body =
         n === 1
           ? `${first.invoiceNumber} · ${first.seller.name}`
@@ -408,7 +466,7 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
     });
 
     // Fan-out do listenerów (np. notify-user w Fazie 6 UI dla real-time toast).
-    const invoiceEvents = freshInvoices.map((inv) =>
+    const invoiceEvents = newlyAddedInvoices.map((inv) =>
       inboxInvoiceReceived.create({
         tenantId,
         ksefNumber: inv.ksefNumber,
@@ -419,14 +477,16 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
         acquisitionTimestamp: inv.acquisitionDate,
       }),
     );
-    await step.sendEvent('fan-out-new-invoices', invoiceEvents);
+    if (invoiceEvents.length > 0) {
+      await step.sendEvent('fan-out-new-invoices', invoiceEvents);
+    }
 
     logger.info(
-      `Dodano ${freshInvoices.length} nowych faktur przychodzących`,
+      `Dodano ${newlyAddedInvoices.length} nowych faktur przychodzących`,
       { tenantId, fetched: newInvoices.length },
     );
 
-    return finish(newInvoices.length, freshInvoices.length);
+    return finish(newInvoices.length, newlyAddedInvoices.length);
 }
 
 export const inboxPollTenantJob = inngest.createFunction(

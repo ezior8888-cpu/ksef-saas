@@ -61,7 +61,9 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00117 | Codex (#63) → Claude (C-20) | `ksef_certificate_claim_guard` (dawniej 00086: proweniencja środowiska KSeF dla firm, faktur, UPO, kolejki Offline24; atomowy claim certyfikatu) | PR `claude/codex-63-ksef-wlasciciel`; przed wdrożeniem, razem z 00118–00119 |
 | 00118 | Codex (#63) → Claude (C-20) | `correction_parent_boundary` (dawniej 00087: rodzic korekty z tej samej firmy i przyjęty w KSeF) | PR `claude/codex-63-ksef-wlasciciel`; przed wdrożeniem |
 | 00119 | Codex (#63) → Claude (C-20) | `invoice_pending_content_freeze` (dawniej 00088: treść dokumentu niezmienna od wysyłki) | PR `claude/codex-63-ksef-wlasciciel`; przed wdrożeniem |
-| **00120** | — | następny wolny (00200 zajęte) | — |
+| 00120 | Codex (#64) → Claude (C-20) | `incoming_ksef_identity` (dawniej 00089: tożsamość faktury przychodzącej (firma, środowisko, numer KSeF); unikalność numeru własnego tylko dla wychodzących) | PR `claude/codex-64-skrzynka`; przed wdrożeniem, razem z 00121 |
+| 00121 | Codex (#64) → Claude (C-20) | `expense_ksef_invoice_identity` (dawniej 00090: jeden koszt na fakturę KSeF, złożony FK tej samej firmy) | PR `claude/codex-64-skrzynka`; przed wdrożeniem |
+| **00122** | — | następny wolny (00200 zajęte) | — |
 
 ---
 

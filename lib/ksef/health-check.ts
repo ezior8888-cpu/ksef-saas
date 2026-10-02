@@ -31,20 +31,22 @@ export async function checkKsefAvailability(
   env?: KsefEnvironment,
 ): Promise<KsefHealthResult> {
   const startTime = Date.now();
-  const apiUrl = getKsefApiUrl(env);
-  const probeUrl = `${apiUrl.replace(/\/+$/, '')}${KSEF_HEALTH_PROBE_PATH}`;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
   try {
+    // Zły adres API to „KSeF niedostępny”, nie wyjątek joba (#64).
+    const apiUrl = getKsefApiUrl(env);
+    const probeUrl = `${apiUrl.replace(/\/+$/, '')}${KSEF_HEALTH_PROBE_PATH}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     const response = await fetch(probeUrl, {
       method: 'GET',
       signal: controller.signal,
       headers: { Accept: 'application/json' },
+      redirect: 'error',
     });
 
-    clearTimeout(timeoutId);
     const responseTime = Date.now() - startTime;
     // Treść certyfikatów nie jest potrzebna — zwalniamy połączenie od razu.
     await response.body?.cancel().catch(() => undefined);
@@ -85,6 +87,8 @@ export async function checkKsefAvailability(
       error: message,
       isMfOutage: false,
     };
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
 }
 

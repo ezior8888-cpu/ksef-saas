@@ -1,5 +1,8 @@
 # C-08 — kolizje numerów faktur odebranych w skrzynce KSeF
 
+> **Numeracja od 02.10.2026 (C-20):** 00089 → **00120**, 00090 → **00121** (szkic #64 przeniesiony do `main`). Treść poniżej w brzmieniu sprzed przeniesienia.
+
+
 Stan przygotowania: 28.09.2026. Dotyczy `main` `4770099` i proponowanej migracji
 `00096_incoming_invoice_number_boundary.sql`. Plik SQL **nie został wykonany**.
 Nie potwierdzono historii migracji ani wersji workera na db-1.
