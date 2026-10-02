@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildCertProposal,
-  certExpiryWindow,
+  dueCertThreshold,
   evaluateCert,
   shouldHoldApprovedSubmissions,
   shouldWarn,
@@ -223,37 +223,35 @@ describe('X-03 — progi', () => {
     expect(WARN_THRESHOLDS).toEqual([30, 14, 7]);
   });
 
-  it('SZEW: w oknie zadania karta powstaje na każdym progu', () => {
+  it('SZEW: na progu wyznaczonym przez zadanie karta powstaje zawsze', () => {
     // NAJWAŻNIEJSZY TEST W TYM BLOKU. Każda połowa była przetestowana
     // osobno — `shouldWarn(30)` zielone, okno zadania poprawne — a razem
-    // nie dawały ani jednej karty. W oknie `[próg−1, próg]` `evaluateCert`
-    // liczy `próg−1` dni, a `shouldWarn` przepuszczał tylko równe progi.
-    // Ten test idzie dokładnie drogą zadania: okno → ocena → karta.
-    const DAY = 86_400_000;
+    // nie dawały ani jednej karty: `evaluateCert` liczy dni w dół,
+    // a `shouldWarn` przepuszcza tylko równe progi. Od 02.10 (AUD-53)
+    // zadanie nadrabia pominięte dni, więc dni do wygaśnięcia bywają dowolne
+    // poniżej progu. Ten test idzie drogą zadania: próg → ocena → karta.
+    for (const dni of [29.99, 25, 14.01, 13.5, 8, 7, 6.99, 3, 0.5]) {
+      const expiresAt = at(dni);
+      const due = dueCertThreshold(expiresAt, NOW);
+      expect(due, `${dni} dni`).not.toBeNull();
 
-    for (const days of WARN_THRESHOLDS) {
-      const { from, to } = certExpiryWindow(days, NOW);
+      const verdict = evaluateCert(cert({ expiresAt }), NOW);
+      expect(verdict.state, `${dni} dni`).toBe('expiring');
 
-      for (const pozycja of [0.01, 0.5, 0.99]) {
-        const expiresAt = new Date(
-          from.getTime() + pozycja * (to.getTime() - from.getTime()),
-        ).toISOString();
-        const verdict = evaluateCert(cert({ expiresAt }), NOW);
-
-        expect(verdict.state, `próg ${days}, pozycja ${pozycja}`).toBe('expiring');
-        expect(verdict.daysLeft).toBe(days - 1);
-
-        const card = buildCertProposal({
-          tenantId: 't',
-          verdict,
-          now: NOW,
-          threshold: days,
-        });
-        expect(card, `próg ${days}, pozycja ${pozycja}`).not.toBeNull();
-      }
-
-      expect(to.getTime() - from.getTime()).toBe(DAY);
+      const card = buildCertProposal({ tenantId: 't', verdict, now: NOW, threshold: due! });
+      expect(card, `${dni} dni`).not.toBeNull();
     }
+  });
+
+  it('próg zadania: najpilniejszy przekroczony, poza horyzontem i po terminie — brak', () => {
+    expect(dueCertThreshold(at(30), NOW)).toBe(30);
+    expect(dueCertThreshold(at(14.5), NOW)).toBe(30);
+    expect(dueCertThreshold(at(14), NOW)).toBe(14);
+    expect(dueCertThreshold(at(7), NOW)).toBe(7);
+    expect(dueCertThreshold(at(1), NOW)).toBe(7);
+    expect(dueCertThreshold(at(30.01), NOW)).toBeNull();
+    expect(dueCertThreshold(at(-1), NOW)).toBeNull();
+    expect(dueCertThreshold(null, NOW)).toBeNull();
   });
 
   it('bez progu z zadania liczy się daysLeft — jak dotąd', () => {
@@ -265,17 +263,16 @@ describe('X-03 — progi', () => {
     expect(buildCertProposal({ tenantId: 't', verdict, now: NOW })).toBeNull();
   });
 
-  it('zadanie cert-expiry-alert idzie przez to samo okno i przekazuje próg', () => {
+  it('zadanie cert-expiry-alert bierze próg z modułu i przekazuje go karcie', () => {
     // Test szwu wyżej pilnuje modułu. Ten pilnuje zadania: to w nim brakowało
     // jednej linijki — przekazania progu — i przez to karta X-03 nie powstała
-    // ani razu. Zadanie trudno odpalić w teście (kolejka, baza, mail, push),
-    // więc sprawdzamy tekst: własna lista progów albo własne okno znaczyłyby
-    // powrót dwóch źródeł prawdy.
+    // ani razu. Własna lista progów albo własna reguła w zadaniu znaczyłyby
+    // powrót dwóch źródeł prawdy. Zachowanie zadania (nadrabianie, pamięć
+    // wysłanych progów) sprawdza certyfikat-alert-nadrabianie.test.ts.
     const zadanie = readFileSync('lib/inngest/jobs/cert-expiry-alert.ts', 'utf8');
 
-    expect(zadanie).toContain('const thresholds = WARN_THRESHOLDS;');
-    expect(zadanie).toContain('certExpiryWindow(days, now)');
-    expect(zadanie).toContain('threshold: days');
+    expect(zadanie).toContain('dueCertThreshold(tenant.ksef_certificate_expiry, now)');
+    expect(zadanie).toContain('threshold: due');
     expect(zadanie).not.toContain('[30, 14, 7]');
   });
 

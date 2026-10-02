@@ -16,35 +16,46 @@ vi.mock('@/lib/supabase/admin-queries', () => ({
 vi.mock('@/lib/email/send', () => ({ sendCertExpiryAlert: mocks.email }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToTenant: mocks.push }));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: mocks.proposal }));
+vi.mock('@/lib/alerts/slack', () => ({ sendSlackAlert: vi.fn() }));
+vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: async () => {
-    const q: Record<string, unknown> = {};
-    Object.assign(q, {
-      select: () => q,
-      eq: () => q,
-      gte: () => q,
-      lte: () => q,
-      order: () => q,
-      limit: () => q,
-      maybeSingle: async () => ({ data: null, error: null }),
-      // Każdy próg widzi te same dwie firmy — wystarczy do sprawdzenia kanałów.
-      then: (ok: (v: unknown) => unknown) =>
-        Promise.resolve({
-          data: [
-            { id: 't1', nip: '1', name: 'Firma 1', ksef_certificate_expiry: new Date(Date.now() + 7 * 864e5).toISOString() },
-            { id: 't2', nip: '2', name: 'Firma 2', ksef_certificate_expiry: new Date(Date.now() + 7 * 864e5).toISOString() },
-          ],
-          error: null,
-        }).then(ok),
-    });
-    return { from: () => q };
+    const query = (table: string) => {
+      const q: Record<string, unknown> = {};
+      Object.assign(q, {
+        select: () => q,
+        eq: () => q,
+        in: () => q,
+        gt: () => q,
+        gte: () => q,
+        lte: () => q,
+        order: () => q,
+        limit: () => q,
+        maybeSingle: async () => ({ data: null, error: null }),
+        // Dwie firmy z certyfikatem na ostatnim progu, bez wysłanych ostrzeżeń
+        // — wystarczy do sprawdzenia kanałów.
+        then: (ok: (v: unknown) => unknown) =>
+          Promise.resolve({
+            data:
+              table === 'tenants'
+                ? [
+                    { id: 't1', nip: '1', name: 'Firma 1', ksef_certificate_expiry: new Date(Date.now() + 6.5 * 864e5).toISOString() },
+                    { id: 't2', nip: '2', name: 'Firma 2', ksef_certificate_expiry: new Date(Date.now() + 6.5 * 864e5).toISOString() },
+                  ]
+                : [],
+            error: null,
+          }).then(ok),
+      });
+      return q;
+    };
+    return { from: query };
   },
 }));
 
 import { runCertExpiryAlert } from '@/lib/inngest/jobs/cert-expiry-alert';
 
 /**
- * Ostrzeżenie o wygasającym certyfikacie ma okno jednego dnia. Karta Flo
+ * Ostrzeżenie o wygasającym certyfikacie jest krytyczne. Karta Flo
  * (X-03) to dodatek — jej awaria nie może zablokować maila ani pusha,
  * ani kolejnych firm. (Uwaga recenzji ChatGPT nr 6, 25.09.2026.)
  */
