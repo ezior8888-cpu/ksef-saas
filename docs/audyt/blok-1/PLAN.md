@@ -120,16 +120,18 @@ Commit: `e94c10e`
 Sprawdzenie: `pnpm exec vitest run tests/unit/wystaw-data-dzis.test.ts`; w aplikacji: Nowa faktura z datą wystawienia jutro → „Wystaw i wyślij” pokazuje komunikat o dzisiejszej dacie, „Zapisz szkic” działa.
 
 ### P-09 — Lista faktur: wyszukiwanie, filtr statusu i okresu, stronicowanie
-Status: W TOKU
+Status: ZROBIONE
 Typ: DOKOŃCZENIE
 Znaleziska: F-086, F-091 (podtytuł listy)
 Zmiana:
 - `app/(dashboard)/invoices/page.tsx`: parametry w URL (`q`, `status`, `od`, `do`, `strona`), zapytanie z `range` i `count`, formularz GET bez JS, nawigacja stron;
 - nowy `lib/invoices/list-query.ts`: parsowanie parametrów i bezpieczne budowanie filtra (numer, nazwa nabywcy, NIP).
 Kryterium: testy `list-query` (parsowanie, ucieczka znaków `,()%*`, zakres stron) i test strony na mocku klienta: filtry trafiają do zapytania, a `range` odpowiada stronie.
+Commit: `f6784ce`
+Sprawdzenie: `pnpm exec vitest run tests/unit/lista-faktur-filtry.test.ts`; w aplikacji: /invoices?q=FV&status=przyjete&od=2026-09-01 — lista zawężona, pod nią „Strona 1 z N”.
 
 ### P-10 — Portal księgowej: dokumenty księgowe zamiast surowej listy
-Status: TODO
+Status: W TOKU
 Typ: DOKOŃCZENIE
 Znaleziska: F-063
 Zmiana: `lib/accountant/load-accountant-portal.ts` oraz `components/accountant/invoice-list.tsx`:
