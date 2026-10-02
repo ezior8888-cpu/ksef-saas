@@ -143,14 +143,16 @@ Commit: `da57935`
 Sprawdzenie: `pnpm exec vitest run tests/unit/portal-ksiegowej-lista.test.tsx`; w aplikacji: link portalu księgowej (/accountant/<token>) — tabela z kolumną Rodzaj, bez szkiców, „Pobierz XML” tylko przy fakturach z plikiem. Brak filtra okresu i PDF zostaje na później.
 
 ### P-11 — Data sprzedaży do 60 dni po dacie wystawienia
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-014
 Zmiana: `lib/schemas/invoice-form.ts` (reguła daty sprzedaży) oraz `lib/xml/invoice-calculator.ts` (`validateInvoice`). Dozwolone `saleDate <= issueDate + 60 dni` (art. 106i ust. 7); później — błąd z wyjaśnieniem.
 Kryterium: test schematu i `validateInvoice`: +10 dni przechodzi, +61 dni odrzucone, data wcześniejsza przechodzi.
+Commit: `328d486`
+Sprawdzenie: `pnpm exec vitest run tests/unit/data-sprzedazy-60-dni.test.ts` i `pnpm test` (kalkulator: 61 dni odrzucone, 12 dni przyjęte); w aplikacji: faktura z datą sprzedaży za tydzień zapisuje się i wysyła.
 
 ### P-12 — Formularz faktury odrzuca dane, których nie przyjmie XSD ani baza
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-041
 Zmiana: `lib/schemas/invoice-form.ts` (schemat pozycji i nabywcy):
