@@ -9,7 +9,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // zwraca — kończył na pierwszej stronie (domyślnie 10 faktur).
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
-vi.mock('@/lib/ksef/client', () => ({ ksefFetch: mocks.fetch }));
+// Adres API sprawdzany dla każdego środowiska (#64).
+vi.mock('@/lib/ksef/client', () => ({ ksefFetch: mocks.fetch, getKsefBaseUrl: () => 'https://api-test.ksef.mf.gov.pl/v2' }));
 vi.mock('@/lib/ksef/session-cache', () => ({
   ksefSessionCache: { getSession: async () => ({ accessToken: 'fixture-token' }) },
 }));
