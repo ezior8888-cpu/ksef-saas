@@ -9,6 +9,7 @@ import { createPortalSession } from '@/lib/stripe/portal';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { assertSensitiveMfa, SensitiveMfaRequiredError } from '@/lib/auth/sensitive-mfa';
+import { syncStripeCustomerEmail } from '@/lib/stripe/customer-email';
 
 /**
  * Server actions dla `/settings/billing` (Faza 25 Krok 2).
@@ -63,13 +64,14 @@ export async function startCheckoutAction(plan: CheckoutPlan): Promise<void> {
   const admin = createAdminClient();
   const { data: tenant } = await admin
     .from('tenants')
-    .select('name, nip')
+    .select('name, nip, stripe_customer_id')
     .eq('id', ctx.tenantId)
     .maybeSingle();
 
   if (!tenant) {
     redirect('/settings/billing?error=tenant-not-found');
   }
+  await syncBillingEmail(tenant.stripe_customer_id, ctx.user.email, ctx.tenantId);
 
   let url: string;
   try {
@@ -118,13 +120,14 @@ export async function openCustomerPortalAction(): Promise<void> {
   const admin = createAdminClient();
   const { data: tenant } = await admin
     .from('tenants')
-    .select('name, nip')
+    .select('name, nip, stripe_customer_id')
     .eq('id', ctx.tenantId)
     .maybeSingle();
 
   if (!tenant) {
     redirect('/settings/billing?error=tenant-not-found');
   }
+  await syncBillingEmail(tenant.stripe_customer_id, ctx.user.email, ctx.tenantId);
 
   let url: string;
   try {
@@ -168,5 +171,19 @@ async function billingMfaSatisfied(ctx: { tenantId: string; user: { id: string }
   } catch (e) {
     if (e instanceof SensitiveMfaRequiredError) return false;
     throw e;
+  }
+}
+
+/**
+ * Adres osoby zarządzającej płatnościami do klienta Stripe (AUD-78). Błąd
+ * nie blokuje Checkout/Portalu — trafia do Sentry.
+ */
+async function syncBillingEmail(customerId: string | null, email: string | null, tenantId: string): Promise<void> {
+  if (!customerId) return;
+  try {
+    await syncStripeCustomerEmail(customerId, email);
+  } catch (e) {
+    const Sentry = await import('@sentry/nextjs');
+    Sentry.captureException(e, { tags: { area: 'billing.customer-email' }, extra: { tenantId } });
   }
 }
