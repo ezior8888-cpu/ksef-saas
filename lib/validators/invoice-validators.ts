@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import { validateNipChecksum, validatePeselChecksum } from '@/lib/xml/invoice-calculator';
 import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
+import { isForeignEuVat } from '@/lib/invoices/vat-ue';
 
 // ============================================================================
 // Helpers walidacyjne
@@ -120,6 +121,40 @@ export const buyerB2CSchema = z
 export const buyerSchema = z.discriminatedUnion('type', [buyerB2BSchema, buyerB2CSchema]);
 
 // ============================================================================
+// Nabywca z UE (VAT-UE) — tylko korekta zwykłej faktury (AUD-70)
+// ============================================================================
+
+export const buyerEUSchema = z.object({
+  type: z.literal('eu'),
+  vatUeNumber: z
+    .string()
+    .refine((v) => isForeignEuVat(v), 'Numer VAT-UE firmy z innego kraju UE, np. DE123456789 (Grecja: EL)'),
+  name: z.string().min(1).max(512),
+  address: z.object({
+    addressLine1: z.string().min(1),
+    addressLine2: z.string().optional(),
+    countryCode: z
+      .string()
+      .length(2)
+      .refine((c) => c !== 'PL', 'Kraj adresu firmy z UE nie może być Polską'),
+  }),
+  email: z.string().email().optional(),
+});
+
+/** Nabywca korekty: jak na fakturze pierwotnej — z NIP, osoba prywatna albo firma z UE. */
+export const correctionBuyerSchema = z.discriminatedUnion('type', [
+  buyerB2BSchema,
+  buyerB2CSchema,
+  buyerEUSchema,
+]);
+
+/** Pozycja korekty — jak `invoiceLineSchema`, plus `np_ii` (korekta faktury dla firmy z UE). */
+export const correctionLineSchema = invoiceLineSchema.extend({
+  vatRate: z.enum(['23', '8', '5', '0', 'oo', 'np', 'np_ii']),
+});
+export type CorrectionLineSchema = z.infer<typeof correctionLineSchema>;
+
+// ============================================================================
 // Faktura ZWYKŁA
 // ============================================================================
 
@@ -170,10 +205,10 @@ export const correctionInvoiceSchema = z
     typKorekty: z.enum(['1', '2', '3']).default('2'),
 
     seller: sellerSchema,
-    buyer: buyerSchema,
+    buyer: correctionBuyerSchema,
 
-    linesBefore: z.array(invoiceLineSchema).optional(),
-    linesAfter: z.array(invoiceLineSchema).optional(),
+    linesBefore: z.array(correctionLineSchema).optional(),
+    linesAfter: z.array(correctionLineSchema).optional(),
 
     amountChange: z
       .object({
@@ -181,6 +216,8 @@ export const correctionInvoiceSchema = z
         vatDelta: z.number(),
         grossDelta: z.number(),
         description: z.string().min(1).max(500),
+        /** Stawka bez VAT z faktury pierwotnej (np I / np II / oo) — nie wynika z kwot. */
+        vatRate: z.enum(['np', 'np_ii', 'oo']).optional(),
       })
       .optional(),
   })

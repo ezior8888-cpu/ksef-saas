@@ -280,6 +280,10 @@ function ghostInvoice(correctionEnvelope: CorrectionInvoiceData, lines: InvoiceL
 
   let buyerParty: BuyerParty;
   const b = correctionEnvelope.buyer;
+  if (b.type === 'eu') {
+    // Zaślepka fundamentu — obsługę nabywcy z UE dokłada część K1 (AUD-70 KOR).
+    throw new Error('Korekta faktury dla firmy z UE — w budowie.');
+  }
   if (b.type === 'b2b') {
     buyerParty = {
       nip: b.nip,

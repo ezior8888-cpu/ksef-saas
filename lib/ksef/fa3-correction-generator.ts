@@ -487,7 +487,10 @@ export function generateCorrectionInvoiceXml(
   const podmiot2 = root.ele('Podmiot2');
   const dane2 = podmiot2.ele('DaneIdentyfikacyjne');
 
-  if (data.buyer.type === 'b2b') {
+  if (data.buyer.type === 'eu') {
+    // Zaślepka fundamentu — obsługę KodUE+NrVatUE dokłada część K2 (AUD-70 KOR).
+    throw new Error('FA(3) KOR: nabywca z UE (VAT-UE) — w budowie.');
+  } else if (data.buyer.type === 'b2b') {
     dane2.ele('NIP').txt(requireText(data.buyer.nip, 'buyer.nip'));
   } else if (data.buyer.idType === 'pesel' && data.buyer.pesel) {
     // FA(3) Podmiot2 nie ma NrPESEL — PESEL idzie do KodKraju+NrID (bug fix).

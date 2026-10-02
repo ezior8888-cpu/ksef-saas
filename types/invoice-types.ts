@@ -80,6 +80,30 @@ export interface BuyerB2C {
 
 export type BuyerData = BuyerB2B | BuyerB2C;
 
+/**
+ * Firma z innego państwa UE identyfikowana numerem VAT-UE (AUD-70). Na razie
+ * tylko jako nabywca korekty zwykłej faktury — ZAL/ROZ zostają przy `BuyerData`.
+ */
+export interface BuyerEU {
+  type: 'eu';
+  /** Numer VAT-UE z prefiksem kraju, postać kanoniczna (`parseVatUe().normalized`), np. `DE123456789`. */
+  vatUeNumber: string;
+  name: string;
+  address: {
+    addressLine1: string;
+    addressLine2?: string;
+    /** Kod ISO kraju adresu (Grecja `GR`, choć prefiks VAT-UE to `EL`). */
+    countryCode: string;
+  };
+  email?: string;
+}
+
+/** Nabywca korekty — ten sam co na fakturze pierwotnej, także firma z UE. */
+export type CorrectionBuyer = BuyerData | BuyerEU;
+
+/** Stawki bez VAT, które korekta kwotowa przejmuje z faktury pierwotnej. */
+export type ZeroVatAmountChangeRate = 'np' | 'np_ii' | 'oo';
+
 // ============================================================================
 // Pozycja faktury
 // ============================================================================
@@ -125,7 +149,7 @@ export interface CorrectionInvoiceData extends InvoiceCommonFields {
   typKorekty?: '1' | '2' | '3';
 
   seller: SellerData;
-  buyer: BuyerData;
+  buyer: CorrectionBuyer;
 
   // Korekty typu before_after
   linesBefore?: InvoiceLine[]; // pozycje z faktury pierwotnej
@@ -143,6 +167,11 @@ export interface CorrectionInvoiceData extends InvoiceCommonFields {
     vatDelta: number;
     grossDelta: number;
     description: string;
+    /**
+     * Stawka bez VAT innej niż „0 KR” (np I, np II, oo) — z faktury pierwotnej,
+     * bo z samych kwot (VAT 0) nie da się jej odróżnić od 0%.
+     */
+    vatRate?: ZeroVatAmountChangeRate;
   };
 }
 
