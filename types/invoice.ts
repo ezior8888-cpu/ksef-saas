@@ -80,7 +80,8 @@ export type VatRate =
   | '0' // zerowa (generator zmapuje na '0 KR' / '0 WDT' / '0 EX' wg kontekstu; MVP: '0 KR')
   | 'zw' // zwolniona z VAT (wymaga P_19 z podstawą prawną zamiast P_19N)
   | 'oo' // odwrotne obciążenie (wymaga P_18=1)
-  | 'np'; // nie podlega opodatkowaniu (XSD: 'np I' / 'np II' - generator zmapuje)
+  | 'np' // nie podlega opodatkowaniu w kraju — XSD 'np I' (P_13_8)
+  | 'np_ii'; // usługi z art. 100 ust. 1 pkt 4 (art. 28b, nabywca z UE) — XSD 'np II' (P_13_9, P_18=1); AUD-70
 
 export interface InvoiceLineItem {
   /** Kolejny numer porządkowy pozycji (1, 2, 3...) */

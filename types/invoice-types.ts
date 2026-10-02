@@ -90,7 +90,7 @@ export interface InvoiceLine {
   quantity: number;
   unitPriceNet: number;
   /** `zw` tylko z danych historycznych; nowe formularze nie emitują (wymaga P_19). */
-  vatRate: '23' | '8' | '5' | '0' | 'oo' | 'np' | 'zw';
+  vatRate: '23' | '8' | '5' | '0' | 'oo' | 'np' | 'np_ii' | 'zw';
   pkwiuCode?: string;
   gtuCode?: string;
 }

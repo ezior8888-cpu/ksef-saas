@@ -9,6 +9,8 @@ import type { InvoiceLineItem } from '@/types/invoice';
 const OPIS_STAWKI: Record<string, string> = {
   oo: 'odwrotne obciążenie',
   np: 'nie podlega',
+  // AUD-70: usługa z art. 100 ust. 1 pkt 4 (FA(3) „np II”) — bez opisu wyszłoby „VAT np_ii%”.
+  np_ii: 'nie podlega (np. II)',
   zw: 'zwolniona',
 };
 

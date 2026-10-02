@@ -41,7 +41,7 @@ export function generateInsertSubiektCsv(data: CsvExportInput): Buffer {
     Numer: inv.invoiceNumber,
     Data: formatPlDate(inv.issueDate),
     Klient: party.name,
-    NIP: party.nip ?? '',
+    NIP: partyTaxId(party),
     Netto: totals.net.toFixed(2).replace('.', ','),
     VAT: totals.vat.toFixed(2).replace('.', ','),
     Brutto: totals.gross.toFixed(2).replace('.', ','),
@@ -69,7 +69,7 @@ export function generateSymfoniaCsv(data: CsvExportInput): Buffer {
     DataWystawienia: formatPlDate(inv.issueDate),
     DataSprzedazy: formatPlDate(inv.saleDate ?? inv.issueDate),
     Kontrahent: party.name,
-    NIP: party.nip ?? '',
+    NIP: partyTaxId(party),
     Adres: party.address ?? '',
     WartoscNetto: totals.net.toFixed(2).replace('.', ','),
     WartoscVAT: totals.vat.toFixed(2).replace('.', ','),
@@ -104,7 +104,7 @@ export function generateWaproCsv(data: CsvExportInput): Buffer {
     data: formatPlDate(inv.issueDate),
     data_sprzedazy: formatPlDate(inv.saleDate ?? inv.issueDate),
     nabywca: party.name,
-    nip: party.nip ?? '',
+    nip: partyTaxId(party),
     adres: party.address ?? '',
     netto: totals.net.toFixed(2).replace('.', ','),
     vat: totals.vat.toFixed(2).replace('.', ','),
@@ -134,7 +134,7 @@ export function generateUniversalCsv(data: CsvExportInput): Buffer {
     Numer: inv.invoiceNumber,
     DataWystawienia: formatPlDate(inv.issueDate),
     Kontrahent: party.name,
-    NIP: party.nip ?? '',
+    NIP: partyTaxId(party),
     Netto: totals.net.toFixed(2).replace('.', ','),
     VAT: totals.vat.toFixed(2).replace('.', ','),
     Brutto: totals.gross.toFixed(2).replace('.', ','),
@@ -180,6 +180,14 @@ interface DocumentTotals {
   net: number;
   vat: number;
   gross: number;
+}
+
+/**
+ * Identyfikator kontrahenta w kolumnie „NIP”: NIP, a nabywca z UE bez NIP-u
+ * (AUD-70) — numer VAT-UE z prefiksem kraju, zamiast pustej komórki.
+ */
+function partyTaxId(party: ExportParty): string {
+  return party.nip?.trim() || party.vatUe?.trim() || '';
 }
 
 /**

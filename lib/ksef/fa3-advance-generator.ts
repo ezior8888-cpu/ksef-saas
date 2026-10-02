@@ -67,6 +67,8 @@ const FULL_VAT_RATE_MAP: Record<VatRate, VatRateMapping> = {
   zw: { netElement: 'P_13_7', p12Value: 'zw' },
   oo: { netElement: 'P_13_10', p12Value: 'oo' },
   np: { netElement: 'P_13_8', p12Value: 'np I' },
+  // AUD-70: usługi z art. 100 ust. 1 pkt 4 (nabywca z UE rozlicza VAT).
+  np_ii: { netElement: 'P_13_9', p12Value: 'np II' },
 };
 
 const P_13_ORDER: readonly string[] = [
@@ -170,14 +172,32 @@ function emitVatSummariesFromMap(
   }
 }
 
+/**
+ * „np II” (usługi z art. 100 ust. 1 pkt 4, AUD-70) wymaga nabywcy z innego
+ * państwa UE identyfikowanego numerem VAT-UE (KodUE + NrVatUE). ZAL i ROZ
+ * znają tylko nabywcę z NIP albo B2C (`BuyerData`), więc taka faktura byłaby
+ * niezgodna z ustawą — przerywamy przed budową XML.
+ */
+function assertNoNpII(rates: readonly (string | null | undefined)[], kind: 'ZAL' | 'ROZ'): void {
+  if (rates.some((rate) => rate === 'np_ii')) {
+    const label = kind === 'ZAL' ? 'faktura zaliczkowa' : 'faktura rozliczająca';
+    throw new Error(
+      `FA(3) ${kind}: stawka „np II” (usługi z art. 100 ust. 1 pkt 4 ustawy o VAT) wymaga nabywcy ` +
+        `z innego państwa UE z numerem VAT-UE — ${label} jej nie obsługuje (nabywca z NIP albo B2C).`,
+    );
+  }
+}
+
 function buildAdnotacjeStandard(
   fa: XMLBuilder,
   lines: InvoiceLineItem[],
   taxAnnotations: AdvanceInvoiceData['taxAnnotations'],
 ): void {
   const adn = fa.ele('Adnotacje');
-  const hasOoLine = lines.some((l) => l.vatRate === 'oo');
-  const p18 = hasOoLine ? 1 : 2;
+  // P_18=1 dla „oo” i „np II” (VAT rozlicza nabywca; AUD-70). „np II” blokuje
+  // dziś `assertNoNpII`, ale adnotacja ma być spójna z pozycjami.
+  const hasReverseChargeLine = lines.some((l) => l.vatRate === 'oo' || l.vatRate === 'np_ii');
+  const p18 = hasReverseChargeLine ? 1 : 2;
   const hasZwLine = lines.some((l) => l.vatRate === 'zw');
   if (hasZwLine) {
     throw new Error(
@@ -391,6 +411,8 @@ export function generateAdvanceInvoiceXml(
   options: GenerateAdvanceXmlOptions = {},
 ): string {
   const taxAnnotations = requireTaxAnnotations(data, 'ZAL');
+  // Koperta z bazy (JSON) nie przechodzi przez typ `vatRate` — sprawdzamy w runtime.
+  assertNoNpII([data.vatRate], 'ZAL');
   const {
     generatedAt = new Date(),
     prettyPrint = true,
@@ -554,6 +576,10 @@ export function generateFinalInvoiceXml(
     throw new Error('FA(3) ROZ: przekazano pustą listę faktur zaliczkowych.');
   }
   const taxAnnotations = requireTaxAnnotations(data, 'ROZ');
+  assertNoNpII(
+    [...data.lines.map((l) => l.vatRate), ...advanceInvoices.map((a) => a.vat_rate?.trim())],
+    'ROZ',
+  );
 
   const {
     generatedAt = new Date(),

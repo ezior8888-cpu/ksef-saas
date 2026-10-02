@@ -3,7 +3,12 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 
 import type { Invoice, InvoiceLineItem, VatRate } from '@/types/invoice';
-import { CASH_METHOD_LABEL, REVERSE_CHARGE_LABEL, SPLIT_PAYMENT_LABEL } from '@/lib/invoices/annotations';
+import {
+  CASH_METHOD_LABEL,
+  hasReverseChargeLine,
+  REVERSE_CHARGE_LABEL,
+  SPLIT_PAYMENT_LABEL,
+} from '@/lib/invoices/annotations';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
@@ -88,6 +93,8 @@ const VAT_RATE_LABEL: Record<VatRate, string> = {
   zw: 'zw.',
   oo: 'o.o.',
   np: 'np.',
+  // AUD-70: usługa z art. 100 ust. 1 pkt 4 (FA(3) „np II”) — odróżniona od „np” (np I).
+  np_ii: 'np. II',
 };
 
 /**
@@ -555,9 +562,10 @@ function drawFooter(
     doc.y += 4;
   }
   // Art. 106e ust. 1 pkt 18 — podatek rozlicza nabywca. Jak w XML (P_18=1):
-  // każda pozycja „oo”. W kolumnie stawki jest tylko skrót „o.o.”, a nabywca
-  // spoza KSeF (np. zagraniczny) dostaje wyłącznie ten PDF.
-  if (invoice.lines.some((l) => l.vatRate === 'oo')) {
+  // każda pozycja „oo” albo „np_ii” (usługa z art. 100 ust. 1 pkt 4 dla firmy
+  // z UE, AUD-70). W kolumnie stawki jest tylko skrót, a nabywca spoza KSeF
+  // (np. zagraniczny) dostaje wyłącznie ten PDF.
+  if (hasReverseChargeLine(invoice.lines)) {
     doc.font('bold').fontSize(9).fillColor('#222222');
     doc.text(REVERSE_CHARGE_LABEL, left, doc.y, { width });
     doc.y += 4;

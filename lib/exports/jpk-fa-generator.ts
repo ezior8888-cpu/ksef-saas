@@ -16,6 +16,8 @@ import type { XMLBuilder } from 'xmlbuilder2/lib/interfaces';
 import { MissingIssuerAddressError, type RegisteredAddress } from '@/lib/exports/issuer-address';
 import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
 import { isKnownTaxOffice } from '@/lib/exports/tax-offices';
+import { REVERSE_CHARGE_RATES } from '@/lib/invoices/annotations';
+import { parseVatUe } from '@/lib/invoices/vat-ue';
 import {
   settlementVatSummaries,
   type AdvanceInvoiceSettlementRow,
@@ -78,6 +80,12 @@ export interface JpkInvoice {
   // (`counterpartyOf`). Do 26.09 była tylko strona nabywcy, więc przy
   // zakupach „kontrahentem” wychodziła nasza firma.
   buyerNip?: string;
+  /**
+   * Numer VAT-UE nabywcy z innego państwa UE z prefiksem kraju (np.
+   * `DE123456789`) — gdy nabywca nie ma NIP-u (AUD-70). JPK_FA: P_5A + P_5B,
+   * JPK_V7M: KodKrajuNadaniaTIN + NrKontrahenta, CSV: kolumna identyfikatora.
+   */
+  buyerVatUe?: string;
   buyerName: string;
   buyerAddress?: string;
   sellerNip?: string;
@@ -126,6 +134,8 @@ export interface JpkInvoiceAnnotations {
 export interface ExportParty {
   name: string;
   nip?: string;
+  /** Numer VAT-UE (z prefiksem kraju) kontrahenta z UE bez NIP-u — AUD-70. */
+  vatUe?: string;
   address?: string;
 }
 
@@ -138,7 +148,7 @@ export function counterpartyOf(inv: JpkInvoice, direction: 'issued' | 'received'
   if (direction === 'received') {
     return { name: inv.sellerName ?? '', nip: inv.sellerNip, address: inv.sellerAddress };
   }
-  return { name: inv.buyerName, nip: inv.buyerNip, address: inv.buyerAddress };
+  return { name: inv.buyerName, nip: inv.buyerNip, vatUe: inv.buyerVatUe, address: inv.buyerAddress };
 }
 
 export interface JpkInvoiceLine {
@@ -148,7 +158,7 @@ export interface JpkInvoiceLine {
   quantity: number;
   unitPriceNet: number;
   netAmount: number;
-  vatRate: string; // '23', '8', '5', '0', 'zw', 'oo', 'np'
+  vatRate: string; // '23', '8', '5', '0', 'zw', 'oo', 'np', 'np_ii'
   /** VAT pozycji z faktury — P_14_x musi się zgadzać z fakturą co do grosza. */
   vatAmount?: number;
 }
@@ -273,7 +283,12 @@ interface InvoiceAmounts {
   p15: number;
 }
 
-const RATE_FIELDS: Record<string, { net: string; vat?: string }> = {
+interface RateField {
+  net: string;
+  vat?: string;
+}
+
+const RATE_FIELDS: Record<string, RateField> = {
   '23': { net: 'P_13_1', vat: 'P_14_1' },
   '8': { net: 'P_13_2', vat: 'P_14_2' },
   '5': { net: 'P_13_3', vat: 'P_14_3' },
@@ -282,10 +297,20 @@ const RATE_FIELDS: Record<string, { net: string; vat?: string }> = {
   oo: { net: 'P_13_4', vat: 'P_14_4' },
   // Dostawa/usługa poza terytorium kraju — P_14_5 opcjonalne.
   np: { net: 'P_13_5' },
+  // AUD-70: usługa z art. 100 ust. 1 pkt 4 to też „poza terytorium kraju”
+  // (JPK_FA(4) nie ma osobnego pola jak FA(3) P_13_9). Netto sumowane z „np”
+  // w jednym P_13_5 (`buildFaktura`), P_18 = true (`REVERSE_CHARGE_RATES`).
+  np_ii: { net: 'P_13_5' },
   '0': { net: 'P_13_6' },
   zw: { net: 'P_13_7' },
 };
-const RATE_ORDER = ['23', '8', '5', 'oo', 'np', '0', 'zw'];
+const RATE_ORDER = ['23', '8', '5', 'oo', 'np', 'np_ii', '0', 'zw'];
+
+/**
+ * P_12 pozycji: enum JPK_FA(4) zna tylko „np” (maxLength 2, bez „np I”/„np II”
+ * z FA(3)), więc „np_ii” idzie jako „np”.
+ */
+const P12_VALUE: Readonly<Record<string, string>> = { np_ii: 'np' };
 
 /** Kwoty w stawkach i P_15 — jak na fakturze w KSeF (ROZ po odjęciu zaliczek). */
 export function amountsOf(inv: JpkInvoice): InvoiceAmounts {
@@ -353,14 +378,34 @@ function buildFaktura(
   f.ele('P_3C').txt(znaki(inv.sellerName || issuer.name));
   f.ele('P_3D').txt(znaki(sellerAddress ?? ''));
   f.ele('P_4B').txt(inv.sellerNip || issuer.nip);
-  if (inv.buyerNip?.trim()) f.ele('P_5B').txt(inv.buyerNip.trim());
+  // Nabywca z UE bez NIP-u (AUD-70): P_5A = prefiks (TKodyKrajowUE, Grecja
+  // „EL”), P_5B = numer bez prefiksu. Numer spoza listy krajów UE — bez obu
+  // pól, jak dotąd przy braku identyfikatora.
+  const buyerNip = inv.buyerNip?.trim();
+  const buyerVatUe = buyerNip ? null : parseVatUe(inv.buyerVatUe);
+  if (buyerNip) {
+    f.ele('P_5B').txt(buyerNip);
+  } else if (buyerVatUe) {
+    f.ele('P_5A').txt(buyerVatUe.kodUE);
+    f.ele('P_5B').txt(buyerVatUe.numer);
+  }
 
   if (inv.saleDate && inv.saleDate !== inv.issueDate) f.ele('P_6').txt(inv.saleDate);
 
+  // Kilka stawek może mieć jedno pole („np” i „np_ii” → P_13_5), a schemat
+  // nie dopuszcza dwóch takich samych elementów — sumujemy po polu. Kolejność
+  // pól zostaje z RATE_ORDER (Map trzyma kolejność wstawiania).
+  const byField = new Map<string, { fields: RateField; net: number; vat: number }>();
   for (const a of amounts.rates) {
     const fields = RATE_FIELDS[a.rate];
-    f.ele(fields.net).txt(kwota(a.net));
-    if (fields.vat) f.ele(fields.vat).txt(kwota(a.vat));
+    const sum = byField.get(fields.net) ?? { fields, net: 0, vat: 0 };
+    sum.net += a.net;
+    sum.vat += a.vat;
+    byField.set(fields.net, sum);
+  }
+  for (const { fields, net, vat } of byField.values()) {
+    f.ele(fields.net).txt(kwota(net));
+    if (fields.vat) f.ele(fields.vat).txt(kwota(vat));
   }
   f.ele('P_15').txt(kwota(amounts.p15));
 
@@ -369,7 +414,8 @@ function buildFaktura(
   const basis = inv.annotations?.vatExemptionBasis?.trim();
   f.ele('P_16').txt(bool(inv.annotations?.cashMethod === true));
   f.ele('P_17').txt('false'); // samofakturowanie — nie wystawiamy
-  f.ele('P_18').txt(bool(rates.has('oo')));
+  // Podatek rozlicza nabywca: „oo” i „np_ii” (AUD-70) — opis P_18 jak w FA(3).
+  f.ele('P_18').txt(bool([...rates].some((r) => REVERSE_CHARGE_RATES.has(r))));
   f.ele('P_18A').txt(bool(inv.annotations?.splitPayment === true));
   f.ele('P_19').txt(bool(exempt));
   if (exempt && basis) f.ele('P_19A').txt(znaki(basis));
@@ -396,7 +442,8 @@ function buildFakturaWiersz(root: XMLBuilder, invoiceNumber: string, line: JpkIn
   w.ele('P_8B').txt(ilosc(line.quantity));
   w.ele('P_9A').txt(kwota(line.unitPriceNet));
   w.ele('P_11').txt(kwota(line.netAmount));
-  w.ele('P_12').txt(line.vatRate.trim().toLowerCase());
+  const rate = line.vatRate.trim().toLowerCase();
+  w.ele('P_12').txt(P12_VALUE[rate] ?? rate);
 }
 
 // ============================================================================

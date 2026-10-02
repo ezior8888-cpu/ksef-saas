@@ -9,6 +9,7 @@ import {
   validateInvoice,
   ZW_WITHOUT_BASIS_MESSAGE,
 } from './invoice-calculator';
+import { parseVatUe } from '@/lib/invoices/vat-ue';
 
 // ═══════════════════════════════════════════════════════════════
 // STAŁE SCHEMATU FA(3)
@@ -57,12 +58,12 @@ function formatTimestamp(date: Date = new Date()): string {
  * Mapa VatRate domenowej → triplet (elementy XSD dla netSum/vatSum, etykieta P_12).
  *
  * MVP krajowe B2B: zawsze interpretujemy:
- *  - '0'  → 0% krajowa (P_13_6_1, P_12='0 KR')
- *  - 'np' → 'np I' (dostawy poza krajem, P_13_8)
+ *  - '0'     → 0% krajowa (P_13_6_1, P_12='0 KR')
+ *  - 'np'    → 'np I' (dostawy poza krajem, P_13_8)
+ *  - 'np_ii' → 'np II' (usługi z art. 100 ust. 1 pkt 4, P_13_9; AUD-70)
  *
- * Obsługa WDT ('0 WDT' → P_13_6_2), eksportu ('0 EX' → P_13_6_3),
- * 'np II' (usługi art. 100 → P_13_9) itd. będzie wymagała rozszerzenia
- * VatRate o rozróżnianie wariantów.
+ * Obsługa WDT ('0 WDT' → P_13_6_2), eksportu ('0 EX' → P_13_6_3) itd.
+ * będzie wymagała rozszerzenia VatRate o rozróżnianie wariantów.
  */
 interface VatRateMapping {
   /** Element XSD dla sumy netto tej stawki (np. 'P_13_1', 'P_13_6_1'). */
@@ -81,6 +82,8 @@ const VAT_RATE_MAP: Record<VatRate, VatRateMapping> = {
   zw: { netElement: 'P_13_7', p12Value: 'zw' },
   oo: { netElement: 'P_13_10', p12Value: 'oo' },
   np: { netElement: 'P_13_8', p12Value: 'np I' },
+  // AUD-70: usługi z art. 100 ust. 1 pkt 4 (nabywca z UE rozlicza VAT).
+  np_ii: { netElement: 'P_13_9', p12Value: 'np II' },
 };
 
 /**
@@ -156,16 +159,21 @@ function requireText(value: string | undefined | null, field: string): string {
 /**
  * Rozbija numer VAT UE w formacie "DE123456789" na parę (KodUE, NrVatUE).
  * XSD TPodmiot2/choice wymaga rozdzielenia prefiksu od numeru.
+ *
+ * Bezpiecznik (AUD-70): prefiks spoza `TKodyKrajowUE` (np. „GR” zamiast „EL”)
+ * albo numer niezgodny z `TNrVatUE` przerywa generowanie — wcześniej taki XML
+ * powstawał i odpadał dopiero w KSeF. Komunikat dla człowieka daje
+ * `validateInvoice`; tu tylko ostatnia linia obrony przy `validate: false`.
  */
 function splitVatUe(vatUeNumber: string): { kodUE: string; numer: string } {
-  const trimmed = vatUeNumber.replace(/\s+/g, '').toUpperCase();
-  const match = trimmed.match(/^([A-Z]{2})(.+)$/);
-  if (!match) {
+  const parsed = parseVatUe(vatUeNumber);
+  if (!parsed) {
     throw new Error(
-      `FA(3): vatUeNumber "${vatUeNumber}" nie zawiera prefiksu kraju UE (oczekiwano np. "DE123456789").`,
+      `FA(3): numer VAT-UE nabywcy "${vatUeNumber}" jest nieprawidłowy — oczekiwano prefiksu kraju UE ` +
+        '(Grecja: „EL”, nie „GR”) i 1–12 znaków [0-9A-Z+*], np. „DE123456789”.',
     );
   }
-  return { kodUE: match[1], numer: match[2] };
+  return { kodUE: parsed.kodUE, numer: parsed.numer };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -405,10 +413,14 @@ function buildAdnotacje(
   // P_17 - samofakturowanie
   adn.ele('P_17').txt(String(a.selfInvoicing ?? 2));
 
-  // P_18 - odwrotne obciążenie. Jeśli którakolwiek pozycja ma vatRate='oo',
-  // wymuszamy 1 niezależnie od tego co user podał (spójność z liniami faktury).
-  const hasOoLine = invoice.lines.some((l) => l.vatRate === 'oo');
-  const p18 = hasOoLine ? 1 : (a.reverseCharge ?? 2);
+  // P_18 - odwrotne obciążenie. Jeśli którakolwiek pozycja ma vatRate='oo'
+  // albo 'np_ii' (usługa z art. 28b — VAT rozlicza nabywca z UE; XSD P_18:
+  // „obowiązanym do rozliczenia podatku … jest nabywca”, AUD-70), wymuszamy 1
+  // niezależnie od tego co user podał (spójność z liniami faktury).
+  const hasReverseChargeLine = invoice.lines.some(
+    (l) => l.vatRate === 'oo' || l.vatRate === 'np_ii',
+  );
+  const p18 = hasReverseChargeLine ? 1 : (a.reverseCharge ?? 2);
   adn.ele('P_18').txt(String(p18));
 
   // P_18A - MPP
