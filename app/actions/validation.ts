@@ -2,8 +2,11 @@
 
 import { formatInngestSendError } from '@/lib/inngest/error-message';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
-import { createClient } from '@/lib/supabase/server';
-import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
+import {
+  ActionAuthError,
+  requireUserAndActiveOrg,
+  type AuthContext,
+} from '@/lib/supabase/auth-context';
 import {
   validateNipCached,
   type CachedValidationResult,
@@ -11,6 +14,22 @@ import {
 import { checkBankAccountInWhitelist } from '@/lib/validation/whitelist-client';
 import { contractorValidationPatch } from '@/lib/validation/contractor-update';
 import { extractCountryFromVatNumber } from '@/lib/validation/vies-client';
+
+/**
+ * Zalogowany członek aktywnej firmy po drugim kroku MFA (gdy go ma).
+ * Do 02.10 akcje sprawdzały tylko `getUser()`, a firmę brały z ciasteczka
+ * bez sprawdzenia członkostwa (AUD-58).
+ */
+async function authorize(): Promise<
+  { ok: true; ctx: AuthContext } | { ok: false; error: string }
+> {
+  try {
+    return { ok: true, ctx: await requireUserAndActiveOrg() };
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { ok: false, error: e.message };
+    throw e;
+  }
+}
 
 // ============================================================================
 // Live validation (formularz faktury)
@@ -22,12 +41,8 @@ export async function validateNipLiveAction(
   | { success: true; result: CachedValidationResult }
   | { success: false; error: string }
 > {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { success: false, error: 'Niezalogowany' };
+  const auth = await authorize();
+  if (!auth.ok) return { success: false, error: auth.error };
 
   const { countryCode, vatNumber: cleanVat } =
     extractCountryFromVatNumber(vatNumber);
@@ -61,12 +76,8 @@ export async function validateBankAccountAction(
   | { success: true; isOnWhitelist: boolean; warning?: string }
   | { success: false; error: string }
 > {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { success: false, error: 'Niezalogowany' };
+  const auth = await authorize();
+  if (!auth.ok) return { success: false, error: auth.error };
 
   const cleanAccount = bankAccount.replace(/\s/g, '').toUpperCase();
   if (!/^[A-Z]{0,2}\d{20,28}$/.test(cleanAccount)) {
@@ -101,17 +112,9 @@ export async function bulkValidateContractorsAction(
   | { success: true; jobId: string; total: number }
   | { success: false; error: string }
 > {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { success: false, error: 'Niezalogowany' };
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    return { success: false, error: 'Brak aktywnej organizacji' };
-  }
+  const auth = await authorize();
+  if (!auth.ok) return { success: false, error: auth.error };
+  const { supabase, user, tenantId } = auth.ctx;
 
   const { data: contractors } = await supabase
     .from('contractors')
@@ -159,17 +162,9 @@ export async function getContractorVatStatusAction(
   | { success: true; status: CachedValidationResult }
   | { success: false; error: string }
 > {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { success: false, error: 'Niezalogowany' };
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    return { success: false, error: 'Brak aktywnej organizacji' };
-  }
+  const auth = await authorize();
+  if (!auth.ok) return { success: false, error: auth.error };
+  const { supabase, tenantId } = auth.ctx;
 
   const { data: contractor } = await supabase
     .from('contractors')

@@ -1,15 +1,25 @@
 'use server';
 
 import { sendSlackAlert } from '@/lib/alerts/slack';
-import { createClient } from '@/lib/supabase/server';
+import { ActionAuthError, requireVerifiedUser } from '@/lib/supabase/auth-context';
 import { getOwnedConversation, updateConversation } from './conversations';
 
 /**
  * Server Actions dla widgetu support (Faza 30 Krok 7).
- * Każda sprawdza ownership konwersacji przed zapisem.
+ * Każda sprawdza ownership konwersacji przed zapisem — i sesję po drugim
+ * kroku MFA, nie sam `getUser()` (AUD-58).
  */
 
 export type SupportActionResult = { ok: boolean };
+
+async function verifiedUser(): Promise<{ id: string; email?: string | null } | null> {
+  try {
+    return (await requireVerifiedUser()).user;
+  } catch (e) {
+    if (e instanceof ActionAuthError) return null;
+    throw e;
+  }
+}
 
 /**
  * CSAT — użytkownik ocenia konwersację 👍/👎. Negatywna ocena trafia
@@ -19,10 +29,7 @@ export async function submitCsatAction(
   conversationId: string,
   positive: boolean,
 ): Promise<SupportActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await verifiedUser();
   if (!user) return { ok: false };
 
   const conv = await getOwnedConversation(conversationId, user.id);
@@ -51,10 +58,7 @@ export async function submitCsatAction(
 export async function escalateConversationAction(
   conversationId: string,
 ): Promise<SupportActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await verifiedUser();
   if (!user) return { ok: false };
 
   const conv = await getOwnedConversation(conversationId, user.id);
