@@ -111,7 +111,6 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.ops-heartbeat', cron: '* * * * *', tz: TZ },
   { queue: 'cron.nightly-validation-recheck', cron: '0 4 * * *', tz: TZ },
   { queue: 'cron.process-offline-queue', cron: '*/5 * * * *', tz: TZ },
-  { queue: 'cron.refresh-materialized-views', cron: '0 * * * *', tz: TZ },
   { queue: 'cron.reminder-scheduler', cron: '0 * * * *', tz: TZ },
   { queue: 'cron.retention-delete', cron: '0 4 * * *', tz: TZ },
   { queue: 'cron.trial-countdown-emails', cron: '0 9 * * *', tz: TZ },
@@ -119,6 +118,17 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.verify-backup', cron: '0 3 * * 0', tz: TZ },
   { queue: 'cron.weekly-business-review', cron: '0 9 * * 1', tz: TZ },
 ] as const;
+
+/**
+ * Crony wycofane — worker zdejmuje je z `pgboss.schedule` przy starcie.
+ * Samo usunięcie z `CRON_JOBS` nie wystarcza: wpis z wcześniejszego startu
+ * zostaje w tabeli i pg-boss dalej wysyła joby do kolejki bez workera.
+ *
+ * `refresh-materialized-views` (AUD-118): przeliczał co godzinę dwa widoki
+ * na całej tabeli faktur, a nikt ich nie czytał. Widoki zostają w bazie
+ * (bez DROP) — usunięcie to osobna decyzja.
+ */
+export const RETIRED_CRON_QUEUES = ['cron.refresh-materialized-views'] as const;
 
 /** Kolejka testowa smoke (Etap 1/2 — weryfikacja fundamentu i połączenia). */
 export const SMOKE_QUEUE = 'jobs.smoke';

@@ -34,7 +34,6 @@ import {
   coPilotSendPackageJob,
 } from '@/lib/inngest/jobs/co-pilot-monthly';
 import { jobsWatchdogJob } from '@/lib/inngest/jobs/jobs-watchdog';
-import { refreshMaterializedViewsJob } from '@/lib/inngest/jobs/refresh-materialized-views';
 import { cleanupAuditLogsJob } from '@/lib/inngest/jobs/cleanup-audit-logs';
 import { ksefHealthCheckJob } from '@/lib/inngest/jobs/ksef-health-check';
 import { upoRetryStaleJob } from '@/lib/inngest/jobs/upo-retry-stale';
@@ -99,7 +98,6 @@ const ALL_FUNCTIONS = [
     coPilotMonthlyJob,
     coPilotSendPackageJob,
     jobsWatchdogJob,
-    refreshMaterializedViewsJob,
     cleanupAuditLogsJob,
     ksefHealthCheckJob,
     upoRetryStaleJob,

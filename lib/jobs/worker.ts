@@ -18,9 +18,10 @@ import { createServer } from 'node:http';
 import { ensureQueue, startBoss, stopBoss, enableWorkerRole } from './boss';
 import { assertPgBossWorkerBackend, getWorkerHealthPort } from './config';
 import { createJobLogger } from './logger';
-import { CRON_JOBS, SMOKE_QUEUE } from './queues';
+import { CRON_JOBS, RETIRED_CRON_QUEUES, SMOKE_QUEUE } from './queues';
 import { getRegisteredJobs, registerJob } from './registry';
 import { wrapHandler } from './run-job';
+import { workOptionsFor } from './work-options';
 import {
   flushWorkerSentry,
   initWorkerSentry,
@@ -67,19 +68,14 @@ async function main(): Promise<void> {
 
   for (const def of defs) {
     await ensureQueue(def.queue);
-    await boss.work(
-      def.queue,
-      {
-        batchSize: def.batchSize ?? 1,
-        ...(def.groupConcurrency !== undefined
-          ? { groupConcurrency: def.groupConcurrency }
-          : {}),
-        // Każdy job paczki rozliczany osobno (AUD-35, `run-job.ts`).
-        perJobResults: true,
-      },
-      wrapHandler(def),
-    );
+    await boss.work(def.queue, workOptionsFor(def), wrapHandler(def));
     log.info(`kolejka aktywna: ${def.queue}`);
+  }
+
+  // Wycofane crony zdejmujemy zawsze — inaczej wpis w `pgboss.schedule`
+  // z poprzedniego startu dalej produkuje joby bez workera (AUD-118).
+  for (const queue of RETIRED_CRON_QUEUES) {
+    await boss.unschedule(queue);
   }
 
   let scheduled = 0;
