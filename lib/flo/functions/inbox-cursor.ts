@@ -1,25 +1,22 @@
 /**
- * Utrwalony kursor pobierania skrzynki KSeF (krok 19-21 planu, tabela z 00063).
+ * Utrwalony stan pobierania skrzynki KSeF (tabela z 00063) — HWM (AUD-18).
  *
- * Pobieranie chodzi po stronach przez `continuationToken`. Gdy proces zginie
- * w połowie — restart kontenera, timeout, 5xx z Ministerstwa — bez utrwalonego
- * kursora następny przebieg zaczyna od zera. To wygląda niewinnie, dopóki
- * okno dat się nie przesunie: wtedy część faktur kosztowych NIGDY nie trafia
- * do klienta, a on płaci wyższy podatek i nie ma jak się dowiedzieć, że
- * powinien czegoś szukać.
+ * Skrzynka chodziła przesuwnym oknem „ostatnie 48 h”: awaria dłuższa niż
+ * 48 h zostawiała faktury kosztowe, których nikt już nie pobrał, a klient
+ * płacił wyższy podatek, nie mając jak się o tym dowiedzieć. Teraz zapisujemy,
+ * do której chwili KSeF potwierdził komplet (`permanentStorageHwmDate`),
+ * i od niej zaczyna się następne okno — po przerwie każdej długości.
+ *
+ * Kolumny z 00063, bez migracji: `window_to` = HWM (początek następnego
+ * okna), `window_from` = początek ostatniego pełnego okna, `announced_count`
+ * = pobrane w nim faktury, `saved_count` = nowo zapisane. `continuation_token`
+ * nie jest używany — `/invoices/query/metadata` nie ma tokenu kontynuacji.
  */
 
-import type { InboxCursorState } from '@/lib/flo/functions/expense-inbox';
-import { cursorMatchesWindow } from '@/lib/flo/functions/expense-inbox';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 interface CursorRow {
-  tenant_id: string;
-  continuation_token: string | null;
-  window_from: string | null;
   window_to: string | null;
-  announced_count: number;
-  saved_count: number;
 }
 
 interface CursorClient {
@@ -39,92 +36,44 @@ interface CursorClient {
       row: Record<string, unknown>,
       opts?: { onConflict?: string },
     ) => Promise<{ error: { message: string } | null }>;
-    delete: () => {
-      eq: (
-        column: string,
-        value: string,
-      ) => Promise<{ error: { message: string } | null }>;
-    };
   };
 }
 
-const EMPTY: InboxCursorState = {
-  continuationToken: null,
-  windowFrom: null,
-  windowTo: null,
-  announcedCount: 0,
-  savedCount: 0,
-};
-
-/**
- * Kursor dla tego okna dat — albo pusty, jeśli zapisany dotyczy innego.
- *
- * Świadomie zwracamy pusty stan zamiast rzucać: kursor z innego okna nie jest
- * awarią, tylko informacją, że trzeba zacząć od początku.
- */
-export async function readInboxCursor(
+/** HWM ostatniego pełnego przebiegu albo `null` (firma jeszcze nie pobierana). */
+export async function readInboxHwm(
   tenantId: string,
-  windowFrom: Date,
-  windowTo: Date,
   client: CursorClient = createAdminClient() as unknown as CursorClient,
-): Promise<InboxCursorState> {
+): Promise<string | null> {
   const { data, error } = await client
     .from('ksef_inbox_cursor')
-    .select('*')
+    .select('window_to')
     .eq('tenant_id', tenantId)
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) return EMPTY;
-
-  const state: InboxCursorState = {
-    continuationToken: data.continuation_token,
-    windowFrom: data.window_from,
-    windowTo: data.window_to,
-    announcedCount: data.announced_count ?? 0,
-    savedCount: data.saved_count ?? 0,
-  };
-
-  return cursorMatchesWindow(state, windowFrom, windowTo) ? state : EMPTY;
+  return data?.window_to ?? null;
 }
 
-export async function saveInboxCursor(
+/** Zapis PO zapisaniu faktur z okna — HWM nie może wyprzedzić bazy. */
+export async function saveInboxHwm(
   tenantId: string,
-  state: {
-    continuationToken: string | null;
-    windowFrom: Date;
-    windowTo: Date;
-    announcedCount: number;
-    savedCount: number;
-  },
+  state: { windowFrom: string; hwm: string; fetched: number; saved: number },
   client: CursorClient = createAdminClient() as unknown as CursorClient,
 ): Promise<void> {
+  const now = new Date().toISOString();
   const { error } = await client.from('ksef_inbox_cursor').upsert(
     {
       tenant_id: tenantId,
-      continuation_token: state.continuationToken,
-      window_from: state.windowFrom.toISOString(),
-      window_to: state.windowTo.toISOString(),
-      announced_count: state.announcedCount,
-      saved_count: state.savedCount,
-      last_page_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      continuation_token: null,
+      window_from: state.windowFrom,
+      window_to: state.hwm,
+      announced_count: state.fetched,
+      saved_count: state.saved,
+      last_page_at: now,
+      updated_at: now,
     },
     { onConflict: 'tenant_id' },
   );
-
-  if (error) throw new Error(error.message);
-}
-
-/** Pobieranie doszło do końca — kursor nie jest już do niczego potrzebny. */
-export async function clearInboxCursor(
-  tenantId: string,
-  client: CursorClient = createAdminClient() as unknown as CursorClient,
-): Promise<void> {
-  const { error } = await client
-    .from('ksef_inbox_cursor')
-    .delete()
-    .eq('tenant_id', tenantId);
 
   if (error) throw new Error(error.message);
 }

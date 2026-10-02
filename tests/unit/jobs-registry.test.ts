@@ -170,7 +170,7 @@ describe('rejestr jobów', () => {
     const byQueue = new Map(registered.map((j) => [j.queue, j]));
     expect(byQueue.get('invoice.submit.requested')?.groupConcurrency).toBe(100);
     expect(byQueue.get('invoice.upo.requested')?.groupConcurrency).toBe(3);
-    expect(byQueue.get('inbox.poll.tenant')?.groupConcurrency).toBe(3);
+    expect(byQueue.get('inbox.poll.tenant')?.groupConcurrency).toBe(1); // AUD-91: jeden przebieg skrzynki na NIP
     expect(byQueue.get('billing.payment.succeeded')?.groupConcurrency).toBe(1);
   });
 
