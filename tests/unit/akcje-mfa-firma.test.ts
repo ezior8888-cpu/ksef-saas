@@ -159,3 +159,15 @@ describe('bez MFA w koncie (opcjonalne) — działa jak dotąd', () => {
     expect(await validateNipLiveAction('5260001246')).toMatchObject({ success: true });
   });
 });
+
+describe('usunięcie kosztu (AUD-58)', () => {
+  it('sesja bez drugiego kroku MFA — odmowa, nic nie usunięte', async () => {
+    s.mfa = 'challenge_required';
+    const { deleteExpenseAction } = await import('@/app/actions/expenses');
+
+    const out = await deleteExpenseAction('e-1');
+
+    expect(out).toMatchObject({ success: false });
+    expect(s.updates).toEqual([]);
+  });
+});

@@ -279,16 +279,15 @@ export async function reviewExpenseAction(
 }
 
 export async function deleteExpenseAction(expenseId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false as const, error: 'Brak autoryzacji' };
-
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) {
-    return { success: false as const, error: 'Brak aktywnej organizacji' };
+  // Sesja po drugim kroku MFA i potwierdzone członkostwo, nie sam `getUser()`
+  // z firmą z ciasteczka (AUD-58).
+  let auth;
+  try {
+    auth = await requireUserAndActiveOrg();
+  } catch {
+    return { success: false as const, error: 'Brak autoryzacji' };
   }
+  const { supabase, tenantId } = auth;
 
   const { error, count } = await supabase
     .from('expenses')
