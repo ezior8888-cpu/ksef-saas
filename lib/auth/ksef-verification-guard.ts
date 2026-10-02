@@ -1,6 +1,6 @@
 /**
  * Enforcement gate: akcje wymagające potwierdzonej weryfikacji KSeF dla org
- * (`tenants.ksef_verified_at` ustawiane atomowo przez `claim_ksef_nip_ownership`).
+ * (`tenants.ksef_verified_at` i środowisko ustawiane atomowo przez trusted RPC).
  *
  * Odczyt przez `createClient()` (sesja użytkownika) — respektuje RLS
  * (`is_member_of`); nie używamy service_role, żeby nie odczytywać metadanych
@@ -11,6 +11,7 @@
 
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { isUuid } from '@/lib/supabase/active-org';
+import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 
 export class KsefNotVerifiedError extends Error {
   constructor(message = 'KSeF_NOT_VERIFIED') {
@@ -44,11 +45,13 @@ export async function requireKsefVerification(tenantId: string): Promise<void> {
   const supabase = await createClient();
   const { data: tenant, error } = await supabase
     .from('tenants')
-    .select('ksef_verified_at')
+    .select('ksef_verified_at, ksef_verified_environment')
     .eq('id', tenantId)
     .maybeSingle();
 
-  if (error || !tenant?.ksef_verified_at) {
+  const env = configuredKsefEnvironment();
+  if (error || !tenant?.ksef_verified_at || !env ||
+      tenant.ksef_verified_environment !== env) {
     throw new KsefNotVerifiedError();
   }
 }
@@ -72,14 +75,18 @@ export async function getKsefVerificationStatus(
   const supabase = await createClient();
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('ksef_verified_at, ksef_authority_user_id, nip, name')
+    .select('ksef_verified_at, ksef_verified_environment, ksef_authority_user_id, nip, name')
     .eq('id', tenantId)
     .maybeSingle();
 
+  const env = configuredKsefEnvironment();
+  const verified = Boolean(
+    env && tenant?.ksef_verified_at && tenant.ksef_verified_environment === env,
+  );
   return {
-    isVerified: !!tenant?.ksef_verified_at,
-    verifiedAt: tenant?.ksef_verified_at ?? null,
-    authorityUserId: tenant?.ksef_authority_user_id ?? null,
+    isVerified: verified,
+    verifiedAt: verified ? tenant?.ksef_verified_at ?? null : null,
+    authorityUserId: verified ? tenant?.ksef_authority_user_id ?? null : null,
     nip: tenant?.nip ?? null,
     name: tenant?.name ?? null,
   };
@@ -87,7 +94,7 @@ export async function getKsefVerificationStatus(
 
 /**
  * Weryfikacja KSeF dla jobów w tle (Inngest, worker) — brak `auth.uid()` w
- * kontekście HTTP; odczyt wyłącznie `ksef_verified_at` przez service_role.
+ * kontekście HTTP; odczyt znacznika i środowiska przez service_role.
  * Używaj tylko po wcześniejszym ustaleniu `tenantId` z zaufanego źródła (event).
  */
 export async function requireKsefVerificationForBackgroundJob(
@@ -100,11 +107,13 @@ export async function requireKsefVerificationForBackgroundJob(
   const admin = createAdminClient();
   const { data: tenant, error } = await admin
     .from('tenants')
-    .select('ksef_verified_at')
+    .select('ksef_verified_at, ksef_verified_environment')
     .eq('id', tenantId)
     .maybeSingle();
 
-  if (error || !tenant?.ksef_verified_at) {
+  const env = configuredKsefEnvironment();
+  if (error || !tenant?.ksef_verified_at || !env ||
+      tenant.ksef_verified_environment !== env) {
     throw new KsefNotVerifiedError();
   }
 }

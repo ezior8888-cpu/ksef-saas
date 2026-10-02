@@ -6,6 +6,7 @@ import {
 } from '@/lib/auth/ksef-verification-guard';
 import { createClient } from '@/lib/supabase/server';
 import { downloadUpoPdf, downloadUpoXml } from '@/lib/ksef/upo-storage';
+import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 
 function upoPdfFilename(
   internalNumber: string | null | undefined,
@@ -35,7 +36,7 @@ export async function getUpoPdfAction(
 
   const { data: invoice, error: invError } = await supabase
     .from('invoices')
-    .select('id, tenant_id, internal_number, ksef_status')
+    .select('id, tenant_id, internal_number, ksef_status, ksef_number, ksef_environment')
     .eq('id', invoiceId)
     .maybeSingle();
 
@@ -63,13 +64,21 @@ export async function getUpoPdfAction(
     };
   }
 
+  const environment = configuredKsefEnvironment();
+  if (!environment || invoice.ksef_environment !== environment) {
+    return { success: false, error: 'Środowisko tej faktury KSeF wymaga uzgodnienia przed pobraniem UPO.' };
+  }
+
   const { data: upo, error: upoError } = await supabase
     .from('upo_receipts')
-    .select('status')
+    .select('status, tenant_id, ksef_number, ksef_environment')
     .eq('invoice_id', invoiceId)
     .maybeSingle();
 
-  if (upoError || !upo || upo.status !== 'downloaded') {
+  if (upoError || !upo || upo.status !== 'downloaded' ||
+      upo.tenant_id !== invoice.tenant_id ||
+      upo.ksef_number !== invoice.ksef_number ||
+      upo.ksef_environment !== environment) {
     return {
       success: false,
       error:
@@ -104,7 +113,7 @@ export async function getUpoXmlAction(
 
   const { data: invoice, error: invError } = await supabase
     .from('invoices')
-    .select('id, tenant_id, ksef_status')
+    .select('id, tenant_id, ksef_status, ksef_number, ksef_environment')
     .eq('id', invoiceId)
     .maybeSingle();
 
@@ -117,13 +126,21 @@ export async function getUpoXmlAction(
     };
   }
 
+  const environment = configuredKsefEnvironment();
+  if (!environment || invoice.ksef_environment !== environment) {
+    return { success: false, error: 'Środowisko tej faktury KSeF wymaga uzgodnienia przed pobraniem UPO.' };
+  }
+
   const { data: upo, error: upoError } = await supabase
     .from('upo_receipts')
-    .select('status')
+    .select('status, tenant_id, ksef_number, ksef_environment')
     .eq('invoice_id', invoiceId)
     .maybeSingle();
 
-  if (upoError || !upo || upo.status !== 'downloaded') {
+  if (upoError || !upo || upo.status !== 'downloaded' ||
+      upo.tenant_id !== invoice.tenant_id ||
+      upo.ksef_number !== invoice.ksef_number ||
+      upo.ksef_environment !== environment) {
     return {
       success: false,
       error:

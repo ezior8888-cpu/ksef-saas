@@ -49,6 +49,8 @@ const InvoiceSubmitRequestedSchema = z.object({
   ),
   /** NIP tenanta (klucz rate-limitera + kontekst sesji KSeF). */
   nip: z.string().regex(/^\d{10}$/, 'NIP musi mieć dokładnie 10 cyfr'),
+  /** Provenance z chwili enqueue; stare eventy bez niego są odrzucane. */
+  environment: z.enum(['test', 'demo', 'production']),
   /** Gdy ustawione, generujemy XML z `generateCorrectionInvoiceXml`. */
   correctionData: z.custom<CorrectionInvoiceData>().optional(),
   /** Faktura ZAL w FA(3). */
@@ -75,9 +77,11 @@ export const invoiceSubmitSucceeded = eventType('invoice/submit.succeeded', {
     tenantId: string;
     invoiceId: string;
     ksefNumber: string;
+    environment: 'test' | 'demo' | 'production';
     /** Opcjonalne — konsumenci mogą pobierać ścieżkę z rekordu faktury w DB. */
     xmlStoragePath?: string;
     fromOfflineQueue?: boolean;
+    offlineQueueId?: string;
   }>(),
 });
 
@@ -87,7 +91,9 @@ export const invoiceSubmitFailed = eventType('invoice/submit.failed', {
     tenantId: string;
     invoiceId: string;
     error: string;
+    environment: 'test' | 'demo' | 'production';
     fromOfflineQueue?: boolean;
+    offlineQueueId?: string;
     /**
      * Błąd kończący (odrzucenie treści, brak danych dokumentu) — kolejka
      * Offline24 NIE może takiej faktury ponawiać. Brak pola = jak dotąd
@@ -110,6 +116,7 @@ export const inboxPollTenant = eventType('inbox/poll.tenant', {
   schema: staticSchema<{
     tenantId: string;
     nip: string;
+    environment: 'test' | 'demo' | 'production';
   }>(),
 });
 
@@ -159,6 +166,7 @@ export const invoiceUpoRequested = eventType('invoice/upo.requested', {
      * z `upo-retry-stale` biorą go z `ksef_submissions`.
      */
     sessionReferenceNumber?: string;
+    environment: 'test' | 'demo' | 'production';
   }>(),
 });
 
@@ -177,6 +185,7 @@ export const importKsefHistoryRequested = eventType('import/ksef-history.request
     dateFrom: string;
     dateTo: string;
     direction: 'issued' | 'received';
+    environment: 'test' | 'demo' | 'production';
   }>(),
 });
 

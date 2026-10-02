@@ -20,6 +20,7 @@ import {
 import type { KsefAuth } from './auth';
 import { recordKsefSubmissionSent } from './submission-log';
 import { submitInvoice } from './submit';
+import { requireMatchingKsefEnvironment } from './claim-environment';
 
 /**
  * FULL FLOW: od modelu domenowego faktury do numeru KSeF.
@@ -71,6 +72,7 @@ export async function submitInvoiceFullFlow(
     throw new InvoiceValidationError([ROZ_SUBMISSION_HOLD_MESSAGE]);
   }
 
+  const configuredEnv = requireMatchingKsefEnvironment(env);
   await requireKsefVerificationForBackgroundJob(tenantId);
 
   // 0. Korekta/zaliczka/rozliczenie bez swoich danych zbudowałyby się jako
@@ -135,7 +137,7 @@ export async function submitInvoiceFullFlow(
   const submitResult = await submitInvoice(
     xml,
     auth,
-    env,
+    configuredEnv,
     { tenantId, invoiceId },
     {
       onInvoiceSent: (references) =>

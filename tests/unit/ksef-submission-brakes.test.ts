@@ -108,6 +108,7 @@ function enqueueParams(type: Invoice['type'], auditKind: 'regular' | 'correction
     userId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     invoiceId: ID,
     nip: '1234567890',
+    environment: 'test' as const,
     invoice: { type, internalNumber: 'FK/1' } as Invoice,
     auditKind,
   };
@@ -129,6 +130,7 @@ function submitEvent(type: Invoice['type'] = 'VAT') {
     invoiceId: ID,
     tenantId: TENANT,
     nip: '1234567890',
+    environment: 'test' as const,
     invoice: { type, internalNumber: 'FV/1', issueDate: '2026-10-01' } as Invoice,
   };
 }

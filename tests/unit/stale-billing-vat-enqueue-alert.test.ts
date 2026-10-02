@@ -103,6 +103,7 @@ function queryResult(count: number | null, error: Error | null = null) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv('KSEF_ENV', 'test');
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-25T12:00:00.000Z'));
   mocks.cacheGet.mockResolvedValue(null);
@@ -111,6 +112,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 
@@ -176,13 +178,13 @@ describe('stale billing VAT enqueue alert', () => {
   it('runs the VAT check in the shared monitor used by both job backends', async () => {
     const query = {
       select: vi.fn(), eq: vi.fn(), not: vi.fn(), is: vi.fn(),
-      in: vi.fn(), gte: vi.fn(), lt: vi.fn(), order: vi.fn(), or: vi.fn(),
-      then: vi.fn(),
+      in: vi.fn(), gte: vi.fn(), lt: vi.fn(), order: vi.fn(),
+      or: vi.fn(), limit: vi.fn(), maybeSingle: vi.fn(), then: vi.fn(),
     };
-    for (const name of ['select', 'eq', 'not', 'is', 'in', 'gte', 'lt', 'or'] as const) {
+    for (const name of ['select', 'eq', 'not', 'is', 'in', 'gte', 'lt', 'or', 'limit', 'order'] as const) {
       query[name].mockReturnValue(query);
     }
-    query.order.mockResolvedValue({ data: [], error: null });
+    query.maybeSingle.mockResolvedValue({ data: null, error: null });
     query.then.mockImplementation((resolve: (value: unknown) => void) =>
       Promise.resolve({ count: 0, error: null, data: [] }).then(resolve));
     mocks.from.mockReturnValue(query);
@@ -200,7 +202,10 @@ describe('stale billing VAT enqueue alert', () => {
     expect(step.run).toHaveBeenCalledWith('check-customer-attempts', expect.any(Function));
     // 13 → 14: płatność opłacona bez faktury VAT (AUD-40).
     expect(step.run).toHaveBeenCalledWith('check-paid-without-vat-invoice', expect.any(Function));
-    expect(result).toMatchObject({ checked: 15, fired: 0 });
+    // 15 → 16: kolejka offline w innym środowisku KSeF (#63 Codexa).
+    expect(step.run).toHaveBeenCalledWith('check-offline-environment', expect.any(Function));
+    expect(result).toMatchObject({ checked: 16, fired: 0 });
+    expect(result.details).toContainEqual({ type: 'offline_environment_blocked', fired: false });
   });
 });
 

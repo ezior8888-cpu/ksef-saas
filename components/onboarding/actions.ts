@@ -5,6 +5,7 @@ import { getVerifiedUserContext } from '@/lib/auth/verified-user';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { createAdminClient } from '@/lib/supabase/server';
 import { validateNipChecksum } from '@/lib/xml/invoice-calculator';
+import { hasConfiguredKsefProof } from '@/lib/ksef/claim-environment';
 
 import {
   createOrganizationAction,
@@ -94,7 +95,7 @@ export async function lookupNipAction(nip: string): Promise<LookupNipResult> {
   const admin = createAdminClient();
   const { data: existing } = await admin
     .from('tenants')
-    .select('id, name, ksef_verified_at')
+    .select('id, name, ksef_verified_at, ksef_verified_environment')
     .eq('nip', nip)
     .limit(10);
 
@@ -112,7 +113,7 @@ export async function lookupNipAction(nip: string): Promise<LookupNipResult> {
     existingOrgs: (existing ?? []).map((t) => ({
       organizationId: t.id,
       name: t.name,
-      ksefVerified: t.ksef_verified_at !== null,
+      ksefVerified: hasConfiguredKsefProof(t.ksef_verified_at, t.ksef_verified_environment),
     })),
   };
 }

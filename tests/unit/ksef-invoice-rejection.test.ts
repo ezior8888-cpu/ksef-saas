@@ -1,5 +1,5 @@
 import { NonRetriableError, RetryAfterError } from 'inngest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice } from '@/types/invoice';
@@ -65,7 +65,12 @@ vi.mock('@/lib/supabase/server', () => ({
       maybeSingle: async () => ({
         data: isUpdate
           ? { id: '11111111-1111-4111-8111-111111111111' }
-          : { ksef_status: 'queued', ksef_number: null },
+          : {
+              id: '11111111-1111-4111-8111-111111111111',
+              ksef_status: 'queued', ksef_number: null, ksef_environment: 'test',
+              invoice_kind: 'regular', invoice_type: 'VAT', internal_number: 'FV 1/2026',
+              fa3_data: { internalNumber: 'FV 1/2026', type: 'VAT' },
+            },
         error: null,
       }),
     };
@@ -110,7 +115,9 @@ const DUPLIKAT = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv('KSEF_ENV', 'test');
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('submitInvoice: odrzucenie w statusie faktury', () => {
   it('440: typowany błąd z numerem KSeF faktury, która już jest w systemie', async () => {
@@ -169,6 +176,7 @@ describe('job wysyłki: odrzucenie w statusie kończy się bez ponowień', () =>
     invoiceId: '11111111-1111-4111-8111-111111111111',
     tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     nip: '1234567890',
+    environment: 'test' as const,
     invoice: { internalNumber: 'FV 1/2026', type: 'VAT' } as Invoice,
   };
 

@@ -13,6 +13,7 @@ import 'server-only';
 
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { hasConfiguredKsefProof } from '@/lib/ksef/claim-environment';
 
 export interface AdminUserListItem {
   userId: string;
@@ -80,7 +81,7 @@ export async function listAdminUsers(
   const { data: memberships } = await supabase
     .from('memberships')
     .select(
-      'user_id, joined_at, organization_id, tenants(name, nip, ksef_verified_at)',
+      'user_id, joined_at, organization_id, tenants(name, nip, ksef_verified_at, ksef_verified_environment)',
     )
     .in('user_id', userIds)
     .eq('status', 'active')
@@ -96,11 +97,13 @@ export async function listAdminUsers(
           name: string;
           nip: string;
           ksef_verified_at: string | null;
+          ksef_verified_environment: string | null;
         }
       | {
           name: string;
           nip: string;
           ksef_verified_at: string | null;
+          ksef_verified_environment: string | null;
         }[]
       | null;
   };
@@ -129,7 +132,7 @@ export async function listAdminUsers(
       orgCount: userMemberships.length,
       primaryOrgName: primaryTenant?.name ?? null,
       primaryOrgNip: primaryTenant?.nip ?? null,
-      primaryOrgVerified: Boolean(primaryTenant?.ksef_verified_at),
+      primaryOrgVerified: hasConfiguredKsefProof(primaryTenant?.ksef_verified_at, primaryTenant?.ksef_verified_environment),
     };
   });
 
@@ -219,7 +222,7 @@ export async function getAdminUserDetail(
   const { data: memberships } = await supabase
     .from('memberships')
     .select(
-      'organization_id, role, status, joined_at, tenants(name, nip, ksef_verified_at)',
+      'organization_id, role, status, joined_at, tenants(name, nip, ksef_verified_at, ksef_verified_environment)',
     )
     .eq('user_id', userId)
     .order('joined_at', { ascending: false });
@@ -230,8 +233,8 @@ export async function getAdminUserDetail(
     status: string;
     joined_at: string;
     tenants:
-      | { name: string; nip: string; ksef_verified_at: string | null }
-      | { name: string; nip: string; ksef_verified_at: string | null }[]
+      | { name: string; nip: string; ksef_verified_at: string | null; ksef_verified_environment: string | null }
+      | { name: string; nip: string; ksef_verified_at: string | null; ksef_verified_environment: string | null }[]
       | null;
   };
 
@@ -272,7 +275,7 @@ export async function getAdminUserDetail(
       role: m.role,
       status: m.status,
       joinedAt: m.joined_at,
-      ksefVerified: Boolean(tenant?.ksef_verified_at),
+      ksefVerified: hasConfiguredKsefProof(tenant?.ksef_verified_at, tenant?.ksef_verified_environment),
       invoiceCount: invCounts.get(m.organization_id) ?? 0,
       expenseCount: expCounts.get(m.organization_id) ?? 0,
     };

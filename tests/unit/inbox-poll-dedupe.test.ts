@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
 
@@ -85,7 +85,7 @@ const ctx: JobContext = {
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
   step: { run: async (_n, fn) => fn(), sleep: vi.fn(), sendEvent: vi.fn(), scheduleAfter: vi.fn() },
 };
-const DATA = { tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', nip: '1234567890' };
+const DATA = { tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', nip: '1234567890', environment: 'test' as const };
 
 function faktura(n: number, sellerNip = '5260001246') {
   const numer = `1234567890-20260925-${String(n).padStart(12, '0')}-00`;
@@ -104,6 +104,7 @@ function faktura(n: number, sellerNip = '5260001246') {
 }
 
 beforeEach(() => {
+  vi.stubEnv('KSEF_ENV', 'test');
   vi.clearAllMocks();
   db.existing = new Set();
   db.filterError = null;
@@ -111,6 +112,10 @@ beforeEach(() => {
   db.inserts = [];
   db.sellerRows = [];
   db.classify.mockClear();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('skrzynka KSeF: filtr już zapisanych faktur', () => {

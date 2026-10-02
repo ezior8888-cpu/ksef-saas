@@ -119,6 +119,7 @@ function statusReply(status: Record<string, unknown>, extra: Record<string, unkn
 }
 
 beforeEach(() => {
+  vi.stubEnv('KSEF_ENV', 'test');
   vi.clearAllMocks();
   mocks.credentials.mockResolvedValue(AUTH);
   mocks.findOpen.mockResolvedValue(null);
@@ -213,6 +214,7 @@ describe('job wysyłki — uzgadnianie zamiast ponownej wysyłki', () => {
     invoiceId: '11111111-1111-4111-8111-111111111111',
     tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     nip: '1234567890',
+    environment: 'test' as const,
     invoice: { internalNumber: 'FV 1/2026', type: 'VAT', issueDate: '2026-10-01' } as Invoice,
   };
   const upoEvent = () =>
@@ -288,6 +290,7 @@ describe('job wysyłki — odpowiedź 440 „duplikat”', () => {
     invoiceId: '11111111-1111-4111-8111-111111111111',
     tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     nip: '1234567890',
+    environment: 'test' as const,
     invoice: { internalNumber: 'FV 1/2026', type: 'VAT', issueDate: '2026-10-01' } as Invoice,
   };
 

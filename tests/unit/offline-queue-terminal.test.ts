@@ -1,5 +1,5 @@
 import { NonRetriableError } from 'inngest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice } from '@/types/invoice';
@@ -8,12 +8,14 @@ type Row = Record<string, unknown>;
 
 const db = vi.hoisted(() => ({
   queueRow: null as Row | null,
+  invoiceRow: null as Row | null,
   updates: [] as Array<{ table: string; patch: Row }>,
 }));
 const mocks = vi.hoisted(() => ({ status: vi.fn(), sendEvent: vi.fn() }));
 
 vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({
   requireInvoiceTenant: vi.fn(),
+  assertJobIdentity: vi.fn(),
   InvoiceTenantMismatchError: class InvoiceTenantMismatchError extends Error {},
 }));
 vi.mock('@/lib/supabase/admin-queries', () => ({
@@ -46,8 +48,8 @@ vi.mock('@/lib/supabase/server', () => ({
       maybeSingle: async () => {
         if (patch) db.updates.push({ table, patch });
         return {
-          data: patch && table === 'invoices'
-            ? { id: '11111111-1111-4111-8111-111111111111' }
+          data: table === 'invoices'
+            ? (patch ? { id: '11111111-1111-4111-8111-111111111111' } : db.invoiceRow)
             : db.queueRow,
           error: null,
         };
@@ -84,17 +86,24 @@ const ctx: JobContext = {
 };
 const INV = '11111111-1111-4111-8111-111111111111';
 const TEN = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const QUEUE = '22222222-2222-4222-8222-222222222222';
 
 beforeEach(() => {
   vi.clearAllMocks();
-  db.queueRow = { id: 'q1', attempts: 2, status: 'sending' };
+  vi.stubEnv('KSEF_ENV', 'test');
+  db.queueRow = { id: QUEUE, attempts: 2, status: 'sending' };
+  db.invoiceRow = {
+    id: INV, ksef_status: 'failed', invoice_kind: 'regular', invoice_type: 'VAT',
+    fa3_data: { type: 'VAT' }, ksef_environment: 'test',
+  };
   db.updates = [];
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('kolejka Offline24 po nieudanej wysyłce', () => {
   it('błąd kończący: wpis zamknięty jako failed, status faktury nietknięty', async () => {
     await runOfflineQueueFailure(
-      { invoiceId: INV, tenantId: TEN, error: 'KSeF odrzucił fakturę', fromOfflineQueue: true, terminal: true },
+      { invoiceId: INV, tenantId: TEN, error: 'KSeF odrzucił fakturę', fromOfflineQueue: true, terminal: true, environment: 'test', offlineQueueId: QUEUE },
       ctx,
     );
     expect(db.updates).toEqual([
@@ -105,7 +114,7 @@ describe('kolejka Offline24 po nieudanej wysyłce', () => {
 
   it('błąd przejściowy: wraca do kolejki jak dotąd', async () => {
     await runOfflineQueueFailure(
-      { invoiceId: INV, tenantId: TEN, error: 'ECONNRESET', fromOfflineQueue: true, terminal: false },
+      { invoiceId: INV, tenantId: TEN, error: 'ECONNRESET', fromOfflineQueue: true, terminal: false, environment: 'test', offlineQueueId: QUEUE },
       ctx,
     );
     expect(db.updates[0]?.patch.status).toBe('queued');
@@ -113,7 +122,7 @@ describe('kolejka Offline24 po nieudanej wysyłce', () => {
   });
 
   it('zdarzenie sprzed zmiany (bez pola terminal) zachowuje się jak dotąd', async () => {
-    await runOfflineQueueFailure({ invoiceId: INV, tenantId: TEN, error: 'x', fromOfflineQueue: true }, ctx);
+    await runOfflineQueueFailure({ invoiceId: INV, tenantId: TEN, error: 'x', fromOfflineQueue: true, environment: 'test', offlineQueueId: QUEUE }, ctx);
     expect(db.updates[0]?.patch.status).toBe('queued');
   });
 });
@@ -125,6 +134,8 @@ describe('job wysyłki mówi kolejce, czy błąd jest kończący', () => {
     nip: '1234567890',
     invoice: { internalNumber: 'FV 1/2026', type: 'VAT' } as Invoice,
     fromOfflineQueue: true,
+    offlineQueueId: QUEUE,
+    environment: 'test' as const,
   };
   const wyslane = () =>
     mocks.sendEvent.mock.calls.find((c) => c[0] === 'emit-failure')?.[1] as { data: Record<string, unknown> };
@@ -132,6 +143,12 @@ describe('job wysyłki mówi kolejce, czy błąd jest kończący', () => {
   it('NonRetriableError → terminal: true', async () => {
     await onSubmitInvoiceExhausted(new NonRetriableError('KSeF odrzucił fakturę'), zdarzenie, ctx);
     expect(wyslane().data.terminal).toBe(true);
+  });
+
+  it('integrity failure stays failed yet closes the Offline24 row', async () => {
+    await onSubmitInvoiceExhausted(new NonRetriableError('KSeF document kind requires manual reconciliation'), zdarzenie, ctx);
+    expect(wyslane().data.terminal).toBe(true);
+    expect(mocks.status).toHaveBeenCalledWith(INV, expect.objectContaining({ ksef_status: 'failed' }), TEN);
   });
 
   it('inny błąd po wyczerpaniu prób → terminal: false', async () => {

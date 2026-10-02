@@ -109,6 +109,7 @@ const zdarzenie = {
   invoiceId: '11111111-1111-4111-8111-111111111111',
   tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   nip: '1234567890',
+  environment: 'test' as const,
   invoice: { internalNumber: 'FV/1/2026', type: 'VAT', issueDate: '2026-10-01' } as Invoice,
 };
 const ACCEPTED = {

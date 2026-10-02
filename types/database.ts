@@ -957,6 +957,7 @@ export type Database = {
           issue_date: string
           ksef_accepted_at: string | null
           ksef_number: string | null
+          ksef_environment: string | null
           ksef_status: string | null
           last_attempt_at: string | null
           last_error: string | null
@@ -1023,6 +1024,7 @@ export type Database = {
           issue_date: string
           ksef_accepted_at?: string | null
           ksef_number?: string | null
+          ksef_environment?: string | null
           ksef_status?: string | null
           last_attempt_at?: string | null
           last_error?: string | null
@@ -1089,6 +1091,7 @@ export type Database = {
           issue_date?: string
           ksef_accepted_at?: string | null
           ksef_number?: string | null
+          ksef_environment?: string | null
           ksef_status?: string | null
           last_attempt_at?: string | null
           last_error?: string | null
@@ -1242,6 +1245,7 @@ export type Database = {
           deadline: string
           id: string
           idempotency_key: string
+          ksef_environment: string | null
           invoice_id: string
           is_mf_outage: boolean
           last_attempt_at: string | null
@@ -1261,6 +1265,7 @@ export type Database = {
           deadline: string
           id?: string
           idempotency_key: string
+          ksef_environment?: string | null
           invoice_id: string
           is_mf_outage?: boolean
           last_attempt_at?: string | null
@@ -1280,6 +1285,7 @@ export type Database = {
           deadline?: string
           id?: string
           idempotency_key?: string
+          ksef_environment?: string | null
           invoice_id?: string
           is_mf_outage?: boolean
           last_attempt_at?: string | null
@@ -2053,6 +2059,7 @@ export type Database = {
           ksef_certificate_expiry: string | null
           ksef_credentials_encrypted: string | null
           ksef_verified_at: string | null
+          ksef_verified_environment: string | null
           name: string
           nip: string
           regon: string | null
@@ -2072,6 +2079,7 @@ export type Database = {
           ksef_certificate_expiry?: string | null
           ksef_credentials_encrypted?: string | null
           ksef_verified_at?: string | null
+          ksef_verified_environment?: string | null
           name: string
           nip: string
           regon?: string | null
@@ -2262,6 +2270,7 @@ export type Database = {
           invoice_id: string
           ksef_acceptance_timestamp: string
           ksef_number: string
+          ksef_environment: string | null
           last_error: string | null
           status: Database["public"]["Enums"]["upo_status_enum"]
           tenant_id: string
@@ -2280,6 +2289,7 @@ export type Database = {
           invoice_id: string
           ksef_acceptance_timestamp: string
           ksef_number: string
+          ksef_environment?: string | null
           last_error?: string | null
           status?: Database["public"]["Enums"]["upo_status_enum"]
           tenant_id: string
@@ -2298,6 +2308,7 @@ export type Database = {
           invoice_id?: string
           ksef_acceptance_timestamp?: string
           ksef_number?: string
+          ksef_environment?: string | null
           last_error?: string | null
           status?: Database["public"]["Enums"]["upo_status_enum"]
           tenant_id?: string
@@ -2552,6 +2563,7 @@ export type Database = {
           is_ksef_verified: boolean | null
           ksef_verified_at: string | null
           ksef_authority_user_id: string | null
+          verified_environment: string | null
         }
         Insert: {
           id?: never
@@ -2560,6 +2572,7 @@ export type Database = {
           is_ksef_verified?: never
           ksef_verified_at?: never
           ksef_authority_user_id?: never
+          verified_environment?: never
         }
         Update: {
           id?: never
@@ -2568,6 +2581,7 @@ export type Database = {
           is_ksef_verified?: never
           ksef_verified_at?: never
           ksef_authority_user_id?: never
+          verified_environment?: never
         }
         Relationships: []
       }

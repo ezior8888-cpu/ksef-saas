@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobContext } from '@/lib/jobs/registry';
 
 type Row = Record<string, unknown>;
@@ -28,11 +28,11 @@ const ID = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
 const RECEIPT = '33333333-3333-4333-8333-333333333333';
 const REF = 'TEST-UPO-REFERENCE';
-const event = { invoiceId: ID, tenantId: A, ksefNumber: REF, nip: '1234567890' };
-const invoice = (patch: Row = {}): Row => ({ id: ID, tenant_id: A, ksef_number: REF, ksef_status: 'accepted',
+const event = { invoiceId: ID, tenantId: A, ksefNumber: REF, nip: '1234567890', environment: 'test' as const };
+const invoice = (patch: Row = {}): Row => ({ id: ID, tenant_id: A, ksef_number: REF, ksef_status: 'accepted', ksef_environment: 'test',
   internal_number: 'TEST-1', issue_date: '2026-01-01', gross_total: 123, buyer_data: { name: 'Test buyer' },
   buyer_nip: '1234567890', seller_nip: '1234567890', tenants: { id: A, name: 'Test seller', nip: '1234567890' }, ...patch });
-const receipt = (patch: Row = {}): Row => ({ id: RECEIPT, tenant_id: A, invoice_id: ID, ksef_number: REF,
+const receipt = (patch: Row = {}): Row => ({ id: RECEIPT, tenant_id: A, invoice_id: ID, ksef_number: REF, ksef_environment: 'test',
   status: 'pending', download_attempts: 0, last_error: null, created_at: '2000-01-01', ...patch });
 let tables: Record<string, Row[]>;
 let errors: Set<string>;
@@ -102,7 +102,8 @@ function expectNoExternalEffects() {
   expect(sendEvent).not.toHaveBeenCalled();
 }
 beforeEach(() => {
-  vi.clearAllMocks(); calls = []; errors = new Set(); beforeQuery = undefined;
+  vi.clearAllMocks();
+  vi.stubEnv('KSEF_ENV', 'test'); calls = []; errors = new Set(); beforeQuery = undefined;
   tables = { invoices: [invoice()], upo_receipts: [] };
   mocks.admin.mockImplementation(client);
   mocks.download.mockResolvedValue({ success: true, upoXml: '<test/>', upoXmlHash: 'hash', upoId: 'test-upo', acceptanceTimestamp: '2026-01-01' });
@@ -110,8 +111,27 @@ beforeEach(() => {
   mocks.render.mockResolvedValue(Buffer.from('test-pdf'));
   mocks.pdf.mockResolvedValue('upo/' + A + '/' + ID + '.pdf');
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('UPO worker boundaries', () => {
+  it('rejects old or cross-environment UPO events before privileged reads', async () => {
+    await expect(runDownloadUpo({ ...event, environment: 'demo' }, context)).rejects.toThrow('environment');
+    await expect(runDownloadUpo({ ...event, environment: undefined } as unknown as typeof event, context)).rejects.toThrow('environment');
+    expect(mocks.admin).not.toHaveBeenCalled();
+    expectNoExternalEffects();
+  });
+  it('rejects a legacy accepted invoice without environment provenance', async () => {
+    tables.invoices = [invoice({ ksef_environment: null })];
+    await expect(runDownloadUpo(event, context)).rejects.toThrow('zaakceptowanej');
+    expect(writes()).toEqual([]);
+    expectNoExternalEffects();
+  });
+  it('rejects a legacy downloaded UPO without environment provenance', async () => {
+    tables.upo_receipts = [receipt({ ksef_environment: null, status: 'downloaded' })];
+    await expect(runDownloadUpo(event, context)).rejects.toThrow('zaakceptowanej');
+    expect(writes()).toEqual([]);
+    expectNoExternalEffects();
+  });
   it('rejects malformed event identity before privileged reads', async () => {
     await expect(runDownloadUpo({ ...event, invoiceId: 'invalid' }, context)).rejects.toThrow('tożsamość');
     expect(mocks.admin).not.toHaveBeenCalled(); expectNoExternalEffects();
