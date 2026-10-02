@@ -248,11 +248,13 @@ Commit: `2017b80`
 Sprawdzenie: `pnpm exec vitest run tests/unit/numeracja-podpowiedz.test.ts` (17 testów); w aplikacji: Nowa faktura → pole numeru wypełnione kolejnym numerem po ostatniej fakturze.
 
 ### P-21 — PDF: pełna precyzja ilości i ceny; „VAT UE” zamiast „NIP”
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-069
 Zmiana: `lib/pdf/invoice-renderer.ts` — ilość i cena jednostkowa z dokładnością do 4 miejsc (bez zbędnych zer); identyfikator nabywcy z właściwą etykietą.
 Kryterium: test renderu — cena 100,1234 wypisana w całości; numer VAT-UE z etykietą „VAT UE”.
+Commit: `2bce837`
+Sprawdzenie: `pnpm exec vitest run tests/unit/pdf-precyzja-vatue.test.ts`; w aplikacji: PDF faktury z ceną 100,1234 pokazuje ją w całości, nabywca z UE ma „VAT UE: …”.
 
 ---
 
