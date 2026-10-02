@@ -38,7 +38,7 @@ describe('hashIdentifier — nie trzymamy plaintext', () => {
   });
 });
 
-describe('checkRateLimit — fail-open bez Redis', () => {
+describe('checkRateLimit — bez Redis limit w pamięci procesu (AUD-62)', () => {
   let saved: Record<string, string | undefined>;
 
   beforeEach(() => {
@@ -56,7 +56,7 @@ describe('checkRateLimit — fail-open bez Redis', () => {
     }
   });
 
-  it('brak Redis ⇒ allowed=true + fallback=true (nie blokuje logowania)', async () => {
+  it('brak Redis ⇒ pierwsze żądanie przechodzi, limit się liczy (fallback=true)', async () => {
     const r = await checkRateLimit({
       bucket: 'login',
       identifier: 'test@example.com',
@@ -66,10 +66,10 @@ describe('checkRateLimit — fail-open bez Redis', () => {
     expect(r.allowed).toBe(true);
     expect(r.fallback).toBe(true);
     expect(r.retryAfter).toBe(0);
-    expect(r.remaining).toBe(5);
+    expect(r.remaining).toBe(4);
   });
 
-  it('fail-open dla każdego bucketu', async () => {
+  it('pierwsze żądanie w każdym kubełku przechodzi', async () => {
     for (const bucket of ['login', 'register', 'password_reset', 'support_chat'] as const) {
       const r = await checkRateLimit({ bucket, identifier: 'x', limit: 3, windowSeconds: 60 });
       expect(r.allowed).toBe(true);

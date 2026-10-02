@@ -1,21 +1,25 @@
 import { headers } from 'next/headers';
 
 /**
- * Wyciąga client IP z proxy headers. Vercel zawsze dokleja `x-forwarded-for`
- * (lista przez przecinek, pierwszy = klient). Fallback `x-real-ip` na
- * wypadek innego deploymentu.
+ * IP klienta do limitów prób (AUD-62).
+ *
+ * Kolejność: `X-Real-Ip` (ustawia Traefik w Coolify — przy domyślnej
+ * konfiguracji nadpisuje nagłówki przysłane przez klienta), potem OSTATNI
+ * wpis `X-Forwarded-For` — dopisany przez nasze proxy. Pierwszy wpis może
+ * podać sam klient, więc klucz limitu dałby się podmieniać przy każdym
+ * żądaniu.
  *
  * Zwraca 'unknown' lokalnie — wtedy rate limiting per-IP staje się
  * globalny (wszyscy w dev mają wspólny bucket), co jest OK do testów.
  */
 export async function getClientIp(): Promise<string> {
   const headersList = await headers();
+  const realIp = headersList.get('x-real-ip')?.trim();
+  if (realIp) return realIp;
   const forwarded = headersList.get('x-forwarded-for');
   if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
+    const last = forwarded.split(',').map((p) => p.trim()).filter(Boolean).pop();
+    if (last) return last;
   }
-  const realIp = headersList.get('x-real-ip');
-  if (realIp) return realIp.trim();
   return 'unknown';
 }
