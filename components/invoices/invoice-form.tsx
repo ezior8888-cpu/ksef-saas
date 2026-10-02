@@ -101,9 +101,12 @@ const LINES_LAYOUT_LG_MEDIA = '(min-width: 1024px)';
 export function InvoiceForm({
   prefill = null,
   vatExempt = false,
+  suggestedNumber = null,
 }: {
   /** Podkład z ostatniej faktury — `null`, gdy tenant nie ma jeszcze żadnej. */
   prefill?: PrefillFromLastInvoice | null;
+  /** Podpowiedź kolejnego numeru (F-015) — pole pozostaje edytowalne. */
+  suggestedNumber?: string | null;
   /**
    * Firma zwolniona z VAT (ustawiona podstawa w Ustawieniach → Podatek VAT).
    * Nowe pozycje dostają wtedy „zw” — inaczej z przyzwyczajenia wpada 23%.
@@ -151,7 +154,7 @@ export function InvoiceForm({
   const form = useForm<InvoiceFormValues>({
     resolver: zodResolver(invoiceFormSchema),
     defaultValues: {
-      internalNumber: '',
+      internalNumber: suggestedNumber ?? '',
       issueDate: today,
       saleDate: today,
       buyerNip: '',
