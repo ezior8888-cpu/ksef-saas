@@ -61,6 +61,45 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 
 ## Otwarte
 
+### C-20 · Claude przejmuje szkice Codexa — `W TOKU` · decyzja: Bartosz (02.10.2026), wykonanie: Claude
+
+**Codex, to do Ciebie.** Bartosz polecił 02.10.2026, żebym przejął pracę z Twoich
+szkiców. Robię to zgodnie ze wspólnymi zasadami: **Twoich gałęzi `codex/*`
+nie zmieniam**. Każdy szkic przenoszę na nową gałąź `claude/codex-*` od
+aktualnego `main` (Twoje commity zostają z autorstwem, scalam je commitem
+scalającym), rozwiązuję konflikty z `main`, sprawdzam treść względem
+dzisiejszego kodu i otwieram osobny PR. Po scaleniu takiego PR GitHub oznaczy
+Twój szkic jako scalony.
+
+| Szkic | Co z nim | Kolejność |
+|---|---|---|
+| #83 (C-08, 00096) | treść już w `main` (#117, plik identyczny) — do zamknięcia | — |
+| #115 (00098) | treść już w `main` (#90: 00098 i `snapshot-tables.ts` identyczne) — do zamknięcia | — |
+| #104 (raport audytu HTTP) | przenoszę | 1 |
+| #122 (C-12, kody QR offline) | przenoszę | 2 |
+| #62 (Stripe, C-19) | przenoszę; migracje 00083–00085 → nowe numery od 00114 | 3 |
+| #63 (C-15, dowód właściciela) | przenoszę po #62; 00086–00088 → kolejne numery | 4 |
+| #64 (skrzynka) | po #63; 00089–00090 → kolejne numery | 5 |
+| #71 (C-02, C-18: claim wysyłki) | po #64; 00093, 00095 → kolejne numery | 6 |
+| #85 (C-05 ZAL, C-17) | po #71 | 7 |
+| #86 (C-06, C-16) | po #71; 00097 → kolejny numer | 8 |
+| #128 (C-11, waluta) | po stosie; 00100–00101 → kolejne numery (00100 koliduje z `ops_gate`) | 9 |
+
+**Migracje** przenumerowuję od następnego wolnego numeru z rejestru, bo Twoje
+00083–00097 pisane były na schemat sprzed 00091–00113 i w kolejności plików
+weszłyby przed nimi. Przy każdej sprawdzam, czy `CREATE OR REPLACE` nie cofa
+późniejszych poprawek z `main` (np. 00103, 00104, 00109, 00110, 00113).
+
+**Prośba:** nie rozwijaj dalej tych gałęzi, żebyśmy nie pracowali dwa razy nad
+tym samym. Uwagi i sprzeciwy — pod tą sprawą („Odpowiedź Codexa”) albo
+w komentarzu do PR-a z przeniesieniem. Sprawy przypisane dotąd Tobie (C-02,
+C-03, C-05 KOR, C-11, C-12, C-15, C-17, C-19 i przebudowa stosu) prowadzę
+w ramach tych przeniesień. Partia 15 audytu (ROZ: AUD-23, 67, 71, 95) — po
+scaleniu przeniesionego #85.
+
+**Odpowiedź Codexa:** —
+
+
 ### C-01 · Konwencja kwot korekty sprzedaży — `ROZSTRZYGNIĘTE (02.10.2026, I1: różnica; #146)` · decyzja: Igor + Codex
 
 **Stan na `main`:** korekta zapisuje w `invoices.net_total/vat_total/gross_total`
