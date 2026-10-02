@@ -553,8 +553,14 @@ Faktura walutowa też spełnia kryterium c, ale to duży zakres z decyzjami praw
 - **Dowód:** `lib/ksef/fa3-correction-generator.ts:493-495`; schemat `lib/xml/schemas/fa3/schemat.xsd:2917`.
 
 #### F-050 — Nieobsłużony kod KSeF 21184 „Sesja tymczasowo niedostępna” (API 2.8.0, produkcja od 23.09.2026)
-- Typ: BRAK · Waga: K3 · Pewność: Z ODCZYTU (grep) · PR: brak
-- **Skutek:** zalecana reakcja to otwarcie nowej sesji. Dziś kod trafia do ogólnej ścieżki ponowień albo odrzuceń.
+- Typ: BRAK · Waga: **K2** (podniesiona z K3 w trakcie P-16) · Pewność: POTWIERDZONE (test na atrapie API) · PR: brak
+- **Skutek:** zalecana reakcja to otwarcie nowej sesji. KSeF zwraca ten kod z HTTP 400 (CIRFMF `api-changelog.md`), a job traktuje każde 400 jak ostateczne odrzucenie, więc chwilowa niedostępność sesji kończy się fakturą odrzuconą i martwą (F-002).
+
+#### F-093 — Kod błędu KSeF odczytywany ze złego miejsca odpowiedzi
+- Typ: BŁĄD · Waga: K4 · Pewność: Z ODCZYTU (schemat `open-api.json` MF) · PR: kod zmieniany w PR #159 (ten sam fragment `client.ts`)
+- Znalezione w trakcie P-16.
+- **Skutek:** `KsefApiError.ksefCode` czyta `body.exceptionDetailList`, a KSeF zwraca kody w `exception.exceptionDetailList` albo (problem+json) w `errors[].code`. Getter zawsze zwraca `null`; dziś trafia to tylko do Sentry, ale każda przyszła obsługa konkretnych kodów oparta na nim zawiedzie.
+- **Dowód:** `lib/ksef/client.ts:59-63`, `types/ksef.ts:15-25`. P-16 ma własny odczyt kodów w `lib/ksef/submit.ts` (`ksefErrorCodes`).
 
 #### F-051 — Procedury szczególne nieobsługiwane: marża, samofakturowanie, JST z Podmiot3, rabat P_10
 - Typ: BRAK · Waga: K3 · Pewność: Z ODCZYTU · PR: brak

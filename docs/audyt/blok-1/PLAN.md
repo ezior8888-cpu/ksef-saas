@@ -195,14 +195,16 @@ Commit: `89d757d`
 Sprawdzenie: `pnpm exec vitest run tests/unit/kategorie-regula-nazwy.test.ts`; w aplikacji: popraw kategorię paragonu bez NIP, a następny paragon od tego sprzedawcy dostaje ją automatycznie (metoda „learned”).
 
 ### P-16 — KSeF: kod 21184 „Sesja tymczasowo niedostępna” → nowa sesja
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-050
 Zmiana: `lib/ksef/submit.ts` — przy 21184 unieważnienie sesji z pamięci podręcznej i błąd ponawialny. Bez zmian w jobach (te są w PR).
 Kryterium: test na mocku klienta KSeF — odpowiedź z kodem 21184 unieważnia sesję i daje błąd ponawialny.
+Commit: `8392351`
+Sprawdzenie: `pnpm exec vitest run tests/unit/ksef-sesja-21184.test.ts` — 400 z kodem 21184 (oba formaty odpowiedzi) daje błąd ponawialny, inne 400 zostają ostateczne.
 
 ### P-17 — Dane firmy: edycja nazwy i adresu przez właściciela
-Status: TODO
+Status: W TOKU
 Typ: DOKOŃCZENIE
 Znaleziska: F-008
 Zmiana:
@@ -290,6 +292,7 @@ Każde znalezisko spoza planu z powodem. „Kod zmieniany w PR #N” znaczy, że
 | F-048 `offlineMode`, offline ZAL/KOR | Kod zmieniany w PR #63, #71, #122, #147. |
 | F-051 marża, samofakturowanie, JST | Nowe funkcje — „Pomysły na później”. |
 | F-052 unikalność per NIP | K4; decyzja o modelu organizacji z tym samym NIP. |
+| F-093 getter `ksefCode` | K4; fragment `client.ts` zmieniany w PR #159 — po scaleniu zastąpić getter funkcją `ksefErrorCodes` z `lib/ksef/submit.ts`. |
 | F-053 próg MPP | Naprawiane w PR #151. |
 | F-055 PDF korekty | Wymaga zapisu stanu przed korektą (`correction-actions.ts` w PR #63, #71; dane PDF w PR #122). KOR i tak wstrzymane — warunek zdjęcia blokady. |
 | F-056 PDF ROZ | ROZ wstrzymane; dane PDF w PR #122. |
