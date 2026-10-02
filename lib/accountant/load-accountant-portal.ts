@@ -18,8 +18,19 @@ export interface AccountantPortalData {
     issue_date: string;
     gross_total: number | null;
     ksef_status: string | null;
+    /** `outgoing` = sprzedaż, `incoming` = koszt. */
+    direction: string | null;
+    /** XML w magazynie — bez niego nie ma czego pobrać. */
+    xml_storage_path: string | null;
   }>;
 }
+
+/**
+ * Dokumenty księgowe dla księgowej (F-063): przyjęte w KSeF (sprzedaż
+ * i koszty) oraz wystawione w trybie offline, czekające na KSeF. Szkice,
+ * faktury w kolejce i odrzucone nie są dokumentami księgowymi.
+ */
+export const ACCOUNTANT_PORTAL_STATUSES = ['accepted', 'received', 'offline_queued'] as const;
 
 /**
  * Weryfikuje token (hash) i zwraca dane do widoku portalu księgowej.
@@ -56,8 +67,9 @@ export async function loadAccountantPortal(
 
   const { data: invoices } = await admin
     .from('invoices')
-    .select('id, internal_number, issue_date, gross_total, ksef_status')
+    .select('id, internal_number, issue_date, gross_total, ksef_status, direction, xml_storage_path')
     .eq('tenant_id', access.tenant_id as string)
+    .in('ksef_status', [...ACCOUNTANT_PORTAL_STATUSES])
     .order('issue_date', { ascending: false })
     .limit(100);
 
