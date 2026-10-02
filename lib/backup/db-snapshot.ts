@@ -2,30 +2,13 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { createAdminClient } from '@/lib/supabase/server';
 import { buildSnapshotKey, uploadSnapshot } from './r2-backup-client';
+import { SKIP_TABLES } from './snapshot-tables';
 
 /**
  * Wielkość batcha dla paginacji per tabela. Supabase REST `range(a, b)`.
  * 1000 to sweet spot — większe = ryzyko timeout na PostgREST.
  */
 const PAGE_SIZE = 1000;
-
-/**
- * Tabele które celowo POMIJAMY w snapshot:
- *
- * - `audit_logs` jest gigantyczne i ma osobną retencję 12-mc + już immutable.
- *   Restore z snapshotu i tak by nie pasowało (powstałby duplikat zdarzeń).
- * - `inngest_run_log` — operacyjne, samo się rotuje, nie potrzeba.
- * - `ksef_health_log` — telemetria zewnętrzna, generowana na nowo.
- * - `_supabase_migrations` itp. — system tables.
- *
- * Reszta wszystko z `public.*` leci do snapshotu.
- */
-const SKIP_TABLES = new Set([
-  'audit_logs',
-  'inngest_run_log',
-  'ksef_health_log',
-  'gdpr_deletion_requests', // PII + ma własną logikę cooling-off, restore by zepsuł flow
-]);
 
 interface AdminRpc {
   rpc: (

@@ -31,30 +31,31 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00083–00085 | Codex (#62) | `stripe_customer_claim`, `stripe_failed_payment_reference_rotation`, `stripe_checkout_session_id` | PR otwarty |
 | 00086–00088 | Codex (#63) | `ksef_certificate_claim_guard`, `correction_parent_boundary`, `invoice_pending_content_freeze` | PR otwarty |
 | 00089–00090 | Codex (#64) | `incoming_ksef_identity`, `expense_ksef_invoice_identity` | PR otwarty |
-| 00091 | Claude | `tenant_vat_exemption` | w `main`, niewgrana |
-| 00092 | Claude | `tenant_tax_office_code` | w `main`, niewgrana |
+| 00091 | Claude | `tenant_vat_exemption` | w `main`, **wgrana 28.09** |
+| 00092 | Claude | `tenant_tax_office_code` | w `main`, **wgrana 28.09** |
 | 00093 | Codex (#71) | `invoice_delivery_history_guard` | PR otwarty |
-| 00094 | Claude | `tenant_vat_cash_method` | w `main`, niewgrana |
+| 00094 | Claude | `tenant_vat_cash_method` | w `main`, **wgrana 28.09** |
 | 00095 | Codex (#71) | `expense_provenance_guard` | PR otwarty |
 | 00096 | Codex (#83) → Claude przeniósł 1:1 na `main` (01.10) | `incoming_invoice_number_boundary` (C-08) | w `main` (#117), **wgrana na db-1 01.10** |
 | 00097 | Codex (#86) | `invoices_overdue_reconciliation_guard` | PR otwarty |
-| 00098 | Bartosz (#90) | `backup_read_stripe_service_tables` | wgrana na db-1 (28.09), w `main` jeszcze nie; ten sam plik w szkicu #115 — wchodzi przez #90 |
+| 00098 | Bartosz (#90) | `backup_read_stripe_service_tables` | w `main` (#90, 02.10), **wgrana na db-1 28.09** |
 | 00099 | Claude | `ksef_submission_references` (C-18) | PR `claude/ksef-niepewny-wynik`; wgranie PRZED wdrożeniem kodu |
 | 00100 | Claude | `ops_gate` (bramka Telegram: rola `ops_actor`, schemat `ops`) | PR `claude/bramka-telegram`; wgranie PRZED uruchomieniem bramki |
 | 00100–00101 | Codex (#128, szkic) | `ksef_expense_provenance_guard`, `ksef_expense_full_update_guard` | PR otwarty — **00100 koliduje z `00100_ops_gate` na `main`**, do przenumerowania (od 00103) |
-| 00102 | Claude | `signup_gate_hook` (AUD-63) | PR `claude/naprawy-wylaczniki-2`; wgranie PRZED zmiennymi `GOTRUE_HOOK_BEFORE_USER_CREATED_*` |
-| 00103 | Claude | `org_role_guards` (AUD-29: owner nadaje/odbiera tylko owner) | PR `claude/naprawy-migracje`; zgodna wstecz — wgrana na produkcję przed wdrożeniem |
-| 00104 | Claude | `service_function_grants` (AUD-30, AUD-64: EXECUTE tylko service_role) | PR `claude/naprawy-migracje`; zgodna wstecz — wgrana na produkcję przed wdrożeniem |
-| 00105 | Claude | `flo_usage_increment` (AUD-116: atomowy zapis zużycia AI) | PR `claude/naprawy-flo-budzet`; zgodna wstecz — wgrana przed wdrożeniem |
-| 00106 | Claude | `org_rpc_public_revoke` (dopełnienie 00103: EXECUTE bez PUBLIC) | PR `claude/naprawy-flo-budzet`; zgodna wstecz |
-| 00107 | Claude | `invoice_xml_generated_at` (AUD-46: stała DataWytworzeniaFa) | PR `claude/naprawy-ksef-5`; tylko nowa kolumna — przed wdrożeniem |
-| 00108 | Claude | `flag_require_mfa_sensitive` (AUD-65: wiersz flagi, wyłączony) | PR `claude/naprawy-ksef-5`; tylko INSERT — przed wdrożeniem |
-| 00109 | Claude | `stripe_webhook_retention` (AUD-79: porównanie `data`; AUD-81: retencja payloadów 90 dni) | PR `claude/naprawy-billing`; CREATE OR REPLACE — przed wdrożeniem |
-| 00110 | Claude | `billing_invoice_numbering` (AUD-69: kolejny numer, data PL, status paid) | PR `claude/naprawy-billing`; nowa tabela + funkcja — przed wdrożeniem |
-| 00111 | Claude | `tenant_ksef_credentials_flag` (AUD-103: kolumna generowana `has_ksef_credentials`) | PR `claude/naprawy-reszta`; przed wdrożeniem |
-| 00112 | Claude | `tenant_credentials_column_privileges` (AUD-103: bez SELECT blobu KSeF dla ról klienckich) | PR `claude/naprawy-reszta`; **PO wdrożeniu kodu** — nowe kolumny `tenants` wymagają odtąd jawnego GRANT SELECT |
-| 00113 | Claude | `user_deletion_foreign_keys` (AUD-41: autor wydatku, OCR i dostępu księgowej → `ON DELETE SET NULL`; `gdpr_user_deletion_blockers` przed anonimizacją; AUD-81: stare `email_bounces.raw_payload`) | PR `claude/naprawy-rodo-2`; przed wdrożeniem (kod sprawdza funkcję) |
-| **00114** | — | następny wolny | — |
+| 00102 | Claude | `signup_gate_hook` (AUD-63) | w `main`, **wgrana na db-1**; zmienne `GOTRUE_HOOK_BEFORE_USER_CREATED_*` ustawione 02.10 |
+| 00103 | Claude | `org_role_guards` (AUD-29: owner nadaje/odbiera tylko owner) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00104 | Claude | `service_function_grants` (AUD-30, AUD-64: EXECUTE tylko service_role) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00105 | Claude | `flo_usage_increment` (AUD-116: atomowy zapis zużycia AI) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00106 | Claude | `org_rpc_public_revoke` (dopełnienie 00103: EXECUTE bez PUBLIC) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00107 | Claude | `invoice_xml_generated_at` (AUD-46: stała DataWytworzeniaFa) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00108 | Claude | `flag_require_mfa_sensitive` (AUD-65: wiersz flagi, wyłączony) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00109 | Claude | `stripe_webhook_retention` (AUD-79: porównanie `data`; AUD-81: retencja payloadów 90 dni) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00110 | Claude | `billing_invoice_numbering` (AUD-69: kolejny numer, data PL, status paid) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00111 | Claude | `tenant_ksef_credentials_flag` (AUD-103: kolumna generowana `has_ksef_credentials`) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00112 | Claude | `tenant_credentials_column_privileges` (AUD-103: bez SELECT blobu KSeF dla ról klienckich) | w `main` (#156), **wgrana na db-1 02.10 po wdrożeniu**; nowe kolumny `tenants` wymagają odtąd jawnego GRANT SELECT |
+| 00113 | Claude | `user_deletion_foreign_keys` (AUD-41: autor wydatku, OCR i dostępu księgowej → `ON DELETE SET NULL`; `gdpr_user_deletion_blockers` przed anonimizacją; AUD-81: stare `email_bounces.raw_payload`) | w `main` (#156), **wgrana na db-1 02.10** |
+| 00200 | Claude (audyt bloku 1, #166) | `correction_negative_total_paid_check` (F-004: CHECK `check_paid_amount_valid` dopuszcza ujemne brutto korekty, wpłata 0) | w `main` (#166), **wgrana na db-1 02.10**; numer spoza kolejności — kolejne migracje dalej od 00114 |
+| **00114** | — | następny wolny (00200 zajęte) | — |
 
 ---
 
@@ -150,7 +151,9 @@ bez obowiązkowej adnotacji.
 
 **Odpowiedź Codexa:** —
 
-### C-06 · Widok „Zaległe płatności” pokazuje korekty — `OTWARTE` · migracja: Bartosz
+### C-06 · Widok „Zaległe płatności” pokazuje korekty — `W TOKU` (#86, migracja 00097) · migracja: Bartosz
+
+**28.09 (Bartosz):** Codex robi to w #86 (`00097_invoices_overdue_reconciliation_guard`: tylko faktury ścigalne, bez korekt i bez ROZ do czasu C-01). Osobnej migracji Bartosza nie będzie — wgrywam 00097 po scaleniu #86.
 
 Widok `invoices_overdue` (00082) bierze każdą zaakceptowaną, nieopłaconą
 fakturę sprzedaży po terminie — także **korektę**. Ponaglenia i K-01 już
@@ -446,6 +449,8 @@ wydzielenie? Kto przygotowuje plik (numer z rejestru, dziś 00095)?
 `uq_invoices_tenant_internal_number` — każde trafienie to paczka faktur,
 której skrzynka nie zapisała.
 
+**Odpowiedź Bartosza (odczyt 28.09):** w logach workera od wdrożenia 25.09 — **0** trafień `uq_invoices_tenant_internal_number`. Żadna z 2 firm na produkcji nie ma poświadczeń KSeF, więc skrzynka nic nie pobiera i dziś nic nie ginie. Dublety `(tenant_id, ksef_number)` odebranych: **0**, `(tenant_id, internal_number)` wystawionych: **0**. Próba 00096 z #83 w transakcji z `ROLLBACK` na produkcyjnym schemacie — bez błędów. Wydzielenie z #83 (od `main`) wystarcza; wgrywam po scaleniu.
+
 **Odpowiedź Codexa:** —
 
 ### C-09 · #82 (ROZ bez dubla zaliczek) a przebudowa stron w #71 — `OTWARTE` · rozwiązuje: kto scala drugi
@@ -492,6 +497,8 @@ muszą przejść, inaczej generator przy zamówieniu w kilku stawkach odmówi
 
 Do Bartosza (odczyt): ile ROZ już przyjął KSeF — każda wymaga `KOR_ROZ`:
 `SELECT count(*) FROM invoices WHERE direction='outgoing' AND invoice_kind='final' AND ksef_status='accepted';`
+
+**Odpowiedź Bartosza (odczyt 28.09):** ROZ przyjętych przez KSeF: **0**, ROZ w ogóle: **0**, zaliczek: **0**. `KOR_ROZ` nie jest potrzebny. Produkcja od 28.09 stoi na `b25c126` (z #82/#84, bez #87) — bezpieczne wyłącznie dlatego, że żadna firma nie ma poświadczeń KSeF; **#87 musi wejść przed pierwszą firmą z KSeF**.
 
 **Odpowiedź Codexa:** —
 
