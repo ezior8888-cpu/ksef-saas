@@ -122,6 +122,11 @@ export interface KsefRequestOptions {
   /** Timeout w ms (domyślnie 30s) */
   timeoutMs?: number;
   /**
+   * `bytes` — odpowiedź jako `Buffer` z dokładnymi bajtami (XML faktury do
+   * skrótu SHA-256 w KODZIE I; `text()` zdjąłby BOM). Domyślnie JSON/tekst.
+   */
+  responseType?: 'auto' | 'bytes';
+  /**
    * Audit log każdej interakcji z KSeF (Faza 23 sekcja 3). Gdy `audit`
    * jest podane, każde wywołanie ksefFetch wpisuje do `audit_logs`:
    *   - status HTTP, response time, payload size
@@ -241,6 +246,7 @@ export async function ksefFetch<TResponse = unknown>(
     env = (process.env.KSEF_ENV as KsefEnvironment) ?? 'test',
     timeoutMs = 30_000,
     audit,
+    responseType = 'auto',
   } = options;
 
   const url = `${getKsefBaseUrl(env)}${path}`;
@@ -275,6 +281,7 @@ export async function ksefFetch<TResponse = unknown>(
     let responseStatus: number;
     let responseOk: boolean;
     let text: string;
+    let bytes: Buffer | null = null;
     let contentType: string | null;
     let retryAfterMs: number | null = null;
 
@@ -283,6 +290,7 @@ export async function ksefFetch<TResponse = unknown>(
       responseStatus = mocked.status;
       responseOk = mocked.status >= 200 && mocked.status < 300;
       text = mocked.bodyText;
+      if (responseType === 'bytes') bytes = Buffer.from(text, 'utf8');
       contentType = text.startsWith('<')
         ? 'application/xml'
         : 'application/json';
@@ -297,12 +305,17 @@ export async function ksefFetch<TResponse = unknown>(
       clearTimeout(timeoutHandle);
       responseStatus = response.status;
       responseOk = response.ok;
-      text = await response.text();
+      if (responseType === 'bytes') {
+        bytes = Buffer.from(await response.arrayBuffer());
+        text = bytes.toString('utf8');
+      } else {
+        text = await response.text();
+      }
       contentType = response.headers.get('content-type');
       retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
     }
 
-    const responseSize = Buffer.byteLength(text, 'utf8');
+    const responseSize = bytes ? bytes.length : Buffer.byteLength(text, 'utf8');
     let parsedBody: unknown = text;
     if (text && contentType?.includes('application/json')) {
       try {
@@ -334,6 +347,7 @@ export async function ksefFetch<TResponse = unknown>(
       );
     }
 
+    if (bytes) return bytes as unknown as TResponse;
     return parsedBody as TResponse;
   } catch (error) {
     clearTimeout(timeoutHandle);

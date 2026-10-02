@@ -5,6 +5,7 @@
 
 import { XMLParser } from 'fast-xml-parser';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
+import type { ArchivedKsefXml } from './ksef-xml-archive';
 
 // ============================================================================
 // Typy wynikowe
@@ -12,6 +13,8 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 export interface ParsedInvoice {
   ksefNumber?: string;
+  /** Oryginał XML z KSeF w magazynie firmy (import historii) — do KODU I. */
+  xmlArchive?: ArchivedKsefXml;
   invoiceNumber: string;
   issueDate: string;
   invoiceType: 'regular' | 'correction' | 'advance' | 'final';

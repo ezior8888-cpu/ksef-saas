@@ -9,7 +9,7 @@ import {
 } from '@/lib/import/fa3-parser';
 import {
   fetchInvoicesMetadata,
-  fetchInvoiceXml,
+  fetchInvoiceXmlBytes,
 } from '@/lib/ksef/history-fetcher';
 import { processImportedInvoices } from '@/lib/import/import-engine';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -18,6 +18,7 @@ import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { importKsefHistoryRequested, inngest } from '../client';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import type { JobContext } from '@/lib/jobs/registry';
+import { archiveImportedKsefXml, decodeKsefXml } from '@/lib/import/ksef-xml-archive';
 
 /**
  * Obsługa po wyczerpaniu prób (Etap 7): wspólna dla Inngest `onFailure`
@@ -154,8 +155,14 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
       const batchResults = await step.run(`fetch-batch-${i}`, async () => {
         const results: ParsedInvoice[] = [];
         for (const meta of batch) {
-          const xml = await fetchInvoiceXml(tenantId, meta.ksefNumber);
-          results.push(parseFa3Xml(xml, { ksefNumber: meta.ksefNumber }));
+          // Oryginał zostaje w magazynie firmy przed parsowaniem: KOD I na
+          // PDF wymaga skrótu dokładnie tych bajtów (#122 część B, R6).
+          const bytes = await fetchInvoiceXmlBytes(tenantId, meta.ksefNumber);
+          const xmlArchive = await archiveImportedKsefXml(tenantId, meta.ksefNumber, bytes);
+          results.push({
+            ...parseFa3Xml(decodeKsefXml(bytes), { ksefNumber: meta.ksefNumber }),
+            xmlArchive,
+          });
         }
         return results;
       });

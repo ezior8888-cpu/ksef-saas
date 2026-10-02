@@ -10,6 +10,9 @@ import type { BuyerParty, PaymentInfo, SellerParty } from '@/types/invoice';
 import type { InvoiceOrigin } from '@/lib/flo/functions/import-history';
 import type { ParsedInvoice, ParsedLine, ParsedParty } from './fa3-parser';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
+import { isTenantStoragePath } from '@/lib/storage/tenant-path';
+import { recordXmlDocument } from '@/lib/storage/xml-documents';
+import type { ArchivedKsefXml } from './ksef-xml-archive';
 
 export interface ImportEngineParams {
   tenantId: string;
@@ -401,12 +404,13 @@ async function insertInvoices(
     internal_number: string | null;
     ksef_status: string | null;
     ksef_environment: string | null;
+    xml_storage_path: string | null;
   };
   const existingKsef = new Map<string, ExistingKsefInvoice[]>();
   if (ksefNumbers.length > 0) {
     let query = supabase
       .from('invoices')
-      .select('id, ksef_number, internal_number, ksef_status, ksef_environment')
+      .select('id, ksef_number, internal_number, ksef_status, ksef_environment, xml_storage_path')
       .eq('tenant_id', tenantId)
       .eq('direction', invoiceDirection);
     if (invoiceDirection === 'incoming' && ksefEnvironment) {
@@ -475,6 +479,12 @@ async function insertInvoices(
             failed++;
             continue;
           }
+          // Ponowienie po nieudanym zapisie oryginału: uzupełniamy XML tylko
+          // przy fakturze bez własnego pliku albo z tym samym archiwum.
+          if (inv.xmlArchive && !(await repairImportedXml(supabase, tenantId, stored, inv.xmlArchive, num, warnings))) {
+            failed++;
+            continue;
+          }
         }
         warnings.push(`Pominięto duplikat (DB, KSeF): ${ksefNorm}`);
         continue;
@@ -517,6 +527,13 @@ async function insertInvoices(
     const acceptedNow =
       invoiceKsefStatus === 'accepted' ? new Date().toISOString() : null;
 
+    if (inv.xmlArchive && (source !== 'ksef_history' || !ksefNorm ||
+        !isTenantStoragePath(inv.xmlArchive.storagePath, tenantId))) {
+      warnings.push(`${num}: oryginał XML spoza importu historii tej firmy — pominięto`);
+      failed++;
+      continue;
+    }
+
     const { data: inserted, error: invErr } = await supabase
       .from('invoices')
       .insert({
@@ -548,6 +565,7 @@ async function insertInvoices(
         buyer_pesel: idCols.buyer_pesel,
         buyer_id_number: idCols.buyer_id_number,
         notes: `[import] ${source} job=${importJobId}`,
+        ...(inv.xmlArchive ? { xml_storage_path: inv.xmlArchive.storagePath } : {}),
       })
       .select('id')
       .single();
@@ -591,11 +609,61 @@ async function insertInvoices(
       continue;
     }
 
+    if (inv.xmlArchive) {
+      try {
+        await recordXmlDocument({ tenantId, invoiceId: inserted.id, ...inv.xmlArchive });
+      } catch (e) {
+        // Faktura zostaje; ponowienie importu uzupełni wiersz (gałąź duplikatu).
+        warnings.push(`Faktura ${num}: nie zapisano oryginału XML (KOD I) — ponów import (${e instanceof Error ? e.message : 'błąd'})`);
+        failed++;
+        rememberNumber(key, ksefNorm ?? null);
+        continue;
+      }
+    }
+
     imported++;
     rememberNumber(key, ksefNorm ?? null);
   }
 
   return { imported, failed };
+}
+
+/**
+ * Duplikat z importu historii bez zapisanego oryginału XML: ustawia ścieżkę
+ * (tylko gdy pusta) i wiersz `xml_documents`. Faktura z własnym plikiem
+ * (wysłana z aplikacji) zostaje bez zmian. `false` = nie udało się.
+ */
+async function repairImportedXml(
+  supabase: AdminSupabase,
+  tenantId: string,
+  stored: { id: string; xml_storage_path: string | null },
+  archive: ArchivedKsefXml,
+  num: string,
+  warnings: string[],
+): Promise<boolean> {
+  if (!isTenantStoragePath(archive.storagePath, tenantId)) {
+    warnings.push(`${num}: oryginał XML spoza folderu firmy — pominięto`);
+    return false;
+  }
+  if (stored.xml_storage_path && stored.xml_storage_path !== archive.storagePath) return true;
+  try {
+    if (!stored.xml_storage_path) {
+      const { data, error } = await supabase
+        .from('invoices')
+        .update({ xml_storage_path: archive.storagePath })
+        .eq('id', stored.id)
+        .eq('tenant_id', tenantId)
+        .is('xml_storage_path', null)
+        .select('id')
+        .maybeSingle();
+      if (error || data?.id !== stored.id) throw new Error(error?.message ?? 'faktura zmieniła się w międzyczasie');
+    }
+    await recordXmlDocument({ tenantId, invoiceId: stored.id, ...archive });
+    return true;
+  } catch (e) {
+    warnings.push(`${num}: nie uzupełniono oryginału XML (KOD I) — ${e instanceof Error ? e.message : 'błąd'}`);
+    return false;
+  }
 }
 
 /** Korekty / zaliczki / final wymagają powiązań w DB — przy imporcie zapis jako `regular` + komunikat. */
