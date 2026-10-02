@@ -68,8 +68,33 @@ describe('KSeF import environment provenance', () => {
     expect(result.invoicesImported).toBe(1);
     expect(invoiceInserts).toHaveLength(1);
     expect(invoiceInserts[0]).toMatchObject({
-      tenant_id: 'tenant', ksef_status: 'accepted', ksef_environment: 'test',
+      tenant_id: 'tenant', origin: 'ksef_import', ksef_status: 'accepted', ksef_environment: 'test',
       ksef_number: 'KSEF-TEST-1',
     });
+  });
+
+  it('rejects an incoming KSeF number without environment before writing contractors', async () => {
+    await expect(processImportedInvoices({
+      tenantId: 'tenant', importJobId: 'job', invoices: [invoice],
+      source: 'file_import', invoiceDirection: 'incoming', invoiceKsefStatus: 'draft',
+    })).rejects.toThrow('Incoming KSeF number requires verified environment provenance');
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it('keeps incoming invoices from different sellers with the same issuer number', async () => {
+    const { client, invoiceInserts } = database();
+    mocks.createAdminClient.mockReturnValue(client);
+    const result = await processImportedInvoices({
+      tenantId: 'tenant', importJobId: 'job', source: 'ksef_inbox',
+      invoiceDirection: 'incoming', invoiceKsefStatus: 'accepted', ksefEnvironment: 'test',
+      invoices: [
+        { ...invoice, seller: { name: 'Seller 1', nip: '1111111111' } },
+        { ...invoice, ksefNumber: 'KSEF-TEST-2', seller: { name: 'Seller 2', nip: '2222222222' } },
+      ],
+    });
+
+    expect(result.invoicesImported).toBe(2);
+    expect(invoiceInserts).toHaveLength(2);
+    expect(invoiceInserts.every((row) => row.origin === 'ksef_inbox')).toBe(true);
   });
 });

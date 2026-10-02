@@ -7,6 +7,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import type { Json } from '@/types/database';
 import type { KsefEnvironment } from '@/types/ksef';
 import type { BuyerParty, PaymentInfo, SellerParty } from '@/types/invoice';
+import type { InvoiceOrigin } from '@/lib/flo/functions/import-history';
 import type { ParsedInvoice, ParsedLine, ParsedParty } from './fa3-parser';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
@@ -42,6 +43,10 @@ export async function processImportedInvoices(
   const invoiceKsefStatus = params.invoiceKsefStatus ?? 'draft';
   if (invoiceKsefStatus === 'accepted' && !params.ksefEnvironment) {
     throw new Error('Accepted KSeF import requires verified environment provenance');
+  }
+  if (params.invoiceDirection === 'incoming' && !params.ksefEnvironment &&
+      params.invoices.some((invoice) => Boolean(invoice.ksefNumber?.trim()))) {
+    throw new Error('Incoming KSeF number requires verified environment provenance');
   }
   const supabase = createAdminClient();
   const warnings: string[] = [];
@@ -345,8 +350,14 @@ async function insertInvoices(
   warnings: string[],
 ): Promise<number> {
   if (invoices.length === 0) return 0;
+  const origin: InvoiceOrigin = source === 'ksef_history' ? 'ksef_import'
+    : source === 'ksef_inbox' ? 'ksef_inbox'
+    : source === 'ocr_photo' ? 'ocr'
+    : 'file_import';
 
-  const numbers = [...new Set(invoices.map((i) => i.invoiceNumber.trim()).filter(Boolean))];
+  const numbers = [...new Set(invoices
+    .filter((invoice) => invoiceDirection === 'outgoing' || !invoice.ksefNumber?.trim())
+    .map((invoice) => invoice.invoiceNumber.trim()).filter(Boolean))];
   const ksefNumbers = [
     ...new Set(
       invoices
@@ -355,34 +366,43 @@ async function insertInvoices(
     ),
   ];
 
-  const { data: existingNums, error: exNumErr } = await supabase
-    .from('invoices')
-    .select('internal_number')
-    .eq('tenant_id', tenantId)
-    .in('internal_number', numbers);
+  const numberKey = (num: string, sellerNip: string | null, issueDate: string) =>
+    invoiceDirection === 'outgoing' ? num : `${sellerNip ?? ''}|${issueDate}|${num}`;
+  const existingNumbers = new Set<string>();
+  if (numbers.length > 0) {
+    const { data: existingNums, error: exNumErr } = await supabase
+      .from('invoices')
+      .select('internal_number, seller_nip, issue_date')
+      .eq('tenant_id', tenantId)
+      .eq('direction', invoiceDirection)
+      .in('internal_number', numbers);
 
-  if (exNumErr) warnings.push(`Faktury: odczyt duplikatów (numer) — ${exNumErr.message}`);
-
-  const existingNumbers = new Set(
-    existingNums?.map((r) => r.internal_number).filter((x): x is string => !!x?.trim()) ?? [],
-  );
+    if (exNumErr) throw new Error(`Faktury: odczyt duplikatów (numer) — ${exNumErr.message}`);
+    for (const row of existingNums ?? []) {
+      if (row.internal_number?.trim()) {
+        existingNumbers.add(numberKey(row.internal_number, row.seller_nip, row.issue_date));
+      }
+    }
+  }
 
   let existingKsef = new Set<string>();
   if (ksefNumbers.length > 0) {
-    const { data: ksefExisting, error: exKErr } = await supabase
+    let query = supabase
       .from('invoices')
       .select('ksef_number')
       .eq('tenant_id', tenantId)
-      .in('ksef_number', ksefNumbers);
-
-    if (exKErr) warnings.push(`Faktury: odczyt duplikatów (ksef) — ${exKErr.message}`);
-    else {
-      existingKsef = new Set(
-        (ksefExisting ?? [])
-          .map((r) => r.ksef_number as string | null)
-          .filter((x): x is string => !!x?.trim()),
-      );
+      .eq('direction', invoiceDirection);
+    if (invoiceDirection === 'incoming' && ksefEnvironment) {
+      query = query.eq('ksef_environment', ksefEnvironment);
     }
+    const { data: ksefExisting, error: exKErr } = await query.in('ksef_number', ksefNumbers);
+
+    if (exKErr) throw new Error(`Faktury: odczyt duplikatów (ksef) — ${exKErr.message}`);
+    existingKsef = new Set(
+      (ksefExisting ?? [])
+        .map((r) => r.ksef_number as string | null)
+        .filter((x): x is string => !!x?.trim()),
+    );
   }
 
   const seenInBatch = new Set<string>();
@@ -409,16 +429,18 @@ async function insertInvoices(
       }
     }
 
-    if (existingNumbers.has(num)) {
-      warnings.push(`Pominięto duplikat (DB): ${num}`);
-      continue;
+    if (invoiceDirection === 'outgoing' || !ksefNorm) {
+      const key = numberKey(num, inv.seller.nip?.replace(/\D/g, '') ?? null, inv.issueDate);
+      if (existingNumbers.has(key)) {
+        warnings.push(`Pominięto duplikat (DB): ${num}`);
+        continue;
+      }
+      if (seenInBatch.has(key)) {
+        warnings.push(`Pominięto duplikat (plik importu): ${num}`);
+        continue;
+      }
+      seenInBatch.add(key);
     }
-    if (seenInBatch.has(num)) {
-      warnings.push(`Pominięto duplikat (plik importu): ${num}`);
-      continue;
-    }
-
-    seenInBatch.add(num);
     if (ksefNorm) seenKsefInBatch.add(ksefNorm);
 
     const sellerNipDigits = inv.seller.nip?.replace(/\D/g, '') ?? '';
@@ -439,6 +461,7 @@ async function insertInvoices(
       .insert({
         tenant_id: tenantId,
         direction: invoiceDirection,
+        origin,
         internal_number: num,
         ksef_status: invoiceKsefStatus,
         ksef_environment: ksefEnvironment,

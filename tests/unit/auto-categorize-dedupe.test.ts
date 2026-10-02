@@ -8,6 +8,9 @@ const db = vi.hoisted(() => ({
   existing: null as Row | null,
   existingError: null as { message: string } | null,
   inserts: [] as Row[],
+  insertConflict: false,
+  concurrentExpense: null as Row | null,
+  expenseReads: 0,
 }));
 
 vi.mock('@/lib/categorization', () => ({
@@ -53,10 +56,19 @@ vi.mock('@/lib/supabase/admin', () => ({
               error: null,
             };
           }
+          if (table === 'expenses' && db.insertConflict) {
+            return { data: null, error: { code: '23505', message: 'unique violation' } };
+          }
           return { data: insertRow ? { id: 'exp-1' } : null, error: null };
         },
         maybeSingle: async () => {
-          if (table === 'expenses') return { data: db.existing, error: db.existingError };
+          if (table === 'expenses') {
+            db.expenseReads++;
+            return {
+              data: db.expenseReads > 1 && db.insertConflict ? db.concurrentExpense : db.existing,
+              error: db.existingError,
+            };
+          }
           if (table === 'memberships') return { data: { user_id: 'u-1' }, error: null };
           return { data: null, error: null };
         },
@@ -68,11 +80,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 import { runAutoCategorizeInbox } from '@/lib/inngest/jobs/auto-categorize-inbox';
 
-/**
- * Sprawdzenie „czy wydatek z tej faktury już jest” to jedyna ochrona przed
- * drugim kosztem w KPiR — indeks na `expenses.ksef_invoice_id` nie jest
- * UNIQUE. Błąd tego zapytania nie może znaczyć „nie ma”.
- */
+/** Odczyt jest optymalizacją; 00090 rozstrzyga równoległe INSERT-y w bazie. */
 
 const ctx: JobContext = {
   attempt: 0,
@@ -88,6 +96,9 @@ beforeEach(() => {
   db.existing = null;
   db.existingError = null;
   db.inserts = [];
+  db.insertConflict = false;
+  db.concurrentExpense = null;
+  db.expenseReads = 0;
 });
 
 describe('auto-kategoryzacja: drugi wydatek z tej samej faktury', () => {
@@ -106,5 +117,20 @@ describe('auto-kategoryzacja: drugi wydatek z tej samej faktury', () => {
   it('nie ma wydatku — powstaje jeden', async () => {
     await runAutoCategorizeInbox(DANE, ctx);
     expect(db.inserts).toHaveLength(1);
+  });
+
+  it('po przegranym wyścigu 23505 potwierdza koszt tego samego tenanta i faktury', async () => {
+    db.insertConflict = true;
+    db.concurrentExpense = { id: 'exp-concurrent' };
+
+    await expect(runAutoCategorizeInbox(DANE, ctx)).resolves.toMatchObject({ success: true });
+    expect(db.inserts).toHaveLength(1);
+    expect(db.expenseReads).toBe(2);
+  });
+
+  it('nie ukrywa 23505 z innego ograniczenia jako duplikatu faktury', async () => {
+    db.insertConflict = true;
+
+    await expect(runAutoCategorizeInbox(DANE, ctx)).rejects.toThrow(/Konflikt UNIQUE/);
   });
 });
