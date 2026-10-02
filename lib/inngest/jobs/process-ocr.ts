@@ -15,6 +15,7 @@ import {
   readSellerHistory,
 } from '@/lib/flo/functions/expense-review';
 import { extractInvoiceFromImage } from '@/lib/ocr/engine';
+import { checkTenantAiBudget, recordTenantAiUsage } from '@/lib/ai/tenant-ai-budget';
 import {
   extractedInvoiceSchema,
   type ExtractedInvoice,
@@ -132,9 +133,19 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
       },
     );
 
-    const ocrResult = await step.run('claude-vision-ocr', async () => {
-      return extractInvoiceFromImage(imageBase64, mimeType);
-    });
+    // AUD-107: budżet AI firmy PRZED wywołaniem modelu — po fakcie limit
+    // byłby tylko statystyką.
+    const aiBudget = await step.run('ai-budget', () => checkTenantAiBudget(tenantId, 'ocr'));
+    const ocrResult = aiBudget.allowed
+      ? await step.run('claude-vision-ocr', async () => {
+          return extractInvoiceFromImage(imageBase64, mimeType);
+        })
+      : { success: false as const, error: aiBudget.message, inputTokens: 0, outputTokens: 0, processingTimeMs: 0 };
+    if (aiBudget.allowed) {
+      await step.run('ai-usage', () =>
+        recordTenantAiUsage(tenantId, { inputTokens: ocrResult.inputTokens, outputTokens: ocrResult.outputTokens }),
+      );
+    }
 
     if (!ocrResult.success || !ocrResult.data) {
       await step.run('mark-failed', async () => {

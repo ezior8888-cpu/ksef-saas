@@ -24,6 +24,12 @@ interface InngestStepLike {
   sendEvent: (name: string, events: unknown) => Promise<unknown>;
 }
 
+/** `groupId` to pojęcie pg-boss — Inngest dostaje samo `{ name, data }`. */
+function forInngest(events: JobEvent | JobEvent[]) {
+  const strip = ({ name, data }: JobEvent) => ({ name, data });
+  return Array.isArray(events) ? events.map(strip) : strip(events);
+}
+
 export function toJobContext(args: {
   step: unknown;
   logger: unknown;
@@ -40,7 +46,7 @@ export function toJobContext(args: {
     },
 
     sendEvent: async (name, events) => {
-      await inngestStep.sendEvent(name, events);
+      await inngestStep.sendEvent(name, forInngest(events));
     },
 
     // Na Inngest: durable sleep silnika + wysyłka. Zachowuje dotychczasowe
@@ -51,7 +57,7 @@ export function toJobContext(args: {
       events: JobEvent | JobEvent[],
     ) => {
       await inngestStep.sleep(`${name}-wait`, delay);
-      await inngestStep.sendEvent(name, events);
+      await inngestStep.sendEvent(name, forInngest(events));
     },
   };
 

@@ -116,7 +116,12 @@ export async function approveProposal(
   expectedVersion: string,
   input?: FloApproveInput,
 ): Promise<FloApproveResult> {
-  const { tenantId, user } = await requireUserAndActiveOrg();
+  const { tenantId, user, role } = await requireUserAndActiveOrg();
+  // AUD-113: zatwierdzenie uruchamia działanie na zewnątrz w imieniu firmy
+  // (np. ponaglenie do kontrahenta) — tylko właściciel i administrator.
+  if (role !== 'owner' && role !== 'admin') {
+    return { ok: false, reason: 'blocked', message: 'Działania FLO zatwierdza właściciel albo administrator firmy.' };
+  }
   if (!isApprovalVersion(expectedVersion)) {
     return { ok: false, reason: 'stale', message: 'Odśwież propozycję i sprawdź ją przed zatwierdzeniem.' };
   }
