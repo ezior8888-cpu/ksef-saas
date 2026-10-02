@@ -231,7 +231,7 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
 
     await step.run('create-expense', async () => {
       // Odczyt oszczędza ponownego insertu, ale nie rozstrzyga wyścigu.
-      // Indeks 00090 gwarantuje jeden koszt na fakturę, a 23505 wymaga
+      // Indeks 00121 gwarantuje jeden koszt na fakturę, a 23505 wymaga
       // ponownego odczytu dokładnie w tym tenancie.
       const { data: existing, error: existingErr } = await supabase
         .from('expenses')

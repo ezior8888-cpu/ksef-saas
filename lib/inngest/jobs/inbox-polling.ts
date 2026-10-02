@@ -33,9 +33,9 @@ import type { InvoiceMetadata, KsefEnvironment } from '@/types/ksef';
  * Idempotencja:
  *   - KSeF zwraca tę samą fakturę przy kolejnych pollach jeśli w zakresie dat
  *   - `filter-existing` ogranicza odczyt do tenant + incoming + środowisko.
- *   - 00089 rozstrzyga wyścig w bazie po (tenant, environment, KSeF number).
+ *   - 00120 rozstrzyga wyścig w bazie po (tenant, environment, KSeF number).
  *     Po konflikcie odczytujemy istniejący dokument i ponawiamy atomowy batch
- *     bez potwierdzonych duplikatów. Wymaga wdrożenia 00089 przed tym kodem.
+ *     bez potwierdzonych duplikatów. Wymaga wdrożenia 00120 przed tym kodem.
  *
  * UWAGA schema: KSeF inbox daje tylko METADANE - pełnego XML tu nie pobieramy.
  * Zapisujemy dane do `fa3_data JSONB` z `_source: 'inbox-metadata'` żeby

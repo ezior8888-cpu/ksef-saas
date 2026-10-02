@@ -80,7 +80,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 import { runAutoCategorizeInbox } from '@/lib/inngest/jobs/auto-categorize-inbox';
 
-/** Odczyt jest optymalizacją; 00090 rozstrzyga równoległe INSERT-y w bazie. */
+/** Odczyt jest optymalizacją; 00121 rozstrzyga równoległe INSERT-y w bazie. */
 
 const ctx: JobContext = {
   attempt: 0,

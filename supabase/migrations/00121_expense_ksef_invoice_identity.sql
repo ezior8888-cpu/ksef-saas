@@ -1,3 +1,5 @@
+-- Przeniesione 02.10.2026 ze szkicu Codexa #64 (tam 00090) jako 00121 — C-20.
+-- Numeracja: 00089→00120, 00090→00121.
 -- One invoice may create at most one KPiR expense. The old index from 00044
 -- was not unique, so concurrent auto-categorize events could double-book it.
 -- No historical expense is deleted or merged here.
@@ -19,7 +21,7 @@ BEGIN
       HAVING count(*) > 1
     ) AS duplicates
   ) THEN
-    RAISE EXCEPTION 'Duplicate KSeF-linked expenses require manual reconciliation before 00090';
+    RAISE EXCEPTION 'Duplicate KSeF-linked expenses require manual reconciliation before 00121';
   END IF;
 
   IF EXISTS (
@@ -28,7 +30,7 @@ BEGIN
     JOIN public.invoices AS i ON i.id = e.ksef_invoice_id
     WHERE e.ksef_invoice_id IS NOT NULL AND e.tenant_id <> i.tenant_id
   ) THEN
-    RAISE EXCEPTION 'Cross-tenant KSeF-linked expenses require manual reconciliation before 00090';
+    RAISE EXCEPTION 'Cross-tenant KSeF-linked expenses require manual reconciliation before 00121';
   END IF;
 END;
 $$;

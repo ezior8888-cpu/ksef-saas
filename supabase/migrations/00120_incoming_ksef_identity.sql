@@ -1,3 +1,5 @@
+-- Przeniesione 02.10.2026 ze szkicu Codexa #64 (tam 00089) jako 00120 — C-20.
+-- Numeracja: 00089→00120, 00090→00121.
 -- An incoming invoice is identified by the KSeF number within a tenant and
 -- KSeF environment. Its issuer's invoice number is not unique across sellers.
 -- Requires 00086 (invoices.ksef_environment). No historical rows are deleted
@@ -16,7 +18,7 @@ BEGIN
       AND ksef_number IS NOT NULL
       AND ksef_environment IS NULL
   ) THEN
-    RAISE EXCEPTION 'Incoming KSeF invoices without environment require manual reconciliation before 00089';
+    RAISE EXCEPTION 'Incoming KSeF invoices without environment require manual reconciliation before 00120';
   END IF;
 
   IF EXISTS (
@@ -28,7 +30,7 @@ BEGIN
       HAVING count(*) > 1
     ) AS duplicates
   ) THEN
-    RAISE EXCEPTION 'Duplicate incoming KSeF identities require manual reconciliation before 00089';
+    RAISE EXCEPTION 'Duplicate incoming KSeF identities require manual reconciliation before 00120';
   END IF;
 END;
 $$;

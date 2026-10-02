@@ -97,7 +97,7 @@ vi.mock('@/lib/supabase/server', () => ({
 import { queryReceivedInvoices } from '@/lib/ksef/inbox';
 import { KSEF_NUMBERS_PER_QUERY, runInboxPollTenant } from '@/lib/inngest/jobs/inbox-polling';
 
-/** Okno 48 h powoduje nakładające się importy; 00089 rozstrzyga wyścig w DB. */
+/** Okno 48 h powoduje nakładające się importy; 00120 rozstrzyga wyścig w DB. */
 
 const ctx: JobContext = {
   attempt: 0,
