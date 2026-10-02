@@ -29,6 +29,8 @@ export interface ImportEngineParams {
 
 export interface ImportEngineResult {
   invoicesImported: number;
+  /** Dokumenty nieutrwalone wskutek braku numeru, konfliktu KSeF albo błędu zapisu; potwierdzone duplikaty nie są awarią. */
+  invoicesFailed: number;
   contractorsCreated: number;
   contractorsUpdated: number;
   productsCreated: number;
@@ -71,7 +73,7 @@ export async function processImportedInvoices(
   const productsMap = extractUniqueProducts(params.invoices);
   const productsCreated = await upsertProducts(supabase, params.tenantId, productsMap, warnings);
 
-  const invoicesImported = await insertInvoices(
+  const invoiceResult = await insertInvoices(
     supabase,
     params.tenantId,
     params.invoices,
@@ -84,7 +86,8 @@ export async function processImportedInvoices(
   );
 
   return {
-    invoicesImported,
+    invoicesImported: invoiceResult.imported,
+    invoicesFailed: invoiceResult.failed,
     contractorsCreated: contractorResult.created,
     contractorsUpdated: contractorResult.updated,
     productsCreated,
@@ -348,8 +351,8 @@ async function insertInvoices(
   invoiceKsefStatus: string,
   ksefEnvironment: KsefEnvironment | null,
   warnings: string[],
-): Promise<number> {
-  if (invoices.length === 0) return 0;
+): Promise<{ imported: number; failed: number }> {
+  if (invoices.length === 0) return { imported: 0, failed: 0 };
   const origin: InvoiceOrigin = source === 'ksef_history' ? 'ksef_import'
     : source === 'ksef_inbox' ? 'ksef_inbox'
     : source === 'ocr_photo' ? 'ocr'
@@ -368,11 +371,16 @@ async function insertInvoices(
 
   const numberKey = (num: string, sellerNip: string | null, issueDate: string) =>
     invoiceDirection === 'outgoing' ? num : `${sellerNip ?? ''}|${issueDate}|${num}`;
-  const existingNumbers = new Set<string>();
+  const existingNumbers = new Map<string, Set<string | null>>();
+  const rememberNumber = (key: string, ksefNumber: string | null) => {
+    const matches = existingNumbers.get(key) ?? new Set<string | null>();
+    matches.add(ksefNumber);
+    existingNumbers.set(key, matches);
+  };
   if (numbers.length > 0) {
     const { data: existingNums, error: exNumErr } = await supabase
       .from('invoices')
-      .select('internal_number, seller_nip, issue_date')
+      .select('internal_number, seller_nip, issue_date, ksef_number')
       .eq('tenant_id', tenantId)
       .eq('direction', invoiceDirection)
       .in('internal_number', numbers);
@@ -380,16 +388,25 @@ async function insertInvoices(
     if (exNumErr) throw new Error(`Faktury: odczyt duplikatów (numer) — ${exNumErr.message}`);
     for (const row of existingNums ?? []) {
       if (row.internal_number?.trim()) {
-        existingNumbers.add(numberKey(row.internal_number, row.seller_nip, row.issue_date));
+        rememberNumber(
+          numberKey(row.internal_number.trim(), row.seller_nip, row.issue_date),
+          row.ksef_number?.trim() || null,
+        );
       }
     }
   }
 
-  let existingKsef = new Set<string>();
+  type ExistingKsefInvoice = {
+    id: string;
+    internal_number: string | null;
+    ksef_status: string | null;
+    ksef_environment: string | null;
+  };
+  const existingKsef = new Map<string, ExistingKsefInvoice[]>();
   if (ksefNumbers.length > 0) {
     let query = supabase
       .from('invoices')
-      .select('ksef_number')
+      .select('id, ksef_number, internal_number, ksef_status, ksef_environment')
       .eq('tenant_id', tenantId)
       .eq('direction', invoiceDirection);
     if (invoiceDirection === 'incoming' && ksefEnvironment) {
@@ -398,39 +415,83 @@ async function insertInvoices(
     const { data: ksefExisting, error: exKErr } = await query.in('ksef_number', ksefNumbers);
 
     if (exKErr) throw new Error(`Faktury: odczyt duplikatów (ksef) — ${exKErr.message}`);
-    existingKsef = new Set(
-      (ksefExisting ?? [])
-        .map((r) => r.ksef_number as string | null)
-        .filter((x): x is string => !!x?.trim()),
-    );
+    for (const row of ksefExisting ?? []) {
+      const ksefNumber = row.ksef_number?.trim();
+      if (ksefNumber) {
+        const matches = existingKsef.get(ksefNumber) ?? [];
+        matches.push(row);
+        existingKsef.set(ksefNumber, matches);
+      }
+    }
   }
 
-  const seenInBatch = new Set<string>();
-  const seenKsefInBatch = new Set<string>();
+  const seenInBatch = new Map<string, string | null>();
+  const seenKsefInBatch = new Map<string, string>();
   let imported = 0;
+  let failed = 0;
 
   for (const inv of invoices) {
     const num = inv.invoiceNumber.trim();
 
     if (!num) {
       warnings.push('Pominięto fakturę bez numeru');
+      failed++;
       continue;
     }
 
     const ksefNorm = inv.ksefNumber?.trim();
+    const key = numberKey(num, inv.seller.nip?.replace(/\D/g, '') ?? null, inv.issueDate);
+    if (source === 'ksef_history' && invoiceDirection === 'outgoing' && ksefNorm) {
+      if (seenInBatch.has(key) && seenInBatch.get(key) !== ksefNorm) {
+        warnings.push(`${num}: konflikt numeru faktury z innym numerem KSeF w imporcie`);
+        failed++;
+        continue;
+      }
+      const storedKsefNumbers = existingNumbers.get(key);
+      if (storedKsefNumbers && [...storedKsefNumbers].some((stored) => stored !== ksefNorm)) {
+        warnings.push(`${num}: konflikt numeru faktury z innym numerem KSeF w bazie`);
+        failed++;
+        continue;
+      }
+    }
     if (ksefNorm) {
-      if (existingKsef.has(ksefNorm)) {
+      const matches = existingKsef.get(ksefNorm);
+      if (matches?.length) {
+        if (source === 'ksef_history') {
+          const stored = matches.length === 1 ? matches[0] : null;
+          if (!stored?.id || stored.internal_number?.trim() !== num ||
+              stored.ksef_status !== 'accepted' ||
+              stored.ksef_environment !== ksefEnvironment) {
+            warnings.push(`${num}: nie można potwierdzić kompletności duplikatu KSeF ${ksefNorm} (nagłówek)`);
+            failed++;
+            continue;
+          }
+          const { count, error: countErr } = await supabase
+            .from('invoice_line_items')
+            .select('id', { count: 'exact', head: true })
+            .eq('invoice_id', stored.id);
+          if (countErr || count === null || count !== inv.lines.length) {
+            warnings.push(`${num}: nie można potwierdzić kompletności duplikatu KSeF ${ksefNorm} (pozycje: ${countErr?.message ?? 'niezgodna lub nieznana liczba'})`);
+            failed++;
+            continue;
+          }
+        }
         warnings.push(`Pominięto duplikat (DB, KSeF): ${ksefNorm}`);
         continue;
       }
-      if (seenKsefInBatch.has(ksefNorm)) {
+      const earlierNumber = seenKsefInBatch.get(ksefNorm);
+      if (earlierNumber !== undefined) {
+        if (source === 'ksef_history' && earlierNumber !== num) {
+          warnings.push(`${num}: numer KSeF ${ksefNorm} ma inny numer faktury w imporcie`);
+          failed++;
+          continue;
+        }
         warnings.push(`Pominięto duplikat (import, KSeF): ${ksefNorm}`);
         continue;
       }
     }
 
     if (invoiceDirection === 'outgoing' || !ksefNorm) {
-      const key = numberKey(num, inv.seller.nip?.replace(/\D/g, '') ?? null, inv.issueDate);
       if (existingNumbers.has(key)) {
         warnings.push(`Pominięto duplikat (DB): ${num}`);
         continue;
@@ -439,9 +500,9 @@ async function insertInvoices(
         warnings.push(`Pominięto duplikat (plik importu): ${num}`);
         continue;
       }
-      seenInBatch.add(key);
+      seenInBatch.set(key, ksefNorm ?? null);
     }
-    if (ksefNorm) seenKsefInBatch.add(ksefNorm);
+    if (ksefNorm) seenKsefInBatch.set(ksefNorm, num);
 
     const sellerNipDigits = inv.seller.nip?.replace(/\D/g, '') ?? '';
     if (invoiceDirection === 'outgoing' && sellerNipDigits.length !== 10) {
@@ -493,6 +554,7 @@ async function insertInvoices(
 
     if (invErr || !inserted?.id) {
       warnings.push(`Błąd zapisu faktury ${num}: ${invErr?.message ?? 'unknown'}`);
+      failed++;
       continue;
     }
 
@@ -516,16 +578,24 @@ async function insertInvoices(
 
     if (linesErr) {
       warnings.push(`Faktura ${num}: błąd pozycji — ${linesErr.message}`);
-      await supabase.from('invoices').delete().eq('id', inserted.id);
+      const { data: removed, error: cleanupErr } = await supabase
+        .from('invoices')
+        .delete()
+        .eq('id', inserted.id)
+        .eq('tenant_id', tenantId)
+        .select('id');
+      if (cleanupErr || removed?.length !== 1 || removed[0]?.id !== inserted.id) {
+        warnings.push(`Faktura ${num}: nie potwierdzono usunięcia niepełnego nagłówka — ${cleanupErr?.message ?? 'brak potwierdzenia DELETE'}`);
+      }
+      failed++;
       continue;
     }
 
     imported++;
-    existingNumbers.add(num);
-    if (ksefNorm) existingKsef.add(ksefNorm);
+    rememberNumber(key, ksefNorm ?? null);
   }
 
-  return imported;
+  return { imported, failed };
 }
 
 /** Korekty / zaliczki / final wymagają powiązań w DB — przy imporcie zapis jako `regular` + komunikat. */

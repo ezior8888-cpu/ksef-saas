@@ -5,6 +5,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { getDashboardOrgSwitcherProps } from '@/lib/dashboard-shell-data';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { isReminderInvoiceChaseable } from '@/lib/reminders/delivery-schema';
 import type { Database } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,7 @@ type OverdueInvoiceBase = Omit<OverdueInvoice, 'reminder_status'>;
 const PENDING_REVIEW_AFTER_MS = 30 * 60_000;
 const OVERDUE_PAGE_SIZE = 100;
 const MAX_VISIBLE_INVOICES = 100;
+const MAX_RELATED_INVOICES_PER_PAGE = 500;
 
 function reminderReviewBefore(): number {
   // Server-only page: evaluate the clock once per request, after the read.
@@ -44,11 +46,11 @@ export default async function OverduePage() {
   const supabase = await createClient();
   const environment = requireConfiguredKsefEnvironment();
 
-  // The view has no environment column. Walk its stable order in bounded
-  // pages, retain only invoices proven to belong to this environment, and
-  // take the first 100 *after* filtering. Filtering a single 100-row page
-  // would hide valid production debts behind older TEST/DEMO invoices.
+  // The currently deployed view may predate the reconciliation guard. Check
+  // origin, both invoice classifications, linked children and environment
+  // independently before displaying an amount or allowing a preview.
   const overdueRows: OverdueViewRow[] = [];
+  const seenViewIds = new Set<string>();
   let overdueError: string | null = null;
   let totalCandidates: number | null = null;
   for (let offset = 0; overdueRows.length < MAX_VISIBLE_INVOICES; offset += OVERDUE_PAGE_SIZE) {
@@ -69,19 +71,22 @@ export default async function OverduePage() {
     if (page.data.length === 0) break;
 
     const ids = page.data.map((row) => row.id).filter((id): id is string => id !== null);
-    if (ids.length !== page.data.length) {
+    if (ids.length !== page.data.length || ids.some((id) => seenViewIds.has(id)) ||
+        new Set(ids).size !== ids.length) {
       overdueError = 'Nie można potwierdzić tożsamości zaległych faktur';
       break;
     }
+    for (const id of ids) seenViewIds.add(id);
     const matching = await supabase
       .from('invoices')
-      .select('id, ksef_environment', { count: 'exact' })
+      .select('id, ksef_environment, origin, invoice_kind, invoice_type, currency', { count: 'exact' })
       .eq('tenant_id', tenantId)
       .in('id', ids);
     if (matching.error || !matching.data || matching.count === null ||
         matching.count !== ids.length || matching.data.length !== ids.length ||
+        new Set(matching.data.map((invoice) => invoice.id)).size !== ids.length ||
         matching.data.some((invoice) => !ids.includes(invoice.id))) {
-      overdueError = 'Nie można potwierdzić środowiska zaległych faktur';
+      overdueError = 'Nie można potwierdzić danych zaległych faktur';
       break;
     }
     if (matching.data.some((invoice) =>
@@ -91,10 +96,67 @@ export default async function OverduePage() {
       overdueError = 'Zaległe faktury wymagają uzgodnienia środowiska KSeF';
       break;
     }
-    const visibleIds = new Set(matching.data
-      .filter((invoice) => invoice.ksef_environment === environment)
-      .map((invoice) => invoice.id));
-    overdueRows.push(...page.data.filter((row) => row.id && visibleIds.has(row.id)));
+    const eligibleInvoices = matching.data.filter((invoice) =>
+      invoice.ksef_environment === environment && isReminderInvoiceChaseable(invoice) &&
+      (invoice.currency === null || invoice.currency === 'PLN'));
+    const eligibleIds = new Set(eligibleInvoices.map((invoice) => invoice.id));
+    const relatedParents = new Set<string>();
+    if (eligibleIds.size > 0) {
+      // One bounded complete read per page. A server cap or failed exact count
+      // must not make a corrected original appear safe to chase.
+      const related = await supabase.from('invoices')
+        .select('id, tenant_id, parent_invoice_id', { count: 'exact' })
+        .eq('tenant_id', tenantId)
+        .in('parent_invoice_id', [...eligibleIds])
+        .limit(MAX_RELATED_INVOICES_PER_PAGE);
+      if (related.error || !related.data || related.count === null ||
+          !Number.isSafeInteger(related.count) || related.count < 0 ||
+          related.count > MAX_RELATED_INVOICES_PER_PAGE || related.data.length !== related.count ||
+          new Set(related.data.map((row) => row.id)).size !== related.data.length ||
+          related.data.some((row) => row.tenant_id !== tenantId || !row.parent_invoice_id ||
+            !eligibleIds.has(row.parent_invoice_id))) {
+        overdueError = 'Nie można potwierdzić faktur powiązanych z korektami';
+        break;
+      }
+      for (const row of related.data) relatedParents.add(row.parent_invoice_id!);
+
+      // A final invoice settles advances through advance_invoice_ids rather
+      // than parent_invoice_id. Exact HEAD counts cannot be silently truncated.
+      const advances = eligibleInvoices.filter((invoice) =>
+        invoice.invoice_kind === 'advance' && invoice.invoice_type === 'ZAL');
+      try {
+        const settledCounts = await Promise.all(advances.map(async (invoice) => {
+          const result = await supabase.from('invoices')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', tenantId)
+            .contains('advance_invoice_ids', [invoice.id]);
+          return { id: invoice.id, ...result };
+        }));
+        if (settledCounts.some(({ error, count }) => error || count === null ||
+            !Number.isSafeInteger(count) || count < 0)) {
+          overdueError = 'Nie można potwierdzić faktur rozliczających zaliczki';
+          break;
+        }
+        for (const { id, count } of settledCounts) {
+          if (count! > 0) relatedParents.add(id);
+        }
+      } catch {
+        overdueError = 'Nie można potwierdzić faktur rozliczających zaliczki';
+        break;
+      }
+    }
+    const safeRows = page.data.filter((row) => row.id && eligibleIds.has(row.id) && !relatedParents.has(row.id));
+    if (safeRows.some((row) => {
+      const gross = Number(row.gross_total); const paid = Number(row.paid_amount);
+      const due = Number(row.amount_due);
+      return row.gross_total === null || row.paid_amount === null || row.amount_due === null ||
+        !Number.isFinite(gross) || !Number.isFinite(paid) || !Number.isFinite(due) ||
+        gross <= 0 || paid < 0 || paid >= gross || Math.abs(due - (gross - paid)) > 0.005;
+    })) {
+      overdueError = 'Zaległe faktury wymagają uzgodnienia kwot';
+      break;
+    }
+    overdueRows.push(...safeRows);
     if (offset + page.data.length >= page.count) break;
   }
 

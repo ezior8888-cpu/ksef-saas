@@ -55,6 +55,11 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
         <p className="text-sm text-[var(--ff-text-muted)]">
           Faktury po terminie płatności • przypomnienia e-mail. Stan przypomnień jest orientacyjny.
         </p>
+        <p className="mt-3 max-w-3xl text-sm text-[var(--ff-text-muted)]" role="note">
+          Pokazujemy najwyżej 100 faktur wystawionych w aplikacji bez powiązanych korekt.
+          Importy i dokumenty wymagające uzgodnienia nie wchodzą do tej sumy.
+          Przed zatwierdzeniem przypomnienia sprawdź aktualne saldo.
+        </p>
       </div>
 
       <div className="mb-[var(--ff-gutter)] grid grid-cols-1 gap-[var(--ff-gutter)] md:grid-cols-3">
@@ -66,14 +71,14 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
               </span>
             </div>
             <span className="text-[11px] font-semibold uppercase leading-[1.3] tracking-[0.06em] text-[var(--ff-text-muted)]">
-              Liczba przeterminowanych
+              Pokazane pozycje po terminie
             </span>
           </div>
           <p className="text-[34px] font-bold leading-none tracking-[-0.02em] tabular-nums">
             {formatPlInt(stats.totalCount)}
           </p>
           <p className="mt-3 text-xs text-[var(--ff-text-dim)]">
-            Wymagają działania lub opłacenia
+            Tylko pozycje z tej listy
           </p>
         </div>
 
@@ -85,7 +90,7 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
               </span>
             </div>
             <span className="text-[11px] font-semibold uppercase leading-[1.3] tracking-[0.06em] text-[var(--ff-text-muted)]">
-              Suma do odzyskania
+              Suma pokazanych pozycji
             </span>
           </div>
           <div className="flex items-baseline gap-2">
@@ -97,7 +102,7 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
             </span>
           </div>
           <p className="mt-3 text-xs text-[var(--ff-text-dim)]">
-            Kwoty „do zapłaty” z widoku
+            Salda według pokazanych faktur
           </p>
         </div>
 
@@ -134,16 +139,15 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
             </span>
           </div>
           <h3 className="mb-2 text-xl font-bold tracking-tight">
-            Wszystkie faktury opłacone w terminie
+            Brak pozycji gotowych do przypomnienia
           </h3>
           <p className="mx-auto max-w-md text-sm text-[var(--ff-text-muted)]">
-            Brak pozycji po terminie — gdy pojawią się zaległości, zobaczysz je w
-            tabeli poniżej.
+            Inne dokumenty mogą nadal wymagać sprawdzenia salda i korekt.
           </p>
         </div>
       ) : (
         <ResponsiveTable
-          title="Lista zaległości"
+          title="Pozycje do przypomnienia"
           subtitle={`${formatPlInt(overdueInvoices.length)} pozycji (max. 100) • sortowanie wg dni po terminie`}
           table={
             <table className="w-full min-w-[880px] text-left text-[14px]">
@@ -162,7 +166,7 @@ export function OverdueDashboard({ overdueInvoices, stats }: Props) {
                     Opóźnienie
                   </th>
                   <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Do zapłaty
+                    Saldo wg faktury
                   </th>
                   <th className="px-6 py-3.5 text-center text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
                     Stan orientacyjny

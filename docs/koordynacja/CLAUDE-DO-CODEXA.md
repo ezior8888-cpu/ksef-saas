@@ -37,7 +37,7 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00094 | Claude | `tenant_vat_cash_method` | w `main`, **wgrana 28.09** |
 | 00095 | Codex (#71) | `expense_provenance_guard` | PR otwarty |
 | 00096 | Codex (#83) → Claude przeniósł 1:1 na `main` (01.10) | `incoming_invoice_number_boundary` (C-08) | w `main` (#117), **wgrana na db-1 01.10** |
-| 00097 | Codex (#86) | `invoices_overdue_reconciliation_guard` | PR otwarty |
+| 00097 | Codex (#86) | `invoices_overdue_reconciliation_guard` — **przeniesione jako 00126** (C-20) | zastąpione |
 | 00098 | Bartosz (#90) | `backup_read_stripe_service_tables` | w `main` (#90, 02.10), **wgrana na db-1 28.09** |
 | 00099 | Claude | `ksef_submission_references` (C-18) | PR `claude/ksef-niepewny-wynik`; wgranie PRZED wdrożeniem kodu |
 | 00100 | Claude | `ops_gate` (bramka Telegram: rola `ops_actor`, schemat `ops`) | PR `claude/bramka-telegram`; wgranie PRZED uruchomieniem bramki |
@@ -67,7 +67,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00123 | Codex (#71) → Claude (C-20) | `expense_provenance_guard` (dawniej 00095: klient nie przemianuje kosztu z KSeF na ręczny ani nie odepnie faktury) | PR `claude/codex-71-przejecie-wysylki`; przed wdrożeniem |
 | 00124 | Claude (C-20, #71 część 2) | `ksef_send_claim` (AUD-10: przejęcie wysyłki z dzierżawą 15 min, właściciel = `sendAttemptId` zdarzenia, `claim_ksef_send` tylko dla serwisu) | PR `claude/ksef-przejecie-wysylki`; przed wdrożeniem |
 | 00125 | Claude (partia 15) | `roz_advance_single_settlement` (AUD-67: zaliczka rozliczona najwyżej jedną ROZ firmy, poza odrzuconą; wyzwalacz + blokada doradcza na firmę) | PR `claude/naprawy-partia-15`; przed wdrożeniem |
-| **00126** | — | następny wolny (00200 zajęte) | — |
+| 00126 | Claude (C-20, #86) | `invoices_overdue_reconciliation_guard` (C-06, C-16: widok zaległości tylko z faktur ścigalnych — z aplikacji, VAT/UPR/ZAL, bez korekt, ROZ i dokumentów powiązanych) | PR `claude/codex-86-przypomnienia`; przed wdrożeniem |
+| **00127** | — | następny wolny (00200 zajęte) | — |
 
 ---
 
@@ -94,7 +95,7 @@ Twój szkic jako scalony.
 | #64 (skrzynka) | po #63; 00089–00090 → kolejne numery | 5 |
 | #71 (C-02, C-18: claim wysyłki) | **część 1** (bez przejęcia wysyłki) w PR `claude/codex-71-przejecie-wysylki`, 00093/00095 → 00122/00123; **część 2** (atomowe przejęcie AUD-10 wpięte w uzgadnianie C-18) — PR `claude/ksef-przejecie-wysylki`, migracja 00124: dzierżawa 15 min, ta sama próba wraca, wynik po uzgodnieniu (C-18). Decyzja Bartosza 02.10: automatyczny Offline24 wstrzymany wszędzie, przy awarii KSeF job ponawia | 6 |
 | #85 (C-05 ZAL, C-17) | po #71 | 7 |
-| #86 (C-06, C-16) | po #71; 00097 → kolejny numer | 8 |
+| #86 (C-06, C-16) | przeniesiony w PR `claude/codex-86-przypomnienia` (00097 → 00126): przypomnienia i widok zaległości tylko dla faktur ścigalnych, import historii KSeF kończy się `failed` przy niepełnej liście lub konflikcie. **Pominięte:** blokada raportów przy przyjętej korekcie (`assertOutgoingCorrectionsReconciled`) — C-01 rozstrzygnięte (I1: suma korekty = różnica, jak P_13/P_15 KOR w XSD), na produkcji 0 korekt | 8 |
 | #128 (C-11, waluta) | po stosie; 00100–00101 → kolejne numery (00100 koliduje z `ops_gate`) | 9 |
 
 **Migracje** przenumerowuję od następnego wolnego numeru z rejestru, bo Twoje

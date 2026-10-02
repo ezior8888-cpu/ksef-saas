@@ -45,6 +45,28 @@ export async function onMagicImportExhausted(
   if (error) throw new Error(error.message);
 }
 
+async function markMagicImportIncomplete(
+  supabase: ReturnType<typeof createAdminClient>,
+  importJobId: string,
+  tenantId: string,
+  message: string,
+  warnings: string[] = [],
+  imported = 0,
+): Promise<void> {
+  const { error } = await supabase.from('import_jobs')
+    .update({
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+      progress_percent: 100,
+      progress_message: message,
+      invoices_imported: imported,
+      warnings,
+    })
+    .eq('id', importJobId)
+    .eq('tenant_id', tenantId);
+  if (error) throw new Error(error.message);
+}
+
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
@@ -96,6 +118,15 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
       if (error) throw new Error(error.message);
     });
 
+    if (metadata.truncated || !Number.isSafeInteger(metadata.totalCount) ||
+        metadata.totalCount !== metadata.invoices.length) {
+      await step.run('mark-incomplete-metadata', () => markMagicImportIncomplete(
+        supabase, importJobId, tenantId,
+        'Lista faktur KSeF jest niepełna. Zawęź zakres dat i ponów import.',
+      ));
+      return { success: false as const, imported: 0 };
+    }
+
     if (metadata.totalCount === 0) {
       await step.run('mark-empty-completed', async () => {
         const { error } = await supabase
@@ -123,12 +154,8 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
       const batchResults = await step.run(`fetch-batch-${i}`, async () => {
         const results: ParsedInvoice[] = [];
         for (const meta of batch) {
-          try {
-            const xml = await fetchInvoiceXml(tenantId, meta.ksefNumber);
-            results.push(parseFa3Xml(xml, { ksefNumber: meta.ksefNumber }));
-          } catch (e) {
-            console.error(`Failed to fetch ${meta.ksefNumber}:`, e);
-          }
+          const xml = await fetchInvoiceXml(tenantId, meta.ksefNumber);
+          results.push(parseFa3Xml(xml, { ksefNumber: meta.ksefNumber }));
         }
         return results;
       });
@@ -152,6 +179,14 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
       if (i + batchSize < total) {
         await step.sleep(`rate-limit-delay-${i}`, '500ms');
       }
+    }
+
+    if (parsedInvoices.length !== total) {
+      await step.run('mark-incomplete-xml', () => markMagicImportIncomplete(
+        supabase, importJobId, tenantId,
+        'Nie udało się odczytać wszystkich faktur KSeF. Import nie jest kompletny.',
+      ));
+      return { success: false as const, imported: 0 };
     }
 
     await step.run('mark-deduplicating', async () => {
@@ -178,6 +213,16 @@ export async function runMagicImportKsef(data: Parameters<typeof importKsefHisto
         ksefEnvironment: environment,
       });
     });
+
+    if (!Number.isSafeInteger(processResult.invoicesFailed) || processResult.invoicesFailed !== 0) {
+      await step.run('mark-incomplete-invoices', () => markMagicImportIncomplete(
+        supabase, importJobId, tenantId,
+        'Część faktur KSeF nie została zapisana. Import wymaga uzgodnienia.',
+        processResult.warnings ?? [],
+        processResult.invoicesImported,
+      ));
+      return { success: false as const, imported: processResult.invoicesImported };
+    }
 
     await step.run('mark-completed', async () => {
       const { error } = await supabase
