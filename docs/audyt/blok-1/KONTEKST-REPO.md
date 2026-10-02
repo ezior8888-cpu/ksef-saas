@@ -5,14 +5,17 @@ wygląda to konkretne repo. Jeśli coś tutaj przeczy `AGENTS.md`, rację ma ten
 
 ## 1. Gdzie pracujesz
 
-- Worktree: `.claude/worktrees/audyt-blok-1`, gałąź `audyt/blok-1`, utworzona
-  od `origin/main` (commit `19821ea`). Zależności (`pnpm install`) są już
-  zainstalowane.
-- Główny katalog repo (`/Users/mokryrys/dev/ksef-saas`) należy do innych sesji,
-  które równolegle naprawiają kod i przełączają tam gałęzie. Nie wchodź tam,
-  nie czytaj stamtąd plików i nie zmieniaj tam niczego.
-- Repo jest **publiczne**. Nic nie wypychasz. `docs/automation/` jest poufne
-  i nigdy nie trafia do gita.
+Sesja może ruszyć w dwóch trybach — ustal, w którym jesteś, i zapisz to w `STAN.md`:
+
+- **Chmura (claude.ai/code):** świeży klon z GitHuba. Gałąź `audyt/blok-1` jest
+  na `origin` (od `origin/main`, commit `19821ea`). Zależności doinstaluj
+  `pnpm install --frozen-lockfile`. Po każdym commicie `git push origin audyt/blok-1`.
+- **Lokalnie:** worktree `.claude/worktrees/audyt-blok-1` na Macu Bartosza,
+  zależności zainstalowane. Bez pushu. Nie wchodź do głównego katalogu repo —
+  pracują tam inne sesje i przełączają gałęzie.
+
+W obu trybach: repo jest **publiczne**, `docs/automation/` jest poufne i nigdy
+nie trafia do gita, commitujesz pliki po nazwie.
 
 ## 2. Stos: co jest naprawdę (AGENTS.md na `main` jest częściowo nieaktualny)
 
@@ -32,10 +35,12 @@ Od 1 października 2026 trwa osobny audyt całego kodu (ustalenia `AUD-NN`)
 i naprawy w kilkunastu otwartych PR. Ich poprawek **nie ma** na `origin/main`,
 więc w twoim drzewie te błędy nadal widać.
 
-- Jeśli w worktree jest katalog `docs/automation/` (Bartosz może go skopiować),
-  przeczytaj `02_AUDYT_KODU.md` i `12_NAPRAWY_POSTEP.md` przed audytem. Jeśli go
-  nie ma, zapisz to w `STAN.md` i pracuj dalej.
-- Otwarte PR na 2 października 2026 (sprawdź świeżo `gh pr list --state open`):
+- Jeśli masz katalog `docs/automation/` (jest tylko w trybie lokalnym, w chmurze
+  go nie ma), przeczytaj `02_AUDYT_KODU.md` i `12_NAPRAWY_POSTEP.md` przed
+  audytem. Jeśli go nie ma, zapisz to w `STAN.md` — wtedy jedynym źródłem
+  o trwających naprawach są otwarte PR (niżej), więc sprawdzaj je tym staranniej.
+- Otwarte PR na 2 października 2026 (sprawdź świeżo `gh pr list --state open`;
+  jeśli `gh` nie działa, `git ls-remote --heads origin` pokaże gałęzie):
   - **Claude (naprawy audytu):** #147, #149–#160. Dotyczą KSeF (XML, XSD, Offline24, Retry-After), finansów (grosze, progi VAT, JPK), jobów, RODO, organizacji i limitów maili.
   - **Codex (bezpieczeństwo, część dotyka logiki domeny):** #62, #63, #64, #71 (atomowy claim wysyłki do KSeF), #83 (numery w skrzynce), #85 (ZAL, adnotacje VAT), #86 (sumy korekt, ponaglenia), #104, #115, #122 (QR w PDF), #128 (waluta kosztów).
   - **Inne:** #134 (numer rachunku przy wysyłce do KSeF) oraz #90.
@@ -55,13 +60,14 @@ Tylko jako pliki w `supabase/migrations/` — nic nie wgrywasz.
 
 ## 5. Środowisko
 
-- W worktree **nie ma `.env.local`**, chyba że Bartosz go skopiował. To celowe:
+- **Nie ma `.env.local`** (ani w worktree, ani w chmurze). To celowe:
   bez niego nic nie dotknie zdalnej bazy, poczty (Resend), Stripe ani Anthropic.
   Jeśli plik jednak jest, wolno ci zapisać w `STAN.md` tylko hosty, nie wartości;
   zdalna baza z niego to deweloperski Supabase Cloud, nie produkcja, ale i tak
   nie wolno w niej niczego zmieniać.
-- Nie ma Dockera, więc nie uruchomisz lokalnego Supabase (`supabase start`)
-  ani `pnpm test:rls`. Testy logiki: mocki.
+- Lokalnie nie ma Dockera; w chmurze sprawdź `docker --version`, ale i tak nie
+  uruchamiaj lokalnego Supabase ani `pnpm test:rls` (to blok bezpieczeństwa).
+  Testy logiki: mocki.
 - `KSEF_ENV=test`, ale tej nocy KSeF tylko na mockach (`lib/ksef/mock-fixtures.ts`).
 
 ## 6. Komendy
