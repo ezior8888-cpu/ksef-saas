@@ -7,7 +7,7 @@
  *   3. Szyfruje `{ type: 'token', nip, token }` z KSEF_TEST_TOKEN
  *   4. Zapisuje blob w `tenants.ksef_credentials_encrypted` (BYTEA)
  *   5. Drukuje tenant.id na stdout + zapisuje do `.tmp/ksef-test-tenant-id.txt`
- *      (używane przez seed-test-invoice.ts i trigger-submit.ts)
+ *      (używane przez seed-test-invoice.ts)
  *
  * Idempotent - możesz uruchamiać wielokrotnie (update'uje credentials).
  *

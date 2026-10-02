@@ -8,18 +8,17 @@ const mocks = vi.hoisted(() => ({
   captureException: vi.fn(),
 }));
 
-vi.mock('inngest', () => ({ cron: vi.fn((schedule: string) => schedule) }));
 vi.mock('@sentry/nextjs', () => ({ captureException: mocks.captureException }));
 vi.mock('@/lib/alerts/slack', () => ({ alertCritical: mocks.alertCritical }));
 vi.mock('@/lib/cache', () => ({ cacheGet: mocks.cacheGet, cacheSet: mocks.cacheSet }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({ from: mocks.from }),
 }));
-vi.mock('@/lib/inngest/client', () => ({
+vi.mock('@/lib/jobs/events', () => ({
   inngest: { createFunction: vi.fn() },
 }));
 
-import { checkOpenStripeFinancialCases } from '@/lib/inngest/jobs/critical-alerts-monitor';
+import { checkOpenStripeFinancialCases } from '@/lib/jobs/runners/critical-alerts-monitor';
 
 type CountResult = { count: number | null; error: Error | null };
 

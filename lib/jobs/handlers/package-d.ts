@@ -1,8 +1,8 @@
 /**
  * Paczka D (Etap 7.6): 9 jobów RDZENIA KSeF — serce produktu.
  *
- * Runnery żyją w lib/inngest/jobs/* (jedno źródło prawdy; sekwencja kroków
- * `submit-invoice` zweryfikowana jako identyczna z wersją Inngest).
+ * Runnery żyją w lib/jobs/runners/* (sekwencja kroków `submit-invoice`
+ * zweryfikowana przy etapie 7 jako identyczna z dawną wersją Inngest).
  *
  * ── Parytet limitów ──────────────────────────────────────────────
  * Inngest miał DWA mechanizmy per klucz: `concurrency` (ile naraz) oraz
@@ -22,28 +22,28 @@
  * najprostsza korekta to zmniejszenie `batchSize`/`groupConcurrency`.
  */
 
-import { runDownloadUpo } from '../../inngest/jobs/download-upo';
-import { runInboxPolling, runInboxPollTenant } from '../../inngest/jobs/inbox-polling';
+import { runDownloadUpo } from '../runners/download-upo';
+import { runInboxPolling, runInboxPollTenant } from '../runners/inbox-polling';
 import {
   runOfflineQueueFailure,
   runOfflineQueueSuccess,
   runProcessOfflineQueue,
-} from '../../inngest/jobs/process-offline-queue';
-import { runSelfInvoicePayment } from '../../inngest/jobs/self-invoice-payment';
+} from '../runners/process-offline-queue';
+import { runSelfInvoicePayment } from '../runners/self-invoice-payment';
 import {
   onSubmitInvoiceExhausted,
   runSubmitInvoice,
-} from '../../inngest/jobs/submit-invoice';
-import { runUpoRetryStale } from '../../inngest/jobs/upo-retry-stale';
+} from '../runners/submit-invoice';
+import { runUpoRetryStale } from '../runners/upo-retry-stale';
 import { parseDurationMs } from '../duration';
 import {
   getKsefRetryDelay,
   KSEF_MAX_RETRIES,
   KSEF_TENANT_CONCURRENCY_LIMIT,
-} from '../../inngest/retry-schedule';
+} from '../retry-schedule';
 import { registerJob, type JobContext } from '../registry';
 
-const INNGEST_DEFAULT_RETRIES = 4;
+const DEFAULT_JOB_RETRIES = 4;
 
 // ═══════════════════════════════════════════════════════════════
 // WYSYŁKA FAKTURY DO KSeF — najważniejszy job w aplikacji
@@ -75,7 +75,7 @@ registerJob<Parameters<typeof runDownloadUpo>[0]>({
 
 registerJob<Record<string, never>>({
   queue: 'cron.upo-retry-stale',
-  maxRetries: INNGEST_DEFAULT_RETRIES,
+  maxRetries: DEFAULT_JOB_RETRIES,
   handler: (_data, ctx: JobContext) => runUpoRetryStale(ctx),
 });
 
@@ -84,7 +84,7 @@ registerJob<Record<string, never>>({
 // ═══════════════════════════════════════════════════════════════
 registerJob<Record<string, never>>({
   queue: 'cron.inbox-polling',
-  maxRetries: INNGEST_DEFAULT_RETRIES,
+  maxRetries: DEFAULT_JOB_RETRIES,
   handler: (_data, ctx: JobContext) => runInboxPolling(ctx),
 });
 
@@ -104,7 +104,7 @@ registerJob<Parameters<typeof runInboxPollTenant>[0]>({
 // ═══════════════════════════════════════════════════════════════
 registerJob<Record<string, never>>({
   queue: 'cron.process-offline-queue',
-  maxRetries: INNGEST_DEFAULT_RETRIES,
+  maxRetries: DEFAULT_JOB_RETRIES,
   handler: (_data, ctx: JobContext) => runProcessOfflineQueue(ctx),
 });
 
@@ -112,14 +112,14 @@ registerJob<Record<string, never>>({
 // (patrz EVENT_QUEUE_MAP) — nadawca publikuje do obu.
 registerJob<Parameters<typeof runOfflineQueueSuccess>[0]>({
   queue: 'invoice.submit.succeeded.offline-queue',
-  maxRetries: INNGEST_DEFAULT_RETRIES,
+  maxRetries: DEFAULT_JOB_RETRIES,
   batchSize: 25,
   handler: (data, ctx) => runOfflineQueueSuccess(data, ctx),
 });
 
 registerJob<Parameters<typeof runOfflineQueueFailure>[0]>({
   queue: 'invoice.submit.failed.offline-queue',
-  maxRetries: INNGEST_DEFAULT_RETRIES,
+  maxRetries: DEFAULT_JOB_RETRIES,
   batchSize: 25,
   handler: (data, ctx) => runOfflineQueueFailure(data, ctx),
 });

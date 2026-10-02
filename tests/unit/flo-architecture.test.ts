@@ -40,8 +40,8 @@ function toPosix(path: string): string {
 const OUTGOING_SINKS: Record<string, string> = {
   'lib/ksef/submit.ts': 'wysyłka faktury do KSeF',
   'lib/ksef/submit-invoice-full.ts': 'wysyłka faktury do KSeF',
-  'lib/inngest/jobs/send-reminder.ts': 'wiadomość do kontrahenta',
-  'lib/inngest/jobs/co-pilot-monthly.ts': 'paczka dokumentów do księgowej',
+  'lib/jobs/runners/send-reminder.ts': 'wiadomość do kontrahenta',
+  'lib/jobs/runners/co-pilot-monthly.ts': 'paczka dokumentów do księgowej',
 };
 
 /**
@@ -54,7 +54,7 @@ const KNOWN_UNGATED: Record<string, string> = {
   // To jest zgoda przez ustawienie: ktoś włączył to raz i zapomniał — czyli
   // dokładnie ten model, który został odrzucony przy ponagleniach.
   // ZAMYKA: krok 41 (B-01 — propozycja „wysłać paczkę?” zamiast automatu).
-  'lib/inngest/jobs/co-pilot-monthly.ts':
+  'lib/jobs/runners/co-pilot-monthly.ts':
     'B-01 — automatyczna wysyłka paczki w dniu z ustawień',
 };
 
@@ -113,14 +113,14 @@ function resolveImport(spec: string, from: string): string | null {
 
 /**
  * Nazwy stałych zdarzeń. Obsługujemy OBA sposoby deklaracji obecne w
- * `client.ts` — `eventType(` i `zodEvent(`. Pominięcie jednego z nich
+ * `events.ts` — `jobEvent<` i `zodEvent(`. Pominięcie jednego z nich
  * (co przydarzyło się przy pierwszym podejściu) sprawia, że graf gubi
  * połowę krawędzi, a test staje się zawsze zielony i nic nie wart.
  */
-const clientSource = sources.get('lib/inngest/client.ts') ?? '';
+const clientSource = sources.get('lib/jobs/events.ts') ?? '';
 const eventNames = [
   ...clientSource.matchAll(
-    /export const (\w+)\s*=\s*(?:eventType|zodEvent)\s*[<(]/g,
+    /export const (\w+)\s*=\s*(?:jobEvent|zodEvent)\s*[<(]/g,
   ),
 ].map((m) => m[1]!);
 
@@ -135,19 +135,62 @@ for (const [file, source] of sources) {
 }
 
 // Krawędzie przez kolejkę: kto emituje zdarzenie → kto je obsługuje.
+// Od etapu 10 (Inngest odpięty) wyzwalacz to rejestracja pg-boss:
+//   stała zdarzenia → nazwa zdarzenia (`lib/jobs/events.ts`)
+//   → kolejki (`EVENT_QUEUE_MAP` w `lib/jobs/queues.ts`)
+//   → runner zarejestrowany na kolejce (`lib/jobs/handlers/*`)
+//   → plik, który ten runner eksportuje.
+const eventStringByConst = new Map(
+  [...clientSource.matchAll(/export const (\w+)\s*=\s*(?:zodEvent\(\s*|jobEvent<[\s\S]*?>\(\s*)'([^']+)'/g)]
+    .map((m) => [m[1]!, m[2]!] as const),
+);
+const queuesSource = sources.get('lib/jobs/queues.ts') ?? '';
+const mapBody = queuesSource.slice(
+  queuesSource.indexOf('EVENT_QUEUE_MAP = {'),
+  queuesSource.indexOf('} as const', queuesSource.indexOf('EVENT_QUEUE_MAP = {')),
+);
+const queuesByEvent = new Map(
+  [...mapBody.matchAll(/'([a-z]+\/[a-z0-9.-]+)':\s*\[([^\]]*)\]/g)].map((m) => [
+    m[1]!,
+    [...m[2]!.matchAll(/'([a-z0-9.-]+)'/g)].map((q) => q[1]!),
+  ] as const),
+);
+const runnerByQueue = new Map<string, string>();
+for (const [file, source] of sources) {
+  if (!file.startsWith('lib/jobs/handlers/')) continue;
+  for (const m of source.matchAll(/\b\w+Job\(\s*'([a-z0-9.-]+)',\s*(run\w+)/g)) {
+    runnerByQueue.set(m[1]!, m[2]!);
+  }
+  for (const m of source.matchAll(/queue:\s*'([a-z0-9.-]+)'[\s\S]*?handler:[^\n]*?\b(run\w+)\(/g)) {
+    runnerByQueue.set(m[1]!, m[2]!);
+  }
+}
+const fileByRunner = new Map<string, string>();
+for (const [file, source] of sources) {
+  for (const m of source.matchAll(/export (?:async )?function (run\w+)\s*[<(]/g)) {
+    fileByRunner.set(m[1]!, file);
+  }
+}
+const handlerFileByQueue = new Map(
+  [...runnerByQueue].flatMap(([queue, runner]) => {
+    const file = fileByRunner.get(runner);
+    return file ? [[queue, file] as const] : [];
+  }),
+);
+
 let queueEdgeCount = 0;
 for (const name of eventNames) {
   const emitters: string[] = [];
-  const handlers: string[] = [];
   for (const [file, source] of sources) {
-    if (file === 'lib/inngest/client.ts') continue;
+    if (file === 'lib/jobs/events.ts') continue;
     if (new RegExp(`\\b${name}\\.create\\s*\\(`).test(source)) {
       emitters.push(file);
     }
-    if (new RegExp(`triggers:\\s*\\[[^\\]]*\\b${name}\\b`).test(source)) {
-      handlers.push(file);
-    }
   }
+  const eventString = eventStringByConst.get(name);
+  const handlers = (eventString ? queuesByEvent.get(eventString) ?? [] : [])
+    .map((queue) => handlerFileByQueue.get(queue))
+    .filter((file): file is string => Boolean(file));
   for (const emitter of emitters) {
     for (const handler of handlers) {
       graph.get(emitter)?.add(handler);
@@ -156,9 +199,13 @@ for (const name of eventNames) {
   }
 }
 
-const cronFiles = [...sources.entries()]
-  .filter(([, source]) => /cron\(\s*['"]/.test(source))
-  .map(([file]) => file);
+const cronFiles = [
+  ...new Set(
+    [...handlerFileByQueue]
+      .filter(([queue]) => queue.startsWith('cron.'))
+      .map(([, file]) => file),
+  ),
+];
 
 function pathToSink(start: string): string[] | null {
   const queue: Array<[string, string[]]> = [[start, [start]]];
@@ -249,7 +296,7 @@ describe('W1 — nic nie wychodzi bez kliknięcia człowieka', () => {
   it('cron ponagleń jest odcięty od wysyłki', () => {
     // To jest wynik kroku 6. Gdyby ktoś przywrócił stare zachowanie, ta
     // asercja pada jako pierwsza i wskazuje dokładnie ten plik.
-    expect(pathToSink('lib/inngest/jobs/reminder-scheduler.ts')).toBeNull();
+    expect(pathToSink('lib/jobs/runners/reminder-scheduler.ts')).toBeNull();
   });
 
   it('puls agenta jest odcięty od wysyłki', () => {

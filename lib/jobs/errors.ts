@@ -1,25 +1,26 @@
 /**
- * Błędy sterujące retry w workerze pg-boss (Etap 7 migracji).
+ * Błędy sterujące retry w workerze pg-boss.
  *
- * Semantyka 1:1 z klasami Inngest używanymi w jobach:
- *   - `NonRetriableJobError` ⇔ inngest.NonRetriableError — natychmiast kończy
- *     próby i woła `onExhausted` (odpowiednik `onFailure`).
- *   - `RetryAfterJobError` ⇔ inngest.RetryAfterError — retry z JAWNYM
- *     opóźnieniem (np. schedule KSeF 30s→2m→5m→15m→1h) zamiast domyślnego.
- *
- * Port joba = zmiana importu z 'inngest' na ten moduł; logika bez zmian.
+ * Nazwy i konstruktory jak w dawnym SDK Inngest (etap 10: Inngest odpięty
+ * 02.10.2026), żeby ciała jobów rzucały je bez zmian:
+ *   - `NonRetriableError` — natychmiast kończy próby i woła `onExhausted`.
+ *     Część jobów rozpoznaje go po `error.name === 'NonRetriableError'`
+ *     (np. klasyfikacja odrzucenia w `onSubmitInvoiceExhausted`), więc nazwa
+ *     jest częścią kontraktu.
+ *   - `RetryAfterError` — retry z JAWNYM opóźnieniem (np. schedule KSeF
+ *     30s→2m→5m→15m→1h) zamiast domyślnego. Opóźnienie: ms albo '30s'/'2m'.
  */
 
 import { parseDurationMs } from './duration';
 
-export class NonRetriableJobError extends Error {
+export class NonRetriableError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
-    this.name = 'NonRetriableJobError';
+    this.name = 'NonRetriableError';
   }
 }
 
-export class RetryAfterJobError extends Error {
+export class RetryAfterError extends Error {
   /** Opóźnienie kolejnej próby w ms. */
   readonly retryAfterMs: number;
 
@@ -29,7 +30,7 @@ export class RetryAfterJobError extends Error {
     options?: { cause?: unknown },
   ) {
     super(message, options);
-    this.name = 'RetryAfterJobError';
+    this.name = 'RetryAfterError';
     this.retryAfterMs = parseDurationMs(retryAfter);
   }
 }

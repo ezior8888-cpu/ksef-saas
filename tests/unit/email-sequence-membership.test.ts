@@ -31,7 +31,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { runEmailDay1, runEmailDay14, runEmailDay8 } from '@/lib/inngest/jobs/email-sequence';
+import { runEmailDay1, runEmailDay14, runEmailDay8 } from '@/lib/jobs/runners/email-sequence';
 
 /**
  * Odebranie członkostwa nie czyści `last_active_tenant_id`, a maile czytają

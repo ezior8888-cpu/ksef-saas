@@ -15,7 +15,7 @@
  * — w ostatnim odczycie przed wysyłką, razem z trwałą zgodą na wiadomość.
  */
 import { registerFloHandler } from '@/lib/flo/handlers';
-import { remindersSendRequested } from '@/lib/inngest/client';
+import { remindersSendRequested } from '@/lib/jobs/events';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { approvedReminderDelivery, authorizeReminderDispatch, hasReminderDispatch } from '@/lib/reminders/delivery-consent';

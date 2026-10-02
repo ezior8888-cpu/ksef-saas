@@ -38,7 +38,7 @@ describe('alarm terminu Offline24', () => {
   });
 
   it('job używa najbliższego PRZYSZŁEGO terminu, nie najstarszego', () => {
-    const kod = readFileSync(join(process.cwd(), 'lib/inngest/jobs/process-offline-queue.ts'), 'utf8');
+    const kod = readFileSync(join(process.cwd(), 'lib/jobs/runners/process-offline-queue.ts'), 'utf8');
     expect(kod).toMatch(/nearestFutureDeadline\(deadlines, now\)/);
     expect(kod).not.toMatch(/deadlines\.sort\(\)\[0\]/);
   });

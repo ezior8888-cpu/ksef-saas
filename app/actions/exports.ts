@@ -6,8 +6,8 @@ import { sendJobEvent } from '@/lib/jobs/enqueue';
 import {
   exportsCoPilotSendPackage,
   exportsGenerateRequested,
-  } from '@/lib/inngest/client';
-import { formatInngestSendError } from '@/lib/inngest/error-message';
+  } from '@/lib/jobs/events';
+import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
   ActionAuthError,
   requireOrgRole,
@@ -142,7 +142,7 @@ export async function startExportAction(params: {
       .delete()
       .eq('id', job.id)
       .eq('tenant_id', tenantId);
-    return { success: false, error: formatInngestSendError(e) };
+    return { success: false, error: formatJobSendError(e) };
   }
 
   revalidatePath('/dashboard');
@@ -420,7 +420,7 @@ export async function triggerCoPilotNowAction(
       jobId: inngestEventIdFromSendResult(sent),
     };
   } catch (e) {
-    return { success: false, error: formatInngestSendError(e) };
+    return { success: false, error: formatJobSendError(e) };
   }
 }
 

@@ -6,7 +6,7 @@ import {
   isTelegramConfigured,
   sendTelegramMessage,
 } from '@/lib/alerts/telegram';
-import { buildTelegramReport } from '@/lib/inngest/jobs/daily-summary-email';
+import { buildTelegramReport } from '@/lib/jobs/runners/daily-summary-email';
 import type { DailyMetrics } from '@/lib/observability/business-metrics';
 
 const token = '123456:synthetic-telegram-secret';

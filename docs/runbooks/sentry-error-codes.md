@@ -131,7 +131,7 @@ się rozjechał, albo ktoś próbuje fake'ować webhook.
 
 **Co zrobić:**
 1. Sprawdź Anthropic status page.
-2. Dla `429` z naszej strony — patrz `lib/inngest/jobs/process-ocr.ts` concurrency.
+2. Dla `429` z naszej strony — patrz `lib/jobs/runners/process-ocr.ts` concurrency.
 3. Dla `invalid_request` — sprawdź size zdjęcia w `expenses.image_path`.
 
 ## §7. ChunkLoadError / "Loading chunk N failed"

@@ -1,8 +1,8 @@
 # Joby w tle — pg-boss (runbook)
 
 Od 18 sierpnia 2026 wszystkie joby chodzą na **pg-boss** w naszym Postgresie
-(schemat `pgboss` na `db-1`). Inngest zostaje tylko jako ścieżka powrotu
-i lokalny dev (AUD-101, AUD-110). Dostępy i zmienne: `AGENTS.md`, sekcja
+(schemat `pgboss` na `db-1`). Inngest odpięty 02.10.2026 (etap 10) — bez
+ścieżki powrotu. Dostępy i zmienne: `AGENTS.md`, sekcja
 „Infrastruktura i dostępy” (`source .agents/infra.env`).
 
 ## Jak to działa
@@ -11,7 +11,7 @@ i lokalny dev (AUD-101, AUD-110). Dostępy i zmienne: `AGENTS.md`, sekcja
 |---|---|---|
 | Wysyłka zadania | aplikacja web, `lib/jobs/enqueue.ts` | `sendJobEvent` → kolejka z `EVENT_QUEUE_MAP` (`lib/jobs/queues.ts`); zdarzenie może iść do kilku kolejek |
 | Worker | Coolify **id=2**, `lib/jobs/worker.ts` | odbiera kolejki, prowadzi crony (`CRON_JOBS`), healthcheck HTTP dla Coolify |
-| Rejestracja jobów | `lib/jobs/handlers/*` | kolejka → ciało joba z `lib/inngest/jobs/*`, limity (`batchSize`, `groupConcurrency`), `onExhausted` |
+| Rejestracja jobów | `lib/jobs/handlers/*` | kolejka → ciało joba z `lib/jobs/runners/*`, limity (`batchSize`, `groupConcurrency`), `onExhausted` |
 | Ponowienia | wrapper workera | licznik `__attempt` w danych, harmonogram jak w Inngest; po wyczerpaniu `onExhausted` |
 | Dziennik przebiegów | `inngest_run_log` (`lib/jobs/run-log.ts`) | każdy przebieg: sukces / błąd, czas; czyta go monitor alarmów i `/admin/system` |
 | Heartbeat | cron `cron.ops-heartbeat` → `OPS_HEARTBEAT_URL` | ping co minutę do Healthchecks; **brak pinga = alarm** |

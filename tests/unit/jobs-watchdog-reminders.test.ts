@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({ db: vi.fn(), capture: vi.fn() }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.db }));
 vi.mock('@/lib/flo/db-types', () => ({ floDb: mocks.db }));
 vi.mock('@sentry/nextjs', () => ({ captureMessage: mocks.capture }));
-import { runJobsWatchdog } from '@/lib/inngest/jobs/jobs-watchdog';
+import { runJobsWatchdog } from '@/lib/jobs/runners/jobs-watchdog';
 
 const NOW = new Date('2026-09-23T12:00:00.000Z');
 const IDS = ['approval-receipt', 'approval-dispatch', 'approval-legacy', 'approval-missing'];

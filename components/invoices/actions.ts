@@ -7,7 +7,7 @@ import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue'
 import type { createClient } from '@/lib/supabase/server';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { lookupCompanyByNip } from '@/lib/gus/client';
-import { formatInngestSendError } from '@/lib/inngest/error-message';
+import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
   calculateInvoiceTotals,
   calculateLineItem,
@@ -616,7 +616,7 @@ export async function saveAndSendInvoiceAction(
       success: false,
       error:
         err instanceof Error
-          ? formatInngestSendError(err)
+          ? formatJobSendError(err)
           : 'Nieznany błąd wysyłki',
     };
   }

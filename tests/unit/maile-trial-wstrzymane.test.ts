@@ -31,7 +31,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   },
 }));
 
-import { runEmailDay12, runEmailDay14, runEmailDay8 } from '@/lib/inngest/jobs/email-sequence';
+import { runEmailDay12, runEmailDay14, runEmailDay8 } from '@/lib/jobs/runners/email-sequence';
 
 const scheduleAfter = vi.fn();
 const ctx: JobContext = {
@@ -67,7 +67,7 @@ describe('sekwencja powitalna: maile 12 i 14 wstrzymane', () => {
   });
 
   it('w kodzie nie zostały obietnice sprzeczne z regulaminem i retencją', () => {
-    const source = readFileSync(join(process.cwd(), 'lib/inngest/jobs/email-sequence.ts'), 'utf8');
+    const source = readFileSync(join(process.cwd(), 'lib/jobs/runners/email-sequence.ts'), 'utf8');
     for (const tekst of ['2 dni do końca trialu</h1>', 'read-only. Możesz', 'usuwane permanentnie']) {
       expect(source).not.toContain(tekst);
     }

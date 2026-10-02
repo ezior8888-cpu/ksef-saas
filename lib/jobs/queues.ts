@@ -1,13 +1,13 @@
 /**
- * Rejestr kolejek pg-boss: mapa eventów Inngest → nazwy kolejek + definicje
- * cronów. JEDYNE źródło prawdy dla obu backendów w okresie przejściowym.
+ * Rejestr kolejek pg-boss: mapa zdarzeń (`lib/jobs/events.ts`) → nazwy
+ * kolejek + definicje cronów. Jedyne źródło prawdy (Inngest odpięty, etap 10).
  *
  * Konwencja nazw: event 'invoice/submit.requested' → kolejka
  * 'invoice.submit.requested' (pg-boss preferuje [a-z0-9.-]).
  * Crony: kolejka 'cron.<id-joba-z-inngest>'.
  *
  * Test `tests/unit/jobs-queues.test.ts` pilnuje, żeby ta mapa nie
- * rozjechała się z eventami zdefiniowanymi w `lib/inngest/client.ts`.
+ * rozjechała się z eventami zdefiniowanymi w `lib/jobs/events.ts`.
  */
 
 /**

@@ -171,7 +171,7 @@ async function main() {
   console.log(`${DIM}invoice_id:${RESET}      ${GREEN}${invoiceId}${RESET}`);
   console.log(`${DIM}internalNumber:${RESET}  ${invoice.internalNumber}`);
   console.log(`${DIM}ksef_status:${RESET}     draft`);
-  console.log(`${DIM}Teraz uruchom:${RESET}   pnpm trigger:submit`);
+  console.log(`${DIM}Teraz:${RESET}           wyślij szkic do KSeF z widoku faktury (worker: pnpm worker:dev)`);
 }
 
 main().catch((err) => {

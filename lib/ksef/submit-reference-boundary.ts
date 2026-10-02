@@ -1,4 +1,4 @@
-import { NonRetriableError } from 'inngest';
+import { NonRetriableError } from '@/lib/jobs/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { KsefEnvironment } from '@/types/ksef';

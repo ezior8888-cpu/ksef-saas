@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { NonRetriableError } from 'inngest';
+import { NonRetriableError } from '@/lib/jobs/errors';
 import type { FloApprovalRow, FloProposalRow } from '@/lib/flo/db-types';
 import type { FloApproveInput } from '@/types/flo';
 import type { ReminderDelivery, ReminderInvoiceSource } from '@/types/reminder-delivery';
@@ -18,7 +18,7 @@ vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: 
 vi.mock('@/lib/storage/r2', () => ({ uploadToR2: mocks.upload }));
 vi.mock('resend', () => ({ Resend: class { emails = { send: mocks.send }; } }));
 import { authorizeReminderDispatch, readReminderDispatch, assertDeliveryDeadline } from '@/lib/reminders/delivery-consent';
-import { runSendReminder } from '@/lib/inngest/jobs/send-reminder';
+import { runSendReminder } from '@/lib/jobs/runners/send-reminder';
 import { assertReminderSendable } from '@/lib/reminders/delivery-safety';
 import { approvalOperationHash, proposalApprovalVersion } from '@/lib/flo/approval-version';
 import { reminderInvoiceFingerprint } from '@/lib/reminders/delivery-schema';

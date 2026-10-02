@@ -49,7 +49,6 @@
 
 # Joby, kopie, wyłączniki, alarmy
 /lib/jobs/                   @ezior8888-cpu
-/lib/inngest/                @ezior8888-cpu
 /lib/backup/                 @ezior8888-cpu
 /lib/feature-flags/          @ezior8888-cpu
 /lib/alerts/                 @ezior8888-cpu

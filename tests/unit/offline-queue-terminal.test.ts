@@ -1,4 +1,4 @@
-import { NonRetriableError } from 'inngest';
+import { NonRetriableError } from '@/lib/jobs/errors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
@@ -13,7 +13,7 @@ const db = vi.hoisted(() => ({
 }));
 const mocks = vi.hoisted(() => ({ status: vi.fn(), sendEvent: vi.fn() }));
 
-vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({
+vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({
   requireInvoiceTenant: vi.fn(),
   assertJobIdentity: vi.fn(),
   InvoiceTenantMismatchError: class InvoiceTenantMismatchError extends Error {},
@@ -69,8 +69,8 @@ vi.mock('@/lib/supabase/server', () => ({
   },
 }));
 
-import { runOfflineQueueFailure } from '@/lib/inngest/jobs/process-offline-queue';
-import { KSEF_DUPLICATE_RECONCILE, onSubmitInvoiceExhausted } from '@/lib/inngest/jobs/submit-invoice';
+import { runOfflineQueueFailure } from '@/lib/jobs/runners/process-offline-queue';
+import { KSEF_DUPLICATE_RECONCILE, onSubmitInvoiceExhausted } from '@/lib/jobs/runners/submit-invoice';
 
 /**
  * Faktura wysłana z kolejki Offline24 i odrzucona na stałe (treść, brak

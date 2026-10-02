@@ -20,13 +20,13 @@ vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mocks.audit }));
 vi.mock('@/lib/stripe/billed-plan', () => ({ deriveBilledPlanFromPaidInvoice: mocks.derivePlan }));
 vi.mock('@sentry/nextjs', () => ({ captureException: mocks.capture }));
 vi.mock('@/lib/jobs/inngest-adapter', () => ({ toJobContext: vi.fn() }));
-vi.mock('@/lib/inngest/client', () => ({
+vi.mock('@/lib/jobs/events', () => ({
   billingPaymentSucceeded: { create: (data: unknown) => ({ data }) },
   invoiceSubmitRequested: { create: (data: unknown) => ({ data }) },
   inngest: { createFunction: () => ({}) },
 }));
 
-import { runSelfInvoicePayment } from '@/lib/inngest/jobs/self-invoice-payment';
+import { runSelfInvoicePayment } from '@/lib/jobs/runners/self-invoice-payment';
 
 const event = {
   tenantId: 'customer-tenant',

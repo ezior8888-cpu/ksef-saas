@@ -1,34 +1,34 @@
 /**
  * Paczka A (Etap 7.3): 12 cronów utrzymaniowych — rejestracje pg-boss.
  *
- * Runnery żyją w lib/inngest/jobs/* (jedno źródło prawdy — Inngest woła je
- * przez adapter, worker pg-boss stąd). Kolejki cron.* są planowane przez
- * worker wg CRON_JOBS z lib/jobs/queues.ts (1:1 z triggerami Inngest).
+ * Runnery żyją w lib/jobs/runners/*. Kolejki cron.* planuje worker wg
+ * CRON_JOBS z lib/jobs/queues.ts (harmonogramy przeniesione 1:1 z dawnych
+ * triggerów Inngest; Inngest odpięty w etapie 10).
  *
- * Parytet retries: Inngest default = 4 ponowne próby; wyjątek
+ * Domyślnie 4 ponowne próby (jak dawniej w Inngest); wyjątek
  * nightly-validation-recheck (retries: 1 w konfiguracji joba).
  */
 
-import { runArchiveOldInvoices } from '../../inngest/jobs/archive-old-invoices';
-import { runCertExpiryAlert } from '../../inngest/jobs/cert-expiry-alert';
-import { runCleanupAuditLogs } from '../../inngest/jobs/cleanup-audit-logs';
-import { runCleanupOldBackups } from '../../inngest/jobs/cleanup-old-backups';
-import { runDailyDbSnapshot } from '../../inngest/jobs/daily-db-snapshot';
-import { runGdprProcessDeletions } from '../../inngest/jobs/gdpr-process-deletions';
-import { runJobsWatchdog } from '../../inngest/jobs/jobs-watchdog';
-import { runKsefHealthCheck } from '../../inngest/jobs/ksef-health-check';
-import { runNightlyValidationRecheck } from '../../inngest/jobs/nightly-validation-recheck';
-import { runRetentionDelete } from '../../inngest/jobs/retention-delete';
-import { runVerifyBackup } from '../../inngest/jobs/verify-backup';
+import { runArchiveOldInvoices } from '../runners/archive-old-invoices';
+import { runCertExpiryAlert } from '../runners/cert-expiry-alert';
+import { runCleanupAuditLogs } from '../runners/cleanup-audit-logs';
+import { runCleanupOldBackups } from '../runners/cleanup-old-backups';
+import { runDailyDbSnapshot } from '../runners/daily-db-snapshot';
+import { runGdprProcessDeletions } from '../runners/gdpr-process-deletions';
+import { runJobsWatchdog } from '../runners/jobs-watchdog';
+import { runKsefHealthCheck } from '../runners/ksef-health-check';
+import { runNightlyValidationRecheck } from '../runners/nightly-validation-recheck';
+import { runRetentionDelete } from '../runners/retention-delete';
+import { runVerifyBackup } from '../runners/verify-backup';
 import { registerJob, type JobContext } from '../registry';
 
-const INNGEST_DEFAULT_RETRIES = 4;
+const DEFAULT_JOB_RETRIES = 4;
 
 /** Cron bez payloadu — handler ignoruje dane, odpala runner z kontekstem. */
 function cronJob(
   queue: string,
   runner: (ctx: JobContext) => Promise<unknown>,
-  maxRetries: number = INNGEST_DEFAULT_RETRIES,
+  maxRetries: number = DEFAULT_JOB_RETRIES,
 ): void {
   registerJob<Record<string, never>>({
     queue,

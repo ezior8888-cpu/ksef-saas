@@ -39,7 +39,6 @@ const AUTH_PUBLIC_PREFIXES = [
 ] as const;
 
 const PUBLIC_API_PREFIXES = [
-  '/api/inngest',
   '/api/health',
   '/api/status',
   '/api/portal',

@@ -69,7 +69,7 @@ import {
   type JpkV7mInputData,
 } from '@/lib/exports/jpk-v7m-generator';
 import { validateJpkV7m } from '@/lib/exports/jpk-v7m-validator';
-import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/inngest/jobs/exports-generate';
+import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/jobs/runners/exports-generate';
 
 /**
  * Stawki „np” i „oo” w JPK_V7M. Do 01.10.2026 obie po cichu wypadały

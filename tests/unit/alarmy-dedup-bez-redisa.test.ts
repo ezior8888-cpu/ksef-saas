@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { markAlertDelivered, shouldSendAlert } from '@/lib/inngest/jobs/critical-alerts-monitor';
+import { markAlertDelivered, shouldSendAlert } from '@/lib/jobs/runners/critical-alerts-monitor';
 
 /**
  * N2: deduplikacja alarmów krytycznych szła tylko przez Redis, którego na

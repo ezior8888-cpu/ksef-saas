@@ -14,7 +14,7 @@ Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (K
 - Next.js 16 (App Router), TypeScript, React Server Components
 - Tailwind CSS + shadcn/ui (style: new-york, baseColor: neutral)
 - Supabase **self-hosted** na Hetznerze (`db-1`, NBG1 — Norymberga): Postgres + RLS, GoTrue (logowanie e-mail/hasło + Google OAuth, MFA), PostgREST
-- pg-boss — background jobs (worker = druga aplikacja w Coolify, `lib/jobs/`); Inngest zostaje tylko jako ścieżka powrotu i lokalny dev
+- pg-boss — background jobs (worker = druga aplikacja w Coolify, `lib/jobs/`; lokalnie `pnpm worker:dev` z `DATABASE_URL`). Inngest odpięty 02.10.2026 (etap 10) — bez ścieżki powrotu
 - Magazyn plików przez API S3 (`lib/storage/r2.ts`, zmienne `R2_*`; na produkcji MinIO na `db-1`) — XML FA(3), UPO, zdjęcia
 - Hosting: Hetzner + Coolify — jedyny od 14.09.2026 (szczegóły w „Infrastruktura i dostępy”)
 - **pnpm** — menedżer pakietów (`pnpm-lock.yaml`); w root nie używaj `npm install` (brak `package-lock.json`; globalny `.npmrc` z opcjami pnpm potrafi psuć npm).
@@ -47,7 +47,7 @@ Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (K
 - `lib/ksef/` — klient KSeF API, auth, submit, inbox.
 - `lib/supabase/` — tylko klienty Supabase (`client.ts`, `server.ts`, `middleware.ts`).
 - `lib/xml/` — generator i walidator FA(3) XML.
-- `lib/inngest/jobs/` — ciała background jobs (wspólne dla pg-boss i Inngest); rejestracja pg-boss: `lib/jobs/handlers/`.
+- `lib/jobs/runners/` — ciała background jobs (`run*`, `on*Exhausted`); rejestracja kolejek: `lib/jobs/handlers/`; zdarzenia: `lib/jobs/events.ts` (`X.create()`, `.parse()`); błędy sterujące ponowieniem: `lib/jobs/errors.ts` (`NonRetriableError`, `RetryAfterError`).
 - `lib/audit/log.ts` — helper do zapisywania logów do tabeli `audit_logs`.
 
 ### Supabase / bazy danych

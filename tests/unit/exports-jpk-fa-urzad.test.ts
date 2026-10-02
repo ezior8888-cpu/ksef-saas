@@ -113,8 +113,8 @@ vi.mock('@/lib/exports/data-fetcher', () => ({
   }),
 }));
 
-import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/inngest/jobs/exports-generate';
-import { formatsWithoutUnaddressedJpkFa, runCoPilotSendPackage } from '@/lib/inngest/jobs/co-pilot-monthly';
+import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/jobs/runners/exports-generate';
+import { formatsWithoutUnaddressedJpkFa, runCoPilotSendPackage } from '@/lib/jobs/runners/co-pilot-monthly';
 import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
 import { MissingIssuerAddressError } from '@/lib/exports/issuer-address';
 import { JpkFaCorrectionNotSupportedError, JpkFaForeignCurrencyNotSupportedError } from '@/lib/exports/jpk-fa-generator';

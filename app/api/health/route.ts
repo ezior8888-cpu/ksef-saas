@@ -21,15 +21,14 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const checks: Record<string, { status: 'ok' | 'fail' }> = {};
 
-  // Backend jobów musi być ustawiony jawnie (krok 5). Klucz Inngest jest
-  // potrzebny tylko wtedy, gdy joby rzeczywiście idą przez Inngest — przy
-  // pg-boss jego brak nie może kłaść health checku.
+  // Zlecenia jobów idą do pg-boss w naszym Postgresie — bez DATABASE_URL
+  // aplikacja nie przekaże żadnej wysyłki do KSeF (Inngest odpięty, etap 10).
   const jobsBackend = resolveJobsBackend();
   const requiredEnvs = [
     'NEXT_PUBLIC_SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE_KEY',
     'KSEF_CREDENTIALS_ENCRYPTION_KEY',
-    ...(jobsBackend === 'inngest' ? ['INNGEST_EVENT_KEY'] : []),
+    'DATABASE_URL',
   ];
   const missing = requiredEnvs.filter((env) => !process.env[env]);
   if (!jobsBackend) missing.push('JOBS_BACKEND');

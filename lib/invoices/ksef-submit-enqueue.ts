@@ -32,7 +32,7 @@ import {
   KOR_HOLD_MESSAGE,
   KSEF_PAUSED_MESSAGE,
 } from '@/lib/ksef/submission-holds';
-import { formatInngestSendError } from '@/lib/inngest/error-message';
+import { formatJobSendError } from '@/lib/jobs/error-message';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 import type { Invoice } from '@/types/invoice';
 import type {
@@ -268,7 +268,7 @@ export async function enqueueKsefSubmitAfterDraft(
       },
     });
   } catch (e) {
-    return { ok: false, error: formatInngestSendError(e) };
+    return { ok: false, error: formatJobSendError(e) };
   }
 
   const { error: queueErr } = await supabase

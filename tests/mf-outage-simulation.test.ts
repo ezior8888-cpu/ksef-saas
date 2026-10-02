@@ -26,8 +26,7 @@ import {
   getKsefRetryDelay,
   KSEF_MAX_RETRIES,
   KSEF_TENANT_CONCURRENCY_LIMIT,
-  KSEF_TENANT_THROTTLE_LIMIT,
-} from '@/lib/inngest/retry-schedule';
+} from '@/lib/jobs/retry-schedule';
 
 describe('Symulacja: MF down 4h', () => {
   beforeEach(() => {
@@ -175,7 +174,7 @@ describe('Symulacja: MF down 4h', () => {
     });
   });
 
-  describe('Retry schedule sanity (z lib/inngest/retry-schedule.ts)', () => {
+  describe('Retry schedule sanity (z lib/jobs/retry-schedule.ts)', () => {
     it('schedule pokrywa 30s → 2m → 5m → 15m → 1h dla attempts 0-4', () => {
       expect(getKsefRetryDelay(0)).toBe('30s');
       expect(getKsefRetryDelay(1)).toBe('2m');
@@ -189,10 +188,9 @@ describe('Symulacja: MF down 4h', () => {
       expect(getKsefRetryDelay(100)).toBe('1h');
     });
 
-    it('limity per-tenant zgodne ze speca (100 concurrency, 60/min throttle)', () => {
+    it('limity per-tenant zgodne ze speca (100 równoległych, 5 ponowień)', () => {
       expect(KSEF_MAX_RETRIES).toBe(5);
       expect(KSEF_TENANT_CONCURRENCY_LIMIT).toBe(100);
-      expect(KSEF_TENANT_THROTTLE_LIMIT).toBe(60);
     });
   });
 

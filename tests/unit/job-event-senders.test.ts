@@ -16,18 +16,18 @@ import { bezKomentarzyTs, plikiKodu, toPosix } from '../helpers/schema-z-migracj
  * nadawcy jest zarejestrowany, przetestowany i martwy — w przeglądzie
  * 24–25.09 był to najczęstszy wzorzec (X-05, wykonawca K-01, maile triala).
  *
- * Nadawca to wywołanie `<stała>.create(…)` (stała z `lib/inngest/client.ts`)
+ * Nadawca to wywołanie `<stała>.create(…)` (stała z `lib/jobs/events.ts`)
  * albo zdarzenie podane napisem: `{ name: '…' }` lub `send…('…')`.
  */
 
 const ROOT = process.cwd();
-const KLIENT = 'lib/inngest/client.ts';
+const KLIENT = 'lib/jobs/events.ts';
 
 /** Nazwa zdarzenia → nazwa stałej, którą się je tworzy. */
 function staleZdarzen(): Map<string, string> {
   const kod = readFileSync(join(ROOT, KLIENT), 'utf8');
   return new Map(
-    [...kod.matchAll(/export const ([A-Za-z0-9_]+)\s*=\s*(?:zodEvent|eventType)\(\s*'([^']+)'/g)].map(
+    [...kod.matchAll(/export const ([A-Za-z0-9_]+)\s*=\s*(?:zodEvent\(\s*|jobEvent<[\s\S]*?>\(\s*)'([^']+)'/g)].map(
       (m) => [m[2]!, m[1]!] as const,
     ),
   );

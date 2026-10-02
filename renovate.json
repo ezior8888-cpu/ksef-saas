@@ -53,8 +53,8 @@
       "labels": ["dependencies", "security-review-required"]
     },
     {
-      "description": "Major bumps Next/React/Inngest — zawsze ręcznie + breaking-changes label",
-      "matchPackageNames": ["next", "react", "react-dom", "inngest"],
+      "description": "Major bumps Next/React — zawsze ręcznie + breaking-changes label",
+      "matchPackageNames": ["next", "react", "react-dom"],
       "matchUpdateTypes": ["major"],
       "automerge": false,
       "labels": ["dependencies", "breaking-changes"]

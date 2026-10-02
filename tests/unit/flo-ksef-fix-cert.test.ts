@@ -269,7 +269,7 @@ describe('X-03 — progi', () => {
     // ani razu. Własna lista progów albo własna reguła w zadaniu znaczyłyby
     // powrót dwóch źródeł prawdy. Zachowanie zadania (nadrabianie, pamięć
     // wysłanych progów) sprawdza certyfikat-alert-nadrabianie.test.ts.
-    const zadanie = readFileSync('lib/inngest/jobs/cert-expiry-alert.ts', 'utf8');
+    const zadanie = readFileSync('lib/jobs/runners/cert-expiry-alert.ts', 'utf8');
 
     expect(zadanie).toContain('dueCertThreshold(tenant.ksef_certificate_expiry, now)');
     expect(zadanie).toContain('threshold: due');

@@ -41,7 +41,7 @@ vi.mock('@/lib/storage/expenses', () => ({
 }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToUser: vi.fn() }));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: vi.fn() }));
-vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({ requireTenantMember: vi.fn(async () => undefined) }));
+vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireTenantMember: vi.fn(async () => undefined) }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
@@ -81,7 +81,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 import { fetchNbpTablesBefore } from '@/lib/nbp/client';
 import { costInPln, documentCurrency } from '@/lib/ocr/currency';
 import { extractedInvoiceSchema } from '@/lib/ocr/schema';
-import { runProcessOcr } from '@/lib/inngest/jobs/process-ocr';
+import { runProcessOcr } from '@/lib/jobs/runners/process-ocr';
 
 /**
  * Koszt w walucie obcej (faktura za oprogramowanie w EUR/USD). Do 29.09 OCR

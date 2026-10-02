@@ -62,7 +62,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }));
 
-import { runRetentionDelete } from '@/lib/inngest/jobs/retention-delete';
+import { runRetentionDelete } from '@/lib/jobs/runners/retention-delete';
 
 /**
  * AUD-45: usunięcie faktury po retencji kasowało tylko wiersze. XML, UPO,

@@ -176,7 +176,7 @@ także na lokalnym gnieździe (produkcja nie), a plik ról podmienia hasło
 
 ## 6. Snapshot JSON (warstwa C)
 
-Tworzy go `lib/inngest/jobs/daily-db-snapshot.ts`, a sprawdza
+Tworzy go `lib/jobs/runners/daily-db-snapshot.ts`, a sprawdza
 `verify-backup.ts` (co tydzień: sumy, odczyt, odchylenie liczby wierszy).
 `critical-alerts-monitor.ts` co 5 minut sprawdza świeżość: alarm na Slacku
 i w Telegramie, gdy najnowsza udana kopia ma ponad 26 h. Przypomnienie

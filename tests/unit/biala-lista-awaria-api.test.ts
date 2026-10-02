@@ -73,8 +73,8 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 import { validateNipCached } from '@/lib/validation/cache';
 import { contractorValidationPatch } from '@/lib/validation/contractor-update';
-import { runNightlyValidationRecheck } from '@/lib/inngest/jobs/nightly-validation-recheck';
-import { runBulkValidateContractors } from '@/lib/inngest/jobs/bulk-validate-contractors';
+import { runNightlyValidationRecheck } from '@/lib/jobs/runners/nightly-validation-recheck';
+import { runBulkValidateContractors } from '@/lib/jobs/runners/bulk-validate-contractors';
 
 const NIP = '5260001246';
 const OK = {

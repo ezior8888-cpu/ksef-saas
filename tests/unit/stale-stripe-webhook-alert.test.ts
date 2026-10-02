@@ -8,16 +8,15 @@ const mocks = vi.hoisted(() => ({
   captureException: vi.fn(),
 }));
 
-vi.mock('inngest', () => ({ cron: vi.fn((schedule: string) => schedule) }));
 vi.mock('@sentry/nextjs', () => ({ captureException: mocks.captureException }));
 vi.mock('@/lib/alerts/slack', () => ({ alertCritical: mocks.alertCritical }));
 vi.mock('@/lib/cache', () => ({ cacheGet: mocks.cacheGet, cacheSet: mocks.cacheSet }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({ from: mocks.from }),
 }));
-vi.mock('@/lib/inngest/client', () => ({ inngest: { createFunction: vi.fn() } }));
+vi.mock('@/lib/jobs/events', () => ({ inngest: { createFunction: vi.fn() } }));
 
-import { checkStaleStripeWebhookEvents } from '@/lib/inngest/jobs/critical-alerts-monitor';
+import { checkStaleStripeWebhookEvents } from '@/lib/jobs/runners/critical-alerts-monitor';
 
 function queries(
   processingCount: number | null,

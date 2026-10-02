@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { KsefApiError, ksefFetch, parseRetryAfterMs } from '@/lib/ksef/client';
-import { ksefRetryDelayFor } from '@/lib/inngest/retry-schedule';
+import { ksefRetryDelayFor } from '@/lib/jobs/retry-schedule';
 
 /**
  * AUD-92: przy 429 KSeF mówi w `Retry-After`, ile czekać. Komentarz w jobie

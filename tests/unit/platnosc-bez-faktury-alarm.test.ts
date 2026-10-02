@@ -6,11 +6,10 @@ const mocks = vi.hoisted(() => ({
   filters: [] as string[],
 }));
 
-vi.mock('inngest', () => ({ cron: vi.fn((schedule: string) => schedule) }));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
 vi.mock('@/lib/alerts/slack', () => ({ alertCritical: mocks.alertCritical }));
 vi.mock('@/lib/cache', () => ({ cacheGet: vi.fn(async () => null), cacheSet: vi.fn(async () => true) }));
-vi.mock('@/lib/inngest/client', () => ({ inngest: { createFunction: vi.fn() } }));
+vi.mock('@/lib/jobs/events', () => ({ inngest: { createFunction: vi.fn() } }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
@@ -27,7 +26,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { checkPaidWithoutVatInvoice } from '@/lib/inngest/jobs/critical-alerts-monitor';
+import { checkPaidWithoutVatInvoice } from '@/lib/jobs/runners/critical-alerts-monitor';
 
 /**
  * AUD-40: płatność Stripe opłacona, a faktura VAT nie powstała (np. brak

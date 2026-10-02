@@ -7,8 +7,8 @@ import { redirect } from 'next/navigation';
 import {
   importFileUploaded,
   importKsefHistoryRequested,
-  } from '@/lib/inngest/client';
-import { formatInngestSendError } from '@/lib/inngest/error-message';
+  } from '@/lib/jobs/events';
+import { formatJobSendError } from '@/lib/jobs/error-message';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { uploadImportFile } from '@/lib/import/file-storage';
 import { ActionAuthError, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
@@ -120,7 +120,7 @@ export async function startMagicImportAction(
       }),
     });
   } catch (e) {
-    const friendly = formatInngestSendError(e);
+    const friendly = formatJobSendError(e);
     await supabase
       .from('import_jobs')
       .update({
@@ -290,7 +290,7 @@ export async function startFileImportAction(
       }),
     );
   } catch (e) {
-    const friendly = formatInngestSendError(e);
+    const friendly = formatJobSendError(e);
     await supabase
       .from('import_jobs')
       .update({

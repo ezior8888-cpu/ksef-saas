@@ -4,15 +4,15 @@
  * Parytet z Inngest:
  *   - `retries: N` w Inngest = N ponownych prób po pierwszej (N+1 wykonań).
  *     Tu: `maxRetries: N` + licznik wykonań `attempt` (0-based) w danych joba.
- *   - `RetryAfterJobError` wygrywa z domyślnym schedule (jawne opóźnienie).
- *   - `NonRetriableJobError` → natychmiast 'exhausted' (→ onExhausted,
+ *   - `RetryAfterError` wygrywa z domyślnym schedule (jawne opóźnienie).
+ *   - `NonRetriableError` → natychmiast 'exhausted' (→ onExhausted,
  *     odpowiednik Inngest onFailure).
  *
  * WAŻNE: kolejki pg-boss tworzymy z `retryLimit: 0` — CAŁY retry jest tutaj.
  * Dzięki temu nie ma podwójnego liczenia prób (pg-boss + nasze).
  */
 
-import { NonRetriableJobError, RetryAfterJobError } from './errors';
+import { NonRetriableError, RetryAfterError } from './errors';
 
 export interface RetryPolicy {
   /** Liczba PONOWNYCH prób po pierwszym wykonaniu (jak Inngest `retries`). */
@@ -26,30 +26,21 @@ export type RetryDecision =
   | { action: 'exhausted'; reason: 'non-retriable' | 'attempts-exhausted' };
 
 /**
- * Runnery są WSPÓŁDZIELONE z Inngest, więc rzucają jego klasy błędów
- * (`NonRetriableError`, `RetryAfterError`). Rozpoznajemy je po `name` —
- * dokładnie tak, jak robi to sam Inngest przy serializacji cross-process
- * (patrz komentarz w submit-invoice.ts). Bez tego job z NonRetriableError
- * byłby bezsensownie ponawiany zamiast trafić do `onExhausted`.
+ * `NonRetriableError` z `./errors`. Rozpoznajemy także po `name` — błąd
+ * z innej instancji modułu (np. po `vi.resetModules` w testach) nie przejdzie
+ * `instanceof`, a job nie może być wtedy bezsensownie ponawiany.
  */
 function isNonRetriable(error: unknown): boolean {
-  if (error instanceof NonRetriableJobError) return true;
+  if (error instanceof NonRetriableError) return true;
   return error instanceof Error && error.name === 'NonRetriableError';
 }
 
-/** Jawne opóźnienie z błędu (nasz `RetryAfterJobError` lub Inngest `RetryAfterError`). */
+/** Jawne opóźnienie z `RetryAfterError` (ms). */
 function explicitRetryDelayMs(error: unknown): number | null {
-  if (error instanceof RetryAfterJobError) return error.retryAfterMs;
+  if (error instanceof RetryAfterError) return error.retryAfterMs;
   if (!(error instanceof Error) || error.name !== 'RetryAfterError') return null;
-
-  // Inngest trzyma `retryAfter` jako łańcuch SEKUND ('30') albo Date.
-  const raw = (error as { retryAfter?: unknown }).retryAfter;
-  if (raw instanceof Date) return Math.max(0, raw.getTime() - Date.now());
-  if (typeof raw === 'string' || typeof raw === 'number') {
-    const seconds = Number(raw);
-    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
-  }
-  return null;
+  const ms = (error as { retryAfterMs?: unknown }).retryAfterMs;
+  return typeof ms === 'number' && Number.isFinite(ms) && ms >= 0 ? ms : null;
 }
 
 export function decideRetry(

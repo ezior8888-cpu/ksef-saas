@@ -1,4 +1,4 @@
-import { NonRetriableError, RetryAfterError } from 'inngest';
+import { NonRetriableError, RetryAfterError } from '@/lib/jobs/errors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
@@ -40,7 +40,7 @@ vi.mock('@/lib/ksef/encryption', () => ({
 }));
 
 // ── Część 2: job wysyłki — wszystko poza klasyfikacją błędu wyciszone ──
-vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn() }));
+vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn() }));
 // Krok 5: job czyta wyłącznik wysyłek autorytatywnie — tu zdjęty.
 vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: async () => false }));
 vi.mock('@/lib/ksef/submit-invoice-full', () => ({ submitInvoiceFullFlow: mocks.fullFlow }));
@@ -83,7 +83,7 @@ vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), addBreadcrumb: vi.fn() }));
 
 import { KsefInvoiceRejectedError, submitInvoice } from '@/lib/ksef/submit';
-import { runSubmitInvoice } from '@/lib/inngest/jobs/submit-invoice';
+import { runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
 import type { KsefAuth } from '@/lib/ksef/auth';
 
 /**

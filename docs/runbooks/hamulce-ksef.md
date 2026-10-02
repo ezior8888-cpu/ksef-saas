@@ -13,7 +13,7 @@ konfiguracji, która nie pozwala jobom zniknąć po cichu.
 
 Każdy hamulec sprawdzany jest w trzech miejscach: przy kolejkowaniu
 (`lib/invoices/ksef-submit-enqueue.ts`), na starcie joba przed sondą zdrowia
-i Offline24 oraz tuż przed wysyłką (`lib/inngest/jobs/submit-invoice.ts`).
+i Offline24 oraz tuż przed wysyłką (`lib/jobs/runners/submit-invoice.ts`).
 Zatrzymana faktura dostaje status `failed` z kodem w `last_error_code`
 — to stan „do uzgodnienia”, nie „odrzucona przez KSeF”. Mail o odrzuceniu
 nie wychodzi.
@@ -93,17 +93,13 @@ Nie przełączaj jej flagą.
 
 ## `JOBS_BACKEND`
 
-Produkcja: `JOBS_BACKEND=pgboss` w obu aplikacjach Coolify (id=1 i id=2,
-`is_preview = false`). Brak zmiennej albo literówka:
+Jedyny backend to pg-boss — Inngest odpięty 02.10.2026 (etap 10), **bez
+ścieżki powrotu**. Produkcja ma `JOBS_BACKEND=pgboss` w obu aplikacjach
+Coolify (id=1 i id=2, `is_preview = false`); brak zmiennej też oznacza
+pg-boss. Nieobsługiwana wartość (literówka, dawne `inngest`):
 
-- kolejkowanie rzuca błąd zamiast po cichu wysłać zlecenie do Inngest,
-- `/api/health` zwraca 503 (`checks.env = fail`),
-- worker nie startuje,
-- `/api/inngest` rejestruje pustą listę funkcji.
+- kolejkowanie rzuca błąd — zlecenie nie wychodzi,
+- `/api/health` zwraca 503 (`checks.env = fail`; wymaga też `DATABASE_URL`),
+- worker nie startuje.
 
-Lokalnie (`NODE_ENV=development`/`test`) brak zmiennej oznacza Inngest Dev
-Server, jak wcześniej. Worker lokalny wymaga `JOBS_BACKEND=pgboss`.
-
-**Rollback na Inngest** (`docs/migration/ETAP7-PGBOSS-PLAN.md`, Etap 9):
-`JOBS_BACKEND=inngest` w aplikacji id=1 i **zatrzymanie** workera id=2.
-Worker z `inngest` odmawia startu, bo zdublowałby crony Inngest Cloud.
+Lokalnie: `DATABASE_URL` do bazy z kolejką i `pnpm worker:dev`.

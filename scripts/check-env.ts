@@ -34,7 +34,7 @@ interface VarSpec {
 /**
  * Zmienne czytane przez kod produkcyjny (lib/ app/ components/ proxy.ts
  * instrumentation* sentry* next.config.ts). Dev-only (E2E_MOCK_*, DEBUG_KSEF,
- * LOAD_TEST_MODE, INNGEST_DEV, RESEND_DEV_TO_OVERRIDE, SENTRY_LOG_TEST_SECRET,
+ * LOAD_TEST_MODE, RESEND_DEV_TO_OVERRIDE, SENTRY_LOG_TEST_SECRET,
  * CI) oraz Vercel-only (VERCEL_*) celowo POZA listą. `EDGE_CONFIG` zniknął
  * w Etapie 8 migracji — globalne flagi siedzą teraz w naszym Postgresie.
  */
@@ -57,10 +57,6 @@ const SPECS: VarSpec[] = [
   { name: 'KSEF_TEST_URL', feature: 'KSeF', level: 'required' },
   { name: 'KSEF_DEMO_URL', feature: 'KSeF', level: 'optional' },
   { name: 'KSEF_PROD_URL', feature: 'KSeF', level: 'optional', note: 'wymagany dopiero przy KSEF_ENV=production' },
-
-  // ── Kolejka jobów (Inngest — do Etapu 7 migracji) ──
-  { name: 'INNGEST_EVENT_KEY', feature: 'Joby w tle (Inngest)', level: 'optional', note: 'tylko przy JOBS_BACKEND=inngest (rollback); produkcja chodzi na pg-boss' },
-  { name: 'INNGEST_SIGNING_KEY', feature: 'Joby w tle (Inngest)', level: 'optional', note: 'tylko przy JOBS_BACKEND=inngest (rollback)' },
 
   // ── Pliki (R2 / MinIO po Etapie 5) ──
   { name: 'R2_ACCOUNT_ID', feature: 'Pliki XML/PDF (R2)', level: 'required' },
@@ -117,9 +113,9 @@ const SPECS: VarSpec[] = [
   // ── Panel admina + raporty operatora ──
   { name: 'ADMIN_EMAILS', feature: 'Panel admina', level: 'required', note: 'pusty = /admin zablokowany + brak daily summary (fail-closed)' },
 
-  // ── Joby w tle (pg-boss — Etap 7 migracji) ──
-  { name: 'JOBS_BACKEND', feature: 'Joby w tle (pg-boss)', level: 'required', note: 'pgboss na produkcji (apka i worker); inngest tylko przy rollbacku. Brak = zlecenia odrzucane, worker nie startuje' },
-  { name: 'DATABASE_URL', feature: 'Joby w tle (pg-boss)', level: 'required', note: 'Postgres db-1 przez sieć prywatną (worker + enqueue przy JOBS_BACKEND=pgboss)' },
+  // ── Joby w tle (pg-boss; Inngest odpięty w etapie 10) ──
+  { name: 'JOBS_BACKEND', feature: 'Joby w tle (pg-boss)', level: 'optional', note: 'brak albo pgboss; inna wartość = zlecenia odrzucane, worker nie startuje' },
+  { name: 'DATABASE_URL', feature: 'Joby w tle (pg-boss)', level: 'required', note: 'Postgres db-1 przez sieć prywatną (worker + enqueue z aplikacji)' },
   { name: 'WORKER_HEALTH_PORT', feature: 'Joby w tle (pg-boss)', level: 'optional', note: 'tylko worker; port healthchecku Coolify (domyślnie 8080)' },
   { name: 'WORKER_DISABLE_SCHEDULES', feature: 'Joby w tle (pg-boss)', level: 'optional', note: 'tylko worker; "true" wyłącza crony i czyści zapisany harmonogram' },
   { name: 'APP_ENV', feature: 'Rdzeń aplikacji', level: 'optional', note: 'serwerowy odpowiednik NEXT_PUBLIC_APP_ENV dla bramek bezpieczeństwa (lib/security/environment.ts)' },

@@ -12,7 +12,7 @@ import { validatePassword } from '@/lib/auth/password';
 import { isSignupClosed } from '@/lib/feature-flags/signups';
 import { checkRegisterRateLimit } from '@/lib/rate-limit/auth';
 import { verifyTurnstile } from '@/lib/security/turnstile';
-import { userRegistered } from '@/lib/inngest/client';
+import { userRegistered } from '@/lib/jobs/events';
 import { createClient } from '@/lib/supabase/server';
 
 /**

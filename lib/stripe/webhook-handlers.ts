@@ -23,7 +23,7 @@ import { logAuditSystem } from '@/lib/audit/log-system';
 import {
   billingPaymentFailed,
   billingPaymentSucceeded,
-} from '@/lib/inngest/client';
+} from '@/lib/jobs/events';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import {

@@ -6,17 +6,16 @@ const mocks = vi.hoisted(() => ({
   cacheGet: vi.fn(),
   cacheSet: vi.fn(),
 }));
-vi.mock('inngest', () => ({ cron: vi.fn((schedule: string) => schedule) }));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
 vi.mock('@/lib/alerts/slack', () => ({ alertCritical: mocks.alertCritical }));
 vi.mock('@/lib/cache', () => ({ cacheGet: mocks.cacheGet, cacheSet: mocks.cacheSet }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: mocks.from }) }));
-vi.mock('@/lib/inngest/client', () => ({ inngest: { createFunction: vi.fn() } }));
+vi.mock('@/lib/jobs/events', () => ({ inngest: { createFunction: vi.fn() } }));
 
 import {
   checkBlockedKsefOfflineQueue,
   checkStaleKsefSendingInvoices,
-} from '@/lib/inngest/jobs/critical-alerts-monitor';
+} from '@/lib/jobs/runners/critical-alerts-monitor';
 
 function query(result: { count?: number | null; data?: { deadline: string } | null; error: Error | null }) {
   const builder = {

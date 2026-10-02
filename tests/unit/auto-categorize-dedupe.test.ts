@@ -86,7 +86,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { runAutoCategorizeInbox } from '@/lib/inngest/jobs/auto-categorize-inbox';
+import { runAutoCategorizeInbox } from '@/lib/jobs/runners/auto-categorize-inbox';
 
 /** Odczyt jest optymalizacją; 00121 rozstrzyga równoległe INSERT-y w bazie. */
 

@@ -6,10 +6,10 @@ import type { Invoice } from '@/types/invoice';
 
 /**
  * Zapytania używające service_role - BYPASUJĄ RLS.
- * Używane TYLKO z Inngest jobs (background, zaufany kontekst).
+ * Używane TYLKO z jobów pg-boss (background, zaufany kontekst).
  *
  * UWAGA: NIGDY nie importuj tego pliku w client components / Server Actions
- * związanych z UI użytkownika. Tylko Inngest jobs.
+ * związanych z UI użytkownika. Tylko joby.
  */
 
 /**
@@ -154,7 +154,7 @@ export async function getInvoiceForSubmit(invoiceId: string, tenantId: string): 
 }
 
 /**
- * Pola które można ustawiać w `invoices` z poziomu Inngest joba.
+ * Pola które można ustawiać w `invoices` z poziomu joba.
  * Ograniczamy celowo - żaden job nie powinien ruszać np. `tenant_id`.
  *
  * UWAGA: we wklejce było `ksef_timestamp`, ale takiej kolumny nie ma

@@ -20,8 +20,8 @@ vi.mock('@/lib/stripe/customer', () => ({ ensureStripeCustomer: mocks.stripe }))
 vi.mock('@/lib/stripe/client', () => ({ isStripeConfigured: () => true }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: mocks.enqueue }));
 vi.mock('@/lib/import/file-storage', () => ({ uploadImportFile: mocks.upload }));
-vi.mock('@/lib/inngest/error-message', () => ({ formatInngestSendError: () => 'fixture failure' }));
-vi.mock('@/lib/inngest/client', () => ({
+vi.mock('@/lib/jobs/error-message', () => ({ formatJobSendError: () => 'fixture failure' }));
+vi.mock('@/lib/jobs/events', () => ({
   importKsefHistoryRequested: { create: (data: unknown) => ({ name: 'ksef', data }) },
   importFileUploaded: { create: (data: unknown) => ({ name: 'file', data }) },
 }));

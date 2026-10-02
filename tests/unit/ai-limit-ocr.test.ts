@@ -49,7 +49,7 @@ vi.mock('@/lib/flo/proposals', () => ({ createProposal: state.proposal }));
 vi.mock('@/lib/flo/functions/expense-review', () => ({
   buildExpenseReviewProposal: () => ({}), buildOcrFailedProposal: () => ({}), readSellerHistory: async () => null,
 }));
-vi.mock('@/lib/inngest/jobs/tenant-boundary', () => ({ requireTenantMember: vi.fn(async () => undefined) }));
+vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireTenantMember: vi.fn(async () => undefined) }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
@@ -93,7 +93,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 
 
-import { runProcessOcr } from '@/lib/inngest/jobs/process-ocr';
+import { runProcessOcr } from '@/lib/jobs/runners/process-ocr';
 
 const ctx: JobContext = {
   attempt: 0,

@@ -110,7 +110,7 @@ vi.mock('@/lib/exports/jpk-fa-generator', async (orig) => {
   return { ...real, generateJpkFa: (...a: Parameters<typeof real.generateJpkFa>) => zepsuj(real.generateJpkFa(...a)) };
 });
 
-import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/inngest/jobs/exports-generate';
+import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/jobs/runners/exports-generate';
 
 /**
  * AUD-121: walidatory XSD JPK działały tylko w testach. Generator, który dla

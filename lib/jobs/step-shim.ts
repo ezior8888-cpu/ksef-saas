@@ -34,10 +34,8 @@ export interface JobStep {
    * „Wyślij event ZA X czasu" — jedyny poprawny sposób na odstępy liczone
    * w godzinach/dniach (sekwencja e-maili onboardingowych).
    *
-   * Każdy backend realizuje to swoim durable mechanizmem:
-   *   - pg-boss: job z `startAfter` (czeka w tabeli, przeżywa restart workera),
-   *   - Inngest: `step.sleep` + `step.sendEvent` (durable sleep silnika).
-   * Dzięki temu ta sama linia kodu zachowuje się identycznie na obu.
+   * pg-boss realizuje to jobem z `startAfter` (czeka w tabeli, przeżywa
+   * restart workera).
    */
   scheduleAfter(
     name: string,

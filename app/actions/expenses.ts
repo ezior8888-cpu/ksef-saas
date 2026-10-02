@@ -7,10 +7,10 @@ import { sendJobEvent } from '@/lib/jobs/enqueue';
 import { learnFromCorrection } from '@/lib/categorization';
 import { deductibleAfterVatChange } from '@/lib/categorization/vat-deduction';
 import { hasKsefCurrencyRate } from '@/lib/expenses/ksef-currency-review';
-import { formatInngestSendError } from '@/lib/inngest/error-message';
+import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
   ocrProcessPhotoRequested,
-} from '@/lib/inngest/client';
+} from '@/lib/jobs/events';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
@@ -189,7 +189,7 @@ export async function uploadExpensePhotoAction(formData: FormData) {
     await admin.from('ocr_jobs').delete().eq('id', ocrJob.id);
     return {
       success: false as const,
-      error: formatInngestSendError(e),
+      error: formatJobSendError(e),
     };
   }
 
