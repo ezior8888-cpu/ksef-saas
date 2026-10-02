@@ -24,6 +24,8 @@
 
 import type { TimeStr } from 'inngest';
 
+import { KsefApiError } from '@/lib/ksef/client';
+
 /**
  * Maksymalna liczba retries w `inngest.createFunction({ retries: ... })`.
  * Initial attempt + 5 retries = 6 prób total = 5 delay'ów ze schedulu poniżej.
@@ -55,6 +57,21 @@ export function getKsefRetryDelay(attempt: number): TimeStr {
     return KSEF_BACKOFF_SCHEDULE[KSEF_BACKOFF_SCHEDULE.length - 1]!;
   }
   return KSEF_BACKOFF_SCHEDULE[attempt]!;
+}
+
+/** Górna granica oczekiwania z `Retry-After` — dłużej czeka już Offline24. */
+const MAX_RETRY_AFTER_SECONDS = 3600;
+
+/**
+ * Opóźnienie ponowienia wysyłki: `Retry-After` z KSeF ma pierwszeństwo
+ * przed harmonogramem (AUD-92), ale nie dłużej niż godzinę.
+ */
+export function ksefRetryDelayFor(error: unknown, attempt: number): TimeStr {
+  if (error instanceof KsefApiError && error.retryAfterMs !== null) {
+    const seconds = Math.min(MAX_RETRY_AFTER_SECONDS, Math.max(1, Math.ceil(error.retryAfterMs / 1000)));
+    return `${seconds}s`;
+  }
+  return getKsefRetryDelay(attempt);
 }
 
 /**

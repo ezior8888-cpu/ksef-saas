@@ -44,6 +44,7 @@ import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
 import {
   getKsefRetryDelay,
+  ksefRetryDelayFor,
   KSEF_MAX_RETRIES,
   KSEF_TENANT_CONCURRENCY_LIMIT,
   KSEF_TENANT_THROTTLE_LIMIT,
@@ -874,8 +875,8 @@ export async function runSubmitInvoice(
         // 30s → 2min → 5min → 15min → 1h (Faza 23 sekcja 2).
         //
         // KsefApiError 429 może mieć `Retry-After` header — jeśli MF mówi
-        // nam konkretnie ile czekać, słuchamy. Inaczej trzymamy się schedule'a.
-        const customDelay = getKsefRetryDelay(attempt);
+        // nam konkretnie ile czekać, słuchamy (AUD-92). Inaczej harmonogram.
+        const customDelay = ksefRetryDelayFor(error, attempt);
         const isKsefApi = error instanceof KsefApiError;
         const errorLabel = isKsefApi
           ? `KSeF HTTP ${error.status}: ${error.message}`
@@ -975,6 +976,8 @@ export async function runSubmitInvoice(
 
     await step.sendEvent('trigger-upo-download', {
       name: 'invoice/upo.requested',
+      // Limit „3 naraz per NIP” w pg-boss działa tylko z grupą (AUD-92).
+      groupId: nip,
       data: {
         invoiceId,
         tenantId,

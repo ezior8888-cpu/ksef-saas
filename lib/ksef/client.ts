@@ -30,7 +30,9 @@ export class KsefApiError extends Error {
   constructor(
     public readonly status: number,
     public readonly body: KsefErrorResponse | string,
-    message: string
+    message: string,
+    /** Ile czekać według KSeF (nagłówek `Retry-After`, zwykle przy 429). */
+    public readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = 'KsefApiError';
@@ -61,6 +63,19 @@ export class KsefApiError extends Error {
     if (typeof this.body === 'string') return null;
     return this.body.exceptionDetailList?.[0]?.exceptionCode ?? null;
   }
+}
+
+/**
+ * `Retry-After` w sekundach albo jako data HTTP → milisekundy od `now`.
+ * `null`, gdy nagłówka nie ma albo jest nieczytelny (AUD-92).
+ */
+export function parseRetryAfterMs(header: string | null, now: Date = new Date()): number | null {
+  const value = header?.trim();
+  if (!value) return null;
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  const at = Date.parse(value);
+  if (Number.isNaN(at)) return null;
+  return Math.max(0, at - now.getTime());
 }
 
 /**
@@ -233,6 +248,7 @@ export async function ksefFetch<TResponse = unknown>(
     let responseOk: boolean;
     let text: string;
     let contentType: string | null;
+    let retryAfterMs: number | null = null;
 
     if (mocked) {
       clearTimeout(timeoutHandle);
@@ -254,6 +270,7 @@ export async function ksefFetch<TResponse = unknown>(
       responseOk = response.ok;
       text = await response.text();
       contentType = response.headers.get('content-type');
+      retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
     }
 
     const responseSize = Buffer.byteLength(text, 'utf8');
@@ -283,7 +300,8 @@ export async function ksefFetch<TResponse = unknown>(
       throw new KsefApiError(
         responseStatus,
         parsedBody as KsefErrorResponse | string,
-        `KSeF API ${method} ${path} failed: ${responseStatus}`
+        `KSeF API ${method} ${path} failed: ${responseStatus}`,
+        retryAfterMs,
       );
     }
 
