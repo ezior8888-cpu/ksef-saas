@@ -4,6 +4,7 @@
  */
 
 import { XMLParser } from 'fast-xml-parser';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 // ============================================================================
 // Typy wynikowe
@@ -524,5 +525,5 @@ function optionalNum(raw: unknown): number | undefined {
 }
 
 function roundCents(n: number): number {
-  return Math.round(n * 100) / 100;
+  return roundToCents(n);
 }

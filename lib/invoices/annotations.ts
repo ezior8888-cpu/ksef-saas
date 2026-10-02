@@ -7,8 +7,8 @@
 import type { Invoice, InvoiceLineItem } from '@/types/invoice';
 
 /**
- * Próg MPP: faktura na kwotę brutto co najmniej 15 000 zł (art. 108a ust. 1a
- * ustawy o VAT) z towarem/usługą z zał. 15. Aplikacja nie zna zał. 15 —
+ * Próg MPP: kwota należności ogółem PRZEKRACZA 15 000 zł (art. 108a ust. 1a
+ * ustawy o VAT; tak też XSD FA(3)) przy towarze/usłudze z zał. 15 (AUD-96). Aplikacja nie zna zał. 15 —
  * podpowiada przy fakturze dla firmy powyżej progu, decyduje klient.
  */
 export const SPLIT_PAYMENT_THRESHOLD_PLN = 15_000;
@@ -26,7 +26,7 @@ export const SPLIT_PAYMENT_LABEL = 'mechanizm podzielonej płatności';
 export const REVERSE_CHARGE_LABEL = 'odwrotne obciążenie';
 
 export function suggestsSplitPayment(grossTotal: number, buyerIsConsumer: boolean): boolean {
-  return !buyerIsConsumer && grossTotal >= SPLIT_PAYMENT_THRESHOLD_PLN;
+  return !buyerIsConsumer && grossTotal > SPLIT_PAYMENT_THRESHOLD_PLN;
 }
 
 export function buildInvoiceAnnotations(input: {

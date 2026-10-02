@@ -23,6 +23,7 @@ import type { Invoice, InvoiceLineItem } from '@/types/invoice';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import { getOperatorTenant, type OperatorTenantInfo } from './operator-config';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 export interface BuildSelfInvoiceInput {
   /** Brutto w groszach (PLN). */
@@ -44,7 +45,7 @@ export interface BuildSelfInvoiceOutput {
 const VAT_RATE_PCT = 23;
 
 function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
+  return roundToCents(value);
 }
 
 function centsToPln(cents: number): number {

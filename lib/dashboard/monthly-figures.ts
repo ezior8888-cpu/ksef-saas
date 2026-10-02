@@ -1,3 +1,7 @@
+import {
+  fetchSettledAdvancesTotals,
+  type SettledAdvanceTotals,
+} from '@/lib/invoices/settled-advances';
 import type { PageContext } from '@/lib/supabase/page-context';
 
 /**
@@ -15,6 +19,24 @@ import type { PageContext } from '@/lib/supabase/page-context';
  */
 
 const OUTGOING = 'outgoing' as const;
+
+/** Kolumny, po których `fetchSettledAdvancesTotals` rozpoznaje ROZ i jej zaliczki. */
+const SETTLEMENT_COLUMNS = 'id, invoice_kind, advance_invoice_ids';
+
+/**
+ * Kwota faktury bez zaliczek, które rozlicza. ROZ trzyma w bazie PEŁNE
+ * zamówienie, a VAT i sprzedaż zaliczki pulpit liczy już w jej miesiącu —
+ * z ROZ zostaje więc reszta, jak w KPiR i JPK (AUD-26). Inne faktury
+ * przechodzą bez zmian.
+ */
+function remainder(
+  settled: Map<string, SettledAdvanceTotals>,
+  row: { id: string },
+  amount: number | string | null,
+  part: keyof SettledAdvanceTotals,
+): number {
+  return Number(amount ?? 0) - (settled.get(row.id)?.[part] ?? 0);
+}
 
 export interface MonthlyFigures {
   /** „sierpień 2026" */
@@ -62,45 +84,51 @@ export async function getMonthlyFigures(
     await Promise.all([
       supabase
         .from('invoices')
-        .select('gross_total, net_total, vat_total, ksef_status')
+        .select(`gross_total, net_total, vat_total, ksef_status, ${SETTLEMENT_COLUMNS}`)
         .eq('tenant_id', tenantId)
         .eq('direction', OUTGOING)
         .gte('issue_date', startOfMonthIso),
       supabase
         .from('invoices')
-        .select('gross_total')
+        .select(`gross_total, ${SETTLEMENT_COLUMNS}`)
         .eq('tenant_id', tenantId)
         .eq('direction', OUTGOING)
         .gte('issue_date', prevMonthStartIso)
         .lt('issue_date', startOfMonthIso),
       supabase
         .from('invoices')
-        .select('gross_total, issue_date')
+        .select(`gross_total, issue_date, ${SETTLEMENT_COLUMNS}`)
         .eq('tenant_id', tenantId)
         .eq('direction', OUTGOING)
         .gte('issue_date', yearStartIso),
     ]);
 
+  // Bieżący miesiąc zawiera się w YTD, więc jedno odczytanie obejmuje wszystkie trzy.
+  const settled = await fetchSettledAdvancesTotals(supabase, tenantId, [
+    ...(prevInvoices ?? []),
+    ...(ytdInvoices ?? []),
+  ]);
+
   const issuedCount = monthInvoices?.length ?? 0;
   const acceptedCount =
     monthInvoices?.filter((i) => i.ksef_status === 'accepted').length ?? 0;
   const totalNet =
-    monthInvoices?.reduce((sum, i) => sum + Number(i.net_total ?? 0), 0) ?? 0;
+    monthInvoices?.reduce((sum, i) => sum + remainder(settled, i, i.net_total, 'net'), 0) ?? 0;
   const totalVat =
-    monthInvoices?.reduce((sum, i) => sum + Number(i.vat_total ?? 0), 0) ?? 0;
+    monthInvoices?.reduce((sum, i) => sum + remainder(settled, i, i.vat_total, 'vat'), 0) ?? 0;
   const totalGross =
-    monthInvoices?.reduce((sum, i) => sum + Number(i.gross_total ?? 0), 0) ?? 0;
+    monthInvoices?.reduce((sum, i) => sum + remainder(settled, i, i.gross_total, 'gross'), 0) ?? 0;
 
   const ytdByMonth = new Map<string, number>();
   ytdInvoices?.forEach((inv) => {
     const key = inv.issue_date.slice(0, 7);
-    ytdByMonth.set(key, (ytdByMonth.get(key) ?? 0) + Number(inv.gross_total ?? 0));
+    ytdByMonth.set(key, (ytdByMonth.get(key) ?? 0) + remainder(settled, inv, inv.gross_total, 'gross'));
   });
   const maxYtdMonthGross = Math.max(0, ...Array.from(ytdByMonth.values()));
 
   const prevIssuedCount = prevInvoices?.length ?? 0;
   const prevGross =
-    prevInvoices?.reduce((sum, i) => sum + Number(i.gross_total ?? 0), 0) ?? 0;
+    prevInvoices?.reduce((sum, i) => sum + remainder(settled, i, i.gross_total, 'gross'), 0) ?? 0;
 
   /**
    * Zmiana procentowa liczona osobno dla liczby faktur i dla kwoty — te dwie
@@ -192,26 +220,31 @@ export async function getSalesSeries(
   const [{ data: current }, { data: previous }] = await Promise.all([
     supabase
       .from('invoices')
-      .select('gross_total, issue_date')
+      .select(`gross_total, issue_date, ${SETTLEMENT_COLUMNS}`)
       .eq('tenant_id', tenantId)
       .eq('direction', OUTGOING)
       .gte('issue_date', windowStartIso),
     supabase
       .from('invoices')
-      .select('gross_total, issue_date')
+      .select(`gross_total, issue_date, ${SETTLEMENT_COLUMNS}`)
       .eq('tenant_id', tenantId)
       .eq('direction', OUTGOING)
       .gte('issue_date', prevYearStartIso)
       .lt('issue_date', windowStartIso),
   ]);
 
+  const settled = await fetchSettledAdvancesTotals(supabase, tenantId, [
+    ...(current ?? []),
+    ...(previous ?? []),
+  ]);
+
   const sumByMonth = (
-    rows: { gross_total: number | string | null; issue_date: string }[] | null,
+    rows: { id: string; gross_total: number | string | null; issue_date: string }[] | null,
   ) => {
     const map = new Map<string, number>();
     rows?.forEach((inv) => {
       const key = inv.issue_date.slice(0, 7);
-      map.set(key, (map.get(key) ?? 0) + Number(inv.gross_total ?? 0));
+      map.set(key, (map.get(key) ?? 0) + remainder(settled, inv, inv.gross_total, 'gross'));
     });
     return map;
   };
