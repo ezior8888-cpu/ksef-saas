@@ -52,12 +52,18 @@ function centsToPln(cents: number): number {
   return roundMoney(cents / 100);
 }
 
-function buildInternalNumber(stripeInvoiceId: string, paidAt: Date): string {
-  const yyyy = paidAt.getUTCFullYear();
-  const mm = String(paidAt.getUTCMonth() + 1).padStart(2, '0');
-  // Strip `in_` prefix i bierzemy końcówkę dla krótkiego, deterministic ID.
-  const seq = stripeInvoiceId.replace(/^in_/, '').slice(-8).toUpperCase();
-  return `FF/${yyyy}/${mm}/${seq}`;
+/**
+ * Dzień płatności według czasu polskiego (`YYYY-MM-DD`) — ten sam, który
+ * liczy baza (`paid_at AT TIME ZONE 'Europe/Warsaw'`, 00110). Do 02.10
+ * brany z UTC: płatność 00:00–02:00 lądowała w poprzednim dniu (AUD-69).
+ */
+export function paidDateInPoland(paidAt: string): string {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Warsaw',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(paidAt));
 }
 
 function planLineName(plan: 'monthly' | 'annual', issueDate: string): string {
@@ -105,11 +111,10 @@ export async function buildSelfInvoiceDraft(
   const net = roundMoney(gross / (1 + VAT_RATE_PCT / 100));
   const vat = roundMoney(gross - net);
 
-  const issueDate = input.paidAt.slice(0, 10); // YYYY-MM-DD
-  const internalNumber = buildInternalNumber(
-    input.stripeInvoiceId,
-    new Date(input.paidAt),
-  );
+  const issueDate = paidDateInPoland(input.paidAt);
+  // Numer nadaje baza (kolejny w miesiącu, 00110) i zwraca z
+  // `create_billing_vat_invoice` — draft go nie zna (AUD-69).
+  const internalNumber = '';
 
   const line: InvoiceLineItem = {
     ordinal: 1,

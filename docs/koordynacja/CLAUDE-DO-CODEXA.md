@@ -49,7 +49,9 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00106 | Claude | `org_rpc_public_revoke` (dopełnienie 00103: EXECUTE bez PUBLIC) | PR `claude/naprawy-flo-budzet`; zgodna wstecz |
 | 00107 | Claude | `invoice_xml_generated_at` (AUD-46: stała DataWytworzeniaFa) | PR `claude/naprawy-ksef-5`; tylko nowa kolumna — przed wdrożeniem |
 | 00108 | Claude | `flag_require_mfa_sensitive` (AUD-65: wiersz flagi, wyłączony) | PR `claude/naprawy-ksef-5`; tylko INSERT — przed wdrożeniem |
-| **00109** | — | następny wolny | — |
+| 00109 | Claude | `stripe_webhook_retention` (AUD-79: porównanie `data`; AUD-81: retencja payloadów 90 dni) | PR `claude/naprawy-billing`; CREATE OR REPLACE — przed wdrożeniem |
+| 00110 | Claude | `billing_invoice_numbering` (AUD-69: kolejny numer, data PL, status paid) | PR `claude/naprawy-billing`; nowa tabela + funkcja — przed wdrożeniem |
+| **00111** | — | następny wolny | — |
 
 ---
 

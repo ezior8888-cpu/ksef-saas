@@ -214,7 +214,8 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
         internalNumber: inserted.internalNumber,
         operatorTenantId: draft.operator.tenantId,
         operatorNip: draft.operator.nip,
-        invoice: draft.invoice,
+        // Numer nadała baza (kolejny w miesiącu, AUD-69) — XML musi mieć ten sam.
+        invoice: { ...draft.invoice, internalNumber: inserted.internalNumber },
       };
     });
 
