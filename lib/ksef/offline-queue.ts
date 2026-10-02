@@ -77,7 +77,11 @@ export async function addToOfflineQueue(
     params.invoiceId,
     idempotencySource,
   );
-  const deadline = calculateOfflineDeadline(now, params.isMfOutage);
+  // Termin od daty wystawienia, dni robocze w Polsce (AUD-15, decyzja P1).
+  const deadline = calculateOfflineDeadline(
+    String(invoiceRow.issue_date ?? now.toISOString().slice(0, 10)),
+    params.isMfOutage,
+  );
 
   const tenants = invoiceRow.tenants as
     | { nip: string; ksef_verified_at: string | null; ksef_verified_environment: string | null }

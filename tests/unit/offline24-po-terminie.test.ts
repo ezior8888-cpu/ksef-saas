@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobContext } from '@/lib/jobs/registry';
 
 /**
- * AUD-15 (decyzja P1): po terminie Offline24 wpis przechodził w `expired`,
- * a faktura w `failed` — bez dalszej wysyłki, a operator dowiadywał się
- * dopiero przy ≥ 50 wpisach. Faktury nadal trzeba dosłać do KSeF, więc
- * kolejka próbuje dalej, a przy pierwszym przekroczeniu terminu alarmuje
- * operatora i klienta — raz (znacznik `user_notified`).
+ * AUD-15 (decyzja P1) zakładał, że kolejka po terminie dalej wysyła. Od
+ * 02.10.2026 (decyzja Bartosza przy przeniesieniu #71) automatyczny Offline24
+ * jest wstrzymany: kolejka niczego nie wysyła, wpisy po terminie wygasają,
+ * a pozostałe idą do ręcznego uzgodnienia. Alarm o zaległych wpisach daje
+ * monitor krytyczny, nie ten job.
  */
 
 type Row = Record<string, unknown>;
@@ -81,24 +81,21 @@ beforeEach(() => {
   mocks.push.mockResolvedValue({ sent: 1, failed: 0 });
 });
 
-describe('Offline24 po terminie', () => {
-  it('nie wygasza wpisu i nie oznacza faktury jako failed — wysyła dalej', async () => {
+describe('Offline24 po terminie — kolejka wstrzymana (decyzja 02.10.2026)', () => {
+  it('wpis po terminie wygasa, a kolejka niczego nie wysyła', async () => {
     await runProcessOfflineQueue(ctx);
-    expect(db.updates.some((u) => u.patch.status === 'expired')).toBe(false);
-    expect(db.updates.some((u) => u.table === 'invoices' && u.patch.ksef_status === 'failed')).toBe(false);
-    expect(mocks.sendEvent).toHaveBeenCalledWith(expect.stringContaining('submit-from-offline'), expect.anything());
+    expect(db.updates.some((u) => u.table === 'ksef_offline_queue' && u.patch.status === 'expired')).toBe(true);
+    expect(mocks.sendEvent).not.toHaveBeenCalled();
   });
 
-  it('pierwsze przekroczenie: alarm dla operatora i powiadomienie klienta, znacznik user_notified', async () => {
+  it('wpis przed terminem idzie do ręcznego uzgodnienia, bez wysyłki', async () => {
+    db.item = { ...db.item, deadline: '2099-01-01T21:59:59.999Z' };
     await runProcessOfflineQueue(ctx);
-    expect(mocks.alert).toHaveBeenCalledOnce();
-    expect(JSON.stringify(mocks.alert.mock.calls)).not.toContain('1234567890');
-    expect(mocks.push).toHaveBeenCalledWith(db.item.tenant_id, 'invoice_rejected', expect.objectContaining({ title: expect.any(String) }));
-    expect(db.updates).toContainEqual({ table: 'ksef_offline_queue', patch: { user_notified: true } });
+    expect(db.updates.some((u) => u.table === 'ksef_offline_queue' && u.patch.status === 'failed')).toBe(true);
+    expect(mocks.sendEvent).not.toHaveBeenCalled();
   });
 
-  it('kolejne przebiegi po terminie nie powtarzają alarmu', async () => {
-    db.item = { ...db.item, user_notified: true };
+  it('job kolejki nie wysyła alarmu ani powiadomienia sam (robi to monitor)', async () => {
     await runProcessOfflineQueue(ctx);
     expect(mocks.alert).not.toHaveBeenCalled();
     expect(mocks.push).not.toHaveBeenCalled();

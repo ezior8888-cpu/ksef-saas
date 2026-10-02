@@ -21,6 +21,14 @@ vi.mock('@/lib/audit/log', () => ({ logAudit: vi.fn() }));
 vi.mock('@/lib/invoices/ksef-submit-enqueue', () => ({ enqueueKsefSubmitAfterDraft: vi.fn() }));
 vi.mock('@/lib/inngest/error-message', () => ({ formatInngestSendError: () => 'x' }));
 vi.mock('@/lib/supabase/active-org', () => ({ getActiveOrgIdFromCookies: async () => '11111111-1111-4111-8111-111111111111' }));
+// Akcje dokumentów specjalnych idą przez sesję po MFA i członkostwo (#71).
+vi.mock('@/lib/supabase/auth-context', () => ({
+  requireUserAndActiveOrg: async () => {
+    const { createClient } = await import('@/lib/supabase/server');
+    return { supabase: await createClient(), user: { id: 'fixture-user' }, tenantId: '11111111-1111-4111-8111-111111111111' };
+  },
+  ActionAuthError: class ActionAuthError extends Error {},
+}));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: 'fixture-user' } } }) },

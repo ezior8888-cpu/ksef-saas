@@ -365,7 +365,8 @@ async function resolveLinesForInvoices(
         supabase
           .from('invoice_line_items')
           .select(
-            'id, invoice_id, ordinal, name, unit, quantity, unit_price_net, net_amount, vat_rate',
+            // vat_amount: VAT pozycji z tabeli, nie przeliczany (main).
+            'id, invoice_id, ordinal, name, unit, quantity, unit_price_net, net_amount, vat_rate, vat_amount',
             { count: 'exact' },
           )
           .in('invoice_id', batch)

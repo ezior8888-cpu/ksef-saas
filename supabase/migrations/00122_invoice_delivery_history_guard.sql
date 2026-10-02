@@ -1,8 +1,9 @@
+-- Przeniesione 02.10.2026 ze szkicu Codexa #71 (tam 00093) jako 00122 — C-20.
 -- Close the authenticated write gap left by 00088 for historical failed and
 -- rejected invoices with a NULL submitted_to_ksef_at. This migration is for
 -- operator review and copy-DB testing; Codex does not execute it.
 -- Files 00091/00092 are already in main; their presence does not prove they
--- ran on db-1. Verify the actual migration sequence before applying 00093.
+-- ran on db-1. Verify the actual migration sequence before applying 00122 (dawniej 00093).
 BEGIN;
 
 CREATE OR REPLACE FUNCTION public.guard_invoice_delivery_history()

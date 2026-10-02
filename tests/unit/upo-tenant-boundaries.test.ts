@@ -254,7 +254,7 @@ describe('UPO retry cron boundaries', () => {
     tables.invoices = [oldInvoice()];
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });
     expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
-      { name: 'invoice/upo.requested', data: event },
+      { name: 'invoice/upo.requested', groupId: '1234567890', data: event },
     ]);
     expect(writes()).toEqual([]);
   });
@@ -291,7 +291,7 @@ describe('UPO retry cron boundaries', () => {
     tables.invoices = [oldInvoice({ ksef_accepted_at: null, updated_at: new Date().toISOString() })];
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });
     expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
-      { name: 'invoice/upo.requested', data: event },
+      { name: 'invoice/upo.requested', groupId: '1234567890', data: event },
     ]);
   });
   it('filters freshly updated legacy rows before the page limit so they cannot starve an older missing UPO', async () => {
@@ -302,7 +302,7 @@ describe('UPO retry cron boundaries', () => {
     tables.invoices.push(oldInvoice({ id: OTHER, ksef_accepted_at: null }));
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });
     expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
-      { name: 'invoice/upo.requested', data: { ...event, invoiceId: OTHER } },
+      { name: 'invoice/upo.requested', groupId: '1234567890', data: { ...event, invoiceId: OTHER } },
     ]);
   });
   it('filters a recent historical submit before the page limit even with old created and updated times', async () => {
@@ -313,7 +313,7 @@ describe('UPO retry cron boundaries', () => {
     tables.invoices.push(oldInvoice({ id: OTHER, ksef_accepted_at: null }));
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });
     expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
-      { name: 'invoice/upo.requested', data: { ...event, invoiceId: OTHER } },
+      { name: 'invoice/upo.requested', groupId: '1234567890', data: { ...event, invoiceId: OTHER } },
     ]);
   });
   it('anti-joins receipts before limiting the batch so old completed UPOs do not starve a missing one', async () => {
@@ -327,7 +327,7 @@ describe('UPO retry cron boundaries', () => {
     tables.invoices.push(oldInvoice({ id: OTHER }));
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });
     expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
-      { name: 'invoice/upo.requested', data: { ...event, invoiceId: OTHER } },
+      { name: 'invoice/upo.requested', groupId: '1234567890', data: { ...event, invoiceId: OTHER } },
     ]);
   });
   it('reserves dispatch capacity for a missing UPO even when stale receipts fill their page', async () => {
@@ -362,7 +362,7 @@ describe('UPO retry cron boundaries', () => {
     tables.invoices.push(oldInvoice({ id: lateId, ksef_accepted_at: legacy ? null : '2000-01-01' }));
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 81, dispatched: 1, scanTruncated: false });
     expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [
-      { name: 'invoice/upo.requested', data: { ...event, invoiceId: lateId } },
+      { name: 'invoice/upo.requested', groupId: '1234567890', data: { ...event, invoiceId: lateId } },
     ]);
     expect(mocks.sentry).toHaveBeenCalledTimes(1);
     expect(mocks.sentry).toHaveBeenCalledWith(expect.stringContaining('NIP requires reconciliation'),

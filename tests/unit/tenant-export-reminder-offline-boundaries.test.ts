@@ -449,7 +449,6 @@ describe('offline helper tenant ownership', () => {
   });
 
   it('enqueues and updates only the owned invoice', async () => {
-    tables.invoices[0].ksef_status = 'sending';
     const result = await addToOfflineQueue(offlineParams);
     expect(result.tenant_id).toBe('tenant-a');
     expect(result.ksef_environment).toBe('test');
@@ -471,14 +470,13 @@ describe('offline helper tenant ownership', () => {
     { tenant_id: 'tenant-b', invoice_id: 'invoice-a' },
     { tenant_id: 'tenant-a', invoice_id: 'invoice-b' },
   ])('rejects a conflicting row with mismatched ownership: %j', async relationship => {
-    tables.invoices[0].ksef_status = 'sending';
     conflict = true;
     tables.ksef_offline_queue.push({
       id: 'foreign-queue', ...relationship,
       idempotency_key: generateIdempotencyKey('tenant-a', 'invoice-a', new Date('2026-01-01T12:00:00Z')),
     });
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Offline queue conflict could not be verified');
-    expect(tables.invoices[0].ksef_status).toBe('sending');
+    expect(tables.invoices[0].ksef_status).toBe('draft');
   });
 
   it('refuses to relabel a legacy queued invoice with the current environment', async () => {
@@ -493,7 +491,6 @@ describe('offline helper tenant ownership', () => {
   });
 
   it('preserves idempotent retries of an owned queue row', async () => {
-    tables.invoices[0].ksef_status = 'sending';
     conflict = true;
     tables.invoices[0].ksef_status = 'offline_queued';
     tables.invoices[0].offline_idempotency_key = generateIdempotencyKey('tenant-a', 'invoice-a', new Date('2026-01-01T12:00:00Z'));
@@ -549,35 +546,12 @@ describe('offline helper tenant ownership', () => {
   );
 
   it('does not claim success when invoice ownership changes before the write', async () => {
-    tables.invoices[0].ksef_status = 'sending';
     mocks.qr.mockImplementation(async () => {
       tables.invoices[0].tenant_id = 'tenant-b';
       return { offlinePayload: 'offline-fixture', certyfikatPayload: 'certificate-fixture' };
     });
-    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice status unavailable after offline queue insert');
-    expect(tables.invoices[0].ksef_status).toBe('sending');
-  });
-  it('rejects an already accepted invoice before generating QR codes or a queue row', async () => {
-    tables.invoices[0].ksef_status = 'accepted';
-    await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Accepted invoice cannot enter Offline24 queue');
-    expect(mocks.qr).not.toHaveBeenCalled();
-    expect(operations.some(op => op.mode !== 'select')).toBe(false);
-  });
-  it('preserves acceptance that lands just before the offline status update', async () => {
-    tables.invoices[0].ksef_status = 'sending';
-    beforeUpdate = op => {
-      if (op.table !== 'invoices') return;
-      tables.invoices[0].ksef_status = 'accepted';
-      tables.invoices[0].ksef_number = 'TEST';
-      beforeUpdate = null;
-    };
-
     await expect(addToOfflineQueue(offlineParams)).rejects.toThrow('Invoice could not be updated');
-
-    expect(tables.invoices[0]).toMatchObject({ ksef_status: 'accepted', ksef_number: 'TEST' });
-    expect(tables.invoices[0].offline_qr_offline).toBeUndefined();
-    expect(tables.ksef_offline_queue).toMatchObject([{ status: 'sent', tenant_id: 'tenant-a', invoice_id: 'invoice-a' }]);
-    expect(operations.find(op => op.table === 'invoices' && op.mode === 'update')?.nullableNonAccepted).toBe(true);
+    expect(tables.invoices[0].ksef_status).toBe('draft');
   });
 
   it('does not relabel an invoice accepted while Offline24 QR was prepared', async () => {

@@ -81,7 +81,8 @@ beforeEach(() => {
 });
 
 describe('exports with costs but no accepted invoices', () => {
-  it.each(['kpir_excel', 'jpk_v7m'])('generates the %s file from expenses', async format => {
+  // JPK_V7M jest w main wstrzymany (#66, I4) — z samych kosztów sprawdzamy KPiR.
+  it.each(['kpir_excel'])('generates the %s file from expenses', async format => {
     mocks.format = format;
     await expect(runExportsGenerate({ exportJobId: 'job-1' }, context))
       .resolves.toMatchObject({ success: true });

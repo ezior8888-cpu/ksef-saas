@@ -17,7 +17,9 @@ const state = vi.hoisted(() => ({
 
 // These generators deliberately return different bytes on every call, as the
 // real JPK timestamps and XLSX metadata can do between the two old steps.
-vi.mock('@/lib/exports/jpk-fa-generator', () => ({
+vi.mock('@/lib/exports/jpk-fa-generator', async (original) => ({
+  // Klasy błędów (np. JpkFaCorrectionNotSupportedError z main) zostają prawdziwe.
+  ...(await original<typeof import('@/lib/exports/jpk-fa-generator')>()),
   generateJpkFa: () => {
     state.generationCount++;
     return `<JPK_FA generated="${++state.generation}"/>`;
@@ -50,6 +52,16 @@ vi.mock('@/lib/exports/data-fetcher', () => ({
     receivedInvoices: [],
     expenses: [],
   }),
+}));
+// Ten test sprawdza tylko hash zapisanego pliku: bramki main (JPK_V7M
+// wstrzymany #66, kontrola XSD AUD-121) wyłączone atrapą.
+vi.mock('@/lib/exports/suspended-formats', async (orig) => ({
+  ...(await orig<typeof import('@/lib/exports/suspended-formats')>()),
+  isExportFormatSuspended: () => false,
+}));
+vi.mock('@/lib/exports/jpk-schema-check', async (orig) => ({
+  ...(await orig<typeof import('@/lib/exports/jpk-schema-check')>()),
+  assertJpkMatchesSchema: async () => undefined,
 }));
 vi.mock('@/lib/storage/r2', () => ({
   uploadToR2IfAbsent: async (path: string, body: Buffer) => {

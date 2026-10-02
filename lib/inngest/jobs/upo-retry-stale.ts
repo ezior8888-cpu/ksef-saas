@@ -241,7 +241,8 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
         missingNipRejected++;
         continue;
       }
-      events.push({ name: 'invoice/upo.requested', data: { ...identity, nip, environment } });
+      // groupId = NIP: limit „3 naraz per NIP” w pg-boss działa tylko z grupą (AUD-92).
+      events.push({ name: 'invoice/upo.requested', groupId: nip, data: { ...identity, nip, environment } });
     }
   }
   async function scanMissing(legacy: boolean, maxEvents: number): Promise<{ scanned: number; truncated: boolean }> {

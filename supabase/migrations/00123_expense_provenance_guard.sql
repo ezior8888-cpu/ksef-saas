@@ -1,3 +1,4 @@
+-- Przeniesione 02.10.2026 ze szkicu Codexa #71 (tam 00095) jako 00123 — C-20.
 -- The 00034 tenant RLS policy still lets an authenticated caller UPDATE every
 -- expense column. A client could relabel a KSeF expense as manual or remove its
 -- invoice link, making it escape environment-specific KSeF expense filters.
