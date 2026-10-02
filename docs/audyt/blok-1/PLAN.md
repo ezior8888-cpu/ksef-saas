@@ -108,7 +108,7 @@ Commit: `07d7686`
 Sprawdzenie: `pnpm exec vitest run tests/unit/szkic-wysylka-usuwanie.test.ts tests/unit/szkic-walidacja-serwerowa.test.ts`; w aplikacji: Nowa faktura → „Zapisz szkic” → w szczególe „Wyślij do KSeF” (status zmienia się na W kolejce) albo „Usuń szkic” (numer wolny do ponownego użycia). Szkic z datą inną niż dziś trzeba wystawić od nowa.
 
 ### P-22 — „Wystaw i wyślij” tylko z dzisiejszą datą wystawienia
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-092 (znalezione w trakcie P-08)
 Zmiana:
@@ -116,9 +116,11 @@ Zmiana:
 - formularz pokazuje ten sam komunikat.
 - Korekty, zaliczki i ROZ pomijam: ich akcje zmieniają PR #63, #71, #85.
 Kryterium: test akcji — data jutrzejsza i wczorajsza odrzucone bez zapisu i bez kolejki, dzisiejsza przechodzi; `saveDraftAction` z inną datą nadal zapisuje.
+Commit: `e94c10e`
+Sprawdzenie: `pnpm exec vitest run tests/unit/wystaw-data-dzis.test.ts`; w aplikacji: Nowa faktura z datą wystawienia jutro → „Wystaw i wyślij” pokazuje komunikat o dzisiejszej dacie, „Zapisz szkic” działa.
 
 ### P-09 — Lista faktur: wyszukiwanie, filtr statusu i okresu, stronicowanie
-Status: TODO
+Status: W TOKU
 Typ: DOKOŃCZENIE
 Znaleziska: F-086, F-091 (podtytuł listy)
 Zmiana:
