@@ -12,6 +12,12 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
+// Stan kolejek pg-boss (AUD-34) ma osobne testy w straznik-kolejek.test.ts.
+vi.mock('@/lib/jobs/jobs-health', async (orig) => ({
+  ...(await orig<typeof import('@/lib/jobs/jobs-health')>()),
+  readQueueHealth: async () => [],
+}));
+
 import { runOpsHeartbeat } from '@/lib/jobs/heartbeat';
 import { getRegisteredJobs } from '@/lib/jobs/registry';
 import { CRON_JOBS } from '@/lib/jobs/queues';
