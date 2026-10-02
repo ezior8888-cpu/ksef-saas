@@ -236,7 +236,7 @@ Commit: `67796fa`
 Sprawdzenie: `pnpm exec vitest run tests/unit/wydatki-miesiac.test.ts`; w aplikacji: /expenses → strzałka „← sierpień 2026” pokazuje wydatki z sierpnia.
 
 ### P-20 — Podpowiedź kolejnego numeru faktury
-Status: W TOKU
+Status: ZROBIONE
 Typ: NOWA
 Znaleziska: F-015
 Uzasadnienie (kryterium c): numeracja z seriami jest w podstawowym obiegu u wszystkich czterech konkurentów (Fakturownia, inFakt, wFirma, iFirma — źródła w `RAPORT.md`). Ręczne wpisywanie numeru przy każdej fakturze prowadzi do dziur i duplikatów w serii, czyli wprost do problemu z art. 106e ust. 1 pkt 2.
@@ -244,9 +244,11 @@ Zmiana:
 - nowy `lib/invoices/next-number.ts`: zwiększa ostatni człon liczbowy z zachowaniem zer wiodących; podmienia rok i miesiąc w numerze, gdy zmienił się okres, i wtedy zeruje licznik;
 - strona `app/(dashboard)/invoices/new/regular` przekazuje podpowiedź do formularza (pole pozostaje edytowalne).
 Kryterium: testy funkcji — FV/2026/10/007 → FV/2026/10/008; przełom miesiąca → FV/2026/11/001; przełom roku; numer bez cyfr → brak podpowiedzi.
+Commit: `2017b80`
+Sprawdzenie: `pnpm exec vitest run tests/unit/numeracja-podpowiedz.test.ts` (17 testów); w aplikacji: Nowa faktura → pole numeru wypełnione kolejnym numerem po ostatniej fakturze.
 
 ### P-21 — PDF: pełna precyzja ilości i ceny; „VAT UE” zamiast „NIP”
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-069
 Zmiana: `lib/pdf/invoice-renderer.ts` — ilość i cena jednostkowa z dokładnością do 4 miejsc (bez zbędnych zer); identyfikator nabywcy z właściwą etykietą.
