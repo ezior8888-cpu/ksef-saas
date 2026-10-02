@@ -26,7 +26,7 @@ Commit: `9ff3f20`
 Sprawdzenie: `pnpm exec vitest run tests/unit/korekta-nr-ksef-xsd.test.ts` — korekta z numerem KSeF rodzica przechodzi oficjalny XSD (przed poprawką: „Element NumerKSeFFaKorygowanej is not expected”).
 
 ### P-02 — PDF: tabela pozycji z równym nagłówkiem, zawijaniem nazw i łamaniem stron
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-054
 Zmiana: `lib/pdf/invoice-renderer.ts` (tylko rysowanie tabeli):
@@ -37,9 +37,11 @@ Zmiana: `lib/pdf/invoice-renderer.ts` (tylko rysowanie tabeli):
 Kryterium: test renderuje fakturę z 1, 40 i 60 pozycjami (także z długimi nazwami). Sprawdza:
 - liczbę stron (1 pozycja → 1 strona, 40 → co najwyżej 3);
 - że wszystkie etykiety nagłówka mają tę samą współrzędną Y.
+Commit: `f2faffc`
+Sprawdzenie: `pnpm exec vitest run tests/unit/pdf-tabela-pozycji.test.ts` (przed poprawką: 8 różnych Y nagłówka, 40 pozycji = 149 stron); w aplikacji: PDF faktury z 30+ pozycjami ma 2–3 strony z nagłówkiem tabeli na każdej. Wersji cache PDF nie podbijałem (zmienia ją PR #122) — bez #122 stary PDF z cache może się pokazać do zmiany faktury.
 
 ### P-03 — Import FA(3): pola liczbopodobne zachowane jako tekst
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-079
 Zmiana: `lib/import/fa3-parser.ts` (i ten sam wzorzec w `lib/import/jpk-fa-parser.ts`, jeśli dotyczy): parser bez automatycznej konwersji wartości; liczby parsowane jawnie tam, gdzie są kwotami.
