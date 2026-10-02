@@ -101,6 +101,18 @@ function money(n: number): string {
   });
 }
 
+/**
+ * Ilość i cena jednostkowa: do 4 miejsc, jak w bazie (NUMERIC(14,4)) i w XML
+ * (P_8B, P_9A) — inaczej cena 100,1234 drukowała się jako 100,12 obok
+ * wartości 150,19 (F-069). Co najmniej 2 miejsca, jak przy kwotach.
+ */
+function decimal4(n: number): string {
+  return n.toLocaleString('pl-PL', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+}
+
 function fmtDate(iso: string): string {
   return iso; // już ISO YYYY-MM-DD — czytelne i jednoznaczne
 }
@@ -268,9 +280,10 @@ function drawParties(
     x: number,
     heading: string,
     name: string,
-    nip: string | null,
+    taxId: string | null,
     addr1: string,
     addr2: string,
+    taxIdLabel = 'NIP',
   ) => {
     doc.font('bold').fontSize(8).fillColor('#888888');
     doc.text(heading.toUpperCase(), x, top, { width: colWidth });
@@ -278,8 +291,8 @@ function drawParties(
     doc.text(name, x, top + 12, { width: colWidth });
     doc.font('body').fontSize(9).fillColor('#444444');
     let y = doc.y + 1;
-    if (nip) {
-      doc.text(`NIP: ${nip}`, x, y, { width: colWidth });
+    if (taxId) {
+      doc.text(`${taxIdLabel}: ${taxId}`, x, y, { width: colWidth });
       y = doc.y;
     }
     doc.text(addr1, x, y, { width: colWidth });
@@ -296,13 +309,16 @@ function drawParties(
   );
   const sellerBottom = doc.y;
 
+  // Nabywca z UE ma numer VAT UE, nie NIP (F-069).
+  const buyerVatUe = !invoice.buyer.nip && invoice.buyer.vatUeNumber ? invoice.buyer.vatUeNumber : null;
   block(
     left + colWidth + 20,
     'Nabywca',
     invoice.buyer.name,
-    invoice.buyer.nip ?? invoice.buyer.vatUeNumber ?? null,
+    invoice.buyer.nip ?? buyerVatUe,
     invoice.buyer.address.addressLine1,
     invoice.buyer.address.addressLine2,
+    buyerVatUe ? 'VAT UE' : 'NIP',
   );
 
   doc.y = Math.max(sellerBottom, doc.y) + 18;
@@ -377,9 +393,9 @@ function drawLineItems(
     const values: Record<string, string> = {
       lp: String(line.ordinal),
       name: line.name,
-      qty: money(line.quantity),
+      qty: decimal4(line.quantity),
       unit: line.unit,
-      price: money(line.unitPriceNet),
+      price: decimal4(line.unitPriceNet),
       net: money(line.netAmount),
       vat: vatRateLabel(line.vatRate),
       gross: money(line.grossAmount),
