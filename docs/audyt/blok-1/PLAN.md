@@ -186,14 +186,16 @@ Commit: `b1c420a`
 Sprawdzenie: `pnpm exec vitest run tests/unit/pdf-stawka-z-importu.test.ts`; w aplikacji: PDF faktury zaimportowanej z KSeF ze stawką 0 KR pokazuje „0 KR” w tabeli i podsumowaniu.
 
 ### P-15 — Kategorie kosztów: reguły „nazwa sprzedawcy” są stosowane
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-084
 Zmiana: `lib/categorization/rule-engine.ts` — dopasowanie reguł `name_exact` po znormalizowanej nazwie sprzedawcy, gdy brak reguły po NIP; włączenie w kolejność klasyfikacji (`lib/categorization/index.ts`).
 Kryterium: test na mocku bazy — wydatek bez NIP od sprzedawcy z regułą `name_exact` dostaje kategorię z reguły.
+Commit: `89d757d`
+Sprawdzenie: `pnpm exec vitest run tests/unit/kategorie-regula-nazwy.test.ts`; w aplikacji: popraw kategorię paragonu bez NIP, a następny paragon od tego sprzedawcy dostaje ją automatycznie (metoda „learned”).
 
 ### P-16 — KSeF: kod 21184 „Sesja tymczasowo niedostępna” → nowa sesja
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-050
 Zmiana: `lib/ksef/submit.ts` — przy 21184 unieważnienie sesji z pamięci podręcznej i błąd ponawialny. Bez zmian w jobach (te są w PR).
