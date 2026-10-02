@@ -131,7 +131,7 @@ Commit: `f6784ce`
 Sprawdzenie: `pnpm exec vitest run tests/unit/lista-faktur-filtry.test.ts`; w aplikacji: /invoices?q=FV&status=przyjete&od=2026-09-01 — lista zawężona, pod nią „Strona 1 z N”.
 
 ### P-10 — Portal księgowej: dokumenty księgowe zamiast surowej listy
-Status: W TOKU
+Status: ZROBIONE
 Typ: DOKOŃCZENIE
 Znaleziska: F-063
 Zmiana: `lib/accountant/load-accountant-portal.ts` oraz `components/accountant/invoice-list.tsx`:
@@ -139,9 +139,11 @@ Zmiana: `lib/accountant/load-accountant-portal.ts` oraz `components/accountant/i
 - kolumna kierunku (sprzedaż / koszt) i polskie nazwy statusów;
 - „Pobierz XML” tylko tam, gdzie XML istnieje.
 Kryterium: test loadera (filtr statusów w zapytaniu, mapowanie kierunku) i test listy (brak przycisku XML bez pliku, polskie etykiety).
+Commit: `da57935`
+Sprawdzenie: `pnpm exec vitest run tests/unit/portal-ksiegowej-lista.test.tsx`; w aplikacji: link portalu księgowej (/accountant/<token>) — tabela z kolumną Rodzaj, bez szkiców, „Pobierz XML” tylko przy fakturach z plikiem. Brak filtra okresu i PDF zostaje na później.
 
 ### P-11 — Data sprzedaży do 60 dni po dacie wystawienia
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-014
 Zmiana: `lib/schemas/invoice-form.ts` (reguła daty sprzedaży) oraz `lib/xml/invoice-calculator.ts` (`validateInvoice`). Dozwolone `saleDate <= issueDate + 60 dni` (art. 106i ust. 7); później — błąd z wyjaśnieniem.
