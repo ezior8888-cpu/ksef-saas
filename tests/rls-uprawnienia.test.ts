@@ -127,6 +127,16 @@ describe.skipIf(!hasDatabase)('uprawnienia funkcji i ról (00103, 00104)', () =>
     expect(asMember.error).toBeNull();
   });
 
+  it('członek firmy nie czyta zaszyfrowanych danych KSeF, flagę obecności — tak (00111/00112, AUD-103)', async () => {
+    const c = await signedIn(ADMIN_EMAIL);
+    const blob = await c.from('tenants').select('ksef_credentials_encrypted').eq('id', ORG);
+    expect(blob.error?.code).toBe('42501');
+
+    const flag = await c.from('tenants').select('name, has_ksef_credentials').eq('id', ORG).single();
+    expect(flag.error).toBeNull();
+    expect(flag.data).toMatchObject({ name: 'Firma Uprawnienia RLS', has_ksef_credentials: false });
+  });
+
   it('admin nie usunie właściciela', async () => {
     const c = await signedIn(ADMIN_EMAIL);
     const { error } = await c.rpc('revoke_membership', { p_membership_id: ownerMembershipId });

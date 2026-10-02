@@ -16,6 +16,7 @@ import {
   requireKsefVerification,
 } from '@/lib/auth/ksef-verification-guard';
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSensitiveMfa, SensitiveMfaRequiredError } from '@/lib/auth/sensitive-mfa';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { isOffline24Enabled } from '@/lib/ksef/offline24-policy';
@@ -151,7 +152,9 @@ export async function enqueueKsefSubmitAfterDraft(
     throw e;
   }
 
-  const { data: tenantKsef, error: tenantErr } = await supabase
+  // Blob czytamy kluczem serwisowym — rola kliencka nie ma do niego SELECT
+  // (00112, AUD-103). Firma jest już zweryfikowana przez akcję wołającą.
+  const { data: tenantKsef, error: tenantErr } = await createAdminClient()
     .from('tenants')
     .select('ksef_credentials_encrypted')
     .eq('id', tenantId)

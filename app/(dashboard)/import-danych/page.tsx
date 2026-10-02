@@ -29,11 +29,11 @@ export default async function ImportDanychPage() {
 
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('name, nip, ksef_credentials_encrypted')
+    .select('name, nip, has_ksef_credentials')
     .eq('id', tenantId)
     .single();
 
-  const hasCredentials = !!tenant?.ksef_credentials_encrypted;
+  const hasCredentials = !!tenant?.has_ksef_credentials;
 
   return (
     <div className="space-y-8 pb-6 text-[var(--ff-on-surface)]">
