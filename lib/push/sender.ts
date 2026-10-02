@@ -4,6 +4,8 @@ import webPush from 'web-push';
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
+import { isAllowedPushEndpoint } from './endpoint';
+
 /** RFC 8292: subject musi być URI typu mailto: lub https: */
 function normalizeVapidSubject(raw: string): string {
   const t = raw.trim();
@@ -92,8 +94,12 @@ export async function sendPushToUser(
     return { sent: 0, failed: 0 };
   }
 
+  // AUD-61: wiersze sprzed walidacji w akcji — adres spoza usług push
+  // przeglądarek nie dostaje żądania z serwera.
+  const deliverable = subscriptions.filter((sub) => isAllowedPushEndpoint(sub.endpoint));
+
   const outcomes = await Promise.all(
-    subscriptions.map(async (sub) => {
+    deliverable.map(async (sub) => {
       try {
         await webPush.sendNotification(
           {

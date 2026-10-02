@@ -38,10 +38,12 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00095 | Codex (#71) | `expense_provenance_guard` | PR otwarty |
 | 00096 | Codex (#83) → Claude przeniósł 1:1 na `main` (01.10) | `incoming_invoice_number_boundary` (C-08) | w `main` (#117), **wgrana na db-1 01.10** |
 | 00097 | Codex (#86) | `invoices_overdue_reconciliation_guard` | PR otwarty |
-| 00098 | Bartosz (#90) | `backup_read_stripe_service_tables` | wgrana na db-1 (28.09), w `main` jeszcze nie |
+| 00098 | Bartosz (#90) | `backup_read_stripe_service_tables` | wgrana na db-1 (28.09), w `main` jeszcze nie; ten sam plik w szkicu #115 — wchodzi przez #90 |
 | 00099 | Claude | `ksef_submission_references` (C-18) | PR `claude/ksef-niepewny-wynik`; wgranie PRZED wdrożeniem kodu |
 | 00100 | Claude | `ops_gate` (bramka Telegram: rola `ops_actor`, schemat `ops`) | PR `claude/bramka-telegram`; wgranie PRZED uruchomieniem bramki |
-| **00101** | — | następny wolny | — |
+| 00100–00101 | Codex (#128, szkic) | `ksef_expense_provenance_guard`, `ksef_expense_full_update_guard` | PR otwarty — **00100 koliduje z `00100_ops_gate` na `main`**, do przenumerowania (od 00103) |
+| 00102 | Claude | `signup_gate_hook` (AUD-63) | PR `claude/naprawy-wylaczniki-2`; wgranie PRZED zmiennymi `GOTRUE_HOOK_BEFORE_USER_CREATED_*` |
+| **00103** | — | następny wolny | — |
 
 ---
 

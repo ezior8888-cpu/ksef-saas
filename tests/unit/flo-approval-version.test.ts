@@ -6,7 +6,7 @@ import { createFakeDb, type FakeDb } from './flo-fake-db';
 
 const mock = vi.hoisted(() => ({ client: null as unknown, audit: vi.fn(), revalidate: vi.fn() }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => mock.client }));
-vi.mock('@/lib/supabase/auth-context', () => ({ requireUserAndActiveOrg: async () => ({ tenantId: 'tenant-a', user: { id: 'user-a' } }) }));
+vi.mock('@/lib/supabase/auth-context', () => ({ requireUserAndActiveOrg: async () => ({ tenantId: 'tenant-a', user: { id: 'user-a' }, role: 'owner' }) }));
 vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: async () => false, getGlobalFlag: async () => false }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mock.audit }));
 vi.mock('@/lib/flo/functions', () => ({}));

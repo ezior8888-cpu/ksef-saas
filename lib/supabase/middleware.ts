@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
+import { isMaintenanceMode, MAINTENANCE_PATH } from '@/lib/feature-flags/maintenance';
 
 import { isMobilePanelAllowed, mobilePanelMode } from '@/lib/mobile-access';
 import { isLocalDevEnv } from '@/lib/security/environment';
@@ -60,6 +61,7 @@ const STATIC_PUBLIC_EXACT = [
   '/robots.txt',
   '/sitemap.xml',
   '/opengraph-image',
+  MAINTENANCE_PATH, // tu kieruje bramka przerwy technicznej — musi być osiągalna
 ] as const;
 
 export function isMarketingPath(pathname: string): boolean {
@@ -239,6 +241,19 @@ export async function updateSession(request: NextRequest) {
     const res = NextResponse.redirect(url);
     for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
     return res;
+  }
+
+  // AUD-63: przerwa techniczna (`maintenanceMode`) blokuje panel zalogowanego,
+  // także onboarding (zapisy w bazie). Poza bramką: strony publiczne, /admin
+  // (operator) i logowanie. Przed MFA i danymi firmy — w przerwie nie
+  // dotykamy bazy bardziej, niż trzeba.
+  const isOnboarding = path === '/onboarding' || path.startsWith('/onboarding/');
+  if (userId && !isAdmin && (!isPublicPath(path) || isOnboarding) && await isMaintenanceMode()) {
+    if (isApi) return denyApi('maintenance', 503);
+    const url = request.nextUrl.clone();
+    url.pathname = MAINTENANCE_PATH;
+    url.search = '';
+    return withSessionCookies(NextResponse.redirect(url));
   }
 
   // Recheck authoritative factors and the claims of the exact session token.

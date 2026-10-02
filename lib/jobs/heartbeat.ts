@@ -15,11 +15,15 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
+import { evaluateJobsHealth, readQueueHealth, type QueueHealthRow } from './jobs-health';
+import { CRON_JOBS } from './queues';
+
 const TIMEOUT_MS = 5000;
 
 export type HeartbeatResult =
   | { sent: true }
-  | { sent: false; reason: 'not-configured' | 'invalid-url' | 'db-unavailable' | 'ping-failed' };
+  | { sent: false; reason: 'not-configured' | 'invalid-url' | 'db-unavailable' | 'ping-failed' }
+  | { sent: false; reason: 'jobs-unhealthy'; problems: string[] };
 
 function getHeartbeatUrl(): string | null | 'invalid' {
   const raw = process.env.OPS_HEARTBEAT_URL?.trim();
@@ -33,7 +37,9 @@ function getHeartbeatUrl(): string | null | 'invalid' {
   }
 }
 
-export async function runOpsHeartbeat(): Promise<HeartbeatResult> {
+export async function runOpsHeartbeat(
+  readHealth: () => Promise<QueueHealthRow[]> = readQueueHealth,
+): Promise<HeartbeatResult> {
   const url = getHeartbeatUrl();
   if (url === null) return { sent: false, reason: 'not-configured' };
   if (url === 'invalid') return { sent: false, reason: 'invalid-url' };
@@ -45,6 +51,21 @@ export async function runOpsHeartbeat(): Promise<HeartbeatResult> {
     .select('id', { head: true, count: 'exact' })
     .limit(1);
   if (error) return { sent: false, reason: 'db-unavailable' };
+
+  // AUD-34: zaległe zadania, porzucone przez pg-boss i crony, które stoją,
+  // też uciszają ping. Powód idzie do logu workera — strażnik zna tylko ciszę.
+  let problems: string[];
+  try {
+    problems = evaluateJobsHealth(await readHealth(), CRON_JOBS, Date.now(), {
+      schedulesDisabled: process.env.WORKER_DISABLE_SCHEDULES === 'true',
+    });
+  } catch {
+    return { sent: false, reason: 'db-unavailable' };
+  }
+  if (problems.length > 0) {
+    console.error(`[heartbeat] ping wstrzymany — ${problems.join('; ')}`);
+    return { sent: false, reason: 'jobs-unhealthy', problems };
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
