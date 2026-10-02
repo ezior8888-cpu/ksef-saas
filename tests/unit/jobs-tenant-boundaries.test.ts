@@ -18,7 +18,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/supabase/server', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/import/file-storage', () => ({ downloadImportFile: mocks.download }));
-vi.mock('@/lib/ksef/history-fetcher', () => ({ fetchInvoicesMetadata: mocks.metadata, fetchInvoiceXml: mocks.xml }));
+vi.mock('@/lib/ksef/history-fetcher', () => ({ fetchInvoicesMetadata: mocks.metadata, fetchInvoiceXmlBytes: mocks.xml }));
+vi.mock('@/lib/import/ksef-xml-archive', () => ({
+  archiveImportedKsefXml: async (tenantId: string, ksefNumber: string, bytes: Buffer) => ({
+    storagePath: `${tenantId}/ksef-import/${ksefNumber}.xml`, sha256Hash: 'a'.repeat(64), sizeBytes: bytes.length,
+  }),
+  decodeKsefXml: (bytes: Buffer) => bytes.toString('utf8'),
+}));
 vi.mock('@/lib/import/fa3-parser', () => ({ parseFa3Xml: mocks.parseFa3Xml }));
 vi.mock('@/lib/import/import-engine', () => ({ processImportedInvoices: mocks.process }));
 vi.mock('@/lib/storage/expenses', () => ({ downloadExpensePhoto: mocks.photo }));
@@ -150,7 +156,7 @@ beforeEach(() => {
   mocks.admin.mockImplementation(client);
   mocks.health.mockResolvedValue({ available: true });
   mocks.metadata.mockResolvedValue({ totalCount: 0, invoices: [] });
-  mocks.xml.mockResolvedValue('<Faktura/>');
+  mocks.xml.mockResolvedValue(Buffer.from('<Faktura/>'));
   mocks.parseFa3Xml.mockReturnValue({ invoiceNumber: 'TEST/1/2026' });
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -253,6 +259,10 @@ describe('service-role job boundaries', () => {
     });
     await expect(runMagicImportKsef(magicEvent, ctx)).resolves.toMatchObject({ success: true, imported: 0 });
     expect(tables.import_jobs[0].status).toBe('completed');
+    // #122 część B: do silnika trafia faktura z oryginałem XML w folderze firmy.
+    expect(mocks.process.mock.calls.at(-1)?.[0].invoices[0]).toMatchObject({
+      xmlArchive: { storagePath: `${A}/ksef-import/KSEF-TEST-1.xml`, sha256Hash: 'a'.repeat(64) },
+    });
   });
   it.each(['success', 'failure'] as const)('rejects a mismatched %s notification before cards, mail or push', async (kind) => {
     tables.invoices = [{ id: ID, tenant_id: B }];

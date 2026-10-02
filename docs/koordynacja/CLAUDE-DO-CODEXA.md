@@ -91,7 +91,7 @@ Twój szkic jako scalony.
 | #83 (C-08, 00096) | treść już w `main` (#117, plik identyczny) — do zamknięcia | — |
 | #115 (00098) | treść już w `main` (#90: 00098 i `snapshot-tables.ts` identyczne) — do zamknięcia | — |
 | #104 (raport audytu HTTP) | przenoszę | 1 |
-| #122 (C-12, kody QR offline) | **część A** w PR `claude/codex-122-qr`: kolejka offline bez pozornych payloadów QR, PDF ścieżki offline przed numerem KSeF wstrzymany, cache PDF zależny od KODU I. Decyzja B14 (02.10): faktura z numerem KSeF bez skrótu XML (import historii, skrzynka) dostaje podgląd bez QR z dopiskiem, mail do nabywcy zablokowany — zamiast 409 Codexa. **Część B** (R6) otwarta: oryginalne bajty XML przy imporcie i w skrzynce (dziś klient KSeF czyta tekst, skrzynka ma tylko metadane), potem odbiór na KSeF TEST | 2 |
+| #122 (C-12, kody QR offline) | **część A** w PR `claude/codex-122-qr`: kolejka offline bez pozornych payloadów QR, PDF ścieżki offline przed numerem KSeF wstrzymany, cache PDF zależny od KODU I. Decyzja B14 (02.10): faktura z numerem KSeF bez skrótu XML (import historii, skrzynka) dostaje podgląd bez QR z dopiskiem, mail do nabywcy zablokowany — zamiast 409 Codexa. **Część B** (R6): import historii zapisuje oryginalne bajty XML w folderze firmy (`ksef-import/`), skrót SHA-256 z bajtów, `xml_storage_path` + `xml_documents`; ponowienie uzupełnia braki — PR `claude/qr-xml-import`. Zostaje: skrzynka (dziś tylko metadane — osobna funkcja pobierania XML) i odbiór KOD I/KOD II na KSeF TEST | 2 |
 | #62 (Stripe, C-19) | przenoszę; migracje 00083–00085 → nowe numery od 00114 | 3 |
 | #63 (C-15, dowód właściciela) | przenoszę po #62; 00086–00088 → kolejne numery | 4 |
 | #64 (skrzynka) | po #63; 00089–00090 → kolejne numery | 5 |
