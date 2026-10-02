@@ -185,28 +185,12 @@ export async function getWeeklyMetrics(): Promise<WeeklyMetrics> {
 
   const supabase = createAdminClient();
 
-  // Active + trialing subscriptions snapshot.
-  const result = (await (supabase as unknown as {
-    from: (n: string) => {
-      select: (c: string) => {
-        in: (k: string, v: string[]) => Promise<{
-          data: Array<{ plan: 'monthly' | 'annual'; status: string }> | null;
-        }>;
-      };
-    };
-  })
-    .from('subscriptions')
-    .select('plan, status')
-    .in('status', ['active', 'trialing']));
-
-  const subs = result.data ?? [];
-  const active = subs.filter((s) => s.status === 'active').length;
-  const trialing = subs.filter((s) => s.status === 'trialing').length;
+  // Liczby subskrypcji liczy baza (AUD-106) — wcześniej wszystkie wiersze
+  // active/trialing trafiały do pamięci, bez limitu.
+  const { active, trialing, monthlyCount, annualCount } = await readSubscriptionCounts(supabase);
 
   // MRR netto z jednej ceny (lib/billing/pricing.ts). Plan roczny wycofany —
   // ewentualne starsze subskrypcje roczne liczymy po tej samej stawce.
-  const monthlyCount = subs.filter((s) => s.status === 'active' && s.plan === 'monthly').length;
-  const annualCount = subs.filter((s) => s.status === 'active' && s.plan === 'annual').length;
   const mrrPln = roundToCents((monthlyCount + annualCount) * MONTHLY_NET_PLN);
 
   // Churn — canceled w ostatnich 7 dniach.
@@ -237,4 +221,32 @@ export async function getWeeklyMetrics(): Promise<WeeklyMetrics> {
     churnedSubscriptions,
     arpu,
   };
+}
+
+type CountQuery = {
+  eq(column: string, value: string): CountQuery;
+} & PromiseLike<{ count: number | null; error: { message: string } | null }>;
+
+/** Liczby subskrypcji zapytaniami `count` — bez pobierania wierszy (AUD-106). */
+export async function readSubscriptionCounts(
+  supabase: ReturnType<typeof createAdminClient>,
+): Promise<{ active: number; trialing: number; monthlyCount: number; annualCount: number }> {
+  const count = async (status: string, plan?: string): Promise<number> => {
+    let query = (supabase as unknown as {
+      from(table: string): { select(columns: string, options: { count: 'exact'; head: true }): CountQuery };
+    })
+      .from('subscriptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', status);
+    if (plan) query = query.eq('plan', plan);
+    const { count: n, error } = await query;
+    if (error || n === null) throw new Error(`Liczba subskrypcji niedostępna: ${error?.message ?? 'brak'}`);
+    return n;
+  };
+  const [monthlyCount, annualCount, trialing] = await Promise.all([
+    count('active', 'monthly'),
+    count('active', 'annual'),
+    count('trialing'),
+  ]);
+  return { active: monthlyCount + annualCount, trialing, monthlyCount, annualCount };
 }
