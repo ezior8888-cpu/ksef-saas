@@ -50,14 +50,16 @@ Commit: `a1e6d87`
 Sprawdzenie: `pnpm exec vitest run tests/unit/import-pola-tekstowe.test.ts` — NrRB, numery „000123”/„1e3” wracają bez zmian, kwoty dalej liczbowe; dotyczy nowych importów (już zaimportowane faktury z popsutym rachunkiem zostają — import ponowny po scaleniu).
 
 ### P-04 — Skrzynka KSeF: kolejne okno od końca poprzedniego, nie od globalnego HWM
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-039
 Zmiana: `lib/inngest/jobs/inbox-polling.ts` — następny punkt startu = `min(HWM, window.to)` (dokumentacja MF: „moment zakończenia = `dateRange.to`, gdy została podana”). Wyliczenie wydzielone do czystej funkcji z testem.
 Kryterium: test — okno 2026-01-01..04-01 z HWM 2026-10-02 zapisuje 2026-04-01; okno bieżące z HWM wcześniejszym niż `to` zapisuje HWM.
+Commit: `f4a5298`
+Sprawdzenie: `pnpm exec vitest run tests/unit/skrzynka-hwm-koniec-okna.test.ts` — przy zaległości okno 01.01–01.04 zapisuje 01.04 zamiast HWM 02.10 (na starej logice test pada); bieżące okno dalej idzie do HWM z KSeF.
 
 ### P-05 — Formularze faktur: daty liczone w czasie polskim
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-013
 Zmiana:
