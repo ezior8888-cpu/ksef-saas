@@ -1,3 +1,7 @@
+// NIEAKTYWNE (AUD-115): moduł agenta FLO bez importera w kodzie produkcyjnym —
+// na produkcji nie działa. Podpięcie = przegląd i zdjęcie znacznika
+// (pilnuje tests/unit/flo-nieaktywne.test.ts).
+
 /**
  * Warstwa modelu językowego (krok 15 planu, własność W2 i mechanizm M4).
  *
@@ -253,7 +257,8 @@ export async function generateCopy(
   }
 
   if (verdict.alert) {
-    logger.info('[flo/llm] konto powyżej dwukrotności celu kosztowego', {
+    // AUD-116: ostrzeżenie, nie `info` — `info` na produkcji nic nie wypisuje.
+    logger.warn('[flo/llm] konto powyżej dwukrotności celu kosztowego', {
       tenantId: input.tenantId,
       spentPln: verdict.spentPln.toFixed(2),
     });

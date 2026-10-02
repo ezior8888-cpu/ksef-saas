@@ -105,6 +105,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# AUD-127: proces bez roota. Obraz `node` ma użytkownika `node`; pliki aplikacji
+# zostają tylko do odczytu, a zapisy (tsx, eksporty) idą do /tmp.
+USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.WORKER_HEALTH_PORT||8080)+'/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]

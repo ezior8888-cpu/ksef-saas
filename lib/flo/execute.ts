@@ -228,48 +228,15 @@ export async function executeProposal(
     };
   }
 
+  let result: Awaited<ReturnType<typeof handler>>;
   try {
-    const result = await handler({
+    result = await handler({
       proposal: claimedRow,
       userId,
       approvalId,
       snapshot,
       input,
     });
-
-    // Zapis cofnięcia ląduje w ładunku razem z zamknięciem karty — w jednym
-    // zapisie, żeby nie było chwili, w której czynność jest zrobiona, a nie
-    // da się jej cofnąć.
-    await db
-      .from('flo_proposals')
-      .update({
-        status: 'done',
-        executed_at: now.toISOString(),
-        ...(result.undo
-          ? {
-              payload: {
-                ...(claimedRow.payload ?? {}),
-                undo: result.undo,
-                undoableUntil: undoableUntil(result.undo),
-              },
-            }
-          : {}),
-      })
-      .eq('id', proposalId)
-      .eq('tenant_id', tenantId);
-
-    await audit(claimedRow, userId, approvalId, 'flo.proposal.executed', {
-      summary: result.summary,
-      ...result.details,
-    });
-
-    await recordDecision(proposal.tenant_id, proposal.kind, 'accepted', now, db);
-    // Także na poziomie sprawy: przyjęcie zeruje serię odrzuceń i zdejmuje
-    // ciszę, więc sprawa, na którą człowiek się w końcu zgodził, przestaje
-    // się liczyć do reguły tłumu.
-    await recordDecision(proposal.tenant_id, proposal.topic_key, 'accepted', now, db);
-
-    return { ok: true };
   } catch (e) {
     // Wykonanie padło PO zużyciu żetonu. Świadomie nie odtwarzamy żetonu:
     // jeśli funkcja wychodząca zdążyła zadziałać, drugie podejście wysłałoby
@@ -288,6 +255,56 @@ export async function executeProposal(
       message: 'Nie udało mi się tego dokończyć. Zajmujemy się tym.',
     };
   }
+
+  // AUD-111: od tej chwili działanie JUŻ się odbyło. Błąd zapisu nie może
+  // cofnąć karty do „zatwierdzona” (drugie zatwierdzenie = drugie ponaglenie)
+  // ani przejść bez śladu — karta zostaje w „wykonuję”, dziennik ma wpis
+  // o wykonaniu, a wołający dostaje błąd.
+  //
+  // Zapis cofnięcia ląduje w ładunku razem z zamknięciem karty — w jednym
+  // zapisie, żeby nie było chwili, w której czynność jest zrobiona, a nie
+  // da się jej cofnąć.
+  const { error: doneError } = await db
+    .from('flo_proposals')
+    .update({
+      status: 'done',
+      executed_at: now.toISOString(),
+      ...(result.undo
+        ? {
+            payload: {
+              ...(claimedRow.payload ?? {}),
+              undo: result.undo,
+              undoableUntil: undoableUntil(result.undo),
+            },
+          }
+        : {}),
+    })
+    .eq('id', proposalId)
+    .eq('tenant_id', tenantId)
+    .eq('status', 'executing');
+
+  await audit(claimedRow, userId, approvalId, 'flo.proposal.executed', {
+    summary: result.summary,
+    ...result.details,
+    ...(doneError ? { stateWriteFailed: true } : {}),
+  });
+
+  if (doneError) {
+    throw new Error(`FLO: działanie wykonane, ale stan propozycji nie zapisany (${doneError.message})`);
+  }
+
+  try {
+    await recordDecision(proposal.tenant_id, proposal.kind, 'accepted', now, db);
+    // Także na poziomie sprawy: przyjęcie zeruje serię odrzuceń i zdejmuje
+    // ciszę, więc sprawa, na którą człowiek się w końcu zgodził, przestaje
+    // się liczyć do reguły tłumu.
+    await recordDecision(proposal.tenant_id, proposal.topic_key, 'accepted', now, db);
+  } catch (e) {
+    // Statystyka decyzji nie może zmienić wyniku wykonanego działania.
+    console.error('[flo/execute] nie zapisano decyzji:', e instanceof Error ? e.message : e);
+  }
+
+  return { ok: true };
 }
 
 // ═══════════════════════════════════════════════════════════════

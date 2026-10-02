@@ -167,3 +167,35 @@ describe('FLO consent version', () => {
     expect(query.get('consumed_at')).toBe('is.null');
   });
 });
+
+// AUD-111: po wykonaniu działania zapis „done” nie był sprawdzany, a błąd po
+// drodze cofał kartę do „zatwierdzona” — drugie zatwierdzenie wysłałoby
+// ponaglenie drugi raz. Strażnik zawieszonych kart przestawiał je bez warunku
+// na „wykonuję”.
+describe('FLO — stan po wykonaniu (AUD-111)', () => {
+  it('nieudany zapis „done” po wykonaniu: błąd, karta NIE wraca do zatwierdzenia', async () => {
+    const failing = {
+      ...db.client,
+      from: (table: string) => {
+        const q = db.client.from(table as never) as unknown as Record<string, unknown>;
+        if (table !== 'flo_proposals') return q;
+        return {
+          ...q,
+          update: (patch: Record<string, unknown>) => {
+            if (patch.status !== 'done') return (q.update as (p: unknown) => unknown)(patch);
+            const chain: Record<string, unknown> = {
+              eq: () => chain,
+              then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'fixture write failed' } }).then(ok),
+            };
+            return chain;
+          },
+        };
+      },
+    } as unknown as typeof db.client;
+    const token = await createApproval(consent(), db.client);
+    await expect(executeProposal(args(token), NOW, failing)).rejects.toThrow(/nie zapisano|nie zapisany/);
+    expect(handler).toHaveBeenCalledOnce();
+    expect(db.tables.flo_proposals[0]!.status).toBe('executing');
+    expect(mock.audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'flo.proposal.executed' }));
+  });
+});
