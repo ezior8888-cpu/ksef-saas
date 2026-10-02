@@ -38,3 +38,19 @@ export function resolveAmountChangeVatRate(change: AmountChange): Rate {
   }
   return matches[0]![0];
 }
+
+/**
+ * Stawka bez VAT dla korekty kwotowej z pozycji faktury pierwotnej: gdy WSZYSTKIE
+ * pozycje mają tę samą stawkę `np` / `np_ii` / `oo`, korekta ją przejmuje
+ * (z kwot — VAT 0 — nie da się jej odróżnić od „0 KR”). Inaczej `undefined`
+ * i stawkę wyznaczają kwoty (`resolveAmountChangeVatRate`). Wspólne dla
+ * serwera (akcja korekty) i formularza.
+ */
+export function zeroVatRateFromParentLines(
+  lines: ReadonlyArray<{ vatRate: string }>,
+): ZeroVatAmountChangeRate | undefined {
+  const rates = new Set(lines.map((l) => l.vatRate));
+  if (rates.size !== 1) return undefined;
+  const [rate] = [...rates];
+  return rate === 'np' || rate === 'np_ii' || rate === 'oo' ? rate : undefined;
+}
