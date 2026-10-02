@@ -15,6 +15,7 @@ const db = vi.hoisted(() => ({
 }));
 
 // AUD-107: budżet AI firmy — tu zawsze w limicie (osobne testy: ai-limit-*).
+vi.mock('@/lib/ksef/inbox-xml', () => ({ archiveInboxInvoiceXml: async () => ({ archived: false, reason: 'not-applicable' }) }));
 vi.mock('@/lib/ai/tenant-ai-budget', () => ({
   checkTenantAiBudget: async () => ({ allowed: true }),
   recordTenantAiUsage: async () => undefined,

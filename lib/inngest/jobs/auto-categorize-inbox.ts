@@ -15,6 +15,7 @@ import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices
 import { nbpRateForCost } from '@/lib/nbp/client';
 import { costInPln, documentCurrency, HOME_CURRENCY } from '@/lib/ocr/currency';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { archiveInboxInvoiceXml } from '@/lib/ksef/inbox-xml';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { Database, Json } from '@/types/database';
 
@@ -212,6 +213,12 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
       throw new NonRetriableError('KSeF expense event environment requires reconciliation');
     }
     const supabase = createAdminClient();
+
+    // #122 część B: oryginał XML faktury otrzymanej (KOD I, „Pobierz XML”).
+    // Przed kategoryzacją, więc działa także, gdy koszt zostanie pominięty;
+    // błąd nie przerywa joba — PDF zostaje podglądem (B14).
+    await step.run('archive-ksef-xml', () =>
+      archiveInboxInvoiceXml({ tenantId, invoiceId, environment }));
 
     // Nowa nazwa kroku wymusza ponowny odczyt waluty także przy wznowieniu
     // starszego przebiegu Inngest z zapamiętanym wynikiem `fetch-invoice`.

@@ -11,6 +11,7 @@ const db = vi.hoisted(() => ({
   nbp: vi.fn(),
 }));
 
+vi.mock('@/lib/ksef/inbox-xml', () => ({ archiveInboxInvoiceXml: async () => ({ archived: false, reason: 'not-applicable' }) }));
 vi.mock('@/lib/categorization', () => ({
   categorizeExpense: async (_tenantId: string, extracted: Row) => {
     db.categorized.push(extracted);
