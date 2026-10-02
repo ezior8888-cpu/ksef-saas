@@ -77,7 +77,7 @@ właśnie ten błąd.
 | `pnpm lint` | **exit 0** | 0 błędów, 33 ostrzeżenia (nieużywane zmienne itp.) |
 | `pnpm test` | **exit 0** | 66 testów / 11 suite, 0 fail (tsx --test: kalkulator, generator FA(3), walidator) |
 | `pnpm test:vitest` | **exit 0** | 296 plików, 4170 testów, 0 fail (ok. 2 min) |
-| `pnpm build` | (w toku) | |
+| `pnpm build` | **exit 0** | `next build --webpack`, ok. 4 min, bez `.env.local` |
 
 ## Środowisko
 
