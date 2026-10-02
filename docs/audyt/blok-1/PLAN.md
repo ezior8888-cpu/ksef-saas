@@ -152,7 +152,7 @@ Commit: `328d486`
 Sprawdzenie: `pnpm exec vitest run tests/unit/data-sprzedazy-60-dni.test.ts` i `pnpm test` (kalkulator: 61 dni odrzucone, 12 dni przyjęte); w aplikacji: faktura z datą sprzedaży za tydzień zapisuje się i wysyła.
 
 ### P-12 — Formularz faktury odrzuca dane, których nie przyjmie XSD ani baza
-Status: W TOKU
+Status: ZROBIONE
 Typ: NAPRAWA
 Znaleziska: F-041
 Zmiana: `lib/schemas/invoice-form.ts` (schemat pozycji i nabywcy):
@@ -161,9 +161,11 @@ Zmiana: `lib/schemas/invoice-form.ts` (schemat pozycji i nabywcy):
 - nazwa nabywcy ≤ 512, jednostka ≤ 50;
 - ilość i cena w zakresie `NUMERIC(12,2)` wartości pozycji.
 Kryterium: test schematu dla każdego przypadku z F-041; dotychczasowe testy formularza przechodzą.
+Commit: `577dc91`
+Sprawdzenie: `pnpm exec vitest run tests/unit/formularz-dane-xsd-baza.test.ts`; w aplikacji: wklejenie nazwy z niewidocznym znakiem sterującym albo jednostki dłuższej niż 50 znaków pokazuje błąd przy polu zamiast odrzucenia po wysyłce.
 
 ### P-13 — Korekta przed/po: pary pozycji według treści, nie kolejności
-Status: TODO
+Status: W TOKU
 Typ: NAPRAWA
 Znaleziska: F-019
 Zmiana: `lib/ksef/fa3-correction-generator.ts` (`beforeAfterRows`):
