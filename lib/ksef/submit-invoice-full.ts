@@ -9,7 +9,7 @@ import {
 import { generateFA3Xml, InvoiceValidationError } from '@/lib/xml/fa3-generator';
 import { assertSpecialInvoiceData } from '@/lib/ksef/special-invoice-data';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
-import { validateInvoiceXml } from '@/lib/xml/validator';
+import { InvoiceXmlSchemaError, validateInvoiceXml } from '@/lib/xml/validator';
 import { invoiceXmlExistsForId, uploadInvoiceXml } from '@/lib/storage/r2';
 
 import {
@@ -38,6 +38,7 @@ export interface FullSubmitResult {
   ksefNumber: string;
   xmlStoragePath: string;
   xmlSha256Hash: string;
+  xmlSizeBytes: number;
   /** ISO 8601 timestamp akceptacji; `undefined` jeśli KSeF nie zwrócił go w statusie. */
   acquisitionTimestamp?: string;
   /** Numer sesji KSeF — potrzebny do pobrania UPO (KSeF 2.0 trzyma je w zasobach sesji). */
@@ -90,10 +91,8 @@ export async function submitInvoiceFullFlow(
   //    (limit otwartych sesji per podmiot + czas dostępu do API).
   const validation = await validateInvoiceXml(xml);
   if (!validation.valid) {
-    throw new Error(
-      `XML FA(3) jest niezgodny ze schematem XSD:\n${validation.errors
-        .map((e) => `  Linia ${e.line}: ${e.message}`)
-        .join('\n')}`,
+    throw new InvoiceXmlSchemaError(
+      validation.errors.map((e) => `Linia ${e.line}: ${e.message}`),
     );
   }
 
@@ -149,6 +148,7 @@ export async function submitInvoiceFullFlow(
     ksefNumber: submitResult.ksefNumber,
     xmlStoragePath: uploadResult.storagePath,
     xmlSha256Hash: uploadResult.sha256Hash,
+    xmlSizeBytes: uploadResult.sizeBytes,
     acquisitionTimestamp: submitResult.acquisitionTimestamp,
     sessionReferenceNumber: submitResult.sessionReferenceNumber,
     invoiceReferenceNumber: submitResult.invoiceReferenceNumber,

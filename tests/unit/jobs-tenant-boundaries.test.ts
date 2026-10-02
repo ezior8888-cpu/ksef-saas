@@ -20,7 +20,9 @@ vi.mock('@/lib/ksef/history-fetcher', () => ({ fetchInvoicesMetadata: mocks.meta
 vi.mock('@/lib/import/import-engine', () => ({ processImportedInvoices: mocks.process }));
 vi.mock('@/lib/storage/expenses', () => ({ downloadExpensePhoto: mocks.photo }));
 vi.mock('@/lib/ocr/engine', () => ({ extractInvoiceFromImage: mocks.ocr }));
-vi.mock('@/lib/push/sender', () => ({ sendPushToUser: mocks.push }));
+vi.mock('@/lib/push/sender', () => ({ sendPushToUser: mocks.push, sendPushToTenant: vi.fn(async () => ({ sent: 0, failed: 0 })) }));
+// AUD-15: alarm po terminie Offline24 (process-offline-queue) — bez sieci w teście.
+vi.mock('@/lib/alerts/slack', () => ({ alertCritical: vi.fn(async () => undefined) }));
 vi.mock('@/lib/email/send', () => ({ sendInvoiceAcceptedEmail: mocks.email, sendInvoiceFailedEmail: mocks.email }));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: mocks.proposal }));
 vi.mock('@/lib/ksef/health-check', () => ({ checkKsefAvailability: mocks.health, shouldUseOfflineMode: mocks.health }));
@@ -136,12 +138,15 @@ describe('service-role job boundaries', () => {
       id: '44444444-4444-4444-8444-' + String(index).padStart(12, '0'),
       tenant_id: A, invoice_id: ID, status: 'queued', deadline: '2000-01-01',
     }));
-    tables.ksef_offline_queue.push({ id: USER, tenant_id: A, invoice_id: OTHER, status: 'queued', deadline: '2000-01-01' });
+    tables.ksef_offline_queue.push({ id: USER, tenant_id: A, invoice_id: OTHER, status: 'queued', deadline: '2000-01-01', user_notified: false });
     await runProcessOfflineQueue(ctx);
     expect(tables.ksef_offline_queue.filter((r) => r.status === 'failed')).toHaveLength(10);
     expect(tables.ksef_offline_queue[10].status).toBe('queued');
     await runProcessOfflineQueue(ctx);
-    expect(tables.ksef_offline_queue[10].status).toBe('expired');
+    // AUD-15: po terminie wpis nie wygasa — poprawny wiersz został obsłużony
+    // w drugim przebiegu (alarm o terminie) i czeka na dalsze próby.
+    expect(tables.ksef_offline_queue[10].status).not.toBe('expired');
+    expect(tables.ksef_offline_queue[10].user_notified).toBe(true);
     expect(tables.invoices[0]).toEqual({ id: ID, tenant_id: B });
   });
   it('rejects legacy reminder consent before restoring an old durable fetch', async () => {
@@ -258,12 +263,12 @@ describe('service-role job boundaries', () => {
     expect(tables.invoices[0]).toEqual({ id: ID, tenant_id: B });
     expect(sendEvent).not.toHaveBeenCalled();
   });
-  it('expires a valid offline row and scopes both updates', async () => {
-    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued', deadline: '2000-01-01' }];
+  it('past deadline keeps sending a valid offline row and scopes every update (AUD-15)', async () => {
+    tables.ksef_offline_queue = [{ id: OTHER, tenant_id: A, invoice_id: ID, status: 'queued', deadline: '2000-01-01', user_notified: false }];
     tables.invoices = [{ id: ID, tenant_id: A }];
     await runProcessOfflineQueue(ctx);
-    expect(tables.ksef_offline_queue[0].status).toBe('expired');
-    expect(tables.invoices[0].ksef_status).toBe('failed');
+    expect(tables.ksef_offline_queue[0].status).not.toBe('expired');
+    expect(tables.invoices[0].ksef_status).not.toBe('failed');
     for (const q of writes()) expect(q.filters).toContainEqual(['tenant_id', A]);
   });
   it('does not expire a queue row already marked sent by a late success', async () => {
