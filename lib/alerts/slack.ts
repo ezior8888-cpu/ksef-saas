@@ -42,6 +42,9 @@ async function postSlackAlert(
     if (requireDelivery) {
       throw new Error('Critical Slack webhook is not configured');
     }
+    // AUD-83: alert bez webhooka znikał bez śladu. Pierwsza linia wystarczy,
+    // żeby w logu było widać, co przepadło.
+    console.warn(`[slack] brak webhooka ${msg.channel} — alert pominięty: ${msg.text.split('\n')[0]!.slice(0, 120)}`);
     return;
   }
 
@@ -88,7 +91,26 @@ async function postSlackAlert(
 
 /** Fail-soft transport for support, bugs, backups and metrics. */
 export async function sendSlackAlert(msg: SlackMessage): Promise<void> {
-  await postSlackAlert(msg, false);
+  if (msg.channel !== 'urgent' || !isTelegramConfigured()) {
+    await postSlackAlert(msg, false);
+    return;
+  }
+  // Pilne (dziś: kopie bazy) idą też na Telegram, jak alarmy krytyczne —
+  // sam Slack nikogo nie budzi (AUD-83). Oba kanały fail-soft.
+  await Promise.all([
+    postSlackAlert(msg, false),
+    sendTelegramMessage(formatUrgentForTelegram(msg)).catch(() => {
+      console.error('[telegram] pilny alert niedostarczony');
+    }),
+  ]);
+}
+
+function formatUrgentForTelegram(msg: SlackMessage): string {
+  const lines = [`🚨 ${escapeTelegramHtml(msg.text.replace(/\*/g, ''))}`];
+  for (const [label, value] of Object.entries(msg.context ?? {})) {
+    lines.push(`• ${escapeTelegramHtml(label)}: ${escapeTelegramHtml(String(value))}`);
+  }
+  return lines.join('\n');
 }
 
 export interface SlackAlertRichContext {

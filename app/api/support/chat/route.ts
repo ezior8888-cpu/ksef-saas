@@ -44,6 +44,21 @@ const bodySchema = z.object({
 // rozdmuchaniem kontekstu w długiej konwersacji.
 const MAX_HISTORY_TURNS = 20;
 
+async function memberOrgOrNull(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  orgId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('memberships')
+    .select('organization_id')
+    .eq('user_id', userId)
+    .eq('organization_id', orgId)
+    .eq('status', 'active')
+    .maybeSingle();
+  return data ? orgId : null;
+}
+
 export async function POST(req: Request): Promise<Response> {
   const supabase = await createClient();
   const {
@@ -95,7 +110,10 @@ export async function POST(req: Request): Promise<Response> {
         content: m.content,
       }));
   } else {
-    const tenantId = await getActiveOrgIdFromCookies();
+    // AUD-104: cookie aktywnej firmy ustawia klient — firma tylko po
+    // sprawdzeniu aktywnego członkostwa, inaczej rozmowa bez firmy.
+    const cookieOrg = await getActiveOrgIdFromCookies();
+    const tenantId = cookieOrg ? await memberOrgOrNull(supabase, user.id, cookieOrg) : null;
     conversationId = await createConversation({
       userId: user.id,
       tenantId: tenantId ?? null,

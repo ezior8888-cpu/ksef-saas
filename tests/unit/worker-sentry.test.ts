@@ -92,8 +92,11 @@ describe('worker.ts korzysta z Sentry', () => {
   });
 
   it('wyczerpany job, awaria startu i zamknięcie procesu', () => {
-    const exhausted = source.indexOf('wyczerpane próby');
-    expect(source.indexOf('reportExhaustedJob(def.queue, error, decision.reason)')).toBeGreaterThan(exhausted);
+    // Wrapper jobów przeniesiony z worker.ts do run-job.ts (AUD-35).
+    const runJob = readFileSync(join(process.cwd(), 'lib/jobs/run-job.ts'), 'utf8');
+    const exhausted = runJob.indexOf('wyczerpane próby');
+    expect(exhausted).toBeGreaterThan(-1);
+    expect(runJob.indexOf('reportExhaustedJob(def.queue, error, decision.reason)')).toBeGreaterThan(exhausted);
     expect(main).toContain('reportWorkerStartupFailure(err)');
     expect(main.split('flushWorkerSentry()').length - 1).toBe(2);
   });

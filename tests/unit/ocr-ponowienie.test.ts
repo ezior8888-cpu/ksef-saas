@@ -22,6 +22,11 @@ const state = vi.hoisted(() => ({
   proposal: vi.fn(),
 }));
 
+// AUD-107: budżet AI firmy — tu zawsze w limicie (osobne testy: ai-limit-*).
+vi.mock('@/lib/ai/tenant-ai-budget', () => ({
+  checkTenantAiBudget: async () => ({ allowed: true }),
+  recordTenantAiUsage: async () => undefined,
+}));
 vi.mock('@/lib/categorization', () => ({
   categorizeExpense: async () => ({ kpir_column: 'col_13', category_label: 'Paliwo', method: 'rule', confidence: 0.9 }),
 }));

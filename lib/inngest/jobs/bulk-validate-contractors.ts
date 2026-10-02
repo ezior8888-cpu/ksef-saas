@@ -6,6 +6,7 @@ import { contractorValidationPatch } from '@/lib/validation/contractor-update';
 
 import { inngest, validationBulkContractorsRequested } from '../client';
 import { toJobContext } from '@/lib/jobs/inngest-adapter';
+import { maskNip } from '@/lib/jobs/logger';
 import type { JobContext } from '@/lib/jobs/registry';
 
 /**
@@ -73,7 +74,7 @@ export async function runBulkValidateContractors(data: Parameters<typeof validat
             if (result.vatStatus === 'inactive') bin++;
             if (result.warning) bw++;
           } catch (e) {
-            console.error(`Bulk validate failed (${nip})`, e);
+            console.error(`Bulk validate failed (${maskNip(nip)})`, e);
           }
         }
 
