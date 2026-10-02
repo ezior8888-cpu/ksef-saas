@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { Constants, type Tables } from '@/types/database';
 import { saveBlob } from '@/lib/download';
 import { isExportFormatSuspended, SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
+import { includeReceivedAfterFormatChange, receivedLabelForFormat } from '@/lib/exports/form-defaults';
 
 /** Wiersz joba + pliki z nested select (historia ręcznych eksportów). */
 export type ManualExportJobWithFiles = Tables<'export_jobs'> & {
@@ -132,6 +133,12 @@ export function NewExportForm() {
   const [includeCorrections, setIncludeCorrections] = useState(true);
   const [isStarting, startExport] = useTransition();
 
+  // KPiR bez kosztów to księga z samymi przychodami (F-058).
+  const chooseFormat = (value: ExportFormat) => {
+    setFormat(value);
+    setIncludeReceived((current) => includeReceivedAfterFormatChange(value, current));
+  };
+
   const handleStart = () => {
     startExport(async () => {
       const result = await startExportAction({
@@ -199,7 +206,7 @@ export function NewExportForm() {
               key={value}
               type="button"
               disabled={isStarting}
-              onClick={() => setFormat(value)}
+              onClick={() => chooseFormat(value)}
               className={cn(
                 'rounded-[var(--ff-radius-lg)] border p-3 text-left transition-all duration-200 active:scale-[0.98] disabled:opacity-50',
                 format === value
@@ -296,7 +303,7 @@ export function NewExportForm() {
           onChange={setIncludeIssued}
         />
         <CheckboxItem
-          label="Faktury otrzymane (zakupowe)"
+          label={receivedLabelForFormat(format)}
           checked={includeReceived}
           disabled={isStarting}
           onChange={setIncludeReceived}
@@ -494,6 +501,8 @@ function CheckboxItem({
   return (
     <button
       type="button"
+      role="checkbox"
+      aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className="flex w-full items-center gap-3 rounded-[var(--ff-radius-lg)] border border-transparent p-2.5 text-left transition-colors hover:border-white/10 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)] disabled:pointer-events-none disabled:opacity-50"
