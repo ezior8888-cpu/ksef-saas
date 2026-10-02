@@ -13,7 +13,7 @@ import {
   type InvoiceLineSchema,
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
-import { calculateLineItem, calculateInvoiceTotals } from '@/lib/xml/invoice-calculator';
+import { calculateLineItem, calculateInvoiceTotals, roundToCents } from '@/lib/xml/invoice-calculator';
 import type { Invoice, InvoiceLineItem, BuyerParty, PaymentMethod, SellerParty } from '@/types/invoice';
 import type { BuyerB2B, BuyerData, CorrectionInvoiceData, InvoiceLine, SellerData } from '@/types/invoice-types';
 
@@ -385,9 +385,12 @@ async function insertCorrection(
       payment_data: ghost.payment,
       payment_due_date: ghost.payment.dueDate,
       currency: 'PLN',
-      net_total: totals.netAfter,
-      vat_total: totals.vatAfter,
-      gross_total: totals.grossAfter,
+      // Sumy korekty = RÓŻNICA dla każdego typu (AUD-21, decyzja z 02.10.2026),
+      // spójnie z P_13/P_15 w FA(3) KOR. KPiR, CSV i pulpit sumują `net_total`
+      // faktur sprzedaży — z różnicą liczą przychód poprawnie bez wyjątków.
+      net_total: roundToCents(totals.netDelta),
+      vat_total: roundToCents(totals.vatDelta),
+      gross_total: roundToCents(totals.grossDelta),
       notes: correctionEnvelope.notes ?? null,
       fa3_data: ghost,
     })
