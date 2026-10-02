@@ -196,7 +196,7 @@ describe('stale billing VAT enqueue alert', () => {
     expect(step.run).toHaveBeenCalledWith('check-ksef-reconciliation', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-checkout-attempts', expect.any(Function));
     expect(step.run).toHaveBeenCalledWith('check-stale-backup', expect.any(Function));
-    expect(result).toMatchObject({ checked: 12, fired: 0 });
+    expect(result).toMatchObject({ checked: 13, fired: 0 });
   });
 });
 

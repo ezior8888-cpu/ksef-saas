@@ -11,6 +11,8 @@
  * Dynamic import klientów — worker w trybie pgboss nie dotyka SDK Inngest.
  */
 
+import type { Db as IDatabase } from 'pg-boss';
+
 import { getJobsBackend } from './config';
 import { queuesForEvent } from './queues';
 
@@ -80,10 +82,35 @@ export async function sendJobEvents(
     };
     // Fan-out: jeden event może mieć kilku odbiorców (patrz EVENT_QUEUE_MAP) —
     // publikujemy do KAŻDEJ kolejki, co odtwarza zachowanie Inngest.
-    for (const queue of queuesForEvent(e.name)) {
+    const queues = queuesForEvent(e.name);
+    const db = boss.getDb() as TransactionalDb;
+    if (queues.length > 1 && typeof db.withTransaction === 'function') {
+      // Wszystkie kolejki zdarzenia albo żadna (AUD-91): błąd przy drugiej
+      // zostawiał pierwszą, a ponowienie nadawcy dublowało powiadomienie.
+      const sent = await db.withTransaction(async (tx) => {
+        const txIds: string[] = [];
+        for (const queue of queues) {
+          const id = await boss.send(queue, e.data, { ...sendOptions, db: tx });
+          if (id) txIds.push(id);
+        }
+        return txIds;
+      });
+      ids.push(...sent);
+      continue;
+    }
+    for (const queue of queues) {
       const id = await boss.send(queue, e.data, sendOptions);
       if (id) ids.push(id);
     }
   }
   return { ids };
 }
+
+/**
+ * `getDb()` pg-boss zwraca interfejs `IDatabase`; wbudowany `Db` (pula z
+ * `connectionString`) ma też `withTransaction`, który przypina jedno
+ * połączenie na BEGIN…COMMIT.
+ */
+type TransactionalDb = IDatabase & {
+  withTransaction?: <T>(fn: (db: IDatabase) => Promise<T>) => Promise<T>;
+};
