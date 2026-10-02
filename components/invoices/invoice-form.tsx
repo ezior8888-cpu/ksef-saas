@@ -44,6 +44,7 @@ import { AlertCircle, ChevronLeft, Plus, Trash2, Loader2 } from 'lucide-react';
 import { InvoiceTotals } from '@/components/invoices/invoice-totals';
 import { suggestsSplitPayment } from '@/lib/invoices/annotations';
 import { formatPlMoney } from '@/lib/format/pl';
+import { dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
 import { ffSettingsPanel } from '@/lib/dashboard/ff-surface-classes';
 import { BUYER_ID_TYPE_LABELS } from '@/types/invoice-types';
 
@@ -100,9 +101,12 @@ const LINES_LAYOUT_LG_MEDIA = '(min-width: 1024px)';
 export function InvoiceForm({
   prefill = null,
   vatExempt = false,
+  suggestedNumber = null,
 }: {
   /** Podkład z ostatniej faktury — `null`, gdy tenant nie ma jeszcze żadnej. */
   prefill?: PrefillFromLastInvoice | null;
+  /** Podpowiedź kolejnego numeru (F-015) — pole pozostaje edytowalne. */
+  suggestedNumber?: string | null;
   /**
    * Firma zwolniona z VAT (ustawiona podstawa w Ustawieniach → Podatek VAT).
    * Nowe pozycje dostają wtedy „zw” — inaczej z przyzwyczajenia wpada 23%.
@@ -143,15 +147,14 @@ export function InvoiceForm({
     return () => mql.removeEventListener('change', sync);
   }, []);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const in14days = new Date(Date.now() + 14 * 86400_000)
-    .toISOString()
-    .slice(0, 10);
+  // Daty w czasie polskim, nie UTC (F-013): po północy „dziś” to nowy dzień.
+  const today = todayInWarsaw();
+  const in14days = dueDateFrom(today, 14);
 
   const form = useForm<InvoiceFormValues>({
     resolver: zodResolver(invoiceFormSchema),
     defaultValues: {
-      internalNumber: '',
+      internalNumber: suggestedNumber ?? '',
       issueDate: today,
       saleDate: today,
       buyerNip: '',
@@ -252,11 +255,9 @@ export function InvoiceForm({
    * a schemat to odrzuca (`paymentDueDate >= issueDate`).
    */
   const ustawTermin = (dni: number) => {
-    const bazowa = form.getValues('issueDate');
-    const d = bazowa ? new Date(`${bazowa}T00:00:00`) : new Date();
-    if (Number.isNaN(d.getTime())) return;
-    d.setDate(d.getDate() + dni);
-    form.setValue('paymentDueDate', d.toISOString().slice(0, 10), {
+    // Dodawanie dni na samej dacie — lokalna północ zamieniona na UTC dawała
+    // w Polsce termin o dzień krótszy (F-013).
+    form.setValue('paymentDueDate', dueDateFrom(form.getValues('issueDate'), dni), {
       shouldValidate: true,
     });
   };

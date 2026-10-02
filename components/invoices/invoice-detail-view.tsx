@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/invoices/status-badge';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
 import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
 import { UpoDownload } from '@/components/invoices/upo-download';
+import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import type { Database } from '@/types/database';
 
 export interface InvoiceDetailLine {
@@ -30,6 +31,7 @@ interface AddressSnapshot {
 
 interface PartySnapshot {
   nip?: string | null;
+  vatUeNumber?: string | null;
   name?: string | null;
   address?: AddressSnapshot | null;
   email?: string | null;
@@ -55,13 +57,38 @@ export interface InvoiceDetailInitial {
   last_error_suggestion: string | null;
   seller_data: unknown;
   buyer_data: unknown;
+  /** `invoices.payment_data` — `PaymentInfo` z faktury; `null` w starych rekordach. */
+  payment_data: unknown;
   lines: InvoiceDetailLine[];
   upo_status: Database['public']['Enums']['upo_status_enum'] | null;
 }
 
-function formatNumber(value: string | number | null, digits = 2): string {
+interface PaymentSnapshot {
+  method?: string | null;
+  dueDate?: string | null;
+  bankAccount?: string | null;
+}
+
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  transfer: 'Przelew',
+  cash: 'Gotówka',
+  card: 'Karta',
+  other: 'Inna',
+};
+
+/**
+ * Liczba po polsku („18 000,19”): co najmniej 2 miejsca, najwyżej
+ * `maxDigits`. Ilość i cena jednostkowa mają w bazie i w XML 4 miejsca —
+ * ekran pokazuje je w całości, jak PDF (F-094).
+ */
+function formatNumber(value: string | number | null, maxDigits = 2): string {
   if (value == null) return '—';
-  return Number(value).toFixed(digits);
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return n.toLocaleString('pl-PL', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: maxDigits,
+  });
 }
 
 function vatRateLabel(rate: string | null): string {
@@ -151,6 +178,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
 
   const seller = (inv.seller_data ?? {}) as PartySnapshot;
   const buyer = (inv.buyer_data ?? {}) as PartySnapshot;
+  const payment = (inv.payment_data ?? null) as PaymentSnapshot | null;
   const lines = inv.lines;
 
   return (
@@ -186,7 +214,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           <p className="font-mono text-sm mt-1">{inv.ksef_number}</p>
           {inv.ksef_accepted_at && (
             <p className="text-xs text-green-800 mt-1">
-              Zaakceptowana: {inv.ksef_accepted_at}
+              Zaakceptowana: {formatWarsawDateTime(inv.ksef_accepted_at)}
             </p>
           )}
         </Card>
@@ -240,9 +268,11 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
             Nabywca
           </h3>
           <p className="font-medium">{buyer.name ?? '—'}</p>
-          {buyer.nip && (
+          {buyer.nip ? (
             <p className="text-xs text-gray-500">NIP: {buyer.nip}</p>
-          )}
+          ) : buyer.vatUeNumber ? (
+            <p className="text-xs text-gray-500">VAT UE: {buyer.vatUeNumber}</p>
+          ) : null}
           <p className="text-xs text-gray-600 mt-2 whitespace-pre-line">
             {buyer.address?.addressLine1 ?? ''}
             {buyer.address?.addressLine2
@@ -286,13 +316,13 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
                 <td className="py-2">{line.ordinal}</td>
                 <td>{line.name ?? '—'}</td>
                 <td className="text-right tabular-nums">
-                  {formatNumber(line.quantity, 2)}{' '}
+                  {formatNumber(line.quantity, 4)}{' '}
                   <span className="text-gray-500 text-xs">
                     {line.unit ?? ''}
                   </span>
                 </td>
                 <td className="text-right tabular-nums">
-                  {formatNumber(line.unit_price_net, 2)}
+                  {formatNumber(line.unit_price_net, 4)}
                 </td>
                 <td className="text-right">{vatRateLabel(line.vat_rate)}</td>
                 <td className="text-right tabular-nums font-medium">
@@ -330,6 +360,30 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
         </table>
       </Card>
 
+      {payment?.dueDate && (
+        <Card className="p-4 mb-6">
+          <h3 className="font-semibold mb-2 text-sm uppercase text-gray-500">
+            Płatność
+          </h3>
+          <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+            <div>
+              <dt className="text-xs text-gray-500">Forma</dt>
+              <dd>{PAYMENT_METHOD_LABEL[payment.method ?? ''] ?? payment.method ?? '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-gray-500">Termin płatności</dt>
+              <dd className="tabular-nums">{payment.dueDate}</dd>
+            </div>
+            {payment.bankAccount && (
+              <div>
+                <dt className="text-xs text-gray-500">Rachunek</dt>
+                <dd className="font-mono text-xs break-all">{payment.bankAccount}</dd>
+              </div>
+            )}
+          </dl>
+        </Card>
+      )}
+
       {inv.notes && (
         <Card className="p-4 mb-6">
           <h3 className="font-semibold mb-2 text-sm uppercase text-gray-500">
@@ -344,6 +398,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           id: inv.id,
           ksef_status: inv.ksef_status,
           xml_storage_path: inv.xml_storage_path ?? null,
+          invoice_type: inv.invoice_type,
         }}
       />
     </div>

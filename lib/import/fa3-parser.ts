@@ -68,7 +68,9 @@ const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   parseAttributeValue: true,
-  parseTagValue: true,
+  // Wartości jako tekst: numer rachunku (26 cyfr), numer faktury „000123”
+  // czy „1e3” nie mogą stać się liczbą (F-079). Kwoty czyta `parseNum`.
+  parseTagValue: false,
   trimValues: true,
   removeNSPrefix: true,
 });

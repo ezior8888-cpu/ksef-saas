@@ -19,6 +19,7 @@ import { DeleteAccountSection } from '@/components/settings/delete-account';
 import { VatExemptionForm } from '@/components/settings/vat-exemption-form';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { CashMethodForm } from '@/components/settings/cash-method-form';
+import { CompanyProfileForm } from '@/components/settings/company-profile-form';
 import { readTenantCashMethod } from '@/lib/invoices/cash-method';
 import { getPageContext } from '@/lib/supabase/page-context';
 
@@ -43,6 +44,14 @@ export default async function SettingsPage() {
   // `user` z `getPageContext` ma email + id; created_at potrzebne tylko tutaj.
   const userCreatedAt = authUser.user?.created_at ?? null;
   const isOwner = role === 'owner';
+  // Edycja danych firmy (F-008): właściciel i administrator, jak ustawienia VAT.
+  const canEditCompany = isOwner || role === 'admin';
+  const addressJson = (tenant?.address_json ?? null) as { addressLine1?: string; addressLine2?: string } | null;
+  const companyAddress = {
+    name: tenant?.name ?? '',
+    addressLine1: addressJson?.addressLine1 ?? '',
+    addressLine2: addressJson?.addressLine2 ?? '',
+  };
 
   const settingsLinks = [
     {
@@ -195,7 +204,9 @@ export default async function SettingsPage() {
                   Dane firmy
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Informacje o aktywnej organizacji (z onboardingu / GUS)
+                  {canEditCompany
+                    ? 'Nazwa i adres siedziby na kolejnych fakturach'
+                    : 'Informacje o aktywnej organizacji (z onboardingu / GUS)'}
                 </p>
               </div>
               <Link
@@ -208,6 +219,15 @@ export default async function SettingsPage() {
               </Link>
             </div>
 
+            {canEditCompany ? (
+              <>
+                <div className="text-sm">
+                  <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">NIP</span>
+                  <div className="font-mono mt-1">{tenant?.nip ?? '-'}</div>
+                </div>
+                <CompanyProfileForm initial={companyAddress} />
+              </>
+            ) : (
             <dl className="grid grid-cols-1 gap-4 text-sm">
               <div>
                 <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
@@ -252,6 +272,7 @@ export default async function SettingsPage() {
                   </div>
                 )}
             </dl>
+            )}
           </div>
         </div>
       </div>

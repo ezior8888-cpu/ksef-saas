@@ -7,6 +7,7 @@ import type {
   PaymentInfo,
   InvoiceType,
 } from '@/types/invoice';
+import { isSaleDateWithinLimit, SALE_DATE_TOO_LATE_MESSAGE } from '@/lib/invoices/sale-date';
 
 // ═══════════════════════════════════════════════════════════════
 // Zaokrąglanie i konwersje liczbowe
@@ -331,8 +332,8 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
     const saleDate = parseIsoDate(invoice.saleDate);
     if (!saleDate) {
       errors.push(`Data sprzedaży "${invoice.saleDate}" ma nieprawidłowy format.`);
-    } else if (issueDate && saleDate > issueDate) {
-      errors.push('Data sprzedaży nie może być późniejsza niż data wystawienia.');
+    } else if (issueDate && !isSaleDateWithinLimit(invoice.issueDate, invoice.saleDate)) {
+      errors.push(SALE_DATE_TOO_LATE_MESSAGE);
     }
   }
 

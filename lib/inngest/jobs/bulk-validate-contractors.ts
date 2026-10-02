@@ -9,6 +9,9 @@ import { toJobContext } from '@/lib/jobs/inngest-adapter';
 import { maskNip } from '@/lib/jobs/logger';
 import type { JobContext } from '@/lib/jobs/registry';
 
+/** Ile identyfikatorów w jednym zapytaniu `.in()`. */
+const FETCH_CHUNK = 100;
+
 /**
  * Runner (Etap 7): wspólne ciało dla Inngest i workera pg-boss.
  * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
@@ -16,20 +19,28 @@ import type { JobContext } from '@/lib/jobs/registry';
 export async function runBulkValidateContractors(data: Parameters<typeof validationBulkContractorsRequested.create>[0], { step }: JobContext) {
     const { tenantId, contractorIds, forceRefresh } = data;
 
+    // Paczkami: `.in()` idzie w adresie URL (ok. 39 znaków na UUID), więc
+    // jedno zapytanie ze wszystkimi kontrahentami przy kilkuset pozycjach
+    // przekraczało limit długości adresu i job padał przed pierwszym
+    // sprawdzeniem (F-088).
     const contractors = await step.run('fetch-contractors', async () => {
       const supabase = createAdminClient();
+      const rows: Array<{ id: string; nip: string | null }> = [];
 
-      const { data, error } = await supabase
-        .from('contractors')
-        .select('id, nip')
-        .eq('tenant_id', tenantId)
-        .in('id', contractorIds);
+      for (let i = 0; i < contractorIds.length; i += FETCH_CHUNK) {
+        const { data, error } = await supabase
+          .from('contractors')
+          .select('id, nip')
+          .eq('tenant_id', tenantId)
+          .in('id', contractorIds.slice(i, i + FETCH_CHUNK));
 
-      if (error) {
-        throw new Error(error.message);
+        if (error) {
+          throw new Error(error.message);
+        }
+        rows.push(...(data ?? []));
       }
 
-      return data ?? [];
+      return rows;
     });
 
     let validated = 0;
@@ -63,11 +74,15 @@ export async function runBulkValidateContractors(data: Parameters<typeof validat
             const patch = contractorValidationPatch(result);
             if (!patch) continue;
 
-            await supabase
+            const { error: updateError } = await supabase
               .from('contractors')
               .update(patch)
               .eq('id', c.id)
               .eq('tenant_id', tenantId);
+            if (updateError) {
+              console.error(`Bulk validate: zapis nieudany (${maskNip(nip)})`, updateError.message);
+              continue;
+            }
 
             bv++;
             if (result.vatStatus === 'active') ba++;

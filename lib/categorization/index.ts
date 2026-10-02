@@ -9,6 +9,7 @@ import { checkTenantAiBudget, recordTenantAiUsage } from '@/lib/ai/tenant-ai-bud
 
 import { classifyByAI } from './ai-classifier';
 import { classifyByHeuristics } from './heuristics';
+import { classifyByExactName } from './name-rule';
 import {
   classifyByKeyword,
   classifyByNip,
@@ -49,6 +50,15 @@ export async function categorizeExpense(
     );
     if (nipResult) return nipResult;
   }
+
+  // Reguła nauczona po nazwie (poprawka kategorii paragonu bez NIP, F-084)
+  // ma pierwszeństwo przed słowami kluczowymi i heurystyką.
+  const nameResult = await classifyByExactName(
+    tenantId,
+    data.seller_name,
+    data.gross_amount ?? undefined,
+  );
+  if (nameResult) return nameResult;
 
   const keywordResult = await classifyByKeyword(tenantId, data.seller_name);
   if (keywordResult) return keywordResult;

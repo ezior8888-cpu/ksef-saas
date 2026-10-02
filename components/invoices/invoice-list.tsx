@@ -17,7 +17,7 @@ export type { InvoiceRow } from './invoice-row-types';
 /**
  * Lista faktur z nasłuchem Realtime.
  *
- * Server renderuje początkowy snapshot (pierwsze 100 faktur tenanta),
+ * Server renderuje początkowy snapshot (stronę listy z filtrami z adresu),
  * a klient subskrybuje kanał `postgres_changes` dla tabeli `invoices`:
  *   - INSERT: doklejamy u góry listy.
  *   - UPDATE: mergujemy pola z `payload.new`.
@@ -36,9 +36,19 @@ export type { InvoiceRow } from './invoice-row-types';
 export function InvoiceList({
   tenantId,
   initialInvoices,
+  filtered = false,
+  summary,
 }: {
   tenantId: string;
   initialInvoices: InvoiceRow[];
+  /**
+   * Lista zawężona filtrem albo dalszą stroną (F-086): nowe faktury z Realtime
+   * nie są wtedy doklejane (mogą nie pasować do filtra), a pusty wynik to
+   * „brak wyników”, nie „brak faktur”.
+   */
+  filtered?: boolean;
+  /** Opis zakresu pozycji z serwera (np. „1–50 z 230”). */
+  summary?: string;
 }) {
   const [invoices, setInvoices] = useState<InvoiceRow[]>(initialInvoices);
 
@@ -74,6 +84,7 @@ export function InvoiceList({
         },
         (payload) => {
           const next = payload.new as InvoiceRow;
+          if (filtered) return;
           if ((next as unknown as { direction?: string }).direction === 'incoming')
             return;
           setInvoices((prev) => {
@@ -100,7 +111,23 @@ export function InvoiceList({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tenantId]);
+  }, [tenantId, filtered]);
+
+  if (invoices.length === 0 && filtered) {
+    return (
+      <EmptyState
+        icon={FileText}
+        title="Brak faktur dla tych filtrów"
+        description="Zmień frazę, status albo okres — albo wyczyść filtry."
+        primaryAction={{
+          type: 'link',
+          label: 'Wyczyść filtry',
+          href: '/invoices',
+          icon: FileText,
+        }}
+      />
+    );
+  }
 
   if (invoices.length === 0) {
     return (
@@ -138,7 +165,7 @@ export function InvoiceList({
         <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
           <h2 className="text-[15px] font-semibold text-[var(--ff-text-strong)]">Lista faktur wystawionych</h2>
           <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
-            {invoices.length} pozycji (max. 100) • sortowanie wg daty utworzenia
+            {summary ?? `${invoices.length} pozycji • sortowanie wg daty utworzenia`}
           </p>
         </div>
         <div className="overflow-x-auto">

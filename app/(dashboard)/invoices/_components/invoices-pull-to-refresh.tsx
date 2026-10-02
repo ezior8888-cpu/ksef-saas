@@ -11,11 +11,17 @@ export function InvoicesPullToRefresh({
   tenantId,
   initialInvoices,
   listKey,
+  filtered = false,
+  summary,
 }: {
   tenantId: string;
   initialInvoices: InvoiceRow[];
   /** Unikalny fingerprint listy z serwera — zmiana po `router.refresh()` remountuje listę. */
   listKey: string;
+  /** Lista zawężona filtrem albo dalszą stroną (F-086). */
+  filtered?: boolean;
+  /** Opis zakresu pozycji pod nagłówkiem tabeli. */
+  summary?: string;
 }) {
   const router = useRouter();
 
@@ -25,6 +31,8 @@ export function InvoicesPullToRefresh({
         key={listKey}
         tenantId={tenantId}
         initialInvoices={initialInvoices}
+        filtered={filtered}
+        summary={summary}
       />
     </PullToRefresh>
   );

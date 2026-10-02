@@ -103,6 +103,9 @@ export type AuditAction =
   | 'accountant.token_revoked'
   | 'accountant.access_used'
   | 'accountant.portal_export'
+  // Kontrahenci — poprawka danych i usunięcie z bazy (audyt bloku 1, F-011).
+  | 'contractor.updated'
+  | 'contractor.deleted'
   | 'retention.deletion_requested'
   | 'retention.deletion_executed'
   | 'invitation.created'

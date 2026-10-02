@@ -4,6 +4,8 @@ import {
   validatePeselChecksum,
 } from '@/lib/xml/invoice-calculator';
 
+import { isSaleDateWithinLimit, SALE_DATE_TOO_LATE_MESSAGE } from '@/lib/invoices/sale-date';
+
 // UWAGA: typ VatRate w types/invoice.ts nie zawiera '3' (stawka ryczałtu
 // rolnika ryczałtowego). Trzymamy się tego samego zestawu, żeby
 // calculateLineItem/getVatPercentage nie traciły type-safety. '3' da się
@@ -28,17 +30,56 @@ const consumerIdChoices = buyerConsumerIdTypeEnum.enum;
 // Puste pole number → `NaN`; `z.number()` w Zod odrzuca NaN — wtedy
 // walidacja się nie udaje — MUSIMY pokazać toast w `handleSubmit` onInvalid
 
+/**
+ * Granice, których nie przyjmie XSD FA(3) albo baza (F-041). Bez nich
+ * faktura przechodziła formularz, a padała dopiero po zapisie — w XSD
+ * przy wysyłce albo surowym błędem Postgresa.
+ */
+/** Znaki sterujące niedozwolone w XML 1.0 (np. pionowy tabulator wklejony z Worda). */
+const XML_FORBIDDEN_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/;
+const NO_CONTROL_CHARS_MESSAGE = 'Usuń niewidoczne znaki sterujące (np. wklejone z Worda)';
+const xmlSafe = (v: string) => !XML_FORBIDDEN_CHARS.test(v);
+/** `quantity`, `unit_price_net` to NUMERIC(14,4): najwyżej 4 miejsca po przecinku. */
+const hasAtMostDecimals = (v: number, d: number) => {
+  const scaled = v * 10 ** d;
+  return Math.abs(scaled - Math.round(scaled)) < 1e-6;
+};
+/** Kwoty faktury i pozycji to NUMERIC(12,2) — poniżej 10 mld zł. */
+export const MAX_INVOICE_AMOUNT = 9_999_999_999.99;
+const VAT_FACTOR: Record<string, number> = { '23': 1.23, '8': 1.08, '5': 1.05 };
+
 export const lineItemSchema = z.object({
-  name: z.string().min(1, 'Nazwa wymagana').max(512, 'Maksymalnie 512 znaków'),
-  unit: z.string().min(1, 'Podaj jednostkę'),
-  quantity: z.number().positive('Ilość musi być > 0'),
-  unitPriceNet: z.number().nonnegative('Cena nie może być ujemna'),
+  name: z
+    .string()
+    .min(1, 'Nazwa wymagana')
+    .max(512, 'Maksymalnie 512 znaków')
+    .refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE),
+  unit: z
+    .string()
+    .min(1, 'Podaj jednostkę')
+    .max(50, 'Jednostka — maksymalnie 50 znaków')
+    .refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE),
+  quantity: z
+    .number()
+    .positive('Ilość musi być > 0')
+    .max(MAX_INVOICE_AMOUNT, 'Ilość za duża')
+    .refine((v) => hasAtMostDecimals(v, 4), 'Ilość — najwyżej 4 miejsca po przecinku'),
+  unitPriceNet: z
+    .number()
+    .nonnegative('Cena nie może być ujemna')
+    .max(MAX_INVOICE_AMOUNT, 'Cena za duża')
+    .refine((v) => hasAtMostDecimals(v, 4), 'Cena — najwyżej 4 miejsca po przecinku'),
   vatRate: vatRateEnum,
 });
 
 export const invoiceFormSchema = z
   .object({
-    internalNumber: z.string().min(1, 'Numer faktury wymagany').max(50),
+    internalNumber: z
+      .string()
+      .min(1, 'Numer faktury wymagany')
+      .max(50)
+      .refine((v) => v.trim().length > 0, 'Numer faktury wymagany')
+      .refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE),
     issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format: RRRR-MM-DD'),
     saleDate: z.union([
       z.literal(''),
@@ -46,9 +87,21 @@ export const invoiceFormSchema = z
     ]),
     /** Dla firm — 10 cyfr + checksum (walidacja gdy buyerIsConsumer=false). */
     buyerNip: z.string(),
-    buyerName: z.string().min(1, 'Nazwa wymagana'),
-    buyerAddressLine1: z.string().min(1, 'Adres — linia 1 wymagana'),
-    buyerAddressLine2: z.string().min(1, 'Adres — linia 2 wymagana'),
+    buyerName: z
+      .string()
+      .min(1, 'Nazwa wymagana')
+      .max(512, 'Maksymalnie 512 znaków')
+      .refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE),
+    buyerAddressLine1: z
+      .string()
+      .min(1, 'Adres — linia 1 wymagana')
+      .max(512, 'Maksymalnie 512 znaków')
+      .refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE),
+    buyerAddressLine2: z
+      .string()
+      .min(1, 'Adres — linia 2 wymagana')
+      .max(512, 'Maksymalnie 512 znaków')
+      .refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE),
     buyerEmail: z.union([
       z.literal(''),
       z.string().email('Nieprawidłowy adres e-mail'),
@@ -61,10 +114,16 @@ export const invoiceFormSchema = z
     paymentMethod: z.enum(['transfer', 'cash', 'card', 'other']),
     paymentDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     bankAccount: z.string().optional(),
-    notes: z.string().max(3500).optional(),
+    notes: z.string().max(3500).refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE).optional(),
     /** P_18A — mechanizm podzielonej płatności (art. 106e ust. 1 pkt 18a). */
     splitPayment: z.boolean().optional(),
   })
+  .refine(
+    (d) =>
+      d.lines.reduce((sum, l) => sum + l.quantity * l.unitPriceNet * (VAT_FACTOR[l.vatRate] ?? 1), 0) <=
+      MAX_INVOICE_AMOUNT,
+    { message: 'Kwota faktury przekracza 10 mld zł — podziel ją na kilka faktur', path: ['lines'] },
+  )
   .refine((d) => !d.splitPayment || (d.paymentMethod === 'transfer' && !!d.bankAccount?.trim()), {
     message: 'Mechanizm podzielonej płatności wymaga przelewu — podaj numer rachunku',
     path: ['splitPayment'],
@@ -110,9 +169,9 @@ export const invoiceFormSchema = z
     (d) =>
       !d.saleDate ||
       d.saleDate === '' ||
-      new Date(d.saleDate).getTime() <= new Date(d.issueDate).getTime(),
+      isSaleDateWithinLimit(d.issueDate, d.saleDate),
     {
-      message: 'Data sprzedaży nie może być późniejsza niż data wystawienia',
+      message: SALE_DATE_TOO_LATE_MESSAGE,
       path: ['saleDate'],
     },
   );

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(), createAdminClient: vi.fn(), cookies: vi.fn(),
@@ -22,6 +22,16 @@ import {
 } from '@/components/invoices/actions';
 import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
 import { ACTIVE_ORG_COOKIE } from '@/lib/supabase/active-org';
+
+// F-092: „Wystaw i wyślij” przyjmuje tylko dzisiejszą datę wystawienia —
+// testy działają w dniu daty z fixture'a (`issueDate: '2026-09-15'`).
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-15T10:00:00Z'));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const org = '11111111-1111-4111-8111-111111111111';
 const userId = 'fixture-user';

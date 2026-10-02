@@ -85,11 +85,32 @@ const VAT_RATE_LABEL: Record<VatRate, string> = {
   np: 'np.',
 };
 
+/**
+ * Etykieta stawki. Faktury z importu historii KSeF mają surowe kody FA(3)
+ * („0 KR”, „np I”, „0 WDT”), których mapa nie zna — drukujemy sam kod
+ * zamiast pustej komórki i „undefined” w podsumowaniu (F-067).
+ */
+function vatRateLabel(rate: string): string {
+  return VAT_RATE_LABEL[rate as VatRate] ?? rate;
+}
+
 /** Format kwoty w konwencji PL: `1 234,56`. */
 function money(n: number): string {
   return n.toLocaleString('pl-PL', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  });
+}
+
+/**
+ * Ilość i cena jednostkowa: do 4 miejsc, jak w bazie (NUMERIC(14,4)) i w XML
+ * (P_8B, P_9A) — inaczej cena 100,1234 drukowała się jako 100,12 obok
+ * wartości 150,19 (F-069). Co najmniej 2 miejsca, jak przy kwotach.
+ */
+function decimal4(n: number): string {
+  return n.toLocaleString('pl-PL', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
   });
 }
 
@@ -260,9 +281,10 @@ function drawParties(
     x: number,
     heading: string,
     name: string,
-    nip: string | null,
+    taxId: string | null,
     addr1: string,
     addr2: string,
+    taxIdLabel = 'NIP',
   ) => {
     doc.font('bold').fontSize(8).fillColor('#888888');
     doc.text(heading.toUpperCase(), x, top, { width: colWidth });
@@ -270,8 +292,8 @@ function drawParties(
     doc.text(name, x, top + 12, { width: colWidth });
     doc.font('body').fontSize(9).fillColor('#444444');
     let y = doc.y + 1;
-    if (nip) {
-      doc.text(`NIP: ${nip}`, x, y, { width: colWidth });
+    if (taxId) {
+      doc.text(`${taxIdLabel}: ${taxId}`, x, y, { width: colWidth });
       y = doc.y;
     }
     doc.text(addr1, x, y, { width: colWidth });
@@ -288,13 +310,16 @@ function drawParties(
   );
   const sellerBottom = doc.y;
 
+  // Nabywca z UE ma numer VAT UE, nie NIP (F-069).
+  const buyerVatUe = !invoice.buyer.nip && invoice.buyer.vatUeNumber ? invoice.buyer.vatUeNumber : null;
   block(
     left + colWidth + 20,
     'Nabywca',
     invoice.buyer.name,
-    invoice.buyer.nip ?? invoice.buyer.vatUeNumber ?? null,
+    invoice.buyer.nip ?? buyerVatUe,
     invoice.buyer.address.addressLine1,
     invoice.buyer.address.addressLine2,
+    buyerVatUe ? 'VAT UE' : 'NIP',
   );
 
   doc.y = Math.max(sellerBottom, doc.y) + 18;
@@ -312,6 +337,18 @@ const COLS = [
   { key: 'gross', label: 'Brutto', w: 0.14, align: 'right' as const },
 ];
 
+/** Dolna granica treści — poniżej jest tylko stopka strony. */
+function contentBottom(doc: Doc): number {
+  return doc.page.height - PAGE_MARGIN - 24;
+}
+
+/** Nowa strona, gdy blok o wysokości `height` nie zmieści się na bieżącej. */
+function ensureSpace(doc: Doc, height: number): void {
+  if (doc.y + height > contentBottom(doc)) {
+    doc.addPage();
+  }
+}
+
 function drawLineItems(
   doc: Doc,
   invoice: Invoice,
@@ -319,7 +356,8 @@ function drawLineItems(
   width: number,
 ): void {
   const cellPad = 4;
-  const rowHeight = 20;
+  const minRowHeight = 20;
+  const textTop = 6;
 
   const colX: number[] = [];
   let acc = left;
@@ -327,43 +365,64 @@ function drawLineItems(
     colX.push(acc);
     acc += c.w * width;
   }
+  const cellWidth = (i: number) => COLS[i]!.w * width - cellPad * 2;
 
-  // Nagłówek tabeli.
-  doc.rect(left, doc.y, width, rowHeight).fill('#f3f3f3');
-  doc.font('bold').fontSize(8).fillColor('#333333');
-  COLS.forEach((c, i) => {
-    doc.text(c.label, colX[i]! + cellPad, doc.y + 6, {
-      width: c.w * width - cellPad * 2,
-      align: c.align,
+  // Nagłówek tabeli. Wszystkie etykiety od jednej współrzędnej — `doc.text`
+  // przesuwa `doc.y`, więc liczenie od `doc.y` w pętli schodkowało kolumny.
+  const drawHeaderRow = (): void => {
+    const top = doc.y;
+    doc.rect(left, top, width, minRowHeight).fill('#f3f3f3');
+    doc.font('bold').fontSize(8).fillColor('#333333');
+    COLS.forEach((c, i) => {
+      doc.text(c.label, colX[i]! + cellPad, top + textTop, {
+        width: cellWidth(i),
+        align: c.align,
+        lineBreak: false,
+      });
     });
-  });
-  doc.y += rowHeight;
+    doc.y = top + minRowHeight;
+    doc.font('body').fontSize(8).fillColor('#222222');
+  };
 
-  // Wiersze pozycji.
-  doc.font('body').fontSize(8).fillColor('#222222');
+  ensureSpace(doc, minRowHeight * 2);
+  drawHeaderRow();
+
+  // Wiersze pozycji. Wysokość wiersza z najwyższej komórki (długa nazwa się
+  // zawija), a wiersz, który się nie mieści, idzie na nową stronę razem
+  // z powtórzonym nagłówkiem — bez tego pdfkit dokładał stronę na komórkę.
   invoice.lines.forEach((line: InvoiceLineItem, idx: number) => {
-    const rowTop = doc.y;
     const values: Record<string, string> = {
       lp: String(line.ordinal),
       name: line.name,
-      qty: money(line.quantity),
+      qty: decimal4(line.quantity),
       unit: line.unit,
-      price: money(line.unitPriceNet),
+      price: decimal4(line.unitPriceNet),
       net: money(line.netAmount),
-      vat: VAT_RATE_LABEL[line.vatRate],
+      vat: vatRateLabel(line.vatRate),
       gross: money(line.grossAmount),
     };
+    const textHeight = Math.max(
+      ...COLS.map((c, i) =>
+        doc.heightOfString(values[c.key] ?? '', { width: cellWidth(i), align: c.align }),
+      ),
+    );
+    const rowHeight = Math.max(minRowHeight, Math.ceil(textHeight) + textTop * 2);
+
+    if (doc.y + rowHeight > contentBottom(doc)) {
+      doc.addPage();
+      drawHeaderRow();
+    }
+
+    const rowTop = doc.y;
     // Zebra dla czytelności.
     if (idx % 2 === 1) {
       doc.rect(left, rowTop, width, rowHeight).fill('#fafafa');
       doc.fillColor('#222222');
     }
     COLS.forEach((c, i) => {
-      doc.text(values[c.key] ?? '', colX[i]! + cellPad, rowTop + 6, {
-        width: c.w * width - cellPad * 2,
+      doc.text(values[c.key] ?? '', colX[i]! + cellPad, rowTop + textTop, {
+        width: cellWidth(i),
         align: c.align,
-        lineBreak: false,
-        ellipsis: true,
       });
     });
     doc.y = rowTop + rowHeight;
@@ -398,6 +457,8 @@ function drawVatSummary(
 
   const boxW = 250;
   const boxX = left + width - boxW;
+  // Nagłówek + stawki + zaliczki + „Do zapłaty” — całość na jednej stronie.
+  ensureSpace(doc, 13 + byRate.size * 12 + 16 + 22);
   let y = doc.y;
 
   doc.font('bold').fontSize(8).fillColor('#888888');
@@ -409,7 +470,7 @@ function drawVatSummary(
   doc.font('body').fontSize(8).fillColor('#333333');
   for (const [rate, sums] of byRate) {
     doc.text(
-      `${VAT_RATE_LABEL[rate]}  netto ${money(sums.net)}  VAT ${money(sums.vat)}`,
+      `${vatRateLabel(rate)}  netto ${money(sums.net)}  VAT ${money(sums.vat)}`,
       boxX,
       y,
       { width: boxW, align: 'right' },
@@ -438,6 +499,7 @@ function drawPayment(
   width: number,
 ): void {
   const p = invoice.payment;
+  ensureSpace(doc, 50);
   doc.font('bold').fontSize(8).fillColor('#888888');
   doc.text('PŁATNOŚĆ', left, doc.y);
   doc.font('body').fontSize(9).fillColor('#444444');
@@ -465,6 +527,8 @@ function drawFooter(
   left: number,
   width: number,
 ): void {
+  // Adnotacje, uwagi i numer KSeF nie mogą wejść na stopkę strony.
+  ensureSpace(doc, 70);
   // Art. 106e ust. 1 pkt 16 — obowiązkowe wyrazy przy metodzie kasowej.
   if (invoice.annotations?.cashMethod === 1) {
     doc.font('bold').fontSize(9).fillColor('#222222');
