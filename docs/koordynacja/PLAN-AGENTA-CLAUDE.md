@@ -186,6 +186,19 @@ dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 
 ## 5. Następny krok
 
+00. **CI czerwone dla każdego PR (od 03.10).** Krok „Audit production
+    dependencies” (`pnpm audit --prod --audit-level=high`) pada na nowym
+    ostrzeżeniu `braces` ≤3.0.3 (GHSA-vfj7-8cjw-p6xm, DoS przez głęboko
+    zagnieżdżone wzorce), **bez wersji z łatką**. Ścieżka:
+    `shadcn > fast-glob > micromatch > braces`. `shadcn` to narzędzie CLI;
+    w działającej aplikacji używamy z niego tylko `app/globals.css`
+    (`@import "shadcn/tailwind.css"`, rozwiązywane przy budowaniu), a
+    `Dockerfile` (etap `deps`) instaluje pełne zależności. Najpierw sprawdź,
+    czy `main` już to naprawił (`pnpm audit --prod --audit-level=high` na
+    `origin/main`). Jeśli nie — decyzja Bartosza: (a) `shadcn` do
+    `devDependencies` (moja rekomendacja: znika z audytu produkcyjnego, nic
+    nie wyciszamy) albo (b) `pnpm.auditConfig.ignoreGhsas` z uzasadnieniem.
+    Przy (a): `pnpm run ci && pnpm build`.
 0. **Najpierw podział pracy z sesjami Bartosza.** Logikę domenową prowadzi
    teraz audyt (`docs/audyt/`). Zanim weźmiesz sprawę z listy niżej, ustal
    z Igorem (a on z Bartoszem), czy jest twoja — inaczej dwie sesje zrobią
