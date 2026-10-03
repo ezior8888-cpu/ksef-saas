@@ -45,7 +45,7 @@ test('validator rejects every leaked private canary, including nested files', ()
   }
 }));
 
-test('validator rejects exclusion of runtime schema/font/help files', () => temporary((root) => {
+test('validator retains runtime assets, backup source, SQL source, and public archives', () => temporary((root) => {
   for (const name of requiredPaths) {
     validExport(root);
     rmSync(join(root, 'app', name));

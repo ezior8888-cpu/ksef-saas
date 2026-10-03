@@ -33,10 +33,33 @@ docs
 # Migracje wgrywane osobno (pnpm db:push:prod), nie z kontenera.
 supabase
 
-# Lokalne środowisko i sekrety — env wchodzi przez Coolify, nigdy z pliku.
-.env*
+# Lokalne środowisko — root i podkatalogi; env dostarcza Coolify.
+**/.[eE][nN][vV]*
+**/.[nN][pP][mM][rR][cC]
+**/faktflow-backup.env
 instrukcja.txt
 ai_todo.md
+
+# Poświadczenia plikowe są tylko dev/test; produkcja odczytuje je z DB/API.
+# Brak wymaganych certyfikatów plikowych w repo. Nowy publiczny CA wymaga
+# osobnej, sprawdzonej reguły dla konkretnej ścieżki, nie ogólnego wyjątku.
+**/.ksef-test-certs
+**/*.[pP][eE][mM]
+**/*.[kK][eE][yY]
+**/*.[cC][rR][tT]
+**/*.[cC][eE][rR]
+**/*.[pP]12
+**/*.[pP][fF][xX]
+
+# Kopie danych i ich artefakty; nie wykluczamy źródeł lib/backup ani *.sql.
+**/backups
+**/.outbox
+**/backup_*.[sS][qQ][lL]
+**/backup_*.[sS][qQ][lL].*
+**/*.[dD][uU][mM][pP]
+**/*.[dD][uU][mM][pP].*
+**/*.roles.[sS][qQ][lL]
+**/*.roles.[sS][qQ][lL].*
 
 # Artefakty
 tsconfig.tsbuildinfo

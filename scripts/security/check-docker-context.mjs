@@ -7,11 +7,27 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Only synthetic names: private config, credential formats, and backup conventions.
+const operatorFiles = [
+  '.env', '.env.local', '.ENV.PRODUCTION', '.npmrc', '.NPMRC', 'faktflow-backup.env',
+  '.ksef-test-certs/credentials.json', '.ksef-test-certs/server.pem',
+  'server.pem', 'server.PEM', 'server.key', 'server.KEY', 'server.crt', 'server.CRT',
+  'server.cer', 'server.CER', 'server.p12', 'server.P12', 'server.pfx', 'server.PFX',
+  'backup_synthetic.sql', 'backup_synthetic.SQL', 'backup_synthetic.sql.gz',
+  'faktflow-synthetic.dump', 'faktflow-synthetic.DUMP', 'faktflow-synthetic.dump.gz',
+  '.partial-faktflow-synthetic.dump', 'faktflow-synthetic.dump.sha256',
+  'faktflow-synthetic.roles.sql', 'faktflow-synthetic.roles.SQL',
+  'faktflow-synthetic.roles.sql.gz', '.partial-faktflow-synthetic.roles.sql',
+  'faktflow-synthetic.roles.sql.sha256', 'backups/db/synthetic.json.gz',
+  '.outbox/synthetic-manifest.json',
+];
+
 export const privatePaths = [
   '.agents/infra.env', '.agents/README.md', '.codex/session.json', '.mcp.json', '.tmp/evidence.json',
   'local/.agents/infra.env', 'local/.codex/session.json', 'local/.mcp.json', 'local/.tmp/evidence.json',
   'local/session/.agents/infra.env', 'local/session/.codex/session.json',
   'local/session/.mcp.json', 'local/session/.tmp/evidence.json',
+  ...['', 'local/', 'local/session/'].flatMap((prefix) => operatorFiles.map((name) => prefix + name)),
 ];
 export const requiredPaths = [
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json',
@@ -19,6 +35,9 @@ export const requiredPaths = [
   'lib/xml/schemas/fa3/schemat-local.xsd', 'lib/exports/schemas/jpk-v7m3/schemat-local.xsd',
   'lib/pdf/fonts/Roboto-Regular.ttf', 'content/help/pierwsze-kroki-w-faktflow.mdx',
   'public/marketing/hero.jpg', 'README.md',
+  'lib/backup/db-snapshot.ts', 'lib/auth/backup-codes.ts',
+  'scripts/hetzner/db-backup.sh', 'scripts/hetzner/restore-drill.sh',
+  'scripts/security/sql/01-rls-pokrycie.sql', 'public/favicon.zip',
   // Synthetic public dotfile: guard against over-broad exclusion of all hidden directories.
   'public/.well-known/security.txt',
 ];
@@ -85,10 +104,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     assert.ok(process.argv.length <= 3, 'Usage: check-docker-context.mjs [dockerignore-path]');
     const counts = checkContext(readPolicy(process.cwd(), process.argv[2]));
-    // Fault injection persists after this fix merges: an unfiltered local context must leak a canary.
+    // Fault injection: retaining only the earlier agent exclusions must still leak an env canary.
     // Builder/CLI failures do not satisfy the expected leak error.
-    assert.throws(() => checkContext(''), /Private synthetic path entered context/);
-    console.log(`Docker context: PASS (${counts.privatePaths} private paths excluded; ${counts.requiredPaths} required paths retained; unfiltered control rejected)`);
+    const agentsOnly = '**/.agents\n**/.codex\n**/.mcp.json\n**/.tmp\n';
+    assert.throws(() => checkContext(agentsOnly), /Private synthetic path entered context: \.env/);
+    console.log(`Docker context: PASS (${counts.privatePaths} private paths excluded; ${counts.requiredPaths} required paths retained; agents-only control rejected)`);
   } catch (error) {
     console.error(`Docker context: FAIL (${error instanceof Error ? error.message : 'validation failed'})`);
     process.exitCode = 1;
