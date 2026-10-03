@@ -19,6 +19,13 @@ export interface JobEvent {
    * Ustawiany PER EVENT, bo fan-out może dotyczyć wielu tenantów naraz.
    */
   groupId?: string;
+  /**
+   * pg-boss `singletonKey`: w kolejce czeka najwyżej jeden job z tym kluczem.
+   * Dla zdarzeń, które może wysłać kilku nadawców naraz (skrzynka i cron
+   * uzupełniający dla tej samej faktury — K2), drugie zlecenie nie dubluje
+   * pracy, dopóki pierwsze nie zostało wykonane.
+   */
+  singletonKey?: string;
 }
 
 export interface SendJobOptions {
@@ -61,6 +68,7 @@ export async function sendJobEvents(
     const sendOptions = {
       ...startAfter,
       ...(groupId ? { group: { id: groupId } } : {}),
+      ...(e.singletonKey ? { singletonKey: e.singletonKey } : {}),
     };
     // Fan-out: jeden event może mieć kilku odbiorców (patrz EVENT_QUEUE_MAP) —
     // publikujemy do KAŻDEJ kolejki.
