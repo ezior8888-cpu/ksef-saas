@@ -328,11 +328,10 @@ describe('service-role job boundaries', () => {
       id: ID, tenant_id: A, ksef_status: 'draft', invoice_kind: invoiceKind,
       internal_number: 'TEST-1', parent_invoice_id: OTHER, advance_invoice_ids: [OTHER],
     }];
-    // ROZ zatrzymuje wcześniej wstrzymanie z main; korekta i zaliczka — kontrola
-    // dokumentu z #63. W każdym przypadku bez zapisu, sondy i wysyłki.
-    await expect(runSubmitInvoice(submitEvent, ctx)).rejects.toThrow(
-      /manual reconciliation|Wysyłka faktur rozliczających jest tymczasowo wstrzymana/,
-    );
+    // Każdy — korekta, zaliczka, ROZ (od C-10 bez własnego hamulca tutaj) —
+    // zatrzymuje się na strażniku referencji z #63: brak `fa3_data` nie
+    // pozwala zbudować dokumentu specjalnego. Bez zapisu, sondy i wysyłki.
+    await expect(runSubmitInvoice(submitEvent, ctx)).rejects.toThrow('manual reconciliation');
     expect(writes()).toEqual([]);
     expect(mocks.submit).not.toHaveBeenCalled();
     expect(mocks.health).not.toHaveBeenCalled();
@@ -420,6 +419,10 @@ describe('service-role job boundaries', () => {
     await expect(runSubmitInvoice(submitEvent, ctx)).resolves.toEqual({ alreadyAccepted: true, ksefNumber: 'TEST' });
     expect(writes()).toEqual([]); expect(mocks.submit).not.toHaveBeenCalled();
   });
+  // C-10 (03.10.2026): warstwa 1 (blokada ROZ "wszędzie") zdjęta — ROZ nie
+  // ma już własnego hamulca w tym jobie. Zdarzenie z innym typem niż
+  // zapisany w bazie wciąż zatrzymuje się na strażniku referencji (#63),
+  // tylko komunikat jest już ogólny, nie ROZ-owy.
   it('stops a queued ROZ from an older event even when the event calls it VAT', async () => {
     tables.invoices = [{
       id: ID, tenant_id: A, ksef_status: 'queued', ksef_number: null,
@@ -428,13 +431,17 @@ describe('service-role job boundaries', () => {
     await expect(runSubmitInvoice({
       ...submitEvent,
       invoice: { ...submitEvent.invoice, type: 'VAT' },
-    }, ctx)).rejects.toThrow(/Wysyłka faktur rozliczających jest tymczasowo wstrzymana/);
+    }, ctx)).rejects.toThrow('manual reconciliation');
     expect(writes()).toEqual([]);
     expect(mocks.health).not.toHaveBeenCalled();
     expect(mocks.submit).not.toHaveBeenCalled();
     expect(sendEvent).not.toHaveBeenCalled();
   });
-  it('never parks a queued ROZ in Offline24 after a transient submit failure', async () => {
+  // Bez warstwy 1, transient failure na ROZ idzie tą samą ścieżką co inny
+  // dokument specjalny (korekta, zaliczka): Offline24 jej nie przyjmie
+  // (`dokument-specjalny`, decyzja #71), więc kończy `failed` — zwykły,
+  // retriable błąd, nie "do uzgodnienia".
+  it('marks a queued ROZ failed after a transient submit failure, without Offline24 parking', async () => {
     tables.invoices = [{
       id: ID, tenant_id: A, ksef_status: 'queued', ksef_number: null,
       invoice_kind: 'final', invoice_type: 'ROZ',
@@ -445,14 +452,14 @@ describe('service-role job boundaries', () => {
     }, ctx);
     expect(result).toMatchObject({ handled: true, finalStatus: 'failed' });
     expect(tables.invoices[0]).toMatchObject({
-      ksef_status: 'failed', last_error_code: 'ROZ_HOLD_RECONCILE',
+      ksef_status: 'failed', last_error_code: null,
     });
     expect(tables.ksef_offline_queue).toBeUndefined();
     expect(sendEvent).toHaveBeenCalledWith('emit-failure', expect.objectContaining({
-      data: expect.objectContaining({ terminal: true, manualReconciliationRequired: true }),
+      data: expect.objectContaining({ terminal: false, manualReconciliationRequired: false }),
     }));
   });
-  it('marks a legacy ROZ with NULL KSeF status for manual reconciliation', async () => {
+  it('marks a legacy ROZ with NULL KSeF status failed the same way, not as a hold', async () => {
     tables.invoices = [{
       id: ID, tenant_id: A, ksef_status: null, ksef_number: null,
       invoice_kind: 'final', invoice_type: 'ROZ',
@@ -462,7 +469,7 @@ describe('service-role job boundaries', () => {
       invoice: { ...submitEvent.invoice, type: 'ROZ' },
     }, ctx);
     expect(tables.invoices[0]).toMatchObject({
-      ksef_status: 'failed', last_error_code: 'ROZ_HOLD_RECONCILE',
+      ksef_status: 'failed', last_error_code: null,
     });
   });
   it('does not downgrade an already accepted ROZ when its event is replayed', async () => {
@@ -577,7 +584,10 @@ describe('service-role job boundaries', () => {
     expect(sendEvent).not.toHaveBeenCalled();
     expect(mocks.audit).not.toHaveBeenCalled();
   });
-  it('suppresses the failure event when ROZ is accepted after the hold update', async () => {
+  // Bez warstwy 1 ROZ idzie przez ten sam 'mark-as-failed' co każdy inny
+  // dokument specjalny po nieudanym Offline24 (zob. test wyżej) — nie przez
+  // dawny 'mark-as-failed-roz-hold'.
+  it('suppresses the failure event when ROZ is accepted after the failed-write step', async () => {
     tables.invoices = [{
       id: ID, tenant_id: A, ksef_status: 'sending', ksef_number: null, ksef_environment: 'test',
       invoice_kind: 'final', invoice_type: 'ROZ',
@@ -588,7 +598,7 @@ describe('service-role job boundaries', () => {
         ...ctx.step,
         run: async <T>(name: string, fn: () => Promise<T> | T): Promise<T> => {
           const result = await fn();
-          if (name === 'mark-as-failed-roz-hold') {
+          if (name === 'mark-as-failed') {
             tables.invoices[0].ksef_status = 'accepted';
             tables.invoices[0].ksef_number = 'TEST';
           }

@@ -153,12 +153,34 @@ describe('fetchSettledAdvancesNet — tylko zaliczki, które KPiR już liczy', (
       { id: 'roz-1', invoice_kind: 'final', advance_invoice_ids: ['zal-1', 'zal-2', 'zal-1', 'zal-odrzucona', 'zal-cudza', 'zwykla', 'zal-odebrana'] },
       { id: 'roz-pusta', invoice_kind: 'final', advance_invoice_ids: [] },
       { id: 'zwykla-z-tablica', invoice_kind: 'regular', advance_invoice_ids: ['zal-1'] },
-    ]);
+    ], 'test');
     expect(wynik).toEqual(new Map([['roz-1', 12500.5]]));
   });
 
+  it('C-09: zaliczka przyjęta w innym środowisku KSeF rzuca, zamiast pomniejszyć o zero', async () => {
+    tables.invoices.push(
+      faktura({ id: 'zal-prod', invoice_kind: 'advance', ksef_environment: 'production', net_total: 10000 }),
+    );
+    await expect(
+      fetchSettledAdvancesNet(client(), 'firma-a', [
+        { id: 'roz-1', invoice_kind: 'final', advance_invoice_ids: ['zal-prod'] },
+      ], 'test'),
+    ).rejects.toThrow(/innym środowisku/);
+  });
+
+  it('C-09: zaliczka bez środowiska (NULL, historyczna) też rzuca, nie liczy się jako „zero"', async () => {
+    tables.invoices.push(
+      faktura({ id: 'zal-legacy', invoice_kind: 'advance', ksef_environment: null, net_total: 10000 }),
+    );
+    await expect(
+      fetchSettledAdvancesNet(client(), 'firma-a', [
+        { id: 'roz-1', invoice_kind: 'final', advance_invoice_ids: ['zal-legacy'] },
+      ], 'test'),
+    ).rejects.toThrow(/innym środowisku/);
+  });
+
   it('bez ROZ nie pyta bazy', async () => {
-    await fetchSettledAdvancesNet(client(), 'firma-a', [{ id: 'x', invoice_kind: 'regular', advance_invoice_ids: [] }]);
+    await fetchSettledAdvancesNet(client(), 'firma-a', [{ id: 'x', invoice_kind: 'regular', advance_invoice_ids: [] }], 'test');
     expect(queries).toEqual([]);
   });
 
@@ -167,7 +189,7 @@ describe('fetchSettledAdvancesNet — tylko zaliczki, które KPiR już liczy', (
     tables.invoices.push(...ids.map((id) => faktura({ id, invoice_kind: 'advance', net_total: 1 })));
     const wynik = await fetchSettledAdvancesNet(client(), 'firma-a', [
       { id: 'roz', invoice_kind: 'final', advance_invoice_ids: ids },
-    ]);
+    ], 'test');
     expect(wynik.get('roz')).toBe(150);
     expect(queries).toHaveLength(2);
     const porcje = queries.map((q) => (q.filters.find((f) => f[0] === 'in')?.[2] as unknown[]).length);
@@ -177,7 +199,7 @@ describe('fetchSettledAdvancesNet — tylko zaliczki, które KPiR już liczy', (
   it('błąd odczytu rzuca — „nie wiem” to nie „zero zaliczek”', async () => {
     failWhen = zapytanieOZaliczki;
     await expect(
-      fetchSettledAdvancesNet(client(), 'firma-a', [{ id: 'roz', invoice_kind: 'final', advance_invoice_ids: ['zal-1'] }]),
+      fetchSettledAdvancesNet(client(), 'firma-a', [{ id: 'roz', invoice_kind: 'final', advance_invoice_ids: ['zal-1'] }], 'test'),
     ).rejects.toThrow(/zaliczek/);
   });
 });

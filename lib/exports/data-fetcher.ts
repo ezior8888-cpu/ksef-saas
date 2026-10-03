@@ -138,8 +138,8 @@ export async function fetchInvoicesForExport(
     needExpenses
       ? fetchExpensesForExport(supabase, params, environment)
       : Promise.resolve<ExportExpense[]>([]),
-    fetchSettledAdvancesNet(supabase, params.tenantId, issuedRows),
-    fetchAdvanceSettlementRows(supabase, params.tenantId, issuedRows),
+    fetchSettledAdvancesNet(supabase, params.tenantId, issuedRows, environment),
+    fetchAdvanceSettlementRows(supabase, params.tenantId, issuedRows, environment),
   ]);
 
   // ROZ niesie pełną wartość zamówienia; KPiR odejmuje zaliczki, które już

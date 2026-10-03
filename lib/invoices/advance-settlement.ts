@@ -13,6 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
+import type { KsefEnvironment } from '@/types/ksef';
 
 /** Tyle identyfikatorów na jedno `.in()` — długość adresu zapytania PostgREST. */
 const LOOKUP_CHUNK = 100;
@@ -67,12 +68,19 @@ export function settlementRowFromAdvance(row: AdvanceInvoiceDbRow): AdvanceInvoi
  * (`fetchSettledAdvancesNet`): tej firmy, wystawione, przyjęte przez KSeF —
  * cudzy albo nieprzyjęty identyfikator nic nie odejmie.
  *
+ * C-09: `environment` jest wymagane. Zaliczka odczytana niezależnie od
+ * środowiska, bo inaczej przyjęcie w innym środowisku KSeF wyglądałoby jak
+ * "nieprzyjęta" i zostałoby po cichu pominięte — zawyżając przychód ROZ.
+ * Gdy znaleziona zaliczka nie jest z aktywnego środowiska (także NULL),
+ * rzucamy; naprawdę nieznaleziona (inna firma, nieprzyjęta) nic nie odejmuje.
+ *
  * Błąd odczytu rzuca: plik z „zerem zaliczek” miałby zawyżone P_13/P_14/P_15.
  */
 export async function fetchAdvanceSettlementRows(
   client: SupabaseClient,
   tenantId: string,
   invoices: ReadonlyArray<{ id: string; invoice_kind?: string | null; advance_invoice_ids?: string[] | null }>,
+  environment: KsefEnvironment,
 ): Promise<Map<string, AdvanceInvoiceSettlementRow[]>> {
   const finals = invoices.filter(
     (inv) => inv.invoice_kind === 'final' && (inv.advance_invoice_ids?.length ?? 0) > 0,
@@ -82,23 +90,35 @@ export async function fetchAdvanceSettlementRows(
 
   const ids = [...new Set(finals.flatMap((inv) => inv.advance_invoice_ids ?? []))];
   const byId = new Map<string, AdvanceInvoiceSettlementRow>();
+  const envById = new Map<string, string | null>();
   for (let i = 0; i < ids.length; i += LOOKUP_CHUNK) {
     const { data, error } = await client
       .from('invoices')
-      .select('id, internal_number, ksef_number, issue_date, advance_amount, gross_total, net_total, vat_total, fa3_data')
+      .select('id, internal_number, ksef_number, issue_date, advance_amount, gross_total, net_total, vat_total, fa3_data, ksef_environment')
       .eq('tenant_id', tenantId)
       .eq('direction', 'outgoing')
       .eq('invoice_kind', 'advance')
       .eq('ksef_status', 'accepted')
       .in('id', ids.slice(i, i + LOOKUP_CHUNK));
     if (error) throw new Error(`Nie można odczytać zaliczek rozliczonych fakturą końcową: ${error.message}`);
-    for (const row of (data ?? []) as AdvanceInvoiceDbRow[]) byId.set(row.id, settlementRowFromAdvance(row));
+    for (const row of (data ?? []) as Array<AdvanceInvoiceDbRow & { ksef_environment: string | null }>) {
+      byId.set(row.id, settlementRowFromAdvance(row));
+      envById.set(row.id, row.ksef_environment);
+    }
   }
 
   for (const inv of finals) {
-    const rows = [...new Set(inv.advance_invoice_ids ?? [])]
-      .map((id) => byId.get(id))
-      .filter((row): row is AdvanceInvoiceSettlementRow => row !== undefined);
+    const rows: AdvanceInvoiceSettlementRow[] = [];
+    for (const id of new Set(inv.advance_invoice_ids ?? [])) {
+      const row = byId.get(id);
+      if (!row) continue;
+      if (envById.get(id) !== environment) {
+        throw new Error(
+          `Zaliczka ${row.internal_number} rozliczona fakturą ${inv.id} jest przyjęta w innym środowisku KSeF niż aktywne — rozlicz ją ręcznie.`,
+        );
+      }
+      rows.push(row);
+    }
     result.set(inv.id, rows);
   }
   return result;

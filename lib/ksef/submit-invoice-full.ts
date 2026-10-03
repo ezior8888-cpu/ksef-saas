@@ -6,10 +6,9 @@ import {
   generateAdvanceInvoiceXml,
   generateFinalInvoiceXml,
 } from '@/lib/ksef/fa3-advance-generator';
-import { generateFA3Xml, InvoiceValidationError } from '@/lib/xml/fa3-generator';
+import { generateFA3Xml } from '@/lib/xml/fa3-generator';
 import { claimXmlGeneratedAt } from '@/lib/ksef/xml-generated-at';
 import { assertSpecialInvoiceData } from '@/lib/ksef/special-invoice-data';
-import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { InvoiceXmlSchemaError, validateInvoiceXml } from '@/lib/xml/validator';
 import { invoiceXmlExistsForId, uploadInvoiceXml } from '@/lib/storage/r2';
 
@@ -62,16 +61,11 @@ export async function submitInvoiceFullFlow(
     | { finalData: FinalInvoiceData; advanceSettlementRows: AdvanceInvoiceSettlementRow[] }
     | null,
 ): Promise<FullSubmitResult> {
-  // Last backstop for direct callers and a ROZ that reaches this flow from an
-  // older queue event. Stop before XML generation, archive upload or KSeF POST.
-  if (isRozSubmission({
-    invoiceType: invoice.type,
-    finalData: finalPayload?.finalData,
-    finalAdvanceSettlementRows: finalPayload?.advanceSettlementRows,
-  })) {
-    throw new InvoiceValidationError([ROZ_SUBMISSION_HOLD_MESSAGE]);
-  }
-
+  // C-10: warstwa 1 (blokada ROZ "wszędzie") zdjęta 03.10.2026 — treść i
+  // rozliczenie zaliczek czyta `assertSubmitReferences` z bazy PRZED wejściem
+  // tutaj, przy każdej wysyłce. Warstwa 2 (PROD) trzyma ROZ wcześniej, w
+  // `ksef-submit-enqueue.ts` i w samym strażniku referencji — ten flow jej
+  // nie potrzebuje, tak jak nie ma jej dla korekty ani zaliczki.
   const configuredEnv = requireMatchingKsefEnvironment(env);
   await requireKsefVerificationForBackgroundJob(tenantId);
 

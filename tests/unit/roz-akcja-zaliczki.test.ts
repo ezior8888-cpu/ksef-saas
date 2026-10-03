@@ -16,7 +16,6 @@ vi.mock('@/lib/invoices/ksef-submit-enqueue', () => ({ enqueueKsefSubmitAfterDra
 vi.mock('@/lib/audit/log', () => ({ logAudit: vi.fn() }));
 
 import { saveAndSendFinalAction, saveFinalAction } from '@/components/invoices/final-actions';
-import { ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 
 /**
  * Akcja „Wystaw i wyślij” faktury rozliczającej: wiersze zaliczek muszą nieść
@@ -80,8 +79,8 @@ const ZAL_5 = '33333333-3333-4333-8333-333333333333';
 
 function zaliczka(id: string, gross: number, net: number, vat: number, rate: string): Row {
   return {
-    id, tenant_id: 'firma-a', direction: 'outgoing', ksef_status: 'accepted', invoice_kind: 'advance',
-    internal_number: `ZAL/${rate}`, ksef_number: null, issue_date: '2026-08-01',
+    id, tenant_id: 'firma-a', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: 'test',
+    invoice_kind: 'advance', internal_number: `ZAL/${rate}`, ksef_number: null, issue_date: '2026-08-01',
     advance_amount: gross, gross_total: gross, net_total: net, vat_total: vat,
     fa3_data: { lines: [{ vatRate: rate, netAmount: net }] },
   };
@@ -159,19 +158,34 @@ describe('faktura rozliczeniowa — zaliczki ze stawką', () => {
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
-  it.each(['test', 'production'])(
-    'wstrzymuje wysyłkę ROZ przy KSEF_ENV=%s, zanim zapisze szkic lub zleci job',
-    async (env) => {
-      vi.stubEnv('KSEF_ENV', env);
-      // Prior-period accepted ZAL can come from the other environment; the
-      // existing invoice row does not record its KSeF environment.
-      tables.invoices[0].issue_date = '2026-08-01';
-      tables.invoices[0].ksef_number = '5260001246-20260801-0000000000-00';
+  // C-10 (03.10.2026): warstwa 1 (blokada ROZ "wszędzie") zdjęta — treść ROZ
+  // i rozliczenie zaliczek strażnik referencji czyta z bazy przy KAŻDEJ
+  // wysyłce, nie z eventu. "Wystaw i wyślij" zapisuje szkic i zleca job tak
+  // jak zaliczka i korekta; warstwa 2 (PROD) zostaje w `enqueueKsefSubmitAfterDraft`
+  // (zamockowanym tutaj) — testuje ją `roz-submit-hold.test.ts`.
+  it('zapisuje szkic i zleca job z finalData (bez wierszy rozliczenia w evencie)', async () => {
+    vi.stubEnv('KSEF_ENV', 'test');
 
-      const wynik = await saveAndSendFinalAction(formularz([ZAL_23], 12300));
-      expect(wynik).toEqual({ success: false, error: ROZ_SUBMISSION_HOLD_MESSAGE });
-      expect(inserts).toEqual([]);
-      expect(mocks.enqueue).not.toHaveBeenCalled();
-    },
-  );
+    const wynik = await saveAndSendFinalAction(formularz([ZAL_23], 12300));
+    expect(wynik).toEqual({ success: true, invoiceId: 'roz-nowa', offline: false });
+    expect(inserts[0]).toMatchObject({
+      table: 'invoices',
+      value: { invoice_kind: 'final', invoice_type: 'ROZ', advance_invoice_ids: [ZAL_23] },
+    });
+
+    expect(mocks.enqueue).toHaveBeenCalledTimes(1);
+    const call = mocks.enqueue.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(call).toMatchObject({ invoiceId: 'roz-nowa', auditKind: 'final' });
+    expect(call.finalData).toMatchObject({ invoiceType: 'final', advanceInvoiceIds: [ZAL_23] });
+    expect(call).not.toHaveProperty('finalAdvanceSettlementRows');
+  });
+
+  it('nie zapisuje szkicu, gdy kolejka odmówi (certyfikat, pauza operatora)', async () => {
+    vi.stubEnv('KSEF_ENV', 'test');
+    mocks.enqueue.mockResolvedValue({ ok: false, error: 'Brak certyfikatu KSeF.' });
+
+    const wynik = await saveAndSendFinalAction(formularz([ZAL_23], 12300));
+    expect(wynik).toEqual({ success: false, error: 'Brak certyfikatu KSeF.', invoiceId: 'roz-nowa' });
+    expect(inserts.filter((i) => i.table === 'invoices')).toHaveLength(1);
+  });
 });
