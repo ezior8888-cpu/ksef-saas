@@ -40,7 +40,6 @@ import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { isOffline24Enabled } from '@/lib/ksef/offline24-policy';
 import { recordXmlDocument } from '@/lib/storage/xml-documents';
 import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
-import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
 import {
@@ -111,9 +110,6 @@ export const KSEF_SEND_LEASE_SECONDS = 15 * 60;
 /** Gdy wysyłkę trzyma inna próba — ponowienie po 5 min (wynik albo koniec dzierżawy). */
 export const KSEF_SEND_CLAIM_RETRY_MS = 5 * 60 * 1000;
 
-const ROZ_RECONCILIATION_MESSAGE =
-  'Wysyłka faktury rozliczającej została wstrzymana. Przed kolejną próbą ręcznie uzgodnij jej status z KSeF.';
-
 /** Fresh DB read outside Inngest steps, including the accepted status. */
 async function currentSubmissionState(
   data: Parameters<typeof invoiceSubmitRequested.create>[0],
@@ -135,19 +131,6 @@ async function currentSubmissionState(
   if (error || !stored) throw new Error('Nie można sprawdzić rodzaju faktury');
 
   return stored;
-}
-
-function isHeldRozSubmission(
-  data: Parameters<typeof invoiceSubmitRequested.create>[0],
-  stored: Awaited<ReturnType<typeof currentSubmissionState>>,
-): boolean {
-  return isRozSubmission({
-    invoiceType: data.invoice.type,
-    storedInvoiceType: stored.invoice_type,
-    invoiceKind: stored.invoice_kind,
-    finalData: data.finalData,
-    finalAdvanceSettlementRows: data.finalAdvanceSettlementRows,
-  });
 }
 
 /**
@@ -269,11 +252,8 @@ export async function onSubmitInvoiceExhausted(
         });
         return { handled: false, reason: 'accepted-reconciliation' };
       }
-      const heldRoz = isHeldRozSubmission(parsed.data, current);
-      const markedHold = heldRoz
-        ? null
-        : NEUTRAL_HOLD_CODES.find((code) => error.message.includes(`[${code}]`)) ?? null;
-      const reconcileHold = heldRoz || markedHold !== null;
+      const markedHold = NEUTRAL_HOLD_CODES.find((code) => error.message.includes(`[${code}]`)) ?? null;
+      const reconcileHold = markedHold !== null;
 
       // Klasyfikacja błędu (Faza 23 sekcja 3):
       //   - `NonRetriableError` → walidacja / 4xx → 'rejected' (nie ma sensu
@@ -293,11 +273,9 @@ export async function onSubmitInvoiceExhausted(
       const integrityHold = error.name === 'NonRetriableError' &&
         error.message.includes('manual reconciliation');
       const isTransientFailure = !isBusinessRejection && !reconcileHold && !integrityHold;
-      const failureMessage = heldRoz
-        ? ROZ_RECONCILIATION_MESSAGE
-        : markedHold
-          ? error.message.replace(`[${markedHold}] `, '')
-          : `${error.name}: ${error.message}`;
+      const failureMessage = markedHold
+        ? error.message.replace(`[${markedHold}] `, '')
+        : `${error.name}: ${error.message}`;
 
       logger.error('Job wysyłki padł — klasyfikacja błędu', {
         tenantId,
@@ -306,7 +284,6 @@ export async function onSubmitInvoiceExhausted(
         internalNumber: invoice.internalNumber,
         errorName: error.name,
         errorMessage: error.message,
-        heldRoz,
         markedHold,
         isBusinessRejection,
         isTransientFailure,
@@ -320,17 +297,17 @@ export async function onSubmitInvoiceExhausted(
       let statusWriteLost = false;
 
       if (reconcileHold) {
-        // A local safety hold (ROZ, paused submissions, held corrections) or a
+        // A local safety hold (paused submissions, held corrections) or a
         // 440 we cannot attribute to our own earlier submission is not a
         // rejection from KSeF. A conditional update cannot overwrite a
         // concurrent acceptance by another worker.
-        const marked = await step.run(heldRoz ? 'mark-as-failed-roz-hold' : 'mark-as-neutral-hold', async () => {
+        const marked = await step.run('mark-as-neutral-hold', async () => {
           const { data: updated, error: updateError } = await (await createAdminClient())
             .from('invoices')
             .update({
               ksef_status: 'failed',
               last_error: failureMessage,
-              last_error_code: heldRoz ? 'ROZ_HOLD_RECONCILE' : markedHold,
+              last_error_code: markedHold,
               last_error_field: null,
               last_error_suggestion: null,
             })
@@ -586,14 +563,13 @@ export async function runSubmitInvoice(
       await reconcileAcceptedOfflineQueue(parsed.data);
       return { alreadyAccepted: true as const, ksefNumber: current.ksef_number };
     }
-    if (isHeldRozSubmission(parsed.data, current)) {
-      throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
-    }
     // Przed sondą zdrowia i Offline24 — wstrzymanej faktury nie wolno też zaparkować.
     await assertSubmissionNotHeld(parsed.data, current, env);
 
     // Odwołania dokumentu specjalnego (rodzic korekty, zaliczki ROZ) muszą
     // wskazywać faktury tej firmy przyjęte w tym środowisku KSeF (#63, Codex).
+    // Dla ROZ (C-10) ten strażnik niesie też wiersze rozliczenia zaliczek
+    // przeczytane z bazy — budujemy z nich XML, nie z eventu.
     const documentKind = await assertSubmitReferences({
       supabase: await createAdminClient(),
       tenantId,
@@ -603,7 +579,6 @@ export async function runSubmitInvoice(
       correctionData: parsed.data.correctionData,
       advanceData: parsed.data.advanceData,
       finalData: parsed.data.finalData,
-      finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
     });
 
     logger.info('Rozpoczynam wysyłkę faktury', {
@@ -658,9 +633,8 @@ export async function runSubmitInvoice(
             }
 
             const current = await currentSubmissionState(parsed.data);
-            if ((current.ksef_status === 'accepted' && current.ksef_number) ||
-                isHeldRozSubmission(parsed.data, current)) {
-              throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
+            if (current.ksef_status === 'accepted' && current.ksef_number) {
+              throw new NonRetriableError('KSeF invoice already accepted; manual reconciliation required');
             }
             await addToOfflineQueue({
               tenantId,
@@ -869,13 +843,15 @@ export async function runSubmitInvoice(
 
     const result: SubmitOutcome = reconciled ?? await step.run('submit-to-ksef', async (): Promise<SubmitOutcome> => {
       const current = await currentSubmissionState(parsed.data);
-      if ((current.ksef_status === 'accepted' && current.ksef_number) ||
-          isHeldRozSubmission(parsed.data, current)) {
-        throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
+      if (current.ksef_status === 'accepted' && current.ksef_number) {
+        throw new NonRetriableError('KSeF invoice already accepted; manual reconciliation required');
       }
       // Ponownie tuż przed wysyłką: wyłącznik mógł zostać włączony między krokami.
       await assertSubmissionNotHeld(parsed.data, current, env);
-      await assertSubmitReferences({
+      // C-10: ROZ XML idzie z wierszy rozliczenia zaliczek przeczytanych TU,
+      // z bazy — nigdy z `parsed.data` (event mógł nieść stare wiersze, albo
+      // już żadnych od 03.10.2026).
+      const refCheck = await assertSubmitReferences({
         supabase: await createAdminClient(),
         tenantId,
         invoiceId,
@@ -884,20 +860,15 @@ export async function runSubmitInvoice(
         correctionData: parsed.data.correctionData,
         advanceData: parsed.data.advanceData,
         finalData: parsed.data.finalData,
-        finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
       });
       const credentials = await getTenantKsefCredentials(tenantId);
 
       try {
-        // Po refaktorze na zodEvent korzystamy z `parsed.data` (zwalidowanego),
-        // a nie z surowego `data` — typy są pewne, bez `as` casta.
         const finalPayload =
-          parsed.data.finalData &&
-          parsed.data.finalAdvanceSettlementRows &&
-          parsed.data.finalAdvanceSettlementRows.length > 0
+          typeof refCheck === 'object' && refCheck.kind === 'final'
             ? {
-                finalData: parsed.data.finalData,
-                advanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
+                finalData: parsed.data.finalData!,
+                advanceSettlementRows: refCheck.settlementRows,
               }
             : null;
 

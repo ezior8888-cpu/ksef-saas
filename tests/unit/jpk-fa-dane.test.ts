@@ -118,7 +118,7 @@ describe('fetchAdvanceSettlementRows', () => {
     const wynik = await fetchAdvanceSettlementRows(client(), 'firma-a', [
       { id: 'roz', invoice_kind: 'final', advance_invoice_ids: ['zal-2', 'zal-1', 'zal-2', 'zal-odrzucona', 'zal-cudza', 'zwykla'] },
       { id: 'fv', invoice_kind: 'regular', advance_invoice_ids: ['zal-1'] },
-    ]);
+    ], 'test');
     expect([...wynik.keys()]).toEqual(['roz']);
     expect(wynik.get('roz')).toEqual([
       expect.objectContaining({ internal_number: 'ZAL-2', advance_amount: 615, vat_rate: '23', net_amount: 500, vat_amount: 115 }),
@@ -129,7 +129,7 @@ describe('fetchAdvanceSettlementRows', () => {
   it('błąd odczytu rzuca — „zero zaliczek” zawyżyłoby P_13/P_14/P_15', async () => {
     failAdvances = true;
     await expect(
-      fetchAdvanceSettlementRows(client(), 'firma-a', [{ id: 'roz', invoice_kind: 'final', advance_invoice_ids: ['zal-1'] }]),
+      fetchAdvanceSettlementRows(client(), 'firma-a', [{ id: 'roz', invoice_kind: 'final', advance_invoice_ids: ['zal-1'] }], 'test'),
     ).rejects.toThrow(/zaliczek/);
   });
 });

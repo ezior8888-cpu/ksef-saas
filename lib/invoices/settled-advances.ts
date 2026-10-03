@@ -7,6 +7,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { roundToCents } from '@/lib/xml/invoice-calculator';
+import type { KsefEnvironment } from '@/types/ksef';
 
 /** Tyle identyfikatorów na jedno `.in()` — długość adresu zapytania PostgREST. */
 const LOOKUP_CHUNK = 100;
@@ -38,8 +39,9 @@ export async function fetchSettledAdvancesNet(
   client: SupabaseClient,
   tenantId: string,
   invoices: ReadonlyArray<SettlementSource>,
+  environment: KsefEnvironment,
 ): Promise<Map<string, number>> {
-  const totals = await fetchSettledAdvancesTotals(client, tenantId, invoices);
+  const totals = await fetchSettledAdvancesTotals(client, tenantId, invoices, environment);
   return new Map([...totals].map(([id, t]) => [id, t.net]));
 }
 
@@ -47,11 +49,19 @@ export async function fetchSettledAdvancesNet(
  * Netto, VAT i brutto zaliczek rozliczonych każdą fakturą ROZ z listy —
  * te same zaliczki co `fetchSettledAdvancesNet`. Pulpit odejmuje je od ROZ,
  * bo VAT zaliczki był należny w jej miesiącu (AUD-26).
+ *
+ * C-09: `environment` jest wymagane i NIE filtruje zapytania — filtrowanie
+ * po cichu zamieniłoby zaliczkę przyjętą w innym środowisku KSeF w „zero
+ * zaliczek”, czyli zawyżony przychód ROZ. Zamiast tego czytamy zaliczkę
+ * niezależnie od jej środowiska i RZUCAMY, gdy się nie zgadza z aktywnym
+ * (NULL też się nie zgadza) — zaliczka nieznaleziona wcale (inna firma,
+ * nieprzyjęta) wciąż liczy się jako „nic do odjęcia”.
  */
 export async function fetchSettledAdvancesTotals(
   client: SupabaseClient,
   tenantId: string,
   invoices: ReadonlyArray<SettlementSource>,
+  environment: KsefEnvironment,
 ): Promise<Map<string, SettledAdvanceTotals>> {
   const finals = invoices.filter(
     (inv) => inv.invoice_kind === 'final' && (inv.advance_invoice_ids?.length ?? 0) > 0,
@@ -60,11 +70,11 @@ export async function fetchSettledAdvancesTotals(
   if (finals.length === 0) return result;
 
   const ids = [...new Set(finals.flatMap((inv) => inv.advance_invoice_ids ?? []))];
-  const byId = new Map<string, SettledAdvanceTotals>();
+  const byId = new Map<string, SettledAdvanceTotals & { environment: string | null }>();
   for (let i = 0; i < ids.length; i += LOOKUP_CHUNK) {
     const { data, error } = await client
       .from('invoices')
-      .select('id, net_total, vat_total, gross_total')
+      .select('id, net_total, vat_total, gross_total, ksef_environment')
       .eq('tenant_id', tenantId)
       .eq('direction', 'outgoing')
       .eq('invoice_kind', 'advance')
@@ -76,11 +86,13 @@ export async function fetchSettledAdvancesTotals(
       net_total: number | string | null;
       vat_total: number | string | null;
       gross_total: number | string | null;
+      ksef_environment: string | null;
     }>) {
       byId.set(row.id, {
         net: Number(row.net_total ?? 0),
         vat: Number(row.vat_total ?? 0),
         gross: Number(row.gross_total ?? 0),
+        environment: row.ksef_environment,
       });
     }
   }
@@ -90,6 +102,11 @@ export async function fetchSettledAdvancesTotals(
     for (const id of new Set(inv.advance_invoice_ids ?? [])) {
       const adv = byId.get(id);
       if (!adv) continue;
+      if (adv.environment !== environment) {
+        throw new Error(
+          `Zaliczka ${id} rozliczona fakturą ${inv.id} jest przyjęta w innym środowisku KSeF niż aktywne — rozlicz ją ręcznie.`,
+        );
+      }
       sum.net += adv.net;
       sum.vat += adv.vat;
       sum.gross += adv.gross;

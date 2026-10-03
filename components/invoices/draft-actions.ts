@@ -17,9 +17,12 @@ import type { Invoice } from '@/types/invoice';
  * jego numer zostawał zajęty (unikat numeru w organizacji), więc klient
  * wystawiał fakturę pod nowym numerem i zostawiał dziurę w serii.
  *
- * Wysyłka obejmuje tylko zwykłe faktury VAT: korekta, zaliczka i faktura
- * końcowa potrzebują danych specjalnych, których szkic nie przechowuje —
- * takie szkice można usunąć i wystawić ponownie.
+ * Wysyłka obejmuje zwykłe faktury VAT i — od C-10 (03.10.2026) — faktury
+ * rozliczające (ROZ): szkic ROZ niesie w `fa3_data.finalEnvelope` wszystko,
+ * czego potrzebuje strażnik referencji przy wysyłce (ten sam wzorzec co
+ * `advanceEnvelope` dla ZAL). Korekta i zaliczka nadal potrzebują danych
+ * specjalnych, których szkic nie przechowuje — takie szkice można usunąć
+ * i wystawić ponownie.
  */
 
 export type DraftActionResult =
@@ -59,16 +62,25 @@ export async function sendDraftInvoiceAction(invoiceId: string): Promise<DraftAc
       return { success: false, error: 'Do KSeF można wysłać tylko szkic.' };
     }
     const kind = draft.invoice_kind ?? 'regular';
-    if (draft.direction !== 'outgoing' || kind !== 'regular' || (draft.invoice_type ?? 'VAT') !== 'VAT') {
+    // C-10: ROZ idzie tą samą ścieżką kolejkowania co VAT, z `auditKind: 'final'`
+    // — `enqueueKsefSubmitAfterDraft` wstrzymuje ją dalej tylko w PROD (warstwa 2).
+    // Korekta i zaliczka nadal potrzebują danych specjalnych, których szkic
+    // nie przechowuje.
+    const isRegularVat = kind === 'regular' && (draft.invoice_type ?? 'VAT') === 'VAT';
+    const isFinalRoz = kind === 'final' && draft.invoice_type === 'ROZ';
+    if (draft.direction !== 'outgoing' || (!isRegularVat && !isFinalRoz)) {
       return {
         success: false,
-        error: 'Ze szkicu można wysłać tylko zwykłą fakturę VAT. Korektę, zaliczkę i fakturę końcową usuń i wystaw ponownie.',
+        error: 'Ze szkicu można wysłać tylko zwykłą fakturę VAT albo fakturę rozliczającą. Korektę i zaliczkę usuń i wystaw ponownie.',
       };
     }
 
     const invoice = draft.fa3_data as Invoice | null;
     if (!invoice || typeof invoice !== 'object' || !Array.isArray(invoice.lines)) {
       return { success: false, error: 'Szkic nie ma kompletnych danych faktury. Usuń go i wystaw fakturę ponownie.' };
+    }
+    if (isFinalRoz && !invoice.finalEnvelope) {
+      return { success: false, error: 'Szkic faktury rozliczającej nie ma kompletnych danych. Usuń go i wystaw ponownie.' };
     }
 
     // Faktura w KSeF jest wystawiona w dniu przesłania (art. 106na ust. 1),
@@ -83,10 +95,15 @@ export async function sendDraftInvoiceAction(invoiceId: string): Promise<DraftAc
     }
 
     // Ta sama walidacja co w jobie wysyłki — błąd tutaj, zanim faktura
-    // trafi do kolejki i wróci jako odrzucona.
-    const errors = validateInvoice(invoice);
-    if (errors.length > 0) {
-      return { success: false, error: errors[0]! };
+    // trafi do kolejki i wróci jako odrzucona. Tylko dla zwykłej faktury VAT:
+    // sprawdza amountDue === grossTotal, co dla ROZ jest z definicji nieprawdą
+    // (do zapłaty to reszta po zaliczkach) — ROZ waliduje generator FA(3)
+    // przy budowie XML, z wierszami rozliczenia przeczytanymi wtedy z bazy.
+    if (isRegularVat) {
+      const errors = validateInvoice(invoice);
+      if (errors.length > 0) {
+        return { success: false, error: errors[0]! };
+      }
     }
 
     const { data: tenant } = await supabase
@@ -118,7 +135,8 @@ export async function sendDraftInvoiceAction(invoiceId: string): Promise<DraftAc
       invoiceId,
       nip,
       invoice,
-      auditKind: 'regular',
+      finalData: isFinalRoz ? invoice.finalEnvelope : undefined,
+      auditKind: isFinalRoz ? 'final' : 'regular',
       internalNumberForAudit: invoice.internalNumber,
     });
 

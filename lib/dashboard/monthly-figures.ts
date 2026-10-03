@@ -201,7 +201,7 @@ export async function getMonthlyFigures(
   const settled = await fetchSettledAdvancesTotals(supabase, tenantId, [
     ...prevInvoices,
     ...ytdInvoices,
-  ]);
+  ], environment);
 
   const acceptedCount = monthInvoices.length;
   const totalNet =
@@ -332,7 +332,7 @@ export async function getSalesSeries(
   const settled = await fetchSettledAdvancesTotals(supabase, tenantId, [
     ...(current ?? []),
     ...(previous ?? []),
-  ]);
+  ], environment);
 
   const sumByMonth = (
     rows: InvoiceSummary[],

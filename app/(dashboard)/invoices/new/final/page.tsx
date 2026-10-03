@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { loadTenantSellerForForms } from '@/lib/invoices/load-tenant-seller';
 import { findAdvancesAlreadySettled } from '@/lib/invoices/settled-advances';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 
 export default async function NewFinalInvoicePage() {
   const seller = await loadTenantSellerForForms();
@@ -12,6 +13,10 @@ export default async function NewFinalInvoicePage() {
   const tenantId = await getActiveOrgIdFromCookies();
   if (!tenantId) return <SellerProfileBlock />;
 
+  // C-09: tylko zaliczki przyjęte w AKTYWNYM środowisku KSeF — inaczej
+  // formularz pozwoliłby rozliczyć zaliczkę z innego środowiska, a akcja
+  // zapisu i tak by ją odrzuciła (fetchSettlementRows), tracąc czas klienta.
+  const environment = requireConfiguredKsefEnvironment();
   const supabase = await createClient();
   const { data: advances } = await supabase
     .from('invoices')
@@ -20,6 +25,7 @@ export default async function NewFinalInvoicePage() {
     .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
     .eq('invoice_kind', 'advance')
+    .eq('ksef_environment', environment)
     .order('issue_date', { ascending: false })
     .limit(120);
 
