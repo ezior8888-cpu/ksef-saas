@@ -5,6 +5,7 @@ import { finalizeInvoice, validateInvoice, type InvoiceInput } from '@/lib/xml/i
 import { validateInvoiceXml } from '@/lib/xml/validator';
 import { generateAdvanceInvoiceXml, generateFinalInvoiceXml } from '@/lib/ksef/fa3-advance-generator';
 import { generateCorrectionInvoiceXml } from '@/lib/ksef/fa3-correction-generator';
+import { NP_II_REQUIRES_EU_BUYER_MESSAGE } from '@/lib/schemas/invoice-form';
 import type { BuyerParty, Invoice } from '@/types/invoice';
 import type {
   AdvanceInvoiceData,
@@ -238,7 +239,7 @@ describe('validateInvoice — np II i numer VAT-UE nabywcy (AUD-70)', () => {
   });
 });
 
-describe('ZAL / ROZ / KOR — np II nieobsługiwane (nabywca z NIP albo B2C)', () => {
+describe('ZAL / ROZ — np II nieobsługiwane; KOR — np II tylko z nabywcą z UE', () => {
   const SELLER: SellerData = {
     nip: '1234567890',
     name: 'Sprzedawca testowy',
@@ -337,17 +338,37 @@ describe('ZAL / ROZ / KOR — np II nieobsługiwane (nabywca z NIP albo B2C)', (
     ...o,
   });
 
-  it('KOR przed/po: pozycja np II — błąd', () => {
-    expect(() => generateCorrectionInvoiceXml(korekta({}))).toThrow(NP_II_NIEOBSLUGIWANE);
+  // KOR obsługuje już nabywcę z UE (KodUE + NrVatUE) — szczegóły
+  // w `korekta-nabywca-ue.test.ts`. Nabywca z NIP z np II dalej odpada.
+  it('KOR przed/po: pozycja np II z nabywcą z NIP — błąd', () => {
+    expect(() => generateCorrectionInvoiceXml(korekta({}))).toThrow(NP_II_REQUIRES_EU_BUYER_MESSAGE);
     expect(() =>
       generateCorrectionInvoiceXml(korekta({ linesBefore: [pozycja('23')], linesAfter: [pozycja('np_ii')] })),
-    ).toThrow(NP_II_NIEOBSLUGIWANE);
+    ).toThrow(NP_II_REQUIRES_EU_BUYER_MESSAGE);
   });
 
-  it('KOR anulująca fakturę z np II — błąd', () => {
+  it('KOR anulująca fakturę z np II z nabywcą z NIP — błąd', () => {
     expect(() =>
       generateCorrectionInvoiceXml(korekta({ correctionType: 'cancellation', linesAfter: undefined })),
-    ).toThrow(NP_II_NIEOBSLUGIWANE);
+    ).toThrow(NP_II_REQUIRES_EU_BUYER_MESSAGE);
+  });
+
+  it('KOR przed/po np II z nabywcą z UE (DE) — P_13_9, P_18=1, XSD poprawny', async () => {
+    const xml = generateCorrectionInvoiceXml(
+      korekta({
+        buyer: {
+          type: 'eu',
+          vatUeNumber: 'DE123456789',
+          name: 'Kunde GmbH',
+          address: { countryCode: 'DE', addressLine1: 'Hauptstrasse 1', addressLine2: '10115 Berlin' },
+        },
+      }),
+      { prettyPrint: false },
+    );
+    expect(xml).toContain('<KodUE>DE</KodUE><NrVatUE>123456789</NrVatUE>');
+    expect(xml).toContain('<P_13_9>-100.00</P_13_9>');
+    expect(xml).toContain('<P_18>1</P_18>');
+    expect((await validateInvoiceXml(xml)).valid).toBe(true);
   });
 
   it('KOR bez np II — bez zmian (P_18=2, XSD poprawny)', async () => {
