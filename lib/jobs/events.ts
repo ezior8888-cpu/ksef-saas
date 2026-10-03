@@ -121,6 +121,8 @@ export const invoiceSubmitFailed = jobEvent<{
     terminal?: boolean;
     /** Local ROZ safety hold: requires reconciliation, not a KSeF rejection. */
     manualReconciliationRequired?: boolean;
+    /** Kod z katalogu `ksef_error_codes` (00131) — ten sam, co w `invoices.last_error_code`. */
+    errorCode?: string;
   }>('invoice/submit.failed');
 
 /**

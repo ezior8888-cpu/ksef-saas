@@ -57,12 +57,12 @@ describe('decideRetry — parytet z Inngest', () => {
 
   it('zwykły błąd → retry z default schedule i inkrementacją attempt', () => {
     const d = decideRetry(new Error('ECONNRESET'), 0, policy);
-    expect(d).toEqual({ action: 'retry', delayMs: 10_000, nextAttempt: 1 });
+    expect(d).toEqual({ action: 'retry', delayMs: 10_000, nextAttempt: 1, nextWaits: 0 });
   });
 
   it('RetryAfter wygrywa z default schedule (jawne opóźnienie)', () => {
     const d = decideRetry(new RetryAfterError('KSeF 503', '2m'), 1, policy);
-    expect(d).toEqual({ action: 'retry', delayMs: 120_000, nextAttempt: 2 });
+    expect(d).toEqual({ action: 'retry', delayMs: 120_000, nextAttempt: 2, nextWaits: 0 });
   });
 
   it('wyczerpanie prób: attempt >= maxRetries → exhausted', () => {
@@ -82,6 +82,7 @@ describe('decideRetry — parytet z Inngest', () => {
         action: 'retry',
         delayMs: expected[attempt],
         nextAttempt: attempt + 1,
+        nextWaits: 0,
       });
     }
     // 6. wykonanie (attempt=5) → exhausted → ścieżka Offline24 w onExhausted.
@@ -112,11 +113,13 @@ describe('decideRetry — błędy KLAS INNGEST (runnery są współdzielone)', (
       action: 'retry',
       delayMs: 30_000,
       nextAttempt: 1,
+      nextWaits: 0,
     });
     expect(decideRetry(new InngestRetryAfterError('x', '1h'), 2, policy)).toEqual({
       action: 'retry',
       delayMs: 3_600_000,
       nextAttempt: 3,
+      nextWaits: 0,
     });
   });
 

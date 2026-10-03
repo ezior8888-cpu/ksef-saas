@@ -15,7 +15,7 @@ import type { Job, JobResult } from 'pg-boss';
 import { startBoss } from './boss';
 import { createJobLogger } from './logger';
 import { retryPolicyFor, type JobDefinition } from './registry';
-import { ATTEMPT_KEY, decideRetry, readAttempt } from './retry';
+import { ATTEMPT_KEY, decideRetry, readAttempt, readWaits, WAITS_KEY } from './retry';
 import { recordJobRun } from './run-log';
 import { reportExhaustedJob } from './sentry';
 import { createJobStep } from './step-shim';
@@ -38,14 +38,16 @@ async function runOne(
   job: Job<object>,
 ): Promise<JobResult> {
   const attempt = readAttempt(job.data);
+  const waits = readWaits(job.data);
   const jobLog = createJobLogger(`${def.queue}#${job.id.slice(0, 8)}`);
   const completed: JobResult = { id: job.id, status: 'completed' };
 
-  // Walidacja payloadu na granicy (bez klucza technicznego __attempt).
+  // Walidacja payloadu na granicy (bez kluczy technicznych __attempt/__waits).
   let data: unknown = job.data;
   if (def.schema) {
     const cleaned = { ...(job.data as Record<string, unknown>) };
     delete cleaned[ATTEMPT_KEY];
+    delete cleaned[WAITS_KEY];
     const parsed = def.schema.safeParse(cleaned);
     if (!parsed.success) {
       jobLog.error('payload nie przeszedł walidacji — onExhausted', {
@@ -73,18 +75,24 @@ async function runOne(
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     await recordJobRun({ queue: def.queue, runId: job.id, status: 'failed', durationMs: Date.now() - startedAt, error });
-    const decision = decideRetry(error, attempt, policy);
+    const decision = decideRetry(error, attempt, policy, waits);
 
     if (decision.action === 'retry') {
       jobLog.warn(
-        `próba ${attempt + 1} padła — retry za ${decision.delayMs}ms`,
+        decision.nextAttempt === attempt
+          ? `próba ${attempt + 1} czeka (odczekanie ${decision.nextWaits}) — ponownie za ${decision.delayMs}ms`
+          : `próba ${attempt + 1} padła — retry za ${decision.delayMs}ms`,
         error,
       );
       try {
         const boss = await startBoss();
         await boss.send(
           def.queue,
-          { ...(job.data as object), [ATTEMPT_KEY]: decision.nextAttempt },
+          {
+            ...(job.data as object),
+            [ATTEMPT_KEY]: decision.nextAttempt,
+            [WAITS_KEY]: decision.nextWaits,
+          },
           {
             startAfter: Math.ceil(decision.delayMs / 1000),
             // Bez grupy ponowienie omijało limit per firma/NIP.
