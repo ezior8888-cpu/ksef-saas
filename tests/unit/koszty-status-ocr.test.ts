@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
   response: {
     data: null as Record<string, unknown> | null,
-    error: null as { code: string; message: string } | null,
+    error: null as { code: string; message: string; details?: string; hint?: string } | null,
   },
 }));
 
@@ -121,6 +121,29 @@ describe('getOcrJobStatusAction — trzy wyniki (E16)', () => {
     expect(logged).toContain('08006');
     expect(logged).not.toContain('10.0.0.5');
     expect(logged).not.toContain('1234567890');
+  });
+
+  it('szczegóły i podpowiedź PostgREST-a też nie wychodzą — ani do klienta, ani do logu', async () => {
+    mocks.response = {
+      data: null,
+      error: {
+        code: '42501',
+        message: 'permission denied for table ocr_jobs',
+        details: 'Key (tenant_id)=(aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa) is not present',
+        hint: 'Wiersz należy do Jan Kowalski, NIP 1234567890',
+      },
+    };
+
+    const out = await getOcrJobStatusAction(JOB_ID);
+
+    expect(out).toMatchObject({ success: false, retryable: true });
+    const sent = JSON.stringify(out);
+    const logged = JSON.stringify(consoleError.mock.calls);
+    for (const secret of ['aaaaaaaa-aaaa', 'Kowalski', '1234567890', 'permission denied']) {
+      expect(sent).not.toContain(secret);
+      expect(logged).not.toContain(secret);
+    }
+    expect(logged).toContain('42501');
   });
 
   it('błąd ma pierwszeństwo przed danymi — nie zgadujemy stanu z połowicznej odpowiedzi', async () => {

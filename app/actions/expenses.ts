@@ -209,7 +209,13 @@ export async function uploadExpensePhotoAction(formData: FormData) {
  *    stan zadania jest nieznany, więc UI pyta dalej. Wcześniej błąd ginął
  *    i wyglądał jak brak zadania — UI pokazywał porażkę, klient wgrywał
  *    zdjęcie drugi raz i powstawał drugi wydatek.
- * Treść błędu bazy zostaje w logu serwera (sam kod), nie trafia do klienta.
+ * Treść błędu bazy nie trafia ani do klienta, ani do logu serwera (tam
+ * sam kod).
+ *
+ * Każdy błąd odczytu traktujemy jako chwilowy — także trwałe jak 42501
+ * (brak uprawnień). Uproszczenie świadome: rozróżnianie kodów nic by nie
+ * dało, bo UI i tak przestaje pytać po 60 s, a pomyłka w drugą stronę
+ * (chwilowy uznany za trwały) to znów drugi wydatek z tego samego zdjęcia.
  */
 export async function getOcrJobStatusAction(ocrJobId: string) {
   // Argument akcji przychodzi z przeglądarki. Nie-UUID to nie chwilowy błąd,

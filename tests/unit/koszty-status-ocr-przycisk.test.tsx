@@ -220,6 +220,56 @@ describe('CaptureButton — odpytywanie stanu odczytu (E16)', () => {
     expect(mocks.toast.error).not.toHaveBeenCalled();
   });
 
+  it('odmontowanie w trakcie pytania → spóźnione „completed” nie przenosi i nie pokazuje toastu', async () => {
+    let resolve!: (value: StatusResult) => void;
+    mocks.getStatus.mockReturnValue(
+      new Promise<StatusResult>((r) => {
+        resolve = r;
+      }),
+    );
+
+    await renderAndUpload();
+    expect(mocks.getStatus).toHaveBeenCalledOnce();
+
+    // Klient przechodzi na inną stronę, zanim serwer odpowie.
+    act(() => root!.unmount());
+    root = null;
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () => {
+      resolve(job('completed', EXPENSE_ID));
+    });
+    await advance(70_000);
+    expect(mocks.router.push).not.toHaveBeenCalled();
+    expect(mocks.toast.success).not.toHaveBeenCalled();
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+    expect(mocks.getStatus).toHaveBeenCalledOnce();
+  });
+
+  it('odpowiedź wisi dłużej niż 60 s → jeden toast o czasie, spóźnione „completed” nic nie robi', async () => {
+    let resolve!: (value: StatusResult) => void;
+    mocks.getStatus.mockReturnValue(
+      new Promise<StatusResult>((r) => {
+        resolve = r;
+      }),
+    );
+
+    await renderAndUpload();
+    await advance(60_000);
+    expect(mocks.toast.error).toHaveBeenCalledOnce();
+    expect(mocks.toast.error).toHaveBeenCalledWith('Przekroczono czas oczekiwania');
+    expect(buttonText()).toContain('Dodaj wydatek');
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () => {
+      resolve(job('completed', EXPENSE_ID));
+    });
+    expect(mocks.router.push).not.toHaveBeenCalled();
+    expect(mocks.toast.success).not.toHaveBeenCalled();
+    expect(mocks.toast.error).toHaveBeenCalledOnce();
+    expect(mocks.getStatus).toHaveBeenCalledOnce();
+  });
+
   it('po zwolnieniu blokady pytamy dalej (wolna odpowiedź pending, potem completed)', async () => {
     let resolve!: (value: StatusResult) => void;
     mocks.getStatus
