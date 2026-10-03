@@ -10,6 +10,7 @@ import {
   Flag,
   Gauge,
   LifeBuoy,
+  Send,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -26,6 +27,7 @@ const LINKS: AdminNavLink[] = [
   { href: '/admin', label: 'Dashboard', icon: Gauge },
   { href: '/admin/users', label: 'Użytkownicy', icon: Users },
   { href: '/admin/system', label: 'System', icon: ActivitySquare },
+  { href: '/admin/ksef', label: 'KSeF — cykl życia', icon: Send },
   { href: '/admin/support', label: 'Support', icon: LifeBuoy },
   { href: '/admin/audit', label: 'Audit log', icon: ClipboardList },
   { href: '/admin/flags', label: 'Feature flags', icon: Flag },
