@@ -183,7 +183,7 @@ describe('EVENT_QUEUE_MAP — alarm dryfu względem lib/jobs/events.ts', () => {
 });
 
 describe('CRON_JOBS', () => {
-  it('25 cronów (stan 3 paź 2026), unikalne kolejki cron.*', () => {
+  it('27 cronów (stan 3 paź 2026), unikalne kolejki cron.*', () => {
     // 22 → 23: doszedł `cron.flo-tick`, puls agenta FLO (krok 13 planu).
     // 23 → 24: `cron.flo-shadow-settle`, rozstrzyganie trybu cichego (K3.2) —
     // raz w tygodniu, więc jeden przebieg na tydzień.
@@ -195,10 +195,13 @@ describe('CRON_JOBS', () => {
     // a każdy nowy kosztuje przebiegi na produkcji. Zmiana tu ma być
     // 24 → 25: `cron.inbox-backfill` (K2, 03.10.2026) — co 15 min domyka
     // faktury ze skrzynki bez kosztu/XML; 96 lekkich przebiegów na dobę.
+    // 25 → 27: cykl życia faktury (PR 4b, 03.10.2026) — `cron.ksef-lifecycle-reconcile`
+    // co 15 min (I1, ponowienia transient, hamulec; 96 lekkich przebiegów na dobę)
+    // i `cron.ksef-lifecycle-report` raz dziennie o 07:30.
     // Ta liczba jest celowo wpisana na sztywno: cron dokłada się cicho,
     // a każdy nowy kosztuje przebiegi na produkcji. Zmiana tu ma być
     // świadoma, nie automatyczna.
-    expect(CRON_JOBS.length).toBe(25);
+    expect(CRON_JOBS.length).toBe(27);
     const queues = CRON_JOBS.map((c) => c.queue);
     expect(new Set(queues).size).toBe(queues.length);
     for (const c of CRON_JOBS) {
