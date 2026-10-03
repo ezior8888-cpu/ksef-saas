@@ -7,53 +7,76 @@
  * to warstwa magazynu). Zapis idzie przez klienta admina: `authenticated`
  * nie ma prawa zapisu do tej tabeli (00027).
  *
- * Idempotentnie: jeden wiersz na fakturę; ponowienie aktualizuje ścieżkę
- * i skrót zamiast dopisywać kolejny.
+ * Jeden wiersz na fakturę. Ponowienie musi wskazywać ten sam plik i te same
+ * bajty; raz zapisanych dowodów nie zastępujemy danymi kolejnej próby.
  */
 
 import { createHash } from 'node:crypto';
 
+import { requireInvoiceTenant } from '@/lib/jobs/runners/tenant-boundary';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-import { downloadInvoiceXmlUnchecked } from './r2';
+import { downloadFromR2 } from './r2';
+import { assertTenantStoragePath } from './tenant-path';
 
 export interface XmlDocumentRecord {
   tenantId: string;
   invoiceId: string;
   storagePath: string;
-  /** Brak = policz z pliku w magazynie (uzgodnienie bez świeżego uploadu). */
+  /** Oczekiwany skrót; zawsze porównywany z dokładnymi bajtami w magazynie. */
   sha256Hash?: string;
   sizeBytes?: number;
 }
 
 export async function recordXmlDocument(record: XmlDocumentRecord): Promise<void> {
-  let { sha256Hash, sizeBytes } = record;
-  if (!sha256Hash) {
-    const xml = await downloadInvoiceXmlUnchecked(record.storagePath, record.tenantId);
-    sha256Hash = createHash('sha256').update(xml, 'utf8').digest('hex');
-    sizeBytes = Buffer.byteLength(xml, 'utf8');
+  assertTenantStoragePath(record.storagePath, record.tenantId);
+  await requireInvoiceTenant(record.invoiceId, record.tenantId);
+
+  // Importy mogą zawierać BOM lub inne kodowanie. Skrót i rozmiar dotyczą
+  // oryginalnego bufora, bez dekodowania XML i ponownego kodowania UTF-8.
+  const bytes = await downloadFromR2(record.storagePath, record.tenantId);
+  const sha256Hash = createHash('sha256').update(bytes).digest('hex');
+  const sizeBytes = bytes.length;
+  if ((record.sha256Hash !== undefined && record.sha256Hash !== sha256Hash) ||
+      (record.sizeBytes !== undefined && record.sizeBytes !== sizeBytes)) {
+    throw new Error('xml_documents: zapisany plik nie zgadza się z oczekiwanym XML');
   }
 
   const admin = createAdminClient();
-  const { data: existing, error: readError } = await admin
-    .from('xml_documents')
-    .select('id')
-    .eq('invoice_id', record.invoiceId)
-    .eq('tenant_id', record.tenantId)
-    .limit(1)
-    .maybeSingle();
-  if (readError) throw new Error(`xml_documents: ${readError.message}`);
-
   const row = {
     storage_provider: 'r2',
     storage_path: record.storagePath,
     sha256_hash: sha256Hash,
-    file_size_bytes: sizeBytes ?? null,
+    file_size_bytes: sizeBytes,
   };
-  const { error } = existing
-    ? await admin.from('xml_documents').update(row).eq('id', existing.id)
-    : await admin
-        .from('xml_documents')
-        .insert({ ...row, invoice_id: record.invoiceId, tenant_id: record.tenantId });
-  if (error) throw new Error(`xml_documents: ${error.message}`);
+  const readExisting = async () => {
+    const { data, error } = await admin
+      .from('xml_documents')
+      .select('storage_provider, storage_path, sha256_hash, file_size_bytes')
+      .eq('invoice_id', record.invoiceId)
+      .eq('tenant_id', record.tenantId)
+      .limit(2);
+    if (error) throw new Error(`xml_documents: ${error.message}`);
+    if (!data) throw new Error('xml_documents: brak wyniku odczytu metadanych');
+    if (data.length > 1) throw new Error('xml_documents: wiele zapisów XML dla jednej faktury');
+    const existing = data[0];
+    if (existing && (existing.storage_provider !== row.storage_provider ||
+        existing.storage_path !== row.storage_path || existing.sha256_hash !== row.sha256_hash ||
+        existing.file_size_bytes !== row.file_size_bytes)) {
+      throw new Error('xml_documents: istniejący zapis wskazuje inny plik XML');
+    }
+    return existing;
+  };
+
+  if (await readExisting()) return;
+  const { error } = await admin.from('xml_documents')
+    .insert({ ...row, invoice_id: record.invoiceId, tenant_id: record.tenantId });
+  if (!error) return;
+  if (error.code !== '23505') throw new Error(`xml_documents: ${error.message}`);
+
+  // Unikalność z 00129 rozstrzyga równoległe zapisy. Sam konflikt klucza
+  // nie jest sukcesem: zwycięski wiersz musi zawierać dokładnie te same dowody.
+  if (!await readExisting()) {
+    throw new Error('xml_documents: konflikt zapisu bez metadanych XML');
+  }
 }

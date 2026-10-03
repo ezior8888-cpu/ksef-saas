@@ -1,4 +1,5 @@
 import { NonRetriableError } from '@/lib/jobs/errors';
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
@@ -28,6 +29,11 @@ const mocks = vi.hoisted(() => ({
   health: vi.fn(),
   addOffline: vi.fn(),
   recordXml: vi.fn(),
+  ownSubmission: vi.fn(),
+  xmlAdmin: vi.fn(),
+  xmlDownload: vi.fn(),
+  xmlInsert: vi.fn(),
+  capture: vi.fn(),
 }));
 
 vi.mock('@/lib/ksef/client', async (orig) => ({
@@ -55,6 +61,7 @@ vi.mock('@/lib/ksef/submission-log', () => ({
   markKsefSubmission: mocks.mark,
   findOpenKsefSubmission: mocks.findOpen,
   isOwnKsefSession: mocks.isOwn,
+  findOwnKsefSubmission: mocks.ownSubmission,
   findSessionReferenceForKsefNumber: vi.fn(async () => null),
 }));
 vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn() }));
@@ -64,6 +71,11 @@ vi.mock('@/lib/ksef/submit-invoice-full', () => ({ submitInvoiceFullFlow: mocks.
 vi.mock('@/lib/ksef/health-check', () => ({ shouldUseOfflineMode: mocks.health, isKsefHealthy: async () => true }));
 vi.mock('@/lib/ksef/offline-queue', () => ({ addToOfflineQueue: mocks.addOffline }));
 vi.mock('@/lib/storage/xml-documents', () => ({ recordXmlDocument: mocks.recordXml }));
+vi.mock('@/lib/storage/r2', async (orig) => ({
+  ...(await orig<typeof import('@/lib/storage/r2')>()),
+  downloadFromR2: mocks.xmlDownload,
+}));
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.xmlAdmin }));
 vi.mock('@/lib/auth/ksef-verification-guard', () => ({
   requireKsefVerificationForBackgroundJob: vi.fn(),
   KsefNotVerifiedError: class KsefNotVerifiedError extends Error {},
@@ -99,9 +111,10 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/cache/invalidation', () => ({ invalidateTenantDashboard: vi.fn() }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: vi.fn() }));
 vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
-vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), addBreadcrumb: vi.fn() }));
+vi.mock('@sentry/nextjs', () => ({ captureException: mocks.capture, addBreadcrumb: vi.fn() }));
 
 import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
+import { KsefInvoiceRejectedError } from '@/lib/ksef/submit';
 import { onSubmitInvoiceExhausted, runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
 import type { KsefAuth } from '@/lib/ksef/auth';
 
@@ -132,9 +145,152 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.credentials.mockResolvedValue(XADES);
   mocks.findOpen.mockResolvedValue(null);
+  mocks.ownSubmission.mockResolvedValue(null);
+  mocks.recordXml.mockReset().mockResolvedValue(undefined);
   mocks.health.mockResolvedValue({ offline: false });
   mocks.fullFlow.mockResolvedValue(ACCEPTED);
   vi.stubEnv('KSEF_ENV', 'test');
+});
+
+describe('uzgodnienie KSeF: hash wysłanego XML zamiast dowodu z bieżącego archiwum', () => {
+  const ORIGINAL_XML = Buffer.from('<Faktura>oryginał</Faktura>');
+  const CHANGED_XML = Buffer.from('<Faktura>zmieniona</Faktura>');
+  const ORIGINAL_HASH = createHash('sha256').update(ORIGINAL_XML).digest('hex');
+  const ORIGINAL_REFS = { sessionReferenceNumber: 'S-ORIGINAL', invoiceReferenceNumber: 'I-ORIGINAL' };
+  const ORIGINAL_PATH = `${zdarzenie.tenantId}/2026/10/${zdarzenie.invoiceId}.xml`;
+
+  async function useActualMetadataHelper(bytes: Buffer) {
+    const actual = await vi.importActual<typeof import('@/lib/storage/xml-documents')>('@/lib/storage/xml-documents');
+    mocks.recordXml.mockImplementation(actual.recordXmlDocument);
+    mocks.xmlDownload.mockResolvedValue(bytes);
+    mocks.xmlInsert.mockResolvedValue({ error: null });
+    mocks.xmlAdmin.mockReturnValue({
+      from: () => {
+        const q = {
+          select: () => q,
+          eq: () => q,
+          limit: async () => ({ data: [], error: null }),
+          insert: mocks.xmlInsert,
+        };
+        return q;
+      },
+    });
+  }
+
+  function reconcileWithHash(payloadHash: string | null | undefined) {
+    mocks.findOpen.mockResolvedValue({ ...ORIGINAL_REFS, payloadHash });
+    mocks.fetch.mockResolvedValue({
+      referenceNumber: ORIGINAL_REFS.invoiceReferenceNumber,
+      status: { code: 200, description: 'Sukces' },
+      ksefNumber: ACCEPTED.ksefNumber,
+    });
+  }
+
+  function duplicateWithHash(payloadHash: string | null) {
+    mocks.fullFlow.mockRejectedValue(new KsefInvoiceRejectedError(440, {
+      code: 440, description: 'Duplikat',
+      extensions: { originalSessionReferenceNumber: ORIGINAL_REFS.sessionReferenceNumber, originalKsefNumber: ACCEPTED.ksefNumber },
+    }));
+    mocks.ownSubmission.mockResolvedValue({ ...ORIGINAL_REFS, payloadHash });
+  }
+
+  function expectAcceptedAndUpo() {
+    expect(mocks.status).toHaveBeenCalledWith(zdarzenie.invoiceId, expect.objectContaining({
+      ksef_status: 'accepted', ksef_number: ACCEPTED.ksefNumber,
+    }), zdarzenie.tenantId);
+    expect(mocks.sendEvent).toHaveBeenCalledWith('trigger-upo-download', expect.objectContaining({
+      data: expect.objectContaining({ sessionReferenceNumber: ORIGINAL_REFS.sessionReferenceNumber }),
+    }));
+  }
+
+  it('przyjęta próba A z archiwum B: rzeczywisty helper odrzuca dowód B, akceptacja i UPO zostają', async () => {
+    await useActualMetadataHelper(CHANGED_XML);
+    reconcileWithHash(ORIGINAL_HASH);
+    await expect(runSubmitInvoice(zdarzenie, ctx)).resolves.toMatchObject({ success: true });
+    expect(mocks.fullFlow).not.toHaveBeenCalled();
+    expect(mocks.recordXml).toHaveBeenCalledWith(expect.objectContaining({ sha256Hash: ORIGINAL_HASH }));
+    expect(mocks.xmlDownload).toHaveBeenCalledWith(ORIGINAL_PATH, zdarzenie.tenantId);
+    expect(mocks.xmlInsert).not.toHaveBeenCalled();
+    expect(mocks.capture).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ tags: { area: 'ksef.xml-documents' } }));
+    expectAcceptedAndUpo();
+  });
+
+  it('przyjęta próba A z tym samym archiwum A: rzeczywisty helper zapisuje sprawdzony dowód', async () => {
+    await useActualMetadataHelper(ORIGINAL_XML);
+    reconcileWithHash(ORIGINAL_HASH);
+    await expect(runSubmitInvoice(zdarzenie, ctx)).resolves.toMatchObject({ success: true });
+    expect(mocks.xmlInsert).toHaveBeenCalledWith(expect.objectContaining({
+      sha256_hash: ORIGINAL_HASH, file_size_bytes: ORIGINAL_XML.length, storage_path: ORIGINAL_PATH,
+    }));
+    expectAcceptedAndUpo();
+  });
+
+  it.each([
+    ['NULL', null], ['brak pola', undefined], ['pusty', ''], ['krótki', 'abc'], ['wielkie litery', 'A'.repeat(64)],
+  ])('uzgodnienie bez kanonicznego skrótu (%s): akceptacja i UPO, bez tworzenia metadanych', async (_label, hash) => {
+    await useActualMetadataHelper(CHANGED_XML);
+    reconcileWithHash(hash);
+    await expect(runSubmitInvoice(zdarzenie, ctx)).resolves.toMatchObject({ success: true });
+    expect(mocks.recordXml).not.toHaveBeenCalled();
+    expect(mocks.xmlDownload).not.toHaveBeenCalled();
+    expect(mocks.xmlInsert).not.toHaveBeenCalled();
+    expect(mocks.capture).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ tags: { area: 'ksef.xml-documents' } }));
+    expectAcceptedAndUpo();
+  });
+
+  it('440 bierze hash oryginalnej sesji A: nowa próba z archiwum B nie zyskuje dowodu', async () => {
+    await useActualMetadataHelper(CHANGED_XML);
+    duplicateWithHash(ORIGINAL_HASH);
+    await expect(runSubmitInvoice(zdarzenie, ctx)).resolves.toMatchObject({ success: true });
+    expect(mocks.ownSubmission).toHaveBeenCalledWith(zdarzenie.tenantId, zdarzenie.invoiceId,
+      ORIGINAL_REFS.sessionReferenceNumber, ACCEPTED.ksefNumber);
+    expect(mocks.recordXml).toHaveBeenCalledWith(expect.objectContaining({ sha256Hash: ORIGINAL_HASH }));
+    expect(mocks.xmlInsert).not.toHaveBeenCalled();
+    expectAcceptedAndUpo();
+  });
+
+  it('440 z dowodem A i archiwum A zapisuje metadane i zamyka oryginalną próbę', async () => {
+    await useActualMetadataHelper(ORIGINAL_XML);
+    duplicateWithHash(ORIGINAL_HASH);
+    await expect(runSubmitInvoice(zdarzenie, ctx)).resolves.toMatchObject({ success: true });
+    expect(mocks.xmlInsert).toHaveBeenCalledWith(expect.objectContaining({ sha256_hash: ORIGINAL_HASH }));
+    expect(mocks.mark).toHaveBeenCalledWith(expect.objectContaining({
+      invoiceReferenceNumber: ORIGINAL_REFS.invoiceReferenceNumber, status: 'accepted',
+    }));
+    expectAcceptedAndUpo();
+  });
+
+  it('440 z własnej starszej sesji NULL hash zachowuje akceptację i UPO bez dowodu XML', async () => {
+    await useActualMetadataHelper(CHANGED_XML);
+    duplicateWithHash(null);
+    await expect(runSubmitInvoice(zdarzenie, ctx)).resolves.toMatchObject({ success: true });
+    expect(mocks.recordXml).not.toHaveBeenCalled();
+    expect(mocks.xmlDownload).not.toHaveBeenCalled();
+    expectAcceptedAndUpo();
+  });
+
+  it('awaria odczytu oryginalnej sesji 440 nie przyznaje akceptacji ani dowodu', async () => {
+    duplicateWithHash(ORIGINAL_HASH);
+    mocks.ownSubmission.mockRejectedValueOnce(new Error('history unavailable'));
+    await expect(runSubmitInvoice(zdarzenie, ctx)).rejects.toThrow('history unavailable');
+    expect(mocks.status).not.toHaveBeenCalled();
+    expect(mocks.recordXml).not.toHaveBeenCalled();
+  });
+
+  it('awaria odczytu poprzedniej próby nie powoduje nowej wysyłki ani dowodu', async () => {
+    mocks.findOpen.mockRejectedValueOnce(new Error('history unavailable'));
+    await expect(runSubmitInvoice(zdarzenie, ctx)).rejects.toThrow('history unavailable');
+    expect(mocks.fullFlow).not.toHaveBeenCalled();
+    expect(mocks.status).not.toHaveBeenCalled();
+    expect(mocks.recordXml).not.toHaveBeenCalled();
+  });
+
+  it('również świeży wynik bez skrótu nie może wytworzyć dowodu z magazynu', async () => {
+    mocks.fullFlow.mockResolvedValue({ ...ACCEPTED, xmlSha256Hash: undefined });
+    await expect(runSubmitInvoice(zdarzenie, ctx)).resolves.toMatchObject({ success: true });
+    expect(mocks.recordXml).not.toHaveBeenCalled();
+    expect(mocks.capture).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ tags: { area: 'ksef.xml-documents' } }));
+  });
 });
 afterEach(() => vi.unstubAllEnvs());
 

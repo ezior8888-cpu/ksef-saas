@@ -9,6 +9,7 @@ vi.mock('@/lib/ksef/submission-log', () => ({
   markKsefSubmission: vi.fn(),
   findOpenKsefSubmission: vi.fn(async () => null),
   isOwnKsefSession: vi.fn(async () => false),
+  findOwnKsefSubmission: vi.fn(async () => null),
   findSessionReferenceForKsefNumber: vi.fn(async () => 'SESJA-TEST'),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createAdminClient: mocks.admin }));

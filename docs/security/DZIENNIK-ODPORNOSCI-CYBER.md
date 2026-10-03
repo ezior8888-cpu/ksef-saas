@@ -1041,3 +1041,177 @@ Rejestr Claude nazywa `00095` „następnym wolnym”, lecz lokalny stos Codexa 
 **Weryfikacja i granice:** pełne lokalne `pnpm run ci` na `40825e3`: typy, lint bez błędów (29 wcześniejszych ostrzeżeń), 66 testów Node i 4000/4000 Vitest; walidacja FA(3) XSD 18/18. `pnpm build` po wpisie dziennika zakończył się sukcesem, 82/82 strony. Niezależna recenzja nie znalazła obejścia kontroli sprzedawcy i wskazała błędne przekierowanie przy niepełnym profilu, poprawione w `16e5768`. SQL, KSeF live, Coolify i db-1 nie były sprawdzane. Stan `00094` i `00088` na db-1 jest niepotwierdzony: bez `00094` nowy kod blokuje zwykłe faktury i zaliczki, więc nie wolno go scalać ani wdrażać przed ustaleniem kolejności baza → web/worker. KOR/ROZ w PROD pozostają wstrzymane; ich adnotacje, pełna niezmienność pozostałych pól ZAL oraz uzgodnienie kwot korekt wymagają osobnych prac.
 
 **Dogrywka recenzencka:** niezależny przegląd wykazał, że samo porównanie sprzedawcy, MPP, P_16 i płatności nie wiązało wszystkich pól `advanceData` z zapisaną fakturą. W szczególności zmiana `advanceAmount` mogła zmienić XML bez zmiany `gross_total`, a `other`→`compensation` zmieniało `OpisPlatnosci`, choć ghost używał w obu przypadkach metody `other`. Commit `6610809` dopisuje całą kanoniczną kopertę ZAL do `fa3_data` i zdarzenia; przed KSeF worker porównuje ją z payloadem, a stare dokumenty bez migawki zatrzymuje do ręcznego uzgodnienia. Testy odtwarzają zmianę kwoty, nabywcy, metody i brak migawki. Commit `bf6a0d5` uzupełnia atrapę dawnego testu awarii KSeF o tę samą kopertę. Na końcowym kodzie `pnpm run ci` przeszło: typecheck, lint bez błędów, 66 testów Node i 4003/4003 Vitest; `pnpm build` zbudował 82/82 strony (po zmianie wyłącznie pliku testowego). To dowód lokalny, bez próby na db-1 lub serwerze.
+
+## 2026-10-03 — C-20, odbiór przeniesień C-11/C-12 i integralność dowodów XML
+
+**Zakres:** na polecenie Igora sprawdzono wiadomość Bartosza/Claude C-20 i
+aktualny `main` `407ac44dcc354920fac3c6fe014ee977ae734c13`. Claude przejął stare
+szkice; nowy pakiet powstał od `main` na `codex/security-xml-evidence-integrity`.
+Nie rozwijano starych gałęzi C-11/C-12 ani cudzych `claude/*`.
+
+**Przeniesienia — kod:** C-11 jest w `main` przez #179 (`fb8f9bf`), migracje
+00100/00101 starego szkicu mają teraz numery **00127/00128**. RPC zachowuje
+izolację firmy, aktywne członkostwo, kontrolę pól, CAS i atomowy audyt.
+C-12 jest w `main` przez #180 (`a7a2877`, QR/podgląd B14), #181 (`37876380`,
+archiwum oryginalnych bajtów importu) i #183 (`700f9b4`, archiwum skrzynki).
+#128 jest zamknięty bez własnego merge — treść przeniesiono przez #179.
+#184 usunął Inngest; bieżące zadania znajdują się w `lib/jobs/runners/`.
+
+**Przeniesienia — wdrożenie:**
+[komentarz operatora do #128](https://github.com/ezior8888-cpu/ksef-saas/pull/128#issuecomment-5959060624)
+z 02.10 20:45 czasu PL potwierdza według operatora wdrożenie C-11 i wykonanie
+`00127 → web/worker → 00128`. Codex nie czytał db-1 ani stanu kontenerów;
+to deklaracja operatora, nie niezależny pomiar produkcji. Odbiór KOD I/KOD II
+na KSeF TEST nie został potwierdzony. Automatyczny Offline24 pozostaje
+wstrzymany także na TEST; KOR/ROZ nie są przez tę pracę odblokowywane.
+
+**Dowody błędów na bazowym `main`:**
+
+- `lib/storage/xml-documents.ts:43,57`: limit 1 ukrywał duplikaty, a dwa
+  równoległe odczyty pustej historii kończyły się dwoma INSERT jednej faktury.
+  Odtworzenie bazowego helpera z barierą odczytów zapisało 2 wiersze. Schemat
+  nie miał unikalności pary (firma, faktura). Dowód nowego kontraktu:
+  `tests/unit/xml-document-evidence.test.ts` — konkurencyjny zapis, 23505,
+  konflikt zwycięskiego wiersza i wykrywanie wcześniejszych duplikatów.
+- `lib/storage/r2.ts:250–258`: 412 było sukcesem bez odczytu magazynu i zwracało
+  hash bieżącego XML. `submit-invoice-full.ts` dodatkowo wyłączał ochronę
+  nadpisania po HEAD. Odtworzenie bazowej warstwy: 0 odczytów archiwum,
+  akceptacja innej treści, zwrócony hash niezgodny z zapisaną treścią.
+  Nowe testy immutable uruchomione z bazowym `r2.ts` podstawionym wyłącznie
+  w pamięci Vite: **3 upadły, 1 przeszedł**; z poprawką przechodzą wszystkie.
+- Recenzja wskazała pomijanie `request_payload_hash` przez
+  `submission-log.ts:83–94` i odzyskiwanie w `submit-invoice.ts:837,972,1077`.
+  KSeF przyjął A, worker padł przed metadanymi, magazyn zawierał B: helper
+  zapisywał hash B jako dowód A. Scenariusz odtworzono i dodano testy recovery
+  z rzeczywistym helperem w `ksef-xml-offline24.test.ts`.
+
+**Poprawki:** immutable PUT w każdej próbie i porównanie dokładnych bajtów po
+412; konflikt/awaria odczytu zatrzymuje nowy KSeF POST. Metadane zawsze czytają
+bajty, sprawdzają oczekiwany hash/rozmiar oraz firmę faktury i ścieżki. Nie
+nadpisują istniejącego dowodu; 23505 wymaga ponownego odczytu zgodnego wiersza.
+Historia przekazuje hash tej samej próby co referencje. Własny duplikat 440
+korzysta z jednej oryginalnej sesji, sprawdza firmę/fakturę/status/numer KSeF
+i odrzuca niejednoznaczność. Brak kanonicznego hash nie tworzy metadanych z
+obecnego pliku. Prawdziwa akceptacja i UPO pozostają, błąd dowodu trafia do Sentry.
+
+**SQL jako plik:** `00129_xml_document_invoice_identity.sql` utrzymuje blokadę
+zapisów od kontroli duplikatów do utworzenia UNIQUE (tenant_id, invoice_id).
+Duplikat przerywa transakcję; brak automatycznego usuwania/backfillu historii.
+Numer sprawdzono na `main` i wszystkich pobranych gałęziach zdalnych oraz
+zarezerwowano w C-20 (kolejny wolny 00130). **Codex nie uruchamiał migracji.**
+
+**Recenzja i weryfikacja:** osobny recenzent znalazł lukę recovery; została
+poprawiona i ponownie przejrzana. Końcowo brak dodatkowego trafienia wymagającego
+zmiany w tym pakiecie; 173 testy w 9 plikach recenzenckich przeszły. Dodatkowo
+testy własne: 165 w 7 zależnych zestawach, typecheck i lint zmienionych plików
+bez błędów. Wynik całego końcowego CI/build zapisany w bloku stanu poniżej.
+Pierwszy typecheck wykrył stare wygenerowane typy usuniętego `/api/inngest`
+w cache `.next` użytego worktree; usunięto tylko ten sprawdzony cache.
+Wstępny build przeszedł (82/82 strony); nie zmieniano kodu w celu obejścia
+tego problemu środowiska.
+
+Pełny przebieg ujawnił 6 błędnych alarmów istniejących testów Windows:
+ścieżki `lib\\...` nie pasowały do list wyjątków POSIX, a CRLF nie pasował
+do wzorców LF w testach RLS/RODO. Normalizacja odczytu w 4 plikach zachowuje
+asercje i listy wyjątków; 22 testy przeszły. Kolejna powtórka: jeden test
+wydatków przekroczył 5 s przy dynamicznym imporcie całej strony. Przeniesiono
+ten sam mock i import do przygotowania modułu, wyczyszczono tablicę wywołań
+przed testem; wszystkie 6 testów pliku przechodzi (sam scenariusz strony 34 ms).
+Nie zwiększono timeoutu. Osobny recenzent sprawdził oba dostosowania bez uwag.
+To stabilizacja wymaganej weryfikacji, bez zmian działania aplikacji.
+Końcowy build po wszystkich poprawkach przeszedł: `pnpm.cmd build`, exit 0,
+82/82 strony. Jedna próba pełnego CI równolegle z buildem zakończyła się
+błędem pamięci PowerShell, a nakładka `pnpm.ps1` wcześniej zgłosiła wyjątek
+bez miarodajnego wyniku builda. Przerwane przebiegi nie są liczone jako sukces;
+finalną weryfikację powtórzono sekwencyjnie przez natywny launcher.
+
+**Potwierdzony końcowy wynik lokalny (03.10, 12:39 PL):** `pnpm.cmd run ci`
+exit 0: typecheck, lint 0 błędów / 35 dotychczasowych ostrzeżeń, 72/72 testy
+Node/XML oraz **424/424 zestawy, 5373/5373 testy Vitest**. Końcowy build
+exit 0, 82/82 strony. Nie uruchamiano lokalnego zestawu RLS wymagającego
+migracji ani testów live. Standardowy job RLS GitHuba po publikacji korzysta
+z odizolowanej jednorazowej bazy testowej; jego wynik nie potwierdza db-1.
+
+**Nowe niezależne sprawy w kolejce:**
+
+- **CYB-DEP-BRACES — następny jeden pakiet kodowy.** `pnpm audit --prod
+  --audit-level=high` 03.10: exit 1, jeden high `braces` przez
+  `shadcn → fast-glob → micromatch`. Manifest, lockfile i reguły pnpm pozostają
+  identyczne z bazą. [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+  obejmuje wersje do 3.0.3; w chwili sprawdzenia brak wskazanej wersji naprawionej.
+  Nie dodano wyjątku i nie rozpoczęto naprawy zależności w pakiecie XML.
+  To blokada skanu, nie odtworzony atak na aplikację; wymaga oceny osiągalności
+  i bezpiecznej naprawy bez obniżania CI.
+- **C-11 / podatki:** domyślne `vat_deductible_amount=0` w kosztach walutowych
+  wymaga decyzji Igora/księgowej przed włączeniem KPiR. Nie podjęto decyzji
+  prawnej/podatkowej za właściciela.
+- **C-11 / świeżość formularza:** sprawdzić oddzielnie konflikt z edycją
+  zakończoną już po otwarciu formularza, ale przed zapisem. Obecny CAS chroni
+  odczyt→RPC podczas akcji, nie potwierdza wersji wyświetlonej wcześniej.
+- **C-12 / historyczne dowody:** operator liczy duplikaty, NULL rozmiaru,
+  niezgodne powiązania firm i konflikty hash zaakceptowanych prób. Nie naprawiać
+  starych wierszy bez porównania oryginalnych bajtów i dowodu KSeF.
+
+### Aktualny stan i następny krok
+
+**Wykonane:** przegląd wiadomości C-20 i przeniesień C-11/C-12, trzy naprawy
+integralności (w tym dogrywka recenzji), regresje, plik 00129, odpowiedź pod
+C-20, aktualizacja planu i
+[instrukcja odbioru Bartosza](XML-EVIDENCE-INTEGRITY-ODBIOR-2026-10-03.md).
+**Otwarte:** blokada skanu zależności, wykonanie/odbiór 00129 i obu aplikacji,
+przegląd starych dowodów, rzeczywisty odbiór QR oraz decyzje C-11.
+
+**Katalog roboczy:**
+`C:\Users\Igor\.codex\worktrees\security-main-pdf-hotfix\ksef-saas`.
+Gałąź `codex/security-xml-evidence-integrity`, baza `407ac44`.
+Commity kodu: `0701675cec862d419d7c4b487ddb9ce9a45caa84` (XML) oraz
+`2938a0fdfa204eca982578e0f0678d380ab74b6f` (przenośność i stabilność testów).
+**Publikacja:** [roboczy PR #190](https://github.com/ezior8888-cpu/ksef-saas/pull/190)
+z tej gałęzi względem `main`. Pierwszy opublikowany head:
+`33ec92f34ec6633c300283631799e2e5cafa9289` (dziennik i odbiór, ponad dwoma
+commitami kodu/testów); dalsza aktualizacja przekazania dotyczy dokumentacji.
+Wyniki końcowe lokalne są potwierdzone powyżej. Kontrole GitHuba uruchomiono;
+**wynik dla head `33ec92f` (03.10, 12:48 PL): 10/11 kontroli SUCCESS**.
+Przeszły oba CodeQL i zbiorczy CodeQL, Secret scan, Next build, izolacja RLS,
+inventory, dependency-review, Agent guard i Test-first (agent). Ostatnie dwa
+kończą się sukcesem dla gałęzi `codex/*`, ale zgodnie z ich detekcją nie
+potwierdzają uruchomienia trybu agenta `agent/*` ani testów przeciw bazie.
+Job „Typecheck + Lint + Unit tests” zakończył się **FAILURE w kroku Audit
+production dependencies**: log potwierdza dokładnie high
+`GHSA-vfj7-8cjw-p6xm`, `shadcn → fast-glob → micromatch → braces`.
+Dalsze typy/lint/testy tego joba były pominięte; ich potwierdzenie lokalne
+pozostaje powyżej. **Nie uznajemy CI/Security za w pełni zielone.**
+
+Aktualizacja przekazania po tym wyniku dotyczy wyłącznie dokumentów, bez
+zmiany kodu, SQL, zależności i testów. Uruchomi kolejny standardowy przebieg
+CI; wynik wskazanego head nie jest automatycznie wynikiem nowego head.
+Dokładny końcowy head i bieżące kontrole widoczne w PR #190.
+Nie scalano PR. Po zapisie i publikacji dokumentów własny worktree jest
+czysty; stare niezapisane katalogi poniżej są celowo zachowane.
+
+**Zachowane stare katalogi, bez dalszego rozwijania:**
+
+- `C:\Users\Igor\.codex\worktrees\offline-qr-spec\ksef-saas`,
+  `codex/offline-qr-spec`, HEAD `e2e123001c5841f9eff7cd91f70f6cb3eeb743d0`.
+  Nadal niezapisane M: `lib/ksef/submit-invoice-full.ts`, `lib/storage/r2.ts`,
+  `tests/unit/ksef-special-invoice-resend.test.ts`; nieśledzone:
+  `lib/storage/xml-document-metadata.ts`,
+  `supabase/migrations/00102_xml_documents_unique_invoice.sql`,
+  `tests/unit/ksef-xml-evidence.test.ts`, `tests/unit/xml-storage-immutability.test.ts`.
+  Są lokalnym śladem starego podejścia; nie publikować kolidującej 00102.
+- `C:\Users\Igor\.codex\worktrees\security-ksef-claim-hardening\ksef-saas`,
+  `codex/security-ksef-inbox-currency`, HEAD
+  `157f09654cb64914e71a12b41b0d7fef697fdd9c`, czysty. Nie aktualizowano go.
+- `C:\dev\ksef-saas`, `redesign/dashboard-prototyp`: zachowane zmiany użytkownika
+  `.gitignore`, `AGENTS.md`, nieśledzone `.codex/`, `.mcp.json`. Nie zmieniano
+  gałęzi ani tych plików.
+
+**Kod a wdrożenie:** nowy pakiet nie jest dowodem działania na produkcji.
+Nie wykonano migracji, merge, deployu, restartów ani zmian sekretów. Bartosz
+potwierdza preflight, SQL 00129 z zaakceptowanego `main`, SHA webu/workera,
+MinIO i KSeF TEST. Najpierw wstrzymuje stare procesy zapisujące dowody;
+sam UNIQUE nie blokuje starego helpera aktualizującego wiersz.
+
+**Następny jeden pakiet kodowy:** CYB-DEP-BRACES — naprawa blokady skanu zależności
+produkcji bez ignorowania alertu. Nie rozpoczęto go; praca zatrzymuje się po
+przekazaniu bieżącego pakietu. Odbiór C-12 pozostaje osobnym zadaniem operatora.

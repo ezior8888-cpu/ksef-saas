@@ -19,6 +19,11 @@ export interface KsefSubmissionReferences {
   invoiceReferenceNumber: string;
 }
 
+export interface KsefSubmissionEvidence extends KsefSubmissionReferences {
+  /** Skrót XML tej konkretnej wysyłki; NULL w starszej historii nie jest dowodem bajtów. */
+  payloadHash: string | null;
+}
+
 type SubmissionStatus = 'sent' | 'accepted' | 'rejected' | 'duplicate';
 
 /**
@@ -78,10 +83,10 @@ export async function markKsefSubmission(params: {
 export async function findOpenKsefSubmission(
   tenantId: string,
   invoiceId: string,
-): Promise<KsefSubmissionReferences | null> {
+): Promise<KsefSubmissionEvidence | null> {
   const { data, error } = await createAdminClient()
     .from('ksef_submissions')
-    .select('session_reference_number, invoice_reference_number')
+    .select('session_reference_number, invoice_reference_number, request_payload_hash')
     .eq('tenant_id', tenantId)
     .eq('invoice_id', invoiceId)
     .eq('status', 'sent')
@@ -94,6 +99,44 @@ export async function findOpenKsefSubmission(
   return {
     sessionReferenceNumber: data.session_reference_number,
     invoiceReferenceNumber: data.invoice_reference_number,
+    payloadHash: data.request_payload_hash,
+  };
+}
+
+/**
+ * Dowód oryginalnej własnej wysyłki wskazanej w odpowiedzi 440. Sama sesja
+ * z dowolnej próby nie wystarcza: bierzemy dokładnie jeden wpis tej faktury
+ * w tej firmie, z referencjami i bez konfliktu z zapisanym numerem KSeF.
+ */
+export async function findOwnKsefSubmission(
+  tenantId: string,
+  invoiceId: string,
+  sessionReferenceNumber: string,
+  originalKsefNumber: string,
+): Promise<KsefSubmissionEvidence | null> {
+  if (!sessionReferenceNumber || !originalKsefNumber) return null;
+  const { data, error } = await createAdminClient()
+    .from('ksef_submissions')
+    .select('tenant_id, invoice_id, status, session_reference_number, invoice_reference_number, request_payload_hash, response_ksef_number')
+    .eq('tenant_id', tenantId)
+    .eq('invoice_id', invoiceId)
+    .eq('session_reference_number', sessionReferenceNumber)
+    .limit(2);
+  if (error || !data) throw new Error('Nie można odczytać historii wysyłki KSeF');
+  if (data.length !== 1) return null;
+  const submission = data[0];
+  if (submission.tenant_id !== tenantId || submission.invoice_id !== invoiceId ||
+      submission.session_reference_number !== sessionReferenceNumber ||
+      !submission.invoice_reference_number ||
+      !['sent', 'accepted'].includes(submission.status) ||
+      (submission.response_ksef_number !== null && submission.response_ksef_number !== originalKsefNumber) ||
+      (submission.status === 'accepted' && submission.response_ksef_number !== originalKsefNumber)) {
+    return null;
+  }
+  return {
+    sessionReferenceNumber: submission.session_reference_number,
+    invoiceReferenceNumber: submission.invoice_reference_number,
+    payloadHash: submission.request_payload_hash,
   };
 }
 

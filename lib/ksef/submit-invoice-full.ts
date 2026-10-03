@@ -11,7 +11,7 @@ import { claimXmlGeneratedAt } from '@/lib/ksef/xml-generated-at';
 import { assertSpecialInvoiceData } from '@/lib/ksef/special-invoice-data';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { InvoiceXmlSchemaError, validateInvoiceXml } from '@/lib/xml/validator';
-import { invoiceXmlExistsForId, uploadInvoiceXml } from '@/lib/storage/r2';
+import { uploadInvoiceXml } from '@/lib/storage/r2';
 
 import {
   requireKsefVerificationForBackgroundJob,
@@ -34,7 +34,7 @@ import { requireMatchingKsefEnvironment } from './claim-environment';
  *   5. Zwróć numer KSeF + metadane do zapisania w DB
  *
  * UPO NIE jest tutaj pobierane / uploadowane - zwracamy URL do pobrania,
- * consumer (Inngest job) decyduje kiedy fetch + uploadInvoiceUpo.
+ * consumer (job) decyduje kiedy fetch + uploadInvoiceUpo.
  */
 export interface FullSubmitResult {
   ksefNumber: string;
@@ -106,27 +106,15 @@ export async function submitInvoiceFullFlow(
   //    - sukces KSeF → mamy archive z SHA-256 integrity check
   //    - odrzucenie KSeF → też mamy historię próby (audit / retry)
   //
-  //    Idempotency dwuwarstwowa, oparta o deterministyczny generator FA(3):
-  //      a) HEAD przed PUT — przy retry wykrywamy istnienie obiektu i wyłączamy
-  //         `IfNoneMatch: '*'`, żeby drugi PUT nie wracał `PreconditionFailed`
-  //         w środku flow (a wtedy `submit-to-ksef` retryowałby w nieskończoność).
-  //      b) `IfNoneMatch: '*'` na pierwszym wgraniu — gwarantuje, że dwa
-  //         równoczesne calle z różnych instancji nie nadpiszą się nawzajem.
-  //      c) Obsługa `PreconditionFailed` w `r2.uploadXmlDocument` — gdyby a) i b)
-  //         zawiodły jednocześnie (np. klient_już-uploadował, my retryujemy
-  //         z `immutable=true`), traktujemy to jako sukces idempotentny.
-  const alreadyUploaded = await invoiceXmlExistsForId(
-    tenantId,
-    invoiceId,
-    invoice.issueDate,
-  );
-
+  //    Każdy PUT zachowuje IfNoneMatch='*'. Odczyt istniejącego pliku i
+  //    porównanie bajtów w warstwie magazynu pozwala wznowić identyczną
+  //    próbę, a konflikt zatrzymuje wysyłkę PRZED otwarciem sesji KSeF.
   const uploadResult = await uploadInvoiceXml(
     tenantId,
     invoiceId,
     invoice.issueDate,
     xml,
-    { immutable: !alreadyUploaded },
+    { immutable: true },
   );
 
   // 4. Wysyłka do KSeF (rate-limited, z enkrypcją i auto-close sesji).
