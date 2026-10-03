@@ -32,6 +32,7 @@ import { KsefInvoiceRejectedError } from '@/lib/ksef/submit';
 import { KOR_HOLD, KSEF_PAUSED } from '@/lib/ksef/submission-holds';
 import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
 import {
+  isSendErrorCode,
   SEND_ERROR_CLASS,
   SEND_ERROR_CODES,
   type SendErrorClass,
@@ -122,6 +123,10 @@ function codeFor(error: unknown): SendErrorCode {
   // 2. Znaczniki i komunikaty w treści (hamulce, strażniki, oczekiwanie).
   for (const e of errors) {
     const m = e.message;
+    // Każdy kod z katalogu może być znacznikiem `[KOD]` na początku treści
+    // (np. `[RESULT_UNCERTAIN]` z trybu „tylko uzgodnij”).
+    const marker = /^\[([A-Z_]+)\]/.exec(m);
+    if (marker && isSendErrorCode(marker[1])) return marker[1];
     if (m.includes(`[${SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE}]`)) return SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE;
     if (m.includes(`[${KSEF_PAUSED}]`)) return SEND_ERROR_CODES.KSEF_PAUSED;
     if (m.includes(`[${KOR_HOLD}]`)) return SEND_ERROR_CODES.KOR_HOLD;
