@@ -4,6 +4,8 @@
 import { z } from 'zod';
 import { validateNipChecksum, validatePeselChecksum } from '@/lib/xml/invoice-calculator';
 import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
+import { isForeignEuVat, isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
+import { NP_II_CORRECTION_BUYER_MESSAGE, NP_II_NOT_FOR_XI_MESSAGE } from '@/lib/schemas/invoice-form';
 
 // ============================================================================
 // Helpers walidacyjne
@@ -120,6 +122,67 @@ export const buyerB2CSchema = z
 export const buyerSchema = z.discriminatedUnion('type', [buyerB2BSchema, buyerB2CSchema]);
 
 // ============================================================================
+// Nabywca z UE (VAT-UE) — tylko korekta zwykłej faktury (AUD-70)
+// ============================================================================
+
+export const buyerEUSchema = z.object({
+  type: z.literal('eu'),
+  vatUeNumber: z
+    .string()
+    .refine((v) => isForeignEuVat(v), 'Numer VAT-UE firmy z innego kraju UE, np. DE123456789 (Grecja: EL)'),
+  name: z.string().min(1).max(512),
+  address: z.object({
+    addressLine1: z.string().min(1),
+    addressLine2: z.string().optional(),
+    countryCode: z
+      .string()
+      .length(2)
+      .refine((c) => c !== 'PL', 'Kraj adresu firmy z UE nie może być Polską'),
+  }),
+  email: z.string().email().optional(),
+});
+
+/** Nabywca korekty: jak na fakturze pierwotnej — z NIP, osoba prywatna albo firma z UE. */
+export const correctionBuyerSchema = z.discriminatedUnion('type', [
+  buyerB2BSchema,
+  buyerB2CSchema,
+  buyerEUSchema,
+]);
+
+/** Pozycja korekty — jak `invoiceLineSchema`, plus `np_ii` (korekta faktury dla firmy z UE). */
+export const correctionLineSchema = invoiceLineSchema.extend({
+  vatRate: z.enum(['23', '8', '5', '0', 'oo', 'np', 'np_ii']),
+});
+export type CorrectionLineSchema = z.infer<typeof correctionLineSchema>;
+
+/** Dane korekty, od których zależy „np. II” — pasuje też `CorrectionInvoiceData` (generator KOR). */
+export interface CorrectionNpIiInput {
+  buyer: { type: string; vatUeNumber?: string };
+  /** Bez typu stawka `amountChange` liczy się zawsze; z typem — tylko w korekcie kwotowej. */
+  correctionType?: string;
+  linesBefore?: ReadonlyArray<{ vatRate: string }>;
+  linesAfter?: ReadonlyArray<{ vatRate: string }>;
+  amountChange?: { vatRate?: string };
+}
+
+/**
+ * Reguła „np. II” w korekcie (AUD-70): stawka z art. 100 ust. 1 pkt 4 tylko dla
+ * nabywcy — podatnika z INNEGO państwa UE (`isNpIiBuyerVat`: bez PL i bez XI).
+ * Obejmuje pozycje przed i po korekcie oraz stawkę korekty kwotowej. Komunikat
+ * albo `null` — wspólne dla schematu (formularz, akcja) i generatora KOR.
+ */
+export function correctionNpIiBuyerError(data: CorrectionNpIiInput): string | null {
+  const hasNpIi =
+    [...(data.linesBefore ?? []), ...(data.linesAfter ?? [])].some((l) => l.vatRate === 'np_ii') ||
+    ((data.correctionType === undefined || data.correctionType === 'amount_change') &&
+      data.amountChange?.vatRate === 'np_ii');
+  if (!hasNpIi) return null;
+  const vatUe = data.buyer.type === 'eu' ? data.buyer.vatUeNumber : undefined;
+  if (isNpIiBuyerVat(vatUe)) return null;
+  return parseVatUe(vatUe)?.kodUE === 'XI' ? NP_II_NOT_FOR_XI_MESSAGE : NP_II_CORRECTION_BUYER_MESSAGE;
+}
+
+// ============================================================================
 // Faktura ZWYKŁA
 // ============================================================================
 
@@ -170,10 +233,10 @@ export const correctionInvoiceSchema = z
     typKorekty: z.enum(['1', '2', '3']).default('2'),
 
     seller: sellerSchema,
-    buyer: buyerSchema,
+    buyer: correctionBuyerSchema,
 
-    linesBefore: z.array(invoiceLineSchema).optional(),
-    linesAfter: z.array(invoiceLineSchema).optional(),
+    linesBefore: z.array(correctionLineSchema).optional(),
+    linesAfter: z.array(correctionLineSchema).optional(),
 
     amountChange: z
       .object({
@@ -181,6 +244,8 @@ export const correctionInvoiceSchema = z
         vatDelta: z.number(),
         grossDelta: z.number(),
         description: z.string().min(1).max(500),
+        /** Stawka bez VAT z faktury pierwotnej (np I / np II / oo) — nie wynika z kwot. */
+        vatRate: z.enum(['np', 'np_ii', 'oo']).optional(),
       })
       .optional(),
   })
@@ -209,6 +274,17 @@ export const correctionInvoiceSchema = z
   }, {
     message: 'Kwoty korekty muszą mieć jedną obsługiwaną stawkę VAT i brutto równe netto plus VAT',
     path: ['amountChange'],
+  })
+  // AUD-70: np. II tylko dla firmy z innego kraju UE (bez XI) — błąd przy polu
+  // ze stawką np. II, żeby formularz pokazał go przy właściwej sekcji.
+  .superRefine((data, ctx) => {
+    const message = correctionNpIiBuyerError(data);
+    if (!message) return;
+    const fields: Array<'linesBefore' | 'linesAfter' | 'amountChange'> = [];
+    if (data.linesBefore?.some((l) => l.vatRate === 'np_ii')) fields.push('linesBefore');
+    if (data.linesAfter?.some((l) => l.vatRate === 'np_ii')) fields.push('linesAfter');
+    if (data.correctionType === 'amount_change' && data.amountChange?.vatRate === 'np_ii') fields.push('amountChange');
+    for (const field of fields) ctx.addIssue({ code: 'custom', message, path: [field] });
   })
   .refine((data) => new Date(data.paymentDueDate) >= new Date(data.issueDate), {
     message: 'Termin płatności nie może być przed datą wystawienia',
