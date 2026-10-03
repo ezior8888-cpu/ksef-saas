@@ -31,6 +31,8 @@ const mocks = vi.hoisted(() => ({
   markSubmission: vi.fn(),
   sendEvent: vi.fn(),
   captureMessage: vi.fn(),
+  /** Wynik `claim_ksef_send`: znacznik czasu = przejęte, `null` = trzyma inna próba (S22). */
+  claim: '2026-10-03T12:00:00.000000+00:00' as string | null,
   invoice: {} as Record<string, unknown>,
   updates: [] as Array<Record<string, unknown>>,
 }));
@@ -85,7 +87,7 @@ vi.mock('@/lib/supabase/server', () => ({
     };
     return {
       from: () => q,
-      rpc: async (fn: string) => ({ data: fn === 'claim_ksef_send' ? '2026-10-03T12:00:00.000000+00:00' : null, error: null }),
+      rpc: async (fn: string) => ({ data: fn === 'claim_ksef_send' ? mocks.claim : null, error: null }),
     };
   },
 }));
@@ -142,6 +144,7 @@ beforeEach(() => {
     fa3_data: { type: 'VAT', internalNumber: 'FV/1', issueDate: '2026-10-01' },
   };
   mocks.updates = [];
+  mocks.claim = '2026-10-03T12:00:00.000000+00:00';
   vi.stubEnv('KSEF_ENV', 'test');
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -253,27 +256,12 @@ describe('W3: onExhausted zawsze zostawia ślad', () => {
 
 describe('S22: oczekiwanie nie zużywa próby', () => {
   it('„wysyłkę trzyma inna próba” to RetryAfterError bez zużycia próby', async () => {
-    vi.doMock('@/lib/supabase/server', () => ({}));
-    const error = await failing(runSubmitInvoiceWithClaim(null));
+    // Bez vi.resetModules/doMock: pod pełnym biegiem Vitest podmiana modułu
+    // w locie była niestabilna (runner trafiał na inną instancję atrapy).
+    mocks.claim = null;
+    const error = await failing(runSubmitInvoice(event(), ctx));
     expect(error.name).toBe('RetryAfterError');
     expect(error.countsAsAttempt).toBe(false);
+    expect(mocks.fullFlow).not.toHaveBeenCalled();
   });
 });
-
-/** Ten sam runner, ale `claim_ksef_send` zwraca podany wynik (null = trzyma inna próba). */
-async function runSubmitInvoiceWithClaim(claim: string | null) {
-  vi.resetModules();
-  vi.doMock('@/lib/supabase/server', () => ({
-    createAdminClient: async () => {
-      const q = {
-        select: () => q, eq: () => q, in: () => q, or: () => q,
-        update: () => q,
-        maybeSingle: async () => ({ data: { ...mocks.invoice }, error: null }),
-        then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
-      };
-      return { from: () => q, rpc: async () => ({ data: claim, error: null }) };
-    },
-  }));
-  const mod = await import('@/lib/jobs/runners/submit-invoice');
-  return mod.runSubmitInvoice(event(), ctx);
-}
