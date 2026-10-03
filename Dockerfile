@@ -99,26 +99,33 @@ ENV NODE_OPTIONS="--max-old-space-size=3072"
 # Coolify w trybie secrets przekazuje także publiczne build variables przez
 # --secret i nie uzupełnia RUN, który ma już secret mount. Jawne mounty
 # zachowują te wartości; zwykły Docker nadal obsługuje publiczne --build-arg.
+# Publiczne wartości czytamy tylko, jeśli mount plikowy istnieje. Opcjonalny
+# env mount bez sekretu nadpisuje ENV/ARG pustą wartością w BuildKit 0.33.1.
 # Odbiór konfiguracji operatora: docs/runbooks/docker-build-secrets.md.
 RUN --mount=type=secret,id=SENTRY_AUTH_TOKEN,env=SENTRY_AUTH_TOKEN \
-    --mount=type=secret,id=SENTRY_AUTH_TOKEN_REQUIRED,env=SENTRY_AUTH_TOKEN_REQUIRED \
-    --mount=type=secret,id=SENTRY_ORG,env=SENTRY_ORG \
-    --mount=type=secret,id=SENTRY_PROJECT,env=SENTRY_PROJECT \
-    --mount=type=secret,id=SENTRY_URL,env=SENTRY_URL \
-    --mount=type=secret,id=SENTRY_RELEASE,env=SENTRY_RELEASE \
-    --mount=type=secret,id=NEXT_PUBLIC_APP_DOMAIN,env=NEXT_PUBLIC_APP_DOMAIN \
-    --mount=type=secret,id=NEXT_PUBLIC_APP_ENV,env=NEXT_PUBLIC_APP_ENV \
-    --mount=type=secret,id=NEXT_PUBLIC_APP_URL,env=NEXT_PUBLIC_APP_URL \
-    --mount=type=secret,id=NEXT_PUBLIC_MOBILE_PANEL,env=NEXT_PUBLIC_MOBILE_PANEL \
-    --mount=type=secret,id=NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST,env=NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST \
-    --mount=type=secret,id=NEXT_PUBLIC_POSTHOG_HOST,env=NEXT_PUBLIC_POSTHOG_HOST \
-    --mount=type=secret,id=NEXT_PUBLIC_POSTHOG_KEY,env=NEXT_PUBLIC_POSTHOG_KEY \
-    --mount=type=secret,id=NEXT_PUBLIC_SENTRY_DSN,env=NEXT_PUBLIC_SENTRY_DSN \
-    --mount=type=secret,id=NEXT_PUBLIC_SUPABASE_ANON_KEY,env=NEXT_PUBLIC_SUPABASE_ANON_KEY \
-    --mount=type=secret,id=NEXT_PUBLIC_SUPABASE_URL,env=NEXT_PUBLIC_SUPABASE_URL \
-    --mount=type=secret,id=NEXT_PUBLIC_TURNSTILE_SITE_KEY,env=NEXT_PUBLIC_TURNSTILE_SITE_KEY \
-    --mount=type=secret,id=NEXT_PUBLIC_VAPID_PUBLIC_KEY,env=NEXT_PUBLIC_VAPID_PUBLIC_KEY \
-    case "${SENTRY_AUTH_TOKEN_REQUIRED:-0}" in 0|1) ;; *) echo 'SENTRY_AUTH_TOKEN_REQUIRED must be 0 or 1' >&2; exit 1;; esac \
+    --mount=type=secret,id=SENTRY_AUTH_TOKEN_REQUIRED \
+    --mount=type=secret,id=SENTRY_ORG \
+    --mount=type=secret,id=SENTRY_PROJECT \
+    --mount=type=secret,id=SENTRY_URL \
+    --mount=type=secret,id=SENTRY_RELEASE \
+    --mount=type=secret,id=NEXT_PUBLIC_APP_DOMAIN \
+    --mount=type=secret,id=NEXT_PUBLIC_APP_ENV \
+    --mount=type=secret,id=NEXT_PUBLIC_APP_URL \
+    --mount=type=secret,id=NEXT_PUBLIC_MOBILE_PANEL \
+    --mount=type=secret,id=NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST \
+    --mount=type=secret,id=NEXT_PUBLIC_POSTHOG_HOST \
+    --mount=type=secret,id=NEXT_PUBLIC_POSTHOG_KEY \
+    --mount=type=secret,id=NEXT_PUBLIC_SENTRY_DSN \
+    --mount=type=secret,id=NEXT_PUBLIC_SUPABASE_ANON_KEY \
+    --mount=type=secret,id=NEXT_PUBLIC_SUPABASE_URL \
+    --mount=type=secret,id=NEXT_PUBLIC_TURNSTILE_SITE_KEY \
+    --mount=type=secret,id=NEXT_PUBLIC_VAPID_PUBLIC_KEY \
+    for name in SENTRY_AUTH_TOKEN_REQUIRED SENTRY_ORG SENTRY_PROJECT SENTRY_URL SENTRY_RELEASE NEXT_PUBLIC_APP_DOMAIN NEXT_PUBLIC_APP_ENV NEXT_PUBLIC_APP_URL NEXT_PUBLIC_MOBILE_PANEL NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST NEXT_PUBLIC_POSTHOG_HOST NEXT_PUBLIC_POSTHOG_KEY NEXT_PUBLIC_SENTRY_DSN NEXT_PUBLIC_SUPABASE_ANON_KEY NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_TURNSTILE_SITE_KEY NEXT_PUBLIC_VAPID_PUBLIC_KEY; do \
+      if [ -f "/run/secrets/$name" ]; then \
+        value=$(cat "/run/secrets/$name") || exit 1; export "$name=$value"; \
+      fi; \
+    done \
+    && case "${SENTRY_AUTH_TOKEN_REQUIRED:-0}" in 0|1) ;; *) echo 'SENTRY_AUTH_TOKEN_REQUIRED must be 0 or 1' >&2; exit 1;; esac \
     && if [ "${SENTRY_AUTH_TOKEN_REQUIRED:-0}" = 1 ] && [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then \
          echo 'SENTRY_AUTH_TOKEN_REQUIRED=1 requires the SENTRY_AUTH_TOKEN BuildKit secret' >&2; exit 1; \
        fi \

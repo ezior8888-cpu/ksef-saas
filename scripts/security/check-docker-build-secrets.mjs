@@ -138,11 +138,18 @@ export function buildDiagnostic(result, token, scenario = 'unknown') {
     .replace(/\r\n?/g, '\n')
     .replace(/\p{Cc}/gu, (character) => ['\n', '\t'].includes(character) ? character : '')
     .replaceAll(token, '[synthetic-token-redacted]');
-  const output = clean(`${result.stdout ?? ''}\n${result.stderr ?? ''}\n${result.error?.message ?? ''}`).slice(-4000);
+  const output = clean(`${result.stdout ?? ''}\n${result.stderr ?? ''}\n${result.error?.message ?? ''}`);
+  const executed = output.split('\n').filter((line) => /^#\d+ [\d.]+ /.test(line));
+  const errors = executed.filter((line) => /\b(?:[A-Za-z]*Error|ERROR):/.test(line))
+    .slice(0, 2).map((line) => line.slice(0, 600)).join('\n');
+  const priority = executed.length
+    ? `Executed build output:\n${errors}\n${executed.join('\n').slice(0, 1800)}\nLog tail:\n`
+    : '';
+  const bounded = priority + output.slice(-(4000 - priority.length));
   const name = clean(scenario).replace(/\s/g, ' ').slice(0, 80);
   const status = clean(result.status ?? 'unavailable').slice(0, 20);
   const signal = clean(result.signal ?? 'none').slice(0, 20);
-  return `Scenario: ${name}; status: ${status}; signal: ${signal}\n${output}`;
+  return `Scenario: ${name}; status: ${status}; signal: ${signal}\n${bounded}`;
 }
 
 export function verifyBuildResult(result, token, guardMessage, scenario) {

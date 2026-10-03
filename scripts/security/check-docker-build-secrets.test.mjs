@@ -160,3 +160,18 @@ test('failure diagnostics redact canaries before bounding output and strip termi
     return true;
   });
 });
+test('executed error remains visible before a long repeated RUN and warning tail', () => {
+  const result = {
+    status: 1,
+    stderr: '#8 0.124 Error: Synthetic public variable mismatch: NEXT_PUBLIC_APP_DOMAIN\n'
+      + '#8 0.125     at Object.<anonymous> (/usr/local/bin/pnpm:8:42)\n'
+      + (`#8 RUN --mount=type=secret env repeated ${syntheticToken}\n`).repeat(200)
+      + 'ERROR: failed to solve: process did not complete successfully\n',
+  };
+  const diagnostic = buildDiagnostic(result, syntheticToken, 'build-args');
+  assert.match(diagnostic, /Error: Synthetic public variable mismatch: NEXT_PUBLIC_APP_DOMAIN/);
+  assert.match(diagnostic, /at Object\.<anonymous> \(\/usr\/local\/bin\/pnpm:8:42\)/);
+  assert.match(diagnostic, /ERROR: failed to solve/);
+  assert.equal(diagnostic.includes(syntheticToken), false);
+  assert.ok(diagnostic.length <= 4060);
+});

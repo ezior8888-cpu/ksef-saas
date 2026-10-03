@@ -35,8 +35,12 @@ Potrzebne publiczne `NEXT_PUBLIC_*`, `SENTRY_ORG`, `SENTRY_PROJECT`,
 `SENTRY_URL`, `SENTRY_RELEASE` i `SENTRY_AUTH_TOKEN_REQUIRED` mają dwa kanały:
 
 - Zwykły Docker: jawne `--build-arg`, tylko dla niesekretnych wartości.
-- Coolify z build secrets: jawne, opcjonalne mounty o identycznych nazwach
-  udostępniają te wartości podczas tego samego `RUN` co build.
+- Coolify z build secrets: jawne, opcjonalne mounty plikowe o identycznych
+  nazwach udostępniają te wartości podczas tego samego `RUN` co build.
+  Shell odczytuje tylko istniejące pliki i wtedy nadpisuje publiczne ARG/ENV.
+  Brak pliku zachowuje wartość z ARG; pusty plik oznacza jawną pustą wartość.
+  W BuildKit 0.33.1 opcjonalny mount `env=` bez sekretu nadpisuje istniejące
+  ARG/ENV pustą wartością. Dlatego `env=` pozostaje tylko dla samego tokenu.
 
 Nazwa mechanizmu „secret” nie zmienia publiczności `NEXT_PUBLIC_*`: Next.js
 nadal zapisuje je w bundlu klienta. `SENTRY_URL` nie może zawierać hasła ani
@@ -150,6 +154,7 @@ runbooka nie oznacza wykonania opisanych prób; ich wyniki zapisuje dziennik pak
 - [Docker — build secrets](https://docs.docker.com/build/building/secrets/)
 - [Dockerfile — secret mount](https://docs.docker.com/reference/dockerfile/#run---mounttypesecret)
 - [Docker — build variables](https://docs.docker.com/build/building/variables/)
+- [BuildKit 0.33.1 — loadSecretEnv](https://github.com/moby/buildkit/blob/v0.33.1/solver/llbsolver/ops/exec.go#L576-L601)
 - [Docker — cache invalidation](https://docs.docker.com/build/cache/invalidation/)
 - [Docker — provenance](https://docs.docker.com/build/metadata/attestations/slsa-provenance/)
 - [Docker — SLSA definitions](https://docs.docker.com/build/metadata/attestations/slsa-definitions/)
