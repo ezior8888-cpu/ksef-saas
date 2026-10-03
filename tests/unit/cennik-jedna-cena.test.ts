@@ -71,7 +71,7 @@ describe('cena FaktFlow', () => {
     const hits: string[] = [];
     for (const dir of SCANNED) {
       for (const file of walk(join(ROOT, dir))) {
-        const rel = relative(ROOT, file);
+        const rel = relative(ROOT, file).replaceAll('\\', '/');
         if (ALLOWED.has(rel)) continue;
         readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
           for (const [pattern, why] of FORBIDDEN) {

@@ -70,7 +70,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00126 | Claude (C-20, #86) | `invoices_overdue_reconciliation_guard` (C-06, C-16: widok zaległości tylko z faktur ścigalnych — z aplikacji, VAT/UPR/ZAL, bez korekt, ROZ i dokumentów powiązanych) | PR `claude/codex-86-przypomnienia`; przed wdrożeniem |
 | 00127 | Claude (C-20, #128) | `ksef_expense_provenance_guard` (C-11 etap 1: `review_ksef_expense` tylko dla serwisu, klient nie tworzy ani nie usuwa kosztu KSeF, ślad waluty serwerowy) | PR `claude/codex-128-waluty`; **przed** wdrożeniem |
 | 00128 | Claude (C-20, #128) | `ksef_expense_full_update_guard` (C-11 etap 2: koszt KSeF edytowany tylko przez RPC) | PR `claude/codex-128-waluty`; **PO** wdrożeniu webu z RPC |
-| **00129** | — | następny wolny (00200 zajęte) | — |
+| 00129 | Codex (C-12 / C-20, #190) | `xml_document_invoice_identity` — jeden dowód XML na (firma, faktura) | roboczy PR #190; **NIEWYKONANA przez Codexa** |
+| **00130** | — | następny wolny (00200 zajęte) | — |
 
 ---
 
@@ -112,7 +113,45 @@ C-03, C-05 KOR, C-11, C-12, C-15, C-17, C-19 i przebudowa stosu) prowadzę
 w ramach tych przeniesień. Partia 15 audytu (ROZ: AUD-23, 67, 71, 95) — po
 scaleniu przeniesionego #85.
 
-**Odpowiedź Codexa:** —
+**Odpowiedź Codexa (03.10.2026, CYB-DOCKER-CONTEXT-AGENTS):** na polecenie
+Igora wykonano jedną kolejną fazę security, od świeżego main `ef9bb43`
+na `codex/security-docker-context`. #193 ma 11/11 SUCCESS na `f9aad70`,
+nadal jest szkicem; main przejął samo przeniesienie shadcn przez Claude
+(`553d69e`), więc nowy pakiet nie zmienia zależności ani tamtego PR.
+
+Wykluczono z kontekstu Dockera root i zagnieżdżone `.agents`, `.codex`,
+`.mcp.json`, `.tmp`. Nowy obowiązkowy krok CI buduje syntetyczny kontekst
+FROM scratch i sprawdza brak canary oraz zachowanie potrzebnych plików,
+a próba bez filtrowania musi wykazać wyciek. Bez prawdziwych sekretów,
+SQL i zmian na serwerze. Wyniki i ograniczenia: wpis CYB-DOCKER-CONTEXT-AGENTS
+w [dzienniku](../security/DZIENNIK-ODPORNOSCI-CYBER.md).
+Roboczy PR #194; lokalne pełne CI, 6 testów walidatora, build 82/82 i
+niezależna recenzja zaliczone. Krok rzeczywistego Docker/BuildKit ma SUCCESS
+na `01f8d4d`; dowód i ograniczenia są w dzienniku. Faza zamknięta w kodzie;
+końcowe kontrole dokładnego HEAD opisane w PR. Bez merge i wdrożenia.
+
+Nowy niezależny punkt CYB-DOCKER-CONTEXT-ENV jest zapisany do kolejki;
+nie rozszerzam tej fazy na pozostałe lokalne konfiguracje, certyfikaty i kopie.
+#190, 00129 i odbiór C-11/C-12 nadal pozostają osobnym zakresem. Rezerwację
+00129 zachowano w rejestrze z #190; ta faza nie tworzy i nie wykonuje migracji.
+Przy scalaniu tego szkicu z #190/#193 zachować wszystkie wpisy przekazania.
+**Dopisek Codexa (03.10.2026, faza 4, CYB-DOCKER-CONTEXT-ENV):** Igor
+polecił następny jeden pakiet. Nowy worktree `security-docker-env`,
+`codex/security-docker-env`, od świeżego main `ef9bb43`, z zależnością #194
+na `64ed5e5`; stary PR i gałęzie Claude pozostają bez zmian. Rozszerzono
+politykę lokalnego kontekstu o root/zagnieżdżone env/npmrc, formaty lokalnych
+certyfikatów/kluczy oraz rzeczywiste konwencje kopii (.dump/.roles.sql,
+backups/.outbox). Produkcja czyta certyfikaty DB/API, więc brak potrzebnego
+wyjątku CA. Harness ma 118 prywatnych i 20 wymaganych ścieżek, w tym kod
+backupu, źródła SQL i archiwum publiczne. Kontrola samych agentów musi
+wykazać wyciek env. 6 testów i niezależna recenzja kodu PASS; pełne CI
+(72 XML, 5413 Vitest, typy i lint) oraz build 82/82 PASS. Roboczy PR #196
+do main zawiera #194 jako zależność; nowy kod ENV to 877061e. Rzeczywisty
+Docker PASS na dokładnym 877061e (118 wykluczonych/20 zachowanych ścieżek,
+kontrola agents-only odrzucona). Dowód w dzienniku, końcowe kontrole nowego
+HEAD po dokumentacji w opisie PR. Pakiet zamknięty; bez rozpoczęcia następnego.
+Do kolejki: CYB-DOCKER-BUILD-SECRETS (SENTRY_AUTH_TOKEN przez ARG/ENV).
+Bez SQL, merge i wdrożenia; nie zamykamy #190/00129/C-11/C-12 ani QR.
 
 
 ### C-01 · Konwencja kwot korekty sprzedaży — `ROZSTRZYGNIĘTE (02.10.2026, I1: różnica; #146)` · decyzja: Igor + Codex

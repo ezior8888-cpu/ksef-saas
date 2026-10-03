@@ -68,6 +68,11 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify Docker context excludes local operator files
+        run: |
+          node --test scripts/security/check-docker-context.test.mjs
+          node scripts/security/check-docker-context.mjs
+        # Tylko syntetyczny kontekst FROM scratch; brak sekretów i obrazu bazowego.
       - name: Build
         run: pnpm build
         env:
