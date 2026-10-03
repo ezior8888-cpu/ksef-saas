@@ -23,14 +23,22 @@ export class NonRetriableError extends Error {
 export class RetryAfterError extends Error {
   /** Opóźnienie kolejnej próby w ms. */
   readonly retryAfterMs: number;
+  /**
+   * Czy to ponowienie zużywa próbę z `maxRetries`. `false` = OCZEKIWANIE
+   * (KSeF nadal przetwarza wcześniejszą wysyłkę, inna próba trzyma dzierżawę):
+   * liczone osobnym licznikiem, żeby pięć odczekań nie kończyło faktury jako
+   * `failed` (S22 z rewizji 03.10.2026). Domyślnie `true`.
+   */
+  readonly countsAsAttempt: boolean;
 
   constructor(
     message: string,
     retryAfter: string | number,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; countsAsAttempt?: boolean },
   ) {
-    super(message, options);
+    super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = 'RetryAfterError';
     this.retryAfterMs = parseDurationMs(retryAfter);
+    this.countsAsAttempt = options?.countsAsAttempt ?? true;
   }
 }

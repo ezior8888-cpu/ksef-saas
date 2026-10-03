@@ -80,7 +80,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: vi.fn() }));
 vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
-vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), addBreadcrumb: vi.fn() }));
+vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn(), addBreadcrumb: vi.fn() }));
 
 import { KsefInvoiceRejectedError, submitInvoice } from '@/lib/ksef/submit';
 import { runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
