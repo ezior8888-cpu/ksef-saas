@@ -44,7 +44,7 @@ import {
 } from '@/lib/validators/invoice-validators';
 import {
   NP_II_NOT_FOR_XI_MESSAGE,
-  NP_II_REQUIRES_EU_BUYER_MESSAGE,
+  NP_II_CORRECTION_BUYER_MESSAGE,
 } from '@/lib/schemas/invoice-form';
 import type { CorrectionInvoiceData } from '@/types/invoice-types';
 
@@ -208,7 +208,15 @@ describe('correctionNpIiBuyerError', () => {
     ['pozycja po', { linesAfter: [{ vatRate: '23' }, npIiLine] }],
     ['korekta kwotowa', { amountChange: { vatRate: 'np_ii' } }],
   ])('np. II dla firmy z NIP (%s) — odrzucone', (_label, patch) => {
-    expect(correctionNpIiBuyerError({ buyer: b2bBuyer, ...patch })).toBe(NP_II_REQUIRES_EU_BUYER_MESSAGE);
+    expect(correctionNpIiBuyerError({ buyer: b2bBuyer, ...patch })).toBe(NP_II_CORRECTION_BUYER_MESSAGE);
+  });
+
+  it('stawka korekty kwotowej liczy się tylko w korekcie kwotowej', () => {
+    const amountChange = { vatRate: 'np_ii' };
+    expect(correctionNpIiBuyerError({ buyer: b2bBuyer, correctionType: 'before_after', amountChange }))
+      .toBeNull();
+    expect(correctionNpIiBuyerError({ buyer: b2bBuyer, correctionType: 'amount_change', amountChange }))
+      .toBe(NP_II_CORRECTION_BUYER_MESSAGE);
   });
 
   it('bez np. II — bez błędu, także dla firmy z NIP', () => {
@@ -226,7 +234,7 @@ describe('correctionNpIiBuyerError', () => {
   it('schemat korekty odrzuca np. II dla firmy z NIP (klient i serwer)', () => {
     const result = correctionInvoiceSchema.safeParse(payload({ buyer: b2bBuyer }));
     expect(result.success).toBe(false);
-    expect(result.error?.issues.map((i) => i.message)).toContain(NP_II_REQUIRES_EU_BUYER_MESSAGE);
+    expect(result.error?.issues.map((i) => i.message)).toContain(NP_II_CORRECTION_BUYER_MESSAGE);
     expect(correctionInvoiceSchema.safeParse(payload()).success).toBe(true);
   });
 });
@@ -273,7 +281,7 @@ describe('getCorrectionParentContextAction — nabywca z UE', () => {
 
   it.each([
     ['Irlandia Płn. (XI)', euParty('XI123456789', { ...deAddress, countryCode: 'XI' }), NP_II_NOT_FOR_XI_MESSAGE],
-    ['firma z NIP', b2bParty, NP_II_REQUIRES_EU_BUYER_MESSAGE],
+    ['firma z NIP', b2bParty, NP_II_CORRECTION_BUYER_MESSAGE],
   ])('faktura z np. II dla nabywcy bez prawa do np. II (%s) — odmowa od razu', async (_label, buyerData, message) => {
     setParent(buyerData, ['np_ii']);
     expect(await getCorrectionParentContextAction(parentId)).toEqual({ success: false, error: message });
@@ -388,7 +396,7 @@ describe('saveCorrectionDraftAction — nabywca z UE', () => {
       linesBefore: [{ ...npIiLine, vatRate: '23' }],
       linesAfter: [{ ...npIiLine, unitPriceNet: 800 }],
     }));
-    expect(res).toMatchObject({ success: false, error: expect.stringContaining(NP_II_REQUIRES_EU_BUYER_MESSAGE) });
+    expect(res).toMatchObject({ success: false, error: expect.stringContaining(NP_II_CORRECTION_BUYER_MESSAGE) });
     expectNoWrite();
   });
 
@@ -437,6 +445,18 @@ describe('korekta kwotowa — stawka bez VAT wyznacza serwer', () => {
     expect(correctionData.buyer).toMatchObject({ type: 'eu', vatUeNumber: 'DE123456789' });
     expect(invoice.buyer).toMatchObject({ vatUeNumber: 'DE123456789' });
     expect(invoice.buyer.nip).toBeUndefined();
+  });
+
+  it('stan przed z bazy, nie z formularza (P_18 w XML liczy się z faktury pierwotnej)', async () => {
+    const res = await saveAndSendCorrectionAction(payload({
+      correctionType: 'amount_change',
+      linesBefore: [{ name: 'Inna', unit: 'szt.', quantity: 1, unitPriceNet: 1, vatRate: 'oo' }],
+      linesAfter: undefined,
+      amountChange: amountChange({ vatRate: 'np_ii' }),
+    }));
+    expect(res).toMatchObject({ success: true });
+    const { correctionData } = mocks.enqueue.mock.calls[0]![0];
+    expect(correctionData.linesBefore.map((l: { vatRate: string }) => l.vatRate)).toEqual(['np_ii']);
   });
 
   it.each([

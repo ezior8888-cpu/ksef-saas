@@ -5,7 +5,7 @@ import { finalizeInvoice, validateInvoice, type InvoiceInput } from '@/lib/xml/i
 import { validateInvoiceXml } from '@/lib/xml/validator';
 import { generateAdvanceInvoiceXml, generateFinalInvoiceXml } from '@/lib/ksef/fa3-advance-generator';
 import { generateCorrectionInvoiceXml } from '@/lib/ksef/fa3-correction-generator';
-import { NP_II_REQUIRES_EU_BUYER_MESSAGE } from '@/lib/schemas/invoice-form';
+import { NP_II_CORRECTION_BUYER_MESSAGE } from '@/lib/schemas/invoice-form';
 import type { BuyerParty, Invoice } from '@/types/invoice';
 import type {
   AdvanceInvoiceData,
@@ -341,16 +341,16 @@ describe('ZAL / ROZ — np II nieobsługiwane; KOR — np II tylko z nabywcą z 
   // KOR obsługuje już nabywcę z UE (KodUE + NrVatUE) — szczegóły
   // w `korekta-nabywca-ue.test.ts`. Nabywca z NIP z np II dalej odpada.
   it('KOR przed/po: pozycja np II z nabywcą z NIP — błąd', () => {
-    expect(() => generateCorrectionInvoiceXml(korekta({}))).toThrow(NP_II_REQUIRES_EU_BUYER_MESSAGE);
+    expect(() => generateCorrectionInvoiceXml(korekta({}))).toThrow(NP_II_CORRECTION_BUYER_MESSAGE);
     expect(() =>
       generateCorrectionInvoiceXml(korekta({ linesBefore: [pozycja('23')], linesAfter: [pozycja('np_ii')] })),
-    ).toThrow(NP_II_REQUIRES_EU_BUYER_MESSAGE);
+    ).toThrow(NP_II_CORRECTION_BUYER_MESSAGE);
   });
 
   it('KOR anulująca fakturę z np II z nabywcą z NIP — błąd', () => {
     expect(() =>
       generateCorrectionInvoiceXml(korekta({ correctionType: 'cancellation', linesAfter: undefined })),
-    ).toThrow(NP_II_REQUIRES_EU_BUYER_MESSAGE);
+    ).toThrow(NP_II_CORRECTION_BUYER_MESSAGE);
   });
 
   it('KOR przed/po np II z nabywcą z UE (DE) — P_13_9, P_18=1, XSD poprawny', async () => {

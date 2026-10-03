@@ -16,13 +16,8 @@ import {
 } from '@/lib/xml/invoice-calculator';
 import type { BuyerEU, CorrectionInvoiceData, InvoiceLine } from '@/types/invoice-types';
 import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
-import {
-  addressCountryForKodUE,
-  isNpIiBuyerVat,
-  parseVatUe,
-  type ParsedVatUe,
-} from '@/lib/invoices/vat-ue';
-import { NP_II_NOT_FOR_XI_MESSAGE, NP_II_REQUIRES_EU_BUYER_MESSAGE } from '@/lib/schemas/invoice-form';
+import { addressCountryForKodUE, parseVatUe, type ParsedVatUe } from '@/lib/invoices/vat-ue';
+import { correctionNpIiBuyerError } from '@/lib/validators/invoice-validators';
 
 const FA3_NAMESPACE = 'http://crd.gov.pl/wzor/2025/06/25/13775/';
 const ETD_NAMESPACE =
@@ -264,13 +259,15 @@ function emitVatSummaries(fa: XMLBuilder, summaries: ReturnType<typeof summarize
 
 /**
  * Stawki wszystkich pozycji, których dotyczy korekta: stan przed (pozycje
- * faktury pierwotnej) ∪ stan po ∪ wiersze XML (m.in. stawka korekty kwotowej
+ * faktury pierwotnej) ∪ stan po (tylko korekta „przed / po” — w innych typach
+ * `linesAfter` nic nie znaczy) ∪ wiersze XML (m.in. stawka korekty kwotowej
  * i wiersze anulowania).
  */
 function correctionRates(data: CorrectionInvoiceData, rows: readonly InvoiceLineItem[]): Set<string> {
+  const after = data.correctionType === 'before_after' ? (data.linesAfter ?? []) : [];
   return new Set<string>([
     ...(data.linesBefore ?? []).map((l) => l.vatRate),
-    ...(data.linesAfter ?? []).map((l) => l.vatRate),
+    ...after.map((l) => l.vatRate),
     ...rows.map((l) => l.vatRate),
   ]);
 }
@@ -308,23 +305,12 @@ function buildAdnotacjeMinimal(
  * „np II” (usługi z art. 100 ust. 1 pkt 4 — art. 28b, AUD-70) wymaga nabywcy —
  * podatnika z INNEGO państwa UE z numerem VAT-UE (KodUE + NrVatUE). Nabywca
  * z NIP, osoba prywatna, polski VAT-UE i Irlandia Płn. (XI — numer tylko dla
- * towarów) przerywają wystawienie przed budową XML. Liczy się każda pozycja
- * przed i po korekcie oraz stawka korekty kwotowej. Komunikat dla człowieka
- * daje walidator akcji; tu ostatnia linia obrony.
+ * towarów) przerywają wystawienie przed budową XML. Ta sama reguła co
+ * w schemacie korekty (`correctionNpIiBuyerError`); tu ostatnia linia obrony.
  */
 function assertNpIiBuyer(data: CorrectionInvoiceData): void {
-  const npIi =
-    [...(data.linesBefore ?? []), ...(data.linesAfter ?? [])].some((l) => l.vatRate === 'np_ii') ||
-    (data.correctionType === 'amount_change' && data.amountChange?.vatRate === 'np_ii');
-  if (!npIi) return;
-
-  const vatUe = data.buyer.type === 'eu' ? data.buyer.vatUeNumber : null;
-  if (parseVatUe(vatUe)?.kodUE === 'XI') {
-    throw new Error(`FA(3) KOR: ${NP_II_NOT_FOR_XI_MESSAGE}`);
-  }
-  if (!isNpIiBuyerVat(vatUe)) {
-    throw new Error(`FA(3) KOR: ${NP_II_REQUIRES_EU_BUYER_MESSAGE}`);
-  }
+  const message = correctionNpIiBuyerError(data);
+  if (message) throw new Error(`FA(3) KOR: ${message}`);
 }
 
 /**

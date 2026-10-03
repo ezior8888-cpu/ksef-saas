@@ -41,14 +41,15 @@ import {
 } from '@/components/ui/select';
 import {
   correctionInvoiceSchema,
+  correctionNpIiBuyerError,
   type CorrectionInvoiceSchemaIn,
   type InvoiceLineSchema,
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
 import { zeroVatRateFromParentLines } from '@/lib/invoices/correction-amount-change';
-import { addressCountryForKodUE, isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
+import { addressCountryForKodUE, parseVatUe } from '@/lib/invoices/vat-ue';
 import { dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
-import { EU_BUYER_COUNTRIES, NP_II_NOT_FOR_XI_MESSAGE } from '@/lib/schemas/invoice-form';
+import { EU_BUYER_COUNTRIES } from '@/lib/schemas/invoice-form';
 import { calculateLineItem } from '@/lib/xml/invoice-calculator';
 import { CORRECTION_TYPE_LABELS } from '@/types/invoice-types';
 import type { CorrectionInvoiceData, ZeroVatAmountChangeRate } from '@/types/invoice-types';
@@ -155,20 +156,13 @@ function correctionBuyerIdLabel(buyer: CorrectionFormBuyer): string | null {
 /** Etykieta stawki np. II — ta sama co w formularzu zwykłej faktury. */
 const NP_II_OPTION_LABEL = 'np. II (usługa dla firmy z UE)';
 
-/** np. II w korekcie nabywcy, który nie jest firmą z innego kraju UE (nabywcy korekty nie zmienia się). */
-const NP_II_CORRECTION_BUYER_MESSAGE =
-  'Stawka np. II tylko dla usługi dla firmy z innego kraju UE z numerem VAT-UE — nabywca faktury pierwotnej go nie ma; wybierz inną stawkę';
-
 /**
  * `null`, gdy pozycje korekty mogą mieć stawkę np. II (firma z innego kraju UE,
  * bez Irlandii Płn. — `isNpIiBuyerVat`); inaczej komunikat przy takiej pozycji.
  */
 function npIiBlockMessage(buyer: CorrectionFormBuyer): string | null {
-  if (buyer.type !== 'eu') return NP_II_CORRECTION_BUYER_MESSAGE;
-  if (isNpIiBuyerVat(buyer.vatUeNumber)) return null;
-  return parseVatUe(buyer.vatUeNumber)?.kodUE === 'XI'
-    ? NP_II_NOT_FOR_XI_MESSAGE
-    : NP_II_CORRECTION_BUYER_MESSAGE;
+  // Ta sama reguła co w schemacie i generatorze KOR — zapytana o jedną pozycję np. II.
+  return correctionNpIiBuyerError({ buyer, linesAfter: [{ vatRate: 'np_ii' }] });
 }
 
 /** Stawki bez VAT, które korekta kwotowa przejmuje z faktury pierwotnej — opis dla użytkownika. */

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { generateCorrectionInvoiceXml } from '@/lib/ksef/fa3-correction-generator';
 import { validateInvoiceXml } from '@/lib/xml/validator';
-import { NP_II_NOT_FOR_XI_MESSAGE, NP_II_REQUIRES_EU_BUYER_MESSAGE } from '@/lib/schemas/invoice-form';
+import { NP_II_NOT_FOR_XI_MESSAGE, NP_II_CORRECTION_BUYER_MESSAGE } from '@/lib/schemas/invoice-form';
 import type {
   BuyerB2B,
   BuyerB2C,
@@ -181,6 +181,19 @@ describe('KOR — nabywca z UE (KodUE + NrVatUE), AUD-70', () => {
     expect(xml).toContain('<KodUE>DE</KodUE><NrVatUE>123456789</NrVatUE>');
   });
 
+  it('kwotowa 23%: pozycje „po” spoza korekty „przed / po” nie ustawiają P_18', async () => {
+    const xml = xmlOf(
+      korekta({
+        correctionType: 'amount_change',
+        linesBefore: [pozycja('23')],
+        linesAfter: [pozycja('oo')],
+        amountChange: { netDelta: -100, vatDelta: -23, grossDelta: -123, description: 'Rabat' },
+      }),
+    );
+    expect(xml).toContain('<P_18>2</P_18>');
+    await expectXsdValid(xml);
+  });
+
   it('nabywca z UE ze stawką 23% (bez np II): KodUE+NrVatUE, P_18=2 — zgodna z XSD', async () => {
     const xml = xmlOf(
       korekta({ linesBefore: [pozycja('23', 1000)], linesAfter: [pozycja('23', 900)] }),
@@ -220,16 +233,16 @@ describe('KOR — nabywca z UE (KodUE + NrVatUE), AUD-70', () => {
 
 describe('KOR — reguła „np II” wymaga nabywcy z innego państwa UE', () => {
   it('nabywca z NIP + np II (przed/po) — błąd', () => {
-    expect(() => xmlOf(korekta({ buyer: NABYWCA_NIP }))).toThrow(NP_II_REQUIRES_EU_BUYER_MESSAGE);
+    expect(() => xmlOf(korekta({ buyer: NABYWCA_NIP }))).toThrow(NP_II_CORRECTION_BUYER_MESSAGE);
   });
 
   it('nabywca z NIP + np II tylko po korekcie — błąd', () => {
     expect(() => xmlOf(korekta({ buyer: NABYWCA_NIP, linesBefore: [pozycja('23')], linesAfter: [pozycja('np_ii')] })))
-      .toThrow(NP_II_REQUIRES_EU_BUYER_MESSAGE);
+      .toThrow(NP_II_CORRECTION_BUYER_MESSAGE);
   });
 
   it('osoba prywatna + np II — błąd', () => {
-    expect(() => xmlOf(korekta({ buyer: NABYWCA_B2C }))).toThrow(NP_II_REQUIRES_EU_BUYER_MESSAGE);
+    expect(() => xmlOf(korekta({ buyer: NABYWCA_B2C }))).toThrow(NP_II_CORRECTION_BUYER_MESSAGE);
   });
 
   it('Irlandia Płn. (XI) + np II — błąd: numer XI obejmuje tylko towary', () => {
@@ -247,12 +260,12 @@ describe('KOR — reguła „np II” wymaga nabywcy z innego państwa UE', () =
           amountChange: { netDelta: -100, vatDelta: 0, grossDelta: -100, description: 'Rabat', vatRate: 'np_ii' },
         }),
       ),
-    ).toThrow(NP_II_REQUIRES_EU_BUYER_MESSAGE);
+    ).toThrow(NP_II_CORRECTION_BUYER_MESSAGE);
   });
 
   it('anulująca np II z nabywcą z NIP — błąd', () => {
     expect(() => xmlOf(korekta({ buyer: NABYWCA_NIP, correctionType: 'cancellation', linesAfter: undefined })))
-      .toThrow(NP_II_REQUIRES_EU_BUYER_MESSAGE);
+      .toThrow(NP_II_CORRECTION_BUYER_MESSAGE);
   });
 });
 

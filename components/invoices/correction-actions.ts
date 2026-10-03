@@ -618,6 +618,9 @@ async function normalizePayload(
     // Stawka bez VAT (np I / np II / oo) nie wynika z kwot — wyznacza ją serwer
     // z pozycji faktury pierwotnej. Inna wartość od klienta = odrzucenie.
     const original = await fetchParentInvoiceLines(supabase, parent.id as string);
+    // Stan przed = pozycje faktury pierwotnej z bazy, nie z formularza — generator
+    // liczy z nich adnotację P_18 (oo / np. II).
+    linesBefore = original;
     const parentRate = zeroVatRateFromParentLines(original);
     const { vatRate: suppliedRate, ...amounts } = amountChange;
     if (suppliedRate !== undefined && suppliedRate !== parentRate) {

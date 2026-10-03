@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { validateNipChecksum, validatePeselChecksum } from '@/lib/xml/invoice-calculator';
 import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
 import { isForeignEuVat, isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
-import { NP_II_NOT_FOR_XI_MESSAGE, NP_II_REQUIRES_EU_BUYER_MESSAGE } from '@/lib/schemas/invoice-form';
+import { NP_II_CORRECTION_BUYER_MESSAGE, NP_II_NOT_FOR_XI_MESSAGE } from '@/lib/schemas/invoice-form';
 
 // ============================================================================
 // Helpers walidacyjne
@@ -158,6 +158,8 @@ export type CorrectionLineSchema = z.infer<typeof correctionLineSchema>;
 /** Dane korekty, od których zależy „np. II” — pasuje też `CorrectionInvoiceData` (generator KOR). */
 export interface CorrectionNpIiInput {
   buyer: { type: string; vatUeNumber?: string };
+  /** Bez typu stawka `amountChange` liczy się zawsze; z typem — tylko w korekcie kwotowej. */
+  correctionType?: string;
   linesBefore?: ReadonlyArray<{ vatRate: string }>;
   linesAfter?: ReadonlyArray<{ vatRate: string }>;
   amountChange?: { vatRate?: string };
@@ -172,11 +174,12 @@ export interface CorrectionNpIiInput {
 export function correctionNpIiBuyerError(data: CorrectionNpIiInput): string | null {
   const hasNpIi =
     [...(data.linesBefore ?? []), ...(data.linesAfter ?? [])].some((l) => l.vatRate === 'np_ii') ||
-    data.amountChange?.vatRate === 'np_ii';
+    ((data.correctionType === undefined || data.correctionType === 'amount_change') &&
+      data.amountChange?.vatRate === 'np_ii');
   if (!hasNpIi) return null;
   const vatUe = data.buyer.type === 'eu' ? data.buyer.vatUeNumber : undefined;
   if (isNpIiBuyerVat(vatUe)) return null;
-  return parseVatUe(vatUe)?.kodUE === 'XI' ? NP_II_NOT_FOR_XI_MESSAGE : NP_II_REQUIRES_EU_BUYER_MESSAGE;
+  return parseVatUe(vatUe)?.kodUE === 'XI' ? NP_II_NOT_FOR_XI_MESSAGE : NP_II_CORRECTION_BUYER_MESSAGE;
 }
 
 // ============================================================================
@@ -280,7 +283,7 @@ export const correctionInvoiceSchema = z
     const fields: Array<'linesBefore' | 'linesAfter' | 'amountChange'> = [];
     if (data.linesBefore?.some((l) => l.vatRate === 'np_ii')) fields.push('linesBefore');
     if (data.linesAfter?.some((l) => l.vatRate === 'np_ii')) fields.push('linesAfter');
-    if (data.amountChange?.vatRate === 'np_ii') fields.push('amountChange');
+    if (data.correctionType === 'amount_change' && data.amountChange?.vatRate === 'np_ii') fields.push('amountChange');
     for (const field of fields) ctx.addIssue({ code: 'custom', message, path: [field] });
   })
   .refine((data) => new Date(data.paymentDueDate) >= new Date(data.issueDate), {
