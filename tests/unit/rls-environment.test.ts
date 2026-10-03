@@ -41,6 +41,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-uprawnienia.test.ts',
       // 00131: cykl życia faktury (RPC przejść, dowód kontaktu, strażnik).
       'tests/rls-cykl-faktury.test.ts',
+      // PR 3 cyklu życia: RPC w jednej transakcji ze zleceniem pg-boss.
+      'tests/rls-kolejkowanie-wysylki.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

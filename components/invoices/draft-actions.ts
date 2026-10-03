@@ -97,20 +97,10 @@ export async function sendDraftInvoiceAction(invoiceId: string): Promise<DraftAc
     const nip = (tenant?.nip as string | null | undefined) ?? invoice.seller?.nip;
     if (!nip) return { success: false, error: 'Brak NIP firmy.' };
 
-    // Atomowe przejęcie szkicu: podwójne kliknięcie albo druga karta nie
-    // wyślą tej samej faktury dwa razy.
-    const { data: claimed, error: claimError } = await supabase
-      .from('invoices')
-      .update({ ksef_status: 'queued' })
-      .eq('id', invoiceId)
-      .eq('tenant_id', tenantId)
-      .eq('ksef_status', 'draft')
-      .select('id');
-    if (claimError) return { success: false, error: 'Nie udało się rozpocząć wysyłki. Spróbuj ponownie.' };
-    if (!claimed || claimed.length === 0) {
-      return { success: false, error: 'Ta faktura jest już wysyłana.' };
-    }
-
+    // Przejęcie szkicu robi serwer: RPC `enqueue_ksef_send` (warunek `draft`)
+    // w jednej transakcji ze zleceniem pg-boss. Podwójne kliknięcie albo druga
+    // karta dostają odmowę RPC („już wysyłana”), a sesja klienta nie pisze
+    // `ksef_status` (cykl życia faktury, PR 3 — W2).
     const enq = await enqueueKsefSubmitAfterDraft({
       supabase,
       tenantId,
@@ -123,14 +113,8 @@ export async function sendDraftInvoiceAction(invoiceId: string): Promise<DraftAc
     });
 
     if (!enq.ok) {
-      // Kolejka odmówiła, zanim cokolwiek wysłała (brak certyfikatu, pauza
-      // operatora, błąd kolejki) — faktura wraca do szkicu.
-      await supabase
-        .from('invoices')
-        .update({ ksef_status: 'draft' })
-        .eq('id', invoiceId)
-        .eq('tenant_id', tenantId)
-        .eq('ksef_status', 'queued');
+      // Kolejka odmówiła (brak certyfikatu, pauza operatora, błąd kolejki) —
+      // status nie został zmieniony, faktura jest nadal szkicem.
       return { success: false, error: enq.error };
     }
 

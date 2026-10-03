@@ -32,6 +32,8 @@ export RLS_TEST_SUPABASE_URL="${API_URL}"
 export RLS_TEST_SUPABASE_ANON_KEY="${ANON_KEY:-${PUBLISHABLE_KEY:-}}"
 export RLS_TEST_SUPABASE_SERVICE_ROLE_KEY="${SERVICE_ROLE_KEY:-${SECRET_KEY:-}}"
 export RLS_TEST_ALLOW_DESTRUCTIVE="isolated-local-database"
+# Testy kolejki pg-boss (PR 3 cyklu życia) łączą się z tą samą lokalną bazą po Postgresie.
+export RLS_TEST_DATABASE_URL="${DB_URL}"
 unset NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY
 
 pnpm test:rls
