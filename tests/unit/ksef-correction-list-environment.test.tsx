@@ -19,6 +19,11 @@ const rows = [
   { id: '3', tenant_id: 'tenant-a', internal_number: 'LEGACY-A', direction: 'outgoing', ksef_status: 'accepted', invoice_kind: 'regular', ksef_environment: null, ksef_number: 'legacy-3', issue_date: '2026-09-01' },
   { id: '4', tenant_id: 'tenant-b', internal_number: 'PROD-B', direction: 'outgoing', ksef_status: 'accepted', invoice_kind: 'regular', ksef_environment: 'production', ksef_number: 'prod-4', issue_date: '2026-09-01' },
   { id: '5', tenant_id: 'tenant-a', internal_number: 'NO-NUMBER', direction: 'outgoing', ksef_status: 'accepted', invoice_kind: 'regular', ksef_environment: 'production', ksef_number: null, issue_date: '2026-09-01' },
+  // K4: rodzic z otwartą korektą znika z listy; z odrzuconą — zostaje.
+  { id: '6', tenant_id: 'tenant-a', internal_number: 'PROD-OPEN-KOR', direction: 'outgoing', ksef_status: 'accepted', invoice_kind: 'regular', ksef_environment: 'production', ksef_number: 'prod-6', issue_date: '2026-09-02' },
+  { id: '7', tenant_id: 'tenant-a', internal_number: 'PROD-REJECTED-KOR', direction: 'outgoing', ksef_status: 'accepted', invoice_kind: 'regular', ksef_environment: 'production', ksef_number: 'prod-7', issue_date: '2026-09-03' },
+  { id: '60', tenant_id: 'tenant-a', internal_number: 'KOR-6', direction: 'outgoing', ksef_status: 'failed', invoice_kind: 'correction', ksef_environment: 'production', ksef_number: null, issue_date: '2026-09-05', parent_invoice_id: '6' },
+  { id: '70', tenant_id: 'tenant-a', internal_number: 'KOR-7', direction: 'outgoing', ksef_status: 'rejected', invoice_kind: 'correction', ksef_environment: 'production', ksef_number: null, issue_date: '2026-09-05', parent_invoice_id: '7' },
 ];
 let reads: number;
 const from = vi.fn(() => {
@@ -54,7 +59,15 @@ it('lists only current-tenant accepted parents with PROD provenance and KSeF num
   const html = renderToStaticMarkup(await NewCorrectionPage({ searchParams: Promise.resolve({}) }));
   expect(html).toContain('PROD-A');
   expect(html).not.toMatch(/TEST-A|LEGACY-A|PROD-B|NO-NUMBER/);
-  expect(reads).toBe(1);
+  // Dwa odczyty: rodzice + korekty firmy (K4 — rodzic z otwartą korektą nie jest kandydatem).
+  expect(reads).toBe(2);
+});
+
+it('K4: parent with an open correction is not offered again; a rejected correction does not block', async () => {
+  const html = renderToStaticMarkup(await NewCorrectionPage({ searchParams: Promise.resolve({}) }));
+  expect(html).toContain('PROD-REJECTED-KOR');
+  expect(html).not.toContain('PROD-OPEN-KOR');
+  expect(html).not.toMatch(/KOR-6|KOR-7/);
 });
 
 it('does not read invoices without an active organization', async () => {
