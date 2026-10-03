@@ -147,6 +147,19 @@ export function describeChange(
     return 'Ten dokument został już przejrzany ręcznie.';
   }
 
+  // Koszt w KPiR albo poza nią (`expenses.is_deductible`) inaczej niż na
+  // karcie. Bez tej gałęzi człowiek dostałby nazwę pola z bazy zamiast zdania.
+  // Zdanie mówi, JAK JEST, a nie, że ktoś to zmienił: karta mogła od początku
+  // zakładać KPiR przy koszcie, który zapisaliśmy poza nią (waluta bez kursu).
+  if (
+    kind === 'expense.review' &&
+    (before.deductible ?? null) !== (after.deductible ?? null)
+  ) {
+    return after.deductible === 1
+      ? 'Ten koszt jest w KPiR, a karta zakładała inaczej — sprawdź go w formularzu.'
+      : 'Ten koszt jest poza KPiR, więc niczego nie potwierdziłem — sprawdź go w formularzu.';
+  }
+
   const changed = diffFacts(before, after);
   if (changed.length === 0) {
     return 'Dane zmieniły się od czasu przygotowania tej propozycji.';

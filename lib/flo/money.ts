@@ -36,9 +36,14 @@ const ANY_SPACE = /[\s   ]/g;
  * kwadrans.
  */
 export function formatPln(amount: number): string {
+  return `${plDigits(amount)}${NBSP}zł`;
+}
+
+/** Same cyfry kwoty po polsku, z twardą spacją jako separatorem tysięcy. */
+function plDigits(amount: number): string {
   const safe = Number.isFinite(amount) ? amount : 0;
 
-  const digits = new Intl.NumberFormat('pl-PL', {
+  return new Intl.NumberFormat('pl-PL', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
     // Zawsze grupujemy tysiące. Domyślne zachowanie `Intl` dla polskiego
@@ -50,8 +55,6 @@ export function formatPln(amount: number): string {
   })
     .format(safe)
     .replace(ANY_SPACE, NBSP);
-
-  return `${digits}${NBSP}zł`;
 }
 
 /**
@@ -61,6 +64,20 @@ export function formatPln(amount: number): string {
  */
 export function formatPlnPlain(amount: number): string {
   return formatPln(amount).replace(ANY_SPACE, ' ');
+}
+
+/**
+ * Kwota w dowolnej walucie, bez twardych spacji: „1 234,50 EUR”.
+ *
+ * Złotówki (i brak kodu) dają DOKŁADNIE to samo co `formatPlnPlain` — „zł”,
+ * nie „PLN”. Inna waluta ma te same polskie cyfry i kod ISO zamiast „zł”:
+ * kwota nieprzeliczona kursem, a podpisana „zł”, mówi klientowi nieprawdę
+ * o jego pieniądzach (sto euro to nie sto złotych).
+ */
+export function formatMoneyPlain(amount: number, currency: string): string {
+  const code = currency.trim().toUpperCase();
+  if (code === '' || code === 'PLN') return formatPlnPlain(amount);
+  return `${plDigits(amount)} ${code}`.replace(ANY_SPACE, ' ');
 }
 
 /**

@@ -331,7 +331,35 @@ export function toProposalView(row: FloProposalRow): FloProposalView | null {
     priority: row.priority,
     createdAt: row.created_at,
     undoableUntil: readString(payload.undoableUntil) ?? undefined,
+    ocrCard: kind === 'expense.review' ? readOcrCard(payload) : undefined,
   };
+}
+
+/**
+ * Czy karta `expense.review` jest wynikiem odczytu zdjęcia — i jakim.
+ *
+ * Rodzaj dzielą trzy różne karty: koszt odczytany ze zdjęcia (`expenseId`),
+ * porażka odczytu (`failed: 1` + `ocrJobId`, `buildOcrFailedProposal`)
+ * i zbiorcza karta skrzynki KSeF (bez `expenseId`). Pasek zdjęcia musi je
+ * rozróżnić: wcześniej każda karta `expense.*` znaczyła „paragon odczytany”,
+ * także ta, która mówi „nie odczytałem tego zdjęcia”.
+ */
+function readOcrCard(
+  payload: Record<string, unknown>,
+): FloProposalView['ocrCard'] {
+  const ocrJobId = readString(payload.ocrJobId);
+
+  // Porażka bez numeru zadania nie wskaże żadnego zdjęcia — ale nie może
+  // też przejść niżej i udawać odczytanego kosztu.
+  if (payload.failed === 1) {
+    return ocrJobId ? { failed: true, ocrJobId } : undefined;
+  }
+
+  if (readString(payload.expenseId)) {
+    return ocrJobId ? { failed: false, ocrJobId } : { failed: false };
+  }
+
+  return undefined;
 }
 
 /**
