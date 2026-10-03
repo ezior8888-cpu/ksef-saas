@@ -147,8 +147,8 @@ export async function onProcessOcrExhausted(
   // agenta, powiadomienie — np. autor zdjęcia odszedł z firmy). „Nieudane”
   // kazałoby klientowi wpisać paragon ręcznie, czyli drugi raz do KPiR.
   // Wtedy zadanie kończy się wskazaniem na zapisany wydatek. Gdy nie da się
-  // tego sprawdzić, odczyt rzuca: zadanie zostaje „processing” (run-job
-  // zapisze błąd), zamiast ogłaszać porażkę w ciemno.
+  // tego sprawdzić, odczyt rzuca: zadanie zostaje „pending” albo „processing”
+  // (run-job zapisze błąd), zamiast ogłaszać porażkę w ciemno.
   const saved = await findOcrJobExpense(supabase, tenantId, ocrJobId);
   if (saved) {
     const { error: updateError } = await supabase

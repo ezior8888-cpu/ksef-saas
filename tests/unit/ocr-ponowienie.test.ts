@@ -36,8 +36,14 @@ const state = vi.hoisted(() => ({
   jobUpdateError: false,
   ocrFails: false,
   aiBudgetExhausted: false,
+  // Pola odczytu modelu nadpisujące domyślny paragon (np. waluta).
+  extractData: {} as Record<string, unknown>,
+  // Wiersz ocr_jobs widziany przez load-job (`null` — brak zadania).
+  jobRow: null as Record<string, unknown> | null,
   expenseReads: 0,
   inserts: 0,
+  cardSeq: 0,
+  nbp: vi.fn(),
   extract: vi.fn(),
   budget: vi.fn(),
   download: vi.fn(),
@@ -58,6 +64,10 @@ vi.mock('@/lib/categorization', () => ({
 vi.mock('@/lib/ocr/engine', () => ({
   extractInvoiceFromImage: (...args: unknown[]) => state.extract(...args),
 }));
+vi.mock('@/lib/nbp/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/nbp/client')>()),
+  nbpRateForCost: (...args: unknown[]) => state.nbp(...args),
+}));
 vi.mock('@/lib/storage/expenses', () => ({
   downloadExpensePhoto: (...args: unknown[]) => state.download(...args),
 }));
@@ -75,21 +85,25 @@ vi.mock('@/lib/supabase/admin', () => ({
       const filters: Array<[string, unknown]> = [];
       let insertRow: Row | null = null;
       let limited = false;
+      let orderBy: { column: string; ascending: boolean } | null = null;
       const q: Record<string, unknown> = {};
       const rowsOf = (rows: Row[]) => rows.filter((r) => filters.every(([k, v]) => r[k] === v));
       Object.assign(q, {
         select: () => q,
         eq: (k: string, v: unknown) => { filters.push([k, v]); return q; },
-        order: () => q,
+        order: (column: string, opts?: { ascending?: boolean }) => {
+          orderBy = { column, ascending: opts?.ascending !== false };
+          return q;
+        },
         limit: () => { limited = true; return q; },
         update: (v: Row) => { if (table === 'ocr_jobs') state.jobUpdates.push(v); return q; },
         insert: (r: Row) => { insertRow = r; return q; },
         single: async () => {
           if (table === 'ocr_jobs') {
-            return {
-              data: { id: OCR_JOB, tenant_id: TENANT, created_by: USER, source_file_path: 'r2/x.jpg', source_file_mime: 'image/jpeg' },
-              error: null,
-            };
+            const [job] = rowsOf(state.jobRow ? [state.jobRow] : []);
+            return job
+              ? { data: job, error: null }
+              : { data: null, error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' } };
           }
           if (table === 'expenses' && insertRow) {
             state.inserts += 1;
@@ -112,7 +126,15 @@ vi.mock('@/lib/supabase/admin', () => ({
           if (table === 'tenants') return { data: { vat_exemption_basis: null }, error: null };
           if (table === 'flo_proposals') {
             if (state.cardReadError) return { data: null, error: { message: 'database unavailable' } };
-            return { data: rowsOf(state.cards).at(-1) ?? null, error: null };
+            const rows = rowsOf(state.cards);
+            if (orderBy) {
+              const { column, ascending } = orderBy;
+              rows.sort((a, b) => String(a[column]).localeCompare(String(b[column])) * (ascending ? 1 : -1));
+            }
+            if (rows.length > 1 && !limited) {
+              return { data: null, error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' } };
+            }
+            return { data: rows[0] ?? null, error: null };
           }
           if (table === 'expenses') {
             state.expenseReads += 1;
@@ -163,11 +185,19 @@ function savedRow(id: string, over: Row = {}): Row {
   };
 }
 
+/** Karta Flo zapisana przez wcześniejszy przebieg. */
+function card(topicKey: string, status: string, over: Row = {}): Row {
+  state.cardSeq += 1;
+  return { tenant_id: TENANT, topic_key: topicKey, status, created_at: `2026-10-03T10:00:${String(state.cardSeq).padStart(2, '0')}Z`, ...over };
+}
+
 /** Pierwszy przebieg pada na karcie agenta (wydatek już zapisany), liczniki od nowa. */
 async function firstRunFailsAfterSave() {
   state.proposal.mockRejectedValueOnce(new Error('chwilowy błąd bazy'));
   await expect(runProcessOcr(event, ctx)).rejects.toThrow('chwilowy błąd bazy');
   expect(state.expenses).toHaveLength(1);
+  // Karta przed powiadomieniem — na tym opiera się „karta otwarta ⇒ push nie wyszedł”.
+  expect(state.push).not.toHaveBeenCalled();
   state.jobUpdates = [];
   state.expenseReads = 0;
   for (const spy of [state.extract, state.budget, state.download, state.categorize, state.review, state.proposal, state.push]) {
@@ -191,8 +221,14 @@ beforeEach(() => {
   state.jobUpdateError = false;
   state.ocrFails = false;
   state.aiBudgetExhausted = false;
+  state.extractData = {};
+  state.jobRow = { id: OCR_JOB, tenant_id: TENANT, created_by: USER, source_file_path: 'r2/x.jpg', source_file_mime: 'image/jpeg' };
   state.expenseReads = 0;
   state.inserts = 0;
+  state.cardSeq = 0;
+  state.nbp.mockReset().mockResolvedValue({
+    found: true, rate: { currency: 'EUR', mid: 4.2567, tableNo: '188/A/NBP/2026', effectiveDate: '2026-09-25' }, gapDays: 3,
+  });
   state.budget.mockReset().mockImplementation(async () => state.aiBudgetExhausted
     ? { allowed: false, message: 'Limit AI firmy na ten miesiąc wyczerpany' }
     : { allowed: true });
@@ -208,15 +244,20 @@ beforeEach(() => {
       document_number: 'PAR/1', document_type: 'receipt', issue_date: '2026-09-28',
       net_amount: 100, vat_amount: 23, gross_amount: 123, vat_rate: '23',
       line_items: null, ocr_confidence: 0.95, notes: null, currency: 'PLN',
+      ...state.extractData,
     },
-    inputTokens: 1, outputTokens: 1, processingTimeMs: 1,
+    modelUsed: 'claude-test', inputTokens: 1, outputTokens: 1, processingTimeMs: 1,
   });
   state.download.mockReset().mockResolvedValue({ buffer: Buffer.from('x'), mimeType: 'image/jpeg' });
   state.review.mockReset().mockImplementation((input: { expenseId: string }) => ({
     topicKey: `expense.review:${input.expenseId}`,
     expenseId: input.expenseId,
   }));
-  state.proposal.mockReset().mockResolvedValue({ status: 'created' });
+  // Jak createProposal: zapisuje otwartą kartę tematu.
+  state.proposal.mockReset().mockImplementation(async (proposal: { topicKey?: string }) => {
+    if (proposal.topicKey) state.cards.push(card(proposal.topicKey, 'open'));
+    return { status: 'created' };
+  });
   state.failedCard.mockReset().mockReturnValue({});
   state.push.mockReset();
 });
@@ -280,10 +321,41 @@ describe('pierwszy przebieg — karta, powiadomienie i ślad odczytu jak dotąd'
     expect(state.proposal).toHaveBeenCalledTimes(1);
     expect(pushBodies('invoice_accepted')).toEqual(['Stacja Paliw • 123.00 PLN']);
     expect(state.jobUpdates[0]).toEqual({ status: 'processing' });
-    expect(state.jobUpdates.at(-1)).toEqual(expect.objectContaining({
-      status: 'completed', expense_id: 'exp-1', ai_input_tokens: 1, extracted_data: expect.anything(),
-    }));
+    expect(state.jobUpdates.at(-1)).toEqual({
+      status: 'completed', expense_id: 'exp-1', completed_at: expect.any(String),
+      extracted_data: expect.objectContaining({ seller_name: 'Stacja Paliw', gross_amount: 123 }),
+      ai_model_used: 'claude-test', ai_input_tokens: 1, ai_output_tokens: 1, processing_time_ms: 1,
+    });
     expect(state.expenseReads).toBe(2);
+  });
+
+  it.each([
+    ['waluta z kursem NBP', true, { netAmount: 425.67, vatAmount: 0, grossAmount: 425.67 }, 'Figma Inc. • 425.67 PLN'],
+    ['waluta bez kursu NBP', false, { netAmount: 100, vatAmount: 0, grossAmount: 100 }, 'Figma Inc. • 100.00 EUR (bez kursu)'],
+  ])('%s — karta i powiadomienie jak dotąd', async (_label, rateFound, amounts, body) => {
+    state.extractData = { seller_name: 'Figma Inc.', currency: 'EUR', net_amount: 100, vat_amount: 0, gross_amount: 100 };
+    if (!rateFound) state.nbp.mockResolvedValue({ found: false, reason: 'no_table_before' });
+
+    await runProcessOcr(event, ctx);
+    expect(state.review).toHaveBeenCalledWith(expect.objectContaining({
+      facts: expect.objectContaining({ sellerName: 'Figma Inc.', ...amounts }),
+    }));
+    expect(pushBodies('invoice_accepted')).toEqual([body]);
+  });
+
+  it.each([
+    ['autor usunął konto', { created_by: null }, 'Autor zadania OCR usunął konto'],
+    ['zdjęcie jeszcze nie wgrane', { source_file_path: 'pending' }, 'Brak pliku źródłowego'],
+    ['zadanie innej firmy', { tenant_id: OTHER_TENANT }, 'Job nie istnieje lub niewłaściwy tenant'],
+  ])('%s — błąd ostateczny przed odczytem wydatku, „przetwarzaniem” i zdjęciem', async (_label, over, message) => {
+    state.jobRow = { ...state.jobRow, ...over };
+
+    const err = await runProcessOcr(event, ctx).catch((e: unknown) => e);
+    expect((err as Error).name).toBe('NonRetriableError');
+    expect((err as Error).message).toContain(message);
+    expect(state.expenseReads).toBe(0);
+    expect(state.jobUpdates).toEqual([]);
+    expect(state.download).not.toHaveBeenCalled();
   });
 });
 
@@ -297,11 +369,7 @@ describe('E15 — ponowienie po zapisie: bez płatnego OCR, karta i powiadomieni
     expect(state.extract).not.toHaveBeenCalled();
     expect(state.categorize).not.toHaveBeenCalled();
     expect(state.expenseReads).toBe(1);
-    expect(state.jobUpdates).not.toContainEqual(expect.objectContaining({ status: 'processing' }));
-    const completed = state.jobUpdates.at(-1);
-    expect(completed).toEqual(expect.objectContaining({ status: 'completed', expense_id: 'exp-1' }));
-    expect(completed).not.toHaveProperty('extracted_data');
-    expect(completed).not.toHaveProperty('ai_input_tokens');
+    expect(state.jobUpdates).toEqual([{ status: 'completed', expense_id: 'exp-1', completed_at: expect.any(String) }]);
     expect(state.proposal).toHaveBeenCalledTimes(1);
     expect(pushBodies('invoice_accepted')).toEqual(['Stacja Paliw • 123.00 PLN']);
   });
@@ -340,12 +408,52 @@ describe('E15 — ponowienie po zapisie: bez płatnego OCR, karta i powiadomieni
     expect(state.push).not.toHaveBeenCalled();
   });
 
-  it('karta otwarta (pierwszy przebieg do niej doszedł) — bez nowej karty, powiadomienie wychodzi', async () => {
-    state.expenses.push(savedRow('exp-1'));
-    state.cards.push({ tenant_id: TENANT, topic_key: 'expense.review:exp-1', status: 'open' });
+  it('klient już przejrzał wydatek, karta wciąż otwarta — bez karty i bez powiadomienia', async () => {
+    state.expenses.push(savedRow('exp-1', { is_reviewed: true }));
+    state.cards.push(card('expense.review:exp-1', 'open'));
 
     await runProcessOcr(event, ctx);
     expect(state.proposal).not.toHaveBeenCalled();
+    expect(state.push).not.toHaveBeenCalled();
+  });
+
+  it('karta otwarta (pierwszy przebieg do niej doszedł) — bez nowej karty, powiadomienie wychodzi', async () => {
+    state.expenses.push(savedRow('exp-1'));
+    state.cards.push(card('expense.review:exp-1', 'open'));
+
+    await runProcessOcr(event, ctx);
+    expect(state.proposal).not.toHaveBeenCalled();
+    expect(pushBodies('invoice_accepted')).toHaveLength(1);
+  });
+
+  it('pierwszy przebieg padł na powiadomieniu — ponowienie: bez nowej karty, jedno powiadomienie', async () => {
+    state.push.mockRejectedValueOnce(new Error('push niedostępny'));
+    await expect(runProcessOcr(event, ctx)).rejects.toThrow('push niedostępny');
+    expect(state.cards).toEqual([expect.objectContaining({ topic_key: 'expense.review:exp-1', status: 'open' })]);
+    state.proposal.mockClear();
+    state.push.mockClear();
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: 'exp-1' });
+    expect(state.proposal).not.toHaveBeenCalled();
+    expect(state.cards).toHaveLength(1);
+    expect(pushBodies('invoice_accepted')).toHaveLength(1);
+  });
+
+  it('kilka kart tematu (starsza odrzucona, nowsza otwarta) — decyduje najnowsza: bez nowej karty, powiadomienie', async () => {
+    state.expenses.push(savedRow('exp-1'));
+    state.cards.push(card('expense.review:exp-1', 'dismissed'), card('expense.review:exp-1', 'open'));
+
+    await runProcessOcr(event, ctx);
+    expect(state.proposal).not.toHaveBeenCalled();
+    expect(pushBodies('invoice_accepted')).toHaveLength(1);
+  });
+
+  it('karta innego tematu tej firmy nie zatrzymuje karty ani powiadomienia', async () => {
+    state.expenses.push(savedRow('exp-1'));
+    state.cards.push(card('expense.review:exp-inny', 'done'));
+
+    await runProcessOcr(event, ctx);
+    expect(state.proposal).toHaveBeenCalledTimes(1);
     expect(pushBodies('invoice_accepted')).toHaveLength(1);
   });
 
@@ -353,7 +461,7 @@ describe('E15 — ponowienie po zapisie: bez płatnego OCR, karta i powiadomieni
     'karta w stanie „%s” (klient zareagował) — bez nowej karty i bez powiadomienia',
     async (status) => {
       state.expenses.push(savedRow('exp-1'));
-      state.cards.push({ tenant_id: TENANT, topic_key: 'expense.review:exp-1', status });
+      state.cards.push(card('expense.review:exp-1', status));
 
       expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: 'exp-1' });
       expect(state.proposal).not.toHaveBeenCalled();
@@ -363,7 +471,7 @@ describe('E15 — ponowienie po zapisie: bez płatnego OCR, karta i powiadomieni
 
   it('karta tego tematu w innej firmie nie zatrzymuje karty', async () => {
     state.expenses.push(savedRow('exp-1'));
-    state.cards.push({ tenant_id: OTHER_TENANT, topic_key: 'expense.review:exp-1', status: 'done' });
+    state.cards.push(card('expense.review:exp-1', 'done', { tenant_id: OTHER_TENANT }));
 
     await runProcessOcr(event, ctx);
     expect(state.proposal).toHaveBeenCalledTimes(1);
@@ -382,6 +490,7 @@ describe('E15 — ponowienie po zapisie: bez płatnego OCR, karta i powiadomieni
     ['waluta z kursem NBP', { currency: 'EUR', ocr_confidence: 0.9, fx: { currency: 'EUR', mid: 4.3, tableNo: 'X', effectiveDate: '2026-09-26' } }, 430.5, 'Stacja Paliw • 430.50 PLN', 0.9],
     ['waluta bez kursu', { currency: 'EUR', ocr_confidence: 0.9 }, 100, 'Stacja Paliw • 100.00 EUR (bez kursu)', 0.9],
     ['dawny wpis bez waluty', { ocr_confidence: 0.8 }, 123, 'Stacja Paliw • 123.00 PLN', 0.8],
+    ['ślad bez pewności odczytu', { currency: 'PLN' }, 123, 'Stacja Paliw • 123.00 PLN', null],
     ['nieczytelny ślad OCR — pewność 0 (karta-pytanie)', null, 123, 'Stacja Paliw • 123.00 PLN', 0],
   ])('kwota i pewność z zapisanego śladu: %s', async (_label, trace, gross, body, confidence) => {
     state.expenses.push(savedRow('exp-1', { ocr_extracted_data: trace, gross_amount: gross }));
@@ -406,9 +515,7 @@ describe('B4 — indeks UNIQUE (tenant_id, ocr_job_id): wyścig dwóch przebieg�
       expect(state.expenses.filter((e) => e.ocr_job_id === OCR_JOB && e.tenant_id === TENANT)).toHaveLength(1);
       expect(state.inserts).toBe(1);
       expect(state.expenseReads).toBe(3);
-      const completed = state.jobUpdates.at(-1);
-      expect(completed).toEqual(expect.objectContaining({ status: 'completed', expense_id: winnerId }));
-      expect(completed).not.toHaveProperty('extracted_data');
+      expect(state.jobUpdates.at(-1)).toEqual({ status: 'completed', expense_id: winnerId, completed_at: expect.any(String) });
       expect(state.review).toHaveBeenCalledWith(expect.objectContaining({
         expenseId: winnerId,
         facts: expect.objectContaining({ grossAmount: 200, categoryLabel: 'Usługi' }),
@@ -424,8 +531,21 @@ describe('B4 — indeks UNIQUE (tenant_id, ocr_job_id): wyścig dwóch przebieg�
     expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: 'exp-konkurent' });
     expect(state.inserts).toBe(0);
     expect(state.expenseReads).toBe(2);
-    expect(state.jobUpdates.at(-1)).not.toHaveProperty('extracted_data');
+    expect(state.jobUpdates.at(-1)).toEqual({ status: 'completed', expense_id: 'exp-konkurent', completed_at: expect.any(String) });
     expect(pushBodies('invoice_accepted')).toEqual(['Stacja Paliw • 200.00 PLN']);
+  });
+
+  it.each([
+    ['odczyt przed zapisem', 1, false],
+    ['23505', 2, true],
+  ])('wydatek równoległego przebiegu już przejrzany (%s) — bez karty i bez powiadomienia', async (_label, raceAfterRead, uniqueIndex) => {
+    state.uniqueIndex = uniqueIndex;
+    state.raceAfterRead = raceAfterRead;
+    state.raceRow = savedRow('exp-konkurent', { is_reviewed: true });
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: 'exp-konkurent' });
+    expect(state.proposal).not.toHaveBeenCalled();
+    expect(state.push).not.toHaveBeenCalled();
   });
 
   it.each([
