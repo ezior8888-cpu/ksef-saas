@@ -14,8 +14,15 @@ import {
   roundToCents,
   summarizeVatPerRate,
 } from '@/lib/xml/invoice-calculator';
-import type { CorrectionInvoiceData, InvoiceLine } from '@/types/invoice-types';
+import type { BuyerEU, CorrectionInvoiceData, InvoiceLine } from '@/types/invoice-types';
 import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
+import {
+  addressCountryForKodUE,
+  isNpIiBuyerVat,
+  parseVatUe,
+  type ParsedVatUe,
+} from '@/lib/invoices/vat-ue';
+import { NP_II_NOT_FOR_XI_MESSAGE, NP_II_REQUIRES_EU_BUYER_MESSAGE } from '@/lib/schemas/invoice-form';
 
 const FA3_NAMESPACE = 'http://crd.gov.pl/wzor/2025/06/25/13775/';
 const ETD_NAMESPACE =
@@ -255,16 +262,29 @@ function emitVatSummaries(fa: XMLBuilder, summaries: ReturnType<typeof summarize
   }
 }
 
+/**
+ * Stawki wszystkich pozycji, których dotyczy korekta: stan przed (pozycje
+ * faktury pierwotnej) ∪ stan po ∪ wiersze XML (m.in. stawka korekty kwotowej
+ * i wiersze anulowania).
+ */
+function correctionRates(data: CorrectionInvoiceData, rows: readonly InvoiceLineItem[]): Set<string> {
+  return new Set<string>([
+    ...(data.linesBefore ?? []).map((l) => l.vatRate),
+    ...(data.linesAfter ?? []).map((l) => l.vatRate),
+    ...rows.map((l) => l.vatRate),
+  ]);
+}
+
 function buildAdnotacjeMinimal(
   fa: XMLBuilder,
   lines: InvoiceLineItem[],
+  reverseCharge: boolean,
   annotations: CorrectionInvoiceData['annotations'] = {},
 ): void {
   const adn = fa.ele('Adnotacje');
-  // P_18=1 dla „oo” i „np II” (VAT rozlicza nabywca; AUD-70). „np II” blokuje
-  // dziś `assertNoNpII`, ale adnotacja ma być spójna z pozycjami.
-  const hasReverseChargeLine = lines.some((l) => l.vatRate === 'oo' || l.vatRate === 'np_ii');
-  const p18 = hasReverseChargeLine ? 1 : 2;
+  // P_18=1 dla „oo” i „np II” (VAT rozlicza nabywca; AUD-70) — jak w zwykłej
+  // fakturze, liczone z pozycji przed i po korekcie (`correctionRates`).
+  const p18 = reverseCharge ? 1 : 2;
   const hasZwLine = lines.some((l) => l.vatRate === 'zw');
   if (hasZwLine) {
     throw new Error(
@@ -285,18 +305,67 @@ function buildAdnotacjeMinimal(
 }
 
 /**
- * „np II” (usługi z art. 100 ust. 1 pkt 4, AUD-70) wymaga nabywcy z innego
- * państwa UE z numerem VAT-UE (KodUE + NrVatUE). Korekta zna tylko nabywcę
- * z NIP albo B2C (`BuyerData`), więc przerywamy przed budową XML.
+ * „np II” (usługi z art. 100 ust. 1 pkt 4 — art. 28b, AUD-70) wymaga nabywcy —
+ * podatnika z INNEGO państwa UE z numerem VAT-UE (KodUE + NrVatUE). Nabywca
+ * z NIP, osoba prywatna, polski VAT-UE i Irlandia Płn. (XI — numer tylko dla
+ * towarów) przerywają wystawienie przed budową XML. Liczy się każda pozycja
+ * przed i po korekcie oraz stawka korekty kwotowej. Komunikat dla człowieka
+ * daje walidator akcji; tu ostatnia linia obrony.
  */
-function assertNoNpII(data: CorrectionInvoiceData): void {
-  const lines = [...(data.linesBefore ?? []), ...(data.linesAfter ?? [])];
-  if (lines.some((l) => l.vatRate === 'np_ii')) {
+function assertNpIiBuyer(data: CorrectionInvoiceData): void {
+  const npIi =
+    [...(data.linesBefore ?? []), ...(data.linesAfter ?? [])].some((l) => l.vatRate === 'np_ii') ||
+    (data.correctionType === 'amount_change' && data.amountChange?.vatRate === 'np_ii');
+  if (!npIi) return;
+
+  const vatUe = data.buyer.type === 'eu' ? data.buyer.vatUeNumber : null;
+  if (parseVatUe(vatUe)?.kodUE === 'XI') {
+    throw new Error(`FA(3) KOR: ${NP_II_NOT_FOR_XI_MESSAGE}`);
+  }
+  if (!isNpIiBuyerVat(vatUe)) {
+    throw new Error(`FA(3) KOR: ${NP_II_REQUIRES_EU_BUYER_MESSAGE}`);
+  }
+}
+
+/**
+ * Numer VAT-UE nabywcy z UE rozbity na `KodUE` + `NrVatUE` (XSD `TPodmiot2`).
+ * Prefiks spoza `TKodyKrajowUE` (np. „GR” zamiast „EL”), numer niezgodny
+ * z `TNrVatUE` albo polski VAT-UE (`BuyerEU` to firma z innego państwa)
+ * przerywa generowanie — jak `splitVatUe` w generatorze zwykłej faktury.
+ */
+function euBuyerVat(buyer: BuyerEU): ParsedVatUe {
+  const parsed = parseVatUe(buyer.vatUeNumber);
+  if (!parsed) {
     throw new Error(
-      'FA(3) KOR: stawka „np II” (usługi z art. 100 ust. 1 pkt 4 ustawy o VAT) wymaga nabywcy ' +
-        'z innego państwa UE z numerem VAT-UE — faktura korygująca jej nie obsługuje (nabywca z NIP albo B2C).',
+      `FA(3) KOR: numer VAT-UE nabywcy "${buyer.vatUeNumber}" jest nieprawidłowy — oczekiwano prefiksu kraju UE ` +
+        '(Grecja: „EL”, nie „GR”) i 1–12 znaków [0-9A-Z+*], np. „DE123456789”.',
     );
   }
+  if (parsed.kodUE === 'PL') {
+    throw new Error(
+      'FA(3) KOR: nabywca „firma z UE” musi mieć numer VAT-UE z innego państwa UE niż Polska — ' +
+        'polskiego nabywcę identyfikuje NIP.',
+    );
+  }
+  return parsed;
+}
+
+/**
+ * Kraj adresu nabywcy z UE (`Adres/KodKraju`, `TKodKraju` — kod ISO). Grecja
+ * ma w numerze VAT prefiks „EL”, którego nie ma na liście ISO, więc „EL”
+ * w adresie zamieniamy na „GR”. Pusty kraj — z prefiksu VAT-UE (jak przy
+ * zwykłej fakturze). Polska odpada: firma z UE ma adres za granicą.
+ */
+function euBuyerAddressCountry(buyer: BuyerEU, vat: ParsedVatUe): string {
+  const raw = (buyer.address.countryCode ?? '').trim().toUpperCase();
+  const country = raw === '' ? addressCountryForKodUE(vat.kodUE) : raw === 'EL' ? 'GR' : raw;
+  if (country === 'PL') {
+    throw new Error(
+      `FA(3) KOR: nabywca z numerem VAT-UE ${vat.kodUE} musi mieć kraj adresu inny niż Polska ` +
+        `(np. „${addressCountryForKodUE(vat.kodUE)}”).`,
+    );
+  }
+  return country;
 }
 
 function appendFaWiersze(fa: XMLBuilder, lines: CorrectionRow[]): void {
@@ -431,7 +500,7 @@ export function generateCorrectionInvoiceXml(
   if (data.correctionType === 'amount_change' && !data.amountChange) {
     throw new Error('FA(3) KOR: typ amount_change wymaga pola amountChange.');
   }
-  assertNoNpII(data);
+  assertNpIiBuyer(data);
 
   const parentIssue =
     data.parentInvoiceIssueDate != null && data.parentInvoiceIssueDate !== ''
@@ -487,9 +556,16 @@ export function generateCorrectionInvoiceXml(
   const podmiot2 = root.ele('Podmiot2');
   const dane2 = podmiot2.ele('DaneIdentyfikacyjne');
 
+  // Kraj adresu nabywcy; dla firmy z UE kod ISO (Grecja „GR”), nigdy PL.
+  let buyerAddressCountry = data.buyer.address.countryCode;
+
   if (data.buyer.type === 'eu') {
-    // Zaślepka fundamentu — obsługę KodUE+NrVatUE dokłada część K2 (AUD-70 KOR).
-    throw new Error('FA(3) KOR: nabywca z UE (VAT-UE) — w budowie.');
+    // AUD-70: firma z innego państwa UE — XSD `TPodmiot2`: KodUE, NrVatUE
+    // (bez prefiksu), potem Nazwa.
+    const vat = euBuyerVat(data.buyer);
+    dane2.ele('KodUE').txt(vat.kodUE);
+    dane2.ele('NrVatUE').txt(vat.numer);
+    buyerAddressCountry = euBuyerAddressCountry(data.buyer, vat);
   } else if (data.buyer.type === 'b2b') {
     dane2.ele('NIP').txt(requireText(data.buyer.nip, 'buyer.nip'));
   } else if (data.buyer.idType === 'pesel' && data.buyer.pesel) {
@@ -509,7 +585,7 @@ export function generateCorrectionInvoiceXml(
   dane2.ele('Nazwa').txt(requireText(data.buyer.name, 'buyer.name'));
 
   const adres2 = podmiot2.ele('Adres');
-  adres2.ele('KodKraju').txt(requireText(data.buyer.address.countryCode, 'buyer.address.countryCode'));
+  adres2.ele('KodKraju').txt(requireText(buyerAddressCountry, 'buyer.address.countryCode'));
   adres2.ele('AdresL1').txt(requireText(data.buyer.address.addressLine1, 'buyer.address.addressLine1'));
   if (data.buyer.address.addressLine2) {
     adres2.ele('AdresL2').txt(data.buyer.address.addressLine2);
@@ -528,7 +604,8 @@ export function generateCorrectionInvoiceXml(
 
   // P_15: „korekta kwoty wynikającej z faktury korygowanej” — różnica.
   fa.ele('P_15').txt(formatDecimal(grossTotal));
-  buildAdnotacjeMinimal(fa, preparedLines, data.annotations);
+  const rates = correctionRates(data, preparedLines);
+  buildAdnotacjeMinimal(fa, preparedLines, rates.has('oo') || rates.has('np_ii'), data.annotations);
 
   fa.ele('RodzajFaktury').txt('KOR');
 

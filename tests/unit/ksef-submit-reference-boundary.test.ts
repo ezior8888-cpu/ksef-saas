@@ -20,10 +20,17 @@ const seller = {
   address: { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' },
 };
 const sellerParty = sellerPartyFromSellerData(seller);
+const buyerAddress = { countryCode: 'PL', addressLine1: 'ul. Odbiorcy 2', addressLine2: '00-002 Warszawa' };
 const correction = {
   invoiceType: 'correction', internalNumber: 'KOR/1', parentInvoiceId: parentId,
   parentInvoiceNumber: 'VAT/1', parentInvoiceIssueDate: '2026-09-01',
   parentKsefNumber: 'KSEF-PROD-1', seller: { nip },
+  buyer: { type: 'b2b', idType: 'nip', nip, name: 'Fixture buyer', address: buyerAddress },
+} as CorrectionInvoiceData;
+const euAddress = { countryCode: 'DE', addressLine1: 'Hauptstrasse 1', addressLine2: '10115 Berlin' };
+const euCorrection = {
+  ...correction,
+  buyer: { type: 'eu', vatUeNumber: 'DE123456789', name: 'Kunde GmbH', address: euAddress },
 } as CorrectionInvoiceData;
 const advance = {
   invoiceType: 'advance', internalNumber: 'ZAL/1', seller,
@@ -80,6 +87,7 @@ beforeEach(() => {
     id: parentId, tenant_id: tenantId, direction: 'outgoing', invoice_kind: 'regular',
     ksef_status: 'accepted', ksef_environment: 'test', internal_number: 'VAT/1',
     issue_date: '2026-09-01', ksef_number: 'KSEF-PROD-1', seller_nip: nip,
+    buyer_data: { nip, name: 'Fixture buyer', address: buyerAddress, jst: 2, gv: 2 },
   };
   tenant = { id: tenantId, nip, name: seller.name, address_json: seller.address };
 });
@@ -160,6 +168,102 @@ describe('KSeF submit reference boundary', () => {
     await expect(assertSubmitReferences({
       ...input(), correctionData: { ...correction, parentInvoiceNumber: 'FORGED' },
     })).rejects.toThrow('manual reconciliation');
+  });
+
+  it('blocks a correction whose buyer NIP differs from the accepted parent buyer', async () => {
+    await expect(assertSubmitReferences({
+      ...input(),
+      correctionData: { ...correction, buyer: { ...correction.buyer, nip: '9876543210' } as CorrectionInvoiceData['buyer'] },
+    })).rejects.toThrow('manual reconciliation');
+  });
+
+  it('accepts a formatted but equal buyer NIP', async () => {
+    await expect(assertSubmitReferences({
+      ...input(),
+      correctionData: { ...correction, buyer: { ...correction.buyer, nip: '123-456-78-90' } as CorrectionInvoiceData['buyer'] },
+    })).resolves.toBe('correction');
+  });
+
+  it.each([
+    ['parent without buyer data', () => { parent.buyer_data = null; }],
+    ['parent buyer without identifier', () => { parent.buyer_data = { name: 'Fixture buyer', address: buyerAddress }; }],
+    ['parent buyer identified only by VAT-UE', () => {
+      parent.buyer_data = { vatUeNumber: 'DE123456789', name: 'Kunde GmbH', address: euAddress };
+    }],
+  ])('blocks a NIP correction for a %s', async (_label, patch) => {
+    patch();
+    await expect(assertSubmitReferences(input())).rejects.toThrow('manual reconciliation');
+  });
+
+  it('blocks a correction without buyer or with a private-person buyer (no B2C corrections)', async () => {
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: { ...correction, buyer: undefined } as unknown as CorrectionInvoiceData,
+    })).rejects.toThrow('manual reconciliation');
+    reads = [];
+    parent.buyer_data = { noIdMarker: true, name: 'Konsument', address: buyerAddress };
+    await expect(assertSubmitReferences({
+      ...input(),
+      correctionData: {
+        ...correction,
+        buyer: { type: 'b2c', idType: 'no_id', name: 'Konsument', address: buyerAddress },
+      },
+    })).rejects.toThrow('manual reconciliation');
+  });
+
+  describe('EU buyer (VAT-UE, AUD-70)', () => {
+    beforeEach(() => {
+      parent.buyer_data = { vatUeNumber: 'DE123456789', name: 'Kunde GmbH', address: euAddress, jst: 2, gv: 2 };
+    });
+
+    it('allows a correction whose VAT-UE equals the parent buyer VAT-UE', async () => {
+      await expect(assertSubmitReferences({ ...input(), correctionData: euCorrection })).resolves.toBe('correction');
+    });
+
+    it('compares the canonical VAT-UE form, not raw spelling', async () => {
+      await expect(assertSubmitReferences({
+        ...input(),
+        correctionData: { ...euCorrection, buyer: { ...euCorrection.buyer, vatUeNumber: 'de 123 456 789' } as CorrectionInvoiceData['buyer'] },
+      })).resolves.toBe('correction');
+    });
+
+    it.each([
+      ['another VAT-UE number', 'DE987654321'],
+      ['the same digits under another country prefix', 'AT123456789'],
+      ['an unparseable number', 'GR123456789'],
+    ])('blocks %s', async (_label, vatUeNumber) => {
+      await expect(assertSubmitReferences({
+        ...input(),
+        correctionData: { ...euCorrection, buyer: { ...euCorrection.buyer, vatUeNumber } as CorrectionInvoiceData['buyer'] },
+      })).rejects.toThrow('manual reconciliation');
+    });
+
+    it('blocks type mismatch both ways: EU correction for a NIP parent and NIP correction for an EU parent', async () => {
+      await expect(assertSubmitReferences(input())).rejects.toThrow('manual reconciliation');
+      reads = [];
+      parent.buyer_data = { nip, name: 'Fixture buyer', address: buyerAddress };
+      await expect(assertSubmitReferences({ ...input(), correctionData: euCorrection }))
+        .rejects.toThrow('manual reconciliation');
+    });
+
+    it('blocks an EU correction when the parent XML identified the buyer by NIP (NIP wins in FA(3))', async () => {
+      parent.buyer_data = { nip, vatUeNumber: 'DE123456789', name: 'Kunde GmbH', address: euAddress };
+      await expect(assertSubmitReferences({ ...input(), correctionData: euCorrection }))
+        .rejects.toThrow('manual reconciliation');
+    });
+
+    it('blocks a parent with a Polish VAT-UE (not a buyer from another EU state)', async () => {
+      parent.buyer_data = { vatUeNumber: 'PL1234567890', name: 'Kunde GmbH', address: euAddress };
+      await expect(assertSubmitReferences({
+        ...input(),
+        correctionData: { ...euCorrection, buyer: { ...euCorrection.buyer, vatUeNumber: 'PL1234567890' } as CorrectionInvoiceData['buyer'] },
+      })).rejects.toThrow('manual reconciliation');
+    });
+
+    it('keeps the PROD hold for an EU correction', async () => {
+      await expect(assertSubmitReferences({ ...input(), environment: 'production', correctionData: euCorrection }))
+        .rejects.toThrow('manual reconciliation');
+      expect(reads).toHaveLength(1);
+    });
   });
 
   it('keeps ordinary VAT payloads and rejects subtype data on a regular invoice', async () => {
