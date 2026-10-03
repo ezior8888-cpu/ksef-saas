@@ -144,12 +144,13 @@ wydanie #111 (`7a9f49a`) z #106–#110, #134 (przez #167 Bartosza) oraz:
 | #123 | Awaria API Białej Listy/VIES nie kasuje statusu VAT i rachunków kontrahenta ani nie truje cache |
 | #124 | Retencja kopii bazy zostawia zawsze 7 najnowszych udanych |
 | #127 | Plan: E10/E11 przejrzane, E12 samochód do decyzji (scalony razem z #129) |
-| #129 | Kafelek „Szac. podatek” na przepływach liczy od 1 stycznia (był: ostatnie 6 miesięcy, także z zeszłego roku) + C-18 |
+| #129 | Kafelek „Szac. podatek” na przepływach liczy od 1 stycznia (był: ostatnie 6 miesięcy, także z zeszłego roku) + C-21 (zgłoszone jako „C-18”, numer zajęty — zob. 4.4) |
 | #130 | Import FA(3)/JPK_FA odmawia faktury w walucie obcej (kwoty szły jak złote do KPiR) |
 
 ### 4.2. Otwarte PR-y Claude
 
-Brak. Otwarte cudze (03.10): Bartosz #186 (korekta dla firmy z UE, np. II —
+#187 (ten plan) i PR z `claude/przeplywy-od-stycznia` (C-21) — oba czekają
+na scalenie przez Bartosza. Otwarte cudze (03.10): Bartosz #186 (korekta dla firmy z UE, np. II —
 dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 
 ### 4.3. Prośby do Bartosza (migracje, produkcja) — stan 03.10
@@ -171,7 +172,7 @@ dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 | C-05: adnotacje P_16/P_18A dla ZAL i ROZ | ✅ #176, #177 (z zamrożonej koperty) |
 | C-17 = audyt F-020: faktura zaliczkowa bez P_6 (data otrzymania zaliczki) i z przyszłym terminem zamiast „zapłacono” | otwarte; `Zamowienie` zrobione (AUD-71, #177). Generator ZAL zmieniany 02.10 przez sesje Bartosza (AUD-70) — **zanim weźmiesz: ustal z Bartoszem**, czy ktoś to robi |
 | C-15 = AUD-04: korekty i zaliczki przy stawce „zw” rzucają wyjątek; korekty na produkcji wstrzymane (`lib/ksef/submission-holds.ts`, AUD-03/04) | otwarte; pliki korekt w #186 Bartosza — po jego scaleniu i po uzgodnieniu |
-| C-18: strona przepływów ma ładować dane od 1 stycznia i przekazać `dataFrom` | otwarte; `przeplywy/page.tsx` wolny od 03.10 (stos Codexa w `main`) |
+| C-21 (dawniej mylnie „C-18” — ten numer ma sprawa „Niepewny wynik wysyłki KSeF i UPO”): strona przepływów ładuje dane od 1 stycznia i przekazuje `dataFrom` | zrobione 03.10, PR z gałęzi `claude/przeplywy-od-stycznia` — czeka na scalenie przez Bartosza |
 | Szacunek podatku zakłada 19% liniowy dla każdego (podpisane na kafelku); skala i ryczałt dałyby inne kwoty; Flo ma profil podatkowy (`taxGateOpen`) | decyzja produktowa (Bartosz) |
 | JPK_V7M: pole dla „oo” i okres według daty sprzedaży | księgowa |
 | C-01: konwencja kwot korekty | ✅ rozstrzygnięte 02.10 (I1: różnica, #146); JPK_FA z korektą — audyt F-060 |
@@ -189,9 +190,13 @@ dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
    teraz audyt (`docs/audyt/`). Zanim weźmiesz sprawę z listy niżej, ustal
    z Igorem (a on z Bartoszem), czy jest twoja — inaczej dwie sesje zrobią
    to samo w tych samych plikach.
-1. Kandydaci (bez kolizji 03.10): C-18 (przepływy od 1 stycznia,
-   `przeplywy/page.tsx` + prop `dataFrom`), B4 (prośba o `UNIQUE` na
-   `ocr_job_id` + zapytanie o duble).
+1. Kandydaci (bez kolizji 03.10): B4 (prośba o `UNIQUE` na `ocr_job_id`
+   + zapytanie o duble), F-093 z audytu (getter `KsefApiError.ksefCode`
+   czyta kod ze złego miejsca — PR #159 już w `main`). C-21 (przepływy od
+   1 stycznia) zrobione — PR z `claude/przeplywy-od-stycznia`.
+   **Numery spraw `C-xx`:** przed nadaniem sprawdź `grep "^### C-"
+   docs/koordynacja/CLAUDE-DO-CODEXA.md` — sesje Bartosza też je nadają
+   (03.10 kolizja „C-18”).
 2. Po uzgodnieniu: C-17 / F-020 (P_6 i „zapłacono” w ZAL); C-15 / AUD-04
    (korekty „zw”) po scaleniu #186.
 3. E14 zamknięty 03.10: generatory KOR/ZAL nie wołają `validateInvoice`;
