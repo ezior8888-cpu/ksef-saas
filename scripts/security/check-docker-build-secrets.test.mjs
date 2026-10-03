@@ -175,3 +175,14 @@ test('executed error remains visible before a long repeated RUN and warning tail
   assert.equal(diagnostic.includes(syntheticToken), false);
   assert.ok(diagnostic.length <= 4060);
 });
+
+test('ARG/ENV control requires both successful execution and the intentional log leak', () => {
+  const logs = `SYNTHETIC_BUILD_STUB_RAN\n${syntheticToken}`;
+  verifyBuildResult({ status: 0, stdout: logs }, syntheticToken, undefined, 'negative-arg-env', true);
+  assert.throws(() => verifyBuildResult({ status: 0, stdout: 'SYNTHETIC_BUILD_STUB_RAN' },
+    syntheticToken, undefined, 'negative-arg-env', true), /did not reveal the expected token/);
+  assert.throws(() => verifyBuildResult({ status: 1, stdout: logs },
+    syntheticToken, undefined, 'negative-arg-env', true), /Synthetic Docker build failed/);
+  assert.throws(() => verifyBuildResult({ status: 0, stdout: logs },
+    syntheticToken, undefined, 'build-args'), /Synthetic token leaked in build logs/);
+});

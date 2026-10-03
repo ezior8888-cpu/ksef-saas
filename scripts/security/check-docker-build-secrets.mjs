@@ -152,14 +152,16 @@ export function buildDiagnostic(result, token, scenario = 'unknown') {
   return `Scenario: ${name}; status: ${status}; signal: ${signal}\n${bounded}`;
 }
 
-export function verifyBuildResult(result, token, guardMessage, scenario) {
+export function verifyBuildResult(result, token, guardMessage, scenario, expectLogLeak = false) {
   const diagnostic = buildDiagnostic(result, token, scenario);
   const requireResult = (condition, message) => {
     if (!condition) throw new Error(`${message}\n${diagnostic}`);
   };
   requireResult(!result.error, 'Docker/BuildKit must be available; command did not complete');
   const logs = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
-  requireResult(!logs.includes(token), 'Synthetic token leaked in build logs');
+  requireResult(logs.includes(token) === expectLogLeak, expectLogLeak
+    ? 'ARG/ENV control did not reveal the expected token in build logs'
+    : 'Synthetic token leaked in build logs');
   if (guardMessage) {
     requireResult(result.status !== 0, 'Required upload unexpectedly succeeded without its secret');
     // Match an executed shell message, not merely the RUN command echoed by BuildKit.
@@ -219,7 +221,7 @@ export function checkBuildSecrets(source) {
         encoding: 'utf8', timeout: 180_000, maxBuffer: 16 * 1024 * 1024,
         env: { ...process.env, [tokenName]: token, DOCKER_BUILDKIT: '1' },
       });
-      verifyBuildResult(result, token, scenario.failure, scenario.name);
+      verifyBuildResult(result, token, scenario.failure, scenario.name, scenario.injection === 'arg-env');
       counts.builds += 1;
       if (scenario.failure) continue;
       const imageCheck = inspectLayout(image, token, 'image');
