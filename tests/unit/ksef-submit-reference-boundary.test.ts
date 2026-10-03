@@ -48,6 +48,11 @@ const final = {
   paymentMethod: 'transfer', bankAccount: '11111111111111111111111111',
   taxAnnotations: { cashMethod: 1, splitPayment: 2 },
 } as FinalInvoiceData;
+// C-10: zaliczka rozliczona przez ROZ czytana z bazy — `parent` dostaje
+// kształt zaakceptowanej zaliczki (nie korekty) w testach tego bloku.
+const SETTLED_ADVANCE_GROSS = 1230;
+const ROZ_GROSS_TOTAL = 5000;
+const ROZ_AMOUNT_DUE = ROZ_GROSS_TOTAL - SETTLED_ADVANCE_GROSS;
 
 type Row = Record<string, unknown>;
 let invoice: Row;
@@ -103,13 +108,33 @@ function setDocument(internalNumber: string, type: Invoice['type']) {
         bankAccount: advance.bankAccount,
       },
     } : {}),
-    ...(type === 'ROZ' ? { annotations: final.taxAnnotations } : {}),
-  } as Invoice;
+    ...(type === 'ROZ' ? {
+      finalEnvelope: final,
+      annotations: final.taxAnnotations,
+      grossTotal: ROZ_GROSS_TOTAL,
+      payment: {
+        method: 'transfer', bankAccount: final.bankAccount,
+        amountDue: ROZ_AMOUNT_DUE,
+      },
+    } : {}),
+  } as unknown as Invoice;
   invoice.internal_number = internalNumber;
   invoice.invoice_type = type;
   invoice.fa3_data = JSON.parse(JSON.stringify(eventInvoice));
   invoice.seller_nip = nip;
   invoice.seller_data = JSON.parse(JSON.stringify(sellerParty));
+}
+
+/** C-10: zaliczka zaakceptowana w `environment`, gotowa do odjęcia przez ROZ. */
+function advanceRow(patch: Row = {}): Row {
+  return {
+    id: parentId, tenant_id: tenantId, direction: 'outgoing', invoice_kind: 'advance',
+    ksef_status: 'accepted', ksef_environment: 'test', internal_number: 'ZAL/1',
+    ksef_number: 'KSEF-ZAL-1', issue_date: '2026-09-01',
+    advance_amount: SETTLED_ADVANCE_GROSS, gross_total: SETTLED_ADVANCE_GROSS,
+    net_total: null, vat_total: null, fa3_data: null,
+    ...patch,
+  };
 }
 
 const input = () => ({
@@ -274,7 +299,7 @@ describe('KSeF submit reference boundary', () => {
     await expect(assertSubmitReferences(input())).rejects.toThrow('manual reconciliation');
   });
 
-  it('blocks incomplete advance and final payloads instead of falling back to VAT XML', async () => {
+  it('blocks an incomplete advance payload instead of falling back to VAT XML', async () => {
     invoice.invoice_kind = 'advance';
     setDocument('ZAL/1', 'ZAL');
     await expect(assertSubmitReferences({ ...input(), correctionData: undefined }))
@@ -282,63 +307,105 @@ describe('KSeF submit reference boundary', () => {
     reads = [];
     await expect(assertSubmitReferences({ ...input(), correctionData: undefined, advanceData: advance }))
       .resolves.toBe('advance');
-    invoice.invoice_kind = 'final';
-    setDocument('ROZ/1', 'ROZ');
-    invoice.advance_invoice_ids = [parentId];
-    reads = [];
-    await expect(assertSubmitReferences({ ...input(), correctionData: undefined }))
-      .rejects.toThrow('manual reconciliation');
-    reads = [];
-    await expect(assertSubmitReferences({
-      ...input(), environment: 'production', correctionData: undefined,
-      finalData: final, finalAdvanceSettlementRows: [{}],
-    })).rejects.toThrow('manual reconciliation');
-    reads = [];
-    await expect(assertSubmitReferences({
-      ...input(), environment: 'test', correctionData: undefined,
-      finalData: final, finalAdvanceSettlementRows: [{}],
-    })).resolves.toBe('final');
-    invoice.advance_invoice_ids = ['different'];
-    reads = [];
-    await expect(assertSubmitReferences({
-      ...input(), environment: 'test', correctionData: undefined,
-      finalData: final, finalAdvanceSettlementRows: [{}],
-    })).rejects.toThrow('manual reconciliation');
   });
 
-  it.each(['advance', 'final'] as const)(
-    'rejects a %s envelope seller changed after enqueue before KSeF I/O',
-    async (kind) => {
-      invoice.invoice_kind = kind;
-      setDocument(kind === 'advance' ? 'ZAL/1' : 'ROZ/1', kind === 'advance' ? 'ZAL' : 'ROZ');
-      invoice.advance_invoice_ids = kind === 'final' ? [parentId] : [];
-      const changedSeller = {
-        ...seller, address: { ...seller.address, addressLine1: 'ul. Inna 5' },
-      };
-      await expect(assertSubmitReferences({
-        ...input(), correctionData: undefined,
-        advanceData: kind === 'advance' ? { ...advance, seller: changedSeller } : undefined,
-        finalData: kind === 'final' ? { ...final, seller: changedSeller } : undefined,
-        finalAdvanceSettlementRows: kind === 'final' ? [{}] : undefined,
-      })).rejects.toThrow('manual reconciliation');
-      expect(reads).toHaveLength(1);
-    },
-  );
+  it('rejects an advance envelope seller changed after enqueue before KSeF I/O', async () => {
+    invoice.invoice_kind = 'advance';
+    setDocument('ZAL/1', 'ZAL');
+    const changedSeller = { ...seller, address: { ...seller.address, addressLine1: 'ul. Inna 5' } };
+    await expect(assertSubmitReferences({
+      ...input(), correctionData: undefined, advanceData: { ...advance, seller: changedSeller },
+    })).rejects.toThrow('manual reconciliation');
+    expect(reads).toHaveLength(1);
+  });
 
-  it('rejects a ROZ event without frozen flags or with flags differing from the stored document (AUD-23)', async () => {
-    invoice.invoice_kind = 'final';
-    setDocument('ROZ/1', 'ROZ');
-    invoice.advance_invoice_ids = [parentId];
-    const base = { ...input(), environment: 'test' as const, correctionData: undefined, finalAdvanceSettlementRows: [{}] };
-    await expect(assertSubmitReferences({ ...base, finalData: final })).resolves.toBe('final');
-    for (const finalData of [
-      { ...final, taxAnnotations: undefined as unknown as FinalInvoiceData['taxAnnotations'] },
-      { ...final, taxAnnotations: { cashMethod: 2, splitPayment: 2 } as const },
-      { ...final, taxAnnotations: { cashMethod: 1, splitPayment: 1 } as const, paymentMethod: 'cash' as const },
-    ]) {
-      reads = [];
-      await expect(assertSubmitReferences({ ...base, finalData })).rejects.toThrow('manual reconciliation');
-    }
+  describe('faktura rozliczająca (ROZ) — rozliczenie zaliczek z bazy (C-10)', () => {
+    beforeEach(() => {
+      invoice.invoice_kind = 'final';
+      setDocument('ROZ/1', 'ROZ');
+      invoice.advance_invoice_ids = [parentId];
+      parent = advanceRow();
+    });
+
+    const base = () => ({ ...input(), environment: 'test' as const, correctionData: undefined });
+
+    it('blocks a ROZ without finalData instead of falling back to VAT XML', async () => {
+      await expect(assertSubmitReferences({ ...base(), finalData: undefined }))
+        .rejects.toThrow('manual reconciliation');
+    });
+
+    it('holds PROD pending C-16 (amount due) and I9/C-17 (advance lines, P_6)', async () => {
+      await expect(assertSubmitReferences({ ...base(), environment: 'production', finalData: final }))
+        .rejects.toThrow('manual reconciliation');
+    });
+
+    it('resolves on TEST and returns the settlement rows read from the DB', async () => {
+      await expect(assertSubmitReferences({ ...base(), finalData: final })).resolves.toEqual({
+        kind: 'final',
+        settlementRows: [{
+          internal_number: 'ZAL/1', ksef_number: 'KSEF-ZAL-1', advance_amount: SETTLED_ADVANCE_GROSS,
+          issue_date: '2026-09-01', vat_rate: null, net_amount: null, vat_amount: null,
+        }],
+      });
+    });
+
+    it('blocks a changed advance_invoice_ids before KSeF I/O', async () => {
+      invoice.advance_invoice_ids = ['different'];
+      await expect(assertSubmitReferences({ ...base(), finalData: final }))
+        .rejects.toThrow('manual reconciliation');
+    });
+
+    it('rejects when the stored finalEnvelope differs from the event, even if finalData matches the fixture', async () => {
+      eventInvoice.finalEnvelope = { ...final, totalAdvances: 999 } as FinalInvoiceData;
+      invoice.fa3_data = JSON.parse(JSON.stringify(eventInvoice));
+      await expect(assertSubmitReferences({ ...base(), finalData: final }))
+        .rejects.toThrow('manual reconciliation');
+      expect(reads).toHaveLength(1);
+    });
+
+    it('rejects when a referenced advance row is missing (not accepted, wrong tenant, or deleted)', async () => {
+      parent = { ...parent, ksef_status: 'draft' };
+      await expect(assertSubmitReferences({ ...base(), finalData: final }))
+        .rejects.toThrow('manual reconciliation');
+    });
+
+    it('rejects when a referenced advance was accepted in another KSeF environment', async () => {
+      parent = { ...parent, ksef_environment: 'production' };
+      await expect(assertSubmitReferences({ ...base(), finalData: final }))
+        .rejects.toThrow('manual reconciliation');
+    });
+
+    it('rejects when the stored advance has no KSeF environment at all (legacy row)', async () => {
+      parent = { ...parent, ksef_environment: null };
+      await expect(assertSubmitReferences({ ...base(), finalData: final }))
+        .rejects.toThrow('manual reconciliation');
+    });
+
+    it('rejects when amountDue does not match gross minus the settled advances', async () => {
+      eventInvoice.payment = { ...eventInvoice.payment, amountDue: ROZ_AMOUNT_DUE + 1 } as Invoice['payment'];
+      invoice.fa3_data = JSON.parse(JSON.stringify(eventInvoice));
+      await expect(assertSubmitReferences({ ...base(), finalData: final }))
+        .rejects.toThrow('manual reconciliation');
+    });
+
+    it('rejects an envelope seller changed after enqueue before KSeF I/O', async () => {
+      const changedSeller = { ...seller, address: { ...seller.address, addressLine1: 'ul. Inna 5' } };
+      await expect(assertSubmitReferences({ ...base(), finalData: { ...final, seller: changedSeller } }))
+        .rejects.toThrow('manual reconciliation');
+      // finalEnvelope mismatch catches the changed seller before any extra read.
+      expect(reads).toHaveLength(1);
+    });
+
+    it('rejects a ROZ event without frozen flags or with flags differing from the stored document (AUD-23)', async () => {
+      for (const finalData of [
+        { ...final, taxAnnotations: undefined as unknown as FinalInvoiceData['taxAnnotations'] },
+        { ...final, taxAnnotations: { cashMethod: 2, splitPayment: 2 } as const },
+        { ...final, taxAnnotations: { cashMethod: 1, splitPayment: 1 } as const, paymentMethod: 'cash' as const },
+      ]) {
+        reads = [];
+        await expect(assertSubmitReferences({ ...base(), finalData })).rejects.toThrow('manual reconciliation');
+      }
+    });
   });
 
   it('rejects an old ZAL event without flags and a tampered flag after enqueue', async () => {

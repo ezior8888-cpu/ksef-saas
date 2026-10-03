@@ -106,7 +106,7 @@ export default async function KpirPage({
   let settled = new Map<string, number>();
   if (!currencyBlocked) {
     try {
-      settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices);
+      settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices, environment);
     } catch (e) {
       settledError = e instanceof Error ? e.message : 'Nie można odczytać zaliczek';
     }

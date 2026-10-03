@@ -22,7 +22,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSensitiveMfa, SensitiveMfaRequiredError } from '@/lib/auth/sensitive-mfa';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { isOffline24Enabled } from '@/lib/ksef/offline24-policy';
-import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
+import { ROZ_PRODUCTION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import {
@@ -33,7 +33,6 @@ import {
   KSEF_PAUSED_MESSAGE,
 } from '@/lib/ksef/submission-holds';
 import { formatJobSendError } from '@/lib/jobs/error-message';
-import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 import type { Invoice } from '@/types/invoice';
 import type {
   AdvanceInvoiceData,
@@ -56,7 +55,6 @@ export interface EnqueueKsefSubmitParams {
   correctionData?: CorrectionInvoiceData;
   advanceData?: AdvanceInvoiceData;
   finalData?: FinalInvoiceData;
-  finalAdvanceSettlementRows?: AdvanceInvoiceSettlementRow[];
   auditKind: 'regular' | 'correction' | 'advance' | 'final';
   internalNumberForAudit?: string;
 }
@@ -92,21 +90,9 @@ export async function enqueueKsefSubmitAfterDraft(
     correctionData,
     advanceData,
     finalData,
-    finalAdvanceSettlementRows,
     auditKind,
     internalNumberForAudit,
   } = params;
-
-  // Covers existing ROZ drafts and callers that bypass the final invoice action.
-  // Do this before both online and Offline24 enqueue paths.
-  if (isRozSubmission({
-    invoiceType: invoice.type,
-    auditKind,
-    finalData,
-    finalAdvanceSettlementRows,
-  })) {
-    return { ok: false, error: ROZ_SUBMISSION_HOLD_MESSAGE };
-  }
 
   // Krok 5: korekty wstrzymane na KSeF produkcyjnym (AUD-03/04) i globalny
   // wyłącznik operatora (AUD-63) — przed kolejką i przed Offline24.
@@ -188,11 +174,11 @@ export async function enqueueKsefSubmitAfterDraft(
       error: 'Wysyłka korekt w PROD jest wstrzymana do uzgodnienia oryginału i wcześniejszych korekt. Dokument zapisano jako szkic.',
     };
   }
+  // Warstwa 2 (jedyna pozostała od C-10, zob. `roz-submission-hold.ts`):
+  // PROD trzyma ROZ do domknięcia C-16 (kwota do zapłaty w płatnościach) i
+  // I9/C-17 (pozycje zamówienia zaliczki, P_6 w generatorze). TEST już wysyła.
   if (auditKind === 'final' && env === 'production') {
-    return {
-      ok: false,
-      error: 'Wysyłka faktury rozliczającej w PROD jest wstrzymana do czasu atomowego rozliczania zaliczek. Dokument zapisano jako szkic.',
-    };
+    return { ok: false, error: ROZ_PRODUCTION_HOLD_MESSAGE };
   }
 
   // AUD-14: na KSeF produkcyjnym bez automatycznego Offline24 (`offline24-policy.ts`).
@@ -262,7 +248,6 @@ export async function enqueueKsefSubmitAfterDraft(
         correctionData,
         advanceData,
         finalData,
-        finalAdvanceSettlementRows,
         // Właściciel przejęcia wysyłki (AUD-10): każde kolejkowanie to nowa próba.
         sendAttemptId: randomUUID(),
       },

@@ -84,7 +84,7 @@ export default async function PrzeplywyPage() {
   // Przychód jak w KPiR: ROZ bez zaliczek, które już są w przychodzie
   // (`kpirRevenueNet`). Błąd odczytu leci do `error.tsx` — zerowa suma
   // zaliczek zawyżyłaby dochód i szacowany podatek.
-  const settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices);
+  const settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices, environment);
   const invoiceRows = invoices.map((inv) => ({
     ...inv,
     settled_advances_net: settled.get(inv.id) ?? null,

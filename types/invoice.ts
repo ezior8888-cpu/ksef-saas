@@ -16,7 +16,7 @@
  * - korekty wielokrotne
  */
 
-import type { AdvanceInvoiceData } from './invoice-types';
+import type { AdvanceInvoiceData, FinalInvoiceData } from './invoice-types';
 
 // ═══════════════════════════════════════════════════════════════
 // Adresy i kontakty
@@ -201,4 +201,11 @@ export interface Invoice {
 
   /** Frozen source for ZAL XML; the worker must reject a different queued envelope. */
   advanceEnvelope?: AdvanceInvoiceData;
+
+  /**
+   * Frozen source for ROZ XML (C-10) — ten sam wzorzec co `advanceEnvelope`.
+   * Boundary czyta treść i rozliczenie zaliczek z bazy przy każdej wysyłce,
+   * nie z eventu kolejki.
+   */
+  finalEnvelope?: FinalInvoiceData;
 }

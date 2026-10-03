@@ -51,6 +51,7 @@ import {
   type PaymentConfirmSources,
 } from '@/lib/flo/functions/payment-confirm-producer';
 import { ruleRun, runFloTick } from '@/lib/flo/tick';
+import { amountDueOf } from '@/lib/invoices/amount-due';
 
 import { createFakeDb } from './flo-fake-db';
 
@@ -61,12 +62,18 @@ const TENANT = 'ten-1';
 
 function putInvoice(
   id: string,
-  overrides: { gross?: number; paid?: number; due?: string; paused?: boolean } = {},
+  overrides: {
+    gross?: number; paid?: number; due?: string; paused?: boolean;
+    /** ROZ (C-16, 00130): invoice_kind='final' + payment_data.amountDue. */
+    kind?: string; amountDue?: number;
+  } = {},
 ) {
   invoiceRows.set(id, {
     id,
     tenant_id: TENANT,
     internal_number: `FV/${id}`,
+    invoice_kind: overrides.kind ?? 'regular',
+    payment_data: overrides.amountDue !== undefined ? { amountDue: overrides.amountDue } : null,
     buyer_data: { name: 'Nowak Sp. z o.o.' },
     ksef_status: 'accepted',
     gross_total: overrides.gross ?? 4300,
@@ -82,6 +89,9 @@ function toOverdue(row: Record<string, unknown>): OverdueInvoice {
     number: String(row.internal_number),
     contractorName: 'Nowak Sp. z o.o.',
     grossTotal: Number(row.gross_total),
+    amountDue: amountDueOf({
+      invoice_kind: row.invoice_kind, gross_total: row.gross_total, payment_data: row.payment_data,
+    }),
     paidAmount: Number(row.paid_amount),
     dueDate: String(row.payment_due_date),
     remindersPaused: row.reminders_paused === true,
@@ -252,6 +262,31 @@ describe('K-01 w pulsie — jedno pytanie', () => {
     // Kontrahent zapłacił między pokazaniem karty a kliknięciem — kliknięcie
     // ma zostać zatrzymane z ludzkim zdaniem, a nie ogólnikiem.
     invoiceRows.get('A')!.paid_amount = 4300;
+    await expect(assertFresh(row, NOW)).rejects.toThrow(FloStaleError);
+    await expect(assertFresh(row, NOW)).rejects.toThrow(/zapłacił/);
+  });
+
+  it('ROZ: karta pyta o payment_data.amountDue (reszta po zaliczkach), nie o gross_total (C-16, 00130)', async () => {
+    // Zamówienie 12 300, zaliczka już rozliczona — do zapłaty na TEJ
+    // fakturze jest 9 840.
+    putInvoice('A', { gross: 12300, kind: 'final', amountDue: 9840 });
+    const db = createFakeDb({ flo_kind_flags: [alphaFlag()] });
+
+    const result = await producePaymentConfirm(TENANT, NOW, db.client, sources().value);
+    expect(result.outcome).toBe('created');
+    const row = db.tables.flo_proposals[0]! as unknown as FloProposalRow;
+
+    // Karta pyta o 9 840, nie o 12 300.
+    expect(row.body).toContain('9 840,00 zł');
+    expect(row.body).not.toContain('12 300,00 zł');
+    expect((row.payload.facts as Record<string, unknown>).amountDue).toBe(9840);
+
+    await expect(assertFresh(row, NOW)).resolves.toBeUndefined();
+
+    // Nabywca wpłacił całą resztę (9 840) — mniej niż całe zamówienie
+    // (12 300), ale to WSZYSTKO, co ta ROZ jeszcze żądała. Re-walidacja ma
+    // powiedzieć „zapłacił”, nie „wpłacił część”.
+    invoiceRows.get('A')!.paid_amount = 9840;
     await expect(assertFresh(row, NOW)).rejects.toThrow(FloStaleError);
     await expect(assertFresh(row, NOW)).rejects.toThrow(/zapłacił/);
   });

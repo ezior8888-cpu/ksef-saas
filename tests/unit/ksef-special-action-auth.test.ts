@@ -152,6 +152,7 @@ describe('ZAL/ROZ seller authority', () => {
     ['advance draft', () => saveAdvanceAction(advanceInput)],
     ['advance send', () => saveAndSendAdvanceAction(advanceInput)],
     ['final draft', () => saveFinalAction(finalInput)],
+    ['final send', () => saveAndSendFinalAction(finalInput)],
   ])('uses the server tenant seller in %s', async (label, action) => {
     const result = await action();
     expect(result).toMatchObject({ success: true, invoiceId });
@@ -172,13 +173,15 @@ describe('ZAL/ROZ seller authority', () => {
     }
   });
 
-  // Wysyłka ROZ jest w main wstrzymana do partii 15 audytu (AUD-23 ROZ, 67, 95)
-  // — akcja nie zapisuje nowej faktury i nie zleca joba.
-  it('final send stays on hold until settlement fixes (partia 15)', async () => {
+  // C-10 (03.10.2026): blokada ROZ "wszędzie" zdjęta — na KSeF TEST „Wystaw
+  // i wyślij” zapisuje szkic i zleca job tak jak zaliczka. Warstwa PROD
+  // zostaje w `enqueueKsefSubmitAfterDraft` (zamockowany tutaj) — testuje ją
+  // `roz-submit-hold.test.ts`.
+  it('final send on TEST saves the draft and enqueues the job (C-10)', async () => {
     const result = await saveAndSendFinalAction(finalInput);
-    expect(result).toMatchObject({ success: false });
-    expect(queries.some((q) => q.table === 'invoices' && q.operation === 'insert')).toBe(false);
-    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ success: true, invoiceId });
+    expect(queries.some((q) => q.table === 'invoices' && q.operation === 'insert')).toBe(true);
+    expect(mocks.enqueue).toHaveBeenCalledTimes(1);
   });
 
   it.each([

@@ -70,7 +70,9 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00126 | Claude (C-20, #86) | `invoices_overdue_reconciliation_guard` (C-06, C-16: widok zaległości tylko z faktur ścigalnych — z aplikacji, VAT/UPR/ZAL, bez korekt, ROZ i dokumentów powiązanych) | PR `claude/codex-86-przypomnienia`; przed wdrożeniem |
 | 00127 | Claude (C-20, #128) | `ksef_expense_provenance_guard` (C-11 etap 1: `review_ksef_expense` tylko dla serwisu, klient nie tworzy ani nie usuwa kosztu KSeF, ślad waluty serwerowy) | PR `claude/codex-128-waluty`; **przed** wdrożeniem |
 | 00128 | Claude (C-20, #128) | `ksef_expense_full_update_guard` (C-11 etap 2: koszt KSeF edytowany tylko przez RPC) | PR `claude/codex-128-waluty`; **PO** wdrożeniu webu z RPC |
-| **00129** | — | następny wolny (00200 zajęte) | — |
+| 00129 | Codex (#190, szkic) | `xml_document_invoice_identity` (C-12/C-20: niezmienne dowody XML) | PR `codex/security-xml-evidence-integrity`; numer zajęty przez szkic |
+| 00130 | Claude (ROZ, C-16) | `roz_amount_due` (kwota do zapłaty ROZ = `payment_data.amountDue`: status płatności i widok zaległości) | PR `claude/roz-warunki`; przed wdrożeniem |
+| **00131** | — | następny wolny (00200 zajęte) | — |
 
 ---
 

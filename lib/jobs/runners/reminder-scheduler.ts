@@ -75,8 +75,11 @@ export async function runReminderScheduler({ step, logger }: JobContext) {
           invoice.tenant_id,
         );
 
+        // ROZ: do zapłaty jest reszta po zaliczkach (`amountDue` w faktach
+        // z `readState`), nie całe `grossTotal` — zapasowy grossTotal tylko
+        // dla faktów bez tego pola (C-16, 00130).
         const outstanding =
-          Number(state.facts.grossTotal ?? 0) -
+          Number(state.facts.amountDue ?? state.facts.grossTotal ?? 0) -
           Number(state.facts.paidAmount ?? 0);
         const who = state.context.contractorName ?? 'Kontrahent';
         const number = state.context.invoiceNumber ?? 'bez numeru';

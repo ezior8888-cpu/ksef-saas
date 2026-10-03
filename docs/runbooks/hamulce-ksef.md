@@ -8,12 +8,15 @@ konfiguracji, która nie pozwala jobom zniknąć po cichu.
 |---|---|---|
 | Wyłącznik `killAllKsefSubmissions` | operator włącza go SQL-em | „Wysyłka faktur do KSeF jest chwilowo wstrzymana…” |
 | Blokada korekt (`KOR_HOLD`) | zawsze przy `KSEF_ENV=production` | „Wysyłka faktur korygujących… wstrzymana do czasu poprawki ich kwot” |
-| Blokada ROZ (`ROZ_HOLD_RECONCILE`) | zawsze (wcześniejsza zmiana) | komunikat o rozliczeniu zaliczek |
+| Blokada ROZ w PROD (`ROZ_PRODUCTION_HOLD_MESSAGE`) | tylko przy `KSEF_ENV=production`, od 03.10.2026 (C-10) | „Wysyłka faktury rozliczającej w PROD jest wstrzymana…” |
 | `JOBS_BACKEND` jawny | poza lokalnym środowiskiem | brak zmiennej = zlecenie odrzucone, worker nie startuje |
 
-Każdy hamulec sprawdzany jest w trzech miejscach: przy kolejkowaniu
+Większość hamulców sprawdzana jest w trzech miejscach: przy kolejkowaniu
 (`lib/invoices/ksef-submit-enqueue.ts`), na starcie joba przed sondą zdrowia
 i Offline24 oraz tuż przed wysyłką (`lib/jobs/runners/submit-invoice.ts`).
+Blokada ROZ — tylko w dwóch: kolejkowanie i strażnik referencji tuż przed
+wysyłką (`lib/ksef/submit-reference-boundary.ts`), bo oba wprost sprawdzają
+`environment`, bez osobnego wyłącznika operatora.
 Zatrzymana faktura dostaje status `failed` z kodem w `last_error_code`
 — to stan „do uzgodnienia”, nie „odrzucona przez KSeF”. Mail o odrzuceniu
 nie wychodzi.
@@ -90,6 +93,28 @@ dało się sprawdzić poprawkę.
 Zdjęcie blokady to zmiana w kodzie (`isCorrectionHeldForEnv` w
 `lib/ksef/submission-holds.ts`), razem z poprawką generatora i testami kwot.
 Nie przełączaj jej flagą.
+
+## Blokada ROZ na produkcji
+
+Do 03.10.2026 faktura rozliczająca (ROZ) była wstrzymana WSZĘDZIE, bez
+rozróżnienia środowiska KSeF (warstwa 1) — treść XML i rozliczenie zaliczek
+szły z eventu kolejki, bez dowodu, że odwołane zaliczki są naprawdę przyjęte
+w TYM SAMYM środowisku co wysyłka. Warstwa 1 zdjęta w C-10:
+`lib/ksef/submit-reference-boundary.ts` czyta teraz treść ROZ
+(`finalEnvelope`) i rozliczenie zaliczek PRZY KAŻDEJ wysyłce z bazy, nie
+z eventu — ten sam wzorzec co ZAL (`advanceEnvelope`). KSeF TEST już wysyła
+ROZ, ze szkicu albo przez „Wystaw i wyślij”.
+
+Zostaje tylko warstwa 2 — PROD, w `lib/ksef/roz-submission-hold.ts`
+(`ROZ_PRODUCTION_HOLD_MESSAGE`), do domknięcia:
+
+- **C-16** — kwota do zapłaty ROZ liczona z `payments`, nie tylko z zaliczek
+  wskazanych w `advance_invoice_ids` (osobny PR),
+- **I9/C-17** — pozycje zamówienia zaliczki i `P_6` w generatorze FA(3).
+
+Zdjęcie tej blokady to zmiana w kodzie (warunek `env === 'production'` w
+`lib/invoices/ksef-submit-enqueue.ts` i w `submit-reference-boundary.ts`),
+razem z zamknięciem obu punktów wyżej. Nie przełączaj jej flagą.
 
 ## `JOBS_BACKEND`
 

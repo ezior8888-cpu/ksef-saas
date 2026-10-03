@@ -59,6 +59,8 @@ function toInvoiceForScheduling(row: InvoiceRow): InvoiceForScheduling {
     buyer_data: row.buyer_data,
     buyer_nip: row.buyer_nip,
     reminders_paused: row.reminders_paused,
+    invoice_kind: row.invoice_kind,
+    payment_data: row.payment_data,
   };
 }
 

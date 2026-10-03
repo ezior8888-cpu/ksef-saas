@@ -7,6 +7,9 @@ import type { AdvanceInvoiceData, CorrectionInvoiceData, FinalInvoiceData, Selle
 import { sellerPartyFromSellerData } from '@/lib/invoices/map-buyer-party';
 import { matchesTenantSeller, sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
 import { parseVatUe } from '@/lib/invoices/vat-ue';
+import { settlementRowFromAdvance, type AdvanceInvoiceDbRow } from '@/lib/invoices/advance-settlement';
+import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 interface SubmitReferenceInput {
   supabase: SupabaseClient;
@@ -17,8 +20,19 @@ interface SubmitReferenceInput {
   correctionData?: CorrectionInvoiceData;
   advanceData?: AdvanceInvoiceData;
   finalData?: FinalInvoiceData;
-  finalAdvanceSettlementRows?: readonly unknown[];
 }
+
+/**
+ * Wynik strażnika referencji. Dla zwykłych dokumentów to sama nazwa rodzaju;
+ * dla ROZ (C-10) niesie też wiersze rozliczenia zaliczek PRZECZYTANE Z BAZY
+ * przy tej wysyłce — wołający musi zbudować z nich XML, a event (który może
+ * nieść inne, stare wiersze) zignorować.
+ */
+export type SubmitReferenceResult =
+  | 'regular'
+  | 'correction'
+  | 'advance'
+  | { kind: 'final'; settlementRows: AdvanceInvoiceSettlementRow[] };
 
 function invalidPayload(): never {
   throw new NonRetriableError('KSeF document kind or source requires manual reconciliation');
@@ -98,10 +112,43 @@ async function assertSpecialSeller(
   if (!tenantSeller || !matchesTenantSeller(envelopeSeller, tenantSeller)) invalidPayload();
 }
 
+/**
+ * C-10: rozliczenie zaliczek ROZ przeczytane Z BAZY, w środowisku tej
+ * wysyłki — event niesie tylko nagłówek (`finalData`), nigdy już wiersze.
+ * Jedno zapytanie na zaliczkę (`.maybeSingle()`), ten sam wzorzec co reszta
+ * tego strażnika (`assertSpecialSeller`); ROZ rozlicza zwykle kilka zaliczek,
+ * nie setki, więc N zapytań nie jest tu kosztem. Zaliczka, która nie istnieje
+ * z tymi filtrami — inna firma, nieprzyjęta, inne środowisko KSeF niż ta
+ * wysyłka — kończy się tym samym `invalidPayload()` jak każdy inny fałsz
+ * w tym pliku: bez tego ROZ poszłaby do KSeF z zawyżonym „do zapłaty”.
+ */
+async function readFinalSettlementRows(
+  input: SubmitReferenceInput,
+  storedIds: readonly string[],
+): Promise<AdvanceInvoiceSettlementRow[]> {
+  const rows: AdvanceInvoiceSettlementRow[] = [];
+  for (const id of storedIds) {
+    const { data, error } = await input.supabase
+      .from('invoices')
+      .select('id, internal_number, ksef_number, issue_date, advance_amount, gross_total, net_total, vat_total, fa3_data')
+      .eq('id', id)
+      .eq('tenant_id', input.tenantId)
+      .eq('direction', 'outgoing')
+      .eq('invoice_kind', 'advance')
+      .eq('ksef_status', 'accepted')
+      .eq('ksef_environment', input.environment)
+      .maybeSingle();
+    if (error) throw new Error('Cannot read KSeF advance settlement row');
+    if (!data) invalidPayload();
+    rows.push(settlementRowFromAdvance(data as AdvanceInvoiceDbRow));
+  }
+  return rows;
+}
+
 /** Re-read the stored legal document before KSeF I/O; old/replayed events are not authority. */
 export async function assertSubmitReferences(
   input: SubmitReferenceInput,
-): Promise<'regular' | 'correction' | 'advance' | 'final'> {
+): Promise<SubmitReferenceResult> {
   const { data: invoice, error } = await input.supabase
     .from('invoices')
     .select('id, invoice_kind, invoice_type, internal_number, parent_invoice_id, advance_invoice_ids, seller_nip, seller_data, fa3_data')
@@ -183,15 +230,14 @@ export async function assertSubmitReferences(
       await assertSpecialSeller(input, invoice, advanceData.seller);
       return 'advance';
     case 'final': {
-      // Settlement rows are event-supplied and advances are not atomically
-      // claimed yet. Never emit legal ROZ XML in production on that evidence.
+      // Warstwa 2 (jedyna pozostała od C-10, zob. `roz-submission-hold.ts`):
+      // PROD trzyma ROZ do domknięcia C-16 (kwota do zapłaty) i I9/C-17
+      // (pozycje zamówienia zaliczki, P_6). TEST idzie dalej do odczytu z bazy.
       if (input.environment === 'production') invalidPayload();
       if (!finalData || correctionData || advanceData ||
           finalData.invoiceType !== 'final' ||
           invoice.internal_number !== finalData.internalNumber ||
-          !Array.isArray(finalData.advanceInvoiceIds) ||
-          !Array.isArray(input.finalAdvanceSettlementRows) ||
-          !input.finalAdvanceSettlementRows.length) invalidPayload();
+          !Array.isArray(finalData.advanceInvoiceIds)) invalidPayload();
       // AUD-23: P_16/P_18A ROZ tylko z dokumentu zapisanego przy wystawieniu.
       const flags = finalData.taxAnnotations;
       if (!flags ||
@@ -207,8 +253,20 @@ export async function assertSubmitReferences(
       const storedIds = invoice.advance_invoice_ids as string[] | null;
       if (!Array.isArray(storedIds) || storedIds.length !== finalData.advanceInvoiceIds.length ||
           storedIds.some((id, index) => id !== finalData.advanceInvoiceIds[index])) invalidPayload();
+      // C-10: treść ROZ (jak `advanceEnvelope` dla ZAL) tylko z dokumentu
+      // zapisanego przy wystawieniu — event niesie już tylko nagłówek.
+      if (!input.invoice.finalEnvelope ||
+          !isDeepStrictEqual(plainJson(input.invoice.finalEnvelope), plainJson(finalData))) invalidPayload();
       await assertSpecialSeller(input, invoice, finalData.seller);
-      return 'final';
+      // C-10: rozliczenie zaliczek czytane TERAZ z bazy, nie z eventu —
+      // i suma „do zapłaty” sprawdzona od razu, zanim ktoś zbuduje z niej
+      // legalny XML.
+      const settlementRows = await readFinalSettlementRows(input, storedIds);
+      const settledGross = settlementRows.reduce((sum, row) => sum + row.advance_amount, 0);
+      if (typeof input.invoice.payment?.amountDue !== 'number' ||
+          roundToCents(input.invoice.payment.amountDue) !==
+            roundToCents(input.invoice.grossTotal - settledGross)) invalidPayload();
+      return { kind: 'final', settlementRows };
     }
     default:
       invalidPayload();

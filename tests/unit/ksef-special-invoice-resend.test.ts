@@ -91,16 +91,19 @@ describe('ponowna wysyłka dokumentów specjalnych z samej kopii', () => {
     expect(mocks.submit).toHaveBeenCalledTimes(1);
   });
 
-  it('pełny payload ROZ jest zatrzymany przed XML, archiwum i KSeF', async () => {
+  it('pełny payload ROZ na TEST nie jest już zatrzymywany komunikatem zdjętej blokady (C-10)', async () => {
+    // Blokada ROZ "wszędzie" (warstwa 1) zdjęta 03.10.2026 — ten pusty
+    // finalData i tak nie przejdzie generatora FA(3) (brak adnotacji P_16/
+    // P_18A), ale już nie przez TEN komunikat; to już nie jest ten strażnik.
     const finalPayload = {
       finalData: {} as FinalInvoiceData,
       advanceSettlementRows: [{} as AdvanceInvoiceSettlementRow],
     };
-    await expect(submitInvoiceFullFlow(
+    const error = await submitInvoiceFullFlow(
       T, ID, kopia('ROZ'), AUTH, 'test', null, null, finalPayload,
-    )).rejects.toThrow(/Wysyłka faktur rozliczających jest tymczasowo wstrzymana/);
-    expect(mocks.exists).not.toHaveBeenCalled();
-    expect(mocks.upload).not.toHaveBeenCalled();
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toMatch(/Wysyłka faktur rozliczających jest tymczasowo wstrzymana/);
     expect(mocks.submit).not.toHaveBeenCalled();
   });
 

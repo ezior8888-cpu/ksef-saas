@@ -10,8 +10,6 @@ import {
   settlementRowFromAdvance,
   type AdvanceInvoiceDbRow,
 } from '@/lib/invoices/advance-settlement';
-import { ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
-import { createClient } from '@/lib/supabase/server';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -45,6 +43,7 @@ import type {
   VatRate,
 } from '@/types/invoice';
 import type { BuyerData, FinalInvoiceData, InvoiceLine, SellerData } from '@/types/invoice-types';
+import type { KsefEnvironment } from '@/types/ksef';
 
 type ActionResult =
   | { success: true; invoiceId: string; offline?: boolean }
@@ -202,6 +201,9 @@ function ghostFinalInvoice(envelope: FinalInvoiceData): Invoice {
     },
     annotations: envelope.taxAnnotations,
     notes: envelope.notes,
+    // C-10: ROZ XML musi iść z dokumentu zapisanego przy wystawieniu, nie
+    // z eventu kolejki — ten sam wzorzec co `advanceEnvelope` dla ZAL.
+    finalEnvelope: envelope,
   };
 }
 
@@ -209,9 +211,13 @@ async function fetchSettlementRows(
   supabase: SupabaseClient,
   tenantId: string,
   ids: string[],
+  environment: KsefEnvironment,
 ): Promise<AdvanceInvoiceSettlementRow[] | { error: string }> {
   if (!ids.length) return { error: 'Brak zaliczek do rozliczenia.' };
 
+  // C-09: tylko zaliczki przyjęte w AKTYWNYM środowisku KSeF — zaliczka
+  // z innego środowiska ma "nie znaleziono" ten sam skutek co nieprzyjęta,
+  // zamiast po cichu rozliczyć zaliczkę, której to ROZ nie może dotyczyć.
   const { data, error } = await supabase
     .from('invoices')
     .select(
@@ -220,6 +226,7 @@ async function fetchSettlementRows(
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
+    .eq('ksef_environment', environment)
     .in('id', ids);
 
   if (error || !data) {
@@ -324,8 +331,9 @@ async function resolveFinalPayload(
   supabase: SupabaseClient,
   tenantId: string,
   parsed: FinalInvoiceSchemaIn,
+  environment: KsefEnvironment,
 ): Promise<{ envelope: FinalInvoiceData; settlement: AdvanceInvoiceSettlementRow[] } | { error: string }> {
-  const settlement = await fetchSettlementRows(supabase, tenantId, parsed.advanceInvoiceIds);
+  const settlement = await fetchSettlementRows(supabase, tenantId, parsed.advanceInvoiceIds, environment);
   if ('error' in settlement) return settlement;
 
   // AUD-67: zaliczka rozliczona już inną ROZ zaniżyłaby przychód drugi raz.
@@ -368,8 +376,9 @@ export async function saveFinalAction(raw: unknown): Promise<ActionResult> {
     const parsed = finalInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 
+    const environment = requireConfiguredKsefEnvironment();
     const seller = requireTenantSeller(parsed.data.seller, tenant);
-    const payload = await resolveFinalPayload(supabase, tenant.id, { ...parsed.data, seller });
+    const payload = await resolveFinalPayload(supabase, tenant.id, { ...parsed.data, seller }, environment);
     if ('error' in payload) return { success: false, error: payload.error };
 
     const ghost = ghostFinalInvoice(payload.envelope);
@@ -392,15 +401,52 @@ export async function saveFinalAction(raw: unknown): Promise<ActionResult> {
   }
 }
 
+/**
+ * C-10: od 03.10.2026 ZDJĘTA blokada "wszędzie" — treść ROZ (`finalEnvelope`)
+ * i rozliczenie zaliczek czyta z bazy `assertSubmitReferences` PRZY KAŻDEJ
+ * wysyłce, nie z eventu kolejki. Wysyłka na KSeF TEST idzie dalej; PROD
+ * zostaje wstrzymany przez `enqueueKsefSubmitAfterDraft` (warstwa 2, C-16
+ * i I9/C-17) — stamtąd wraca komunikat, a dokument zostaje szkicem.
+ */
 export async function saveAndSendFinalAction(raw: unknown): Promise<ActionResult> {
   try {
-    await tenantContext();
+    const { supabase, tenant, userId } = await tenantContext();
     const parsed = finalInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 
-    // No accepted advance carries trustworthy KSeF environment provenance yet.
-    // Keep the draft action available, but stop send before inserting a new ROZ.
-    return { success: false, error: ROZ_SUBMISSION_HOLD_MESSAGE };
+    const environment = requireConfiguredKsefEnvironment();
+    const seller = requireTenantSeller(parsed.data.seller, tenant);
+    const payload = await resolveFinalPayload(supabase, tenant.id, { ...parsed.data, seller }, environment);
+    if ('error' in payload) return { success: false, error: payload.error };
+
+    const ghost = ghostFinalInvoice(payload.envelope);
+
+    const saved = await insertFinalDraft(supabase, tenant.id, ghost, payload.envelope);
+    if (!saved.success) return saved;
+
+    const invoiceId = saved.invoiceId;
+
+    const enq = await enqueueKsefSubmitAfterDraft({
+      supabase,
+      tenantId: tenant.id,
+      userId,
+      invoiceId,
+      nip: tenant.nip,
+      invoice: ghost,
+      finalData: payload.envelope,
+      auditKind: 'final',
+      internalNumberForAudit: ghost.internalNumber,
+    });
+
+    if (!enq.ok) {
+      return { success: false, error: enq.error, invoiceId };
+    }
+
+    return {
+      success: true,
+      invoiceId,
+      offline: enq.mode === 'offline_queued',
+    };
   } catch (e) {
     return {
       success: false,

@@ -12,7 +12,6 @@ import { z } from 'zod';
 
 import type { Invoice } from '@/types/invoice';
 import type { CorrectionInvoiceData, AdvanceInvoiceData, FinalInvoiceData } from '@/types/invoice-types';
-import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 
 export interface JobEventType<T extends object> {
   readonly name: string;
@@ -71,11 +70,14 @@ const InvoiceSubmitRequestedSchema = z.object({
   correctionData: z.custom<CorrectionInvoiceData>().optional(),
   /** Faktura ZAL w FA(3). */
   advanceData: z.custom<AdvanceInvoiceData>().optional(),
-  /** ROZ — nagłówek bez listy zaliczek; użyj razem z `finalAdvanceSettlementRows`. */
+  /**
+   * ROZ — tylko nagłówek. Rozliczenie zaliczek NIE jedzie w evencie od
+   * 03.10.2026 (C-10): `assertSubmitReferences` czyta je z bazy przy każdej
+   * wysyłce po `advance_invoice_ids` zapisanych na fakturze, więc stare
+   * zdarzenia z polem `finalAdvanceSettlementRows` wciąż się parsują —
+   * zod bez `.strict()` po cichu odrzuca nieznane klucze.
+   */
   finalData: z.custom<FinalInvoiceData>().optional(),
-  finalAdvanceSettlementRows: z
-    .array(z.custom<AdvanceInvoiceSettlementRow>())
-    .optional(),
   fromOfflineQueue: z.boolean().optional(),
   offlineQueueId: z.string().optional(),
   idempotencyKey: z.string().optional(),
