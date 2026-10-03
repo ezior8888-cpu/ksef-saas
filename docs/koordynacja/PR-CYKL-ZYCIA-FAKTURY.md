@@ -4,6 +4,18 @@ Realizuje `docs/architecture/cykl-zycia-faktury-ksef.md`. Zamyka ustalenia K3, W
 
 Zasada tej rundy: **stos czterech małych PR zamiast jednego dużego**, każdy z testem czerwonym na `main` przed naprawą, każdy osobno wdrażalny. Kolejność scalania i wdrażania jest częścią projektu, bo stary kod webu pisze `queued` z sesji klienta, a wyzwalacze trzeba zacieśnić dopiero po jego wymianie.
 
+## Stan realizacji (03.10.2026)
+
+| Część | PR | Stan |
+|---|---|---|
+| PR 1 — baza (00131: katalog kodów, RPC przejść, strażnik) | #202 | scalony, 00131 wgrana na db-1 03.10 |
+| PR 2 — worker (klasyfikacja, kody, zamykanie historii, oczekiwanie) | #204 | scalony, wdrożony |
+| PR 3a — kolejkowanie w jednej transakcji (W16/W2) | #205 | scalony |
+| PR 3b — „Wyślij ponownie” / „Wróć do szkicu” (K3) | #206 → #207 | #206 trafił do gałęzi 3a, #207 przenosi do `main` |
+| PR 3c — panel operatora `/admin/ksef` | #208 | otwarty (stos na #207) |
+| PR 4 — strażnik: 00132, cron ponowień, alarm `queued`, martwe kolejki | — | do zrobienia |
+| D5 — klucz XML per próba | — | osobny PR, do zrobienia |
+
 Numery migracji: rejestr w `CLAUDE-DO-CODEXA.md` podaje „następny wolny 00129”, ale `00129_xml_document_invoice_identity.sql` istnieje już na gałęzi `codex/security-xml-evidence-integrity` (commit 0701675). `00130_roz_amount_due.sql` leży na gałęzi `claude/roz-warunki` (commit 7494b19). Plan używa **00131** (PR 1, przed wdrożeniem) i **00132** (PR 4, PO wdrożeniu); rejestr zaktualizowany w PR 1 (następny wolny 00133).
 
 ---
