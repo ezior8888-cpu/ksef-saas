@@ -4,15 +4,15 @@ Realizuje `docs/architecture/cykl-zycia-faktury-ksef.md`. Zamyka ustalenia K3, W
 
 Zasada tej rundy: **stos czterech małych PR zamiast jednego dużego**, każdy z testem czerwonym na `main` przed naprawą, każdy osobno wdrażalny. Kolejność scalania i wdrażania jest częścią projektu, bo stary kod webu pisze `queued` z sesji klienta, a wyzwalacze trzeba zacieśnić dopiero po jego wymianie.
 
-Numery migracji: rejestr w `CLAUDE-DO-CODEXA.md` podaje „następny wolny 00129”, ale `00129_xml_document_invoice_identity.sql` istnieje już na gałęzi `codex/security-xml-evidence-integrity` (commit 0701675). Plan używa **00130** i **00131**; przed otwarciem PR 1 sprawdzić `git log --all -- 'supabase/migrations/0013*'` i dopisać oba numery do rejestru w tym samym PR.
+Numery migracji: rejestr w `CLAUDE-DO-CODEXA.md` podaje „następny wolny 00129”, ale `00129_xml_document_invoice_identity.sql` istnieje już na gałęzi `codex/security-xml-evidence-integrity` (commit 0701675). `00130_roz_amount_due.sql` leży na gałęzi `claude/roz-warunki` (commit 7494b19). Plan używa **00131** (PR 1, przed wdrożeniem) i **00132** (PR 4, PO wdrożeniu); rejestr zaktualizowany w PR 1 (następny wolny 00133).
 
 ---
 
-## PR 1 — baza: RPC przejść i katalog kodów (migracja 00130, PRZED wdrożeniem)
+## PR 1 — baza: RPC przejść i katalog kodów (migracja 00131, PRZED wdrożeniem)
 
 Addytywna: nowe funkcje, bez zmian w istniejących wyzwalaczach. Stary kod działa z nią bez zmian.
 
-### Zawartość 00130_ksef_send_lifecycle.sql
+### Zawartość 00131_ksef_send_lifecycle.sql
 
 | Obiekt | Sygnatura | Reguły |
 |---|---|---|
@@ -41,7 +41,7 @@ Dodatkowo **testy charakteryzujące dzisiejsze wyzwalacze** (zielone na main, pi
 
 ## PR 2 — worker: klasyfikacja błędów, kody, zamykanie historii
 
-Bez migracji. Wdrażany **po 00130** (RPC istnieją), **przed PR 3**.
+Bez migracji. Wdrażany **po 00131** (RPC istnieją), **przed PR 3**.
 
 | Zmiana | Plik | Co dokładnie |
 |---|---|---|
@@ -70,7 +70,7 @@ Bez migracji. Wdrażany **po PR 2**. Po nim żadna ścieżka webu nie pisze `kse
 
 | Zmiana | Plik | Co dokładnie |
 |---|---|---|
-| W16, W2 | `lib/invoices/ksef-submit-enqueue.ts:250-281` | zamiast `sendJobEvent` + `update({queued})`: jedna transakcja na połączeniu pg-boss. Sprawdzone w pg-boss 12.27.0: `boss.getDb()` zwraca instancję `Db` z metodą `withTransaction(fn)` (`node_modules/pg-boss/dist/db.js:189`, `fn` dostaje `{ executeSql }` na jednym kliencie `pg`), `send()` przyjmuje `db` (`types.d.ts:44,300`) i `singletonKey` (`types.d.ts:286`). Typ `IDatabase` nie deklaruje `withTransaction`, więc potrzebny wąski typ pomocniczy (`db as IDatabase & { withTransaction<T>(fn: (tx: IDatabase) => Promise<T>): Promise<T> }`) z testem jednostkowym pilnującym, że metoda istnieje. Kroki: (1) `SELECT public.enqueue_ksef_send($1,$2,$3)` przez `tx.executeSql` (rola z `DATABASE_URL` musi mieć EXECUTE — nadać w 00130), (2) `boss.send(name, data, { db: tx, singletonKey: invoiceId })`. Błąd w (2) wycofuje (1). Jeśli transakcja na połączeniu pg-boss okaże się niemożliwa (rola `DATABASE_URL` bez EXECUTE na funkcji), wariant B: RPC adminem, potem `boss.send`, a przy błędzie `release_ksef_enqueue` w `finally` + strażnik I1 jako siatka |
+| W16, W2 | `lib/invoices/ksef-submit-enqueue.ts:250-281` | zamiast `sendJobEvent` + `update({queued})`: jedna transakcja na połączeniu pg-boss. Sprawdzone w pg-boss 12.27.0: `boss.getDb()` zwraca instancję `Db` z metodą `withTransaction(fn)` (`node_modules/pg-boss/dist/db.js:189`, `fn` dostaje `{ executeSql }` na jednym kliencie `pg`), `send()` przyjmuje `db` (`types.d.ts:44,300`) i `singletonKey` (`types.d.ts:286`). Typ `IDatabase` nie deklaruje `withTransaction`, więc potrzebny wąski typ pomocniczy (`db as IDatabase & { withTransaction<T>(fn: (tx: IDatabase) => Promise<T>): Promise<T> }`) z testem jednostkowym pilnującym, że metoda istnieje. Kroki: (1) `SELECT public.enqueue_ksef_send($1,$2,$3)` przez `tx.executeSql` (rola z `DATABASE_URL` musi mieć EXECUTE — nadać w 00131), (2) `boss.send(name, data, { db: tx, singletonKey: invoiceId })`. Błąd w (2) wycofuje (1). Jeśli transakcja na połączeniu pg-boss okaże się niemożliwa (rola `DATABASE_URL` bez EXECUTE na funkcji), wariant B: RPC adminem, potem `boss.send`, a przy błędzie `release_ksef_enqueue` w `finally` + strażnik I1 jako siatka |
 | W2 | `components/invoices/draft-actions.ts:100-135` | usunąć własne `update({queued})` i cofnięcie; podwójne kliknięcie łapie `enqueue_ksef_send` (warunek `draft`) i `singletonKey` |
 | hamulce | `ksef-submit-enqueue.ts:111-130` | bez zmian logicznych; `KSEF_PAUSED` jako odmowa przed kolejką zostaje (szkic nie dostaje statusu `failed`) |
 | K3 | `components/invoices/actions-detail.ts:115-145` (`resendInvoiceAction`) | prawdziwa implementacja: `requireOrgRole(['owner','admin'])` (D4), odczyt `last_error_code` → jeśli klasa dopuszcza: ta sama transakcja co enqueue, ale z `requeue_ksef_send`; dla RECONCILE komunikat „zgłoszono operatorowi” + `Sentry.captureMessage` |
@@ -90,9 +90,9 @@ Bez migracji. Wdrażany **po PR 2**. Po nim żadna ścieżka webu nie pisze `kse
 
 ---
 
-## PR 4 — strażnik cyklu życia (migracja 00131, PO wdrożeniu PR 3)
+## PR 4 — strażnik cyklu życia (migracja 00132, PO wdrożeniu PR 3)
 
-### 00131_ksef_lifecycle_guard_tighten.sql (PO wdrożeniu)
+### 00132_ksef_lifecycle_guard_tighten.sql (PO wdrożeniu)
 
 - `guard_invoice_pending_content` (00119) i `guard_invoice_delivery_history` (00122): `CREATE OR REPLACE` z trzema zmianami: (1) usunięty wyjątek „klient zmienia `draft → queued`” — klient nie zmienia `ksef_status` nigdy; (2) „historyczny” = `ksef_has_contact_evidence()` OR `ksef_number`/`ksef_accepted_at`/`xml_storage_path` niepuste — `last_attempt_at`, `submission_attempts`, `last_error*` przestają zamrażać treść (są diagnostyką); (3) DELETE dla klienta wyłącznie `draft` bez dowodu kontaktu (bez zmian). Wyzwalacz dla `service_role` nadal przepuszcza wszystko — ochroną są RPC.
 - Nagłówek migracji: „PO wdrożeniu PR 3; DROP/CREATE wyzwalaczy bez zmian danych”.
@@ -112,7 +112,7 @@ Bez migracji. Wdrażany **po PR 2**. Po nim żadna ścieżka webu nie pisze `kse
 
 ### Testy PR 4
 
-1. Na bazie: po 00131 klient nie zmieni `draft → queued` (dziś może); klient edytuje `failed INFRA` po resecie (dziś nie może); klient nadal nie usunie wiersza z wpisem `sent`.
+1. Na bazie: po 00132 klient nie zmieni `draft → queued` (dziś może); klient edytuje `failed INFRA` po resecie (dziś nie może); klient nadal nie usunie wiersza z wpisem `sent`.
 2. Vitest runnera: scenariusze I1, I5, I6, I7 z mockiem bazy; `TRANSIENT_EXHAUSTED` po 24 h; raport dzienny zawiera liczby.
 3. `tests/unit/jobs-registry.test.ts`: komplet 25 cronów.
 
@@ -121,29 +121,29 @@ Bez migracji. Wdrażany **po PR 2**. Po nim żadna ścieżka webu nie pisze `kse
 ## Kolejność wdrożenia
 
 ```
-1. PR 1 → scalenie → 00130 na db-1 (przed) → weryfikacja: \df public.*ksef_send*, PostgREST widzi ksef_error_codes
+1. PR 1 → scalenie → 00131 na db-1 (przed) → weryfikacja: \df public.*ksef_send*, PostgREST widzi ksef_error_codes
 2. PR 2 → scalenie → wdrożenie workera (id=2), potem aplikacji (id=1) — jak zawsze
 3. PR 3 → scalenie → wdrożenie aplikacji (id=1), potem workera (id=2) — ten PR zmienia głównie web; worker dla spójności
 4. test dymny na KSeF TEST: wystaw FA → accepted → UPO; wystaw FA przy KSEF_PAUSED=true → failed KSEF_PAUSED → zdjęcie flagi → cron → accepted; wymuś 5xx (mock w TEST) → failed KSEF_UNAVAILABLE → requeue → accepted; szkic bez certyfikatu → zostaje draft
-5. PR 4 → scalenie → wdrożenie workera i aplikacji → 00131 na db-1 (PO) → test dymny ponownie
+5. PR 4 → scalenie → wdrożenie workera i aplikacji → 00132 na db-1 (PO) → test dymny ponownie
 6. siedem dni raportu dziennego bez naruszeń = gotowe
 ```
 
-Wycofanie: 00130 jest addytywna (funkcje można zostawić); PR 2/3 cofa się zwykłym wdrożeniem poprzedniego SHA; 00131 ma parę odwrotną (przywrócenie funkcji z 00119/00122 — dołączyć jako `00131_rollback.sql.txt` w katalogu migracji, nieuruchamiany automatycznie).
+Wycofanie: 00131 jest addytywna (funkcje można zostawić); PR 2/3 cofa się zwykłym wdrożeniem poprzedniego SHA; 00132 ma parę odwrotną (przywrócenie funkcji z 00119/00122 — dołączyć jako `00132_rollback.sql.txt` w katalogu migracji, nieuruchamiany automatycznie).
 
 ## Dokumenty do aktualizacji w tych PR
 
 - `docs/runbooks/hamulce-ksef.md:48-62` — po hamulcu faktury wracają same (I7); operator nic nie klika.
 - nowy `docs/runbooks/faktura-do-uzgodnienia.md` — co robić z kodami RECONCILE (`/admin/ksef`, „Tylko uzgodnij”, kiedy SQL jako `postgres`).
 - `docs/architecture/ksef-flow.md` — link do maszyny stanów; sekcja „Retry schedule” o auto-ponowieniach z crona.
-- `docs/koordynacja/CLAUDE-DO-CODEXA.md` — rejestr: 00130, 00131; kolizja 00129 z Codexem.
+- `docs/koordynacja/CLAUDE-DO-CODEXA.md` — rejestr: 00131, 00132; kolizja 00129 z Codexem.
 - `AGENTS.md` — liczba cronów „25/25”.
 
 ## Definicja ukończenia
 
 - Wszystkie testy z sekcji PR 1–4 zielone w CI (w tym job RLS na lokalnym Supabase).
 - Reprodukcje z rewizji (W1, W2, S1, W3) zielone na nowym kodzie.
-- Test dymny na KSeF TEST z kroku 4 przeszedł dwa razy (przed i po 00131).
+- Test dymny na KSeF TEST z kroku 4 przeszedł dwa razy (przed i po 00132).
 - `grep -rn "ksef_status: 'queued'" app components lib` zwraca zero trafień poza RPC.
 - Raport dzienny strażnika przychodzi na Telegram i przez 7 dni nie zgłasza naruszeń.
 - Rewizja wąska: jeden rewident czyta tylko diff PR 1–4 względem tego dokumentu (nie kolejny pełny audyt).

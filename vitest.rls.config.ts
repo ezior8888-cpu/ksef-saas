@@ -6,7 +6,11 @@ export default defineConfig({
   ...localConfig,
   test: {
     ...localConfig.test,
-    include: ['tests/rls-isolation.test.ts', 'tests/rls-uprawnienia.test.ts'],
+    include: [
+      'tests/rls-isolation.test.ts',
+      'tests/rls-uprawnienia.test.ts',
+      'tests/rls-cykl-faktury.test.ts',
+    ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
   },
