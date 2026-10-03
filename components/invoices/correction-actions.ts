@@ -10,15 +10,28 @@ import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
   correctionInvoiceSchema,
-  invoiceLineSchema,
+  correctionLineSchema,
+  correctionNpIiBuyerError,
   type CorrectionInvoiceSchemaIn,
-  type InvoiceLineSchema,
+  type CorrectionLineSchema,
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
-import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
+import {
+  resolveAmountChangeVatRate,
+  zeroVatRateFromParentLines,
+} from '@/lib/invoices/correction-amount-change';
+import { isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
 import { calculateLineItem, calculateInvoiceTotals, roundToCents } from '@/lib/xml/invoice-calculator';
 import type { Invoice, InvoiceLineItem, BuyerParty, PaymentMethod, SellerParty } from '@/types/invoice';
-import type { BuyerB2B, BuyerData, CorrectionInvoiceData, InvoiceLine, SellerData } from '@/types/invoice-types';
+import type {
+  BuyerB2B,
+  BuyerEU,
+  CorrectionBuyer,
+  CorrectionInvoiceData,
+  InvoiceLine,
+  SellerData,
+  ZeroVatAmountChangeRate,
+} from '@/types/invoice-types';
 import { loadParentAnnotations } from '@/lib/invoices/correction-annotations';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -81,8 +94,11 @@ function normalizeBankAccount(raw: string | undefined): string | undefined {
   return raw.replace(/\s+/g, '');
 }
 
-/** Pozycje z faktury pierwotnej (DB) mogą mieć stare stawki (np. zw) — forma korekt dopuszcza wyłącznie pełny zestaw do FA. */
-function vatRateFromDbForCorrectionLine(raw: unknown): InvoiceLineSchema['vatRate'] {
+/**
+ * Pozycje z faktury pierwotnej (DB) mogą mieć stare stawki (np. zw) — forma korekt dopuszcza wyłącznie pełny zestaw do FA.
+ * Zwykła faktura zapisuje kody aplikacji (`np`, `np_ii` — AUD-70), import z KSeF wartości P_12 z XML (`np I`, `np II`).
+ */
+function vatRateFromDbForCorrectionLine(raw: unknown): CorrectionLineSchema['vatRate'] {
   const s = typeof raw === 'string' ? raw.trim() : '';
   switch (s) {
     case '23':
@@ -91,13 +107,26 @@ function vatRateFromDbForCorrectionLine(raw: unknown): InvoiceLineSchema['vatRat
     case '0':
     case 'oo':
     case 'np':
+    case 'np_ii':
       return s;
+    case 'np I':
+      return 'np';
+    case 'np II':
+      return 'np_ii';
     default:
       throw new Error('Faktura pierwotna ma stawkę VAT nieobsługiwaną w korekcie. Wymagane ręczne uzgodnienie.');
   }
 }
 
-function buyerDataFromParty(bp: BuyerParty): BuyerB2B {
+/** Stawki bez VAT, których z samych kwot (VAT 0) nie da się odróżnić od „0 KR”. */
+const ZERO_VAT_RATES: ReadonlySet<string> = new Set<ZeroVatAmountChangeRate>(['np', 'np_ii', 'oo']);
+
+/**
+ * Nabywca faktury pierwotnej jako nabywca korekty: firma z NIP albo firma z UE
+ * (AUD-70 — `buyer_data` z `vatUeNumber`, bez NIP). Numer VAT-UE w postaci
+ * kanonicznej, jak zapisuje go zwykła faktura. Niespójne dane — błąd, nie zgadujemy.
+ */
+function buyerDataFromParty(bp: BuyerParty): BuyerB2B | BuyerEU {
   if (bp.nip) {
     const b: BuyerB2B = {
       type: 'b2b',
@@ -113,7 +142,53 @@ function buyerDataFromParty(bp: BuyerParty): BuyerB2B {
     };
     return b;
   }
-  throw new Error('Korekta: brak NIP na fakturze pierwotnej (MVP obsługuje tylko B2B).');
+  if (bp.vatUeNumber?.trim()) {
+    const vat = parseVatUe(bp.vatUeNumber);
+    if (!vat) {
+      throw new Error('Faktura pierwotna ma nieprawidłowy numer VAT-UE nabywcy. Wymagane ręczne uzgodnienie.');
+    }
+    if (vat.kodUE === 'PL') {
+      throw new Error('Faktura pierwotna ma polski numer VAT-UE (PL) nabywcy zamiast NIP. Wymagane ręczne uzgodnienie.');
+    }
+    const countryCode = bp.address?.countryCode?.trim() ?? '';
+    if (!/^[A-Z]{2}$/.test(countryCode) || countryCode === 'PL') {
+      throw new Error('Nabywca z UE na fakturze pierwotnej nie ma w adresie kraju spoza Polski. Wymagane ręczne uzgodnienie.');
+    }
+    const addressLine2 = bp.address.addressLine2?.trim() ? bp.address.addressLine2 : undefined;
+    return {
+      type: 'eu',
+      vatUeNumber: vat.normalized,
+      name: bp.name,
+      address: {
+        countryCode,
+        addressLine1: bp.address.addressLine1 || ' ',
+        ...(addressLine2 ? { addressLine2 } : {}),
+      },
+      email: bp.email,
+    };
+  }
+  throw new Error('Korekta: brak NIP ani numeru VAT-UE nabywcy na fakturze pierwotnej (korekta obsługuje firmy z Polski i z UE).');
+}
+
+/** Nabywca korekty z formularza = nabywca faktury pierwotnej, bez zmiany typu (NIP ↔ VAT-UE). */
+function sameBuyerAsParent(
+  supplied: CorrectionInvoiceSchemaIn['buyer'],
+  original: BuyerB2B | BuyerEU,
+): boolean {
+  if (supplied.name !== original.name ||
+      supplied.address.countryCode !== original.address.countryCode ||
+      supplied.address.addressLine1 !== original.address.addressLine1) {
+    return false;
+  }
+  if (original.type === 'b2b') {
+    return supplied.type === 'b2b' &&
+      supplied.nip.replace(/\s+/g, '') === original.nip &&
+      supplied.address.addressLine2 === original.address.addressLine2;
+  }
+  // Firma z UE: numer porównany w postaci kanonicznej (wielkość liter, spacje, kropki).
+  return supplied.type === 'eu' &&
+    parseVatUe(supplied.vatUeNumber)?.normalized === original.vatUeNumber &&
+    (supplied.address.addressLine2 ?? '') === (original.address.addressLine2 ?? '');
 }
 
 function sellerDataFromParty(sp: SellerParty): SellerData {
@@ -132,7 +207,7 @@ function sellerDataFromParty(sp: SellerParty): SellerData {
 async function fetchParentInvoiceLines(
   supabase: SupabaseClient,
   invoiceId: string,
-): Promise<InvoiceLineSchema[]> {
+): Promise<CorrectionLineSchema[]> {
   const { data, error } = await supabase
     .from('invoice_line_items')
     .select('name, unit, quantity, unit_price_net, vat_rate')
@@ -149,7 +224,8 @@ async function fetchParentInvoiceLines(
         !Number.isFinite(Number(row.unit_price_net))) {
       throw new Error('Niepełne kwoty pozycji faktury pierwotnej; wymagane ręczne uzgodnienie.');
     }
-    const parsed = invoiceLineSchema.safeParse({
+    // Schemat korekty — dopuszcza pozycje np. II faktury dla firmy z UE (AUD-70).
+    const parsed = correctionLineSchema.safeParse({
       name: row.name,
       unit: row.unit,
       quantity: Number(row.quantity),
@@ -165,7 +241,7 @@ async function fetchParentInvoiceLines(
 
 function buildCorrectionEnvelope(parsed: CorrectionInvoiceSchemaIn): CorrectionInvoiceData {
   const bankNorm = normalizeBankAccount(parsed.bankAccount ?? undefined);
-  const buyer = parsed.buyer as BuyerData;
+  const buyer = parsed.buyer as CorrectionBuyer;
   const seller = parsed.seller as SellerData;
 
   return {
@@ -281,10 +357,21 @@ function ghostInvoice(correctionEnvelope: CorrectionInvoiceData, lines: InvoiceL
   let buyerParty: BuyerParty;
   const b = correctionEnvelope.buyer;
   if (b.type === 'eu') {
-    // Zaślepka fundamentu — obsługę nabywcy z UE dokłada część K1 (AUD-70 KOR).
-    throw new Error('Korekta faktury dla firmy z UE — w budowie.');
-  }
-  if (b.type === 'b2b') {
+    // AUD-70: firma z UE jak nabywca zwykłej faktury (`components/invoices/actions.ts`):
+    // numer VAT-UE zamiast NIP, adres z krajem nabywcy.
+    buyerParty = {
+      vatUeNumber: b.vatUeNumber,
+      name: b.name,
+      address: {
+        countryCode: b.address.countryCode,
+        addressLine1: b.address.addressLine1,
+        addressLine2: b.address.addressLine2 ?? '',
+      },
+      email: b.email,
+      jst: 2,
+      gv: 2,
+    };
+  } else if (b.type === 'b2b') {
     buyerParty = {
       nip: b.nip,
       name: b.name,
@@ -343,6 +430,21 @@ function ghostInvoice(correctionEnvelope: CorrectionInvoiceData, lines: InvoiceL
   };
 }
 
+/**
+ * Kolumny nabywcy w `invoices` — jak zwykła faktura (`buyerColumnsFromInvoiceForm`,
+ * AUD-70): firma z UE to B2B typu `nip` z pustym `buyer_nip` (VARCHAR(10) na
+ * polski NIP), a numer VAT-UE leży tylko w `buyer_data` / `fa3_data`.
+ */
+function buyerColumnsForCorrection(buyer: CorrectionBuyer): {
+  is_b2c: boolean;
+  buyer_id_type: 'nip' | 'pesel' | 'id_card' | 'passport' | 'no_id';
+  buyer_nip: string | null;
+} {
+  if (buyer.type === 'eu') return { is_b2c: false, buyer_id_type: 'nip', buyer_nip: null };
+  if (buyer.type === 'b2b') return { is_b2c: false, buyer_id_type: 'nip', buyer_nip: buyer.nip };
+  return { is_b2c: true, buyer_id_type: buyer.idType, buyer_nip: null };
+}
+
 async function insertCorrection(
   supabase: SupabaseClient,
   tenantId: string,
@@ -366,7 +468,7 @@ async function insertCorrection(
       correction_reason: correctionEnvelope.correctionReason,
       correction_type: correctionEnvelope.correctionType,
       seller_nip: ghost.seller.nip,
-      buyer_nip: ghost.buyer.nip ?? null,
+      ...buyerColumnsForCorrection(correctionEnvelope.buyer),
       seller_data: correctionEnvelope.seller,
       buyer_data: ghost.buyer,
       payment_data: ghost.payment,
@@ -461,18 +563,19 @@ async function normalizePayload(
     return { error: 'Dane faktury pierwotnej zmieniły się lub nie należą do tej firmy. Wybierz ją ponownie.' };
   }
 
-  // MVP corrections change amounts or lines, never the legal buyer identity.
+  // MVP corrections change amounts or lines, never the legal buyer identity —
+  // ani typu nabywcy (firma z NIP / firma z UE z numerem VAT-UE, AUD-70).
   const originalBuyer = parent.buyer_data as BuyerParty | null;
-  if (!originalBuyer?.nip) {
+  if (!originalBuyer) {
     return { error: 'Korekta wymaga zweryfikowanego nabywcy faktury pierwotnej.' };
   }
-  const authoritativeBuyer = buyerDataFromParty(originalBuyer);
-  if (parsed.data.buyer.type !== 'b2b' ||
-      parsed.data.buyer.nip.replace(/\s+/g, '') !== authoritativeBuyer.nip ||
-      parsed.data.buyer.name !== authoritativeBuyer.name ||
-      parsed.data.buyer.address.countryCode !== authoritativeBuyer.address.countryCode ||
-      parsed.data.buyer.address.addressLine1 !== authoritativeBuyer.address.addressLine1 ||
-      parsed.data.buyer.address.addressLine2 !== authoritativeBuyer.address.addressLine2) {
+  let authoritativeBuyer: BuyerB2B | BuyerEU;
+  try {
+    authoritativeBuyer = buyerDataFromParty(originalBuyer);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Korekta wymaga zweryfikowanego nabywcy faktury pierwotnej.' };
+  }
+  if (!sameBuyerAsParent(parsed.data.buyer, authoritativeBuyer)) {
     return { error: 'Korekta musi wskazywać nabywcę zaakceptowanej faktury pierwotnej.' };
   }
 
@@ -509,14 +612,47 @@ async function normalizePayload(
     }
     linesBefore = original;
   }
-  return {
+
+  let amountChange = parsed.data.amountChange;
+  if (parsed.data.correctionType === 'amount_change' && amountChange) {
+    // Stawka bez VAT (np I / np II / oo) nie wynika z kwot — wyznacza ją serwer
+    // z pozycji faktury pierwotnej. Inna wartość od klienta = odrzucenie.
+    const original = await fetchParentInvoiceLines(supabase, parent.id as string);
+    const parentRate = zeroVatRateFromParentLines(original);
+    const { vatRate: suppliedRate, ...amounts } = amountChange;
+    if (suppliedRate !== undefined && suppliedRate !== parentRate) {
+      return { error: 'Stawka korekty kwotowej różni się od stawki faktury pierwotnej. Wybierz fakturę ponownie.' };
+    }
+    amountChange = parentRate ? { ...amounts, vatRate: parentRate } : amounts;
+    let rate: ReturnType<typeof resolveAmountChangeVatRate>;
+    try {
+      rate = resolveAmountChangeVatRate(amountChange);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Korekta kwotowa: niespójne kwoty.' };
+    }
+    // VAT 0 przy fakturze z różnymi stawkami, w tym bez VAT: z kwot wyszłoby
+    // „0 KR”, a korekta może dotyczyć pozycji np I / np II / oo — nie zgadujemy.
+    if (!parentRate && rate === '0' && original.some((line) => ZERO_VAT_RATES.has(line.vatRate))) {
+      return {
+        error: 'Korekta kwotowa bez VAT faktury z różnymi stawkami (w tym np., np. II lub oo) jest niejednoznaczna — skoryguj pozycje („przed / po”).',
+      };
+    }
+  }
+
+  const normalized: CorrectionInvoiceSchemaIn = {
     ...parsed.data,
     linesBefore,
+    amountChange,
     buyer: authoritativeBuyer,
     parentInvoiceNumber: parentNumber,
     parentInvoiceIssueDate: parentIssueDate,
     parentKsefNumber: parentKsefNumber ?? undefined,
   };
+  // np. II tylko dla firmy z innego kraju UE (bez XI) — także dla pozycji z bazy
+  // i stawki wyznaczonej przez serwer, nie tylko danych z formularza.
+  const npIiError = correctionNpIiBuyerError(normalized);
+  if (npIiError) return { error: npIiError };
+  return normalized;
 }
 
 export async function getCorrectionParentContextAction(parentId: string): Promise<
@@ -528,6 +664,12 @@ export async function getCorrectionParentContextAction(parentId: string): Promis
       grossTotal: number | null;
       seller: CorrectionInvoiceSchemaIn['seller'];
       buyer: CorrectionInvoiceSchemaIn['buyer'];
+      /** Numer VAT-UE nabywcy z UE (postać kanoniczna, np. `DE123456789`); brak dla firmy z NIP. */
+      buyerVatUe?: string;
+      /** Czy w korekcie wolno użyć stawki „np. II” (nabywca z UE poza PL i XI — `isNpIiBuyerVat`). */
+      npIiAllowed: boolean;
+      /** Stawka bez VAT korekty kwotowej — wspólna stawka np / np_ii / oo pozycji faktury pierwotnej. */
+      amountChangeVatRate?: ZeroVatAmountChangeRate;
       linesBefore: NonNullable<CorrectionInvoiceSchemaIn['linesBefore']>;
       linesAfter: NonNullable<CorrectionInvoiceSchemaIn['linesAfter']>;
     }
@@ -540,10 +682,17 @@ export async function getCorrectionParentContextAction(parentId: string): Promis
 
     const sellerRow = row.seller_data as SellerParty | null;
     const buyerRow = row.buyer_data as BuyerParty | null;
-    if (!sellerRow || !buyerRow?.nip)
+    if (!sellerRow || !buyerRow)
       return { success: false, error: 'Niepełne dane pierwotnej (sprzedawca / nabywca).' };
 
+    const buyer = buyerDataFromParty(buyerRow);
     const linesRaw = await fetchParentInvoiceLines(supabase, parentId);
+    // Pozycje np. II dla nabywcy, który ich mieć nie może (np. XI) — każda
+    // korekta i tak zostałaby odrzucona; mówimy o tym od razu.
+    const npIiError = correctionNpIiBuyerError({ buyer, linesBefore: linesRaw });
+    if (npIiError) return { success: false, error: npIiError };
+    const buyerVatUe = buyer.type === 'eu' ? buyer.vatUeNumber : undefined;
+    const amountChangeVatRate = zeroVatRateFromParentLines(linesRaw);
 
     return {
       success: true,
@@ -552,7 +701,10 @@ export async function getCorrectionParentContextAction(parentId: string): Promis
       ksefNumber: row.ksef_number,
       grossTotal: row.gross_total,
       seller: sellerDataFromParty(sellerRow) as CorrectionInvoiceSchemaIn['seller'],
-      buyer: buyerDataFromParty(buyerRow) as CorrectionInvoiceSchemaIn['buyer'],
+      buyer: buyer as CorrectionInvoiceSchemaIn['buyer'],
+      ...(buyerVatUe ? { buyerVatUe } : {}),
+      npIiAllowed: isNpIiBuyerVat(buyerVatUe),
+      ...(amountChangeVatRate ? { amountChangeVatRate } : {}),
       linesBefore: linesRaw,
       linesAfter: structuredClone(linesRaw),
     };
