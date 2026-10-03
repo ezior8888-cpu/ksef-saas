@@ -534,7 +534,53 @@ async function readAcceptedCorrectionParent(
   if (error || !row?.id || !row.ksef_number?.trim()) {
     throw new Error('Faktura pierwotna nie ma potwierdzonego numeru KSeF w bieżącym środowisku tej firmy.');
   }
+  // K4: druga korekta liczyłaby różnicę od stanu pierwotnego, nie po
+  // poprzedniej KOR. Do czasu łańcucha korekt rodzic ma najwyżej jedną
+  // korektę poza odrzuconą przez KSeF (ta sama reguła w wyzwalaczu 00133).
+  const open = await findOpenCorrection(supabase, tenantId, parentId);
+  if (open) {
+    throw new Error(openCorrectionMessage(row.internal_number as string | null, open));
+  }
   return row;
+}
+
+export interface OpenCorrectionRef {
+  internal_number: string | null;
+  ksef_status: string | null;
+}
+
+const CORRECTION_STATUS_LABEL: Record<string, string> = {
+  draft: 'szkic',
+  queued: 'w kolejce do KSeF',
+  sending: 'w trakcie wysyłki',
+  offline_queued: 'w kolejce offline',
+  failed: 'z błędem wysyłki',
+  accepted: 'przyjęta przez KSeF',
+};
+
+/** Komunikat K4 — wspólny dla akcji i (pośrednio) wyzwalacza 00133. */
+export function openCorrectionMessage(parentNumber: string | null, open: OpenCorrectionRef): string {
+  const status = CORRECTION_STATUS_LABEL[open.ksef_status ?? ''] ?? (open.ksef_status ?? 'w toku');
+  return `Faktura ${parentNumber ?? 'pierwotna'} ma już korektę ${open.internal_number ?? ''} (${status}). `
+    + 'Kolejną korektę tej samej faktury (łańcuch korekt) obsłużymy w następnym wydaniu — '
+    + 'do tego czasu popraw istniejącą korektę albo skontaktuj się z nami.';
+}
+
+/** Korekta rodzica poza odrzuconą przez KSeF — szkic i każdy stan w drodze liczą się tak samo. */
+async function findOpenCorrection(
+  supabase: SupabaseClient,
+  tenantId: string,
+  parentId: string,
+): Promise<OpenCorrectionRef | null> {
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('internal_number, ksef_status')
+    .eq('tenant_id', tenantId)
+    .eq('parent_invoice_id', parentId)
+    .eq('invoice_kind', 'correction');
+  if (error) throw new Error('Nie można sprawdzić wcześniejszych korekt faktury pierwotnej.');
+  const rows = (Array.isArray(data) ? data : data ? [data] : []) as OpenCorrectionRef[];
+  return rows.find((row) => row.ksef_status !== 'rejected') ?? null;
 }
 
 async function normalizePayload(
