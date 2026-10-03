@@ -7,6 +7,7 @@ import { Download, FileText, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmailInvoiceButton } from './email-invoice-button';
 import { DraftInvoiceActions } from './draft-invoice-actions';
+import { FailedInvoiceActions } from './failed-invoice-actions';
 import { downloadInvoiceXmlAction } from './actions-detail';
 import { saveBlob } from '@/lib/download';
 
@@ -17,10 +18,16 @@ interface Props {
     xml_storage_path: string | null;
     /** VAT / KOR / ZAL / ROZ — do przycisków szkicu. */
     invoice_type?: string | null;
+    /** regular / correction / advance / final — dokument specjalny nie ma „Wyślij ponownie”. */
+    invoice_kind?: string | null;
+    /** Kod z katalogu `ksef_error_codes` — decyduje o przyciskach po błędzie. */
+    last_error_code?: string | null;
   };
+  /** Rola w firmie dopuszcza ponowną wysyłkę i powrót do szkicu (owner/admin). */
+  canManageSend?: boolean;
 }
 
-export function InvoiceActions({ invoice }: Props) {
+export function InvoiceActions({ invoice, canManageSend = false }: Props) {
   const [isDownloading, startDownloading] = useTransition();
   const [isDownloadingPdf, startDownloadingPdf] = useTransition();
 
@@ -102,9 +109,13 @@ export function InvoiceActions({ invoice }: Props) {
         <DraftInvoiceActions invoiceId={invoice.id} invoiceType={invoice.invoice_type ?? null} />
       )}
       {(invoice.ksef_status === 'rejected' || invoice.ksef_status === 'failed') && (
-        <p className="w-full text-right text-sm text-[var(--ff-text-muted)]">
-          Przed kolejną wysyłką potrzebne jest ręczne uzgodnienie z KSeF.
-        </p>
+        <FailedInvoiceActions
+          invoiceId={invoice.id}
+          status={invoice.ksef_status}
+          errorCode={invoice.last_error_code ?? null}
+          invoiceKind={invoice.invoice_kind ?? null}
+          canManage={canManageSend}
+        />
       )}
     </div>
   );
