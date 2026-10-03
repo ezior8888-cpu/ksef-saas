@@ -266,6 +266,59 @@ async function main(): Promise<void> {
   };
   await verifyXml('KOREKTA · nabywca B2C PESEL (regresja NrID)', () => generateCorrectionInvoiceXml(correctionPesel));
 
+  // AUD-70 KOR: korekta faktury dla firmy z UE — Podmiot2 KodUE+NrVatUE,
+  // różnica „np II” w P_13_9 (bez P_14), P_18=1.
+  const correctionEuNpII: CorrectionInvoiceData = {
+    ...correction,
+    internalNumber: 'FK 2026/04/003',
+    correctionType: 'before_after',
+    correctionReason: 'Zmiana ceny usługi',
+    buyer: {
+      type: 'eu', vatUeNumber: 'DE123456789', name: 'Auslandische GmbH',
+      address: { countryCode: 'DE', addressLine1: 'Hauptstrasse 1', addressLine2: '10115 Berlin' },
+    },
+    amountChange: undefined,
+    linesBefore: [
+      { name: 'Usługa programistyczna', unit: 'usł.', quantity: 1, unitPriceNet: 3000, vatRate: 'np_ii' },
+    ],
+    linesAfter: [
+      { name: 'Usługa programistyczna', unit: 'usł.', quantity: 1, unitPriceNet: 2500, vatRate: 'np_ii' },
+    ],
+  };
+  await verifyXml('KOREKTA · przed/po np II, nabywca z UE (VAT-UE DE)', () => generateCorrectionInvoiceXml(correctionEuNpII));
+
+  await verifyXml('KOREKTA · kwotowa np II, nabywca z UE (VAT-UE DE)', () =>
+    generateCorrectionInvoiceXml({
+      ...correctionEuNpII,
+      internalNumber: 'FK 2026/04/004',
+      correctionType: 'amount_change',
+      correctionReason: 'Rabat posprzedażowy',
+      linesBefore: undefined,
+      linesAfter: undefined,
+      amountChange: { netDelta: -300, vatDelta: 0, grossDelta: -300, description: 'Rabat 10%', vatRate: 'np_ii' },
+    }),
+  );
+
+  // Grecja: prefiks VAT-UE „EL”, a kraj adresu (ISO) „GR”; korekta 23% + np II.
+  await verifyXml('KOREKTA · przed/po np II + 23%, nabywca z Grecji (EL / adres GR)', () =>
+    generateCorrectionInvoiceXml({
+      ...correctionEuNpII,
+      internalNumber: 'FK 2026/04/005',
+      buyer: {
+        type: 'eu', vatUeNumber: 'EL123456789', name: 'Pelatis A.E.',
+        address: { countryCode: 'GR', addressLine1: 'Odos Ermou 1', addressLine2: '10563 Athina' },
+      },
+      linesBefore: [
+        { name: 'Licencja', unit: 'szt.', quantity: 2, unitPriceNet: 150, vatRate: '23' },
+        { name: 'Konsultacja zdalna', unit: 'godz.', quantity: 4, unitPriceNet: 200, vatRate: 'np_ii' },
+      ],
+      linesAfter: [
+        { name: 'Licencja', unit: 'szt.', quantity: 1, unitPriceNet: 150, vatRate: '23' },
+        { name: 'Konsultacja zdalna', unit: 'godz.', quantity: 3, unitPriceNet: 200, vatRate: 'np_ii' },
+      ],
+    }),
+  );
+
   // ── FAKTURA ZALICZKOWA ──────────────────────────────────────
   const advance: AdvanceInvoiceData = {
     invoiceType: 'advance',

@@ -58,6 +58,13 @@ const EU_BUYER_COUNTRY_CODES: ReadonlySet<string> = new Set(EU_BUYER_COUNTRIES.m
 export const NP_II_REQUIRES_EU_BUYER_MESSAGE =
   'Stawka np. II tylko dla usługi dla firmy z innego kraju UE z numerem VAT-UE — wybierz nabywcę „Firma z UE (VAT-UE)”';
 
+/**
+ * „np. II” w korekcie, gdy nabywca faktury pierwotnej nie jest firmą z innego
+ * kraju UE — nabywcy korekty nie zmienia się, więc bez wskazówki „wybierz nabywcę”.
+ */
+export const NP_II_CORRECTION_BUYER_MESSAGE =
+  'Stawka np. II tylko dla usługi dla firmy z innego kraju UE z numerem VAT-UE — nabywca faktury pierwotnej go nie ma; wybierz inną stawkę';
+
 /** Irlandia Płn. ma numer VAT-UE tylko dla towarów — usługa nie jest np. II. */
 export const NP_II_NOT_FOR_XI_MESSAGE =
   'Stawka np. II nie dotyczy firm z Irlandii Północnej (XI) — ich numer VAT-UE obejmuje tylko towary; dla usługi wybierz np. (poza krajem)';
