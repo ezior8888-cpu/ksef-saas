@@ -106,6 +106,10 @@ describe('ROZ amount-due migration (00130)', () => {
     expect(rozAware).toMatch(/LANGUAGE plpgsql\s*\n\s*SET search_path = ''/);
   });
 
+  it('treats a ROZ fully covered by advances (amount due 0) as paid, not unpaid/overdue', () => {
+    expect(rozAware).toContain("IF NEW.paid_amount = 0 AND NOT (NEW.invoice_kind = 'final' AND v_due = 0) THEN");
+  });
+
   it('is purely additive: no DROP TABLE/COLUMN, TRUNCATE or DELETE FROM (outside comments)', () => {
     // Strip `--` line comments first — the migration's own prose names these
     // forbidden statements to explain why none of them appear in the SQL.
