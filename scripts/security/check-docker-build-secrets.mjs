@@ -7,6 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import { gunzipSync } from 'node:zlib';
 
 const tokenName = 'SENTRY_AUTH_TOKEN';
@@ -130,23 +131,40 @@ export function inspectLayout(root, token, scope) {
   return { leaks: [...leaks], files, compressed, provenance };
 }
 
-export function verifyBuildResult(result, token, guardMessage) {
-  assert.ok(!result.error, 'Docker/BuildKit must be available; command did not complete');
-  const logs = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
-  assert.equal(logs.includes(token), false, 'Synthetic token leaked in build logs');
-  if (guardMessage) {
-    assert.notEqual(result.status, 0, 'Required upload unexpectedly succeeded without its secret');
-    // Match an executed shell message, not merely the RUN command echoed by BuildKit.
-    const message = guardMessage.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    assert.match(logs, new RegExp(`(?:^|\\n)(?:#\\d+ [\\d.]+ )?${message}(?:\\r?\\n|$)`),
-      'Build failed for a reason other than the required-secret guard');
-    assert.equal(logs.includes(stubMarker), false, 'pnpm build ran without its required secret');
-  } else {
-    assert.equal(result.status, 0, 'Synthetic Docker build failed (logs withheld to avoid exposing canaries)');
-    assert.ok(logs.includes(stubMarker), 'Synthetic pnpm build did not run');
-  }
+// Diagnostics contain only output from our synthetic context. Redact before truncating,
+// so a token crossing the tail boundary cannot escape as a partially visible value.
+export function buildDiagnostic(result, token, scenario = 'unknown') {
+  const clean = (value) => stripVTControlCharacters(String(value))
+    .replace(/\r\n?/g, '\n')
+    .replace(/\p{Cc}/gu, (character) => ['\n', '\t'].includes(character) ? character : '')
+    .replaceAll(token, '[synthetic-token-redacted]');
+  const output = clean(`${result.stdout ?? ''}\n${result.stderr ?? ''}\n${result.error?.message ?? ''}`).slice(-4000);
+  const name = clean(scenario).replace(/\s/g, ' ').slice(0, 80);
+  const status = clean(result.status ?? 'unavailable').slice(0, 20);
+  const signal = clean(result.signal ?? 'none').slice(0, 20);
+  return `Scenario: ${name}; status: ${status}; signal: ${signal}\n${output}`;
 }
 
+export function verifyBuildResult(result, token, guardMessage, scenario) {
+  const diagnostic = buildDiagnostic(result, token, scenario);
+  const requireResult = (condition, message) => {
+    if (!condition) throw new Error(`${message}\n${diagnostic}`);
+  };
+  requireResult(!result.error, 'Docker/BuildKit must be available; command did not complete');
+  const logs = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+  requireResult(!logs.includes(token), 'Synthetic token leaked in build logs');
+  if (guardMessage) {
+    requireResult(result.status !== 0, 'Required upload unexpectedly succeeded without its secret');
+    // Match an executed shell message, not merely the RUN command echoed by BuildKit.
+    const message = guardMessage.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    requireResult(new RegExp(`(?:^|\\n)(?:#\\d+ [\\d.]+ )?${message}(?:\\r?\\n|$)`).test(logs),
+      'Build failed for a reason other than the required-secret guard');
+    requireResult(!logs.includes(stubMarker), 'pnpm build ran without its required secret');
+  } else {
+    requireResult(result.status === 0, 'Synthetic Docker build failed');
+    requireResult(logs.includes(stubMarker), 'Synthetic pnpm build did not run');
+  }
+}
 export function checkBuildSecrets(source) {
   const instructions = extractBuildInstructions(source);
   const temporaryRoot = resolve(tmpdir());
@@ -194,7 +212,7 @@ export function checkBuildSecrets(source) {
         encoding: 'utf8', timeout: 180_000, maxBuffer: 16 * 1024 * 1024,
         env: { ...process.env, [tokenName]: token, DOCKER_BUILDKIT: '1' },
       });
-      verifyBuildResult(result, token, scenario.failure);
+      verifyBuildResult(result, token, scenario.failure, scenario.name);
       counts.builds += 1;
       if (scenario.failure) continue;
       const imageCheck = inspectLayout(image, token, 'image');

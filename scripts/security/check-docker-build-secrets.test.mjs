@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import test from 'node:test';
 import {
-  createFixture, extractBuildInstructions, inspectBytes, inspectLayout,
+  buildDiagnostic, createFixture, extractBuildInstructions, inspectBytes, inspectLayout,
   invalidPolicyMessage, missingTokenMessage, publicValues, verifyBuildResult,
 } from './check-docker-build-secrets.mjs';
 
@@ -139,3 +139,24 @@ test('missing Docker makes the executable fail; it never satisfies a negative co
   assert.match(result.stderr, /Docker\/BuildKit must be available/);
   assert.doesNotMatch(result.stdout, /PASS/);
 }));
+
+test('failure diagnostics redact canaries before bounding output and strip terminal controls', () => {
+  const result = {
+    status: 17, signal: null,
+    stdout: 'discarded-prefix'.repeat(400),
+    stderr: `\u001b[31m${syntheticToken}\u001b[0m\u0000\b\r\nreal synthetic failure\n${syntheticToken}`,
+  };
+  const diagnostic = buildDiagnostic(result, syntheticToken, 'build-args');
+  assert.match(diagnostic, /^Scenario: build-args; status: 17; signal: none\n/);
+  assert.ok(diagnostic.length <= 4060);
+  assert.equal(diagnostic.includes(syntheticToken), false);
+  assert.equal(diagnostic.includes('discarded-prefixdiscarded-prefixdiscarded-prefix'.repeat(100)), false);
+  assert.ok(diagnostic.includes('[synthetic-token-redacted]'));
+  assert.ok(diagnostic.endsWith('real synthetic failure\n[synthetic-token-redacted]\n'));
+  assert.ok([...diagnostic].every((character) => !/\p{Cc}/u.test(character) || ['\n', '\t'].includes(character)));
+  assert.throws(() => verifyBuildResult({ status: 1, stderr: 'synthetic exporter failure' }, syntheticToken, undefined, 'build-args'), (error) => {
+    assert.match(error.message, /Scenario: build-args; status: 1/);
+    assert.match(error.message, /synthetic exporter failure/);
+    return true;
+  });
+});
