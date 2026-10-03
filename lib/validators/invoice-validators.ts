@@ -4,7 +4,8 @@
 import { z } from 'zod';
 import { validateNipChecksum, validatePeselChecksum } from '@/lib/xml/invoice-calculator';
 import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
-import { isForeignEuVat } from '@/lib/invoices/vat-ue';
+import { isForeignEuVat, isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
+import { NP_II_NOT_FOR_XI_MESSAGE, NP_II_REQUIRES_EU_BUYER_MESSAGE } from '@/lib/schemas/invoice-form';
 
 // ============================================================================
 // Helpers walidacyjne
@@ -154,6 +155,30 @@ export const correctionLineSchema = invoiceLineSchema.extend({
 });
 export type CorrectionLineSchema = z.infer<typeof correctionLineSchema>;
 
+/** Dane korekty, od których zależy „np. II” — pasuje też `CorrectionInvoiceData` (generator KOR). */
+export interface CorrectionNpIiInput {
+  buyer: { type: string; vatUeNumber?: string };
+  linesBefore?: ReadonlyArray<{ vatRate: string }>;
+  linesAfter?: ReadonlyArray<{ vatRate: string }>;
+  amountChange?: { vatRate?: string };
+}
+
+/**
+ * Reguła „np. II” w korekcie (AUD-70): stawka z art. 100 ust. 1 pkt 4 tylko dla
+ * nabywcy — podatnika z INNEGO państwa UE (`isNpIiBuyerVat`: bez PL i bez XI).
+ * Obejmuje pozycje przed i po korekcie oraz stawkę korekty kwotowej. Komunikat
+ * albo `null` — wspólne dla schematu (formularz, akcja) i generatora KOR.
+ */
+export function correctionNpIiBuyerError(data: CorrectionNpIiInput): string | null {
+  const hasNpIi =
+    [...(data.linesBefore ?? []), ...(data.linesAfter ?? [])].some((l) => l.vatRate === 'np_ii') ||
+    data.amountChange?.vatRate === 'np_ii';
+  if (!hasNpIi) return null;
+  const vatUe = data.buyer.type === 'eu' ? data.buyer.vatUeNumber : undefined;
+  if (isNpIiBuyerVat(vatUe)) return null;
+  return parseVatUe(vatUe)?.kodUE === 'XI' ? NP_II_NOT_FOR_XI_MESSAGE : NP_II_REQUIRES_EU_BUYER_MESSAGE;
+}
+
 // ============================================================================
 // Faktura ZWYKŁA
 // ============================================================================
@@ -246,6 +271,17 @@ export const correctionInvoiceSchema = z
   }, {
     message: 'Kwoty korekty muszą mieć jedną obsługiwaną stawkę VAT i brutto równe netto plus VAT',
     path: ['amountChange'],
+  })
+  // AUD-70: np. II tylko dla firmy z innego kraju UE (bez XI) — błąd przy polu
+  // ze stawką np. II, żeby formularz pokazał go przy właściwej sekcji.
+  .superRefine((data, ctx) => {
+    const message = correctionNpIiBuyerError(data);
+    if (!message) return;
+    const fields: Array<'linesBefore' | 'linesAfter' | 'amountChange'> = [];
+    if (data.linesBefore?.some((l) => l.vatRate === 'np_ii')) fields.push('linesBefore');
+    if (data.linesAfter?.some((l) => l.vatRate === 'np_ii')) fields.push('linesAfter');
+    if (data.amountChange?.vatRate === 'np_ii') fields.push('amountChange');
+    for (const field of fields) ctx.addIssue({ code: 'custom', message, path: [field] });
   })
   .refine((data) => new Date(data.paymentDueDate) >= new Date(data.issueDate), {
     message: 'Termin płatności nie może być przed datą wystawienia',
