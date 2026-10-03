@@ -199,3 +199,25 @@ kontekstem obrazu. Rozszerza sprawdzoną kontrolę #194 na osobnej gałęzi
 `codex/security-docker-env`. Uzasadnienie, dowody i ograniczenia są w
 [dzienniku](DZIENNIK-ODPORNOSCI-CYBER.md). Do kolejki niezależny zakres
 CYB-DOCKER-BUILD-SECRETS; bez migracji, merge i wdrożenia.
+
+
+## Aktualizacja wykonania 03.10.2026 — CYB-DOCKER-BUILD-SECRETS (faza 4)
+
+Jeden pakiet zmienia transport SENTRY_AUTH_TOKEN z ARG/ENV na BuildKit secret
+mount. Zachowuje plugin Sentry, publiczne wartości builda i oba wspierane
+sposoby przekazania konfiguracji. Flaga SENTRY_AUTH_TOKEN_REQUIRED sprawdza
+obecność tokenu. Syntetyczny test bada logi, konfigurację/historię, warstwy,
+provenance i cache, z kontrolami celowych wycieków. Zależność #196 obejmuje
+wcześniejszą ochronę kontekstu i jej testy. Dowody, status PR i ograniczenia:
+[dziennik](DZIENNIK-ODPORNOSCI-CYBER.md), [odbiór buildera](../runbooks/docker-build-secrets.md).
+Zakres kodu sekretów builda wspomniany również w fazie 5 wykonujemy tu w fazie 4;
+odbiór konfiguracji infrastruktury nadal pozostaje w fazie 5.
+
+Nowe niezależne sprawy w kolejce: CYB-COOLIFY-BUILD-SECRET-SCOPE (automatyczne
+mounty innych RUN) i CYB-SENTRY-UPLOAD-FAILURE-GATE (błąd uploadu może nie
+przerwać builda). Wynik kodu/testów nie dowodzi wdrożenia, poprawnego uploadu
+ani braku historycznego wycieku. Bez SQL, merge i deploy; po tym pakiecie stop.
+
+Pakiet zakończony w kodzie i testach, roboczy PR #197. Lokalne CI/build,
+15 testów harnessu, rzeczywiste siedem buildów Docker i niezależna recenzja
+zaliczone. Dalszy zakres fazy 4 oraz operacyjny odbiór fazy 5 pozostają otwarte.
