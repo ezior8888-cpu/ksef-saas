@@ -1,6 +1,6 @@
-// Wygenerowane 02.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00128 —
-// AUD-122. Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// Wygenerowane 03.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00131
+// (cykl życia faktury). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -10,8 +10,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.6"
   }
@@ -2176,6 +2174,30 @@ export type Database = {
           kpir_column?: Database["public"]["Enums"]["kpir_column"]
           nip?: string | null
           notes?: string | null
+        }
+        Relationships: []
+      }
+      ksef_error_codes: {
+        Row: {
+          auto_requeue: boolean
+          class: string
+          client_message: string
+          code: string
+          created_at: string
+        }
+        Insert: {
+          auto_requeue?: boolean
+          class: string
+          client_message: string
+          code: string
+          created_at?: string
+        }
+        Update: {
+          auto_requeue?: boolean
+          class?: string
+          client_message?: string
+          code?: string
+          created_at?: string
         }
         Relationships: []
       }
@@ -5095,6 +5117,89 @@ export type Database = {
       }
       days_overdue: { Args: { invoice_due_date: string }; Returns: number }
       deny_join_request: { Args: { p_request_id: string }; Returns: undefined }
+      enqueue_ksef_send: {
+        Args: {
+          p_attempt_id: string
+          p_invoice_id: string
+          p_tenant_id: string
+        }
+        Returns: {
+          advance_amount: number | null
+          advance_invoice_ids: string[]
+          archive_storage_path: string | null
+          archived_at: string | null
+          bank_account_validated: boolean | null
+          buyer_data: Json | null
+          buyer_id_number: string | null
+          buyer_id_type: Database["public"]["Enums"]["buyer_id_type_enum"]
+          buyer_nip: string | null
+          buyer_pesel: string | null
+          buyer_vat_status_at_issue:
+            | Database["public"]["Enums"]["vat_status_enum"]
+            | null
+          correction_reason: string | null
+          correction_type:
+            | Database["public"]["Enums"]["correction_type_enum"]
+            | null
+          created_at: string | null
+          currency: string | null
+          days_to_payment: number | null
+          direction: string
+          fa3_data: Json
+          gross_total: number | null
+          id: string
+          internal_number: string | null
+          invoice_kind: Database["public"]["Enums"]["invoice_type_enum"]
+          invoice_type: string | null
+          is_b2c: boolean
+          issue_date: string
+          ksef_accepted_at: string | null
+          ksef_environment: string | null
+          ksef_number: string | null
+          ksef_send_owner: string | null
+          ksef_status: string | null
+          last_attempt_at: string | null
+          last_error: string | null
+          last_error_code: string | null
+          last_error_field: string | null
+          last_error_suggestion: string | null
+          net_total: number | null
+          notes: string | null
+          offline_idempotency_key: string | null
+          offline_qr_certyfikat: string | null
+          offline_qr_offline: string | null
+          origin: string
+          paid_amount: number
+          paid_at: string | null
+          parent_invoice_id: string | null
+          payment_data: Json | null
+          payment_due_date: string | null
+          payment_status: Database["public"]["Enums"]["payment_status_enum"]
+          pdf_generated_at: string | null
+          pdf_storage_path: string | null
+          reminders_paused: boolean
+          reminders_paused_reason: string | null
+          sale_date: string | null
+          scheduled_deletion_at: string | null
+          seller_data: Json | null
+          seller_nip: string | null
+          stripe_invoice_id: string | null
+          submission_attempts: number
+          submitted_to_ksef_at: string | null
+          tenant_id: string
+          updated_at: string | null
+          validation_warnings: string[] | null
+          vat_total: number | null
+          xml_generated_at: string | null
+          xml_storage_path: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invoices"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       finalize_ksef_certificate_claim: {
         Args: {
           p_actor_user_id: string
@@ -5168,6 +5273,30 @@ export type Database = {
         Args: { p_nip: string; p_tenant_id: string }
         Returns: boolean
       }
+      ksef_error_class: { Args: { p_code: string }; Returns: string }
+      ksef_has_contact_evidence: {
+        Args: { p_invoice_id: string; p_tenant_id: string }
+        Returns: boolean
+      }
+      ksef_lifecycle_violations: {
+        Args: never
+        Returns: {
+          detail: Json
+          invariant: string
+          invoice_id: string
+          tenant_id: string
+        }[]
+      }
+      ksef_send_audit: {
+        Args: {
+          p_action: string
+          p_actor_user_id: string
+          p_details: Json
+          p_invoice_id: string
+          p_tenant_id: string
+        }
+        Returns: undefined
+      }
       list_public_tables: {
         Args: never
         Returns: {
@@ -5220,6 +5349,10 @@ export type Database = {
         Returns: boolean
       }
       refresh_dashboard_materialized_views: { Args: never; Returns: Json }
+      release_ksef_enqueue: {
+        Args: { p_invoice_id: string; p_reason: string; p_tenant_id: string }
+        Returns: boolean
+      }
       release_stripe_subscription_sync: {
         Args: {
           p_claim_token: string
@@ -5227,6 +5360,174 @@ export type Database = {
           p_subscription_id: string
         }
         Returns: boolean
+      }
+      requeue_ksef_send: {
+        Args: {
+          p_actor_user_id: string
+          p_attempt_id: string
+          p_invoice_id: string
+          p_reconcile_only?: boolean
+          p_tenant_id: string
+        }
+        Returns: {
+          advance_amount: number | null
+          advance_invoice_ids: string[]
+          archive_storage_path: string | null
+          archived_at: string | null
+          bank_account_validated: boolean | null
+          buyer_data: Json | null
+          buyer_id_number: string | null
+          buyer_id_type: Database["public"]["Enums"]["buyer_id_type_enum"]
+          buyer_nip: string | null
+          buyer_pesel: string | null
+          buyer_vat_status_at_issue:
+            | Database["public"]["Enums"]["vat_status_enum"]
+            | null
+          correction_reason: string | null
+          correction_type:
+            | Database["public"]["Enums"]["correction_type_enum"]
+            | null
+          created_at: string | null
+          currency: string | null
+          days_to_payment: number | null
+          direction: string
+          fa3_data: Json
+          gross_total: number | null
+          id: string
+          internal_number: string | null
+          invoice_kind: Database["public"]["Enums"]["invoice_type_enum"]
+          invoice_type: string | null
+          is_b2c: boolean
+          issue_date: string
+          ksef_accepted_at: string | null
+          ksef_environment: string | null
+          ksef_number: string | null
+          ksef_send_owner: string | null
+          ksef_status: string | null
+          last_attempt_at: string | null
+          last_error: string | null
+          last_error_code: string | null
+          last_error_field: string | null
+          last_error_suggestion: string | null
+          net_total: number | null
+          notes: string | null
+          offline_idempotency_key: string | null
+          offline_qr_certyfikat: string | null
+          offline_qr_offline: string | null
+          origin: string
+          paid_amount: number
+          paid_at: string | null
+          parent_invoice_id: string | null
+          payment_data: Json | null
+          payment_due_date: string | null
+          payment_status: Database["public"]["Enums"]["payment_status_enum"]
+          pdf_generated_at: string | null
+          pdf_storage_path: string | null
+          reminders_paused: boolean
+          reminders_paused_reason: string | null
+          sale_date: string | null
+          scheduled_deletion_at: string | null
+          seller_data: Json | null
+          seller_nip: string | null
+          stripe_invoice_id: string | null
+          submission_attempts: number
+          submitted_to_ksef_at: string | null
+          tenant_id: string
+          updated_at: string | null
+          validation_warnings: string[] | null
+          vat_total: number | null
+          xml_generated_at: string | null
+          xml_storage_path: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invoices"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      reset_ksef_send: {
+        Args: {
+          p_actor_user_id: string
+          p_invoice_id: string
+          p_tenant_id: string
+        }
+        Returns: {
+          advance_amount: number | null
+          advance_invoice_ids: string[]
+          archive_storage_path: string | null
+          archived_at: string | null
+          bank_account_validated: boolean | null
+          buyer_data: Json | null
+          buyer_id_number: string | null
+          buyer_id_type: Database["public"]["Enums"]["buyer_id_type_enum"]
+          buyer_nip: string | null
+          buyer_pesel: string | null
+          buyer_vat_status_at_issue:
+            | Database["public"]["Enums"]["vat_status_enum"]
+            | null
+          correction_reason: string | null
+          correction_type:
+            | Database["public"]["Enums"]["correction_type_enum"]
+            | null
+          created_at: string | null
+          currency: string | null
+          days_to_payment: number | null
+          direction: string
+          fa3_data: Json
+          gross_total: number | null
+          id: string
+          internal_number: string | null
+          invoice_kind: Database["public"]["Enums"]["invoice_type_enum"]
+          invoice_type: string | null
+          is_b2c: boolean
+          issue_date: string
+          ksef_accepted_at: string | null
+          ksef_environment: string | null
+          ksef_number: string | null
+          ksef_send_owner: string | null
+          ksef_status: string | null
+          last_attempt_at: string | null
+          last_error: string | null
+          last_error_code: string | null
+          last_error_field: string | null
+          last_error_suggestion: string | null
+          net_total: number | null
+          notes: string | null
+          offline_idempotency_key: string | null
+          offline_qr_certyfikat: string | null
+          offline_qr_offline: string | null
+          origin: string
+          paid_amount: number
+          paid_at: string | null
+          parent_invoice_id: string | null
+          payment_data: Json | null
+          payment_due_date: string | null
+          payment_status: Database["public"]["Enums"]["payment_status_enum"]
+          pdf_generated_at: string | null
+          pdf_storage_path: string | null
+          reminders_paused: boolean
+          reminders_paused_reason: string | null
+          sale_date: string | null
+          scheduled_deletion_at: string | null
+          seller_data: Json | null
+          seller_nip: string | null
+          stripe_invoice_id: string | null
+          submission_attempts: number
+          submitted_to_ksef_at: string | null
+          tenant_id: string
+          updated_at: string | null
+          validation_warnings: string[] | null
+          vat_total: number | null
+          xml_generated_at: string | null
+          xml_storage_path: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invoices"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       retire_completed_stripe_checkout_attempt: {
         Args: {

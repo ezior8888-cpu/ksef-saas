@@ -1,9 +1,14 @@
 /**
- * Jedna ścieżka po zapisie szkicu: kolejka Inngest (online) lub tryb Offline24,
+ * Jedna ścieżka po zapisie szkicu: kolejka pg-boss (online) lub tryb Offline24,
  * jeśli KSeF jest niedostępny i tenant ma para certyfikat+klucz (XAdES).
  *
+ * Przejście stanu faktury (`draft → queued`, przy ponowieniu `failed → queued`)
+ * robi RPC z 00131 w TEJ SAMEJ transakcji, w której pg-boss zapisuje
+ * zlecenie (`ksef-send-step.ts`). Sesja klienta nigdy nie pisze `ksef_status`
+ * (cykl życia faktury, PR 3 — W16/W2 z rewizji 03.10.2026).
+ *
  * UWAGA: generacji XML ani uploadu R2 nie robimy w Server Action — robi to
- * `submitInvoiceFullFlow` w jobie Inngest (spójnie dla VAT / ZAL / ROZ / korekta).
+ * `submitInvoiceFullFlow` w jobie wysyłki (spójnie dla VAT / ZAL / ROZ / korekta).
  */
 
 import { randomUUID } from 'node:crypto';
@@ -32,7 +37,7 @@ import {
   KOR_HOLD_MESSAGE,
   KSEF_PAUSED_MESSAGE,
 } from '@/lib/ksef/submission-holds';
-import { formatJobSendError } from '@/lib/jobs/error-message';
+import { describeKsefSendError, ksefSendTransactionStep, type KsefSendMode } from '@/lib/invoices/ksef-send-step';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 import type { Invoice } from '@/types/invoice';
 import type {
@@ -46,6 +51,7 @@ export type KsefSubmitEnqueueResult =
   | { ok: false; error: string; code?: 'KSEF_NOT_VERIFIED' | 'MFA_REQUIRED' };
 
 export interface EnqueueKsefSubmitParams {
+  /** Klient sesji — tylko do odczytów wołającego; status faktury zmienia RPC serwera. */
   supabase: SupabaseClient;
   tenantId: string;
   userId: string;
@@ -59,6 +65,8 @@ export interface EnqueueKsefSubmitParams {
   finalAdvanceSettlementRows?: AdvanceInvoiceSettlementRow[];
   auditKind: 'regular' | 'correction' | 'advance' | 'final';
   internalNumberForAudit?: string;
+  /** Domyślnie pierwsza wysyłka szkicu; `requeue` = ponowna wysyłka z `failed` (K3). */
+  mode?: KsefSendMode;
 }
 
 function credentialsBuffer(raw: unknown): Buffer {
@@ -83,7 +91,6 @@ export async function enqueueKsefSubmitAfterDraft(
   params: EnqueueKsefSubmitParams,
 ): Promise<KsefSubmitEnqueueResult> {
   const {
-    supabase,
     tenantId,
     userId,
     invoiceId,
@@ -247,37 +254,37 @@ export async function enqueueKsefSubmitAfterDraft(
     return { ok: true, mode: 'offline_queued' };
   }
 
+  // Jedna transakcja (W16/W2): RPC przestawia status po stronie serwera, pg-boss
+  // zapisuje zlecenie na tym samym połączeniu. Błąd zapisu zlecenia cofa status;
+  // odmowa RPC (drugie kliknięcie, błąd treści przy ponowieniu) nie tworzy
+  // zlecenia. `singletonKey` = faktura: w kolejce czeka najwyżej jedno zlecenie.
+  const mode: KsefSendMode = params.mode ?? { kind: 'enqueue' };
+  // Właściciel przejęcia wysyłki (AUD-10): każde kolejkowanie to nowa próba.
+  const sendAttemptId = randomUUID();
   try {
-    await sendJobEvent({
-      // Grupa per tenant — odpowiednik `concurrency: { key: 'event.data.tenantId' }`
-      // z Inngest (limit 100 równoległych wysyłek jednej organizacji).
-      groupId: tenantId,
-      name: 'invoice/submit.requested',
-      data: {
-        tenantId,
-        invoiceId,
-        invoice,
-        nip: nipNorm,
-        environment: env,
-        correctionData,
-        advanceData,
-        finalData,
-        finalAdvanceSettlementRows,
-        // Właściciel przejęcia wysyłki (AUD-10): każde kolejkowanie to nowa próba.
-        sendAttemptId: randomUUID(),
+    await sendJobEvent(
+      {
+        // Grupa per tenant — limit równoległych wysyłek jednej organizacji.
+        groupId: tenantId,
+        singletonKey: invoiceId,
+        name: 'invoice/submit.requested',
+        data: {
+          tenantId,
+          invoiceId,
+          invoice,
+          nip: nipNorm,
+          environment: env,
+          correctionData,
+          advanceData,
+          finalData,
+          finalAdvanceSettlementRows,
+          sendAttemptId,
+        },
       },
-    });
+      { inTransaction: ksefSendTransactionStep(mode, { invoiceId, tenantId, attemptId: sendAttemptId }) },
+    );
   } catch (e) {
-    return { ok: false, error: formatJobSendError(e) };
-  }
-
-  const { error: queueErr } = await supabase
-    .from('invoices')
-    .update({ ksef_status: 'queued' })
-    .eq('id', invoiceId);
-
-  if (queueErr) {
-    console.error('[enqueueKsefSubmitAfterDraft] queued status update failed', queueErr);
+    return { ok: false, error: describeKsefSendError(e, mode) };
   }
 
   await logAudit({
@@ -290,6 +297,8 @@ export async function enqueueKsefSubmitAfterDraft(
       nip: nipNorm,
       kind: auditKind,
       mode: 'online_queued',
+      send: mode.kind,
+      sendAttemptId,
       internalNumber: internalNumberForAudit ?? invoice.internalNumber,
     },
   });
