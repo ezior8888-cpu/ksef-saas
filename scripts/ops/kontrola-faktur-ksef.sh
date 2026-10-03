@@ -28,11 +28,34 @@
 
 set -euo pipefail
 
+# Gdzie leży `.agents/infra.env`: zmienna FAKTFLOW_INFRA_ENV, katalog tego
+# repo, a dla worktree (`.claude/worktrees/*`) — główny checkout, bo plik jest
+# poza gitem i worktree go nie ma.
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-ENV_FILE="${FAKTFLOW_INFRA_ENV:-$ROOT/.agents/infra.env}"
+MAIN_ROOT=""
+if command -v git >/dev/null 2>&1; then
+  COMMON_DIR=$(git -C "$ROOT" rev-parse --git-common-dir 2>/dev/null || true)
+  if [ -n "$COMMON_DIR" ]; then
+    case "$COMMON_DIR" in
+      /*) MAIN_ROOT=$(cd "$COMMON_DIR/.." && pwd) ;;
+      *)  MAIN_ROOT=$(cd "$ROOT/$COMMON_DIR/.." && pwd) ;;
+    esac
+  fi
+fi
 
-if [ ! -f "$ENV_FILE" ]; then
-  echo "Brak $ENV_FILE — plik jest poza gitem, poproś Bartosza (AGENTS.md → Infrastruktura)." >&2
+ENV_FILE=""
+for candidate in "${FAKTFLOW_INFRA_ENV:-}" "$ROOT/.agents/infra.env" "${MAIN_ROOT:+$MAIN_ROOT/.agents/infra.env}"; do
+  if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+    ENV_FILE=$candidate
+    break
+  fi
+done
+
+if [ -z "$ENV_FILE" ]; then
+  {
+    echo "Nie znalazłem .agents/infra.env (plik jest poza gitem — AGENTS.md → Infrastruktura)."
+    echo "Szukałem w: ${FAKTFLOW_INFRA_ENV:-(FAKTFLOW_INFRA_ENV nieustawione)}, $ROOT/.agents/infra.env${MAIN_ROOT:+, $MAIN_ROOT/.agents/infra.env}"
+  } >&2
   exit 1
 fi
 # shellcheck source=/dev/null
@@ -43,6 +66,14 @@ for v in K APP DB PGC APP_PREFIX WORKER_PREFIX; do
     exit 1
   fi
 done
+
+# `--sprawdz`: tylko pokaż, skąd czytasz konfigurację, bez łączenia z serwerami.
+if [ "${1:-}" = "--sprawdz" ]; then
+  echo "Konfiguracja: $ENV_FILE"
+  echo "Klucz SSH: $K ($([ -f "$K" ] && echo 'jest' || echo 'BRAK PLIKU'))"
+  echo "Serwery: app=$APP db=$DB; kontener Postgresa: $PGC"
+  exit 0
+fi
 
 SSH=(ssh -i "$K" -o ConnectTimeout=15 -o BatchMode=yes)
 
