@@ -7,6 +7,8 @@ import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+// Plik 'use server' eksportuje tylko akcje — komunikat i typ K4 żyją w czystym module.
+import { openCorrectionMessage, type OpenCorrectionRef } from '@/lib/invoices/correction-parents';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
   correctionInvoiceSchema,
@@ -534,7 +536,31 @@ async function readAcceptedCorrectionParent(
   if (error || !row?.id || !row.ksef_number?.trim()) {
     throw new Error('Faktura pierwotna nie ma potwierdzonego numeru KSeF w bieżącym środowisku tej firmy.');
   }
+  // K4: druga korekta liczyłaby różnicę od stanu pierwotnego, nie po
+  // poprzedniej KOR. Do czasu łańcucha korekt rodzic ma najwyżej jedną
+  // korektę poza odrzuconą przez KSeF (ta sama reguła w wyzwalaczu 00133).
+  const open = await findOpenCorrection(supabase, tenantId, parentId);
+  if (open) {
+    throw new Error(openCorrectionMessage(row.internal_number as string | null, open));
+  }
   return row;
+}
+
+/** Korekta rodzica poza odrzuconą przez KSeF — szkic i każdy stan w drodze liczą się tak samo. */
+async function findOpenCorrection(
+  supabase: SupabaseClient,
+  tenantId: string,
+  parentId: string,
+): Promise<OpenCorrectionRef | null> {
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('internal_number, ksef_status')
+    .eq('tenant_id', tenantId)
+    .eq('parent_invoice_id', parentId)
+    .eq('invoice_kind', 'correction');
+  if (error) throw new Error('Nie można sprawdzić wcześniejszych korekt faktury pierwotnej.');
+  const rows = (Array.isArray(data) ? data : data ? [data] : []) as OpenCorrectionRef[];
+  return rows.find((row) => row.ksef_status !== 'rejected') ?? null;
 }
 
 async function normalizePayload(

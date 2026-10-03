@@ -45,6 +45,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-kolejkowanie-wysylki.test.ts',
       // 00132: wyzwalacze po zacieśnieniu — klient nigdy nie pisze ksef_status.
       'tests/rls-cykl-wyzwalacze.test.ts',
+      // 00133 (K4): jedna otwarta korekta na fakturę pierwotną.
+      'tests/rls-korekta-jedna-otwarta.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
