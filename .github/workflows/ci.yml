@@ -68,6 +68,17 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Verify Docker build secrets with synthetic values
+        run: |
+          node --test scripts/security/check-docker-build-secrets.test.mjs
+          node scripts/security/check-docker-build-secrets.mjs
+        # Tylko syntetyczny kontekst/token; żadnego uploadu do Sentry ani sekretów CI.
+      - name: Verify Docker context excludes local operator files
+        run: |
+          node --test scripts/security/check-docker-context.test.mjs
+          node scripts/security/check-docker-context.mjs
+        # Tylko syntetyczny kontekst FROM scratch; brak sekretów i obrazu bazowego.
       - name: Build
         run: pnpm build
         env:
