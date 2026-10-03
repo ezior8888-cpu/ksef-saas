@@ -45,10 +45,13 @@ import {
   type InvoiceLineSchema,
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
+import { zeroVatRateFromParentLines } from '@/lib/invoices/correction-amount-change';
+import { addressCountryForKodUE, isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
 import { dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
+import { EU_BUYER_COUNTRIES, NP_II_NOT_FOR_XI_MESSAGE } from '@/lib/schemas/invoice-form';
 import { calculateLineItem } from '@/lib/xml/invoice-calculator';
 import { CORRECTION_TYPE_LABELS } from '@/types/invoice-types';
-import type { CorrectionInvoiceData } from '@/types/invoice-types';
+import type { CorrectionInvoiceData, ZeroVatAmountChangeRate } from '@/types/invoice-types';
 
 import {
   getCorrectionParentContextAction,
@@ -73,6 +76,8 @@ export interface CorrectionParentInvoiceRow {
   buyer_data: unknown;
 }
 
+type CorrectionFormBuyer = CorrectionFormIn['buyer'];
+
 function buyerLabel(buyer: unknown): string {
   if (buyer && typeof buyer === 'object' && buyer !== null) {
     const name = (buyer as Record<string, unknown>).name;
@@ -80,6 +85,98 @@ function buyerLabel(buyer: unknown): string {
   }
   return '—';
 }
+
+/** Nazwa kraju UE po kodzie ISO adresu (Grecja `GR`) — jak w formularzu zwykłej faktury. */
+function euCountryName(code: string | undefined): string | undefined {
+  if (!code) return undefined;
+  const upper = code.toUpperCase();
+  return EU_BUYER_COUNTRIES.find((k) => k.code === upper)?.name;
+}
+
+/** „VAT UE: DE123456789 · Niemcy” — kraj z adresu, a bez niego z prefiksu numeru. */
+function vatUeLabel(vatUeNumber: string, countryCode?: string): string {
+  const parsed = parseVatUe(vatUeNumber);
+  const numer = parsed?.normalized ?? vatUeNumber.trim().toUpperCase();
+  const kraj =
+    euCountryName(countryCode) ??
+    (parsed ? euCountryName(addressCountryForKodUE(parsed.kodUE)) : undefined);
+  return kraj ? `VAT UE: ${numer} · ${kraj}` : `VAT UE: ${numer}`;
+}
+
+/**
+ * Identyfikator nabywcy z `buyer_data` faktury pierwotnej (lista do wyboru):
+ * NIP albo — dla firmy z UE (AUD-70) — numer VAT UE z krajem. Osoba prywatna
+ * bez identyfikatora w etykiecie, jak dotąd.
+ */
+function buyerIdLabel(buyer: unknown): string | null {
+  if (!buyer || typeof buyer !== 'object') return null;
+  const rec = buyer as Record<string, unknown>;
+  const nip = typeof rec.nip === 'string' ? rec.nip.trim() : '';
+  if (nip) return `NIP: ${nip}`;
+  const vatUe = typeof rec.vatUeNumber === 'string' ? rec.vatUeNumber.trim() : '';
+  if (!vatUe) return null;
+  const address = rec.address;
+  const countryCode =
+    address && typeof address === 'object'
+      ? (address as Record<string, unknown>).countryCode
+      : undefined;
+  return vatUeLabel(vatUe, typeof countryCode === 'string' ? countryCode : undefined);
+}
+
+/** Nabywca na liście faktur do korekty: nazwa i pod nią NIP albo VAT UE. */
+function ParentBuyerLabel({ buyer }: { buyer: unknown }) {
+  const idLabel = buyerIdLabel(buyer);
+  return (
+    <>
+      {buyerLabel(buyer)}
+      {idLabel ?
+        <span className="mt-0.5 block text-xs text-muted-foreground">{idLabel}</span>
+      : null}
+    </>
+  );
+}
+
+/** Identyfikator nabywcy korekty (z faktury pierwotnej) do nagłówka formularza. */
+function correctionBuyerIdLabel(buyer: CorrectionFormBuyer): string | null {
+  switch (buyer.type) {
+    case 'b2b':
+      return `NIP: ${buyer.nip}`;
+    case 'eu':
+      return vatUeLabel(buyer.vatUeNumber, buyer.address.countryCode);
+    case 'b2c':
+      return null;
+    default: {
+      const nieznany: never = buyer;
+      return nieznany;
+    }
+  }
+}
+
+/** Etykieta stawki np. II — ta sama co w formularzu zwykłej faktury. */
+const NP_II_OPTION_LABEL = 'np. II (usługa dla firmy z UE)';
+
+/** np. II w korekcie nabywcy, który nie jest firmą z innego kraju UE (nabywcy korekty nie zmienia się). */
+const NP_II_CORRECTION_BUYER_MESSAGE =
+  'Stawka np. II tylko dla usługi dla firmy z innego kraju UE z numerem VAT-UE — nabywca faktury pierwotnej go nie ma; wybierz inną stawkę';
+
+/**
+ * `null`, gdy pozycje korekty mogą mieć stawkę np. II (firma z innego kraju UE,
+ * bez Irlandii Płn. — `isNpIiBuyerVat`); inaczej komunikat przy takiej pozycji.
+ */
+function npIiBlockMessage(buyer: CorrectionFormBuyer): string | null {
+  if (buyer.type !== 'eu') return NP_II_CORRECTION_BUYER_MESSAGE;
+  if (isNpIiBuyerVat(buyer.vatUeNumber)) return null;
+  return parseVatUe(buyer.vatUeNumber)?.kodUE === 'XI'
+    ? NP_II_NOT_FOR_XI_MESSAGE
+    : NP_II_CORRECTION_BUYER_MESSAGE;
+}
+
+/** Stawki bez VAT, które korekta kwotowa przejmuje z faktury pierwotnej — opis dla użytkownika. */
+const ZERO_VAT_RATE_LABELS = {
+  np: 'np (nie podlega)',
+  np_ii: NP_II_OPTION_LABEL,
+  oo: 'oo (odwrotne obciążenie)',
+} satisfies Record<ZeroVatAmountChangeRate, string>;
 
 /** Etykiety MF `TypKorekty` (1–3) — uproszczony opis dla użytkownika. */
 const TYPOLOGY_KOREKTY_LABELS = {
@@ -129,6 +226,19 @@ function correctionDataFromForm(v: CorrectionFormParsed): CorrectionInvoiceData 
   };
 }
 
+/** Pusta korekta kwotowa; stawka bez VAT wspólna dla pozycji faktury pierwotnej (jeśli jest). */
+function emptyAmountChange(
+  zeroVatRate: ZeroVatAmountChangeRate | undefined,
+): NonNullable<CorrectionFormIn['amountChange']> {
+  return {
+    netDelta: 0,
+    vatDelta: 0,
+    grossDelta: 0,
+    description: '',
+    ...(zeroVatRate ? { vatRate: zeroVatRate } : {}),
+  };
+}
+
 function buildDefaultCorrectionFormValues(
   parent: CorrectionParentInvoiceRow,
   ctx: ParentContextSuccess,
@@ -157,12 +267,9 @@ function buildDefaultCorrectionFormValues(
     linesBefore: ctx.linesBefore,
     linesAfter: structuredClone(ctx.linesAfter),
 
-    amountChange: {
-      netDelta: 0,
-      vatDelta: 0,
-      grossDelta: 0,
-      description: '',
-    },
+    // Stawka np / np. II / oo nie wynika z kwot (VAT 0 to także „0 KR”) —
+    // korekta kwotowa bierze ją z pozycji faktury pierwotnej.
+    amountChange: emptyAmountChange(zeroVatRateFromParentLines(ctx.linesBefore)),
   };
 }
 
@@ -345,7 +452,9 @@ export function CorrectionInvoiceForm({
                       {inv.internal_number ?? inv.id.slice(0, 8)}
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">{inv.issue_date}</td>
-                    <td className="px-6 py-4">{buyerLabel(inv.buyer_data)}</td>
+                    <td className="px-6 py-4">
+                      <ParentBuyerLabel buyer={inv.buyer_data} />
+                    </td>
                     <td className="px-6 py-4 text-right font-medium tabular-nums">
                       {inv.gross_total != null ?
                         `${Number(inv.gross_total).toFixed(2)} PLN`
@@ -457,16 +566,21 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFill
   const correctionType = useWatch({ control: form.control, name: 'correctionType' });
   const typKorekty = useWatch({ control: form.control, name: 'typKorekty' }) ?? '2';
 
+  // Nabywca i pozycje „Było” przychodzą z faktury pierwotnej (formularz nabywcy
+  // nie zmienia) — z nich wynika dostępność np. II i stawka korekty kwotowej.
+  const buyer = defaults.buyer;
+  const buyerIdText = correctionBuyerIdLabel(buyer);
+  const npIiBlock = npIiBlockMessage(buyer);
+  const parentZeroVatRate = useMemo(
+    () => zeroVatRateFromParentLines(defaults.linesBefore ?? []),
+    [defaults.linesBefore],
+  );
+
   const handleCorrectionTypeChange = (value: CorrectionFormParsed['correctionType']) => {
     form.setValue('correctionType', value);
     const current = form.getValues('amountChange');
     if (value === 'amount_change' && !current) {
-      form.setValue('amountChange', {
-        netDelta: 0,
-        vatDelta: 0,
-        grossDelta: 0,
-        description: '',
-      });
+      form.setValue('amountChange', emptyAmountChange(parentZeroVatRate));
     }
   };
 
@@ -534,6 +648,16 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFill
               {' '}
               <span className="text-muted-foreground">· KSeF</span>{' '}
               <span className="font-mono text-sm">{parentRow.ksef_number}</span>
+            </>
+          : null}
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Nabywca:{' '}
+          <span className="font-medium text-foreground">{buyer.name}</span>
+          {buyerIdText ?
+            <>
+              {' · '}
+              <span className="tabular-nums">{buyerIdText}</span>
             </>
           : null}
         </p>
@@ -638,10 +762,10 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFill
       </section>
 
       {correctionType === 'before_after' ?
-        <BeforeAfterSection form={form} />
+        <BeforeAfterSection form={form} npIiBlock={npIiBlock} />
       : null}
       {correctionType === 'amount_change' ?
-        <AmountChangeSection form={form} />
+        <AmountChangeSection form={form} zeroVatRate={parentZeroVatRate} />
       : null}
       {correctionType === 'cancellation' ?
         <CancellationConfirmation parentInvoice={parentRow} form={form} />
@@ -753,8 +877,10 @@ function CorrectionLinesTable(props: {
   subtitle?: string;
   form: UseFormReturn<CorrectionFormIn, unknown, CorrectionFormParsed>;
   name: 'linesBefore' | 'linesAfter';
+  /** `null` — np. II dozwolona; inaczej komunikat dla pozycji z np. II. */
+  npIiBlock: string | null;
 }) {
-  const { title, subtitle, form, name } = props;
+  const { title, subtitle, form, name, npIiBlock } = props;
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name,
@@ -762,6 +888,19 @@ function CorrectionLinesTable(props: {
   });
   const watched = useWatch({ control: form.control, name });
   const c = linesTableClasses();
+  const lineErrors =
+    name === 'linesBefore' ? form.formState.errors.linesBefore : form.formState.errors.linesAfter;
+
+  /**
+   * Błąd stawki pozycji: ze schematu, a bez niego — np. II u nabywcy, który jej
+   * nie dopuszcza. Takiej stawki nie zmieniamy po cichu: zostaje z komunikatem.
+   */
+  const rateError = (index: number): string | undefined =>
+    lineErrors?.[index]?.vatRate?.message ??
+    (watched?.[index]?.vatRate === 'np_ii' && npIiBlock ? npIiBlock : undefined);
+  const rateErrors = fields
+    .map((_, index) => ({ index, message: rateError(index) }))
+    .filter((e): e is { index: number; message: string } => !!e.message);
 
   return (
     <div className="space-y-3">
@@ -826,7 +965,10 @@ function CorrectionLinesTable(props: {
                   </td>
                   <td className="py-3 pr-2">
                     <select
-                      className="h-9 w-full rounded-xl border border-white/55 bg-white/50 px-2 text-sm backdrop-blur-[12px] transition-colors focus:outline-none focus:ring-2 focus:ring-foreground/20 dark:border-white/14 dark:bg-white/[0.05]"
+                      className="h-9 w-full rounded-xl border border-white/55 bg-white/50 px-2 text-sm backdrop-blur-[12px] transition-colors focus:outline-none focus:ring-2 focus:ring-foreground/20 aria-invalid:border-red-500/60 dark:border-white/14 dark:bg-white/[0.05]"
+                      aria-label={`Stawka VAT pozycji ${index + 1} (${title})`}
+                      aria-invalid={rateError(index) ? true : undefined}
+                      title={rateError(index)}
                       {...form.register(`${name}.${index}.vatRate`)}
                     >
                       <option value="23">23%</option>
@@ -835,6 +977,9 @@ function CorrectionLinesTable(props: {
                       <option value="0">0%</option>
                       <option value="oo">oo</option>
                       <option value="np">np</option>
+                      {npIiBlock === null || wl?.vatRate === 'np_ii' ?
+                        <option value="np_ii">{NP_II_OPTION_LABEL}</option>
+                      : null}
                     </select>
                   </td>
                   <td className="py-3 pr-2 text-right tabular-nums">
@@ -862,6 +1007,19 @@ function CorrectionLinesTable(props: {
         </table>
       </div>
 
+      {rateErrors.length ?
+        <ul className="space-y-1">
+          {rateErrors.map(({ index, message }) => (
+            <li key={`${name}-rate-${index}`} className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400">
+              <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+              <span>
+                Pozycja {index + 1}: {message}
+              </span>
+            </li>
+          ))}
+        </ul>
+      : null}
+
       {(name === 'linesBefore' && form.formState.errors.linesBefore) ||
       (name === 'linesAfter' && form.formState.errors.linesAfter) ?
         <p className="text-xs text-red-600">
@@ -877,8 +1035,10 @@ function CorrectionLinesTable(props: {
 
 function BeforeAfterSection({
   form,
+  npIiBlock,
 }: {
   form: UseFormReturn<CorrectionFormIn, unknown, CorrectionFormParsed>;
+  npIiBlock: string | null;
 }) {
   const copyLines = () => {
     const lines = structuredClone(form.getValues('linesBefore') ?? []);
@@ -909,18 +1069,37 @@ function BeforeAfterSection({
         name="linesBefore"
         title="Było"
         subtitle="Stan pierwotny"
+        npIiBlock={npIiBlock}
       />
 
-      <CorrectionLinesTable form={form} name="linesAfter" title="Jest" subtitle="Stan po korekcie" />
+      <CorrectionLinesTable
+        form={form}
+        name="linesAfter"
+        title="Jest"
+        subtitle="Stan po korekcie"
+        npIiBlock={npIiBlock}
+      />
     </section>
   );
 }
 
 function AmountChangeSection({
   form,
+  zeroVatRate,
 }: {
   form: UseFormReturn<CorrectionFormIn, unknown, CorrectionFormParsed>;
+  /** Wspólna stawka bez VAT pozycji faktury pierwotnej — wtedy VAT 0 i brutto = netto. */
+  zeroVatRate: ZeroVatAmountChangeRate | undefined;
 }) {
+  const netDelta = useWatch({ control: form.control, name: 'amountChange.netDelta' });
+  const hintId = 'amount-change-rate-hint';
+
+  // Stawka bez VAT: zmiana VAT zawsze 0, a brutto idzie za netto (pola tylko do odczytu).
+  const syncZeroVat = () => {
+    form.setValue('amountChange.vatDelta', 0);
+    form.setValue('amountChange.grossDelta', form.getValues('amountChange.netDelta'));
+  };
+
   return (
     <section className="space-y-5 rounded-3xl border border-white/55 bg-white/45 p-7 shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] backdrop-blur-xl dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
       <div>
@@ -930,38 +1109,69 @@ function AmountChangeSection({
         <p className="mt-1 text-sm text-muted-foreground">
           Zwrot, rabat lub inna zmiana sumarycznego skutku (np. uproszczony wiersz korekty).
         </p>
+        {zeroVatRate ?
+          <p id={hintId} className="mt-3 rounded-xl border border-white/45 bg-white/40 p-3 text-sm dark:border-white/10 dark:bg-white/5">
+            Stawka z faktury pierwotnej: {ZERO_VAT_RATE_LABELS[zeroVatRate]} — bez VAT. Zmiana VAT
+            wynosi 0, a brutto jest równe netto.
+          </p>
+        : null}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
-          <Label className={labelClass}>Zmiana netto (±)</Label>
+          <Label htmlFor="amount-change-net" className={labelClass}>Zmiana netto (±)</Label>
           <Input
+            id="amount-change-net"
             type="number"
             step="0.01"
-            {...form.register('amountChange.netDelta', { valueAsNumber: true })}
+            {...form.register('amountChange.netDelta', {
+              valueAsNumber: true,
+              onChange: zeroVatRate ? syncZeroVat : undefined,
+            })}
           />
         </div>
         <div>
-          <Label className={labelClass}>Zmiana VAT (±)</Label>
-          <Input
-            type="number"
-            step="0.01"
-            {...form.register('amountChange.vatDelta', { valueAsNumber: true })}
-          />
+          <Label htmlFor="amount-change-vat" className={labelClass}>Zmiana VAT (±)</Label>
+          {zeroVatRate ?
+            <Input
+              id="amount-change-vat"
+              type="number"
+              value={0}
+              readOnly
+              disabled
+              aria-describedby={hintId}
+            />
+          : <Input
+              id="amount-change-vat"
+              type="number"
+              step="0.01"
+              {...form.register('amountChange.vatDelta', { valueAsNumber: true })}
+            />
+          }
         </div>
         <div>
-          <Label className={labelClass}>Zmiana brutto (±)</Label>
-          <Input
-            type="number"
-            step="0.01"
-            {...form.register('amountChange.grossDelta', { valueAsNumber: true })}
-          />
+          <Label htmlFor="amount-change-gross" className={labelClass}>Zmiana brutto (±)</Label>
+          {zeroVatRate ?
+            <Input
+              id="amount-change-gross"
+              type="number"
+              value={Number.isFinite(netDelta) ? netDelta : ''}
+              readOnly
+              aria-describedby={hintId}
+            />
+          : <Input
+              id="amount-change-gross"
+              type="number"
+              step="0.01"
+              {...form.register('amountChange.grossDelta', { valueAsNumber: true })}
+            />
+          }
         </div>
       </div>
 
       <div>
-        <Label className={labelClass}>Opis pozycji korekty</Label>
-        <Input {...form.register('amountChange.description')} />
+        <Label htmlFor="amount-change-description" className={labelClass}>Opis pozycji korekty</Label>
+        <Input id="amount-change-description" {...form.register('amountChange.description')} />
         {form.formState.errors.amountChange?.description ? (
           <p className="mt-1 text-xs text-red-600">
             {form.formState.errors.amountChange.description.message}
