@@ -11,6 +11,7 @@ import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
   ocrProcessPhotoRequested,
 } from '@/lib/jobs/events';
+import { isUuid } from '@/lib/supabase/active-org';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
@@ -199,16 +200,43 @@ export async function uploadExpensePhotoAction(formData: FormData) {
 
 /**
  * Sprawdź status OCR joba (do pollowania z UI).
+ *
+ * Trzy wyniki, bo UI musi odróżnić „zadania nie ma” od „nie wiem”:
+ *  - zadanie jest → `success: true` z wierszem;
+ *  - brak wiersza (albo RLS go nie pokazuje — dla użytkownika to to samo)
+ *    → `retryable: false`: dalsze pytanie nic nie zmieni, UI kończy czekanie;
+ *  - błąd odczytu (chwilowa awaria bazy, sieci, PostgREST) → `retryable: true`:
+ *    stan zadania jest nieznany, więc UI pyta dalej. Wcześniej błąd ginął
+ *    i wyglądał jak brak zadania — UI pokazywał porażkę, klient wgrywał
+ *    zdjęcie drugi raz i powstawał drugi wydatek.
+ * Treść błędu bazy zostaje w logu serwera (sam kod), nie trafia do klienta.
  */
 export async function getOcrJobStatusAction(ocrJobId: string) {
+  // Argument akcji przychodzi z przeglądarki. Nie-UUID to nie chwilowy błąd,
+  // tylko zadanie, którego nie ma — odpowiadamy bez zapytania do bazy.
+  if (!isUuid(ocrJobId)) {
+    return { success: false as const, retryable: false as const, error: 'Job nie istnieje' };
+  }
+
   const supabase = await createClient();
-  const { data: job } = await supabase
+  const { data: job, error } = await supabase
     .from('ocr_jobs')
     .select('id, status, error_message, expense_id, extracted_data')
     .eq('id', ocrJobId)
     .maybeSingle();
 
-  if (!job) return { success: false as const, error: 'Job nie istnieje' };
+  if (error) {
+    console.error('[getOcrJobStatusAction] odczyt ocr_jobs nieudany', { code: error.code });
+    return {
+      success: false as const,
+      retryable: true as const,
+      error: 'Nie mogę teraz sprawdzić stanu odczytu',
+    };
+  }
+
+  if (!job) {
+    return { success: false as const, retryable: false as const, error: 'Job nie istnieje' };
+  }
 
   return { success: true as const, job };
 }

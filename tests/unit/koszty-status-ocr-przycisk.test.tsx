@@ -1,0 +1,248 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * E16: przycisk „Dodaj wydatek” po wgraniu zdjęcia odpytuje co 2 s stan
+ * odczytu. Chwilowy błąd (odpowiedź `retryable: true` albo odrzucona
+ * obietnica akcji) nie może kończyć czekania porażką — klient wgrałby
+ * zdjęcie drugi raz i powstałby drugi wydatek. Pytania nie nakładają się:
+ * wolna odpowiedź nie daje podwójnego toastu ani przejścia.
+ */
+
+type StatusResult = Awaited<
+  ReturnType<typeof import('@/app/actions/expenses').getOcrJobStatusAction>
+>;
+
+const mocks = vi.hoisted(() => ({
+  getStatus: vi.fn(),
+  upload: vi.fn(),
+  router: { push: vi.fn(), refresh: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+// Stały obiekt routera, jak w Next — efekt odpytywania zależy od `router`.
+vi.mock('next/navigation', () => ({ useRouter: () => mocks.router }));
+vi.mock('sonner', () => ({ toast: mocks.toast }));
+vi.mock('@/app/actions/expenses', () => ({
+  getOcrJobStatusAction: mocks.getStatus,
+  uploadExpensePhotoAction: mocks.upload,
+}));
+
+import { CaptureButton } from '@/components/expenses/capture-button';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const JOB_ID = '11111111-1111-4111-8111-111111111111';
+const EXPENSE_ID = '22222222-2222-4222-8222-222222222222';
+
+const RETRYABLE: StatusResult = {
+  success: false,
+  retryable: true,
+  error: 'Nie mogę teraz sprawdzić stanu odczytu',
+};
+const MISSING: StatusResult = { success: false, retryable: false, error: 'Job nie istnieje' };
+
+function job(status: 'pending' | 'processing' | 'completed' | 'failed', expenseId: string | null = null) {
+  return {
+    success: true,
+    job: { id: JOB_ID, status, error_message: null, expense_id: expenseId, extracted_data: null },
+  } as StatusResult;
+}
+
+let root: Root | null = null;
+let host: HTMLDivElement | null = null;
+const unhandled: unknown[] = [];
+const onUnhandled = (reason: unknown) => {
+  unhandled.push(reason);
+};
+
+beforeEach(() => {
+  // `reset`, nie `clear`: kolejka `mockResolvedValueOnce` niezużyta w jednym
+  // teście (np. gdy test pada w połowie) nie może przeciec do następnego.
+  vi.resetAllMocks();
+  vi.useFakeTimers();
+  unhandled.length = 0;
+  process.on('unhandledRejection', onUnhandled);
+  mocks.upload.mockResolvedValue({ success: true, ocrJobId: JOB_ID });
+});
+
+afterEach(() => {
+  act(() => root?.unmount());
+  host?.remove();
+  root = null;
+  host = null;
+  vi.useRealTimers();
+  process.off('unhandledRejection', onUnhandled);
+});
+
+/** Renderuje przycisk i wgrywa zdjęcie — po tym trwa odpytywanie. */
+async function renderAndUpload() {
+  host = document.createElement('div');
+  document.body.appendChild(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(<CaptureButton />);
+  });
+
+  const input = host.querySelector<HTMLInputElement>('input[type="file"]')!;
+  const file = new File(['x'], 'paragon.jpg', { type: 'image/jpeg' });
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  await act(async () => {
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  // Akcja wgrania odpowiada asynchronicznie; potem efekt odpytywania
+  // pyta od razu (bez czekania na pierwszy takt).
+  await act(async () => {});
+  expect(mocks.upload).toHaveBeenCalledOnce();
+  return host;
+}
+
+async function advance(ms: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
+function buttonText() {
+  return host!.querySelector('button')!.textContent;
+}
+
+describe('CaptureButton — odpytywanie stanu odczytu (E16)', () => {
+  it('retryable → pending → completed: przejście do wydatku, bez toastu błędu', async () => {
+    mocks.getStatus
+      .mockResolvedValueOnce(RETRYABLE)
+      .mockResolvedValueOnce(job('pending'))
+      .mockResolvedValueOnce(job('completed', EXPENSE_ID));
+
+    await renderAndUpload();
+    expect(mocks.getStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.getStatus).toHaveBeenLastCalledWith(JOB_ID);
+    expect(buttonText()).toContain('Rozpoznaję');
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+
+    await advance(2000);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(2);
+    expect(buttonText()).toContain('Rozpoznaję');
+
+    await advance(2000);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(3);
+    expect(mocks.router.push).toHaveBeenCalledOnce();
+    expect(mocks.router.push).toHaveBeenCalledWith(`/expenses/${EXPENSE_ID}`);
+    expect(mocks.toast.success).toHaveBeenCalledOnce();
+
+    // Po sukcesie koniec: ani kolejnych pytań, ani toastu o przekroczeniu czasu.
+    await advance(70_000);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(3);
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+    expect(buttonText()).toContain('Dodaj wydatek');
+  });
+
+  it('retryable: false → jeden toast z błędem i koniec odpytywania', async () => {
+    mocks.getStatus.mockResolvedValue(MISSING);
+
+    await renderAndUpload();
+    expect(mocks.toast.error).toHaveBeenCalledOnce();
+    expect(mocks.toast.error).toHaveBeenCalledWith('Job nie istnieje');
+    expect(buttonText()).toContain('Dodaj wydatek');
+
+    await advance(70_000);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.toast.error).toHaveBeenCalledOnce();
+    expect(mocks.router.push).not.toHaveBeenCalled();
+  });
+
+  it('odrzucona obietnica akcji → kolejne pytanie po 2 s, bez unhandled rejection', async () => {
+    mocks.getStatus
+      .mockRejectedValueOnce(new Error('Failed to fetch'))
+      .mockResolvedValueOnce(job('completed', EXPENSE_ID));
+
+    await renderAndUpload();
+    expect(mocks.getStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+    expect(buttonText()).toContain('Rozpoznaję');
+
+    await advance(1999);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(1);
+    await advance(1);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(2);
+    expect(mocks.router.push).toHaveBeenCalledOnce();
+    expect(mocks.router.push).toHaveBeenCalledWith(`/expenses/${EXPENSE_ID}`);
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+
+    // Node zgłasza nieobsłużone odrzucenie po opróżnieniu kolejki mikrozadań —
+    // dajemy mu prawdziwy takt pętli zdarzeń.
+    vi.useRealTimers();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(unhandled).toEqual([]);
+  });
+
+  it('ciągle retryable → po 60 s „Przekroczono czas oczekiwania” i koniec pytań', async () => {
+    mocks.getStatus.mockResolvedValue(RETRYABLE);
+
+    await renderAndUpload();
+    await advance(58_000);
+    // Pytanie od razu + co 2 s do 58 s włącznie.
+    expect(mocks.getStatus).toHaveBeenCalledTimes(30);
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+    expect(buttonText()).toContain('Rozpoznaję');
+
+    await advance(2000);
+    expect(mocks.toast.error).toHaveBeenCalledOnce();
+    expect(mocks.toast.error).toHaveBeenCalledWith('Przekroczono czas oczekiwania');
+    expect(buttonText()).toContain('Dodaj wydatek');
+
+    const calls = mocks.getStatus.mock.calls.length;
+    await advance(20_000);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(calls);
+    expect(mocks.toast.error).toHaveBeenCalledOnce();
+    expect(mocks.router.push).not.toHaveBeenCalled();
+  });
+
+  it('wisząca odpowiedź → jedno pytanie naraz; po odpowiedzi jedno przejście i jeden toast', async () => {
+    let resolve!: (value: StatusResult) => void;
+    mocks.getStatus.mockReturnValue(
+      new Promise<StatusResult>((r) => {
+        resolve = r;
+      }),
+    );
+
+    await renderAndUpload();
+    await advance(10_000);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolve(job('completed', EXPENSE_ID));
+    });
+    expect(mocks.router.push).toHaveBeenCalledOnce();
+    expect(mocks.toast.success).toHaveBeenCalledOnce();
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+  });
+
+  it('po zwolnieniu blokady pytamy dalej (wolna odpowiedź pending, potem completed)', async () => {
+    let resolve!: (value: StatusResult) => void;
+    mocks.getStatus
+      .mockReturnValueOnce(
+        new Promise<StatusResult>((r) => {
+          resolve = r;
+        }),
+      )
+      .mockResolvedValueOnce(job('completed', EXPENSE_ID));
+
+    await renderAndUpload();
+    await advance(5000);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolve(job('processing'));
+    });
+    expect(mocks.router.push).not.toHaveBeenCalled();
+
+    // Następny takt (6 s) pyta znowu.
+    await advance(1000);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(2);
+    expect(mocks.router.push).toHaveBeenCalledOnce();
+    expect(mocks.router.push).toHaveBeenCalledWith(`/expenses/${EXPENSE_ID}`);
+  });
+});
