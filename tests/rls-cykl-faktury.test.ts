@@ -324,6 +324,8 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
     const upo = await admin.from('upo_receipts').insert({
       tenant_id: ORG, invoice_id: acceptedOk, ksef_number: '9480000014-20261001-000000000004-00',
       ksef_environment: 'test', status: 'downloaded',
+      // NOT NULL w schemacie (moment przyjęcia przez KSeF).
+      ksef_acceptance_timestamp: '2026-10-01T10:00:00Z',
     });
     expect(upo.error, `upo_receipts: ${upo.error?.message}`).toBeNull();
     const failedOwner = await invoice({ ksef_status: 'failed', last_error_code: 'INFRA', ksef_send_owner: 'wisząca' });
