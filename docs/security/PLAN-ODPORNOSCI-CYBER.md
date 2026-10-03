@@ -181,3 +181,15 @@ Plan nie wymaga zakupu wszystkich narzędzi ani równoczesnego wdrożenia kilku 
 **Igor zatwierdził rozpoczęcie stopniowej realizacji 2026-09-13.** Pierwszy pakiet dotyczy kodu CI i bezpiecznych testów. Nie oznacza to zgody na dowolne działania produkcyjne; nie wykonano migracji, skanów produkcji, rotacji ani zmian na serwerze. Zmiany SQL i ich wykonanie należą do odrębnego uzgodnienia z właścicielem repo; tak samo działania na serwerze i publikacja. Zachowujemy obecny stack, nazwy R2_*/UPSTASH_* oraz oba backendy jobów.
 
 Dalszą pracę zapisujemy w [dzienniku odporności cybernetycznej](DZIENNIK-ODPORNOSCI-CYBER.md). Rejestr ma dokumentować fakty i dowody, a nie samą liczbę zamkniętych zadań.
+
+## Aktualizacja 03.10.2026 — jeden pakiet CYB-DEP-BRACES
+
+Po przekazaniu XML w roboczym PR #190 realizowany jest wyłącznie pakiet
+zależności produkcyjnych od aktualnego main. Granica obejmuje rzeczywiste
+node_modules workera, nie tylko etykietę dependencies w manifeście.
+Wynik, dowody i kolejkę zapisujemy w [dzienniku](DZIENNIK-ODPORNOSCI-CYBER.md).
+Zmiana nie wymaga SQL, nie zamyka odbioru C-11/C-12 ani całych faz planu.
+00129 nadal jest plikiem w #190, bez wykonania przez Codexa. Aktualna
+architektura jobów w main jest opisana w AGENTS.md (pg-boss po usunięciu
+Inngest); ten pakiet nie zmienia silnika jobów. Po walidacji zatrzymujemy
+się przed kolejnym pakietem i bez scalania/wdrażania.
