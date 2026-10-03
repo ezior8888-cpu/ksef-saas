@@ -74,7 +74,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00130 | Bartosz/Igor (szkic) | `roz_amount_due` — gałąź `claude/roz-warunki`, nie w `main` | zarezerwowane |
 | 00131 | Claude (cykl życia faktury, PR 1) | `ksef_send_lifecycle`: RPC `enqueue/release/requeue/reset_ksef_send`, `ksef_has_contact_evidence`, `ksef_error_codes`, `ksef_lifecycle_violations()` (docs/architecture/cykl-zycia-faktury-ksef.md) | PR `claude/cykl-zycia-1-rpc`; **przed** wdrożeniem |
 | 00132 | Claude (cykl życia faktury, PR 4a) | `ksef_lifecycle_guard_tighten`: CREATE OR REPLACE trzech funkcji wyzwalaczy z 00119/00122 — klient nigdy nie zmienia `ksef_status` (koniec wyjątku `draft → queued`), historia dostawy = stan failed/rejected albo pola wysyłki (diagnostyka nie zamraża treści) | PR `claude/cykl-zycia-4a-wyzwalacze`; **PO** wdrożeniu PR 3 (#205 i #207 wdrożone 03.10) |
-| **00133** | — | następny wolny (00200 zajęte) | — |
+| 00133 | Claude (K4, druga korekta) | `single_open_correction`: wyzwalacz `guard_single_open_correction` — faktura pierwotna ma najwyżej jedną korektę poza `rejected` (blokada doradcza per rodzic) | PR `claude/k4-druga-korekta`; **przed** wdrożeniem |
+| **00134** | — | następny wolny (00200 zajęte) | — |
 
 ---
 
