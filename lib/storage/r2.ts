@@ -132,8 +132,8 @@ export interface UploadXmlResult {
 export interface XmlUploadOptions {
   /**
    * Jeśli true, PUT idzie z `IfNoneMatch: '*'` - blokuje nadpisanie istniejącego
-   * klucza. Używaj zawsze, chyba że świadomie chcesz replace (np. retry po
-   * awarii PRZED pierwszym udanym zapisem do xml_documents).
+   * klucza. Ponowienie wymaga identycznych bajtów w magazynie. Wyłączenie
+   * ochrony nie jest sposobem ponowienia wysyłki faktury.
    * Default: true.
    */
   immutable?: boolean;
@@ -191,11 +191,8 @@ export async function uploadInvoiceUpo(
  * Heurystyka: czy wyjątek to "obiekt już istnieje pod kluczem objętym IfNoneMatch=*".
  *
  * R2/S3 zwracają `PreconditionFailed` (HTTP 412) gdy `IfNoneMatch: '*'` trafia
- * na istniejący klucz. To NIE jest błąd przy retry idempotentnego flow KSeF —
- * pierwszy upload się udał, a job został wznowiony przed zapisem `xml_documents`.
- * W tym przypadku traktujemy zdarzenie jak no-op i wracamy te same metadane
- * (deterministyczny generator FA(3) gwarantuje, że SHA-256 z drugiego call'a
- * zgadza się z tym, co już leży w R2).
+ * na istniejący klucz. Dopiero odczyt i porównanie bajtów potwierdza, że
+ * poprzedni upload zapisał ten sam XML; sam status 412 nie jest dowodem.
  */
 function isPreconditionFailed(e: unknown): boolean {
   if (!(e instanceof S3ServiceException)) return false;
@@ -248,13 +245,16 @@ async function uploadXmlDocument(params: {
     };
   } catch (e) {
     if (immutable && isPreconditionFailed(e)) {
-      // Idempotency: ten klucz został już zapisany w poprzedniej próbie tego
-      // samego flow. Wracamy SHA-256 z bieżącego buforu — powinien zgadzać
-      // się z R2, bo generator FA(3) jest deterministyczny.
+      // Nie ufamy metadanym S3 ani deterministyczności generatora: pod tym
+      // kluczem może być XML z innej próby lub starszej wersji aplikacji.
+      const archivedBytes = await downloadFromR2(key, tenantId);
+      if (!archivedBytes.equals(bodyBuffer)) {
+        throw new Error('R2: immutable XML differs from archived bytes');
+      }
       return {
         storagePath: key,
-        sha256Hash,
-        sizeBytes: bodyBuffer.length,
+        sha256Hash: createHash('sha256').update(archivedBytes).digest('hex'),
+        sizeBytes: archivedBytes.length,
         etag: '',
       };
     }
@@ -405,15 +405,14 @@ export async function invoiceXmlExists(storagePath: string): Promise<boolean> {
 
 /**
  * Generyczny alias na `invoiceXmlExists` — HEAD pod dowolnym kluczem R2.
- * Używaj w idempotentnych flow Inngest (np. `exports-generate.ts`,
- * `submitInvoiceFullFlow`) gdzie nazwa "invoice xml" wprowadza w błąd.
+ * Używaj do sprawdzania obecności obiektu; HEAD nie potwierdza jego treści.
  */
 export const r2ObjectExists = invoiceXmlExists;
 
 /**
  * Sprawdza, czy XML faktury (klucz wyliczany z `tenantId/invoiceId/issueDate`)
- * jest już w R2. Używaj w `submitInvoiceFullFlow` przed PUT, by wyłączyć
- * `IfNoneMatch: '*'` przy retry — uniknąć pętli `PreconditionFailed`.
+ * jest już w R2. Wynik nie uprawnia do nadpisania pliku przy ponowieniu;
+ * zgodność bajtów sprawdza `uploadInvoiceXml` przy niezmiennym zapisie.
  */
 export async function invoiceXmlExistsForId(
   tenantId: string,

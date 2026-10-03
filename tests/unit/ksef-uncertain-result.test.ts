@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   fullFlow: vi.fn(),
   findOpen: vi.fn(),
   isOwn: vi.fn(),
+  ownSubmission: vi.fn(),
   mark: vi.fn(),
   record: vi.fn(),
   status: vi.fn(),
@@ -52,6 +53,7 @@ vi.mock('@/lib/ksef/submission-log', () => ({
   markKsefSubmission: mocks.mark,
   findOpenKsefSubmission: mocks.findOpen,
   isOwnKsefSession: mocks.isOwn,
+  findOwnKsefSubmission: mocks.ownSubmission,
   findSessionReferenceForKsefNumber: vi.fn(async () => null),
 }));
 vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn() }));
@@ -130,6 +132,7 @@ beforeEach(() => {
   mocks.credentials.mockResolvedValue(AUTH);
   mocks.findOpen.mockResolvedValue(null);
   mocks.isOwn.mockResolvedValue(false);
+  mocks.ownSubmission.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -302,10 +305,10 @@ describe('job wysyłki — odpowiedź 440 „duplikat”', () => {
 
   it('duplikat NASZEJ wcześniejszej wysyłki → przyjmujemy jej numer KSeF', async () => {
     mocks.fullFlow.mockRejectedValue(new KsefInvoiceRejectedError(440, DUPLIKAT));
-    mocks.isOwn.mockResolvedValue(true);
+    mocks.ownSubmission.mockResolvedValue({ ...REF, payloadHash: null });
 
     await expect(runSubmitInvoice(zdarzenie, ctx)).resolves.toMatchObject({ success: true, ksefNumber: ORYGINAL });
-    expect(mocks.isOwn).toHaveBeenCalledWith(zdarzenie.tenantId, zdarzenie.invoiceId, SESJA);
+    expect(mocks.ownSubmission).toHaveBeenCalledWith(zdarzenie.tenantId, zdarzenie.invoiceId, SESJA, ORYGINAL);
     expect(mocks.status).toHaveBeenCalledWith(
       zdarzenie.invoiceId,
       expect.objectContaining({ ksef_status: 'accepted', ksef_number: ORYGINAL }),
@@ -315,7 +318,7 @@ describe('job wysyłki — odpowiedź 440 „duplikat”', () => {
 
   it('duplikat spoza naszej historii → do uzgodnienia (znacznik), nie przypinamy cudzego numeru', async () => {
     mocks.fullFlow.mockRejectedValue(new KsefInvoiceRejectedError(440, DUPLIKAT));
-    mocks.isOwn.mockResolvedValue(false);
+    mocks.ownSubmission.mockResolvedValue(null);
 
     const blad = (await runSubmitInvoice(zdarzenie, ctx).catch((e: unknown) => e)) as Error;
 

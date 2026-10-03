@@ -50,6 +50,7 @@ vi.mock('@/lib/ksef/submission-log', () => ({
   markKsefSubmission: vi.fn(),
   findOpenKsefSubmission: mocks.findOpen,
   isOwnKsefSession: vi.fn(async () => false),
+  findOwnKsefSubmission: vi.fn(async () => null),
   findSessionReferenceForKsefNumber: vi.fn(async () => null),
 }));
 vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn() }));

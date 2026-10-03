@@ -24,7 +24,7 @@ import { checkInvoiceStatusByReference, KsefInvoiceRejectedError } from '@/lib/k
 import { ksefSessionCache } from '@/lib/ksef/session-cache';
 import {
   findOpenKsefSubmission,
-  isOwnKsefSession,
+  findOwnKsefSubmission,
   markKsefSubmission,
 } from '@/lib/ksef/submission-log';
 import { invoiceXmlKey } from '@/lib/storage/r2';
@@ -70,7 +70,7 @@ const NEUTRAL_HOLD_CODES = [KSEF_DUPLICATE_RECONCILE, KSEF_PAUSED, KOR_HOLD] as 
 interface SubmitOutcome {
   ksefNumber: string;
   xmlStoragePath: string;
-  /** Znane przy świeżej wysyłce; przy uzgodnieniu liczone z pliku w magazynie. */
+  /** Skrót faktycznie wysłanego XML: z uploadu albo z tej samej próby w historii. */
   xmlSha256Hash?: string;
   xmlSizeBytes?: number;
   acquisitionTimestamp?: string;
@@ -838,6 +838,7 @@ export async function runSubmitInvoice(
           ksefNumber: status.ksefNumber,
           acquisitionTimestamp: status.acquisitionTimestamp,
           xmlStoragePath: invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
+          xmlSha256Hash: previous.payloadHash ?? undefined,
           sessionReferenceNumber: previous.sessionReferenceNumber,
           invoiceReferenceNumber: previous.invoiceReferenceNumber,
           via: 'reference-reconcile',
@@ -962,15 +963,17 @@ export async function runSubmitInvoice(
           // 440: KSeF ma już fakturę o tym numerze. Jeśli to NASZA wcześniejsza
           // wysyłka tej faktury (numer sesji z odpowiedzi jest w historii),
           // przyjmujemy jej numer KSeF zamiast oznaczać fakturę jako odrzuconą.
-          const ownSession =
+          const ownSubmission =
             error.originalKsefNumber && error.originalSessionReferenceNumber
-              ? await isOwnKsefSession(tenantId, invoiceId, error.originalSessionReferenceNumber)
-              : false;
-          if (ownSession && error.originalKsefNumber && error.originalSessionReferenceNumber) {
+              ? await findOwnKsefSubmission(tenantId, invoiceId, error.originalSessionReferenceNumber, error.originalKsefNumber)
+              : null;
+          if (ownSubmission && error.originalKsefNumber) {
             return {
               ksefNumber: error.originalKsefNumber,
               xmlStoragePath: invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
-              sessionReferenceNumber: error.originalSessionReferenceNumber,
+              xmlSha256Hash: ownSubmission.payloadHash ?? undefined,
+              sessionReferenceNumber: ownSubmission.sessionReferenceNumber,
+              invoiceReferenceNumber: ownSubmission.invoiceReferenceNumber,
               via: 'own-duplicate',
             };
           }
@@ -1070,6 +1073,12 @@ export async function runSubmitInvoice(
       // księgowej). Fail-soft jak historia wysyłki — akceptacji nie cofamy,
       // brak wiersza widać w Sentry.
       try {
+        // Archiwum nie dowodzi samo, że to właśnie ten XML KSeF zaakceptował.
+        // Starsza historia bez skrótu zachowuje akceptację i UPO, ale nie może
+        // uzyskać dowodu XML przez policzenie skrótu dowolnego obecnego pliku.
+        if (!result.xmlSha256Hash || !/^[a-f0-9]{64}$/.test(result.xmlSha256Hash)) {
+          throw new Error('Brak wiarygodnego skrótu XML faktycznie wysłanego do KSeF');
+        }
         await recordXmlDocument({
           tenantId,
           invoiceId,
