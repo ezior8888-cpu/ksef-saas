@@ -115,7 +115,10 @@ nie oznacza. Uwagi, bez pilności:
 
 ## 4. Stan — aktualizuj po każdym etapie
 
-**Ostatnia aktualizacja:** 03.10.2026 wieczór — Claude (sesja z Igorem): punkt 00
+**Ostatnia aktualizacja:** 03.10.2026 wieczór (20:45) — Claude (sesja z Igorem).
+`main` poszedł do `d1aae4c` (#199–#201 Bartosza, w tym protokół naprawy).
+Moje PR-y są BEHIND, bez konfliktów; aktualizuje je Bartosz przy scalaniu
+(`gh pr update-branch`). Wcześniej: punkt 00
 sprawdzony (main dalej czerwony, wiadomość dla Bartosza), F-093 zrobione w #189,
 B4 i E15 w #192 (kod + prośba o migrację w opisie). Po południu Bartosz scalił
 B8 (`553d69e`, `shadcn` w devDependencies) i #186 — audyt w CI zielony; moje
@@ -205,6 +208,19 @@ aktualizacji z `main` (03.10 po południu: #187–#189 i #192 zaktualizowane).
 00. ✅ **CI czerwone przez audyt `braces` (03.10)** — rozwiązane przez
     Bartosza (B8, `553d69e`: `shadcn` w devDependencies). Po aktualizacji
     z `main` PR-y przechodzą audyt; lokalnie `pnpm audit --prod` czysty.
+0a. **Od 03.10 wieczór obowiązuje „Protokół naprawy błędu” (`AGENTS.md`,
+   #201):
+   - jedna naprawa = jedna gałąź `claude/<kod>-<temat>` = jeden PR;
+   - najpierw czerwony test na prawdziwej ścieżce (wyzwalacze, RPC i statusy
+     na bazie, `tests/rls-*`);
+   - opis PR według `.github/pull_request_template.md`;
+   - komendy dla Bartosza jako skrypty w `scripts/ops/`, nie bloki
+     „`source` + komenda”;
+   - po etapie raport i stop do „idź dalej”.
+   Moje PR-y #187–#198 powstały przed protokołem. Opis #198 przepisany na
+   szablon (na `main` czerwonych 70 ze 160 testów E16). #192 ma dla
+   Bartosza bloki z `source .agents/infra.env` — skrypt w `scripts/ops/`
+   tylko po decyzji Igora.
 0. **Najpierw podział pracy z sesjami Bartosza.** Logikę domenową prowadzi
    teraz audyt (`docs/audyt/`). Zanim weźmiesz sprawę z listy niżej, ustal
    z Igorem (a on z Bartoszem), czy jest twoja — inaczej dwie sesje zrobią
