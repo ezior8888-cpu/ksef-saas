@@ -1,5 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+const { calls } = vi.hoisted(() => ({ calls: [] as Array<[string, unknown[]]> }));
+
+vi.mock('@/lib/supabase/page-context', () => ({
+  getPageContext: async () => {
+    const chain: Record<string, unknown> = {};
+    for (const m of ['from', 'select', 'eq', 'order', 'gte', 'lte']) {
+      chain[m] = (...args: unknown[]) => { calls.push([m, args]); return chain; };
+    }
+    chain.limit = async (...args: unknown[]) => { calls.push(['limit', args]); return { data: [], error: null }; };
+    return { supabase: chain, tenantId: 'ten-1' };
+  },
+}));
+
+import ExpensesPage from '@/app/(dashboard)/expenses/page';
 import { monthLabel, monthRange, parseExpenseMonth, shiftMonth } from '@/lib/expenses/month';
 
 /**
@@ -40,19 +54,7 @@ describe('miesiąc listy wydatków', () => {
 
 describe('strona /expenses — zakres miesiąca w zapytaniu', () => {
   it('wybrany miesiąc: od pierwszego do ostatniego dnia', async () => {
-    const calls: Array<[string, unknown[]]> = [];
-    const { vi } = await import('vitest');
-    vi.doMock('@/lib/supabase/page-context', () => ({
-      getPageContext: async () => {
-        const chain: Record<string, unknown> = {};
-        for (const m of ['from', 'select', 'eq', 'order', 'gte', 'lte']) {
-          chain[m] = (...args: unknown[]) => { calls.push([m, args]); return chain; };
-        }
-        chain.limit = async (...args: unknown[]) => { calls.push(['limit', args]); return { data: [], error: null }; };
-        return { supabase: chain, tenantId: 'ten-1' };
-      },
-    }));
-    const { default: ExpensesPage } = await import('@/app/(dashboard)/expenses/page');
+    calls.length = 0;
     await ExpensesPage({ searchParams: Promise.resolve({ miesiac: '2026-02' }) });
     expect(calls.filter(([m]) => m === 'gte')).toEqual([['gte', ['issue_date', '2026-02-01']]]);
     expect(calls.filter(([m]) => m === 'lte')).toEqual([['lte', ['issue_date', '2026-02-28']]]);
