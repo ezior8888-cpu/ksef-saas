@@ -6,6 +6,7 @@ import type { Invoice } from '@/types/invoice';
 import type { AdvanceInvoiceData, CorrectionInvoiceData, FinalInvoiceData, SellerData } from '@/types/invoice-types';
 import { sellerPartyFromSellerData } from '@/lib/invoices/map-buyer-party';
 import { matchesTenantSeller, sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
+import { parseVatUe } from '@/lib/invoices/vat-ue';
 
 interface SubmitReferenceInput {
   supabase: SupabaseClient;
@@ -35,6 +36,35 @@ function frozenBankAccount(value: unknown): string | undefined {
   if (value == null || value === '') return undefined;
   if (typeof value !== 'string') invalidPayload();
   return value.replace(/\s+/g, '') || undefined;
+}
+
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+/**
+ * KOR XML takes Podmiot2 from the event envelope, so its buyer identity must be
+ * the accepted parent's `buyer_data`. FA(3) identifies the parent buyer by NIP
+ * when present (generator choice order), otherwise by VAT-UE (KodUE+NrVatUE).
+ * NIP buyer: same NIP digits. EU buyer: same canonical VAT-UE from another EU
+ * state. Anything else (B2C, missing or ambiguous identity) fails closed.
+ */
+function sameCorrectionBuyer(buyer: CorrectionInvoiceData['buyer'] | undefined, stored: unknown): boolean {
+  if (!buyer || typeof buyer !== 'object' || !stored || typeof stored !== 'object') return false;
+  const { nip: storedNip, vatUeNumber: storedVatUe } = stored as { nip?: unknown; vatUeNumber?: unknown };
+  const parentNip = typeof storedNip === 'string' ? digitsOnly(storedNip) : '';
+
+  if (buyer.type === 'b2b') {
+    return parentNip !== '' && typeof buyer.nip === 'string' && digitsOnly(buyer.nip) === parentNip;
+  }
+  if (buyer.type === 'eu') {
+    if (parentNip !== '' || typeof storedVatUe !== 'string' || typeof buyer.vatUeNumber !== 'string') return false;
+    const parentVatUe = parseVatUe(storedVatUe);
+    const correctionVatUe = parseVatUe(buyer.vatUeNumber);
+    return parentVatUe !== null && parentVatUe.kodUE !== 'PL' &&
+      correctionVatUe !== null && correctionVatUe.normalized === parentVatUe.normalized;
+  }
+  return false;
 }
 
 /** A special XML uses its separate envelope, so it must have the frozen seller. */
@@ -109,7 +139,7 @@ export async function assertSubmitReferences(
 
       const { data: parent, error: parentError } = await input.supabase
         .from('invoices')
-        .select('id, internal_number, issue_date, ksef_number, seller_nip')
+        .select('id, internal_number, issue_date, ksef_number, seller_nip, buyer_data')
         .eq('id', correctionData.parentInvoiceId)
         .eq('tenant_id', input.tenantId)
         .eq('direction', 'outgoing')
@@ -123,7 +153,8 @@ export async function assertSubmitReferences(
           parent.issue_date !== correctionData.parentInvoiceIssueDate ||
           parent.ksef_number !== correctionData.parentKsefNumber ||
           !parent.seller_nip ||
-          parent.seller_nip.replace(/\s+/g, '') !== correctionData.seller.nip.replace(/\s+/g, '')) {
+          parent.seller_nip.replace(/\s+/g, '') !== correctionData.seller.nip.replace(/\s+/g, '') ||
+          !sameCorrectionBuyer(correctionData.buyer, parent.buyer_data)) {
         invalidPayload();
       }
       return 'correction';
