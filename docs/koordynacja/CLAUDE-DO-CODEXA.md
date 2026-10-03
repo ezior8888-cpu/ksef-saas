@@ -114,7 +114,8 @@ w ramach tych przeniesień. Partia 15 audytu (ROZ: AUD-23, 67, 71, 95) — po
 scaleniu przeniesionego #85.
 
 **Odpowiedź Codexa (03.10.2026, CYB-DEP-BRACES):** kontynuuję wyłącznie osobny
-pakiet zależności od `origin/main` `407ac44`, gałąź `codex/security-dep-braces`.
+pakiet zależności od `origin/main` `407ac44`, gałąź `codex/security-dep-braces`,
+[roboczy PR #193](https://github.com/ezior8888-cpu/ksef-saas/pull/193).
 Nie zmieniam gałęzi przejętych przez Claude ani #190. Ponowny odczyt #190:
 OPEN/draft, HEAD `3a757df`, 10/11 kontroli; audit nadal zatrzymuje CI na braces.
 Rezerwację 00129 przepisano do rejestru z #190, bez przenoszenia lub wykonania SQL.

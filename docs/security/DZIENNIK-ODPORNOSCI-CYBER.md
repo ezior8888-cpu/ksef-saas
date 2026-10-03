@@ -1096,7 +1096,8 @@ ci-rls i rodo-usuniecie-konta-klucze. Wyłącznie normalizacja wejścia; asercje
 i listy wyjątków bez zmian. Nie przenoszono kodu XML ani niezależnej
 stabilizacji testu wydatków. Ponowny test tych plików i pakowania: 26/26 PASS.
 Niezależna recenzja: brak ustaleń blokujących po sprawdzeniu kodu, logów
-fixture i czterech zmian testów. Recenzent uruchomił nowy test pakowania
+fixture i czterech zmian testów. Końcowo recenzent potwierdził także wynik CI/
+builda i przejrzał 377 manifestów pakietów oraz 257 wpisów magazynu standalone. Recenzent uruchomił nowy test pakowania
 z bazowym Dockerfile/manifestem w odizolowanym katalogu: dwa nowe testy FAIL,
 dwa stare PASS. Z poprawką 4/4 PASS. Regresja wykrywa zarówno pełne zależności
 workera, jak i niepoprawną klasyfikację CLI/loadera.
@@ -1137,8 +1138,8 @@ do main i nie wdrażano. W tej sesji nie ma Dockera, więc build obrazu Linux
 pozostaje niezweryfikowany; lokalne testy produkcyjnego drzewa zależności
 nie zastępują odbioru kontenera. **Kod sprawdzony lokalnie i zrecenzowany; praca zatrzymana po tym pakiecie.**
 Commity kodu: `5abee6d` (pakowanie i regresje), `8fdd9cf` (cztery poprawki
-zgodności testów Windows). Publikacja: nowy roboczy PR od main z gałęzi
-`codex/security-dep-braces`; wynik GitHuba wymaga odczytu dla opublikowanego
+zgodności testów Windows). Publikacja: [roboczy PR #193](https://github.com/ezior8888-cpu/ksef-saas/pull/193)
+od main z gałęzi `codex/security-dep-braces`; wynik GitHuba wymaga odczytu dla opublikowanego
 head, lokalne PASS go nie zastępuje. PR #190 pozostaje osobnym szkicem i
 bez włączenia tej poprawki nadal niesie stary manifest; ten pakiet go nie
 aktualizuje ani nie scala.
