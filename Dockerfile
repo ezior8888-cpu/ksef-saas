@@ -33,6 +33,15 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile
 
+# ── prod_deps: tylko zależności runtime workera ──
+# Osobna instalacja: przeniesienie CLI do devDependencies nie wystarcza,
+# gdy worker kopiuje całe node_modules z etapu budowania.
+FROM base AS prod_deps
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --prod --frozen-lockfile
+
 # ── build: next build --webpack w trybie standalone ──
 FROM base AS build
 WORKDIR /app
@@ -97,13 +106,13 @@ RUN pnpm build
 # ── worker: proces jobów pg-boss (Etap 7 migracji Hetzner) ──
 # Drugi kontener z TEGO SAMEGO repo — w Coolify osobna aplikacja z
 # `Dockerfile target: worker` (kolumna dockerfile_target_build).
-# Celowo pełne node_modules + tsx zamiast standalone: worker importuje
-# szeroki przekrój lib/** (joby, e-maile React Email, XSD/WASM), a rozmiar
-# obrazu na własnym serwerze nie jest krytyczny.
+# Worker importuje szeroki przekrój lib/** (joby, React Email, XSD/WASM),
+# więc używa produkcyjnych node_modules + tsx zamiast standalone.
+# CLI shadcn, ESLint i pozostałe narzędzia builda nie trafiają do runtime.
 FROM base AS worker
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=prod_deps /app/node_modules ./node_modules
 COPY . .
 # AUD-127: proces bez roota. Obraz `node` ma użytkownika `node`; pliki aplikacji
 # zostają tylko do odczytu, a zapisy (tsx, eksporty) idą do /tmp.

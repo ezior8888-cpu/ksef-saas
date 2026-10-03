@@ -1041,3 +1041,112 @@ Rejestr Claude nazywa `00095` „następnym wolnym”, lecz lokalny stos Codexa 
 **Weryfikacja i granice:** pełne lokalne `pnpm run ci` na `40825e3`: typy, lint bez błędów (29 wcześniejszych ostrzeżeń), 66 testów Node i 4000/4000 Vitest; walidacja FA(3) XSD 18/18. `pnpm build` po wpisie dziennika zakończył się sukcesem, 82/82 strony. Niezależna recenzja nie znalazła obejścia kontroli sprzedawcy i wskazała błędne przekierowanie przy niepełnym profilu, poprawione w `16e5768`. SQL, KSeF live, Coolify i db-1 nie były sprawdzane. Stan `00094` i `00088` na db-1 jest niepotwierdzony: bez `00094` nowy kod blokuje zwykłe faktury i zaliczki, więc nie wolno go scalać ani wdrażać przed ustaleniem kolejności baza → web/worker. KOR/ROZ w PROD pozostają wstrzymane; ich adnotacje, pełna niezmienność pozostałych pól ZAL oraz uzgodnienie kwot korekt wymagają osobnych prac.
 
 **Dogrywka recenzencka:** niezależny przegląd wykazał, że samo porównanie sprzedawcy, MPP, P_16 i płatności nie wiązało wszystkich pól `advanceData` z zapisaną fakturą. W szczególności zmiana `advanceAmount` mogła zmienić XML bez zmiany `gross_total`, a `other`→`compensation` zmieniało `OpisPlatnosci`, choć ghost używał w obu przypadkach metody `other`. Commit `6610809` dopisuje całą kanoniczną kopertę ZAL do `fa3_data` i zdarzenia; przed KSeF worker porównuje ją z payloadem, a stare dokumenty bez migawki zatrzymuje do ręcznego uzgodnienia. Testy odtwarzają zmianę kwoty, nabywcy, metody i brak migawki. Commit `bf6a0d5` uzupełnia atrapę dawnego testu awarii KSeF o tę samą kopertę. Na końcowym kodzie `pnpm run ci` przeszło: typecheck, lint bez błędów, 66 testów Node i 4003/4003 Vitest; `pnpm build` zbudował 82/82 strony (po zmianie wyłącznie pliku testowego). To dowód lokalny, bez próby na db-1 lub serwerze.
+
+## 2026-10-03 — CYB-DEP-BRACES: granica zależności produkcyjnych
+
+**Zakres:** jeden pakiet security, od świeżego `origin/main`
+`407ac44dcc354920fac3c6fe014ee977ae734c13`, w nowym worktree
+`C:\Users\Igor\.codex\worktrees\security-dep-braces\ksef-saas`, gałąź
+`codex/security-dep-braces`. Zachowano zmiany głównego katalogu i stare
+worktree, w tym XML `security-main-pdf-hotfix`. Nie rozwijano gałęzi Claude.
+
+**Przekazanie XML sprawdzone ponownie:** #190 pozostaje OPEN/draft na
+`3a757df08182bcad90f632fd7690c8b8a515983a`; 10/11 kontroli SUCCESS.
+Czerwony job zatrzymuje się na `pnpm audit --prod --audit-level=high`,
+`GHSA-vfj7-8cjw-p6xm`. Wersja `main` nie zawiera kodu ani końcowego wpisu
+XML z #190; tamten wpis i dokument odbioru pozostają na jego gałęzi.
+Ten pakiet nie przenosi zmian XML ani pliku migracji 00129.
+
+**Dowód i decyzja:** bazowy audit odtworzył jeden high:
+`shadcn@4.3.0 → fast-glob@3.3.3 → micromatch@4.0.8 → braces@3.0.3`
+(także przez ts-morph). [Advisory GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+obejmuje `<=3.0.3`, bez wskazanej poprawionej wersji przy sprawdzeniu.
+Warunkiem ataku jest przekazanie głęboko zagnieżdżonego wzorca do parsera;
+nie odtworzono takiej ścieżki z żądania użytkownika aplikacji.
+Jedyny import shadcn to `app/globals.css`, statyczny `shadcn/tailwind.css`.
+Przegląd 281 modułów osiągalnych z workera, także importów dynamicznych,
+nie znalazł zależności runtime od shadcn ani pozostałych devDependencies.
+
+Samo przeniesienie CLI do devDependencies byłoby niewystarczające:
+Dockerfile kopiował pełne node_modules do workera, a drugi łańcuch do
+braces prowadzi przez ESLint Next. Dlatego shadcn jest teraz zależnością
+budowania, tsx jawną zależnością runtime (wymaga go CMD workera), a nowy
+etap `prod_deps` instaluje `--prod --frozen-lockfile`. Worker kopiuje tylko
+to drzewo. Build Next nadal dostaje pełne narzędzia i ten sam CSS; runner
+pozostaje ostatnim etapem. [Wzorzec pakowania pnpm](https://pnpm.io/docker).
+Lockfile zmienia wyłącznie klasyfikację dwóch pakietów, bez aktualizacji
+wersji. Skan, próg high, workflow i lista wyjątków pozostają bez zmian.
+
+**Dowody walidacji:** audit produkcyjny po poprawce: exit 0, brak znanych
+podatności; `pnpm.cmd why braces --prod` nie zwraca ścieżek. Izolowany fixture
+poza repo, bez nadrzędnego node_modules, zainstalował wyłącznie produkcyjne
+zależności z tego lockfile. Fizycznie brak shadcn, fast-glob, micromatch,
+braces i eslint. Produkcyjny tsx załadował 6 modułów handlerów i zarejestrował
+48 jobów; nie importowano worker.ts i nie wykonywano jobów. 72/72 testy
+Node/XML przeszły na tym drzewie. Blokada sieci odnotowała wyłącznie próby
+lokalnego IPC loadera tsx, bez połączeń aplikacji. Środowisko: Windows,
+Node 24.11.1, pnpm 10.33.0; Docker używa Linux/Node 22. Lokalne logi:
+`.tmp/cyb-dep-braces-runtime/` (poza gitem).
+
+Pierwsze pełne CI: typecheck PASS, lint 0 błędów / 35 wcześniejszych
+ostrzeżeń, Node/XML 72/72; Vitest 5300 PASS / 6 FAIL. To te same różnice
+Windows (separator ścieżki i CRLF), które udokumentowano w #190. Przeniesiono
+z jego commitu `2938a0f` dokładnie cztery pliki testów: cennik, adres kontaktowy,
+ci-rls i rodo-usuniecie-konta-klucze. Wyłącznie normalizacja wejścia; asercje
+i listy wyjątków bez zmian. Nie przenoszono kodu XML ani niezależnej
+stabilizacji testu wydatków. Ponowny test tych plików i pakowania: 26/26 PASS.
+Niezależna recenzja: brak ustaleń blokujących po sprawdzeniu kodu, logów
+fixture i czterech zmian testów. Końcowo recenzent potwierdził także wynik CI/
+builda i przejrzał 377 manifestów pakietów oraz 257 wpisów magazynu standalone. Recenzent uruchomił nowy test pakowania
+z bazowym Dockerfile/manifestem w odizolowanym katalogu: dwa nowe testy FAIL,
+dwa stare PASS. Z poprawką 4/4 PASS. Regresja wykrywa zarówno pełne zależności
+workera, jak i niepoprawną klasyfikację CLI/loadera.
+
+**Końcowe CI lokalne (03.10, 14:38 PL):** `pnpm.cmd run ci`, exit 0;
+typecheck PASS, lint 0 błędów / 35 wcześniejszych ostrzeżeń, Node/XML 72/72,
+Vitest 420/420 zestawów i 5306/5306 testów. Pełne CI i build uruchamiane
+kolejno, przez `pnpm.cmd`.
+
+**Build i pakowanie webu:** `NEXT_OUTPUT=standalone NEXT_TELEMETRY_DISABLED=1
+pnpm.cmd build`, exit 0, 82/82 strony. Artefakt `.next/standalone` ma serwer
+i 257 wpisów w magazynie pnpm; przegląd fizycznych katalogów i ścieżek plików
+nie znalazł shadcn, fast-glob, micromatch, braces ani eslint. Import CSS
+pozostał bez zmian i build go poprawnie rozwiązał. Logi poza gitem:
+`.tmp/ci-final.log`, `.tmp/build-standalone.log`, `.tmp/standalone-inventory.log`.
+
+**Kolejka niezależnych spraw (bez naprawy w tym pakiecie):**
+
+- **CYB-DEP-BRACES-DEV:** pełny audit nadal zwraca jeden high braces w narzędziach
+  deweloperskich (shadcn, ESLint). Usunięcie z runtime nie jest naprawą
+  upstream ani deklaracją czystości środowiska builda. Brak wyjątku; następna
+  ocena po dostępności naprawy upstream lub osobnej decyzji o narzędziach.
+- **CYB-DOCKER-CONTEXT-AGENTS:** `.dockerignore` nie wyklucza `.agents`,
+  a worker ma `COPY . .`. Lokalny kontekst może zawierać opisany w AGENTS.md
+  plik infrastruktury `.agents/infra.env`. Nie czytano jego zawartości i nie
+  potwierdzono wycieku z obrazu produkcyjnego. Osobno zbadać rzeczywisty
+  kontekst Coolify i ograniczyć pakowanie lokalnych plików operatora.
+- Nadal otwarte z #190: odbiór historycznych dowodów i MinIO, QR na KSeF TEST,
+  decyzja Igor/księgowa o odliczeniu VAT kosztów walutowych C-11 oraz
+  świeżość formularza po cudzej edycji. Deklaracja operatora o 00127/00128
+  i web/worker nie stanowi niezależnej weryfikacji db-1 przez Codexa.
+
+### Aktualny stan i następny krok — CYB-DEP-BRACES
+
+Pakiet nie wymaga migracji. 00129 jest zarezerwowanym plikiem w #190,
+**niewykonanym przez Codexa**. Nie uruchomiono SQL ani pg-boss, nie scalano
+do main i nie wdrażano. W tej sesji nie ma Dockera, więc build obrazu Linux
+pozostaje niezweryfikowany; lokalne testy produkcyjnego drzewa zależności
+nie zastępują odbioru kontenera. **Kod sprawdzony lokalnie i zrecenzowany; praca zatrzymana po tym pakiecie.**
+Commity kodu: `5abee6d` (pakowanie i regresje), `8fdd9cf` (cztery poprawki
+zgodności testów Windows). Publikacja: [roboczy PR #193](https://github.com/ezior8888-cpu/ksef-saas/pull/193)
+od main z gałęzi `codex/security-dep-braces`; wynik GitHuba wymaga odczytu dla opublikowanego
+head, lokalne PASS go nie zastępuje. PR #190 pozostaje osobnym szkicem i
+bez włączenia tej poprawki nadal niesie stary manifest; ten pakiet go nie
+aktualizuje ani nie scala.
+
+Następny krok w tym pakiecie przed ewentualnym wydaniem: właściciel ocenia
+szkic, a operator potwierdza build i zawartość obrazów Linux/Node 22 oraz
+wersje web/worker w uzgodnionym środowisku. Odbiór C-11/C-12 pozostaje
+oddzielny. Nie rozpoczęto żadnego kolejnego pakietu z kolejki. Kontrola
+końcowa potwierdziła zachowane zmiany `C:\dev\ksef-saas`, czysty stary
+worktree XML i niezmienioną listę niezapisanych plików `offline-qr-spec`.
