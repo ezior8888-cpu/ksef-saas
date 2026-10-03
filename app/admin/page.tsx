@@ -15,6 +15,7 @@ import {
   Users,
 } from 'lucide-react';
 
+import { countLifecycleViolations } from '@/lib/admin/ksef-lifecycle';
 import { getAdminOverviewMetrics } from '@/lib/admin/metrics';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +27,8 @@ function fmt(n: number): string {
 
 export default async function AdminDashboardPage() {
   const metrics = await getAdminOverviewMetrics();
+  // Strażnik cyklu życia (00131) — brak funkcji na starej bazie nie może wyłączyć panelu.
+  const lifecycleViolations = await countLifecycleViolations().catch(() => null);
 
   const ksef = metrics.ksefHealth;
   const ksefLevel = ksef?.level ?? 'unknown';
@@ -102,6 +105,20 @@ export default async function AdminDashboardPage() {
           title="System"
           description="KSeF health 24h, Inngest jobs, R2, DB stats."
           metric={ksefLevel}
+        />
+        <NavTile
+          href="/admin/ksef"
+          icon={Send}
+          title="KSeF — cykl życia"
+          description="Naruszenia I1–I9, faktury failed per kod, ponowna wysyłka, uzgodnienie, powrót do szkicu."
+          metric={
+            lifecycleViolations === null
+              ? 'strażnik niedostępny'
+              : lifecycleViolations > 0
+                ? `${fmt(lifecycleViolations)} naruszeń`
+                : 'Brak naruszeń'
+          }
+          tone={lifecycleViolations ? 'warning' : 'default'}
         />
         <NavTile
           href="/admin/support"
