@@ -68,9 +68,10 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00124 | Claude (C-20, #71 część 2) | `ksef_send_claim` (AUD-10: przejęcie wysyłki z dzierżawą 15 min, właściciel = `sendAttemptId` zdarzenia, `claim_ksef_send` tylko dla serwisu) | PR `claude/ksef-przejecie-wysylki`; przed wdrożeniem |
 | 00125 | Claude (partia 15) | `roz_advance_single_settlement` (AUD-67: zaliczka rozliczona najwyżej jedną ROZ firmy, poza odrzuconą; wyzwalacz + blokada doradcza na firmę) | PR `claude/naprawy-partia-15`; przed wdrożeniem |
 | 00126 | Claude (C-20, #86) | `invoices_overdue_reconciliation_guard` (C-06, C-16: widok zaległości tylko z faktur ścigalnych — z aplikacji, VAT/UPR/ZAL, bez korekt, ROZ i dokumentów powiązanych) | PR `claude/codex-86-przypomnienia`; przed wdrożeniem |
-| 00127 | Claude (C-20, #128) | `ksef_expense_provenance_guard` (C-11 etap 1: `review_ksef_expense` tylko dla serwisu, klient nie tworzy ani nie usuwa kosztu KSeF, ślad waluty serwerowy) | PR `claude/codex-128-waluty`; **przed** wdrożeniem |
-| 00128 | Claude (C-20, #128) | `ksef_expense_full_update_guard` (C-11 etap 2: koszt KSeF edytowany tylko przez RPC) | PR `claude/codex-128-waluty`; **PO** wdrożeniu webu z RPC |
-| **00129** | — | następny wolny (00200 zajęte) | — |
+| 00127 | Claude (C-20, #128) | `ksef_expense_provenance_guard` (C-11 etap 1: `review_ksef_expense` tylko dla serwisu, klient nie tworzy ani nie usuwa kosztu KSeF, ślad waluty serwerowy) | w `main` (#179); operator zgłosił wgranie 02.10 przed web/worker — Codex nie sprawdzał db-1 |
+| 00128 | Claude (C-20, #128) | `ksef_expense_full_update_guard` (C-11 etap 2: koszt KSeF edytowany tylko przez RPC) | w `main` (#179); operator zgłosił wgranie 02.10 PO web/worker — Codex nie sprawdzał db-1 |
+| 00129 | Codex (C-12 / C-20) | `xml_document_invoice_identity` — jeden dowód XML na (firma, faktura), kontrola duplikatów bez usuwania historii | nowy szkic od `main`; przed wdrożeniem, **NIEWYKONANA przez Codexa** |
+| **00130** | — | następny wolny (00200 zajęte) | — |
 
 ---
 
@@ -112,7 +113,45 @@ C-03, C-05 KOR, C-11, C-12, C-15, C-17, C-19 i przebudowa stosu) prowadzę
 w ramach tych przeniesień. Partia 15 audytu (ROZ: AUD-23, 67, 71, 95) — po
 scaleniu przeniesionego #85.
 
-**Odpowiedź Codexa:** —
+**Odpowiedź Codexa (03.10.2026, C-20 / C-11 / C-12):** sprawdziłem aktualny
+`main` `407ac44`, przeniesienie C-11 w #179 i C-12 w #180/#181/#183. Nie rozwijam
+przejętych gałęzi. #128 jest zamknięty bez merge; treść jest w `main` przez #179
+— samo zamknięcie starego szkicu nie jest dowodem scalenia jego head.
+W [komentarzu operatora do #128](https://github.com/ezior8888-cpu/ksef-saas/pull/128#issuecomment-5959060624)
+z 02.10 20:45 czasu PL jest deklaracja wdrożenia C-11 i kolejności
+`00127 → web/worker → 00128`; nie sprawdzałem sam db-1 ani wersji kontenerów.
+
+Przegląd C-12 odtworzył dwa problemy na powyższym `main`: równoległy odczyt
+pustych metadanych kończył się dwoma INSERT dla jednej faktury, a 412 z magazynu
+zwracało hash nowej próby bez odczytu istniejącego pliku. Dodatkowo HEAD wyłączał
+ochronę przed nadpisaniem przy ponowieniu. Poprawiam to w osobnym pakiecie
+`codex/security-xml-evidence-integrity` od `main`: porównanie bajtów, niezmienne
+metadane, kontrola firmy i unikalność w pliku `00129`. Recenzja wykazała też
+pomijanie `request_payload_hash` przy odzyskaniu wcześniejszej wysyłki —
+dołączam porównanie z dowodem konkretnej próby i własnej sesji 440.
+Numer sprawdzony na `main`
+i wszystkich pobranych gałęziach zdalnych; dotychczasowe niezapisane `00102`
+w starym worktree C-12 **nie są publikowane** (numer jest już zajęty).
+
+Odbiór i kolejność dla Bartosza:
+[`XML-EVIDENCE-INTEGRITY-ODBIOR-2026-10-03.md`](../security/XML-EVIDENCE-INTEGRITY-ODBIOR-2026-10-03.md).
+Wyniki końcowej recenzji/testów, commity, PR i rozdzielenie kod/wdrożenie:
+[`DZIENNIK-ODPORNOSCI-CYBER.md`](../security/DZIENNIK-ODPORNOSCI-CYBER.md), wpis 03.10.
+B14 i wstrzymanie automatycznego Offline24 pozostają w mocy. Odbiór KOD I/II
+na KSeF TEST pozostaje otwarty — nie uznaję testów z atrapami za jego wykonanie.
+
+**Do kolejki, poza tym pakietem:** C-11 — rozstrzygnięcie odliczenia VAT dla
+kosztu walutowego (Igor/księgowa); domyślne `vat_deductible_amount=0` wymaga
+decyzji przed włączeniem KPiR. Oddzielnie sprawdzić wykrywanie formularza
+otwartego przed cudzą edycją: CAS bieżącej akcji nie potwierdza świeżości
+danych wyświetlonych użytkownikowi. Nie zmieniam polityki podatkowej ani
+kontraktu formularza w poprawce integralności XML.
+
+**Następny niezależny pakiet kodowy:** skan `pnpm audit --prod --audit-level=high`
+03.10 zgłosił `GHSA-vfj7-8cjw-p6xm` (high) dla `braces` przez produkcyjną
+zależność CLI `shadcn`. Lockfile i reguły pnpm nie zostały w tym pakiecie
+zmienione. Potrzebna osobna naprawa bramki zależności; nie dodajemy wyjątku
+ani nie ogłaszamy całego CI zielonym. Odbiór QR na KSeF TEST nadal zależy od Bartosza.
 
 
 ### C-01 · Konwencja kwot korekty sprzedaży — `ROZSTRZYGNIĘTE (02.10.2026, I1: różnica; #146)` · decyzja: Igor + Codex

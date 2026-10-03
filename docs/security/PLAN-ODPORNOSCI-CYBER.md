@@ -181,3 +181,25 @@ Plan nie wymaga zakupu wszystkich narzędzi ani równoczesnego wdrożenia kilku 
 **Igor zatwierdził rozpoczęcie stopniowej realizacji 2026-09-13.** Pierwszy pakiet dotyczy kodu CI i bezpiecznych testów. Nie oznacza to zgody na dowolne działania produkcyjne; nie wykonano migracji, skanów produkcji, rotacji ani zmian na serwerze. Zmiany SQL i ich wykonanie należą do odrębnego uzgodnienia z właścicielem repo; tak samo działania na serwerze i publikacja. Zachowujemy obecny stack, nazwy R2_*/UPSTASH_* oraz oba backendy jobów.
 
 Dalszą pracę zapisujemy w [dzienniku odporności cybernetycznej](DZIENNIK-ODPORNOSCI-CYBER.md). Rejestr ma dokumentować fakty i dowody, a nie samą liczbę zamkniętych zadań.
+
+## Aktualizacja kolejności — 03.10.2026
+
+Claude przejął stare szkice w C-20 i przeniósł ich treść na aktualny `main`.
+Nie rozwijamy równolegle dawnych stosów. C-11 jest w kodzie przez #179;
+operator zgłosił wdrożenie i migracje 00127/00128, ale Codex nie sprawdził db-1.
+C-12 jest w kodzie przez #180/#181/#183; odbiór KOD I/II na KSeF TEST nadal
+nie jest potwierdzony. Aktualna architektura jobów jest opisana w `AGENTS.md`:
+Inngest usunięto w #184. Ten pakiet nie zmienia silnika jobów.
+
+Domykamy jeden pakiet **C-12 / C-20 — integralność dowodów XML** od `main`:
+niezmienne archiwum, powiązanie z hash konkretnej wysyłki, odporność metadanych
+na równoległy zapis i plik migracji 00129. Dokument odbioru:
+[XML-EVIDENCE-INTEGRITY-ODBIOR-2026-10-03.md](XML-EVIDENCE-INTEGRITY-ODBIOR-2026-10-03.md).
+Po testach i recenzji zatrzymujemy pracę przed kolejnym pakietem; nie uruchamiamy SQL.
+
+**Jeden następny pakiet kodowy:** rozwiązać nowo potwierdzoną blokadę skanu
+zależności produkcyjnych `GHSA-vfj7-8cjw-p6xm` (`braces`, przez CLI `shadcn`)
+bez obniżenia wymagań CI. Lockfile w poprawce XML pozostaje niezmieniony.
+Oddzielnie Bartosz prowadzi odbiór migracji/webu/workera, MinIO i QR na KSeF TEST,
+a Igor z księgową rozstrzygają odliczenie VAT kosztu walutowego C-11.
+To otwarte zależności, nie zakończone fazy całego planu.
