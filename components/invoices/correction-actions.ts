@@ -7,6 +7,8 @@ import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+// Plik 'use server' eksportuje tylko akcje — komunikat i typ K4 żyją w czystym module.
+import { openCorrectionMessage, type OpenCorrectionRef } from '@/lib/invoices/correction-parents';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
   correctionInvoiceSchema,
@@ -542,28 +544,6 @@ async function readAcceptedCorrectionParent(
     throw new Error(openCorrectionMessage(row.internal_number as string | null, open));
   }
   return row;
-}
-
-export interface OpenCorrectionRef {
-  internal_number: string | null;
-  ksef_status: string | null;
-}
-
-const CORRECTION_STATUS_LABEL: Record<string, string> = {
-  draft: 'szkic',
-  queued: 'w kolejce do KSeF',
-  sending: 'w trakcie wysyłki',
-  offline_queued: 'w kolejce offline',
-  failed: 'z błędem wysyłki',
-  accepted: 'przyjęta przez KSeF',
-};
-
-/** Komunikat K4 — wspólny dla akcji i (pośrednio) wyzwalacza 00133. */
-export function openCorrectionMessage(parentNumber: string | null, open: OpenCorrectionRef): string {
-  const status = CORRECTION_STATUS_LABEL[open.ksef_status ?? ''] ?? (open.ksef_status ?? 'w toku');
-  return `Faktura ${parentNumber ?? 'pierwotna'} ma już korektę ${open.internal_number ?? ''} (${status}). `
-    + 'Kolejną korektę tej samej faktury (łańcuch korekt) obsłużymy w następnym wydaniu — '
-    + 'do tego czasu popraw istniejącą korektę albo skontaktuj się z nami.';
 }
 
 /** Korekta rodzica poza odrzuconą przez KSeF — szkic i każdy stan w drodze liczą się tak samo. */

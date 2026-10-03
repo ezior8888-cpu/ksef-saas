@@ -23,11 +23,10 @@ vi.mock('@/lib/xml/invoice-calculator', async (importOriginal) => ({
 
 import {
   getCorrectionParentContextAction,
-  openCorrectionMessage,
   saveAndSendCorrectionAction,
   saveCorrectionDraftAction,
 } from '@/components/invoices/correction-actions';
-import { excludeParentsWithOpenCorrection } from '@/lib/invoices/correction-parents';
+import { excludeParentsWithOpenCorrection, openCorrectionMessage } from '@/lib/invoices/correction-parents';
 import type { CorrectionInvoiceSchemaIn } from '@/lib/validators/invoice-validators';
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
