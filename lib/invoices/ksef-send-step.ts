@@ -22,8 +22,10 @@ export type KsefSendMode =
   /**
    * Ponowna wysyłka: `failed → queued` (`requeue_ksef_send`); z `rejected`
    * tylko w trybie „tylko uzgodnij” (job zaczyna od uzgodnienia po referencji).
+   * `actorUserId: null` = automat (cron cyklu życia) — po tym cron rozpoznaje
+   * swoje ponowienia w `audit_logs` i liczy je do limitu dobowego.
    */
-  | { kind: 'requeue'; actorUserId: string; reconcileOnly?: boolean };
+  | { kind: 'requeue'; actorUserId: string | null; reconcileOnly?: boolean };
 
 export interface KsefSendIds {
   invoiceId: string;

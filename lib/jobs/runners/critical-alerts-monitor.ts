@@ -719,6 +719,42 @@ export async function checkKsefReconciliationAnomalies(): Promise<AlertCheckResu
   return { type: 'ksef_reconciliation', fired: true };
 }
 
+/**
+ * W3 / cykl życia faktury (PR 4b): naruszenia strażnika `ksef_lifecycle_violations()`
+ * (00131). I1 i klasa transient mają automat w `cron.ksef-lifecycle-reconcile`;
+ * reszta (I2 sending ponad dzierżawę, I3 accepted bez UPO/XML, I4 failed bez
+ * kodu, I5 stary wpis sent, I9 failed z numerem) to praca operatora w /admin/ksef.
+ */
+export async function checkKsefLifecycleViolations(): Promise<AlertCheckResult> {
+  const { data, error } = await createAdminClient().rpc('ksef_lifecycle_violations');
+  if (error) throw new Error(`ksef_lifecycle_violations: ${error.message}`);
+  const rows = (data ?? []) as Array<{ invariant: string }>;
+  if (rows.length === 0) {
+    return { type: 'ksef_lifecycle_violations', fired: false };
+  }
+  const counts = new Map<string, number>();
+  for (const row of rows) counts.set(row.invariant, (counts.get(row.invariant) ?? 0) + 1);
+  const invariants = [...counts.keys()].sort();
+  // Nowy inwariant ma alarmować od razu, nawet gdy inny poszedł w oknie dedup.
+  const alertKey = `ksef_lifecycle_violations:${invariants.join('+')}`;
+  if (!(await shouldSendAlert(alertKey))) {
+    return { type: 'ksef_lifecycle_violations', fired: false, reason: 'dedup' };
+  }
+  await alertCritical(
+    'Strażnik cyklu życia faktury: naruszenia',
+    'Faktury w stanie sprzecznym z cyklem życia. I1 (queued bez zlecenia) i klasę transient naprawia cron ponowień; pozostałe wymagają operatora: I2 sending ponad dzierżawę, I3 accepted bez UPO/XML, I4 failed bez kodu z katalogu, I5 wpis sent starszy niż 48 h, I9 failed z numerem KSeF.',
+    {
+      fields: invariants.map((inv) => ({ label: inv, value: String(counts.get(inv)) })),
+      link: {
+        label: 'Otwórz /admin/ksef',
+        url: (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/admin/ksef',
+      },
+    },
+  );
+  await markAlertDelivered(alertKey);
+  return { type: 'ksef_lifecycle_violations', fired: true };
+}
+
 /** An uncertain email send must be reconciled before any new delivery. */
 export async function checkStaleDunningNotifications(): Promise<AlertCheckResult> {
   const cutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
@@ -909,6 +945,9 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-ksef-reconciliation', () =>
         checkKsefReconciliationAnomalies().catch(captureAndReturn('ksef_reconciliation')),
+      ),
+      step.run('check-ksef-lifecycle', () =>
+        checkKsefLifecycleViolations().catch(captureAndReturn('ksef_lifecycle_violations')),
       ),
       step.run('check-stale-backup', () =>
         checkStaleBackup().catch(captureAndReturn('stale_backup')),

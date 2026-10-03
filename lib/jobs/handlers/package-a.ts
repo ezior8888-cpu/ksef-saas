@@ -17,6 +17,8 @@ import { runDailyDbSnapshot } from '../runners/daily-db-snapshot';
 import { runGdprProcessDeletions } from '../runners/gdpr-process-deletions';
 import { runJobsWatchdog } from '../runners/jobs-watchdog';
 import { runKsefHealthCheck } from '../runners/ksef-health-check';
+import { runKsefLifecycleReconcile } from '../runners/ksef-lifecycle-reconcile';
+import { runKsefLifecycleReport } from '../runners/ksef-lifecycle-report';
 import { runNightlyValidationRecheck } from '../runners/nightly-validation-recheck';
 import { runRetentionDelete } from '../runners/retention-delete';
 import { runVerifyBackup } from '../runners/verify-backup';
@@ -45,6 +47,10 @@ cronJob('cron.daily-db-snapshot', runDailyDbSnapshot);
 cronJob('cron.gdpr-process-deletions', runGdprProcessDeletions);
 cronJob('cron.jobs-watchdog', runJobsWatchdog);
 cronJob('cron.ksef-health-check', runKsefHealthCheck);
+// Cykl życia faktury (PR 4b): przebieg jest idempotentny (RPC + warunki w UPDATE),
+// więc ponowienie po błędzie nie dubluje zleceń; 1 retry wystarczy.
+cronJob('cron.ksef-lifecycle-reconcile', runKsefLifecycleReconcile, 1);
+cronJob('cron.ksef-lifecycle-report', runKsefLifecycleReport, 1);
 cronJob(
   'cron.nightly-validation-recheck',
   runNightlyValidationRecheck,

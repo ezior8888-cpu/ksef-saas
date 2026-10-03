@@ -108,6 +108,12 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.inbox-backfill', cron: '7,22,37,52 * * * *', tz: TZ },
   { queue: 'cron.jobs-watchdog', cron: '*/15 * * * *', tz: TZ },
   { queue: 'cron.ksef-health-check', cron: '* * * * *', tz: TZ },
+  // Cykl życia faktury (PR 4b): co 15 min — I1 (queued bez zlecenia),
+  // automatyczne ponowienia klasy transient (co godzinę, 24 h), wznowienie
+  // po hamulcu. 96 lekkich przebiegów na dobę.
+  { queue: 'cron.ksef-lifecycle-reconcile', cron: '3,18,33,48 * * * *', tz: TZ },
+  // Raport dzienny cyklu życia dla operatora — 07:30, po pulsie FLO.
+  { queue: 'cron.ksef-lifecycle-report', cron: '30 7 * * *', tz: TZ },
   // Heartbeat dla zewnętrznego strażnika (lib/jobs/heartbeat.ts): ping co minutę
   // tylko wtedy, gdy harmonogram, worker i baza działają. Brak pinga = alarm.
   { queue: 'cron.ops-heartbeat', cron: '* * * * *', tz: TZ },
@@ -131,6 +137,19 @@ export const CRON_JOBS: readonly CronJobDef[] = [
  * (bez DROP) — usunięcie to osobna decyzja.
  */
 export const RETIRED_CRON_QUEUES = ['cron.refresh-materialized-views'] as const;
+
+/**
+ * Martwe kolejki pg-boss — worker usuwa je przy starcie (`deleteQueue`).
+ * Zostały po dawnych nazwach zdarzeń i wycofanym cronie; nikt do nich nie
+ * wysyła (EVENT_QUEUE_MAP ich nie zna) i nikt z nich nie czyta. Potwierdzone
+ * na produkcji 03.10.2026 (rewizja, PR 4b). Usunięcie jest idempotentne.
+ */
+export const RETIRED_QUEUES = [
+  'inbox.invoice.received',
+  'invoice.submit.failed',
+  'invoice.submit.succeeded',
+  'cron.refresh-materialized-views',
+] as const;
 
 /** Kolejka testowa smoke (Etap 1/2 — weryfikacja fundamentu i połączenia). */
 export const SMOKE_QUEUE = 'jobs.smoke';
