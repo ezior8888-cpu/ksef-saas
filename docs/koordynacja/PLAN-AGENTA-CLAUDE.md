@@ -113,7 +113,8 @@ nie oznacza. Uwagi, bez pilności:
 ## 4. Stan — aktualizuj po każdym etapie
 
 **Ostatnia aktualizacja:** 03.10.2026 wieczór — Claude (sesja z Igorem): punkt 00
-sprawdzony (main dalej czerwony, wiadomość dla Bartosza), F-093 zrobione w #189.
+sprawdzony (main dalej czerwony, wiadomość dla Bartosza), F-093 zrobione w #189,
+B4 w #192 (kod + prośba o migrację w opisie).
 
 **Co się zmieniło 02.10 (ważne dla każdej nowej sesji):** sesje Claude
 Bartosza zrobiły audyt logiki domenowej (`docs/audyt/blok-1/`, PR #166),
@@ -150,8 +151,9 @@ wydanie #111 (`7a9f49a`) z #106–#110, #134 (przez #167 Bartosza) oraz:
 
 ### 4.2. Otwarte PR-y Claude
 
-#187 (ten plan), #188 (C-21, gałąź `claude/przeplywy-od-stycznia`) i #189
-(F-093, gałąź `claude/jolly-tesla-jg9c9z`) — czekają na scalenie przez Bartosza.
+#187 (ten plan), #188 (C-21, gałąź `claude/przeplywy-od-stycznia`), #189
+(F-093, gałąź `claude/jolly-tesla-jg9c9z`) i #192 (B4, gałąź
+`claude/ocr-unikalnosc-b4`) — czekają na scalenie przez Bartosza.
 Wszystkie (także #186) mają czerwone CI wyłącznie przez krok audytu — punkt 00.
 Otwarte cudze (03.10): Bartosz #186 (korekta dla firmy z UE, np. II — dotyka
 plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
@@ -163,7 +165,7 @@ plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 | B1 | Wdrożyć `main` (aplikacja + worker) | u Bartosza — rejestr migracji / wdrożeń w `CLAUDE-DO-CODEXA.md` |
 | B2 | Sprawdzić/ustawić `GUS_API_KEY` na produkcji | nieznany |
 | B3 | Klucze obce blokujące usunięcie konta (RODO) | ✅ migracja `00113_user_deletion_foreign_keys` |
-| B4 | Odczyt dubli wydatków z OCR (SQL w #109), potem `UNIQUE (tenant_id, ocr_job_id)` | otwarte — brak takiej migracji na `main` |
+| B4 | Odczyt dubli wydatków z OCR, potem `UNIQUE (tenant_id, ocr_job_id)` | 03.10: kod (obsługa 23505, „nie rozpoznano” po zapisie) w #192; w opisie #192 gotowy SQL sprawdzony na PG16 z kompletem migracji: liczenie dubli, odczyt dla księgowej, migracja `00NNN_expense_ocr_job_identity` (numer nadaje Bartosz — **00129 rezerwuje szkic Codexa #190**), wiersz do rejestru. Czeka na Bartosza |
 | B5 | C-16: płatności/ponaglenia ROZ | ✅ częściowo #178 (ponaglenia i zaległości tylko dla faktur ścigalnych, 00126) |
 | B6 | `SENTRY_DSN` w zmiennych workera (log startu „Sentry: alerty z jobów włączone”) | nieznany; od #120 alerty idą też na Telegram |
 | B7 | Mail o końcu trialu dla kont bez karty | decyzja — cennik i trial ujednolicone w #136 (`lib/billing/pricing.ts`) |
@@ -217,16 +219,26 @@ plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
    teraz audyt (`docs/audyt/`). Zanim weźmiesz sprawę z listy niżej, ustal
    z Igorem (a on z Bartoszem), czy jest twoja — inaczej dwie sesje zrobią
    to samo w tych samych plikach.
-1. **Następny w kolejce: B4** — prośba do Bartosza o odczyt dubli wydatków
-   z OCR i `UNIQUE (tenant_id, ocr_job_id)` (SQL w opisie #109; na `main`
-   nadal brak takiego indeksu — sprawdzone 03.10). Bez pliku migracji
-   (zasada 2): gotowy SQL + co sprawdzić przed, w opisie PR albo jako
-   wiadomość przez Igora; numer migracji z rejestru w `CLAUDE-DO-CODEXA.md`
-   nadaje Bartosz. F-093 zrobione w #189 (getter `ksefCode` przez
-   `ksefErrorCodes`, przeniesione do `client.ts`; `ksefFetch` parsuje też
-   `application/problem+json` — bez tego kod 21184 z F-050 w tym kształcie
-   nie byłby rozpoznany na produkcji, a test F-050 tego nie widział, bo
-   podmienia `ksefFetch`). C-21 zrobione w #188.
+1. **Następny krok: zapytać Igora** o C-17 / C-15 (pkt 2 — mogą je robić
+   sesje Bartosza). Bez kolizji, do wzięcia od razu: **E15 — job OCR po
+   B4** (uwagi z przeglądu #192, wszystkie w `lib/jobs/runners/process-ocr.ts`):
+   (a) ponowienie robi płatne OCR PRZED odczytem wydatku — przy ponowieniu
+   po zapisie można pominąć AI i dokończyć kroki danymi zapisanego wiersza;
+   (b) karta przeglądu przy ponowieniu i przegranym wyścigu powstaje
+   z bieżącego odczytu modelu, nie z zapisanego wydatku (kwota/kolumna na
+   karcie i `undo` mogą się różnić); (c) `onProcessOcrExhausted` przy
+   błędzie odczytu ogłasza „nieudane”, choć wydatek może istnieć;
+   (d) nieaktualne komentarze `retryLimit: 0` w `lib/jobs/worker.ts` i
+   `lib/jobs/retry.ts` (dziś `boss.ts`: 2) i martwy `findStuckOcrJobs`
+   (`expense-review.ts`), choć `share-target/route.ts` obiecuje kartę po
+   3 min. Osobno (decyzja produktowa): ponowne wgranie tego samego zdjęcia
+   daje nowe zadanie OCR i drugi wydatek — indeks B4 tego nie łapie.
+   Zrobione 03.10: F-093 w #189 (getter `ksefCode` przez `ksefErrorCodes`;
+   `ksefFetch` parsuje też `application/problem+json` — inaczej 21184 z
+   F-050 w tym kształcie nie byłby rozpoznany), B4 w #192, C-21 w #188.
+   **Numery migracji:** rejestr na `main` nie wystarcza — sprawdź też
+   gałęzie zdalne (`git ls-tree -r --name-only <gałąź> supabase/migrations`;
+   03.10 szkic #190 zajął 00129).
    **Numery spraw `C-xx`:** przed nadaniem sprawdź `grep "^### C-"
    docs/koordynacja/CLAUDE-DO-CODEXA.md` — sesje Bartosza też je nadają
    (03.10 kolizja „C-18”).
