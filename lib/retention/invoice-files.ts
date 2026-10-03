@@ -1,6 +1,7 @@
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 import { deleteFromGlacier } from '@/lib/storage/glacier';
+import { listInvoiceAttemptXmls } from '@/lib/storage/r2';
 import { getR2Client, getR2Config } from '@/lib/storage/r2-client';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import type { createAdminClient } from '@/lib/supabase/server';
@@ -22,6 +23,8 @@ export interface RetainedInvoice {
   xml_storage_path?: string | null;
   pdf_storage_path?: string | null;
   archive_storage_path?: string | null;
+  /** Data wystawienia — folder prób wysyłki `tenant/yyyy/mm/invoiceId/` (D5). */
+  issue_date?: string | null;
 }
 
 export interface InvoiceStorageKeys {
@@ -72,6 +75,12 @@ export async function collectInvoiceStorageKeys(
   }
   for (const row of await read('payment_reminders', 'pdf_attachment_path')) {
     add(r2, row.pdf_attachment_path);
+  }
+  // D5: pliki wszystkich prób wysyłki (także nieudanych) leżą w folderze
+  // faktury; wiersz wskazuje tylko plik przyjęty. Błąd listowania = wyjątek.
+  const issueDate = text(invoice.issue_date);
+  if (issueDate && /^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
+    for (const key of await listInvoiceAttemptXmls(invoice.tenant_id, invoice.id, issueDate)) add(r2, key);
   }
 
   const own = (key: string) => isTenantStoragePath(key, invoice.tenant_id);

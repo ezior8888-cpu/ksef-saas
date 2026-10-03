@@ -25,6 +25,7 @@ import { checkInvoiceStatusByReference, KsefInvoiceRejectedError } from '@/lib/k
 import { ksefSessionCache } from '@/lib/ksef/session-cache';
 import {
   findOpenKsefSubmission,
+  findOwnKsefSessionXmlPath,
   isOwnKsefSession,
   markKsefSubmission,
 } from '@/lib/ksef/submission-log';
@@ -969,7 +970,8 @@ export async function runSubmitInvoice(
         return {
           ksefNumber: status.ksefNumber,
           acquisitionTimestamp: status.acquisitionTimestamp,
-          xmlStoragePath: invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
+          // D5: plik tej właśnie próby; klucz historyczny tylko dla wpisów sprzed 00134.
+          xmlStoragePath: previous.xmlStoragePath ?? invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
           sessionReferenceNumber: previous.sessionReferenceNumber,
           invoiceReferenceNumber: previous.invoiceReferenceNumber,
           via: 'reference-reconcile',
@@ -1042,6 +1044,8 @@ export async function runSubmitInvoice(
           parsed.data.correctionData ?? null,
           parsed.data.advanceData ?? null,
           finalPayload,
+          // D5: klucz XML per próba — ponowienie tej samej próby trafia w ten sam plik.
+          parsed.data.sendAttemptId ?? null,
         );
         return { ...submitted, via: 'submit' };
       } catch (error) {
@@ -1101,9 +1105,17 @@ export async function runSubmitInvoice(
               ? await isOwnKsefSession(tenantId, invoiceId, error.originalSessionReferenceNumber)
               : false;
           if (ownSession && error.originalKsefNumber && error.originalSessionReferenceNumber) {
+            // D5: plik próby z tej sesji; wpisy sprzed 00134 nie mają ścieżki —
+            // wtedy klucz historyczny. Odczyt fail-soft: brak ścieżki nie cofa akceptacji.
+            let ownPath: string | null = null;
+            try {
+              ownPath = await findOwnKsefSessionXmlPath(tenantId, invoiceId, error.originalSessionReferenceNumber);
+            } catch {
+              ownPath = null;
+            }
             return {
               ksefNumber: error.originalKsefNumber,
-              xmlStoragePath: invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
+              xmlStoragePath: ownPath ?? invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
               sessionReferenceNumber: error.originalSessionReferenceNumber,
               via: 'own-duplicate',
             };

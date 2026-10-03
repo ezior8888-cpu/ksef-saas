@@ -2456,6 +2456,7 @@ export type Database = {
           status: string | null
           submission_type: string | null
           tenant_id: string
+          xml_storage_path: string | null
         }
         Insert: {
           attempted_at?: string | null
@@ -2472,6 +2473,7 @@ export type Database = {
           status?: string | null
           submission_type?: string | null
           tenant_id: string
+          xml_storage_path?: string | null
         }
         Update: {
           attempted_at?: string | null
@@ -2488,6 +2490,7 @@ export type Database = {
           status?: string | null
           submission_type?: string | null
           tenant_id?: string
+          xml_storage_path?: string | null
         }
         Relationships: [
           {
