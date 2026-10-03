@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 
+import { canManageKsefSend } from '@/lib/invoices/ksef-send-policy';
 import { createClient } from '@/lib/supabase/server';
 import {
   InvoiceDetailView,
@@ -22,8 +23,10 @@ export default async function InvoiceDetailPage({
     .select(
       `
       id,
+      tenant_id,
       internal_number,
       invoice_type,
+      invoice_kind,
       issue_date,
       sale_date,
       ksef_status,
@@ -63,6 +66,20 @@ export default async function InvoiceDetailPage({
     .eq('invoice_id', id)
     .maybeSingle();
 
+  // Rola w firmie TEJ faktury (nie z ciasteczka aktywnej firmy): decyduje
+  // o przyciskach po błędzie wysyłki (PR 3b, D4). Akcje sprawdzają rolę
+  // ponownie po swojej stronie — tu tylko to, co pokazać.
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: membership } = user
+    ? await supabase
+        .from('memberships')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('organization_id', invoice.tenant_id as string)
+        .eq('status', 'active')
+        .maybeSingle()
+    : { data: null };
+
   const lines = ((invoice.invoice_line_items ?? []) as InvoiceDetailLine[])
     .slice()
     .sort((a, b) => a.ordinal - b.ordinal);
@@ -71,6 +88,7 @@ export default async function InvoiceDetailPage({
     id: invoice.id as string,
     internal_number: (invoice.internal_number as string | null) ?? null,
     invoice_type: (invoice.invoice_type as string | null) ?? null,
+    invoice_kind: (invoice.invoice_kind as string | null) ?? null,
     issue_date: (invoice.issue_date as string | null) ?? null,
     sale_date: (invoice.sale_date as string | null) ?? null,
     ksef_status: invoice.ksef_status as string,
@@ -92,6 +110,7 @@ export default async function InvoiceDetailPage({
     upo_status:
       upo?.status ??
       null,
+    can_manage_send: canManageKsefSend(membership?.role ?? null),
   };
 
   return <InvoiceDetailView key={initial.id} initial={initial} />;
