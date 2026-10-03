@@ -14,7 +14,7 @@ Zasada tej rundy: **stos czterech małych PR zamiast jednego dużego**, każdy z
 | PR 3b — „Wyślij ponownie” / „Wróć do szkicu” (K3) | #206 → #207 | #206 trafił do gałęzi 3a, #207 przenosi do `main` |
 | PR 3c — panel operatora `/admin/ksef` | #208 | otwarty (stos na #207) |
 | PR 4 — strażnik: 00132, cron ponowień, alarm `queued`, martwe kolejki | — | do zrobienia |
-| D5 — klucz XML per próba | — | osobny PR, do zrobienia |
+| D5 — klucz XML per próba | PR `claude/d5-xml-per-proba` (00134) | otwarty |
 
 Numery migracji: rejestr w `CLAUDE-DO-CODEXA.md` podaje „następny wolny 00129”, ale `00129_xml_document_invoice_identity.sql` istnieje już na gałęzi `codex/security-xml-evidence-integrity` (commit 0701675). `00130_roz_amount_due.sql` leży na gałęzi `claude/roz-warunki` (commit 7494b19). Plan używa **00131** (PR 1, przed wdrożeniem) i **00132** (PR 4, PO wdrożeniu); rejestr zaktualizowany w PR 1 (następny wolny 00133).
 

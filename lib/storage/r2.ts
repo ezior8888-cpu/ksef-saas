@@ -57,6 +57,43 @@ export function invoiceXmlKey(
   return `${tenantId}/${year}/${month}/${invoiceId}.xml`;
 }
 
+/**
+ * Klucz XML JEDNEJ PRÓBY wysyłki (decyzja D5 cyklu życia faktury):
+ * `tenant/yyyy/mm/invoiceId/sendAttemptId.xml`. Każde kolejkowanie ma nowy
+ * `sendAttemptId`, więc ponowna wysyłka po resecie i poprawie nigdy nie
+ * nadpisuje pliku, który poszedł do KSeF; ponowienie TEJ SAMEJ próby trafia
+ * w ten sam klucz (idempotencja HEAD + IfNoneMatch bez zmian).
+ */
+export function invoiceXmlAttemptKey(
+  tenantId: string,
+  invoiceId: string,
+  issueDate: string,
+  attemptId: string,
+): string {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(attemptId)) {
+    throw new Error('Invalid sendAttemptId for storage key');
+  }
+  return `${invoiceXmlAttemptPrefix(tenantId, invoiceId, issueDate)}${attemptId}.xml`;
+}
+
+/** Folder prób wysyłki faktury — do wylistowania plików przy retencji. */
+export function invoiceXmlAttemptPrefix(tenantId: string, invoiceId: string, issueDate: string): string {
+  const { year, month } = parseYearMonth(issueDate);
+  return `${tenantId}/${year}/${month}/${invoiceId}/`;
+}
+
+/** Klucz XML: per próba, gdy znany `sendAttemptId`; inaczej klucz historyczny per faktura. */
+export function invoiceXmlKeyFor(params: {
+  tenantId: string;
+  invoiceId: string;
+  issueDate: string;
+  attemptId?: string | null;
+}): string {
+  return params.attemptId
+    ? invoiceXmlAttemptKey(params.tenantId, params.invoiceId, params.issueDate, params.attemptId)
+    : invoiceXmlKey(params.tenantId, params.invoiceId, params.issueDate);
+}
+
 function invoiceUpoKey(
   tenantId: string,
   invoiceId: string,
@@ -139,6 +176,8 @@ export interface XmlUploadOptions {
   immutable?: boolean;
   /** Dodatkowe metadane - trafiają jako x-amz-meta-* (max 2KB łącznie). */
   metadata?: Record<string, string>;
+  /** `sendAttemptId` zdarzenia wysyłki — klucz per próba (D5). Brak = klucz historyczny per faktura. */
+  attemptId?: string | null;
 }
 
 /**
@@ -155,7 +194,7 @@ export async function uploadInvoiceXml(
   options: XmlUploadOptions = {},
 ): Promise<UploadXmlResult> {
   return uploadXmlDocument({
-    key: invoiceXmlKey(tenantId, invoiceId, issueDate),
+    key: invoiceXmlKeyFor({ tenantId, invoiceId, issueDate, attemptId: options.attemptId }),
     body: xmlContent,
     tenantId,
     invoiceId,
@@ -419,8 +458,36 @@ export async function invoiceXmlExistsForId(
   tenantId: string,
   invoiceId: string,
   issueDate: string,
+  attemptId?: string | null,
 ): Promise<boolean> {
-  return invoiceXmlExists(invoiceXmlKey(tenantId, invoiceId, issueDate));
+  return invoiceXmlExists(invoiceXmlKeyFor({ tenantId, invoiceId, issueDate, attemptId }));
+}
+
+/**
+ * Wszystkie pliki prób wysyłki faktury (folder `invoiceXmlAttemptPrefix`) —
+ * retencja usuwa je razem z fakturą (D5: stare próby czyści retencja).
+ * Rzuca przy błędzie listowania: „nie wiem, jakie pliki” ≠ „nie ma plików”.
+ */
+export async function listInvoiceAttemptXmls(
+  tenantId: string,
+  invoiceId: string,
+  issueDate: string,
+): Promise<string[]> {
+  const { bucketName } = getR2Config();
+  const client = getR2Client();
+  const prefix = invoiceXmlAttemptPrefix(tenantId, invoiceId, issueDate);
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const result: ListObjectsV2CommandOutput = await client.send(
+      new ListObjectsV2Command({ Bucket: bucketName, Prefix: prefix, ContinuationToken: continuationToken }),
+    );
+    for (const obj of result?.Contents ?? []) {
+      if (obj.Key) keys.push(obj.Key);
+    }
+    continuationToken = result?.IsTruncated ? result.NextContinuationToken : undefined;
+  } while (continuationToken);
+  return keys;
 }
 
 /**

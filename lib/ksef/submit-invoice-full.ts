@@ -61,6 +61,12 @@ export async function submitInvoiceFullFlow(
   finalPayload?:
     | { finalData: FinalInvoiceData; advanceSettlementRows: AdvanceInvoiceSettlementRow[] }
     | null,
+  /**
+   * `sendAttemptId` zdarzenia wysyłki — klucz XML per próba (D5). Ponowienie
+   * tej samej próby trafia w ten sam klucz; nowe kolejkowanie dostaje nowy.
+   * Brak (stare zdarzenia) = klucz historyczny per faktura.
+   */
+  sendAttemptId?: string | null,
 ): Promise<FullSubmitResult> {
   // Last backstop for direct callers and a ROZ that reaches this flow from an
   // older queue event. Stop before XML generation, archive upload or KSeF POST.
@@ -115,10 +121,12 @@ export async function submitInvoiceFullFlow(
   //      c) Obsługa `PreconditionFailed` w `r2.uploadXmlDocument` — gdyby a) i b)
   //         zawiodły jednocześnie (np. klient_już-uploadował, my retryujemy
   //         z `immutable=true`), traktujemy to jako sukces idempotentny.
+  const attemptId = sendAttemptId ?? null;
   const alreadyUploaded = await invoiceXmlExistsForId(
     tenantId,
     invoiceId,
     invoice.issueDate,
+    attemptId,
   );
 
   const uploadResult = await uploadInvoiceXml(
@@ -126,7 +134,7 @@ export async function submitInvoiceFullFlow(
     invoiceId,
     invoice.issueDate,
     xml,
-    { immutable: !alreadyUploaded },
+    { immutable: !alreadyUploaded, attemptId },
   );
 
   // 4. Wysyłka do KSeF (rate-limited, z enkrypcją i auto-close sesji).
@@ -146,6 +154,9 @@ export async function submitInvoiceFullFlow(
           invoiceId,
           references,
           payloadHash: uploadResult.sha256Hash,
+          // D5: wpis `sent` zna plik, który poszedł do KSeF — uzgodnienie po
+          // referencji wskazuje ten plik, nie klucz wyliczony od nowa.
+          xmlStoragePath: uploadResult.storagePath,
         }),
     },
   );

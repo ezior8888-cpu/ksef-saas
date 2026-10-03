@@ -17,6 +17,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export interface KsefSubmissionReferences {
   sessionReferenceNumber: string;
   invoiceReferenceNumber: string;
+  /** Klucz XML tej próby w magazynie (D5, kolumna z 00134); `null` dla wpisów sprzed zmiany. */
+  xmlStoragePath?: string | null;
 }
 
 type SubmissionStatus = 'sent' | 'accepted' | 'rejected' | 'duplicate';
@@ -30,6 +32,8 @@ export async function recordKsefSubmissionSent(params: {
   invoiceId: string;
   references: KsefSubmissionReferences;
   payloadHash?: string | null;
+  /** Klucz XML, który poszedł do KSeF w tej próbie (D5). */
+  xmlStoragePath?: string | null;
 }): Promise<void> {
   const { error } = await createAdminClient()
     .from('ksef_submissions')
@@ -41,6 +45,7 @@ export async function recordKsefSubmissionSent(params: {
       session_reference_number: params.references.sessionReferenceNumber,
       invoice_reference_number: params.references.invoiceReferenceNumber,
       request_payload_hash: params.payloadHash ?? null,
+      xml_storage_path: params.xmlStoragePath ?? null,
     });
   if (error) throw new Error('Nie można zapisać numerów referencyjnych wysyłki KSeF');
 }
@@ -81,7 +86,7 @@ export async function findOpenKsefSubmission(
 ): Promise<KsefSubmissionReferences | null> {
   const { data, error } = await createAdminClient()
     .from('ksef_submissions')
-    .select('session_reference_number, invoice_reference_number')
+    .select('session_reference_number, invoice_reference_number, xml_storage_path')
     .eq('tenant_id', tenantId)
     .eq('invoice_id', invoiceId)
     .eq('status', 'sent')
@@ -94,7 +99,31 @@ export async function findOpenKsefSubmission(
   return {
     sessionReferenceNumber: data.session_reference_number,
     invoiceReferenceNumber: data.invoice_reference_number,
+    xmlStoragePath: data.xml_storage_path ?? null,
   };
+}
+
+/**
+ * Klucz XML próby, która poszła w danej sesji KSeF (własny duplikat 440, D5).
+ * `null`, gdy wpis jest sprzed 00134 albo sesja nie należy do tej faktury.
+ */
+export async function findOwnKsefSessionXmlPath(
+  tenantId: string,
+  invoiceId: string,
+  sessionReferenceNumber: string,
+): Promise<string | null> {
+  const { data, error } = await createAdminClient()
+    .from('ksef_submissions')
+    .select('xml_storage_path')
+    .eq('tenant_id', tenantId)
+    .eq('invoice_id', invoiceId)
+    .eq('session_reference_number', sessionReferenceNumber)
+    .not('xml_storage_path', 'is', null)
+    .order('attempted_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error('Nie można odczytać historii wysyłki KSeF');
+  return data?.xml_storage_path ?? null;
 }
 
 /** Czy ta sesja KSeF należy do wysyłek tej faktury (rozpoznanie własnego duplikatu 440). */
