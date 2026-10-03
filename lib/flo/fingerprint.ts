@@ -147,6 +147,17 @@ export function describeChange(
     return 'Ten dokument został już przejrzany ręcznie.';
   }
 
+  // Koszt włączony do KPiR albo z niej wyłączony (`expenses.is_deductible`).
+  // Bez tej gałęzi człowiek dostałby nazwę pola z bazy zamiast zdania.
+  if (
+    kind === 'expense.review' &&
+    (before.deductible ?? null) !== (after.deductible ?? null)
+  ) {
+    return after.deductible === 1
+      ? 'Ten koszt został w międzyczasie włączony do KPiR — sprawdź go w formularzu.'
+      : 'Ten koszt został w międzyczasie wyłączony z KPiR, więc niczego nie potwierdziłem.';
+  }
+
   const changed = diffFacts(before, after);
   if (changed.length === 0) {
     return 'Dane zmieniły się od czasu przygotowania tej propozycji.';
