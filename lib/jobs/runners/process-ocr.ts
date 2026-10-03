@@ -306,8 +306,9 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
 
       // Odczyt wyżej nie rozstrzyga wyścigu dwóch równoczesnych przebiegów
       // (wygaśnięcie / utrata heartbeatu w pg-boss). Rozstrzyga go indeks
-      // UNIQUE (tenant_id, ocr_job_id) — prośba B4 do Bartosza — a 23505
-      // wymaga ponownego odczytu dokładnie tego zadania w tej firmie.
+      // `uq_expenses_tenant_ocr_job` (B4, migracja do wgrania; bez niego 23505
+      // nie występuje), a 23505 wymaga ponownego odczytu dokładnie tego
+      // zadania w tej firmie.
       if (error?.code === '23505') {
         const concurrentId = await findOcrJobExpense(supabase, tenantId, ocrJobId);
         if (!concurrentId) {

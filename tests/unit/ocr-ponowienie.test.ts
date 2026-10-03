@@ -29,13 +29,16 @@ const state = vi.hoisted(() => ({
   insertError: null as { code: string; message: string } | null,
   rereadError: false,
   ocrFails: false,
+  aiBudgetExhausted: false,
   expenseReads: 0,
   inserts: 0,
 }));
 
 // AUD-107: budżet AI firmy — tu zawsze w limicie (osobne testy: ai-limit-*).
 vi.mock('@/lib/ai/tenant-ai-budget', () => ({
-  checkTenantAiBudget: async () => ({ allowed: true }),
+  checkTenantAiBudget: async () => state.aiBudgetExhausted
+    ? { allowed: false, message: 'Limit AI firmy na ten miesiąc wyczerpany' }
+    : { allowed: true },
   recordTenantAiUsage: async () => undefined,
 }));
 vi.mock('@/lib/categorization', () => ({
@@ -71,12 +74,13 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: (table: string) => {
       const filters: Array<[string, unknown]> = [];
       let insertRow: Row | null = null;
+      let limited = false;
       const q: Record<string, unknown> = {};
       const matching = () => state.expenses.filter((r) => filters.every(([k, v]) => r[k] === v));
       Object.assign(q, {
         select: () => q,
         eq: (k: string, v: unknown) => { filters.push([k, v]); return q; },
-        limit: () => q,
+        limit: () => { limited = true; return q; },
         update: (v: Row) => { if (table === 'ocr_jobs') state.jobUpdates.push(v); return q; },
         insert: (r: Row) => { insertRow = r; return q; },
         single: async () => {
@@ -111,7 +115,12 @@ vi.mock('@/lib/supabase/admin', () => ({
             if (state.rereadError && state.expenseReads > 1) {
               return { data: null, error: { message: 'database unavailable' } };
             }
-            const found = matching()[0] ?? null;
+            const rows = matching();
+            // Jak postgrest-js: maybeSingle przy kilku wierszach bez limit(1) to PGRST116.
+            if (rows.length > 1 && !limited) {
+              return { data: null, error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' } };
+            }
+            const found = rows[0] ?? null;
             if (state.raceRow) {
               state.expenses.push(state.raceRow);
               state.raceRow = null;
@@ -145,6 +154,7 @@ beforeEach(() => {
   state.insertError = null;
   state.rereadError = false;
   state.ocrFails = false;
+  state.aiBudgetExhausted = false;
   state.expenseReads = 0;
   state.inserts = 0;
   state.proposal.mockReset().mockResolvedValue({ status: 'created' });
@@ -274,6 +284,17 @@ describe('B4 — ponowienie po zapisie, a OCR tym razem zawodzi', () => {
     expect(state.expenses).toHaveLength(1);
   });
 
+  it('wydatek już jest, a budżet AI firmy wyczerpany (pierwszy przebieg zużył resztę) — „zakończone”', async () => {
+    state.proposal.mockRejectedValueOnce(new Error('chwilowy błąd bazy'));
+    await expect(runProcessOcr(event, ctx)).rejects.toThrow('chwilowy błąd bazy');
+    state.jobUpdates = [];
+    state.aiBudgetExhausted = true;
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: 'exp-1' });
+    expect(state.jobUpdates).not.toContainEqual(expect.objectContaining({ status: 'failed' }));
+    expect(state.failedCard).not.toHaveBeenCalled();
+  });
+
   it('wydatku nie ma — „nie rozpoznano” jak dotąd (karta i powiadomienie)', async () => {
     state.ocrFails = true;
 
@@ -301,5 +322,18 @@ describe('B4 — ponowienie po zapisie, a OCR tym razem zawodzi', () => {
     await expect(runProcessOcr(event, ctx)).rejects.toThrow('Nie można sprawdzić, czy wydatek już istnieje');
     expect(state.jobUpdates).not.toContainEqual(expect.objectContaining({ status: 'failed' }));
     expect(state.push).not.toHaveBeenCalled();
+  });
+});
+
+describe('dawne duble (sprzed indeksu B4) nie blokują joba', () => {
+  it('dwa zapisane wydatki z tego zadania — job kończy się jednym z nich, bez trzeciego zapisu', async () => {
+    state.expenses.push(
+      { id: 'exp-stary-1', tenant_id: TENANT, ocr_job_id: OCR_JOB },
+      { id: 'exp-stary-2', tenant_id: TENANT, ocr_job_id: OCR_JOB },
+    );
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: 'exp-stary-1' });
+    expect(state.inserts).toBe(0);
+    expect(state.expenses).toHaveLength(2);
   });
 });
