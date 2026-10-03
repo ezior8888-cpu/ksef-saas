@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { evaluateChaseSafety, SAFETY_WINDOW_MS } from '@/lib/flo/functions/payment-chase';
 import { isReminderInvoiceChaseable, reminderInvoiceFingerprint } from './delivery-schema';
 import { assertNoRelatedInvoice } from './reconciliation-guard';
+import { outstandingOf } from '@/lib/invoices/amount-due';
 import type { ReminderDelivery } from '@/types/reminder-delivery';
 
 // PostgREST can silently truncate result sets. Every bounded read below also
@@ -61,7 +62,12 @@ export async function assertReminderSendable(delivery: ReminderDelivery) {
     .order('payment_date', { ascending: false }).limit(1);
   if (recent.error || !recent.data) throw new Error('Nie można sprawdzić ostatnich płatności.');
   const day = recent.data?.[0]?.payment_date;
-  const outstanding = Number(row.gross_total) - Number(row.paid_amount);
+  // ROZ: zaległość liczona od `payment_data.amountDue`, nie od całego
+  // `gross_total` — ta sama reguła co w `prepare-delivery.ts` (C-16, 00130).
+  const outstanding = outstandingOf({
+    invoice_kind: row.invoice_kind, gross_total: row.gross_total,
+    payment_data: row.payment_data, paid_amount: row.paid_amount,
+  });
   if (!Number.isFinite(outstanding) || row.gross_total === null || row.paid_amount === null) {
     throw new ReminderConsentDenied('Nieprawidłowa kwota należności.');
   }

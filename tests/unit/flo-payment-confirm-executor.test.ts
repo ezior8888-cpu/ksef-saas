@@ -183,6 +183,27 @@ function seedInvoice(id = 'A') {
   });
 }
 
+/**
+ * ROZ (final) na zamówienie 12 300 z rozliczoną zaliczką 2 460 — do
+ * zapłaty na TEJ fakturze jest 9 840, zapisane w `payment_data.amountDue`
+ * (C-16, 00130). Bez wcześniejszej wpłaty.
+ */
+function seedFinalInvoice(id = 'A') {
+  store.invoices.set(id, {
+    id,
+    tenant_id: TENANT,
+    internal_number: `FV/${id}`,
+    buyer_data: { name: 'Nowak Sp. z o.o.' },
+    ksef_status: 'accepted',
+    invoice_kind: 'final',
+    gross_total: 12300,
+    paid_amount: 0,
+    payment_data: { amountDue: 9840 },
+    payment_due_date: '2026-09-10',
+    reminders_paused: false,
+  });
+}
+
 /** Karta dokładnie taka, jaką postawi producent w pulsie. */
 async function cardFor(invoiceId = 'A') {
   const state = await readState('payment.confirm', { invoiceId }, TENANT);
@@ -360,6 +381,40 @@ describe('K-01 — zapis wpłaty', () => {
     expect(store.calls.insert).toBe(0);
   });
 
+  it('ROZ: „Tak” zapisuje tylko 9 840 — resztę po zaliczce, nie 12 300 (C-16, 00130)', async () => {
+    seedFinalInvoice();
+    const card = await cardFor();
+
+    const result = await runHandler(card.payload ?? {});
+
+    expect(paymentsOfA().at(-1)).toMatchObject({ invoice_id: 'A', amount: 9840 });
+    // Przeliczone przez atrapę triggera `recalculate_invoice_paid_amount`.
+    expect(store.invoices.get('A')!.paid_amount).toBe(9840);
+    expect(result.summary).toBe('faktura FV/A oznaczona jako zapłacona');
+  });
+
+  it('ROZ: odmawia kwoty większej niż 9 840, choć gross_total faktury to 12 300', async () => {
+    seedFinalInvoice();
+    const card = await cardFor();
+
+    await expect(runHandler(card.payload ?? {}, { value: '10 000' })).rejects.toThrow(
+      /poza zakresem/,
+    );
+    expect(store.calls.insert).toBe(0);
+  });
+
+  it('ROZ: saldo do zapisu liczy ZAWSZE świeży odczyt payment_data z bazy, nie tylko fakty z karty', async () => {
+    seedFinalInvoice();
+    const card = await cardFor();
+    // Między przygotowaniem karty (9 840) a kliknięciem baza zmieniła
+    // amountDue na mniej (np. korekta zaliczki) — wykonawca ma to sprawdzić
+    // na nowo, a nie ufać kwocie z `payload.facts`.
+    store.invoices.get('A')!.payment_data = { amountDue: 5000 };
+
+    await expect(runHandler(card.payload ?? {})).rejects.toThrow(/poza zakresem/);
+    expect(store.calls.insert).toBe(0);
+  });
+
   it('BEZPIECZEŃSTWO: identyfikator faktury z przeglądarki nie wybiera faktury', async () => {
     // Zapis idzie klientem administracyjnym, z pominięciem RLS. Poprzednia
     // wersja brała fakturę z `selectedIds` — podmienione żądanie dopisywało
@@ -385,6 +440,18 @@ describe('K-01 — zapis wpłaty', () => {
     });
 
     expect(plan).toMatchObject({ amount: 300, kind: 'full' });
+  });
+
+  it('ROZ: należność z faktów to amountDue minus paidAmount, nie grossTotal minus paidAmount (C-16, 00130)', () => {
+    const plan = planPaymentConfirmation({
+      invoiceId: 'A',
+      number: 'FV/A',
+      facts: { grossTotal: 12300, amountDue: 9840, paidAmount: 9000, status: 'accepted' },
+      invoices: [{ invoiceId: 'A', outstanding: 12300 }],
+    });
+
+    // 9840 - 9000 = 840, nie 12300 - 9000 = 3300.
+    expect(plan).toMatchObject({ amount: 840, kind: 'full' });
   });
 });
 

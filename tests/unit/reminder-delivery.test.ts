@@ -168,15 +168,38 @@ describe('read-only reminder preview preparation', () => {
       filters: [['tenant_id', tenantId], ['advance_invoice_ids', [invoiceId]]] });
     expect(mocks.pdf).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
   });
-  it('does not demand 1000 PLN on a final ROZ whose settled advance leaves only 700 PLN due', async () => {
-    const finalGross = 1000; const settledAdvance = 300;
-    patchInvoice({ invoice_kind: 'final', invoice_type: 'ROZ', gross_total: finalGross, paid_amount: 0 });
-    // paid_amount does not include the advance, so the stored due calculation overstates the claim.
-    expect(finalGross - Number((rows.invoices as ReminderInvoiceSource).paid_amount)).toBe(1000);
-    expect(finalGross - settledAdvance).toBe(700);
-    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_3')).rejects.toThrow('faktura rozliczeniowa');
-    expect(queries.map((query) => query.table)).toEqual(['invoices']);
-    expect(mocks.pdf).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+  it('demands only 700 PLN on a final ROZ whose settled advance leaves that much due (C-16, 00130)', async () => {
+    // Do 00130 ROZ była wykluczona z ponagleń właśnie dlatego, że do zapłaty
+    // liczyło się od gross_total (1000), choć 300 jest już rozliczone
+    // zaliczką. Teraz amountDue z payment_data mówi, ile naprawdę brakuje.
+    const finalGross = 1000; const amountDue = 700;
+    patchInvoice({ invoice_kind: 'final', invoice_type: 'ROZ', gross_total: finalGross, paid_amount: 0,
+      payment_data: { amountDue, bankAccount: 'PL-fixture-bank' } });
+    const delivery = await buildReminderDelivery(tenantId, invoiceId, 'stage_3');
+    expect(delivery).toMatchObject({ invoiceId });
+    expect(mocks.pdf).toHaveBeenCalledWith(
+      expect.objectContaining({ grossAmount: 1000, paidAmount: 0, amountDue: 700 }),
+    );
+  });
+  it('falls back to gross_total when a final ROZ has no amountDue yet (fail-safe, never throws)', async () => {
+    patchInvoice({ invoice_kind: 'final', invoice_type: 'ROZ', gross_total: 1000, paid_amount: 0,
+      payment_data: { bankAccount: 'PL-fixture-bank' } });
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_3')).resolves.toMatchObject({ invoiceId });
+    expect(mocks.pdf).toHaveBeenCalledWith(expect.objectContaining({ amountDue: 1000 }));
+  });
+  it('falls back to gross_total when a final ROZ amountDue is malformed (fail-safe, never throws)', async () => {
+    patchInvoice({ invoice_kind: 'final', invoice_type: 'ROZ', gross_total: 1000, paid_amount: 0,
+      payment_data: { amountDue: 'zepsute' } });
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_3')).resolves.toMatchObject({ invoiceId });
+    expect(mocks.pdf).toHaveBeenCalledWith(expect.objectContaining({ amountDue: 1000 }));
+  });
+  it('a fully settled final ROZ (paid >= amountDue) does not need a reminder, even though paid < gross_total', async () => {
+    patchInvoice({ invoice_kind: 'final', invoice_type: 'ROZ', gross_total: 1000, paid_amount: 700,
+      payment_data: { amountDue: 700 } });
+    await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).rejects.toThrow(
+      'nie wymaga przypomnienia',
+    );
+    expect(mocks.pdf).not.toHaveBeenCalled();
   });
   it('does not block an advance settled by a final invoice in another tenant', async () => {
     patchInvoice({ invoice_kind: 'advance', invoice_type: 'ZAL' });
@@ -201,7 +224,7 @@ describe('read-only reminder preview preparation', () => {
     expect(mocks.pdf).not.toHaveBeenCalled();
   });
   it.each([
-    ['regular', 'VAT'], ['regular', 'UPR'], ['advance', 'ZAL'],
+    ['regular', 'VAT'], ['regular', 'UPR'], ['advance', 'ZAL'], ['final', 'ROZ'],
   ])('prepares a supported %s/%s invoice', async (kind, type) => {
     patchInvoice({ invoice_kind: kind, invoice_type: type });
     await expect(buildReminderDelivery(tenantId, invoiceId, 'stage_1')).resolves.toMatchObject({ invoiceId });

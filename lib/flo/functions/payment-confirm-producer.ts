@@ -53,6 +53,7 @@ import { runSweep, type FloSweepResult } from '@/lib/flo/sweep';
 import type { JobLogger } from '@/lib/jobs/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { CHASEABLE_INVOICE_KINDS } from '@/lib/reminders/scheduler';
+import { amountDueOf } from '@/lib/invoices/amount-due';
 
 const KIND = 'payment.confirm' as const;
 const TOPIC_PREFIX = `${KIND}:`;
@@ -122,7 +123,7 @@ async function readOverdueInvoices(
   const { data, error } = await createAdminClient()
     .from('invoices')
     .select(
-      'id, internal_number, buyer_data, gross_total, paid_amount, payment_due_date, reminders_paused',
+      'id, internal_number, buyer_data, gross_total, paid_amount, payment_due_date, reminders_paused, invoice_kind, payment_data',
     )
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
@@ -148,6 +149,11 @@ async function readOverdueInvoices(
             number: row.internal_number ?? 'bez numeru',
             contractorName: buyerName(row.buyer_data) ?? 'Kontrahent',
             grossTotal: Number(row.gross_total ?? 0),
+            // ROZ: do zapłaty jest reszta po zaliczkach (C-16, 00130).
+            amountDue: amountDueOf({
+              invoice_kind: row.invoice_kind, gross_total: row.gross_total,
+              payment_data: row.payment_data,
+            }),
             paidAmount: Number(row.paid_amount ?? 0),
             dueDate: row.payment_due_date,
             remindersPaused: row.reminders_paused,
