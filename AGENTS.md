@@ -172,7 +172,7 @@ realny czas, więc nie są to przestrogi teoretyczne:
 4. wdrożenie: worker id=2, potem aplikacja id=1 — po kolei, nie naraz
 5. migracje „PO wdrożeniu” (jeśli nagłówek migracji tak mówi)
 6. weryfikacja: kontenery healthy na nowym SHA, /api/health, strona,
-   logi bez błędów, w logu workera „24/24 cronów” (liczba z rejestru jobów)
+   logi bez błędów, w logu workera „25/25 cronów” (liczba z rejestru jobów)
 ```
 
 `pnpm test` to tylko 3 testy tsx — pełny zestaw (typy, lint, XML, Vitest)
