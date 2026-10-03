@@ -70,7 +70,7 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00126 | Claude (C-20, #86) | `invoices_overdue_reconciliation_guard` (C-06, C-16: widok zaległości tylko z faktur ścigalnych — z aplikacji, VAT/UPR/ZAL, bez korekt, ROZ i dokumentów powiązanych) | PR `claude/codex-86-przypomnienia`; przed wdrożeniem |
 | 00127 | Claude (C-20, #128) | `ksef_expense_provenance_guard` (C-11 etap 1: `review_ksef_expense` tylko dla serwisu, klient nie tworzy ani nie usuwa kosztu KSeF, ślad waluty serwerowy) | w `main` (#179); operator zgłosił wgranie 02.10 przed web/worker — Codex nie sprawdzał db-1 |
 | 00128 | Claude (C-20, #128) | `ksef_expense_full_update_guard` (C-11 etap 2: koszt KSeF edytowany tylko przez RPC) | w `main` (#179); operator zgłosił wgranie 02.10 PO web/worker — Codex nie sprawdzał db-1 |
-| 00129 | Codex (C-12 / C-20) | `xml_document_invoice_identity` — jeden dowód XML na (firma, faktura), kontrola duplikatów bez usuwania historii | nowy szkic od `main`; przed wdrożeniem, **NIEWYKONANA przez Codexa** |
+| 00129 | Codex (C-12 / C-20, #190) | `xml_document_invoice_identity` — jeden dowód XML na (firma, faktura), kontrola duplikatów bez usuwania historii | roboczy PR #190 od `main`; przed wdrożeniem, **NIEWYKONANA przez Codexa** |
 | **00130** | — | następny wolny (00200 zajęte) | — |
 
 ---
@@ -124,11 +124,11 @@ z 02.10 20:45 czasu PL jest deklaracja wdrożenia C-11 i kolejności
 Przegląd C-12 odtworzył dwa problemy na powyższym `main`: równoległy odczyt
 pustych metadanych kończył się dwoma INSERT dla jednej faktury, a 412 z magazynu
 zwracało hash nowej próby bez odczytu istniejącego pliku. Dodatkowo HEAD wyłączał
-ochronę przed nadpisaniem przy ponowieniu. Poprawiam to w osobnym pakiecie
+ochronę przed nadpisaniem przy ponowieniu. Poprawiono to w [roboczym PR #190](https://github.com/ezior8888-cpu/ksef-saas/pull/190), osobnym pakiecie
 `codex/security-xml-evidence-integrity` od `main`: porównanie bajtów, niezmienne
 metadane, kontrola firmy i unikalność w pliku `00129`. Recenzja wykazała też
 pomijanie `request_payload_hash` przy odzyskaniu wcześniejszej wysyłki —
-dołączam porównanie z dowodem konkretnej próby i własnej sesji 440.
+dołączono porównanie z dowodem konkretnej próby i własnej sesji 440.
 Numer sprawdzony na `main`
 i wszystkich pobranych gałęziach zdalnych; dotychczasowe niezapisane `00102`
 w starym worktree C-12 **nie są publikowane** (numer jest już zajęty).
@@ -152,6 +152,15 @@ kontraktu formularza w poprawce integralności XML.
 zależność CLI `shadcn`. Lockfile i reguły pnpm nie zostały w tym pakiecie
 zmienione. Potrzebna osobna naprawa bramki zależności; nie dodajemy wyjątku
 ani nie ogłaszamy całego CI zielonym. Odbiór QR na KSeF TEST nadal zależy od Bartosza.
+
+**Końcowa walidacja kodu #190 (03.10):** lokalne typy/lint (0 błędów), 72
+Node/XML i 5373 Vitest — PASS; końcowy build 82/82 — PASS. Dla pierwszego
+opublikowanego head `33ec92f` GitHub zakończył 10/11 kontroli sukcesem,
+w tym CodeQL, sekrety, build i lokalny RLS. Jeden czerwony job zatrzymał się
+na potwierdzonym powyższym audycie `braces`, przed typami/testami.
+Późniejszy zapis numeru PR i wyników zmienia wyłącznie dokumentację;
+wynik jego nowego head trzeba odczytać w #190. Kod pozostaje szkicem,
+00129 niewykonana przez Codexa, brak merge/deploy. Następnego pakietu nie rozpoczęto.
 
 
 ### C-01 · Konwencja kwot korekty sprzedaży — `ROZSTRZYGNIĘTE (02.10.2026, I1: różnica; #146)` · decyzja: Igor + Codex

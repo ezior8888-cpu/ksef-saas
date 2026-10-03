@@ -1166,11 +1166,28 @@ przegląd starych dowodów, rzeczywisty odbiór QR oraz decyzje C-11.
 Gałąź `codex/security-xml-evidence-integrity`, baza `407ac44`.
 Commity kodu: `0701675cec862d419d7c4b487ddb9ce9a45caa84` (XML) oraz
 `2938a0fdfa204eca982578e0f0678d380ab74b6f` (przenośność i stabilność testów).
-Stan przed publikacją: nowy PR jeszcze nieutworzony; wyniki końcowe lokalne
-potwierdzono powyżej, skan zależności blokuje gotowość do merge. Dokumenty
-pakietu są zapisywane w osobnym commicie. Numer PR i jego kontrole zostaną
-dopisane po publikacji. Własny worktree po zapisie tych dokumentów ma pozostać
-czysty; stare niezapisane katalogi opisane poniżej są celowo zachowane.
+**Publikacja:** [roboczy PR #190](https://github.com/ezior8888-cpu/ksef-saas/pull/190)
+z tej gałęzi względem `main`. Pierwszy opublikowany head:
+`33ec92f34ec6633c300283631799e2e5cafa9289` (dziennik i odbiór, ponad dwoma
+commitami kodu/testów); dalsza aktualizacja przekazania dotyczy dokumentacji.
+Wyniki końcowe lokalne są potwierdzone powyżej. Kontrole GitHuba uruchomiono;
+**wynik dla head `33ec92f` (03.10, 12:48 PL): 10/11 kontroli SUCCESS**.
+Przeszły oba CodeQL i zbiorczy CodeQL, Secret scan, Next build, izolacja RLS,
+inventory, dependency-review, Agent guard i Test-first (agent). Ostatnie dwa
+kończą się sukcesem dla gałęzi `codex/*`, ale zgodnie z ich detekcją nie
+potwierdzają uruchomienia trybu agenta `agent/*` ani testów przeciw bazie.
+Job „Typecheck + Lint + Unit tests” zakończył się **FAILURE w kroku Audit
+production dependencies**: log potwierdza dokładnie high
+`GHSA-vfj7-8cjw-p6xm`, `shadcn → fast-glob → micromatch → braces`.
+Dalsze typy/lint/testy tego joba były pominięte; ich potwierdzenie lokalne
+pozostaje powyżej. **Nie uznajemy CI/Security za w pełni zielone.**
+
+Aktualizacja przekazania po tym wyniku dotyczy wyłącznie dokumentów, bez
+zmiany kodu, SQL, zależności i testów. Uruchomi kolejny standardowy przebieg
+CI; wynik wskazanego head nie jest automatycznie wynikiem nowego head.
+Dokładny końcowy head i bieżące kontrole widoczne w PR #190.
+Nie scalano PR. Po zapisie i publikacji dokumentów własny worktree jest
+czysty; stare niezapisane katalogi poniżej są celowo zachowane.
 
 **Zachowane stare katalogi, bez dalszego rozwijania:**
 
