@@ -89,9 +89,13 @@ describe('kandydaci do ponaglenia (cron)', () => {
       faktura('f-zaplacona', { payment_status: 'paid' }),
       faktura('g-przed-terminem', { payment_due_date: '2999-01-01' }),
       faktura('h-zakup', { direction: 'incoming' }),
+      // C-16/00130: ROZ jest kandydatem jak każda inna ścigalna faktura —
+      // CHASEABLE_INVOICE_KINDS już ją wpuszcza, bo dojrzałość amountDue
+      // jest po stronie wyzwalacza i decideNextReminder, nie tego filtra.
+      faktura('i-roz', { invoice_kind: 'final', invoice_type: 'ROZ' }),
     ];
     const ids = (await findInvoicesRequiringReminders()).map((i) => i.id);
-    expect(ids).toEqual(['a-zwykla', 'd-zaliczka']);
+    expect(ids).toEqual(['a-zwykla', 'd-zaliczka', 'i-roz']);
   });
 
   it('ponad 500 zaległych na platformie — każda trafia do przebiegu', async () => {
@@ -117,5 +121,18 @@ describe('K-01 „czy klient zapłacił” — ta sama definicja zaległości', 
     ];
     const found = await productionPaymentConfirmSources().readOverdueInvoices(TENANT, now);
     expect(found.map((i) => i.id)).toEqual(['a-zwykla']);
+  });
+
+  it('ROZ: amountDue z payment_data.amountDue, nie z gross_total (C-16, 00130)', async () => {
+    const now = new Date('2026-09-27T10:00:00Z');
+    db.rows = [
+      faktura('roz-1', {
+        invoice_kind: 'final', invoice_type: 'ROZ', payment_due_date: '2026-09-20',
+        gross_total: 12300, payment_data: { amountDue: 9840 },
+      }),
+    ];
+    const found = await productionPaymentConfirmSources().readOverdueInvoices(TENANT, now);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ id: 'roz-1', grossTotal: 12300, amountDue: 9840 });
   });
 });
