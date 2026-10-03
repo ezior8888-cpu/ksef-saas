@@ -27,11 +27,12 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => search,
 }));
 
-const { FloPhotoBanner, photoBannerMessage, photoBannerResult } = await import(
-  '@/components/flo/flo-photo-banner'
-);
+const { FloPhotoBanner, photoBannerMessage, photoBannerResult, strongerPhotoBannerResult } =
+  await import('@/components/flo/flo-photo-banner');
 
 const FAILED_SENTENCE = 'Nie odczytałem tego paragonu';
+
+type PhotoResult = ReturnType<typeof photoBannerResult>;
 
 function render(
   params: string,
@@ -155,6 +156,33 @@ describe('FloPhotoBanner — wybór zdania', () => {
     ).toBe('read');
   });
 
+  it('zapas jednego cyklu odpytywania: koszt sprzed 5 s to odczyt, sprzed 15 s już nie', () => {
+    // Odczyt mógł skończyć się tuż przed wejściem na ekran (powiadomienie
+    // przyszło szybciej niż przekierowanie z udostępniania).
+    const at = (ms: number) => new Date(STARTED + ms).toISOString();
+    const result = (latestExpenseAt: string) =>
+      photoBannerResult({ paragon: 'job-1', failedOcrJobIds: [], latestExpenseAt, startedAt: STARTED });
+
+    expect(result(at(-5_000))).toBe('read');
+    expect(result(at(-14_999))).toBe('read');
+    expect(result(at(-15_000))).toBeNull();
+  });
+
+  it('mocniejszy wynik: porażka > odczyt > brak, niezależnie od kolejności', () => {
+    const cases: Array<[PhotoResult, PhotoResult, PhotoResult]> = [
+      [null, null, null],
+      [null, 'read', 'read'],
+      ['read', null, 'read'],
+      ['read', 'failed', 'failed'],
+      ['failed', 'read', 'failed'],
+      ['failed', null, 'failed'],
+      [null, 'failed', 'failed'],
+    ];
+    for (const [a, b, expected] of cases) {
+      expect(strongerPhotoBannerResult(a, b)).toBe(expected);
+    }
+  });
+
   it('stary koszt z wątku nie udaje odczytu nowego paragonu', () => {
     expect(
       photoBannerResult({
@@ -253,12 +281,62 @@ describe('FloPhotoBanner — odpytywanie w przeglądarce', () => {
     expect(container.textContent).toContain(FAILED_SENTENCE);
   });
 
-  it('po odczycie nie odświeża', () => {
+  it('po odczycie (wniosek z czasu) odświeża dalej — karta porażki tego paragonu może go poprawić', () => {
+    // Koszt młodszy niż wejście mógł przyjść z INNEGO zdjęcia.
     mount({ latestExpenseAt: '2026-08-26T12:00:05.000Z' });
+    advance(15_000);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Paragon odczytany');
+
+    mount({ latestExpenseAt: '2026-08-26T12:00:05.000Z', failedOcrJobIds: ['job-1'] });
+    advance(60_000);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(container.textContent).toContain(FAILED_SENTENCE);
+  });
+
+  it('po odczycie odświeża najwyżej trzy minuty, potem cisza — zdanie zostaje', () => {
+    mount({ latestExpenseAt: '2026-08-26T12:00:05.000Z' });
+    advance(10 * 60_000);
+
+    // Co 15 s do trzeciej minuty włącznie.
+    expect(router.refresh).toHaveBeenCalledTimes(12);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(container.textContent).toContain('Paragon odczytany');
+    expect(container.textContent).not.toContain('dłużej niż zwykle');
+  });
+
+  it('zamknięta karta porażki nie cofa paska do „czytam” ani nie wznawia odświeżania', () => {
+    mount({ failedOcrJobIds: ['job-1'] });
+    expect(container.textContent).toContain(FAILED_SENTENCE);
+
+    // Klient zamknął kartę „Nie odczytałem” — wątek jej już nie zawiera.
+    mount({});
     advance(60_000);
 
     expect(router.refresh).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(container.textContent).toContain(FAILED_SENTENCE);
+  });
+
+  it('potwierdzony koszt znika z wątku, a pasek dalej mówi „odczytany”', () => {
+    mount({ latestExpenseAt: '2026-08-26T12:00:05.000Z' });
+    mount({});
     expect(container.textContent).toContain('Paragon odczytany');
+    expect(container.textContent).not.toContain('Czytam paragon');
+  });
+
+  it('inny paragon w adresie zaczyna od zera', () => {
+    mount({ failedOcrJobIds: ['job-1'] });
+    expect(container.textContent).toContain(FAILED_SENTENCE);
+
+    search = new URLSearchParams('paragon=job-2');
+    mount({ failedOcrJobIds: ['job-1'] });
+    expect(container.textContent).not.toContain(FAILED_SENTENCE);
+    expect(container.textContent).toContain('Czytam paragon');
+
+    advance(15_000);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 
   it('gdy karta porażki dojdzie w trakcie, odświeżanie staje', () => {

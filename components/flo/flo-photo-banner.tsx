@@ -54,6 +54,21 @@ export function photoBannerResult({
 }
 
 /**
+ * Mocniejszy z dwóch wyników: porażka > odczyt > brak. Pasek pamięta
+ * najmocniejszy wynik, jaki widział dla danego paragonu — karta, z której
+ * go poznał, może zniknąć z wątku (klient ją zamknął albo potwierdził),
+ * a wtedy pasek wracałby do „Czytam paragon” i odpytywania od nowa.
+ */
+export function strongerPhotoBannerResult(
+  a: PhotoBannerResult,
+  b: PhotoBannerResult,
+): PhotoBannerResult {
+  if (a === 'failed' || b === 'failed') return 'failed';
+  if (a === 'read' || b === 'read') return 'read';
+  return null;
+}
+
+/**
  * Zdanie paska. Porażka ma pierwszeństwo przed „odczytany” i „dłużej niż
  * zwykle”: pasek obiecuje „jeśli się nie uda, powiem o tym wprost”, więc nie
  * wolno mu przeczyć karcie „Nie odczytałem tego zdjęcia” tuż pod nim.
@@ -115,12 +130,28 @@ export function FloPhotoBanner({
     setStartedAt(Date.now());
   }, []);
 
-  const result = paragon
+  const current = paragon
     ? photoBannerResult({ paragon, failedOcrJobIds, latestExpenseAt, startedAt })
     : null;
-  // Po wyniku (porażka albo odczyt) nie ma już na co czekać — dalsze
-  // odświeżanie co 15 s tylko męczyłoby serwer i baterię telefonu.
-  const settled = result !== null;
+
+  // Zapamiętany wynik dla TEGO paragonu (wzorzec „stan z poprzedniego
+  // renderu” z dokumentacji Reacta — bez efektu, więc bez klatki ze starym
+  // zdaniem). Inny paragon w adresie zaczyna od zera.
+  const [latched, setLatched] = useState<{
+    paragon: string | null;
+    result: PhotoBannerResult;
+  }>({ paragon, result: null });
+  const remembered = latched.paragon === paragon ? latched.result : null;
+  const result = strongerPhotoBannerResult(remembered, current);
+  if (latched.paragon !== paragon || latched.result !== result) {
+    setLatched({ paragon, result });
+  }
+
+  // Na pewno wiemy tylko o porażce: karta „nie odczytałem” niesie numer
+  // TEGO zadania. „Odczytany” to wniosek z czasu najświeższego kosztu —
+  // mógł przyjść z innego zdjęcia — więc pytamy dalej (do trzech minut),
+  // żeby karta porażki tego paragonu mogła go jeszcze poprawić.
+  const settled = result === 'failed';
 
   useEffect(() => {
     if (startedAt === null || settled) return;

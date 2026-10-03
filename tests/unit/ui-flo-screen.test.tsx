@@ -168,6 +168,43 @@ describe('FloScreen — sygnały dla paska zdjęcia (E16)', () => {
     expect(signals.failedOcrJobIds).toEqual(['job-1']);
   });
 
+  it('kolejność z listOpen (priorytet, potem od najnowszych) nie myli najświeższego kosztu', () => {
+    // Wątek przychodzi posortowany po priorytecie, a w nim od najnowszych —
+    // najświeższy koszt nie musi stać ani pierwszy, ani ostatni.
+    const signals = photoBannerSignals([
+      card({
+        id: 'ask-new',
+        kind: 'expense.review',
+        priority: 40,
+        createdAt: '2026-08-26T12:03:00.000Z',
+        ocrCard: { failed: false },
+      }),
+      card({
+        id: 'ask-old',
+        kind: 'expense.review',
+        priority: 40,
+        createdAt: '2026-08-26T11:00:00.000Z',
+        ocrCard: { failed: false },
+      }),
+      card({
+        id: 'done-newest',
+        kind: 'expense.review',
+        priority: 60,
+        createdAt: '2026-08-26T12:07:00.000Z',
+        ocrCard: { failed: false },
+      }),
+      card({
+        id: 'done-old',
+        kind: 'expense.review',
+        priority: 60,
+        createdAt: '2026-08-26T10:00:00.000Z',
+        ocrCard: { failed: false },
+      }),
+    ]);
+
+    expect(signals.latestExpenseAt).toBe('2026-08-26T12:07:00.000Z');
+  });
+
   it('pasek nad kartą porażki mówi o porażce, nie o odczycie', () => {
     search = new URLSearchParams('paragon=job-1');
     const html = renderToStaticMarkup(
