@@ -149,7 +149,7 @@ wydanie #111 (`7a9f49a`) z #106–#110, #134 (przez #167 Bartosza) oraz:
 
 ### 4.2. Otwarte PR-y Claude
 
-#187 (ten plan) i PR z `claude/przeplywy-od-stycznia` (C-21) — oba czekają
+#187 (ten plan) i #188 (C-21, gałąź `claude/przeplywy-od-stycznia`) — oba czekają
 na scalenie przez Bartosza. Otwarte cudze (03.10): Bartosz #186 (korekta dla firmy z UE, np. II —
 dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 
@@ -172,7 +172,7 @@ dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 | C-05: adnotacje P_16/P_18A dla ZAL i ROZ | ✅ #176, #177 (z zamrożonej koperty) |
 | C-17 = audyt F-020: faktura zaliczkowa bez P_6 (data otrzymania zaliczki) i z przyszłym terminem zamiast „zapłacono” | otwarte; `Zamowienie` zrobione (AUD-71, #177). Generator ZAL zmieniany 02.10 przez sesje Bartosza (AUD-70) — **zanim weźmiesz: ustal z Bartoszem**, czy ktoś to robi |
 | C-15 = AUD-04: korekty i zaliczki przy stawce „zw” rzucają wyjątek; korekty na produkcji wstrzymane (`lib/ksef/submission-holds.ts`, AUD-03/04) | otwarte; pliki korekt w #186 Bartosza — po jego scaleniu i po uzgodnieniu |
-| C-21 (dawniej mylnie „C-18” — ten numer ma sprawa „Niepewny wynik wysyłki KSeF i UPO”): strona przepływów ładuje dane od 1 stycznia i przekazuje `dataFrom` | zrobione 03.10, PR z gałęzi `claude/przeplywy-od-stycznia` — czeka na scalenie przez Bartosza |
+| C-21 (dawniej mylnie „C-18” — ten numer ma sprawa „Niepewny wynik wysyłki KSeF i UPO”): strona przepływów ładuje dane od 1 stycznia i przekazuje `dataFrom` | zrobione 03.10 w #188 — czeka na scalenie przez Bartosza |
 | Szacunek podatku zakłada 19% liniowy dla każdego (podpisane na kafelku); skala i ryczałt dałyby inne kwoty; Flo ma profil podatkowy (`taxGateOpen`) | decyzja produktowa (Bartosz) |
 | JPK_V7M: pole dla „oo” i okres według daty sprzedaży | księgowa |
 | C-01: konwencja kwot korekty | ✅ rozstrzygnięte 02.10 (I1: różnica, #146); JPK_FA z korektą — audyt F-060 |
@@ -190,13 +190,26 @@ dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
    teraz audyt (`docs/audyt/`). Zanim weźmiesz sprawę z listy niżej, ustal
    z Igorem (a on z Bartoszem), czy jest twoja — inaczej dwie sesje zrobią
    to samo w tych samych plikach.
-1. Kandydaci (bez kolizji 03.10): B4 (prośba o `UNIQUE` na `ocr_job_id`
-   + zapytanie o duble), F-093 z audytu (getter `KsefApiError.ksefCode`
-   czyta kod ze złego miejsca — PR #159 już w `main`). C-21 (przepływy od
-   1 stycznia) zrobione — PR z `claude/przeplywy-od-stycznia`.
+1. **Następny w kolejce: F-093 z audytu** (K4, bez kolizji 03.10 — PR #159
+   już w `main`). `KsefApiError.ksefCode` (`lib/ksef/client.ts`) czyta
+   `body.exceptionDetailList`, a KSeF zwraca kody w
+   `exception.exceptionDetailList` albo `errors[].code` — getter zawsze daje
+   `null` (trafia do Sentry z `lib/jobs/runners/submit-invoice.ts`).
+   Poprawka: przenieść `ksefErrorCodes` z `lib/ksef/submit.ts` do
+   `client.ts` (submit importuje z client, nie odwrotnie — inaczej cykl),
+   getter = `ksefErrorCodes(this.body)[0] ?? null`, test na trzy kształty
+   odpowiedzi + tekst. Gałąź od `origin/main`, PR, bez scalania.
+   Potem B4 (prośba do Bartosza o `UNIQUE` na `ocr_job_id` + zapytanie
+   o duble — SQL w opisie #109). C-21 zrobione w #188.
    **Numery spraw `C-xx`:** przed nadaniem sprawdź `grep "^### C-"
    docs/koordynacja/CLAUDE-DO-CODEXA.md` — sesje Bartosza też je nadają
    (03.10 kolizja „C-18”).
+   **Vitest na Windows:** 6 testów pada lokalnie niezależnie od zmian
+   (CRLF w plikach SQL, `\` w ścieżkach: `cennik-jedna-cena`, `ci-rls`,
+   `jeden-adres-kontaktowy`, `rodo-usuniecie-konta-klucze`). Na GitHub CI
+   (Linux) przechodzą — sprawdź tylko, że na liście nie ma nic więcej.
+   Po dużym `git pull` typecheck krzyczy o `app/api/inngest` → usuń
+   `.next` i `tsconfig.tsbuildinfo`.
 2. Po uzgodnieniu: C-17 / F-020 (P_6 i „zapłacono” w ZAL); C-15 / AUD-04
    (korekty „zw”) po scaleniu #186.
 3. E14 zamknięty 03.10: generatory KOR/ZAL nie wołają `validateInvoice`;
