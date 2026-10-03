@@ -26,8 +26,8 @@ wdrożenia, decyzje księgowe).
 |---|---|---|
 | 1 | Świeży stan repo | `git fetch origin`; nowa gałąź `git checkout -b claude/<temat> origin/main`. **Nigdy `git checkout main`** (lokalny main bywa nieaktualny). |
 | 2 | Otwarte PR-y | `gh pr list --state open` — porównaj z tabelą w sekcji 4. Scalony/zamknięty PR → popraw tabelę. |
-| 3 | Kanał z Codexem | [`CLAUDE-DO-CODEXA.md`](CLAUDE-DO-CODEXA.md) — nowe odpowiedzi Codexa, rejestr numerów migracji. |
-| 4 | Cudze pliki | Zanim ruszysz plik: `git diff --quiet origin/main...origin/<gałąź-codexa> -- <plik>` dla otwartych gałęzi `codex/*` i `ops/*`. Plik w cudzym stosie → wpis C-xx zamiast zmiany. |
+| 3 | Kanał z Codexem i audyt | [`CLAUDE-DO-CODEXA.md`](CLAUDE-DO-CODEXA.md) (od 02.10 szkice Codexa przejmuje sesja Claude Bartosza — C-20) oraz [`docs/audyt/`](../audyt/) — audyt logiki domenowej prowadzony przez sesje Bartosza (raport, plan, numery AUD-xx). Zanim weźmiesz sprawę, sprawdź, czy nie ma jej tam z właścicielem. |
+| 4 | Cudze pliki | Zanim ruszysz plik: `git diff --name-only origin/main...origin/<gałąź>` dla KAŻDEGO otwartego PR (nie tylko `codex/*`). Plik w cudzym PR → nie zmieniaj, zgłoś. |
 | 5 | Środowisko | `pnpm install` w worktree (bez `node_modules` testy nie ruszą); testy XSD potrzebują systemowego `xmllint`. |
 
 ## 2. Zasady — twarde
@@ -37,10 +37,11 @@ wdrożenia, decyzje księgowe).
 2. **Bez migracji.** Nie tworzymy plików w `supabase/migrations/`. Potrzebna
    zmiana schematu → prośba do Bartosza w opisie PR (gotowy SQL + co
    sprawdzić przed) i wpis w sekcji 4.3.
-3. **Scalanie:** od 01.10.2026 Claude scala **swoje** PR-y (`claude/*`) sam,
-   po zielonym CI i lokalnym `pnpm run ci` (zgoda Igora). Merge commit,
-   nigdy `--admin`. Cudzych PR-ów (Codex, Bartosz) nie scala bez wyraźnego
-   polecenia. Scalenie to nie wdrożenie — zasada 1 obowiązuje dalej.
+3. **Scalanie: tylko na wyraźne polecenie Bartosza** — zasada zespołu
+   z `AGENTS.md` („Scalanie PR”, 02.10.2026), która zastępuje zgodę z 01.10
+   na samodzielne scalanie. Sesja Igora kończy na zielonym PR i zgłasza go
+   do scalenia. Merge commit, nigdy `--admin`. Scalenie to nie wdrożenie —
+   zasada 1 obowiązuje dalej.
 4. **PR od `origin/main`, bez stosów.** Kilka gotowych PR-ów naraz → gałąź
    „wydanie” łącząca je, jedno CI, jedno scalenie.
 5. **Każda poprawka:** test, który bez poprawki pada; testy mutacyjne
@@ -60,7 +61,7 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E2 | Faktury: adnotacje FA(3) (MPP, metoda kasowa, „odwrotne obciążenie”), ROZ po zaliczkach, PDF korekty, kod QR, mail z kwotą do zapłaty | ✅ / ⏳ C-05 | #75, #76, #79, #84, #95, #102, #103 |
 | E3 | OCR i waluty: koszt w walucie obcej po kursie NBP | ✅ | #94 |
 | E4 | Joby pg-boss: ponowienie wykonuje CAŁY job od nowa (brak pamięci kroków) — każdy zapis musi być odporny na powtórkę | ✅ | #109 (OCR), #112/#116 (Co-Pilot), #114 (Sentry w workerze), #118 (maile triala), #119 (zapis przebiegów); lista w 3.1 |
-| E5 | RODO / konto: usunięcie konta a subskrypcja i klucze obce | ✅ kod / ⏳ migracja B3 | #108 |
+| E5 | RODO / konto: usunięcie konta a subskrypcja i klucze obce | ✅ | #108 + migracja 00113 |
 | E6 | Konfiguracja produkcji bez cichych zastępstw (GUS sandbox, brak kluczy) | ✅ / ⏳ B2 | #107 |
 | E7 | Retencja 10 lat: joby `retention-delete`, `archive-old-invoices` — czy nic nie kasuje faktur przed terminem | ✅ sprawdzone 01.10 | uwagi w 3.2 |
 | E8 | Pozostałe obszary: import (Magiczny Import), portal księgowej, walidatory formularzy, powiadomienia | ✅ przegląd 01.10 | portal: token jako hash, wygaśnięcie, odwołanie, firma i ścieżka XML sprawdzane; push tylko do aktywnych członków; walidator ZAL bez „zw” = C-15; import: silnik w stosie Codexa, parsery FA(3)/JPK_FA ignorowały walutę — #130. Uwaga dla Codexa: Magiczny Import łapie błąd parsera tylko w logu (`magic-import-ksef.ts`), użytkownik nie widzi powodu pominięcia |
@@ -111,13 +112,21 @@ nie oznacza. Uwagi, bez pilności:
 
 ## 4. Stan — aktualizuj po każdym etapie
 
-**Ostatnia aktualizacja:** 01.10.2026 — Claude (sesja z Igorem).
+**Ostatnia aktualizacja:** 03.10.2026 — Claude (sesja z Igorem).
 
-### 4.1. Scalone do `main`, NIEWDROŻONE
+**Co się zmieniło 02.10 (ważne dla każdej nowej sesji):** sesje Claude
+Bartosza zrobiły audyt logiki domenowej (`docs/audyt/blok-1/`, PR #166),
+przeniosły cały stos Codexa na `main` (#170–#180, C-20) i dodały zasady
+scalania i migracji w `AGENTS.md` (#168). Main poszedł od #134 do #185.
+Wiele spraw z tego planu zamknęły tamte PR-y — tabela 4.4 jest po
+sprawdzeniu na kodzie 03.10. Stan wdrożenia i wgranych migracji prowadzi
+Bartosz (rejestr migracji w `CLAUDE-DO-CODEXA.md`, migracje do 00200) —
+nie zakładaj, że coś jest albo nie jest na produkcji.
 
-Main od `b25c126` czeka na wdrożenie (aplikacja + worker, bez migracji):
-#91–#97, #100, #101, #105 (= #98, #99, #102, #103), wydanie #111 (`7a9f49a`)
-z #106–#110, oraz:
+### 4.1. Moje PR-y — wszystkie scalone
+
+Do `main` weszły: #91–#97, #100, #101, #105 (= #98, #99, #102, #103),
+wydanie #111 (`7a9f49a`) z #106–#110, #134 (przez #167 Bartosza) oraz:
 
 | PR | Co |
 |---|---|
@@ -140,64 +149,58 @@ z #106–#110, oraz:
 
 ### 4.2. Otwarte PR-y Claude
 
-| PR | Co | Stan |
+Brak. Otwarte cudze (03.10): Bartosz #186 (korekta dla firmy z UE, np. II —
+dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
+
+### 4.3. Prośby do Bartosza (migracje, produkcja) — stan 03.10
+
+| # | Prośba | Stan |
 |---|---|---|
-| #134 | Zwykły numer rachunku (26 cyfr) i reguły wysyłki sprawdzane już w formularzu — faktura nie utyka jako nieudana | w tym PR |
+| B1 | Wdrożyć `main` (aplikacja + worker) | u Bartosza — rejestr migracji / wdrożeń w `CLAUDE-DO-CODEXA.md` |
+| B2 | Sprawdzić/ustawić `GUS_API_KEY` na produkcji | nieznany |
+| B3 | Klucze obce blokujące usunięcie konta (RODO) | ✅ migracja `00113_user_deletion_foreign_keys` |
+| B4 | Odczyt dubli wydatków z OCR (SQL w #109), potem `UNIQUE (tenant_id, ocr_job_id)` | otwarte — brak takiej migracji na `main` |
+| B5 | C-16: płatności/ponaglenia ROZ | ✅ częściowo #178 (ponaglenia i zaległości tylko dla faktur ścigalnych, 00126) |
+| B6 | `SENTRY_DSN` w zmiennych workera (log startu „Sentry: alerty z jobów włączone”) | nieznany; od #120 alerty idą też na Telegram |
+| B7 | Mail o końcu trialu dla kont bez karty | decyzja — cennik i trial ujednolicone w #136 (`lib/billing/pricing.ts`) |
 
-Na `main` od innych od 01.10: Bartosz #113 (health-check KSeF), #117 (C-08,
-migracja `00096`), #120 (alerty Telegram + heartbeat workera), #126
-(uzgadnianie niepewnego wyniku KSeF, migracja `00099`) — wgranie migracji po
-stronie Bartosza.
+### 4.4. Czeka na decyzję / kogoś innego — sprawdzone na kodzie 03.10
 
-Cudze otwarte: Codex #62, #63, #64, #71, #83, #85, #86, #104, #122 (PDF bez
-poprawnych kodów QR); Bartosz #90.
-
-### 4.3. Prośby do Bartosza (migracje, produkcja)
-
-| # | Prośba | Skąd |
-|---|---|---|
-| B1 | Wdrożyć `main` (aplikacja + worker) | 4.1 |
-| B2 | Sprawdzić/ustawić `GUS_API_KEY` na produkcji | #107 |
-| B3 | Migracja: klucze obce `expenses.created_by`, `ocr_jobs.created_by`, `accountant_access.created_by_user_id` → `ON DELETE SET NULL` (dziś blokują usunięcie konta RODO) | #108 |
-| B4 | Odczyt: czy na produkcji są zdublowane wydatki z OCR (SQL w #109); potem `UNIQUE (tenant_id, ocr_job_id)` | #109 |
-| B5 | C-16: płatności/ponaglenia ROZ liczone od pełnej kwoty — migracja przed zdjęciem wstrzymania ROZ | `CLAUDE-DO-CODEXA.md` |
-| B6 | Po wdrożeniu workera: w logach startu ma być „Sentry: alerty z jobów włączone”; jeśli „WYŁĄCZONE” — dodać `SENTRY_DSN` do zmiennych workera (Coolify id=2) | #114 |
-| B7 | Decyzja: czy kontom BEZ karty (trial bez danych płatniczych, regulamin §3) potrzebny mail o końcu trialu — nowa treść pod 30 dni, bez obietnic usuwania danych. Kolejki `email.trial-day-12/14` usunąć ~14 dni po wdrożeniu | #118 |
-
-### 4.4. Czeka na decyzję / kogoś innego
-
-| Sprawa | Kto |
+| Sprawa | Stan / kto |
 |---|---|
-| C-05: adnotacje P_16/P_18A dla ROZ | Claude, po scaleniu #85 (Codex) |
-| C-17: faktura zaliczkowa bez daty otrzymania zapłaty (`P_6`, art. 106e ust. 1 pkt 6) — formularz, generator i JPK | Codex (#85 — pliki ZAL w jego stosie) |
-| C-18: strona przepływów ma ładować dane od 1 stycznia i przekazać `dataFrom` — wtedy szacunek podatku obejmie cały rok | Codex (`przeplywy/page.tsx` w jego stosie) |
-| Szacunek podatku zakłada 19% liniowy dla każdego (podpisane na kafelku); skala 12/32% i ryczałt dałyby inne kwoty, brak też odliczenia składki zdrowotnej — Flo ma profil podatkowy (`taxGateOpen`), z którego można by brać formę | decyzja produktowa (Bartosz — właściciel strony) |
-| JPK_V7M: pole dla „oo” (odwrotne obciążenie) i okres według daty sprzedaży | księgowa |
-| JPK_FA: korekty (C-01, konwencja kwot) | Igor + Codex |
-| Ochrona przed brakiem `KSEF_ENV` (`claim-environment`) | Codex (stos #63/#64) |
+| C-05: adnotacje P_16/P_18A dla ZAL i ROZ | ✅ #176, #177 (z zamrożonej koperty) |
+| C-17 = audyt F-020: faktura zaliczkowa bez P_6 (data otrzymania zaliczki) i z przyszłym terminem zamiast „zapłacono” | otwarte; `Zamowienie` zrobione (AUD-71, #177). Generator ZAL zmieniany 02.10 przez sesje Bartosza (AUD-70) — **zanim weźmiesz: ustal z Bartoszem**, czy ktoś to robi |
+| C-15 = AUD-04: korekty i zaliczki przy stawce „zw” rzucają wyjątek; korekty na produkcji wstrzymane (`lib/ksef/submission-holds.ts`, AUD-03/04) | otwarte; pliki korekt w #186 Bartosza — po jego scaleniu i po uzgodnieniu |
+| C-18: strona przepływów ma ładować dane od 1 stycznia i przekazać `dataFrom` | otwarte; `przeplywy/page.tsx` wolny od 03.10 (stos Codexa w `main`) |
+| Szacunek podatku zakłada 19% liniowy dla każdego (podpisane na kafelku); skala i ryczałt dałyby inne kwoty; Flo ma profil podatkowy (`taxGateOpen`) | decyzja produktowa (Bartosz) |
+| JPK_V7M: pole dla „oo” i okres według daty sprzedaży | księgowa |
+| C-01: konwencja kwot korekty | ✅ rozstrzygnięte 02.10 (I1: różnica, #146); JPK_FA z korektą — audyt F-060 |
+| Ochrona przed brakiem `KSEF_ENV` (`claim-environment`) | ✅ `lib/ksef/claim-environment.ts` na `main` (#172) |
 | Autouzupełnianie kontrahentów z testowej bazy GUS bez klucza | zgłoszone, decyzja produktowa |
-| Pulpit `monthly-figures` i FLO sumują `gross_total` ROZ | Bartosz |
+| Pulpit `monthly-figures` i FLO sumują `gross_total` ROZ | ✅ pulpit odejmuje zaliczki (#151) |
 | Flo `payment.confirm` zapisuje `payment_date` = dzień KLIKNIĘCIA, nie wpływu pieniędzy (karta pyta dobę po terminie, zbiorczo). Dziś czytają to tylko zabezpieczenia ponagleń — ale zanim VAT metodą kasową (#76) zacznie liczyć okres z wpłat, karta musi pytać o datę wpływu | przyszłość, decyzja przy JPK_V7M dla metody kasowej |
 | **E12 — samochód osobowy.** Paliwo i inne wydatki na auto idą z odliczeniem 100% VAT (OCR, skrzynka KSeF), a użytkownik nie ma jak ustawić 50%. W typowej mikrofirmie (użytek mieszany): VAT tylko 50% (art. 86a ust. 1), nieodliczona połowa do kosztu, koszt PIT max 75% (art. 23 ust. 1 pkt 46a); leasing ma osobne limity (pkt 47a). Dziś KPiR zaniża koszt o połowę VAT i nie stosuje limitu 75% (JPK_V7M zawyżyłby odliczenie, ale jest wstrzymany). Propozycja: ustawienie firmy „samochód: brak / mieszany / 100% firmowy (VAT-26)”, rozpoznanie wydatków samochodowych (paliwo, serwis, ubezpieczenie) i proporcja odliczenia przy zapisie wydatku | Igor + księgowa (decyzja, co liczyć), potem Claude |
 | Import: Magiczny Import z KSeF zapisuje faktury jako `accepted` (wchodzą do KPiR i eksportów), a import pliku JPK_FA/CSV jako `draft` (nie wchodzą). Spójne z celem „historia z innego programu, który już zaksięgował”? Szkiców z importu nie da się wysłać do KSeF (wysyłka tylko z formularza „zapisz i wyślij”). Wszystkie importy zapisują `invoice_kind = regular` z kwotami z pliku (ROZ = reszta po zaliczkach, KOR = różnica) — w KPiR bez dubli | decyzja produktowa (Igor/Bartosz) |
-| Formularz faktury nie pozwala na datę sprzedaży PO dacie wystawienia (art. 106i ust. 7 dopuszcza fakturę do 60 dni przed dostawą) i nie ostrzega o spóźnionym wystawieniu (po 15. dniu następnego miesiąca, art. 106i ust. 1) — ograniczenie, nie błąd danych | decyzja produktowa |
+| Data sprzedaży po dacie wystawienia (art. 106i ust. 7) | ✅ audyt P-22 (`isSaleDateWithinLimit` w `schemas/invoice-form.ts`) |
 
 ## 5. Następny krok
 
-0. E14 (nowy, z #134): wzorzec „reguła sprawdzana tylko przy
-   wysyłce” w generatorach KOR/ZAL/ROZ (`lib/ksef/fa3-*-generator.ts`,
-   formularze — stos Codexa: zgłoszenie C-xx z listą reguł, których formularz
-   nie sprawdza).
-1. E13: przepływy naprawione (#129, C-18). Funkcje
-   podatkowe Flo (grupa T: `tax.setaside`, `tax.limit`, `tax.deadline`,
-   `tax.relief`, `tax.simulate`) są WYŁĄCZONE bramką
-   (`lib/flo/tax-params.ts`: `PARAMS_VERIFIED = false`) — przegląd ROZ,
-   korekt, „zw”, waluty i paragonów zrobić PRZED ich włączeniem, razem
-   z weryfikacją tabeli parametrów przez księgowa.
-2. Po decyzji Igora/księgowej: E12 (samochód 50%/75%).
-3. Po scaleniu #85 (Codex): C-05 — adnotacje P_16/P_18A dla ROZ.
-4. Po scaleniu #90 (Bartosz): przegląd snapshotu i weryfikacji kopii (dziś
-   przeczytane: alert przy awarii jest — Sentry + kanał „urgent”).
+0. **Najpierw podział pracy z sesjami Bartosza.** Logikę domenową prowadzi
+   teraz audyt (`docs/audyt/`). Zanim weźmiesz sprawę z listy niżej, ustal
+   z Igorem (a on z Bartoszem), czy jest twoja — inaczej dwie sesje zrobią
+   to samo w tych samych plikach.
+1. Kandydaci (bez kolizji 03.10): C-18 (przepływy od 1 stycznia,
+   `przeplywy/page.tsx` + prop `dataFrom`), B4 (prośba o `UNIQUE` na
+   `ocr_job_id` + zapytanie o duble).
+2. Po uzgodnieniu: C-17 / F-020 (P_6 i „zapłacono” w ZAL); C-15 / AUD-04
+   (korekty „zw”) po scaleniu #186.
+3. E14 zamknięty 03.10: generatory KOR/ZAL nie wołają `validateInvoice`;
+   formularze wymuszają 26 cyfr rachunku i identyfikator B2C; jedyna blokująca
+   reguła to „zw” (C-15). ROZ wstrzymana.
+4. E13: funkcje podatkowe Flo (grupa T) WYŁĄCZONE bramką
+   (`lib/flo/tax-params.ts`: `PARAMS_VERIFIED = false`) — przegląd przed
+   włączeniem, razem z weryfikacją parametrów przez księgową.
+5. Po decyzji Igora/księgowej: E12 (samochód 50%/75%).
 
 Sprawdzone 01.10 bez zmian: `daily-db-snapshot`, `verify-backup` (suma
 kontrolna, rozpakowanie, liczby wierszy), `cleanup-audit-logs` (logi > 12 mies.,
