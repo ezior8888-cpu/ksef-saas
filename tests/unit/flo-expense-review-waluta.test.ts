@@ -283,19 +283,78 @@ describe('historia sprzedawcy w karcie', () => {
     expect(proposal.payload?.issues).not.toContain('unknown_seller');
   });
 
-  it('próg historii liczy WCZEŚNIEJSZE dokumenty', () => {
-    // Dwa wcześniejsze + bieżący = trzy wiersze, ale mediana z dwóch to
-    // za mało, żeby cokolwiek nazywać typowym.
-    const two = build({
+  it('trzeci dokument u sprzedawcy: bieżąca kwota uzupełnia medianę, sito działa jak dotąd', () => {
+    // Dwa wcześniejsze paragony po ~312 zł, trzeci odczytany jako 31 240 —
+    // zgubiony przecinek. Mediana z dwóch to za mało, ale z trzech (z bieżącą)
+    // wychodzi 315, więc 31 240 odstaje stukrotnie. Tak liczyła karta przed
+    // wykluczeniem bieżącego wydatku.
+    const comma = build({
+      facts: facts({ grossAmount: 31240 }),
+      history: {
+        count: 3,
+        medianGross: 315,
+        entries: [entry('a', 312.4), entry('b', 315), entry('exp-cur', 31240)],
+      },
+    });
+    expect(comma.payload?.issues).toContain('magnitude');
+
+    // W drugą stronę: 3,12 zamiast 312,40.
+    const lost = build({
+      facts: facts({ grossAmount: 3.12 }),
+      history: {
+        count: 3,
+        medianGross: 312.4,
+        entries: [entry('a', 312.4), entry('b', 315), entry('exp-cur', 3.12)],
+      },
+    });
+    expect(lost.payload?.issues).toContain('magnitude');
+
+    // Zwykła kwota przy tych samych dwóch — cisza.
+    const usual = build({
+      facts: facts({ grossAmount: 320 }),
+      history: {
+        count: 3,
+        medianGross: 315,
+        entries: [entry('a', 312.4), entry('b', 315), entry('exp-cur', 320)],
+      },
+    });
+    expect(usual.payload?.issues).toEqual([]);
+  });
+
+  it('jeden wcześniejszy dokument to za mało nawet z bieżącym', () => {
+    const one = build({
+      facts: facts({ grossAmount: 9000 }),
+      history: { count: 2, medianGross: 4550, entries: [entry('a', 100), entry('exp-cur', 9000)] },
+    });
+    expect(one.payload?.issues).not.toContain('magnitude');
+
+    // Dwa wcześniejsze, ale jeden bez kursu — do mediany weszłyby dwie kwoty.
+    const noRate = build({
       facts: facts({ grossAmount: 9000 }),
       history: {
         count: 3,
         medianGross: 100,
-        entries: [entry('a', 100), entry('b', 100), entry('exp-cur', 9000)],
+        entries: [entry('a', 100), entry('b', null), entry('exp-cur', 9000)],
       },
     });
-    expect(two.payload?.issues).not.toContain('magnitude');
+    expect(noRate.payload?.issues).not.toContain('magnitude');
+  });
 
+  it('kwota bez kursu przy dwóch wcześniejszych: tylko brak kursu', () => {
+    // 9000 EUR nie jest kwotą w złotych: karta nie dokłada jej do mediany,
+    // a sito rzędu wielkości i tak pomija waluty bez kursu.
+    const proposal = build({
+      facts: facts({ grossAmount: 9000, amountCurrency: 'EUR' }),
+      history: {
+        count: 3,
+        medianGross: 100,
+        entries: [entry('a', 100), entry('b', 100), entry('exp-cur', null)],
+      },
+    });
+    expect(proposal.payload?.issues).toEqual(['missing_rate']);
+  });
+
+  it('trzy wcześniejsze dokumenty wystarczą bez bieżącego', () => {
     const three = build({
       facts: facts({ grossAmount: 9000 }),
       history: {
@@ -391,6 +450,7 @@ describe('readSellerHistory', () => {
       expect.arrayContaining([
         'id',
         'gross_amount',
+        'is_deductible',
         'currency:ocr_extracted_data->>currency',
         'fx:ocr_extracted_data->fx',
       ]),
@@ -436,6 +496,28 @@ describe('readSellerHistory', () => {
     expect(history.medianGross).toBe(200);
   });
 
+  it('koszt bez kursu poprawiony ręcznie na złotówki i włączony do KPiR wchodzi do mediany', async () => {
+    const { client } = fakeClient({
+      data: [
+        // Ślad OCR dalej mówi „EUR” bez kursu, ale klient wpisał kwotę
+        // w złotych i włączył koszt do KPiR.
+        { id: 'a', gross_amount: 430.5, is_deductible: true, currency: 'EUR', fx: null },
+        // Wciąż poza KPiR — kwota w euro.
+        { id: 'b', gross_amount: 100, is_deductible: false, currency: 'EUR', fx: null },
+        // Złotówki wyłączone z KPiR (np. wydatek prywatny) — dalej złotówki.
+        { id: 'c', gross_amount: 80, is_deductible: false, currency: 'PLN', fx: null },
+      ],
+      error: null,
+    });
+    const history = await readSellerHistory('ten-1', 'Sklep Testowy', client);
+
+    expect(history.entries).toEqual([
+      { expenseId: 'a', grossPln: 430.5 },
+      { expenseId: 'b', grossPln: null },
+      { expenseId: 'c', grossPln: 80 },
+    ]);
+  });
+
   it('zwraca też bieżący wydatek — wyklucza go dopiero karta', async () => {
     const { client } = fakeClient({
       data: [{ id: 'exp-cur', gross_amount: 600, currency: null, fx: null }],
@@ -476,7 +558,7 @@ describe('readSellerHistory', () => {
 describe('describeChange — koszt włączony do KPiR albo z niej wyłączony', () => {
   const base = { grossTotal: 100, kpirColumn: 'col_13', reviewedAt: 0 };
 
-  it('wyłączenie z KPiR mówi po polsku, bez nazwy pola', () => {
+  it('koszt poza KPiR mówi po polsku, bez nazwy pola', () => {
     const message = describeChange(
       'expense.review',
       { ...base, deductible: 1 },
@@ -485,9 +567,27 @@ describe('describeChange — koszt włączony do KPiR albo z niej wyłączony', 
       NOW,
     );
     expect(message).toBe(
-      'Ten koszt został w międzyczasie wyłączony z KPiR, więc niczego nie potwierdziłem.',
+      'Ten koszt jest poza KPiR, więc niczego nie potwierdziłem — sprawdź go w formularzu.',
     );
     expect(message).not.toContain('deductible');
+  });
+
+  it('nie twierdzi, że ktoś coś zmienił — karta mogła od początku zakładać KPiR', () => {
+    // Wydatek bez kursu zapisujemy poza KPiR; karta zbudowana bez `deductible`
+    // przez starszy kod ma w odcisku 1. Nikt niczego nie ruszał.
+    for (const [before, after] of [
+      [1, 0],
+      [0, 1],
+    ] as const) {
+      const message = describeChange(
+        'expense.review',
+        { ...base, deductible: before },
+        { ...base, deductible: after },
+        {},
+        NOW,
+      );
+      expect(message).not.toMatch(/międzyczasie|został|zmienił/);
+    }
   });
 
   it('włączenie do KPiR odsyła do formularza', () => {
@@ -499,7 +599,7 @@ describe('describeChange — koszt włączony do KPiR albo z niej wyłączony', 
       NOW,
     );
     expect(message).toBe(
-      'Ten koszt został w międzyczasie włączony do KPiR — sprawdź go w formularzu.',
+      'Ten koszt jest w KPiR, a karta zakładała inaczej — sprawdź go w formularzu.',
     );
     expect(message).not.toContain('deductible');
   });

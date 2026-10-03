@@ -277,17 +277,22 @@ export function buildExpenseReviewProposal(
   input: BuildExpenseProposalInput,
 ): CreateProposalInput {
   const now = input.now ?? new Date();
+  const currency = amountCurrencyOf(input.facts);
+  const withoutRate = currency !== HOME_CURRENCY;
+
   // Karta powstaje PO zapisie wydatku, więc surowa historia zawiera i jego.
   // Bez wykluczenia sprzedawca nigdy nie byłby „nieznany”, a mediana
   // porównywałaby kwotę z nią samą. Historia podana wprost (bez wierszy) —
   // jak dotąd.
   const history = input.history.entries
-    ? sellerHistoryFrom(input.history.entries, input.expenseId)
+    ? historyForCard(
+        input.history.entries,
+        input.expenseId,
+        withoutRate ? null : input.facts.grossAmount,
+      )
     : input.history;
   const assessment = assessExpense(input.facts, history);
 
-  const currency = amountCurrencyOf(input.facts);
-  const withoutRate = currency !== HOME_CURRENCY;
   const deductible = input.deductible ?? !withoutRate;
   // Ta sama kwota na karcie i w odcisku — taka, jaką zapisała baza.
   const gross = storedCents(input.facts.grossAmount ?? 0);
@@ -449,10 +454,7 @@ export function sellerHistoryFrom(
       ? entries
       : entries.filter((entry) => entry.expenseId !== excludeExpenseId);
 
-  const amounts = others
-    .map((entry) => entry.grossPln)
-    .filter((n): n is number => n !== null && Number.isFinite(n) && n > 0)
-    .sort((a, b) => a - b);
+  const amounts = medianAmounts(others.map((entry) => entry.grossPln));
 
   return {
     count: others.length,
@@ -463,13 +465,49 @@ export function sellerHistoryFrom(
 }
 
 /**
+ * Historia, z którą karta porównuje bieżący wydatek: bez niego samego. Gdy
+ * jednak do progu mediany brakuje JEDNEJ kwoty, bieżąca ją uzupełnia — tak
+ * liczyła karta przed wykluczeniem, więc trzeci dokument u sprzedawcy nie
+ * traci sita rzędu wielkości. Mediana z trzech i tak wskazuje typową kwotę,
+ * gdy sprawdzana odstaje (312, 315 i 31 240 → 315).
+ *
+ * `currentPln` = kwota bieżącego wydatku w złotych; `null`, gdy jest w walucie
+ * bez kursu (wtedy rzędu wielkości i tak nie oceniamy).
+ */
+function historyForCard(
+  entries: readonly SellerHistoryEntry[],
+  expenseId: string,
+  currentPln: number | null,
+): SellerHistory {
+  const history = sellerHistoryFrom(entries, expenseId);
+  if (history.medianBasis !== HISTORY_MIN - 1) return history;
+
+  // Bez ważnej bieżącej kwoty zostają te same kwoty — mediana bez zmian,
+  // a próg dalej niespełniony.
+  const amounts = medianAmounts([
+    ...(history.entries ?? []).map((entry) => entry.grossPln),
+    currentPln,
+  ]);
+
+  return { ...history, medianGross: median(amounts), medianBasis: amounts.length };
+}
+
+/** Kwoty, które mogą wejść do mediany: dodatnie, w złotych, rosnąco. */
+function medianAmounts(amounts: ReadonlyArray<number | null>): number[] {
+  return amounts
+    .filter((n): n is number => n !== null && Number.isFinite(n) && n > 0)
+    .sort((a, b) => a - b);
+}
+
+/**
  * Wszystkie wydatki tego sprzedawcy — RAZEM z właśnie zapisanym; wyklucza go
  * dopiero karta (`buildExpenseReviewProposal`), bo tylko ona zna jego id.
  *
  * Waluta i kurs pochodzą ze śladu OCR (`ocr_extracted_data`): wiersz w walucie
  * obcej bez kursu ma w `gross_amount` kwotę w tej walucie, nie w złotych.
  * Wiersze bez śladu waluty (wpisane ręcznie, z KSeF, sprzed obsługi walut)
- * liczymy jak dotąd — w złotych.
+ * liczymy jak dotąd — w złotych; tak samo wiersze włączone do KPiR
+ * (`is_deductible`), bo tam kwota jest w złotych niezależnie od śladu.
  */
 export async function readSellerHistory(
   tenantId: string,
@@ -481,7 +519,7 @@ export async function readSellerHistory(
   const { data, error } = await client
     .from('expenses')
     .select(
-      'id, gross_amount, currency:ocr_extracted_data->>currency, fx:ocr_extracted_data->fx',
+      'id, gross_amount, is_deductible, currency:ocr_extracted_data->>currency, fx:ocr_extracted_data->fx',
     )
     .eq('tenant_id', tenantId)
     .eq('seller_name', sellerName);
@@ -497,12 +535,16 @@ function historyEntryFromRow(row: Record<string, unknown>): SellerHistoryEntry {
   });
   // Kurs zapisany przy koszcie = kwota w `gross_amount` jest już w złotych.
   const converted = typeof row.fx === 'object' && row.fx !== null;
+  // Koszt w KPiR liczy się w złotych. Wydatek bez kursu zapisujemy poza
+  // KPiR, więc włączony to taki, który ktoś poprawił ręcznie na złotówki —
+  // ślad OCR dalej mówi „EUR” i nie ma kursu, ale kwota jest już w złotych.
+  const inKpir = row.is_deductible === true;
   const gross = Number(row.gross_amount ?? 0);
 
   return {
     expenseId: String(row.id),
     grossPln:
-      (currency === HOME_CURRENCY || converted) && Number.isFinite(gross)
+      (currency === HOME_CURRENCY || converted || inKpir) && Number.isFinite(gross)
         ? gross
         : null,
   };
