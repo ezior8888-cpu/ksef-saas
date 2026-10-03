@@ -401,7 +401,13 @@ z Vercela (Vercel → Settings → Environment Variables). Dwa wyjątki/uwagi:
 
 - Każdą zmienną zaczynającą się od `NEXT_PUBLIC_` **oznacz jako „Build
   Variable"** (checkbox) — one są wypiekane w JS podczas builda.
-- `SENTRY_AUTH_TOKEN` też jako Build Variable (opcjonalny).
+- `SENTRY_AUTH_TOKEN` (jeśli używany do uploadu map) przekazuj wyłącznie jako
+  BuildKit secret, bez `ARG`/`ENV` obrazu i bez Runtime Variable. W Coolify samo
+  zaznaczenie Build Variable nie wystarcza: wymagany jest odbiór BuildKit,
+  `Use Docker Build Secrets` i wygenerowanego Dockerfile na fikcyjnych sekretach.
+  Dla wymaganych uploadów ustaw `SENTRY_AUTH_TOKEN_REQUIRED=1`; przy zmianie wartości
+  przekazywanych jako secrets wymuś build bez cache. Pełna procedura i ograniczenia:
+  [sekrety builda Docker](../runbooks/docker-build-secrets.md).
 - NIE przenoś zmiennych `VERCEL_*` (nie istnieją poza Vercelem — i dobrze;
   gate `lib/security/environment.ts` jest na to przygotowany, ale sprawdź,
   że na Hetznerze ustawiasz `NEXT_PUBLIC_APP_ENV=production`).
