@@ -6,6 +6,13 @@ node_modules
 .claude
 .vscode
 
+# Lokalne pliki operatora i agentów — root oraz zagnieżdżone katalogi.
+# .gitignore nie chroni kontekstu wysyłanego przez lokalny docker build.
+**/.agents
+**/.codex
+**/.mcp.json
+**/.tmp
+
 # Testy i narzędzia deweloperskie — nie wchodzą do obrazu.
 e2e
 tests
