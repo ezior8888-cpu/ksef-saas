@@ -20,6 +20,17 @@ const state = vi.hoisted(() => ({
   jobUpdates: [] as Record<string, unknown>[],
   lookupError: false,
   proposal: vi.fn(),
+  failedCard: vi.fn(() => ({})),
+  push: vi.fn(),
+  // B4: indeks UNIQUE (tenant_id, ocr_job_id) — insert dubla dostaje 23505.
+  uniqueIndex: false,
+  // Konkurencyjny przebieg zapisuje wydatek między odczytem a insertem.
+  raceRow: null as Record<string, unknown> | null,
+  insertError: null as { code: string; message: string } | null,
+  rereadError: false,
+  ocrFails: false,
+  expenseReads: 0,
+  inserts: 0,
 }));
 
 // AUD-107: budżet AI firmy — tu zawsze w limicie (osobne testy: ai-limit-*).
@@ -31,7 +42,9 @@ vi.mock('@/lib/categorization', () => ({
   categorizeExpense: async () => ({ kpir_column: 'col_13', category_label: 'Paliwo', method: 'rule', confidence: 0.9 }),
 }));
 vi.mock('@/lib/ocr/engine', () => ({
-  extractInvoiceFromImage: async () => ({
+  extractInvoiceFromImage: async () => state.ocrFails ? {
+    success: false, error: 'Limit AI firmy na ten miesiąc wyczerpany', inputTokens: 0, outputTokens: 0, processingTimeMs: 1,
+  } : ({
     success: true,
     data: {
       seller_name: 'Stacja Paliw', seller_nip: '5260001246', seller_address: null,
@@ -45,10 +58,12 @@ vi.mock('@/lib/ocr/engine', () => ({
 vi.mock('@/lib/storage/expenses', () => ({
   downloadExpensePhoto: async () => ({ buffer: Buffer.from('x'), mimeType: 'image/jpeg' }),
 }));
-vi.mock('@/lib/push/sender', () => ({ sendPushToUser: vi.fn() }));
+vi.mock('@/lib/push/sender', () => ({ sendPushToUser: state.push }));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: state.proposal }));
 vi.mock('@/lib/flo/functions/expense-review', () => ({
-  buildExpenseReviewProposal: () => ({}), buildOcrFailedProposal: () => ({}), readSellerHistory: async () => null,
+  buildExpenseReviewProposal: (input: { expenseId: string }) => ({ expenseId: input.expenseId }),
+  buildOcrFailedProposal: state.failedCard,
+  readSellerHistory: async () => null,
 }));
 vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireTenantMember: vi.fn(async () => undefined) }));
 vi.mock('@/lib/supabase/admin', () => ({
@@ -72,7 +87,17 @@ vi.mock('@/lib/supabase/admin', () => ({
             };
           }
           if (table === 'expenses' && insertRow) {
-            const row = { id: `exp-${state.expenses.length + 1}`, ...insertRow };
+            state.inserts += 1;
+            if (state.insertError) return { data: null, error: state.insertError };
+            const row: Row = { id: `exp-${state.expenses.length + 1}`, ...insertRow };
+            if (state.uniqueIndex && state.expenses.some(
+              (e) => e.tenant_id === row.tenant_id && e.ocr_job_id === row.ocr_job_id,
+            )) {
+              return {
+                data: null,
+                error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_expenses_tenant_ocr_job"' },
+              };
+            }
             state.expenses.push(row);
             return { data: { id: row.id }, error: null };
           }
@@ -81,8 +106,17 @@ vi.mock('@/lib/supabase/admin', () => ({
         maybeSingle: async () => {
           if (table === 'tenants') return { data: { vat_exemption_basis: null }, error: null };
           if (table === 'expenses') {
+            state.expenseReads += 1;
             if (state.lookupError) return { data: null, error: { message: 'database unavailable' } };
-            return { data: matching()[0] ?? null, error: null };
+            if (state.rereadError && state.expenseReads > 1) {
+              return { data: null, error: { message: 'database unavailable' } };
+            }
+            const found = matching()[0] ?? null;
+            if (state.raceRow) {
+              state.expenses.push(state.raceRow);
+              state.raceRow = null;
+            }
+            return { data: found, error: null };
           }
           return { data: null, error: null };
         },
@@ -106,7 +140,16 @@ beforeEach(() => {
   state.expenses = [];
   state.jobUpdates = [];
   state.lookupError = false;
+  state.uniqueIndex = false;
+  state.raceRow = null;
+  state.insertError = null;
+  state.rereadError = false;
+  state.ocrFails = false;
+  state.expenseReads = 0;
+  state.inserts = 0;
   state.proposal.mockReset().mockResolvedValue({ status: 'created' });
+  state.failedCard.mockClear();
+  state.push.mockReset();
 });
 
 describe('OCR — ponowienie joba nie dubluje wydatku', () => {
@@ -151,5 +194,112 @@ describe('OCR — ponowienie joba nie dubluje wydatku', () => {
     state.lookupError = true;
     await expect(runProcessOcr(event, ctx)).rejects.toThrow('Nie można sprawdzić, czy wydatek już istnieje');
     expect(state.expenses).toHaveLength(0);
+  });
+});
+
+describe('B4 — indeks UNIQUE (tenant_id, ocr_job_id): wyścig dwóch przebiegów', () => {
+  const RACE = { id: 'exp-konkurent', tenant_id: TENANT, ocr_job_id: OCR_JOB };
+
+  it.each(['exp-konkurent', 'exp-zwyciezca-2'])(
+    'przegrany wyścig (23505) — job kończy się wydatkiem zwycięzcy %s, bez dubla i bez ponowienia',
+    async (winnerId) => {
+      state.uniqueIndex = true;
+      state.raceRow = { ...RACE, id: winnerId };
+
+      expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: winnerId });
+      expect(state.expenses.filter((e) => e.ocr_job_id === OCR_JOB && e.tenant_id === TENANT)).toHaveLength(1);
+      expect(state.inserts).toBe(1);
+      expect(state.expenseReads).toBe(2);
+      expect(state.jobUpdates).toContainEqual(expect.objectContaining({ status: 'completed', expense_id: winnerId }));
+      expect(state.proposal).toHaveBeenCalledWith({ expenseId: winnerId });
+    },
+  );
+
+  it.each([
+    ['innego ograniczenia (brak wydatku)', []],
+    ['wydatek innej firmy', [{ id: 'exp-obcy', tenant_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', ocr_job_id: OCR_JOB }]],
+    ['wydatek innego zadania', [{ id: 'exp-obcy', tenant_id: TENANT, ocr_job_id: '99999999-9999-4999-8999-999999999999' }]],
+  ])('23505, a ponowny odczyt nie znajduje wydatku tego zadania (%s) — błąd, nie cudze id', async (_label, rows) => {
+    state.expenses.push(...rows);
+    state.insertError = { code: '23505', message: 'duplicate key value violates unique constraint "inny"' };
+
+    await expect(runProcessOcr(event, ctx)).rejects.toThrow('Konflikt UNIQUE nie dotyczy wydatku z tego zadania OCR');
+    expect(state.expenseReads).toBe(2);
+    expect(state.jobUpdates).not.toContainEqual(expect.objectContaining({ status: 'completed' }));
+  });
+
+  it('23505, a ponowny odczyt pada — błąd ponawialny, bez „zakończone”', async () => {
+    state.uniqueIndex = true;
+    state.raceRow = { ...RACE };
+    state.rereadError = true;
+
+    const err = await runProcessOcr(event, ctx).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain('Nie można sprawdzić, czy wydatek już istnieje');
+    expect((err as Error).name).not.toBe('NonRetriableError');
+    expect(state.jobUpdates).not.toContainEqual(expect.objectContaining({ status: 'completed' }));
+  });
+
+  it('inny błąd zapisu — bez ponownego odczytu, komunikat bazy', async () => {
+    state.insertError = { code: '23502', message: 'null value in column "seller_name"' };
+
+    await expect(runProcessOcr(event, ctx)).rejects.toThrow('null value in column "seller_name"');
+    expect(state.expenseReads).toBe(1);
+  });
+
+  it('z indeksem: ponowienie po błędzie karty nie próbuje drugiego zapisu', async () => {
+    state.uniqueIndex = true;
+    state.proposal.mockRejectedValueOnce(new Error('chwilowy błąd bazy'));
+    await expect(runProcessOcr(event, ctx)).rejects.toThrow('chwilowy błąd bazy');
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: 'exp-1' });
+    expect(state.inserts).toBe(1);
+    expect(state.expenses).toHaveLength(1);
+  });
+});
+
+describe('B4 — ponowienie po zapisie, a OCR tym razem zawodzi', () => {
+  it('wydatek już jest — zadanie „zakończone” z tym wydatkiem, bez „nie rozpoznano” i bez karty „wpisz ręcznie”', async () => {
+    state.proposal.mockRejectedValueOnce(new Error('chwilowy błąd bazy'));
+    await expect(runProcessOcr(event, ctx)).rejects.toThrow('chwilowy błąd bazy');
+    state.jobUpdates = [];
+    state.push.mockReset();
+    state.ocrFails = true;
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: 'exp-1' });
+    expect(state.jobUpdates.at(-1)).toEqual(expect.objectContaining({ status: 'completed', expense_id: 'exp-1' }));
+    expect(state.jobUpdates).not.toContainEqual(expect.objectContaining({ status: 'failed' }));
+    expect(state.failedCard).not.toHaveBeenCalled();
+    expect(state.push).not.toHaveBeenCalled();
+    expect(state.expenses).toHaveLength(1);
+  });
+
+  it('wydatku nie ma — „nie rozpoznano” jak dotąd (karta i powiadomienie)', async () => {
+    state.ocrFails = true;
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: false });
+    expect(state.jobUpdates).toContainEqual(expect.objectContaining({ status: 'failed' }));
+    expect(state.failedCard).toHaveBeenCalledTimes(1);
+    expect(state.push).toHaveBeenCalledWith(USER, 'invoice_rejected', expect.anything());
+  });
+
+  it.each([
+    ['innej firmy', { id: 'exp-obcy', tenant_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', ocr_job_id: OCR_JOB }],
+    ['innego zadania', { id: 'exp-obcy', tenant_id: TENANT, ocr_job_id: '99999999-9999-4999-8999-999999999999' }],
+  ])('jest tylko wydatek %s — „nie rozpoznano”', async (_label, other) => {
+    state.expenses.push(other);
+    state.ocrFails = true;
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: false });
+    expect(state.jobUpdates).toContainEqual(expect.objectContaining({ status: 'failed' }));
+  });
+
+  it('nie da się sprawdzić, czy wydatek jest — job rzuca zamiast ogłaszać porażkę w ciemno', async () => {
+    state.ocrFails = true;
+    state.lookupError = true;
+
+    await expect(runProcessOcr(event, ctx)).rejects.toThrow('Nie można sprawdzić, czy wydatek już istnieje');
+    expect(state.jobUpdates).not.toContainEqual(expect.objectContaining({ status: 'failed' }));
+    expect(state.push).not.toHaveBeenCalled();
   });
 });

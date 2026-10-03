@@ -37,6 +37,29 @@ function extractedInvoiceToJson(data: ExtractedInvoice, fx: RateStamp | null = n
 }
 
 /**
+ * Wydatek zapisany już z tego zadania OCR w tej firmie (albo `null`).
+ * Błąd odczytu rzuca — job nie może wtedy zapisać ani ogłosić porażki
+ * „w ciemno”. `limit(1)`: dawne duble (sprzed B4) nie mogą zablokować joba.
+ */
+async function findOcrJobExpense(
+  supabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  ocrJobId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('ocr_job_id', ocrJobId)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Nie można sprawdzić, czy wydatek już istnieje: ${error.message}`);
+  }
+  return data?.id ?? null;
+}
+
+/**
  * Obsługa po wyczerpaniu prób (Etap 7): wspólna dla Inngest `onFailure`
  * i pg-boss `onExhausted` — oznacza job OCR jako nieudany, żeby UI przestało
  * pokazywać „przetwarzanie" i user mógł wpisać dane ręcznie.
@@ -150,6 +173,27 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
     }
 
     if (!ocrResult.success || !ocrResult.data) {
+      // Ponowienie po zapisie (pg-boss powtarza cały job): wydatek już jest,
+      // a OCR tym razem zawiódł — np. pierwszy przebieg zużył resztę budżetu
+      // AI firmy. „Nie rozpoznano” z kartą „wpisz ręcznie” skończyłoby się
+      // drugim kosztem w KPiR (B4). Zadanie wskazuje zapisany wydatek, jak
+      // w `onProcessOcrExhausted`.
+      const savedExpenseId = await step.run('find-saved-expense', () =>
+        findOcrJobExpense(supabase, tenantId, ocrJobId),
+      );
+      if (savedExpenseId) {
+        await step.run('mark-completed-saved', async () => {
+          const { error } = await supabase
+            .from('ocr_jobs')
+            .update({ status: 'completed', expense_id: savedExpenseId, completed_at: new Date().toISOString() })
+            .eq('id', ocrJobId)
+            .eq('tenant_id', tenantId);
+
+          if (error) throw new Error(error.message);
+        });
+        return { success: true as const, expenseId: savedExpenseId };
+      }
+
       await step.run('mark-failed', async () => {
         const { error } = await supabase
           .from('ocr_jobs')
@@ -211,19 +255,9 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
       // Ponowienie (pg-boss bez pamięci kroków) wykonuje cały job od nowa.
       // Gdy zapis się udał, a padł późniejszy krok (oznaczenie zadania, karta
       // agenta, powiadomienie), drugi przebieg dopisywał ten sam paragon
-      // jeszcze raz — koszt w KPiR liczył się podwójnie. `ocr_job_id` nie jest
-      // UNIQUE; `limit(1)`, bo dawne duble nie mogą zablokować joba.
-      const { data: existing, error: existingErr } = await supabase
-        .from('expenses')
-        .select('id')
-        .eq('tenant_id', tenantId)
-        .eq('ocr_job_id', ocrJobId)
-        .limit(1)
-        .maybeSingle();
-      if (existingErr) {
-        throw new Error(`Nie można sprawdzić, czy wydatek już istnieje: ${existingErr.message}`);
-      }
-      if (existing) return existing.id;
+      // jeszcze raz — koszt w KPiR liczył się podwójnie.
+      const existingId = await findOcrJobExpense(supabase, tenantId, ocrJobId);
+      if (existingId) return existingId;
 
       const data = extractedData;
       const docType =
@@ -270,6 +304,17 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         .select('id')
         .single();
 
+      // Odczyt wyżej nie rozstrzyga wyścigu dwóch równoczesnych przebiegów
+      // (wygaśnięcie / utrata heartbeatu w pg-boss). Rozstrzyga go indeks
+      // UNIQUE (tenant_id, ocr_job_id) — prośba B4 do Bartosza — a 23505
+      // wymaga ponownego odczytu dokładnie tego zadania w tej firmie.
+      if (error?.code === '23505') {
+        const concurrentId = await findOcrJobExpense(supabase, tenantId, ocrJobId);
+        if (!concurrentId) {
+          throw new Error(`Konflikt UNIQUE nie dotyczy wydatku z tego zadania OCR: ${error.message}`);
+        }
+        return concurrentId;
+      }
       if (error || !expense) {
         throw new Error(error?.message ?? 'Insert failed');
       }
