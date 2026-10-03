@@ -1143,3 +1143,106 @@ i C-20 zaktualizowano. Nie podejmujemy kolejnej pozycji kolejki bez nowego
 polecenia Igora. PR #194 pozostaje szkicem do osobnej decyzji właściciela;
 bez merge, deploy i migracji na db-1. Końcowy wynik kontroli aktualnego HEAD
 jest zapisany w opisie PR, który należy sprawdzić ponownie przed scalaniem.
+
+## 2026-10-03 — CYB-DOCKER-CONTEXT-ENV: środowisko, certyfikaty i kopie poza obrazem
+
+**Faza 4 planu — CI, zależności i bezpieczne wydawanie zmian.** Igor polecił
+następny jeden pakiet i przekazanie do nowego czatu przy kończącym się
+kontekście. Nowy worktree `C:\Users\Igor\.codex\worktrees\security-docker-env\ksef-saas`,
+gałąź `codex/security-docker-env`, utworzona od świeżego `origin/main`
+`ef9bb438280aed56c638a70e4404ff4faadf09a0`. Następnie fast-forward wyłącznie
+sprawdzonej zależności #194 do `64ed5e56017ed35be0a5bb2d7b3eed329cdc8cca`:
+polityka plików agentów, harness Docker, normalizacje Windows i przekazanie.
+PR #194 pozostaje OPEN/draft, 11/11 SUCCESS na tym dokładnym HEAD.
+Stare worktree, główny katalog i gałęzie Claude zachowano.
+
+**Potwierdzone w kodzie:** `.env*` w dotychczasowym `.dockerignore` obejmuje
+root, a `app/.env.example` pokazuje już zagnieżdżoną konwencję. `.npmrc`
+może być lokalną konfiguracją operatora; nie jest śledzone ani kopiowane
+w etapie deps. `.gitignore` wskazuje lokalne certyfikaty i `.ksef-test-certs`.
+Helper `loadCredentialsFromFiles` jest używany przez skrypt testowy;
+produkcyjna ścieżka poświadczeń czyta szyfrowaną DB, cert MF pobiera z API.
+Brak śledzonego CA, lokalnego certyfikatu lub importu wymagającego tych plików.
+Sprawdzono nazwy śledzonych plików i jawne odwołania kodu, nie zawartość
+rzeczywistych poświadczeń, konfiguracji, certyfikatów ani kopii.
+
+`db-backup.sh` tworzy `.dump`, `.roles.sql`, `.partial-*` i `.outbox`;
+zrzut ról może zawierać hashe haseł: skrypt używa `pg_dumpall --roles-only`
+bez `--no-role-passwords`. [Dokumentacja PostgreSQL](https://www.postgresql.org/docs/18/app-pg-dumpall.html).
+Konfiguracja nazywa się
+`faktflow-backup.env`, czego wzorzec `.env*` nie obejmuje. Snapshot aplikacji
+używa kluczy `backups/db/...json.gz`; potrzebne źródła są w `lib/backup`.
+Nie potwierdzono obecności takich kopii w obrazie ani wcześniejszego wycieku.
+
+**Zmiana i uzasadnienie:** reguły obejmują root i podkatalogi: `.env*`
+i `.npmrc` również z różną wielkością liter, `faktflow-backup.env`, cały
+`.ksef-test-certs`, formaty PEM/KEY/CRT/CER/P12/PFX z różną wielkością liter,
+katalogi `backups` i `.outbox`, `backup_*.sql`, `.dump`, `.roles.sql` oraz
+ich dalsze rozszerzenia (np. kompresja/checksum). Nie rozróżniamy klucza
+od publicznego certyfikatu na podstawie samego rozszerzenia PEM; obecny kod
+nie wymaga plików certyfikatów. Przyszły publiczny CA wymaga konkretnej,
+sprawdzonej ścieżki i testu, bez ogólnego wyjątku dla wszystkich certyfikatów.
+Nie wykluczono wszystkich SQL/JSON/XML/GZ/ZIP ani `backup*`, bo usunęłoby
+to potrzebne źródła lub zasoby. Semantyka `**` i pierwszeństwa reguł:
+[dokumentacja Docker](https://docs.docker.com/build/concepts/context/#dockerignore-files).
+
+**Kontrola:** rozszerzono istniejący syntetyczny harness #194: 118 ścieżek
+prywatnych na zero, jednym i dwóch poziomach zagnieżdżenia oraz 20 wymaganych
+ścieżek dodatnich. Oprócz dotychczasowych XSD/fontu/MDX/public kontrola zachowuje
+`lib/backup/db-snapshot.ts`, `lib/auth/backup-codes.ts`, skrypty backup/restore,
+źródłowy SQL audytu i `public/favicon.zip`. Kontrola ujemna zachowuje wyłącznie
+wcześniejsze cztery reguły agentów — musi wtedy wykryć konkretny wyciek `.env`.
+Brak Docker/BuildKit nie spełnia warunku. Fixture ma wyłącznie fikcyjny marker,
+FROM scratch i COPY; rzeczywiste repo nie jest eksportowane.
+
+**Weryfikacja:** pełne lokalne `pnpm.cmd run ci` na dostępnym Node 24.19.0
+PASS: typecheck, lint 0 błędów / 35 wcześniejszych ostrzeżeń, 72/72 Node/XML,
+424 zestawy i 5413/5413 Vitest. 6/6 testów walidatora i lint skryptów PASS.
+Niezależna recenzja kodu nie znalazła blockerów; potwierdziła brak kolizji
+nowych reguł ze śledzonym runtime oraz niezależnie uruchomiła sześć testów.
+Build standalone przez `pnpm.cmd` wykonany po CI PASS: 82/82 strony, exit 0,
+`.next/standalone/server.js`, NEXT_OUTPUT=standalone, limit 3072 MB.
+Docker pozostaje niedostępny lokalnie; rzeczywiste wzorce sprawdzono w Linux CI.
+Dowód znajduje się poniżej.
+Commit nowej poprawki kodu: `877061e4834c6adc391a4715e1fb20a51383dac0`.
+
+**Kolejka nowego niezależnego problemu — CYB-DOCKER-BUILD-SECRETS:**
+Dockerfile przekazuje `SENTRY_AUTH_TOKEN` przez ARG oraz ENV etapu build.
+Osobno ocenić utrwalanie w cache/warstwach/logach i użycie secret mount;
+nie potwierdzono faktycznej wartości tokenu, ekspozycji w produkcji ani
+obecności w finalnym runnerze. [Docker: build secrets](https://docs.docker.com/build/building/secrets/).
+Ten pakiet nie zmienia sposobu przekazywania sekretów builda.
+
+### Aktualny stan i następny krok — CYB-DOCKER-CONTEXT-ENV
+
+Jeden pakiet obejmuje znane konwencje lokalnych konfiguracji, certyfikatów
+i kopii. Reguły nazw nie stanowią wykrywania dowolnego sekretu pod dowolną
+nazwą lub rozszerzeniem. Nie zweryfikowano rzeczywistego kontekstu Coolify
+ani produkcyjnego obrazu, db-1, QR i odbioru C-11/C-12. Nie tworzono SQL,
+nie wykonywano migracji na db-1, nie uruchamiano workera ani wdrożenia.
+Pakiet jest zakończony; kolejna pozycja kolejki nie została rozpoczęta.
+
+**Publikacja:** [roboczy PR #196](https://github.com/ezior8888-cpu/ksef-saas/pull/196),
+OPEN/draft, baza main. Zawiera niezmienione commity #194 jako zależność;
+nowy kod ENV to `877061e`. Po osobnym scaleniu #194 diff automatycznie
+ograniczy się do nowego pakietu. Nie zmieniono #194, #193 ani gałęzi Claude.
+Przy publikacji rozpoczęły się kontrole GitHuba; dowód Docker zapisano poniżej. Standardowy istniejący job RLS GitHuba używa
+izolowanej bazy testowej, nie potwierdza db-1 ani migracji 00129.
+
+**Rzeczywisty Docker — PASS:** dokładny kod `877061e4834c6adc391a4715e1fb20a51383dac0`,
+krok `Verify Docker context excludes local operator files` COMPLETED/SUCCESS
+w [Next build](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/37129370866/job/111221231387).
+Krok wykonuje sześć testów oraz aktualny eksport i kontrolę agents-only:
+118 prywatnych ścieżek wykluczone, 20 wymaganych zachowane, próba z samymi
+regułami agentów odrzucona po wykryciu `.env`. To syntetyczny test polityki,
+nie test produkcyjnych danych, obrazu lub konfiguracji Coolify.
+
+**Zamknięcie pakietu w fazie 4:** kod, pełne lokalne CI, build, rzeczywisty
+Docker i niezależna recenzja zaliczone. Dziennik, plan i C-20 uzupełniono;
+CYB-DOCKER-BUILD-SECRETS pozostaje w kolejce. Po commicie dokumentacji
+kontrole GitHuba odczytujemy dla dokładnego nowego HEAD i zapisujemy ich
+końcowy wynik w opisie PR #196. PR pozostaje szkicem do osobnej decyzji
+właściciela. Bez merge, deploy, migracji na db-1 i uruchamiania workera.
+Praca nad kolejną fazą nie jest rozpoczęta; przygotowujemy przekazanie do
+nowego czatu zgodnie z poleceniem Igora. Cała faza 4 planu pozostaje szersza
+od tego jednego zakończonego pakietu.

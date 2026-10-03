@@ -135,6 +135,23 @@ nie rozszerzam tej fazy na pozostałe lokalne konfiguracje, certyfikaty i kopie.
 #190, 00129 i odbiór C-11/C-12 nadal pozostają osobnym zakresem. Rezerwację
 00129 zachowano w rejestrze z #190; ta faza nie tworzy i nie wykonuje migracji.
 Przy scalaniu tego szkicu z #190/#193 zachować wszystkie wpisy przekazania.
+**Dopisek Codexa (03.10.2026, faza 4, CYB-DOCKER-CONTEXT-ENV):** Igor
+polecił następny jeden pakiet. Nowy worktree `security-docker-env`,
+`codex/security-docker-env`, od świeżego main `ef9bb43`, z zależnością #194
+na `64ed5e5`; stary PR i gałęzie Claude pozostają bez zmian. Rozszerzono
+politykę lokalnego kontekstu o root/zagnieżdżone env/npmrc, formaty lokalnych
+certyfikatów/kluczy oraz rzeczywiste konwencje kopii (.dump/.roles.sql,
+backups/.outbox). Produkcja czyta certyfikaty DB/API, więc brak potrzebnego
+wyjątku CA. Harness ma 118 prywatnych i 20 wymaganych ścieżek, w tym kod
+backupu, źródła SQL i archiwum publiczne. Kontrola samych agentów musi
+wykazać wyciek env. 6 testów i niezależna recenzja kodu PASS; pełne CI
+(72 XML, 5413 Vitest, typy i lint) oraz build 82/82 PASS. Roboczy PR #196
+do main zawiera #194 jako zależność; nowy kod ENV to 877061e. Rzeczywisty
+Docker PASS na dokładnym 877061e (118 wykluczonych/20 zachowanych ścieżek,
+kontrola agents-only odrzucona). Dowód w dzienniku, końcowe kontrole nowego
+HEAD po dokumentacji w opisie PR. Pakiet zamknięty; bez rozpoczęcia następnego.
+Do kolejki: CYB-DOCKER-BUILD-SECRETS (SENTRY_AUTH_TOKEN przez ARG/ENV).
+Bez SQL, merge i wdrożenia; nie zamykamy #190/00129/C-11/C-12 ani QR.
 
 
 ### C-01 · Konwencja kwot korekty sprzedaży — `ROZSTRZYGNIĘTE (02.10.2026, I1: różnica; #146)` · decyzja: Igor + Codex

@@ -191,3 +191,11 @@ w [dzienniku](DZIENNIK-ODPORNOSCI-CYBER.md). Testy kodu nie potwierdzają stanu
 Coolify, obrazu produkcyjnego ani db-1. Bez migracji, merge i wdrożenia.
 Niezależny zakres CYB-DOCKER-CONTEXT-ENV trafia do kolejki, poza tę fazę.
 Po zapisaniu wyniku tej fazy praca zostaje zatrzymana zgodnie z poleceniem Igora.
+
+## Aktualizacja wykonania 03.10.2026 — CYB-DOCKER-CONTEXT-ENV (faza 4)
+
+Kolejny jeden pakiet: lokalne konfiguracje, certyfikaty i kopie danych poza
+kontekstem obrazu. Rozszerza sprawdzoną kontrolę #194 na osobnej gałęzi
+`codex/security-docker-env`. Uzasadnienie, dowody i ograniczenia są w
+[dzienniku](DZIENNIK-ODPORNOSCI-CYBER.md). Do kolejki niezależny zakres
+CYB-DOCKER-BUILD-SECRETS; bez migracji, merge i wdrożenia.
