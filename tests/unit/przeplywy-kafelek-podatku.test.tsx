@@ -34,7 +34,7 @@ describe('kafelek szacowanego podatku', () => {
     expect(html).toContain('bez wcześniejszych miesięcy roku');
   });
 
-  it('strona z danymi od 1 stycznia (C-18): pełny rok mimo sześciu miesięcy na wykresie', () => {
+  it('strona z danymi od 1 stycznia (C-21): pełny rok mimo sześciu miesięcy na wykresie', () => {
     vi.setSystemTime(new Date('2026-10-10T12:00:00'));
     const html = renderToStaticMarkup(
       <CashFlowDashboard

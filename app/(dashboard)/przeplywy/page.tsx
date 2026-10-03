@@ -11,6 +11,7 @@ import {
   getMonthlyFigures,
   getSalesSeries,
 } from '@/lib/dashboard/monthly-figures';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { getPageContext } from '@/lib/supabase/page-context';
@@ -33,9 +34,17 @@ export default async function PrzeplywyPage() {
   const environment = requireConfiguredKsefEnvironment();
 
   const now = new Date();
-  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
-    .toISOString()
-    .slice(0, 10);
+  // Miesiąc i rok w czasie polskim, bez `toISOString()` z lokalnej północy
+  // (w strefie polskiej cofało początek o dzień: 1 maja → 30 kwietnia),
+  // a serwer chodzi w UTC.
+  const [year, month] = todayInWarsaw(now).split('-').map(Number);
+  const chartStart = new Date(Date.UTC(year, month - 1 - 5, 1));
+  const sixMonthsAgo = chartStart.toISOString().slice(0, 10);
+  // C-21: szacunek podatku liczy się od 1 stycznia, a wykres pokazuje sześć
+  // miesięcy — dane od wcześniejszej z tych dat. Bez tego od lipca kafelek
+  // mówił „od 1 maja · bez wcześniejszych miesięcy roku”.
+  const yearStart = `${year}-01-01`;
+  const dataFrom = yearStart < sixMonthsAgo ? yearStart : sixMonthsAgo;
 
   const [invoices, expenses] = await Promise.all([
     readCompletePages('cash-flow invoices', (from, to) =>
@@ -46,7 +55,7 @@ export default async function PrzeplywyPage() {
         .eq('direction', 'outgoing')
         .eq('ksef_status', 'accepted')
         .eq('ksef_environment', environment)
-        .gte('issue_date', sixMonthsAgo)
+        .gte('issue_date', dataFrom)
         .order('id', { ascending: true })
         .range(from, to),
     ),
@@ -56,7 +65,7 @@ export default async function PrzeplywyPage() {
         .select('id, source, ksef_invoice_id, issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column, is_reviewed, ocr_extracted_data', { count: 'exact' })
         .eq('tenant_id', tenantId)
         .eq('is_deductible', true)
-        .gte('issue_date', sixMonthsAgo)
+        .gte('issue_date', dataFrom)
         .order('id', { ascending: true })
         .range(from, to),
     ),
@@ -115,6 +124,7 @@ export default async function PrzeplywyPage() {
         invoices={invoiceRows}
         expenses={visibleExpenses}
         pendingReviewCount={pendingReviewCount ?? 0}
+        dataFrom={dataFrom}
       />
 
       <VatSummaryCard
