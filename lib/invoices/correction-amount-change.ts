@@ -1,7 +1,14 @@
 import { roundToCents } from '@/lib/xml/invoice-calculator';
+import type { ZeroVatAmountChangeRate } from '@/types/invoice-types';
 
-type AmountChange = { netDelta: number; vatDelta: number; grossDelta: number };
-type Rate = '23' | '8' | '5' | '0';
+type AmountChange = {
+  netDelta: number;
+  vatDelta: number;
+  grossDelta: number;
+  /** Jawna stawka bez VAT z faktury pierwotnej (np I, np II, oo). */
+  vatRate?: ZeroVatAmountChangeRate;
+};
+type Rate = '23' | '8' | '5' | '0' | ZeroVatAmountChangeRate;
 
 /** Reject ambiguous or inconsistent deltas rather than guessing a legal VAT rate. */
 export function resolveAmountChangeVatRate(change: AmountChange): Rate {
@@ -13,6 +20,15 @@ export function resolveAmountChangeVatRate(change: AmountChange): Rate {
     throw new Error('Korekta kwotowa: niespójna kwota netto, VAT lub brutto.');
   }
 
+  // Stawka bez VAT nie wynika z kwot (VAT 0 = także „0 KR”) — przychodzi jawnie
+  // z faktury pierwotnej i wymaga zerowego VAT w korekcie.
+  if (change.vatRate !== undefined) {
+    if (roundToCents(vatDelta) !== 0) {
+      throw new Error(`Korekta kwotowa: stawka „${change.vatRate}” nie ma VAT — różnica VAT musi być 0.`);
+    }
+    return change.vatRate;
+  }
+
   const rates = [
     ['23', 0.23], ['8', 0.08], ['5', 0.05], ['0', 0],
   ] as const;
@@ -21,4 +37,20 @@ export function resolveAmountChangeVatRate(change: AmountChange): Rate {
     throw new Error('Korekta kwotowa: stawka VAT jest niejednoznaczna lub nieobsługiwana.');
   }
   return matches[0]![0];
+}
+
+/**
+ * Stawka bez VAT dla korekty kwotowej z pozycji faktury pierwotnej: gdy WSZYSTKIE
+ * pozycje mają tę samą stawkę `np` / `np_ii` / `oo`, korekta ją przejmuje
+ * (z kwot — VAT 0 — nie da się jej odróżnić od „0 KR”). Inaczej `undefined`
+ * i stawkę wyznaczają kwoty (`resolveAmountChangeVatRate`). Wspólne dla
+ * serwera (akcja korekty) i formularza.
+ */
+export function zeroVatRateFromParentLines(
+  lines: ReadonlyArray<{ vatRate: string }>,
+): ZeroVatAmountChangeRate | undefined {
+  const rates = new Set(lines.map((l) => l.vatRate));
+  if (rates.size !== 1) return undefined;
+  const [rate] = [...rates];
+  return rate === 'np' || rate === 'np_ii' || rate === 'oo' ? rate : undefined;
 }
