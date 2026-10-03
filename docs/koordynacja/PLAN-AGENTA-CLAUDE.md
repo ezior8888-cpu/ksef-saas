@@ -116,7 +116,9 @@ nie oznacza. Uwagi, bez pilności:
 
 **Ostatnia aktualizacja:** 03.10.2026 wieczór — Claude (sesja z Igorem): punkt 00
 sprawdzony (main dalej czerwony, wiadomość dla Bartosza), F-093 zrobione w #189,
-B4 i E15 w #192 (kod + prośba o migrację w opisie).
+B4 i E15 w #192 (kod + prośba o migrację w opisie). Po południu Bartosz scalił
+B8 (`553d69e`, `shadcn` w devDependencies) i #186 — audyt w CI zielony; moje
+PR-y #187–#189 i #192 zaktualizowane merge'em z `main`.
 
 **Co się zmieniło 02.10 (ważne dla każdej nowej sesji):** sesje Claude
 Bartosza zrobiły audyt logiki domenowej (`docs/audyt/blok-1/`, PR #166),
@@ -158,9 +160,9 @@ wydanie #111 (`7a9f49a`) z #106–#110, #134 (przez #167 Bartosza) oraz:
 `claude/ocr-unikalnosc-b4`) i #191 (atrapa GUS w teście hasha eksportu —
 z zadania zgłoszonego 03.10, gałąź `claude/test-hash-gus-atrapa`) — czekają
 na scalenie przez Bartosza.
-Wszystkie (także #186) mają czerwone CI wyłącznie przez krok audytu — punkt 00.
-Otwarte cudze (03.10): Bartosz #186 (korekta dla firmy z UE, np. II — dotyka
-plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
+Audyt zależności naprawiony w `main` (B8) — CI liczy się od nowa po
+aktualizacji z `main` (03.10 po południu: #187–#189 i #192 zaktualizowane).
+#186 Bartosza (korekta dla firmy z UE, np. II) scalony 03.10.
 
 ### 4.3. Prośby do Bartosza (migracje, produkcja) — stan 03.10
 
@@ -173,7 +175,7 @@ plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 | B5 | C-16: płatności/ponaglenia ROZ | ✅ częściowo #178 (ponaglenia i zaległości tylko dla faktur ścigalnych, 00126) |
 | B6 | `SENTRY_DSN` w zmiennych workera (log startu „Sentry: alerty z jobów włączone”) | nieznany; od #120 alerty idą też na Telegram |
 | B7 | Mail o końcu trialu dla kont bez karty | decyzja — cennik i trial ujednolicone w #136 (`lib/billing/pricing.ts`) |
-| B8 | CI: `shadcn` → `devDependencies` (punkt 00 w sekcji 5) | wiadomość przez Igora 03.10 wieczór — decyzja i zmiana po stronie Bartosza |
+| B8 | CI: `shadcn` → `devDependencies` (punkt 00 w sekcji 5) | ✅ Bartosz 03.10, `553d69e` w `main` — `pnpm audit --prod` czysty |
 
 ### 4.4. Czeka na decyzję / kogoś innego — sprawdzone na kodzie 03.10
 
@@ -181,7 +183,7 @@ plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 |---|---|
 | C-05: adnotacje P_16/P_18A dla ZAL i ROZ | ✅ #176, #177 (z zamrożonej koperty) |
 | C-17 = audyt F-020: faktura zaliczkowa bez P_6 (data otrzymania zaliczki) i z przyszłym terminem zamiast „zapłacono” | otwarte; `Zamowienie` zrobione (AUD-71, #177). Generator ZAL zmieniany 02.10 przez sesje Bartosza (AUD-70) — **zanim weźmiesz: ustal z Bartoszem**, czy ktoś to robi |
-| C-15 = AUD-04: korekty i zaliczki przy stawce „zw” rzucają wyjątek; korekty na produkcji wstrzymane (`lib/ksef/submission-holds.ts`, AUD-03/04) | otwarte; pliki korekt w #186 Bartosza — po jego scaleniu i po uzgodnieniu |
+| C-15 = AUD-04: korekty i zaliczki przy stawce „zw” rzucają wyjątek; korekty na produkcji wstrzymane (`lib/ksef/submission-holds.ts`, AUD-03/04) | otwarte; #186 scalony 03.10 — zostaje uzgodnienie z Bartoszem (pliki korekt zmieniały jego sesje) |
 | F-093: `KsefApiError.ksefCode` zawsze `null` + odpowiedź `application/problem+json` nieparsowana (kody z tego kształtu, także 21184 z F-050, nieczytelne w prawdziwym `ksefFetch`) | zrobione 03.10 w #189 — czeka na scalenie przez Bartosza |
 | C-21 (dawniej mylnie „C-18” — ten numer ma sprawa „Niepewny wynik wysyłki KSeF i UPO”): strona przepływów ładuje dane od 1 stycznia i przekazuje `dataFrom` | zrobione 03.10 w #188 — czeka na scalenie przez Bartosza |
 | Szacunek podatku zakłada 19% liniowy dla każdego (podpisane na kafelku); skala i ryczałt dałyby inne kwoty; Flo ma profil podatkowy (`taxGateOpen`) | decyzja produktowa (Bartosz) |
@@ -197,28 +199,9 @@ plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 
 ## 5. Następny krok
 
-00. **CI czerwone dla każdego PR (od 03.10).** Krok „Audit production
-    dependencies” (`pnpm audit --prod --audit-level=high`) pada na nowym
-    ostrzeżeniu `braces` ≤3.0.3 (GHSA-vfj7-8cjw-p6xm, DoS przez głęboko
-    zagnieżdżone wzorce), **bez wersji z łatką**. Ścieżka:
-    `shadcn > fast-glob > micromatch > braces`. `shadcn` to narzędzie CLI;
-    w działającej aplikacji używamy z niego tylko `app/globals.css`
-    (`@import "shadcn/tailwind.css"`, rozwiązywane przy budowaniu), a
-    `Dockerfile` (etap `deps`) instaluje pełne zależności. Najpierw sprawdź,
-    czy `main` już to naprawił (`pnpm audit --prod --audit-level=high` na
-    `origin/main`). Jeśli nie — decyzja Bartosza: (a) `shadcn` do
-    `devDependencies` (moja rekomendacja: znika z audytu produkcyjnego, nic
-    nie wyciszamy) albo (b) `pnpm.auditConfig.ignoreGhsas` z uzasadnieniem.
-    Przy (a): `pnpm run ci && pnpm build`.
-    **Sprawdzone 03.10 wieczorem:** `main` nadal pada (jedyna ścieżka do
-    `braces` to `shadcn`). W kopii roboczej poza repo: po przeniesieniu
-    `shadcn` do `devDependencies` `pnpm-lock.yaml` zmienia się tylko
-    przeniesieniem tego wpisu, a `pnpm audit --prod --audit-level=high` daje
-    „No known vulnerabilities found”. Obrazy bez zmian: etap `deps`
-    instaluje pełne zależności (build już dziś potrzebuje `tailwindcss`
-    i `typescript` z devDependencies, worker startuje przez `tsx` z
-    devDependencies). Wiadomość z rekomendacją (a) poszła przez Igora —
-    sesja Igora tego nie zmienia (B8).
+00. ✅ **CI czerwone przez audyt `braces` (03.10)** — rozwiązane przez
+    Bartosza (B8, `553d69e`: `shadcn` w devDependencies). Po aktualizacji
+    z `main` PR-y przechodzą audyt; lokalnie `pnpm audit --prod` czysty.
 0. **Najpierw podział pracy z sesjami Bartosza.** Logikę domenową prowadzi
    teraz audyt (`docs/audyt/`). Zanim weźmiesz sprawę z listy niżej, ustal
    z Igorem (a on z Bartoszem), czy jest twoja — inaczej dwie sesje zrobią
@@ -268,7 +251,7 @@ plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
    daje 403. Na GitHub CI przechodzi, dopóki sandbox GUS odpowiada — ukryta
    zależność testu od sieci, kandydat na małą poprawkę (atrapa w teście).
 2. Po uzgodnieniu: C-17 / F-020 (P_6 i „zapłacono” w ZAL); C-15 / AUD-04
-   (korekty „zw”) po scaleniu #186.
+   (korekty „zw”) — #186 już scalony, zostaje tylko uzgodnienie.
 3. E14 zamknięty 03.10: generatory KOR/ZAL nie wołają `validateInvoice`;
    formularze wymuszają 26 cyfr rachunku i identyfikator B2C; jedyna blokująca
    reguła to „zw” (C-15). ROZ wstrzymana.
