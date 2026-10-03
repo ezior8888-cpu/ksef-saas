@@ -69,6 +69,8 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E10 | Formularze faktur VAT/KOR/ZAL/ROZ — przypadki brzegowe dat i kwot (art. 106i, 106e) | ✅ przegląd 01.10 + poprawka | KOREKTA przeglądu: reguły sprawdzane tylko przy wysyłce (`validateInvoice` w jobie) — rachunek przy przelewie, format IBAN wymagający „PL” (zwykłe 26 cyfr odrzucane), zakres daty wystawienia — przepuszczały fakturę przez zapis, a wysyłka padała bez możliwości poprawki; #134. Ograniczenia produktowe w 4.4. Formularz i akcje VAT/KOR/ZAL/ROZ w stosie Codexa |
 | E11 | Ustawienia firmy i KSeF — zmiana NIP, danych sprzedawcy, certyfikatu; co dzieje się z wystawionymi fakturami | ✅ przegląd 01.10 | PDF bierze sprzedawcę z migawki faktury (`seller_data`); NIP firmy ustawia się tylko w szkicu; ponowna wysyłka wstrzymana do ręcznego uzgodnienia |
 | E12 | Koszty samochodu osobowego (50% VAT, 75% PIT) — aplikacja odlicza 100% VAT i nie stosuje limitu | ⏳ decyzja | 4.4 |
+| E15 | Job OCR po B4: ponowienie bez płatnego OCR, karta i powiadomienie z zapisanego wydatku, `onProcessOcrExhausted` bez „nieudane” w ciemno | ✅ 03.10 | #192 (razem z B4) |
+| E16 | Resztki OCR i karty wydatku: karta przy braku kursu (`deductible: 1` → „stale”, kwota w walucie jako „zł”, `unknown_seller` nieosiągalne); zawieszone „przetwarzanie” (decyzja); dubel przy ponownym wgraniu zdjęcia (decyzja) | ⬜ | 5 |
 
 ### 3.1. Audyt jobów pod ponowienia (E4)
 
@@ -114,7 +116,7 @@ nie oznacza. Uwagi, bez pilności:
 
 **Ostatnia aktualizacja:** 03.10.2026 wieczór — Claude (sesja z Igorem): punkt 00
 sprawdzony (main dalej czerwony, wiadomość dla Bartosza), F-093 zrobione w #189,
-B4 w #192 (kod + prośba o migrację w opisie).
+B4 i E15 w #192 (kod + prośba o migrację w opisie).
 
 **Co się zmieniło 02.10 (ważne dla każdej nowej sesji):** sesje Claude
 Bartosza zrobiły audyt logiki domenowej (`docs/audyt/blok-1/`, PR #166),
@@ -152,8 +154,10 @@ wydanie #111 (`7a9f49a`) z #106–#110, #134 (przez #167 Bartosza) oraz:
 ### 4.2. Otwarte PR-y Claude
 
 #187 (ten plan), #188 (C-21, gałąź `claude/przeplywy-od-stycznia`), #189
-(F-093, gałąź `claude/jolly-tesla-jg9c9z`) i #192 (B4, gałąź
-`claude/ocr-unikalnosc-b4`) — czekają na scalenie przez Bartosza.
+(F-093, gałąź `claude/jolly-tesla-jg9c9z`), #192 (B4 + E15, gałąź
+`claude/ocr-unikalnosc-b4`) i #191 (atrapa GUS w teście hasha eksportu —
+z zadania zgłoszonego 03.10, gałąź `claude/test-hash-gus-atrapa`) — czekają
+na scalenie przez Bartosza.
 Wszystkie (także #186) mają czerwone CI wyłącznie przez krok audytu — punkt 00.
 Otwarte cudze (03.10): Bartosz #186 (korekta dla firmy z UE, np. II — dotyka
 plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
@@ -220,22 +224,31 @@ plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
    z Igorem (a on z Bartoszem), czy jest twoja — inaczej dwie sesje zrobią
    to samo w tych samych plikach.
 1. **Następny krok: zapytać Igora** o C-17 / C-15 (pkt 2 — mogą je robić
-   sesje Bartosza). Bez kolizji, do wzięcia od razu: **E15 — job OCR po
-   B4** (uwagi z przeglądu #192, wszystkie w `lib/jobs/runners/process-ocr.ts`):
-   (a) ponowienie robi płatne OCR PRZED odczytem wydatku — przy ponowieniu
-   po zapisie można pominąć AI i dokończyć kroki danymi zapisanego wiersza;
-   (b) karta przeglądu przy ponowieniu i przegranym wyścigu powstaje
-   z bieżącego odczytu modelu, nie z zapisanego wydatku (kwota/kolumna na
-   karcie i `undo` mogą się różnić); (c) `onProcessOcrExhausted` przy
-   błędzie odczytu ogłasza „nieudane”, choć wydatek może istnieć;
-   (d) nieaktualne komentarze `retryLimit: 0` w `lib/jobs/worker.ts` i
-   `lib/jobs/retry.ts` (dziś `boss.ts`: 2) i martwy `findStuckOcrJobs`
-   (`expense-review.ts`), choć `share-target/route.ts` obiecuje kartę po
-   3 min. Osobno (decyzja produktowa): ponowne wgranie tego samego zdjęcia
-   daje nowe zadanie OCR i drugi wydatek — indeks B4 tego nie łapie.
+   sesje Bartosza). Bez kolizji, do wzięcia od razu: **E16 — karta
+   przeglądu wydatku** (`lib/flo/functions/expense-review.ts`; stara gałąź
+   `codex/security-ksef-inbox-currency` też go zmienia, ale bez otwartego
+   PR — sprawdź przed startem): (a) przy braku kursu NBP odcisk karty ma na
+   sztywno `deductible: 1`, a wydatek `is_deductible = false` — „Zgadza
+   się” kończy się „stale” już w pierwszym przebiegu; (b) kwota w walucie
+   wychodzi na karcie jako „zł” (`formatPlnPlain`); (c) `unknown_seller`
+   nieosiągalne z OCR, bo `readSellerHistory` liczy sam wydatek;
+   (d) `getOcrJobStatusAction` (`app/actions/expenses.ts`) ignoruje błąd
+   odczytu — chwilowy błąd kończy odpytywanie komunikatem „Job nie
+   istnieje”; (e) baner na ekranie agenta pisze „Paragon odczytany” także
+   przy karcie porażki (ten sam `kind`). **Decyzje Bartosza (E16):**
+   zawieszone „przetwarzanie” — po wyczerpaniu ponowień samego pg-boss
+   `onExhausted` się nie wywołuje, a `findStuckOcrJobs` nie jest podpięty,
+   choć `share-target/route.ts` i baner obiecują kartę „po 3 min”
+   (technicznie: krok w `jobs-watchdog`, bez nowego crona, rozstrzygany
+   stanem pg-boss, nie czasem); ponowne wgranie tego samego zdjęcia (także
+   po 60 s limitu w przycisku) daje drugi wydatek.
    Zrobione 03.10: F-093 w #189 (getter `ksefCode` przez `ksefErrorCodes`;
    `ksefFetch` parsuje też `application/problem+json` — inaczej 21184 z
-   F-050 w tym kształcie nie byłby rozpoznany), B4 w #192, C-21 w #188.
+   F-050 w tym kształcie nie byłby rozpoznany), B4 + E15 w #192, C-21 w #188.
+   **Weryfikacja na prawdziwej bazie:** w kontenerze w chmurze jest
+   PostgreSQL 16 (`/usr/lib/postgresql/16/bin`); komplet migracji repo
+   wchodzi na czystą bazę z atrapami Supabase (role, `auth.*`,
+   `supabase_migrations`, `pgboss.job`) — tak sprawdzono SQL dla B4.
    **Numery migracji:** rejestr na `main` nie wystarcza — sprawdź też
    gałęzie zdalne (`git ls-tree -r --name-only <gałąź> supabase/migrations`;
    03.10 szkic #190 zajął 00129).
