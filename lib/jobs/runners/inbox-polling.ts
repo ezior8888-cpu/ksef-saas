@@ -1,3 +1,5 @@
+import * as Sentry from '@sentry/nextjs';
+
 import type { JobContext } from '@/lib/jobs/registry';
 
 import {
@@ -355,11 +357,51 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
     const insertedNumbers = new Set(insertedInvoices.map((row) => row.ksef_number as string));
     const newlyAddedInvoices = freshInvoices.filter((inv) => insertedNumbers.has(inv.ksefNumber));
 
+    // K2 (rewizja 03.10.2026): kategoryzacja kosztu i archiwum XML idą
+    // NATYCHMIAST po zapisie — przed kartą FLO i pushem. Wcześniej błąd karty
+    // wywracał job, ponowienie widziało faktury „już w DB”, przesuwało HWM i
+    // nikt nigdy nie emitował tego zdarzenia: faktura w /inbox, ale bez kosztu
+    // w KPiR i bez XML. `singletonKey` = id faktury: cron `inbox-backfill` może
+    // wysłać to samo zdarzenie drugi raz, a pg-boss trzyma w kolejce jeden job.
+    // Błąd TEJ emisji ma wywrócić job: HWM stoi, ponowienie nic nie zapisze
+    // (filter-existing), a brakujące zdarzenia dośle cron po 15 minutach
+    // (znacznik `fa3_data._pendingFullFetch`).
+    if (insertedInvoices.length > 0) {
+      await step.sendEvent(
+        'fan-out-auto-categorize-inbox',
+        insertedInvoices.map((row) => ({
+          ...inboxInvoiceReceivedAutoCategorize.create({
+            invoiceId: row.id,
+            tenantId,
+            environment: env,
+          }),
+          singletonKey: row.id as string,
+        })),
+      );
+    }
+
+    // Od tego miejsca wszystko jest „best effort”: karta FLO, push i zdarzenie
+    // dla UI nie mogą zatrzymać HWM ani przebiegu. Błąd idzie do logu i Sentry.
+    const bestEffort = async (name: string, fn: () => Promise<unknown>): Promise<void> => {
+      try {
+        await step.run(name, fn);
+      } catch (e) {
+        logger.error(`Skrzynka: krok pomocniczy „${name}” nieudany — faktury i kategoryzacja są zapisane`, {
+          tenantId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        Sentry.captureException(e, {
+          tags: { job: 'inbox-poll-tenant', step: name },
+          extra: { tenantId },
+        });
+      }
+    };
+
     // Jedna zbiorcza karta na cały przebieg. Pięć faktur w nocy to pięć
     // powiadomień o siódmej rano — czyli hałas, przez który ludzie wyłączają
     // powiadomienia i przestają widzieć również te ważne.
     if (insertedInvoices.length > 0) {
-      await step.run('flo-inbox-card', async () => {
+      await bestEffort('flo-inbox-card', async () => {
         const supabase = await createAdminClient();
 
         // Sprzedawcy, których klient już u siebie widział. Nieznany
@@ -418,20 +460,9 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
 
         if (proposal) await createProposal(proposal);
       });
-
-      await step.sendEvent(
-        'fan-out-auto-categorize-inbox',
-        insertedInvoices.map((row) =>
-          inboxInvoiceReceivedAutoCategorize.create({
-            invoiceId: row.id,
-            tenantId,
-            environment: env,
-          }),
-        ),
-      );
     }
 
-    await step.run('push-inbox-new', async () => {
+    await bestEffort('push-inbox-new', async () => {
       const n = newlyAddedInvoices.length;
       if (n === 0) return { skipped: true as const };
 
@@ -465,7 +496,18 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
       }),
     );
     if (invoiceEvents.length > 0) {
-      await step.sendEvent('fan-out-new-invoices', invoiceEvents);
+      try {
+        await step.sendEvent('fan-out-new-invoices', invoiceEvents);
+      } catch (e) {
+        logger.error('Skrzynka: zdarzenie dla UI nie wyszło — faktury i kategoryzacja są zapisane', {
+          tenantId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        Sentry.captureException(e, {
+          tags: { job: 'inbox-poll-tenant', step: 'fan-out-new-invoices' },
+          extra: { tenantId },
+        });
+      }
     }
 
     logger.info(

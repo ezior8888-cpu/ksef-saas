@@ -2,6 +2,8 @@
  * Po zapisaniu faktury przychodzącej z inbox KSeF — tworzymy `expenses` z kategoryzacją KPiR.
  */
 
+import * as Sentry from '@sentry/nextjs';
+
 import { NonRetriableError } from '../errors';
 import type { JobContext } from '@/lib/jobs/registry';
 
@@ -15,6 +17,7 @@ import { nbpRateForCost } from '@/lib/nbp/client';
 import { costInPln, documentCurrency, HOME_CURRENCY } from '@/lib/ocr/currency';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { archiveInboxInvoiceXml } from '@/lib/ksef/inbox-xml';
+import { markInboxInvoiceProcessed } from '@/lib/ksef/inbox-pending';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { Database, Json } from '@/types/database';
 
@@ -204,7 +207,7 @@ export function unsignedForCategorization(extracted: ExtractedInvoice): Extracte
  * Runner joba (worker pg-boss).
  * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
  */
-export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoiceReceivedAutoCategorize.create>[0], { step }: JobContext) {
+export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoiceReceivedAutoCategorize.create>[0], { step, logger }: JobContext) {
     const { invoiceId, tenantId, environment } = inboxInvoiceReceivedAutoCategorize.parse(
       data,
     );
@@ -216,7 +219,7 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     // #122 część B: oryginał XML faktury otrzymanej (KOD I, „Pobierz XML”).
     // Przed kategoryzacją, więc działa także, gdy koszt zostanie pominięty;
     // błąd nie przerywa joba — PDF zostaje podglądem (B14).
-    await step.run('archive-ksef-xml', () =>
+    const xml = await step.run('archive-ksef-xml', () =>
       archiveInboxInvoiceXml({ tenantId, invoiceId, environment }));
 
     // Nowa nazwa kroku wymusza ponowny odczyt waluty także przy wznowieniu
@@ -426,6 +429,31 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
 
       return { skipped: false as const, expenseId: expense.id };
     });
+
+    // K2 (rewizja 03.10.2026): domknięcie przebiegu. Odbiór skrzynki zapala
+    // `fa3_data._pendingFullFetch`; cron `inbox-backfill` emituje zdarzenie
+    // ponownie dla faktur, które tu nie doszły. Znacznik gaśnie dopiero, gdy
+    // koszt istnieje (utworzony albo zastany wyżej) i XML jest w archiwum albo
+    // nie jest potrzebny. Błąd pobrania XML zostawia znacznik — cron spróbuje
+    // ponownie, a koszt już jest.
+    const xmlSettled = xml.archived || xml.reason === 'has-xml' || xml.reason === 'not-applicable';
+    if (xmlSettled) {
+      // Praca jest zrobiona; nieudane zgaszenie znacznika kosztuje najwyżej
+      // jedną zbędną emisję z crona (idempotentną), więc nie wywraca joba.
+      try {
+        await step.run('mark-inbox-processed', () =>
+          markInboxInvoiceProcessed(supabase, { tenantId, invoiceId }));
+      } catch (e) {
+        logger.warn('Skrzynka: nie udało się zgasić znacznika _pendingFullFetch — cron uzupełniający ponowi', {
+          invoiceId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        Sentry.captureException(e, {
+          tags: { job: 'auto-categorize-inbox', step: 'mark-inbox-processed' },
+          extra: { tenantId, invoiceId },
+        });
+      }
+    }
 
     return { success: true as const };
 }
