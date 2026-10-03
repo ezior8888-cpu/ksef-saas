@@ -43,6 +43,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-cykl-faktury.test.ts',
       // PR 3 cyklu życia: RPC w jednej transakcji ze zleceniem pg-boss.
       'tests/rls-kolejkowanie-wysylki.test.ts',
+      // 00132: wyzwalacze po zacieśnieniu — klient nigdy nie pisze ksef_status.
+      'tests/rls-cykl-wyzwalacze.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
