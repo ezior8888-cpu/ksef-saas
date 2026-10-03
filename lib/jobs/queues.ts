@@ -104,6 +104,8 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.flo-shadow-settle', cron: '0 6 * * 1', tz: TZ },
   { queue: 'cron.gdpr-process-deletions', cron: '0 * * * *' },
   { queue: 'cron.inbox-polling', cron: '*/15 * * * *', tz: TZ },
+  // K2: 7 minut po odbiorze skrzynki — domyka faktury bez kosztu/XML.
+  { queue: 'cron.inbox-backfill', cron: '7,22,37,52 * * * *', tz: TZ },
   { queue: 'cron.jobs-watchdog', cron: '*/15 * * * *', tz: TZ },
   { queue: 'cron.ksef-health-check', cron: '* * * * *', tz: TZ },
   // Heartbeat dla zewnętrznego strażnika (lib/jobs/heartbeat.ts): ping co minutę

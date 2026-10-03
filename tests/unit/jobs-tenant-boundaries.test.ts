@@ -3,6 +3,7 @@ import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice } from '@/types/invoice';
 import type { AdvanceInvoiceData } from '@/types/invoice-types';
 import { sellerPartyFromSellerData } from '@/lib/invoices/map-buyer-party';
+import { KsefApiError } from '@/lib/ksef/client';
 
 type Row = Record<string, unknown>;
 type Query = {
@@ -517,7 +518,8 @@ describe('service-role job boundaries', () => {
   });
   it.each([
     { error: new Error('old timeout'), fromOfflineQueue: true, attemptedStatus: 'failed' },
-    { error: Object.assign(new Error('KSeF rejected'), { name: 'NonRetriableError' }), fromOfflineQueue: false, attemptedStatus: 'rejected' },
+    // `rejected` tylko dla odrzucenia TREŚCI przez KSeF (katalog kodów, PR 2 cyklu życia).
+    { error: Object.assign(new Error('KSeF odrzucił fakturę (HTTP 400)'), { name: 'NonRetriableError', cause: new KsefApiError(400, 'x', 'Bad request') }), fromOfflineQueue: false, attemptedStatus: 'rejected' },
   ])('preserves an ordinary VAT acceptance racing with a $attemptedStatus update', async ({ error, fromOfflineQueue, attemptedStatus }) => {
     tables.invoices = [{
       id: ID, tenant_id: A, ksef_status: 'sending', ksef_number: null, ksef_environment: 'test',

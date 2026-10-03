@@ -182,6 +182,33 @@ export interface InsertResult {
   created: boolean;
 }
 
+/** Format numeru nadawanego przez bazę (`create_billing_vat_invoice`, 00110). */
+const BILLING_INVOICE_NUMBER = /^FF\/\d{4}\/\d{2}\/\d{4}$/;
+
+/**
+ * Czy numer zwrócony przez RPC jest tym, którego się spodziewamy.
+ *
+ * Od 00110 numer nadaje baza, a draft idzie z pustym `internalNumber` —
+ * porównanie „numer z bazy = numer draftu” było wtedy zawsze fałszywe
+ * i każda faktura za abonament kończyła się wyjątkiem PO zacommitowanej
+ * transakcji (K1 w rewizji z 03.10.2026, regresja AUD-69).
+ *
+ *   - draft bez numeru, nowa faktura: numer musi mieć format bazy,
+ *   - draft bez numeru, faktura istniejąca: baza jest źródłem prawdy
+ *     (także dawny format sprzed 00110),
+ *   - draft z numerem (dawna ścieżka): numer musi się zgadzać dokładnie.
+ */
+function isExpectedInternalNumber(
+  returned: unknown,
+  draftNumber: string,
+  created: boolean,
+): returned is string {
+  if (typeof returned !== 'string' || returned.length === 0) return false;
+  if (draftNumber !== '') return returned === draftNumber;
+  if (!created) return true;
+  return BILLING_INVOICE_NUMBER.test(returned);
+}
+
 /**
  * Tworzy fakturę, jej pozycję i powiązanie z płatnością w jednej transakcji
  * SQL. RPC blokuje wiersz płatności także dla równoległego zwrotu.
@@ -223,8 +250,8 @@ export async function insertSelfInvoice(
   }
   if (!Array.isArray(data) || data.length !== 1 ||
       typeof data[0].invoice_id !== 'string' ||
-      data[0].internal_number !== invoice.internalNumber ||
-      typeof data[0].created !== 'boolean') {
+      typeof data[0].created !== 'boolean' ||
+      !isExpectedInternalNumber(data[0].internal_number, invoice.internalNumber, data[0].created)) {
     throw new Error('Self-invoice transaction returned an invalid result');
   }
 

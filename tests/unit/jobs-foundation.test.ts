@@ -57,12 +57,12 @@ describe('decideRetry — parytet z Inngest', () => {
 
   it('zwykły błąd → retry z default schedule i inkrementacją attempt', () => {
     const d = decideRetry(new Error('ECONNRESET'), 0, policy);
-    expect(d).toEqual({ action: 'retry', delayMs: 10_000, nextAttempt: 1 });
+    expect(d).toEqual({ action: 'retry', delayMs: 10_000, nextAttempt: 1, nextWaits: 0 });
   });
 
   it('RetryAfter wygrywa z default schedule (jawne opóźnienie)', () => {
     const d = decideRetry(new RetryAfterError('KSeF 503', '2m'), 1, policy);
-    expect(d).toEqual({ action: 'retry', delayMs: 120_000, nextAttempt: 2 });
+    expect(d).toEqual({ action: 'retry', delayMs: 120_000, nextAttempt: 2, nextWaits: 0 });
   });
 
   it('wyczerpanie prób: attempt >= maxRetries → exhausted', () => {
@@ -82,6 +82,7 @@ describe('decideRetry — parytet z Inngest', () => {
         action: 'retry',
         delayMs: expected[attempt],
         nextAttempt: attempt + 1,
+        nextWaits: 0,
       });
     }
     // 6. wykonanie (attempt=5) → exhausted → ścieżka Offline24 w onExhausted.
@@ -112,11 +113,13 @@ describe('decideRetry — błędy KLAS INNGEST (runnery są współdzielone)', (
       action: 'retry',
       delayMs: 30_000,
       nextAttempt: 1,
+      nextWaits: 0,
     });
     expect(decideRetry(new InngestRetryAfterError('x', '1h'), 2, policy)).toEqual({
       action: 'retry',
       delayMs: 3_600_000,
       nextAttempt: 3,
+      nextWaits: 0,
     });
   });
 
@@ -180,7 +183,7 @@ describe('EVENT_QUEUE_MAP — alarm dryfu względem lib/jobs/events.ts', () => {
 });
 
 describe('CRON_JOBS', () => {
-  it('24 crony (stan 2 paź 2026), unikalne kolejki cron.*', () => {
+  it('25 cronów (stan 3 paź 2026), unikalne kolejki cron.*', () => {
     // 22 → 23: doszedł `cron.flo-tick`, puls agenta FLO (krok 13 planu).
     // 23 → 24: `cron.flo-shadow-settle`, rozstrzyganie trybu cichego (K3.2) —
     // raz w tygodniu, więc jeden przebieg na tydzień.
@@ -190,8 +193,12 @@ describe('CRON_JOBS', () => {
     // godzinę widoki, których nikt nie czytał (AUD-118, 02.10.2026).
     // Ta liczba jest celowo wpisana na sztywno: cron dokłada się cicho,
     // a każdy nowy kosztuje przebiegi na produkcji. Zmiana tu ma być
+    // 24 → 25: `cron.inbox-backfill` (K2, 03.10.2026) — co 15 min domyka
+    // faktury ze skrzynki bez kosztu/XML; 96 lekkich przebiegów na dobę.
+    // Ta liczba jest celowo wpisana na sztywno: cron dokłada się cicho,
+    // a każdy nowy kosztuje przebiegi na produkcji. Zmiana tu ma być
     // świadoma, nie automatyczna.
-    expect(CRON_JOBS.length).toBe(24);
+    expect(CRON_JOBS.length).toBe(25);
     const queues = CRON_JOBS.map((c) => c.queue);
     expect(new Set(queues).size).toBe(queues.length);
     for (const c of CRON_JOBS) {

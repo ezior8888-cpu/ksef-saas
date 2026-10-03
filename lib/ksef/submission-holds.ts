@@ -24,11 +24,24 @@ import type { KsefEnvironment } from '@/types/ksef';
 export const KSEF_PAUSED = 'KSEF_PAUSED';
 export const KOR_HOLD = 'KOR_HOLD';
 
+/** Odmowa przy kolejkowaniu: dokument zostaje szkicem, wysyła go człowiek. */
 export const KSEF_PAUSED_MESSAGE =
-  'Wysyłka faktur do KSeF jest chwilowo wstrzymana przez operatora. Faktura została zapisana — wyślij ją ponownie, gdy wysyłka zostanie przywrócona.';
+  'Wysyłka faktur do KSeF jest chwilowo wstrzymana przez operatora. Faktura została zapisana jako szkic — wyślij ją ponownie, gdy wysyłka zostanie przywrócona.';
 
 export const KOR_HOLD_MESSAGE =
   'Wysyłka faktur korygujących do KSeF jest tymczasowo wstrzymana do czasu poprawki ich kwot. Korekta została zapisana jako szkic.';
+
+/**
+ * Hamulec napotkany już W JOBIE: faktura ma status `failed` z kodem hamulca,
+ * a cron cyklu życia ponawia ją sam po zdjęciu hamulca (I7, PR 4). Komunikat
+ * nie może kazać klientowi „wysłać ponownie” — do 03.10.2026 kazał, choć
+ * ponowna wysyłka nie istniała (K3 z rewizji).
+ */
+export const KSEF_PAUSED_JOB_MESSAGE =
+  'Wysyłka faktur do KSeF jest chwilowo wstrzymana przez operatora. Faktura wyjdzie automatycznie po przywróceniu wysyłki.';
+
+export const KOR_HOLD_JOB_MESSAGE =
+  'Wysyłka faktur korygujących do KSeF jest tymczasowo wstrzymana do czasu poprawki ich kwot. Korekta wyjdzie automatycznie po zdjęciu blokady.';
 
 /** Czy operator zatrzymał wszystkie wysyłki. Rzuca przy błędzie bazy (fail-closed). */
 export async function isKsefSubmissionPaused(): Promise<boolean> {
@@ -54,7 +67,7 @@ export function isCorrectionHeldForEnv(env: KsefEnvironment): boolean {
   return env === 'production';
 }
 
-/** Treść błędu joba ze znacznikiem neutralnej blokady. */
+/** Treść błędu joba ze znacznikiem neutralnej blokady (wersja „wyjdzie automatycznie”). */
 export function heldErrorMessage(code: typeof KSEF_PAUSED | typeof KOR_HOLD): string {
-  return `[${code}] ${code === KSEF_PAUSED ? KSEF_PAUSED_MESSAGE : KOR_HOLD_MESSAGE}`;
+  return `[${code}] ${code === KSEF_PAUSED ? KSEF_PAUSED_JOB_MESSAGE : KOR_HOLD_JOB_MESSAGE}`;
 }

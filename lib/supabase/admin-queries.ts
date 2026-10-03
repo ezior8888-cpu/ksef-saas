@@ -35,6 +35,35 @@ function parseBytea(raw: unknown): Buffer {
  * w `credentials-crypto.ts`). Zwrócony `KsefAuth` ma ten sam discriminator -
  * przekazujesz go do `submitInvoiceFullFlow` bez dodatkowego mapowania.
  */
+export type KsefCredentialsErrorReason =
+  /** PostgREST/sieć: firma istnieje, odczyt się nie powiódł — ponowienie. */
+  | 'tenant-read'
+  /** NIP firmy nie jest zweryfikowany w bieżącym środowisku — klient. */
+  | 'not-verified'
+  /** Brak blobu poświadczeń — klient wgrywa certyfikat. */
+  | 'missing'
+  /** Deszyfrowanie nie powiodło się (klucz po rotacji, zły AAD) — operator. */
+  | 'decrypt'
+  /** NIP z szyfrogramu ≠ NIP firmy — operator. */
+  | 'nip-mismatch';
+
+/**
+ * Powód, dla którego poświadczeń KSeF nie da się użyć. Runner wysyłki mapuje
+ * go na kod z katalogu `ksef_error_codes` (W1 z rewizji 03.10.2026): błąd
+ * odczytu bazy jest ponawiany, brak certyfikatu idzie do klienta, a kłopot
+ * z kluczem do operatora — żaden nie udaje odrzucenia przez KSeF.
+ */
+export class KsefCredentialsError extends Error {
+  constructor(
+    public readonly reason: KsefCredentialsErrorReason,
+    message: string,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = 'KsefCredentialsError';
+  }
+}
+
 export async function getTenantKsefCredentials(
   tenantId: string,
 ): Promise<KsefAuth> {
@@ -47,20 +76,32 @@ export async function getTenantKsefCredentials(
     .eq('id', tenantId)
     .single();
 
-  if (error) throw new Error(`Tenant ${tenantId} not found: ${error.message}`);
+  if (error) {
+    throw new KsefCredentialsError('tenant-read', `Tenant ${tenantId} not found: ${error.message}`);
+  }
   if (!data.ksef_verified_at || data.ksef_verified_environment !== environment) {
-    throw new Error('KSeF NIP is not verified for configured environment');
+    throw new KsefCredentialsError('not-verified', 'KSeF NIP is not verified for configured environment');
   }
   if (!data.ksef_credentials_encrypted) {
-    throw new Error(
+    throw new KsefCredentialsError(
+      'missing',
       `Tenant ${tenantId} nie ma skonfigurowanych credentials KSeF`,
     );
   }
 
-  const encryptedBlob = parseBytea(data.ksef_credentials_encrypted);
-  const decrypted = decryptCredentials(encryptedBlob, tenantId);
+  let decrypted: ReturnType<typeof decryptCredentials>;
+  try {
+    const encryptedBlob = parseBytea(data.ksef_credentials_encrypted);
+    decrypted = decryptCredentials(encryptedBlob, tenantId);
+  } catch (e) {
+    throw new KsefCredentialsError(
+      'decrypt',
+      `Nie można odszyfrować poświadczeń KSeF: ${e instanceof Error ? e.message : String(e)}`,
+      { cause: e },
+    );
+  }
   if (decrypted.nip !== data.nip) {
-    throw new Error("KSeF credential NIP differs from verified NIP");
+    throw new KsefCredentialsError('nip-mismatch', 'KSeF credential NIP differs from verified NIP');
   }
 
   // Używamy NIP-u z bazy tylko po potwierdzeniu zgodności z szyfrogramem.
