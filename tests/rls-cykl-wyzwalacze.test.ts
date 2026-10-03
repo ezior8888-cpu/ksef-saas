@@ -156,8 +156,15 @@ describe.skipIf(!hasDatabase)('wyzwalacze cyklu życia po 00132 — rola klienta
     const sent = await invoice({ ksef_status: 'failed', submitted_to_ksef_at: '2026-10-01T10:00:00Z' });
     const plain = await invoice({});
 
-    expect((await owner.from('invoices').delete().eq('id', queued).select('id')).error?.code).toBe('42501');
-    expect((await owner.from('invoices').delete().eq('id', sent).select('id')).error?.code).toBe('42501');
+    // Dwie warstwy: polityka RLS może wyciąć wiersz przed wyzwalaczem (DELETE
+    // kończy się „0 wierszy”, bez błędu), a wyzwalacz odpowiada 42501, gdy
+    // wiersz do niego dotrze. Dowodem jest to, że faktura zostaje w bazie.
+    for (const id of [queued, sent]) {
+      const attempt = await owner.from('invoices').delete().eq('id', id).select('id');
+      if (attempt.error) expect(attempt.error.code).toBe('42501');
+      expect(attempt.data ?? []).toHaveLength(0);
+      expect(await status(id)).not.toBeNull();
+    }
     const ok = await owner.from('invoices').delete().eq('id', plain).select('id');
     expect(ok.error).toBeNull();
     expect(ok.data).toHaveLength(1);
