@@ -319,7 +319,13 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
     const sendingNoClaim = await invoice({ ksef_status: 'sending' });
     const acceptedNoUpo = await invoice({ ksef_status: 'accepted', ksef_number: '9480000014-20261001-000000000003-00', ksef_environment: 'test', xml_storage_path: 'x.xml' });
     const acceptedOk = await invoice({ ksef_status: 'accepted', ksef_number: '9480000014-20261001-000000000004-00', ksef_environment: 'test', xml_storage_path: 'y.xml' });
-    await admin.from('upo_receipts').insert({ tenant_id: ORG, invoice_id: acceptedOk, ksef_number: '9480000014-20261001-000000000004-00', status: 'downloaded' });
+    // 00117: UPO przyjętej faktury niesie środowisko KSeF; bez niego wyzwalacz
+    // odrzuca INSERT, a faktura „zdrowa” wyglądałaby jak bez UPO (I3).
+    const upo = await admin.from('upo_receipts').insert({
+      tenant_id: ORG, invoice_id: acceptedOk, ksef_number: '9480000014-20261001-000000000004-00',
+      ksef_environment: 'test', status: 'downloaded',
+    });
+    expect(upo.error, `upo_receipts: ${upo.error?.message}`).toBeNull();
     const failedOwner = await invoice({ ksef_status: 'failed', last_error_code: 'INFRA', ksef_send_owner: 'wisząca' });
     const failedUnknownCode = await invoice({ ksef_status: 'failed', last_error_code: 'COS_DZIWNEGO' });
     const failedOk = await invoice({ ksef_status: 'failed', last_error_code: 'KSEF_UNAVAILABLE' });

@@ -36,7 +36,12 @@ describe('separate RLS test configuration', () => {
   it('the explicit config runs only RLS and preserves server module aliases', () => {
     expect(rlsConfig.envDir).toBe(false);
     // Od 00103/00104 także testy uprawnień funkcji i ról (AUD-29/30/64).
-    expect(rlsConfig.test?.include).toEqual(['tests/rls-isolation.test.ts', 'tests/rls-uprawnienia.test.ts']);
+    expect(rlsConfig.test?.include).toEqual([
+      'tests/rls-isolation.test.ts',
+      'tests/rls-uprawnienia.test.ts',
+      // 00131: cykl życia faktury (RPC przejść, dowód kontaktu, strażnik).
+      'tests/rls-cykl-faktury.test.ts',
+    ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
     expect(rlsConfig.resolve?.alias).toEqual(localConfig.resolve?.alias);
