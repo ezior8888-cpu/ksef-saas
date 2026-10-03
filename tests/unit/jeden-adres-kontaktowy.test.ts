@@ -32,7 +32,7 @@ function scan(pattern: RegExp): string[] {
   const hits: string[] = [];
   for (const dir of SCANNED) {
     for (const file of walk(join(ROOT, dir))) {
-      const rel = relative(ROOT, file);
+      const rel = relative(ROOT, file).replaceAll('\\', '/');
       if (rel === 'lib/site.ts') continue;
       readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
         for (const m of line.matchAll(pattern)) hits.push(`${rel}:${i + 1} ${m[0]}`);
