@@ -8,8 +8,12 @@
  *   - `NonRetriableError` → natychmiast 'exhausted' (→ onExhausted,
  *     odpowiednik Inngest onFailure).
  *
- * WAŻNE: kolejki pg-boss tworzymy z `retryLimit: 0` — CAŁY retry jest tutaj.
- * Dzięki temu nie ma podwójnego liczenia prób (pg-boss + nasze).
+ * WAŻNE: retry po błędzie handlera jest tutaj — wrapper (`run-job.ts`) nie
+ * rzuca, więc pg-boss go nie dubluje. Kolejki mają jednak `retryLimit: 2`
+ * (`QUEUE_POLICY` w `boss.ts`, AUD-16) dla jobów porzuconych (utrata
+ * heartbeatu, limit czasu, zamknięcie workera). Takie ponowienie nie zwiększa
+ * `attempt` i po wyczerpaniu NIE woła `onExhausted` — job zostaje w pg-boss
+ * jako `failed`. Jedno zdarzenie może się więc wykonać do (maxRetries+1)×3 razy.
  */
 
 import { NonRetriableError, RetryAfterError } from './errors';

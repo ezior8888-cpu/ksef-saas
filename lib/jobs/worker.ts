@@ -6,7 +6,8 @@
  *
  * Co robi:
  *   1. startuje pg-boss (schemat `pgboss` w Postgresie na db-1),
- *   2. tworzy kolejki zarejestrowanych jobów (retryLimit:0 — retry nasze),
+ *   2. tworzy kolejki zarejestrowanych jobów (`QUEUE_POLICY` w `boss.ts`:
+ *      retry po błędzie handlera nasze, pg-boss tylko dla porzuconych),
  *   3. rejestruje handlery przez wrapper retry (parytet z Inngest, `run-job.ts`),
  *   4. planuje crony TYLKO dla zarejestrowanych kolejek cron.*,
  *   5. wystawia healthcheck HTTP (Coolify) na WORKER_HEALTH_PORT (def. 8080),
