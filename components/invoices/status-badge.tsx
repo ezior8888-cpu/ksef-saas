@@ -2,6 +2,7 @@ import { Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { ffStatusPill, ffStatusTone, type FfStatusTone } from '@/lib/dashboard/ff-surface-classes';
+import { sendErrorClassOf } from '@/lib/ksef/send-error-classes';
 
 /**
  * „Pigułki" statusów z prototypu: tło = przyciemniony odcień roli, tekst =
@@ -26,13 +27,28 @@ const FALLBACK: { label: string; tone: FfStatusTone } = {
   tone: 'neutral',
 };
 
+/**
+ * `failed` z kodem z katalogu `ksef_error_codes` (00131): etykieta mówi, co
+ * dalej — automat, operator czy klient (cykl życia faktury, sekcja 7).
+ */
+const FAILED_BY_CLASS: Record<string, { label: string; tone: FfStatusTone }> = {
+  transient: { label: 'Błąd — ponawiamy', tone: 'warning' },
+  hold: { label: 'Wstrzymana', tone: 'warning' },
+  reconcile: { label: 'Do uzgodnienia', tone: 'warning' },
+  setup: { label: 'Brak certyfikatu', tone: 'danger' },
+  terminal: { label: 'Błąd treści', tone: 'danger' },
+};
+
 interface StatusBadgeProps {
   status: string;
+  /** `invoices.last_error_code` — doprecyzowuje etykietę stanu `failed`. */
+  errorCode?: string | null;
   isLoading?: boolean;
 }
 
-export function StatusBadge({ status, isLoading }: StatusBadgeProps) {
-  const meta = STATUS_MAP[status] ?? FALLBACK;
+export function StatusBadge({ status, errorCode, isLoading }: StatusBadgeProps) {
+  const failedClass = status === 'failed' ? sendErrorClassOf(errorCode) : null;
+  const meta = (failedClass ? FAILED_BY_CLASS[failedClass] : undefined) ?? STATUS_MAP[status] ?? FALLBACK;
   const showSpinner =
     isLoading === true ||
     status === 'queued' ||
