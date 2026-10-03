@@ -112,7 +112,8 @@ nie oznacza. Uwagi, bez pilności:
 
 ## 4. Stan — aktualizuj po każdym etapie
 
-**Ostatnia aktualizacja:** 03.10.2026 — Claude (sesja z Igorem).
+**Ostatnia aktualizacja:** 03.10.2026 wieczór — Claude (sesja z Igorem): punkt 00
+sprawdzony (main dalej czerwony, wiadomość dla Bartosza), F-093 zrobione w #189.
 
 **Co się zmieniło 02.10 (ważne dla każdej nowej sesji):** sesje Claude
 Bartosza zrobiły audyt logiki domenowej (`docs/audyt/blok-1/`, PR #166),
@@ -149,9 +150,11 @@ wydanie #111 (`7a9f49a`) z #106–#110, #134 (przez #167 Bartosza) oraz:
 
 ### 4.2. Otwarte PR-y Claude
 
-#187 (ten plan) i #188 (C-21, gałąź `claude/przeplywy-od-stycznia`) — oba czekają
-na scalenie przez Bartosza. Otwarte cudze (03.10): Bartosz #186 (korekta dla firmy z UE, np. II —
-dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
+#187 (ten plan), #188 (C-21, gałąź `claude/przeplywy-od-stycznia`) i #189
+(F-093, gałąź `claude/jolly-tesla-jg9c9z`) — czekają na scalenie przez Bartosza.
+Wszystkie (także #186) mają czerwone CI wyłącznie przez krok audytu — punkt 00.
+Otwarte cudze (03.10): Bartosz #186 (korekta dla firmy z UE, np. II — dotyka
+plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 
 ### 4.3. Prośby do Bartosza (migracje, produkcja) — stan 03.10
 
@@ -164,6 +167,7 @@ dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 | B5 | C-16: płatności/ponaglenia ROZ | ✅ częściowo #178 (ponaglenia i zaległości tylko dla faktur ścigalnych, 00126) |
 | B6 | `SENTRY_DSN` w zmiennych workera (log startu „Sentry: alerty z jobów włączone”) | nieznany; od #120 alerty idą też na Telegram |
 | B7 | Mail o końcu trialu dla kont bez karty | decyzja — cennik i trial ujednolicone w #136 (`lib/billing/pricing.ts`) |
+| B8 | CI: `shadcn` → `devDependencies` (punkt 00 w sekcji 5) | wiadomość przez Igora 03.10 wieczór — decyzja i zmiana po stronie Bartosza |
 
 ### 4.4. Czeka na decyzję / kogoś innego — sprawdzone na kodzie 03.10
 
@@ -172,6 +176,7 @@ dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
 | C-05: adnotacje P_16/P_18A dla ZAL i ROZ | ✅ #176, #177 (z zamrożonej koperty) |
 | C-17 = audyt F-020: faktura zaliczkowa bez P_6 (data otrzymania zaliczki) i z przyszłym terminem zamiast „zapłacono” | otwarte; `Zamowienie` zrobione (AUD-71, #177). Generator ZAL zmieniany 02.10 przez sesje Bartosza (AUD-70) — **zanim weźmiesz: ustal z Bartoszem**, czy ktoś to robi |
 | C-15 = AUD-04: korekty i zaliczki przy stawce „zw” rzucają wyjątek; korekty na produkcji wstrzymane (`lib/ksef/submission-holds.ts`, AUD-03/04) | otwarte; pliki korekt w #186 Bartosza — po jego scaleniu i po uzgodnieniu |
+| F-093: `KsefApiError.ksefCode` zawsze `null` + odpowiedź `application/problem+json` nieparsowana (kody z tego kształtu, także 21184 z F-050, nieczytelne w prawdziwym `ksefFetch`) | zrobione 03.10 w #189 — czeka na scalenie przez Bartosza |
 | C-21 (dawniej mylnie „C-18” — ten numer ma sprawa „Niepewny wynik wysyłki KSeF i UPO”): strona przepływów ładuje dane od 1 stycznia i przekazuje `dataFrom` | zrobione 03.10 w #188 — czeka na scalenie przez Bartosza |
 | Szacunek podatku zakłada 19% liniowy dla każdego (podpisane na kafelku); skala i ryczałt dałyby inne kwoty; Flo ma profil podatkowy (`taxGateOpen`) | decyzja produktowa (Bartosz) |
 | JPK_V7M: pole dla „oo” i okres według daty sprzedaży | księgowa |
@@ -199,21 +204,29 @@ dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
     `devDependencies` (moja rekomendacja: znika z audytu produkcyjnego, nic
     nie wyciszamy) albo (b) `pnpm.auditConfig.ignoreGhsas` z uzasadnieniem.
     Przy (a): `pnpm run ci && pnpm build`.
+    **Sprawdzone 03.10 wieczorem:** `main` nadal pada (jedyna ścieżka do
+    `braces` to `shadcn`). W kopii roboczej poza repo: po przeniesieniu
+    `shadcn` do `devDependencies` `pnpm-lock.yaml` zmienia się tylko
+    przeniesieniem tego wpisu, a `pnpm audit --prod --audit-level=high` daje
+    „No known vulnerabilities found”. Obrazy bez zmian: etap `deps`
+    instaluje pełne zależności (build już dziś potrzebuje `tailwindcss`
+    i `typescript` z devDependencies, worker startuje przez `tsx` z
+    devDependencies). Wiadomość z rekomendacją (a) poszła przez Igora —
+    sesja Igora tego nie zmienia (B8).
 0. **Najpierw podział pracy z sesjami Bartosza.** Logikę domenową prowadzi
    teraz audyt (`docs/audyt/`). Zanim weźmiesz sprawę z listy niżej, ustal
    z Igorem (a on z Bartoszem), czy jest twoja — inaczej dwie sesje zrobią
    to samo w tych samych plikach.
-1. **Następny w kolejce: F-093 z audytu** (K4, bez kolizji 03.10 — PR #159
-   już w `main`). `KsefApiError.ksefCode` (`lib/ksef/client.ts`) czyta
-   `body.exceptionDetailList`, a KSeF zwraca kody w
-   `exception.exceptionDetailList` albo `errors[].code` — getter zawsze daje
-   `null` (trafia do Sentry z `lib/jobs/runners/submit-invoice.ts`).
-   Poprawka: przenieść `ksefErrorCodes` z `lib/ksef/submit.ts` do
-   `client.ts` (submit importuje z client, nie odwrotnie — inaczej cykl),
-   getter = `ksefErrorCodes(this.body)[0] ?? null`, test na trzy kształty
-   odpowiedzi + tekst. Gałąź od `origin/main`, PR, bez scalania.
-   Potem B4 (prośba do Bartosza o `UNIQUE` na `ocr_job_id` + zapytanie
-   o duble — SQL w opisie #109). C-21 zrobione w #188.
+1. **Następny w kolejce: B4** — prośba do Bartosza o odczyt dubli wydatków
+   z OCR i `UNIQUE (tenant_id, ocr_job_id)` (SQL w opisie #109; na `main`
+   nadal brak takiego indeksu — sprawdzone 03.10). Bez pliku migracji
+   (zasada 2): gotowy SQL + co sprawdzić przed, w opisie PR albo jako
+   wiadomość przez Igora; numer migracji z rejestru w `CLAUDE-DO-CODEXA.md`
+   nadaje Bartosz. F-093 zrobione w #189 (getter `ksefCode` przez
+   `ksefErrorCodes`, przeniesione do `client.ts`; `ksefFetch` parsuje też
+   `application/problem+json` — bez tego kod 21184 z F-050 w tym kształcie
+   nie byłby rozpoznany na produkcji, a test F-050 tego nie widział, bo
+   podmienia `ksefFetch`). C-21 zrobione w #188.
    **Numery spraw `C-xx`:** przed nadaniem sprawdź `grep "^### C-"
    docs/koordynacja/CLAUDE-DO-CODEXA.md` — sesje Bartosza też je nadają
    (03.10 kolizja „C-18”).
@@ -223,6 +236,12 @@ dotyka plików korekt, `invoice-validators.ts`, `schemas/invoice-form.ts`).
    (Linux) przechodzą — sprawdź tylko, że na liście nie ma nic więcej.
    Po dużym `git pull` typecheck krzyczy o `app/api/inngest` → usuń
    `.next` i `tsconfig.tsbuildinfo`.
+   **Sesja w chmurze (kontener Claude Code):** `pnpm install` + `pnpm run ci`
+   działają; pada tylko `tests/unit/export-file-hash-integrity.test.ts`
+   (2 testy, także na czystym `main`) — test woła PRAWDZIWĄ testową bazę GUS
+   (`lookupCompanyByNip` z `@/lib/gus/client` bez atrapy), a proxy kontenera
+   daje 403. Na GitHub CI przechodzi, dopóki sandbox GUS odpowiada — ukryta
+   zależność testu od sieci, kandydat na małą poprawkę (atrapa w teście).
 2. Po uzgodnieniu: C-17 / F-020 (P_6 i „zapłacono” w ZAL); C-15 / AUD-04
    (korekty „zw”) po scaleniu #186.
 3. E14 zamknięty 03.10: generatory KOR/ZAL nie wołają `validateInvoice`;
