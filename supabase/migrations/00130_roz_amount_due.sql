@@ -40,7 +40,9 @@ BEGIN
     v_due := NEW.gross_total;
   END IF;
 
-  IF NEW.paid_amount = 0 THEN
+  -- ROZ w całości pokryta zaliczkami (do zapłaty 0) jest rozliczona od
+  -- wystawienia — gałąź „paid” niżej, nie „unpaid/overdue”.
+  IF NEW.paid_amount = 0 AND NOT (NEW.invoice_kind = 'final' AND v_due = 0) THEN
     NEW.paid_at := NULL;
     IF NEW.payment_due_date IS NOT NULL AND NEW.payment_due_date < CURRENT_DATE THEN
       NEW.payment_status := 'overdue';
