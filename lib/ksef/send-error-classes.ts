@@ -22,6 +22,7 @@ export const SEND_ERROR_CODES = {
   XSD_INVALID: 'XSD_INVALID',
   KSEF_REJECTED: 'KSEF_REJECTED',
   INVALID_DOCUMENT: 'INVALID_DOCUMENT',
+  KSEF_NUMBER_TAKEN: 'KSEF_NUMBER_TAKEN',
   KSEF_UNAVAILABLE: 'KSEF_UNAVAILABLE',
   KSEF_RATE_LIMIT: 'KSEF_RATE_LIMIT',
   KSEF_SESSION: 'KSEF_SESSION',
@@ -48,6 +49,9 @@ export const SEND_ERROR_CLASS: Record<SendErrorCode, SendErrorClass> = {
   XSD_INVALID: 'terminal',
   KSEF_REJECTED: 'terminal',
   INVALID_DOCUMENT: 'terminal',
+  // D-A4-1 (00142): numer faktury jest w KSeF na fakturze tej firmy z innego
+  // programu (treść sprawdzona) — klient wystawia z nowym numerem.
+  KSEF_NUMBER_TAKEN: 'terminal',
   KSEF_UNAVAILABLE: 'transient',
   KSEF_RATE_LIMIT: 'transient',
   KSEF_SESSION: 'transient',

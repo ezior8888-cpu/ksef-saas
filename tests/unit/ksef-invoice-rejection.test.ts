@@ -2,6 +2,7 @@ import { NonRetriableError, RetryAfterError } from '@/lib/jobs/errors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
+import { KsefApiError } from '@/lib/ksef/client';
 import type { Invoice } from '@/types/invoice';
 
 const mocks = vi.hoisted(() => ({
@@ -17,6 +18,14 @@ vi.mock('@/lib/ksef/submission-log', () => ({
   promoteKsefSubmissionIntent: vi.fn(async () => false),
   abandonKsefSubmissionIntent: vi.fn(),
   recordKsefSubmissionIntent: vi.fn(),
+  // D-A4-1: weryfikacja cudzego 440 — domyślnie bez sesji w historii i bez znanego numeru.
+  findKsefSessionRow: vi.fn(async () => null),
+  findSubmissionPayloads: vi.fn(async () => []),
+  findTenantInvoiceByKsefNumber: vi.fn(async () => null),
+  closeKsefAttempt: vi.fn(),
+  markKsefSubmissionsNumberTaken: vi.fn(),
+  recordKsefAcceptedSession: vi.fn(),
+  markKsefAttemptDuplicatePending: vi.fn(),
   recordKsefSubmissionSent: vi.fn(),
   markKsefSubmission: vi.fn(),
   findOpenKsefSubmission: vi.fn(async () => null),
@@ -190,6 +199,8 @@ describe('job wysyłki: odrzucenie w statusie kończy się bez ponowień', () =>
     ['440 duplikat', DUPLIKAT],
     ['450 semantyka', { code: 450, description: 'Błąd semantyki' }],
   ])('%s → NonRetriableError (nie RetryAfterError, więc bez Offline24)', async (_opis, status) => {
+    // D-A4-1: przy 440 runner pobiera oryginał z KSeF; tu KSeF odmawia (403) → werdykt dla operatora.
+    mocks.fetch.mockRejectedValue(new KsefApiError(403, 'Forbidden', 'Forbidden'));
     mocks.fullFlow.mockRejectedValue(new KsefInvoiceRejectedError(status.code, status));
     const blad = await runSubmitInvoice(zdarzenie, ctx).catch((e: unknown) => e);
 
@@ -199,6 +210,7 @@ describe('job wysyłki: odrzucenie w statusie kończy się bez ponowień', () =>
   });
 
   it('komunikat duplikatu z numerem KSeF trafia do błędu joba (a stamtąd na fakturę)', async () => {
+    mocks.fetch.mockRejectedValue(new KsefApiError(403, 'Forbidden', 'Forbidden'));
     mocks.fullFlow.mockRejectedValue(new KsefInvoiceRejectedError(440, DUPLIKAT));
     const blad = (await runSubmitInvoice(zdarzenie, ctx).catch((e: unknown) => e)) as Error;
     expect(blad.message).toContain(ORYGINAL);

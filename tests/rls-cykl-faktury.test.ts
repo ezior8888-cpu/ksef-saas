@@ -171,6 +171,24 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
     expect(byCode.get('KSEF_DUPLICATE_RECONCILE')?.class).toBe('reconcile');
     expect(byCode.get('NO_CERTIFICATE')?.class).toBe('setup');
     expect(byCode.get('NOT_IN_KSEF')).toMatchObject({ class: 'transient', auto_requeue: false });
+    expect(byCode.get('KSEF_NUMBER_TAKEN')).toMatchObject({ class: 'terminal', auto_requeue: false });
+  });
+
+  it('D-A4-1 (00142): wpisy number_taken (numer zajęty przez inną fakturę) nie są dowodem kontaktu — klient wraca do szkicu', async () => {
+    const taken = await invoice({ ksef_status: 'failed', last_error_code: 'KSEF_NUMBER_TAKEN' });
+    for (const session of ['SES-NT-1', 'SES-NT-2']) {
+      const { error } = await admin.from('ksef_submissions').insert({
+        tenant_id: ORG, invoice_id: taken, submission_type: 'online', status: 'number_taken',
+        session_reference_number: session, invoice_reference_number: `${session}-REF`,
+        // Znacznik 440 z 00142 — kolumny muszą istnieć.
+        original_ksef_number: '9480000014-20261001-000000000099-00', original_session_reference_number: 'SES-ORYGINAL',
+      });
+      if (error) throw new Error(`insert ksef_submissions: ${error.message}`);
+    }
+    expect((await admin.rpc('ksef_has_contact_evidence', { p_invoice_id: taken, p_tenant_id: ORG })).data).toBe(false);
+    const reset = await admin.rpc('reset_ksef_send', { p_invoice_id: taken, p_tenant_id: ORG, p_actor_user_id: ownerId });
+    expect(reset.error).toBeNull();
+    expect((await row(taken)).ksef_status).toBe('draft');
   });
 
   it('A2b: NOT_IN_KSEF bez dowodu kontaktu — powrót do szkicu i ponowna wysyłka działają (nie ślepa uliczka)', async () => {

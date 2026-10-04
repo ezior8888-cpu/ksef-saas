@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice } from '@/types/invoice';
+import { KsefApiError } from '@/lib/ksef/client';
 
 /**
  * Cykl życia faktury, PR 2 — runner wysyłki po porażce (rewizja 03.10.2026):
@@ -31,6 +32,11 @@ const mocks = vi.hoisted(() => ({
   markSubmission: vi.fn(),
   sendEvent: vi.fn(),
   captureMessage: vi.fn(),
+  download: vi.fn(),
+  sessionRow: vi.fn(),
+  readOurXml: vi.fn(),
+  numberTaken: vi.fn(),
+  closeAttempt: vi.fn(),
   /** Wynik `claim_ksef_send`: znacznik czasu = przejęte, `null` = trzyma inna próba (S22). */
   claim: '2026-10-03T12:00:00.000000+00:00' as string | null,
   invoice: {} as Record<string, unknown>,
@@ -51,12 +57,29 @@ vi.mock('@/lib/ksef/health-check', () => ({ shouldUseOfflineMode: mocks.health }
 vi.mock('@/lib/ksef/offline-queue', () => ({ addToOfflineQueue: vi.fn() }));
 vi.mock('@/lib/ksef/submit-invoice-full', () => ({ submitInvoiceFullFlow: mocks.fullFlow }));
 vi.mock('@/lib/ksef/submit-reference-boundary', () => ({ assertSubmitReferences: async () => 'regular' }));
+// D-A4-1: pobranie oryginału przy cudzym 440 i odczyt naszego pliku (reszta modułów prawdziwa).
+vi.mock('@/lib/ksef/submit', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/ksef/submit')>(),
+  downloadKsefInvoice: mocks.download,
+}));
+vi.mock('@/lib/storage/r2', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/storage/r2')>(),
+  downloadInvoiceXml: mocks.readOurXml,
+}));
 vi.mock('@/lib/ksef/submission-log', () => ({
   // A2: bez zamiarów wysyłki do rozstrzygnięcia — runner idzie jak dotąd.
   findOpenKsefSubmissionIntents: vi.fn(async () => []),
   promoteKsefSubmissionIntent: vi.fn(async () => false),
   abandonKsefSubmissionIntent: vi.fn(),
   recordKsefSubmissionIntent: vi.fn(),
+  // D-A4-1: weryfikacja cudzego 440 — domyślnie bez sesji w historii i bez znanego numeru.
+  findKsefSessionRow: mocks.sessionRow,
+  findSubmissionPayloads: vi.fn(async () => []),
+  findTenantInvoiceByKsefNumber: vi.fn(async () => null),
+  closeKsefAttempt: mocks.closeAttempt,
+  markKsefSubmissionsNumberTaken: mocks.numberTaken,
+  recordKsefAcceptedSession: vi.fn(),
+  markKsefAttemptDuplicatePending: vi.fn(),
   recordKsefSubmissionSent: vi.fn(),
   markKsefSubmission: mocks.markSubmission,
   findOpenKsefSubmission: mocks.findOpen,
@@ -207,17 +230,36 @@ describe('S1: odrzucenie przez KSeF zamyka wpis historii', () => {
     expect(lastInvoiceUpdate()).toMatchObject({ ksef_status: 'rejected', last_error_code: 'KSEF_REJECTED', ksef_send_owner: null });
   });
 
-  it('cudzy duplikat 440: wpis sent → duplicate, faktura failed KSEF_DUPLICATE_RECONCILE', async () => {
-    mocks.fullFlow.mockRejectedValue(new KsefInvoiceRejectedError(440, {
-      code: 440, description: 'Duplikat', details: [],
-      extensions: { originalKsefNumber: '9999999999-20261001-000000000001-00', originalSessionReferenceNumber: 'CUDZA' },
-    } as never));
-    mocks.findOpen
-      .mockResolvedValueOnce(null)
-      .mockResolvedValue({ sessionReferenceNumber: 'SES-2', invoiceReferenceNumber: 'REF-2' });
+  // D-A4-1: cudzy 440 rozstrzyga treść oryginału pobranego z KSeF; tu cała
+  // ścieżka do `onExhausted` z prawdziwym klasyfikatorem (werdykt wygrywa
+  // z KsefInvoiceRejectedError i błędem HTTP pobrania w łańcuchu przyczyn).
+  const foreign440 = () => new KsefInvoiceRejectedError(440, {
+    code: 440, description: 'Duplikat', details: [],
+    extensions: { originalKsefNumber: '9999999999-20261001-000000000001-00', originalSessionReferenceNumber: 'CUDZA' },
+  } as never, { invoiceHash: 'nasz', sessionReferenceNumber: 'SES-2', invoiceReferenceNumber: 'REF-2' });
+
+  it('cudzy duplikat 440, oryginał z innego programu o innej treści: wpisy → number_taken, faktura failed KSEF_NUMBER_TAKEN', async () => {
+    mocks.fullFlow.mockRejectedValue(foreign440());
+    mocks.download.mockResolvedValue(Buffer.from('<Faktura><Naglowek><SystemInfo>Inny</SystemInfo></Naglowek><Fa><P_2>FV/1</P_2><P_15>9.99</P_15></Fa></Faktura>'));
+    // Nasz plik tej próby (inna treść) — porównanie poza nagłówkiem.
+    mocks.sessionRow.mockResolvedValue({ status: 'sent', requestPayloadHash: 'ab'.repeat(32), xmlStoragePath: 'nasz.xml' });
+    mocks.readOurXml.mockResolvedValue('<Faktura><Naglowek><SystemInfo>KSeF SaaS v1.0</SystemInfo></Naglowek><Fa><P_2>FV/1</P_2><P_15>123.00</P_15></Fa></Faktura>');
 
     const error = await failing(runSubmitInvoice(event(), ctx));
-    expect(mocks.markSubmission).toHaveBeenCalledWith(expect.objectContaining({ invoiceReferenceNumber: 'REF-2', status: 'duplicate' }));
+    expect(mocks.numberTaken).toHaveBeenCalledWith(expect.objectContaining({ originalKsefNumber: '9999999999-20261001-000000000001-00' }));
+
+    await onSubmitInvoiceExhausted(error, event(), ctx);
+    expect(lastInvoiceUpdate()).toMatchObject({ ksef_status: 'failed', last_error_code: 'KSEF_NUMBER_TAKEN', ksef_send_owner: null });
+    expect(String(lastInvoiceUpdate()?.last_error)).toContain('9999999999-20261001-000000000001-00');
+  });
+
+  it('cudzy duplikat 440, oryginału nie da się pobrać (403): faktura failed KSEF_DUPLICATE_RECONCILE, wpis zostaje otwarty', async () => {
+    mocks.fullFlow.mockRejectedValue(foreign440());
+    mocks.download.mockRejectedValue(new KsefApiError(403, 'Forbidden', 'Forbidden'));
+
+    const error = await failing(runSubmitInvoice(event(), ctx));
+    expect(mocks.closeAttempt).not.toHaveBeenCalled();
+    expect(mocks.markSubmission).not.toHaveBeenCalled();
 
     await onSubmitInvoiceExhausted(error, event(), ctx);
     expect(lastInvoiceUpdate()).toMatchObject({ ksef_status: 'failed', last_error_code: 'KSEF_DUPLICATE_RECONCILE', ksef_send_owner: null });

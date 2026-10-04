@@ -22,8 +22,9 @@ import { SEND_ERROR_CODES, sendErrorClassOf, type SendErrorCode } from '@/lib/ks
  * (00132), a KSeF odrzuca drugą fakturę o tym samym numerze (440, a sesja
  * z naszej historii = własny duplikat → `accepted`). Ponowienie tej samej
  * treści nie zrobi więc duplikatu.
- * Poza listą: KSEF_DUPLICATE_RECONCILE (ponowienie powtórzy cudze 440 —
- * decyzja D-A4-1) i ENV_MISMATCH (wysyłka w innym środowisku — D-A4-2).
+ * Poza listą: KSEF_DUPLICATE_RECONCILE (ponowienie powtórzy 440; weryfikację
+ * treści powtarza „Tylko uzgodnij” przy otwartym wpisie, a ręczny werdykt —
+ * D-A4-1b) i ENV_MISMATCH (wysyłka w innym środowisku — D-A4-2).
  */
 export const OPERATOR_REQUEUE_RECONCILE_CODES: readonly SendErrorCode[] = [
   SEND_ERROR_CODES.ENQUEUE_LOST,
@@ -59,7 +60,7 @@ export const OPERATOR_MESSAGES = {
   rejectedToDraft: 'Odrzuconej treści nie wysyła się ponownie — powrót do szkicu.',
   terminal: 'Błąd treści dokumentu — powrót do szkicu, nie ponowienie.',
   reconcileClass: 'Klasa reconcile: nie wysyłaj od nowa — użyj „Tylko uzgodnij” albo zostaw.',
-  duplicateRequeue: 'KSeF ma już fakturę o tym numerze spoza naszej historii — ponowienie powtórzy 440. Sprawdź w KSeF numer z błędu (runbook: KSEF_DUPLICATE_RECONCILE).',
+  duplicateRequeue: 'KSeF ma już fakturę o tym numerze, a automat nie rozstrzygnął, czyja to treść — ponowienie powtórzy 440. Przy otwartym wpisie użyj „Tylko uzgodnij” (powtórzy weryfikację); inaczej runbook: KSEF_DUPLICATE_RECONCILE.',
   envMismatchRequeue: 'Faktura była zlecona w innym środowisku KSeF — ponowienie wysłałoby ją w bieżącym. Najpierw ustal z klientem (runbook: ENV_MISMATCH).',
   notFailedOrRejected: 'Dostępne tylko dla failed / rejected.',
   evidence: 'Faktura ma dowód kontaktu z KSeF (numer albo wpis sent/accepted/duplicate) — nie wraca do szkicu.',

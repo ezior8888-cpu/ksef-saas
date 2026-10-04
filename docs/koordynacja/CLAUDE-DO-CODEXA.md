@@ -81,7 +81,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00137 | Claude (plan, A4) | `special_invoice_data` — `correction_data`/`advance_data`/`final_data` na wierszu faktury | zarezerwowane (plan, sekcja 5) |
 | 00138–00140 | Codex (centrum dowodzenia, C-22) | `ksef_send_metrics`, `ksef_invoice_timeline`, `ksef_error_patterns` + `ops_alert_log` | zarezerwowane (`CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`, sekcja 6) |
 | 00141 | Claude (A2b, plan zero zgubionych faktur) | `ksef_error_code_not_in_ksef`: kod katalogu `NOT_IN_KSEF` (transient, bez auto) — wynik „tylko uzgodnij”, gdy KSeF nie ma faktury (koniec ślepej uliczki RESULT_UNCERTAIN bez dowodu kontaktu) | w `main` (#222), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
-| **00142** | — | następny wolny (00200 zajęte) | — |
+| 00142 | Claude (D-A4-1a, plan zero zgubionych faktur) | `ksef_error_code_number_taken`: kod katalogu `KSEF_NUMBER_TAKEN` (terminal, bez auto) — cudzy 440 z oryginałem z innego programu; komentarz statusów `ksef_submissions.status` (`number_taken` nie jest dowodem kontaktu) | PR `claude/a4-d1-cudzy-440`; **przed** wdrożeniem |
+| **00143** | — | następny wolny (00200 zajęte) | — |
 
 ---
 
