@@ -165,9 +165,16 @@ wysłaniem pliku. Jeśli został otwarty, odpowiedź na wysyłkę nie dotarła
   wysyłka po kilku dniach to decyzja o dacie wystawienia (B1/B2 planu).
   Klient widzi: „KSeF nie ma tej faktury — poprzednia wysyłka do niego nie
   dotarła. Wyślij ją ponownie albo wróć do szkicu.”
-- **Strażnik:** zamiar starszy niż 48 h przy fakturze poza `sending` to I5.
-  KSeF odpowiadający na pytanie o sesję kodem 21173 („Brak sesji”) po 48 h
-  zamyka zamiar jako `abandoned` z kodem `STALE`.
+- **Strażnik:** zamiar (albo wpis `sent`) starszy niż 48 h przy fakturze
+  poza `sending` to I5. KSeF odpowiadający na pytanie o sesję kodem 21173
+  („Brak sesji”) po 48 h zamyka zamiar jako `abandoned` z kodem `STALE`.
+- **Cron (A3):** przy I5 i fakturze `failed`/`rejected` cron cyklu życia sam
+  zleca „Tylko uzgodnij” (aktor NULL w audycie, `reconcile_only = true`),
+  najwyżej raz na dobę. Po trzech próbach w tygodniu przestaje
+  (`i5NeedsOperator` w logu crona, ostrzeżenie w Sentry) — wtedy operator:
+  karta faktury, historia wysyłek i ślad audytu pokazują, co KSeF odpowiadał.
+  I5 przy fakturze w innym stanie (np. `accepted` z niezamkniętym wpisem)
+  cron tylko liczy (`i5Other`) — to sprawa dla operatora.
 
 ---
 

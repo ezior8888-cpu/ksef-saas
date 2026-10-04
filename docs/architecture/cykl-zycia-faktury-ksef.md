@@ -75,7 +75,7 @@ Zasada dla klienta: **sesja użytkownika nie zmienia `ksef_status` nigdy**. Każ
 | I2 | `sending` ⇒ `submitted_to_ksef_at` nie starsze niż dzierżawa + 15 min | alarm `stale_ksef_sending_invoices` (istnieje) |
 | I3 | `accepted` ⇒ `ksef_number`, `ksef_environment`, `xml_storage_path` niepuste, wpis `ksef_submissions.accepted` lub `duplicate`, wiersz `upo_receipts` | brak UPO: `cron.upo-retry-stale` (istnieje, po naprawie W12); brak wpisu historii: alarm informacyjny |
 | I4 | `failed`/`rejected` ⇒ `last_error_code` z katalogu, `ksef_send_owner IS NULL` | kod spoza katalogu: alarm i kod `UNKNOWN` |
-| I5 | wpis `ksef_submissions.sent` starszy niż 48 h ⇒ faktura jest w `sending` z żywą dzierżawą albo w `failed` z kodem RECONCILE | inaczej: `requeue_ksef_send(p_reconcile_only = true)` |
+| I5 | wpis `ksef_submissions.sent` albo zamiar `intent` (00136) starszy niż 48 h ⇒ faktura jest w `sending` z żywą dzierżawą albo w `failed` z kodem RECONCILE | inaczej: `requeue_ksef_send(p_reconcile_only = true)` — **cron co 15 min** dla `failed`/`rejected` (A3): najwyżej raz na dobę, po 3 próbach w tygodniu alarm i operator; inne stany — tylko alarm |
 | I6 | `failed` z kodem TRANSIENT młodszy niż 24 h ⇒ zostanie ponowiony | cron ponawia co 60 min; po 24 h kod zmienia się na `TRANSIENT_EXHAUSTED` i idzie alarm do operatora |
 | I7 | `failed` z kodem HOLD ⇒ hamulec nadal aktywny | hamulec zdjęty: `requeue_ksef_send` |
 | I8 | numer faktury należy do dokładnie jednego wiersza firmy (indeks unikalny) i po resecie wraca do tego samego wiersza | bez zmian |
