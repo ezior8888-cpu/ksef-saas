@@ -499,8 +499,11 @@ export async function recordKsefAcceptedSession(params: {
 }
 
 /**
- * Inna faktura tej firmy z danym numerem KSeF (np. import historii) — wtedy
- * cudzy 440 dotyczy dokumentu znanego w FaktFlow i rozstrzyga operator.
+ * Inna faktura SPRZEDAŻY tej firmy z danym numerem KSeF (np. import historii)
+ * — wtedy cudzy 440 dotyczy dokumentu znanego w FaktFlow i rozstrzyga
+ * operator. Tylko wychodzące (D-A4-1b-3, A0): faktura zakupowa z tym numerem
+ * (np. sprzedaż firmy samej sobie odebrana skrzynką) nie jest zapisem naszej
+ * sprzedaży i nie może zatrzymać porównania treści oryginału.
  */
 export async function findTenantInvoiceByKsefNumber(
   tenantId: string,
@@ -511,6 +514,7 @@ export async function findTenantInvoiceByKsefNumber(
     .from('invoices')
     .select('id, internal_number')
     .eq('tenant_id', tenantId)
+    .eq('direction', 'outgoing')
     .eq('ksef_number', ksefNumber)
     .neq('id', excludeInvoiceId)
     .limit(1)

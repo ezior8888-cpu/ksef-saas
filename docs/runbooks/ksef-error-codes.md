@@ -92,9 +92,23 @@ reconcile nie ma żadnego wyjścia → A4b (00137: dane specjalne na wierszu).
   uzupełnia datę z KSeF). Kierunek bezpieczny: „numer zajęty” nigdy dla oryginału
   z FaktFlow, przy tej samej treści z innego programu (ta sama sprzedaż) ani
   bez naszego pliku do porównania.
-  Ręczny werdykt operatora („przypnij numer” / „numer zajęty”) dla
-  przypadków nierozstrzygniętych — **D-A4-1b**. Do tego czasu operator
-  sprawdza fakturę w KSeF i zgłasza ją Bartoszowi.
+  „Znany numer” (numer KSeF oryginału ma już inna faktura firmy) liczy
+  tylko faktury sprzedaży — zakupowa z tym numerem nie zatrzymuje
+  porównania treści (D-A4-1b-3, A0).
+- **D-A4-1b — przypadki nierozstrzygnięte przez automat** (decyzje Bartosza
+  04.10.2026):
+  1. wcześniejsza wersja tej faktury w KSeF → przyjąć oryginał (numer
+     i treść), zmiany korektą — **odłożone** do B2 (data poprawiana w tym
+     samym szkicu): dziś szkic z nieaktualną datą jest usuwany i wystawiany
+     od nowa, a usunięcie kasuje historię prób, więc automat nie ma dowodu;
+  2. ta sama treść z innego programu → numer + trwały znacznik, baner, mail,
+     ostrzeżenie w JPK (D-A4-1b-2);
+  3. pozostałe → decyduje **klient** przyciskiem z danymi oryginału („ta
+     sama sprzedaż” / „inna sprzedaż → nowy numer”), operator tylko zapisuje
+     decyzję klienta (D-A4-1b-3, w budowie: A0 → A dane oryginału na wpisie
+     → wierny import → B decyzja → C zapis oryginału z FaktFlow → D
+     „Sprawdź ponownie”). Do tego czasu operator sprawdza fakturę w KSeF
+     i zgłasza ją Bartoszowi.
 - **D-A4-2 — `ENV_MISMATCH`** (decyzja Bartosza 04.10.2026, przyjęta
   w 00143). Ponowienie tworzy nowe zdarzenie z BIEŻĄCYM środowiskiem, więc
   wysłałoby fakturę zleconą na TEST jako prawdziwą fakturę na PROD. Dlatego
