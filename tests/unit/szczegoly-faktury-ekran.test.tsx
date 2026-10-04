@@ -141,7 +141,7 @@ describe('szczegóły faktury na ekranie (F-094)', () => {
     const view = describeDuplicateOriginal('FV/7/10/2026', '5260001246-20260928-0100A0B0C0D0-1A', {
       v: 1, env: 'test', checkedAt: '2026-10-04T12:00:00Z', reason: 'faktflow-original',
       sha256: 'a'.repeat(64), archivePath: 'x', sizeBytes: 1, sameContentExceptHeader: false, ownHistory: false,
-      acquiredAt: '2026-09-28T07:15:00.000Z', httpStatus: null, knownInvoice: null,
+      acquiredAt: '2026-09-28T07:15:00.000Z', httpStatus: null, knownInvoice: null, recheck: null,
       summary: { systemInfo: 'KSeF SaaS v1.0', number: 'FV/7/10/2026', issueDate: '2026-09-28', buyerNip: '5252241585', buyerName: 'Klient', gross: '1845.00', currency: 'PLN' },
     });
     const failed = { ...base, ksef_status: 'failed', ksef_number: null, last_error_code: 'KSEF_DUPLICATE_RECONCILE', ksef_duplicate_original: view };
@@ -150,7 +150,7 @@ describe('szczegóły faktury na ekranie (F-094)', () => {
     expect(t).toContain('5260001246-20260928-0100A0B0C0D0-1A');
     expect(t).toContain('1845.00 PLN');
     expect(t).toContain('Klient, NIP 5252241585');
-    expect(t).toContain('Nie wystawiaj jej ponownie');
+    expect(t).toContain('Nie wystawiaj tej faktury ponownie');
 
     // Po zmianie stanu (np. ponowne uzgodnienie) panel znika.
     expect(render({ ...failed, ksef_status: 'queued' })).not.toContain('W KSeF jest już faktura o tym numerze');

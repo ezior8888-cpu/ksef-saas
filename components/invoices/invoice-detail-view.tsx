@@ -129,6 +129,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           const row = payload.new as Record<string, unknown>;
           setInv((prev) => ({
             ...prev,
+            // Dane oryginału 440 pochodzą z chwili otwarcia strony — po zmianie
+            // stanu faktury są nieaktualne (nowy werdykt = nowe dane po odświeżeniu).
+            ksef_duplicate_original:
+              (typeof row.ksef_status === 'string' && row.ksef_status !== prev.ksef_status) ||
+              ('last_error_code' in row && row.last_error_code !== prev.last_error_code) ||
+              ('last_error' in row && row.last_error !== prev.last_error)
+                ? null
+                : prev.ksef_duplicate_original,
             ksef_status:
               typeof row.ksef_status === 'string'
                 ? row.ksef_status

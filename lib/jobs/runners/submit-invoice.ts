@@ -1260,6 +1260,7 @@ export async function runSubmitInvoice(
             acquiredAt: null,
             httpStatus: null,
             knownInvoice: null,
+            recheck: null,
             ...data,
             v: 1,
             env,
@@ -1406,7 +1407,7 @@ export async function runSubmitInvoice(
                 'do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.',
             );
           }
-          await recordCheck('storage-pending', originalData);
+          await recordCheck('archive-pending', { ...originalData, ownHistory });
           throw pending(
             `KSeF ma już fakturę o tym numerze (numer KSeF ${original}); nie udało się zapisać jej pliku w archiwum ` +
               `(${archiveError instanceof Error ? archiveError.message : 'magazyn'}). Do uzgodnienia; nie wystawiaj faktury ponownie.`,

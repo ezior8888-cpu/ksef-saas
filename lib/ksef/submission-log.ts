@@ -25,7 +25,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
-import type { KsefDuplicateCheck } from './duplicate-check';
+import { mergeDuplicateCheck, parseDuplicateCheck, type KsefDuplicateCheck } from './duplicate-check';
 
 export interface KsefSubmissionReferences {
   sessionReferenceNumber: string;
@@ -537,10 +537,26 @@ export async function recordKsefDuplicateCheck(params: {
   originalKsefNumber: string;
   check: KsefDuplicateCheck;
 }): Promise<void> {
-  const { error } = await createAdminClient()
+  const supabase = createAdminClient();
+  // Sprawdzenie, które nie pobrało oryginału, nie kasuje danych z wcześniejszego
+  // udanego (`mergeDuplicateCheck`) — odczyt bieżącego zapisu przed nadpisaniem.
+  // Jedna próba naraz (przejęcie wysyłki, 00124), więc odczyt i zapis się nie mijają.
+  const { data: current, error: readError } = await supabase
     .from('ksef_submissions')
     // `original_check` z 00144 — typy bazy dogenerujemy z produkcji po wgraniu.
-    .update({ original_check: params.check } as Record<string, unknown>)
+    .select('original_check')
+    .eq('tenant_id', params.tenantId)
+    .eq('invoice_id', params.invoiceId)
+    .eq('original_ksef_number', params.originalKsefNumber)
+    .in('status', ['intent', 'sent'])
+    .order('attempted_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (readError) throw new Error('Nie można odczytać danych oryginału duplikatu KSeF');
+  const previous = parseDuplicateCheck((current as { original_check?: unknown } | null)?.original_check);
+  const { error } = await supabase
+    .from('ksef_submissions')
+    .update({ original_check: mergeDuplicateCheck(previous, params.check) } as Record<string, unknown>)
     .eq('tenant_id', params.tenantId)
     .eq('invoice_id', params.invoiceId)
     .eq('original_ksef_number', params.originalKsefNumber)

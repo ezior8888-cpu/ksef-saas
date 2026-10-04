@@ -77,7 +77,7 @@ describe('describeDuplicateOriginal — panel dla klienta', () => {
       { label: 'Program', value: 'FaktFlow' },
     ]);
     expect(v.note).toContain('Faktura FV/1');
-    expect(v.note).toContain('Nie wystawiaj jej ponownie');
+    expect(v.note).toContain('Nie wystawiaj tej faktury ponownie');
   });
 
   it('bez danych (oryginału nie pobrano) — numer KSeF i data z numeru; nie udaje, że zna treść', () => {

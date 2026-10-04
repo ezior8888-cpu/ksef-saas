@@ -95,13 +95,16 @@ reconcile nie ma żadnego wyjścia → A4b (00137: dane specjalne na wierszu).
   Każdy nierozstrzygnięty werdykt zapisuje **dane oryginału** na otwartym
   wpisie próby (`ksef_submissions.original_check`, 00144): powód
   (`known-number`, `download-refused`, `download-pending`, `storage-pending`,
-  `faktflow-original`, `same-content-other-program`, `no-own-file`,
-  `archive-conflict`), numer, datę, nabywcę, kwotę, program, datę nadania
+  `archive-pending`, `faktflow-original`, `same-content-other-program`,
+  `no-own-file`, `archive-conflict`), numer, datę, nabywcę, kwotę, program, datę nadania
   numeru, skrót i — gdy oryginał pobrano, a werdykt nie zapadł — bajty
   oryginału w archiwum `<firma>/ksef-import/<numer KSeF>.xml` (ten sam klucz
   co Magiczny import). Klient widzi je na karcie faktury, operator na karcie
-  w `/admin/ksef`. `archive-conflict` = w archiwum jest inny plik pod tym
-  numerem KSeF: operator porównuje oba pliki, zanim cokolwiek zdecyduje.
+  w `/admin/ksef`. Ponowne sprawdzenie (cron I5, „Tylko uzgodnij”), które
+  nie pobrało oryginału (503, 403), nie kasuje danych z udanego — wynik
+  próby trafia do `recheck`. `archive-conflict` = w archiwum jest inny plik
+  pod tym numerem KSeF: operator porównuje oba pliki, zanim cokolwiek
+  zdecyduje.
   „Znany numer” (numer KSeF oryginału ma już inna faktura firmy) liczy
   tylko faktury sprzedaży — zakupowa z tym numerem nie zatrzymuje
   porównania treści (D-A4-1b-3, A0).

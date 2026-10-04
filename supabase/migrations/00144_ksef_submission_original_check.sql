@@ -23,6 +23,6 @@ ALTER TABLE public.ksef_submissions
   ADD COLUMN IF NOT EXISTS original_check jsonb;
 
 COMMENT ON COLUMN public.ksef_submissions.original_check IS
-  'D-A4-1b-3 (00144): wynik weryfikacji duplikatu 440, którego automat nie rozstrzygnął — {v, env, checkedAt, reason (known-number | download-refused | download-pending | storage-pending | faktflow-original | same-content-other-program | no-own-file | archive-conflict), sha256, archivePath, sizeBytes, summary {systemInfo, number, issueDate, buyerNip, buyerName, gross, currency}, sameContentExceptHeader, ownHistory, acquiredAt, httpStatus, knownInvoice}. Tylko na otwartym wpisie ze znacznikiem 440; pisze serwer.';
+  'D-A4-1b-3 (00144): wynik weryfikacji duplikatu 440, którego automat nie rozstrzygnął — {v, env, checkedAt, reason (known-number | download-refused | download-pending | storage-pending | archive-pending | faktflow-original | same-content-other-program | no-own-file | archive-conflict), sha256, archivePath, sizeBytes, summary {systemInfo, number, issueDate, buyerNip, buyerName, gross, currency}, sameContentExceptHeader, ownHistory, acquiredAt, httpStatus, knownInvoice, recheck}. Tylko na otwartym wpisie ze znacznikiem 440; pisze serwer. Ponowne sprawdzenie, które nie pobrało oryginału, nie kasuje danych z udanego — zapisuje się w recheck.';
 
 COMMIT;

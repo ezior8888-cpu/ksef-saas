@@ -21,6 +21,8 @@ export const DUPLICATE_CHECK_REASONS = [
   'download-pending',
   /** Nie udało się odczytać naszego pliku z magazynu — ponowienie. */
   'storage-pending',
+  /** Oryginał pobrany, ale zapis jego bajtów w archiwum chwilowo nieudany — ponowienie. */
+  'archive-pending',
   /** Oryginał wygenerował FaktFlow, treść inna niż nasza. */
   'faktflow-original',
   /** Inny program, ta sama treść co nasza (poza nagłówkiem). */
@@ -55,6 +57,30 @@ export interface KsefDuplicateCheck {
   httpStatus: number | null;
   /** Faktura sprzedaży w FaktFlow, która ma już ten numer KSeF (`known-number`). */
   knownInvoice: { id: string; internalNumber: string | null } | null;
+  /**
+   * Ostatnie ponowne sprawdzenie, które NIE pobrało oryginału (np. cron I5
+   * po 48 h dostał 503) — dane wyżej pochodzą z wcześniejszego, udanego.
+   */
+  recheck: { reason: DuplicateCheckReason; httpStatus: number | null; checkedAt: string } | null;
+}
+
+/** Powody, przy których sprawdzenie nie pobrało oryginału z powodu chwilowej albo uprawnieniowej awarii. */
+const FAILED_FETCH_REASONS: readonly DuplicateCheckReason[] = ['download-pending', 'download-refused', 'storage-pending', 'archive-pending'];
+
+/**
+ * Nowy zapis po kolejnym sprawdzeniu. Sprawdzenie, które nie pobrało
+ * oryginału (awaria, 403), NIE kasuje danych z wcześniejszego udanego —
+ * na nich klient podejmuje decyzję; dopisuje tylko wynik próby (`recheck`).
+ * Nowe dane oryginału, „znany numer” albo inne środowisko — zapis w całości.
+ */
+export function mergeDuplicateCheck(previous: KsefDuplicateCheck | null, next: KsefDuplicateCheck): KsefDuplicateCheck {
+  const keepPrevious = previous !== null
+    && previous.sha256 !== null
+    && previous.env === next.env
+    && FAILED_FETCH_REASONS.includes(next.reason)
+    && (next.sha256 === null || next.sha256 === previous.sha256);
+  if (!keepPrevious) return { ...next, recheck: null };
+  return { ...previous, recheck: { reason: next.reason, httpStatus: next.httpStatus, checkedAt: next.checkedAt } };
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -82,6 +108,10 @@ export function parseDuplicateCheck(value: unknown): KsefDuplicateCheck | null {
   const known = isRecord(value.knownInvoice) && str(value.knownInvoice.id)
     ? { id: str(value.knownInvoice.id)!, internalNumber: str(value.knownInvoice.internalNumber) }
     : null;
+  const r = value.recheck;
+  const recheck = isRecord(r) && typeof r.reason === 'string' && (DUPLICATE_CHECK_REASONS as readonly string[]).includes(r.reason)
+    ? { reason: r.reason as DuplicateCheckReason, httpStatus: typeof r.httpStatus === 'number' ? r.httpStatus : null, checkedAt: str(r.checkedAt) ?? '' }
+    : null;
   return {
     v: 1,
     env: str(value.env) ?? '',
@@ -96,6 +126,7 @@ export function parseDuplicateCheck(value: unknown): KsefDuplicateCheck | null {
     acquiredAt: str(value.acquiredAt),
     httpStatus: typeof value.httpStatus === 'number' ? value.httpStatus : null,
     knownInvoice: known,
+    recheck,
   };
 }
 
@@ -106,6 +137,16 @@ export interface DuplicateOriginalView {
   rows: ReadonlyArray<{ label: string; value: string }>;
   /** Co to znaczy i co robić (bez obietnic przycisku, którego jeszcze nie ma). */
   note: string;
+}
+
+/** Dzień w Polsce (Europe/Warsaw) jako RRRR-MM-DD — nie dzień w UTC. */
+function warsawDay(iso: string): string | null {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(at);
+  const get = (type: 'year' | 'month' | 'day') => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
 /** Data `RRRR-MM-DD` z numeru KSeF (`NIP-RRRRMMDD-…`) — gdy KSeF nie podał daty nadania. */
@@ -128,7 +169,7 @@ export function describeDuplicateOriginal(
 ): DuplicateOriginalView {
   const s = check?.summary ?? null;
   const rows: Array<{ label: string; value: string }> = [{ label: 'Numer KSeF', value: ksefNumber }];
-  const assigned = check?.acquiredAt?.slice(0, 10) ?? dateFromKsefNumber(ksefNumber);
+  const assigned = (check?.acquiredAt ? warsawDay(check.acquiredAt) : null) ?? dateFromKsefNumber(ksefNumber);
   if (assigned) rows.push({ label: 'Numer nadany w KSeF', value: assigned });
   if (s?.number) rows.push({ label: 'Numer faktury', value: s.number });
   if (s?.issueDate) rows.push({ label: 'Data wystawienia', value: s.issueDate });
@@ -140,21 +181,30 @@ export function describeDuplicateOriginal(
   }
 
   const doc = invoiceNumber ? `Faktura ${invoiceNumber}` : 'Ta faktura';
+  const dontReissue = 'Nie wystawiaj tej faktury ponownie.';
   let note: string;
   switch (check?.reason) {
     case 'download-refused':
       note = check.httpStatus === 403
-        ? 'Nie mogliśmy pobrać treści tej faktury z KSeF — token KSeF nie ma uprawnienia do odczytu faktur (InvoiceRead). ' +
-          'Nadaj je w Aplikacji Podatnika KSeF. Nie wystawiaj tej faktury ponownie.'
-        : 'Nie mogliśmy pobrać treści tej faktury z KSeF. Nie wystawiaj tej faktury ponownie — zajmujemy się tym.';
+        ? 'Nie mogliśmy pobrać treści tej faktury z KSeF — dane logowania KSeF w FaktFlow nie mają uprawnienia do odczytu ' +
+          'faktur (InvoiceRead). Sprawdź uprawnienia w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach → KSeF. ' +
+          dontReissue
+        : `Nie mogliśmy pobrać treści tej faktury z KSeF — zajmujemy się tym. ${dontReissue}`;
       break;
     case 'download-pending':
     case 'storage-pending':
-      note = 'Sprawdzamy w KSeF treść tej faktury — odśwież za kilka minut. Nie wystawiaj tej faktury ponownie.';
+    case 'archive-pending':
+      // Panel widać dopiero po wyczerpaniu ponowień joba — następne
+      // sprawdzenie robi cron (po 48 h) albo operator.
+      note = 'Nie udało się jeszcze sprawdzić treści tej faktury w KSeF — sprawdzimy ponownie automatycznie ' +
+        `(zwykle w ciągu 2 dni), a w razie potrzeby zajmie się tym operator. ${dontReissue}`;
       break;
     default:
-      note = `${doc} nie została przyjęta, bo KSeF ma już fakturę Twojej firmy o tym numerze (dane wyżej). ` +
-        'Nie wystawiaj jej ponownie — zajmujemy się tym i poprosimy Cię o decyzję, czy to ta sama sprzedaż.';
+      note = check?.reason === 'faktflow-original' && check.ownHistory
+        ? `${doc} nie została przyjęta, bo KSeF ma już wcześniejszą wersję tej faktury wysłaną z FaktFlow (dane wyżej). ` +
+          `Zajmujemy się tym. ${dontReissue}`
+        : `${doc} nie została przyjęta, bo KSeF ma już fakturę Twojej firmy o tym numerze (dane wyżej). ` +
+          `Zajmujemy się tym. ${dontReissue}`;
   }
   return { title: 'W KSeF jest już faktura o tym numerze', rows, note };
 }

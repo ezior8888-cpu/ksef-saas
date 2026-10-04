@@ -132,7 +132,9 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
             const c = s.originalCheck!;
             const fields: Array<[string, string | null]> = [
               ['Numer KSeF oryginału', s.originalKsefNumber],
+              ['Wpis próby', `${s.status ?? '—'}${s.status === 'sent' || s.status === 'intent' ? ' (otwarty — bieżący)' : ' (zamknięty — historyczny)'}`],
               ['Powód', c.reason],
+              ['Ostatnie nieudane sprawdzenie', c.recheck ? `${c.recheck.reason}${c.recheck.httpStatus ? ` (HTTP ${c.recheck.httpStatus})` : ''}, ${when(c.recheck.checkedAt)}` : null],
               ['Środowisko', c.env],
               ['Sprawdzono', when(c.checkedAt)],
               ['Numer faktury (P_2)', c.summary?.number ?? null],
