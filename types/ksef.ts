@@ -260,6 +260,8 @@ export interface QueryInvoicesRequest {
     /** Tylko dla `PermanentStorage`: `to` nie wyjdzie poza HWM. */
     restrictToPermanentStorageHwmDate?: boolean;
   };
+  /** Numer KSeF faktury (dokładne dopasowanie). */
+  ksefNumber?: string;
 }
 
 /**

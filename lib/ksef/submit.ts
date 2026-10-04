@@ -11,6 +11,8 @@ import type {
   SendInvoiceResponse,
   InvoiceStatusResponse,
   KsefEnvironment,
+  QueryInvoicesRequest,
+  QueryInvoicesResponse,
   SessionInvoicesResponse,
 } from '@/types/ksef';
 import { INVOICE_STATUS } from '@/types/ksef';
@@ -399,6 +401,46 @@ export async function downloadKsefInvoice(
       throw new Error('KSeF zwrócił pusty XML faktury');
     }
     return body;
+  });
+}
+
+/**
+ * Data nadania numeru KSeF fakturze (`acquisitionDate` z
+ * `POST /invoices/query/metadata`, filtr `ksefNumber`) — przy przyjęciu
+ * numeru z duplikatu to data oryginału wyznacza wystawienie i otrzymanie
+ * (art. 106na). Zakres dat jest wymagany: bierzemy dzień z numeru KSeF
+ * (`NIP-RRRRMMDD-…`) z zapasem ±3 dni. `null`, gdy KSeF nie zwrócił daty.
+ */
+export async function fetchKsefAcquisitionDate(
+  ksefNumber: string,
+  auth: KsefAuth,
+  env?: KsefEnvironment,
+  auditContext?: SubmitAuditContext,
+): Promise<string | null> {
+  const day = /^\d{10}-(\d{4})(\d{2})(\d{2})-/.exec(ksefNumber);
+  if (!day) return null;
+  const base = Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3]));
+  const dayMs = 24 * 60 * 60 * 1000;
+  const req: QueryInvoicesRequest = {
+    subjectType: 'subject1',
+    dateRange: {
+      dateType: 'Invoicing',
+      from: new Date(base - 3 * dayMs).toISOString(),
+      to: new Date(base + 4 * dayMs - 1).toISOString(),
+    },
+    ksefNumber,
+  };
+  return ksefRateLimiter.enqueue(auth.nip, async () => {
+    const authSession = await ksefSessionCache.getSession(auth, env);
+    const response = await ksefFetch<QueryInvoicesResponse>('/invoices/query/metadata?pageOffset=0&pageSize=10', {
+      method: 'POST',
+      accessToken: authSession.accessToken,
+      body: req,
+      env,
+      audit: auditContext ? { ...auditContext, action: 'invoice.original-metadata', metadata: { ksefNumber } } : undefined,
+    });
+    const hit = (response.invoices ?? []).find((i) => i.ksefNumber === ksefNumber);
+    return hit?.acquisitionDate ?? null;
   });
 }
 
