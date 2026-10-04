@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
 
 // ── Część 1: submitInvoice na atrapie API KSeF ──
 vi.mock('@/lib/ksef/submission-log', () => ({
+  // A2: bez zamiarów wysyłki do rozstrzygnięcia — runner idzie jak dotąd.
+  findOpenKsefSubmissionIntents: vi.fn(async () => []),
+  promoteKsefSubmissionIntent: vi.fn(async () => false),
+  abandonKsefSubmissionIntent: vi.fn(),
+  recordKsefSubmissionIntent: vi.fn(),
   recordKsefSubmissionSent: vi.fn(),
   markKsefSubmission: vi.fn(),
   findOpenKsefSubmission: vi.fn(async () => null),

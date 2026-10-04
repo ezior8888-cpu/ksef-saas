@@ -109,6 +109,19 @@ async function sentSubmission(invoiceId: string, status: 'sent' | 'accepted' | '
   if (error) throw new Error(`insert ksef_submissions: ${error.message}`);
 }
 
+/**
+ * Wpis zamiaru wysyłki (A2, 00136): numer sesji jest, numeru referencyjnego
+ * faktury jeszcze nie — tak wygląda próba, w której odpowiedź na POST zginęła.
+ */
+async function intentSubmission(invoiceId: string, status: 'intent' | 'abandoned', attemptedAt?: string) {
+  const { error } = await admin.from('ksef_submissions').insert({
+    tenant_id: ORG, invoice_id: invoiceId, submission_type: 'online', status,
+    session_reference_number: `SES-${counter}`, invoice_reference_number: null,
+    ...(attemptedAt ? { attempted_at: attemptedAt } : {}),
+  });
+  if (error) throw new Error(`insert ksef_submissions: ${error.message}`);
+}
+
 /** Wyzwalacze 00119 blokują DELETE poza szkicem bez śladu wysyłki — najpierw powrót do szkicu. */
 async function cleanupInvoices() {
   await admin.from('upo_receipts').delete().eq('tenant_id', ORG);
@@ -195,6 +208,34 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
 
     const numbered = await invoice({ ksef_status: 'accepted', ksef_number: '9480000014-20261001-000000000001-00', ksef_environment: 'test', xml_storage_path: 'x.xml' });
     expect((await evidence(numbered)).data).toBe(true);
+  });
+
+  it('A2 (00136): zamiar wysyłki jest dowodem kontaktu i blokuje powrót do szkicu; porzucony nie; stary zamiar widzi strażnik (I5)', async () => {
+    const evidence = (id: string) => admin.rpc('ksef_has_contact_evidence', { p_invoice_id: id, p_tenant_id: ORG });
+    const reset = (id: string) => admin.rpc('reset_ksef_send', { p_invoice_id: id, p_tenant_id: ORG, p_actor_user_id: ownerId });
+
+    // Odpowiedź na POST zginęła: KSeF mógł dostać fakturę — treści nie wolno zmienić.
+    const intent = await invoice({ ksef_status: 'failed', last_error_code: 'INFRA' });
+    await intentSubmission(intent, 'intent');
+    expect((await evidence(intent)).data).toBe(true);
+    expect((await reset(intent)).error?.code).toBe('P0001');
+    expect((await row(intent)).ksef_status).toBe('failed');
+
+    // Runner sprawdził sesję w KSeF: pusta — faktura z tej próby nie dotarła.
+    const abandoned = await invoice({ ksef_status: 'failed', last_error_code: 'INFRA' });
+    await intentSubmission(abandoned, 'abandoned');
+    expect((await evidence(abandoned)).data).toBe(false);
+    expect((await reset(abandoned)).error).toBeNull();
+    expect((await row(abandoned)).ksef_status).toBe('draft');
+
+    const staleIntent = await invoice({ ksef_status: 'failed', last_error_code: 'RESULT_UNCERTAIN' });
+    await intentSubmission(staleIntent, 'intent', '2026-09-01T10:00:00Z');
+    const { data, error } = await admin.rpc('ksef_lifecycle_violations');
+    expect(error).toBeNull();
+    const invariants = ((data ?? []) as Array<{ invariant: string; invoice_id: string }>)
+      .filter((v) => v.invoice_id === staleIntent)
+      .map((v) => v.invariant);
+    expect(invariants).toEqual(['I5']);
   });
 
   it('enqueue: tylko szkic przechodzi do queued, drugi raz i z failed — odmowa', async () => {

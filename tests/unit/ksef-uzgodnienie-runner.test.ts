@@ -43,6 +43,11 @@ vi.mock('@/lib/ksef/submit', async (importOriginal) => ({
   checkInvoiceStatusByReference: m.status,
 }));
 vi.mock('@/lib/ksef/submission-log', () => ({
+  // A2: bez zamiarów wysyłki do rozstrzygnięcia — runner idzie jak dotąd.
+  findOpenKsefSubmissionIntents: vi.fn(async () => []),
+  promoteKsefSubmissionIntent: vi.fn(async () => false),
+  abandonKsefSubmissionIntent: vi.fn(),
+  recordKsefSubmissionIntent: vi.fn(),
   recordKsefSubmissionSent: vi.fn(),
   markKsefSubmission: m.markSubmission,
   findOpenKsefSubmission: m.findOpen,

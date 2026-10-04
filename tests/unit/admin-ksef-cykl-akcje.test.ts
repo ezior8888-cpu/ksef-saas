@@ -20,7 +20,8 @@ const m = vi.hoisted(() => ({
   audit: vi.fn(),
   revalidate: vi.fn(),
   invoice: null as Record<string, unknown> | null,
-  openSent: [] as Array<{ id: string }>,
+  /** Wpisy `ksef_submissions` faktury; bez `status` = `sent`. */
+  openSent: [] as Array<{ id: string; status?: string }>,
 }));
 
 vi.mock('@/lib/auth/admin-guard', () => ({ requireAdmin: m.requireAdmin }));
@@ -39,12 +40,19 @@ type Tx = { executeSql: ReturnType<typeof vi.fn> };
 function fakeAdminClient() {
   return {
     from: (table: string) => {
+      const statusOk: Array<(status: string) => boolean> = [];
       const q = {
         select: () => q,
-        eq: () => q,
+        eq: (k: string, v: unknown) => { if (k === 'status') statusOk.push((st) => st === v); return q; },
+        in: (k: string, vs: unknown[]) => { if (k === 'status') statusOk.push((st) => vs.includes(st)); return q; },
         limit: () => q,
         maybeSingle: async () => ({ data: table === 'invoices' ? m.invoice : null, error: null }),
-        then: (ok: (v: unknown) => unknown) => ok({ data: table === 'ksef_submissions' ? m.openSent : [], error: null }),
+        then: (ok: (v: unknown) => unknown) => ok({
+          data: table === 'ksef_submissions'
+            ? m.openSent.filter((r) => statusOk.every((f) => f(r.status ?? 'sent')))
+            : [],
+          error: null,
+        }),
       };
       return q;
     },
@@ -123,6 +131,22 @@ describe('operatorRequeueAction', () => {
     expect(values[3]).toBe(OPERATOR.userId);
     expect(values[4]).toBe(true);
     expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'invoice.operator_reconcile' }));
+  });
+
+  it('A2: „tylko uzgodnij” przy samym zamiarze wysyłki (intent) — zlecenie; wpis zamknięty (abandoned) — odmowa', async () => {
+    m.openSent = [{ id: 'sub-1', status: 'abandoned' }];
+    await expect(operatorRequeueAction(ID, { reconcileOnly: true })).resolves.toEqual({
+      success: false, error: OPERATOR_MESSAGES.noOpenSent,
+    });
+
+    m.openSent = [{ id: 'sub-2', status: 'intent' }];
+    const tx: Tx = { executeSql: vi.fn(async () => ({ rows: [{ id: ID }], rowCount: 1 })) };
+    sendRunningStep(tx);
+    await expect(operatorRequeueAction(ID, { reconcileOnly: true })).resolves.toEqual({
+      success: true, message: OPERATOR_MESSAGES.reconcileQueued,
+    });
+    const event = m.send.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(event.data.reconcileOnly).toBe(true);
   });
 
   it.each([

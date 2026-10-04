@@ -494,7 +494,8 @@ pierwszy kwartał; każdy nowy kod błędu lub blokada wchodzi tylko z wyjściem
 | Data | Sesja | PR | Zrobione | Co zostało |
 |---|---|---|---|---|
 | 03–04.10.2026 | (runda cyklu życia, przed tym planem) | #199–#217 | sekcja 3 | — (wszystko scalone, 00131–00135 na db-1, wdrożone 04.10) |
-| 04.10.2026 | A1 | #219 | `lib/invoices/issue-date.ts`: jedna reguła „data wystawienia = dziś w Polsce” w 5 akcjach wysyłki (FA, szkic, ZAL, KOR, ROZ — w ROZ przed hamulcem); formularz ZAL bez UTC; 11 przypadków czerwonych przed naprawą | scalenie i wdrożenie #219 (bez migracji); faktura, która nie wyszła przed północą (ponowienie, cron, `/admin/ksef`), to B1/B2 |
+| 04.10.2026 | A1 | #219 | `lib/invoices/issue-date.ts`: jedna reguła „data wystawienia = dziś w Polsce” w 5 akcjach wysyłki (FA, szkic, ZAL, KOR, ROZ — w ROZ przed hamulcem); formularz ZAL bez UTC; 11 przypadków czerwonych przed naprawą. Scalone i wdrożone 04.10 (worker, potem web; `2dbf13a`) | faktura, która nie wyszła przed północą (ponowienie, cron, `/admin/ksef`), to B1/B2 |
+| 04.10.2026 | A2 | #221 | wpis `intent` z numerem sesji przed POST pliku (bez zapisu — bez wysyłki); ponowienie zamyka sesję zamiaru i pyta KSeF o jej faktury (`GET /sessions/{ref}/invoices`): plik → `sent` + uzgodnienie, pusto → `abandoned` + wysyłka od nowa; 00136: `intent` = dowód kontaktu, I5 widzi stary zamiar; „Tylko uzgodnij” działa przy zamiarze | wgrać 00136 PRZED wdrożeniem; test na KSeF TEST (H1, scenariusz 5); osobne ustalenie: status 440 przy uzgadnianiu po referencji (`reconcile-previous-submission`) kończy się ponowieniami zamiast ścieżką „własny duplikat”; dla A5/C-22: A2 dodało status `abandoned`, a otwarte zamiary rozstrzyga osobny krok (`findOpenKsefSubmissionIntents`) — `findOpenKsefSubmission` zostaje przy `sent`; punkt 3 kontraktu w sekcji 5 briefu do uzgodnienia przed A5 |
 
 ---
 

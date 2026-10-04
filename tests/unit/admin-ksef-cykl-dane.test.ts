@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { countByCode, NO_CODE_FILTER, summarizeViolations } from '@/lib/admin/ksef-lifecycle';
-import { OPERATOR_MESSAGES, operatorInvoiceButtons } from '@/lib/admin/ksef-operator-policy';
+import { hasOpenSubmission, OPERATOR_MESSAGES, operatorInvoiceButtons } from '@/lib/admin/ksef-operator-policy';
 
 /**
  * Panel operatora `/admin/ksef` (PR 3c cyklu życia): zliczenia bez GROUP BY
@@ -85,5 +85,15 @@ describe('operatorInvoiceButtons — tabela decyzji operatora', () => {
       const b = operatorInvoiceButtons(input);
       expect([b.requeue.enabled, b.reconcile.enabled, b.reset.enabled]).toEqual([false, false, false]);
     }
+  });
+});
+
+describe('hasOpenSubmission (A2): czy „Tylko uzgodnij” ma co uzgadniać', () => {
+  it('sent i zamiar intent — tak; zamknięte (accepted, rejected, duplicate, abandoned) — nie', () => {
+    expect(hasOpenSubmission([{ status: 'sent' }])).toBe(true);
+    expect(hasOpenSubmission([{ status: 'abandoned' }, { status: 'intent' }])).toBe(true);
+    expect(hasOpenSubmission([
+      { status: 'accepted' }, { status: 'rejected' }, { status: 'duplicate' }, { status: 'abandoned' }, { status: null },
+    ])).toBe(false);
   });
 });

@@ -70,7 +70,7 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
         ) : null}
         <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span>dowód kontaktu z KSeF: <strong>{evidence ? 'TAK' : 'nie'}</strong></span>
-          <span>otwarty wpis sent: <strong>{openSent ? 'TAK' : 'nie'}</strong></span>
+          <span>otwarty wpis sent / zamiar intent: <strong>{openSent ? 'TAK' : 'nie'}</strong></span>
         </div>
       </section>
 

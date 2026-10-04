@@ -14,12 +14,24 @@
 
 import { sendErrorClassOf } from '@/lib/ksef/send-error-classes';
 
+/**
+ * Wpisy `ksef_submissions`, które „Tylko uzgodnij” ma czym uzgodnić: wysyłka
+ * z numerem referencyjnym (`sent`) albo zamiar z numerem sesji (`intent`, A2
+ * — runner zamyka sesję i pyta KSeF o jej faktury). Ta sama lista dla akcji
+ * i karty faktury.
+ */
+export const OPEN_SUBMISSION_STATUSES = ['sent', 'intent'] as const;
+
+export function hasOpenSubmission(history: ReadonlyArray<{ status: string | null }>): boolean {
+  return history.some((s) => (OPEN_SUBMISSION_STATUSES as readonly (string | null)[]).includes(s.status));
+}
+
 export const OPERATOR_MESSAGES = {
   notFound: 'Nie ma takiej faktury.',
   incoming: 'To faktura przychodząca — nie wysyła się jej do KSeF.',
   special: 'Dokument specjalny (korekta, zaliczka, ROZ): zdarzenia wysyłki nie da się odtworzyć z wiersza. Dostępny jest tylko powrót do szkicu.',
   incomplete: 'Wiersz nie ma kompletnych danych faktury (fa3_data) — tylko powrót do szkicu.',
-  noOpenSent: 'Brak otwartego wpisu wysyłki (sent) — nie ma czego uzgadniać. Ponowna wysyłka wysłałaby fakturę od nowa.',
+  noOpenSent: 'Brak otwartego wpisu wysyłki (sent ani zamiaru intent) — nie ma czego uzgadniać. Ponowna wysyłka wysłałaby fakturę od nowa.',
   paused: 'Wysyłki są wstrzymane wyłącznikiem operatora (killAllKsefSubmissions). Najpierw zdejmij hamulec.',
   pausedUnknown: 'Nie można sprawdzić wyłącznika wysyłek — zlecenie nie zostało wysłane.',
   noNip: 'Firma nie ma NIP-u w bazie ani w fakturze.',
