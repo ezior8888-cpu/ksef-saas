@@ -46,9 +46,16 @@ describe('operatorInvoiceButtons — tabela decyzji operatora', () => {
     expect(operatorInvoiceButtons({ ...base, status: 'failed', errorCode: 'KSEF_PAUSED' }).requeue.enabled).toBe(true);
   });
 
-  it('klasa reconcile z otwartym wpisem sent: tylko „Tylko uzgodnij”', () => {
+  it('klasa reconcile z otwartym wpisem sent: cudzy duplikat — tylko „Tylko uzgodnij”', () => {
+    const b = operatorInvoiceButtons({ ...base, status: 'failed', errorCode: 'KSEF_DUPLICATE_RECONCILE', openSent: true, evidence: true });
+    expect(b.requeue).toEqual({ enabled: false, reason: OPERATOR_MESSAGES.duplicateRequeue });
+    expect(b.reconcile.enabled).toBe(true);
+    expect(b.reset).toEqual({ enabled: false, reason: OPERATOR_MESSAGES.evidence });
+  });
+
+  it('A4: RESULT_UNCERTAIN — także „Wyślij ponownie” (runner uzgadnia najpierw, 440 chroni przed duplikatem)', () => {
     const b = operatorInvoiceButtons({ ...base, status: 'failed', errorCode: 'RESULT_UNCERTAIN', openSent: true, evidence: true });
-    expect(b.requeue).toEqual({ enabled: false, reason: OPERATOR_MESSAGES.reconcileClass });
+    expect(b.requeue).toEqual({ enabled: true, reason: null });
     expect(b.reconcile.enabled).toBe(true);
     expect(b.reset).toEqual({ enabled: false, reason: OPERATOR_MESSAGES.evidence });
   });

@@ -198,6 +198,12 @@ agenta z weryfikacją Bartosza, nie obietnica.
   hamulca → dozwolone; runner odtwarza XML identyczny (skrót) z pierwszej próby.
 - DoD: `operatorInvoiceButtons` i `failedInvoiceButtons` nie mają gałęzi
   „dokument specjalny: tylko szkic”.
+- Podział (04.10.2026): **A4a** — katalog wyjść (tabela w runbooku,
+  macierz `tests/unit/ksef-wyjscia-kodow.test.ts`, „Wyślij ponownie”
+  operatora dla ENQUEUE_LOST / INVALID_EVENT / RESULT_UNCERTAIN, akcja
+  = przycisk); **A4b** — dane specjalne na wierszu (00137) i ponowienie
+  KOR/ZAL/ROZ; decyzje D-A4-1 (cudzy 440) i D-A4-2 (ENV_MISMATCH) w runbooku
+  `ksef-error-codes.md`.
 
 **A5. Ślad per próba — kontrakt danych dla centrum dowodzenia (M10)**
 - Problem: porażka przed POST (poświadczenia, XML, upload, przejęcie) nie
@@ -497,7 +503,8 @@ pierwszy kwartał; każdy nowy kod błędu lub blokada wchodzi tylko z wyjściem
 | 04.10.2026 | A1 | #219 | `lib/invoices/issue-date.ts`: jedna reguła „data wystawienia = dziś w Polsce” w 5 akcjach wysyłki (FA, szkic, ZAL, KOR, ROZ — w ROZ przed hamulcem); formularz ZAL bez UTC; 11 przypadków czerwonych przed naprawą. Scalone i wdrożone 04.10 (worker, potem web; `2dbf13a`) | faktura, która nie wyszła przed północą (ponowienie, cron, `/admin/ksef`), to B1/B2 |
 | 04.10.2026 | A2 | #221 | wpis `intent` z numerem sesji przed POST pliku (bez zapisu — bez wysyłki); ponowienie zamyka sesję zamiaru i pyta KSeF o jej faktury (`GET /sessions/{ref}/invoices`): plik → `sent` + uzgodnienie, pusto → `abandoned` + wysyłka od nowa; 00136: `intent` = dowód kontaktu, I5 widzi stary zamiar; „Tylko uzgodnij” działa przy zamiarze | scalone, 00136 wgrana na db-1 i wdrożone 04.10 (worker, potem web; `dcf48ba`; strażnik 0); test na KSeF TEST (H1, scenariusz 5); osobne ustalenie: status 440 przy uzgadnianiu po referencji (`reconcile-previous-submission`) kończy się ponowieniami zamiast ścieżką „własny duplikat”; dla A5/C-22: A2 dodało status `abandoned`, a otwarte zamiary rozstrzyga osobny krok (`findOpenKsefSubmissionIntents`) — `findOpenKsefSubmission` zostaje przy `sent`; punkt 3 kontraktu w sekcji 5 briefu do uzgodnienia przed A5 |
 | 04.10.2026 | A2b | #222 | ustalenie z A2: „tylko uzgodnij”, które stwierdza brak faktury w KSeF (zamiar porzucony, wpis STALE) i brak dowodu kontaktu, kończy `failed NOT_IN_KSEF` (00141, transient, bez automatu) z „Wyślij ponownie” / „Wróć do szkicu” zamiast ślepej uliczki RESULT_UNCERTAIN; poprawione błędne zdanie runbooka A2 | scalone, 00141 wgrana na db-1 i wdrożone 04.10 (`ae87bdd`); osobne ustalenie: komunikat klienta dla klasy transient obiecuje „ponowimy automatycznie” także przy `TRANSIENT_EXHAUSTED` i `CREDENTIALS_UNAVAILABLE` (bez automatu); A3 po #222 |
-| 04.10.2026 | A3 | #223 | cron cyklu życia: I5 (zalegający `sent` / zamiar `intent` > 48 h) przy fakturze `failed`/`rejected` → „tylko uzgodnij” z aktorem NULL; najwyżej raz na dobę (audyt `reconcile_only = true`), po 3 próbach w tygodniu `i5NeedsOperator` + Sentry; inne stany `i5Other` (tylko alarm); dokumenty specjalne pominięte (A4) | bez migracji; I5 przy `accepted` z niezamkniętym wpisem — automat go nie zamyka (do rozważenia: zamknięcie wpisu, gdy numer KSeF się zgadza) |
+| 04.10.2026 | A3 | #223 | cron cyklu życia: I5 (zalegający `sent` / zamiar `intent` > 48 h) przy fakturze `failed`/`rejected` → „tylko uzgodnij” z aktorem NULL; najwyżej raz na dobę (audyt `reconcile_only = true`), po 3 próbach w tygodniu `i5NeedsOperator` + Sentry; inne stany `i5Other` (tylko alarm); dokumenty specjalne pominięte (A4) | scalone i wdrożone 04.10 (`1f95c97`); I5 przy `accepted` z niezamkniętym wpisem — automat go nie zamyka (do rozważenia: zamknięcie wpisu, gdy numer KSeF się zgadza) |
+| 04.10.2026 | A4a | #224 | macierz wyjść dla 20 kodów × rodzaj × dowód × otwarty wpis (test-strażnik z jawną listą ślepych uliczek); „Wyślij ponownie” operatora dla ENQUEUE_LOST, INVALID_EVENT, RESULT_UNCERTAIN; akcja operatora decyduje jak przycisk (zasada 6); tabela kod → wyjście w runbooku | A4b (00137, dokumenty specjalne); decyzje D-A4-1 (cudzy 440: porównanie treści z KSeF) i D-A4-2 (ENV_MISMATCH, z F1) |
 
 ---
 

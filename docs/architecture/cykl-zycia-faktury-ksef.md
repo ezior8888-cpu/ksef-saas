@@ -101,7 +101,7 @@ Raport dzienny strażnika na Telegram: liczba faktur per stan, naruszenia I1–I
 | HOLD | `KOR_HOLD`, `ROZ_HOLD_RECONCILE` | blokady KOR/ROZ | `queued` po zdjęciu; `draft` | „Wysyłka korekt jest tymczasowo wstrzymana …” |
 | RECONCILE | `KSEF_DUPLICATE_RECONCILE` | 440 bez własnej sesji | tylko operator (uzgodnienie) | „Faktura wymaga uzgodnienia z KSeF. Skontaktujemy się.” |
 | RECONCILE | `RESULT_UNCERTAIN` | otwarty wpis `sent`, KSeF nie odpowiada na status; „tylko uzgodnij” bez otwartej wysyłki, gdy dowód kontaktu zostaje | job uzgadniający | jak wyżej |
-| RECONCILE | `ENV_MISMATCH`, `INVALID_EVENT`, `ENQUEUE_LOST` | `onExhausted handled:false`, strażnik I1 | operator | jak wyżej |
+| RECONCILE | `ENV_MISMATCH`, `INVALID_EVENT`, `ENQUEUE_LOST` | `onExhausted handled:false`, strażnik I1 | operator: `INVALID_EVENT`, `ENQUEUE_LOST` (i `RESULT_UNCERTAIN`) — „Wyślij ponownie” (A4); `ENV_MISMATCH` — decyzja D-A4-2 | jak wyżej |
 | — | `NO_CERTIFICATE`, `NOT_VERIFIED` | brak/niezweryfikowany certyfikat | `draft` (klient uzupełnia certyfikat) | „Najpierw wgraj i zweryfikuj certyfikat KSeF.” |
 
 Zasada klasyfikacji (W1): na `TERMINAL` mapuje się wyłącznie błąd, którego przyczyną jest **treść dokumentu** albo **decyzja KSeF o treści**. Każdy błąd, który może zniknąć bez zmiany dokumentu, jest `TRANSIENT`. Brak pewności = `RECONCILE`, nigdy `rejected`.

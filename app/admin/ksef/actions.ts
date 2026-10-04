@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { describeKsefSendError, ksefSendTransactionStep, type KsefSendMode } from '@/lib/invoices/ksef-send-step';
-import { OPEN_SUBMISSION_STATUSES, OPERATOR_MESSAGES } from '@/lib/admin/ksef-operator-policy';
+import { OPEN_SUBMISSION_STATUSES, OPERATOR_MESSAGES, operatorRequeueButton } from '@/lib/admin/ksef-operator-policy';
 import { describeResetError } from '@/lib/invoices/ksef-send-policy';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -64,6 +64,13 @@ export async function operatorRequeueAction(
   const invoice = row.fa3_data as Invoice | null;
   if (!invoice || typeof invoice !== 'object' || !Array.isArray(invoice.lines)) {
     return { success: false, error: OPERATOR_MESSAGES.incomplete };
+  }
+  // Ta sama decyzja co przycisk (A4): klasa terminal, cudzy duplikat, inne środowisko.
+  if (!options.reconcileOnly) {
+    const decision = operatorRequeueButton({
+      direction: row.direction, status: row.ksef_status, errorCode: row.last_error_code, invoiceKind: row.invoice_kind,
+    });
+    if (!decision.enabled) return { success: false, error: decision.reason ?? OPERATOR_MESSAGES.reconcileClass };
   }
 
   const supabase = createAdminClient();

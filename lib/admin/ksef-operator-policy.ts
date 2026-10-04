@@ -8,11 +8,28 @@
  *     także dla `rejected` — ale tylko gdy jest otwarty wpis `sent`, bo
  *     runner uzgadnia po referencji, a bez niej wysłałby fakturę od nowa;
  *   - operator może ponowić po hamulcu (klasa hold) — to on go zdejmuje;
- *   - klasa reconcile: operator decyduje (uzgodnij albo zostaw), ale nie
- *     wysyła od nowa.
+ *   - klasa reconcile: operator decyduje (uzgodnij albo zostaw), a przy
+ *     ENQUEUE_LOST, INVALID_EVENT i RESULT_UNCERTAIN może też wysłać
+ *     ponownie (A4) — patrz `OPERATOR_REQUEUE_RECONCILE_CODES`.
  */
 
-import { sendErrorClassOf } from '@/lib/ksef/send-error-classes';
+import { SEND_ERROR_CODES, sendErrorClassOf, type SendErrorCode } from '@/lib/ksef/send-error-classes';
+
+/**
+ * Kody klasy reconcile, przy których „Wyślij ponownie” operatora jest
+ * bezpieczne (A4): runner zaczyna od rozstrzygnięcia zamiaru i uzgodnienia
+ * otwartego wpisu (A2), treść faktury z dowodem kontaktu jest zamrożona
+ * (00132), a KSeF odrzuca drugą fakturę o tym samym numerze (440, a sesja
+ * z naszej historii = własny duplikat → `accepted`). Ponowienie tej samej
+ * treści nie zrobi więc duplikatu.
+ * Poza listą: KSEF_DUPLICATE_RECONCILE (ponowienie powtórzy cudze 440 —
+ * decyzja D-A4-1) i ENV_MISMATCH (wysyłka w innym środowisku — D-A4-2).
+ */
+export const OPERATOR_REQUEUE_RECONCILE_CODES: readonly SendErrorCode[] = [
+  SEND_ERROR_CODES.ENQUEUE_LOST,
+  SEND_ERROR_CODES.INVALID_EVENT,
+  SEND_ERROR_CODES.RESULT_UNCERTAIN,
+];
 
 /**
  * Wpisy `ksef_submissions`, które „Tylko uzgodnij” ma czym uzgodnić: wysyłka
@@ -42,6 +59,8 @@ export const OPERATOR_MESSAGES = {
   rejectedToDraft: 'Odrzuconej treści nie wysyła się ponownie — powrót do szkicu.',
   terminal: 'Błąd treści dokumentu — powrót do szkicu, nie ponowienie.',
   reconcileClass: 'Klasa reconcile: nie wysyłaj od nowa — użyj „Tylko uzgodnij” albo zostaw.',
+  duplicateRequeue: 'KSeF ma już fakturę o tym numerze spoza naszej historii — ponowienie powtórzy 440. Sprawdź w KSeF numer z błędu (runbook: KSEF_DUPLICATE_RECONCILE).',
+  envMismatchRequeue: 'Faktura była zlecona w innym środowisku KSeF — ponowienie wysłałoby ją w bieżącym. Najpierw ustal z klientem (runbook: ENV_MISMATCH).',
   notFailedOrRejected: 'Dostępne tylko dla failed / rejected.',
   evidence: 'Faktura ma dowód kontaktu z KSeF (numer albo wpis sent/accepted/duplicate) — nie wraca do szkicu.',
 } as const;
@@ -67,13 +86,23 @@ export interface OperatorButtonsInput {
   evidence: boolean;
 }
 
-export function operatorInvoiceButtons(input: OperatorButtonsInput): OperatorButtons {
+function reconcileRequeueRefusal(code: string | null): string {
+  if (code === SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE) return OPERATOR_MESSAGES.duplicateRequeue;
+  if (code === SEND_ERROR_CODES.ENV_MISMATCH) return OPERATOR_MESSAGES.envMismatchRequeue;
+  return OPERATOR_MESSAGES.reconcileClass;
+}
+
+/**
+ * „Wyślij ponownie” operatora — ta sama decyzja dla przycisku i akcji
+ * (`operatorRequeueAction`); nie zależy od dowodu kontaktu ani otwartego wpisu.
+ */
+export function operatorRequeueButton(
+  input: Pick<OperatorButtonsInput, 'direction' | 'status' | 'errorCode' | 'invoiceKind'>,
+): OperatorButton {
   const outgoing = input.direction === 'outgoing';
-  const failedOrRejected = input.status === 'failed' || input.status === 'rejected';
   const special = (input.invoiceKind ?? 'regular') !== 'regular';
   const errorClass = sendErrorClassOf(input.errorCode);
-
-  const requeue: OperatorButton = !outgoing
+  return !outgoing
     ? { enabled: false, reason: OPERATOR_MESSAGES.incoming }
     : input.status === 'rejected'
       ? { enabled: false, reason: OPERATOR_MESSAGES.rejectedToDraft }
@@ -83,9 +112,18 @@ export function operatorInvoiceButtons(input: OperatorButtonsInput): OperatorBut
           ? { enabled: false, reason: OPERATOR_MESSAGES.special }
           : errorClass === 'terminal'
             ? { enabled: false, reason: OPERATOR_MESSAGES.terminal }
-            : errorClass === 'reconcile'
-              ? { enabled: false, reason: OPERATOR_MESSAGES.reconcileClass }
+            : errorClass === 'reconcile' && !OPERATOR_REQUEUE_RECONCILE_CODES.includes(input.errorCode as SendErrorCode)
+              ? { enabled: false, reason: reconcileRequeueRefusal(input.errorCode) }
               : { enabled: true, reason: null };
+}
+
+export function operatorInvoiceButtons(input: OperatorButtonsInput): OperatorButtons {
+  const outgoing = input.direction === 'outgoing';
+  const failedOrRejected = input.status === 'failed' || input.status === 'rejected';
+  const special = (input.invoiceKind ?? 'regular') !== 'regular';
+  const errorClass = sendErrorClassOf(input.errorCode);
+
+  const requeue = operatorRequeueButton(input);
 
   const reconcile: OperatorButton = !outgoing
     ? { enabled: false, reason: OPERATOR_MESSAGES.incoming }
