@@ -8,6 +8,7 @@ import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue'
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import { calculateAdvanceTotals } from '@/lib/invoices/calculator';
+import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
 import { matchesTenantSeller, sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
 import {
@@ -271,6 +272,12 @@ export async function saveAndSendAdvanceAction(raw: unknown): Promise<ActionResu
     const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
     const envelope = buildAdvanceEnvelope({ ...parsed.data, seller }, cashMethod);
     const ghost = ghostAdvanceInvoice(envelope);
+
+    // Ta sama reguła co zwykła faktura (A1, W5): w KSeF tylko z dzisiejszą datą
+    // wystawienia — odmowa przed zapisem, żeby nie zostawić szkicu zaliczki,
+    // którego i tak nie da się później wysłać.
+    const notToday = issueDateNotTodayError(ghost.issueDate, 'special');
+    if (notToday) return { success: false, error: notToday };
 
     const saved = await insertAdvanceDraft(supabase, tenant.id, ghost, envelope);
     if (!saved.success) return saved;

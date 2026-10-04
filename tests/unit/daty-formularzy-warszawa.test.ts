@@ -56,10 +56,12 @@ describe('dueDateFrom', () => {
 });
 
 describe('formularze faktur nie biorą daty z UTC', () => {
+  // A1 (W5): zaliczka była tu pominięta i liczyła „dziś” w UTC.
   const pliki = [
     'components/invoices/invoice-form.tsx',
     'components/invoices/correction-form.tsx',
     'components/invoices/final-form.tsx',
+    'components/invoices/advance-form.tsx',
   ];
 
   it.each(pliki)('%s nie używa toISOString().slice(0, 10) do dat faktury', (plik) => {

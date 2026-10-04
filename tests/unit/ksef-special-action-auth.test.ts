@@ -41,9 +41,16 @@ import type { Invoice } from '@/types/invoice';
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('KSEF_ENV', 'test');
+  // Wysyłka przyjmuje tylko dzisiejszą datę wystawienia (A1, W5) — testy
+  // działają w dniu daty z danych testowych (2026-09-28).
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-28T10:00:00Z'));
 });
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 describe('special invoice actions', () => {
   it.each([

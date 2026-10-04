@@ -23,6 +23,7 @@ import {
   type CorrectionLineSchema,
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
+import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import {
   resolveAmountChangeVatRate,
   zeroVatRateFromParentLines,
@@ -886,6 +887,11 @@ export async function saveAndSendCorrectionAction(
     envelope.annotations = await loadParentAnnotations(supabase, tenant.id, envelope.parentInvoiceId);
     const lines = linesToStoredItems(envelope);
     const ghost = ghostInvoice(envelope, lines);
+
+    // Ta sama reguła co zwykła faktura (A1, W5): w KSeF tylko z dzisiejszą datą
+    // wystawienia — odmowa przed zapisem i przed zleceniem wysyłki.
+    const notToday = issueDateNotTodayError(ghost.issueDate, 'special');
+    if (notToday) return { success: false, error: notToday };
 
     const saved = await insertCorrection(supabase, tenant.id, envelope, lines);
     if (!saved.success) return saved;

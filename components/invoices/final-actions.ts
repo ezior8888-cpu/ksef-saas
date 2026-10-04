@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logAudit } from '@/lib/audit/log';
 import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
+import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import { findAdvancesAlreadySettled } from '@/lib/invoices/settled-advances';
 import {
   settlementRowFromAdvance,
@@ -397,6 +398,11 @@ export async function saveAndSendFinalAction(raw: unknown): Promise<ActionResult
     await tenantContext();
     const parsed = finalInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
+
+    // Ta sama reguła co zwykła faktura (A1, W5): w KSeF tylko z dzisiejszą datą
+    // wystawienia. Stoi przed hamulcem ROZ, żeby została po jego zdjęciu (C4).
+    const notToday = issueDateNotTodayError(parsed.data.issueDate, 'special');
+    if (notToday) return { success: false, error: notToday };
 
     // No accepted advance carries trustworthy KSeF environment provenance yet.
     // Keep the draft action available, but stop send before inserting a new ROZ.

@@ -27,6 +27,7 @@ import {
   type AdvanceInvoiceSchemaIn,
 } from '@/lib/validators/invoice-validators';
 import { calculateAdvanceTotals } from '@/lib/invoices/calculator';
+import { dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
 import type { BuyerB2B, SellerData } from '@/types/invoice-types';
 
 import { saveAdvanceAction, saveAndSendAdvanceAction } from './advance-actions';
@@ -53,14 +54,11 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
   const [saving, startSave] = useTransition();
   const [sending, startSend] = useTransition();
 
-  // useMemo([]) — daty defaultowe liczone raz przy mount; bez tego React Compiler
-  // flaguje `Date.now()` jako impure call w renderze.
+  // Daty w czasie polskim, nie UTC (F-013, A1) — wysyłka przyjmuje tylko
+  // dzisiejszą datę w Polsce. useMemo([]) — liczone raz przy mount.
   const { today, due } = useMemo(() => {
-    const now = Date.now();
-    return {
-      today: new Date(now).toISOString().slice(0, 10),
-      due: new Date(now + 14 * 86400000).toISOString().slice(0, 10),
-    };
+    const todayPl = todayInWarsaw();
+    return { today: todayPl, due: dueDateFrom(todayPl, 14) };
   }, []);
 
   const defaults = {
