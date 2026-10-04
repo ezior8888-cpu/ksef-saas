@@ -335,6 +335,7 @@ export interface KsefSessionRow {
   status: string | null;
   requestPayloadHash: string | null;
   xmlStoragePath: string | null;
+  invoiceReferenceNumber: string | null;
 }
 
 /** Wpis tej faktury z danej sesji (najnowszy) — skrót i plik próby. */
@@ -345,7 +346,7 @@ export async function findKsefSessionRow(
 ): Promise<KsefSessionRow | null> {
   const { data, error } = await createAdminClient()
     .from('ksef_submissions')
-    .select('status, request_payload_hash, xml_storage_path')
+    .select('status, request_payload_hash, xml_storage_path, invoice_reference_number')
     .eq('tenant_id', tenantId)
     .eq('invoice_id', invoiceId)
     .eq('session_reference_number', sessionReferenceNumber)
@@ -358,6 +359,7 @@ export async function findKsefSessionRow(
     status: data.status ?? null,
     requestPayloadHash: data.request_payload_hash ?? null,
     xmlStoragePath: data.xml_storage_path ?? null,
+    invoiceReferenceNumber: data.invoice_reference_number ?? null,
   };
 }
 

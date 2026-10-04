@@ -25,6 +25,8 @@ export interface StoredInvoice {
   ksefNumber: string | null;
   /** Treść pliku, którą KSeF oddaje przy `GET /invoices/ksef/{ksefNumber}`. */
   xml: string;
+  /** Data nadania numeru KSeF (status i metadane). */
+  acquisitionDate?: string;
   originalSession?: string;
   originalKsef?: string;
 }
@@ -44,6 +46,8 @@ export interface FakeKsef {
   listFails: boolean;
   /** Pobranie faktury po numerze KSeF kończy się tym statusem HTTP (i kodem KSeF), zamiast pliku. */
   downloadFailure: { status: number; code?: number } | null;
+  /** Zapytanie o metadane faktur kończy się błędem HTTP. */
+  metadataFails: boolean;
 }
 
 export function freshKsef(): FakeKsef {
@@ -58,6 +62,7 @@ export function freshKsef(): FakeKsef {
     statusFails: false,
     listFails: false,
     downloadFailure: null,
+    metadataFails: false,
   };
 }
 
@@ -65,7 +70,12 @@ export const sha256Base64 = (text: string) => createHash('sha256').update(text, 
 export const sha256Hex = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
 /** Faktura, którą KSeF już ma — np. wystawiona w innym programie albo przed historią wysyłek. */
-export function seedKsefInvoice(k: FakeKsef, input: { session: string; ksefNumber: string; xml: string }): void {
+export const SEEDED_ACQUISITION = '2026-09-30T08:00:00.000Z';
+
+export function seedKsefInvoice(
+  k: FakeKsef,
+  input: { session: string; ksefNumber: string; xml: string; acquisitionDate?: string },
+): void {
   const invoiceNumber = /<(?:\w+:)?P_2>([^<]*)<\/(?:\w+:)?P_2>/.exec(input.xml)?.[1] ?? '';
   const session = k.sessions.get(input.session) ?? { open: false, invoices: [] };
   session.invoices.push({
@@ -75,6 +85,7 @@ export function seedKsefInvoice(k: FakeKsef, input: { session: string; ksefNumbe
     code: 200,
     ksefNumber: input.ksefNumber,
     xml: input.xml,
+    acquisitionDate: input.acquisitionDate ?? SEEDED_ACQUISITION,
   });
   k.sessions.set(input.session, session);
 }
@@ -84,7 +95,7 @@ function statusReply(inv: StoredInvoice) {
     referenceNumber: inv.referenceNumber,
     invoiceHash: inv.invoiceHash,
     ksefNumber: inv.ksefNumber ?? undefined,
-    acquisitionTimestamp: inv.ksefNumber ? '2026-10-01T10:00:00Z' : undefined,
+    acquisitionTimestamp: inv.ksefNumber ? (inv.acquisitionDate ?? '2026-10-01T10:00:00Z') : undefined,
     status: inv.code === 440
       ? { code: 440, description: 'Duplikat faktury', details: ['Duplikat faktury'],
           extensions: { originalSessionReferenceNumber: inv.originalSession, originalKsefNumber: inv.originalKsef } }
@@ -158,6 +169,20 @@ export function ksefClientModule(real: ClientModule, state: () => FakeKsef): Cli
       const inv = k.sessions.get(decodeURIComponent(hit[1]!))?.invoices.find((i) => i.referenceNumber === ref);
       if (!inv) throw new KsefApiError(404, 'Not found', 'Brak faktury');
       return statusReply(inv);
+    }
+    if (route === '/invoices/query/metadata' && method === 'POST') {
+      if (k.metadataFails) throw new KsefApiError(503, 'Service Unavailable', 'KSeF niedostępny');
+      const wanted = (opts.body as { ksefNumber?: string } | undefined)?.ksefNumber;
+      const found = [...k.sessions.values()].flatMap((s) => s.invoices)
+        .filter((i) => i.code === 200 && i.ksefNumber && (!wanted || i.ksefNumber === wanted));
+      return {
+        hasMore: false,
+        isTruncated: false,
+        invoices: found.map((i) => ({
+          ksefNumber: i.ksefNumber, invoiceNumber: i.invoiceNumber, invoiceHash: i.invoiceHash,
+          acquisitionDate: i.acquisitionDate ?? '2026-10-01T10:00:00Z', invoicingDate: i.acquisitionDate ?? '2026-10-01T10:00:00Z',
+        })),
+      };
     }
     hit = /^\/invoices\/ksef\/([^/]+)$/.exec(route);
     if (hit && method === 'GET') {

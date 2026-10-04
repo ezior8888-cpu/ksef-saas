@@ -25,6 +25,7 @@ import { KsefApiError } from '@/lib/ksef/client';
 import {
   checkInvoiceStatusByReference,
   downloadKsefInvoice,
+  fetchKsefAcquisitionDate,
   KSEF_INVOICE_NOT_FOUND,
   KSEF_INVOICE_NOT_YET_AVAILABLE,
   KSEF_DUPLICATE_INVOICE,
@@ -1139,14 +1140,49 @@ export async function runSubmitInvoice(
           tags: { job: 'submit-invoice', kind: `ksef-duplicate-${kind}` },
           extra: { tenantId, invoiceId, originalKsefNumber: original, originalSessionReferenceNumber: originalSession, ...extra },
         });
-      const accept = (
+      // Data nadania numeru oryginałowi (art. 106na: wystawienie i otrzymanie).
+      // Własna sesja — status po referencji (bez uprawnienia InvoiceRead);
+      // inaczej metadane po numerze KSeF. Brak daty nie cofa werdyktu — alarm.
+      const originalAcquisition = async (ownInvoiceReference: string | null): Promise<string | undefined> => {
+        try {
+          const credentials = await getTenantKsefCredentials(tenantId);
+          if (originalSession && ownInvoiceReference) {
+            const status = await checkInvoiceStatusByReference(
+              { sessionReferenceNumber: originalSession, invoiceReferenceNumber: ownInvoiceReference },
+              credentials,
+              env,
+              { tenantId, invoiceId },
+            );
+            if (status.state === 'accepted' && status.acquisitionTimestamp) return status.acquisitionTimestamp;
+          }
+          return (await fetchKsefAcquisitionDate(original!, credentials, env, { tenantId, invoiceId })) ?? undefined;
+        } catch (e) {
+          logger.warn('Nie ustalono daty przyjęcia oryginału duplikatu', {
+            invoiceId,
+            ksefNumber: original,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          return undefined;
+        }
+      };
+      const accept = async (
         via: 'own-duplicate' | 'verified-duplicate',
         xmlStoragePath: string | null,
         sha256Hex: string | null,
-      ): SubmitOutcome => {
+        ownInvoiceReference: string | null = null,
+      ): Promise<SubmitOutcome> => {
         logger.warn('Duplikat 440 rozstrzygnięty jako nasza faktura', { invoiceId, ksefNumber: original, via });
+        const acquisitionTimestamp = await originalAcquisition(ownInvoiceReference);
+        if (!acquisitionTimestamp) {
+          Sentry.captureMessage('KSeF: brak daty przyjęcia oryginału przy przyjęciu numeru z duplikatu', {
+            level: 'warning',
+            tags: { job: 'submit-invoice', kind: 'ksef-duplicate-no-date' },
+            extra: { tenantId, invoiceId, originalKsefNumber: original, via },
+          });
+        }
         return {
           ksefNumber: original!,
+          acquisitionTimestamp,
           xmlStoragePath: xmlStoragePath ?? invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
           xmlSha256Hash: sha256Hex ?? undefined,
           sessionReferenceNumber: originalSession ?? undefined,
@@ -1194,7 +1230,7 @@ export async function runSubmitInvoice(
         const sessionHash = hexHashToBase64(sessionRow?.requestPayloadHash);
         if (sessionRow && sessionHash && error.ourInvoiceHash && sessionHash === error.ourInvoiceHash) {
           await recordOriginalSession(sessionRow.xmlStoragePath, sessionRow.requestPayloadHash);
-          return accept('own-duplicate', sessionRow.xmlStoragePath, sessionRow.requestPayloadHash);
+          return accept('own-duplicate', sessionRow.xmlStoragePath, sessionRow.requestPayloadHash, sessionRow.invoiceReferenceNumber);
         }
       }
 

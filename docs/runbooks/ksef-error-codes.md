@@ -85,7 +85,11 @@ reconcile nie ma żadnego wyjścia → A4b (00137: dane specjalne na wierszu).
   dowód kontaktu) przy każdym werdykcie „do operatora” — każde kolejne
   uzgodnienie (cron I5, „Tylko uzgodnij”) weryfikuje treść od nowa i nigdy nie
   kończy się STALE / NOT_IN_KSEF. Zamyka go tylko werdykt: `number_taken` albo
-  zapis akceptacji. Kierunek bezpieczny: „numer zajęty” nigdy dla oryginału
+  zapis akceptacji. Przy przyjęciu numeru z duplikatu `ksef_accepted_at` =
+  data nadania numeru **oryginałowi** (art. 106na — wystawienie i otrzymanie):
+  własna sesja — status po referencji, inaczej metadane po numerze KSeF;
+  brak daty → numer przyjęty, alarm `ksef-duplicate-no-date` (operator
+  uzupełnia datę z KSeF). Kierunek bezpieczny: „numer zajęty” nigdy dla oryginału
   z FaktFlow, przy tej samej treści z innego programu (ta sama sprzedaż) ani
   bez naszego pliku do porównania.
   Ręczny werdykt operatora („przypnij numer” / „numer zajęty”) dla
