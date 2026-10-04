@@ -80,3 +80,32 @@ export function getRlsTestEnvironment(
     serviceRoleKey,
   };
 }
+
+/**
+ * Połączenie Postgres do TEJ SAMEJ lokalnej bazy testowej (testy kolejki
+ * pg-boss: `tests/rls-kolejkowanie-wysylki.test.ts`). Te same granice co
+ * adres HTTP: wyłącznie numeryczny loopback, bez zdalnych hostów i tuneli.
+ */
+export function getRlsTestDatabaseUrl(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const raw = env.RLS_TEST_DATABASE_URL?.trim();
+  if (!raw) {
+    throw new Error('Testy kolejki wymagają RLS_TEST_DATABASE_URL (połączenie Postgres lokalnej bazy testowej).');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error('RLS_TEST_DATABASE_URL musi być poprawnym adresem postgresql:// lokalnej bazy testowej.');
+  }
+  if (parsed.protocol !== 'postgresql:' && parsed.protocol !== 'postgres:') {
+    throw new Error('RLS_TEST_DATABASE_URL musi używać schematu postgresql://.');
+  }
+  if (parsed.hostname !== '127.0.0.1' && parsed.hostname !== '[::1]') {
+    throw new Error(
+      'RLS_TEST_DATABASE_URL dopuszcza wyłącznie numeryczny loopback 127.0.0.1 lub [::1]. Zdalne bazy są zablokowane.',
+    );
+  }
+  return raw;
+}

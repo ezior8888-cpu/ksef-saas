@@ -41,6 +41,7 @@ const base: InvoiceDetailInitial = {
   id: 'inv-1',
   internal_number: 'FV/7/10/2026',
   invoice_type: 'VAT',
+  invoice_kind: 'regular',
   issue_date: '2026-10-02',
   sale_date: '2026-10-02',
   ksef_status: 'accepted',
@@ -68,6 +69,7 @@ const base: InvoiceDetailInitial = {
     { ordinal: 1, name: 'Usługa', unit: 'h', quantity: '1.5', unit_price_net: '100.1234', vat_rate: '23', gross_amount: '184.73' },
   ],
   upo_status: null,
+  can_manage_send: false,
 };
 
 function render(initial: InvoiceDetailInitial) {

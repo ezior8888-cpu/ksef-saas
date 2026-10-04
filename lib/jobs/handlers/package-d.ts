@@ -1,5 +1,6 @@
 /**
- * Paczka D (Etap 7.6): 9 jobów RDZENIA KSeF — serce produktu.
+ * Paczka D (Etap 7.6): 10 jobów RDZENIA KSeF — serce produktu
+ * (9 z inwentaryzacji Inngest + cron uzupełniający skrzynkę, K2 03.10.2026).
  *
  * Runnery żyją w lib/jobs/runners/* (sekwencja kroków `submit-invoice`
  * zweryfikowana przy etapie 7 jako identyczna z dawną wersją Inngest).
@@ -23,6 +24,7 @@
  */
 
 import { runDownloadUpo } from '../runners/download-upo';
+import { runInboxBackfill } from '../runners/inbox-backfill';
 import { runInboxPolling, runInboxPollTenant } from '../runners/inbox-polling';
 import {
   runOfflineQueueFailure,
@@ -97,6 +99,14 @@ registerJob<Parameters<typeof runInboxPollTenant>[0]>({
   // Kilka skrzynek naraz zamiast firma po firmie (AUD-36).
   localConcurrency: 4,
   handler: (data, ctx) => runInboxPollTenant(data, ctx),
+});
+
+// K2: faktury ze skrzynki, które nie doszły do kategoryzacji/XML (znacznik
+// `_pendingFullFetch`), dostają zdarzenie `inbox/invoice-received` ponownie.
+registerJob<Record<string, never>>({
+  queue: 'cron.inbox-backfill',
+  maxRetries: DEFAULT_JOB_RETRIES,
+  handler: (_data, ctx: JobContext) => runInboxBackfill(ctx),
 });
 
 // ═══════════════════════════════════════════════════════════════

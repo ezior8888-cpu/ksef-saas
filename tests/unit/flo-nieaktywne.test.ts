@@ -10,6 +10,12 @@ import { describe, expect, it } from 'vitest';
  * moduł ze znacznikiem naprawdę jest nieosiągalny z kodu produkcyjnego,
  * a lista oznaczonych jest kompletna. Podpięcie modułu = zdjęcie znacznika
  * (inaczej test padnie) i przegląd przed włączeniem.
+ *
+ * S14 (rewizja 03.10.2026): `lib/flo/functions/index.ts` i
+ * `payment-chase-handler.ts` są AKTYWNE — worker (`flo-tick.ts`) i akcje
+ * (`app/actions/flo.ts`) importują rejestr wykonawców dla skutku ubocznego
+ * (`import '…'` bez `from`), czego dawny wzorzec nie widział. Zatwierdzona
+ * karta ponaglenia realnie wysyła wiadomość. Znaczniki zdjęte, lista skrócona.
  */
 
 const ROOT = process.cwd();
@@ -19,11 +25,9 @@ const INACTIVE = [
   'lib/flo/functions/contractor-check.ts',
   'lib/flo/functions/contractor-foreign.ts',
   'lib/flo/functions/feature-hint.ts',
-  'lib/flo/functions/index.ts',
   'lib/flo/functions/invoice-final.ts',
   'lib/flo/functions/milestone.ts',
   'lib/flo/functions/month-close.ts',
-  'lib/flo/functions/payment-chase-handler.ts',
   'lib/flo/functions/payment-score.ts',
   'lib/flo/functions/rate-raise.ts',
   'lib/flo/functions/tax-deadline.ts',
@@ -61,7 +65,10 @@ function reachableFromProduction(): Set<string> {
   const imports = new Map<string, string[]>();
   for (const file of sources) {
     const text = readFileSync(join(ROOT, file), 'utf8');
-    const specs = [...text.matchAll(/(?:from|import\()\s*['"]([^'"]+)['"]/g)].map((m) => m[1]!);
+    // S14 (rewizja 03.10.2026): dawny wzorzec nie widział importów dla skutku
+    // ubocznego (`import '@/lib/flo/functions'`) — przez to moduły realnie
+    // podpięte pod worker i akcje uchodziły za nieaktywne.
+    const specs = [...text.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+)['"]([^'"]+)['"]/gm)].map((m) => m[1]!);
     imports.set(file, specs.map((s) => resolve(file, s)).filter((r): r is string => r !== null));
   }
   const roots = sources.filter((f) => f.startsWith('app/') || f === 'proxy.ts' || f === 'instrumentation.ts'

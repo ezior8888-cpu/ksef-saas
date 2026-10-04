@@ -1,6 +1,7 @@
-// NIEAKTYWNE (AUD-115): moduł agenta FLO bez importera w kodzie produkcyjnym —
-// na produkcji nie działa. Podpięcie = przegląd i zdjęcie znacznika
-// (pilnuje tests/unit/flo-nieaktywne.test.ts).
+// AKTYWNE w produkcji (S14, rewizja 03.10.2026): importowane dla skutku
+// ubocznego przez `lib/jobs/handlers/flo-tick.ts` i `app/actions/flo.ts` —
+// rejestr wykonawców propozycji. Dawny znacznik NIEAKTYWNE był fałszywy:
+// strażnik `tests/unit/flo-nieaktywne.test.ts` nie widział importów bez `from`.
 
 /**
  * Funkcje agenta FLO — jedno miejsce, które zapełnia rejestr wykonawców.

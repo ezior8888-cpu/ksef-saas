@@ -7,6 +7,13 @@ import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+// Plik 'use server' eksportuje tylko akcje — komunikat i typ K4 żyją w czystym module.
+import {
+  correctionNotAllowedMessage,
+  openCorrectionMessage,
+  type CorrectionBaselineOf,
+  type OpenCorrectionRef,
+} from '@/lib/invoices/correction-parents';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
   correctionInvoiceSchema,
@@ -16,6 +23,7 @@ import {
   type CorrectionLineSchema,
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
+import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import {
   resolveAmountChangeVatRate,
   zeroVatRateFromParentLines,
@@ -534,8 +542,112 @@ async function readAcceptedCorrectionParent(
   if (error || !row?.id || !row.ksef_number?.trim()) {
     throw new Error('Faktura pierwotna nie ma potwierdzonego numeru KSeF w bieżącym środowisku tej firmy.');
   }
-  return row;
+  // K4 — łańcuch korekt: kolejna korekta liczy różnicę od stanu PO
+  // poprzednich przyjętych korektach, a druga korekta w toku jest
+  // niedozwolona (ta sama reguła w wyzwalaczu 00133/00135).
+  const corrections = await listCorrectionsOf(supabase, tenantId, parentId);
+  const open = corrections.find((c) => isInFlightCorrection(c.ksef_status));
+  if (open) {
+    throw new Error(openCorrectionMessage(row.internal_number as string | null, open));
+  }
+  const baseline = await correctionBaseline(supabase, row, corrections);
+  return { parent: row, baseline };
 }
+
+interface CorrectionRow extends OpenCorrectionRef {
+  id: string;
+  correction_type: string | null;
+  ksef_accepted_at: string | null;
+  created_at: string | null;
+  net_total: unknown;
+  vat_total: unknown;
+  gross_total: unknown;
+}
+
+/** Korekta w drodze do KSeF albo po nieudanej wysyłce — blokuje kolejną; przyjęta i odrzucona nie. */
+function isInFlightCorrection(status: string | null): boolean {
+  return status !== 'accepted' && status !== 'rejected';
+}
+
+async function listCorrectionsOf(
+  supabase: SupabaseClient,
+  tenantId: string,
+  parentId: string,
+): Promise<CorrectionRow[]> {
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('id, internal_number, ksef_status, correction_type, ksef_accepted_at, created_at, net_total, vat_total, gross_total')
+    .eq('tenant_id', tenantId)
+    .eq('parent_invoice_id', parentId)
+    .eq('invoice_kind', 'correction');
+  if (error) throw new Error('Nie można sprawdzić wcześniejszych korekt faktury pierwotnej.');
+  return (Array.isArray(data) ? data : data ? [data] : []) as CorrectionRow[];
+}
+
+/**
+ * Stan faktury PO przyjętych korektach (łańcuch korekt, K4):
+ *   - sumy = sumy pierwotne + różnice przyjętych korekt (wiersz korekty
+ *     przechowuje różnicę — AUD-21),
+ *   - pozycje = pozycje ostatniej przyjętej korekty „przed/po” (jej wiersze
+ *     to stan po), a bez takiej korekty — pozycje pierwotne,
+ *   - po korekcie kwotowej stan pozycji nie jest jednoznaczny: wolno tylko
+ *     kolejną korektę kwotową; po anulowaniu nie ma już czego korygować.
+ * Każda niezgodność sum z pozycjami kończy się odmową — nie zgadujemy.
+ */
+type CorrectionBaseline = CorrectionBaselineOf<CorrectionLineSchema>;
+
+function linesTotals(lines: CorrectionLineSchema[]) {
+  return calculateInvoiceTotals(lines.map((line, index) => ({ ...line, ordinal: index + 1, ...calculateLineItem(line) })));
+}
+
+async function correctionBaseline(
+  supabase: SupabaseClient,
+  parent: { id: string; internal_number: string | null; net_total: unknown; vat_total: unknown; gross_total: unknown },
+  corrections: CorrectionRow[],
+): Promise<CorrectionBaseline> {
+  const original = await fetchParentInvoiceLines(supabase, parent.id);
+  const storedRaw = [parent.net_total, parent.vat_total, parent.gross_total];
+  const stored = storedRaw.map(Number);
+  const originalTotals = linesTotals(original);
+  if (storedRaw.some((amount) => amount == null) ||
+      stored.some((amount) => !Number.isFinite(amount)) ||
+      roundToCents(stored[0]!) !== originalTotals.netTotal ||
+      roundToCents(stored[1]!) !== originalTotals.vatTotal ||
+      roundToCents(stored[2]!) !== originalTotals.grossTotal) {
+    throw new Error('Pozycje faktury pierwotnej nie zgadzają się z zaakceptowaną kwotą; wymagane ręczne uzgodnienie.');
+  }
+
+  const accepted = corrections
+    .filter((c) => c.ksef_status === 'accepted')
+    .sort((a, b) => String(a.ksef_accepted_at ?? a.created_at ?? '').localeCompare(String(b.ksef_accepted_at ?? b.created_at ?? '')));
+  let net = originalTotals.netTotal;
+  let vat = originalTotals.vatTotal;
+  let gross = originalTotals.grossTotal;
+  for (const c of accepted) {
+    const deltas = [c.net_total, c.vat_total, c.gross_total].map(Number);
+    if (deltas.some((d) => !Number.isFinite(d))) {
+      throw new Error(`Przyjęta korekta ${c.internal_number ?? ''} nie ma zapisanych kwot różnicy; wymagane ręczne uzgodnienie.`);
+    }
+    net = roundToCents(net + deltas[0]!);
+    vat = roundToCents(vat + deltas[1]!);
+    gross = roundToCents(gross + deltas[2]!);
+  }
+  const totals = { net, vat, gross };
+  const last = accepted.at(-1);
+  if (!last) return { lines: original, totals, latest: null, allowed: 'all' };
+  const latest = { id: last.id, internalNumber: last.internal_number, correctionType: last.correction_type };
+  if (last.correction_type === 'cancellation') return { lines: [], totals, latest, allowed: 'none' };
+  if (last.correction_type !== 'before_after') return { lines: original, totals, latest, allowed: 'amount_change_only' };
+
+  const after = await fetchParentInvoiceLines(supabase, last.id);
+  const afterTotals = linesTotals(after);
+  if (afterTotals.netTotal !== totals.net || afterTotals.vatTotal !== totals.vat || afterTotals.grossTotal !== totals.gross) {
+    throw new Error(`Stan po korekcie ${last.internal_number ?? ''} nie zgadza się z sumami faktury i jej korekt; wymagane ręczne uzgodnienie.`);
+  }
+  return { lines: after, totals, latest, allowed: 'all' };
+}
+
+
 
 async function normalizePayload(
   supabase: SupabaseClient,
@@ -547,7 +659,7 @@ async function normalizePayload(
 
   // Server Actions can be invoked without the form. Never trust parent identifiers
   // or invoice metadata supplied by the browser when building a legal KSeF XML.
-  const parent = await readAcceptedCorrectionParent(supabase, tenant.id, parsed.data.parentInvoiceId);
+  const { parent, baseline } = await readAcceptedCorrectionParent(supabase, tenant.id, parsed.data.parentInvoiceId);
   const parentNumber = parent.internal_number as string | null;
   const parentIssueDate = parent.issue_date as string | null;
   const parentKsefNumber = (parent.ksef_number as string | null) ?? null;
@@ -579,47 +691,42 @@ async function normalizePayload(
     return { error: 'Korekta musi wskazywać nabywcę zaakceptowanej faktury pierwotnej.' };
   }
 
+  // K4 — łańcuch korekt: po anulowaniu nic, po korekcie kwotowej tylko kwotowa.
+  const notAllowed = correctionNotAllowedMessage(parentNumber, baseline, parsed.data.correctionType);
+  if (notAllowed) return { error: notAllowed };
+
   let linesBefore = parsed.data.linesBefore;
   if (parsed.data.correctionType === 'cancellation' ||
       parsed.data.correctionType === 'before_after') {
-    const original = await fetchParentInvoiceLines(supabase, parent.id as string);
-    const storedRaw = [parent.net_total, parent.vat_total, parent.gross_total];
-    const stored = storedRaw.map(Number);
-    const calculated = original.map((line, index) => ({
-      ...line,
-      ordinal: index + 1,
-      ...calculateLineItem(line),
-    }));
-    const totals = calculateInvoiceTotals(calculated);
-    if (storedRaw.some((amount) => amount == null) ||
-        stored.some((amount) => !Number.isFinite(amount)) ||
-        roundToCents(stored[0]!) !== totals.netTotal ||
-        roundToCents(stored[1]!) !== totals.vatTotal ||
-        roundToCents(stored[2]!) !== totals.grossTotal) {
-      return { error: 'Pozycje faktury pierwotnej nie zgadzają się z zaakceptowaną kwotą; wymagane ręczne uzgodnienie.' };
-    }
+    // Stan przed = stan PO poprzednich przyjętych korektach (K4), z bazy,
+    // nie z formularza. Sumy pierwotne i łańcuch sprawdza `correctionBaseline`.
+    const current = baseline.lines;
     const supplied = parsed.data.linesBefore;
     if (supplied?.length && (
-      supplied.length !== original.length ||
+      supplied.length !== current.length ||
       supplied.some((line, index) => {
-        const source = original[index]!;
+        const source = current[index]!;
         return line.name !== source.name || line.unit !== source.unit ||
           line.quantity !== source.quantity || line.unitPriceNet !== source.unitPriceNet ||
           line.vatRate !== source.vatRate;
       })
     )) {
-      return { error: 'Korekta musi odzwierciedlać pozycje zaakceptowanej faktury pierwotnej.' };
+      return {
+        error: baseline.latest
+          ? `Korekta musi odzwierciedlać stan pozycji po korekcie ${baseline.latest.internalNumber ?? ''}. Wybierz fakturę ponownie.`
+          : 'Korekta musi odzwierciedlać pozycje zaakceptowanej faktury pierwotnej.',
+      };
     }
-    linesBefore = original;
+    linesBefore = current;
   }
 
   let amountChange = parsed.data.amountChange;
   if (parsed.data.correctionType === 'amount_change' && amountChange) {
     // Stawka bez VAT (np I / np II / oo) nie wynika z kwot — wyznacza ją serwer
-    // z pozycji faktury pierwotnej. Inna wartość od klienta = odrzucenie.
-    const original = await fetchParentInvoiceLines(supabase, parent.id as string);
-    // Stan przed = pozycje faktury pierwotnej z bazy, nie z formularza — generator
-    // liczy z nich adnotację P_18 (oo / np. II).
+    // z pozycji faktury (stan bieżący). Inna wartość od klienta = odrzucenie.
+    const original = baseline.lines;
+    // Stan przed = pozycje z bazy, nie z formularza — generator liczy z nich
+    // adnotację P_18 (oo / np. II).
     linesBefore = original;
     const parentRate = zeroVatRateFromParentLines(original);
     const { vatRate: suppliedRate, ...amounts } = amountChange;
@@ -673,6 +780,10 @@ export async function getCorrectionParentContextAction(parentId: string): Promis
       npIiAllowed: boolean;
       /** Stawka bez VAT korekty kwotowej — wspólna stawka np / np_ii / oo pozycji faktury pierwotnej. */
       amountChangeVatRate?: ZeroVatAmountChangeRate;
+      /** Ostatnia przyjęta korekta tej faktury (K4): „stan przed” to stan po niej. */
+      previousCorrection?: { internalNumber: string | null; correctionType: string | null };
+      /** Po korekcie kwotowej tylko kwotowa; po anulowaniu kontekst kończy się błędem. */
+      allowedCorrectionTypes: 'all' | 'amount_change_only' | 'none';
       linesBefore: NonNullable<CorrectionInvoiceSchemaIn['linesBefore']>;
       linesAfter: NonNullable<CorrectionInvoiceSchemaIn['linesAfter']>;
     }
@@ -681,7 +792,10 @@ export async function getCorrectionParentContextAction(parentId: string): Promis
   try {
     const { supabase, tenant } = await tenantContext();
 
-    const row = await readAcceptedCorrectionParent(supabase, tenant.id, parentId);
+    const { parent: row, baseline } = await readAcceptedCorrectionParent(supabase, tenant.id, parentId);
+    if (baseline.allowed === 'none') {
+      return { success: false, error: correctionNotAllowedMessage(row.internal_number as string | null, baseline, 'before_after')! };
+    }
 
     const sellerRow = row.seller_data as SellerParty | null;
     const buyerRow = row.buyer_data as BuyerParty | null;
@@ -689,7 +803,8 @@ export async function getCorrectionParentContextAction(parentId: string): Promis
       return { success: false, error: 'Niepełne dane pierwotnej (sprzedawca / nabywca).' };
 
     const buyer = buyerDataFromParty(buyerRow);
-    const linesRaw = await fetchParentInvoiceLines(supabase, parentId);
+    // K4: stan PO poprzednich przyjętych korektach — to od niego liczy się różnicę.
+    const linesRaw = baseline.lines;
     // Pozycje np. II dla nabywcy, który ich mieć nie może (np. XI) — każda
     // korekta i tak zostałaby odrzucona; mówimy o tym od razu.
     const npIiError = correctionNpIiBuyerError({ buyer, linesBefore: linesRaw });
@@ -702,7 +817,9 @@ export async function getCorrectionParentContextAction(parentId: string): Promis
       issueDate: row.issue_date as string,
       internalNumber: row.internal_number,
       ksefNumber: row.ksef_number,
-      grossTotal: row.gross_total,
+      grossTotal: baseline.totals.gross,
+      previousCorrection: baseline.latest ? { internalNumber: baseline.latest.internalNumber, correctionType: baseline.latest.correctionType } : undefined,
+      allowedCorrectionTypes: baseline.allowed,
       seller: sellerDataFromParty(sellerRow) as CorrectionInvoiceSchemaIn['seller'],
       buyer: buyer as CorrectionInvoiceSchemaIn['buyer'],
       ...(buyerVatUe ? { buyerVatUe } : {}),
@@ -770,6 +887,11 @@ export async function saveAndSendCorrectionAction(
     envelope.annotations = await loadParentAnnotations(supabase, tenant.id, envelope.parentInvoiceId);
     const lines = linesToStoredItems(envelope);
     const ghost = ghostInvoice(envelope, lines);
+
+    // Ta sama reguła co zwykła faktura (A1, W5): w KSeF tylko z dzisiejszą datą
+    // wystawienia — odmowa przed zapisem i przed zleceniem wysyłki.
+    const notToday = issueDateNotTodayError(ghost.issueDate, 'special');
+    if (notToday) return { success: false, error: notToday };
 
     const saved = await insertCorrection(supabase, tenant.id, envelope, lines);
     if (!saved.success) return saved;

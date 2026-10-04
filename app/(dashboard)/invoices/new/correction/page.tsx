@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { CorrectionInvoiceForm } from '@/components/invoices/correction-form';
+import { excludeParentsWithOpenCorrection } from '@/lib/invoices/correction-parents';
 
 export default async function NewCorrectionPage({
   searchParams,
@@ -25,10 +26,20 @@ export default async function NewCorrectionPage({
     .order('issue_date', { ascending: false })
     .limit(50) : { data: [] };
 
+  // K4: rodzic z otwartą korektą (każdą poza odrzuconą przez KSeF) nie dostaje
+  // drugiej — akcja i wyzwalacz 00133 i tak odmówią, lista nie ma go kusić.
+  const { data: corrections } = tenantId ? await supabase
+    .from('invoices')
+    .select('parent_invoice_id, ksef_status')
+    .eq('tenant_id', tenantId)
+    .eq('invoice_kind', 'correction')
+    .limit(500) : { data: [] };
+  const available = excludeParentsWithOpenCorrection(parentInvoices ?? [], corrections ?? []);
+
   return (
     <div className="max-w-4xl">
       <CorrectionInvoiceForm
-        parentInvoices={parentInvoices ?? []}
+        parentInvoices={available}
         preselectedParentId={params.parentId}
       />
     </div>

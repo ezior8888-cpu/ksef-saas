@@ -46,6 +46,11 @@ vi.mock('@/lib/ksef/health-check', () => ({ shouldUseOfflineMode: mocks.health }
 vi.mock('@/lib/ksef/offline-queue', () => ({ addToOfflineQueue: mocks.offline }));
 vi.mock('@/lib/ksef/submit-invoice-full', () => ({ submitInvoiceFullFlow: mocks.fullFlow }));
 vi.mock('@/lib/ksef/submission-log', () => ({
+  // A2: bez zamiarów wysyłki do rozstrzygnięcia — runner idzie jak dotąd.
+  findOpenKsefSubmissionIntents: vi.fn(async () => []),
+  promoteKsefSubmissionIntent: vi.fn(async () => false),
+  abandonKsefSubmissionIntent: vi.fn(),
+  recordKsefSubmissionIntent: vi.fn(),
   recordKsefSubmissionSent: vi.fn(),
   markKsefSubmission: vi.fn(),
   findOpenKsefSubmission: mocks.findOpen,
@@ -85,7 +90,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 vi.mock('@/lib/cache/invalidation', () => ({ invalidateTenantDashboard: vi.fn() }));
 vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
-vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), addBreadcrumb: vi.fn() }));
+vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn(), addBreadcrumb: vi.fn() }));
 
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { onSubmitInvoiceExhausted, runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';

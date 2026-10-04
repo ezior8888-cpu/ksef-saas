@@ -51,6 +51,11 @@ vi.mock('@/lib/ksef/encryption', () => ({
   }),
 }));
 vi.mock('@/lib/ksef/submission-log', () => ({
+  // A2: bez zamiarów wysyłki do rozstrzygnięcia — runner idzie jak dotąd.
+  findOpenKsefSubmissionIntents: vi.fn(async () => []),
+  promoteKsefSubmissionIntent: vi.fn(async () => false),
+  abandonKsefSubmissionIntent: vi.fn(),
+  recordKsefSubmissionIntent: vi.fn(),
   recordKsefSubmissionSent: mocks.record,
   markKsefSubmission: mocks.mark,
   findOpenKsefSubmission: mocks.findOpen,
@@ -99,7 +104,7 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/cache/invalidation', () => ({ invalidateTenantDashboard: vi.fn() }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: vi.fn() }));
 vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
-vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), addBreadcrumb: vi.fn() }));
+vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn(), addBreadcrumb: vi.fn() }));
 
 import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
 import { onSubmitInvoiceExhausted, runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';

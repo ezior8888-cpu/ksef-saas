@@ -18,7 +18,11 @@ import {
 } from '@/lib/auth/ksef-verification-guard';
 
 import type { KsefAuth } from './auth';
-import { recordKsefSubmissionSent } from './submission-log';
+import {
+  abandonKsefSubmissionIntent,
+  recordKsefSubmissionIntent,
+  recordKsefSubmissionSent,
+} from './submission-log';
 import { submitInvoice } from './submit';
 import { requireMatchingKsefEnvironment } from './claim-environment';
 
@@ -61,6 +65,12 @@ export async function submitInvoiceFullFlow(
   finalPayload?:
     | { finalData: FinalInvoiceData; advanceSettlementRows: AdvanceInvoiceSettlementRow[] }
     | null,
+  /**
+   * `sendAttemptId` zdarzenia wysyłki — klucz XML per próba (D5). Ponowienie
+   * tej samej próby trafia w ten sam klucz; nowe kolejkowanie dostaje nowy.
+   * Brak (stare zdarzenia) = klucz historyczny per faktura.
+   */
+  sendAttemptId?: string | null,
 ): Promise<FullSubmitResult> {
   // Last backstop for direct callers and a ROZ that reaches this flow from an
   // older queue event. Stop before XML generation, archive upload or KSeF POST.
@@ -115,10 +125,12 @@ export async function submitInvoiceFullFlow(
   //      c) Obsługa `PreconditionFailed` w `r2.uploadXmlDocument` — gdyby a) i b)
   //         zawiodły jednocześnie (np. klient_już-uploadował, my retryujemy
   //         z `immutable=true`), traktujemy to jako sukces idempotentny.
+  const attemptId = sendAttemptId ?? null;
   const alreadyUploaded = await invoiceXmlExistsForId(
     tenantId,
     invoiceId,
     invoice.issueDate,
+    attemptId,
   );
 
   const uploadResult = await uploadInvoiceXml(
@@ -126,7 +138,7 @@ export async function submitInvoiceFullFlow(
     invoiceId,
     invoice.issueDate,
     xml,
-    { immutable: !alreadyUploaded },
+    { immutable: !alreadyUploaded, attemptId },
   );
 
   // 4. Wysyłka do KSeF (rate-limited, z enkrypcją i auto-close sesji).
@@ -134,18 +146,39 @@ export async function submitInvoiceFullFlow(
   //    temu każdy request do MF wpisuje się do `audit_logs` (Faza 23 sekcja 3).
   //    Numery referencyjne zapisujemy zaraz po przyjęciu pliku — od tej chwili
   //    ponowienie uzgadnia status zamiast wysyłać fakturę drugi raz (AUD-01).
+  //    Wcześniej, przed samym plikiem, zamiar z numerem sesji (A2): gdy
+  //    odpowiedź na wysyłkę zginie, ponowienie zapyta KSeF o tę sesję.
   const submitResult = await submitInvoice(
     xml,
     auth,
     configuredEnv,
     { tenantId, invoiceId },
     {
+      onSessionOpened: ({ sessionReferenceNumber }) =>
+        recordKsefSubmissionIntent({
+          tenantId,
+          invoiceId,
+          sessionReferenceNumber,
+          payloadHash: uploadResult.sha256Hash,
+          xmlStoragePath: uploadResult.storagePath,
+        }),
+      onInvoiceNotAccepted: ({ sessionReferenceNumber }, error) =>
+        abandonKsefSubmissionIntent({
+          tenantId,
+          invoiceId,
+          sessionReferenceNumber,
+          errorCode: String(error.status),
+          errorMessage: `KSeF nie przyjął pliku: ${error.message}`,
+        }),
       onInvoiceSent: (references) =>
         recordKsefSubmissionSent({
           tenantId,
           invoiceId,
           references,
           payloadHash: uploadResult.sha256Hash,
+          // D5: wpis `sent` zna plik, który poszedł do KSeF — uzgodnienie po
+          // referencji wskazuje ten plik, nie klucz wyliczony od nowa.
+          xmlStoragePath: uploadResult.storagePath,
         }),
     },
   );

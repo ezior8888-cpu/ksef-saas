@@ -4,6 +4,12 @@
 > [`docs/koordynacja/PLAN-AGENTA-CLAUDE.md`](docs/koordynacja/PLAN-AGENTA-CLAUDE.md),
 > zrób checklistę startową i pracuj od sekcji „Następny krok”. Po każdym
 > etapie aktualizuj w tym pliku stan i następny krok.
+>
+> **„Kontynuuj plan zero zgubionych faktur, sesja N”** (naprawy wysyłki
+> KSeF do wydania): przeczytaj
+> [`docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`](docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md),
+> zrób TYLKO wskazaną sesję według „Protokołu naprawy błędu” niżej, a na
+> końcu dopisz wiersz w dzienniku sesji (sekcja 9) z numerem PR.
 
 ## Projekt
 
@@ -172,7 +178,7 @@ realny czas, więc nie są to przestrogi teoretyczne:
 4. wdrożenie: worker id=2, potem aplikacja id=1 — po kolei, nie naraz
 5. migracje „PO wdrożeniu” (jeśli nagłówek migracji tak mówi)
 6. weryfikacja: kontenery healthy na nowym SHA, /api/health, strona,
-   logi bez błędów, w logu workera „24/24 cronów” (liczba z rejestru jobów)
+   logi bez błędów, w logu workera „27/27 cronów” (liczba z rejestru jobów)
 ```
 
 `pnpm test` to tylko 3 testy tsx — pełny zestaw (typy, lint, XML, Vitest)
@@ -435,7 +441,15 @@ starą** — awarii produkcji nie ma, masz czas na diagnozę.
 
 ### Weryfikacja po wdrożeniu
 
-Nie kończ na „status = finished". Sprawdź, co faktycznie wstało:
+Nie kończ na „status = finished". Sprawdź, co faktycznie wstało. Komplet
+odczytów (kontenery, log workera, statusy faktur, kolejki pg-boss, migracje)
+daje jedna komenda, która sama ładuje `infra.env`:
+
+```bash
+./scripts/ops/kontrola-faktur-ksef.sh
+```
+
+Ręcznie, krok po kroku:
 
 Nazwy kontenerów to hasze generowane przez Coolify i zmieniają się przy
 każdym wdrożeniu — nie wpisuj ich z pamięci, wyszukaj:
@@ -524,6 +538,54 @@ Twojej gałęzi (zdarzyło się 02.10). Przed każdym pushem przejrzyj
 `git log --format='%h %an %s' origin/main..HEAD`. Cudzy commit usuwasz
 nowym commitem (i scalasz w przód przez stos), nie przepisywaniem historii
 wypchniętej gałęzi.
+
+## Protokół naprawy błędu (obowiązuje każdego agenta)
+
+Skąd ten protokół: rewizja z 03.10.2026 (`docs/automation/13_REWIZJA_2026-10-03.md`)
+pokazała, że 350 commitów napraw z zielonym CI zostawiło około 45 defektów,
+w tym 4 krytyczne. Naprawy były lokalne, testy mockowały bazę bez wyzwalaczy,
+a dziennik ufał opisowi PR zamiast kodowi na `main`. Każda naprawa idzie więc
+tak:
+
+1. **Jedna naprawa = jedna gałąź od `origin/main` = jeden PR.** Nazwa
+   `claude/<kod-ustalenia>-<temat>`. Bez refaktorów „przy okazji”, bez
+   drugiej naprawy w tym samym PR. Duży refaktor ma własną sesję i własną
+   listę inwariantów spisaną PRZED zmianą.
+2. **Najpierw czerwony test.** Zanim dotkniesz kodu, napisz test odtwarzający
+   błąd na PRAWDZIWEJ ścieżce: runner albo akcja z mockami tylko dla HTTP
+   i bazy. Wyzwalacze, RPC, uprawnienia i przejścia statusów testujesz na
+   bazie (`tests/rls-*.test.ts`, job CI „RLS isolation”), nie w pamięci.
+   Uruchom test, zobacz czerwony, dopiero potem napraw. Test, który
+   przechodzi przed naprawą, nie dowodzi niczego i nie liczy się.
+3. **Napraw przyczynę i wszystkie jej wystąpienia.** Ten sam błąd w drugim
+   generatorze, runnerze albo ścieżce UI naprawiasz razem albo zapisujesz
+   jako osobne ustalenie w dzienniku. Nigdy po cichu.
+4. **Fail-closed musi mieć wyjście.** Każda blokada (wyzwalacz, guard, hold,
+   odmowa raportu) wymaga komunikatu dla klienta z nazwą dokumentu i tym, co
+   ma zrobić, oraz ścieżki operatora (RPC, akcja w `/admin`, runbook).
+   Blokada bez wyjścia to nowy błąd, nie zabezpieczenie.
+5. **Ponowienie od zera.** Worker pg-boss wykonuje cały handler ponownie, bez
+   memoizacji kroków. Każdy krok z efektem zewnętrznym (mail, wysyłka,
+   zapis, zdarzenie) jest idempotentny albo ma klucz (`idempotencyKey`,
+   `singletonKey`, warunek w UPDATE). W opisie PR piszesz, co się stanie przy
+   ponowieniu po każdym kroku.
+6. **Przed PR:** `pnpm typecheck`, `eslint` na zmienionych plikach, pełny
+   `pnpm vitest run`, a przy zmianach w `app/` także `pnpm build`. Liczby
+   wpisane w testach na sztywno (crony, paczki jobów) zmieniasz świadomie,
+   z komentarzem dlaczego.
+7. **Opis PR według `.github/pull_request_template.md`:** co naprawia (kod
+   ustalenia), zmiana, co było czerwone przed naprawą, tabela weryfikacji,
+   migracje (numer z rejestru, przed czy PO wdrożeniu), co sprawdzić po
+   wdrożeniu.
+8. **„Scalone” to nie „naprawione”.** Wpis „naprawione” w dzienniku
+   (`docs/automation/12_NAPRAWY_POSTEP.md`) dostaje ustalenie dopiero, gdy
+   ktoś inny niż autor przeczyta kod na `main` i poda plik:linia.
+9. **Komendy dla Bartosza to skrypty w `scripts/ops/`**, uruchamiane jedną
+   linią i same ładujące `.agents/infra.env`. Przycisk „Run” w aplikacji
+   uruchamia każdy blok w świeżej powłoce, więc bloki „najpierw `source`,
+   potem komenda” nie działają.
+10. **Raport po etapie i stop.** Status, tabela weryfikacji, numer PR, co
+    dalej. Następny etap dopiero po „idź dalej”.
 
 ## Co NIE robić
 

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { logAudit } from '@/lib/audit/log';
-import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { ActionAuthError, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { validateInvoice } from '@/lib/xml/invoice-calculator';
@@ -71,16 +71,10 @@ export async function sendDraftInvoiceAction(invoiceId: string): Promise<DraftAc
       return { success: false, error: 'Szkic nie ma kompletnych danych faktury. Usuń go i wystaw fakturę ponownie.' };
     }
 
-    // Faktura w KSeF jest wystawiona w dniu przesłania (art. 106na ust. 1),
-    // a KSeF odrzuca datę wystawienia późniejszą niż dzień przyjęcia i traktuje
-    // wcześniejszą jak fakturę offline. Szkic z inną datą trzeba wystawić od nowa.
-    const today = todayInWarsaw();
-    if (invoice.issueDate !== today) {
-      return {
-        success: false,
-        error: `Szkic ma datę wystawienia ${invoice.issueDate}, a fakturę w KSeF wystawia się w dniu wysyłki (${today}). Usuń szkic i wystaw fakturę ponownie z dzisiejszą datą.`,
-      };
-    }
+    // Faktura w KSeF jest wystawiona w dniu przesłania (art. 106na ust. 1, A1).
+    // Szkic z inną datą trzeba wystawić od nowa.
+    const notToday = issueDateNotTodayError(invoice.issueDate, 'draft');
+    if (notToday) return { success: false, error: notToday };
 
     // Ta sama walidacja co w jobie wysyłki — błąd tutaj, zanim faktura
     // trafi do kolejki i wróci jako odrzucona.
@@ -97,20 +91,10 @@ export async function sendDraftInvoiceAction(invoiceId: string): Promise<DraftAc
     const nip = (tenant?.nip as string | null | undefined) ?? invoice.seller?.nip;
     if (!nip) return { success: false, error: 'Brak NIP firmy.' };
 
-    // Atomowe przejęcie szkicu: podwójne kliknięcie albo druga karta nie
-    // wyślą tej samej faktury dwa razy.
-    const { data: claimed, error: claimError } = await supabase
-      .from('invoices')
-      .update({ ksef_status: 'queued' })
-      .eq('id', invoiceId)
-      .eq('tenant_id', tenantId)
-      .eq('ksef_status', 'draft')
-      .select('id');
-    if (claimError) return { success: false, error: 'Nie udało się rozpocząć wysyłki. Spróbuj ponownie.' };
-    if (!claimed || claimed.length === 0) {
-      return { success: false, error: 'Ta faktura jest już wysyłana.' };
-    }
-
+    // Przejęcie szkicu robi serwer: RPC `enqueue_ksef_send` (warunek `draft`)
+    // w jednej transakcji ze zleceniem pg-boss. Podwójne kliknięcie albo druga
+    // karta dostają odmowę RPC („już wysyłana”), a sesja klienta nie pisze
+    // `ksef_status` (cykl życia faktury, PR 3 — W2).
     const enq = await enqueueKsefSubmitAfterDraft({
       supabase,
       tenantId,
@@ -123,14 +107,8 @@ export async function sendDraftInvoiceAction(invoiceId: string): Promise<DraftAc
     });
 
     if (!enq.ok) {
-      // Kolejka odmówiła, zanim cokolwiek wysłała (brak certyfikatu, pauza
-      // operatora, błąd kolejki) — faktura wraca do szkicu.
-      await supabase
-        .from('invoices')
-        .update({ ksef_status: 'draft' })
-        .eq('id', invoiceId)
-        .eq('tenant_id', tenantId)
-        .eq('ksef_status', 'queued');
+      // Kolejka odmówiła (brak certyfikatu, pauza operatora, błąd kolejki) —
+      // status nie został zmieniony, faktura jest nadal szkicem.
       return { success: false, error: enq.error };
     }
 

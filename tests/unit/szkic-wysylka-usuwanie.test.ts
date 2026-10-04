@@ -120,14 +120,20 @@ describe('wysyłka szkicu do KSeF (F-001)', () => {
       auditKind: 'regular',
       invoice: expect.objectContaining({ internalNumber: 'FV 5/10/2026' }),
     });
-    expect(db.invoices[0]!.ksef_status).toBe('queued');
+    // Status przestawia RPC `enqueue_ksef_send` w transakcji ze zleceniem
+    // (tu zamockowane) — akcja nie pisze `ksef_status` z sesji klienta (PR 3, W2).
+    expect(db.invoices[0]!.ksef_status).toBe('draft');
   });
 
-  it('drugie kliknięcie nie wysyła tej samej faktury drugi raz', async () => {
+  it('drugie kliknięcie: odmowę daje RPC (warunek draft), nie zapis z sesji', async () => {
+    mocks.enqueue
+      .mockResolvedValueOnce({ ok: true, mode: 'online_queued' })
+      .mockResolvedValueOnce({ ok: false, error: 'Ta faktura jest już wysyłana albo nie jest szkicem.' });
     await sendDraftInvoiceAction('inv-1');
     const drugi = await sendDraftInvoiceAction('inv-1');
-    expect(drugi.success).toBe(false);
-    expect(mocks.enqueue).toHaveBeenCalledTimes(1);
+    expect(drugi).toEqual({ success: false, error: 'Ta faktura jest już wysyłana albo nie jest szkicem.' });
+    expect(mocks.enqueue).toHaveBeenCalledTimes(2);
+    expect(db.invoices[0]!.ksef_status).toBe('draft');
   });
 
   it('gdy kolejka odmówi (np. brak certyfikatu), faktura wraca do szkicu', async () => {

@@ -6,7 +6,8 @@
  *
  * Co robi:
  *   1. startuje pg-boss (schemat `pgboss` w Postgresie na db-1),
- *   2. tworzy kolejki zarejestrowanych jobów (retryLimit:0 — retry nasze),
+ *   2. tworzy kolejki zarejestrowanych jobów (QUEUE_POLICY z boss.ts: siatka na
+ *      joby zabite w trakcie; retry merytoryczny liczy run-job.ts),
  *   3. rejestruje handlery przez wrapper retry (parytet z Inngest, `run-job.ts`),
  *   4. planuje crony TYLKO dla zarejestrowanych kolejek cron.*,
  *   5. wystawia healthcheck HTTP (Coolify) na WORKER_HEALTH_PORT (def. 8080),
@@ -18,7 +19,7 @@ import { createServer } from 'node:http';
 import { ensureQueue, startBoss, stopBoss, enableWorkerRole } from './boss';
 import { assertPgBossWorkerBackend, getWorkerHealthPort } from './config';
 import { createJobLogger } from './logger';
-import { CRON_JOBS, RETIRED_CRON_QUEUES, SMOKE_QUEUE } from './queues';
+import { CRON_JOBS, RETIRED_CRON_QUEUES, RETIRED_QUEUES, SMOKE_QUEUE } from './queues';
 import { getRegisteredJobs, registerJob } from './registry';
 import { wrapHandler } from './run-job';
 import { workOptionsFor } from './work-options';
@@ -76,6 +77,19 @@ async function main(): Promise<void> {
   // z poprzedniego startu dalej produkuje joby bez workera (AUD-118).
   for (const queue of RETIRED_CRON_QUEUES) {
     await boss.unschedule(queue);
+  }
+
+  // Martwe kolejki (PR 4b cyklu życia): nikt nie wysyła, nikt nie czyta —
+  // usuwamy, żeby nie mylić przy przeglądzie `pgboss.queue`. Fail-soft:
+  // brak kolejki albo błąd nie zatrzymuje startu workera.
+  for (const queue of RETIRED_QUEUES) {
+    if (registeredQueues.has(queue)) continue;
+    try {
+      await boss.deleteQueue(queue);
+      log.info(`usunięto martwą kolejkę: ${queue}`);
+    } catch (err) {
+      log.warn(`nie usunięto kolejki ${queue}`, err);
+    }
   }
 
   let scheduled = 0;

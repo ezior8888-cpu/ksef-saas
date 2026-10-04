@@ -108,9 +108,16 @@ function formularz(advanceInvoiceIds: string[], totalAdvances: number) {
   };
 }
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 beforeEach(() => {
+  // Wysyłka przyjmuje tylko dzisiejszą datę wystawienia (A1, W5) — testy
+  // działają w dniu daty z danych testowych (2026-09-20).
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-20T10:00:00Z'));
   tables = {
     // Pełny profil sprzedawcy — #85 bierze sprzedawcę z firmy, nie z formularza.
     tenants: [{ id: 'firma-a', nip: '5260001246', name: 'ACME', vat_cash_method: false, address_json: { addressLine1: 'ul. A 1', addressLine2: '00-001 Warszawa', countryCode: 'PL' } }],

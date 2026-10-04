@@ -41,6 +41,8 @@ export interface InvoiceDetailInitial {
   id: string;
   internal_number: string | null;
   invoice_type: string | null;
+  /** regular / correction / advance / final (`invoices.invoice_kind`). */
+  invoice_kind: string | null;
   issue_date: string | null;
   sale_date: string | null;
   ksef_status: string;
@@ -61,6 +63,8 @@ export interface InvoiceDetailInitial {
   payment_data: unknown;
   lines: InvoiceDetailLine[];
   upo_status: Database['public']['Enums']['upo_status_enum'] | null;
+  /** Rola zalogowanej osoby w firmie faktury dopuszcza „Wyślij ponownie” / „Wróć do szkicu”. */
+  can_manage_send: boolean;
 }
 
 interface PaymentSnapshot {
@@ -208,7 +212,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
             {inv.invoice_type ? ` · ${inv.invoice_type}` : ''}
           </p>
         </div>
-        <StatusBadge status={inv.ksef_status} />
+        <StatusBadge status={inv.ksef_status} errorCode={inv.last_error_code} />
       </div>
 
       {inv.ksef_number && (
@@ -404,7 +408,10 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           ksef_status: inv.ksef_status,
           xml_storage_path: inv.xml_storage_path ?? null,
           invoice_type: inv.invoice_type,
+          invoice_kind: inv.invoice_kind,
+          last_error_code: inv.last_error_code,
         }}
+        canManageSend={inv.can_manage_send}
       />
     </div>
   );

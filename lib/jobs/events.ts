@@ -85,6 +85,13 @@ const InvoiceSubmitRequestedSchema = z.object({
    * Stare zdarzenia bez niego przejmują fakturę tylko wolną albo po dzierżawie.
    */
   sendAttemptId: z.string().uuid().optional(),
+  /**
+   * Tryb „tylko uzgodnij” (operator, `requeue_ksef_send(p_reconcile_only)`):
+   * runner uzgadnia poprzednią wysyłkę po numerze referencyjnym i NIGDY nie
+   * wysyła faktury od nowa — bez otwartego wpisu `sent` kończy jako
+   * `failed RESULT_UNCERTAIN`.
+   */
+  reconcileOnly: z.boolean().optional(),
 });
 
 /** Użytkownik kliknął "Wyślij fakturę do KSeF" w UI. */
@@ -121,6 +128,8 @@ export const invoiceSubmitFailed = jobEvent<{
     terminal?: boolean;
     /** Local ROZ safety hold: requires reconciliation, not a KSeF rejection. */
     manualReconciliationRequired?: boolean;
+    /** Kod z katalogu `ksef_error_codes` (00131) — ten sam, co w `invoices.last_error_code`. */
+    errorCode?: string;
   }>('invoice/submit.failed');
 
 /**

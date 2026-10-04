@@ -17,7 +17,7 @@ import {
 import { buildInvoiceAnnotations } from '@/lib/invoices/annotations';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
-import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import { addressCountryForKodUE, parseVatUe } from '@/lib/invoices/vat-ue';
 import {
   EU_BUYER_COUNTRIES,
@@ -583,16 +583,10 @@ export async function saveAndSendInvoiceAction(
   }
   try {
     const { supabase, tenant, userId } = await getTenantContext();
-    // Faktura w KSeF jest wystawiona w dniu przesłania: KSeF odrzuca datę
-    // wystawienia późniejszą niż dzień przyjęcia, a wcześniejszą sam oznacza
-    // jako fakturę offline (F-092). Inną datę można zapisać jako szkic.
-    const today = todayInWarsaw();
-    if (values.issueDate !== today) {
-      return {
-        success: false,
-        error: `Do KSeF wysyłamy fakturę z dzisiejszą datą wystawienia (${today}). Zmień datę albo zapisz fakturę jako szkic.`,
-      };
-    }
+    // Faktura w KSeF jest wystawiona w dniu przesłania (F-092, A1) — ta sama
+    // reguła dla wszystkich dokumentów. Inną datę można zapisać jako szkic.
+    const notToday = issueDateNotTodayError(values.issueDate, 'form');
+    if (notToday) return { success: false, error: notToday };
     // Odpornie: przed wgraniem 00091 kolumny nie ma — zwykła faktura nie może
     // od niej zależeć.
     const vatExemptionBasis = await readTenantVatExemption(supabase, tenant.id);

@@ -14,7 +14,8 @@ vi.mock('@sentry/nextjs', () => ({ captureException: mocks.captureException }));
 vi.mock('@/lib/alerts/slack', () => ({ alertCritical: mocks.alertCritical }));
 vi.mock('@/lib/cache', () => ({ cacheGet: mocks.cacheGet, cacheSet: mocks.cacheSet }));
 vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: () => ({ from: mocks.from }),
+  // `rpc`: strażnik cyklu życia (PR 4b) pyta `ksef_lifecycle_violations()` — tu bez naruszeń.
+  createAdminClient: () => ({ from: mocks.from, rpc: async () => ({ data: [], error: null }) }),
 }));
 vi.mock('@/lib/jobs/events', () => ({
   inngest: { createFunction: vi.fn() },
@@ -207,7 +208,9 @@ describe('stale billing VAT enqueue alert', () => {
     // 15 → 16: kolejka offline w innym środowisku KSeF (#63 Codexa).
     expect(step.run).toHaveBeenCalledWith('check-offline-environment', expect.any(Function));
     // 16 → 17: faktura w `sending` bez wyniku po przejęciu wysyłki (#71).
-    expect(result).toMatchObject({ checked: 17, fired: 0 });
+    // 17 → 18: strażnik cyklu życia faktury I1–I9 (PR 4b, 03.10.2026).
+    expect(step.run).toHaveBeenCalledWith('check-ksef-lifecycle', expect.any(Function));
+    expect(result).toMatchObject({ checked: 18, fired: 0 });
     expect(result.details).toContainEqual({ type: 'offline_environment_blocked', fired: false });
   });
 });

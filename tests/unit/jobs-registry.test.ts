@@ -44,7 +44,7 @@ describe('rejestr jobów', () => {
     expect(bezHandlera, 'kolejki zdarzeń bez zarejestrowanego joba').toEqual([]);
   });
 
-  it('paczka A: 11 cronów utrzymaniowych (bez odświeżania widoków, AUD-118)', () => {
+  it('paczka A: 13 cronów utrzymaniowych (bez odświeżania widoków, AUD-118; + cykl życia, PR 4b)', () => {
     const packageA = [
       'cron.archive-old-invoices',
       'cron.cert-expiry-alert',
@@ -54,6 +54,8 @@ describe('rejestr jobów', () => {
       'cron.gdpr-process-deletions',
       'cron.jobs-watchdog',
       'cron.ksef-health-check',
+      'cron.ksef-lifecycle-reconcile',
+      'cron.ksef-lifecycle-report',
       'cron.nightly-validation-recheck',
       'cron.retention-delete',
       'cron.verify-backup',
@@ -134,19 +136,20 @@ describe('rejestr jobów', () => {
     }
   });
 
-  it('paczka D: 9 jobów rdzenia KSeF', () => {
+  it('paczka D: 10 jobów rdzenia KSeF (9 z Inngest + cron uzupełniający skrzynkę, K2)', () => {
     const packageD = [
       'invoice.submit.requested',
       'invoice.upo.requested',
       'cron.upo-retry-stale',
       'cron.inbox-polling',
       'inbox.poll.tenant',
+      'cron.inbox-backfill',
       'cron.process-offline-queue',
       'invoice.submit.succeeded.offline-queue',
       'invoice.submit.failed.offline-queue',
       'billing.payment.succeeded',
     ];
-    expect(packageD.length).toBe(9);
+    expect(packageD.length).toBe(10);
     for (const q of packageD) expect(queues, `brak ${q}`).toContain(q);
   });
 
@@ -173,10 +176,13 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('billing.payment.succeeded')?.groupConcurrency).toBe(1);
   });
 
-  it('KOMPLET: 45 jobów z inwentaryzacji + kolejka smoke', () => {
+  it('KOMPLET: 48 jobów (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia)', () => {
     // Alarm, gdyby któraś paczka wypadła z importów workera.
-    // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych.
-    expect(registered.length).toBe(45);
+    // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych;
+    // 46: od K2 (03.10.2026) z `cron.inbox-backfill`;
+    // 48: od PR 4b cyklu życia (03.10.2026) z `cron.ksef-lifecycle-reconcile`
+    // i `cron.ksef-lifecycle-report`.
+    expect(registered.length).toBe(48);
   });
 
   it('parytet limitów równoległości paczki C', () => {
