@@ -172,6 +172,33 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
     expect(byCode.get('NO_CERTIFICATE')?.class).toBe('setup');
     expect(byCode.get('NOT_IN_KSEF')).toMatchObject({ class: 'transient', auto_requeue: false });
     expect(byCode.get('KSEF_NUMBER_TAKEN')).toMatchObject({ class: 'terminal', auto_requeue: false });
+    expect(byCode.get('ENV_MISMATCH')).toMatchObject({ class: 'terminal', auto_requeue: false });
+  });
+
+  it('D-A4-2 (00143): ENV_MISMATCH bez dowodu wraca do szkicu; ponowienie w bieżącym środowisku odmówione; „tylko uzgodnij” przy otwartym wpisie działa', async () => {
+    const toDraft = await invoice({ ksef_status: 'failed', last_error_code: 'ENV_MISMATCH' });
+    const reset = await admin.rpc('reset_ksef_send', { p_invoice_id: toDraft, p_tenant_id: ORG, p_actor_user_id: ownerId });
+    expect(reset.error).toBeNull();
+    expect(await row(toDraft)).toMatchObject({ ksef_status: 'draft', last_error_code: null });
+
+    // Ponowienie wysłałoby fakturę zleconą w innym środowisku tam, gdzie
+    // jesteśmy teraz (np. dokument z TEST na PROD) — baza odmawia, nie tylko przycisk.
+    const noResend = await invoice({ ksef_status: 'failed', last_error_code: 'ENV_MISMATCH' });
+    const requeue = await admin.rpc('requeue_ksef_send', {
+      p_invoice_id: noResend, p_tenant_id: ORG, p_attempt_id: ATTEMPT, p_actor_user_id: ownerId,
+    });
+    expect(requeue.error?.code).toBe('P0001');
+    expect((await row(noResend)).ksef_status).toBe('failed');
+
+    // Wcześniejsza próba mogła dotrzeć do KSeF: bez szkicu, uzgodnienie po referencji.
+    const contacted = await invoice({ ksef_status: 'failed', last_error_code: 'ENV_MISMATCH' });
+    await sentSubmission(contacted, 'sent');
+    expect((await admin.rpc('reset_ksef_send', { p_invoice_id: contacted, p_tenant_id: ORG, p_actor_user_id: ownerId })).error?.code).toBe('P0001');
+    const reconcile = await admin.rpc('requeue_ksef_send', {
+      p_invoice_id: contacted, p_tenant_id: ORG, p_attempt_id: ATTEMPT, p_actor_user_id: ownerId, p_reconcile_only: true,
+    });
+    expect(reconcile.error).toBeNull();
+    expect((await row(contacted)).ksef_status).toBe('queued');
   });
 
   it('D-A4-1 (00142): wpisy number_taken (numer zajęty przez inną fakturę) nie są dowodem kontaktu — klient wraca do szkicu', async () => {
@@ -401,7 +428,8 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
     expect((await admin.rpc('reset_ksef_send', { p_invoice_id: contacted, p_tenant_id: ORG, p_actor_user_id: ownerId })).error?.code).toBe('P0001');
     expect((await row(contacted)).ksef_status).toBe('failed');
 
-    const reconcile = await invoice({ ksef_status: 'failed', last_error_code: 'ENV_MISMATCH' });
+    // Klasa reconcile (ENV_MISMATCH od 00143 jest terminal — D-A4-2).
+    const reconcile = await invoice({ ksef_status: 'failed', last_error_code: 'INVALID_EVENT' });
     expect((await admin.rpc('reset_ksef_send', { p_invoice_id: reconcile, p_tenant_id: ORG, p_actor_user_id: ownerId })).error?.code).toBe('P0001');
 
     const rejected = await invoice({ ksef_status: 'rejected', last_error_code: 'KSEF_REJECTED', submitted_to_ksef_at: '2026-10-01T10:00:00Z' });

@@ -35,6 +35,7 @@ rodzaj dokumentu × dowód kontaktu × otwarty wpis); ślepe uliczki z kolumny
 | `KSEF_REJECTED` | terminal | KSeF odrzucił treść (status ≥ 400, HTTP 4xx) | Wróć do szkicu | — | Wróć do szkicu; „Tylko uzgodnij” przy otwartym wpisie | jak wyżej |
 | `INVALID_DOCUMENT` | terminal | walidacja dokumentu, odwołania (`assertSubmitReferences`) | Wróć do szkicu | — | Wróć do szkicu | jak wyżej |
 | `KSEF_NUMBER_TAKEN` | terminal | cudzy 440, oryginał z innego programu (treść sprawdzona, D-A4-1a) | Wróć do szkicu → usuń → wystaw z nowym numerem (albo nie wystawiaj, jeśli to ta sama sprzedaż) | — | Wróć do szkicu | — (wpisy `number_taken` nie są dowodem kontaktu) |
+| `ENV_MISMATCH` | terminal (D-A4-2, 00143) | zdarzenie z innego środowiska KSeF niż skonfigurowane w workerze (zlecone na TEST, worker na PROD; albo worker bez poprawnego `KSEF_ENV`) — runner nie dotknął KSeF | Wróć do szkicu → zdecyduj, czy wysłać w obecnym środowisku | — | Wróć do szkicu (bez dowodu); „Tylko uzgodnij” tylko dla otwartego wpisu z OBECNEGO środowiska; **nigdy** „Wyślij ponownie” (baza odmawia) | przy dowodzie kontaktu bez otwartego wpisu — jak wyżej; otwarty wpis sprzed przełączenia środowiska — bez bezpiecznego wyjścia do F2 (niżej) |
 | `KSEF_UNAVAILABLE` | transient | 5xx, timeout | Wyślij ponownie / Wróć do szkicu | I6: co godzinę przez 24 h | Wyślij ponownie / szkic | — |
 | `KSEF_RATE_LIMIT` | transient | 429 | jak wyżej | I6 | jak wyżej | — |
 | `KSEF_SESSION` | transient | 401/403, 21184 | jak wyżej | I6 | jak wyżej | — |
@@ -47,7 +48,6 @@ rodzaj dokumentu × dowód kontaktu × otwarty wpis); ślepe uliczki z kolumny
 | `ROZ_HOLD_RECONCILE` | hold | hamulec ROZ | czeka | — | Wróć do szkicu (bez dowodu) | jak wyżej |
 | `KSEF_DUPLICATE_RECONCILE` | reconcile | 440, którego automat nie rozstrzygnął: oryginał z FaktFlow o innym pliku, numer KSeF w innej fakturze firmy, oryginału nie da się pobrać (403 — token bez `InvoiceRead`; po ponowieniach 5xx/429/21164/21165) | „zajmujemy się” | I5 przy otwartym wpisie > 48 h (weryfikacja od nowa) | „Tylko uzgodnij” przy otwartym wpisie (powtarza weryfikację) | bez otwartego wpisu: **ślepa uliczka** → ręczny werdykt D-A4-1b |
 | `RESULT_UNCERTAIN` | reconcile | niepewny wynik, KSeF nie odpowiada | „nie wystawiaj ponownie” | I5 (A3): „tylko uzgodnij” raz na dobę | „Tylko uzgodnij” / **Wyślij ponownie** (A4) | — |
-| `ENV_MISMATCH` | reconcile | zdarzenie z innego środowiska | „zajmujemy się” | — | „Tylko uzgodnij” przy otwartym wpisie | bez otwartego wpisu: **ślepa uliczka** → D-A4-2 (F1) |
 | `INVALID_EVENT` | reconcile | zły payload zdarzenia | „zajmujemy się” | — | **Wyślij ponownie** (A4) — zdarzenie odtworzone z wiersza | — |
 | `ENQUEUE_LOST` | reconcile | `queued` bez zlecenia, z dowodem kontaktu (I1) | „zajmujemy się” | I5 przy otwartym wpisie > 48 h | **Wyślij ponownie** (A4) / „Tylko uzgodnij” | — |
 | `NO_CERTIFICATE` | setup | brak certyfikatu | Ustawienia → Wyślij ponownie | — | Wyślij ponownie | — |
@@ -95,10 +95,32 @@ reconcile nie ma żadnego wyjścia → A4b (00137: dane specjalne na wierszu).
   Ręczny werdykt operatora („przypnij numer” / „numer zajęty”) dla
   przypadków nierozstrzygniętych — **D-A4-1b**. Do tego czasu operator
   sprawdza fakturę w KSeF i zgłasza ją Bartoszowi.
-- **D-A4-2 — `ENV_MISMATCH`.** Ponowienie wysłałoby fakturę w bieżącym
-  środowisku (np. fakturę z czasu TEST na PROD). Do rozstrzygnięcia razem
-  z runbookiem go-live (F1): powrót do szkicu i decyzja klienta czy
-  ponowienie w bieżącym środowisku.
+- **D-A4-2 — `ENV_MISMATCH`** (decyzja Bartosza 04.10.2026, przyjęta
+  w 00143). Ponowienie tworzy nowe zdarzenie z BIEŻĄCYM środowiskiem, więc
+  wysłałoby fakturę zleconą na TEST jako prawdziwą fakturę na PROD. Dlatego
+  kod jest klasy **terminal**: faktura bez dowodu kontaktu wraca do szkicu
+  (klient sam albo operator), a klient decyduje — wysyła ją w obecnym
+  środowisku albo jej nie wystawia (usuwa szkic). `requeue_ksef_send` odmawia
+  ponowienia (przepuszcza tylko „tylko uzgodnij”), więc ochrona nie zależy
+  od przycisku. Z otwartym wpisem z wcześniejszej próby faktura mogła
+  dotrzeć do KSeF: klient dostaje „nie wystawiaj ponownie”, szkic jest
+  zablokowany. **Uwaga:** „Tylko uzgodnij” (i cron I5 po 48 h) uzgadnia
+  w BIEŻĄCYM środowisku, a wpis `ksef_submissions` nie zna swojego (F2).
+  Wpis sprzed przełączenia środowiska nic tam nie znajdzie, a `requeue`
+  czyści kod — wynik (`NOT_IN_KSEF`, `NOT_VERIFIED`, `RESULT_UNCERTAIN`)
+  zaprasza do ponownej wysyłki, czyli wysłania dokumentu z TEST na PROD.
+  Operator nie uzgadnia tak wpisu z drugiego środowiska: sprawdza fakturę
+  w KSeF tamtego środowiska i zgłasza ją Bartoszowi (wyjście — F2). Gdy worker nie ma poprawnego `KSEF_ENV`, każda wysyłka kończy
+  się `ENV_MISMATCH` z komunikatem „zajmujemy się tym”: najpierw napraw
+  zmienną w Coolify (worker `id=2`), potem klienci wracają do szkicu
+  i wysyłają ponownie. Operator: lista w `/admin/ksef` po kodzie, alarm
+  Sentry „KSeF submit event environment mismatch”.
+  Przełączenie TEST → PROD (F1) musi to uwzględnić: przed zmianą `KSEF_ENV`
+  hamulec i pusta kolejka, bo cron (I6, I7) wznawia `failed` z kodami
+  przejściowymi i `KSEF_PAUSED` nowym zdarzeniem z bieżącym środowiskiem —
+  faktury z czasu TEST wyszłyby same na PROD; wpisy `ksef_submissions` nie
+  mają kolumny środowiska, więc próba z TEST wygląda po przełączeniu jak
+  dowód kontaktu (F2).
 
 ## Najczęstsze kody — co znaczą, co robić
 

@@ -6,8 +6,10 @@
  * `send-error-codes.ts`, który re-eksportuje wszystko stąd.
  *
  * Klasa kodu decyduje o stanie faktury po wyczerpaniu prób i o wyjściach:
- *   - terminal   — błąd TREŚCI dokumentu (XSD, odrzucenie przez KSeF, strażnik
- *                  dokumentu): tylko powrót do szkicu i poprawa;
+ *   - terminal   — ta wysyłka nie dojdzie do skutku bez decyzji o dokumencie
+ *                  (błąd treści: XSD, odrzucenie przez KSeF, strażnik
+ *                  dokumentu; numer zajęty; inne środowisko KSeF): tylko
+ *                  powrót do szkicu;
  *   - transient  — awaria, której zniknięcie nie wymaga zmiany dokumentu
  *                  (KSeF leży, limit, sesja, nasza baza): ponowienie,
  *                  część automatycznie (cron, PR 4);
@@ -67,7 +69,10 @@ export const SEND_ERROR_CLASS: Record<SendErrorCode, SendErrorClass> = {
   ROZ_HOLD_RECONCILE: 'hold',
   KSEF_DUPLICATE_RECONCILE: 'reconcile',
   RESULT_UNCERTAIN: 'reconcile',
-  ENV_MISMATCH: 'reconcile',
+  // D-A4-2 (00143): zdarzenie z innego środowiska KSeF niż skonfigurowane.
+  // Ponowienie wysłałoby fakturę w bieżącym (np. dokument z TEST na PROD) —
+  // tylko szkic, klient decyduje, czy wysłać ją tutaj.
+  ENV_MISMATCH: 'terminal',
   INVALID_EVENT: 'reconcile',
   ENQUEUE_LOST: 'reconcile',
   NO_CERTIFICATE: 'setup',

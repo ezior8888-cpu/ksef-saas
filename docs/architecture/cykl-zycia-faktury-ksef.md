@@ -100,12 +100,13 @@ Raport dzienny strażnika na Telegram: liczba faktur per stan, naruszenia I1–I
 | HOLD | `KSEF_PAUSED` | `killAllKsefSubmissions` | `queued` automatycznie po zdjęciu | „Wysyłka wstrzymana przez operatora. Faktura wyjdzie automatycznie po przywróceniu.” (dziś tekst obiecuje „wyślij ponownie” — do zmiany) |
 | HOLD | `KOR_HOLD`, `ROZ_HOLD_RECONCILE` | blokady KOR/ROZ | `queued` po zdjęciu; `draft` | „Wysyłka korekt jest tymczasowo wstrzymana …” |
 | TERMINAL | `KSEF_NUMBER_TAKEN` | 440, oryginał z innego programu po porównaniu treści (D-A4-1a, 00142) | `draft` (klient: nowy numer albo rezygnacja, gdy to ta sama sprzedaż) | „W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie…” (z numerem KSeF, datą, nabywcą i kwotą oryginału) |
+| TERMINAL | `ENV_MISMATCH` | zdarzenie z innego środowiska KSeF niż skonfigurowane (D-A4-2, 00143; dawniej RECONCILE) | `draft` (klient albo operator, bez dowodu kontaktu); `requeue` odmawia — ponowienie wysłałoby fakturę w bieżącym środowisku; z otwartym wpisem „tylko uzgodnij” | „Tej wysyłki nie wykonaliśmy: zlecenie dotyczyło innego środowiska KSeF… Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku.” (przy dowodzie kontaktu: „nie wystawiaj ponownie, uzgodni operator”) |
 | RECONCILE | `KSEF_DUPLICATE_RECONCILE` | 440 nierozstrzygnięty: oryginał z FaktFlow o innym pliku, numer KSeF w innej fakturze, oryginał niepobieralny | operator: „Tylko uzgodnij” przy otwartym wpisie; ręczny werdykt — D-A4-1b | „Faktura wymaga uzgodnienia z KSeF. Skontaktujemy się.” |
 | RECONCILE | `RESULT_UNCERTAIN` | otwarty wpis `sent`, KSeF nie odpowiada na status; „tylko uzgodnij” bez otwartej wysyłki, gdy dowód kontaktu zostaje | job uzgadniający | jak wyżej |
-| RECONCILE | `ENV_MISMATCH`, `INVALID_EVENT`, `ENQUEUE_LOST` | `onExhausted handled:false`, strażnik I1 | operator: `INVALID_EVENT`, `ENQUEUE_LOST` (i `RESULT_UNCERTAIN`) — „Wyślij ponownie” (A4); `ENV_MISMATCH` — decyzja D-A4-2 | jak wyżej |
+| RECONCILE | `INVALID_EVENT`, `ENQUEUE_LOST` | `onExhausted handled:false`, strażnik I1 | operator: `INVALID_EVENT`, `ENQUEUE_LOST` (i `RESULT_UNCERTAIN`) — „Wyślij ponownie” (A4) | jak wyżej |
 | — | `NO_CERTIFICATE`, `NOT_VERIFIED` | brak/niezweryfikowany certyfikat | `draft` (klient uzupełnia certyfikat) | „Najpierw wgraj i zweryfikuj certyfikat KSeF.” |
 
-Zasada klasyfikacji (W1): na `TERMINAL` mapuje się wyłącznie błąd, którego przyczyną jest **treść dokumentu** albo **decyzja KSeF o treści**. Każdy błąd, który może zniknąć bez zmiany dokumentu, jest `TRANSIENT`. Brak pewności = `RECONCILE`, nigdy `rejected`.
+Zasada klasyfikacji (W1): na `TERMINAL` mapuje się wyłącznie błąd, którego przyczyną jest **treść dokumentu** albo **decyzja KSeF o treści** — oraz dwa przypadki, w których wysyłka tej wersji nie może dojść do skutku bez decyzji klienta o dokumencie: numer zajęty (`KSEF_NUMBER_TAKEN`) i inne środowisko (`ENV_MISMATCH`); żaden nie kończy się `rejected`. Każdy błąd, który może zniknąć bez zmiany dokumentu, jest `TRANSIENT`. Brak pewności = `RECONCILE`, nigdy `rejected`.
 
 ## 7. Co widzi użytkownik
 
