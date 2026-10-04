@@ -1,0 +1,197 @@
+{
+  "schema_version": 2,
+  "date": "2026-10-04",
+  "status": "F0_OPEN",
+  "scope": "public_allowlisted_summary_not_raw_runtime_evidence",
+  "operator_measurement": {
+    "window_utc": [
+      "2026-10-04T11:03:00Z",
+      "2026-10-04T11:22:00Z"
+    ],
+    "final_runtime_observed_utc": "2026-10-04T11:21:00Z",
+    "access_mode": "read_only",
+    "collector_in_this_PR_used": false,
+    "source": "operator scripts with the same inventory scope; attachments supplied by user",
+    "private_sources": [
+      {
+        "file": "f0-inwentarz-2026-10-04.md",
+        "sha256": "c974cbc981be4e8d547b4123adff2c2ddb0e2bc59eb7c37397033dc4a614324f"
+      },
+      {
+        "file": "f0-runtime-2026-10-04.json",
+        "sha256": "bb11924da5f1a72ab419d6b22b5eef104d50e5e7793f966dff452607a48da377"
+      }
+    ],
+    "concurrent_activity": "another session deployed worker and web during the window; the inventory operator made no server changes"
+  },
+  "source_revisions": {
+    "historical_local_checkout": "94eecc8a71aaaa6c40ea6f69a002a5d0dff6db56",
+    "prior_audit": "ef9bb438280aed56c638a70e4404ff4faadf09a0",
+    "first_session_main_read": "dcf48bad4ca63802b57f7046d8932b369cd9cfc9",
+    "publication_base": "1f95c970c11dca1cbe4093a50e2f0b73d7c714ff",
+    "measured_production_web": "ae87bdde93a636fcb2c48aef737e57a80a3315a7",
+    "measured_production_worker": "ae87bdde93a636fcb2c48aef737e57a80a3315a7",
+    "interpretation": "publication base is a repository revision; no claim it is deployed"
+  },
+  "production": {
+    "web": {
+      "status": "healthy",
+      "restart_count": 0,
+      "docker_target": "runner"
+    },
+    "worker": {
+      "status": "healthy",
+      "restart_count": 0,
+      "docker_target": "worker",
+      "jobs_backend": "pgboss",
+      "health_queues": 52,
+      "health_crons": 27,
+      "database_schedules": 27
+    },
+    "ksef_environment": "test",
+    "image_provenance": {
+      "build": "local",
+      "registry_manifest_digests": null,
+      "local_image_ids": "present_in_private_evidence_not_published",
+      "node_binary_version": null,
+      "application_minio_binary_version": null
+    },
+    "application_storage": {
+      "provider": "MinIO",
+      "host_alias": "ops-1",
+      "separate_from": "MinIO on db-1 for Supabase Storage"
+    },
+    "cache": {
+      "provider": "local Redis with SRH",
+      "image_tag": "redis:7.2",
+      "host_alias": "app-1",
+      "upstash_service": false,
+      "legacy_environment_variable_names_preserved": true
+    }
+  },
+  "backups": {
+    "full_database_dump": {
+      "scope": "full pg_dump",
+      "last_success_utc": "2026-10-04T01:30:00Z",
+      "location": "database_host",
+      "off_host_copy_present": false
+    },
+    "partial_json_snapshot": {
+      "present": true,
+      "location": "MinIO on another host",
+      "provider_and_region": "same",
+      "scope": "limited public schema snapshot",
+      "auth_and_pgboss_included": false,
+      "equivalent_to_full_database_backup": false
+    },
+    "application_minio_copy_present": false,
+    "wal_pitr_observed": false,
+    "hetzner_snapshots": "unverified_access_unavailable",
+    "storage_box": "not_configured",
+    "restore_drill": "not_run"
+  },
+  "staging": {
+    "coolify_environment_present": false,
+    "github_environment": "security-staging",
+    "allowed_branches": [
+      "main"
+    ],
+    "required_reviewer_count": 1,
+    "environment_secret_count": 0,
+    "environment_variable_count": 0,
+    "e2e_staging_workflow_runs": 0,
+    "required_staging_keys_missing": [
+      "STAGING_SUPABASE_URL",
+      "STAGING_SUPABASE_ANON_KEY",
+      "STAGING_SUPABASE_SERVICE_ROLE_KEY",
+      "STAGING_KSEF_CREDENTIALS_ENCRYPTION_KEY"
+    ],
+    "interpretation": "GitHub approval settings do not constitute an isolated staging runtime"
+  },
+  "observability_accounts": {
+    "sentry": {
+      "configured_intake_region": "EU",
+      "plan_products_retention_rbac": "blocked_access_unavailable"
+    },
+    "posthog": {
+      "configured_intake_region": "EU",
+      "plan_products_retention_rbac": "blocked_access_unavailable"
+    },
+    "datadog_eu_organization_and_products": "unverified",
+    "interpretation": "EU intake does not confirm all processing locations or paid product entitlements"
+  },
+  "gates": {
+    "F0-G01": "PARTIAL",
+    "F0-G02": "PARTIAL",
+    "F0-G03": "FAIL",
+    "F0-G04": "PENDING",
+    "F0-G05": "PENDING",
+    "F0-G06": "PENDING",
+    "F0-G07": "PARTIAL_REGION_BLOCKED_PRODUCTS",
+    "F0-G08": "PENDING",
+    "F0-G09": "FAIL"
+  },
+  "earlier_session": {
+    "public_health_observed_utc": "2026-10-04T10:41:44Z",
+    "public_health_status": "healthy",
+    "private_server_access_available": false,
+    "local_environment_check": {
+      "checkout": "historical_local_checkout",
+      "exit_code": 1,
+      "required_missing_or_placeholder_count": 13,
+      "interpretation": "local setup only; no production conclusion"
+    },
+    "interpretation": "later operator evidence supersedes earlier runtime unknowns"
+  },
+  "remaining_runtime_unknowns": [
+    "exact Node binary version",
+    "exact application MinIO binary version",
+    "registry manifest digests unavailable for local builds",
+    "Hetzner firewall rules",
+    "Kuma monitor configurations"
+  ],
+  "not_executed_by_F0_inventory": [
+    "server_change",
+    "migration",
+    "worker_start",
+    "deployment",
+    "E2E",
+    "RLS",
+    "load_test",
+    "backup_restore",
+    "real_alert",
+    "provider_activation"
+  ],
+  "owner_decisions": "10 pending topics in ../ownership.md",
+  "publication_validation": {
+    "collector_tests": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "network": "mocked_no_connections"
+    },
+    "syntax": "passed",
+    "typecheck": "passed",
+    "changed_script_lint": "passed",
+    "relative_links_checked": 38,
+    "yaml_files_parsed": 2,
+    "json": "valid",
+    "privacy_review": {
+      "private_identifier_patterns_checked": 49,
+      "matches": 0,
+      "independent_review": "no_publication_blockers"
+    },
+    "full_vitest": {
+      "passed": 5645,
+      "failed": 6,
+      "skipped": 28,
+      "files_passed": 443,
+      "files_failed": 4,
+      "files_skipped": 4,
+      "exit_code": 1,
+      "limitations": "6 existing Windows path separator / CRLF assertions in unchanged base files",
+      "affected_base_paths_unchanged": true
+    },
+    "build": "not_required_no_app_changes"
+  }
+}
