@@ -257,6 +257,29 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
     expect(invariants).toEqual(['I5']);
   });
 
+  it('A3: audyt „tylko uzgodnij” z crona — filtr crona (aktor NULL, details_json->>reconcile_only = true) liczy tylko uzgodnienia', async () => {
+    const reconciled = await invoice({ ksef_status: 'failed', last_error_code: 'RESULT_UNCERTAIN' });
+    await sentSubmission(reconciled, 'sent', '2026-09-01T10:00:00Z');
+    const plain = await invoice({ ksef_status: 'failed', last_error_code: 'KSEF_UNAVAILABLE' });
+    expect((await admin.rpc('requeue_ksef_send', {
+      p_invoice_id: reconciled, p_tenant_id: ORG, p_attempt_id: ATTEMPT, p_actor_user_id: null, p_reconcile_only: true,
+    })).error).toBeNull();
+    expect((await admin.rpc('requeue_ksef_send', {
+      p_invoice_id: plain, p_tenant_id: ORG, p_attempt_id: ATTEMPT, p_actor_user_id: null,
+    })).error).toBeNull();
+
+    const { data, error } = await admin
+      .from('audit_logs')
+      .select('entity_id')
+      .eq('action', 'invoice.send_requeued')
+      .is('user_id', null)
+      .eq('details_json->>reconcile_only', 'true')
+      .in('entity_id', [reconciled, plain]);
+    expect(error).toBeNull();
+    expect((data ?? []).map((r) => r.entity_id)).toEqual([reconciled]);
+    expect((await row(reconciled)).ksef_status).toBe('queued');
+  });
+
   it('enqueue: tylko szkic przechodzi do queued, drugi raz i z failed — odmowa', async () => {
     const id = await invoice({});
     const first = await admin.rpc('enqueue_ksef_send', { p_invoice_id: id, p_tenant_id: ORG, p_attempt_id: ATTEMPT });
