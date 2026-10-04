@@ -474,8 +474,9 @@ export async function onSubmitInvoiceExhausted(
         return { handled: false as const, reason: 'accepted-reconciliation' as const };
       }
       // Zdarzenie z innego środowiska KSeF niż skonfigurowane (#63, Codex):
-      // faktura dostaje kod `ENV_MISMATCH` (klasa reconcile) zamiast zostać
-      // w `queued`/`sending` na zawsze (W3). Dalej decyduje operator.
+      // faktura dostaje kod `ENV_MISMATCH` zamiast zostać w `queued`/`sending`
+      // na zawsze (W3). Klasa terminal (D-A4-2, 00143): ponowienie wysłałoby
+      // fakturę w bieżącym środowisku, więc klient wraca do szkicu i decyduje.
       const configuredEnv = configuredKsefEnvironment();
       if (parsed.data.environment !== configuredEnv) {
         logger.error('KSeF submit event environment mismatch; invoice requires reconciliation', {
@@ -490,12 +491,22 @@ export async function onSubmitInvoiceExhausted(
           eventEnvironment: parsed.data.environment,
           configuredEnvironment: configuredEnv,
         });
+        // Wcześniejsza próba tego zdarzenia mogła dotrzeć do KSeF (otwarty
+        // wpis z A2) — wtedy komunikat nie może mówić „nie wysłaliśmy” ani
+        // kierować do szkicu (RPC odmówi). Błąd odczytu = ostrożny wariant.
+        const contacted = await step.run('env-mismatch-contact-evidence', async () => {
+          const { data, error } = await (await createAdminClient()).rpc('ksef_has_contact_evidence', {
+            p_invoice_id: invoiceId,
+            p_tenant_id: tenantId,
+          });
+          return error ? true : data !== false;
+        });
         const marked = await step.run('mark-as-failed-env-mismatch', () =>
           markFailureUnlessAccepted(
             invoiceId,
             tenantId,
             'failed',
-            'Zdarzenie wysyłki pochodzi z innego środowiska KSeF niż skonfigurowane — wymaga uzgodnienia przez operatora.',
+            envMismatchMessage(parsed.data.environment, configuredEnv, contacted),
             SEND_ERROR_CODES.ENV_MISMATCH,
           ));
         return marked
@@ -690,6 +701,28 @@ export async function onSubmitInvoiceExhausted(
       });
 
       return { handled: true as const, finalStatus, fromOfflineQueue };
+}
+
+/**
+ * D-A4-2: komunikat dla klienta przy `ENV_MISMATCH` — gdzie zlecono wysyłkę,
+ * jakie środowisko jest teraz i co zrobić. Bez dowodu kontaktu: szkic
+ * i decyzja klienta. Z dowodem (wcześniejsza próba mogła dotrzeć do KSeF):
+ * nie wystawiać ponownie — szkic zablokowany, uzgadnia operator.
+ */
+function envMismatchMessage(
+  eventEnvironment: string,
+  configuredEnvironment: string | null,
+  contacted: boolean,
+): string {
+  const what = configuredEnvironment
+    ? `Tej wysyłki nie wykonaliśmy: zlecono ją w środowisku KSeF „${eventEnvironment}”, a obecne to „${configuredEnvironment}”.`
+    : `Tej wysyłki nie wykonaliśmy: środowisko KSeF po stronie FaktFlow nie jest poprawnie ustawione (zlecenie: „${eventEnvironment}”). Zajmujemy się tym.`;
+  if (contacted) {
+    return `${what} Wcześniejsza próba wysyłki tej faktury mogła dotrzeć do KSeF — nie wystawiaj jej ponownie, uzgodni ją operator FaktFlow.`;
+  }
+  return configuredEnvironment
+    ? `${what} Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku.`
+    : `${what} Potem wróć do szkicu i wyślij fakturę ponownie.`;
 }
 
 /**
