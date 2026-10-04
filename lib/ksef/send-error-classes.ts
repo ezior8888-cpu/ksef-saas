@@ -28,6 +28,7 @@ export const SEND_ERROR_CODES = {
   INFRA: 'INFRA',
   CREDENTIALS_UNAVAILABLE: 'CREDENTIALS_UNAVAILABLE',
   TRANSIENT_EXHAUSTED: 'TRANSIENT_EXHAUSTED',
+  NOT_IN_KSEF: 'NOT_IN_KSEF',
   KSEF_PAUSED: 'KSEF_PAUSED',
   KOR_HOLD: 'KOR_HOLD',
   ROZ_HOLD_RECONCILE: 'ROZ_HOLD_RECONCILE',
@@ -53,6 +54,10 @@ export const SEND_ERROR_CLASS: Record<SendErrorCode, SendErrorClass> = {
   INFRA: 'transient',
   CREDENTIALS_UNAVAILABLE: 'transient',
   TRANSIENT_EXHAUSTED: 'transient',
+  // A2b (00141): „tylko uzgodnij” stwierdził, że KSeF nie ma faktury od nas
+  // (zamiar porzucony, wpis STALE, brak dowodu kontaktu). Bez automatu —
+  // ponowna wysyłka to decyzja klienta (data wystawienia, B1/B2).
+  NOT_IN_KSEF: 'transient',
   KSEF_PAUSED: 'hold',
   KOR_HOLD: 'hold',
   ROZ_HOLD_RECONCILE: 'hold',

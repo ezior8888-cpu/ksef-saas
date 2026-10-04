@@ -36,6 +36,9 @@ describe('katalog kodów błędu wysyłki', () => {
     }
     expect(AUTO_REQUEUE_CODES).toEqual(expect.arrayContaining(['KSEF_UNAVAILABLE', 'KSEF_RATE_LIMIT', 'KSEF_SESSION', 'INFRA']));
     expect(AUTO_REQUEUE_CODES).not.toContain('CREDENTIALS_UNAVAILABLE');
+    // A2b: KSeF nie ma faktury — klient decyduje (B2: data wystawienia), automat nie wysyła.
+    expect(SEND_ERROR_CLASS['NOT_IN_KSEF' as keyof typeof SEND_ERROR_CLASS]).toBe('transient');
+    expect(AUTO_REQUEUE_CODES).not.toContain('NOT_IN_KSEF');
   });
 
   it.each([

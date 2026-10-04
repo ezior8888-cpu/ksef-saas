@@ -77,10 +77,11 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00133 | Claude (K4, druga korekta) | `single_open_correction`: wyzwalacz `guard_single_open_correction` — faktura pierwotna ma najwyżej jedną korektę poza `rejected` (blokada doradcza per rodzic) | w `main` (#212), **wgrana na db-1 03.10** |
 | 00134 | Claude (D5, cykl życia) | `ksef_submissions_xml_path`: kolumna `ksef_submissions.xml_storage_path` — klucz XML próby wysyłki (`tenant/yyyy/mm/invoiceId/sendAttemptId.xml`) | w `main` (#215), **wgrana na db-1 04.10** |
 | 00135 | Claude (K4, łańcuch korekt) | `correction_chain_guard`: `guard_single_open_correction` blokuje tylko korektę W TOKU (przyjęta tworzy łańcuch, odrzucona nie liczy się) | w `main` (#217), **wgrana na db-1 04.10** |
-| 00136 | Claude (A2, plan zero zgubionych faktur) | `ksef_submission_intent`: `ksef_has_contact_evidence` liczy wpis `intent` (zamiar wysyłki przed POST), strażnik I5 widzi zamiar starszy niż 48 h — CREATE OR REPLACE dwóch funkcji z 00131 | PR #221 (`claude/a2-intent-przed-post`); **przed** wdrożeniem |
+| 00136 | Claude (A2, plan zero zgubionych faktur) | `ksef_submission_intent`: `ksef_has_contact_evidence` liczy wpis `intent` (zamiar wysyłki przed POST), strażnik I5 widzi zamiar starszy niż 48 h — CREATE OR REPLACE dwóch funkcji z 00131 | w `main` (#221), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
 | 00137 | Claude (plan, A4) | `special_invoice_data` — `correction_data`/`advance_data`/`final_data` na wierszu faktury | zarezerwowane (plan, sekcja 5) |
 | 00138–00140 | Codex (centrum dowodzenia, C-22) | `ksef_send_metrics`, `ksef_invoice_timeline`, `ksef_error_patterns` + `ops_alert_log` | zarezerwowane (`CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`, sekcja 6) |
-| **00141** | — | następny wolny (00200 zajęte) | — |
+| 00141 | Claude (A2b, plan zero zgubionych faktur) | `ksef_error_code_not_in_ksef`: kod katalogu `NOT_IN_KSEF` (transient, bez auto) — wynik „tylko uzgodnij”, gdy KSeF nie ma faktury (koniec ślepej uliczki RESULT_UNCERTAIN bez dowodu kontaktu) | PR `claude/a2b-uzgodnij-bez-sladu`; **przed** wdrożeniem |
+| **00142** | — | następny wolny (00200 zajęte) | — |
 
 ---
 

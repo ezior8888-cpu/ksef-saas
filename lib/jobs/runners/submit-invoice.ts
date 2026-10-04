@@ -62,6 +62,7 @@ import {
   SEND_ERROR_CODES,
   type SendErrorCode,
 } from '@/lib/ksef/send-error-codes';
+import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
 import {
   getKsefRetryDelay,
   ksefRetryDelayFor,
@@ -1069,13 +1070,33 @@ export async function runSubmitInvoice(
       }
     });
 
+    // A2b: „tylko uzgodnij” bez otwartej wysyłki. Bez dowodu kontaktu z KSeF
+    // (00131/00136: numer KSeF albo wpis intent/sent/accepted/duplicate)
+    // KSeF nie ma tej faktury od nas — NOT_IN_KSEF z wyjściem dla klienta
+    // (wyślij ponownie / wróć do szkicu). Z dowodem — RESULT_UNCERTAIN dla
+    // operatora. Błąd odczytu dowodu = ponowienie, nie zgadywanie.
+    const reconcileOnlyWithoutOpenSubmission = async (uncertainMessage: string): Promise<Error> => {
+      const { data, error } = await (await createAdminClient()).rpc('ksef_has_contact_evidence', {
+        p_invoice_id: invoiceId,
+        p_tenant_id: tenantId,
+      });
+      if (error) {
+        return new RetryAfterError('Nie można sprawdzić dowodu kontaktu z KSeF — ponowię uzgadnianie', getKsefRetryDelay(attempt));
+      }
+      if (data === true) {
+        return new NonRetriableError(`[${SEND_ERROR_CODES.RESULT_UNCERTAIN}] ${uncertainMessage}`);
+      }
+      logger.warn('Tylko uzgodnij: KSeF nie ma tej faktury — NOT_IN_KSEF', { invoiceId, detail: uncertainMessage });
+      return new NonRetriableError(`[${SEND_ERROR_CODES.NOT_IN_KSEF}] ${KSEF_SEND_MESSAGES.notInKsef}`);
+    };
+
     const reconciled = await step.run('reconcile-previous-submission', async (): Promise<SubmitOutcome | null> => {
       const previous = await findOpenKsefSubmission(tenantId, invoiceId);
       if (!previous) {
         // Tryb „tylko uzgodnij” nie wysyła od nowa — bez wpisu `sent` nie ma czego uzgadniać.
         if (parsed.data.reconcileOnly) {
-          throw new NonRetriableError(
-            `[${SEND_ERROR_CODES.RESULT_UNCERTAIN}] Tryb „tylko uzgodnij”: brak otwartej wysyłki (wpisu sent) do uzgodnienia — faktura nie została wysłana ponownie.`,
+          throw await reconcileOnlyWithoutOpenSubmission(
+            'Tryb „tylko uzgodnij”: brak otwartej wysyłki (wpisu sent) do uzgodnienia — faktura nie została wysłana ponownie.',
           );
         }
         return null;
@@ -1150,8 +1171,8 @@ export async function runSubmitInvoice(
             extra: { tenantId, invoiceId, attemptedAt: previous.attemptedAt, status: error.status },
           });
           if (parsed.data.reconcileOnly) {
-            throw new NonRetriableError(
-              `[${SEND_ERROR_CODES.RESULT_UNCERTAIN}] Tryb „tylko uzgodnij”: KSeF nie zna wysyłki sprzed ponad 48 h (HTTP ${error.status}) — wpis zamknięty jako STALE, faktura nie została wysłana ponownie.`,
+            throw await reconcileOnlyWithoutOpenSubmission(
+              `Tryb „tylko uzgodnij”: KSeF nie zna wysyłki sprzed ponad 48 h (HTTP ${error.status}) — wpis zamknięty jako STALE, faktura nie została wysłana ponownie.`,
             );
           }
           return null;

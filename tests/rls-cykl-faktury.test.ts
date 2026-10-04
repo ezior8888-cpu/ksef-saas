@@ -170,6 +170,25 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
     expect(byCode.get('KSEF_PAUSED')?.class).toBe('hold');
     expect(byCode.get('KSEF_DUPLICATE_RECONCILE')?.class).toBe('reconcile');
     expect(byCode.get('NO_CERTIFICATE')?.class).toBe('setup');
+    expect(byCode.get('NOT_IN_KSEF')).toMatchObject({ class: 'transient', auto_requeue: false });
+  });
+
+  it('A2b: NOT_IN_KSEF bez dowodu kontaktu — powrót do szkicu i ponowna wysyłka działają (nie ślepa uliczka)', async () => {
+    const toDraft = await invoice({ ksef_status: 'failed', last_error_code: 'NOT_IN_KSEF' });
+    await intentSubmission(toDraft, 'abandoned');
+    const reset = await admin.rpc('reset_ksef_send', { p_invoice_id: toDraft, p_tenant_id: ORG, p_actor_user_id: ownerId });
+    expect(reset.error).toBeNull();
+    expect((await row(toDraft)).ksef_status).toBe('draft');
+
+    const toQueue = await invoice({ ksef_status: 'failed', last_error_code: 'NOT_IN_KSEF' });
+    const requeue = await admin.rpc('requeue_ksef_send', { p_invoice_id: toQueue, p_tenant_id: ORG, p_attempt_id: ATTEMPT, p_actor_user_id: ownerId });
+    expect(requeue.error).toBeNull();
+    expect((await row(toQueue)).ksef_status).toBe('queued');
+
+    // Kod jest w katalogu — strażnik I4 go nie zgłasza.
+    const { data } = await admin.rpc('ksef_lifecycle_violations');
+    const flagged = ((data ?? []) as Array<{ invariant: string; invoice_id: string }>).filter((v) => v.invoice_id === toDraft || v.invoice_id === toQueue);
+    expect(flagged).toEqual([]);
   });
 
   it('przejścia są tylko dla serwisu: anon i zalogowany dostają 42501', async () => {
