@@ -106,13 +106,13 @@ Zrobione i wdrożone 03–04.10.2026 (migracje 00131–00134 na db-1):
 | Operator | `/admin/ksef`: naruszenia, `failed` per kod, karta faktury, „Wyślij ponownie / Tylko uzgodnij / Wróć do szkicu” | #208/#209 |
 | Wyzwalacze | 00132: klient nigdy nie zmienia stanu; diagnostyka nie zamraża treści | #210 |
 | Automat | cron co 15 min: I1, ponowienia klasy transient przez 24 h, wznowienie po hamulcu; raport dzienny; alarm strażnika; martwe kolejki usunięte | #211 |
-| Korekty | 00133 + 00135: jedna korekta w toku; łańcuch korekt — „stan przed” po ostatniej przyjętej KOR (prawdziwe K4) | #212, #217 (czeka) |
+| Korekty | 00133 + 00135: jedna korekta w toku; łańcuch korekt — „stan przed” po ostatniej przyjętej KOR (prawdziwe K4) | #212, #217 |
 | Magazyn XML | klucz per próba (D5), wpis `sent` zna swój plik, retencja prób | #215 |
-| Uzgodnienie | tryb „tylko uzgodnij” w runnerze; okno 48 h dla zalegających wpisów `sent` (STALE) | #216 (czeka) |
+| Uzgodnienie | tryb „tylko uzgodnij” w runnerze; okno 48 h dla zalegających wpisów `sent` (STALE) | #216 |
 | Wcześniej | K1 (faktura za abonament), K2 (skrzynka: kategoryzacja i XML), W1, W2, W3, W16, S1, S14, S22 | #199–#201, #213, #214 |
 
-Czeka na scalenie: #216, #217 (po nich: 00135 na db-1, wdrożenie workera
-i aplikacji). Hamulce nadal włączone na PROD: `KOR_HOLD` (korekty),
+#216 i #217 scalone 04.10.2026; 00135 wgrana na db-1 04.10 (strażnik 0),
+worker i aplikacja wdrożone na `2dbf13a` (razem z A1, #219). Hamulce nadal włączone na PROD: `KOR_HOLD` (korekty),
 `ROZ_HOLD` (faktury rozliczające), Offline24 wyłączony (AUD-14).
 
 Nienaprawione z rewizji (tematy tego planu): W4–W15, S2–S13, S15–S21, S23,
@@ -198,6 +198,29 @@ agenta z weryfikacją Bartosza, nie obietnica.
   hamulca → dozwolone; runner odtwarza XML identyczny (skrót) z pierwszej próby.
 - DoD: `operatorInvoiceButtons` i `failedInvoiceButtons` nie mają gałęzi
   „dokument specjalny: tylko szkic”.
+
+**A5. Ślad per próba — kontrakt danych dla centrum dowodzenia (M10)**
+- Problem: porażka przed POST (poświadczenia, XML, upload, przejęcie) nie
+  zostawia wiersza w `ksef_submissions`; na fakturze zostaje tylko ostatnia
+  (`last_error*`), więc historia prób nie istnieje w bazie, a operator
+  i centrum dowodzenia (osobny tor Masła/Codexa,
+  `CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`) nie widzą, ile razy i na czym
+  faktura padła.
+- Czerwony test: runner z `KsefCredentialsError` → oczekiwany wiersz
+  `ksef_submissions` ze `status = failed`, `stage = credentials`,
+  `send_attempt_id` zdarzenia; druga próba tej samej faktury nie traktuje
+  go jako otwartej wysyłki.
+- Zakres (po A2, bo A2 wprowadza wiersz `intent`): kolumny
+  `send_attempt_id` (UNIQUE), `stage`, `error_class`, `job_id`,
+  `worker_sha`, `sentry_event_id`, `ksef_http_status` (numer z rejestru,
+  przed wdrożeniem); wiersz tworzony na początku próby i uzupełniany;
+  `findOpenKsefSubmission` filtruje `status IN ('sent','intent')`; jedna
+  linia JSON per etap w logu workera; `ops_alert_log` zapisywany
+  w `markAlertDelivered` monitora alarmów (decyzja D7 briefu).
+- DoD: każda próba (udana i nie) ma dokładnie jeden wiersz; test na bazie
+  dla UNIQUE i filtra otwartej wysyłki; `/admin/ksef/[id]` pokazuje próby
+  sprzed POST. Kontrakt kolumn uzgodniony w `CLAUDE-DO-CODEXA.md` (C-22)
+  PRZED tą sesją.
 
 ### Blok B — awaria KSeF i tryb offline (M1, M6) — najgroźniejsze prawnie
 
@@ -406,11 +429,15 @@ D1, D2, E1, E2, F1, F2, G1–G3 — równolegle, każda osobno; I1–I3 w dowoln
 H2 (game day) po G1 i A2. Blok J po bramce.
 ```
 
+A5 (ślad per próba) po A2, przed H2 — dostarcza dane centrum dowodzenia
+(osobny tor Masła/Codexa, `CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`);
+centrum nie jest sesją tego planu.
+
 Można prowadzić dwie sesje naraz tylko wtedy, gdy nie dotykają tych samych
 plików: np. C1 (walidatory) i E1 (skrzynka), D1 (UPO) i G3 (retencja).
 Bloki A i H prowadzi jedna linia sesji, bo zmieniają runner.
 
-Orientacyjnie: 20 sesji roboczych (A: 4, B: 3, C: 5, D: 2, E: 2, F: 2, G: 3,
+Orientacyjnie: 21 sesji roboczych (A: 5, B: 3, C: 5, D: 2, E: 2, F: 2, G: 3,
 H: 2, I: 3 — część krótkich), plus decyzje Bartosza w B1 i C4.
 
 ---
@@ -466,9 +493,9 @@ pierwszy kwartał; każdy nowy kod błędu lub blokada wchodzi tylko z wyjściem
 
 | Data | Sesja | PR | Zrobione | Co zostało |
 |---|---|---|---|---|
-| 03–04.10.2026 | (runda cyklu życia, przed tym planem) | #199–#217 | sekcja 3 | #216, #217 do scalenia; 00135 do wgrania |
+| 03–04.10.2026 | (runda cyklu życia, przed tym planem) | #199–#217 | sekcja 3 | — (wszystko scalone, 00131–00135 na db-1, wdrożone 04.10) |
 | 04.10.2026 | A1 | #219 | `lib/invoices/issue-date.ts`: jedna reguła „data wystawienia = dziś w Polsce” w 5 akcjach wysyłki (FA, szkic, ZAL, KOR, ROZ — w ROZ przed hamulcem); formularz ZAL bez UTC; 11 przypadków czerwonych przed naprawą. Scalone i wdrożone 04.10 (worker, potem web; `2dbf13a`) | faktura, która nie wyszła przed północą (ponowienie, cron, `/admin/ksef`), to B1/B2 |
-| 04.10.2026 | A2 | #221 | wpis `intent` z numerem sesji przed POST pliku (bez zapisu — bez wysyłki); ponowienie zamyka sesję zamiaru i pyta KSeF o jej faktury (`GET /sessions/{ref}/invoices`): plik → `sent` + uzgodnienie, pusto → `abandoned` + wysyłka od nowa; 00136: `intent` = dowód kontaktu, I5 widzi stary zamiar; „Tylko uzgodnij” działa przy zamiarze | wgrać 00136 PRZED wdrożeniem; test na KSeF TEST (H1, scenariusz 5); osobne ustalenie: status 440 przy uzgadnianiu po referencji (`reconcile-previous-submission`) kończy się ponowieniami zamiast ścieżką „własny duplikat” |
+| 04.10.2026 | A2 | #221 | wpis `intent` z numerem sesji przed POST pliku (bez zapisu — bez wysyłki); ponowienie zamyka sesję zamiaru i pyta KSeF o jej faktury (`GET /sessions/{ref}/invoices`): plik → `sent` + uzgodnienie, pusto → `abandoned` + wysyłka od nowa; 00136: `intent` = dowód kontaktu, I5 widzi stary zamiar; „Tylko uzgodnij” działa przy zamiarze | wgrać 00136 PRZED wdrożeniem; test na KSeF TEST (H1, scenariusz 5); osobne ustalenie: status 440 przy uzgadnianiu po referencji (`reconcile-previous-submission`) kończy się ponowieniami zamiast ścieżką „własny duplikat”; dla A5/C-22: A2 dodało status `abandoned`, a otwarte zamiary rozstrzyga osobny krok (`findOpenKsefSubmissionIntents`) — `findOpenKsefSubmission` zostaje przy `sent`; punkt 3 kontraktu w sekcji 5 briefu do uzgodnienia przed A5 |
 
 ---
 
@@ -481,3 +508,6 @@ pierwszy kwartał; każdy nowy kod błędu lub blokada wchodzi tylko z wyjściem
 - Nie uznawać za naprawione niczego, czego nie widział test na prawdziwej
   ścieżce (baza z wyzwalaczami albo KSeF TEST).
 - Nie pisać `ksef_status` nigdzie poza RPC z 00131 i workerem.
+- Nie budować w sesjach planu statystyk, pulpitów ani osi czasu faktury —
+  to centrum dowodzenia (tor Masła/Codexa, `CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`);
+  plan dostarcza dane (A5), nie widoki.

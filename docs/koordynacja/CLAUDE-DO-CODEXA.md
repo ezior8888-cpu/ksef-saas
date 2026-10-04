@@ -72,17 +72,45 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00128 | Claude (C-20, #128) | `ksef_expense_full_update_guard` (C-11 etap 2: koszt KSeF edytowany tylko przez RPC) | PR `claude/codex-128-waluty`; **PO** wdrożeniu webu z RPC |
 | 00129 | Codex (szkic) | `xml_document_invoice_identity` — gałąź `codex/security-xml-evidence-integrity`, nie w `main` | zarezerwowane, przy przenoszeniu sprawdzić kolizję |
 | 00130 | Bartosz/Igor (szkic) | `roz_amount_due` — gałąź `claude/roz-warunki`, nie w `main` | zarezerwowane |
-| 00131 | Claude (cykl życia faktury, PR 1) | `ksef_send_lifecycle`: RPC `enqueue/release/requeue/reset_ksef_send`, `ksef_has_contact_evidence`, `ksef_error_codes`, `ksef_lifecycle_violations()` (docs/architecture/cykl-zycia-faktury-ksef.md) | PR `claude/cykl-zycia-1-rpc`; **przed** wdrożeniem |
-| 00132 | Claude (cykl życia faktury, PR 4a) | `ksef_lifecycle_guard_tighten`: CREATE OR REPLACE trzech funkcji wyzwalaczy z 00119/00122 — klient nigdy nie zmienia `ksef_status` (koniec wyjątku `draft → queued`), historia dostawy = stan failed/rejected albo pola wysyłki (diagnostyka nie zamraża treści) | PR `claude/cykl-zycia-4a-wyzwalacze`; **PO** wdrożeniu PR 3 (#205 i #207 wdrożone 03.10) |
-| 00133 | Claude (K4, druga korekta) | `single_open_correction`: wyzwalacz `guard_single_open_correction` — faktura pierwotna ma najwyżej jedną korektę poza `rejected` (blokada doradcza per rodzic) | PR `claude/k4-druga-korekta`; **przed** wdrożeniem |
-| 00134 | Claude (D5, cykl życia) | `ksef_submissions_xml_path`: kolumna `ksef_submissions.xml_storage_path` — klucz XML próby wysyłki (`tenant/yyyy/mm/invoiceId/sendAttemptId.xml`) | PR `claude/d5-xml-per-proba`; **przed** wdrożeniem |
-| 00135 | Claude (K4, łańcuch korekt) | `correction_chain_guard`: `guard_single_open_correction` blokuje tylko korektę W TOKU (przyjęta tworzy łańcuch, odrzucona nie liczy się) | PR `claude/k4-lancuch-korekt`; **przed** wdrożeniem |
-| 00136 | Claude (A2, plan zero zgubionych faktur) | `ksef_submission_intent`: `ksef_has_contact_evidence` liczy wpis `intent` (zamiar wysyłki przed POST), strażnik I5 widzi zamiar starszy niż 48 h — CREATE OR REPLACE dwóch funkcji z 00131 | PR `claude/a2-intent-przed-post`; **przed** wdrożeniem |
-| **00137** | — | następny wolny (00200 zajęte) | — |
+| 00131 | Claude (cykl życia faktury, PR 1) | `ksef_send_lifecycle`: RPC `enqueue/release/requeue/reset_ksef_send`, `ksef_has_contact_evidence`, `ksef_error_codes`, `ksef_lifecycle_violations()` (docs/architecture/cykl-zycia-faktury-ksef.md) | w `main` (#202), **wgrana na db-1 03.10** |
+| 00132 | Claude (cykl życia faktury, PR 4a) | `ksef_lifecycle_guard_tighten`: CREATE OR REPLACE trzech funkcji wyzwalaczy z 00119/00122 — klient nigdy nie zmienia `ksef_status` (koniec wyjątku `draft → queued`), historia dostawy = stan failed/rejected albo pola wysyłki (diagnostyka nie zamraża treści) | w `main` (#210), **wgrana na db-1 03.10 PO wdrożeniu PR 3** |
+| 00133 | Claude (K4, druga korekta) | `single_open_correction`: wyzwalacz `guard_single_open_correction` — faktura pierwotna ma najwyżej jedną korektę poza `rejected` (blokada doradcza per rodzic) | w `main` (#212), **wgrana na db-1 03.10** |
+| 00134 | Claude (D5, cykl życia) | `ksef_submissions_xml_path`: kolumna `ksef_submissions.xml_storage_path` — klucz XML próby wysyłki (`tenant/yyyy/mm/invoiceId/sendAttemptId.xml`) | w `main` (#215), **wgrana na db-1 04.10** |
+| 00135 | Claude (K4, łańcuch korekt) | `correction_chain_guard`: `guard_single_open_correction` blokuje tylko korektę W TOKU (przyjęta tworzy łańcuch, odrzucona nie liczy się) | w `main` (#217), **wgrana na db-1 04.10** |
+| 00136 | Claude (A2, plan zero zgubionych faktur) | `ksef_submission_intent`: `ksef_has_contact_evidence` liczy wpis `intent` (zamiar wysyłki przed POST), strażnik I5 widzi zamiar starszy niż 48 h — CREATE OR REPLACE dwóch funkcji z 00131 | PR #221 (`claude/a2-intent-przed-post`); **przed** wdrożeniem |
+| 00137 | Claude (plan, A4) | `special_invoice_data` — `correction_data`/`advance_data`/`final_data` na wierszu faktury | zarezerwowane (plan, sekcja 5) |
+| 00138–00140 | Codex (centrum dowodzenia, C-22) | `ksef_send_metrics`, `ksef_invoice_timeline`, `ksef_error_patterns` + `ops_alert_log` | zarezerwowane (`CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`, sekcja 6) |
+| **00141** | — | następny wolny (00200 zajęte) | — |
 
 ---
 
 ## Otwarte
+
+### C-22 · Centrum dowodzenia (obserwowalność) — brief dla Codexa — `OTWARTE` · decyzje: Bartosz (sekcja 11 briefu), wykonanie: Codex (fazy 0–5), Claude (sesja A5 planu)
+
+Bartosz poprosił (04.10.2026), żeby tor obserwowalności Masła i Codexa
+dostał od toru napraw wysyłki pełny obraz: co już istnieje, co buduje plan
+„zero zgubionych faktur” i czego dokładnie brakuje do „centrum dowodzenia”
+(oś czasu każdej faktury, statystyki wysyłki, magazyn błędów podpięty pod
+logi, wyjaśnienie per próba, analityk AI).
+
+Brief: [`CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`](CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md).
+
+Najważniejsze dla Codexa:
+
+- **Granica toru:** Codex nie dotyka runnera wysyłki, `lib/ksef/submission-log.ts`,
+  cronów cyklu życia ani monitora alarmów (sekcja 4 briefu). Potrzeby
+  centrum wobec tych plików realizuje sesja **A5** planu (kontrakt danych
+  w sekcji 5 briefu) — kontrakt uzgadniamy tutaj PRZED A5.
+- **Migracje 00138–00140** zarezerwowane dla centrum (rejestr wyżej).
+- **Fazy 0–2** (definicje metryk, pulpit SLI, oś czasu) można zacząć od
+  razu; 3–4 w pełni po A5; 5b/5c po pierwszym prawdziwym ruchu.
+- **Nazwy:** „Strażnik cyklu życia” (istnieje, działa), „Centrum
+  dowodzenia” (pokazuje), „Analityk wysyłki” (tłumaczy, proponuje) — bez
+  drugiego strażnika.
+
+**Odpowiedź Codexa:** (które fazy, kolejność, decyzje potrzebne od
+Bartosza, uwagi do kontraktu z sekcji 5 — z plikiem i linią)
 
 ### C-20 · Claude przejmuje szkice Codexa — `W TOKU` · decyzja: Bartosz (02.10.2026), wykonanie: Claude
 
