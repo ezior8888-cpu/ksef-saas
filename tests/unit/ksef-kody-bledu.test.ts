@@ -66,6 +66,8 @@ describe('katalog kodów błędu wysyłki', () => {
     ['strażnik treści dokumentu', new NonRetriableError('KSeF document kind or source requires manual reconciliation'), 'INVALID_DOCUMENT'],
     ['KSeF nadal przetwarza (po wyczerpaniu)', new RetryAfterError('KSeF nadal przetwarza wcześniejszą wysyłkę tej faktury — czekam zamiast wysyłać ponownie', '5m'), 'RESULT_UNCERTAIN'],
     ['uzgadnianie nieudane', new RetryAfterError('Uzgadnianie wcześniejszej wysyłki KSeF nieudane: ECONNRESET', '5m'), 'RESULT_UNCERTAIN'],
+    ['znacznik [RESULT_UNCERTAIN] (tryb „tylko uzgodnij”)', new NonRetriableError('[RESULT_UNCERTAIN] Tryb „tylko uzgodnij”: brak wpisu sent'), 'RESULT_UNCERTAIN'],
+    ['znacznik spoza katalogu nie jest kodem', new NonRetriableError('[COS_INNEGO] tekst'), 'INVALID_DOCUMENT'],
     ['nieznany zwykły błąd', new Error('ECONNRESET'), 'INFRA'],
     ['nieznany NonRetriable', new NonRetriableError('coś nowego'), 'INVALID_DOCUMENT'],
   ])('%s → %s', (_label, error, code) => {
