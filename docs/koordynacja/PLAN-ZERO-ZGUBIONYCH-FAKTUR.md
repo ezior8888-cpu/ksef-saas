@@ -199,6 +199,29 @@ agenta z weryfikacją Bartosza, nie obietnica.
 - DoD: `operatorInvoiceButtons` i `failedInvoiceButtons` nie mają gałęzi
   „dokument specjalny: tylko szkic”.
 
+**A5. Ślad per próba — kontrakt danych dla centrum dowodzenia (M10)**
+- Problem: porażka przed POST (poświadczenia, XML, upload, przejęcie) nie
+  zostawia wiersza w `ksef_submissions`; na fakturze zostaje tylko ostatnia
+  (`last_error*`), więc historia prób nie istnieje w bazie, a operator
+  i centrum dowodzenia (osobny tor Masła/Codexa,
+  `CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`) nie widzą, ile razy i na czym
+  faktura padła.
+- Czerwony test: runner z `KsefCredentialsError` → oczekiwany wiersz
+  `ksef_submissions` ze `status = failed`, `stage = credentials`,
+  `send_attempt_id` zdarzenia; druga próba tej samej faktury nie traktuje
+  go jako otwartej wysyłki.
+- Zakres (po A2, bo A2 wprowadza wiersz `intent`): kolumny
+  `send_attempt_id` (UNIQUE), `stage`, `error_class`, `job_id`,
+  `worker_sha`, `sentry_event_id`, `ksef_http_status` (numer z rejestru,
+  przed wdrożeniem); wiersz tworzony na początku próby i uzupełniany;
+  `findOpenKsefSubmission` filtruje `status IN ('sent','intent')`; jedna
+  linia JSON per etap w logu workera; `ops_alert_log` zapisywany
+  w `markAlertDelivered` monitora alarmów (decyzja D7 briefu).
+- DoD: każda próba (udana i nie) ma dokładnie jeden wiersz; test na bazie
+  dla UNIQUE i filtra otwartej wysyłki; `/admin/ksef/[id]` pokazuje próby
+  sprzed POST. Kontrakt kolumn uzgodniony w `CLAUDE-DO-CODEXA.md` (C-22)
+  PRZED tą sesją.
+
 ### Blok B — awaria KSeF i tryb offline (M1, M6) — najgroźniejsze prawnie
 
 **B1. Decyzja prawna i produktowa (Bartosz + prawnik, bez kodu)**
@@ -406,11 +429,15 @@ D1, D2, E1, E2, F1, F2, G1–G3 — równolegle, każda osobno; I1–I3 w dowoln
 H2 (game day) po G1 i A2. Blok J po bramce.
 ```
 
+A5 (ślad per próba) po A2, przed H2 — dostarcza dane centrum dowodzenia
+(osobny tor Masła/Codexa, `CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`);
+centrum nie jest sesją tego planu.
+
 Można prowadzić dwie sesje naraz tylko wtedy, gdy nie dotykają tych samych
 plików: np. C1 (walidatory) i E1 (skrzynka), D1 (UPO) i G3 (retencja).
 Bloki A i H prowadzi jedna linia sesji, bo zmieniają runner.
 
-Orientacyjnie: 20 sesji roboczych (A: 4, B: 3, C: 5, D: 2, E: 2, F: 2, G: 3,
+Orientacyjnie: 21 sesji roboczych (A: 5, B: 3, C: 5, D: 2, E: 2, F: 2, G: 3,
 H: 2, I: 3 — część krótkich), plus decyzje Bartosza w B1 i C4.
 
 ---
@@ -480,3 +507,6 @@ pierwszy kwartał; każdy nowy kod błędu lub blokada wchodzi tylko z wyjściem
 - Nie uznawać za naprawione niczego, czego nie widział test na prawdziwej
   ścieżce (baza z wyzwalaczami albo KSeF TEST).
 - Nie pisać `ksef_status` nigdzie poza RPC z 00131 i workerem.
+- Nie budować w sesjach planu statystyk, pulpitów ani osi czasu faktury —
+  to centrum dowodzenia (tor Masła/Codexa, `CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`);
+  plan dostarcza dane (A5), nie widoki.
