@@ -115,7 +115,7 @@ import { classifySendError } from '@/lib/ksef/send-error-codes';
 import { invoiceXmlKeyFor } from '@/lib/storage/r2';
 import { generateFA3Xml } from '@/lib/xml/fa3-generator';
 import { finalizeInvoice } from '@/lib/xml/invoice-calculator';
-import { freshKsef, seedKsefInvoice, sha256Hex } from './helpers/ksef-pelna-sciezka';
+import { freshKsef, SEEDED_ACQUISITION, seedKsefInvoice, sha256Hex } from './helpers/ksef-pelna-sciezka';
 
 const faktura = (unitPriceNet = 100) => finalizeInvoice({
   internalNumber: NUMBER,
@@ -348,5 +348,44 @@ describe('D-A4-1a — ustalenia recenzji przed wypchnięciem', () => {
     expect(saved).toMatchObject({ ksef_status: 'accepted', ksef_number: 'K-OLD' });
     expect(String(saved?.xml_storage_path)).toMatch(/\/ksef-[0-9a-f]{40}\.xml$/);
     expect(m.storage.get(String(saved?.xml_storage_path))).toBe(earlier);
+  });
+});
+
+describe('D-A4-1: data przyjęcia oryginału przy przyjęciu numeru z duplikatu (art. 106na)', () => {
+  it('zweryfikowany duplikat spoza historii → ksef_accepted_at = data nadania numeru oryginałowi (metadane KSeF)', async () => {
+    // Prawdziwy kształt numeru KSeF: zakres dat zapytania bierze się z jego daty.
+    const KSEF = '5260001246-20260928-0100A0B0C0D0-1A';
+    seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: KSEF, xml: ourXml(), acquisitionDate: '2026-09-28T07:15:00.000Z' });
+
+    await runSubmitInvoice(event(), ctx(0));
+
+    expect(accepted()).toMatchObject({ ksef_number: KSEF, ksef_accepted_at: '2026-09-28T07:15:00.000Z' });
+  });
+
+  it('własny duplikat z sesji w historii → data ze statusu po referencji tamtej wysyłki (bez zapytania o metadane)', async () => {
+    const own = ourXml();
+    seedKsefInvoice(m.ksef, { session: 'S-WLASNA', ksefNumber: 'K-WLASNA', xml: own, acquisitionDate: '2026-09-29T12:00:00.000Z' });
+    m.ksef.metadataFails = true;
+    m.mem.db.ksef_submissions = [{
+      id: 'row-own', tenant_id: T, invoice_id: ID, submission_type: 'online', status: 'abandoned',
+      session_reference_number: 'S-WLASNA', invoice_reference_number: 'I-S-WLASNA', request_payload_hash: sha256Hex(own),
+      attempted_at: new Date(Date.now() - 86_400_000).toISOString(),
+    }];
+
+    await runSubmitInvoice(event(), ctx(0));
+
+    expect(accepted()).toMatchObject({ ksef_number: 'K-WLASNA', ksef_accepted_at: '2026-09-29T12:00:00.000Z' });
+  });
+
+  it('daty nie da się ustalić (metadane 503) → numer przyjęty mimo to, alarm dla operatora', async () => {
+    const KSEF = '5260001246-20260928-0100A0B0C0D0-1A';
+    seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: KSEF, xml: ourXml(), acquisitionDate: SEEDED_ACQUISITION });
+    m.ksef.metadataFails = true;
+
+    await runSubmitInvoice(event(), ctx(0));
+
+    expect(accepted()).toMatchObject({ ksef_number: KSEF });
+    expect(accepted()?.ksef_accepted_at).toBeUndefined();
+    expect(m.captureMessage).toHaveBeenCalledWith(expect.stringContaining('daty przyjęcia oryginału'), expect.anything());
   });
 });
