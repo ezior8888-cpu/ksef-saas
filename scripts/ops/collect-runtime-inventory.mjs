@@ -4,7 +4,7 @@
  * connects. Uses existing SSH, trusted known-hosts and remote python3.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, lstatSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -450,7 +450,19 @@ function parseCli(args) {
   return options;
 }
 
-export function main(args = process.argv.slice(2), { run = execFileSync, stderr = process.stderr, stdout = process.stdout, environment = process.env } = {}) {
+const LOCAL_FILES = { closeSync, fstatSync, lstatSync, openSync, readFileSync, writeFileSync };
+
+function withRegularFile(file, files, action) {
+  const descriptor = files.openSync(file, "r");
+  try {
+    if (!files.fstatSync(descriptor).isFile()) throw new Error("local_file_unavailable");
+    return action(descriptor);
+  } finally {
+    files.closeSync(descriptor);
+  }
+}
+
+export function main(args = process.argv.slice(2), { run = execFileSync, stderr = process.stderr, stdout = process.stdout, environment = process.env, files = LOCAL_FILES } = {}) {
   try {
     const options = parseCli(args);
     if (options.help) {
@@ -459,18 +471,29 @@ export function main(args = process.argv.slice(2), { run = execFileSync, stderr 
     }
     const infraPath = resolveInfraPath({ explicit: options.infra, environment, run });
     // All local prerequisites are validated before the first SSH connection.
-    if (!statSync(infraPath).isFile()) throw new Error("infra_unavailable");
-    const config = parseInfra(readFileSync(infraPath, "utf8"), { baseDir: path.dirname(infraPath) });
-    if (!statSync(config.K).isFile()) throw new Error("ssh_key_unavailable");
+    const config = withRegularFile(infraPath, files, (descriptor) =>
+      parseInfra(files.readFileSync(descriptor, "utf8"), { baseDir: path.dirname(infraPath) }));
+    withRegularFile(config.K, files, () => {});
     const output = path.resolve(options.output);
-    if (output === infraPath || output === config.K || existsSync(output)) throw new Error("output_conflict");
-    if (!statSync(path.dirname(output)).isDirectory()) throw new Error("output_directory_unavailable");
-    const report = collectInventory(config, { run });
-    writeFileSync(output, JSON.stringify(report, null, 2) + "\n", { encoding: "utf8", flag: "wx", mode: 0o600 });
+    if (output === infraPath || output === config.K) throw new Error("output_conflict");
+    // O_EXCL rejects existing files and symlinks atomically, before any SSH.
+    // Keep the descriptor: a later pathname replacement must never be written.
+    const descriptor = files.openSync(output, "wx", 0o600);
+    let report;
+    try {
+      report = collectInventory(config, { run });
+      files.writeFileSync(descriptor, JSON.stringify(report, null, 2) + "\n", { encoding: "utf8" });
+      const reserved = files.fstatSync(descriptor);
+      const current = files.lstatSync(output);
+      if (!current.isFile() || current.dev !== reserved.dev || current.ino !== reserved.ino) throw new Error("output_replaced");
+    } finally {
+      files.closeSync(descriptor);
+      // Do not unlink by pathname on failure: it may belong to another writer.
+    }
     stdout.write("Read-only inventory saved. Review unverified sections; no environment state was changed.\n");
     return report.hosts.some((host) => host.status !== "observed") ? 2 : 0;
   } catch {
-    stderr.write("Inventory failed: check private input paths, required assignments and a new output file in an existing directory. No sensitive diagnostics are printed.\n");
+    stderr.write("Inventory failed: check private input paths, required assignments and a new output file in an existing directory. A reserved output file may remain. No sensitive diagnostics are printed.\n");
     return 1;
   }
 }

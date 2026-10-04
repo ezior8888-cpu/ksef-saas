@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, lstatSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -46,6 +46,60 @@ function packet(containers = []) {
 function sinks() {
   const lines = [];
   return { lines, stdout: { write: (value) => lines.push(value) }, stderr: { write: (value) => lines.push(value) } };
+}
+
+function localFixture(action) {
+  const dir = mkdtempSync(path.join(tmpdir(), "f0-collector-race-test-"));
+  const key = path.join(dir, "test-key");
+  const infra = path.join(dir, "infra.env");
+  const out = path.join(dir, "inventory.json");
+  writeFileSync(key, "synthetic key");
+  writeFileSync(infra, "K='" + key + "'\nAPP=example.invalid\nOPS=example.invalid\nDB=example.invalid");
+  try {
+    action({ dir, key, infra, out, args: ["--infra", infra, "--output", out] });
+  } finally {
+    const cleanupTarget = path.resolve(dir);
+    assert.equal(path.dirname(cleanupTarget), path.resolve(tmpdir()));
+    assert.equal(path.basename(cleanupTarget).startsWith("f0-collector-race-test-"), true);
+    rmSync(cleanupTarget, { recursive: true, force: true });
+  }
+}
+
+// Use real files/descriptors and deterministic hooks to exercise pathname races.
+function trackedFiles(hooks = {}) {
+  const active = new Map();
+  const closed = [];
+  return {
+    active, closed,
+    files: {
+      openSync(file, flags, mode) {
+        hooks.beforeOpen?.(file, flags, mode);
+        const descriptor = openSync(file, flags, mode);
+        active.set(descriptor, file);
+        return descriptor;
+      },
+      fstatSync(descriptor) {
+        const stats = fstatSync(descriptor);
+        hooks.afterStat?.(active.get(descriptor), descriptor);
+        return stats;
+      },
+      lstatSync,
+      readFileSync(descriptor, encoding) {
+        hooks.beforeRead?.(active.get(descriptor), descriptor);
+        return readFileSync(descriptor, encoding);
+      },
+      writeFileSync(descriptor, data, options) {
+        assert.equal(typeof descriptor, "number");
+        hooks.beforeWrite?.(active.get(descriptor), descriptor);
+        return writeFileSync(descriptor, data, options);
+      },
+      closeSync(descriptor) {
+        closeSync(descriptor);
+        closed.push(active.get(descriptor));
+        active.delete(descriptor);
+      },
+    },
+  };
 }
 
 test("infra is data, supports quotes, tilde and ignores unrelated secret assignments", () => {
@@ -181,6 +235,191 @@ test("missing key and existing output are rejected before connections; new outpu
     assert.equal(path.dirname(cleanupTarget), path.resolve(tmpdir()));
     assert.equal(path.basename(cleanupTarget).startsWith("f0-collector-test-"), true);
     rmSync(cleanupTarget, { recursive: true, force: true });
+  }
+});
+
+test("infra pathname replacement after fstat cannot change the opened input", () => {
+  localFixture(({ infra, out, args }) => {
+    let replaced = false;
+    const tracked = trackedFiles({ afterStat: (file) => {
+      if (file !== infra || replaced) return;
+      replaced = true;
+      renameSync(infra, infra + ".opened");
+      writeFileSync(infra, "invalid input " + SECRET);
+    } });
+    let calls = 0;
+    const run = () => { calls++; return JSON.stringify(packet()); };
+    assert.equal(main(args, { ...sinks(), run, files: tracked.files }), 0);
+    assert.equal(replaced, true);
+    assert.equal(calls, 3);
+    assert.equal(tracked.active.size, 0);
+    assert.equal(readFileSync(infra, "utf8"), "invalid input " + SECRET);
+    assert.equal(JSON.parse(readFileSync(out, "utf8")).hosts.length, 3);
+  });
+});
+
+test("a competing output creation is rejected atomically before any SSH", () => {
+  localFixture(({ out, args }) => {
+    const tracked = trackedFiles({ beforeOpen: (file, flags) => {
+      if (file === out) {
+        assert.equal(flags, "wx");
+        writeFileSync(out, "other writer " + SECRET);
+      }
+    } });
+    let calls = 0;
+    const output = sinks();
+    assert.equal(main(args, { ...output, files: tracked.files, run: () => { calls++; return JSON.stringify(packet()); } }), 1);
+    assert.equal(calls, 0);
+    assert.equal(readFileSync(out, "utf8"), "other writer " + SECRET);
+    assert.equal(tracked.active.size, 0);
+    assert.equal(tracked.closed.length, 2);
+    assert.equal(output.lines.join("").includes(SECRET), false);
+  });
+});
+
+test("output reservation is observable before every mocked SSH without filesystem injection", () => {
+  localFixture(({ out, args }) => {
+    const samples = [];
+    const run = () => {
+      samples.push(existsSync(out) ? lstatSync(out).size : null);
+      return JSON.stringify(packet());
+    };
+    assert.equal(main(args, { ...sinks(), run }), 0);
+    assert.deepEqual(samples, [0, 0, 0]);
+    assert.equal(JSON.parse(readFileSync(out, "utf8")).hosts.length, 3);
+  });
+});
+
+test("another writer cannot claim output during collection without filesystem injection", () => {
+  localFixture(({ out, args }) => {
+    let calls = 0;
+    let competingResult;
+    const run = () => {
+      if (++calls === 1) {
+        try {
+          writeFileSync(out, "competing writer " + SECRET, { flag: "wx" });
+          competingResult = "created";
+        } catch (error) {
+          competingResult = error.code;
+        }
+      }
+      return JSON.stringify(packet());
+    };
+    const exitCode = main(args, { ...sinks(), run });
+    assert.equal(calls, 3);
+    assert.equal(competingResult, "EEXIST");
+    assert.equal(exitCode, 0);
+    const saved = readFileSync(out, "utf8");
+    assert.equal(JSON.parse(saved).hosts.length, 3);
+    assert.equal(saved.includes(SECRET), false);
+  });
+});
+
+test("the private output is reserved before SSH and every descriptor closes on success", () => {
+  localFixture(({ out, args }) => {
+    const tracked = trackedFiles();
+    let calls = 0;
+    const run = () => {
+      calls++;
+      assert.deepEqual([...tracked.active.values()], [out]);
+      assert.equal(readFileSync(out, "utf8"), "");
+      if (process.platform !== "win32") assert.equal(lstatSync(out).mode & 0o777, 0o600);
+      return JSON.stringify(packet());
+    };
+    assert.equal(main(args, { ...sinks(), run, files: tracked.files }), 0);
+    assert.equal(calls, 3);
+    assert.equal(tracked.active.size, 0);
+    assert.equal(tracked.closed.length, 3);
+  });
+});
+
+test("replacement output is neither overwritten nor deleted and does not report success", () => {
+  localFixture(({ key, out, args }) => {
+    const moved = out + ".reserved";
+    const tracked = trackedFiles();
+    const output = sinks();
+    let calls = 0;
+    const run = () => {
+      if (++calls === 1) {
+        renameSync(out, moved);
+        writeFileSync(out, "replacement " + SECRET);
+      }
+      return JSON.stringify(packet());
+    };
+    assert.equal(main(args, { ...output, run, files: tracked.files }), 1);
+    assert.equal(calls, 3);
+    assert.equal(readFileSync(out, "utf8"), "replacement " + SECRET);
+    assert.equal(readFileSync(key, "utf8"), "synthetic key");
+    assert.equal(JSON.parse(readFileSync(moved, "utf8")).hosts.length, 3);
+    assert.equal(tracked.active.size, 0);
+    assert.equal(tracked.closed.length, 3);
+    assert.equal(output.lines.join("").includes(SECRET), false);
+    assert.equal(output.lines.join("").includes("saved"), false);
+  });
+});
+
+test("input and key output aliases and invalid output directories fail before SSH", () => {
+  localFixture(({ key, infra, dir, args }) => {
+    let calls = 0;
+    const run = () => { calls++; return JSON.stringify(packet()); };
+    for (const target of [key, infra, dir, path.join(dir, "missing", "inventory.json")]) {
+      const tracked = trackedFiles();
+      assert.equal(main([...args.slice(0, 3), target], { ...sinks(), run, files: tracked.files }), 1);
+      assert.equal(tracked.active.size, 0);
+    }
+    assert.equal(calls, 0);
+    assert.equal(readFileSync(key, "utf8"), "synthetic key");
+    assert.equal(readFileSync(infra, "utf8").startsWith("K='"), true);
+  });
+});
+
+test("existing output symlinks, including dangling links, fail before SSH", (context) => {
+  localFixture(({ key, infra, out, dir, args }) => {
+    let calls = 0;
+    const run = () => { calls++; return JSON.stringify(packet()); };
+    for (const target of [key, infra, path.join(dir, "missing-target")]) {
+      try {
+        symlinkSync(target, out, "file");
+      } catch (error) {
+        if (process.platform === "win32" && ["EPERM", "EACCES"].includes(error.code)) {
+          context.skip("Windows does not permit creating local symlinks");
+          return;
+        }
+        throw error;
+      }
+      const tracked = trackedFiles();
+      assert.equal(main(args, { ...sinks(), run, files: tracked.files }), 1);
+      assert.equal(lstatSync(out).isSymbolicLink(), true);
+      assert.equal(tracked.active.size, 0);
+      rmSync(out);
+    }
+    assert.equal(calls, 0);
+    assert.equal(readFileSync(key, "utf8"), "synthetic key");
+    assert.equal(readFileSync(infra, "utf8").startsWith("K='"), true);
+    assert.equal(existsSync(path.join(dir, "missing-target")), false);
+  });
+});
+
+test("local read, stat, parse and write failures close every opened descriptor", () => {
+  for (const failure of ["infra-stat", "infra-read", "infra-parse", "key-stat", "output-write", "output-stat"]) {
+    localFixture(({ infra, key, out, args }) => {
+      if (failure === "infra-parse") writeFileSync(infra, "invalid " + SECRET);
+      const tracked = trackedFiles({
+        afterStat: (file) => {
+          if ((failure === "infra-stat" && file === infra) || (failure === "key-stat" && file === key) || (failure === "output-stat" && file === out)) throw new Error(SECRET);
+        },
+        beforeRead: () => { if (failure === "infra-read") throw new Error(SECRET); },
+        beforeWrite: () => { if (failure === "output-write") throw new Error(SECRET); },
+      });
+      let calls = 0;
+      const output = sinks();
+      assert.equal(main(args, { ...output, files: tracked.files, run: () => { calls++; return JSON.stringify(packet()); } }), 1, failure);
+      assert.equal(calls, failure.startsWith("output-") ? 3 : 0, failure);
+      assert.equal(tracked.active.size, 0, failure);
+      assert.equal(tracked.closed.length, failure.startsWith("infra-") ? 1 : failure === "key-stat" ? 2 : 3, failure);
+      assert.equal(output.lines.join("").includes(SECRET), false, failure);
+      if (failure === "output-write") assert.equal(readFileSync(out, "utf8"), "");
+    });
   }
 });
 

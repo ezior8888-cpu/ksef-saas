@@ -98,6 +98,16 @@ node scripts/ops/collect-runtime-inventory.mjs --output .agents/f0-runtime-next.
 
 Kod 0 oznacza tylko pobranie metadanych, 2 częściowy odczyt, 1 błąd lokalnych danych wejściowych/wyjściowych. Żaden kod nie oznacza akceptacji F0. Dokładne reguły zapory, ACL dostawców, kopie off-host i działanie staging wymagają osobnych dowodów.
 
+Kontynuacja po publikacji `6399ff9` zabezpiecza lokalny odczyt i zapis kolektora:
+plik wejściowy jest sprawdzany i czytany przez ten sam otwarty uchwyt, a nowy
+plik wyniku rezerwowany wyłącznie przed pierwszym połączeniem SSH. Zapis używa
+zachowanego uchwytu. Istniejący cel jest odrzucany, a wykryta podmiana ścieżki
+wyniku kończy się błędem. Po lokalnym błędzie może pozostać pusty lub niepełny
+plik; nie jest dowodem udanego odczytu. Kolejne uruchomienie wymaga nowej
+prywatnej ścieżki. Pliki nie są automatycznie usuwane po błędzie, ponieważ
+podmieniona ścieżka może należeć do innego procesu. To poprawka narzędzia,
+bez powtórzenia pomiaru serwerów i bez zmiany statusów bramek.
+
 Weryfikacja publikowanego pakietu: 13/13 testów syntetycznych kolektora (0 pominiętych), kontrola składni, typecheck i lint przeszły. Sprawdzono 38 linków względnych, dwa YAML i JSON oraz brak 49 wybranych prywatnych identyfikatorów w publikowanych plikach. Niezależny przegląd treści i kolektora nie wykazał blokad publikacji. Pełny Vitest: 5645 PASS, 6 FAIL, 28 SKIP; 443 pliki PASS, 4 FAIL, 4 SKIP. Sześć błędów dotyczy niezmienionych testów i plików bazowych: dwóch wyjątków ścieżek z ukośnikami Windows oraz czterech dopasowań oczekujących LF zamiast CRLF. Nie zmieniano tych plików w pakiecie F0. Build nie był wymagany, ponieważ aplikacja nie została zmieniona. Wyniki testów narzędzia nie potwierdzają działania środowiska ani realizacji dziesięciu decyzji operatora.
 
 **Kolejny krok:** Bartosz rozstrzyga decyzje z ownership; osobne prace domykają kopie, staging i dowody produktów. F1 nie został rozpoczęty.
