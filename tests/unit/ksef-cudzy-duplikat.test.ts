@@ -58,6 +58,17 @@ vi.mock('@/lib/storage/r2', async (orig) => {
       return { storagePath, sha256Hash: sha256Hex(xml), sizeBytes: xml.length, etag: '"e"' };
     },
     invoiceXmlExistsForId: async () => false,
+    // Archiwum bajtów oryginału (`archiveImportedKsefXml`, D-A4-1b-3 PR A).
+    uploadToR2IfAbsent: async (key: string, body: Buffer) => {
+      if (m.storage.has(key)) return false;
+      m.storage.set(key, body.toString('utf8'));
+      return true;
+    },
+    downloadFromR2: async (key: string) => {
+      const xml = m.storage.get(key);
+      if (xml === undefined) throw new Error(`brak pliku ${key}`);
+      return Buffer.from(xml, 'utf8');
+    },
     downloadInvoiceXml: async (path: string) => {
       if (m.storageReadFails) throw new Error('R2 niedostępne');
       const xml = m.storage.get(path);
@@ -401,5 +412,114 @@ describe('D-A4-1: data przyjęcia oryginału przy przyjęciu numeru z duplikatu 
     expect(accepted()).toMatchObject({ ksef_number: KSEF });
     expect(accepted()?.ksef_accepted_at).toBeUndefined();
     expect(m.captureMessage).toHaveBeenCalledWith(expect.stringContaining('daty przyjęcia oryginału'), expect.anything());
+  });
+});
+
+describe('D-A4-1b-3 (A): dane oryginału przy nierozstrzygniętym 440 — zapisane na wpisie próby', () => {
+  // Realny kształt numeru KSeF — z niego zakres dat zapytania o metadane (data nadania).
+  const K = '5260001246-20260928-0100A0B0C0D0-1A';
+  const marker = () => submissions().find((r) => r.original_ksef_number === K);
+  const archiveKey = `${T}/ksef-import/${K}.xml`;
+
+  it('oryginał z FaktFlow o innej treści → original_check z danymi oryginału, skrótem, archiwum i datą nadania', async () => {
+    const original = ourXml(150);
+    seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: K, xml: original, acquisitionDate: '2026-09-28T07:15:00.000Z' });
+
+    const error = await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(classifySendError(error).code).toBe('KSEF_DUPLICATE_RECONCILE');
+    expect(marker()).toMatchObject({ status: 'sent' });
+    expect(marker()!.original_check).toMatchObject({
+      v: 1, env: 'test', reason: 'faktflow-original', sha256: sha256Hex(original), archivePath: archiveKey,
+      sameContentExceptHeader: false, ownHistory: false, acquiredAt: '2026-09-28T07:15:00.000Z', httpStatus: null,
+      knownInvoice: null,
+      summary: expect.objectContaining({ number: NUMBER, issueDate: '2026-10-01', buyerNip: '5252241585', systemInfo: 'KSeF SaaS v1.0' }),
+    });
+    // Dokładne bajty z KSeF pod kluczem importu historii (ten sam obiekt zobaczy Magiczny import).
+    expect(m.storage.get(archiveKey)).toBe(original);
+  });
+
+  it('oryginał to plik z historii tej faktury → ownHistory: true', async () => {
+    const old = ourXml(150);
+    seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: K, xml: old });
+    m.mem.db.ksef_submissions = [{
+      id: 'row-old', tenant_id: T, invoice_id: ID, submission_type: 'online', status: 'abandoned',
+      session_reference_number: 'S-STARA', invoice_reference_number: null, request_payload_hash: sha256Hex(old),
+      attempted_at: new Date(Date.now() - 86_400_000).toISOString(),
+    }];
+
+    await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(marker()!.original_check).toMatchObject({ reason: 'faktflow-original', ownHistory: true });
+  });
+
+  it('inny program, ta sama treść → reason same-content-other-program', async () => {
+    const sameContent = withOtherHeaderDate(ourXml()).replace(/<SystemInfo>[^<]*<\/SystemInfo>/, '<SystemInfo>Inny Program 2.0</SystemInfo>');
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: sameContent });
+
+    await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(marker()!.original_check).toMatchObject({
+      reason: 'same-content-other-program', sameContentExceptHeader: true,
+      summary: expect.objectContaining({ systemInfo: 'Inny Program 2.0' }),
+    });
+  });
+
+  it('numer KSeF ma inna faktura sprzedaży w FaktFlow → reason known-number z odnośnikiem, bez pobierania', async () => {
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: fromOtherProgram(ourXml()) });
+    m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_number: K, internal_number: 'FV/INNA/1' }];
+
+    await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(m.ksef.downloads).toBe(0);
+    expect(marker()!.original_check).toMatchObject({
+      reason: 'known-number', knownInvoice: { id: 'inna', internalNumber: 'FV/INNA/1' }, sha256: null, summary: null,
+    });
+  });
+
+  it('403 przy pobraniu → reason download-refused z kodem HTTP; 503 → download-pending', async () => {
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: fromOtherProgram(ourXml()) });
+    m.ksef.downloadFailure = { status: 503 };
+    await failing(runSubmitInvoice(event(), ctx(0)));
+    expect(marker()!.original_check).toMatchObject({ reason: 'download-pending', httpStatus: 503, sha256: null });
+
+    m.ksef.downloadFailure = { status: 403 };
+    await failing(runSubmitInvoice(event(), ctx(1)));
+    expect(marker()!.original_check).toMatchObject({ reason: 'download-refused', httpStatus: 403, sha256: null });
+  });
+
+  it('błąd odczytu naszego pliku → reason storage-pending (dane oryginału już są)', async () => {
+    const other = fromOtherProgram(ourXml());
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: other });
+    m.storageReadFails = true;
+
+    await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(marker()!.original_check).toMatchObject({ reason: 'storage-pending', sha256: sha256Hex(other) });
+  });
+
+  it('w archiwum inny plik pod tym numerem KSeF → reason archive-conflict, werdykt dla operatora (nie pętla ponowień)', async () => {
+    seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: K, xml: ourXml(150) });
+    m.storage.set(archiveKey, '<Faktura>coś innego</Faktura>');
+
+    const error = await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(error).toBeInstanceOf(NonRetriableError);
+    expect(classifySendError(error).code).toBe('KSEF_DUPLICATE_RECONCILE');
+    expect(marker()!.original_check).toMatchObject({ reason: 'archive-conflict' });
+    expect(m.storage.get(archiveKey)).toBe('<Faktura>coś innego</Faktura>');
+  });
+
+  it('ponowienie tej samej weryfikacji → ten sam zapis, archiwum bez konfliktu, bez drugiej wysyłki', async () => {
+    const original = ourXml(150);
+    seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: K, xml: original });
+
+    await failing(runSubmitInvoice(event(), ctx(0)));
+    const first = { ...(marker()!.original_check as Row) };
+    const again = await failing(runSubmitInvoice({ ...event(), reconcileOnly: true }, ctx(0)));
+
+    expect(classifySendError(again).code).toBe('KSEF_DUPLICATE_RECONCILE');
+    expect(m.ksef.invoicePosts).toBe(1);
+    expect(marker()!.original_check).toMatchObject({ ...first, checkedAt: expect.any(String) });
   });
 });

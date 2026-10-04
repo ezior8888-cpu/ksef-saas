@@ -218,6 +218,27 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
     expect((await row(taken)).ksef_status).toBe('draft');
   });
 
+  it('D-A4-1b-3 (00144): dane oryginału 440 na wpisie próby — klient firmy je czyta, nie może ich zmienić', async () => {
+    const id = await invoice({ ksef_status: 'failed', last_error_code: 'KSEF_DUPLICATE_RECONCILE' });
+    const check = { v: 1, env: 'test', reason: 'faktflow-original', summary: { number: 'CYKL/x', gross: '123.00' } };
+    const { error } = await admin.from('ksef_submissions').insert({
+      tenant_id: ORG, invoice_id: id, submission_type: 'online', status: 'sent', error_code: '440',
+      session_reference_number: 'SES-440', original_ksef_number: '9480000014-20261001-000000000077-00',
+      original_check: check,
+    });
+    expect(error, `insert ksef_submissions: ${error?.message}`).toBeNull();
+
+    const c = await signedIn(OWNER_EMAIL);
+    const read = await c.from('ksef_submissions').select('original_ksef_number, original_check').eq('invoice_id', id);
+    expect(read.error).toBeNull();
+    expect(read.data).toEqual([{ original_ksef_number: '9480000014-20261001-000000000077-00', original_check: check }]);
+
+    const forged = await c.from('ksef_submissions').update({ original_check: { v: 1, reason: 'podrobione' } }).eq('invoice_id', id).select('id');
+    expect(forged.error?.code ?? (forged.data?.length === 0 ? 'brak' : 'zmienione')).not.toBe('zmienione');
+    const after = await admin.from('ksef_submissions').select('original_check').eq('invoice_id', id).single();
+    expect(after.data?.original_check).toEqual(check);
+  });
+
   it('A2b: NOT_IN_KSEF bez dowodu kontaktu — powrót do szkicu i ponowna wysyłka działają (nie ślepa uliczka)', async () => {
     const toDraft = await invoice({ ksef_status: 'failed', last_error_code: 'NOT_IN_KSEF' });
     await intentSubmission(toDraft, 'abandoned');
