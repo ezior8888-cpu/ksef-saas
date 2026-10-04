@@ -37,6 +37,8 @@ const mocks = vi.hoisted(() => ({
   readOurXml: vi.fn(),
   numberTaken: vi.fn(),
   closeAttempt: vi.fn(),
+  /** Wynik `ksef_has_contact_evidence` (00131/00136). */
+  evidence: false as boolean | null,
   /** Wynik `claim_ksef_send`: znacznik czasu = przejęte, `null` = trzyma inna próba (S22). */
   claim: '2026-10-03T12:00:00.000000+00:00' as string | null,
   invoice: {} as Record<string, unknown>,
@@ -115,7 +117,10 @@ vi.mock('@/lib/supabase/server', () => ({
     };
     return {
       from: () => q,
-      rpc: async (fn: string) => ({ data: fn === 'claim_ksef_send' ? mocks.claim : null, error: null }),
+      rpc: async (fn: string) => ({
+        data: fn === 'claim_ksef_send' ? mocks.claim : fn === 'ksef_has_contact_evidence' ? mocks.evidence : null,
+        error: null,
+      }),
     };
   },
 }));
@@ -165,6 +170,7 @@ beforeEach(() => {
   mocks.verification.mockResolvedValue(undefined);
   mocks.health.mockResolvedValue({ offline: false });
   mocks.findOpen.mockResolvedValue(null);
+  mocks.evidence = false;
   mocks.credentials.mockResolvedValue({ type: 'token', nip: '1234567890', token: 't' });
   mocks.invoice = {
     id: ID, direction: 'outgoing', ksef_status: 'queued', ksef_number: null, ksef_environment: 'test',
@@ -286,6 +292,16 @@ describe('W3: onExhausted zawsze zostawia ślad', () => {
     const message = String(lastInvoiceUpdate()?.last_error ?? '');
     expect(message).toContain('production');
     expect(message).toContain('Wróć do szkicu');
+  });
+
+  it('D-A4-2: ENV_MISMATCH przy dowodzie kontaktu (wcześniejsza próba mogła dotrzeć do KSeF) — bez „nie została wysłana” i bez „wróć do szkicu”', async () => {
+    mocks.evidence = true;
+    await onSubmitInvoiceExhausted(new Error('cokolwiek'), event('production'), ctx);
+    expect(lastInvoiceUpdate()).toMatchObject({ ksef_status: 'failed', last_error_code: 'ENV_MISMATCH' });
+    const message = String(lastInvoiceUpdate()?.last_error ?? '');
+    expect(message).toContain('nie wystawiaj');
+    expect(message).not.toContain('nie została wysłana');
+    expect(message).not.toContain('Wróć do szkicu');
   });
 
   it('zły payload (bez nip): failed INVALID_EVENT, gdy da się ustalić fakturę i firmę', async () => {

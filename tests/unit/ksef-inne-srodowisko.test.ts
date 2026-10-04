@@ -32,6 +32,11 @@ describe('D-A4-2: ENV_MISMATCH — powrót do szkicu, decyzja klienta', () => {
     });
     expect(KSEF_SEND_MESSAGES.envMismatch).toMatch(/środowisk/);
     expect(KSEF_SEND_MESSAGES.envMismatch).toMatch(/szkic/);
+    // Ten sam tekst stoi przy fakturze z dowodem kontaktu (interfejs zna tylko
+    // kod) — nie może twierdzić, że faktura nie dotarła do KSeF, i musi mówić,
+    // co zrobić, gdy powrót do szkicu jest zablokowany.
+    expect(KSEF_SEND_MESSAGES.envMismatch).not.toMatch(/nie została wysłana/);
+    expect(KSEF_SEND_MESSAGES.envMismatch).toMatch(/nie wystawiaj/);
   });
 
   it('klient bez uprawnień: ten sam komunikat i prośba do właściciela', () => {
@@ -67,7 +72,7 @@ describe('D-A4-2: ENV_MISMATCH — powrót do szkicu, decyzja klienta', () => {
     expect(contacted.reconcile).toEqual({ enabled: true, reason: null });
   });
 
-  it('etykieta na liście faktur mówi o środowisku, nie o błędzie treści', () => {
+  it('etykieta statusu (karta faktury) mówi o środowisku, nie o błędzie treści', () => {
     const html = renderToStaticMarkup(StatusBadge({ status: 'failed', errorCode: CODE }));
     expect(html).toContain('Inne środowisko KSeF');
     expect(html).not.toContain('Błąd treści');
