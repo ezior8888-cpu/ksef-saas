@@ -282,6 +282,10 @@ describe('W3: onExhausted zawsze zostawia ślad', () => {
     expect(result).toMatchObject({ handled: true, finalStatus: 'failed' });
     expect(lastInvoiceUpdate()).toMatchObject({ ksef_status: 'failed', last_error_code: 'ENV_MISMATCH' });
     expect(mocks.captureMessage).toHaveBeenCalled();
+    // D-A4-2: komunikat dla klienta — które środowiska i co zrobić (szkic, nie ponowienie).
+    const message = String(lastInvoiceUpdate()?.last_error ?? '');
+    expect(message).toContain('production');
+    expect(message).toContain('Wróć do szkicu');
   });
 
   it('zły payload (bez nip): failed INVALID_EVENT, gdy da się ustalić fakturę i firmę', async () => {

@@ -82,8 +82,6 @@ const label = (s: Scenario) =>
  *    treść i nie rozstrzygnął (oryginał z FaktFlow o innym pliku, numer KSeF
  *    w innej fakturze) — wyjściem będzie ręczny werdykt operatora (D-A4-1b).
  *    Z otwartym wpisem „Tylko uzgodnij” powtarza weryfikację.
- *  - ENV_MISMATCH: ponowienie wysłałoby fakturę w innym środowisku niż to, w
- *    którym ją zlecono (np. faktura z TEST na PROD) — decyzja D-A4-2 (F1, go-live).
  *  - kod treści (terminal) przy dowodzie kontaktu bez otwartego wpisu — w
  *    praktyce zamknięty wpis `duplicate` po nierozstrzygniętym 440 w historii
  *    (rozstrzygnięty „numer zajęty” przenosi wpisy na `number_taken`, które
@@ -95,7 +93,7 @@ function knownDeadEnd(s: Scenario): boolean {
   const errorClass = sendErrorClassOf(s.code);
   if (s.kind === 'regular') {
     if (s.openSubmission) return false;
-    if (s.code === SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE || s.code === SEND_ERROR_CODES.ENV_MISMATCH) return true;
+    if (s.code === SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE) return true;
     return s.evidence && errorClass === 'terminal';
   }
   return errorClass === 'reconcile' || s.evidence;
