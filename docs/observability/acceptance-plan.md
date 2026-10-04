@@ -38,6 +38,81 @@ następnego etapu. Zapis dokumentów i publikacja kolektora nie zmieniają statu
 na COMPLETE. Samodzielne planowanie pozostaje możliwe; F1 i czynności operacyjne
 wymagają osobnego uzgodnienia zakresu po rozstrzygnięciu blokad.
 
+## Brakujące dowody do odbioru
+
+Przegląd dokumentacji 04.10.2026 nie jest nowym pomiarem serwerów. Poniższa
+lista precyzuje materiał potrzebny według istniejących warunków bramek;
+nie zmienia ich statusów ani nie obniża kryteriów. Wykonawca i reviewer
+każdego dowodu są **PENDING** do przyjęcia ról w [ownership](ownership.md).
+Bartosz jest kontaktem do uzgodnienia zakresu, co nie przypisuje mu
+automatycznie wszystkich zadań ani dyżuru.
+
+- **G01 — runtime:** datowane odczyty dokładnej wersji Node w web i worker
+  oraz binarki MinIO aplikacji; prywatne powiązanie procesów, SHA i lokalnych
+  Image ID. Przy lokalnym buildzie brak registry digestu zapisujemy jako
+  ograniczenie pochodzenia, bez tworzenia fikcyjnego digestu. Nowy odczyt
+  dostaje własne okno i release, nie zastępuje pomiaru z 11:03–11:22 UTC.
+- **G02 — infrastruktura i monitoring:** prywatny przegląd kompletności
+  routingu/ACL, reguł zapory Hetznera i konfiguracji monitorów Uptime Kuma
+  oraz używanych niezależnych checków: zakres, interwał, warunek awarii,
+  świeżość, kanał i luki. Publicznie tylko wynik i bezpieczna referencja.
+  Brak dostępu do panelu oznacza brak dowodu, nie brak konfiguracji.
+- **G03 — staging:** dowód istniejących i działających web/worker oraz
+  oddzielnej DB, kolejek, storage, kluczy i odbiorców; syntetyczne dane,
+  KSeF TEST i Stripe test. Operator wykazuje izolację od produkcyjnych
+  efektów. Utworzenie środowiska jest osobnym zadaniem; YAML i puste
+  `security-staging` nadal nie zaliczają bramki.
+- **G04 — kontrakty:** datowane przyjęcie konkretnej wersji wyników,
+  korelacji, kwalifikacji populacji i deadline. Trzeba rozstrzygnąć klasy
+  plików import/eksport, terminy Flo, harmonogramy/grace oraz różnice z SLI
+  C-22 opisane w [contracts](contracts.md#uzgodnienie-z-c-22-przed-przyjęciem-g04).
+  F0-D07 osobno potwierdza intencję `KSEF_ENV=test` produkcyjnej aplikacji.
+- **G05 — dane:** przyjęcie polityki dla każdej klasy, w tym terminów
+  audit/source maps, hold/delete, tenant_ref, consent i RBAC. Otwarte wartości
+  mają pozostać jawne; pomiar intake EU nie zatwierdza nowych eksportów.
+- **G06 — narzut:** przyjęte wartości budżetu, limity, obrazy i klasy
+  obciążenia oraz metoda OFF/ON i plan baseline. Odczyt zasobów z G02 nie
+  jest porównaniem narzutu. Wykonanie TEST-05 następuje w osobnym odbiorze.
+- **G07 — konta i produkty:** datowany prywatny odczyt rzeczywistego konta,
+  organizacji, regionów, aktywnych planów i wymaganych produktów; retencje,
+  limity ingest/API, koszty i uprawnienia. Sentry/PostHog i wybrany docelowy
+  dostawca mają osobne dowody. Datadog EU, DBM/APM/RUM/On-Call pozostają
+  niezweryfikowane; publiczna oferta lub region endpointu nie dowodzą
+  uprawnień konkretnego konta. Niewybrany produkt nie znika z warunku G07
+  bez jawnego uzgodnienia zakresu przez odbiorcę.
+- **G08 — role i alarmy:** datowane przyjęcie osób, zakresów, godzin,
+  zastępstwa lub jego braku i coverage gaps; realny odbiorca, okno TEST-06
+  oraz decyzja o niezależnym lifecycle ACK/expiry/recovery. Prywatne dane
+  kontaktowe zostają poza repo. Test telefonu nadal NOT RUN.
+- **G09 — backup:** dowód rzeczywistej pełnej kopii DB poza hostem źródłowym
+  i kopii wymaganych obiektów; ostatni sukces UTC, artefakt/hash, zakres,
+  harmonogram i przyjęta retencja. Manifest ma wyjaśniać pokrycie ról/auth,
+  danych aplikacji, stanu operacji i powiązań storage, rozróżniając MinIO
+  aplikacji oraz Supabase Storage. Dołączona procedura izolowanego restore
+  obejmuje ACL i blokadę produkcyjnych efektów. Snapshot `public` i sam
+  plan transportu off-host nie wystarczają. Backupy/snapshoty Hetznera
+  nadal są nieodczytane.
+
+Karta dowodu zawiera bramkę, rodzaj źródła (**pomiar**, **decyzja** lub
+**deklaracja**), wykonawcę/reviewera, UTC odczytu, środowisko i wersję materiału,
+oczekiwany zakres, wynik, ograniczenia oraz prywatną referencję z bezpiecznym
+wyciągiem. Status zmienia się dopiero po sprawdzeniu pełnego kryterium.
+Historyczny JSON z 04.10 pozostaje zapisem historycznego pomiaru.
+
+## Granica odbioru F0 i późniejszych testów
+
+Warunki wyjścia F0 są w tabeli F0-G01–G09. G04/G05/G06/G08 wymagają przyjętych
+decyzji i przygotowania odbioru; TEST-01…TEST-06 weryfikują późniejszą
+implementację. Ich NOT RUN nie oznacza akceptacji ani nie uzasadnia
+rozpoczynania F1 dla domknięcia dokumentacji. Czternaście dni baseline jest
+warunkiem kalibracji SLO, nie automatycznym warunkiem zakończenia samego F0.
+
+G09 wymaga istniejących kopii i procedury restore. Wykonanie TEST-07 jest
+osobną czynnością; w tej kontynuacji obowiązuje zakaz restore. Jeżeli odbiorca
+wymaga wyniku TEST-07 przed akceptacją F0, zapisuje to jako dodatkowy otwarty
+warunek do osobno upoważnionego wykonania. Nie oznaczamy testu jako PASS.
+F1 może rozpocząć się dopiero po jawnym odbiorze F0 i uzgodnieniu jego zakresu.
+
 ## Proponowany budżet instrumentacji — F0-G06
 
 Wartości startowe do decyzji, bez gwarancji i bez wykonanego testu. Mierzyć te

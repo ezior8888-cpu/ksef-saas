@@ -13,6 +13,29 @@ instalacji, migracji, wdrożeń, testów telefonu lub zmiany kont. Pełne dowody
 pozostają prywatne. [Inwentarz](runtime-inventory.md) rozdziela pomiar od
 deklaracji, a [plan odbioru](acceptance-plan.md) opisuje F0-G01–F0-G09.
 
+## Aktualne decyzje — przegląd kontynuacji 04.10.2026
+
+W pakiecie opublikowanym w [PR #225](https://github.com/ezior8888-cpu/ksef-saas/pull/225)
+na `6399ff9df0b2dc0874e4411983d3543c7dee5f70`, jego dyskusji oraz wcześniejszych
+czatach F0 nie znaleziono nowych zatwierdzeń Bartosza. Ostatnie odczytane
+wcześniejsze zlecenie Igora dotyczyło włączenia pomiaru i publikacji pakietu,
+przy zachowaniu otwartego F0. Obecna kontynuacja wymaga domykania decyzji i
+brakujących dowodów, bez czynności operacyjnych i bez rozpoczęcia F1.
+To granica sprawdzonych źródeł, nie twierdzenie, że decyzje nie
+istnieją w innych miejscach. D01–D10 i nieprzyjęte role pozostają PENDING.
+
+[C-22](../koordynacja/CLAUDE-DO-CODEXA.md) przekazuje prośbę Bartosza o kontekst
+centrum dowodzenia. Sekcja 11 [briefu](../koordynacja/CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md)
+zawiera osobne propozycje D1–D7. W odpowiedziach używamy oznaczeń **F0-D01…D10**
+oraz **C22-D1…D7**, zachowując dotychczasowe ID w tych dokumentach. Przyjęcie
+jednego zestawu nie zatwierdza drugiego. Rekomendacja Datadog EU także nie
+jest potwierdzonym wyborem właściciela ani dowodem dostępności produktów.
+
+Aktualny zakres kontynuacji obejmuje dokumentację i lokalne poprawki pakietu.
+Nie obejmuje migracji, wdrożeń, restore ani zmian serwerów. Wskazanie w briefie,
+że jego fazy 0–2 mogą się rozpocząć, nie uchyla zakazu rozpoczęcia F1 przed
+odbiorem F0. Numeracja faz briefu i etapów observability ma oddzielne znaczenie.
+
 ## Proponowane role
 
 | Rola | Osoba / stan | Zakres i wymagany dowód przyjęcia |
@@ -77,3 +100,30 @@ Każda decyzja zawiera: ID, właściciela, datę UTC, wersję/commit materiału,
 przyjęty zakres, wyjątki, dowód i zależny etap. Zmiana kontraktu, retencji,
 regionu, budżetu lub odpowiedzialności otwiera właściwą decyzję ponownie.
 Sam commit, przykład konfiguracji i udział w repo nie zatwierdzają polityki.
+
+## Karta odpowiedzi i odbioru
+
+Odpowiedzi można przekazać partiami. Najpierw potrzebne są F0-D01/D02/D03/D08
+oraz wskazanie osób przyjmujących G04/G05/G06/G08: zasady dowodów, backup,
+staging, produkty i odpowiedzialność. Pozostałe decyzje domykają zastrzeżenia
+runtime i kolejkę utrzymania. Ta kolejność jest propozycją organizacji pracy,
+nie poleceniem wykonania zmian.
+
+Każda odpowiedź powinna zawierać:
+
+- **ID i rozstrzygnięcie:** przyjęte, odrzucone albo do wyjaśnienia, z konkretną
+  treścią wyboru; sama odpowiedź „OK” bez zakresu nie zmienia bramki.
+- **Kto i kiedy:** osoba podejmująca decyzję, data i czas UTC, źródło odpowiedzi.
+- **Materiał:** commit/wersja dokumentu, przyjęte wartości, wyjątki i warunki.
+- **Wykonanie i przegląd:** osoba przyjmująca zadanie, reviewer, termin lub
+  jawny brak terminu; wskazanie osoby jest propozycją do jej przyjęcia.
+- **Dowód:** prywatna referencja i bezpieczny publiczny wyciąg zgodny z D01;
+  bez adresów, loginów, nazw zasobów, danych kontaktowych i sekretów.
+- **Skutek:** powiązana bramka, zależny etap oraz osobny zakres czynności
+  operacyjnych. Zgoda na rozwiązanie nie jest dowodem jego wykonania.
+
+Nie dopisano fikcyjnych odpowiedzi ani dat akceptacji. Lista potrzebnych
+odczytów i artefaktów jest w [planie odbioru](acceptance-plan.md#brakujące-dowody-do-odbioru).
+Zamknięcie F0 wymaga osobnego zapisu odbioru wszystkich F0-G01–G09 ze źródłami
+i datą, przez przyjętego odbiorcę. Publikacja kolejnego commita, zielone testy
+kolektora i decyzja o późniejszych pracach nie zastępują tego zapisu.

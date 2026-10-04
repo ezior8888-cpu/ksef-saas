@@ -14,3 +14,9 @@ Pomiar 04.10.2026 wykonano wyłącznie odczytowo w oknie 11:03–11:22 UTC. F0 p
 Publiczny pakiet zawiera uzgodnione podsumowania i propozycje. Pełny raport operatora, sekcja `raw`, identyfikatory infrastruktury i szczegóły konfiguracji pozostają w prywatnym, ignorowanym `.agents/`. Kolektor nie został użyty do przekazanego pomiaru; operator wykonał go własnymi skryptami.
 
 Dokumenty nie zmieniają aplikacji, serwerów ani ustawień usług. Publikacja gałęzi/PR nie oznacza zaliczenia F0, zgody na wdrożenie ani rozpoczęcia F1.
+
+Kontynuacja 04.10.2026 zaczyna się od [aktualnych decyzji i karty odpowiedzi](ownership.md#aktualne-decyzje--przegląd-kontynuacji-04102026)
+oraz [brakujących dowodów per bramka](acceptance-plan.md#brakujące-dowody-do-odbioru).
+Przegląd repo i dyskusji PR nie dostarczył nowych zatwierdzeń Bartosza ani
+nowego pomiaru infrastruktury. F0-D01…D10 i propozycje C22-D1…D7 są osobnymi
+rejestrami; różnice proponowanych SLI wymagają uzgodnienia przed przyjęciem G04.

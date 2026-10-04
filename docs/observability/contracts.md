@@ -104,3 +104,27 @@ opisuje [polityka danych](data-policy.md).
 Otwarte decyzje: klasy wyniku i deadline, limity import/eksport, wymagany audit
 oraz journal, kwalifikacja tick. Przyjęcie kontraktu zapisuje właściciela, datę,
 wersję i wyjątki według [ownership](ownership.md).
+
+## Uzgodnienie z C-22 przed przyjęciem G04
+
+Sekcja 8 [briefu centrum dowodzenia](../koordynacja/CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md)
+także jest propozycją do zatwierdzenia. Nie potwierdza przyjęcia liczb z tego
+dokumentu. W G04 potrzebny jest zapis zgodności definicji lub konkretnych zmian:
+
+- F0 proponuje accepted ≤120 s dla przyjętej intencji; brief proponuje S4
+  p95 ≤15 min od pierwszego kolejkowania, tylko przy dostępności KSeF, oraz
+  S1 ≥99,5% accepted w 24 h w oknie przesuniętym o dobę.
+- F0 proponuje wymagane pliki UPO ≤15 min od accepted; brief S5 proponuje
+  p95 ≤2 h i 100% ≤24 h. Trzeba określić, co jest terminem operacji,
+  celem statystycznym i progiem istniejącego strażnika.
+- F0 kwalifikuje tenant-minuty i kompletność skanowania skrzynki; brief S10
+  mierzy p95 od `DataPrzeslania` do zapisu otrzymanej faktury. To różne
+  populacje; żadna nie dowodzi automatycznie kompletności drugiej.
+- F0 nie wyłącza po przyjęciu intencji awarii dostawcy z populacji.
+  Warunkowe S4 może istnieć jako osobny wskaźnik diagnostyczny, ale nie
+  zastępuje wyniku całej przyjętej populacji.
+
+Różne wskaźniki mogą współistnieć, jeśli ich zakres i cel są jawne. Do decyzji
+pozostają powyższe definicje, limity plików i terminy Flo; nie wybrano jednej
+wersji w imieniu właściciela. Kontrakt A5 wymaga osobnego uzgodnienia z torem
+wysyłki. F0 nie zmienia runnera, strażnika, cronów ani monitora alarmów.
