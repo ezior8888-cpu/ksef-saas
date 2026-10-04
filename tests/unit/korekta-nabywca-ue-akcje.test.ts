@@ -164,6 +164,10 @@ function expectNoWrite() {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('KSEF_ENV', 'test');
+  // Wysyłka przyjmuje tylko dzisiejszą datę wystawienia (A1, W5) — testy
+  // działają w dniu daty z danych testowych (2026-10-02).
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-02T10:00:00Z'));
   queries = [];
   parent = {
     id: parentId, tenant_id: tenantId, direction: 'outgoing', invoice_kind: 'regular',
@@ -180,7 +184,10 @@ beforeEach(() => {
   });
   mocks.enqueue.mockResolvedValue({ ok: true, mode: 'online_queued' });
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 // ════════════════════════════════════════════════════════════════════════════
 // Reguła np. II — wspólna dla akcji, formularza i generatora

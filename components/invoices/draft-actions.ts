@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { logAudit } from '@/lib/audit/log';
-import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import { ActionAuthError, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { validateInvoice } from '@/lib/xml/invoice-calculator';
@@ -71,16 +71,10 @@ export async function sendDraftInvoiceAction(invoiceId: string): Promise<DraftAc
       return { success: false, error: 'Szkic nie ma kompletnych danych faktury. Usuń go i wystaw fakturę ponownie.' };
     }
 
-    // Faktura w KSeF jest wystawiona w dniu przesłania (art. 106na ust. 1),
-    // a KSeF odrzuca datę wystawienia późniejszą niż dzień przyjęcia i traktuje
-    // wcześniejszą jak fakturę offline. Szkic z inną datą trzeba wystawić od nowa.
-    const today = todayInWarsaw();
-    if (invoice.issueDate !== today) {
-      return {
-        success: false,
-        error: `Szkic ma datę wystawienia ${invoice.issueDate}, a fakturę w KSeF wystawia się w dniu wysyłki (${today}). Usuń szkic i wystaw fakturę ponownie z dzisiejszą datą.`,
-      };
-    }
+    // Faktura w KSeF jest wystawiona w dniu przesłania (art. 106na ust. 1, A1).
+    // Szkic z inną datą trzeba wystawić od nowa.
+    const notToday = issueDateNotTodayError(invoice.issueDate, 'draft');
+    if (notToday) return { success: false, error: notToday };
 
     // Ta sama walidacja co w jobie wysyłki — błąd tutaj, zanim faktura
     // trafi do kolejki i wróci jako odrzucona.

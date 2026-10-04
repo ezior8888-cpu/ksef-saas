@@ -94,6 +94,10 @@ function from(table: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('KSEF_ENV', 'production');
+  // Wysyłka przyjmuje tylko dzisiejszą datę wystawienia (A1, W5) — testy
+  // działają w dniu daty z danych testowych (2026-09-26).
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-26T10:00:00Z'));
   queries = [];
   parent = {
     id: parentId, tenant_id: tenantId, direction: 'outgoing', invoice_kind: 'regular',
@@ -110,7 +114,10 @@ beforeEach(() => {
   });
   mocks.enqueue.mockResolvedValue({ ok: true, mode: 'online_queued' });
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 function expectNoWrite() {
   expect(queries.some((query) => query.operation === 'insert')).toBe(false);
