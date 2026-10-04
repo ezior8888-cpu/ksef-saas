@@ -116,6 +116,21 @@ interface SubmitOutcome {
 export const KSEF_SEND_LEASE_SECONDS = 15 * 60;
 /** Gdy wysyłkę trzyma inna próba — ponowienie po 5 min (wynik albo koniec dzierżawy). */
 export const KSEF_SEND_CLAIM_RETRY_MS = 5 * 60 * 1000;
+/**
+ * Okno 48 h (I5): wpis `sent`, o którym KSeF po dwóch dobach odpowiada
+ * błędem klienta (4xx poza 401/403), nie zostanie już rozstrzygnięty — KSeF
+ * nie zna tej wysyłki. Zamykamy wpis jako `rejected` z kodem `STALE`
+ * i wysyłamy od nowa; gdyby KSeF jednak miał ten plik, odpowie 440 z numerem
+ * sesji, która jest w naszej historii — runner uzna własny duplikat.
+ */
+export const KSEF_SUBMISSION_STALE_MS = 48 * 60 * 60 * 1000;
+export const KSEF_SUBMISSION_STALE_CODE = 'STALE';
+
+function isStaleSubmission(attemptedAt: string | null | undefined): boolean {
+  if (!attemptedAt) return false;
+  const at = Date.parse(attemptedAt);
+  return Number.isFinite(at) && Date.now() - at > KSEF_SUBMISSION_STALE_MS;
+}
 
 const ROZ_RECONCILIATION_MESSAGE =
   'Wysyłka faktury rozliczającej została wstrzymana. Przed kolejną próbą ręcznie uzgodnij jej status z KSeF.';
@@ -952,7 +967,15 @@ export async function runSubmitInvoice(
     // się ponowną wysyłką, odpowiedzią 440 i fałszywym „odrzucona”.
     const reconciled = await step.run('reconcile-previous-submission', async (): Promise<SubmitOutcome | null> => {
       const previous = await findOpenKsefSubmission(tenantId, invoiceId);
-      if (!previous) return null;
+      if (!previous) {
+        // Tryb „tylko uzgodnij” nie wysyła od nowa — bez wpisu `sent` nie ma czego uzgadniać.
+        if (parsed.data.reconcileOnly) {
+          throw new NonRetriableError(
+            `[${SEND_ERROR_CODES.RESULT_UNCERTAIN}] Tryb „tylko uzgodnij”: brak otwartej wysyłki (wpisu sent) do uzgodnienia — faktura nie została wysłana ponownie.`,
+          );
+        }
+        return null;
+      }
       const credentials = await getTenantKsefCredentials(tenantId);
       try {
         const status = await checkInvoiceStatusByReference(previous, credentials, env, {
@@ -991,6 +1014,43 @@ export async function runSubmitInvoice(
         }
         if (error instanceof KsefApiError && error.status === 401) {
           ksefSessionCache.invalidate(credentials.nip, env);
+        }
+        // Okno 48 h (I5): KSeF odpowiada błędem klienta o wysyłce sprzed dwóch
+        // dób — wpis nie zostanie rozstrzygnięty. Zamykamy go jako STALE
+        // (ślad w historii i audycie) i wysyłamy od nowa; w trybie „tylko
+        // uzgodnij” kończymy bez wysyłki.
+        if (
+          error instanceof KsefApiError &&
+          !error.isRetryable &&
+          error.status !== 401 &&
+          error.status !== 403 &&
+          isStaleSubmission(previous.attemptedAt)
+        ) {
+          await markKsefSubmission({
+            tenantId,
+            invoiceId,
+            invoiceReferenceNumber: previous.invoiceReferenceNumber,
+            status: 'rejected',
+            errorCode: KSEF_SUBMISSION_STALE_CODE,
+            errorMessage: `KSeF nie zna wysyłki sprzed ponad 48 h (HTTP ${error.status}): ${error.message}`,
+          });
+          logger.warn('Zalegający wpis sent zamknięty jako STALE — KSeF nie zna tej wysyłki', {
+            invoiceId,
+            attemptedAt: previous.attemptedAt,
+            status: error.status,
+            reconcileOnly: Boolean(parsed.data.reconcileOnly),
+          });
+          Sentry.captureMessage('KSeF: zalegający wpis sent zamknięty jako STALE', {
+            level: 'warning',
+            tags: { job: 'submit-invoice', kind: 'stale-submission' },
+            extra: { tenantId, invoiceId, attemptedAt: previous.attemptedAt, status: error.status },
+          });
+          if (parsed.data.reconcileOnly) {
+            throw new NonRetriableError(
+              `[${SEND_ERROR_CODES.RESULT_UNCERTAIN}] Tryb „tylko uzgodnij”: KSeF nie zna wysyłki sprzed ponad 48 h (HTTP ${error.status}) — wpis zamknięty jako STALE, faktura nie została wysłana ponownie.`,
+            );
+          }
+          return null;
         }
         // Awaria łącza albo KSeF: ponawiamy UZGADNIANIE, nigdy wysyłkę.
         throw new RetryAfterError(

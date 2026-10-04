@@ -106,6 +106,8 @@ export async function operatorRequeueAction(
           nip,
           environment,
           sendAttemptId,
+          // Runner w tym trybie nigdy nie wysyła od nowa (brak wpisu sent → RESULT_UNCERTAIN).
+          ...(options.reconcileOnly ? { reconcileOnly: true } : {}),
         },
       },
       { inTransaction: ksefSendTransactionStep(mode, { invoiceId: row.id, tenantId: row.tenant_id, attemptId: sendAttemptId }) },
