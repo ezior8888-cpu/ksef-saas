@@ -11,8 +11,14 @@ import type {
   SendInvoiceResponse,
   InvoiceStatusResponse,
   KsefEnvironment,
+  SessionInvoicesResponse,
 } from '@/types/ksef';
 import { INVOICE_STATUS } from '@/types/ksef';
+
+// Odczyt kodów błędu KSeF mieszka w `client.ts` (getter `KsefApiError.ksefCode`
+// czyta to samo). Eksport stąd zostaje, bo job wysyłki i atrapy testów biorą
+// go z `@/lib/ksef/submit`.
+export { ksefErrorCodes };
 
 export interface SubmitInvoiceResult {
   /** Numer KSeF nadany fakturze po akceptacji */
@@ -56,6 +62,12 @@ export interface SubmitAuditContext {
  */
 export interface SubmitInvoiceHooks {
   /**
+   * Po otwarciu sesji, PRZED wysłaniem pliku (A2): zapis zamiaru wysyłki
+   * z numerem sesji. Błąd hooka PRZERYWA wysyłkę — bez śladu sesji ponowienie
+   * nie umiałoby sprawdzić, czy KSeF dostał plik, i wysłałoby go drugi raz.
+   */
+  onSessionOpened?: (session: { sessionReferenceNumber: string }) => Promise<void>;
+  /**
    * Zaraz po przyjęciu pliku przez KSeF, przed odpytywaniem statusu — moment,
    * od którego ponowna wysyłka byłaby duplikatem. Błąd hooka nie przerywa
    * wysyłki (faktura już jest w KSeF), tylko zostaje zalogowany.
@@ -64,6 +76,25 @@ export interface SubmitInvoiceHooks {
     sessionReferenceNumber: string;
     invoiceReferenceNumber: string;
   }) => Promise<void>;
+  /**
+   * KSeF odpowiedział na wysyłkę pliku błędem 4xx (poza 408 — naszym
+   * timeoutem): pliku w tej sesji nie ma. Pozwala zamknąć zamiar bez pytania
+   * KSeF ponownie. Błąd hooka nie zmienia wyniku wysyłki, tylko zostaje
+   * zalogowany (zamiar rozstrzygnie wtedy następna próba).
+   */
+  onInvoiceNotAccepted?: (
+    session: { sessionReferenceNumber: string },
+    error: KsefApiError,
+  ) => Promise<void>;
+}
+
+/**
+ * Czy odpowiedź KSeF na wysyłkę pliku oznacza, że plik NIE został przyjęty.
+ * 4xx to odmowa po stronie KSeF; 408 to nasz timeout (odpowiedź nie dotarła),
+ * a 5xx i błędy sieci — niepewność: KSeF mógł plik przyjąć.
+ */
+export function isInvoiceNotAcceptedError(e: unknown): e is KsefApiError {
+  return e instanceof KsefApiError && e.status >= 400 && e.status < 500 && e.status !== 408;
 }
 
 export async function submitInvoice(
@@ -105,6 +136,11 @@ export async function submitInvoice(
     });
 
     try {
+      // 3a. Zamiar wysyłki z numerem sesji — przed plikiem (A2). Błąd = bez wysyłki.
+      if (hooks?.onSessionOpened) {
+        await hooks.onSessionOpened({ sessionReferenceNumber: session.referenceNumber });
+      }
+
       // 4. Szyfrowanie XML (zwraca komplet: hash+size niezaszyfrowanego
       //    i zaszyfrowanego body zgodnie z wymogami KSeF 2.0).
       const payload = encryptInvoiceXml(invoiceXml, encryption);
@@ -133,7 +169,17 @@ export async function submitInvoice(
               }
             : undefined,
         }
-      ).catch((e: unknown) => {
+      ).catch(async (e: unknown) => {
+        if (hooks?.onInvoiceNotAccepted && isInvoiceNotAcceptedError(e)) {
+          try {
+            await hooks.onInvoiceNotAccepted({ sessionReferenceNumber: session.referenceNumber }, e);
+          } catch (hookError) {
+            console.error(
+              '[ksef.submit] zamknięcie zamiaru wysyłki nieudane',
+              hookError instanceof Error ? hookError.message : String(hookError),
+            );
+          }
+        }
         throw sessionTemporarilyUnavailableAsRetryable(e);
       });
 
@@ -306,6 +352,62 @@ export async function checkInvoiceStatusByReference(
       ksefNumber: settled.ksefNumber,
       acquisitionTimestamp: settled.acquisitionTimestamp,
     };
+  });
+}
+
+/** Kod KSeF „Brak sesji o wskazanym numerze referencyjnym” (open-api.json, HTTP 400). */
+export const KSEF_SESSION_NOT_FOUND = 21173;
+
+export interface SessionInvoiceSummary {
+  referenceNumber: string;
+  invoiceNumber: string | null;
+  /** SHA-256 niezaszyfrowanego XML, Base64. */
+  invoiceHash: string;
+  statusCode: number;
+}
+
+/**
+ * Faktury, które KSeF ma w danej sesji online — do rozstrzygnięcia zamiaru
+ * wysyłki bez numeru referencyjnego faktury (A2). Najpierw zamyka sesję:
+ * po zamknięciu nic już do niej nie dotrze, więc pusta lista znaczy, że plik
+ * z tamtej próby NIE trafił do KSeF. Zamknięcie odrzucone przez KSeF (4xx:
+ * sesja już zamknięta albo wygasła) nie przeszkadza; chwilowa awaria (5xx,
+ * 429, timeout, sieć) przerywa — bez pewnego zamknięcia nie ma pewnej listy.
+ *
+ * Każda nasza sesja niesie jedną fakturę, więc pierwsza strona wystarcza.
+ */
+export async function listSessionInvoicesAfterClose(
+  sessionReferenceNumber: string,
+  auth: KsefAuth,
+  env?: KsefEnvironment,
+  auditContext?: SubmitAuditContext,
+): Promise<SessionInvoiceSummary[]> {
+  return ksefRateLimiter.enqueue(auth.nip, async () => {
+    const authSession = await ksefSessionCache.getSession(auth, env);
+    const audit = (action: string) =>
+      auditContext
+        ? { ...auditContext, action, metadata: { sessionRef: sessionReferenceNumber } }
+        : undefined;
+    try {
+      await ksefFetch(`/sessions/online/${encodeURIComponent(sessionReferenceNumber)}/close`, {
+        method: 'POST',
+        accessToken: authSession.accessToken,
+        env,
+        audit: audit('session.close'),
+      });
+    } catch (e) {
+      if (!(e instanceof KsefApiError) || e.isRetryable || e.isAuthError) throw e;
+    }
+    const list = await ksefFetch<SessionInvoicesResponse>(
+      `/sessions/${encodeURIComponent(sessionReferenceNumber)}/invoices?pageSize=100`,
+      { accessToken: authSession.accessToken, env, audit: audit('session.invoices') },
+    );
+    return (list.invoices ?? []).map((inv) => ({
+      referenceNumber: inv.referenceNumber,
+      invoiceNumber: inv.invoiceNumber ?? null,
+      invoiceHash: inv.invoiceHash,
+      statusCode: ksefNumericStatusCode(inv.status?.code),
+    }));
   });
 }
 

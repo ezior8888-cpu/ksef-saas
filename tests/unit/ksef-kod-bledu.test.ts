@@ -26,7 +26,7 @@ vi.mock('@/lib/ksef/encryption', () => ({
 }));
 
 import { KsefApiError, ksefErrorCodes, ksefFetch } from '@/lib/ksef/client';
-import { submitInvoice } from '@/lib/ksef/submit';
+import { ksefErrorCodes as ksefErrorCodesFromSubmit, submitInvoice } from '@/lib/ksef/submit';
 import type { KsefAuth } from '@/lib/ksef/auth';
 
 const PROBLEM_21184 = {
@@ -56,6 +56,10 @@ describe('KsefApiError.ksefCode (F-093)', () => {
     const body = { errors: [{ code: 21405 }, { code: 21184 }] };
     expect(new KsefApiError(400, body, 'x').ksefCode).toBe(21405);
     expect(ksefErrorCodes(body)).toEqual([21405, 21184]);
+  });
+
+  it('job wysyłki bierze ksefErrorCodes z submit — to ta sama funkcja co w kliencie', () => {
+    expect(ksefErrorCodesFromSubmit).toBe(ksefErrorCodes);
   });
 });
 
