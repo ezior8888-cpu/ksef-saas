@@ -27,7 +27,7 @@ Dziś łamią to trzy miejsca: `failed` bez wyjścia (K3), `queued` bez zadania 
 
 Definicja **dowodu kontaktu** (używana przez wyzwalacze, RPC i strażnika): faktura ma dowód kontaktu, gdy `ksef_number IS NOT NULL` **albo** istnieje wiersz `ksef_submissions` o statusie `intent`, `sent`, `accepted` lub `duplicate`. Wiersze `rejected` i `abandoned` dowodem nie są (KSeF odrzucił treść albo potwierdził, że pliku nie dostał).
 
-**Zamiar wysyłki (A2, 00136).** Worker zapisuje wpis `intent` z numerem sesji po jej otwarciu, a PRZED wysłaniem pliku; bez tego zapisu plik nie wychodzi. Po odpowiedzi KSeF wpis staje się `sent` (z numerem referencyjnym faktury), po odmowie przyjęcia pliku (HTTP 4xx poza 408) — `abandoned`. Zamiar, który został otwarty (timeout, padnięty worker, błąd zapisu), rozstrzyga następna próba: zamyka tamtą sesję i pyta KSeF o jej faktury (`GET /sessions/{ref}/invoices`) — plik jest → `sent` i zwykłe uzgodnienie po referencji; sesja pusta → `abandoned` i wysyłka od nowa; awaria KSeF → ponowienie uzgadniania, nigdy drugi POST. Wyjście z blokady powrotu do szkicu: „Wyślij ponownie”, cron ponowień albo operator „Tylko uzgodnij”.
+**Zamiar wysyłki (A2, 00136).** Worker zapisuje wpis `intent` z numerem sesji po jej otwarciu, a PRZED wysłaniem pliku; bez tego zapisu plik nie wychodzi. Po odpowiedzi KSeF wpis staje się `sent` (z numerem referencyjnym faktury), po odmowie przyjęcia pliku (HTTP 4xx poza 408) — `abandoned`. Zamiar, który został otwarty (timeout, padnięty worker, błąd zapisu), rozstrzyga następna próba: zamyka tamtą sesję i pyta KSeF o jej faktury (`GET /sessions/{ref}/invoices`) — plik jest → `sent` i zwykłe uzgodnienie po referencji; sesja pusta → `abandoned` i wysyłka od nowa; awaria KSeF → ponowienie uzgadniania, nigdy drugi POST. Wyjście z blokady powrotu do szkicu: „Wyślij ponownie”, cron ponowień albo operator „Tylko uzgodnij”. „Tylko uzgodnij”, które stwierdzi, że KSeF nie ma faktury (brak dowodu kontaktu po rozstrzygnięciu), kończy `failed NOT_IN_KSEF` — klient wysyła ponownie albo wraca do szkicu (A2b).
 
 ## 3. Stany
 
@@ -96,10 +96,11 @@ Raport dzienny strażnika na Telegram: liczba faktur per stan, naruszenia I1–I
 | TRANSIENT | `INFRA` | błąd bazy / PostgREST / R2 **przed POST** do KSeF (dziś mylnie `rejected`, W1) | `queued` (auto) | „Chwilowy błąd po naszej stronie. Ponowimy wysyłkę.” |
 | TRANSIENT | `CREDENTIALS_UNAVAILABLE` | brak klucza po rotacji, błąd deszyfrowania | `queued` po naprawie konfiguracji; alarm operatora natychmiast | „Wysyłka wstrzymana po naszej stronie. Pracujemy nad tym.” |
 | TRANSIENT | `TRANSIENT_EXHAUSTED` | 24 h automatycznych ponowień bez skutku | `queued` ręcznie (O/S) | „Wysyłka nie powiodła się przez dobę. Zajmujemy się tym.” |
+| TRANSIENT | `NOT_IN_KSEF` | „tylko uzgodnij” bez otwartej wysyłki i bez dowodu kontaktu (zamiar porzucony, wpis STALE) — A2b, 00141 | `queued` ręcznie (klient/O), `draft`; **bez** automatu (data wystawienia, B1/B2) | „KSeF nie ma tej faktury — poprzednia wysyłka do niego nie dotarła. Wyślij ją ponownie albo wróć do szkicu.” |
 | HOLD | `KSEF_PAUSED` | `killAllKsefSubmissions` | `queued` automatycznie po zdjęciu | „Wysyłka wstrzymana przez operatora. Faktura wyjdzie automatycznie po przywróceniu.” (dziś tekst obiecuje „wyślij ponownie” — do zmiany) |
 | HOLD | `KOR_HOLD`, `ROZ_HOLD_RECONCILE` | blokady KOR/ROZ | `queued` po zdjęciu; `draft` | „Wysyłka korekt jest tymczasowo wstrzymana …” |
 | RECONCILE | `KSEF_DUPLICATE_RECONCILE` | 440 bez własnej sesji | tylko operator (uzgodnienie) | „Faktura wymaga uzgodnienia z KSeF. Skontaktujemy się.” |
-| RECONCILE | `RESULT_UNCERTAIN` | otwarty wpis `sent`, KSeF nie odpowiada na status | job uzgadniający | jak wyżej |
+| RECONCILE | `RESULT_UNCERTAIN` | otwarty wpis `sent`, KSeF nie odpowiada na status; „tylko uzgodnij” bez otwartej wysyłki, gdy dowód kontaktu zostaje | job uzgadniający | jak wyżej |
 | RECONCILE | `ENV_MISMATCH`, `INVALID_EVENT`, `ENQUEUE_LOST` | `onExhausted handled:false`, strażnik I1 | operator | jak wyżej |
 | — | `NO_CERTIFICATE`, `NOT_VERIFIED` | brak/niezweryfikowany certyfikat | `draft` (klient uzupełnia certyfikat) | „Najpierw wgraj i zweryfikuj certyfikat KSeF.” |
 

@@ -9,7 +9,7 @@
  * ta tabela jest pierwszą linią, nie jedyną.
  */
 
-import { sendErrorClassOf, type SendErrorClass } from '@/lib/ksef/send-error-classes';
+import { SEND_ERROR_CODES, sendErrorClassOf, type SendErrorClass } from '@/lib/ksef/send-error-classes';
 
 /** Role, które uruchamiają ponowną wysyłkę i powrót do szkicu (D4). */
 export const KSEF_SEND_MANAGER_ROLES: readonly string[] = ['owner', 'admin'];
@@ -30,6 +30,7 @@ export const KSEF_SEND_MESSAGES = {
   incomplete: 'Faktura nie ma kompletnych danych do wysyłki. Wróć do szkicu i wystaw ją ponownie.',
   transient: 'Błąd po stronie KSeF albo FaktFlow — wysyłkę ponowimy automatycznie. Możesz też wysłać teraz.',
   setup: 'Brak zweryfikowanego certyfikatu KSeF — uzupełnij ustawienia KSeF, potem wyślij ponownie.',
+  notInKsef: 'KSeF nie ma tej faktury — poprzednia wysyłka do niego nie dotarła. Wyślij ją ponownie albo wróć do szkicu.',
   historical: 'Wysyłka nie powiodła się. Możesz wysłać ponownie albo wrócić do szkicu.',
   askManager: 'Poproś właściciela lub administratora firmy.',
   resetDone: 'Faktura wróciła do szkicu. Popraw ją i wyślij ponownie.',
@@ -136,7 +137,10 @@ export function failedInvoiceButtons(input: FailedInvoiceButtonsInput): FailedIn
   } else {
     reset = true;
     settings = errorClass === 'setup';
-    info = errorClass === 'transient'
+    // NOT_IN_KSEF jest klasy transient, ale bez automatu — nie obiecujemy ponowienia.
+    info = input.errorCode === SEND_ERROR_CODES.NOT_IN_KSEF
+      ? KSEF_SEND_MESSAGES.notInKsef
+      : errorClass === 'transient'
       ? KSEF_SEND_MESSAGES.transient
       : errorClass === 'setup'
         ? KSEF_SEND_MESSAGES.setup

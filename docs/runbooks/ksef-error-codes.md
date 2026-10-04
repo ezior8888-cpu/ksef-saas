@@ -155,9 +155,16 @@ wysłaniem pliku. Jeśli został otwarty, odpowiedź na wysyłkę nie dotarła
   i uzgodnienie po numerze referencyjnym; sesja pusta → `abandoned`
   (`error_code = NOT_IN_SESSION`) i wysyłka od nowa. Nigdy drugi POST.
 - **Co klika operator:** `/admin/ksef/<id>` → „Tylko uzgodnij” (działa przy
-  `sent` i przy `intent`). Po rozstrzygnięciu faktura jest `accepted`, albo
-  zamiar ma status `abandoned` i „Wróć do szkicu” / „Wyślij ponownie” znowu
-  działają.
+  `sent` i przy `intent`). Po rozstrzygnięciu faktura jest `accepted`, albo —
+  gdy KSeF jej nie ma i nie zostaje żaden dowód kontaktu — `failed
+  NOT_IN_KSEF` (A2b, 00141): klient i operator mogą „Wyślij ponownie” albo
+  „Wróć do szkicu”. Gdy inny dowód kontaktu zostaje (np. wpis `duplicate`),
+  wynik to `RESULT_UNCERTAIN` dla operatora.
+- **`NOT_IN_KSEF`** (klasa transient, bez automatu): KSeF potwierdził, że
+  nie ma faktury z poprzedniej wysyłki. Cron NIE wysyła jej sam — ponowna
+  wysyłka po kilku dniach to decyzja o dacie wystawienia (B1/B2 planu).
+  Klient widzi: „KSeF nie ma tej faktury — poprzednia wysyłka do niego nie
+  dotarła. Wyślij ją ponownie albo wróć do szkicu.”
 - **Strażnik:** zamiar starszy niż 48 h przy fakturze poza `sending` to I5.
   KSeF odpowiadający na pytanie o sesję kodem 21173 („Brak sesji”) po 48 h
   zamyka zamiar jako `abandoned` z kodem `STALE`.
