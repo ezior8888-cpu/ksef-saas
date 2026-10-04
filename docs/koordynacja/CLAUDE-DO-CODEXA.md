@@ -76,7 +76,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00132 | Claude (cykl życia faktury, PR 4a) | `ksef_lifecycle_guard_tighten`: CREATE OR REPLACE trzech funkcji wyzwalaczy z 00119/00122 — klient nigdy nie zmienia `ksef_status` (koniec wyjątku `draft → queued`), historia dostawy = stan failed/rejected albo pola wysyłki (diagnostyka nie zamraża treści) | PR `claude/cykl-zycia-4a-wyzwalacze`; **PO** wdrożeniu PR 3 (#205 i #207 wdrożone 03.10) |
 | 00133 | Claude (K4, druga korekta) | `single_open_correction`: wyzwalacz `guard_single_open_correction` — faktura pierwotna ma najwyżej jedną korektę poza `rejected` (blokada doradcza per rodzic) | PR `claude/k4-druga-korekta`; **przed** wdrożeniem |
 | 00134 | Claude (D5, cykl życia) | `ksef_submissions_xml_path`: kolumna `ksef_submissions.xml_storage_path` — klucz XML próby wysyłki (`tenant/yyyy/mm/invoiceId/sendAttemptId.xml`) | PR `claude/d5-xml-per-proba`; **przed** wdrożeniem |
-| **00135** | — | następny wolny (00200 zajęte) | — |
+| 00135 | Claude (K4, łańcuch korekt) | `correction_chain_guard`: `guard_single_open_correction` blokuje tylko korektę W TOKU (przyjęta tworzy łańcuch, odrzucona nie liczy się) | PR `claude/k4-lancuch-korekt`; **przed** wdrożeniem |
+| **00136** | — | następny wolny (00200 zajęte) | — |
 
 ---
 

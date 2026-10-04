@@ -1,6 +1,6 @@
-// Wygenerowane 03.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00131
-// (cykl życia faktury). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// Wygenerowane 04.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00134
+// (cykl życia faktury, K4, D5). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
