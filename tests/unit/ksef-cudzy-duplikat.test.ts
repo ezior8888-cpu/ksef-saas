@@ -241,13 +241,27 @@ describe('D-A4-1: cudzy 440 — weryfikacja treści oryginału z KSeF', () => {
 
   it('numer KSeF oryginału należy do innej faktury tej firmy w FaktFlow → operator, bez pobierania', async () => {
     seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: 'K-OBCA', xml: fromOtherProgram(ourXml()) });
-    m.mem.db.invoices = [{ id: 'inna', tenant_id: T, ksef_number: 'K-OBCA', internal_number: 'FV/INNA/1' }];
+    m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_number: 'K-OBCA', internal_number: 'FV/INNA/1' }];
 
     const error = await failing(runSubmitInvoice(event(), ctx(0)));
 
     expect(classifySendError(error).code).toBe('KSEF_DUPLICATE_RECONCILE');
     expect(error.message).toContain('FV/INNA/1');
     expect(m.ksef.downloads).toBe(0);
+  });
+
+  it('D-A4-1b-3 (A0): numer KSeF oryginału ma tylko faktura PRZYCHODZĄCA firmy → to nie jest „znany numer”; weryfikacja treści jak zwykle', async () => {
+    // Faktura zakupowa z tym numerem KSeF (np. sprzedaż firmy samej sobie
+    // odebrana skrzynką) nie jest zapisem naszej sprzedaży — nie może
+    // zatrzymać porównania treści oryginału.
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: 'K-OBCA', xml: fromOtherProgram(ourXml()) });
+    m.mem.db.invoices = [{ id: 'zakup', tenant_id: T, direction: 'incoming', ksef_number: 'K-OBCA', internal_number: 'FZ/1' }];
+
+    const error = await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(m.ksef.downloads).toBe(1);
+    expect(classifySendError(error).code).toBe('KSEF_NUMBER_TAKEN');
+    expect(error.message).not.toContain('FZ/1');
   });
 
   it('nasza sesja w historii, ale treść faktury się zmieniła (np. po powrocie do szkicu) → nie przyjmujemy numeru starej treści', async () => {
