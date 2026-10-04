@@ -231,7 +231,13 @@ vi.mock('@/lib/supabase/server', () => ({
       }),
       then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
     };
-    return { from: () => q, rpc: async () => ({ data: '2026-10-03T12:00:00.000000+00:00', error: null }) };
+    return {
+      from: () => q,
+      rpc: async (fn: string) => fn === 'ksef_has_contact_evidence'
+        // Jak 00136: intent, sent, accepted, duplicate są dowodem kontaktu.
+        ? { data: m.db.ksef_submissions.some((r) => ['intent', 'sent', 'accepted', 'duplicate'].includes(String(r.status))), error: null }
+        : { data: '2026-10-03T12:00:00.000000+00:00', error: null },
+    };
   },
 }));
 vi.mock('@/lib/storage/xml-documents', () => ({ recordXmlDocument: vi.fn() }));
@@ -240,6 +246,9 @@ vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn(), addBreadcrumb: vi.fn() }));
 
 import { NonRetriableError, RetryAfterError } from '@/lib/jobs/errors';
+import { classifySendError } from '@/lib/ksef/send-error-codes';
+import { decideResend, failedInvoiceButtons, KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
+import { operatorInvoiceButtons } from '@/lib/admin/ksef-operator-policy';
 import { runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
 import { invoiceXmlKeyFor } from '@/lib/storage/r2';
 import { finalizeInvoice } from '@/lib/xml/invoice-calculator';
@@ -255,9 +264,9 @@ const faktura = () => finalizeInvoice({
   payment: { currency: 'PLN', dueDate: '2026-10-15', method: 'transfer', bankAccount: 'PL61109010140000071219812874' },
 });
 
-const event = () => ({
+const event = (extra: Record<string, unknown> = {}) => ({
   invoiceId: ID, tenantId: T, nip: '1234567890', environment: 'test' as const,
-  invoice: faktura() as Invoice, sendAttemptId: ATTEMPT,
+  invoice: faktura() as Invoice, sendAttemptId: ATTEMPT, ...extra,
 });
 
 const ctx = (attempt: number): JobContext => ({
@@ -380,5 +389,46 @@ describe('A2: KSeF przyjął plik, a my o tym nie wiemy — ponowienie uzgadnia,
     expect(submissions()).toEqual([
       expect.objectContaining({ session_reference_number: 'S-1', status: 'abandoned', error_code: '400' }),
     ]);
+  });
+});
+
+describe('A2b: „Tylko uzgodnij” stwierdza, że KSeF nie ma faktury — wynik z wyjściem, nie ślepa uliczka', () => {
+  it('zamiar w pustej sesji → porzucony; faktura NOT_IN_KSEF (klasa transient): klient i operator mogą wysłać ponownie albo wrócić do szkicu', async () => {
+    m.ksef.dropInvoicePost = true;
+    await expect(runSubmitInvoice(event(), ctx(0))).rejects.toBeInstanceOf(RetryAfterError);
+    m.ksef.dropInvoicePost = false;
+
+    const error = await runSubmitInvoice(event({ reconcileOnly: true }), ctx(0)).then(
+      () => { throw new Error('oczekiwano błędu'); },
+      (e: unknown) => e as Error,
+    );
+
+    expect(error).toBeInstanceOf(NonRetriableError);
+    expect(classifySendError(error).code).toBe('NOT_IN_KSEF');
+    expect(m.ksef.invoicePosts).toBe(1); // tylko pierwsza, nieudana próba — uzgodnienie nie wysyła
+    expect(submissions()).toEqual([expect.objectContaining({ status: 'abandoned', error_code: 'NOT_IN_SESSION' })]);
+
+    const failed = { direction: 'outgoing', status: 'failed', errorCode: 'NOT_IN_KSEF', invoiceKind: 'regular' };
+    expect(decideResend(failed)).toMatchObject({ allowed: true });
+    const buttons = operatorInvoiceButtons({ ...failed, openSent: false, evidence: false });
+    expect(buttons.requeue.enabled).toBe(true);
+    expect(buttons.reset.enabled).toBe(true);
+    // Klient: oba przyciski i zdanie bez obietnicy automatycznego ponowienia.
+    expect(failedInvoiceButtons({ status: 'failed', errorCode: 'NOT_IN_KSEF', invoiceKind: 'regular', canManage: true }))
+      .toEqual({ resend: true, reset: true, settings: false, info: KSEF_SEND_MESSAGES.notInKsef });
+    expect(error.message).toContain(KSEF_SEND_MESSAGES.notInKsef);
+  });
+
+  it('zostaje inny dowód kontaktu (wpis sent bez odpowiedzi) → nadal RESULT_UNCERTAIN dla operatora', async () => {
+    m.db.ksef_submissions = [{
+      id: 'row-x', tenant_id: T, invoice_id: ID, submission_type: 'online', status: 'duplicate',
+      session_reference_number: 'S-OBCA', invoice_reference_number: 'I-OBCA', attempted_at: new Date().toISOString(),
+    }];
+    const error = await runSubmitInvoice(event({ reconcileOnly: true }), ctx(0)).then(
+      () => { throw new Error('oczekiwano błędu'); },
+      (e: unknown) => e as Error,
+    );
+    expect(classifySendError(error).code).toBe('RESULT_UNCERTAIN');
+    expect(m.ksef.invoicePosts).toBe(0);
   });
 });

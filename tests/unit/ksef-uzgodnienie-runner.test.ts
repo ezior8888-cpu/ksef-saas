@@ -6,7 +6,8 @@ import type { Invoice } from '@/types/invoice';
 /**
  * Etap 8 cyklu życia — krok `reconcile-previous-submission` runnera:
  *   - tryb „tylko uzgodnij” (operator, `reconcileOnly`) NIGDY nie wysyła
- *     faktury od nowa: bez wpisu `sent` kończy jako RESULT_UNCERTAIN;
+ *     faktury od nowa: bez wpisu `sent` kończy jako RESULT_UNCERTAIN, a gdy
+ *     nie ma już żadnego dowodu kontaktu z KSeF — NOT_IN_KSEF (A2b);
  *   - okno 48 h (I5): wpis `sent`, o którym KSeF po dwóch dobach odpowiada
  *     błędem klienta, jest zamykany jako `rejected STALE`, a wysyłka idzie od
  *     nowa (440 z numerem sesji z historii = własny duplikat); świeży wpis
@@ -26,6 +27,8 @@ const m = vi.hoisted(() => ({
   updateStatus: vi.fn(),
   captureMessage: vi.fn(),
   invoice: {} as Record<string, unknown>,
+  /** Wynik `ksef_has_contact_evidence` (00131/00136) po uzgodnieniu. */
+  evidence: true,
 }));
 
 vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: async () => false }));
@@ -68,7 +71,12 @@ vi.mock('@/lib/supabase/server', () => ({
       maybeSingle: async () => ({ data: { ...m.invoice }, error: null }),
       then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
     };
-    return { from: () => q, rpc: async () => ({ data: '2026-10-03T12:00:00.000000+00:00', error: null }) };
+    return {
+      from: () => q,
+      rpc: async (fn: string) => fn === 'ksef_has_contact_evidence'
+        ? { data: m.evidence, error: null }
+        : { data: '2026-10-03T12:00:00.000000+00:00', error: null },
+    };
   },
 }));
 vi.mock('@/lib/storage/xml-documents', () => ({ recordXmlDocument: vi.fn() }));
@@ -103,12 +111,21 @@ beforeEach(() => {
   vi.stubEnv('KSEF_ENV', 'test');
   m.fullFlow.mockResolvedValue(ACCEPTED);
   m.findOpen.mockResolvedValue(null);
+  m.evidence = true;
   m.invoice = { id: ID, direction: 'outgoing', ksef_status: 'queued', ksef_number: null, ksef_environment: 'test', invoice_type: 'VAT', invoice_kind: 'regular', fa3_data: {} };
 });
 afterEach(() => vi.unstubAllEnvs());
 
 describe('tryb „tylko uzgodnij” (reconcileOnly)', () => {
-  it('bez wpisu sent: RESULT_UNCERTAIN bez ponowień, faktura NIE jest wysyłana', async () => {
+  it('A2b: bez wpisu sent i bez dowodu kontaktu: NOT_IN_KSEF (z wyjściem), faktura NIE jest wysyłana', async () => {
+    m.evidence = false;
+    const error = await failing(runSubmitInvoice(event({ reconcileOnly: true }), ctx));
+    expect(error.name).toBe('NonRetriableError');
+    expect(classifySendError(error).code).toBe('NOT_IN_KSEF');
+    expect(m.fullFlow).not.toHaveBeenCalled();
+  });
+
+  it('bez wpisu sent, ale z innym dowodem kontaktu: RESULT_UNCERTAIN bez ponowień, faktura NIE jest wysyłana', async () => {
     const error = await failing(runSubmitInvoice(event({ reconcileOnly: true }), ctx));
     expect(error.name).toBe('NonRetriableError');
     expect(error.message).toContain('[RESULT_UNCERTAIN]');
@@ -168,12 +185,14 @@ describe('okno 48 h dla zalegającego wpisu sent (I5)', () => {
     expect(m.markSubmission).not.toHaveBeenCalled();
   });
 
-  it('„tylko uzgodnij” + zalegający wpis: zamknięcie STALE i RESULT_UNCERTAIN, bez wysyłki', async () => {
+  it('„tylko uzgodnij” + zalegający wpis: zamknięcie STALE i — bez innego dowodu kontaktu — NOT_IN_KSEF (A2b), bez wysyłki', async () => {
     m.findOpen.mockResolvedValue(sentRow(hoursAgo(72)));
     m.status.mockRejectedValue(new KsefApiError(400, 'x', 'Bad request'));
+    // Po zamknięciu wpisu jako STALE faktura nie ma już dowodu kontaktu.
+    m.evidence = false;
     const error = await failing(runSubmitInvoice(event({ reconcileOnly: true }), ctx));
     expect(error.name).toBe('NonRetriableError');
-    expect(classifySendError(error).code).toBe('RESULT_UNCERTAIN');
+    expect(classifySendError(error).code).toBe('NOT_IN_KSEF');
     expect(m.markSubmission).toHaveBeenCalledWith(expect.objectContaining({ errorCode: KSEF_SUBMISSION_STALE_CODE }));
     expect(m.fullFlow).not.toHaveBeenCalled();
   });
