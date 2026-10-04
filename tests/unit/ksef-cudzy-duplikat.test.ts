@@ -34,6 +34,7 @@ const m = vi.hoisted(() => ({
   invalidate: vi.fn(),
   captureMessage: vi.fn(),
   storageReadFails: false,
+  archiveFails: false,
 }));
 
 vi.mock('@/lib/ksef/client', async (orig) =>
@@ -60,6 +61,7 @@ vi.mock('@/lib/storage/r2', async (orig) => {
     invoiceXmlExistsForId: async () => false,
     // Archiwum bajtów oryginału (`archiveImportedKsefXml`, D-A4-1b-3 PR A).
     uploadToR2IfAbsent: async (key: string, body: Buffer) => {
+      if (m.archiveFails) throw new Error('R2 niedostępne (zapis)');
       if (m.storage.has(key)) return false;
       m.storage.set(key, body.toString('utf8'));
       return true;
@@ -170,6 +172,7 @@ beforeEach(() => {
   m.mem = { db: { ksef_submissions: [], invoices: [] }, failWrite: null };
   m.storage = new Map();
   m.storageReadFails = false;
+  m.archiveFails = false;
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -521,5 +524,45 @@ describe('D-A4-1b-3 (A): dane oryginału przy nierozstrzygniętym 440 — zapisa
     expect(classifySendError(again).code).toBe('KSEF_DUPLICATE_RECONCILE');
     expect(m.ksef.invoicePosts).toBe(1);
     expect(marker()!.original_check).toMatchObject({ ...first, checkedAt: expect.any(String) });
+  });
+
+  // Ustalenia recenzji PR A.
+  it('ponowne sprawdzenie, które nie pobrało oryginału (503, 403), NIE kasuje zapisanych danych — dopisuje wynik próby', async () => {
+    const original = ourXml(150);
+    seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: K, xml: original });
+    await failing(runSubmitInvoice(event(), ctx(0)));
+    const full = { ...(marker()!.original_check as Row) };
+    expect(full).toMatchObject({ reason: 'faktflow-original', sha256: sha256Hex(original) });
+
+    // Cron I5 dwie doby później: KSeF chwilowo nie oddaje pliku.
+    m.ksef.downloadFailure = { status: 503 };
+    await failing(runSubmitInvoice({ ...event(), reconcileOnly: true }, ctx(0)));
+    expect(marker()!.original_check).toMatchObject({
+      reason: 'faktflow-original', sha256: sha256Hex(original), archivePath: archiveKey, summary: full.summary,
+      recheck: { reason: 'download-pending', httpStatus: 503, checkedAt: expect.any(String) },
+    });
+
+    // Token wymieniony na taki bez InvoiceRead — dane dalej są, próba zapisana.
+    m.ksef.downloadFailure = { status: 403 };
+    await failing(runSubmitInvoice({ ...event(), reconcileOnly: true }, ctx(0)));
+    expect(marker()!.original_check).toMatchObject({
+      reason: 'faktflow-original', sha256: sha256Hex(original), recheck: { reason: 'download-refused', httpStatus: 403 },
+    });
+
+    // Udane sprawdzenie zastępuje zapis w całości (bez starego wyniku próby).
+    m.ksef.downloadFailure = null;
+    await failing(runSubmitInvoice({ ...event(), reconcileOnly: true }, ctx(0)));
+    expect(marker()!.original_check).toMatchObject({ reason: 'faktflow-original', recheck: null });
+  });
+
+  it('błąd zapisu archiwum (nie konflikt) → osobny powód archive-pending, dane oryginału zapisane, ponowienie', async () => {
+    const original = ourXml(150);
+    seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: K, xml: original });
+    m.archiveFails = true;
+
+    const error = await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(error).toBeInstanceOf(RetryAfterError);
+    expect(marker()!.original_check).toMatchObject({ reason: 'archive-pending', sha256: sha256Hex(original), archivePath: null });
   });
 });

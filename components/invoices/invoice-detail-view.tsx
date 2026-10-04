@@ -11,6 +11,7 @@ import { InvoiceActions } from '@/components/invoices/invoice-actions';
 import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
 import { UpoDownload } from '@/components/invoices/upo-download';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
+import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
 import type { Database } from '@/types/database';
 
 export interface InvoiceDetailLine {
@@ -65,6 +66,8 @@ export interface InvoiceDetailInitial {
   upo_status: Database['public']['Enums']['upo_status_enum'] | null;
   /** Rola zalogowanej osoby w firmie faktury dopuszcza „Wyślij ponownie” / „Wróć do szkicu”. */
   can_manage_send: boolean;
+  /** D-A4-1b-3: dane faktury, którą KSeF ma już pod tym numerem (nierozstrzygnięty 440). */
+  ksef_duplicate_original: DuplicateOriginalView | null;
 }
 
 interface PaymentSnapshot {
@@ -254,6 +257,27 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           />
         </div>
       )}
+
+      {inv.ksef_status === 'failed' &&
+        inv.last_error_code === 'KSEF_DUPLICATE_RECONCILE' &&
+        inv.ksef_duplicate_original && (
+          <Card className="p-4 mb-6 border-amber-200 bg-amber-50">
+            <h3 className="font-semibold text-sm text-amber-900">
+              {inv.ksef_duplicate_original.title}
+            </h3>
+            <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+              {inv.ksef_duplicate_original.rows.map((row) => (
+                <div key={row.label} className="flex gap-2">
+                  <dt className="text-amber-800">{row.label}:</dt>
+                  <dd className="font-medium break-all">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="text-sm text-amber-900 mt-3">
+              {inv.ksef_duplicate_original.note}
+            </p>
+          </Card>
+        )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <Card className="p-4">

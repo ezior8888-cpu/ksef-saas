@@ -25,6 +25,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
+import type { KsefDuplicateCheck } from './duplicate-check';
+
 export interface KsefSubmissionReferences {
   sessionReferenceNumber: string;
   invoiceReferenceNumber: string;
@@ -509,7 +511,7 @@ export async function findTenantInvoiceByKsefNumber(
   tenantId: string,
   ksefNumber: string,
   excludeInvoiceId: string,
-): Promise<{ internalNumber: string | null } | null> {
+): Promise<{ id: string; internalNumber: string | null } | null> {
   const { data, error } = await createAdminClient()
     .from('invoices')
     .select('id, internal_number')
@@ -520,5 +522,28 @@ export async function findTenantInvoiceByKsefNumber(
     .limit(1)
     .maybeSingle();
   if (error) throw new Error('Nie można sprawdzić numeru KSeF w fakturach firmy');
-  return data ? { internalNumber: (data.internal_number as string | null) ?? null } : null;
+  return data ? { id: data.id as string, internalNumber: (data.internal_number as string | null) ?? null } : null;
+}
+
+/**
+ * D-A4-1b-3 (00144): dane oryginału przy duplikacie 440, którego automat nie
+ * rozstrzygnął — na otwartym wpisie próby ze znacznikiem 440 tego numeru KSeF.
+ * Zamknięte wpisy (decyzja, `number_taken`, akceptacja) nie są nadpisywane.
+ * Rzuca przy błędzie bazy (fail-closed: bez danych nie ma werdyktu).
+ */
+export async function recordKsefDuplicateCheck(params: {
+  tenantId: string;
+  invoiceId: string;
+  originalKsefNumber: string;
+  check: KsefDuplicateCheck;
+}): Promise<void> {
+  const { error } = await createAdminClient()
+    .from('ksef_submissions')
+    // `original_check` z 00144 — typy bazy dogenerujemy z produkcji po wgraniu.
+    .update({ original_check: params.check } as Record<string, unknown>)
+    .eq('tenant_id', params.tenantId)
+    .eq('invoice_id', params.invoiceId)
+    .eq('original_ksef_number', params.originalKsefNumber)
+    .in('status', ['intent', 'sent']);
+  if (error) throw new Error('Nie można zapisać danych oryginału duplikatu KSeF');
 }

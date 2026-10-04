@@ -80,6 +80,7 @@ vi.mock('@/lib/ksef/submission-log', () => ({
   findTenantInvoiceByKsefNumber: vi.fn(async () => null),
   closeKsefAttempt: mocks.closeAttempt,
   markKsefSubmissionsNumberTaken: mocks.numberTaken,
+  recordKsefDuplicateCheck: vi.fn(),
   recordKsefAcceptedSession: vi.fn(),
   markKsefAttemptDuplicatePending: vi.fn(),
   recordKsefSubmissionSent: vi.fn(),

@@ -82,8 +82,9 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00138–00140 | Codex (centrum dowodzenia, C-22) | `ksef_send_metrics`, `ksef_invoice_timeline`, `ksef_error_patterns` + `ops_alert_log` | zarezerwowane (`CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`, sekcja 6) |
 | 00141 | Claude (A2b, plan zero zgubionych faktur) | `ksef_error_code_not_in_ksef`: kod katalogu `NOT_IN_KSEF` (transient, bez auto) — wynik „tylko uzgodnij”, gdy KSeF nie ma faktury (koniec ślepej uliczki RESULT_UNCERTAIN bez dowodu kontaktu) | w `main` (#222), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
 | 00142 | Claude (D-A4-1a, plan zero zgubionych faktur) | `ksef_error_code_number_taken`: kod katalogu `KSEF_NUMBER_TAKEN` (terminal, bez auto) — cudzy 440 z oryginałem z innego programu; komentarz statusów `ksef_submissions.status` (`number_taken` nie jest dowodem kontaktu); kolumny znacznika 440 | w `main` (#226), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
-| 00143 | Claude (D-A4-2, plan zero zgubionych faktur) | `ksef_error_code_env_mismatch_terminal`: UPDATE wiersza katalogu — `ENV_MISMATCH` z reconcile na terminal (szkic i decyzja klienta; `requeue_ksef_send` odmawia ponowienia w bieżącym środowisku) + komunikat klienta | PR `claude/d-a4-2-env-mismatch`; **przed** wdrożeniem |
-| **00144** | — | następny wolny (00200 zajęte) | — |
+| 00143 | Claude (D-A4-2, plan zero zgubionych faktur) | `ksef_error_code_env_mismatch_terminal`: UPDATE wiersza katalogu — `ENV_MISMATCH` z reconcile na terminal (szkic i decyzja klienta; `requeue_ksef_send` odmawia ponowienia w bieżącym środowisku) + komunikat klienta | w `main` (#228), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
+| 00144 | Claude (D-A4-1b-3 PR A, plan zero zgubionych faktur) | `ksef_submission_original_check`: kolumna `ksef_submissions.original_check` jsonb — dane oryginału przy nierozstrzygniętym 440 (powód, dane, skrót, archiwum, data nadania) | PR `claude/d-a4-1b-3-dane-oryginalu`; **przed** wdrożeniem |
+| **00145** | — | następny wolny (00200 zajęte); kolejne PR D-A4-1b-3 (B, C) biorą numer przy otwarciu | — |
 
 ---
 

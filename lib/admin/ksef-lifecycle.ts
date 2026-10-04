@@ -9,6 +9,7 @@
 
 import { hasOpenSubmission } from '@/lib/admin/ksef-operator-policy';
 import { requireAdmin } from '@/lib/auth/admin-guard';
+import { parseDuplicateCheck, type KsefDuplicateCheck } from '@/lib/ksef/duplicate-check';
 import { sendErrorClassOf, type SendErrorClass } from '@/lib/ksef/send-error-classes';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/types/database';
@@ -205,6 +206,10 @@ export interface SubmissionHistoryRow {
   errorMessage: string | null;
   attemptedAt: string | null;
   completedAt: string | null;
+  /** Znacznik 440 (00142): numer KSeF oryginału. */
+  originalKsefNumber: string | null;
+  /** D-A4-1b-3 (00144): dane oryginału przy nierozstrzygniętym 440. */
+  originalCheck: KsefDuplicateCheck | null;
 }
 
 export interface AuditTrailRow {
@@ -264,7 +269,7 @@ export async function getInvoiceLifecycle(invoiceId: string): Promise<InvoiceLif
   const [submissions, audit, evidence] = await Promise.all([
     supabase
       .from('ksef_submissions')
-      .select('id, status, session_reference_number, invoice_reference_number, error_code, error_message, attempted_at, completed_at')
+      .select('id, status, session_reference_number, invoice_reference_number, error_code, error_message, attempted_at, completed_at, original_ksef_number, original_check')
       .eq('invoice_id', invoiceId)
       .order('attempted_at', { ascending: false }),
     supabase
@@ -289,6 +294,9 @@ export async function getInvoiceLifecycle(invoiceId: string): Promise<InvoiceLif
     errorMessage: s.error_message,
     attemptedAt: s.attempted_at,
     completedAt: s.completed_at,
+    originalKsefNumber: s.original_ksef_number,
+    // `original_check` z 00144 — typy bazy dogenerujemy z produkcji po wgraniu.
+    originalCheck: parseDuplicateCheck((s as { original_check?: unknown }).original_check),
   }));
 
   return {
