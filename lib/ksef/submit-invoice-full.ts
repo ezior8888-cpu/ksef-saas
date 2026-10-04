@@ -18,7 +18,11 @@ import {
 } from '@/lib/auth/ksef-verification-guard';
 
 import type { KsefAuth } from './auth';
-import { recordKsefSubmissionSent } from './submission-log';
+import {
+  abandonKsefSubmissionIntent,
+  recordKsefSubmissionIntent,
+  recordKsefSubmissionSent,
+} from './submission-log';
 import { submitInvoice } from './submit';
 import { requireMatchingKsefEnvironment } from './claim-environment';
 
@@ -142,12 +146,30 @@ export async function submitInvoiceFullFlow(
   //    temu każdy request do MF wpisuje się do `audit_logs` (Faza 23 sekcja 3).
   //    Numery referencyjne zapisujemy zaraz po przyjęciu pliku — od tej chwili
   //    ponowienie uzgadnia status zamiast wysyłać fakturę drugi raz (AUD-01).
+  //    Wcześniej, przed samym plikiem, zamiar z numerem sesji (A2): gdy
+  //    odpowiedź na wysyłkę zginie, ponowienie zapyta KSeF o tę sesję.
   const submitResult = await submitInvoice(
     xml,
     auth,
     configuredEnv,
     { tenantId, invoiceId },
     {
+      onSessionOpened: ({ sessionReferenceNumber }) =>
+        recordKsefSubmissionIntent({
+          tenantId,
+          invoiceId,
+          sessionReferenceNumber,
+          payloadHash: uploadResult.sha256Hash,
+          xmlStoragePath: uploadResult.storagePath,
+        }),
+      onInvoiceNotAccepted: ({ sessionReferenceNumber }, error) =>
+        abandonKsefSubmissionIntent({
+          tenantId,
+          invoiceId,
+          sessionReferenceNumber,
+          errorCode: String(error.status),
+          errorMessage: `KSeF nie przyjął pliku: ${error.message}`,
+        }),
       onInvoiceSent: (references) =>
         recordKsefSubmissionSent({
           tenantId,

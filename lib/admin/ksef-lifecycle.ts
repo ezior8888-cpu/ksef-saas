@@ -7,6 +7,7 @@
  * `ksef_error_codes`, historia `ksef_submissions`, ślad w `audit_logs`.
  */
 
+import { hasOpenSubmission } from '@/lib/admin/ksef-operator-policy';
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { sendErrorClassOf, type SendErrorClass } from '@/lib/ksef/send-error-classes';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -20,7 +21,7 @@ export const INVARIANT_LABELS: Record<string, string> = {
   I2: 'sending dłużej niż dzierżawa (ponad 30 min) albo bez znacznika przejęcia',
   I3: 'accepted bez numeru KSeF, środowiska, pliku XML albo UPO',
   I4: 'failed / rejected bez kodu z katalogu albo z trzymanym przejęciem',
-  I5: 'otwarty wpis sent starszy niż 48 h',
+  I5: 'otwarty wpis sent albo zamiar intent starszy niż 48 h',
   I9: 'failed / rejected z numerem KSeF (stan sprzeczny)',
 };
 
@@ -322,7 +323,7 @@ export async function getInvoiceLifecycle(invoiceId: string): Promise<InvoiceLif
       createdAt: a.created_at,
       details: a.details_json ?? a.metadata ?? null,
     })),
-    openSent: history.some((s) => s.status === 'sent'),
+    openSent: hasOpenSubmission(history),
     evidence: evidence.error ? true : Boolean(evidence.data),
   };
 }

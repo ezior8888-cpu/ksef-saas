@@ -77,7 +77,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00133 | Claude (K4, druga korekta) | `single_open_correction`: wyzwalacz `guard_single_open_correction` — faktura pierwotna ma najwyżej jedną korektę poza `rejected` (blokada doradcza per rodzic) | PR `claude/k4-druga-korekta`; **przed** wdrożeniem |
 | 00134 | Claude (D5, cykl życia) | `ksef_submissions_xml_path`: kolumna `ksef_submissions.xml_storage_path` — klucz XML próby wysyłki (`tenant/yyyy/mm/invoiceId/sendAttemptId.xml`) | PR `claude/d5-xml-per-proba`; **przed** wdrożeniem |
 | 00135 | Claude (K4, łańcuch korekt) | `correction_chain_guard`: `guard_single_open_correction` blokuje tylko korektę W TOKU (przyjęta tworzy łańcuch, odrzucona nie liczy się) | PR `claude/k4-lancuch-korekt`; **przed** wdrożeniem |
-| **00136** | — | następny wolny (00200 zajęte) | — |
+| 00136 | Claude (A2, plan zero zgubionych faktur) | `ksef_submission_intent`: `ksef_has_contact_evidence` liczy wpis `intent` (zamiar wysyłki przed POST), strażnik I5 widzi zamiar starszy niż 48 h — CREATE OR REPLACE dwóch funkcji z 00131 | PR `claude/a2-intent-przed-post`; **przed** wdrożeniem |
+| **00137** | — | następny wolny (00200 zajęte) | — |
 
 ---
 

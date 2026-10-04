@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { describeKsefSendError, ksefSendTransactionStep, type KsefSendMode } from '@/lib/invoices/ksef-send-step';
-import { OPERATOR_MESSAGES } from '@/lib/admin/ksef-operator-policy';
+import { OPEN_SUBMISSION_STATUSES, OPERATOR_MESSAGES } from '@/lib/admin/ksef-operator-policy';
 import { describeResetError } from '@/lib/invoices/ksef-send-policy';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -73,7 +73,7 @@ export async function operatorRequeueAction(
       .select('id')
       .eq('invoice_id', invoiceId)
       .eq('tenant_id', row.tenant_id)
-      .eq('status', 'sent')
+      .in('status', [...OPEN_SUBMISSION_STATUSES])
       .limit(1);
     if (error) throw new Error(`ksef_submissions: ${error.message}`);
     if (!open || open.length === 0) return { success: false, error: OPERATOR_MESSAGES.noOpenSent };

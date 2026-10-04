@@ -140,6 +140,28 @@ bez re-encrypt sesji w `ksef_sessions`. Patrz [key-rotation.md](./key-rotation.m
 UPO retry cron (`upoRetryStaleJob`) powinien dorzucić w ciągu 24h. Manual
 trigger: `pnpm trigger:submit` (skrypt).
 
+### "W historii wysyłek wisi zamiar `intent`" (A2, 00136)
+
+Wpis `intent` w `ksef_submissions` powstaje po otwarciu sesji KSeF, PRZED
+wysłaniem pliku. Jeśli został otwarty, odpowiedź na wysyłkę nie dotarła
+(timeout, restart workera, błąd zapisu) i nie wiadomo, czy KSeF ma plik.
+
+- **Co widzi klient:** faktura `failed` z kodem z katalogu; „Wróć do szkicu”
+  jest zablokowane (zamiar to dowód kontaktu — treści nie wolno zmienić,
+  dopóki nie wiadomo, co ma KSeF).
+- **Co robi automat:** każda następna próba wysyłki (przycisk „Wyślij
+  ponownie”, cron ponowień) najpierw zamyka tamtą sesję i pyta KSeF o jej
+  faktury (`GET /sessions/{ref}/invoices`): plik jest → wpis `sent`
+  i uzgodnienie po numerze referencyjnym; sesja pusta → `abandoned`
+  (`error_code = NOT_IN_SESSION`) i wysyłka od nowa. Nigdy drugi POST.
+- **Co klika operator:** `/admin/ksef/<id>` → „Tylko uzgodnij” (działa przy
+  `sent` i przy `intent`). Po rozstrzygnięciu faktura jest `accepted`, albo
+  zamiar ma status `abandoned` i „Wróć do szkicu” / „Wyślij ponownie” znowu
+  działają.
+- **Strażnik:** zamiar starszy niż 48 h przy fakturze poza `sending` to I5.
+  KSeF odpowiadający na pytanie o sesję kodem 21173 („Brak sesji”) po 48 h
+  zamyka zamiar jako `abandoned` z kodem `STALE`.
+
 ---
 
 ## Aktualizacja `error_translations`

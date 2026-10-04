@@ -118,7 +118,7 @@ vi.mock('@/lib/ksef/client', async (orig) => {
           throw new KsefApiError(400, { exception: { exceptionDetailList: [{ exceptionCode: 21173 }] } } as never, 'Brak sesji');
         }
         void query;
-        return { continuationToken: null, invoices: session.invoices.map((inv, n) => ({ ordinalNumber: n + 1, invoicingDate: '2026-10-01T10:00:00Z', ...statusReply(inv) })) };
+        return { continuationToken: null, invoices: session.invoices.map((inv, n) => ({ ordinalNumber: n + 1, invoicingDate: '2026-10-01T10:00:00Z', invoiceNumber: inv.invoiceNumber, ...statusReply(inv) })) };
       }
       hit = /^\/sessions\/([^/]+)\/invoices\/([^/]+)$/.exec(route!);
       if (hit && method === 'GET') {
@@ -335,7 +335,7 @@ describe('A2: KSeF przyjął plik, a my o tym nie wiemy — ponowienie uzgadnia,
     expect(accepted()).toMatchObject({ ksef_status: 'accepted' });
     expect(submissions()).toEqual([
       expect.objectContaining({ session_reference_number: 'S-1', status: 'abandoned' }),
-      expect.objectContaining({ session_reference_number: 'S-3', status: 'accepted' }),
+      expect.objectContaining({ session_reference_number: 'S-2', status: 'accepted', response_ksef_number: 'K-3' }),
     ]);
   });
 
@@ -348,6 +348,29 @@ describe('A2: KSeF przyjął plik, a my o tym nie wiemy — ponowienie uzgadnia,
     await expect(runSubmitInvoice(event(), ctx(1))).rejects.toBeInstanceOf(RetryAfterError);
     expect(m.ksef.invoicePosts).toBe(1);
     expect(submissions()).toEqual([expect.objectContaining({ status: 'intent', session_reference_number: 'S-1' })]);
+  });
+
+  const oldIntent = (hoursAgo: number) => ({
+    id: 'row-old', tenant_id: T, invoice_id: ID, submission_type: 'online', status: 'intent',
+    session_reference_number: 'S-NIEZNANA', invoice_reference_number: null,
+    attempted_at: new Date(Date.now() - hoursAgo * 3600_000).toISOString(),
+  });
+
+  it('KSeF nie zna sesji zamiaru sprzed ponad 48 h (21173) → zamiar zamknięty jako STALE, wysyłka od nowa', async () => {
+    m.db.ksef_submissions = [oldIntent(72)];
+    await runSubmitInvoice(event(), ctx(1));
+
+    expect(m.ksef.invoicePosts).toBe(1);
+    expect(accepted()).toMatchObject({ ksef_status: 'accepted' });
+    expect(submissions()[0]).toMatchObject({ session_reference_number: 'S-NIEZNANA', status: 'abandoned', error_code: 'STALE' });
+  });
+
+  it('KSeF nie zna sesji świeżego zamiaru (1 h) → tylko ponowienie uzgadniania, bez wysyłki', async () => {
+    m.db.ksef_submissions = [oldIntent(1)];
+    await expect(runSubmitInvoice(event(), ctx(1))).rejects.toBeInstanceOf(RetryAfterError);
+
+    expect(m.ksef.invoicePosts).toBe(0);
+    expect(submissions()[0]).toMatchObject({ status: 'intent' });
   });
 
   it('KSeF odmówił przyjęcia pliku (HTTP 400) → zamiar zamknięty jako porzucony z kodem, bez dowodu kontaktu', async () => {

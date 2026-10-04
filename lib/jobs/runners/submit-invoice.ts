@@ -21,13 +21,24 @@ import {
 } from '@/lib/supabase/admin-queries';
 import { createAdminClient } from '@/lib/supabase/server';
 import { KsefApiError } from '@/lib/ksef/client';
-import { checkInvoiceStatusByReference, KsefInvoiceRejectedError } from '@/lib/ksef/submit';
+import {
+  checkInvoiceStatusByReference,
+  KSEF_SESSION_NOT_FOUND,
+  KsefInvoiceRejectedError,
+  ksefErrorCodes,
+  listSessionInvoicesAfterClose,
+  type SessionInvoiceSummary,
+} from '@/lib/ksef/submit';
 import { ksefSessionCache } from '@/lib/ksef/session-cache';
 import {
+  abandonKsefSubmissionIntent,
   findOpenKsefSubmission,
+  findOpenKsefSubmissionIntents,
   findOwnKsefSessionXmlPath,
   isOwnKsefSession,
   markKsefSubmission,
+  promoteKsefSubmissionIntent,
+  type KsefSubmissionIntent,
 } from '@/lib/ksef/submission-log';
 import { invoiceXmlKey } from '@/lib/storage/r2';
 import {
@@ -125,6 +136,30 @@ export const KSEF_SEND_CLAIM_RETRY_MS = 5 * 60 * 1000;
  */
 export const KSEF_SUBMISSION_STALE_MS = 48 * 60 * 60 * 1000;
 export const KSEF_SUBMISSION_STALE_CODE = 'STALE';
+
+/** Kod zamknięcia zamiaru, gdy KSeF nie ma pliku z tej próby w (zamkniętej) sesji. */
+export const KSEF_INTENT_NOT_IN_SESSION_CODE = 'NOT_IN_SESSION';
+
+/**
+ * Plik tej próby wśród faktur sesji KSeF: ten sam skrót treści albo ten sam
+ * numer faktury. Nasza sesja niesie jedną fakturę, więc dopasowanie po numerze
+ * wystarcza, gdy skrótu nie ma (wpis bez `request_payload_hash`).
+ */
+function intentInvoiceInSession(
+  found: SessionInvoiceSummary[],
+  intent: KsefSubmissionIntent,
+  internalNumber: string | undefined,
+): SessionInvoiceSummary | null {
+  const hash =
+    intent.payloadHash && /^[0-9a-f]{64}$/i.test(intent.payloadHash)
+      ? Buffer.from(intent.payloadHash, 'hex').toString('base64')
+      : null;
+  return (
+    found.find(
+      (f) => (hash !== null && f.invoiceHash === hash) || (Boolean(internalNumber) && f.invoiceNumber === internalNumber),
+    ) ?? null
+  );
+}
 
 function isStaleSubmission(attemptedAt: string | null | undefined): boolean {
   if (!attemptedAt) return false;
@@ -965,6 +1000,75 @@ export async function runSubmitInvoice(
     // numery referencyjne), pytamy o status TEJ wysyłki zamiast wysyłać fakturę
     // drugi raz. Bez tego timeout pollingu, 5xx albo padnięty worker kończyły
     // się ponowną wysyłką, odpowiedzią 440 i fałszywym „odrzucona”.
+    // Krok 2.4 (A2): zamiar wysyłki bez numeru referencyjnego faktury — KSeF
+    // mógł przyjąć plik, a odpowiedź nie dotarła (timeout, padnięty worker,
+    // błąd zapisu). Zamykamy tamtą sesję i pytamy KSeF o jej faktury: plik
+    // jest → wpis `sent` i zwykłe uzgodnienie po referencji niżej; sesja
+    // pusta → zamiar porzucony i wysyłka od nowa. Każda niepewność to
+    // ponowienie uzgadniania, nigdy druga wysyłka.
+    await step.run('resolve-submission-intents', async () => {
+      const intents = await findOpenKsefSubmissionIntents(tenantId, invoiceId);
+      if (intents.length === 0) return;
+      const credentials = await getTenantKsefCredentials(tenantId);
+      for (const intent of intents) {
+        const base = { tenantId, invoiceId, sessionReferenceNumber: intent.sessionReferenceNumber };
+        let found: SessionInvoiceSummary[];
+        try {
+          found = await listSessionInvoicesAfterClose(intent.sessionReferenceNumber, credentials, env, {
+            tenantId,
+            invoiceId,
+          });
+        } catch (error) {
+          if (error instanceof KsefApiError && error.status === 401) {
+            ksefSessionCache.invalidate(credentials.nip, env);
+          }
+          // KSeF nie zna sesji sprzed ponad 48 h — jak STALE dla wpisu `sent`:
+          // ślad zostaje, wysyłka idzie od nowa, a gdyby KSeF jednak miał plik,
+          // 440 wskaże tę sesję z historii (własny duplikat).
+          if (
+            error instanceof KsefApiError &&
+            ksefErrorCodes(error.body).includes(KSEF_SESSION_NOT_FOUND) &&
+            isStaleSubmission(intent.attemptedAt)
+          ) {
+            await abandonKsefSubmissionIntent({
+              ...base,
+              errorCode: KSEF_SUBMISSION_STALE_CODE,
+              errorMessage: `KSeF nie zna sesji sprzed ponad 48 h (HTTP ${error.status}): ${error.message}`,
+            });
+            continue;
+          }
+          throw new RetryAfterError(
+            `Uzgadnianie zamiaru wysyłki KSeF nieudane: ${error instanceof Error ? error.message : 'nieznany błąd'}`,
+            getKsefRetryDelay(attempt),
+            { cause: error instanceof Error ? error : undefined },
+          );
+        }
+        const ours = intentInvoiceInSession(found, intent, invoice.internalNumber);
+        if (ours) {
+          await promoteKsefSubmissionIntent({ ...base, invoiceReferenceNumber: ours.referenceNumber });
+          logger.warn('Zamiar wysyłki rozstrzygnięty: KSeF ma plik z wcześniejszej próby — uzgadniam zamiast wysyłać', {
+            invoiceId,
+            session: intent.sessionReferenceNumber,
+            statusCode: ours.statusCode,
+          });
+          continue;
+        }
+        if (found.length > 0) {
+          // Nasza sesja niesie jedną fakturę — inna treść i numer to sygnał dla operatora.
+          Sentry.captureMessage('KSeF: sesja zamiaru ma faktury inne niż oczekiwana', {
+            level: 'warning',
+            tags: { job: 'submit-invoice', kind: 'intent-mismatch' },
+            extra: { tenantId, invoiceId, session: intent.sessionReferenceNumber, count: found.length },
+          });
+        }
+        await abandonKsefSubmissionIntent({
+          ...base,
+          errorCode: KSEF_INTENT_NOT_IN_SESSION_CODE,
+          errorMessage: 'KSeF nie ma pliku z tej próby w zamkniętej sesji — wysyłka od nowa.',
+        });
+      }
+    });
+
     const reconciled = await step.run('reconcile-previous-submission', async (): Promise<SubmitOutcome | null> => {
       const previous = await findOpenKsefSubmission(tenantId, invoiceId);
       if (!previous) {
@@ -1259,6 +1363,15 @@ export async function runSubmitInvoice(
       // nie może cofnąć akceptacji ani zablokować zdarzenia UPO niżej.
       if (result.invoiceReferenceNumber) {
         try {
+          // A2: zamiar tej sesji, którego awans do `sent` nie zdążył się zapisać.
+          if (result.sessionReferenceNumber) {
+            await promoteKsefSubmissionIntent({
+              tenantId,
+              invoiceId,
+              sessionReferenceNumber: result.sessionReferenceNumber,
+              invoiceReferenceNumber: result.invoiceReferenceNumber,
+            });
+          }
           await markKsefSubmission({
             tenantId,
             invoiceId,

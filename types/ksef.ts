@@ -172,6 +172,27 @@ export interface InvoiceStatusResponse {
   upoDownloadUrl?: string;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// SESJE: GET /sessions/{referenceNumber}/invoices
+// Faktury przesłane w sesji (open-api.json MF: SessionInvoicesResponse)
+// ═══════════════════════════════════════════════════════════════
+
+export interface SessionInvoicesResponse {
+  /** Pusty albo brak — nie ma kolejnych stron. */
+  continuationToken?: string | null;
+  invoices: Array<{
+    ordinalNumber: number;
+    /** Numer faktury sprzedawcy (P_2). */
+    invoiceNumber?: string | null;
+    ksefNumber?: string | null;
+    /** Numer referencyjny faktury w sesji. */
+    referenceNumber: string;
+    /** SHA-256 niezaszyfrowanego XML, Base64. */
+    invoiceHash: string;
+    status: InvoiceStatusResponse['status'];
+  }>;
+}
+
 // Kody statusów faktury (patrz dokumentacja MF)
 export const INVOICE_STATUS = {
   QUEUED: 150, // W trakcie przetwarzania
