@@ -106,13 +106,13 @@ Zrobione i wdrożone 03–04.10.2026 (migracje 00131–00134 na db-1):
 | Operator | `/admin/ksef`: naruszenia, `failed` per kod, karta faktury, „Wyślij ponownie / Tylko uzgodnij / Wróć do szkicu” | #208/#209 |
 | Wyzwalacze | 00132: klient nigdy nie zmienia stanu; diagnostyka nie zamraża treści | #210 |
 | Automat | cron co 15 min: I1, ponowienia klasy transient przez 24 h, wznowienie po hamulcu; raport dzienny; alarm strażnika; martwe kolejki usunięte | #211 |
-| Korekty | 00133 + 00135: jedna korekta w toku; łańcuch korekt — „stan przed” po ostatniej przyjętej KOR (prawdziwe K4) | #212, #217 (czeka) |
+| Korekty | 00133 + 00135: jedna korekta w toku; łańcuch korekt — „stan przed” po ostatniej przyjętej KOR (prawdziwe K4) | #212, #217 |
 | Magazyn XML | klucz per próba (D5), wpis `sent` zna swój plik, retencja prób | #215 |
-| Uzgodnienie | tryb „tylko uzgodnij” w runnerze; okno 48 h dla zalegających wpisów `sent` (STALE) | #216 (czeka) |
+| Uzgodnienie | tryb „tylko uzgodnij” w runnerze; okno 48 h dla zalegających wpisów `sent` (STALE) | #216 |
 | Wcześniej | K1 (faktura za abonament), K2 (skrzynka: kategoryzacja i XML), W1, W2, W3, W16, S1, S14, S22 | #199–#201, #213, #214 |
 
-Czeka na scalenie: #216, #217 (po nich: 00135 na db-1, wdrożenie workera
-i aplikacji). Hamulce nadal włączone na PROD: `KOR_HOLD` (korekty),
+#216 i #217 scalone 04.10.2026; 00135 wgrana na db-1 04.10 (strażnik 0),
+worker i aplikacja wdrożone na `2dbf13a` (razem z A1, #219). Hamulce nadal włączone na PROD: `KOR_HOLD` (korekty),
 `ROZ_HOLD` (faktury rozliczające), Offline24 wyłączony (AUD-14).
 
 Nienaprawione z rewizji (tematy tego planu): W4–W15, S2–S13, S15–S21, S23,
@@ -493,7 +493,7 @@ pierwszy kwartał; każdy nowy kod błędu lub blokada wchodzi tylko z wyjściem
 
 | Data | Sesja | PR | Zrobione | Co zostało |
 |---|---|---|---|---|
-| 03–04.10.2026 | (runda cyklu życia, przed tym planem) | #199–#217 | sekcja 3 | #216, #217 do scalenia; 00135 do wgrania |
+| 03–04.10.2026 | (runda cyklu życia, przed tym planem) | #199–#217 | sekcja 3 | — (wszystko scalone, 00131–00135 na db-1, wdrożone 04.10) |
 | 04.10.2026 | A1 | #219 | `lib/invoices/issue-date.ts`: jedna reguła „data wystawienia = dziś w Polsce” w 5 akcjach wysyłki (FA, szkic, ZAL, KOR, ROZ — w ROZ przed hamulcem); formularz ZAL bez UTC; 11 przypadków czerwonych przed naprawą | scalenie i wdrożenie #219 (bez migracji); faktura, która nie wyszła przed północą (ponowienie, cron, `/admin/ksef`), to B1/B2 |
 
 ---
