@@ -67,7 +67,7 @@ async function cleanup() {
   await admin.from('audit_logs').delete().eq('tenant_id', ORG);
 }
 
-describe.skipIf(!hasDatabase)('K4 (00133): jedna otwarta korekta na fakturę pierwotną', () => {
+describe.skipIf(!hasDatabase)('K4 (00133 + 00135): jedna korekta w toku na fakturę pierwotną', () => {
   beforeAll(async () => {
     await cleanup();
     await admin.from('tenants').delete().eq('id', ORG);
@@ -92,7 +92,8 @@ describe.skipIf(!hasDatabase)('K4 (00133): jedna otwarta korekta na fakturę pie
 
     const second = await correction(parent, 'draft');
     expect(second.error?.code).toBe('23505');
-    expect(second.error?.message).toContain('ma już korektę');
+    // 00135: komunikat mówi o korekcie W TOKU (przyjęta tworzy łańcuch).
+    expect(second.error?.message).toContain('ma korektę w toku');
     expect(second.error?.message).toContain(`KOR/${counter - 1}`);
   });
 
