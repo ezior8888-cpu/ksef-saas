@@ -19,6 +19,8 @@ export interface KsefSubmissionReferences {
   invoiceReferenceNumber: string;
   /** Klucz XML tej próby w magazynie (D5, kolumna z 00134); `null` dla wpisów sprzed zmiany. */
   xmlStoragePath?: string | null;
+  /** Kiedy plik dotarł do KSeF — po 48 h bez odpowiedzi KSeF wpis uznajemy za zalegający (I5). */
+  attemptedAt?: string | null;
 }
 
 type SubmissionStatus = 'sent' | 'accepted' | 'rejected' | 'duplicate';
@@ -86,7 +88,7 @@ export async function findOpenKsefSubmission(
 ): Promise<KsefSubmissionReferences | null> {
   const { data, error } = await createAdminClient()
     .from('ksef_submissions')
-    .select('session_reference_number, invoice_reference_number, xml_storage_path')
+    .select('session_reference_number, invoice_reference_number, xml_storage_path, attempted_at')
     .eq('tenant_id', tenantId)
     .eq('invoice_id', invoiceId)
     .eq('status', 'sent')
@@ -100,6 +102,7 @@ export async function findOpenKsefSubmission(
     sessionReferenceNumber: data.session_reference_number,
     invoiceReferenceNumber: data.invoice_reference_number,
     xmlStoragePath: data.xml_storage_path ?? null,
+    attemptedAt: data.attempted_at ?? null,
   };
 }
 

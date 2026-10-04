@@ -4,11 +4,11 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getRlsTestEnvironment } from './helpers/rls-environment';
 
 /**
- * K4 (00133) na prawdziwej bazie: faktura pierwotna ma najwyżej jedną
- * korektę poza odrzuconą przez KSeF. Druga korekta tej samej faktury
- * liczyła różnicę od stanu pierwotnego (podwójna korekta) — do czasu
- * łańcucha korekt baza odmawia. Odrzucona KOR nie blokuje; powrót KOR
- * z `rejected` do szkicu przy istniejącej drugiej korekcie też odbija.
+ * K4 (00133 + 00135) na prawdziwej bazie: faktura pierwotna ma najwyżej
+ * jedną korektę W TOKU (szkic, kolejka, wysyłka, offline, błąd). Przyjęta
+ * korekta tworzy łańcuch — kolejna liczy „stan przed” po niej (akcje), więc
+ * NIE blokuje następnej; odrzucona nie liczy się wcale. Powrót korekty
+ * z `rejected` do szkicu przy innej korekcie w toku odbija.
  */
 
 const hasDatabase = Boolean(
@@ -67,7 +67,7 @@ async function cleanup() {
   await admin.from('audit_logs').delete().eq('tenant_id', ORG);
 }
 
-describe.skipIf(!hasDatabase)('K4 (00133): jedna otwarta korekta na fakturę pierwotną', () => {
+describe.skipIf(!hasDatabase)('K4 (00133 + 00135): jedna korekta w toku na fakturę pierwotną', () => {
   beforeAll(async () => {
     await cleanup();
     await admin.from('tenants').delete().eq('id', ORG);
@@ -92,21 +92,37 @@ describe.skipIf(!hasDatabase)('K4 (00133): jedna otwarta korekta na fakturę pie
 
     const second = await correction(parent, 'draft');
     expect(second.error?.code).toBe('23505');
-    expect(second.error?.message).toContain('ma już korektę');
+    // 00135: komunikat mówi o korekcie W TOKU (przyjęta tworzy łańcuch).
+    expect(second.error?.message).toContain('ma korektę w toku');
     expect(second.error?.message).toContain(`KOR/${counter - 1}`);
   });
 
-  it.each(['queued', 'failed', 'accepted'])('korekta w stanie %s też blokuje kolejną', async (status) => {
+  it.each(['queued', 'failed'])('korekta w stanie %s też blokuje kolejną', async (status) => {
     const parent = await acceptedParent();
     const first = await correction(parent, 'draft');
     expect(first.error).toBeNull();
-    const patch: Record<string, unknown> = { ksef_status: status };
-    if (status === 'accepted') Object.assign(patch, { ksef_number: `9480000014-20261002-${String(counter).padStart(12, '0')}-00`, ksef_environment: 'test', xml_storage_path: 'k.xml' });
-    const { error: moveError } = await admin.from('invoices').update(patch).eq('id', first.id);
+    const { error: moveError } = await admin.from('invoices').update({ ksef_status: status }).eq('id', first.id);
     expect(moveError).toBeNull();
 
     const second = await correction(parent, 'draft');
     expect(second.error?.code).toBe('23505');
+    expect(second.error?.message).toContain('w toku');
+  });
+
+  it('łańcuch: przyjęta korekta NIE blokuje kolejnej (00135)', async () => {
+    const parent = await acceptedParent();
+    const first = await correction(parent, 'draft');
+    const { error: acceptError } = await admin.from('invoices').update({
+      ksef_status: 'accepted', ksef_number: `9480000014-20261002-${String(counter).padStart(12, '0')}-00`,
+      ksef_environment: 'test', xml_storage_path: 'k.xml',
+    }).eq('id', first.id);
+    expect(acceptError).toBeNull();
+
+    const second = await correction(parent, 'draft');
+    expect(second.error).toBeNull();
+    // ...ale druga korekta w toku nadal blokuje trzecią.
+    const third = await correction(parent, 'draft');
+    expect(third.error?.code).toBe('23505');
   });
 
   it('odrzucona przez KSeF korekta nie blokuje; jej powrót do szkicu przy drugiej otwartej odbija', async () => {
