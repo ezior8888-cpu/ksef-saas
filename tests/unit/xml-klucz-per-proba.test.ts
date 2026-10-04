@@ -25,6 +25,7 @@ const m = vi.hoisted(() => ({
   recordSent: vi.fn(),
   findOpen: vi.fn(),
   ownPath: vi.fn(),
+  sessionRow: vi.fn(),
   status: vi.fn(),
   updateStatus: vi.fn(),
   listAttempts: vi.fn(),
@@ -53,6 +54,14 @@ vi.mock('@/lib/ksef/submission-log', () => ({
   promoteKsefSubmissionIntent: vi.fn(async () => false),
   abandonKsefSubmissionIntent: vi.fn(),
   recordKsefSubmissionIntent: vi.fn(),
+  // D-A4-1: weryfikacja cudzego 440 — domyślnie bez sesji w historii i bez znanego numeru.
+  findKsefSessionRow: m.sessionRow,
+  findSubmissionPayloads: vi.fn(async () => []),
+  findTenantInvoiceByKsefNumber: vi.fn(async () => null),
+  closeKsefAttempt: vi.fn(),
+  markKsefSubmissionsNumberTaken: vi.fn(),
+  recordKsefAcceptedSession: vi.fn(),
+  markKsefAttemptDuplicatePending: vi.fn(),
   recordKsefSubmissionSent: m.recordSent,
   markKsefSubmission: vi.fn(),
   findOpenKsefSubmission: m.findOpen,
@@ -195,13 +204,14 @@ describe('runner: uzgodnienie wskazuje plik próby (D5)', () => {
     expect(m.updateStatus).toHaveBeenCalledWith(ID, expect.objectContaining({ xml_storage_path: LEGACY_KEY }), T);
   });
 
-  it('własny duplikat 440: plik próby z tej sesji; brak ścieżki → klucz historyczny', async () => {
+  it('własny duplikat 440 (ten sam plik — D-A4-1): plik próby z tej sesji; wpis bez ścieżki → klucz historyczny', async () => {
+    const HASH_HEX = 'cd'.repeat(32);
     const dup = () => new KsefInvoiceRejectedError(440, {
       code: 440, description: 'Duplikat', details: [],
       extensions: { originalKsefNumber: 'K-ORIG', originalSessionReferenceNumber: 'S-ORIG' },
-    } as never);
+    } as never, { invoiceHash: Buffer.from(HASH_HEX, 'hex').toString('base64') });
     m.submit.mockRejectedValue(dup());
-    m.ownPath.mockResolvedValue(`${T}/2026/10/${ID}/proba-oryginalna.xml`);
+    m.sessionRow.mockResolvedValue({ status: 'sent', requestPayloadHash: HASH_HEX, xmlStoragePath: `${T}/2026/10/${ID}/proba-oryginalna.xml` });
     await runSubmitInvoice(event(ATTEMPT), ctx);
     expect(m.updateStatus).toHaveBeenCalledWith(ID, expect.objectContaining({
       ksef_number: 'K-ORIG', xml_storage_path: `${T}/2026/10/${ID}/proba-oryginalna.xml`,
@@ -210,7 +220,7 @@ describe('runner: uzgodnienie wskazuje plik próby (D5)', () => {
     vi.clearAllMocks();
     m.findOpen.mockResolvedValue(null);
     m.submit.mockRejectedValue(dup());
-    m.ownPath.mockRejectedValue(new Error('db'));
+    m.sessionRow.mockResolvedValue({ status: 'sent', requestPayloadHash: HASH_HEX, xmlStoragePath: null });
     await runSubmitInvoice(event(ATTEMPT), ctx);
     expect(m.updateStatus).toHaveBeenCalledWith(ID, expect.objectContaining({ ksef_number: 'K-ORIG', xml_storage_path: LEGACY_KEY }), T);
   });

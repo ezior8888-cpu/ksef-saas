@@ -78,14 +78,16 @@ const label = (s: Scenario) =>
 
 /**
  * Znane ślepe uliczki — każda z sesją albo decyzją, która ją zamknie.
- *  - KSEF_DUPLICATE_RECONCILE: ponowienie powtórzy 440 (KSeF ma fakturę o tym
- *    numerze spoza naszej historii); wyjście wymaga decyzji D-A4-1 (porównanie
- *    treści z `GET /invoices/ksef/{ksefNumber}` albo zmiana numeru przez szkic).
+ *  - KSEF_DUPLICATE_RECONCILE bez otwartego wpisu: automat (D-A4-1a) porównał
+ *    treść i nie rozstrzygnął (oryginał z FaktFlow o innym pliku, numer KSeF
+ *    w innej fakturze) — wyjściem będzie ręczny werdykt operatora (D-A4-1b).
+ *    Z otwartym wpisem „Tylko uzgodnij” powtarza weryfikację.
  *  - ENV_MISMATCH: ponowienie wysłałoby fakturę w innym środowisku niż to, w
  *    którym ją zlecono (np. faktura z TEST na PROD) — decyzja D-A4-2 (F1, go-live).
  *  - kod treści (terminal) przy dowodzie kontaktu bez otwartego wpisu — w
- *    praktyce zamknięty wpis `duplicate` po cudzym 440 w historii, który na
- *    zawsze blokuje powrót do szkicu; ta sama decyzja D-A4-1.
+ *    praktyce zamknięty wpis `duplicate` po nierozstrzygniętym 440 w historii
+ *    (rozstrzygnięty „numer zajęty” przenosi wpisy na `number_taken`, które
+ *    nie są dowodem); wyjście: ręczny werdykt D-A4-1b.
  *  - dokument specjalny z dowodem kontaktu albo z kodem reconcile: zdarzenia
  *    nie da się odtworzyć z wiersza — A4b (00137, dane specjalne na wierszu).
  */

@@ -32,6 +32,8 @@ const m = vi.hoisted(() => ({
   storage: new Map<string, string>(),
   updateStatus: vi.fn(),
   invalidate: vi.fn(),
+  captureMessage: vi.fn(),
+  storageReadFails: false,
 }));
 
 vi.mock('@/lib/ksef/client', async (orig) =>
@@ -57,6 +59,7 @@ vi.mock('@/lib/storage/r2', async (orig) => {
     },
     invoiceXmlExistsForId: async () => false,
     downloadInvoiceXml: async (path: string) => {
+      if (m.storageReadFails) throw new Error('R2 niedostępne');
       const xml = m.storage.get(path);
       if (xml === undefined) throw new Error(`brak pliku ${path}`);
       return xml;
@@ -104,7 +107,7 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/storage/xml-documents', () => ({ recordXmlDocument: vi.fn() }));
 vi.mock('@/lib/cache/invalidation', () => ({ invalidateTenantDashboard: vi.fn() }));
 vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
-vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn(), addBreadcrumb: vi.fn() }));
+vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: m.captureMessage, addBreadcrumb: vi.fn() }));
 
 import { NonRetriableError, RetryAfterError } from '@/lib/jobs/errors';
 import { runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
@@ -155,6 +158,7 @@ beforeEach(() => {
   m.ksef = freshKsef();
   m.mem = { db: { ksef_submissions: [], invoices: [] }, failWrite: null };
   m.storage = new Map();
+  m.storageReadFails = false;
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -193,10 +197,12 @@ describe('D-A4-1: cudzy 440 — weryfikacja treści oryginału z KSeF', () => {
       referenceNumber: 'I-9', invoiceNumber: NUMBER, invoiceHash: Buffer.from(sha256Hex(our), 'hex').toString('base64'),
       code: 440, ksefNumber: null, xml: our, originalSession: 'S-OBCA', originalKsef: 'K-OBCA',
     }] });
+    const ourPath = `${T}/2026/10/${ID}/wczesniejsza-proba.xml`;
+    m.storage.set(ourPath, our);
     m.mem.db.ksef_submissions = [{
       id: 'row-9', tenant_id: T, invoice_id: ID, submission_type: 'online', status: 'sent',
       session_reference_number: 'S-9', invoice_reference_number: 'I-9', request_payload_hash: sha256Hex(our),
-      attempted_at: new Date().toISOString(),
+      xml_storage_path: ourPath, attempted_at: new Date().toISOString(),
     }];
 
     const error = await failing(runSubmitInvoice(event(), ctx(1)));
@@ -267,5 +273,80 @@ describe('D-A4-1: cudzy 440 — weryfikacja treści oryginału z KSeF', () => {
     expect(accepted()).toBeUndefined();
     expect(classifySendError(error).code).toBe('KSEF_DUPLICATE_RECONCILE');
     expect(error.message).toContain('K-STARA');
+  });
+});
+
+describe('D-A4-1a — ustalenia recenzji przed wypchnięciem', () => {
+  it('niezweryfikowany 440 (403): znacznik na otwartym wpisie; po 48 h, gdy KSeF nie zna już sesji, „tylko uzgodnij” weryfikuje treść — nigdy NOT_IN_KSEF', async () => {
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: 'K-OBCA', xml: fromOtherProgram(ourXml()) });
+    m.ksef.downloadFailure = { status: 403 };
+    await failing(runSubmitInvoice(event(), ctx(0)));
+    expect(submissions()).toEqual([expect.objectContaining({
+      status: 'sent', error_code: '440', original_ksef_number: 'K-OBCA', original_session_reference_number: 'S-OBCA',
+    })]);
+    expect(m.captureMessage).toHaveBeenCalledWith('KSeF: duplikat 440 do uzgodnienia przez operatora', expect.anything());
+
+    // Dwie doby później: KSeF zapomniał naszą sesję (pytanie o status dałoby 21173 → STALE).
+    m.ksef.sessions.delete('S-1');
+    submissions()[0]!.attempted_at = new Date(Date.now() - 72 * 3_600_000).toISOString();
+    const stillLocked = await failing(runSubmitInvoice({ ...event(), reconcileOnly: true }, ctx(0)));
+    expect(classifySendError(stillLocked).code).toBe('KSEF_DUPLICATE_RECONCILE');
+    expect(submissions()[0]).toMatchObject({ status: 'sent' });
+
+    m.ksef.downloadFailure = null;
+    const decided = await failing(runSubmitInvoice({ ...event(), reconcileOnly: true }, ctx(0)));
+    expect(classifySendError(decided).code).toBe('KSEF_NUMBER_TAKEN');
+    expect(m.ksef.invoicePosts).toBe(1);
+  });
+
+  it('chwilowy błąd odczytu naszego pliku z magazynu → ponowienie weryfikacji, nie werdykt dla operatora', async () => {
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: 'K-OBCA', xml: fromOtherProgram(ourXml()) });
+    m.storageReadFails = true;
+
+    const error = await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(error).toBeInstanceOf(RetryAfterError);
+    expect(submissions().map((r) => r.status)).toEqual(['sent']);
+  });
+
+  it('inny program, ta sama treść co nasza (tylko nagłówek) → operator, nie „numer zajęty” (ta sama sprzedaż)', async () => {
+    const sameContent = withOtherHeaderDate(ourXml()).replace(/<SystemInfo>[^<]*<\/SystemInfo>/, '<SystemInfo>Inny Program 2.0</SystemInfo>');
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: 'K-OBCA', xml: sameContent });
+
+    const error = await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(classifySendError(error).code).toBe('KSEF_DUPLICATE_RECONCILE');
+    expect(error.message).toContain('ta sama sprzedaż');
+    expect(evidence()).toBe(true);
+  });
+
+  it('akceptacja duplikatu, a zapis faktury pada → wpis próby zostaje otwarty; ponowienie przyjmuje numer bez drugiej wysyłki', async () => {
+    seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: 'K-STARA', xml: ourXml() });
+    m.updateStatus.mockRejectedValueOnce(new Error('PostgREST 503'));
+
+    await failing(runSubmitInvoice(event(), ctx(0)));
+    expect(submissions().find((r) => r.session_reference_number === 'S-1')).toMatchObject({ status: 'sent', original_ksef_number: 'K-STARA' });
+
+    await runSubmitInvoice(event(), ctx(1));
+    expect(accepted()).toMatchObject({ ksef_number: 'K-STARA' });
+    expect(m.ksef.invoicePosts).toBe(1);
+    expect(submissions().find((r) => r.session_reference_number === 'S-1')).toMatchObject({ status: 'duplicate' });
+  });
+
+  it('oryginał = wcześniejsza próba tej samej treści, której wpis nie zna pliku (sprzed 00134) → archiwum pobranego oryginału', async () => {
+    const earlier = withOtherHeaderDate(ourXml());
+    seedKsefInvoice(m.ksef, { session: 'S-OLD', ksefNumber: 'K-OLD', xml: earlier });
+    m.mem.db.ksef_submissions = [{
+      id: 'row-old', tenant_id: T, invoice_id: ID, submission_type: 'online', status: 'abandoned',
+      session_reference_number: 'S-INNA', invoice_reference_number: null, request_payload_hash: sha256Hex(earlier),
+      xml_storage_path: null, attempted_at: new Date(Date.now() - 86_400_000).toISOString(),
+    }];
+
+    await runSubmitInvoice(event(), ctx(0));
+
+    const saved = accepted();
+    expect(saved).toMatchObject({ ksef_status: 'accepted', ksef_number: 'K-OLD' });
+    expect(String(saved?.xml_storage_path)).toMatch(/\/ksef-[0-9a-f]{40}\.xml$/);
+    expect(m.storage.get(String(saved?.xml_storage_path))).toBe(earlier);
   });
 });

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   fullFlow: vi.fn(),
   findOpen: vi.fn(),
   isOwn: vi.fn(),
+  sessionRow: vi.fn(),
   mark: vi.fn(),
   record: vi.fn(),
   status: vi.fn(),
@@ -53,6 +54,14 @@ vi.mock('@/lib/ksef/submission-log', () => ({
   promoteKsefSubmissionIntent: vi.fn(async () => false),
   abandonKsefSubmissionIntent: vi.fn(),
   recordKsefSubmissionIntent: vi.fn(),
+  // D-A4-1: weryfikacja cudzego 440 — domyślnie bez sesji w historii i bez znanego numeru.
+  findKsefSessionRow: mocks.sessionRow,
+  findSubmissionPayloads: vi.fn(async () => []),
+  findTenantInvoiceByKsefNumber: vi.fn(async () => null),
+  closeKsefAttempt: vi.fn(),
+  markKsefSubmissionsNumberTaken: vi.fn(),
+  recordKsefAcceptedSession: vi.fn(),
+  markKsefAttemptDuplicatePending: vi.fn(),
   recordKsefSubmissionSent: mocks.record,
   markKsefSubmission: mocks.mark,
   findOpenKsefSubmission: mocks.findOpen,
@@ -135,6 +144,7 @@ beforeEach(() => {
   mocks.credentials.mockResolvedValue(AUTH);
   mocks.findOpen.mockResolvedValue(null);
   mocks.isOwn.mockResolvedValue(false);
+  mocks.sessionRow.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -305,12 +315,14 @@ describe('job wysyłki — odpowiedź 440 „duplikat”', () => {
     invoice: { internalNumber: 'FV 1/2026', type: 'VAT', issueDate: '2026-10-01' } as Invoice,
   };
 
-  it('duplikat NASZEJ wcześniejszej wysyłki → przyjmujemy jej numer KSeF', async () => {
-    mocks.fullFlow.mockRejectedValue(new KsefInvoiceRejectedError(440, DUPLIKAT));
-    mocks.isOwn.mockResolvedValue(true);
+  it('duplikat NASZEJ wcześniejszej wysyłki tego samego pliku → przyjmujemy jej numer KSeF', async () => {
+    // D-A4-1: „nasza” = sesja oryginału w historii tej faktury I ten sam skrót pliku co bieżąca wysyłka.
+    const HASH_HEX = 'ab'.repeat(32);
+    mocks.fullFlow.mockRejectedValue(new KsefInvoiceRejectedError(440, DUPLIKAT, { invoiceHash: Buffer.from(HASH_HEX, 'hex').toString('base64') }));
+    mocks.sessionRow.mockResolvedValue({ status: 'sent', requestPayloadHash: HASH_HEX, xmlStoragePath: 'x.xml' });
 
     await expect(runSubmitInvoice(zdarzenie, ctx)).resolves.toMatchObject({ success: true, ksefNumber: ORYGINAL });
-    expect(mocks.isOwn).toHaveBeenCalledWith(zdarzenie.tenantId, zdarzenie.invoiceId, SESJA);
+    expect(mocks.sessionRow).toHaveBeenCalledWith(zdarzenie.tenantId, zdarzenie.invoiceId, SESJA);
     expect(mocks.status).toHaveBeenCalledWith(
       zdarzenie.invoiceId,
       expect.objectContaining({ ksef_status: 'accepted', ksef_number: ORYGINAL }),
@@ -318,9 +330,10 @@ describe('job wysyłki — odpowiedź 440 „duplikat”', () => {
     );
   });
 
-  it('duplikat spoza naszej historii → do uzgodnienia (znacznik), nie przypinamy cudzego numeru', async () => {
+  it('duplikat spoza naszej historii, treści nie da się pobrać (403) → do uzgodnienia (znacznik), nie przypinamy cudzego numeru', async () => {
     mocks.fullFlow.mockRejectedValue(new KsefInvoiceRejectedError(440, DUPLIKAT));
-    mocks.isOwn.mockResolvedValue(false);
+    mocks.sessionRow.mockResolvedValue(null);
+    mocks.fetch.mockRejectedValue(new KsefApiError(403, 'Forbidden', 'Forbidden'));
 
     const blad = (await runSubmitInvoice(zdarzenie, ctx).catch((e: unknown) => e)) as Error;
 
