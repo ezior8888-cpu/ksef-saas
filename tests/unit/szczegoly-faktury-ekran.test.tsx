@@ -13,9 +13,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  *    surowy znacznik ISO w UTC (część F-091).
  */
 
+const realtime = vi.hoisted(() => ({ handlers: [] as Array<(payload: { new: Record<string, unknown> }) => void> }));
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => {
-    const ch = { on: () => ch, subscribe: () => ch };
+    const ch = {
+      on: (_e: unknown, _f: unknown, cb: (payload: { new: Record<string, unknown> }) => void) => { realtime.handlers.push(cb); return ch; },
+      subscribe: () => ch,
+    };
     return { channel: () => ch, removeChannel: vi.fn() };
   },
 }));
@@ -24,6 +28,7 @@ vi.mock('@/components/invoices/upo-download', () => ({ UpoDownload: () => null }
 vi.mock('@/components/invoices/error-display', () => ({ InvoiceErrorDisplay: () => null }));
 
 import { InvoiceDetailView, type InvoiceDetailInitial } from '@/components/invoices/invoice-detail-view';
+import { describeDuplicateOriginal } from '@/lib/ksef/duplicate-check';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -70,6 +75,7 @@ const base: InvoiceDetailInitial = {
   ],
   upo_status: null,
   can_manage_send: false,
+  ksef_duplicate_original: null,
 };
 
 function render(initial: InvoiceDetailInitial) {
@@ -129,5 +135,34 @@ describe('szczegóły faktury na ekranie (F-094)', () => {
     const t = render({ ...base, payment_data: null });
     expect(t).not.toContain('Termin płatności');
     expect(t).toContain('FV/7/10/2026');
+  });
+
+  it('D-A4-1b-3: nierozstrzygnięty duplikat 440 — panel z danymi faktury, którą KSeF ma pod tym numerem', () => {
+    const view = describeDuplicateOriginal('FV/7/10/2026', '5260001246-20260928-0100A0B0C0D0-1A', {
+      v: 1, env: 'test', checkedAt: '2026-10-04T12:00:00Z', reason: 'faktflow-original',
+      sha256: 'a'.repeat(64), archivePath: 'x', sizeBytes: 1, sameContentExceptHeader: false, ownHistory: false,
+      acquiredAt: '2026-09-28T07:15:00.000Z', httpStatus: null, knownInvoice: null, recheck: null,
+      summary: { systemInfo: 'KSeF SaaS v1.0', number: 'FV/7/10/2026', issueDate: '2026-09-28', buyerNip: '5252241585', buyerName: 'Klient', gross: '1845.00', currency: 'PLN' },
+    });
+    const failed = { ...base, ksef_status: 'failed', ksef_number: null, last_error_code: 'KSEF_DUPLICATE_RECONCILE', ksef_duplicate_original: view };
+    const t = render(failed);
+    expect(t).toContain('W KSeF jest już faktura o tym numerze');
+    expect(t).toContain('5260001246-20260928-0100A0B0C0D0-1A');
+    expect(t).toContain('1845.00 PLN');
+    expect(t).toContain('Klient, NIP 5252241585');
+    expect(t).toContain('Nie wystawiaj tej faktury ponownie');
+
+    // Po zmianie stanu (np. ponowne uzgodnienie) panel znika.
+    expect(render({ ...failed, ksef_status: 'queued' })).not.toContain('W KSeF jest już faktura o tym numerze');
+  });
+
+  it('D-A4-1b-3: po zmianie stanu w czasie rzeczywistym panel nie wraca ze starymi danymi (nowe dane dopiero po odświeżeniu)', () => {
+    realtime.handlers.length = 0;
+    const view = describeDuplicateOriginal('FV/7/10/2026', '5260001246-20260928-0100A0B0C0D0-1A', null);
+    render({ ...base, ksef_status: 'failed', ksef_number: null, last_error_code: 'KSEF_DUPLICATE_RECONCILE', ksef_duplicate_original: view });
+    const invoiceUpdate = realtime.handlers[0]!;
+    act(() => invoiceUpdate({ new: { ksef_status: 'queued', last_error_code: null, last_error: null } }));
+    act(() => invoiceUpdate({ new: { ksef_status: 'failed', last_error_code: 'KSEF_DUPLICATE_RECONCILE', last_error: 'nowy werdykt' } }));
+    expect((host?.textContent ?? '')).not.toContain('W KSeF jest już faktura o tym numerze');
   });
 });

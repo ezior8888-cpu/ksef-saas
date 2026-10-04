@@ -40,6 +40,14 @@ export function decodeKsefXml(bytes: Buffer): string {
   return text.startsWith(UTF8_BOM) ? text.slice(1) : text;
 }
 
+/** W archiwum jest już INNY plik pod tym numerem KSeF — wymaga wyjaśnienia, nie ponowienia. */
+export class KsefXmlArchiveConflictError extends Error {
+  constructor(readonly ksefNumber: string) {
+    super(`Archiwum XML ${ksefNumber}: w magazynie jest inny plik — wymagane uzgodnienie`);
+    this.name = 'KsefXmlArchiveConflictError';
+  }
+}
+
 /**
  * Zapisuje XML (tylko gdy obiektu jeszcze nie ma) i zwraca ścieżkę ze skrótem.
  * Istniejący obiekt z innym skrótem przerywa import — dwa różne pliki pod
@@ -56,7 +64,7 @@ export async function archiveImportedKsefXml(
   if (!uploaded) {
     const existing = await downloadFromR2(storagePath, tenantId);
     if (sha256Hex(existing) !== sha256Hash) {
-      throw new Error(`Archiwum XML ${ksefNumber}: w magazynie jest inny plik — wymagane uzgodnienie`);
+      throw new KsefXmlArchiveConflictError(ksefNumber);
     }
   }
   return { storagePath, sha256Hash, sizeBytes: bytes.length };

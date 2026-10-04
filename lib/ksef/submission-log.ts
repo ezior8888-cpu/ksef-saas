@@ -25,6 +25,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
+import { mergeDuplicateCheck, parseDuplicateCheck, type KsefDuplicateCheck } from './duplicate-check';
+
 export interface KsefSubmissionReferences {
   sessionReferenceNumber: string;
   invoiceReferenceNumber: string;
@@ -509,7 +511,7 @@ export async function findTenantInvoiceByKsefNumber(
   tenantId: string,
   ksefNumber: string,
   excludeInvoiceId: string,
-): Promise<{ internalNumber: string | null } | null> {
+): Promise<{ id: string; internalNumber: string | null } | null> {
   const { data, error } = await createAdminClient()
     .from('invoices')
     .select('id, internal_number')
@@ -520,5 +522,44 @@ export async function findTenantInvoiceByKsefNumber(
     .limit(1)
     .maybeSingle();
   if (error) throw new Error('Nie można sprawdzić numeru KSeF w fakturach firmy');
-  return data ? { internalNumber: (data.internal_number as string | null) ?? null } : null;
+  return data ? { id: data.id as string, internalNumber: (data.internal_number as string | null) ?? null } : null;
+}
+
+/**
+ * D-A4-1b-3 (00144): dane oryginału przy duplikacie 440, którego automat nie
+ * rozstrzygnął — na otwartym wpisie próby ze znacznikiem 440 tego numeru KSeF.
+ * Zamknięte wpisy (decyzja, `number_taken`, akceptacja) nie są nadpisywane.
+ * Rzuca przy błędzie bazy (fail-closed: bez danych nie ma werdyktu).
+ */
+export async function recordKsefDuplicateCheck(params: {
+  tenantId: string;
+  invoiceId: string;
+  originalKsefNumber: string;
+  check: KsefDuplicateCheck;
+}): Promise<void> {
+  const supabase = createAdminClient();
+  // Sprawdzenie, które nie pobrało oryginału, nie kasuje danych z wcześniejszego
+  // udanego (`mergeDuplicateCheck`) — odczyt bieżącego zapisu przed nadpisaniem.
+  // Jedna próba naraz (przejęcie wysyłki, 00124), więc odczyt i zapis się nie mijają.
+  const { data: current, error: readError } = await supabase
+    .from('ksef_submissions')
+    // `original_check` z 00144 — typy bazy dogenerujemy z produkcji po wgraniu.
+    .select('original_check')
+    .eq('tenant_id', params.tenantId)
+    .eq('invoice_id', params.invoiceId)
+    .eq('original_ksef_number', params.originalKsefNumber)
+    .in('status', ['intent', 'sent'])
+    .order('attempted_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (readError) throw new Error('Nie można odczytać danych oryginału duplikatu KSeF');
+  const previous = parseDuplicateCheck((current as { original_check?: unknown } | null)?.original_check);
+  const { error } = await supabase
+    .from('ksef_submissions')
+    .update({ original_check: mergeDuplicateCheck(previous, params.check) } as Record<string, unknown>)
+    .eq('tenant_id', params.tenantId)
+    .eq('invoice_id', params.invoiceId)
+    .eq('original_ksef_number', params.originalKsefNumber)
+    .in('status', ['intent', 'sent']);
+  if (error) throw new Error('Nie można zapisać danych oryginału duplikatu KSeF');
 }

@@ -46,7 +46,7 @@ rodzaj dokumentu × dowód kontaktu × otwarty wpis); ślepe uliczki z kolumny
 | `KSEF_PAUSED` | hold | wyłącznik operatora | czeka | I7: po zdjęciu hamulca | Wyślij ponownie / szkic | — |
 | `KOR_HOLD` | hold | hamulec korekt | czeka | — | Wróć do szkicu (bez dowodu) | ponowienie korekty → A4b (00137); zdjęcie hamulca → C4 |
 | `ROZ_HOLD_RECONCILE` | hold | hamulec ROZ | czeka | — | Wróć do szkicu (bez dowodu) | jak wyżej |
-| `KSEF_DUPLICATE_RECONCILE` | reconcile | 440, którego automat nie rozstrzygnął: oryginał z FaktFlow o innym pliku, numer KSeF w innej fakturze firmy, oryginału nie da się pobrać (403 — token bez `InvoiceRead`; po ponowieniach 5xx/429/21164/21165) | „zajmujemy się” | I5 przy otwartym wpisie > 48 h (weryfikacja od nowa) | „Tylko uzgodnij” przy otwartym wpisie (powtarza weryfikację) | bez otwartego wpisu: **ślepa uliczka** → ręczny werdykt D-A4-1b |
+| `KSEF_DUPLICATE_RECONCILE` | reconcile | 440, którego automat nie rozstrzygnął: oryginał z FaktFlow o innym pliku, numer KSeF w innej fakturze firmy, oryginału nie da się pobrać (403 — token bez `InvoiceRead`; po ponowieniach 5xx/429/21164/21165) | „zajmujemy się” + dane oryginału z KSeF na karcie faktury (D-A4-1b-3, 00144) | I5 przy otwartym wpisie > 48 h (weryfikacja od nowa) | „Tylko uzgodnij” przy otwartym wpisie (powtarza weryfikację); karta `/admin/ksef/[id]`: `original_check` (powód, dane, skrót, archiwum) | bez otwartego wpisu: **ślepa uliczka** → ręczny werdykt D-A4-1b |
 | `RESULT_UNCERTAIN` | reconcile | niepewny wynik, KSeF nie odpowiada | „nie wystawiaj ponownie” | I5 (A3): „tylko uzgodnij” raz na dobę | „Tylko uzgodnij” / **Wyślij ponownie** (A4) | — |
 | `INVALID_EVENT` | reconcile | zły payload zdarzenia | „zajmujemy się” | — | **Wyślij ponownie** (A4) — zdarzenie odtworzone z wiersza | — |
 | `ENQUEUE_LOST` | reconcile | `queued` bez zlecenia, z dowodem kontaktu (I1) | „zajmujemy się” | I5 przy otwartym wpisie > 48 h | **Wyślij ponownie** (A4) / „Tylko uzgodnij” | — |
@@ -92,6 +92,19 @@ reconcile nie ma żadnego wyjścia → A4b (00137: dane specjalne na wierszu).
   uzupełnia datę z KSeF). Kierunek bezpieczny: „numer zajęty” nigdy dla oryginału
   z FaktFlow, przy tej samej treści z innego programu (ta sama sprzedaż) ani
   bez naszego pliku do porównania.
+  Każdy nierozstrzygnięty werdykt zapisuje **dane oryginału** na otwartym
+  wpisie próby (`ksef_submissions.original_check`, 00144): powód
+  (`known-number`, `download-refused`, `download-pending`, `storage-pending`,
+  `archive-pending`, `faktflow-original`, `same-content-other-program`,
+  `no-own-file`, `archive-conflict`), numer, datę, nabywcę, kwotę, program, datę nadania
+  numeru, skrót i — gdy oryginał pobrano, a werdykt nie zapadł — bajty
+  oryginału w archiwum `<firma>/ksef-import/<numer KSeF>.xml` (ten sam klucz
+  co Magiczny import). Klient widzi je na karcie faktury, operator na karcie
+  w `/admin/ksef`. Ponowne sprawdzenie (cron I5, „Tylko uzgodnij”), które
+  nie pobrało oryginału (503, 403), nie kasuje danych z udanego — wynik
+  próby trafia do `recheck`. `archive-conflict` = w archiwum jest inny plik
+  pod tym numerem KSeF: operator porównuje oba pliki, zanim cokolwiek
+  zdecyduje.
   „Znany numer” (numer KSeF oryginału ma już inna faktura firmy) liczy
   tylko faktury sprzedaży — zakupowa z tym numerem nie zatrzymuje
   porównania treści (D-A4-1b-3, A0).

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import { canManageKsefSend } from '@/lib/invoices/ksef-send-policy';
+import { describeDuplicateOriginal, parseDuplicateCheck } from '@/lib/ksef/duplicate-check';
 import { createClient } from '@/lib/supabase/server';
 import {
   InvoiceDetailView,
@@ -80,6 +81,20 @@ export default async function InvoiceDetailPage({
         .maybeSingle()
     : { data: null };
 
+  // D-A4-1b-3 (00144): KSeF ma już fakturę o tym numerze, a automat nie
+  // rozstrzygnął — dane oryginału z otwartego wpisu próby ze znacznikiem 440.
+  const duplicate = invoice.ksef_status === 'failed' && invoice.last_error_code === 'KSEF_DUPLICATE_RECONCILE'
+    ? (await supabase
+        .from('ksef_submissions')
+        .select('original_ksef_number, original_check')
+        .eq('invoice_id', id)
+        .in('status', ['intent', 'sent'])
+        .not('original_ksef_number', 'is', null)
+        .order('attempted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()).data as { original_ksef_number: string | null; original_check: unknown } | null
+    : null;
+
   const lines = ((invoice.invoice_line_items ?? []) as InvoiceDetailLine[])
     .slice()
     .sort((a, b) => a.ordinal - b.ordinal);
@@ -111,6 +126,13 @@ export default async function InvoiceDetailPage({
       upo?.status ??
       null,
     can_manage_send: canManageKsefSend(membership?.role ?? null),
+    ksef_duplicate_original: duplicate?.original_ksef_number
+      ? describeDuplicateOriginal(
+          (invoice.internal_number as string | null) ?? null,
+          duplicate.original_ksef_number,
+          parseDuplicateCheck(duplicate.original_check),
+        )
+      : null,
   };
 
   return <InvoiceDetailView key={initial.id} initial={initial} />;
