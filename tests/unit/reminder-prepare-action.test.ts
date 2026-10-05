@@ -83,7 +83,7 @@ describe('prepare reminder action', () => {
     expect(db.tables.flo_approvals).toEqual([]);
     expect(db.tables.payment_reminders).toEqual([]);
   });
-  it('creates a preview for a final/ROZ invoice — C-16/00130 made it chaseable', async () => {
+  it('creates a preview for a final/ROZ invoice — C-16/00145 made it chaseable', async () => {
     Object.assign(db.tables.invoices[0]!, { invoice_kind: 'final', invoice_type: 'ROZ' });
     const result = await prepareReminderAction({ invoiceId: ID, stage: 'stage_1' });
     expect(result).toMatchObject({ success: true });

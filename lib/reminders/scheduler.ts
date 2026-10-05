@@ -27,7 +27,7 @@ export interface InvoiceForScheduling {
   /**
    * Opcjonalne: bez nich `amountDueOf` liczy jak zwykła faktura (gross_total).
    * Potrzebne, żeby ROZ (invoice_kind='final') nie była gonione o całe
-   * zamówienie, gdy rozliczyła już zaliczkę (C-16, 00130).
+   * zamówienie, gdy rozliczyła już zaliczkę (C-16, 00145).
    */
   invoice_kind?: string | null;
   payment_data?: Json | null;
@@ -99,7 +99,7 @@ export async function decideNextReminder(
   const paid = toNumber(invoice.paid_amount);
   // ROZ: do zapłaty to `payment_data.amountDue` (reszta po zaliczkach), nie
   // całe `gross_total` — inaczej ROZ nigdy nie wypadłaby jako zapłacona
-  // (C-16, 00130). Dla każdej innej faktury `amountDueOf` wraca do gross_total.
+  // (C-16, 00145). Dla każdej innej faktury `amountDueOf` wraca do gross_total.
   const due = amountDueOf({
     invoice_kind: invoice.invoice_kind, gross_total: invoice.gross_total,
     payment_data: invoice.payment_data,

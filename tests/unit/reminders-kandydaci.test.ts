@@ -89,7 +89,7 @@ describe('kandydaci do ponaglenia (cron)', () => {
       faktura('f-zaplacona', { payment_status: 'paid' }),
       faktura('g-przed-terminem', { payment_due_date: '2999-01-01' }),
       faktura('h-zakup', { direction: 'incoming' }),
-      // C-16/00130: ROZ jest kandydatem jak każda inna ścigalna faktura —
+      // C-16/00145: ROZ jest kandydatem jak każda inna ścigalna faktura —
       // CHASEABLE_INVOICE_KINDS już ją wpuszcza, bo dojrzałość amountDue
       // jest po stronie wyzwalacza i decideNextReminder, nie tego filtra.
       faktura('i-roz', { invoice_kind: 'final', invoice_type: 'ROZ' }),
@@ -123,7 +123,7 @@ describe('K-01 „czy klient zapłacił” — ta sama definicja zaległości', 
     expect(found.map((i) => i.id)).toEqual(['a-zwykla']);
   });
 
-  it('ROZ: amountDue z payment_data.amountDue, nie z gross_total (C-16, 00130)', async () => {
+  it('ROZ: amountDue z payment_data.amountDue, nie z gross_total (C-16, 00145)', async () => {
     const now = new Date('2026-09-27T10:00:00Z');
     db.rows = [
       faktura('roz-1', {

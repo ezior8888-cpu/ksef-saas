@@ -8,7 +8,7 @@ function migration(name: string): string {
 
 const previous = migration('00082_invoices_overdue_outgoing.sql');
 const guarded = migration('00126_invoices_overdue_reconciliation_guard.sql');
-const rozAware = migration('00130_roz_amount_due.sql');
+const rozAware = migration('00145_roz_amount_due.sql');
 
 function projection(sql: string): string {
   const match = /CREATE OR REPLACE VIEW public\.invoices_overdue\s+WITH\s*\(security_invoker\s*=\s*true\)\s+AS\s+SELECT\s+([\s\S]*?)\s+FROM public\.invoices i\b/i.exec(sql);
@@ -40,14 +40,14 @@ describe('overdue view reconciliation migration (00126)', () => {
 });
 
 /**
- * C-16 (00130) — inwersja 00126: ROZ nie jest już wykluczona, a amount_due
+ * C-16 (00145) — inwersja 00126: ROZ nie jest już wykluczona, a amount_due
  * liczy się od `payment_data.amountDue` (reszta po zaliczkach), nie od
  * całego gross_total. Kolumny widoku (nazwy, kolejność) zostają te same co
  * w 00082/00126 — tylko wzór amount_due się zmienia, więc porównanie
  * projekcji nie może już być bajt-w-bajt identyczne; sprawdzamy kolejność
  * nazw kolumn z osobna.
  */
-describe('ROZ amount-due migration (00130)', () => {
+describe('ROZ amount-due migration (00145)', () => {
   it('admits ROZ by invoice_kind/invoice_type, unlike 00126', () => {
     expect(rozAware).toMatch(/i\.invoice_kind\s*=\s*'final'\s+AND\s+i\.invoice_type\s*=\s*'ROZ'/);
     // Keeps the two existing allowed combinations untouched.

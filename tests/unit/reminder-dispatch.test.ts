@@ -285,8 +285,8 @@ describe('delayed reminder dispatch guards', () => {
     expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();
     expect(tables.payment_reminders[0].status).toBe('pending');
   });
-  it('sends an approved final ROZ demand for the 700 PLN amountDue, now that C-16 (00130) trusts it', async () => {
-    // Do 00130 KAŻDA ROZ była tu zatrzymywana jako bezpiecznik, niezależnie
+  it('sends an approved final ROZ demand for the 700 PLN amountDue, now that C-16 (00145) trusts it', async () => {
+    // Do 00145 KAŻDA ROZ była tu zatrzymywana jako bezpiecznik, niezależnie
     // od kwoty. `isReminderInvoiceChaseable` już ją wpuszcza, a zaległość
     // (`outstandingOf`) liczy się od payment_data.amountDue, nie od całego
     // gross_total — więc 1000 PLN zamówienia z resztą 700 PLN po zaliczce

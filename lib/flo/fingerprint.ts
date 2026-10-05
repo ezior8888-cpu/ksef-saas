@@ -114,7 +114,7 @@ export function describeChange(
   const gross = toNumber(after.grossTotal);
   // ROZ: „zapłacił w całości” znaczy paid >= amountDue (reszta po
   // zaliczkach), nie paid >= grossTotal — inaczej ROZ nigdy nie dostałaby
-  // zdania „zapłacił”, tylko zawsze „wpłacił część” (C-16, 00130).
+  // zdania „zapłacił”, tylko zawsze „wpłacił część” (C-16, 00145).
   const due = Object.hasOwn(after, 'amountDue') ? toNumber(after.amountDue) : gross;
 
   if (
@@ -217,7 +217,7 @@ export async function readState(
         status: readString(data.ksef_status),
         grossTotal: toNumber(data.gross_total),
         // ROZ: do zapłaty jest reszta po zaliczkach (payment_data.amountDue),
-        // nie całe grossTotal (C-16, 00130) — patrz lib/invoices/amount-due.ts.
+        // nie całe grossTotal (C-16, 00145) — patrz lib/invoices/amount-due.ts.
         // Wchodzi do odcisku, więc rozliczenie zaliczki po utworzeniu karty
         // też unieważnia propozycję, tak jak zmiana paidAmount.
         amountDue: toNumber(

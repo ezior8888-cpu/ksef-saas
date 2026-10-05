@@ -154,7 +154,7 @@ export default async function OverduePage() {
       const matchingRow = row.id ? eligibleById.get(row.id) : undefined;
       if (!matchingRow) return true;
       // ROZ: do zapłaty to `payment_data.amountDue` (reszta po zaliczkach),
-      // nie całe `gross_total` — ta sama reguła co w widoku (C-16, 00130).
+      // nie całe `gross_total` — ta sama reguła co w widoku (C-16, 00145).
       const expectedDue = amountDueOf({
         invoice_kind: matchingRow.invoice_kind, gross_total: row.gross_total,
         payment_data: matchingRow.payment_data,

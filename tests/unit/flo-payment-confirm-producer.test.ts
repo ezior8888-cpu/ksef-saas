@@ -64,7 +64,7 @@ function putInvoice(
   id: string,
   overrides: {
     gross?: number; paid?: number; due?: string; paused?: boolean;
-    /** ROZ (C-16, 00130): invoice_kind='final' + payment_data.amountDue. */
+    /** ROZ (C-16, 00145): invoice_kind='final' + payment_data.amountDue. */
     kind?: string; amountDue?: number;
   } = {},
 ) {
@@ -266,7 +266,7 @@ describe('K-01 w pulsie — jedno pytanie', () => {
     await expect(assertFresh(row, NOW)).rejects.toThrow(/zapłacił/);
   });
 
-  it('ROZ: karta pyta o payment_data.amountDue (reszta po zaliczkach), nie o gross_total (C-16, 00130)', async () => {
+  it('ROZ: karta pyta o payment_data.amountDue (reszta po zaliczkach), nie o gross_total (C-16, 00145)', async () => {
     // Zamówienie 12 300, zaliczka już rozliczona — do zapłaty na TEJ
     // fakturze jest 9 840.
     putInvoice('A', { gross: 12300, kind: 'final', amountDue: 9840 });

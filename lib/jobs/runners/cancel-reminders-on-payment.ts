@@ -33,7 +33,7 @@ export async function runCancelRemindersOnPayment(data: Parameters<typeof invoic
     const gross = Number(invoice.gross_total ?? 0);
     // ROZ: zapłacona w całości znaczy „paid >= payment_data.amountDue”, nie
     // „paid >= gross_total” — inaczej ROZ ze rozliczoną zaliczką nigdy nie
-    // odwołałaby swoich przypomnień (C-16, 00130).
+    // odwołałaby swoich przypomnień (C-16, 00145).
     const due = amountDueOf({
       invoice_kind: invoice.invoice_kind, gross_total: invoice.gross_total,
       payment_data: invoice.payment_data,

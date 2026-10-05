@@ -186,7 +186,7 @@ function seedInvoice(id = 'A') {
 /**
  * ROZ (final) na zamówienie 12 300 z rozliczoną zaliczką 2 460 — do
  * zapłaty na TEJ fakturze jest 9 840, zapisane w `payment_data.amountDue`
- * (C-16, 00130). Bez wcześniejszej wpłaty.
+ * (C-16, 00145). Bez wcześniejszej wpłaty.
  */
 function seedFinalInvoice(id = 'A') {
   store.invoices.set(id, {
@@ -381,7 +381,7 @@ describe('K-01 — zapis wpłaty', () => {
     expect(store.calls.insert).toBe(0);
   });
 
-  it('ROZ: „Tak” zapisuje tylko 9 840 — resztę po zaliczce, nie 12 300 (C-16, 00130)', async () => {
+  it('ROZ: „Tak” zapisuje tylko 9 840 — resztę po zaliczce, nie 12 300 (C-16, 00145)', async () => {
     seedFinalInvoice();
     const card = await cardFor();
 
@@ -442,7 +442,7 @@ describe('K-01 — zapis wpłaty', () => {
     expect(plan).toMatchObject({ amount: 300, kind: 'full' });
   });
 
-  it('ROZ: należność z faktów to amountDue minus paidAmount, nie grossTotal minus paidAmount (C-16, 00130)', () => {
+  it('ROZ: należność z faktów to amountDue minus paidAmount, nie grossTotal minus paidAmount (C-16, 00145)', () => {
     const plan = planPaymentConfirmation({
       invoiceId: 'A',
       number: 'FV/A',

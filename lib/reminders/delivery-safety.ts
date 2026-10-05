@@ -63,7 +63,7 @@ export async function assertReminderSendable(delivery: ReminderDelivery) {
   if (recent.error || !recent.data) throw new Error('Nie można sprawdzić ostatnich płatności.');
   const day = recent.data?.[0]?.payment_date;
   // ROZ: zaległość liczona od `payment_data.amountDue`, nie od całego
-  // `gross_total` — ta sama reguła co w `prepare-delivery.ts` (C-16, 00130).
+  // `gross_total` — ta sama reguła co w `prepare-delivery.ts` (C-16, 00145).
   const outstanding = outstandingOf({
     invoice_kind: row.invoice_kind, gross_total: row.gross_total,
     payment_data: row.payment_data, paid_amount: row.paid_amount,

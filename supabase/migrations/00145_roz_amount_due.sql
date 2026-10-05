@@ -143,5 +143,5 @@ GRANT SELECT ON public.invoices_overdue TO authenticated;
 COMMENT ON VIEW public.invoices_overdue IS
   'Zaległe pozycje do przypomnienia: app, bez powiązanych dokumentów, '
   'z security_invoker=true. ROZ liczona od payment_data.amountDue (reszta '
-  'po zaliczkach, C-16/00130), nie od całego gross_total. Nie jest pełnym '
+  'po zaliczkach, C-16/00145), nie od całego gross_total. Nie jest pełnym '
   'saldem należności po korektach ani po imporcie.';

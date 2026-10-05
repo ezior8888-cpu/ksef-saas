@@ -60,7 +60,7 @@ export interface OverdueInvoice {
   grossTotal: number;
   /**
    * Do zapłaty NA TEJ fakturze — dla ROZ to `payment_data.amountDue`
-   * (reszta po zaliczkach), nie `grossTotal` (C-16, 00130). Dla każdej innej
+   * (reszta po zaliczkach), nie `grossTotal` (C-16, 00145). Dla każdej innej
    * faktury to ta sama wartość co `grossTotal`. Opcjonalne: źródła, które
    * jeszcze go nie liczą, dostają zapasowe `grossTotal`.
    */
@@ -302,7 +302,7 @@ export function overdueEntryFromState(
     contractorName: context.contractorName ?? 'Kontrahent',
     grossTotal: Number(facts.grossTotal ?? 0),
     // `readState` zawsze liczy amountDue (C-16); zapasowy grossTotal jest
-    // tylko dla faktów bez tego pola (stary ładunek przed 00130).
+    // tylko dla faktów bez tego pola (stary ładunek przed 00145).
     amountDue: Number(facts.amountDue ?? facts.grossTotal ?? 0),
     paidAmount: Number(facts.paidAmount ?? 0),
     dueDate: facts.dueDate,
@@ -390,7 +390,7 @@ export function planPaymentConfirmation(
       ? (payload.facts as Record<string, unknown>)
       : {};
   const grossTotal = Number(facts.grossTotal);
-  // Zapasowy grossTotal tylko dla propozycji zapisanej przed 00130, która
+  // Zapasowy grossTotal tylko dla propozycji zapisanej przed 00145, która
   // nie ma jeszcze amountDue w payload — nowe karty zawsze je mają.
   const amountDue = Number(
     Object.hasOwn(facts, 'amountDue') ? facts.amountDue : facts.grossTotal,
@@ -455,7 +455,7 @@ registerFloHandler('payment.confirm', async (ctx) => {
     throw new Error('Nie można potwierdzić tej faktury');
   }
   // ROZ: saldo liczymy od payment_data.amountDue, nie od gross_total — ta
-  // sama reguła co w planie (C-16, 00130).
+  // sama reguła co w planie (C-16, 00145).
   const balance = outstandingOf({
     invoice_kind: invoice.data.invoice_kind, gross_total: invoice.data.gross_total,
     payment_data: invoice.data.payment_data, paid_amount: invoice.data.paid_amount,

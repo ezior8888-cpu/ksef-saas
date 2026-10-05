@@ -149,7 +149,7 @@ async function readOverdueInvoices(
             number: row.internal_number ?? 'bez numeru',
             contractorName: buyerName(row.buyer_data) ?? 'Kontrahent',
             grossTotal: Number(row.gross_total ?? 0),
-            // ROZ: do zapłaty jest reszta po zaliczkach (C-16, 00130).
+            // ROZ: do zapłaty jest reszta po zaliczkach (C-16, 00145).
             amountDue: amountDueOf({
               invoice_kind: row.invoice_kind, gross_total: row.gross_total,
               payment_data: row.payment_data,

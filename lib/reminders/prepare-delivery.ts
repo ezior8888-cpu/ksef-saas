@@ -56,7 +56,7 @@ export async function buildReminderDelivery(
   const gross = Number(invoice.gross_total); const paid = Number(invoice.paid_amount);
   // ROZ: zaległość liczymy od `payment_data.amountDue` (reszta po
   // zaliczkach), nie od `gross_total` — inaczej ponaglenie żądałoby całego
-  // zamówienia, choć część już rozliczono zaliczką (C-16, 00130).
+  // zamówienia, choć część już rozliczono zaliczką (C-16, 00145).
   const outstanding = outstandingOf({
     invoice_kind: invoice.invoice_kind, gross_total: invoice.gross_total,
     payment_data: invoice.payment_data, paid_amount: invoice.paid_amount,

@@ -14,7 +14,7 @@
  * długo gonić już opłaconą fakturę niż przestać gonić zaległą.
  *
  * Ta sama reguła po stronie bazy: wyzwalacz `update_invoice_payment_status`
- * i widok `invoices_overdue` w migracji `supabase/migrations/00130_roz_amount_due.sql`.
+ * i widok `invoices_overdue` w migracji `supabase/migrations/00145_roz_amount_due.sql`.
  */
 
 import { roundToCents } from '@/lib/xml/invoice-calculator';

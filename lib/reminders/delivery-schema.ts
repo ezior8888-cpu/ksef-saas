@@ -9,7 +9,7 @@ export const REMINDER_INVOICE_SELECT = 'id,tenant_id,gross_total,paid_amount,cur
 
 /** Imported corrections can have invoice_kind=regular, so both stored classifications must be safe.
  * Final/ROZ była wykluczona, dopóki do zapłaty liczyło się od gross_total
- * (kwota zaliczki wyglądała jak własny dług). Od C-16 (00130) wyzwalacz
+ * (kwota zaliczki wyglądała jak własny dług). Od C-16 (00145) wyzwalacz
  * i widok zaległości liczą ROZ od `payment_data.amountDue`, więc jest
  * ścigalna jak każda inna faktura.
  */

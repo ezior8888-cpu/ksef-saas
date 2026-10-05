@@ -168,8 +168,8 @@ describe('read-only reminder preview preparation', () => {
       filters: [['tenant_id', tenantId], ['advance_invoice_ids', [invoiceId]]] });
     expect(mocks.pdf).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
   });
-  it('demands only 700 PLN on a final ROZ whose settled advance leaves that much due (C-16, 00130)', async () => {
-    // Do 00130 ROZ była wykluczona z ponagleń właśnie dlatego, że do zapłaty
+  it('demands only 700 PLN on a final ROZ whose settled advance leaves that much due (C-16, 00145)', async () => {
+    // Do 00145 ROZ była wykluczona z ponagleń właśnie dlatego, że do zapłaty
     // liczyło się od gross_total (1000), choć 300 jest już rozliczone
     // zaliczką. Teraz amountDue z payment_data mówi, ile naprawdę brakuje.
     const finalGross = 1000; const amountDue = 700;

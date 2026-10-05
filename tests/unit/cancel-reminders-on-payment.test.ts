@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobContext } from '@/lib/jobs/registry';
 
 /**
- * C-16 (00130) — anulowanie przypomnień po wpłacie musi liczyć „zapłacona
+ * C-16 (00145) — anulowanie przypomnień po wpłacie musi liczyć „zapłacona
  * w całości" od `payment_data.amountDue` (ROZ), nie od `gross_total`.
  * Inaczej ROZ z rozliczoną zaliczką nigdy nie odwołałaby swoich przypomnień,
  * choć klient wpłacił już wszystko, czego ta faktura jeszcze żądała.
@@ -94,7 +94,7 @@ describe('runCancelRemindersOnPayment', () => {
     expect(store.reminders[0]!.status).toBe('pending');
   });
 
-  it('ROZ: wpłata 9 840 odwołuje przypomnienia, choć gross_total (12 300) nie jest pokryte (C-16, 00130)', async () => {
+  it('ROZ: wpłata 9 840 odwołuje przypomnienia, choć gross_total (12 300) nie jest pokryte (C-16, 00145)', async () => {
     store.invoice = {
       paid_amount: 9840, gross_total: 12300, tenant_id: 'ten-1', internal_number: 'FV/ROZ-1',
       invoice_kind: 'final', payment_data: { amountDue: 9840 },
