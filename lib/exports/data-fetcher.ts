@@ -476,6 +476,7 @@ function mapInvoiceRow(
     currency: row.currency,
     invoiceType: mapInvoiceKind(row.invoice_kind),
     importedDocumentType: importedDocumentType(row),
+    importedFromKsef: row.origin === 'ksef_import',
     issueDate: row.issue_date,
     saleDate: row.sale_date ?? row.issue_date,
     paymentDueDate: row.payment_due_date ?? undefined,

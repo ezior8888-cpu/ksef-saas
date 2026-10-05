@@ -27,12 +27,22 @@ interface PeriodInvoice {
   ksef_number: string | null;
   invoice_kind: string | null;
   invoice_type: string | null;
+  origin: string | null;
+  net_total: number | string | null;
+}
+
+interface PeriodLine {
+  invoice_id: string;
+  vat_rate: string | null;
+  net_amount: number | string | null;
 }
 
 /**
  * W9: pierwszy dokument okresu, którego JPK nie wykaże — powód tą samą
  * odmową co generator (`amountsOf`), więc paczka i plik mówią to samo.
  * Te same faktury co eksport: sprzedaż przyjęta w KSeF, w tym środowisku.
+ * Faktury z importu sprawdzane z pozycjami (stawki i suma netto), pozostałe
+ * — rodzaj i stawki spoza FaktFlow.
  */
 async function unsupportedDocumentReason(
   client: SupabaseClient,
@@ -43,7 +53,7 @@ async function unsupportedDocumentReason(
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await client
       .from('invoices')
-      .select('id, internal_number, ksef_number, invoice_kind, invoice_type')
+      .select('id, internal_number, ksef_number, invoice_kind, invoice_type, origin, net_total')
       .eq('tenant_id', params.tenantId)
       .eq('direction', 'outgoing')
       .eq('ksef_status', 'accepted')
@@ -58,19 +68,23 @@ async function unsupportedDocumentReason(
     if (page.length < PAGE) break;
   }
 
-  const asJpk = (inv: PeriodInvoice, vatRate: string | null): JpkInvoice => {
+  const asJpk = (inv: PeriodInvoice, lines: readonly PeriodLine[] | null): JpkInvoice => {
     const type = (inv.invoice_type ?? '').toUpperCase();
     return {
       invoiceNumber: inv.internal_number ?? inv.ksef_number ?? '',
       ksefNumber: inv.ksef_number ?? undefined,
       invoiceType: 'regular',
       importedDocumentType: inv.invoice_kind === 'regular' && (type === 'KOR' || type === 'ZAL' || type === 'ROZ') ? type : undefined,
+      importedFromKsef: lines !== null && inv.origin === 'ksef_import',
       issueDate: params.periodStart,
       buyerName: '',
-      netTotal: 0,
+      netTotal: Number(inv.net_total ?? 0),
       vatTotal: 0,
       grossTotal: 0,
-      lines: vatRate === null ? [] : [{ position: 1, name: '', unit: '', quantity: 1, unitPriceNet: 0, netAmount: 0, vatRate }],
+      lines: (lines ?? []).map((l, i) => ({
+        position: i + 1, name: '', unit: '', quantity: 1, unitPriceNet: 0,
+        netAmount: Number(l.net_amount ?? 0), vatRate: String(l.vat_rate ?? ''),
+      })),
     };
   };
   const refusal = (inv: JpkInvoice): string | null => {
@@ -86,21 +100,46 @@ async function unsupportedDocumentReason(
     const reason = refusal(asJpk(inv, null));
     if (reason) return reason;
   }
-  const byId = new Map(invoices.map((inv) => [inv.id, inv]));
+
+  // Faktury z importu: wszystkie pozycje (stawka i suma netto).
+  const imported = invoices.filter((inv) => inv.origin === 'ksef_import');
+  for (let i = 0; i < imported.length; i += LINE_CHUNK) {
+    const chunk = imported.slice(i, i + LINE_CHUNK);
+    const lines: PeriodLine[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await client
+        .from('invoice_line_items')
+        .select('invoice_id, vat_rate, net_amount')
+        .in('invoice_id', chunk.map((inv) => inv.id))
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`Nie można sprawdzić pozycji faktur z importu: ${error.message}`);
+      const page = (data ?? []) as PeriodLine[];
+      lines.push(...page);
+      if (page.length < PAGE) break;
+    }
+    for (const inv of chunk) {
+      const reason = refusal(asJpk(inv, lines.filter((l) => l.invoice_id === inv.id)));
+      if (reason) return reason;
+    }
+  }
+
+  // Pozostałe faktury: stawka spoza FaktFlow w którejkolwiek pozycji.
+  const others = invoices.filter((inv) => inv.origin !== 'ksef_import');
+  const byId = new Map(others.map((inv) => [inv.id, inv]));
   const allowed = `(${VAT_RATES.map((r) => `"${r}"`).join(',')})`;
-  for (let i = 0; i < invoices.length; i += LINE_CHUNK) {
-    const ids = invoices.slice(i, i + LINE_CHUNK).map((inv) => inv.id);
+  for (let i = 0; i < others.length; i += LINE_CHUNK) {
     const { data, error } = await client
       .from('invoice_line_items')
-      .select('invoice_id, vat_rate')
-      .in('invoice_id', ids)
+      .select('invoice_id, vat_rate, net_amount')
+      .in('invoice_id', others.slice(i, i + LINE_CHUNK).map((inv) => inv.id))
       .not('vat_rate', 'in', allowed)
       .limit(1);
     if (error) throw new Error(`Nie można sprawdzić stawek pozycji okresu: ${error.message}`);
-    const line = (data ?? [])[0] as { invoice_id: string; vat_rate: string | null } | undefined;
+    const line = (data ?? [])[0] as PeriodLine | undefined;
     const inv = line ? byId.get(line.invoice_id) : undefined;
     if (inv && line) {
-      const reason = refusal(asJpk(inv, String(line.vat_rate ?? '')));
+      const reason = refusal(asJpk(inv, [line]));
       if (reason) return reason;
     }
   }

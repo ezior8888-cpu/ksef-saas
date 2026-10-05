@@ -416,12 +416,13 @@ async function insertInvoices(
     ksef_status: string | null;
     ksef_environment: string | null;
     xml_storage_path: string | null;
+    origin: string | null;
   };
   const existingKsef = new Map<string, ExistingKsefInvoice[]>();
   if (ksefNumbers.length > 0) {
     let query = supabase
       .from('invoices')
-      .select('id, ksef_number, internal_number, ksef_status, ksef_environment, xml_storage_path')
+      .select('id, ksef_number, internal_number, ksef_status, ksef_environment, xml_storage_path, origin')
       .eq('tenant_id', tenantId)
       .eq('direction', invoiceDirection);
     if (invoiceDirection === 'incoming' && ksefEnvironment) {
@@ -497,8 +498,12 @@ async function insertInvoices(
             continue;
           }
         }
-        // Ponowienie importu: dokument jest już zapisany — ostrzeżenie zostaje.
-        if (source === 'ksef_history') noteHeld(inv, num, ksefNorm);
+        // Ponowienie importu: dokument zapisany wcześniej PRZEZ IMPORT — ostrzeżenie
+        // zostaje. Faktura wystawiona w FaktFlow (korekta, zaliczka z aplikacji)
+        // ma w bazie właściwy rodzaj i stawki — JPK ją wykaże, bez ostrzeżenia.
+        if (source === 'ksef_history' && matches.length === 1 && matches[0]?.origin === 'ksef_import') {
+          noteHeld(inv, num, ksefNorm);
+        }
         warnings.push(`Pominięto duplikat (DB, KSeF): ${ksefNorm}`);
         continue;
       }
@@ -628,6 +633,8 @@ async function insertInvoices(
       } catch (e) {
         // Faktura zostaje; ponowienie importu uzupełni wiersz (gałąź duplikatu).
         warnings.push(`Faktura ${num}: nie zapisano oryginału XML (KOD I) — ponów import (${e instanceof Error ? e.message : 'błąd'})`);
+        // Faktura i pozycje są zapisane — ostrzeżenie o JPK też musi być.
+        noteHeld(inv, num, ksefNorm);
         failed++;
         rememberNumber(key, ksefNorm ?? null);
         continue;
@@ -670,7 +677,11 @@ function heldDocumentWarning(
     .join(', ');
   const type = mapParsedKindToFaVatType(inv.invoiceType);
   const special = type === 'VAT' ? null : IMPORTED_TYPE_LABEL[type];
-  if (codes.length === 0 && !special) return null;
+  // Pozycje nie sumują się do netto z nagłówka (np. ceny brutto: P_11A bez P_11).
+  const linesNet = inv.lines.reduce((sum, l) => sum + (Number.isFinite(l.netAmount) ? l.netAmount : 0), 0);
+  const mismatch = status === 'accepted' && direction === 'outgoing' &&
+    Math.abs(roundToCents(linesNet) - roundToCents(inv.totals.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01;
+  if (codes.length === 0 && !special && !mismatch) return null;
 
   if (status !== 'accepted') {
     return codes.length ? `${doc}: stawka ${rates} nie ma odpowiednika w FaktFlow — szkic zapisany z tą stawką.` : null;
@@ -682,7 +693,9 @@ function heldDocumentWarning(
   }
   const what = special
     ? `zaimportowana faktura ${special} — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki)`
-    : `stawka VAT ${rates} — FaktFlow jej jeszcze nie wykazuje w JPK`;
+    : codes.length
+      ? `stawka VAT ${rates} — FaktFlow jej jeszcze nie wykazuje w JPK`
+      : 'netto pozycji nie sumuje się do sumy netto faktury z KSeF (np. ceny brutto — P_11A)';
   return (
     `${doc}: ${what}. Faktura jest zapisana, ale JPK_FA i JPK_V7M za ${inv.issueDate.slice(0, 7)} nie powstaną ` +
     'w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).'

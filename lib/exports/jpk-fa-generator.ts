@@ -78,6 +78,8 @@ export interface JpkInvoice {
    * zna powiązań korekty, zaliczek, ROZ — W9). JPK go nie wykaże poprawnie.
    */
   importedDocumentType?: 'KOR' | 'ZAL' | 'ROZ';
+  /** Faktura z importu historii KSeF (`origin = ksef_import`) — pozycje z parsera, nie z FaktFlow. */
+  importedFromKsef?: boolean;
   issueDate: string;
   saleDate?: string;
   paymentDueDate?: string;
@@ -208,7 +210,7 @@ export class JpkDocumentNotSupportedError extends Error {
   ) {
     super(
       `${JPK_DOCUMENT_REFUSAL_PREFIX} faktura ${invoiceNumber}${ksefNumber ? ` (KSeF ${ksefNumber})` : ''} ${reason} ` +
-        'Plik nie powstał, żeby nie pominąć ani nie pomylić tej sprzedaży — przygotuj JPK za ten okres z księgową (KPiR i CSV działają).',
+        'Plik nie powstał, żeby nie pominąć ani nie pomylić tej sprzedaży — JPK za ten okres trzeba przygotować poza FaktFlow (KPiR i CSV z FaktFlow działają).',
     );
     this.name = 'JpkDocumentNotSupportedError';
   }
@@ -366,8 +368,26 @@ const RATE_ORDER = ['23', '8', '5', 'oo', 'np', 'np_ii', '0', 'zw'];
 const P12_VALUE: Readonly<Record<string, string>> = { np_ii: 'np' };
 
 /** Kwoty w stawkach i P_15 — jak na fakturze w KSeF (ROZ po odjęciu zaliczek). */
+/**
+ * W9: pozycje faktury z importu muszą sumować się do jej netto z KSeF —
+ * inaczej (np. ceny brutto: P_11A bez P_11, netto pozycji = 0) sprzedaż po
+ * cichu wypadłaby z pól stawek.
+ */
+export function importedLinesMismatch(inv: Pick<JpkInvoice, 'importedFromKsef' | 'netTotal' | 'lines'>): boolean {
+  if (!inv.importedFromKsef) return false;
+  const sum = inv.lines.reduce((s, l) => s + (Number.isFinite(l.netAmount) ? l.netAmount : 0), 0);
+  return Math.abs(roundToCents(sum) - roundToCents(inv.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01;
+}
+
 export function amountsOf(inv: JpkInvoice): InvoiceAmounts {
   if (inv.importedDocumentType) throw unsupportedImportedType(inv, inv.importedDocumentType);
+  if (importedLinesMismatch(inv)) {
+    throw new JpkDocumentNotSupportedError(
+      inv.invoiceNumber,
+      inv.ksefNumber,
+      'ma pozycje, których netto nie sumuje się do sumy netto faktury z KSeF (np. ceny brutto — P_11A), więc FaktFlow nie wykaże jej poprawnie w JPK.',
+    );
+  }
   const items = inv.lines.map((line) => toLineItem(line, inv));
   const byRate =
     inv.invoiceType === 'final'

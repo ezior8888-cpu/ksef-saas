@@ -13,13 +13,18 @@ odwzorowanie), `lib/import/fa3-parser.ts` (import), `lib/exports/jpk-fa-generato
 | `np I` | `np` | wykazuje (P_13_5 / K_11) |
 | `np II` | `np_ii` | wykazuje (P_13_5 + P_18 / K_11 + K_12) |
 | `0 WDT`, `0 EX`, `22`, `7`, `4`, `3` | **ten sam kod, dosłownie** | **odmawia** z numerem faktury |
-| brak P_12 | stawka z nagłówka, gdy jednoznaczna (jedna niezerowa suma; 23/22 i 8/7 z proporcji podatku; bez sum przy `P_19 = 1` — `zw`) | jak wyżej |
+| brak P_12 | stawka z nagłówka, gdy jednoznaczna (jedna niezerowa suma; 23/22 i 8/7 z proporcji podatku; bez sum przy `P_19 = 1` — `zw`; zwolnienie obok innej sumy — `nieznana`) | jak wyżej |
 | brak P_12 bez jednoznacznej sumy, kod spoza FA(3) | `nieznana` | **odmawia** z numerem faktury |
 | gołe `0` / `np` (pliki FA(2)) | wariant z jedynej niezerowej sumy rodziny (P_13_6_1/2/3, P_13_8/9), inaczej `nieznana` | jak wyżej |
 
 Dlaczego dosłownie, a nie „0” albo „23”: WDT i eksport mają w JPK_V7M własne
 pola (K_21, K_22), a „22” → „23” zmieniłoby wyliczony podatek. Lepiej, żeby
 plik nie powstał, niż żeby sprzedaż trafiła do złego pola albo wypadła.
+
+Faktura z importu, której **netto pozycji nie sumuje się do netto z
+nagłówka** (np. ceny brutto: `P_11A` bez `P_11`, parser czyta tylko `P_11`),
+też jest odmawiana z numerem — inaczej sprzedaż po cichu wypadłaby z pól
+stawek. Odczyt cen brutto to C5b.
 
 Zaimportowane **korekty, zaliczki i ROZ** import zapisuje jako zwykłe
 (`invoice_kind = regular`, rodzaj z pliku w `invoice_type`), bo nie zna ich
@@ -31,9 +36,12 @@ powiązań. JPK też ich odmawia z numerem dokumentu.
   kod stawki i miesiąc, za który JPK nie powstanie w FaktFlow. Faktura jest
   zapisana i liczy się do KPiR i CSV.
 - **Eksport JPK_FA / JPK_V7M:** zadanie kończy się od razu (bez ponowień)
-  powodem „JPK wstrzymany: faktura … ma stawkę VAT „0 WDT” (…) … przygotuj JPK
-  za ten okres z księgową (KPiR i CSV działają)”. Portal księgowej: 422 z tym
-  samym tekstem.
+  powodem „JPK wstrzymany: faktura … ma stawkę VAT „0 WDT” (…) … JPK za ten
+  okres trzeba przygotować poza FaktFlow (KPiR i CSV z FaktFlow działają)”,
+  widocznym w Centrum eksportu pod pozycją eksportu. Portal księgowej: 422
+  z tym samym tekstem.
+- **Ponowny import** faktury wystawionej w FaktFlow (np. własnej korekty)
+  nie daje ostrzeżenia — w bazie ma właściwy rodzaj i stawki.
 - **Paczka Co-Pilot:** zamiast JPK_FA dostaje CSV (jak przy korekcie w okresie).
 - **Karta faktury:** stawka z opisem, np. „0 WDT (wewnątrzwspólnotowa dostawa
   towarów, 0%)”.

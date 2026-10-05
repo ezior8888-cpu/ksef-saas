@@ -128,6 +128,7 @@ function rateFromSingleBucket(header: Fa3RateHeader, among: readonly Fa3NetField
  *    (P_13_6_1/2/3, P_13_8/9);
  *  - brak P_12 → stawka z jedynej niezerowej sumy nagłówka (23/22 i 8/7
  *    po proporcji podatku); bez sum przy zwolnieniu (P_19 = 1) → „zw”;
+ *    zwolnienie obok innej sumy → „nieznana” (pozycja może być zwolniona);
  *  - wszystko inne → „nieznana”.
  */
 export function importVatRateFromFa3(p12: unknown, header: Fa3RateHeader): ImportedVatRate {
@@ -140,7 +141,11 @@ export function importVatRateFromFa3(p12: unknown, header: Fa3RateHeader): Impor
     if (code.toLowerCase() === 'np') return rateFromSingleBucket(header, ['P_13_8', 'P_13_9']) ?? UNKNOWN_VAT_RATE;
     return UNKNOWN_VAT_RATE;
   }
-  if (nonZeroFields(header, FA3_NET_FIELDS).length === 0) return header.exempt ? 'zw' : UNKNOWN_VAT_RATE;
+  const buckets = nonZeroFields(header, FA3_NET_FIELDS);
+  if (buckets.length === 0) return header.exempt ? 'zw' : UNKNOWN_VAT_RATE;
+  // Zwolnienie (P_19 = 1) obok innej sumy: pozycja bez P_12 może być tą
+  // zwolnioną, której suma P_13_7 nie musi występować — nie zgadujemy.
+  if (header.exempt && buckets[0] !== 'P_13_7') return UNKNOWN_VAT_RATE;
   return rateFromSingleBucket(header, FA3_NET_FIELDS) ?? UNKNOWN_VAT_RATE;
 }
 

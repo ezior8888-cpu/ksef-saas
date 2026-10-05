@@ -31,8 +31,8 @@ beforeEach(() => {
   vi.stubEnv('KSEF_ENV', 'test');
   tables = {
     tenants: [{ id: 'firma-a', nip: '5260001246' }],
-    invoices: [faktura({ id: 'fv-1', internal_number: 'FV/1' })],
-    invoice_line_items: [{ id: 'l-1', invoice_id: 'fv-1', vat_rate: '23' }],
+    invoices: [faktura({ id: 'fv-1', internal_number: 'FV/1', net_total: 100 })],
+    invoice_line_items: [{ id: 'l-1', invoice_id: 'fv-1', vat_rate: '23', net_amount: 100 }],
   };
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -43,8 +43,8 @@ describe('jpkFaBlocker — dokumenty, których JPK nie wykaże poprawnie', () =>
   });
 
   it('pozycja „0 WDT” z importu → powód z numerem faktury (paczka dostanie CSV)', async () => {
-    tables.invoices!.push(faktura({ id: 'fv-wdt', internal_number: 'FV/WDT/1', ksef_number: '5260001246-20260910-0100A0B0C0D1-AF' }));
-    tables.invoice_line_items!.push({ id: 'l-2', invoice_id: 'fv-wdt', vat_rate: '0 WDT' });
+    tables.invoices!.push(faktura({ id: 'fv-wdt', internal_number: 'FV/WDT/1', ksef_number: '5260001246-20260910-0100A0B0C0D1-AF', net_total: 500 }));
+    tables.invoice_line_items!.push({ id: 'l-2', invoice_id: 'fv-wdt', vat_rate: '0 WDT', net_amount: 500 });
     expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/WDT\/1.*0 WDT/);
   });
 
@@ -52,6 +52,18 @@ describe('jpkFaBlocker — dokumenty, których JPK nie wykaże poprawnie', () =>
     tables.invoices!.push(faktura({ id: 'kor-1', internal_number: 'KOR/1', invoice_type: 'KOR' }));
     tables.invoice_line_items!.push({ id: 'l-3', invoice_id: 'kor-1', vat_rate: '23' });
     expect(await blocker()).toMatch(/JPK wstrzymany:.*KOR\/1/);
+  });
+
+  it('faktura z importu z pozycjami, które nie sumują się do netto (ceny brutto) → powód z numerem', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-br', internal_number: 'FV/BR/1', net_total: 500 }));
+    tables.invoice_line_items!.push({ id: 'l-5', invoice_id: 'fv-br', vat_rate: '0', net_amount: 0 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/BR\/1/);
+  });
+
+  it('faktura z aplikacji ze stawką spoza FaktFlow (dane historyczne) → powód z numerem', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-app', internal_number: 'FV/APP/1', origin: 'app', net_total: 100 }));
+    tables.invoice_line_items!.push({ id: 'l-6', invoice_id: 'fv-app', vat_rate: '0 KR', net_amount: 100 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/APP\/1/);
   });
 
   it('dokument z innego środowiska KSeF nie blokuje (eksport go nie czyta)', async () => {
