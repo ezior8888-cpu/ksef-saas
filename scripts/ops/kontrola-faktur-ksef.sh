@@ -21,7 +21,9 @@
 #   5. UPO wg statusu i błędu (W12)
 #   6. skrzynka: przychodzące bez kosztu, bez XML, z otwartym znacznikiem (K2)
 #   7. pg-boss: joby wg (kolejka, stan), harmonogramy, polityka kolejek
-#   8. ostatnie migracje w schema_migrations
+#   8. dokumenty, których JPK nie wykaże (W9): stawki spoza FaktFlow
+#      i zaimportowane KOR/ZAL/ROZ
+#   9. ostatnie migracje w schema_migrations
 #
 # Błąd jednego zapytania nie przerywa reszty (np. kolumna sprzed migracji).
 # ════════════════════════════════════════════════════════════════
@@ -146,7 +148,13 @@ sql "harmonogramy (powinny odpowiadać CRON_JOBS; wycofane: cron.refresh-materia
 sql "polityka kolejek (QUEUE_POLICY: retry_limit, expire_seconds)" \
   "SELECT name, retry_limit, retry_delay, expire_seconds FROM pgboss.queue ORDER BY 1"
 
-section "8. db-1: ostatnie migracje"
+section "8. db-1: dokumenty, których JPK nie wykaże (W9, import historii KSeF)"
+sql "pozycje sprzedaży przyjętej ze stawką spoza FaktFlow (0 WDT, 0 EX, 22, 7, 4, 3, nieznana; stare surowe 0 KR / np I / np II)" \
+  "SELECT i.tenant_id, i.internal_number, i.ksef_number, to_char(i.issue_date, 'YYYY-MM') AS okres, l.vat_rate, count(*) FROM invoice_line_items l JOIN invoices i ON i.id = l.invoice_id WHERE i.direction='outgoing' AND i.ksef_status='accepted' AND l.vat_rate NOT IN ('23','8','5','0','zw','oo','np','np_ii') GROUP BY 1,2,3,4,5 ORDER BY 4 DESC, 2 LIMIT 50"
+sql "zaimportowane korekty, zaliczki i ROZ zapisane jako zwykłe (invoice_kind regular)" \
+  "SELECT tenant_id, internal_number, ksef_number, invoice_type, issue_date FROM invoices WHERE direction='outgoing' AND ksef_status='accepted' AND invoice_kind='regular' AND invoice_type IN ('KOR','ZAL','ROZ') ORDER BY issue_date DESC LIMIT 50"
+
+section "9. db-1: ostatnie migracje"
 sql "schema_migrations" \
   "SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5"
 

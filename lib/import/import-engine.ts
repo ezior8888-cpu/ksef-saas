@@ -10,6 +10,7 @@ import type { BuyerParty, PaymentInfo, SellerParty } from '@/types/invoice';
 import type { InvoiceOrigin } from '@/lib/flo/functions/import-history';
 import type { ParsedInvoice, ParsedLine, ParsedParty } from './fa3-parser';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
+import { importedVatRateLabel, isVatRate } from '@/lib/xml/fa3-p12';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import { recordXmlDocument } from '@/lib/storage/xml-documents';
 import type { ArchivedKsefXml } from './ksef-xml-archive';
@@ -76,6 +77,10 @@ export async function processImportedInvoices(
   const productsMap = extractUniqueProducts(params.invoices);
   const productsCreated = await upsertProducts(supabase, params.tenantId, productsMap, warnings);
 
+  // W9: dokumenty zapisane, których JPK nie wykaże (stawka spoza FaktFlow,
+  // zaimportowana korekta / zaliczka / ROZ) — na początku listy, bo widok
+  // importu pokazuje tylko pierwsze ostrzeżenia.
+  const held: string[] = [];
   const invoiceResult = await insertInvoices(
     supabase,
     params.tenantId,
@@ -86,6 +91,7 @@ export async function processImportedInvoices(
     invoiceKsefStatus,
     params.ksefEnvironment ?? null,
     warnings,
+    held,
   );
 
   return {
@@ -94,7 +100,7 @@ export async function processImportedInvoices(
     contractorsCreated: contractorResult.created,
     contractorsUpdated: contractorResult.updated,
     productsCreated,
-    warnings,
+    warnings: [...held, ...warnings],
   };
 }
 
@@ -354,8 +360,13 @@ async function insertInvoices(
   invoiceKsefStatus: string,
   ksefEnvironment: KsefEnvironment | null,
   warnings: string[],
+  held: string[],
 ): Promise<{ imported: number; failed: number }> {
   if (invoices.length === 0) return { imported: 0, failed: 0 };
+  const noteHeld = (inv: ParsedInvoice, num: string, ksefNumber: string | undefined) => {
+    const note = heldDocumentWarning(inv, num, ksefNumber, invoiceDirection, invoiceKsefStatus);
+    if (note) held.push(note);
+  };
   const origin: InvoiceOrigin = source === 'ksef_history' ? 'ksef_import'
     : source === 'ksef_inbox' ? 'ksef_inbox'
     : source === 'ocr_photo' ? 'ocr'
@@ -486,6 +497,8 @@ async function insertInvoices(
             continue;
           }
         }
+        // Ponowienie importu: dokument jest już zapisany — ostrzeżenie zostaje.
+        if (source === 'ksef_history') noteHeld(inv, num, ksefNorm);
         warnings.push(`Pominięto duplikat (DB, KSeF): ${ksefNorm}`);
         continue;
       }
@@ -622,10 +635,58 @@ async function insertInvoices(
     }
 
     imported++;
+    noteHeld(inv, num, ksefNorm);
     rememberNumber(key, ksefNorm ?? null);
   }
 
   return { imported, failed };
+}
+
+const IMPORTED_TYPE_LABEL: Record<'KOR' | 'ZAL' | 'ROZ', string> = {
+  KOR: 'korygująca',
+  ZAL: 'zaliczkowa',
+  ROZ: 'rozliczeniowa',
+};
+
+/**
+ * W9 (C5a): ostrzeżenie dla klienta o zapisanym dokumencie, którego JPK nie
+ * wykaże — stawka spoza FaktFlow („0 WDT”, „0 EX”, „22”…, „nieznana”) albo
+ * zaimportowana korekta / zaliczka / ROZ. `null`, gdy dokument jest zwykły.
+ */
+function heldDocumentWarning(
+  inv: ParsedInvoice,
+  num: string,
+  ksefNumber: string | undefined,
+  direction: 'outgoing' | 'incoming',
+  status: string,
+): string | null {
+  const doc = `${num}${ksefNumber ? ` (KSeF ${ksefNumber})` : ''}`;
+  const codes = [...new Set(inv.lines.map((l) => l.vatRate.trim()).filter((r) => !isVatRate(r)))];
+  const rates = codes
+    .map((c) => {
+      const label = importedVatRateLabel(c);
+      return `„${c}”${label ? ` (${label})` : ''}`;
+    })
+    .join(', ');
+  const type = mapParsedKindToFaVatType(inv.invoiceType);
+  const special = type === 'VAT' ? null : IMPORTED_TYPE_LABEL[type];
+  if (codes.length === 0 && !special) return null;
+
+  if (status !== 'accepted') {
+    return codes.length ? `${doc}: stawka ${rates} nie ma odpowiednika w FaktFlow — szkic zapisany z tą stawką.` : null;
+  }
+  if (direction === 'incoming') {
+    return codes.length
+      ? `${doc}: stawka ${rates} — FaktFlow jej nie rozlicza; faktura jest zapisana z kwotami z KSeF, sprawdź ją z księgową.`
+      : null;
+  }
+  const what = special
+    ? `zaimportowana faktura ${special} — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki)`
+    : `stawka VAT ${rates} — FaktFlow jej jeszcze nie wykazuje w JPK`;
+  return (
+    `${doc}: ${what}. Faktura jest zapisana, ale JPK_FA i JPK_V7M za ${inv.issueDate.slice(0, 7)} nie powstaną ` +
+    'w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).'
+  );
 }
 
 /**

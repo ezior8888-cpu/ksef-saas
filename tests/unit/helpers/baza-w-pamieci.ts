@@ -18,7 +18,7 @@ export interface MemoryTables {
 
 let nextId = 1;
 
-export function memoryClient(tables: MemoryTables) {
+export function memoryClient(tables: MemoryTables, options: { failInsertInto?: readonly string[] } = {}) {
   function from(table: string) {
     const rows = (tables[table] ??= []);
     const predicates: Array<(r: Row) => boolean> = [];
@@ -33,6 +33,7 @@ export function memoryClient(tables: MemoryTables) {
 
     const exec = () => {
       if (op === 'insert') {
+        if (options.failInsertInto?.includes(table)) return { data: null, error: { message: 'db down' }, count: null };
         const list = Array.isArray(payload) ? payload : [payload];
         inserted = list.map((p) => ({ id: p.id ?? `${table}-${nextId++}`, ...p }));
         rows.push(...inserted);

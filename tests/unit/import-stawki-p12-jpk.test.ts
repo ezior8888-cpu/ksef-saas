@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { memoryClient, type MemoryTables, type Row } from './helpers/baza-w-pamieci';
+import type { MemoryTables, Row } from './helpers/baza-w-pamieci';
 
-const db = vi.hoisted(() => ({ tables: {} as MemoryTables }));
+const db = vi.hoisted(() => ({ tables: {} as MemoryTables, failInsertInto: [] as string[] }));
 vi.mock('@/lib/supabase/server', async () => {
   const { memoryClient: client } = await import('./helpers/baza-w-pamieci');
-  return { createAdminClient: () => client(db.tables) };
+  return { createAdminClient: () => client(db.tables, { failInsertInto: db.failInsertInto }) };
 });
 vi.mock('@/lib/supabase/admin', async () => {
   const { memoryClient: client } = await import('./helpers/baza-w-pamieci');
-  return { createAdminClient: () => client(db.tables) };
+  return { createAdminClient: () => client(db.tables, { failInsertInto: db.failInsertInto }) };
 });
 
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
@@ -17,7 +17,7 @@ import { generateJpkFa } from '@/lib/exports/jpk-fa-generator';
 import { validateJpkFa } from '@/lib/exports/jpk-fa-validator';
 import { generateJpkV7m } from '@/lib/exports/jpk-v7m-generator';
 import { validateJpkV7m } from '@/lib/exports/jpk-v7m-validator';
-import { parseFa3Xml } from '@/lib/import/fa3-parser';
+import { parseFa3Xml, type ParsedInvoice } from '@/lib/import/fa3-parser';
 import { processImportedInvoices } from '@/lib/import/import-engine';
 import { generateFA3Xml } from '@/lib/xml/fa3-generator';
 import { finalizeInvoice } from '@/lib/xml/invoice-calculator';
@@ -70,14 +70,21 @@ function invoice(number: string, lines: Array<{ rate: VatRate; net: number }>, o
 const xmlOf = (inv: Invoice) => generateFA3Xml(inv, { generatedAt: new Date('2026-09-10T08:00:00Z') });
 
 async function importXml(...xmls: string[]) {
+  return importParsed(xmls.map((xml) => parseFa3Xml(xml, { ksefNumber: ksefNumber() })));
+}
+
+function importParsed(
+  invoices: ParsedInvoice[],
+  o: { direction?: 'outgoing' | 'incoming'; status?: string; source?: string } = {},
+) {
   return processImportedInvoices({
     tenantId: T,
     importJobId: 'job-1',
-    source: 'ksef_history',
-    invoiceDirection: 'outgoing',
-    invoiceKsefStatus: 'accepted',
+    source: o.source ?? 'ksef_history',
+    invoiceDirection: o.direction ?? 'outgoing',
+    invoiceKsefStatus: o.status ?? 'accepted',
     ksefEnvironment: 'test',
-    invoices: xmls.map((xml) => parseFa3Xml(xml, { ksefNumber: ksefNumber() })),
+    invoices,
   });
 }
 
@@ -121,6 +128,7 @@ const withoutP12 = (xml: string) => xml.replace(/<P_12>[^<]*<\/P_12>/g, '');
 beforeEach(() => {
   vi.stubEnv('KSEF_ENV', 'test');
   ksefCounter = 0;
+  db.failInsertInto = [];
   db.tables = {
     tenants: [{ id: T, nip: NIP, name: 'ACME sp. z o.o.', address_json: null }],
     invoices: [], invoice_line_items: [], contractors: [], products: [], expenses: [], xml_documents: [],
@@ -245,6 +253,86 @@ describe('W9: zaimportowane faktury korygujące, zaliczkowe i rozliczeniowe — 
     await importXml(kor(rate), xmlOf(invoice('FV/23/1', [{ rate: '23', net: 100 }])));
     await expect(jpkFa()).rejects.toThrow(/JPK wstrzymany:.*KOR\/1/);
     await expect(jpkV7m()).rejects.toThrow(/JPK wstrzymany:.*KOR\/1/);
+  });
+});
+
+describe('W9 — ustalenia recenzji C5a', () => {
+  it('pozycja zwolniona bez P_12 obok sumy 23% (P_19 = 1) → „nieznana”, nie 23% (faktura mieszana)', async () => {
+    const xml = xmlOf(invoice('FV/MIESZ/1', [{ rate: '23', net: 100 }, { rate: 'zw', net: 50 }]))
+      .replace('<P_12>zw</P_12>', '')
+      .replace(/<P_13_7>[^<]*<\/P_13_7>/, '');
+    await importXml(xml);
+    expect(storedRates('FV/MIESZ/1')).toEqual(['23', 'nieznana']);
+    await expect(jpkV7m()).rejects.toThrow(/JPK wstrzymany:.*FV\/MIESZ\/1/);
+  });
+
+  it.each([['0', 'FV/BR0/1'], ['23', 'FV/BR23/1']] as Array<[VatRate, string]>)(
+    'ceny brutto (P_11A zamiast P_11, stawka %s) → JPK odmawia z numerem, ostrzeżenie przy imporcie (nie ciche zero)',
+    async (rate, number) => {
+      const xml = xmlOf(invoice(number, [{ rate, net: 500 }]))
+        .replace(/<P_9A>([^<]*)<\/P_9A>/, '<P_9B>$1</P_9B>')
+        .replace(/<P_11>([^<]*)<\/P_11>/, '<P_11A>$1</P_11A>');
+      const result = await importXml(xml);
+      expect(result.warnings[0]).toContain(number);
+      await expect(jpkFa()).rejects.toThrow(new RegExp(`JPK wstrzymany:.*${number.replace(/\//g, '\\/')}`));
+      await expect(jpkV7m()).rejects.toThrow(/JPK wstrzymany:/);
+    },
+  );
+
+  it('ponowny import własnej korekty FaktFlow (w bazie jako korekta z aplikacji) → bez ostrzeżenia „JPK nie powstanie”', async () => {
+    const K = `${NIP}-20260910-0100A0B0C0D1-AF`.slice(0, 35);
+    db.tables.invoices!.push({
+      id: 'kor-app', tenant_id: T, direction: 'outgoing', origin: 'app', internal_number: 'KOR/APP/1', invoice_kind: 'correction',
+      invoice_type: 'KOR', ksef_status: 'accepted', ksef_environment: 'test', ksef_number: K, issue_date: '2026-09-10', xml_storage_path: 'x',
+    });
+    db.tables.invoice_line_items!.push({ id: 'kl-1', invoice_id: 'kor-app', vat_rate: '23', net_amount: 100 });
+    const xml = xmlOf(invoice('KOR/APP/1', [{ rate: '23', net: 100 }])).replace('<RodzajFaktury>VAT</RodzajFaktury>', '<RodzajFaktury>KOR</RodzajFaktury>');
+
+    const result = await importXml(xml);
+
+    expect(result.warnings.join(' | ')).not.toMatch(/JPK_FA i JPK_V7M/);
+  });
+
+  it('ponowny import dokumentu z importu ze stawką „0 WDT” → ostrzeżenie zostaje (gałąź duplikatu)', async () => {
+    const wdt = xmlOf(invoice('FV/WDT/2', [{ rate: '0', net: 500 }]))
+      .replace('<P_12>0 KR</P_12>', '<P_12>0 WDT</P_12>')
+      .replace(/<P_13_6_1>([^<]*)<\/P_13_6_1>/, '<P_13_6_2>$1</P_13_6_2>');
+    const parsed = parseFa3Xml(wdt, { ksefNumber: ksefNumber() });
+    await importParsed([parsed]);
+    const again = await importParsed([parsed]);
+    expect(again.warnings[0]).toContain('FV/WDT/2');
+    expect(again.warnings[0]).toContain('0 WDT');
+  });
+
+  it('faktura zapisana, ale zapis oryginału XML nieudany → ostrzeżenie o JPK i tak jest', async () => {
+    const wdt = xmlOf(invoice('FV/WDT/3', [{ rate: '0', net: 500 }]))
+      .replace('<P_12>0 KR</P_12>', '<P_12>0 WDT</P_12>')
+      .replace(/<P_13_6_1>([^<]*)<\/P_13_6_1>/, '<P_13_6_2>$1</P_13_6_2>');
+    const k = ksefNumber();
+    const parsed = { ...parseFa3Xml(wdt, { ksefNumber: k }), xmlArchive: { storagePath: `${T}/ksef-import/${k}.xml`, sha256Hash: 'a'.repeat(64), sizeBytes: 10 } };
+    db.failInsertInto = ['xml_documents'];
+    const result = await importParsed([parsed]);
+    expect(db.tables.invoices!.some((r) => r.internal_number === 'FV/WDT/3')).toBe(true);
+    expect(result.warnings.some((w) => /FV\/WDT\/3.*0 WDT.*JPK_FA i JPK_V7M/.test(w))).toBe(true);
+  });
+
+  it('komunikaty: faktura przychodząca i szkic z pliku — bez obietnic o JPK sprzedaży', async () => {
+    const wdt = xmlOf(invoice('FZ/WDT/1', [{ rate: '0', net: 500 }]))
+      .replace('<P_12>0 KR</P_12>', '<P_12>0 WDT</P_12>');
+    const incoming = await importParsed([parseFa3Xml(wdt, { ksefNumber: ksefNumber() })], { direction: 'incoming' });
+    expect(incoming.warnings[0]).toMatch(/FZ\/WDT\/1.*0 WDT.*sprawdź ją z księgową/);
+    expect(incoming.warnings[0]).not.toContain('JPK_FA');
+
+    const draft = await importParsed([{ ...parseFa3Xml(wdt.replace('FZ/WDT/1', 'SZK/1')), ksefNumber: undefined }], { status: 'draft', source: 'xml_file' });
+    expect(draft.warnings[0]).toMatch(/SZK\/1.*szkic zapisany/);
+  });
+
+  it('odmowa JPK nie każe księgowej „przygotować JPK z księgową” (ten sam tekst idzie do portalu)', async () => {
+    await importXml(xmlOf(invoice('FV/WDT/4', [{ rate: '0', net: 500 }])).replace('<P_12>0 KR</P_12>', '<P_12>0 WDT</P_12>')
+      .replace(/<P_13_6_1>([^<]*)<\/P_13_6_1>/, '<P_13_6_2>$1</P_13_6_2>'));
+    const error = await jpkFa().then(() => null, (e: Error) => e);
+    expect(error?.message).toMatch(/JPK wstrzymany:/);
+    expect(error?.message).not.toContain('z księgową');
   });
 });
 
