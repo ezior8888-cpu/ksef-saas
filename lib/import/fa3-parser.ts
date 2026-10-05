@@ -5,6 +5,7 @@
 
 import { XMLParser } from 'fast-xml-parser';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
+import { FA3_NET_FIELDS, importVatRateFromFa3, type Fa3RateHeader } from '@/lib/xml/fa3-p12';
 import type { ArchivedKsefXml } from './ksef-xml-archive';
 
 // ============================================================================
@@ -58,8 +59,14 @@ export interface ParsedLine {
   unit: string;
   quantity: number;
   unitPriceNet: number;
-  /** Wartość z P_12 (np. „23”, „zw”, „0 KR”). */
+  /**
+   * Stawka do zapisu: stawka FaktFlow („23”, „0”, „np_ii”…) z P_12, kod FA(3)
+   * bez odpowiednika („0 WDT”, „0 EX”, „22”, „7”, „4”, „3”) albo „nieznana”
+   * (`lib/xml/fa3-p12.ts`, W9). Nigdy surowe „0 KR” / „np I” / „np II”.
+   */
   vatRate: string;
+  /** Surowe P_12 z pliku (dowód); brak, gdy pozycja nie miała P_12. */
+  p12?: string;
   netAmount: number;
 }
 
@@ -176,16 +183,21 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
   const buyer = parseParty(root.Podmiot2, warnings, 'Nabywca');
 
   const wiersze = ensureArray(fa.FaWiersz as unknown[] | Record<string, unknown> | undefined);
+  const rateHeader = rateHeaderFromFa(fa);
   const lines: ParsedLine[] = wiersze.map((wRaw, idx) => {
     const w = (wRaw && typeof wRaw === 'object' ? wRaw : {}) as Record<string, unknown>;
     const pos = Number(w.NrWierszaFa) || idx + 1;
+    const p12 = w.P_12 == null ? undefined : String(w.P_12);
     return {
       position: pos,
       name: String(w.P_7 ?? ''),
       unit: String(w.P_8A ?? 'szt.'),
       quantity: parseNum(w.P_8B),
       unitPriceNet: parseNum(w.P_9A),
-      vatRate: String(w.P_12 ?? '23'),
+      // W9: stawka FaktFlow zamiast surowego P_12; bez P_12 — z nagłówka albo
+      // „nieznana”, nigdy domyślne 23%.
+      vatRate: importVatRateFromFa3(p12, rateHeader),
+      ...(p12 !== undefined ? { p12 } : {}),
       netAmount: parseNum(w.P_11),
     };
   });
@@ -336,6 +348,21 @@ function parseParty(
 // ============================================================================
 // Pozycje / kwoty
 // ============================================================================
+
+/** Sumy nagłówka i zwolnienie (P_19) — do ustalenia stawki pozycji bez P_12 (W9). */
+function rateHeaderFromFa(fa: Record<string, unknown>): Fa3RateHeader {
+  const nets: Fa3RateHeader['nets'] = {};
+  for (const field of FA3_NET_FIELDS) {
+    if (fa[field] != null && String(fa[field]).trim() !== '') nets[field] = parseNum(fa[field]);
+  }
+  const adnotacje = (fa.Adnotacje && typeof fa.Adnotacje === 'object' ? fa.Adnotacje : {}) as Record<string, unknown>;
+  const zwolnienie = (adnotacje.Zwolnienie && typeof adnotacje.Zwolnienie === 'object' ? adnotacje.Zwolnienie : {}) as Record<string, unknown>;
+  return {
+    nets,
+    vats: { P_14_1: optionalNum(fa.P_14_1), P_14_2: optionalNum(fa.P_14_2) },
+    exempt: String(zwolnienie.P_19 ?? '').trim() === '1',
+  };
+}
 
 function summarizeTotalsFromFa(fa: Record<string, unknown>): {
   grossTotal?: number;

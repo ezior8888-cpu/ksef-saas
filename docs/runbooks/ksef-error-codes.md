@@ -119,7 +119,7 @@ reconcile nie ma żadnego wyjścia → A4b (00137: dane specjalne na wierszu).
   3. pozostałe → decyduje **klient** przyciskiem z danymi oryginału („ta
      sama sprzedaż” / „inna sprzedaż → nowy numer”), operator tylko zapisuje
      decyzję klienta (D-A4-1b-3, w budowie: A0 → A dane oryginału na wpisie
-     → wierny import → B decyzja → C zapis oryginału z FaktFlow → D
+     → wierny import (C5a stawki P_12, C5b P_6 i adnotacje) → B decyzja → C zapis oryginału z FaktFlow → D
      „Sprawdź ponownie”). Do tego czasu operator sprawdza fakturę w KSeF
      i zgłasza ją Bartoszowi.
 - **D-A4-2 — `ENV_MISMATCH`** (decyzja Bartosza 04.10.2026, przyjęta

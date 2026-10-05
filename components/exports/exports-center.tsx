@@ -459,6 +459,10 @@ function ExportJobRow({ job }: { job: ManualExportJobWithFiles }) {
           <p className="text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
             {periodLabel} • {job.invoices_count ?? 0} faktur
           </p>
+          {/* Powód odmowy dla człowieka (np. W9: „JPK wstrzymany: faktura …”). */}
+          {job.status === 'failed' && job.error_message ? (
+            <p className="mt-1 text-[12px] text-red-300">{job.error_message}</p>
+          ) : null}
         </div>
       </div>
 

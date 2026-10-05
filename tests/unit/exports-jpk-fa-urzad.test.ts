@@ -30,6 +30,11 @@ function builder(table: string) {
     eq: () => q,
     gte: () => q,
     lte: () => q,
+    // W9: sprawdzenie dokumentów z importu w `jpkFaBlocker` (faktury okresu, stawki pozycji).
+    order: () => q,
+    range: () => q,
+    not: () => q,
+    limit: () => q,
     in: (col: string, vals: unknown[]) => {
       if (col === 'status') statusIn = vals;
       return q;

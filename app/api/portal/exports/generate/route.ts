@@ -11,7 +11,7 @@ import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
 import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
-import { generateJpkFa, JpkFaCorrectionNotSupportedError, JpkFaForeignCurrencyNotSupportedError } from '@/lib/exports/jpk-fa-generator';
+import { generateJpkFa, JpkDocumentNotSupportedError, JpkFaCorrectionNotSupportedError, JpkFaForeignCurrencyNotSupportedError } from '@/lib/exports/jpk-fa-generator';
 import { assertJpkMatchesSchema, JpkSchemaError } from '@/lib/exports/jpk-schema-check';
 import { MissingTaxOfficeError, readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
@@ -145,7 +145,11 @@ export async function POST(req: NextRequest) {
         });
         await assertJpkMatchesSchema('JPK_FA', xml);
       } catch (e) {
-        if (e instanceof JpkFaCorrectionNotSupportedError || e instanceof JpkFaForeignCurrencyNotSupportedError) {
+        if (
+          e instanceof JpkFaCorrectionNotSupportedError ||
+          e instanceof JpkFaForeignCurrencyNotSupportedError ||
+          e instanceof JpkDocumentNotSupportedError
+        ) {
           return NextResponse.json({ error: e.message }, { status: 422 });
         }
         if (e instanceof JpkSchemaError) {

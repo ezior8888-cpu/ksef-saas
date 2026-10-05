@@ -12,6 +12,7 @@ import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
 import { UpoDownload } from '@/components/invoices/upo-download';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
+import { importedVatRateLabel } from '@/lib/xml/fa3-p12';
 import type { Database } from '@/types/database';
 
 export interface InvoiceDetailLine {
@@ -103,6 +104,9 @@ function vatRateLabel(rate: string | null): string {
   // AUD-70: usługa z art. 100 ust. 1 pkt 4 (FA(3) „np II”) — jak na PDF.
   if (rate === 'np_ii') return 'np. II';
   if (['zw', 'oo', 'np'].includes(rate)) return rate;
+  // W9: kod FA(3) z importu bez odpowiednika w FaktFlow („0 WDT”, „nieznana”…).
+  const imported = importedVatRateLabel(rate);
+  if (imported) return `${rate} (${imported})`;
   return `${rate}%`;
 }
 

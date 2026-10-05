@@ -150,7 +150,8 @@ describe('kwoty w stawkach', () => {
   });
 
   it('stawka spoza JPK_FA(4) — błąd, nie ciche 23%', () => {
-    expect(() => generateJpkFa(dane([faktura({ lines: [linia('X', 10, '7', 0.7)] })]))).toThrow(/stawka "7"/);
+    // W9 (C5a): odmowa dokumentu z jego numerem i kodem stawki (`JpkDocumentNotSupportedError`).
+    expect(() => generateJpkFa(dane([faktura({ lines: [linia('X', 10, '7', 0.7)] })]))).toThrow(/JPK wstrzymany:.*„7”/);
   });
 });
 
