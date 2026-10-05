@@ -2,6 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import { getRlsTestEnvironment } from './helpers/rls-environment';
+import { assertSubmitReferences } from '@/lib/ksef/submit-reference-boundary';
+import type { Invoice } from '@/types/invoice';
+import type { CorrectionInvoiceData } from '@/types/invoice-types';
 
 /**
  * A4b PR1 (00137) na prawdziwej bazie: `invoices.special_data` — dane
@@ -333,6 +336,63 @@ describe.skipIf(!hasDatabase)('A4b (00137): special_data — kształt, zapis jed
       expect(after.ksef_status).toBe('draft');
       expect(after.special_data).toEqual({ correctionData: correctionData(8) });
       expect(after.xml_generated_at).toBeNull();
+    });
+  });
+
+  describe('granica wysyłki na prawdziwym wierszu (PostgREST, jsonb)', () => {
+    /** Korekta z rodzicem przyjętym w KSeF TEST; zwraca dane do zdarzenia. */
+    async function correctionForBoundary(specialData: 'stored' | 'legacy') {
+      const parentId = await acceptedParent();
+      const { data: parentRow, error: parentError } = await admin.from('invoices')
+        .select('internal_number, issue_date, ksef_number').eq('id', parentId).single();
+      if (parentError) throw parentError;
+      const id = nextId();
+      const number = `KOR/${counter}`;
+      const correction = {
+        invoiceType: 'correction', internalNumber: number, parentInvoiceId: parentId,
+        parentInvoiceNumber: parentRow.internal_number, parentInvoiceIssueDate: parentRow.issue_date,
+        parentKsefNumber: parentRow.ksef_number, seller: { nip: '9480000014' },
+        buyer: { type: 'b2b', idType: 'nip', nip: '1234567890', name: 'Nabywca' },
+        correctionType: 'before_after', typKorekty: '1', paymentMethod: 'compensation',
+        // Ułamki i zagnieżdżenia — przejście przez jsonb nie może zmienić werdyktu.
+        linesAfter: [{ name: 'Usługa', quantity: 8, unitPriceNet: 100.1, vatRate: '23', pkwiuCode: '62.01.11.0' }],
+        amounts: { netDelta: -200.2, vatDelta: -46.05 },
+      } as unknown as CorrectionInvoiceData;
+      const document = { internalNumber: number, type: 'KOR' } as Invoice;
+      const { error } = await admin.from('invoices').insert({
+        id, tenant_id: ORG, direction: 'outgoing', internal_number: number, invoice_type: 'KOR',
+        invoice_kind: 'correction', parent_invoice_id: parentId, correction_reason: 'test', correction_type: 'before_after',
+        issue_date: '2026-10-02', seller_nip: '9480000014', buyer_nip: '1234567890',
+        gross_total: -246.25, net_total: -200.2, vat_total: -46.05, ksef_status: 'queued',
+        fa3_data: document, seller_data: { nip: '9480000014' }, buyer_data: { nip: '1234567890' },
+        ...(specialData === 'stored' ? { special_data: { correctionData: correction } } : {}),
+      });
+      if (error) throw new Error(`insert correction: ${error.message}`);
+      const input = (correctionData: CorrectionInvoiceData) => ({
+        supabase: admin, tenantId: ORG, invoiceId: id, invoice: document,
+        environment: 'test' as const, correctionData,
+      });
+      return { correction, input };
+    }
+
+    it('kopia równa zdarzeniu → przepuszcza (także zdarzenie z polami undefined); inna treść → odmowa', async () => {
+      const { correction, input } = await correctionForBoundary('stored');
+      await expect(assertSubmitReferences(input(JSON.parse(JSON.stringify(correction)))))
+        .resolves.toBe('correction');
+      // Pole `undefined` znika w pg-boss tak samo jak w jsonb — nie jest różnicą.
+      await expect(assertSubmitReferences(input({ ...correction, notes: undefined } as CorrectionInvoiceData)))
+        .resolves.toBe('correction');
+      await expect(assertSubmitReferences(input({ ...correction, typKorekty: '2' } as CorrectionInvoiceData)))
+        .rejects.toThrow('manual reconciliation');
+      const lines = [{ ...(correction as unknown as { linesAfter: Array<Record<string, unknown>> }).linesAfter[0], quantity: 9 }];
+      await expect(assertSubmitReferences(input({ ...correction, linesAfter: lines } as unknown as CorrectionInvoiceData)))
+        .rejects.toThrow('manual reconciliation');
+    });
+
+    it('korekta sprzed 00137 (bez kopii) → jak dotąd, bez odmowy', async () => {
+      const { correction, input } = await correctionForBoundary('legacy');
+      await expect(assertSubmitReferences(input({ ...correction, typKorekty: '2' } as CorrectionInvoiceData)))
+        .resolves.toBe('correction');
     });
   });
 

@@ -50,7 +50,8 @@ vi.mock('@/lib/jobs/enqueue', () => ({
     options?: { inTransaction?: (tx: { executeSql: () => Promise<unknown> }) => Promise<void> },
   ) => {
     await options?.inTransaction?.({ executeSql: async () => ({ rows: [{ id: 'inv-1' }], rowCount: 1 }) });
-    st.events.push(event);
+    // Kopia w chwili zapisu zlecenia (pg-boss trzyma jsonb), nie żywa referencja.
+    st.events.push(JSON.parse(JSON.stringify(event)) as { data: Record<string, unknown> });
     return { ids: ['job-1'] };
   },
 }));
@@ -99,7 +100,9 @@ vi.mock('@/lib/supabase/server', () => ({
           ? { data: [{ name: 'Usługa', unit: 'szt.', quantity: 10, unit_price_net: 100, vat_rate: '23' }], error: null }
           : { data: [], error: null }).then(ok),
         insert: (payload: Record<string, unknown>) => {
-          if (table === 'invoices') st.inserted.push(payload);
+          // Kopia w chwili INSERT (supabase-js serializuje treść przy wysyłce) —
+          // zmiana koperty po zapisie musi rozjechać wiersz i zlecenie.
+          if (table === 'invoices') st.inserted.push(JSON.parse(JSON.stringify(payload)) as Record<string, unknown>);
           if (table === 'invoices' && st.insertError) {
             const error = st.insertError;
             return { select: () => ({ single: async () => ({ data: null, error }) }) };

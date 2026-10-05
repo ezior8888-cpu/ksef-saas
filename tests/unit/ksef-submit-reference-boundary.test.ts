@@ -55,20 +55,23 @@ let eventInvoice: Invoice;
 let parent: Row;
 let tenant: Row;
 let readError: string | null;
-let reads: Array<{ table: string; filters: Record<string, unknown> }>;
+let reads: Array<{ table: string; filters: Record<string, unknown>; columns: string[] }>;
 
 function from(table: string) {
-  const record = { table, filters: {} as Record<string, unknown> };
+  const record = { table, filters: {} as Record<string, unknown>, columns: [] as string[] };
   reads.push(record);
   const chain = {
-    select: () => chain,
+    // Jak PostgREST: wiersz ma tylko kolumny z SELECT — kolumna, której kod
+    // nie pobrał (np. `special_data`), w teście też jej nie ma.
+    select: (columns: string) => { record.columns = columns.split(',').map((c) => c.trim()); return chain; },
     eq: (key: string, value: unknown) => { record.filters[key] = value; return chain; },
     maybeSingle: async () => {
       if (readError === table) return { data: null, error: { message: 'temporary-db-error' } };
       const row = table === 'tenants' ? tenant :
         table === 'invoices' && reads.length === 1 ? invoice : parent;
       const match = Object.entries(record.filters).every(([key, value]) => row[key] === value);
-      return { data: match ? row : null, error: null };
+      const projected = Object.fromEntries(record.columns.filter((c) => c in row).map((c) => [c, row[c]]));
+      return { data: match ? projected : null, error: null };
     },
   };
   return chain;

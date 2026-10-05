@@ -15,7 +15,10 @@
 # Skrypt sam ładuje `.agents/infra.env` (K, APP, DB, PGC, RESTC, APP_PREFIX,
 # WORKER_PREFIX) — przycisk „Run” w aplikacji uruchamia każdy blok w świeżej
 # powłoce, więc osobne `source` nic nie daje. Nic nie zmienia na serwerach:
-# `docker ps`, `docker logs`, `curl` do /api/health i SELECT-y przez psql.
+# `docker ps`, `docker logs`, `docker inspect` (z env workera wychodzi tylko
+# KSEF_ENV — filtr po stronie serwera), `curl` do /api/health, SELECT-y przez
+# psql i jedna sonda PostgREST: PATCH bez tokenu (rola anon nie ma prawa
+# zapisu) na nieistniejące id — odmowa albo zero wierszy, nigdy zmiana.
 #
 # Co pokazuje (sekcje odpowiadają kontrolom z rewizji 03.10.2026):
 #   1. kontenery na app-1 i SHA obrazów (web i worker na tym samym commicie?)
@@ -192,11 +195,11 @@ sql "KOR/ROZ bez special_data utworzone w ostatnich $A4B_HOURS h (po wdrożeniu 
 # PATCH bez tokenu (rola anon) na nieistniejące id — niczego nie zmienia, ale
 # PostgREST sprawdza kolumny treści zapisu w swoim cache schematu. SELECT
 # kolumny tego nie wykrywa (puszcza go do Postgresa).
-printf -- '--- PostgREST zna special_data? (42501 albo [] = tak; PGRST204 = brak NOTIFY pgrst)\n'
+printf -- '--- PostgREST zna special_data? (42501 = tak; PGRST204 = nie zna kolumny: brak migracji albo NOTIFY pgrst)\n'
 "${SSH[@]}" "root@$DB" \
   "IP=\$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $RESTC); \
    curl -s -X PATCH \"http://\$IP:3000/invoices?id=eq.00000000-0000-0000-0000-000000000000\" \
-     -H 'Content-Type: application/json' -d '{\"special_data\":null}'; echo" \
+     -H 'Content-Type: application/json' -d '{\"special_data\":null}' -w ' (HTTP %{http_code})'; echo" \
   || echo "  (nie udało się odpytać PostgREST)"
 
 section "10. db-1: ostatnie migracje"
