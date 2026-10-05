@@ -459,4 +459,46 @@ describe('KSeF submit reference boundary', () => {
     await expect(assertSubmitReferences({ ...input(), correctionData: undefined }))
       .rejects.toThrow('manual reconciliation');
   });
+
+  describe('A4b (00137): dane dokumentu specjalnego zapisane na wierszu (`special_data`)', () => {
+    const plain = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+
+    it('korekta: zapisana kopia równa zdarzeniu → przepuszcza; inna (np. zmieniona po zleceniu) → odmowa', async () => {
+      invoice.special_data = plain({ correctionData: correction });
+      await expect(assertSubmitReferences(input())).resolves.toBe('correction');
+      reads = [];
+      invoice.special_data = plain({ correctionData: { ...correction, internalNumber: 'KOR/1', notes: 'inna treść' } });
+      await expect(assertSubmitReferences(input())).rejects.toThrow('manual reconciliation');
+    });
+
+    it('korekta bez zapisanej kopii (dokument sprzed 00137) → jak dotąd, bez odmowy', async () => {
+      invoice.special_data = null;
+      await expect(assertSubmitReferences(input())).resolves.toBe('correction');
+    });
+
+    it('ROZ: zapisane finalData i wiersze zaliczek równe zdarzeniu → przepuszcza; inne wiersze → odmowa', async () => {
+      invoice.invoice_kind = 'final';
+      setDocument('ROZ/1', 'ROZ');
+      invoice.advance_invoice_ids = [parentId];
+      const rows = [{ invoice_id: parentId, advance_amount: 123 }];
+      const base = { ...input(), environment: 'test' as const, correctionData: undefined, finalData: final, finalAdvanceSettlementRows: rows };
+      invoice.special_data = plain({ finalData: final, finalAdvanceSettlementRows: rows });
+      await expect(assertSubmitReferences(base as never)).resolves.toBe('final');
+      reads = [];
+      invoice.special_data = plain({ finalData: final, finalAdvanceSettlementRows: [{ invoice_id: parentId, advance_amount: 999 }] });
+      await expect(assertSubmitReferences(base as never)).rejects.toThrow('manual reconciliation');
+    });
+
+    it('zwykła faktura i zaliczka z danymi specjalnymi na wierszu → odmowa (kształt pilnuje też CHECK)', async () => {
+      invoice.invoice_kind = 'regular';
+      setDocument('VAT/1', 'VAT');
+      invoice.special_data = { correctionData: correction };
+      await expect(assertSubmitReferences({ ...input(), correctionData: undefined })).rejects.toThrow('manual reconciliation');
+      reads = [];
+      invoice.invoice_kind = 'advance';
+      setDocument('ZAL/1', 'ZAL');
+      invoice.special_data = { correctionData: correction };
+      await expect(assertSubmitReferences({ ...input(), correctionData: undefined, advanceData: advance })).rejects.toThrow('manual reconciliation');
+    });
+  });
 });
