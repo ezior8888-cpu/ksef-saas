@@ -274,7 +274,9 @@ describe('W9 — ustalenia recenzji C5a', () => {
         .replace(/<P_11>([^<]*)<\/P_11>/, '<P_11A>$1</P_11A>');
       const result = await importXml(xml);
       expect(result.warnings[0]).toContain(number);
-      await expect(jpkFa()).rejects.toThrow(new RegExp(`JPK wstrzymany:.*${number.replace(/\//g, '\\/')}`));
+      const refusal = await jpkFa().then(() => null, (e: Error) => e);
+      expect(refusal?.message).toContain('JPK wstrzymany:');
+      expect(refusal?.message).toContain(number);
       await expect(jpkV7m()).rejects.toThrow(/JPK wstrzymany:/);
     },
   );
