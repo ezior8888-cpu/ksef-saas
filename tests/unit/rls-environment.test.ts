@@ -47,6 +47,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-cykl-wyzwalacze.test.ts',
       // 00133 (K4): jedna otwarta korekta na fakturę pierwotną.
       'tests/rls-korekta-jedna-otwarta.test.ts',
+      // 00137 (A4b): special_data — kształt, zapis jednorazowy, przejścia 00131.
+      'tests/rls-dane-specjalne.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

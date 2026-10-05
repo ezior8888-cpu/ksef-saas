@@ -191,9 +191,15 @@ agenta z weryfikacją Bartosza, nie obietnica.
   `ENQUEUE_LOST`, `ENV_MISMATCH`, `INVALID_EVENT` (operator ma tylko
   „Tylko uzgodnij” / szkic); `KOR_HOLD`, `ROZ_HOLD_RECONCILE` (dokumenty
   specjalne bez odtwarzalnego zdarzenia).
-- Zakres: `correction_data`/`advance_data`/`final_data` jsonb na wierszu
-  faktury (00137) zapisywane przy tworzeniu dokumentu specjalnego → zdarzenie
-  wysyłki da się odtworzyć → „Wyślij ponownie” i cron działają też dla KOR/ZAL/ROZ.
+- Zakres: dane zdarzenia wysyłki na wierszu faktury (00137) zapisywane przy
+  tworzeniu dokumentu specjalnego → zdarzenie wysyłki da się odtworzyć →
+  „Wyślij ponownie” i cron działają też dla KOR/ZAL/ROZ. Po projekcie A4b
+  (05.10.2026): jedna kolumna `special_data` zamiast trzech — KOR
+  `{correctionData}`, ROZ `{finalData, finalAdvanceSettlementRows}`; ZAL nie
+  dostaje kopii, bo jej koperta jest już w `fa3_data.advanceEnvelope` (od
+  02.10) i granica wysyłki ją porównuje. Zapis jednorazowy wyzwalaczem
+  zamiast dopisania kolumn do list ROW z 00132. PR1: kolumna, zapis, porównanie
+  na granicy wysyłki; PR2: ponowienie z kopii (bez migracji).
 - Czerwony test: `decideResend` dla `failed KOR_HOLD` korekty po zdjęciu
   hamulca → dozwolone; runner odtwarza XML identyczny (skrót) z pierwszej próby.
 - DoD: `operatorInvoiceButtons` i `failedInvoiceButtons` nie mają gałęzi
