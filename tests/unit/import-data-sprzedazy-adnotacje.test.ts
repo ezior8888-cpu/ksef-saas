@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MemoryTables } from './helpers/baza-w-pamieci';
 
-const db = vi.hoisted(() => ({ tables: {} as MemoryTables }));
+const db = vi.hoisted(() => ({ tables: {} as MemoryTables, failUpdateOf: [] as string[] }));
 vi.mock('@/lib/supabase/server', async () => {
   const { memoryClient: client } = await import('./helpers/baza-w-pamieci');
-  return { createAdminClient: () => client(db.tables) };
+  return { createAdminClient: () => client(db.tables, { failUpdateOf: db.failUpdateOf }) };
 });
 vi.mock('@/lib/supabase/admin', async () => {
   const { memoryClient: client } = await import('./helpers/baza-w-pamieci');
-  return { createAdminClient: () => client(db.tables) };
+  return { createAdminClient: () => client(db.tables, { failUpdateOf: db.failUpdateOf }) };
 });
 
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
@@ -139,6 +139,7 @@ async function expectJpkRefusal(number: string, reason: RegExp) {
 beforeEach(() => {
   vi.stubEnv('KSEF_ENV', 'test');
   ksefCounter = 0;
+  db.failUpdateOf = [];
   db.tables = {
     tenants: [{ id: T, nip: NIP, name: 'Firma testowa', address_json: null }],
     invoices: [], invoice_line_items: [], contractors: [], products: [], expenses: [], xml_documents: [],
@@ -200,6 +201,21 @@ describe('C5b: data sprzedaży z pliku KSeF (P_6, OkresFa, P_6A)', () => {
     await importXml(xml);
     expect(fa3('FV/P6A/3').saleDates).toMatchObject({ unclear: true });
     await expectJpkRefusal('FV/P6A/3', /różnymi datami sprzedaży/);
+  });
+
+  it.each([
+    ['P_6 nieczytelna (2026-02-30)', (x: string) => setP6(x, '2026-02-30')],
+    ['P_6A nieczytelna', (x: string) => lineDates(noP6(x), ['10.09.2026'])],
+    ['tylko część pozycji z P_6A (reszta = data wystawienia)', (x: string) => lineDates(noP6(x), ['2026-09-05'])],
+    ['P_6A poza OkresFa', (x: string) => lineDates(period(x, '2026-09-01', '2026-09-15'), ['2026-09-20'])],
+    ['OkresFa odwrócony (P_6_Od po P_6_Do)', (x: string) => period(x, '2026-09-30', '2026-09-01')],
+  ])('%s → data niejasna, ostrzeżenie i odmowa JPK', async (_name, change) => {
+    const two = xmlOf(invoice('FV/DATA/1', [{ rate: '23', net: 1000 }, { rate: '8', net: 100 }]));
+    const result = await importXml(change(two));
+    expect(result.invoicesImported).toBe(1);
+    expect(fa3('FV/DATA/1').saleDates).toMatchObject({ unclear: true });
+    expect(result.warnings[0]).toContain('FV/DATA/1');
+    await expectJpkRefusal('FV/DATA/1', /datami sprzedaży|datę sprzedaży/);
   });
 
   it('zaliczka z P_6 (data otrzymania zaliczki) → sale_date NULL, jak zaliczki FaktFlow', async () => {
@@ -285,13 +301,22 @@ describe('C5b: adnotacje z pliku KSeF w fa3_data.annotations (jak faktury FaktFl
       .replace('<WariantFormularza>3</WariantFormularza>', '<WariantFormularza>2</WariantFormularza>');
     const parsed = parseFa3Xml(xml, { ksefNumber: ksefNumber() });
     expect(parsed.formCode).toBe('FA (2)');
-    expect(parsed.warnings.join(' ')).not.toMatch(/FA \(1\)/);
+    expect(parsed.warnings.join(' ')).not.toMatch(/Plik w formacie/);
     await processImportedInvoices({
       tenantId: T, importJobId: 'job-1', source: 'ksef_history', invoiceDirection: 'outgoing',
       invoiceKsefStatus: 'accepted', ksefEnvironment: 'test', invoices: [parsed],
     });
     expect(stored('FV/FA2/1').sale_date).toBe('2026-08-28');
     expect(fa3('FV/FA2/1').annotations).toMatchObject({ cashMethod: 1 });
+  });
+});
+
+describe('C5b: kod formularza', () => {
+  it('plik w innym formacie niż FA(2)/FA(3) (np. „FA (1)” z KSeF 1.0) → ostrzeżenie, odczyt bez zgadywania', () => {
+    const xml = xml23('FV/FA1/1').replace('kodSystemowy="FA (3)"', 'kodSystemowy="FA (1)"');
+    const parsed = parseFa3Xml(xml, { ksefNumber: ksefNumber() });
+    expect(parsed.formCode).toBe('FA (1)');
+    expect(parsed.warnings.join(' ')).toMatch(/Plik w formacie „FA \(1\)”/);
   });
 });
 
@@ -348,6 +373,34 @@ describe('C5b: faktury zaimportowane przed C5b i ponowienie importu', () => {
     expect(fragment(await jpkFa(), '<P_2A>FV/STARA/1', '</Faktura>')).toContain('<P_18A>true</P_18A>');
   });
 
+  it('wiersz z adnotacjami nie jest nadpisywany ponownym importem (warunek uzupełnienia), bez komunikatu „uzupełniono”', async () => {
+    const xml = xml23('FV/NIE/1');
+    const ksef = ksefNumber();
+    await importXml(xml, { ksef });
+    // Adnotacje na wierszu różne od pliku — ponowny import nie może ich ruszyć.
+    const row = stored('FV/NIE/1');
+    row.fa3_data = { ...(row.fa3_data as object), annotations: { splitPayment: 1 }, inny: 'klucz' };
+    const again = await importXml(xml, { ksef });
+    expect(again.invoicesFailed).toBe(0);
+    expect(fa3('FV/NIE/1').annotations).toEqual({ splitPayment: 1 });
+    expect(fa3('FV/NIE/1').inny).toBe('klucz');
+    expect(again.warnings.join('\n')).not.toMatch(/uzupełniono/);
+  });
+
+  it('nieudane uzupełnienie (błąd zapisu) → faktura liczona jako nieudana z „ponów import”, wiersz bez zmian', async () => {
+    const xml = flag(xml23('FV/BLAD/1'), 'P_18A', '1');
+    const ksef = ksefNumber();
+    await importXml(xml, { ksef });
+    const row = stored('FV/BLAD/1');
+    const { import: meta, parsed } = row.fa3_data as Record<string, unknown>;
+    row.fa3_data = { import: meta, parsed };
+    db.failUpdateOf = ['invoices'];
+    const again = await importXml(xml, { ksef });
+    expect(again.invoicesFailed).toBe(1);
+    expect(again.warnings.join('\n')).toMatch(/FV\/BLAD\/1: nie uzupełniono daty sprzedaży i adnotacji z KSeF — ponów import/);
+    expect(fa3('FV/BLAD/1')).not.toHaveProperty('annotations');
+  });
+
   it('ponowienie importu tej samej faktury (job od zera) → duplikat bez błędu, adnotacje bez zmian', async () => {
     const xml = flag(xml23('FV/PON/1'), 'P_16', '1');
     const ksef = ksefNumber();
@@ -357,5 +410,6 @@ describe('C5b: faktury zaimportowane przed C5b i ponowienie importu', () => {
     expect(again.invoicesFailed).toBe(0);
     expect(again.invoicesImported).toBe(0);
     expect(fa3('FV/PON/1').annotations).toEqual(before);
+    expect(again.warnings.join('\n')).not.toMatch(/uzupełniono/);
   });
 });

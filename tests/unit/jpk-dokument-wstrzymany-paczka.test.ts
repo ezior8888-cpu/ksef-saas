@@ -92,6 +92,30 @@ describe('jpkFaBlocker — dokumenty, których JPK nie wykaże poprawnie', () =>
     expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/OLD\/1.*ponów import/);
   });
 
+  it('C5b: nieczytelne adnotacje z importu (annotationProblems) → powód z numerem', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-adn', internal_number: 'FV/ADN/1', net_total: 100, fa3_data: { annotations: ADNOTACJE_IMPORTU, annotationProblems: ['P_16 „tak”'] } }));
+    tables.invoice_line_items!.push({ id: 'l-10', invoice_id: 'fv-adn', vat_rate: '23', net_amount: 100 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/ADN\/1.*nie udało się odczytać/);
+  });
+
+  it('C5b: różne daty sprzedaży pozycji z importu (saleDates.unclear) → powód z numerem', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-dat', internal_number: 'FV/DAT/1', net_total: 100, fa3_data: { annotations: ADNOTACJE_IMPORTU, saleDates: { unclear: true } } }));
+    tables.invoice_line_items!.push({ id: 'l-11', invoice_id: 'fv-dat', vat_rate: '23', net_amount: 100 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/DAT\/1.*datami sprzedaży/);
+  });
+
+  it('C5b: zwolnienie (P_19) z importu przy pozycji 23% → powód z numerem (sprawdzenie z pozycjami)', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-zw', internal_number: 'FV/ZW/1', net_total: 100, fa3_data: { annotations: { ...ADNOTACJE_IMPORTU, vatExemptionBasis: 'art. 113 ust. 1' } } }));
+    tables.invoice_line_items!.push({ id: 'l-12', invoice_id: 'fv-zw', vat_rate: '23', net_amount: 100 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/ZW\/1.*P_19/);
+  });
+
+  it('C5b: faktura z aplikacji bez adnotacji w fa3_data nie jest „importem sprzed C5b” (bramka po origin)', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-own', internal_number: 'FV/OWN/1', origin: 'app', net_total: 100, fa3_data: { lines: [] } }));
+    tables.invoice_line_items!.push({ id: 'l-13', invoice_id: 'fv-own', vat_rate: '23', net_amount: 100 });
+    expect(await blocker()).toBeNull();
+  });
+
   it('dokument z innego środowiska KSeF nie blokuje (eksport go nie czyta)', async () => {
     tables.invoices!.push(faktura({ id: 'fv-prod', internal_number: 'FV/PROD/1', ksef_environment: 'production' }));
     tables.invoice_line_items!.push({ id: 'l-4', invoice_id: 'fv-prod', vat_rate: '0 WDT' });

@@ -38,7 +38,7 @@ function jsonAliases(columns: string | undefined): Array<[string, string]> {
   });
 }
 
-export function memoryClient(tables: MemoryTables, options: { failInsertInto?: readonly string[] } = {}) {
+export function memoryClient(tables: MemoryTables, options: { failInsertInto?: readonly string[]; failUpdateOf?: readonly string[] } = {}) {
   function from(table: string) {
     const rows = (tables[table] ??= []);
     const predicates: Array<(r: Row) => boolean> = [];
@@ -63,6 +63,7 @@ export function memoryClient(tables: MemoryTables, options: { failInsertInto?: r
       }
       let hit = rows.filter((r) => predicates.every((p) => p(r)));
       if (op === 'update') {
+        if (options.failUpdateOf?.includes(table)) return { data: null, error: { message: 'db down' }, count: null };
         hit.forEach((r) => Object.assign(r, payload));
         const data = hit.map((r) => ({ ...r }));
         return { data: singular ? data[0] ?? null : data, error: null, count: null };

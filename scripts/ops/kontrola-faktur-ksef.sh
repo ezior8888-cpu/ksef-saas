@@ -21,8 +21,9 @@
 #   5. UPO wg statusu i błędu (W12)
 #   6. skrzynka: przychodzące bez kosztu, bez XML, z otwartym znacznikiem (K2)
 #   7. pg-boss: joby wg (kolejka, stan), harmonogramy, polityka kolejek
-#   8. dokumenty, których JPK nie wykaże (W9): stawki spoza FaktFlow
-#      i zaimportowane KOR/ZAL/ROZ
+#   8. dokumenty, których JPK nie wykaże (W9): stawki spoza FaktFlow,
+#      zaimportowane KOR/ZAL/ROZ, a od C5b treść z pliku KSeF (adnotacje
+#      i daty sprzedaży nieczytelne albo sprzed C5b, procedury, FP/TP/GTU)
 #   9. ostatnie migracje w schema_migrations
 #
 # Błąd jednego zapytania nie przerywa reszty (np. kolumna sprzed migracji).
@@ -153,6 +154,8 @@ sql "pozycje sprzedaży przyjętej ze stawką spoza FaktFlow (0 WDT, 0 EX, 22, 7
   "SELECT i.tenant_id, i.internal_number, i.ksef_number, to_char(i.issue_date, 'YYYY-MM') AS okres, l.vat_rate, count(*) FROM invoice_line_items l JOIN invoices i ON i.id = l.invoice_id WHERE i.direction='outgoing' AND i.ksef_status='accepted' AND l.vat_rate NOT IN ('23','8','5','0','zw','oo','np','np_ii') GROUP BY 1,2,3,4,5 ORDER BY 4 DESC, 2 LIMIT 50"
 sql "zaimportowane korekty, zaliczki i ROZ zapisane jako zwykłe (invoice_kind regular)" \
   "SELECT tenant_id, internal_number, ksef_number, invoice_type, issue_date FROM invoices WHERE direction='outgoing' AND ksef_status='accepted' AND invoice_kind='regular' AND invoice_type IN ('KOR','ZAL','ROZ') ORDER BY issue_date DESC LIMIT 50"
+sql "C5b: sprzedaż z importu, której JPK nie wykaże przez treść z pliku (sprzed C5b = ponów import historii)" \
+  "SELECT tenant_id, internal_number, ksef_number, okres, powod FROM (SELECT tenant_id, internal_number, ksef_number, to_char(issue_date, 'YYYY-MM') AS okres, CASE WHEN jsonb_typeof(fa3_data->'annotations') IS DISTINCT FROM 'object' THEN 'bez adnotacji - import sprzed C5b' WHEN fa3_data ? 'annotationProblems' THEN 'adnotacje nieczytelne' WHEN fa3_data->'annotations'->>'simplifiedProcedure' = '1' THEN 'P_23' WHEN fa3_data->'annotations'->>'newMeansOfTransport' = '1' THEN 'P_22' WHEN fa3_data->'annotations' ? 'marginScheme' THEN 'marza' WHEN fa3_data ? 'ksefMarkers' THEN 'FP/TP/GTU/procedura/podmiot upowazniony' WHEN fa3_data->'saleDates'->>'unclear' = 'true' THEN 'rozne daty sprzedazy' WHEN NOT EXISTS (SELECT 1 FROM invoice_line_items l WHERE l.invoice_id = i.id AND l.vat_rate NOT IN ('23','8','5','0','zw','oo','np','np_ii')) AND EXISTS (SELECT 1 FROM invoice_line_items l WHERE l.invoice_id = i.id AND l.vat_rate = 'zw') IS DISTINCT FROM (coalesce(trim(fa3_data->'annotations'->>'vatExemptionBasis'), '') <> '') THEN 'P_19 niezgodne ze stawkami' END AS powod FROM invoices i WHERE direction='outgoing' AND ksef_status='accepted' AND origin='ksef_import') x WHERE powod IS NOT NULL ORDER BY okres DESC, internal_number LIMIT 50"
 
 section "9. db-1: ostatnie migracje"
 sql "schema_migrations" \
