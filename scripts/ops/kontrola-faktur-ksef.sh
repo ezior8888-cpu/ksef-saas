@@ -6,10 +6,19 @@
 #
 #   ./scripts/ops/kontrola-faktur-ksef.sh
 #
-# Skrypt sam ładuje `.agents/infra.env` (K, APP, DB, PGC, APP_PREFIX,
+# Opcjonalnie okno sekcji 9 (dokumenty specjalne bez danych utworzone
+# w ostatnich N godzinach; domyślnie 24 — po wdrożeniu A4b podaj czas od
+# wgrania 00137):
+#
+#   ./scripts/ops/kontrola-faktur-ksef.sh --od-godzin 6
+#
+# Skrypt sam ładuje `.agents/infra.env` (K, APP, DB, PGC, RESTC, APP_PREFIX,
 # WORKER_PREFIX) — przycisk „Run” w aplikacji uruchamia każdy blok w świeżej
 # powłoce, więc osobne `source` nic nie daje. Nic nie zmienia na serwerach:
-# `docker ps`, `docker logs`, `curl` do /api/health i SELECT-y przez psql.
+# `docker ps`, `docker logs`, `docker inspect` (z env workera wychodzi tylko
+# KSEF_ENV — filtr po stronie serwera), `curl` do /api/health, SELECT-y przez
+# psql i jedna sonda PostgREST: PATCH bez tokenu (rola anon nie ma prawa
+# zapisu) na nieistniejące id — odmowa albo zero wierszy, nigdy zmiana.
 #
 # Co pokazuje (sekcje odpowiadają kontrolom z rewizji 03.10.2026):
 #   1. kontenery na app-1 i SHA obrazów (web i worker na tym samym commicie?)
@@ -24,7 +33,10 @@
 #   8. dokumenty, których JPK nie wykaże (W9): stawki spoza FaktFlow,
 #      zaimportowane KOR/ZAL/ROZ, a od C5b treść z pliku KSeF (adnotacje
 #      i daty sprzedaży nieczytelne albo sprzed C5b, procedury, FP/TP/GTU)
-#   9. ostatnie migracje w schema_migrations
+#   9. dokumenty specjalne (A4b, 00137): KOR/ZAL/ROZ wg stanu i kodu,
+#      ZAL bez koperty, KOR/ROZ bez special_data (stare i świeże),
+#      środowisko KSeF workera, sonda PostgREST na kolumnę special_data
+#  10. ostatnie migracje w schema_migrations
 #
 # Błąd jednego zapytania nie przerywa reszty (np. kolumna sprzed migracji).
 # ════════════════════════════════════════════════════════════════
@@ -63,12 +75,23 @@ if [ -z "$ENV_FILE" ]; then
 fi
 # shellcheck source=/dev/null
 source "$ENV_FILE"
-for v in K APP DB PGC APP_PREFIX WORKER_PREFIX; do
+for v in K APP DB PGC RESTC APP_PREFIX WORKER_PREFIX; do
   if [ -z "${!v:-}" ]; then
     echo "Brak zmiennej $v w $ENV_FILE." >&2
     exit 1
   fi
 done
+
+# `--od-godzin N`: okno sekcji 9 (tylko liczba — trafia do SQL).
+A4B_HOURS=24
+if [ "${1:-}" = "--od-godzin" ]; then
+  if [[ "${2:-}" =~ ^[0-9]{1,4}$ ]]; then
+    A4B_HOURS=$2
+  else
+    echo "--od-godzin wymaga liczby godzin (np. --od-godzin 6)." >&2
+    exit 1
+  fi
+fi
 
 # `--sprawdz`: tylko pokaż, skąd czytasz konfigurację, bez łączenia z serwerami.
 if [ "${1:-}" = "--sprawdz" ]; then
@@ -157,7 +180,32 @@ sql "zaimportowane korekty, zaliczki i ROZ zapisane jako zwykłe (invoice_kind r
 sql "C5b: sprzedaż z importu, której JPK nie wykaże przez treść z pliku (sprzed C5b = ponów import historii)" \
   "SELECT tenant_id, internal_number, ksef_number, okres, powod FROM (SELECT tenant_id, internal_number, ksef_number, to_char(issue_date, 'YYYY-MM') AS okres, CASE WHEN jsonb_typeof(fa3_data->'annotations') IS DISTINCT FROM 'object' THEN 'bez adnotacji - import sprzed C5b' WHEN fa3_data ? 'annotationProblems' THEN 'adnotacje nieczytelne' WHEN fa3_data->'annotations'->>'simplifiedProcedure' = '1' THEN 'P_23' WHEN fa3_data->'annotations'->>'newMeansOfTransport' = '1' THEN 'P_22' WHEN fa3_data->'annotations' ? 'marginScheme' THEN 'marza' WHEN fa3_data ? 'ksefMarkers' THEN 'FP/TP/GTU/procedura/podmiot upowazniony' WHEN fa3_data->'saleDates'->>'unclear' = 'true' THEN 'rozne daty sprzedazy' WHEN NOT EXISTS (SELECT 1 FROM invoice_line_items l WHERE l.invoice_id = i.id AND l.vat_rate NOT IN ('23','8','5','0','zw','oo','np','np_ii')) AND EXISTS (SELECT 1 FROM invoice_line_items l WHERE l.invoice_id = i.id AND l.vat_rate = 'zw') IS DISTINCT FROM (coalesce(trim(fa3_data->'annotations'->>'vatExemptionBasis'), '') <> '') THEN 'P_19 niezgodne ze stawkami' END AS powod FROM invoices i WHERE direction='outgoing' AND ksef_status='accepted' AND origin='ksef_import') x WHERE powod IS NOT NULL ORDER BY okres DESC, internal_number LIMIT 50"
 
-section "9. db-1: ostatnie migracje"
+section "9. dokumenty specjalne — dane do ponownej wysyłki (A4b, 00137)"
+printf -- '--- KSEF_ENV workera (test = KOR wysyłane także na produkcji FaktFlow)\n'
+"${SSH[@]}" "root@$APP" \
+  "W=\$(docker ps --format '{{.Names}}' | grep '^$WORKER_PREFIX' | head -1); \
+   if [ -z \"\$W\" ]; then echo '  (brak kontenera workera)'; exit 0; fi; \
+   docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' \"\$W\" | grep '^KSEF_ENV=' || echo '  (KSEF_ENV nieustawione)'" \
+  || echo "  (nie udało się odczytać środowiska workera)"
+sql "KOR/ZAL/ROZ wg rodzaju, stanu i kodu (przed 00137: ile starych dokumentów bez danych)" \
+  "SELECT invoice_kind, coalesce(ksef_status,'(null)') AS status, coalesce(last_error_code,'-') AS kod, count(*) FROM invoices WHERE direction='outgoing' AND invoice_kind<>'regular' GROUP BY 1,2,3 ORDER BY 1,2,3"
+sql "ZAL bez koperty fa3_data.advanceEnvelope (sprzed 02.10.2026 — bez ponowienia z kopii)" \
+  "SELECT coalesce(ksef_status,'(null)') AS status, count(*) FROM invoices WHERE direction='outgoing' AND invoice_kind='advance' AND jsonb_typeof(fa3_data->'advanceEnvelope') IS DISTINCT FROM 'object' GROUP BY 1 ORDER BY 1"
+sql "KOR/ROZ bez special_data wg stanu (sprzed 00137; po wgraniu migracji)" \
+  "SELECT invoice_kind, coalesce(ksef_status,'(null)') AS status, count(*) FROM invoices WHERE direction='outgoing' AND invoice_kind IN ('correction','final') AND special_data IS NULL GROUP BY 1,2 ORDER BY 1,2"
+sql "KOR/ROZ bez special_data utworzone w ostatnich $A4B_HOURS h (po wdrożeniu A4b oczekiwane 0; okno migracja→wdrożenie: każdy stan)" \
+  "SELECT id, invoice_kind, internal_number, ksef_status, created_at FROM invoices WHERE direction='outgoing' AND invoice_kind IN ('correction','final') AND special_data IS NULL AND created_at > now() - interval '$A4B_HOURS hours' ORDER BY created_at DESC LIMIT 20"
+# PATCH bez tokenu (rola anon) na nieistniejące id — niczego nie zmienia, ale
+# PostgREST sprawdza kolumny treści zapisu w swoim cache schematu. SELECT
+# kolumny tego nie wykrywa (puszcza go do Postgresa).
+printf -- '--- PostgREST zna special_data? (42501 = tak; PGRST204 = nie zna kolumny: brak migracji albo NOTIFY pgrst)\n'
+"${SSH[@]}" "root@$DB" \
+  "IP=\$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $RESTC); \
+   curl -s -X PATCH \"http://\$IP:3000/invoices?id=eq.00000000-0000-0000-0000-000000000000\" \
+     -H 'Content-Type: application/json' -d '{\"special_data\":null}' -w ' (HTTP %{http_code})'; echo" \
+  || echo "  (nie udało się odpytać PostgREST)"
+
+section "10. db-1: ostatnie migracje"
 sql "schema_migrations" \
   "SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5"
 

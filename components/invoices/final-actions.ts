@@ -7,6 +7,7 @@ import { logAudit } from '@/lib/audit/log';
 import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
 import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import { findAdvancesAlreadySettled } from '@/lib/invoices/settled-advances';
+import { finalSpecialData, specialDataInsertError } from '@/lib/invoices/special-data';
 import {
   settlementRowFromAdvance,
   type AdvanceInvoiceDbRow,
@@ -261,6 +262,7 @@ async function insertFinalDraft(
   tenantId: string,
   ghost: Invoice,
   envelope: FinalInvoiceData,
+  settlement: AdvanceInvoiceSettlementRow[],
 ): Promise<ActionResult> {
   const { data: inserted, error: invErr } = await supabase
     .from('invoices')
@@ -285,6 +287,8 @@ async function insertFinalDraft(
       advance_invoice_ids: envelope.advanceInvoiceIds,
       notes: envelope.notes ?? null,
       fa3_data: ghost,
+      // A4b (00137): dane zdarzenia wysyłki ROZ (dziś szkic; wysyłka wstrzymana do C4).
+      special_data: finalSpecialData(envelope, settlement),
     })
     .select('id')
     .single();
@@ -292,7 +296,8 @@ async function insertFinalDraft(
   if (invErr || !inserted) {
     return {
       success: false,
-      error: invErr?.message ?? 'Nie udało się zapisać faktury rozliczającej',
+      error: specialDataInsertError(invErr, `faktury rozliczającej ${ghost.internalNumber}`)
+        ?? invErr?.message ?? 'Nie udało się zapisać faktury rozliczającej',
     };
   }
 
@@ -375,7 +380,7 @@ export async function saveFinalAction(raw: unknown): Promise<ActionResult> {
 
     const ghost = ghostFinalInvoice(payload.envelope);
 
-    const result = await insertFinalDraft(supabase, tenant.id, ghost, payload.envelope);
+    const result = await insertFinalDraft(supabase, tenant.id, ghost, payload.envelope, payload.settlement);
     if (result.success) {
       await logAudit({
         action: 'invoice.draft_created',
