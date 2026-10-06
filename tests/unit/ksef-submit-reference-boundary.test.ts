@@ -55,20 +55,23 @@ let eventInvoice: Invoice;
 let parent: Row;
 let tenant: Row;
 let readError: string | null;
-let reads: Array<{ table: string; filters: Record<string, unknown> }>;
+let reads: Array<{ table: string; filters: Record<string, unknown>; columns: string[] }>;
 
 function from(table: string) {
-  const record = { table, filters: {} as Record<string, unknown> };
+  const record = { table, filters: {} as Record<string, unknown>, columns: [] as string[] };
   reads.push(record);
   const chain = {
-    select: () => chain,
+    // Jak PostgREST: wiersz ma tylko kolumny z SELECT — kolumna, której kod
+    // nie pobrał (np. `special_data`), w teście też jej nie ma.
+    select: (columns: string) => { record.columns = columns.split(',').map((c) => c.trim()); return chain; },
     eq: (key: string, value: unknown) => { record.filters[key] = value; return chain; },
     maybeSingle: async () => {
       if (readError === table) return { data: null, error: { message: 'temporary-db-error' } };
       const row = table === 'tenants' ? tenant :
         table === 'invoices' && reads.length === 1 ? invoice : parent;
       const match = Object.entries(record.filters).every(([key, value]) => row[key] === value);
-      return { data: match ? row : null, error: null };
+      const projected = Object.fromEntries(record.columns.filter((c) => c in row).map((c) => [c, row[c]]));
+      return { data: match ? projected : null, error: null };
     },
   };
   return chain;
@@ -458,5 +461,47 @@ describe('KSeF submit reference boundary', () => {
     invoice.invoice_type = 'KOR';
     await expect(assertSubmitReferences({ ...input(), correctionData: undefined }))
       .rejects.toThrow('manual reconciliation');
+  });
+
+  describe('A4b (00137): dane dokumentu specjalnego zapisane na wierszu (`special_data`)', () => {
+    const plain = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+
+    it('korekta: zapisana kopia równa zdarzeniu → przepuszcza; inna (np. zmieniona po zleceniu) → odmowa', async () => {
+      invoice.special_data = plain({ correctionData: correction });
+      await expect(assertSubmitReferences(input())).resolves.toBe('correction');
+      reads = [];
+      invoice.special_data = plain({ correctionData: { ...correction, internalNumber: 'KOR/1', notes: 'inna treść' } });
+      await expect(assertSubmitReferences(input())).rejects.toThrow('manual reconciliation');
+    });
+
+    it('korekta bez zapisanej kopii (dokument sprzed 00137) → jak dotąd, bez odmowy', async () => {
+      invoice.special_data = null;
+      await expect(assertSubmitReferences(input())).resolves.toBe('correction');
+    });
+
+    it('ROZ: zapisane finalData i wiersze zaliczek równe zdarzeniu → przepuszcza; inne wiersze → odmowa', async () => {
+      invoice.invoice_kind = 'final';
+      setDocument('ROZ/1', 'ROZ');
+      invoice.advance_invoice_ids = [parentId];
+      const rows = [{ invoice_id: parentId, advance_amount: 123 }];
+      const base = { ...input(), environment: 'test' as const, correctionData: undefined, finalData: final, finalAdvanceSettlementRows: rows };
+      invoice.special_data = plain({ finalData: final, finalAdvanceSettlementRows: rows });
+      await expect(assertSubmitReferences(base as never)).resolves.toBe('final');
+      reads = [];
+      invoice.special_data = plain({ finalData: final, finalAdvanceSettlementRows: [{ invoice_id: parentId, advance_amount: 999 }] });
+      await expect(assertSubmitReferences(base as never)).rejects.toThrow('manual reconciliation');
+    });
+
+    it('zwykła faktura i zaliczka z danymi specjalnymi na wierszu → odmowa (kształt pilnuje też CHECK)', async () => {
+      invoice.invoice_kind = 'regular';
+      setDocument('VAT/1', 'VAT');
+      invoice.special_data = { correctionData: correction };
+      await expect(assertSubmitReferences({ ...input(), correctionData: undefined })).rejects.toThrow('manual reconciliation');
+      reads = [];
+      invoice.invoice_kind = 'advance';
+      setDocument('ZAL/1', 'ZAL');
+      invoice.special_data = { correctionData: correction };
+      await expect(assertSubmitReferences({ ...input(), correctionData: undefined, advanceData: advance })).rejects.toThrow('manual reconciliation');
+    });
   });
 });

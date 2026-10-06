@@ -261,6 +261,33 @@ describe.skipIf(!hasDatabase)('uprawnienia funkcji i ról (00103, 00104)', () =>
     await admin.from('invoices').delete().in('id', ids);
   });
 
+  it('najwyżej jeden wydatek na zadanie OCR w firmie; inna firma i wydatki bez OCR przechodzą (00146, B4 z #192)', async () => {
+    const OTHER = '44444444-4444-4444-4444-444444444445';
+    const job = '4444aaaa-0000-4000-8000-000000000146';
+    const expense = (tenantId: string, ocrJobId: string | null) => admin.from('expenses').insert({
+      tenant_id: tenantId, created_by: ownerId, source: ocrJobId ? 'ocr_photo' : 'manual', seller_name: 'Sprzedawca Testowy',
+      issue_date: '2026-10-01', net_amount: 100, gross_amount: 123, ocr_job_id: ocrJobId,
+    }).select('id').single();
+    await admin.from('expenses').delete().eq('tenant_id', OTHER);
+    await admin.from('tenants').delete().eq('id', OTHER);
+    const { error: tErr } = await admin.from('tenants').insert({ id: OTHER, nip: '1234567890', name: 'Inna firma B4' });
+    expect(tErr).toBeNull();
+    try {
+      expect((await expense(ORG, job)).error).toBeNull();
+      // Drugi przebieg tego samego zadania (pg-boss doręczył job drugi raz) — baza odmawia.
+      const dup = await expense(ORG, job);
+      expect(dup.error?.code).toBe('23505');
+      expect(dup.error?.message).toContain('uq_expenses_tenant_ocr_job');
+      // To samo zadanie w innej firmie i wydatki bez zadania OCR — bez zmian.
+      expect((await expense(OTHER, job)).error).toBeNull();
+      expect((await expense(ORG, null)).error).toBeNull();
+      expect((await expense(ORG, null)).error).toBeNull();
+    } finally {
+      await admin.from('expenses').delete().eq('tenant_id', OTHER);
+      await admin.from('tenants').delete().eq('id', OTHER);
+    }
+  });
+
   it('admin nie usunie właściciela', async () => {
     const c = await signedIn(ADMIN_EMAIL);
     const { error } = await c.rpc('revoke_membership', { p_membership_id: ownerMembershipId });

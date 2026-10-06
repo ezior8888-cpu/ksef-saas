@@ -14,6 +14,7 @@ import { importedVatRateLabel, isVatRate } from '@/lib/xml/fa3-p12';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import { recordXmlDocument } from '@/lib/storage/xml-documents';
 import type { ArchivedKsefXml } from './ksef-xml-archive';
+import { contentHeldReasons, fa3ImportContent, type ImportContent } from './fa3-content';
 
 export interface ImportEngineParams {
   tenantId: string;
@@ -364,7 +365,7 @@ async function insertInvoices(
 ): Promise<{ imported: number; failed: number }> {
   if (invoices.length === 0) return { imported: 0, failed: 0 };
   const noteHeld = (inv: ParsedInvoice, num: string, ksefNumber: string | undefined) => {
-    const note = heldDocumentWarning(inv, num, ksefNumber, invoiceDirection, invoiceKsefStatus);
+    const note = heldDocumentWarning(inv, num, ksefNumber, invoiceDirection, invoiceKsefStatus, fa3ImportContent(inv));
     if (note) held.push(note);
   };
   const origin: InvoiceOrigin = source === 'ksef_history' ? 'ksef_import'
@@ -417,12 +418,14 @@ async function insertInvoices(
     ksef_environment: string | null;
     xml_storage_path: string | null;
     origin: string | null;
+    /** C5b: `fa3_data->annotations` — NULL przy imporcie sprzed C5b. */
+    stored_annotations?: unknown;
   };
   const existingKsef = new Map<string, ExistingKsefInvoice[]>();
   if (ksefNumbers.length > 0) {
     let query = supabase
       .from('invoices')
-      .select('id, ksef_number, internal_number, ksef_status, ksef_environment, xml_storage_path, origin')
+      .select('id, ksef_number, internal_number, ksef_status, ksef_environment, xml_storage_path, origin, stored_annotations:fa3_data->annotations')
       .eq('tenant_id', tenantId)
       .eq('direction', invoiceDirection);
     if (invoiceDirection === 'incoming' && ksefEnvironment) {
@@ -497,6 +500,13 @@ async function insertInvoices(
             failed++;
             continue;
           }
+          // C5b: faktura z importu sprzed odczytu daty sprzedaży i adnotacji —
+          // ponowny import uzupełnia je z oryginału (decyzja Bartosza 06.10).
+          if (stored.origin === 'ksef_import' && stored.stored_annotations == null &&
+              !(await backfillImportedContent(supabase, tenantId, stored.id, inv, num, warnings))) {
+            failed++;
+            continue;
+          }
         }
         // Ponowienie importu: dokument zapisany wcześniej PRZEZ IMPORT — ostrzeżenie
         // zostaje. Faktura wystawiona w FaktFlow (korekta, zaliczka z aplikacji)
@@ -538,6 +548,7 @@ async function insertInvoices(
     }
 
     const invoiceKind = normalizeInvoiceKindForInsert(inv, warnings);
+    const content = fa3ImportContent(inv);
     const faInvoiceType = mapParsedKindToFaVatType(inv.invoiceType);
     const idCols = buyerIdentityFromParsed(inv.buyer);
     const payment = paymentInfoFromParsed(inv);
@@ -566,7 +577,7 @@ async function insertInvoices(
         invoice_kind: invoiceKind,
         invoice_type: faInvoiceType,
         issue_date: inv.issueDate,
-        sale_date: null,
+        sale_date: content.saleDate,
         seller_nip: inv.seller.nip?.replace(/\D/g, '').slice(0, 10) || null,
         buyer_nip: idCols.buyer_nip,
         currency: 'PLN',
@@ -574,7 +585,7 @@ async function insertInvoices(
         vat_total: inv.totals.vatTotal,
         gross_total: inv.totals.grossTotal,
         payment_due_date: inv.paymentDueDate ?? null,
-        fa3_data: buildImportFa3Json(inv, source, importJobId),
+        fa3_data: buildImportFa3Json(inv, source, importJobId, content),
         seller_data: sellerPartyFromParsed(inv.seller) as unknown as Json,
         buyer_data: buyerPartyFromParsed(inv.buyer) as unknown as Json,
         payment_data: payment as unknown as Json,
@@ -666,6 +677,7 @@ function heldDocumentWarning(
   ksefNumber: string | undefined,
   direction: 'outgoing' | 'incoming',
   status: string,
+  content: ImportContent,
 ): string | null {
   const doc = `${num}${ksefNumber ? ` (KSeF ${ksefNumber})` : ''}`;
   const codes = [...new Set(inv.lines.map((l) => l.vatRate.trim()).filter((r) => !isVatRate(r)))];
@@ -681,7 +693,9 @@ function heldDocumentWarning(
   const linesNet = inv.lines.reduce((sum, l) => sum + (Number.isFinite(l.netAmount) ? l.netAmount : 0), 0);
   const mismatch = status === 'accepted' && direction === 'outgoing' &&
     Math.abs(roundToCents(linesNet) - roundToCents(inv.totals.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01;
-  if (codes.length === 0 && !special && !mismatch) return null;
+  // C5b: data sprzedaży, adnotacje i oznaczenia, których JPK nie wykaże — tylko sprzedaż przyjęta w KSeF.
+  const contentReasons = status === 'accepted' && direction === 'outgoing' ? contentHeldReasons(inv, content) : [];
+  if (codes.length === 0 && !special && !mismatch && contentReasons.length === 0) return null;
 
   if (status !== 'accepted') {
     return codes.length ? `${doc}: stawka ${rates} nie ma odpowiednika w FaktFlow — szkic zapisany z tą stawką.` : null;
@@ -691,11 +705,13 @@ function heldDocumentWarning(
       ? `${doc}: stawka ${rates} — FaktFlow jej nie rozlicza; faktura jest zapisana z kwotami z KSeF, sprawdź ją z księgową.`
       : null;
   }
-  const what = special
-    ? `zaimportowana faktura ${special} — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki)`
-    : codes.length
-      ? `stawka VAT ${rates} — FaktFlow jej jeszcze nie wykazuje w JPK`
-      : 'netto pozycji nie sumuje się do sumy netto faktury z KSeF (np. ceny brutto — P_11A)';
+  // Wszystkie powody naraz (C5b) — JPK odmówi z pierwszym, klient widzi komplet.
+  const what = [
+    special ? `zaimportowana faktura ${special} — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki)` : null,
+    codes.length ? `stawka VAT ${rates} — FaktFlow jej jeszcze nie wykazuje w JPK` : null,
+    ...contentReasons,
+    mismatch ? 'netto pozycji nie sumuje się do sumy netto faktury z KSeF (np. ceny brutto — P_11A)' : null,
+  ].filter(Boolean).join('; ');
   return (
     `${doc}: ${what}. Faktura jest zapisana, ale JPK_FA i JPK_V7M za ${inv.issueDate.slice(0, 7)} nie powstaną ` +
     'w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).'
@@ -736,6 +752,51 @@ async function repairImportedXml(
     return true;
   } catch (e) {
     warnings.push(`${num}: nie uzupełniono oryginału XML (KOD I) — ${e instanceof Error ? e.message : 'błąd'}`);
+    return false;
+  }
+}
+
+/**
+ * C5b: wiersz z importu historii sprzed odczytu daty sprzedaży i adnotacji
+ * (`fa3_data.annotations` brak). Ponowny import tej samej faktury dopisuje je
+ * z oryginału — warunkowo (tylko gdy adnotacji nadal nie ma), więc ponowienie
+ * joba niczego nie nadpisze. Serwis może: przyjęta faktura z importu nie ma
+ * `submitted_to_ksef_at` ani wysyłki w toku (00132). `false` = nie udało się.
+ */
+async function backfillImportedContent(
+  supabase: AdminSupabase,
+  tenantId: string,
+  invoiceId: string,
+  inv: ParsedInvoice,
+  num: string,
+  warnings: string[],
+): Promise<boolean> {
+  const content = fa3ImportContent(inv);
+  if (!content.annotations) return true; // plik bez Adnotacji do odczytu (nie z KSeF) — nic do dopisania
+  try {
+    const { data: row, error: readErr } = await supabase
+      .from('invoices')
+      .select('fa3_data, sale_date')
+      .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
+      .single();
+    if (readErr || !row) throw new Error(readErr?.message ?? 'brak faktury');
+    const stored = (row.fa3_data && typeof row.fa3_data === 'object' && !Array.isArray(row.fa3_data) ? row.fa3_data : {}) as Record<string, unknown>;
+    const { data, error } = await supabase
+      .from('invoices')
+      .update({
+        fa3_data: { ...stored, ...contentFa3Fields(content) } as unknown as Json,
+        ...(row.sale_date == null ? { sale_date: content.saleDate } : {}),
+      })
+      .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
+      .is('fa3_data->annotations', null)
+      .select('id');
+    if (error) throw new Error(error.message);
+    if (data?.length) warnings.push(`${num}: uzupełniono datę sprzedaży i adnotacje z oryginału KSeF (faktura z wcześniejszego importu)`);
+    return true;
+  } catch (e) {
+    warnings.push(`${num}: nie uzupełniono daty sprzedaży i adnotacji z KSeF — ponów import (${e instanceof Error ? e.message : 'błąd'})`);
     return false;
   }
 }
@@ -871,7 +932,22 @@ function paymentInfoFromParsed(inv: ParsedInvoice): PaymentInfo {
   };
 }
 
-function buildImportFa3Json(inv: ParsedInvoice, source: string, importJobId: string): Json {
+/**
+ * C5b: treść z pliku na górnym poziomie `fa3_data` — tam czytają ją JPK
+ * (`data-fetcher`), PDF (`invoice-data`) i korekta (`correction-annotations`).
+ * Bez `lines` na górze: z nimi szkic z importu dałoby się wysłać, a JPK
+ * brałby pozycje z parsera zamiast z tabeli.
+ */
+function contentFa3Fields(content: ImportContent): Record<string, unknown> {
+  return {
+    ...(content.annotations ? { annotations: content.annotations } : {}),
+    ...(content.annotationProblems.length ? { annotationProblems: content.annotationProblems } : {}),
+    ...(content.saleDates ? { saleDates: content.saleDates } : {}),
+    ...(content.markers ? { ksefMarkers: content.markers } : {}),
+  };
+}
+
+function buildImportFa3Json(inv: ParsedInvoice, source: string, importJobId: string, content: ImportContent): Json {
   return {
     import: {
       source,
@@ -879,6 +955,7 @@ function buildImportFa3Json(inv: ParsedInvoice, source: string, importJobId: str
       importedAt: new Date().toISOString(),
     },
     parsed: inv,
+    ...contentFa3Fields(content),
   } as unknown as Json;
 }
 

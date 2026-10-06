@@ -232,7 +232,7 @@ describe('overdue reminder status', () => {
     expect(props.stats.totalAmount).toBe(10_000);
     expect(queries.filter((query) => query.table === 'invoices_overdue')).toHaveLength(3);
     expect(queries.filter((query) => query.table === 'invoices' && query.selection.includes('ksef_environment'))
-      .every((query) => query.selection === 'id, ksef_environment, origin, invoice_kind, invoice_type, currency' && query.exactCount)).toBe(true);
+      .every((query) => query.selection === 'id, ksef_environment, origin, invoice_kind, invoice_type, currency, payment_data' && query.exactCount)).toBe(true);
   });
 
   it('shows reconciliation error for an overdue accepted invoice with unknown environment', async () => {

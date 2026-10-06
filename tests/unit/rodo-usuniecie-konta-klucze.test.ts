@@ -9,7 +9,8 @@ import { describe, expect, it } from 'vitest';
  * tests/rls-uprawnienia.test.ts w jobie RLS.
  */
 
-const sql = readFileSync('supabase/migrations/00113_user_deletion_foreign_keys.sql', 'utf8');
+const sql = readFileSync('supabase/migrations/00113_user_deletion_foreign_keys.sql', 'utf8')
+  .replace(/\r\n/g, '\n');
 
 describe('00113: usunięcie konta nie zatrzymuje się na kluczach obcych', () => {
   it.each([
