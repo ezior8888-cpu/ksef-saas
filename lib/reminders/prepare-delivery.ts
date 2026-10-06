@@ -6,6 +6,7 @@ import { generateDemandLetterPdf } from './pdf-demand-letter';
 import { DEFAULT_TEMPLATES, formatDatePl, formatPln } from './templates';
 import { MAX_REMINDER_PDF_BYTES, REMINDER_DELIVERY_TTL_MS, reminderDeliverySchema, reminderInvoiceFingerprint, isReminderInvoiceChaseable } from './delivery-schema';
 import { assertNoRelatedInvoice } from './reconciliation-guard';
+import { outstandingOf } from '@/lib/invoices/amount-due';
 import type { ReminderDelivery, ReminderDeliveryStage } from '@/types/reminder-delivery';
 import type { Json } from '@/types/database';
 
@@ -53,7 +54,14 @@ export async function buildReminderDelivery(
   if (invoiceResult.error || !invoice || invoice.id !== invoiceId || invoice.tenant_id !== tenantId) throw new Error('Nie udało się odczytać faktury tej organizacji.');
   if (!isReminderInvoiceChaseable(invoice)) throw new Error('Korekta, faktura rozliczeniowa lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.');
   const gross = Number(invoice.gross_total); const paid = Number(invoice.paid_amount);
-  if (invoice.gross_total === null || invoice.paid_amount === null || !Number.isFinite(gross) || !Number.isFinite(paid) || gross <= 0 || paid < 0 || paid >= gross ||
+  // ROZ: zaległość liczymy od `payment_data.amountDue` (reszta po
+  // zaliczkach), nie od `gross_total` — inaczej ponaglenie żądałoby całego
+  // zamówienia, choć część już rozliczono zaliczką (C-16, 00145).
+  const outstanding = outstandingOf({
+    invoice_kind: invoice.invoice_kind, gross_total: invoice.gross_total,
+    payment_data: invoice.payment_data, paid_amount: invoice.paid_amount,
+  });
+  if (invoice.gross_total === null || invoice.paid_amount === null || !Number.isFinite(gross) || !Number.isFinite(paid) || gross <= 0 || paid < 0 || outstanding <= 0 ||
       invoice.reminders_paused || invoice.direction !== 'outgoing' || invoice.ksef_status !== 'accepted' || invoice.payment_status === 'paid') {
     throw new Error('Ta faktura nie wymaga przypomnienia albo przypomnienia są wstrzymane.');
   }
@@ -89,7 +97,7 @@ export async function buildReminderDelivery(
   const source = template ? { subject: text(template.email_subject, 998), body: text(template.email_body, 20000) } : DEFAULT_TEMPLATES[stage];
   if (!source.subject || !source.body) throw new Error('Szablon przypomnienia jest pusty.');
   const variables: Record<string, string | number> = {
-    numerFaktury: invoiceLabel, kwota: formatPln(gross), kwotaDoZaplaty: formatPln(gross - paid),
+    numerFaktury: invoiceLabel, kwota: formatPln(gross), kwotaDoZaplaty: formatPln(outstanding),
     dataWystawienia: formatDatePl(invoice.issue_date), terminPlatnosci: formatDatePl(invoice.payment_due_date!),
     dniPoTerminie: daysOverdue, nazwaFirmy: text(tenant.name), nazwaKontrahenta: text(buyer.name),
     rachunekBankowy: bankAccount, imieNadawcy: senderName, linkPlatnosci: '',
@@ -107,7 +115,7 @@ export async function buildReminderDelivery(
       sellerName: text(tenant.name), sellerNip: text(tenant.nip), sellerAddress,
       buyerName: text(buyer.name), buyerNip: text(buyer.nip) || text(invoice.buyer_nip) || undefined,
       buyerAddress: address(buyer.address), invoiceNumber: invoiceLabel, issueDate: invoice.issue_date,
-      dueDate: invoice.payment_due_date!, grossAmount: gross, paidAmount: paid, amountDue: gross - paid,
+      dueDate: invoice.payment_due_date!, grossAmount: gross, paidAmount: paid, amountDue: outstanding,
       bankAccount, daysOverdue, senderName, senderEmail: replyTo ?? fromEmail,
       placeOfIssue: sellerAddress.match(/\d{2}-\d{3}\s+([^,]+)/)?.[1]?.trim() || 'Polska',
       letterDate: preparedAt.toISOString().slice(0, 10),

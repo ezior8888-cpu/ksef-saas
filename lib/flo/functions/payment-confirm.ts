@@ -44,6 +44,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database, TablesInsert } from '@/types/database';
 import type { FloApproveInput } from '@/types/flo';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
+import { outstandingOf } from '@/lib/invoices/amount-due';
 
 /** Dobę po terminie, nie w dniu terminu. Przelew bywa w drodze. */
 const ASK_AFTER_DAYS = 1;
@@ -57,6 +58,13 @@ export interface OverdueInvoice {
   number: string;
   contractorName: string;
   grossTotal: number;
+  /**
+   * Do zapłaty NA TEJ fakturze — dla ROZ to `payment_data.amountDue`
+   * (reszta po zaliczkach), nie `grossTotal` (C-16, 00145). Dla każdej innej
+   * faktury to ta sama wartość co `grossTotal`. Opcjonalne: źródła, które
+   * jeszcze go nie liczą, dostają zapasowe `grossTotal`.
+   */
+  amountDue?: number;
   paidAmount: number;
   /** YYYY-MM-DD */
   dueDate: string;
@@ -79,7 +87,7 @@ export function selectOverdueForConfirmation(
 ): OverdueSelection[] {
   return invoices
     .map((invoice) => {
-      const outstanding = round2(invoice.grossTotal - invoice.paidAmount);
+      const outstanding = round2((invoice.amountDue ?? invoice.grossTotal) - invoice.paidAmount);
       const due = Date.parse(invoice.dueDate);
       const daysOverdue = Number.isNaN(due)
         ? 0
@@ -162,6 +170,7 @@ export function buildPaymentConfirmProposal(input: {
       })),
       facts: {
         grossTotal: first.invoice.grossTotal,
+        amountDue: first.invoice.amountDue ?? first.invoice.grossTotal,
         paidAmount: first.invoice.paidAmount,
         dueDate: first.invoice.dueDate,
         status: 'overdue',
@@ -292,6 +301,9 @@ export function overdueEntryFromState(
     number: context.invoiceNumber ?? 'bez numeru',
     contractorName: context.contractorName ?? 'Kontrahent',
     grossTotal: Number(facts.grossTotal ?? 0),
+    // `readState` zawsze liczy amountDue (C-16); zapasowy grossTotal jest
+    // tylko dla faktów bez tego pola (stary ładunek przed 00145).
+    amountDue: Number(facts.amountDue ?? facts.grossTotal ?? 0),
     paidAmount: Number(facts.paidAmount ?? 0),
     dueDate: facts.dueDate,
     remindersPaused: facts.remindersPaused === 1,
@@ -378,11 +390,16 @@ export function planPaymentConfirmation(
       ? (payload.facts as Record<string, unknown>)
       : {};
   const grossTotal = Number(facts.grossTotal);
+  // Zapasowy grossTotal tylko dla propozycji zapisanej przed 00145, która
+  // nie ma jeszcze amountDue w payload — nowe karty zawsze je mają.
+  const amountDue = Number(
+    Object.hasOwn(facts, 'amountDue') ? facts.amountDue : facts.grossTotal,
+  );
   const paidAmount = Number(facts.paidAmount);
-  if (!Number.isFinite(grossTotal) || !Number.isFinite(paidAmount)) {
+  if (!Number.isFinite(grossTotal) || !Number.isFinite(amountDue) || !Number.isFinite(paidAmount)) {
     throw new Error('Propozycja bez kwot faktury');
   }
-  const outstanding = round2(grossTotal - paidAmount);
+  const outstanding = round2(amountDue - paidAmount);
 
   let amount = outstanding;
   if (input?.value !== undefined) {
@@ -430,16 +447,19 @@ registerFloHandler('payment.confirm', async (ctx) => {
   // WOLNO zapisać, mówi bieżące saldo faktury tego konta.
   const invoice = await client
     .from('invoices')
-    .select('id, gross_total, paid_amount')
+    .select('id, gross_total, paid_amount, invoice_kind, payment_data')
     .eq('id', plan.invoiceId)
     .eq('tenant_id', ctx.proposal.tenant_id)
     .maybeSingle();
   if (invoice.error || !invoice.data) {
     throw new Error('Nie można potwierdzić tej faktury');
   }
-  const balance = round2(
-    Number(invoice.data.gross_total) - Number(invoice.data.paid_amount),
-  );
+  // ROZ: saldo liczymy od payment_data.amountDue, nie od gross_total — ta
+  // sama reguła co w planie (C-16, 00145).
+  const balance = outstandingOf({
+    invoice_kind: invoice.data.invoice_kind, gross_total: invoice.data.gross_total,
+    payment_data: invoice.data.payment_data, paid_amount: invoice.data.paid_amount,
+  });
   if (!Number.isFinite(balance) || balance <= 0 || plan.amount > balance + 0.005) {
     throw new Error('Kwota poza zakresem aktualnej należności');
   }

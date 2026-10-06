@@ -285,9 +285,23 @@ describe('delayed reminder dispatch guards', () => {
     expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();
     expect(tables.payment_reminders[0].status).toBe('pending');
   });
-  it('stops an approved final ROZ demand whose 1000 PLN gross can leave only 700 PLN after an advance', async () => {
+  it('sends an approved final ROZ demand for the 700 PLN amountDue, now that C-16 (00145) trusts it', async () => {
+    // Do 00145 KAŻDA ROZ była tu zatrzymywana jako bezpiecznik, niezależnie
+    // od kwoty. `isReminderInvoiceChaseable` już ją wpuszcza, a zaległość
+    // (`outstandingOf`) liczy się od payment_data.amountDue, nie od całego
+    // gross_total — więc 1000 PLN zamówienia z resztą 700 PLN po zaliczce
+    // wysyła się normalnie.
     await seed({ attachment: true, invoicePatch: {
       invoice_kind: 'final', invoice_type: 'ROZ', gross_total: 1000, paid_amount: 0,
+      payment_data: { amountDue: 700, bankAccount: 'TEST-ACCOUNT' },
+    } });
+    await expect(runSendReminder(jobData, context)).resolves.toMatchObject({ success: true });
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+  });
+  it('stops an approved final ROZ demand already settled against amountDue, even though paid_amount < gross_total', async () => {
+    await seed({ attachment: true, invoicePatch: {
+      invoice_kind: 'final', invoice_type: 'ROZ', gross_total: 1000, paid_amount: 700,
+      payment_data: { amountDue: 700, bankAccount: 'TEST-ACCOUNT' },
     } });
     await expect(runSendReminder(jobData, context)).rejects.toBeInstanceOf(NonRetriableError);
     expectNoSend(); expect(snapshot().reminderReceipt).toBeUndefined();

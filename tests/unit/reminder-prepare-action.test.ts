@@ -70,7 +70,7 @@ describe('prepare reminder action', () => {
     expect(mocks.build).not.toHaveBeenCalled(); expect(db.writes).toBe(0);
   });
   it.each([
-    ['correction', 'KOR'], ['regular', 'KOR'], ['regular', 'KOR_ZAL'], ['final', 'ROZ'],
+    ['correction', 'KOR'], ['regular', 'KOR'], ['regular', 'KOR_ZAL'],
     ['regular', null], [null, 'VAT'], ['regular', undefined],
   ])('does not create a preview, reminder or dispatch for %s/%s', async (kind, type) => {
     Object.assign(db.tables.invoices[0]!, { invoice_kind: kind, invoice_type: type });
@@ -82,6 +82,12 @@ describe('prepare reminder action', () => {
     expect(db.tables.flo_proposals).toEqual([]);
     expect(db.tables.flo_approvals).toEqual([]);
     expect(db.tables.payment_reminders).toEqual([]);
+  });
+  it('creates a preview for a final/ROZ invoice — C-16/00145 made it chaseable', async () => {
+    Object.assign(db.tables.invoices[0]!, { invoice_kind: 'final', invoice_type: 'ROZ' });
+    const result = await prepareReminderAction({ invoiceId: ID, stage: 'stage_1' });
+    expect(result).toMatchObject({ success: true });
+    expect(mocks.build).toHaveBeenCalled();
   });
   it('does not create a preview or writes for an imported invoice', async () => {
     db.tables.invoices[0]!.origin = 'ksef_import';
