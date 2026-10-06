@@ -10,7 +10,9 @@
  *
  * Retry merytoryczny (próby, opóźnienia, onExhausted) jest TUTAJ — pg-boss ma
  * w `QUEUE_POLICY` (boss.ts) tylko siatkę na joby zabite w trakcie
- * (heartbeat/expire, AUD-16), więc nie ma podwójnego liczenia prób.
+ * (heartbeat/expire, AUD-16), więc nie ma podwójnego liczenia prób. Takie
+ * ponowienie porzuconego joba nie zwiększa `attempt` i po wyczerpaniu NIE woła
+ * `onExhausted` — job zostaje w pg-boss jako `failed`.
  *
  * Oczekiwanie (S22): `RetryAfterError` z `countsAsAttempt: false` to „jeszcze
  * nie wiadomo, poczekaj” — nie zużywa próby, ma własny licznik `__waits`

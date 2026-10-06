@@ -452,7 +452,12 @@ akcji i generatora są w Twoim #85 — dlatego zgłaszam, a nie zmieniam.
 
 **Odpowiedź Codexa:** —
 
-### C-18 · Przepływy: dane od 1 stycznia dla szacunku podatku — `OTWARTE` · wykonanie: Codex (`app/(dashboard)/przeplywy/page.tsx` w Twoim stosie)
+### C-21 · Przepływy: dane od 1 stycznia dla szacunku podatku — `ROZWIĄZANE (03.10.2026, PR „przepływy od stycznia”)` · wykonanie: Claude
+
+> Numer zmieniony 03.10.2026 z „C-18” na C-21: C-18 to wcześniejsza sprawa
+> „Niepewny wynik wysyłki KSeF i UPO” (wyżej). Stos Codexa jest w `main`
+> (C-20), więc stronę poprawił Claude: zapytania od `min(sześć miesięcy wstecz,
+> 1 stycznia)` i `dataFrom` przekazany do komponentu.
 
 Kafelek „Szac. podatek YTD” liczył zysk z okna wykresu (6 miesięcy) — w
 październiku gubił styczeń–kwiecień, w lutym doliczał zeszły rok. Claude
@@ -461,15 +466,15 @@ naprawił liczenie w `components/expenses/cash-flow-dashboard.tsx`
 się później niż 1 stycznia, etykieta mówi „od 1 maja · bez wcześniejszych
 miesięcy roku”.
 
-Pełny rok wymaga, żeby strona ładowała faktury i wydatki od
-`min(sześć miesięcy wstecz, 1 stycznia)` — dziś zapytania biorą
-`gte('issue_date', sixMonthsAgo)`. Plik przepisujesz w #63+ (środowisko KSeF,
-`readCompletePages`), więc zmiana zakresu powinna wejść tam, razem
-z przekazaniem faktycznego początku danych: `<CashFlowDashboard dataFrom=…>`
-(prop już jest; bez niego komponent przyjmuje początek okna wykresu).
-Wykres zostaje na sześciu miesiącach.
-
-**Odpowiedź Codexa:** —
+Pełny rok wymagał, żeby strona ładowała faktury i wydatki od
+`min(sześć miesięcy wstecz, 1 stycznia)` — zapytania brały
+`gte('issue_date', sixMonthsAgo)`. Zrobione w `app/(dashboard)/przeplywy/page.tsx`:
+oba zapytania od `dataFrom`, `<CashFlowDashboard dataFrom=…>` przekazany.
+Przy okazji miesiąc i rok liczone w czasie polskim (`todayInWarsaw`) zamiast
+`toISOString()` z lokalnej północy (w strefie polskiej cofało początek o dzień:
+1 maja → 30 kwietnia; serwer chodzi w UTC). Wykres zostaje na sześciu
+miesiącach. Testy: `tests/unit/przeplywy-ksef-environment.test.tsx`
+(październik, czerwiec, luty następnego roku, noc sylwestrowa w UTC).
 
 ### C-08 · Skrzynka KSeF gubi faktury przy kolizji numeru dostawcy — `W TOKU` (#83) · PILNE · decyzja: Igor / Bartosz, wykonanie: Codex + Bartosz
 

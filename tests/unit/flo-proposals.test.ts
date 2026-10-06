@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FloProposalRow } from '@/lib/flo/db-types';
-import { toProposalView } from '@/lib/flo/proposals';
+import {
+  buildInboxSummaryProposal,
+  classifyInboxDocuments,
+} from '@/lib/flo/functions/expense-inbox';
+import {
+  buildExpenseReviewProposal,
+  buildOcrFailedProposal,
+} from '@/lib/flo/functions/expense-review';
+import { toProposalView, type CreateProposalInput } from '@/lib/flo/proposals';
 
 /**
  * Zamiana wiersza bazy na kartę w interfejsie (krok 7 planu).
@@ -185,5 +193,113 @@ describe('wiersz → karta: źródło podglądu przypomnienia', () => {
   });
   it('does not turn another proposal kind into a reminder', () => {
     expect(toProposalView(row({ kind: 'invoice.raise', payload: { invoiceId: 'invoice-a', stage: 'stage_1' } }))?.reminder).toBeUndefined();
+  });
+});
+
+describe('wiersz → karta: wynik odczytu zdjęcia (E16)', () => {
+  // Ładunki z prawdziwych producentów kart, nie przepisane ręcznie: jeśli
+  // któryś zmieni kształt, ten test powie o tym, zanim pasek zdjęcia zacznie
+  // znów ogłaszać „odczytany” nad kartą porażki.
+  const NOW = new Date('2026-08-26T12:00:00.000Z');
+
+  function fromInput(input: CreateProposalInput) {
+    return toProposalView(
+      row({
+        kind: input.kind,
+        topic_key: input.topicKey,
+        title: input.title,
+        body: input.body,
+        payload: input.payload ?? {},
+      }),
+    );
+  }
+
+  it('karta porażki OCR niesie numer zadania i znacznik porażki', () => {
+    const view = fromInput(buildOcrFailedProposal('ten-1', 'job-1', NOW));
+
+    expect(view?.ocrCard).toEqual({ failed: true, ocrJobId: 'job-1' });
+  });
+
+  it('koszt odczytany ze zdjęcia to wynik udany', () => {
+    const view = fromInput(
+      buildExpenseReviewProposal({
+        tenantId: 'ten-1',
+        expenseId: 'exp-1',
+        facts: {
+          sellerName: 'Sklep Testowy',
+          sellerNip: '1234567890',
+          netAmount: 100,
+          vatAmount: 23,
+          grossAmount: 123,
+          issueDate: '2026-08-22',
+          confidence: 0.95,
+          categoryLabel: 'materiały',
+        },
+        history: { count: 5, medianGross: 120 },
+        applied: { kpirColumn: 'col_10', categoryLabel: 'materiały' },
+        now: NOW,
+      }),
+    );
+
+    expect(view?.ocrCard).toEqual({ failed: false });
+  });
+
+  it('koszt z numerem zadania OCR przekazuje go dalej', () => {
+    const view = toProposalView(
+      row({
+        kind: 'expense.review',
+        payload: { expenseId: 'exp-1', ocrJobId: 'job-7' },
+      }),
+    );
+
+    expect(view?.ocrCard).toEqual({ failed: false, ocrJobId: 'job-7' });
+  });
+
+  it('karta skrzynki KSeF nie jest wynikiem odczytu zdjęcia', () => {
+    const input = buildInboxSummaryProposal({
+      tenantId: 'ten-1',
+      documents: classifyInboxDocuments(
+        [
+          {
+            id: 'doc-1',
+            sellerName: 'Sklep Testowy',
+            sellerNip: '1234567890',
+            grossAmount: 123,
+            issueDate: '2026-08-22',
+          },
+        ],
+        new Set(['1234567890']),
+      ),
+      periodKey: '2026-08-26',
+      now: NOW,
+    });
+    expect(input?.kind).toBe('expense.review');
+
+    expect(fromInput(input!)?.ocrCard).toBeUndefined();
+  });
+
+  it('porażka bez numeru zadania nie udaje odczytanego kosztu', () => {
+    const view = toProposalView(
+      row({
+        kind: 'expense.review',
+        payload: { expenseId: 'exp-1', failed: 1 },
+      }),
+    );
+
+    expect(view?.ocrCard).toBeUndefined();
+  });
+
+  it('inny rodzaj karty nie dostaje wyniku odczytu, nawet z tym samym ładunkiem', () => {
+    for (const kind of ['expense.rule', 'expense.missing', 'ksef.status']) {
+      const failed = toProposalView(
+        row({ kind, payload: { ocrJobId: 'job-1', failed: 1 } }),
+      );
+      const read = toProposalView(
+        row({ kind, payload: { expenseId: 'exp-1', ocrJobId: 'job-1' } }),
+      );
+
+      expect(failed?.ocrCard).toBeUndefined();
+      expect(read?.ocrCard).toBeUndefined();
+    }
   });
 });
