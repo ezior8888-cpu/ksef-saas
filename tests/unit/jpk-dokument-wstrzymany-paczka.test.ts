@@ -19,9 +19,17 @@ import { jpkFaBlocker } from '@/lib/exports/jpk-fa-readiness';
  */
 
 let tables: MemoryTables;
+/**
+ * C5b: import zapisuje adnotacje z pliku w `fa3_data.annotations` — wiersz
+ * z importu bez nich to import sprzed C5b (JPK odmawia z podpowiedzią). Domyślna
+ * faktura testowa ma adnotacje jak po imporcie pliku bez procedur (świadoma
+ * zmiana danych testu, opis w PR).
+ */
+const ADNOTACJE_IMPORTU = { cashMethod: 2, selfInvoicing: 2, reverseCharge: 2, splitPayment: 2, simplifiedProcedure: 2, newMeansOfTransport: 2 };
 const faktura = (o: Record<string, unknown>) => ({
   tenant_id: 'firma-a', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: 'test',
-  issue_date: '2026-09-10', invoice_kind: 'regular', invoice_type: 'VAT', origin: 'ksef_import', ...o,
+  issue_date: '2026-09-10', invoice_kind: 'regular', invoice_type: 'VAT', origin: 'ksef_import',
+  fa3_data: { annotations: ADNOTACJE_IMPORTU }, ...o,
 });
 const blocker = () => jpkFaBlocker(memoryClient(tables) as never, {
   tenantId: 'firma-a', periodStart: '2026-09-01', periodEnd: '2026-09-30', includeCorrections: true,
@@ -64,6 +72,48 @@ describe('jpkFaBlocker — dokumenty, których JPK nie wykaże poprawnie', () =>
     tables.invoices!.push(faktura({ id: 'fv-app', internal_number: 'FV/APP/1', origin: 'app', net_total: 100 }));
     tables.invoice_line_items!.push({ id: 'l-6', invoice_id: 'fv-app', vat_rate: '0 KR', net_amount: 100 });
     expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/APP\/1/);
+  });
+
+  it('C5b: faktura z importu z procedurą trójstronną (P_23) → powód z numerem', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-p23', internal_number: 'FV/P23/1', net_total: 100, fa3_data: { annotations: { ...ADNOTACJE_IMPORTU, simplifiedProcedure: 1 } } }));
+    tables.invoice_line_items!.push({ id: 'l-7', invoice_id: 'fv-p23', vat_rate: '23', net_amount: 100 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/P23\/1.*procedura trójstronna/);
+  });
+
+  it('C5b: faktura z importu z oznaczeniem FP (do paragonu) → powód z numerem', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-fp', internal_number: 'FV/FP/1', net_total: 100, fa3_data: { annotations: ADNOTACJE_IMPORTU, ksefMarkers: { fp: true } } }));
+    tables.invoice_line_items!.push({ id: 'l-8', invoice_id: 'fv-fp', vat_rate: '23', net_amount: 100 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/FP\/1.*\(FP\)/);
+  });
+
+  it('C5b: faktura zaimportowana przed C5b (bez adnotacji) → powód z numerem i „ponów import”', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-old', internal_number: 'FV/OLD/1', net_total: 100, fa3_data: { import: { source: 'ksef_history' }, parsed: {} } }));
+    tables.invoice_line_items!.push({ id: 'l-9', invoice_id: 'fv-old', vat_rate: '23', net_amount: 100 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/OLD\/1.*ponów import/);
+  });
+
+  it('C5b: nieczytelne adnotacje z importu (annotationProblems) → powód z numerem', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-adn', internal_number: 'FV/ADN/1', net_total: 100, fa3_data: { annotations: ADNOTACJE_IMPORTU, annotationProblems: ['P_16 „tak”'] } }));
+    tables.invoice_line_items!.push({ id: 'l-10', invoice_id: 'fv-adn', vat_rate: '23', net_amount: 100 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/ADN\/1.*nie udało się odczytać/);
+  });
+
+  it('C5b: różne daty sprzedaży pozycji z importu (saleDates.unclear) → powód z numerem', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-dat', internal_number: 'FV/DAT/1', net_total: 100, fa3_data: { annotations: ADNOTACJE_IMPORTU, saleDates: { unclear: true } } }));
+    tables.invoice_line_items!.push({ id: 'l-11', invoice_id: 'fv-dat', vat_rate: '23', net_amount: 100 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/DAT\/1.*datami sprzedaży/);
+  });
+
+  it('C5b: zwolnienie (P_19) z importu przy pozycji 23% → powód z numerem (sprawdzenie z pozycjami)', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-zw', internal_number: 'FV/ZW/1', net_total: 100, fa3_data: { annotations: { ...ADNOTACJE_IMPORTU, vatExemptionBasis: 'art. 113 ust. 1' } } }));
+    tables.invoice_line_items!.push({ id: 'l-12', invoice_id: 'fv-zw', vat_rate: '23', net_amount: 100 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/ZW\/1.*P_19/);
+  });
+
+  it('C5b: faktura z aplikacji bez adnotacji w fa3_data nie jest „importem sprzed C5b” (bramka po origin)', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-own', internal_number: 'FV/OWN/1', origin: 'app', net_total: 100, fa3_data: { lines: [] } }));
+    tables.invoice_line_items!.push({ id: 'l-13', invoice_id: 'fv-own', vat_rate: '23', net_amount: 100 });
+    expect(await blocker()).toBeNull();
   });
 
   it('dokument z innego środowiska KSeF nie blokuje (eksport go nie czyta)', async () => {

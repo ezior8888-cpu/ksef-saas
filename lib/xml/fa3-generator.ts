@@ -438,19 +438,32 @@ function buildAdnotacje(
       throw new InvoiceValidationError([ZW_WITHOUT_BASIS_MESSAGE]);
     }
     zwolnienie.ele('P_19').txt('1');
-    zwolnienie.ele('P_19A').txt(basis);
+    // C5b: rodzaj podstawy z importu KSeF (P_19B dyrektywa, P_19C inna); brak = P_19A.
+    zwolnienie.ele(a.vatExemptionBasisKind ?? 'P_19A').txt(basis);
   } else {
     zwolnienie.ele('P_19N').txt('1');
   }
 
   // NoweSrodkiTransportu – choice: (P_22 + P_42_5 + NowySrodekTransportu) LUB P_22N
-  // MVP zawsze P_22N=1.
+  // MVP zawsze P_22N=1. Faktura z importu KSeF z P_22 (C5b) nie może wyjść
+  // jako „nie dotyczy” — FaktFlow nie wystawia dostaw nowych środków transportu.
+  if (a.newMeansOfTransport === 1) {
+    throw new InvoiceValidationError([
+      'FaktFlow nie wystawia faktur dostawy nowych środków transportu (P_22) — tej faktury nie da się utworzyć w FaktFlow z oryginału KSeF.',
+    ]);
+  }
   adn.ele('NoweSrodkiTransportu').ele('P_22N').txt('1');
 
   // P_23 - procedura uproszczona
   adn.ele('P_23').txt(String(a.simplifiedProcedure ?? 2));
 
-  // PMarzy – choice: (P_PMarzy + P_PMarzy_*) LUB P_PMarzyN
+  // PMarzy – choice: (P_PMarzy + P_PMarzy_*) LUB P_PMarzyN. Procedura marży
+  // z importu KSeF (C5b) — FaktFlow jej nie wystawia, więc odmowa, nie P_PMarzyN.
+  if (a.marginScheme) {
+    throw new InvoiceValidationError([
+      `FaktFlow nie wystawia faktur w procedurze marży (${a.marginScheme}) — tej faktury nie da się utworzyć w FaktFlow z oryginału KSeF.`,
+    ]);
+  }
   adn.ele('PMarzy').ele('P_PMarzyN').txt('1');
 }
 

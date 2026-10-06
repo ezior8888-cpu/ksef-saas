@@ -1,8 +1,11 @@
-# Stawki VAT faktur z importu historii KSeF (W9)
+# Import historii KSeF: stawki VAT, data sprzedaży i adnotacje (W9, C5a, C5b)
 
-Plan „zero zgubionych faktur”, sesja C5a. Kod: `lib/xml/fa3-p12.ts` (jedno
-odwzorowanie), `lib/import/fa3-parser.ts` (import), `lib/exports/jpk-fa-generator.ts`
-(`JpkDocumentNotSupportedError`), `lib/exports/jpk-fa-readiness.ts` (paczka Co-Pilot).
+Plan „zero zgubionych faktur”, sesje C5a (stawki) i C5b (data sprzedaży,
+adnotacje, oznaczenia). Kod: `lib/xml/fa3-p12.ts` (stawki),
+`lib/xml/fa3-annotations.ts` (odczyt adnotacji, dat i oznaczeń),
+`lib/import/fa3-parser.ts` (import), `lib/import/fa3-content.ts` (co trafia
+na wiersz), `lib/exports/jpk-fa-generator.ts` (`JpkDocumentNotSupportedError`),
+`lib/exports/jpk-fa-readiness.ts` (paczka Co-Pilot).
 
 ## Co import zapisuje jako stawkę pozycji
 
@@ -24,17 +27,57 @@ plik nie powstał, niż żeby sprzedaż trafiła do złego pola albo wypadła.
 Faktura z importu, której **netto pozycji nie sumuje się do netto z
 nagłówka** (np. ceny brutto: `P_11A` bez `P_11`, parser czyta tylko `P_11`),
 też jest odmawiana z numerem — inaczej sprzedaż po cichu wypadłaby z pól
-stawek. Odczyt cen brutto to C5b.
+stawek. Odczyt cen brutto to C5c (decyzja Bartosza 06.10.2026: osobny PR).
 
 Zaimportowane **korekty, zaliczki i ROZ** import zapisuje jako zwykłe
 (`invoice_kind = regular`, rodzaj z pliku w `invoice_type`), bo nie zna ich
 powiązań. JPK też ich odmawia z numerem dokumentu.
 
+## Data sprzedaży (C5b)
+
+| Plik | `invoices.sale_date` | `fa3_data.saleDates` | JPK |
+|---|---|---|---|
+| `P_6` (bez `P_6A` albo wszystkie `P_6A` równe `P_6`) | `P_6` — także gdy równa dacie wystawienia (wiersz wierny plikowi) | — | JPK_FA `P_6` / V7M `DataSprzedazy`, gdy różna od daty wystawienia |
+| `OkresFa` (`P_6_Od`, `P_6_Do`) | `P_6_Do` (data zakończenia) | `period` | jak wyżej |
+| bez `P_6`, ta sama `P_6A` na każdej pozycji | ta data | `lines` | jak wyżej |
+| bez daty sprzedaży | NULL (sprzedaż = data wystawienia) | — | bez `P_6` |
+| kilka dat: `P_6`/`P_6_Do` i `P_6A` różne, `P_6A` poza `OkresFa`, część pozycji bez `P_6A` | `P_6` / `P_6_Do` albo NULL | `lines`, `unclear` | **odmawia** z numerem (JPK ma jedną datę sprzedaży dokumentu) |
+| data nieczytelna (np. `2026-02-30`) | NULL | `unclear` | **odmawia** z numerem |
+| zaliczka, korekta | NULL zawsze (P_6 to tam data zaliczki / stan po korekcie) | jak wyżej | odmawia — rodzaj (C5a) |
+
+## Adnotacje i oznaczenia (C5b)
+
+Import zapisuje je w `fa3_data.annotations` w kluczach FaktFlow, liczbami
+1|2 (jak faktury z aplikacji), a nieczytelne w `fa3_data.annotationProblems`
+— **nigdy domyślne „nie”**.
+
+| Plik | Klucz | JPK_FA | JPK_V7M | Uwaga |
+|---|---|---|---|---|
+| `P_16` | `cashMethod` | `P_16` | — (okres wg daty wystawienia — ustalenie C5b-f) | korekta dziedziczy |
+| `P_17` | `selfInvoicing` | `P_17` z pliku | — | decyzja Bartosza 06.10 |
+| `P_18` | `reverseCharge` | `P_18` z pliku (bez klucza — z pozycji `oo` / `np_ii`) | — | decyzja Bartosza 06.10 |
+| `P_18A` | `splitPayment` | `P_18A` | — | korekta dziedziczy |
+| `P_19` + `P_19A` / `P_19B` / `P_19C` | `vatExemptionBasis` + `vatExemptionBasisKind` | `P_19A` / `P_19B` / `P_19C` z pliku | — | zwolnienie niezgodne ze stawkami pozycji → **odmowa** |
+| `P_23 = 1` | `simplifiedProcedure` | **odmowa** | **odmowa** (bez TT_D) | |
+| `P_22 = 1` | `newMeansOfTransport` | **odmowa** | **odmowa** | szczegóły w archiwum XML |
+| `PMarzy` (`P_PMarzy_*`) | `marginScheme` | **odmowa** | **odmowa** (bez MR_T / MR_UZ) | |
+| `FP`, `TP`, podmiot upoważniony (`RolaPU`), `GTU`, `Procedura` | `fa3_data.ksefMarkers` | **odmowa** | **odmowa** | decyzja Bartosza 06.10: wykrywać i zatrzymywać |
+| adnotacja nieczytelna | `annotationProblems` | **odmowa** | **odmowa** | |
+
+JPK_FA(4) umiałby wpisać `P_23` i `P_106E_*`, ale JPK_V7M (to samo
+`amountsOf`) nie ma tych oznaczeń ani kwot marży — odmowa obu plików jest
+celowa, nie „do poprawienia tylko w JPK_FA”.
+
 ## Co widzi klient
 
 - **Import:** pierwsze ostrzeżenie w raporcie — numer faktury, numer KSeF,
-  kod stawki i miesiąc, za który JPK nie powstanie w FaktFlow. Faktura jest
-  zapisana i liczy się do KPiR i CSV.
+  wszystkie powody (stawka, rodzaj, adnotacja, oznaczenie, daty pozycji)
+  i miesiąc, za który JPK nie powstanie w FaktFlow. Faktura jest zapisana
+  i liczy się do KPiR i CSV.
+- **Faktura z importu sprzed C5b** (bez adnotacji): JPK odmawia z podpowiedzią
+  „ponów import historii z KSeF za ten okres”. Ponowny import tej samej
+  faktury dopisuje datę sprzedaży i adnotacje z oryginału (raport: „uzupełniono
+  datę sprzedaży i adnotacje”) — decyzja Bartosza 06.10.2026.
 - **Eksport JPK_FA / JPK_V7M:** zadanie kończy się od razu (bez ponowień)
   powodem „JPK wstrzymany: faktura … ma stawkę VAT „0 WDT” (…) … JPK za ten
   okres trzeba przygotować poza FaktFlow (KPiR i CSV z FaktFlow działają)”,
@@ -48,7 +91,9 @@ powiązań. JPK też ich odmawia z numerem dokumentu.
 
 ## Co robi operator
 
-1. Lista dokumentów: `./scripts/ops/kontrola-faktur-ksef.sh`, sekcja 8.
+1. Lista dokumentów: `./scripts/ops/kontrola-faktur-ksef.sh`, sekcja 8 (od C5b
+   także „sprzedaż z importu, której JPK nie wykaże przez treść z pliku”,
+   z powodem).
 2. **Nie przepisujesz stawek faktur przyjętych w KSeF** — to treść
    wystawionego dokumentu (00119/00132), a stawka FaktFlow nie wyraża WDT ani
    eksportu.
@@ -59,9 +104,21 @@ powiązań. JPK też ich odmawia z numerem dokumentu.
    wierszy, 0 faktur z importu).
 4. Rozszerzenie stawek FaktFlow o WDT / eksport (z polami K_21 / K_22) zwolni
    te dokumenty — osobna sesja (ustalenie W9-g w dzienniku planu).
+5. Faktury z importu sprzed C5b: klient ponawia import historii (uzupełnienie
+   jest warunkowe i idempotentne). **Nie** dopisujesz adnotacji ręcznie
+   UPDATE-em — to treść z oryginału, którą czyta import.
 
-## Czego ta sesja nie zmienia
+## Czego te sesje nie zmieniają (dalej otwarte)
 
-Data sprzedaży (P_6) i adnotacje (MPP, metoda kasowa, podstawa zwolnienia)
-z pliku dalej giną przy imporcie — **C5b**, warunek zapisu oryginału z KSeF
-po decyzji klienta (D-A4-1b-3, PR C).
+- **C5c** — ceny brutto (`P_9B`, `P_11A`, `P_11Vat`): dziś odmowa z numerem
+  (netto pozycji ≠ netto nagłówka). Warunek D-A4-1b-3 PR C.
+- **C5b-b** — nabywca z `NrID` (zagraniczny bez VAT-UE) i `JST`/`GV` z pliku
+  (dziś stałe 2). **C5b-c** — `ksef_accepted_at` = chwila importu, `notes`
+  „[import]…” drukowane na PDF, Stopka z pliku pomijana. **C5b-d** — PDF bez
+  wzmianki o `P_17`, jawnym `P_18`, `P_23`, marży i `OkresFa`; karta faktury
+  bez adnotacji. Wszystkie przed D-A4-1b-3 PR C.
+- **C5b-e** — korekta faktury z importu z `P_17`/`P_22`/`P_23`/marżą/`P_19B-C`
+  wpisuje 2/N (`fa3-correction-generator.ts`) — warunek C4 (zdjęcie KOR_HOLD).
+- **C5b-f** — JPK_V7M liczy okres po dacie wystawienia, nie po momencie
+  powstania obowiązku (metoda kasowa, `P_6` w innym miesiącu, `OkresFa`);
+  dotyczy też faktur FaktFlow.
