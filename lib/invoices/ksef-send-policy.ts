@@ -31,6 +31,7 @@ export const KSEF_SEND_MESSAGES = {
   transient: 'Błąd po stronie KSeF albo FaktFlow — wysyłkę ponowimy automatycznie. Możesz też wysłać teraz.',
   setup: 'Brak zweryfikowanego certyfikatu KSeF — uzupełnij ustawienia KSeF, potem wyślij ponownie.',
   notInKsef: 'KSeF nie ma tej faktury — poprzednia wysyłka do niego nie dotarła. Wyślij ją ponownie albo wróć do szkicu.',
+  issueDatePassed: 'Tego dokumentu nie wysłaliśmy: ma datę wystawienia sprzed dzisiaj, a w KSeF dokument wystawia się w dniu wysyłki (szczegóły wyżej). Wróć do szkicu, usuń go i wystaw dokument od nowa z dzisiejszą datą. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj dokumentu ponownie — uzgodni go operator FaktFlow.',
   envMismatch: 'Tej wysyłki nie wykonaliśmy: zlecenie dotyczyło innego środowiska KSeF (testowego albo produkcyjnego) niż obecne ustawienie FaktFlow — szczegóły wyżej. Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj tej faktury ponownie, uzgodni ją operator FaktFlow.',
   numberTaken: 'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie (szczegóły wyżej). Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wróć do szkicu, usuń go i wystaw fakturę z nowym numerem.',
   historical: 'Wysyłka nie powiodła się. Możesz wysłać ponownie albo wrócić do szkicu.',
@@ -81,7 +82,9 @@ export function decideResend(input: ResendInput): ResendDecision {
   if (errorClass === 'terminal') {
     const message = input.errorCode === SEND_ERROR_CODES.ENV_MISMATCH
       ? KSEF_SEND_MESSAGES.envMismatch
-      : KSEF_SEND_MESSAGES.terminal;
+      : input.errorCode === SEND_ERROR_CODES.ISSUE_DATE_PASSED
+        ? KSEF_SEND_MESSAGES.issueDatePassed
+        : KSEF_SEND_MESSAGES.terminal;
     return { allowed: false, reason: 'terminal', message };
   }
   if (errorClass === 'reconcile') {

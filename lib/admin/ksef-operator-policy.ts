@@ -63,6 +63,7 @@ export const OPERATOR_MESSAGES = {
   reconcileClass: 'Klasa reconcile: nie wysyłaj od nowa — użyj „Tylko uzgodnij” albo zostaw.',
   duplicateRequeue: 'KSeF ma już fakturę o tym numerze, a automat nie rozstrzygnął, czyja to treść — ponowienie powtórzy 440. Przy otwartym wpisie użyj „Tylko uzgodnij” (powtórzy weryfikację); inaczej runbook: KSEF_DUPLICATE_RECONCILE.',
   envMismatchRequeue: 'Faktura była zlecona w innym środowisku KSeF — ponowienie wysłałoby ją w bieżącym. Bez dowodu kontaktu: „Wróć do szkicu”, klient zdecyduje, czy wysłać ją tutaj. Otwarty wpis: „Tylko uzgodnij” uzgadnia w BIEŻĄCYM środowisku — wpisu sprzed przełączenia środowiska nie uzgadniaj tak (runbook: ENV_MISMATCH).',
+  issueDatePassedRequeue: 'Dokument specjalny z datą wystawienia sprzed dzisiaj — worker nie wyśle go z wcześniejszą datą (decyzja 06.10.2026, 00147; do B2). Bez dowodu kontaktu: „Wróć do szkicu” (klient usuwa szkic i wystawia dokument od nowa z dzisiejszą datą). Otwarty wpis: „Tylko uzgodnij” (nie wysyła).',
   notFailedOrRejected: 'Dostępne tylko dla failed / rejected.',
   evidence: 'Faktura ma dowód kontaktu z KSeF (numer albo wpis sent/accepted/duplicate) — nie wraca do szkicu.',
 } as const;
@@ -95,6 +96,7 @@ function reconcileRequeueRefusal(code: string | null): string {
 
 function terminalRequeueRefusal(code: string | null): string {
   if (code === SEND_ERROR_CODES.ENV_MISMATCH) return OPERATOR_MESSAGES.envMismatchRequeue;
+  if (code === SEND_ERROR_CODES.ISSUE_DATE_PASSED) return OPERATOR_MESSAGES.issueDatePassedRequeue;
   return OPERATOR_MESSAGES.terminal;
 }
 
@@ -115,7 +117,8 @@ export function operatorRequeueButton(
       : input.status !== 'failed'
         ? { enabled: false, reason: OPERATOR_MESSAGES.onlyFailed }
         : special
-          ? { enabled: false, reason: OPERATOR_MESSAGES.special }
+          // ISSUE_DATE_PASSED (00147) dostają tylko dokumenty specjalne — dokładny powód zamiast ogólnego.
+          ? { enabled: false, reason: input.errorCode === SEND_ERROR_CODES.ISSUE_DATE_PASSED ? OPERATOR_MESSAGES.issueDatePassedRequeue : OPERATOR_MESSAGES.special }
           : errorClass === 'terminal'
             ? { enabled: false, reason: terminalRequeueRefusal(input.errorCode) }
             : errorClass === 'reconcile' && !OPERATOR_REQUEUE_RECONCILE_CODES.includes(input.errorCode as SendErrorCode)

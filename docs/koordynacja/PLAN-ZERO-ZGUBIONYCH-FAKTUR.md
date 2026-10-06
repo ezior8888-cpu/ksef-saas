@@ -253,6 +253,10 @@ agenta z weryfikacją Bartosza, nie obietnica.
   przełącza w tryb offline (jeśli B1 = tak). Komunikat w aplikacji i mail.
 - Czerwony test: faktura `failed INFRA` z `issue_date = wczoraj` nie jest
   ponawiana przez automat; klient widzi dlaczego i co zrobić.
+- Częściowo zrobione przed B2 (decyzja Bartosza 06.10.2026, A4b): kod
+  `ISSUE_DATE_PASSED` (00147) i bezpiecznik w workerze tuż przed POST — tylko
+  dla dokumentów specjalnych (KOR, ZAL, ROZ). B2 rozszerza go na zwykłe faktury
+  (po decyzji B1) i dokłada cron 23:45 oraz maila.
 
 **B3. Sonda zdrowia KSeF bez Redisa (S2) i baner awarii**
 - Problem: `ksef-health-check` nic nie zapisuje bez Redisa; `isKsefHealthy`

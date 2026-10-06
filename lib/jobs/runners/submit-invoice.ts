@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { assertJobIdentity, requireInvoiceTenant } from './tenant-boundary';
 import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError, RetryAfterError } from '../errors';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import type { JobContext } from '@/lib/jobs/registry';
 import type { KsefEnvironment } from '@/types/ksef';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
@@ -1564,7 +1565,7 @@ export async function runSubmitInvoice(
       }
       // Ponownie tuż przed wysyłką: wyłącznik mógł zostać włączony między krokami.
       await assertSubmissionNotHeld(parsed.data, current, env);
-      await assertSubmitReferences({
+      const documentKind = await assertSubmitReferences({
         supabase: await createAdminClient(),
         tenantId,
         invoiceId,
@@ -1575,6 +1576,21 @@ export async function runSubmitInvoice(
         finalData: parsed.data.finalData,
         finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
       });
+      // Decyzja Bartosza 06.10.2026 (00147): KOR/ZAL/ROZ tylko w dniu wystawienia.
+      // Ponowienie pg-boss albo oczekiwanie na przejęcie może przenieść POST za
+      // północ — w KSeF dokument wystawia się w dniu wysyłki. Tu, przed
+      // `submitInvoiceFullFlow`: uzgodnienie (wyżej) nie wysyła, więc działa dalej.
+      // Zwykła faktura bez zmian (B1/B2); do zdjęcia, gdy B2 obejmie wszystkie rodzaje.
+      if (documentKind !== 'regular') {
+        const today = todayInWarsaw();
+        if (invoice.issueDate !== today) {
+          throw new NonRetriableError(
+            `[${SEND_ERROR_CODES.ISSUE_DATE_PASSED}] Tego dokumentu nie wysłaliśmy do KSeF: ma datę wystawienia ` +
+              `${invoice.issueDate || 'brak'}, a dziś jest ${today} — w KSeF dokument wystawia się w dniu wysyłki. ` +
+              'Wróć do szkicu, usuń go i wystaw dokument od nowa z dzisiejszą datą.',
+          );
+        }
+      }
       const credentials = await getTenantKsefCredentials(tenantId);
 
       try {

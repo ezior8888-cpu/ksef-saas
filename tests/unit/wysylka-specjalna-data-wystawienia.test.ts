@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice } from '@/types/invoice';
+import type { AdvanceInvoiceData, CorrectionInvoiceData } from '@/types/invoice-types';
 
 /**
  * Decyzja Bartosza 06.10.2026 (A4b PR2, krytyka projektu B1): dokument
@@ -152,8 +153,9 @@ function event(kind: 'regular' | 'advance' | 'correction', issueDate: string) {
     environment: 'test' as const,
     sendAttemptId: ATTEMPT,
     invoice: { type, internalNumber: `${type}/1`, issueDate } as Invoice,
-    ...(kind === 'advance' ? { advanceData: { invoiceType: 'advance', internalNumber: 'ZAL/1', issueDate } } : {}),
-    ...(kind === 'correction' ? { correctionData: { invoiceType: 'correction', internalNumber: 'KOR/1', issueDate } } : {}),
+    // Koperty skrócone — granica dokumentu jest tu atrapą (rodzaj z `mocks.kind`).
+    ...(kind === 'advance' ? { advanceData: { invoiceType: 'advance', internalNumber: 'ZAL/1', issueDate } as unknown as AdvanceInvoiceData } : {}),
+    ...(kind === 'correction' ? { correctionData: { invoiceType: 'correction', internalNumber: 'KOR/1', issueDate } as unknown as CorrectionInvoiceData } : {}),
   };
 }
 

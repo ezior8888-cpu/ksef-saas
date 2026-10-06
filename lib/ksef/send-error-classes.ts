@@ -38,6 +38,7 @@ export const SEND_ERROR_CODES = {
   KSEF_DUPLICATE_RECONCILE: 'KSEF_DUPLICATE_RECONCILE',
   RESULT_UNCERTAIN: 'RESULT_UNCERTAIN',
   ENV_MISMATCH: 'ENV_MISMATCH',
+  ISSUE_DATE_PASSED: 'ISSUE_DATE_PASSED',
   INVALID_EVENT: 'INVALID_EVENT',
   ENQUEUE_LOST: 'ENQUEUE_LOST',
   NO_CERTIFICATE: 'NO_CERTIFICATE',
@@ -73,6 +74,9 @@ export const SEND_ERROR_CLASS: Record<SendErrorCode, SendErrorClass> = {
   // Ponowienie wysłałoby fakturę w bieżącym (np. dokument z TEST na PROD) —
   // tylko szkic, klient decyduje, czy wysłać ją tutaj.
   ENV_MISMATCH: 'terminal',
+  // 00147 (decyzja 06.10.2026): dokument specjalny z datą wystawienia sprzed
+  // dzisiaj — worker nie wysyła go po północy; tylko szkic (bez automatu).
+  ISSUE_DATE_PASSED: 'terminal',
   INVALID_EVENT: 'reconcile',
   ENQUEUE_LOST: 'reconcile',
   NO_CERTIFICATE: 'setup',
