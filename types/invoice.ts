@@ -161,11 +161,21 @@ export interface InvoiceAnnotations {
   /** P_23 - procedura uproszczona (drugi w kolejności podatnik, art. 135) */
   simplifiedProcedure?: 1 | 2;
   /**
-   * P_19A - podstawa prawna zwolnienia (np. „art. 113 ust. 1 ustawy o VAT”).
-   * Wymagana, gdy którakolwiek pozycja ma stawkę 'zw'. Pochodzi z ustawień
-   * firmy (`tenants.vat_exemption_basis`), nie z formularza faktury.
+   * P_19A/B/C - podstawa prawna zwolnienia (np. „art. 113 ust. 1 ustawy o VAT”).
+   * Wymagana, gdy którakolwiek pozycja ma stawkę 'zw'. Na fakturze z FaktFlow
+   * pochodzi z ustawień firmy (`tenants.vat_exemption_basis`), nie z formularza;
+   * na fakturze z importu KSeF — z pliku (C5b).
    */
   vatExemptionBasis?: string;
+  /**
+   * Rodzaj podstawy zwolnienia z pliku KSeF (C5b): P_19A przepis ustawy,
+   * P_19B przepis dyrektywy, P_19C inna podstawa. Brak = P_19A (faktury FaktFlow).
+   */
+  vatExemptionBasisKind?: 'P_19A' | 'P_19B' | 'P_19C';
+  /** P_22 - dostawa nowych środków transportu (tylko z importu KSeF; FaktFlow jej nie wystawia). */
+  newMeansOfTransport?: 1 | 2;
+  /** PMarzy - procedura marży z importu KSeF (FaktFlow jej nie wystawia); brak = P_PMarzyN. */
+  marginScheme?: 'P_PMarzy_2' | 'P_PMarzy_3_1' | 'P_PMarzy_3_2' | 'P_PMarzy_3_3';
 }
 
 export interface Invoice {

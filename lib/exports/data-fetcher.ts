@@ -17,6 +17,7 @@ import type { KsefEnvironment } from '@/types/ksef';
 import type { Database, Json } from '@/types/database';
 
 import type { JpkFaInputData, JpkInvoice, JpkInvoiceLine } from './jpk-fa-generator';
+import { jpkAnnotationsFromJson, type Fa3Markers } from '@/lib/xml/fa3-annotations';
 
 type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
 type LineItemRow = Database['public']['Tables']['invoice_line_items']['Row'];
@@ -499,22 +500,39 @@ function mapInvoiceRow(
     correctionReason: row.correction_reason ?? undefined,
     ksefNumber: row.ksef_number ?? undefined,
     annotations: annotationsFromFa3(row.fa3_data),
+    ...importedContentFlags(row.origin, row.fa3_data),
   };
 }
 
-/** Adnotacje z `fa3_data.annotations` (#60, #75, #79) — JPK_FA: P_16, P_18A, P_19A. */
+/** Adnotacje z `fa3_data.annotations` (#60, #75, #79; C5b: import KSeF) — JPK_FA: P_16–P_19C. */
 export function annotationsFromFa3(fa3: Json | null): JpkInvoice['annotations'] {
   if (!fa3 || typeof fa3 !== 'object' || Array.isArray(fa3)) return undefined;
-  const raw = (fa3 as Record<string, unknown>).annotations;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
-  const o = raw as Record<string, unknown>;
-  const out: NonNullable<JpkInvoice['annotations']> = {};
-  if (o.splitPayment === 1) out.splitPayment = true;
-  if (o.cashMethod === 1) out.cashMethod = true;
-  if (typeof o.vatExemptionBasis === 'string' && o.vatExemptionBasis.trim()) {
-    out.vatExemptionBasis = o.vatExemptionBasis.trim();
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
+  return jpkAnnotationsFromJson((fa3 as Record<string, unknown>).annotations);
+}
+
+const isRecordJson = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * C5b: flagi treści z pliku KSeF dla `amountsOf` — wspólne dla pobierania
+ * danych eksportu i gotowości paczki (`jpk-fa-readiness`). Przyjmuje
+ * `fa3_data` albo jego pola wybrane aliasami.
+ */
+export function importedContentFlags(
+  origin: string | null | undefined,
+  fa3: unknown,
+): Pick<JpkInvoice, 'importedAnnotationsMissing' | 'importedAnnotationProblems' | 'importedSaleDateUnclear' | 'ksefMarkers'> {
+  const o = isRecordJson(fa3) ? fa3 : {};
+  const problems = Array.isArray(o.annotationProblems)
+    ? o.annotationProblems.filter((p): p is string => typeof p === 'string')
+    : [];
+  const markers = isRecordJson(o.ksefMarkers) ? (o.ksefMarkers as Fa3Markers) : undefined;
+  const saleDates = isRecordJson(o.saleDates) ? o.saleDates : undefined;
+  return {
+    ...(origin === 'ksef_import' && !isRecordJson(o.annotations) ? { importedAnnotationsMissing: true } : {}),
+    ...(problems.length ? { importedAnnotationProblems: problems } : {}),
+    ...(saleDates?.unclear === true ? { importedSaleDateUnclear: true } : {}),
+    ...(markers ? { ksefMarkers: markers } : {}),
+  };
 }
 
 /**

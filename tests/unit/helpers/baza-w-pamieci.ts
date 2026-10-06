@@ -7,7 +7,8 @@
  * Obsługa: select (kolumny, count/head), insert (wiersz albo tablica, z
  * `.select()` zwraca wstawione), update, delete, eq/neq/in/is/not/gte/lte/gt,
  * `or` dla kontroli środowiska z data-fetchera, order, limit, range, single,
- * maybeSingle.
+ * maybeSingle. Kolumny JSON jak w PostgREST: `alias:kolumna->klucz` w select
+ * (pełny wiersz zostaje, alias dochodzi) i `kolumna->klucz` w filtrach.
  */
 
 export type Row = Record<string, unknown>;
@@ -18,7 +19,26 @@ export interface MemoryTables {
 
 let nextId = 1;
 
-export function memoryClient(tables: MemoryTables, options: { failInsertInto?: readonly string[] } = {}) {
+/** `fa3_data->annotations` / `fa3_data->>key` — wartość ze ścieżki JSON (jak PostgREST). */
+function valueAt(row: Row, key: string): unknown {
+  const parts = key.split(/->>?/);
+  let value: unknown = row[parts[0]!];
+  for (const part of parts.slice(1)) {
+    value = value && typeof value === 'object' && !Array.isArray(value) ? (value as Row)[part] : undefined;
+  }
+  return value;
+}
+
+/** Aliasy `alias:kolumna->klucz` (i `kolumna->klucz` bez aliasu) z listy select. */
+function jsonAliases(columns: string | undefined): Array<[string, string]> {
+  if (!columns) return [];
+  return columns.split(',').map((c) => c.trim()).filter((c) => c.includes('->')).map((c) => {
+    const [alias, path] = c.includes(':') ? c.split(':') as [string, string] : [c.split(/->>?/).pop()!, c];
+    return [alias.trim(), path.trim()];
+  });
+}
+
+export function memoryClient(tables: MemoryTables, options: { failInsertInto?: readonly string[]; failUpdateOf?: readonly string[] } = {}) {
   function from(table: string) {
     const rows = (tables[table] ??= []);
     const predicates: Array<(r: Row) => boolean> = [];
@@ -30,6 +50,7 @@ export function memoryClient(tables: MemoryTables, options: { failInsertInto?: r
     let limitN: number | null = null;
     let window: [number, number] | null = null;
     let inserted: Row[] = [];
+    let aliases: Array<[string, string]> = [];
 
     const exec = () => {
       if (op === 'insert') {
@@ -42,6 +63,7 @@ export function memoryClient(tables: MemoryTables, options: { failInsertInto?: r
       }
       let hit = rows.filter((r) => predicates.every((p) => p(r)));
       if (op === 'update') {
+        if (options.failUpdateOf?.includes(table)) return { data: null, error: { message: 'db down' }, count: null };
         hit.forEach((r) => Object.assign(r, payload));
         const data = hit.map((r) => ({ ...r }));
         return { data: singular ? data[0] ?? null : data, error: null, count: null };
@@ -58,22 +80,23 @@ export function memoryClient(tables: MemoryTables, options: { failInsertInto?: r
       const count = hit.length;
       if (window) hit = hit.slice(window[0], window[1] + 1);
       if (limitN !== null) hit = hit.slice(0, limitN);
-      const data = hit.map((r) => ({ ...r }));
+      const data = hit.map((r) => ({ ...r, ...Object.fromEntries(aliases.map(([alias, path]) => [alias, valueAt(r, path) ?? null])) }));
       return { data: head ? null : singular ? data[0] ?? null : data, error: null, count };
     };
 
     const q = {
-      select: (_cols?: string, options?: { head?: boolean; count?: string }) => {
+      select: (cols?: string, options?: { head?: boolean; count?: string }) => {
         head = Boolean(options?.head);
+        aliases = jsonAliases(cols);
         return q;
       },
       insert: (p: Row | Row[]) => { op = 'insert'; payload = p; return q; },
       update: (p: Row) => { op = 'update'; payload = p; return q; },
       delete: () => { op = 'delete'; return q; },
-      eq: (k: string, v: unknown) => { predicates.push((r) => r[k] === v); return q; },
+      eq: (k: string, v: unknown) => { predicates.push((r) => valueAt(r, k) === v); return q; },
       neq: (k: string, v: unknown) => { predicates.push((r) => r[k] !== v); return q; },
       in: (k: string, vs: unknown[]) => { predicates.push((r) => vs.includes(r[k])); return q; },
-      is: (k: string, v: unknown) => { predicates.push((r) => (r[k] ?? null) === v); return q; },
+      is: (k: string, v: unknown) => { predicates.push((r) => (valueAt(r, k) ?? null) === v); return q; },
       not: (k: string, operator: string, v: unknown) => {
         if (operator === 'is') predicates.push((r) => (r[k] ?? null) !== v);
         else if (operator === 'in') {
