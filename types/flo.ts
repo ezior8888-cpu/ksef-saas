@@ -252,6 +252,15 @@ export interface FloProposalView {
    * Do tego momentu karta pokazuje pasek „cofnij”. ISO 8601, zwykle +10 min.
    */
   undoableUntil?: string;
+  /**
+   * Wynik odczytu zdjęcia (OCR), którego dotyczy karta — tylko dla
+   * `expense.review` z OCR. `failed: true` to karta „nie odczytałem”,
+   * `false` to koszt odczytany ze zdjęcia. `ocrJobId` wiąże kartę z
+   * paragonem z adresu (`?paragon=`). Brak pola = karta nie pochodzi
+   * z odczytu zdjęcia (skrzynka KSeF, reguła, brakujący dokument) i pasek
+   * zdjęcia NIE może po niej uznać, że paragon odczytano.
+   */
+  ocrCard?: { failed: boolean; ocrJobId?: string };
 }
 
 // ═══════════════════════════════════════════════════════════════
