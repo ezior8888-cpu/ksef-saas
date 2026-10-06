@@ -39,8 +39,10 @@ beforeEach(() => {
   vi.stubEnv('KSEF_ENV', 'test');
   tables = {
     tenants: [{ id: 'firma-a', nip: '5260001246' }],
-    invoices: [faktura({ id: 'fv-1', internal_number: 'FV/1', net_total: 100 })],
-    invoice_line_items: [{ id: 'l-1', invoice_id: 'fv-1', vat_rate: '23', net_amount: 100 }],
+    // C5c: VAT pozycji = VAT faktury co do grosza (świadoma zmiana danych testu —
+    // bez VAT bazowa faktura z importu byłaby zatrzymana przez nową kontrolę VAT).
+    invoices: [faktura({ id: 'fv-1', internal_number: 'FV/1', net_total: 100, vat_total: 23 })],
+    invoice_line_items: [{ id: 'l-1', invoice_id: 'fv-1', vat_rate: '23', net_amount: 100, vat_amount: 23 }],
   };
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -114,6 +116,18 @@ describe('jpkFaBlocker — dokumenty, których JPK nie wykaże poprawnie', () =>
     tables.invoices!.push(faktura({ id: 'fv-own', internal_number: 'FV/OWN/1', origin: 'app', net_total: 100, fa3_data: { lines: [] } }));
     tables.invoice_line_items!.push({ id: 'l-13', invoice_id: 'fv-own', vat_rate: '23', net_amount: 100 });
     expect(await blocker()).toBeNull();
+  });
+
+  it('C5c: VAT pozycji z importu różny od VAT faktury → powód z numerem (jak eksport)', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-vat', internal_number: 'FV/VAT/1', net_total: 100, vat_total: 23 }));
+    tables.invoice_line_items!.push({ id: 'l-14', invoice_id: 'fv-vat', vat_rate: '23', net_amount: 100, vat_amount: 22 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/VAT\/1.*VAT/);
+  });
+
+  it('C5c: kwoty pozycji z importu nieprzeniesione wiernie (lineAmountProblems) → powód z numerem', async () => {
+    tables.invoices!.push(faktura({ id: 'fv-kw', internal_number: 'FV/KW/1', net_total: 100, vat_total: 23, fa3_data: { annotations: ADNOTACJE_IMPORTU, lineAmountProblems: ['stawka 23: pozycje z wartością netto (P_11) i brutto (P_11A) naraz'] } }));
+    tables.invoice_line_items!.push({ id: 'l-15', invoice_id: 'fv-kw', vat_rate: '23', net_amount: 100, vat_amount: 23 });
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/KW\/1.*naraz/);
   });
 
   it('dokument z innego środowiska KSeF nie blokuje (eksport go nie czyta)', async () => {

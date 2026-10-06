@@ -31,6 +31,10 @@ interface PeriodInvoice {
   invoice_type: string | null;
   origin: string | null;
   net_total: number | string | null;
+  vat_total?: number | string | null;
+  /** C5c: `fa3_data.lineAmountProblems` / `lineAmountTotalsUnknown` aliasami. */
+  line_amount_problems?: unknown;
+  line_amount_totals_unknown?: unknown;
   /** C5b: pola `fa3_data` aliasami (bez pozycji — na fakturach FaktFlow `fa3_data` niesie wszystkie). */
   annotations?: unknown;
   annotation_problems?: unknown;
@@ -42,6 +46,8 @@ interface PeriodLine {
   invoice_id: string;
   vat_rate: string | null;
   net_amount: number | string | null;
+  /** C5c: VAT pozycji — kontrola co do grosza z VAT faktury (jak eksport). */
+  vat_amount?: number | string | null;
 }
 
 /**
@@ -60,7 +66,7 @@ async function unsupportedDocumentReason(
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await client
       .from('invoices')
-      .select('id, internal_number, ksef_number, invoice_kind, invoice_type, origin, net_total, annotations:fa3_data->annotations, annotation_problems:fa3_data->annotationProblems, sale_dates:fa3_data->saleDates, ksef_markers:fa3_data->ksefMarkers')
+      .select('id, internal_number, ksef_number, invoice_kind, invoice_type, origin, net_total, vat_total, annotations:fa3_data->annotations, annotation_problems:fa3_data->annotationProblems, sale_dates:fa3_data->saleDates, ksef_markers:fa3_data->ksefMarkers, line_amount_problems:fa3_data->lineAmountProblems, line_amount_totals_unknown:fa3_data->lineAmountTotalsUnknown')
       .eq('tenant_id', params.tenantId)
       .eq('direction', 'outgoing')
       .eq('ksef_status', 'accepted')
@@ -88,15 +94,17 @@ async function unsupportedDocumentReason(
       ...importedContentFlags(inv.origin, {
         annotations: inv.annotations, annotationProblems: inv.annotation_problems,
         saleDates: inv.sale_dates, ksefMarkers: inv.ksef_markers,
+        lineAmountProblems: inv.line_amount_problems, lineAmountTotalsUnknown: inv.line_amount_totals_unknown,
       }),
       issueDate: params.periodStart,
       buyerName: '',
       netTotal: Number(inv.net_total ?? 0),
-      vatTotal: 0,
+      vatTotal: Number(inv.vat_total ?? 0),
       grossTotal: 0,
       lines: (lines ?? []).map((l, i) => ({
         position: i + 1, name: '', unit: '', quantity: 1, unitPriceNet: 0,
         netAmount: Number(l.net_amount ?? 0), vatRate: String(l.vat_rate ?? ''),
+        ...(l.vat_amount == null ? {} : { vatAmount: Number(l.vat_amount) }),
       })),
     };
   };
@@ -122,7 +130,7 @@ async function unsupportedDocumentReason(
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await client
         .from('invoice_line_items')
-        .select('invoice_id, vat_rate, net_amount')
+        .select('invoice_id, vat_rate, net_amount, vat_amount')
         .in('invoice_id', chunk.map((inv) => inv.id))
         .order('id', { ascending: true })
         .range(from, from + PAGE - 1);

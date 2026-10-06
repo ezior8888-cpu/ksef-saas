@@ -8,13 +8,14 @@ import type { Json } from '@/types/database';
 import type { KsefEnvironment } from '@/types/ksef';
 import type { BuyerParty, PaymentInfo, SellerParty } from '@/types/invoice';
 import type { InvoiceOrigin } from '@/lib/flo/functions/import-history';
-import type { ParsedInvoice, ParsedLine, ParsedParty } from './fa3-parser';
+import type { ParsedInvoice, ParsedParty } from './fa3-parser';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 import { importedVatRateLabel, isVatRate } from '@/lib/xml/fa3-p12';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import { recordXmlDocument } from '@/lib/storage/xml-documents';
 import type { ArchivedKsefXml } from './ksef-xml-archive';
 import { contentHeldReasons, fa3ImportContent, type ImportContent } from './fa3-content';
+import { fa3ImportLineAmounts, type ImportLineAmounts } from './fa3-line-amounts';
 
 export interface ImportEngineParams {
   tenantId: string;
@@ -230,7 +231,8 @@ async function upsertContractors(
 interface ProductSummary {
   name: string;
   unit: string;
-  defaultPriceNet: number;
+  /** NULL, gdy plik KSeF nie podaje ceny netto (ceny brutto — C5c). */
+  defaultPriceNet: number | null;
   defaultVatRate: string;
   useCount: number;
 }
@@ -250,7 +252,8 @@ function extractUniqueProducts(invoices: ParsedInvoice[]): Map<string, ProductSu
         map.set(key, {
           name: line.name,
           unit: line.unit,
-          defaultPriceNet: line.unitPriceNet,
+          // C5c: z pliku KSeF cena netto tylko z P_9A — przy cenach brutto jej nie ma (nie 0).
+          defaultPriceNet: line.ksef ? (line.ksef.P_9A !== undefined && Number.isFinite(Number(line.ksef.P_9A)) ? Number(line.ksef.P_9A) : null) : line.unitPriceNet,
           defaultVatRate: line.vatRate,
           useCount: 1,
         });
@@ -298,7 +301,7 @@ async function upsertProducts(
     tenant_id: string;
     name: string;
     unit: string;
-    default_price_net: number;
+    default_price_net: number | null;
     default_vat_rate: string;
     use_count: number;
     last_used_at: string;
@@ -365,7 +368,7 @@ async function insertInvoices(
 ): Promise<{ imported: number; failed: number }> {
   if (invoices.length === 0) return { imported: 0, failed: 0 };
   const noteHeld = (inv: ParsedInvoice, num: string, ksefNumber: string | undefined) => {
-    const note = heldDocumentWarning(inv, num, ksefNumber, invoiceDirection, invoiceKsefStatus, fa3ImportContent(inv));
+    const note = heldDocumentWarning(inv, num, ksefNumber, invoiceDirection, invoiceKsefStatus, fa3ImportContent(inv), fa3ImportLineAmounts(inv));
     if (note) held.push(note);
   };
   const origin: InvoiceOrigin = source === 'ksef_history' ? 'ksef_import'
@@ -549,6 +552,8 @@ async function insertInvoices(
 
     const invoiceKind = normalizeInvoiceKindForInsert(inv, warnings);
     const content = fa3ImportContent(inv);
+    // C5c: netto / VAT / brutto pozycji zgodne z sumami stawek nagłówka (art. 106e ust. 7–11).
+    const amounts = fa3ImportLineAmounts(inv);
     const faInvoiceType = mapParsedKindToFaVatType(inv.invoiceType);
     const idCols = buyerIdentityFromParsed(inv.buyer);
     const payment = paymentInfoFromParsed(inv);
@@ -585,7 +590,7 @@ async function insertInvoices(
         vat_total: inv.totals.vatTotal,
         gross_total: inv.totals.grossTotal,
         payment_due_date: inv.paymentDueDate ?? null,
-        fa3_data: buildImportFa3Json(inv, source, importJobId, content),
+        fa3_data: buildImportFa3Json(inv, source, importJobId, content, amounts),
         seller_data: sellerPartyFromParsed(inv.seller) as unknown as Json,
         buyer_data: buyerPartyFromParsed(inv.buyer) as unknown as Json,
         payment_data: payment as unknown as Json,
@@ -606,18 +611,18 @@ async function insertInvoices(
     }
 
     const lineRows = inv.lines.map((line, idx) => {
-      const { vatAmount, grossAmount } = lineVatGross(line);
+      const row = amounts.rows[idx]!;
       return {
         invoice_id: inserted.id,
         ordinal: line.position ?? idx + 1,
         name: line.name,
         unit: line.unit,
         quantity: line.quantity,
-        unit_price_net: line.unitPriceNet,
-        net_amount: line.netAmount,
+        unit_price_net: row.unitPriceNet,
+        net_amount: row.netAmount,
         vat_rate: line.vatRate,
-        vat_amount: vatAmount,
-        gross_amount: grossAmount,
+        vat_amount: row.vatAmount,
+        gross_amount: row.grossAmount,
       };
     });
 
@@ -678,6 +683,7 @@ function heldDocumentWarning(
   direction: 'outgoing' | 'incoming',
   status: string,
   content: ImportContent,
+  amounts: ImportLineAmounts,
 ): string | null {
   const doc = `${num}${ksefNumber ? ` (KSeF ${ksefNumber})` : ''}`;
   const codes = [...new Set(inv.lines.map((l) => l.vatRate.trim()).filter((r) => !isVatRate(r)))];
@@ -689,13 +695,20 @@ function heldDocumentWarning(
     .join(', ');
   const type = mapParsedKindToFaVatType(inv.invoiceType);
   const special = type === 'VAT' ? null : IMPORTED_TYPE_LABEL[type];
-  // Pozycje nie sumują się do netto z nagłówka (np. ceny brutto: P_11A bez P_11).
-  const linesNet = inv.lines.reduce((sum, l) => sum + (Number.isFinite(l.netAmount) ? l.netAmount : 0), 0);
-  const mismatch = status === 'accepted' && direction === 'outgoing' &&
-    Math.abs(roundToCents(linesNet) - roundToCents(inv.totals.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01;
+  const sale = status === 'accepted' && direction === 'outgoing';
   // C5b: data sprzedaży, adnotacje i oznaczenia, których JPK nie wykaże — tylko sprzedaż przyjęta w KSeF.
-  const contentReasons = status === 'accepted' && direction === 'outgoing' ? contentHeldReasons(inv, content) : [];
-  if (codes.length === 0 && !special && !mismatch && contentReasons.length === 0) return null;
+  const contentReasons = sale ? contentHeldReasons(inv, content) : [];
+  // C5c: kwoty pozycji, których nie da się wiernie przenieść z pliku (ceny brutto, VAT od sumy stawki).
+  const amountReason = sale && amounts.problems.length
+    ? `kwot pozycji nie da się wiernie przenieść z pliku KSeF (${amounts.problems.join('; ')})`
+    : null;
+  // Bezpiecznik: pozycje nie sumują się do netto albo VAT nagłówka — tylko gdy nie ma powodu dokładniejszego.
+  const linesNet = amounts.rows.reduce((sum, r) => sum + (Number.isFinite(r.netAmount) ? r.netAmount : 0), 0);
+  const linesVat = amounts.rows.reduce((sum, r) => sum + (Number.isFinite(r.vatAmount) ? r.vatAmount : 0), 0);
+  const mismatch = sale && !codes.length && !amountReason && !special && (
+    Math.abs(roundToCents(linesNet) - roundToCents(inv.totals.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01 ||
+    Math.abs(roundToCents(linesVat) - roundToCents(inv.totals.vatTotal)) >= 0.005);
+  if (codes.length === 0 && !special && !mismatch && contentReasons.length === 0 && !amountReason) return null;
 
   if (status !== 'accepted') {
     return codes.length ? `${doc}: stawka ${rates} nie ma odpowiednika w FaktFlow — szkic zapisany z tą stawką.` : null;
@@ -710,11 +723,16 @@ function heldDocumentWarning(
     special ? `zaimportowana faktura ${special} — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki)` : null,
     codes.length ? `stawka VAT ${rates} — FaktFlow jej jeszcze nie wykazuje w JPK` : null,
     ...contentReasons,
-    mismatch ? 'netto pozycji nie sumuje się do sumy netto faktury z KSeF (np. ceny brutto — P_11A)' : null,
+    amountReason,
+    mismatch ? 'netto albo VAT pozycji nie sumuje się do sum faktury z KSeF' : null,
   ].filter(Boolean).join('; ');
+  // C5c: bez sum stawek w pliku netto i VAT faktury są nieznane — KPiR i CSV też ich nie pokażą.
+  const exit = sale && amounts.totalsUnknown
+    ? 'przygotuj je z księgową — KPiR i CSV też nie pokażą poprawnych kwot tej faktury, wprowadźcie je ręcznie'
+    : 'przygotuj je z księgową (KPiR i CSV działają)';
   return (
     `${doc}: ${what}. Faktura jest zapisana, ale JPK_FA i JPK_V7M za ${inv.issueDate.slice(0, 7)} nie powstaną ` +
-    'w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).'
+    `w FaktFlow, dopóki ta faktura jest w okresie — ${exit}.`
   );
 }
 
@@ -947,7 +965,13 @@ function contentFa3Fields(content: ImportContent): Record<string, unknown> {
   };
 }
 
-function buildImportFa3Json(inv: ParsedInvoice, source: string, importJobId: string, content: ImportContent): Json {
+function buildImportFa3Json(
+  inv: ParsedInvoice,
+  source: string,
+  importJobId: string,
+  content: ImportContent,
+  amounts: ImportLineAmounts,
+): Json {
   return {
     import: {
       source,
@@ -956,27 +980,10 @@ function buildImportFa3Json(inv: ParsedInvoice, source: string, importJobId: str
     },
     parsed: inv,
     ...contentFa3Fields(content),
+    // C5c: pola pozycji z pliku dla JPK_FA (P_9B, P_11A…) i powody zatrzymania kwot.
+    // Nie w `contentFa3Fields` — uzupełnienie sprzed C5b nie przepisuje pozycji.
+    ...(amounts.ksefLineFields ? { ksefLineFields: amounts.ksefLineFields } : {}),
+    ...(amounts.problems.length ? { lineAmountProblems: amounts.problems } : {}),
+    ...(amounts.totalsUnknown ? { lineAmountTotalsUnknown: true } : {}),
   } as unknown as Json;
-}
-
-function lineVatGross(line: ParsedLine): { vatAmount: number; grossAmount: number } {
-  const net = line.netAmount;
-  const raw = line.vatRate.trim().toLowerCase();
-
-  if (raw === 'zw' || raw === 'oo' || raw === 'np' || /^0(\s|$|kr|ex|wt)/i.test(raw)) {
-    return { vatAmount: 0, grossAmount: round2(net) };
-  }
-
-  const pctMatch = raw.match(/^(\d+(?:[\.,]\d+)?)/);
-  const pct = pctMatch ? parseFloat(pctMatch[1].replace(',', '.')) : NaN;
-  if (!Number.isFinite(pct)) {
-    return { vatAmount: 0, grossAmount: round2(net) };
-  }
-
-  const vatAmount = round2((net * pct) / 100);
-  return { vatAmount, grossAmount: round2(net + vatAmount) };
-}
-
-function round2(n: number): number {
-  return roundToCents(n);
 }

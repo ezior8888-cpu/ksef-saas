@@ -318,6 +318,8 @@ agenta z weryfikacją Bartosza, nie obietnica.
   JPK_FA wpisuje `P_17`, jawne `P_18` i `P_19B`/`P_19C` z pliku; FP, TP,
   podmiot upoważniony, GTU i Procedura — wykrywane i zatrzymywane w JPK;
   faktury z importu sprzed C5b uzupełnia ponowny import.
+  C5c (decyzje 06.10): VAT nagłówka dzielony na pozycje także dla faktur
+  netto; `P_11Vat` częściowy albo niezgodny z nagłówkiem — zatrzymać.
 
 ### Blok D — dowody (M5)
 
