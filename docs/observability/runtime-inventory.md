@@ -1,6 +1,6 @@
 # F0 — inwentaryzacja środowisk
 
-Stan: **04.10.2026, pomiar wykonany; F0 nie jest domknięty**. Ten dokument włącza przekazany przez użytkownika pomiar z 11:03–11:22 UTC. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
+Stan pomiaru: **04.10.2026, 11:03–11:22 UTC; F0 nie jest domknięty**. Deklaracje przekazane 06.10.2026 są zapisane osobno poniżej i nie są nowym pomiarem serwerów. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
 
 ## Pochodzenie i granice dowodów
 
@@ -11,12 +11,40 @@ Stan: **04.10.2026, pomiar wykonany; F0 nie jest domknięty**. Ten dokument wł�
 | Pierwszy odczyt F0 | main `dcf48bad4ca63802b57f7046d8932b369cd9cfc9`; publiczny health 10:41:44 UTC | Kod i pojedyncza odpowiedź HTTP 200 z env/database/redis ok |
 | Przekazany pomiar operatora | 04.10, 11:03–11:22 UTC; końcowy odczyt release 11:21 | Odczyty runtime, konfiguracji i braków w opisanym zakresie |
 | Baza gałęzi publikującej pakiet | main `1f95c970c11dca1cbe4093a50e2f0b73d7c714ff` | Kod bazowy publikacji, nowszy niż pomiar; nie dowód nowego wdrożenia |
+| Informacje przekazane przez Igora | 06.10.2026; deklaracja w czacie kontynuacji F0 | Podtrzymanie braku staging i pełnych kopii off-host; doprecyzowanie dostępu, bez nowego odczytu serwerów i bez akceptacji F0 |
 
-Legenda: **P** — przekazany pomiar; **D** — deklaracja kodu/dokumentu; **brak dostępu** — punkt nieodczytany. Wyniki P przypisujemy do operatora i okna pomiarowego; w tej sesji nie powtarzano połączeń z serwerami.
+Legenda: **P** — przekazany pomiar; **D** — deklaracja kodu, dokumentu lub użytkownika; **brak dostępu** — punkt nieodczytany. Wyniki P przypisujemy do operatora i okna pomiarowego; w tej sesji nie powtarzano połączeń z serwerami.
 
 W trakcie pomiaru inna sesja wdrożyła `ae87bdde93a636fcb2c48aef737e57a80a3315a7`: worker 11:06–11:08, web 11:08–11:20 UTC. Stan końcowy został odczytany o 11:21. Wcześniejsze `dcf48bad` oznacza stan sprzed tego wdrożenia. Sesja zbierająca F0 nie brała udziału we wdrożeniu i nie zmieniała serwerów. SHA działającej aplikacji nie należy utożsamiać z aktualnym `main`.
 
 Dowody publiczne: [bezpieczne podsumowanie JSON](evidence/f0-2026-10-04.json). Pełny `f0-inwentarz-2026-10-04.md` oraz `f0-runtime-2026-10-04.json` są prywatnymi referencjami operatora. Kopie robocze są w ignorowanym `.agents/f0-evidence/`; nie są częścią commita. Sekcja `raw`, identyfikatory Coolify, nazwy kontenerów, buckety, adresy infrastruktury, dane kont i szczegóły ACL nie trafiają do publicznego podsumowania.
+
+## Deklaracje przekazane 06.10.2026
+
+Źródło: wiadomość Igora w czacie kontynuacji F0. Jest to **deklaracja**,
+nie nowe okno pomiarowe ani przyjęcie kontraktów, ról lub odbioru F0.
+Historyczny JSON z 04.10 pozostaje niezmieniony.
+
+- Staging nadal nie istnieje. Deklaracja podtrzymuje **F0-G03 FAIL**;
+  nie ma podstaw do proszenia o dowód izolacji nieistniejącego środowiska.
+- Pełna kopia bazy poza hostem źródłowym i kopia MinIO aplikacji poza
+  jego hostem nie działają. **F0-G09 FAIL** pozostaje aktualnym ograniczeniem
+  odbioru oraz ryzykiem utraty danych po utracie hosta. Deklaracja dotyczy
+  kopii off-host; nie unieważnia pomiaru istniejącej lokalnej kopii bazy
+  ani ograniczonego snapshotu JSON.
+- Według deklaracji odczyt metadanych Coolify jest możliwy przez istniejący dostęp SSH;
+  osobny token API nie jest warunkiem tego odczytu. Prywatnie przekazano
+  sposób dostępu i identyfikację web/worker. Nie wykonano tego odczytu.
+- Wskazano konta/projekty Sentry i PostHog oraz region EU intake. Nie
+  przekazano dowodu aktywnych planów, produktów, retencji, limitów ani
+  uprawnień. **F0-G07 pozostaje BLOCKED** dla tego zakresu. Identyfikatory
+  kont i zasobów pozostają poza publicznym pakietem.
+
+Lokalna kontrola dostępów w tej kontynuacji nie znalazła prywatnego
+`infra.env` ani wskazania `FAKTFLOW_INFRA_ENV`. Nie otwarto połączenia SSH,
+nie wykonano pomiaru serwerów ani zmian infrastruktury. Prywatny inventory
+z aktualnymi adresami nie został dostarczony do tej kontynuacji; deklaracje
+pozostają oddzielone od pomiaru.
 
 ## Środowiska i wersje produkcji
 

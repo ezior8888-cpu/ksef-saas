@@ -7,6 +7,11 @@ wdrożenia wykonanego przez F0. Źródła i bezpieczne ustalenia są w
 [inwentarzu](runtime-inventory.md) oraz [wyciągu dowodów](evidence/f0-2026-10-04.json).
 Surowe załączniki pozostają prywatne.
 
+Aktualizacja 06.10.2026: [deklaracje przekazane przez Igora](runtime-inventory.md#deklaracje-przekazane-06102026)
+podtrzymują brak staging i pełnych kopii off-host, czyli **G03 i G09 FAIL**.
+Nie wykonano nowego pomiaru serwerów. Identyfikacja Sentry/PostHog nie
+zastępuje dowodów planów i produktów; G07 nadal jest częściowo BLOCKED.
+
 **F0 jest niezamknięty.** Staging i pełne kopie zapasowe są niezaliczone;
 produkty EU są zablokowane; kontrakty, polityka danych, budżety i role czekają
 na decyzje. Dokument jest samodzielnym planem. TEST-01…TEST-07 poniżej są
@@ -62,6 +67,8 @@ automatycznie wszystkich zadań ani dyżuru.
   KSeF TEST i Stripe test. Operator wykazuje izolację od produkcyjnych
   efektów. Utworzenie środowiska jest osobnym zadaniem; YAML i puste
   `security-staging` nadal nie zaliczają bramki.
+  Deklaracja z 06.10 podtrzymuje brak staging; nie żądamy odczytu izolacji
+  nieistniejącego środowiska jako sposobu zaliczenia G03.
 - **G04 — kontrakty:** datowane przyjęcie konkretnej wersji wyników,
   korelacji, kwalifikacji populacji i deadline. Trzeba rozstrzygnąć klasy
   plików import/eksport, terminy Flo, harmonogramy/grace oraz różnice z SLI
@@ -92,6 +99,9 @@ automatycznie wszystkich zadań ani dyżuru.
   obejmuje ACL i blokadę produkcyjnych efektów. Snapshot `public` i sam
   plan transportu off-host nie wystarczają. Backupy/snapshoty Hetznera
   nadal są nieodczytane.
+  Deklaracja z 06.10 podtrzymuje brak pełnych kopii off-host. Aktualnie nie
+  ma artefaktu do przedstawienia jako dowód PASS; plan lub zakup docelowego
+  storage nie spełnia tego warunku. Uruchomienie kopii wymaga osobnego zakresu.
 
 Karta dowodu zawiera bramkę, rodzaj źródła (**pomiar**, **decyzja** lub
 **deklaracja**), wykonawcę/reviewera, UTC odczytu, środowisko i wersję materiału,

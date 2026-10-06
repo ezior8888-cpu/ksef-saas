@@ -20,3 +20,9 @@ oraz [brakujących dowodów per bramka](acceptance-plan.md#brakujące-dowody-do-
 Przegląd repo i dyskusji PR nie dostarczył nowych zatwierdzeń Bartosza ani
 nowego pomiaru infrastruktury. F0-D01…D10 i propozycje C22-D1…D7 są osobnymi
 rejestrami; różnice proponowanych SLI wymagają uzgodnienia przed przyjęciem G04.
+
+Aktualizacja 06.10.2026: [deklaracje przekazane przez Igora](runtime-inventory.md#deklaracje-przekazane-06102026)
+podtrzymują **G03 FAIL** (brak staging) i **G09 FAIL** (brak pełnych kopii
+off-host). Doprecyzowano dostęp do istniejących usług; osobny token Coolify
+nie jest konieczny do odczytu przez SSH. Nie wykonano nowego pomiaru serwerów;
+plany/produkty nadal wymagają dowodów z kont. F0 i decyzje pozostają otwarte.

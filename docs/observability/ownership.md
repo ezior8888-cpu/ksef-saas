@@ -24,6 +24,15 @@ brakujących dowodów, bez czynności operacyjnych i bez rozpoczęcia F1.
 To granica sprawdzonych źródeł, nie twierdzenie, że decyzje nie
 istnieją w innych miejscach. D01–D10 i nieprzyjęte role pozostają PENDING.
 
+**Aktualizacja 06.10.2026:** Igor przekazał informacje o dostępie oraz
+podtrzymał brak staging i pełnych kopii off-host. Są zapisane jako
+[deklaracje](runtime-inventory.md#deklaracje-przekazane-06102026), osobno od
+pomiaru z 04.10. Odczyt Coolify przez istniejący dostęp SSH nie wymaga
+osobnego tokenu API; prywatny plik inventory nie dotarł do tej kontynuacji.
+Podane identyfikatory kont nie potwierdzają planów ani retencji.
+Wiadomość nie zatwierdza proponowanych kontraktów, polityki danych,
+budżetów lub ról, nie rozstrzyga D01–D10 i nie jest odbiorem F0.
+
 [C-22](../koordynacja/CLAUDE-DO-CODEXA.md) przekazuje prośbę Bartosza o kontekst
 centrum dowodzenia. Sekcja 11 [briefu](../koordynacja/CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md)
 zawiera osobne propozycje D1–D7. W odpowiedziach używamy oznaczeń **F0-D01…D10**
