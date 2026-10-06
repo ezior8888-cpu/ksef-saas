@@ -1,6 +1,7 @@
 // Decyzje: który etap przypomnienia i kiedy zaplanować wysyłkę.
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { amountDueOf } from '@/lib/invoices/amount-due';
 import type { Database, Json } from '@/types/database';
 
 export type ReminderStage = Database['public']['Enums']['reminder_stage_enum'];
@@ -23,6 +24,13 @@ export interface InvoiceForScheduling {
   /** Z kolumny faktury (jeśli w query) — uzupełnia NIP gdy nie ma w buyer_data */
   buyer_nip?: string | null;
   reminders_paused: boolean;
+  /**
+   * Opcjonalne: bez nich `amountDueOf` liczy jak zwykła faktura (gross_total).
+   * Potrzebne, żeby ROZ (invoice_kind='final') nie była gonione o całe
+   * zamówienie, gdy rozliczyła już zaliczkę (C-16, 00145).
+   */
+  invoice_kind?: string | null;
+  payment_data?: Json | null;
 }
 
 const MS_PER_DAY = 86400_000;
@@ -88,9 +96,15 @@ export async function decideNextReminder(
 ): Promise<ScheduleDecision> {
   const supabase = createAdminClient();
 
-  const gross = toNumber(invoice.gross_total);
   const paid = toNumber(invoice.paid_amount);
-  if (Number.isFinite(gross) && Number.isFinite(paid) && paid >= gross) {
+  // ROZ: do zapłaty to `payment_data.amountDue` (reszta po zaliczkach), nie
+  // całe `gross_total` — inaczej ROZ nigdy nie wypadłaby jako zapłacona
+  // (C-16, 00145). Dla każdej innej faktury `amountDueOf` wraca do gross_total.
+  const due = amountDueOf({
+    invoice_kind: invoice.invoice_kind, gross_total: invoice.gross_total,
+    payment_data: invoice.payment_data,
+  });
+  if (Number.isFinite(paid) && paid >= due) {
     return { shouldSend: false, skipReason: 'Faktura zapłacona' };
   }
 
@@ -317,7 +331,7 @@ export async function findInvoicesRequiringReminders(): Promise<
     let query = supabase
       .from('invoices')
       .select(
-        'id, tenant_id, internal_number, payment_due_date, gross_total, paid_amount, buyer_data, buyer_nip, reminders_paused',
+        'id, tenant_id, internal_number, payment_due_date, gross_total, paid_amount, buyer_data, buyer_nip, reminders_paused, invoice_kind, payment_data',
       )
       .eq('direction', 'outgoing')
       .eq('ksef_status', 'accepted')
@@ -348,6 +362,8 @@ export async function findInvoicesRequiringReminders(): Promise<
         buyer_data: row.buyer_data,
         buyer_nip: row.buyer_nip ?? null,
         reminders_paused: row.reminders_paused,
+        invoice_kind: row.invoice_kind,
+        payment_data: row.payment_data,
       });
     }
     if (page.length < CANDIDATE_PAGE) break;

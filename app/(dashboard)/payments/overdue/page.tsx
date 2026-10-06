@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getDashboardOrgSwitcherProps } from '@/lib/dashboard-shell-data';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { isReminderInvoiceChaseable } from '@/lib/reminders/delivery-schema';
+import { amountDueOf } from '@/lib/invoices/amount-due';
 import type { Database } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
@@ -79,7 +80,7 @@ export default async function OverduePage() {
     for (const id of ids) seenViewIds.add(id);
     const matching = await supabase
       .from('invoices')
-      .select('id, ksef_environment, origin, invoice_kind, invoice_type, currency', { count: 'exact' })
+      .select('id, ksef_environment, origin, invoice_kind, invoice_type, currency, payment_data', { count: 'exact' })
       .eq('tenant_id', tenantId)
       .in('id', ids);
     if (matching.error || !matching.data || matching.count === null ||
@@ -100,6 +101,7 @@ export default async function OverduePage() {
       invoice.ksef_environment === environment && isReminderInvoiceChaseable(invoice) &&
       (invoice.currency === null || invoice.currency === 'PLN'));
     const eligibleIds = new Set(eligibleInvoices.map((invoice) => invoice.id));
+    const eligibleById = new Map(eligibleInvoices.map((invoice) => [invoice.id, invoice]));
     const relatedParents = new Set<string>();
     if (eligibleIds.size > 0) {
       // One bounded complete read per page. A server cap or failed exact count
@@ -149,9 +151,17 @@ export default async function OverduePage() {
     if (safeRows.some((row) => {
       const gross = Number(row.gross_total); const paid = Number(row.paid_amount);
       const due = Number(row.amount_due);
+      const matchingRow = row.id ? eligibleById.get(row.id) : undefined;
+      if (!matchingRow) return true;
+      // ROZ: do zapłaty to `payment_data.amountDue` (reszta po zaliczkach),
+      // nie całe `gross_total` — ta sama reguła co w widoku (C-16, 00145).
+      const expectedDue = amountDueOf({
+        invoice_kind: matchingRow.invoice_kind, gross_total: row.gross_total,
+        payment_data: matchingRow.payment_data,
+      });
       return row.gross_total === null || row.paid_amount === null || row.amount_due === null ||
         !Number.isFinite(gross) || !Number.isFinite(paid) || !Number.isFinite(due) ||
-        gross <= 0 || paid < 0 || paid >= gross || Math.abs(due - (gross - paid)) > 0.005;
+        gross <= 0 || paid < 0 || paid >= expectedDue || Math.abs(due - (expectedDue - paid)) > 0.005;
     })) {
       overdueError = 'Zaległe faktury wymagają uzgodnienia kwot';
       break;

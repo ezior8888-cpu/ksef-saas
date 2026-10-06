@@ -24,6 +24,7 @@ import { createHash } from 'node:crypto';
 
 import type { FloProposalRow } from '@/lib/flo/db-types';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { amountDueOf } from '@/lib/invoices/amount-due';
 import type { FloProposalKind } from '@/types/flo';
 
 // ═══════════════════════════════════════════════════════════════
@@ -111,6 +112,10 @@ export function describeChange(
   const paidBefore = toNumber(before.paidAmount);
   const paidAfter = toNumber(after.paidAmount);
   const gross = toNumber(after.grossTotal);
+  // ROZ: „zapłacił w całości” znaczy paid >= amountDue (reszta po
+  // zaliczkach), nie paid >= grossTotal — inaczej ROZ nigdy nie dostałaby
+  // zdania „zapłacił”, tylko zawsze „wpłacił część” (C-16, 00145).
+  const due = Object.hasOwn(after, 'amountDue') ? toNumber(after.amountDue) : gross;
 
   if (
     (kind === 'payment.chase' ||
@@ -119,7 +124,7 @@ export function describeChange(
     paidAfter > paidBefore
   ) {
     const when = relativeDay(after.lastPaymentAt, now);
-    if (gross > 0 && paidAfter >= gross) {
+    if (due > 0 && paidAfter >= due) {
       return `${who} zapłacił${when ? ` ${when}` : ''} — anulowałem.`;
     }
     return `${who} wpłacił część należności${when ? ` ${when}` : ''} — treść była już nieaktualna.`;
@@ -145,6 +150,19 @@ export function describeChange(
 
   if (before.reviewedAt !== after.reviewedAt) {
     return 'Ten dokument został już przejrzany ręcznie.';
+  }
+
+  // Koszt w KPiR albo poza nią (`expenses.is_deductible`) inaczej niż na
+  // karcie. Bez tej gałęzi człowiek dostałby nazwę pola z bazy zamiast zdania.
+  // Zdanie mówi, JAK JEST, a nie, że ktoś to zmienił: karta mogła od początku
+  // zakładać KPiR przy koszcie, który zapisaliśmy poza nią (waluta bez kursu).
+  if (
+    kind === 'expense.review' &&
+    (before.deductible ?? null) !== (after.deductible ?? null)
+  ) {
+    return after.deductible === 1
+      ? 'Ten koszt jest w KPiR, a karta zakładała inaczej — sprawdź go w formularzu.'
+      : 'Ten koszt jest poza KPiR, więc niczego nie potwierdziłem — sprawdź go w formularzu.';
   }
 
   const changed = diffFacts(before, after);
@@ -195,7 +213,7 @@ export async function readState(
     const { data, error } = await db
       .from('invoices')
       .select(
-        'id, ksef_status, gross_total, paid_amount, payment_due_date, reminders_paused, buyer_data, internal_number, updated_at',
+        'id, ksef_status, gross_total, paid_amount, payment_due_date, reminders_paused, buyer_data, internal_number, updated_at, invoice_kind, payment_data',
       )
       .eq('id', invoiceId)
       .eq('tenant_id', tenantId)
@@ -211,6 +229,17 @@ export async function readState(
       facts: {
         status: readString(data.ksef_status),
         grossTotal: toNumber(data.gross_total),
+        // ROZ: do zapłaty jest reszta po zaliczkach (payment_data.amountDue),
+        // nie całe grossTotal (C-16, 00145) — patrz lib/invoices/amount-due.ts.
+        // Wchodzi do odcisku, więc rozliczenie zaliczki po utworzeniu karty
+        // też unieważnia propozycję, tak jak zmiana paidAmount.
+        amountDue: toNumber(
+          amountDueOf({
+            invoice_kind: data.invoice_kind,
+            gross_total: data.gross_total,
+            payment_data: data.payment_data,
+          }),
+        ),
         paidAmount: toNumber(data.paid_amount),
         dueDate: readString(data.payment_due_date),
         remindersPaused: data.reminders_paused === true ? 1 : 0,
