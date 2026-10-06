@@ -1873,6 +1873,7 @@ export type Database = {
           scheduled_deletion_at: string | null
           seller_data: Json | null
           seller_nip: string | null
+          special_data: Json | null
           stripe_invoice_id: string | null
           submission_attempts: number
           submitted_to_ksef_at: string | null
@@ -1943,6 +1944,7 @@ export type Database = {
           scheduled_deletion_at?: string | null
           seller_data?: Json | null
           seller_nip?: string | null
+          special_data?: Json | null
           stripe_invoice_id?: string | null
           submission_attempts?: number
           submitted_to_ksef_at?: string | null

@@ -41,6 +41,7 @@ import type {
   ZeroVatAmountChangeRate,
 } from '@/types/invoice-types';
 import { loadParentAnnotations } from '@/lib/invoices/correction-annotations';
+import { correctionSpecialData, specialDataInsertError } from '@/lib/invoices/special-data';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Tenant
@@ -491,12 +492,18 @@ async function insertCorrection(
       gross_total: roundToCents(totals.grossDelta),
       notes: correctionEnvelope.notes ?? null,
       fa3_data: ghost,
+      // A4b (00137): koperta zdarzenia wysyłki — ponowienie odtworzy z niej korektę.
+      special_data: correctionSpecialData(correctionEnvelope),
     })
     .select('id')
     .single();
 
   if (error || !inserted) {
-    return { success: false, error: error?.message ?? 'Nie udało się zapisać korekty' };
+    return {
+      success: false,
+      error: specialDataInsertError(error, `korekty ${ghost.internalNumber}`)
+        ?? error?.message ?? 'Nie udało się zapisać korekty',
+    };
   }
 
   const invoiceId = inserted.id as string;
