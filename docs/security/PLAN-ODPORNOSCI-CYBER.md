@@ -181,3 +181,21 @@ Plan nie wymaga zakupu wszystkich narzędzi ani równoczesnego wdrożenia kilku 
 **Igor zatwierdził rozpoczęcie stopniowej realizacji 2026-09-13.** Pierwszy pakiet dotyczy kodu CI i bezpiecznych testów. Nie oznacza to zgody na dowolne działania produkcyjne; nie wykonano migracji, skanów produkcji, rotacji ani zmian na serwerze. Zmiany SQL i ich wykonanie należą do odrębnego uzgodnienia z właścicielem repo; tak samo działania na serwerze i publikacja. Zachowujemy obecny stack, nazwy R2_*/UPSTASH_* oraz oba backendy jobów.
 
 Dalszą pracę zapisujemy w [dzienniku odporności cybernetycznej](DZIENNIK-ODPORNOSCI-CYBER.md). Rejestr ma dokumentować fakty i dowody, a nie samą liczbę zamkniętych zadań.
+
+## Aktualizacja wykonania 03.10.2026 — CYB-DOCKER-CONTEXT-AGENTS
+
+Jedna faza security na `codex/security-docker-context` od świeżego main:
+wykluczenie lokalnych plików agentów/operatora z kontekstu obrazu i obowiązkowy
+test Docker z syntetycznymi danymi. Dowody, status PR i granice odbioru są
+w [dzienniku](DZIENNIK-ODPORNOSCI-CYBER.md). Testy kodu nie potwierdzają stanu
+Coolify, obrazu produkcyjnego ani db-1. Bez migracji, merge i wdrożenia.
+Niezależny zakres CYB-DOCKER-CONTEXT-ENV trafia do kolejki, poza tę fazę.
+Po zapisaniu wyniku tej fazy praca zostaje zatrzymana zgodnie z poleceniem Igora.
+
+## Aktualizacja wykonania 03.10.2026 — CYB-DOCKER-CONTEXT-ENV (faza 4)
+
+Kolejny jeden pakiet: lokalne konfiguracje, certyfikaty i kopie danych poza
+kontekstem obrazu. Rozszerza sprawdzoną kontrolę #194 na osobnej gałęzi
+`codex/security-docker-env`. Uzasadnienie, dowody i ograniczenia są w
+[dzienniku](DZIENNIK-ODPORNOSCI-CYBER.md). Do kolejki niezależny zakres
+CYB-DOCKER-BUILD-SECRETS; bez migracji, merge i wdrożenia.
