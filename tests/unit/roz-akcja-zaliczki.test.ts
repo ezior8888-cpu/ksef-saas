@@ -17,6 +17,7 @@ vi.mock('@/lib/audit/log', () => ({ logAudit: vi.fn() }));
 
 import { saveAndSendFinalAction, saveFinalAction } from '@/components/invoices/final-actions';
 import { ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
+import { settlementRowFromAdvance, type AdvanceInvoiceDbRow } from '@/lib/invoices/advance-settlement';
 
 /**
  * Akcja „Wystaw i wyślij” faktury rozliczającej: wiersze zaliczek muszą nieść
@@ -141,6 +142,23 @@ describe('faktura rozliczeniowa — zaliczki ze stawką', () => {
       value: { invoice_kind: 'final', invoice_type: 'ROZ', advance_invoice_ids: [ZAL_23, ZAL_8] },
     });
     expect(mocks.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('A4b (00137): szkic zapisuje na wierszu finalData i wiersze rozliczenia zaliczek (te, które pójdą w zdarzeniu)', async () => {
+    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380));
+    expect(wynik).toMatchObject({ success: true });
+    const value = inserts[0]?.value as Row;
+    expect(value.special_data, 'INSERT ROZ bez special_data').toBeDefined();
+    const special = JSON.parse(JSON.stringify(value.special_data)) as Record<string, Row & Row[]>;
+    expect(Object.keys(special).sort()).toEqual(['finalAdvanceSettlementRows', 'finalData']);
+    // Wiersze rozliczenia — ze stawką i rozbiciem z faktur zaliczkowych, w kolejności wyboru.
+    const expectedRows = [ZAL_23, ZAL_8].map((id) =>
+      settlementRowFromAdvance(tables.invoices.find((r) => r.id === id) as unknown as AdvanceInvoiceDbRow));
+    expect(special.finalAdvanceSettlementRows).toEqual(JSON.parse(JSON.stringify(expectedRows)));
+    expect(special.finalData).toMatchObject({
+      invoiceType: 'final', internalNumber: 'FR/2026/09/1', advanceInvoiceIds: [ZAL_23, ZAL_8],
+      seller: { nip: '5260001246', name: 'ACME' },
+    });
   });
 
   it('zaliczka wskazana w innej ROZ nie trafi do drugiej; odrzucona ROZ ją zwalnia (AUD-67)', async () => {

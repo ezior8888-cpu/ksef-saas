@@ -70,21 +70,29 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00126 | Claude (C-20, #86) | `invoices_overdue_reconciliation_guard` (C-06, C-16: widok zaległości tylko z faktur ścigalnych — z aplikacji, VAT/UPR/ZAL, bez korekt, ROZ i dokumentów powiązanych) | PR `claude/codex-86-przypomnienia`; przed wdrożeniem |
 | 00127 | Claude (C-20, #128) | `ksef_expense_provenance_guard` (C-11 etap 1: `review_ksef_expense` tylko dla serwisu, klient nie tworzy ani nie usuwa kosztu KSeF, ślad waluty serwerowy) | PR `claude/codex-128-waluty`; **przed** wdrożeniem |
 | 00128 | Claude (C-20, #128) | `ksef_expense_full_update_guard` (C-11 etap 2: koszt KSeF edytowany tylko przez RPC) | PR `claude/codex-128-waluty`; **PO** wdrożeniu webu z RPC |
-| 00129 | Codex (szkic) | `xml_document_invoice_identity` — gałąź `codex/security-xml-evidence-integrity`, nie w `main` | zarezerwowane, przy przenoszeniu sprawdzić kolizję |
-| 00130 | Bartosz/Igor (szkic) | `roz_amount_due` — gałąź `claude/roz-warunki`, nie w `main` | zarezerwowane |
+| 00129 | Codex (szkic) | `xml_document_invoice_identity` — gałąź `codex/security-xml-evidence-integrity` (#190), nie w `main` | rezerwacja wycofana (reguła 05.10.2026): przy przeniesieniu C-12 bierze **kolejny wolny** numer |
+| 00130 | Bartosz/Igor (szkic) | `roz_amount_due` — gałąź `claude/roz-warunki` (#195) | **nieużywany** — przeniesione jako 00145 (reguła 05.10.2026) |
 | 00131 | Claude (cykl życia faktury, PR 1) | `ksef_send_lifecycle`: RPC `enqueue/release/requeue/reset_ksef_send`, `ksef_has_contact_evidence`, `ksef_error_codes`, `ksef_lifecycle_violations()` (docs/architecture/cykl-zycia-faktury-ksef.md) | w `main` (#202), **wgrana na db-1 03.10** |
 | 00132 | Claude (cykl życia faktury, PR 4a) | `ksef_lifecycle_guard_tighten`: CREATE OR REPLACE trzech funkcji wyzwalaczy z 00119/00122 — klient nigdy nie zmienia `ksef_status` (koniec wyjątku `draft → queued`), historia dostawy = stan failed/rejected albo pola wysyłki (diagnostyka nie zamraża treści) | w `main` (#210), **wgrana na db-1 03.10 PO wdrożeniu PR 3** |
 | 00133 | Claude (K4, druga korekta) | `single_open_correction`: wyzwalacz `guard_single_open_correction` — faktura pierwotna ma najwyżej jedną korektę poza `rejected` (blokada doradcza per rodzic) | w `main` (#212), **wgrana na db-1 03.10** |
 | 00134 | Claude (D5, cykl życia) | `ksef_submissions_xml_path`: kolumna `ksef_submissions.xml_storage_path` — klucz XML próby wysyłki (`tenant/yyyy/mm/invoiceId/sendAttemptId.xml`) | w `main` (#215), **wgrana na db-1 04.10** |
 | 00135 | Claude (K4, łańcuch korekt) | `correction_chain_guard`: `guard_single_open_correction` blokuje tylko korektę W TOKU (przyjęta tworzy łańcuch, odrzucona nie liczy się) | w `main` (#217), **wgrana na db-1 04.10** |
 | 00136 | Claude (A2, plan zero zgubionych faktur) | `ksef_submission_intent`: `ksef_has_contact_evidence` liczy wpis `intent` (zamiar wysyłki przed POST), strażnik I5 widzi zamiar starszy niż 48 h — CREATE OR REPLACE dwóch funkcji z 00131 | w `main` (#221), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
-| 00137 | Claude (plan, A4) | `special_invoice_data` — `correction_data`/`advance_data`/`final_data` na wierszu faktury | zarezerwowane (plan, sekcja 5) |
+| 00137 | Claude (A4b PR1) | `invoice_special_data` — jedna kolumna `invoices.special_data` (KOR `{correctionData}`, ROZ `{finalData, finalAdvanceSettlementRows}`) + CHECK kształtu + wyzwalacz zapisu jednorazowego; ZAL zostaje w `fa3_data.advanceEnvelope` | #235; **wgrana na db-1 06.10** |
 | 00138–00140 | Codex (centrum dowodzenia, C-22) | `ksef_send_metrics`, `ksef_invoice_timeline`, `ksef_error_patterns` + `ops_alert_log` | zarezerwowane (`CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`, sekcja 6) |
 | 00141 | Claude (A2b, plan zero zgubionych faktur) | `ksef_error_code_not_in_ksef`: kod katalogu `NOT_IN_KSEF` (transient, bez auto) — wynik „tylko uzgodnij”, gdy KSeF nie ma faktury (koniec ślepej uliczki RESULT_UNCERTAIN bez dowodu kontaktu) | w `main` (#222), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
 | 00142 | Claude (D-A4-1a, plan zero zgubionych faktur) | `ksef_error_code_number_taken`: kod katalogu `KSEF_NUMBER_TAKEN` (terminal, bez auto) — cudzy 440 z oryginałem z innego programu; komentarz statusów `ksef_submissions.status` (`number_taken` nie jest dowodem kontaktu); kolumny znacznika 440 | w `main` (#226), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
 | 00143 | Claude (D-A4-2, plan zero zgubionych faktur) | `ksef_error_code_env_mismatch_terminal`: UPDATE wiersza katalogu — `ENV_MISMATCH` z reconcile na terminal (szkic i decyzja klienta; `requeue_ksef_send` odmawia ponowienia w bieżącym środowisku) + komunikat klienta | w `main` (#228), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
-| 00144 | Claude (D-A4-1b-3 PR A, plan zero zgubionych faktur) | `ksef_submission_original_check`: kolumna `ksef_submissions.original_check` jsonb — dane oryginału przy nierozstrzygniętym 440 (powód, dane, skrót, archiwum, data nadania) | PR `claude/d-a4-1b-3-dane-oryginalu`; **przed** wdrożeniem |
-| **00145** | — | następny wolny (00200 zajęte); kolejne PR D-A4-1b-3 (B, C) biorą numer przy otwarciu | — |
+| 00144 | Claude (D-A4-1b-3 PR A, plan zero zgubionych faktur) | `ksef_submission_original_check`: kolumna `ksef_submissions.original_check` jsonb — dane oryginału przy nierozstrzygniętym 440 (powód, dane, skrót, archiwum, data nadania) | w `main` (#230), **wgrana na db-1 05.10** (przed wdrożeniem, strażnik 0) |
+| 00145 | Bartosz/Igor (#195, C-16) → Claude | `roz_amount_due`: wyzwalacz `update_invoice_payment_status` i widok `invoices_overdue` liczą ROZ od `payment_data.amountDue` (reszta po zaliczkach), ROZ w całości pokryta zaliczkami = `paid`; wyzwalacz reaguje też na `payment_data`, `invoice_kind` (dawniej 00130) | #234; **wgrana na db-1 06.10** |
+| 00146 | Claude (B4, #192) | `expense_ocr_job_identity` — najwyżej jeden wydatek na zadanie OCR w firmie (`uq_expenses_tenant_ocr_job`); preflight dubli, bez zmian danych | PR B4 indeks; przed wdrożeniem |
+| **00147** | — | następny wolny (00200 zajęte) | — |
+
+**Reguła numeracji (Bartosz, 05.10.2026):** rezerwacje sprzed bieżącej
+kolejności (00129, 00130) nie wracają „wstecz” — migracja przenoszona
+z gałęzi szkicu bierze kolejny wolny numer w chwili otwarcia PR, a wiersz
+w rejestrze wpisuje ten sam PR. Wiersz „następny wolny” utrzymuje `main`;
+przy rozwiązywaniu konfliktu w rejestrze bierze się stronę `main`.
 
 ---
 
@@ -152,7 +160,45 @@ C-03, C-05 KOR, C-11, C-12, C-15, C-17, C-19 i przebudowa stosu) prowadzę
 w ramach tych przeniesień. Partia 15 audytu (ROZ: AUD-23, 67, 71, 95) — po
 scaleniu przeniesionego #85.
 
-**Odpowiedź Codexa:** —
+**Odpowiedź Codexa (03.10.2026, CYB-DOCKER-CONTEXT-AGENTS):** na polecenie
+Igora wykonano jedną kolejną fazę security, od świeżego main `ef9bb43`
+na `codex/security-docker-context`. #193 ma 11/11 SUCCESS na `f9aad70`,
+nadal jest szkicem; main przejął samo przeniesienie shadcn przez Claude
+(`553d69e`), więc nowy pakiet nie zmienia zależności ani tamtego PR.
+
+Wykluczono z kontekstu Dockera root i zagnieżdżone `.agents`, `.codex`,
+`.mcp.json`, `.tmp`. Nowy obowiązkowy krok CI buduje syntetyczny kontekst
+FROM scratch i sprawdza brak canary oraz zachowanie potrzebnych plików,
+a próba bez filtrowania musi wykazać wyciek. Bez prawdziwych sekretów,
+SQL i zmian na serwerze. Wyniki i ograniczenia: wpis CYB-DOCKER-CONTEXT-AGENTS
+w [dzienniku](../security/DZIENNIK-ODPORNOSCI-CYBER.md).
+Roboczy PR #194; lokalne pełne CI, 6 testów walidatora, build 82/82 i
+niezależna recenzja zaliczone. Krok rzeczywistego Docker/BuildKit ma SUCCESS
+na `01f8d4d`; dowód i ograniczenia są w dzienniku. Faza zamknięta w kodzie;
+końcowe kontrole dokładnego HEAD opisane w PR. Bez merge i wdrożenia.
+
+Nowy niezależny punkt CYB-DOCKER-CONTEXT-ENV jest zapisany do kolejki;
+nie rozszerzam tej fazy na pozostałe lokalne konfiguracje, certyfikaty i kopie.
+#190, 00129 i odbiór C-11/C-12 nadal pozostają osobnym zakresem. Rezerwację
+00129 zachowano w rejestrze z #190; ta faza nie tworzy i nie wykonuje migracji.
+Przy scalaniu tego szkicu z #190/#193 zachować wszystkie wpisy przekazania.
+**Dopisek Codexa (03.10.2026, faza 4, CYB-DOCKER-CONTEXT-ENV):** Igor
+polecił następny jeden pakiet. Nowy worktree `security-docker-env`,
+`codex/security-docker-env`, od świeżego main `ef9bb43`, z zależnością #194
+na `64ed5e5`; stary PR i gałęzie Claude pozostają bez zmian. Rozszerzono
+politykę lokalnego kontekstu o root/zagnieżdżone env/npmrc, formaty lokalnych
+certyfikatów/kluczy oraz rzeczywiste konwencje kopii (.dump/.roles.sql,
+backups/.outbox). Produkcja czyta certyfikaty DB/API, więc brak potrzebnego
+wyjątku CA. Harness ma 118 prywatnych i 20 wymaganych ścieżek, w tym kod
+backupu, źródła SQL i archiwum publiczne. Kontrola samych agentów musi
+wykazać wyciek env. 6 testów i niezależna recenzja kodu PASS; pełne CI
+(72 XML, 5413 Vitest, typy i lint) oraz build 82/82 PASS. Roboczy PR #196
+do main zawiera #194 jako zależność; nowy kod ENV to 877061e. Rzeczywisty
+Docker PASS na dokładnym 877061e (118 wykluczonych/20 zachowanych ścieżek,
+kontrola agents-only odrzucona). Dowód w dzienniku, końcowe kontrole nowego
+HEAD po dokumentacji w opisie PR. Pakiet zamknięty; bez rozpoczęcia następnego.
+Do kolejki: CYB-DOCKER-BUILD-SECRETS (SENTRY_AUTH_TOKEN przez ARG/ENV).
+Bez SQL, merge i wdrożenia; nie zamykamy #190/00129/C-11/C-12 ani QR.
 
 
 ### C-01 · Konwencja kwot korekty sprzedaży — `ROZSTRZYGNIĘTE (02.10.2026, I1: różnica; #146)` · decyzja: Igor + Codex

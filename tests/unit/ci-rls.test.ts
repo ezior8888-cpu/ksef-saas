@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
  * CI ma osobny job z lokalnym Supabase i migracjami z repo.
  */
 
-const ci = readFileSync(join(process.cwd(), '.github/workflows/ci.yml'), 'utf8');
+const ci = readFileSync(join(process.cwd(), '.github/workflows/ci.yml'), 'utf8')
+  .replace(/\r\n/g, '\n');
 const script = readFileSync(join(process.cwd(), 'scripts/ci/rls-local.sh'), 'utf8');
 
 describe('CI: izolacja RLS', () => {

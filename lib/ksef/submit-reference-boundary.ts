@@ -104,7 +104,7 @@ export async function assertSubmitReferences(
 ): Promise<'regular' | 'correction' | 'advance' | 'final'> {
   const { data: invoice, error } = await input.supabase
     .from('invoices')
-    .select('id, invoice_kind, invoice_type, internal_number, parent_invoice_id, advance_invoice_ids, seller_nip, seller_data, fa3_data')
+    .select('id, invoice_kind, invoice_type, internal_number, parent_invoice_id, advance_invoice_ids, seller_nip, seller_data, fa3_data, special_data')
     .eq('id', input.invoiceId)
     .eq('tenant_id', input.tenantId)
     .eq('direction', 'outgoing')
@@ -125,9 +125,16 @@ export async function assertSubmitReferences(
       invoice.internal_number !== input.invoice.internalNumber) invalidPayload();
 
   const { correctionData, advanceData, finalData } = input;
+  // A4b (00137): dane zdarzenia zapisane przy INSERT dokumentu. NULL = wiersz
+  // sprzed 00137 — przyjmowany jak dotąd. Zapisana kopia musi być równa
+  // zdarzeniu: zlecenie nie może nieść innej treści niż ta zapisana raz.
+  const storedSpecial = invoice.special_data ?? null;
+  const assertStoredSpecial = (fromEvent: unknown) => {
+    if (storedSpecial !== null && !isDeepStrictEqual(storedSpecial, plainJson(fromEvent))) invalidPayload();
+  };
   switch (invoice.invoice_kind) {
     case 'regular':
-      if (correctionData || advanceData || finalData) invalidPayload();
+      if (correctionData || advanceData || finalData || storedSpecial !== null) invalidPayload();
       return 'regular';
     case 'correction': {
       if (input.environment === 'production') invalidPayload();
@@ -136,6 +143,7 @@ export async function assertSubmitReferences(
           typeof correctionData.seller?.nip !== 'string' ||
           invoice.parent_invoice_id !== correctionData.parentInvoiceId ||
           invoice.internal_number !== correctionData.internalNumber) invalidPayload();
+      assertStoredSpecial({ correctionData });
 
       const { data: parent, error: parentError } = await input.supabase
         .from('invoices')
@@ -160,7 +168,8 @@ export async function assertSubmitReferences(
       return 'correction';
     }
     case 'advance':
-      if (!advanceData || correctionData || finalData ||
+      // Koperta ZAL leży w fa3_data.advanceEnvelope (porównana niżej), nie tutaj.
+      if (!advanceData || correctionData || finalData || storedSpecial !== null ||
           advanceData.invoiceType !== 'advance' ||
           invoice.internal_number !== advanceData.internalNumber) invalidPayload();
       if (!input.invoice.advanceEnvelope ||
@@ -192,6 +201,7 @@ export async function assertSubmitReferences(
           !Array.isArray(finalData.advanceInvoiceIds) ||
           !Array.isArray(input.finalAdvanceSettlementRows) ||
           !input.finalAdvanceSettlementRows.length) invalidPayload();
+      assertStoredSpecial({ finalData, finalAdvanceSettlementRows: input.finalAdvanceSettlementRows });
       // AUD-23: P_16/P_18A ROZ tylko z dokumentu zapisanego przy wystawieniu.
       const flags = finalData.taxAnnotations;
       if (!flags ||
