@@ -36,7 +36,13 @@ import {
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
-import { generateJpkFa, JpkFaCorrectionNotSupportedError, JpkFaForeignCurrencyNotSupportedError } from '@/lib/exports/jpk-fa-generator';
+import {
+  generateJpkFa,
+  JPK_DOCUMENT_REFUSAL_PREFIX,
+  JpkDocumentNotSupportedError,
+  JpkFaCorrectionNotSupportedError,
+  JpkFaForeignCurrencyNotSupportedError,
+} from '@/lib/exports/jpk-fa-generator';
 import {
   assertJpkMatchesSchema,
   JPK_SCHEMA_ERROR_MESSAGES,
@@ -252,6 +258,8 @@ export async function onExportsGenerateExhausted(
 ): Promise<void> {
   const human =
     HUMAN_EXPORT_ERRORS.includes(failure.message) ||
+    // W9: odmowa dokumentu ma w treści jego numer — rozpoznawana po początku.
+    failure.message.startsWith(JPK_DOCUMENT_REFUSAL_PREFIX) ||
     Object.values(SUSPENDED_EXPORT_FORMATS).includes(failure.message);
   const message = human
     ? failure.message
@@ -411,6 +419,7 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
             e instanceof MissingIssuerAddressError ||
             e instanceof JpkFaCorrectionNotSupportedError ||
             e instanceof JpkFaForeignCurrencyNotSupportedError ||
+            e instanceof JpkDocumentNotSupportedError ||
             e instanceof CsvForeignCurrencyNotSupportedError ||
             e instanceof OutgoingInvoiceCurrencyNotSupportedError ||
             e instanceof JpkV7mReverseChargeNotSupportedError

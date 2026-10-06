@@ -77,10 +77,14 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00133 | Claude (K4, druga korekta) | `single_open_correction`: wyzwalacz `guard_single_open_correction` — faktura pierwotna ma najwyżej jedną korektę poza `rejected` (blokada doradcza per rodzic) | w `main` (#212), **wgrana na db-1 03.10** |
 | 00134 | Claude (D5, cykl życia) | `ksef_submissions_xml_path`: kolumna `ksef_submissions.xml_storage_path` — klucz XML próby wysyłki (`tenant/yyyy/mm/invoiceId/sendAttemptId.xml`) | w `main` (#215), **wgrana na db-1 04.10** |
 | 00135 | Claude (K4, łańcuch korekt) | `correction_chain_guard`: `guard_single_open_correction` blokuje tylko korektę W TOKU (przyjęta tworzy łańcuch, odrzucona nie liczy się) | w `main` (#217), **wgrana na db-1 04.10** |
-| 00136 | Claude (A2, plan zero zgubionych faktur) | `ksef_submission_intent`: `ksef_has_contact_evidence` liczy wpis `intent` (zamiar wysyłki przed POST), strażnik I5 widzi zamiar starszy niż 48 h — CREATE OR REPLACE dwóch funkcji z 00131 | PR #221 (`claude/a2-intent-przed-post`); **przed** wdrożeniem |
+| 00136 | Claude (A2, plan zero zgubionych faktur) | `ksef_submission_intent`: `ksef_has_contact_evidence` liczy wpis `intent` (zamiar wysyłki przed POST), strażnik I5 widzi zamiar starszy niż 48 h — CREATE OR REPLACE dwóch funkcji z 00131 | w `main` (#221), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
 | 00137 | Claude (plan, A4) | `special_invoice_data` — `correction_data`/`advance_data`/`final_data` na wierszu faktury | zarezerwowane (plan, sekcja 5) |
 | 00138–00140 | Codex (centrum dowodzenia, C-22) | `ksef_send_metrics`, `ksef_invoice_timeline`, `ksef_error_patterns` + `ops_alert_log` | zarezerwowane (`CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`, sekcja 6) |
-| **00141** | — | następny wolny (00200 zajęte) | — |
+| 00141 | Claude (A2b, plan zero zgubionych faktur) | `ksef_error_code_not_in_ksef`: kod katalogu `NOT_IN_KSEF` (transient, bez auto) — wynik „tylko uzgodnij”, gdy KSeF nie ma faktury (koniec ślepej uliczki RESULT_UNCERTAIN bez dowodu kontaktu) | w `main` (#222), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
+| 00142 | Claude (D-A4-1a, plan zero zgubionych faktur) | `ksef_error_code_number_taken`: kod katalogu `KSEF_NUMBER_TAKEN` (terminal, bez auto) — cudzy 440 z oryginałem z innego programu; komentarz statusów `ksef_submissions.status` (`number_taken` nie jest dowodem kontaktu); kolumny znacznika 440 | w `main` (#226), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
+| 00143 | Claude (D-A4-2, plan zero zgubionych faktur) | `ksef_error_code_env_mismatch_terminal`: UPDATE wiersza katalogu — `ENV_MISMATCH` z reconcile na terminal (szkic i decyzja klienta; `requeue_ksef_send` odmawia ponowienia w bieżącym środowisku) + komunikat klienta | w `main` (#228), **wgrana na db-1 04.10** (przed wdrożeniem, strażnik 0) |
+| 00144 | Claude (D-A4-1b-3 PR A, plan zero zgubionych faktur) | `ksef_submission_original_check`: kolumna `ksef_submissions.original_check` jsonb — dane oryginału przy nierozstrzygniętym 440 (powód, dane, skrót, archiwum, data nadania) | PR `claude/d-a4-1b-3-dane-oryginalu`; **przed** wdrożeniem |
+| **00145** | — | następny wolny (00200 zajęte); kolejne PR D-A4-1b-3 (B, C) biorą numer przy otwarciu | — |
 
 ---
 
@@ -441,7 +445,12 @@ akcji i generatora są w Twoim #85 — dlatego zgłaszam, a nie zmieniam.
 
 **Odpowiedź Codexa:** —
 
-### C-18 · Przepływy: dane od 1 stycznia dla szacunku podatku — `OTWARTE` · wykonanie: Codex (`app/(dashboard)/przeplywy/page.tsx` w Twoim stosie)
+### C-21 · Przepływy: dane od 1 stycznia dla szacunku podatku — `ROZWIĄZANE (03.10.2026, PR „przepływy od stycznia”)` · wykonanie: Claude
+
+> Numer zmieniony 03.10.2026 z „C-18” na C-21: C-18 to wcześniejsza sprawa
+> „Niepewny wynik wysyłki KSeF i UPO” (wyżej). Stos Codexa jest w `main`
+> (C-20), więc stronę poprawił Claude: zapytania od `min(sześć miesięcy wstecz,
+> 1 stycznia)` i `dataFrom` przekazany do komponentu.
 
 Kafelek „Szac. podatek YTD” liczył zysk z okna wykresu (6 miesięcy) — w
 październiku gubił styczeń–kwiecień, w lutym doliczał zeszły rok. Claude
@@ -450,15 +459,15 @@ naprawił liczenie w `components/expenses/cash-flow-dashboard.tsx`
 się później niż 1 stycznia, etykieta mówi „od 1 maja · bez wcześniejszych
 miesięcy roku”.
 
-Pełny rok wymaga, żeby strona ładowała faktury i wydatki od
-`min(sześć miesięcy wstecz, 1 stycznia)` — dziś zapytania biorą
-`gte('issue_date', sixMonthsAgo)`. Plik przepisujesz w #63+ (środowisko KSeF,
-`readCompletePages`), więc zmiana zakresu powinna wejść tam, razem
-z przekazaniem faktycznego początku danych: `<CashFlowDashboard dataFrom=…>`
-(prop już jest; bez niego komponent przyjmuje początek okna wykresu).
-Wykres zostaje na sześciu miesiącach.
-
-**Odpowiedź Codexa:** —
+Pełny rok wymagał, żeby strona ładowała faktury i wydatki od
+`min(sześć miesięcy wstecz, 1 stycznia)` — zapytania brały
+`gte('issue_date', sixMonthsAgo)`. Zrobione w `app/(dashboard)/przeplywy/page.tsx`:
+oba zapytania od `dataFrom`, `<CashFlowDashboard dataFrom=…>` przekazany.
+Przy okazji miesiąc i rok liczone w czasie polskim (`todayInWarsaw`) zamiast
+`toISOString()` z lokalnej północy (w strefie polskiej cofało początek o dzień:
+1 maja → 30 kwietnia; serwer chodzi w UTC). Wykres zostaje na sześciu
+miesiącach. Testy: `tests/unit/przeplywy-ksef-environment.test.tsx`
+(październik, czerwiec, luty następnego roku, noc sylwestrowa w UTC).
 
 ### C-08 · Skrzynka KSeF gubi faktury przy kolizji numeru dostawcy — `W TOKU` (#83) · PILNE · decyzja: Igor / Bartosz, wykonanie: Codex + Bartosz
 

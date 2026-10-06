@@ -1,6 +1,6 @@
 // Wygenerowane 04.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00134
-// (cykl życia faktury, K4, D5). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00142
+// (cykl życia faktury, K4, D5, A2, A2b, D-A4-1). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -2449,6 +2449,8 @@ export type Database = {
           id: string
           invoice_id: string
           invoice_reference_number: string | null
+          original_ksef_number: string | null
+          original_session_reference_number: string | null
           request_payload_hash: string | null
           response_ksef_number: string | null
           retry_count: number | null
@@ -2466,6 +2468,8 @@ export type Database = {
           id?: string
           invoice_id: string
           invoice_reference_number?: string | null
+          original_ksef_number?: string | null
+          original_session_reference_number?: string | null
           request_payload_hash?: string | null
           response_ksef_number?: string | null
           retry_count?: number | null
@@ -2483,6 +2487,8 @@ export type Database = {
           id?: string
           invoice_id?: string
           invoice_reference_number?: string | null
+          original_ksef_number?: string | null
+          original_session_reference_number?: string | null
           request_payload_hash?: string | null
           response_ksef_number?: string | null
           retry_count?: number | null

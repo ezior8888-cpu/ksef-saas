@@ -27,7 +27,7 @@ Dziś łamią to trzy miejsca: `failed` bez wyjścia (K3), `queued` bez zadania 
 
 Definicja **dowodu kontaktu** (używana przez wyzwalacze, RPC i strażnika): faktura ma dowód kontaktu, gdy `ksef_number IS NOT NULL` **albo** istnieje wiersz `ksef_submissions` o statusie `intent`, `sent`, `accepted` lub `duplicate`. Wiersze `rejected` i `abandoned` dowodem nie są (KSeF odrzucił treść albo potwierdził, że pliku nie dostał).
 
-**Zamiar wysyłki (A2, 00136).** Worker zapisuje wpis `intent` z numerem sesji po jej otwarciu, a PRZED wysłaniem pliku; bez tego zapisu plik nie wychodzi. Po odpowiedzi KSeF wpis staje się `sent` (z numerem referencyjnym faktury), po odmowie przyjęcia pliku (HTTP 4xx poza 408) — `abandoned`. Zamiar, który został otwarty (timeout, padnięty worker, błąd zapisu), rozstrzyga następna próba: zamyka tamtą sesję i pyta KSeF o jej faktury (`GET /sessions/{ref}/invoices`) — plik jest → `sent` i zwykłe uzgodnienie po referencji; sesja pusta → `abandoned` i wysyłka od nowa; awaria KSeF → ponowienie uzgadniania, nigdy drugi POST. Wyjście z blokady powrotu do szkicu: „Wyślij ponownie”, cron ponowień albo operator „Tylko uzgodnij”.
+**Zamiar wysyłki (A2, 00136).** Worker zapisuje wpis `intent` z numerem sesji po jej otwarciu, a PRZED wysłaniem pliku; bez tego zapisu plik nie wychodzi. Po odpowiedzi KSeF wpis staje się `sent` (z numerem referencyjnym faktury), po odmowie przyjęcia pliku (HTTP 4xx poza 408) — `abandoned`. Zamiar, który został otwarty (timeout, padnięty worker, błąd zapisu), rozstrzyga następna próba: zamyka tamtą sesję i pyta KSeF o jej faktury (`GET /sessions/{ref}/invoices`) — plik jest → `sent` i zwykłe uzgodnienie po referencji; sesja pusta → `abandoned` i wysyłka od nowa; awaria KSeF → ponowienie uzgadniania, nigdy drugi POST. Wyjście z blokady powrotu do szkicu: „Wyślij ponownie”, cron ponowień albo operator „Tylko uzgodnij”. „Tylko uzgodnij”, które stwierdzi, że KSeF nie ma faktury (brak dowodu kontaktu po rozstrzygnięciu), kończy `failed NOT_IN_KSEF` — klient wysyła ponownie albo wraca do szkicu (A2b).
 
 ## 3. Stany
 
@@ -75,7 +75,7 @@ Zasada dla klienta: **sesja użytkownika nie zmienia `ksef_status` nigdy**. Każ
 | I2 | `sending` ⇒ `submitted_to_ksef_at` nie starsze niż dzierżawa + 15 min | alarm `stale_ksef_sending_invoices` (istnieje) |
 | I3 | `accepted` ⇒ `ksef_number`, `ksef_environment`, `xml_storage_path` niepuste, wpis `ksef_submissions.accepted` lub `duplicate`, wiersz `upo_receipts` | brak UPO: `cron.upo-retry-stale` (istnieje, po naprawie W12); brak wpisu historii: alarm informacyjny |
 | I4 | `failed`/`rejected` ⇒ `last_error_code` z katalogu, `ksef_send_owner IS NULL` | kod spoza katalogu: alarm i kod `UNKNOWN` |
-| I5 | wpis `ksef_submissions.sent` starszy niż 48 h ⇒ faktura jest w `sending` z żywą dzierżawą albo w `failed` z kodem RECONCILE | inaczej: `requeue_ksef_send(p_reconcile_only = true)` |
+| I5 | wpis `ksef_submissions.sent` albo zamiar `intent` (00136) starszy niż 48 h ⇒ faktura jest w `sending` z żywą dzierżawą albo w `failed` z kodem RECONCILE | inaczej: `requeue_ksef_send(p_reconcile_only = true)` — **cron co 15 min** dla `failed`/`rejected` (A3): najwyżej raz na dobę, po 3 próbach w tygodniu alarm i operator; inne stany — tylko alarm |
 | I6 | `failed` z kodem TRANSIENT młodszy niż 24 h ⇒ zostanie ponowiony | cron ponawia co 60 min; po 24 h kod zmienia się na `TRANSIENT_EXHAUSTED` i idzie alarm do operatora |
 | I7 | `failed` z kodem HOLD ⇒ hamulec nadal aktywny | hamulec zdjęty: `requeue_ksef_send` |
 | I8 | numer faktury należy do dokładnie jednego wiersza firmy (indeks unikalny) i po resecie wraca do tego samego wiersza | bez zmian |
@@ -96,14 +96,17 @@ Raport dzienny strażnika na Telegram: liczba faktur per stan, naruszenia I1–I
 | TRANSIENT | `INFRA` | błąd bazy / PostgREST / R2 **przed POST** do KSeF (dziś mylnie `rejected`, W1) | `queued` (auto) | „Chwilowy błąd po naszej stronie. Ponowimy wysyłkę.” |
 | TRANSIENT | `CREDENTIALS_UNAVAILABLE` | brak klucza po rotacji, błąd deszyfrowania | `queued` po naprawie konfiguracji; alarm operatora natychmiast | „Wysyłka wstrzymana po naszej stronie. Pracujemy nad tym.” |
 | TRANSIENT | `TRANSIENT_EXHAUSTED` | 24 h automatycznych ponowień bez skutku | `queued` ręcznie (O/S) | „Wysyłka nie powiodła się przez dobę. Zajmujemy się tym.” |
+| TRANSIENT | `NOT_IN_KSEF` | „tylko uzgodnij” bez otwartej wysyłki i bez dowodu kontaktu (zamiar porzucony, wpis STALE) — A2b, 00141 | `queued` ręcznie (klient/O), `draft`; **bez** automatu (data wystawienia, B1/B2) | „KSeF nie ma tej faktury — poprzednia wysyłka do niego nie dotarła. Wyślij ją ponownie albo wróć do szkicu.” |
 | HOLD | `KSEF_PAUSED` | `killAllKsefSubmissions` | `queued` automatycznie po zdjęciu | „Wysyłka wstrzymana przez operatora. Faktura wyjdzie automatycznie po przywróceniu.” (dziś tekst obiecuje „wyślij ponownie” — do zmiany) |
 | HOLD | `KOR_HOLD`, `ROZ_HOLD_RECONCILE` | blokady KOR/ROZ | `queued` po zdjęciu; `draft` | „Wysyłka korekt jest tymczasowo wstrzymana …” |
-| RECONCILE | `KSEF_DUPLICATE_RECONCILE` | 440 bez własnej sesji | tylko operator (uzgodnienie) | „Faktura wymaga uzgodnienia z KSeF. Skontaktujemy się.” |
-| RECONCILE | `RESULT_UNCERTAIN` | otwarty wpis `sent`, KSeF nie odpowiada na status | job uzgadniający | jak wyżej |
-| RECONCILE | `ENV_MISMATCH`, `INVALID_EVENT`, `ENQUEUE_LOST` | `onExhausted handled:false`, strażnik I1 | operator | jak wyżej |
+| TERMINAL | `KSEF_NUMBER_TAKEN` | 440, oryginał z innego programu po porównaniu treści (D-A4-1a, 00142) | `draft` (klient: nowy numer albo rezygnacja, gdy to ta sama sprzedaż) | „W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie…” (z numerem KSeF, datą, nabywcą i kwotą oryginału) |
+| TERMINAL | `ENV_MISMATCH` | zdarzenie z innego środowiska KSeF niż skonfigurowane (D-A4-2, 00143; dawniej RECONCILE) | `draft` (klient albo operator, bez dowodu kontaktu); `requeue` odmawia — ponowienie wysłałoby fakturę w bieżącym środowisku; z otwartym wpisem „tylko uzgodnij” | „Tej wysyłki nie wykonaliśmy: zlecenie dotyczyło innego środowiska KSeF… Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku.” (przy dowodzie kontaktu: „nie wystawiaj ponownie, uzgodni operator”) |
+| RECONCILE | `KSEF_DUPLICATE_RECONCILE` | 440 nierozstrzygnięty: oryginał z FaktFlow o innym pliku, numer KSeF w innej fakturze, oryginał niepobieralny | operator: „Tylko uzgodnij” przy otwartym wpisie; ręczny werdykt — D-A4-1b | „Faktura wymaga uzgodnienia z KSeF. Skontaktujemy się.” |
+| RECONCILE | `RESULT_UNCERTAIN` | otwarty wpis `sent`, KSeF nie odpowiada na status; „tylko uzgodnij” bez otwartej wysyłki, gdy dowód kontaktu zostaje | job uzgadniający | jak wyżej |
+| RECONCILE | `INVALID_EVENT`, `ENQUEUE_LOST` | `onExhausted handled:false`, strażnik I1 | operator: `INVALID_EVENT`, `ENQUEUE_LOST` (i `RESULT_UNCERTAIN`) — „Wyślij ponownie” (A4) | jak wyżej |
 | — | `NO_CERTIFICATE`, `NOT_VERIFIED` | brak/niezweryfikowany certyfikat | `draft` (klient uzupełnia certyfikat) | „Najpierw wgraj i zweryfikuj certyfikat KSeF.” |
 
-Zasada klasyfikacji (W1): na `TERMINAL` mapuje się wyłącznie błąd, którego przyczyną jest **treść dokumentu** albo **decyzja KSeF o treści**. Każdy błąd, który może zniknąć bez zmiany dokumentu, jest `TRANSIENT`. Brak pewności = `RECONCILE`, nigdy `rejected`.
+Zasada klasyfikacji (W1): na `TERMINAL` mapuje się wyłącznie błąd, którego przyczyną jest **treść dokumentu** albo **decyzja KSeF o treści** — oraz dwa przypadki, w których wysyłka tej wersji nie może dojść do skutku bez decyzji klienta o dokumencie: numer zajęty (`KSEF_NUMBER_TAKEN`) i inne środowisko (`ENV_MISMATCH`); żaden nie kończy się `rejected`. Każdy błąd, który może zniknąć bez zmiany dokumentu, jest `TRANSIENT`. Brak pewności = `RECONCILE`, nigdy `rejected`.
 
 ## 7. Co widzi użytkownik
 

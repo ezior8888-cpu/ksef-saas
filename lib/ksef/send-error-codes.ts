@@ -56,6 +56,19 @@ export interface ClassifiedSendError {
   class: SendErrorClass;
 }
 
+/**
+ * Błąd, którego kod runner już rozstrzygnął (D-A4-1: werdykt po weryfikacji
+ * cudzego 440). Klasyfikator bierze jego kod PRZED klasami KSeF z łańcucha
+ * przyczyn — inaczej `KsefInvoiceRejectedError(440)` albo błąd HTTP pobrania
+ * oryginału przesłoniłby werdykt (403 → KSEF_SESSION z automatem itd.).
+ */
+export class KsefSendVerdictError extends Error {
+  constructor(readonly code: SendErrorCode, message: string) {
+    super(message);
+    this.name = 'KsefSendVerdictError';
+  }
+}
+
 export function classifySendError(error: unknown): ClassifiedSendError {
   const code = codeFor(error);
   return { code, class: SEND_ERROR_CLASS[code] };
@@ -97,6 +110,14 @@ function httpCode(error: KsefApiError): SendErrorCode {
 
 function codeFor(error: unknown): SendErrorCode {
   const errors = chain(error);
+
+  // 0. Kod rozstrzygnięty przez runner (werdykt) wygrywa z całym łańcuchem.
+  for (const e of errors) {
+    if (e instanceof KsefSendVerdictError || e.name === 'KsefSendVerdictError') {
+      const code = (e as KsefSendVerdictError).code;
+      if (isSendErrorCode(code)) return code;
+    }
+  }
 
   // 1. Konkretne klasy błędów gdziekolwiek w łańcuchu przyczyn.
   for (const e of errors) {

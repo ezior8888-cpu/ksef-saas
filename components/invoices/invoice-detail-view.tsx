@@ -11,6 +11,8 @@ import { InvoiceActions } from '@/components/invoices/invoice-actions';
 import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
 import { UpoDownload } from '@/components/invoices/upo-download';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
+import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
+import { importedVatRateLabel } from '@/lib/xml/fa3-p12';
 import type { Database } from '@/types/database';
 
 export interface InvoiceDetailLine {
@@ -65,6 +67,8 @@ export interface InvoiceDetailInitial {
   upo_status: Database['public']['Enums']['upo_status_enum'] | null;
   /** Rola zalogowanej osoby w firmie faktury dopuszcza „Wyślij ponownie” / „Wróć do szkicu”. */
   can_manage_send: boolean;
+  /** D-A4-1b-3: dane faktury, którą KSeF ma już pod tym numerem (nierozstrzygnięty 440). */
+  ksef_duplicate_original: DuplicateOriginalView | null;
 }
 
 interface PaymentSnapshot {
@@ -100,6 +104,9 @@ function vatRateLabel(rate: string | null): string {
   // AUD-70: usługa z art. 100 ust. 1 pkt 4 (FA(3) „np II”) — jak na PDF.
   if (rate === 'np_ii') return 'np. II';
   if (['zw', 'oo', 'np'].includes(rate)) return rate;
+  // W9: kod FA(3) z importu bez odpowiednika w FaktFlow („0 WDT”, „nieznana”…).
+  const imported = importedVatRateLabel(rate);
+  if (imported) return `${rate} (${imported})`;
   return `${rate}%`;
 }
 
@@ -126,6 +133,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           const row = payload.new as Record<string, unknown>;
           setInv((prev) => ({
             ...prev,
+            // Dane oryginału 440 pochodzą z chwili otwarcia strony — po zmianie
+            // stanu faktury są nieaktualne (nowy werdykt = nowe dane po odświeżeniu).
+            ksef_duplicate_original:
+              (typeof row.ksef_status === 'string' && row.ksef_status !== prev.ksef_status) ||
+              ('last_error_code' in row && row.last_error_code !== prev.last_error_code) ||
+              ('last_error' in row && row.last_error !== prev.last_error)
+                ? null
+                : prev.ksef_duplicate_original,
             ksef_status:
               typeof row.ksef_status === 'string'
                 ? row.ksef_status
@@ -254,6 +269,27 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           />
         </div>
       )}
+
+      {inv.ksef_status === 'failed' &&
+        inv.last_error_code === 'KSEF_DUPLICATE_RECONCILE' &&
+        inv.ksef_duplicate_original && (
+          <Card className="p-4 mb-6 border-amber-200 bg-amber-50">
+            <h3 className="font-semibold text-sm text-amber-900">
+              {inv.ksef_duplicate_original.title}
+            </h3>
+            <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+              {inv.ksef_duplicate_original.rows.map((row) => (
+                <div key={row.label} className="flex gap-2">
+                  <dt className="text-amber-800">{row.label}:</dt>
+                  <dd className="font-medium break-all">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="text-sm text-amber-900 mt-3">
+              {inv.ksef_duplicate_original.note}
+            </p>
+          </Card>
+        )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <Card className="p-4">

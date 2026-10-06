@@ -20,6 +20,135 @@ Każdy kod KSeF mapujemy na jedną z 4 kategorii w `lib/ksef/error-classifier.ts
 | **KSEF_DOWN** | KSeF zwrócił 5xx / timeout | Pełen retry schedule (30s → 1h) |
 | **MAINTENANCE** | Zapowiedziana przerwa | Offline24 od razu |
 
+## Katalog kodów wysyłki FaktFlow — kto ma wyjście (A4)
+
+Kody `invoices.last_error_code` z katalogu `ksef_error_codes` (00131, 00141).
+Zasada: każdy stan ma **wyjście** — automat (cron `ksef-lifecycle-reconcile`),
+klient (przycisk na fakturze) albo operator (`/admin/ksef/<id>`). Strażnikiem
+tej tabeli jest test `tests/unit/ksef-wyjscia-kodow.test.ts` (macierz kod ×
+rodzaj dokumentu × dowód kontaktu × otwarty wpis); ślepe uliczki z kolumny
+„Luka” są w nim wypisane jawnie.
+
+| Kod | Klasa | Skąd | Klient | Automat | Operator | Luka |
+|---|---|---|---|---|---|---|
+| `XSD_INVALID` | terminal | XML niezgodny z XSD | Wróć do szkicu | — | Wróć do szkicu | przy dowodzie kontaktu bez otwartego wpisu (po cudzym 440) → D-A4-1 |
+| `KSEF_REJECTED` | terminal | KSeF odrzucił treść (status ≥ 400, HTTP 4xx) | Wróć do szkicu | — | Wróć do szkicu; „Tylko uzgodnij” przy otwartym wpisie | jak wyżej |
+| `INVALID_DOCUMENT` | terminal | walidacja dokumentu, odwołania (`assertSubmitReferences`) | Wróć do szkicu | — | Wróć do szkicu | jak wyżej |
+| `KSEF_NUMBER_TAKEN` | terminal | cudzy 440, oryginał z innego programu (treść sprawdzona, D-A4-1a) | Wróć do szkicu → usuń → wystaw z nowym numerem (albo nie wystawiaj, jeśli to ta sama sprzedaż) | — | Wróć do szkicu | — (wpisy `number_taken` nie są dowodem kontaktu) |
+| `ENV_MISMATCH` | terminal (D-A4-2, 00143) | zdarzenie z innego środowiska KSeF niż skonfigurowane w workerze (zlecone na TEST, worker na PROD; albo worker bez poprawnego `KSEF_ENV`) — runner nie dotknął KSeF | Wróć do szkicu → zdecyduj, czy wysłać w obecnym środowisku | — | Wróć do szkicu (bez dowodu); „Tylko uzgodnij” tylko dla otwartego wpisu z OBECNEGO środowiska; **nigdy** „Wyślij ponownie” (baza odmawia) | przy dowodzie kontaktu bez otwartego wpisu — jak wyżej; otwarty wpis sprzed przełączenia środowiska — bez bezpiecznego wyjścia do F2 (niżej) |
+| `KSEF_UNAVAILABLE` | transient | 5xx, timeout | Wyślij ponownie / Wróć do szkicu | I6: co godzinę przez 24 h | Wyślij ponownie / szkic | — |
+| `KSEF_RATE_LIMIT` | transient | 429 | jak wyżej | I6 | jak wyżej | — |
+| `KSEF_SESSION` | transient | 401/403, 21184 | jak wyżej | I6 | jak wyżej | — |
+| `INFRA` | transient | baza / PostgREST / R2 przed POST | jak wyżej | I6 | jak wyżej | — |
+| `CREDENTIALS_UNAVAILABLE` | transient | klucz po rotacji, deszyfrowanie | Wyślij ponownie / szkic | — (alarm) | napraw klucz → Wyślij ponownie | komunikat obiecuje automat (ustalenie A2b) |
+| `TRANSIENT_EXHAUSTED` | transient | 24 h ponowień bez skutku | Wyślij ponownie / szkic | — | Wyślij ponownie / szkic | komunikat obiecuje automat (ustalenie A2b) |
+| `NOT_IN_KSEF` | transient | „tylko uzgodnij”: KSeF nie ma faktury (A2b) | Wyślij ponownie / Wróć do szkicu | — (decyzja o dacie: B1/B2) | Wyślij ponownie / szkic | — |
+| `KSEF_PAUSED` | hold | wyłącznik operatora | czeka | I7: po zdjęciu hamulca | Wyślij ponownie / szkic | — |
+| `KOR_HOLD` | hold | hamulec korekt | czeka | — | Wróć do szkicu (bez dowodu) | ponowienie korekty → A4b (00137); zdjęcie hamulca → C4 |
+| `ROZ_HOLD_RECONCILE` | hold | hamulec ROZ | czeka | — | Wróć do szkicu (bez dowodu) | jak wyżej |
+| `KSEF_DUPLICATE_RECONCILE` | reconcile | 440, którego automat nie rozstrzygnął: oryginał z FaktFlow o innym pliku, numer KSeF w innej fakturze firmy, oryginału nie da się pobrać (403 — token bez `InvoiceRead`; po ponowieniach 5xx/429/21164/21165) | „zajmujemy się” + dane oryginału z KSeF na karcie faktury (D-A4-1b-3, 00144) | I5 przy otwartym wpisie > 48 h (weryfikacja od nowa) | „Tylko uzgodnij” przy otwartym wpisie (powtarza weryfikację); karta `/admin/ksef/[id]`: `original_check` (powód, dane, skrót, archiwum) | bez otwartego wpisu: **ślepa uliczka** → ręczny werdykt D-A4-1b |
+| `RESULT_UNCERTAIN` | reconcile | niepewny wynik, KSeF nie odpowiada | „nie wystawiaj ponownie” | I5 (A3): „tylko uzgodnij” raz na dobę | „Tylko uzgodnij” / **Wyślij ponownie** (A4) | — |
+| `INVALID_EVENT` | reconcile | zły payload zdarzenia | „zajmujemy się” | — | **Wyślij ponownie** (A4) — zdarzenie odtworzone z wiersza | — |
+| `ENQUEUE_LOST` | reconcile | `queued` bez zlecenia, z dowodem kontaktu (I1) | „zajmujemy się” | I5 przy otwartym wpisie > 48 h | **Wyślij ponownie** (A4) / „Tylko uzgodnij” | — |
+| `NO_CERTIFICATE` | setup | brak certyfikatu | Ustawienia → Wyślij ponownie | — | Wyślij ponownie | — |
+| `NOT_VERIFIED` | setup | NIP niezweryfikowany | Ustawienia → Wyślij ponownie | — | Wyślij ponownie | — |
+
+**Dlaczego „Wyślij ponownie” operatora przy klasie reconcile jest bezpieczne**
+(ENQUEUE_LOST, INVALID_EVENT, RESULT_UNCERTAIN): runner najpierw rozstrzyga
+zamiar i uzgadnia otwarty wpis (A2), treść faktury z dowodem kontaktu jest
+zamrożona (00132), a KSeF nie przyjmie drugiej faktury o tym samym numerze
+(440 — sesja z naszej historii oznacza własny duplikat i `accepted`).
+Duplikat mógłby powstać tylko po zmianie numeru, czyli po powrocie do szkicu.
+
+**Dokumenty specjalne (KOR, ZAL, ROZ):** zdarzenia wysyłki nie da się dziś
+odtworzyć z wiersza, więc ani cron, ani „Wyślij ponownie” ich nie obsługują.
+Wyjściem jest tylko powrót do szkicu, a przy dowodzie kontaktu albo kodzie
+reconcile nie ma żadnego wyjścia → A4b (00137: dane specjalne na wierszu).
+
+**Decyzje do podjęcia (Bartosz):**
+- **D-A4-1 — cudzy 440 — PRZYJĘTA (Bartosz, 04.10.2026).** Automat (D-A4-1a)
+  przy każdym 440 — w nowej wysyłce i przy uzgadnianiu po referencji:
+  1. sesja oryginału w historii tej faktury **i ten sam skrót pliku** →
+     nasza faktura, `accepted` z numerem oryginału (bez skrótu albo z innym
+     skrótem → dalej, bo po powrocie do szkicu treść mogła się zmienić);
+  2. numer KSeF oryginału ma inna faktura firmy w FaktFlow → operator;
+  3. pobranie oryginału (`GET /invoices/ksef/{ksefNumber}`, `InvoiceRead`):
+     bieżący plik bajt w bajt (albo wcześniejsza próba o tej samej treści)
+     → `accepted`; oryginał z FaktFlow (`SystemInfo = KSeF SaaS v1.0`) o innym
+     pliku → operator; oryginał z innego programu → `KSEF_NUMBER_TAKEN`
+     (wszystkie wpisy duplikatu → `number_taken`, klient wraca do szkicu);
+  4. pobranie się nie udało: chwilowo (5xx, 429, 401, 21164, 21165, błąd
+     odczytu naszego pliku z magazynu) — ponowienie samej weryfikacji, bez
+     drugiej wysyłki; trwale (403, inne 4xx) — operator.
+  Wpis próby dostaje **znacznik 440** (`original_ksef_number`,
+  `original_session_reference_number`, 00142) i zostaje **otwarty** (`sent`,
+  dowód kontaktu) przy każdym werdykcie „do operatora” — każde kolejne
+  uzgodnienie (cron I5, „Tylko uzgodnij”) weryfikuje treść od nowa i nigdy nie
+  kończy się STALE / NOT_IN_KSEF. Zamyka go tylko werdykt: `number_taken` albo
+  zapis akceptacji. Przy przyjęciu numeru z duplikatu `ksef_accepted_at` =
+  data nadania numeru **oryginałowi** (art. 106na — wystawienie i otrzymanie):
+  własna sesja — status po referencji, inaczej metadane po numerze KSeF;
+  brak daty → numer przyjęty, alarm `ksef-duplicate-no-date` (operator
+  uzupełnia datę z KSeF). Kierunek bezpieczny: „numer zajęty” nigdy dla oryginału
+  z FaktFlow, przy tej samej treści z innego programu (ta sama sprzedaż) ani
+  bez naszego pliku do porównania.
+  Każdy nierozstrzygnięty werdykt zapisuje **dane oryginału** na otwartym
+  wpisie próby (`ksef_submissions.original_check`, 00144): powód
+  (`known-number`, `download-refused`, `download-pending`, `storage-pending`,
+  `archive-pending`, `faktflow-original`, `same-content-other-program`,
+  `no-own-file`, `archive-conflict`), numer, datę, nabywcę, kwotę, program, datę nadania
+  numeru, skrót i — gdy oryginał pobrano, a werdykt nie zapadł — bajty
+  oryginału w archiwum `<firma>/ksef-import/<numer KSeF>.xml` (ten sam klucz
+  co Magiczny import). Klient widzi je na karcie faktury, operator na karcie
+  w `/admin/ksef`. Ponowne sprawdzenie (cron I5, „Tylko uzgodnij”), które
+  nie pobrało oryginału (503, 403), nie kasuje danych z udanego — wynik
+  próby trafia do `recheck`. `archive-conflict` = w archiwum jest inny plik
+  pod tym numerem KSeF: operator porównuje oba pliki, zanim cokolwiek
+  zdecyduje.
+  „Znany numer” (numer KSeF oryginału ma już inna faktura firmy) liczy
+  tylko faktury sprzedaży — zakupowa z tym numerem nie zatrzymuje
+  porównania treści (D-A4-1b-3, A0).
+- **D-A4-1b — przypadki nierozstrzygnięte przez automat** (decyzje Bartosza
+  04.10.2026):
+  1. wcześniejsza wersja tej faktury w KSeF → przyjąć oryginał (numer
+     i treść), zmiany korektą — **odłożone** do B2 (data poprawiana w tym
+     samym szkicu): dziś szkic z nieaktualną datą jest usuwany i wystawiany
+     od nowa, a usunięcie kasuje historię prób, więc automat nie ma dowodu;
+  2. ta sama treść z innego programu → numer + trwały znacznik, baner, mail,
+     ostrzeżenie w JPK (D-A4-1b-2);
+  3. pozostałe → decyduje **klient** przyciskiem z danymi oryginału („ta
+     sama sprzedaż” / „inna sprzedaż → nowy numer”), operator tylko zapisuje
+     decyzję klienta (D-A4-1b-3, w budowie: A0 → A dane oryginału na wpisie
+     → wierny import (C5a stawki P_12, C5b P_6 i adnotacje) → B decyzja → C zapis oryginału z FaktFlow → D
+     „Sprawdź ponownie”). Do tego czasu operator sprawdza fakturę w KSeF
+     i zgłasza ją Bartoszowi.
+- **D-A4-2 — `ENV_MISMATCH`** (decyzja Bartosza 04.10.2026, przyjęta
+  w 00143). Ponowienie tworzy nowe zdarzenie z BIEŻĄCYM środowiskiem, więc
+  wysłałoby fakturę zleconą na TEST jako prawdziwą fakturę na PROD. Dlatego
+  kod jest klasy **terminal**: faktura bez dowodu kontaktu wraca do szkicu
+  (klient sam albo operator), a klient decyduje — wysyła ją w obecnym
+  środowisku albo jej nie wystawia (usuwa szkic). `requeue_ksef_send` odmawia
+  ponowienia (przepuszcza tylko „tylko uzgodnij”), więc ochrona nie zależy
+  od przycisku. Z otwartym wpisem z wcześniejszej próby faktura mogła
+  dotrzeć do KSeF: klient dostaje „nie wystawiaj ponownie”, szkic jest
+  zablokowany. **Uwaga:** „Tylko uzgodnij” (i cron I5 po 48 h) uzgadnia
+  w BIEŻĄCYM środowisku, a wpis `ksef_submissions` nie zna swojego (F2).
+  Wpis sprzed przełączenia środowiska nic tam nie znajdzie, a `requeue`
+  czyści kod — wynik (`NOT_IN_KSEF`, `NOT_VERIFIED`, `RESULT_UNCERTAIN`)
+  zaprasza do ponownej wysyłki, czyli wysłania dokumentu z TEST na PROD.
+  Operator nie uzgadnia tak wpisu z drugiego środowiska: sprawdza fakturę
+  w KSeF tamtego środowiska i zgłasza ją Bartoszowi (wyjście — F2). Gdy worker nie ma poprawnego `KSEF_ENV`, każda wysyłka kończy
+  się `ENV_MISMATCH` z komunikatem „zajmujemy się tym”: najpierw napraw
+  zmienną w Coolify (worker `id=2`), potem klienci wracają do szkicu
+  i wysyłają ponownie. Operator: lista w `/admin/ksef` po kodzie, alarm
+  Sentry „KSeF submit event environment mismatch”.
+  Przełączenie TEST → PROD (F1) musi to uwzględnić: przed zmianą `KSEF_ENV`
+  hamulec i pusta kolejka, bo cron (I6, I7) wznawia `failed` z kodami
+  przejściowymi i `KSEF_PAUSED` nowym zdarzeniem z bieżącym środowiskiem —
+  faktury z czasu TEST wyszłyby same na PROD; wpisy `ksef_submissions` nie
+  mają kolumny środowiska, więc próba z TEST wygląda po przełączeniu jak
+  dowód kontaktu (F2).
+
 ## Najczęstsze kody — co znaczą, co robić
 
 ### Authentication / Authorization (21100-21199)
@@ -155,12 +284,26 @@ wysłaniem pliku. Jeśli został otwarty, odpowiedź na wysyłkę nie dotarła
   i uzgodnienie po numerze referencyjnym; sesja pusta → `abandoned`
   (`error_code = NOT_IN_SESSION`) i wysyłka od nowa. Nigdy drugi POST.
 - **Co klika operator:** `/admin/ksef/<id>` → „Tylko uzgodnij” (działa przy
-  `sent` i przy `intent`). Po rozstrzygnięciu faktura jest `accepted`, albo
-  zamiar ma status `abandoned` i „Wróć do szkicu” / „Wyślij ponownie” znowu
-  działają.
-- **Strażnik:** zamiar starszy niż 48 h przy fakturze poza `sending` to I5.
-  KSeF odpowiadający na pytanie o sesję kodem 21173 („Brak sesji”) po 48 h
-  zamyka zamiar jako `abandoned` z kodem `STALE`.
+  `sent` i przy `intent`). Po rozstrzygnięciu faktura jest `accepted`, albo —
+  gdy KSeF jej nie ma i nie zostaje żaden dowód kontaktu — `failed
+  NOT_IN_KSEF` (A2b, 00141): klient i operator mogą „Wyślij ponownie” albo
+  „Wróć do szkicu”. Gdy inny dowód kontaktu zostaje (np. wpis `duplicate`),
+  wynik to `RESULT_UNCERTAIN` dla operatora.
+- **`NOT_IN_KSEF`** (klasa transient, bez automatu): KSeF potwierdził, że
+  nie ma faktury z poprzedniej wysyłki. Cron NIE wysyła jej sam — ponowna
+  wysyłka po kilku dniach to decyzja o dacie wystawienia (B1/B2 planu).
+  Klient widzi: „KSeF nie ma tej faktury — poprzednia wysyłka do niego nie
+  dotarła. Wyślij ją ponownie albo wróć do szkicu.”
+- **Strażnik:** zamiar (albo wpis `sent`) starszy niż 48 h przy fakturze
+  poza `sending` to I5. KSeF odpowiadający na pytanie o sesję kodem 21173
+  („Brak sesji”) po 48 h zamyka zamiar jako `abandoned` z kodem `STALE`.
+- **Cron (A3):** przy I5 i fakturze `failed`/`rejected` cron cyklu życia sam
+  zleca „Tylko uzgodnij” (aktor NULL w audycie, `reconcile_only = true`),
+  najwyżej raz na dobę. Po trzech próbach w tygodniu przestaje
+  (`i5NeedsOperator` w logu crona, ostrzeżenie w Sentry) — wtedy operator:
+  karta faktury, historia wysyłek i ślad audytu pokazują, co KSeF odpowiadał.
+  I5 przy fakturze w innym stanie (np. `accepted` z niezamkniętym wpisem)
+  cron tylko liczy (`i5Other`) — to sprawa dla operatora.
 
 ---
 

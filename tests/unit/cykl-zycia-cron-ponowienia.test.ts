@@ -8,7 +8,10 @@ import type { JobContext } from '@/lib/jobs/registry';
  *   I6  failed klasy transient → ponowienie co godzinę, po 24 → TRANSIENT_EXHAUSTED;
  *   I7  failed KSEF_PAUSED po zdjęciu hamulca → ponowienie;
  *   hamulec włączony albo nieczytelny → żadnych ponowień, I1 nadal porządkowane;
- *   dokument specjalny → pominięty (zdarzenia nie da się odtworzyć).
+ *   dokument specjalny → pominięty (zdarzenia nie da się odtworzyć);
+ *   I5  (A3) zalegający wpis `sent` / zamiar `intent` > 48 h przy fakturze
+ *       failed/rejected → „tylko uzgodnij” z aktorem NULL, najwyżej raz na
+ *       dobę, po trzech próbach w tygodniu — operator (alarm).
  */
 
 const ID1 = '11111111-1111-4111-8111-111111111111';
@@ -21,7 +24,7 @@ type Row = Record<string, unknown>;
 
 const m = vi.hoisted(() => ({
   tables: { invoices: [] as Row[], audit_logs: [] as Row[] },
-  violations: [] as Array<{ invariant: string; invoice_id: string; tenant_id: string }>,
+  violations: [] as Array<{ invariant: string; invoice_id: string; tenant_id: string; detail?: Row }>,
   release: vi.fn(),
   send: vi.fn(),
   paused: vi.fn(),
@@ -53,7 +56,13 @@ function fakeAdmin() {
       const q = {
         select: () => q,
         update: (p: Row) => { patch = p; return q; },
-        eq: (k: string, v: unknown) => { recorded.push([k, v]); filters.push((r) => r[k] === v); return q; },
+        eq: (k: string, v: unknown) => {
+          recorded.push([k, v]);
+          // `kolumna->>klucz` jak w PostgREST: tekst z jsonb.
+          const [col, key] = k.split('->>');
+          filters.push((r) => (key ? String((r[col!] as Row | undefined)?.[key!] ?? '') === v : r[k] === v));
+          return q;
+        },
         in: (k: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[k])); return q; },
         is: (k: string, v: unknown) => { filters.push((r) => r[k] === v || (v === null && r[k] === undefined)); return q; },
         lt: (k: string, v: string) => { filters.push((r) => String(r[k]) < v); return q; },
@@ -76,6 +85,7 @@ vi.mock('@sentry/nextjs', () => ({ captureMessage: m.captureMessage, captureExce
 import {
   ENQUEUE_LOST_MESSAGE,
   I1_RELEASE_REASON,
+  LIFECYCLE_RECONCILE_MAX,
   LIFECYCLE_REQUEUE_MAX,
   runKsefLifecycleReconcile,
   TRANSIENT_EXHAUSTED_MESSAGE,
@@ -229,6 +239,88 @@ describe('I7 i hamulec', () => {
     m.tables.invoices = [failedRow(ID1, 'INFRA')];
     const report = await runKsefLifecycleReconcile(ctx);
     expect(report).toMatchObject({ paused: null, requeued: 0 });
+    expect(m.send).not.toHaveBeenCalled();
+  });
+});
+
+/** Wiersz audytu automatycznego „tylko uzgodnij” (aktor NULL, reconcile_only) sprzed `hoursAgo` godzin. */
+function autoReconcileAudit(invoiceId: string, hoursAgo: number): Row {
+  return { ...autoRequeueAudit(invoiceId, hoursAgo), details_json: { reconcile_only: true } };
+}
+const i5 = (invoiceId: string) => ({ invariant: 'I5', invoice_id: invoiceId, tenant_id: TENANT, detail: { session: 'S-1' } });
+
+describe('I5 — zalegający wpis: automatyczne „tylko uzgodnij” (A3)', () => {
+  it('failed RESULT_UNCERTAIN z wpisem sprzed 3 dni: jedno zlecenie reconcileOnly (RPC z p_reconcile_only = true, aktor NULL)', async () => {
+    m.violations = [i5(ID1)];
+    m.tables.invoices = [failedRow(ID1, 'RESULT_UNCERTAIN')];
+
+    const report = await runKsefLifecycleReconcile(ctx);
+
+    expect(report).toMatchObject({ i5Reconciled: 1, requeued: 0, errors: 0 });
+    expect(m.send).toHaveBeenCalledTimes(1);
+    const event = m.send.mock.calls[0]![0] as { singletonKey: string; data: Record<string, unknown> };
+    expect(event.singletonKey).toBe(ID1);
+    expect(event.data).toMatchObject({ invoiceId: ID1, reconcileOnly: true });
+    expect(sqlCalls[0]![1]).toEqual([ID1, TENANT, event.data.sendAttemptId, null, true]);
+  });
+
+  it('rejected z otwartym wpisem też (RPC dopuszcza rejected w trybie uzgodnienia); kilka wierszy I5 tej samej faktury = jedno zlecenie', async () => {
+    m.violations = [i5(ID1), i5(ID1)];
+    m.tables.invoices = [failedRow(ID1, 'KSEF_REJECTED', { ksef_status: 'rejected' })];
+    const report = await runKsefLifecycleReconcile(ctx);
+    expect(report.i5Reconciled).toBe(1);
+    expect(m.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('najwyżej raz na dobę: próba sprzed 5 h — czekamy; ponowienia I6 (bez reconcile_only) się nie liczą', async () => {
+    m.violations = [i5(ID1), i5(ID2)];
+    m.tables.invoices = [failedRow(ID1, 'RESULT_UNCERTAIN'), failedRow(ID2, 'TRANSIENT_EXHAUSTED')];
+    m.tables.audit_logs.push(autoReconcileAudit(ID1, 5));
+    m.tables.audit_logs.push({ ...autoRequeueAudit(ID2, 2), details_json: { reconcile_only: false } });
+
+    const report = await runKsefLifecycleReconcile(ctx);
+
+    expect(report).toMatchObject({ i5Reconciled: 1, i5Deferred: 1 });
+    expect((m.send.mock.calls[0]![0] as { singletonKey: string }).singletonKey).toBe(ID2);
+  });
+
+  it(`po ${3} próbach w tygodniu: bez kolejnej — operator (alarm)`, async () => {
+    m.violations = [i5(ID1)];
+    m.tables.invoices = [failedRow(ID1, 'RESULT_UNCERTAIN')];
+    for (const h of [26, 50, 74].slice(0, LIFECYCLE_RECONCILE_MAX)) m.tables.audit_logs.push(autoReconcileAudit(ID1, h));
+
+    const report = await runKsefLifecycleReconcile(ctx);
+
+    expect(report).toMatchObject({ i5Reconciled: 0, i5NeedsOperator: 1 });
+    expect(m.send).not.toHaveBeenCalled();
+    expect(m.captureMessage).toHaveBeenCalled();
+  });
+
+  it('faktura poza failed/rejected (accepted z niezamkniętym wpisem, queued) — tylko alarm, bez zlecenia', async () => {
+    m.violations = [i5(ID1), i5(ID2)];
+    m.tables.invoices = [
+      failedRow(ID1, 'RESULT_UNCERTAIN', { ksef_status: 'accepted', ksef_number: 'K-1' }),
+      failedRow(ID2, 'RESULT_UNCERTAIN', { ksef_status: 'queued' }),
+    ];
+    const report = await runKsefLifecycleReconcile(ctx);
+    expect(report).toMatchObject({ i5Reconciled: 0, i5Other: 2 });
+    expect(m.send).not.toHaveBeenCalled();
+  });
+
+  it('dokument specjalny — pominięty (zdarzenia nie da się odtworzyć, A4)', async () => {
+    m.violations = [i5(ID1)];
+    m.tables.invoices = [failedRow(ID1, 'RESULT_UNCERTAIN', { invoice_kind: 'correction' })];
+    const report = await runKsefLifecycleReconcile(ctx);
+    expect(report).toMatchObject({ i5Reconciled: 0, skippedSpecial: 1 });
+    expect(m.send).not.toHaveBeenCalled();
+  });
+
+  it('hamulec włączony: bez uzgadniania z crona', async () => {
+    m.paused.mockResolvedValue(true);
+    m.violations = [i5(ID1)];
+    m.tables.invoices = [failedRow(ID1, 'RESULT_UNCERTAIN')];
+    const report = await runKsefLifecycleReconcile(ctx);
+    expect(report.i5Reconciled).toBe(0);
     expect(m.send).not.toHaveBeenCalled();
   });
 });

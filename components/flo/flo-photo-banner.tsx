@@ -20,11 +20,96 @@ import { useEffect, useState } from 'react';
 const POLL_MS = 15_000;
 const GIVE_UP_MS = 3 * 60 * 1000;
 
-export function FloPhotoBanner({
-  /** najświeższa propozycja kosztowa — po niej poznajemy, że odczyt gotowy */
+/** Wynik odczytu paragonu z adresu; `null` = jeszcze nie wiemy. */
+export type PhotoBannerResult = 'failed' | 'read' | null;
+
+/**
+ * Czy paragon z adresu (`?paragon=<ocrJobId>`) ma już wynik.
+ *
+ * PORAŻKA NIE ZALEŻY OD CZASU: karta „nie odczytałem” niesie numer zadania,
+ * więc rozpoznajemy ją po nim — tak samo na serwerze i w przeglądarce, bez
+ * migania przy hydratacji. Sukces poznajemy po koszcie odczytanym ze zdjęcia,
+ * młodszym niż wejście na ekran (z zapasem jednego cyklu odpytywania).
+ */
+export function photoBannerResult({
+  paragon,
+  failedOcrJobIds,
   latestExpenseAt,
+  startedAt,
+}: {
+  paragon: string;
+  failedOcrJobIds: readonly string[];
+  latestExpenseAt: string | null;
+  startedAt: number | null;
+}): PhotoBannerResult {
+  if (failedOcrJobIds.includes(paragon)) return 'failed';
+  if (
+    latestExpenseAt !== null &&
+    startedAt !== null &&
+    Date.parse(latestExpenseAt) > startedAt - POLL_MS
+  ) {
+    return 'read';
+  }
+  return null;
+}
+
+/**
+ * Mocniejszy z dwóch wyników: porażka > odczyt > brak. Pasek pamięta
+ * najmocniejszy wynik, jaki widział dla danego paragonu — karta, z której
+ * go poznał, może zniknąć z wątku (klient ją zamknął albo potwierdził),
+ * a wtedy pasek wracałby do „Czytam paragon” i odpytywania od nowa.
+ */
+export function strongerPhotoBannerResult(
+  a: PhotoBannerResult,
+  b: PhotoBannerResult,
+): PhotoBannerResult {
+  if (a === 'failed' || b === 'failed') return 'failed';
+  if (a === 'read' || b === 'read') return 'read';
+  return null;
+}
+
+/**
+ * Zdanie paska. Porażka ma pierwszeństwo przed „odczytany” i „dłużej niż
+ * zwykle”: pasek obiecuje „jeśli się nie uda, powiem o tym wprost”, więc nie
+ * wolno mu przeczyć karcie „Nie odczytałem tego zdjęcia” tuż pod nim.
+ * Zdanie porażki powtarza treść tej karty (`expense.review:failed`
+ * w `lib/flo/copy.ts`), a drogę wyjścia zostawia karcie.
+ */
+export function photoBannerMessage({
+  paragon,
+  result,
+  slow,
+}: {
+  paragon: string;
+  result: PhotoBannerResult;
+  slow: boolean;
+}): string {
+  if (paragon === 'brak-zdjecia') {
+    return 'Nie dostałem zdjęcia — spróbuj udostępnić je jeszcze raz.';
+  }
+  if (paragon === 'blad') {
+    return 'Nie udało mi się przyjąć tego zdjęcia. Nic nie zginęło — spróbuj ponownie albo dodaj paragon w Wydatkach.';
+  }
+  if (result === 'failed') {
+    return 'Nie odczytałem tego paragonu. Zdjęcie zostało w archiwum, nic nie przepadło — co dalej, piszę w karcie poniżej.';
+  }
+  if (result === 'read') {
+    return 'Paragon odczytany — koszt jest w wątku poniżej.';
+  }
+  if (slow) {
+    return 'Czytam ten paragon dłużej niż zwykle. Zdjęcie jest bezpieczne w archiwum — wrócę z wynikiem, a jeśli się nie uda, powiem o tym wprost.';
+  }
+  return 'Mam Twoje zdjęcie. Czytam paragon — wynik pojawi się tutaj.';
+}
+
+export function FloPhotoBanner({
+  /** najświeższy koszt odczytany ze zdjęcia — po nim poznajemy, że odczyt gotowy */
+  latestExpenseAt,
+  /** zadania OCR z kartą porażki w wątku — po nich poznajemy, że odczyt nie wyszedł */
+  failedOcrJobIds = [],
 }: {
   latestExpenseAt: string | null;
+  failedOcrJobIds?: readonly string[];
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -45,8 +130,31 @@ export function FloPhotoBanner({
     setStartedAt(Date.now());
   }, []);
 
+  const current = paragon
+    ? photoBannerResult({ paragon, failedOcrJobIds, latestExpenseAt, startedAt })
+    : null;
+
+  // Zapamiętany wynik dla TEGO paragonu (wzorzec „stan z poprzedniego
+  // renderu” z dokumentacji Reacta — bez efektu, więc bez klatki ze starym
+  // zdaniem). Inny paragon w adresie zaczyna od zera.
+  const [latched, setLatched] = useState<{
+    paragon: string | null;
+    result: PhotoBannerResult;
+  }>({ paragon, result: null });
+  const remembered = latched.paragon === paragon ? latched.result : null;
+  const result = strongerPhotoBannerResult(remembered, current);
+  if (latched.paragon !== paragon || latched.result !== result) {
+    setLatched({ paragon, result });
+  }
+
+  // Na pewno wiemy tylko o porażce: karta „nie odczytałem” niesie numer
+  // TEGO zadania. „Odczytany” to wniosek z czasu najświeższego kosztu —
+  // mógł przyjść z innego zdjęcia — więc pytamy dalej (do trzech minut),
+  // żeby karta porażki tego paragonu mogła go jeszcze poprawić.
+  const settled = result === 'failed';
+
   useEffect(() => {
-    if (startedAt === null) return;
+    if (startedAt === null || settled) return;
     if (!paragon || paragon === 'blad' || paragon === 'brak-zdjecia') return;
 
     const poll = setInterval(() => {
@@ -59,31 +167,11 @@ export function FloPhotoBanner({
     }, POLL_MS);
 
     return () => clearInterval(poll);
-  }, [paragon, router, startedAt]);
+  }, [paragon, router, settled, startedAt]);
 
   if (!paragon || hidden) return null;
 
-  // Odczyt się udał: nowy koszt jest młodszy niż moment wejścia na ekran.
-  const arrived =
-    latestExpenseAt !== null &&
-    startedAt !== null &&
-    Date.parse(latestExpenseAt) > startedAt - POLL_MS;
-
-  const message = (() => {
-    if (paragon === 'brak-zdjecia') {
-      return 'Nie dostałem zdjęcia — spróbuj udostępnić je jeszcze raz.';
-    }
-    if (paragon === 'blad') {
-      return 'Nie udało mi się przyjąć tego zdjęcia. Nic nie zginęło — spróbuj ponownie albo dodaj paragon w Wydatkach.';
-    }
-    if (arrived) {
-      return 'Paragon odczytany — koszt jest w wątku poniżej.';
-    }
-    if (slow) {
-      return 'Czytam ten paragon dłużej niż zwykle. Zdjęcie jest bezpieczne w archiwum — wrócę z wynikiem, a jeśli się nie uda, powiem o tym wprost.';
-    }
-    return 'Mam Twoje zdjęcie. Czytam paragon — wynik pojawi się tutaj.';
-  })();
+  const message = photoBannerMessage({ paragon, result, slow });
 
   return (
     <div

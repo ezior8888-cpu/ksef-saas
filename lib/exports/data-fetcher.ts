@@ -475,6 +475,8 @@ function mapInvoiceRow(
     invoiceNumber: row.internal_number ?? row.ksef_number ?? '',
     currency: row.currency,
     invoiceType: mapInvoiceKind(row.invoice_kind),
+    importedDocumentType: importedDocumentType(row),
+    importedFromKsef: row.origin === 'ksef_import',
     issueDate: row.issue_date,
     saleDate: row.sale_date ?? row.issue_date,
     paymentDueDate: row.payment_due_date ?? undefined,
@@ -513,6 +515,17 @@ export function annotationsFromFa3(fa3: Json | null): JpkInvoice['annotations'] 
     out.vatExemptionBasis = o.vatExemptionBasis.trim();
   }
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * W9 (C5a): import historii KSeF zapisuje korektę, zaliczkę i ROZ jako
+ * `invoice_kind = regular` (bez powiązań), a rodzaj z pliku zostaje
+ * w `invoice_type`. JPK nie może ich policzyć jak zwykłej sprzedaży.
+ */
+function importedDocumentType(row: InvoiceRow): JpkInvoice['importedDocumentType'] {
+  if (row.invoice_kind !== 'regular') return undefined;
+  const type = (row.invoice_type ?? '').toUpperCase();
+  return type === 'KOR' || type === 'ZAL' || type === 'ROZ' ? type : undefined;
 }
 
 function mapInvoiceKind(

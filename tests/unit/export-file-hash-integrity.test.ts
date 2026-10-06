@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { GusLookupResult } from '@/lib/gus/client';
 import type { JobContext } from '@/lib/jobs/registry';
 
 type Row = Record<string, unknown>;
@@ -45,6 +46,20 @@ vi.mock('@/lib/exports/tax-office', () => ({
   readTenantTaxOffice: async () => '1433',
 }));
 vi.mock('@/lib/exports/taxpayer-email', () => ({ readTaxpayerEmail: async () => 'owner@example.test' }));
+// JPK_FA czyta adres siedziby z GUS (`readIssuerRegisteredAddress`). Bez atrapy
+// test pytał testową bazę GUS przez sieć i padał, gdy ta nie odpowiadała.
+// `gusUsesSandbox` zostaje prawdziwy.
+vi.mock('@/lib/gus/client', async (original) => ({
+  ...(await original<typeof import('@/lib/gus/client')>()),
+  lookupCompanyByNip: async (nip: string): Promise<GusLookupResult> => ({
+    kind: 'found',
+    data: {
+      nip, regon: '012345678', name: 'Firma',
+      postalCode: '00-001', city: 'Warszawa', street: 'ul. Testowa', buildingNumber: '1',
+      voivodeship: 'MAZOWIECKIE', county: 'Warszawa', commune: 'Śródmieście',
+    },
+  }),
+}));
 vi.mock('@/lib/exports/data-fetcher', () => ({
   fetchInvoicesForExport: async () => ({
     issuer: { nip: '1234567890', name: 'Firma' },

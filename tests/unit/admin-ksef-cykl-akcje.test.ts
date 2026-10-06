@@ -133,6 +133,24 @@ describe('operatorRequeueAction', () => {
     expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'invoice.operator_reconcile' }));
   });
 
+  it.each([
+    ['cudzy duplikat 440', 'KSEF_DUPLICATE_RECONCILE', OPERATOR_MESSAGES.duplicateRequeue],
+    ['inne środowisko', 'ENV_MISMATCH', OPERATOR_MESSAGES.envMismatchRequeue],
+    ['błąd treści', 'XSD_INVALID', OPERATOR_MESSAGES.terminal],
+  ])('A4: akcja decyduje jak przycisk — %s: „Wyślij ponownie” odmówione bez zlecenia', async (_l, code, reason) => {
+    m.invoice = row({ last_error_code: code });
+    await expect(operatorRequeueAction(ID, { reconcileOnly: false })).resolves.toEqual({ success: false, error: reason });
+    expect(m.send).not.toHaveBeenCalled();
+    expect(m.audit).not.toHaveBeenCalled();
+  });
+
+  it('A4: ENQUEUE_LOST — „Wyślij ponownie” operatora zlecone', async () => {
+    m.invoice = row({ last_error_code: 'ENQUEUE_LOST' });
+    const tx: Tx = { executeSql: vi.fn(async () => ({ rows: [{ id: ID }], rowCount: 1 })) };
+    sendRunningStep(tx);
+    await expect(operatorRequeueAction(ID, { reconcileOnly: false })).resolves.toEqual({ success: true, message: OPERATOR_MESSAGES.requeued });
+  });
+
   it('A2: „tylko uzgodnij” przy samym zamiarze wysyłki (intent) — zlecenie; wpis zamknięty (abandoned) — odmowa', async () => {
     m.openSent = [{ id: 'sub-1', status: 'abandoned' }];
     await expect(operatorRequeueAction(ID, { reconcileOnly: true })).resolves.toEqual({

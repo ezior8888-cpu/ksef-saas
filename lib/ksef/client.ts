@@ -99,6 +99,16 @@ export class KsefApiError extends Error {
  * atrapy w repo mają jeszcze `exceptionDetailList` na wierzchu.
  */
 export function ksefErrorCodes(body: unknown): number[] {
+  // Ciało jako tekst: `ksefFetch` parsuje już `application/problem+json`, ale
+  // błąd mógł przyjść inną drogą (atrapa, odpowiedź z błędnym nagłówkiem).
+  // JSON w tekście czytamy tak samo jak sparsowany (D-A4-1a).
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return [];
+    }
+  }
   if (!body || typeof body !== 'object') return [];
   const b = body as {
     errors?: Array<{ code?: unknown }>;

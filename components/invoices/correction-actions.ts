@@ -104,7 +104,8 @@ function normalizeBankAccount(raw: string | undefined): string | undefined {
 
 /**
  * Pozycje z faktury pierwotnej (DB) mogą mieć stare stawki (np. zw) — forma korekt dopuszcza wyłącznie pełny zestaw do FA.
- * Zwykła faktura zapisuje kody aplikacji (`np`, `np_ii` — AUD-70), import z KSeF wartości P_12 z XML (`np I`, `np II`).
+ * Zwykła faktura zapisuje kody aplikacji (`np`, `np_ii` — AUD-70); import z KSeF od W9 też (`lib/xml/fa3-p12.ts`),
+ * a wcześniejsze wiersze importu mogą mieć surowe P_12 z XML (`np I`, `np II`).
  */
 function vatRateFromDbForCorrectionLine(raw: unknown): CorrectionLineSchema['vatRate'] {
   const s = typeof raw === 'string' ? raw.trim() : '';

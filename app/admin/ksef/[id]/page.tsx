@@ -125,6 +125,45 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
         )}
       </section>
 
+      {submissions.some((s) => s.originalCheck) && (
+        <section className="space-y-3">
+          <h2 className="font-semibold text-lg">Oryginał z KSeF przy duplikacie 440 (original_check)</h2>
+          {submissions.filter((s) => s.originalCheck).map((s) => {
+            const c = s.originalCheck!;
+            const fields: Array<[string, string | null]> = [
+              ['Numer KSeF oryginału', s.originalKsefNumber],
+              ['Wpis próby', `${s.status ?? '—'}${s.status === 'sent' || s.status === 'intent' ? ' (otwarty — bieżący)' : ' (zamknięty — historyczny)'}`],
+              ['Powód', c.reason],
+              ['Ostatnie nieudane sprawdzenie', c.recheck ? `${c.recheck.reason}${c.recheck.httpStatus ? ` (HTTP ${c.recheck.httpStatus})` : ''}, ${when(c.recheck.checkedAt)}` : null],
+              ['Środowisko', c.env],
+              ['Sprawdzono', when(c.checkedAt)],
+              ['Numer faktury (P_2)', c.summary?.number ?? null],
+              ['Data wystawienia (P_1)', c.summary?.issueDate ?? null],
+              ['Nabywca', [c.summary?.buyerName, c.summary?.buyerNip].filter(Boolean).join(', ') || null],
+              ['Brutto', c.summary?.gross ? `${c.summary.gross} ${c.summary.currency ?? ''}` : null],
+              ['Program', c.summary?.systemInfo ?? null],
+              ['Data nadania numeru', c.acquiredAt],
+              ['Treść jak nasza (poza nagłówkiem)', c.sameContentExceptHeader === null ? null : c.sameContentExceptHeader ? 'tak' : 'nie'],
+              ['W historii tej faktury', c.ownHistory === null ? null : c.ownHistory ? 'tak' : 'nie'],
+              ['HTTP odmowy pobrania', c.httpStatus === null ? null : String(c.httpStatus)],
+              ['Faktura w FaktFlow z tym numerem KSeF', c.knownInvoice ? `${c.knownInvoice.internalNumber ?? 'bez numeru'} (${c.knownInvoice.id})` : null],
+              ['SHA-256 oryginału', c.sha256],
+              ['Archiwum', c.archivePath],
+            ];
+            return (
+              <dl key={s.id} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 rounded-2xl border border-glass-border bg-foreground/3 p-4 text-sm">
+                {fields.filter(([, v]) => v).map(([label, value]) => (
+                  <div key={label} className="flex gap-2">
+                    <dt className="text-muted-foreground">{label}:</dt>
+                    <dd className="font-mono text-xs break-all">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            );
+          })}
+        </section>
+      )}
+
       <section className="space-y-3">
         <h2 className="font-semibold text-lg">Ślad audytu (ostatnie 50)</h2>
         {audit.length === 0 ? (

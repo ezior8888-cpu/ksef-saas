@@ -6,8 +6,10 @@
  * `send-error-codes.ts`, który re-eksportuje wszystko stąd.
  *
  * Klasa kodu decyduje o stanie faktury po wyczerpaniu prób i o wyjściach:
- *   - terminal   — błąd TREŚCI dokumentu (XSD, odrzucenie przez KSeF, strażnik
- *                  dokumentu): tylko powrót do szkicu i poprawa;
+ *   - terminal   — ta wysyłka nie dojdzie do skutku bez decyzji o dokumencie
+ *                  (błąd treści: XSD, odrzucenie przez KSeF, strażnik
+ *                  dokumentu; numer zajęty; inne środowisko KSeF): tylko
+ *                  powrót do szkicu;
  *   - transient  — awaria, której zniknięcie nie wymaga zmiany dokumentu
  *                  (KSeF leży, limit, sesja, nasza baza): ponowienie,
  *                  część automatycznie (cron, PR 4);
@@ -22,12 +24,14 @@ export const SEND_ERROR_CODES = {
   XSD_INVALID: 'XSD_INVALID',
   KSEF_REJECTED: 'KSEF_REJECTED',
   INVALID_DOCUMENT: 'INVALID_DOCUMENT',
+  KSEF_NUMBER_TAKEN: 'KSEF_NUMBER_TAKEN',
   KSEF_UNAVAILABLE: 'KSEF_UNAVAILABLE',
   KSEF_RATE_LIMIT: 'KSEF_RATE_LIMIT',
   KSEF_SESSION: 'KSEF_SESSION',
   INFRA: 'INFRA',
   CREDENTIALS_UNAVAILABLE: 'CREDENTIALS_UNAVAILABLE',
   TRANSIENT_EXHAUSTED: 'TRANSIENT_EXHAUSTED',
+  NOT_IN_KSEF: 'NOT_IN_KSEF',
   KSEF_PAUSED: 'KSEF_PAUSED',
   KOR_HOLD: 'KOR_HOLD',
   ROZ_HOLD_RECONCILE: 'ROZ_HOLD_RECONCILE',
@@ -47,18 +51,28 @@ export const SEND_ERROR_CLASS: Record<SendErrorCode, SendErrorClass> = {
   XSD_INVALID: 'terminal',
   KSEF_REJECTED: 'terminal',
   INVALID_DOCUMENT: 'terminal',
+  // D-A4-1 (00142): numer faktury jest w KSeF na fakturze tej firmy z innego
+  // programu (treść sprawdzona) — klient wystawia z nowym numerem.
+  KSEF_NUMBER_TAKEN: 'terminal',
   KSEF_UNAVAILABLE: 'transient',
   KSEF_RATE_LIMIT: 'transient',
   KSEF_SESSION: 'transient',
   INFRA: 'transient',
   CREDENTIALS_UNAVAILABLE: 'transient',
   TRANSIENT_EXHAUSTED: 'transient',
+  // A2b (00141): „tylko uzgodnij” stwierdził, że KSeF nie ma faktury od nas
+  // (zamiar porzucony, wpis STALE, brak dowodu kontaktu). Bez automatu —
+  // ponowna wysyłka to decyzja klienta (data wystawienia, B1/B2).
+  NOT_IN_KSEF: 'transient',
   KSEF_PAUSED: 'hold',
   KOR_HOLD: 'hold',
   ROZ_HOLD_RECONCILE: 'hold',
   KSEF_DUPLICATE_RECONCILE: 'reconcile',
   RESULT_UNCERTAIN: 'reconcile',
-  ENV_MISMATCH: 'reconcile',
+  // D-A4-2 (00143): zdarzenie z innego środowiska KSeF niż skonfigurowane.
+  // Ponowienie wysłałoby fakturę w bieżącym (np. dokument z TEST na PROD) —
+  // tylko szkic, klient decyduje, czy wysłać ją tutaj.
+  ENV_MISMATCH: 'terminal',
   INVALID_EVENT: 'reconcile',
   ENQUEUE_LOST: 'reconcile',
   NO_CERTIFICATE: 'setup',

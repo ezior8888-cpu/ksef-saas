@@ -134,4 +134,14 @@ describe('portal: JPK_FA(4)', () => {
     expect(odp.status).toBe(422);
     expect(await odp.json()).toEqual({ error: komunikat });
   });
+
+  it('W9: faktura z importu ze stawką „0 WDT” → 422 z numerem faktury (nie 500)', async () => {
+    mocks.issued = [faktura({
+      invoiceNumber: 'FV/WDT/1',
+      lines: [{ position: 1, name: 'Towar do DE', unit: 'szt.', quantity: 1, unitPriceNet: 100, netAmount: 100, vatRate: '0 WDT', vatAmount: 0 }],
+    })];
+    const odp = await pobierz();
+    expect(odp.status).toBe(422);
+    expect((await odp.json()).error).toMatch(/JPK wstrzymany:.*FV\/WDT\/1/);
+  });
 });

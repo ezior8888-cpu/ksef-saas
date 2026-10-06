@@ -8,6 +8,7 @@ import {
   type OcrFacts,
   type SellerHistory,
 } from '@/lib/flo/functions/expense-review';
+import { fingerprintOf } from '@/lib/flo/fingerprint';
 import { containsSensitive, redactForModel, redactText } from '@/lib/flo/redact';
 
 /**
@@ -215,6 +216,34 @@ describe('W-01 — karta dla klienta', () => {
     expect(proposal.topicKey).toBe('expense.review:exp-1');
   });
 
+  it('wywołanie bez nowych pól daje ten sam odcisk co przed obsługą walut', () => {
+    // Karty już leżące w bazie mają odcisk liczony z tych czterech faktów.
+    // Zmiana odcisku dla złotówek = każda z nich „nieaktualna” przy kliknięciu.
+    const proposal = buildExpenseReviewProposal({
+      tenantId: 'ten-1',
+      expenseId: 'exp-1',
+      facts: facts(),
+      history,
+      applied: { kpirColumn: 'col_13', categoryLabel: 'paliwo' },
+      now: NOW,
+    });
+
+    expect(proposal.payload?.facts).toEqual({
+      grossTotal: 312.4,
+      kpirColumn: 'col_13',
+      reviewedAt: 0,
+      deductible: 1,
+    });
+    expect(proposal.fingerprint).toBe(
+      fingerprintOf({ grossTotal: 312.4, kpirColumn: 'col_13', reviewedAt: 0, deductible: 1 }),
+    );
+    // Wartość z wersji sprzed zmiany (ef9bb43) — pilnuje też samego skrótu.
+    expect(proposal.fingerprint).toBe('d3b4c560f53a65272a8d7a8eccb9617a');
+    // Złotówki nie dostają przycisku „otwórz” — zostaje „Zgadza się”.
+    expect(proposal.payload).not.toHaveProperty('primaryIntent');
+    expect(proposal.payload).not.toHaveProperty('primaryLabel');
+  });
+
   it('przy wątpliwościach PYTA i nie twierdzi, że zaksięgował', () => {
     // To jest różnica, która decyduje o zaufaniu: agent nie może meldować
     // roboty, której nie jest pewien.
@@ -244,6 +273,24 @@ describe('W-01 — karta dla klienta', () => {
     expect(proposal.body).toContain('archiwum');
     expect(proposal.body).toMatch(/ręcznie|nowe ujęcie/);
     expect(proposal.topicKey).toBe('expense.review:ocr:ocr-7');
+  });
+
+  it('AWARIA 3: karta porażki prowadzi do wydatków zamiast udawać „Zgadza się”', () => {
+    // Wydatku nie ma, więc wykonawca zawsze kończył się „Propozycja bez
+    // identyfikatora wydatku”. Przycisk ma otworzyć listę wydatków.
+    const proposal = buildOcrFailedProposal('ten-1', 'ocr-7', NOW);
+
+    expect(proposal.payload).toEqual({
+      // Klucze, na których opiera się baner — bez zmian.
+      ocrJobId: 'ocr-7',
+      failed: 1,
+      primaryIntent: 'open',
+      primaryLabel: 'Wpisz ręcznie',
+    });
+    expect(proposal.evidence?.[0]?.href).toBe('/expenses');
+    // Odcisk bez zmian — wciąż tylko z identyfikatora zadania OCR.
+    expect(proposal.fingerprint).toBe(fingerprintOf({ ocrJobId: 'ocr-7' }));
+    expect(proposal.priority).toBe(45);
   });
 
   it('kwota w karcie jest sformatowana przez serwer', () => {

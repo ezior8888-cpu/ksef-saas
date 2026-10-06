@@ -22,6 +22,7 @@ import {
   settlementVatSummaries,
   type AdvanceInvoiceSettlementRow,
 } from '@/lib/ksef/fa3-advance-generator';
+import { importedVatRateLabel } from '@/lib/xml/fa3-p12';
 import { roundToCents, summarizeVatPerRate } from '@/lib/xml/invoice-calculator';
 import type { InvoiceLineItem, VatRate } from '@/types/invoice';
 
@@ -72,6 +73,13 @@ export interface JpkInvoice {
   /** Waluta kwot dokumentu; brak w starych ręcznie budowanych danych oznacza PLN. */
   currency?: string | null;
   invoiceType: 'regular' | 'correction' | 'advance' | 'final';
+  /**
+   * Rodzaj z pliku KSeF dokumentu z importu zapisanego jako zwykły (import nie
+   * zna powiązań korekty, zaliczek, ROZ — W9). JPK go nie wykaże poprawnie.
+   */
+  importedDocumentType?: 'KOR' | 'ZAL' | 'ROZ';
+  /** Faktura z importu historii KSeF (`origin = ksef_import`) — pozycje z parsera, nie z FaktFlow. */
+  importedFromKsef?: boolean;
   issueDate: string;
   saleDate?: string;
   paymentDueDate?: string;
@@ -176,6 +184,53 @@ export class JpkFaCorrectionNotSupportedError extends Error {
     );
     this.name = 'JpkFaCorrectionNotSupportedError';
   }
+}
+
+/** Początek każdej odmowy dokumentu — po nim job rozpoznaje powód dla człowieka. */
+export const JPK_DOCUMENT_REFUSAL_PREFIX = 'JPK wstrzymany:';
+
+const IMPORTED_TYPE_LABEL: Record<NonNullable<JpkInvoice['importedDocumentType']>, string> = {
+  KOR: 'korygująca',
+  ZAL: 'zaliczkowa',
+  ROZ: 'rozliczeniowa',
+};
+
+/**
+ * W9 (C5a): dokument, którego JPK (FA i V7M) nie wykaże poprawnie — faktura
+ * z importu historii KSeF ze stawką bez odpowiednika w FaktFlow („0 WDT”,
+ * „0 EX”, „22”…, „nieznana”) albo zaimportowana korekta / zaliczka / ROZ.
+ * Plik nie powstaje (lepiej niż sprzedaż pominięta albo w złym polu),
+ * a komunikat nazywa dokument i mówi, co zrobić.
+ */
+export class JpkDocumentNotSupportedError extends Error {
+  constructor(
+    readonly invoiceNumber: string,
+    readonly ksefNumber: string | undefined,
+    reason: string,
+  ) {
+    super(
+      `${JPK_DOCUMENT_REFUSAL_PREFIX} faktura ${invoiceNumber}${ksefNumber ? ` (KSeF ${ksefNumber})` : ''} ${reason} ` +
+        'Plik nie powstał, żeby nie pominąć ani nie pomylić tej sprzedaży — JPK za ten okres trzeba przygotować poza FaktFlow (KPiR i CSV z FaktFlow działają).',
+    );
+    this.name = 'JpkDocumentNotSupportedError';
+  }
+}
+
+function unsupportedRate(inv: JpkInvoice, rate: string): JpkDocumentNotSupportedError {
+  const label = importedVatRateLabel(rate);
+  return new JpkDocumentNotSupportedError(
+    inv.invoiceNumber,
+    inv.ksefNumber,
+    `ma stawkę VAT „${rate}”${label ? ` (${label})` : ''}, której FaktFlow jeszcze nie wykazuje w JPK.`,
+  );
+}
+
+function unsupportedImportedType(inv: JpkInvoice, type: NonNullable<JpkInvoice['importedDocumentType']>): JpkDocumentNotSupportedError {
+  return new JpkDocumentNotSupportedError(
+    inv.invoiceNumber,
+    inv.ksefNumber,
+    `to zaimportowana z KSeF faktura ${IMPORTED_TYPE_LABEL[type]} — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki), więc nie wykaże jej poprawnie w JPK.`,
+  );
 }
 
 // ============================================================================
@@ -313,8 +368,27 @@ const RATE_ORDER = ['23', '8', '5', 'oo', 'np', 'np_ii', '0', 'zw'];
 const P12_VALUE: Readonly<Record<string, string>> = { np_ii: 'np' };
 
 /** Kwoty w stawkach i P_15 — jak na fakturze w KSeF (ROZ po odjęciu zaliczek). */
+/**
+ * W9: pozycje faktury z importu muszą sumować się do jej netto z KSeF —
+ * inaczej (np. ceny brutto: P_11A bez P_11, netto pozycji = 0) sprzedaż po
+ * cichu wypadłaby z pól stawek.
+ */
+export function importedLinesMismatch(inv: Pick<JpkInvoice, 'importedFromKsef' | 'netTotal' | 'lines'>): boolean {
+  if (!inv.importedFromKsef) return false;
+  const sum = inv.lines.reduce((s, l) => s + (Number.isFinite(l.netAmount) ? l.netAmount : 0), 0);
+  return Math.abs(roundToCents(sum) - roundToCents(inv.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01;
+}
+
 export function amountsOf(inv: JpkInvoice): InvoiceAmounts {
-  const items = inv.lines.map(toLineItem);
+  if (inv.importedDocumentType) throw unsupportedImportedType(inv, inv.importedDocumentType);
+  if (importedLinesMismatch(inv)) {
+    throw new JpkDocumentNotSupportedError(
+      inv.invoiceNumber,
+      inv.ksefNumber,
+      'ma pozycje, których netto nie sumuje się do sumy netto faktury z KSeF (np. ceny brutto — P_11A), więc FaktFlow nie wykaże jej poprawnie w JPK.',
+    );
+  }
+  const items = inv.lines.map((line) => toLineItem(line, inv));
   const byRate =
     inv.invoiceType === 'final'
       ? settlementVatSummaries(items, inv.advanceSettlement ?? [])
@@ -332,11 +406,9 @@ export function amountsOf(inv: JpkInvoice): InvoiceAmounts {
   return { rates, p15 };
 }
 
-function toLineItem(line: JpkInvoiceLine): InvoiceLineItem {
+function toLineItem(line: JpkInvoiceLine, inv: JpkInvoice): InvoiceLineItem {
   const rate = line.vatRate.trim().toLowerCase();
-  if (!RATE_FIELDS[rate]) {
-    throw new Error(`JPK_FA: stawka "${line.vatRate}" nie ma pola w JPK_FA(4).`);
-  }
+  if (!Object.prototype.hasOwnProperty.call(RATE_FIELDS, rate)) throw unsupportedRate(inv, line.vatRate.trim());
   const pct = rate === '23' || rate === '8' || rate === '5' ? Number(rate) / 100 : 0;
   const vat = line.vatAmount ?? roundToCents(line.netAmount * pct);
   return {

@@ -11,6 +11,8 @@ import type {
   SendInvoiceResponse,
   InvoiceStatusResponse,
   KsefEnvironment,
+  QueryInvoicesRequest,
+  QueryInvoicesResponse,
   SessionInvoicesResponse,
 } from '@/types/ksef';
 import { INVOICE_STATUS } from '@/types/ksef';
@@ -258,12 +260,23 @@ export const KSEF_SYSTEM_STATUS_MIN = 500;
  * komunikat podaje numer KSeF oryginału — bez tego faktura wisiałaby jako
  * błąd, choć w KSeF jest przyjęta.
  */
+/** Nasza odrzucona wysyłka: skrót pliku z odpowiedzi KSeF i numery tej próby (D-A4-1). */
+export interface RejectedAttempt {
+  /** SHA-256 naszego pliku, Base64 — z `InvoiceStatusResponse.invoiceHash`. */
+  invoiceHash?: string | null;
+  sessionReferenceNumber?: string | null;
+  invoiceReferenceNumber?: string | null;
+}
+
 export class KsefInvoiceRejectedError extends Error {
   readonly code: number;
   readonly originalKsefNumber: string | null;
   readonly originalSessionReferenceNumber: string | null;
+  readonly ourInvoiceHash: string | null;
+  readonly ourSessionReferenceNumber: string | null;
+  readonly ourInvoiceReferenceNumber: string | null;
 
-  constructor(code: number, status: InvoiceStatusResponse['status']) {
+  constructor(code: number, status: InvoiceStatusResponse['status'], attempt: RejectedAttempt = {}) {
     const details = status.details?.join('; ') ?? '';
     const original = status.extensions?.originalKsefNumber ?? null;
     const originalSession = status.extensions?.originalSessionReferenceNumber ?? null;
@@ -279,6 +292,9 @@ export class KsefInvoiceRejectedError extends Error {
     this.code = code;
     this.originalKsefNumber = original;
     this.originalSessionReferenceNumber = originalSession;
+    this.ourInvoiceHash = attempt.invoiceHash ?? null;
+    this.ourSessionReferenceNumber = attempt.sessionReferenceNumber ?? null;
+    this.ourInvoiceReferenceNumber = attempt.invoiceReferenceNumber ?? null;
   }
 
   get isDuplicate(): boolean {
@@ -291,7 +307,10 @@ export class KsefInvoiceRejectedError extends Error {
  * po numerze referencyjnym, żeby obie drogi decydowały identycznie.
  * Akceptacja → status; w toku → null; odrzucenie albo awaria KSeF → wyjątek.
  */
-function settleInvoiceStatus(status: InvoiceStatusResponse): InvoiceStatusResponse | null {
+function settleInvoiceStatus(
+  status: InvoiceStatusResponse,
+  references?: { sessionReferenceNumber: string; invoiceReferenceNumber: string },
+): InvoiceStatusResponse | null {
   const code = ksefNumericStatusCode(status.status?.code);
   if (code === INVOICE_STATUS.ACCEPTED) {
     return status;
@@ -306,7 +325,11 @@ function settleInvoiceStatus(status: InvoiceStatusResponse): InvoiceStatusRespon
     );
   }
   if (Number.isFinite(code) && code >= INVOICE_STATUS.REJECTED) {
-    throw new KsefInvoiceRejectedError(code, status.status);
+    throw new KsefInvoiceRejectedError(code, status.status, {
+      invoiceHash: status.invoiceHash ?? null,
+      sessionReferenceNumber: references?.sessionReferenceNumber ?? null,
+      invoiceReferenceNumber: references?.invoiceReferenceNumber ?? status.referenceNumber ?? null,
+    });
   }
   return null;
 }
@@ -342,7 +365,7 @@ export async function checkInvoiceStatusByReference(
           : undefined,
       },
     );
-    const settled = settleInvoiceStatus(status);
+    const settled = settleInvoiceStatus(status, references);
     if (!settled) return { state: 'processing' };
     if (!settled.ksefNumber) {
       throw new Error('KSeF: faktura przyjęta bez numeru KSeF w statusie');
@@ -352,6 +375,77 @@ export async function checkInvoiceStatusByReference(
       ksefNumber: settled.ksefNumber,
       acquisitionTimestamp: settled.acquisitionTimestamp,
     };
+  });
+}
+
+/** Kody KSeF przy `GET /invoices/ksef/{ksefNumber}` (open-api.json, HTTP 400). */
+export const KSEF_INVOICE_NOT_FOUND = 21164;
+/** „Faktura … została przetworzona, ale nie jest jeszcze dostępna do pobrania. Spróbuj ponownie później.” */
+export const KSEF_INVOICE_NOT_YET_AVAILABLE = 21165;
+
+/**
+ * Faktura z KSeF po numerze KSeF — dokładne bajty pliku (D-A4-1: porównanie
+ * skrótu z naszą wysyłką przy cudzym 440). Wymaga uprawnienia `InvoiceRead`.
+ */
+export async function downloadKsefInvoice(
+  ksefNumber: string,
+  auth: KsefAuth,
+  env?: KsefEnvironment,
+  auditContext?: SubmitAuditContext,
+): Promise<Buffer> {
+  return ksefRateLimiter.enqueue(auth.nip, async () => {
+    const authSession = await ksefSessionCache.getSession(auth, env);
+    const body = await ksefFetch<Buffer>(`/invoices/ksef/${encodeURIComponent(ksefNumber)}`, {
+      accessToken: authSession.accessToken,
+      headers: { Accept: 'application/xml' },
+      env,
+      responseType: 'bytes',
+      audit: auditContext ? { ...auditContext, action: 'invoice.download-original', metadata: { ksefNumber } } : undefined,
+    });
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      throw new Error('KSeF zwrócił pusty XML faktury');
+    }
+    return body;
+  });
+}
+
+/**
+ * Data nadania numeru KSeF fakturze (`acquisitionDate` z
+ * `POST /invoices/query/metadata`, filtr `ksefNumber`) — przy przyjęciu
+ * numeru z duplikatu to data oryginału wyznacza wystawienie i otrzymanie
+ * (art. 106na). Zakres dat jest wymagany: bierzemy dzień z numeru KSeF
+ * (`NIP-RRRRMMDD-…`) z zapasem ±3 dni. `null`, gdy KSeF nie zwrócił daty.
+ */
+export async function fetchKsefAcquisitionDate(
+  ksefNumber: string,
+  auth: KsefAuth,
+  env?: KsefEnvironment,
+  auditContext?: SubmitAuditContext,
+): Promise<string | null> {
+  const day = /^\d{10}-(\d{4})(\d{2})(\d{2})-/.exec(ksefNumber);
+  if (!day) return null;
+  const base = Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3]));
+  const dayMs = 24 * 60 * 60 * 1000;
+  const req: QueryInvoicesRequest = {
+    subjectType: 'subject1',
+    dateRange: {
+      dateType: 'Invoicing',
+      from: new Date(base - 3 * dayMs).toISOString(),
+      to: new Date(base + 4 * dayMs - 1).toISOString(),
+    },
+    ksefNumber,
+  };
+  return ksefRateLimiter.enqueue(auth.nip, async () => {
+    const authSession = await ksefSessionCache.getSession(auth, env);
+    const response = await ksefFetch<QueryInvoicesResponse>('/invoices/query/metadata?pageOffset=0&pageSize=10', {
+      method: 'POST',
+      accessToken: authSession.accessToken,
+      body: req,
+      env,
+      audit: auditContext ? { ...auditContext, action: 'invoice.original-metadata', metadata: { ksefNumber } } : undefined,
+    });
+    const hit = (response.invoices ?? []).find((i) => i.ksefNumber === ksefNumber);
+    return hit?.acquisitionDate ?? null;
   });
 }
 
@@ -439,7 +533,7 @@ async function pollInvoiceStatus(
       }
     );
 
-    const settled = settleInvoiceStatus(status);
+    const settled = settleInvoiceStatus(status, { sessionReferenceNumber: sessionRef, invoiceReferenceNumber: invoiceRef });
     if (settled) return settled;
 
     // Status 150 (QUEUED) lub nieznany kod < 400 — czekamy

@@ -9,7 +9,7 @@
  * ta tabela jest pierwszą linią, nie jedyną.
  */
 
-import { sendErrorClassOf, type SendErrorClass } from '@/lib/ksef/send-error-classes';
+import { SEND_ERROR_CODES, sendErrorClassOf, type SendErrorClass } from '@/lib/ksef/send-error-classes';
 
 /** Role, które uruchamiają ponowną wysyłkę i powrót do szkicu (D4). */
 export const KSEF_SEND_MANAGER_ROLES: readonly string[] = ['owner', 'admin'];
@@ -30,6 +30,9 @@ export const KSEF_SEND_MESSAGES = {
   incomplete: 'Faktura nie ma kompletnych danych do wysyłki. Wróć do szkicu i wystaw ją ponownie.',
   transient: 'Błąd po stronie KSeF albo FaktFlow — wysyłkę ponowimy automatycznie. Możesz też wysłać teraz.',
   setup: 'Brak zweryfikowanego certyfikatu KSeF — uzupełnij ustawienia KSeF, potem wyślij ponownie.',
+  notInKsef: 'KSeF nie ma tej faktury — poprzednia wysyłka do niego nie dotarła. Wyślij ją ponownie albo wróć do szkicu.',
+  envMismatch: 'Tej wysyłki nie wykonaliśmy: zlecenie dotyczyło innego środowiska KSeF (testowego albo produkcyjnego) niż obecne ustawienie FaktFlow — szczegóły wyżej. Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj tej faktury ponownie, uzgodni ją operator FaktFlow.',
+  numberTaken: 'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie (szczegóły wyżej). Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wróć do szkicu, usuń go i wystaw fakturę z nowym numerem.',
   historical: 'Wysyłka nie powiodła się. Możesz wysłać ponownie albo wrócić do szkicu.',
   askManager: 'Poproś właściciela lub administratora firmy.',
   resetDone: 'Faktura wróciła do szkicu. Popraw ją i wyślij ponownie.',
@@ -76,7 +79,10 @@ export function decideResend(input: ResendInput): ResendDecision {
   }
   const errorClass = sendErrorClassOf(input.errorCode);
   if (errorClass === 'terminal') {
-    return { allowed: false, reason: 'terminal', message: KSEF_SEND_MESSAGES.terminal };
+    const message = input.errorCode === SEND_ERROR_CODES.ENV_MISMATCH
+      ? KSEF_SEND_MESSAGES.envMismatch
+      : KSEF_SEND_MESSAGES.terminal;
+    return { allowed: false, reason: 'terminal', message };
   }
   if (errorClass === 'reconcile') {
     return { allowed: false, reason: 'reconcile', message: KSEF_SEND_MESSAGES.reconcile };
@@ -130,13 +136,16 @@ export function failedInvoiceButtons(input: FailedInvoiceButtonsInput): FailedIn
     reset = true;
     info = KSEF_SEND_MESSAGES.rejected;
   } else if (!decision.allowed) {
-    // terminal → szkic; hold/reconcile → nic (automat / operator); special → szkic.
+    // terminal → szkic (też ENV_MISMATCH, D-A4-2); hold/reconcile → nic (automat / operator); special → szkic.
     reset = decision.reason === 'terminal' || decision.reason === 'special';
-    info = decision.message;
+    info = input.errorCode === SEND_ERROR_CODES.KSEF_NUMBER_TAKEN ? KSEF_SEND_MESSAGES.numberTaken : decision.message;
   } else {
     reset = true;
     settings = errorClass === 'setup';
-    info = errorClass === 'transient'
+    // NOT_IN_KSEF jest klasy transient, ale bez automatu — nie obiecujemy ponowienia.
+    info = input.errorCode === SEND_ERROR_CODES.NOT_IN_KSEF
+      ? KSEF_SEND_MESSAGES.notInKsef
+      : errorClass === 'transient'
       ? KSEF_SEND_MESSAGES.transient
       : errorClass === 'setup'
         ? KSEF_SEND_MESSAGES.setup

@@ -46,6 +46,7 @@ describe('KsefApiError.ksefCode (F-093)', () => {
     ['atrapa: lista na wierzchu', { exceptionDetailList: [{ exceptionCode: 21001, exceptionDescription: 'Service temporarily unavailable' }] }, 21001],
     ['kod jako tekst', { errors: [{ code: '21405' }] }, 21405],
     ['tekst zamiast JSON', 'Bad Gateway', null],
+    ['JSON w tekście (D-A4-1a)', JSON.stringify({ errors: [{ code: 440 }] }), 440],
     ['JSON bez kodów', { title: 'Bad Request', status: 400 }, null],
   ])('%s → %s', (_label, body, code) => {
     const err = new KsefApiError(400, body as never, 'KSeF API POST /x failed: 400');
@@ -81,7 +82,7 @@ describe('ksefFetch: odpowiedź application/problem+json', () => {
     expect((err as KsefApiError).ksefCode).toBe(21184);
   });
 
-  it('inny typ treści zostaje tekstem', async () => {
+  it('inny typ treści zostaje tekstem — kod i tak czytelny z JSON-u w tekście (D-A4-1a)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"errors":[{"code":21184}]}', {
       status: 502,
       headers: { 'content-type': 'text/html' },
@@ -89,8 +90,10 @@ describe('ksefFetch: odpowiedź application/problem+json', () => {
 
     const err = await ksefFetch('/test', { env: 'test' }).catch((e: unknown) => e);
 
+    // ksefFetch nie parsuje typu innego niż JSON…
     expect((err as KsefApiError).body).toBe('{"errors":[{"code":21184}]}');
-    expect((err as KsefApiError).ksefCode).toBeNull();
+    // …ale kod z JSON-u w tekście czyta ksefErrorCodes.
+    expect((err as KsefApiError).ksefCode).toBe(21184);
   });
 
   it('21184 jako problem+json z prawdziwego ksefFetch — wysyłka ponawialna (F-050)', async () => {

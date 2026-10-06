@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { NonRetriableError, RetryAfterError } from '@/lib/jobs/errors';
 import { KsefApiError } from '@/lib/ksef/client';
-import { KsefInvoiceRejectedError, KSEF_DUPLICATE_INVOICE } from '@/lib/ksef/submit';
+import { KsefInvoiceRejectedError, KSEF_DUPLICATE_INVOICE, ksefErrorCodes } from '@/lib/ksef/submit';
 import {
   AUTO_REQUEUE_CODES,
   classifySendError,
@@ -25,6 +25,14 @@ import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
 
 const status = (code: number) => ({ code, description: 'Opis', details: ['x'] }) as never;
 
+describe('ksefErrorCodes', () => {
+  it('D-A4-1: kody z treści application/problem+json (ksefFetch zostawia ją jako tekst)', () => {
+    expect(ksefErrorCodes(JSON.stringify({ errors: [{ code: 21165 }] }))).toEqual([21165]);
+    expect(ksefErrorCodes(JSON.stringify({ exception: { exceptionDetailList: [{ exceptionCode: 21164 }] } }))).toEqual([21164]);
+    expect(ksefErrorCodes('Bad gateway')).toEqual([]);
+  });
+});
+
 describe('katalog kodów błędu wysyłki', () => {
   it('każdy kod ma klasę z zamkniętej listy, a auto-ponowienie dotyczy tylko klasy transient', () => {
     const classes = new Set(['terminal', 'transient', 'hold', 'reconcile', 'setup']);
@@ -36,6 +44,9 @@ describe('katalog kodów błędu wysyłki', () => {
     }
     expect(AUTO_REQUEUE_CODES).toEqual(expect.arrayContaining(['KSEF_UNAVAILABLE', 'KSEF_RATE_LIMIT', 'KSEF_SESSION', 'INFRA']));
     expect(AUTO_REQUEUE_CODES).not.toContain('CREDENTIALS_UNAVAILABLE');
+    // A2b: KSeF nie ma faktury — klient decyduje (B2: data wystawienia), automat nie wysyła.
+    expect(SEND_ERROR_CLASS['NOT_IN_KSEF' as keyof typeof SEND_ERROR_CLASS]).toBe('transient');
+    expect(AUTO_REQUEUE_CODES).not.toContain('NOT_IN_KSEF');
   });
 
   it.each([

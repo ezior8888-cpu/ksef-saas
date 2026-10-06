@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { assertJobIdentity, requireInvoiceTenant } from './tenant-boundary';
 import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError, RetryAfterError } from '../errors';
@@ -23,24 +24,44 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { KsefApiError } from '@/lib/ksef/client';
 import {
   checkInvoiceStatusByReference,
+  downloadKsefInvoice,
+  fetchKsefAcquisitionDate,
+  KSEF_INVOICE_NOT_FOUND,
+  KSEF_INVOICE_NOT_YET_AVAILABLE,
+  KSEF_DUPLICATE_INVOICE,
   KSEF_SESSION_NOT_FOUND,
   KsefInvoiceRejectedError,
   ksefErrorCodes,
   listSessionInvoicesAfterClose,
   type SessionInvoiceSummary,
 } from '@/lib/ksef/submit';
+import {
+  compareDuplicate,
+  hexHashToBase64,
+  numberTakenMessage,
+  operatorVerdictMessage,
+  summarizeInvoiceXml,
+} from '@/lib/ksef/duplicate-verdict';
+import type { DuplicateCheckReason, KsefDuplicateCheck } from '@/lib/ksef/duplicate-check';
+import { archiveImportedKsefXml, KsefXmlArchiveConflictError } from '@/lib/import/ksef-xml-archive';
 import { ksefSessionCache } from '@/lib/ksef/session-cache';
 import {
   abandonKsefSubmissionIntent,
+  closeKsefAttempt,
+  findKsefSessionRow,
   findOpenKsefSubmission,
   findOpenKsefSubmissionIntents,
-  findOwnKsefSessionXmlPath,
-  isOwnKsefSession,
+  findSubmissionPayloads,
+  findTenantInvoiceByKsefNumber,
   markKsefSubmission,
+  markKsefAttemptDuplicatePending,
+  markKsefSubmissionsNumberTaken,
   promoteKsefSubmissionIntent,
+  recordKsefAcceptedSession,
+  recordKsefDuplicateCheck,
   type KsefSubmissionIntent,
 } from '@/lib/ksef/submission-log';
-import { invoiceXmlKey } from '@/lib/storage/r2';
+import { downloadInvoiceXml, invoiceXmlKey, invoiceXmlKeyFor, uploadInvoiceXml } from '@/lib/storage/r2';
 import {
   heldErrorMessage,
   isCorrectionHeldForEnv,
@@ -59,9 +80,11 @@ import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
 import {
   classifySendError,
   isContentRejection,
+  KsefSendVerdictError,
   SEND_ERROR_CODES,
   type SendErrorCode,
 } from '@/lib/ksef/send-error-codes';
+import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
 import {
   getKsefRetryDelay,
   ksefRetryDelayFor,
@@ -92,7 +115,9 @@ interface SubmitOutcome {
   sessionReferenceNumber?: string;
   invoiceReferenceNumber?: string;
   /** Skąd wiemy o akceptacji — do audytu. */
-  via: 'submit' | 'reference-reconcile' | 'own-duplicate';
+  via: 'submit' | 'reference-reconcile' | 'own-duplicate' | 'verified-duplicate';
+  /** D-A4-1: nasza próba odrzucona jako duplikat — zamykana po zapisie akceptacji. */
+  duplicateAttempt?: { sessionReferenceNumber: string; invoiceReferenceNumber: string | null };
 }
 
 /**
@@ -453,8 +478,9 @@ export async function onSubmitInvoiceExhausted(
         return { handled: false as const, reason: 'accepted-reconciliation' as const };
       }
       // Zdarzenie z innego środowiska KSeF niż skonfigurowane (#63, Codex):
-      // faktura dostaje kod `ENV_MISMATCH` (klasa reconcile) zamiast zostać
-      // w `queued`/`sending` na zawsze (W3). Dalej decyduje operator.
+      // faktura dostaje kod `ENV_MISMATCH` zamiast zostać w `queued`/`sending`
+      // na zawsze (W3). Klasa terminal (D-A4-2, 00143): ponowienie wysłałoby
+      // fakturę w bieżącym środowisku, więc klient wraca do szkicu i decyduje.
       const configuredEnv = configuredKsefEnvironment();
       if (parsed.data.environment !== configuredEnv) {
         logger.error('KSeF submit event environment mismatch; invoice requires reconciliation', {
@@ -469,12 +495,22 @@ export async function onSubmitInvoiceExhausted(
           eventEnvironment: parsed.data.environment,
           configuredEnvironment: configuredEnv,
         });
+        // Wcześniejsza próba tego zdarzenia mogła dotrzeć do KSeF (otwarty
+        // wpis z A2) — wtedy komunikat nie może mówić „nie wysłaliśmy” ani
+        // kierować do szkicu (RPC odmówi). Błąd odczytu = ostrożny wariant.
+        const contacted = await step.run('env-mismatch-contact-evidence', async () => {
+          const { data, error } = await (await createAdminClient()).rpc('ksef_has_contact_evidence', {
+            p_invoice_id: invoiceId,
+            p_tenant_id: tenantId,
+          });
+          return error ? true : data !== false;
+        });
         const marked = await step.run('mark-as-failed-env-mismatch', () =>
           markFailureUnlessAccepted(
             invoiceId,
             tenantId,
             'failed',
-            'Zdarzenie wysyłki pochodzi z innego środowiska KSeF niż skonfigurowane — wymaga uzgodnienia przez operatora.',
+            envMismatchMessage(parsed.data.environment, configuredEnv, contacted),
             SEND_ERROR_CODES.ENV_MISMATCH,
           ));
         return marked
@@ -669,6 +705,28 @@ export async function onSubmitInvoiceExhausted(
       });
 
       return { handled: true as const, finalStatus, fromOfflineQueue };
+}
+
+/**
+ * D-A4-2: komunikat dla klienta przy `ENV_MISMATCH` — gdzie zlecono wysyłkę,
+ * jakie środowisko jest teraz i co zrobić. Bez dowodu kontaktu: szkic
+ * i decyzja klienta. Z dowodem (wcześniejsza próba mogła dotrzeć do KSeF):
+ * nie wystawiać ponownie — szkic zablokowany, uzgadnia operator.
+ */
+function envMismatchMessage(
+  eventEnvironment: string,
+  configuredEnvironment: string | null,
+  contacted: boolean,
+): string {
+  const what = configuredEnvironment
+    ? `Tej wysyłki nie wykonaliśmy: zlecono ją w środowisku KSeF „${eventEnvironment}”, a obecne to „${configuredEnvironment}”.`
+    : `Tej wysyłki nie wykonaliśmy: środowisko KSeF po stronie FaktFlow nie jest poprawnie ustawione (zlecenie: „${eventEnvironment}”). Zajmujemy się tym.`;
+  if (contacted) {
+    return `${what} Wcześniejsza próba wysyłki tej faktury mogła dotrzeć do KSeF — nie wystawiaj jej ponownie, uzgodni ją operator FaktFlow.`;
+  }
+  return configuredEnvironment
+    ? `${what} Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku.`
+    : `${what} Potem wróć do szkicu i wyślij fakturę ponownie.`;
 }
 
 /**
@@ -1069,16 +1127,345 @@ export async function runSubmitInvoice(
       }
     });
 
+    // A2b: „tylko uzgodnij” bez otwartej wysyłki. Bez dowodu kontaktu z KSeF
+    // (00131/00136: numer KSeF albo wpis intent/sent/accepted/duplicate)
+    // KSeF nie ma tej faktury od nas — NOT_IN_KSEF z wyjściem dla klienta
+    // (wyślij ponownie / wróć do szkicu). Z dowodem — RESULT_UNCERTAIN dla
+    // operatora. Błąd odczytu dowodu = ponowienie, nie zgadywanie.
+    const reconcileOnlyWithoutOpenSubmission = async (uncertainMessage: string): Promise<Error> => {
+      const { data, error } = await (await createAdminClient()).rpc('ksef_has_contact_evidence', {
+        p_invoice_id: invoiceId,
+        p_tenant_id: tenantId,
+      });
+      if (error) {
+        return new RetryAfterError('Nie można sprawdzić dowodu kontaktu z KSeF — ponowię uzgadnianie', getKsefRetryDelay(attempt));
+      }
+      if (data === true) {
+        return new NonRetriableError(`[${SEND_ERROR_CODES.RESULT_UNCERTAIN}] ${uncertainMessage}`);
+      }
+      logger.warn('Tylko uzgodnij: KSeF nie ma tej faktury — NOT_IN_KSEF', { invoiceId, detail: uncertainMessage });
+      return new NonRetriableError(`[${SEND_ERROR_CODES.NOT_IN_KSEF}] ${KSEF_SEND_MESSAGES.notInKsef}`);
+    };
+
+    // D-A4-1: odpowiedź 440 „duplikat” — jedna ścieżka dla nowej wysyłki
+    // i dla uzgadniania po referencji (także zamiaru z A2). KSeF ma już fakturę
+    // tej firmy o tym numerze; rozstrzygamy, czyja to treść:
+    //   1. sesja oryginału jest w historii tej faktury i ma ten sam skrót → nasza;
+    //   2. numer KSeF oryginału ma inna faktura firmy w FaktFlow → operator;
+    //   3. pobieramy oryginał i porównujemy z naszymi plikami: identyczny → nasza
+    //      (`accepted` z numerem oryginału); z FaktFlow albo ta sama treść
+    //      z innego programu → operator; inny program, inna treść →
+    //      KSEF_NUMBER_TAKEN (klient wystawia z nowym numerem).
+    // Wpis naszej próby dostaje znacznik 440 (numer i sesja oryginału) i zostaje
+    // OTWARTY do werdyktu: jest dowodem kontaktu, a ponowienie (cron I5, „Tylko
+    // uzgodnij”) weryfikuje treść od nowa — bez drugiej wysyłki i bez STALE.
+    // Zamykamy go dopiero werdyktem: „numer zajęty” (number_taken) albo
+    // zapisem akceptacji (krok save-ksef-number).
+    const resolveDuplicate = async (error: KsefInvoiceRejectedError): Promise<SubmitOutcome> => {
+      const original = error.originalKsefNumber;
+      const originalSession = error.originalSessionReferenceNumber;
+      const ourSession = error.ourSessionReferenceNumber;
+      const verdict = (code: SendErrorCode, message: string) =>
+        new NonRetriableError(`[${code}] ${message}`, { cause: new KsefSendVerdictError(code, message) });
+      const pending = (message: string, delay: number | string) =>
+        new RetryAfterError(message, delay, {
+          cause: new KsefSendVerdictError(SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, message),
+        });
+      const alertOperator = (kind: string, extra: Record<string, unknown> = {}) =>
+        Sentry.captureMessage('KSeF: duplikat 440 do uzgodnienia przez operatora', {
+          level: 'warning',
+          tags: { job: 'submit-invoice', kind: `ksef-duplicate-${kind}` },
+          extra: { tenantId, invoiceId, originalKsefNumber: original, originalSessionReferenceNumber: originalSession, ...extra },
+        });
+      // Data nadania numeru oryginałowi (art. 106na: wystawienie i otrzymanie).
+      // Własna sesja — status po referencji (bez uprawnienia InvoiceRead);
+      // inaczej metadane po numerze KSeF. Brak daty nie cofa werdyktu — alarm.
+      const originalAcquisition = async (ownInvoiceReference: string | null): Promise<string | undefined> => {
+        try {
+          const credentials = await getTenantKsefCredentials(tenantId);
+          if (originalSession && ownInvoiceReference) {
+            const status = await checkInvoiceStatusByReference(
+              { sessionReferenceNumber: originalSession, invoiceReferenceNumber: ownInvoiceReference },
+              credentials,
+              env,
+              { tenantId, invoiceId },
+            );
+            if (status.state === 'accepted' && status.acquisitionTimestamp) return status.acquisitionTimestamp;
+          }
+          return (await fetchKsefAcquisitionDate(original!, credentials, env, { tenantId, invoiceId })) ?? undefined;
+        } catch (e) {
+          logger.warn('Nie ustalono daty przyjęcia oryginału duplikatu', {
+            invoiceId,
+            ksefNumber: original,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          return undefined;
+        }
+      };
+      const accept = async (
+        via: 'own-duplicate' | 'verified-duplicate',
+        xmlStoragePath: string | null,
+        sha256Hex: string | null,
+        ownInvoiceReference: string | null = null,
+      ): Promise<SubmitOutcome> => {
+        logger.warn('Duplikat 440 rozstrzygnięty jako nasza faktura', { invoiceId, ksefNumber: original, via });
+        const acquisitionTimestamp = await originalAcquisition(ownInvoiceReference);
+        if (!acquisitionTimestamp) {
+          Sentry.captureMessage('KSeF: brak daty przyjęcia oryginału przy przyjęciu numeru z duplikatu', {
+            level: 'warning',
+            tags: { job: 'submit-invoice', kind: 'ksef-duplicate-no-date' },
+            extra: { tenantId, invoiceId, originalKsefNumber: original, via },
+          });
+        }
+        return {
+          ksefNumber: original!,
+          acquisitionTimestamp,
+          xmlStoragePath: xmlStoragePath ?? invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
+          xmlSha256Hash: sha256Hex ?? undefined,
+          sessionReferenceNumber: originalSession ?? undefined,
+          duplicateAttempt: ourSession
+            ? { sessionReferenceNumber: ourSession, invoiceReferenceNumber: error.ourInvoiceReferenceNumber }
+            : undefined,
+          via,
+        };
+      };
+      const recordOriginalSession = async (xmlStoragePath: string | null, sha256Hex: string | null) => {
+        // Sesja oryginału z numerem KSeF — ponowienia UPO znajdą ją w historii.
+        if (!originalSession) return;
+        await recordKsefAcceptedSession({
+          tenantId,
+          invoiceId,
+          sessionReferenceNumber: originalSession,
+          ksefNumber: original!,
+          xmlStoragePath,
+          payloadHash: sha256Hex,
+        });
+      };
+
+      // D-A4-1b-3 (00144): dane oryginału na otwartym wpisie ze znacznikiem 440,
+      // zanim faktura zostanie „do uzgodnienia” — na nich klient zdecyduje
+      // („ta sama sprzedaż” / „inna”), a operator widzi je na karcie faktury.
+      const recordCheck = (reason: DuplicateCheckReason, data: Partial<KsefDuplicateCheck> = {}) =>
+        recordKsefDuplicateCheck({
+          tenantId,
+          invoiceId,
+          originalKsefNumber: original!,
+          check: {
+            sha256: null,
+            archivePath: null,
+            sizeBytes: null,
+            summary: null,
+            sameContentExceptHeader: null,
+            ownHistory: null,
+            acquiredAt: null,
+            httpStatus: null,
+            knownInvoice: null,
+            recheck: null,
+            ...data,
+            v: 1,
+            env,
+            checkedAt: new Date().toISOString(),
+            reason,
+          },
+        });
+
+      if (!original) {
+        throw pending(
+          'KSeF zgłosił duplikat faktury bez numeru oryginału — nie można sprawdzić, czyja to treść. Do uzgodnienia; nie wystawiaj faktury ponownie.',
+          getKsefRetryDelay(attempt),
+        );
+      }
+
+      // 0. Znacznik 440 na otwartym wpisie próby (fail-closed: bez niego nie weryfikujemy).
+      if (ourSession) {
+        await markKsefAttemptDuplicatePending({
+          tenantId,
+          invoiceId,
+          sessionReferenceNumber: ourSession,
+          invoiceReferenceNumber: error.ourInvoiceReferenceNumber,
+          originalKsefNumber: original,
+          originalSessionReferenceNumber: originalSession,
+        });
+      }
+
+      // 1. Własna sesja z tym samym plikiem — bez pobierania.
+      const originalSessionRow = originalSession ? await findKsefSessionRow(tenantId, invoiceId, originalSession) : null;
+      if (originalSession) {
+        const sessionRow = originalSessionRow;
+        const sessionHash = hexHashToBase64(sessionRow?.requestPayloadHash);
+        if (sessionRow && sessionHash && error.ourInvoiceHash && sessionHash === error.ourInvoiceHash) {
+          await recordOriginalSession(sessionRow.xmlStoragePath, sessionRow.requestPayloadHash);
+          return accept('own-duplicate', sessionRow.xmlStoragePath, sessionRow.requestPayloadHash, sessionRow.invoiceReferenceNumber);
+        }
+      }
+
+      // 2. Numer KSeF oryginału zna już inna faktura tej firmy (np. import historii).
+      const known = await findTenantInvoiceByKsefNumber(tenantId, original, invoiceId);
+      if (known) {
+        await recordCheck('known-number', { knownInvoice: known });
+        alertOperator('known-number', { otherInvoice: known.internalNumber });
+        throw verdict(
+          SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE,
+          `KSeF ma już fakturę o tym numerze (numer KSeF ${original}), a w FaktFlow ten numer KSeF ma faktura ` +
+            `${known.internalNumber ?? 'bez numeru'} — do uzgodnienia przez operatora; nie wystawiaj jej ponownie.`,
+        );
+      }
+
+      // 3. Oryginał z KSeF.
+      const credentials = await getTenantKsefCredentials(tenantId);
+      let originalBytes: Buffer;
+      try {
+        originalBytes = await downloadKsefInvoice(original, credentials, env, { tenantId, invoiceId });
+      } catch (downloadError) {
+        const api = downloadError instanceof KsefApiError ? downloadError : null;
+        if (api?.status === 401) ksefSessionCache.invalidate(credentials.nip, env);
+        const codes = api ? ksefErrorCodes(api.body) : [];
+        const httpLabel = api ? `HTTP ${api.status}` : 'błąd sieci';
+        const unverified =
+          `KSeF ma już fakturę o tym numerze (numer KSeF ${original}), ale nie udało się pobrać jej treści do porównania (${httpLabel}` +
+          `${api?.status === 403 ? ' — token KSeF bez uprawnienia InvoiceRead' : ''}). Do uzgodnienia; nie wystawiaj faktury ponownie.`;
+        // 21164 tuż po przyjęciu oryginału też bywa chwilowe — w obrębie ponowień joba.
+        const transient = !api || api.isRetryable || api.status === 401 ||
+          codes.includes(KSEF_INVOICE_NOT_YET_AVAILABLE) || codes.includes(KSEF_INVOICE_NOT_FOUND);
+        await recordCheck(transient ? 'download-pending' : 'download-refused', { httpStatus: api?.status ?? null });
+        if (transient) throw pending(unverified, ksefRetryDelayFor(downloadError, attempt));
+        // 403 (token bez InvoiceRead) i inne 4xx: operator. Wpis zostaje otwarty
+        // ze znacznikiem 440 — „Tylko uzgodnij” i cron I5 powtórzą weryfikację.
+        alertOperator('download-refused', { status: api?.status });
+        throw verdict(SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, unverified);
+      }
+      const originalSha256Hex = createHash('sha256').update(originalBytes).digest('hex');
+      const originalData = {
+        sha256: originalSha256Hex,
+        sizeBytes: originalBytes.length,
+        summary: summarizeInvoiceXml(originalBytes.toString('utf8')),
+      };
+
+      // 4. Werdykt po treści. Bieżący plik zgodny bajt w bajt — bez dalszych odczytów.
+      const attemptRow = ourSession ? await findKsefSessionRow(tenantId, invoiceId, ourSession) : null;
+      const currentHash = error.ourInvoiceHash ?? hexHashToBase64(attemptRow?.requestPayloadHash);
+      const originalHash = Buffer.from(originalSha256Hex, 'hex').toString('base64');
+      if (currentHash && currentHash === originalHash) {
+        const path = attemptRow?.xmlStoragePath
+          ?? invoiceXmlKeyFor({ tenantId, invoiceId, issueDate: invoice.issueDate, attemptId: parsed.data.sendAttemptId ?? null });
+        await recordOriginalSession(path, originalSha256Hex);
+        return accept('verified-duplicate', path, originalSha256Hex);
+      }
+      // Dalej potrzebny bieżący plik (treść poza nagłówkiem). Chwilowy błąd
+      // magazynu = ponowienie, nie werdykt; brak pliku (wpis sprzed 00134) = operator.
+      let ourXml: string | null = null;
+      if (attemptRow?.xmlStoragePath && attemptRow.requestPayloadHash) {
+        try {
+          ourXml = await downloadInvoiceXml(attemptRow.xmlStoragePath, attemptRow.requestPayloadHash, tenantId);
+        } catch (readError) {
+          await recordCheck('storage-pending', originalData);
+          throw pending(
+            `KSeF ma już fakturę o tym numerze (numer KSeF ${original}); nie udało się odczytać naszego pliku do porównania ` +
+              `(${readError instanceof Error ? readError.message : 'magazyn'}). Do uzgodnienia; nie wystawiaj faktury ponownie.`,
+            getKsefRetryDelay(attempt),
+          );
+        }
+      }
+      const payloads = await findSubmissionPayloads(tenantId, invoiceId);
+      const cmp = compareDuplicate({
+        originalBytes,
+        currentHashBase64: currentHash,
+        earlierHashesBase64: payloads.map((p) => hexHashToBase64(p.hash)),
+        ourXml,
+      });
+      if (cmp.verdict === 'identical') {
+        // Wcześniejsza próba o tej samej treści: jej plik, a gdy wpis go nie zna
+        // (sprzed 00134) — archiwum pobranego oryginału (KOD I liczy skrót z niego).
+        let path = payloads.find((p) => hexHashToBase64(p.hash) === cmp.matchedHash)?.xmlStoragePath ?? null;
+        if (!path) {
+          const stored = await uploadInvoiceXml(tenantId, invoiceId, invoice.issueDate, originalBytes.toString('utf8'), {
+            attemptId: `ksef-${originalSha256Hex.slice(0, 40)}`,
+            immutable: false,
+          });
+          path = stored.storagePath;
+        }
+        await recordOriginalSession(path, originalSha256Hex);
+        return accept('verified-duplicate', path, originalSha256Hex);
+      }
+      if (cmp.verdict === 'operator' || !ourXml) {
+        // Bez naszego pliku nie wolno orzec „numer zajęty” (mogłaby to być ta sama sprzedaż).
+        const reason: DuplicateCheckReason = cmp.verdict === 'operator' && cmp.reason ? cmp.reason : 'no-own-file';
+        const ownHistory = Boolean(originalSessionRow)
+          || payloads.some((p) => p.hash.toLowerCase() === originalSha256Hex);
+        // Bajty oryginału pod kluczem importu historii (ten sam obiekt zobaczy
+        // Magiczny import) — z nich zapis oryginału po decyzji klienta.
+        let archivePath: string;
+        try {
+          archivePath = (await archiveImportedKsefXml(tenantId, original, originalBytes)).storagePath;
+        } catch (archiveError) {
+          if (archiveError instanceof KsefXmlArchiveConflictError) {
+            await recordCheck('archive-conflict', { ...originalData, ownHistory });
+            alertOperator('archive-conflict');
+            throw verdict(
+              SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE,
+              `KSeF ma już fakturę o tym numerze (numer KSeF ${original}), a w archiwum FaktFlow jest pod tym numerem inny plik — ` +
+                'do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.',
+            );
+          }
+          await recordCheck('archive-pending', { ...originalData, ownHistory });
+          throw pending(
+            `KSeF ma już fakturę o tym numerze (numer KSeF ${original}); nie udało się zapisać jej pliku w archiwum ` +
+              `(${archiveError instanceof Error ? archiveError.message : 'magazyn'}). Do uzgodnienia; nie wystawiaj faktury ponownie.`,
+            getKsefRetryDelay(attempt),
+          );
+        }
+        await recordCheck(reason, {
+          ...originalData,
+          summary: cmp.summary,
+          archivePath,
+          sameContentExceptHeader: ourXml ? cmp.sameContentExceptHeader : null,
+          ownHistory,
+          acquiredAt: (await originalAcquisition(originalSessionRow?.invoiceReferenceNumber ?? null)) ?? null,
+        });
+        alertOperator(reason, { sameContentExceptHeader: cmp.sameContentExceptHeader });
+        throw verdict(
+          SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE,
+          cmp.verdict === 'operator'
+            ? operatorVerdictMessage(original, cmp)
+            : `KSeF ma już fakturę o tym numerze (numer KSeF ${original}) spoza FaktFlow, a historia wysyłki nie ma naszego pliku do porównania treści. Do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.`,
+        );
+      }
+      // Oryginał z innego programu o innej treści: numer zajęty. Wszystkie wpisy
+      // duplikatu tej faktury przestają być dowodem kontaktu (fail-closed).
+      await markKsefSubmissionsNumberTaken({ tenantId, invoiceId, originalKsefNumber: original });
+      throw verdict(
+        SEND_ERROR_CODES.KSEF_NUMBER_TAKEN,
+        numberTakenMessage(invoice.internalNumber ?? '', original, cmp.summary),
+      );
+    };
+
     const reconciled = await step.run('reconcile-previous-submission', async (): Promise<SubmitOutcome | null> => {
       const previous = await findOpenKsefSubmission(tenantId, invoiceId);
       if (!previous) {
         // Tryb „tylko uzgodnij” nie wysyła od nowa — bez wpisu `sent` nie ma czego uzgadniać.
         if (parsed.data.reconcileOnly) {
-          throw new NonRetriableError(
-            `[${SEND_ERROR_CODES.RESULT_UNCERTAIN}] Tryb „tylko uzgodnij”: brak otwartej wysyłki (wpisu sent) do uzgodnienia — faktura nie została wysłana ponownie.`,
+          throw await reconcileOnlyWithoutOpenSubmission(
+            'Tryb „tylko uzgodnij”: brak otwartej wysyłki (wpisu sent) do uzgodnienia — faktura nie została wysłana ponownie.',
           );
         }
         return null;
+      }
+      // D-A4-1: KSeF odpowiedział już na tę próbę 440 — weryfikacja treści od
+      // razu (stara sesja nie jest potrzebna; po 48 h KSeF może jej nie znać).
+      if (previous.originalKsefNumber) {
+        return await resolveDuplicate(new KsefInvoiceRejectedError(KSEF_DUPLICATE_INVOICE, {
+          code: KSEF_DUPLICATE_INVOICE,
+          description: 'Duplikat faktury (odpowiedź zapisana w historii wysyłki)',
+          details: [],
+          extensions: {
+            originalKsefNumber: previous.originalKsefNumber,
+            originalSessionReferenceNumber: previous.originalSessionReferenceNumber ?? undefined,
+          },
+        }, {
+          invoiceHash: hexHashToBase64(previous.payloadHash),
+          sessionReferenceNumber: previous.sessionReferenceNumber,
+          invoiceReferenceNumber: previous.invoiceReferenceNumber,
+        }));
       }
       const credentials = await getTenantKsefCredentials(tenantId);
       try {
@@ -1105,6 +1492,10 @@ export async function runSubmitInvoice(
         };
       } catch (error) {
         if (error instanceof RetryAfterError) throw error;
+        // D-A4-1: 440 przy uzgadnianiu (np. po timeoucie pollingu) — ta sama weryfikacja, bez wysyłki.
+        if (error instanceof KsefInvoiceRejectedError && error.isDuplicate) {
+          return await resolveDuplicate(error);
+        }
         if (error instanceof KsefInvoiceRejectedError && !error.isDuplicate) {
           await markKsefSubmission({
             tenantId,
@@ -1150,8 +1541,8 @@ export async function runSubmitInvoice(
             extra: { tenantId, invoiceId, attemptedAt: previous.attemptedAt, status: error.status },
           });
           if (parsed.data.reconcileOnly) {
-            throw new NonRetriableError(
-              `[${SEND_ERROR_CODES.RESULT_UNCERTAIN}] Tryb „tylko uzgodnij”: KSeF nie zna wysyłki sprzed ponad 48 h (HTTP ${error.status}) — wpis zamknięty jako STALE, faktura nie została wysłana ponownie.`,
+            throw await reconcileOnlyWithoutOpenSubmission(
+              `Tryb „tylko uzgodnij”: KSeF nie zna wysyłki sprzed ponad 48 h (HTTP ${error.status}) — wpis zamknięty jako STALE, faktura nie została wysłana ponownie.`,
             );
           }
           return null;
@@ -1259,37 +1650,8 @@ export async function runSubmitInvoice(
         // o treści co wyżej. Wcześniej leciało jako zwykły Error: 5 ponownych
         // wysyłek, potem Offline24. Przy 440 (duplikat) faktura już JEST w KSeF.
         if (error instanceof KsefInvoiceRejectedError && error.isDuplicate) {
-          // Ta wysyłka zakończyła się duplikatem — zamykamy JEJ wpis (S1).
-          await closeOpenSubmission(tenantId, invoiceId, 'duplicate', error, logger);
-          // 440: KSeF ma już fakturę o tym numerze. Jeśli to NASZA wcześniejsza
-          // wysyłka tej faktury (numer sesji z odpowiedzi jest w historii),
-          // przyjmujemy jej numer KSeF zamiast oznaczać fakturę jako odrzuconą.
-          const ownSession =
-            error.originalKsefNumber && error.originalSessionReferenceNumber
-              ? await isOwnKsefSession(tenantId, invoiceId, error.originalSessionReferenceNumber)
-              : false;
-          if (ownSession && error.originalKsefNumber && error.originalSessionReferenceNumber) {
-            // D5: plik próby z tej sesji; wpisy sprzed 00134 nie mają ścieżki —
-            // wtedy klucz historyczny. Odczyt fail-soft: brak ścieżki nie cofa akceptacji.
-            let ownPath: string | null = null;
-            try {
-              ownPath = await findOwnKsefSessionXmlPath(tenantId, invoiceId, error.originalSessionReferenceNumber);
-            } catch {
-              ownPath = null;
-            }
-            return {
-              ksefNumber: error.originalKsefNumber,
-              xmlStoragePath: ownPath ?? invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
-              sessionReferenceNumber: error.originalSessionReferenceNumber,
-              via: 'own-duplicate',
-            };
-          }
-          Sentry.captureException(error, {
-            tags: { job: 'submit-invoice', kind: 'ksef-duplicate' },
-            extra: { tenantId, invoiceId, ksefStatusCode: error.code, originalKsefNumber: error.originalKsefNumber },
-          });
-          // Nie wiemy, czyja to faktura — do uzgodnienia, nie „odrzucona”.
-          throw new NonRetriableError(`[${KSEF_DUPLICATE_RECONCILE}] ${error.message}`, { cause: error });
+          // 440: KSeF ma już fakturę o tym numerze — werdykt po treści (D-A4-1).
+          return await resolveDuplicate(error);
         }
         if (error instanceof KsefInvoiceRejectedError) {
           // Odrzucenie w statusie zamyka wpis historii tej wysyłki (S1).
@@ -1358,6 +1720,28 @@ export async function runSubmitInvoice(
         last_error_field: null,
         last_error_suggestion: null,
       }, tenantId);
+
+      // D-A4-1: nasza próba odrzucona jako duplikat własnej faktury — zamykamy
+      // ją dopiero teraz, po zapisie akceptacji (restart wcześniej = ponowna
+      // weryfikacja po znaczniku 440, bez drugiej wysyłki). Fail-soft.
+      if (result.duplicateAttempt) {
+        try {
+          await closeKsefAttempt({
+            tenantId,
+            invoiceId,
+            sessionReferenceNumber: result.duplicateAttempt.sessionReferenceNumber,
+            invoiceReferenceNumber: result.duplicateAttempt.invoiceReferenceNumber,
+            status: 'duplicate',
+            errorCode: '440',
+            errorMessage: `Duplikat własnej faktury — przyjęty numer oryginału ${result.ksefNumber}`,
+          });
+        } catch (e) {
+          logger.warn('Nie zamknięto wpisu próby odrzuconej jako duplikat', {
+            invoiceId,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
 
       // Historia prób: wpis zamykamy po zapisie akceptacji. Fail-soft — błąd tu
       // nie może cofnąć akceptacji ani zablokować zdarzenia UPO niżej.

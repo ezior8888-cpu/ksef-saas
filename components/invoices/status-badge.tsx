@@ -39,6 +39,14 @@ const FAILED_BY_CLASS: Record<string, { label: string; tone: FfStatusTone }> = {
   terminal: { label: 'Błąd treści', tone: 'danger' },
 };
 
+/**
+ * Kody, dla których etykieta klasy myli: `ENV_MISMATCH` jest klasy terminal
+ * (tylko szkic, D-A4-2), ale treść dokumentu jest w porządku.
+ */
+const FAILED_BY_CODE = new Map<string, { label: string; tone: FfStatusTone }>([
+  ['ENV_MISMATCH', { label: 'Inne środowisko KSeF', tone: 'warning' }],
+]);
+
 interface StatusBadgeProps {
   status: string;
   /** `invoices.last_error_code` — doprecyzowuje etykietę stanu `failed`. */
@@ -48,7 +56,8 @@ interface StatusBadgeProps {
 
 export function StatusBadge({ status, errorCode, isLoading }: StatusBadgeProps) {
   const failedClass = status === 'failed' ? sendErrorClassOf(errorCode) : null;
-  const meta = (failedClass ? FAILED_BY_CLASS[failedClass] : undefined) ?? STATUS_MAP[status] ?? FALLBACK;
+  const byCode = status === 'failed' && errorCode ? FAILED_BY_CODE.get(errorCode) : undefined;
+  const meta = byCode ?? (failedClass ? FAILED_BY_CLASS[failedClass] : undefined) ?? STATUS_MAP[status] ?? FALLBACK;
   const showSpinner =
     isLoading === true ||
     status === 'queued' ||
