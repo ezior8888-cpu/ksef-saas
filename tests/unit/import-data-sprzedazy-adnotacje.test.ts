@@ -130,10 +130,14 @@ function fragment(xml: string, start: string, end: string): string {
   expect(i, `brak ${start}`).toBeGreaterThanOrEqual(0);
   return xml.slice(i, xml.indexOf(end, i));
 }
+/** Odmowa obu plików z numerem faktury i powodem (bez RegExp z danych — CodeQL). */
 async function expectJpkRefusal(number: string, reason: RegExp) {
-  await expect(jpkFa()).rejects.toThrow(new RegExp(`JPK wstrzymany:.*${number.replace(/\//g, '\\/')}`));
-  await expect(jpkFa()).rejects.toThrow(reason);
-  await expect(jpkV7m()).rejects.toThrow(reason);
+  const refusal = (p: Promise<unknown>) => p.then(() => '', (e: unknown) => (e instanceof Error ? e.message : String(e)));
+  for (const message of [await refusal(jpkFa()), await refusal(jpkV7m())]) {
+    expect(message).toContain('JPK wstrzymany:');
+    expect(message).toContain(`faktura ${number}`);
+    expect(message).toMatch(reason);
+  }
 }
 
 beforeEach(() => {
