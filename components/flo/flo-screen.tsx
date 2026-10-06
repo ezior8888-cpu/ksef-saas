@@ -54,13 +54,7 @@ export function FloScreen({
 }) {
   const todayTasks = countTodayTasks(proposals);
 
-  // Najświeższy koszt — po nim pasek zdjęcia poznaje, że odczyt się udał.
-  const latestExpenseAt =
-    proposals
-      .filter((p) => p.kind.startsWith('expense.'))
-      .map((p) => p.createdAt)
-      .sort()
-      .at(-1) ?? null;
+  const { latestExpenseAt, failedOcrJobIds } = photoBannerSignals(proposals);
 
   // Ciaśniej na telefonie: ekran agenta ma zablokowaną wysokość, więc każde
   // 8 px odstępu to 8 px mniej dla wątku — a wątek jest treścią.
@@ -116,7 +110,10 @@ export function FloScreen({
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex min-h-0 flex-col gap-3">
           <Suspense fallback={null}>
-            <FloPhotoBanner latestExpenseAt={latestExpenseAt} />
+            <FloPhotoBanner
+              latestExpenseAt={latestExpenseAt}
+              failedOcrJobIds={failedOcrJobIds}
+            />
           </Suspense>
 
           {/* Widoczny zastępnik, nie `null`: gdyby ta wyspa kiedyś nie
@@ -148,4 +145,32 @@ export function FloScreen({
       </div>
     </div>
   );
+}
+
+/**
+ * Co pasek zdjęcia ma wiedzieć o wątku — funkcja czysta, testowana bez Reacta.
+ *
+ * Liczą się WYŁĄCZNIE karty odczytu zdjęcia (`ocrCard`). Wcześniej sygnałem
+ * była dowolna karta `expense.*` młodsza niż wejście — także karta porażki
+ * OCR, skrzynki KSeF, reguły czy brakującego dokumentu — i pasek mówił
+ * „Paragon odczytany” nad kartą „Nie odczytałem tego zdjęcia”.
+ */
+export function photoBannerSignals(proposals: readonly FloProposalView[]): {
+  /** najświeższy koszt odczytany ze zdjęcia — po nim pasek poznaje sukces */
+  latestExpenseAt: string | null;
+  /** zadania OCR, po których silnik przysłał kartę „nie odczytałem” */
+  failedOcrJobIds: string[];
+} {
+  const latestExpenseAt =
+    proposals
+      .filter((p) => p.ocrCard && !p.ocrCard.failed)
+      .map((p) => p.createdAt)
+      .sort()
+      .at(-1) ?? null;
+
+  const failedOcrJobIds = proposals.flatMap((p) =>
+    p.ocrCard?.failed && p.ocrCard.ocrJobId ? [p.ocrCard.ocrJobId] : [],
+  );
+
+  return { latestExpenseAt, failedOcrJobIds };
 }

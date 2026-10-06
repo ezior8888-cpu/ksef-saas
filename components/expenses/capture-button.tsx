@@ -40,13 +40,25 @@ export function CaptureButton({
     const jobId = processingJobId;
     let cancelled = false;
     const timers: { interval?: ReturnType<typeof setInterval> } = {};
+    // Jedno pytanie naraz: odpowiedź wolniejsza niż takt (2 s) nie może
+    // nakładać się na następne — dwie odpowiedzi „completed” dałyby
+    // podwójny toast i podwójne przejście do wydatku.
+    let inFlight = false;
 
     async function pollOnce() {
-      if (cancelled) return;
-      const status = await getOcrJobStatusAction(jobId);
-      if (cancelled) return;
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      // Odrzucona obietnica akcji (sieć, restart serwera) to chwilowy błąd —
+      // stan zadania nieznany, pytamy przy następnym takcie.
+      const status = await getOcrJobStatusAction(jobId).catch(() => null);
+      inFlight = false;
+      if (cancelled || !status) return;
 
       if (!status.success) {
+        // Chwilowy błąd odczytu: zadanie mogło się udać, więc nie pokazujemy
+        // porażki (klient wgrałby zdjęcie drugi raz → drugi wydatek). Pytamy
+        // dalej; limit 60 s niżej i tak zakończy czekanie.
+        if (status.retryable) return;
         if (timers.interval) clearInterval(timers.interval);
         setState({ kind: 'failed', error: status.error });
         toast.error(status.error);

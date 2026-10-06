@@ -37,7 +37,7 @@ interface CashFlowDashboardProps {
   /**
    * Pierwszy dzień załadowanych danych (`RRRR-MM-DD`). Domyślnie początek
    * okna wykresu (6 miesięcy); gdy strona załaduje dane od 1 stycznia,
-   * szacunek podatku obejmie cały rok (C-18).
+   * szacunek podatku obejmie cały rok (C-21).
    */
   dataFrom?: string;
 }

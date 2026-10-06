@@ -243,3 +243,48 @@ describe('cash flow after switching from TEST to PROD', () => {
     await expect(PrzeplywyPage()).rejects.toThrow('nie można potwierdzić liczby rekordów');
   });
 });
+
+/**
+ * C-21: szacunek podatku na przepływach liczy od 1 stycznia, a strona ładowała
+ * tylko sześć miesięcy wykresu — od lipca kafelek obejmował niepełny rok.
+ */
+describe('przepływy: dane od 1 stycznia dla szacunku podatku', () => {
+  const sprzedaz = (id: string, issue_date: string): Row => ({
+    id, tenant_id: TENANT, direction: 'outgoing', currency: 'PLN', ksef_status: 'accepted',
+    ksef_environment: 'production', issue_date, net_total: 1_000, gross_total: 1_230,
+  });
+
+  async function dashboardProps(now: string, outgoingInvoices: Row[]) {
+    vi.setSystemTime(new Date(now));
+    mocks.context.mockResolvedValue({ supabase: client({ outgoingInvoices }), tenantId: TENANT });
+    const page = await PrzeplywyPage();
+    return (Children.toArray(page.props.children)[1] as ReactElement<{
+      invoices: Array<{ id: string }>;
+      dataFrom?: string;
+    }>).props;
+  }
+
+  it('październik: luty w danych, kafelek dostaje początek roku', async () => {
+    const props = await dashboardProps('2026-10-10T12:00:00Z', [sprzedaz('luty', '2026-02-10'), sprzedaz('grudzien-2025', '2025-12-20')]);
+    expect(props.dataFrom).toBe('2026-01-01');
+    expect(props.invoices.map((i) => i.id)).toContain('luty');
+    expect(props.invoices.map((i) => i.id)).not.toContain('grudzien-2025');
+  });
+
+  it('czerwiec: początek wykresu i roku to ten sam styczeń', async () => {
+    expect((await dashboardProps('2026-06-15T12:00:00Z', [])).dataFrom).toBe('2026-01-01');
+  });
+
+  it('luty: wykres sięga września zeszłego roku — dane od początku wykresu', async () => {
+    const props = await dashboardProps('2027-02-20T12:00:00Z', [sprzedaz('sierpien', '2026-08-31'), sprzedaz('wrzesien', '2026-09-01')]);
+    expect(props.dataFrom).toBe('2026-09-01');
+    expect(props.invoices.map((i) => i.id)).toContain('wrzesien');
+    expect(props.invoices.map((i) => i.id)).not.toContain('sierpien');
+  });
+
+  it('noc sylwestrowa: w Polsce już 1 stycznia, choć w UTC jeszcze grudzień — liczy nowy rok', async () => {
+    // 23:30 UTC 31.12 = 00:30 1.01 w Warszawie; serwer chodzi w UTC.
+    const props = await dashboardProps('2026-12-31T23:30:00Z', []);
+    expect(props.dataFrom).toBe('2026-08-01');
+  });
+});

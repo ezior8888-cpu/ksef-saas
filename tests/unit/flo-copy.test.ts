@@ -7,7 +7,7 @@ import {
   renderCopy,
   renderTemplate,
 } from '@/lib/flo/copy';
-import { formatDays, formatPln, formatPlnPlain } from '@/lib/flo/money';
+import { formatDays, formatMoneyPlain, formatPln, formatPlnPlain } from '@/lib/flo/money';
 
 /**
  * Szablony i kwoty (krok 14 planu).
@@ -43,6 +43,35 @@ describe('kwoty', () => {
 
   it('nie wywala się na wartości bez sensu', () => {
     expect(formatPlnPlain(Number.NaN)).toBe('0,00 zł');
+  });
+
+  it('formatPln i formatPlnPlain bez zmian po dodaniu innych walut', () => {
+    // Przypięte znak po znaku: twarda spacja (U+00A0) w obu miejscach
+    // `formatPln`, zwykła w `formatPlnPlain`. Kwoty z tych funkcji siedzą
+    // w zapisanych kartach, mailach i plikach dla księgowej.
+    expect(formatPln(1234.5)).toBe('1\u00a0234,50\u00a0zł');
+    expect(formatPln(0)).toBe('0,00\u00a0zł');
+    expect(formatPlnPlain(1234.5)).toBe('1 234,50 zł');
+    expect(formatPlnPlain(-1234567.891)).toBe('-1 234 567,89 zł');
+  });
+
+  it('kwota w złotych przez formatMoneyPlain to dokładnie formatPlnPlain', () => {
+    for (const amount of [0, 10.5, 312.4, 4300, 1234567.89, Number.NaN]) {
+      expect(formatMoneyPlain(amount, 'PLN')).toBe(formatPlnPlain(amount));
+      // Brak kodu i zapis małymi literami to też złotówki.
+      expect(formatMoneyPlain(amount, '')).toBe(formatPlnPlain(amount));
+      expect(formatMoneyPlain(amount, ' pln ')).toBe(formatPlnPlain(amount));
+    }
+  });
+
+  it('inna waluta: te same polskie cyfry i kod ISO zamiast „zł”', () => {
+    // Sto euro podpisane „zł” mówi klientowi nieprawdę o jego pieniądzach.
+    expect(formatMoneyPlain(1234.5, 'EUR')).toBe('1 234,50 EUR');
+    expect(formatMoneyPlain(100, 'usd')).toBe('100,00 USD');
+    expect(formatMoneyPlain(4300, 'EUR')).toBe('4 300,00 EUR');
+    expect(formatMoneyPlain(Number.NaN, 'EUR')).toBe('0,00 EUR');
+    expect(formatMoneyPlain(22140, 'EUR')).not.toContain('\u00a0');
+    expect(formatMoneyPlain(22140, 'EUR')).not.toContain('zł');
   });
 
   it('odmienia dni', () => {

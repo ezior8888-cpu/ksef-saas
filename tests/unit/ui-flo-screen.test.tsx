@@ -1,5 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import type { FloProposalView } from '@/types/flo';
 
 /**
  * Ekran agenta w całości (kroki 4, 15–20 toru B).
@@ -10,9 +12,11 @@ import { describe, expect, it, vi } from 'vitest';
  * komponenty — sprawdzamy prawdziwy ekran, nie jego atrapę.
  */
 
+let search = new URLSearchParams();
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: () => {}, push: () => {}, replace: () => {} }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => search,
 }));
 
 vi.mock('@/app/actions/flo', () => ({
@@ -22,7 +26,7 @@ vi.mock('@/app/actions/flo', () => ({
   cancelScheduled: async () => {},
 }));
 
-const { FloScreen } = await import(
+const { FloScreen, photoBannerSignals } = await import(
   '@/components/flo/flo-screen'
 );
 const { FLO_FIXTURES, FLO_SCHEDULED_FIXTURES } = await import(
@@ -95,5 +99,119 @@ describe('FloScreen — ekran agenta', () => {
     const undoable = FLO_FIXTURES.filter((f) => f.undoableUntil);
     expect(undoable.length).toBeGreaterThan(0);
     expect(render()).not.toContain('Zrobiłem to za Ciebie');
+  });
+});
+
+describe('FloScreen — sygnały dla paska zdjęcia (E16)', () => {
+  afterEach(() => {
+    search = new URLSearchParams();
+  });
+
+  function card(
+    overrides: Partial<FloProposalView> & Pick<FloProposalView, 'id' | 'kind'>,
+  ): FloProposalView {
+    return {
+      variant: 'single',
+      title: 'Karta',
+      body: 'Treść',
+      evidence: [],
+      primary: { label: 'Zgadza się', intent: 'approve' },
+      secondary: [],
+      expiresAt: '2026-09-30T12:00:00.000Z',
+      priority: 50,
+      createdAt: '2026-08-26T12:00:00.000Z',
+      ...overrides,
+    };
+  }
+
+  const failedCard = card({
+    id: 'ocr-failed',
+    kind: 'expense.review',
+    title: 'Nie odczytałem tego zdjęcia',
+    createdAt: '2026-08-26T12:05:00.000Z',
+    ocrCard: { failed: true, ocrJobId: 'job-1' },
+  });
+
+  it('karty reguły, skrzynki KSeF, brakującego dokumentu i porażki nie znaczą „odczytany”', () => {
+    // Każda z nich jest młodsza niż wejście na ekran — wcześniej to
+    // wystarczało, żeby pasek ogłosił sukces odczytu.
+    const signals = photoBannerSignals([
+      card({ id: 'rule', kind: 'expense.rule', createdAt: '2026-08-26T12:01:00.000Z' }),
+      card({ id: 'inbox', kind: 'expense.review', createdAt: '2026-08-26T12:02:00.000Z' }),
+      card({ id: 'missing', kind: 'expense.missing', createdAt: '2026-08-26T12:03:00.000Z' }),
+      failedCard,
+    ]);
+
+    expect(signals.latestExpenseAt).toBeNull();
+    expect(signals.failedOcrJobIds).toEqual(['job-1']);
+  });
+
+  it('sukcesem jest tylko najświeższy koszt odczytany ze zdjęcia', () => {
+    const signals = photoBannerSignals([
+      card({
+        id: 'read-old',
+        kind: 'expense.review',
+        createdAt: '2026-08-26T11:00:00.000Z',
+        ocrCard: { failed: false },
+      }),
+      card({
+        id: 'read-new',
+        kind: 'expense.review',
+        createdAt: '2026-08-26T12:04:00.000Z',
+        ocrCard: { failed: false, ocrJobId: 'job-9' },
+      }),
+      card({ id: 'inbox', kind: 'expense.review', createdAt: '2026-08-26T12:30:00.000Z' }),
+      failedCard,
+    ]);
+
+    expect(signals.latestExpenseAt).toBe('2026-08-26T12:04:00.000Z');
+    expect(signals.failedOcrJobIds).toEqual(['job-1']);
+  });
+
+  it('kolejność z listOpen (priorytet, potem od najnowszych) nie myli najświeższego kosztu', () => {
+    // Wątek przychodzi posortowany po priorytecie, a w nim od najnowszych —
+    // najświeższy koszt nie musi stać ani pierwszy, ani ostatni.
+    const signals = photoBannerSignals([
+      card({
+        id: 'ask-new',
+        kind: 'expense.review',
+        priority: 40,
+        createdAt: '2026-08-26T12:03:00.000Z',
+        ocrCard: { failed: false },
+      }),
+      card({
+        id: 'ask-old',
+        kind: 'expense.review',
+        priority: 40,
+        createdAt: '2026-08-26T11:00:00.000Z',
+        ocrCard: { failed: false },
+      }),
+      card({
+        id: 'done-newest',
+        kind: 'expense.review',
+        priority: 60,
+        createdAt: '2026-08-26T12:07:00.000Z',
+        ocrCard: { failed: false },
+      }),
+      card({
+        id: 'done-old',
+        kind: 'expense.review',
+        priority: 60,
+        createdAt: '2026-08-26T10:00:00.000Z',
+        ocrCard: { failed: false },
+      }),
+    ]);
+
+    expect(signals.latestExpenseAt).toBe('2026-08-26T12:07:00.000Z');
+  });
+
+  it('pasek nad kartą porażki mówi o porażce, nie o odczycie', () => {
+    search = new URLSearchParams('paragon=job-1');
+    const html = renderToStaticMarkup(
+      <FloScreen proposals={[failedCard]} scheduled={[]} />,
+    );
+
+    expect(html).toContain('Nie odczytałem tego paragonu');
+    expect(html).not.toContain('Paragon odczytany');
   });
 });
