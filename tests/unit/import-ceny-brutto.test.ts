@@ -218,12 +218,15 @@ describe('C5c: faktura w cenach brutto (art. 106e ust. 7–8) — kwoty z pliku,
 
   it('T2: VAT pozycji podany w pliku (P_11Vat, art. 106e ust. 10) → z pliku', async () => {
     let xml = xmlOf(invoice('FV/BR/V', [{ rate: '23', net: 27.10 }, { rate: '23', net: 27.10 }, { rate: '23', net: 27.10 }]));
-    for (const i of [0, 1, 2]) xml = grossLine(xml, i, { unit: '33.33', gross: '33.33', vat: '6.23' });
+    // VAT pozycji różny od podziału nagłówka (6,23 × 3) — widać, że jest z pliku.
+    xml = grossLine(xml, 0, { unit: '33.33', gross: '33.33', vat: '6.24' });
+    xml = grossLine(xml, 1, { unit: '33.33', gross: '33.33', vat: '6.22' });
+    xml = grossLine(xml, 2, { unit: '33.33', gross: '33.33', vat: '6.23' });
     xml = header(xml, { P_13_1: '81.30', P_14_1: '18.69', P_15: '99.99' });
     await expectSchemaValid(xml);
     await importXml(xml);
-    expect(column('FV/BR/V', 'vat_amount')).toEqual([6.23, 6.23, 6.23]);
-    expect(column('FV/BR/V', 'net_amount')).toEqual([27.10, 27.10, 27.10]);
+    expect(column('FV/BR/V', 'vat_amount')).toEqual([6.24, 6.22, 6.23]);
+    expect(column('FV/BR/V', 'net_amount')).toEqual([27.09, 27.11, 27.10]);
     expect(fragment(await jpkFa(), '<P_2A>FV/BR/V', '</Faktura>')).toContain('<P_14_1>18.69</P_14_1>');
   });
 
@@ -297,10 +300,22 @@ describe('C5c: faktura w cenach brutto (art. 106e ust. 7–8) — kwoty z pliku,
     expect(fragment(fa, '<FakturaWierszCtrl>', '</FakturaWierszCtrl>')).toContain('<WartoscWierszyFaktur>100.00</WartoscWierszyFaktur>');
   });
 
+  it('suma kontrolna JPK_FA: tylko zapisane P_11 (pozycja wyłącznie brutto się nie liczy)', async () => {
+    // Dwie stawki: w jednej stawce mieszanka P_11+P_11A z samym P_11A byłaby zatrzymana (VAT tylko przy części).
+    let xml = xmlOf(invoice('FV/BR/C', [{ rate: '23', net: 100 }, { rate: '8', net: 100 }]));
+    xml = grossLine(xml, 0, { unit: '123.00', gross: '123.00', keepNet: true });
+    xml = grossLine(xml, 1, { unit: '108.00', gross: '108.00' });
+    await expectSchemaValid(xml);
+    await importXml(xml);
+    const fa = await jpkFa();
+    expect(fragment(fa, '<FakturaWierszCtrl>', '</FakturaWierszCtrl>')).toContain('<WartoscWierszyFaktur>100.00</WartoscWierszyFaktur>');
+  });
+
   it('produkt z faktury brutto → domyślna cena netto pusta (nie 0)', async () => {
     await importXml(t1());
     const product = db.tables.products!.find((p) => p.name === 'Usługa 1');
-    expect(product?.default_price_net ?? null).toBeNull();
+    expect(product, 'brak produktu z importu').toBeDefined();
+    expect(product!.default_price_net).toBeNull();
   });
 });
 
@@ -316,7 +331,7 @@ describe('C5c: faktura netto innego programu — VAT od sumy stawki (art. 106e u
     expect(fragment(await jpkV7m(), 'FV/NET/3', '</SprzedazWiersz>')).toContain('<K_20>0.07</K_20>');
   });
 
-  it('faktura uproszczona bez sum nagłówka, jedna stawka → VAT = P_15 − netto pozycji, rozłożony', async () => {
+  it('faktura uproszczona bez sum nagłówka, jedna stawka → VAT od sumy netto stawki (0,07), rozłożony, zgodny z P_15', async () => {
     let xml = xmlOf(invoice('FV/UPR/1', [{ rate: '23', net: 0.10 }, { rate: '23', net: 0.10 }, { rate: '23', net: 0.10 }]));
     xml = header(xml, { P_13_1: null, P_14_1: null, P_15: '0.37' });
     await expectSchemaValid(xml);
@@ -359,10 +374,10 @@ describe('C5c: kwoty, których nie da się wiernie przenieść — zatrzymanie z
       const xml = xmlOf(invoice('FV/PUSTA/1', [{ rate: '23', net: 100 }]));
       return xml.replace('<P_15>', '<P_13_2>50.00</P_13_2><P_14_2>4.00</P_14_2><P_15>');
     }, /suma P_13_2 bez pozycji/],
-    ['ceny brutto bez sum nagłówka (faktura uproszczona)', 'FV/BR/U', () => {
+    ['ceny brutto bez sum nagłówka, pozycje ≠ P_15', 'FV/BR/U', () => {
       const xml = grossLine(xmlOf(invoice('FV/BR/U', [{ rate: '23', net: 100 }])), 0, { unit: '123.00', gross: '123.00' });
-      return header(xml, { P_13_1: null, P_14_1: null });
-    }, /ceny brutto \(P_11A\) bez sum P_13\/P_14/],
+      return header(xml, { P_13_1: null, P_14_1: null, P_15: '120.00' });
+    }, /brutto pozycji 123\.00 ≠ P_15 120\.00/],
   ])('%s → ostrzeżenie i odmowa JPK z numerem', async (_name, number, build, reason) => {
     const xml = build();
     await expectSchemaValid(xml);
@@ -372,8 +387,53 @@ describe('C5c: kwoty, których nie da się wiernie przenieść — zatrzymanie z
     await expectJpkRefusal(number, reason);
   });
 
+  it('faktura uproszczona w cenach brutto przy 23% bez sum stawek → VAT ze wzoru ust. 7 (od sumy brutto stawki)', async () => {
+    const xml = header(grossLine(xmlOf(invoice('FV/UPR/23', [{ rate: '23', net: 100 }])), 0, { unit: '123.00', gross: '123.00' }), { P_13_1: null, P_14_1: null });
+    await expectSchemaValid(xml);
+    await importXml(xml);
+    expect(lines('FV/UPR/23')[0]).toMatchObject({ net_amount: 100, vat_amount: 23, gross_amount: 123 });
+    expect(stored('FV/UPR/23')).toMatchObject({ net_total: 100, vat_total: 23 });
+    const f = fragment(await jpkFa(), '<P_2A>FV/UPR/23', '</Faktura>');
+    expect(f).toContain('<P_13_1>100.00</P_13_1>');
+    expect(f).toContain('<P_14_1>23.00</P_14_1>');
+  });
+
+  it('faktura uproszczona w cenach brutto przy zw bez sum stawek → netto faktury z pozycji, JPK z P_13_7', async () => {
+    let xml = xmlOf(invoice('FV/UPR/ZW', [{ rate: 'zw', net: 50 }, { rate: 'zw', net: 30 }]));
+    xml = grossLine(xml, 0, { unit: '50.00', gross: '50.00' });
+    xml = grossLine(xml, 1, { unit: '30.00', gross: '30.00' });
+    xml = header(xml, { P_13_7: null });
+    await expectSchemaValid(xml);
+    const result = await importXml(xml);
+    expect(result.warnings.join('\n')).not.toMatch(/JPK_FA i JPK_V7M/);
+    expect(stored('FV/UPR/ZW')).toMatchObject({ net_total: 80, vat_total: 0, gross_total: 80 });
+    expect(fragment(await jpkFa(), '<P_2A>FV/UPR/ZW', '</Faktura>')).toContain('<P_13_7>80.00</P_13_7>');
+  });
+
+  it('odmowa JPK przy nieznanych kwotach faktury mówi, że KPiR i CSV też ich nie pokażą (eksport i paczka)', async () => {
+    const xml = header(grossLine(xmlOf(invoice('FV/BR/U3', [{ rate: '23', net: 100 }, { rate: '8', net: 50 }])), 0, { unit: '123.00', gross: '123.00' }), { P_13_1: null, P_14_1: null });
+    await importXml(xml);
+    await expectJpkRefusal('FV/BR/U3', /KPiR i CSV też nie pokażą/);
+    const { jpkFaBlocker } = await import('@/lib/exports/jpk-fa-readiness');
+    const { memoryClient } = await import('./helpers/baza-w-pamieci');
+    const blocker = await jpkFaBlocker(memoryClient(db.tables) as never, { tenantId: T, periodStart: '2026-09-01', periodEnd: '2026-09-30', includeCorrections: true });
+    expect(blocker).toMatch(/FV\/BR\/U3.*KPiR i CSV też nie pokażą/);
+  });
+
+  it('pozycja w bazie bez pól z pliku (ksefLineFields bez jej numeru) → odmowa eksportu i paczki z numerem', async () => {
+    const xml = grossLine(xmlOf(invoice('FV/BR/F', [{ rate: '23', net: 100 }])), 0, { unit: '123.00', gross: '123.00' });
+    await importXml(xml);
+    const row = stored('FV/BR/F');
+    (row.fa3_data as Record<string, unknown>).ksefLineFields = [];
+    await expectJpkRefusal('FV/BR/F', /pozycja 1 bez pól z pliku KSeF/);
+    const { jpkFaBlocker } = await import('@/lib/exports/jpk-fa-readiness');
+    const { memoryClient } = await import('./helpers/baza-w-pamieci');
+    const blocker = await jpkFaBlocker(memoryClient(db.tables) as never, { tenantId: T, periodStart: '2026-09-01', periodEnd: '2026-09-30', includeCorrections: true });
+    expect(blocker).toMatch(/FV\/BR\/F.*bez pól z pliku KSeF/);
+  });
+
   it('ceny brutto bez sum nagłówka → komunikat mówi wprost, że KPiR i CSV nie znają kwot (nie „działają”)', async () => {
-    const xml = header(grossLine(xmlOf(invoice('FV/BR/U2', [{ rate: '23', net: 100 }])), 0, { unit: '123.00', gross: '123.00' }), { P_13_1: null, P_14_1: null });
+    const xml = header(grossLine(xmlOf(invoice('FV/BR/U2', [{ rate: '23', net: 100 }])), 0, { unit: '123.00', gross: '123.00' }), { P_13_1: null, P_14_1: null, P_15: '120.00' });
     const result = await importXml(xml);
     expect(result.warnings[0]).toContain('FV/BR/U2');
     expect(result.warnings[0]).toMatch(/KPiR i CSV też nie pokażą/);

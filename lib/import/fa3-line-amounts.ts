@@ -48,7 +48,12 @@ export interface ImportLineAmounts {
   /** Brak przy powtórzonych numerach pozycji albo pliku spoza KSeF. */
   ksefLineFields?: KsefLineFields[];
   problems: string[];
-  /** Plik nie podaje sum stawki — netto i VAT faktury są nieznane (KPiR i CSV też ich nie pokażą). */
+  /**
+   * Netto i VAT faktury policzone z pozycji — tylko faktura bez sum stawek
+   * (P_13_x / P_14_x), gdy pozycje zgadzają się z P_15. Inaczej sumy z nagłówka.
+   */
+  totals?: { netTotal: number; vatTotal: number };
+  /** Netto i VAT faktury są nieznane (brak sum stawki albo pozycje ≠ P_15) — KPiR i CSV też ich nie pokażą. */
   totalsUnknown?: true;
 }
 
@@ -59,7 +64,7 @@ function grosze(raw: string): number | null {
   const m = /^(-?)(\d{1,16})(?:\.(\d{1,2}))?$/.exec(raw.trim());
   if (!m) return null;
   const value = Number(m[2]) * 100 + Number((m[3] ?? '').padEnd(2, '0'));
-  return m[1] ? -value : value;
+  return m[1] && value ? -value : value;
 }
 
 /** TKwotowy2 / TIlosci (do 8 miejsc) → liczba; `null` = nieczytelne. */
@@ -179,6 +184,80 @@ function allocate(
   return { vats, floor, ceil };
 }
 
+/** Zaokrąglenie ilorazu do grosza (ust. 11: od 0,5 grosza w górę), symetrycznie dla kwot ujemnych. */
+function roundDiv(num: number, den: number): number {
+  const value = Math.floor((2 * Math.abs(num) + den) / (2 * den));
+  return num < 0 ? -value : value;
+}
+
+/** VAT podany przy pozycji (ust. 10): P_11Vat albo P_11A − P_11. */
+const fixedVat = (f: LineFacts) => f.p11vat ?? (f.p11 !== undefined && f.p11a !== undefined ? f.p11a - f.p11 : undefined);
+
+interface Derived {
+  f: LineFacts;
+  net: number;
+  vat: number;
+  gross: number;
+}
+
+/**
+ * Netto, VAT i brutto pozycji jednej grupy stawki. `target` — sumy nagłówka
+ * (brak sumy = 0). Bez `target.vat` (faktura bez sum stawek; grupa = jedna
+ * stawka) VAT liczymy od sumy wartości stawki: ust. 7 przy cenach brutto,
+ * ust. 1 pkt 14 przy netto. `null`, gdy nie da się wiernie — powód w `fail`.
+ */
+function splitBucket(
+  bucket: readonly LineFacts[],
+  target: { net?: number; vat?: number },
+  fail: (text: string) => void,
+): Derived[] | null {
+  const hasN = bucket.some((f) => f.p11 !== undefined && f.p11a === undefined);
+  const hasG = bucket.some((f) => f.p11a !== undefined && f.p11 === undefined);
+  const fixedCount = bucket.filter((f) => fixedVat(f) !== undefined).length;
+  if (hasN && hasG) { fail('pozycje z wartością netto (P_11) i brutto (P_11A) naraz'); return null; }
+  if (fixedCount > 0 && fixedCount < bucket.length) { fail('VAT pozycji (P_11Vat albo P_11 i P_11A) tylko przy części pozycji'); return null; }
+  if (target.net !== undefined && target.vat !== undefined && bucket.every((f) => f.p11a !== undefined)) {
+    const gross = bucket.reduce((a, f) => a + f.p11a!, 0);
+    if (gross !== target.net + target.vat) {
+      fail(`brutto pozycji ${zl(gross)} ≠ netto ${zl(target.net)} + VAT ${zl(target.vat)} z nagłówka`);
+      return null;
+    }
+  }
+  let vats: number[];
+  if (fixedCount === bucket.length) {
+    vats = bucket.map((f) => fixedVat(f)!);
+    const sum = vats.reduce((a, v) => a + v, 0);
+    if (target.vat !== undefined && sum !== target.vat) { fail(`VAT pozycji ${zl(sum)} ≠ VAT z nagłówka ${zl(target.vat)}`); return null; }
+  } else {
+    const shares = bucket.map((f) => {
+      const pct = VAT_BUCKETS[f.rate]!.pct;
+      return f.p11 !== undefined
+        ? { num: f.p11 * pct, den: 100, ordinal: f.line.position, index: f.index }
+        : { num: f.p11a! * pct, den: 100 + pct, ordinal: f.line.position, index: f.index };
+    });
+    // Bez sumy nagłówka grupa ma jedną stawkę i jeden rodzaj wartości — wspólny mianownik.
+    const total = target.vat ?? roundDiv(shares.reduce((a, s) => a + s.num, 0), shares[0]!.den);
+    const result = allocate(shares, total);
+    if (!result.vats) {
+      fail(`VAT z nagłówka ${zl(total)} nie wynika z wartości pozycji (możliwe ${zl(result.floor)}–${zl(result.ceil)})`);
+      return null;
+    }
+    vats = result.vats;
+  }
+  const derived = bucket.map((f, i) => {
+    const vat = vats[i]!;
+    const net = f.p11 ?? f.p11a! - vat;
+    return { f, net, vat, gross: f.p11a ?? net + vat };
+  });
+  if (target.net !== undefined) {
+    const net = derived.reduce((a, d) => a + d.net, 0);
+    if (net !== target.net) { fail(`netto pozycji ${zl(net)} ≠ netto z nagłówka ${zl(target.net)}`); return null; }
+  }
+  return derived;
+}
+
+const sumOf = (ds: readonly Derived[], key: 'net' | 'vat' | 'gross') => ds.reduce((a, d) => a + d[key], 0);
+
 /**
  * Kwoty pozycji faktury z importu KSeF. Plik spoza KSeF (JPK, CSV), korekta,
  * zaliczka i ROZ (odmowa z rodzaju, C5a) albo stawka nieznana — jak dotąd.
@@ -193,7 +272,13 @@ export function fa3ImportLineAmounts(inv: ParsedInvoice): ImportLineAmounts {
   const facts = lines.map(factsOf);
   const problems: string[] = [];
   let totalsUnknown = false;
+  let totals: { netTotal: number; vatTotal: number } | undefined;
   const rows: ImportLineRow[] = facts.map((f) => legacyLineAmounts(f.line, f.unitPriceNet));
+  const write = (ds: readonly Derived[]) => {
+    for (const d of ds) {
+      rows[d.f.index] = { ordinal: d.f.line.position, unitPriceNet: d.f.unitPriceNet, netAmount: d.net / 100, vatAmount: d.vat / 100, grossAmount: d.gross / 100 };
+    }
+  };
 
   const ordinals = lines.map((l) => l.position);
   const duplicated = [...new Set(ordinals.filter((o, i) => ordinals.indexOf(o) !== i))];
@@ -208,7 +293,6 @@ export function fa3ImportLineAmounts(inv: ParsedInvoice): ImportLineAmounts {
     if (f.unreadable.length) problems.push(`pozycja ${f.line.position}: ${f.unreadable.join(', ')} nieczytelne`);
     if (f.p11 === undefined && f.p11a === undefined && !f.unreadable.length) {
       problems.push(`pozycja ${f.line.position}: brak wartości (ani P_11, ani P_11A)`);
-      totalsUnknown = true;
     }
     if (f.p11vat !== undefined && f.p11 !== undefined && f.p11a !== undefined && f.p11vat !== f.p11a - f.p11) {
       problems.push(`pozycja ${f.line.position}: P_11A − P_11 = ${zl(f.p11a - f.p11)} ≠ P_11Vat ${zl(f.p11vat)}`);
@@ -228,124 +312,128 @@ export function fa3ImportLineAmounts(inv: ParsedInvoice): ImportLineAmounts {
     if (g === null) problems.push(`nagłówek: ${field} „${raw}” nieczytelne`);
     return g;
   };
-  const anyHeaderNet = Object.keys(sums).some((k) => k.startsWith('P_13_'));
-  const vatBucketsWithLines = new Set(facts.filter((f) => f.rate in VAT_BUCKETS).map((f) => VAT_BUCKETS[f.rate]!.net));
-  const p15 = sums.P_15 === undefined ? undefined : grosze(sums.P_15);
-
-  // ── Stawki z VAT ──
-  for (const [netField, vatField] of VAT_PAIRS) {
-    const bucket = facts.filter((f) => VAT_BUCKETS[f.rate]?.net === netField);
-    const label = [...new Set(bucket.map((f) => f.rate))].join('/');
-    const tn = header(netField);
-    const tv = header(vatField);
-    if (!bucket.length) {
-      if ((tn ?? 0) !== 0 || (tv ?? 0) !== 0) problems.push(`suma ${netField} bez pozycji tej stawki (${zl(tn ?? 0)})`);
-      continue;
-    }
-    if (bucket.some(badLine) || tn === null || tv === null) continue;
-    const hasN = bucket.some((f) => f.p11 !== undefined && f.p11a === undefined);
-    const hasG = bucket.some((f) => f.p11a !== undefined && f.p11 === undefined);
-    const fixedVat = (f: LineFacts) => f.p11vat ?? (f.p11 !== undefined && f.p11a !== undefined ? f.p11a - f.p11 : undefined);
-    const fixedCount = bucket.filter((f) => fixedVat(f) !== undefined).length;
-    const fail = (text: string) => { problems.push(`stawka ${label}: ${text}`); };
-
-    let target: { net?: number; vat: number } | null = null;
-    if (tn !== undefined && tv !== undefined) {
-      target = { net: tn, vat: tv };
-    } else if (hasG || anyHeaderNet) {
-      fail(hasG ? 'ceny brutto (P_11A) bez sum P_13/P_14 w nagłówku' : `brak sum ${netField}/${vatField} w nagłówku`);
-      totalsUnknown = true;
-      continue;
-    } else if (vatBucketsWithLines.size === 1 && p15 !== undefined && p15 !== null && facts.every((f) => f.p11 !== undefined && f.p11a === undefined)) {
-      // Faktura uproszczona bez sum stawek, jedna stawka z VAT: VAT = P_15 − netto pozycji.
-      target = { vat: p15 - facts.reduce((a, f) => a + f.p11!, 0) };
-    } else {
-      continue; // jak dotąd (VAT liczony z pozycji)
-    }
-
-    if (hasN && hasG) { fail('pozycje z wartością netto (P_11) i brutto (P_11A) naraz'); continue; }
-    if (fixedCount > 0 && fixedCount < bucket.length) { fail('VAT pozycji (P_11Vat albo P_11 i P_11A) tylko przy części pozycji'); continue; }
-    if (target.net !== undefined && bucket.every((f) => f.p11a !== undefined)) {
-      const gross = bucket.reduce((a, f) => a + f.p11a!, 0);
-      if (gross !== target.net + target.vat) {
-        fail(`brutto pozycji ${zl(gross)} ≠ netto ${zl(target.net)} + VAT ${zl(target.vat)} z nagłówka`);
-        continue;
-      }
-    }
-    let vats: number[];
-    if (fixedCount === bucket.length) {
-      vats = bucket.map((f) => fixedVat(f)!);
-      const sum = vats.reduce((a, v) => a + v, 0);
-      if (sum !== target.vat) { fail(`VAT pozycji ${zl(sum)} ≠ VAT z nagłówka ${zl(target.vat)}`); continue; }
-    } else {
-      const shares = bucket.map((f) => {
-        const pct = VAT_BUCKETS[f.rate]!.pct;
-        return f.p11 !== undefined
-          ? { num: f.p11 * pct, den: 100, ordinal: f.line.position, index: f.index }
-          : { num: f.p11a! * pct, den: 100 + pct, ordinal: f.line.position, index: f.index };
-      });
-      const result = allocate(shares, target.vat);
-      if (!result.vats) {
-        fail(`VAT z nagłówka ${zl(target.vat)} nie wynika z wartości pozycji (możliwe ${zl(result.floor)}–${zl(result.ceil)})`);
-        continue;
-      }
-      vats = result.vats;
-    }
-    const derived = bucket.map((f, i) => {
-      const vat = vats[i]!;
-      const net = f.p11 ?? f.p11a! - vat;
-      return { f, net, vat, gross: f.p11a ?? net + vat };
-    });
-    if (target.net !== undefined) {
-      const net = derived.reduce((a, d) => a + d.net, 0);
-      if (net !== target.net) { fail(`netto pozycji ${zl(net)} ≠ netto z nagłówka ${zl(target.net)}`); continue; }
-    }
-    for (const d of derived) {
-      rows[d.f.index] = { ordinal: d.f.line.position, unitPriceNet: d.f.unitPriceNet, netAmount: d.net / 100, vatAmount: d.vat / 100, grossAmount: d.gross / 100 };
-    }
-  }
-
-  // ── Stawki bez VAT ──
-  for (const field of new Set(Object.values(NO_VAT_BUCKETS))) {
-    const bucket = facts.filter((f) => NO_VAT_BUCKETS[f.rate] === field);
-    const t = header(field);
-    if (!bucket.length) {
-      if ((t ?? 0) !== 0) problems.push(`suma ${field} bez pozycji tej stawki (${zl(t ?? 0)})`);
-      continue;
-    }
-    if (bucket.some(badLine) || t === null) continue;
-    const label = [...new Set(bucket.map((f) => f.rate))].join('/');
+  /** Stawka bez podatku: VAT pozycji musi być 0; netto = brutto = wartość pozycji. */
+  const noVatDerived = (bucket: readonly LineFacts[]): Derived[] | null => {
     const wrong = bucket.find((f) => (f.p11vat ?? 0) !== 0 || (f.p11 !== undefined && f.p11a !== undefined && f.p11 !== f.p11a));
     if (wrong) {
       problems.push(`pozycja ${wrong.line.position}: stawka ${wrong.rate} bez podatku, a VAT ${zl(wrong.p11vat ?? (wrong.p11a! - wrong.p11!))}`);
-      continue;
+      return null;
     }
-    if (t === undefined && anyHeaderNet) {
-      problems.push(`stawka ${label}: brak sumy ${field} w nagłówku`);
+    return bucket.map((f) => ({ f, net: f.p11 ?? f.p11a!, vat: 0, gross: f.p11 ?? f.p11a! }));
+  };
+  const labelOf = (bucket: readonly LineFacts[]) => [...new Set(bucket.map((f) => f.rate))].join('/');
+  const grossAtUndistributed = facts.filter((f) => NOT_DISTRIBUTED.has(f.rate) && f.p11a !== undefined && f.p11 === undefined);
+
+  if (Object.keys(sums).some((k) => k.startsWith('P_13_') || k.startsWith('P_14_'))) {
+    // ── Sumy stawek w nagłówku: prawdą są P_13_x / P_14_x; brak sumy stawki = 0 ──
+    for (const [netField, vatField] of VAT_PAIRS) {
+      const bucket = facts.filter((f) => VAT_BUCKETS[f.rate]?.net === netField);
+      const tn = header(netField);
+      const tv = header(vatField);
+      if (!bucket.length) {
+        if ((tn ?? 0) !== 0 || (tv ?? 0) !== 0) problems.push(`suma ${netField} bez pozycji tej stawki (${zl(tn ?? 0)})`);
+        continue;
+      }
+      if (bucket.some(badLine) || tn === null || tv === null) continue;
+      const fail = (text: string) => { problems.push(`stawka ${labelOf(bucket)}: ${text}`); };
+      const base = bucket.reduce((a, f) => a + (f.p11 ?? f.p11a!), 0);
+      if (tn === undefined && tv === undefined && base !== 0) {
+        fail(`brak sum ${netField}/${vatField} w nagłówku, a pozycje mają ${zl(base)}`);
+        totalsUnknown = true;
+        continue;
+      }
+      const derived = splitBucket(bucket, { net: tn ?? 0, vat: tv ?? 0 }, fail);
+      if (derived) write(derived);
+    }
+    for (const field of new Set(Object.values(NO_VAT_BUCKETS))) {
+      const bucket = facts.filter((f) => NO_VAT_BUCKETS[f.rate] === field);
+      const t = header(field);
+      if (!bucket.length) {
+        if ((t ?? 0) !== 0) problems.push(`suma ${field} bez pozycji tej stawki (${zl(t ?? 0)})`);
+        continue;
+      }
+      if (bucket.some(badLine) || t === null) continue;
+      const derived = noVatDerived(bucket);
+      if (!derived) continue;
+      const net = sumOf(derived, 'net');
+      if (t === undefined && net !== 0) {
+        problems.push(`stawka ${labelOf(bucket)}: brak sumy ${field} w nagłówku, a pozycje mają ${zl(net)}`);
+        totalsUnknown = true;
+        continue;
+      }
+      if (net !== (t ?? 0)) {
+        problems.push(`stawka ${labelOf(bucket)}: netto pozycji ${zl(net)} ≠ netto z nagłówka ${zl(t ?? 0)}`);
+        continue;
+      }
+      write(derived);
+    }
+  } else {
+    // ── Bez sum stawek (faktura uproszczona): kwoty z pozycji, VAT od sumy każdej
+    // stawki, całość sprawdzona z P_15. Netto i VAT faktury tylko stąd — parser
+    // nie ma ich skąd wziąć (przy cenach brutto dałby netto 0).
+    let unknown = facts.some(badLine) || grossAtUndistributed.length > 0;
+    const groups = new Map<string, LineFacts[]>();
+    for (const f of facts) {
+      if (f.rate in VAT_BUCKETS) groups.set(f.rate, [...(groups.get(f.rate) ?? []), f]);
+    }
+    const results = new Map<string, Derived[]>();
+    for (const [rate, bucket] of groups) {
+      if (bucket.some(badLine)) continue;
+      const derived = splitBucket(bucket, {}, (text) => { problems.push(`stawka ${rate}: ${text}`); });
+      if (derived) results.set(rate, derived);
+      else unknown = true;
+    }
+    const noVat: Derived[] = [];
+    for (const f of facts) {
+      if (!(f.rate in NO_VAT_BUCKETS) || badLine(f)) continue;
+      const derived = noVatDerived([f]);
+      if (derived) noVat.push(...derived);
+      else unknown = true;
+    }
+    // Taksówki (4%/3%) bez rozkładu: kwoty faktury zostają z parsera, jak dotąd.
+    const undistributed = facts.some((f) => NOT_DISTRIBUTED.has(f.rate));
+    if (!unknown && !undistributed) {
+      const p15 = header('P_15');
+      if (p15 === undefined) problems.push('nagłówek: brak P_15');
+      if (p15 === undefined || p15 === null) {
+        unknown = true;
+      } else {
+        const grossAll = () => sumOf([...[...results.values()].flat(), ...noVat], 'gross');
+        // Wystawca liczył VAT inaczej niż od sumy (np. sumą VAT pozycji): przy jednej
+        // stawce netto bez VAT pozycji VAT wynika z P_15 — o ile mieści się w podziale.
+        const adjustable = [...results].filter(([, ds]) => ds.every((d) => d.f.p11a === undefined && fixedVat(d.f) === undefined));
+        if (grossAll() !== p15 && adjustable.length === 1) {
+          const [rate, ds] = adjustable[0]!;
+          const vat = p15 - (grossAll() - sumOf(ds, 'gross')) - sumOf(ds, 'net');
+          const adjusted = splitBucket(groups.get(rate)!, { vat }, () => {});
+          if (adjusted) results.set(rate, adjusted);
+        }
+        const gross = grossAll();
+        if (gross !== p15) {
+          problems.push(`brutto pozycji ${zl(gross)} ≠ P_15 ${zl(p15)}`);
+          unknown = true;
+        }
+      }
+    }
+    for (const ds of results.values()) write(ds);
+    write(noVat);
+    if (unknown) {
       totalsUnknown = true;
-      continue;
+    } else if (!undistributed) {
+      const all = [...[...results.values()].flat(), ...noVat];
+      totals = { netTotal: sumOf(all, 'net') / 100, vatTotal: sumOf(all, 'vat') / 100 };
     }
-    const nets = bucket.map((f) => f.p11 ?? f.p11a!);
-    const sum = nets.reduce((a, n) => a + n, 0);
-    if (t !== undefined && sum !== t) {
-      problems.push(`stawka ${label}: netto pozycji ${zl(sum)} ≠ netto z nagłówka ${zl(t)}`);
-      continue;
-    }
-    bucket.forEach((f, i) => {
-      rows[f.index] = { ordinal: f.line.position, unitPriceNet: f.unitPriceNet, netAmount: nets[i]! / 100, vatAmount: 0, grossAmount: nets[i]! / 100 };
-    });
   }
 
   // ── Stawki, których FaktFlow nie rozkłada ──
-  for (const f of facts) {
-    if (NOT_DISTRIBUTED.has(f.rate) && f.p11a !== undefined && f.p11 === undefined) {
-      problems.push(`pozycja ${f.line.position}: ceny brutto przy stawce ${f.rate}, której FaktFlow nie rozkłada`);
-    }
+  for (const f of grossAtUndistributed) {
+    problems.push(`pozycja ${f.line.position}: ceny brutto przy stawce ${f.rate}, której FaktFlow nie rozkłada`);
   }
   return {
     rows,
     ...(duplicated.length ? {} : { ksefLineFields: ksefLineFieldsOf(lines) }),
     problems: [...new Set(problems)],
+    ...(totals ? { totals } : {}),
     ...(totalsUnknown ? { totalsUnknown: true as const } : {}),
   };
 }

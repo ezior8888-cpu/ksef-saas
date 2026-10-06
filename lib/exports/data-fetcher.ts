@@ -552,7 +552,7 @@ export function importedContentFlags(
  * po numerze pozycji. Pozycja bez pary — powód zatrzymania (JPK nie zapisze
  * wyliczonego netto zamiast ceny brutto z pliku).
  */
-function attachKsefLineFields(
+export function attachKsefLineFields(
   lines: JpkInvoiceLine[],
   fa3: unknown,
 ): { lines: JpkInvoiceLine[]; problems: string[] } {

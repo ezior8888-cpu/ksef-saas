@@ -86,7 +86,14 @@ udział w dół albo w górę) — dla faktur brutto **i netto** (decyzja Bartos
 | `P_11Vat` przy każdej pozycji, suma = `P_14_x` | VAT z pliku | jak wyżej (JPK_FA nie ma `P_11Vat`) |
 | `P_11` i `P_11A` przy pozycji | VAT = `P_11A − P_11` | oba pola |
 | `P_10` (rabat) | bez wpływu na kwoty (`P_11`/`P_11A` są po rabacie) | `P_10` z pliku |
-| faktura uproszczona bez sum, jedna stawka z VAT, ceny netto | VAT = `P_15` − netto pozycji, podzielony | pola z pliku |
+| faktura bez sum stawek (uproszczona), ceny netto albo brutto | VAT od sumy wartości każdej stawki (ust. 7 / ust. 1 pkt 14), zaokrąglony do grosza (ust. 11), podzielony; całość = `P_15`. Jedna stawka netto bez VAT pozycji, gdy suma ≠ `P_15` (wystawca zsumował VAT pozycji): VAT stawki z `P_15`, jeśli mieści się w podziale | pola z pliku |
+
+**Faktura bez sum stawek** (żadnego `P_13_x` / `P_14_x`): netto i VAT
+faktury (`invoices.net_total` / `vat_total`) import liczy z pozycji — parser nie
+ma ich skąd wziąć (przy cenach brutto dałby netto 0, przy zw „KPiR i CSV
+działają” byłoby nieprawdą). Gdy plik ma sumy innych stawek, brak sumy stawki
+liczy się jako 0: pozycje tej stawki sumujące się do 0 przechodzą, inne są
+zatrzymane.
 
 **Zatrzymane z numerem** (pozycje tej stawki zostają jak dotąd, nic nie
 zgadujemy; JPK_FA i V7M odmawiają, raport importu ostrzega): pozycje netto
@@ -94,10 +101,19 @@ i brutto w jednej stawce; `P_11Vat` tylko przy części pozycji albo jego suma
 ≠ VAT nagłówka (decyzja Bartosza 06.10: zatrzymać); VAT nagłówka poza
 możliwym zakresem podziału; brutto pozycji ≠ netto + VAT nagłówka; netto
 pozycji ≠ netto nagłówka (dokładnie, bez tolerancji); suma stawki bez pozycji;
-kwota nieczytelna; powtórzone `NrWierszaFa` przy cenach brutto; ceny brutto przy
-taksówkach (4%/3%). **Ceny brutto bez sum nagłówka** (faktura uproszczona):
-netto i VAT faktury są nieznane — komunikat mówi wprost, że **KPiR i CSV też
-ich nie pokażą** i fakturę trzeba wprowadzić z księgową.
+kwota nieczytelna; pozycja bez wartości; powtórzone `NrWierszaFa` przy cenach
+brutto; ceny brutto przy taksówkach (4%/3%). **Kwoty faktury nieznane**
+(`fa3_data.lineAmountTotalsUnknown`): pozycje stawki bez jej sum w nagłówku,
+a przy fakturze bez sum stawek — pozycje ≠ `P_15`, brak `P_15` albo pozycja
+nieczytelna. Komunikat mówi wtedy wprost, że **KPiR i CSV też ich nie
+pokażą** i fakturę trzeba wprowadzić z księgową.
+
+**Faktura z importu sprzed C5c** (bez `fa3_data.ksefLineFields`): JPK liczy
+ją jak dotąd z pozycji w bazie (kontrola VAT pozycji = VAT faktury co do
+grosza). Ponowny import tej samej faktury trafia w gałąź duplikatu i **nie
+przepisuje pozycji** — w odróżnieniu od dat i adnotacji C5b. Gdy taka faktura
+jest zatrzymana różnicą VAT, wyjście to JPK z księgową (KPiR i CSV działają);
+przepisanie pozycji starych importów to osobna decyzja.
 
 ## Co widzi klient
 

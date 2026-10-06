@@ -586,8 +586,9 @@ async function insertInvoices(
         seller_nip: inv.seller.nip?.replace(/\D/g, '').slice(0, 10) || null,
         buyer_nip: idCols.buyer_nip,
         currency: 'PLN',
-        net_total: inv.totals.netTotal,
-        vat_total: inv.totals.vatTotal,
+        // C5c: faktura bez sum stawek — netto i VAT z pozycji (sprawdzone z P_15), inaczej z nagłówka.
+        net_total: amounts.totals?.netTotal ?? inv.totals.netTotal,
+        vat_total: amounts.totals?.vatTotal ?? inv.totals.vatTotal,
         gross_total: inv.totals.grossTotal,
         payment_due_date: inv.paymentDueDate ?? null,
         fa3_data: buildImportFa3Json(inv, source, importJobId, content, amounts),
@@ -706,8 +707,8 @@ function heldDocumentWarning(
   const linesNet = amounts.rows.reduce((sum, r) => sum + (Number.isFinite(r.netAmount) ? r.netAmount : 0), 0);
   const linesVat = amounts.rows.reduce((sum, r) => sum + (Number.isFinite(r.vatAmount) ? r.vatAmount : 0), 0);
   const mismatch = sale && !codes.length && !amountReason && !special && (
-    Math.abs(roundToCents(linesNet) - roundToCents(inv.totals.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01 ||
-    Math.abs(roundToCents(linesVat) - roundToCents(inv.totals.vatTotal)) >= 0.005);
+    Math.abs(roundToCents(linesNet) - roundToCents(amounts.totals?.netTotal ?? inv.totals.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01 ||
+    Math.abs(roundToCents(linesVat) - roundToCents(amounts.totals?.vatTotal ?? inv.totals.vatTotal)) >= 0.005);
   if (codes.length === 0 && !special && !mismatch && contentReasons.length === 0 && !amountReason) return null;
 
   if (status !== 'accepted') {

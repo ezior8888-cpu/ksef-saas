@@ -56,15 +56,136 @@ describe('fa3ImportLineAmounts', () => {
     expect(r.rows.map((x) => x.netAmount)).toEqual([-8.13, -0.81]);
   });
 
-  it('stawka 23% i 22% w jednej sumie P_13_1 → reszty porównane na krzyż (różne mianowniki)', () => {
-    // 10,00 brutto przy 23% (udział 186,99 gr) i 10,00 przy 22% (180,33 gr): F = 366, C = 368.
+  it('stawka 23% i 22% w jednej sumie P_13_1 → reszty porównane na krzyż (różne mianowniki), nie surowo', () => {
+    // 1,00 brutto przy 23% (pozycja 1) i 1,37 przy 22% (pozycja 2): obie reszty = 86,
+    // ale 86/122 > 86/123 — grosz dostaje 22%, mimo wyższego numeru pozycji.
     const r = fa3ImportLineAmounts(invoice(
-      [line(1, '22', { P_11A: '10.00' }), line(2, '23', { P_11A: '10.00' })],
-      { P_13_1: '16.33', P_14_1: '3.67', P_15: '20.00' },
+      [line(1, '23', { P_11A: '1.00' }), line(2, '22', { P_11A: '1.37' })],
+      { P_13_1: '1.94', P_14_1: '0.43', P_15: '2.37' },
     ));
     expect(r.problems).toEqual([]);
-    // Większa reszta: 23% (0,99) przed 22% (0,33) — mimo niższego numeru pozycji 22%.
-    expect(r.rows.map((x) => x.vatAmount)).toEqual([1.8, 1.87]);
+    expect(r.rows.map((x) => x.vatAmount)).toEqual([0.18, 0.25]);
+  });
+
+  it.each([
+    ['stawka bez VAT: netto pozycji o grosz ≠ suma nagłówka', [line(1, 'zw', { P_11: '50.01' })], { P_13_7: '50.00', P_15: '50.00' }, /stawka zw: netto pozycji 50\.01 ≠ netto z nagłówka 50\.00/],
+    ['pozycja bez P_11 i P_11A', [line(1, '23', {}), line(2, '23', { P_11: '100.00' })], { P_13_1: '100.00', P_14_1: '23.00', P_15: '123.00' }, /pozycja 1: brak wartości/],
+    ['suma jednej stawki brakuje, druga jest, pozycje niezerowe', [line(1, '23', { P_11: '100.00' }), line(2, '8', { P_11: '50.00' })], { P_13_1: '100.00', P_14_1: '23.00', P_15: '177.00' }, /stawka 8: brak sum P_13_2\/P_14_2 w nagłówku, a pozycje mają 50\.00/],
+    ['nieczytelna suma nagłówka', [line(1, '23', { P_11: '100.00' })], { P_13_1: '100,00', P_14_1: '23.00', P_15: '123.00' }, /nagłówek: P_13_1 „100,00” nieczytelne/],
+    ['ceny brutto przy taksówkach (4%)', [line(1, '4', { P_11A: '104.00' })], { P_13_4: '100.00', P_14_4: '4.00', P_15: '104.00' }, /pozycja 1: ceny brutto przy stawce 4/],
+  ])('%s → problem z nazwą', (_name, lines, sums, problem) => {
+    const r = fa3ImportLineAmounts(invoice(lines as ParsedLine[], sums as ParsedInvoice['ksefSums']));
+    expect(r.problems.join(' | ')).toMatch(problem);
+  });
+
+  it('brak wartości pozycji przy sumach nagłówka → bez „kwoty faktury nieznane” (KPiR liczy z nagłówka)', () => {
+    const r = fa3ImportLineAmounts(invoice([line(1, '23', {}), line(2, '23', { P_11: '100.00' })], { P_13_1: '100.00', P_14_1: '23.00', P_15: '123.00' }));
+    expect(r.totalsUnknown).toBeUndefined();
+  });
+
+  it('stawka bez sumy w nagłówku, pozycje sumują się do 0 → bez zatrzymania (brak sumy = 0)', () => {
+    const r = fa3ImportLineAmounts(invoice(
+      [line(1, '23', { P_11: '100.00' }), line(2, '8', { P_11: '10.00' }), line(3, '8', { P_11: '-10.00' })],
+      { P_13_1: '100.00', P_14_1: '23.00', P_15: '123.00' },
+    ));
+    expect(r.problems).toEqual([]);
+    expect(r.rows.map((x) => x.vatAmount)).toEqual([23, 0.8, -0.8]);
+  });
+
+  describe('faktura bez sum stawek (uproszczona) — kwoty faktury z pozycji, sprawdzone z P_15', () => {
+    it('ceny brutto przy zw (P_11A 50 + 30, P_15 80) → netto faktury 80, VAT 0', () => {
+      const r = fa3ImportLineAmounts(invoice([line(1, 'zw', { P_11A: '50.00' }), line(2, 'zw', { P_11A: '30.00' })], { P_15: '80.00' }));
+      expect(r.problems).toEqual([]);
+      expect(r.totals).toEqual({ netTotal: 80, vatTotal: 0 });
+      expect(r.totalsUnknown).toBeUndefined();
+    });
+
+    it('VAT pozycji z pliku (P_11A − P_11) przy jednej stawce → z pliku, brutto = P_11A', () => {
+      const r = fa3ImportLineAmounts(invoice(
+        [line(1, '23', { P_11: '0.10', P_11A: '0.13' }), line(2, '23', { P_11: '0.10', P_11A: '0.12' }), line(3, '23', { P_11: '0.10', P_11A: '0.12' })],
+        { P_15: '0.37' },
+      ));
+      expect(r.problems).toEqual([]);
+      expect(r.rows.map((x) => x.vatAmount)).toEqual([0.03, 0.02, 0.02]);
+      expect(r.rows.map((x) => x.grossAmount)).toEqual([0.13, 0.12, 0.12]);
+      expect(r.totals).toEqual({ netTotal: 0.3, vatTotal: 0.07 });
+    });
+
+    it('dwie stawki netto (23% 3 × 0,10 i 8% 1,00, P_15 1,45) → VAT od sumy każdej stawki: 0,07 i 0,08', () => {
+      const r = fa3ImportLineAmounts(invoice(
+        [line(1, '23', { P_11: '0.10' }), line(2, '23', { P_11: '0.10' }), line(3, '23', { P_11: '0.10' }), line(4, '8', { P_11: '1.00' })],
+        { P_15: '1.45' },
+      ));
+      expect(r.problems).toEqual([]);
+      expect(r.rows.map((x) => x.vatAmount)).toEqual([0.03, 0.02, 0.02, 0.08]);
+      expect(r.totals).toEqual({ netTotal: 1.3, vatTotal: 0.15 });
+    });
+
+    it('ceny brutto przy 23% bez sum (P_11A 123, P_15 123) → VAT ze wzoru ust. 7: 23,00, netto 100', () => {
+      const r = fa3ImportLineAmounts(invoice([line(1, '23', { P_11A: '123.00' })], { P_15: '123.00' }));
+      expect(r.problems).toEqual([]);
+      expect(r.rows[0]).toMatchObject({ netAmount: 100, vatAmount: 23, grossAmount: 123 });
+      expect(r.totals).toEqual({ netTotal: 100, vatTotal: 23 });
+    });
+
+    it('wystawca zsumował VAT pozycji (3 × 0,10, P_15 0,36) → VAT stawki z P_15: 0,06, mieści się w podziale', () => {
+      const r = fa3ImportLineAmounts(invoice([line(1, '23', { P_11: '0.10' }), line(2, '23', { P_11: '0.10' }), line(3, '23', { P_11: '0.10' })], { P_15: '0.36' }));
+      expect(r.problems).toEqual([]);
+      expect(r.rows.map((x) => x.vatAmount)).toEqual([0.02, 0.02, 0.02]);
+      expect(r.totals).toEqual({ netTotal: 0.3, vatTotal: 0.06 });
+    });
+
+    it('P_15 poza możliwym podziałem jedynej stawki netto (3 × 0,10, P_15 0,40) → zatrzymane', () => {
+      const r = fa3ImportLineAmounts(invoice([line(1, '23', { P_11: '0.10' }), line(2, '23', { P_11: '0.10' }), line(3, '23', { P_11: '0.10' })], { P_15: '0.40' }));
+      expect(r.problems).toEqual(['brutto pozycji 0.37 ≠ P_15 0.40']);
+      expect(r.totalsUnknown).toBe(true);
+      expect(r.totals).toBeUndefined();
+    });
+
+    it('dwie stawki netto i pozycje ≠ P_15 → bez zgadywania, której stawki dotyczy różnica', () => {
+      const r = fa3ImportLineAmounts(invoice([line(1, '23', { P_11: '0.10' }), line(2, '23', { P_11: '0.10' }), line(3, '23', { P_11: '0.10' }), line(4, '8', { P_11: '1.00' })], { P_15: '1.44' }));
+      expect(r.problems).toEqual(['brutto pozycji 1.45 ≠ P_15 1.44']);
+      expect(r.totalsUnknown).toBe(true);
+    });
+
+    it('ujemna wartość netto bez sum (zwrot −0,50 przy 23% obok 1,00 przy 8%) → VAT −0,12 (od 0,5 grosza w górę, symetrycznie)', () => {
+      // Dwie stawki: P_15 nie dopasuje VAT za żadną, więc liczy się tylko zaokrąglenie.
+      const r = fa3ImportLineAmounts(invoice([line(1, '23', { P_11: '-0.50' }), line(2, '8', { P_11: '1.00' })], { P_15: '0.46' }));
+      expect(r.problems).toEqual([]);
+      expect(r.rows.map((x) => x.vatAmount)).toEqual([-0.12, 0.08]);
+      expect(r.totals).toEqual({ netTotal: 0.5, vatTotal: -0.04 });
+    });
+
+    it('brak P_15 → kwoty faktury nieznane, z powodem', () => {
+      const r = fa3ImportLineAmounts(invoice([line(1, 'zw', { P_11: '50.00' })], {}));
+      expect(r.problems).toEqual(['nagłówek: brak P_15']);
+      expect(r.totalsUnknown).toBe(true);
+    });
+
+    it('pozycja bez wartości → kwoty faktury nieznane (nie ma ich skąd wziąć)', () => {
+      const r = fa3ImportLineAmounts(invoice([line(1, 'zw', {}), line(2, 'zw', { P_11: '50.00' })], { P_15: '50.00' }));
+      expect(r.problems).toEqual(['pozycja 1: brak wartości (ani P_11, ani P_11A)']);
+      expect(r.totalsUnknown).toBe(true);
+      expect(r.totals).toBeUndefined();
+    });
+
+    it('taksówki (4%) netto bez sum → kwoty faktury z parsera jak dotąd (bez sum z pozycji, bez zatrzymania)', () => {
+      const r = fa3ImportLineAmounts(invoice([line(1, '4', { P_11: '100.00' })], { P_15: '104.00' }));
+      expect(r.problems).toEqual([]);
+      expect(r.totals).toBeUndefined();
+      expect(r.totalsUnknown).toBeUndefined();
+    });
+
+    it('„-0.00” → zero bez znaku (JSON i porównania)', () => {
+      const r = fa3ImportLineAmounts(invoice([line(1, 'zw', { P_11: '-0.00' }), line(2, 'zw', { P_11: '10.00' })], { P_15: '10.00' }));
+      expect(Object.is(r.rows[0]!.netAmount, 0)).toBe(true);
+    });
+
+    it('pozycje ≠ P_15 → zatrzymane, kwoty faktury nieznane', () => {
+      const r = fa3ImportLineAmounts(invoice([line(1, 'zw', { P_11A: '50.00' })], { P_15: '60.00' }));
+      expect(r.problems.join(' | ')).toMatch(/brutto pozycji 50\.00 ≠ P_15 60\.00/);
+      expect(r.totalsUnknown).toBe(true);
+    });
   });
 
   it('wynik przechodzi przez JSON (supabase-js) — bez BigInt, NaN, Infinity', () => {
