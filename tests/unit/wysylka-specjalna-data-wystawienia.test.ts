@@ -225,6 +225,19 @@ describe('ISSUE_DATE_PASSED: dokument specjalny tylko w dniu wystawienia (decyzj
     expect(message).not.toMatch(/^NonRetriableError/);
   });
 
+  it('północ między bezpiecznikiem a plikiem (odmowa z haka sesji) → bez ponowienia, failed ISSUE_DATE_PASSED', async () => {
+    useDocument('advance', '2026-10-02');
+    const { IssueDatePassedError } = await import('@/lib/ksef/special-issue-date');
+    mocks.fullFlow.mockRejectedValueOnce(new IssueDatePassedError('2026-10-02', '2026-10-03'));
+    const error = await failing(runSubmitInvoice(event('advance', '2026-10-02'), ctx));
+    // Nie RetryAfterError: ponowienie po 30 s tylko odłożyłoby tę samą odmowę.
+    expect(error.name).toBe('NonRetriableError');
+
+    await onSubmitInvoiceExhausted(error, event('advance', '2026-10-02'), ctx);
+    expect(lastInvoiceUpdate()).toMatchObject({ ksef_status: 'failed', last_error_code: 'ISSUE_DATE_PASSED' });
+    expect(String(lastInvoiceUpdate()?.last_error ?? '')).toContain('2026-10-03');
+  });
+
   it('zaliczka z dzisiejszą datą → wysyłka jak dotąd', async () => {
     useDocument('advance', '2026-10-02');
     await runSubmitInvoice(event('advance', '2026-10-02'), ctx);
