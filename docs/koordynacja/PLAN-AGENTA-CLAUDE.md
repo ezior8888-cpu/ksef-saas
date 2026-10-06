@@ -123,6 +123,9 @@ z czytaniem JSON-u z tekstu z D-A4-1a, pełne CI 5970/5970, build OK.
 Lekcja z 04.10: czysty merge w gicie to za mało — po przesunięciu `main`
 próbny merge + `tsc` + testy obszaru (03.10 `main` zaczął importować
 `ksefErrorCodes` z `submit`, a #189 go stamtąd przeniósł → TS2459).
+Wieczorem 06.10 `main` dostał poprawkę audytu zależności (`overrides`
+dla `sharp` i `source-map-js`) i indeks B4 (#238, migracja 00146); #189
+i ten plan zaktualizowane z `main`.
 Wcześniej (03.10): punkt 00
 sprawdzony (main dalej czerwony, wiadomość dla Bartosza), F-093 zrobione w #189,
 B4 i E15 w #192 (kod + prośba o migrację w opisie). Po południu Bartosz scalił
@@ -179,7 +182,7 @@ zielony), #192 (B4 + E15), #198 (E16).
 | B1 | Wdrożyć `main` (aplikacja + worker) | u Bartosza — rejestr migracji / wdrożeń w `CLAUDE-DO-CODEXA.md` |
 | B2 | Sprawdzić/ustawić `GUS_API_KEY` na produkcji | nieznany |
 | B3 | Klucze obce blokujące usunięcie konta (RODO) | ✅ migracja `00113_user_deletion_foreign_keys` |
-| B4 | Odczyt dubli wydatków z OCR, potem `UNIQUE (tenant_id, ocr_job_id)` | kod w `main` (#192 przez #232, 06.10). Indeks — osobny PR Bartosza (opis #232): najpierw liczenie dubli na db-1, potem migracja z kolejnym wolnym numerem z rejestru (06.10: 00145). Gotowy SQL (liczenie, odczyt dla księgowej, migracja z preflightem) w opisie #192 |
+| B4 | Odczyt dubli wydatków z OCR, potem `UNIQUE (tenant_id, ocr_job_id)` | ✅ kod w `main` (#192 przez #232, 06.10); indeks `00146_expense_ocr_job_identity` w `main` (#238, 06.10, „przed wdrożeniem”) — stan wgrania w rejestrze migracji |
 | B5 | C-16: płatności/ponaglenia ROZ | ✅ częściowo #178 (ponaglenia i zaległości tylko dla faktur ścigalnych, 00126) |
 | B6 | `SENTRY_DSN` w zmiennych workera (log startu „Sentry: alerty z jobów włączone”) | nieznany; od #120 alerty idą też na Telegram |
 | B7 | Mail o końcu trialu dla kont bez karty | decyzja — cennik i trial ujednolicone w #136 (`lib/billing/pricing.ts`) |
