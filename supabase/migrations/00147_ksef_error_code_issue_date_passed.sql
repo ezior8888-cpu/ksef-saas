@@ -6,13 +6,14 @@
 -- pg-boss (do ok. 1 h 20 min) i oczekiwanie na przejęcie wysyłki potrafią
 -- przenieść POST za północ, a w KSeF dokument wystawia się w dniu wysyłki
 -- (art. 106na ust. 1) — z wcześniejszą datą byłby fakturą offline bez
--- oznaczeń. Worker tuż przed POST odmawia z nowym kodem katalogu.
+-- oznaczeń. Worker odmawia z nowym kodem katalogu przed wysyłką i drugi raz
+-- tuż przed plikiem (hak otwarcia sesji — uwierzytelnienie trwa do kilkudziesięciu sekund).
 --
 -- Nowy kod `ISSUE_DATE_PASSED`, klasa `terminal`, bez automatu: bez dowodu
 -- kontaktu dokument wraca do szkicu (klient albo operator), a ponieważ
 -- szkicu dokumentu specjalnego nie da się wysłać, klient usuwa go i wystawia
--- od nowa z dzisiejszą datą. Z dowodem kontaktu — „Tylko uzgodnij” (nie
--- wysyła) albo decyzja w B2. RPC z 00131 czytają klasę z katalogu
+-- od nowa z dzisiejszą datą. Z dowodem kontaktu dokument specjalny nie ma
+-- dziś wyjścia w panelu (jak przy innych kodach; A4b PR2, B2). RPC z 00131 czytają klasę z katalogu
 -- (`ksef_error_class`), więc `requeue_ksef_send` odmawia, a `reset_ksef_send`
 -- dopuszcza powrót do szkicu bez zmian w funkcjach. Zwykła faktura bez
 -- zmian (B1/B2). Do zdjęcia, gdy B2 obejmie wszystkie rodzaje.

@@ -63,7 +63,7 @@ export const OPERATOR_MESSAGES = {
   reconcileClass: 'Klasa reconcile: nie wysyłaj od nowa — użyj „Tylko uzgodnij” albo zostaw.',
   duplicateRequeue: 'KSeF ma już fakturę o tym numerze, a automat nie rozstrzygnął, czyja to treść — ponowienie powtórzy 440. Przy otwartym wpisie użyj „Tylko uzgodnij” (powtórzy weryfikację); inaczej runbook: KSEF_DUPLICATE_RECONCILE.',
   envMismatchRequeue: 'Faktura była zlecona w innym środowisku KSeF — ponowienie wysłałoby ją w bieżącym. Bez dowodu kontaktu: „Wróć do szkicu”, klient zdecyduje, czy wysłać ją tutaj. Otwarty wpis: „Tylko uzgodnij” uzgadnia w BIEŻĄCYM środowisku — wpisu sprzed przełączenia środowiska nie uzgadniaj tak (runbook: ENV_MISMATCH).',
-  issueDatePassedRequeue: 'Dokument specjalny z datą wystawienia sprzed dzisiaj — worker nie wyśle go z wcześniejszą datą (decyzja 06.10.2026, 00147; do B2). Bez dowodu kontaktu: „Wróć do szkicu” (klient usuwa szkic i wystawia dokument od nowa z dzisiejszą datą). Otwarty wpis: „Tylko uzgodnij” (nie wysyła).',
+  issueDatePassedRequeue: 'Dokument specjalny z datą wystawienia sprzed dzisiaj — worker nie wyśle go z wcześniejszą datą (decyzja 06.10.2026, 00147; do B2). Bez dowodu kontaktu: „Wróć do szkicu” (klient usuwa szkic i wystawia dokument od nowa z dzisiejszą datą). Z dowodem kontaktu (z otwartym wpisem albo bez) dokument specjalny nie ma dziś wyjścia w panelu — runbook ksef-error-codes, „Dokumenty specjalne” (A4b PR2, B2).',
   notFailedOrRejected: 'Dostępne tylko dla failed / rejected.',
   evidence: 'Faktura ma dowód kontaktu z KSeF (numer albo wpis sent/accepted/duplicate) — nie wraca do szkicu.',
 } as const;

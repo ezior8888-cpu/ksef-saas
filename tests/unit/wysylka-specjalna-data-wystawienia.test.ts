@@ -10,8 +10,8 @@ import type { AdvanceInvoiceData, CorrectionInvoiceData } from '@/types/invoice-
  * dziś. Sprawdzenie przy zleceniu nie wystarcza — ponowienia pg-boss (do ok.
  * 1 h 20 min) i oczekiwanie na przejęcie potrafią przenieść POST za północ,
  * a w KSeF dokument wystawia się w dniu wysyłki (art. 106na ust. 1; F-092):
- * z wcześniejszą datą byłby fakturą offline bez oznaczeń. Worker tuż przed
- * POST odmawia z kodem ISSUE_DATE_PASSED (terminal, 00147) — dotyczy też
+ * z wcześniejszą datą byłby fakturą offline bez oznaczeń. Worker przed
+ * wysyłką (i drugi raz w haku sesji, `wysylka-specjalna-data-przed-plikiem`) odmawia z kodem ISSUE_DATE_PASSED (terminal, 00147) — dotyczy też
  * pierwszej wysyłki po północy. Zwykła faktura bez zmian (B1/B2).
  *
  * Prawdziwy runner (`runSubmitInvoice`, `onSubmitInvoiceExhausted`); atrapy:
@@ -261,5 +261,7 @@ describe('ISSUE_DATE_PASSED: dokument specjalny tylko w dniu wystawienia (decyzj
     const button = operatorRequeueButton({ direction: 'outgoing', status: 'failed', errorCode: SEND_ERROR_CODES.ISSUE_DATE_PASSED, invoiceKind: 'advance' } as never);
     expect(button.enabled).toBe(false);
     expect(button.reason).toMatch(/datą wystawienia sprzed dzisiaj/);
+    // Recenzja: „Tylko uzgodnij” jest dla dokumentów specjalnych wyłączony — nie wolno go podpowiadać.
+    expect(button.reason).not.toMatch(/Tylko uzgodnij/);
   });
 });

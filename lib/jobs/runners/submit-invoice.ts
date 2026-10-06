@@ -3,6 +3,7 @@ import { assertJobIdentity, requireInvoiceTenant } from './tenant-boundary';
 import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError, RetryAfterError } from '../errors';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { IssueDatePassedError, issueDatePassedMessage } from '@/lib/ksef/special-issue-date';
 import type { JobContext } from '@/lib/jobs/registry';
 import type { KsefEnvironment } from '@/types/ksef';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
@@ -1580,15 +1581,12 @@ export async function runSubmitInvoice(
       // Ponowienie pg-boss albo oczekiwanie na przejęcie może przenieść POST za
       // północ — w KSeF dokument wystawia się w dniu wysyłki. Tu, przed
       // `submitInvoiceFullFlow`: uzgodnienie (wyżej) nie wysyła, więc działa dalej.
+      // Drugie sprawdzenie — w haku sesji tuż przed plikiem (`IssueDatePassedError`).
       // Zwykła faktura bez zmian (B1/B2); do zdjęcia, gdy B2 obejmie wszystkie rodzaje.
       if (documentKind !== 'regular') {
         const today = todayInWarsaw();
         if (invoice.issueDate !== today) {
-          throw new NonRetriableError(
-            `[${SEND_ERROR_CODES.ISSUE_DATE_PASSED}] Tego dokumentu nie wysłaliśmy do KSeF: ma datę wystawienia ` +
-              `${invoice.issueDate || 'brak'}, a dziś jest ${today} — w KSeF dokument wystawia się w dniu wysyłki. ` +
-              'Wróć do szkicu, usuń go i wystaw dokument od nowa z dzisiejszą datą.',
-          );
+          throw new NonRetriableError(issueDatePassedMessage(invoice.issueDate, today));
         }
       }
       const credentials = await getTenantKsefCredentials(tenantId);
@@ -1620,6 +1618,11 @@ export async function runSubmitInvoice(
         );
         return { ...submitted, via: 'submit' };
       } catch (error) {
+        // Północ wypadła po bezpieczniku wyżej, przed plikiem (hak sesji) — pliku
+        // nie wysłano; ponowienie dałoby tę samą odmowę.
+        if (error instanceof IssueDatePassedError) {
+          throw new NonRetriableError(error.message, { cause: error });
+        }
         if (error instanceof KsefNotVerifiedError) {
           throw new NonRetriableError(
             'Organizacja nie ma zweryfikowanego certyfikatu KSeF (Ustawienia → KSeF). Wysyłka do KSeF jest zablokowana.',

@@ -254,7 +254,8 @@ agenta z weryfikacją Bartosza, nie obietnica.
 - Czerwony test: faktura `failed INFRA` z `issue_date = wczoraj` nie jest
   ponawiana przez automat; klient widzi dlaczego i co zrobić.
 - Częściowo zrobione przed B2 (decyzja Bartosza 06.10.2026, A4b): kod
-  `ISSUE_DATE_PASSED` (00147) i bezpiecznik w workerze tuż przed POST — tylko
+  `ISSUE_DATE_PASSED` (00147) i bezpiecznik w workerze (przed wysyłką i w haku
+  sesji tuż przed plikiem) — tylko
   dla dokumentów specjalnych (KOR, ZAL, ROZ). B2 rozszerza go na zwykłe faktury
   (po decyzji B1) i dokłada cron 23:45 oraz maila.
 
