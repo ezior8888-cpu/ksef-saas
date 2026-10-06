@@ -6,6 +6,14 @@
 import { XMLParser } from 'fast-xml-parser';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 import { FA3_NET_FIELDS, importVatRateFromFa3, type Fa3RateHeader } from '@/lib/xml/fa3-p12';
+import {
+  displayRaw,
+  readFa3Annotations,
+  readFa3Markers,
+  readTDataT,
+  type Fa3Annotations,
+  type Fa3Markers,
+} from '@/lib/xml/fa3-annotations';
 import type { ArchivedKsefXml } from './ksef-xml-archive';
 
 // ============================================================================
@@ -35,6 +43,22 @@ export interface ParsedInvoice {
   /** Zmapowana etykieta (np. przelew / gotówka) albo surowy kod z FormaPlatnosci. */
   paymentMethod?: string;
   bankAccount?: string;
+
+  // ── C5b: treść, którą import dotąd gubił (pola opcjonalne — parsery JPK/CSV ich nie mają) ──
+  /** Kod formularza z nagłówka („FA (3)”, „FA (2)”) — dowód; odczyt jest ten sam. */
+  formCode?: string;
+  /** P_6 — data dostawy / wykonania usługi wspólna dla pozycji. */
+  saleDate?: string;
+  /** OkresFa — okres, którego dotyczy faktura (P_6_Od, P_6_Do). */
+  salePeriod?: { from: string; to: string };
+  /** Daty sprzedaży z pliku, których nie dało się odczytać (P_6, OkresFa, P_6A). */
+  saleDateProblems?: string[];
+  /** Adnotacje z pliku — tylko odczytane pola (`lib/xml/fa3-annotations.ts`). */
+  ksefAnnotations?: Fa3Annotations;
+  /** Adnotacje i oznaczenia z pliku, których nie dało się odczytać. */
+  annotationProblems?: string[];
+  /** FP, TP, podmiot upoważniony, GTU, Procedura — JPK FaktFlow ich nie wykazuje. */
+  ksefMarkers?: Fa3Markers;
 
   warnings: string[];
 }
@@ -68,6 +92,8 @@ export interface ParsedLine {
   /** Surowe P_12 z pliku (dowód); brak, gdy pozycja nie miała P_12. */
   p12?: string;
   netAmount: number;
+  /** P_6A — data sprzedaży pozycji, gdy pozycje mają różne daty (C5b). */
+  saleDate?: string;
 }
 
 // ============================================================================
@@ -182,12 +208,40 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
   const seller = parseParty(root.Podmiot1, warnings, 'Sprzedawca');
   const buyer = parseParty(root.Podmiot2, warnings, 'Nabywca');
 
+  // C5b: kod formularza tylko jako dowód — FA(2) i FA(3) mają te same nazwy
+  // P_6 / OkresFa / P_6A / Adnotacje, a przestrzeń nazw parser pomija.
+  const formCode = readFormCode(root.Naglowek);
+  if (formCode && formCode !== 'FA (3)' && formCode !== 'FA (2)') {
+    warnings.push(`Plik w formacie „${formCode}” — odczytany jak FA(3); sprawdź datę sprzedaży i adnotacje z oryginałem`);
+  }
+
+  // C5b: data sprzedaży — nieczytelna nigdy nie przechodzi jako data.
+  const saleDateProblems: string[] = [];
+  const readDate = (raw: unknown, label: string): string | undefined => {
+    if (raw === undefined || raw === null) return undefined;
+    const date = readTDataT(raw);
+    if (!date) saleDateProblems.push(`${label} ${displayRaw(raw)}`);
+    return date ?? undefined;
+  };
+  const saleDate = readDate(fa.P_6, 'P_6');
+  let salePeriod: ParsedInvoice['salePeriod'];
+  if (fa.OkresFa !== undefined && fa.OkresFa !== null) {
+    const okres = (fa.OkresFa && typeof fa.OkresFa === 'object' && !Array.isArray(fa.OkresFa) ? fa.OkresFa : {}) as Record<string, unknown>;
+    const from = readDate(okres.P_6_Od, 'P_6_Od');
+    const to = readDate(okres.P_6_Do, 'P_6_Do');
+    if (from && to && from <= to) salePeriod = { from, to };
+    else if (from && to) saleDateProblems.push(`OkresFa: P_6_Od ${from} po P_6_Do ${to}`);
+    else if (okres.P_6_Od === undefined || okres.P_6_Do === undefined) saleDateProblems.push('OkresFa bez P_6_Od albo P_6_Do');
+    if (fa.P_6 !== undefined && fa.P_6 !== null) saleDateProblems.push('P_6 i OkresFa naraz');
+  }
+
   const wiersze = ensureArray(fa.FaWiersz as unknown[] | Record<string, unknown> | undefined);
+  const wierszeNodes = wiersze.map((wRaw) => (wRaw && typeof wRaw === 'object' ? wRaw : {}) as Record<string, unknown>);
   const rateHeader = rateHeaderFromFa(fa);
-  const lines: ParsedLine[] = wiersze.map((wRaw, idx) => {
-    const w = (wRaw && typeof wRaw === 'object' ? wRaw : {}) as Record<string, unknown>;
+  const lines: ParsedLine[] = wierszeNodes.map((w, idx) => {
     const pos = Number(w.NrWierszaFa) || idx + 1;
     const p12 = w.P_12 == null ? undefined : String(w.P_12);
+    const lineSaleDate = readDate(w.P_6A, `P_6A (pozycja ${pos})`);
     return {
       position: pos,
       name: String(w.P_7 ?? ''),
@@ -199,8 +253,16 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
       vatRate: importVatRateFromFa3(p12, rateHeader),
       ...(p12 !== undefined ? { p12 } : {}),
       netAmount: parseNum(w.P_11),
+      ...(lineSaleDate ? { saleDate: lineSaleDate } : {}),
     };
   });
+  if (saleDateProblems.length) warnings.push(`Nieczytelna data sprzedaży: ${saleDateProblems.join('; ')}`);
+
+  // C5b: Adnotacje i oznaczenia — każdy problem zatrzyma fakturę w JPK.
+  const { annotations: ksefAnnotations, problems: adnotacjeProblems } = readFa3Annotations(fa.Adnotacje);
+  const { markers: ksefMarkers, problems: markerProblems } = readFa3Markers(root, fa, wierszeNodes);
+  const annotationProblems = [...adnotacjeProblems, ...markerProblems];
+  if (annotationProblems.length) warnings.push(`Nieczytelne adnotacje KSeF: ${annotationProblems.join('; ')}`);
 
   if (lines.length === 0 && invoiceType !== 'correction') {
     warnings.push('Brak pozycji (FaWiersz)');
@@ -213,24 +275,9 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
   const platnosc = fa.Platnosc;
   const { paymentDueDate, paymentMethod, bankAccount } = parsePlatnosc(platnosc, warnings);
 
-  if (options?.ksefNumber) {
-    return {
-      ksefNumber: options.ksefNumber,
-      invoiceNumber,
-      issueDate,
-      invoiceType,
-      seller,
-      buyer,
-      lines,
-      totals,
-      paymentDueDate,
-      paymentMethod,
-      bankAccount,
-      warnings,
-    };
-  }
-
+  // Jeden literał wyniku — z numerem KSeF i bez (szkic z pliku) te same pola.
   return {
+    ...(options?.ksefNumber ? { ksefNumber: options.ksefNumber } : {}),
     invoiceNumber,
     issueDate,
     invoiceType,
@@ -241,8 +288,24 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
     paymentDueDate,
     paymentMethod,
     bankAccount,
+    ...(formCode ? { formCode } : {}),
+    ...(saleDate ? { saleDate } : {}),
+    ...(salePeriod ? { salePeriod } : {}),
+    ...(saleDateProblems.length ? { saleDateProblems } : {}),
+    ksefAnnotations,
+    ...(annotationProblems.length ? { annotationProblems } : {}),
+    ...(ksefMarkers ? { ksefMarkers } : {}),
     warnings,
   };
+}
+
+/** `Naglowek/KodFormularza/@kodSystemowy` („FA (3)”, „FA (2)”). */
+function readFormCode(naglowek: unknown): string | undefined {
+  if (!naglowek || typeof naglowek !== 'object') return undefined;
+  const kod = (naglowek as Record<string, unknown>).KodFormularza;
+  if (!kod || typeof kod !== 'object') return undefined;
+  const code = (kod as Record<string, unknown>)['@_kodSystemowy'];
+  return typeof code === 'string' && code.trim() ? code.trim() : undefined;
 }
 
 // ============================================================================

@@ -307,6 +307,11 @@ agenta z weryfikacją Bartosza, nie obietnica.
   (P_16, P_18A, P_19A/B/C) z pliku do `sale_date` / `fa3_data.annotations` —
   **warunek** D-A4-1b-3 PR C (zapis oryginału z KSeF po decyzji klienta);
   S18/S19 osobno. Na produkcji 05.10: 0 faktur z importu — bez `UPDATE`.
+  Decyzje Bartosza 06.10.2026: **C5c** — ceny brutto (`P_9B`, `P_11A`,
+  `P_11Vat`, VAT rozłożony do `P_14_x`) osobnym PR po C5b, też warunek PR C;
+  JPK_FA wpisuje `P_17`, jawne `P_18` i `P_19B`/`P_19C` z pliku; FP, TP,
+  podmiot upoważniony, GTU i Procedura — wykrywane i zatrzymywane w JPK;
+  faktury z importu sprzed C5b uzupełnia ponowny import.
 
 ### Blok D — dowody (M5)
 

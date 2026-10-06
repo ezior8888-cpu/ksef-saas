@@ -23,6 +23,14 @@ import {
   type AdvanceInvoiceSettlementRow,
 } from '@/lib/ksef/fa3-advance-generator';
 import { importedVatRateLabel } from '@/lib/xml/fa3-p12';
+import {
+  annotationsJpkCannotExpress,
+  exemptionMismatch,
+  markersJpkCannotExpress,
+  type ExemptionBasisKind,
+  type Fa3Markers,
+  type MarginScheme,
+} from '@/lib/xml/fa3-annotations';
 import { roundToCents, summarizeVatPerRate } from '@/lib/xml/invoice-calculator';
 import type { InvoiceLineItem, VatRate } from '@/types/invoice';
 
@@ -80,6 +88,17 @@ export interface JpkInvoice {
   importedDocumentType?: 'KOR' | 'ZAL' | 'ROZ';
   /** Faktura z importu historii KSeF (`origin = ksef_import`) — pozycje z parsera, nie z FaktFlow. */
   importedFromKsef?: boolean;
+  /**
+   * C5b: faktura z importu historii bez odczytanych adnotacji (`fa3_data.annotations`
+   * brak — import sprzed C5b). Ponowny import uzupełnia je z oryginału.
+   */
+  importedAnnotationsMissing?: boolean;
+  /** C5b: adnotacje / oznaczenia z pliku KSeF, których import nie odczytał. */
+  importedAnnotationProblems?: string[];
+  /** C5b: pozycje z różnymi datami sprzedaży (P_6A) albo data nieczytelna — JPK ma jedną datę dokumentu. */
+  importedSaleDateUnclear?: boolean;
+  /** C5b: FP, TP, podmiot upoważniony, GTU, Procedura z pliku KSeF (`fa3_data.ksefMarkers`). */
+  ksefMarkers?: Fa3Markers;
   issueDate: string;
   saleDate?: string;
   paymentDueDate?: string;
@@ -137,6 +156,18 @@ export interface JpkInvoiceAnnotations {
   splitPayment?: boolean;
   cashMethod?: boolean;
   vatExemptionBasis?: string;
+  /** C5b: rodzaj podstawy z pliku KSeF — JPK_FA(4) ma P_19A, P_19B i P_19C. Brak = P_19A. */
+  vatExemptionBasisKind?: ExemptionBasisKind;
+  /** C5b: P_17 z pliku KSeF (FaktFlow sam nie wystawia samofaktur). */
+  selfInvoicing?: boolean;
+  /** C5b: jawne P_18 z pliku KSeF; brak = z pozycji „oo” / „np_ii”. */
+  reverseCharge?: boolean;
+  /** C5b: P_23 z pliku KSeF — JPK odmawia (V7M bez TT_D). */
+  simplifiedProcedure?: boolean;
+  /** C5b: P_22 z pliku KSeF — JPK odmawia. */
+  newMeansOfTransport?: boolean;
+  /** C5b: procedura marży z pliku KSeF — JPK odmawia (V7M bez MR_T / MR_UZ). */
+  marginScheme?: MarginScheme;
 }
 
 export interface ExportParty {
@@ -379,8 +410,35 @@ export function importedLinesMismatch(inv: Pick<JpkInvoice, 'importedFromKsef' |
   return Math.abs(roundToCents(sum) - roundToCents(inv.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01;
 }
 
+/**
+ * C5b: treść z pliku KSeF, której JPK FaktFlow nie wykaże albo nie zna —
+ * `null`, gdy nic nie stoi na przeszkodzie. Oznaczenia i procedury czytane
+ * z faktów (każde pochodzenie wiersza); spójność zwolnienia — tylko import
+ * (faktury FaktFlow sprzed #60 nie mają podstawy w adnotacjach).
+ */
+function importedContentRefusal(inv: JpkInvoice): string | null {
+  if (inv.importedAnnotationsMissing) {
+    return 'jest zaimportowana przed odczytem daty sprzedaży i adnotacji z pliku KSeF (metoda kasowa, MPP, zwolnienie, procedury) — ponów import historii z KSeF za ten okres, a FaktFlow uzupełni je z oryginału.';
+  }
+  if (inv.importedAnnotationProblems?.length) {
+    return `ma w KSeF adnotacje, których import nie udało się odczytać (${inv.importedAnnotationProblems.join('; ')}) — FaktFlow nie wie, czy dotyczy jej metoda kasowa, MPP albo procedura szczególna.`;
+  }
+  const cannot = [...annotationsJpkCannotExpress(inv.annotations), ...markersJpkCannotExpress(inv.ksefMarkers)];
+  if (cannot.length) return `ma w KSeF oznaczenie, którego FaktFlow nie wykazuje w JPK: ${cannot.join(', ')}.`;
+  if (inv.importedFromKsef && inv.annotations !== undefined &&
+      exemptionMismatch(inv.annotations, inv.lines.map((l) => l.vatRate))) {
+    return 'ma zwolnienie z VAT (P_19) niezgodne ze stawkami pozycji, więc FaktFlow nie wykaże jej poprawnie w JPK.';
+  }
+  if (inv.importedSaleDateUnclear) {
+    return 'ma pozycje z różnymi datami sprzedaży (P_6A) albo nieczytelną datę sprzedaży, a JPK przyjmuje jedną datę sprzedaży dla dokumentu.';
+  }
+  return null;
+}
+
 export function amountsOf(inv: JpkInvoice): InvoiceAmounts {
   if (inv.importedDocumentType) throw unsupportedImportedType(inv, inv.importedDocumentType);
+  const contentRefusal = importedContentRefusal(inv);
+  if (contentRefusal) throw new JpkDocumentNotSupportedError(inv.invoiceNumber, inv.ksefNumber, contentRefusal);
   if (importedLinesMismatch(inv)) {
     throw new JpkDocumentNotSupportedError(
       inv.invoiceNumber,
@@ -485,12 +543,15 @@ function buildFaktura(
   const exempt = rates.has('zw');
   const basis = inv.annotations?.vatExemptionBasis?.trim();
   f.ele('P_16').txt(bool(inv.annotations?.cashMethod === true));
-  f.ele('P_17').txt('false'); // samofakturowanie — nie wystawiamy
+  // Samofakturowanie — FaktFlow nie wystawia; z importu KSeF wartość z pliku (C5b).
+  f.ele('P_17').txt(bool(inv.annotations?.selfInvoicing === true));
   // Podatek rozlicza nabywca: „oo” i „np_ii” (AUD-70) — opis P_18 jak w FA(3).
-  f.ele('P_18').txt(bool([...rates].some((r) => REVERSE_CHARGE_RATES.has(r))));
+  // Jawne P_18 z pliku KSeF (C5b) ma pierwszeństwo — JPK mówi to, co oryginał.
+  f.ele('P_18').txt(bool(inv.annotations?.reverseCharge ?? [...rates].some((r) => REVERSE_CHARGE_RATES.has(r))));
   f.ele('P_18A').txt(bool(inv.annotations?.splitPayment === true));
   f.ele('P_19').txt(bool(exempt));
-  if (exempt && basis) f.ele('P_19A').txt(znaki(basis));
+  // P_19A przepis ustawy, P_19B dyrektywy, P_19C inna podstawa (C5b: rodzaj z pliku KSeF).
+  if (exempt && basis) f.ele(inv.annotations?.vatExemptionBasisKind ?? 'P_19A').txt(znaki(basis));
   f.ele('P_20').txt('false'); // egzekucja
   f.ele('P_21').txt('false'); // przedstawiciel podatkowy
   f.ele('P_22').txt('false'); // nowe środki transportu

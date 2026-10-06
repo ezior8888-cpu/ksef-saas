@@ -15,6 +15,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
 import { amountsOf, JpkFaCorrectionNotSupportedError, type JpkInvoice } from '@/lib/exports/jpk-fa-generator';
+import { importedContentFlags } from '@/lib/exports/data-fetcher';
+import { jpkAnnotationsFromJson } from '@/lib/xml/fa3-annotations';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { VAT_RATES } from '@/lib/xml/fa3-p12';
 
@@ -29,6 +31,11 @@ interface PeriodInvoice {
   invoice_type: string | null;
   origin: string | null;
   net_total: number | string | null;
+  /** C5b: pola `fa3_data` aliasami (bez pozycji — na fakturach FaktFlow `fa3_data` niesie wszystkie). */
+  annotations?: unknown;
+  annotation_problems?: unknown;
+  sale_dates?: unknown;
+  ksef_markers?: unknown;
 }
 
 interface PeriodLine {
@@ -53,7 +60,7 @@ async function unsupportedDocumentReason(
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await client
       .from('invoices')
-      .select('id, internal_number, ksef_number, invoice_kind, invoice_type, origin, net_total')
+      .select('id, internal_number, ksef_number, invoice_kind, invoice_type, origin, net_total, annotations:fa3_data->annotations, annotation_problems:fa3_data->annotationProblems, sale_dates:fa3_data->saleDates, ksef_markers:fa3_data->ksefMarkers')
       .eq('tenant_id', params.tenantId)
       .eq('direction', 'outgoing')
       .eq('ksef_status', 'accepted')
@@ -76,6 +83,12 @@ async function unsupportedDocumentReason(
       invoiceType: 'regular',
       importedDocumentType: inv.invoice_kind === 'regular' && (type === 'KOR' || type === 'ZAL' || type === 'ROZ') ? type : undefined,
       importedFromKsef: lines !== null && inv.origin === 'ksef_import',
+      // C5b: te same flagi treści co eksport (`data-fetcher`) — paczka i plik mówią to samo.
+      annotations: jpkAnnotationsFromJson(inv.annotations),
+      ...importedContentFlags(inv.origin, {
+        annotations: inv.annotations, annotationProblems: inv.annotation_problems,
+        saleDates: inv.sale_dates, ksefMarkers: inv.ksef_markers,
+      }),
       issueDate: params.periodStart,
       buyerName: '',
       netTotal: Number(inv.net_total ?? 0),
