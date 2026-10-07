@@ -410,7 +410,10 @@ describe('A2b: „Tylko uzgodnij” stwierdza, że KSeF nie ma faktury — wynik
 
     const failed = { direction: 'outgoing', status: 'failed', errorCode: 'NOT_IN_KSEF', invoiceKind: 'regular' };
     expect(decideResend(failed)).toMatchObject({ allowed: true });
-    const buttons = operatorInvoiceButtons({ ...failed, openSent: false, evidence: false });
+    const buttons = operatorInvoiceButtons({
+      ...failed, openSent: false, evidence: false,
+      facts: { sendData: 'stored', kindHeld: false, issueDatePassed: false }, environmentKnown: true,
+    });
     expect(buttons.requeue.enabled).toBe(true);
     expect(buttons.reset.enabled).toBe(true);
     // Klient: oba przyciski i zdanie bez obietnicy automatycznego ponowienia.
