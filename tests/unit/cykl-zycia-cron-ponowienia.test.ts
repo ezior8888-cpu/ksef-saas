@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
+import type { KsefEnvironment } from '@/types/ksef';
 
 /**
  * Cykl życia faktury, PR 4b — cron `cron.ksef-lifecycle-reconcile`:
@@ -21,6 +22,8 @@ const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type Row = Record<string, unknown>;
+/** Filtry `eq` zapytania w kolejności wywołań (kolumna, wartość). */
+type Recorded = Array<[string, unknown]>;
 
 const m = vi.hoisted(() => ({
   tables: { invoices: [] as Row[], audit_logs: [] as Row[] },
@@ -28,12 +31,67 @@ const m = vi.hoisted(() => ({
   release: vi.fn(),
   send: vi.fn(),
   paused: vi.fn(),
+  env: vi.fn((): KsefEnvironment => 'test'),
   captureMessage: vi.fn(),
   captureException: vi.fn(),
-  updates: [] as Array<{ table: string; patch: Row; filters: Array<[string, unknown]> }>,
+  updates: [] as Array<{ table: string; patch: Row; filters: Recorded }>,
+  /** Każde `select(kolumny)` — test sprawdza, co cron naprawdę pobiera. */
+  selects: [] as Array<{ table: string; columns: string }>,
+  /** Każde `in(kolumna, wartości)` — rozmiary paczek i listy rodzajów. */
+  ins: [] as Array<{ table: string; column: string; values: unknown[] }>,
+  /** Hak po wykonaniu zapytania (np. przesunięcie zegara między odczytem a zleceniem). */
+  afterQuery: undefined as undefined | ((query: { table: string; filters: Recorded }) => void),
 }));
 
-/** Minimalny klient: filtry eq/in/is/lt/gte na tabelach w pamięci, update z zapisem łatki. */
+/** Kolumny z `select('a, b, rel(c, d)')` — podział po przecinkach najwyższego poziomu. */
+function splitColumns(columns: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of columns) {
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) {
+      out.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) out.push(current.trim());
+  return out;
+}
+
+/**
+ * Wiersz tak, jak oddaje go PostgREST: tylko wybrane kolumny. Kolumna wybrana,
+ * a nieobecna w danych testu → null; niewybrana → brak klucza (undefined).
+ * `rel(a, b)` wybiera klucze relacji (obiekt albo tablica obiektów).
+ */
+function project(row: Row, columns: string): Row {
+  const out: Row = {};
+  for (const col of splitColumns(columns)) {
+    if (col === '*') {
+      Object.assign(out, row);
+      continue;
+    }
+    const rel = /^(\w+)\(([\s\S]*)\)$/.exec(col);
+    if (!rel) {
+      out[col] = row[col] ?? null;
+      continue;
+    }
+    const [, name, inner] = rel;
+    const pick = (v: unknown): Row | null => (v !== null && typeof v === 'object' ? project(v as Row, inner!) : null);
+    const value = row[name!];
+    out[name!] = Array.isArray(value) ? value.map(pick) : pick(value);
+  }
+  // Kopia jak z sieci — zdarzenie nie dzieli obiektów z danymi testu.
+  return structuredClone(out);
+}
+
+/**
+ * Minimalny klient: filtry eq/in/is/lt/gte na tabelach w pamięci, select
+ * z projekcją kolumn, order/limit po filtrach, update z zapisem łatki.
+ */
 function fakeAdmin() {
   return {
     rpc: async (fn: string, args?: Record<string, unknown>) => {
@@ -43,18 +101,37 @@ function fakeAdmin() {
     },
     from: (table: 'invoices' | 'audit_logs') => {
       const filters: Array<(r: Row) => boolean> = [];
-      const recorded: Array<[string, unknown]> = [];
+      const recorded: Recorded = [];
       let patch: Row | null = null;
+      let columns: string | null = null;
+      const orderBy: Array<{ key: string; ascending: boolean }> = [];
+      let limit: number | null = null;
       const run = () => {
-        const rows = m.tables[table].filter((r) => filters.every((f) => f(r)));
+        let rows = m.tables[table].filter((r) => filters.every((f) => f(r)));
         if (patch) {
           rows.forEach((r) => Object.assign(r, patch));
           m.updates.push({ table, patch, filters: recorded });
         }
-        return { data: rows.map((r) => ({ ...r })), error: null, count: rows.length };
+        if (orderBy.length > 0) {
+          rows = [...rows].sort((a, b) => {
+            for (const { key, ascending } of orderBy) {
+              const [x, y] = [String(a[key]), String(b[key])];
+              if (x !== y) return (x < y ? -1 : 1) * (ascending ? 1 : -1);
+            }
+            return 0;
+          });
+        }
+        if (limit !== null) rows = rows.slice(0, limit);
+        const data = columns === null ? rows.map((r) => ({ ...r })) : rows.map((r) => project(r, columns!));
+        m.afterQuery?.({ table, filters: recorded });
+        return { data, error: null, count: rows.length };
       };
       const q = {
-        select: () => q,
+        select: (c = '*') => {
+          columns = c;
+          m.selects.push({ table, columns: c });
+          return q;
+        },
         update: (p: Row) => { patch = p; return q; },
         eq: (k: string, v: unknown) => {
           recorded.push([k, v]);
@@ -63,12 +140,19 @@ function fakeAdmin() {
           filters.push((r) => (key ? String((r[col!] as Row | undefined)?.[key!] ?? '') === v : r[k] === v));
           return q;
         },
-        in: (k: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[k])); return q; },
+        in: (k: string, vs: unknown[]) => {
+          m.ins.push({ table, column: k, values: [...vs] });
+          filters.push((r) => vs.includes(r[k]));
+          return q;
+        },
         is: (k: string, v: unknown) => { filters.push((r) => r[k] === v || (v === null && r[k] === undefined)); return q; },
         lt: (k: string, v: string) => { filters.push((r) => String(r[k]) < v); return q; },
         gte: (k: string, v: string) => { filters.push((r) => String(r[k]) >= v); return q; },
-        order: () => q,
-        limit: () => q,
+        order: (k: string, o?: { ascending?: boolean }) => {
+          orderBy.push({ key: k, ascending: o?.ascending !== false });
+          return q;
+        },
+        limit: (n: number) => { limit = n; return q; },
         then: (ok: (v: unknown) => unknown, fail?: (e: unknown) => unknown) => Promise.resolve(run()).then(ok, fail),
       };
       return q;
@@ -79,7 +163,7 @@ function fakeAdmin() {
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => fakeAdmin() }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: m.send }));
 vi.mock('@/lib/ksef/submission-holds', () => ({ isKsefSubmissionPaused: m.paused }));
-vi.mock('@/lib/ksef/claim-environment', () => ({ requireConfiguredKsefEnvironment: () => 'test' }));
+vi.mock('@/lib/ksef/claim-environment', () => ({ requireConfiguredKsefEnvironment: m.env }));
 vi.mock('@sentry/nextjs', () => ({ captureMessage: m.captureMessage, captureException: m.captureException }));
 
 import {
@@ -99,14 +183,42 @@ const ctx: JobContext = {
 
 const OLD = '2026-10-03T08:00:00.000Z'; // ponad godzinę przed „teraz”
 const NOW = new Date('2026-10-03T12:00:00.000Z');
+/** „Dziś” w Polsce przy NOW (14:00 czasu polskiego). */
+const TODAY = '2026-10-03';
 
 function failedRow(id: string, code: string, extra: Row = {}): Row {
   return {
     id, tenant_id: TENANT, direction: 'outgoing', ksef_status: 'failed', invoice_kind: 'regular',
-    last_error_code: code, updated_at: OLD, tenants: { nip: '5260001246' },
+    last_error_code: code, updated_at: OLD, tenants: { nip: '5260001246' }, issue_date: TODAY, special_data: null,
     fa3_data: { internalNumber: `FV/${id.slice(0, 2)}`, type: 'VAT', lines: [{ ordinal: 1 }], seller: { nip: '5260001246' } },
     ...extra,
   };
+}
+
+/** Zaliczka (ZAL): dane wysyłki w kopercie `fa3_data.advanceEnvelope` (od 02.10.2026). */
+function zalRow(id: string, code: string, issueDate: string, extra: Row = {}): Row {
+  return failedRow(id, code, {
+    invoice_kind: 'advance',
+    issue_date: issueDate,
+    fa3_data: {
+      internalNumber: `FZ/${id.slice(0, 2)}`, type: 'ZAL', issueDate, lines: [{ ordinal: 1 }], seller: { nip: '5260001246' },
+      advanceEnvelope: { invoiceType: 'advance', issueDate },
+    },
+    ...extra,
+  });
+}
+
+/** Korekta (KOR): dane wysyłki w `special_data.correctionData` (00137). */
+function korRow(id: string, code: string, issueDate: string, extra: Row = {}): Row {
+  return failedRow(id, code, {
+    invoice_kind: 'correction',
+    issue_date: issueDate,
+    fa3_data: {
+      internalNumber: `FK/${id.slice(0, 2)}`, type: 'KOR', issueDate, lines: [{ ordinal: 1 }], seller: { nip: '5260001246' },
+    },
+    special_data: { correctionData: { invoiceType: 'correction', issueDate } },
+    ...extra,
+  });
 }
 
 /** Wiersz audytu automatycznego ponowienia (aktor NULL) sprzed `hoursAgo` godzin. */
@@ -127,7 +239,11 @@ beforeEach(() => {
   m.tables = { invoices: [], audit_logs: [] };
   m.violations = [];
   m.updates = [];
+  m.selects = [];
+  m.ins = [];
+  m.afterQuery = undefined;
   sqlCalls.length = 0;
+  m.env.mockImplementation(() => 'test');
   m.paused.mockResolvedValue(false);
   m.release.mockResolvedValue(true);
   m.send.mockImplementation(async (_event: unknown, options?: { inTransaction?: (tx: Tx) => Promise<void> }) => {

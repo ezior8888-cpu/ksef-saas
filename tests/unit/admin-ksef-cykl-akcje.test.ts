@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Akcje operatora `/admin/ksef` (PR 3c cyklu życia): `requireAdmin()` przed
@@ -10,6 +10,8 @@ const ID = '11111111-1111-4111-8111-111111111111';
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const OPERATOR = { userId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', email: 'operator@example.test' };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const NOW = '2026-10-03T10:00:00Z';
+const TODAY = '2026-10-03';
 
 const m = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
@@ -19,16 +21,23 @@ const m = vi.hoisted(() => ({
   paused: vi.fn(),
   audit: vi.fn(),
   revalidate: vi.fn(),
+  /** `configuredKsefEnvironment()` akcji (null = KSEF_ENV nieustawione albo błędne). */
+  env: vi.fn((): string | null => 'test'),
   invoice: null as Record<string, unknown> | null,
   /** Wpisy `ksef_submissions` faktury; bez `status` = `sent`. */
   openSent: [] as Array<{ id: string; status?: string }>,
+  /** Napisy `select(...)` w kolejności wywołań — kontrakt kolumn odczytu. */
+  selects: [] as Array<{ table: string; columns: string }>,
 }));
 
 vi.mock('@/lib/auth/admin-guard', () => ({ requireAdmin: m.requireAdmin }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: m.admin }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: m.send }));
 vi.mock('@/lib/ksef/submission-holds', () => ({ isKsefSubmissionPaused: m.paused }));
-vi.mock('@/lib/ksef/claim-environment', () => ({ requireConfiguredKsefEnvironment: () => 'test' }));
+vi.mock('@/lib/ksef/claim-environment', () => ({
+  configuredKsefEnvironment: m.env,
+  requireConfiguredKsefEnvironment: () => 'test',
+}));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: m.audit }));
 vi.mock('next/cache', () => ({ revalidatePath: m.revalidate }));
 
@@ -37,16 +46,69 @@ import { OPERATOR_MESSAGES } from '@/lib/admin/ksef-operator-policy';
 
 type Tx = { executeSql: ReturnType<typeof vi.fn> };
 
+/** Kolumny napisu select na najwyższym poziomie: `a, b, rel(x, y)` → `['a', 'b', 'rel(x, y)']`. */
+function topLevelColumns(columns: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of columns) {
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) {
+      out.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) out.push(current.trim());
+  return out;
+}
+
+/**
+ * Jak PostgREST: tylko wybrane kolumny; wybrana, a nieobecna w danych → null;
+ * niewybrana — brak klucza (akcja, która czyta niepobraną kolumnę, widzi undefined).
+ */
+function project(source: Record<string, unknown>, columns: string): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const column of topLevelColumns(columns)) {
+    const open = column.indexOf('(');
+    if (open === -1) {
+      out[column] = source[column] ?? null;
+      continue;
+    }
+    const key = column.slice(0, open).trim();
+    const nested = column.slice(open + 1, column.lastIndexOf(')'));
+    const value = source[key];
+    out[key] = Array.isArray(value)
+      ? value.map((v) => project(v as Record<string, unknown>, nested))
+      : value && typeof value === 'object'
+        ? project(value as Record<string, unknown>, nested)
+        : null;
+  }
+  return out;
+}
+
 function fakeAdminClient() {
   return {
     from: (table: string) => {
       const statusOk: Array<(status: string) => boolean> = [];
+      let columns = '*';
       const q = {
-        select: () => q,
+        select: (c: string) => {
+          columns = c;
+          m.selects.push({ table, columns: c });
+          return q;
+        },
         eq: (k: string, v: unknown) => { if (k === 'status') statusOk.push((st) => st === v); return q; },
         in: (k: string, vs: unknown[]) => { if (k === 'status') statusOk.push((st) => vs.includes(st)); return q; },
         limit: () => q,
-        maybeSingle: async () => ({ data: table === 'invoices' ? m.invoice : null, error: null }),
+        maybeSingle: async () => ({
+          data: table === 'invoices' && m.invoice
+            ? (columns === '*' ? m.invoice : project(m.invoice, columns))
+            : null,
+          error: null,
+        }),
         then: (ok: (v: unknown) => unknown) => ok({
           data: table === 'ksef_submissions'
             ? m.openSent.filter((r) => statusOk.every((f) => f(r.status ?? 'sent')))
@@ -72,6 +134,7 @@ function row(extra: Record<string, unknown> = {}) {
   return {
     id: ID, tenant_id: TENANT, direction: 'outgoing', invoice_kind: 'regular', ksef_status: 'failed',
     last_error_code: 'INFRA', internal_number: 'FV/9', tenants: { nip: '5260001246' },
+    issue_date: TODAY, special_data: null,
     fa3_data: { internalNumber: 'FV/9', type: 'VAT', lines: [{ ordinal: 1 }], seller: { nip: '5260001246' } },
     ...extra,
   };
@@ -79,12 +142,22 @@ function row(extra: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Dzień wystawienia dokumentów z `row()` (Europe/Warsaw: 03.10.2026, 12:00).
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(NOW));
+  m.env.mockReset();
+  m.env.mockReturnValue('test');
+  m.selects = [];
   m.requireAdmin.mockResolvedValue(OPERATOR);
   m.admin.mockImplementation(fakeAdminClient);
   m.rpc.mockResolvedValue({ data: { id: ID }, error: null });
   m.paused.mockResolvedValue(false);
   m.invoice = row();
   m.openSent = [];
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('operatorRequeueAction', () => {
