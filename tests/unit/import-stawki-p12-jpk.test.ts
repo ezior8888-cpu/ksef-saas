@@ -266,20 +266,35 @@ describe('W9 — ustalenia recenzji C5a', () => {
     await expect(jpkV7m()).rejects.toThrow(/JPK wstrzymany:.*FV\/MIESZ\/1/);
   });
 
-  it.each([['0', 'FV/BR0/1'], ['23', 'FV/BR23/1']] as Array<[VatRate, string]>)(
-    'ceny brutto (P_11A zamiast P_11, stawka %s) → JPK odmawia z numerem, ostrzeżenie przy imporcie (nie ciche zero)',
-    async (rate, number) => {
-      const xml = xmlOf(invoice(number, [{ rate, net: 500 }]))
-        .replace(/<P_9A>([^<]*)<\/P_9A>/, '<P_9B>$1</P_9B>')
-        .replace(/<P_11>([^<]*)<\/P_11>/, '<P_11A>$1</P_11A>');
-      const result = await importXml(xml);
-      expect(result.warnings[0]).toContain(number);
-      const refusal = await jpkFa().then(() => null, (e: Error) => e);
-      expect(refusal?.message).toContain('JPK wstrzymany:');
-      expect(refusal?.message).toContain(number);
-      await expect(jpkV7m()).rejects.toThrow(/JPK wstrzymany:/);
-    },
-  );
+  // C5c (świadoma zmiana): przy 0% brutto = netto, więc P_11A 500 przy P_13_6_1
+  // 500 to spójna faktura w cenach brutto — wchodzi do JPK z polami z pliku.
+  it('ceny brutto (P_11A zamiast P_11) przy 0% → spójne z nagłówkiem: JPK z P_9B/P_11A (C5c)', async () => {
+    const xml = xmlOf(invoice('FV/BR0/1', [{ rate: '0', net: 500 }]))
+      .replace(/<P_9A>([^<]*)<\/P_9A>/, '<P_9B>$1</P_9B>')
+      .replace(/<P_11>([^<]*)<\/P_11>/, '<P_11A>$1</P_11A>');
+    const result = await importXml(xml);
+    expect(result.warnings.join('\n')).not.toMatch(/JPK_FA i JPK_V7M/);
+    const fa = await jpkFa();
+    expect(fragment(fa, '<P_2A>FV/BR0/1', '</Faktura>')).toContain('<P_13_6>500.00</P_13_6>');
+    const wiersz = fragment(fa, '<P_2B>FV/BR0/1</P_2B>', '</FakturaWiersz>');
+    expect(wiersz).toContain('<P_11A>500.00</P_11A>');
+    expect(wiersz).not.toContain('<P_11>');
+    expect((await validateJpkFa(fa)).errors).toEqual([]);
+  });
+
+  // Przy 23% P_11A 500 ≠ netto 500 + VAT 115 z nagłówka — plik sprzeczny, dalej odmowa (z dokładnym powodem).
+  it('ceny brutto (P_11A zamiast P_11) przy 23%, sprzeczne z nagłówkiem → JPK odmawia z numerem i powodem', async () => {
+    const xml = xmlOf(invoice('FV/BR23/1', [{ rate: '23', net: 500 }]))
+      .replace(/<P_9A>([^<]*)<\/P_9A>/, '<P_9B>$1</P_9B>')
+      .replace(/<P_11>([^<]*)<\/P_11>/, '<P_11A>$1</P_11A>');
+    const result = await importXml(xml);
+    expect(result.warnings[0]).toContain('FV/BR23/1');
+    expect(result.warnings[0]).toContain('brutto pozycji');
+    const refusal = await jpkFa().then(() => null, (e: Error) => e);
+    expect(refusal?.message).toContain('JPK wstrzymany:');
+    expect(refusal?.message).toContain('FV/BR23/1');
+    await expect(jpkV7m()).rejects.toThrow(/JPK wstrzymany:/);
+  });
 
   it('ponowny import własnej korekty FaktFlow (w bazie jako korekta z aplikacji) → bez ostrzeżenia „JPK nie powstanie”', async () => {
     const K = `${NIP}-20260910-0100A0B0C0D1-AF`.slice(0, 35);

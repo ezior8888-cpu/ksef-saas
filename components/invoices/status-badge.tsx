@@ -45,6 +45,7 @@ const FAILED_BY_CLASS: Record<string, { label: string; tone: FfStatusTone }> = {
  */
 const FAILED_BY_CODE = new Map<string, { label: string; tone: FfStatusTone }>([
   ['ENV_MISMATCH', { label: 'Inne środowisko KSeF', tone: 'warning' }],
+  ['ISSUE_DATE_PASSED', { label: 'Data wystawienia minęła', tone: 'warning' }],
 ]);
 
 interface StatusBadgeProps {
