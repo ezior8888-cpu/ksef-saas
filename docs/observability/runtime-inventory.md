@@ -1,6 +1,6 @@
 # F0 — inwentaryzacja środowisk
 
-Stan pomiaru: **04.10.2026, 11:03–11:22 UTC; F0 nie jest domknięty**. Deklaracje przekazane 06.10.2026 są zapisane osobno poniżej i nie są nowym pomiarem serwerów. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
+Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.2026, 11:03–11:22 UTC. Deklaracje oraz odczyty API dostawców i nieudaną próbę SSH z 06.10 zapisano osobno; nie potwierdzają one aktualnego runtime kontenerów. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
 
 ## Pochodzenie i granice dowodów
 
@@ -12,12 +12,19 @@ Stan pomiaru: **04.10.2026, 11:03–11:22 UTC; F0 nie jest domknięty**. Deklara
 | Przekazany pomiar operatora | 04.10, 11:03–11:22 UTC; końcowy odczyt release 11:21 | Odczyty runtime, konfiguracji i braków w opisanym zakresie |
 | Baza gałęzi publikującej pakiet | main `1f95c970c11dca1cbe4093a50e2f0b73d7c714ff` | Kod bazowy publikacji, nowszy niż pomiar; nie dowód nowego wdrożenia |
 | Informacje przekazane przez Igora | 06.10.2026; deklaracja w czacie kontynuacji F0 | Podtrzymanie braku staging i pełnych kopii off-host; doprecyzowanie dostępu, bez nowego odczytu serwerów i bez akceptacji F0 |
+| Próba kolektora z publikowanego pakietu | 06.10, 20:45:46 UTC; kod `80db8b49300cd41854114582cc869f5276aa6943` | Wszystkie hosty `unverified`; ograniczenia SSH, bez nowego pomiaru runtime |
+| API Hetzner | 06.10, odczyty 20:48:15–20:54:29 UTC | Metadane VM, region, przypisane zapory i dostępne obrazy backupu; nie health kontenerów ani zawartość kopii |
+| API Sentry/PostHog EU | 06.10, 20:49:23–20:49:55 UTC | Metadane kont/projektów i część retencji/uprawnień; ograniczenia planów i rozliczeń pozostają jawne |
 
-Legenda: **P** — przekazany pomiar; **D** — deklaracja kodu, dokumentu lub użytkownika; **brak dostępu** — punkt nieodczytany. Wyniki P przypisujemy do operatora i okna pomiarowego; w tej sesji nie powtarzano połączeń z serwerami.
+Legenda: **P** — pomiar z podanym źródłem i oknem; **D** — deklaracja kodu, dokumentu lub użytkownika; **brak dostępu** — punkt nieodczytany. Historyczne wyniki P przypisujemy operatorowi i oknu z 04.10. Odczyty API z 06.10 mają osobne źródła; nieudana próba SSH nie odświeża historycznego runtime.
 
 W trakcie pomiaru inna sesja wdrożyła `ae87bdde93a636fcb2c48aef737e57a80a3315a7`: worker 11:06–11:08, web 11:08–11:20 UTC. Stan końcowy został odczytany o 11:21. Wcześniejsze `dcf48bad` oznacza stan sprzed tego wdrożenia. Sesja zbierająca F0 nie brała udziału we wdrożeniu i nie zmieniała serwerów. SHA działającej aplikacji nie należy utożsamiać z aktualnym `main`.
 
 Dowody publiczne: [bezpieczne podsumowanie JSON](evidence/f0-2026-10-04.json). Pełny `f0-inwentarz-2026-10-04.md` oraz `f0-runtime-2026-10-04.json` są prywatnymi referencjami operatora. Kopie robocze są w ignorowanym `.agents/f0-evidence/`; nie są częścią commita. Sekcja `raw`, identyfikatory Coolify, nazwy kontenerów, buckety, adresy infrastruktury, dane kont i szczegóły ACL nie trafiają do publicznego podsumowania.
+
+Osobny [wyciąg odczytów z 06.10](evidence/f0-2026-10-06.json) zawiera
+bezpieczne pola i skróty prywatnych dowodów. Pełne nowe odpowiedzi API,
+prywatna konfiguracja i reguły zapór pozostają poza repo.
 
 ## Deklaracje przekazane 06.10.2026
 
@@ -40,13 +47,64 @@ Historyczny JSON z 04.10 pozostaje niezmieniony.
   uprawnień. **F0-G07 pozostaje BLOCKED** dla tego zakresu. Identyfikatory
   kont i zasobów pozostają poza publicznym pakietem.
 
-Lokalna kontrola dostępów w tej kontynuacji nie znalazła prywatnego
-`infra.env` ani wskazania `FAKTFLOW_INFRA_ENV`. Nie otwarto połączenia SSH,
-nie wykonano pomiaru serwerów ani zmian infrastruktury. Prywatny inventory
-z aktualnymi adresami nie został dostarczony do tej kontynuacji; deklaracje
-pozostają oddzielone od pomiaru.
+W chwili zapisu deklaracji prywatny `infra.env` nie był jeszcze dostarczony
+i nie wykonano własnego odczytu serwerów. Późniejsze przekazanie pliku
+umożliwiło próby dostępu opisane poniżej; nie zmienia deklaracji na pomiar.
+
+## Odczyty dostawców i próba SSH 06.10.2026
+
+**P — dostęp lokalny i SSH:** dostarczony plik został odczytany jako dane,
+bez wykonywania jego treści. Próba opublikowanego kolektora z 20:45:46 UTC
+zakończyła się `unverified` dla trzech hostów. Brakuje zaufanych kluczy hostów
+dla części połączeń; lokalny klucz użytkownika jest chroniony hasłem i nie
+jest odblokowany w agencie. Nie rozstrzygnięto akceptacji klucza przez
+serwery. Nie potwierdzono aktualnego SHA, health ani wersji Node/MinIO.
+Potrzebne są zaufane dane hostów i lokalne odblokowanie klucza; hasła
+oraz klucze prywatne nie są materiałem do publikacji ani do wklejania w czat.
+
+**P — API Hetzner:** odczyty metadanych, przypisanych zapór i obrazów
+backupów zwróciły HTTP 200. Trzy wskazane VM mają stan `running` i lokalizację
+DE; nie jest to status kontenerów web/worker. Reguły zapór przypisanych
+do wszystkich trzech VM zachowano prywatnie. Odczyt konfiguracji Hetznera
+nie potwierdza reguł systemowych, realnego ruchu ani monitorów Uptime Kuma.
+
+Na db-1 włączone są backupy hosta; API zwróciło **7 obrazów `available`**,
+ostatni z **06.10.2026, 02:43:59 UTC**. Dla app-1 i ops-1 ta funkcja jest
+wyłączona i odczyt nie zwrócił obrazów backupu tych hostów. Wynik dotyczy
+funkcji Hetznera, nie wszystkich możliwych mechanizmów kopii. Obrazy db-1
+nie potwierdzają zawartości i spójności pełnego dumpa, pokrycia MinIO,
+uzgodnionej retencji ani wykonanego restore. **G09 pozostaje FAIL** według
+historycznego pomiaru i aktualnej deklaracji o brakujących kopiach.
+
+**P — Sentry/PostHog:** odczyty organizacji i projektów w EU zwróciły
+HTTP 200. Sentry udostępniło metadane i flagi dostępności funkcji;
+nie odczytano aktywnej subskrypcji, limitów ani retencji. Flagi nie są
+dowodem planu ani działania instrumentacji w aplikacji.
+
+PostHog zwrócił projektowe ustawienia replay: opt-in włączone, retencja
+`30d`, heatmaps włączone. Uprawnienia organizacji wskazują retencję
+Product Analytics, Feature Flags i Surveys po **1 roku**, replay
+**1 miesiąc**, limit **5 alerts** i **2 destinations Error Tracking**.
+Wartości projektowe i organizacyjne mają osobne zakresy; nie wywodzimy
+z nich automatycznie efektywnej retencji wszystkich danych. Ustawienia
+replay nie dowodzą nagrywania przez SDK ani zatwierdzenia eksportu z G05.
+Odczyty billing/features i billing/limits zwróciły **403**, bez ustalonej
+przyczyny; nazwa aktywnego planu i limity budżetu pozostają niezweryfikowane.
+**G07 ma nowe częściowe dowody, ale nie jest zaliczone.**
+
+**P — katalog cen:** odczyt oficjalnych typów i cen Hetznera z
+20:52:37–20:53:00 UTC zwrócił BX11 (1 TiB), **3,20 EUR netto/miesiąc**,
+**3,936 EUR brutto przy zwróconym VAT 23%**, bez opłaty startowej.
+To wycena katalogowa, nie dowód zakupu ani konfiguracji kopii.
+
+Odczyty nie uruchamiały usług, testów biznesowych, alertów, migracji,
+wdrożeń ani restore i nie zmieniały kont lub serwerów. F0 pozostaje otwarte,
+a historyczny pomiar i JSON z 04.10 pozostają niezmienione.
 
 ## Środowiska i wersje produkcji
+
+Poniższa tabela opisuje wyłącznie pomiar runtime z **04.10.2026**.
+Próba SSH z 06.10 nie dostarczyła jego aktualizacji.
 
 | Pozycja | Stan potwierdzony w pomiarze | Źródło / zastrzeżenie |
 |---|---|---|
@@ -59,7 +117,7 @@ pozostają oddzielone od pomiaru.
 | Staging | Nie istnieje w odczytanym Coolify: brak osobnej aplikacji, bazy i sekretów | P; FAIL dla bramki izolowanego środowiska |
 | GitHub `security-staging` | Istnieje; main-only, wymagany recenzent; sekretów/zmiennych i uruchomień workflow: 0 | P; sama konfiguracja GitHub nie tworzy staging |
 
-Prywatny pomiar zawiera również wersje usług, konfigurację hostów, health/restart, log rotation, zasoby, NTP, routing, role i zakres portów. Te szczegóły mają pozostać w prywatnym rejestrze operatora. Nie odczytano dokładnej binarnej wersji Node ani MinIO aplikacji; ruchomy tag obrazu nie zastępuje wersji uruchomionej binarki. Reguły zapory Hetznera i konfiguracja monitorów Uptime Kuma pozostają nieodczytane.
+Prywatny pomiar zawiera również wersje usług, konfigurację hostów, health/restart, log rotation, zasoby, NTP, routing, role i zakres portów. Te szczegóły mają pozostać w prywatnym rejestrze operatora. Nie odczytano dokładnej binarnej wersji Node ani MinIO aplikacji; ruchomy tag obrazu nie zastępuje wersji uruchomionej binarki. W pomiarze z 04.10 reguły zapory Hetznera były nieodczytane; odczyt API z 06.10 uzupełnia tę część. Konfiguracja monitorów Uptime Kuma pozostaje nieodczytana.
 
 ## Rozstrzygnięte rozbieżności usług
 
@@ -87,17 +145,23 @@ Prywatny pomiar zawiera również wersje usług, konfigurację hostów, health/r
 | Snapshoty/backupy hostów Hetzner | Nieodczytane | Brak dostępu; nie uznawać za istniejące ani nieistniejące |
 | Storage Box / docelowy transport off-host | Kod/propozycja istnieje; konfiguracja nie jest wdrożona | D + P rozdzielone; decyzja i wykonanie poza tym pakietem |
 
+Tabela opisuje pomiar z 04.10. Nowy odczyt API backupów hosta db-1 i jego
+ograniczenia są w [sekcji odczytów z 06.10](#odczyty-dostawców-i-próba-ssh-06102026).
+
 Nie pisać „brak jakiejkolwiek kopii na drugim hoście”: ograniczony snapshot JSON istnieje. Nie uznawać go jednak za pełną kopię off-host. W pomiarze F0 nie wykonywano backupu ani restore. Historyczny test odtworzenia nie zastępuje odbioru bieżącej pełnej kopii.
 
 ## Staging i organizacje EU
 
-**P:** w odczytanym Coolify istnieje wyłącznie środowisko produkcyjne. `security-staging` w GitHub ma puste sekrety i zmienne, bez wykonania workflow. Wszystkie cztery wymagane `STAGING_*` są nieobecne. Staging ma status **FAIL**, nie samo NOT RUN. Utworzenie środowiska i zasady zatwierdzania pozostają decyzją właściciela; przykład YAML nie oznacza uruchomienia.
+**P — 04.10:** w odczytanym Coolify istnieje wyłącznie środowisko produkcyjne. `security-staging` w GitHub ma puste sekrety i zmienne, bez wykonania workflow. Wszystkie cztery wymagane `STAGING_*` są nieobecne. Staging ma status **FAIL**, nie samo NOT RUN. Utworzenie środowiska i zasady zatwierdzania pozostają decyzją właściciela; przykład YAML nie oznacza uruchomienia.
 
-**P:** skonfigurowane intake Sentry i PostHog wskazują EU. **Brak dostępu:** plany, produkty, retencje, limity, role i umowy nie zostały odczytane. Region intake nie dowodzi wszystkich miejsc przetwarzania ani dostępności funkcji. Pomiar istniejącego Sentry/PostHog nie potwierdza organizacji Datadog EU, DBM/APM/RUM/On-Call ani niezależnego paging.
+**P — 04.10:** skonfigurowane intake Sentry i PostHog wskazują EU. W tym pomiarze plany, produkty, retencje, limity, role i umowy nie zostały odczytane przez brak dostępu. Częściowy odczyt kont z 06.10 jest opisany osobno powyżej. Region intake nie dowodzi wszystkich miejsc przetwarzania ani dostępności funkcji. Pomiar istniejącego Sentry/PostHog nie potwierdza organizacji Datadog EU, DBM/APM/RUM/On-Call ani niezależnego paging.
 
 ## Mapowanie bramek pomiaru na pakiet F0
 
 Statusy: `PASS` — wymagany dowód; `PARTIAL` — odczyt z jawnymi zastrzeżeniami; `FAIL` — zaobserwowane niespełnienie; `BLOCKED` — brak dostępu do konkretnego dowodu; `PENDING` — decyzja właściciela; `NOT RUN` — niewykonany test.
+
+Tabela mapuje statusy historycznego raportu z 04.10. Nowe częściowe dowody
+z 06.10 są uwzględnione w aktualnym [planie odbioru](acceptance-plan.md).
 
 | Bramka z przekazanego raportu | Odpowiednik tutaj | Stan po włączeniu pomiaru |
 |---|---|---|
@@ -114,7 +178,7 @@ Pełne kryteria i proponowane budżety: [acceptance-plan.md](acceptance-plan.md)
 
 ## Kolektor i komplet pakietu
 
-Przekazany pomiar został wykonany skryptami operatora, **nie tym kolektorem**: wówczas nie był opublikowany w repo. Pakiet udostępnia teraz [collect-runtime-inventory.mjs](../../scripts/ops/collect-runtime-inventory.mjs) i testy, pięć dokumentów F0, bezpieczny indeks oraz przykłady [staging](../../ops/observability/environments/staging.example.yaml) i [production](../../ops/observability/environments/production.example.yaml).
+Przekazany pomiar z 04.10 został wykonany skryptami operatora, **nie tym kolektorem**: wówczas nie był opublikowany w repo. Pakiet udostępnia teraz [collect-runtime-inventory.mjs](../../scripts/ops/collect-runtime-inventory.mjs) i testy, pięć dokumentów F0, bezpieczne indeksy oraz przykłady [staging](../../ops/observability/environments/staging.example.yaml) i [production](../../ops/observability/environments/production.example.yaml).
 
 Kolektor wyszukuje dane wejściowe kolejno: jawne `--infra`, `FAKTFLOW_INFRA_ENV`, `.agents/infra.env` w repo i w głównym checkoucie worktree. Czyta je jako dane; nie wykonuje instrukcji powłoki. Wymaga istniejącego klucza SSH, zaufanych kluczy hostów i zdalnego `python3`. Filtruje pola na hoście i lokalnie, bez eksportu wartości sekretów, adresów i nazw kontenerów. Nie uruchamia aplikacji, migracji, alertów ani testów biznesowych.
 

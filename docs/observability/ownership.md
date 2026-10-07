@@ -25,13 +25,28 @@ To granica sprawdzonych źródeł, nie twierdzenie, że decyzje nie
 istnieją w innych miejscach. D01–D10 i nieprzyjęte role pozostają PENDING.
 
 **Aktualizacja 06.10.2026:** Igor przekazał informacje o dostępie oraz
-podtrzymał brak staging i pełnych kopii off-host. Są zapisane jako
+podtrzymał brak staging, pełnego dumpa DB off-host i kopii MinIO. Są zapisane jako
 [deklaracje](runtime-inventory.md#deklaracje-przekazane-06102026), osobno od
-pomiaru z 04.10. Odczyt Coolify przez istniejący dostęp SSH nie wymaga
-osobnego tokenu API; prywatny plik inventory nie dotarł do tej kontynuacji.
+pomiaru z 04.10. Według deklaracji odczyt Coolify przez istniejący dostęp
+SSH nie wymaga osobnego tokenu API. Na etapie tej wiadomości prywatny plik
+inventory nie był jeszcze dostarczony. Później wskazano go i zweryfikowano
+lokalnie; nie oznacza to uzyskania uwierzytelnionego odczytu runtime.
 Podane identyfikatory kont nie potwierdzają planów ani retencji.
 Wiadomość nie zatwierdza proponowanych kontraktów, polityki danych,
 budżetów lub ról, nie rozstrzyga D01–D10 i nie jest odbiorem F0.
+
+**Odczyty techniczne 06.10.2026:** [pomiar API i próba SSH](runtime-inventory.md#odczyty-dostawców-i-próba-ssh-06102026)
+oraz [bezpieczny indeks](evidence/f0-2026-10-06.json) są osobnymi źródłami.
+API Hetznera potwierdza VM, przypisane reguły zapory i siedem obrazów backupu
+dysku DB; API Sentry/PostHog daje częściowe dowody metadanych EU i ustawień.
+Nie potwierdzono pełnego zakresu backupu DB/MinIO ani restore, planów/kosztów
+i wszystkich produktów. SSH nie dostarczył odczytu runtime. Właściciel klucza
+odblokowuje go lokalnie; haseł kluczy nie przekazuje się w czacie. Zaufane
+klucze hostów wymagają niezależnej weryfikacji, bez wyłączania jej kontroli.
+Odczyt ustawień replay nie zatwierdza polityki danych i nie dowodzi aktywnego
+nagrywania w aplikacji. G02/G07 mają częściowe dowody; G03/G09 pozostają FAIL,
+G04/G05/G06/G08 PENDING. Nie przyjęto nowych ról, decyzji ani odbioru F0;
+nie zmieniono serwerów lub ustawień dostawców i nie rozpoczęto F1.
 
 [C-22](../koordynacja/CLAUDE-DO-CODEXA.md) przekazuje prośbę Bartosza o kontekst
 centrum dowodzenia. Sekcja 11 [briefu](../koordynacja/CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md)
@@ -78,7 +93,7 @@ organizacji odpowiedzialności i prywatnych dowodów.
 | D05 / G01–G02 | Uzgodnić opis dwóch odrębnych MinIO, weryfikację wersji i healthchecks. MinIO aplikacji jest na ops-1, MinIO Supabase na db-1; istniejące identyfikatory danych pozostają bez publikacji i bez zmiany przez F0. | PENDING — Bartosz. |
 | D06 / G02/G08 | Przyjąć politykę aktualizacji Coolify oraz zasady 2FA i odbioru dostępu administracyjnego. Szczegóły konfiguracji pozostają prywatne. | PENDING — Bartosz. |
 | D07 / G01/G04 | Potwierdzić intencję wyboru środowiska KSeF dla produkcyjnej aplikacji; env aplikacji i env KSeF są oddzielnymi pojęciami. Dowód i ewentualna zmiana wymagają osobnego zakresu. | PENDING — Bartosz. |
-| D08 / G07 | Zapewnić odczyt planów/produktów i limitów Sentry/PostHog w EU. Potwierdzony region ingest nie zamyka odbioru planów ani docelowej organizacji Datadog. | PENDING — Bartosz; produkty BLOCKED przez brak dostępu. |
+| D08 / G07 | Zapewnić odczyt planów/produktów i limitów Sentry/PostHog w EU. Potwierdzony region ingest nie zamyka odbioru planów ani docelowej organizacji Datadog. | PENDING — Bartosz; częściowy odczyt kont wykonano 06.10; dowody planów/kosztów i pozostałych produktów nadal niepełne. |
 | D09 / G02/G06 | Oddzielić późniejszy etap instrumentacji F1 od kolejki utrzymania: aktualizacje systemu, zasoby, role/ACL DB, starsza konfiguracja env i realtime. Uzgodnić priorytety i zakres bez ujawniania prywatnych szczegółów infrastruktury. | PENDING — Bartosz; żadne zmiany utrzymaniowe nie zostały wykonane przez F0. |
 | D10 / G08 | Potwierdzić rolę dodatkowego współpracownika, zakres dostępu i obowiązki; bez automatycznego uznania tej osoby za zastępcę lub dyżurnego. | PENDING — Bartosz; bez publikacji loginu. |
 

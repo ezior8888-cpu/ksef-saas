@@ -1,19 +1,21 @@
 # F0 — plan odbioru i status bramek
 
-Stan: 04.10.2026, po pomiarze 11:03–11:22 UTC przekazanym przez Igora.
-Pomiar był wyłącznie odczytem. W tym oknie inna sesja wdrożyła produkcję;
+Pomiar runtime: 04.10.2026, 11:03–11:22 UTC, przekazany przez Igora.
+Pomiar z 04.10 był wyłącznie odczytem. W tym oknie inna sesja wdrożyła produkcję;
 końcowy odczyt web/worker z 11:21 UTC jest stanem zmierzonym, a nie dowodem
 wdrożenia wykonanego przez F0. Źródła i bezpieczne ustalenia są w
 [inwentarzu](runtime-inventory.md) oraz [wyciągu dowodów](evidence/f0-2026-10-04.json).
 Surowe załączniki pozostają prywatne.
 
 Aktualizacja 06.10.2026: [deklaracje przekazane przez Igora](runtime-inventory.md#deklaracje-przekazane-06102026)
-podtrzymują brak staging i pełnych kopii off-host, czyli **G03 i G09 FAIL**.
-Nie wykonano nowego pomiaru serwerów. Identyfikacja Sentry/PostHog nie
-zastępuje dowodów planów i produktów; G07 nadal jest częściowo BLOCKED.
+podtrzymują brak staging, pełnego dumpa DB off-host i kopii MinIO, czyli **G03 i G09 FAIL**.
+Osobno wykonano [odczyty API dostawców i próbę SSH](runtime-inventory.md#odczyty-dostawców-i-próba-ssh-06102026),
+zapisane w [indeksie z 06.10](evidence/f0-2026-10-06.json). Runtime kontenerów
+nie został odczytany; G02/G07 mają częściowe dowody, a plany i uprawnienia
+do pozostałych produktów nadal są niezweryfikowane.
 
 **F0 jest niezamknięty.** Staging i pełne kopie zapasowe są niezaliczone;
-produkty EU są zablokowane; kontrakty, polityka danych, budżety i role czekają
+dowody produktów EU są niepełne; kontrakty, polityka danych, budżety i role czekają
 na decyzje. Dokument jest samodzielnym planem. TEST-01…TEST-07 poniżej są
 lokalnymi identyfikatorami przyszłych testów; nie odsyłają do innych raportów.
 
@@ -26,22 +28,51 @@ Biblioteka, przykład konfiguracji i zdrowy HTTP nie są odbiorem funkcji.
 
 ## Bramki F0-G01–F0-G09
 
-| ID | Warunek odbioru | Stan po pomiarze i ograniczenie |
+| ID | Warunek odbioru | Stan, źródło i ograniczenie |
 |---|---|---|
-| F0-G01 | Inwentarz env/usług ze źródłem, timestamp i punktem odczytu; rzeczywisty SHA web/worker, wersje i tożsamość obrazów; lokalizacja MinIO. | **PARTIAL.** Web/worker healthy na `ae87bdde93a636fcb2c48aef737e57a80a3315a7` o 11:21 UTC. MinIO aplikacji na ops-1 jest odrębne od MinIO Supabase na db-1; Redis 7.2 i SRH są lokalnie na app-1. Dokładna wersja Node i binarnego MinIO pozostaje PENDING. Lokalne image ID nie są digestami registry; brak dowodu digestu registry nie został uzupełniony domysłem. |
-| F0-G02 | Health/restart/startup, limity, routing, log rotation, zegary oraz zakres read-only dołączone do inventory; konfiguracja kontroli dostępu udokumentowana prywatnie. | **PARTIAL.** Pomiar zasobów i usług jest przekazany prywatnie; kompletność części konfiguracji infrastruktury i niezależnego monitoringu pozostaje do odrębnego potwierdzenia. Healthy nie dowodzi skutku jobów ani ciągłości dyżuru. |
-| F0-G03 | Działający staging z osobną DB/kolejką/storage i kluczami, syntetycznymi danymi, KSeF TEST, Stripe test oraz kontrolowanymi odbiorcami. Web i worker bez dostępu do produkcyjnych efektów. | **FAIL — staging nie istnieje.** Konfiguracja GitHub `security-staging`, approval i workflow nie zastępują środowiska. Fault injection i aktywne PoC są zablokowane. |
+| F0-G01 | Inwentarz env/usług ze źródłem, timestamp i punktem odczytu; rzeczywisty SHA web/worker, wersje i tożsamość obrazów; lokalizacja MinIO. | **PARTIAL.** Historyczny pomiar 04.10: web/worker healthy na `ae87bdde93a636fcb2c48aef737e57a80a3315a7` o 11:21 UTC. Ten pomiar wskazuje MinIO aplikacji na ops-1, odrębne od MinIO Supabase na db-1, oraz lokalne Redis 7.2 i SRH na app-1. Próba SSH z 06.10 nie odczytała runtime; aktualny SHA/health oraz dokładne wersje Node i MinIO pozostają niezweryfikowane. Lokalne image ID nie są digestami registry; brak dowodu digestu registry nie został uzupełniony domysłem. |
+| F0-G02 | Health/restart/startup, limity, routing, log rotation, zegary oraz zakres read-only dołączone do inventory; konfiguracja kontroli dostępu udokumentowana prywatnie. | **PARTIAL.** Pomiar zasobów i usług z 04.10 jest przekazany prywatnie. API Hetznera z 06.10 potwierdza pełny odczyt reguł zapory i ich przypisanie do trzech hostów; szczegóły pozostają prywatne. Routing/ACL, reguły systemowe i niezależny monitoring nadal wymagają odbioru. Stan VM running nie dowodzi health kontenerów ani ciągłości dyżuru. |
+| F0-G03 | Działający staging z osobną DB/kolejką/storage i kluczami, syntetycznymi danymi, KSeF TEST, Stripe test oraz kontrolowanymi odbiorcami. Web i worker bez dostępu do produkcyjnych efektów. | **FAIL — staging nie istnieje.** Źródła: pomiar 04.10 i deklaracja 06.10. Konfiguracja GitHub `security-staging`, approval i workflow nie zastępują środowiska. Fault injection i aktywne PoC są zablokowane. |
 | F0-G04 | Zatwierdzone wyniki, korelacja, deadline, kwalifikacja populacji i klasy plików z [contracts](contracts.md). | **PENDING.** Dokument jest propozycją; TEST-01/TEST-02 pozostają NOT RUN. |
 | F0-G05 | Zatwierdzone klasy danych, retencja, audit/source maps/holds/delete, tenant_ref, consent i uprawnienia z [data-policy](data-policy.md). | **PENDING.** Dostarczenie pomiaru nie zatwierdza nowego eksportu danych. TEST-04 NOT RUN. |
 | F0-G06 | Przyjęty budżet narzutu, limity zasobów i metoda OFF/ON; baseline i klasy obciążenia określone. | **PENDING.** Pomiary zasobów nie zastępują decyzji o budżecie instrumentacji. Baseline/TEST-05 NOT RUN. |
-| F0-G07 | Dowód regionu istniejących usług oraz, osobno, rzeczywistego konta docelowego, planów/produktów, retencji/ingest/API, kosztów i uprawnień. | **PASS dla regionu ingest istniejących Sentry/PostHog; BLOCKED dla planów i produktów przez brak dostępu.** Region docelowej organizacji Datadog oraz jej funkcje nie są potwierdzone. Bramka jako całość pozostaje niezamknięta. |
+| F0-G07 | Dowód regionu istniejących usług oraz, osobno, rzeczywistego konta docelowego, planów/produktów, retencji/ingest/API, kosztów i uprawnień. | **PARTIAL.** Region ingest potwierdzono 04.10; API z 06.10 potwierdza metadane istniejących usług EU i część ustawień PostHog. Plany/koszty i pozostałe uprawnienia do produktów pozostają BLOCKED; retencja Sentry nie została ujawniona przez odczytane API. PostHog billing zwrócił 403 o nieustalonej przyczynie. Datadog i jego produkty nadal nie są potwierdzone. |
 | F0-G08 | Przyjęte role, realny dyżurny, godziny i coverage gaps; odbiorca oraz okno testu telefonu; decyzja o niezależnym lifecycle alarmu. | **PENDING.** Igor jest zlecającym, Bartosz kontaktem operacyjnym; żadna z tych informacji nie potwierdza dyżuru. TEST-06 NOT RUN. |
-| F0-G09 | Pełna kopia bazy i wymaganych obiektów poza hostem źródłowym; harmonogram, ostatni artifact/hash, retencja i procedura izolowanego restore obejmująca auth/storage oraz stan operacji. | **FAIL.** Brak pełnego `pg_dump` off-host i kopii MinIO aplikacji. Ograniczony snapshot JSON schematu `public` na innym hoście nie spełnia tego zakresu. Izolowany restore/TEST-07 NOT RUN. |
+| F0-G09 | Pełna kopia bazy i wymaganych obiektów poza hostem źródłowym; harmonogram, ostatni artifact/hash, retencja i procedura izolowanego restore obejmująca auth/storage oraz stan operacji. | **FAIL.** Pomiar 04.10 i deklaracja 06.10 wskazują brak pełnego `pg_dump` off-host i kopii MinIO aplikacji. API z 06.10 potwierdza siedem obrazów backupu dysku DB, bez dowodu spójności/zakresu DB i obiektów MinIO ani restore. Ograniczony snapshot JSON nie spełnia całego kryterium. TEST-07 NOT RUN. |
 
 Wyjście F0 wymaga wszystkich bramek oraz zamknięcia zastrzeżeń potrzebnych do
 następnego etapu. Zapis dokumentów i publikacja kolektora nie zmieniają statusu
 na COMPLETE. Samodzielne planowanie pozostaje możliwe; F1 i czynności operacyjne
 wymagają osobnego uzgodnienia zakresu po rozstrzygnięciu blokad.
+
+## Odczyty uzupełniające 06.10.2026
+
+Źródła i granice: [inwentarz](runtime-inventory.md#odczyty-dostawców-i-próba-ssh-06102026)
+oraz [bezpieczny indeks](evidence/f0-2026-10-06.json). Są to nowe odczyty API,
+osobne od deklaracji użytkownika i historycznego runtime z 04.10.
+
+- Hetzner, 20:48:15–20:49:14 UTC: trzy VM running w DE; siedem dostępnych
+  obrazów backupu dysku DB, najnowszy z 2026-10-06T02:43:59Z. Dla app/ops
+  funkcja backupu Cloud jest wyłączona, a API zwróciło zero obrazów backupu.
+  Nie przesądza to o wszystkich innych mechanizmach kopii.
+- Hetzner, 20:54:29 UTC: pełne reguły zapory i przypisanie do trzech hostów
+  odczytane; szczegóły prywatne. Nie jest to test rzeczywistego ruchu.
+- Sentry/PostHog, 20:49:23–20:49:55 UTC: GET 200 dla metadanych EU.
+  Sentry nie ujawnił w tych odpowiedziach planu ani retencji. PostHog
+  zwrócił projektowe replay opt-in=true, heatmaps=true i retencję replay
+  30 dni; organizacyjne retencje analytics/feature flags/surveys 1 rok,
+  replay 1 miesiąc, limit alertów 5 i error-tracking destinations 2.
+  Zakresy tych pól są oddzielne; nie wyznaczają same efektywnej retencji
+  ani wszystkich uprawnień planu. Billing PostHog: 403, przyczyna nieustalona.
+- Kolektor, 20:45:46.237 UTC: runtime trzech hostów unverified. Wskazany
+  klucz SSH jest lokalnie zaszyfrowany i nieodblokowany, a dla części hostów
+  brakuje zaufanych kluczy hosta. Nie uzyskano bieżącego SHA/health ani wersji
+  Node/MinIO; brak odczytu nie jest dowodem braku usług.
+
+Konfiguracja replay/heatmaps nie dowodzi faktycznego nagrywania przez SDK
+ani przyjęcia consent/polityki danych. Lokalizacja metadanych lub intake EU
+nie dowodzi wszystkich miejsc przetwarzania. Odczyty nie zmieniły serwerów
+ani ustawień dostawców i nie rozpoczęły F1.
 
 ## Brakujące dowody do odbioru
 
@@ -57,11 +88,12 @@ automatycznie wszystkich zadań ani dyżuru.
   Image ID. Przy lokalnym buildzie brak registry digestu zapisujemy jako
   ograniczenie pochodzenia, bez tworzenia fikcyjnego digestu. Nowy odczyt
   dostaje własne okno i release, nie zastępuje pomiaru z 11:03–11:22 UTC.
-- **G02 — infrastruktura i monitoring:** prywatny przegląd kompletności
-  routingu/ACL, reguł zapory Hetznera i konfiguracji monitorów Uptime Kuma
-  oraz używanych niezależnych checków: zakres, interwał, warunek awarii,
-  świeżość, kanał i luki. Publicznie tylko wynik i bezpieczna referencja.
-  Brak dostępu do panelu oznacza brak dowodu, nie brak konfiguracji.
+- **G02 — infrastruktura i monitoring:** odczyt reguł Hetznera i ich
+  przypisania z 06.10 jest wykonany, ze szczegółami zachowanymi prywatnie.
+  Pozostają przegląd kompletności routingu/ACL i reguł systemowych oraz
+  konfiguracja monitorów Uptime Kuma i niezależnych checków: zakres,
+  interwał, warunek awarii, świeżość, kanał i luki. Publicznie tylko wynik
+  i bezpieczna referencja. Brak dowodu nie oznacza braku konfiguracji.
 - **G03 — staging:** dowód istniejących i działających web/worker oraz
   oddzielnej DB, kolejek, storage, kluczy i odbiorców; syntetyczne dane,
   KSeF TEST i Stripe test. Operator wykazuje izolację od produkcyjnych
@@ -77,6 +109,8 @@ automatycznie wszystkich zadań ani dyżuru.
 - **G05 — dane:** przyjęcie polityki dla każdej klasy, w tym terminów
   audit/source maps, hold/delete, tenant_ref, consent i RBAC. Otwarte wartości
   mają pozostać jawne; pomiar intake EU nie zatwierdza nowych eksportów.
+  Odczytane ustawienia replay/heatmaps PostHog wymagają zestawienia z SDK
+  i przyjętą polityką; same nie dowodzą nagrywania ani naruszenia.
 - **G06 — narzut:** przyjęte wartości budżetu, limity, obrazy i klasy
   obciążenia oraz metoda OFF/ON i plan baseline. Odczyt zasobów z G02 nie
   jest porównaniem narzutu. Wykonanie TEST-05 następuje w osobnym odbiorze.
@@ -85,8 +119,10 @@ automatycznie wszystkich zadań ani dyżuru.
   limity ingest/API, koszty i uprawnienia. Sentry/PostHog i wybrany docelowy
   dostawca mają osobne dowody. Datadog EU, DBM/APM/RUM/On-Call pozostają
   niezweryfikowane; publiczna oferta lub region endpointu nie dowodzą
-  uprawnień konkretnego konta. Niewybrany produkt nie znika z warunku G07
-  bez jawnego uzgodnienia zakresu przez odbiorcę.
+  uprawnień konkretnego konta. Odczyt metadanych z 06.10 dostarcza części
+  dowodów kont/regionu i ustawień; nadal potrzebne są plan/koszty, retencja
+  Sentry i brakujące uprawnienia. Billing 403 nie rozstrzyga przyczyny odmowy.
+  Niewybrany produkt nie znika z G07 bez jawnego uzgodnienia zakresu.
 - **G08 — role i alarmy:** datowane przyjęcie osób, zakresów, godzin,
   zastępstwa lub jego braku i coverage gaps; realny odbiorca, okno TEST-06
   oraz decyzja o niezależnym lifecycle ACK/expiry/recovery. Prywatne dane
@@ -97,11 +133,12 @@ automatycznie wszystkich zadań ani dyżuru.
   danych aplikacji, stanu operacji i powiązań storage, rozróżniając MinIO
   aplikacji oraz Supabase Storage. Dołączona procedura izolowanego restore
   obejmuje ACL i blokadę produkcyjnych efektów. Snapshot `public` i sam
-  plan transportu off-host nie wystarczają. Backupy/snapshoty Hetznera
-  nadal są nieodczytane.
-  Deklaracja z 06.10 podtrzymuje brak pełnych kopii off-host. Aktualnie nie
-  ma artefaktu do przedstawienia jako dowód PASS; plan lub zakup docelowego
-  storage nie spełnia tego warunku. Uruchomienie kopii wymaga osobnego zakresu.
+  plan transportu off-host nie wystarczają. Obrazy backupu Hetznera są
+  odczytane 06.10: siedem dla DB, zero dla app/ops. Ich metadane nie dowodzą
+  spójności pełnej bazy, pokrycia MinIO ani restore.
+  Deklaracja z 06.10 podtrzymuje brak pełnego dumpa off-host i kopii MinIO.
+  Metadane obrazów i plan lub zakup storage nie zaliczają G09; uruchomienie
+  pełnych kopii i odbiór ich zakresu wymagają osobnego zadania.
 
 Karta dowodu zawiera bramkę, rodzaj źródła (**pomiar**, **decyzja** lub
 **deklaracja**), wykonawcę/reviewera, UTC odczytu, środowisko i wersję materiału,
