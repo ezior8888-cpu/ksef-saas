@@ -282,6 +282,49 @@ TEST-01…TEST-05 nadal nie zostały odebrane. KSeF TEST pozostaje celowym wybor
   bramki. Datowane dowody operatora/panelu mogą zastąpić odczyt Codexa.
   Nie kopiujemy klucza prywatnego do repo/chmury i nie wyłączamy host checks.
 
+## Wariant bez nowego abonamentu — ocena 07.10.2026
+
+**D — deklaracja:** po pytaniu „czy dałoby się to zrobić żeby było za darmo”
+Igor potwierdził urządzenie w UE dostępne codziennie, **500 GB wolnego miejsca**
+i że jest to komputer z Codexem. Nie jest to pomiar czasu dostępności ani
+zobowiązanie do działania 24/7. Nie podano czasu UTC wiadomości źródłowych.
+
+**P — odczyt lokalny**, 07.10 **19:01:06–19:01:08 UTC**: około 31,7 GiB RAM,
+13,4 GiB dostępnego RAM w tej chwili, 12 rdzeni fizycznych / 20 wątków oraz
+około 641,9 GiB wolnego miejsca na rozważanym dysku. Prywatny wyciąg jest poza
+Git; SHA-256: `b91b41875f18af3943b0a62116110598e76952d930ce3cf4f26baa118c10c2f1`.
+Nie uruchomiono Linuxa, kontenerów ani staging. Nie potwierdzono działającego
+Docker Engine; istniejący Ubuntu WSL2 był zatrzymany. Nie odczytano produkcji.
+
+**Wybrany kierunek dalszego przygotowania:** najpierw wariant **0 nowych
+abonamentów**, zamiast zamówienia BX11/CPX32. Istniejąca produkcja, prąd,
+łącze i sprzęt pozostają kosztami; nie jest to zerowy koszt całego projektu.
+Poprzednia cena 39,19 EUR netto opisuje wariant zakupowy, a historyczny indeks
+decyzji pozostaje niezmieniony. Nie zamówiono ani nie anulowano usług.
+
+- Kopie: trzy szyfrowane repozytoria restic na posiadanym urządzeniu, bez
+  publikowania plików, pełna DB/globals oraz oba MinIO. Utrzymujemy 7/4/12,
+  manifest, spójność referencji, osobne klucze i odzyskiwanie. Najpierw
+  zmierzyć pełny komplet, przyrost i zapas miejsca; 500 GB nie gwarantuje
+  zmieszczenia całej retencji. Potwierdzić dostępność w porze kopii, wiek
+  sukcesu do 26 h, alarm braku kopii i brak usypiania podczas przebiegu.
+  Lokalny cel poza hostami produkcji nie jest WORM ani odporny na utratę
+  urządzenia/ransomware; sekret odzyskiwania musi mieć osobną kopię offline.
+- Staging: osobna lokalna VM Linux z własnymi DB/kolejką/storage/kluczami,
+  danymi syntetycznymi, KSeF TEST i Stripe test. Sprzęt jest kandydatem;
+  alokację i zapas zasobów przyjąć po pomiarze pełnego zestawu, nie samego
+  Supabase. VM nie dostaje produkcyjnych sekretów ani dostępu do repo kopii
+  przez współdzielone dyski/katalogi. Sam dev server lub istniejący WSL2
+  nie zalicza G03: potrzebny działający web/worker i dowody izolacji.
+- Monitoring: wcześniej wybrany darmowy zakres bez płatnych rozszerzeń;
+  rzeczywiste plany, quota i dostęp nadal wymagają dowodów G07. Publiczne
+  oferty nie zmieniają niezweryfikowanych kont w PASS.
+
+To plan do przygotowania. **G03/G09 FAIL, F0_OPEN** pozostają bez zmian.
+Nie wykonano instalacji, kopii, wdrożenia, restore, zmian serwerów ani F1.
+Przygotowanie lokalnego wariantu nie uchyla zakazu czynności operacyjnych
+w tej sesji. Zakup nowych zasobów nie jest samodzielną bramką F0.
+
 ## Role i odpowiedzialność
 
 | Rola | Osoba / stan | Zakres i wymagany dowód przyjęcia |

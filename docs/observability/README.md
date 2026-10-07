@@ -70,5 +70,14 @@ Hobbyist. Nowe kopie BX11 HEL1 + staging CPX32 DE mają odczytany koszt
 planistyczny 39,19 EUR netto/mies., bez zamówienia. SSH Codexa jest opcją
 zbierania dowodów, nie obowiązkową bramką.
 
+Po pytaniu Igora o wariant darmowy przygotowujemy
+[wariant bez nowych abonamentów](ownership.md#wariant-bez-nowego-abonamentu--ocena-07102026):
+kopie na posiadanym urządzeniu i lokalny izolowany staging. Igor zadeklarował
+500 GB miejsca i codzienną dostępność; odczyt lokalny potwierdził zasoby
+komputera, bez pomiaru produkcji lub wykonania kopii. Cena 39,19 EUR dotyczy
+wcześniejszego wariantu zakupowego; zakup nie jest warunkiem samym w sobie.
+Pojemność pełnej retencji i działający staging pozostają niezweryfikowane;
+G03/G09 nadal FAIL. Obecnie priorytetem jest ocena posiadanego sprzętu.
+
 Na prośbę Igora prompt do drugiego chatu powstanie po rzeczywistym odbiorze
 F0, z jego dowodami i konkretną wersją materiału. F1 nie rozpoczęto.
