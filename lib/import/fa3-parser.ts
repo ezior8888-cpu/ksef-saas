@@ -59,6 +59,11 @@ export interface ParsedInvoice {
   annotationProblems?: string[];
   /** FP, TP, podmiot upoważniony, GTU, Procedura — JPK FaktFlow ich nie wykazuje. */
   ksefMarkers?: Fa3Markers;
+  /**
+   * C5c: surowy tekst sum nagłówka (P_13_x, P_14_1…P_14_5, P_15) — źródło
+   * prawdy dla netto i VAT każdej stawki (art. 106e ust. 7–9). Tylko z pliku XML.
+   */
+  ksefSums?: Partial<Record<string, string>>;
 
   warnings: string[];
 }
@@ -94,6 +99,33 @@ export interface ParsedLine {
   netAmount: number;
   /** P_6A — data sprzedaży pozycji, gdy pozycje mają różne daty (C5b). */
   saleDate?: string;
+  /**
+   * C5c: surowy tekst kwot pozycji z pliku (P_8B, P_9A, P_9B, P_10, P_11,
+   * P_11A, P_11Vat). Brak klucza = brak elementu. Kwoty liczy
+   * `lib/import/fa3-line-amounts.ts` — tu tylko odczyt.
+   */
+  ksef?: Partial<Record<Fa3LineField, string>>;
+}
+
+export const FA3_LINE_FIELDS = ['P_8B', 'P_9A', 'P_9B', 'P_10', 'P_11', 'P_11A', 'P_11Vat'] as const;
+export type Fa3LineField = (typeof FA3_LINE_FIELDS)[number];
+const FA3_SUM_FIELDS = [...FA3_NET_FIELDS, 'P_14_1', 'P_14_2', 'P_14_3', 'P_14_4', 'P_14_5', 'P_15'] as const;
+
+/** Tekst elementu (liczba z parsera → tekst); element złożony albo powtórzony → „?”, czyli nieczytelny. */
+function rawText(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return '?';
+}
+
+function rawFields<K extends string>(node: Record<string, unknown>, fields: readonly K[]): Partial<Record<K, string>> {
+  const out: Partial<Record<K, string>> = {};
+  for (const f of fields) {
+    const v = rawText(node[f]);
+    if (v !== undefined) out[f] = v;
+  }
+  return out;
 }
 
 // ============================================================================
@@ -254,6 +286,7 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
       ...(p12 !== undefined ? { p12 } : {}),
       netAmount: parseNum(w.P_11),
       ...(lineSaleDate ? { saleDate: lineSaleDate } : {}),
+      ksef: rawFields(w, FA3_LINE_FIELDS),
     };
   });
   if (saleDateProblems.length) warnings.push(`Nieczytelna data sprzedaży: ${saleDateProblems.join('; ')}`);
@@ -295,6 +328,7 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
     ksefAnnotations,
     ...(annotationProblems.length ? { annotationProblems } : {}),
     ...(ksefMarkers ? { ksefMarkers } : {}),
+    ksefSums: rawFields(fa, FA3_SUM_FIELDS),
     warnings,
   };
 }
