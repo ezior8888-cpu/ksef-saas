@@ -114,7 +114,10 @@ describe('strażnik: każdy generator FaktFlow podpisuje plik tym samym SystemIn
 
 describe('KSEF_NUMBER_TAKEN — wyjście dla klienta i operatora', () => {
   it('klient: „Wróć do szkicu” (bez „Wyślij ponownie”) i zdanie z obiema drogami', () => {
-    expect(failedInvoiceButtons({ status: 'failed', errorCode: 'KSEF_NUMBER_TAKEN', invoiceKind: 'regular', canManage: true }))
+    expect(failedInvoiceButtons({
+      status: 'failed', errorCode: 'KSEF_NUMBER_TAKEN', invoiceKind: 'regular', canManage: true,
+      facts: { sendData: 'stored', kindHeld: false, issueDatePassed: false }, environmentKnown: true,
+    }))
       .toEqual({ resend: false, reset: true, settings: false, info: KSEF_SEND_MESSAGES.numberTaken });
   });
 

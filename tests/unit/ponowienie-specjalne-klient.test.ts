@@ -119,20 +119,28 @@ vi.mock('@/lib/email/send', () => ({ sendInvoiceEmail: vi.fn() }));
 import { resendInvoiceAction } from '@/components/invoices/actions-detail';
 import { saveAndSendAdvanceAction } from '@/components/invoices/advance-actions';
 import { saveAndSendCorrectionAction } from '@/components/invoices/correction-actions';
-import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
-import { finalizeInvoice } from '@/lib/xml/invoice-calculator';
+import { KSEF_RESEND_SOURCE_COLUMNS } from '@/lib/invoices/ksef-requeue-event';
+import {
+  KSEF_SEND_MESSAGES,
+  KSEF_SPECIAL_SEND_MESSAGES,
+  resendMissingCredentialsMessage,
+  resendPausedMessage,
+} from '@/lib/invoices/ksef-send-policy';
+import { SUPPORT_EMAIL } from '@/lib/site';
+import { finalizeInvoice, validateInvoice } from '@/lib/xml/invoice-calculator';
 import type { CorrectionInvoiceSchemaIn } from '@/lib/validators/invoice-validators';
 
 import { jsonb, memoryDb, type MemoryDb, type Row } from './helpers/ponowienie-specjalne-baza';
 
 type CapturedEvent = (typeof st.events)[number];
 
-const { tenant: TENANT, parent: PARENT, invoice: NEW_ID, advance: ADVANCE, user: USER } = st.ids;
+const { tenant: TENANT, parent: PARENT, invoice: NEW_ID, user: USER } = st.ids;
 const TENANT_NIP = '1234567890';
 
 // Dzień wystawienia (Europe/Warsaw) i dzień później.
 const TODAY = '2026-10-02';
 const NOW = new Date('2026-10-02T10:00:00Z');
+const NEXT_DAY = new Date('2026-10-03T10:00:00Z');
 
 const sellerAddress = { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' };
 const buyerAddress = { countryCode: 'PL', addressLine1: 'ul. Testowa 2', addressLine2: '00-002 Warszawa' };
@@ -235,6 +243,12 @@ const advanceInput = {
 
 /** jsonb w bazie i w pg-boss: `undefined` znika, kolejność kluczy bez znaczenia. */
 const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value ?? null));
+
+function withoutAttempt(data: unknown): Row {
+  const copy = { ...(plain(data) as Row) };
+  delete copy.sendAttemptId;
+  return copy;
+}
 
 interface FirstSend {
   first: CapturedEvent;
@@ -358,6 +372,203 @@ describe('strażnik harnessu: pierwsze zdarzenie z prawdziwych akcji, wiersz z b
       maybeSingle: () => Promise<{ data: Row | null }>;
     }).maybeSingle();
     expect(data).toEqual({ invoice_kind: 'advance', special_data: null });
+  });
+});
+
+type SpecialDoc = { kind: 'correction' | 'advance'; cancellation: boolean; send: () => Promise<FirstSend> };
+
+const DOCUMENTS: Array<[string, SpecialDoc]> = [
+  ['KOR przed/po z PKWiU, typKorekty 1, kompensata (TEST)', {
+    kind: 'correction', cancellation: false, send: () => sendCorrection(KOR_BEFORE_AFTER),
+  }],
+  ['KOR anulowanie (TEST)', { kind: 'correction', cancellation: true, send: () => sendCorrection(KOR_CANCELLATION) }],
+  ['ZAL', { kind: 'advance', cancellation: false, send: sendAdvance }],
+];
+
+describe('A4b PR2b: „Wyślij ponownie” KOR/ZAL z kopii na wierszu (w dniu wystawienia)', () => {
+  it.each(DOCUMENTS)('%s: requeue z aktorem, dane zdarzenia = pierwsze zdarzenie poza sendAttemptId', async (_name, doc) => {
+    const { first, insert } = await doc.send();
+    const db = seedFromInsert(insert);
+    if (doc.cancellation) {
+      // Strażnik: walidator zwykłej faktury odrzuca ujemne ilości anulowania —
+      // dlatego akcja waliduje tylko zwykłe faktury (correction-actions.ts linesToStoredItems).
+      expect(validateInvoice(insert.fa3_data as Parameters<typeof validateInvoice>[0]))
+        .toContainEqual(expect.stringMatching(/ilość musi być > 0/));
+    }
+
+    const result = await resendInvoiceAction(NEW_ID);
+
+    // Do PR2b: { success: false, error: tekst „special” } dla każdego dokumentu specjalnego.
+    expect(JSON.stringify(result)).not.toMatch(/ilość musi być > 0/);
+    expect(result).toEqual({ success: true });
+    expect(st.events).toHaveLength(1);
+    const second = st.events[0] as CapturedEvent;
+    expect(second.name).toBe(first.name);
+    expect(second.groupId).toBe(first.groupId);
+    expect(second.singletonKey).toBe(first.singletonKey);
+    expect(withoutAttempt(second.data)).toEqual(withoutAttempt(first.data));
+    expect(second.data.sendAttemptId).not.toBe(first.data.sendAttemptId);
+    // Ponowienie klienta: failed → queued przez RPC z aktorem (nie liczy się do limitu I6), pełna wysyłka.
+    expect(st.sql.at(-1)).toEqual({
+      sql: expect.stringContaining('requeue_ksef_send'),
+      values: [NEW_ID, TENANT, second.data.sendAttemptId, USER, false],
+    });
+    expect(invoiceRow(db).ksef_status).toBe('queued');
+    expect(st.audits).toContainEqual(expect.objectContaining({
+      action: 'invoice.submit_requested',
+      entityId: NEW_ID,
+      metadata: expect.objectContaining({ kind: doc.kind, send: 'requeue', mode: 'online_queued' }),
+    }));
+  });
+
+  // Spec §3.2 p. 12 nazywa ten przypadek strażnikiem, ale na PR2a pierwsze ponowienie ZAL dostaje
+  // „special”, więc wiersz nigdy nie przechodzi w queued. Strażnik dla zwykłej faktury jest niżej.
+  it('ZAL po udanym ponowieniu jest queued — drugie kliknięcie dostaje M.status, bez drugiego zlecenia', async () => {
+    const { insert } = await sendAdvance();
+    const db = seedFromInsert(insert);
+
+    await expect(resendInvoiceAction(NEW_ID)).resolves.toEqual({ success: true });
+    expect(invoiceRow(db).ksef_status).toBe('queued');
+    expect(st.events).toHaveLength(1);
+
+    await expect(resendInvoiceAction(NEW_ID)).resolves.toEqual({ success: false, error: KSEF_SEND_MESSAGES.status });
+    expect(st.events).toHaveLength(1);
+  });
+
+  it('odczyt faktury do ponowienia używa krotki KSEF_RESEND_SOURCE_COLUMNS (jak cron i operator)', async () => {
+    const db = seedRegular();
+
+    await expect(resendInvoiceAction(NEW_ID)).resolves.toEqual({ success: true });
+    const reads = db.reads.filter((r) => r.table === 'invoices');
+    expect(reads).toHaveLength(1);
+    expect(reads[0]!.filters).toEqual({ id: NEW_ID, tenant_id: TENANT });
+    // Do PR2b: literał 'ksef_status, direction, invoice_kind, invoice_type, last_error_code, fa3_data'.
+    expect(reads[0]!.columns).toContain(KSEF_RESEND_SOURCE_COLUMNS);
+  });
+});
+
+describe('A4b PR2b: odmowy z powodem i wyjściem, bez zlecenia', () => {
+  it('stary KOR bez kopii (special_data NULL) → S.incomplete(correction) z adresem pomocy', async () => {
+    const { insert } = await sendCorrection(KOR_BEFORE_AFTER);
+    seedFromInsert(insert, { special_data: null });
+
+    const error = errorOf(await resendInvoiceAction(NEW_ID));
+    // Do PR2b: jeden tekst „special” — bez powodu i bez wyjścia dla zablokowanego szkicu.
+    expect(error).toMatch(/kopii danych korekty/);
+    expect(error).toContain(SUPPORT_EMAIL);
+    expect(error).toBe(KSEF_SPECIAL_SEND_MESSAGES.incomplete('correction'));
+    expect(st.events).toEqual([]);
+    expect(st.sql).toEqual([]);
+  });
+
+  it('KOR, gdy KSEF_ENV = production tylko przy ponowieniu → S.kindHeld(correction)', async () => {
+    const { insert } = await sendCorrection(KOR_BEFORE_AFTER);
+    seedFromInsert(insert);
+    vi.stubEnv('KSEF_ENV', 'production');
+
+    const error = errorOf(await resendInvoiceAction(NEW_ID));
+    expect(error).toMatch(/korekt do produkcyjnego KSeF jest wstrzymana/);
+    expect(error).toBe(KSEF_SPECIAL_SEND_MESSAGES.kindHeld('correction'));
+    expect(st.events).toEqual([]);
+    expect(st.sql).toEqual([]);
+  });
+
+  it('ZAL dzień po dacie wystawienia → S.issueDatePassed(advance), bez „uzgodni operator”', async () => {
+    const { insert } = await sendAdvance();
+    seedFromInsert(insert);
+    vi.setSystemTime(NEXT_DAY);
+
+    const error = errorOf(await resendInvoiceAction(NEW_ID));
+    expect(error).toMatch(/datę wystawienia sprzed dzisiaj/);
+    expect(error).not.toMatch(/uzgodni (ją|go) operator/);
+    expect(error).toBe(KSEF_SPECIAL_SEND_MESSAGES.issueDatePassed('advance'));
+    expect(st.events).toEqual([]);
+    expect(st.sql).toEqual([]);
+  });
+
+  it('ZAL z KSEF_PAUSED bez koperty advanceEnvelope → S.incomplete(advance), nie „wyjdzie automatycznie” (M.hold)', async () => {
+    const { insert } = await sendAdvance();
+    const fa3 = { ...(jsonb(insert.fa3_data) as Row) };
+    delete fa3.advanceEnvelope;
+    seedFromInsert(insert, { last_error_code: 'KSEF_PAUSED', fa3_data: fa3 });
+
+    const error = errorOf(await resendInvoiceAction(NEW_ID));
+    // Do PR2b: M.hold obiecuje automat, którego I7 dla tego wiersza nie wykona (brak danych).
+    expect(error).not.toBe(KSEF_SEND_MESSAGES.hold);
+    expect(error).toMatch(/kopii danych faktury zaliczkowej/);
+    expect(error).toBe(KSEF_SPECIAL_SEND_MESSAGES.incomplete('advance'));
+    expect(st.events).toEqual([]);
+  });
+
+  it('KOR_HOLD na TEST z kopią → M.korHold: bez obietnicy automatu, z adresem pomocy (jedyne wymuszenie decyzji a po stronie serwera)', async () => {
+    const { insert } = await sendCorrection(KOR_BEFORE_AFTER);
+    seedFromInsert(insert, { last_error_code: 'KOR_HOLD' });
+
+    const error = errorOf(await resendInvoiceAction(NEW_ID));
+    // Do PR2b: M.hold „Faktura wyjdzie automatycznie po przywróceniu wysyłki”.
+    expect(error).not.toMatch(/automatycznie/);
+    expect(error).toContain(SUPPORT_EMAIL);
+    expect(error).toBe(KSEF_SEND_MESSAGES.korHold);
+    expect(st.events).toEqual([]);
+    expect(st.sql).toEqual([]);
+  });
+
+  it.each([
+    ['zwykła', async () => seedRegular()],
+    ['ZAL', async () => seedFromInsert((await sendAdvance()).insert)],
+  ] as const)('%s, gdy KSEF_ENV jest niepoprawne → M.envUnknown (nie ogólny błąd z catch)', async (_name, seed) => {
+    await seed();
+    vi.stubEnv('KSEF_ENV', 'bogus');
+
+    const error = errorOf(await resendInvoiceAction(NEW_ID));
+    // Do PR2b: zwykła — wyjątek requireConfiguredKsefEnvironment w kolejce i ogólny tekst; ZAL — „special”.
+    expect(error).toMatch(/środowiska KSeF/);
+    expect(error).toBe(KSEF_SEND_MESSAGES.envUnknown);
+    expect(st.events).toEqual([]);
+    expect(st.sql).toEqual([]);
+  });
+});
+
+describe('A4b PR2b: odmowy kolejki w trybie ponowienia — faktura zostaje z błędem wysyłki, nie „zapisana jako szkic”', () => {
+  it('wyłącznik operatora, zwykła faktura KSEF_UNAVAILABLE → resendPausedMessage(regular), wiersz dalej failed', async () => {
+    const db = seedRegular();
+    st.paused = true;
+
+    const error = errorOf(await resendInvoiceAction(NEW_ID));
+    // Do PR2b: KSEF_PAUSED_MESSAGE „Faktura została zapisana jako szkic”.
+    expect(error).not.toMatch(/szkic/);
+    expect(error).toMatch(/nie wykonaliśmy/);
+    expect(error).toBe(resendPausedMessage('regular'));
+    expect(st.sql).toEqual([]);
+    expect(st.events).toEqual([]);
+    expect(invoiceRow(db).ksef_status).toBe('failed');
+  });
+
+  it('wyłącznik operatora, ZAL w dniu wystawienia → resendPausedMessage(advance)', async () => {
+    const { insert } = await sendAdvance();
+    const db = seedFromInsert(insert);
+    st.paused = true;
+
+    const error = errorOf(await resendInvoiceAction(NEW_ID));
+    // Do PR2b: polityka odmawiała wcześniej tekstem „special”.
+    expect(error).toMatch(/wstrzymana przez operatora/);
+    expect(error).not.toMatch(/zapisan[ao] jako szkic/);
+    expect(error).toBe(resendPausedMessage('advance'));
+    expect(st.sql).toEqual([]);
+    expect(invoiceRow(db).ksef_status).toBe('failed');
+  });
+
+  it('firma bez certyfikatu (blob NULL), zwykła faktura → resendMissingCredentialsMessage(regular)', async () => {
+    const db = seedRegular();
+    st.blob = null;
+
+    const error = errorOf(await resendInvoiceAction(NEW_ID));
+    // Do PR2b: „Faktura została zapisana jako szkic.”
+    expect(error).not.toMatch(/zapisana jako szkic/);
+    expect(error).toMatch(/nie wykonaliśmy/);
+    expect(error).toBe(resendMissingCredentialsMessage('regular'));
+    expect(st.sql).toEqual([]);
+    expect(invoiceRow(db).ksef_status).toBe('failed');
   });
 });
 

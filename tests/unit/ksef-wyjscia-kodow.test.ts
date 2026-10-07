@@ -24,12 +24,15 @@ import type { KsefEnvironment } from '@/types/ksef';
  * tylko dokumentów specjalnych, decyzja b z 06.10.2026).
  *
  * Wyjścia liczone tymi samymi czystymi modułami, z których korzystają
- * przyciski i akcje (operator: fakty + `environmentKnown`; rodzaj wstrzymany
- * — prawdziwe `isKindHeldForEnv`); reguły RPC i crona odwzorowane niżej
- * (komentarz = źródło). Klient do A4b PR2b zostaje przy starej sygnaturze
- * (bez faktów). Lista ŚLEPYCH ULICZEK jest jawna: każda pozycja ma sesję
- * albo decyzję, która ją zamknie. Nowa ślepa uliczka (albo zamknięta,
- * a niewykreślona) czerwieni test.
+ * przyciski i akcje (klient i operator: fakty + `environmentKnown`; rodzaj
+ * wstrzymany — prawdziwe `isKindHeldForEnv`); reguły RPC i crona odwzorowane
+ * niżej (komentarz = źródło). Od A4b PR2b klient też wysyła ponownie KOR/ZAL
+ * z kopii w dniu wystawienia (decyzja b), a zdanie nad jego przyciskami
+ * obiecuje automat tylko tam, gdzie cron naprawdę ponowi — i nigdy nie
+ * odsyła do „uzgodni operator” (takiej ścieżki w panelu nie ma; decyzja
+ * z 07.10.2026: adres pomocy FaktFlow). Lista ŚLEPYCH ULICZEK jest jawna:
+ * każda pozycja ma sesję albo decyzję, która ją zamknie. Nowa ślepa uliczka
+ * (albo zamknięta, a niewykreślona) czerwieni test.
  */
 
 type Kind = 'regular' | 'correction' | 'advance' | 'final';
@@ -75,9 +78,15 @@ function automaticExit(s: Scenario): boolean {
     || (canRebuild && s.openSubmission);
 }
 
-/** Klient do A4b PR2b: stara sygnatura (bez faktów) — dokument specjalny tylko „Wróć do szkicu”. */
+/** Przyciski właściciela (A4b PR2b): fakty ponowienia z kopii i znane środowisko — jak operator. */
+function clientButtons(s: Scenario) {
+  return failedInvoiceButtons({
+    status: 'failed', errorCode: s.code, invoiceKind: s.kind, canManage: true, facts: factsOf(s), environmentKnown: true,
+  });
+}
+
 function clientExit(s: Scenario): boolean {
-  const b = failedInvoiceButtons({ status: 'failed', errorCode: s.code, invoiceKind: s.kind, canManage: true });
+  const b = clientButtons(s);
   if (!b) return false;
   // „Wyślij ponownie” klienta idzie przez `requeue_ksef_send` (klasa terminal odmawia — przycisk jej nie pokazuje).
   return b.resend || (b.reset && resetAllowedByRpc(s));
@@ -112,6 +121,23 @@ function scenarios(): Scenario[] {
     }
   }
   return out;
+}
+
+/** Zdanie klienta nie zależy od dowodu kontaktu ani otwartego wpisu — jeden scenariusz na kombinację. */
+const clientScenarios = () => scenarios().filter((s) => !s.evidence && !s.openSubmission);
+
+/** Zdanie obiecuje automat — po odjęciu jawnej odmowy „nie ponowimy automatycznie”. */
+const promisesAutomat = (info: string) => /automatycznie/.test(info.replace(/nie ponowimy automatycznie/g, ''));
+
+/**
+ * Czy cron I6/I7 naprawdę wyśle fakturę od nowa (`automaticExit` bez I5 —
+ * I5 tylko uzgadnia otwarty wpis, niczego nie wysyła).
+ */
+function automaticResend(s: Scenario): boolean {
+  const special = s.kind !== 'regular';
+  const { kindHeld } = factsOf(s);
+  return s.sendData === 'stored' && !kindHeld && !(special && s.issueDatePassed)
+    && (isAutoRequeueable(s.code) || s.code === SEND_ERROR_CODES.KSEF_PAUSED);
 }
 
 const label = (s: Scenario) =>
@@ -196,5 +222,54 @@ describe('A4: każdy kod katalogu ma wyjście (automat, klient albo operator)', 
     };
     expect(operatorExit(s)).toBe(true);
     expect(knownDeadEnd(s)).toBe(false);
+  });
+});
+
+describe('A4b PR2b: klient — „Wyślij ponownie” z kopii i prawdziwe zdanie o automacie', () => {
+  it.each([
+    ['ZAL z kopią, PROD, w dniu wystawienia, KSEF_UNAVAILABLE', SEND_ERROR_CODES.KSEF_UNAVAILABLE, 'advance', 'production'],
+    ['KOR z kopią, TEST, w dniu wystawienia, INFRA', SEND_ERROR_CODES.INFRA, 'correction', 'test'],
+  ] as const)('(a) %s → klient ma „Wyślij ponownie”', (_label, code, kind, env) => {
+    const s: Scenario = { code, kind, sendData: 'stored', env, issueDatePassed: false, evidence: false, openSubmission: false };
+    expect(clientButtons(s)?.resend).toBe(true);
+  });
+
+  it('(b) zdanie klienta nie obiecuje automatu tam, gdzie cron I6/I7 nie wyśle faktury od nowa', () => {
+    const falsePromises = clientScenarios()
+      .filter((s) => promisesAutomat(clientButtons(s)?.info ?? '') && !automaticResend(s))
+      .map(label)
+      .sort();
+    expect(falsePromises).toEqual([]);
+  });
+
+  it('(c) dokument specjalny: każda obietnica automatu ma granicę dnia wystawienia', () => {
+    const unbounded = clientScenarios()
+      .filter((s) => s.kind !== 'regular')
+      .filter((s) => {
+        const info = clientButtons(s)?.info ?? '';
+        return promisesAutomat(info) && !/północ|dniu wystawienia|dziś/.test(info);
+      })
+      .map(label)
+      .sort();
+    expect(unbounded).toEqual([]);
+  });
+
+  it('(d) żadne zdanie klienta nie odsyła do „uzgodni operator” (w panelu nie ma takiej ścieżki)', () => {
+    const deadPromises = clientScenarios()
+      .filter((s) => /uzgodni (ją|go) operator/.test(clientButtons(s)?.info ?? ''))
+      .map(label)
+      .sort();
+    expect(deadPromises).toEqual([]);
+  });
+
+  it('(e) strażnik: „Wyślij ponownie” klienta ⇒ „Wyślij ponownie” operatora (klient nie zleca więcej niż operator)', () => {
+    const beyondOperator = scenarios()
+      .filter((s) => clientButtons(s)?.resend === true)
+      .filter((s) => !operatorInvoiceButtons({
+        direction: 'outgoing', status: 'failed', errorCode: s.code, invoiceKind: s.kind,
+        openSent: s.openSubmission, evidence: s.evidence, facts: factsOf(s), environmentKnown: true,
+      }).requeue.enabled)
+      .map(label);
+    expect(beyondOperator).toEqual([]);
   });
 });

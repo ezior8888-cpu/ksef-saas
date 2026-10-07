@@ -4,8 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { StatusBadge } from '@/components/invoices/status-badge';
 import { OPERATOR_MESSAGES, operatorInvoiceButtons } from '@/lib/admin/ksef-operator-policy';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
-import { decideResend, failedInvoiceButtons, KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
+import {
+  decideResend,
+  failedInvoiceButtons,
+  KSEF_SEND_MESSAGES,
+  KSEF_SPECIAL_SEND_MESSAGES,
+} from '@/lib/invoices/ksef-send-policy';
 import { SEND_ERROR_CODES, sendErrorClassOf } from '@/lib/ksef/send-error-classes';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 /**
  * D-A4-2 (decyzja Bartosza 04.10.2026, plan „zero zgubionych faktur”):
@@ -53,6 +59,11 @@ describe('D-A4-2: ENV_MISMATCH — powrót do szkicu, decyzja klienta', () => {
   it('korekta: także szkic (zdarzenia nie trzeba odtwarzać — wysyłka zaczyna się od nowa)', () => {
     const b = failedInvoiceButtons({ ...FAILED, invoiceKind: 'correction', canManage: true });
     expect(b).toMatchObject({ resend: false, reset: true });
+    // A4b PR2b (decyzje 07.10.2026): zablokowany szkic → pomoc FaktFlow, nie „uzgodni operator”
+    // (takiej ścieżki w panelu nie ma); szkicu korekty nie wyślesz — od nowa z dzisiejszą datą.
+    expect(b?.info).not.toMatch(/uzgodni (ją|go) operator/);
+    expect(b?.info).toContain(SUPPORT_EMAIL);
+    expect(b?.info).toBe(`${KSEF_SEND_MESSAGES.envMismatch} ${KSEF_SPECIAL_SEND_MESSAGES.envMismatchNote('correction')}`);
   });
 
   it('akcja „Wyślij ponownie” klienta odmawia z tym samym komunikatem', () => {

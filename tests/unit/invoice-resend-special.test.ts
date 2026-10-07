@@ -117,7 +117,8 @@ describe('historical KSeF resend boundary', () => {
 
   it('rejects replay from other statuses before publishing', async () => {
     mocks.row = historical('accepted');
-    expect((await resendInvoiceAction(INVOICE_ID)).success).toBe(false);
+    // Dokładny komunikat odmowy statusu — sam `success: false` przeszedłby też przy ogólnym błędzie z catch.
+    expect(await resendInvoiceAction(INVOICE_ID)).toEqual({ success: false, error: KSEF_SEND_MESSAGES.status });
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 

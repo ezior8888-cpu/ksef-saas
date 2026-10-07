@@ -448,6 +448,12 @@ describe('service-role job boundaries', () => {
     expect(tables.invoices[0]).toMatchObject({
       ksef_status: 'failed', last_error_code: 'ROZ_HOLD_RECONCILE',
     });
+    // A4b PR2b: ROZ_HOLD_RECONCILE nie ma przycisków klienta (decyzja a) ani
+    // automatu (I7 wznawia tylko KSEF_PAUSED). `last_error` stoi nad
+    // przyciskami — nie każe „ręcznie uzgodnić” i nie obiecuje wysyłki.
+    expect(tables.invoices[0].last_error).not.toMatch(/ręcznie uzgodnij/);
+    expect(tables.invoices[0].last_error).not.toMatch(/automatycznie/);
+    expect(tables.invoices[0].last_error).toMatch(/sami nie wyślemy/);
     expect(tables.ksef_offline_queue).toBeUndefined();
     expect(sendEvent).toHaveBeenCalledWith('emit-failure', expect.objectContaining({
       data: expect.objectContaining({ terminal: true, manualReconciliationRequired: true }),
@@ -465,6 +471,10 @@ describe('service-role job boundaries', () => {
     expect(tables.invoices[0]).toMatchObject({
       ksef_status: 'failed', last_error_code: 'ROZ_HOLD_RECONCILE',
     });
+    // A4b PR2b: blokada ROZ klasyfikuje każdą porażkę joba ROZ po stanie,
+    // także starego — ten sam prawdziwy tekst (bez „ręcznie uzgodnij”).
+    expect(tables.invoices[0].last_error).not.toMatch(/ręcznie uzgodnij/);
+    expect(tables.invoices[0].last_error).toMatch(/sami nie wyślemy/);
   });
   it('does not downgrade an already accepted ROZ when its event is replayed', async () => {
     tables.invoices = [{
