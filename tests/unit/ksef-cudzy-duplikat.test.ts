@@ -255,7 +255,7 @@ describe('D-A4-1: cudzy 440 — weryfikacja treści oryginału z KSeF', () => {
 
   it('numer KSeF oryginału należy do innej faktury tej firmy w FaktFlow → operator, bez pobierania', async () => {
     seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: 'K-OBCA', xml: fromOtherProgram(ourXml()) });
-    m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_number: 'K-OBCA', internal_number: 'FV/INNA/1' }];
+    m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_status: 'accepted', ksef_number: 'K-OBCA', internal_number: 'FV/INNA/1' }];
 
     const error = await failing(runSubmitInvoice(event(), ctx(0)));
 
@@ -470,7 +470,7 @@ describe('D-A4-1b-3 (A): dane oryginału przy nierozstrzygniętym 440 — zapisa
 
   it('numer KSeF ma inna faktura sprzedaży w FaktFlow → reason known-number z odnośnikiem, bez pobierania', async () => {
     seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: fromOtherProgram(ourXml()) });
-    m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_number: K, internal_number: 'FV/INNA/1' }];
+    m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_status: 'accepted', ksef_number: K, internal_number: 'FV/INNA/1' }];
 
     await failing(runSubmitInvoice(event(), ctx(0)));
 

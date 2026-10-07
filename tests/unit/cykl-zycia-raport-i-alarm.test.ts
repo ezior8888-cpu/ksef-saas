@@ -8,7 +8,8 @@ import type { JobContext } from '@/lib/jobs/registry';
  */
 
 const m = vi.hoisted(() => ({
-  violations: [] as Array<{ invariant: string }>,
+  // D-A4-1b-3 PR B: wiersze strażnika niosą `detail` (I5D — środowisko sprawdzenia oryginału).
+  violations: [] as Array<{ invariant: string; detail?: unknown }>,
   counts: {} as Record<string, number>,
   audit: [] as Array<{ action: string; user_id: string | null }>,
   slack: vi.fn(),
@@ -22,14 +23,19 @@ vi.mock('@/lib/supabase/admin', () => ({
     rpc: async (fn: string) => (fn === 'ksef_lifecycle_violations' ? { data: m.violations, error: null } : { data: null, error: { message: fn } }),
     from: (table: string) => {
       const filters: Array<[string, unknown]> = [];
+      // `in('action', …)` filtruje ślad jak PostgREST — raport liczy tylko akcje ze swojej listy.
+      let actions: unknown[] | null = null;
       const q = {
         select: () => q,
         eq: (k: string, v: unknown) => { filters.push([k, v]); return q; },
-        in: () => q,
+        in: (k: string, vs: unknown[]) => { if (k === 'action') actions = vs; return q; },
         gte: () => q,
         limit: () => q,
         then: (ok: (v: unknown) => unknown) => {
-          if (table === 'audit_logs') return ok({ data: m.audit, error: null });
+          if (table === 'audit_logs') {
+            const allowed = actions;
+            return ok({ data: allowed ? m.audit.filter((r) => allowed.includes(r.action)) : m.audit, error: null });
+          }
           const status = filters.find(([k]) => k === 'ksef_status')?.[1] as string | undefined;
           return ok({ data: null, error: null, count: m.counts[status ?? ''] ?? 0 });
         },

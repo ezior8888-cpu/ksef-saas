@@ -20,11 +20,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const st = vi.hoisted(() => ({
   db: null as null | import('./helpers/ponowienie-specjalne-baza').MemoryDb,
   user: 'fixture-user',
+  /** Wywołania `.not(...)` (baza w pamięci go nie ma) — D-A4-1b-3 PR B: strona czyta znacznik loaderem z samymi `.eq`. */
+  notCalls: [] as Array<{ table: string; args: unknown[] }>,
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
-    from: (table: string) => st.db!.from(table),
+    from: (table: string) => {
+      const q = st.db!.from(table);
+      // `.not` tylko notuje wywołanie (filtr bez skutku): stary odczyt znacznika
+      // 440 strony (do PR B) przechodzi na danych tych testów, a test sprawdza,
+      // że strona przeszła na loader faktów bez `.not`.
+      return Object.assign(q, {
+        not: (...args: unknown[]) => {
+          st.notCalls.push({ table, args });
+          return q;
+        },
+      });
+    },
     auth: { getUser: async () => ({ data: { user: { id: st.user } }, error: null }) },
   }),
 }));
@@ -155,6 +168,7 @@ function seed() {
     ],
     memberships: [{ user_id: st.user, organization_id: TENANT, status: 'active', role: 'owner' }],
     upo_receipts: [],
+    ksef_submissions: [],
   });
   return st.db;
 }
@@ -167,6 +181,7 @@ async function loadInitial(id: string): Promise<InvoiceDetailInitial> {
 
 beforeEach(() => {
   seed();
+  st.notCalls.length = 0;
   vi.stubEnv('KSEF_ENV', 'test');
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);

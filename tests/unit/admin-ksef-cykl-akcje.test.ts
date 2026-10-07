@@ -24,10 +24,22 @@ const m = vi.hoisted(() => ({
   /** `configuredKsefEnvironment()` akcji (null = KSEF_ENV nieustawione albo błędne). */
   env: vi.fn((): string | null => 'test'),
   invoice: null as Record<string, unknown> | null,
+  /** Inne faktury firmy (np. dokument, który ma już numer KSeF oryginału) — odczyt po `id`. */
+  otherInvoices: [] as Array<Record<string, unknown>>,
   /** Wpisy `ksef_submissions` faktury; bez `status` = `sent`. */
-  openSent: [] as Array<{ id: string; status?: string }>,
+  openSent: [] as Array<{ id: string; status?: string } & Record<string, unknown>>,
+  /** `audit_logs` w pamięci — ślad powiadomień klienta o decyzji (D-A4-1b-3 PR B). */
+  auditLogs: [] as Array<Record<string, unknown>>,
+  /** Zapis do `audit_logs` kończy się błędem bazy. */
+  failAuditInsert: false,
   /** Napisy `select(...)` w kolejności wywołań — kontrakt kolumn odczytu. */
   selects: [] as Array<{ table: string; columns: string }>,
+  /** `getTenantAdminEmail` (e-mail właściciela firmy). */
+  ownerEmail: vi.fn(),
+  /** `sendInvoiceDuplicateDecisionEmail` (przypomnienie o decyzji). */
+  duplicateEmail: vi.fn(),
+  captureException: vi.fn(),
+  captureMessage: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/admin-guard', () => ({ requireAdmin: m.requireAdmin }));
@@ -40,6 +52,17 @@ vi.mock('@/lib/ksef/claim-environment', () => ({
 }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: m.audit }));
 vi.mock('next/cache', () => ({ revalidatePath: m.revalidate }));
+// D-A4-1b-3 PR B: przypomnienie o decyzji — e-mail (Resend) i adres właściciela; Sentry bez sieci.
+vi.mock('@/lib/email/send', () => ({
+  sendInvoiceDuplicateDecisionEmail: m.duplicateEmail,
+  sendInvoiceFailedEmail: vi.fn(),
+  sendInvoiceAcceptedEmail: vi.fn(),
+}));
+vi.mock('@/lib/supabase/admin-queries', async (orig) => ({
+  ...await orig<typeof import('@/lib/supabase/admin-queries')>(),
+  getTenantAdminEmail: m.ownerEmail,
+}));
+vi.mock('@sentry/nextjs', () => ({ captureException: m.captureException, captureMessage: m.captureMessage, addBreadcrumb: vi.fn() }));
 
 import { operatorRequeueAction, operatorResetAction } from '@/app/admin/ksef/actions';
 import {
@@ -95,32 +118,75 @@ function project(source: Record<string, unknown>, columns: string): Record<strin
   return out;
 }
 
+/** Wartość kolumny albo ścieżki jsonb PostgREST (`metadata->>klucz`); `undefined`, gdy wiersz nie ma kolumny. */
+function columnValue(row: Record<string, unknown>, key: string): unknown {
+  const [root, ...path] = key.split(/->>?/);
+  let value: unknown = row[root!];
+  for (const part of path) value = value && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined;
+  return value;
+}
+
 function fakeAdminClient() {
   return {
     from: (table: string) => {
       const statusOk: Array<(status: string) => boolean> = [];
+      // Filtry pomijają kolumny, których wiersz fikstury nie ma (wpisy `{ id, status }` starszych testów).
+      const filters: Array<(r: Record<string, unknown>) => boolean> = [];
+      const has = (r: Record<string, unknown>, k: string) => k.split(/->>?/)[0]! in r;
       let columns = '*';
+      let inserted: Record<string, unknown> | null = null;
+      const rows = (): Array<Record<string, unknown>> => {
+        const source = table === 'ksef_submissions'
+          ? m.openSent.filter((r) => statusOk.every((f) => f(r.status ?? 'sent')))
+          : table === 'audit_logs'
+            ? m.auditLogs
+            : table === 'invoices'
+              ? [m.invoice, ...m.otherInvoices].filter((r): r is Record<string, unknown> => r !== null)
+              : [];
+        return source.filter((r) => filters.every((f) => f(r)));
+      };
+      const insertResult = () => {
+        if (table === 'audit_logs' && m.failAuditInsert) return { data: null, error: { code: 'XX000', message: 'db down' } };
+        if (table === 'audit_logs' && inserted) {
+          m.auditLogs.push({ id: `audit-${m.auditLogs.length + 1}`, created_at: new Date().toISOString(), ...inserted });
+        }
+        return { data: null, error: null };
+      };
+      const one = async () => {
+        if (inserted) return insertResult();
+        const first = rows()[0] ?? null;
+        if (table !== 'invoices') return { data: first, error: null };
+        return { data: first ? (columns === '*' ? first : project(first, columns)) : null, error: null };
+      };
       const q = {
         select: (c: string) => {
           columns = c;
           m.selects.push({ table, columns: c });
           return q;
         },
-        eq: (k: string, v: unknown) => { if (k === 'status') statusOk.push((st) => st === v); return q; },
-        in: (k: string, vs: unknown[]) => { if (k === 'status') statusOk.push((st) => vs.includes(st)); return q; },
+        insert: (row: Record<string, unknown>) => { inserted = row; return q; },
+        eq: (k: string, v: unknown) => {
+          if (k === 'status' && table === 'ksef_submissions') statusOk.push((st) => st === v);
+          else filters.push((r) => !has(r, k) || columnValue(r, k) === v);
+          return q;
+        },
+        in: (k: string, vs: unknown[]) => {
+          if (k === 'status' && table === 'ksef_submissions') statusOk.push((st) => vs.includes(st));
+          else filters.push((r) => !has(r, k) || vs.includes(columnValue(r, k)));
+          return q;
+        },
+        neq: (k: string, v: unknown) => { filters.push((r) => !has(r, k) || columnValue(r, k) !== v); return q; },
+        is: (k: string, v: unknown) => { filters.push((r) => !has(r, k) || (columnValue(r, k) ?? null) === v); return q; },
+        not: (k: string, _op: string, v: unknown) => { filters.push((r) => !has(r, k) || (columnValue(r, k) ?? null) !== v); return q; },
         limit: () => q,
-        maybeSingle: async () => ({
-          data: table === 'invoices' && m.invoice
-            ? (columns === '*' ? m.invoice : project(m.invoice, columns))
-            : null,
-          error: null,
-        }),
-        then: (ok: (v: unknown) => unknown) => ok({
-          data: table === 'ksef_submissions'
-            ? m.openSent.filter((r) => statusOk.every((f) => f(r.status ?? 'sent')))
-            : [],
-          error: null,
-        }),
+        order: () => q,
+        gte: () => q,
+        lte: () => q,
+        maybeSingle: one,
+        single: one,
+        then: (ok: (v: unknown) => unknown) => ok(inserted
+          ? insertResult()
+          : { data: table === 'invoices' ? [] : rows(), error: null }),
       };
       return q;
     },
@@ -159,7 +225,12 @@ beforeEach(() => {
   m.rpc.mockResolvedValue({ data: { id: ID }, error: null });
   m.paused.mockResolvedValue(false);
   m.invoice = row();
+  m.otherInvoices = [];
   m.openSent = [];
+  m.auditLogs = [];
+  m.failAuditInsert = false;
+  m.ownerEmail.mockResolvedValue('owner@example.test');
+  m.duplicateEmail.mockResolvedValue({ sent: true, messageId: 'msg-1' });
 });
 
 afterEach(() => {

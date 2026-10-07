@@ -11,6 +11,11 @@ type Row = Record<string, unknown>;
 const db = vi.hoisted(() => ({
   invoices: [] as Row[],
   tenants: [] as Row[],
+  ksef_submissions: [] as Row[],
+  /** Tabela, której odczyt (select) kończy się błędem bazy. */
+  failRead: null as string | null,
+  /** Błąd DELETE (np. P0001 z wyzwalacza 00148 w wyścigu). */
+  failDelete: null as { code: string; message: string } | null,
 }));
 const mocks = vi.hoisted(() => ({
   enqueue: vi.fn(),
@@ -18,15 +23,20 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
 }));
 
-/** Minimalny klient: select/update/delete z filtrami `eq` na tabeli w pamięci. */
+/**
+ * Minimalny klient: select/update/delete z filtrami `eq` na tabeli w pamięci.
+ * `db.failRead` — odczyt tej tabeli zwraca błąd bazy; `db.failDelete` — DELETE
+ * zwraca podany błąd (D-A4-1b-3 PR B: odczyt historii wysyłki przed wysyłką
+ * i usunięciem szkicu, odmowa wyzwalacza 00148).
+ */
 function fakeSupabase() {
   return {
-    from(table: 'invoices' | 'tenants') {
+    from(table: 'invoices' | 'tenants' | 'ksef_submissions') {
       const filters: Array<[string, unknown]> = [];
       let op: 'select' | 'update' | 'delete' = 'select';
       let patch: Row = {};
       const matches = (r: Row) => filters.every(([k, v]) => r[k] === v);
-      const run = () => {
+      const run = (): { data: Row[] | null; error: { code?: string; message: string } | null } => {
         const rows = db[table];
         if (op === 'update') {
           const hit = rows.filter(matches);
@@ -34,10 +44,12 @@ function fakeSupabase() {
           return { data: hit.map((r) => ({ ...r })), error: null };
         }
         if (op === 'delete') {
+          if (db.failDelete) return { data: null, error: db.failDelete };
           const hit = rows.filter(matches);
           db[table] = rows.filter((r) => !matches(r));
           return { data: hit.map((r) => ({ ...r })), error: null };
         }
+        if (db.failRead === table) return { data: null, error: { message: `odczyt ${table} nieudany` } };
         return { data: rows.filter(matches).map((r) => ({ ...r })), error: null };
       };
       const q = {
@@ -46,8 +58,8 @@ function fakeSupabase() {
         delete: () => { op = 'delete'; return q; },
         eq: (k: string, v: unknown) => { filters.push([k, v]); return q; },
         maybeSingle: async () => {
-          const { data } = run();
-          return { data: data[0] ?? null, error: null };
+          const { data, error } = run();
+          return { data: error ? null : (data?.[0] ?? null), error };
         },
         then: (ok: (v: unknown) => unknown, fail?: (e: unknown) => unknown) =>
           Promise.resolve(run()).then(ok, fail),
@@ -104,6 +116,9 @@ beforeEach(() => {
   vi.setSystemTime(new Date(`${TODAY}T10:00:00Z`));
   db.invoices = [draft()];
   db.tenants = [{ id: TENANT, nip: '5260001246' }];
+  db.ksef_submissions = [];
+  db.failRead = null;
+  db.failDelete = null;
   mocks.auth.mockResolvedValue({ supabase: fakeSupabase(), user: { id: 'user-1' }, tenantId: TENANT, role: 'owner' });
   mocks.enqueue.mockResolvedValue({ ok: true, mode: 'online_queued' });
 });

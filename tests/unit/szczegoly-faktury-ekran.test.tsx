@@ -39,7 +39,18 @@ vi.mock('@/components/invoices/invoice-actions', () => ({
   },
 }));
 vi.mock('@/components/invoices/upo-download', () => ({ UpoDownload: () => null }));
-vi.mock('@/components/invoices/error-display', () => ({ InvoiceErrorDisplay: () => null }));
+// Karta błędu: tekst błędu w znaczniku — D-A4-1b-3 PR B ukrywa ją obok panelu duplikatu.
+vi.mock('@/components/invoices/error-display', () => ({
+  InvoiceErrorDisplay: ({ errorMessage }: { errorMessage: string }) => <div data-testid="karta-bledu">{errorMessage}</div>,
+}));
+// Panel decyzji (D-A4-1b-3 PR B): prawdziwy komponent importuje akcje serwerowe — zapisujemy props.
+const decisionPanel = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }));
+vi.mock('@/components/invoices/ksef-duplicate-decision', () => ({
+  KsefDuplicateDecision: (props: Record<string, unknown>) => {
+    decisionPanel.props.push(props);
+    return <div data-testid="panel-decyzji">panel decyzji</div>;
+  },
+}));
 
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -67,7 +78,11 @@ afterEach(() => {
   host = null;
 });
 
+/** Pola PR B (2.5) — przez rozwinięcie, żeby fixture kompilował się także przed zmianą typu. */
+const NO_DUPLICATE_DECISION = { ksef_duplicate_decision: null, ksef_retired_draft: null };
+
 const base: InvoiceDetailInitial = {
+  ...NO_DUPLICATE_DECISION,
   id: 'inv-1',
   internal_number: 'FV/7/10/2026',
   invoice_type: 'VAT',

@@ -101,6 +101,106 @@ async function auditCount(invoiceId: string, action: string): Promise<number> {
   return count ?? 0;
 }
 
+/** Skrót bajtów oryginału 440 (`original_check.sha256`) — fikcyjny, poprawny kształt. */
+const ORIGINAL_SHA = 'bb'.repeat(32);
+
+/** Fikcyjny numer KSeF oryginału w formacie KSeF. */
+function originalNumber(n: number): string {
+  return `9480000014-20260915-${String(n).padStart(12, '0')}-00`;
+}
+
+/** Dane oryginału z PR B: powód no-own-file, komplet danych, środowisko test. */
+function originalCheck(invoiceNumber: string, k: string): Record<string, unknown> {
+  return {
+    v: 1, env: 'test', checkedAt: '2026-09-01T10:05:00Z', reason: 'no-own-file', sha256: ORIGINAL_SHA,
+    archivePath: `${ORG}/ksef-import/${k}.xml`, sizeBytes: 2048,
+    summary: {
+      systemInfo: 'Inny Program 1.0', number: invoiceNumber, issueDate: '2026-10-01', buyerNip: '1234567890',
+      buyerName: 'Nabywca Kolejka', gross: '123.00', currency: 'PLN',
+    },
+    sameContentExceptHeader: null, ownHistory: false, acquiredAt: '2026-08-31T09:00:00Z',
+    httpStatus: null, knownInvoice: null, recheck: null,
+  };
+}
+
+async function internalNumber(id: string): Promise<string> {
+  const { data, error } = await admin.from('invoices').select('internal_number').eq('id', id).single();
+  if (error) throw error;
+  return data.internal_number as string;
+}
+
+/**
+ * Nierozstrzygnięty 440, na który klient może odpowiedzieć decyzją: faktura
+ * failed KSEF_DUPLICATE_RECONCILE i otwarty wpis `sent` ze znacznikiem 440.
+ */
+async function pendingDuplicate(patch: Record<string, unknown> = {}): Promise<{ id: string; number: string; k: string }> {
+  const id = await invoice({
+    ksef_status: 'failed', last_error_code: 'KSEF_DUPLICATE_RECONCILE',
+    last_error: 'KSeF ma już fakturę o tym numerze — do rozstrzygnięcia na karcie faktury.',
+    submitted_to_ksef_at: '2026-10-01T10:00:00Z', submission_attempts: 6, ...patch,
+  });
+  const number = await internalNumber(id);
+  const k = originalNumber(counter);
+  const { error } = await admin.from('ksef_submissions').insert({
+    tenant_id: ORG, invoice_id: id, submission_type: 'online', status: 'sent', error_code: '440',
+    session_reference_number: `SES-KOL-${counter}`, invoice_reference_number: `REF-KOL-${counter}`,
+    request_payload_hash: 'aa'.repeat(32), original_ksef_number: k,
+    original_session_reference_number: `SES-ORIG-KOL-${counter}`, original_check: originalCheck(number, k),
+    attempted_at: '2026-09-01T10:00:00Z',
+  });
+  if (error) throw new Error(`insert ksef_submissions: ${error.message}`);
+  return { id, number, k };
+}
+
+/** Szkic wycofany automatycznym „numer zajęty” (KSEF_NUMBER_TAKEN → szkic): wpis number_taken z numerem oryginału. */
+async function retire(invoiceId: string, k: string): Promise<void> {
+  const { error } = await admin.from('ksef_submissions').insert({
+    tenant_id: ORG, invoice_id: invoiceId, submission_type: 'online', status: 'number_taken',
+    error_code: 'NUMBER_TAKEN', error_message: `Numer zajęty w KSeF przez fakturę ${k}`,
+    session_reference_number: `SES-NT-KOL-${counter}`, original_ksef_number: k,
+    original_session_reference_number: `SES-ORIG-KOL-${counter}`,
+    attempted_at: '2026-10-02T10:00:00Z', completed_at: '2026-10-02T10:00:05Z',
+  });
+  if (error) throw new Error(`insert ksef_submissions: ${error.message}`);
+}
+
+async function submissionsOf(invoiceId: string) {
+  const { data, error } = await admin
+    .from('ksef_submissions')
+    .select('id, status, original_ksef_number, original_check, attempted_at, completed_at')
+    .eq('invoice_id', invoiceId)
+    .order('attempted_at');
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Faktura abonamentu FaktFlow (`stripe_invoice_id`) — powstaje tylko jako
+ * właściciel bazy: 00079 odmawia serwisowi zapisu tożsamości, a 00080 wymaga
+ * wiersza `stripe_payments` z referencją płatności. Zwraca id i numer.
+ */
+async function billingInvoice(patch: { ksef_status: string; last_error_code: string }): Promise<{ id: string; number: string }> {
+  counter += 1;
+  const id = `6666aaaa-0000-4000-8000-${String(counter).padStart(12, '0')}`;
+  const number = `KOL/ABO/${counter}`;
+  const stripeInvoice = `in_KolejkaAbo${counter}`;
+  await boss.getDb().executeSql(
+    `INSERT INTO public.stripe_payments (tenant_id, stripe_payment_intent_id, stripe_invoice_id, status, amount_cents, currency)
+     VALUES ($1::uuid, $2, $3, 'succeeded', 12300, 'PLN')`,
+    [ORG, `pi_KolejkaAbo${counter}`, stripeInvoice],
+  );
+  await boss.getDb().executeSql(
+    `INSERT INTO public.invoices (id, tenant_id, direction, internal_number, invoice_type, issue_date, seller_nip, buyer_nip,
+       gross_total, net_total, vat_total, ksef_status, last_error_code, last_error, submission_attempts,
+       fa3_data, seller_data, buyer_data, stripe_invoice_id)
+     VALUES ($1::uuid, $2::uuid, 'outgoing', $3, 'VAT', '2026-10-01', '9480000014', '1234567890',
+       123, 100, 23, $4, $5, 'KSeF ma już fakturę o tym numerze.', 6,
+       $6::jsonb, '{"nip":"9480000014"}'::jsonb, '{"nip":"1234567890"}'::jsonb, $7)`,
+    [id, ORG, number, patch.ksef_status, patch.last_error_code, JSON.stringify({ internalNumber: number, type: 'VAT' }), stripeInvoice],
+  );
+  return { id, number };
+}
+
 function submitEvent(invoiceId: string, attemptId: string) {
   return {
     name: 'invoice/submit.requested',
@@ -123,6 +223,9 @@ async function cleanup() {
   await admin.from('invoices').update({
     ksef_status: 'draft', ksef_send_owner: null, submitted_to_ksef_at: null, last_attempt_at: null,
   }).eq('tenant_id', ORG).neq('ksef_status', 'accepted');
+  // Faktura abonamentu: 00079 nie pozwala jej usunąć serwisowi — sprząta właściciel bazy.
+  await boss?.getDb().executeSql(`DELETE FROM public.invoices WHERE tenant_id = $1 AND stripe_invoice_id IS NOT NULL`, [ORG]);
+  await boss?.getDb().executeSql(`DELETE FROM public.stripe_payments WHERE tenant_id = $1`, [ORG]);
   await admin.from('invoices').delete().eq('tenant_id', ORG);
   await admin.from('audit_logs').delete().eq('tenant_id', ORG);
 }
