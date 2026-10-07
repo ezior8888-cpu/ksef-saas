@@ -23,6 +23,7 @@ import {
   type AdvanceInvoiceSettlementRow,
 } from '@/lib/ksef/fa3-advance-generator';
 import { importedVatRateLabel } from '@/lib/xml/fa3-p12';
+import type { KsefLineFields } from '@/lib/import/fa3-line-amounts';
 import {
   annotationsJpkCannotExpress,
   exemptionMismatch,
@@ -97,6 +98,10 @@ export interface JpkInvoice {
   importedAnnotationProblems?: string[];
   /** C5b: pozycje z różnymi datami sprzedaży (P_6A) albo data nieczytelna — JPK ma jedną datę dokumentu. */
   importedSaleDateUnclear?: boolean;
+  /** C5c: kwoty pozycji z pliku KSeF, których import nie przeniósł wiernie (`fa3_data.lineAmountProblems`). */
+  importedLineAmountProblems?: string[];
+  /** C5c: plik nie podaje sum stawek — netto i VAT faktury nieznane (KPiR i CSV też ich nie znają). */
+  importedTotalsUnknown?: boolean;
   /** C5b: FP, TP, podmiot upoważniony, GTU, Procedura z pliku KSeF (`fa3_data.ksefMarkers`). */
   ksefMarkers?: Fa3Markers;
   issueDate: string;
@@ -200,6 +205,11 @@ export interface JpkInvoiceLine {
   vatRate: string; // '23', '8', '5', '0', 'zw', 'oo', 'np', 'np_ii'
   /** VAT pozycji z faktury — P_14_x musi się zgadzać z fakturą co do grosza. */
   vatAmount?: number;
+  /**
+   * C5c: pola pozycji z pliku KSeF (import historii). FakturaWiersz zapisuje
+   * je zamiast wyliczonych — przy cenach brutto P_9B/P_11A, nie nasze netto.
+   */
+  ksefFields?: Omit<KsefLineFields, 'ordinal'>;
 }
 
 /**
@@ -238,10 +248,15 @@ export class JpkDocumentNotSupportedError extends Error {
     readonly invoiceNumber: string,
     readonly ksefNumber: string | undefined,
     reason: string,
+    /** C5c: `false`, gdy KPiR i CSV też nie znają kwot tej faktury (plik bez sum stawek). */
+    kpirCsvWork = true,
   ) {
     super(
       `${JPK_DOCUMENT_REFUSAL_PREFIX} faktura ${invoiceNumber}${ksefNumber ? ` (KSeF ${ksefNumber})` : ''} ${reason} ` +
-        'Plik nie powstał, żeby nie pominąć ani nie pomylić tej sprzedaży — JPK za ten okres trzeba przygotować poza FaktFlow (KPiR i CSV z FaktFlow działają).',
+        'Plik nie powstał, żeby nie pominąć ani nie pomylić tej sprzedaży — JPK za ten okres trzeba przygotować poza FaktFlow ' +
+        (kpirCsvWork
+          ? '(KPiR i CSV z FaktFlow działają).'
+          : '— KPiR i CSV też nie pokażą poprawnych kwot tej faktury, wprowadźcie je ręcznie z księgową.'),
     );
     this.name = 'JpkDocumentNotSupportedError';
   }
@@ -308,7 +323,8 @@ export function generateJpkFa(data: JpkFaInputData): string {
     for (const line of inv.lines) {
       buildFakturaWiersz(root, inv.invoiceNumber, line);
       lineCount += 1;
-      lineValue += line.netAmount;
+      // „Łączna wartość kolumny P_11” — przy polach z pliku KSeF tylko zapisane P_11 (C5c).
+      lineValue += line.ksefFields ? (line.ksefFields.P_11 ?? 0) : line.netAmount;
     }
   }
 
@@ -404,10 +420,18 @@ const P12_VALUE: Readonly<Record<string, string>> = { np_ii: 'np' };
  * inaczej (np. ceny brutto: P_11A bez P_11, netto pozycji = 0) sprzedaż po
  * cichu wypadłaby z pól stawek.
  */
-export function importedLinesMismatch(inv: Pick<JpkInvoice, 'importedFromKsef' | 'netTotal' | 'lines'>): boolean {
+export function importedLinesMismatch(inv: Pick<JpkInvoice, 'importedFromKsef' | 'netTotal' | 'vatTotal' | 'lines'>): boolean {
   if (!inv.importedFromKsef) return false;
   const sum = inv.lines.reduce((s, l) => s + (Number.isFinite(l.netAmount) ? l.netAmount : 0), 0);
-  return Math.abs(roundToCents(sum) - roundToCents(inv.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01;
+  if (Math.abs(roundToCents(sum) - roundToCents(inv.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01) return true;
+  // C5c: VAT pozycji = VAT faktury co do grosza (JPK P_14_x i V7M K_20 z pozycji), liczony jak w `toLineItem`.
+  const vat = inv.lines.reduce((s, l) => s + (l.vatAmount ?? roundToCents(l.netAmount * linePct(l.vatRate))), 0);
+  return Math.abs(roundToCents(vat) - roundToCents(inv.vatTotal)) >= 0.005;
+}
+
+function linePct(vatRate: string): number {
+  const rate = vatRate.trim().toLowerCase();
+  return rate === '23' || rate === '8' || rate === '5' ? Number(rate) / 100 : 0;
 }
 
 /**
@@ -439,14 +463,24 @@ export function amountsOf(inv: JpkInvoice): InvoiceAmounts {
   if (inv.importedDocumentType) throw unsupportedImportedType(inv, inv.importedDocumentType);
   const contentRefusal = importedContentRefusal(inv);
   if (contentRefusal) throw new JpkDocumentNotSupportedError(inv.invoiceNumber, inv.ksefNumber, contentRefusal);
+  // Stawka przed kwotami (C5c): dokument ze stawką spoza FaktFlow dostaje dokładny powód.
+  const items = inv.lines.map((line) => toLineItem(line, inv));
+  if (inv.importedFromKsef && inv.importedLineAmountProblems?.length) {
+    throw new JpkDocumentNotSupportedError(
+      inv.invoiceNumber,
+      inv.ksefNumber,
+      `ma kwoty pozycji, których FaktFlow nie przeniesie wiernie z pliku KSeF (${inv.importedLineAmountProblems.join('; ')}), więc nie wykaże jej poprawnie w JPK.`,
+      !inv.importedTotalsUnknown,
+    );
+  }
   if (importedLinesMismatch(inv)) {
     throw new JpkDocumentNotSupportedError(
       inv.invoiceNumber,
       inv.ksefNumber,
-      'ma pozycje, których netto nie sumuje się do sumy netto faktury z KSeF (np. ceny brutto — P_11A), więc FaktFlow nie wykaże jej poprawnie w JPK.',
+      'ma pozycje, których netto albo VAT nie sumuje się do sum faktury z KSeF, więc FaktFlow nie wykaże jej poprawnie w JPK.',
+      !inv.importedTotalsUnknown,
     );
   }
-  const items = inv.lines.map((line) => toLineItem(line, inv));
   const byRate =
     inv.invoiceType === 'final'
       ? settlementVatSummaries(items, inv.advanceSettlement ?? [])
@@ -572,9 +606,21 @@ function buildFakturaWiersz(root: XMLBuilder, invoiceNumber: string, line: JpkIn
   w.ele('P_2B').txt(znaki(invoiceNumber));
   if (line.name.trim()) w.ele('P_7').txt(znaki(line.name));
   if (line.unit.trim()) w.ele('P_8A').txt(znaki(line.unit));
-  w.ele('P_8B').txt(ilosc(line.quantity));
-  w.ele('P_9A').txt(kwota(line.unitPriceNet));
-  w.ele('P_11').txt(kwota(line.netAmount));
+  const k = line.ksefFields;
+  if (k) {
+    // C5c: faktura z importu KSeF — pola pozycji z pliku, w kolejności XSD; przy
+    // cenach brutto P_9B/P_11A zamiast netto (art. 106e ust. 8), nic wyliczonego.
+    if (k.P_8B !== undefined) w.ele('P_8B').txt(ilosc(k.P_8B));
+    if (k.P_9A !== undefined) w.ele('P_9A').txt(kwota(k.P_9A));
+    if (k.P_9B !== undefined) w.ele('P_9B').txt(kwota(k.P_9B));
+    if (k.P_10 !== undefined) w.ele('P_10').txt(kwota(k.P_10));
+    if (k.P_11 !== undefined) w.ele('P_11').txt(kwota(k.P_11));
+    if (k.P_11A !== undefined) w.ele('P_11A').txt(kwota(k.P_11A));
+  } else {
+    w.ele('P_8B').txt(ilosc(line.quantity));
+    w.ele('P_9A').txt(kwota(line.unitPriceNet));
+    w.ele('P_11').txt(kwota(line.netAmount));
+  }
   const rate = line.vatRate.trim().toLowerCase();
   w.ele('P_12').txt(P12_VALUE[rate] ?? rate);
 }
