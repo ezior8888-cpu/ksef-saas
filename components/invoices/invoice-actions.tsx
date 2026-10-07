@@ -10,6 +10,7 @@ import { DraftInvoiceActions } from './draft-invoice-actions';
 import { FailedInvoiceActions } from './failed-invoice-actions';
 import { downloadInvoiceXmlAction } from './actions-detail';
 import { saveBlob } from '@/lib/download';
+import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 
 interface Props {
   invoice: {
@@ -18,10 +19,14 @@ interface Props {
     xml_storage_path: string | null;
     /** VAT / KOR / ZAL / ROZ — do przycisków szkicu. */
     invoice_type?: string | null;
-    /** regular / correction / advance / final — dokument specjalny nie ma „Wyślij ponownie”. */
+    /** regular / correction / advance / final — dokument specjalny: przyciski wg faktów ponowienia z kopii. */
     invoice_kind?: string | null;
     /** Kod z katalogu `ksef_error_codes` — decyduje o przyciskach po błędzie. */
     last_error_code?: string | null;
+    /** A4b PR2b: dane zapisane, rodzaj wstrzymany, data wystawienia minęła. */
+    ksef_resend_facts: KsefResendFacts;
+    /** `KSEF_ENV` aplikacji poprawny. */
+    ksef_environment_known: boolean;
   };
   /** Rola w firmie dopuszcza ponowną wysyłkę i powrót do szkicu (owner/admin). */
   canManageSend?: boolean;
@@ -115,6 +120,8 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
           errorCode={invoice.last_error_code ?? null}
           invoiceKind={invoice.invoice_kind ?? null}
           canManage={canManageSend}
+          facts={invoice.ksef_resend_facts}
+          environmentKnown={invoice.ksef_environment_known}
         />
       )}
     </div>

@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 
+import { KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { canManageKsefSend } from '@/lib/invoices/ksef-send-policy';
+import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { describeDuplicateOriginal, parseDuplicateCheck } from '@/lib/ksef/duplicate-check';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -27,8 +29,7 @@ export default async function InvoiceDetailPage({
       tenant_id,
       internal_number,
       invoice_type,
-      invoice_kind,
-      issue_date,
+      ${KSEF_RESEND_SOURCE_COLUMNS},
       sale_date,
       ksef_status,
       ksef_number,
@@ -60,6 +61,7 @@ export default async function InvoiceDetailPage({
     .maybeSingle();
 
   if (!invoice) notFound();
+  const env = configuredKsefEnvironment();
 
   const { data: upo } = await supabase
     .from('upo_receipts')
@@ -126,6 +128,10 @@ export default async function InvoiceDetailPage({
       upo?.status ??
       null,
     can_manage_send: canManageKsefSend(membership?.role ?? null),
+    // A4b PR2b: fakty ponowienia z kopii — dla każdego stanu (Realtime zmienia stan, nie fakty);
+    // sama treść (fa3_data, special_data) nie trafia do komponentu klienckiego.
+    ksef_resend_facts: ksefResendFacts(invoice, env),
+    ksef_environment_known: env !== null,
     ksef_duplicate_original: duplicate?.original_ksef_number
       ? describeDuplicateOriginal(
           (invoice.internal_number as string | null) ?? null,

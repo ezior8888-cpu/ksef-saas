@@ -189,21 +189,24 @@ agenta z weryfikacją Bartosza, nie obietnica.
 - Dla każdego z 19 kodów: tabela (kod → kto ma wyjście → gdzie przycisk →
   test) w `docs/runbooks/ksef-error-codes.md`. Dziś bez pełnego wyjścia:
   `ENQUEUE_LOST`, `ENV_MISMATCH`, `INVALID_EVENT` (operator ma tylko
-  „Tylko uzgodnij” / szkic); `KOR_HOLD`, `ROZ_HOLD_RECONCILE` (dokumenty
-  specjalne bez odtwarzalnego zdarzenia).
+  „Tylko uzgodnij” / szkic); `KOR_HOLD`, `ROZ_HOLD_RECONCILE` (hamulce do
+  C4).
 - Zakres: dane zdarzenia wysyłki na wierszu faktury (00137) zapisywane przy
   tworzeniu dokumentu specjalnego → zdarzenie wysyłki da się odtworzyć →
-  „Wyślij ponownie” i cron działają też dla KOR/ZAL/ROZ. Po projekcie A4b
+  „Wyślij ponownie” i cron dla KOR/ZAL z kopii w dniu wystawienia (decyzja b);
+  ROZ i KOR na PROD czekają na C4. Po projekcie A4b
   (05.10.2026): jedna kolumna `special_data` zamiast trzech — KOR
   `{correctionData}`, ROZ `{finalData, finalAdvanceSettlementRows}`; ZAL nie
   dostaje kopii, bo jej koperta jest już w `fa3_data.advanceEnvelope` (od
   02.10) i granica wysyłki ją porównuje. Zapis jednorazowy wyzwalaczem
   zamiast dopisania kolumn do list ROW z 00132. PR1: kolumna, zapis, porównanie
   na granicy wysyłki; PR2: ponowienie z kopii (bez migracji).
-- Czerwony test: `decideResend` dla `failed KOR_HOLD` korekty po zdjęciu
-  hamulca → dozwolone; runner odtwarza XML identyczny (skrót) z pierwszej próby.
+- Czerwony test: ZAL / TEST KOR z kopią w dniu wystawienia → `decideResend`
+  dozwolone; KOR_HOLD/ROZ_HOLD — bez przycisków klienta (decyzja a), operator;
+  runner odtwarza XML identyczny (skrót) z pierwszej próby.
 - DoD: `operatorInvoiceButtons` i `failedInvoiceButtons` nie mają gałęzi
-  „dokument specjalny: tylko szkic”.
+  „dokument specjalny: tylko szkic” — spełnione: operator w A4b PR2a (#243),
+  klient w A4b PR2b.
 - Podział (04.10.2026): **A4a** — katalog wyjść (tabela w runbooku,
   macierz `tests/unit/ksef-wyjscia-kodow.test.ts`, „Wyślij ponownie”
   operatora dla ENQUEUE_LOST / INVALID_EVENT / RESULT_UNCERTAIN, akcja
@@ -258,6 +261,13 @@ agenta z weryfikacją Bartosza, nie obietnica.
   sesji tuż przed plikiem) — tylko
   dla dokumentów specjalnych (KOR, ZAL, ROZ). B2 rozszerza go na zwykłe faktury
   (po decyzji B1) i dokłada cron 23:45 oraz maila.
+- Bezpiecznik daty jest w trzech miejscach: runner (`submit-invoice.ts`,
+  przed wysyłką), hak otwarcia sesji (`submit-invoice-full.ts`, tuż przed
+  plikiem) i builder ponowień (`ksefResendFacts` w
+  `lib/invoices/ksef-requeue-event.ts` — cron I6/I7, operator i od A4b PR2b
+  klient). Zmiana albo zdjęcie (np. tryb offline po B1) — we wszystkich
+  trzech razem; inaczej klient i operator dostaną przycisk, którego worker
+  odmówi, albo odmowę, której worker już nie ma.
 
 **B3. Sonda zdrowia KSeF bez Redisa (S2) i baner awarii**
 - Problem: `ksef-health-check` nic nie zapisuje bez Redisa; `isKsefHealthy`
@@ -301,9 +311,33 @@ agenta z weryfikacją Bartosza, nie obietnica.
 - Checklista przed zdjęciem: łańcuch korekt (#217) wdrożony; C1–C3 scalone;
   H1 przeszedł scenariusze korekt na KSeF TEST (pierwsza, druga, 440, 450);
   ROZ: 00125 (jedna ROZ na zaliczkę) + `assertSubmitReferences` + test TEST.
-- Zdjęcie = PR zmieniający `isCorrectionHeldForEnv` / `roz-submission-hold.ts`
-  + wpis w `docs/runbooks/hamulce-ksef.md`; cron I7 wznawia `KOR_HOLD`
-  (po A4 także dla korekt).
+- Zdjęcie = jeden PR zmieniający razem `lib/ksef/kind-holds.ts`
+  (`isCorrectionHeldForEnv`, `isKindHeldForEnv` — cron, panel operatora,
+  przyciski klienta), `lib/ksef/roz-submission-hold.ts`, kolejkowanie
+  (`lib/invoices/ksef-submit-enqueue.ts`, odmowy ROZ i KOR na PROD)
+  i `lib/ksef/submit-invoice-full.ts` + wpis w `docs/runbooks/hamulce-ksef.md`.
+- Cron I7 wznawia **tylko** `KSEF_PAUSED` (`ksef-lifecycle-reconcile.ts`,
+  krok `find-paused`) — wiersze `failed KOR_HOLD` / `ROZ_HOLD_RECONCILE`
+  po zdjęciu hamulca same nie wyjdą. Do wyboru: I7 (albo osobne zapytanie B)
+  także dla `KOR_HOLD`/`ROZ_HOLD_RECONCILE`, z tymi samymi faktami kopii
+  (dane, rodzaj, dzień wystawienia), albo procedura operatora w runbooku.
+- Wiersze `KOR_HOLD`/`ROZ_HOLD_RECONCILE` z wcześniejszych dni: decyzja —
+  `ISSUE_DATE_PASSED` (szkic, usuń, wystaw od nowa) czy inna ścieżka; builder
+  ponowień odmawia wysyłki po dacie wystawienia (decyzja b).
+- ROZ: przed wysyłką z kopii przeliczyć wiersze rozliczenia zaliczek (00125,
+  jedna ROZ na zaliczkę) — `finalAdvanceSettlementRows` w `special_data`
+  zapisano przy wystawieniu ROZ.
+- Teksty razem ze zdjęciem: klient (`korHold`, `rozHold`, `kindHeld`
+  w `lib/invoices/ksef-send-policy.ts` — dziś „sami nie wyślemy, napisz do
+  pomocy FaktFlow”), worker (`KOR_HOLD_JOB_MESSAGE` w `submission-holds.ts`,
+  `ROZ_RECONCILIATION_MESSAGE` w `submit-invoice.ts`) i `client_message`
+  w katalogu 00131 (`KSEF_PAUSED`, `KOR_HOLD`, `ROZ_HOLD_RECONCILE` — wciąż
+  „wyjdzie automatycznie”; aplikacja go nie czyta, ale nowa migracja ma go
+  poprawić).
+- Odmowa INSERT `special_data` z sesji klienta (`authenticated`): 00137
+  pilnuje kształtu (CHECK) i zapisu jednorazowego tylko przy UPDATE, a od
+  A4b PR2b ponowienie wysyła treść z kopii — przed zdjęciem hamulca kopię ma
+  zapisywać wyłącznie serwer.
 - DoD: pierwsza korekta klienta na PROD przyjęta z UPO; strażnik 0.
 
 **C5. Import historii i JPK (W9, S18, S19)**
@@ -373,6 +407,10 @@ agenta z weryfikacją Bartosza, nie obietnica.
   a faktury `failed` z kodami przejściowymi i `KSEF_PAUSED` rozstrzygnięte
   (szkic albo wysyłka na TEST) — cron I6/I7 wznawia je nowym zdarzeniem
   z bieżącym środowiskiem, więc po przełączeniu wyszłyby same na PROD.
+  To samo „Wyślij ponownie” klienta i operatora (od A4b PR2b klient także
+  dla KOR/ZAL z kopii): zdarzenie dostaje BIEŻĄCE środowisko aplikacji.
+  Aplikacja bez poprawnego `KSEF_ENV` pokazuje klientowi „Nie możemy teraz
+  potwierdzić środowiska KSeF…”, bez przycisków.
   Worker i aplikacja przełączane razem (zdarzenie z drugiego środowiska =
   `ENV_MISMATCH`, wyjście: szkic i decyzja klienta).
 
