@@ -1,6 +1,13 @@
 # FaktFlow — pakiet F0
 
-Pomiar 04.10.2026 wykonano wyłącznie odczytowo w oknie 11:03–11:22 UTC. F0 pozostaje otwarty: pełne kopie poza hostem i staging są niezaliczone, a dowody produktów oraz pozostałe kontrakty, zasady prywatności i budżety są niepełne. Igor prowadzi monitoring i odbiera F0; Codex wykonuje dostępne prace techniczne, ograniczając udział Bartosza do koniecznych czynności operatorskich.
+Pomiar 04.10.2026 wykonano wyłącznie odczytowo w oknie 11:03–11:22 UTC.
+**F0 pozostaje otwarte:** pełne kopie poza hostem i staging są niezaliczone,
+a dowody runtime, kont i rzeczywistej reakcji na alarmy niepełne. Na podstawie
+delegacji Igora z 07.10 przyjęto konkretne kontrakty, politykę danych i budżet
+oraz wybrano cel kopii, staging i zakres narzędzi. Przyjęcie tych decyzji nie
+dowodzi ich wykonania. Igor prowadzi monitoring i odbiera F0; Codex wykonuje
+dostępne prace techniczne, ograniczając Bartosza do koniecznych czynności
+operatorskich.
 
 - [Inwentaryzacja i pochodzenie dowodów](runtime-inventory.md)
 - [Kontrakty wyniku i korelacji](contracts.md)
@@ -10,10 +17,17 @@ Pomiar 04.10.2026 wykonano wyłącznie odczytowo w oknie 11:03–11:22 UTC. F0 p
 - [Bezpieczne podsumowanie pomiaru z 04.10](evidence/f0-2026-10-04.json)
 - [Bezpieczny indeks odczytów z 06.10](evidence/f0-2026-10-06.json)
 - [Bezpieczny indeks ustaleń z 07.10](evidence/f0-2026-10-07.json)
+- [Aktualne wybory na podstawie delegacji Igora](ownership.md#wybory-na-podstawie-delegacji-igora--07102026)
+- [Bezpieczny indeks wyborów i katalogu cen z 07.10](evidence/f0-decisions-2026-10-07.json)
 - [Kolektor tylko do odczytu](../../scripts/ops/collect-runtime-inventory.mjs)
 - [Przykład staging](../../ops/observability/environments/staging.example.yaml) / [production](../../ops/observability/environments/production.example.yaml)
 
-Publiczny pakiet zawiera uzgodnione podsumowania i propozycje. Pełny raport operatora, sekcja `raw`, identyfikatory infrastruktury i szczegóły konfiguracji pozostają w prywatnym, ignorowanym `.agents/`. Kolektor nie został użyty do pomiaru z 04.10; operator wykonał go własnymi skryptami. Próba kolektora z 06.10 nie potwierdziła runtime.
+Publiczny pakiet zawiera bezpieczne podsumowania, przyjęte decyzje i jawne
+ograniczenia. Pełny raport operatora, sekcja `raw`, identyfikatory i szczegóły
+infrastruktury pozostają prywatne poza gitem. Kolektor nie został użyty do
+pomiaru z 04.10; operator wykonał go własnymi skryptami. Próba kolektora z
+06.10 nie potwierdziła runtime. Odczyt katalogu cen z 07.10 nie odczytuje
+kontenerów i nie jest dowodem zakupów lub wykonania kopii.
 
 Dokumenty nie zmieniają aplikacji, serwerów ani ustawień usług. Publikacja gałęzi/PR nie oznacza zaliczenia F0, zgody na wdrożenie ani rozpoczęcia F1.
 
@@ -47,5 +61,14 @@ Aktualna organizacja pracy: **Igor — właściciel monitoringu i odbioru F0;
 Codex — wykonanie dokumentacji, dostępne odczyty i ocena dowodów**. Nie kierujemy
 domyślnie wszystkich pytań do Bartosza. Celowe KSeF TEST jest uzasadnione,
 zakres kopii i termin staging uzgodnione, brak płatnych planów zadeklarowany,
-a odbiorca alarmów i luka dyżuru zapisane. **G03/G09 pozostają FAIL**, G08
-PENDING; decyzje i deklaracje nie są dowodem wykonania ani odbiorem F0.
+a historyczny odbiorca alarmów i luka dyżuru zapisane. Po późniejszej
+delegacji: **G04/G05/G06 PASS tylko dla przyjęcia decyzji**, G08 PARTIAL
+(wybrana polityka, niezweryfikowany routing i gotowość), G01/G02/G07 PARTIAL,
+**G03/G09 FAIL**. Datadog jawnie wyłączono z obecnego zakresu, wybierając
+Sentry EU Developer, PostHog EU Free, Uptime Kuma i planowany Healthchecks
+Hobbyist. Nowe kopie BX11 HEL1 + staging CPX32 DE mają odczytany koszt
+planistyczny 39,19 EUR netto/mies., bez zamówienia. SSH Codexa jest opcją
+zbierania dowodów, nie obowiązkową bramką.
+
+Na prośbę Igora prompt do drugiego chatu powstanie po rzeczywistym odbiorze
+F0, z jego dowodami i konkretną wersją materiału. F1 nie rozpoczęto.

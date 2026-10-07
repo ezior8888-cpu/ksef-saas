@@ -1,8 +1,11 @@
 # F0 — polityka danych obserwowalności
 
-Stan: propozycja z 04.10.2026, z przyjętą docelową polityką kopii według
-[odpowiedzi przekazanej przez Igora 07.10](acceptance-plan.md#odpowiedzi-przekazane-07102026).
-**F0-G05 pozostaje PENDING** dla pozostałego zakresu; nie ma pełnego odbioru.
+Stan: **polityka wybrana 07.10.2026 w ramach delegacji Igora** „Wybierz wszystko
+co uważasz za najlepsze”. Wybór obejmuje poniższe wartości i granice, w tym
+wcześniej przyjętą politykę kopii. Zastępuje propozycje z 04.10; nie jest
+odczytem aktywnej konfiguracji. **G05: PASS dla przyjęcia polityki**, bez
+zaliczenia jej implementacji, TEST-04 lub całego F0. Źródło delegacji i zakres
+decyzji są w [ownership](ownership.md#wybory-na-podstawie-delegacji-igora--07102026).
 Zapis decyzji nie zmienia aktywnej retencji, dostępu ani eksportu. Igor jest
 właścicielem monitoringu, koordynacji i odbiorcą F0; rola nie oznacza odbioru.
 Przyjęcie ról i decyzji zapisuje [rejestr](ownership.md). Kontrakty wyników są
@@ -39,27 +42,27 @@ Odczyt z 04.10.2026, 11:03–11:22 UTC, nie zmieniał serwerów. Jego zaliczenie
 jako źródła faktów nie zatwierdza proponowanych retencji, ról ani konfiguracji.
 Rekomendacje zawarte w załącznikach są materiałem do decyzji właściciela.
 
-## Retencja proponowana
+## Wybrana retencja i limity
 
-Poza docelową polityką kopii przyjętą w odpowiedzi przekazanej 07.10
-poniższe wartości są propozycjami. Żadna nie jest odczytem aktywnych zmiennych
-env ani potwierdzeniem możliwości planu. Źródłem nowych ustaleń jest wiadomość
-Igora przekazująca odpowiedzi przypisane Bartoszowi; nie uzyskano niezależnego
-odczytu wdrożenia ani formalnego odbioru całego F0. Implementacja ma raportować
-rzeczywiste wartości i umożliwiać jawne wyjątki.
+Poniższe wartości są docelową decyzją projektową, nie opinią o ustawowych
+terminach ani dowodem ustawień dostawcy. Terminy miesięczne/roczne są
+kalendarzowe. Aktywne wartości, rozdzielczość, kwoty i ograniczenia kont
+sprawdza G07; implementacja musi ujawniać odstępstwa. Zgodność publikowanego
+kodu i wdrożonych bundle z tą polityką pozostaje do osobnego sprawdzenia.
 
-| Klasa | Wartość proponowana lub przekazany zakres decyzji | Usuwanie / wyjątek / wymagany dowód |
+| Klasa | Wartość wybrana | Usuwanie / wyjątek / wymagany dowód |
 |---|---|---|
 | Dokumenty fakturowe i dane domenowe | 10 lat według instrukcji projektu; poza zakresem skracania przez observability. | Istniejący workflow domenowy. Ten dokument nie jest oceną ustawowych terminów ani nowym mechanizmem DELETE. |
-| Minimalny indeks/historia operacji | 13 miesięcy online. | Otwarte reconciliation nie wygasa automatycznie. Po usunięciu szczegółów pozostaje odczyt autorytatywnej domeny; dłuższy hold wymaga powodu i właściciela. |
-| Wymagany audit | Osobna klasa; termin PENDING, powiązany z polityką domeny/audytu. | Nie kopiować 13 miesięcy journal ani 30 dni logów na audit. Przed implementacją potwierdzić immutable policy i deletion exceptions. |
+| Minimalny indeks/historia operacji | 13 miesięcy online we własnej chronionej bazie. | Otwarte reconciliation nie wygasa automatycznie. Po usunięciu szczegółów pozostaje odczyt autorytatywnej domeny; dłuższy hold wymaga powodu i właściciela. |
+| Wymagany audit finansowy | 10 lat kalendarzowych we własnej chronionej bazie; audit dostępu/admin 13 miesięcy. | Minimalne referencje i przejścia, bez kopiowania payloadu. Historia zmian bez nadpisywania wpisów; TTL respektuje otwarte sprawy i hold. To polityka projektu, nie wniosek o obowiązku prawnym. |
 | Attempts / steps | 90 dni online. | Usunięcie szczegółów nie usuwa minimalnego wyniku i przejść; otwarte sprawy mogą mieć jawny hold. |
 | Metryki / SLO | 13 miesięcy trendu z jawną agregacją rozdzielczości. | Dowód tier, rozdzielczości i expiry; agregat nie zastępuje pełnej historii operacji. |
-| Logi | 30 dni searchable; wybrane zredagowane incydenty do 90 dni. | Przedłużenie z owner, powodem i terminem; archiwum i deletion policy osobno. |
-| Trace | Zwykły ruch 15 dni; istotne business/error/slow do 30 dni. | Dowód retention produktu. Brak trace po sampling/expiry nie oznacza braku operacji. |
-| Error events / source maps | Okres wspieranych release i diagnostyki; liczba dni PENDING. | Zachować mapy aktywnego web/worker bundle po wdrożeniu nowej wersji; dostęp prywatny. |
-| RUM | 30 dni diagnostycznych; replay 0. | Consent/opt-out i usuwanie ID; replay wymaga osobnej decyzji i odbioru. |
-| Lokalne logi / bufory | Limity bytes/age PENDING; proponowane okno bufora 30 min. | Docker rotation i collector queue osobno; expiry/drop jawny. Bufor nie gwarantuje trwałości po utracie hosta. |
+| Logi | Początkowo lokalne zredagowane logi do 7 dni, dodatkowo ograniczone rozmiarem poniżej; wybrane pakiety incydentów 90 dni. Centralny eksport logów poza wybranym zakresem. | Zastępuje propozycję 30 dni centralnych logów; nie zakłada darmowej wyszukiwarki logów. Przedłużenie tylko jako prywatny pakiet incydentu z właścicielem, powodem i terminem. |
+| Trace / diagnostyczny RUM | Docelowo do 30 dni w Sentry EU, wyłącznie w potwierdzonym zakresie darmowego konta. | Retencja i limity konkretnych produktów wymagają G07 przed aktywacją. Brak trace po sampling/expiry nie oznacza braku operacji. |
+| Error events | 30 dni w wybranym Sentry EU Developer; aktywny plan i quota pozostają niezweryfikowane. | Publiczna oferta nie jest odczytem konta; istotny zredagowany incydent może mieć osobny pakiet 90 dni. |
+| Source maps | Cały okres używania bundle web/worker oraz 90 dni po wycofaniu ostatniego procesu na danym SHA. | Własne prywatne archiwum artefaktów; retencja uploadu w Sentry osobno do sprawdzenia. Nie publikować map; sam upload nie dowodzi symbolikacji. |
+| Product analytics | Jeden rok według wybranego PostHog Free EU; replay 0, autocapture i heatmaps wyłączone. | Odrębna klasa od 30-dniowego RUM. Opt-in/opt-out; aktualna roczna retencja konta i workflow usuwania do potwierdzenia. |
+| Lokalne logi / bufory | Logi: 10 MiB × 5 plików na kontener, maks. 7 dni. Bufor: maks. 64 MiB RAM i 256 MiB dysku na host, wiek do 30 min. | Pierwszy osiągnięty limit usuwa najstarszą telemetrię; drop/expiry raportowane. Sama rotacja Dockera nie realizuje limitu wieku. Required journal/audit nie korzysta z tego zawodnego bufora. Pokrycie 30 min peak wymaga pomiaru. |
 | Pakiety incydentów / dowody testów | 90 dni; dłużej tylko jawny hold. | Zredagowane dowody, przegląd aktywnych holdów, brak surowych plików prywatnych w repo. |
 | Kopie zapasowe | Docelowo przyjęte w odpowiedzi przekazanej 07.10: codzienny pełny pg_dump DB i kopie obu MinIO; 7 dziennych / 4 tygodniowe / 12 miesięcznych; comiesięczny test restore. Igor koordynuje; wcześniej wskazano Bartosza jako wykonawcę operatorskiego. | Szyfrowany zewnętrzny cel EU poza hostami źródłowymi. Codex przegląda dostępne dowody. Brak dowodu wdrożenia, sukcesu pełnej kopii i restore; G09 FAIL, TEST-07 NOT RUN. Snapshot JSON i obrazy dysku DB nie dowodzą całego zakresu. Restore ponownie stosuje TTL/hold i ACL. |
 
@@ -72,11 +75,20 @@ artefakt/hash, sukces UTC i prywatny dowód pokrycia przyjętej retencji.
 Comiesięczny test restore jest przyjętym celem, a nie wykonanym testem.
 W tej kontynuacji F0 nie wykonano backupu, cleanup ani odtworzenia.
 
+Kontrola TTL i zadań usuwania: docelowo codziennie, z wynikiem i licznikiem
+błędów. Hold ma Igora jako właściciela, powód, zakres i przegląd co 30 dni;
+nie ma automatycznego wygaśnięcia nierozwiązanej sprawy. Usunięcie historii
+analytics/RUM po przyjętym żądaniu: do 30 dni, z jawnym wynikiem i uwzględnieniem
+holdów oraz retencji kopii. Cofnięcie consent od razu zatrzymuje dalszy eksport;
+nie dowodzi usunięcia już zebranej historii. Po restore stosuje się ponownie
+ACL, TTL, hold i rejestr zrealizowanych żądań.
+
 ## Sampling, dostawcy i dostęp
 
 Wymagane przejścia domeny/audit: 100%, bez sampling. Eksport telemetrii jest
 asynchroniczny, ograniczony i nie blokuje faktur. Sampling requestów ustala się
-po baseline; 10–20% jest propozycją. Canary ma pełny capture/ingest/indexing.
+docelowo na 10%, do sprawdzenia i kalibracji w późniejszym etapie. Canary ma
+100% capture w kontrolowanym teście, z osobno potwierdzonym ingest/indexing.
 Pełny error outcome nie gwarantuje kompletu spanów odrzuconych head sampling.
 
 Pomiar z 04.10 potwierdził **region ingest EU dla istniejących Sentry i PostHog**.
@@ -86,9 +98,9 @@ aktywnego planu ani retencji, a billing PostHog zwrócił 403 o nieustalonej
 przyczynie. **G07 pozostaje PARTIAL, z brakującymi dowodami planów i kosztów**;
 nie jest już uzasadnione opisywanie wszystkich metadanych jako niedostępnych.
 Region intake nie potwierdza regionu każdej dodatkowej funkcji, wszystkich
-subprocessors ani docelowej organizacji Datadog. EU1 pozostaje propozycją
-lokalizacji Datadog. Odczytane retencje produktów nie zatwierdzają terminów
-proponowanej polityki; wymagane pozostają dowody kosztów i brakujących uprawnień.
+subprocessors. Datadog jest jawnie poza wybranym obecnym zakresem; EU1 nie
+jest potwierdzonym kontem. Wybrana polityka nie zmienia odczytanych retencji
+produktów; wymagane pozostają dowody aktywnych kosztów i uprawnień.
 W odpowiedzi przekazanej 07.10 zadeklarowano brak płatnych planów Sentry/PostHog.
 Nie potwierdza to konkretnego planu Free, retencji Sentry, kompletu uprawnień
 ani zerowego kosztu; deklaracja i metadane API pozostają osobnymi źródłami.
@@ -101,17 +113,21 @@ mają wskazane zakresy: według najnowszej wiadomości Igora z 07.10 monitoring,
 koordynacja i odbiór F0 należą do Igora, a Codex dokumentuje, zbiera i przegląda
 dowody w dostępnym, autoryzowanym zakresie. Wcześniejsza deklaracja Bartosza
 dotycząca kopii i staging pozostaje zakresem przyszłych koniecznych czynności
-operatorskich. Przyjęcie ról nie zatwierdza pozostałych wartości G04/G05/G06
-ani nie zastępuje odbioru dowodów; plany kont sprawdzamy w miarę możliwości
+operatorskich. Same role nie zatwierdzały G04/G05/G06; późniejsza delegacja
+przyjmuje ich konkretne wartości, bez odbioru wykonania. Plany kont sprawdzamy
+w miarę możliwości
 samodzielnie, bez automatycznego zlecania nowych pytań Bartoszowi.
 
-Zadeklarowane kanały: krytyczne Slack/Telegram; raport codzienny email/Telegram
+Historyczna deklaracja pierwszych odpowiedzi 07.10: krytyczne Slack/Telegram;
+raport codzienny email/Telegram
 o 06:00. Wcześniej przekazano odbieranie alarmów przez Bartosza 08:00–22:00
 w miarę możliwości, bez formalnego dyżuru i zastępcy. Igor doprecyzował
 strefę obu godzin jako Europe/Warsaw, a następnie przyjął monitoring
 i koordynację; wcześniejsze godziny nie ustanawiają dyżuru Igora.
-Nie odczytano konfiguracji ani działania kanałów, coverage i lifecycle;
-G08 pozostaje PENDING. Dane raportów nadal podlegają powyższej allowlist.
+Nie odczytano konfiguracji ani działania kanałów, coverage i lifecycle.
+Późniejszy delegowany wybór wskazuje Igora jako docelowego głównego odbiorcę,
+Telegram/email dla krytycznych i Slack roboczo; **G08 PARTIAL**, bez
+potwierdzonego routingu lub dyżuru. Dane raportów podlegają powyższej allowlist.
 
 ## Odbiór prywatności
 
@@ -128,7 +144,11 @@ faktycznie wysłane dane, nie tylko zamaskowany widok. Zakazanych canary nie ma
 w eksporcie, a tenant A i anon nie czytają operacji B. **TEST-04: NOT RUN**;
 staging nie istnieje, więc aktywny odbiór nie został rozpoczęty.
 
-PENDING: pozostałe proponowane terminy, audit/source maps, rotation/bufory,
-tenant_ref, consent, zakres produktów i uprawnienia. Docelowa retencja kopii
-7 dziennych / 4 tygodniowe / 12 miesięcznych jest przyjęta według wiadomości
-z 07.10; jej wykonanie i izolowany restore nie zostały odebrane.
+Wybrane terminy, audit/source maps i limity są przyjętą polityką, a nie jej
+implementacją. `tenant_ref` domyślnie pomijamy w SaaS; product analytics/RUM
+wymagają opt-in i zaprzestania eksportu po cofnięciu zgody. Obecny kod `identify`
+wysyła pseudonimowe UUID: zgodność tej ścieżki z nową granicą eksportu wymaga
+osobnego przeglądu/zmiany, bez automatycznego uznania wdrożenia za zgodne.
+Uprawnienia kont, retencje produktów i redakcja w ruchu nadal wymagają dowodów;
+TEST-04 pozostaje NOT RUN. Docelowa polityka kopii 7/4/12 jest przyjęta, ale
+wykonanie i izolowany restore nie zostały odebrane.

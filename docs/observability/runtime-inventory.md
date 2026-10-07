@@ -2,6 +2,34 @@
 
 Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.2026, 11:03–11:22 UTC. Odczyty API i próba SSH z 06.10 oraz decyzje/deklaracje z 07.10 mają osobne źródła; nie potwierdzają aktualnego runtime kontenerów. Igor prowadzi monitoring i odbiera F0, a Codex wykonuje dostępne prace techniczne. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
 
+## Delegowane wybory i katalog cen — 07.10.2026
+
+**U — wybór:** po checklistcie Igor polecił „Wybierz wszystko co uważasz za
+najlepsze”. Przyjęto konkretny kontrakt, politykę danych i budżet oraz wybrano
+BX11 HEL1/restic dla kopii, osobny staging CPX32 DE i darmowy zakres
+Sentry/PostHog/Kuma z planowanym zewnętrznym watchdogiem Healthchecks.
+Datadog jawnie wyłączono z obecnego zakresu. [Pełny wybór](ownership.md#wybory-na-podstawie-delegacji-igora--07102026)
+i [indeks decyzji](evidence/f0-decisions-2026-10-07.json) nie dowodzą wykonania.
+G04/G05/G06: PASS tylko dla decyzji; G08 PARTIAL, pozostałe bramki pomiarowe
+otwarte, G03/G09 FAIL. Nie dokonano formalnego odbioru F0.
+
+**P — katalog dostawcy:** osobne GET-y 07.10, **17:27:36–17:29:06 UTC**,
+odczytały publiczne parametry, ceny i wskaźnik dostępności. BX11 HEL1 1 TiB:
+3,20 EUR netto/mies., setup 0; CPX32 NBG1 4 vCPU/8 GiB/160 GB:
+35,49 EUR netto/mies., IPv4 0,50. Suma nowych wybranych zasobów:
+39,19 EUR netto, około 48,20 brutto przy zwróconym VAT 23%. CPX32 ma
+available=true w odczytanych lokalizacjach EU; CX43 ma available=false.
+Wskaźnik nie jest rezerwacją, a ceny nie są fakturą naszego konta.
+Usunięty endpoint datacenters zwrócił 410; dostępność pochodzi z nowego
+schematu server_types.locations, zgodnie z [changelogiem](https://docs.hetzner.cloud/changelog).
+Bezpieczne pola i źródła są w nowym indeksie; pełny wyciąg roboczy poza gitem.
+
+Nie odczytano nowych kontenerów, nie zakupiono ani nie utworzono zasobów,
+nie wykonano kopii/restore, migracji, wdrożeń lub F1. Historyczne indeksy
+04.10/06.10/pierwszych ustaleń 07.10 pozostają bez zmian. SSH jest opcją
+pozyskania aktualnych dowodów; datowany odczyt uprawnionego operatora może
+go zastąpić. Na prośbę Igora prompt do drugiego chatu powstanie po odbiorze F0.
+
 ## Pochodzenie i granice dowodów
 
 | Źródło | Stan / okno | Co potwierdza |
@@ -16,6 +44,8 @@ Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.20
 | API Hetzner | 06.10, odczyty 20:48:15–20:54:29 UTC | Metadane VM, region, przypisane zapory i dostępne obrazy backupu; nie health kontenerów ani zawartość kopii |
 | API Sentry/PostHog EU | 06.10, 20:49:23–20:49:55 UTC | Metadane kont/projektów i część retencji/uprawnień; ograniczenia planów i rozliczeń pozostają jawne |
 | Odpowiedzi i instrukcje przekazane przez Igora | 07.10.2026; czat kontynuacji F0 | Decyzje o KSeF TEST, zakresie kopii/staging i organizacji pracy; deklaracje planów i odbioru alarmów, bez nowego pomiaru |
+| Delegacja wyborów Igora | 07.10.2026; osobna wiadomość po checklistcie | Przyjęcie konkretnych wyborów kontraktów/polityki/budżetu i zakresu docelowego, bez formalnego odbioru F0 |
+| API katalogu Hetzner | 07.10, 17:27:36–17:29:06 UTC | Ceny/parametry publicznych typów i wskaźnik dostępności; nie zakup, runtime lub zawartość kopii |
 
 Legenda: **P** — pomiar z podanym źródłem i oknem; **D** — deklaracja kodu, dokumentu lub użytkownika; **U** — uzgodniona decyzja lub zakres; **brak dostępu** — punkt nieodczytany. Historyczne wyniki P przypisujemy operatorowi i oknu z 04.10. Odczyty API z 06.10 mają osobne źródła; nieudana próba SSH nie odświeża historycznego runtime.
 
@@ -233,7 +263,7 @@ z 06.10 są uwzględnione w aktualnym [planie odbioru](acceptance-plan.md).
 | G6 — kontrakty/prywatność/budżety/role | F0-G04/G05/G06/G08 | PENDING |
 | G7 — dokumenty i kolektor w repo | Dostarczenie pakietu | Udostępnione w pakiecie gałęzi/PR; publikacja nie oznacza zaliczenia F0 |
 
-Pełne kryteria i proponowane budżety: [acceptance-plan.md](acceptance-plan.md).
+Pełne kryteria i przyjęty budżet: [acceptance-plan.md](acceptance-plan.md).
 Rejestr decyzji i aktualny rozdział ról: [ownership.md](ownership.md).
 Statusy propozycji rozstrzygają zapisane odpowiedzi, nie sam załącznik;
 nie wykonano jego rekomendacji jako instrukcji.
