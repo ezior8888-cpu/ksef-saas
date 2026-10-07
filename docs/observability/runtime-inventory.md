@@ -101,6 +101,33 @@ Odczyty nie uruchamiały usług, testów biznesowych, alertów, migracji,
 wdrożeń ani restore i nie zmieniały kont lub serwerów. F0 pozostaje otwarte,
 a historyczny pomiar i JSON z 04.10 pozostają niezmienione.
 
+## Przegląd kodu i CI — 07.10.2026
+
+**D — kod repo, nie pomiar produkcji:** przegląd dotyczy niezmiennego
+`84b75eaf76ad6421395a031951e39ad57e3d36d5`. W
+[inicjalizacji PostHog](https://github.com/ezior8888-cpu/ksef-saas/blob/84b75eaf76ad6421395a031951e39ad57e3d36d5/lib/analytics/init-posthog-browser.ts)
+ustawiono `disable_session_recording: true`, `autocapture: false` oraz
+`capture_heatmaps: false`. Inicjalizacja przeglądarkowa wymaga consent, a cofnięcie zgody
+zatrzymuje nagrywanie i capture. Provider używa tego samego singletona;
+w przejrzanych źródłach nie znaleziono wywołania startu nagrywania lub
+nadpisania tych ustawień. Flagi projektu odczytane przez API z 06.10
+opisują osobny zakres konfiguracji.
+
+Inicjalizacje Sentry browser/Node/Edge/worker używają wspólnych
+[opcji prywatności](https://github.com/ezior8888-cpu/ksef-saas/blob/84b75eaf76ad6421395a031951e39ad57e3d36d5/lib/observability/scrub.ts):
+`sendDefaultPii: false`, wyłączony eksport logów i redakcja błędów,
+transakcji, spanów oraz breadcrumbs. Mechanizm redakcji nie klasyfikuje dowolnego
+PII lub wolnego tekstu; jego obecność nie dowodzi kompletnej redakcji.
+Odczyt kodu nie potwierdza wdrożonego bundle, skutecznej retencji ani
+rzeczywiście wysłanych danych. **G05 pozostaje PENDING, TEST-04 NOT RUN**.
+
+**P — kontrole pakietu:** odczyt GitHub z 07.10 potwierdził **11/11 SUCCESS**
+dla `84b75ea`, w tym
+[typy/lint/unit, build i izolację RLS](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/37620979505)
+oraz [CodeQL i skan sekretów](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/37620979524).
+Wyniki dotyczą wskazanego commita i środowiska CI; nie są odbiorem
+infrastruktury, polityki danych ani całego F0.
+
 ## Środowiska i wersje produkcji
 
 Poniższa tabela opisuje wyłącznie pomiar runtime z **04.10.2026**.

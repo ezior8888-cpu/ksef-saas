@@ -151,3 +151,30 @@ odczytów i artefaktów jest w [planie odbioru](acceptance-plan.md#brakujące-do
 Zamknięcie F0 wymaga osobnego zapisu odbioru wszystkich F0-G01–G09 ze źródłami
 i datą, przez przyjętego odbiorcę. Publikacja kolejnego commita, zielone testy
 kolektora i decyzja o późniejszych pracach nie zastępują tego zapisu.
+
+## Pierwsza partia pytań do Bartosza — 07.10.2026
+
+Nie wymagają znajomości wewnętrznych oznaczeń decyzji. Brak staging i pełnych
+kopii, lokalizacje usług, dane dostępu oraz granica publikacji bieżącego
+pakietu są już zapisane. Pytania dotyczą pozostałych decyzji i dowodów:
+
+1. Czy używanie KSeF TEST przez aplikację produkcyjną jest celowym wyborem?
+   Chodzi o intencję konfiguracji z historycznego pomiaru, bez jej zmiany.
+2. Kto przyjmie odpowiedzialność za pełne kopie bazy i plików, a kto sprawdzi
+   ich kompletność? Jaką retencję i termin proponujesz Igorowi do zatwierdzenia?
+   Obecne backupy dysku DB nie pokrywają całego wymaganego zakresu dowodowego.
+3. Kto przyjmie przygotowanie osobnego stagingu i sprawdzenie jego izolacji?
+   Jaki termin można zaproponować? Uzgodnienie odpowiedzialności nie uruchamia
+   prac na serwerach w tej kontynuacji.
+4. Czy możesz dostarczyć prywatny, datowany odczyt aktywnych planów i kosztów
+   Sentry/PostHog oraz retencji Sentry i brakujących uprawnień produktów?
+   Ceny publiczne i metadane już sprawdzono; API nie ujawniło aktywnych planów.
+   Hasła, klucze prywatne i wartości tokenów nie są potrzebne w odpowiedzi.
+5. Kto rzeczywiście odbiera alarmy, w jakich godzinach i czy ma zastępstwo?
+   Kto ma przyjąć końcowy odbiór F0? Kontakt operacyjny nie oznacza dyżuru.
+
+To pierwsza partia, nie zastępstwo całego rejestru. Kontrakty biznesowe,
+politykę danych, budżet narzutu i zakres docelowych produktów zatwierdza Igor
+lub wskazany właściciel po przyjęciu roli; Bartosz dostarcza ograniczenia
+techniczne i przyjmuje własny zakres. Odpowiedzi nie zostały jeszcze udzielone.
+Pytania nie są poleceniami zmian serwerów, testu telefonu ani rozpoczęcia F1.

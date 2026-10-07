@@ -68,12 +68,16 @@ asynchroniczny, ograniczony i nie blokuje faktur. Sampling requestów ustala si�
 po baseline; 10–20% jest propozycją. Canary ma pełny capture/ingest/indexing.
 Pełny error outcome nie gwarantuje kompletu spanów odrzuconych head sampling.
 
-Pomiar potwierdził **region ingest EU dla istniejących Sentry i PostHog**.
-Dostępność planów, produktów i limitów jest **BLOCKED** przez brak dostępu do
-paneli. Nie potwierdza to regionu każdej dodatkowej funkcji, wszystkich
+Pomiar z 04.10 potwierdził **region ingest EU dla istniejących Sentry i PostHog**.
+[Odczyty API z 06.10](runtime-inventory.md#odczyty-dostawców-i-próba-ssh-06102026)
+uzupełniły metadane kont i część ustawień/uprawnień PostHog. Sentry nie ujawnił
+aktywnego planu ani retencji, a billing PostHog zwrócił 403 o nieustalonej
+przyczynie. **G07 pozostaje PARTIAL, z brakującymi dowodami planów i kosztów**;
+nie jest już uzasadnione opisywanie wszystkich metadanych jako niedostępnych.
+Region intake nie potwierdza regionu każdej dodatkowej funkcji, wszystkich
 subprocessors ani docelowej organizacji Datadog. EU1 pozostaje propozycją
-lokalizacji Datadog. F0-G07 wymaga osobnego dowodu rzeczywistego konta,
-produktów, retencji, kosztów i uprawnień.
+lokalizacji Datadog. Odczytane retencje produktów nie zatwierdzają terminów
+proponowanej polityki; wymagane pozostają dowody kosztów i brakujących uprawnień.
 
 Oddzielne klucze/env i role z minimalnymi uprawnieniami. Eksport telemetrii nie
 dostaje Supabase service-role. DBM: read-only i normalized SQL bez bind values;
@@ -82,6 +86,12 @@ incydentu. SSO/MFA i audyt dostępu wymagają odbioru. [Role](ownership.md)
 pozostają propozycją.
 
 ## Odbiór prywatności
+
+[Przegląd kodu z 07.10](runtime-inventory.md#przegląd-kodu-i-ci--07102026)
+potwierdza wyłączenia replay/autocapture/heatmaps i consent gate w PostHog
+oraz wspólne opcje redakcji Sentry na `84b75ea`. Jest to deklaracja kodu,
+osobna od ustawień konta i stanu produkcji. Nie zatwierdza polityki,
+nie potwierdza wdrożonego bundle ani skuteczności redakcji i nie zalicza TEST-04.
 
 Na izolowanym staging przygotować dwa syntetyczne tenanty, NIP `1234567890`
 i canary przypominające token, kwotę, XML, email, presigned URL oraz prompt.

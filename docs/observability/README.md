@@ -33,3 +33,10 @@ dowody; plany, koszty i pozostałe uprawnienia nadal są niezweryfikowane.
 Runtime kontenerów nie został odczytany: aktualny SHA/health i wersje Node/MinIO
 pozostają nieznane. F0 i decyzje pozostają otwarte; nie wykonano zmian
 serwerów ani ustawień dostawców i nie rozpoczęto F1.
+
+Przegląd 07.10.2026: [kod i CI na `84b75ea`](runtime-inventory.md#przegląd-kodu-i-ci--07102026)
+uzupełniają dowody istniejących ustawień prywatności i 11 zaliczonych kontroli
+pakietu. Odczyt kodu nie jest pomiarem produkcji ani odbiorem G05/TEST-04.
+[Pierwsza partia pytań do Bartosza](ownership.md#pierwsza-partia-pytań-do-bartosza--07102026)
+dotyczy brakujących decyzji i dowodów bez wewnętrznych skrótów lub ponownego
+żądania znanych danych. F0 i nieprzyjęte decyzje pozostają otwarte.
