@@ -31,7 +31,7 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
   const { id } = await props.params;
   const data = await getInvoiceLifecycle(id);
   if (!data) notFound();
-  const { invoice, submissions, audit, openSent, evidence } = data;
+  const { invoice, submissions, audit, openSent, evidence, resendFacts, environment } = data;
 
   return (
     <div className="space-y-8">
@@ -71,6 +71,10 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
         <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span>dowód kontaktu z KSeF: <strong>{evidence ? 'TAK' : 'nie'}</strong></span>
           <span>otwarty wpis sent / zamiar intent: <strong>{openSent ? 'TAK' : 'nie'}</strong></span>
+          <span>dane do ponownej wysyłki: <strong>{resendFacts.sendData === 'stored' ? 'zapisane' : 'brak'}</strong></span>
+          <span>rodzaj wstrzymany w tym środowisku: <strong>{resendFacts.kindHeld ? 'TAK' : 'nie'}</strong></span>
+          <span>data wystawienia minęła (dokument specjalny): <strong>{resendFacts.issueDatePassed ? 'TAK' : 'nie'}</strong></span>
+          <span>KSEF_ENV aplikacji: <strong>{environment ?? 'nieustawione'}</strong></span>
         </div>
       </section>
 
@@ -85,6 +89,8 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
           invoiceKind={invoice.invoiceKind}
           openSent={openSent}
           evidence={evidence}
+          facts={resendFacts}
+          environmentKnown={environment !== null}
         />
       </section>
 

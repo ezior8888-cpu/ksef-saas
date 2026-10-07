@@ -16,6 +16,11 @@ import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
  *
  * Tak działały dwie ścieżki: ponowna wysyłka z kolejki Offline24 i przycisk
  * „Wyślij ponownie”. Obie odtwarzają fakturę z bazy, bez tych danych.
+ *
+ * Od A4b dane są też na wierszu: ZAL w `fa3_data.advanceEnvelope`, KOR i ROZ
+ * w `special_data` (00137). Cron i operator odtwarzają z nich zdarzenie
+ * (`lib/invoices/ksef-requeue-event.ts`, PR2a); Offline24 i klient (do PR2b)
+ * jak wyżej. Ten bezpiecznik zostaje bez zmian.
  */
 const SPECIAL_TYPE_LABEL = {
   KOR: 'korekty',

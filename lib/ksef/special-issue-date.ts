@@ -37,3 +37,8 @@ export function assertSpecialIssueDateToday(issueDate: string): void {
   const today = todayInWarsaw();
   if (issueDate !== today) throw new IssueDatePassedError(issueDate, today);
 }
+
+/** Reguła 00147 jako predykat (zlecenie z kopii, A4b PR2a): data wystawienia dokumentu specjalnego = dziś w Polsce. */
+export function specialIssueDateIsToday(issueDate: unknown, now: Date = new Date()): boolean {
+  return typeof issueDate === 'string' && issueDate === todayInWarsaw(now);
+}

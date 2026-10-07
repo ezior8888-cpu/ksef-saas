@@ -19,7 +19,6 @@
  */
 
 import { getGlobalFlagForExecution } from '@/lib/feature-flags/global-flags';
-import type { KsefEnvironment } from '@/types/ksef';
 
 export const KSEF_PAUSED = 'KSEF_PAUSED';
 export const KOR_HOLD = 'KOR_HOLD';
@@ -62,10 +61,8 @@ export function isCorrectionSubmission(input: {
     || input.correctionData != null;
 }
 
-/** Korekty są wstrzymane tylko na KSeF produkcyjnym. */
-export function isCorrectionHeldForEnv(env: KsefEnvironment): boolean {
-  return env === 'production';
-}
+// Korekty są wstrzymane tylko na KSeF produkcyjnym — czysta definicja w kind-holds (A4b PR2a).
+export { isCorrectionHeldForEnv } from './kind-holds';
 
 /** Treść błędu joba ze znacznikiem neutralnej blokady (wersja „wyjdzie automatycznie”). */
 export function heldErrorMessage(code: typeof KSEF_PAUSED | typeof KOR_HOLD): string {

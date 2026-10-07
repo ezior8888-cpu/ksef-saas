@@ -11,8 +11,15 @@
  *   - klasa reconcile: operator decyduje (uzgodnij albo zostaw), a przy
  *     ENQUEUE_LOST, INVALID_EVENT i RESULT_UNCERTAIN może też wysłać
  *     ponownie (A4) — patrz `OPERATOR_REQUEUE_RECONCILE_CODES`.
+ *
+ * Dokumenty specjalne (KOR, ZAL, ROZ) od A4b PR2a: zdarzenie odtwarzamy
+ * z kopii na wierszu (`ksefResendFacts`). Po klasie kodu: środowisko znane →
+ * dane zapisane → rodzaj niewstrzymany (KOR na PROD, ROZ wszędzie — C4) →
+ * pełna wysyłka tylko w dniu wystawienia (decyzja Bartosza 06.10.2026 b).
+ * „Tylko uzgodnij” datę pomija — nie wysyła.
  */
 
+import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { SEND_ERROR_CODES, sendErrorClassOf, type SendErrorCode } from '@/lib/ksef/send-error-classes';
 
 /**
@@ -48,7 +55,7 @@ export function hasOpenSubmission(history: ReadonlyArray<{ status: string | null
 export const OPERATOR_MESSAGES = {
   notFound: 'Nie ma takiej faktury.',
   incoming: 'To faktura przychodząca — nie wysyła się jej do KSeF.',
-  special: 'Dokument specjalny (korekta, zaliczka, ROZ): zdarzenia wysyłki nie da się odtworzyć z wiersza. Dostępny jest tylko powrót do szkicu.',
+  envUnknown: 'Środowisko KSeF nie jest poprawnie skonfigurowane (KSEF_ENV) — zlecenie nie zostało wysłane.',
   incomplete: 'Wiersz nie ma kompletnych danych faktury (fa3_data) — tylko powrót do szkicu.',
   noOpenSent: 'Brak otwartego wpisu wysyłki (sent ani zamiaru intent) — nie ma czego uzgadniać. Ponowna wysyłka wysłałaby fakturę od nowa.',
   paused: 'Wysyłki są wstrzymane wyłącznikiem operatora (killAllKsefSubmissions). Najpierw zdejmij hamulec.',
@@ -63,7 +70,7 @@ export const OPERATOR_MESSAGES = {
   reconcileClass: 'Klasa reconcile: nie wysyłaj od nowa — użyj „Tylko uzgodnij” albo zostaw.',
   duplicateRequeue: 'KSeF ma już fakturę o tym numerze, a automat nie rozstrzygnął, czyja to treść — ponowienie powtórzy 440. Przy otwartym wpisie użyj „Tylko uzgodnij” (powtórzy weryfikację); inaczej runbook: KSEF_DUPLICATE_RECONCILE.',
   envMismatchRequeue: 'Faktura była zlecona w innym środowisku KSeF — ponowienie wysłałoby ją w bieżącym. Bez dowodu kontaktu: „Wróć do szkicu”, klient zdecyduje, czy wysłać ją tutaj. Otwarty wpis: „Tylko uzgodnij” uzgadnia w BIEŻĄCYM środowisku — wpisu sprzed przełączenia środowiska nie uzgadniaj tak (runbook: ENV_MISMATCH).',
-  issueDatePassedRequeue: 'Dokument specjalny z datą wystawienia sprzed dzisiaj — worker nie wyśle go z wcześniejszą datą (decyzja 06.10.2026, 00147; do B2). Bez dowodu kontaktu: „Wróć do szkicu” (klient usuwa szkic i wystawia dokument od nowa z dzisiejszą datą). Z dowodem kontaktu (z otwartym wpisem albo bez) dokument specjalny nie ma dziś wyjścia w panelu — runbook ksef-error-codes, „Dokumenty specjalne” (A4b PR2, B2).',
+  issueDatePassedRequeue: 'Dokument specjalny z datą wystawienia sprzed dzisiaj — worker nie wysyła go z wcześniejszą datą (decyzja 06.10.2026, 00147; do B2). Ten kod powstaje bez otwartego wpisu (worker odmawia po uzgodnieniu, przed plikiem i zamiarem), więc nie ma czego uzgadniać. Bez dowodu kontaktu: „Wróć do szkicu” (klient usuwa szkic i wystawia dokument od nowa z dzisiejszą datą). Z dowodem kontaktu brak wyjścia w panelu do B2 — sprawdź dokument w KSeF i zgłoś go Bartoszowi (runbook ksef-error-codes, „Dokumenty specjalne”).',
   notFailedOrRejected: 'Dostępne tylko dla failed / rejected.',
   evidence: 'Faktura ma dowód kontaktu z KSeF (numer albo wpis sent/accepted/duplicate) — nie wraca do szkicu.',
 } as const;
@@ -84,9 +91,58 @@ export interface OperatorButtonsInput {
   direction: string | null;
   status: string | null;
   errorCode: string | null;
+  /** Tylko do etykiet komunikatów — o ponowieniu decydują `facts`. */
   invoiceKind: string | null;
   openSent: boolean;
   evidence: boolean;
+  /** Ponowienie z kopii (A4b PR2a): dane zapisane, rodzaj wstrzymany, data wystawienia minęła. */
+  facts: KsefResendFacts;
+  /** `KSEF_ENV` aplikacji poprawny — bez niego nic nie zlecamy. */
+  environmentKnown: boolean;
+}
+
+/** Etykiety dokumentów specjalnych w komunikatach operatora. */
+export const OPERATOR_KIND_LABEL = {
+  correction: 'Korekta (KOR)',
+  advance: 'Zaliczka (ZAL)',
+  final: 'Faktura rozliczeniowa (ROZ)',
+} as const;
+
+type SpecialKind = keyof typeof OPERATOR_KIND_LABEL;
+const isSpecialKind = (kind: string | null): kind is SpecialKind =>
+  kind === 'correction' || kind === 'advance' || kind === 'final';
+
+/** Wiersz bez danych do odtworzenia zdarzenia (stary dokument albo zwykła bez pozycji). */
+export function operatorLegacyDataMessage(kind: string | null): string {
+  switch (kind) {
+    case 'correction':
+      return 'Korekta (KOR) sprzed 00137 (przed wdrożeniem A4b PR1): wiersz nie ma special_data — zdarzenia wysyłki nie da się odtworzyć. Bez dowodu kontaktu i poza klasą reconcile: „Wróć do szkicu”. W pozostałych przypadkach runbook ksef-error-codes, „Stary dokument specjalny” (special_data dopisuje serwer — 00137 dopuszcza NULL → wartość), potem na TEST „Tylko uzgodnij”; na PROD korekta czeka na C4 (KOR_HOLD).';
+    case 'final':
+      return 'Faktura rozliczeniowa (ROZ) sprzed 00137 (przed wdrożeniem A4b PR1): wiersz nie ma special_data — zdarzenia wysyłki nie da się odtworzyć. Bez dowodu kontaktu i poza klasą reconcile: „Wróć do szkicu”. W pozostałych przypadkach runbook ksef-error-codes, „Stary dokument specjalny” (special_data dopisuje serwer); ponowienie i uzgodnienie ROZ i tak czekają na C4 (hamulec ROZ we wszystkich środowiskach).';
+    case 'advance':
+      return 'Zaliczka (ZAL) sprzed 02.10.2026: fa3_data nie ma koperty advanceEnvelope — zdarzenia wysyłki nie da się odtworzyć. Bez dowodu kontaktu i poza klasą reconcile: „Wróć do szkicu”. W pozostałych przypadkach brak wyjścia w panelu: po przejęciu wysyłki fa3_data jest zamrożone (00132) — zgłoś fakturę Bartoszowi (runbook ksef-error-codes, „Stary dokument specjalny”).';
+    default:
+      return OPERATOR_MESSAGES.incomplete;
+  }
+}
+
+/** Rodzaj wstrzymany w tym środowisku — runner zatrzymałby zlecenie przed KSeF. */
+export function operatorKindHeldMessage(kind: string | null): string {
+  switch (kind) {
+    case 'correction':
+      return 'Hamulec korekt na KSeF produkcyjnym (KOR_HOLD) — runner zatrzymałby ponowienie i uzgodnienie przed KSeF i nadpisał kod. Zdejmuje go C4 (docs/runbooks/hamulce-ksef.md). Bez dowodu kontaktu i poza klasą reconcile: „Wróć do szkicu”.';
+    case 'final':
+      return 'Hamulec faktur rozliczeniowych we wszystkich środowiskach (ROZ_HOLD_RECONCILE) — runner zatrzymałby ponowienie i uzgodnienie przed KSeF i nadpisał kod. Zdejmuje go C4 (docs/runbooks/hamulce-ksef.md). Bez dowodu kontaktu i poza klasą reconcile: „Wróć do szkicu”.';
+    default:
+      // Zaliczka jest wstrzymana tylko przy nieznanym środowisku (przyciski odmawiają wcześniej).
+      return OPERATOR_MESSAGES.envUnknown;
+  }
+}
+
+/** Dokument specjalny po dacie wystawienia — pełnej wysyłki z kopii nie zlecamy (decyzja b). */
+export function operatorIssueDateMessage(kind: string | null): string {
+  const label = isSpecialKind(kind) ? OPERATOR_KIND_LABEL[kind] : 'Dokument specjalny';
+  return `${label} z datą wystawienia sprzed dzisiaj — nie zlecamy pełnej wysyłki: worker odmówiłby jej z kodem ISSUE_DATE_PASSED (decyzja 06.10.2026, 00147; do B2). Otwarty wpis sent/intent: „Tylko uzgodnij” (nie wysyła, data nie ma znaczenia). Bez dowodu kontaktu i poza klasą reconcile: „Wróć do szkicu”. W pozostałych przypadkach brak wyjścia w panelu do B2 — sprawdź dokument w KSeF i zgłoś go Bartoszowi.`;
 }
 
 function reconcileRequeueRefusal(code: string | null): string {
@@ -100,49 +156,55 @@ function terminalRequeueRefusal(code: string | null): string {
   return OPERATOR_MESSAGES.terminal;
 }
 
+const off = (reason: string): OperatorButton => ({ enabled: false, reason });
+
 /**
  * „Wyślij ponownie” operatora — ta sama decyzja dla przycisku i akcji
  * (`operatorRequeueAction`); nie zależy od dowodu kontaktu ani otwartego wpisu.
+ * Klasa hold zostaje dostępna (operator zdejmuje hamulce; akcja sprawdza wyłącznik).
  */
 export function operatorRequeueButton(
-  input: Pick<OperatorButtonsInput, 'direction' | 'status' | 'errorCode' | 'invoiceKind'>,
+  input: Pick<OperatorButtonsInput, 'direction' | 'status' | 'errorCode' | 'invoiceKind' | 'facts' | 'environmentKnown'>,
 ): OperatorButton {
-  const outgoing = input.direction === 'outgoing';
-  const special = (input.invoiceKind ?? 'regular') !== 'regular';
   const errorClass = sendErrorClassOf(input.errorCode);
-  return !outgoing
-    ? { enabled: false, reason: OPERATOR_MESSAGES.incoming }
-    : input.status === 'rejected'
-      ? { enabled: false, reason: OPERATOR_MESSAGES.rejectedToDraft }
-      : input.status !== 'failed'
-        ? { enabled: false, reason: OPERATOR_MESSAGES.onlyFailed }
-        : special
-          // ISSUE_DATE_PASSED (00147) dostają tylko dokumenty specjalne — dokładny powód zamiast ogólnego.
-          ? { enabled: false, reason: input.errorCode === SEND_ERROR_CODES.ISSUE_DATE_PASSED ? OPERATOR_MESSAGES.issueDatePassedRequeue : OPERATOR_MESSAGES.special }
-          : errorClass === 'terminal'
-            ? { enabled: false, reason: terminalRequeueRefusal(input.errorCode) }
-            : errorClass === 'reconcile' && !OPERATOR_REQUEUE_RECONCILE_CODES.includes(input.errorCode as SendErrorCode)
-              ? { enabled: false, reason: reconcileRequeueRefusal(input.errorCode) }
-              : { enabled: true, reason: null };
+  if (input.direction !== 'outgoing') return off(OPERATOR_MESSAGES.incoming);
+  if (input.status === 'rejected') return off(OPERATOR_MESSAGES.rejectedToDraft);
+  if (input.status !== 'failed') return off(OPERATOR_MESSAGES.onlyFailed);
+  if (errorClass === 'terminal') return off(terminalRequeueRefusal(input.errorCode));
+  if (errorClass === 'reconcile' && !OPERATOR_REQUEUE_RECONCILE_CODES.includes(input.errorCode as SendErrorCode)) {
+    return off(reconcileRequeueRefusal(input.errorCode));
+  }
+  if (!input.environmentKnown) return off(OPERATOR_MESSAGES.envUnknown);
+  if (input.facts.sendData === 'missing') return off(operatorLegacyDataMessage(input.invoiceKind));
+  if (input.facts.kindHeld) return off(operatorKindHeldMessage(input.invoiceKind));
+  if (input.invoiceKind !== 'regular' && input.facts.issueDatePassed) return off(operatorIssueDateMessage(input.invoiceKind));
+  return { enabled: true, reason: null };
+}
+
+/**
+ * „Tylko uzgodnij” — ta sama decyzja dla przycisku i akcji. Bez sprawdzania
+ * klasy i daty (nie wysyła), ale z danymi i rodzajem: runner potrzebuje
+ * kompletnego zdarzenia na granicy i zatrzymuje hamulec przed uzgodnieniem.
+ */
+export function operatorReconcileButton(
+  input: Pick<OperatorButtonsInput, 'direction' | 'status' | 'invoiceKind' | 'facts' | 'environmentKnown' | 'openSent'>,
+): OperatorButton {
+  if (input.direction !== 'outgoing') return off(OPERATOR_MESSAGES.incoming);
+  if (input.status !== 'failed' && input.status !== 'rejected') return off(OPERATOR_MESSAGES.notFailedOrRejected);
+  if (!input.environmentKnown) return off(OPERATOR_MESSAGES.envUnknown);
+  if (input.facts.sendData === 'missing') return off(operatorLegacyDataMessage(input.invoiceKind));
+  if (input.facts.kindHeld) return off(operatorKindHeldMessage(input.invoiceKind));
+  if (!input.openSent) return off(OPERATOR_MESSAGES.noOpenSent);
+  return { enabled: true, reason: null };
 }
 
 export function operatorInvoiceButtons(input: OperatorButtonsInput): OperatorButtons {
   const outgoing = input.direction === 'outgoing';
   const failedOrRejected = input.status === 'failed' || input.status === 'rejected';
-  const special = (input.invoiceKind ?? 'regular') !== 'regular';
   const errorClass = sendErrorClassOf(input.errorCode);
 
   const requeue = operatorRequeueButton(input);
-
-  const reconcile: OperatorButton = !outgoing
-    ? { enabled: false, reason: OPERATOR_MESSAGES.incoming }
-    : !failedOrRejected
-      ? { enabled: false, reason: OPERATOR_MESSAGES.notFailedOrRejected }
-      : special
-        ? { enabled: false, reason: OPERATOR_MESSAGES.special }
-        : !input.openSent
-          ? { enabled: false, reason: OPERATOR_MESSAGES.noOpenSent }
-          : { enabled: true, reason: null };
+  const reconcile = operatorReconcileButton(input);
 
   const reset: OperatorButton = !outgoing
     ? { enabled: false, reason: OPERATOR_MESSAGES.incoming }
