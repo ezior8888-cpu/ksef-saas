@@ -261,13 +261,18 @@ agenta z weryfikacją Bartosza, nie obietnica.
   sesji tuż przed plikiem) — tylko
   dla dokumentów specjalnych (KOR, ZAL, ROZ). B2 rozszerza go na zwykłe faktury
   (po decyzji B1) i dokłada cron 23:45 oraz maila.
-- Bezpiecznik daty jest w trzech miejscach: runner (`submit-invoice.ts`,
+- Bezpiecznik daty jest w czterech miejscach: runner (`submit-invoice.ts`,
   przed wysyłką), hak otwarcia sesji (`submit-invoice-full.ts`, tuż przed
-  plikiem) i builder ponowień (`ksefResendFacts` w
+  plikiem), builder ponowień (`ksefResendFacts` w
   `lib/invoices/ksef-requeue-event.ts` — cron I6/I7, operator i od A4b PR2b
-  klient). Zmiana albo zdjęcie (np. tryb offline po B1) — we wszystkich
-  trzech razem; inaczej klient i operator dostaną przycisk, którego worker
-  odmówi, albo odmowę, której worker już nie ma.
+  klient) oraz filtr kandydatów crona (`ksef-lifecycle-reconcile.ts`,
+  `candidates`: `.eq('issue_date', todayInWarsaw())`). Granicę dnia mają też
+  teksty: `ksef-send-policy.ts` (`sendToday`, `transient`, `paused`,
+  `resend*Message`), `submission-holds.ts` (`KSEF_PAUSED_SPECIAL_JOB_MESSAGE`)
+  i lustra w `tests/unit/ksef-wyjscia-kodow.test.ts`. Zmiana albo zdjęcie
+  (np. tryb offline po B1) — wszędzie razem; inaczej klient i operator
+  dostaną przycisk, którego worker odmówi, odmowę, której worker już nie ma,
+  albo tekst o północy, który przestał być prawdą.
 
 **B3. Sonda zdrowia KSeF bez Redisa (S2) i baner awarii**
 - Problem: `ksef-health-check` nic nie zapisuje bez Redisa; `isKsefHealthy`

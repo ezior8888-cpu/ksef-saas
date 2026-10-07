@@ -99,7 +99,10 @@ i zgłoś Bartoszowi.
   albo KOR na PROD nie dostaje „wystaw od nowa”, bo kolejkowanie odmówiłoby
   też nowemu dokumentowi). Szkicu dokumentu specjalnego się nie wysyła —
   klient usuwa szkic i wystawia dokument od nowa (przy wstrzymanym rodzaju
-  po zdjęciu blokady).
+  po zdjęciu blokady). To samo przy odrzuceniu, błędzie treści, ENV_MISMATCH
+  i ISSUE_DATE_PASSED: przy KOR na PROD i ROZ tekst mówi „możesz wrócić do
+  szkicu — nowy dokument dopiero po zdjęciu blokady”, nigdy „wystaw od nowa
+  z dzisiejszą datą”.
 - `KOR_HOLD`, `ROZ_HOLD_RECONCILE`: bez przycisków (decyzja a); klient
   i `last_error` workera mówią „sami jej nie wyślemy, napisz do pomocy
   FaktFlow (pomoc@faktflow.pl)” — procedura niżej.

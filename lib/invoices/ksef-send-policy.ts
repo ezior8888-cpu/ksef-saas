@@ -82,6 +82,18 @@ const issueDatePassedSpecial = (k: SpecialKind) => {
   return `${l.T} ma datę wystawienia sprzed dzisiaj, a w KSeF dokument wystawia się w dniu wysyłki — nie wyślemy jej ponownie i nie ponowimy automatycznie. Wróć do szkicu, usuń go i wystaw ${l.A} od nowa z dzisiejszą datą. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj ${l.G} ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`;
 };
 
+/** Hamulec rodzaju w tym środowisku — nowego dokumentu kolejkowanie i tak by nie wysłało. */
+const KIND_BRAKE: Record<SpecialKind, string> = {
+  correction: 'wysyłka korekt do produkcyjnego KSeF jest wstrzymana przez FaktFlow do czasu poprawki ich kwot',
+  final: 'wysyłka faktur rozliczeniowych do KSeF jest wstrzymana przez FaktFlow do czasu pewnego rozliczania zaliczek',
+  // Zaliczka jest „wstrzymana” tylko przy nieznanym środowisku (wtedy ta gałąź nie jest używana).
+  advance: 'nie możemy teraz potwierdzić środowiska KSeF po stronie FaktFlow',
+};
+
+/** Rodzaj wstrzymany: szkic tak, nowy dokument dopiero po zdjęciu blokady. */
+const heldNote = (k: SpecialKind) =>
+  `Nowej ${KIND_LABEL[k].G} teraz nie wystawisz, bo ${KIND_BRAKE[k]} — po zdjęciu blokady usuń szkic i wystaw ${KIND_LABEL[k].A} od nowa (pytania: ${SUPPORT_EMAIL}).`;
+
 /** Teksty dla korekty, zaliczki i faktury rozliczeniowej (A4b PR2b). */
 export const KSEF_SPECIAL_SEND_MESSAGES = {
   rejected: (k: SpecialKind) =>
@@ -92,6 +104,12 @@ export const KSEF_SPECIAL_SEND_MESSAGES = {
     `Szkicu ${KIND_LABEL[k].G} nie wyślesz do KSeF — jeśli zdecydujesz się ją wysłać, po powrocie do szkicu usuń go i wystaw ${KIND_LABEL[k].A} od nowa z dzisiejszą datą.`,
   issueDatePassed: issueDatePassedSpecial,
   issueDatePassedCode: (k: SpecialKind) => `Tej wysyłki nie wykonaliśmy (szczegóły wyżej). ${issueDatePassedSpecial(k)}`,
+  // Rodzaj wstrzymany (KOR na PROD, ROZ): kolejkowanie odmówiłoby nowemu dokumentowi — „od nowa” tylko po zdjęciu blokady.
+  heldNote,
+  rejectedHeld: (k: SpecialKind) => `KSeF odrzucił treść ${KIND_LABEL[k].G} — możesz wrócić do szkicu. ${heldNote(k)}`,
+  terminalHeld: (k: SpecialKind) => `${KIND_LABEL[k].T} nie przeszła kontroli treści — możesz wrócić do szkicu. ${heldNote(k)}`,
+  issueDatePassedCodeHeld: (k: SpecialKind) =>
+    `Tej wysyłki nie wykonaliśmy (szczegóły wyżej): ${KIND_LABEL[k].L} ma datę wystawienia sprzed dzisiaj, a w KSeF dokument wystawia się w dniu wysyłki. Możesz wrócić do szkicu. ${heldNote(k)} Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj ${KIND_LABEL[k].G} ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`,
   incomplete: (k: SpecialKind) =>
     `Nie mamy zapisanej kopii danych ${KIND_LABEL[k].G} potrzebnej do ponownej wysyłki — nie wyślemy jej ponownie i nie ponowimy automatycznie. Wróć do szkicu, usuń go i wystaw ${KIND_LABEL[k].A} od nowa z dzisiejszą datą. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj ${KIND_LABEL[k].G} ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`,
   kindHeld: (k: SpecialKind): string => {
@@ -210,8 +228,14 @@ export function decideResend(input: ResendInput): ResendDecision {
   if (input.direction !== 'outgoing') {
     return { allowed: false, reason: 'direction', message: M.direction };
   }
+  // Rodzaj wstrzymany w znanym środowisku: wszystkie teksty „wystaw od nowa” mówią „po zdjęciu blokady”.
+  const held = kind !== null && input.environmentKnown && input.facts.kindHeld;
   if (input.status === 'rejected') {
-    return { allowed: false, reason: 'rejected', message: kind ? S.rejected(kind) : M.rejected };
+    return {
+      allowed: false,
+      reason: 'rejected',
+      message: kind ? (held ? S.rejectedHeld(kind) : S.rejected(kind)) : M.rejected,
+    };
   }
   if (input.status !== 'failed') {
     return { allowed: false, reason: 'status', message: M.status };
@@ -219,12 +243,12 @@ export function decideResend(input: ResendInput): ResendDecision {
   const errorClass = sendErrorClassOf(input.errorCode);
   if (errorClass === 'terminal') {
     const message = input.errorCode === SEND_ERROR_CODES.ENV_MISMATCH
-      ? (kind ? `${M.envMismatch} ${S.envMismatchNote(kind)}` : M.envMismatch)
+      ? (kind ? `${M.envMismatch} ${held ? S.heldNote(kind) : S.envMismatchNote(kind)}` : M.envMismatch)
       : input.errorCode === SEND_ERROR_CODES.ISSUE_DATE_PASSED
-        ? (kind ? S.issueDatePassedCode(kind) : M.issueDatePassed)
+        ? (kind ? (held ? S.issueDatePassedCodeHeld(kind) : S.issueDatePassedCode(kind)) : M.issueDatePassed)
         : input.errorCode === SEND_ERROR_CODES.KSEF_NUMBER_TAKEN
           ? M.numberTaken
-          : (kind ? S.terminal(kind) : M.terminal);
+          : (kind ? (held ? S.terminalHeld(kind) : S.terminal(kind)) : M.terminal);
     return { allowed: false, reason: 'terminal', message };
   }
   if (errorClass === 'reconcile') {
