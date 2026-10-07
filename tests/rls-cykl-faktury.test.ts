@@ -173,6 +173,26 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
     expect(byCode.get('NOT_IN_KSEF')).toMatchObject({ class: 'transient', auto_requeue: false });
     expect(byCode.get('KSEF_NUMBER_TAKEN')).toMatchObject({ class: 'terminal', auto_requeue: false });
     expect(byCode.get('ENV_MISMATCH')).toMatchObject({ class: 'terminal', auto_requeue: false });
+    // 00147: dokument specjalny z datą wystawienia sprzed dzisiaj — tylko szkic.
+    expect(byCode.get('ISSUE_DATE_PASSED')).toMatchObject({ class: 'terminal', auto_requeue: false });
+  });
+
+  it('00147: ISSUE_DATE_PASSED bez dowodu wraca do szkicu; ponowienie odmówione; strażnik I4 kodu nie zgłasza', async () => {
+    const toDraft = await invoice({ ksef_status: 'failed', last_error_code: 'ISSUE_DATE_PASSED' });
+    const reset = await admin.rpc('reset_ksef_send', { p_invoice_id: toDraft, p_tenant_id: ORG, p_actor_user_id: ownerId });
+    expect(reset.error).toBeNull();
+    expect((await row(toDraft)).ksef_status).toBe('draft');
+
+    const noResend = await invoice({ ksef_status: 'failed', last_error_code: 'ISSUE_DATE_PASSED' });
+    const requeue = await admin.rpc('requeue_ksef_send', {
+      p_invoice_id: noResend, p_tenant_id: ORG, p_attempt_id: ATTEMPT, p_actor_user_id: ownerId,
+    });
+    expect(requeue.error?.code).toBe('P0001');
+    expect((await row(noResend)).ksef_status).toBe('failed');
+
+    const { data } = await admin.rpc('ksef_lifecycle_violations');
+    const flagged = ((data ?? []) as Array<{ invoice_id: string }>).filter((v) => v.invoice_id === noResend);
+    expect(flagged).toEqual([]);
   });
 
   it('D-A4-2 (00143): ENV_MISMATCH bez dowodu wraca do szkicu; ponowienie w bieżącym środowisku odmówione; „tylko uzgodnij” przy otwartym wpisie działa', async () => {
