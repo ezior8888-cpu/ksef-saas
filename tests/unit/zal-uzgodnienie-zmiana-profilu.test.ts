@@ -34,6 +34,10 @@ const m = vi.hoisted(() => ({
   markSubmission: vi.fn(),
   updateStatus: vi.fn(),
   captureMessage: vi.fn(),
+  intents: vi.fn(),
+  promote: vi.fn(),
+  sessionInvoices: vi.fn(),
+  rpcCalls: [] as string[],
   db: null as unknown as MemoryDb,
 }));
 
@@ -55,11 +59,12 @@ vi.mock('@/lib/ksef/submit-invoice-full', () => ({ submitInvoiceFullFlow: m.full
 vi.mock('@/lib/ksef/submit', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/ksef/submit')>(),
   checkInvoiceStatusByReference: m.status,
+  listSessionInvoicesAfterClose: m.sessionInvoices,
 }));
 vi.mock('@/lib/ksef/submission-log', () => ({
-  // A2: bez zamiarów wysyłki do rozstrzygnięcia — runner idzie jak dotąd.
-  findOpenKsefSubmissionIntents: vi.fn(async () => []),
-  promoteKsefSubmissionIntent: vi.fn(async () => false),
+  // A2: domyślnie bez zamiarów wysyłki do rozstrzygnięcia (przypadki niżej je ustawiają).
+  findOpenKsefSubmissionIntents: m.intents,
+  promoteKsefSubmissionIntent: m.promote,
   abandonKsefSubmissionIntent: vi.fn(),
   recordKsefSubmissionIntent: vi.fn(),
   // D-A4-1: weryfikacja cudzego 440 — domyślnie bez sesji w historii i bez znanego numeru.
@@ -143,6 +148,10 @@ beforeEach(() => {
   m.fullFlow.mockResolvedValue(ACCEPTED);
   // Tylko mockResolvedValue: po naprawie runner pyta o otwarty wpis także przed granicą.
   m.findOpen.mockResolvedValue(null);
+  m.intents.mockResolvedValue([]);
+  m.promote.mockResolvedValue(false);
+  m.sessionInvoices.mockResolvedValue([]);
+  m.rpcCalls = [];
   const invoice: Row = jsonb({
     id: ID, tenant_id: TENANT, direction: 'outgoing',
     // Ponowiona przez `requeue_ksef_send` (była failed po wysyłce, która mogła dojść do KSeF).
@@ -158,10 +167,13 @@ beforeEach(() => {
       // Profil firmy zmieniony PO wysłaniu zaliczki — reszta danych bez zmian.
       tenants: [{ id: TENANT, nip: NIP, name: 'Nowa nazwa', address_json: address }],
     },
-    (fn) => ({
-      data: fn === 'ksef_has_contact_evidence' ? true : '2026-10-03T12:00:00.000000+00:00',
-      error: null,
-    }),
+    (fn) => {
+      m.rpcCalls.push(fn);
+      return {
+        data: fn === 'ksef_has_contact_evidence' ? true : '2026-10-03T12:00:00.000000+00:00',
+        error: null,
+      };
+    },
   );
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -199,6 +211,33 @@ describe('ZAL po zmianie profilu firmy: uzgodnienie bez żywego profilu, POST z 
     expect(m.status).not.toHaveBeenCalled();
     expect(m.fullFlow).not.toHaveBeenCalled();
     expect(tenantReads().length).toBeGreaterThan(0);
+    // Odmowa jeszcze przed przejęciem wysyłki — pominięcie profilu jest warunkowe, nie bezwarunkowe.
+    expect(m.rpcCalls).not.toContain('claim_ksef_send');
+  });
+
+  it('„tylko uzgodnij” bez otwartego wpisu (wpis zamknięty wcześniej) → RESULT_UNCERTAIN bez czytania profilu firmy', async () => {
+    // Np. ponowienie pg-boss po próbie, która zamknęła wpis jako STALE — dowód kontaktu zostaje.
+    const error = await failing(runSubmitInvoice(event({ reconcileOnly: true }), ctx));
+    expect(classifySendError(error).code).toBe('RESULT_UNCERTAIN');
+    expect(m.fullFlow).not.toHaveBeenCalled();
+    expect(tenantReads()).toHaveLength(0);
+  });
+
+  it('pełne zdarzenie z otwartym zamiarem intent → zamiar rozstrzygnięty, uzgodnienie po referencji, bez czytania profilu', async () => {
+    m.intents.mockResolvedValue([{ sessionReferenceNumber: 'SES-I', payloadHash: null, attemptedAt: hoursAgo(1) }]);
+    m.sessionInvoices.mockResolvedValue([{ referenceNumber: 'REF-I', invoiceNumber: 'ZAL/1', invoiceHash: 'x', statusCode: 200 }]);
+    m.promote.mockImplementation(async () => {
+      // Zamiar awansowany do wpisu sent — od tej chwili jest otwarta wysyłka.
+      m.findOpen.mockResolvedValue({ sessionReferenceNumber: 'SES-I', invoiceReferenceNumber: 'REF-I', attemptedAt: hoursAgo(1) });
+      return true;
+    });
+    m.status.mockResolvedValue({ state: 'accepted', ksefNumber: 'K-INT', acquisitionTimestamp: '2026-10-01T10:00:00Z' });
+
+    await expect(runSubmitInvoice(event(), ctx)).resolves.toMatchObject({ success: true, ksefNumber: 'K-INT' });
+
+    expect(m.promote).toHaveBeenCalledWith(expect.objectContaining({ invoiceReferenceNumber: 'REF-I' }));
+    expect(m.fullFlow).not.toHaveBeenCalled();
+    expect(tenantReads()).toHaveLength(0);
   });
 
   it('wpis sent sprzed 3 dni + 404: zamknięty jako STALE, potem granica przed POST odmawia (INVALID_DOCUMENT), bez wysyłki', async () => {

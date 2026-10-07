@@ -95,29 +95,33 @@ KOR/ROZ sprzed 00137 (bez `special_data`) albo ZAL sprzed 02.10.2026 (bez
 
 1. Tylko przy dowodzie kontaktu albo kodzie klasy reconcile; w pozostałych
    przypadkach operator klika „Wróć do szkicu”.
-2. Weź PIERWSZE zlecenie wysyłki tej faktury (pg-boss trzyma joby 7 dni):
-   ```sql
-   SELECT j.id, j.created_on, j.data->>'environment' AS env,
-          (j.data->'invoice' = i.fa3_data) AS ta_sama_tresc
-   FROM pgboss.job j JOIN invoices i ON i.id = (j.data->>'invoiceId')::uuid
-   WHERE j.name = 'invoice.submit.requested' AND j.data->>'invoiceId' = '<id>'
-   ORDER BY j.created_on LIMIT 1;
+2. KOR/ROZ: uruchom skrypt — najpierw bez opcji (tylko sprawdza i pokazuje
+   faktura + PIERWSZE zlecenie wysyłki tej faktury z pg-boss, które trzyma joby
+   7 dni):
+   ```bash
+   ./scripts/ops/dopisz-dane-specjalne.sh <id-faktury>
    ```
-   Wymagane: `env` = `KSEF_ENV` workera (sekcja 9) i `ta_sama_tresc` = true;
-   inaczej STOP (F2, Bartosz). Po 7 dniach źródła nie ma — ślepa uliczka,
-   decyzja Bartosza.
-3. KOR/ROZ: najpierw policz wiersze, potem jedna transakcja jako `postgres`:
-   `UPDATE invoices SET special_data = jsonb_build_object('correctionData', j.data->'correctionData')`
-   (ROZ: `'finalData', j.data->'finalData', 'finalAdvanceSettlementRows', j.data->'finalAdvanceSettlementRows'`)
-   `FROM pgboss.job j WHERE invoices.id = '<id>' AND invoices.tenant_id = '<tenant>' AND invoices.special_data IS NULL AND j.id = '<job>'`
-   oraz wpis w `audit_logs` (operator, id joba). Wyzwalacz 00137 dopuszcza
+   Wszystkie kolumny warunków muszą być `t`: faktura KOR/ROZ bez
+   `special_data`; job tej faktury (`invoiceId`) i tej samej firmy
+   (`tenantId`); środowisko joba = `KSEF_ENV` workera; treść joba = `fa3_data`;
+   job niesie dane tego rodzaju. Inaczej STOP (inne środowisko — F2;
+   po 7 dniach źródła nie ma — ślepa uliczka, decyzja Bartosza).
+3. Zapis (NIEODWRACALNY — 00137 zapisuje `special_data` raz):
+   ```bash
+   ./scripts/ops/dopisz-dane-specjalne.sh <id-faktury> --wykonaj
+   ```
+   Jedna transakcja: te same warunki w jednym zapytaniu, zapis tylko przy
+   DOKŁADNIE jednym trafionym wierszu (inaczej ROLLBACK) i wpis `audit_logs`
+   `invoice.special_data_backfilled` z id joba. Wyzwalacz 00137 dopuszcza
    NULL → wartość tylko serwerowi; kształt pilnuje CHECK.
 4. ZAL: tylko gdy `submitted_to_ksef_at IS NULL` i za zgodą Bartosza dla tej
    faktury (dopisanie `fa3_data.advanceEnvelope` z `data->'advanceData'`). Po
    przejęciu wysyłki (00124) `fa3_data` jest zamrożone dla każdej roli (00132)
    — 42501 = STOP, zgłoś Bartoszowi.
-5. Po zapisie wiersz ma dane: I5 i „Tylko uzgodnij” każdego dnia, I6/I7
-   i „Wyślij ponownie” tylko w dniu wystawienia; ROZ i KOR na PROD czekają na C4.
+5. Po zapisie wiersz ma dane: I5 i „Tylko uzgodnij” przy otwartym wpisie
+   sent/intent każdego dnia, I6/I7 i „Wyślij ponownie” tylko w dniu
+   wystawienia; poza tym brak wyjścia do B2 (zgłoś Bartoszowi). ROZ i KOR na
+   PROD czekają na C4.
 6. Sekcję 9 `kontrola-faktur-ksef.sh` uruchom ponownie po wdrożeniu PR2a.
 
 **Decyzje do podjęcia (Bartosz):**

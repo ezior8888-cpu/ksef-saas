@@ -375,17 +375,28 @@ describe('KSeF submit reference boundary', () => {
       },
     );
 
-    it.each(['advance', 'final'] as const)(
-      'strażnik: %s z pominięciem nadal odrzuca kopertę ze zmienionym sprzedawcą (zamrożona kopia przed pominięciem)',
-      async (kind) => {
-        const changedSeller = { ...seller, address: { ...seller.address, addressLine1: 'ul. Inna 5' } };
-        const base = special(kind);
-        await expect(assertSubmitReferences({
-          ...base,
-          advanceData: kind === 'advance' ? { ...advance, seller: changedSeller } : undefined,
-          finalData: kind === 'final' ? { ...final, seller: changedSeller } : undefined,
-          skipLiveTenantSeller: async () => true,
-        })).rejects.toThrow('manual reconciliation');
+    it('strażnik: final z pominięciem nadal odrzuca kopertę ze zmienionym sprzedawcą (zamrożona kopia przed pominięciem)', async () => {
+      const changedSeller = { ...seller, address: { ...seller.address, addressLine1: 'ul. Inna 5' } };
+      await expect(assertSubmitReferences({
+        ...special('final'),
+        finalData: { ...final, seller: changedSeller },
+        skipLiveTenantSeller: async () => true,
+      })).rejects.toThrow('manual reconciliation');
+      expect(reads).toHaveLength(1);
+    });
+
+    it.each([
+      ['nazwa w seller_data', () => { invoice.seller_data = { ...(invoice.seller_data as object), name: 'Inna nazwa' }; }],
+      ['NIP w seller_nip', () => { invoice.seller_nip = '9999999999'; }],
+    ] as const)(
+      'strażnik: advance z pominięciem nadal porównuje zamrożoną kopię sprzedawcy (%s) — koperta bez zmian',
+      async (_name, breakFrozen) => {
+        // Koperta = zdarzenie (porównanie koperty przechodzi), zmieniona tylko kopia z wystawienia:
+        // pominięcie żywego profilu nie może ominąć porównania zamrożonego sprzedawcy.
+        const base = special('advance');
+        breakFrozen();
+        await expect(assertSubmitReferences({ ...base, skipLiveTenantSeller: async () => true }))
+          .rejects.toThrow('manual reconciliation');
         expect(reads).toHaveLength(1);
       },
     );
