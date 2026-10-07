@@ -487,3 +487,31 @@ describe('describeResetError', () => {
     expect(describeResetError({ code: '08006', message: 'connection' })).toBe(M.resetFailed);
   });
 });
+
+describe('A4b PR2b (recenzja): rodzaj wstrzymany — szkic tak, nowy dokument dopiero po zdjęciu blokady', () => {
+  // KOR na PROD (KOR_HOLD) i ROZ wszędzie: nowej korekty / faktury rozliczeniowej kolejkowanie i tak nie wyśle,
+  // więc żaden tekst nie może kazać „wystawić od nowa” teraz (reguła z nagłówka polityki).
+  it.each([
+    ['ENV_MISMATCH, korekta', 'correction', 'failed', 'ENV_MISMATCH'],
+    ['ENV_MISMATCH, ROZ', 'final', 'failed', 'ENV_MISMATCH'],
+    ['błąd treści (INVALID_DOCUMENT), korekta', 'correction', 'failed', 'INVALID_DOCUMENT'],
+    ['błąd treści (XSD_INVALID), ROZ', 'final', 'failed', 'XSD_INVALID'],
+    ['ISSUE_DATE_PASSED, korekta', 'correction', 'failed', 'ISSUE_DATE_PASSED'],
+    ['odrzucona przez KSeF, korekta', 'correction', 'rejected', 'KSEF_REJECTED'],
+    ['odrzucona przez KSeF, ROZ', 'final', 'rejected', 'KSEF_REJECTED'],
+  ] as const)('%s: „Wróć do szkicu”, a nowy dokument po zdjęciu blokady (z adresem pomocy)', (_name, kind, status, code) => {
+    const b = failedInvoiceButtons({ status, invoiceKind: kind, errorCode: code, facts: HELD, environmentKnown: true, canManage: true });
+    expect(b?.reset).toBe(true);
+    expect(b?.resend).toBe(false);
+    expect(b?.info).toMatch(/po zdjęciu blokady/);
+    expect(b?.info).not.toMatch(/od nowa z dzisiejszą datą/);
+    expect(b?.info).not.toMatch(/od nowa z poprawionymi danymi/);
+    expect(b?.info).toContain(SUPPORT_EMAIL);
+  });
+
+  it('strażnik: rodzaj niewstrzymany (KOR na TEST) — błąd treści dalej każe wystawić od nowa z poprawionymi danymi', () => {
+    const b = failedInvoiceButtons({ status: 'failed', invoiceKind: 'correction', errorCode: 'INVALID_DOCUMENT', facts: STORED, environmentKnown: true, canManage: true });
+    expect(b?.info).toMatch(/od nowa z poprawionymi danymi/);
+    expect(b?.info).not.toMatch(/po zdjęciu blokady/);
+  });
+});

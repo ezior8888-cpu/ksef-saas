@@ -262,6 +262,19 @@ describe('A4b PR2b: klient — „Wyślij ponownie” z kopii i prawdziwe zdanie
     expect(deadPromises).toEqual([]);
   });
 
+  it('(f) rodzaj wstrzymany (KOR na PROD, ROZ): żadne zdanie nie każe wystawić dokumentu od nowa przed zdjęciem blokady', () => {
+    // Kolejkowanie odmówiłoby nowej korekcie na PROD i nowemu ROZ (ksef-submit-enqueue) — „od nowa” tylko „po zdjęciu blokady”.
+    const premature = clientScenarios()
+      .filter((s) => s.kind !== 'regular' && isKindHeldForEnv(s.kind, s.env))
+      .filter((s) => {
+        const info = clientButtons(s)?.info ?? '';
+        return /od nowa/.test(info) && !/po zdjęciu blokady/.test(info);
+      })
+      .map(label)
+      .sort();
+    expect(premature).toEqual([]);
+  });
+
   it('(e) strażnik: „Wyślij ponownie” klienta ⇒ „Wyślij ponownie” operatora (klient nie zleca więcej niż operator)', () => {
     const beyondOperator = scenarios()
       .filter((s) => clientButtons(s)?.resend === true)
