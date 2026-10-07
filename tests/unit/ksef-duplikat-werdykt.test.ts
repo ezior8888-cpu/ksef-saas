@@ -121,6 +121,7 @@ describe('KSEF_NUMBER_TAKEN — wyjście dla klienta i operatora', () => {
   it('operator: szkic dostępny (wpisy number_taken nie są dowodem), ponowienie nie', () => {
     const b = operatorInvoiceButtons({
       direction: 'outgoing', status: 'failed', errorCode: 'KSEF_NUMBER_TAKEN', invoiceKind: 'regular', openSent: false, evidence: false,
+      facts: { sendData: 'stored', kindHeld: false, issueDatePassed: false }, environmentKnown: true,
     });
     expect(b.requeue.enabled).toBe(false);
     expect(b.reset.enabled).toBe(true);

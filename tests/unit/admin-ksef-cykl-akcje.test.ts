@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Akcje operatora `/admin/ksef` (PR 3c cyklu życia): `requireAdmin()` przed
@@ -10,6 +10,8 @@ const ID = '11111111-1111-4111-8111-111111111111';
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const OPERATOR = { userId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', email: 'operator@example.test' };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const NOW = '2026-10-03T10:00:00Z';
+const TODAY = '2026-10-03';
 
 const m = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
@@ -19,34 +21,100 @@ const m = vi.hoisted(() => ({
   paused: vi.fn(),
   audit: vi.fn(),
   revalidate: vi.fn(),
+  /** `configuredKsefEnvironment()` akcji (null = KSEF_ENV nieustawione albo błędne). */
+  env: vi.fn((): string | null => 'test'),
   invoice: null as Record<string, unknown> | null,
   /** Wpisy `ksef_submissions` faktury; bez `status` = `sent`. */
   openSent: [] as Array<{ id: string; status?: string }>,
+  /** Napisy `select(...)` w kolejności wywołań — kontrakt kolumn odczytu. */
+  selects: [] as Array<{ table: string; columns: string }>,
 }));
 
 vi.mock('@/lib/auth/admin-guard', () => ({ requireAdmin: m.requireAdmin }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: m.admin }));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: m.send }));
 vi.mock('@/lib/ksef/submission-holds', () => ({ isKsefSubmissionPaused: m.paused }));
-vi.mock('@/lib/ksef/claim-environment', () => ({ requireConfiguredKsefEnvironment: () => 'test' }));
+vi.mock('@/lib/ksef/claim-environment', () => ({
+  configuredKsefEnvironment: m.env,
+  requireConfiguredKsefEnvironment: () => 'test',
+}));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: m.audit }));
 vi.mock('next/cache', () => ({ revalidatePath: m.revalidate }));
 
 import { operatorRequeueAction, operatorResetAction } from '@/app/admin/ksef/actions';
-import { OPERATOR_MESSAGES } from '@/lib/admin/ksef-operator-policy';
+import {
+  OPERATOR_MESSAGES,
+  operatorIssueDateMessage,
+  operatorKindHeldMessage,
+  operatorLegacyDataMessage,
+} from '@/lib/admin/ksef-operator-policy';
+import { KSEF_RESEND_SOURCE_COLUMNS } from '@/lib/invoices/ksef-requeue-event';
 
 type Tx = { executeSql: ReturnType<typeof vi.fn> };
+
+/** Kolumny napisu select na najwyższym poziomie: `a, b, rel(x, y)` → `['a', 'b', 'rel(x, y)']`. */
+function topLevelColumns(columns: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of columns) {
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) {
+      out.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) out.push(current.trim());
+  return out;
+}
+
+/**
+ * Jak PostgREST: tylko wybrane kolumny; wybrana, a nieobecna w danych → null;
+ * niewybrana — brak klucza (akcja, która czyta niepobraną kolumnę, widzi undefined).
+ */
+function project(source: Record<string, unknown>, columns: string): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const column of topLevelColumns(columns)) {
+    const open = column.indexOf('(');
+    if (open === -1) {
+      out[column] = source[column] ?? null;
+      continue;
+    }
+    const key = column.slice(0, open).trim();
+    const nested = column.slice(open + 1, column.lastIndexOf(')'));
+    const value = source[key];
+    out[key] = Array.isArray(value)
+      ? value.map((v) => project(v as Record<string, unknown>, nested))
+      : value && typeof value === 'object'
+        ? project(value as Record<string, unknown>, nested)
+        : null;
+  }
+  return out;
+}
 
 function fakeAdminClient() {
   return {
     from: (table: string) => {
       const statusOk: Array<(status: string) => boolean> = [];
+      let columns = '*';
       const q = {
-        select: () => q,
+        select: (c: string) => {
+          columns = c;
+          m.selects.push({ table, columns: c });
+          return q;
+        },
         eq: (k: string, v: unknown) => { if (k === 'status') statusOk.push((st) => st === v); return q; },
         in: (k: string, vs: unknown[]) => { if (k === 'status') statusOk.push((st) => vs.includes(st)); return q; },
         limit: () => q,
-        maybeSingle: async () => ({ data: table === 'invoices' ? m.invoice : null, error: null }),
+        maybeSingle: async () => ({
+          data: table === 'invoices' && m.invoice
+            ? (columns === '*' ? m.invoice : project(m.invoice, columns))
+            : null,
+          error: null,
+        }),
         then: (ok: (v: unknown) => unknown) => ok({
           data: table === 'ksef_submissions'
             ? m.openSent.filter((r) => statusOk.every((f) => f(r.status ?? 'sent')))
@@ -72,6 +140,7 @@ function row(extra: Record<string, unknown> = {}) {
   return {
     id: ID, tenant_id: TENANT, direction: 'outgoing', invoice_kind: 'regular', ksef_status: 'failed',
     last_error_code: 'INFRA', internal_number: 'FV/9', tenants: { nip: '5260001246' },
+    issue_date: TODAY, special_data: null,
     fa3_data: { internalNumber: 'FV/9', type: 'VAT', lines: [{ ordinal: 1 }], seller: { nip: '5260001246' } },
     ...extra,
   };
@@ -79,12 +148,22 @@ function row(extra: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Dzień wystawienia dokumentów z `row()` (Europe/Warsaw: 03.10.2026, 12:00).
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(NOW));
+  m.env.mockReset();
+  m.env.mockReturnValue('test');
+  m.selects = [];
   m.requireAdmin.mockResolvedValue(OPERATOR);
   m.admin.mockImplementation(fakeAdminClient);
   m.rpc.mockResolvedValue({ data: { id: ID }, error: null });
   m.paused.mockResolvedValue(false);
   m.invoice = row();
   m.openSent = [];
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('operatorRequeueAction', () => {
@@ -167,14 +246,17 @@ describe('operatorRequeueAction', () => {
     expect(event.data.reconcileOnly).toBe(true);
   });
 
+  // Komunikat jako funkcja: liczony w teście, nie przy zbieraniu tabeli.
   it.each([
-    ['dokument specjalny', { invoice_kind: 'correction' }, OPERATOR_MESSAGES.special],
-    ['przychodząca', { direction: 'incoming' }, OPERATOR_MESSAGES.incoming],
-    ['bez pozycji', { fa3_data: { internalNumber: 'FV/9' } }, OPERATOR_MESSAGES.incomplete],
+    // A4b PR2a: korekta bez special_data (sprzed 00137) — zdarzenia nie da się odtworzyć.
+    ['stary dokument specjalny', { invoice_kind: 'correction' }, (): string => operatorLegacyDataMessage('correction')],
+    ['przychodząca', { direction: 'incoming' }, (): string => OPERATOR_MESSAGES.incoming],
+    ['bez pozycji', { fa3_data: { internalNumber: 'FV/9' } }, (): string => OPERATOR_MESSAGES.incomplete],
   ])('%s → odmowa bez zlecenia', async (_l, patch, message) => {
     m.invoice = row(patch);
-    await expect(operatorRequeueAction(ID, { reconcileOnly: false })).resolves.toEqual({ success: false, error: message });
+    const result = await operatorRequeueAction(ID, { reconcileOnly: false });
     expect(m.send).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: false, error: message() });
   });
 
   it('hamulec operatora: odmowa; awaria odczytu hamulca też (fail-closed)', async () => {
@@ -197,6 +279,183 @@ describe('operatorRequeueAction', () => {
   it('brak faktury → komunikat, bez efektów', async () => {
     m.invoice = null;
     await expect(operatorRequeueAction(ID, { reconcileOnly: false })).resolves.toEqual({ success: false, error: OPERATOR_MESSAGES.notFound });
+  });
+});
+
+/**
+ * A4b PR2a: dokument specjalny odtwarzany z kopii na wierszu — ZAL z
+ * `fa3_data.advanceEnvelope`, KOR/ROZ ze `special_data` (00137). Kolejność
+ * w akcji: fakty (dane, rodzaj wstrzymany w środowisku, data wystawienia) →
+ * decyzja (b): pełna wysyłka tylko w dniu wystawienia, uzgodnienie bez względu
+ * na datę. Ta sama decyzja co przycisk; wspólny budowniczy zdarzenia z cronem.
+ */
+describe('operatorRequeueAction — dokumenty specjalne z kopii (A4b PR2a)', () => {
+  const YESTERDAY = '2026-10-02';
+
+  function zalRow(issueDate: string, extra: Record<string, unknown> = {}) {
+    const advanceEnvelope = {
+      invoiceType: 'advance', issueDate, advanceAmount: 1230, totalContractAmount: 2460, vatRate: '23',
+      description: 'Zaliczka na projekt', seller: { nip: '5260001246' },
+    };
+    return {
+      advanceEnvelope,
+      row: row({
+        invoice_kind: 'advance', internal_number: 'ZAL/9', issue_date: issueDate, last_error_code: 'KSEF_UNAVAILABLE',
+        fa3_data: {
+          internalNumber: 'ZAL/9', type: 'ZAL', issueDate, lines: [{ ordinal: 1 }], seller: { nip: '5260001246' },
+          advanceEnvelope,
+        },
+        ...extra,
+      }),
+    };
+  }
+
+  function korRow(issueDate: string, extra: Record<string, unknown> = {}) {
+    const correctionData = {
+      invoiceType: 'correction', issueDate, parentInvoiceId: '99999999-9999-4999-8999-999999999999',
+      parentInvoiceNumber: 'FV/1', correctionType: 'before_after', correctionReason: 'Zwrot towaru',
+      seller: { nip: '5260001246' },
+    };
+    return {
+      correctionData,
+      row: row({
+        invoice_kind: 'correction', internal_number: 'KOR/9', issue_date: issueDate, last_error_code: 'KOR_HOLD',
+        fa3_data: { internalNumber: 'KOR/9', type: 'KOR', issueDate, lines: [{ ordinal: 1 }], seller: { nip: '5260001246' } },
+        special_data: { correctionData },
+        ...extra,
+      }),
+    };
+  }
+
+  function okTx(): Tx {
+    const tx: Tx = { executeSql: vi.fn(async () => ({ rows: [{ id: ID }], rowCount: 1 })) };
+    sendRunningStep(tx);
+    return tx;
+  }
+
+  type SentEvent = { singletonKey: string; groupId: string; name: string; data: Record<string, unknown> };
+
+  it('„Tylko uzgodnij” przy failed ZAL z otwartym wpisem sent: zdarzenie z kopertą advanceData i reconcileOnly, RPC z p_reconcile_only = true', async () => {
+    const zal = zalRow(TODAY);
+    m.invoice = zal.row;
+    m.openSent = [{ id: 'sub-1' }];
+    const tx = okTx();
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly: true });
+
+    expect(result).toEqual({ success: true, message: OPERATOR_MESSAGES.reconcileQueued });
+    const event = m.send.mock.calls[0]![0] as SentEvent;
+    expect(event).toMatchObject({ groupId: TENANT, singletonKey: ID, name: 'invoice/submit.requested' });
+    expect(event.data).toMatchObject({
+      tenantId: TENANT, invoiceId: ID, nip: '5260001246', environment: 'test', reconcileOnly: true,
+    });
+    expect(event.data.advanceData).toEqual(zal.advanceEnvelope);
+    expect(event.data).not.toHaveProperty('correctionData');
+    expect(event.data.sendAttemptId).toMatch(UUID);
+    const [, values] = tx.executeSql.mock.calls[0] as [string, unknown[]];
+    expect(values).toEqual([ID, TENANT, event.data.sendAttemptId, OPERATOR.userId, true]);
+    expect(values[4]).toBe(true);
+    expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'invoice.operator_reconcile',
+      metadata: expect.objectContaining({ sendAttemptId: event.data.sendAttemptId }),
+    }));
+  });
+
+  it.each([
+    ['ZAL w dniu wystawienia (KSEF_UNAVAILABLE)', () => zalRow(TODAY), 'advanceData'],
+    ['KOR na TEST po hamulcu (KOR_HOLD)', () => korRow(TODAY), 'correctionData'],
+  ] as const)('„Wyślij ponownie”: %s → pełna wysyłka z danymi z kopii, bez reconcileOnly', async (_l, make, key) => {
+    const doc = make();
+    m.invoice = doc.row;
+    const tx = okTx();
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly: false });
+
+    expect(result).toEqual({ success: true, message: OPERATOR_MESSAGES.requeued });
+    const event = m.send.mock.calls[0]![0] as SentEvent;
+    expect(event.data[key]).toEqual('advanceEnvelope' in doc ? doc.advanceEnvelope : doc.correctionData);
+    expect(event.data).not.toHaveProperty('reconcileOnly');
+    const [, values] = tx.executeSql.mock.calls[0] as [string, unknown[]];
+    expect(values).toEqual([ID, TENANT, event.data.sendAttemptId, OPERATOR.userId, false]);
+  });
+
+  it('KSeF produkcyjny: korekta z danymi po KOR_HOLD — „Wyślij ponownie” odmówione powodem hamulca korekt, bez zlecenia', async () => {
+    m.env.mockReturnValue('production');
+    m.invoice = korRow(TODAY).row;
+    okTx();
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly: false });
+
+    expect(m.send).not.toHaveBeenCalled();
+    expect(m.audit).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: false, error: operatorKindHeldMessage('correction') });
+  });
+
+  it('ZAL z wczorajszą datą wystawienia: „Wyślij ponownie” odmówione (decyzja b), „Tylko uzgodnij” przy otwartym wpisie sent zlecone', async () => {
+    const zal = zalRow(YESTERDAY);
+    m.invoice = zal.row;
+    const tx = okTx();
+
+    const refused = await operatorRequeueAction(ID, { reconcileOnly: false });
+    const sendsAfterRefusal = m.send.mock.calls.length;
+    m.openSent = [{ id: 'sub-1' }];
+    const reconciled = await operatorRequeueAction(ID, { reconcileOnly: true });
+
+    expect(sendsAfterRefusal).toBe(0);
+    expect(reconciled).toEqual({ success: true, message: OPERATOR_MESSAGES.reconcileQueued });
+    const event = m.send.mock.calls[0]![0] as SentEvent;
+    expect(event.data).toMatchObject({ reconcileOnly: true, advanceData: zal.advanceEnvelope });
+    const [, values] = tx.executeSql.mock.calls[0] as [string, unknown[]];
+    expect(values[4]).toBe(true);
+    expect(refused).toEqual({ success: false, error: operatorIssueDateMessage('advance') });
+  });
+
+  it('ISSUE_DATE_PASSED (ZAL z danymi, wczorajsza data) z otwartym zamiarem intent: „Tylko uzgodnij” zlecone — uzgodnienie nie patrzy na datę', async () => {
+    m.invoice = zalRow(YESTERDAY, { last_error_code: 'ISSUE_DATE_PASSED' }).row;
+    m.openSent = [{ id: 'sub-1', status: 'intent' }];
+    const tx = okTx();
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly: true });
+
+    expect(result).toEqual({ success: true, message: OPERATOR_MESSAGES.reconcileQueued });
+    const [, values] = tx.executeSql.mock.calls[0] as [string, unknown[]];
+    expect(values[4]).toBe(true);
+  });
+
+  it('„Tylko uzgodnij” szkicu z otwartym zamiarem intent: odmowa jak przycisk (tylko failed / rejected), bez zlecenia', async () => {
+    m.invoice = row({ ksef_status: 'draft', last_error_code: null });
+    m.openSent = [{ id: 'sub-1', status: 'intent' }];
+    okTx();
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly: true });
+
+    expect(m.send).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: false, error: OPERATOR_MESSAGES.notFailedOrRejected });
+  });
+
+  it('KSEF_ENV nieustawione (configuredKsefEnvironment → null): odmowa obu trybów, także dla zwykłej faktury, bez zlecenia', async () => {
+    m.env.mockReturnValue(null);
+    okTx();
+
+    const requeue = await operatorRequeueAction(ID, { reconcileOnly: false });
+    m.openSent = [{ id: 'sub-1' }];
+    const reconcile = await operatorRequeueAction(ID, { reconcileOnly: true });
+
+    expect(m.send).not.toHaveBeenCalled();
+    expect(OPERATOR_MESSAGES).toHaveProperty('envUnknown');
+    expect(requeue).toEqual({ success: false, error: OPERATOR_MESSAGES.envUnknown });
+    expect(reconcile).toEqual({ success: false, error: OPERATOR_MESSAGES.envUnknown });
+  });
+
+  it('odczyt wiersza pobiera kolumny kontraktu KSEF_RESEND_SOURCE_COLUMNS, każdą raz', async () => {
+    okTx();
+    await operatorRequeueAction(ID, { reconcileOnly: false });
+
+    const invoiceSelect = m.selects.find((s) => s.table === 'invoices')?.columns ?? '';
+    expect(typeof KSEF_RESEND_SOURCE_COLUMNS).toBe('string');
+    expect(invoiceSelect).toContain(KSEF_RESEND_SOURCE_COLUMNS);
+    const columns = topLevelColumns(invoiceSelect);
+    expect(new Set(columns).size).toBe(columns.length);
   });
 });
 

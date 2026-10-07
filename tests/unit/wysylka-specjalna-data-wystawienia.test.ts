@@ -258,10 +258,13 @@ describe('ISSUE_DATE_PASSED: dokument specjalny tylko w dniu wystawienia (decyzj
     const decision = decideResend({ direction: 'outgoing', status: 'failed', errorCode: SEND_ERROR_CODES.ISSUE_DATE_PASSED, invoiceKind: 'advance' });
     expect(decision).toMatchObject({ allowed: false, reason: 'terminal' });
     expect((decision as { message: string }).message).toMatch(/datę wystawienia sprzed dzisiaj/);
-    const button = operatorRequeueButton({ direction: 'outgoing', status: 'failed', errorCode: SEND_ERROR_CODES.ISSUE_DATE_PASSED, invoiceKind: 'advance' } as never);
+    const button = operatorRequeueButton({
+      direction: 'outgoing', status: 'failed', errorCode: SEND_ERROR_CODES.ISSUE_DATE_PASSED, invoiceKind: 'advance',
+      facts: { sendData: 'stored', kindHeld: false, issueDatePassed: true }, environmentKnown: true,
+    });
     expect(button.enabled).toBe(false);
     expect(button.reason).toMatch(/datą wystawienia sprzed dzisiaj/);
-    // Recenzja: „Tylko uzgodnij” jest dla dokumentów specjalnych wyłączony — nie wolno go podpowiadać.
+    // Kod powstaje bez otwartego wpisu — „Tylko uzgodnij” nie ma tu czego uzgadniać.
     expect(button.reason).not.toMatch(/Tylko uzgodnij/);
   });
 });

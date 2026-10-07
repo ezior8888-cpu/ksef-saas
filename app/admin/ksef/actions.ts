@@ -7,13 +7,21 @@ import { revalidatePath } from 'next/cache';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { describeKsefSendError, ksefSendTransactionStep, type KsefSendMode } from '@/lib/invoices/ksef-send-step';
-import { OPEN_SUBMISSION_STATUSES, OPERATOR_MESSAGES, operatorRequeueButton } from '@/lib/admin/ksef-operator-policy';
+import {
+  OPEN_SUBMISSION_STATUSES,
+  OPERATOR_MESSAGES,
+  operatorIssueDateMessage,
+  operatorKindHeldMessage,
+  operatorLegacyDataMessage,
+  operatorReconcileButton,
+  operatorRequeueButton,
+} from '@/lib/admin/ksef-operator-policy';
+import { buildKsefRequeueEvent, KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { describeResetError } from '@/lib/invoices/ksef-send-policy';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
-import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { isKsefSubmissionPaused } from '@/lib/ksef/submission-holds';
 import { createAdminClient } from '@/lib/supabase/admin';
-import type { Invoice } from '@/types/invoice';
 
 /**
  * Akcje operatora `/admin/ksef` (cykl życia faktury, PR 3c). Te same RPC
@@ -24,6 +32,10 @@ import type { Invoice } from '@/types/invoice';
  * „Tylko uzgodnij” to `requeue_ksef_send(p_reconcile_only = true)` — runner
  * zaczyna od uzgodnienia po referencji, więc wymaga otwartego wpisu `sent`;
  * bez niego wysłałby fakturę od nowa, czego operator w tym trybie nie chce.
+ *
+ * Zdarzenie odtwarza `buildKsefRequeueEvent` z kopii na wierszu — także dla
+ * KOR/ZAL/ROZ (A4b PR2a); decyzja jak przycisk (`operatorRequeueButton`,
+ * `operatorReconcileButton`), z tymi samymi faktami.
  */
 
 export type OperatorActionResult =
@@ -35,21 +47,26 @@ interface OperatorRow {
   tenant_id: string;
   direction: string | null;
   invoice_kind: string | null;
+  issue_date: string | null;
   ksef_status: string | null;
   last_error_code: string | null;
   internal_number: string | null;
   fa3_data: unknown;
+  special_data: unknown;
   tenants: { nip: string | null } | { nip: string | null }[] | null;
 }
+
+const OPERATOR_ROW_COLUMNS =
+  `${KSEF_RESEND_SOURCE_COLUMNS}, id, tenant_id, direction, ksef_status, last_error_code, internal_number, tenants(nip)` as const;
 
 async function loadRow(invoiceId: string): Promise<OperatorRow | null> {
   const { data, error } = await createAdminClient()
     .from('invoices')
-    .select('id, tenant_id, direction, invoice_kind, ksef_status, last_error_code, internal_number, fa3_data, tenants(nip)')
+    .select(OPERATOR_ROW_COLUMNS)
     .eq('id', invoiceId)
     .maybeSingle();
   if (error) throw new Error(`invoice lookup: ${error.message}`);
-  return (data as OperatorRow | null) ?? null;
+  return (data as unknown as OperatorRow | null) ?? null;
 }
 
 export async function operatorRequeueAction(
@@ -59,21 +76,16 @@ export async function operatorRequeueAction(
   const admin = await requireAdmin();
   const row = await loadRow(invoiceId);
   if (!row) return { success: false, error: OPERATOR_MESSAGES.notFound };
-  if (row.direction !== 'outgoing') return { success: false, error: OPERATOR_MESSAGES.incoming };
-  if ((row.invoice_kind ?? 'regular') !== 'regular') return { success: false, error: OPERATOR_MESSAGES.special };
-  const invoice = row.fa3_data as Invoice | null;
-  if (!invoice || typeof invoice !== 'object' || !Array.isArray(invoice.lines)) {
-    return { success: false, error: OPERATOR_MESSAGES.incomplete };
-  }
-  // Ta sama decyzja co przycisk (A4): klasa terminal, cudzy duplikat, inne środowisko.
-  if (!options.reconcileOnly) {
-    const decision = operatorRequeueButton({
-      direction: row.direction, status: row.ksef_status, errorCode: row.last_error_code, invoiceKind: row.invoice_kind,
-    });
-    if (!decision.enabled) return { success: false, error: decision.reason ?? OPERATOR_MESSAGES.reconcileClass };
-  }
+  const environment = configuredKsefEnvironment();
+  const facts = ksefResendFacts(row, environment);
+  const common = {
+    direction: row.direction, status: row.ksef_status, invoiceKind: row.invoice_kind,
+    facts, environmentKnown: environment !== null,
+  };
 
+  // Ta sama decyzja co przycisk (A4): klasa, środowisko, dane z kopii, rodzaj, data (decyzja b).
   const supabase = createAdminClient();
+  let decision;
   if (options.reconcileOnly) {
     const { data: open, error } = await supabase
       .from('ksef_submissions')
@@ -83,8 +95,12 @@ export async function operatorRequeueAction(
       .in('status', [...OPEN_SUBMISSION_STATUSES])
       .limit(1);
     if (error) throw new Error(`ksef_submissions: ${error.message}`);
-    if (!open || open.length === 0) return { success: false, error: OPERATOR_MESSAGES.noOpenSent };
+    decision = operatorReconcileButton({ ...common, openSent: (open ?? []).length > 0 });
+  } else {
+    decision = operatorRequeueButton({ ...common, errorCode: row.last_error_code });
   }
+  if (!decision.enabled) return { success: false, error: decision.reason ?? OPERATOR_MESSAGES.reconcileClass };
+  if (!environment) return { success: false, error: OPERATOR_MESSAGES.envUnknown };
 
   // Hamulec operatora — fail-closed, jak przy kolejkowaniu z akcji klienta.
   try {
@@ -93,30 +109,25 @@ export async function operatorRequeueAction(
     return { success: false, error: OPERATOR_MESSAGES.pausedUnknown };
   }
 
-  const tenant = Array.isArray(row.tenants) ? row.tenants[0] : row.tenants;
-  const nip = (tenant?.nip ?? invoice.seller?.nip ?? '').replace(/\s+/g, '');
-  if (!nip) return { success: false, error: OPERATOR_MESSAGES.noNip };
-  const environment = requireConfiguredKsefEnvironment();
+  // Zdarzenie z kopii na wierszu — ta sama definicja co cron (A4b PR2a).
+  const built = buildKsefRequeueEvent(row, environment, randomUUID(), { reconcileOnly: options.reconcileOnly });
+  if (!built.ok) {
+    // Zwykle nieosiągalne po decyzji przycisku — chyba że minęła północ między krokami.
+    const refusal = built.reason === 'missing-special-data' || built.reason === 'incomplete'
+      ? operatorLegacyDataMessage(row.invoice_kind)
+      : built.reason === 'kind-held'
+        ? operatorKindHeldMessage(row.invoice_kind)
+        : built.reason === 'issue-date'
+          ? operatorIssueDateMessage(row.invoice_kind)
+          : OPERATOR_MESSAGES.noNip;
+    return { success: false, error: refusal };
+  }
   const mode: KsefSendMode = { kind: 'requeue', actorUserId: admin.userId, reconcileOnly: options.reconcileOnly };
-  const sendAttemptId = randomUUID();
+  const sendAttemptId = built.sendAttemptId;
 
   try {
     await sendJobEvent(
-      {
-        groupId: row.tenant_id,
-        singletonKey: row.id,
-        name: 'invoice/submit.requested',
-        data: {
-          tenantId: row.tenant_id,
-          invoiceId: row.id,
-          invoice,
-          nip,
-          environment,
-          sendAttemptId,
-          // Runner w tym trybie nigdy nie wysyła od nowa (brak wpisu sent → RESULT_UNCERTAIN).
-          ...(options.reconcileOnly ? { reconcileOnly: true } : {}),
-        },
-      },
+      built.event,
       { inTransaction: ksefSendTransactionStep(mode, { invoiceId: row.id, tenantId: row.tenant_id, attemptId: sendAttemptId }) },
     );
   } catch (e) {

@@ -847,6 +847,11 @@ export async function runSubmitInvoice(
       advanceData: parsed.data.advanceData,
       finalData: parsed.data.finalData,
       finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
+      // A4b PR2a: przed uzgodnieniem bez porównania z bieżącym profilem firmy —
+      // tylko gdy będzie co uzgadniać. Granica przed POST sprawdza go zawsze.
+      skipLiveTenantSeller: async () => parsed.data.reconcileOnly === true
+        || (await findOpenKsefSubmission(tenantId, invoiceId)) !== null
+        || (await findOpenKsefSubmissionIntents(tenantId, invoiceId)).length > 0,
     });
 
     logger.info('Rozpoczynam wysyłkę faktury', {

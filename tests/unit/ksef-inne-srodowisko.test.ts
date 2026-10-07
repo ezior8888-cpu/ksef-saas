@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { StatusBadge } from '@/components/invoices/status-badge';
 import { OPERATOR_MESSAGES, operatorInvoiceButtons } from '@/lib/admin/ksef-operator-policy';
+import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { decideResend, failedInvoiceButtons, KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
 import { SEND_ERROR_CODES, sendErrorClassOf } from '@/lib/ksef/send-error-classes';
 
@@ -17,6 +18,8 @@ import { SEND_ERROR_CODES, sendErrorClassOf } from '@/lib/ksef/send-error-classe
  * przycisku — ślepa uliczka.
  */
 const CODE = SEND_ERROR_CODES.ENV_MISMATCH;
+/** Fakty ponowienia operatora (A4b PR2a): zwykła faktura z danymi. */
+const STORED: KsefResendFacts = { sendData: 'stored', kindHeld: false, issueDatePassed: false };
 
 describe('D-A4-2: ENV_MISMATCH — powrót do szkicu, decyzja klienta', () => {
   it('klasa terminal: jedyne wyjście to szkic (RPC odmawia ponowienia w bieżącym środowisku)', () => {
@@ -61,12 +64,14 @@ describe('D-A4-2: ENV_MISMATCH — powrót do szkicu, decyzja klienta', () => {
   it('operator: szkic bez dowodu kontaktu; ponowienie zablokowane z powodem; „Tylko uzgodnij” przy otwartym wpisie', () => {
     const clean = operatorInvoiceButtons({
       direction: 'outgoing', status: 'failed', errorCode: CODE, invoiceKind: 'regular', openSent: false, evidence: false,
+      facts: STORED, environmentKnown: true,
     });
     expect(clean.reset).toEqual({ enabled: true, reason: null });
     expect(clean.requeue).toEqual({ enabled: false, reason: OPERATOR_MESSAGES.envMismatchRequeue });
 
     const contacted = operatorInvoiceButtons({
       direction: 'outgoing', status: 'failed', errorCode: CODE, invoiceKind: 'regular', openSent: true, evidence: true,
+      facts: STORED, environmentKnown: true,
     });
     expect(contacted.reset).toEqual({ enabled: false, reason: OPERATOR_MESSAGES.evidence });
     expect(contacted.reconcile).toEqual({ enabled: true, reason: null });

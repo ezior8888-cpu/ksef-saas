@@ -9,10 +9,13 @@
 
 import { hasOpenSubmission } from '@/lib/admin/ksef-operator-policy';
 import { requireAdmin } from '@/lib/auth/admin-guard';
+import { KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts, type KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
+import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { parseDuplicateCheck, type KsefDuplicateCheck } from '@/lib/ksef/duplicate-check';
 import { sendErrorClassOf, type SendErrorClass } from '@/lib/ksef/send-error-classes';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/types/database';
+import type { KsefEnvironment } from '@/types/ksef';
 
 /** Wartość filtra `?code=` dla faktur bez kodu (historycznych). */
 export const NO_CODE_FILTER = 'brak';
@@ -250,7 +253,14 @@ export interface InvoiceLifecycle {
   openSent: boolean;
   /** Dowód kontaktu z KSeF (`ksef_has_contact_evidence`) — blokuje powrót do szkicu. */
   evidence: boolean;
+  /** Ponowienie z kopii (A4b PR2a) — bez treści dokumentu. */
+  resendFacts: KsefResendFacts;
+  /** `KSEF_ENV` aplikacji (`null` = niepoprawne — nic nie zlecamy). */
+  environment: KsefEnvironment | null;
 }
+
+const LIFECYCLE_INVOICE_COLUMNS =
+  `${KSEF_RESEND_SOURCE_COLUMNS}, id, tenant_id, internal_number, direction, invoice_type, ksef_status, ksef_number, ksef_environment, last_error_code, last_error, ksef_send_owner, submitted_to_ksef_at, last_attempt_at, submission_attempts, xml_storage_path, updated_at, tenants(name, nip)` as const;
 
 export async function getInvoiceLifecycle(invoiceId: string): Promise<InvoiceLifecycle | null> {
   await requireAdmin();
@@ -258,9 +268,7 @@ export async function getInvoiceLifecycle(invoiceId: string): Promise<InvoiceLif
 
   const { data: inv, error } = await supabase
     .from('invoices')
-    .select(
-      'id, tenant_id, internal_number, direction, invoice_kind, invoice_type, issue_date, ksef_status, ksef_number, ksef_environment, last_error_code, last_error, ksef_send_owner, submitted_to_ksef_at, last_attempt_at, submission_attempts, xml_storage_path, updated_at, tenants(name, nip)',
-    )
+    .select(LIFECYCLE_INVOICE_COLUMNS)
     .eq('id', invoiceId)
     .maybeSingle();
   if (error) throw new Error(`invoice lookup: ${error.message}`);
@@ -285,6 +293,7 @@ export async function getInvoiceLifecycle(invoiceId: string): Promise<InvoiceLif
   if (audit.error) throw new Error(`audit_logs: ${audit.error.message}`);
 
   const tenant = tenantOf(inv.tenants as TenantEmbed);
+  const environment = configuredKsefEnvironment();
   const history: SubmissionHistoryRow[] = (submissions.data ?? []).map((s) => ({
     id: s.id,
     status: s.status,
@@ -333,5 +342,7 @@ export async function getInvoiceLifecycle(invoiceId: string): Promise<InvoiceLif
     })),
     openSent: hasOpenSubmission(history),
     evidence: evidence.error ? true : Boolean(evidence.data),
+    resendFacts: ksefResendFacts(inv, environment),
+    environment,
   };
 }

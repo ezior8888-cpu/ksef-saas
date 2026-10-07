@@ -86,7 +86,7 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00144 | Claude (D-A4-1b-3 PR A, plan zero zgubionych faktur) | `ksef_submission_original_check`: kolumna `ksef_submissions.original_check` jsonb — dane oryginału przy nierozstrzygniętym 440 (powód, dane, skrót, archiwum, data nadania) | w `main` (#230), **wgrana na db-1 05.10** (przed wdrożeniem, strażnik 0) |
 | 00145 | Bartosz/Igor (#195, C-16) → Claude | `roz_amount_due`: wyzwalacz `update_invoice_payment_status` i widok `invoices_overdue` liczą ROZ od `payment_data.amountDue` (reszta po zaliczkach), ROZ w całości pokryta zaliczkami = `paid`; wyzwalacz reaguje też na `payment_data`, `invoice_kind` (dawniej 00130) | #234; **wgrana na db-1 06.10** |
 | 00146 | Claude (B4, #192) | `expense_ocr_job_identity` — najwyżej jeden wydatek na zadanie OCR w firmie (`uq_expenses_tenant_ocr_job`); preflight dubli, bez zmian danych | #238; **wgrana na db-1 06.10** |
-| 00147 | Claude (A4b, decyzja 06.10) | `ksef_error_code_issue_date_passed` — kod `ISSUE_DATE_PASSED` (terminal, bez automatu): worker nie wysyła KOR/ZAL/ROZ z datą wystawienia sprzed dzisiaj | PR A4b bezpiecznik daty; przed wdrożeniem |
+| 00147 | Claude (A4b, decyzja 06.10) | `ksef_error_code_issue_date_passed` — kod `ISSUE_DATE_PASSED` (terminal, bez automatu): worker nie wysyła KOR/ZAL/ROZ z datą wystawienia sprzed dzisiaj | #242; **wgrana na db-1 07.10** (przed wdrożeniem) |
 | **00148** | — | następny wolny (00200 zajęte) | — |
 
 **Reguła numeracji (Bartosz, 05.10.2026):** rezerwacje sprzed bieżącej

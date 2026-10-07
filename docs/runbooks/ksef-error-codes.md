@@ -26,8 +26,9 @@ Kody `invoices.last_error_code` z katalogu `ksef_error_codes` (00131, 00141).
 Zasada: każdy stan ma **wyjście** — automat (cron `ksef-lifecycle-reconcile`),
 klient (przycisk na fakturze) albo operator (`/admin/ksef/<id>`). Strażnikiem
 tej tabeli jest test `tests/unit/ksef-wyjscia-kodow.test.ts` (macierz kod ×
-rodzaj dokumentu × dowód kontaktu × otwarty wpis); ślepe uliczki z kolumny
-„Luka” są w nim wypisane jawnie.
+rodzaj dokumentu (FA/KOR/ZAL/ROZ) × dane do ponowienia × środowisko × data
+wystawienia (dziś/wcześniej) × dowód kontaktu × otwarty wpis); ślepe uliczki
+z kolumny „Luka” są w nim wypisane jawnie.
 
 | Kod | Klasa | Skąd | Klient | Automat | Operator | Luka |
 |---|---|---|---|---|---|---|
@@ -36,23 +37,35 @@ rodzaj dokumentu × dowód kontaktu × otwarty wpis); ślepe uliczki z kolumny
 | `INVALID_DOCUMENT` | terminal | walidacja dokumentu, odwołania (`assertSubmitReferences`) | Wróć do szkicu | — | Wróć do szkicu | jak wyżej |
 | `KSEF_NUMBER_TAKEN` | terminal | cudzy 440, oryginał z innego programu (treść sprawdzona, D-A4-1a) | Wróć do szkicu → usuń → wystaw z nowym numerem (albo nie wystawiaj, jeśli to ta sama sprzedaż) | — | Wróć do szkicu | — (wpisy `number_taken` nie są dowodem kontaktu) |
 | `ENV_MISMATCH` | terminal (D-A4-2, 00143) | zdarzenie z innego środowiska KSeF niż skonfigurowane w workerze (zlecone na TEST, worker na PROD; albo worker bez poprawnego `KSEF_ENV`) — runner nie dotknął KSeF | Wróć do szkicu → zdecyduj, czy wysłać w obecnym środowisku | — | Wróć do szkicu (bez dowodu); „Tylko uzgodnij” tylko dla otwartego wpisu z OBECNEGO środowiska; **nigdy** „Wyślij ponownie” (baza odmawia) | przy dowodzie kontaktu bez otwartego wpisu — jak wyżej; otwarty wpis sprzed przełączenia środowiska — bez bezpiecznego wyjścia do F2 (niżej) |
-| `ISSUE_DATE_PASSED` | terminal (decyzja 06.10.2026, 00147) | dokument specjalny (KOR, ZAL, ROZ) z datą wystawienia sprzed dzisiaj — worker odmówił przed wysyłką (runner) albo tuż przed plikiem (hak otwarcia sesji, po uwierzytelnieniu); ponowienie, oczekiwanie albo samo uwierzytelnienie przeniosło wysyłkę za północ, a w KSeF dokument wystawia się w dniu wysyłki. Zostaje okno samego żądania z plikiem (poniżej sekundy) | Wróć do szkicu → usuń szkic i wystaw dokument od nowa z dzisiejszą datą (szkicu dokumentu specjalnego się nie wysyła) | — | Wróć do szkicu (bez dowodu); **nigdy** „Wyślij ponownie” (baza odmawia); „Tylko uzgodnij” jest dla dokumentów specjalnych wyłączony | z dowodem kontaktu (z otwartym wpisem albo bez) — jak każdy dokument specjalny, „Dokumenty specjalne” niżej (A4b PR2, B2; decyzja o wysyłce po północy — B1) |
-| `KSEF_UNAVAILABLE` | transient | 5xx, timeout | Wyślij ponownie / Wróć do szkicu | I6: co godzinę przez 24 h | Wyślij ponownie / szkic | — |
-| `KSEF_RATE_LIMIT` | transient | 429 | jak wyżej | I6 | jak wyżej | — |
-| `KSEF_SESSION` | transient | 401/403, 21184 | jak wyżej | I6 | jak wyżej | — |
-| `INFRA` | transient | baza / PostgREST / R2 przed POST | jak wyżej | I6 | jak wyżej | — |
-| `CREDENTIALS_UNAVAILABLE` | transient | klucz po rotacji, deszyfrowanie | Wyślij ponownie / szkic | — (alarm) | napraw klucz → Wyślij ponownie | komunikat obiecuje automat (ustalenie A2b) |
-| `TRANSIENT_EXHAUSTED` | transient | 24 h ponowień bez skutku | Wyślij ponownie / szkic | — | Wyślij ponownie / szkic | komunikat obiecuje automat (ustalenie A2b) |
-| `NOT_IN_KSEF` | transient | „tylko uzgodnij”: KSeF nie ma faktury (A2b) | Wyślij ponownie / Wróć do szkicu | — (decyzja o dacie: B1/B2) | Wyślij ponownie / szkic | — |
-| `KSEF_PAUSED` | hold | wyłącznik operatora | czeka | I7: po zdjęciu hamulca | Wyślij ponownie / szkic | — |
-| `KOR_HOLD` | hold | hamulec korekt | czeka | — | Wróć do szkicu (bez dowodu) | ponowienie korekty → A4b (00137); zdjęcie hamulca → C4 |
-| `ROZ_HOLD_RECONCILE` | hold | hamulec ROZ | czeka | — | Wróć do szkicu (bez dowodu) | jak wyżej |
+| `ISSUE_DATE_PASSED` | terminal (decyzja 06.10.2026, 00147) | dokument specjalny (KOR, ZAL, ROZ) z datą wystawienia sprzed dzisiaj — worker odmówił przed wysyłką (runner) albo tuż przed plikiem (hak otwarcia sesji, po uwierzytelnieniu); ponowienie, oczekiwanie albo samo uwierzytelnienie przeniosło wysyłkę za północ, a w KSeF dokument wystawia się w dniu wysyłki. Zostaje okno samego żądania z plikiem (poniżej sekundy) | Wróć do szkicu → usuń szkic i wystaw dokument od nowa z dzisiejszą datą (szkicu dokumentu specjalnego się nie wysyła) | — | Wróć do szkicu (bez dowodu); **nigdy** „Wyślij ponownie” (baza odmawia); kod powstaje bez otwartego wpisu (worker odmawia po uzgodnieniu, przed plikiem i zamiarem), więc nie ma czego uzgadniać | z dowodem kontaktu — brak wyjścia w panelu do B2: sprawdź dokument w KSeF i zgłoś Bartoszowi |
+| `KSEF_UNAVAILABLE` | transient | 5xx, timeout | Wyślij ponownie / Wróć do szkicu | I6: co godzinę przez 24 h; KOR/ZAL¹ tylko w dniu wystawienia | Wyślij ponownie / szkic (KOR/ZAL¹ w dniu wystawienia) | — |
+| `KSEF_RATE_LIMIT` | transient | 429 | jak wyżej | I6 (KOR/ZAL¹ jak wyżej) | jak wyżej | — |
+| `KSEF_SESSION` | transient | 401/403, 21184 | jak wyżej | I6 (KOR/ZAL¹ jak wyżej) | jak wyżej | — |
+| `INFRA` | transient | baza / PostgREST / R2 przed POST | jak wyżej | I6 (KOR/ZAL¹ jak wyżej) | jak wyżej | — |
+| `CREDENTIALS_UNAVAILABLE` | transient | klucz po rotacji, deszyfrowanie | Wyślij ponownie / szkic | — (alarm) | napraw klucz → Wyślij ponownie (KOR/ZAL¹ w dniu wystawienia) | komunikat obiecuje automat (ustalenie A2b) |
+| `TRANSIENT_EXHAUSTED` | transient | 24 h ponowień bez skutku | Wyślij ponownie / szkic | — | Wyślij ponownie / szkic (KOR/ZAL¹ w dniu wystawienia) | komunikat obiecuje automat (ustalenie A2b) |
+| `NOT_IN_KSEF` | transient | „tylko uzgodnij”: KSeF nie ma faktury (A2b) | Wyślij ponownie / Wróć do szkicu | — (decyzja o dacie: B1/B2) | Wyślij ponownie / szkic (KOR/ZAL¹ w dniu wystawienia) | — |
+| `KSEF_PAUSED` | hold | wyłącznik operatora | czeka | I7: po zdjęciu hamulca (KOR/ZAL¹ tylko w dniu wystawienia) | Wyślij ponownie / szkic | — |
+| `KOR_HOLD` | hold | hamulec korekt | brak przycisków (decyzja a); komunikat obiecuje automat — C4 | — | TEST: „Wyślij ponownie”¹; PROD: Wróć do szkicu (bez dowodu) | PROD z dowodem kontaktu — C4 |
+| `ROZ_HOLD_RECONCILE` | hold | hamulec ROZ | brak przycisków (decyzja a); komunikat obiecuje automat — C4 | — | Wróć do szkicu (bez dowodu) | z dowodem kontaktu — C4 |
 | `KSEF_DUPLICATE_RECONCILE` | reconcile | 440, którego automat nie rozstrzygnął: oryginał z FaktFlow o innym pliku, numer KSeF w innej fakturze firmy, oryginału nie da się pobrać (403 — token bez `InvoiceRead`; po ponowieniach 5xx/429/21164/21165) | „zajmujemy się” + dane oryginału z KSeF na karcie faktury (D-A4-1b-3, 00144) | I5 przy otwartym wpisie > 48 h (weryfikacja od nowa) | „Tylko uzgodnij” przy otwartym wpisie (powtarza weryfikację); karta `/admin/ksef/[id]`: `original_check` (powód, dane, skrót, archiwum) | bez otwartego wpisu: **ślepa uliczka** → ręczny werdykt D-A4-1b |
-| `RESULT_UNCERTAIN` | reconcile | niepewny wynik, KSeF nie odpowiada | „nie wystawiaj ponownie” | I5 (A3): „tylko uzgodnij” raz na dobę | „Tylko uzgodnij” / **Wyślij ponownie** (A4) | — |
-| `INVALID_EVENT` | reconcile | zły payload zdarzenia | „zajmujemy się” | — | **Wyślij ponownie** (A4) — zdarzenie odtworzone z wiersza | — |
-| `ENQUEUE_LOST` | reconcile | `queued` bez zlecenia, z dowodem kontaktu (I1) | „zajmujemy się” | I5 przy otwartym wpisie > 48 h | **Wyślij ponownie** (A4) / „Tylko uzgodnij” | — |
+| `RESULT_UNCERTAIN` | reconcile | niepewny wynik, KSeF nie odpowiada | „nie wystawiaj ponownie” | I5 (A3): „tylko uzgodnij” raz na dobę, także KOR/ZAL¹ bez względu na datę | „Tylko uzgodnij” (KOR/ZAL¹ każdego dnia) / **Wyślij ponownie** (A4; KOR/ZAL¹ tylko w dniu wystawienia) | dokument specjalny po dacie wystawienia bez otwartego wpisu — do B2 |
+| `INVALID_EVENT` | reconcile | zły payload zdarzenia | „zajmujemy się” | — | **Wyślij ponownie** (A4) — zdarzenie odtworzone z wiersza (KOR/ZAL¹ tylko w dniu wystawienia) | dokument specjalny po dacie wystawienia bez otwartego wpisu — do B2 |
+| `ENQUEUE_LOST` | reconcile | `queued` bez zlecenia, z dowodem kontaktu (I1) | „zajmujemy się” | I5 przy otwartym wpisie > 48 h (także KOR/ZAL¹ bez względu na datę) | **Wyślij ponownie** (A4; KOR/ZAL¹ tylko w dniu wystawienia) / „Tylko uzgodnij” | dokument specjalny po dacie wystawienia bez otwartego wpisu — do B2 |
 | `NO_CERTIFICATE` | setup | brak certyfikatu | Ustawienia → Wyślij ponownie | — | Wyślij ponownie | — |
 | `NOT_VERIFIED` | setup | NIP niezweryfikowany | Ustawienia → Wyślij ponownie | — | Wyślij ponownie | — |
+
+¹ Dokument specjalny z zapisanymi danymi, rodzaj niewstrzymany w tym
+środowisku (KOR nie na PROD, ROZ nigdy — C4). I6 czeka godzinę po każdym
+błędzie, więc błąd KOR/ZAL po ok. 23:00 nie zostanie ponowiony automatycznie;
+ponowienie, które dojdzie do KSeF po północy, kończy się `ISSUE_DATE_PASSED`.
+
+Pola raportu crona (log workera „Cykl życia: przebieg zakończony”):
+`skippedNoData` — brak danych do ponowienia (zwykła bez pozycji albo stary
+dokument specjalny); `skippedHeld` — rodzaj wstrzymany (w praktyce I5: KOR na
+PROD, ROZ); `skippedIssueDate` — północ między odczytem a zleceniem;
+`skippedConflict` — odrzucona korekta czeka na inną korektę tej samej faktury
+pierwotnej (00135); utrzymujące się > 0 = sprawdź tamtą korektę.
 
 **Dlaczego „Wyślij ponownie” operatora przy klasie reconcile jest bezpieczne**
 (ENQUEUE_LOST, INVALID_EVENT, RESULT_UNCERTAIN): runner najpierw rozstrzyga
@@ -61,10 +74,55 @@ zamrożona (00132), a KSeF nie przyjmie drugiej faktury o tym samym numerze
 (440 — sesja z naszej historii oznacza własny duplikat i `accepted`).
 Duplikat mógłby powstać tylko po zmianie numeru, czyli po powrocie do szkicu.
 
-**Dokumenty specjalne (KOR, ZAL, ROZ):** zdarzenia wysyłki nie da się dziś
-odtworzyć z wiersza, więc ani cron, ani „Wyślij ponownie” ich nie obsługują.
-Wyjściem jest tylko powrót do szkicu, a przy dowodzie kontaktu albo kodzie
-reconcile nie ma żadnego wyjścia → A4b (00137: dane specjalne na wierszu).
+**Dokumenty specjalne (KOR, ZAL, ROZ), od A4b PR2a:** zdarzenie odtwarzamy
+z kopii na wierszu — ZAL z `fa3_data.advanceEnvelope`, KOR/ROZ ze
+`special_data` (00137). Warunki (cron, panel operatora, od PR2b klient): dane
+zapisane; rodzaj niewstrzymany (KOR na PROD — KOR_HOLD, ROZ wszędzie — C4);
+pełna wysyłka tylko w dniu wystawienia (decyzja b, 06.10.2026); uzgodnienie
+(I5, „Tylko uzgodnij”) bez względu na datę, bo nie wysyła. Ponowienie, które
+dojdzie do KSeF po północy, worker zamienia w `ISSUE_DATE_PASSED` (00147).
+Brak danych → „Stary dokument specjalny” niżej. Bez wyjścia do B2: dokument po
+dacie wystawienia bez otwartego wpisu, z dowodem kontaktu albo kodem
+reconcile — sprawdź w KSeF i zgłoś Bartoszowi. Klient do PR2b: tylko „Wróć do
+szkicu” (automat może w dniu wystawienia ponowić ZAL albo KOR na TEST
+wcześniej — wyścig bezpieczny: reset odmawia faktury w kolejce).
+
+### Stary dokument specjalny (bez danych do ponowienia)
+
+KOR/ROZ sprzed 00137 (bez `special_data`) albo ZAL sprzed 02.10.2026 (bez
+`fa3_data.advanceEnvelope`). Na produkcji 05.10.2026: 0 takich dokumentów
+(sekcja 9 `kontrola-faktur-ksef.sh`).
+
+1. Tylko przy dowodzie kontaktu albo kodzie klasy reconcile; w pozostałych
+   przypadkach operator klika „Wróć do szkicu”.
+2. KOR/ROZ: uruchom skrypt — najpierw bez opcji (tylko sprawdza i pokazuje
+   faktura + PIERWSZE zlecenie wysyłki tej faktury z pg-boss, które trzyma joby
+   7 dni):
+   ```bash
+   ./scripts/ops/dopisz-dane-specjalne.sh <id-faktury>
+   ```
+   Wszystkie kolumny warunków muszą być `t`: faktura KOR/ROZ bez
+   `special_data`; job tej faktury (`invoiceId`) i tej samej firmy
+   (`tenantId`); środowisko joba = `KSEF_ENV` workera; treść joba = `fa3_data`;
+   job niesie dane tego rodzaju. Inaczej STOP (inne środowisko — F2;
+   po 7 dniach źródła nie ma — ślepa uliczka, decyzja Bartosza).
+3. Zapis (NIEODWRACALNY — 00137 zapisuje `special_data` raz):
+   ```bash
+   ./scripts/ops/dopisz-dane-specjalne.sh <id-faktury> --wykonaj
+   ```
+   Jedna transakcja: te same warunki w jednym zapytaniu, zapis tylko przy
+   DOKŁADNIE jednym trafionym wierszu (inaczej ROLLBACK) i wpis `audit_logs`
+   `invoice.special_data_backfilled` z id joba. Wyzwalacz 00137 dopuszcza
+   NULL → wartość tylko serwerowi; kształt pilnuje CHECK.
+4. ZAL: tylko gdy `submitted_to_ksef_at IS NULL` i za zgodą Bartosza dla tej
+   faktury (dopisanie `fa3_data.advanceEnvelope` z `data->'advanceData'`). Po
+   przejęciu wysyłki (00124) `fa3_data` jest zamrożone dla każdej roli (00132)
+   — 42501 = STOP, zgłoś Bartoszowi.
+5. Po zapisie wiersz ma dane: I5 i „Tylko uzgodnij” przy otwartym wpisie
+   sent/intent każdego dnia, I6/I7 i „Wyślij ponownie” tylko w dniu
+   wystawienia; poza tym brak wyjścia do B2 (zgłoś Bartoszowi). ROZ i KOR na
+   PROD czekają na C4.
+6. Sekcję 9 `kontrola-faktur-ksef.sh` uruchom ponownie po wdrożeniu PR2a.
 
 **Decyzje do podjęcia (Bartosz):**
 - **D-A4-1 — cudzy 440 — PRZYJĘTA (Bartosz, 04.10.2026).** Automat (D-A4-1a)

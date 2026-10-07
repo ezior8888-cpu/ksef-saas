@@ -36,7 +36,10 @@
 #      od C5c kwoty pozycji (ceny brutto, VAT od sumy stawki)
 #   9. dokumenty specjalne (A4b, 00137): KOR/ZAL/ROZ wg stanu i kodu,
 #      ZAL bez koperty, KOR/ROZ bez special_data (stare i świeże),
-#      środowisko KSeF workera, sonda PostgREST na kolumnę special_data
+#      środowisko KSeF workera, sonda PostgREST na kolumnę special_data;
+#      od A4b PR2a: failed KOR/ZAL/ROZ — czy automat ponowi (kod, data
+#      wystawienia, dane), zwykłe failed bez pozycji, I5 wg danych,
+#      ostatni przebieg crona
 #  10. ostatnie migracje w schema_migrations
 #
 # Błąd jednego zapytania nie przerywa reszty (np. kolumna sprzed migracji).
@@ -199,6 +202,19 @@ sql "KOR/ROZ bez special_data wg stanu (sprzed 00137; po wgraniu migracji)" \
   "SELECT invoice_kind, coalesce(ksef_status,'(null)') AS status, count(*) FROM invoices WHERE direction='outgoing' AND invoice_kind IN ('correction','final') AND special_data IS NULL GROUP BY 1,2 ORDER BY 1,2"
 sql "KOR/ROZ bez special_data utworzone w ostatnich $A4B_HOURS h (po wdrożeniu A4b oczekiwane 0; okno migracja→wdrożenie: każdy stan)" \
   "SELECT id, invoice_kind, internal_number, ksef_status, created_at FROM invoices WHERE direction='outgoing' AND invoice_kind IN ('correction','final') AND special_data IS NULL AND created_at > now() - interval '$A4B_HOURS hours' ORDER BY created_at DESC LIMIT 20"
+# A4b PR2a: ponowienie z kopii. „dane” = lustro storedSendPayload (kształt special_data pilnuje CHECK z 00137).
+sql "failed KOR/ZAL/ROZ: rodzaj | kod | data wystawienia | dane do ponowienia | czy automat I6/I7 ponowi | liczba (KOR zalezy od KSEF_ENV wyzej; I5 uzgadnia takze po terminie)" \
+  "SELECT invoice_kind, kod, data_wyst, dane, CASE WHEN invoice_kind='final' THEN 'nie - ROZ_HOLD do C4' WHEN NOT dane THEN 'nie - brak danych, runbook Stary dokument specjalny' WHEN NOT kod_automatu THEN 'nie - kod bez automatu (klient albo operator)' WHEN data_wyst <> 'dzis' THEN 'nie - data wystawienia minela (decyzja b)' WHEN invoice_kind='correction' THEN 'tylko przy KSEF_ENV=test (production: KOR_HOLD)' ELSE 'tak - I6/I7 dzis' END AS automat, count(*) FROM (SELECT i.invoice_kind, coalesce(i.last_error_code,'(brak kodu)') AS kod, (coalesce(c.auto_requeue, false) OR i.last_error_code IS NOT DISTINCT FROM 'KSEF_PAUSED') AS kod_automatu, CASE WHEN i.issue_date = (now() AT TIME ZONE 'Europe/Warsaw')::date THEN 'dzis' ELSE 'przed dzis' END AS data_wyst, (jsonb_typeof(i.fa3_data->'lines') IS NOT DISTINCT FROM 'array' AND CASE WHEN i.invoice_kind='advance' THEN jsonb_typeof(i.fa3_data->'advanceEnvelope') IS NOT DISTINCT FROM 'object' ELSE i.special_data IS NOT NULL END) AS dane FROM invoices i LEFT JOIN ksef_error_codes c ON c.code = i.last_error_code WHERE i.direction='outgoing' AND i.ksef_status='failed' AND i.invoice_kind<>'regular') x GROUP BY 1,2,3,4,5 ORDER BY 1,2,3,4"
+sql "zwykle failed z kodem automatu bez tablicy pozycji w fa3_data (I6/I7 pomijaja co przebieg: skippedNoData): kod | liczba" \
+  "SELECT coalesce(i.last_error_code,'(brak kodu)') AS kod, count(*) FROM invoices i LEFT JOIN ksef_error_codes c ON c.code = i.last_error_code WHERE i.direction='outgoing' AND i.ksef_status='failed' AND i.invoice_kind='regular' AND (coalesce(c.auto_requeue, false) OR i.last_error_code = 'KSEF_PAUSED') AND jsonb_typeof(i.fa3_data->'lines') IS DISTINCT FROM 'array' GROUP BY 1 ORDER BY 1"
+sql "I5: failed/rejected z wpisem sent/intent starszym niz 48 h: rodzaj | stan | dane | czy automat I5 uzgodni | liczba (KOR zalezy od KSEF_ENV wyzej)" \
+  "SELECT invoice_kind, ksef_status, dane, CASE WHEN invoice_kind='final' THEN 'nie - ROZ_HOLD do C4, operator' WHEN NOT dane THEN 'nie - brak danych, runbook Stary dokument specjalny' WHEN invoice_kind='correction' THEN 'tylko przy KSEF_ENV=test (production: KOR_HOLD)' ELSE 'tak - I5 raz na dobe' END AS automat, count(*) FROM (SELECT DISTINCT i.id, i.invoice_kind, i.ksef_status, (jsonb_typeof(i.fa3_data->'lines') IS NOT DISTINCT FROM 'array' AND CASE WHEN i.invoice_kind='regular' THEN true WHEN i.invoice_kind='advance' THEN jsonb_typeof(i.fa3_data->'advanceEnvelope') IS NOT DISTINCT FROM 'object' ELSE i.special_data IS NOT NULL END) AS dane FROM ksef_submissions s JOIN invoices i ON i.id = s.invoice_id WHERE s.status IN ('sent','intent') AND s.attempted_at < now() - interval '48 hours' AND i.ksef_status IN ('failed','rejected')) x GROUP BY 1,2,3,4 ORDER BY 1,2,3,4"
+printf -- '--- ostatni przebieg cyklu życia (worker, 30 min): skippedNoData / skippedHeld / skippedIssueDate / skippedConflict\n'
+"${SSH[@]}" "root@$APP" \
+  "W=\$(docker ps --format '{{.Names}}' | grep '^$WORKER_PREFIX' | head -1); \
+   if [ -z \"\$W\" ]; then echo '  (brak kontenera workera)'; exit 0; fi; \
+   docker logs --since 30m \"\$W\" 2>&1 | grep 'przebieg zakończony' | tail -1" \
+  || echo "  (nie udało się odczytać logu workera)"
 # PATCH bez tokenu (rola anon) na nieistniejące id — niczego nie zmienia, ale
 # PostgREST sprawdza kolumny treści zapisu w swoim cache schematu. SELECT
 # kolumny tego nie wykrywa (puszcza go do Postgresa).
