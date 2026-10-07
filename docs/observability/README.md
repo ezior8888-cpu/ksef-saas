@@ -1,14 +1,15 @@
 # FaktFlow — pakiet F0
 
-Pomiar 04.10.2026 wykonano wyłącznie odczytowo w oknie 11:03–11:22 UTC. F0 pozostaje otwarty: pełne kopie poza hostem i staging są niezaliczone, dowody planów i uprawnień do produktów są niepełne, a kontrakty, prywatność, budżety i role czekają na decyzje.
+Pomiar 04.10.2026 wykonano wyłącznie odczytowo w oknie 11:03–11:22 UTC. F0 pozostaje otwarty: pełne kopie poza hostem i staging są niezaliczone, a dowody produktów oraz pozostałe kontrakty, zasady prywatności i budżety są niepełne. Igor prowadzi monitoring i odbiera F0; Codex wykonuje dostępne prace techniczne, ograniczając udział Bartosza do koniecznych czynności operatorskich.
 
 - [Inwentaryzacja i pochodzenie dowodów](runtime-inventory.md)
 - [Kontrakty wyniku i korelacji](contracts.md)
 - [Polityka danych](data-policy.md)
 - [Bramki i plan odbioru](acceptance-plan.md)
-- [Role i dziesięć decyzji Bartosza](ownership.md)
+- [Role i decyzje F0](ownership.md)
 - [Bezpieczne podsumowanie pomiaru z 04.10](evidence/f0-2026-10-04.json)
 - [Bezpieczny indeks odczytów z 06.10](evidence/f0-2026-10-06.json)
+- [Bezpieczny indeks ustaleń z 07.10](evidence/f0-2026-10-07.json)
 - [Kolektor tylko do odczytu](../../scripts/ops/collect-runtime-inventory.mjs)
 - [Przykład staging](../../ops/observability/environments/staging.example.yaml) / [production](../../ops/observability/environments/production.example.yaml)
 
@@ -39,4 +40,12 @@ uzupełniają dowody istniejących ustawień prywatności i 11 zaliczonych kontr
 pakietu. Odczyt kodu nie jest pomiarem produkcji ani odbiorem G05/TEST-04.
 [Pierwsza partia pytań do Bartosza](ownership.md#pierwsza-partia-pytań-do-bartosza--07102026)
 dotyczy brakujących decyzji i dowodów bez wewnętrznych skrótów lub ponownego
-żądania znanych danych. F0 i nieprzyjęte decyzje pozostają otwarte.
+żądania znanych danych. Odpowiedzi na tę partię zostały przekazane i zapisane
+w [ustaleniach z 07.10](runtime-inventory.md#ustalenia-przekazane-07102026).
+
+Aktualna organizacja pracy: **Igor — właściciel monitoringu i odbioru F0;
+Codex — wykonanie dokumentacji, dostępne odczyty i ocena dowodów**. Nie kierujemy
+domyślnie wszystkich pytań do Bartosza. Celowe KSeF TEST jest uzasadnione,
+zakres kopii i termin staging uzgodnione, brak płatnych planów zadeklarowany,
+a odbiorca alarmów i luka dyżuru zapisane. **G03/G09 pozostają FAIL**, G08
+PENDING; decyzje i deklaracje nie są dowodem wykonania ani odbiorem F0.

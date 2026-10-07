@@ -1,7 +1,9 @@
 # F0 — kontrakty wyników i korelacji
 
-Stan: **propozycja do zatwierdzenia**, 04.10.2026. Igor jest zlecającym F0;
-Bartosz zatwierdza decyzje operacyjne wskazane w [rejestrze](ownership.md).
+Stan: **propozycja do zatwierdzenia**, 04.10.2026. Według ustaleń z 07.10
+Igor jest właścicielem monitoringu i decyzji F0; Codex przygotowuje materiał,
+a udział Bartosza ograniczamy do koniecznych czynności operatorskich zgodnie
+z [rejestrem](ownership.md#decyzje-i-deklaracje-przekazane-07102026).
 Publikacja tego dokumentu nie zatwierdza kontraktów i nie wdraża instrumentacji,
 dziennika ani nowych statusów domenowych. F0-G04 pozostaje **PENDING**.
 

@@ -1,6 +1,6 @@
 # F0 — inwentaryzacja środowisk
 
-Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.2026, 11:03–11:22 UTC. Deklaracje oraz odczyty API dostawców i nieudaną próbę SSH z 06.10 zapisano osobno; nie potwierdzają one aktualnego runtime kontenerów. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
+Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.2026, 11:03–11:22 UTC. Odczyty API i próba SSH z 06.10 oraz decyzje/deklaracje z 07.10 mają osobne źródła; nie potwierdzają aktualnego runtime kontenerów. Igor prowadzi monitoring i odbiera F0, a Codex wykonuje dostępne prace techniczne. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
 
 ## Pochodzenie i granice dowodów
 
@@ -15,8 +15,9 @@ Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.20
 | Próba kolektora z publikowanego pakietu | 06.10, 20:45:46 UTC; kod `80db8b49300cd41854114582cc869f5276aa6943` | Wszystkie hosty `unverified`; ograniczenia SSH, bez nowego pomiaru runtime |
 | API Hetzner | 06.10, odczyty 20:48:15–20:54:29 UTC | Metadane VM, region, przypisane zapory i dostępne obrazy backupu; nie health kontenerów ani zawartość kopii |
 | API Sentry/PostHog EU | 06.10, 20:49:23–20:49:55 UTC | Metadane kont/projektów i część retencji/uprawnień; ograniczenia planów i rozliczeń pozostają jawne |
+| Odpowiedzi i instrukcje przekazane przez Igora | 07.10.2026; czat kontynuacji F0 | Decyzje o KSeF TEST, zakresie kopii/staging i organizacji pracy; deklaracje planów i odbioru alarmów, bez nowego pomiaru |
 
-Legenda: **P** — pomiar z podanym źródłem i oknem; **D** — deklaracja kodu, dokumentu lub użytkownika; **brak dostępu** — punkt nieodczytany. Historyczne wyniki P przypisujemy operatorowi i oknu z 04.10. Odczyty API z 06.10 mają osobne źródła; nieudana próba SSH nie odświeża historycznego runtime.
+Legenda: **P** — pomiar z podanym źródłem i oknem; **D** — deklaracja kodu, dokumentu lub użytkownika; **U** — uzgodniona decyzja lub zakres; **brak dostępu** — punkt nieodczytany. Historyczne wyniki P przypisujemy operatorowi i oknu z 04.10. Odczyty API z 06.10 mają osobne źródła; nieudana próba SSH nie odświeża historycznego runtime.
 
 W trakcie pomiaru inna sesja wdrożyła `ae87bdde93a636fcb2c48aef737e57a80a3315a7`: worker 11:06–11:08, web 11:08–11:20 UTC. Stan końcowy został odczytany o 11:21. Wcześniejsze `dcf48bad` oznacza stan sprzed tego wdrożenia. Sesja zbierająca F0 nie brała udziału we wdrożeniu i nie zmieniała serwerów. SHA działającej aplikacji nie należy utożsamiać z aktualnym `main`.
 
@@ -128,6 +129,37 @@ oraz [CodeQL i skan sekretów](https://github.com/ezior8888-cpu/ksef-saas/action
 Wyniki dotyczą wskazanego commita i środowiska CI; nie są odbiorem
 infrastruktury, polityki danych ani całego F0.
 
+## Ustalenia przekazane 07.10.2026
+
+Źródło: odpowiedzi i późniejsze instrukcje Igora w tej kontynuacji, na bazie
+pakietu `4a0113a`. Szczegóły decyzji są w [ownership](ownership.md#decyzje-i-deklaracje-przekazane-07102026),
+a bezpieczny zapis w [indeksie ustaleń](evidence/f0-2026-10-07.json).
+To nie jest nowe okno pomiaru serwerów lub kont dostawców.
+
+- **U — KSeF TEST:** celowy wybór przed startem produktu. Informacja o braku
+  prawdziwych klientów jest deklaracją. TEST → PROD pozostaje osobnym go-live
+  z planu faktur (F1/W15/S13), bez realizacji w tym czacie.
+- **U — pełne kopie:** codzienny pełny `pg_dump` z auth/storage, oba MinIO,
+  szyfrowanie i cel UE poza źródłami; 7 kopii dziennych, 4 tygodniowe,
+  12 miesięcznych oraz miesięczne próbne odtworzenie. **G09 FAIL** — zakres
+  uzgodniony, bez dowodu wykonania i bez restore w tej kontynuacji.
+- **U — staging:** osobne DB/kolejka/storage/klucze, KSeF TEST i Stripe test;
+  do 31.10.2026, po kopiach i przed Closed Alpha. **G03 FAIL** — plan i termin
+  nie są dowodem istniejącego środowiska.
+- **D — konta:** brak płatnych planów Sentry/PostHog. Nie ustalono przez to
+  nazwy darmowego planu, całkowitego kosztu ani brakujących limitów/retencji.
+  G07 nadal ma częściowe dowody; odczyt API z 06.10 pozostaje historyczny.
+- **D — alarmy:** zadeklarowano Slack/Telegram i raport email/Telegram o 06:00;
+  odbiór przez Bartosza best effort 08:00–22:00. Igor potwierdził Europe/Warsaw.
+  Formalnego dyżuru/zastępstwa i dowodu doręczeń nie ma; luka G08 pozostaje.
+- **U — prowadzenie F0:** Igor przejmuje monitoring, koordynację decyzji i
+  końcowy odbiór; Codex wykonuje dostępne prace techniczne. Udział Bartosza
+  ograniczamy do koniecznych czynności operatorskich. To nie przekierowuje
+  automatycznie alarmów do Igora i nie zatwierdza wyników F0.
+
+Stare indeksy z 04.10 i 06.10 pozostają niezmienione. Nie uruchomiono
+konfiguracji kopii/staging, zmian dostawców, migracji, wdrożeń, restore ani F1.
+
 ## Środowiska i wersje produkcji
 
 Poniższa tabela opisuje wyłącznie pomiar runtime z **04.10.2026**.
@@ -201,7 +233,10 @@ z 06.10 są uwzględnione w aktualnym [planie odbioru](acceptance-plan.md).
 | G6 — kontrakty/prywatność/budżety/role | F0-G04/G05/G06/G08 | PENDING |
 | G7 — dokumenty i kolektor w repo | Dostarczenie pakietu | Udostępnione w pakiecie gałęzi/PR; publikacja nie oznacza zaliczenia F0 |
 
-Pełne kryteria i proponowane budżety: [acceptance-plan.md](acceptance-plan.md). Dziesięć decyzji Bartosza i rozdział ról: [ownership.md](ownership.md). Wszystkie propozycje z załącznika pozostają niezatwierdzone; nie wykonano ich jako instrukcji.
+Pełne kryteria i proponowane budżety: [acceptance-plan.md](acceptance-plan.md).
+Rejestr decyzji i aktualny rozdział ról: [ownership.md](ownership.md).
+Statusy propozycji rozstrzygają zapisane odpowiedzi, nie sam załącznik;
+nie wykonano jego rekomendacji jako instrukcji.
 
 ## Kolektor i komplet pakietu
 
@@ -229,4 +264,7 @@ bez powtórzenia pomiaru serwerów i bez zmiany statusów bramek.
 
 Weryfikacja publikowanego pakietu: 13/13 testów syntetycznych kolektora (0 pominiętych), kontrola składni, typecheck i lint przeszły. Sprawdzono 38 linków względnych, dwa YAML i JSON oraz brak 49 wybranych prywatnych identyfikatorów w publikowanych plikach. Niezależny przegląd treści i kolektora nie wykazał blokad publikacji. Pełny Vitest: 5645 PASS, 6 FAIL, 28 SKIP; 443 pliki PASS, 4 FAIL, 4 SKIP. Sześć błędów dotyczy niezmienionych testów i plików bazowych: dwóch wyjątków ścieżek z ukośnikami Windows oraz czterech dopasowań oczekujących LF zamiast CRLF. Nie zmieniano tych plików w pakiecie F0. Build nie był wymagany, ponieważ aplikacja nie została zmieniona. Wyniki testów narzędzia nie potwierdzają działania środowiska ani realizacji dziesięciu decyzji operatora.
 
-**Kolejny krok:** Bartosz rozstrzyga decyzje z ownership; osobne prace domykają kopie, staging i dowody produktów. F1 nie został rozpoczęty.
+**Kolejny krok:** Igor rozstrzyga pozostałe decyzje z ownership na podstawie
+materiału przygotowanego przez Codex. Osobno upoważnione prace i dowody
+domykają kopie/staging; Bartosz uczestniczy tylko w koniecznym zakresie
+operatorskim. F1 nie został rozpoczęty.

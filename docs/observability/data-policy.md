@@ -1,8 +1,11 @@
 # F0 — polityka danych obserwowalności
 
-Stan: **propozycja do zatwierdzenia**, 04.10.2026. F0-G05 pozostaje **PENDING**.
-Dokument nie zmienia retencji, dostępu ani eksportu. Igor jest zlecającym F0;
-przyjęcie ról i decyzji zapisuje [rejestr](ownership.md). Kontrakty wyników są
+Stan: propozycja z 04.10.2026, z przyjętą docelową polityką kopii według
+[odpowiedzi przekazanej przez Igora 07.10](acceptance-plan.md#odpowiedzi-przekazane-07102026).
+**F0-G05 pozostaje PENDING** dla pozostałego zakresu; nie ma pełnego odbioru.
+Zapis decyzji nie zmienia aktywnej retencji, dostępu ani eksportu. Igor jest
+właścicielem monitoringu, koordynacji i odbiorcą F0; rola nie oznacza odbioru.
+Przyjęcie ról i decyzji zapisuje [rejestr](ownership.md). Kontrakty wyników są
 w [contracts](contracts.md), pomiary w [inwentarzu](runtime-inventory.md),
 a pełne scenariusze odbioru w [acceptance-plan](acceptance-plan.md).
 
@@ -38,11 +41,14 @@ Rekomendacje zawarte w załącznikach są materiałem do decyzji właściciela.
 
 ## Retencja proponowana
 
-Poniższe wartości są propozycjami polityki, nie aktywnymi zmiennymi env ani
-potwierdzeniem możliwości zakupionego planu. Implementacja ma raportować
+Poza docelową polityką kopii przyjętą w odpowiedzi przekazanej 07.10
+poniższe wartości są propozycjami. Żadna nie jest odczytem aktywnych zmiennych
+env ani potwierdzeniem możliwości planu. Źródłem nowych ustaleń jest wiadomość
+Igora przekazująca odpowiedzi przypisane Bartoszowi; nie uzyskano niezależnego
+odczytu wdrożenia ani formalnego odbioru całego F0. Implementacja ma raportować
 rzeczywiste wartości i umożliwiać jawne wyjątki.
 
-| Klasa | Wartość do zatwierdzenia | Usuwanie / wyjątek / wymagany dowód |
+| Klasa | Wartość proponowana lub przekazany zakres decyzji | Usuwanie / wyjątek / wymagany dowód |
 |---|---|---|
 | Dokumenty fakturowe i dane domenowe | 10 lat według instrukcji projektu; poza zakresem skracania przez observability. | Istniejący workflow domenowy. Ten dokument nie jest oceną ustawowych terminów ani nowym mechanizmem DELETE. |
 | Minimalny indeks/historia operacji | 13 miesięcy online. | Otwarte reconciliation nie wygasa automatycznie. Po usunięciu szczegółów pozostaje odczyt autorytatywnej domeny; dłuższy hold wymaga powodu i właściciela. |
@@ -55,11 +61,16 @@ rzeczywiste wartości i umożliwiać jawne wyjątki.
 | RUM | 30 dni diagnostycznych; replay 0. | Consent/opt-out i usuwanie ID; replay wymaga osobnej decyzji i odbioru. |
 | Lokalne logi / bufory | Limity bytes/age PENDING; proponowane okno bufora 30 min. | Docker rotation i collector queue osobno; expiry/drop jawny. Bufor nie gwarantuje trwałości po utracie hosta. |
 | Pakiety incydentów / dowody testów | 90 dni; dłużej tylko jawny hold. | Zredagowane dowody, przegląd aktywnych holdów, brak surowych plików prywatnych w repo. |
-| Kopie zapasowe | Harmonogram, zakres, retencja i izolowany restore PENDING. | Pomiar potwierdził brak pełnej kopii `pg_dump` off-host i kopii storage aplikacji. Ograniczony snapshot JSON na innym hoście nie spełnia pełnego backupu. Restore ponownie stosuje TTL/hold i ACL. |
+| Kopie zapasowe | Docelowo przyjęte w odpowiedzi przekazanej 07.10: codzienny pełny pg_dump DB i kopie obu MinIO; 7 dziennych / 4 tygodniowe / 12 miesięcznych; comiesięczny test restore. Igor koordynuje; wcześniej wskazano Bartosza jako wykonawcę operatorskiego. | Szyfrowany zewnętrzny cel EU poza hostami źródłowymi. Codex przegląda dostępne dowody. Brak dowodu wdrożenia, sukcesu pełnej kopii i restore; G09 FAIL, TEST-07 NOT RUN. Snapshot JSON i obrazy dysku DB nie dowodzą całego zakresu. Restore ponownie stosuje TTL/hold i ACL. |
 
 Po zatwierdzeniu rejestr każdej klasy wskazuje właściciela, region/lokalizację,
 aktywną retencję, wyjątek, sposób delete, harmonogram i ostatnią kontrolę.
-W F0 nie wykonano cleanup ani odtworzenia.
+Docelowy dump obejmuje całą DB, w tym auth/storage; obiekty obejmują MinIO
+aplikacji i odrębne MinIO Supabase Storage. Do odbioru nadal potrzebny jest
+manifest wykazujący role/auth, metadane i obiekty storage oraz stan operacji,
+artefakt/hash, sukces UTC i prywatny dowód pokrycia przyjętej retencji.
+Comiesięczny test restore jest przyjętym celem, a nie wykonanym testem.
+W tej kontynuacji F0 nie wykonano backupu, cleanup ani odtworzenia.
 
 ## Sampling, dostawcy i dostęp
 
@@ -78,12 +89,29 @@ Region intake nie potwierdza regionu każdej dodatkowej funkcji, wszystkich
 subprocessors ani docelowej organizacji Datadog. EU1 pozostaje propozycją
 lokalizacji Datadog. Odczytane retencje produktów nie zatwierdzają terminów
 proponowanej polityki; wymagane pozostają dowody kosztów i brakujących uprawnień.
+W odpowiedzi przekazanej 07.10 zadeklarowano brak płatnych planów Sentry/PostHog.
+Nie potwierdza to konkretnego planu Free, retencji Sentry, kompletu uprawnień
+ani zerowego kosztu; deklaracja i metadane API pozostają osobnymi źródłami.
 
 Oddzielne klucze/env i role z minimalnymi uprawnieniami. Eksport telemetrii nie
 dostaje Supabase service-role. DBM: read-only i normalized SQL bez bind values;
 plany/komentarze objęte redakcją. Diagnoza AI: read-only i zredagowany zakres
 incydentu. SSO/MFA i audyt dostępu wymagają odbioru. [Role](ownership.md)
-pozostają propozycją.
+mają wskazane zakresy: według najnowszej wiadomości Igora z 07.10 monitoring,
+koordynacja i odbiór F0 należą do Igora, a Codex dokumentuje, zbiera i przegląda
+dowody w dostępnym, autoryzowanym zakresie. Wcześniejsza deklaracja Bartosza
+dotycząca kopii i staging pozostaje zakresem przyszłych koniecznych czynności
+operatorskich. Przyjęcie ról nie zatwierdza pozostałych wartości G04/G05/G06
+ani nie zastępuje odbioru dowodów; plany kont sprawdzamy w miarę możliwości
+samodzielnie, bez automatycznego zlecania nowych pytań Bartoszowi.
+
+Zadeklarowane kanały: krytyczne Slack/Telegram; raport codzienny email/Telegram
+o 06:00. Wcześniej przekazano odbieranie alarmów przez Bartosza 08:00–22:00
+w miarę możliwości, bez formalnego dyżuru i zastępcy. Igor doprecyzował
+strefę obu godzin jako Europe/Warsaw, a następnie przyjął monitoring
+i koordynację; wcześniejsze godziny nie ustanawiają dyżuru Igora.
+Nie odczytano konfiguracji ani działania kanałów, coverage i lifecycle;
+G08 pozostaje PENDING. Dane raportów nadal podlegają powyższej allowlist.
 
 ## Odbiór prywatności
 
@@ -100,5 +128,7 @@ faktycznie wysłane dane, nie tylko zamaskowany widok. Zakazanych canary nie ma
 w eksporcie, a tenant A i anon nie czytają operacji B. **TEST-04: NOT RUN**;
 staging nie istnieje, więc aktywny odbiór nie został rozpoczęty.
 
-PENDING: wszystkie proponowane terminy, audit/source maps, rotation/bufory,
-backup retention, tenant_ref, consent, zakres produktów i uprawnienia.
+PENDING: pozostałe proponowane terminy, audit/source maps, rotation/bufory,
+tenant_ref, consent, zakres produktów i uprawnienia. Docelowa retencja kopii
+7 dziennych / 4 tygodniowe / 12 miesięcznych jest przyjęta według wiadomości
+z 07.10; jej wykonanie i izolowany restore nie zostały odebrane.
