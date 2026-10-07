@@ -74,7 +74,7 @@ it.each([
   ['final', 'failed', KSEF_SEND_MESSAGES.special],
   ['correction', 'rejected', KSEF_SEND_MESSAGES.rejected],
 ])('blocks %s/%s resend before any job or status update', async (kind, status, message) => {
-  mocks.row = { ksef_status: status, direction: 'outgoing', invoice_kind: kind, invoice_type: 'KOR', last_error_code: 'INFRA', fa3_data: snapshot };
+  mocks.row = { ksef_status: status, direction: 'outgoing', invoice_kind: kind, invoice_type: 'KOR', last_error_code: 'INFRA', issue_date: '2026-10-01', fa3_data: snapshot, special_data: null };
 
   const result = await resendInvoiceAction(invoiceId);
 
@@ -87,7 +87,7 @@ it.each([
 });
 
 it('regular/failed is requeued through the lifecycle RPC, never by a session status update', async () => {
-  mocks.row = { ksef_status: 'failed', direction: 'outgoing', invoice_kind: 'regular', invoice_type: 'VAT', last_error_code: 'INFRA', fa3_data: snapshot };
+  mocks.row = { ksef_status: 'failed', direction: 'outgoing', invoice_kind: 'regular', invoice_type: 'VAT', last_error_code: 'INFRA', issue_date: '2026-10-01', fa3_data: snapshot, special_data: null };
 
   expect(await resendInvoiceAction(invoiceId)).toEqual({ success: true });
   expect(mocks.enqueue).toHaveBeenCalledWith(expect.objectContaining({ mode: { kind: 'requeue', actorUserId: 'fixture-user' } }));

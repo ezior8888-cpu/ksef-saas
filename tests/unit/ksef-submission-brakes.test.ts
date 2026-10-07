@@ -2,6 +2,8 @@ import { NonRetriableError } from '@/lib/jobs/errors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import type { EnqueueKsefSubmitParams } from '@/lib/invoices/ksef-submit-enqueue';
+import type { KsefSendMode } from '@/lib/invoices/ksef-send-step';
 import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice } from '@/types/invoice';
 
@@ -16,6 +18,7 @@ import type { Invoice } from '@/types/invoice';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const USER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 const mocks = vi.hoisted(() => ({
   flag: vi.fn(),
@@ -30,6 +33,8 @@ const mocks = vi.hoisted(() => ({
   sendEvent: vi.fn(),
   invoice: {} as Record<string, unknown>,
   updates: [] as Array<Record<string, unknown>>,
+  /** Blob certyfikatu firmy (`tenants.ksef_credentials_encrypted`); null = brak certyfikatu. */
+  blob: null as unknown,
 }));
 
 vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: mocks.flag }));
@@ -72,7 +77,9 @@ vi.mock('@/lib/supabase/admin-queries', () => ({
   updateInvoiceStatus: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({
-  createAdminClient: async () => {
+  // Prawdziwy `createAdminClient` jest synchroniczny (`lib/supabase/server.ts`):
+  // runner woła go z `await`, enqueue bez — mock musi obsłużyć obie drogi.
+  createAdminClient: () => {
     let patch: Record<string, unknown> | null = null;
     const q = {
       select: () => q,
@@ -93,8 +100,17 @@ vi.mock('@/lib/supabase/server', () => ({
         return Promise.resolve({ data: null, error: null }).then(resolve);
       },
     };
+    // Blob certyfikatu czyta enqueue kluczem serwisowym (00112, AUD-103).
+    const tenants = {
+      select: () => tenants,
+      eq: () => tenants,
+      single: async () => ({ data: { ksef_credentials_encrypted: mocks.blob }, error: null }),
+    };
     // Przejęcie wysyłki (AUD-10, 00124) — w tych testach zawsze wolne.
-    return { from: () => q, rpc: async (fn: string) => ({ data: fn === 'claim_ksef_send' ? '2026-10-02T12:00:00.000000+00:00' : null, error: null }), };
+    return {
+      from: (table: string) => (table === 'tenants' ? tenants : q),
+      rpc: async (fn: string) => ({ data: fn === 'claim_ksef_send' ? '2026-10-02T12:00:00.000000+00:00' : null, error: null }),
+    };
   },
 }));
 vi.mock('@/lib/cache/invalidation', () => ({ invalidateTenantDashboard: vi.fn() }));
@@ -116,17 +132,27 @@ import { isAnthropicMocked, isGusMocked, isKsefMocked, isResendMocked } from '@/
 
 const noDatabaseAccess = { from: vi.fn() } as unknown as SupabaseClient;
 
-function enqueueParams(type: Invoice['type'], auditKind: 'regular' | 'correction') {
+function enqueueParams(
+  type: Invoice['type'],
+  auditKind: EnqueueKsefSubmitParams['auditKind'],
+  mode?: KsefSendMode,
+) {
   return {
     supabase: noDatabaseAccess,
     tenantId: TENANT,
-    userId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    userId: USER,
     invoiceId: ID,
     nip: '1234567890',
     environment: 'test' as const,
     invoice: { type, internalNumber: 'FK/1' } as Invoice,
     auditKind,
+    ...(mode ? { mode } : {}),
   };
+}
+
+/** „Wyślij ponownie” klienta przy fakturze `failed` (K3): ten sam enqueue w trybie ponowienia. */
+function resendParams(type: Invoice['type'], auditKind: EnqueueKsefSubmitParams['auditKind']) {
+  return enqueueParams(type, auditKind, { kind: 'requeue', actorUserId: USER });
 }
 
 const ctx: JobContext = {
@@ -169,6 +195,7 @@ beforeEach(() => {
     fa3_data: { type: 'VAT', internalNumber: 'FV/1', issueDate: '2026-10-01' },
   };
   mocks.updates = [];
+  mocks.blob = null;
   vi.stubEnv('KSEF_ENV', 'test');
 });
 

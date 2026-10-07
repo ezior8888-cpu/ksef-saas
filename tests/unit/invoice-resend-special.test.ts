@@ -49,7 +49,10 @@ const snapshot = finalizeInvoice({
 });
 
 function historical(status: string) {
-  return { ksef_status: status, direction: 'outgoing', invoice_kind: 'regular', invoice_type: 'VAT', last_error_code: null, fa3_data: snapshot };
+  return {
+    ksef_status: status, direction: 'outgoing', invoice_kind: 'regular', invoice_type: 'VAT', last_error_code: null,
+    issue_date: '2026-10-01', fa3_data: snapshot, special_data: null,
+  };
 }
 
 beforeEach(() => {

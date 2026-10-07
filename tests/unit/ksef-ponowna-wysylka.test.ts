@@ -16,6 +16,7 @@ const m = vi.hoisted(() => ({
   enqueue: vi.fn(),
   rpc: vi.fn(),
   captureMessage: vi.fn(),
+  captureException: vi.fn(),
   revalidate: vi.fn(),
   row: null as Record<string, unknown> | null,
   tenant: { nip: '5260001246' } as Record<string, unknown> | null,
@@ -36,7 +37,7 @@ vi.mock('@/lib/supabase/auth-context', () => {
 });
 vi.mock('@/lib/invoices/ksef-submit-enqueue', () => ({ enqueueKsefSubmitAfterDraft: m.enqueue }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ rpc: m.rpc }) }));
-vi.mock('@sentry/nextjs', () => ({ captureMessage: m.captureMessage, captureException: vi.fn() }));
+vi.mock('@sentry/nextjs', () => ({ captureMessage: m.captureMessage, captureException: m.captureException }));
 vi.mock('next/cache', () => ({ revalidatePath: m.revalidate }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: vi.fn() }));
 vi.mock('@/lib/storage/r2', () => ({ downloadInvoiceXml: vi.fn() }));
@@ -61,10 +62,11 @@ function snapshot() {
   });
 }
 
-function failedRow(extra: Record<string, unknown> = {}) {
+/** Wiersz z kolumnami źródła ponowienia (`KSEF_RESEND_SOURCE_COLUMNS`) — zwykła faktura ma `special_data` NULL. */
+function failedRow(extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     ksef_status: 'failed', direction: 'outgoing', invoice_kind: 'regular', invoice_type: 'VAT',
-    last_error_code: 'INFRA', fa3_data: snapshot(), ...extra,
+    last_error_code: 'INFRA', issue_date: '2026-10-02', fa3_data: snapshot(), special_data: null, ...extra,
   };
 }
 

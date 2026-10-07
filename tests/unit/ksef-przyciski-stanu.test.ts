@@ -7,6 +7,7 @@ import {
   failedInvoiceButtons,
   KSEF_SEND_MESSAGES,
 } from '@/lib/invoices/ksef-send-policy';
+import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 
 /**
  * Cykl życia faktury, PR 3b (K3, D2, D4): jedna tabela decyzji dla akcji
@@ -14,7 +15,11 @@ import {
  * akcja odmówi, a `member` nie widzi „Wyślij ponownie”.
  */
 
-const base = { direction: 'outgoing', invoiceKind: 'regular' } as const;
+/** Fakty ponowienia z kopii (A4b PR2a): dane zapisane, rodzaj niewstrzymany, dziś. */
+const STORED: KsefResendFacts = { sendData: 'stored', kindHeld: false, issueDatePassed: false };
+const ENV = { environmentKnown: true } as const;
+
+const base = { direction: 'outgoing', invoiceKind: 'regular', facts: STORED, ...ENV } as const;
 
 describe('decideResend — kto i kiedy może wysłać ponownie', () => {
   it.each([
@@ -41,7 +46,7 @@ describe('decideResend — kto i kiedy może wysłać ponownie', () => {
   it('dokument specjalny i faktura przychodząca → odmowa', () => {
     expect(decideResend({ ...base, status: 'failed', errorCode: 'INFRA', invoiceKind: 'correction' }))
       .toMatchObject({ allowed: false, reason: 'special' });
-    expect(decideResend({ direction: 'incoming', status: 'failed', errorCode: 'INFRA', invoiceKind: 'regular' }))
+    expect(decideResend({ ...base, direction: 'incoming', status: 'failed', errorCode: 'INFRA' }))
       .toMatchObject({ allowed: false, reason: 'direction' });
   });
 
@@ -55,7 +60,7 @@ describe('decideResend — kto i kiedy może wysłać ponownie', () => {
 });
 
 describe('failedInvoiceButtons — tabela stanów (sekcja 7 projektu)', () => {
-  const manage = { invoiceKind: 'regular', canManage: true };
+  const manage = { invoiceKind: 'regular', canManage: true, facts: STORED, ...ENV };
 
   it('rejected → tylko „Wróć do szkicu”', () => {
     expect(failedInvoiceButtons({ ...manage, status: 'rejected', errorCode: 'KSEF_REJECTED' }))
@@ -90,12 +95,12 @@ describe('failedInvoiceButtons — tabela stanów (sekcja 7 projektu)', () => {
   });
 
   it('dokument specjalny: bez „Wyślij ponownie”, zostaje szkic', () => {
-    expect(failedInvoiceButtons({ status: 'failed', errorCode: 'INFRA', invoiceKind: 'correction', canManage: true }))
+    expect(failedInvoiceButtons({ ...manage, status: 'failed', errorCode: 'INFRA', invoiceKind: 'correction' }))
       .toEqual({ resend: false, reset: true, settings: false, info: KSEF_SEND_MESSAGES.special });
   });
 
   it('member nie widzi przycisków, dostaje prośbę o właściciela', () => {
-    const plan = failedInvoiceButtons({ status: 'failed', errorCode: 'INFRA', invoiceKind: 'regular', canManage: false });
+    const plan = failedInvoiceButtons({ ...manage, status: 'failed', errorCode: 'INFRA', canManage: false });
     expect(plan).toMatchObject({ resend: false, reset: false });
     expect(plan?.info).toContain(KSEF_SEND_MESSAGES.askManager);
   });
