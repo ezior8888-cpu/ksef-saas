@@ -59,6 +59,21 @@ import { StatusBadge } from '@/components/invoices/status-badge';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { describeDuplicateOriginal } from '@/lib/ksef/duplicate-check';
 
+import {
+  BANNER,
+  CLIENT,
+  K,
+  K2,
+  SQL,
+  Y_ID,
+  Y_NR,
+  decidableView,
+  deleteRefusal,
+  fill,
+  sendRefusal,
+  type RetiredDraftViewFixture,
+} from './helpers/decyzja-klienta';
+
 /** Kopia danych zapisana, rodzaj niewstrzymany, dziś dzień wystawienia (A4b PR2b). */
 const STORED: KsefResendFacts = { sendData: 'stored', kindHeld: false, issueDatePassed: false };
 /** Brak kopii danych (dokument sprzed 00137 / sprzed koperty ZAL, zwykła bez fa3_data). */
@@ -327,5 +342,231 @@ describe('A4b PR2b (decyzja 10, 07.10.2026): znaczek statusu „ponawiamy” tyl
     expect(renderToStaticMarkup(<StatusBadge status="failed" />)).toContain('>Błąd<');
     expect(renderToStaticMarkup(<StatusBadge status="failed" errorCode="KSEF_PAUSED" />)).toContain('Wstrzymana');
     expect(renderToStaticMarkup(<StatusBadge status="failed" errorCode="ISSUE_DATE_PASSED" />)).toContain('Data wystawienia minęła');
+  });
+});
+
+/**
+ * D-A4-1b-3 PR B (2.5): karta faktury przy nierozstrzygniętym 440 i szkicu
+ * wycofanym.
+ *  - Obok panelu duplikatu nie ma karty błędu: tekst runnera jest dla
+ *    operatora („do uzgodnienia przez operatora”), klient ma panel.
+ *  - Widok `decidable` → panel decyzji (`KsefDuplicateDecision`) zamiast noty.
+ *  - Szkic wycofany każdego rodzaju (decyzja 9) → baner z tytułem, treścią
+ *    i jedynym przyciskiem (nowa faktura / nowa zaliczka); KOR i ROZ bez
+ *    przycisku (ich wyjście to „Usuń szkic” w pasku); przy known-number
+ *    odnośnik do dokumentu Y.
+ *  - Pasek akcji dostaje `ksef_retired` i `ksef_duplicate_panel`.
+ * Do PR B karta błędu stała zawsze, panel miał tylko notę, a banera nie było.
+ */
+describe('D-A4-1b-3 PR B: panel decyzji, karta błędu i baner szkicu wycofanego', () => {
+  type ActionsProps = { invoice: Record<string, unknown>; canManageSend?: boolean };
+  const lastActions = () => actions.props.at(-1) as ActionsProps | undefined;
+
+  const NR = 'FV/7/10/2026';
+  const RUNNER_TEXT = 'KSeF ma już fakturę o tym numerze (numer KSeF 1234567890-20261001-0100A0B0C0D0-1A) — do uzgodnienia przez operatora.';
+  // `link` (C16) — przez stałą, nie literał w miejscu typu, żeby kompilowało się przed i po zmianie `DuplicateOriginalView`.
+  const ORIGINAL = { title: 'W KSeF jest już faktura o tym numerze', rows: [{ label: 'Numer KSeF', value: K }], note: 'Nota PR A o fakturze w KSeF.', link: null };
+
+  /** `initial` z polami PR B (typ widoku zmienia się w PR B). */
+  const withB = (initial: InvoiceDetailInitial, extra: Record<string, unknown>) => ({ ...initial, ...extra }) as InvoiceDetailInitial;
+
+  const failedDuplicate = (extra: Record<string, unknown>, patch: Partial<InvoiceDetailInitial> = {}) => withB({
+    ...base,
+    ksef_status: 'failed',
+    ksef_number: null,
+    ksef_accepted_at: null,
+    last_error: RUNNER_TEXT,
+    last_error_code: 'KSEF_DUPLICATE_RECONCILE',
+    ksef_duplicate_original: ORIGINAL,
+    can_manage_send: true,
+    ...patch,
+  }, extra);
+
+  const draftWith = (retired: RetiredDraftViewFixture | null, patch: Partial<InvoiceDetailInitial> = {}) => withB({
+    ...base,
+    ksef_status: 'draft',
+    ksef_number: null,
+    ksef_accepted_at: null,
+    can_manage_send: true,
+    ...patch,
+  }, { ksef_retired_draft: retired });
+
+  const retiredRegular: RetiredDraftViewFixture = {
+    title: BANNER.title(NR),
+    body: BANNER.otherSale('02.10.2026, 10:30', K, NR),
+    cta: BANNER.ctaRegular,
+    knownInvoice: null,
+    sendRefusal: sendRefusal(NR, 'decided-other'),
+    deletable: false,
+    deleteRefusal: deleteRefusal(NR),
+  };
+  const retiredAdvance: RetiredDraftViewFixture = {
+    title: BANNER.title('ZAL/1/10/2026'),
+    body: BANNER.autoAdvance('ZAL/1/10/2026', K2),
+    cta: BANNER.ctaAdvance,
+    knownInvoice: null,
+    sendRefusal: sendRefusal('ZAL/1/10/2026', 'automatic', K2),
+    deletable: false,
+    deleteRefusal: deleteRefusal('ZAL/1/10/2026', K2),
+  };
+  const retiredCorrection: RetiredDraftViewFixture = {
+    title: BANNER.title('FK/1/10/2026'),
+    body: BANNER.autoDeletable('FK/1/10/2026', K, 'korekty', 'korektę'),
+    cta: null,
+    knownInvoice: null,
+    sendRefusal: sendRefusal('FK/1/10/2026', 'automatic'),
+    deletable: true,
+    deleteRefusal: null,
+  };
+  const retiredSameKnown: RetiredDraftViewFixture = {
+    title: BANNER.title(NR),
+    body: `Zapisano 02.10.2026, 10:30: to ta sama sprzedaż co faktura ${NR} w KSeF (numer KSeF ${K}), którą w FaktFlow ma dokument ${Y_NR}. Tego dokumentu nie wyślesz do KSeF. Jeśli to jednak inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.`,
+    cta: null,
+    knownInvoice: { id: Y_ID, internalNumber: Y_NR },
+    sendRefusal: sendRefusal(NR, 'decided-same'),
+    deletable: false,
+    deleteRefusal: deleteRefusal(NR),
+  };
+
+  const text = () => (host?.textContent ?? '').replace(/ /g, ' ');
+  const errorCard = () => host?.querySelector('[data-testid="karta-bledu"]') ?? null;
+  const panel = () => host?.querySelector('[data-testid="panel-decyzji"]') ?? null;
+  const linksTo = (href: string) => Array.from(host?.querySelectorAll<HTMLAnchorElement>('a') ?? []).filter((a) => a.getAttribute('href') === href);
+  const newDocumentLinks = () =>
+    Array.from(host?.querySelectorAll<HTMLAnchorElement>('a') ?? []).filter((a) => (a.getAttribute('href') ?? '').startsWith('/invoices/new'));
+
+  /** Kontrolki (odnośniki i przyciski, bez zagnieżdżonych) w najmniejszym elemencie z tytułem, treścią i etykietą przycisku banera. */
+  function bannerControls(...texts: string[]): Element[] {
+    const all = Array.from(host?.querySelectorAll<HTMLElement>('*') ?? []).filter((n) => texts.every((t) => (n.textContent ?? '').includes(t)));
+    const deepest = all.filter((n) => !all.some((o) => o !== n && n.contains(o)));
+    expect(deepest, `brak banera z tekstami: ${texts.join(' | ')}`).toHaveLength(1);
+    const banner = deepest[0]!;
+    return Array.from(banner.querySelectorAll('a, button')).filter((c) => !c.parentElement?.closest('a, button') || !banner.contains(c.parentElement!.closest('a, button')));
+  }
+
+  it('U9a: panel duplikatu (widok decidable albo odmowa) — bez karty błędu z tekstem runnera dla operatora', () => {
+    render(failedDuplicate({ ksef_duplicate_decision: decidableView({ invoiceNumber: NR }) }));
+    expect(errorCard()).toBeNull();
+    expect(text()).not.toContain('przez operatora');
+
+    // Odmowa: strona wstawia jej tekst jako notę panelu (2.5) — karta błędu też znika.
+    act(() => root?.unmount());
+    const payments = fill(SQL.payments, NR);
+    render(failedDuplicate(
+      { ksef_duplicate_decision: { kind: 'refused', refusal: 'payments', message: payments } },
+      { ksef_duplicate_original: { ...ORIGINAL, note: payments } },
+    ));
+    expect(errorCard()).toBeNull();
+    expect(text()).toContain(payments);
+    expect(panel()).toBeNull();
+  });
+
+  it('U9a strażnik: karta błędu zostaje przy innym kodzie i przy KSEF_DUPLICATE_RECONCILE bez danych panelu', () => {
+    render(failedDuplicate({}, { last_error_code: 'KSEF_UNAVAILABLE', last_error: 'KSeF chwilowo niedostępny.', ksef_duplicate_original: null }));
+    expect(errorCard()?.textContent).toBe('KSeF chwilowo niedostępny.');
+
+    act(() => root?.unmount());
+    render(failedDuplicate({}, { ksef_duplicate_original: null }));
+    expect(errorCard()?.textContent).toBe(RUNNER_TEXT);
+  });
+
+  it('U9b: widok decidable — panel decyzji z widokiem zamiast noty; po zmianie stanu w Realtime panel znika', () => {
+    realtime.handlers.length = 0;
+    decisionPanel.props.length = 0;
+    const view = decidableView({ invoiceNumber: NR });
+    render(failedDuplicate({ ksef_duplicate_decision: view }));
+
+    expect(panel()).not.toBeNull();
+    expect(decisionPanel.props.at(-1)).toEqual({ invoiceId: 'inv-1', view });
+    expect(text()).toContain(ORIGINAL.title);
+    expect(text()).not.toContain(ORIGINAL.note);
+
+    const invoiceUpdate = realtime.handlers[0]!;
+    act(() => invoiceUpdate({ new: { ksef_status: 'queued', last_error_code: null, last_error: null } }));
+    act(() => invoiceUpdate({ new: { ksef_status: 'failed', last_error_code: 'KSEF_DUPLICATE_RECONCILE', last_error: 'nowy werdykt' } }));
+    expect(panel()).toBeNull();
+  });
+
+  it('U9c (decyzja 9): zwykły szkic wycofany „inną sprzedażą” — baner z jedynym przyciskiem „Wystaw nową fakturę”', () => {
+    render(draftWith(retiredRegular));
+
+    expect(text()).toContain(retiredRegular.title);
+    expect(text()).toContain(retiredRegular.body);
+    const controls = bannerControls(retiredRegular.title, retiredRegular.body, BANNER.ctaRegular.label);
+    expect(controls).toHaveLength(1);
+    expect(controls[0]!.closest('a')?.getAttribute('href') ?? controls[0]!.getAttribute('href')).toBe(BANNER.ctaRegular.href);
+    expect(newDocumentLinks().map((a) => a.getAttribute('href'))).toEqual([BANNER.ctaRegular.href]);
+  });
+
+  it('U9c: zaliczka wycofana automatycznie — przycisk „Wystaw nową fakturę zaliczkową”', () => {
+    render(draftWith(retiredAdvance, { invoice_kind: 'advance', invoice_type: 'ZAL', internal_number: 'ZAL/1/10/2026' }));
+
+    expect(text()).toContain(retiredAdvance.body);
+    const links = linksTo(BANNER.ctaAdvance.href);
+    expect(links).toHaveLength(1);
+    expect(links[0]!.textContent).toContain(BANNER.ctaAdvance.label);
+  });
+
+  it('U9c: korekta wycofana automatycznie — baner bez przycisku (wyjście: „Usuń szkic” w pasku)', () => {
+    render(draftWith(retiredCorrection, { invoice_kind: 'correction', invoice_type: 'KOR', internal_number: 'FK/1/10/2026' }));
+
+    expect(text()).toContain(retiredCorrection.title);
+    expect(text()).toContain(retiredCorrection.body);
+    expect(newDocumentLinks()).toEqual([]);
+  });
+
+  it('U9c: decyzja „ta sama sprzedaż” przy known-number — odnośnik do dokumentu Y w banerze; po zmianie stanu baner znika', () => {
+    realtime.handlers.length = 0;
+    render(draftWith(retiredSameKnown));
+
+    expect(text()).toContain(retiredSameKnown.body);
+    const links = linksTo(`/invoices/${Y_ID}`);
+    expect(links).toHaveLength(1);
+    expect(links[0]!.textContent).toContain(`Zobacz dokument ${Y_NR}`);
+    expect(newDocumentLinks()).toEqual([]);
+
+    // Stan dalej `draft` (np. zapis innej kolumny) — baner zostaje; inny stan — znika.
+    act(() => realtime.handlers[0]!({ new: { ksef_status: 'draft', last_error: null } }));
+    expect(text()).toContain(retiredSameKnown.title);
+    act(() => realtime.handlers[0]!({ new: { ksef_status: 'queued' } }));
+    expect(text()).not.toContain(retiredSameKnown.title);
+  });
+
+  it('U9d: pasek akcji dostaje `ksef_retired` ({deletable}) i `ksef_duplicate_panel`', () => {
+    actions.props.length = 0;
+    render(draftWith(retiredRegular));
+    expect(lastActions()?.invoice.ksef_retired).toEqual({ deletable: false });
+
+    act(() => root?.unmount());
+    render(draftWith(retiredAdvance, { invoice_kind: 'advance', invoice_type: 'ZAL' }));
+    expect(lastActions()?.invoice.ksef_retired).toEqual({ deletable: false });
+
+    act(() => root?.unmount());
+    render(draftWith(retiredCorrection, { invoice_kind: 'correction', invoice_type: 'KOR' }));
+    expect(lastActions()?.invoice.ksef_retired).toEqual({ deletable: true });
+
+    act(() => root?.unmount());
+    render(draftWith(null));
+    expect(lastActions()?.invoice.ksef_retired).toBeNull();
+    expect(lastActions()?.invoice.ksef_duplicate_panel).toBe(false);
+
+    act(() => root?.unmount());
+    render(failedDuplicate({ ksef_duplicate_decision: decidableView({ invoiceNumber: NR }) }));
+    expect(lastActions()?.invoice.ksef_duplicate_panel).toBe(true);
+    expect(lastActions()?.invoice.ksef_retired).toBeNull();
+  });
+
+  it('U9e (C16): odmowa known-number — nota i odnośnik „Zobacz dokument {Y}” do faktury Y', () => {
+    const note = CLIENT.knownNumberNote(K, Y_NR, NR);
+    render(failedDuplicate(
+      { ksef_duplicate_decision: { kind: 'refused', refusal: 'known-stale', message: fill(SQL.knownStale, K, NR) } },
+      { ksef_duplicate_original: { ...ORIGINAL, note, ...{ link: { href: `/invoices/${Y_ID}`, label: `Zobacz dokument ${Y_NR}` } } } },
+    ));
+
+    expect(text()).toContain(note);
+    const links = linksTo(`/invoices/${Y_ID}`);
+    expect(links).toHaveLength(1);
+    expect(links[0]!.textContent).toBe(`Zobacz dokument ${Y_NR}`);
+    expect(panel()).toBeNull();
   });
 });

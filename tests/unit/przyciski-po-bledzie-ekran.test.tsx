@@ -147,7 +147,9 @@ describe('przyciski po błędzie wysyłki', () => {
 
   it('do uzgodnienia / wstrzymana: bez przycisków, z wyjaśnieniem', () => {
     expect(buttons(render({ errorCode: 'KSEF_DUPLICATE_RECONCILE' }))).toEqual([]);
-    expect(host!.textContent).toContain('operator');
+    // D-A4-1b-3 PR B (reguła 07.10.2026): duplikat 440 ma wyjście klienta (panel decyzji) i adres
+    // pomocy FaktFlow — tekst nie odsyła już do operatora.
+    expect(host!.textContent).not.toContain('operator');
     act(() => root?.unmount());
     expect(buttons(render({ errorCode: 'KSEF_PAUSED' }))).toEqual([]);
     expect(host!.textContent).toContain('wstrzymana przez operatora');
@@ -292,6 +294,9 @@ describe('A4b PR2b: pasek akcji faktury przekazuje fakty ponowienia i środowisk
           last_error_code: 'KSEF_UNAVAILABLE',
           ksef_resend_facts: STORED,
           ksef_environment_known: true,
+          // D-A4-1b-3 PR B: panel decyzji duplikatu i szkic wycofany — tu bez nich.
+          ksef_duplicate_panel: false,
+          ksef_retired: null,
           ...invoice,
         }}
         canManageSend
@@ -319,5 +324,119 @@ describe('A4b PR2b: pasek akcji faktury przekazuje fakty ponowienia i środowisk
     expect(buttons(el)).not.toContain('Wyślij ponownie');
     expect(buttons(el)).not.toContain('Wróć do szkicu');
     expect(el.textContent).toContain(KSEF_SEND_MESSAGES.envUnknown);
+  });
+});
+
+/** D-A4-1b-3 PR B — teksty paska przy duplikacie 440 i „numer zajęty” (decyzje 3 i 9, C4). */
+const DUPLICATE_PANEL_INFO =
+  'KSeF ma już fakturę o tym numerze — szczegóły i dalsze kroki są wyżej, w ramce „W KSeF jest już faktura o tym numerze”. Nie wysyłaj tej faktury ponownie.';
+const DUPLICATE_INFO =
+  'KSeF ma już fakturę o tym numerze — tej faktury nie wysyłaj ponownie. Szczegóły są na karcie faktury; pytania: pomoc FaktFlow (pomoc@faktflow.pl), podaj numer faktury.';
+const NUMBER_TAKEN_INFO =
+  'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie (szczegóły wyżej). Tego dokumentu nie wyślesz do KSeF. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.';
+
+describe('D-A4-1b-3 PR B: duplikat 440 i „numer zajęty” — pasek po błędzie', () => {
+  it('U10a: KSEF_DUPLICATE_RECONCILE z panelem decyzji — bez przycisków, odsyła do ramki wyżej; bez operatora', () => {
+    const el = render({ errorCode: 'KSEF_DUPLICATE_RECONCILE', duplicatePanel: true });
+    expect(buttons(el)).toEqual([]);
+    expect(info(el)).toBe(DUPLICATE_PANEL_INFO);
+    expect(el.textContent).not.toMatch(/operator/i);
+  });
+
+  it('U10a: KSEF_DUPLICATE_RECONCILE bez panelu (inny powód) — bez przycisków, karta faktury i adres pomocy; bez operatora', () => {
+    for (const props of [{ duplicatePanel: false }, {}]) {
+      const el = render({ errorCode: 'KSEF_DUPLICATE_RECONCILE', ...props });
+      expect(buttons(el)).toEqual([]);
+      expect(info(el)).toBe(DUPLICATE_INFO);
+      expect(info(el)).toContain(SUPPORT_EMAIL);
+      expect(el.textContent).not.toMatch(/operator/i);
+      unmount();
+    }
+  });
+
+  it('U10a: pasek akcji faktury przekazuje „panel decyzji” do przycisków po błędzie', () => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    act(() => root!.render(
+      <InvoiceActions
+        invoice={{
+          id: 'inv-1', ksef_status: 'failed', xml_storage_path: null, invoice_type: 'VAT', invoice_kind: 'regular',
+          last_error_code: 'KSEF_DUPLICATE_RECONCILE', ksef_resend_facts: STORED, ksef_environment_known: true,
+          ksef_duplicate_panel: true, ksef_retired: null,
+        }}
+        canManageSend
+      />,
+    ));
+    expect(host.textContent).toContain(DUPLICATE_PANEL_INFO);
+    expect(host.textContent).not.toMatch(/operator/i);
+  });
+
+  it.each(['regular', 'advance', 'correction', 'final'])('U10b: KSEF_NUMBER_TAKEN (%s) — „Wróć do szkicu”, tekst bez „usuń go”', (kind) => {
+    const el = render({ errorCode: 'KSEF_NUMBER_TAKEN', invoiceKind: kind, facts: kind === 'final' ? HELD : STORED });
+    expect(buttons(el)).toEqual(['Wróć do szkicu']);
+    expect(info(el)).toBe(NUMBER_TAKEN_INFO);
+    expect(info(el)).not.toMatch(/usuń go/i);
+  });
+
+  it.each([
+    [
+      'zwykła',
+      'regular',
+      STORED,
+      'Dokument wrócił do szkicu jako wycofany: numer jest zajęty w KSeF, więc tego szkicu nie wyślesz ani nie usuniesz. Jeśli to inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.',
+    ],
+    [
+      'ZAL',
+      'advance',
+      STORED,
+      'Faktura zaliczkowa wróciła do szkicu jako wycofana: numer jest zajęty w KSeF, więc tego szkicu nie wyślesz ani nie usuniesz. Jeśli to inna sprzedaż, wystaw fakturę zaliczkową od nowa z nowym numerem.',
+    ],
+    [
+      'KOR (TEST)',
+      'correction',
+      STORED,
+      'Korekta wróciła do szkicu jako wycofana: numer jest zajęty w KSeF, więc tego szkicu nie wyślesz do KSeF. Jeśli w KSeF jest inny dokument, usuń szkic („Usuń szkic”) i wystaw korektę od nowa z nowym numerem.',
+    ],
+    [
+      'KOR wstrzymana (PROD)',
+      'correction',
+      HELD,
+      'Korekta wróciła do szkicu jako wycofana: numer jest zajęty w KSeF, więc tego szkicu nie wyślesz do KSeF. Jeśli w KSeF jest inny dokument, usuń szkic („Usuń szkic”), a po zdjęciu blokady wysyłki wystaw korektę od nowa z nowym numerem.',
+    ],
+    [
+      'ROZ (wstrzymana wszędzie)',
+      'final',
+      HELD,
+      'Faktura rozliczeniowa wróciła do szkicu jako wycofana: numer jest zajęty w KSeF, więc tego szkicu nie wyślesz do KSeF. Jeśli w KSeF jest inny dokument, usuń szkic („Usuń szkic”), a po zdjęciu blokady wysyłki wystaw fakturę rozliczeniową od nowa z nowym numerem.',
+    ],
+  ] as const)('U10c (C4, decyzja 9): toast po „Wróć do szkicu” przy KSEF_NUMBER_TAKEN — %s', async (_name, kind, facts, expected) => {
+    const el = render({ errorCode: 'KSEF_NUMBER_TAKEN', invoiceKind: kind, facts });
+    await act(async () => { button(el, 'Wróć do szkicu').click(); });
+    expect(m.reset).toHaveBeenCalledWith('inv-1');
+    const message = String(m.toastSuccess.mock.calls[0]?.[0]);
+    expect(message).toBe(expected);
+    expect(message).toContain('z nowym numerem');
+    expect(message).not.toMatch(/wyślij ponownie|Popraw ją|usuń go/i);
+    if (kind === 'regular' || kind === 'advance') {
+      // Zwykłej faktury i zaliczki z wpisem number_taken nie usuniesz (00148, decyzja 9).
+      expect(message).toContain('ani nie usuniesz');
+      expect(message).not.toContain('Usuń szkic');
+    } else {
+      // KOR i ROZ zostają usuwalne — usunięcie szkicu to ich wyjście.
+      expect(message).toContain('„Usuń szkic”');
+    }
+    if (facts.kindHeld && kind !== 'regular') expect(message).toContain('po zdjęciu blokady');
+  });
+
+  it('U10c strażnik: korekta po innym kodzie treści — toast bez zmian (resetDone), zwykła po KSEF_REJECTED — M.resetDone', async () => {
+    const el = render({ errorCode: 'XSD_INVALID', invoiceKind: 'correction', facts: STORED });
+    await act(async () => { button(el, 'Wróć do szkicu').click(); });
+    expect(m.toastSuccess).toHaveBeenCalledWith(KSEF_SPECIAL_SEND_MESSAGES.resetDone('correction'));
+    unmount();
+    m.toastSuccess.mockClear();
+    const regular = render({ status: 'rejected', errorCode: 'KSEF_REJECTED' });
+    await act(async () => { button(regular, 'Wróć do szkicu').click(); });
+    expect(m.toastSuccess).toHaveBeenCalledWith(KSEF_SEND_MESSAGES.resetDone);
   });
 });

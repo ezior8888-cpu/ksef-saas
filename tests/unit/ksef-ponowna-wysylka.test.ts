@@ -174,12 +174,30 @@ describe('resendInvoiceAction — ponowna wysyłka przez requeue_ksef_send', () 
     );
   });
 
-  it('klasa reconcile: odmowa i alarm dla operatora (Sentry.captureMessage)', async () => {
+  it('klasa reconcile, KSEF_DUPLICATE_RECONCILE: odmowa tekstem „duplikat” bez „operatora” i alarm dla operatora (Sentry.captureMessage)', async () => {
     m.row = failedRow({ last_error_code: 'KSEF_DUPLICATE_RECONCILE' });
+
+    // D-A4-1b-3 PR B (zasada z 07.10.2026): klient decyduje sam na karcie faktury,
+    // więc tekst nie odsyła do operatora (do PR B: M.reconcile „zajmuje się tym
+    // operator FaktFlow”). Alarm Sentry dla operatora zostaje.
+    const result = await resendInvoiceAction(ID);
+    expect(result.success).toBe(false);
+    const error = result.success ? '' : result.error;
+    expect(error).not.toMatch(/operator/);
+    expect(error).toContain(SUPPORT_EMAIL);
+    expect(result).toEqual({ success: false, error: KSEF_SEND_MESSAGES.duplicate });
+    expect(m.captureMessage).toHaveBeenCalledWith(expect.stringContaining('uzgodnienia'), expect.objectContaining({
+      extra: expect.objectContaining({ invoiceId: ID, tenantId: TENANT, code: 'KSEF_DUPLICATE_RECONCILE' }),
+    }));
+    expect(m.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('strażnik: inne kody klasy reconcile (RESULT_UNCERTAIN) — dalej M.reconcile i alarm (§7 p. 17)', async () => {
+    m.row = failedRow({ last_error_code: 'RESULT_UNCERTAIN' });
 
     await expect(resendInvoiceAction(ID)).resolves.toEqual({ success: false, error: KSEF_SEND_MESSAGES.reconcile });
     expect(m.captureMessage).toHaveBeenCalledWith(expect.stringContaining('uzgodnienia'), expect.objectContaining({
-      extra: expect.objectContaining({ invoiceId: ID, tenantId: TENANT, code: 'KSEF_DUPLICATE_RECONCILE' }),
+      extra: expect.objectContaining({ code: 'RESULT_UNCERTAIN' }),
     }));
     expect(m.enqueue).not.toHaveBeenCalled();
   });
