@@ -38,6 +38,11 @@ import {
   KSEF_PAUSED_MESSAGE,
 } from '@/lib/ksef/submission-holds';
 import { describeKsefSendError, ksefSendTransactionStep, type KsefSendMode } from '@/lib/invoices/ksef-send-step';
+import {
+  resendMissingCredentialsMessage,
+  resendPausedMessage,
+  resendPauseUnknownMessage,
+} from '@/lib/invoices/ksef-send-policy';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 import type { Invoice } from '@/types/invoice';
 import type {
@@ -103,6 +108,8 @@ export async function enqueueKsefSubmitAfterDraft(
     auditKind,
     internalNumberForAudit,
   } = params;
+  // Ponowna wysyłka z `failed` (K3, A4b PR2b): odmowa zostawia fakturę z błędem wysyłki, nie szkicem.
+  const resend = params.mode?.kind === 'requeue';
 
   // Covers existing ROZ drafts and callers that bypass the final invoice action.
   // Do this before both online and Offline24 enqueue paths.
@@ -126,13 +133,15 @@ export async function enqueueKsefSubmitAfterDraft(
   }
   try {
     if (await isKsefSubmissionPaused()) {
-      return { ok: false, error: KSEF_PAUSED_MESSAGE };
+      return { ok: false, error: resend ? resendPausedMessage(auditKind) : KSEF_PAUSED_MESSAGE };
     }
   } catch {
     // Bez pewności, że wyłącznik jest zdjęty, nie kolejkujemy (fail-closed).
     return {
       ok: false,
-      error: 'Nie można sprawdzić, czy wysyłka do KSeF jest dostępna. Faktura została zapisana — spróbuj ponownie za chwilę.',
+      error: resend
+        ? resendPauseUnknownMessage(auditKind)
+        : 'Nie można sprawdzić, czy wysyłka do KSeF jest dostępna. Faktura została zapisana — spróbuj ponownie za chwilę.',
     };
   }
 
@@ -178,7 +187,7 @@ export async function enqueueKsefSubmitAfterDraft(
   }
 
   if (!tenantKsef?.ksef_credentials_encrypted) {
-    return { ok: false, error: missingCredentialsMessage(auditKind) };
+    return { ok: false, error: resend ? resendMissingCredentialsMessage(auditKind) : missingCredentialsMessage(auditKind) };
   }
 
   let decrypted: ReturnType<typeof decryptCredentials>;

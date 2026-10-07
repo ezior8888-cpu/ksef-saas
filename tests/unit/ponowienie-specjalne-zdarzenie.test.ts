@@ -593,6 +593,9 @@ describe('A4b PR2a: każdy odczyt wiersza do ponowienia używa jednej krotki kol
     'lib/jobs/runners/ksef-lifecycle-reconcile.ts',
     'app/admin/ksef/actions.ts',
     'lib/admin/ksef-lifecycle.ts',
+    // A4b PR2b: „Wyślij ponownie” klienta i fakty na stronie faktury (do PR2b — literały bez special_data).
+    'app/(dashboard)/invoices/[id]/page.tsx',
+    'components/invoices/actions-detail.ts',
   ])('%s', (file) => {
     const source = readFileSync(path.join(process.cwd(), file), 'utf8');
     // Sam wynik, bez wypisywania całego pliku przy porażce.

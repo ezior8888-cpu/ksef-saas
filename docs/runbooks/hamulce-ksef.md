@@ -6,9 +6,9 @@ konfiguracji, która nie pozwala jobom zniknąć po cichu.
 
 | Hamulec | Kiedy działa | Co widzi użytkownik |
 |---|---|---|
-| Wyłącznik `killAllKsefSubmissions` | operator włącza go SQL-em | „Wysyłka faktur do KSeF jest chwilowo wstrzymana…” |
-| Blokada korekt (`KOR_HOLD`) | zawsze przy `KSEF_ENV=production` | „Wysyłka faktur korygujących… wstrzymana do czasu poprawki ich kwot” |
-| Blokada ROZ (`ROZ_HOLD_RECONCILE`) | zawsze (wcześniejsza zmiana) | komunikat o rozliczeniu zaliczek |
+| Wyłącznik `killAllKsefSubmissions` | operator włącza go SQL-em | „Wysyłka faktur do KSeF jest chwilowo wstrzymana…”: pierwsza wysyłka — faktura zostaje szkicem; „Wyślij ponownie” — „tej wysyłki nie wykonaliśmy”, faktura zostaje z błędem wysyłki; w jobie (`KSEF_PAUSED`) — zwykła wyjdzie automatycznie po zdjęciu, KOR/ZAL tylko w dniu wystawienia |
+| Blokada korekt (`KOR_HOLD`) | zawsze przy `KSEF_ENV=production` | „Wysyłka faktur korygujących… wstrzymana do czasu poprawki ich kwot”: przy wysyłce korekta zostaje szkicem; w jobie — „po zdjęciu blokady tej korekty sami nie wyślemy”, bez przycisków, napisz do pomocy FaktFlow (pomoc@faktflow.pl) |
+| Blokada ROZ (`ROZ_HOLD_RECONCILE`) | zawsze (wcześniejsza zmiana) | „Wysyłka faktur rozliczeniowych… wstrzymana”: przy wysyłce dokument zostaje szkicem; w jobie — „po zdjęciu blokady tej faktury sami nie wyślemy”, bez przycisków, napisz do pomocy FaktFlow |
 | `JOBS_BACKEND` jawny | poza lokalnym środowiskiem | brak zmiennej = zlecenie odrzucone, worker nie startuje |
 
 Każdy hamulec sprawdzany jest w trzech miejscach: przy kolejkowaniu
@@ -45,6 +45,8 @@ Wyłączenie: to samo z `enabled = false`.
 **Co dzieje się z fakturami w trakcie:**
 
 - Nowe kliknięcia „Wyślij” zwracają komunikat i zostawiają szkic.
+- „Wyślij ponownie” przy fakturze z błędem: komunikat, faktura zostaje
+  z błędem wysyłki (nie szkic).
 - Joby już w kolejce kończą się stanem `failed` / `KSEF_PAUSED`.
 - Wiersze Offline24 przechodzą w `failed` (zdarzenie ma
   `manualReconciliationRequired`) — po zdjęciu wyłącznika trzeba je wysłać
@@ -53,10 +55,15 @@ Wyłączenie: to samo z `enabled = false`.
   `ksef_submissions`. Ponowne wysłanie po zdjęciu wyłącznika najpierw zapyta
   KSeF o jej status, więc nie powstanie duplikat.
 
-Faktury do ponownego wysłania po zdjęciu wyłącznika:
+Po zdjęciu wyłącznika cron cyklu życia (I7, co 15 min) sam wznawia faktury
+`KSEF_PAUSED` z danymi do ponowienia: zwykłe każdego dnia, KOR/ZAL z kopią
+tylko w dniu wystawienia (KOR na PROD i ROZ nigdy — C4). Faktury, które
+zostają (brak danych, dokument specjalny po dacie wystawienia, wstrzymany
+rodzaj), klient widzi z powodem i przyciskiem „Wróć do szkicu”. Lista
+faktur, które nadal czekają:
 
 ```sql
-SELECT id, tenant_id, internal_number, updated_at
+SELECT id, tenant_id, internal_number, invoice_kind, issue_date, updated_at
   FROM public.invoices
  WHERE ksef_status = 'failed' AND last_error_code = 'KSEF_PAUSED'
  ORDER BY updated_at;
@@ -87,9 +94,15 @@ Generator korekt wysyła wartości „po” zamiast różnicy i zamienia `zw` na
 `KSEF_ENV=production` zostaje szkicem. Na KSeF TEST wysyłka działa, żeby
 dało się sprawdzić poprawkę.
 
-Zdjęcie blokady to zmiana w kodzie (`isCorrectionHeldForEnv` w
-`lib/ksef/submission-holds.ts`), razem z poprawką generatora i testami kwot.
-Nie przełączaj jej flagą.
+Zdjęcie blokady to zmiana w kodzie (C4 planu), razem z poprawką generatora
+i testami kwot: `lib/ksef/kind-holds.ts` (`isCorrectionHeldForEnv`,
+`isKindHeldForEnv` — z nich korzystają cron, panel operatora i przyciski
+klienta), `lib/ksef/roz-submission-hold.ts` (ROZ), kolejkowanie
+`lib/invoices/ksef-submit-enqueue.ts` i `lib/ksef/submit-invoice-full.ts` —
+wszystkie razem. Nie przełączaj jej flagą. Faktury `failed KOR_HOLD`
+i `ROZ_HOLD_RECONCILE` po zdjęciu nie wyjdą same (I7 wznawia tylko
+`KSEF_PAUSED`) — C4 rozstrzyga je osobno; do tego czasu klient pisze do
+pomocy FaktFlow (procedura w `ksef-error-codes.md`).
 
 ## `JOBS_BACKEND`
 

@@ -11,6 +11,8 @@ import { InvoiceActions } from '@/components/invoices/invoice-actions';
 import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
 import { UpoDownload } from '@/components/invoices/upo-download';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
+import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
+import { automaticResendExpected } from '@/lib/invoices/ksef-send-policy';
 import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
 import { importedVatRateLabel } from '@/lib/xml/fa3-p12';
 import type { Database } from '@/types/database';
@@ -69,6 +71,10 @@ export interface InvoiceDetailInitial {
   can_manage_send: boolean;
   /** D-A4-1b-3: dane faktury, którą KSeF ma już pod tym numerem (nierozstrzygnięty 440). */
   ksef_duplicate_original: DuplicateOriginalView | null;
+  /** A4b PR2b: ponowienie z kopii (dane zapisane, rodzaj wstrzymany, data minęła) — bez treści dokumentu. */
+  ksef_resend_facts: KsefResendFacts;
+  /** `KSEF_ENV` aplikacji poprawny. */
+  ksef_environment_known: boolean;
 }
 
 interface PaymentSnapshot {
@@ -227,7 +233,18 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
             {inv.invoice_type ? ` · ${inv.invoice_type}` : ''}
           </p>
         </div>
-        <StatusBadge status={inv.ksef_status} errorCode={inv.last_error_code} />
+        <StatusBadge
+          status={inv.ksef_status}
+          errorCode={inv.last_error_code}
+          automaticResend={automaticResendExpected({
+            status: inv.ksef_status,
+            errorCode: inv.last_error_code,
+            invoiceKind: inv.invoice_kind,
+            // Fakty z propsów (odświeżane przez router.refresh), stan i kod z Realtime.
+            facts: initial.ksef_resend_facts,
+            environmentKnown: initial.ksef_environment_known,
+          })}
+        />
       </div>
 
       {inv.ksef_number && (
@@ -446,6 +463,8 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           invoice_type: inv.invoice_type,
           invoice_kind: inv.invoice_kind,
           last_error_code: inv.last_error_code,
+          ksef_resend_facts: initial.ksef_resend_facts,
+          ksef_environment_known: initial.ksef_environment_known,
         }}
         canManageSend={inv.can_manage_send}
       />

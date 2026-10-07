@@ -48,17 +48,28 @@ const FAILED_BY_CODE = new Map<string, { label: string; tone: FfStatusTone }>([
   ['ISSUE_DATE_PASSED', { label: 'Data wystawienia minęła', tone: 'warning' }],
 ]);
 
+/** Klasa transient bez automatu (kod spoza `auto_requeue`, dokument po dacie wystawienia, brak danych). */
+const FAILED_TRANSIENT_MANUAL: { label: string; tone: FfStatusTone } = { label: 'Błąd wysyłki', tone: 'danger' };
+
 interface StatusBadgeProps {
   status: string;
   /** `invoices.last_error_code` — doprecyzowuje etykietę stanu `failed`. */
   errorCode?: string | null;
+  /**
+   * Czy automat naprawdę ponowi wysyłkę (`automaticResendExpected`). Bez tej
+   * informacji znaczek nie obiecuje ponowienia: „Błąd wysyłki”.
+   */
+  automaticResend?: boolean;
   isLoading?: boolean;
 }
 
-export function StatusBadge({ status, errorCode, isLoading }: StatusBadgeProps) {
+export function StatusBadge({ status, errorCode, automaticResend, isLoading }: StatusBadgeProps) {
   const failedClass = status === 'failed' ? sendErrorClassOf(errorCode) : null;
   const byCode = status === 'failed' && errorCode ? FAILED_BY_CODE.get(errorCode) : undefined;
-  const meta = byCode ?? (failedClass ? FAILED_BY_CLASS[failedClass] : undefined) ?? STATUS_MAP[status] ?? FALLBACK;
+  const byClass = failedClass === 'transient' && automaticResend !== true
+    ? FAILED_TRANSIENT_MANUAL
+    : failedClass ? FAILED_BY_CLASS[failedClass] : undefined;
+  const meta = byCode ?? byClass ?? STATUS_MAP[status] ?? FALLBACK;
   const showSpinner =
     isLoading === true ||
     status === 'queued' ||

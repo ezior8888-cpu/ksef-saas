@@ -255,9 +255,14 @@ describe('ISSUE_DATE_PASSED: dokument specjalny tylko w dniu wystawienia (decyzj
   });
 
   it('klient: „Wróć do szkicu” z powodem daty; operator: odmowa ponowienia z powodem', () => {
-    const decision = decideResend({ direction: 'outgoing', status: 'failed', errorCode: SEND_ERROR_CODES.ISSUE_DATE_PASSED, invoiceKind: 'advance' });
+    const decision = decideResend({
+      direction: 'outgoing', status: 'failed', errorCode: SEND_ERROR_CODES.ISSUE_DATE_PASSED, invoiceKind: 'advance',
+      facts: { sendData: 'stored', kindHeld: false, issueDatePassed: true }, environmentKnown: true,
+    });
     expect(decision).toMatchObject({ allowed: false, reason: 'terminal' });
     expect((decision as { message: string }).message).toMatch(/datę wystawienia sprzed dzisiaj/);
+    // A4b PR2b (decyzja 07.10.2026): zablokowany szkic → pomoc FaktFlow; „uzgodni operator” nie ma ścieżki w panelu.
+    expect((decision as { message: string }).message).not.toMatch(/uzgodni/);
     const button = operatorRequeueButton({
       direction: 'outgoing', status: 'failed', errorCode: SEND_ERROR_CODES.ISSUE_DATE_PASSED, invoiceKind: 'advance',
       facts: { sendData: 'stored', kindHeld: false, issueDatePassed: true }, environmentKnown: true,

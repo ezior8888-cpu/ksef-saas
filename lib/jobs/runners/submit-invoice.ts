@@ -3,6 +3,7 @@ import { assertJobIdentity, requireInvoiceTenant } from './tenant-boundary';
 import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError, RetryAfterError } from '../errors';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import { IssueDatePassedError, issueDatePassedMessage } from '@/lib/ksef/special-issue-date';
 import type { JobContext } from '@/lib/jobs/registry';
 import type { KsefEnvironment } from '@/types/ksef';
@@ -195,7 +196,7 @@ function isStaleSubmission(attemptedAt: string | null | undefined): boolean {
 }
 
 const ROZ_RECONCILIATION_MESSAGE =
-  'Wysyłka faktury rozliczającej została wstrzymana. Przed kolejną próbą ręcznie uzgodnij jej status z KSeF.';
+  'Wysyłka faktur rozliczeniowych do KSeF jest tymczasowo wstrzymana — po zdjęciu blokady tej faktury sami nie wyślemy (co dalej — na dole strony).';
 
 /** Fresh DB read outside Inngest steps, including the accepted status. */
 async function currentSubmissionState(
@@ -252,10 +253,10 @@ async function assertSubmissionNotHeld(
       correctionData: data.correctionData,
     })
   ) {
-    throw new NonRetriableError(heldErrorMessage(KOR_HOLD));
+    throw new NonRetriableError(heldErrorMessage(KOR_HOLD, stored.invoice_kind));
   }
   if (await isKsefSubmissionPaused()) {
-    throw new NonRetriableError(heldErrorMessage(KSEF_PAUSED));
+    throw new NonRetriableError(heldErrorMessage(KSEF_PAUSED, stored.invoice_kind));
   }
 }
 
@@ -713,7 +714,7 @@ export async function onSubmitInvoiceExhausted(
  * D-A4-2: komunikat dla klienta przy `ENV_MISMATCH` — gdzie zlecono wysyłkę,
  * jakie środowisko jest teraz i co zrobić. Bez dowodu kontaktu: szkic
  * i decyzja klienta. Z dowodem (wcześniejsza próba mogła dotrzeć do KSeF):
- * nie wystawiać ponownie — szkic zablokowany, uzgadnia operator.
+ * nie wystawiać ponownie — szkic zablokowany, sprawdza pomoc FaktFlow (decyzja 07.10.2026).
  */
 function envMismatchMessage(
   eventEnvironment: string,
@@ -724,7 +725,7 @@ function envMismatchMessage(
     ? `Tej wysyłki nie wykonaliśmy: zlecono ją w środowisku KSeF „${eventEnvironment}”, a obecne to „${configuredEnvironment}”.`
     : `Tej wysyłki nie wykonaliśmy: środowisko KSeF po stronie FaktFlow nie jest poprawnie ustawione (zlecenie: „${eventEnvironment}”). Zajmujemy się tym.`;
   if (contacted) {
-    return `${what} Wcześniejsza próba wysyłki tej faktury mogła dotrzeć do KSeF — nie wystawiaj jej ponownie, uzgodni ją operator FaktFlow.`;
+    return `${what} Wcześniejsza próba wysyłki tej faktury mogła dotrzeć do KSeF — nie wystawiaj jej ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`;
   }
   return configuredEnvironment
     ? `${what} Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku.`
