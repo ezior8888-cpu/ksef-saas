@@ -35,7 +35,7 @@ z kolumny „Luka” są w nim wypisane jawnie.
 | `XSD_INVALID` | terminal | XML niezgodny z XSD | Wróć do szkicu | — | Wróć do szkicu | przy dowodzie kontaktu bez otwartego wpisu (po cudzym 440) → D-A4-1 |
 | `KSEF_REJECTED` | terminal | KSeF odrzucił treść (status ≥ 400, HTTP 4xx) | Wróć do szkicu | — | Wróć do szkicu; „Tylko uzgodnij” przy otwartym wpisie | jak wyżej |
 | `INVALID_DOCUMENT` | terminal | walidacja dokumentu, odwołania (`assertSubmitReferences`) | Wróć do szkicu | — | Wróć do szkicu | jak wyżej |
-| `KSEF_NUMBER_TAKEN` | terminal | cudzy 440, oryginał z innego programu (treść sprawdzona, D-A4-1a) | Wróć do szkicu → usuń → wystaw z nowym numerem (albo nie wystawiaj, jeśli to ta sama sprzedaż) | — | Wróć do szkicu | — (wpisy `number_taken` nie są dowodem kontaktu) |
+| `KSEF_NUMBER_TAKEN` | terminal | cudzy 440, oryginał z innego programu (treść sprawdzona, D-A4-1a) | Wróć do szkicu → szkic wycofany: nie wyślesz go ani nie wyślesz e-mailem; zwykłej faktury i zaliczki nie usuniesz ani nie zmienisz jej numeru (00148) → „Wystaw nową fakturę” z nowym numerem; korektę i fakturę rozliczeniową usuń („Usuń szkic”) i wystaw od nowa z nowym numerem; ta sama sprzedaż — nic | — | Wróć do szkicu | — (wpisy `number_taken` nie są dowodem kontaktu); szkic wycofany trzyma numer (00148; KOR/ROZ usuwalne — decyzja 07.10 (9)) |
 | `ENV_MISMATCH` | terminal (D-A4-2, 00143) | zdarzenie z innego środowiska KSeF niż skonfigurowane w workerze (zlecone na TEST, worker na PROD; albo worker bez poprawnego `KSEF_ENV`) — runner nie dotknął KSeF | Wróć do szkicu → zdecyduj, czy wysłać w obecnym środowisku (dokument specjalny: usuń szkic i wystaw od nowa z dzisiejszą datą); szkic zablokowany → pomoc FaktFlow (sprawdzamy w KSeF) | — | Wróć do szkicu (bez dowodu); „Tylko uzgodnij” tylko dla otwartego wpisu z OBECNEGO środowiska; **nigdy** „Wyślij ponownie” (baza odmawia) | przy dowodzie kontaktu bez otwartego wpisu — jak wyżej; otwarty wpis sprzed przełączenia środowiska — bez bezpiecznego wyjścia do F2 (niżej) |
 | `ISSUE_DATE_PASSED` | terminal (decyzja 06.10.2026, 00147) | dokument specjalny (KOR, ZAL, ROZ) z datą wystawienia sprzed dzisiaj — worker odmówił przed wysyłką (runner) albo tuż przed plikiem (hak otwarcia sesji, po uwierzytelnieniu); ponowienie, oczekiwanie albo samo uwierzytelnienie przeniosło wysyłkę za północ, a w KSeF dokument wystawia się w dniu wysyłki. Zostaje okno samego żądania z plikiem (poniżej sekundy) | Wróć do szkicu → usuń szkic i wystaw dokument od nowa z dzisiejszą datą (szkicu dokumentu specjalnego się nie wysyła); szkic zablokowany → pomoc FaktFlow (sprawdzamy w KSeF) | — | Wróć do szkicu (bez dowodu); **nigdy** „Wyślij ponownie” (baza odmawia); kod powstaje bez otwartego wpisu (worker odmawia po uzgodnieniu, przed plikiem i zamiarem), więc nie ma czego uzgadniać | z dowodem kontaktu — brak wyjścia w panelu do B2: sprawdź dokument w KSeF i zgłoś Bartoszowi |
 | `KSEF_UNAVAILABLE` | transient | 5xx, timeout | Wyślij ponownie / Wróć do szkicu (KOR/ZAL¹ tylko w dniu wystawienia; po dacie, bez danych albo przy wstrzymanym rodzaju — tylko Wróć do szkicu z powodem) | I6: co godzinę przez 24 h; KOR/ZAL¹ tylko w dniu wystawienia | Wyślij ponownie / szkic (KOR/ZAL¹ w dniu wystawienia) | — |
@@ -48,7 +48,7 @@ z kolumny „Luka” są w nim wypisane jawnie.
 | `KSEF_PAUSED` | hold | wyłącznik operatora | czeka, bez przycisków (zwykła — automat po zdjęciu; KOR/ZAL¹ tylko dziś); bez danych (także zwykła), dokument specjalny po dacie albo wstrzymany rodzaj — Wróć do szkicu z powodem | I7: po zdjęciu hamulca (KOR/ZAL¹ tylko w dniu wystawienia) | Wyślij ponownie / szkic | — |
 | `KOR_HOLD` | hold | hamulec korekt | brak przycisków (decyzja a); komunikat: sami nie wyślemy, napisz do pomocy FaktFlow | — (I7 wznawia tylko `KSEF_PAUSED`) | TEST: „Wyślij ponownie”¹; PROD: Wróć do szkicu (bez dowodu) | PROD z dowodem kontaktu — C4 |
 | `ROZ_HOLD_RECONCILE` | hold | hamulec ROZ | brak przycisków (decyzja a); komunikat: sami nie wyślemy, napisz do pomocy FaktFlow | — (jak wyżej) | Wróć do szkicu (bez dowodu) | z dowodem kontaktu — C4 |
-| `KSEF_DUPLICATE_RECONCILE` | reconcile | 440, którego automat nie rozstrzygnął: oryginał z FaktFlow o innym pliku, numer KSeF w innej fakturze firmy, oryginału nie da się pobrać (403 — token bez `InvoiceRead`; po ponowieniach 5xx/429/21164/21165) | „zajmujemy się” + dane oryginału z KSeF na karcie faktury (D-A4-1b-3, 00144) | I5 przy otwartym wpisie > 48 h (weryfikacja od nowa) | „Tylko uzgodnij” przy otwartym wpisie (powtarza weryfikację); karta `/admin/ksef/[id]`: `original_check` (powód, dane, skrót, archiwum) | bez otwartego wpisu: **ślepa uliczka** → ręczny werdykt D-A4-1b |
+| `KSEF_DUPLICATE_RECONCILE` | reconcile | 440, którego automat nie rozstrzygnął: oryginał z innego programu bez naszego pliku do porównania (`no-own-file`), oryginał z FaktFlow o innym pliku, numer KSeF w innej fakturze firmy (`known-number`), oryginału nie da się pobrać (403 — token bez `InvoiceRead`; po ponowieniach 5xx/429/21164/21165) | Decyzja klienta (no-own-file, known-number; zwykła faktura): przycisk na karcie faktury — „To ta sama sprzedaż” / „To inna sprzedaż” (właściciel albo administrator; 00148, D-A4-1b-3 PR B; e-mail „czeka na Twoją decyzję” raz). Pozostałe powody i rodzaje: dane oryginału z KSeF na karcie faktury (00144), „nie wystawiaj ponownie”, pytania do pomocy FaktFlow | I5D — bez automatu i bez alarmu (`I5D-env` — alarm); I5 dla pozostałych powodów: przy otwartym wpisie > 48 h weryfikacja od nowa | „Zapisz decyzję klienta” (tylko decyzja przekazana przez klienta, notatka: kanał, data, osoba) i „Przypomnij klientowi” (raz na 24 h, decyzja 07.10 (12)); „Tylko uzgodnij” przy otwartym wpisie (powtarza weryfikację); karta `/admin/ksef/[id]`: `original_check` (powód, dane, skrót, archiwum, decyzja, powiadomienie) | bez otwartego wpisu: **ślepa uliczka** → ręczny werdykt D-A4-1b; bez decyzji w panelu: `faktflow-original` → PR C, `same-content-other-program` → D-A4-1b-2, `download-*`/`storage-pending`/`archive-pending` → PR D (do tego czasu I5 i „Tylko uzgodnij”), KOR/ZAL/ROZ → D-A4-1b-3-S |
 | `RESULT_UNCERTAIN` | reconcile | niepewny wynik, KSeF nie odpowiada | „nie wystawiaj ponownie” | I5 (A3): „tylko uzgodnij” raz na dobę, także KOR/ZAL¹ bez względu na datę | „Tylko uzgodnij” (KOR/ZAL¹ każdego dnia) / **Wyślij ponownie** (A4; KOR/ZAL¹ tylko w dniu wystawienia) | dokument specjalny po dacie wystawienia bez otwartego wpisu — do B2 |
 | `INVALID_EVENT` | reconcile | zły payload zdarzenia | „zajmujemy się” | — | **Wyślij ponownie** (A4) — zdarzenie odtworzone z wiersza (KOR/ZAL¹ tylko w dniu wystawienia) | dokument specjalny po dacie wystawienia bez otwartego wpisu — do B2 |
 | `ENQUEUE_LOST` | reconcile | `queued` bez zlecenia, z dowodem kontaktu (I1) | „zajmujemy się” | I5 przy otwartym wpisie > 48 h (także KOR/ZAL¹ bez względu na datę) | **Wyślij ponownie** (A4; KOR/ZAL¹ tylko w dniu wystawienia) / „Tylko uzgodnij” | dokument specjalny po dacie wystawienia bez otwartego wpisu — do B2 |
@@ -135,6 +135,68 @@ i zgłoś Bartoszowi.
 - **`ENV_MISMATCH` z zablokowanym szkicem:** sprawdź fakturę w KSeF tamtego
   środowiska i zgłoś Bartoszowi (F2, D-A4-2 niżej).
 
+**`KSEF_DUPLICATE_RECONCILE` — decyzja klienta (D-A4-1b-3 PR B, 00148;
+zasady w „Decyzje do podjęcia” niżej):**
+- **Zapis decyzji przekazanej przez klienta:** `/admin/ksef/<id>` →
+  „Zapisz decyzję klienta”. Operator nie decyduje sam (04.10.2026) —
+  zapisuje tylko to, co klient powiedział albo napisał. Notatka (co
+  najmniej 10 znaków): **kanał, data, osoba**, np. „e-mail od właściciela
+  05.10, Jan Kowalski”. Odpowiedź klienta zachowaj w skrzynce pomocy.
+  Gdy dialog wymaga potwierdzenia „Rozumiem skutki” (inny albo nieznany NIP
+  nabywcy, inna albo nieznana kwota brutto lub waluta), zaznacz je tylko
+  wtedy, gdy klient potwierdził je wprost. Przycisk wyłączony = powód obok
+  (np. wpłaty, środowisko, `known-stale`) — kroki niżej.
+- **„Przypomnij klientowi”:** pierwszy e-mail „Faktura {nr} czeka na
+  Twoją decyzję” (i push) wysyła automat sam, raz na fakturę i numer KSeF
+  oryginału. Przycisk wysyła przypomnienie na adres właściciela firmy,
+  najwyżej raz na 24 h (decyzja 07.10 (12)). „Firma nie ma adresu e-mail
+  właściciela” → skontaktuj się innym kanałem. „Przypomnienie wysłane, ale
+  nie zapisaliśmy śladu w audit_logs” → nie wysyłaj ponownie przez 24 h.
+  Faktura, która czekała przed wdrożeniem PR B, dostaje pierwszy e-mail
+  dopiero z tego przycisku.
+- **`known-number` po decyzji klienta:** sprawdź dokument Y (ten, który
+  w FaktFlow ma numer KSeF oryginału) w KSeF i w FaktFlow — lista decyzji
+  z 30 dni: sekcja 10 (f) `scripts/ops/kontrola-faktur-ksef.sh`; sygnał
+  także z alarmu Sentry `ksef-duplicate-known-number`. Jeśli Y ma ten
+  numer KSeF przez pomyłkę albo jego dane nie zgadzają się z fakturą
+  w KSeF: naprawa Y rolą serwisową **tylko za zgodą Bartosza**, dla tej
+  jednej faktury (D-A4-1b-3-KN-Y — narzędzia nie ma).
+- **Wpłaty na dokumencie (decyzja 07.10 (6)):** decyzja jest zablokowana,
+  dopóki przy dokumencie są wpłaty (`paid_amount` albo wiersze
+  `payments`). Ustal z klientem, przy której fakturze wpłata ma być.
+  `UPDATE payments.invoice_id` (przeniesienie) albo usunięcie wiersza
+  wpłaty — **tylko za zgodą Bartosza, osobno dla każdego przypadku**;
+  potem „Zapisz decyzję klienta”. Panel klienta widzi tylko `paid_amount`
+  (rola `authenticated` nie czyta `payments`): wiersz, którego `paid_amount`
+  nie liczy (np. niepotwierdzone dopasowanie automatyczne), kończy się
+  odmową RPC z numerem dokumentu i ostrzeżeniem Sentry
+  `ksef.duplicate-decision` („RPC odmówiło mimo zgody polityki”).
+- **Blokady bez decyzji w panelu** — `billing` (faktura abonamentu),
+  `offline`, `conflicting-originals`, `own-history` (oryginał może być
+  wcześniejszą wysyłką z FaktFlow), `kind` (KOR/ZAL/ROZ, D-A4-1b-3-S),
+  `no-marker`, `known-stale`: sprawdź fakturę w KSeF i zgłoś Bartoszowi.
+  `known-stale` (Y nie ma już numeru KSeF oryginału albo nie jest
+  przyjęty): „Tylko uzgodnij” odświeża werdykt; Y w stanie `failed`
+  z numerem KSeF to I9 — najpierw I9. `no-check` (wpis sprzed 00144): I5
+  zapisze dane przy ponownym sprawdzeniu.
+- **Błędna decyzja:** wycofany dokument zostaje niewysyłalny (RPC odmawia
+  drugiej, innej decyzji). Przy „ta sama sprzedaż”, która okazała się inną
+  sprzedażą, klient wystawia nową fakturę z nowym numerem. Zmiana
+  `original_check.decision` — tylko za zgodą Bartosza.
+- **Usunięcie albo zmiana numeru wycofanego szkicu zwykłej faktury lub
+  zaliczki na prośbę klienta:** tylko za zgodą Bartosza, rolą serwisową
+  (wyzwalacze `c_guard_ksef_retired_draft_delete`
+  i `c_guard_ksef_retired_draft_number` przepuszczają serwis). Usunięcie
+  kasuje ślad decyzji (`ksef_submissions` usuwa się kaskadą) i oddaje numer
+  do podpowiedzi następnego numeru. Szkic wycofany KOR i ROZ klient usuwa
+  sam („Usuń szkic”, decyzja 07.10 (9)).
+- **Przełączenie TEST → PROD (lista kontrolna):** przed zmianą `KSEF_ENV`
+  policz faktury I5D z `detail.env = 'test'` (sekcja 10 (c)
+  `kontrola-faktur-ksef.sh`). Po przełączeniu każda z nich to `I5D-env`
+  (alarm krytyczny): klient nie zapisze decyzji (RPC `ENV`), a ponowne
+  sprawdzenie pytałoby PROD o numer z TEST. Niech klienci zdecydują przed
+  przełączeniem; reszta — zgłoś Bartoszowi (F2).
+
 ### Stary dokument specjalny (bez danych do ponowienia)
 
 KOR/ROZ sprzed 00137 (bez `special_data`) albo ZAL sprzed 02.10.2026 (bez
@@ -178,12 +240,17 @@ KOR/ROZ sprzed 00137 (bez `special_data`) albo ZAL sprzed 02.10.2026 (bez
   1. sesja oryginału w historii tej faktury **i ten sam skrót pliku** →
      nasza faktura, `accepted` z numerem oryginału (bez skrótu albo z innym
      skrótem → dalej, bo po powrocie do szkicu treść mogła się zmienić);
-  2. numer KSeF oryginału ma inna faktura firmy w FaktFlow → operator;
+  2. numer KSeF oryginału ma inna faktura firmy w FaktFlow (Y) → bez
+     przyjęcia treści; od D-A4-1b-3 PR B oryginał i tak pobieramy (krok 3)
+     i zapisujemy jego dane, a werdykt po udanym pobraniu to `known-number`
+     — decyzja klienta (niżej; nieudane pobranie jak w kroku 4), alarm
+     operatora `ksef-duplicate-known-number` zostaje;
   3. pobranie oryginału (`GET /invoices/ksef/{ksefNumber}`, `InvoiceRead`):
      bieżący plik bajt w bajt (albo wcześniejsza próba o tej samej treści)
      → `accepted`; oryginał z FaktFlow (`SystemInfo = KSeF SaaS v1.0`) o innym
      pliku → operator; oryginał z innego programu → `KSEF_NUMBER_TAKEN`
-     (wszystkie wpisy duplikatu → `number_taken`, klient wraca do szkicu);
+     (wszystkie wpisy duplikatu → `number_taken`, klient może wrócić do szkicu
+     (szkic wycofany, 00148));
   4. pobranie się nie udało: chwilowo (5xx, 429, 401, 21164, 21165, błąd
      odczytu naszego pliku z magazynu) — ponowienie samej weryfikacji, bez
      drugiej wysyłki; trwale (403, inne 4xx) — operator.
@@ -214,7 +281,11 @@ KOR/ROZ sprzed 00137 (bez `special_data`) albo ZAL sprzed 02.10.2026 (bez
   zdecyduje.
   „Znany numer” (numer KSeF oryginału ma już inna faktura firmy) liczy
   tylko faktury sprzedaży — zakupowa z tym numerem nie zatrzymuje
-  porównania treści (D-A4-1b-3, A0).
+  porównania treści (D-A4-1b-3, A0); od PR B pobieramy oryginał także przy
+  znanym numerze (dane, skrót, archiwum i `knownInvoice` na wpisie), ale
+  w tej gałęzi nie przyjmujemy jego treści — Y ma już ten numer KSeF.
+  Wyjątek: krok 1 (własna sesja z tym samym skrótem) idzie przed
+  sprawdzeniem znanego numeru — osobne ustalenie D-A4-1b-3-OWN-KN.
 - **D-A4-1b — przypadki nierozstrzygnięte przez automat** (decyzje Bartosza
   04.10.2026):
   1. wcześniejsza wersja tej faktury w KSeF → przyjąć oryginał (numer
@@ -225,10 +296,104 @@ KOR/ROZ sprzed 00137 (bez `special_data`) albo ZAL sprzed 02.10.2026 (bez
      ostrzeżenie w JPK (D-A4-1b-2);
   3. pozostałe → decyduje **klient** przyciskiem z danymi oryginału („ta
      sama sprzedaż” / „inna sprzedaż → nowy numer”), operator tylko zapisuje
-     decyzję klienta (D-A4-1b-3, w budowie: A0 → A dane oryginału na wpisie
-     → wierny import (C5a stawki P_12, C5b P_6 i adnotacje) → B decyzja → C zapis oryginału z FaktFlow → D
-     „Sprawdź ponownie”). Do tego czasu operator sprawdza fakturę w KSeF
-     i zgłasza ją Bartoszowi.
+     decyzję klienta (D-A4-1b-3: A0 i A dane oryginału na wpisie — zrobione;
+     wierny import C5a–C5c — zrobiony; **B decyzja — zrobiona dla
+     `no-own-file` i `known-number`, tylko zwykła faktura** (00148, punkt
+     niżej); C zapis oryginału z FaktFlow (`faktflow-original`); D
+     „Sprawdź ponownie” (powody bez danych oryginału)). KOR, ZAL i ROZ
+     z nierozstrzygniętym 440 nie mają decyzji w panelu — osobne ustalenie
+     D-A4-1b-3-S. Dla powodów i rodzajów bez decyzji w panelu operator
+     sprawdza fakturę w KSeF i zgłasza ją Bartoszowi.
+- **D-A4-1b-3 PR B — decyzja klienta przy nierozstrzygniętym 440** (00148,
+  decyzje Bartosza 04.10 i 07.10.2026):
+  1. **Kto i kiedy.** Właściciel albo administrator firmy, przyciskiem na
+     karcie faktury `failed KSEF_DUPLICATE_RECONCILE`, gdy
+     `ksef_duplicate_decision_blocker` = NULL: powód `no-own-file` albo
+     `known-number` z danymi oryginału (skrót, podsumowanie,
+     `ownHistory = false`), zwykła faktura bez numeru KSeF, nie abonament,
+     nie offline,
+     jeden oryginał w historii, brak własnej historii tego pliku, brak wpłat,
+     dane oryginału sprawdzone w środowisku = `KSEF_ENV`. Operator zapisuje
+     decyzję wyłącznie na prośbę klienta („Zapisz decyzję klienta”,
+     notatka: kanał, data, osoba) — sam nie decyduje (04.10.2026).
+     „Rozumiem skutki” jest wymagane, sprawdzane też na serwerze (07.10 (7),
+     (12)): „inna sprzedaż” przy tym samym albo nieznanym NIP nabywcy;
+     „ta sama sprzedaż” przy innym albo nieznanym NIP albo innej, nieznanej
+     lub w innej walucie kwocie brutto.
+  2. **Skutek** (RPC `decide_ksef_duplicate`, jedna transakcja): wpisy
+     `intent`/`sent`/`duplicate` → `number_taken` z kluczem `decision` na
+     znaczniku, dokument wraca do szkicu jako **wycofany** (numer zostaje
+     przy nim), audyt `invoice.ksef_duplicate_decided` (aktor, notatka,
+     dane oryginału, prawdziwy poprzedni stan) i `invoice.send_reset`.
+     Nic nie importujemy (07.10 (A)): „ta sama sprzedaż” — fakturą tej
+     sprzedaży jest ta w KSeF (FaktFlow nie ujmuje jej w JPK ani w KPiR);
+     „inna sprzedaż” — klient wystawia nową fakturę z nowym numerem
+     i dzisiejszą datą. Ta sama decyzja drugi raz = `already_decided`, bez
+     zapisu; inna — odmowa („Decyzja … jest już zapisana”).
+  3. **`known-number`** (07.10 (1)): runner pobiera, archiwizuje
+     i streszcza oryginał K; klient widzi dane K i odnośnik „Zobacz
+     dokument {Y}” do faktury, która w FaktFlow ma numer K. Decyzja dotyczy
+     tylko naszego dokumentu — Y zostaje bez zmian (nie może być wiernym
+     zapisem K: indeks unikalny numeru, 00120). Y bez numeru K albo
+     nieprzyjęty → `known-stale` (zostaje I5, ponowne sprawdzenie). Naprawa
+     Y — procedura „Klient pisze do pomocy”, za zgodą Bartosza
+     (D-A4-1b-3-KN-Y).
+  4. **Szkic wycofany** — każdy szkic z wpisem `number_taken`, z decyzji
+     albo z automatu `KSEF_NUMBER_TAKEN` (07.10 (2), (3), (9)–(11)): nie
+     wyślesz go do KSeF (wyzwalacz `c_guard_ksef_retired_draft`, każda
+     rola), nie wyślesz go e-mailem do nabywcy (odmowa w
+     `emailInvoiceAction`), klient nie zmieni jego numeru
+     (`c_guard_ksef_retired_draft_number`); zwykłej faktury i zaliczki
+     klient nie usunie (`c_guard_ksef_retired_draft_delete` — numer nie
+     wraca do podpowiedzi), korektę i fakturę rozliczeniową usunie (szkic
+     KOR blokowałby kolejną korektę, 00133/00135; szkic ROZ trzyma swoje
+     zaliczki, 00125). Baner „Dokument wycofany — numer … jest zajęty
+     w KSeF” przy każdym rodzaju; pobranie PDF zostaje (kopia klienta).
+     Rola serwisowa przechodzi przez wyzwalacze usunięcia i numeru (zgoda
+     Bartosza, procedura niżej).
+  5. **I5D — czeka na klienta** (07.10 (4)): osobny wiersz
+     `ksef_lifecycle_violations()` dla faktury, którą klient może
+     rozstrzygnąć (blokada = NULL), od pierwszej minuty, bez progu wieku.
+     Cron go nie uzgadnia, alarm krytyczny go nie liczy, raport dzienny
+     („Czekają na decyzję klienta (I5D)”) i `/admin/ksef` pokazują go
+     osobno. Wyjątek **`I5D-env`** — dane oryginału z innego środowiska
+     KSeF niż `KSEF_ENV`: alarm krytyczny, bo klient nie zapisze decyzji
+     (RPC `ENV`). Faktura, której klient nie rozstrzygnie (wpłaty, rodzaj,
+     abonament, offline, `no-check`, inne powody, `known-stale`, własna
+     historia), zostaje w I5 z alarmem i ponownym sprawdzeniem po 48 h.
+  6. **Powiadomienie** (07.10 (5), (12)): e-mail „Faktura {nr} czeka na
+     Twoją decyzję” i push do właściciela — raz na fakturę i numer KSeF
+     oryginału (trwały ślad `invoice.ksef_duplicate_decision_notified`
+     w `audit_logs`, zapis tylko po dostarczeniu). Bez automatycznego
+     przypomnienia; „Przypomnij klientowi” w `/admin/ksef/<id>` wysyła
+     ponownie e-mail, najwyżej raz na 24 h.
+  7. **Wpłaty** (07.10 (A), (6)): wpłaty zapisane na dokumencie blokują
+     decyzję; klient dostaje komunikat z numerem dokumentu i adresem
+     pomoc@faktflow.pl. Wiersze `payments` zmieniamy tylko za zgodą
+     Bartosza, osobno dla każdego przypadku (procedura „Klient pisze do
+     pomocy”). Narzędzia operatora do wpłat nie ma.
+  8. **Przegląd prawnika przed KSeF PROD** (07.10 (A), (8); TEST bez
+     blokady): dialogi i panel decyzji, odmowy w panelu, komunikaty P0001
+     z RPC i wyzwalaczy 00148 (`DUPLICATE_DECISION_SQL_TEXTS`), baner
+     wycofanego dokumentu każdego rodzaju, odmowa e-maila, e-mail,
+     przypomnienie i push, teksty `KSEF_NUMBER_TAKEN` (także KOR/ZAL/ROZ
+     i katalog `ksef_error_codes`). Lista do przekazania prawnikowi to jeden
+     plik: `tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt`
+     (migawka `DUPLICATE_DECISION_TEXTS` + `DUPLICATE_DECISION_SQL_TEXTS`
+     z `lib/ksef/duplicate-decision.ts`, test
+     `tests/unit/ksef-duplikat-decyzja-teksty.test.ts`). Zmiana tekstu
+     P0001 po przeglądzie wymaga nowej migracji (`CREATE OR REPLACE`) i tej
+     samej zmiany w lustrze TypeScript; dziś zgodność lustra z 00148
+     pilnuje `tests/unit/ksef-decyzja-duplikatu-migracja.test.ts` (U16e) —
+     nowa migracja musi dostać takie samo sprawdzenie. Punkt bramki: plan
+     „zero zgubionych faktur”, sekcja 8.
+  9. **Zapisane osobno** (dziennik planu, sekcja 9): D-A4-1b-3-S
+     (KOR/ZAL/ROZ z nierozstrzygniętym 440), D-A4-1b-3-KN-Y (zapis Y po
+     decyzji `known-number`), D-A4-1b-3-OWN-KN (akceptacja własnej sesji
+     przed sprawdzeniem znanego numeru), treść szkicu wycofanego poza
+     numerem (niezamrożona na poziomie bazy), e-mail dokumentu bez numeru
+     KSeF poza szkicem wycofanym, brak znaczka „Czeka na decyzję” na
+     liście faktur.
 - **D-A4-2 — `ENV_MISMATCH`** (decyzja Bartosza 04.10.2026, przyjęta
   w 00143). Ponowienie tworzy nowe zdarzenie z BIEŻĄCYM środowiskiem, więc
   wysłałoby fakturę zleconą na TEST jako prawdziwą fakturę na PROD. Dlatego
@@ -254,7 +419,9 @@ KOR/ROZ sprzed 00137 (bez `special_data`) albo ZAL sprzed 02.10.2026 (bez
   przejściowymi i `KSEF_PAUSED` nowym zdarzeniem z bieżącym środowiskiem —
   faktury z czasu TEST wyszłyby same na PROD; wpisy `ksef_submissions` nie
   mają kolumny środowiska, więc próba z TEST wygląda po przełączeniu jak
-  dowód kontaktu (F2).
+  dowód kontaktu (F2). Od 00148 także faktury czekające na decyzję klienta
+  (I5D) z danymi oryginału z TEST — po przełączeniu `I5D-env`, alarm
+  krytyczny (lista kontrolna w „Klient pisze do pomocy FaktFlow”).
 
 ## Najczęstsze kody — co znaczą, co robić
 
@@ -402,7 +569,9 @@ wysłaniem pliku. Jeśli został otwarty, odpowiedź na wysyłkę nie dotarła
   Klient widzi: „KSeF nie ma tej faktury — poprzednia wysyłka do niego nie
   dotarła. Wyślij ją ponownie albo wróć do szkicu.”
 - **Strażnik:** zamiar (albo wpis `sent`) starszy niż 48 h przy fakturze
-  poza `sending` to I5. KSeF odpowiadający na pytanie o sesję kodem 21173
+  poza `sending` to I5 — od 00148 bez faktur czekających na decyzję klienta
+  (te są w I5D, bez automatu i bez alarmu; wyżej, D-A4-1b-3 PR B). KSeF
+  odpowiadający na pytanie o sesję kodem 21173
   („Brak sesji”) po 48 h zamyka zamiar jako `abandoned` z kodem `STALE`.
 - **Cron (A3):** przy I5 i fakturze `failed`/`rejected` cron cyklu życia sam
   zleca „Tylko uzgodnij” (aktor NULL w audycie, `reconcile_only = true`),

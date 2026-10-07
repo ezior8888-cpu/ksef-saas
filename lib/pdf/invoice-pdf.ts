@@ -7,6 +7,8 @@ import {
 } from './pdf-storage';
 import { renderInvoicePdf } from './invoice-renderer';
 import { invoiceVerificationUrl, ksefEnvForQr, qrLabel } from '@/lib/ksef/qr-verification';
+import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
+import { findKsefNumberTaken } from '@/lib/ksef/submission-log';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 
 export type GenerateInvoicePdfResult =
@@ -21,7 +23,7 @@ export type GenerateInvoicePdfResult =
   | {
       success: false;
       error: string;
-      code?: 'KSEF_NOT_VERIFIED' | 'NOT_FOUND' | 'FORBIDDEN' | 'OFFLINE_QR_UNAVAILABLE' | 'PDF_STATE_CHANGED';
+      code?: 'KSEF_NOT_VERIFIED' | 'NOT_FOUND' | 'FORBIDDEN' | 'OFFLINE_QR_UNAVAILABLE' | 'PDF_STATE_CHANGED' | 'RETIRED_DRAFT';
     };
 
 type PdfFailure = Extract<GenerateInvoicePdfResult, { success: false }>;
@@ -86,6 +88,23 @@ export async function verifyInvoicePdfDeliveryState(
   const current = await loadInvoiceForPdf(invoiceId, tenantId);
   if (!current) return { success: false, code: 'NOT_FOUND', error: 'Faktura nie istnieje.' };
   if (current.tenantId !== tenantId) return { success: false, code: 'FORBIDDEN', error: 'Brak dostępu do tej faktury.' };
+  // D-A4-1b-3 PR B (decyzja Bartosza 07.10.2026): szkic z numerem zajętym w KSeF przez inną
+  // fakturę (wpis number_taken) nie jest fakturą pod tym numerem — nie idzie do nabywcy.
+  if (current.ksefStatus === 'draft') {
+    let taken;
+    try {
+      taken = await findKsefNumberTaken(tenantId, invoiceId);
+    } catch {
+      return { success: false, code: 'RETIRED_DRAFT', error: DUPLICATE_DECISION_TEXTS.HISTORY_READ_FAILED };
+    }
+    if (taken) {
+      return {
+        success: false,
+        code: 'RETIRED_DRAFT',
+        error: DUPLICATE_DECISION_TEXTS.RETIRED_EMAIL_REFUSAL(current.invoice.internalNumber),
+      };
+    }
+  }
   const currentQr = await checkQrAvailability(current, invoiceId, tenantId, queueEntry);
   if (currentQr.failure) return currentQr.failure;
   const currentKey = buildInvoicePdfKey(

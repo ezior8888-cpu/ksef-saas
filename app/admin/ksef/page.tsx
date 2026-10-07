@@ -3,11 +3,15 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import {
+  clientDecisionRows,
   listFailedInvoices,
   listLifecycleViolations,
   NO_CODE_FILTER,
+  splitClientDecisionPending,
   summarizeViolations,
 } from '@/lib/admin/ksef-lifecycle';
+import { OPERATOR_DUPLICATE_MESSAGES } from '@/lib/admin/ksef-operator-policy';
+import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -32,18 +36,22 @@ function when(iso: string | null): string {
 /**
  * Panel operatora cyklu życia faktury (PR 3c): naruszenia inwariantów
  * I1–I5, I9 ze strażnika 00131, faktury `failed`/`rejected` per kod
- * z katalogu, wejście do karty faktury z akcjami.
+ * z katalogu, wejście do karty faktury z akcjami. Od 00148 (D-A4-1b-3 PR B,
+ * decyzja 4) faktury czekające na decyzję klienta (I5D) mają osobną sekcję
+ * i nie liczą się do naruszeń.
  */
 export default async function AdminKsefPage(props: { searchParams: Promise<SearchParams> }) {
   await requireAdmin();
   const params = await props.searchParams;
   const code = params.code?.trim() || null;
 
-  const [violations, failed] = await Promise.all([
+  const [allViolations, failed] = await Promise.all([
     listLifecycleViolations(),
     listFailedInvoices({ code, limit: 100 }),
   ]);
+  const { violations, clientPending } = splitClientDecisionPending(allViolations);
   const summary = summarizeViolations(violations);
+  const waiting = clientDecisionRows(clientPending, configuredKsefEnvironment());
 
   return (
     <div className="space-y-8">
@@ -106,6 +114,50 @@ export default async function AdminKsefPage(props: { searchParams: Promise<Searc
               </table>
             </div>
           </>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-semibold text-lg">Czekają na decyzję klienta (I5D): {waiting.length}</h2>
+        {waiting.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Brak faktur czekających na decyzję klienta.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-glass-border bg-foreground/3 backdrop-blur-glass">
+            <table className="w-full text-sm">
+              <thead className="border-b border-glass-border">
+                <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-2.5 font-medium">Faktura</th>
+                  <th className="px-4 py-2.5 font-medium">Firma</th>
+                  <th className="px-4 py-2.5 font-medium">Numer KSeF oryginału</th>
+                  <th className="px-4 py-2.5 font-medium">Powód</th>
+                  <th className="px-4 py-2.5 font-medium">Środowisko</th>
+                  <th className="px-4 py-2.5 font-medium">Od</th>
+                </tr>
+              </thead>
+              <tbody>
+                {waiting.map((w) => (
+                  <tr key={w.invoiceId} className="border-b border-glass-border last:border-0">
+                    <td className="px-4 py-2.5">
+                      <Link href={`/admin/ksef/${w.invoiceId}`} className="font-medium hover:underline">
+                        {w.internalNumber ?? w.invoiceId}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{w.tenantName ?? '—'}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs break-all">{w.originalKsefNumber ?? '—'}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs">{w.reason ?? '—'}</td>
+                    <td
+                      className={cn('px-4 py-2.5 font-mono text-xs', w.envMatches ? '' : 'bg-red-500/10 font-semibold text-red-700 dark:text-red-400')}
+                      title={w.envMatches ? undefined : OPERATOR_DUPLICATE_MESSAGES.i5dEnv}
+                    >
+                      {w.env ?? '(brak)'}
+                      {w.envMatches ? null : <span className="block">I5D-env</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs tabular-nums">{when(w.attemptedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 

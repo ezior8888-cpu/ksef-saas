@@ -34,9 +34,10 @@ stanu, zła stawka, zły nabywca), bez dowodu (UPO/XML) albo w złym
 1. Każdy stan końcowy faktury wychodzącej ma **wyjście**: automat (cron),
    klient (przycisk z komunikatem, co dalej) albo operator (`/admin/ksef`).
    Żaden kod błędu z katalogu `ksef_error_codes` nie jest ślepą uliczką.
-2. Strażnik `ksef_lifecycle_violations()` zwraca **0 wierszy** przez 14
-   kolejnych dni produkcji, a alarm „Strażnik cyklu życia” nie odezwał się
-   ani razu bez znanej przyczyny.
+2. Strażnik `ksef_lifecycle_violations()` zwraca **0 wierszy** poza I5D
+   (faktury czekające na decyzję klienta, od 00148 — stan, nie naruszenie;
+   `I5D-env` = 0) przez 14 kolejnych dni produkcji, a alarm „Strażnik cyklu
+   życia” nie odezwał się ani razu bez znanej przyczyny.
 3. Każda faktura `accepted` ma w ciągu 24 h numer KSeF, plik XML tej
    próby, wpis `xml_documents` i UPO (I3 = 0).
 4. Każdy dokument, który wychodzi do KSeF, przeszedł **ten sam** zestaw
@@ -213,6 +214,24 @@ agenta z weryfikacją Bartosza, nie obietnica.
   = przycisk); **A4b** — dane specjalne na wierszu (00137) i ponowienie
   KOR/ZAL/ROZ; decyzje D-A4-1 (cudzy 440) i D-A4-2 (ENV_MISMATCH) w runbooku
   `ksef-error-codes.md`.
+- **D-A4-1b-3 — decyzja klienta przy nierozstrzygniętym 440** (stan
+  07.10.2026): A0 (#229) i A — dane oryginału na wpisie (#230, 00144) —
+  scalone; wierny import C5a–C5c (#231, #239, #241) scalony. **PR B** —
+  decyzja klienta „ta sama sprzedaż” / „inna sprzedaż” (00148, przed
+  wdrożeniem; numer PR w dzienniku, sekcja 9): powody `no-own-file`
+  i `known-number` (runner pobiera oryginał także przy znanym numerze),
+  tylko zwykła faktura; nic nie importujemy, wpłaty blokują decyzję
+  (07.10 (A)); szkic wycofany przy każdym wpisie `number_taken` — bez
+  wysyłki, bez e-maila do nabywcy, bez zmiany numeru przez klienta, zwykła
+  i ZAL bez usunięcia, KOR i ROZ usuwalne (07.10 (2), (3), (9)–(11)); I5D
+  „czeka na klienta” osobno od I5 — bez automatu i bez alarmu, poza
+  `I5D-env` (07.10 (4)); e-mail raz na fakturę i numer KSeF oryginału
+  oraz „Przypomnij klientowi” raz na 24 h (07.10 (5), (12)); teksty klienta
+  i komunikaty P0001 — przegląd prawnika przed KSeF PROD (punkt bramki,
+  sekcja 8). Dalej: **PR C** (`faktflow-original` — zapis oryginału
+  z FaktFlow) i **PR D** („Sprawdź ponownie” dla powodów bez danych
+  oryginału). Bez decyzji w panelu zostają: KOR/ZAL/ROZ (D-A4-1b-3-S),
+  `same-content-other-program` (D-A4-1b-2), `archive-conflict` (runbook).
 
 **A5. Ślad per próba — kontrakt danych dla centrum dowodzenia (M10)**
 - Problem: porażka przed POST (poświadczenia, XML, upload, przejęcie) nie
@@ -481,7 +500,7 @@ rewizja znajdzie „~45 defektów przy zielonych testach”.
 
 **I3. Backup i odtworzenie z weryfikacją faktur**
 - `docs/runbooks/backup-restore.md` wykonany na kopii: po odtworzeniu
-  `ksef_lifecycle_violations()` = 0, liczby faktur per stan zgodne,
+  `ksef_lifecycle_violations()` bez I5D = 0, liczby faktur per stan zgodne,
   pliki XML prób dostępne.
 
 ### Blok J — pozostałe ustalenia rewizji (po A–I)
@@ -547,8 +566,9 @@ są odhaczone (z datą i numerem PR/raportu):
 - [ ] Sesje A1–A4, B1–B3, C1–C4, D1, E1, F1, G1, H1, H2 scalone i wdrożone.
 - [ ] 12 scenariuszy z sekcji 7 zielone na KSeF TEST w 3 kolejnych
       tygodniowych przebiegach.
-- [ ] `ksef_lifecycle_violations()` = 0 przez 14 dni; raport dzienny bez
-      `exhausted` i `i1Lost` niewyjaśnionych.
+- [ ] `ksef_lifecycle_violations()` bez I5D = 0 przez 14 dni (I5D — faktury
+      czekające na decyzję klienta — w raporcie osobno; I5D-env = 0); raport
+      dzienny bez `exhausted` i `i1Lost` niewyjaśnionych.
 - [ ] Każdy kod z `ksef_error_codes` ma wiersz w runbooku z wyjściem
       i testem (A4, I2).
 - [ ] Game day (H2): każda z 5 awarii → sygnał ≤ 15 min → wyjście.
@@ -559,6 +579,13 @@ są odhaczone (z datą i numerem PR/raportu):
       w produkcie (komunikat, nie `failed`).
 - [ ] Decyzja B1 zapisana w projekcie cyklu życia; Offline24 albo działa,
       albo jest jawnie poza produktem.
+- [ ] Teksty decyzji D-A4-1b-3 PR B (dialogi, odmowy w panelu, komunikaty
+      P0001 z RPC i wyzwalaczy 00148, baner wycofanego dokumentu każdego
+      rodzaju, odmowa e-maila, e-mail i przypomnienie, teksty
+      KSEF_NUMBER_TAKEN, w tym KOR/ZAL/ROZ) przejrzane przez prawnika —
+      decyzje Bartosza 07.10.2026 (A) i (8); TEST bez blokady. Lista:
+      DUPLICATE_DECISION_TEXTS + DUPLICATE_DECISION_SQL_TEXTS (snapshot
+      tests/unit/ksef-duplikat-decyzja-teksty.test.ts).
 - [ ] `scripts/ops/kontrola-faktur-ksef.sh` uruchamiany codziennie przez
       14 dni bez „nieznanych” stanów.
 

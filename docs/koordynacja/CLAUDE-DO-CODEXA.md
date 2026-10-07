@@ -87,7 +87,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00145 | Bartosz/Igor (#195, C-16) → Claude | `roz_amount_due`: wyzwalacz `update_invoice_payment_status` i widok `invoices_overdue` liczą ROZ od `payment_data.amountDue` (reszta po zaliczkach), ROZ w całości pokryta zaliczkami = `paid`; wyzwalacz reaguje też na `payment_data`, `invoice_kind` (dawniej 00130) | #234; **wgrana na db-1 06.10** |
 | 00146 | Claude (B4, #192) | `expense_ocr_job_identity` — najwyżej jeden wydatek na zadanie OCR w firmie (`uq_expenses_tenant_ocr_job`); preflight dubli, bez zmian danych | #238; **wgrana na db-1 06.10** |
 | 00147 | Claude (A4b, decyzja 06.10) | `ksef_error_code_issue_date_passed` — kod `ISSUE_DATE_PASSED` (terminal, bez automatu): worker nie wysyła KOR/ZAL/ROZ z datą wystawienia sprzed dzisiaj | #242; **wgrana na db-1 07.10** (przed wdrożeniem) |
-| **00148** | — | następny wolny (00200 zajęte) | — |
+| 00148 | Claude (D-A4-1b-3 PR B, plan zero zgubionych faktur) | `ksef_duplicate_decision`: RPC `decide_ksef_duplicate` (decyzja klienta „ta sama sprzedaż” / „inna sprzedaż” przy nierozstrzygniętym 440, powody `no-own-file` i `known-number`), `ksef_duplicate_check_allows`, `ksef_duplicate_decision_blocker`, wyzwalacze `c_guard_ksef_retired_draft` (szkic z wpisem `number_taken` nie wychodzi ze stanu `draft`), `c_guard_ksef_retired_draft_delete` (klient nie usuwa szkicu wycofanego zwykłej faktury ani zaliczki; KOR/ROZ usuwalne) i `c_guard_ksef_retired_draft_number` (klient nie zmienia numeru szkicu wycofanego), `ksef_lifecycle_violations`: I5 bez faktur czekających na klienta + I5D „czeka na klienta”, UPDATE komunikatu katalogu `KSEF_NUMBER_TAKEN` | PR #…; **przed** wdrożeniem |
+| **00149** | — | następny wolny (00200 zajęte) | — |
 
 **Reguła numeracji (Bartosz, 05.10.2026):** rezerwacje sprzed bieżącej
 kolejności (00129, 00130) nie wracają „wstecz” — migracja przenoszona

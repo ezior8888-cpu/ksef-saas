@@ -4,6 +4,15 @@ import { KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts } from '@/lib/invoices/ksef
 import { canManageKsefSend } from '@/lib/invoices/ksef-send-policy';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { describeDuplicateOriginal, parseDuplicateCheck } from '@/lib/ksef/duplicate-check';
+import {
+  duplicateDecisionOptions,
+  duplicateMarker,
+  retiredDraftView,
+  type DuplicateDecisionInvoiceRow,
+  type DuplicateDecisionView,
+  type RetiredDraftView,
+} from '@/lib/ksef/duplicate-decision';
+import { loadDuplicateDecisionFacts } from '@/lib/ksef/duplicate-decision-facts';
 import { createClient } from '@/lib/supabase/server';
 import {
   InvoiceDetailView,
@@ -31,6 +40,7 @@ export default async function InvoiceDetailPage({
       invoice_type,
       ${KSEF_RESEND_SOURCE_COLUMNS},
       sale_date,
+      direction,
       ksef_status,
       ksef_number,
       ksef_accepted_at,
@@ -38,12 +48,19 @@ export default async function InvoiceDetailPage({
       net_total,
       vat_total,
       gross_total,
+      currency,
+      paid_amount,
+      stripe_invoice_id,
+      offline_idempotency_key,
+      offline_qr_offline,
+      offline_qr_certyfikat,
       notes,
       last_error,
       last_error_code,
       last_error_field,
       last_error_suggestion,
       seller_data,
+      buyer_nip,
       buyer_data,
       payment_data,
       invoice_line_items(
@@ -83,18 +100,44 @@ export default async function InvoiceDetailPage({
         .maybeSingle()
     : { data: null };
 
-  // D-A4-1b-3 (00144): KSeF ma już fakturę o tym numerze, a automat nie
-  // rozstrzygnął — dane oryginału z otwartego wpisu próby ze znacznikiem 440.
-  const duplicate = invoice.ksef_status === 'failed' && invoice.last_error_code === 'KSEF_DUPLICATE_RECONCILE'
-    ? (await supabase
-        .from('ksef_submissions')
-        .select('original_ksef_number, original_check')
-        .eq('invoice_id', id)
-        .in('status', ['intent', 'sent'])
-        .not('original_ksef_number', 'is', null)
-        .order('attempted_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()).data as { original_ksef_number: string | null; original_check: unknown } | null
+  const canManageSend = canManageKsefSend(membership?.role ?? null);
+  const resendFacts = ksefResendFacts(invoice, env);
+  const internalNumber = (invoice.internal_number as string | null) ?? null;
+
+  // D-A4-1b-3 (00144, PR B 00148): KSeF ma już fakturę o tym numerze, a automat
+  // nie rozstrzygnął — dane oryginału ze znacznika 440 i decyzja klienta; szkic
+  // z wpisem `number_taken` jest wycofany (każdy rodzaj, decyzja 9). Fakty czyta
+  // loader sesją (RLS), z wierszem faktury tej strony; błąd odczytu rzuca
+  // (fail-closed — strona błędu z ponowieniem, nie panel bez danych).
+  const awaitingDecision = invoice.ksef_status === 'failed' && invoice.last_error_code === 'KSEF_DUPLICATE_RECONCILE';
+  const facts = awaitingDecision || invoice.ksef_status === 'draft'
+    ? await loadDuplicateDecisionFacts(
+        supabase,
+        invoice.tenant_id as string,
+        id,
+        // Kolumny `DUPLICATE_DECISION_INVOICE_COLUMNS` są w odczycie wyżej; loader sprawdza każdą.
+        invoice as unknown as DuplicateDecisionInvoiceRow,
+      )
+    : null;
+
+  const duplicateDecision: DuplicateDecisionView | null = awaitingDecision && facts
+    ? duplicateDecisionOptions({ facts, actor: 'client', canManage: canManageSend, environment: env, now: new Date() })
+    : null;
+  const marker = awaitingDecision && facts ? duplicateMarker(facts.submissions) : null;
+  const original = marker?.original_ksef_number
+    ? describeDuplicateOriginal(internalNumber, marker.original_ksef_number, parseDuplicateCheck(marker.original_check))
+    : null;
+  // Odmowa decyzji ma własny tekst (nazywa dokument i wyjście); `reason` zostawia notatkę PR A.
+  const duplicateOriginal = original && duplicateDecision?.kind === 'refused' && duplicateDecision.message
+    ? { ...original, note: duplicateDecision.message }
+    : original;
+  const retiredDraft: RetiredDraftView | null = invoice.ksef_status === 'draft' && facts
+    ? retiredDraftView({
+        invoiceNumber: internalNumber,
+        invoiceKind: (invoice.invoice_kind as string | null) ?? null,
+        submissions: facts.submissions,
+        kindHeld: resendFacts.kindHeld,
+      })
     : null;
 
   const lines = ((invoice.invoice_line_items ?? []) as InvoiceDetailLine[])
@@ -103,7 +146,7 @@ export default async function InvoiceDetailPage({
 
   const initial: InvoiceDetailInitial = {
     id: invoice.id as string,
-    internal_number: (invoice.internal_number as string | null) ?? null,
+    internal_number: internalNumber,
     invoice_type: (invoice.invoice_type as string | null) ?? null,
     invoice_kind: (invoice.invoice_kind as string | null) ?? null,
     issue_date: (invoice.issue_date as string | null) ?? null,
@@ -127,18 +170,15 @@ export default async function InvoiceDetailPage({
     upo_status:
       upo?.status ??
       null,
-    can_manage_send: canManageKsefSend(membership?.role ?? null),
+    can_manage_send: canManageSend,
     // A4b PR2b: fakty ponowienia z kopii — dla każdego stanu (Realtime zmienia stan, nie fakty);
     // sama treść (fa3_data, special_data) nie trafia do komponentu klienckiego.
-    ksef_resend_facts: ksefResendFacts(invoice, env),
+    ksef_resend_facts: resendFacts,
     ksef_environment_known: env !== null,
-    ksef_duplicate_original: duplicate?.original_ksef_number
-      ? describeDuplicateOriginal(
-          (invoice.internal_number as string | null) ?? null,
-          duplicate.original_ksef_number,
-          parseDuplicateCheck(duplicate.original_check),
-        )
-      : null,
+    ksef_duplicate_original: duplicateOriginal,
+    // D-A4-1b-3 PR B: widoki liczone na serwerze — bez surowego `original_check`.
+    ksef_duplicate_decision: duplicateDecision,
+    ksef_retired_draft: retiredDraft,
   };
 
   return <InvoiceDetailView key={initial.id} initial={initial} />;

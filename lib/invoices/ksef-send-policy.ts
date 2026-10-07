@@ -19,6 +19,11 @@
  * i operator (dane → rodzaj → data), celowo: starej korekcie na PROD ani
  * staremu ROZ nie wolno kazać „wystaw od nowa”, bo kolejkowanie odmówiłoby
  * też nowemu dokumentowi.
+ *
+ * D-A4-1b-3 PR B: `KSEF_DUPLICATE_RECONCILE` ma wyjście klienta (panel decyzji)
+ * — tekst bez operatora; szkic po „numer zajęty” jest wycofany (00148), więc
+ * teksty KSEF_NUMBER_TAKEN nie każą usuwać zwykłej faktury ani zaliczki, a korekcie
+ * i fakturze rozliczeniowej każą (decyzja 9 — usunięcie to ich wyjście).
  */
 
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
@@ -50,7 +55,19 @@ export const KSEF_SEND_MESSAGES = {
   notInKsef: 'KSeF nie ma tej faktury — poprzednia wysyłka do niego nie dotarła. Wyślij ją ponownie albo wróć do szkicu.',
   issueDatePassed: `Tej wysyłki nie wykonaliśmy: dokument ma datę wystawienia sprzed dzisiaj, a w KSeF dokument wystawia się w dniu wysyłki (szczegóły wyżej). Wróć do szkicu, usuń go i wystaw dokument od nowa z dzisiejszą datą. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj dokumentu ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy go w KSeF.`,
   envMismatch: `Tej wysyłki nie wykonaliśmy: zlecenie dotyczyło innego środowiska KSeF (testowego albo produkcyjnego) niż obecne ustawienie FaktFlow — szczegóły wyżej. Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj tej faktury ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`,
-  numberTaken: 'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie (szczegóły wyżej). Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wróć do szkicu, usuń go i wystaw fakturę z nowym numerem.',
+  // D-A4-1b-3 PR B (decyzje Bartosza 07.10.2026 (3) i (9)): szkic po „numer zajęty” jest wycofany —
+  // nie wyślesz go, a zwykłej faktury i zaliczki nie usuniesz (00148), więc tekst nie każe „usuń go”.
+  numberTaken: 'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie (szczegóły wyżej). Tego dokumentu nie wyślesz do KSeF. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.',
+  /** Toast po „Wróć do szkicu” przy `KSEF_NUMBER_TAKEN` — zwykła faktura (dokumenty specjalne: `KSEF_SPECIAL_SEND_MESSAGES`). */
+  numberTakenResetDone: 'Dokument wrócił do szkicu jako wycofany: numer jest zajęty w KSeF, więc tego szkicu nie wyślesz ani nie usuniesz. Jeśli to inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.',
+  /**
+   * `KSEF_DUPLICATE_RECONCILE` (D-A4-1b-3 PR B, reguła 07.10.2026): duplikat 440 ma wyjście klienta
+   * (panel decyzji na karcie faktury) albo adres pomocy — bez odsyłania do operatora. Pozostałe kody
+   * klasy reconcile zostają przy `reconcile` (§7 p. 17 specyfikacji PR B).
+   */
+  duplicate: `KSeF ma już fakturę o tym numerze — tej faktury nie wysyłaj ponownie. Szczegóły są na karcie faktury; pytania: pomoc FaktFlow (${SUPPORT_EMAIL}), podaj numer faktury.`,
+  /** To samo, gdy nad paskiem stoi panel decyzji (ramka „W KSeF jest już faktura o tym numerze”). */
+  duplicatePanel: 'KSeF ma już fakturę o tym numerze — szczegóły i dalsze kroki są wyżej, w ramce „W KSeF jest już faktura o tym numerze”. Nie wysyłaj tej faktury ponownie.',
   historical: 'Wysyłka nie powiodła się. Możesz wysłać ponownie albo wrócić do szkicu.',
   askManager: 'Poproś właściciela lub administratora firmy.',
   resetDone: 'Faktura wróciła do szkicu. Popraw ją i wyślij ponownie.',
@@ -66,6 +83,13 @@ const KIND_LABEL: Record<SpecialKind, { N: string; T: string; L: string; A: stri
   advance: { N: 'Faktura zaliczkowa', T: 'Ta faktura zaliczkowa', L: 'ta faktura zaliczkowa', A: 'fakturę zaliczkową', G: 'faktury zaliczkowej' },
   final: { N: 'Faktura rozliczeniowa', T: 'Ta faktura rozliczeniowa', L: 'ta faktura rozliczeniowa', A: 'fakturę rozliczeniową', G: 'faktury rozliczeniowej' },
 };
+
+/**
+ * Ta sama odmiana dla tekstów szkicu wycofanego (`lib/ksef/duplicate-decision.ts`,
+ * D-A4-1b-3 PR B): N — mianownik, T/L — „Ta …”/„ta …”, A — biernik, G — dopełniacz.
+ * Ten moduł nie importuje `duplicate-decision.ts` (bez cyklu).
+ */
+export const SPECIAL_KIND_LABEL: Readonly<Record<SpecialKind, Readonly<{ N: string; T: string; L: string; A: string; G: string }>>> = KIND_LABEL;
 
 /** Rodzaj dokumentu specjalnego; `null` dla zwykłej faktury i rodzaju nieznanego (fakty: brak danych). */
 export function specialKindOf(kind: string | null): SpecialKind | null {
@@ -131,13 +155,32 @@ export const KSEF_SPECIAL_SEND_MESSAGES = {
     `${KIND_LABEL[k].N} wróciła do szkicu. Szkicu ${KIND_LABEL[k].G} nie wyślesz do KSeF — usuń go („Usuń szkic”) i wystaw ${KIND_LABEL[k].A} od nowa z dzisiejszą datą.`,
   resetDoneHeld: (k: SpecialKind) =>
     `${KIND_LABEL[k].N} wróciła do szkicu. Szkicu ${KIND_LABEL[k].G} nie wyślesz do KSeF — usuń go („Usuń szkic”), a po zdjęciu blokady wystaw ${KIND_LABEL[k].A} od nowa.`,
+  // D-A4-1b-3 PR B (C4, decyzja 07.10.2026 (9)): „Wróć do szkicu” przy KSEF_NUMBER_TAKEN — szkic wycofany.
+  // Zaliczki nie usuniesz (00148, jak zwykłej faktury); korektę i fakturę rozliczeniową usuwasz — to ich wyjście.
+  numberTakenResetDone: (k: SpecialKind) =>
+    `${KIND_LABEL[k].N} wróciła do szkicu jako wycofana: numer jest zajęty w KSeF, więc tego szkicu nie wyślesz ani nie usuniesz. Jeśli to inna sprzedaż, wystaw ${KIND_LABEL[k].A} od nowa z nowym numerem.`,
+  numberTakenResetDoneDeletable: (k: SpecialKind) =>
+    `${KIND_LABEL[k].N} wróciła do szkicu jako wycofana: numer jest zajęty w KSeF, więc tego szkicu nie wyślesz do KSeF. Jeśli w KSeF jest inny dokument, usuń szkic („Usuń szkic”) i wystaw ${KIND_LABEL[k].A} od nowa z nowym numerem.`,
+  numberTakenResetDoneDeletableHeld: (k: SpecialKind) =>
+    `${KIND_LABEL[k].N} wróciła do szkicu jako wycofana: numer jest zajęty w KSeF, więc tego szkicu nie wyślesz do KSeF. Jeśli w KSeF jest inny dokument, usuń szkic („Usuń szkic”), a po zdjęciu blokady wysyłki wystaw ${KIND_LABEL[k].A} od nowa z nowym numerem.`,
 } as const;
 
-/** Toast po „Wróć do szkicu” — szkicu dokumentu specjalnego nie da się wysłać. */
-export function resetDoneMessage(invoiceKind: string | null, facts: KsefResendFacts): string {
+/**
+ * Toast po „Wróć do szkicu” — szkicu dokumentu specjalnego nie da się wysłać.
+ * Przy `KSEF_NUMBER_TAKEN` szkic jest wycofany (wpis `number_taken`, 00148):
+ * zwykłej faktury i zaliczki nie usuniesz, korektę i fakturę rozliczeniową tak
+ * (C4, decyzja 07.10.2026 (9)). Inne kody — bez zmian.
+ */
+export function resetDoneMessage(invoiceKind: string | null, facts: KsefResendFacts, errorCode?: string | null): string {
   const k = specialKindOf(invoiceKind);
+  const S = KSEF_SPECIAL_SEND_MESSAGES;
+  if (errorCode === SEND_ERROR_CODES.KSEF_NUMBER_TAKEN) {
+    if (!k) return KSEF_SEND_MESSAGES.numberTakenResetDone;
+    if (k === 'advance') return S.numberTakenResetDone(k);
+    return facts.kindHeld ? S.numberTakenResetDoneDeletableHeld(k) : S.numberTakenResetDoneDeletable(k);
+  }
   if (!k) return KSEF_SEND_MESSAGES.resetDone;
-  return facts.kindHeld ? KSEF_SPECIAL_SEND_MESSAGES.resetDoneHeld(k) : KSEF_SPECIAL_SEND_MESSAGES.resetDone(k);
+  return facts.kindHeld ? S.resetDoneHeld(k) : S.resetDone(k);
 }
 
 type AuditKind = 'regular' | 'correction' | 'advance' | 'final';
@@ -252,7 +295,9 @@ export function decideResend(input: ResendInput): ResendDecision {
     return { allowed: false, reason: 'terminal', message };
   }
   if (errorClass === 'reconcile') {
-    return { allowed: false, reason: 'reconcile', message: M.reconcile };
+    // Duplikat 440 ma wyjście klienta (panel decyzji, D-A4-1b-3 PR B); reszta klasy — operator (§7 p. 17).
+    const message = input.errorCode === SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE ? M.duplicate : M.reconcile;
+    return { allowed: false, reason: 'reconcile', message };
   }
   if (!input.environmentKnown) {
     return { allowed: false, reason: 'env-unknown', message: M.envUnknown };
@@ -305,6 +350,11 @@ export interface FailedInvoiceButtonsInput {
   canManage: boolean;
   facts: KsefResendFacts;
   environmentKnown: boolean;
+  /**
+   * `KSEF_DUPLICATE_RECONCILE`: nad paskiem stoi panel duplikatu (decyzja albo
+   * notatka z danymi oryginału) — zdanie odsyła do ramki wyżej (D-A4-1b-3 PR B).
+   */
+  duplicatePanel?: boolean;
 }
 
 /** Odmowy, przy których klient może wrócić do szkicu. */
@@ -331,7 +381,9 @@ export function failedInvoiceButtons(input: FailedInvoiceButtonsInput): FailedIn
 
   if (!decision.allowed) {
     reset = RESET_REFUSALS.includes(decision.reason);
-    info = decision.message;
+    info = input.errorCode === SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE && input.duplicatePanel
+      ? KSEF_SEND_MESSAGES.duplicatePanel
+      : decision.message;
   } else {
     reset = true;
     settings = errorClass === 'setup';

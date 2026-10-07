@@ -65,6 +65,12 @@ export type AuditAction =
   | 'invoice.operator_requeue'
   | 'invoice.operator_reconcile'
   | 'invoice.operator_reset'
+  // D-A4-1b-3 PR B: operator zapisał decyzję klienta przy nierozstrzygniętym 440
+  // (decyzję zapisuje RPC `decide_ksef_duplicate` — `invoice.ksef_duplicate_decided`).
+  | 'invoice.operator_duplicate_decision'
+  // D-A4-1b-3 PR B: „Faktura … czeka na Twoją decyzję” dostarczone (e-mail albo push) —
+  // zapis bezpośredni (`lib/ksef/duplicate-decision-notice.ts`), raz na (fakturę, K).
+  | 'invoice.ksef_duplicate_decision_notified'
   | 'invoice.emailed'
   | 'invoice.resubmit_requested'
   | 'ksef.credentials_uploaded'

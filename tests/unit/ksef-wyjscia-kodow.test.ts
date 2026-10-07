@@ -4,6 +4,7 @@ import { operatorInvoiceButtons } from '@/lib/admin/ksef-operator-policy';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { decideResend, failedInvoiceButtons } from '@/lib/invoices/ksef-send-policy';
 import { DUPLICATE_CHECK_REASONS, type DuplicateCheckReason } from '@/lib/ksef/duplicate-check';
+import { duplicateDecisionOptions } from '@/lib/ksef/duplicate-decision';
 import { isKindHeldForEnv } from '@/lib/ksef/kind-holds';
 import {
   isAutoRequeueable,
@@ -12,6 +13,14 @@ import {
   type SendErrorCode,
 } from '@/lib/ksef/send-error-classes';
 import type { KsefEnvironment } from '@/types/ksef';
+
+import {
+  decisionFacts,
+  DUP_KNOWN_ID,
+  DUP_KNOWN_NUMBER,
+  knownNumberCheck,
+  validCheck,
+} from './helpers/ksef-duplicate-decision-cases';
 
 /**
  * A4 z planu „zero zgubionych faktur” (definicja sukcesu nr 1): każdy stan
@@ -109,6 +118,30 @@ function automaticExit(s: Scenario): boolean {
     || (canRebuild && s.openSubmission && reconcileIsExit(s));
 }
 
+const NOW = new Date('2026-10-07T12:00:00.000Z');
+
+/**
+ * Widok decyzji (D-A4-1b-3 PR B) z prawdziwej polityki — fakty jak z ładowarki:
+ * znacznik z zapisem sprawdzenia danego powodu (dane oryginału kompletne),
+ * przy known-number faktura Y z K i przyjęta. Tylko KSEF_DUPLICATE_RECONCILE
+ * z otwartym wpisem; inaczej panelu nie ma.
+ */
+function duplicateViewOf(s: Scenario, actor: 'client' | 'operator') {
+  if (s.code !== SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE || !s.openSubmission || !s.duplicateReason) return null;
+  const reason = s.duplicateReason;
+  const check = reason === 'no-check'
+    ? null
+    : reason === 'known-number'
+      ? knownNumberCheck({ env: s.env })
+      : validCheck({ reason, env: s.env });
+  const facts = decisionFacts({
+    invoice: { invoice_kind: s.kind },
+    check,
+    knownInvoice: reason === 'known-number' ? { id: DUP_KNOWN_ID, internalNumber: DUP_KNOWN_NUMBER, holdsOriginal: true } : null,
+  });
+  return duplicateDecisionOptions({ facts, actor, canManage: true, environment: s.env, now: NOW });
+}
+
 /** Przyciski właściciela (A4b PR2b): fakty ponowienia z kopii i znane środowisko — jak operator. */
 function clientButtons(s: Scenario) {
   return failedInvoiceButtons({
@@ -120,15 +153,18 @@ function clientExit(s: Scenario): boolean {
   const b = clientButtons(s);
   if (!b) return false;
   // „Wyślij ponownie” klienta idzie przez `requeue_ksef_send` (klasa terminal odmawia — przycisk jej nie pokazuje).
-  return b.resend || (b.reset && resetAllowedByRpc(s));
+  // D-A4-1b-3 PR B: panel decyzji („ta sama sprzedaż” / „inna sprzedaż”) — `decide_ksef_duplicate`.
+  return b.resend || (b.reset && resetAllowedByRpc(s)) || duplicateViewOf(s, 'client')?.kind === 'decidable';
 }
 
 function operatorExit(s: Scenario): boolean {
   const b = operatorInvoiceButtons({
     direction: 'outgoing', status: 'failed', errorCode: s.code, invoiceKind: s.kind,
     openSent: s.openSubmission, evidence: s.evidence, facts: factsOf(s), environmentKnown: true,
+    duplicateDecision: duplicateViewOf(s, 'operator'), duplicateNotice: null, now: NOW,
   });
-  return b.requeue.enabled || (b.reconcile.enabled && reconcileIsExit(s)) || (b.reset.enabled && resetAllowedByRpc(s));
+  return b.requeue.enabled || (b.reconcile.enabled && reconcileIsExit(s)) || (b.reset.enabled && resetAllowedByRpc(s))
+    || b.decide.enabled;
 }
 
 const KINDS: readonly Kind[] = ['regular', 'correction', 'advance', 'final'];
@@ -297,14 +333,30 @@ describe('A4: każdy kod katalogu ma wyjście (automat, klient albo operator)', 
     expect(knownDeadEnd({ ...regularOpen('download-pending'), kind: 'correction' })).toBe(false);
   });
 
+  it('U15d: wyjście PR B — zwykła no-own-file i known-number: panel klienta i „Zapisz decyzję klienta” operatora', () => {
+    for (const env of ENVS) {
+      for (const duplicateReason of ['no-own-file', 'known-number'] as const) {
+        const s: Scenario = {
+          code: SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, kind: 'regular', sendData: 'stored', env,
+          issueDatePassed: false, evidence: true, openSubmission: true, duplicateReason,
+        };
+        expect(clientExit(s), `${env} ${duplicateReason}`).toBe(true);
+        expect(operatorExit(s), `${env} ${duplicateReason}`).toBe(true);
+        expect(automaticExit(s), `${env} ${duplicateReason}`).toBe(false);
+      }
+    }
+  });
+
   it('U15e: żaden tekst klienta przy KSEF_DUPLICATE_RECONCILE nie odsyła do operatora (reguła 07.10)', () => {
     const texts = new Set<string>();
     for (const s of scenarios().filter((x) => x.code === SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE)) {
       for (const canManage of [true, false]) {
-        const b = failedInvoiceButtons({
-          status: 'failed', errorCode: s.code, invoiceKind: s.kind, canManage, facts: factsOf(s), environmentKnown: true,
-        });
-        if (b) texts.add(b.info);
+        for (const duplicatePanel of [true, false]) {
+          const b = failedInvoiceButtons({
+            status: 'failed', errorCode: s.code, invoiceKind: s.kind, canManage, facts: factsOf(s), environmentKnown: true, duplicatePanel,
+          });
+          if (b) texts.add(b.info);
+        }
       }
       const d = decideResend({
         direction: 'outgoing', status: 'failed', errorCode: s.code, invoiceKind: s.kind, facts: factsOf(s), environmentKnown: true,

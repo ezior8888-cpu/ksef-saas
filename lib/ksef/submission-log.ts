@@ -25,7 +25,12 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
-import { mergeDuplicateCheck, parseDuplicateCheck, type KsefDuplicateCheck } from './duplicate-check';
+import {
+  mergeDuplicateCheck,
+  parseDuplicateCheck,
+  type DuplicateDecisionChoice,
+  type KsefDuplicateCheck,
+} from './duplicate-check';
 
 export interface KsefSubmissionReferences {
   sessionReferenceNumber: string;
@@ -454,6 +459,84 @@ export async function markKsefSubmissionsNumberTaken(params: {
     .eq('invoice_id', params.invoiceId)
     .in('status', ['intent', 'sent', 'duplicate']);
   if (error) throw new Error('Nie można zapisać werdyktu „numer zajęty” w historii wysyłki KSeF');
+}
+
+/** Szkic wycofany (wpis `number_taken`): numer KSeF oryginału i decyzja klienta, jeśli była. */
+export interface KsefNumberTaken {
+  /** K — `null`, gdy faktura ma tylko wpisy `number_taken` bez znacznika 440. */
+  originalKsefNumber: string | null;
+  /** `original_check.decision.choice` (00148); `null` — automatyczny „numer zajęty”. */
+  decision: DuplicateDecisionChoice | null;
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+function takenDecision(check: unknown): DuplicateDecisionChoice | null {
+  if (!isRecord(check) || !isRecord(check.decision)) return null;
+  const choice = check.decision.choice;
+  return choice === 'same_sale' || choice === 'other_sale' ? choice : null;
+}
+
+/** Czas do sortowania (ms) i mikrosekundy ponad ms (`timestamptz` z PostgREST ma 6 cyfr ułamka). */
+function timeOf(value: string | null): number | null {
+  if (!value) return null;
+  const t = Date.parse(value);
+  return Number.isNaN(t) ? null : t;
+}
+function microsOf(value: string | null): number {
+  const m = value ? /:\d{2}\.\d{3}(\d{1,3})/.exec(value) : null;
+  return m ? Number(m[1]!.padEnd(3, '0')) : 0;
+}
+
+/**
+ * D-A4-1b-3 PR B (decyzje Bartosza 07.10.2026 (2), (3)): czy faktura jest
+ * szkicem wycofanym — ma wpis `number_taken` (decyzja klienta „ta sama /
+ * inna sprzedaż” albo automatyczny werdykt KSEF_NUMBER_TAKEN). Numer jest
+ * zajęty w KSeF, więc runner kończy taki job bez zapisu, a e-maila do
+ * nabywcy nie wysyłamy.
+ *
+ * Wybór wpisu jak w wyzwalaczu `guard_ksef_retired_draft` (00148, krok 2):
+ * najpierw z decyzją, potem z numerem oryginału (`markKsefSubmissionsNumberTaken`
+ * zamyka też wpisy bez znacznika), potem `completed_at` malejąco (brak na
+ * końcu), potem `id`. Sortowanie w TypeScript — w zapytaniu tylko `.eq`.
+ * Filtr po firmie I fakturze. Rzuca przy błędzie bazy (fail-closed:
+ * „nie wiem” to nie „zwykły szkic”).
+ */
+export async function findKsefNumberTaken(tenantId: string, invoiceId: string): Promise<KsefNumberTaken | null> {
+  const { data, error } = await createAdminClient()
+    .from('ksef_submissions')
+    // `original_check` z 00144 — typy bazy dogenerujemy z produkcji po wgraniu.
+    .select('id, original_ksef_number, original_check, completed_at')
+    .eq('tenant_id', tenantId)
+    .eq('invoice_id', invoiceId)
+    .eq('status', 'number_taken' satisfies SubmissionStatus);
+  if (error) throw new Error('Nie można sprawdzić, czy numer faktury jest zajęty w KSeF (historia wysyłki)');
+  type TakenRow = { id: string; original_ksef_number: string | null; original_check: unknown; completed_at: string | null };
+  const rows = ((data ?? []) as unknown as TakenRow[]).map((r) => ({
+    ...r,
+    decided: isRecord(r.original_check) && Object.prototype.hasOwnProperty.call(r.original_check, 'decision'),
+  }));
+  if (rows.length === 0) return null;
+  rows.sort((a, b) => {
+    if (a.decided !== b.decided) return a.decided ? -1 : 1;
+    const withKa = a.original_ksef_number != null;
+    const withKb = b.original_ksef_number != null;
+    if (withKa !== withKb) return withKa ? -1 : 1;
+    const ta = timeOf(a.completed_at);
+    const tb = timeOf(b.completed_at);
+    if (ta !== tb) {
+      if (ta === null) return 1;
+      if (tb === null) return -1;
+      return tb - ta;
+    }
+    if (ta !== null) {
+      const micro = microsOf(b.completed_at) - microsOf(a.completed_at);
+      if (micro !== 0) return micro;
+    }
+    return a.id === b.id ? 0 : a.id < b.id ? -1 : 1;
+  });
+  const row = rows[0]!;
+  return { originalKsefNumber: row.original_ksef_number ?? null, decision: takenDecision(row.original_check) };
 }
 
 /**

@@ -25,13 +25,18 @@ function Field({ label, value, mono = false }: { label: string; value: string | 
   );
 }
 
-/** Karta faktury dla operatora: stan, historia wysyłek, ślad audytu, akcje (PR 3c). */
+/**
+ * Karta faktury dla operatora: stan, historia wysyłek, ślad audytu, akcje (PR 3c).
+ * D-A4-1b-3 PR B: decyzja klienta przy 440 i ślad powiadomień w sekcji `original_check`.
+ */
 export default async function AdminKsefInvoicePage(props: { params: Promise<{ id: string }> }) {
   await requireAdmin();
   const { id } = await props.params;
   const data = await getInvoiceLifecycle(id);
   if (!data) notFound();
-  const { invoice, submissions, audit, openSent, evidence, resendFacts, environment } = data;
+  const { invoice, submissions, audit, openSent, evidence, resendFacts, environment, duplicateDecision, duplicateNotice } = data;
+  // Chwila odczytu dla reguły 24 h „Przypomnij klientowi” — ta sama w renderze serwera i klienta.
+  const now = new Date();
 
   return (
     <div className="space-y-8">
@@ -91,6 +96,9 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
           evidence={evidence}
           facts={resendFacts}
           environmentKnown={environment !== null}
+          duplicateDecision={duplicateDecision}
+          duplicateNotice={duplicateNotice}
+          now={now}
         />
       </section>
 
@@ -136,10 +144,19 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
           <h2 className="font-semibold text-lg">Oryginał z KSeF przy duplikacie 440 (original_check)</h2>
           {submissions.filter((s) => s.originalCheck).map((s) => {
             const c = s.originalCheck!;
+            const open = s.status === 'sent' || s.status === 'intent';
             const fields: Array<[string, string | null]> = [
               ['Numer KSeF oryginału', s.originalKsefNumber],
-              ['Wpis próby', `${s.status ?? '—'}${s.status === 'sent' || s.status === 'intent' ? ' (otwarty — bieżący)' : ' (zamknięty — historyczny)'}`],
+              ['Wpis próby', `${s.status ?? '—'}${open ? ' (otwarty — bieżący)' : ' (zamknięty — historyczny)'}`],
               ['Powód', c.reason],
+              // D-A4-1b-3 PR B (00148): decyzja klienta na zamkniętym wpisie number_taken.
+              ['Decyzja', c.decision
+                ? `${c.decision.choice === 'same_sale' ? 'ta sama sprzedaż' : 'inna sprzedaż'} · ${c.decision.via === 'operator' ? 'zapisał operator' : 'klient'} · ${when(c.decision.at)}`
+                : null],
+              // Powiadomienie „czeka na Twoją decyzję” dla otwartego znacznika tego numeru KSeF.
+              ['Powiadomienie klienta', open && duplicateNotice && s.originalKsefNumber === duplicateNotice.ksefNumber
+                ? `${duplicateNotice.count} × · ostatnie: ${when(duplicateNotice.lastAt)}`
+                : null],
               ['Ostatnie nieudane sprawdzenie', c.recheck ? `${c.recheck.reason}${c.recheck.httpStatus ? ` (HTTP ${c.recheck.httpStatus})` : ''}, ${when(c.recheck.checkedAt)}` : null],
               ['Środowisko', c.env],
               ['Sprawdzono', when(c.checkedAt)],
