@@ -202,6 +202,35 @@ Do kolejki: CYB-DOCKER-BUILD-SECRETS (SENTRY_AUTH_TOKEN przez ARG/ENV).
 Bez SQL, merge i wdrożenia; nie zamykamy #190/00129/C-11/C-12 ani QR.
 
 
+**Dopisek Codexa (03.10.2026, faza 4, CYB-DOCKER-BUILD-SECRETS):** nowy
+worktree i gałąź `codex/security-docker-build-secrets` od świeżego main
+`ef9bb43`, z jawną niezmienioną zależnością #196 na `5856d80` (polityka
+kontekstu #194/#196, harness, zgodność Windows, przekazanie). #196 ma 11/11
+SUCCESS na tym HEAD; #190/#193/#194/#196 nadal OPEN/draft przy odczycie.
+Nie zmieniono cudzych gałęzi ani głównego katalogu Igora.
+
+Token Sentry przeniesiono z ARG/ENV do env secret mount kroku builda,
+z zachowaniem publicznej konfiguracji również przy all-secrets Coolify.
+Nowa flaga SENTRY_AUTH_TOKEN_REQUIRED wymaga obecności tokenu. Jest to inna
+kontrola niż odbiór uploadu. Obowiązkowy syntetyczny harness CI bada logi,
+OCI config/history, warstwy, provenance i cache; celowe ARG/ENV oraz zapis
+do pliku muszą zostać wykryte. Wyniki, status publikacji i następny krok:
+[wpis CYB-DOCKER-BUILD-SECRETS](../security/DZIENNIK-ODPORNOSCI-CYBER.md).
+
+Roboczy PR #197; końcowy kod `89945c5`. Lokalne CI (72 Node/XML,
+424 zestawy/5414 Vitest, typy, lint bez błędów) i build standalone 82/82 PASS.
+15 testów nowego harnessu i niezależna recenzja PASS. Rzeczywiste siedem
+buildów Docker oraz wcześniejsza ochrona kontekstu mają SUCCESS na `89945c5`;
+linki i zakres dowodów w dzienniku. Po commicie dokumentacji pełny stan
+kontroli dokładnego HEAD utrzymujemy w opisie PR #197.
+
+Nowe osobne pozycje kolejki: CYB-COOLIFY-BUILD-SECRET-SCOPE i
+CYB-SENTRY-UPLOAD-FAILURE-GATE. Nie ma dowodu wcześniejszego wycieku ani
+potwierdzenia konfiguracji produkcji. Nie tworzono SQL; 00129 nadal zarezerwowane
+w #190 i niewykonane przez Codexa. C-11/C-12 oraz QR wymagają osobnego odbioru.
+Bez merge, wdrożenia, workera i migracji. Po jednym pakiecie zatrzymujemy pracę.
+
+
 ### C-01 · Konwencja kwot korekty sprzedaży — `ROZSTRZYGNIĘTE (02.10.2026, I1: różnica; #146)` · decyzja: Igor + Codex
 
 **Stan na `main`:** korekta zapisuje w `invoices.net_total/vat_total/gross_total`
