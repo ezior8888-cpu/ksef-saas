@@ -80,6 +80,11 @@ export async function verifyInvoicePdfDeliveryState(
   invoiceId: string,
   tenantId: string,
   expectedQrStateKey: string,
+  /**
+   * Wysyłka do nabywcy (mail): odmowa szkicu z numerem zajętym w KSeF (D-A4-1b-3 PR B,
+   * decyzja 07.10.2026). Pobranie PDF przez samego klienta zostaje dostępne.
+   */
+  options: { refuseRetiredDraft?: boolean } = {},
 ): Promise<PdfFailure | null> {
   // Nowa ścieżka Offline24 zapisuje znacznik na fakturze przed insertem kolejki.
   // Odczyt kolejki musi więc poprzedzać ostatni odczyt faktury: dzięki temu
@@ -90,7 +95,7 @@ export async function verifyInvoicePdfDeliveryState(
   if (current.tenantId !== tenantId) return { success: false, code: 'FORBIDDEN', error: 'Brak dostępu do tej faktury.' };
   // D-A4-1b-3 PR B (decyzja Bartosza 07.10.2026): szkic z numerem zajętym w KSeF przez inną
   // fakturę (wpis number_taken) nie jest fakturą pod tym numerem — nie idzie do nabywcy.
-  if (current.ksefStatus === 'draft') {
+  if (options.refuseRetiredDraft && current.ksefStatus === 'draft') {
     let taken;
     try {
       taken = await findKsefNumberTaken(tenantId, invoiceId);

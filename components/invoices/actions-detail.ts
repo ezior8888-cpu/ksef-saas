@@ -486,7 +486,9 @@ export async function emailInvoiceAction(
 
   const inv = data.invoice;
   const amount = invoiceEmailAmount(inv);
-  const deliveryFailure = await verifyInvoicePdfDeliveryState(invoiceId, tenantId, pdfResult.qrStateKey);
+  const deliveryFailure = await verifyInvoicePdfDeliveryState(invoiceId, tenantId, pdfResult.qrStateKey, {
+    refuseRetiredDraft: true,
+  });
   if (deliveryFailure) {
     return { success: false, error: deliveryFailure.error };
   }
