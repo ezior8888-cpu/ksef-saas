@@ -177,7 +177,11 @@ async function submissionsOf(invoiceId: string) {
 /**
  * Faktura abonamentu FaktFlow (`stripe_invoice_id`) — powstaje tylko jako
  * właściciel bazy: 00079 odmawia serwisowi zapisu tożsamości, a 00080 wymaga
- * wiersza `stripe_payments` z referencją płatności. Zwraca id i numer.
+ * wiersza `stripe_payments` z referencją płatności. Od 00115 wpłata musi mieć
+ * potwierdzoną pełną parę PaymentIntent/Charge (`stripe_payment_refs_verified`,
+ * CHECK `stripe_payments_verified_ref_pair`) — inaczej `zz_guard_billing_
+ * invoice_financial_case` odmawia („Stripe financial case requires VAT
+ * reconciliation”). Zwraca id i numer.
  */
 async function billingInvoice(patch: { ksef_status: string; last_error_code: string }): Promise<{ id: string; number: string }> {
   counter += 1;
@@ -185,9 +189,10 @@ async function billingInvoice(patch: { ksef_status: string; last_error_code: str
   const number = `KOL/ABO/${counter}`;
   const stripeInvoice = `in_KolejkaAbo${counter}`;
   await boss.getDb().executeSql(
-    `INSERT INTO public.stripe_payments (tenant_id, stripe_payment_intent_id, stripe_invoice_id, status, amount_cents, currency)
-     VALUES ($1::uuid, $2, $3, 'succeeded', 12300, 'PLN')`,
-    [ORG, `pi_KolejkaAbo${counter}`, stripeInvoice],
+    `INSERT INTO public.stripe_payments (tenant_id, stripe_payment_intent_id, stripe_charge_id, stripe_payment_refs_verified,
+       stripe_invoice_id, status, amount_cents, currency)
+     VALUES ($1::uuid, $2, $3, true, $4, 'succeeded', 12300, 'PLN')`,
+    [ORG, `pi_KolejkaAbo${counter}`, `ch_KolejkaAbo${counter}`, stripeInvoice],
   );
   await boss.getDb().executeSql(
     `INSERT INTO public.invoices (id, tenant_id, direction, internal_number, invoice_type, issue_date, seller_nip, buyer_nip,
