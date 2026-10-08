@@ -168,7 +168,7 @@ const RETIRED_TRIGGERS = [
 const SQL_TEXT_KEYS = [
   'NOTE', 'ROLE', 'ALREADY', 'IN_FLIGHT', 'not-pending', 'in-ksef', 'kind', 'billing', 'offline', 'no-marker',
   'conflicting-originals', 'no-check', 'reason', 'known-stale', 'own-history', 'payments', 'STALE', 'ENV', 'EVIDENCE',
-  'TRIGGER_SAME', 'TRIGGER_OTHER', 'TRIGGER_AUTO', 'TRIGGER_DELETE', 'TRIGGER_RENUMBER', 'CATALOG_NUMBER_TAKEN',
+  'TRIGGER_SAME', 'TRIGGER_OTHER', 'TRIGGER_AUTO', 'TRIGGER_DELETE', 'TRIGGER_RENUMBER', 'TRIGGER_DIRECTION', 'CATALOG_NUMBER_TAKEN',
 ];
 
 /** Kod błędu RAISE wg 2.11.A: NOTE 22023, ROLE 42501, reszta P0001. */
@@ -289,19 +289,30 @@ describe('strażnik tekstu migracji 00148 (D-A4-1b-3 PR B)', () => {
         BEFORE UPDATE OF ksef_status ON public.invoices FOR EACH ROW
         WHEN (OLD.ksef_status = 'draft' AND NEW.ksef_status IS DISTINCT FROM 'draft')
         EXECUTE FUNCTION public.guard_ksef_retired_draft()`));
-    // 07.10 (9): korekta i faktura rozliczeniowa zostają usuwalne.
-    expect(tight(triggers.get('c_guard_ksef_retired_draft_delete')!.text)).toBe(tight(`
+    // 07.10 (9): korekta i faktura rozliczeniowa zostają usuwalne. Bez warunku
+    // na kierunek (rewizja PR B #0): wpisy number_taken są tylko przy fakturach
+    // wychodzących, a warunek `OLD.direction = 'outgoing'` klient obchodził,
+    // zmieniając najpierw kierunek na 'incoming'.
+    const deleteTrigger = triggers.get('c_guard_ksef_retired_draft_delete')!;
+    expect(tight(deleteTrigger.text)).toBe(tight(`
       CREATE TRIGGER c_guard_ksef_retired_draft_delete
         BEFORE DELETE ON public.invoices FOR EACH ROW
-        WHEN (OLD.ksef_status = 'draft' AND OLD.direction = 'outgoing'
+        WHEN (OLD.ksef_status = 'draft'
               AND OLD.invoice_kind IN ('regular', 'advance'))
         EXECUTE FUNCTION public.guard_ksef_retired_draft()`));
-    // 07.10 (11): numer szkicu wycofanego (każdy rodzaj) zmienia tylko serwis.
-    expect(tight(triggers.get('c_guard_ksef_retired_draft_number')!.text)).toBe(tight(`
+    expect(/\bWHEN\s*\(([\s\S]*)\)\s*EXECUTE\b/i.exec(deleteTrigger.bare)?.[1]).not.toMatch(/\bdirection\b/i);
+    // 07.10 (11): numer i kierunek szkicu wycofanego (każdy rodzaj) zmienia tylko serwis.
+    const numberTrigger = triggers.get('c_guard_ksef_retired_draft_number')!;
+    expect(tight(numberTrigger.text)).toBe(tight(`
       CREATE TRIGGER c_guard_ksef_retired_draft_number
-        BEFORE UPDATE OF internal_number ON public.invoices FOR EACH ROW
-        WHEN (OLD.ksef_status = 'draft' AND NEW.internal_number IS DISTINCT FROM OLD.internal_number)
+        BEFORE UPDATE OF internal_number, direction ON public.invoices FOR EACH ROW
+        WHEN (OLD.ksef_status = 'draft'
+              AND (NEW.internal_number IS DISTINCT FROM OLD.internal_number
+                   OR NEW.direction IS DISTINCT FROM OLD.direction))
         EXECUTE FUNCTION public.guard_ksef_retired_draft()`));
+    expect(tight(numberTrigger.bare)).toContain(tight('BEFORE UPDATE OF internal_number, direction ON public.invoices'));
+    expect(tight(numberTrigger.bare)).toContain(tight('NEW.internal_number IS DISTINCT FROM OLD.internal_number'));
+    expect(tight(numberTrigger.bare)).toContain(tight('NEW.direction IS DISTINCT FROM OLD.direction'));
 
     // Każdy CREATE TRIGGER poprzedza DROP TRIGGER IF EXISTS tego samego wyzwalacza (powtarzalność).
     for (const name of RETIRED_TRIGGERS) {
@@ -310,6 +321,43 @@ describe('strażnik tekstu migracji 00148 (D-A4-1b-3 PR B)', () => {
       expect(drop, name).toBeGreaterThanOrEqual(0);
       expect(drop, name).toBeLessThan(create);
     }
+  });
+
+  it('U16f (rewizja PR B #0): w gałęzi wyzwalacza numeru zmiana kierunku dostaje TRIGGER_DIRECTION przed TRIGGER_RENUMBER; obejście roli serwisu bez zmian', async () => {
+    const { DUPLICATE_DECISION_SQL_TEXTS } = await import('@/lib/ksef/duplicate-decision');
+    const bodies = functionBodies(read(M148)).get('guard_ksef_retired_draft');
+    expect(bodies).toHaveLength(1);
+    const body = normBody(bodies![0]!);
+
+    // Krok 1: serwis (rola spoza authenticated/anon) przechodzi wyzwalacz numeru bez sprawdzania wpisów.
+    expect(body).toContain(tight(`
+      ELSIF TG_NAME = 'c_guard_ksef_retired_draft_number' THEN
+        IF current_user NOT IN ('authenticated', 'anon') THEN
+          RETURN NEW;
+        END IF;`));
+    // Krok 6: kierunek najpierw, potem numer — oba z argumentami (nr, odwołanie do K).
+    expect(body).toContain(tight(`
+      IF TG_NAME = 'c_guard_ksef_retired_draft_number' THEN
+        IF NEW.direction IS DISTINCT FROM OLD.direction THEN
+          RAISE EXCEPTION '${DUPLICATE_DECISION_SQL_TEXTS.TRIGGER_DIRECTION.template}', v_num, v_ref USING ERRCODE = 'P0001';
+        END IF;
+        RAISE EXCEPTION '${DUPLICATE_DECISION_SQL_TEXTS.TRIGGER_RENUMBER.template}', v_num, v_ref USING ERRCODE = 'P0001';
+      END IF;`));
+  });
+
+  it('U16g (rewizja PR B #7): decyzja blokuje (krok 4) i zamyka (a) ten sam zbiór otwartych wpisów — intent, sent i duplicate', () => {
+    const bodies = functionBodies(read(M148)).get('decide_ksef_duplicate');
+    expect(bodies).toHaveLength(1);
+    const body = normBody(bodies![0]!);
+    const open = "s.status IN ('intent', 'sent', 'duplicate')";
+    const where = `WHERE s.invoice_id = p_invoice_id AND s.tenant_id = p_tenant_id AND ${open}`;
+
+    expect(body).toContain(tight(`PERFORM 1 FROM public.ksef_submissions s ${where} FOR UPDATE;`));
+    // Bez `intent` w (a) starszy otwarty zamiar bez znacznika zostałby dowodem kontaktu
+    // (00136), a (b) odmawiałby EVIDENCE każdej takiej decyzji. Zachowanie: R2 (1).
+    const closing = /UPDATE public\.ksef_submissions s SET status='number_taken'[\s\S]*?;/.exec(body)?.[0];
+    expect(closing).toBeDefined();
+    expect(closing!.endsWith(tight(`${where};`))).toBe(true);
   });
 
   it('U16e (C1): każdy szablon DUPLICATE_DECISION_SQL_TEXTS stoi dosłownie po RAISE EXCEPTION z kodem z 2.11.A, nigdy w format(); CATALOG w UPDATE katalogu', async () => {

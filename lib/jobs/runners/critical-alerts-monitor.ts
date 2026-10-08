@@ -725,11 +725,12 @@ export const I5D_ENV_INVARIANT = 'I5D-env';
 
 /**
  * Inwariant do alarmu dla wiersza strażnika. I5D (00148, D-A4-1b-3 PR B,
- * decyzja 4) — faktura czeka na decyzję klienta: nie alarm (klient dostał
- * e-mail, operator widzi ją w raporcie i /admin/ksef), chyba że dane
- * oryginału sprawdzono w innym środowisku KSeF niż obecne (albo KSEF_ENV
- * jest nieznane) — wtedy `I5D-env`, bo klient nie zapisze decyzji (RPC ENV).
- * `null` — wiersz nie alarmuje.
+ * decyzja 4) — faktura czeka na decyzję klienta: nie alarm, także gdy
+ * powiadomienie nie doszło. E-mail „czeka na Twoją decyzję” idzie raz i nikt
+ * go automatycznie nie ponawia; gdy nie doszedł — operator: „Przypomnij
+ * klientowi” (raport dzienny, /admin/ksef z kolumną „Powiadomienie klienta”). Wyjątek: dane oryginału sprawdzono w innym środowisku KSeF niż
+ * obecne (albo KSEF_ENV jest nieznane) — wtedy `I5D-env`, bo klient nie
+ * zapisze decyzji (RPC ENV). `null` — wiersz nie alarmuje.
  */
 function alertingInvariant(row: { invariant: string; detail?: unknown }, environment: string | null): string | null {
   if (row.invariant !== 'I5D') return row.invariant;
@@ -742,9 +743,10 @@ function alertingInvariant(row: { invariant: string; detail?: unknown }, environ
  * (00131). I1 i klasa transient mają automat w `cron.ksef-lifecycle-reconcile`;
  * reszta (I2 sending ponad dzierżawę, I3 accepted bez UPO/XML, I4 failed bez
  * kodu, I5 stary wpis sent, I9 failed z numerem) to praca operatora w /admin/ksef.
- * I5D (00148) — faktura czeka na decyzję klienta: nie alarm (klient dostał
- * e-mail, operator widzi ją w raporcie i /admin/ksef); I5D-env — alarm, bo
- * klient nie zapisze decyzji.
+ * I5D (00148) — faktura czeka na decyzję klienta: nie alarm (e-mail idzie raz
+ * i nie jest ponawiany; gdy nie doszedł — operator: „Przypomnij klientowi” —
+ * widzi fakturę w raporcie i w /admin/ksef); I5D-env — alarm, bo klient nie
+ * zapisze decyzji.
  */
 export async function checkKsefLifecycleViolations(): Promise<AlertCheckResult> {
   const { data, error } = await createAdminClient().rpc('ksef_lifecycle_violations');

@@ -91,7 +91,17 @@ import {
   type DecidableViewFixture,
 } from './helpers/decyzja-klienta';
 
-type PanelProps = { invoiceId: string; view: DecidableViewFixture };
+/**
+ * Widok panelu: fixture z 2.2.1 plus `markedDifference` (#2 przeglądu PR B —
+ * czy któryś wiersz tabeli ma „różni się”; od niego zależy etykieta pola
+ * „Rozumiem skutki” przy „ta sama sprzedaż”).
+ */
+type PanelView = DecidableViewFixture & { markedDifference?: boolean };
+type PanelProps = { invoiceId: string; view: PanelView };
+
+/** Etykieta pola „ta sama sprzedaż”, gdy tabela nie zaznacza różnic (NIP nieznany, B2C, waluta nieznana). */
+const SAME_CHECKBOX_UNCOMPARABLE = (k: string, nr: string) =>
+  `Rozumiem skutki: faktura ${k} w KSeF dokumentuje tę samą sprzedaż co dokument ${nr}, choć części danych w tabeli nie da się porównać.`;
 type PanelComponent = (props: PanelProps) => ReactNode;
 
 /**
@@ -127,14 +137,17 @@ afterEach(() => {
   host = null;
 });
 
-async function renderPanel(view: DecidableViewFixture): Promise<HTMLDivElement> {
+async function renderPanel(view: PanelView): Promise<HTMLDivElement> {
   const Panel = await loadPanel();
   act(() => root?.unmount());
   host?.remove();
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
-  act(() => root!.render(<Panel invoiceId="inv-1" view={view} />));
+  // Domyślnie z tabeli, jak w polityce (`markedDifference` = któryś wiersz „różni się”) —
+  // fixture bez pola nie pokaże etykiety sprzecznej z własną tabelą.
+  const v = { ...view, markedDifference: view.markedDifference ?? view.comparison.some((r) => r.same === false) };
+  act(() => root!.render(<Panel invoiceId="inv-1" view={v} />));
   return host;
 }
 
@@ -276,12 +289,46 @@ describe('KsefDuplicateDecision — panel decyzji klienta (D-A4-1b-3 PR B)', () 
   });
 
   it('U8c: „ta sama sprzedaż” przy różnicach (tarcie) — pole z etykietą wariantu „ta sama”', async () => {
-    await renderPanel(decidableView({ needsConfirmation: { same_sale: true, other_sale: false } }));
+    // Fixture ma w tabeli „różni się” przy dacie — `markedDifference` jak z polityki.
+    await renderPanel({ ...decidableView({ needsConfirmation: { same_sale: true, other_sale: false } }), markedDifference: true });
     await click(button(PANEL.buttonSame));
 
     expect(text()).toContain(PANEL.same.checkbox(K, VIEW_NR));
+    expect(text()).not.toContain(SAME_CHECKBOX_UNCOMPARABLE(K, VIEW_NR));
     await click(button(PANEL.same.confirm));
     expect(m.decide).not.toHaveBeenCalled();
+  });
+
+  it('U8c (#2): „ta sama sprzedaż” bez różnic zaznaczonych w tabeli (B2C: NIP nieznany) — etykieta „choć części danych w tabeli nie da się porównać”', async () => {
+    const b2c = decidableView({
+      comparison: [
+        { label: 'Numer faktury', ksef: VIEW_NR, ours: VIEW_NR, same: true },
+        { label: 'Data wystawienia', ksef: '2026-10-01', ours: '2026-10-01', same: true },
+        { label: 'Nabywca', ksef: 'Jan Konsument', ours: 'Jan Konsument', same: true },
+        { label: 'NIP nabywcy', ksef: null, ours: null, same: null },
+        { label: 'Kwota brutto', ksef: '123.00 PLN', ours: '123.00 PLN', same: true },
+        { label: 'Program', ksef: 'Inny Program 1.0', ours: 'FaktFlow', same: null },
+      ],
+      needsConfirmation: { same_sale: true, other_sale: true },
+    });
+    await renderPanel({ ...b2c, markedDifference: false });
+    expect(text()).not.toContain(PANEL.differs);
+    await click(button(PANEL.buttonSame));
+
+    expect(text()).toContain(SAME_CHECKBOX_UNCOMPARABLE(K, VIEW_NR));
+    expect(text()).not.toContain('mimo różnic zaznaczonych w tabeli');
+    // Pole nadal wymagane: bez zaznaczenia nic nie idzie, po zaznaczeniu — z `confirmed: true`.
+    await click(button(PANEL.same.confirm));
+    expect(m.decide).not.toHaveBeenCalled();
+    await click(checkbox()!);
+    await click(button(PANEL.same.confirm));
+    expect(m.decide).toHaveBeenCalledTimes(1);
+    expect(m.decide.mock.calls[0]![0]).toMatchObject({ choice: 'same_sale', confirmed: true });
+
+    // Etykieta „inna sprzedaż” bez zmian.
+    await renderPanel({ ...b2c, markedDifference: false });
+    await click(button(PANEL.buttonOther));
+    expect(text()).toContain(PANEL.other.checkbox(K, VIEW_NR));
   });
 
   it('U8c: bez tarcia — bez pola „Rozumiem skutki”, decyzja od razu', async () => {

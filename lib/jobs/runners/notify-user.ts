@@ -6,9 +6,11 @@ import {
   invoiceSubmitSucceeded,
 } from '../events';
 import type { JobContext } from '@/lib/jobs/registry';
+import { RetryAfterError } from '@/lib/jobs/errors';
 import {
   getTenantAdminEmail,
   getTenantOwnerUserId,
+  readTenantOwnerContact,
 } from '@/lib/supabase/admin-queries';
 import {
   sendInvoiceAcceptedEmail,
@@ -184,15 +186,23 @@ type DuplicateDecisionNotice =
 /**
  * D-A4-1b-3 PR B (decyzja Bartosza 07.10.2026 (5), spec §2.8): „Faktura {nr}
  * czeka na Twoją decyzję” — DOKŁADNIE RAZ na fakturę i numer KSeF oryginału.
- * Ponowienie od zera po każdym kroku:
- *   - blokada, znacznik i ślad — tylko odczyt (błąd odczytu śladu rzuca,
- *     więc nic nie wychodzi);
+ * Ponowienie od zera po każdym kroku (pg-boss, `maxRetries: 2` w package-b.ts):
+ *   - blokada, znacznik, ślad, właściciel i jego adres — tylko odczyt; błąd
+ *     odczytu rzuca, więc nic nie wychodzi, a zadanie się ponawia (właściciel
+ *     ścisłym `readTenantOwnerContact`: chwilowy błąd bazy albo GoTrue to nie
+ *     „firma nie ma właściciela”, kolejna próba za 5 min — `RetryAfterError`);
  *   - e-mail ze stałym kluczem `ksef-duplicate-decision/{faktura}/{K}` — Resend
  *     deduplikuje 24 h; push z tagiem `invoice-{faktura}` zastępuje poprzedni;
  *   - zapis śladu: błąd rzuca, ponowienie wysyła z tym samym kluczem i zapisuje;
  *     po zapisie każde kolejne zdarzenie o (fakturze, K) jest pomijane.
- * Niedostarczone (bez e-maila i pusha) nie zostawia śladu — następne zdarzenie
- * spróbuje znowu (precedens `cert-expiry-alert.ts`: zapis tylko po dostarczeniu).
+ * Niedostarczone (bez e-maila i pusha: adres na liście odbić, brak właściciela
+ * albo adresu, push bez subskrypcji) nie zostawia śladu (precedens
+ * `cert-expiry-alert.ts`: zapis tylko po dostarczeniu) i NIKT go automatycznie
+ * nie ponowi: faktura w I5D nie dostaje kolejnego zdarzenia (cron uzgadnia
+ * tylko I5, alarm krytyczny I5D nie liczy — decyzja 4; bez automatycznego
+ * przypomnienia — decyzja 5, spec §7 p. 11). Wyjście operatora: „Przypomnij klientowi”
+ * w `/admin/ksef/<id>`; tabela I5D i karta faktury pokazują, ile powiadomień
+ * o tym K doszło (0 × = klient nie wie).
  */
 async function notifyDuplicateDecision(invoiceId: string, tenantId: string): Promise<DuplicateDecisionNotice> {
   const supabase = createAdminClient();
@@ -233,8 +243,19 @@ async function notifyDuplicateDecision(invoiceId: string, tenantId: string): Pro
   const invoiceNumber = (invoice as { internal_number: string | null } | null)?.internal_number?.trim() || 'bez numeru';
   const idempotencyKey = duplicateNoticeKey(invoiceId, ksefNumber, null);
 
-  // 4. E-mail do właściciela.
-  const email = await getTenantAdminEmail(tenantId);
+  // 4. Właściciel i jego adres — wariant ścisły: błąd odczytu rzuca (pg-boss
+  // ponawia), bo to jedyne automatyczne powiadomienie; prawdziwy brak = null.
+  // Odstęp 5 min zamiast domyślnych 10 s / 30 s: restart bazy albo GoTrue
+  // trwa dłużej niż ~40 s, a po ostatniej próbie nic go już nie ponowi.
+  let contact: Awaited<ReturnType<typeof readTenantOwnerContact>>;
+  try {
+    contact = await readTenantOwnerContact(tenantId);
+  } catch (e) {
+    throw new RetryAfterError(e instanceof Error ? e.message : String(e), '5m', { cause: e });
+  }
+  const { ownerUserId: ownerId, email } = contact;
+
+  // 5. E-mail do właściciela.
   const mail = email
     ? await sendInvoiceDuplicateDecisionEmail(
         email,
@@ -244,8 +265,7 @@ async function notifyDuplicateDecision(invoiceId: string, tenantId: string): Pro
     : { sent: false as const, reason: 'no-admin-email' };
   const emailed = mail.sent === true;
 
-  // 5. Push do właściciela (preferencja `notify_invoice_rejected`).
-  const ownerId = await getTenantOwnerUserId(tenantId);
+  // 6. Push do właściciela (preferencja `notify_invoice_rejected`).
   const push = ownerId
     ? await sendPushToUser(ownerId, 'invoice_rejected', {
         title: DUPLICATE_DECISION_TEXTS.NOTICE.PUSH_TITLE(invoiceNumber),
@@ -256,7 +276,7 @@ async function notifyDuplicateDecision(invoiceId: string, tenantId: string): Pro
     : { skipped: true as const, reason: 'no-owner' as const };
   const pushSent = 'sent' in push ? push.sent : 0;
 
-  // 6. Ślad tylko po dostarczeniu.
+  // 7. Ślad tylko po dostarczeniu.
   const delivered = emailed || pushSent > 0;
   if (delivered) {
     await recordDuplicateNotice({

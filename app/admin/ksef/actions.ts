@@ -43,10 +43,14 @@ import {
   findDuplicateNotices,
   recordDuplicateNotice,
 } from '@/lib/ksef/duplicate-decision-notice';
-import { callDecideKsefDuplicate, readDuplicateDecisionBlocker } from '@/lib/ksef/duplicate-decision-rpc';
+import {
+  callDecideKsefDuplicate,
+  readDuplicateDecisionBlocker,
+  type DuplicateRpcError,
+} from '@/lib/ksef/duplicate-decision-rpc';
 import { isKsefSubmissionPaused } from '@/lib/ksef/submission-holds';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getTenantAdminEmail } from '@/lib/supabase/admin-queries';
+import { readTenantOwnerContact } from '@/lib/supabase/admin-queries';
 
 /**
  * Akcje operatora `/admin/ksef` (cykl życia faktury, PR 3c). Te same RPC
@@ -245,6 +249,33 @@ async function loadDuplicateDecision(row: OperatorRow): Promise<{
 const choiceLabel = (choice: DuplicateChoice): string => (choice === 'same_sale' ? 'ta sama sprzedaż' : 'inna sprzedaż');
 
 /**
+ * Błąd RPC `decide_ksef_duplicate` → tekst dla operatora (jak akcja klienta
+ * `decideKsefDuplicateAction`, przegląd PR B #3). Nie tekst resetu — ta akcja
+ * nie przywraca szkicu.
+ *  - P0001 — odmowa z bazy napisana dla człowieka (np. wpłata niewidoczna
+ *    w `paid_amount`, decyzja zapisana równolegle: ALREADY) — bez zmian;
+ *  - P0002 — faktura nie tej firmy;
+ *  - 22023 z tekstem NOTE — baza policzyła notatkę krócej niż akcja;
+ *  - reszta (22023 argumentów, 42501, XX000 „Unknown … blocker”, transport) to
+ *    rozjazd TS↔SQL albo awaria — ogólny tekst decyzji i Sentry.
+ */
+function describeOperatorDecideError(
+  error: DuplicateRpcError,
+  context: { tenantId: string; invoiceId: string; choice: DuplicateChoice },
+): string {
+  if (error.code === 'P0001' && error.message) return error.message;
+  if (error.code === 'P0002') return OPERATOR_MESSAGES.notFound;
+  if (error.code === '22023' && error.message === DUPLICATE_DECISION_SQL_TEXTS.NOTE.template) {
+    return OPERATOR_DUPLICATE_MESSAGES.noteError;
+  }
+  Sentry.captureException(new Error(`decide_ksef_duplicate (operator): błąd bazy ${error.code || 'bez kodu'}`), {
+    tags: { area: 'ksef.duplicate-decision', kind: 'operator-decision' },
+    extra: { ...context, code: error.code ?? null, message: error.message ?? null },
+  });
+  return DUPLICATE_DECISION_TEXTS.GENERIC;
+}
+
+/**
  * „Zapisz decyzję klienta” (D-A4-1b-3 PR B, spec §2.6.4; decyzje Bartosza
  * 04.10 i 07.10.2026 (7)). Operator zapisuje decyzję przekazaną przez klienta —
  * nie decyduje sam. Kolejność: `requireAdmin()` przed kluczem serwisowym →
@@ -284,7 +315,8 @@ export async function operatorDecideDuplicateAction(
   if (!environment) return { success: false, error: OPERATOR_MESSAGES.envUnknown };
 
   const note = (input.note ?? '').trim();
-  if (note.length < OPERATOR_NOTE_MIN_LENGTH) return { success: false, error: OPERATOR_DUPLICATE_MESSAGES.noteError };
+  // Znaki (punkty kodowe) jak `length()` w bazie — nie jednostki UTF-16 (emoji to dwie).
+  if ([...note].length < OPERATOR_NOTE_MIN_LENGTH) return { success: false, error: OPERATOR_DUPLICATE_MESSAGES.noteError };
   if (view.originalKsefNumber !== input.originalKsefNumber || view.originalSha256 !== input.originalSha256) {
     return { success: false, error: DUPLICATE_DECISION_TEXTS.STALE };
   }
@@ -303,8 +335,12 @@ export async function operatorDecideDuplicateAction(
     env: environment,
     note,
   });
-  // P0001 (odmowa z bazy, np. wpłata niewidoczna w paid_amount) — tekst bez zmian.
-  if (error) return { success: false, error: describeResetError(error) };
+  if (error) {
+    return {
+      success: false,
+      error: describeOperatorDecideError(error, { tenantId: row.tenant_id, invoiceId: row.id, choice: input.choice }),
+    };
+  }
 
   if (data?.already_decided !== true) {
     await logAuditSystem({
@@ -371,7 +407,15 @@ export async function operatorRemindDuplicateDecisionAction(invoiceId: string): 
   const remind = operatorRemindButton(decide, notices, new Date());
   if (!remind.enabled) return { success: false, error: remind.reason ?? OPERATOR_DUPLICATE_MESSAGES.notPending };
 
-  const email = await getTenantAdminEmail(row.tenant_id);
+  // Wariant ścisły (przegląd PR B #1/#4): chwilowy błąd bazy albo GoTrue to nie
+  // „firma nie ma adresu” — operator ponawia, a nie szuka innego kanału.
+  let email: string | null;
+  try {
+    ({ email } = await readTenantOwnerContact(row.tenant_id));
+  } catch (e) {
+    Sentry.captureException(e, { tags: { area: 'ksef.duplicate-decision', kind: 'reminder-owner-read' }, extra: { invoiceId: row.id } });
+    return { success: false, error: OPERATOR_DUPLICATE_MESSAGES.remindReadFailed };
+  }
   if (!email) return { success: false, error: OPERATOR_DUPLICATE_MESSAGES.remindNoEmail };
 
   const idempotencyKey = duplicateNoticeKey(row.id, k, notices.count);

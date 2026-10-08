@@ -90,6 +90,7 @@ import {
   markerRow,
   numberTakenRow,
 } from './helpers/decyzja-klienta';
+import { fillExpected } from './helpers/ksef-duplicate-decision-cases';
 import { memoryDb, type Row } from './helpers/ponowienie-specjalne-baza';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -386,6 +387,23 @@ describe('decideKsefDuplicateAction — decyzja klienta przy nierozstrzygniętym
     const r = await decide({ choice: 'other_sale', confirmed: true });
 
     expect(r).toMatchObject({ success: true });
+    expect(m.rpc).not.toHaveBeenCalled();
+  });
+
+  // Przegląd PR B (#5): druga, nieodświeżona karta po zapisanej decyzji — nie „Zapisano: inna sprzedaż”,
+  // tylko ALREADY z ZAPISANYM wyborem (ten sam tekst co RPC, krok 2); RPC niewołane.
+  it.each([
+    ['inny wybór niż zapisany („inna sprzedaż” przy zapisanej „tej samej”)', { choice: 'other_sale' as const }],
+    ['ten sam wybór, ale inny numer KSeF oryginału niż zapisany', { choice: 'same_sale' as const, originalKsefNumber: K2 }],
+  ])('U3h: szkic wycofany decyzją „ta sama sprzedaż”, %s — ALREADY, bez RPC', async (_label, patch) => {
+    seed({
+      invoice: invoiceRow({ ksef_status: 'draft', last_error_code: null, last_error: null }),
+      submissions: [numberTakenRow(TENANT, X_ID, 'decided-same')],
+    });
+
+    const r = await decide({ ...patch, confirmed: true });
+
+    expect(r).toEqual({ success: false, error: fillExpected('ALREADY', NR, 'ta sama sprzedaż') });
     expect(m.rpc).not.toHaveBeenCalled();
   });
 

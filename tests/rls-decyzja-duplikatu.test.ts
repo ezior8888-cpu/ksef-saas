@@ -12,8 +12,9 @@ import { getRlsTestEnvironment } from './helpers/rls-environment';
  *     i akceptacji odbijają się od wyzwalacza `c_guard_ksef_retired_draft`
  *     z tekstem równym `retiredDraftSendRefusal` z TS (R1a–R1d),
  *   - sesja klienta nie usuwa wycofanego szkicu zwykłej faktury ani zaliczki
- *     (KOR i ROZ zostają usuwalne — 07.10 (9)) i nie zmienia jego numeru
- *     (07.10 (11)); serwis może (R1e–R1h),
+ *     (KOR i ROZ zostają usuwalne — 07.10 (9)), także po zmianie kierunku,
+ *     i nie zmienia jego numeru (07.10 (11)) ani kierunku (rewizja PR B #0);
+ *     serwis może (R1e–R1i),
  *   - RPC `decide_ksef_duplicate`: skutki w jednej transakcji, odmowy
  *     z tekstami z `DUPLICATE_DECISION_SQL_TEXTS`, powtórzenie = already_decided
  *     (R2–R4),
@@ -394,6 +395,15 @@ async function invoiceRow(id: string): Promise<Json | null> {
   return data as Json | null;
 }
 
+/** Kierunek i numer faktury (INVOICE_COLUMNS nie ma kierunku). */
+async function directionRow(id: string): Promise<{ direction: string; internal_number: string | null } | null> {
+  const { data, error } = await admin.from('invoices')
+    .select('direction, internal_number')
+    .eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data as { direction: string; internal_number: string | null } | null;
+}
+
 async function submissionsOf(invoiceId: string): Promise<Json[]> {
   const { data, error } = await admin.from('ksef_submissions')
     .select(SUBMISSION_COLUMNS).eq('invoice_id', invoiceId).order('attempted_at');
@@ -743,12 +753,19 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
       expect(error?.message).toBe(await sqlText('TRIGGER_RENUMBER', d.number, `faktura ${d.k}`));
     });
 
-    it('R1h strażnik: serwis zmienia numer szkicu wycofanego; właściciel zmienia uwagi szkicu wycofanego i numer zwykłego szkicu', async () => {
+    it('R1h strażnik: serwis zmienia numer i kierunek szkicu wycofanego; właściciel zmienia uwagi szkicu wycofanego oraz numer i kierunek zwykłego szkicu', async () => {
       const byService = await retiredDraft('regular', [{ shape: 'automatic' }]);
       const service = await admin.from('invoices')
         .update({ internal_number: `${byService.number}-SERWIS` }).eq('id', byService.id).select('internal_number');
       expect(service.error).toBeNull();
       expect(service.data).toEqual([{ internal_number: `${byService.number}-SERWIS` }]);
+
+      // Rewizja PR B #0: wyzwalacz numeru strzeże też kierunku, ale serwis dalej go przechodzi (krok 1).
+      const flippedByService = await retiredDraft('regular', [{ shape: 'decided', choice: 'other_sale' }]);
+      const serviceDirection = await admin.from('invoices')
+        .update({ direction: 'incoming' }).eq('id', flippedByService.id).select('direction');
+      expect(serviceDirection.error).toBeNull();
+      expect(serviceDirection.data).toEqual([{ direction: 'incoming' }]);
 
       const notes = await retiredDraft('regular', [{ shape: 'decided', choice: 'other_sale' }]);
       const edit = await owner.from('invoices').update({ notes: 'uwaga do wycofanego szkicu' }).eq('id', notes.id).select('notes');
@@ -760,6 +777,49 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
         .update({ internal_number: `${plain.number}-NOWY` }).eq('id', plain.id).select('internal_number');
       expect(renumber.error).toBeNull();
       expect(renumber.data).toEqual([{ internal_number: `${plain.number}-NOWY` }]);
+
+      // Zwykły szkic (bez wpisu number_taken): zmiana kierunku z sesji klienta przechodzi.
+      const plainDirection = await plainDraft();
+      const flip = await owner.from('invoices')
+        .update({ direction: 'incoming' }).eq('id', plainDirection.id).select('direction');
+      expect(flip.error).toBeNull();
+      expect(flip.data).toEqual([{ direction: 'incoming' }]);
+    });
+
+    it.each<{ name: string; rows: TakenRow[] }>([
+      { name: 'decyzja', rows: [{ shape: 'decided', choice: 'other_sale' }] },
+      { name: 'automatyczny', rows: [{ shape: 'automatic' }] },
+    ])('R1i: właściciel nie zmienia kierunku szkicu wycofanego zwykłej faktury na zakupowy ($name) — P0001 TRIGGER_DIRECTION, kierunek i numer zostają', async ({ rows }) => {
+      const d = await retiredDraft('regular', rows);
+
+      const { data, error } = await owner.from('invoices')
+        .update({ direction: 'incoming' }).eq('id', d.id).select('direction');
+
+      // Dziś (rewizja PR B #0) kierunku szkicu bez pól wysyłki nie strzeże nic: 00132 zamraża
+      // treść tylko przy historii dostawy, 00073 — tylko na przyjętej fakturze, a wyzwalacz
+      // numeru patrzy tylko na internal_number. PATCH przechodzi i FV/N wypada z indeksu
+      // unikalnego numerów sprzedaży (00120), a wyzwalacz usunięcia (WHEN direction) przestaje działać.
+      expect(error?.code).toBe('P0001');
+      expect(data ?? []).toEqual([]);
+      expect(await directionRow(d.id)).toEqual({ direction: 'outgoing', internal_number: d.number });
+      expect(error?.message).toBe(await sqlText('TRIGGER_DIRECTION', d.number, `faktura ${d.k}`));
+    });
+
+    it('R1i: szkic wycofany z kierunkiem zmienionym przez serwis (dawne obejście) — właściciel go nie usuwa: P0001 TRIGGER_DELETE, wiersz i wpis number_taken zostają', async () => {
+      const d = await retiredDraft('regular', [{ shape: 'decided', choice: 'other_sale' }]);
+      const flip = await admin.from('invoices').update({ direction: 'incoming' }).eq('id', d.id).select('direction');
+      expect(flip.error).toBeNull();
+      expect(flip.data).toEqual([{ direction: 'incoming' }]);
+
+      const { data, error } = await owner.from('invoices').delete().eq('id', d.id).select('id');
+
+      // Dziś WHEN wyzwalacza usunięcia wymaga OLD.direction = 'outgoing': szkic znika razem
+      // z wpisem number_taken (ON DELETE CASCADE, 00001), a FV/N wraca do podpowiedzi.
+      expect(error?.code).toBe('P0001');
+      expect(data ?? []).toEqual([]);
+      expect(await directionRow(d.id)).toEqual({ direction: 'incoming', internal_number: d.number });
+      expect((await submissionsOf(d.id)).filter((s) => s.status === 'number_taken')).toHaveLength(1);
+      expect(error?.message).toBe(await sqlText('TRIGGER_DELETE', d.number, `faktura ${d.k}`));
     });
   });
 
@@ -771,9 +831,12 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
         rows: [
           { status: 'duplicate', attempted_at: '2026-08-30T10:00:00Z' },
           { status: 'rejected', attempted_at: '2026-08-29T10:00:00Z' },
+          // Rewizja PR B #7: starszy otwarty zamiar bez znacznika — skutek (a) zamyka też
+          // `intent`; bez tego (b) widziałby dowód kontaktu (00136) i odmawiał EVIDENCE.
+          { status: 'intent', attempted_at: '2026-08-28T10:00:00Z' },
         ],
       });
-      const [duplicateId, rejectedId] = p.extraIds;
+      const [duplicateId, rejectedId, intentId] = p.extraIds;
 
       const { data, error } = await decide(p);
 
@@ -781,7 +844,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
       expect(error).toBeNull();
       expect(data).toMatchObject({
         invoice_id: p.id, internal_number: p.number, original_ksef_number: p.k, choice: 'other_sale', via: 'client',
-        reason: 'no-own-file', already_decided: false, submissions_closed: 3,
+        reason: 'no-own-file', already_decided: false, submissions_closed: 4,
       });
 
       expect(await invoiceRow(p.id)).toMatchObject({
@@ -792,7 +855,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
 
       const rows = await submissionsOf(p.id);
       const closed = rows.filter((r) => r.status === 'number_taken');
-      expect(closed.map((r) => r.id).sort()).toEqual([p.markerId, p.olderId, duplicateId].sort());
+      expect(closed.map((r) => r.id).sort()).toEqual([p.markerId, p.olderId, duplicateId, intentId].sort());
       for (const r of closed) {
         expect(r).toMatchObject({
           error_code: 'NUMBER_TAKEN',
@@ -810,6 +873,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
       // Klient czyta original_check (00002:183-186): bez aktora i notatki.
       expect(JSON.stringify(marker.original_check)).not.toContain(ids.owner);
       expect(rows.find((r) => r.id === p.olderId)?.original_check).toBeNull();
+      expect(rows.find((r) => r.id === intentId)?.original_check).toBeNull();
 
       const evidence = await admin.rpc('ksef_has_contact_evidence', { p_invoice_id: p.id, p_tenant_id: ORG });
       expect(evidence.error).toBeNull();
@@ -821,7 +885,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
       const details = decided[0]!.details_json as Json & { retired: Json; previous: Json };
       expect(details).toMatchObject({
         choice: 'other_sale', via: 'client', note: null, env: 'test', reason: 'no-own-file',
-        marker_submission_id: p.markerId, submissions_closed: 3,
+        marker_submission_id: p.markerId, submissions_closed: 4,
         original: {
           ksef_number: p.k, session: `SES-ORIG-${p.n}`, sha256: SHA,
           summary: (p.check as Json).summary, acquired_at: (p.check as Json).acquiredAt,

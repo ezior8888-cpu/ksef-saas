@@ -279,17 +279,49 @@ describe('U1c: widok do decyzji, tabela porównania i „Rozumiem skutki” (dec
     expect(sameOf(v)).toEqual({
       'Numer faktury': true, 'Data wystawienia': true, Nabywca: true, 'NIP nabywcy': true, 'Kwota brutto': true, Program: null,
     });
+    expect(v.markedDifference).toBe(false);
   });
 
-  it('różnice: data, nabywca, NIP i kwota; kwota w innej albo nieznanej walucie — bez porównania (same null)', () => {
+  // Zmiana świadoma (przegląd PR B, ustalenie #2): kwota w innej ZNANEJ walucie
+  // to „różni się” (same false) — wcześniej wiersz był bez porównania (null),
+  // a pole „Rozumiem skutki” mówiło o różnicach, których tabela nie zaznaczała.
+  it('różnice: data, nabywca, NIP i kwota; kwota w innej znanej walucie — „różni się” (same false); waluta nieznana — bez porównania (same null)', () => {
     const differs = decidableView(decisionFacts({
       check: validCheck({ summary: { ...(validCheck().summary as object), issueDate: '2026-09-30', buyerName: 'Inny Nabywca', buyerNip: '9876543210', gross: '999.99' } }),
     }));
     expect(sameOf(differs)).toMatchObject({ 'Data wystawienia': false, Nabywca: false, 'NIP nabywcy': false, 'Kwota brutto': false });
+    expect(differs.markedDifference).toBe(true);
     const eur = decidableView(decisionFacts({ check: validCheck({ summary: { ...(validCheck().summary as object), currency: 'EUR' } }) }));
-    expect(sameOf(eur)['Kwota brutto']).toBeNull();
+    expect(sameOf(eur)['Kwota brutto']).toBe(false);
     const noCurrency = decidableView(decisionFacts({ check: validCheck({ summary: { ...(validCheck().summary as object), currency: null } }) }));
     expect(sameOf(noCurrency)['Kwota brutto']).toBeNull();
+    expect(noCurrency.markedDifference).toBe(false);
+    const oursNoCurrency = decidableView(decisionFacts({ invoice: { currency: null } }));
+    expect(sameOf(oursNoCurrency)['Kwota brutto']).toBeNull();
+    // Inna znana waluta, ale kwota nieznana — nadal bez porównania.
+    const eurNoGross = decidableView(decisionFacts({ check: validCheck({ summary: { ...(validCheck().summary as object), currency: 'EUR', gross: null } }) }));
+    expect(sameOf(eurNoGross)['Kwota brutto']).toBeNull();
+    expect(eurNoGross.markedDifference).toBe(false);
+  });
+
+  it('#2 B2C (nabywca bez NIP, BrakID): NIP nieznany po obu stronach, reszta zgodna — „ta sama sprzedaż” wymaga potwierdzenia, ale tabela nie zaznacza różnic (markedDifference false)', () => {
+    const v = decidableView(decisionFacts({
+      check: validCheck({ summary: { ...(validCheck().summary as object), buyerNip: null } }),
+      invoice: { buyer_nip: null },
+    }));
+    expect(sameOf(v)).toEqual({
+      'Numer faktury': true, 'Data wystawienia': true, Nabywca: true, 'NIP nabywcy': null, 'Kwota brutto': true, Program: null,
+    });
+    expect(v.needsConfirmation).toEqual({ same_sale: true, other_sale: true });
+    expect(v.markedDifference).toBe(false);
+  });
+
+  it('#2 ta sama wartość w EUR (KSeF) i w PLN (ten dokument): wiersz kwoty „różni się”, markedDifference true; tarcie bez zmian', () => {
+    const v = decidableView(decisionFacts({ check: validCheck({ summary: { ...(validCheck().summary as object), currency: 'EUR' } }) }));
+    const gross = v.comparison.find((r) => r.label === 'Kwota brutto');
+    expect(gross).toEqual({ label: 'Kwota brutto', ksef: '1230.00 EUR', ours: '1230.00 PLN', same: false });
+    expect(v.markedDifference).toBe(true);
+    expect(v.needsConfirmation).toEqual({ same_sale: true, other_sale: true });
   });
 
   it.each([
@@ -548,6 +580,9 @@ describe('U1f: teksty klienta (przegląd prawnika, decyzje A i 8)', () => {
     expect(texts).toContain('Zaznacz „Rozumiem skutki” i zapisz decyzję jeszcze raz.');
     const labels = texts.filter((t) => t.startsWith('Rozumiem skutki: '));
     expect(labels.some((t) => /^Rozumiem skutki: faktura .+ w KSeF dokumentuje tę samą sprzedaż co dokument .+, mimo różnic zaznaczonych w tabeli\.$/.test(t)))
+      .toBe(true);
+    // #2: wariant bez różnic zaznaczonych w tabeli (NIP nieznany, B2C, waluta nieznana).
+    expect(labels.some((t) => /^Rozumiem skutki: faktura .+ w KSeF dokumentuje tę samą sprzedaż co dokument .+, choć części danych w tabeli nie da się porównać\.$/.test(t)))
       .toBe(true);
     expect(labels.some((t) => /^Rozumiem skutki: faktura .+ w KSeF dokumentuje inną sprzedaż niż dokument .+\.$/.test(t))).toBe(true);
     // „Rozumiem skutki” poza etykietą pola tylko w cudzysłowie (CONFIRM).

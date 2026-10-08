@@ -116,6 +116,11 @@ export function KsefDuplicateDecision({ invoiceId, view }: Props) {
   };
 
   const dialog = choice === 'same_sale' ? T.DIALOG_SAME : T.DIALOG_OTHER;
+  // „Ta sama sprzedaż”: „mimo różnic zaznaczonych w tabeli” tylko, gdy tabela którąś zaznacza;
+  // tarcie z danych nieznanych (B2C bez NIP, waluta nieznana) — wariant „nie da się porównać”.
+  const checkboxLabel = choice === 'same_sale'
+    ? (view.markedDifference ? T.DIALOG_SAME.CHECKBOX(k, nr) : T.DIALOG_SAME.CHECKBOX_UNCOMPARABLE(k, nr))
+    : T.DIALOG_OTHER.CHECKBOX(k, nr);
 
   return (
     <div className="mt-3 space-y-3 text-sm text-amber-950">
@@ -201,7 +206,7 @@ export function KsefDuplicateDecision({ invoiceId, view }: Props) {
                     className="mt-0.5"
                   />
                   <Label htmlFor={checkboxId} className="leading-snug font-normal">
-                    {dialog.CHECKBOX(k, nr)}
+                    {checkboxLabel}
                   </Label>
                 </div>
               )}

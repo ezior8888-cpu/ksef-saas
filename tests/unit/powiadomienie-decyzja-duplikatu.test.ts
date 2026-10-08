@@ -14,9 +14,11 @@ import type { JobContext } from '@/lib/jobs/registry';
  * `manualReconciliationRequired` (`notify-user.ts:178-180`), więc klient
  * czekającej faktury nie dostaje żadnej wiadomości.
  *
- * Prawdziwe: `runNotifyFailure` i moduł śladu powiadomień nad bazą w pamięci
- * (invoices, ksef_submissions, audit_logs, RPC blokady decyzji). Atrapy:
- * Resend (`@/lib/email/send`), Web Push, adres i użytkownik właściciela, FLO.
+ * Prawdziwe: `runNotifyFailure`, moduł śladu powiadomień i odczyt właściciela
+ * firmy (`@/lib/supabase/admin-queries`) nad bazą w pamięci (invoices,
+ * ksef_submissions, audit_logs, memberships, RPC blokady decyzji) i atrapą
+ * GoTrue (`auth.admin.getUserById`). Atrapy: Resend (`@/lib/email/send`),
+ * Web Push, FLO.
  */
 
 const T = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -41,11 +43,14 @@ const m = vi.hoisted(() => ({
   rpcCalls: [] as Array<{ fn: string; args: Record<string, unknown> }>,
   /** Wynik `ksef_duplicate_decision_blocker` (00148): NULL = czeka na klienta. */
   blocker: null as string | null,
+  /** Konta GoTrue (`auth.users`): id → e-mail. Brak wpisu = 404 `user_not_found`. */
+  authUsers: {} as Record<string, { email: string | null }>,
+  /** Błąd GoTrue przy `getUserById` (np. 503) — zamiast odpowiedzi. */
+  authError: null as null | { name: string; status: number; code?: string; message: string },
+  authCalls: [] as string[],
   duplicateEmail: vi.fn(),
   failedEmail: vi.fn(),
   push: vi.fn(),
-  ownerEmail: vi.fn(),
-  ownerId: vi.fn(),
   proposal: vi.fn(),
   auditSystem: vi.fn(),
 }));
@@ -111,6 +116,20 @@ function client() {
       }
       return { data: null, error: { code: 'PGRST202', message: `Could not find the function public.${fn}` } };
     },
+    // GoTrue jak `@supabase/auth-js`: błąd HTTP wraca w `error` (nie rzuca); brak konta = 404 `user_not_found`.
+    auth: {
+      admin: {
+        getUserById: async (id: string) => {
+          m.authCalls.push(id);
+          if (m.authError) return { data: { user: null }, error: m.authError };
+          const user = m.authUsers[id];
+          if (!user) {
+            return { data: { user: null }, error: { name: 'AuthApiError', status: 404, code: 'user_not_found', message: 'User not found' } };
+          }
+          return { data: { user: { id, email: user.email } }, error: null };
+        },
+      },
+    },
   };
 }
 
@@ -122,11 +141,6 @@ vi.mock('@/lib/email/send', () => ({
   sendInvoiceAcceptedEmail: vi.fn(),
 }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToUser: m.push, sendPushToTenant: vi.fn(async () => ({ sent: 0, failed: 0 })) }));
-vi.mock('@/lib/supabase/admin-queries', async (orig) => ({
-  ...await orig<typeof import('@/lib/supabase/admin-queries')>(),
-  getTenantAdminEmail: m.ownerEmail,
-  getTenantOwnerUserId: m.ownerId,
-}));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: m.proposal }));
 vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn(), assertJobIdentity: vi.fn() }));
 // Ślad powiadomienia NIE idzie przez logAuditSystem (połyka błędy) — atrapa łapie taką pomyłkę.
@@ -134,6 +148,7 @@ vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: m.auditSystem }));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn(), addBreadcrumb: vi.fn() }));
 
 import { runNotifyFailure } from '@/lib/jobs/runners/notify-user';
+import { RetryAfterError } from '@/lib/jobs/errors';
 
 type FailedEvent = Parameters<typeof runNotifyFailure>[0];
 
@@ -190,7 +205,11 @@ function seed(options: { invoice?: Row; check?: Row; notices?: Row[] } = {}) {
       },
     ],
     audit_logs: [...(options.notices ?? [])],
+    memberships: [
+      { organization_id: T, user_id: OWNER, role: 'owner', status: 'active', joined_at: '2026-01-02T08:00:00.000Z' },
+    ],
   };
+  m.authUsers = { [OWNER]: { email: OWNER_EMAIL } };
 }
 
 beforeEach(() => {
@@ -202,8 +221,8 @@ beforeEach(() => {
   m.inserts = [];
   m.rpcCalls = [];
   m.blocker = null;
-  m.ownerEmail.mockResolvedValue(OWNER_EMAIL);
-  m.ownerId.mockResolvedValue(OWNER);
+  m.authError = null;
+  m.authCalls = [];
   m.duplicateEmail.mockResolvedValue({ sent: true, messageId: 'msg-1' });
   m.failedEmail.mockResolvedValue({ sent: true, messageId: 'msg-f' });
   m.push.mockResolvedValue({ sent: 1, failed: 0 });
@@ -279,7 +298,7 @@ describe('U7d–U7f: ślad niepewny albo niezapisany', () => {
     expect(m.failedEmail).not.toHaveBeenCalled();
   });
 
-  it('U7e: e-mail niewysłany (Resend nieskonfigurowany) i push 0 → próba była, ale bez zapisu śladu (następne zdarzenie spróbuje znowu)', async () => {
+  it('U7e: e-mail niewysłany (Resend nieskonfigurowany) i push 0 → próba była, ale bez zapisu śladu (bez automatycznego ponowienia — dla I5D nie przyjdzie kolejne zdarzenie; wyjście: „Przypomnij klientowi”, karta pokazuje 0 ×)', async () => {
     m.duplicateEmail.mockResolvedValue({ sent: false, reason: 'not-configured' });
     m.push.mockResolvedValue({ sent: 0, failed: 0 });
 
@@ -304,6 +323,71 @@ describe('U7d–U7f: ślad niepewny albo niezapisany', () => {
     expect(m.duplicateEmail).toHaveBeenCalledTimes(2);
     expect(m.duplicateEmail.mock.calls.map((call) => (call[2] as { idempotencyKey?: string }).idempotencyKey)).toEqual([KEY, KEY]);
     expect(notices()).toHaveLength(1);
+  });
+});
+
+describe('U7i–U7k: odczyt właściciela i jego e-maila — błąd to nie „brak właściciela” (przegląd PR B, #1/#4)', () => {
+  // Powiadomienie automatyczne jest jedno: dla I5D nie przyjdzie kolejne zdarzenie.
+  // Chwilowy błąd odczytu musi więc rzucić (pg-boss ponowi zadanie, maxRetries 2),
+  // a nie zakończyć je jako „nie ma do kogo wysłać”.
+  it('U7i: odczyt właściciela (memberships) pada → krok rzuca; bez e-maila, pusha i śladu', async () => {
+    m.failRead.add('memberships');
+
+    const thrown = await runNotifyFailure(failedEvent(), ctx()).then(() => null, (e: unknown) => e);
+    expect(String(thrown)).toMatch(/właściciel/);
+    // Dłuższa awaria (restart kontenera) nie zjada jedynego powiadomienia w ~40 s
+    // domyślnego odstępu: kolejna próba za 5 min.
+    expect(thrown).toBeInstanceOf(RetryAfterError);
+    expect((thrown as RetryAfterError).retryAfterMs).toBe(5 * 60_000);
+
+    expect(m.duplicateEmail).not.toHaveBeenCalled();
+    expect(m.push).not.toHaveBeenCalled();
+    expect(notices()).toEqual([]);
+    expect(m.failedEmail).not.toHaveBeenCalled();
+  });
+
+  it('U7j: odczyt e-maila właściciela (GoTrue 503) pada → krok rzuca; bez e-maila, pusha i śladu', async () => {
+    m.authError = { name: 'AuthRetryableFetchError', status: 503, message: 'Service Unavailable' };
+
+    const thrown = await runNotifyFailure(failedEvent(), ctx()).then(() => null, (e: unknown) => e);
+    expect(String(thrown)).toMatch(/e-mail/);
+    expect(thrown).toBeInstanceOf(RetryAfterError);
+    expect((thrown as RetryAfterError).retryAfterMs).toBe(5 * 60_000);
+
+    expect(m.authCalls).toEqual([OWNER]);
+    expect(m.duplicateEmail).not.toHaveBeenCalled();
+    expect(m.push).not.toHaveBeenCalled();
+    expect(notices()).toEqual([]);
+  });
+
+  it('U7k: firma bez aktywnego właściciela (prawdziwy brak) → bez rzucania, bez e-maila, pusha i śladu — jak dotąd', async () => {
+    m.tables.memberships = [
+      { organization_id: T, user_id: OWNER, role: 'owner', status: 'removed', joined_at: '2026-01-02T08:00:00.000Z' },
+    ];
+
+    const result = await runNotifyFailure(failedEvent(), ctx());
+
+    expect(result).toMatchObject({ notified: false, emailed: false, push: { skipped: true, reason: 'no-owner' } });
+    expect(m.authCalls).toEqual([]);
+    expect(m.duplicateEmail).not.toHaveBeenCalled();
+    expect(m.push).not.toHaveBeenCalled();
+    expect(notices()).toEqual([]);
+  });
+
+  it.each([
+    ['konta nie ma w GoTrue (404 user_not_found)', () => { m.authUsers = {}; }],
+    ['konto bez adresu e-mail', () => { m.authUsers = { [OWNER]: { email: null } }; }],
+  ] as const)('U7k: %s → bez rzucania i bez e-maila; push do właściciela idzie, ślad emailed:false — jak dotąd', async (_l, arrange) => {
+    arrange();
+
+    const result = await runNotifyFailure(failedEvent(), ctx());
+
+    expect(result).toMatchObject({ notified: true, emailed: false });
+    expect(m.duplicateEmail).not.toHaveBeenCalled();
+    expect(m.push).toHaveBeenCalledTimes(1);
+    expect(m.push).toHaveBeenCalledWith(OWNER, 'invoice_rejected', expect.objectContaining({ url: `/invoices/${ID}` }));
+    expect(notices()).toHaveLength(1);
+    expect(notices()[0]).toMatchObject({ metadata: expect.objectContaining({ emailed: false, push_sent: 1, via: 'auto' }) });
   });
 });
 

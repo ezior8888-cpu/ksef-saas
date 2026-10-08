@@ -34,7 +34,7 @@ const m = vi.hoisted(() => ({
   failAuditInsert: false,
   /** Napisy `select(...)` w kolejności wywołań — kontrakt kolumn odczytu. */
   selects: [] as Array<{ table: string; columns: string }>,
-  /** `getTenantAdminEmail` (e-mail właściciela firmy). */
+  /** E-mail właściciela firmy (`readTenantOwnerContact`; odrzucenie = błąd odczytu). */
   ownerEmail: vi.fn(),
   /** `sendInvoiceDuplicateDecisionEmail` (przypomnienie o decyzji). */
   duplicateEmail: vi.fn(),
@@ -61,18 +61,27 @@ vi.mock('@/lib/email/send', () => ({
 vi.mock('@/lib/supabase/admin-queries', async (orig) => ({
   ...await orig<typeof import('@/lib/supabase/admin-queries')>(),
   getTenantAdminEmail: m.ownerEmail,
+  // Wariant ścisły (przegląd PR B #1/#4): błąd odczytu rzuca, prawdziwy brak = null.
+  readTenantOwnerContact: async (tenantId: string) => {
+    const email = (await m.ownerEmail(tenantId)) as string | null;
+    return { ownerUserId: email ? 'owner-user' : null, email };
+  },
 }));
 vi.mock('@sentry/nextjs', () => ({ captureException: m.captureException, captureMessage: m.captureMessage, addBreadcrumb: vi.fn() }));
 
 import { operatorRequeueAction, operatorResetAction, type OperatorActionResult } from '@/app/admin/ksef/actions';
 import * as operatorActions from '@/app/admin/ksef/actions';
 import {
+  OPERATOR_DUPLICATE_MESSAGES,
   OPERATOR_MESSAGES,
   operatorIssueDateMessage,
   operatorKindHeldMessage,
   operatorLegacyDataMessage,
 } from '@/lib/admin/ksef-operator-policy';
 import { KSEF_RESEND_SOURCE_COLUMNS } from '@/lib/invoices/ksef-requeue-event';
+
+import { CLIENT } from './helpers/decyzja-klienta';
+import { fillExpected } from './helpers/ksef-duplicate-decision-cases';
 
 type Tx = { executeSql: ReturnType<typeof vi.fn> };
 
@@ -768,6 +777,110 @@ describe('D-A4-1b-3 PR B: decyzja klienta i przypomnienie — akcje operatora', 
       expect(rpcCallsOf('decide_ksef_duplicate')).toHaveLength(1);
       expect(result).toEqual({ success: false, error: refusal });
       expect(m.audit).not.toHaveBeenCalled();
+      expect(m.captureException).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Przegląd PR B (#3): błąd RPC inny niż P0001 dawał tekst resetu („Nie udało
+   * się przywrócić szkicu”) bez Sentry — akcja nie przywraca szkicu, więc to
+   * zła rada. Notatkę liczymy w znakach jak `length()` w bazie, nie
+   * w jednostkach UTF-16.
+   */
+  describe('U13b: błąd RPC decide_ksef_duplicate — tekst decyzji, nie resetu szkicu', () => {
+    it('P0002 (faktura nie tej firmy) → „Nie ma takiej faktury.” operatora, bez audytu', async () => {
+      decideReply = { data: null, error: { code: 'P0002', message: 'Faktura nie należy do tej firmy' } };
+
+      const result = await decide(ID, decideInput());
+
+      expect(result).toEqual({ success: false, error: OPERATOR_MESSAGES.notFound });
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it('22023 NOTE (baza liczy notatkę krócej niż akcja) → tekst o notatce, bez Sentry i audytu', async () => {
+      decideReply = { data: null, error: { code: '22023', message: fillExpected('NOTE') } };
+
+      const result = await decide(ID, decideInput());
+
+      expect(rpcCallsOf('decide_ksef_duplicate')).toHaveLength(1);
+      expect(result).toEqual({ success: false, error: T_NOTE });
+      expect(m.captureException).not.toHaveBeenCalled();
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['XX000 (nieznana blokada — rozjazd TS↔SQL)', { code: 'XX000', message: 'Unknown KSeF duplicate decision blocker: nowy-powod' }],
+      ['42501 (rola bazy)', { code: '42501', message: 'KSeF duplicate decision is server-managed' }],
+      ['22023 argumentu, nie notatki', { code: '22023', message: 'KSeF duplicate decision requires a lowercase hex SHA-256 of the original' }],
+      ['transport (fetch failed, bez kodu)', { code: '', message: 'TypeError: fetch failed' }],
+    ])('%s → ogólny tekst decyzji i Sentry.captureException z kontekstem; bez audytu', async (_l, error) => {
+      decideReply = { data: null, error };
+
+      const result = await decide(ID, decideInput());
+
+      expect(result).toEqual({ success: false, error: CLIENT.generic });
+      expect(m.captureException).toHaveBeenCalledTimes(1);
+      expect(m.captureException).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        tags: expect.objectContaining({ area: 'ksef.duplicate-decision' }),
+        extra: expect.objectContaining({ tenantId: TENANT, invoiceId: ID, choice: 'same_sale', code: error.code }),
+      }));
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it('notatka „📧📞 Jan K” — 10 jednostek UTF-16, ale 8 znaków: tekst o notatce bez RPC (jak length() w bazie)', async () => {
+      const note = '📧📞 Jan K';
+      expect(note.length).toBe(10);
+      expect([...note].length).toBe(8);
+
+      const result = await decide(ID, decideInput({ note }));
+
+      expect(result).toEqual({ success: false, error: T_NOTE });
+      expect(rpcCallsOf('decide_ksef_duplicate')).toEqual([]);
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Przegląd PR B (#5): szkic już wycofany decyzją — akcja odpowiada sama, bez
+   * RPC (widok `decided` z wpisu `number_taken`, nie atrapa odpowiedzi RPC).
+   * Ten sam wybór o tym samym K to sukces; inny wybór albo inny K — ALREADY
+   * z ZAPISANYM wyborem (ten sam tekst co RPC, krok 2), nigdy „Zapisano”.
+   */
+  describe('U13b: decyzja zapisana wcześniej (widok decided) — akcja odpowiada bez RPC', () => {
+    /** Szkic wycofany decyzją klienta „ta sama sprzedaż” o K (wpis `number_taken` z `original_check.decision`). */
+    function decidedSame() {
+      m.invoice = pendingRow({ ksef_status: 'draft', last_error_code: null });
+      m.openSent = [{
+        ...duplicateRows()[0]!,
+        id: 'sub-decided', status: 'number_taken', error_code: 'NUMBER_TAKEN', completed_at: '2026-10-03T09:00:00.000Z',
+        original_check: {
+          ...duplicateCheck(),
+          decision: { choice: 'same_sale', via: 'client', at: '2026-10-03T09:00:00.000Z', reason: 'no-own-file', env: 'test' },
+        },
+      }];
+    }
+
+    it.each([
+      ['inny wybór niż zapisany („inna sprzedaż” przy zapisanej „tej samej”)', { choice: 'other_sale' as const }],
+      ['ten sam wybór, ale inny numer KSeF oryginału niż zapisany', { originalKsefNumber: K2 }],
+    ])('%s → ALREADY z zapisanym wyborem; bez RPC i audytu', async (_l, patch) => {
+      decidedSame();
+
+      const result = await decide(ID, decideInput(patch));
+
+      expect(result).toEqual({ success: false, error: fillExpected('ALREADY', 'FV/9', 'ta sama sprzedaż') });
+      expect(rpcCallsOf('decide_ksef_duplicate')).toEqual([]);
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it('ta sama decyzja o tym samym K (zgubiona odpowiedź, drugie kliknięcie) → sukces bez RPC i audytu', async () => {
+      decidedSame();
+
+      const result = await decide(ID, decideInput());
+
+      expect(result).toEqual({ success: true, message: T_SUCCESS('ta sama sprzedaż') });
+      expect(rpcCallsOf('decide_ksef_duplicate')).toEqual([]);
+      expect(m.audit).not.toHaveBeenCalled();
     });
   });
 
@@ -815,6 +928,17 @@ describe('D-A4-1b-3 PR B: decyzja klienta i przypomnienie — akcje operatora', 
       expect(m.duplicateEmail).not.toHaveBeenCalled();
       expect(notices()).toEqual([]);
       expect(m.ownerEmail).toHaveBeenCalledWith(TENANT);
+    });
+
+    it('chwilowy błąd odczytu adresu właściciela (baza albo GoTrue) → REMIND_READ_FAILED, nie „innym kanałem”; bez e-maila i śladu (przegląd PR B #1/#4)', async () => {
+      m.ownerEmail.mockRejectedValue(new Error('Nie można odczytać e-maila właściciela firmy: Service Unavailable'));
+
+      const result = await remind(ID);
+
+      expect(result).toEqual({ success: false, error: OPERATOR_DUPLICATE_MESSAGES.remindReadFailed });
+      expect(m.duplicateEmail).not.toHaveBeenCalled();
+      expect(notices()).toEqual([]);
+      expect(m.captureException).toHaveBeenCalledTimes(1);
     });
   });
 

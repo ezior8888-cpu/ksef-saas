@@ -30,6 +30,9 @@ export const DUPLICATE_REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000;
 /** Najwięcej śladów czytanych dla jednej faktury (przypomnienia są rzadkie). */
 const NOTICE_READ_LIMIT = 200;
 
+/** Najwięcej śladów czytanych naraz dla tabeli I5D; pełny limit = nie wiemy, czy to wszystkie. */
+const NOTICE_BATCH_READ_LIMIT = 1000;
+
 /**
  * Klucz idempotencji Resend: `ksef-duplicate-decision/{faktura}/{K}`, a dla
  * przypomnienia `…/przypomnienie-{n}`, gdzie `n` to liczba śladów przed
@@ -49,29 +52,17 @@ export interface DuplicateNotices {
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+type NoticeRow = { tenant_id?: string | null; entity_id?: string | null; created_at: string | null; metadata: unknown };
+
 /**
- * Ślady powiadomień o fakturze `invoiceId` i numerze KSeF oryginału `ksefNumber`.
- * Ślad o innym K się nie liczy (inny oryginał = nowa decyzja). Rzuca przy
- * błędzie odczytu.
+ * Jeden filtr śladu dla karty faktury i tabeli I5D: ta firma, ta faktura, ten K
+ * (ślad o innym K się nie liczy — inny oryginał = nowa decyzja). Filtr po K
+ * także w kodzie — wynik nie zależy od tego, jak baza czyta ścieżkę jsonb.
  */
-export async function findDuplicateNotices(
-  tenantId: string,
-  invoiceId: string,
-  ksefNumber: string,
-): Promise<DuplicateNotices> {
-  const { data, error } = await createAdminClient()
-    .from('audit_logs')
-    .select('created_at, metadata')
-    .eq('action', DUPLICATE_NOTICE_ACTION)
-    .eq('tenant_id', tenantId)
-    .eq('entity_id', invoiceId)
-    .eq('metadata->>original_ksef_number', ksefNumber)
-    .order('created_at', { ascending: false })
-    .limit(NOTICE_READ_LIMIT);
-  if (error) throw new Error(`Nie można odczytać śladu powiadomień o decyzji klienta: ${error.message}`);
-  const rows = ((data ?? []) as Array<{ created_at: string | null; metadata: unknown }>)
-    // Filtr po K także tutaj — wynik nie zależy od tego, jak baza czyta ścieżkę jsonb.
-    .filter((r) => isRecord(r.metadata) && r.metadata.original_ksef_number === ksefNumber);
+const isNoticeOf = (r: NoticeRow, tenantId: string, invoiceId: string, ksefNumber: string): boolean =>
+  r.tenant_id === tenantId && r.entity_id === invoiceId && isRecord(r.metadata) && r.metadata.original_ksef_number === ksefNumber;
+
+function summarizeNotices(rows: readonly NoticeRow[]): DuplicateNotices {
   let lastAt: string | null = null;
   let lastMs = -Infinity;
   for (const r of rows) {
@@ -82,6 +73,58 @@ export async function findDuplicateNotices(
     }
   }
   return { count: rows.length, lastAt };
+}
+
+/**
+ * Ślady powiadomień o fakturze `invoiceId` i numerze KSeF oryginału `ksefNumber`.
+ * Rzuca przy błędzie odczytu.
+ */
+export async function findDuplicateNotices(
+  tenantId: string,
+  invoiceId: string,
+  ksefNumber: string,
+): Promise<DuplicateNotices> {
+  const { data, error } = await createAdminClient()
+    .from('audit_logs')
+    .select('tenant_id, entity_id, created_at, metadata')
+    .eq('action', DUPLICATE_NOTICE_ACTION)
+    .eq('tenant_id', tenantId)
+    .eq('entity_id', invoiceId)
+    .eq('metadata->>original_ksef_number', ksefNumber)
+    .order('created_at', { ascending: false })
+    .limit(NOTICE_READ_LIMIT);
+  if (error) throw new Error(`Nie można odczytać śladu powiadomień o decyzji klienta: ${error.message}`);
+  return summarizeNotices(((data ?? []) as NoticeRow[]).filter((r) => isNoticeOf(r, tenantId, invoiceId, ksefNumber)));
+}
+
+/**
+ * Ślady powiadomień dla wielu faktur naraz — tabela I5D w `/admin/ksef`
+ * (przegląd PR B, #1/#4): JEDEN odczyt `audit_logs`, ten sam filtr co karta
+ * faktury (`isNoticeOf`). Klucz mapy — `invoiceId`; faktura bez śladu ma
+ * `{ count: 0 }`. Rzuca przy błędzie odczytu i przy wyniku obciętym limitem
+ * („nie wiemy, czy to wszystkie” to nie „nie było powiadomienia”).
+ */
+export async function findDuplicateNoticesBatch(
+  invoices: ReadonlyArray<{ invoiceId: string; tenantId: string; ksefNumber: string }>,
+): Promise<Map<string, DuplicateNotices>> {
+  const result = new Map<string, DuplicateNotices>(invoices.map((i) => [i.invoiceId, { count: 0, lastAt: null }]));
+  if (invoices.length === 0) return result;
+  const { data, error } = await createAdminClient()
+    .from('audit_logs')
+    .select('tenant_id, entity_id, created_at, metadata')
+    .eq('action', DUPLICATE_NOTICE_ACTION)
+    .in('entity_id', invoices.map((i) => i.invoiceId))
+    .order('created_at', { ascending: false })
+    .limit(NOTICE_BATCH_READ_LIMIT);
+  if (error) throw new Error(`Nie można odczytać śladu powiadomień o decyzji klienta: ${error.message}`);
+  const rows = (data ?? []) as NoticeRow[];
+  if (rows.length >= NOTICE_BATCH_READ_LIMIT) {
+    throw new Error(`Ślad powiadomień o decyzji klienta: ${rows.length} wierszy — wynik obcięty limitem`);
+  }
+  for (const i of invoices) {
+    result.set(i.invoiceId, summarizeNotices(rows.filter((r) => isNoticeOf(r, i.tenantId, i.invoiceId, i.ksefNumber))));
+  }
+  return result;
 }
 
 export interface DuplicateNoticeRecord {

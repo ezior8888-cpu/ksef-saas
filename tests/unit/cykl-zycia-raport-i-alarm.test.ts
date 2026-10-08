@@ -129,8 +129,9 @@ describe('alarm strażnika w monitorze (W3)', () => {
 
 /**
  * D-A4-1b-3 PR B (decyzja 4, 07.10.2026): I5D — faktura czeka na decyzję
- * klienta przy nierozstrzygniętym 440 (00148). Nie alarm krytyczny (klient
- * dostał e-mail, operator widzi ją w raporcie i /admin/ksef) — chyba że dane
+ * klienta przy nierozstrzygniętym 440 (00148). Nie alarm krytyczny (e-mail
+ * idzie raz i nie jest ponawiany; gdy nie doszedł — operator: „Przypomnij
+ * klientowi”; widzi fakturę w raporcie i /admin/ksef) — chyba że dane
  * oryginału sprawdzono w innym środowisku KSeF niż obecne (I5D-env: klient
  * nie zapisze decyzji). W raporcie osobny wiersz, nie „Naruszenia strażnika”.
  */

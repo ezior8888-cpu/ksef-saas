@@ -65,7 +65,9 @@ export function OperatorDuplicateDecision({ invoiceId, internalNumber, view, dis
 
   const submit = () => {
     if (!choice) return;
-    if (note.trim().length < 10) {
+    // Znaki (punkty kodowe), nie jednostki UTF-16 — jak `length(btrim(p_note)) < 10` w RPC (00148)
+    // i `OPERATOR_NOTE_MIN_LENGTH` w akcji; emoji to jeden znak, nie dwa.
+    if ([...note.trim()].length < 10) {
       setNoteError(M.noteError);
       return;
     }
@@ -177,7 +179,9 @@ export function OperatorDuplicateDecision({ invoiceId, internalNumber, view, dis
                 disabled={pending}
               />
               <Label htmlFor="operator-duplicate-confirm" className={cn('font-normal leading-snug')}>
-                {choice === 'same_sale' ? M.confirmSame(k, nr) : M.confirmOther(k, nr)}
+                {choice === 'same_sale'
+                  ? (view.markedDifference ? M.confirmSame(k, nr) : M.confirmSameUncomparable(k, nr))
+                  : M.confirmOther(k, nr)}
               </Label>
             </div>
           ) : null}

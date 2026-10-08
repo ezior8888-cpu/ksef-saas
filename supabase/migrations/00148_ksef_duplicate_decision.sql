@@ -31,11 +31,13 @@
 --    wyzwalacza — świeżą.
 --    c_guard_ksef_retired_draft_delete — sesja klienta nie usuwa szkicu
 --    wycofanego zwykłej faktury ani zaliczki (numer zostaje przy nim; usuwa
---    tylko serwis za zgodą Bartosza). Korekta i faktura rozliczeniowa zostają
---    usuwalne: niewyrzucalny szkic korekty blokowałby kolejną korektę
---    (00133/00135), a szkic ROZ trzyma swoje zaliczki (00125).
+--    tylko serwis za zgodą Bartosza) niezależnie od kierunku: WHEN nie sprawdza
+--    direction, bo klient mógłby go najpierw zmienić. Korekta i faktura
+--    rozliczeniowa zostają usuwalne: niewyrzucalny szkic korekty blokowałby
+--    kolejną korektę (00133/00135), a szkic ROZ trzyma swoje zaliczki (00125).
 --    c_guard_ksef_retired_draft_number — sesja klienta nie zmienia numeru
---    szkicu wycofanego (każdy rodzaj); serwis może.
+--    ani kierunku szkicu wycofanego (każdy rodzaj; faktura zakupowa wypada
+--    z indeksu unikalnego numerów sprzedaży 00120); serwis może.
 -- 5. ksef_lifecycle_violations: I5 bez faktur czekających na decyzję klienta
 --    i nowy wiersz I5D „czeka na klienta” (definicja z 00136 + warunek I5
 --    + blok I5D; 07.10 (4)).
@@ -48,20 +50,23 @@
 -- dla niego: szkicu z wpisem number_taken nie da się wysłać (dziś powtórne
 -- 440; odmowa P0001 przechodzi przez describeKsefSendError), usunąć z sesji
 -- klienta, jeśli to zwykła faktura albo zaliczka (stary kod pokaże ogólne
--- „Nie udało się usunąć szkicu”), ani przenumerować z sesji klienta (stary
--- kod tego nie robi); stary monitor liczy I5D jak każde naruszenie (alarm
+-- „Nie udało się usunąć szkicu”), ani przenumerować czy zmienić na fakturę
+-- zakupową z sesji klienta (stary kod nie robi żadnej z tych zmian);
+-- stary monitor liczy I5D jak każde naruszenie (alarm
 -- krytyczny). Na produkcji 07.10: 0 faktur KSEF_DUPLICATE_RECONCILE,
 -- 0 wpisów number_taken, 0 wpłat — w oknie migracja→wdrożenie żaden z tych
 -- przypadków nie wystąpi. Wdrożenie: worker (id=2), potem web (id=1).
 --
 -- Wycofanie (decyzja Bartosza): DROP TRIGGER c_guard_ksef_retired_draft,
--- c_guard_ksef_retired_draft_delete, c_guard_ksef_retired_draft_number;
+-- c_guard_ksef_retired_draft_delete, c_guard_ksef_retired_draft_number
+-- (ten ostatni strzeże numeru i kierunku);
 -- DROP FUNCTION decide_ksef_duplicate, ksef_duplicate_decision_blocker,
 -- ksef_duplicate_check_allows, guard_ksef_retired_draft;
 -- ksef_lifecycle_violations z 00136; komunikat KSEF_NUMBER_TAKEN z 00142.
 -- Uwaga: wycofane dokumenty zostają szkicami z number_taken — bez wyzwalaczy
--- znów dałoby się je wysłać (powtórne 440), usunąć i przenumerować (numer
--- wraca do podpowiedzi).
+-- znów dałoby się je wysłać (powtórne 440), usunąć, przenumerować i zmienić
+-- na fakturę zakupową (numer wraca do podpowiedzi albo wypada z indeksu
+-- unikalnego numerów sprzedaży).
 --
 -- Przed uruchomieniem (sesja lokalna, AGENTS.md „Wgrywanie migracji”):
 --   SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 3;
@@ -598,13 +603,14 @@ COMMENT ON FUNCTION public.decide_ksef_duplicate(uuid, uuid, uuid, text, text, t
   'Decyzja klienta (albo operatora na jego prośbę) przy nierozstrzygniętym duplikacie 440 (00148): same_sale albo other_sale. Jedna transakcja: wpisy intent/sent/duplicate → number_taken z decision na znaczniku, faktura → szkic wycofany (numer zostaje), audyt invoice.ksef_duplicate_decided i invoice.send_reset. Powtórzenie tej samej decyzji = already_decided bez zapisów.';
 
 -- ─────────────────────────────────────────────────────────────────
--- 4. Szkic wycofany: bez wysyłki, bez usunięcia i zmiany numeru z sesji klienta
+-- 4. Szkic wycofany: bez wysyłki, bez usunięcia, zmiany numeru i kierunku z sesji klienta
 -- ─────────────────────────────────────────────────────────────────
 -- Szkic wycofany = szkic z wpisem number_taken (decyzja klienta albo
 -- automatyczny KSEF_NUMBER_TAKEN). Teksty = retiredDraftSendRefusal,
--- retiredDraftView().deleteRefusal i TRIGGER_RENUMBER w TS (test RLS je
--- porównuje). SECURITY INVOKER: sesja klienta widzi wpisy swojej firmy
--- (RLS 00002, SELECT 00027) — tej samej, której szkic usuwa albo zmienia.
+-- retiredDraftView().deleteRefusal, TRIGGER_RENUMBER i TRIGGER_DIRECTION
+-- w TS (test RLS je porównuje). SECURITY INVOKER: sesja klienta widzi wpisy
+-- swojej firmy (RLS 00002, SELECT 00027) — tej samej, której szkic usuwa
+-- albo zmienia.
 CREATE OR REPLACE FUNCTION public.guard_ksef_retired_draft()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -617,9 +623,9 @@ DECLARE
   v_ref text;
   v_ref_acc text;
 BEGIN
-  -- 1. Serwis (service_role, postgres) usuwa i przenumerowuje: operator za
-  --    zgodą Bartosza, retencja, sprzątanie testów (wzór 00132). Wyzwalacz
-  --    stanu nie ma wyjątku roli.
+  -- 1. Serwis (service_role, postgres) usuwa, przenumerowuje i zmienia
+  --    kierunek: operator za zgodą Bartosza, retencja, sprzątanie testów
+  --    (wzór 00132). Wyzwalacz stanu nie ma wyjątku roli.
   IF TG_OP = 'DELETE' THEN
     IF current_user NOT IN ('authenticated', 'anon') THEN
       RETURN OLD;
@@ -665,8 +671,14 @@ BEGIN
     RAISE EXCEPTION 'Wycofanego dokumentu % nie usuniesz: zajmuje numer, który w KSeF ma już %, i zostaje w FaktFlow, żeby ten numer nie został podpowiedziany ponownie. Jeśli musisz go usunąć, napisz do nas: pomoc@faktflow.pl.', v_num, v_ref USING ERRCODE = 'P0001';
   END IF;
 
-  -- 6. Zmiana numeru z sesji klienta (każdy rodzaj, 07.10 (11)).
+  -- 6. Zmiana numeru albo kierunku z sesji klienta (każdy rodzaj, 07.10 (11)).
+  --    Kierunek: faktura zakupowa wypada z indeksu unikalnego numerów sprzedaży
+  --    (00120), więc numer byłby znów wolny dla nowej faktury sprzedaży.
+  --    Zmiana kierunku i numeru naraz dostaje tekst o kierunku.
   IF TG_NAME = 'c_guard_ksef_retired_draft_number' THEN
+    IF NEW.direction IS DISTINCT FROM OLD.direction THEN
+      RAISE EXCEPTION 'Wycofanego dokumentu % nie zmienisz na fakturę zakupową: zajmuje numer, który w KSeF ma już %, i zostaje w FaktFlow jako faktura sprzedaży, żeby tego numeru nie dostała inna faktura sprzedaży.', v_num, v_ref USING ERRCODE = 'P0001';
+    END IF;
     RAISE EXCEPTION 'Numeru wycofanego dokumentu % nie zmienisz: ten numer ma w KSeF już %, a dokument zostaje z nim w FaktFlow, żeby numer nie został podpowiedziany ponownie. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', v_num, v_ref USING ERRCODE = 'P0001';
   END IF;
 
@@ -683,7 +695,7 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.guard_ksef_retired_draft() FROM PUBLIC, anon, authenticated;
 COMMENT ON FUNCTION public.guard_ksef_retired_draft() IS
-  'Szkic wycofany (wpis ksef_submissions number_taken, 00148): nie wychodzi ze stanu draft (każda rola), a sesja klienta nie usuwa szkicu zwykłej faktury ani zaliczki i nie zmienia numeru szkicu żadnego rodzaju. Serwis usuwa i przenumerowuje za zgodą Bartosza.';
+  'Szkic wycofany (wpis ksef_submissions number_taken, 00148): nie wychodzi ze stanu draft (każda rola), a sesja klienta nie usuwa szkicu zwykłej faktury ani zaliczki (niezależnie od kierunku) i nie zmienia numeru ani kierunku szkicu żadnego rodzaju. Serwis usuwa, przenumerowuje i zmienia kierunek za zgodą Bartosza.';
 
 -- Wyjście ze stanu draft: claim_ksef_send, enqueue_ksef_send (P0001 cofa
 -- zlecenie pg-boss w tej samej transakcji), zapis porażki, zapis akceptacji,
@@ -697,20 +709,30 @@ CREATE TRIGGER c_guard_ksef_retired_draft
 -- Bezpośredni DELETE z PostgREST: RLS pozwala usunąć każdy szkic (00002),
 -- a szkic po resecie nie ma pól wysyłki (00132 przepuszcza). Usunięcie
 -- zwolniłoby numer i skasowało ślad decyzji (ON DELETE CASCADE, 00001).
+-- Kierunku nie ma w WHEN: wpisy number_taken powstają tylko przy fakturach
+-- wychodzących, więc rozstrzyga zapytanie funkcji (krok 2). Warunek
+-- OLD.direction = 'outgoing' klient obchodziłby, zmieniając najpierw
+-- kierunek na 'incoming' (wyzwalacz numeru niżej odmawia tego, ale szkic
+-- przestawiony wcześniej przez serwis też ma zostać nieusuwalny).
 DROP TRIGGER IF EXISTS c_guard_ksef_retired_draft_delete ON public.invoices;
 CREATE TRIGGER c_guard_ksef_retired_draft_delete
   BEFORE DELETE ON public.invoices FOR EACH ROW
-  WHEN (OLD.ksef_status = 'draft' AND OLD.direction = 'outgoing'
+  WHEN (OLD.ksef_status = 'draft'
         AND OLD.invoice_kind IN ('regular', 'advance'))          -- 07.10 (9): KOR i ROZ zostają usuwalne
   EXECUTE FUNCTION public.guard_ksef_retired_draft();
 
--- PATCH internal_number z PostgREST (RLS 00002 pozwala, 00132 nie zamraża
--- szkicu bez pól wysyłki): zmieniony numer wróciłby do podpowiedzi.
+-- PATCH internal_number albo direction z PostgREST (RLS 00002 pozwala, 00132
+-- nie zamraża szkicu bez pól wysyłki, 00073 zamraża kierunek tylko faktury
+-- przyjętej): zmieniony numer wróciłby do podpowiedzi, a faktura zakupowa
+-- wypada z indeksu unikalnego numerów sprzedaży (00120). Nazwa wyzwalacza
+-- zostaje — funkcja rozgałęzia się po TG_NAME.
 DROP TRIGGER IF EXISTS c_guard_ksef_retired_draft_number ON public.invoices;
 CREATE TRIGGER c_guard_ksef_retired_draft_number
-  BEFORE UPDATE OF internal_number ON public.invoices FOR EACH ROW
-  WHEN (OLD.ksef_status = 'draft' AND NEW.internal_number IS DISTINCT FROM OLD.internal_number)
-  EXECUTE FUNCTION public.guard_ksef_retired_draft();          -- 07.10 (11)
+  BEFORE UPDATE OF internal_number, direction ON public.invoices FOR EACH ROW
+  WHEN (OLD.ksef_status = 'draft'
+        AND (NEW.internal_number IS DISTINCT FROM OLD.internal_number
+             OR NEW.direction IS DISTINCT FROM OLD.direction))
+  EXECUTE FUNCTION public.guard_ksef_retired_draft();          -- 07.10 (11), rewizja PR B #0
 
 -- ─────────────────────────────────────────────────────────────────
 -- 5. Strażnik: I5 bez faktur czekających na klienta + I5D (00136 + 00148)

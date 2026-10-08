@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+/** KPI `/admin` (`countLifecycleViolations`): autoryzacja operatora i RPC strażnika — atrapy; reszta pliku to czyste funkcje. */
+const kpi = vi.hoisted(() => ({ requireAdmin: vi.fn(), rpc: vi.fn() }));
+vi.mock('@/lib/auth/admin-guard', () => ({ requireAdmin: kpi.requireAdmin }));
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ rpc: kpi.rpc }) }));
 
 import {
   clientDecisionRows,
   countByCode,
+  countLifecycleViolations,
   INVARIANT_LABELS,
   NO_CODE_FILTER,
   splitClientDecisionPending,
@@ -295,6 +301,8 @@ function decidable(reason: 'no-own-file' | 'known-number') {
     ],
     sameContent: reason === 'known-number' ? false : null,
     needsConfirmation: { same_sale: false, other_sale: true },
+    // Jak polityka: żaden wiersz tabeli nie ma `same: false` (przegląd PR B #2).
+    markedDifference: false,
     program: DUP_PROGRAM,
     knownInvoice: reason === 'known-number' ? { id: DUP_KNOWN_ID, internalNumber: DUP_KNOWN_NUMBER } : null,
     heldCorrections: false,
@@ -348,7 +356,7 @@ describe('D-A4-1b-3 PR B: „Zapisz decyzję klienta” i „Przypomnij klientow
       { invariant: 'I5D', label: INVARIANT_LABELS.I5D, count: 2 },
     ]);
     expect(INVARIANT_LABELS.I5D).toBe(
-      'czeka na decyzję klienta: nierozstrzygnięty 440 z danymi oryginału (no-own-file, known-number) — bez automatu i bez alarmu; klient dostał e-mail',
+      'czeka na decyzję klienta: nierozstrzygnięty 440 z danymi oryginału (no-own-file, known-number) — bez automatu i bez alarmu; e-mail idzie raz i nie jest ponawiany; gdy nie doszedł — operator: „Przypomnij klientowi”',
     );
     const row = (invariant: string, invoiceId: string, detail: Record<string, unknown> = {}) => ({
       invariant, label: INVARIANT_LABELS[invariant] ?? invariant, invoiceId, tenantId: 't-1', tenantName: 'Firma Testowa',
@@ -369,6 +377,50 @@ describe('D-A4-1b-3 PR B: „Zapisz decyzję klienta” i „Przypomnij klientow
     ]);
     // KSEF_ENV nieznane — żadne środowisko się nie zgadza (I5D-env).
     expect(clientDecisionRows([i5dTest], null).map((r: { envMatches: boolean }) => r.envMatches)).toEqual([false]);
+  });
+});
+
+/**
+ * Przegląd PR B (#8): KPI „naruszenia strażnika” na `/admin` (app/admin/page.tsx)
+ * nie liczy I5D — faktura czekająca na decyzję klienta to stan, nie naruszenie
+ * (decyzja 4, bramka planu „bez I5D = 0”). Wiersze w kształcie
+ * `ksef_lifecycle_violations()` z 00131/00148.
+ */
+describe('U14d: countLifecycleViolations — KPI panelu bez I5D', () => {
+  const violation = (invariant: string, n: number) => ({
+    invariant, invoice_id: `inv-${n}`, tenant_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', detail: {},
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    kpi.requireAdmin.mockResolvedValue({ userId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', email: 'operator@example.test' });
+  });
+
+  it('I1 i dwa I5D → 1: faktury czekające na klienta nie są naruszeniem', async () => {
+    kpi.rpc.mockResolvedValue({ data: [violation('I1', 1), violation('I5D', 2), violation('I5D', 3)], error: null });
+
+    await expect(countLifecycleViolations()).resolves.toBe(1);
+
+    expect(kpi.requireAdmin).toHaveBeenCalledTimes(1);
+    expect(kpi.rpc).toHaveBeenCalledWith('ksef_lifecycle_violations');
+  });
+
+  it('same I5D → 0; pusta odpowiedź (null) → 0', async () => {
+    kpi.rpc.mockResolvedValueOnce({ data: [violation('I5D', 1), violation('I5D', 2)], error: null });
+    await expect(countLifecycleViolations()).resolves.toBe(0);
+
+    kpi.rpc.mockResolvedValueOnce({ data: null, error: null });
+    await expect(countLifecycleViolations()).resolves.toBe(0);
+  });
+
+  it('błąd RPC → wyjątek (KPI nie udaje zera); odmowa requireAdmin → bez odczytu kluczem serwisowym', async () => {
+    kpi.rpc.mockResolvedValueOnce({ data: null, error: { message: 'db down' } });
+    await expect(countLifecycleViolations()).rejects.toThrow('ksef_lifecycle_violations: db down');
+
+    kpi.rpc.mockClear();
+    kpi.requireAdmin.mockRejectedValueOnce(new Error('synthetic authorization denied'));
+    await expect(countLifecycleViolations()).rejects.toThrow('synthetic authorization denied');
+    expect(kpi.rpc).not.toHaveBeenCalled();
   });
 });
 

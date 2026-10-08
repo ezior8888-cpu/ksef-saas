@@ -32,7 +32,7 @@ export const INVARIANT_LABELS: Record<string, string> = {
   I5: 'otwarty wpis sent albo zamiar intent starszy niż 48 h',
   I9: 'failed / rejected z numerem KSeF (stan sprzeczny)',
   // 00148 (D-A4-1b-3 PR B, decyzja 4): stan, nie naruszenie — osobno w raporcie i w /admin/ksef.
-  I5D: 'czeka na decyzję klienta: nierozstrzygnięty 440 z danymi oryginału (no-own-file, known-number) — bez automatu i bez alarmu; klient dostał e-mail',
+  I5D: 'czeka na decyzję klienta: nierozstrzygnięty 440 z danymi oryginału (no-own-file, known-number) — bez automatu i bez alarmu; e-mail idzie raz i nie jest ponawiany; gdy nie doszedł — operator: „Przypomnij klientowi”',
 };
 
 /** Wiersz `ksef_lifecycle_violations()` „faktura czeka na decyzję klienta” (00148). */
@@ -40,7 +40,10 @@ export const CLIENT_DECISION_INVARIANT = 'I5D';
 
 /**
  * Naruszenia strażnika bez I5D i faktury czekające na decyzję klienta (I5D) —
- * osobno: I5D to stan („klient dostał e-mail”), nie praca operatora od razu.
+ * osobno: I5D to stan (klient decyduje; e-mail idzie raz i nie jest
+ * ponawiany), nie praca operatora od razu. Wyjątek — faktura, o której
+ * klient nie dostał powiadomienia (tabela I5D: „nie”): operator, „Przypomnij
+ * klientowi”.
  */
 export function splitClientDecisionPending<T extends { invariant: string }>(
   rows: readonly T[],

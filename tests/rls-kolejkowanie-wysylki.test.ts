@@ -399,22 +399,31 @@ describe.skipIf(!hasDatabase)('kolejkowanie wysyłki KSeF — RPC w transakcji z
       // Zamiast zgadywać opóźnienie (spec: 300 ms) czekamy, aż transakcja decyzji
       // dojdzie do pg_sleep — wtedy RPC jest wykonane i trzyma blokadę wiersza.
       // Tekst zapytania sondy nie zawiera id (parametr), więc liczy tylko decyzję.
+      let sawSleep = false;
       for (let i = 0; i < 40 && !settled; i += 1) {
         const { rows } = await boss.getDb().executeSql(
           `SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event = 'PgSleep' AND query LIKE $1`,
           [`%${p.id}%`],
         );
-        if ((rows as Array<{ n: number }>)[0]!.n > 0) break;
+        if ((rows as Array<{ n: number }>)[0]!.n > 0) {
+          sawSleep = true;
+          break;
+        }
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       // Przejęcie czeka na blokadę wiersza; po zatwierdzeniu decyzji WHERE jest
       // sprawdzany ponownie na nowej wersji (draft, submitted_to_ksef_at NULL) i
       // przechodzi — zatrzymać go może tylko wyzwalacz ze świeżą migawką.
+      // Rewizja PR B #6: bez tych dwóch asercji przejęcie po zatwierdzeniu decyzji
+      // (sonda nie zobaczyła pg_sleep) też daje P0001 i R9 przechodzi bez wyścigu.
+      const settledAtClaim = settled;
       const claim = await admin.rpc('claim_ksef_send', {
         p_invoice_id: p.id, p_tenant_id: ORG, p_owner: 'stara-proba-r9', p_lease_seconds: 900,
       });
 
       expect(await decision).toBeNull();
+      expect(sawSleep, 'sonda nie zobaczyła decyzji w pg_sleep — wyścig nie został sprawdzony').toBe(true);
+      expect(settledAtClaim, 'decyzja była już zatwierdzona przed przejęciem — wyścig nie został sprawdzony').toBe(false);
       expect(claim.error?.code).toBe('P0001');
       expect(claim.data).toBeNull();
       const { data: after, error } = await admin.from('invoices')

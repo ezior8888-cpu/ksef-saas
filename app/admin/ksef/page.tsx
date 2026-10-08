@@ -12,6 +12,7 @@ import {
 } from '@/lib/admin/ksef-lifecycle';
 import { OPERATOR_DUPLICATE_MESSAGES } from '@/lib/admin/ksef-operator-policy';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { findDuplicateNoticesBatch, type DuplicateNotices } from '@/lib/ksef/duplicate-decision-notice';
 import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -34,11 +35,49 @@ function when(iso: string | null): string {
 }
 
 /**
+ * Ślady „Faktura … czeka na Twoją decyzję” dla wszystkich wierszy I5D jednym
+ * odczytem (`findDuplicateNoticesBatch`, ten sam filtr co karta faktury).
+ * Automat wysyła powiadomienie raz i niedostarczonego nie ponawia (przegląd
+ * PR B, #1/#4), więc „nie” to sygnał dla operatora: „Przypomnij klientowi”.
+ * `null` — błąd odczytu albo wynik obcięty limitem: „nie wiadomo”, nigdy „nie”.
+ */
+async function loadI5dNotices(
+  rows: ReadonlyArray<{ invoiceId: string; tenantId: string | null; ksefNumber: string | null }>,
+): Promise<Map<string, DuplicateNotices> | null> {
+  const wanted = rows.filter((r): r is { invoiceId: string; tenantId: string; ksefNumber: string } =>
+    r.tenantId !== null && r.ksefNumber !== null);
+  try {
+    return await findDuplicateNoticesBatch(wanted);
+  } catch {
+    return null;
+  }
+}
+
+/** Komórka „Powiadomienie klienta” tabeli I5D. */
+function noticeCell(
+  notices: DuplicateNotices | null | undefined,
+  row: { originalKsefNumber: string | null; envMatches: boolean },
+): { text: string; warn: boolean; title?: string } {
+  if (!row.originalKsefNumber) return { text: '—', warn: false };
+  if (!notices) {
+    return { text: 'nie wiadomo (błąd odczytu śladu)', warn: true, title: 'Sprawdź „Powiadomienie klienta” w karcie faktury.' };
+  }
+  if (notices.count === 0) {
+    // I5D-env: klient i tak nie zapisze decyzji — przypomnienie nic nie da, alarm jest osobno.
+    return row.envMatches
+      ? { text: 'nie', warn: true, title: 'Klient nie dostał powiadomienia o tym numerze KSeF oryginału — „Przypomnij klientowi” w karcie faktury.' }
+      : { text: 'nie', warn: false };
+  }
+  return { text: `tak, ${notices.count} × · ostatnie ${when(notices.lastAt)}`, warn: false };
+}
+
+/**
  * Panel operatora cyklu życia faktury (PR 3c): naruszenia inwariantów
  * I1–I5, I9 ze strażnika 00131, faktury `failed`/`rejected` per kod
  * z katalogu, wejście do karty faktury z akcjami. Od 00148 (D-A4-1b-3 PR B,
  * decyzja 4) faktury czekające na decyzję klienta (I5D) mają osobną sekcję
- * i nie liczą się do naruszeń.
+ * i nie liczą się do naruszeń; kolumna „Powiadomienie klienta” mówi, czy
+ * klient dostał e-mail albo push o bieżącym numerze KSeF oryginału.
  */
 export default async function AdminKsefPage(props: { searchParams: Promise<SearchParams> }) {
   await requireAdmin();
@@ -52,6 +91,10 @@ export default async function AdminKsefPage(props: { searchParams: Promise<Searc
   const { violations, clientPending } = splitClientDecisionPending(allViolations);
   const summary = summarizeViolations(violations);
   const waiting = clientDecisionRows(clientPending, configuredKsefEnvironment());
+  const tenantOf = new Map(clientPending.map((v) => [v.invoiceId, v.tenantId]));
+  const notices = await loadI5dNotices(
+    waiting.map((w) => ({ invoiceId: w.invoiceId, tenantId: tenantOf.get(w.invoiceId) ?? null, ksefNumber: w.originalKsefNumber })),
+  );
 
   return (
     <div className="space-y-8">
@@ -132,29 +175,39 @@ export default async function AdminKsefPage(props: { searchParams: Promise<Searc
                   <th className="px-4 py-2.5 font-medium">Powód</th>
                   <th className="px-4 py-2.5 font-medium">Środowisko</th>
                   <th className="px-4 py-2.5 font-medium">Od</th>
+                  <th className="px-4 py-2.5 font-medium">Powiadomienie klienta</th>
                 </tr>
               </thead>
               <tbody>
-                {waiting.map((w) => (
-                  <tr key={w.invoiceId} className="border-b border-glass-border last:border-0">
-                    <td className="px-4 py-2.5">
-                      <Link href={`/admin/ksef/${w.invoiceId}`} className="font-medium hover:underline">
-                        {w.internalNumber ?? w.invoiceId}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{w.tenantName ?? '—'}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs break-all">{w.originalKsefNumber ?? '—'}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs">{w.reason ?? '—'}</td>
-                    <td
-                      className={cn('px-4 py-2.5 font-mono text-xs', w.envMatches ? '' : 'bg-red-500/10 font-semibold text-red-700 dark:text-red-400')}
-                      title={w.envMatches ? undefined : OPERATOR_DUPLICATE_MESSAGES.i5dEnv}
-                    >
-                      {w.env ?? '(brak)'}
-                      {w.envMatches ? null : <span className="block">I5D-env</span>}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs tabular-nums">{when(w.attemptedAt)}</td>
-                  </tr>
-                ))}
+                {waiting.map((w) => {
+                  const notice = noticeCell(notices ? notices.get(w.invoiceId) : null, w);
+                  return (
+                    <tr key={w.invoiceId} className="border-b border-glass-border last:border-0">
+                      <td className="px-4 py-2.5">
+                        <Link href={`/admin/ksef/${w.invoiceId}`} className="font-medium hover:underline">
+                          {w.internalNumber ?? w.invoiceId}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{w.tenantName ?? '—'}</td>
+                      <td className="px-4 py-2.5 font-mono text-xs break-all">{w.originalKsefNumber ?? '—'}</td>
+                      <td className="px-4 py-2.5 font-mono text-xs">{w.reason ?? '—'}</td>
+                      <td
+                        className={cn('px-4 py-2.5 font-mono text-xs', w.envMatches ? '' : 'bg-red-500/10 font-semibold text-red-700 dark:text-red-400')}
+                        title={w.envMatches ? undefined : OPERATOR_DUPLICATE_MESSAGES.i5dEnv}
+                      >
+                        {w.env ?? '(brak)'}
+                        {w.envMatches ? null : <span className="block">I5D-env</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs tabular-nums">{when(w.attemptedAt)}</td>
+                      <td
+                        className={cn('px-4 py-2.5 text-xs tabular-nums', notice.warn ? 'bg-amber-500/10 font-semibold text-amber-800 dark:text-amber-300' : '')}
+                        title={notice.title}
+                      >
+                        {notice.text}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -147,11 +147,25 @@ zasady w „Decyzje do podjęcia” niżej):**
   wtedy, gdy klient potwierdził je wprost. Przycisk wyłączony = powód obok
   (np. wpłaty, środowisko, `known-stale`) — kroki niżej.
 - **„Przypomnij klientowi”:** pierwszy e-mail „Faktura {nr} czeka na
-  Twoją decyzję” (i push) wysyła automat sam, raz na fakturę i numer KSeF
-  oryginału. Przycisk wysyła przypomnienie na adres właściciela firmy,
+  Twoją decyzję” (i push) automat próbuje wysłać raz na fakturę i numer
+  KSeF oryginału; ślad zapisuje tylko po dostarczeniu. Niedostarczonego
+  (adres właściciela na liście odbić, firma bez właściciela albo adresu,
+  push bez subskrypcji) nic automatycznie nie ponawia: faktura w I5D nie
+  dostaje kolejnego zdarzenia. Błąd odczytu właściciela albo adresu (baza,
+  GoTrue) ponawia samo zadanie co 5 min (pg-boss, 2 ponowienia); po ich
+  wyczerpaniu — tak samo bez śladu. Sprawdź kolumnę „Powiadomienie klienta” w tabeli
+  „Czekają na decyzję klienta (I5D)” w `/admin/ksef` (w karcie faktury:
+  „Powiadomienie klienta: N ×”): **„nie” → operator: „Przypomnij
+  klientowi”**. Przycisk wysyła przypomnienie na adres właściciela firmy,
   najwyżej raz na 24 h (decyzja 07.10 (12)). „Firma nie ma adresu e-mail
-  właściciela” → skontaktuj się innym kanałem. „Przypomnienie wysłane, ale
-  nie zapisaliśmy śladu w audit_logs” → nie wysyłaj ponownie przez 24 h.
+  właściciela” → skontaktuj się innym kanałem. „Nie udało się odczytać
+  adresu e-mail właściciela” → chwilowy błąd bazy albo GoTrue: spróbuj
+  ponownie za chwilę, nie szukaj innego kanału. „Nie wysłano przypomnienia
+  (hard_bounce)” albo „(complaint)” → adres właściciela jest na liście odbić,
+  przypomnienie tam nie dojdzie: skontaktuj się z klientem innym kanałem
+  (telefon albo inny adres z danych firmy) i zapisz kontakt w skrzynce
+  pomocy. „Przypomnienie wysłane, ale nie zapisaliśmy śladu w audit_logs”
+  → nie wysyłaj ponownie przez 24 h.
   Faktura, która czekała przed wdrożeniem PR B, dostaje pierwszy e-mail
   dopiero z tego przycisku.
 - **`known-number` po decyzji klienta:** sprawdź dokument Y (ten, który
@@ -365,8 +379,12 @@ KOR/ROZ sprzed 00137 (bez `special_data`) albo ZAL sprzed 02.10.2026 (bez
      Twoją decyzję” i push do właściciela — raz na fakturę i numer KSeF
      oryginału (trwały ślad `invoice.ksef_duplicate_decision_notified`
      w `audit_logs`, zapis tylko po dostarczeniu). Bez automatycznego
-     przypomnienia; „Przypomnij klientowi” w `/admin/ksef/<id>` wysyła
-     ponownie e-mail, najwyżej raz na 24 h.
+     przypomnienia i bez automatycznego ponowienia niedostarczonego
+     pierwszego powiadomienia; „Przypomnij klientowi” w `/admin/ksef/<id>`
+     wysyła e-mail (także pierwszy, gdy automat go nie dostarczył), najwyżej
+     raz na 24 h. Tabela I5D w `/admin/ksef` pokazuje w kolumnie
+     „Powiadomienie klienta”, czy klient dostał powiadomienie o tym numerze
+     KSeF oryginału.
   7. **Wpłaty** (07.10 (A), (6)): wpłaty zapisane na dokumencie blokują
      decyzję; klient dostaje komunikat z numerem dokumentu i adresem
      pomoc@faktflow.pl. Wiersze `payments` zmieniamy tylko za zgodą
@@ -381,7 +399,15 @@ KOR/ROZ sprzed 00137 (bez `special_data`) albo ZAL sprzed 02.10.2026 (bez
      plik: `tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt`
      (migawka `DUPLICATE_DECISION_TEXTS` + `DUPLICATE_DECISION_SQL_TEXTS`
      z `lib/ksef/duplicate-decision.ts`, test
-     `tests/unit/ksef-duplikat-decyzja-teksty.test.ts`). Zmiana tekstu
+     `tests/unit/ksef-duplikat-decyzja-teksty.test.ts`). Po przeglądzie
+     PR B doszły dwa teksty — wskaż je prawnikowi osobno:
+     `TRIGGER_DIRECTION` (odmowa wyzwalacza: „Wycofanego dokumentu % nie
+     zmienisz na fakturę zakupową: zajmuje numer, który w KSeF ma już %,
+     i zostaje w FaktFlow jako faktura sprzedaży, żeby tego numeru nie
+     dostała inna faktura sprzedaży.”) i `DIALOG_SAME.CHECKBOX_UNCOMPARABLE`
+     (potwierdzenie w dialogu „ta sama sprzedaż”: „Rozumiem skutki: faktura
+     {K} w KSeF dokumentuje tę samą sprzedaż co dokument {nr}, choć części
+     danych w tabeli nie da się porównać.”). Zmiana tekstu
      P0001 po przeglądzie wymaga nowej migracji (`CREATE OR REPLACE`) i tej
      samej zmiany w lustrze TypeScript; dziś zgodność lustra z 00148
      pilnuje `tests/unit/ksef-decyzja-duplikatu-migracja.test.ts` (U16e) —

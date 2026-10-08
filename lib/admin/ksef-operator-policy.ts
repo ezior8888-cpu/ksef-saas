@@ -150,9 +150,15 @@ export const OPERATOR_DUPLICATE_MESSAGES = {
   noteLabel: 'Skąd decyzja (kanał, data, osoba)',
   notePlaceholder: 'np. e-mail od właściciela 05.10, Jan Kowalski',
   noteError: 'Notatka: co najmniej 10 znaków — kanał, data, osoba.',
-  /** Pole „Rozumiem skutki” klienta (decyzja 7, C5) — wymagane, gdy `needsConfirmation[choice]`. */
+  /**
+   * Pole „Rozumiem skutki” klienta (decyzja 7, C5) — wymagane, gdy `needsConfirmation[choice]`.
+   * „Ta sama sprzedaż”: `confirmSame`, gdy tabela zaznacza różnicę (`markedDifference`),
+   * inaczej `confirmSameUncomparable` — jak `DIALOG_SAME.CHECKBOX` / `CHECKBOX_UNCOMPARABLE` klienta.
+   */
   confirmSame: (k: string, nr: string) =>
     `Klient potwierdził „Rozumiem skutki”: faktura ${k} w KSeF dokumentuje tę samą sprzedaż co dokument ${nr}, mimo różnic w tabeli.`,
+  confirmSameUncomparable: (k: string, nr: string) =>
+    `Klient potwierdził „Rozumiem skutki”: faktura ${k} w KSeF dokumentuje tę samą sprzedaż co dokument ${nr}, choć części danych w tabeli nie da się porównać.`,
   confirmOther: (k: string, nr: string) =>
     `Klient potwierdził „Rozumiem skutki”: faktura ${k} w KSeF dokumentuje inną sprzedaż niż dokument ${nr}.`,
   confirmMissing: 'Zaznacz potwierdzenie klienta („Rozumiem skutki”) i zapisz jeszcze raz.',
@@ -163,6 +169,7 @@ export const OPERATOR_DUPLICATE_MESSAGES = {
   remindTooSoon: (lastAt: string) =>
     `Ostatnie powiadomienie: ${formatWarsawDateTime(lastAt)} — przypomnienie najwcześniej 24 h później.`,
   remindNoEmail: 'Firma nie ma adresu e-mail właściciela — skontaktuj się z klientem innym kanałem (runbook KSEF_DUPLICATE_RECONCILE).',
+  remindReadFailed: 'Nie udało się odczytać adresu e-mail właściciela (błąd bazy albo GoTrue) — spróbuj ponownie za chwilę.',
   remindNotSent: (reason: string) => `Nie wysłano przypomnienia (${reason}).`,
   remindSentNotRecorded: 'Przypomnienie wysłane, ale nie zapisaliśmy śladu w audit_logs — nie wysyłaj go ponownie przez 24 h (klucz Resend chroni tylko dobę).',
   remindSuccess: (email: string) => `Wysłano przypomnienie do ${email}.`,

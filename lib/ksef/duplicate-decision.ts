@@ -130,7 +130,10 @@ export interface ComparisonRow {
   ksef: string | null;
   /** Wartość z tego dokumentu w FaktFlow. */
   ours: string | null;
-  /** `null` — bez porównania (wartość nieznana, inna waluta, program). */
+  /**
+   * `false` — „różni się” w tabeli (przy kwocie także inna znana waluta);
+   * `null` — bez porównania (wartość albo waluta nieznana, program).
+   */
   same: boolean | null;
 }
 
@@ -161,6 +164,14 @@ export type DuplicateDecisionView =
       originalKsefNumber: string;
       originalSha256: string;
       comparison: ComparisonRow[];
+      /**
+       * Któryś wiersz `comparison` ma „różni się” (`same === false`). Wybiera
+       * etykietę „Rozumiem skutki” przy „ta sama sprzedaż”: `true` — „mimo
+       * różnic zaznaczonych w tabeli” (`DIALOG_SAME.CHECKBOX`), `false` — „choć
+       * części danych w tabeli nie da się porównać” (`CHECKBOX_UNCOMPARABLE`;
+       * np. B2C bez NIP nabywcy, waluta nieznana). Klient i operator.
+       */
+      markedDifference: boolean;
       /** Treść pozycji zgodna z oryginałem poza nagłówkiem; `null` — nie porównano (brak naszego pliku). */
       sameContent: boolean | null;
       /** Wybór wymaga pola „Rozumiem skutki” (decyzje 7 i 12; sprawdza też serwer). */
@@ -222,6 +233,7 @@ export type DuplicateDecisionSqlTextKey =
   | 'TRIGGER_AUTO'
   | 'TRIGGER_DELETE'
   | 'TRIGGER_RENUMBER'
+  | 'TRIGGER_DIRECTION'
   | 'CATALOG_NUMBER_TAKEN';
 
 export interface DuplicateDecisionSqlText {
@@ -237,8 +249,8 @@ export interface DuplicateDecisionSqlText {
  * nie ma dosłownego `%` ani apostrofu. Kolejność argumentów — sekcja 2.11.A
  * specyfikacji: known-stale i own-history (K, nr); ENV (K, etykieta środowiska
  * sprawdzenia, etykieta środowiska aplikacji, nr); ALREADY (nr, zapisany wybór);
- * TRIGGER_AUTO (nr, „fakturę {K}” / „inną fakturę Twojej firmy”); TRIGGER_DELETE
- * i TRIGGER_RENUMBER (nr, „faktura {K}” / „inna faktura Twojej firmy”).
+ * TRIGGER_AUTO (nr, „fakturę {K}” / „inną fakturę Twojej firmy”); TRIGGER_DELETE,
+ * TRIGGER_RENUMBER i TRIGGER_DIRECTION (nr, „faktura {K}” / „inna faktura Twojej firmy”).
  * Test U16e sprawdza, że każdy wzorzec stoi w 00148 zaraz po `RAISE EXCEPTION '`.
  */
 export const DUPLICATE_DECISION_SQL_TEXTS: Readonly<Record<DuplicateDecisionSqlTextKey, DuplicateDecisionSqlText>> = {
@@ -266,6 +278,7 @@ export const DUPLICATE_DECISION_SQL_TEXTS: Readonly<Record<DuplicateDecisionSqlT
   TRIGGER_AUTO: { template: 'Numer % jest zajęty w KSeF przez % wystawioną poza FaktFlow — tego dokumentu nie wyślesz do KSeF (KSeF odrzuciłby go jako duplikat). Jeśli to inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.', arity: 2 },
   TRIGGER_DELETE: { template: 'Wycofanego dokumentu % nie usuniesz: zajmuje numer, który w KSeF ma już %, i zostaje w FaktFlow, żeby ten numer nie został podpowiedziany ponownie. Jeśli musisz go usunąć, napisz do nas: pomoc@faktflow.pl.', arity: 2 },
   TRIGGER_RENUMBER: { template: 'Numeru wycofanego dokumentu % nie zmienisz: ten numer ma w KSeF już %, a dokument zostaje z nim w FaktFlow, żeby numer nie został podpowiedziany ponownie. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 2 },
+  TRIGGER_DIRECTION: { template: 'Wycofanego dokumentu % nie zmienisz na fakturę zakupową: zajmuje numer, który w KSeF ma już %, i zostaje w FaktFlow jako faktura sprzedaży, żeby tego numeru nie dostała inna faktura sprzedaży.', arity: 2 },
   CATALOG_NUMBER_TAKEN: { template: 'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie. Tego dokumentu nie wyślesz do KSeF. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.', arity: 0 },
 };
 
@@ -381,9 +394,12 @@ export const DUPLICATE_DECISION_TEXTS = {
     LINE_3_KNOWN: (nr: string, k: string, y: string) =>
       `Dokument ${nr} nie trafi do JPK ani do KPiR w FaktFlow. Fakturę ${k} FaktFlow zna jako dokument ${y} — sprawdź, czy jego dane zgadzają się z danymi z KSeF w tabeli; jeśli nie, napisz do nas: pomoc@faktflow.pl, podając oba numery.`,
     LINE_4: 'Jeśli to jednak inna sprzedaż, zostanie bez faktury — wystaw ją wtedy jako nową fakturę z nowym numerem.',
-    /** Pole wymagane, gdy `needsConfirmation.same_sale` (C5). */
+    /** Etykieta pola „Rozumiem skutki” (wymaganego, gdy `needsConfirmation.same_sale`, C5), gdy tabela zaznacza różnicę (`markedDifference`). */
     CHECKBOX: (k: string, nr: string) =>
       `Rozumiem skutki: faktura ${k} w KSeF dokumentuje tę samą sprzedaż co dokument ${nr}, mimo różnic zaznaczonych w tabeli.`,
+    /** Etykieta tego samego pola bez różnic zaznaczonych w tabeli; pole nadal wymagane — tarcie z danych nieznanych (NIP, kwota, waluta). */
+    CHECKBOX_UNCOMPARABLE: (k: string, nr: string) =>
+      `Rozumiem skutki: faktura ${k} w KSeF dokumentuje tę samą sprzedaż co dokument ${nr}, choć części danych w tabeli nie da się porównać.`,
     CONFIRM_BUTTON: 'Zapisz: ta sama sprzedaż',
   },
   DIALOG_OTHER: {
@@ -757,10 +773,11 @@ export function duplicateDecisionOptions(input: DuplicateDecisionOptionsInput): 
   const oursGross = toNumber(inv.gross_total);
   const ksefCurrency = trimmed(summary.currency);
   const oursCurrency = trimmed(inv.currency);
-  // Kwota porównywana tylko w tej samej, znanej walucie; inaczej „bez porównania” (decyzja 12: to „kwota się różni”).
-  const grossSame = ksefGross !== null && oursGross !== null && ksefCurrency !== null && ksefCurrency === oursCurrency
-    ? ksefGross.toFixed(2) === oursGross.toFixed(2)
-    : null;
+  // Obie kwoty i obie waluty znane: inna waluta — „różni się” (decyzja 12: to „kwota się różni”), ta sama — porównanie
+  // kwot. Kwota albo waluta nieznana — „bez porównania” (null); „Rozumiem skutki” i tak wymagane (`grossSame !== true`).
+  const grossSame = ksefGross === null || oursGross === null || ksefCurrency === null || oursCurrency === null
+    ? null
+    : ksefCurrency === oursCurrency && ksefGross.toFixed(2) === oursGross.toFixed(2);
   const money = (value: number | null, currency: string | null): string | null =>
     value === null ? null : currency ? `${value.toFixed(2)} ${currency}` : value.toFixed(2);
 
@@ -784,6 +801,7 @@ export function duplicateDecisionOptions(input: DuplicateDecisionOptionsInput): 
     originalKsefNumber: k,
     originalSha256: sha256,
     comparison,
+    markedDifference: comparison.some((row) => row.same === false),
     // no-own-file: FaktFlow nie ma pliku próby — treści nie porównano.
     sameContent: reason === 'known-number' && typeof check.sameContentExceptHeader === 'boolean' ? check.sameContentExceptHeader : null,
     needsConfirmation: {
