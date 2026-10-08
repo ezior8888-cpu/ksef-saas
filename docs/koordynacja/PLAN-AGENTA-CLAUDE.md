@@ -69,9 +69,9 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E10 | Formularze faktur VAT/KOR/ZAL/ROZ — przypadki brzegowe dat i kwot (art. 106i, 106e) | ✅ przegląd 01.10 + poprawka | KOREKTA przeglądu: reguły sprawdzane tylko przy wysyłce (`validateInvoice` w jobie) — rachunek przy przelewie, format IBAN wymagający „PL” (zwykłe 26 cyfr odrzucane), zakres daty wystawienia — przepuszczały fakturę przez zapis, a wysyłka padała bez możliwości poprawki; #134. Ograniczenia produktowe w 4.4. Formularz i akcje VAT/KOR/ZAL/ROZ w stosie Codexa |
 | E11 | Ustawienia firmy i KSeF — zmiana NIP, danych sprzedawcy, certyfikatu; co dzieje się z wystawionymi fakturami | ✅ przegląd 01.10 | PDF bierze sprzedawcę z migawki faktury (`seller_data`); NIP firmy ustawia się tylko w szkicu; ponowna wysyłka wstrzymana do ręcznego uzgodnienia |
 | E12 | Koszty samochodu osobowego (50% VAT, 75% PIT) — aplikacja odlicza 100% VAT i nie stosuje limitu | ⏳ decyzja | 4.4 |
-| E15 | Job OCR po B4: ponowienie bez płatnego OCR, karta i powiadomienie z zapisanego wydatku, `onProcessOcrExhausted` bez „nieudane” w ciemno | ✅ 03.10 | #192 (razem z B4) |
-| E16 | Resztki OCR i karty wydatku: karta przy braku kursu (`deductible: 1` → „stale”, kwota w walucie jako „zł”, `unknown_seller` nieosiągalne); status odczytu OCR (błąd bazy = „Job nie istnieje”); baner „odczytany” nad kartą porażki; zawieszone „przetwarzanie” (decyzja); dubel przy ponownym wgraniu zdjęcia (decyzja) | ✅ 03.10 kod / ⏳ decyzje | #198; decyzje Bartosza w 5 |
-| E17 | Podpięcie E16 w `process-ocr` (po scaleniu #192 i #198): waluta kwot i `is_deductible` do karty (świeża ścieżka i `reviewSourceFromSaved`), `ocrJobId` w karcie sukcesu (baner bez wniosku z czasu), karta porażki w `onProcessOcrExhausted` | ⬜ czeka na scalenie | 5 |
+| E15 | Job OCR po B4: ponowienie bez płatnego OCR, karta i powiadomienie z zapisanego wydatku, `onProcessOcrExhausted` bez „nieudane” w ciemno | ✅ w `main` 06.10 | #192 (razem z B4), przez #232 |
+| E16 | Resztki OCR i karty wydatku: karta przy braku kursu (`deductible: 1` → „stale”, kwota w walucie jako „zł”, `unknown_seller` nieosiągalne); status odczytu OCR (błąd bazy = „Job nie istnieje”); baner „odczytany” nad kartą porażki; zawieszone „przetwarzanie” (decyzja); dubel przy ponownym wgraniu zdjęcia (decyzja) | ✅ w `main` 06.10 / ⏳ decyzje | #198 przez #232; decyzje Bartosza w 5 |
+| E17 | Podpięcie E16 w `process-ocr` (po scaleniu #192 i #198): waluta kwot i `is_deductible` do karty (świeża ścieżka i `reviewSourceFromSaved`), `ocrJobId` w karcie sukcesu (baner bez wniosku z czasu), karta porażki w `onProcessOcrExhausted` | ⬜ do wzięcia po „idź dalej” (#192 i #198 w `main`) | 5 |
 
 ### 3.1. Audyt jobów pod ponowienia (E4)
 
@@ -115,10 +115,18 @@ nie oznacza. Uwagi, bez pilności:
 
 ## 4. Stan — aktualizuj po każdym etapie
 
-**Ostatnia aktualizacja:** 03.10.2026 wieczór (20:45) — Claude (sesja z Igorem).
-`main` poszedł do `d1aae4c` (#199–#201 Bartosza, w tym protokół naprawy).
-Moje PR-y są BEHIND, bez konfliktów; aktualizuje je Bartosz przy scalaniu
-(`gh pr update-branch`). Wcześniej: punkt 00
+**Ostatnia aktualizacja:** 06.10.2026 wieczór — Claude (sesja z Igorem).
+Bartosz scalił zbiorczo #187, #188, #191, #192 i #198 (#232, `4009cc7`).
+Poza pakietem zostało #189 (F-093): po D-A4-1a (`3e12e3c`) miało konflikt
+w `lib/ksef/submit.ts` — rozwiązany 06.10, `ksefErrorCodes` w `client.ts`
+z czytaniem JSON-u z tekstu z D-A4-1a, pełne CI 5970/5970, build OK.
+Lekcja z 04.10: czysty merge w gicie to za mało — po przesunięciu `main`
+próbny merge + `tsc` + testy obszaru (03.10 `main` zaczął importować
+`ksefErrorCodes` z `submit`, a #189 go stamtąd przeniósł → TS2459).
+Wieczorem 06.10 `main` dostał poprawkę audytu zależności (`overrides`
+dla `sharp` i `source-map-js`) i indeks B4 (#238, migracja 00146); #189
+i ten plan zaktualizowane z `main`.
+Wcześniej (03.10): punkt 00
 sprawdzony (main dalej czerwony, wiadomość dla Bartosza), F-093 zrobione w #189,
 B4 i E15 w #192 (kod + prośba o migrację w opisie). Po południu Bartosz scalił
 B8 (`553d69e`, `shadcn` w devDependencies) i #186 — audyt w CI zielony; moje
@@ -161,14 +169,11 @@ wydanie #111 (`7a9f49a`) z #106–#110, #134 (przez #167 Bartosza) oraz:
 
 ### 4.2. Otwarte PR-y Claude
 
-#187 (ten plan), #188 (C-21, gałąź `claude/przeplywy-od-stycznia`), #189
-(F-093, gałąź `claude/jolly-tesla-jg9c9z`), #192 (B4 + E15, gałąź
-`claude/ocr-unikalnosc-b4`), #198 (E16, gałąź `claude/karta-wydatku-e16`) i #191 (atrapa GUS w teście hasha eksportu —
-z zadania zgłoszonego 03.10, gałąź `claude/test-hash-gus-atrapa`) — czekają
-na scalenie przez Bartosza.
-Audyt zależności naprawiony w `main` (B8) — CI liczy się od nowa po
-aktualizacji z `main` (03.10 po południu: #187–#189 i #192 zaktualizowane).
-#186 Bartosza (korekta dla firmy z UE, np. II) scalony 03.10.
+Otwarte: #189 (F-093, gałąź `claude/jolly-tesla-jg9c9z`) — czeka na
+scalenie przez Bartosza; ten plan (gałąź `claude/plan-po-scaleniu-232`).
+Scalone 06.10 przez #232: #187 (plan), #188 (C-21), #191 (atrapa GUS
+w teście hasha eksportu — lokalnie `pnpm run ci` jest już w całości
+zielony), #192 (B4 + E15), #198 (E16).
 
 ### 4.3. Prośby do Bartosza (migracje, produkcja) — stan 03.10
 
@@ -177,7 +182,7 @@ aktualizacji z `main` (03.10 po południu: #187–#189 i #192 zaktualizowane).
 | B1 | Wdrożyć `main` (aplikacja + worker) | u Bartosza — rejestr migracji / wdrożeń w `CLAUDE-DO-CODEXA.md` |
 | B2 | Sprawdzić/ustawić `GUS_API_KEY` na produkcji | nieznany |
 | B3 | Klucze obce blokujące usunięcie konta (RODO) | ✅ migracja `00113_user_deletion_foreign_keys` |
-| B4 | Odczyt dubli wydatków z OCR, potem `UNIQUE (tenant_id, ocr_job_id)` | 03.10: kod (obsługa 23505, „nie rozpoznano” po zapisie) w #192; w opisie #192 gotowy SQL sprawdzony na PG16 z kompletem migracji: liczenie dubli, odczyt dla księgowej, migracja `00NNN_expense_ocr_job_identity` (numer nadaje Bartosz — **00129 rezerwuje szkic Codexa #190**), wiersz do rejestru. Czeka na Bartosza |
+| B4 | Odczyt dubli wydatków z OCR, potem `UNIQUE (tenant_id, ocr_job_id)` | ✅ kod w `main` (#192 przez #232, 06.10); indeks `00146_expense_ocr_job_identity` w `main` (#238, 06.10, „przed wdrożeniem”) — stan wgrania w rejestrze migracji |
 | B5 | C-16: płatności/ponaglenia ROZ | ✅ częściowo #178 (ponaglenia i zaległości tylko dla faktur ścigalnych, 00126) |
 | B6 | `SENTRY_DSN` w zmiennych workera (log startu „Sentry: alerty z jobów włączone”) | nieznany; od #120 alerty idą też na Telegram |
 | B7 | Mail o końcu trialu dla kont bez karty | decyzja — cennik i trial ujednolicone w #136 (`lib/billing/pricing.ts`) |
@@ -190,8 +195,8 @@ aktualizacji z `main` (03.10 po południu: #187–#189 i #192 zaktualizowane).
 | C-05: adnotacje P_16/P_18A dla ZAL i ROZ | ✅ #176, #177 (z zamrożonej koperty) |
 | C-17 = audyt F-020: faktura zaliczkowa bez P_6 (data otrzymania zaliczki) i z przyszłym terminem zamiast „zapłacono” | otwarte; `Zamowienie` zrobione (AUD-71, #177). Generator ZAL zmieniany 02.10 przez sesje Bartosza (AUD-70) — **zanim weźmiesz: ustal z Bartoszem**, czy ktoś to robi |
 | C-15 = AUD-04: korekty i zaliczki przy stawce „zw” rzucają wyjątek; korekty na produkcji wstrzymane (`lib/ksef/submission-holds.ts`, AUD-03/04) | otwarte; #186 scalony 03.10 — zostaje uzgodnienie z Bartoszem (pliki korekt zmieniały jego sesje) |
-| F-093: `KsefApiError.ksefCode` zawsze `null` + odpowiedź `application/problem+json` nieparsowana (kody z tego kształtu, także 21184 z F-050, nieczytelne w prawdziwym `ksefFetch`) | zrobione 03.10 w #189 — czeka na scalenie przez Bartosza |
-| C-21 (dawniej mylnie „C-18” — ten numer ma sprawa „Niepewny wynik wysyłki KSeF i UPO”): strona przepływów ładuje dane od 1 stycznia i przekazuje `dataFrom` | zrobione 03.10 w #188 — czeka na scalenie przez Bartosza |
+| F-093: `KsefApiError.ksefCode` zawsze `null` + odpowiedź `application/problem+json` nieparsowana (kody z tego kształtu, także 21184 z F-050, nieczytelne w prawdziwym `ksefFetch`) | zrobione w #189 (06.10 po konflikcie z D-A4-1a: zgodne z `main`) — czeka na scalenie przez Bartosza |
+| C-21 (dawniej mylnie „C-18” — ten numer ma sprawa „Niepewny wynik wysyłki KSeF i UPO”): strona przepływów ładuje dane od 1 stycznia i przekazuje `dataFrom` | ✅ w `main` 06.10 (#188 przez #232) |
 | Szacunek podatku zakłada 19% liniowy dla każdego (podpisane na kafelku); skala i ryczałt dałyby inne kwoty; Flo ma profil podatkowy (`taxGateOpen`) | decyzja produktowa (Bartosz) |
 | JPK_V7M: pole dla „oo” i okres według daty sprzedaży | księgowa |
 | C-01: konwencja kwot korekty | ✅ rozstrzygnięte 02.10 (I1: różnica, #146); JPK_FA z korektą — audyt F-060 |
@@ -225,9 +230,10 @@ aktualizacji z `main` (03.10 po południu: #187–#189 i #192 zaktualizowane).
    teraz audyt (`docs/audyt/`). Zanim weźmiesz sprawę z listy niżej, ustal
    z Igorem (a on z Bartoszem), czy jest twoja — inaczej dwie sesje zrobią
    to samo w tych samych plikach.
-1. **Następny krok: zapytać Igora** o C-17 / C-15 (pkt 2 — mogą je robić
-   sesje Bartosza). **E17** (podpięcie E16 w `process-ocr`) czeka na
-   scalenie #192 i #198 — bez tego konflikt w `process-ocr.ts`. Do E17:
+1. **Następny krok (po „idź dalej” Igora): E17** — #192 i #198 są w `main`
+   od 06.10, więc podpięcie E16 w `process-ocr` nie koliduje. Równolegle
+   dalej pytanie do Igora o C-17 / C-15 (pkt 2 — mogą je robić sesje
+   Bartosza). Do E17 (nowa gałąź od `main`, protokół naprawy):
    w świeżej ścieżce `amountCurrency: cost.kind === 'missing_rate' ?
    currency : 'PLN'` i `deductible: cost.kind !== 'missing_rate'`;
    w `reviewSourceFromSaved` waluta ze śladu i `expense.is_deductible`
