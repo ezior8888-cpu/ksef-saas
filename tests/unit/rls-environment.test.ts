@@ -49,6 +49,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-korekta-jedna-otwarta.test.ts',
       // 00137 (A4b): special_data — kształt, zapis jednorazowy, przejścia 00131.
       'tests/rls-dane-specjalne.test.ts',
+      // 00148 (D-A4-1b-3 PR B): decyzja klienta przy cudzym 440, wycofany szkic, I5D.
+      'tests/rls-decyzja-duplikatu.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

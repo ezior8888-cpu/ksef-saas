@@ -14,6 +14,7 @@ export default defineConfig({
       'tests/rls-cykl-wyzwalacze.test.ts',
       'tests/rls-korekta-jedna-otwarta.test.ts',
       'tests/rls-dane-specjalne.test.ts',
+      'tests/rls-decyzja-duplikatu.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

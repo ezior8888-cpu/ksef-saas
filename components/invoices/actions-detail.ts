@@ -20,6 +20,15 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { ActionAuthError, requireOrgRole, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
 import { downloadInvoiceXml } from '@/lib/storage/r2';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import {
+  DUPLICATE_DECISION_SQL_TEXTS,
+  DUPLICATE_DECISION_TEXTS,
+  duplicateDecisionOptions,
+  fillSqlText,
+  type DuplicateChoice,
+} from '@/lib/ksef/duplicate-decision';
+import { loadDuplicateDecisionFacts } from '@/lib/ksef/duplicate-decision-facts';
+import { callDecideKsefDuplicate } from '@/lib/ksef/duplicate-decision-rpc';
 import { validateInvoice } from '@/lib/xml/invoice-calculator';
 import { generateInvoicePdf, verifyInvoicePdfDeliveryState } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
@@ -291,6 +300,122 @@ export async function resetInvoiceToDraftAction(
     return { success: false, error: KSEF_SEND_MESSAGES.resetFailed };
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// decideKsefDuplicateAction — decyzja klienta przy nierozstrzygniętym 440
+// ═══════════════════════════════════════════════════════════════
+
+export type DecideKsefDuplicateInput = {
+  invoiceId: string;
+  choice: DuplicateChoice;
+  /** Numer KSeF oryginału pokazany klientowi (wiązanie z danymi na stronie). */
+  originalKsefNumber: string;
+  /** SHA-256 danych oryginału pokazanych klientowi (wiązanie). */
+  originalSha256: string;
+  /** Zaznaczone „Rozumiem skutki” (decyzja 7 — sprawdzane też tutaj, nie tylko w UI). */
+  confirmed: boolean;
+};
+
+export type DecideKsefDuplicateResult =
+  | { success: true; message: string }
+  | { success: false; error: string };
+
+const isDuplicateChoice = (v: unknown): v is DuplicateChoice => v === 'same_sale' || v === 'other_sale';
+
+/**
+ * „To ta sama sprzedaż” / „To inna sprzedaż” na karcie faktury (D-A4-1b-3 PR B,
+ * decyzje Bartosza 04.10 i 07.10.2026). Kolejność: rola (właściciel/admin),
+ * środowisko KSeF serwera, fakty sesją klienta (RLS) i ta sama polityka co
+ * panel, wiązanie z danymi pokazanymi klientowi (numer KSeF i SHA-256
+ * oryginału), „Rozumiem skutki” — dopiero wtedy RPC kluczem serwisowym
+ * (przejścia stanu są serwerowe). RPC sprawdza to samo w bazie i zapisuje
+ * audyt; akcja własnego audytu nie pisze.
+ *
+ * Ponowienie po zgubionej odpowiedzi (drugie kliknięcie): szkic wycofany tą
+ * samą decyzją daje sukces bez RPC; RPC samo też odpowiada `already_decided`.
+ */
+export async function decideKsefDuplicateAction(
+  input: DecideKsefDuplicateInput,
+): Promise<DecideKsefDuplicateResult> {
+  const T = DUPLICATE_DECISION_TEXTS;
+  try {
+    const { supabase, user, tenantId, role } = await requireUserAndActiveOrg();
+    if (!canManageKsefSend(role)) return { success: false, error: T.ROLE };
+    if (!isDuplicateChoice(input.choice)) return { success: false, error: T.GENERIC };
+
+    const env = configuredKsefEnvironment();
+    if (env === null) return { success: false, error: KSEF_SEND_MESSAGES.envUnknown };
+
+    const facts = await loadDuplicateDecisionFacts(supabase, tenantId, input.invoiceId);
+    const view = duplicateDecisionOptions({ facts, actor: 'client', canManage: true, environment: env, now: new Date() });
+    const nr = facts.invoice?.internal_number ?? '(bez numeru)';
+    const toast = input.choice === 'same_sale' ? T.TOAST_SAME(nr) : T.TOAST_OTHER;
+
+    if (view.kind === 'decided') {
+      if (view.choice === input.choice && view.originalKsefNumber === input.originalKsefNumber) {
+        return { success: true, message: toast };
+      }
+      // Inny wybór (albo inny oryginał) niż zapisany — ten sam tekst co RPC (ALREADY).
+      return {
+        success: false,
+        error: fillSqlText(
+          DUPLICATE_DECISION_SQL_TEXTS.ALREADY.template,
+          nr,
+          view.choice === 'same_sale' ? 'ta sama sprzedaż' : 'inna sprzedaż',
+        ),
+      };
+    }
+    if (view.kind === 'refused') return { success: false, error: view.message ?? T.GENERIC };
+    if (view.originalKsefNumber !== input.originalKsefNumber || view.originalSha256 !== input.originalSha256) {
+      return { success: false, error: T.STALE };
+    }
+    if (view.needsConfirmation[input.choice] && !input.confirmed) {
+      return { success: false, error: T.CONFIRM };
+    }
+
+    const { error } = await callDecideKsefDuplicate(createAdminClient(), {
+      invoiceId: input.invoiceId,
+      tenantId,
+      actorUserId: user.id,
+      choice: input.choice,
+      via: 'client',
+      originalKsefNumber: input.originalKsefNumber,
+      originalSha256: input.originalSha256,
+      env,
+      note: null,
+    });
+    if (error) {
+      if (error.code === 'P0001' && error.message) {
+        // Polityka TS pozwoliła, baza odmówiła — rozjazd TS↔SQL (np. wiersz `payments`
+        // niewidoczny dla sesji, §7 p. 18). Komunikat bazy jest dla klienta (nazywa dokument).
+        Sentry.captureMessage('Decyzja przy duplikacie 440: RPC odmówiło mimo zgody polityki', {
+          level: 'warning',
+          tags: { area: 'ksef.duplicate-decision' },
+          extra: { tenantId, invoiceId: input.invoiceId, choice: input.choice },
+        });
+        return { success: false, error: error.message };
+      }
+      if (error.code === 'P0002') return { success: false, error: KSEF_SEND_MESSAGES.notFound };
+      if (error.code === '42501') return { success: false, error: T.ROLE };
+      Sentry.captureException(new Error(`decide_ksef_duplicate: błąd bazy ${error.code ?? 'bez kodu'}`), {
+        tags: { area: 'ksef.duplicate-decision' },
+        extra: { tenantId, invoiceId: input.invoiceId },
+      });
+      return { success: false, error: T.GENERIC };
+    }
+
+    revalidatePath('/invoices');
+    revalidatePath(`/invoices/${input.invoiceId}`);
+    return { success: true, message: toast };
+  } catch (err) {
+    if (err instanceof ActionAuthError) {
+      return { success: false, error: err.message };
+    }
+    Sentry.captureException(err, { tags: { area: 'ksef.duplicate-decision' }, extra: { invoiceId: input.invoiceId } });
+    return { success: false, error: T.GENERIC };
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // emailInvoiceAction — wysyłka faktury do nabywcy z PDF (Faza 33 Krok 8)
 // ═══════════════════════════════════════════════════════════════
@@ -361,7 +486,9 @@ export async function emailInvoiceAction(
 
   const inv = data.invoice;
   const amount = invoiceEmailAmount(inv);
-  const deliveryFailure = await verifyInvoicePdfDeliveryState(invoiceId, tenantId, pdfResult.qrStateKey);
+  const deliveryFailure = await verifyInvoicePdfDeliveryState(invoiceId, tenantId, pdfResult.qrStateKey, {
+    refuseRetiredDraft: true,
+  });
   if (deliveryFailure) {
     return { success: false, error: deliveryFailure.error };
   }

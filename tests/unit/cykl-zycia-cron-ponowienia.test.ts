@@ -633,3 +633,27 @@ describe('I5 — zalegający wpis: automatyczne „tylko uzgodnij” (A3)', () =
     expect(m.send).not.toHaveBeenCalled();
   });
 });
+
+describe('D-A4-1b-3 PR B: I5D — faktura czeka na decyzję klienta (00148)', () => {
+  it('U20 strażnik: wiersz I5D (failed KSEF_DUPLICATE_RECONCILE, znacznik sprzed 3 dni) — cron go nie uzgadnia i nie liczy w I5', async () => {
+    // Od 00148 faktura gotowa do decyzji klienta wypada z I5 (blokada decyzji = NULL)
+    // i trafia do I5D; cron bierze tylko invariant === 'I5' (ksef-lifecycle-reconcile.ts:309).
+    m.violations = [{
+      invariant: 'I5D', invoice_id: ID1, tenant_id: TENANT,
+      detail: {
+        original_ksef_number: '1234567890-20261001-0100A0B0C0D0-1A', reason: 'no-own-file', env: 'test',
+        checked_at: '2026-09-30T10:00:00.000Z', attempted_at: '2026-09-30T08:00:00.000Z', last_attempt_at: '2026-09-30T08:05:00.000Z',
+      },
+    }];
+    m.tables.invoices = [failedRow(ID1, 'KSEF_DUPLICATE_RECONCILE', { updated_at: '2026-09-30T08:05:00.000Z' })];
+
+    const report = await runKsefLifecycleReconcile(ctx);
+
+    expect(report).toMatchObject({ i5Reconciled: 0, i5Deferred: 0, i5NeedsOperator: 0, i5Other: 0, requeued: 0, errors: 0 });
+    expect(m.send).not.toHaveBeenCalled();
+    expect(sqlCalls.filter(([sql]) => /requeue_ksef_send/.test(sql))).toEqual([]);
+    expect(m.updates).toEqual([]);
+    // Faktury z I5D nawet nie czytamy jako kandydatów I5.
+    expect(m.ins.filter((i) => i.table === 'invoices' && i.column === 'id' && i.values.includes(ID1))).toEqual([]);
+  });
+});

@@ -27,6 +27,17 @@ interface Props {
     ksef_resend_facts: KsefResendFacts;
     /** `KSEF_ENV` aplikacji poprawny. */
     ksef_environment_known: boolean;
+    /**
+     * D-A4-1b-3 PR B: nad paskiem stoi panel duplikatu 440 (decyzja albo nota
+     * z danymi oryginału) — pasek po błędzie odsyła do ramki wyżej.
+     */
+    ksef_duplicate_panel?: boolean;
+    /**
+     * D-A4-1b-3 PR B: szkic wycofany (wpis `number_taken`) — bez wysyłki do KSeF
+     * i bez e-maila do nabywcy (decyzja 10); usunąć można tylko korektę i fakturę
+     * rozliczeniową (`deletable`, decyzja 9). `null` — zwykły szkic albo inny stan.
+     */
+    ksef_retired?: { deletable: boolean } | null;
   };
   /** Rola w firmie dopuszcza ponowną wysyłkę i powrót do szkicu (owner/admin). */
   canManageSend?: boolean;
@@ -94,7 +105,8 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
         )}
         Pobierz PDF
       </Button>
-      <EmailInvoiceButton invoiceId={invoice.id} />
+      {/* Decyzja 10: dokument wycofany nie jest fakturą dla nabywcy (odmawia też serwer). */}
+      {!invoice.ksef_retired && <EmailInvoiceButton invoiceId={invoice.id} />}
       {canDownload && (
         <Button
           variant="glass"
@@ -111,7 +123,11 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
         </Button>
       )}
       {invoice.ksef_status === 'draft' && (
-        <DraftInvoiceActions invoiceId={invoice.id} invoiceType={invoice.invoice_type ?? null} />
+        <DraftInvoiceActions
+          invoiceId={invoice.id}
+          invoiceType={invoice.invoice_type ?? null}
+          retired={invoice.ksef_retired ?? null}
+        />
       )}
       {(invoice.ksef_status === 'rejected' || invoice.ksef_status === 'failed') && (
         <FailedInvoiceActions
@@ -122,6 +138,7 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
           canManage={canManageSend}
           facts={invoice.ksef_resend_facts}
           environmentKnown={invoice.ksef_environment_known}
+          duplicatePanel={invoice.ksef_duplicate_panel ?? false}
         />
       )}
     </div>

@@ -4,7 +4,9 @@
  * próby ze znacznikiem 440 (`ksef_submissions.original_check`, 00144), zanim
  * zostawi fakturę w `KSEF_DUPLICATE_RECONCILE`. Klient i operator widzą, co
  * KSeF ma pod tym numerem: numer KSeF, datę, nabywcę, kwotę, program — na
- * tych danych klient podejmie decyzję („ta sama sprzedaż” / „inna”).
+ * tych danych klient podejmuje decyzję („ta sama sprzedaż” / „inna”,
+ * D-A4-1b-3 PR B: `lib/ksef/duplicate-decision.ts`, RPC `decide_ksef_duplicate`
+ * z 00148, który dopisuje do znacznika klucz `decision`).
  *
  * CZYSTY moduł (importowany w komponencie): bez KSeF, bazy i Node.
  */
@@ -35,6 +37,19 @@ export const DUPLICATE_CHECK_REASONS = [
 
 export type DuplicateCheckReason = (typeof DUPLICATE_CHECK_REASONS)[number];
 
+/** Wybór klienta przy nierozstrzygniętym 440 (D-A4-1b-3 PR B). */
+export type DuplicateDecisionChoice = 'same_sale' | 'other_sale';
+/** Kto zapisał decyzję: klient w panelu albo operator na jego prośbę. */
+export type DuplicateDecisionVia = 'client' | 'operator';
+
+/** Zapis decyzji w `original_check.decision` (00148) — tylko pola, które czyta aplikacja. */
+export interface KsefDuplicateDecisionRecord {
+  choice: DuplicateDecisionChoice;
+  via: DuplicateDecisionVia;
+  /** Moment decyzji (ISO z bazy, `now()` w RPC). */
+  at: string;
+}
+
 export interface KsefDuplicateCheck {
   v: 1;
   /** Środowisko KSeF, w którym sprawdzono oryginał. */
@@ -62,6 +77,12 @@ export interface KsefDuplicateCheck {
    * po 48 h dostał 503) — dane wyżej pochodzą z wcześniejszego, udanego.
    */
   recheck: { reason: DuplicateCheckReason; httpStatus: number | null; checkedAt: string } | null;
+  /**
+   * Decyzja klienta (00148, `decide_ksef_duplicate`) — tylko na wpisie, który
+   * stał się `number_taken`. Klucz obecny wyłącznie przy poprawnym zapisie;
+   * zapis bez decyzji wraca bez tego klucza (odczyt PR A bez zmian).
+   */
+  decision?: KsefDuplicateDecisionRecord;
 }
 
 /** Powody, przy których sprawdzenie nie pobrało oryginału z powodu chwilowej albo uprawnieniowej awarii. */
@@ -112,6 +133,7 @@ export function parseDuplicateCheck(value: unknown): KsefDuplicateCheck | null {
   const recheck = isRecord(r) && typeof r.reason === 'string' && (DUPLICATE_CHECK_REASONS as readonly string[]).includes(r.reason)
     ? { reason: r.reason as DuplicateCheckReason, httpStatus: typeof r.httpStatus === 'number' ? r.httpStatus : null, checkedAt: str(r.checkedAt) ?? '' }
     : null;
+  const decision = parseDecision(value.decision);
   return {
     v: 1,
     env: str(value.env) ?? '',
@@ -127,7 +149,18 @@ export function parseDuplicateCheck(value: unknown): KsefDuplicateCheck | null {
     httpStatus: typeof value.httpStatus === 'number' ? value.httpStatus : null,
     knownInvoice: known,
     recheck,
+    ...(decision ? { decision } : {}),
   };
+}
+
+/** `original_check.decision` — `{choice, via, at}` tylko przy poprawnych wartościach (reszta zapisu RPC zostaje w bazie). */
+function parseDecision(value: unknown): KsefDuplicateDecisionRecord | null {
+  if (!isRecord(value)) return null;
+  const { choice, via, at } = value;
+  if (choice !== 'same_sale' && choice !== 'other_sale') return null;
+  if (via !== 'client' && via !== 'operator') return null;
+  if (typeof at !== 'string' || Number.isNaN(Date.parse(at))) return null;
+  return { choice, via, at };
 }
 
 export interface DuplicateOriginalView {
@@ -137,7 +170,35 @@ export interface DuplicateOriginalView {
   rows: ReadonlyArray<{ label: string; value: string }>;
   /** Co to znaczy i co robić (bez obietnic przycisku, którego jeszcze nie ma). */
   note: string;
+  /** Odnośnik pod notatką — dokument Y przy `known-number` (C16); `null` dla każdego innego powodu. */
+  link: { href: string; label: string } | null;
 }
+
+const DONT_REISSUE = 'Nie wystawiaj tej faktury ponownie.';
+
+/**
+ * Notatki panelu „W KSeF jest już faktura o tym numerze” (D-A4-1b-3 PR B, 2.11.B):
+ * bez „zajmujemy się” i „operatora” (reguła 07.10.2026), z adresem pomocy.
+ * W przeglądzie prawnika razem z `DUPLICATE_DECISION_TEXTS` (decyzje A i 8).
+ * `{doc}` = „Faktura {nr}” albo „Ta faktura”.
+ */
+export const DUPLICATE_ORIGINAL_NOTES = {
+  /** `known-number` bez decyzji w panelu (zapis PR A bez danych, własna historia, known-stale). */
+  KNOWN_NUMBER_NOTE: (k: string, y: string, nr: string) =>
+    `W FaktFlow numer KSeF ${k} ma już dokument ${y} — te dane się nie zgadzają i musimy je wyjaśnić, zanim zdecydujesz, czym jest ten dokument. Napisz do nas: pomoc@faktflow.pl, podając numer ${nr}. ${DONT_REISSUE}`,
+  /** Odnośnik do dokumentu Y (`/invoices/{Y.id}`). */
+  KNOWN_LINK: (y: string) => `Zobacz dokument ${y}`,
+  /** Odmowa pobrania inna niż 403. */
+  DOWNLOAD_REFUSED_NOTE:
+    `Nie mogliśmy pobrać treści tej faktury z KSeF — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni); pytania: pomoc FaktFlow (pomoc@faktflow.pl), podaj numer faktury. ${DONT_REISSUE}`,
+  /** Pobranie, magazyn albo archiwum chwilowo nieudane — panel widać dopiero po wyczerpaniu ponowień joba. */
+  PENDING_NOTE:
+    `Nie udało się jeszcze sprawdzić treści tej faktury w KSeF — sprawdzimy ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl, podając numer faktury. ${DONT_REISSUE}`,
+  DEFAULT_NOTE: (doc: string) =>
+    `${doc} nie została przyjęta, bo KSeF ma już fakturę Twojej firmy o tym numerze (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktFlow (pomoc@faktflow.pl), podaj numer faktury. ${DONT_REISSUE}`,
+  OWN_HISTORY_NOTE: (doc: string) =>
+    `${doc} nie została przyjęta, bo KSeF ma już wcześniejszą wersję tej faktury wysłaną z FaktFlow (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktFlow (pomoc@faktflow.pl), podaj numer faktury. ${DONT_REISSUE}`,
+} as const;
 
 /** Dzień w Polsce (Europe/Warsaw) jako RRRR-MM-DD — nie dzień w UTC. */
 function warsawDay(iso: string): string | null {
@@ -158,9 +219,10 @@ function dateFromKsefNumber(ksefNumber: string): string | null {
 const PROGRAM_FAKTFLOW = 'KSeF SaaS v1.0';
 
 /**
- * Panel „W KSeF jest już faktura o tym numerze” dla klienta. Same fakty
- * z KSeF; decyzję („ta sama sprzedaż” / „inna”) dostanie przyciskiem
- * w kolejnym kroku (D-A4-1b-3, PR B/C).
+ * Panel „W KSeF jest już faktura o tym numerze” dla klienta: fakty z KSeF
+ * i notatka. Gdy decyzja jest dostępna (`no-own-file`, `known-number` z danymi
+ * oryginału — `duplicateDecisionOptions`), karta pokazuje zamiast notatki panel
+ * decyzji; notatka zostaje dla pozostałych powodów (D-A4-1b-3 PR B).
  */
 export function describeDuplicateOriginal(
   invoiceNumber: string | null,
@@ -181,30 +243,36 @@ export function describeDuplicateOriginal(
   }
 
   const doc = invoiceNumber ? `Faktura ${invoiceNumber}` : 'Ta faktura';
-  const dontReissue = 'Nie wystawiaj tej faktury ponownie.';
+  const N = DUPLICATE_ORIGINAL_NOTES;
   let note: string;
+  let link: DuplicateOriginalView['link'] = null;
   switch (check?.reason) {
     case 'download-refused':
       note = check.httpStatus === 403
         ? 'Nie mogliśmy pobrać treści tej faktury z KSeF — dane logowania KSeF w FaktFlow nie mają uprawnienia do odczytu ' +
           'faktur (InvoiceRead). Sprawdź uprawnienia w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach → KSeF. ' +
-          dontReissue
-        : `Nie mogliśmy pobrać treści tej faktury z KSeF — zajmujemy się tym. ${dontReissue}`;
+          DONT_REISSUE
+        : N.DOWNLOAD_REFUSED_NOTE;
       break;
     case 'download-pending':
     case 'storage-pending':
     case 'archive-pending':
-      // Panel widać dopiero po wyczerpaniu ponowień joba — następne
-      // sprawdzenie robi cron (po 48 h) albo operator.
-      note = 'Nie udało się jeszcze sprawdzić treści tej faktury w KSeF — sprawdzimy ponownie automatycznie ' +
-        `(zwykle w ciągu 2 dni), a w razie potrzeby zajmie się tym operator. ${dontReissue}`;
+      // Panel widać dopiero po wyczerpaniu ponowień joba — następne sprawdzenie robi cron (po 48 h).
+      note = N.PENDING_NOTE;
+      break;
+    case 'known-number':
+      // Notatka tylko przy odmowie decyzji (zapis PR A bez danych, własna historia,
+      // known-stale): przy decyzji dostępnej karta pokazuje panel (C16: „dokument {Y}”).
+      if (check.knownInvoice) {
+        const y = check.knownInvoice.internalNumber ?? 'bez numeru';
+        note = N.KNOWN_NUMBER_NOTE(ksefNumber, y, invoiceNumber ?? 'faktury');
+        link = { href: `/invoices/${encodeURIComponent(check.knownInvoice.id)}`, label: N.KNOWN_LINK(y) };
+      } else {
+        note = N.DEFAULT_NOTE(doc);
+      }
       break;
     default:
-      note = check?.reason === 'faktflow-original' && check.ownHistory
-        ? `${doc} nie została przyjęta, bo KSeF ma już wcześniejszą wersję tej faktury wysłaną z FaktFlow (dane wyżej). ` +
-          `Zajmujemy się tym. ${dontReissue}`
-        : `${doc} nie została przyjęta, bo KSeF ma już fakturę Twojej firmy o tym numerze (dane wyżej). ` +
-          `Zajmujemy się tym. ${dontReissue}`;
+      note = check?.reason === 'faktflow-original' && check.ownHistory ? N.OWN_HISTORY_NOTE(doc) : N.DEFAULT_NOTE(doc);
   }
-  return { title: 'W KSeF jest już faktura o tym numerze', rows, note };
+  return { title: 'W KSeF jest już faktura o tym numerze', rows, note, link };
 }

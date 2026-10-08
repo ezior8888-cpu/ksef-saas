@@ -3,19 +3,36 @@
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Loader2, RotateCcw, SearchCheck, Send } from 'lucide-react';
+import { BellRing, Gavel, Loader2, RotateCcw, SearchCheck, Send } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { operatorInvoiceButtons, type OperatorButtonsInput } from '@/lib/admin/ksef-operator-policy';
+import {
+  OPERATOR_DUPLICATE_MESSAGES,
+  operatorInvoiceButtons,
+  type OperatorButtonsInput,
+} from '@/lib/admin/ksef-operator-policy';
 
-import { operatorRequeueAction, operatorResetAction } from '../actions';
+import { operatorRemindDuplicateDecisionAction, operatorRequeueAction, operatorResetAction } from '../actions';
+import { OperatorDuplicateDecision } from './operator-duplicate-decision';
 
 interface Props extends OperatorButtonsInput {
   invoiceId: string;
   internalNumber: string | null;
 }
 
-/** Przyciski operatora: te same RPC co u klienta, z aktorem = operator (PR 3c). */
+const BUTTON_LABELS = {
+  requeue: 'Wyślij ponownie',
+  reconcile: 'Tylko uzgodnij',
+  reset: 'Wróć do szkicu',
+  decide: OPERATOR_DUPLICATE_MESSAGES.decideButton,
+  remind: OPERATOR_DUPLICATE_MESSAGES.remindButton,
+} as const;
+
+/**
+ * Przyciski operatora: te same RPC co u klienta, z aktorem = operator (PR 3c).
+ * D-A4-1b-3 PR B: „Zapisz decyzję klienta” i „Przypomnij klientowi” przy
+ * nierozstrzygniętym 440 (widok polityki w `duplicateDecision`).
+ */
 export function OperatorActions(props: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -67,15 +84,36 @@ export function OperatorActions(props: Props) {
           <RotateCcw className="h-4 w-4 mr-2" />
           Wróć do szkicu
         </Button>
+        {buttons.decide.enabled && props.duplicateDecision?.kind === 'decidable' ? (
+          <OperatorDuplicateDecision
+            invoiceId={props.invoiceId}
+            internalNumber={props.internalNumber}
+            view={props.duplicateDecision}
+            disabled={pending}
+          />
+        ) : (
+          <Button variant="outline" disabled title={buttons.decide.reason ?? undefined}>
+            <Gavel className="h-4 w-4 mr-2" />
+            {OPERATOR_DUPLICATE_MESSAGES.decideButton}
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          onClick={() => run(OPERATOR_DUPLICATE_MESSAGES.remindConfirm(label), () =>
+            operatorRemindDuplicateDecisionAction(props.invoiceId))}
+          disabled={pending || !buttons.remind.enabled}
+          title={buttons.remind.reason ?? undefined}
+        >
+          <BellRing className="h-4 w-4 mr-2" />
+          {OPERATOR_DUPLICATE_MESSAGES.remindButton}
+        </Button>
       </div>
       <ul className="space-y-1 text-xs text-muted-foreground">
-        {(['requeue', 'reconcile', 'reset'] as const)
+        {(['requeue', 'reconcile', 'reset', 'decide', 'remind'] as const)
           .filter((key) => buttons[key].reason)
           .map((key) => (
             <li key={key}>
-              <span className="font-medium">
-                {key === 'requeue' ? 'Wyślij ponownie' : key === 'reconcile' ? 'Tylko uzgodnij' : 'Wróć do szkicu'}
-              </span>
+              <span className="font-medium">{BUTTON_LABELS[key]}</span>
               {': '}
               {buttons[key].reason}
             </li>
