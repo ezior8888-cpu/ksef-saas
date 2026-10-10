@@ -4,9 +4,9 @@
 |---|---|
 | Etap | Rozpoznanie projektu i dostępu (pkt 2 zadania) |
 | Autor | koordynator (główna sesja) |
-| Data | 7.10.2026 |
-| Wersja kodu | `origin/main` @ `7c0097f` (2026-10-07 17:38 +0200, scalenie PR #243) |
-| Gałąź robocza | `claude/gallant-faraday-ypjokp` = `origin/main`, drzewo czyste, brak lokalnych zmian |
+| Data | 7.10.2026 (start), 10.10.2026 (wznowienie) |
+| Wersja kodu | `origin/main` @ `3e5e00d` (10.10.2026, scalenie PR #245); start audytu 7.10 na `7c0097f` |
+| Gałąź robocza | `claude/gallant-faraday-ypjokp` = `origin/main` + pliki tego audytu (scalenie `main` 10.10), brak innych lokalnych zmian |
 | Recenzja | patrz `10-REVIEW.md` (etap R1) |
 
 ## 1. Po co ten plik
@@ -17,14 +17,20 @@ trzeba czytać przez pryzmat ograniczeń z sekcji 5.
 
 ## 2. Wersja kodu i zmiany w toku
 
-- Audyt dotyczy `7c0097f` (HEAD `origin/main` w chwili startu). Nie było
-  lokalnych zmian ani nieśledzonych plików.
-- Otwarte PR na 7.10.2026 (odczyt przez GitHub API):
+- Audyt wystartował 7.10.2026 na `7c0097f`. Pierwsze podejście agentów
+  przerwał limit użycia API (żaden raport nie został zapisany), więc
+  10.10.2026 gałąź scalono z aktualnym `main` (`3e5e00d`) i badanie
+  wykonano na tej wersji. Różnica to 15 commitów KSeF (PR #244, #245:
+  ponowienia KOR/ZAL/ROZ, decyzja klienta przy duplikacie, migracja
+  `00148`); w obszarze prywatności zmieniły się tylko `lib/audit/log.ts`
+  (+6 linii) i `lib/email/send.ts` (+40 linii). Nie było innych lokalnych
+  zmian ani nieśledzonych plików poza materiałami audytu.
+- Otwarte PR na 10.10.2026 (odczyt przez GitHub API):
 
 | PR | Tytuł (skrót) | Znaczenie dla tego audytu |
 |---|---|---|
-| #225 (Codex, niescalony) | F0: wybory właściciela, dowody i bezpieczny inwentarz | **Istotny.** `docs/observability/*` na gałęzi `codex/f0-runtime-inventory` zawiera deklarowany pomiar produkcji z 4.10, odczyty API dostawców z 6.10 i przyjętą (niewdrożoną) politykę danych obserwowalności. Używamy go jako dowodu pośredniego, z oznaczeniem poziomu. |
-| #244, #195, #189 | KSeF: ponowienia, ROZ, kody błędów | Integralność przetwarzania (SOC 2 PI); nie zmieniają przetwarzania danych osobowych. |
+| #225 (Codex, niescalony, gałąź @ `686a465`, aktualizacja 10.10) | F0: wybory właściciela, dowody i bezpieczny inwentarz | **Istotny.** `docs/observability/*` na gałęzi `codex/f0-runtime-inventory` zawiera deklarowany pomiar produkcji z 4.10, odczyty API dostawców z 6.10, przyjętą (niewdrożoną) politykę danych obserwowalności oraz decyzje z 10.10 (docelowo płatny Sentry Team EU, 10-letnia historia błędów faktur we własnej bazie, przyszły agent z odczytem zredagowanej diagnostyki). Próba odczytu serwerów 10.10 nieudana. Używamy go jako dowodu pośredniego, z oznaczeniem poziomu. |
+| #195, #189 | KSeF: ROZ, kody błędów | Integralność przetwarzania (SOC 2 PI); nie zmieniają przetwarzania danych osobowych. |
 | #190, #193, #197 (szkice) | Bezpieczeństwo: dowody XML, obraz workera, sekrety buildu | Pośrednio SOC 2 (CC6/CC8). |
 | #236 | Plan agenta | Dokumentacja. |
 
@@ -76,7 +82,7 @@ jako „pomiar/deklaracja operatora z PR #225”.
 |---|---|---|
 | Sesja w chmurze: brak `.env.local`, brak `.agents/infra.env`, brak klucza SSH, brak `docs/automation/` | Brak dostępu do produkcji, bazy produkcyjnej, Coolify, logów, kopii. Brak prywatnych dzienników napraw `AUD-NN`. | „niezweryfikowane — brak dostępu do produkcji” |
 | Brak dostępu do paneli i umów dostawców (Sentry, PostHog, Stripe, Resend, Anthropic, Hetzner, Google, Cloudflare) | Nie znamy treści DPA, ustawień retencji, regionów dodatkowych funkcji, list dalszych procesorów | „stan umowy nieznany; nie zgadujemy treści” |
-| Egress sieci filtrowany polityką organizacji (sprawdzone 7.10.2026 ok. 18:55 UTC) | **Zablokowane (403):** eur-lex.europa.eu, edpb.europa.eu, uodo.gov.pl, isap.sejm.gov.pl, api.sejm.gov.pl, eli.gov.pl, aicpa-cima.com, gov.pl, ec.europa.eu, strony dostawców (supabase.com, posthog.com, sentry.io, stripe.com, resend.com, hetzner.com, upstash.com, cloudflare.com). **Dostępne:** github.com, raw.githubusercontent.com, www.anthropic.com/legal/*, registry.npmjs.org. | Źródła pierwotne prawa i AICPA: „niezweryfikowane online 7.10.2026 — egress zablokowany; identyfikacja wg wiedzy modelu” |
+| Egress sieci filtrowany polityką organizacji (sprawdzone 7.10.2026 ok. 18:55 UTC; stan polityki ponownie potwierdzany przez agentów 10.10) | **Zablokowane (403):** eur-lex.europa.eu, edpb.europa.eu, uodo.gov.pl, isap.sejm.gov.pl, api.sejm.gov.pl, eli.gov.pl, aicpa-cima.com, gov.pl, ec.europa.eu, strony dostawców (supabase.com, posthog.com, sentry.io, stripe.com, resend.com, hetzner.com, upstash.com, cloudflare.com). **Dostępne:** github.com, raw.githubusercontent.com, www.anthropic.com/legal/*, registry.npmjs.org. | Źródła pierwotne prawa i AICPA: „niezweryfikowane online 7.10.2026 — egress zablokowany; identyfikacja wg wiedzy modelu” |
 | Właściciel odrzucił użycie wyszukiwarki (WebSearch) w trakcie sesji i polecił kontynuować | Brak wyszukiwania nowszych wersji wytycznych, orzeczeń i dokumentów dostawców | jak wyżej |
 | Brak prawdziwych danych | Analiza na kodzie, schematach, konfiguracji i danych syntetycznych; test przeglądarkowy na lokalnym buildzie z syntetycznymi zmiennymi | wyniki testów runtime opisują build lokalny, nie produkcję |
 | Podmiot prawny operatora | Polityka prywatności ma placeholder; `ai_todo.md` mówi o pracy „przed założeniem firmy” | niewiadoma N-01 w `08-NIEWIADOME-I-REVIEW-PRAWNE.md` |
@@ -92,7 +98,7 @@ z listą przepisów do sprawdzenia w źródle.
 
 ## 6. Granice audytu
 
-**W zakresie:** cały kod aplikacji i workera na `7c0097f`, migracje,
+**W zakresie:** cały kod aplikacji i workera na `3e5e00d`, migracje,
 konfiguracja w repo (CSP, Sentry, PostHog, Docker, CI), dokumentacja
 w repo, otwarty PR #225 jako dowód pośredni, lokalny test przeglądarkowy
 (cookies, magazyny, żądania sieciowe) na stronach publicznych.
