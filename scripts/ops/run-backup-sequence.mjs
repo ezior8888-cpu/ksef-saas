@@ -71,7 +71,8 @@ export async function runBackupSequence(options) {
       const wasInterrupted = combined.aborted; local.abort();
       // Do not free the scope lock while a client can still write. A timed-out
       // transport may also leave a remote child alive; any timeout retains it.
-      if (active.has(token) || wasInterrupted || error?.discardClientRequired) retainLock = true;
+      const exceededDeadline = error instanceof SequenceError && error.sequenceCode === 'RUN_ABORTED_OR_TIMED_OUT';
+      if (active.has(token) || wasInterrupted || exceededDeadline || error?.discardClientRequired) retainLock = true;
       throw error;
     } finally { clearTimeout(timer); combined.removeEventListener('abort', stop); }
   }
@@ -121,12 +122,15 @@ export async function runBackupSequence(options) {
     const recoveryArtifact = await step('hash-recovery', ctx => hashBackupArtifact(recoveryPath, ctx));
     manifest.recoveryBundle = { runId, encrypted: true, configurationIncluded: true, keysIncluded: true,
       operationWindow: { startedAtUtc: recoveryStart, completedAtUtc: now() }, artifact: recoveryArtifact };
+    const minioIndexFiles = {};
     for (const source of ['application', 'supabase']) {
       const operationStart = now();
       const summary = await step('export-' + source, ctx => exportBackupS3({ client: adapters.s3[source], runId, source,
         destinationDir: dirs[source], signal: ctx.signal, maxDurationMs: Math.min(ctx.timeoutMs, 3_600_000) }));
       const counts = { ...summary.counts, versioningCounts: { Enabled: 0, Suspended: 0, Unversioned: summary.counts.bucketCount } };
       const hashArtifact = await hashBackupArtifact(path.join(dirs[source], 'objects.ndjson'), { signal: controller.signal });
+      minioIndexFiles[source] = [hashArtifact, { path: path.join(dirs[source], 'bucket-config.ndjson'),
+        sha256: summary.bucketConfig.sha256, bytes: summary.bucketConfig.bytes }];
       // Empty NDJSON has 0 bytes, while the manifest contract requires a
       // nonempty evidence artifact. Preserve the exact file in a JSON envelope.
       const objectEnvelope = await writeBackupJson(path.join(dirs[source], 'object-manifest-proof.json'), { runId, objectManifest: hashArtifact }, { signal: controller.signal });
@@ -166,7 +170,7 @@ export async function runBackupSequence(options) {
       const files = await step('inventory-files-' + kind, ctx => inventoryBackupFiles(dirs[kind], ctx));
       const source = manifest.minio.find(m => m.id === kind);
       const sourceArtifacts = kind === 'database' ? [...dbMembers, normalizedReferenceArtifact] : [source.objectHashManifest.artifact, source.sourceListingArtifact, source.exportArtifact, source.metadataArtifact, source.bucketConfigurationArtifact];
-      const requiredFiles = [...sourceArtifacts, ...(comparison.verifiedPayloadFiles ?? []).filter(f => path.dirname(path.dirname(f.path)) === dirs[kind])];
+      const requiredFiles = [...sourceArtifacts, ...(minioIndexFiles[kind] ?? []), ...(comparison.verifiedPayloadFiles ?? []).filter(f => path.dirname(path.dirname(f.path)) === dirs[kind])];
       if (!requiredFiles.every(a => files.some(f => f.path === a.path && f.sha256 === a.sha256 && f.bytes === a.bytes))) fail('SOURCE_ARTIFACT_CHANGED');
       sourceFiles[kind] = files;
     }

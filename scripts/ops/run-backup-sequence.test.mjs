@@ -180,3 +180,14 @@ test('payload changed after reference check cannot be accepted from a later inve
   const r = await runBackupSequence(f.options); assert.equal(r.status,'INCOMPLETE'); assert.equal(r.code,'SOURCE_ARTIFACT_CHANGED');
   assert.ok(!f.events.includes('synthetic-complete'));
 });
+
+for (const source of ['app-minio', 'supabase-minio']) for (const filename of ['objects.ndjson', 'bucket-config.ndjson']) test(source + ' ' + filename + ' changed after checking cannot inherit earlier proof', async t => {
+  const f = await fixture(t), original = f.adapters.observeConsistency;
+  f.adapters.observeConsistency = async ctx => {
+    if (ctx.phase === 'after') await writeFile(path.join(ctx.runRoot, source, filename), 'CHANGED SYNTHETIC INDEX');
+    return original(ctx);
+  };
+  const r = await runBackupSequence(f.options);
+  assert.equal(r.status, 'INCOMPLETE'); assert.equal(r.code, 'SOURCE_ARTIFACT_CHANGED');
+  assert.equal(f.snapshots.size, 0); assert.deepEqual(f.events, ['backup-failed']);
+});

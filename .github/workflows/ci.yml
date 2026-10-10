@@ -45,7 +45,7 @@ jobs:
       - name: Test agent guard rules
         run: node --test scripts/ci/agent-guard.test.mjs
       - name: Test F0 operational tools (offline)
-        run: node --test scripts/ops/prepare-backup-plan.test.mjs scripts/ops/check-backup-set.test.mjs scripts/ops/collect-runtime-inventory.test.mjs scripts/ops/export-backup-s3.test.mjs scripts/ops/check-backup-references.test.mjs scripts/ops/plan-backup-retention.test.mjs scripts/ops/prepare-backup-reference-input.test.mjs scripts/ops/export-backup-db-references.test.mjs scripts/ops/backup-runtime.test.mjs scripts/ops/backup-database-command.test.mjs scripts/ops/backup-restic.test.mjs scripts/ops/run-backup-sequence.test.mjs scripts/ops/backup-restic-sequence.test.mjs scripts/ops/check-backup-signal.test.mjs
+        run: node --test scripts/ops/prepare-backup-plan.test.mjs scripts/ops/check-backup-set.test.mjs scripts/ops/collect-runtime-inventory.test.mjs scripts/ops/export-backup-s3.test.mjs scripts/ops/check-backup-references.test.mjs scripts/ops/plan-backup-retention.test.mjs scripts/ops/prepare-backup-reference-input.test.mjs scripts/ops/export-backup-db-references.test.mjs scripts/ops/backup-runtime.test.mjs scripts/ops/backup-database-command.test.mjs scripts/ops/backup-restic.test.mjs scripts/ops/run-backup-sequence.test.mjs scripts/ops/backup-restic-sequence.test.mjs scripts/ops/backup-sequence-elapsed.test.mjs scripts/ops/check-backup-signal.test.mjs
       - name: Test Telegram gate (ops/bramka)
         run: node --test ops/bramka/test/*.test.mjs
       - name: Test support mail worker (ops/poczta)
