@@ -1,0 +1,72 @@
+-- 00149_ksef_duplicate_original.sql
+--
+-- D-A4-1b-3 PR C (plan „zero zgubionych faktur”): oryginał z oznaczeniem
+-- FaktFlow przy nierozstrzygniętym 440 (`faktflow-original`), decyzje Bartosza
+-- 04.10, 07.10 i 08.10.2026 (C1–C8). Brama pochodzenia liczona w runnerze
+-- (`original_check.importGate`) wybiera ofertę: zapis oryginału przez klienta
+-- (para albo jeden przycisk), przegląd operatora albo — po oddaniu przez
+-- operatora — decyzja jak przy innym programie. Zapis oryginału w jednej
+-- transakcji: wycofanie dokumentu (jak 00148), numer przechodzi z dokumentu
+-- na oryginał, oryginał jako przyjęta faktura sprzedaży (origin ksef_import)
+-- z pozycjami, xml_documents, sesją oryginału i wierszem upo_receipts.
+--
+--  1. ksef_duplicate_check_allows — + faktflow-original (CREATE OR REPLACE).
+--  2. ksef_duplicate_own_history — predykat 00148 krok 12 jako funkcja.
+--  3. ksef_duplicate_gate_ok — poprawny kształt importGate (wspólny dla 4, 5, 11).
+--  4. ksef_duplicate_original_offer — oferta z importGate i własnej historii.
+--  5. ksef_duplicate_cross_tenant — K albo numer w innej firmie (jedyne miejsce reguły).
+--  6. ksef_duplicate_decision_blocker — + known-now, cross-tenant,
+--     recheck-needed, provenance-review; own-history nie dla faktflow-original
+--     (CREATE OR REPLACE).
+--  7. ksef_duplicate_decision_blocker_for_session — blokada dla sesji klienta.
+--  8. ksef_original_import_mismatch — kontrola projekcji oryginału.
+--  9. ksef_duplicate_decide_core — ciało decyzji (tryby retire/import/no-import).
+-- 10. decide_ksef_duplicate (te same 9 argumentów) — opakowanie core('retire').
+-- 11. decide_ksef_duplicate_original — opakowanie core('import'|'no-import').
+-- 12. release_ksef_original_review — operator oddaje decyzję klientowi.
+-- 13. flag_ksef_original_recheck — trwały znacznik „sprawdź ponownie”.
+-- 14. guard_ksef_retired_draft — teksty szkicu wycofanego po zapisie oryginału.
+-- 15. ksef_lifecycle_violations — I5 bez przeglądu, I5R, I3K (CREATE OR REPLACE).
+-- 16. COMMENT original_check (importGate, recheckNeeded, decision.mode…).
+--
+-- PRZED wdrożeniem kodu: CREATE OR REPLACE i nowe funkcje; bez DML na danych,
+-- bez DROP. Stary kod: decyzji dla faktflow-original nie woła (TS odmawia
+-- przed RPC — allows TS bez faktflow-original); decide_ksef_duplicate dla
+-- no-own-file/known-number działa jak w 00148 (INV-14). Okno
+-- migracja→wdrożenie: stary runner zapisuje znacznik faktflow-original bez
+-- importGate → blokada recheck-needed → I5 (stary cron po 48 h robi
+-- „Tylko uzgodnij”, a nowy runner zapisze bramę); stary notify-user idzie
+-- ścieżką ogólną. Okno worker→web: nowy worker może wysłać e-mail „zapisz
+-- fakturę z KSeF”, a stary panel jeszcze odmawia („decyzji w panelu nie ma”)
+-- — przy 0 znacznikach bez skutku, okno to minuty. Produkcja 08.10:
+-- 0 takich znaczników. Wdrożenie: worker (id=2), potem web (id=1).
+--
+-- Wycofanie (decyzja Bartosza): NAJPIERW zapisz wynik zapytania I3K
+-- (ksef_lifecycle_violations() WHERE invariant = 'I3K' — faktury z KSeF bez
+-- sesji UPO albo daty; po wycofaniu nic ich nie pokaże) w runbooku. Potem
+-- CREATE OR REPLACE funkcji 1, 6, 10, 15 ciałami z 00148; DROP FUNCTION
+-- decide_ksef_duplicate_original, release_ksef_original_review,
+-- flag_ksef_original_recheck, ksef_duplicate_decide_core,
+-- ksef_original_import_mismatch, ksef_duplicate_decision_blocker_for_session,
+-- ksef_duplicate_original_offer, ksef_duplicate_cross_tenant,
+-- ksef_duplicate_gate_ok, ksef_duplicate_own_history.
+-- guard_ksef_retired_draft ZOSTAJE z 00149 (bez decyzji z importem jej teksty
+-- są identyczne z 00148; ciało z 00148 pokazałoby przy szkicu bez numeru
+-- „zajmuje numer, który w KSeF ma już…”, co byłoby fałszem). Faktury zapisane
+-- z KSeF zostają (są poprawnym zapisem wystawionych faktur); szkice wycofane
+-- bez numeru zostają bez numeru.
+--
+-- Przed uruchomieniem (sesja lokalna, AGENTS.md „Wgrywanie migracji”):
+--   SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 3;   → 00148
+--   SELECT count(*) FROM public.invoices WHERE ksef_status='failed' AND last_error_code='KSEF_DUPLICATE_RECONCILE';
+--   SELECT original_check->>'reason', original_check ? 'importGate', count(*)
+--     FROM public.ksef_submissions WHERE original_check IS NOT NULL GROUP BY 1, 2;
+--   SELECT count(*) FROM public.ksef_submissions WHERE status='number_taken';
+--   SELECT count(*) FROM public.invoices WHERE origin='ksef_import';
+--   (informacyjnie — migracja nie zmienia wierszy)
+--
+-- Kontrakt PR C (commit 1): nagłówek i pusta transakcja; funkcje 1–16 dochodzą
+-- w commicie „migracja 00149” (spec v3 9.2 punkt 5).
+
+BEGIN;
+COMMIT;

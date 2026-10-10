@@ -199,6 +199,7 @@ export interface DuplicateFactsInvoice {
   offline_qr_certyfikat: string | null;
   paid_amount: number | null;
   issue_date: string | null;
+  sale_date: string | null;
   buyer_nip: string | null;
   buyer_data: Record<string, unknown> | null;
   gross_total: number | null;
@@ -249,6 +250,7 @@ export function decisionInvoice(over: Partial<DuplicateFactsInvoice> = {}): Dupl
     offline_qr_certyfikat: null,
     paid_amount: 0,
     issue_date: '2026-10-01',
+    sale_date: null,
     buyer_nip: '1234567890',
     buyer_data: { name: 'Nabywca Testowy Sp. z o.o.', nip: '1234567890' },
     gross_total: 1230,
@@ -403,6 +405,19 @@ export const EXPECTED_SQL_TEXTS: Readonly<Record<string, { template: string; ari
   TRIGGER_RENUMBER: { template: 'Numeru wycofanego dokumentu % nie zmienisz: ten numer ma w KSeF już %, a dokument zostaje z nim w FaktFlow, żeby numer nie został podpowiedziany ponownie. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 2 },
   TRIGGER_DIRECTION: { template: 'Wycofanego dokumentu % nie zmienisz na fakturę zakupową: zajmuje numer, który w KSeF ma już %, i zostaje w FaktFlow jako faktura sprzedaży, żeby tego numeru nie dostała inna faktura sprzedaży.', arity: 2 },
   CATALOG_NUMBER_TAKEN: { template: 'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie. Tego dokumentu nie wyślesz do KSeF. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.', arity: 0 },
+  // PR C (00149): nowe wzorce przepisane ze specyfikacji v3, 6.3 (słowo w słowo; lista prawnika).
+  'known-now': { template: 'Faktura % z KSeF jest już zapisana w FaktFlow przy innym dokumencie — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl. Nie wystawiaj dokumentu % ponownie.', arity: 2 },
+  'cross-tenant': { template: 'Faktury z KSeF o numerze % nie możemy zapisać przy tym dokumencie — wyjaśniamy to i damy znać. Nie wystawiaj dokumentu % ponownie; pytania: pomoc@faktflow.pl.', arity: 2 },
+  'recheck-needed': { template: 'Fakturę z KSeF dla dokumentu % sprawdzamy jeszcze raz — automatycznie, zwykle w ciągu 2 dni; potem decyzję zapiszesz na tej karcie. Nie wystawiaj dokumentu ponownie; jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl.', arity: 1 },
+  'provenance-review': { template: 'Sprawdzamy fakturę z KSeF dla dokumentu % — nie wystawiaj go ponownie, damy znać. Pytania: pomoc@faktflow.pl.', arity: 1 },
+  CHOICE: { template: 'Dla dokumentu % możliwy jest tylko zapis faktury z KSeF jako tej samej sprzedaży — odśwież stronę.', arity: 1 },
+  IMPORT_MISMATCH: { template: 'Faktury % z KSeF nie zapiszemy przy dokumencie %: numer faktury albo NIP sprzedawcy w KSeF nie zgadza się z tym dokumentem albo z danymi Twojej firmy. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.', arity: 2 },
+  ALREADY_IMPORTED: { template: 'Decyzja dla dokumentu % jest już zapisana („%”) — co zrobić, jeśli była błędna, piszemy na karcie wycofanego dokumentu.', arity: 2 },
+  TRIGGER_SAME_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: to ta sama sprzedaż co faktura % z KSeF, zapisana w FaktFlow pod numerem %.', arity: 3 },
+  TRIGGER_OTHER_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: numer % ma faktura % z KSeF, zapisana w FaktFlow. Tę sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 3 },
+  TRIGGER_DELETE_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie usuniesz: zostaje w FaktFlow jako ślad decyzji o fakturze % z KSeF, która ma teraz jego numer. Jeśli musisz go usunąć, napisz do nas: pomoc@faktflow.pl.', arity: 2 },
+  TRIGGER_RENUMBER_IMPORTED: { template: 'Wycofanemu dokumentowi (dawniej %) nie nadasz numeru — zostaje bez numeru jako ślad decyzji o fakturze % z KSeF. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 2 },
+  TRIGGER_DIRECTION_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie zmienisz na fakturę zakupową: zostaje w FaktFlow jako ślad decyzji o fakturze % z KSeF.', arity: 2 },
 };
 
 /** Wypełnienie wzorca RAISE od lewej do prawej — niezależne od `fillSqlText` modułu. */
@@ -412,4 +427,47 @@ export function fillExpected(key: string, ...args: string[]): string {
   const parts = entry.template.split('%');
   if (parts.length - 1 !== args.length) throw new Error(`${key}: ${parts.length - 1} znaczników, ${args.length} argumentów`);
   return parts.reduce((out, part, i) => out + part + (i < args.length ? args[i] : ''), '');
+}
+
+// ─── PR C (faktflow-original): kształty wspólnych tabel przypadków ───────────────
+// Kontrakt (commit 1): grupa B wypełnia fabryki, grupa C (test projekcji) i grupa A
+// (R-C6, R-C15 na bazie) je czytają. Tabele budowane LENIWIE — wyłącznie przez
+// wywołanie fabryki, nigdy przy imporcie modułu: budowa projekcji woła
+// `buildOriginalImportProjection`, a import tego pliku przez testy PR B nie może
+// od niej zależeć. Fabryki rzucają, dopóki grupa B ich nie wypełni (pusta tabela
+// dałaby testy zielone bez żadnego przypadku).
+
+/** Wiersz R-C15 / lustra 4.4: `ksef_duplicate_original_offer` = `duplicateOriginalOffer`, `ksef_duplicate_gate_ok` = `originalGateOk`. */
+export interface FaktflowOfferCase {
+  name: string;
+  /** `original_check` (surowy jsonb znacznika). */
+  check: unknown;
+  /** Własna historia z bazy (4.3); `null` = nie policzono. */
+  ownHistoryDb: boolean | null;
+  /** Oczekiwana oferta (`null` = brak oferty — nie `faktflow-original` albo brama nie do użycia). */
+  offer: import('@/lib/ksef/duplicate-check').DuplicateOriginalOffer | null;
+  /** Oczekiwane `originalGateOk(check.importGate)`. */
+  gateOk: boolean;
+}
+
+/** Wiersz R-C6 / lustra 4.8: `ksef_original_import_mismatch` = `originalImportProjectionProblem`. */
+export interface OriginalImportMismatchCase {
+  name: string;
+  offer: import('@/lib/ksef/duplicate-check').DuplicateOriginalImportOffer;
+  /** Zmienia kopię poprawnej projekcji (bazowej z macierzy rundy) w przypadek; zwraca dowolny kształt jak jsonb. */
+  mutate: (projection: Record<string, unknown>) => unknown;
+  /** Nadpisania kontekstu (numer X, NIP firmy, znacznik…). */
+  ctx?: Partial<import('@/lib/ksef/duplicate-original-projection').OriginalImportProblemContext>;
+  /** Pierwszy kod niezgodności; `null` = projekcja poprawna. */
+  expected: import('@/lib/ksef/duplicate-original-projection').OriginalImportProblem | null;
+}
+
+/** Tabela R-C15 (grupa B). */
+export function faktflowOfferCases(): ReadonlyArray<FaktflowOfferCase> {
+  throw new Error('PR C: nie zaimplementowane — faktflowOfferCases (grupa B)');
+}
+
+/** Tabela R-C6 (grupa B). */
+export function originalImportMismatchCases(): ReadonlyArray<OriginalImportMismatchCase> {
+  throw new Error('PR C: nie zaimplementowane — originalImportMismatchCases (grupa B)');
 }

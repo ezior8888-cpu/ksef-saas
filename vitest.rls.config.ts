@@ -15,6 +15,7 @@ export default defineConfig({
       'tests/rls-korekta-jedna-otwarta.test.ts',
       'tests/rls-dane-specjalne.test.ts',
       'tests/rls-decyzja-duplikatu.test.ts',
+      'tests/rls-zapis-oryginalu.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

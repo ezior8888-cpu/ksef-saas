@@ -42,13 +42,235 @@ export type DuplicateDecisionChoice = 'same_sale' | 'other_sale';
 /** Kto zapisał decyzję: klient w panelu albo operator na jego prośbę. */
 export type DuplicateDecisionVia = 'client' | 'operator';
 
+// ─── D-A4-1b-3 PR C (00149): brama pochodzenia, oferta, zapis oryginału ──────
+//
+// Kontrakt PR C (spec v3, 5.2–5.5, 9.3) — wspólny dla polityki (grupa B),
+// bramy, projekcji i runnera (C), klienta (D) i operatora (E). Typy są
+// serializowalne: runner zapisuje bramę w `original_check.importGate`, SQL
+// z 00149 czyta ją w ofercie i blokadzie.
+
+/** Wersja reguł bramy w chwili oceny (`importGate.rules`) — informacyjnie: zmiana bramy to inny `kind` albo inne `problems` (5.3 krok 4). */
+export const ORIGINAL_GATE_RULES = 1;
+
+/**
+ * Problemy bramy pochodzenia w kolejności reguł 5.2 (1 `currency` i 2 `parse`
+ * kończą ocenę; 3–16 zbierane naraz). `importGate.problems` w tej kolejności,
+ * bez powtórzeń.
+ */
+export const ORIGINAL_GATE_PROBLEMS = [
+  'currency',
+  'parse',
+  'form',
+  'kind',
+  'number',
+  'seller',
+  'buyer-id',
+  'no-lines',
+  'gross-prices',
+  'line-fields',
+  'rates',
+  'amounts',
+  'totals',
+  'annotations',
+  'markers',
+  'sale-date',
+] as const;
+export type OriginalGateProblem = (typeof ORIGINAL_GATE_PROBLEMS)[number];
+
+/** Problemy, przy których oryginału nie zapisze nawet operator (tabela 1.1: `not-buildable:<problem>`). */
+export const ORIGINAL_GATE_UNBUILDABLE_PROBLEMS = [
+  'parse',
+  'currency',
+  'kind',
+  'number',
+  'seller',
+  'no-lines',
+] as const satisfies readonly OriginalGateProblem[];
+
+/** Rodzaj trwałego znacznika „sprawdź ponownie” (`recheckNeeded.kind`, `flag_ksef_original_recheck.p_kind`, 4.7b). */
+export const ORIGINAL_RECHECK_KINDS = [
+  'archive-missing',
+  'archive-mismatch',
+  'gate-drift',
+  'import-mismatch',
+  'not-buildable',
+  'import-projection',
+] as const;
+export type OriginalRecheckKind = (typeof ORIGINAL_RECHECK_KINDS)[number];
+
+/** Rodzaj identyfikatora nabywcy w pliku (`nip` → `vat-ue` → `pesel` → `nr-inny` → `brak-id` → `none`). */
+export type OriginalBuyerIdKind = 'nip' | 'vat-ue' | 'pesel' | 'nr-inny' | 'brak-id' | 'none';
+
+/** Korekta faktury istnieje w FaktFlow tylko dla tych nabywców (F44; inaczej `FAKTFLOW.CORRECTION_PERSON`). */
+export const ORIGINAL_CORRECTABLE_BUYER_ID_KINDS = ['nip', 'vat-ue'] as const satisfies readonly OriginalBuyerIdKind[];
+
+export type OriginalPreviewAnnotation = 'cashMethod' | 'splitPayment' | 'reverseCharge' | 'exemption';
+
+/** Pozycja podglądu oryginału (kwoty jako tekst z pliku — bez rzutu). */
+export interface OriginalPreviewLine {
+  ordinal: number;
+  /** Najwyżej 120 znaków. */
+  name: string;
+  quantity: string;
+  unit: string;
+  unitPriceNet: string | null;
+  vatRate: string;
+  gross: string;
+}
+
+/** Podgląd oryginału na znaczniku — strona klienta nie czyta archiwum (INV-13). */
+export interface OriginalPreview {
+  /** P_1 */
+  issueDate: string;
+  /** `fa3ImportContent(parsed).saleDate`; `null` = jak data wystawienia. */
+  saleDate: string | null;
+  /** MM.RRRR z P_1. */
+  period: string;
+  /** Rodzaj identyfikatora nabywcy — korekta istnieje tylko dla `nip` i `vat-ue` (F44, 6.2 CORRECTION_PERSON). */
+  buyerIdKind: OriginalBuyerIdKind;
+  annotations: OriginalPreviewAnnotation[];
+  exemptionBasis: string | null;
+  lineCount: number;
+  /** Najwyżej 20 pierwszych pozycji; nazwa ≤ 120 znaków. */
+  lines: OriginalPreviewLine[];
+  totals: { net: string; vat: string; gross: string };
+}
+
+/** Oddanie decyzji klientowi przez operatora — zapisuje tylko `release_ksef_original_review` (4.7); ten sam kształt co SQL (dowód T6). */
+export interface KsefOriginalRelease {
+  at: string;
+  via: 'operator';
+  actorUserId: string | null;
+  note: string | null;
+}
+
+/** `original_check.importGate` — ocena pliku oryginału przy `faktflow-original` (runner, 5.1). */
+export interface KsefOriginalImportGate {
+  v: 1;
+  /** `ORIGINAL_GATE_RULES` w chwili oceny. */
+  rules: number;
+  /** `review` ⇔ `problems` niepuste (lustro `ksef_duplicate_gate_ok`, 4.4a). */
+  kind: 'importable' | 'review';
+  problems: OriginalGateProblem[];
+  /** `null`, gdy plik nie dał się odczytać (`parse`, `currency`). */
+  preview: OriginalPreview | null;
+  /** Tylko `release_ksef_original_review` (4.7). */
+  release?: KsefOriginalRelease;
+}
+
+/** `original_check.recheckNeeded` — odmowa w chwili zapisu; faktura czeka na nowy werdykt (4.7b, INV-25). */
+export interface KsefOriginalRecheckNeeded {
+  kind: OriginalRecheckKind;
+  at: string;
+}
+
+/**
+ * Oferta dla `faktflow-original` (`ksef_duplicate_original_offer`, 4.4):
+ * `pair` — dwa przyciski, oba zapisują oryginał; `record` — jeden przycisk
+ * (własna historia albo ta sama treść); `released` — operator oddał decyzję,
+ * semantyka PR B bez zapisu; `review-pair` / `review-record` — przegląd operatora.
+ */
+export const DUPLICATE_ORIGINAL_OFFERS = ['pair', 'record', 'released', 'review-pair', 'review-record'] as const;
+export type DuplicateOriginalOffer = (typeof DUPLICATE_ORIGINAL_OFFERS)[number];
+
+/** Oferty trybu `import` (4.6 krok 0); `released` idzie trybem `no-import`. */
+export const DUPLICATE_ORIGINAL_IMPORT_OFFERS = [
+  'pair',
+  'record',
+  'review-pair',
+  'review-record',
+] as const satisfies readonly DuplicateOriginalOffer[];
+export type DuplicateOriginalImportOffer = (typeof DUPLICATE_ORIGINAL_IMPORT_OFFERS)[number];
+
+/**
+ * Tryb decyzji `decide_ksef_duplicate_original`: `import` zapisuje oryginał
+ * jako fakturę sprzedaży K, `no-import` — po oddaniu przez operatora, jak PR B.
+ */
+export const DUPLICATE_DECISION_MODES = ['import', 'no-import'] as const;
+export type DuplicateDecisionMode = (typeof DUPLICATE_DECISION_MODES)[number];
+/** Tryby `ksef_duplicate_decide_core` (4.6): `retire` = 9-argumentowe `decide_ksef_duplicate` z 00148. */
+export type DuplicateDecisionCoreMode = 'retire' | DuplicateDecisionMode;
+
+/** `decision.original` — co klient albo operator widział (4.6 krok 7, T6). */
+export interface KsefDuplicateDecisionOriginal {
+  sha256: string;
+  archivePath: string;
+  sizeBytes: number;
+  acquiredAt: string | null;
+  /** `original_session_reference_number` znacznika. */
+  session: string | null;
+  gateRules: number | null;
+  gateProblems: OriginalGateProblem[];
+  /** Z `importGate.preview`; `null` bez podglądu. */
+  buyerIdKind: OriginalBuyerIdKind | null;
+}
+
+/** `decision.retired.lines[]` — pozycja X przed wycofaniem (kolumny `invoice_line_items`). */
+export interface KsefDuplicateDecisionRetiredLine {
+  ordinal: number;
+  name: string;
+  unit: string;
+  quantity: number;
+  unitPriceNet: number | null;
+  netAmount: number;
+  vatRate: string;
+  vatAmount: number;
+  grossAmount: number;
+}
+
+/** `decision.retired` — kopia treści X przed wycofaniem (D-A4-1b-3-XEDIT, T6). */
+export interface KsefDuplicateDecisionRetired {
+  internalNumber: string | null;
+  issueDate: string | null;
+  saleDate: string | null;
+  buyerNip: string | null;
+  buyerName: string | null;
+  netTotal: number | null;
+  vatTotal: number | null;
+  grossTotal: number | null;
+  currency: string | null;
+  lineCount: number;
+  lines: KsefDuplicateDecisionRetiredLine[];
+}
+
 /** Zapis decyzji w `original_check.decision` (00148) — tylko pola, które czyta aplikacja. */
 export interface KsefDuplicateDecisionRecord {
   choice: DuplicateDecisionChoice;
   via: DuplicateDecisionVia;
   /** Moment decyzji (ISO z bazy, `now()` w RPC). */
   at: string;
+  // PR C (00149) — tylko decyzje `faktflow-original`; decyzje PR B tych kluczy nie mają.
+  mode?: DuplicateDecisionMode;
+  offer?: DuplicateOriginalOffer;
+  actorUserId?: string | null;
+  /** Notatka operatora (`via = 'operator'`); klient — `null`. */
+  note?: string | null;
+  original?: KsefDuplicateDecisionOriginal;
+  retired?: KsefDuplicateDecisionRetired;
+  /** Tylko `mode = 'import'`: id faktury K zapisanej z KSeF. */
+  importedInvoiceId?: string;
+  /** Tylko `mode = 'import'`: numer, który przeszedł z X na K. */
+  retiredInternalNumber?: string;
+  /** Tylko `mode = 'no-import'`: `importGate.release` w chwili decyzji, w całości. */
+  release?: KsefOriginalRelease;
 }
+
+/**
+ * `tags.kind` alarmów Sentry PR C (5.11; `tags.area = 'ksef.duplicate-decision'`,
+ * odcisk `[kind, invoiceId]`). Jedno słowo w kodzie, testach i runbooku.
+ */
+export const KSEF_ORIGINAL_ALARM_KINDS = {
+  provenanceReview: 'ksef-duplicate-provenance-review',
+  recheck: 'ksef-duplicate-recheck',
+  recheckFlag: 'ksef-duplicate-recheck-flag',
+  importRefused: 'ksef-duplicate-import-refused',
+  releaseFailed: 'ksef-duplicate-release-failed',
+  importNoDate: 'ksef-duplicate-import-no-date',
+  importNoSession: 'ksef-duplicate-import-no-session',
+} as const;
+
+/** `fa3_data.import.source` faktury K zapisanej decyzją (4.8 `fa3`, I3K, kontrola sekcja 10). */
+export const ORIGINAL_IMPORT_SOURCE = 'ksef_duplicate_decision';
 
 export interface KsefDuplicateCheck {
   v: 1;
@@ -83,6 +305,14 @@ export interface KsefDuplicateCheck {
    * zapis bez decyzji wraca bez tego klucza (odczyt PR A bez zmian).
    */
   decision?: KsefDuplicateDecisionRecord;
+  /**
+   * PR C (5.1 punkt 4): ocena pliku oryginału — tylko `faktflow-original`
+   * i tylko poprawny kształt (`parseImportGate`); brak klucza = blokada
+   * `recheck-needed` (4.5 krok 11c).
+   */
+  importGate?: KsefOriginalImportGate;
+  /** PR C (4.7b): trwały znacznik „sprawdź ponownie”; nowy werdykt zapisuje znacznik bez niego. */
+  recheckNeeded?: KsefOriginalRecheckNeeded;
 }
 
 /** Powody, przy których sprawdzenie nie pobrało oryginału z powodu chwilowej albo uprawnieniowej awarii. */
@@ -162,6 +392,42 @@ function parseDecision(value: unknown): KsefDuplicateDecisionRecord | null {
   if (typeof at !== 'string' || Number.isNaN(Date.parse(at))) return null;
   return { choice, via, at };
 }
+
+// ─── PR C — sygnatury kontraktu (commit 1); ciała: commit 3 (grupa B) ───────
+/* eslint-disable @typescript-eslint/no-unused-vars -- PR C kontrakt: sygnatury bez ciał, wyłącznik znika z ciałami */
+
+/**
+ * Lustro `ksef_duplicate_gate_ok` (4.4a): `v = 1`, `rules` liczbą, `kind`
+ * `importable`|`review`, `problems` tablicą napisów, `kind = 'importable'` ⇔
+ * `problems` puste. `null`/inny typ → `false`. Nie sprawdza `preview`
+ * ani `release` (tego SQL nie czyta przy poprawności bramy).
+ */
+export function originalGateOk(gate: unknown): boolean {
+  throw new Error('PR C: nie zaimplementowane');
+}
+
+/**
+ * `original_check.importGate` z bazy (5.1 punkt 4): sprawdza to, co czyta
+ * oferta (`originalGateOk`) — zły kształt → `null` (klucz pominięty w
+ * `parseDuplicateCheck`, czyli `recheck-needed`); `preview` (obiekt albo
+ * `null`) zostaje BEZ przebudowy; `release` w całości, gdy ma kształt
+ * `KsefOriginalRelease` (`at` — data), inaczej klucz `release` pominięty.
+ */
+export function parseImportGate(value: unknown): KsefOriginalImportGate | null {
+  throw new Error('PR C: nie zaimplementowane');
+}
+
+/**
+ * Dzień nadania numeru KSeF oryginałowi (RRRR-MM-DD, Europe/Warsaw):
+ * `acquiredAt`, a bez niego data z numeru KSeF (`NIP-RRRRMMDD-…`); `null`,
+ * gdy żadnej nie da się odczytać. Ten sam wiersz „Numer nadany w KSeF” co
+ * `describeDuplicateOriginal` (`{dzien}` w `FAKTFLOW.INTRO_RECORD_*`).
+ */
+export function originalAssignedDay(check: Pick<KsefDuplicateCheck, 'acquiredAt'> | null, ksefNumber: string): string | null {
+  throw new Error('PR C: nie zaimplementowane');
+}
+
+/* eslint-enable @typescript-eslint/no-unused-vars */
 
 export interface DuplicateOriginalView {
   /** Nagłówek panelu na karcie faktury. */

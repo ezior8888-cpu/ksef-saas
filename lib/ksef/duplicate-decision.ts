@@ -17,6 +17,12 @@
  * (DUPLICATE_DECISION_SQL_TEXTS). Migawka do przeglądu:
  * `tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt`.
  *
+ * D-A4-1b-3 PR C (00149, spec v3 5.5): powód `faktflow-original` — oferta
+ * (`duplicateOriginalOffer`, lustro `ksef_duplicate_original_offer`), widok
+ * operatora `review`, warianty powiadomień, teksty `DUPLICATE_DECISION_TEXTS.FAKTFLOW`
+ * i nowe klucze SQL. Kontrakt zamrożony w commicie 1 PR C; ciała funkcji
+ * oznaczonych „PR C: nie zaimplementowane” dochodzą w commicie 3.
+ *
  * CZYSTY moduł (importowany w komponentach klienckich i w workerze): bez bazy,
  * KSeF i Node. Nie importuje `duplicate-verdict.ts` (`node:crypto`).
  */
@@ -33,9 +39,20 @@ import type { KsefEnvironment } from '@/types/ksef';
 import {
   DUPLICATE_ORIGINAL_NOTES,
   type DuplicateDecisionChoice,
+  type DuplicateDecisionMode,
   type DuplicateDecisionVia,
+  type DuplicateOriginalImportOffer,
+  type DuplicateOriginalOffer,
+  type OriginalGateProblem,
+  type OriginalPreview,
 } from './duplicate-check';
 import { isCorrectionHeldForEnv } from './kind-holds';
+
+// PR C (5.5): lustro `ksef_duplicate_gate_ok` i dzień nadania numeru mieszkają
+// w `duplicate-check.ts` (bez cyklu importów: `parseImportGate` używa tego
+// samego sprawdzenia); polityka eksportuje je razem z resztą kontraktu.
+export { originalAssignedDay, originalGateOk } from './duplicate-check';
+export type { DuplicateDecisionMode, DuplicateOriginalImportOffer, DuplicateOriginalOffer } from './duplicate-check';
 
 /**
  * `<SystemInfo>` plików FaktFlow — ta sama wartość co `FAKTFLOW_SYSTEM_INFO`
@@ -46,27 +63,51 @@ const FAKTFLOW_SYSTEM_INFO = 'KSeF SaaS v1.0';
 
 export type DuplicateChoice = DuplicateDecisionChoice;
 export type DuplicateVia = DuplicateDecisionVia;
-/** Powody, dla których klient decyduje w PR B (PR C dopisze `faktflow-original`). */
-export type DuplicateDecisionReason = 'no-own-file' | 'known-number';
+/** Powody, dla których klient decyduje: PR B (`no-own-file`, `known-number`) i PR C (`faktflow-original`, 00149). */
+export type DuplicateDecisionReason = 'no-own-file' | 'known-number' | 'faktflow-original';
 
-/** Kody blokady SQL (2.1.2, w tej kolejności) i odmowy aplikacji (środowisko, rola). */
+/**
+ * Kody `ksef_duplicate_decision_blocker` w kolejności sprawdzeń 00149 (4.5):
+ * 00148 + `known-now`, `cross-tenant`, `recheck-needed` (tylko
+ * `faktflow-original`, przed `own-history`) i `provenance-review` (ostatni).
+ * Dla powodów PR B kody i kolejność jak w 00148 (INV-14).
+ */
+export const DUPLICATE_DECISION_BLOCKER_CODES = [
+  'not-found',
+  'not-pending',
+  'in-ksef',
+  'kind',
+  'billing',
+  'offline',
+  'no-marker',
+  'conflicting-originals',
+  'no-check',
+  'reason',
+  'known-stale',
+  'known-now',
+  'cross-tenant',
+  'recheck-needed',
+  'own-history',
+  'payments',
+  'provenance-review',
+] as const;
+export type DuplicateDecisionBlockerCode = (typeof DUPLICATE_DECISION_BLOCKER_CODES)[number];
+
+/**
+ * Kody odmowy widoku: blokada SQL (`DUPLICATE_DECISION_BLOCKER_CODES`) i odmowy
+ * aplikacji — środowisko, rola, a od PR C: `state-unknown` (odczyt blokady
+ * nieudany), `recheck` (odmowa w chwili zapisu z tekstem `FAKTFLOW.RECHECK`
+ * i znacznikiem `recheckNeeded`), `not-buildable` (operator w przeglądzie —
+ * pliku nie da się zapisać).
+ */
 export type DuplicateDecisionRefusal =
-  | 'not-found'
-  | 'not-pending'
-  | 'in-ksef'
-  | 'kind'
-  | 'billing'
-  | 'offline'
-  | 'no-marker'
-  | 'conflicting-originals'
-  | 'no-check'
-  | 'reason'
-  | 'known-stale'
-  | 'own-history'
-  | 'payments'
+  | DuplicateDecisionBlockerCode
   | 'env-unknown'
   | 'env'
-  | 'role';
+  | 'role'
+  | 'state-unknown'
+  | 'recheck'
+  | 'not-buildable';
 
 // ─── Fakty (kształt wierszy ładowarki `loadDuplicateDecisionFacts`) ──────────
 
@@ -91,6 +132,8 @@ export interface DuplicateDecisionInvoiceRow {
   buyer_data: unknown;
   gross_total: number | string | null;
   currency: string | null;
+  /** PR C (5.4, 5.5): wiersz „Data sprzedaży” przy `faktflow-original` (`NULL` = jak data wystawienia). */
+  sale_date: string | null;
 }
 
 /** Wpis `ksef_submissions` (wszystkie stany) z surowym `original_check` (jsonb). */
@@ -120,6 +163,14 @@ export interface DuplicateDecisionFacts {
   invoice: DuplicateDecisionInvoiceRow | null;
   submissions: DuplicateDecisionSubmissionRow[];
   knownInvoice: DuplicateDecisionKnownInvoice | null;
+  /**
+   * PR C (5.4): kod `ksef_duplicate_decision_blocker` odczytany przy znaczniku
+   * `faktflow-original` (sesja: `ksef_duplicate_decision_blocker_for_session`,
+   * operator i worker: klucz serwisowy) — `null` = faktura czeka na decyzję;
+   * `undefined` = nie odczytano (polityka odmawia `state-unknown` dla
+   * `faktflow-original`; powody PR B go nie potrzebują).
+   */
+  sqlBlocker?: string | null;
 }
 
 // ─── Widoki ──────────────────────────────────────────────────────────────
@@ -154,6 +205,53 @@ export interface DuplicateRefusalDetail {
   paidAmount: number | null;
   /** `{Y}` — numer dokumentu, który ma K w FaktFlow (`bez numeru`, gdy nieznany); `null` poza known-number. */
   knownInvoiceNumber: string | null;
+  /** PR C: `original_check.recheckNeeded.kind` przy blokadzie `recheck-needed` (tekst operatora `recheckPending`); opcjonalne dla PR B. */
+  recheckKind?: import('./duplicate-check').OriginalRecheckKind | null;
+  /** PR C: `original_check.recheckNeeded.at` (ISO); opcjonalne dla PR B. */
+  recheckAt?: string | null;
+}
+
+/** Oferta w widoku `decidable` (5.5); `null` = powód PR B. */
+export type DuplicateDecidableOffer = Extract<DuplicateOriginalOffer, 'pair' | 'record' | 'released'>;
+/** Oferta w widoku operatora `review` (przegląd pliku, I5R). */
+export type DuplicateReviewOffer = Extract<DuplicateOriginalOffer, 'review-pair' | 'review-record'>;
+
+/** Dane oryginału `faktflow-original` w widoku — z `importGate.preview`, bez archiwum i klucza serwisowego. */
+export interface DuplicateOriginalViewData {
+  preview: OriginalPreview | null;
+  /** `originalAssignedDay(check, K)` — `{dzien}` w `FAKTFLOW.INTRO_RECORD_*`; `null` nieznany. */
+  assignedDay: string | null;
+  /** `preview.period` wcześniejszy niż bieżący miesiąc (Europe/Warsaw, `input.now`) — zdanie `PAST_PERIOD`. */
+  pastPeriod: boolean;
+}
+
+/**
+ * Widok operatora w przeglądzie pliku (`provenance-review`, 5.5): zapis
+ * oryginału („Zapisz fakturę z KSeF w FaktFlow”) i — tylko przy `review-pair` —
+ * oddanie decyzji klientowi. Zapisywalność (`recordable`) dokłada strona
+ * operatora z suchego przebiegu `prepareOriginalImport`; polityka jest czysta.
+ * Klient tego widoku nie dostaje (odmowa `provenance-review`).
+ */
+export interface DuplicateDecisionReviewView {
+  kind: 'review';
+  offer: DuplicateReviewOffer;
+  problems: OriginalGateProblem[];
+  invoiceNumber: string | null;
+  originalKsefNumber: string;
+  originalSha256: string;
+  comparison: ComparisonRow[];
+  original: DuplicateOriginalViewData | null;
+  /** `review-record` → `['same_sale']`. */
+  choices: readonly DuplicateChoice[];
+  needsConfirmation: Record<DuplicateChoice, boolean>;
+  sameContent: boolean | null;
+  markedDifference: boolean;
+  heldCorrections: boolean;
+  program: 'FaktFlow';
+  /** `offer === 'review-pair'` — „Oddaj decyzję klientowi” (INV-19, N4). */
+  releasable: boolean;
+  /** `preview.buyerIdKind ∉ ORIGINAL_CORRECTABLE_BUYER_ID_KINDS` — zdanie `FAKTFLOW.CORRECTION_PERSON`. */
+  correctionForPerson: boolean;
 }
 
 export type DuplicateDecisionView =
@@ -181,6 +279,18 @@ export type DuplicateDecisionView =
       knownInvoice: { id: string; internalNumber: string | null } | null;
       /** Korekty do KSeF wstrzymane w tym środowisku (zdanie w dialogu „inna sprzedaż”). */
       heldCorrections: boolean;
+      // ── PR C (5.5) — opcjonalne w kontrakcie, żeby widoki i fikstury PR B
+      // kompilowały się bez zmian; `duplicateDecisionOptions` ustawia je zawsze
+      // (powody PR B: `offer` i `mode` null, oba wybory, `original` null).
+      /** `pair` / `record` / `released`; `null` = powód PR B. */
+      offer?: DuplicateDecidableOffer | null;
+      /** `pair`/`record` → `import`, `released` → `no-import`; `null` = PR B (9-argumentowe RPC). */
+      mode?: DuplicateDecisionMode | null;
+      /** Wybory do pokazania: `record` → `['same_sale']`, inaczej oba. */
+      choices?: readonly DuplicateChoice[];
+      original?: DuplicateOriginalViewData | null;
+      /** `preview.buyerIdKind ∉ ORIGINAL_CORRECTABLE_BUYER_ID_KINDS` — zdanie `FAKTFLOW.CORRECTION_PERSON`. */
+      correctionForPerson?: boolean;
     }
   | {
       kind: 'refused';
@@ -189,7 +299,38 @@ export type DuplicateDecisionView =
       message: string | null;
       detail?: DuplicateRefusalDetail;
     }
-  | { kind: 'decided'; choice: DuplicateChoice; via: DuplicateVia; at: string; originalKsefNumber: string | null };
+  | {
+      kind: 'decided';
+      choice: DuplicateChoice;
+      via: DuplicateVia;
+      at: string;
+      originalKsefNumber: string | null;
+      // ── PR C (5.5) — z `decision` znacznika; brak przy decyzjach PR B.
+      mode?: DuplicateDecisionMode | null;
+      offer?: DuplicateOriginalOffer | null;
+      /** Faktura K zapisana z KSeF (`mode = 'import'`). */
+      importedInvoiceId?: string | null;
+      /** Numer, który przeszedł z X na K (`mode = 'import'`). */
+      retiredInternalNumber?: string | null;
+    }
+  | DuplicateDecisionReviewView;
+
+/** Wariant powiadomienia klienta (e-mail, push, przypomnienie operatora) — z tej samej oferty co panel (INV-24). */
+export type DuplicateNoticeVariant = 'pair' | 'record' | 'released' | 'review';
+
+/** Etykieta decyzji na karcie K, w `ALREADY_IMPORTED` i toastach (`FAKTFLOW.IMPORTED_CARD_CHOICE`). */
+export type DuplicateDecisionLabel = DuplicateChoice | 'record';
+
+/** Pochodzenie faktury K zapisanej decyzją (`fa3_data.import`, 6.5) — tylko to trafia do komponentu karty K. */
+export interface ImportedOriginalProvenance {
+  /** `fa3_data.import.decision.at`. */
+  decidedAt: string;
+  choice: DuplicateChoice;
+  offer: DuplicateOriginalImportOffer;
+  via: DuplicateVia;
+  retiredInvoiceId: string;
+  retiredInternalNumber: string;
+}
 
 export interface RetiredDraftView {
   title: string;
@@ -204,6 +345,12 @@ export interface RetiredDraftView {
   deletable: boolean;
   /** Odmowa usunięcia (zwykła, zaliczka) — tekst wyzwalacza `c_guard_ksef_retired_draft_delete`. */
   deleteRefusal: string | null;
+  /**
+   * PR C (5.5, 6.4): faktura K z KSeF, na którą przeszedł numer dokumentu
+   * (decyzja z `importedInvoiceId`); `internalNumber` = dawny numer X.
+   * Opcjonalne w kontrakcie — banery PR B go nie ustawiają.
+   */
+  imported?: { id: string; internalNumber: string } | null;
 }
 
 // ─── Teksty SQL (00148, 2.11.A) ──────────────────────────────────────────────
@@ -234,7 +381,20 @@ export type DuplicateDecisionSqlTextKey =
   | 'TRIGGER_DELETE'
   | 'TRIGGER_RENUMBER'
   | 'TRIGGER_DIRECTION'
-  | 'CATALOG_NUMBER_TAKEN';
+  | 'CATALOG_NUMBER_TAKEN'
+  // PR C (00149, spec v3 6.3) — lista prawnika.
+  | 'known-now'
+  | 'cross-tenant'
+  | 'recheck-needed'
+  | 'provenance-review'
+  | 'CHOICE'
+  | 'IMPORT_MISMATCH'
+  | 'ALREADY_IMPORTED'
+  | 'TRIGGER_SAME_IMPORTED'
+  | 'TRIGGER_OTHER_IMPORTED'
+  | 'TRIGGER_DELETE_IMPORTED'
+  | 'TRIGGER_RENUMBER_IMPORTED'
+  | 'TRIGGER_DIRECTION_IMPORTED';
 
 export interface DuplicateDecisionSqlText {
   /** Wzorzec `RAISE EXCEPTION '<wzorzec>', args…` — `%` to znacznik RAISE (C1). */
@@ -280,6 +440,22 @@ export const DUPLICATE_DECISION_SQL_TEXTS: Readonly<Record<DuplicateDecisionSqlT
   TRIGGER_RENUMBER: { template: 'Numeru wycofanego dokumentu % nie zmienisz: ten numer ma w KSeF już %, a dokument zostaje z nim w FaktFlow, żeby numer nie został podpowiedziany ponownie. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 2 },
   TRIGGER_DIRECTION: { template: 'Wycofanego dokumentu % nie zmienisz na fakturę zakupową: zajmuje numer, który w KSeF ma już %, i zostaje w FaktFlow jako faktura sprzedaży, żeby tego numeru nie dostała inna faktura sprzedaży.', arity: 2 },
   CATALOG_NUMBER_TAKEN: { template: 'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie. Tego dokumentu nie wyślesz do KSeF. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.', arity: 0 },
+  // ── PR C (00149, spec v3 6.3; lista prawnika). Argumenty: known-now (K, nr); cross-tenant (nr, nr);
+  // recheck-needed, provenance-review, CHOICE (nr); IMPORT_MISMATCH (K, nr); ALREADY_IMPORTED (nr, etykieta
+  // decyzji — „zapis faktury z KSeF” przy ofercie record/review-record); TRIGGER_SAME_IMPORTED (nrOld, K, nrOld);
+  // TRIGGER_OTHER_IMPORTED (nrOld, nrOld, K); TRIGGER_DELETE/RENUMBER/DIRECTION_IMPORTED (nrOld, K).
+  'known-now': { template: 'Faktura % z KSeF jest już zapisana w FaktFlow przy innym dokumencie — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl. Nie wystawiaj dokumentu % ponownie.', arity: 2 },
+  'cross-tenant': { template: 'Faktury z KSeF o numerze % nie możemy zapisać przy tym dokumencie — wyjaśniamy to i damy znać. Nie wystawiaj dokumentu % ponownie; pytania: pomoc@faktflow.pl.', arity: 2 },
+  'recheck-needed': { template: 'Fakturę z KSeF dla dokumentu % sprawdzamy jeszcze raz — automatycznie, zwykle w ciągu 2 dni; potem decyzję zapiszesz na tej karcie. Nie wystawiaj dokumentu ponownie; jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl.', arity: 1 },
+  'provenance-review': { template: 'Sprawdzamy fakturę z KSeF dla dokumentu % — nie wystawiaj go ponownie, damy znać. Pytania: pomoc@faktflow.pl.', arity: 1 },
+  CHOICE: { template: 'Dla dokumentu % możliwy jest tylko zapis faktury z KSeF jako tej samej sprzedaży — odśwież stronę.', arity: 1 },
+  IMPORT_MISMATCH: { template: 'Faktury % z KSeF nie zapiszemy przy dokumencie %: numer faktury albo NIP sprzedawcy w KSeF nie zgadza się z tym dokumentem albo z danymi Twojej firmy. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.', arity: 2 },
+  ALREADY_IMPORTED: { template: 'Decyzja dla dokumentu % jest już zapisana („%”) — co zrobić, jeśli była błędna, piszemy na karcie wycofanego dokumentu.', arity: 2 },
+  TRIGGER_SAME_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: to ta sama sprzedaż co faktura % z KSeF, zapisana w FaktFlow pod numerem %.', arity: 3 },
+  TRIGGER_OTHER_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: numer % ma faktura % z KSeF, zapisana w FaktFlow. Tę sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 3 },
+  TRIGGER_DELETE_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie usuniesz: zostaje w FaktFlow jako ślad decyzji o fakturze % z KSeF, która ma teraz jego numer. Jeśli musisz go usunąć, napisz do nas: pomoc@faktflow.pl.', arity: 2 },
+  TRIGGER_RENUMBER_IMPORTED: { template: 'Wycofanemu dokumentowi (dawniej %) nie nadasz numeru — zostaje bez numeru jako ślad decyzji o fakturze % z KSeF. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 2 },
+  TRIGGER_DIRECTION_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie zmienisz na fakturę zakupową: zostaje w FaktFlow jako ślad decyzji o fakturze % z KSeF.', arity: 2 },
 };
 
 /**
@@ -502,6 +678,118 @@ export const DUPLICATE_DECISION_TEXTS = {
     PUSH_TITLE: (nr: string) => `Faktura ${nr} czeka na Twoją decyzję`,
     PUSH_BODY: 'KSeF ma już fakturę o tym numerze — porównaj dane i zdecyduj.',
   },
+
+  // ── PR C (00149): oryginał z oznaczeniem FaktFlow (`faktflow-original`) — spec v3 6.2, słowo w słowo;
+  // lista prawnika przed KSeF PROD (6.7). Znaczniki: `{nr}` dokument, `{k}` numer KSeF oryginału,
+  // `{nrK}` numer faktury z KSeF (`summary.number ?? nr`), `{nrOld}` dawny numer wycofanego dokumentu,
+  // `{okres}` = `preview.period`, `{dzien}` = `originalAssignedDay`, `{data}` = formatWarsawDateTime(decision.at),
+  // `{via}` = `BANNER_VIA_OPERATOR` przy operatorze. Teksty PR B używane bez zmian — 6.2, akapit końcowy.
+  FAKTFLOW: {
+    // Panel — para
+    INTRO_PAIR: (nr: string, k: string) =>
+      `KSeF nie przyjął dokumentu ${nr}, bo ma już fakturę Twojej firmy o tym numerze (numer KSeF ${k}) z oznaczeniem FaktFlow. Faktura w KSeF jest wiążąca — nie da się jej usunąć ani zastąpić. Porównaj dane i zdecyduj, czym jest ten dokument.`,
+    NOT_RECORDED: 'W FaktFlow nie ma zapisu tej faktury — najpewniej jej dokument usunięto, zanim FaktFlow zapisał potwierdzenie z KSeF.',
+    LEDGER: (k: string, okres: string) =>
+      `Do czasu decyzji FaktFlow nie ujmuje faktury ${k} w JPK ani w KPiR — nie składaj z FaktFlow JPK_V7 za ${okres}, dopóki jej nie zapiszesz. Po decyzji zapiszemy ją w FaktFlow z danymi z KSeF i trafi do JPK i KPiR za ${okres}.`,
+    // Panel — jeden przycisk
+    INTRO_RECORD_OWN: (nr: string, k: string, dzien: string | null, nrK: string) =>
+      `W KSeF jest wcześniejsza wersja dokumentu ${nr}, wysłana z FaktFlow (numer KSeF ${k}${dzien ? `, numer nadany ${dzien}` : ''}). To ona jest wystawioną fakturą i obowiązują jej dane — faktury w KSeF nie da się usunąć ani zastąpić. Zapiszemy ją w FaktFlow jako fakturę ${nrK}, a ten dokument wycofamy bez numeru; zmiany wprowadzisz korektą faktury ${nrK}.`,
+    INTRO_RECORD_SAME: (nr: string, k: string, dzien: string | null) =>
+      `W KSeF jest już faktura ${nr} z oznaczeniem FaktFlow (numer KSeF ${k}${dzien ? `, numer nadany ${dzien}` : ''}) o tej samej treści co ten dokument — różni się tylko nagłówek pliku. Najpewniej to wcześniejsza wysyłka, której wyniku FaktFlow nie zapisał.`,
+    ROW_SALE_DATE: 'Data sprzedaży',
+    ANNOTATIONS: (lista: string) => `Oznaczenia faktury w KSeF: ${lista}.`,
+    ANNOTATION_LABELS: {
+      cashMethod: 'metoda kasowa',
+      splitPayment: 'mechanizm podzielonej płatności',
+      reverseCharge: 'odwrotne obciążenie',
+      exemption: (podstawa: string) => `zwolnienie z VAT (${podstawa})`,
+    },
+    LINES_TOGGLE: (n: number) => `Pozycje faktury w KSeF (${n})`,
+    LINES_MORE: (m: number) => `…i jeszcze ${m} — pełną treść ma plik faktury w KSeF.`,
+    LINES_COLUMNS: { name: 'Nazwa', quantity: 'Ilość', unitPriceNet: 'Cena netto', vatRate: 'Stawka VAT', gross: 'Brutto' },
+    BUTTON_RECORD: 'Zapisz fakturę z KSeF w FaktFlow',
+    // Dialogi
+    DIALOG_SAME: {
+      LINE_1: (nrK: string, k: string, okres: string) =>
+        `Fakturą tej sprzedaży jest faktura ${nrK} z KSeF (numer KSeF ${k}). Zapiszemy ją w FaktFlow z danymi z KSeF — trafi do JPK i KPiR za ${okres}; w FaktFlow ją rozliczasz i korygujesz.`,
+      LINE_2: (nr: string) =>
+        `Dokument ${nr} wycofamy: zostanie w FaktFlow jako szkic bez numeru, którego nie wyślesz do KSeF ani nie usuniesz. Numer ${nr} przejdzie na fakturę z KSeF.`,
+    },
+    DIALOG_OTHER: {
+      LINE_1: (nrK: string, k: string, okres: string) =>
+        `Faktura ${nrK} z KSeF (numer KSeF ${k}) dokumentuje inną sprzedaż i jest wystawiona — obowiązuje, bo jest w KSeF. Zapiszemy ją w FaktFlow z danymi z KSeF — trafi do JPK i KPiR za ${okres}.`,
+      LINE_2: (nr: string) =>
+        `Dokument ${nr} wycofamy: zostanie w FaktFlow jako szkic bez numeru, którego nie wyślesz do KSeF ani nie usuniesz. Sprzedaż z tego dokumentu wystawisz jako nową fakturę — z nowym numerem i dzisiejszą datą.`,
+      ALREADY_REISSUED: 'Jeśli sprzedaż z tego dokumentu jest już wystawiona ponownie pod innym numerem, nie wystawiaj kolejnej faktury.',
+      ZERO: (nrK: string) => `Jeśli sprzedaż z faktury ${nrK} nie doszła do skutku, fakturę ${nrK} trzeba skorygować do zera.`,
+    },
+    DIALOG_RECORD: {
+      TITLE: (nrK: string) => `Zapisać fakturę ${nrK} z KSeF w FaktFlow?`,
+      LINE_1: (nrK: string, okres: string) =>
+        `Zapiszemy w FaktFlow fakturę ${nrK} z danymi z KSeF — trafi do JPK i KPiR za ${okres}. To ona jest fakturą tej sprzedaży.`,
+      LINE_2: (nr: string) =>
+        `Dokument ${nr} wycofamy: zostanie w FaktFlow jako szkic bez numeru, którego nie wyślesz do KSeF ani nie usuniesz. Numer ${nr} przejdzie na fakturę z KSeF.`,
+      LINE_DIFF: (nrK: string) => `Dane z KSeF różnią się od tego dokumentu. Obowiązują dane z KSeF — zmienisz je tylko korektą faktury ${nrK}.`,
+      CHECKBOX: (k: string, nr: string) => `Rozumiem skutki: obowiązują dane faktury ${k} z KSeF, nie dane dokumentu ${nr}.`,
+      CONFIRM_BUTTON: 'Zapisz fakturę z KSeF',
+    },
+    REISSUED: 'Jeśli sprzedaż z tego dokumentu jest już wystawiona ponownie pod innym numerem, są teraz dwie faktury tej samej sprzedaży — fakturę wystawioną ponownie trzeba skorygować do zera.',
+    CORRECTION_PERSON: ' Korekty faktury dla nabywcy bez NIP i bez numeru VAT-UE FaktFlow jeszcze nie wystawia — jeśli trzeba ją skorygować, napisz do nas: pomoc@faktflow.pl.',
+    SALE_DATE_AS_ISSUE: 'jak data wystawienia',
+    DATA_FROM_KSEF: (nrK: string) => `Obowiązują dane z KSeF. Jeśli trzeba je zmienić, wystaw korektę faktury ${nrK}.`,
+    HELD_CORRECTIONS: ' Korekty do produkcyjnego KSeF są teraz wstrzymane przez FaktFlow — napisz do nas: pomoc@faktflow.pl.',
+    BUYER_DIFFERS: (nrK: string) =>
+      `Nabywca w KSeF jest inny niż w tym dokumencie. Jeśli tę sprzedaż dostał inny nabywca, fakturę ${nrK} trzeba skorygować do zera, a sprzedaż wystawić jako nową fakturę z nowym numerem.`,
+    PAST_PERIOD: (okres: string) =>
+      `Jeśli JPK_V7 za ${okres} jest już złożony albo KPiR za ten miesiąc zamknięta bez tej faktury, sprawdź z księgową, czy trzeba je skorygować.`,
+    TOAST_SAME: (nrK: string) => `Zapisano: ta sama sprzedaż. Faktura ${nrK} z KSeF jest w FaktFlow.`,
+    TOAST_OTHER: (nrK: string) => `Zapisano: inna sprzedaż. Faktura ${nrK} z KSeF jest w FaktFlow — sprzedaż z wycofanego dokumentu wystaw jako nową fakturę z nowym numerem, jeśli nie jest już wystawiona.`,
+    TOAST_RECORD: (nrK: string) => `Zapisano fakturę ${nrK} z KSeF w FaktFlow.`,
+    // Po oddaniu przez operatora (FO-ODDANA)
+    RELEASED_NOTE: 'Plik tej faktury w KSeF ma oznaczenie FaktFlow, ale sprawdziliśmy go: nie powstał w FaktFlow. Rozstrzygnij ją jak fakturę z innego programu — FaktFlow jej nie zapisze.',
+    PROGRAM_RELEASED: 'oznaczenie FaktFlow — plik nie powstał w FaktFlow',
+    // Odmowy w akcji i na stronie
+    // Odmowa w chwili zapisu (archiwum, inna ocena pliku, niezgodność projekcji) — zawsze ze znacznikiem recheckNeeded (INV-25)
+    RECHECK: (nr: string) =>
+      `Fakturę z KSeF dla dokumentu ${nr} musimy sprawdzić jeszcze raz — tej decyzji nie zapiszesz teraz. Sprawdzimy ją automatycznie, zwykle w ciągu 2 dni; potem decyzję zapiszesz na karcie dokumentu. Nie wystawiaj go ponownie; jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl.`,
+    READ_FAILED: (nr: string) =>
+      `Nie udało się teraz sprawdzić faktury z KSeF dla dokumentu ${nr} — odśwież stronę za chwilę. Nie wystawiaj go ponownie.`,
+    // Szkic wycofany po zapisie (karta X)
+    BANNER_TITLE: (nrOld: string) => `Dokument wycofany — numer ${nrOld} ma teraz faktura z KSeF`,
+    BANNER_SAME: (data: string, via: string, nrK: string, k: string) =>
+      `Zapisano ${data}${via}: to ta sama sprzedaż co faktura ${nrK} z KSeF (numer KSeF ${k}). Zapisaliśmy ją w FaktFlow — przy niej zapisujesz wpłaty i wystawiasz korekty. Tego dokumentu nie wyślesz do KSeF ani nie usuniesz. Jeśli sprzedaż z tego dokumentu jest jednak inna, wystaw ją jako nową fakturę z nowym numerem — chyba że jest już wystawiona.`,
+    BANNER_OTHER: (data: string, via: string, nrK: string, k: string) =>
+      `Zapisano ${data}${via}: to inna sprzedaż niż faktura ${nrK} z KSeF (numer KSeF ${k}) — zapisaliśmy ją w FaktFlow jako osobną fakturę. Sprzedaż z tego dokumentu wystaw jako nową fakturę — z nowym numerem i dzisiejszą datą; jeśli jest już wystawiona ponownie pod innym numerem, nie wystawiaj kolejnej. Tego dokumentu nie wyślesz do KSeF ani nie usuniesz. Jeśli to jednak ta sama sprzedaż: nie wystawiaj nowej faktury — fakturą tej sprzedaży jest faktura ${nrK}; jeśli nową już wystawiono, trzeba ją skorygować do zera.`,
+    BANNER_RECORD: (data: string, via: string, nrK: string, k: string) =>
+      `Zapisano ${data}${via}: fakturą tej sprzedaży jest faktura ${nrK} z KSeF (numer KSeF ${k}), zapisana w FaktFlow — przy niej zapisujesz wpłaty i wystawiasz korekty. Tego dokumentu nie wyślesz do KSeF ani nie usuniesz. Jeśli sprzedaż z tego dokumentu jest jednak inna, wystaw ją jako nową fakturę z nowym numerem — chyba że jest już wystawiona.`,
+    IMPORTED_LINK: (nrK: string) => `Zobacz fakturę ${nrK}`,
+    RETIRED_DOCUMENT_REFUSAL: (nrOld: string) =>
+      `Wycofany dokument (dawniej ${nrOld}) nie jest fakturą — numer ${nrOld} ma teraz faktura z KSeF zapisana w FaktFlow. Nie pobierzesz PDF tego dokumentu ani nie wyślesz go e-mailem; pobierz PDF faktury ${nrOld}.`,
+    RETIRED_PDF_LINK: (nrOld: string) => `Pobierz PDF faktury ${nrOld}`,
+    // Karta faktury z KSeF (K)
+    IMPORTED_CARD: (data: string, via: string, nrOld: string, wybor: string) =>
+      `Faktura zapisana z KSeF ${data}${via}: KSeF nie przyjął dokumentu ${nrOld} z FaktFlow, bo miał już fakturę o tym numerze (${wybor}).`,
+    IMPORTED_CARD_CHOICE: { same_sale: 'ta sama sprzedaż', other_sale: 'inna sprzedaż', record: 'zapis faktury z KSeF' },
+    IMPORTED_CARD_RETIRED_LINK: 'Zobacz wycofany dokument',
+    IMPORTED_CARD_REMINDERS: 'Przypomnienia o płatności nie obejmują faktur zapisanych z KSeF.',
+    IMPORTED_CARD_PAYMENTS: 'Jeśli nabywca już zapłacił za tę fakturę, zapisz wpłatę przy niej.',
+    // Powiadomienia
+    NOTICE_BODY_RECORD: (nr: string, k: string) =>
+      `KSeF nie przyjął faktury ${nr}, bo ma już jej wersję z oznaczeniem FaktFlow (numer KSeF ${k}). Otwórz fakturę w FaktFlow i zapisz fakturę z KSeF — do tego czasu nie trafi ona do JPK ani KPiR. Nie wystawiaj jej ponownie. Pytania: pomoc@faktflow.pl.`,
+    NOTICE_PUSH_BODY_RECORD: 'KSeF ma już tę fakturę z oznaczeniem FaktFlow — zapisz ją w FaktFlow.',
+    NOTICE_BODY_RELEASED: (nr: string, k: string) =>
+      `Sprawdziliśmy fakturę z KSeF (numer KSeF ${k}), przez którą KSeF nie przyjął dokumentu ${nr}: ma oznaczenie FaktFlow, ale nie powstała w FaktFlow. Otwórz dokument w FaktFlow, porównaj dane i zdecyduj, czy to ta sama sprzedaż, czy inna — FaktFlow tej faktury nie zapisze. Do tego czasu nie wystawiaj dokumentu ponownie. Pytania: pomoc@faktflow.pl.`,
+    NOTICE_REVIEW_SUBJECT: (nr: string) => `Faktura ${nr}: sprawdzamy fakturę z KSeF`,
+    NOTICE_BODY_REVIEW: (nr: string, k: string) =>
+      `KSeF nie przyjął faktury ${nr}, bo ma już fakturę Twojej firmy o tym numerze (numer KSeF ${k}). Sprawdzamy fakturę z KSeF — nie wystawiaj jej ponownie, damy znać. Pytania: pomoc@faktflow.pl.`,
+    NOTICE_PUSH_TITLE_REVIEW: (nr: string) => `Faktura ${nr}: sprawdzamy fakturę z KSeF`,
+    NOTICE_PUSH_BODY_REVIEW: 'Nie wystawiaj jej ponownie — damy znać.',
+    // last_error werdyktu (runner, 5.1)
+    LAST_ERROR: (k: string) =>
+      `KSeF ma już fakturę o tym numerze z oznaczeniem FaktFlow (numer KSeF ${k}) — szczegóły są na karcie faktury; nie wystawiaj jej ponownie.`,
+    LAST_ERROR_REVIEW: (k: string) =>
+      `KSeF ma już fakturę o tym numerze z oznaczeniem FaktFlow (numer KSeF ${k}). Sprawdzamy fakturę z KSeF — nie wystawiaj jej ponownie, damy znać.`,
+  },
 } as const;
 
 // ─── Polityka jsonb (lustro `ksef_duplicate_check_allows`, 2.1.1) ────────────
@@ -530,6 +818,69 @@ export function duplicateCheckAllows(raw: unknown, choice: DuplicateChoice | nul
   }
   return true;
 }
+
+// ─── PR C — sygnatury kontraktu (commit 1); ciała: commit 3 (grupa B) ───────
+// `duplicateCheckAllows` dostaje gałąź `faktflow-original` (lustro 4.2) razem z ciałami.
+/* eslint-disable @typescript-eslint/no-unused-vars -- PR C kontrakt: sygnatury bez ciał, wyłącznik znika z ciałami */
+
+/**
+ * Lustro kroku 11c blokady (`recheck-needed`, 4.5) na surowym jsonb znacznika
+ * `faktflow-original`: `!originalGateOk(check.importGate) || check ? 'recheckNeeded'`.
+ * TS liczy go sam z JSON (R-C16 porównuje z SQL).
+ */
+export function originalRecheckNeeded(check: unknown): boolean {
+  throw new Error('PR C: nie zaimplementowane');
+}
+
+/**
+ * Lustro `ksef_duplicate_own_history` (4.3) — predykat kroku 12 z 00148:
+ * któraś próba faktury ma sesję oryginału (`marker.original_session_reference_number`)
+ * albo `lower(request_payload_hash)` = SHA-256 oryginału (`marker.original_check.sha256`).
+ */
+export function ownHistoryInSubmissions(
+  submissions: ReadonlyArray<Pick<DuplicateDecisionSubmissionRow, 'session_reference_number' | 'request_payload_hash'>>,
+  marker: Pick<DuplicateDecisionSubmissionRow, 'original_session_reference_number' | 'original_check'>,
+): boolean {
+  throw new Error('PR C: nie zaimplementowane');
+}
+
+/**
+ * Lustro `ksef_duplicate_original_offer` (4.4) — JEDNA funkcja oferty dla
+ * panelu, powiadomień i operatora. `null` poza `faktflow-original` albo gdy
+ * `duplicateCheckAllows(check, null)` odmawia. `ownHistoryDb` `null` =
+ * nieznane = tylko zapis (fail-closed). Porównania `=== true` (NULL w
+ * `sameContentExceptHeader` nie daje `record`).
+ */
+export function duplicateOriginalOffer(check: unknown, ownHistoryDb: boolean | null): DuplicateOriginalOffer | null {
+  throw new Error('PR C: nie zaimplementowane');
+}
+
+/**
+ * Wariant e-maila, pusha i przypomnienia operatora (5.5, INV-24): `review` przy
+ * blokadzie `provenance-review`; przy blokadzie NULL — `record` / `released` /
+ * `pair` z `duplicateOriginalOffer` (powody PR B → `pair`); inna blokada →
+ * `null`. `ownHistoryDb` bez `null` — wołający liczy historię
+ * (`ownHistoryInSubmissions`) z tych samych kolumn co panel.
+ */
+export function duplicateNoticeVariant(check: unknown, ownHistoryDb: boolean, blocker: string | null): DuplicateNoticeVariant | null {
+  throw new Error('PR C: nie zaimplementowane');
+}
+
+/** Etykieta decyzji (karta K, `ALREADY_IMPORTED`, toasty): oferta `record`/`review-record` → `record`, inaczej wybór. */
+export function decisionLabel(offer: DuplicateOriginalOffer | null | undefined, choice: DuplicateChoice): DuplicateDecisionLabel {
+  throw new Error('PR C: nie zaimplementowane');
+}
+
+/**
+ * Pochodzenie faktury K (`fa3_data.import`, 6.5): tylko `source =
+ * 'ksef_duplicate_decision'` (`ORIGINAL_IMPORT_SOURCE`) i poprawne `decision`
+ * (wybór, oferta trybu import, `via`, data, X); inaczej `null`.
+ */
+export function importedOriginalProvenance(fa3Data: unknown): ImportedOriginalProvenance | null {
+  throw new Error('PR C: nie zaimplementowane');
+}
+
+/* eslint-enable @typescript-eslint/no-unused-vars */
 
 // ─── Wybór wpisów (te same porządki co SQL) ──────────────────────────────────
 

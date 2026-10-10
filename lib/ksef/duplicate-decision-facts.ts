@@ -31,7 +31,7 @@ import {
 
 /** Kolumny faktury, które czyta polityka decyzji (strona dokłada brakujące do swojego odczytu). */
 export const DUPLICATE_DECISION_INVOICE_COLUMNS =
-  'id, tenant_id, internal_number, direction, ksef_status, last_error_code, ksef_number, invoice_kind, stripe_invoice_id, offline_idempotency_key, offline_qr_offline, offline_qr_certyfikat, paid_amount, issue_date, buyer_nip, buyer_data, gross_total, currency';
+  'id, tenant_id, internal_number, direction, ksef_status, last_error_code, ksef_number, invoice_kind, stripe_invoice_id, offline_idempotency_key, offline_qr_offline, offline_qr_certyfikat, paid_amount, issue_date, sale_date, buyer_nip, buyer_data, gross_total, currency';
 
 /** Kolumny wpisów `ksef_submissions` faktury — te same wiersze zasilają baner szkicu wycofanego. */
 export const DUPLICATE_DECISION_SUBMISSION_COLUMNS =
@@ -68,6 +68,17 @@ function checkedInvoiceRow(row: DuplicateDecisionInvoiceRow): DuplicateDecisionI
   return row;
 }
 
+/** PR C (5.4): skąd czytać blokadę SQL przy znaczniku `faktflow-original` (`facts.sqlBlocker`). */
+export interface DuplicateDecisionFactsOptions {
+  /**
+   * `session` — `ksef_duplicate_decision_blocker_for_session` klientem sesji
+   * (strona i akcja klienta, 4.9); `admin` — `readDuplicateDecisionBlocker`
+   * kluczem serwisowym (operator, worker). Brak — blokady nie czytamy
+   * (`facts.sqlBlocker` undefined).
+   */
+  sqlBlocker?: 'session' | 'admin';
+}
+
 /**
  * Fakty polityki decyzji dla faktury `invoiceId` firmy `tenantId`. `invoiceRow`
  * — wiersz, który wywołujący już przeczytał (z kolumnami
@@ -79,7 +90,10 @@ export async function loadDuplicateDecisionFacts(
   tenantId: string,
   invoiceId: string,
   invoiceRow?: DuplicateDecisionInvoiceRow | null,
+  options?: DuplicateDecisionFactsOptions,
 ): Promise<DuplicateDecisionFacts> {
+  // PR C kontrakt (commit 1): odczyt blokady dochodzi w commicie 6 (grupa C).
+  if (options?.sqlBlocker) throw new Error('PR C: nie zaimplementowane');
   let invoice: DuplicateDecisionInvoiceRow | null;
   if (invoiceRow) {
     invoice = checkedInvoiceRow(invoiceRow);
