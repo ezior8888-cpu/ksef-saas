@@ -7,7 +7,8 @@ import { toast } from 'sonner';
 import { Loader2, RotateCcw, Send, Settings } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { failedInvoiceButtons, KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
+import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
+import { failedInvoiceButtons, resetDoneMessage } from '@/lib/invoices/ksef-send-policy';
 import { resendInvoiceAction, resetInvoiceToDraftAction } from './actions-detail';
 
 interface Props {
@@ -17,6 +18,14 @@ interface Props {
   errorCode: string | null;
   invoiceKind: string | null;
   canManage: boolean;
+  /** A4b PR2b: fakty ponowienia z kopii (liczone na serwerze, bez treści dokumentu). */
+  facts: KsefResendFacts;
+  environmentKnown: boolean;
+  /**
+   * `KSEF_DUPLICATE_RECONCILE`: nad paskiem stoi panel duplikatu (decyzja albo
+   * nota) — zdanie odsyła do ramki wyżej (D-A4-1b-3 PR B).
+   */
+  duplicatePanel?: boolean;
 }
 
 /**
@@ -25,11 +34,20 @@ interface Props {
  * albo samo wyjaśnienie, gdy sprawą zajmuje się automat lub operator.
  * Decyzję podejmuje `failedInvoiceButtons`, tę samą, którą sprawdzają akcje.
  */
-export function FailedInvoiceActions({ invoiceId, status, errorCode, invoiceKind, canManage }: Props) {
+export function FailedInvoiceActions({
+  invoiceId,
+  status,
+  errorCode,
+  invoiceKind,
+  canManage,
+  facts,
+  environmentKnown,
+  duplicatePanel = false,
+}: Props) {
   const router = useRouter();
   const [isResending, startResending] = useTransition();
   const [isResetting, startResetting] = useTransition();
-  const plan = failedInvoiceButtons({ status, errorCode, invoiceKind, canManage });
+  const plan = failedInvoiceButtons({ status, errorCode, invoiceKind, canManage, facts, environmentKnown, duplicatePanel });
   if (!plan) return null;
   const busy = isResending || isResetting;
 
@@ -38,6 +56,8 @@ export function FailedInvoiceActions({ invoiceId, status, errorCode, invoiceKind
       const result = await resendInvoiceAction(invoiceId);
       if (!result.success) {
         toast.error(result.error);
+        // Strona otwarta po północy: serwer przeliczy fakty i zamieni przycisk na wyjaśnienie.
+        router.refresh();
         return;
       }
       toast.success('Faktura wróciła do kolejki KSeF.');
@@ -53,7 +73,8 @@ export function FailedInvoiceActions({ invoiceId, status, errorCode, invoiceKind
         toast.error(result.error);
         return;
       }
-      toast.success(KSEF_SEND_MESSAGES.resetDone);
+      // KSEF_NUMBER_TAKEN: szkic wraca jako wycofany — tekst wg rodzaju (C4, decyzja 9).
+      toast.success(resetDoneMessage(invoiceKind, facts, errorCode));
       router.refresh();
     });
   };

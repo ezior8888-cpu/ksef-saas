@@ -253,15 +253,18 @@ describe('D-A4-1: cudzy 440 — weryfikacja treści oryginału z KSeF', () => {
     expect(submissions().map((r) => r.status)).toEqual(['sent']);
   });
 
-  it('numer KSeF oryginału należy do innej faktury tej firmy w FaktFlow → operator, bez pobierania', async () => {
+  // D-A4-1b-3 PR B (decyzja Bartosza 07.10.2026 (1)): przy znanym numerze runner
+  // też pobiera oryginał — klient decyduje, widząc dane K i odnośnik do dokumentu Y.
+  // Dlatego `downloads` 0 → 1; kod i numer dokumentu Y w komunikacie zostają.
+  it('numer KSeF oryginału należy do innej faktury tej firmy w FaktFlow → do decyzji klienta, oryginał pobrany', async () => {
     seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: 'K-OBCA', xml: fromOtherProgram(ourXml()) });
-    m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_number: 'K-OBCA', internal_number: 'FV/INNA/1' }];
+    m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_status: 'accepted', ksef_number: 'K-OBCA', internal_number: 'FV/INNA/1' }];
 
     const error = await failing(runSubmitInvoice(event(), ctx(0)));
 
     expect(classifySendError(error).code).toBe('KSEF_DUPLICATE_RECONCILE');
     expect(error.message).toContain('FV/INNA/1');
-    expect(m.ksef.downloads).toBe(0);
+    expect(m.ksef.downloads).toBe(1);
   });
 
   it('D-A4-1b-3 (A0): numer KSeF oryginału ma tylko faktura PRZYCHODZĄCA firmy → to nie jest „znany numer”; weryfikacja treści jak zwykle', async () => {
@@ -468,15 +471,19 @@ describe('D-A4-1b-3 (A): dane oryginału przy nierozstrzygniętym 440 — zapisa
     });
   });
 
-  it('numer KSeF ma inna faktura sprzedaży w FaktFlow → reason known-number z odnośnikiem, bez pobierania', async () => {
+  // D-A4-1b-3 PR B (07.10 (1)): known-number niesie dane oryginału jak no-own-file —
+  // pobranie, skrót, podsumowanie, archiwum i `ownHistory` (wcześniej sha256/summary null, bez pobierania).
+  it('numer KSeF ma inna faktura sprzedaży w FaktFlow → reason known-number z odnośnikiem i danymi pobranego oryginału', async () => {
     seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: fromOtherProgram(ourXml()) });
-    m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_number: K, internal_number: 'FV/INNA/1' }];
+    m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_status: 'accepted', ksef_number: K, internal_number: 'FV/INNA/1' }];
 
     await failing(runSubmitInvoice(event(), ctx(0)));
 
-    expect(m.ksef.downloads).toBe(0);
+    expect(m.ksef.downloads).toBe(1);
     expect(marker()!.original_check).toMatchObject({
-      reason: 'known-number', knownInvoice: { id: 'inna', internalNumber: 'FV/INNA/1' }, sha256: null, summary: null,
+      reason: 'known-number', knownInvoice: { id: 'inna', internalNumber: 'FV/INNA/1' },
+      sha256: sha256Hex(fromOtherProgram(ourXml())), summary: expect.objectContaining({ number: NUMBER, systemInfo: 'Inny Program 2.0' }),
+      archivePath: archiveKey, ownHistory: false,
     });
   });
 
@@ -564,5 +571,142 @@ describe('D-A4-1b-3 (A): dane oryginału przy nierozstrzygniętym 440 — zapisa
 
     expect(error).toBeInstanceOf(RetryAfterError);
     expect(marker()!.original_check).toMatchObject({ reason: 'archive-pending', sha256: sha256Hex(original), archivePath: null });
+  });
+});
+
+/**
+ * D-A4-1b-3 PR B, U18a–U18f (decyzja Bartosza 07.10.2026 (1); spec v3 §2.7.1):
+ * numer KSeF oryginału ma już inna, przyjęta faktura sprzedaży firmy (Y).
+ * Runner nie kończy już werdyktu przed pobraniem: pobiera, archiwizuje
+ * i podsumowuje K z tą samą obsługą błędów co pozostałe powody — klient
+ * zdecyduje, widząc dane K i odnośnik do Y. Pomijane jest tylko „accept”
+ * (Y ma już K; druga faktura z tym samym numerem KSeF byłaby podwójną sprzedażą w JPK).
+ */
+describe('D-A4-1b-3 PR B: znany numer KSeF — oryginał pobrany i opisany (U18)', () => {
+  const K = '5260001246-20260928-0100A0B0C0D0-1A';
+  const Y_ID = '33333333-3333-4333-8333-333333333333';
+  const Y = { id: Y_ID, tenant_id: T, direction: 'outgoing', ksef_status: 'accepted', ksef_number: K, internal_number: 'FV/INNA/1' };
+  const KNOWN = { id: Y_ID, internalNumber: 'FV/INNA/1' };
+  const marker = () => submissions().find((r) => r.original_ksef_number === K);
+  const archiveKey = `${T}/ksef-import/${K}.xml`;
+  /** 2.11.B KNOWN_NUMBER_LAST_ERROR (C16): `ownHistory` false — klient rozstrzyga na karcie faktury. */
+  const KNOWN_NUMBER_LAST_ERROR = `KSeF ma już fakturę o tym numerze (numer KSeF ${K}), a w FaktFlow ten numer KSeF ma dokument FV/INNA/1 — ` +
+    'do rozstrzygnięcia na karcie faktury (ta sama czy inna sprzedaż); nie wystawiaj jej ponownie.';
+  /** 2.11.B KNOWN_NUMBER_LAST_ERROR_OWN (C16): `ownHistory` true — klient nie decyduje, więc tekst nie mówi, że sprawa czeka na niego. */
+  const KNOWN_NUMBER_LAST_ERROR_OWN = `KSeF ma już fakturę o tym numerze (numer KSeF ${K}), a w FaktFlow ten numer KSeF ma dokument FV/INNA/1; ` +
+    'faktura w KSeF może być wcześniejszą wysyłką tego dokumentu z FaktFlow — wyjaśnia to pomoc FaktFlow; nie wystawiaj jej ponownie.';
+
+  beforeEach(() => {
+    m.mem.db.invoices = [{ ...Y }];
+  });
+
+  it('U18a: pobranie K, bajty w archiwum importu, pełny original_check i tekst „do rozstrzygnięcia na karcie faktury”', async () => {
+    const original = fromOtherProgram(ourXml());
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: original, acquisitionDate: '2026-09-28T07:15:00.000Z' });
+
+    const error = await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(error).toBeInstanceOf(NonRetriableError);
+    expect(classifySendError(error).code).toBe('KSEF_DUPLICATE_RECONCILE');
+    expect(error.message).toBe(`[KSEF_DUPLICATE_RECONCILE] ${KNOWN_NUMBER_LAST_ERROR}`);
+    expect(m.ksef.downloads).toBe(1);
+    expect(m.storage.get(archiveKey)).toBe(original);
+    expect(marker()).toMatchObject({ status: 'sent' });
+    expect(marker()!.original_check).toMatchObject({
+      v: 1, env: 'test', reason: 'known-number', knownInvoice: KNOWN,
+      sha256: sha256Hex(original), sizeBytes: Buffer.byteLength(original, 'utf8'), archivePath: archiveKey,
+      summary: expect.objectContaining({ number: NUMBER, systemInfo: 'Inny Program 2.0', gross: '999.99', buyerNip: '5252241585' }),
+      sameContentExceptHeader: false, ownHistory: false, acquiredAt: '2026-09-28T07:15:00.000Z', httpStatus: null, recheck: null,
+    });
+    expect(accepted()).toBeUndefined();
+    // Alarm `ksef-duplicate-known-number` zostaje — operator sprawdza Y w każdym przypadku.
+    expect(m.captureMessage).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      tags: expect.objectContaining({ kind: 'ksef-duplicate-known-number' }),
+      extra: expect.objectContaining({ otherInvoice: 'FV/INNA/1', ownHistory: false }),
+    }));
+  });
+
+  it('U18b: 503 przy pobraniu → download-pending (ponowienie) z knownInvoice; 403 → download-refused (werdykt) z knownInvoice', async () => {
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: fromOtherProgram(ourXml()) });
+    m.ksef.downloadFailure = { status: 503 };
+
+    const pending = await failing(runSubmitInvoice(event(), ctx(0)));
+    expect(pending).toBeInstanceOf(RetryAfterError);
+    expect(classifySendError(pending).code).toBe('KSEF_DUPLICATE_RECONCILE');
+    expect(marker()!.original_check).toMatchObject({ reason: 'download-pending', httpStatus: 503, sha256: null, knownInvoice: KNOWN });
+
+    m.ksef.downloadFailure = { status: 403 };
+    const refused = await failing(runSubmitInvoice(event(), ctx(1)));
+    expect(refused).toBeInstanceOf(NonRetriableError);
+    expect(classifySendError(refused).code).toBe('KSEF_DUPLICATE_RECONCILE');
+    expect(marker()!.original_check).toMatchObject({ reason: 'download-refused', httpStatus: 403, sha256: null, knownInvoice: KNOWN });
+    expect(m.ksef.downloads).toBe(2);
+    expect(m.ksef.invoicePosts).toBe(1);
+  });
+
+  it('U18c: błąd odczytu naszego pliku → storage-pending z danymi K (sha256) i knownInvoice', async () => {
+    const original = fromOtherProgram(ourXml());
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: original });
+    m.storageReadFails = true;
+
+    const error = await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(error).toBeInstanceOf(RetryAfterError);
+    expect(marker()!.original_check).toMatchObject({ reason: 'storage-pending', sha256: sha256Hex(original), knownInvoice: KNOWN });
+  });
+
+  it('U18d: błąd zapisu archiwum → archive-pending (ponowienie); inny plik w archiwum → archive-conflict (werdykt); oba z knownInvoice', async () => {
+    const original = fromOtherProgram(ourXml());
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: original });
+    m.archiveFails = true;
+
+    const pending = await failing(runSubmitInvoice(event(), ctx(0)));
+    expect(pending).toBeInstanceOf(RetryAfterError);
+    expect(marker()!.original_check).toMatchObject({
+      reason: 'archive-pending', sha256: sha256Hex(original), archivePath: null, knownInvoice: KNOWN,
+    });
+
+    m.archiveFails = false;
+    m.storage.set(archiveKey, '<Faktura>coś innego</Faktura>');
+    const conflict = await failing(runSubmitInvoice(event(), ctx(1)));
+    expect(conflict).toBeInstanceOf(NonRetriableError);
+    expect(classifySendError(conflict).code).toBe('KSEF_DUPLICATE_RECONCILE');
+    expect(marker()!.original_check).toMatchObject({ reason: 'archive-conflict', sha256: sha256Hex(original), knownInvoice: KNOWN });
+    expect(m.storage.get(archiveKey)).toBe('<Faktura>coś innego</Faktura>');
+  });
+
+  it('U18e: K = nasz bieżący plik → ownHistory: true, bez przyjęcia numeru (Y ma już K) i tekst KNOWN_NUMBER_LAST_ERROR_OWN', async () => {
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: ourXml() });
+
+    const error = await failing(runSubmitInvoice(event(), ctx(0)));
+
+    expect(classifySendError(error).code).toBe('KSEF_DUPLICATE_RECONCILE');
+    expect(error.message).toBe(`[KSEF_DUPLICATE_RECONCILE] ${KNOWN_NUMBER_LAST_ERROR_OWN}`);
+    expect(accepted()).toBeUndefined();
+    expect(submissions().some((r) => r.status === 'accepted')).toBe(false);
+    expect(marker()!.original_check).toMatchObject({
+      reason: 'known-number', ownHistory: true, sha256: sha256Hex(ourXml()), knownInvoice: KNOWN,
+    });
+  });
+
+  it('U18f: znacznik z PR A (known-number bez danych) + „Tylko uzgodnij” → pełny zapis, bez drugiej wysyłki', async () => {
+    const original = fromOtherProgram(ourXml());
+    seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: original });
+    await failing(runSubmitInvoice(event(), ctx(0)));
+    // Kształt zapisu sprzed PR B: werdykt bez pobrania (sha256 i summary null).
+    marker()!.original_check = {
+      v: 1, env: 'test', checkedAt: '2026-10-05T08:00:00.000Z', reason: 'known-number', sha256: null, archivePath: null,
+      sizeBytes: null, summary: null, sameContentExceptHeader: null, ownHistory: null, acquiredAt: null, httpStatus: null,
+      knownInvoice: KNOWN, recheck: null,
+    };
+
+    const again = await failing(runSubmitInvoice({ ...event(), reconcileOnly: true }, ctx(0)));
+
+    expect(classifySendError(again).code).toBe('KSEF_DUPLICATE_RECONCILE');
+    expect(m.ksef.invoicePosts).toBe(1);
+    expect(marker()!.original_check).toMatchObject({
+      reason: 'known-number', knownInvoice: KNOWN, sha256: sha256Hex(original), archivePath: archiveKey, ownHistory: false,
+      summary: expect.objectContaining({ number: NUMBER }), recheck: null,
+    });
   });
 });

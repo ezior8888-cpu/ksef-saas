@@ -39,6 +39,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
  *       w tygodniu cron przestaje i alarmuje — faktura czeka na operatora.
  *       Wynik uzgodnienia: `accepted`, `rejected` albo `NOT_IN_KSEF`
  *       (A2b — klient wysyła ponownie albo wraca do szkicu).
+ *   I5D (00148, faktura czeka na decyzję klienta) — cron jej nie uzgadnia.
  *
  * Dokumenty specjalne (A4b PR2a) — zdarzenie z kopii na wierszu
  * (`ksef-requeue-event.ts`): I6/I7 ponawiają KOR/ZAL z zapisanymi danymi

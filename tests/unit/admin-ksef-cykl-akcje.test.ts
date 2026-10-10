@@ -24,10 +24,22 @@ const m = vi.hoisted(() => ({
   /** `configuredKsefEnvironment()` akcji (null = KSEF_ENV nieustawione albo błędne). */
   env: vi.fn((): string | null => 'test'),
   invoice: null as Record<string, unknown> | null,
+  /** Inne faktury firmy (np. dokument, który ma już numer KSeF oryginału) — odczyt po `id`. */
+  otherInvoices: [] as Array<Record<string, unknown>>,
   /** Wpisy `ksef_submissions` faktury; bez `status` = `sent`. */
-  openSent: [] as Array<{ id: string; status?: string }>,
+  openSent: [] as Array<{ id: string; status?: string } & Record<string, unknown>>,
+  /** `audit_logs` w pamięci — ślad powiadomień klienta o decyzji (D-A4-1b-3 PR B). */
+  auditLogs: [] as Array<Record<string, unknown>>,
+  /** Zapis do `audit_logs` kończy się błędem bazy. */
+  failAuditInsert: false,
   /** Napisy `select(...)` w kolejności wywołań — kontrakt kolumn odczytu. */
   selects: [] as Array<{ table: string; columns: string }>,
+  /** E-mail właściciela firmy (`readTenantOwnerContact`; odrzucenie = błąd odczytu). */
+  ownerEmail: vi.fn(),
+  /** `sendInvoiceDuplicateDecisionEmail` (przypomnienie o decyzji). */
+  duplicateEmail: vi.fn(),
+  captureException: vi.fn(),
+  captureMessage: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/admin-guard', () => ({ requireAdmin: m.requireAdmin }));
@@ -40,15 +52,36 @@ vi.mock('@/lib/ksef/claim-environment', () => ({
 }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: m.audit }));
 vi.mock('next/cache', () => ({ revalidatePath: m.revalidate }));
+// D-A4-1b-3 PR B: przypomnienie o decyzji — e-mail (Resend) i adres właściciela; Sentry bez sieci.
+vi.mock('@/lib/email/send', () => ({
+  sendInvoiceDuplicateDecisionEmail: m.duplicateEmail,
+  sendInvoiceFailedEmail: vi.fn(),
+  sendInvoiceAcceptedEmail: vi.fn(),
+}));
+vi.mock('@/lib/supabase/admin-queries', async (orig) => ({
+  ...await orig<typeof import('@/lib/supabase/admin-queries')>(),
+  getTenantAdminEmail: m.ownerEmail,
+  // Wariant ścisły (przegląd PR B #1/#4): błąd odczytu rzuca, prawdziwy brak = null.
+  readTenantOwnerContact: async (tenantId: string) => {
+    const email = (await m.ownerEmail(tenantId)) as string | null;
+    return { ownerUserId: email ? 'owner-user' : null, email };
+  },
+}));
+vi.mock('@sentry/nextjs', () => ({ captureException: m.captureException, captureMessage: m.captureMessage, addBreadcrumb: vi.fn() }));
 
-import { operatorRequeueAction, operatorResetAction } from '@/app/admin/ksef/actions';
+import { operatorRequeueAction, operatorResetAction, type OperatorActionResult } from '@/app/admin/ksef/actions';
+import * as operatorActions from '@/app/admin/ksef/actions';
 import {
+  OPERATOR_DUPLICATE_MESSAGES,
   OPERATOR_MESSAGES,
   operatorIssueDateMessage,
   operatorKindHeldMessage,
   operatorLegacyDataMessage,
 } from '@/lib/admin/ksef-operator-policy';
 import { KSEF_RESEND_SOURCE_COLUMNS } from '@/lib/invoices/ksef-requeue-event';
+
+import { CLIENT } from './helpers/decyzja-klienta';
+import { fillExpected } from './helpers/ksef-duplicate-decision-cases';
 
 type Tx = { executeSql: ReturnType<typeof vi.fn> };
 
@@ -95,32 +128,75 @@ function project(source: Record<string, unknown>, columns: string): Record<strin
   return out;
 }
 
+/** Wartość kolumny albo ścieżki jsonb PostgREST (`metadata->>klucz`); `undefined`, gdy wiersz nie ma kolumny. */
+function columnValue(row: Record<string, unknown>, key: string): unknown {
+  const [root, ...path] = key.split(/->>?/);
+  let value: unknown = row[root!];
+  for (const part of path) value = value && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined;
+  return value;
+}
+
 function fakeAdminClient() {
   return {
     from: (table: string) => {
       const statusOk: Array<(status: string) => boolean> = [];
+      // Filtry pomijają kolumny, których wiersz fikstury nie ma (wpisy `{ id, status }` starszych testów).
+      const filters: Array<(r: Record<string, unknown>) => boolean> = [];
+      const has = (r: Record<string, unknown>, k: string) => k.split(/->>?/)[0]! in r;
       let columns = '*';
+      let inserted: Record<string, unknown> | null = null;
+      const rows = (): Array<Record<string, unknown>> => {
+        const source = table === 'ksef_submissions'
+          ? m.openSent.filter((r) => statusOk.every((f) => f(r.status ?? 'sent')))
+          : table === 'audit_logs'
+            ? m.auditLogs
+            : table === 'invoices'
+              ? [m.invoice, ...m.otherInvoices].filter((r): r is Record<string, unknown> => r !== null)
+              : [];
+        return source.filter((r) => filters.every((f) => f(r)));
+      };
+      const insertResult = () => {
+        if (table === 'audit_logs' && m.failAuditInsert) return { data: null, error: { code: 'XX000', message: 'db down' } };
+        if (table === 'audit_logs' && inserted) {
+          m.auditLogs.push({ id: `audit-${m.auditLogs.length + 1}`, created_at: new Date().toISOString(), ...inserted });
+        }
+        return { data: null, error: null };
+      };
+      const one = async () => {
+        if (inserted) return insertResult();
+        const first = rows()[0] ?? null;
+        if (table !== 'invoices') return { data: first, error: null };
+        return { data: first ? (columns === '*' ? first : project(first, columns)) : null, error: null };
+      };
       const q = {
         select: (c: string) => {
           columns = c;
           m.selects.push({ table, columns: c });
           return q;
         },
-        eq: (k: string, v: unknown) => { if (k === 'status') statusOk.push((st) => st === v); return q; },
-        in: (k: string, vs: unknown[]) => { if (k === 'status') statusOk.push((st) => vs.includes(st)); return q; },
+        insert: (row: Record<string, unknown>) => { inserted = row; return q; },
+        eq: (k: string, v: unknown) => {
+          if (k === 'status' && table === 'ksef_submissions') statusOk.push((st) => st === v);
+          else filters.push((r) => !has(r, k) || columnValue(r, k) === v);
+          return q;
+        },
+        in: (k: string, vs: unknown[]) => {
+          if (k === 'status' && table === 'ksef_submissions') statusOk.push((st) => vs.includes(st));
+          else filters.push((r) => !has(r, k) || vs.includes(columnValue(r, k)));
+          return q;
+        },
+        neq: (k: string, v: unknown) => { filters.push((r) => !has(r, k) || columnValue(r, k) !== v); return q; },
+        is: (k: string, v: unknown) => { filters.push((r) => !has(r, k) || (columnValue(r, k) ?? null) === v); return q; },
+        not: (k: string, _op: string, v: unknown) => { filters.push((r) => !has(r, k) || (columnValue(r, k) ?? null) !== v); return q; },
         limit: () => q,
-        maybeSingle: async () => ({
-          data: table === 'invoices' && m.invoice
-            ? (columns === '*' ? m.invoice : project(m.invoice, columns))
-            : null,
-          error: null,
-        }),
-        then: (ok: (v: unknown) => unknown) => ok({
-          data: table === 'ksef_submissions'
-            ? m.openSent.filter((r) => statusOk.every((f) => f(r.status ?? 'sent')))
-            : [],
-          error: null,
-        }),
+        order: () => q,
+        gte: () => q,
+        lte: () => q,
+        maybeSingle: one,
+        single: one,
+        then: (ok: (v: unknown) => unknown) => ok(inserted
+          ? insertResult()
+          : { data: table === 'invoices' ? [] : rows(), error: null }),
       };
       return q;
     },
@@ -159,7 +235,12 @@ beforeEach(() => {
   m.rpc.mockResolvedValue({ data: { id: ID }, error: null });
   m.paused.mockResolvedValue(false);
   m.invoice = row();
+  m.otherInvoices = [];
   m.openSent = [];
+  m.auditLogs = [];
+  m.failAuditInsert = false;
+  m.ownerEmail.mockResolvedValue('owner@example.test');
+  m.duplicateEmail.mockResolvedValue({ sent: true, messageId: 'msg-1' });
 });
 
 afterEach(() => {
@@ -487,5 +568,433 @@ describe('autoryzacja operatora przed każdą operacją', () => {
     expect(m.send).not.toHaveBeenCalled();
     expect(m.rpc).not.toHaveBeenCalled();
     expect(m.audit).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * D-A4-1b-3 PR B (decyzje Bartosza 04.10 i 07.10.2026 (5), (7), (12); spec v3
+ * §2.6.4, U13a–U13d): operator zapisuje decyzję przekazaną przez klienta
+ * („Zapisz decyzję klienta”) i przypomina mu o niej („Przypomnij klientowi”,
+ * najwyżej raz na 24 h). Prawdziwe: akcje, polityka i ładowarka faktów,
+ * ślad powiadomień w `audit_logs` (atrapa bazy wyżej). Atrapy: RPC, Resend,
+ * adres właściciela.
+ *
+ * Na f49e687 tych akcji nie ma — operator nie ma jak zapisać decyzji klienta
+ * ani przypomnieć o niej. Wywołanie przez `operatorAction` daje wtedy wynik
+ * bez skutków, więc asercje zachowania (RPC, audyt, e-mail, teksty) są czerwone.
+ */
+type DuplicateChoice = 'same_sale' | 'other_sale';
+interface DecideInput {
+  choice: DuplicateChoice;
+  note: string;
+  originalKsefNumber: string;
+  originalSha256: string;
+  confirmed: boolean;
+}
+const NO_OPERATOR_PATH: OperatorActionResult = { success: false, error: 'brak akcji operatora' };
+function operatorAction<A extends unknown[]>(name: string): (...args: A) => Promise<OperatorActionResult> {
+  return async (...args: A) => {
+    const fn: unknown = Reflect.get(operatorActions, name);
+    return typeof fn === 'function' ? (fn as (...a: A) => Promise<OperatorActionResult>)(...args) : NO_OPERATOR_PATH;
+  };
+}
+const decide = operatorAction<[string, DecideInput]>('operatorDecideDuplicateAction');
+const remind = operatorAction<[string]>('operatorRemindDuplicateDecisionAction');
+
+const K = '5260001246-20261001-0100A0B0C0D0-1A';
+const K2 = '5260001246-20260915-0200A0B0C0D0-2B';
+const SHA = 'bb'.repeat(32);
+const NOTE = 'e-mail od właściciela 03.10, Jan Kowalski';
+const NOTICE_ACTION = 'invoice.ksef_duplicate_decision_notified';
+const OWNER_EMAIL = 'owner@example.test';
+/** 2.11.D — teksty operatora (bez przeglądu prawnika). */
+const T_NOTE = 'Notatka: co najmniej 10 znaków — kanał, data, osoba.';
+const T_CONFIRM = 'Zaznacz potwierdzenie klienta („Rozumiem skutki”) i zapisz jeszcze raz.';
+const T_SUCCESS = (label: string) => `Zapisano decyzję klienta (${label}). Dokument wrócił do szkicu jako wycofany.`;
+const T_NOT_PENDING = 'Faktura nie czeka na decyzję klienta (stan albo kod inny niż failed / KSEF_DUPLICATE_RECONCILE).';
+const T_REMIND_NO_EMAIL = 'Firma nie ma adresu e-mail właściciela — skontaktuj się z klientem innym kanałem (runbook KSEF_DUPLICATE_RECONCILE).';
+const T_REMIND_NOT_RECORDED = 'Przypomnienie wysłane, ale nie zapisaliśmy śladu w audit_logs — nie wysyłaj go ponownie przez 24 h (klucz Resend chroni tylko dobę).';
+const T_REMIND_TOO_SOON = /^Ostatnie powiadomienie: .+ — przypomnienie najwcześniej 24 h później\.$/;
+
+/** Dane oryginału z PR A (00144) — no-own-file z kompletem danych, sprawdzone na KSeF TEST. */
+const duplicateCheck = (extra: Record<string, unknown> = {}) => ({
+  v: 1, env: 'test', checkedAt: '2026-10-03T08:00:00.000Z', reason: 'no-own-file', sha256: SHA,
+  archivePath: `${TENANT}/ksef-import/${K}.xml`, sizeBytes: 1200, sameContentExceptHeader: null, ownHistory: false,
+  acquiredAt: '2026-10-01T09:00:00.000Z', httpStatus: null, knownInvoice: null, recheck: null,
+  summary: { systemInfo: 'Inny Program 2.0', number: 'FV/9', issueDate: TODAY, buyerNip: '5252241585', buyerName: 'Klient', gross: '123.00', currency: 'PLN' },
+  ...extra,
+});
+/** Znacznik 440 (otwarty wpis `sent`) i starszy wpis bez znacznika. */
+function duplicateRows(check: Record<string, unknown> = duplicateCheck()) {
+  return [
+    {
+      id: 'sub-marker', tenant_id: TENANT, invoice_id: ID, status: 'sent', error_code: '440',
+      session_reference_number: 'SES-OWN-1', invoice_reference_number: 'REF-1', request_payload_hash: 'aa'.repeat(32),
+      response_ksef_number: null, original_ksef_number: K, original_session_reference_number: 'SES-ORIG-1',
+      original_check: check, attempted_at: '2026-10-03T07:00:00.000Z', completed_at: null,
+    },
+    {
+      id: 'sub-older', tenant_id: TENANT, invoice_id: ID, status: 'abandoned', error_code: 'NOT_IN_SESSION',
+      session_reference_number: 'SES-OWN-0', invoice_reference_number: null, request_payload_hash: 'cc'.repeat(32),
+      response_ksef_number: null, original_ksef_number: null, original_session_reference_number: null,
+      original_check: null, attempted_at: '2026-10-02T07:00:00.000Z', completed_at: '2026-10-02T07:05:00.000Z',
+    },
+  ];
+}
+/** Faktura czekająca na klienta: failed KSEF_DUPLICATE_RECONCILE; ten sam nabywca, ta sama kwota co w KSeF. */
+const pendingRow = (extra: Record<string, unknown> = {}) => row({
+  ksef_status: 'failed', last_error_code: 'KSEF_DUPLICATE_RECONCILE', ksef_number: null, stripe_invoice_id: null,
+  offline_idempotency_key: null, offline_qr_offline: null, offline_qr_certyfikat: null, paid_amount: 0,
+  buyer_nip: '5252241585', buyer_data: { name: 'Klient', nip: '5252241585' }, gross_total: 123, currency: 'PLN',
+  ...extra,
+});
+const decideInput = (extra: Partial<DecideInput> = {}): DecideInput => ({
+  choice: 'same_sale', note: NOTE, originalKsefNumber: K, originalSha256: SHA, confirmed: true, ...extra,
+});
+const notice = (createdAt: string, ksefNumber = K) => ({
+  id: `notice-${createdAt}`, tenant_id: TENANT, user_id: null, action: NOTICE_ACTION, entity_type: 'invoice', entity_id: ID,
+  metadata: {
+    original_ksef_number: ksefNumber, via: 'auto', idempotency_key: `ksef-duplicate-decision/${ID}/${ksefNumber}`,
+    emailed: true, push_sent: 1, reminder: null, operator: null, source: 'system',
+  },
+  created_at: createdAt,
+});
+const notices = () => m.auditLogs.filter((r) => r.action === NOTICE_ACTION);
+const rpcCallsOf = (fn: string) => m.rpc.mock.calls.filter(([name]) => name === fn);
+
+describe('D-A4-1b-3 PR B: decyzja klienta i przypomnienie — akcje operatora', () => {
+  let blocker: string | null;
+  let decideReply: { data: unknown; error: { code: string; message: string } | null };
+
+  beforeEach(() => {
+    m.invoice = pendingRow();
+    m.openSent = duplicateRows();
+    blocker = null;
+    decideReply = {
+      data: {
+        invoice_id: ID, internal_number: 'FV/9', original_ksef_number: K, choice: 'same_sale', via: 'operator',
+        reason: 'no-own-file', already_decided: false, submissions_closed: 1,
+      },
+      error: null,
+    };
+    m.rpc.mockImplementation(async (fn: string) => {
+      if (fn === 'decide_ksef_duplicate') return decideReply;
+      if (fn === 'ksef_duplicate_decision_blocker') return { data: blocker, error: null };
+      return { data: null, error: { code: 'PGRST202', message: `Could not find the function public.${fn}` } };
+    });
+  });
+
+  describe('U13a: zapis decyzji — autoryzacja, notatka, „Rozumiem skutki” po stronie serwera', () => {
+    it.each([
+      ['Zapisz decyzję klienta', () => decide(ID, decideInput())],
+      ['Przypomnij klientowi (U13c)', () => remind(ID)],
+    ])('%s: odmowa requireAdmin zatrzymuje wszystko przed kluczem serwisowym', async (_l, action) => {
+      m.requireAdmin.mockRejectedValue(new Error('synthetic authorization denied'));
+
+      await expect(action()).rejects.toThrow('synthetic authorization denied');
+
+      expect(m.admin).not.toHaveBeenCalled();
+      expect(m.rpc).not.toHaveBeenCalled();
+      expect(m.duplicateEmail).not.toHaveBeenCalled();
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['za krótka', 'ok'],
+      ['same spacje wokół krótkiej', '    ok tel   '],
+    ])('notatka %s → komunikat o kanale, dacie i osobie; bez RPC', async (_l, note) => {
+      const result = await decide(ID, decideInput({ note }));
+
+      expect(result).toEqual({ success: false, error: T_NOTE });
+      expect(rpcCallsOf('decide_ksef_duplicate')).toEqual([]);
+      expect(m.audit).not.toHaveBeenCalled();
+      expect(m.requireAdmin).toHaveBeenCalled();
+    });
+
+    it('„inna sprzedaż” przy tym samym NIP nabywcy bez potwierdzenia klienta → OPERATOR_CONFIRM; bez RPC (decyzja 7)', async () => {
+      const result = await decide(ID, decideInput({ choice: 'other_sale', confirmed: false }));
+
+      expect(result).toEqual({ success: false, error: T_CONFIRM });
+      expect(rpcCallsOf('decide_ksef_duplicate')).toEqual([]);
+    });
+  });
+
+  describe('U13b: zapis decyzji — RPC decide_ksef_duplicate z aktorem = operator', () => {
+    it.each([
+      ['same_sale', 'ta sama sprzedaż'],
+      ['other_sale', 'inna sprzedaż'],
+    ] as const)('%s: RPC z p_via operator, notatką i środowiskiem; audyt invoice.operator_duplicate_decision; odświeżenie', async (choice, label) => {
+      decideReply = { data: { ...(decideReply.data as Record<string, unknown>), choice }, error: null };
+
+      const result = await decide(ID, decideInput({ choice }));
+
+      expect(result).toEqual({ success: true, message: T_SUCCESS(label) });
+      expect(m.rpc).toHaveBeenCalledWith('decide_ksef_duplicate', {
+        p_invoice_id: ID, p_tenant_id: TENANT, p_actor_user_id: OPERATOR.userId, p_choice: choice, p_via: 'operator',
+        p_original_ksef_number: K, p_original_sha256: SHA, p_env: 'test', p_note: NOTE,
+      });
+      expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({
+        action: 'invoice.operator_duplicate_decision', tenantId: TENANT, entityId: ID,
+        metadata: expect.objectContaining({
+          operator: OPERATOR.email, internalNumber: 'FV/9', choice, note: NOTE, originalKsefNumber: K, reason: 'no-own-file',
+        }),
+      }));
+      expect(m.revalidate).toHaveBeenCalledWith(`/admin/ksef/${ID}`);
+      expect(m.revalidate).toHaveBeenCalledWith(`/invoices/${ID}`);
+    });
+
+    it('powtórzenie tej samej decyzji (already_decided) → sukces bez drugiego audytu', async () => {
+      decideReply = { data: { ...(decideReply.data as Record<string, unknown>), already_decided: true }, error: null };
+
+      const result = await decide(ID, decideInput());
+
+      expect(result).toEqual({ success: true, message: T_SUCCESS('ta sama sprzedaż') });
+      expect(rpcCallsOf('decide_ksef_duplicate')).toHaveLength(1);
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['wpłaty na dokumencie (paid_amount)', () => { m.invoice = pendingRow({ paid_amount: 100 }); }, 'decyzja zablokowana'],
+      ['dane oryginału z innego środowiska KSeF', () => { m.openSent = duplicateRows(duplicateCheck({ env: 'production' })); }, 'original_check.env „production” ≠ KSEF_ENV „test”'],
+      ['powód faktflow-original (PR C)', () => { m.openSent = duplicateRows(duplicateCheck({ reason: 'faktflow-original', summary: { ...duplicateCheck().summary, systemInfo: 'KSeF SaaS v1.0' } })); }, 'Powód faktflow-original'],
+    ])('%s → powód wyłączenia przycisku dla operatora; bez RPC i audytu', async (_l, arrange, reason) => {
+      arrange();
+
+      const result = await decide(ID, decideInput());
+
+      expect(result.success).toBe(false);
+      expect(result.success ? '' : result.error).toContain(reason);
+      expect(rpcCallsOf('decide_ksef_duplicate')).toEqual([]);
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it('odmowa RPC (P0001, np. wpłata niewidoczna w paid_amount) → komunikat RPC bez zmian, bez audytu', async () => {
+      const refusal = 'Na dokumencie FV/9 są zapisane wpłaty — decyzji nie zapiszemy, dopóki wpłaty są przy tym dokumencie. W FaktFlow nie zmienisz ich sam: napisz do nas: pomoc@faktflow.pl, podając numer dokumentu — ustalimy, przy której fakturze je zapisać. Nie wystawiaj go ponownie.';
+      decideReply = { data: null, error: { code: 'P0001', message: refusal } };
+
+      const result = await decide(ID, decideInput());
+
+      expect(rpcCallsOf('decide_ksef_duplicate')).toHaveLength(1);
+      expect(result).toEqual({ success: false, error: refusal });
+      expect(m.audit).not.toHaveBeenCalled();
+      expect(m.captureException).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Przegląd PR B (#3): błąd RPC inny niż P0001 dawał tekst resetu („Nie udało
+   * się przywrócić szkicu”) bez Sentry — akcja nie przywraca szkicu, więc to
+   * zła rada. Notatkę liczymy w znakach jak `length()` w bazie, nie
+   * w jednostkach UTF-16.
+   */
+  describe('U13b: błąd RPC decide_ksef_duplicate — tekst decyzji, nie resetu szkicu', () => {
+    it('P0002 (faktura nie tej firmy) → „Nie ma takiej faktury.” operatora, bez audytu', async () => {
+      decideReply = { data: null, error: { code: 'P0002', message: 'Faktura nie należy do tej firmy' } };
+
+      const result = await decide(ID, decideInput());
+
+      expect(result).toEqual({ success: false, error: OPERATOR_MESSAGES.notFound });
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it('22023 NOTE (baza liczy notatkę krócej niż akcja) → tekst o notatce, bez Sentry i audytu', async () => {
+      decideReply = { data: null, error: { code: '22023', message: fillExpected('NOTE') } };
+
+      const result = await decide(ID, decideInput());
+
+      expect(rpcCallsOf('decide_ksef_duplicate')).toHaveLength(1);
+      expect(result).toEqual({ success: false, error: T_NOTE });
+      expect(m.captureException).not.toHaveBeenCalled();
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['XX000 (nieznana blokada — rozjazd TS↔SQL)', { code: 'XX000', message: 'Unknown KSeF duplicate decision blocker: nowy-powod' }],
+      ['42501 (rola bazy)', { code: '42501', message: 'KSeF duplicate decision is server-managed' }],
+      ['22023 argumentu, nie notatki', { code: '22023', message: 'KSeF duplicate decision requires a lowercase hex SHA-256 of the original' }],
+      ['transport (fetch failed, bez kodu)', { code: '', message: 'TypeError: fetch failed' }],
+    ])('%s → ogólny tekst decyzji i Sentry.captureException z kontekstem; bez audytu', async (_l, error) => {
+      decideReply = { data: null, error };
+
+      const result = await decide(ID, decideInput());
+
+      expect(result).toEqual({ success: false, error: CLIENT.generic });
+      expect(m.captureException).toHaveBeenCalledTimes(1);
+      expect(m.captureException).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        tags: expect.objectContaining({ area: 'ksef.duplicate-decision' }),
+        extra: expect.objectContaining({ tenantId: TENANT, invoiceId: ID, choice: 'same_sale', code: error.code }),
+      }));
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it('notatka „📧📞 Jan K” — 10 jednostek UTF-16, ale 8 znaków: tekst o notatce bez RPC (jak length() w bazie)', async () => {
+      const note = '📧📞 Jan K';
+      expect(note.length).toBe(10);
+      expect([...note].length).toBe(8);
+
+      const result = await decide(ID, decideInput({ note }));
+
+      expect(result).toEqual({ success: false, error: T_NOTE });
+      expect(rpcCallsOf('decide_ksef_duplicate')).toEqual([]);
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Przegląd PR B (#5): szkic już wycofany decyzją — akcja odpowiada sama, bez
+   * RPC (widok `decided` z wpisu `number_taken`, nie atrapa odpowiedzi RPC).
+   * Ten sam wybór o tym samym K to sukces; inny wybór albo inny K — ALREADY
+   * z ZAPISANYM wyborem (ten sam tekst co RPC, krok 2), nigdy „Zapisano”.
+   */
+  describe('U13b: decyzja zapisana wcześniej (widok decided) — akcja odpowiada bez RPC', () => {
+    /** Szkic wycofany decyzją klienta „ta sama sprzedaż” o K (wpis `number_taken` z `original_check.decision`). */
+    function decidedSame() {
+      m.invoice = pendingRow({ ksef_status: 'draft', last_error_code: null });
+      m.openSent = [{
+        ...duplicateRows()[0]!,
+        id: 'sub-decided', status: 'number_taken', error_code: 'NUMBER_TAKEN', completed_at: '2026-10-03T09:00:00.000Z',
+        original_check: {
+          ...duplicateCheck(),
+          decision: { choice: 'same_sale', via: 'client', at: '2026-10-03T09:00:00.000Z', reason: 'no-own-file', env: 'test' },
+        },
+      }];
+    }
+
+    it.each([
+      ['inny wybór niż zapisany („inna sprzedaż” przy zapisanej „tej samej”)', { choice: 'other_sale' as const }],
+      ['ten sam wybór, ale inny numer KSeF oryginału niż zapisany', { originalKsefNumber: K2 }],
+    ])('%s → ALREADY z zapisanym wyborem; bez RPC i audytu', async (_l, patch) => {
+      decidedSame();
+
+      const result = await decide(ID, decideInput(patch));
+
+      expect(result).toEqual({ success: false, error: fillExpected('ALREADY', 'FV/9', 'ta sama sprzedaż') });
+      expect(rpcCallsOf('decide_ksef_duplicate')).toEqual([]);
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it('ta sama decyzja o tym samym K (zgubiona odpowiedź, drugie kliknięcie) → sukces bez RPC i audytu', async () => {
+      decidedSame();
+
+      const result = await decide(ID, decideInput());
+
+      expect(result).toEqual({ success: true, message: T_SUCCESS('ta sama sprzedaż') });
+      expect(rpcCallsOf('decide_ksef_duplicate')).toEqual([]);
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('U13c: „Przypomnij klientowi” — kiedy nie wysyłamy', () => {
+    it('faktura nie czeka na decyzję (szkic) → powód notPending, bez e-maila i śladu', async () => {
+      m.invoice = pendingRow({ ksef_status: 'draft', last_error_code: null });
+
+      const result = await remind(ID);
+
+      expect(result).toEqual({ success: false, error: T_NOT_PENDING });
+      expect(m.duplicateEmail).not.toHaveBeenCalled();
+      expect(notices()).toEqual([]);
+    });
+
+    it('blokada z bazy NOT NULL (wpłata, której panel nie widzi) → powód wyłączenia, bez e-maila', async () => {
+      blocker = 'payments';
+
+      const result = await remind(ID);
+
+      expect(result.success).toBe(false);
+      expect(result.success ? '' : result.error).toContain('decyzja zablokowana');
+      expect(m.duplicateEmail).not.toHaveBeenCalled();
+      expect(notices()).toEqual([]);
+      // Odczyt blokady z bazy jest autorytatywny (obejmuje wiersze payments).
+      expect(rpcCallsOf('ksef_duplicate_decision_blocker')).toHaveLength(1);
+    });
+
+    it('ostatnie powiadomienie o K młodsze niż 24 h → REMIND_TOO_SOON, bez e-maila (decyzja 12)', async () => {
+      m.auditLogs = [notice('2026-10-03T08:00:00.000Z')];
+
+      const result = await remind(ID);
+
+      expect(result.success).toBe(false);
+      expect(result.success ? '' : result.error).toMatch(T_REMIND_TOO_SOON);
+      expect(m.duplicateEmail).not.toHaveBeenCalled();
+      expect(notices()).toHaveLength(1);
+    });
+
+    it('firma bez e-maila właściciela → REMIND_NO_EMAIL, bez śladu', async () => {
+      m.ownerEmail.mockResolvedValue(null);
+
+      const result = await remind(ID);
+
+      expect(result).toEqual({ success: false, error: T_REMIND_NO_EMAIL });
+      expect(m.duplicateEmail).not.toHaveBeenCalled();
+      expect(notices()).toEqual([]);
+      expect(m.ownerEmail).toHaveBeenCalledWith(TENANT);
+    });
+
+    it('chwilowy błąd odczytu adresu właściciela (baza albo GoTrue) → REMIND_READ_FAILED, nie „innym kanałem”; bez e-maila i śladu (przegląd PR B #1/#4)', async () => {
+      m.ownerEmail.mockRejectedValue(new Error('Nie można odczytać e-maila właściciela firmy: Service Unavailable'));
+
+      const result = await remind(ID);
+
+      expect(result).toEqual({ success: false, error: OPERATOR_DUPLICATE_MESSAGES.remindReadFailed });
+      expect(m.duplicateEmail).not.toHaveBeenCalled();
+      expect(notices()).toEqual([]);
+      expect(m.captureException).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('U13d: „Przypomnij klientowi” — wysyłka i ślad', () => {
+    it('ostatnie powiadomienie o K sprzed 25 h (ślad o innym K się nie liczy) → jeden e-mail z kluczem przypomnienie-1 i ślad via operator', async () => {
+      m.auditLogs = [notice('2026-10-02T09:00:00.000Z'), notice('2026-10-03T09:00:00.000Z', K2)];
+      const key = `ksef-duplicate-decision/${ID}/${K}/przypomnienie-1`;
+
+      const result = await remind(ID);
+
+      expect(result).toEqual({ success: true, message: `Wysłano przypomnienie do ${OWNER_EMAIL}.` });
+      expect(m.duplicateEmail).toHaveBeenCalledTimes(1);
+      expect(m.duplicateEmail).toHaveBeenCalledWith(
+        OWNER_EMAIL,
+        expect.objectContaining({ invoiceId: ID, invoiceNumber: 'FV/9', ksefNumber: K, reminder: true }),
+        expect.objectContaining({ idempotencyKey: key }),
+      );
+      expect(notices()).toHaveLength(3);
+      expect(notices().at(-1)).toMatchObject({
+        tenant_id: TENANT, action: NOTICE_ACTION, entity_type: 'invoice', entity_id: ID,
+        metadata: expect.objectContaining({
+          original_ksef_number: K, via: 'operator', idempotency_key: key, emailed: true, push_sent: 0, reminder: 1,
+          operator: OPERATOR.email, source: 'system',
+        }),
+      });
+      expect(m.revalidate).toHaveBeenCalledWith(`/admin/ksef/${ID}`);
+    });
+
+    it('faktura bez żadnego powiadomienia (zaległość sprzed PR B) → pierwsze przypomnienie z kluczem przypomnienie-0', async () => {
+      const result = await remind(ID);
+
+      expect(result).toEqual({ success: true, message: `Wysłano przypomnienie do ${OWNER_EMAIL}.` });
+      expect(m.duplicateEmail).toHaveBeenCalledWith(
+        OWNER_EMAIL, expect.anything(), expect.objectContaining({ idempotencyKey: `ksef-duplicate-decision/${ID}/${K}/przypomnienie-0` }),
+      );
+      expect(notices()).toHaveLength(1);
+    });
+
+    it('zapis śladu pada po wysyłce → REMIND_SENT_NOT_RECORDED i Sentry; dokładnie jeden e-mail', async () => {
+      m.failAuditInsert = true;
+
+      const result = await remind(ID);
+
+      expect(m.duplicateEmail).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ success: false, error: T_REMIND_NOT_RECORDED });
+      expect(m.captureException).toHaveBeenCalled();
+    });
+
+    it('e-mail niewysłany (Resend nieskonfigurowany) → REMIND_NOT_SENT z powodem, bez śladu', async () => {
+      m.duplicateEmail.mockResolvedValue({ sent: false, reason: 'not-configured' });
+
+      const result = await remind(ID);
+
+      expect(m.duplicateEmail).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ success: false, error: 'Nie wysłano przypomnienia (not-configured).' });
+      expect(notices()).toEqual([]);
+    });
   });
 });

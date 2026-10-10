@@ -10,6 +10,7 @@ import { DraftInvoiceActions } from './draft-invoice-actions';
 import { FailedInvoiceActions } from './failed-invoice-actions';
 import { downloadInvoiceXmlAction } from './actions-detail';
 import { saveBlob } from '@/lib/download';
+import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 
 interface Props {
   invoice: {
@@ -18,10 +19,25 @@ interface Props {
     xml_storage_path: string | null;
     /** VAT / KOR / ZAL / ROZ — do przycisków szkicu. */
     invoice_type?: string | null;
-    /** regular / correction / advance / final — dokument specjalny nie ma „Wyślij ponownie”. */
+    /** regular / correction / advance / final — dokument specjalny: przyciski wg faktów ponowienia z kopii. */
     invoice_kind?: string | null;
     /** Kod z katalogu `ksef_error_codes` — decyduje o przyciskach po błędzie. */
     last_error_code?: string | null;
+    /** A4b PR2b: dane zapisane, rodzaj wstrzymany, data wystawienia minęła. */
+    ksef_resend_facts: KsefResendFacts;
+    /** `KSEF_ENV` aplikacji poprawny. */
+    ksef_environment_known: boolean;
+    /**
+     * D-A4-1b-3 PR B: nad paskiem stoi panel duplikatu 440 (decyzja albo nota
+     * z danymi oryginału) — pasek po błędzie odsyła do ramki wyżej.
+     */
+    ksef_duplicate_panel?: boolean;
+    /**
+     * D-A4-1b-3 PR B: szkic wycofany (wpis `number_taken`) — bez wysyłki do KSeF
+     * i bez e-maila do nabywcy (decyzja 10); usunąć można tylko korektę i fakturę
+     * rozliczeniową (`deletable`, decyzja 9). `null` — zwykły szkic albo inny stan.
+     */
+    ksef_retired?: { deletable: boolean } | null;
   };
   /** Rola w firmie dopuszcza ponowną wysyłkę i powrót do szkicu (owner/admin). */
   canManageSend?: boolean;
@@ -89,7 +105,8 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
         )}
         Pobierz PDF
       </Button>
-      <EmailInvoiceButton invoiceId={invoice.id} />
+      {/* Decyzja 10: dokument wycofany nie jest fakturą dla nabywcy (odmawia też serwer). */}
+      {!invoice.ksef_retired && <EmailInvoiceButton invoiceId={invoice.id} />}
       {canDownload && (
         <Button
           variant="glass"
@@ -106,7 +123,11 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
         </Button>
       )}
       {invoice.ksef_status === 'draft' && (
-        <DraftInvoiceActions invoiceId={invoice.id} invoiceType={invoice.invoice_type ?? null} />
+        <DraftInvoiceActions
+          invoiceId={invoice.id}
+          invoiceType={invoice.invoice_type ?? null}
+          retired={invoice.ksef_retired ?? null}
+        />
       )}
       {(invoice.ksef_status === 'rejected' || invoice.ksef_status === 'failed') && (
         <FailedInvoiceActions
@@ -115,6 +136,9 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
           errorCode={invoice.last_error_code ?? null}
           invoiceKind={invoice.invoice_kind ?? null}
           canManage={canManageSend}
+          facts={invoice.ksef_resend_facts}
+          environmentKnown={invoice.ksef_environment_known}
+          duplicatePanel={invoice.ksef_duplicate_panel ?? false}
         />
       )}
     </div>

@@ -20,6 +20,7 @@ import AccountDeletionConfirmation from './templates/AccountDeletionConfirmation
 import CertExpiry from './templates/CertExpiry';
 import GdprDeletionScheduled from './templates/GdprDeletionScheduled';
 import InvoiceAccepted from './templates/InvoiceAccepted';
+import InvoiceDuplicateDecision from './templates/InvoiceDuplicateDecision';
 import InvoiceFailed from './templates/InvoiceFailed';
 import MagicImportCompleted from './templates/MagicImportCompleted';
 import PaymentFailed from './templates/PaymentFailed';
@@ -114,6 +115,16 @@ interface InvoiceFailedPayload {
   errorMessage: string;
 }
 
+/** D-A4-1b-3 PR B: „Faktura … czeka na Twoją decyzję” (nierozstrzygnięty duplikat 440). */
+export interface InvoiceDuplicateDecisionPayload {
+  invoiceId: string;
+  invoiceNumber: string;
+  /** K — numer KSeF faktury, która ma już ten numer w KSeF. */
+  ksefNumber: string;
+  /** Przypomnienie operatora (inny temat). */
+  reminder: boolean;
+}
+
 interface CertExpiryPayload {
   tenantName: string;
   daysRemaining: number;
@@ -130,6 +141,7 @@ import {
   isUnsubscribeConfigured,
 } from './unsubscribe-token';
 import { SUPPORT_EMAIL } from '@/lib/site';
+import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
 
 async function sendViaResend(opts: {
   to: string;
@@ -256,6 +268,34 @@ export async function sendInvoiceFailedEmail(
   return sendViaResend({
     to: email,
     subject: 'Faktura odrzucona przez KSeF',
+    html,
+    idempotencyKey: options.idempotencyKey,
+  });
+}
+
+/**
+ * D-A4-1b-3 PR B (decyzja Bartosza 07.10.2026 (5), spec §2.8): „Faktura {nr}
+ * czeka na Twoją decyzję” — raz na fakturę i numer KSeF oryginału (ślad
+ * w `audit_logs`, klucz idempotencji z wywołującego); przypomnienie operatora
+ * z tematem „Przypomnienie: …”. Teksty: `DUPLICATE_DECISION_TEXTS.NOTICE`
+ * (przegląd prawnika przed KSeF PROD). Błąd Resend rzuca (`sendViaResend`).
+ */
+export async function sendInvoiceDuplicateDecisionEmail(
+  email: string,
+  payload: InvoiceDuplicateDecisionPayload,
+  options: SendOptions = {},
+): Promise<EmailStubResult> {
+  const subject = payload.reminder
+    ? DUPLICATE_DECISION_TEXTS.NOTICE.REMINDER_SUBJECT(payload.invoiceNumber)
+    : DUPLICATE_DECISION_TEXTS.NOTICE.SUBJECT(payload.invoiceNumber);
+  if (!isResendConfigured()) {
+    logger.debug(`[email:stub] sendInvoiceDuplicateDecisionEmail → ${email}:`, `${subject} (numer KSeF ${payload.ksefNumber})`);
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(InvoiceDuplicateDecision({ ...payload, appUrl: APP_URL }));
+  return sendViaResend({
+    to: email,
+    subject,
     html,
     idempotencyKey: options.idempotencyKey,
   });

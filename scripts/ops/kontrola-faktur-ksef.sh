@@ -40,7 +40,12 @@
 #      od A4b PR2a: failed KOR/ZAL/ROZ — czy automat ponowi (kod, data
 #      wystawienia, dane), zwykłe failed bez pozycji, I5 wg danych,
 #      ostatni przebieg crona
-#  10. ostatnie migracje w schema_migrations
+#  10. duplikaty 440 i decyzja klienta (D-A4-1b-3 PR B, 00148): failed
+#      KSEF_DUPLICATE_RECONCILE wg powodu i środowiska znacznika, wg blokady
+#      decyzji (po 00148), I5D „czeka na klienta” wg środowiska, powiadomienia
+#      i decyzje z audytu, decyzje known-number do sprawdzenia dokumentu Y,
+#      szkice wycofane (wpis number_taken) wg rodzaju
+#  11. ostatnie migracje w schema_migrations
 #
 # Błąd jednego zapytania nie przerywa reszty (np. kolumna sprzed migracji).
 # ════════════════════════════════════════════════════════════════
@@ -207,7 +212,7 @@ sql "failed KOR/ZAL/ROZ: rodzaj | kod | data wystawienia | dane do ponowienia | 
   "SELECT invoice_kind, kod, data_wyst, dane, CASE WHEN invoice_kind='final' THEN 'nie - ROZ_HOLD do C4' WHEN NOT dane THEN 'nie - brak danych, runbook Stary dokument specjalny' WHEN NOT kod_automatu THEN 'nie - kod bez automatu (klient albo operator)' WHEN data_wyst <> 'dzis' THEN 'nie - data wystawienia minela (decyzja b)' WHEN invoice_kind='correction' THEN 'tylko przy KSEF_ENV=test (production: KOR_HOLD)' ELSE 'tak - I6/I7 dzis' END AS automat, count(*) FROM (SELECT i.invoice_kind, coalesce(i.last_error_code,'(brak kodu)') AS kod, (coalesce(c.auto_requeue, false) OR i.last_error_code IS NOT DISTINCT FROM 'KSEF_PAUSED') AS kod_automatu, CASE WHEN i.issue_date = (now() AT TIME ZONE 'Europe/Warsaw')::date THEN 'dzis' ELSE 'przed dzis' END AS data_wyst, (jsonb_typeof(i.fa3_data->'lines') IS NOT DISTINCT FROM 'array' AND CASE WHEN i.invoice_kind='advance' THEN jsonb_typeof(i.fa3_data->'advanceEnvelope') IS NOT DISTINCT FROM 'object' ELSE i.special_data IS NOT NULL END) AS dane FROM invoices i LEFT JOIN ksef_error_codes c ON c.code = i.last_error_code WHERE i.direction='outgoing' AND i.ksef_status='failed' AND i.invoice_kind<>'regular') x GROUP BY 1,2,3,4,5 ORDER BY 1,2,3,4"
 sql "zwykle failed z kodem automatu bez tablicy pozycji w fa3_data (I6/I7 pomijaja co przebieg: skippedNoData): kod | liczba" \
   "SELECT coalesce(i.last_error_code,'(brak kodu)') AS kod, count(*) FROM invoices i LEFT JOIN ksef_error_codes c ON c.code = i.last_error_code WHERE i.direction='outgoing' AND i.ksef_status='failed' AND i.invoice_kind='regular' AND (coalesce(c.auto_requeue, false) OR i.last_error_code = 'KSEF_PAUSED') AND jsonb_typeof(i.fa3_data->'lines') IS DISTINCT FROM 'array' GROUP BY 1 ORDER BY 1"
-sql "I5: failed/rejected z wpisem sent/intent starszym niz 48 h: rodzaj | stan | dane | czy automat I5 uzgodni | liczba (KOR zalezy od KSEF_ENV wyzej)" \
+sql "I5: failed/rejected z wpisem sent/intent starszym niz 48 h: rodzaj | stan | dane | czy automat I5 uzgodni | liczba (KOR zalezy od KSEF_ENV wyzej) (od 00148 faktury czekające na decyzję klienta to I5D — sekcja 10; ten licznik je obejmuje)" \
   "SELECT invoice_kind, ksef_status, dane, CASE WHEN invoice_kind='final' THEN 'nie - ROZ_HOLD do C4, operator' WHEN NOT dane THEN 'nie - brak danych, runbook Stary dokument specjalny' WHEN invoice_kind='correction' THEN 'tylko przy KSEF_ENV=test (production: KOR_HOLD)' ELSE 'tak - I5 raz na dobe' END AS automat, count(*) FROM (SELECT DISTINCT i.id, i.invoice_kind, i.ksef_status, (jsonb_typeof(i.fa3_data->'lines') IS NOT DISTINCT FROM 'array' AND CASE WHEN i.invoice_kind='regular' THEN true WHEN i.invoice_kind='advance' THEN jsonb_typeof(i.fa3_data->'advanceEnvelope') IS NOT DISTINCT FROM 'object' ELSE i.special_data IS NOT NULL END) AS dane FROM ksef_submissions s JOIN invoices i ON i.id = s.invoice_id WHERE s.status IN ('sent','intent') AND s.attempted_at < now() - interval '48 hours' AND i.ksef_status IN ('failed','rejected')) x GROUP BY 1,2,3,4 ORDER BY 1,2,3,4"
 printf -- '--- ostatni przebieg cyklu życia (worker, 30 min): skippedNoData / skippedHeld / skippedIssueDate / skippedConflict\n'
 "${SSH[@]}" "root@$APP" \
@@ -225,7 +230,27 @@ printf -- '--- PostgREST zna special_data? (42501 = tak; PGRST204 = nie zna kolu
      -H 'Content-Type: application/json' -d '{\"special_data\":null}' -w ' (HTTP %{http_code})'; echo" \
   || echo "  (nie udało się odpytać PostgREST)"
 
-section "10. db-1: ostatnie migracje"
+section "10. duplikaty 440 i decyzja klienta (D-A4-1b-3 PR B, 00148)"
+# Znacznik 440 = najnowszy wpis intent/sent z original_ksef_number (jak w
+# ksef_duplicate_decision_blocker). (a) i (g) działają także przed 00148;
+# (b) i (c) wymagają 00148 — przed nią (b) kończy się „zapytanie nieudane”,
+# a (c) nie ma wierszy I5D.
+sql "(a) failed KSEF_DUPLICATE_RECONCILE: powód znacznika | środowisko danych oryginału | rodzaj | liczba (środowisko inne niż KSEF_ENV workera z sekcji 9 = I5D-env)" \
+  "SELECT CASE WHEN m.jest IS NULL THEN '(brak znacznika 440)' WHEN m.powod IS NULL THEN '(znacznik bez original_check - sprzed 00144)' ELSE m.powod END AS powod, coalesce(m.env,'-') AS srodowisko, i.invoice_kind, count(*) FROM invoices i LEFT JOIN LATERAL (SELECT true AS jest, s.original_check->>'reason' AS powod, s.original_check->>'env' AS env FROM ksef_submissions s WHERE s.invoice_id = i.id AND s.tenant_id = i.tenant_id AND s.status IN ('intent','sent') AND s.original_ksef_number IS NOT NULL ORDER BY s.attempted_at DESC NULLS LAST, s.id LIMIT 1) m ON true WHERE i.direction='outgoing' AND i.ksef_status='failed' AND i.last_error_code='KSEF_DUPLICATE_RECONCILE' GROUP BY 1,2,3 ORDER BY 1,2,3"
+sql "(b) failed KSEF_DUPLICATE_RECONCILE wg blokady decyzji: blokada | liczba ((czeka na klienta) = I5D; payments — wpłaty, runbook i zgoda Bartosza; known-stale — sprawdź dokument Y; po 00148)" \
+  "SELECT coalesce(public.ksef_duplicate_decision_blocker(i.id, i.tenant_id), '(czeka na klienta)') AS blokada, count(*) FROM invoices i WHERE i.direction='outgoing' AND i.ksef_status='failed' AND i.last_error_code='KSEF_DUPLICATE_RECONCILE' GROUP BY 1 ORDER BY 1"
+sql "(c) I5D — czekają na decyzję klienta: środowisko danych oryginału | liczba | najstarsza próba (inne niż KSEF_ENV workera = I5D-env, alarm krytyczny; przed przełączeniem TEST → PROD: ile z env test)" \
+  "SELECT coalesce(v.detail->>'env','(brak)') AS srodowisko, count(*), min(v.detail->>'attempted_at') AS najstarsza_proba FROM public.ksef_lifecycle_violations() v WHERE v.invariant='I5D' GROUP BY 1 ORDER BY 1"
+sql "(d) powiadomienia „czeka na Twoją decyzję” z 30 dni: kto (auto = pierwszy e-mail, operator = Przypomnij klientowi) | liczba | faktur | ostatnie" \
+  "SELECT coalesce(metadata->>'via','(brak)') AS kto, count(*), count(DISTINCT entity_id) AS faktur, max(created_at) AS ostatnie FROM audit_logs WHERE action='invoice.ksef_duplicate_decision_notified' AND created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1"
+sql "(e) decyzje z 7 dni: wybór | powód | kto (client / operator) | liczba" \
+  "SELECT coalesce(details_json->>'choice','?') AS wybor, coalesce(details_json->>'reason','?') AS powod, coalesce(details_json->>'via','?') AS kto, count(*) FROM audit_logs WHERE action='invoice.ksef_duplicate_decided' AND created_at > now() - interval '7 days' GROUP BY 1,2,3 ORDER BY 1,2,3"
+sql "(f) decyzje known-number z 30 dni — sprawdź dokument Y w KSeF i w FaktFlow (runbook; naprawa Y tylko za zgodą Bartosza): firma | faktura | numer | numer KSeF oryginału | Y id | Y numer | Y stan | Y ma numer KSeF oryginału | wybór | kiedy" \
+  "SELECT a.tenant_id, a.entity_id AS faktura, a.details_json->'retired'->>'internal_number' AS numer, a.details_json->'original'->>'ksef_number' AS numer_ksef_oryginalu, a.details_json->'original'->'known_invoice'->>'id' AS y_id, a.details_json->'original'->'known_invoice'->>'internalNumber' AS y_numer, coalesce(y.ksef_status::text,'(brak Y)') AS y_stan, (y.ksef_number IS NOT DISTINCT FROM a.details_json->'original'->>'ksef_number') AS y_ma_numer_k, a.details_json->>'choice' AS wybor, a.created_at FROM audit_logs a LEFT JOIN invoices y ON y.id::text = a.details_json->'original'->'known_invoice'->>'id' AND y.tenant_id = a.tenant_id WHERE a.action='invoice.ksef_duplicate_decided' AND a.details_json->>'reason'='known-number' AND a.created_at > now() - interval '30 days' ORDER BY a.created_at DESC LIMIT 50"
+sql "(g) szkice z wpisem number_taken (wycofane): rodzaj | skąd (decyzja klienta / automat KSEF_NUMBER_TAKEN) | co blokuje 00148 | liczba" \
+  "SELECT i.invoice_kind, CASE WHEN EXISTS (SELECT 1 FROM ksef_submissions s WHERE s.invoice_id = i.id AND s.tenant_id = i.tenant_id AND s.status='number_taken' AND coalesce(s.original_check ? 'decision', false)) THEN 'decyzja klienta' ELSE 'automat KSEF_NUMBER_TAKEN' END AS skad, CASE WHEN i.invoice_kind IN ('regular','advance') THEN 'trzyma numer: bez wysylki, usuwania i zmiany numeru' ELSE 'bez wysylki i zmiany numeru; klient moze usunac (07.10 (9))' END AS po_00148, count(*) FROM invoices i WHERE i.direction='outgoing' AND i.ksef_status='draft' AND EXISTS (SELECT 1 FROM ksef_submissions s WHERE s.invoice_id = i.id AND s.tenant_id = i.tenant_id AND s.status='number_taken') GROUP BY 1,2,3 ORDER BY 1,2"
+
+section "11. db-1: ostatnie migracje"
 sql "schema_migrations" \
   "SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5"
 

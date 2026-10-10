@@ -9,9 +9,14 @@ import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/invoices/status-badge';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
 import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
+import { KsefDuplicateDecision } from '@/components/invoices/ksef-duplicate-decision';
+import { RetiredDraftBanner } from '@/components/invoices/retired-draft-banner';
 import { UpoDownload } from '@/components/invoices/upo-download';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
+import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
+import { automaticResendExpected } from '@/lib/invoices/ksef-send-policy';
 import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
+import type { DuplicateDecisionView, RetiredDraftView } from '@/lib/ksef/duplicate-decision';
 import { importedVatRateLabel } from '@/lib/xml/fa3-p12';
 import type { Database } from '@/types/database';
 
@@ -69,6 +74,17 @@ export interface InvoiceDetailInitial {
   can_manage_send: boolean;
   /** D-A4-1b-3: dane faktury, którą KSeF ma już pod tym numerem (nierozstrzygnięty 440). */
   ksef_duplicate_original: DuplicateOriginalView | null;
+  /** A4b PR2b: ponowienie z kopii (dane zapisane, rodzaj wstrzymany, data minęła) — bez treści dokumentu. */
+  ksef_resend_facts: KsefResendFacts;
+  /** `KSEF_ENV` aplikacji poprawny. */
+  ksef_environment_known: boolean;
+  /**
+   * D-A4-1b-3 PR B: decyzja klienta przy nierozstrzygniętym 440 (`decidable` —
+   * panel decyzji; `refused` — tekst odmowy jest już notą `ksef_duplicate_original`).
+   */
+  ksef_duplicate_decision: DuplicateDecisionView | null;
+  /** D-A4-1b-3 PR B: szkic wycofany (wpis `number_taken`) — baner każdego rodzaju (decyzja 9). */
+  ksef_retired_draft: RetiredDraftView | null;
 }
 
 interface PaymentSnapshot {
@@ -116,6 +132,14 @@ function vatRateLabel(rate: string | null): string {
  */
 export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }) {
   const [inv, setInv] = useState(initial);
+  // `router.refresh()` (np. po decyzji albo po odmowie wysyłki/usunięcia — C15) przynosi
+  // nowe `initial` z serwera: widok przyjmuje je w całości, inaczej baner szkicu wycofanego
+  // i panel decyzji zostałyby ze stanu z pierwszego renderu. Realtime działa dalej na nim.
+  const [seenInitial, setSeenInitial] = useState(initial);
+  if (initial !== seenInitial) {
+    setSeenInitial(initial);
+    setInv(initial);
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -131,43 +155,48 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
         },
         (payload) => {
           const row = payload.new as Record<string, unknown>;
-          setInv((prev) => ({
-            ...prev,
-            // Dane oryginału 440 pochodzą z chwili otwarcia strony — po zmianie
-            // stanu faktury są nieaktualne (nowy werdykt = nowe dane po odświeżeniu).
-            ksef_duplicate_original:
+          setInv((prev) => {
+            // Dane oryginału 440 i widok decyzji pochodzą z chwili otwarcia strony — po
+            // zmianie stanu faktury są nieaktualne (nowy werdykt = nowe dane po odświeżeniu).
+            const duplicateStale =
               (typeof row.ksef_status === 'string' && row.ksef_status !== prev.ksef_status) ||
               ('last_error_code' in row && row.last_error_code !== prev.last_error_code) ||
-              ('last_error' in row && row.last_error !== prev.last_error)
-                ? null
-                : prev.ksef_duplicate_original,
-            ksef_status:
-              typeof row.ksef_status === 'string'
-                ? row.ksef_status
-                : prev.ksef_status,
-            ksef_number:
-              (row.ksef_number as string | null | undefined) ?? prev.ksef_number,
-            ksef_accepted_at:
-              (row.ksef_accepted_at as string | null | undefined) ??
-              prev.ksef_accepted_at,
-            xml_storage_path:
-              (row.xml_storage_path as string | null | undefined) ??
-              prev.xml_storage_path,
-            last_error:
-              'last_error' in row
-                ? row.last_error as string | null
-                : prev.last_error,
-            last_error_code:
-              'last_error_code' in row
-                ? row.last_error_code as string | null
-                : prev.last_error_code,
-            last_error_field:
-              (row.last_error_field as string | null | undefined) ??
-              prev.last_error_field,
-            last_error_suggestion:
-              (row.last_error_suggestion as string | null | undefined) ??
-              prev.last_error_suggestion,
-          }));
+              ('last_error' in row && row.last_error !== prev.last_error);
+            return {
+              ...prev,
+              ksef_duplicate_original: duplicateStale ? null : prev.ksef_duplicate_original,
+              ksef_duplicate_decision: duplicateStale ? null : prev.ksef_duplicate_decision,
+              // Szkic wycofany zostaje wycofany, dopóki faktura jest szkicem; każdy inny stan — bez banera.
+              ksef_retired_draft:
+                typeof row.ksef_status === 'string' && row.ksef_status !== 'draft' ? null : prev.ksef_retired_draft,
+              ksef_status:
+                typeof row.ksef_status === 'string'
+                  ? row.ksef_status
+                  : prev.ksef_status,
+              ksef_number:
+                (row.ksef_number as string | null | undefined) ?? prev.ksef_number,
+              ksef_accepted_at:
+                (row.ksef_accepted_at as string | null | undefined) ??
+                prev.ksef_accepted_at,
+              xml_storage_path:
+                (row.xml_storage_path as string | null | undefined) ??
+                prev.xml_storage_path,
+              last_error:
+                'last_error' in row
+                  ? row.last_error as string | null
+                  : prev.last_error,
+              last_error_code:
+                'last_error_code' in row
+                  ? row.last_error_code as string | null
+                  : prev.last_error_code,
+              last_error_field:
+                (row.last_error_field as string | null | undefined) ??
+                prev.last_error_field,
+              last_error_suggestion:
+                (row.last_error_suggestion as string | null | undefined) ??
+                prev.last_error_suggestion,
+            };
+          });
         },
       )
       .on(
@@ -204,6 +233,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
   const buyer = (inv.buyer_data ?? {}) as PartySnapshot;
   const payment = (inv.payment_data ?? null) as PaymentSnapshot | null;
   const lines = inv.lines;
+  // Panel „W KSeF jest już faktura o tym numerze” (decyzja albo nota z danymi oryginału).
+  // Obok niego bez karty błędu: tekst runnera jest dla operatora, klient ma panel.
+  const duplicatePanel =
+    inv.ksef_status === 'failed' &&
+    inv.last_error_code === 'KSEF_DUPLICATE_RECONCILE' &&
+    inv.ksef_duplicate_original !== null;
+  const decision = duplicatePanel && inv.ksef_duplicate_decision?.kind === 'decidable' ? inv.ksef_duplicate_decision : null;
+  const retired = inv.ksef_status === 'draft' ? inv.ksef_retired_draft : null;
 
   return (
     <div className="max-w-4xl">
@@ -227,7 +264,18 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
             {inv.invoice_type ? ` · ${inv.invoice_type}` : ''}
           </p>
         </div>
-        <StatusBadge status={inv.ksef_status} errorCode={inv.last_error_code} />
+        <StatusBadge
+          status={inv.ksef_status}
+          errorCode={inv.last_error_code}
+          automaticResend={automaticResendExpected({
+            status: inv.ksef_status,
+            errorCode: inv.last_error_code,
+            invoiceKind: inv.invoice_kind,
+            // Fakty z propsów (odświeżane przez router.refresh), stan i kod z Realtime.
+            facts: initial.ksef_resend_facts,
+            environmentKnown: initial.ksef_environment_known,
+          })}
+        />
       </div>
 
       {inv.ksef_number && (
@@ -254,7 +302,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
         </div>
       )}
 
-      {inv.last_error && (
+      {inv.last_error && !duplicatePanel && (
         <div className="mb-6">
           <InvoiceErrorDisplay
             errorMessage={inv.last_error}
@@ -270,26 +318,42 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
         </div>
       )}
 
-      {inv.ksef_status === 'failed' &&
-        inv.last_error_code === 'KSEF_DUPLICATE_RECONCILE' &&
-        inv.ksef_duplicate_original && (
-          <Card className="p-4 mb-6 border-amber-200 bg-amber-50">
-            <h3 className="font-semibold text-sm text-amber-900">
-              {inv.ksef_duplicate_original.title}
-            </h3>
-            <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
-              {inv.ksef_duplicate_original.rows.map((row) => (
-                <div key={row.label} className="flex gap-2">
-                  <dt className="text-amber-800">{row.label}:</dt>
-                  <dd className="font-medium break-all">{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="text-sm text-amber-900 mt-3">
-              {inv.ksef_duplicate_original.note}
-            </p>
-          </Card>
-        )}
+      {duplicatePanel && inv.ksef_duplicate_original && (
+        <Card className="p-4 mb-6 border-amber-200 bg-amber-50">
+          <h3 className="font-semibold text-sm text-amber-900">
+            {inv.ksef_duplicate_original.title}
+          </h3>
+          <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+            {inv.ksef_duplicate_original.rows.map((row) => (
+              <div key={row.label} className="flex gap-2">
+                <dt className="text-amber-800">{row.label}:</dt>
+                <dd className="font-medium break-all">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+          {decision ? (
+            <KsefDuplicateDecision invoiceId={inv.id} view={decision} />
+          ) : (
+            <>
+              <p className="text-sm text-amber-900 mt-3">
+                {inv.ksef_duplicate_original.note}
+              </p>
+              {inv.ksef_duplicate_original.link && (
+                <p className="text-sm mt-2">
+                  <Link
+                    href={inv.ksef_duplicate_original.link.href}
+                    className="font-medium text-amber-900 underline underline-offset-2 hover:no-underline"
+                  >
+                    {inv.ksef_duplicate_original.link.label}
+                  </Link>
+                </p>
+              )}
+            </>
+          )}
+        </Card>
+      )}
+
+      {retired && <RetiredDraftBanner view={retired} />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <Card className="p-4">
@@ -446,6 +510,10 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           invoice_type: inv.invoice_type,
           invoice_kind: inv.invoice_kind,
           last_error_code: inv.last_error_code,
+          ksef_resend_facts: initial.ksef_resend_facts,
+          ksef_environment_known: initial.ksef_environment_known,
+          ksef_duplicate_panel: duplicatePanel,
+          ksef_retired: retired ? { deletable: retired.deletable } : null,
         }}
         canManageSend={inv.can_manage_send}
       />
