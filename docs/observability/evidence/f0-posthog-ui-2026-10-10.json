@@ -6,9 +6,11 @@
   "scope": "read_only_PostHog_UI_manual_transcription_not_SDK_or_F0_acceptance",
   "source": {
     "kind": "manual_transcription_of_visible_UI",
+    "private_file_persisted_at_utc": "2026-10-10T16:14:31.7025665Z",
+    "persistence_note": "reconstructed_from_observed_UI_tool_outputs_after_transient_path_was_unavailable_to_host",
     "transcription_recorded_at_utc": "2026-10-10T16:07:03.4311488Z",
     "exact_UI_observation_window_utc": "not_instrumented",
-    "private_transcription_sha256": "9a61140eb2454e8737e4f816807ca1716c111ea4bdb75ac1f2447efb5acb1fa7",
+    "private_transcription_sha256": "d04faa328abbd3be493c4d02a1e22690f1e4138c5bc3841c4e2afdc9a1a3001e",
     "hash_kind": "transcription_file_not_raw_HTTP_or_DOM",
     "raw_DOM_saved": false,
     "screenshots_saved": false,
