@@ -40,6 +40,24 @@ release i późniejszego agenta przygotowującego naprawy. Wykonanie i testy
 nie są zaliczone. [Nowy indeks](evidence/f0-low-cost-2026-10-10.json) rozdziela
 decyzje, odczyt lokalny i wcześniejsze dowody; F0 pozostaje otwarte.
 
+**Nowy pomiar 10.10:** SSH do trzech hostów potwierdzone od 14:23 UTC,
+wszystkie klucze ED25519 zgodne z odciskami przekazanymi przez Bartosza
+z jego historycznego `known_hosts`.
+Pełny klucz root nie zapewnia technicznego read-only; odczyt jest granicą
+autoryzowanego zakresu. O 14:26 web/worker healthy na
+`43091e725d845084e11ac73af32750ace349bc02`, Node 22.23.3; odczytano wydania
+obu MinIO. Pomiar rozmiarów 14:27 i osobny breakdown DB
+14:29:01.792858–14:29:02.064051 UTC mają własne wyniki, opisane w
+[inwentarzu](runtime-inventory.md#odczyt-runtime-i-rozmiarów--10102026)
+i [nowym indeksie](evidence/f0-runtime-size-2026-10-10.json). Kompletny listing
+S3 o 14:32 UTC: MinIO aplikacji 31 obiektów / 378638 B, MinIO Supabase
+0 obiektów / 0 B; oba buckety Unversioned. Wersje obejmują bieżące obiekty,
+więc nie dodajemy ponownie ich bajtów. Nie pobierano treści ani nie badano
+referencji DB → obiekty i multipart uploads. Zajętość źródeł i listing
+nie są rozmiarem dumpów, atomowym snapshotem DB/S3 ani dowodem całej retencji.
+G03/G09 nadal FAIL, F0_OPEN; bez kopii, zmian serwerów, migracji, wdrożeń,
+restore lub F1. Wstrzymanie zakupów pozostaje bez zmian.
+
 Statusy: `PASS` wymaga dowodu pełnego kryterium; `PARTIAL` to niepełny dowód;
 `FAIL` stwierdzone niespełnienie; `BLOCKED` brak dostępu do sprawdzenia;
 `PENDING` nierozstrzygnięta decyzja; `NOT RUN` niewykonany test. Operator
@@ -60,17 +78,22 @@ Bartosz nie jest automatycznym wykonawcą ani adresatem nowych zleceń.
    zgodnie z prywatnym `infra.env` i zweryfikowanymi kluczami hostów;
    istniejący klucz wskazany przez `K`.
    `APP`, `OPS`, `DB`, `PGC`, `RESTC`, `APP_PREFIX`, `WORKER_PREFIX` pochodzą
-   z tego pliku i odczytu; wartości pozostają poza Git. Klucz trzeba odblokować
-   lokalnie, a klucze hostów niezależnie zweryfikować. Nie przesyłać hasła ani
-   klucza do czatu. Alternatywa: datowany odczyt uprawnionego operatora.
-   Przed wykonaniem ustalić bieżące kontenery/obrazy, SHA, health, wersje,
-   rozmiary DB i obu MinIO, wolne miejsce, buckety, wersjonowanie, referencje
-   dokumentów oraz dostępność konfiguracji i kluczy odzyskiwania. Nazw z
+   z tego pliku i odczytu; wartości pozostają poza Git. Dostęp i niezależną
+   weryfikację kluczy hostów potwierdzono 10.10 od 14:23 UTC. Klucz ma pełne
+   uprawnienia root; ograniczenie do odczytu jest umową zakresu pracy.
+   Nie przesyłać hasła ani klucza do czatu. Alternatywa: datowany odczyt
+   uprawnionego operatora. Przed osobno upoważnionym wykonaniem odświeżyć
+   bieżące kontenery/obrazy, SHA, health, wersje, rozmiary źródeł i listing S3
+   z pomiaru 10.10 oraz uzupełnić wolne miejsce, referencje dokumentów,
+   multipart uploads i dostępność konfiguracji/kluczy odzyskiwania. Nazw z
    historycznego runbooka nie używać jako aktualnych parametrów wykonania.
 2. **G09: pełne kopie; proponowany cel BX11 HEL1 (Finlandia, 1 TiB).** Trzy oddzielne
    repozytoria restic: pełna baza na db-1 wraz z wymaganymi globals/rolami;
    MinIO aplikacji na ops-1; MinIO Supabase na db-1. Dump bez filtrów
    schematów obejmuje m.in. auth, storage, pg-boss i historię migracji.
+   Osobno opisać zabezpieczenie i odtwarzanie drugiej odczytanej bazy
+   `_supabase`: `pg_dump postgres` jej nie zawiera. Manifest nie może
+   przedstawiać dumpa jednej bazy jako kompletu obu baz.
    Szyfrowanie po stronie klienta, osobne minimalne poświadczenia oraz
    zaszyfrowany pakiet konfiguracji i kluczy odzyskiwania przechowywany
    niezależnie. Harmonogram 00:30 UTC, retencja 7 dziennych / 4 tygodniowe /
@@ -80,8 +103,10 @@ Bartosz nie jest automatycznym wykonawcą ani adresatem nowych zleceń.
    danych źródłowych. Nie zaliczać sukcesu samego lokalnego dumpa. Alternatywą
    bez nowego abonamentu jest urządzenie Igora: dopiero po potwierdzeniu
    lokalizacji w UE, dostępności w porze kopii, miejsca na pełną retencję
-   i odseparowania kopii od VM stagingu. Parametry źródeł i ich przyrost
-   nadal wymagają odczytu; wolny dysk nie dowodzi pojemności dla 7/4/12.
+   i odseparowania kopii od VM stagingu. Rozmiary DB i fizyczne katalogi
+   MinIO oraz kompletny listing obiektów/wersji mają nowy pomiar 10.10;
+   przyrost, rozmiary archiwów i pokrycie referencji DB nadal wymagają dowodów.
+   Wolny dysk nie dowodzi pojemności 7/4/12.
 3. **Dowód G09.** Prywatny manifest wspólnego przebiegu: zakres, UTC,
    wersje, rozmiary i SHA-256 dumpa/globals, liczby i rozmiary obiektów obu
    MinIO, kompletność obiektów referowanych z DB, trzy snapshoty off-host,
@@ -104,7 +129,8 @@ Bartosz nie jest automatycznym wykonawcą ani adresatem nowych zleceń.
    nie jest całodobowym stagingiem ani awarią produkcji. Dowód: datowany
    SHA/obrazy, działający web/worker, rozdzielenie zasobów i integracji,
    zmierzony zapas zasobów. Sam WSL lub dev server nie zalicza G03.
-5. **G01/G02/G07/G08 i odbiór.** Uzupełnić datowany runtime, konfigurację
+5. **G01/G02/G07/G08 i odbiór.** Zachować nowy datowany runtime 10.10,
+   uzupełnić pozostałe kryteria pochodzenia obrazów, konfigurację
    sieci/Kuma/checków oraz rzeczywiste konto/plan/retencję/quota/uprawnienia.
    Dla podstawowego monitorowania F0 odczytać bieżący routing i potwierdzić
    docelowy odbiór przez Igora; brakujące ustawienia kanałów/checków wymagają
@@ -138,12 +164,12 @@ restore i F1 pozostają poza zakresem.
 
 | ID | Warunek odbioru | Stan, źródło i ograniczenie |
 |---|---|---|
-| F0-G01 | Inwentarz env/usług ze źródłem, timestamp i punktem odczytu; rzeczywisty SHA web/worker, wersje i tożsamość obrazów; lokalizacja MinIO. | **PARTIAL.** Historyczny pomiar 04.10: web/worker healthy na `ae87bdde93a636fcb2c48aef737e57a80a3315a7` o 11:21 UTC. Ten pomiar wskazuje MinIO aplikacji na ops-1, odrębne od MinIO Supabase na db-1, oraz lokalne Redis 7.2 i SRH na app-1. Próba SSH z 06.10 nie odczytała runtime; aktualny SHA/health oraz dokładne wersje Node i MinIO pozostają niezweryfikowane. Lokalne image ID nie są digestami registry; brak dowodu digestu registry nie został uzupełniony domysłem. |
-| F0-G02 | Health/restart/startup, limity, routing, log rotation, zegary oraz zakres read-only dołączone do inventory; konfiguracja kontroli dostępu udokumentowana prywatnie. | **PARTIAL.** Pomiar zasobów i usług z 04.10 jest przekazany prywatnie. API Hetznera z 06.10 potwierdza pełny odczyt reguł zapory i ich przypisanie do trzech hostów; szczegóły pozostają prywatne. Routing/ACL, reguły systemowe i niezależny monitoring nadal wymagają odbioru. Stan VM running nie dowodzi health kontenerów ani ciągłości dyżuru. |
+| F0-G01 | Inwentarz env/usług ze źródłem, timestamp i punktem odczytu; rzeczywisty SHA web/worker, wersje i tożsamość obrazów; lokalizacja MinIO. | **PARTIAL.** Historyczny pomiar 04.10: web/worker healthy na `ae87bdde93a636fcb2c48aef737e57a80a3315a7` o 11:21 UTC. Osobny odczyt 10.10 o 14:26 UTC: web/worker healthy na `43091e725d845084e11ac73af32750ace349bc02`, Node 22.23.3, MinIO aplikacji na ops-1 wydanie 2025-09-07, MinIO Supabase na db-1 wydanie 2025-10-15. Redis na app-1: 7.2.15, healthy; SRH działa bez healthchecka. MinIO aplikacji działa bez healthchecka, MinIO Supabase healthy. Pełne pochodzenie obrazów i pozostałe kryteria inwentarza nadal wymagają dowodów. Lokalne image ID nie są digestami registry; nie tworzymy fikcyjnego digestu. |
+| F0-G02 | Health/restart/startup, limity, routing, log rotation, zegary oraz zakres read-only dołączone do inventory; konfiguracja kontroli dostępu udokumentowana prywatnie. | **PARTIAL.** Pomiar zasobów i usług z 04.10 jest przekazany prywatnie. API Hetznera z 06.10 potwierdza reguły zapory i przypisanie do trzech hostów. SSH do wszystkich hostów i zgodność kluczy ED25519 potwierdzono 10.10 od 14:23 UTC; pełny klucz root nie jest technicznie read-only. Nowy health web/worker jest pojedynczym odczytem, nie ciągłością dyżuru. Routing/ACL, reguły systemowe, limity i niezależny monitoring nadal wymagają odbioru. Szczegóły dostępu pozostają prywatne. |
 | F0-G03 | Działający staging z osobną DB/kolejką/storage i kluczami, syntetycznymi danymi, KSeF TEST, Stripe test oraz kontrolowanymi odbiorcami. Web i worker bez dostępu do produkcyjnych efektów. | **FAIL — staging nie istnieje.** Pomiar 04.10 i deklaracja 06.10 nie zostały zastąpione dowodem wykonania. W pierwotnej odpowiedzi z 07.10 wskazano Bartosza jako wykonawcę staging do 31.10.2026; obecnie koordynuje Igor, po pełnych kopiach i przed Closed Alpha, z oddzielnymi DB/kolejką/storage/kluczami, KSeF TEST i Stripe TEST. Termin i przyjęty zakres nie dowodzą działania ani izolacji; fault injection i aktywne PoC pozostają zablokowane. |
 | F0-G04 | Zatwierdzone wyniki, korelacja, deadline, kwalifikacja populacji i klasy plików z [contracts](contracts.md). | **PASS — przyjęcie kontraktu na podstawie delegacji Igora 07.10, uzupełnienie v1.2 z 10.10.** Wybrana wersja rozstrzyga populację, terminy, klasy wejścia, różnice C-22, pełną historię zarejestrowanych błędów faktur i priorytet dashboardu release z późniejszym przygotowaniem napraw przez agenta. Nie zalicza implementacji ani TEST-01/TEST-02, które pozostają NOT RUN. |
 | F0-G05 | Zatwierdzone klasy danych, retencja, audit/source maps/holds/delete, tenant_ref, consent i uprawnienia z [data-policy](data-policy.md). | **PASS — przyjęcie polityki na podstawie delegacji Igora 07.10, uzupełnienie z 10.10.** Zasady obejmują kopie 7/4/12 oraz minimalny wpis każdego błędu w audycie faktury i ograniczony odczyt diagnostyki przez agenta. Aktywna konfiguracja, możliwości kont, zgodność eksportu i TEST-04 nie są zaliczone; TEST-04 NOT RUN. Nie uruchomiono nowego eksportu. |
-| F0-G06 | Przyjęty budżet narzutu, limity zasobów i metoda OFF/ON; baseline i klasy obciążenia określone. | **PASS — przyjęcie budżetu i metody na podstawie delegacji Igora 07.10.** Konkretne obrazy/limity do przyszłego porównania pochodzą z przyjętego G01/G02; brak aktualnego runtime blokuje rozpoczęcie testu, nie tworzy fikcyjnej wersji. Wykonanie baseline i TEST-05 pozostaje NOT RUN. |
+| F0-G06 | Przyjęty budżet narzutu, limity zasobów i metoda OFF/ON; baseline i klasy obciążenia określone. | **PASS — przyjęcie budżetu i metody na podstawie delegacji Igora 07.10.** Runtime ma nowy pomiar 10.10; konkretne obrazy/limity i warunki przyszłego porównania wymagają pozostałych dowodów G01/G02 oraz gotowego stagingu. Odczyt nie upoważnia testu obciążenia. Baseline i TEST-05 pozostają NOT RUN. |
 | F0-G07 | Dowód regionu istniejących usług oraz, osobno, rzeczywistego konta docelowego, planów/produktów, retencji/ingest/API, kosztów i uprawnień. | **PARTIAL.** Metadane EU/API 06.10 i historyczna deklaracja braku płatnych planów są częściowymi dowodami. Aktualny cel po odrzuceniu kosztownego wariantu 10.10: Sentry Developer EU, PostHog EU Free, Kuma i planowany Healthchecks; Datadog poza zakresem. Budżet nowych abonamentów diagnostycznych 0 USD. Aktywne tier, quota, retencje i dostęp kont nadal wymagają odczytu; billing 403 nie ma ustalonej przyczyny. Nie przypisywać Free uprawnień Team ani aktywnego PostHog Error Tracking na podstawie publicznego cennika. Publiczna oferta i katalog cen nie zastępują dowodów kont/usług ani zakupu. |
 | F0-G08 | Przyjęte role, realny dyżurny, godziny i coverage gaps; odbiorca oraz okno testu telefonu; decyzja o niezależnym lifecycle alarmu. | **PARTIAL — decyzje przyjęte, realna gotowość i routing niezweryfikowane.** Igor wybrany jako główny docelowy odbiorca; Telegram/email dla krytycznych, Slack roboczo, raport 06:00 Europe/Warsaw. Brak gwarantowanych godzin reakcji i zastępcy pozostaje jawny. Lifecycle, watchdog i okno przyszłego testu zapisano w ownership, bez konfiguracji kont lub potwierdzonego dyżuru. Historyczny Bartosz 08:00–22:00 best effort nie staje się fallbackiem. TEST-06 NOT RUN. |
 | F0-G09 | Pełna kopia bazy i wymaganych obiektów poza hostem źródłowym; harmonogram, ostatni artifact/hash, retencja i procedura izolowanego restore obejmująca auth/storage oraz stan operacji. | **FAIL.** Pomiar 04.10 i deklaracja 06.10 wskazują brak pełnego pg_dump off-host i kopii MinIO aplikacji. Odpowiedź przekazana 07.10 przyjmuje docelowo codzienny dump całej DB, w tym auth/storage, kopie obu MinIO, szyfrowany zewnętrzny cel EU poza hostami źródłowymi, retencję 7 dziennych / 4 tygodniowe / 12 miesięcznych i comiesięczny test restore; wcześniej wskazano Bartosza jako wykonawcę, obecnie koordynuje Igor. Nie ma nowego dowodu wykonania. Siedem obrazów backupu dysku DB odczytanych 06.10 nie dowodzi pełnego zakresu, spójności ani restore. TEST-07 NOT RUN. |
@@ -243,11 +269,11 @@ opisane poniżej jako przyjęte; pozostałe punkty nadal wymagają pomiarów.
 Dowody kont/planu zbieramy samodzielnie
 w granicach dostępnego, autoryzowanego odczytu.
 
-- **G01 — runtime:** datowane odczyty dokładnej wersji Node w web i worker
-  oraz binarki MinIO aplikacji; prywatne powiązanie procesów, SHA i lokalnych
-  Image ID. Przy lokalnym buildzie brak registry digestu zapisujemy jako
-  ograniczenie pochodzenia, bez tworzenia fikcyjnego digestu. Nowy odczyt
-  dostaje własne okno i release, nie zastępuje pomiaru z 11:03–11:22 UTC.
+- **G01 — runtime:** SHA/health web i worker, Node oraz wydania obu MinIO
+  mają osobny pomiar 10.10. Pozostają pozostałe kryteria inwentarza i prywatne
+  powiązanie procesów, SHA oraz obrazów. Przy lokalnym buildzie brak registry
+  digestu zapisujemy jako ograniczenie pochodzenia, bez tworzenia fikcyjnego
+  digestu. Nowy odczyt ma własne okno i release, nie zastępuje pomiaru 04.10.
 - **G02 — infrastruktura i monitoring:** odczyt reguł Hetznera i ich
   przypisania z 06.10 jest wykonany, ze szczegółami zachowanymi prywatnie.
   Pozostają przegląd kompletności routingu/ACL i reguł systemowych oraz
@@ -273,8 +299,9 @@ w granicach dostępnego, autoryzowanego odczytu.
   odczytane w panelu nie dowodzą nagrywania ani skutecznego wyłączenia.
 - **G06 — narzut, wybór domknięty:** przyjęte wartości i klasy obciążenia,
   metoda OFF/ON oraz plan baseline poniżej. Obrazy i limity do porównania
-  pochodzą z przyjętego G01/G02; tych aktualnych odczytów nadal brakuje.
-  Wykonanie TEST-05 następuje w osobnym odbiorze.
+  wymagają pozostałych dowodów G01/G02; nowy SHA/health i wersje z 10.10
+  nie zastępują pełnego pochodzenia obrazów i limitów. Wykonanie TEST-05
+  następuje w osobnym odbiorze.
 - **G07 — konta i produkty:** datowany prywatny odczyt rzeczywistego konta,
   organizacji, regionów, aktywnych planów i wymaganych produktów; retencje,
   limity ingest/API, koszty i uprawnienia. Sentry/PostHog i wybrany zewnętrzny

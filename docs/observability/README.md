@@ -9,6 +9,22 @@ dowodzi ich wykonania. Igor prowadzi monitoring i odbiera F0; Codex wykonuje
 dostępne prace techniczne, ograniczając Bartosza do koniecznych czynności
 operatorskich.
 
+**Nowy pomiar 10.10, tylko odczyt:** od 14:23 UTC potwierdzono SSH do
+trzech hostów i zgodność ich kluczy ED25519. Klucz daje pełne uprawnienia;
+zakres tylko do odczytu jest ograniczeniem pracy, nie uprawnień technicznych.
+O 14:26 UTC web i worker były healthy na
+`43091e725d845084e11ac73af32750ace349bc02`, Node 22.23.3. Odczytano również
+wydania obu MinIO oraz rozmiary baz i fizycznych katalogów danych MinIO.
+To nowe [dowody runtime i rozmiarów](runtime-inventory.md#odczyt-runtime-i-rozmiarów--10102026)
+z [osobnym indeksem](evidence/f0-runtime-size-2026-10-10.json), bez
+nadpisywania wcześniejszych pomiarów. Kompletny listing S3 o 14:32 UTC:
+MinIO aplikacji 31 obiektów / 378638 B; MinIO Supabase 0 obiektów / 0 B.
+Oba buckety Unversioned. Wersje obejmują bieżące obiekty i nie są dodatkową
+sumą. Nie pobierano treści; referencje DB, multipart uploads, przyrost
+i pełna retencja pozostają niezweryfikowane. Odczyty nie są kopią.
+**G03/G09 FAIL, F0_OPEN**;
+bez zmian serwerów, migracji, wdrożeń, kopii, restore lub F1.
+
 **Aktualny kierunek 10.10: darmowa diagnostyka i tańsza infrastruktura.**
 Igor odrzucił wariant 73,19 EUR netto/mies.; zakupy i czynności operacyjne
 pozostają wstrzymane. Wybór: Sentry Developer EU i PostHog Free EU z budżetem
@@ -42,6 +58,7 @@ podłączenie agenta pozostają w osobnym F1 po odbiorze F0.
 - [Bezpieczny indeks wyborów i katalogu cen z 07.10](evidence/f0-decisions-2026-10-07.json)
 - [Historyczny płatny wariant i odczyty z 10.10](evidence/f0-2026-10-10.json)
 - [Aktualny wariant oszczędny i zakres agenta](evidence/f0-low-cost-2026-10-10.json)
+- [Nowy odczyt runtime i rozmiarów z 10.10](evidence/f0-runtime-size-2026-10-10.json)
 - [Kolektor tylko do odczytu](../../scripts/ops/collect-runtime-inventory.mjs)
 - [Przykład staging](../../ops/observability/environments/staging.example.yaml) / [production](../../ops/observability/environments/production.example.yaml)
 
@@ -68,8 +85,9 @@ siedem dostępnych obrazów backupu dysku DB oraz część metadanych Sentry/Pos
 w EU. Obrazy dysku nie dowodzą spełnienia zakresu G09 ani restore; ustawienia
 replay nie dowodzą faktycznego nagrywania przez SDK. G02/G07 mają częściowe
 dowody; plany, koszty i pozostałe uprawnienia nadal są niezweryfikowane.
-Runtime kontenerów nie został odczytany: aktualny SHA/health i wersje Node/MinIO
-pozostają nieznane. F0 i decyzje pozostają otwarte; nie wykonano zmian
+W odczycie z 06.10 runtime kontenerów nie został odczytany: SHA/health
+i wersje Node/MinIO pozostawały nieznane. Uzupełnia je osobny pomiar 10.10
+opisany wyżej. F0 i decyzje pozostają otwarte; nie wykonano zmian
 serwerów ani ustawień dostawców i nie rozpoczęto F1.
 
 Przegląd 07.10.2026: [kod i CI na `84b75ea`](runtime-inventory.md#przegląd-kodu-i-ci--07102026)

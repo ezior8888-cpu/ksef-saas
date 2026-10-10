@@ -1,6 +1,61 @@
 # F0 — inwentaryzacja środowisk
 
-Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.2026, 11:03–11:22 UTC. Odczyty API i próba SSH z 06.10 oraz decyzje/deklaracje z 07.10 mają osobne źródła; nie potwierdzają aktualnego runtime kontenerów. Igor prowadzi monitoring i odbiera F0, a Codex wykonuje dostępne prace techniczne. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
+Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.2026, 11:03–11:22 UTC. Odczyty API i próba SSH z 06.10 oraz decyzje/deklaracje z 07.10 mają osobne źródła. Nowy odczyt SSH/runtime i rozmiarów z 10.10 jest opisany osobno poniżej; nie nadpisuje historii. Igor prowadzi monitoring i odbiera F0, a Codex wykonuje dostępne prace techniczne. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
+
+## Odczyt runtime i rozmiarów — 10.10.2026
+
+**P — dostęp od 14:23 UTC:** potwierdzono uwierzytelnione SSH do app-1,
+ops-1 i db-1 oraz zgodność wszystkich kluczy hostów ED25519 z odciskami
+przekazanymi przez Bartosza z jego historycznego `known_hosts`. Klucz ma pełne uprawnienia root; tylko odczyt
+jest umową zakresu pracy, nie technicznym ograniczeniem uprawnień.
+Wcześniejsze nieudane próby pozostają datowanymi dowodami historycznymi.
+
+**P — runtime 14:26 UTC:** web i worker healthy na
+`43091e725d845084e11ac73af32750ace349bc02`, Node 22.23.3. MinIO aplikacji
+na ops-1: wydanie z 2025-09-07; odrębne MinIO Supabase na db-1: wydanie
+z 2025-10-15. Zdrowy kontener nie dowodzi wyniku operacji fakturowych;
+wersja uruchomionej binarki nie jest digestem obrazu registry.
+Redis na app-1: 7.2.15, healthy; SRH działa, bez skonfigurowanego healthchecka.
+MinIO aplikacji działa bez healthchecka; MinIO Supabase ma health healthy.
+Kolektor zakończył się częściowym wynikiem: dla jednego kontenera na db-1
+sklasyfikowanego jako postgres nie uzyskał wersji. To ograniczenie odczytu
+metadanych, nie dowód niedziałania bazy; osobne zapytanie o rozmiary powiodło się.
+
+**P — rozmiary 14:27 UTC:** baza `postgres` 190346031 B, schematy `auth`
+i `storage` obecne; dwie bazy inne niż template razem 866379358 B.
+Fizyczny rozmiar katalogu danych MinIO aplikacji: 774144 B;
+MinIO Supabase: 139264 B. To odczyt zajętości źródeł, nie rozmiar
+przyszłych archiwów ani logiczne liczby/rozmiary obiektów S3.
+
+**P — osobny breakdown DB 14:29:01.792858–14:29:02.064051 UTC:**
+`postgres` 190346031 B, z obecnymi `auth`/`storage`; `_supabase` 676049711 B;
+dwie bazy inne niż template razem 866395742 B. Suma różni się od wcześniejszego
+odczytu, więc oba wyniki zachowujemy z własnymi czasami. `pg_dump postgres`
+nie zawiera drugiej bazy `_supabase`; zakres jej zabezpieczenia i odtwarzania
+trzeba opisać osobno w komplecie kopii. Rozmiar DB nie jest rozmiarem dumpa.
+
+**P — logiczny listing S3:** MinIO Supabase na db-1,
+**14:32:17.121–14:32:17.165 UTC**: 1 bucket, 0 obiektów / 0 B,
+0 wersji / 0 B, 0 delete markers, 1 bucket Unversioned. MinIO aplikacji
+na ops-1, **14:32:19.474–14:32:19.562 UTC**: 1 bucket,
+31 obiektów / 378638 B, 31 wersji / 378638 B, 0 delete markers,
+1 bucket Unversioned. Każdy odczyt: 4 GET, 3 strony, `COMPLETE=true`,
+cztery flagi kompletności true, brak `partial_reasons`. Zero Supabase
+pochodzi z kompletnego listingu obiektów i wersji, nie z błędu dostępu.
+Lista wersji obejmuje bieżące obiekty: jej liczby i bajtów nie dodajemy
+ponownie do sumy obiektów. Fizyczna zajętość katalogu i rozmiar logiczny S3
+mają inne znaczenie. Stwierdzone Unversioned nie zostało zmienione.
+Nie pobierano treści obiektów ani nie wykonywano PUT/DELETE.
+
+Kompletność listingu nie dowodzi pokrycia referencji DB → obiekty,
+braku nieukończonych multipart uploads ani wspólnego atomowego snapshotu DB/S3.
+Te zakresy nie zostały zbadane. Nadal nie wykazano pełnej kopii, przyrostu
+danych, rozmiaru całej retencji ani gotowości celu lokalnego. Nowe pomiary
+nie są dowodem pełnej kopii off-host lub działającego stagingu.
+[Osobny indeks](evidence/f0-runtime-size-2026-10-10.json) zawiera bezpieczny
+zakres dowodów; pełne odczyty pozostają poza Git. **G03/G09 FAIL, F0_OPEN**.
+Nie wykonano zmian serwerów, migracji, wdrożeń, kopii, restore lub F1;
+wstrzymanie zakupów i dotychczasowe warunki kosztów pozostają bez zmian.
 
 ## Darmowy wariant i lokalny odczyt — 10.10.2026
 
@@ -18,7 +73,8 @@ rozważanym drugim dysku jest 641,77 GiB wolnego miejsca. Wyciąg prywatny:
 SHA-256 `3da65506f06777a9fdddb3835ab6d764f07a927f2098c6817a7bdaa388b7b36f`.
 To odczyt komputera, nie test Linux VM, Docker Engine lub stagingu.
 Nie uruchomiono usług i nie zmieniano ustawień. Lokalizacji urządzenia
-w UE, nocnej dostępności i wolumenu produkcyjnych kopii nie potwierdzono.
+w UE, nocnej dostępności i wolumenu produkcyjnych kopii w tym lokalnym
+odczycie nie potwierdzono. Późniejszy odczyt źródeł produkcyjnych opisano wyżej.
 Plan stagingu wymaga zwolnienia RAM i pomiaru całego zestawu; plan lokalnej
 kopii wymaga także obliczenia pojemności pełnej retencji. Nie zakładać,
 że obecny wolny dysk pomieści jednocześnie oba zakresy z zapasem.
@@ -29,9 +85,10 @@ BX11 HEL1 to rekomendowany tani cel kopii (3,20 EUR netto/mies. według
 odczytu katalogu 07:20 UTC poniżej), bez zakupienia. Ta cena nie obejmuje
 istniejącej produkcji i AI. [Warunki](ownership.md#darmowa-diagnostyka-i-tańsza-infrastruktura--10102026)
 i [nowy indeks](evidence/f0-low-cost-2026-10-10.json) zastępują wcześniejszy
-płatny wybór, zachowując jego odczyty jako historyczne. Ograniczenia dostępu
-SSH/paneli opisane poniżej nadal pozostają ostatnim uzyskanym dowodem;
-nie powtarzano tych prób. **F0_OPEN, G03/G09 FAIL**, bez nowego odbioru.
+płatny wybór, zachowując jego odczyty jako historyczne. Późniejszy udany
+odczyt SSH opisano osobno powyżej; brak zalogowanej sesji paneli opisany
+poniżej nie został zastąpiony nowym dowodem kont. **F0_OPEN, G03/G09 FAIL**,
+bez nowego odbioru.
 
 ## Wymaganie jakościowe i odczyty — 10.10.2026
 
@@ -134,6 +191,9 @@ go zastąpić. Na prośbę Igora prompt do drugiego chatu powstanie po odbiorze 
 | Odpowiedzi i instrukcje przekazane przez Igora | 07.10.2026; czat kontynuacji F0 | Decyzje o KSeF TEST, zakresie kopii/staging i organizacji pracy; deklaracje planów i odbioru alarmów, bez nowego pomiaru |
 | Delegacja wyborów Igora | 07.10.2026; osobna wiadomość po checklistcie | Przyjęcie konkretnych wyborów kontraktów/polityki/budżetu i zakresu docelowego, bez formalnego odbioru F0 |
 | API katalogu Hetzner | 07.10, 17:27:36–17:29:06 UTC | Ceny/parametry publicznych typów i wskaźnik dostępności; nie zakup, runtime lub zawartość kopii |
+| Uwierzytelnione SSH i runtime | 10.10, dostęp od 14:23 UTC, runtime 14:26 UTC | Zgodność kluczy hostów, aktualny SHA/health web i worker, Node i wydania obu MinIO; pełne uprawnienia klucza, umowny zakres tylko do odczytu |
+| Odczyty rozmiarów źródeł | 10.10, 14:27 UTC oraz osobny breakdown DB 14:29:01.792858–14:29:02.064051 UTC | Dwie bazy, obecność auth/storage w postgres i fizyczne katalogi MinIO; nie kopia ani pojemność retencji |
+| Kompletny logiczny listing S3 | 10.10, Supabase 14:32:17.121–14:32:17.165 UTC, aplikacja 14:32:19.474–14:32:19.562 UTC | Buckety, obiekty, wersje/delete markers i Unversioned; bez treści, pokrycia referencji DB i multipart uploads |
 
 Legenda: **P** — pomiar z podanym źródłem i oknem; **D** — deklaracja kodu, dokumentu lub użytkownika; **U** — uzgodniona decyzja lub zakres; **brak dostępu** — punkt nieodczytany. Historyczne wyniki P przypisujemy operatorowi i oknu z 04.10. Odczyty API z 06.10 mają osobne źródła; nieudana próba SSH nie odświeża historycznego runtime.
 
@@ -281,7 +341,8 @@ konfiguracji kopii/staging, zmian dostawców, migracji, wdrożeń, restore ani F
 ## Środowiska i wersje produkcji
 
 Poniższa tabela opisuje wyłącznie pomiar runtime z **04.10.2026**.
-Próba SSH z 06.10 nie dostarczyła jego aktualizacji.
+Próba SSH z 06.10 nie dostarczyła jego aktualizacji. Aktualny odczyt 10.10
+jest [oddzielnym pomiarem](#odczyt-runtime-i-rozmiarów--10102026).
 
 | Pozycja | Stan potwierdzony w pomiarze | Źródło / zastrzeżenie |
 |---|---|---|

@@ -69,8 +69,10 @@ lub serwerów, wdrożenia, migracje, restore i F1 pozostają wstrzymane.
   [oficjalny katalog typów](https://docs.hetzner.cloud/reference/hetzner#storage-box-types)
   wskazują źródło; przed ewentualnym zamówieniem cenę sprawdzamy ponownie.
   Cel Finlandia pozostaje poza hostami źródłowymi DE i poza komputerem
-  stagingu. Trzy zaszyfrowane repozytoria obejmują pełną DB z globals/rolami,
-  MinIO aplikacji i MinIO Supabase. Zachowujemy 7/4/12, wspólny manifest,
+  stagingu. Trzy zaszyfrowane repozytoria obejmują obie bazy na db-1
+  (postgres i _supabase) z globals/rolami, MinIO aplikacji i MinIO Supabase.
+  Sam pg_dump bazy postgres nie obejmuje odrębnej bazy _supabase; jej
+  zabezpieczenie należy do pełnego planu odzyskiwania. Zachowujemy 7/4/12, wspólny manifest,
   weryfikację referencji i odczytu off-host, osobne klucze odzyskiwania,
   harmonogram i procedurę izolowanego restore. Wspólny dostawca Hetzner
   i brak WORM pozostają ograniczeniami; B2 jest odłożoną opcją jakościową,
@@ -82,9 +84,11 @@ lub serwerów, wdrożenia, migracje, restore i F1 pozostają wstrzymane.
   641,77 GiB wolne na rozważanym dysku i 185,43 GiB na systemowym. Wyciąg
   i hash źródła opisuje [nowy indeks](evidence/f0-low-cost-2026-10-10.json).
   Nie jest to nowy dowód lokalizacji
-  urządzenia w UE ani codziennej dostępności. Rozmiaru danych produkcyjnych
-  i ich przyrostu nadal nie odczytano; nie znamy zapasu na staging oraz
-  całą retencję kopii razem. Wariant lokalny może zastąpić propozycję BX11
+  urządzenia w UE ani codziennej dostępności. Późniejszy odczyt produkcji
+  14:27–14:29 UTC potwierdza rozmiary baz i fizycznego zużycia MinIO opisane
+  poniżej. Przyrost, rozmiar/kompresja dumpów i pojemność pełnej retencji
+  7/4/12 pozostają niezweryfikowane; nie znamy zapasu na staging i kopie
+  razem. Wariant lokalny może zastąpić propozycję BX11
   dopiero po potwierdzeniu EU, pojemności pełnego kompletu z retencją i VM
   oraz codziennych kopii z pełnym sukcesem nie starszym niż 26 h. Samo
   500 GB zadeklarowane lub 641,77 GiB chwilowo wolne tego nie dowodzi.
@@ -103,6 +107,53 @@ Nie pojawiły się nowe dowody uruchomienia stagingu lub pełnych kopii:
 **G03/G09 FAIL, G07 PARTIAL, F0_OPEN**, testy NOT RUN. Granica 31.10 dla
 stagingu pozostaje wcześniejszym celem planowania, nie dowodem wykonania
 ani nową obietnicą operatora. Igor nadal koordynuje i odbiera F0.
+
+## Odczyt SSH i rozmiarów produkcji — 10.10.2026
+
+**P — uwierzytelniony odczyt 14:23 UTC:** SSH jako root działa na app-1,
+ops-1 i db-1; klucze hostów ED25519 zgadzają się z odciskami przekazanymi przez Bartosza z jego historycznego known_hosts.
+Konto root ma pełne uprawnienia techniczne; ograniczenie do odczytu wynika
+z uzgodnionego zakresu działań, nie z technicznej roli read-only. Sam dostęp
+nie nadaje upoważnienia do kopii, zmian serwerów, migracji, wdrożeń, restore lub F1.
+Wcześniejsze nieudane próby SSH pozostają datowanymi dowodami historycznymi,
+nie bieżącą przeszkodą dostępu.
+
+**P — odczyty rozmiarów 14:27–14:29 UTC:** baza postgres zajmuje
+190 346 031 B; potwierdzono obecność schematów auth i storage. Osobna baza
+_supabase zajmuje 676 049 711 B w odczycie 14:29 UTC; razem obie bazy
+866 395 742 B. Suma odczytana o 14:27 wynosiła 866 379 358 B; odczyty mają
+różne chwile pomiaru i nie stanowią dowodu stałego przyrostu. Fizyczne zużycie
+katalogów danych MinIO: aplikacja na ops-1 — 774 144 B, Supabase na db-1 —
+139 264 B. To pomiar du zweryfikowanych mountów, odrębny od logicznej sumy
+payloadów S3. Nie jest to rozmiar kopii, wynik backupu ani dowód pokrycia
+referencji DB.
+
+**P — logiczne metadane S3 14:32 UTC:** obie instalacje mają COMPLETE dla
+odczytu bucketów, bieżących obiektów, wszystkich wersji i ustawienia versioning
+(wszystkie cztery flagi kompletności true).
+
+- Supabase na db-1, **14:32:17.121–14:32:17.165 UTC**: 1 bucket, 0 bieżących
+  obiektów / 0 B, 0 wersji / 0 B, 0 delete markers; versioning unversioned.
+- Aplikacja na ops-1, **14:32:19.474–14:32:19.562 UTC**: 1 bucket,
+  31 bieżących obiektów / 378 638 B; wszystkie wersje 31 / 378 638 B,
+  0 delete markers; versioning unversioned.
+
+Wszystkie wersje zawierają bieżące obiekty: nie dodawać 378 638 B drugi raz.
+Fizyczne zużycie 774 144 B / 139 264 B obejmuje inny zakres niż logiczne
+payloady; nie dodawać go do logicznej sumy S3. COMPLETE oznacza tutaj
+zakończenie listowania metadanych, bez odczytu treści obiektów i bez dowodu
+backupu. Mapowanie referencji DB do obiektów, multipart uploads oraz
+spójność między odczytami nadal niezweryfikowane.
+
+**P — wersje binarek MinIO odczytane 10.10:** aplikacja na ops-1:
+RELEASE.2025-09-07T16-13-09Z; Supabase na db-1:
+RELEASE.2025-10-15T17-29-55Z. Nie wykonywano aktualizacji. Rozmiary, wersje
+i zakres dowodu zapisuje [nowy indeks](evidence/f0-runtime-size-2026-10-10.json);
+pełny materiał pozostaje prywatny. Pełny plan odzyskiwania obejmuje obie bazy
+postgres i _supabase oraz globals/role, oba MinIO i wymagane materiały
+odzyskiwania. Przyrost, dumpy/kompresja, pełna retencja 7/4/12 i wykonanie
+kopii nadal niezweryfikowane. **G03/G09 FAIL, F0_OPEN**; brak zmian kosztów,
+ról, odbioru stagingu lub pełnych kopii.
 
 ## Aktualne decyzje — przegląd kontynuacji 04.10.2026
 
@@ -545,10 +596,10 @@ organizacji odpowiedzialności i prywatnych dowodów.
 | ID / bramka | Decyzja i konkretny materiał | Stan |
 |---|---|---|
 | D01 / G01–G02 | Publicznie uzgodniony wyciąg; pełne odczyty i surowe odpowiedzi poza gitem, przegląd przez Codex, odbiór przez Igora. | GRANICA I ORGANIZACJA BIEŻĄCEGO PAKIETU USTALONE przez Igora; dowody nadal pozostają prywatne. |
-| D02 / G09 | Pełne kopie DB/globals i obu MinIO, 7/4/12, osobne repo/klucze, 00:30 UTC, comiesięczny izolowany restore. BX11 HEL1 + restic za 3,20 EUR netto jest propozycją do osobnej zgody; lokalny cel bez abonamentu wymaga dowodów EU, łącznej pojemności i regularnych pełnych kopii. B2 odłożone. | ZAKRES KOPII PRZYJĘTY; zakup wstrzymany, lokalna gotowość nieudowodniona. G09 FAIL. |
+| D02 / G09 | Pełne kopie obu baz postgres i _supabase z globals/rolami oraz obu MinIO, 7/4/12, osobne repo/klucze, 00:30 UTC, comiesięczny izolowany restore. Sam pg_dump postgres nie obejmuje _supabase. BX11 HEL1 + restic za 3,20 EUR netto jest propozycją do osobnej zgody; lokalny cel bez abonamentu wymaga dowodów EU, łącznej pojemności i regularnych pełnych kopii. B2 odłożone. | ZAKRES KOPII PRZYJĘTY; zakup wstrzymany, lokalna gotowość nieudowodniona. G09 FAIL. |
 | D03 / G03 | Kandydat: osobna VM Linux na posiadanym komputerze, punkt startowy 4 vCPU / 16 GiB / 160 GB. Aktualnie wolne 10,08 GiB RAM nie potwierdza gotowości. Własne DB/auth/kolejka/storage/klucze, KSeF TEST i Stripe test, dane syntetyczne; po kopiach, granica planistyczna 31.10. | KIERUNEK LOKALNY WYBRANY 10.10; wymaga zwolnienia RAM, pomiaru pełnego zestawu, uruchomienia i dowodu izolacji w osobno autoryzowanym zakresie. Zakupy chmurowe wstrzymane, wcześniejszy limit 45 EUR nie obowiązuje. G03 FAIL. |
-| D04 / G01–G02 | Istniejący lokalny Redis/SRH na app-1, docelowo przypięte odczytane wersje/obrazy i osobny health; znaczenie `UPSTASH_*` bez zmiany. | POLITYKA PRZYJĘTA; konkretne aktualne wersje i konfiguracja wymagają odczytu, G01/G02 PARTIAL. |
-| D05 / G01–G02 | Dwa odrębne MinIO według historycznego pomiaru: aplikacja ops-1, Supabase db-1; wymagane wersje binarek, obrazy, health i pokrycie kopią. | POLITYKA PRZYJĘTA; brakujące pomiary pozostają otwarte, bez zmian istniejących identyfikatorów. |
+| D04 / G01–G02 | Istniejący lokalny Redis/SRH na app-1, docelowo przypięte odczytane wersje/obrazy i osobny health; znaczenie `UPSTASH_*` bez zmiany. | POLITYKA PRZYJĘTA; odczyt 10.10 14:26 UTC: Redis 7.2.15 healthy, SRH działa bez skonfigurowanego healthchecka. Pozostała konfiguracja wymaga odbioru, G01/G02 PARTIAL. |
+| D05 / G01–G02 | Dwa odrębne MinIO: aplikacja ops-1, Supabase db-1. Odczyt 10.10 potwierdza wersje binarek RELEASE.2025-09-07T16-13-09Z oraz RELEASE.2025-10-15T17-29-55Z i fizyczne zużycie odpowiednio 774 144 B / 139 264 B. Logiczne S3 COMPLETE: aplikacja 31 obiektów / 378 638 B, Supabase 0 / 0 B; po 1 buckecie, unversioned, brak delete markers. Wszystkie wersje zawierają bieżące i nie zwiększają tych sum. | POLITYKA PRZYJĘTA; nowe wersje/rozmiary są datowanym pomiarem, nie dowodem backupu. Mapowanie DB–obiekty i multipart uploads niezweryfikowane; MinIO aplikacji działa bez healthchecka, MinIO Supabase healthy; pozostałe obrazy/digesty i pokrycie pełną kopią wymagają właściwych dowodów, bez zmian istniejących identyfikatorów. |
 | D06 / G02/G08 | Miesięczny przegląd, kontrolowane aktualizacje po kopii/staging, brak auto-upgrade; MFA i minimalny dostęp administracyjny, przegląd co 30 dni. | POLITYKA PRZYJĘTA; aktywna konfiguracja i gotowość osób wymagają dowodów. |
 | D07 / G01/G04 | KSeF TEST w aplikacji produkcyjnej jest celowy na etapie przed startem; TEST → PROD pozostaje osobnym zadaniem go-live W15/S13. | INTENCJA ROZSTRZYGNIĘTA 07.10; bez przełączenia środowiska i bez odbioru całego G04. |
 | D08 / G07 | Bieżący cel 10.10: Sentry EU Developer i PostHog EU Free, 0 USD nowych opłat, bez PAYG i płatnych rozszerzeń; pełna historia faktur we własnym chronionym audycie. Kuma i planowany Healthchecks bez nowych zmian; Datadog poza zakresem. | DARMOWY KIERUNEK PRZYJĘTY; zastępuje wcześniejszy Sentry Team, bez zmiany kont. Dowody aktywnych tier/retencji/quota/dostępu nadal niepełne. G07 PARTIAL. |
