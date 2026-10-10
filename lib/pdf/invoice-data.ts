@@ -17,7 +17,7 @@ import type {
  *
  * `seller_data` / `buyer_data` / `payment_data` to JSONB zapisywane
  * bezpośrednio jako kształt `SellerParty` / `BuyerParty` / `PaymentInfo`
- * (zob. `lib/import/import-engine.ts`, `lib/billing/self-invoice.ts`)
+ * (zob. `lib/import/imported-invoice-row.ts`, `lib/billing/self-invoice.ts`)
  * — castujemy 1:1.
  */
 
