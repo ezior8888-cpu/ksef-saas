@@ -9,6 +9,13 @@ dowodzi ich wykonania. Igor prowadzi monitoring i odbiera F0; Codex wykonuje
 dostępne prace techniczne, ograniczając Bartosza do koniecznych czynności
 operatorskich.
 
+**Najnowsza dyspozycja Igora z 10.10: „Tylko przygotowanie — bez zakupu
+i zmian”.** Przygotowano [lokalny pakiet kopii](../runbooks/f0-backup-preparation.md):
+plan JSON, przykłady i kontrola zgłoszonego kontraktu manifestu. Nie jest
+to zgoda na wydatek do 5 EUR ani konfigurację kopii; nie ustanawia nowego
+budżetu. Walidacja lokalnego manifestu nie dowodzi autentyczności,
+wykonania kopii lub G09 PASS. **F0_OPEN, G03/G09 FAIL** bez zmian.
+
 **Nowy pomiar 10.10, tylko odczyt:** od 14:23 UTC potwierdzono SSH do
 trzech hostów i zgodność ich kluczy ED25519. Klucz daje pełne uprawnienia;
 zakres tylko do odczytu jest ograniczeniem pracy, nie uprawnień technicznych.
@@ -59,6 +66,8 @@ podłączenie agenta pozostają w osobnym F1 po odbiorze F0.
 - [Historyczny płatny wariant i odczyty z 10.10](evidence/f0-2026-10-10.json)
 - [Aktualny wariant oszczędny i zakres agenta](evidence/f0-low-cost-2026-10-10.json)
 - [Nowy odczyt runtime i rozmiarów z 10.10](evidence/f0-runtime-size-2026-10-10.json)
+- [Lokalne przygotowanie kopii F0](../runbooks/f0-backup-preparation.md) / [przykłady](../../ops/observability/backup/)
+- [Plan JSON bez wykonania](../../scripts/ops/prepare-backup-plan.mjs) / [kontrola kontraktu manifestu](../../scripts/ops/check-backup-set.mjs)
 - [Kolektor tylko do odczytu](../../scripts/ops/collect-runtime-inventory.mjs)
 - [Przykład staging](../../ops/observability/environments/staging.example.yaml) / [production](../../ops/observability/environments/production.example.yaml)
 

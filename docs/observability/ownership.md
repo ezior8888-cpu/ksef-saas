@@ -17,6 +17,20 @@ instalacji, migracji, wdrożeń, testów telefonu lub zmiany kont. Pełne dowody
 pozostają prywatne. [Inwentarz](runtime-inventory.md) rozdziela pomiar od
 deklaracji, a [plan odbioru](acceptance-plan.md) opisuje F0-G01–F0-G09.
 
+## Tylko przygotowanie kopii — najnowsza dyspozycja 10.10.2026
+
+Igor odpowiedział **„Tylko przygotowanie — bez zakupu i zmian”** na propozycję
+zakupu do 5 EUR i konfiguracji kopii. To zgoda na lokalne przygotowanie
+materiału; 5 EUR nie jest zatwierdzonym limitem, a operacje i zakupy
+pozostają wstrzymane. Nie znamy odrębnego czasu UTC tej odpowiedzi.
+[Pakiet przygotowania](../runbooks/f0-backup-preparation.md) obejmuje
+[plan JSON](../../scripts/ops/prepare-backup-plan.mjs),
+[lokalną kontrolę kontraktu manifestu](../../scripts/ops/check-backup-set.mjs)
+i [przykłady](../../ops/observability/backup/). Nie instaluje kopii ani nie
+zastępuje istniejącego jobu. Zgodność zgłoszonego manifestu nie dowodzi
+autentyczności, transportu off-host, pełnej kopii lub G09 PASS.
+**F0_OPEN, G03/G09 FAIL**; brak nowego budżetu i zgody operacyjnej.
+
 ## Darmowa diagnostyka i tańsza infrastruktura — 10.10.2026
 
 **U — aktualna dyspozycja Igora:** Sentry i PostHog mają pozostać bezpłatne;

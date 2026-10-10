@@ -58,6 +58,16 @@ nie są rozmiarem dumpów, atomowym snapshotem DB/S3 ani dowodem całej retencji
 G03/G09 nadal FAIL, F0_OPEN; bez kopii, zmian serwerów, migracji, wdrożeń,
 restore lub F1. Wstrzymanie zakupów pozostaje bez zmian.
 
+**Najnowsza dyspozycja 10.10:** Igor wybrał **„Tylko przygotowanie — bez
+zakupu i zmian”** na propozycję zakupu do 5 EUR i konfiguracji kopii.
+[Lokalny pakiet przygotowania](../runbooks/f0-backup-preparation.md) zawiera
+[generator planu JSON](../../scripts/ops/prepare-backup-plan.mjs),
+[kontrolę kontraktu manifestu](../../scripts/ops/check-backup-set.mjs) oraz
+[przykłady](../../ops/observability/backup/). Nie wykonuje ani nie instaluje
+kopii i nie zastępuje działającego jobu. Wynik kontroli manifestu sprawdza
+zgłoszoną strukturę/warunki, bez dowodu autentyczności lub G09 PASS.
+5 EUR nie jest przyjętym limitem. **F0_OPEN, G03/G09 FAIL** bez zmian.
+
 Statusy: `PASS` wymaga dowodu pełnego kryterium; `PARTIAL` to niepełny dowód;
 `FAIL` stwierdzone niespełnienie; `BLOCKED` brak dostępu do sprawdzenia;
 `PENDING` nierozstrzygnięta decyzja; `NOT RUN` niewykonany test. Operator
@@ -68,8 +78,9 @@ Biblioteka, przykład konfiguracji i zdrowy HTTP nie są odbiorem funkcji.
 ## Karta wykonania brakujących prac F0 — 10.10.2026
 
 **Przygotowany zakres, niewykonany.** Zakupy i czynności operacyjne są
-wstrzymane. Obecne zlecenie obejmuje zmianę planu na tańszy wariant, bez
-instalacji lokalnej VM, zmian serwerów, bootstrapu baz lub F1. Wykonanie
+wstrzymane. Obecne zlecenie obejmuje lokalny plan kopii, przykłady i kontrolę
+kontraktu manifestu, bez zakupu, instalacji kopii lub VM, zmian serwerów,
+bootstrapu baz lub F1. Wykonanie
 wymaga dostępu i wznowienia odpowiedniego zakresu. Karta nie jest dowodem
 wykonania. Igor koordynuje; Codex przygotowuje materiał i sprawdza dowody.
 Bartosz nie jest automatycznym wykonawcą ani adresatem nowych zleceń.

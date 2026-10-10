@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "scope": "preparation-only",
+  "pgContainer": "REPLACE_WITH_VERIFIED_PGC",
+  "stagingRoot": "/var/lib/faktflow-backup/staging",
+  "credentialRoot": "/etc/faktflow-backup"
+}

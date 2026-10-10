@@ -44,6 +44,8 @@ jobs:
         run: node --test scripts/security/check-codeql-results.test.mjs scripts/security/print-codeql-locations.test.mjs
       - name: Test agent guard rules
         run: node --test scripts/ci/agent-guard.test.mjs
+      - name: Test F0 backup preparation (offline)
+        run: node --test scripts/ops/prepare-backup-plan.test.mjs scripts/ops/check-backup-set.test.mjs
       - name: Test Telegram gate (ops/bramka)
         run: node --test ops/bramka/test/*.test.mjs
       - name: Test support mail worker (ops/poczta)
