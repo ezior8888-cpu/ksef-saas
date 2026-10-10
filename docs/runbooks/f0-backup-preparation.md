@@ -41,6 +41,12 @@ Igor koordynuje i odbiera F0; przygotowanie nie jest jego odbiorem.
   poprawność zgłoszonego manifestu nie uwierzytelnia rzeczywistej kopii.
 
 To **pakiet przygotowawczy, nie gotowy automatyczny system kopii**.
+
+**Aktualizacja wykonawcy 10.10:** [osobny opis sekwencji](f0-backup-executor.md)
+ma pierwszeństwo przed poniższą historyczną listą brakujących modułów.
+Przygotowano orkiestrację, ekstraktor referencji DB, adapter SSH, restic,
+blokadę, limity i plan sygnalizacji. Nie skonfigurowano klientów i dowodów
+produkcyjnych, pełnego recovery, kanału alarmów ani harmonogramu.
 Połączenie biblioteki z autoryzowanym klientem S3, rzeczywisty eksport
 referencji DB, konfiguracja odzyskiwania, wykonawca całej sekwencji, blokada
 równoległych przebiegów, harmonogram i alarmy nadal wymagają przygotowania

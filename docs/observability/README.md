@@ -1,4 +1,10 @@
 # FaktFlow — pakiet F0
+**Kontynuacja wykonawcy 10.10:** [sekwencja pełnego zestawu](../runbooks/f0-backup-executor.md)
+łączy przygotowane moduły, rzeczywiste SQL referencji, adaptery SSH/restic,
+blokadę, limity, niezależny odczyt i osobny manifest. Testy są syntetyczne,
+klienci/dowody produkcyjne i harmonogram nie są skonfigurowane. [Indeks przygotowania](evidence/f0-backup-executor-2026-10-10.json). Nowy odczyt
+SSH potwierdził wyłącznie dostęp i zaufane klucze trzech hostów. Nie wykonano
+kopii ani zmian infrastruktury. **G03/G09 FAIL, F0_OPEN.**
 
 Pomiar 04.10.2026 wykonano wyłącznie odczytowo w oknie 11:03–11:22 UTC.
 **F0 pozostaje otwarte:** pełne kopie poza hostem i staging są niezaliczone,

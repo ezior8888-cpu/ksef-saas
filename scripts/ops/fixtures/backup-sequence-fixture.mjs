@@ -45,4 +45,3 @@ export async function fixture(t, dbOptions = {}) {
   const options = { root, runId: 'synthetic-run-001', mode: 'synthetic', pgContainer: 'synthetic-postgres', adapters };
   return { root, calls, events, preflight, adapters, options, db, snapshots };
 }
-

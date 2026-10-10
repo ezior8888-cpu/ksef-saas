@@ -473,3 +473,14 @@ rewizję konfiguracji i obrazy, UTC start/stop, izolację, dane syntetyczne,
 oczekiwany/obserwowany wynik, źródło, bezpieczne dowody, status, cleanup/rollback
 i zamknięcie testowego incydentu. Publiczna karta nie zawiera danych prywatnych.
 PASS odnosi się wyłącznie do konkretnej karty i zakresu.
+
+## Kontynuacja wykonawcy kopii — 10.10.2026
+
+[Opis przygotowanej sekwencji](../runbooks/f0-backup-executor.md) oraz
+[indeks weryfikacji](evidence/f0-backup-executor-2026-10-10.json) uzupełniają
+lokalne przygotowanie: rzeczywisty SQL referencji, adaptery SSH/restic,
+blokadę całego przebiegu, przerwania, sprawdzanie hashów i plan sygnałów.
+Testy syntetyczne nie stanowią dowodu działających kopii. Prywatne klienty,
+pełna konfiguracja odzyskiwania, procedura spójności i alarmy pozostają
+nieprzygotowane do operacyjnego odbioru. G03/G09 nadal FAIL, F0_OPEN;
+TEST-01…07 pozostają NOT RUN. Cena publiczna została odświeżona bez zakupu.
