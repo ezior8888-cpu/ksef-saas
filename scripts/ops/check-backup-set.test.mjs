@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, mkdtempSync, openSync, readFileSync, readSync, renameSync, rmdirSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -180,6 +180,96 @@ test("CLI success reports only claims, never paths/run/repository/private values
   assert.equal(stderr.parts.length, 0); assert.equal(stdout.parts.join(""), `${CONSISTENCY_NOTICE}\n`);
   assert.ok(!stdout.parts.join("").includes(m.runId));
   assert.ok(!stdout.parts.join("").includes(m.snapshots[0].repositoryId));
+});
+test("path replacement after fstat cannot redirect the descriptor read or mutate either object", () => {
+  const original = JSON.stringify(fixture());
+  const replacement = '{"private":"synthetic-replacement-secret",';
+  const stdout = output(); const stderr = output();
+  cliWithFile(original, (file) => {
+    const moved = path.join(path.dirname(file), "opened-original.json");
+    let opened; let opens = 0; let replaced = false; let closed = false;
+    const files = {
+      openSync: (name, flags) => {
+        opens += 1; assert.equal(name, file); assert.equal(typeof flags, "number");
+        assert.equal(flags & (constants.O_WRONLY | constants.O_RDWR | constants.O_CREAT | constants.O_TRUNC), 0);
+        if (typeof constants.O_NOFOLLOW === "number") assert.equal(flags & constants.O_NOFOLLOW, constants.O_NOFOLLOW);
+        opened = openSync(name, flags); return opened;
+      },
+      fstatSync: (fd) => {
+        assert.equal(fd, opened); const stat = fstatSync(fd);
+        renameSync(file, moved); writeFileSync(file, replacement); replaced = true;
+        return stat;
+      },
+      readSync: (fd, ...args) => { assert.equal(fd, opened); assert.equal(replaced, true); return readSync(fd, ...args); },
+      closeSync: (fd) => { assert.equal(fd, opened); closeSync(fd); closed = true; },
+    };
+    try {
+      assert.equal(runCli([file], { now: NOW, stdout, stderr, files }), 0);
+      assert.equal(opens, 1); assert.equal(closed, true);
+      assert.equal(readFileSync(moved, "utf8"), original);
+      assert.equal(readFileSync(file, "utf8"), replacement);
+      assert.equal(stderr.parts.length, 0);
+      assert.ok(!stdout.parts.join("").includes("synthetic-replacement-secret"));
+    } finally { if (replaced) unlinkSync(moved); }
+  });
+});
+test("ordinary validation never writes or truncates the supplied manifest", () => {
+  const original = Buffer.from(`\uFEFF${JSON.stringify(fixture())}\n`);
+  cliWithFile(original, (file) => {
+    assert.equal(runCli([file], { now: NOW, stdout: output(), stderr: output() }), 0);
+    assert.deepEqual(readFileSync(file), original);
+  });
+});
+test("nonregular descriptor is rejected and closed before any read", () => {
+  let opened = 0; let closed = 0;
+  const files = {
+    openSync: (_file, flags) => { assert.equal(typeof flags, "number"); opened += 1; return 37; },
+    fstatSync: (fd) => { assert.equal(fd, 37); return { isFile: () => false, size: 10 }; },
+    readSync: () => assert.fail("nonregular input must not be read"),
+    closeSync: (fd) => { assert.equal(fd, 37); closed += 1; },
+  };
+  assert.equal(runCli(["synthetic-input.json"], { now: NOW, stdout: output(), stderr: output(), files }), 2);
+  assert.equal(opened, 1); assert.equal(closed, 1);
+});
+test("growth after fstat is bounded to the input limit plus one detection byte", () => {
+  let total = 0; let closed = false;
+  const files = {
+    openSync: () => 37,
+    fstatSync: () => ({ isFile: () => true, size: 1 }),
+    readSync: (fd, buffer, offset, length) => {
+      assert.equal(fd, 37); assert.ok(buffer.byteLength <= 1024 * 1024 + 1);
+      buffer.fill(32, offset, offset + length); total += length; return length;
+    },
+    closeSync: () => { closed = true; },
+  };
+  assert.equal(runCli(["synthetic-growing.json"], { now: NOW, stdout: output(), stderr: output(), files }), 2);
+  assert.equal(total, 1024 * 1024 + 1); assert.equal(closed, true);
+});
+test("descriptor errors are sanitized and still attempt closing the handle", () => {
+  const secret = "synthetic-private-fs-error";
+  for (const failingStep of ["open", "stat", "read", "close"]) {
+    const stdout = output(); const stderr = output(); let closeAttempts = 0;
+    const files = {
+      openSync: () => { if (failingStep === "open") throw new Error(secret); return 37; },
+      fstatSync: () => { if (failingStep === "stat") throw new Error(secret); return { isFile: () => true, size: 1 }; },
+      readSync: () => { if (failingStep === "read") throw new Error(secret); return 0; },
+      closeSync: () => { closeAttempts += 1; if (failingStep === "close") throw new Error(secret); },
+    };
+    assert.equal(runCli(["synthetic-input.json"], { now: NOW, stdout, stderr, files }), 2);
+    assert.equal(closeAttempts, failingStep === "open" ? 0 : 1);
+    assert.ok(![...stdout.parts, ...stderr.parts].join("").includes(secret));
+  }
+});
+test("POSIX O_NOFOLLOW rejects a final symlink without altering its target", { skip: typeof constants.O_NOFOLLOW !== "number" }, () => {
+  const original = JSON.stringify(fixture());
+  cliWithFile(original, (file) => {
+    const link = path.join(path.dirname(file), "manifest-link.json");
+    symlinkSync(file, link);
+    try {
+      assert.equal(runCli([link], { now: NOW, stdout: output(), stderr: output() }), 2);
+      assert.equal(readFileSync(file, "utf8"), original);
+    } finally { unlinkSync(link); }
+  });
 });
 test("CLI JSON/type/read failures never echo raw private text or names", () => {
   const secret = "synthetic-private-secret-do-not-echo";

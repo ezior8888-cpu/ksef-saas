@@ -5,7 +5,7 @@
  * Digests/bytes are claims checked for shape and agreement, not truth.
  * v1 supports only Unversioned S3; version-aware backup needs a new contract.
  */
-import { closeSync, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -14,11 +14,20 @@ const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const UTC = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(?:Z|\+00:00)$/;
 const MAX_AGE_MS = 26 * 60 * 60 * 1000;
 const MAX_JSON_BYTES = 1024 * 1024;
+const LOCAL_FILES = { closeSync, fstatSync, openSync, readSync };
+// Never check by pathname before opening. O_NOFOLLOW refuses a final symlink
+// where supported (POSIX); it does not secure symlinked parent directories.
+// Windows lacks this flag: fstat/read still use the same opened object, but
+// symlink/reparse-point refusal is not claimed. NONBLOCK avoids waiting on a
+// FIFO before fstat can reject it, on platforms which support that flag.
+const INPUT_FLAGS = constants.O_RDONLY
+  | (typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0)
+  | (typeof constants.O_NONBLOCK === "number" ? constants.O_NONBLOCK : 0);
 const COUNT_KEYS = ["bucketCount", "currentObjectCount", "currentObjectBytes", "allVersionCount", "allVersionBytes", "deleteMarkerCount", "multipartUploadCount"];
 const MINIO_HOSTS = { application: "ops-1", supabase: "db-1" };
 const EXPECTED_GROUPS = ["database", "application", "supabase"];
 export const CONSISTENCY_NOTICE = "Manifest spójny — zgłoszone dowody nadal wymagają niezależnej weryfikacji. To nie jest potwierdzenie kopii, restore ani PASS G09.";
-export const HELP = "Użycie: node scripts/ops/check-backup-set.mjs <prywatny-manifest.json>\n       node scripts/ops/check-backup-set.mjs --help\nWyłącznie lokalny JSON (maks. 1 MiB); brak sieci, poleceń, kopii i restore.\nExit 0: spójność zgłoszeń, bez potwierdzenia prawdziwości/PASS G09.\nExit 1: niepełny/niespójny manifest. Exit 2: błąd argumentów lub odczytu JSON.\nv1 wymaga obu baz i obu MinIO oraz wyłącznie Unversioned S3.\n";
+export const HELP = "Użycie: node scripts/ops/check-backup-set.mjs <prywatny-manifest.json>\n       node scripts/ops/check-backup-set.mjs --help\nWyłącznie lokalny JSON (maks. 1 MiB); brak sieci, poleceń, kopii i restore.\nKontrola i odczyt używają tego samego uchwytu; O_NOFOLLOW tylko tam, gdzie dostępne.\nNa Windows nie gwarantujemy odmowy symlinków/reparse points.\nExit 0: spójność zgłoszeń, bez potwierdzenia prawdziwości/PASS G09.\nExit 1: niepełny/niespójny manifest. Exit 2: błąd argumentów lub odczytu JSON.\nv1 wymaga obu baz i obu MinIO oraz wyłącznie Unversioned S3.\n";
 
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const sameMembers = (a, b) => a.length === b.length && a.every((item) => b.some((other) => item.sha256 === other.sha256 && item.bytes === other.bytes));
@@ -251,23 +260,37 @@ export function validateBackupSet(manifest, { now = new Date() } = {}) {
 }
 
 /** Reads exactly the supplied local JSON; never follows artifact references. */
-export function runCli(argv, { stdout = process.stdout, stderr = process.stderr, now = new Date() } = {}) {
+export function runCli(argv, { stdout = process.stdout, stderr = process.stderr, now = new Date(), files = LOCAL_FILES } = {}) {
   if (argv.length === 1 && argv[0] === "--help") { stdout.write(HELP); return 0; }
   if (argv.length !== 1 || typeof argv[0] !== "string" || !argv[0] || argv[0].startsWith("-") || /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(argv[0]) || /^[\\/]{2}/.test(argv[0])) {
     stderr.write("Błąd argumentów. Użyj --help.\n"); return 2;
   }
-  let fd; let parsed;
+  let fd; let parsed; let readFailed = false;
   try {
-    if (!lstatSync(argv[0]).isFile()) throw new Error("regular_local_file_required");
-    fd = openSync(argv[0], "r");
-    const stat = fstatSync(fd);
+    fd = files.openSync(argv[0], INPUT_FLAGS);
+    const stat = files.fstatSync(fd);
     if (!stat.isFile() || stat.size > MAX_JSON_BYTES) throw new Error("invalid_local_file");
-    const bytes = readFileSync(fd);
-    if (bytes.byteLength > MAX_JSON_BYTES) throw new Error("input_limit");
-    parsed = JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/, ""));
-  } catch {
+    // Keep the allocation bounded even if a writer grows this same file
+    // after fstat. The extra byte detects exceeding the promised limit.
+    const bytes = Buffer.alloc(MAX_JSON_BYTES + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const read = files.readSync(fd, bytes, length, bytes.length - length, null);
+      if (!Number.isSafeInteger(read) || read < 0 || read > bytes.length - length) throw new Error("invalid_local_read");
+      if (read === 0) break;
+      length += read;
+    }
+    if (length > MAX_JSON_BYTES) throw new Error("input_limit");
+    parsed = JSON.parse(bytes.subarray(0, length).toString("utf8").replace(/^\uFEFF/, ""));
+  } catch { readFailed = true; }
+  finally {
+    if (fd !== undefined) {
+      try { files.closeSync(fd); } catch { readFailed = true; }
+    }
+  }
+  if (readFailed) {
     stderr.write("Nie można odczytać poprawnego lokalnego manifestu JSON. Szczegóły wejścia są prywatne.\n"); return 2;
-  } finally { if (fd !== undefined) closeSync(fd); }
+  }
   let result;
   try { result = validateBackupSet(parsed, { now }); }
   catch { stderr.write("Manifest ma nieprawidłową strukturę. Szczegóły wejścia są prywatne.\n"); return 1; }
