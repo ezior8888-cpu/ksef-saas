@@ -1,6 +1,9 @@
 # F0 — kontrakty wyników i korelacji
 
-Stan: **przyjęta decyzja kontraktowa**, 07.10.2026, wersja **F0-contract-v1**.
+Stan: **przyjęta decyzja kontraktowa**, wersja **F0-contract-v1.1**, z
+uzupełnieniem wymagania Igora z **10.10.2026** o pełną historię błędów faktur
+i przyszły odczyt diagnostyczny. Wersję F0-contract-v1 przyjęto 07.10.2026;
+jej wyniki, terminy, populacje i reguły liczenia pozostają bez zmian.
 Igor jest właścicielem monitoringu i decyzji F0. W wiadomości z 07.10 przekazał
 Codexowi wybór pozostałych szczegółów: „Wybierz wszystko co uważasz za najlepsze”.
 Na tej podstawie Codex wybiera poniższe wyniki, populacje, terminy i korelację.
@@ -211,6 +214,52 @@ powyższy JSON snapshot ani jego verify nie zastępują pg_dump, kopii MinIO lub
 - SLI rozstrzyga domena/ledger; eksport at-least-once wymaga deduplikacji
   i okresowego uzgodnienia. Sampling trace nie usuwa outcome.
 
+## Pełna historia błędów faktur — wymaganie 10.10.2026
+
+Źródło: nowe wymaganie Igora dotyczące wewnętrznego dashboardu i przyszłego
+podłączenia agenta deweloperskiego. Jest to uzupełnienie zakresu F0, nie
+pomiar lub odebrana implementacja. Dashboard jest przeznaczony dla operatorów
+platformy. Widok klienta i mechanizm podłączenia agenta nie są tutaj wdrażane.
+
+Historia obejmuje **wszystkie zarejestrowane błędy** procesu faktury: również
+przed POST do KSeF i przed trwałym przyjęciem intencji, przy retry, podczas
+uzgadniania, pobierania UPO i wymaganych skutków potomnych. Błędy później
+odzyskanych operacji pozostają w historii; bieżący stan faktury i wynik każdej
+próby są osobnymi polami. Otwarte, utknięte i niepewne operacje są widoczne,
+z wiekiem i deadline; sam stan pending nie jest błędem bez dodatkowego faktu.
+Odrzucenie przed przyjęciem pozostaje poza mianownikiem przyjętych intencji,
+ale nie znika z historii błędów, jeśli zostało zarejestrowane.
+
+Minimalny wpis zawiera referencję źródła/faktury lub bezpieczny kontekst
+intencji, tenant scope we własnym systemie, operation/attempt/event reference,
+etap, kod i klasę z chwili wystąpienia, zredagowany opis, czasy źródła/zapisu,
+env/KSeF env i wersję. Kolejne błędy i przejścia recovery uzupełniają historię
+bez nadpisywania wcześniejszego zdarzenia. Dedup dotyczy tego samego zdarzenia,
+nie wszystkich podobnych błędów lub różnych prób. Nie tworzymy domyślnego ID
+faktury ani domniemanej próby dla danych, których źródło nie zawiera.
+
+Źródłem kompletnej historii ma być chroniony audit faktury i ślad prób,
+**bez samplingu**. Sentry jest dodatkową diagnostyką: filtracja, quota,
+retencja, sampling lub brak powiązanego zdarzenia nie dowodzą braku błędu.
+Widok pokazuje zakres dat, świeżość, kompletność odczytu, pokrycie etapów,
+brakujące referencje i ograniczenia historyczne. Brak śladu pre-POST,
+niezapisane zdarzenie lub wygaśnięcie szczegółów pozostają jawną luką; nie
+obiecujemy wstecznego odtworzenia nieistniejących dowodów. Błąd odczytu nie
+jest pustą zdrową listą. Obecne źródła i plan A5 z C-22 nie potwierdzają,
+że taka kompletność została już osiągnięta.
+
+Minimalny wpis błędu jest częścią istniejącego audytu faktury: **10 lat**
+według polityki projektu; szczegóły diagnostyczne prób **90 dni**, a journal
+operacji/SLI **13 miesięcy**. Usunięcie szczegółów nie usuwa minimalnego śladu
+błędu i recovery. Hold i kontrolę dostępu określa
+[polityka danych](data-policy.md#historia-błędów-i-odczyt-diagnostyczny--10102026).
+
+Agent otrzymuje później tylko ograniczony, zredagowany odczyt diagnostyczny:
+osobna tożsamość, audyt odczytów i kontrola dozwolonych tenantów/faktur na
+serwerze. Tekst błędu jest danymi, nie instrukcją. Połączenie agenta,
+instrumentacja pełnego śladu i dashboard należą do **F1 po rzeczywistym
+odbiorze F0**. Nie uruchomiono żadnego z nich ani nie nadano dostępu.
+
 ## Kontrakt korelacji v1
 
 | Pole | Reguła |
@@ -219,7 +268,7 @@ powyższy JSON snapshot ani jego verify nie zastępują pg_dump, kopii MinIO lub
 | `deployment_id`, `configuration_revision` | Wspólne wydanie i osobne wersje web/worker; rewizja konfiguracji bez hashów sekretów. Digest pozostaje w prywatnym inventory. |
 | `ksef.environment` | Test/demo/production niezależnie od env aplikacji; sprawdzane z konfiguracją i źródłem domenowym. |
 | `operation_id`, parent/root | Serwerowy UUID intencji; unique `(type, tenant, source_type, source_id, source_generation)`; stabilny po retry/replay. Dziecko ma własny ID i deadline. |
-| `accepted_at`, `deadline_at`, `contract_version`, `input_class` | Niezmienne granice i wersja F0-contract-v1 wybrane przy przyjęciu; zmiana wymaga nowej jawnej generacji, nigdy naprawienia historycznej statystyki. |
+| `accepted_at`, `deadline_at`, `contract_version`, `input_class` | Niezmienne granice i wersja kontraktu wybrane przy przyjęciu (aktualna F0-contract-v1.1; starsza v1 pozostaje historyczna); zmiana wymaga nowej jawnej generacji, nigdy naprawienia historycznej statystyki. |
 | `attempt_id` | Nowy dla wykonania; istniejące claim/approval powiązane bez eksportu tokenu. Attempt joba i polling HTTP to osobne liczniki. |
 | `event_id`, `causation_id`, `delivery_id`, `job_id` | Event stabilny po redelivery; causation wskazuje przyczynę; delivery nowe; techniczny job może się zmieniać przy retry. |
 | `request_id` | Nowy lub zweryfikowany na wejściu; klientowy ID nie ustanawia tenant scope ani prawa odczytu. |
@@ -285,9 +334,12 @@ w zakresie kontraktu, bez zmiany briefu, runnera, strażnika, cronów lub monito
 ## Odbiór decyzji G04
 
 Zapis zawiera datę, delegującego właściciela Igora, wykonawcę wyboru Codex,
-wersję F0-contract-v1, źródłowy commit kodu, wszystkie sześć rodzin, granice
+wersję F0-contract-v1 z uzupełnieniem F0-contract-v1.1 z 10.10, źródłowy commit
+kodu, wszystkie sześć rodzin, granice
 HTTP/support, wyniki i źródła prawdy, kwalifikację, klasy wejścia, due/deadline,
 zasady liczenia, minimalny journal, korelację v1 oraz rozstrzygnięcie C-22.
+Uzupełnienie z 10.10 zapisuje pełną historię błędów, jej jawne ograniczenia
+i granice przyszłego odczytu przez agenta; nie zalicza ich implementacji.
 Nie pozostaje otwarta decyzja G04 o terminach Flo, plikach lub znaczeniu SLI.
 To materiał pozwalający oznaczyć **G04 PASS (decyzja)** w rejestrze bramek.
 Realizacja kontraktów i **TEST-01–TEST-06** pozostają nieodebrane; F0 wymaga

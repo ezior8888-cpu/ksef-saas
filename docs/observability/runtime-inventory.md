@@ -2,6 +2,43 @@
 
 Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.2026, 11:03–11:22 UTC. Odczyty API i próba SSH z 06.10 oraz decyzje/deklaracje z 07.10 mają osobne źródła; nie potwierdzają aktualnego runtime kontenerów. Igor prowadzi monitoring i odbiera F0, a Codex wykonuje dostępne prace techniczne. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
 
+## Wymaganie jakościowe i odczyty — 10.10.2026
+
+**U — aktualny kierunek:** Igor wraca do płatnego wariantu chmurowego i wymaga
+dashboardu wszystkich błędów faktur oraz przyszłego odczytu diagnostyki przez
+agenta deweloperskiego. [Wybór](ownership.md#płatny-wariant-i-pełna-historia-błędów--10102026)
+przyjmuje Sentry Team EU i chronioną historię bez sampling, rozdzieloną od
+bieżącego stanu faktury. To wymaganie i decyzja, bez wykonania dashboardu,
+nadania dostępu, aktywacji abonamentu lub rozpoczęcia F1. Wcześniejsze oceny
+płatnego/darmowego wariantu pozostają datowanymi zapisami historycznymi.
+
+**P — próba kolektora:** 10.10 **07:18:59.020 UTC**, kod `97527a3cf8b65177eee8ec8799c49c5e48382ded`,
+exit 2, app-1/ops-1/db-1 `unverified`, powód `ssh_or_remote_probe_failed`.
+Nie odczytano kontenerów, SHA/health, wersji lub rozmiaru danych. To brak
+odczytu, nie dowód awarii serwerów. Prywatny wynik pozostaje poza Git.
+
+**P — lokalna gotowość dostępu:** 10.10 **07:28:01.339 UTC**: wskazany plik
+klucza istnieje i jest zaszyfrowany; agent SSH nie ma tożsamości. Brakuje
+wpisów known_hosts app-1/ops-1; wpis db-1 istnieje, ale nie potwierdza sam
+niezależnej weryfikacji klucza hosta. Nie odblokowano klucza, nie dodano
+wpisów i nie odczytano serwerów. Sekrety/hasła nie są potrzebne w czacie.
+Datowany odczyt operatora lub panelu może zastąpić SSH Codexa.
+
+**P — katalog Hetznera:** 10.10 **07:20:56.151–07:20:56.777 UTC**, cztery GET
+200, 26 typów, bez dalszej strony. BX11 HEL1 1 TiB: 3,20 EUR netto/mies.,
+setup 0; CPX42 NBG1 8 vCPU / 16 GiB / 320 GB: 69,49 EUR netto, IPv4 0,50.
+Razem 73,19 EUR netto, ponad dotychczasowy limit 45 EUR. CX43 kosztowałby
+19,69 EUR netto z BX11/IPv4, lecz available=false we wszystkich trzech
+lokalizacjach EU. Najtańszy dostępny nieprzestarzały x86 ≥4 vCPU / 16 GiB
+to CPX42; wskaźnik nie rezerwuje VM. Publiczne źródła SaaS/B2 sprawdzono
+osobno; nie odczytują aktywnego planu naszych kont.
+
+[Bezpieczny indeks](evidence/f0-2026-10-10.json) zawiera zakresy i hashe
+nowych dowodów. Odczyt CI potwierdził 11/11 SUCCESS dla `97527a3`; CI nie
+potwierdza runtime, kopii ani staging. Historyczne indeksy nie zostały
+zmienione. **F0_OPEN, G03/G09 FAIL**, wszystkie TEST NOT RUN. Nie wykonano
+zakupów, zmian serwerów/kont, migracji, wdrożeń, restore, alertów lub F1.
+
 ## Delegowane wybory i katalog cen — 07.10.2026
 
 **U — wybór:** po checklistcie Igor polecił „Wybierz wszystko co uważasz za

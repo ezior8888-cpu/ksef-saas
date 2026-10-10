@@ -1,7 +1,9 @@
 # F0 — polityka danych obserwowalności
 
 Stan: **polityka wybrana 07.10.2026 w ramach delegacji Igora** „Wybierz wszystko
-co uważasz za najlepsze”. Wybór obejmuje poniższe wartości i granice, w tym
+co uważasz za najlepsze”, z uzupełnieniem **10.10.2026** o pełną historię
+błędów faktur, przyszły odczyt agenta i docelowy Sentry EU Team. Wybór
+obejmuje poniższe aktualne wartości i granice, w tym
 wcześniej przyjętą politykę kopii. Zastępuje propozycje z 04.10; nie jest
 odczytem aktywnej konfiguracji. **G05: PASS dla przyjęcia polityki**, bez
 zaliczenia jej implementacji, TEST-04 lub całego F0. Źródło delegacji i zakres
@@ -19,6 +21,7 @@ a pełne scenariusze odbioru w [acceptance-plan](acceptance-plan.md).
 | Dane domenowe i dokumenty | Faktury, XML/PDF/UPO, zdjęcia, płatności i treść support/OCR w obecnej chronionej bazie/storage z tenant scope. | Bez eksportu do telemetrii, telefonu, baggage i pakietu diagnozy AI. |
 | Minimalny journal / wymagany audit | Referencje źródła i aktora, przejście, bezpieczny reason, czasy i korelacja; własna chroniona baza z RLS/ACL. | SaaS dostaje zatwierdzony indeks lub link, nie kopię pełnej historii finansowej. |
 | Próby / kroki techniczne | Stały step key, outcome, dependency, czasy, wersja, zredagowany error i trace references. | Allowlist bez payloadu, surowego SDK response i `Error.cause`. |
+| Minimalna historia błędów faktur | Wszystkie zarejestrowane błędy i późniejsze przejścia recovery, referencje faktury/intencji/próby, etap, bezpieczny kod/klasa, czasy i env we własnej chronionej bazie. | Bez samplingu; widok operatora i ograniczony odczyt diagnostyczny kontrolują tenant na serwerze. Brak dokumentów lub pełnej historii finansowej w pakiecie AI. |
 | Metryki / SLI | Liczba, duration, age, coverage, freshness i query success. | Stałe wymiary service/env/type/route/queue/outcome/dependency/region. Bez UUID, tenant, NIP, email, IP, kwot, URL query i tekstu błędu. |
 | Logi / trace / błędy | Route template, bezpieczny kod/stack, service/env/release, korelacja i ograniczone attributes. | Redakcja przed stdout/eksportem. Bez raw request/response, cookies, auth headers, certyfikatów, sekretów, presigned URL i SQL bind values. |
 | RUM / produkt | Web Vitals, route transitions, fatal UI/fetch failures, browser/version/release i uzgodniony pseudonimowy ID. | Zgodnie z consent; bez pól formularzy i autocapture finansów. Session Replay wyłączony do osobnego odbioru. Trace propagation tylko do własnych originów na allowlist, bez baggage. |
@@ -54,12 +57,12 @@ kodu i wdrożonych bundle z tą polityką pozostaje do osobnego sprawdzenia.
 |---|---|---|
 | Dokumenty fakturowe i dane domenowe | 10 lat według instrukcji projektu; poza zakresem skracania przez observability. | Istniejący workflow domenowy. Ten dokument nie jest oceną ustawowych terminów ani nowym mechanizmem DELETE. |
 | Minimalny indeks/historia operacji | 13 miesięcy online we własnej chronionej bazie. | Otwarte reconciliation nie wygasa automatycznie. Po usunięciu szczegółów pozostaje odczyt autorytatywnej domeny; dłuższy hold wymaga powodu i właściciela. |
-| Wymagany audit finansowy | 10 lat kalendarzowych we własnej chronionej bazie; audit dostępu/admin 13 miesięcy. | Minimalne referencje i przejścia, bez kopiowania payloadu. Historia zmian bez nadpisywania wpisów; TTL respektuje otwarte sprawy i hold. To polityka projektu, nie wniosek o obowiązku prawnym. |
-| Attempts / steps | 90 dni online. | Usunięcie szczegółów nie usuwa minimalnego wyniku i przejść; otwarte sprawy mogą mieć jawny hold. |
+| Wymagany audit finansowy / minimalna historia błędów faktur | 10 lat kalendarzowych we własnej chronionej bazie, również minimalny wpis każdego zarejestrowanego błędu faktury i późniejszego recovery; audit dostępu/admin 13 miesięcy. | Minimalne referencje i przejścia, bez kopiowania payloadu. Historia zmian bez nadpisywania wpisów; TTL respektuje otwarte sprawy i hold. To polityka projektu, nie nowe twierdzenie o obowiązku prawnym. |
+| Attempts / steps | 90 dni online. | Usunięcie szczegółów nie usuwa minimalnego wyniku, wpisu błędu faktury i przejść recovery w audycie; otwarte sprawy mogą mieć jawny hold. |
 | Metryki / SLO | 13 miesięcy trendu z jawną agregacją rozdzielczości. | Dowód tier, rozdzielczości i expiry; agregat nie zastępuje pełnej historii operacji. |
 | Logi | Początkowo lokalne zredagowane logi do 7 dni, dodatkowo ograniczone rozmiarem poniżej; wybrane pakiety incydentów 90 dni. Centralny eksport logów poza wybranym zakresem. | Zastępuje propozycję 30 dni centralnych logów; nie zakłada darmowej wyszukiwarki logów. Przedłużenie tylko jako prywatny pakiet incydentu z właścicielem, powodem i terminem. |
-| Trace / diagnostyczny RUM | Docelowo do 30 dni w Sentry EU, wyłącznie w potwierdzonym zakresie darmowego konta. | Retencja i limity konkretnych produktów wymagają G07 przed aktywacją. Brak trace po sampling/expiry nie oznacza braku operacji. |
-| Error events | 30 dni w wybranym Sentry EU Developer; aktywny plan i quota pozostają niezweryfikowane. | Publiczna oferta nie jest odczytem konta; istotny zredagowany incydent może mieć osobny pakiet 90 dni. |
+| Spans / trace i diagnostyczny RUM | Spans docelowo do 30 dni w wybranym 10.10 Sentry EU Team; diagnostyczny RUM do 30 dni tylko w odrębnie potwierdzonym zakresie produktu. | Aktywny plan, retencja i limity wymagają G07 przed aktywacją. Brak spanów po sampling/expiry nie oznacza braku operacji lub błędu. |
+| Error events Sentry | Docelowa historia błędów do 90 dni w wybranym 10.10 Sentry EU Team; aktywny plan i quota pozostają niezweryfikowane. | Publiczna oferta i wybór planu nie są odczytem konta. Sentry nie zastępuje pełnej minimalnej historii błędów w audycie faktury. |
 | Source maps | Cały okres używania bundle web/worker oraz 90 dni po wycofaniu ostatniego procesu na danym SHA. | Własne prywatne archiwum artefaktów; retencja uploadu w Sentry osobno do sprawdzenia. Nie publikować map; sam upload nie dowodzi symbolikacji. |
 | Product analytics | Jeden rok według wybranego PostHog Free EU; replay 0, autocapture i heatmaps wyłączone. | Odrębna klasa od 30-dniowego RUM. Opt-in/opt-out; aktualna roczna retencja konta i workflow usuwania do potwierdzenia. |
 | Lokalne logi / bufory | Logi: 10 MiB × 5 plików na kontener, maks. 7 dni. Bufor: maks. 64 MiB RAM i 256 MiB dysku na host, wiek do 30 min. | Pierwszy osiągnięty limit usuwa najstarszą telemetrię; drop/expiry raportowane. Sama rotacja Dockera nie realizuje limitu wieku. Required journal/audit nie korzysta z tego zawodnego bufora. Pokrycie 30 min peak wymaga pomiaru. |
@@ -82,6 +85,50 @@ analytics/RUM po przyjętym żądaniu: do 30 dni, z jawnym wynikiem i uwzględni
 holdów oraz retencji kopii. Cofnięcie consent od razu zatrzymuje dalszy eksport;
 nie dowodzi usunięcia już zebranej historii. Po restore stosuje się ponownie
 ACL, TTL, hold i rejestr zrealizowanych żądań.
+
+## Historia błędów i odczyt diagnostyczny — 10.10.2026
+
+Nowe wymaganie Igora dotyczy wewnętrznej historii **wszystkich zarejestrowanych
+błędów faktur**, także sprzed POST, przy retry, odzyskanych oraz związanych
+z otwartymi operacjami. Minimalny wpis należy do istniejącej klasy audytu
+faktury na 10 lat, bez samplingu; nie jest to nowa ocena obowiązku prawnego.
+Bieżący wynik i recovery nie nadpisują wcześniejszej porażki. Szczegóły prób
+wygasają po 90 dniach według powyższej polityki, journal operacji/SLI po
+13 miesiącach; minimalna historia błędów pozostaje dostępna z własnego audytu.
+Widok ujawnia pokrycie okresu/etapów, świeżość i braki: utraconych lub nigdy
+niezapisanych zdarzeń nie uznaje się za odtworzone.
+
+Przyszły agent deweloperski korzysta z osobnej tożsamości i ograniczonego
+interfejsu **tylko do odczytu zredagowanej diagnostyki**. Serwer wyznacza
+dopuszczony zakres tenantów z uprawnień tej tożsamości i sprawdza własność
+każdej wskazanej faktury/próby przed odczytem. ID z żądania i pseudonim nie
+ustanawiają uprawnień. Odczyt obejmujący wiele tenantów wymaga jawnego zakresu
+operatora platformy; wewnętrzny charakter panelu nie znosi izolacji.
+Odczyty są audytowane w klasie dostępu/admin: tożsamość, czas, zakres,
+bezpieczna referencja, wynik, bez kopiowania pobranych payloadów.
+
+Allowlist diagnostyczna obejmuje bezpieczny kod/klasę/etap, czas, env/release,
+stan próby, wynik późniejszy, kompletność oraz kontrolowane referencje do
+dowodu. Poza własnym systemem referencje są pseudonimowe, mapowanie zostaje
+lokalnie. Pakiet nie zawiera XML/PDF/UPO, NIP, nazw, kwot, danych kontaktowych,
+credentials, surowych odpowiedzi SDK lub `Error.cause`. Agent nie dostaje
+service-role, bezpośredniego SQL/SSH ani akcji operatora; może analizować
+udostępnione dowody i formułować oznaczone hipotezy. Tekst błędu, dokumentu
+lub załącznika jest danymi, **nie instrukcją do wykonania**. Zewnętrzna usługa
+otrzymuje tylko zaakceptowany zredagowany zakres po sprawdzeniu jej tożsamości,
+uprawnień i granic przetwarzania; nowy wymóg nie upoważnia eksportu dokumentów.
+
+Sentry EU Team jest nowym wyborem docelowym z 10.10: historia błędów do 90 dni,
+spans do 30 dni. Zastępuje wybór Developer i 30-dniowych error events z 07.10,
+bez zmiany historycznej deklaracji o braku płatnych planów. Źródła i zakres
+wyboru opisuje [ownership](ownership.md). Aktywny plan, quota, retencje,
+rozliczenia i konfiguracja nie zostały tu zweryfikowane; G07 nadal PARTIAL.
+Sentry może filtrować, tracić lub wygaszać zdarzenia i nie jest pełnym ledgerem.
+
+W F0 przyjmujemy kontrakt danych i granice dostępu. Dashboard, instrumentacja
+pełnego śladu, podłączenie i test autoryzacji agenta należą do **F1 po
+rzeczywistym odbiorze F0**. Nie przyznano dostępu, nie podłączono agenta i nie
+uruchomiono testu; TEST-04 pozostaje NOT RUN.
 
 ## Sampling, dostawcy i dostęp
 

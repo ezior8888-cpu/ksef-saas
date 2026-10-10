@@ -9,6 +9,17 @@ dowodzi ich wykonania. Igor prowadzi monitoring i odbiera F0; Codex wykonuje
 dostępne prace techniczne, ograniczając Bartosza do koniecznych czynności
 operatorskich.
 
+**Aktualny kierunek 10.10: płatny wariant chmurowy, jakość przed oszczędzaniem
+na diagnostyce i izolacji.** Wybór: Sentry Team EU oraz pełna historia błędów
+faktur we własnym chronionym audycie, z przyszłym odczytem dla agenta
+deweloperskiego. Kopie BX11 HEL1/restic; dodatkowo rekomendowany niezależny
+cel B2 EU z Object Lock. Staging 16 GiB: dostępny CPX42 wymaga podniesienia
+dotychczasowego budżetu przed zakupem; tańszy CX43 jest niedostępny. Pełne
+[warunki i koszty](ownership.md#płatny-wariant-i-pełna-historia-błędów--10102026)
+oraz [indeks odczytów i wyborów](evidence/f0-2026-10-10.json) rozdzielają
+decyzje od aktywnych kont i wykonania. F0_OPEN; dashboard i podłączenie
+agenta należą do późniejszej implementacji po odbiorze F0.
+
 - [Inwentaryzacja i pochodzenie dowodów](runtime-inventory.md)
 - [Kontrakty wyniku i korelacji](contracts.md)
 - [Polityka danych](data-policy.md)
@@ -19,6 +30,7 @@ operatorskich.
 - [Bezpieczny indeks ustaleń z 07.10](evidence/f0-2026-10-07.json)
 - [Aktualne wybory na podstawie delegacji Igora](ownership.md#wybory-na-podstawie-delegacji-igora--07102026)
 - [Bezpieczny indeks wyborów i katalogu cen z 07.10](evidence/f0-decisions-2026-10-07.json)
+- [Aktualizacja płatnego wariantu i odczyty z 10.10](evidence/f0-2026-10-10.json)
 - [Kolektor tylko do odczytu](../../scripts/ops/collect-runtime-inventory.mjs)
 - [Przykład staging](../../ops/observability/environments/staging.example.yaml) / [production](../../ops/observability/environments/production.example.yaml)
 
@@ -57,27 +69,31 @@ dotyczy brakujących decyzji i dowodów bez wewnętrznych skrótów lub ponowneg
 żądania znanych danych. Odpowiedzi na tę partię zostały przekazane i zapisane
 w [ustaleniach z 07.10](runtime-inventory.md#ustalenia-przekazane-07102026).
 
-Aktualna organizacja pracy: **Igor — właściciel monitoringu i odbioru F0;
+Organizacja przyjęta 07.10, nadal obowiązująca: **Igor — właściciel monitoringu i odbioru F0;
 Codex — wykonanie dokumentacji, dostępne odczyty i ocena dowodów**. Nie kierujemy
 domyślnie wszystkich pytań do Bartosza. Celowe KSeF TEST jest uzasadnione,
 zakres kopii i termin staging uzgodnione, brak płatnych planów zadeklarowany,
 a historyczny odbiorca alarmów i luka dyżuru zapisane. Po późniejszej
 delegacji: **G04/G05/G06 PASS tylko dla przyjęcia decyzji**, G08 PARTIAL
 (wybrana polityka, niezweryfikowany routing i gotowość), G01/G02/G07 PARTIAL,
-**G03/G09 FAIL**. Datadog jawnie wyłączono z obecnego zakresu, wybierając
+**G03/G09 FAIL**. Historyczny wybór z 07.10 wyłączał Datadog, wybierając
 Sentry EU Developer, PostHog EU Free, Uptime Kuma i planowany Healthchecks
-Hobbyist. Nowe kopie BX11 HEL1 + staging CPX32 DE mają odczytany koszt
-planistyczny 39,19 EUR netto/mies., bez zamówienia. SSH Codexa jest opcją
+Hobbyist. BX11 HEL1 + staging CPX32 DE miały odczytany koszt
+planistyczny 39,19 EUR netto/mies., bez zamówienia. Kierunek narzędzi/staging
+zastąpiła opisana wyżej aktualizacja 10.10; pomiar cen 07.10 pozostaje
+historyczny. SSH Codexa jest opcją
 zbierania dowodów, nie obowiązkową bramką.
 
-Po pytaniu Igora o wariant darmowy przygotowujemy
+Po pytaniu Igora o wariant darmowy oceniono historycznie
 [wariant bez nowych abonamentów](ownership.md#wariant-bez-nowego-abonamentu--ocena-07102026):
 kopie na posiadanym urządzeniu i lokalny izolowany staging. Igor zadeklarował
 500 GB miejsca i codzienną dostępność; odczyt lokalny potwierdził zasoby
 komputera, bez pomiaru produkcji lub wykonania kopii. Cena 39,19 EUR dotyczy
 wcześniejszego wariantu zakupowego; zakup nie jest warunkiem samym w sobie.
 Pojemność pełnej retencji i działający staging pozostają niezweryfikowane;
-G03/G09 nadal FAIL. Obecnie priorytetem jest ocena posiadanego sprzętu.
+G03/G09 nadal FAIL. Wiadomości Igora z 10.10 przywracają płatny wariant
+chmurowy jako główny; posiadany sprzęt pozostaje możliwością dodatkowej
+kopii/testów, bez dowodu wykonania.
 
 Na prośbę Igora prompt do drugiego chatu powstanie po rzeczywistym odbiorze
 F0, z jego dowodami i konkretną wersją materiału. F1 nie rozpoczęto.

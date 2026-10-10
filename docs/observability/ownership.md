@@ -1,7 +1,7 @@
 # F0 — odpowiedzialność i decyzje właściciela
 
 Stan: **wybory docelowe przyjęte na podstawie delegacji Igora, F0 nadal otwarte**,
-07.10.2026. Igor jest
+aktualizacja 10.10.2026. Igor jest
 zlecającym, właścicielem monitoringu oraz odbiorcą F0. Codex wykonuje pracę
 techniczną w autoryzowanym zakresie. Bartosz pozostaje kontaktem operatorskim;
 jego udział ograniczamy do koniecznych czynności wymagających jego dostępu.
@@ -325,6 +325,94 @@ Nie wykonano instalacji, kopii, wdrożenia, restore, zmian serwerów ani F1.
 Przygotowanie lokalnego wariantu nie uchyla zakazu czynności operacyjnych
 w tej sesji. Zakup nowych zasobów nie jest samodzielną bramką F0.
 
+## Płatny wariant i pełna historia błędów — 10.10.2026
+
+**U — aktualna decyzja Igora:** „jeszcze robimy tą wersje płatną”, „musi być
+jak najlepsza”, po wymaganiu dashboardu wszystkich błędów faktur i odczytu
+dla agenta deweloperskiego. Wiadomości nie mają dostarczonego czasu UTC.
+W ramach wcześniejszej delegacji Codex przyjmuje poniższy kierunek jakościowy.
+Ocena lokalnego wariantu z 07.10 pozostaje historyczna. Nie jest to zakup,
+zmiana aktywnych kont lub upoważnienie do czynności operacyjnych; poprzedni
+limit infrastruktury 45 EUR netto nie zostaje automatycznie podniesiony.
+
+- **Historia i agent:** źródłem dashboardu jest chroniona historia domenowa,
+  bez próbkowania wymaganych wpisów. Zawiera błędy przed POST, ponowienia,
+  później odzyskane i nadal otwarte operacje; sukces nie usuwa wcześniejszych
+  błędów. Widok ujawnia pokrycie, świeżość i luki historyczne. Minimalny wpis
+  każdego błędu zachowuje audyt faktury przez 10 lat według polityki projektu;
+  szczegóły diagnostyczne 90 dni, journal SLI 13 miesięcy. Nie odtwarzamy
+  zdarzeń nigdy niezapisanych. [Kontrakt](contracts.md) i [polityka danych](data-policy.md)
+  opisują zakres. Przyszły agent otrzymuje osobną tożsamość i zredagowany
+  odczyt z autoryzacją tenantów oraz audytem; bez sekretów, service-role,
+  SQL, SSH i operacji na fakturach. Implementacja dashboardu i podłączenie
+  agenta dopiero po rzeczywistym odbiorze F0, w osobnym chacie. Nie przyznano
+  dostępu ani nie wysłano wiadomości do agenta lub operatora.
+- **Sentry Team EU — wybrany cel:** początkowo miesięcznie, **29 USD/mies.**
+  bez podatków; rocznie 312 USD płatne z góry. Wielu użytkowników, 50 tys.
+  błędów/mies., API/integracje i 20 dashboardów poprawiają współpracę.
+  Błędy do 90 dni; spans/transactions 30 dni. Team nie zwiększa bazowych
+  5 mln spanów względem Developer. [Cennik](https://sentry.io/pricing/),
+  [rozliczenie miesięczne/roczne](https://sentry.zendesk.com/hc/en-us/articles/26365105087643-The-price-on-the-Manage-Subscription-page-differs-from-what-is-shown-on-the-Pricing-Page-why)
+  i [retencja Team](https://www.sentry.help/en/articles/13965032-how-is-my-team-plan-changing-august-27-2025),
+  sprawdzone 10.10. Business 89 USD/mies. nie zwiększa bazowej liczby błędów;
+  nie wybieramy go bez potrzeby dodatkowych funkcji. Aktywny plan pozostaje
+  niezweryfikowany. Docelowo PAYG wyłączony / budżet nadwyżek 0 USD do pomiaru
+  zużycia i alarm przy 80% quota; po wyczerpaniu quota dane Sentry mogą być
+  odrzucane, co wymaga jawnego wskaźnika braków. Płatny plan nie zastępuje
+  audytu. [PAYG](https://www.sentry.help/en/articles/13964878-how-does-pay-as-you-go-work)
+  może być domyślnie włączony przy zakupie; ustawienie wymaga późniejszego odbioru.
+  Replay, profilowanie, Seer i centralne logi SaaS pozostają osobnymi,
+  niewybranymi rozszerzeniami. [EU FAQ](https://www.sentry.help/en/articles/13964378-sentry-s-eu-region-faq)
+  rozróżnia zdarzenia/kopie we Frankfurcie od części metadanych w USA.
+- **Pozostałe narzędzia:** PostHog EU Free dla analityki produktu, istniejący
+  Kuma i planowany Healthchecks dla heartbeatów w dotychczasowym ograniczonym
+  zakresie. Nie kupujemy płatnej analityki, aby zastąpić historię błędów.
+  Datadog pozostaje poza zakresem. Cały lifecycle alarmów i jego niezależność
+  nadal wymagają dowodów G02/G08; sam abonament nie zapewnia reakcji Igora.
+- **Kopie:** główny BX11 HEL1/restic, pełna DB/globals i oba MinIO, zasady
+  spójności, kluczy i retencji 7/4/12 z 07.10 bez zmian. Planistyczny termin
+  pierwszej kopii 09.10 upłynął; brak dowodu jej wykonania i brak nowej
+  obietnicy operatora. Rekomendowany dodatkowy niezależny cel **B2 EU Central
+  (Amsterdam), szyfrowanie klienta i Object Lock COMPLIANCE**: odtwarzalne
+  zaszyfrowane paczki całego zestawu z manifestem i jawną datą retencji.
+  Nie nakładamy blokady na aktywne repo restic bez testu zgodności locks/prune.
+  Samo włączenie Object Lock nie blokuje każdego obiektu; COMPLIANCE chroni
+  zablokowane wersje do daty, także przed usunięciem przez administratora.
+  Upload ma oddzielny klucz ograniczony do celu bez delete/bypass/admin;
+  odzyskiwanie i maintenance osobno u Igora. Region konta wybrać przy zakładaniu;
+  retencję/hold/delete i możliwości odzyskania sprawdzić przed blokadą.
+  [Object Lock](https://www.backblaze.com/docs/cloud-storage-object-lock),
+  [regiony](https://www.backblaze.com/docs/cloud-storage-data-regions),
+  [uprawnienia](https://www.backblaze.com/docs/cloud-storage-s3-compatible-app-keys).
+  Publiczna stawka 10.10: **6,95 USD/TB/mies.**, pierwsze 10 GB darmowe;
+  egress do 3× średniego storage bez opłaty, potem 0,01 USD/GB.
+  [Cena](https://www.backblaze.com/cloud-storage/pricing) nie wyznacza kosztu
+  naszej retencji bez pomiaru rozmiarów. Dodatkowy cel jest rekomendacją
+  jakościową, nie nowym automatycznym warunkiem G09 ani istniejącą kopią.
+- **Staging jakościowy:** rekomendowany **CPX42 NBG1, x86, 8 vCPU / 16 GiB /
+  320 GB**, zamiast wcześniejszego CPX32 8 GiB. Pełny zestaw musi mieć zmierzony
+  zapas RAM/CPU/dysku; 16 GiB nie jest gwarancją wydajności. Izolacja i cel
+  23.10 / granica 31.10 po pełnych kopiach pozostają bez zmian. Odczyt katalogu
+  10.10: CPX42 69,49 EUR netto + IPv4 0,50 + BX11 3,20 = **73,19 EUR netto/mies.**
+  Tańszy CX43 8 vCPU / 16 GiB / 160 GB dałby 19,69 EUR netto z IPv4 i BX11,
+  ale ma available=false w każdej odczytanej lokalizacji EU. Żaden dostępny,
+  nieprzestarzały wariant x86 ≥4 vCPU / 16 GiB nie mieści się w dotychczasowym
+  limicie 45 EUR. Pozyskanie VM pozostaje **BLOCKED — budżet/dostępność**;
+  przed zamówieniem potrzeba osobnego rozstrzygnięcia wyższego limitu albo
+  nowego pomiaru dostępności CX43. Nie złożono ani nie zarezerwowano zamówienia.
+
+**P — źródła odczytu:** katalog Hetznera 10.10 **07:20:56.151–07:20:56.777 UTC**,
+cztery GET 200, 26 typów bez dalszej strony; wskaźnik dostępności nie jest
+rezerwacją. [Indeks](evidence/f0-2026-10-10.json) zawiera hash prywatnego wyciągu.
+Osobno kolektor 07:18:59 UTC nie uzyskał runtime; lokalna kontrola wykazała
+zablokowany klucz, brak tożsamości agenta SSH i wpisów known_hosts app/ops.
+SSH Codexa nadal jest opcjonalnym sposobem zbierania dowodów, z alternatywą
+datowanego odczytu uprawnionego operatora/panelu. Nie obchodzimy tych kontroli.
+
+G01/G02/G07/G08 PARTIAL, G03/G09 FAIL, G04/G05/G06 PASS wyłącznie dla przyjętych
+decyzji, z uzupełnieniami kontraktu/polityki 10.10. TEST-01…07 NOT RUN.
+F0_OPEN: wybór płatnej wersji, aktualny katalog i zielone CI nie są odbiorem F0.
+
 ## Role i odpowiedzialność
 
 | Rola | Osoba / stan | Zakres i wymagany dowód przyjęcia |
@@ -355,13 +443,13 @@ organizacji odpowiedzialności i prywatnych dowodów.
 | ID / bramka | Decyzja i konkretny materiał | Stan |
 |---|---|---|
 | D01 / G01–G02 | Publicznie uzgodniony wyciąg; pełne odczyty i surowe odpowiedzi poza gitem, przegląd przez Codex, odbiór przez Igora. | GRANICA I ORGANIZACJA BIEŻĄCEGO PAKIETU USTALONE przez Igora; dowody nadal pozostają prywatne. |
-| D02 / G09 | Pełne kopie 7/4/12, BX11 HEL1 + restic, osobne repo/klucze, pierwszy komplet planistycznie 09.10 16:00 Europe/Warsaw, później 00:30 UTC, comiesięczny izolowany restore. | WYBÓR PRZYJĘTY przez delegację Igora; zakres operatorski i dowody wykonania otwarte. G09 FAIL. |
-| D03 / G03 | Osobny staging CPX32 DE, własne DB/kolejka/storage/klucze, KSeF TEST i Stripe test; syntetyczne dane, cel 23.10, granica 31.10 po kopiach. | WYBÓR PRZYJĘTY; nie zamówiono zasobów ani nie potwierdzono izolacji. G03 FAIL. |
+| D02 / G09 | Pełne kopie 7/4/12, BX11 HEL1 + restic, osobne repo/klucze, 00:30 UTC, comiesięczny izolowany restore. Dodatkowo rekomendowany B2 EU/Object Lock; planistyczny cel 09.10 upłynął bez dowodu wykonania. | WYBÓR PRZYJĘTY; B2 opcja jakościowa do osobnego wykonania. Zakres operatorski i dowody otwarte. G09 FAIL. |
+| D03 / G03 | Staging DE, 16 GiB: rekomendowany dostępny CPX42 przekracza limit 45 EUR dla VM+BX11; tańszy CX43 niedostępny. Własne DB/kolejka/storage/klucze, KSeF TEST i Stripe test; cel 23.10, granica 31.10 po kopiach. | KIERUNEK JAKOŚCIOWY PRZYJĘTY 10.10; pozyskanie VM BLOCKED budżet/dostępność, bez zakupu i dowodu izolacji. G03 FAIL. |
 | D04 / G01–G02 | Istniejący lokalny Redis/SRH na app-1, docelowo przypięte odczytane wersje/obrazy i osobny health; znaczenie `UPSTASH_*` bez zmiany. | POLITYKA PRZYJĘTA; konkretne aktualne wersje i konfiguracja wymagają odczytu, G01/G02 PARTIAL. |
 | D05 / G01–G02 | Dwa odrębne MinIO według historycznego pomiaru: aplikacja ops-1, Supabase db-1; wymagane wersje binarek, obrazy, health i pokrycie kopią. | POLITYKA PRZYJĘTA; brakujące pomiary pozostają otwarte, bez zmian istniejących identyfikatorów. |
 | D06 / G02/G08 | Miesięczny przegląd, kontrolowane aktualizacje po kopii/staging, brak auto-upgrade; MFA i minimalny dostęp administracyjny, przegląd co 30 dni. | POLITYKA PRZYJĘTA; aktywna konfiguracja i gotowość osób wymagają dowodów. |
 | D07 / G01/G04 | KSeF TEST w aplikacji produkcyjnej jest celowy na etapie przed startem; TEST → PROD pozostaje osobnym zadaniem go-live W15/S13. | INTENCJA ROZSTRZYGNIĘTA 07.10; bez przełączenia środowiska i bez odbioru całego G04. |
-| D08 / G07 | Sentry EU Developer, PostHog EU Free, Uptime Kuma i planowany Healthchecks Hobbyist; Datadog poza obecnym zakresem, SaaS budżet 0 USD. | ZAKRES PRZYJĘTY; dowody aktywnych kont/tier/retencji/quota/dostępu nadal niepełne. G07 PARTIAL. |
+| D08 / G07 | Aktualny cel 10.10: Sentry Team EU miesięcznie 29 USD, bez PAYG do pomiaru; PostHog EU Free, Kuma i planowany Healthchecks Hobbyist; Datadog poza zakresem. Historia faktur we własnym audycie. | ZAKRES PRZYJĘTY, bez zakupu; zastępuje wcześniejszy target Developer/0 USD. Dowody aktywnych kont/tier/retencji/quota/dostępu nadal niepełne. G07 PARTIAL. |
 | D09 / G02/G06 | P0 pełne kopie; P1 staging i dowody dostępu/zasobów/monitorów; P2 kontrolowane utrzymanie systemu, usług, ACL i starszych ustawień. Instrumentacja F1 osobno. | PRIORYTETY PRZYJĘTE; nie wykonano zmian utrzymaniowych ani F1. |
 | D10 / G08 | Bez dodatkowego upoważnienia współpracownika lub zastępcy; nowe tymczasowe dostępy maks. 24 h, role indywidualne i minimalne. | ZAKRES PRZYJĘTY; aktualne role do prywatnego odczytu, brak zastępcy pozostaje jawny. |
 
