@@ -422,3 +422,67 @@ test("malformed prefix cannot silently become unfiltered listing", async (t) => 
   await rejectExport(t, fake({ override: ({ name }) => name === "ListObjectsV2Command"
     ? { IsTruncated: false, KeyCount: 0, Contents: [], Prefix: 0 } : undefined }), "FILTERED_LISTING");
 });
+
+
+test("caller signal pre-abort refuses destination creation and all SDK calls", async (t) => {
+  const paths = await fixture(t), client = fake();
+  await assert.rejects(exportBackupS3({ client, runId: "fixture", source: "application", ...paths, signal: AbortSignal.abort() }), { code: "ABORTED" });
+  await assert.rejects(stat(paths.destinationDir), { code: "ENOENT" });
+  assert.equal(client.calls.length, 0);
+});
+test("caller signal aborts the SDK request even when send ignores cancellation", async (t) => {
+  const controller = new AbortController(); let sdkSignal;
+  const client = fake({ override: ({ name, options }) => {
+    if (name === "ListBucketsCommand") { sdkSignal = options.abortSignal; controller.abort(); return new Promise(() => {}); }
+  } });
+  await rejectExport(t, client, "ABORTED", { signal: controller.signal, requestTimeoutMs: 30 });
+  assert.equal(sdkSignal.aborted, true); assert.equal(client.calls.length, 1);
+});
+test("caller signal aborts payload pipeline and prevents later file growth", async (t) => {
+  const controller = new AbortController(); let started = false;
+  const body = new Readable({ read() { if (!started) { started = true; this.push(Buffer.from("he")); setTimeout(() => controller.abort(), 10); } } });
+  const paths = await rejectExport(t, fake({ override: ({ name }) => name === "GetObjectCommand" ? getResponse(body) : undefined }),
+    "ABORTED", { signal: controller.signal, objectTimeoutMs: 40 });
+  assert.equal(body.destroyed, true);
+  const file = path.join(paths.destinationDir,"payloads","0000000000000001.bin"), size = (await stat(file)).size;
+  body.push(Buffer.from("llo")); await new Promise(resolve => setTimeout(resolve,10));
+  assert.equal((await stat(file)).size,size);
+});
+test("late timed-out GetObject response destroys its unused Body and cannot write payload", async (t) => {
+  let resolve;
+  const client = fake({ override: ({ name }) => name === "GetObjectCommand" ? new Promise(done => { resolve = done; }) : undefined });
+  const paths = await rejectExport(t,client,"REQUEST_TIMEOUT",{requestTimeoutMs:20});
+  const body = new Readable({ read() {} }); resolve(getResponse(body));
+  await new Promise(done => setTimeout(done,10));
+  assert.equal(body.destroyed,true); assert.deepEqual(await readdir(path.join(paths.destinationDir,"payloads")),[]);
+});
+test("caller signal late GetObject resolution destroys Body without resuming writes", async (t) => {
+  const controller = new AbortController(); let resolve;
+  const client = fake({ override: ({ name }) => {
+    if (name === "GetObjectCommand") { controller.abort(); return new Promise(done => { resolve = done; }); }
+  } });
+  const paths = await rejectExport(t,client,"ABORTED",{signal:controller.signal,requestTimeoutMs:30});
+  const body = new Readable({ read() {} }); resolve(getResponse(body));
+  await new Promise(done => setTimeout(done,10));
+  assert.equal(body.destroyed,true); assert.deepEqual(await readdir(path.join(paths.destinationDir,"payloads")),[]);
+});
+test("caller signal on final listing prevents complete summary publication", async (t) => {
+  const controller = new AbortController();
+  await rejectExport(t,fake({override:({name,count})=> { if(name === "ListBucketsCommand" && count === 2) controller.abort(); }}),
+    "ABORTED",{signal:controller.signal});
+});
+
+test("caller signal during pending summary fsync cannot publish the success name", async (t) => {
+  const paths = await fixture(t), controller = new AbortController();
+  const probe = await open(path.join(paths.parent,"probe"),"wx",0o600), prototype = Object.getPrototypeOf(probe);
+  const originalSync = prototype.sync; await probe.close(); let calls = 0;
+  t.mock.method(prototype,"sync",async function() {
+    const result = await originalSync.call(this);
+    if (++calls === 3) controller.abort();
+    return result;
+  });
+  await assert.rejects(exportBackupS3({client:fake(),runId:"fixture",source:"application",...paths,signal:controller.signal}),{code:"ABORTED"});
+  assert.equal(calls,3);
+  await assert.rejects(stat(path.join(paths.destinationDir,"export-summary.json")),{code:"ENOENT"});
+  assert.ok((await stat(path.join(paths.destinationDir,"export-summary.pending.json"))).isFile());
+});

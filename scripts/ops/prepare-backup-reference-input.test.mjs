@@ -242,3 +242,34 @@ test("duplicate bucket config and a claimed enabled versioning profile cannot hi
 test("payload budget covers both sources rather than independently accepting each", t => {
   const f = fixture(t, { supabase: [{ key: "orphan", data: "hello" }] }); rejects(f, { limits: { maxTotalPayloadBytes: 6 } });
 });
+
+test("verified payload files bind actual private paths and bytes from both exports without changing checker input", t => {
+  const f = fixture(t, {
+    app: [{ key: "PRIVATE/doc.xml", data: "hello" }, { key: "../../PRIVATE/never-a-local-filename", data: "" }],
+    supabase: [{ key: "/PRIVATE/remote/object", data: Buffer.from([0, 1, 255, 10]) }, { key: "PRIVATE/Unicode-é", data: "payload-not-a-key" }],
+  });
+  const result = prepareBackupReferenceInput(options(f));
+  const expectedPaths = [f.applicationDir, f.supabaseDir].flatMap(directory => [
+    path.join(directory, "payloads", "0000000000000001.bin"),
+    path.join(directory, "payloads", "0000000000000002.bin"),
+  ]);
+  assert.deepEqual(result.verifiedPayloadFiles, expectedPaths.map(filename => {
+    const content = readFileSync(filename);
+    return { path: filename, sha256: sha(content), bytes: content.byteLength };
+  }));
+  assert.ok(result.verifiedPayloadFiles.every(item => path.isAbsolute(item.path) && Object.keys(item).sort().join(",") === "bytes,path,sha256"));
+  for (const manifest of result.bundle.objectManifests) {
+    assert.deepEqual(Object.keys(manifest).sort(), ["complete", "objects", "runId", "source", "versioning"]);
+    assert.ok(manifest.objects.every(object => !Object.hasOwn(object, "path") && !Object.hasOwn(object, "payloadId")));
+  }
+  const publicReport = JSON.stringify(result.report);
+  for (const filename of expectedPaths) assert.ok(!publicReport.includes(filename));
+  assert.equal(JSON.stringify(result.bundle).includes(f.parent), false);
+});
+
+test("empty verified exports return no invented payload files even when references are missing", t => {
+  const f = fixture(t, { app: [], supabase: [] });
+  const result = prepareBackupReferenceInput(options(f));
+  assert.deepEqual(result.verifiedPayloadFiles, []);
+  assert.equal(result.report.ok, false);
+});

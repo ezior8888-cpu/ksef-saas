@@ -17,8 +17,8 @@
  */
 import * as S3 from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { link, lstat, mkdir, open } from "node:fs/promises";
+import { createWriteStream, linkSync } from "node:fs";
+import { lstat, mkdir, open } from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -72,6 +72,16 @@ const fail = (code) => { throw new BackupS3ExportError(code); };
 function privateFailure(error, fallback) {
   return error instanceof BackupS3ExportError ? error : new BackupS3ExportError(fallback);
 }
+
+/** Best-effort disposal only; never await an untrusted stalled iterator. */
+function disposeBody(body) {
+  try {
+    if (typeof body?.destroy === "function") body.destroy();
+    else if (typeof body?.cancel === "function") Promise.resolve(body.cancel()).catch(() => {});
+    else if (typeof body?.return === "function") Promise.resolve(body.return()).catch(() => {});
+  } catch { /* A disposal failure never exposes private transport details. */ }
+}
+
 function checkStatus(value) {
   if (!isRecord(value)) fail("INVALID_RESPONSE");
   const status = value.$metadata?.httpStatusCode;
@@ -163,7 +173,7 @@ function validateTags(value) {
 }
 /** Reject symlinked parents. The trusted private parent must not be mutated
  * concurrently: portable Node has no openat directory-fd creation primitive. */
-async function newDirectory(destination) {
+async function newDirectory(destination, checkActive) {
   if (typeof destination !== "string" || !path.isAbsolute(destination)) fail("ABSOLUTE_DESTINATION_REQUIRED");
   if (destination.startsWith("\\\\") || destination.startsWith("//") || destination.includes("\0")) fail("LOCAL_DESTINATION_REQUIRED");
   const resolved = path.resolve(destination);
@@ -171,6 +181,7 @@ async function newDirectory(destination) {
   const immediateParent = path.dirname(resolved);
   let current = immediateParent;
   while (true) {
+    checkActive();
     const stat = await lstat(current);
     if (stat.isSymbolicLink() || !stat.isDirectory()) fail("UNSAFE_DESTINATION_PARENT");
     if (current === immediateParent && process.platform !== "win32"
@@ -179,20 +190,23 @@ async function newDirectory(destination) {
     if (parent === current) break;
     current = parent;
   }
+  checkActive();
   await mkdir(resolved, { mode: 0o700, recursive: false });
   return resolved;
 }
-async function jsonWriter(filename, limit) {
+async function jsonWriter(filename, limit, checkActive) {
+  checkActive();
   const handle = await open(filename, "wx", 0o600);
   const hash = createHash("sha256");
   let bytes = 0;
   return {
     async append(value) {
+      checkActive();
       const data = Buffer.from(safeJSON(value, limit) + "\n");
       await handle.writeFile(data);
       bytes += data.length; hash.update(data);
     },
-    async close() { await handle.sync(); await handle.close(); return { bytes, sha256: hash.digest("hex") }; },
+    async close() { checkActive(); await handle.sync(); checkActive(); await handle.close(); return { bytes, sha256: hash.digest("hex") }; },
     async abort() { await handle.close().catch(() => {}); }
   };
 }
@@ -208,7 +222,9 @@ export async function exportBackupS3(options) {
   const start = Date.now();
   try {
     if (!isRecord(options) || !options.client || typeof options.client.send !== "function") fail("CLIENT_REQUIRED");
-    const { client, runId, source, destinationDir } = options;
+    const { client, runId, source, destinationDir, signal } = options;
+    if (signal !== undefined && !(signal instanceof AbortSignal)) fail("INVALID_ABORT_SIGNAL");
+    if (signal?.aborted) fail("ABORTED");
     if (typeof runId !== "string" || !RUN_ID.test(runId)) fail("INVALID_RUN_ID");
     if (source !== "application" && source !== "supabase") fail("INVALID_SOURCE");
     const limits = Object.fromEntries(Object.entries(DEFAULTS).map(([key, value]) => [key, options[key] ?? value]));
@@ -217,26 +233,47 @@ export async function exportBackupS3(options) {
     for (const key of Object.keys(DEFAULTS)) {
       if (limits[key] > DEFAULTS[key]) fail("INVALID_LIMIT");
     }
-    const checkDeadline = () => { if (Date.now() - start >= limits.maxDurationMs) fail("RUN_TIMEOUT"); };
+    const checkDeadline = () => {
+      if (signal?.aborted) fail("ABORTED");
+      if (Date.now() - start >= limits.maxDurationMs) fail("RUN_TIMEOUT");
+    };
     const request = async (commandName, input) => {
       checkDeadline();
       const controller = new AbortController();
-      let timer;
-      const timeout = new Promise((_, reject) => {
-        timer = setTimeout(() => { controller.abort(); reject(new BackupS3ExportError("REQUEST_TIMEOUT")); },
+      let timer, onAbort, stopped = false, response;
+      const halted = new Promise((_, reject) => {
+        const stop = code => { stopped = true; reject(new BackupS3ExportError(code)); controller.abort(); };
+        timer = setTimeout(() => stop("REQUEST_TIMEOUT"),
           Math.min(limits.requestTimeoutMs, Math.max(1, limits.maxDurationMs - (Date.now() - start))));
+        onAbort = () => stop("ABORTED");
+        signal?.addEventListener("abort", onAbort, { once: true });
+      });
+      // A transport may ignore cancellation. A late response has no writer
+      // continuation and its unused Body is disposed instead of leaked.
+      const sent = Promise.resolve().then(() => {
+        checkDeadline();
+        return client.send(new S3[commandName](input), { abortSignal: controller.signal });
+      }).then(value => {
+        if (stopped || signal?.aborted) {
+          disposeBody(value?.Body);
+          fail(signal?.aborted ? "ABORTED" : "REQUEST_TIMEOUT");
+        }
+        return value;
       });
       try {
-        const value = await Promise.race([client.send(new S3[commandName](input), { abortSignal: controller.signal }), timeout]);
-        checkStatus(value);
-        if (commandName !== "GetObjectCommand") safeJSON(value, limits.maxRecordBytes);
-        return value;
-      } finally { clearTimeout(timer); }
+        response = await Promise.race([sent, halted]);
+        checkDeadline(); checkStatus(response);
+        if (commandName !== "GetObjectCommand") safeJSON(response, limits.maxRecordBytes);
+        return response;
+      } catch (error) { disposeBody(response?.Body); throw error; }
+      finally { clearTimeout(timer); signal?.removeEventListener("abort", onAbort); }
     };
-    const dir = await newDirectory(destinationDir);
+    checkDeadline();
+    const dir = await newDirectory(destinationDir, checkDeadline);
+    checkDeadline();
     await mkdir(path.join(dir, "payloads"), { mode: 0o700 });
-    manifestWriter = await jsonWriter(path.join(dir, "objects.ndjson"), limits.maxRecordBytes);
-    configWriter = await jsonWriter(path.join(dir, "bucket-config.ndjson"), limits.maxRecordBytes);
+    manifestWriter = await jsonWriter(path.join(dir, "objects.ndjson"), limits.maxRecordBytes, checkDeadline);
+    configWriter = await jsonWriter(path.join(dir, "bucket-config.ndjson"), limits.maxRecordBytes, checkDeadline);
     let bucketCount = 0, objectCount = 0, objectBytes = 0, payloadSequence = 0, plannedPayloadBytes = 0;
     let totalPages = 0;
     const page = () => { checkDeadline(); if (++totalPages > limits.maxPages) fail("PAGE_LIMIT"); };
@@ -326,7 +363,8 @@ export async function exportBackupS3(options) {
         response.Body?.destroy?.(); fail("OBJECT_CHANGED_OR_PARTIAL");
       }
       const body = response.Body;
-      if (!body || typeof body[Symbol.asyncIterator] !== "function") fail("BODY_STREAM_REQUIRED");
+      if (!body || typeof body[Symbol.asyncIterator] !== "function") { disposeBody(body); fail("BODY_STREAM_REQUIRED"); }
+      checkDeadline();
       const payloadId = String(++payloadSequence).padStart(16, "0") + ".bin";
       const hash = createHash("sha256"); let bytes = 0;
       const transform = new Transform({
@@ -340,12 +378,15 @@ export async function exportBackupS3(options) {
         }
       });
       const controller = new AbortController();
-      let timer;
+      let timer, onAbort;
       const timeout = new Promise((_, reject) => {
-        timer = setTimeout(() => {
-          controller.abort(); body.destroy?.();
-          reject(new BackupS3ExportError("OBJECT_TIMEOUT"));
-        }, Math.min(limits.objectTimeoutMs, Math.max(1, limits.maxDurationMs - (Date.now() - start))));
+        const stop = code => {
+          reject(new BackupS3ExportError(code)); controller.abort(); disposeBody(body);
+        };
+        timer = setTimeout(() => stop("OBJECT_TIMEOUT"),
+          Math.min(limits.objectTimeoutMs, Math.max(1, limits.maxDurationMs - (Date.now() - start))));
+        onAbort = () => stop("ABORTED");
+        signal?.addEventListener("abort", onAbort, { once: true });
       });
       try {
         const readable = body instanceof Readable ? body : Readable.from(body, { objectMode: false });
@@ -355,8 +396,9 @@ export async function exportBackupS3(options) {
           createWriteStream(path.join(dir, "payloads", payloadId), { flags: "wx", mode: 0o600 }),
           { signal: controller.signal }), timeout]);
       } catch (error) {
-        throw controller.signal.aborted ? new BackupS3ExportError("OBJECT_TIMEOUT") : privateFailure(error, "BODY_READ_FAILED");
-      } finally { clearTimeout(timer); }
+        throw signal?.aborted ? new BackupS3ExportError("ABORTED") : controller.signal.aborted ? new BackupS3ExportError("OBJECT_TIMEOUT") : privateFailure(error, "BODY_READ_FAILED");
+      } finally { clearTimeout(timer); signal?.removeEventListener("abort", onAbort); }
+      checkDeadline();
       if (bytes !== item.bytes) fail("OBJECT_SIZE_MISMATCH");
       const sha256 = hash.digest("hex");
       // Composite checksums are not hashes of payload bytes; refuse rather than
@@ -442,10 +484,12 @@ export async function exportBackupS3(options) {
     // Only publish the success name after the complete private file is synced
     // and closed. Keep pending artifacts on failure; link() refuses overwrite.
     const pendingSummary = path.join(dir, "export-summary.pending.json");
-    const writer = await jsonWriter(pendingSummary, limits.maxRecordBytes);
+    const writer = await jsonWriter(pendingSummary, limits.maxRecordBytes, checkDeadline);
     try { await writer.append(summary); await writer.close(); } catch (error) { await writer.abort(); throw error; }
     checkDeadline();
-    await link(pendingSummary, path.join(dir, "export-summary.json"));
+    // Synchronous no-overwrite publication keeps the final abort check and
+    // commit in one JS turn; no late link after a returned cancellation.
+    linkSync(pendingSummary, path.join(dir, "export-summary.json"));
     return summary;
   } catch (error) {
     await manifestWriter?.abort(); await configWriter?.abort();

@@ -2,7 +2,7 @@
 /** Explicit local integrity adapter; import and help-only CLI are inert.
  * Reads a reported normalized-reference JSON, two private S3 export directories,
  * and the fixed repository map. No DB/S3/SSH/client/env, writes or subprocesses.
- * Return `bundle` is PRIVATE. Only `report` is safe for public output.
+ * Return `bundle` and `verifiedPayloadFiles` are PRIVATE. Only `report` is safe for public output.
  * This is not a DB extractor, source-authenticity check, backup or G09 acceptance.
  */
 import { closeSync, constants, fstatSync, lstatSync, openSync, opendirSync, readSync } from "node:fs";
@@ -45,7 +45,7 @@ const keysOnly = (value, allowed) => record(value) && Object.keys(value).every(k
 const exactList = (value, expected) => Array.isArray(value) && value.length === expected.length
   && expected.every(item => value.filter(entry => entry === item).length === 1);
 export const HELP = "Preparation only: import prepareBackupReferenceInput({normalizedReferencesPath, applicationDir, supabaseDir}).\n"
-  + "CLI has no execution option and never reads supplied paths. Return bundle is PRIVATE.\n"
+  + "CLI has no execution option and never reads supplied paths. Return bundle and verifiedPayloadFiles are PRIVATE.\n"
   + "Library reads only local files, fixed repository map and payloads with 16-digit names.\n"
   + "Limits: JSON 1 MiB, NDJSON 64 MiB/file and 2 MiB/row; 10000 objects/source.\n"
   + "Parents must be trusted and stable throughout. Same FD checked/read; detected symlink paths rejected after open.\n"
@@ -211,7 +211,7 @@ function loadExport(directory, source, runId, limits, budget) {
     bucketConfiguration(row); if (buckets.has(row.bucket)) fail("DUPLICATE_BUCKET_CONFIGURATION"); buckets.add(row.bucket);
   });
   if (buckets.size !== summary.counts.bucketCount) fail("BUCKET_COUNT_MISMATCH");
-  const objects = [], identities = new Set(), payloadIds = new Set(); let bytes = 0;
+  const objects = [], verifiedPayloadFiles = [], identities = new Set(), payloadIds = new Set(); let bytes = 0;
   ndjson(path.join(directory, "objects.ndjson"), summary.objectManifest, limits, limits.maxObjects, row => {
     if (!keysOnly(row, ["bucket", "key", "bytes", "sha256", "payloadId", "metadata", "tags"]) || !text(row.bucket)
       || !buckets.has(row.bucket) || !text(row.key) || !integer(row.bytes) || row.bytes > limits.maxPayloadBytes
@@ -223,17 +223,21 @@ function loadExport(directory, source, runId, limits, budget) {
     identities.add(id); payloadIds.add(row.payloadId);
     bytes += row.bytes; budget.bytes += row.bytes;
     if (!integer(bytes) || !integer(budget.bytes) || budget.bytes > limits.maxTotalPayloadBytes) fail("TOTAL_PAYLOAD_BYTE_LIMIT");
-    const actual = readFileBounded(path.join(payloads, row.payloadId), row.bytes, () => {});
+    const filename = path.join(payloads, row.payloadId);
+    const actual = readFileBounded(filename, row.bytes, () => {});
     if (actual.bytes !== row.bytes || actual.sha256 !== row.sha256.toLowerCase()) fail("PAYLOAD_HASH_OR_SIZE_MISMATCH");
     objects.push({ bucket: row.bucket, key: row.key, bytes: row.bytes, sha256: actual.sha256 });
+    verifiedPayloadFiles.push({ path: filename, sha256: actual.sha256, bytes: actual.bytes });
   });
   if (objects.length !== summary.counts.currentObjectCount || bytes !== summary.counts.currentObjectBytes) fail("OBJECT_COUNT_OR_BYTE_MISMATCH");
   verifyPayloadDirectory(payloads, payloadIds, limits.maxObjects);
-  return { source, runId, complete: true, versioning: "Unversioned", objects };
+  return { objectManifest: { source, runId, complete: true, versioning: "Unversioned", objects }, verifiedPayloadFiles };
 }
 
 /** Only explicit local reads. `bundle` has real locally-hashed object members,
  * but the DB rows/coverage remain exactly the supplied reported declarations.
+ * Private verifiedPayloadFiles bind each checked file path to its actual FD
+ * bytes/hash, allowing callers to detect later changes before upload/read.
  * Trusted parents/files must remain stable for the entire multi-file read.
  * Per-file descriptor checks do not create a transactional directory snapshot.
  */
@@ -252,7 +256,9 @@ export function prepareBackupReferenceInput(options) {
       || !record(reported.referenceScope) || !Array.isArray(reported.references) || reported.references.length > 10_000) fail("INVALID_NORMALIZED_REFERENCES");
     const referenceMap = jsonFile(MAP_PATH, LIMITS.maxJsonBytes);
     const budget = { bytes: 0 };
-    const objectManifests = SOURCES.map((source, i) => loadExport(directories[i], source, reported.runId, limits, budget));
+    const exports = SOURCES.map((source, i) => loadExport(directories[i], source, reported.runId, limits, budget));
+    const objectManifests = exports.map(item => item.objectManifest);
+    const verifiedPayloadFiles = exports.flatMap(item => item.verifiedPayloadFiles);
     const bundle = { ...reported, objectManifests };
     const checked = validateBackupReferences(bundle, referenceMap);
     const report = { ...checked, status: checked.ok ? "LOCAL_ARTIFACTS_AND_REPORTED_REFERENCES_CONSISTENT" : "LOCAL_ARTIFACTS_VERIFIED_REFERENCES_INCOMPLETE_OR_INCONSISTENT",
@@ -261,7 +267,7 @@ export function prepareBackupReferenceInput(options) {
       checkedSources: 2, checkedPayloadBytes: budget.bytes, trustedStableParentsRequired: true, windowsACLVerified: false,
       windowsReparseProtectionGuaranteed: false,
       notice: "Verified local file bytes/hashes only. Reported DB references are not an authenticated DB extraction; no backup, restore or G09 acceptance." };
-    return { bundle, report };
+    return { bundle, report, verifiedPayloadFiles };
   } catch (error) {
     if (error instanceof BackupReferenceInputError) throw error;
     throw new BackupReferenceInputError("LOCAL_ARTIFACT_READ_OR_STRUCTURE_FAILED");
