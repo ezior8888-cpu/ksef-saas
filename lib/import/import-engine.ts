@@ -1,21 +1,29 @@
 /**
  * Centralny silnik importu: deduplikacja numerów, kontrahenci, produkty, zapis faktur.
  * Używa service role (`createAdminClient`) — wywoływać tylko z zaufanej ścieżki serwerowej / jobów.
+ * Mapowanie pliku na wiersz faktury (nagłówek, pozycje, `fa3_data`, ostrzeżenie
+ * JPK) jest czyste i wspólne z zapisem oryginału KSeF — `./imported-invoice-row`
+ * (PR C0). Tu zostaje całe I/O: odczyty duplikatów, kolejność zapisów,
+ * kontrahenci, produkty, znaczniki czasu i lista ostrzeżeń.
  */
 
 import { createAdminClient } from '@/lib/supabase/server';
 import type { Json } from '@/types/database';
 import type { KsefEnvironment } from '@/types/ksef';
-import type { BuyerParty, PaymentInfo, SellerParty } from '@/types/invoice';
 import type { InvoiceOrigin } from '@/lib/flo/functions/import-history';
-import type { ParsedInvoice, ParsedParty } from './fa3-parser';
-import { roundToCents } from '@/lib/xml/invoice-calculator';
-import { importedVatRateLabel, isVatRate } from '@/lib/xml/fa3-p12';
+import type { ParsedInvoice } from './fa3-parser';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import { recordXmlDocument } from '@/lib/storage/xml-documents';
 import type { ArchivedKsefXml } from './ksef-xml-archive';
-import { contentHeldReasons, fa3ImportContent, type ImportContent } from './fa3-content';
-import { fa3ImportLineAmounts, type ImportLineAmounts } from './fa3-line-amounts';
+import { fa3ImportContent } from './fa3-content';
+import {
+  buildImportedInvoiceRow,
+  buildImportedLineRows,
+  contentFa3Fields,
+  heldDocumentWarning,
+  importedInvoiceContent,
+  normalizeInvoiceKindForInsert,
+} from './imported-invoice-row';
 
 export interface ImportEngineParams {
   tenantId: string;
@@ -368,7 +376,8 @@ async function insertInvoices(
 ): Promise<{ imported: number; failed: number }> {
   if (invoices.length === 0) return { imported: 0, failed: 0 };
   const noteHeld = (inv: ParsedInvoice, num: string, ksefNumber: string | undefined) => {
-    const note = heldDocumentWarning(inv, num, ksefNumber, invoiceDirection, invoiceKsefStatus, fa3ImportContent(inv), fa3ImportLineAmounts(inv));
+    const { content, amounts } = importedInvoiceContent(inv);
+    const note = heldDocumentWarning(inv, num, ksefNumber, invoiceDirection, invoiceKsefStatus, content, amounts);
     if (note) held.push(note);
   };
   const origin: InvoiceOrigin = source === 'ksef_history' ? 'ksef_import'
@@ -550,13 +559,10 @@ async function insertInvoices(
       warnings.push(`${num}: brak NIP sprzedawcy w importie — kolumna seller_nip została pusta`);
     }
 
-    const invoiceKind = normalizeInvoiceKindForInsert(inv, warnings);
-    const content = fa3ImportContent(inv);
+    const kindWarning = normalizeInvoiceKindForInsert(inv).warning;
+    if (kindWarning) warnings.push(kindWarning);
     // C5c: netto / VAT / brutto pozycji zgodne z sumami stawek nagłówka (art. 106e ust. 7–11).
-    const amounts = fa3ImportLineAmounts(inv);
-    const faInvoiceType = mapParsedKindToFaVatType(inv.invoiceType);
-    const idCols = buyerIdentityFromParsed(inv.buyer);
-    const payment = paymentInfoFromParsed(inv);
+    const { content, amounts } = importedInvoiceContent(inv);
 
     const acceptedNow =
       invoiceKsefStatus === 'accepted' ? new Date().toISOString() : null;
@@ -568,40 +574,22 @@ async function insertInvoices(
       continue;
     }
 
+    const invoiceRow = buildImportedInvoiceRow(inv, {
+      tenantId,
+      direction: invoiceDirection,
+      origin,
+      ksefStatus: invoiceKsefStatus,
+      ksefEnvironment,
+      ksefAcceptedAt: acceptedNow,
+      ksefNumber: ksefNorm ?? null,
+      xmlStoragePath: inv.xmlArchive?.storagePath,
+      notes: `[import] ${source} job=${importJobId}`,
+      provenance: { source, importJobId, importedAt: new Date().toISOString() },
+    }, content, amounts);
+
     const { data: inserted, error: invErr } = await supabase
       .from('invoices')
-      .insert({
-        tenant_id: tenantId,
-        direction: invoiceDirection,
-        origin,
-        internal_number: num,
-        ksef_status: invoiceKsefStatus,
-        ksef_environment: ksefEnvironment,
-        ksef_accepted_at: acceptedNow,
-        ksef_number: ksefNorm ?? null,
-        invoice_kind: invoiceKind,
-        invoice_type: faInvoiceType,
-        issue_date: inv.issueDate,
-        sale_date: content.saleDate,
-        seller_nip: inv.seller.nip?.replace(/\D/g, '').slice(0, 10) || null,
-        buyer_nip: idCols.buyer_nip,
-        currency: 'PLN',
-        // C5c: faktura bez sum stawek — netto i VAT z pozycji (sprawdzone z P_15), inaczej z nagłówka.
-        net_total: amounts.totals?.netTotal ?? inv.totals.netTotal,
-        vat_total: amounts.totals?.vatTotal ?? inv.totals.vatTotal,
-        gross_total: inv.totals.grossTotal,
-        payment_due_date: inv.paymentDueDate ?? null,
-        fa3_data: buildImportFa3Json(inv, source, importJobId, content, amounts),
-        seller_data: sellerPartyFromParsed(inv.seller) as unknown as Json,
-        buyer_data: buyerPartyFromParsed(inv.buyer) as unknown as Json,
-        payment_data: payment as unknown as Json,
-        is_b2c: idCols.is_b2c,
-        buyer_id_type: idCols.buyer_id_type,
-        buyer_pesel: idCols.buyer_pesel,
-        buyer_id_number: idCols.buyer_id_number,
-        notes: `[import] ${source} job=${importJobId}`,
-        ...(inv.xmlArchive ? { xml_storage_path: inv.xmlArchive.storagePath } : {}),
-      })
+      .insert(invoiceRow)
       .select('id')
       .single();
 
@@ -611,21 +599,7 @@ async function insertInvoices(
       continue;
     }
 
-    const lineRows = inv.lines.map((line, idx) => {
-      const row = amounts.rows[idx]!;
-      return {
-        invoice_id: inserted.id,
-        ordinal: line.position ?? idx + 1,
-        name: line.name,
-        unit: line.unit,
-        quantity: line.quantity,
-        unit_price_net: row.unitPriceNet,
-        net_amount: row.netAmount,
-        vat_rate: line.vatRate,
-        vat_amount: row.vatAmount,
-        gross_amount: row.grossAmount,
-      };
-    });
+    const lineRows = buildImportedLineRows(inv, amounts).map((row) => ({ invoice_id: inserted.id, ...row }));
 
     const { error: linesErr } = await supabase.from('invoice_line_items').insert(lineRows);
 
@@ -664,77 +638,6 @@ async function insertInvoices(
   }
 
   return { imported, failed };
-}
-
-const IMPORTED_TYPE_LABEL: Record<'KOR' | 'ZAL' | 'ROZ', string> = {
-  KOR: 'korygująca',
-  ZAL: 'zaliczkowa',
-  ROZ: 'rozliczeniowa',
-};
-
-/**
- * W9 (C5a): ostrzeżenie dla klienta o zapisanym dokumencie, którego JPK nie
- * wykaże — stawka spoza FaktFlow („0 WDT”, „0 EX”, „22”…, „nieznana”) albo
- * zaimportowana korekta / zaliczka / ROZ. `null`, gdy dokument jest zwykły.
- */
-function heldDocumentWarning(
-  inv: ParsedInvoice,
-  num: string,
-  ksefNumber: string | undefined,
-  direction: 'outgoing' | 'incoming',
-  status: string,
-  content: ImportContent,
-  amounts: ImportLineAmounts,
-): string | null {
-  const doc = `${num}${ksefNumber ? ` (KSeF ${ksefNumber})` : ''}`;
-  const codes = [...new Set(inv.lines.map((l) => l.vatRate.trim()).filter((r) => !isVatRate(r)))];
-  const rates = codes
-    .map((c) => {
-      const label = importedVatRateLabel(c);
-      return `„${c}”${label ? ` (${label})` : ''}`;
-    })
-    .join(', ');
-  const type = mapParsedKindToFaVatType(inv.invoiceType);
-  const special = type === 'VAT' ? null : IMPORTED_TYPE_LABEL[type];
-  const sale = status === 'accepted' && direction === 'outgoing';
-  // C5b: data sprzedaży, adnotacje i oznaczenia, których JPK nie wykaże — tylko sprzedaż przyjęta w KSeF.
-  const contentReasons = sale ? contentHeldReasons(inv, content) : [];
-  // C5c: kwoty pozycji, których nie da się wiernie przenieść z pliku (ceny brutto, VAT od sumy stawki).
-  const amountReason = sale && amounts.problems.length
-    ? `kwot pozycji nie da się wiernie przenieść z pliku KSeF (${amounts.problems.join('; ')})`
-    : null;
-  // Bezpiecznik: pozycje nie sumują się do netto albo VAT nagłówka — tylko gdy nie ma powodu dokładniejszego.
-  const linesNet = amounts.rows.reduce((sum, r) => sum + (Number.isFinite(r.netAmount) ? r.netAmount : 0), 0);
-  const linesVat = amounts.rows.reduce((sum, r) => sum + (Number.isFinite(r.vatAmount) ? r.vatAmount : 0), 0);
-  const mismatch = sale && !codes.length && !amountReason && !special && (
-    Math.abs(roundToCents(linesNet) - roundToCents(amounts.totals?.netTotal ?? inv.totals.netTotal)) > 0.01 * Math.max(1, inv.lines.length) + 0.01 ||
-    Math.abs(roundToCents(linesVat) - roundToCents(amounts.totals?.vatTotal ?? inv.totals.vatTotal)) >= 0.005);
-  if (codes.length === 0 && !special && !mismatch && contentReasons.length === 0 && !amountReason) return null;
-
-  if (status !== 'accepted') {
-    return codes.length ? `${doc}: stawka ${rates} nie ma odpowiednika w FaktFlow — szkic zapisany z tą stawką.` : null;
-  }
-  if (direction === 'incoming') {
-    return codes.length
-      ? `${doc}: stawka ${rates} — FaktFlow jej nie rozlicza; faktura jest zapisana z kwotami z KSeF, sprawdź ją z księgową.`
-      : null;
-  }
-  // Wszystkie powody naraz (C5b) — JPK odmówi z pierwszym, klient widzi komplet.
-  const what = [
-    special ? `zaimportowana faktura ${special} — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki)` : null,
-    codes.length ? `stawka VAT ${rates} — FaktFlow jej jeszcze nie wykazuje w JPK` : null,
-    ...contentReasons,
-    amountReason,
-    mismatch ? 'netto albo VAT pozycji nie sumuje się do sum faktury z KSeF' : null,
-  ].filter(Boolean).join('; ');
-  // C5c: bez sum stawek w pliku netto i VAT faktury są nieznane — KPiR i CSV też ich nie pokażą.
-  const exit = sale && amounts.totalsUnknown
-    ? 'przygotuj je z księgową — KPiR i CSV też nie pokażą poprawnych kwot tej faktury, wprowadźcie je ręcznie'
-    : 'przygotuj je z księgową (KPiR i CSV działają)';
-  return (
-    `${doc}: ${what}. Faktura jest zapisana, ale JPK_FA i JPK_V7M za ${inv.issueDate.slice(0, 7)} nie powstaną ` +
-    `w FaktFlow, dopóki ta faktura jest w okresie — ${exit}.`
-  );
 }
 
 /**
@@ -818,173 +721,4 @@ async function backfillImportedContent(
     warnings.push(`${num}: nie uzupełniono daty sprzedaży i adnotacji z KSeF — ponów import (${e instanceof Error ? e.message : 'błąd'})`);
     return false;
   }
-}
-
-/** Korekty / zaliczki / final wymagają powiązań w DB — przy imporcie zapis jako `regular` + komunikat. */
-function normalizeInvoiceKindForInsert(inv: ParsedInvoice, warnings: string[]): 'regular' {
-  if (inv.invoiceType !== 'regular') {
-    warnings.push(
-      `${inv.invoiceNumber}: invoice_kind ustawiono na „regular” (typ źródłowy „${inv.invoiceType}” wymaga pól powiązanych nieobecnych w imporcie)`,
-    );
-  }
-  return 'regular';
-}
-
-function mapParsedKindToFaVatType(
-  kind: ParsedInvoice['invoiceType'],
-): 'VAT' | 'KOR' | 'ZAL' | 'ROZ' {
-  switch (kind) {
-    case 'correction':
-      return 'KOR';
-    case 'advance':
-      return 'ZAL';
-    case 'final':
-      return 'ROZ';
-    default:
-      return 'VAT';
-  }
-}
-
-function buyerIdentityFromParsed(buyer: ParsedParty): {
-  is_b2c: boolean;
-  buyer_id_type: 'nip' | 'pesel' | 'no_id';
-  buyer_nip: string | null;
-  buyer_pesel: string | null;
-  buyer_id_number: string | null;
-} {
-  const nip = buyer.nip?.replace(/\D/g, '') ?? '';
-  if (nip.length === 10) {
-    return {
-      is_b2c: false,
-      buyer_id_type: 'nip',
-      buyer_nip: nip,
-      buyer_pesel: null,
-      buyer_id_number: null,
-    };
-  }
-
-  const pesel = buyer.pesel?.replace(/\D/g, '') ?? '';
-  if (pesel.length === 11) {
-    return {
-      is_b2c: true,
-      buyer_id_type: 'pesel',
-      buyer_nip: null,
-      buyer_pesel: pesel,
-      buyer_id_number: null,
-    };
-  }
-
-  if (
-    (buyer.vatUeNumber && buyer.vatUeNumber.trim()) ||
-    (buyer.nrInny && buyer.nrInny.trim())
-  ) {
-    return {
-      is_b2c: false,
-      buyer_id_type: 'nip',
-      buyer_nip: null,
-      buyer_pesel: null,
-      buyer_id_number: null,
-    };
-  }
-
-  return {
-    is_b2c: true,
-    buyer_id_type: 'no_id',
-    buyer_nip: null,
-    buyer_pesel: null,
-    buyer_id_number: null,
-  };
-}
-
-function sellerPartyFromParsed(seller: ParsedParty): SellerParty {
-  const nip = seller.nip?.replace(/\D/g, '').slice(0, 10) ?? '';
-  return {
-    nip: nip || '0000000000',
-    name: seller.name || '—',
-    address: {
-      countryCode: (seller.countryCode as 'PL') ?? 'PL',
-      addressLine1: seller.addressLine1 ?? '—',
-      addressLine2: seller.addressLine2 ?? '',
-    },
-    email: seller.email,
-    phone: undefined,
-  };
-}
-
-function buyerPartyFromParsed(buyer: ParsedParty): BuyerParty {
-  const hasNip = !!buyer.nip && buyer.nip.replace(/\D/g, '').length === 10;
-
-  return {
-    name: buyer.name || 'Nieznany',
-    nip: hasNip ? buyer.nip!.replace(/\D/g, '').slice(0, 10) : undefined,
-    pesel: buyer.pesel,
-    vatUeNumber: buyer.vatUeNumber,
-    nrInny: buyer.nrInny,
-    noIdMarker: !!(buyer.brakId ?? (!buyer.nip && !buyer.pesel && !buyer.vatUeNumber)),
-    address: {
-      countryCode: (buyer.countryCode as 'PL') ?? 'PL',
-      addressLine1: buyer.addressLine1 ?? '',
-      addressLine2: buyer.addressLine2 ?? '',
-    },
-    email: buyer.email,
-    jst: 2,
-    gv: 2,
-  };
-}
-
-function mapPaymentMethodLabel(raw?: string): PaymentInfo['method'] {
-  if (!raw) return 'transfer';
-  const x = raw.toLowerCase();
-  if (x.includes('gotów') || x === 'cash') return 'cash';
-  if (x.includes('kart')) return 'card';
-  if (x.includes('przelew')) return 'transfer';
-  return 'other';
-}
-
-function paymentInfoFromParsed(inv: ParsedInvoice): PaymentInfo {
-  return {
-    amountDue: inv.totals.grossTotal,
-    currency: 'PLN',
-    dueDate: inv.paymentDueDate ?? inv.issueDate,
-    method: mapPaymentMethodLabel(inv.paymentMethod),
-    bankAccount: inv.bankAccount,
-  };
-}
-
-/**
- * C5b: treść z pliku na górnym poziomie `fa3_data` — tam czytają ją JPK
- * (`data-fetcher`), PDF (`invoice-data`) i korekta (`correction-annotations`).
- * Bez `lines` na górze: z nimi szkic z importu dałoby się wysłać, a JPK
- * brałby pozycje z parsera zamiast z tabeli.
- */
-function contentFa3Fields(content: ImportContent): Record<string, unknown> {
-  return {
-    ...(content.annotations ? { annotations: content.annotations } : {}),
-    ...(content.annotationProblems.length ? { annotationProblems: content.annotationProblems } : {}),
-    ...(content.saleDates ? { saleDates: content.saleDates } : {}),
-    ...(content.markers ? { ksefMarkers: content.markers } : {}),
-  };
-}
-
-function buildImportFa3Json(
-  inv: ParsedInvoice,
-  source: string,
-  importJobId: string,
-  content: ImportContent,
-  amounts: ImportLineAmounts,
-): Json {
-  return {
-    import: {
-      source,
-      importJobId,
-      importedAt: new Date().toISOString(),
-    },
-    parsed: inv,
-    ...contentFa3Fields(content),
-    // C5c: pola pozycji z pliku dla JPK_FA (P_9B, P_11A…) i powody zatrzymania kwot.
-    // Nie w `contentFa3Fields` — uzupełnienie sprzed C5b nie przepisuje pozycji.
-    ...(amounts.ksefLineFields ? { ksefLineFields: amounts.ksefLineFields } : {}),
-    ...(amounts.problems.length ? { lineAmountProblems: amounts.problems } : {}),
-    ...(amounts.totalsUnknown ? { lineAmountTotalsUnknown: true } : {}),
-  } as unknown as Json;
 }
