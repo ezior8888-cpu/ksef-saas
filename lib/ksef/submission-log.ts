@@ -26,9 +26,11 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import {
+  DUPLICATE_ORIGINAL_OFFERS,
   mergeDuplicateCheck,
   parseDuplicateCheck,
   type DuplicateDecisionChoice,
+  type DuplicateOriginalOffer,
   type KsefDuplicateCheck,
 } from './duplicate-check';
 
@@ -467,14 +469,41 @@ export interface KsefNumberTaken {
   originalKsefNumber: string | null;
   /** `original_check.decision.choice` (00148); `null` — automatyczny „numer zajęty”. */
   decision: DuplicateDecisionChoice | null;
+  /**
+   * PR C (00149, 5.4): `decision.importedInvoiceId` — faktura K zapisana z KSeF,
+   * na którą przeszedł numer (szkic wycofany bez numeru; PDF i e-mail odsyłają
+   * do PDF K, 5.12). `null` — decyzja bez zapisu oryginału albo jej brak.
+   */
+  importedInvoiceId: string | null;
+  /** PR C: `decision.retiredInternalNumber` — dawny numer dokumentu (`{nrOld}`). */
+  retiredInternalNumber: string | null;
+  /** PR C: `decision.offer` (znana oferta); `null` przy decyzjach PR B. */
+  offer: DuplicateOriginalOffer | null;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function takenDecision(check: unknown): DuplicateDecisionChoice | null {
   if (!isRecord(check) || !isRecord(check.decision)) return null;
   const choice = check.decision.choice;
   return choice === 'same_sale' || choice === 'other_sale' ? choice : null;
+}
+
+/** Klucze decyzji z zapisem oryginału (00149) — tylko poprawne wartości (id jak wzorzec I3K), reszta `null`. */
+function takenImport(check: unknown): Pick<KsefNumberTaken, 'importedInvoiceId' | 'retiredInternalNumber' | 'offer'> {
+  const decision = isRecord(check) && isRecord(check.decision) ? check.decision : null;
+  const imported = decision?.importedInvoiceId;
+  const retired = decision?.retiredInternalNumber;
+  const offer = decision?.offer;
+  return {
+    importedInvoiceId: typeof imported === 'string' && UUID.test(imported) ? imported : null,
+    retiredInternalNumber: typeof retired === 'string' && retired.trim() !== '' ? retired : null,
+    offer: typeof offer === 'string' && (DUPLICATE_ORIGINAL_OFFERS as readonly string[]).includes(offer)
+      ? (offer as DuplicateOriginalOffer)
+      : null,
+  };
 }
 
 /** Czas do sortowania (ms) i mikrosekundy ponad ms (`timestamptz` z PostgREST ma 6 cyfr ułamka). */
@@ -536,7 +565,11 @@ export async function findKsefNumberTaken(tenantId: string, invoiceId: string): 
     return a.id === b.id ? 0 : a.id < b.id ? -1 : 1;
   });
   const row = rows[0]!;
-  return { originalKsefNumber: row.original_ksef_number ?? null, decision: takenDecision(row.original_check) };
+  return {
+    originalKsefNumber: row.original_ksef_number ?? null,
+    decision: takenDecision(row.original_check),
+    ...takenImport(row.original_check),
+  };
 }
 
 /**

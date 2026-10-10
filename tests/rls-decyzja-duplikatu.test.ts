@@ -1285,7 +1285,9 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
   // ─── R6: zgodność jsonb ──────────────────────────────────────────────────
 
   it('R6: ksef_duplicate_check_allows = duplicateCheckAllows = oczekiwanie wspólnej tabeli (każdy wiersz)', async () => {
-    const { DUPLICATE_CHECK_CASES } = await import('./unit/helpers/ksef-duplicate-decision-cases');
+    // PR C: R6 zostaje strażnikiem PR B — iteruje tabelę bez wierszy `faktflow-original`, bo SQL 00148 i polityka
+    // TS dopuszczają je dopiero po 00149 i implementacji grupy B; pełną tabelę (R-C15) sprawdza `rls-zapis-oryginalu`.
+    const { PR_B_DUPLICATE_CHECK_CASES: DUPLICATE_CHECK_CASES } = await import('./unit/helpers/ksef-duplicate-decision-cases');
     expect(DUPLICATE_CHECK_CASES.length).toBeGreaterThan(0);
 
     const sql: Array<{ name: string; sql: unknown; error: string | null; allows: boolean }> = [];

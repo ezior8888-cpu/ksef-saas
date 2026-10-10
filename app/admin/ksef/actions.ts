@@ -34,7 +34,9 @@ import {
   fillSqlText,
   type DuplicateChoice,
   type DuplicateDecisionFacts,
+  type DuplicateDecisionMode,
   type DuplicateDecisionView,
+  type DuplicateOriginalOffer,
   type DuplicateRefusalDetail,
 } from '@/lib/ksef/duplicate-decision';
 import { loadDuplicateDecisionFacts } from '@/lib/ksef/duplicate-decision-facts';
@@ -51,6 +53,7 @@ import {
 import { isKsefSubmissionPaused } from '@/lib/ksef/submission-holds';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { readTenantOwnerContact } from '@/lib/supabase/admin-queries';
+import type { KsefEnvironment } from '@/types/ksef';
 
 /**
  * Akcje operatora `/admin/ksef` (cykl życia faktury, PR 3c). Te same RPC
@@ -225,6 +228,16 @@ export type OperatorDecideDuplicateInput = {
   originalSha256: string;
   /** Klient potwierdził „Rozumiem skutki” (decyzja 7 — sprawdzane na serwerze). */
   confirmed: boolean;
+  /**
+   * PR C (INV-8, T7): to, co pokazała karta operatora — tryb, oferta i środowisko KSeF serwera. Akcja
+   * porównuje je ze świeżym stanem i przy rozjeździe odpowiada `DUPLICATE_DECISION_TEXTS.STALE`
+   * (bez odczytu archiwum i bez RPC). OPCJONALNE w kontrakcie commitu 2, bo komponent operatora
+   * (`operator-duplicate-decision.tsx`) jeszcze ich nie wysyła; grupa E czyni je wymaganymi razem
+   * z komponentem. `null` = karta powodu PR B (9-argumentowe RPC).
+   */
+  mode?: DuplicateDecisionMode | null;
+  offer?: DuplicateOriginalOffer | null;
+  env?: KsefEnvironment | null;
 };
 
 /** Minimalna długość notatki operatora (RPC sprawdza to samo: 22023 NOTE). */
