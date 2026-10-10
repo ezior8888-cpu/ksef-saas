@@ -1,11 +1,24 @@
 /**
  * Parser XML faktur FA(3) — ekstrakcja kontrahentów, pozycji i kwot.
  * Dopasowany do emisji z `lib/xml/fa3-generator.ts` (wersja schemy 2025-06-25).
+ *
+ * C0b (GEN-RUNDA, spec D-A4-1b-3 v3, 5.10): plik z generatora FaktFlow czyta się
+ * bez strat i bez fałszywych ostrzeżeń (`tests/unit/import-runda-generator.test.ts`).
+ * Dwa przypadki brzegowe identyfikatora nabywcy — FA(3) wyraża PESEL i „inny”
+ * identyfikator tym samym `KodKraju` + `NrID`, więc `parseParty` odróżnia je
+ * heurystyką (KodKraju brak albo PL, 11 cyfr, poprawna suma kontrolna PESEL → `pesel`;
+ * inaczej `nrInny`), a wartość nigdy nie ginie:
+ * (1) generator pisze przy PESEL `KodKraju` z adresu nabywcy (F16) — PESEL nabywcy
+ *     z adresem zagranicznym wraca jako `nrInny` (ustalenie GEN-PESEL-KRAJ,
+ *     poprawka generatora osobno);
+ * (2) 11-cyfrowy NrInny (paszport, dowód) z poprawną sumą PESEL i `KodKraju` PL
+ *     wraca jako `pesel` — FA(3) tego nie rozróżnia.
  */
 
 import { XMLParser } from 'fast-xml-parser';
-import { roundToCents } from '@/lib/xml/invoice-calculator';
-import { FA3_NET_FIELDS, importVatRateFromFa3, type Fa3RateHeader } from '@/lib/xml/fa3-p12';
+import { roundToCents, validatePeselChecksum } from '@/lib/xml/invoice-calculator';
+import { FA3_NET_FIELDS, importVatRateFromFa3, type Fa3OnlyVatRate, type Fa3RateHeader } from '@/lib/xml/fa3-p12';
+import type { VatRate } from '@/types/invoice';
 import {
   displayRaw,
   readFa3Annotations,
@@ -64,15 +77,31 @@ export interface ParsedInvoice {
    * prawdy dla netto i VAT każdej stawki (art. 106e ust. 7–9). Tylko z pliku XML.
    */
   ksefSums?: Partial<Record<string, string>>;
+  /**
+   * C0b: uwagi z pliku — pierwsza niepusta `Stopka/Informacje/StopkaFaktury`,
+   * przycięta. Brak pola = plik bez uwag (nigdy pusty napis).
+   */
+  footerNote?: string;
+  /** C0b: surowe `Fa/RodzajFaktury` (przycięte, wielkość liter z pliku); `invoiceType` to jego odwzorowanie. */
+  invoiceTypeCode?: string;
 
   warnings: string[];
 }
 
 export interface ParsedParty {
   nip?: string;
+  /**
+   * PESEL: `NrPESEL` (inne programy) albo `NrID` z `KodKraju` brak/PL, 11 cyframi
+   * i poprawną sumą kontrolną PESEL (C0b, plik z generatora FaktFlow).
+   */
   pesel?: string;
   /** NrVatUE + KodUE jako „DEXXXXX” (bez spacji). */
   vatUeNumber?: string;
+  /**
+   * Inny identyfikator nabywcy (dowód, paszport, numer zagraniczny): `NrInny`
+   * (inne programy) albo `NrID`, który nie jest PESEL-em (C0b). Zawsze tekst —
+   * zera wiodące są częścią numeru.
+   */
   nrInny?: string;
   brakId?: boolean;
   name: string;
@@ -80,6 +109,10 @@ export interface ParsedParty {
   addressLine2?: string;
   countryCode?: string;
   email?: string;
+  /** C0b: `Podmiot2/JST` (1 = jednostka samorządu terytorialnego, 2 = nie dotyczy); brak = nie odczytano. */
+  jst?: 1 | 2;
+  /** C0b: `Podmiot2/GV` (1 = członek grupy VAT, 2 = nie dotyczy); brak = nie odczytano. */
+  gv?: 1 | 2;
 }
 
 export interface ParsedLine {
@@ -301,9 +334,13 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
     warnings.push('Brak pozycji (FaWiersz)');
   }
 
+  // C0b: uwagi i surowy rodzaj faktury — bez nich zapisany wiersz byłby uboższy niż plik.
+  const footerNote = readFooterNote(root.Stopka);
+  const invoiceTypeCode = readText(fa.RodzajFaktury);
+
   const totalsHeader = summarizeTotalsFromFa(fa);
   const totalsFromLines = summarizeTotalsFromLines(lines);
-  const totals = pickTotals(totalsHeader, totalsFromLines, warnings);
+  const totals = pickTotals(totalsHeader, totalsFromLines, lines, warnings);
 
   const platnosc = fa.Platnosc;
   const { paymentDueDate, paymentMethod, bankAccount } = parsePlatnosc(platnosc, warnings);
@@ -329,8 +366,33 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
     ...(annotationProblems.length ? { annotationProblems } : {}),
     ...(ksefMarkers ? { ksefMarkers } : {}),
     ksefSums: rawFields(fa, FA3_SUM_FIELDS),
+    ...(footerNote ? { footerNote } : {}),
+    ...(invoiceTypeCode ? { invoiceTypeCode } : {}),
     warnings,
   };
+}
+
+/** Tekst elementu przycięty; brak, pusty albo element złożony → `undefined`. */
+function readText(value: unknown): string | undefined {
+  const text = typeof value === 'string' ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+  return text === '' ? undefined : text;
+}
+
+/**
+ * C0b: uwagi faktury — pierwsza niepusta `Stopka/Informacje/StopkaFaktury`
+ * (w kolejności pliku), przycięta. Brak `Stopka`, `Informacje` albo tekstu → `undefined`.
+ */
+function readFooterNote(stopka: unknown): string | undefined {
+  if (!stopka || typeof stopka !== 'object') return undefined;
+  const informacje = ensureArray((stopka as Record<string, unknown>).Informacje as unknown[] | Record<string, unknown> | undefined);
+  for (const info of informacje) {
+    if (!info || typeof info !== 'object') continue;
+    for (const note of ensureArray((info as Record<string, unknown>).StopkaFaktury as unknown[] | string | undefined)) {
+      const text = readText(note);
+      if (text) return text;
+    }
+  }
+  return undefined;
 }
 
 /** `Naglowek/KodFormularza/@kodSystemowy` („FA (3)”, „FA (2)”). */
@@ -381,12 +443,28 @@ function parseParty(
   const pm = podmiot as Record<string, unknown>;
   const dane = (pm.DaneIdentyfikacyjne ?? {}) as Record<string, unknown>;
   const adres = (pm.Adres ?? {}) as Record<string, unknown>;
+  const isBuyer = partyLabel === 'Nabywca';
 
   const nip = dane.NIP != null && String(dane.NIP).trim() !== '' ? String(dane.NIP).trim() : undefined;
 
   let pesel: string | undefined;
   if (dane.NrPESEL != null && String(dane.NrPESEL).trim() !== '') {
     pesel = String(dane.NrPESEL).trim();
+  }
+
+  // C0b: FA(3) Podmiot2 nie ma NrPESEL — PESEL i „inny” identyfikator nabywcy to
+  // `[KodKraju] + NrID` (tak pisze go `buildBuyerChoice` w generatorze). PESEL to
+  // NrID bez KodKraju albo z PL, 11 cyfr i poprawną sumą kontrolną; wszystko inne
+  // — `nrInny`. Wartość zostaje tekstem (zera wiodące) i nigdy nie ginie; dwa
+  // przypadki, w których heurystyka myli rodzaj, opisuje nagłówek pliku.
+  // NrPESEL / NrInny (inne programy) czytane dalej; schemat dopuszcza jeden
+  // identyfikator, więc kolejność pierwszeństwa dotyczy tylko plików niezgodnych z XSD.
+  let nrIdAsNrInny: string | undefined;
+  if (isBuyer && dane.NrID != null && String(dane.NrID).trim() !== '') {
+    const nrId = String(dane.NrID).trim();
+    const nrIdCountry = dane.KodKraju != null ? String(dane.KodKraju).trim().toUpperCase() : '';
+    if ((nrIdCountry === '' || nrIdCountry === 'PL') && validatePeselChecksum(nrId)) pesel ??= nrId;
+    else nrIdAsNrInny = nrId;
   }
 
   let vatUeNumber: string | undefined;
@@ -397,7 +475,7 @@ function parseParty(
   const nrInny =
     dane.NrInny != null && String(dane.NrInny).trim() !== ''
       ? String(dane.NrInny).trim()
-      : undefined;
+      : nrIdAsNrInny;
 
   const brakId =
     dane.BrakID != null &&
@@ -409,7 +487,7 @@ function parseParty(
   const name = String(nazwaRaw ?? '').trim() || 'Nieznany';
 
   if (
-    partyLabel === 'Nabywca' &&
+    isBuyer &&
     !nip &&
     !pesel &&
     !vatUeNumber &&
@@ -418,6 +496,10 @@ function parseParty(
   ) {
     warnings.push(`${partyLabel}: brak identyfikatora (NIP / PESEL / UE / NrInny / BrakID)`);
   }
+
+  // C0b: JST i GV to elementy Podmiot2 (obligatoryjne w XSD); wartość inna niż 1|2 = nieodczytana.
+  const jst = isBuyer ? readJstGv(pm.JST) : undefined;
+  const gv = isBuyer ? readJstGv(pm.GV) : undefined;
 
   let email: string | undefined;
   const kontakt = pm.DaneKontaktowe;
@@ -439,7 +521,15 @@ function parseParty(
     addressLine2: adres.AdresL2 ? String(adres.AdresL2) : undefined,
     countryCode: adres.KodKraju ? String(adres.KodKraju) : 'PL',
     email,
+    ...(jst ? { jst } : {}),
+    ...(gv ? { gv } : {}),
   };
+}
+
+/** `JST` / `GV` (TWybor1-2): „1” albo „2”; inaczej `undefined`. */
+function readJstGv(raw: unknown): 1 | 2 | undefined {
+  const value = readText(raw);
+  return value === '1' ? 1 : value === '2' ? 2 : undefined;
 }
 
 // ============================================================================
@@ -464,16 +554,20 @@ function rateHeaderFromFa(fa: Record<string, unknown>): Fa3RateHeader {
 function summarizeTotalsFromFa(fa: Record<string, unknown>): {
   grossTotal?: number;
   netTotal?: number;
+  /** C0b: Σ P_13_x w groszach całkowitych (porównania bez błędu zmiennoprzecinkowego); brak P_13_x = `undefined`. */
+  netCents?: number;
   vatTotal?: number;
 } {
   const grossTotal = optionalNum(fa.P_15);
 
   let netTotal = 0;
+  let netCents = 0;
   let hasNetKey = false;
   for (const k of FA_NET_KEYS) {
     if (fa[k] != null && String(fa[k]).trim() !== '') {
       hasNetKey = true;
       netTotal += parseNum(fa[k]);
+      netCents += toCents(parseNum(fa[k]));
     }
   }
 
@@ -489,6 +583,7 @@ function summarizeTotalsFromFa(fa: Record<string, unknown>): {
   return {
     grossTotal,
     netTotal: hasNetKey ? netTotal : undefined,
+    netCents: hasNetKey ? netCents : undefined,
     vatTotal: hasVatKey ? vatTotal : undefined,
   };
 }
@@ -506,11 +601,47 @@ function summarizeTotalsFromLines(lines: ParsedLine[]): {
   };
 }
 
+/**
+ * Stawki pozycji bez podatku: stawki FaktFlow (0 KR, zw, oo, np I, np II) i kody FA(3)
+ * spoza FaktFlow (0 WDT, 0 EX) — plik z samymi takimi pozycjami nie ma `P_14_x`.
+ */
+const NO_VAT_LINE_RATES: ReadonlySet<string> = new Set<VatRate | Fa3OnlyVatRate>([
+  '0',
+  '0 WDT',
+  '0 EX',
+  'zw',
+  'oo',
+  'np',
+  'np_ii',
+]);
+
+/** Złote (kwota z pliku, najwyżej 2 miejsca po przecinku) → grosze całkowite. */
+function toCents(amount: number): number {
+  return Math.round(amount * 100);
+}
+
 function pickTotals(
-  fromFa: { grossTotal?: number; netTotal?: number; vatTotal?: number },
+  fromFa: { grossTotal?: number; netTotal?: number; netCents?: number; vatTotal?: number },
   fromLines: { netTotal: number; vatTotal: number },
+  lines: readonly ParsedLine[],
   warnings: string[],
 ): ParsedInvoice['totals'] {
+  // C0b GR-4: plik bez żadnego `P_14_x`, w którym każda pozycja ma stawkę bez podatku, a P_15
+  // różni się od Σ P_13_x najwyżej o grosz (porównanie w groszach całkowitych) — to nie brak
+  // danych, tylko faktura bez VAT: VAT 0, netto z nagłówka, bez ostrzeżenia. Pozycja z podatkiem
+  // bez `P_14_x`, brak P_15 albo większa różnica — dalej jak przedtem (ostrzeżenie zostaje).
+  if (
+    fromFa.vatTotal === undefined &&
+    fromFa.netTotal !== undefined &&
+    fromFa.netCents !== undefined &&
+    fromFa.grossTotal !== undefined &&
+    lines.length > 0 &&
+    lines.every((line) => NO_VAT_LINE_RATES.has(line.vatRate)) &&
+    Math.abs(toCents(fromFa.grossTotal) - fromFa.netCents) <= 1
+  ) {
+    return { netTotal: roundCents(fromFa.netTotal), vatTotal: 0, grossTotal: fromFa.grossTotal };
+  }
+
   let grossTotal = fromFa.grossTotal ?? 0;
   let netTotal = fromFa.netTotal;
   let vatTotal = fromFa.vatTotal;

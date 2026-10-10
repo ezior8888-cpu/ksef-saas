@@ -39,7 +39,10 @@ import { fa3ImportLineAmounts, type ImportLineAmounts } from './fa3-line-amounts
 /** Rodzaj faktury FA(3) (`RodzajFaktury`) zapisywany w `invoices.invoice_type`. */
 export type ImportedFaVatType = 'VAT' | 'KOR' | 'ZAL' | 'ROZ';
 
-/** Kolumny identyfikatora nabywcy na wierszu `invoices`. */
+/**
+ * Kolumny identyfikatora nabywcy na wierszu `invoices`. `buyer_id_number` niesie
+ * `NrInny` z pliku (dowód, paszport, numer zagraniczny); PESEL ma własną kolumnę.
+ */
 export interface ImportedBuyerIdentity {
   is_b2c: boolean;
   buyer_id_type: 'nip' | 'pesel' | 'no_id';
@@ -273,9 +276,10 @@ export function mapParsedKindToFaVatType(kind: ParsedInvoice['invoiceType']): Im
 }
 
 /**
- * Kolumny identyfikatora nabywcy: NIP (10 cyfr) → `nip`; PESEL (11 cyfr) → `pesel`;
- * sam VAT-UE albo NrInny → `buyer_id_type: 'nip'` bez żadnego numeru (C0b GR-5 to zmieni);
- * brak identyfikatora → `no_id`.
+ * Kolumny identyfikatora nabywcy (C0b, GR-5): NIP (10 cyfr) → `nip`; PESEL (11 cyfr) →
+ * `pesel` + `buyer_pesel`; NrInny → `buyer_id_number` = NrInny, a `is_b2c` i `buyer_id_type`
+ * jak dla VAT-UE (`false`, `'nip'` — FA(3) nie mówi, czy to konsument); sam VAT-UE →
+ * `buyer_id_type: 'nip'` bez numeru; brak identyfikatora → `no_id`.
  */
 export function buyerIdentityFromParsed(buyer: ParsedParty): ImportedBuyerIdentity {
   const nip = buyer.nip?.replace(/\D/g, '') ?? '';
@@ -300,16 +304,15 @@ export function buyerIdentityFromParsed(buyer: ParsedParty): ImportedBuyerIdenti
     };
   }
 
-  if (
-    (buyer.vatUeNumber && buyer.vatUeNumber.trim()) ||
-    (buyer.nrInny && buyer.nrInny.trim())
-  ) {
+  const nrInny = buyer.nrInny?.trim() ?? '';
+  if ((buyer.vatUeNumber && buyer.vatUeNumber.trim()) || nrInny) {
     return {
       is_b2c: false,
       buyer_id_type: 'nip',
       buyer_nip: null,
       buyer_pesel: null,
-      buyer_id_number: null,
+      // C0b GR-5: numer z pliku zostaje na wierszu (dotąd ginął); VAT-UE ma go w `buyer_data`.
+      buyer_id_number: nrInny || null,
     };
   }
 
@@ -339,8 +342,10 @@ export function sellerPartyFromParsed(seller: ParsedParty): SellerParty {
 }
 
 /**
- * `buyer_data`: NIP tylko gdy ma 10 cyfr; `jst` i `gv` zawsze 2; `noIdMarker` z `brakId`
- * albo, gdy go brak, z braku NIP, PESEL i VAT-UE — NrInny go nie wyłącza (C0b GR-5 to zmieni).
+ * `buyer_data` (C0b, GR-5): NIP tylko gdy ma 10 cyfr; `jst` i `gv` z pliku (2, gdy pliku nie
+ * niósł tych pól — CSV, JPK); `noIdMarker` z `brakId`, a gdy go brak — tylko wtedy, gdy nabywca
+ * nie ma żadnego identyfikatora (NIP, PESEL, VAT-UE ani NrInny), bo marker obok identyfikatora
+ * łamałby „dokładnie jeden identyfikator nabywcy” (`validateInvoice`).
  */
 export function buyerPartyFromParsed(buyer: ParsedParty): BuyerParty {
   const hasNip = !!buyer.nip && buyer.nip.replace(/\D/g, '').length === 10;
@@ -351,15 +356,15 @@ export function buyerPartyFromParsed(buyer: ParsedParty): BuyerParty {
     pesel: buyer.pesel,
     vatUeNumber: buyer.vatUeNumber,
     nrInny: buyer.nrInny,
-    noIdMarker: !!(buyer.brakId ?? (!buyer.nip && !buyer.pesel && !buyer.vatUeNumber)),
+    noIdMarker: !!(buyer.brakId ?? (!buyer.nip && !buyer.pesel && !buyer.vatUeNumber && !buyer.nrInny)),
     address: {
       countryCode: (buyer.countryCode as 'PL') ?? 'PL',
       addressLine1: buyer.addressLine1 ?? '',
       addressLine2: buyer.addressLine2 ?? '',
     },
     email: buyer.email,
-    jst: 2,
-    gv: 2,
+    jst: buyer.jst ?? 2,
+    gv: buyer.gv ?? 2,
   };
 }
 
