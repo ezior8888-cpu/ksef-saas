@@ -2,6 +2,69 @@
 
 Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.2026, 11:03–11:22 UTC. Odczyty API i próba SSH z 06.10 oraz decyzje/deklaracje z 07.10 mają osobne źródła. Nowy odczyt SSH/runtime i rozmiarów z 10.10 jest opisany osobno poniżej; nie nadpisuje historii. Igor prowadzi monitoring i odbiera F0, a Codex wykonuje dostępne prace techniczne. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
 
+## Uzupełnienie odczytów po 15:20 UTC — 10.10.2026
+
+**P — kolektor `6b1a972`, początek 15:21:45.821 UTC:** wszystkie trzy hosty
+zwróciły metadane bez błędów sekcji kolektora. Web i worker były healthy
+na `face09c57f7de756546e58d092dbe6d280f93c91`, Node 22.23.3, restart count 0.
+Wskazane starty: web 15:03:28.960818334 UTC, worker 14:51:31.013239476 UTC.
+To zmiana względem pomiaru 14:26; ta sesja nie wywoływała wdrożeń.
+Postgres Supabase na db-1: 15.8, healthy. Kolektor rozpoznaje teraz
+`supabase/postgres-meta` jako osobną usługę; poprzedni brak wersji tego
+kontenera był błędem klasyfikacji, nie awarią DB. Wersje MinIO bez zmiany
+względem wcześniejszego odczytu. Zegary wszystkich hostów zgłaszają NTP sync.
+Status `observed` oznacza kompletność zakresu kolektora, nie PASS G01/G02
+ani potwierdzenie wyników faktur, monitorów, ACL lub pochodzenia builda.
+
+**P — uzupełnienie metadanych 15:34:58.074–15:35:04.864 UTC:** odczytano
+30 projekcji kontenerów oraz ich powiązania sieciowe; szczegóły pozostają
+prywatne. Coolify ma jawne targety runner dla web i worker dla workera.
+Po jednym rekordzie finished, wybranym według najwyższego ID kolejki
+każdej aplikacji, wskazuje commit `face09c57f7de756546e58d092dbe6d280f93c91`.
+Zgadza się to z tagami działających kontenerów oraz wcześniejszym odczytem
+release; identyfikatory obrazów kontenerów również są zgodne. Pola czasu
+rekordów Coolify nie zawierają strefy: nie przedstawiamy ich jako UTC.
+Nie czytano logów builda lub sekretów. Rozszerzona projekcja obrazu jest
+częściowa, więc nie dowodzi pełnego pochodzenia builda. Wcześniejsza próba
+15:31 miała niezweryfikowaną projekcję Coolify; została zachowana osobno.
+Kuma wykryto na ops-1, lecz konfiguracja monitorów i faktyczne reguły
+kontroli dostępu pozostają nieodczytane. Port bindings i sieci Dockera
+nie są dowodem efektywnego filtrowania ruchu. G01/G02 pozostają PARTIAL.
+
+**P — API 15:20:37.868–15:20:39.305 UTC:** Sentry EU organization/project
+oraz PostHog EU project/organization: cztery HTTP 200. W Sentry odpowiedź
+organizacji podaje owner oraz dostęp org/project read. PostHog podaje owner
+na poziomie organizacji i administrator na projekcie. To role tożsamości
+API; nie jest to pełna lista zakresów tokena ani dowód dostępu Igora.
+W odpowiedziach brak rozpoznanych pól aktywnego planu. PostHog: retencja
+replay 30d, uprawnienie analytics/flags/surveys po 1 roku, replay 1 miesiąc,
+5 alerts i 2 destinations error tracking. To zwrócone uprawnienia, nie
+potwierdzenie aktywnego wariantu rozliczenia, kosztu lub pełnych quota.
+Panelowe replay/heatmaps są włączone, autocapture_opt_out=false; te ustawienia
+nie dowodzą działania SDK i nie zmieniają przyjętej polityki wyłączenia replay.
+
+**P — billing:** oba endpointy PostHog zwracają 403, o tym samym hashu treści.
+Jedno dodatkowe żądanie diagnostyczne 15:24:10.929–15:24:11.088 UTC potwierdziło
+identyczny hash. W zredagowanym odczycie znaczników komunikat zawiera
+`feature flag` i `organization-billing-api`, a kod `feature_flag` i `required`.
+**Wniosek:** odmowa wskazuje na wymóg flagi produktu; nie jest dowodem, że
+potrzeba silniejszego tokena. Nie wykonano zmiany flagi lub konta. Dowody
+nie rozstrzygają wszystkich uprawnień ani aktywnego planu.
+
+**U — Igor nie ma dostępu do paneli.** Właściciel kont musi dostarczyć
+ograniczony odczyt planów/rozliczeń lub umożliwić dostęp indywidualny.
+[Indeks](evidence/f0-follow-up-2026-10-10.json) zawiera hashe prywatnych
+zredagowanych dowodów. Surowe odpowiedzi z sekretami nie trafiają do Git.
+
+**CI, osobno od pomiaru serwerów:** Security dla `5ec3ddc` wykryło
+`js/file-system-race` i `js/insecure-temporary-file` w lokalnym walidatorze
+manifestu kopii. Naprawa `8fd2662` używa jednego uchwytu i ograniczonego
+odczytu. Na `6b1a972` CodeQL jest SUCCESS, lista otwartych ustaleń PR pusta.
+Testy offline: 73 PASS / 2 SKIP na Windows; lint i typecheck PASS.
+Wszystkie 11 kontroli PR dla `6b1a972`, w tym pełne CI aplikacji, przeszły.
+Nie jest to ocena całego bezpieczeństwa produkcji ani dowód kopii.
+**F0_OPEN; G03/G09 FAIL; F1 nie rozpoczęto.**
+
 ## Odczyt runtime i rozmiarów — 10.10.2026
 
 **P — dostęp od 14:23 UTC:** potwierdzono uwierzytelnione SSH do app-1,

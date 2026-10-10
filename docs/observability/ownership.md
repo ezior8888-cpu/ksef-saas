@@ -17,7 +17,50 @@ instalacji, migracji, wdrożeń, testów telefonu lub zmiany kont. Pełne dowody
 pozostają prywatne. [Inwentarz](runtime-inventory.md) rozdziela pomiar od
 deklaracji, a [plan odbioru](acceptance-plan.md) opisuje F0-G01–F0-G09.
 
-## Tylko przygotowanie kopii — najnowsza dyspozycja 10.10.2026
+## Uzupełnienie deklaracji i dostępu — 10.10.2026
+
+**U — źródło: odpowiedzi Igora w bieżącym czacie, bez odrębnego czasu UTC:**
+„Jeśli to dużo nam zrobi jestem w stanie płacić 5 eur miesięcznie” oraz
+„Tak, w Polsce”. Pierwsza wiadomość jest gotowością warunkową, nie określa
+netto/brutto ani nie zatwierdza konkretnego zamówienia i zmian serwerów.
+Druga potwierdza deklarowaną lokalizację komputera; nie jest pomiarem
+izolacji, dostępności nocnej lub uruchomienia stagingu. Historyczne indeksy
+zachowują wcześniejszy stan wiedzy. W propozycji wydatek ma mieścić się
+w 5 EUR łącznie z podatkiem, po sprawdzeniu ceny dla konta; nie przywracamy
+wariantu 73,19 EUR. Rekomendowane zastosowanie: oddzielny cel kopii w UE,
+zamiast uzależnienia ich dostępności od komputera stagingu.
+
+**P — katalog 15:33 UTC:** BX11 HEL1, 1 TiB, miesięcznie 3,20 netto /
+3,9360 brutto, opłata początkowa 0. Waluta EUR i stawka katalogowa 23%
+pochodzą z odrębnego odczytu `/v1/pricing` o 15:31 UTC; endpoint typów
+Storage Box nie zawiera pola waluty. Około **3,94 EUR brutto/mies.** jest
+kwotą planistyczną, nie dowodem końcowej oferty konta lub zamówienia.
+Przed zakupem obowiązuje sprawdzenie kwoty całkowitej na koncie i limitu
+5 EUR łącznie z podatkiem. [Indeks odczytów](evidence/f0-follow-up-2026-10-10.json)
+zachowuje osobne czasy i źródła.
+
+Igor następnie odpowiedział **„Nie mam dostępu do tych kont”** na prośbę
+o lokalne zalogowanie do paneli Sentry/PostHog. Metadane odczytane przez
+istniejące tokeny opisują role ich tożsamości; nie dowodzą indywidualnego
+dostępu Igora. Potrzebny jednorazowy datowany odczyt aktualnego planu,
+limitów, retencji, PAYG/limitów wydatków i indywidualnego dostępu przez
+właściciela kont. Nie żądamy kolejnego tokena, hasła ani pełnego eksportu.
+
+**P — 15:20–15:24 UTC:** metadane Sentry i PostHog odczytano w EU,
+pozostawiając brak dowodu aktywnych planów. Odmowa billing PostHog wskazuje
+na flagę produktu `organization-billing-api`; nie ustalono wszystkich
+uprawnień tokena. [Indeks](evidence/f0-follow-up-2026-10-10.json) rozdziela
+odczyt, wniosek i deklarację. **G07 PARTIAL, F0_OPEN**. Kopie, staging,
+zakupy i zmiany ustawień pozostają niewykonane.
+
+Przegląd obecnego kodu ujawnia jeszcze rozbieżność kanałów: krytyczne
+`lib/alerts/slack.ts` kieruje do Slack/Telegram, a email/Telegram dotyczy
+raportu dziennego. Przyjęte wcześniej docelowe email/Telegram dla krytycznych
+nie opisuje obecnej implementacji. Nie potwierdzono przekierowania do Igora,
+jego godzin reakcji ani zastępstwa; G08 pozostaje PARTIAL. Sam fakt posiadania
+tokenu kanału nie dowodzi doręczenia i reakcji.
+
+## Tylko przygotowanie kopii — wcześniejsza dyspozycja 10.10.2026
 
 Igor odpowiedział **„Tylko przygotowanie — bez zakupu i zmian”** na propozycję
 zakupu do 5 EUR i konfiguracji kopii. To zgoda na lokalne przygotowanie
@@ -93,7 +136,7 @@ lub serwerów, wdrożenia, migracje, restore i F1 pozostają wstrzymane.
   nie bieżącym zakupem lub nową bramką G09.
 - **Kopie bez nowego abonamentu: wariant warunkowy.** Igor wcześniej
   wskazał swój komputer, codzienną dostępność i 500 GB wolnego miejsca;
-  lokalizacja urządzenia w UE pozostaje do potwierdzenia.
+  lokalizację w Polsce potwierdził w późniejszej odpowiedzi opisanej wyżej.
   **P — odczyt dysków w tym samym oknie 11:57:46.742–11:57:48.169 UTC:**
   641,77 GiB wolne na rozważanym dysku i 185,43 GiB na systemowym. Wyciąg
   i hash źródła opisuje [nowy indeks](evidence/f0-low-cost-2026-10-10.json).

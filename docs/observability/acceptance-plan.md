@@ -58,7 +58,7 @@ nie są rozmiarem dumpów, atomowym snapshotem DB/S3 ani dowodem całej retencji
 G03/G09 nadal FAIL, F0_OPEN; bez kopii, zmian serwerów, migracji, wdrożeń,
 restore lub F1. Wstrzymanie zakupów pozostaje bez zmian.
 
-**Najnowsza dyspozycja 10.10:** Igor wybrał **„Tylko przygotowanie — bez
+**Wcześniejsza dyspozycja 10.10:** Igor wybrał **„Tylko przygotowanie — bez
 zakupu i zmian”** na propozycję zakupu do 5 EUR i konfiguracji kopii.
 [Lokalny pakiet przygotowania](../runbooks/f0-backup-preparation.md) zawiera
 [generator planu JSON](../../scripts/ops/prepare-backup-plan.mjs),
@@ -66,7 +66,13 @@ zakupu i zmian”** na propozycję zakupu do 5 EUR i konfiguracji kopii.
 [przykłady](../../ops/observability/backup/). Nie wykonuje ani nie instaluje
 kopii i nie zastępuje działającego jobu. Wynik kontroli manifestu sprawdza
 zgłoszoną strukturę/warunki, bez dowodu autentyczności lub G09 PASS.
-5 EUR nie jest przyjętym limitem. **F0_OPEN, G03/G09 FAIL** bez zmian.
+Późniejsza odpowiedź Igora wyraża gotowość wydania do 5 EUR miesięcznie,
+jeśli rozwiąże to istotną lukę; nie precyzuje VAT ani nie zatwierdza konkretnego
+zamówienia i zmian. Lokalizacja komputera w Polsce jest potwierdzoną deklaracją.
+[Uzupełnienie](ownership.md#uzupełnienie-deklaracji-i-dostępu--10102026)
+i [nowy indeks](evidence/f0-follow-up-2026-10-10.json) zapisują również odczyty
+runtime/kont po 15:20 UTC i brak dostępu Igora do paneli. **F0_OPEN,
+G03/G09 FAIL** bez zmian; odczyt planów/kosztów wymaga właściciela kont.
 
 Statusy: `PASS` wymaga dowodu pełnego kryterium; `PARTIAL` to niepełny dowód;
 `FAIL` stwierdzone niespełnienie; `BLOCKED` brak dostępu do sprawdzenia;
@@ -112,8 +118,8 @@ Bartosz nie jest automatycznym wykonawcą ani adresatem nowych zleceń.
    stabilizacji zapisów/usuwania; transakcja pg_dump nie obejmuje S3.
    Okno i wpływ na aplikację ustala się przed jego wykonaniem. Nie kasować
    danych źródłowych. Nie zaliczać sukcesu samego lokalnego dumpa. Alternatywą
-   bez nowego abonamentu jest urządzenie Igora: dopiero po potwierdzeniu
-   lokalizacji w UE, dostępności w porze kopii, miejsca na pełną retencję
+   bez nowego abonamentu jest urządzenie Igora, zadeklarowane jako znajdujące się
+   w Polsce: nadal wymaga dowodów dostępności w porze kopii, miejsca na pełną retencję
    i odseparowania kopii od VM stagingu. Rozmiary DB i fizyczne katalogi
    MinIO oraz kompletny listing obiektów/wersji mają nowy pomiar 10.10;
    przyrost, rozmiary archiwów i pokrycie referencji DB nadal wymagają dowodów.
@@ -181,8 +187,8 @@ restore i F1 pozostają poza zakresem.
 | F0-G04 | Zatwierdzone wyniki, korelacja, deadline, kwalifikacja populacji i klasy plików z [contracts](contracts.md). | **PASS — przyjęcie kontraktu na podstawie delegacji Igora 07.10, uzupełnienie v1.2 z 10.10.** Wybrana wersja rozstrzyga populację, terminy, klasy wejścia, różnice C-22, pełną historię zarejestrowanych błędów faktur i priorytet dashboardu release z późniejszym przygotowaniem napraw przez agenta. Nie zalicza implementacji ani TEST-01/TEST-02, które pozostają NOT RUN. |
 | F0-G05 | Zatwierdzone klasy danych, retencja, audit/source maps/holds/delete, tenant_ref, consent i uprawnienia z [data-policy](data-policy.md). | **PASS — przyjęcie polityki na podstawie delegacji Igora 07.10, uzupełnienie z 10.10.** Zasady obejmują kopie 7/4/12 oraz minimalny wpis każdego błędu w audycie faktury i ograniczony odczyt diagnostyki przez agenta. Aktywna konfiguracja, możliwości kont, zgodność eksportu i TEST-04 nie są zaliczone; TEST-04 NOT RUN. Nie uruchomiono nowego eksportu. |
 | F0-G06 | Przyjęty budżet narzutu, limity zasobów i metoda OFF/ON; baseline i klasy obciążenia określone. | **PASS — przyjęcie budżetu i metody na podstawie delegacji Igora 07.10.** Runtime ma nowy pomiar 10.10; konkretne obrazy/limity i warunki przyszłego porównania wymagają pozostałych dowodów G01/G02 oraz gotowego stagingu. Odczyt nie upoważnia testu obciążenia. Baseline i TEST-05 pozostają NOT RUN. |
-| F0-G07 | Dowód regionu istniejących usług oraz, osobno, rzeczywistego konta docelowego, planów/produktów, retencji/ingest/API, kosztów i uprawnień. | **PARTIAL.** Metadane EU/API 06.10 i historyczna deklaracja braku płatnych planów są częściowymi dowodami. Aktualny cel po odrzuceniu kosztownego wariantu 10.10: Sentry Developer EU, PostHog EU Free, Kuma i planowany Healthchecks; Datadog poza zakresem. Budżet nowych abonamentów diagnostycznych 0 USD. Aktywne tier, quota, retencje i dostęp kont nadal wymagają odczytu; billing 403 nie ma ustalonej przyczyny. Nie przypisywać Free uprawnień Team ani aktywnego PostHog Error Tracking na podstawie publicznego cennika. Publiczna oferta i katalog cen nie zastępują dowodów kont/usług ani zakupu. |
-| F0-G08 | Przyjęte role, realny dyżurny, godziny i coverage gaps; odbiorca oraz okno testu telefonu; decyzja o niezależnym lifecycle alarmu. | **PARTIAL — decyzje przyjęte, realna gotowość i routing niezweryfikowane.** Igor wybrany jako główny docelowy odbiorca; Telegram/email dla krytycznych, Slack roboczo, raport 06:00 Europe/Warsaw. Brak gwarantowanych godzin reakcji i zastępcy pozostaje jawny. Lifecycle, watchdog i okno przyszłego testu zapisano w ownership, bez konfiguracji kont lub potwierdzonego dyżuru. Historyczny Bartosz 08:00–22:00 best effort nie staje się fallbackiem. TEST-06 NOT RUN. |
+| F0-G07 | Dowód regionu istniejących usług oraz, osobno, rzeczywistego konta docelowego, planów/produktów, retencji/ingest/API, kosztów i uprawnień. | **PARTIAL.** Metadane EU/API 06.10 i historyczna deklaracja braku płatnych planów są częściowymi dowodami. Aktualny cel po odrzuceniu kosztownego wariantu 10.10: Sentry Developer EU, PostHog EU Free, Kuma i planowany Healthchecks; Datadog poza zakresem. Budżet nowych abonamentów diagnostycznych 0 USD. Aktywne tier, quota, retencje i dostęp kont nadal wymagają odczytu; w odczycie 10.10 billing 403 wskazuje na wymaganą flagę API produktu; nie dowodzi zbyt wąskiego tokena. Igor nie ma dostępu do paneli, a role odczytanej tożsamości API nie dowodzą dostępu Igora. Nie przypisywać Free uprawnień Team ani aktywnego PostHog Error Tracking na podstawie publicznego cennika. Publiczna oferta i katalog cen nie zastępują dowodów kont/usług ani zakupu. |
+| F0-G08 | Przyjęte role, realny dyżurny, godziny i coverage gaps; odbiorca oraz okno testu telefonu; decyzja o niezależnym lifecycle alarmu. | **PARTIAL — decyzje przyjęte, realna gotowość i routing niezweryfikowane.** Igor wybrany jako główny docelowy odbiorca; Docelowo wybrano Telegram/email dla krytycznych i raport 06:00 Europe/Warsaw, lecz obecny kod krytycznych używa Slack/Telegram; email jest w raporcie dziennym. Rozbieżność i faktyczne przekierowanie do Igora pozostają otwarte. Brak gwarantowanych godzin reakcji i zastępcy pozostaje jawny. Lifecycle, watchdog i okno przyszłego testu zapisano w ownership, bez konfiguracji kont lub potwierdzonego dyżuru. Historyczny Bartosz 08:00–22:00 best effort nie staje się fallbackiem. TEST-06 NOT RUN. |
 | F0-G09 | Pełna kopia bazy i wymaganych obiektów poza hostem źródłowym; harmonogram, ostatni artifact/hash, retencja i procedura izolowanego restore obejmująca auth/storage oraz stan operacji. | **FAIL.** Pomiar 04.10 i deklaracja 06.10 wskazują brak pełnego pg_dump off-host i kopii MinIO aplikacji. Odpowiedź przekazana 07.10 przyjmuje docelowo codzienny dump całej DB, w tym auth/storage, kopie obu MinIO, szyfrowany zewnętrzny cel EU poza hostami źródłowymi, retencję 7 dziennych / 4 tygodniowe / 12 miesięcznych i comiesięczny test restore; wcześniej wskazano Bartosza jako wykonawcę, obecnie koordynuje Igor. Nie ma nowego dowodu wykonania. Siedem obrazów backupu dysku DB odczytanych 06.10 nie dowodzi pełnego zakresu, spójności ani restore. TEST-07 NOT RUN. |
 
 Wyjście F0 wymaga wszystkich bramek oraz zamknięcia zastrzeżeń potrzebnych do

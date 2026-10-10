@@ -1,8 +1,11 @@
 # F0 — przygotowanie pełnych kopii
 
-Stan 10.10.2026: **PREPARATION_ONLY, G09 FAIL, F0_OPEN**. Najnowsza odpowiedź
-Igora: **„Tylko przygotowanie — bez zakupu i zmian”**. Pytanie o limit 5 EUR
-nie ustanowiło budżetu. Ten pakiet przygotowuje późniejsze wykonanie;
+Stan 10.10.2026: **PREPARATION_ONLY, G09 FAIL, F0_OPEN**. Wcześniejsza odpowiedź
+Igora: **„Tylko przygotowanie — bez zakupu i zmian”**. Późniejsza deklaracja
+gotowości płacenia do 5 EUR miesięcznie jest warunkowa; nie precyzuje VAT
+ani nie zatwierdza konkretnego zamówienia i zmian. Lokalizacja komputera
+w Polsce została zadeklarowana. [Bieżący zapis](../observability/ownership.md#uzupełnienie-deklaracji-i-dostępu--10102026)
+rozdziela te odpowiedzi od wykonania. Ten pakiet przygotowuje późniejsze wykonanie;
 nie kupuje miejsca, nie łączy się z serwerami, nie wykonuje kopii i nie
 instaluje harmonogramu. Restore, migracje, wdrożenia i F1 pozostają wyłączone.
 Igor koordynuje i odbiera F0; przygotowanie nie jest jego odbiorem.

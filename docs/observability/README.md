@@ -9,12 +9,22 @@ dowodzi ich wykonania. Igor prowadzi monitoring i odbiera F0; Codex wykonuje
 dostępne prace techniczne, ograniczając Bartosza do koniecznych czynności
 operatorskich.
 
-**Najnowsza dyspozycja Igora z 10.10: „Tylko przygotowanie — bez zakupu
-i zmian”.** Przygotowano [lokalny pakiet kopii](../runbooks/f0-backup-preparation.md):
-plan JSON, przykłady i kontrola zgłoszonego kontraktu manifestu. Nie jest
-to zgoda na wydatek do 5 EUR ani konfigurację kopii; nie ustanawia nowego
-budżetu. Walidacja lokalnego manifestu nie dowodzi autentyczności,
-wykonania kopii lub G09 PASS. **F0_OPEN, G03/G09 FAIL** bez zmian.
+**Najnowsze uzupełnienie 10.10:** Igor potwierdził, że komputer znajduje się
+w Polsce, oraz zadeklarował gotowość płacenia do 5 EUR miesięcznie, jeśli
+przyniesie to istotną korzyść. To warunkowa deklaracja budżetowa; nie określa
+VAT ani nie zatwierdza konkretnego zamówienia lub wznowienia zmian po
+wcześniejszym „Tylko przygotowanie — bez zakupu i zmian”. Rekomendowanym
+zastosowaniem jest odrębny cel pełnych kopii. Lokalny pakiet przygotowania
+nie wykonuje backupów, a **G03/G09 nadal FAIL, F0_OPEN**.
+
+**Odczyty 10.10 po 15:20 UTC:** web i worker healthy na `face09c57f7de756546e58d092dbe6d280f93c91`;
+Sentry/PostHog zwracają metadane kont, lecz aktywne plany i koszty nadal nie
+są potwierdzone. Igor nie ma dostępu do paneli. Wymagany jest ograniczony
+odczyt brakujących ustawień przez właściciela kont lub dostęp indywidualny.
+[Nowy indeks](evidence/f0-follow-up-2026-10-10.json) i
+[szczegóły odczytów](runtime-inventory.md#uzupełnienie-odczytów-po-1520-utc--10102026)
+zachowują historię wcześniejszych wyników. Błąd CodeQL lokalnego walidatora
+kopii poprawiono; skan dla `6b1a972` przeszedł, bez wdrożenia tej sesji.
 
 **Nowy pomiar 10.10, tylko odczyt:** od 14:23 UTC potwierdzono SSH do
 trzech hostów i zgodność ich kluczy ED25519. Klucz daje pełne uprawnienia;
@@ -45,8 +55,8 @@ nie otrzymuje automatycznie prawa wdrożenia produkcji.
 Staging: kandydat na posiadanym komputerze, w osobnej VM Linux, z danymi
 syntetycznymi. Kopie: rekomendowany osobny BX11 HEL1/restic, około 3,20 EUR
 netto/mies. według odczytu katalogu z 10.10; zakup niezatwierdzony. Wariant
-bez nowego abonamentu wymaga potwierdzenia lokalizacji urządzenia w UE,
-pojemności, dostępności i izolacji kopii od stagingu. Nie obniża G03/G09.
+bez nowego abonamentu ma potwierdzoną przez Igora lokalizację w Polsce;
+wymaga jeszcze dowodów pojemności, dostępności i izolacji kopii od stagingu. Nie obniża G03/G09.
 [Aktualne warunki](ownership.md#darmowa-diagnostyka-i-tańsza-infrastruktura--10102026)
 i [nowy indeks decyzji](evidence/f0-low-cost-2026-10-10.json) mają pierwszeństwo
 przed wcześniejszym płatnym wariantem. **F0_OPEN**; wykonanie dashboardu i
