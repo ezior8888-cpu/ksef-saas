@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -23,7 +25,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  *   jest używane (plik z ostrzeżeniem parsera bez problemu reguł = `importable`);
  * - funkcja nigdy nie rzuca (każdy wyjątek → `parse`) i jest czysta: te same
  *   bajty → ta sama brama, niezależnie od zegara (ponowienie runnera od zera
- *   nadpisuje znacznik tym samym wynikiem).
+ *   nadpisuje znacznik tym samym wynikiem);
+ * - `importable` oznacza „lustro 4.8 przejdzie” (commit 3, fix 4): pliki, które
+ *   nadal wyglądają na FaktFlow, a ich projekcja 4.8 odrzuciłaby (nazwa
+ *   pozycji spoza 1–512 znaków, jednostka spoza 1–50, NIP nabywcy nie z 10
+ *   cyfr, numer albo NIP sprzedawcy pusty po obu stronach), idą na `review`,
+ *   zamiast zapętlać się w „nie do zapisania” bez wyjścia operatora.
  *
  * Szczegół nieustalony przez specyfikację: tekstowy zapis stawki w
  * `preview.lines[].vatRate` (stawka FaktFlow albo surowe P_12) i liczb jako
@@ -61,8 +68,20 @@ vi.mock('@/lib/import/fa3-line-amounts', async (orig) => {
 
 import { parseFa3Xml } from '@/lib/import/fa3-parser';
 import { importedInvoiceContent } from '@/lib/import/imported-invoice-row';
-import { ORIGINAL_GATE_PROBLEMS, ORIGINAL_GATE_RULES, type OriginalBuyerIdKind, type OriginalGateProblem } from '@/lib/ksef/duplicate-check';
+import {
+  ORIGINAL_GATE_PROBLEMS,
+  ORIGINAL_GATE_RULES,
+  type KsefDuplicateCheck,
+  type OriginalBuyerIdKind,
+  type OriginalGateProblem,
+} from '@/lib/ksef/duplicate-check';
 import { evaluateOriginalGate, type OriginalGateEvaluation, type OriginalGateInput } from '@/lib/ksef/duplicate-original-gate';
+import {
+  buildOriginalImportProjection,
+  originalImportProjectionProblem,
+  type OriginalImportProblem,
+} from '@/lib/ksef/duplicate-original-projection';
+import { summarizeInvoiceXml } from '@/lib/ksef/duplicate-verdict';
 import { buildInvoiceAnnotations } from '@/lib/invoices/annotations';
 import { buyerPartyFromBuyerData } from '@/lib/invoices/map-buyer-party';
 import { generateFA3Xml } from '@/lib/xml/fa3-generator';
@@ -491,6 +510,14 @@ const replaceOnce = (xml: string, from: string | RegExp, to: string): string => 
   return changed;
 };
 
+/** Nazwa i jednostka jedynej pozycji w plikach z przypadku „stawka 23” (macierz: `single`). */
+const LINE_NAME = 'Usługa wdrożeniowa';
+const LINE_UNIT = 'usł.';
+const withLineName = (name: string) => (xml: string) => replaceOnce(xml, `<P_7>${LINE_NAME}</P_7>`, `<P_7>${name}</P_7>`);
+const withLineUnit = (unit: string) => (xml: string) => replaceOnce(xml, `<P_8A>${LINE_UNIT}</P_8A>`, `<P_8A>${unit}</P_8A>`);
+const withBuyerNip = (nip: string) => (xml: string) => replaceOnce(xml, `<NIP>${BUYER_NIP}</NIP>`, `<NIP>${nip}</NIP>`);
+const withSellerNip = (nip: string) => (xml: string) => replaceOnce(xml, `<NIP>${SELLER_NIP}</NIP>`, `<NIP>${nip}</NIP>`);
+
 // ─── Pomocnicze ──────────────────────────────────────────────────────────────
 
 afterEach(() => {
@@ -502,6 +529,54 @@ afterEach(() => {
 /** Ocena pliku z domyślnym kontekstem runnera: numer dokumentu X = P_2 pliku, NIP firmy = NIP sprzedawcy. */
 function gateOf(xml: string, b: Built, over: Partial<OriginalGateInput> = {}): OriginalGateEvaluation {
   return evaluateOriginalGate({ xml, ksefNumber: b.ksefNumber, internalNumber: b.number, tenantNip: SELLER_NIP, ...over });
+}
+
+const TENANT_ID = '13131313-1313-4313-8313-131313131313';
+
+/** Znacznik `original_check` jak zapisuje runner dla pliku: skrót i rozmiar jego bajtów, `summary` z pliku, ścieżka w archiwum firmy. */
+function checkFor(xml: string, b: Built): KsefDuplicateCheck {
+  const bytes = Buffer.from(xml, 'utf8');
+  return {
+    v: 1,
+    env: 'test',
+    checkedAt: '2026-09-11T08:00:00.000Z',
+    reason: 'faktflow-original',
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    archivePath: `${TENANT_ID}/ksef-import/${b.ksefNumber}.xml`,
+    sizeBytes: bytes.length,
+    summary: summarizeInvoiceXml(xml),
+    sameContentExceptHeader: false,
+    ownHistory: false,
+    acquiredAt: '2026-09-10T09:00:00.000Z',
+    httpStatus: null,
+    knownInvoice: null,
+    recheck: null,
+  };
+}
+
+/**
+ * Kod lustra 4.8 dla projekcji zbudowanej z tego, co zwraca brama (też dla `review` — brama zwraca
+ * `parsed`, `content` i `amounts`, gdy plik się odczytał). `null` = projekcja przechodzi.
+ */
+function mirrorProblemOf(xml: string, b: Built, input: Partial<OriginalGateInput> = {}): OriginalImportProblem | null {
+  const ev = gateOf(xml, b, input);
+  if (!ev.parsed || !ev.content || !ev.amounts) throw new Error(`plik się nie odczytał: ${JSON.stringify(ev.gate.problems)}`);
+  const check = checkFor(xml, b);
+  const projection = buildOriginalImportProjection(ev.parsed, ev.content, ev.amounts, {
+    tenantId: TENANT_ID,
+    env: 'test',
+    check,
+    ksefNumber: b.ksefNumber,
+    now: NOW,
+  });
+  return originalImportProjectionProblem(JSON.parse(JSON.stringify(projection)), {
+    internalNumber: input.internalNumber ?? b.number,
+    tenantNip: input.tenantNip ?? SELLER_NIP,
+    tenantId: TENANT_ID,
+    ksefNumber: b.ksefNumber,
+    check,
+    offer: 'pair',
+  });
 }
 
 const previewOf = (ev: OriginalGateEvaluation) => {
@@ -701,14 +776,44 @@ const RULE_CASES: readonly RuleCase[] = [
   { title: '5 number: P_2 inny niż numer dokumentu X', mutate: (xml, b) => replaceOnce(xml, `<P_2>${b.number}</P_2>`, '<P_2>FV/INNY/9</P_2>'), exact: ['number'] },
   { title: '5 number: numer dokumentu X pusty', input: () => ({ internalNumber: '' }), exact: ['number'] },
   { title: '5 number: porównanie dokładne (inna wielkość liter)', input: (b) => ({ internalNumber: b.number.toLowerCase() }), exact: ['number'] },
+  // Fix 4 (commit 3): puste po OBU stronach to nie zgodność — 4.8 odmówiłoby (`shape`: numer 1–100 znaków).
+  {
+    title: '5 number: P_2 pusty i numer dokumentu X pusty (puste po obu stronach nie są zgodne)',
+    mutate: (xml, b) => replaceOnce(xml, `<P_2>${b.number}</P_2>`, '<P_2></P_2>'),
+    input: () => ({ internalNumber: '' }),
+    exact: ['number'],
+  },
+  {
+    title: '5 number: P_2 i numer dokumentu X to same odstępy (po trim puste po obu stronach)',
+    mutate: (xml, b) => replaceOnce(xml, `<P_2>${b.number}</P_2>`, '<P_2>   </P_2>'),
+    input: () => ({ internalNumber: '  ' }),
+    exact: ['number'],
+  },
   // 6 seller
   { title: '6 seller: NIP sprzedawcy w pliku ≠ NIP firmy', input: () => ({ tenantNip: BUYER_NIP }), exact: ['seller'] },
+  // Fix 4 (commit 3): brak cyfr po OBU stronach to nie zgodność — 4.8 odmówiłoby (`shape`: seller_nip to 10 cyfr).
+  {
+    title: '6 seller: brak NIP sprzedawcy w pliku i pusty NIP firmy (puste po obu stronach nie są zgodne)',
+    mutate: (xml) => replaceOnce(xml, `<NIP>${SELLER_NIP}</NIP>`, ''),
+    input: () => ({ tenantNip: '' }),
+    exact: ['seller'],
+  },
+  {
+    title: '6 seller: NIP sprzedawcy w pliku i NIP firmy bez cyfr',
+    mutate: withSellerNip('BRAK'),
+    input: () => ({ tenantNip: '-' }),
+    exact: ['seller'],
+  },
   // 7 buyer-id
   {
     title: '7 buyer-id: nabywca bez NIP, PESEL, VAT-UE, NrInny i BrakID',
     mutate: (xml) => replaceOnce(xml, `<NIP>${BUYER_NIP}</NIP>`, ''),
     exact: ['buyer-id'],
   },
+  // Fix 4 (commit 3): OBECNY NIP nabywcy ma mieć dokładnie 10 cyfr — przy 9 projekcja nie niesie NIP, a plik tak (4.8 `buyer`).
+  { title: '7 buyer-id: NIP nabywcy z 9 cyframi', mutate: withBuyerNip('525224158'), exact: ['buyer-id'] },
+  { title: '7 buyer-id: NIP nabywcy z 11 cyframi', mutate: withBuyerNip(`${BUYER_NIP}1`), exact: ['buyer-id'] },
+  { title: '7 buyer-id: NIP nabywcy bez cyfr', mutate: withBuyerNip('BRAK'), exact: ['buyer-id'] },
   // 8 no-lines (brak pozycji zostawia też sumę stawki bez pozycji → amounts)
   { title: '8 no-lines: faktura bez pozycji', mutate: (xml) => replaceOnce(xml, /<FaWiersz>.*<\/FaWiersz>/, ''), contains: ['no-lines'] },
   // 9 gross-prices
@@ -722,6 +827,13 @@ const RULE_CASES: readonly RuleCase[] = [
   { title: '10 line-fields: brak P_12', mutate: (xml) => replaceOnce(xml, '<P_12>23</P_12>', ''), exact: ['line-fields'] },
   { title: '10 line-fields: rabat P_10', mutate: inLine('<P_11>', '<P_10>5.00</P_10>'), exact: ['line-fields'] },
   { title: '10 line-fields: VAT pozycji P_11Vat', mutate: inLine('<P_12>', '<P_11Vat>23.00</P_11Vat>'), exact: ['line-fields'] },
+  // Fix 4 (commit 3): długości, które 4.8 (`lines`) sprawdza na wierszu projekcji — nazwa 1–512, jednostka 1–50 (punkty kodowe).
+  { title: '10 line-fields: nazwa pozycji (P_7) pusta', mutate: withLineName(''), exact: ['line-fields'] },
+  { title: '10 line-fields: nazwa pozycji (P_7) 513 znaków', mutate: withLineName('n'.repeat(513)), exact: ['line-fields'] },
+  { title: '10 line-fields: nazwa pozycji (P_7) 513 znaków spoza BMP (liczą się punkty kodowe)', mutate: withLineName('😀'.repeat(513)), exact: ['line-fields'] },
+  { title: '10 line-fields: jednostka (P_8A) pusta', mutate: withLineUnit(''), exact: ['line-fields'] },
+  { title: '10 line-fields: jednostka (P_8A) 51 znaków', mutate: withLineUnit('u'.repeat(51)), exact: ['line-fields'] },
+  { title: '10 line-fields: jednostka (P_8A) 51 znaków spoza BMP', mutate: withLineUnit('😀'.repeat(51)), exact: ['line-fields'] },
   // 11 rates
   { title: '11 rates: 0 WDT', mutate: zeroRateFile('0 WDT', 'P_13_6_2'), exact: ['rates'] },
   { title: '11 rates: 0 EX', mutate: zeroRateFile('0 EX', 'P_13_6_3'), exact: ['rates'] },
@@ -735,7 +847,10 @@ const RULE_CASES: readonly RuleCase[] = [
   },
   // 13 totals
   { title: '13 totals: P_15 ≠ suma P_13_x + P_14_x', mutate: (xml) => replaceOnce(xml, '<P_15>123.00</P_15>', '<P_15>130.00</P_15>'), exact: ['totals'] },
-  { title: '13 totals: P_15 różni się o 0,02 (poza tolerancją 0,01)', mutate: (xml) => replaceOnce(xml, '<P_15>123.00</P_15>', '<P_15>123.02</P_15>'), exact: ['totals'] },
+  { title: '13 totals: P_15 różni się o 0,02', mutate: (xml) => replaceOnce(xml, '<P_15>123.00</P_15>', '<P_15>123.02</P_15>'), exact: ['totals'] },
+  // Rozstrzygnięcie po commicie 3: reguła 13 ścisła co do grosza, jak 4.8 `totals` — inaczej plik
+  // „importable” krążyłby w RECHECK bez wyjścia. Generator FaktFlow sumuje P_15 dokładnie.
+  { title: '13 totals: P_15 różni się o 0,01 (reguła ścisła co do grosza)', mutate: (xml) => replaceOnce(xml, '<P_15>123.00</P_15>', '<P_15>123.01</P_15>'), exact: ['totals'] },
   { title: '13 totals: brak P_15', mutate: (xml) => replaceOnce(xml, '<P_15>123.00</P_15>', ''), exact: ['totals'] },
   // 14 annotations
   { title: '14 annotations: P_23=1 (procedura trójstronna)', mutate: inAnnotations('<P_23>2</P_23>', '<P_23>1</P_23>'), exact: ['annotations'] },
@@ -850,13 +965,27 @@ describe('5.2: zbieranie problemów', () => {
 // ─── Granice reguł: pliki, które nadal są importable ─────────────────────────
 
 describe('granice reguł 5.2: plik nadal importable', () => {
-  const OK_CASES: ReadonlyArray<{ title: string; mutate?: (xml: string) => string; input?: (b: Built) => Partial<OriginalGateInput> }> = [
+  const OK_CASES: ReadonlyArray<{
+    title: string;
+    mutate?: (xml: string) => string;
+    input?: (b: Built) => Partial<OriginalGateInput>;
+    /**
+     * ZNANA LUKA (poza zakresem commitu 3): brama przepuszcza plik, a lustro 4.8 odmawia tym kodem.
+     * Test pinuje stan obecny — naprawa bramy (np. ścisła równość w regule 13) ma go zmienić świadomie.
+     */
+    mirrorRefuses?: OriginalImportProblem;
+  }> = [
     { title: 'waluta małymi literami z odstępami: „ pln ” (po trim i toUpperCase to PLN)', mutate: withCurrency(' pln ') },
     { title: 'brak KodWaluty (reguła 1: tylko niepusta waluta ≠ PLN)', mutate: (xml) => replaceOnce(xml, '<KodWaluty>PLN</KodWaluty>', '') },
     { title: 'numer dokumentu X z odstępami (porównanie po trim)', input: (b) => ({ internalNumber: `  ${b.number} ` }) },
     { title: 'P_2 z odstępami w pliku (porównanie po trim)', mutate: (xml) => xml.replace(/<P_2>([^<]*)<\/P_2>/, '<P_2>  $1  </P_2>') },
     { title: 'NIP sprzedawcy z myślnikami (porównanie samych cyfr)', mutate: (xml) => replaceOnce(xml, `<NIP>${SELLER_NIP}</NIP>`, '<NIP>526-000-12-46</NIP>') },
-    { title: 'P_15 różni się o 0,01 od sumy P_13_x + P_14_x (granica tolerancji włącznie)', mutate: (xml) => replaceOnce(xml, '<P_15>123.00</P_15>', '<P_15>123.01</P_15>') },
+    { title: 'nazwa pozycji dokładnie 512 znaków (granica włącznie)', mutate: withLineName('n'.repeat(512)) },
+    // 4.8 liczy `char_length` (punkty kodowe), nie jednostki UTF-16: 512 emoji to 1024 jednostki, a plik jest w porządku.
+    { title: 'nazwa pozycji 512 znaków spoza BMP (punkty kodowe, nie jednostki UTF-16)', mutate: withLineName('😀'.repeat(512)) },
+    { title: 'jednostka dokładnie 50 znaków (granica włącznie)', mutate: withLineUnit('u'.repeat(50)) },
+    { title: 'jednostka 50 znaków spoza BMP (punkty kodowe, nie jednostki UTF-16)', mutate: withLineUnit('😀'.repeat(50)) },
+    { title: 'NIP nabywcy z przedrostkiem i myślnikami (10 cyfr po odfiltrowaniu nie-cyfr, jak w projekcji)', mutate: withBuyerNip('PL 525-224-15-85') },
   ];
 
   it.each(OK_CASES.map((oc) => [oc.title, oc] as const))('%s', (_title, oc) => {
@@ -867,6 +996,63 @@ describe('granice reguł 5.2: plik nadal importable', () => {
 
     expect(ev.gate.problems).toEqual([]);
     expect(ev.gate.kind).toBe('importable');
+  });
+
+  it.each(OK_CASES.map((oc) => [oc.title, oc] as const))('%s: importable ⇒ lustro 4.8 przechodzi (poza znaną luką)', (_title, oc) => {
+    const b = build(byName('stawka 23'));
+    const xml = oc.mutate ? oc.mutate(b.xml) : b.xml;
+
+    expect(mirrorProblemOf(xml, b, oc.input?.(b))).toBe(oc.mirrorRefuses ?? null);
+  });
+});
+
+// ─── Fix 4 (commit 3): importable ⇒ 4.8 przejdzie ────────────────────────────
+
+describe('importable oznacza, że lustro 4.8 przejdzie (brak pętli „nie do zapisania” bez wyjścia operatora)', () => {
+  it.each(EACH)('%s: importable ⇒ lustro 4.8 przechodzi', (_name, c) => {
+    const b = build(c);
+
+    expect(gateOf(b.xml, b).gate.kind).toBe('importable');
+    expect(mirrorProblemOf(b.xml, b)).toBeNull();
+  });
+
+  // Przesłanka każdej nowej reguły: bez niej plik byłby `importable`, a 4.8 odmówiłoby go z podanym kodem
+  // (klient: „nie do zapisania”, cron: ta sama ocena `importable`, ta sama odmowa — pętla bez wyjścia).
+  const REFUSED_BY_4_8: ReadonlyArray<{
+    title: string;
+    mutate: (xml: string, b: Built) => string;
+    input?: Partial<OriginalGateInput>;
+    problem: OriginalGateProblem;
+    code: OriginalImportProblem;
+  }> = [
+    { title: 'nazwa pozycji 513 znaków', mutate: withLineName('n'.repeat(513)), problem: 'line-fields', code: 'lines' },
+    { title: 'nazwa pozycji pusta', mutate: withLineName(''), problem: 'line-fields', code: 'lines' },
+    { title: 'jednostka 51 znaków', mutate: withLineUnit('u'.repeat(51)), problem: 'line-fields', code: 'lines' },
+    { title: 'jednostka pusta', mutate: withLineUnit(''), problem: 'line-fields', code: 'lines' },
+    { title: 'NIP nabywcy z 9 cyframi', mutate: withBuyerNip('525224158'), problem: 'buyer-id', code: 'buyer' },
+    { title: 'NIP nabywcy z 11 cyframi', mutate: withBuyerNip(`${BUYER_NIP}1`), problem: 'buyer-id', code: 'buyer' },
+    {
+      title: 'P_2 pusty i numer dokumentu X pusty',
+      mutate: (xml, b) => replaceOnce(xml, `<P_2>${b.number}</P_2>`, '<P_2></P_2>'),
+      input: { internalNumber: '' },
+      problem: 'number',
+      code: 'shape',
+    },
+    {
+      title: 'brak NIP sprzedawcy w pliku i pusty NIP firmy',
+      mutate: (xml) => replaceOnce(xml, `<NIP>${SELLER_NIP}</NIP>`, ''),
+      input: { tenantNip: '' },
+      problem: 'seller',
+      code: 'shape',
+    },
+  ];
+
+  it.each(REFUSED_BY_4_8.map((rc) => [rc.title, rc] as const))('%s: brama odrzuca, bo 4.8 odmówiłoby', (_title, rc) => {
+    const b = build(byName('stawka 23'));
+    const xml = rc.mutate(b.xml, b);
+
+    expect(gateOf(xml, b, rc.input).gate.problems).toEqual([rc.problem]);
+    expect(mirrorProblemOf(xml, b, rc.input)).toBe(rc.code);
   });
 });
 

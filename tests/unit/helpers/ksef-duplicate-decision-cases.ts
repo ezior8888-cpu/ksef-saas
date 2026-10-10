@@ -1149,6 +1149,12 @@ export function originalImportMismatchCases(): ReadonlyArray<OriginalImportMisma
   add('kwota brutto w pliku bez miejsc po przecinku (123 = 123.00)', null, identity, ctxSummary({ gross: '123' }));
   add('NIP nabywcy w pliku z separatorami i przedrostkiem — porównanie po cyfrach', null, identity, ctxSummary({ buyerNip: 'PL 525-224-15-85' }));
   add('waluta nieobecna w pliku (NULL) przechodzi', null, identity, ctxSummary({ currency: null }));
+  // Jedna reguła waluty (fix 3): problem tylko, gdy `upper(btrim(waluta))` jest niepuste i ≠ 'PLN' —
+  // jak reguła 1 bramy i `assertPlnCurrency`. SQL: `NULLIF(upper(btrim(summary->>'currency')),'') <> 'PLN'`.
+  add('waluta pusta w pliku (\'\') przechodzi', null, identity, ctxSummary({ currency: '' }));
+  add('waluta małymi literami („pln”) przechodzi', null, identity, ctxSummary({ currency: 'pln' }));
+  add('waluta z odstępami na brzegach („ PLN ”) przechodzi (btrim obcina spacje)', null, identity, ctxSummary({ currency: ' PLN ' }));
+  add('waluta same odstępy („   ”) przechodzi (po btrim pusta)', null, identity, ctxSummary({ currency: '   ' }));
   add('nabywca PESEL (B2C): brak NIP po obu stronach', null, (p) => {
     Object.assign(inv(p), { buyer_nip: null, is_b2c: true, buyer_id_type: 'pesel', buyer_pesel: BASE_PESEL, buyer_id_number: null });
     return p;
@@ -1209,6 +1215,13 @@ export function originalImportMismatchCases(): ReadonlyArray<OriginalImportMisma
   add('shape: buyer_id_number 101 znaków', 'shape', (p) => { inv(p).buyer_id_number = 'X'.repeat(101); return p; });
   add('shape: notes 5001 znaków', 'shape', (p) => { inv(p).notes = 'u'.repeat(5001); return p; });
   add('shape: notes liczbą', 'shape', (p) => { inv(p).notes = 5; return p; });
+  // R-C6 (fix 2): brak klucza i liczba w miejscu napisu to `shape` — SQL ma to wyrazić jawnie
+  // (`jsonb_typeof(...) = 'string'` przed każdym wyrażeniem regularnym, `IS DISTINCT FROM`), nie samym `!~` na NULL.
+  add('shape: brak klucza v', 'shape', (p) => { delete p.v; return p; });
+  add('shape: seller_nip liczbą JSON', 'shape', (p) => { inv(p).seller_nip = 5260001246; return p; });
+  add('shape: buyer_nip liczbą JSON', 'shape', (p) => { inv(p).buyer_nip = 5252241585; return p; });
+  add('shape: brak klucza seller_nip', 'shape', (p) => { delete inv(p).seller_nip; return p; });
+  add('shape: brak klucza is_b2c', 'shape', (p) => { delete inv(p).is_b2c; return p; });
 
   // ── lines (program, 22023) ──
   add('lines: klucz invoice_id w pozycji', 'lines', (p) => { lines(p)[0]!.invoice_id = DUP_INVOICE_ID; return p; });
@@ -1227,6 +1240,11 @@ export function originalImportMismatchCases(): ReadonlyArray<OriginalImportMisma
   add('lines: net_amount z 3 miejscami po przecinku', 'lines', (p) => { lines(p)[0]!.net_amount = 100.001; return p; });
   add('lines: vat_amount napisem', 'lines', (p) => { lines(p)[0]!.vat_amount = '23'; return p; });
   add('lines: gross_amount równe 1e10', 'lines', (p) => { lines(p)[0]!.gross_amount = 10000000000; return p; });
+  add('lines: unit_price_net równe 1e10 (kolumna NUMERIC(14,4) — inaczej INSERT pada na 22003)', 'lines', (p) => { lines(p)[0]!.unit_price_net = 10000000000; return p; });
+  add('lines: unit_price_net równe -1e10', 'lines', (p) => { lines(p)[0]!.unit_price_net = -10000000000; return p; });
+  add('lines: pozycja liczbą (nie obiektem)', 'lines', (p) => { p.lines = [lines(p)[0]!, 5]; return p; });
+  add('lines: pozycja null', 'lines', (p) => { p.lines = [lines(p)[0]!, null]; return p; });
+  add('lines: pozycja tablicą', 'lines', (p) => { p.lines = [lines(p)[0]!, []]; return p; });
   for (const offer of ['pair', 'record', 'review-pair', 'review-record'] as const) {
     add(`lines: stawka nieznana nigdy nie przechodzi (${offer})`, 'lines', (p) => { lines(p)[0]!.vat_rate = 'nieznana'; return p; }, undefined, offer);
   }
@@ -1259,12 +1277,14 @@ export function originalImportMismatchCases(): ReadonlyArray<OriginalImportMisma
   add('gross: gross_total inny niż P_15 pliku', 'gross', (p) => { inv(p).gross_total = Number(inv(p).gross_total) + 1; return p; });
   add('gross: P_15 pliku nie jest kwotą', 'gross', identity, ctxSummary({ gross: 'abc' }));
   add('gross: P_15 pliku z 3 miejscami po przecinku', 'gross', identity, ctxSummary({ gross: '123.456' }));
+  add('gross: P_15 pliku nieznane (NULL) — brak brutto w znaczniku to niezgodność (fail-closed)', 'gross', identity, ctxSummary({ gross: null }));
   add('buyer: buyer_nip projekcji inny niż NIP nabywcy w pliku', 'buyer', (p) => { inv(p).buyer_nip = flipNip(inv(p).buyer_nip); return p; });
   add('buyer: brak buyer_nip w projekcji przy NIP w pliku', 'buyer', (p) => { inv(p).buyer_nip = null; return p; });
   add('buyer: NIP nabywcy w pliku nieznany (NULL) przy buyer_nip w projekcji', 'buyer', identity, ctxSummary({ buyerNip: null }));
   add('buyer: NIP nabywcy w pliku bez cyfr przy buyer_nip w projekcji', 'buyer', identity, ctxSummary({ buyerNip: 'brak' }));
   add('currency: waluta pliku EUR', 'currency', identity, ctxSummary({ currency: 'EUR' }));
   add('currency: waluta pliku USD', 'currency', identity, ctxSummary({ currency: 'USD' }));
+  add('currency: waluta pliku z tabulatorem („\\tPLN”) — btrim obcina same spacje', 'currency', identity, ctxSummary({ currency: '\tPLN' }));
 
   // ── xml, totals, fa3 ──
   add('xml: storage_path inna niż archivePath', 'xml', (p) => { xmlPart(p).storage_path = `${DUP_TENANT_ID}/ksef-import/INNY.xml`; return p; });
@@ -1274,12 +1294,16 @@ export function originalImportMismatchCases(): ReadonlyArray<OriginalImportMisma
   }, ctxCheck({ archivePath: `cudza-firma/ksef-import/${BASE_K}.xml` }));
   add('xml: sha256 inny niż w znaczniku', 'xml', (p) => { xmlPart(p).sha256 = 'cc'.repeat(32); return p; });
   add('xml: size_bytes inny niż w znaczniku', 'xml', (p) => { xmlPart(p).size_bytes = Number(xmlPart(p).size_bytes) + 1; return p; });
+  add('xml: brak size_bytes', 'xml', (p) => { delete xmlPart(p).size_bytes; return p; });
+  add('xml: size_bytes napisem', 'xml', (p) => { xmlPart(p).size_bytes = String(xmlPart(p).size_bytes); return p; });
   add('totals: suma net_amount pozycji inna niż net_total', 'totals', (p) => { lines(p)[0]!.net_amount = Number(lines(p)[0]!.net_amount) + 0.01; return p; });
   add('totals: suma vat_amount pozycji inna niż vat_total', 'totals', (p) => { lines(p)[0]!.vat_amount = Number(lines(p)[0]!.vat_amount) + 0.01; return p; });
   add('totals: suma gross_amount pozycji inna niż gross_total', 'totals', (p) => { lines(p)[0]!.gross_amount = Number(lines(p)[0]!.gross_amount) + 0.01; return p; });
   add('fa3: fa3_data ma klucz lines', 'fa3', (p) => { (inv(p).fa3_data as P).lines = []; return p; });
   add('fa3: fa3_data.import.source inne niż ksef_duplicate_decision', 'fa3', (p) => { ((inv(p).fa3_data as P).import as P).source = 'ksef_history'; return p; });
   add('fa3: fa3_data.import.originalSha256 inny niż w znaczniku', 'fa3', (p) => { ((inv(p).fa3_data as P).import as P).originalSha256 = 'dd'.repeat(32); return p; });
+  add('fa3: fa3_data bez klucza import', 'fa3', (p) => { delete (inv(p).fa3_data as P).import; return p; });
+  add('fa3: fa3_data.import bez originalSha256', 'fa3', (p) => { delete ((inv(p).fa3_data as P).import as P).originalSha256; return p; });
 
   // ── Kolejność: wygrywa PIERWSZY kod (każdy wiersz łączy dwa problemy) ──
   add('kolejność: shape przed number', 'shape', (p) => { inv(p).id = 'x'; inv(p).internal_number = 'FV/INNY/2'; return p; });

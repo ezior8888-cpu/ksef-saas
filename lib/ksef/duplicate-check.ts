@@ -323,6 +323,14 @@ const FAILED_FETCH_REASONS: readonly DuplicateCheckReason[] = ['download-pending
  * oryginału (awaria, 403), NIE kasuje danych z wcześniejszego udanego —
  * na nich klient podejmuje decyzję; dopisuje tylko wynik próby (`recheck`).
  * Nowe dane oryginału, „znany numer” albo inne środowisko — zapis w całości.
+ *
+ * PR C (5.1 punkt 4, INV-25, INV-26): gałąź „zachowaj poprzedni” przenosi
+ * `importGate` (z `release`) i `recheckNeeded` bez zmian — to poprzedni obiekt.
+ * W gałęzi „nowy zapis” `release` przechodzi z poprzedniej bramy tylko przy
+ * tym samym pliku (`sha256`, `env`), powodzie `faktflow-original` po obu
+ * stronach i tej samej ocenie `review` (obie bramy poprawne, te same
+ * `problems` jako zbiór); `recheckNeeded` poprzedniego zapisu nigdy nie
+ * przechodzi (nowy werdykt = nowa ocena).
  */
 export function mergeDuplicateCheck(previous: KsefDuplicateCheck | null, next: KsefDuplicateCheck): KsefDuplicateCheck {
   const keepPrevious = previous !== null
@@ -330,13 +338,60 @@ export function mergeDuplicateCheck(previous: KsefDuplicateCheck | null, next: K
     && previous.env === next.env
     && FAILED_FETCH_REASONS.includes(next.reason)
     && (next.sha256 === null || next.sha256 === previous.sha256);
-  if (!keepPrevious) return { ...next, recheck: null };
-  return { ...previous, recheck: { reason: next.reason, httpStatus: next.httpStatus, checkedAt: next.checkedAt } };
+  if (keepPrevious) {
+    return { ...previous, recheck: { reason: next.reason, httpStatus: next.httpStatus, checkedAt: next.checkedAt } };
+  }
+  const merged: KsefDuplicateCheck = { ...next, recheck: null };
+  const release = previous ? carriedRelease(previous, next) : null;
+  if (release && next.importGate) merged.importGate = { ...next.importGate, release };
+  return merged;
+}
+
+/** Ta sama lista napisów jako zbiór (kolejność i powtórzenia bez znaczenia). */
+function sameProblemSet(a: readonly string[], b: readonly string[]): boolean {
+  const sa = new Set(a);
+  const sb = new Set(b);
+  return sa.size === sb.size && [...sa].every((p) => sb.has(p));
+}
+
+/** INV-26 (b): oddanie decyzji z poprzedniej bramy, gdy nowy werdykt to ten sam plik i ta sama ocena `review`. */
+function carriedRelease(previous: KsefDuplicateCheck, next: KsefDuplicateCheck): KsefOriginalRelease | null {
+  const prevGate = previous.importGate;
+  const nextGate = next.importGate;
+  if (previous.reason !== 'faktflow-original' || next.reason !== 'faktflow-original') return null;
+  if (previous.sha256 === null || previous.sha256 !== next.sha256 || previous.env !== next.env) return null;
+  if (!prevGate || !nextGate || !originalGateOk(prevGate) || !originalGateOk(nextGate)) return null;
+  if (prevGate.kind !== 'review' || nextGate.kind !== 'review') return null;
+  if (!sameProblemSet(prevGate.problems, nextGate.problems)) return null;
+  return isOriginalRelease(prevGate.release) ? prevGate.release : null;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 const bool = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null);
+const nullableString = (v: unknown): v is string | null => v === null || typeof v === 'string';
+
+/**
+ * Kształt `KsefOriginalRelease` (4.7): `at` — dowolny niepusty napis (M5: SQL
+ * sprawdza przy ofercie sam typ, nie format daty), `via = 'operator'`,
+ * `actorUserId` i `note` — napis albo `null`.
+ */
+function isOriginalRelease(v: unknown): v is KsefOriginalRelease {
+  return isRecord(v)
+    && typeof v.at === 'string' && v.at.length > 0
+    && v.via === 'operator'
+    && nullableString(v.actorUserId)
+    && nullableString(v.note);
+}
+
+/** `original_check.recheckNeeded` (4.7b) — rodzaj z `ORIGINAL_RECHECK_KINDS` i niepusty `at`; inaczej `null`. */
+function parseRecheckNeeded(v: unknown): KsefOriginalRecheckNeeded | null {
+  if (!isRecord(v)) return null;
+  const { kind } = v;
+  const at = str(v.at);
+  if (typeof kind !== 'string' || !(ORIGINAL_RECHECK_KINDS as readonly string[]).includes(kind) || at === null) return null;
+  return { kind: kind as OriginalRecheckKind, at };
+}
 
 function parseSummary(v: unknown): OriginalInvoiceSummary | null {
   if (!isRecord(v)) return null;
@@ -364,6 +419,9 @@ export function parseDuplicateCheck(value: unknown): KsefDuplicateCheck | null {
     ? { reason: r.reason as DuplicateCheckReason, httpStatus: typeof r.httpStatus === 'number' ? r.httpStatus : null, checkedAt: str(r.checkedAt) ?? '' }
     : null;
   const decision = parseDecision(value.decision);
+  // PR C (5.1 punkt 4): klucze tylko w poprawnym kształcie — brak bramy = blokada `recheck-needed`.
+  const importGate = parseImportGate(value.importGate);
+  const recheckNeeded = parseRecheckNeeded(value.recheckNeeded);
   return {
     v: 1,
     env: str(value.env) ?? '',
@@ -380,6 +438,8 @@ export function parseDuplicateCheck(value: unknown): KsefDuplicateCheck | null {
     knownInvoice: known,
     recheck,
     ...(decision ? { decision } : {}),
+    ...(importGate ? { importGate } : {}),
+    ...(recheckNeeded ? { recheckNeeded } : {}),
   };
 }
 
@@ -393,17 +453,27 @@ function parseDecision(value: unknown): KsefDuplicateDecisionRecord | null {
   return { choice, via, at };
 }
 
-// ─── PR C — sygnatury kontraktu (commit 1); ciała: commit 3 (grupa B) ───────
-/* eslint-disable @typescript-eslint/no-unused-vars -- PR C kontrakt: sygnatury bez ciał, wyłącznik znika z ciałami */
+// ─── PR C (00149): brama pochodzenia przy odczycie ───────────────────────────
 
 /**
  * Lustro `ksef_duplicate_gate_ok` (4.4a): `v = 1`, `rules` liczbą, `kind`
  * `importable`|`review`, `problems` tablicą napisów, `kind = 'importable'` ⇔
  * `problems` puste. `null`/inny typ → `false`. Nie sprawdza `preview`
- * ani `release` (tego SQL nie czyta przy poprawności bramy).
+ * ani `release` (tego SQL nie czyta przy poprawności bramy). Kolejne kroki
+ * jak kolejne `IF` w SQL — typ tablicy przed jej elementami.
  */
 export function originalGateOk(gate: unknown): boolean {
-  throw new Error('PR C: nie zaimplementowane');
+  // 1. obiekt
+  if (!isRecord(gate)) return false;
+  // 2. v = 1 (jsonb), rules liczbą, kind importable|review, problems tablicą
+  if (gate.v !== 1 || typeof gate.rules !== 'number' || (gate.kind !== 'importable' && gate.kind !== 'review')
+    || !Array.isArray(gate.problems)) {
+    return false;
+  }
+  // 3. każdy element problems napisem (kod nieznany też — SQL nie zna listy kodów)
+  if (gate.problems.some((p) => typeof p !== 'string')) return false;
+  // 4. importable ⇔ brak problemów
+  return (gate.kind === 'importable') === (gate.problems.length === 0);
 }
 
 /**
@@ -416,7 +486,19 @@ export function originalGateOk(gate: unknown): boolean {
  * inaczej klucz `release` pominięty.
  */
 export function parseImportGate(value: unknown): KsefOriginalImportGate | null {
-  throw new Error('PR C: nie zaimplementowane');
+  if (!originalGateOk(value)) return null;
+  const gate = value as KsefOriginalImportGate;
+  const raw = value as Record<string, unknown>;
+  // Podgląd bez przebudowy: obiekt zostaje tym samym obiektem (także o nieznanym kształcie), reszta → null.
+  const preview = isRecord(raw.preview) ? (raw.preview as unknown as OriginalPreview) : null;
+  return {
+    v: 1,
+    rules: gate.rules,
+    kind: gate.kind,
+    problems: [...gate.problems],
+    preview,
+    ...(isOriginalRelease(raw.release) ? { release: raw.release } : {}),
+  };
 }
 
 /**
@@ -426,10 +508,9 @@ export function parseImportGate(value: unknown): KsefOriginalImportGate | null {
  * `describeDuplicateOriginal` (`{dzien}` w `FAKTFLOW.INTRO_RECORD_*`).
  */
 export function originalAssignedDay(check: Pick<KsefDuplicateCheck, 'acquiredAt'> | null, ksefNumber: string): string | null {
-  throw new Error('PR C: nie zaimplementowane');
+  const acquiredAt = check?.acquiredAt;
+  return (typeof acquiredAt === 'string' && acquiredAt ? warsawDay(acquiredAt) : null) ?? dateFromKsefNumber(ksefNumber);
 }
-
-/* eslint-enable @typescript-eslint/no-unused-vars */
 
 export interface DuplicateOriginalView {
   /** Nagłówek panelu na karcie faktury. */
@@ -499,7 +580,7 @@ export function describeDuplicateOriginal(
 ): DuplicateOriginalView {
   const s = check?.summary ?? null;
   const rows: Array<{ label: string; value: string }> = [{ label: 'Numer KSeF', value: ksefNumber }];
-  const assigned = (check?.acquiredAt ? warsawDay(check.acquiredAt) : null) ?? dateFromKsefNumber(ksefNumber);
+  const assigned = originalAssignedDay(check, ksefNumber);
   if (assigned) rows.push({ label: 'Numer nadany w KSeF', value: assigned });
   if (s?.number) rows.push({ label: 'Numer faktury', value: s.number });
   if (s?.issueDate) rows.push({ label: 'Data wystawienia', value: s.issueDate });
