@@ -53,8 +53,11 @@ async function credentialFile(filename) {
     if (cursor === immediate && process.platform !== "win32" && ((stat.mode & 0o077) !== 0 || stat.uid !== process.getuid())) fail("UNSAFE_SSH_CREDENTIAL_FILE");
     const parent = path.dirname(cursor); if (parent === cursor) break; cursor = parent;
   }
-  const entry = await lstat(filename);
-  if (!entry.isFile() || entry.isSymbolicLink()) fail("UNSAFE_SSH_CREDENTIAL_FILE");
+  // Validate the opened descriptor, without a final-path check/open race.
+  // Linux O_NOFOLLOW refuses symlinks; O_NONBLOCK lets fstat reject special files.
+  // SSH later opens these paths itself: the caller must keep the private parent
+  // and all ancestor paths stable and trusted throughout command execution.
+  // Windows is used only for injected synthetic transports, not POSIX proof.
   const handle = await open(filename, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
   try {
     const stat = await handle.stat();

@@ -117,3 +117,43 @@ test("POSIX world-readable credentials are refused", { skip: process.platform ==
   const adapter = createBackupDatabaseCommand({ ...config, command: async () => { assert.fail("must not run"); } });
   await assert.rejects(adapter(prepared[0], { timeoutMs: 1000 }), rejects("UNSAFE_SSH_CREDENTIAL_FILE"));
 });
+
+test("directories cannot be used as either SSH credential file", async (t) => {
+  const { root, config } = await fixture(t), directory = path.join(root, "credential-directory");
+  await mkdir(directory, { mode: 0o700 });
+  for (const field of ["identityFile", "knownHostsFile"]) {
+    const adapter = createBackupDatabaseCommand({ ...config, host: { ...config.host, [field]: directory }, command: async () => { assert.fail("must not run"); } });
+    await assert.rejects(adapter(prepared[0], { timeoutMs: 1000 }), rejects("UNSAFE_SSH_CREDENTIAL_FILE"));
+  }
+});
+
+test("oversized files cannot be used as either SSH credential file", async (t) => {
+  const { root, config } = await fixture(t), oversized = path.join(root, "oversized-credential");
+  await writeFile(oversized, Buffer.alloc(1024 ** 2 + 1), { mode: 0o600 });
+  for (const field of ["identityFile", "knownHostsFile"]) {
+    const adapter = createBackupDatabaseCommand({ ...config, host: { ...config.host, [field]: oversized }, command: async () => { assert.fail("must not run"); } });
+    await assert.rejects(adapter(prepared[0], { timeoutMs: 1000 }), rejects("UNSAFE_SSH_CREDENTIAL_FILE"));
+  }
+});
+
+test("POSIX final credential symlinks are refused even when the target is private", { skip: process.platform === "win32" }, async (t) => {
+  const { root, config } = await fixture(t);
+  for (const field of ["identityFile", "knownHostsFile"]) {
+    const alias = path.join(root, field + "-alias");
+    await symlink(config.host[field], alias, "file");
+    const adapter = createBackupDatabaseCommand({ ...config, host: { ...config.host, [field]: alias }, command: async () => { assert.fail("must not run"); } });
+    await assert.rejects(adapter(prepared[0], { timeoutMs: 1000 }), rejects("UNSAFE_SSH_CREDENTIAL_FILE"));
+  }
+});
+
+test("POSIX immediate credential parents must remain private", { skip: process.platform === "win32" }, async (t) => {
+  const { root, config } = await fixture(t), directory = path.join(root, "public-parent");
+  await mkdir(directory, { mode: 0o700 });
+  const credential = path.join(directory, "credential");
+  await writeFile(credential, "SYNTHETIC_PRIVATE_FILE", { mode: 0o600 });
+  await chmod(directory, 0o755);
+  for (const field of ["identityFile", "knownHostsFile"]) {
+    const adapter = createBackupDatabaseCommand({ ...config, host: { ...config.host, [field]: credential }, command: async () => { assert.fail("must not run"); } });
+    await assert.rejects(adapter(prepared[0], { timeoutMs: 1000 }), rejects("UNSAFE_SSH_CREDENTIAL_FILE"));
+  }
+});
