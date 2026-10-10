@@ -1,0 +1,619 @@
+{
+  "schemaVersion": 1,
+  "mapId": "f0-storage-reference-map-v1",
+  "sourceRevision": "face09c57f7de756546e58d092dbe6d280f93c91",
+  "preparationRevision": "bf55afe287342fce7f994b515532bf170cfa12ae",
+  "reviewDate": "2026-10-10",
+  "reviewKind": "STATIC_CODE_AND_MIGRATION_REVIEW_ONLY",
+  "observedRuntimeSchema": false,
+  "supportedSources": [
+    "application",
+    "supabase"
+  ],
+  "requiredDatabaseNames": [
+    "postgres",
+    "_supabase"
+  ],
+  "comparison": "Exact case-sensitive bucket/key strings; no trim, path normalize, URL decode, or Unicode normalization.",
+  "mappings": [
+    {
+      "id": "invoices.xml_storage_path",
+      "database": "postgres",
+      "table": "public.invoices",
+      "column": "xml_storage_path",
+      "nullable": true,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": "optional join xml_documents.sha256_hash",
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00001_initial_schema.sql",
+          "line": 68,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/storage/r2.ts",
+          "line": 51,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/jobs/runners/submit-invoice.ts",
+          "line": 1850,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "notes": "Use the persisted key, not a reconstruction from the current invoice date; legacy and per-attempt keys coexist."
+    },
+    {
+      "id": "invoices.pdf_storage_path",
+      "database": "postgres",
+      "table": "public.invoices",
+      "column": "pdf_storage_path",
+      "nullable": true,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": null,
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00056_invoice_pdf_cache.sql",
+          "line": 12,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/pdf/pdf-storage.ts",
+          "line": 51,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/pdf/invoice-data.ts",
+          "line": 332,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "notes": "Renderer/QR version is part of the key; do not regenerate it from current code."
+    },
+    {
+      "id": "invoices.archive_storage_path",
+      "database": "postgres",
+      "table": "public.invoices",
+      "column": "archive_storage_path",
+      "nullable": true,
+      "source": "glacier",
+      "keyRule": "literal",
+      "hashColumn": null,
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00009_retention.sql",
+          "line": 15,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/storage/glacier.ts",
+          "line": 23,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/storage/glacier.ts",
+          "line": 49,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/jobs/runners/archive-old-invoices.ts",
+          "line": 72,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "notes": "AWS_ARCHIVE_BUCKET or AWS_GLACIER_BUCKET with AWS region/credentials; a non-null reference is unsupported by the two-MinIO checker and blocks coverage."
+    },
+    {
+      "id": "xml_documents.storage_path",
+      "database": "postgres",
+      "table": "public.xml_documents",
+      "column": "storage_path",
+      "nullable": false,
+      "source": "provider",
+      "keyRule": "literal",
+      "hashColumn": "sha256_hash",
+      "hashRequired": true,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00001_initial_schema.sql",
+          "line": 148,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "supabase/migrations/00001_initial_schema.sql",
+          "line": 149,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "supabase/migrations/00001_initial_schema.sql",
+          "line": 151,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/storage/xml-documents.ts",
+          "line": 48,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/retention/invoice-files.ts",
+          "line": 68,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "providerColumn": "storage_provider",
+      "providerSources": {
+        "r2": "application",
+        "s3_glacier": "glacier"
+      },
+      "notes": "NULL/unknown storage_provider is unknown, not an application fallback. Glacier is unsupported."
+    },
+    {
+      "id": "ksef_submissions.xml_storage_path",
+      "database": "postgres",
+      "table": "public.ksef_submissions",
+      "column": "xml_storage_path",
+      "nullable": true,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": "request_payload_hash",
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00134_ksef_submissions_xml_path.sql",
+          "line": 20,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/ksef/submission-log.ts",
+          "line": 58,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/ksef/submission-log.ts",
+          "line": 85,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "notes": "Current code describes request_payload_hash as SHA-256 hex of this attempt XML. Historical absent hashes remain explicit null; no claim that historical rows all have files."
+    },
+    {
+      "id": "upo_receipts.upo_xml_path",
+      "database": "postgres",
+      "table": "public.upo_receipts",
+      "column": "upo_xml_path",
+      "nullable": true,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": "upo_xml_hash",
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00015_ksef_compliance.sql",
+          "line": 38,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/ksef/upo-storage.ts",
+          "line": 7,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/ksef/upo-storage.ts",
+          "line": 21,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/ksef/upo-client.ts",
+          "line": 190,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/jobs/runners/download-upo.ts",
+          "line": 129,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ]
+    },
+    {
+      "id": "upo_receipts.upo_pdf_path",
+      "database": "postgres",
+      "table": "public.upo_receipts",
+      "column": "upo_pdf_path",
+      "nullable": true,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": null,
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00015_ksef_compliance.sql",
+          "line": 39,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/ksef/upo-storage.ts",
+          "line": 11,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/ksef/upo-storage.ts",
+          "line": 31,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ]
+    },
+    {
+      "id": "upo_receipts.archive_glacier_key",
+      "database": "postgres",
+      "table": "public.upo_receipts",
+      "column": "archive_glacier_key",
+      "nullable": true,
+      "source": "glacier",
+      "keyRule": "literal",
+      "hashColumn": null,
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00015_ksef_compliance.sql",
+          "line": 40,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/retention/invoice-files.ts",
+          "line": 74,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "notes": "Schema/retention path exists; no automatic claim that a current writer or deployment uses it. Non-null is unsupported."
+    },
+    {
+      "id": "import_jobs.source_file_path",
+      "database": "postgres",
+      "table": "public.import_jobs",
+      "column": "source_file_path",
+      "nullable": true,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": null,
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00020_import_jobs_pending_metadata.sql",
+          "line": 20,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/import/file-storage.ts",
+          "line": 15,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/import/file-storage.ts",
+          "line": 26,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "app/onboarding/magic-import/actions.ts",
+          "line": 266,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ]
+    },
+    {
+      "id": "expenses.source_file_path",
+      "database": "postgres",
+      "table": "public.expenses",
+      "column": "source_file_path",
+      "nullable": true,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": null,
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00034_expenses_kpir_ocr.sql",
+          "line": 75,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/storage/expenses.ts",
+          "line": 82,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/jobs/runners/process-ocr.ts",
+          "line": 437,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "invalidSentinels": [
+        "pending"
+      ]
+    },
+    {
+      "id": "ocr_jobs.source_file_path",
+      "database": "postgres",
+      "table": "public.ocr_jobs",
+      "column": "source_file_path",
+      "nullable": false,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": null,
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00034_expenses_kpir_ocr.sql",
+          "line": 135,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "app/actions/expenses.ts",
+          "line": 149,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "app/actions/expenses.ts",
+          "line": 167,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/jobs/runners/process-ocr.ts",
+          "line": 202,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "invalidSentinels": [
+        "pending"
+      ],
+      "notes": "The transient pending marker is not a file and must be reported unknown, not silently omitted as an empty optional reference."
+    },
+    {
+      "id": "payment_reminders.pdf_attachment_path",
+      "database": "postgres",
+      "table": "public.payment_reminders",
+      "column": "pdf_attachment_path",
+      "nullable": true,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": null,
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00023_payment_reminder_settings.sql",
+          "line": 119,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/jobs/runners/send-reminder.ts",
+          "line": 94,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/jobs/runners/send-reminder.ts",
+          "line": 102,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ]
+    },
+    {
+      "id": "export_files.r2_path",
+      "database": "postgres",
+      "table": "public.export_files",
+      "column": "r2_path",
+      "nullable": false,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": "file_hash",
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00024_accountant_copilot.sql",
+          "line": 185,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "supabase/migrations/00024_accountant_copilot.sql",
+          "line": 187,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/jobs/runners/exports-generate.ts",
+          "line": 230,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/jobs/runners/exports-generate.ts",
+          "line": 440,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/jobs/runners/exports-generate.ts",
+          "line": 470,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ]
+    },
+    {
+      "id": "backup_log.r2_key",
+      "database": "postgres",
+      "table": "public.backup_log",
+      "column": "r2_key",
+      "nullable": true,
+      "source": "application",
+      "keyRule": "backup-relative",
+      "hashColumn": "checksum",
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00053_backup_log.sql",
+          "line": 25,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/backup/r2-backup-client.ts",
+          "line": 21,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/backup/r2-backup-client.ts",
+          "line": 33,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/backup/db-snapshot.ts",
+          "line": 95,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "notes": "R2_BACKUPS_BUCKET valid dedicated => literal key; fallback R2_BUCKET_NAME => exact backups/ prefix. The bucket/mode must be explicitly supplied from reported configuration. Hash is gzipped object bytes, not decompressed JSON."
+    },
+    {
+      "id": "audit_logs.previous_xml_storage_path",
+      "database": "postgres",
+      "table": "public.audit_logs",
+      "column": "details_json.previous_xml_storage_path",
+      "nullable": true,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": null,
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00001_initial_schema.sql",
+          "line": 169,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "supabase/migrations/00131_ksef_send_lifecycle.sql",
+          "line": 135,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "supabase/migrations/00131_ksef_send_lifecycle.sql",
+          "line": 376,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "supabase/migrations/00148_ksef_duplicate_decision.sql",
+          "line": 583,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "notes": "Extract only rows whose JSON member exists; a JSON missing member is not a referenced file. Explicit JSON null is optional."
+    },
+    {
+      "id": "audit_logs.previous.xml_storage_path",
+      "database": "postgres",
+      "table": "public.audit_logs",
+      "column": "details_json.previous.xml_storage_path",
+      "nullable": true,
+      "source": "application",
+      "keyRule": "literal",
+      "hashColumn": null,
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "supabase/migrations/00148_ksef_duplicate_decision.sql",
+          "line": 570,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "notes": "Known historical duplicate-decision audit member; scan other schemaless file-like members separately and report unclassified mappings."
+    },
+    {
+      "id": "storage.objects.name",
+      "database": "postgres",
+      "table": "storage.objects",
+      "column": "name + bucket_id",
+      "nullable": false,
+      "source": "supabase",
+      "keyRule": "supabase-physical",
+      "hashColumn": null,
+      "hashRequired": false,
+      "hashSemantics": "SHA-256 of stored payload bytes when present; never ETag or an unrelated request hash",
+      "sourceRefs": [
+        {
+          "file": "docs/runbooks/f0-backup-preparation.md",
+          "line": 146,
+          "revision": "bf55afe287342fce7f994b515532bf170cfa12ae"
+        }
+      ],
+      "notes": "Repository scope requires storage.objects but does not define its deployed schema or physical S3 translation. Logical bucket_id/name are not assumed equal to physical Bucket/Key. v1 rejects every nonempty reference as unknown until a verified physical translation rule is added to the trusted repository map; arbitrary input complete/hash flags cannot supply that rule. Zero declared rows may be internally consistent but never prove an empty database.",
+      "runtimeSchemaDefinitionInRepository": false
+    }
+  ],
+  "normalizationContract": {
+    "input": "One bounded local JSON; pure validateBackupReferences(bundle, referenceMap). CLI reads only that JSON and this trusted repository map; never reads artifact paths.",
+    "reference": "{mappingId,referenceId,source,bucket,key,originalKey,sha256:null|hex,provider?}; referenceId identifies row/member, not object.",
+    "scope": "{complete:true,mappingIds:[every map id exactly once],rowCounts:{mappingId:count},unresolvedMappings:0,databaseNames:[postgres,_supabase],bucketBindings:{applicationPrimary,applicationBackups:{mode:shared|dedicated,bucket}}}. Flags/counts remain reported claims; they do not prove a DB extraction.",
+    "objectManifest": "{source:application|supabase,runId,complete:true,versioning:Unversioned,objects:[{bucket,key,bytes,sha256,...}]}; both sources once, same runId.",
+    "ndjsonAdapter": "S3 exporter objects.ndjson uses compatible object records. A separate bounded offline adapter and integrity review must supply objects[]; export-summary/path is not followed or accepted as objects[], nor as recovery/configuration completeness.",
+    "nulls": "Only nullable mappings accept key/originalKey/bucket/sha256 all null. No implicit undefined-to-null. Hash-required mappings reject null SHA-256. Optional absent hashes are counted, not verified.",
+    "backupPrefix": "Use reported bucketBindings; shared uses exactly backups/ + originalKey, dedicated uses exactly originalKey. No inferred endpoint/configuration.",
+    "supabaseTranslation": "v1 has no verified physical translation rule in the trusted map, so EVERY nonempty storage.objects reference is unknown even when input supplies complete:true/evidenceSha256 or an exported matching object. Extend the trusted versioned map/checker only after the schema/backend mapping is verified. Do not use arbitrary normalization flags as a rule."
+  },
+  "gaps": [
+    {
+      "id": "glacier",
+      "status": "UNSUPPORTED_NONEMPTY_REFERENCES",
+      "detail": "External Glacier references need separate scope/export proof before a full backup can be accepted."
+    },
+    {
+      "id": "supabase-physical",
+      "status": "UNSUPPORTED_NONEMPTY_REFERENCES_UNTIL_VERIFIED_RULE",
+      "detail": "Actual schema, global S3 bucket/tenant prefix and any object version suffix are not established by this static repository map."
+    },
+    {
+      "id": "backup-prefix",
+      "status": "UNVERIFIED_RUNTIME_BUCKET_MODE",
+      "detail": "Runtime R2_BACKUPS_BUCKET vs fallback must be recorded privately; no environment reads performed."
+    },
+    {
+      "id": "schema-drift",
+      "status": "NOT_MEASURED",
+      "detail": "Main face09 was reviewed without checkout/merge. Later runtime/schema/new columns and schemaless JSON references require renewed discovery; declare unresolved mappings, never ignore them."
+    }
+  ],
+  "nonColumnObjects": [
+    {
+      "class": "failed-and-unreferenced-attempt-XML",
+      "source": "application",
+      "sourceRefs": [
+        {
+          "file": "lib/storage/r2.ts",
+          "line": 67,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        },
+        {
+          "file": "lib/retention/invoice-files.ts",
+          "line": 79,
+          "revision": "face09c57f7de756546e58d092dbe6d280f93c91"
+        }
+      ],
+      "rule": "Full object export includes unreferenced attempt files. Count exportedOrphans informationally; do not delete/exclude them."
+    }
+  ],
+  "evidenceVerified": false,
+  "g09Accepted": false
+}
