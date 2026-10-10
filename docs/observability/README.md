@@ -9,28 +9,39 @@ dowodzi ich wykonania. Igor prowadzi monitoring i odbiera F0; Codex wykonuje
 dostępne prace techniczne, ograniczając Bartosza do koniecznych czynności
 operatorskich.
 
-**Aktualny kierunek 10.10: płatny wariant chmurowy, jakość przed oszczędzaniem
-na diagnostyce i izolacji.** Wybór: Sentry Team EU oraz pełna historia błędów
-faktur we własnym chronionym audycie, z przyszłym odczytem dla agenta
-deweloperskiego. Kopie BX11 HEL1/restic; dodatkowo rekomendowany niezależny
-cel B2 EU z Object Lock. Staging 16 GiB: dostępny CPX42 wymaga podniesienia
-dotychczasowego budżetu przed zakupem; tańszy CX43 jest niedostępny. Pełne
-[warunki i koszty](ownership.md#płatny-wariant-i-pełna-historia-błędów--10102026)
-oraz [indeks odczytów i wyborów](evidence/f0-2026-10-10.json) rozdzielają
-decyzje od aktywnych kont i wykonania. F0_OPEN; dashboard i podłączenie
-agenta należą do późniejszej implementacji po odbiorze F0.
+**Aktualny kierunek 10.10: darmowa diagnostyka i tańsza infrastruktura.**
+Igor odrzucił wariant 73,19 EUR netto/mies.; zakupy i czynności operacyjne
+pozostają wstrzymane. Wybór: Sentry Developer EU i PostHog Free EU z budżetem
+nowych abonamentów tych narzędzi 0 USD. Aktywne plany wymagają odczytu.
+Dashboard ma pomóc podczas pierwszego release: grupować błędy, pokazywać
+wpływ na faktury, retry/recovery i regresje, zachowując pełną minimalną
+historię we własnym audycie. Przyszły agent korzysta ze zredagowanych dowodów
+i historii zweryfikowanych napraw, przygotowuje test, poprawkę oraz PR;
+nie otrzymuje automatycznie prawa wdrożenia produkcji.
+
+Staging: kandydat na posiadanym komputerze, w osobnej VM Linux, z danymi
+syntetycznymi. Kopie: rekomendowany osobny BX11 HEL1/restic, około 3,20 EUR
+netto/mies. według odczytu katalogu z 10.10; zakup niezatwierdzony. Wariant
+bez nowego abonamentu wymaga potwierdzenia lokalizacji urządzenia w UE,
+pojemności, dostępności i izolacji kopii od stagingu. Nie obniża G03/G09.
+[Aktualne warunki](ownership.md#darmowa-diagnostyka-i-tańsza-infrastruktura--10102026)
+i [nowy indeks decyzji](evidence/f0-low-cost-2026-10-10.json) mają pierwszeństwo
+przed wcześniejszym płatnym wariantem. **F0_OPEN**; wykonanie dashboardu i
+podłączenie agenta pozostają w osobnym F1 po odbiorze F0.
 
 - [Inwentaryzacja i pochodzenie dowodów](runtime-inventory.md)
 - [Kontrakty wyniku i korelacji](contracts.md)
 - [Polityka danych](data-policy.md)
 - [Bramki i plan odbioru](acceptance-plan.md)
+- [Konkretna karta wykonania brakujących prac F0](acceptance-plan.md#karta-wykonania-brakujących-prac-f0--10102026)
 - [Role i decyzje F0](ownership.md)
 - [Bezpieczne podsumowanie pomiaru z 04.10](evidence/f0-2026-10-04.json)
 - [Bezpieczny indeks odczytów z 06.10](evidence/f0-2026-10-06.json)
 - [Bezpieczny indeks ustaleń z 07.10](evidence/f0-2026-10-07.json)
 - [Aktualne wybory na podstawie delegacji Igora](ownership.md#wybory-na-podstawie-delegacji-igora--07102026)
 - [Bezpieczny indeks wyborów i katalogu cen z 07.10](evidence/f0-decisions-2026-10-07.json)
-- [Aktualizacja płatnego wariantu i odczyty z 10.10](evidence/f0-2026-10-10.json)
+- [Historyczny płatny wariant i odczyty z 10.10](evidence/f0-2026-10-10.json)
+- [Aktualny wariant oszczędny i zakres agenta](evidence/f0-low-cost-2026-10-10.json)
 - [Kolektor tylko do odczytu](../../scripts/ops/collect-runtime-inventory.mjs)
 - [Przykład staging](../../ops/observability/environments/staging.example.yaml) / [production](../../ops/observability/environments/production.example.yaml)
 
@@ -91,9 +102,10 @@ kopie na posiadanym urządzeniu i lokalny izolowany staging. Igor zadeklarował
 komputera, bez pomiaru produkcji lub wykonania kopii. Cena 39,19 EUR dotyczy
 wcześniejszego wariantu zakupowego; zakup nie jest warunkiem samym w sobie.
 Pojemność pełnej retencji i działający staging pozostają niezweryfikowane;
-G03/G09 nadal FAIL. Wiadomości Igora z 10.10 przywracają płatny wariant
-chmurowy jako główny; posiadany sprzęt pozostaje możliwością dodatkowej
-kopii/testów, bez dowodu wykonania.
+G03/G09 nadal FAIL. Wcześniejsze wiadomości z 10.10 przywróciły płatny
+wariant chmurowy, następnie Igor odrzucił koszt 73,19 EUR. Obecny kierunek
+darmowej diagnostyki i lokalnego stagingu opisano na początku dokumentu;
+żaden z wyborów nie jest dowodem wykonania.
 
 Na prośbę Igora prompt do drugiego chatu powstanie po rzeczywistym odbiorze
 F0, z jego dowodami i konkretną wersją materiału. F1 nie rozpoczęto.

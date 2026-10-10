@@ -30,14 +30,15 @@ Dokument jest samodzielnym planem.
 TEST-01…TEST-07 poniżej są lokalnymi identyfikatorami przyszłych testów;
 nie odsyłają do innych raportów.
 
-**Aktualizacja 10.10:** Igor wybiera płatny wariant chmurowy i wymaga pełnej
-historii błędów faktur z przyszłym odczytem dla agenta. [Aktualne warunki](ownership.md#płatny-wariant-i-pełna-historia-błędów--10102026)
-zastępują darmowy kierunek jako główny. G04/G05 obejmują przyjęte uzupełnienie
-kontraktu v1.1/polityki z 10.10; wykonanie i testy nie są zaliczone. Sentry
-Team jest wybranym celem, aktywny plan niezweryfikowany. Staging 16 GiB ma
-blokadę budżetu/dostępności, brak nowych dowodów pełnych kopii. Dzisiejszy
-kolektor nie odczytał runtime. [Indeks](evidence/f0-2026-10-10.json) rozdziela
-odczyty i decyzje; F0 pozostaje otwarte.
+**Aktualizacja 10.10 po zmianie budżetu:** darmowe Sentry Developer EU
+i PostHog Free EU, staging na posiadanym komputerze jako kandydat oraz
+rekomendowany osobny cel kopii BX11. [Aktualne warunki](ownership.md#darmowa-diagnostyka-i-tańsza-infrastruktura--10102026)
+zastępują płatny kierunek. Igor odrzucił 73,19 EUR netto/mies. po wcześniejszym
+wstrzymaniu zgody; nie traktować tej kwoty jako aktywnego upoważnienia.
+G04/G05 obejmują kontrakt v1.2/politykę z 10.10, z priorytetem dashboardu
+release i późniejszego agenta przygotowującego naprawy. Wykonanie i testy
+nie są zaliczone. [Nowy indeks](evidence/f0-low-cost-2026-10-10.json) rozdziela
+decyzje, odczyt lokalny i wcześniejsze dowody; F0 pozostaje otwarte.
 
 Statusy: `PASS` wymaga dowodu pełnego kryterium; `PARTIAL` to niepełny dowód;
 `FAIL` stwierdzone niespełnienie; `BLOCKED` brak dostępu do sprawdzenia;
@@ -46,6 +47,93 @@ określił odczyt runtime jako „PASS z zastrzeżeniami”; w szerszych kryteri
 F0-G01/F0-G02 mapujemy go na PARTIAL. Nie zmieniamy warunku bramki po pomiarze.
 Biblioteka, przykład konfiguracji i zdrowy HTTP nie są odbiorem funkcji.
 
+## Karta wykonania brakujących prac F0 — 10.10.2026
+
+**Przygotowany zakres, niewykonany.** Zakupy i czynności operacyjne są
+wstrzymane. Obecne zlecenie obejmuje zmianę planu na tańszy wariant, bez
+instalacji lokalnej VM, zmian serwerów, bootstrapu baz lub F1. Wykonanie
+wymaga dostępu i wznowienia odpowiedniego zakresu. Karta nie jest dowodem
+wykonania. Igor koordynuje; Codex przygotowuje materiał i sprawdza dowody.
+Bartosz nie jest automatycznym wykonawcą ani adresatem nowych zleceń.
+
+1. **Dostęp i odczyt przed zmianami.** Dostęp do app-1, ops-1 i db-1
+   zgodnie z prywatnym `infra.env` i zweryfikowanymi kluczami hostów;
+   istniejący klucz wskazany przez `K`.
+   `APP`, `OPS`, `DB`, `PGC`, `RESTC`, `APP_PREFIX`, `WORKER_PREFIX` pochodzą
+   z tego pliku i odczytu; wartości pozostają poza Git. Klucz trzeba odblokować
+   lokalnie, a klucze hostów niezależnie zweryfikować. Nie przesyłać hasła ani
+   klucza do czatu. Alternatywa: datowany odczyt uprawnionego operatora.
+   Przed wykonaniem ustalić bieżące kontenery/obrazy, SHA, health, wersje,
+   rozmiary DB i obu MinIO, wolne miejsce, buckety, wersjonowanie, referencje
+   dokumentów oraz dostępność konfiguracji i kluczy odzyskiwania. Nazw z
+   historycznego runbooka nie używać jako aktualnych parametrów wykonania.
+2. **G09: pełne kopie; proponowany cel BX11 HEL1 (Finlandia, 1 TiB).** Trzy oddzielne
+   repozytoria restic: pełna baza na db-1 wraz z wymaganymi globals/rolami;
+   MinIO aplikacji na ops-1; MinIO Supabase na db-1. Dump bez filtrów
+   schematów obejmuje m.in. auth, storage, pg-boss i historię migracji.
+   Szyfrowanie po stronie klienta, osobne minimalne poświadczenia oraz
+   zaszyfrowany pakiet konfiguracji i kluczy odzyskiwania przechowywany
+   niezależnie. Harmonogram 00:30 UTC, retencja 7 dziennych / 4 tygodniowe /
+   12 miesięcznych. Pierwszy spójny zestaw wymaga kontrolowanego okna
+   stabilizacji zapisów/usuwania; transakcja pg_dump nie obejmuje S3.
+   Okno i wpływ na aplikację ustala się przed jego wykonaniem. Nie kasować
+   danych źródłowych. Nie zaliczać sukcesu samego lokalnego dumpa. Alternatywą
+   bez nowego abonamentu jest urządzenie Igora: dopiero po potwierdzeniu
+   lokalizacji w UE, dostępności w porze kopii, miejsca na pełną retencję
+   i odseparowania kopii od VM stagingu. Parametry źródeł i ich przyrost
+   nadal wymagają odczytu; wolny dysk nie dowodzi pojemności dla 7/4/12.
+3. **Dowód G09.** Prywatny manifest wspólnego przebiegu: zakres, UTC,
+   wersje, rozmiary i SHA-256 dumpa/globals, liczby i rozmiary obiektów obu
+   MinIO, kompletność obiektów referowanych z DB, trzy snapshoty off-host,
+   wynik odczytu/weryfikacji kopii i dostępność materiałów odzyskiwania
+   z niezależnego klienta. Do tego harmonogram, reguły retencji oraz
+   procedura izolowanego restore. Sygnał pełnego sukcesu dopiero po
+   wszystkich elementach. TEST-07 restore pozostaje osobnym wykonaniem.
+4. **G03 po pełnych kopiach: lokalna VM Linux na komputerze Igora.**
+   Własna sieć, DB/auth, pg-boss, Redis/SRH, magazyny, web/worker, klucze
+   i odbiorcy. Sprzęt jest kandydatem: około 32 GiB całkowitego RAM i
+   około 642 GiB wolnego miejsca na drugim dysku, ale w odczycie 10.10
+   dostępne tylko około 10 GiB RAM. Najpierw zwolnić pamięć i zmierzyć
+   cały zestaw wraz z zapasem dla hosta; nie zaliczać G03 na podstawie
+   samej specyfikacji komputera. Wyłącznie dane syntetyczne,
+   KSeF TEST, Stripe test i kontrolowana wysyłka. Przygotowanie wymaga
+   bootstrapu schematu pustej bazy **wyłącznie stagingu**, w tym DDL pg-boss,
+   oraz uruchomienia web/workera. Nie wgrywać produkcyjnej DB ani kluczy.
+   VM nie dostaje produkcyjnych sekretów ani repozytoriów kopii przez
+   współdzielone katalogi. Wskazać okna dostępności; wyłączony komputer
+   nie jest całodobowym stagingiem ani awarią produkcji. Dowód: datowany
+   SHA/obrazy, działający web/worker, rozdzielenie zasobów i integracji,
+   zmierzony zapas zasobów. Sam WSL lub dev server nie zalicza G03.
+5. **G01/G02/G07/G08 i odbiór.** Uzupełnić datowany runtime, konfigurację
+   sieci/Kuma/checków oraz rzeczywiste konto/plan/retencję/quota/uprawnienia.
+   Dla podstawowego monitorowania F0 odczytać bieżący routing i potwierdzić
+   docelowy odbiór przez Igora; brakujące ustawienia kanałów/checków wymagają
+   objęcia zakresem operacyjnym. Nowej instrumentacji faktur i lifecycle
+   alarmów nie implementować w tej karcie. Jawnie pozostawić brak
+   gwarantowanego dyżuru i zastępstwa. Po komplecie dowodów Igor odbiera F0;
+   dopiero wtedy powstaje prompt do osobnego chatu F1.
+
+**Nowy plan kosztów:** narzędzia Sentry/PostHog 0 USD nowych abonamentów
+w potwierdzonym darmowym zakresie; staging na posiadanym sprzęcie 0 EUR
+nowego abonamentu. Rekomendowany BX11 to **3,20 EUR netto/mies.** według
+odczytu katalogu z 10.10, bez zamówienia. Wariant kopii lokalnej może mieć
+0 EUR nowego abonamentu po spełnieniu wskazanych warunków. Nie obejmuje to
+istniejącej produkcji, prądu, łącza, ewentualnego sprzętu/licencji ani
+pracy agenta AI. Budżet AI i nowy limit zakupów nie są ustalone. Nie
+uruchamiać płatnego trial, PAYG, Sentry Team, CPX42 ani dodatkowego B2.
+Historyczny pakiet 73,19 EUR był kosztem stagingu i kopii, nie dashboardu;
+został odrzucony. Publiczna oferta nie dowodzi aktualnych kosztów konta.
+
+**Przeszkoda w starej procedurze:** [backup-restore](../runbooks/backup-restore.md)
+opisuje wcześniejsze rclone/14 dumpów i nie obejmuje pełnego wspólnego
+zestawu obu MinIO. [db-backup.sh](../../scripts/hetzner/db-backup.sh) pomija
+transport off-host przy pustym `RCLONE_REMOTE`, po czym może wysłać heartbeat
+sukcesu. To wynik przeglądu kodu `686a465`, nie dowód aktualnego uruchomienia
+na serwerze. Procedury nie można przyjąć bez dostosowania jako wykonania
+G09; historyczny restore samej DB z 01.10 nie zalicza pełnego zestawu.
+Produkcja nie otrzymuje w tej karcie migracji ani wdrożenia aplikacji;
+restore i F1 pozostają poza zakresem.
+
 ## Bramki F0-G01–F0-G09
 
 | ID | Warunek odbioru | Stan, źródło i ograniczenie |
@@ -53,10 +141,10 @@ Biblioteka, przykład konfiguracji i zdrowy HTTP nie są odbiorem funkcji.
 | F0-G01 | Inwentarz env/usług ze źródłem, timestamp i punktem odczytu; rzeczywisty SHA web/worker, wersje i tożsamość obrazów; lokalizacja MinIO. | **PARTIAL.** Historyczny pomiar 04.10: web/worker healthy na `ae87bdde93a636fcb2c48aef737e57a80a3315a7` o 11:21 UTC. Ten pomiar wskazuje MinIO aplikacji na ops-1, odrębne od MinIO Supabase na db-1, oraz lokalne Redis 7.2 i SRH na app-1. Próba SSH z 06.10 nie odczytała runtime; aktualny SHA/health oraz dokładne wersje Node i MinIO pozostają niezweryfikowane. Lokalne image ID nie są digestami registry; brak dowodu digestu registry nie został uzupełniony domysłem. |
 | F0-G02 | Health/restart/startup, limity, routing, log rotation, zegary oraz zakres read-only dołączone do inventory; konfiguracja kontroli dostępu udokumentowana prywatnie. | **PARTIAL.** Pomiar zasobów i usług z 04.10 jest przekazany prywatnie. API Hetznera z 06.10 potwierdza pełny odczyt reguł zapory i ich przypisanie do trzech hostów; szczegóły pozostają prywatne. Routing/ACL, reguły systemowe i niezależny monitoring nadal wymagają odbioru. Stan VM running nie dowodzi health kontenerów ani ciągłości dyżuru. |
 | F0-G03 | Działający staging z osobną DB/kolejką/storage i kluczami, syntetycznymi danymi, KSeF TEST, Stripe test oraz kontrolowanymi odbiorcami. Web i worker bez dostępu do produkcyjnych efektów. | **FAIL — staging nie istnieje.** Pomiar 04.10 i deklaracja 06.10 nie zostały zastąpione dowodem wykonania. W pierwotnej odpowiedzi z 07.10 wskazano Bartosza jako wykonawcę staging do 31.10.2026; obecnie koordynuje Igor, po pełnych kopiach i przed Closed Alpha, z oddzielnymi DB/kolejką/storage/kluczami, KSeF TEST i Stripe TEST. Termin i przyjęty zakres nie dowodzą działania ani izolacji; fault injection i aktywne PoC pozostają zablokowane. |
-| F0-G04 | Zatwierdzone wyniki, korelacja, deadline, kwalifikacja populacji i klasy plików z [contracts](contracts.md). | **PASS — przyjęcie kontraktu na podstawie delegacji Igora 07.10, uzupełnienie v1.1 z 10.10.** Wybrana wersja rozstrzyga populację, terminy, klasy wejścia, różnice C-22 i pełną historię zarejestrowanych błędów faktur. Nie zalicza implementacji ani TEST-01/TEST-02, które pozostają NOT RUN. |
+| F0-G04 | Zatwierdzone wyniki, korelacja, deadline, kwalifikacja populacji i klasy plików z [contracts](contracts.md). | **PASS — przyjęcie kontraktu na podstawie delegacji Igora 07.10, uzupełnienie v1.2 z 10.10.** Wybrana wersja rozstrzyga populację, terminy, klasy wejścia, różnice C-22, pełną historię zarejestrowanych błędów faktur i priorytet dashboardu release z późniejszym przygotowaniem napraw przez agenta. Nie zalicza implementacji ani TEST-01/TEST-02, które pozostają NOT RUN. |
 | F0-G05 | Zatwierdzone klasy danych, retencja, audit/source maps/holds/delete, tenant_ref, consent i uprawnienia z [data-policy](data-policy.md). | **PASS — przyjęcie polityki na podstawie delegacji Igora 07.10, uzupełnienie z 10.10.** Zasady obejmują kopie 7/4/12 oraz minimalny wpis każdego błędu w audycie faktury i ograniczony odczyt diagnostyki przez agenta. Aktywna konfiguracja, możliwości kont, zgodność eksportu i TEST-04 nie są zaliczone; TEST-04 NOT RUN. Nie uruchomiono nowego eksportu. |
 | F0-G06 | Przyjęty budżet narzutu, limity zasobów i metoda OFF/ON; baseline i klasy obciążenia określone. | **PASS — przyjęcie budżetu i metody na podstawie delegacji Igora 07.10.** Konkretne obrazy/limity do przyszłego porównania pochodzą z przyjętego G01/G02; brak aktualnego runtime blokuje rozpoczęcie testu, nie tworzy fikcyjnej wersji. Wykonanie baseline i TEST-05 pozostaje NOT RUN. |
-| F0-G07 | Dowód regionu istniejących usług oraz, osobno, rzeczywistego konta docelowego, planów/produktów, retencji/ingest/API, kosztów i uprawnień. | **PARTIAL.** Metadane EU/API 06.10 i historyczna deklaracja braku płatnych planów są częściowymi dowodami. Aktualny cel 10.10: Sentry Team EU, PostHog EU Free, Kuma i planowany Healthchecks; Datadog poza zakresem. Aktywne tier, quota, retencje, PAYG/koszty i dostęp kont nadal wymagają odczytu; billing 403 nie ma ustalonej przyczyny. Publiczne oferty i katalog cen nie zastępują dowodów kont/usług ani zakupu. |
+| F0-G07 | Dowód regionu istniejących usług oraz, osobno, rzeczywistego konta docelowego, planów/produktów, retencji/ingest/API, kosztów i uprawnień. | **PARTIAL.** Metadane EU/API 06.10 i historyczna deklaracja braku płatnych planów są częściowymi dowodami. Aktualny cel po odrzuceniu kosztownego wariantu 10.10: Sentry Developer EU, PostHog EU Free, Kuma i planowany Healthchecks; Datadog poza zakresem. Budżet nowych abonamentów diagnostycznych 0 USD. Aktywne tier, quota, retencje i dostęp kont nadal wymagają odczytu; billing 403 nie ma ustalonej przyczyny. Nie przypisywać Free uprawnień Team ani aktywnego PostHog Error Tracking na podstawie publicznego cennika. Publiczna oferta i katalog cen nie zastępują dowodów kont/usług ani zakupu. |
 | F0-G08 | Przyjęte role, realny dyżurny, godziny i coverage gaps; odbiorca oraz okno testu telefonu; decyzja o niezależnym lifecycle alarmu. | **PARTIAL — decyzje przyjęte, realna gotowość i routing niezweryfikowane.** Igor wybrany jako główny docelowy odbiorca; Telegram/email dla krytycznych, Slack roboczo, raport 06:00 Europe/Warsaw. Brak gwarantowanych godzin reakcji i zastępcy pozostaje jawny. Lifecycle, watchdog i okno przyszłego testu zapisano w ownership, bez konfiguracji kont lub potwierdzonego dyżuru. Historyczny Bartosz 08:00–22:00 best effort nie staje się fallbackiem. TEST-06 NOT RUN. |
 | F0-G09 | Pełna kopia bazy i wymaganych obiektów poza hostem źródłowym; harmonogram, ostatni artifact/hash, retencja i procedura izolowanego restore obejmująca auth/storage oraz stan operacji. | **FAIL.** Pomiar 04.10 i deklaracja 06.10 wskazują brak pełnego pg_dump off-host i kopii MinIO aplikacji. Odpowiedź przekazana 07.10 przyjmuje docelowo codzienny dump całej DB, w tym auth/storage, kopie obu MinIO, szyfrowany zewnętrzny cel EU poza hostami źródłowymi, retencję 7 dziennych / 4 tygodniowe / 12 miesięcznych i comiesięczny test restore; wcześniej wskazano Bartosza jako wykonawcę, obecnie koordynuje Igor. Nie ma nowego dowodu wykonania. Siedem obrazów backupu dysku DB odczytanych 06.10 nie dowodzi pełnego zakresu, spójności ani restore. TEST-07 NOT RUN. |
 

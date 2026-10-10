@@ -2,8 +2,10 @@
 
 Stan: **polityka wybrana 07.10.2026 w ramach delegacji Igora** „Wybierz wszystko
 co uważasz za najlepsze”, z uzupełnieniem **10.10.2026** o pełną historię
-błędów faktur, przyszły odczyt agenta i docelowy Sentry EU Team. Wybór
-obejmuje poniższe aktualne wartości i granice, w tym
+błędów faktur, przyszłego agenta i aktualny wariant **Sentry Developer Free EU /
+PostHog Free EU**. Dalsze zlecenie Igora „rób” z 10.10 dotyczy dostosowania F0
+do darmowych narzędzi; zastępuje wcześniejszy wybór Team, bez zmiany kont.
+Wybór obejmuje poniższe aktualne wartości i granice, w tym
 wcześniej przyjętą politykę kopii. Zastępuje propozycje z 04.10; nie jest
 odczytem aktywnej konfiguracji. **G05: PASS dla przyjęcia polityki**, bez
 zaliczenia jej implementacji, TEST-04 lub całego F0. Źródło delegacji i zakres
@@ -61,12 +63,14 @@ kodu i wdrożonych bundle z tą polityką pozostaje do osobnego sprawdzenia.
 | Attempts / steps | 90 dni online. | Usunięcie szczegółów nie usuwa minimalnego wyniku, wpisu błędu faktury i przejść recovery w audycie; otwarte sprawy mogą mieć jawny hold. |
 | Metryki / SLO | 13 miesięcy trendu z jawną agregacją rozdzielczości. | Dowód tier, rozdzielczości i expiry; agregat nie zastępuje pełnej historii operacji. |
 | Logi | Początkowo lokalne zredagowane logi do 7 dni, dodatkowo ograniczone rozmiarem poniżej; wybrane pakiety incydentów 90 dni. Centralny eksport logów poza wybranym zakresem. | Zastępuje propozycję 30 dni centralnych logów; nie zakłada darmowej wyszukiwarki logów. Przedłużenie tylko jako prywatny pakiet incydentu z właścicielem, powodem i terminem. |
-| Spans / trace i diagnostyczny RUM | Spans docelowo do 30 dni w wybranym 10.10 Sentry EU Team; diagnostyczny RUM do 30 dni tylko w odrębnie potwierdzonym zakresie produktu. | Aktywny plan, retencja i limity wymagają G07 przed aktywacją. Brak spanów po sampling/expiry nie oznacza braku operacji lub błędu. |
-| Error events Sentry | Docelowa historia błędów do 90 dni w wybranym 10.10 Sentry EU Team; aktywny plan i quota pozostają niezweryfikowane. | Publiczna oferta i wybór planu nie są odczytem konta. Sentry nie zastępuje pełnej minimalnej historii błędów w audycie faktury. |
+| Spans / trace i diagnostyczny RUM | Spans w Sentry Developer Free EU: docelowo maks. 30 dni i nie więcej niż potwierdzona efektywna retencja produktu; publiczna oferta 5 mln spanów/mies. Diagnostyczny RUM tylko w odrębnie potwierdzonym zakresie. | Retencja/query window tej klasy, aktywny tier i quota wymagają G07. Nie przenosić warunków Team na Free. Brak spanów po sampling/expiry nie oznacza braku operacji lub błędu. |
+| Error events Sentry | Sentry Developer Free EU: publiczna oferta 5 tys. błędów/mies. i retencja event data 30 dni. Aktywny tier, quota i ustawienia konta niezweryfikowane. | Publiczna oferta i wybór nie są odczytem konta. Po quota/filtracji/expiry mogą występować luki; Sentry nie zastępuje pełnej minimalnej historii błędów w audycie faktury ani lokalnych szczegółów na 90 dni. |
 | Source maps | Cały okres używania bundle web/worker oraz 90 dni po wycofaniu ostatniego procesu na danym SHA. | Własne prywatne archiwum artefaktów; retencja uploadu w Sentry osobno do sprawdzenia. Nie publikować map; sam upload nie dowodzi symbolikacji. |
-| Product analytics | Jeden rok według wybranego PostHog Free EU; replay 0, autocapture i heatmaps wyłączone. | Odrębna klasa od 30-dniowego RUM. Opt-in/opt-out; aktualna roczna retencja konta i workflow usuwania do potwierdzenia. |
+| Product analytics | PostHog Free EU: 1 mln events/mies., 1 projekt i retencja analytics 1 rok według publicznej oferty; replay 0, autocapture i heatmaps wyłączone. | Opt-in/opt-out; aktywny plan, retencja i workflow usuwania do potwierdzenia. Odrębna klasa od RUM i error tracking; nie kopiuje treści faktur. |
+| Error tracking PostHog — warunkowo | Publiczna darmowa quota 100 tys. exceptions/mies.; przyszły zredagowany eksport dopiero po odbiorze zakresu i testu. | Efektywna retencja tej klasy i uprawnienia wymagają G07. Nie zakładać, że roczna retencja analytics rozstrzyga każdą klasę. Obecne capture_exceptions=false nie jest tutaj zmieniane. |
 | Lokalne logi / bufory | Logi: 10 MiB × 5 plików na kontener, maks. 7 dni. Bufor: maks. 64 MiB RAM i 256 MiB dysku na host, wiek do 30 min. | Pierwszy osiągnięty limit usuwa najstarszą telemetrię; drop/expiry raportowane. Sama rotacja Dockera nie realizuje limitu wieku. Required journal/audit nie korzysta z tego zawodnego bufora. Pokrycie 30 min peak wymaga pomiaru. |
 | Pakiety incydentów / dowody testów | 90 dni; dłużej tylko jawny hold. | Zredagowane dowody, przegląd aktywnych holdów, brak surowych plików prywatnych w repo. |
+| Katalog zweryfikowanych rozwiązań | Minimalny zredagowany wzorzec, przyczyna, release/test/PR, wynik i referencja przeglądu człowieka; bez danych faktur. | Pakiety źródłowe podlegają retencji 90 dni/hold powyżej. Po ich expiry katalog ujawnia brak dowodu; ponowne zastosowanie wymaga sprawdzenia wersji i testu. Nie jest treningiem modelu. |
 | Kopie zapasowe | Docelowo przyjęte w odpowiedzi przekazanej 07.10: codzienny pełny pg_dump DB i kopie obu MinIO; 7 dziennych / 4 tygodniowe / 12 miesięcznych; comiesięczny test restore. Igor koordynuje; wcześniej wskazano Bartosza jako wykonawcę operatorskiego. | Szyfrowany zewnętrzny cel EU poza hostami źródłowymi. Codex przegląda dostępne dowody. Brak dowodu wdrożenia, sukcesu pełnej kopii i restore; G09 FAIL, TEST-07 NOT RUN. Snapshot JSON i obrazy dysku DB nie dowodzą całego zakresu. Restore ponownie stosuje TTL/hold i ACL. |
 
 Po zatwierdzeniu rejestr każdej klasy wskazuje właściciela, region/lokalizację,
@@ -98,6 +102,20 @@ wygasają po 90 dniach według powyższej polityki, journal operacji/SLI po
 Widok ujawnia pokrycie okresu/etapów, świeżość i braki: utraconych lub nigdy
 niezapisanych zdarzeń nie uznaje się za odtworzone.
 
+**Luka implementacyjna, przegląd repo `686a465` z 10.10:**
+[runner cleanup](../../lib/jobs/runners/cleanup-audit-logs.ts) przekazuje
+retencję 12 miesięcy do `cleanup_old_audit_logs`. Ostatnia definicja w
+[migracji 00052](../../supabase/migrations/00052_audit_logs_immutable_trigger.sql)
+usuwa wszystkie starsze wpisy `audit_logs`, bez rozdzielenia finansowych
+i administracyjnych lub ochrony hold. Migracja 00104 zmienia uprawnienia,
+nie tę logikę. To nie spełnia przyjętej polityki 10 lat dla minimalnej
+historii błędów faktur. Nie odczytano zastosowanych migracji, aktywności
+harmonogramu, faktycznych usunięć ani dodatkowych archiwów produkcji.
+G05 PASS dotyczy decyzji o polityce; obecnego cleanup nie uznaje się za jej
+implementację. Rozdzielenie klas retencji i zabezpieczenie historii są
+wymaganiem późniejszej implementacji, bez uruchamiania cleanup lub migracji
+w ramach tego odczytu F0.
+
 Przyszły agent deweloperski korzysta z osobnej tożsamości i ograniczonego
 interfejsu **tylko do odczytu zredagowanej diagnostyki**. Serwer wyznacza
 dopuszczony zakres tenantów z uprawnień tej tożsamości i sprawdza własność
@@ -113,22 +131,52 @@ dowodu. Poza własnym systemem referencje są pseudonimowe, mapowanie zostaje
 lokalnie. Pakiet nie zawiera XML/PDF/UPO, NIP, nazw, kwot, danych kontaktowych,
 credentials, surowych odpowiedzi SDK lub `Error.cause`. Agent nie dostaje
 service-role, bezpośredniego SQL/SSH ani akcji operatora; może analizować
-udostępnione dowody i formułować oznaczone hipotezy. Tekst błędu, dokumentu
+udostępnione dowody i formułować oznaczone hipotezy. Tożsamość diagnostyczna
+nie ma uprawnień Git. Odrębny agent/zakres Git może później przygotować test
+regresji na syntetycznych danych, patch na izolowanej gałęzi i draft PR;
+nie dostaje zapisu do produkcji ani automatycznego merge/deploy. Limit kosztu
+i wywołań AI pozostaje nieustalony, bez uruchomienia agenta w F0. Tekst błędu, dokumentu
 lub załącznika jest danymi, **nie instrukcją do wykonania**. Zewnętrzna usługa
 otrzymuje tylko zaakceptowany zredagowany zakres po sprawdzeniu jej tożsamości,
 uprawnień i granic przetwarzania; nowy wymóg nie upoważnia eksportu dokumentów.
 
-Sentry EU Team jest nowym wyborem docelowym z 10.10: historia błędów do 90 dni,
-spans do 30 dni. Zastępuje wybór Developer i 30-dniowych error events z 07.10,
-bez zmiany historycznej deklaracji o braku płatnych planów. Źródła i zakres
-wyboru opisuje [ownership](ownership.md). Aktywny plan, quota, retencje,
-rozliczenia i konfiguracja nie zostały tu zweryfikowane; G07 nadal PARTIAL.
-Sentry może filtrować, tracić lub wygaszać zdarzenia i nie jest pełnym ledgerem.
+Aktualny wybór 10.10 to **Sentry Developer Free EU i PostHog Free EU**;
+wcześniejszy wybór Sentry Team z tego dnia jest zastąpiony w zakresie planu,
+nie zmieniając historycznej deklaracji o braku płatnych planów. Nie dokonano
+zakupu, zmiany planu lub aktywacji funkcji. Źródło decyzji i granice zapisuje
+[ownership](ownership.md). Publiczna oferta Sentry Developer opisuje jednego
+użytkownika, 5 tys. błędów i 5 mln spanów/mies., 10 custom dashboards, email
+alerts i MCP access; nie przypisujemy mu API/integracji z wyższego tier
+([cennik](https://sentry.io/pricing/), odczyt 10.10).
+[Retencja event data Free](https://www.sentry.help/en/articles/13964940-how-long-are-my-organization-s-audit-logs-stored)
+wynosi 30 dni; audit log organizacji dostawcy jest odrębną klasą i nie zastępuje
+audytu faktury. [Developer nie oferuje PAYG](https://www.sentry.help/en/articles/13965037-can-i-set-up-an-on-demand-pay-as-you-go-budget-for-my-free-developer-plan).
+Dostępność [regionu EU także na Free](https://sentry.io/changelog/data-storage-location-in-germany-is-generally-available/)
+nie dowodzi ustawień konkretnego konta lub wszystkich granic przetwarzania.
 
-W F0 przyjmujemy kontrakt danych i granice dostępu. Dashboard, instrumentacja
-pełnego śladu, podłączenie i test autoryzacji agenta należą do **F1 po
-rzeczywistym odbiorze F0**. Nie przyznano dostępu, nie podłączono agenta i nie
-uruchomiono testu; TEST-04 pozostaje NOT RUN.
+[Cennik PostHog](https://posthog.com/pricing), odczyt 10.10, potwierdza osobne
+miesięczne quota: 1 mln analytics events i 100 tys. exceptions, jeden projekt
+oraz roczną retencję analytics na Free. Bez płatnego rozszerzenia dodatkowe
+zdarzenia po limicie są odrzucane; stan/drop/freshness muszą być jawne.
+Error tracking jest warunkowym celem F1 po redakcji i teście rzeczywiście
+wysłanych danych; nie włączamy automatycznie capture_exceptions, replay,
+autocapture ani eksportu dokumentów. Limit 100 tys. nie oznacza obowiązku
+kopiowania błędów lub danych finansowych do dostawcy.
+
+„Uczenie” agenta to katalog zredagowanych przypadków i zweryfikowanych przez
+człowieka rozwiązań: przyczyna, test, wersja/PR i źródło wyniku. Nie jest to
+trening modelu ani powielanie danych faktur. Hipotezy i nieudane naprawy są
+jawnie oznaczone; kolejne użycie rozwiązania wymaga sprawdzenia wersji i testu.
+Aktywne plany, quota, retencje, rozliczenia i uprawnienia pozostają
+niezweryfikowane; **G07 nadal PARTIAL**. Sentry/PostHog mogą tracić lub wygaszać
+zdarzenia i nie są pełnym ledgerem. Lokalne attempts/pakiety diagnostyczne
+na 90 dni są osobną polityką, nie gwarantowaną retencją darmowego SaaS.
+
+W F0 przyjmujemy kontrakt danych i granice dostępu. Dashboard jest priorytetem
+pierwszego release F1; następnie agent analizuje przyczyny i przygotowuje test,
+patch oraz draft PR. Instrumentacja pełnego śladu, dashboard, agent i katalog
+należą do **F1 po rzeczywistym odbiorze F0, w osobnym chacie**. Nie przyznano
+dostępu, nie podłączono agenta i nie uruchomiono testu; TEST-04 pozostaje NOT RUN.
 
 ## Sampling, dostawcy i dostęp
 

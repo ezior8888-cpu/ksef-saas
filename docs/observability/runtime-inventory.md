@@ -2,12 +2,43 @@
 
 Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.2026, 11:03–11:22 UTC. Odczyty API i próba SSH z 06.10 oraz decyzje/deklaracje z 07.10 mają osobne źródła; nie potwierdzają aktualnego runtime kontenerów. Igor prowadzi monitoring i odbiera F0, a Codex wykonuje dostępne prace techniczne. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
 
+## Darmowy wariant i lokalny odczyt — 10.10.2026
+
+**U — najnowszy kierunek:** Igor odrzucił koszt 73,19 EUR netto/mies., po
+wstrzymaniu wcześniejszej zgody. Zlecił dostosowanie F0 do darmowych
+Sentry/PostHog i tańszej infrastruktury. Priorytetem jest dashboard podczas
+pierwszego release, następnie agent korzystający z historii zweryfikowanych
+napraw do przygotowania testów, poprawek i PR. Nie rozpoczęto F1 ani nie
+nadano dostępu agentowi. Nowy budżet zakupów i pracy AI nie jest ustalony;
+zakupy i czynności operacyjne pozostają wstrzymane.
+
+**P — odczyt lokalny 11:57:46.742–11:57:48.169 UTC:** 31,75 GiB całkowitego
+RAM, 10,08 GiB dostępnego w chwili odczytu, 12 rdzeni / 20 wątków. Na
+rozważanym drugim dysku jest 641,77 GiB wolnego miejsca. Wyciąg prywatny:
+SHA-256 `3da65506f06777a9fdddb3835ab6d764f07a927f2098c6817a7bdaa388b7b36f`.
+To odczyt komputera, nie test Linux VM, Docker Engine lub stagingu.
+Nie uruchomiono usług i nie zmieniano ustawień. Lokalizacji urządzenia
+w UE, nocnej dostępności i wolumenu produkcyjnych kopii nie potwierdzono.
+Plan stagingu wymaga zwolnienia RAM i pomiaru całego zestawu; plan lokalnej
+kopii wymaga także obliczenia pojemności pełnej retencji. Nie zakładać,
+że obecny wolny dysk pomieści jednocześnie oba zakresy z zapasem.
+
+**D — wybór, nie pomiar kont:** Sentry Developer EU i PostHog Free EU
+z budżetem nowych abonamentów 0 USD. Lokalna VM jest kandydatem stagingu;
+BX11 HEL1 to rekomendowany tani cel kopii (3,20 EUR netto/mies. według
+odczytu katalogu 07:20 UTC poniżej), bez zakupienia. Ta cena nie obejmuje
+istniejącej produkcji i AI. [Warunki](ownership.md#darmowa-diagnostyka-i-tańsza-infrastruktura--10102026)
+i [nowy indeks](evidence/f0-low-cost-2026-10-10.json) zastępują wcześniejszy
+płatny wybór, zachowując jego odczyty jako historyczne. Ograniczenia dostępu
+SSH/paneli opisane poniżej nadal pozostają ostatnim uzyskanym dowodem;
+nie powtarzano tych prób. **F0_OPEN, G03/G09 FAIL**, bez nowego odbioru.
+
 ## Wymaganie jakościowe i odczyty — 10.10.2026
 
-**U — aktualny kierunek:** Igor wraca do płatnego wariantu chmurowego i wymaga
+**U — wcześniejszy kierunek, zastąpiony powyżej:** Igor wrócił do płatnego wariantu chmurowego i wymagał
 dashboardu wszystkich błędów faktur oraz przyszłego odczytu diagnostyki przez
-agenta deweloperskiego. [Wybór](ownership.md#płatny-wariant-i-pełna-historia-błędów--10102026)
-przyjmuje Sentry Team EU i chronioną historię bez sampling, rozdzieloną od
+agenta deweloperskiego. [Historyczny wybór](ownership.md#płatny-wariant-i-pełna-historia-błędów--10102026)
+przyjmował Sentry Team EU i chronioną historię bez sampling, rozdzieloną od
 bieżącego stanu faktury. To wymaganie i decyzja, bez wykonania dashboardu,
 nadania dostępu, aktywacji abonamentu lub rozpoczęcia F1. Wcześniejsze oceny
 płatnego/darmowego wariantu pozostają datowanymi zapisami historycznymi.
@@ -38,6 +69,26 @@ nowych dowodów. Odczyt CI potwierdził 11/11 SUCCESS dla `97527a3`; CI nie
 potwierdza runtime, kopii ani staging. Historyczne indeksy nie zostały
 zmienione. **F0_OPEN, G03/G09 FAIL**, wszystkie TEST NOT RUN. Nie wykonano
 zakupów, zmian serwerów/kont, migracji, wdrożeń, restore, alertów lub F1.
+
+### Kontynuacja odczytu dostępu — 10.10.2026
+
+**P — lokalny odczyt 09:37:56.231 UTC:** klucz nadal zaszyfrowany, agent
+SSH bez tożsamości, brak wpisów known_hosts app-1/ops-1; wpis db-1 obecny.
+Nie wykonano kolejnego połączenia SSH ani zmian konfiguracji. To kontrola
+lokalnych warunków dostępu, nie uwierzytelnienie lub pomiar serwerów.
+
+**P — panele kont, odnotowane o 09:43:46 UTC:** wejście na panel Sentry
+przekierowało do logowania organizacji; PostHog EU do `/login`.
+Brak zalogowanej sesji w użytej przeglądarce. Nie odczytano billing, planów,
+retencji lub ról i nie zmieniano ustawień. Nie dowodzi to braku kont ani
+uprawnień w innej sesji użytkownika.
+
+**R — przegląd repo `686a465`:** stary skrypt kopii może zgłosić sukces
+bez transportu off-host, a runbook nie opisuje całego zakresu obu MinIO.
+Dokładny zakres i dowody potrzebne do wykonania zawiera
+[karta F0](acceptance-plan.md#karta-wykonania-brakujących-prac-f0--10102026).
+Przegląd kodu nie potwierdza, że ten skrypt jest obecnie uruchamiany na
+serwerze. Stan G03/G09 nie zmienił się; nie rozpoczęto F1.
 
 ## Delegowane wybory i katalog cen — 07.10.2026
 

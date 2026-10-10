@@ -17,6 +17,93 @@ instalacji, migracji, wdrożeń, testów telefonu lub zmiany kont. Pełne dowody
 pozostają prywatne. [Inwentarz](runtime-inventory.md) rozdziela pomiar od
 deklaracji, a [plan odbioru](acceptance-plan.md) opisuje F0-G01–F0-G09.
 
+## Darmowa diagnostyka i tańsza infrastruktura — 10.10.2026
+
+**U — aktualna dyspozycja Igora:** Sentry i PostHog mają pozostać bezpłatne;
+dashboard błędów jest wymaganiem pierwszego wydania, po którym agent
+deweloperski przygotowuje naprawy. Igor odrzuca wariant infrastruktury
+73,19 EUR netto/mies. i wstrzymuje wcześniejszą zgodę zakupową. Nie znamy
+odrębnego czasu UTC tych wiadomości. Ta sekcja zastępuje poprzedni cel
+Sentry Team, rekomendację zakupu CPX42 oraz wcześniejsze limity i zgody
+zakupowe. **Nie ustanawiamy nowego budżetu infrastruktury ani AI.**
+Obecny zakres to plan i dostępne odczyty; zakupy, instalacje, zmiany kont
+lub serwerów, wdrożenia, migracje, restore i F1 pozostają wstrzymane.
+
+- **Diagnostyka: 0 USD nowych opłat Sentry/PostHog.** Docelowo Sentry EU
+  Developer i PostHog EU Free, bez płatnego quota, PAYG, trialu przechodzącego
+  w abonament lub rozszerzeń. Rzeczywiste tier, limity, retencja i dostęp
+  kont nadal wymagają dowodów G07; decyzja nie zmienia aktywnej subskrypcji.
+  Przekroczenie darmowego quota może ograniczyć telemetrię, więc brak danych
+  musi być widoczny. Bezpłatna chmura nie zastępuje pełnej własnej historii.
+- **Dashboard i agent w pierwszym planowanym wydaniu:** dashboard chronionej
+  historii błędów faktur pozostaje wymagany, z błędami przed POST, retry,
+  później naprawionymi i nadal otwartymi operacjami. Sukces nie usuwa historii;
+  pokrycie i braki są jawne. Przyjęte retencje oraz oddzielenie audytu od
+  ograniczonej telemetrii pozostają bez zmian. Następny krok agenta to
+  przygotowanie propozycji napraw na podstawie zredagowanego odczytu, z osobną
+  tożsamością, autoryzacją tenantów i audytem. Bez automatycznego wdrożenia,
+  rozszerzenia dostępu lub zakupu usług AI. Wykonanie dashboardu i podłączenie
+  agenta należą do osobnego chatu po rzeczywistym odbiorze F0; nie wykonano ich.
+- **Tańszy staging: posiadany komputer jako kandydat.** Wybieramy kierunek
+  osobnej lokalnej VM Linux dla syntetycznego stagingu, zamiast nowej VM
+  Hetznera. Docelowy punkt startowy to 4 vCPU, 16 GiB RAM i dysk 160 GB;
+  przydział wymaga zapasu dla systemu gospodarza i pomiaru całego zestawu.
+  **P — lokalny odczyt 10.10, 11:57:46.742–11:57:48.169 UTC:** 31,75 GiB RAM,
+  z czego tylko 10,08 GiB wolne, 12 rdzeni / 20 wątków. Obecny stan nie
+  pozwala uznać VM 16 GiB za gotową; najpierw potrzebne są zwolnienie RAM
+  przez właściciela i ponowny pomiar z zapasem, potem próba całego zestawu.
+  Nie kończymy procesów ani nie uruchamiamy VM. Historycznie WSL2 był
+  zatrzymany, działającego Docker Engine nie potwierdzono. Odczyt zasobów
+  nie potwierdza uruchomienia ani izolacji środowiska.
+  VM musi mieć własne DB/auth, kolejkę, Redis/SRH, storage, web/worker,
+  klucze i kontrolowanych odbiorców; KSeF TEST, Stripe test, dane syntetyczne.
+  Nie dostaje sekretów produkcji ani dostępu do katalogów kopii. Dev server
+  i sam WSL2 nie zaliczają G03. Potrzebne są działające web/worker, dowód
+  izolacji, zmierzony zapas i kontrolowana dostępność w oknach prac.
+  Sen, wyłączenie lub użycie komputera do innych zadań mogą przerwać testy;
+  komputer nie staje się produkcyjnym monitoringiem ani dyżurem 24/7.
+- **Kopie: preferowana mała propozycja BX11 HEL1 + restic.** Dzisiejszy
+  katalog z **07:20:56.151–07:20:56.777 UTC** potwierdził 1 TiB,
+  **3,20 EUR netto/mies.**, setup 0; to cena propozycji, bez zakupu i nowej
+  zgody na wydatek. [Indeks odczytu](evidence/f0-2026-10-10.json) i
+  [oficjalny katalog typów](https://docs.hetzner.cloud/reference/hetzner#storage-box-types)
+  wskazują źródło; przed ewentualnym zamówieniem cenę sprawdzamy ponownie.
+  Cel Finlandia pozostaje poza hostami źródłowymi DE i poza komputerem
+  stagingu. Trzy zaszyfrowane repozytoria obejmują pełną DB z globals/rolami,
+  MinIO aplikacji i MinIO Supabase. Zachowujemy 7/4/12, wspólny manifest,
+  weryfikację referencji i odczytu off-host, osobne klucze odzyskiwania,
+  harmonogram i procedurę izolowanego restore. Wspólny dostawca Hetzner
+  i brak WORM pozostają ograniczeniami; B2 jest odłożoną opcją jakościową,
+  nie bieżącym zakupem lub nową bramką G09.
+- **Kopie bez nowego abonamentu: wariant warunkowy.** Igor wcześniej
+  wskazał swój komputer, codzienną dostępność i 500 GB wolnego miejsca;
+  lokalizacja urządzenia w UE pozostaje do potwierdzenia.
+  **P — odczyt dysków w tym samym oknie 11:57:46.742–11:57:48.169 UTC:**
+  641,77 GiB wolne na rozważanym dysku i 185,43 GiB na systemowym. Wyciąg
+  i hash źródła opisuje [nowy indeks](evidence/f0-low-cost-2026-10-10.json).
+  Nie jest to nowy dowód lokalizacji
+  urządzenia w UE ani codziennej dostępności. Rozmiaru danych produkcyjnych
+  i ich przyrostu nadal nie odczytano; nie znamy zapasu na staging oraz
+  całą retencję kopii razem. Wariant lokalny może zastąpić propozycję BX11
+  dopiero po potwierdzeniu EU, pojemności pełnego kompletu z retencją i VM
+  oraz codziennych kopii z pełnym sukcesem nie starszym niż 26 h. Samo
+  500 GB zadeklarowane lub 641,77 GiB chwilowo wolne tego nie dowodzi.
+  Repo kopii pozostaje poza dyskami/katalogami udostępnionymi VM, z minimalnym
+  dostępem, szyfrowaniem i osobną kopią kluczy offline. Wspólny komputer
+  stagingu i kopii to wspólna domena utraty urządzenia, ransomware, zasilania
+  i dostępności; izolacja VM nie usuwa tego ryzyka. Lokalny cel nadal musi
+  spełnić pełne G09, a nie tylko przechować snapshot publicznego schematu.
+
+Plan ogranicza nowe opłaty: staging wykorzystuje posiadany sprzęt, chmurowa
+diagnostyka ma cel 0 USD, a 3,20 EUR netto za BX11 jest wyłącznie propozycją
+do ewentualnej późniejszej decyzji Igora. Prąd, łącze, istniejąca produkcja
+i używany plan agenta nie stają się darmowe. Nie przyjmujemy 45 EUR ani
+73,19 EUR jako aktualnie zatwierdzonego limitu i nie ustalamy nowego limitu AI.
+Nie pojawiły się nowe dowody uruchomienia stagingu lub pełnych kopii:
+**G03/G09 FAIL, G07 PARTIAL, F0_OPEN**, testy NOT RUN. Granica 31.10 dla
+stagingu pozostaje wcześniejszym celem planowania, nie dowodem wykonania
+ani nową obietnicą operatora. Igor nadal koordynuje i odbiera F0.
+
 ## Aktualne decyzje — przegląd kontynuacji 04.10.2026
 
 W pakiecie opublikowanym w [PR #225](https://github.com/ezior8888-cpu/ksef-saas/pull/225)
@@ -119,6 +206,10 @@ Nie obejmuje migracji, wdrożeń, restore ani zmian serwerów. Wskazanie w brief
 odbiorem F0. Numeracja faz briefu i etapów observability ma oddzielne znaczenie.
 
 ## Wybory na podstawie delegacji Igora — 07.10.2026
+
+**Zapis historyczny:** wybory zakupowe i kwoty w tej sekcji nie są aktualną
+zgodą ani limitem. Obowiązuje [najnowszy kierunek](#darmowa-diagnostyka-i-tańsza-infrastruktura--10102026);
+przyjęty zakres kopii, izolacji, kontraktów i retencji pozostaje wymagany.
 
 Źródło upoważnienia: wiadomość Igora **„Wybierz wszystko co uważasz za
 najlepsze”**, po przedstawieniu pełnej checklisty F0. Codex wybiera poniższy
@@ -284,6 +375,10 @@ TEST-01…TEST-05 nadal nie zostały odebrane. KSeF TEST pozostaje celowym wybor
 
 ## Wariant bez nowego abonamentu — ocena 07.10.2026
 
+**Ocena historyczna:** pomiary sprzętu i deklaracje pozostają źródłami z 07.10.
+Aktualny wybór lokalnego stagingu i warunków kopii opisano
+[na początku dokumentu](#darmowa-diagnostyka-i-tańsza-infrastruktura--10102026).
+
 **D — deklaracja:** po pytaniu „czy dałoby się to zrobić żeby było za darmo”
 Igor potwierdził urządzenie w UE dostępne codziennie, **500 GB wolnego miejsca**
 i że jest to komputer z Codexem. Nie jest to pomiar czasu dostępności ani
@@ -327,7 +422,13 @@ w tej sesji. Zakup nowych zasobów nie jest samodzielną bramką F0.
 
 ## Płatny wariant i pełna historia błędów — 10.10.2026
 
-**U — aktualna decyzja Igora:** „jeszcze robimy tą wersje płatną”, „musi być
+**Wariant zastąpiony późniejszą dyspozycją z tego samego dnia.** Sentry Team,
+CPX42 i wydatek 73,19 EUR nie są aktualnym wyborem ani zgodą zakupową.
+Wymaganie pełnej historii błędów i przyszłego ograniczonego odczytu agenta
+pozostaje aktualne; [bieżący plan](#darmowa-diagnostyka-i-tańsza-infrastruktura--10102026)
+wykorzystuje darmową diagnostykę i lokalny staging jako kandydat.
+
+**U — decyzja Igora w tym wcześniejszym wariancie:** „jeszcze robimy tą wersje płatną”, „musi być
 jak najlepsza”, po wymaganiu dashboardu wszystkich błędów faktur i odczytu
 dla agenta deweloperskiego. Wiadomości nie mają dostarczonego czasu UTC.
 W ramach wcześniejszej delegacji Codex przyjmuje poniższy kierunek jakościowy.
@@ -435,7 +536,8 @@ do publicznego rejestru.
 ## Dziesięć decyzji F0
 
 To bezpieczne streszczenia tematów z prywatnego inwentarza, uzupełnione
-odpowiedziami z 07.10. Stany rozdzielają uzgodnienie zakresu od wykonania;
+odpowiedziami z 07.10 i bieżącą dyspozycją z 10.10. Stany rozdzielają
+uzgodnienie zakresu od wykonania;
 opis wskazuje materiał do zatwierdzenia, nie polecenie wykonania.
 Zlecona przez Igora publikacja bieżącego pakietu nie przesądza docelowej
 organizacji odpowiedzialności i prywatnych dowodów.
@@ -443,13 +545,13 @@ organizacji odpowiedzialności i prywatnych dowodów.
 | ID / bramka | Decyzja i konkretny materiał | Stan |
 |---|---|---|
 | D01 / G01–G02 | Publicznie uzgodniony wyciąg; pełne odczyty i surowe odpowiedzi poza gitem, przegląd przez Codex, odbiór przez Igora. | GRANICA I ORGANIZACJA BIEŻĄCEGO PAKIETU USTALONE przez Igora; dowody nadal pozostają prywatne. |
-| D02 / G09 | Pełne kopie 7/4/12, BX11 HEL1 + restic, osobne repo/klucze, 00:30 UTC, comiesięczny izolowany restore. Dodatkowo rekomendowany B2 EU/Object Lock; planistyczny cel 09.10 upłynął bez dowodu wykonania. | WYBÓR PRZYJĘTY; B2 opcja jakościowa do osobnego wykonania. Zakres operatorski i dowody otwarte. G09 FAIL. |
-| D03 / G03 | Staging DE, 16 GiB: rekomendowany dostępny CPX42 przekracza limit 45 EUR dla VM+BX11; tańszy CX43 niedostępny. Własne DB/kolejka/storage/klucze, KSeF TEST i Stripe test; cel 23.10, granica 31.10 po kopiach. | KIERUNEK JAKOŚCIOWY PRZYJĘTY 10.10; pozyskanie VM BLOCKED budżet/dostępność, bez zakupu i dowodu izolacji. G03 FAIL. |
+| D02 / G09 | Pełne kopie DB/globals i obu MinIO, 7/4/12, osobne repo/klucze, 00:30 UTC, comiesięczny izolowany restore. BX11 HEL1 + restic za 3,20 EUR netto jest propozycją do osobnej zgody; lokalny cel bez abonamentu wymaga dowodów EU, łącznej pojemności i regularnych pełnych kopii. B2 odłożone. | ZAKRES KOPII PRZYJĘTY; zakup wstrzymany, lokalna gotowość nieudowodniona. G09 FAIL. |
+| D03 / G03 | Kandydat: osobna VM Linux na posiadanym komputerze, punkt startowy 4 vCPU / 16 GiB / 160 GB. Aktualnie wolne 10,08 GiB RAM nie potwierdza gotowości. Własne DB/auth/kolejka/storage/klucze, KSeF TEST i Stripe test, dane syntetyczne; po kopiach, granica planistyczna 31.10. | KIERUNEK LOKALNY WYBRANY 10.10; wymaga zwolnienia RAM, pomiaru pełnego zestawu, uruchomienia i dowodu izolacji w osobno autoryzowanym zakresie. Zakupy chmurowe wstrzymane, wcześniejszy limit 45 EUR nie obowiązuje. G03 FAIL. |
 | D04 / G01–G02 | Istniejący lokalny Redis/SRH na app-1, docelowo przypięte odczytane wersje/obrazy i osobny health; znaczenie `UPSTASH_*` bez zmiany. | POLITYKA PRZYJĘTA; konkretne aktualne wersje i konfiguracja wymagają odczytu, G01/G02 PARTIAL. |
 | D05 / G01–G02 | Dwa odrębne MinIO według historycznego pomiaru: aplikacja ops-1, Supabase db-1; wymagane wersje binarek, obrazy, health i pokrycie kopią. | POLITYKA PRZYJĘTA; brakujące pomiary pozostają otwarte, bez zmian istniejących identyfikatorów. |
 | D06 / G02/G08 | Miesięczny przegląd, kontrolowane aktualizacje po kopii/staging, brak auto-upgrade; MFA i minimalny dostęp administracyjny, przegląd co 30 dni. | POLITYKA PRZYJĘTA; aktywna konfiguracja i gotowość osób wymagają dowodów. |
 | D07 / G01/G04 | KSeF TEST w aplikacji produkcyjnej jest celowy na etapie przed startem; TEST → PROD pozostaje osobnym zadaniem go-live W15/S13. | INTENCJA ROZSTRZYGNIĘTA 07.10; bez przełączenia środowiska i bez odbioru całego G04. |
-| D08 / G07 | Aktualny cel 10.10: Sentry Team EU miesięcznie 29 USD, bez PAYG do pomiaru; PostHog EU Free, Kuma i planowany Healthchecks Hobbyist; Datadog poza zakresem. Historia faktur we własnym audycie. | ZAKRES PRZYJĘTY, bez zakupu; zastępuje wcześniejszy target Developer/0 USD. Dowody aktywnych kont/tier/retencji/quota/dostępu nadal niepełne. G07 PARTIAL. |
+| D08 / G07 | Bieżący cel 10.10: Sentry EU Developer i PostHog EU Free, 0 USD nowych opłat, bez PAYG i płatnych rozszerzeń; pełna historia faktur we własnym chronionym audycie. Kuma i planowany Healthchecks bez nowych zmian; Datadog poza zakresem. | DARMOWY KIERUNEK PRZYJĘTY; zastępuje wcześniejszy Sentry Team, bez zmiany kont. Dowody aktywnych tier/retencji/quota/dostępu nadal niepełne. G07 PARTIAL. |
 | D09 / G02/G06 | P0 pełne kopie; P1 staging i dowody dostępu/zasobów/monitorów; P2 kontrolowane utrzymanie systemu, usług, ACL i starszych ustawień. Instrumentacja F1 osobno. | PRIORYTETY PRZYJĘTE; nie wykonano zmian utrzymaniowych ani F1. |
 | D10 / G08 | Bez dodatkowego upoważnienia współpracownika lub zastępcy; nowe tymczasowe dostępy maks. 24 h, role indywidualne i minimalne. | ZAKRES PRZYJĘTY; aktualne role do prywatnego odczytu, brak zastępcy pozostaje jawny. |
 
