@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "status": "PREPARATION_ONLY_NOT_INSTALLED",
+  "coordinator": "one designated Linux coordinator, private configuration pending",
+  "schedule": { "timezone": "UTC", "start": "00:30", "finishBy": "03:30", "maximumDurationSeconds": 10800 },
+  "lock": { "scope": "all sources and all run IDs on the coordinator", "automaticStaleUnlock": false, "distributedLeaseImplemented": false },
+  "signal": {
+    "successAfter": "three verified source snapshots and separately verified final manifest, formal validation and private receipt",
+    "failure": "sanitized stage and code, no paths, object keys, tenant data or credentials",
+    "maximumAgeHours": 26,
+    "externalAbsenceMonitorRequired": true,
+    "receiver": "Igor",
+    "channelConfigured": false,
+    "paidMonitoringSubscriptionAuthorized": false
+  },
+  "retention": { "daily": 7, "weekly": 4, "monthly": 12, "unit": "whole verified common set including manifest snapshot", "deletionImplemented": false },
+  "activationPrerequisites": [
+    "Separate concrete execution and purchase approval where applicable",
+    "Authenticated inventory, runtime schema and revision review; all external storage mappings resolved",
+    "Bounded consistency procedure covering all writers, deleters, jobs and lifecycle rules",
+    "Private source clients, approved encrypted EU off-host target, independent reader and key escrow",
+    "Verified full recovery package including MinIO IAM/KMS, not only S3 getters",
+    "Measured disk space and run duration; private root with trusted stable parents",
+    "Linux process-group tests, real signal delivery and external absence detection",
+    "Only one coordinator enabled; failover requires confirming no old local or remote operation remains"
+  ]
+}

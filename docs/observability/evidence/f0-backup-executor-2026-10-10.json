@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "kind": "LOCAL_EXECUTOR_PREPARATION_AND_NARROW_READ_ONLY_FOLLOW_UP",
+  "baselineRevision": "214b807ed0c1f47a25b09337c484804c6ed1ff38",
+  "runtimeReferenceMapRevision": "face09c57f7de756546e58d092dbe6d280f93c91",
+  "authorization": "PREPARATION_ONLY_NO_PURCHASE_OR_CHANGES",
+  "implementation": {
+    "sequenceLibrary": true,
+    "databaseReferenceSql": true,
+    "hostVerifiedDatabaseCommandAdapter": true,
+    "resticAdapterAndIndependentByteRead": true,
+    "singleCoordinatorScopeLock": true,
+    "boundedCommandsAndCancellation": true,
+    "scheduleAndSignalPolicyPrepared": true,
+    "productionClientsConfigured": false,
+    "recoveryConfigurationCollected": false,
+    "consistencyProcedureExecuted": false,
+    "scheduleInstalled": false,
+    "realSignalSent": false,
+    "retentionDeletionImplemented": false
+  },
+  "localVerification": {
+    "tools": { "total": 357, "pass": 340, "skip": 17, "fail": 0, "platform": "Windows", "input": "synthetic_only" },
+    "typecheck": "PASS",
+    "changedModulesEslint": "PASS",
+    "fullVitest": { "total": 5680, "pass": 5647, "skip": 28, "fail": 5, "failedFiles": ["cennik-jedna-cena", "jeden-adres-kontaktowy", "rodo-usuniecie-konta-klucze"], "limitation": "unchanged Windows separators and CRLF/LF assertions; full local suite is not PASS" },
+    "redThenGreen": ["S3 abort and late response stream disposal", "verified payload descriptors", "runtime timeout uncertainty flag", "dump mutation between source hashing and snapshot inventory", "both MinIO index mutations after reference verification", "elapsed timeout retains lock when timers are delayed"],
+    "intermediateGitHubChecks": { "revision": "6cac526d0f026b9565388d0a2ff39e59d6594e35", "ciLinuxAndBuild": "PASS", "codeql": "FAIL_file-system-race_in_SSH_credential_check", "fix": "validate_already_open_descriptor_without_final_lstat", "suppressionAdded": false },
+    "newRevisionGitHubChecksAtRecordTime": "PENDING_PUBLICATION_AND_VERIFICATION"
+  },
+  "ssh": {
+    "roles": ["app-1", "ops-1", "db-1"],
+    "accessAndPreviouslyTrustedHostKeysVerified": true,
+    "hostKeyChecking": "strict",
+    "operation": "fixed confirmation string only",
+    "productionDataRead": false,
+    "runtimeVersionsRefreshed": false,
+    "limitation": "root remains technically privileged; read-only is the authorized scope"
+  },
+  "publicPrice": {
+    "source": "https://www.hetzner.com/storage/storage-box/bx11/?country=pl",
+    "method": "rendered_public_product_page_read_without_credentials",
+    "observedDate": "2026-10-10",
+    "product": "BX11",
+    "capacity": "1 TB",
+    "availableLocationsShown": ["FSN1", "HEL1"],
+    "monthlyNetEUR": 3.2,
+    "setupEUR": 0,
+    "label": "excl. VAT",
+    "accountTaxAndFinalPriceVerified": false,
+    "purchased": false,
+    "credentialTransmission": "proposed catalog-token use rejected by automatic approval; did not execute; public page used instead"
+  },
+  "gates": { "F0": "OPEN", "G03": "FAIL", "G09": "FAIL" },
+  "notExecuted": ["production_backup", "purchase", "server_change", "account_change", "staging", "restore", "migration", "deployment", "merge", "F1"]
+}

@@ -1,0 +1,320 @@
+{
+  "schema_version": 4,
+  "date": "2026-10-07",
+  "status": "F0_OPEN",
+  "scope": "public_allowlisted_delegated_choices_and_catalog_measurement_not_execution_evidence",
+  "recorded_at_utc": "2026-10-07T17:35:55Z",
+  "authority": {
+    "kind": "user_delegation",
+    "owner": "Igor",
+    "message": "Wybierz wszystko co uważasz za najlepsze",
+    "selection_by": "Codex",
+    "source": "current_F0_chat_user_message",
+    "source_message_time_utc": "not_supplied",
+    "reference_revision": "1712ff27006a8afb67f2e3d7bdc16a1c73582746"
+  },
+  "historical_evidence": [
+    "f0-2026-10-04.json",
+    "f0-2026-10-06.json",
+    "f0-2026-10-07.json"
+  ],
+  "decision_documents": {
+    "contracts": "../contracts.md",
+    "data_policy": "../data-policy.md",
+    "budget": "../acceptance-plan.md#wybrany-budżet-instrumentacji--f0-g06",
+    "roles_and_operating_choices": "../ownership.md#wybory-na-podstawie-delegacji-igora--07102026"
+  },
+  "choices": {
+    "backup": {
+      "provider": "Hetzner",
+      "product": "BX11",
+      "location": "HEL1",
+      "country": "FI",
+      "capacity_bytes": 1099511627776,
+      "method": "restic_client_side_encryption",
+      "separate_repositories": [
+        "full_database_and_required_globals",
+        "application_minio",
+        "supabase_minio"
+      ],
+      "retained_copy_counts": {
+        "daily": 7,
+        "weekly": 4,
+        "monthly": 12
+      },
+      "daily_start_utc": "00:30",
+      "daily_completion_target_utc": "03:30",
+      "stale_complete_success_critical_hours": 26,
+      "first_complete_backup_planning_target_local": "2026-10-09T16:00:00",
+      "time_zone": "Europe/Warsaw",
+      "monthly_trial_restore": "first_working_day_10:00_Europe_Warsaw_separately_authorized",
+      "capacity_warning_percent": 70,
+      "capacity_action_percent": 80,
+      "common_verified_manifest_required": true,
+      "database_object_transactional_consistency_claimed": false,
+      "key_recovery_owner": "Igor",
+      "same_cloud_provider_risk": true,
+      "immutable_or_append_only_claimed": false,
+      "ordered": false,
+      "executed": false
+    },
+    "staging": {
+      "provider": "Hetzner",
+      "product": "CPX32",
+      "location": "NBG1",
+      "country": "DE",
+      "architecture": "x86",
+      "vcpus": 4,
+      "memory_gib": 8,
+      "disk_gb": 160,
+      "monthly_net_ceiling_including_ipv4_eur": 40,
+      "swap_gib_for_sequential_builds_planned": 8,
+      "headroom_acceptance_required": true,
+      "separate_project_network_database_queue_storage_and_keys": true,
+      "ksef_environment": "test",
+      "stripe_mode": "test",
+      "synthetic_data_only": true,
+      "no_production_telemetry_keys": true,
+      "posthog_test_sink": "local_sink_or_export_disabled_not_cloud_ingest_proof",
+      "readiness_target_date": "2026-10-23",
+      "latest_agreed_date": "2026-10-31",
+      "depends_on_verified_full_backups": true,
+      "ordered": false,
+      "created": false
+    },
+    "selected_monitoring": {
+      "sentry": {
+        "region": "EU",
+        "target_tier": "Developer",
+        "paid_extension": false,
+        "active_tier_verified": false
+      },
+      "posthog": {
+        "region": "EU",
+        "target_tier": "Free",
+        "product_analytics_retention": "1_year_plan_defined",
+        "replay": false,
+        "autocapture": false,
+        "heatmaps": false,
+        "active_tier_verified": false
+      },
+      "uptime_kuma": {
+        "scope": "existing_monitors_configuration_review_not_new_install",
+        "configuration_verified": false
+      },
+      "healthchecks": {
+        "target_tier": "Hobbyist",
+        "scope": "opaque_platform_and_full_backup_success_heartbeats_only",
+        "public_check_limit": 20,
+        "public_history_entries_per_check": 100,
+        "customer_payload_allowed": false,
+        "account_verified": false,
+        "processing_chain_EU_guaranteed": false,
+        "same_hosting_provider_risk": true,
+        "activation_requires_account_and_metadata_scope_review": true
+      },
+      "datadog": {
+        "selected": false,
+        "excluded_from_current_G07_scope_by_owner_delegation": true,
+        "historical_entitlements_verified": false
+      },
+      "software_subscription_budget_usd": 0,
+      "new_backup_and_staging_monthly_net_budget_eur": 45
+    },
+    "alarm_policy": {
+      "intended_primary_recipient": "Igor",
+      "critical_channels": [
+        "Telegram",
+        "email"
+      ],
+      "working_channel": "Slack",
+      "daily_report_channels": [
+        "email",
+        "Telegram"
+      ],
+      "daily_report_local_time": "06:00",
+      "time_zone": "Europe/Warsaw",
+      "guaranteed_reaction_hours": "none_confirmed",
+      "substitute": "none_confirmed",
+      "bartosz_automatically_assigned_as_fallback": false,
+      "ack_target_minutes": 15,
+      "main_path_reminder_minutes": 15,
+      "main_path_email_fallback_minutes": 30,
+      "ack_expiry_minutes": 60,
+      "recovery_consecutive_fresh_successes": 3,
+      "no_data_state": "UNKNOWN",
+      "platform_heartbeat_interval_seconds": 60,
+      "platform_heartbeat_grace_seconds": 180,
+      "full_backup_heartbeat_period_hours": 24,
+      "full_backup_heartbeat_grace_hours": 2,
+      "healthchecks_native_ack_or_15_minute_reminders_claimed": false,
+      "future_phone_test_recipient": "Igor",
+      "future_phone_test_window": "30_minutes_workday_10:00_to_16:00_Europe_Warsaw_after_presence_confirmation",
+      "real_routing_and_delivery_verified": false
+    },
+    "data_policy": {
+      "journal_months": 13,
+      "financial_audit_calendar_years": 10,
+      "access_admin_audit_months": 13,
+      "attempts_days": 90,
+      "local_logs_max_age_days": 7,
+      "local_log_rotation_bytes_per_file": 10485760,
+      "local_log_rotation_files_per_container": 5,
+      "incident_packages_days": 90,
+      "error_events_target_days": 30,
+      "trace_and_diagnostic_rum_target_days": 30,
+      "source_maps": "active_bundle_lifetime_plus_90_days_after_last_process_retired",
+      "collector_buffer_ram_bytes": 67108864,
+      "collector_buffer_disk_bytes_per_host": 268435456,
+      "collector_buffer_max_age_minutes": 30,
+      "tenant_reference_to_saas": "omit_by_default",
+      "analytics_and_rum_consent": "explicit_opt_in_stop_after_withdrawal",
+      "delete_workflow_target_days": 30,
+      "hold_review_days": 30,
+      "ttl_review": "daily",
+      "request_sampling_target_percent": 10,
+      "required_domain_journal_and_audit_sampling_percent": 100,
+      "implementation_compliance_verified": false
+    },
+    "resource_budget": {
+      "cpu_work_normalized_increase_percent": 5,
+      "application_peak_rss_increase_mib_per_process": 128,
+      "total_process_rss_container_limit_percent": 80,
+      "crud_p95_increase": "max_5_percent_or_25_ms",
+      "crud_p99_increase": "max_10_percent_or_50_ms",
+      "job_p95_execution_increase": "max_5_percent_or_100_ms",
+      "collector_cpu_per_host": 0.25,
+      "collector_max_rss_mib_per_host": 256,
+      "profiles": {
+        "idle": "no_work",
+        "normal": {
+          "request_per_second": 1,
+          "accepted_jobs_per_minute": 1
+        },
+        "peak": {
+          "request_per_second": 5,
+          "accepted_jobs_per_minute": 10
+        }
+      },
+      "synthetic_tenants": 10,
+      "minimum_latency_samples_per_class": 1000,
+      "comparison": "same_measured_images_limits_population_OFF_ON_three_runs_per_profile",
+      "actual_off_on_measurement": false
+    },
+    "access_and_maintenance": {
+      "owner": "Igor",
+      "technical_preparation_and_available_read_only_review": "Codex",
+      "operators": "separately_scoped_necessary_actions_only",
+      "new_additional_collaborator_authorized": false,
+      "new_substitute_authorized": false,
+      "new_temporary_evidence_access_max_hours": 24,
+      "access_review_days": 30,
+      "mfa": "where_available_private_configuration_review_required",
+      "automatic_production_upgrades": false,
+      "maintenance_review": "monthly",
+      "ordinary_future_window": "Tuesday_10:00_to_12:00_Europe_Warsaw_after_backup_and_staging",
+      "confirmed_critical_vulnerability_triage_hours": 24,
+      "priorities": [
+        "P0_full_backups",
+        "P1_staging_and_access_resource_monitor_evidence",
+        "P2_controlled_maintenance"
+      ],
+      "ssh_for_codex_mandatory": false,
+      "alternative_runtime_evidence": "dated_authorized_operator_or_panel_readout",
+      "ssh_host_verification_bypass": false
+    }
+  },
+  "catalog_measurement": {
+    "kind": "read_only_provider_catalog_not_account_or_runtime",
+    "utc_window": {
+      "from": "2026-10-07T17:27:36Z",
+      "to": "2026-10-07T17:29:06.7576017Z"
+    },
+    "safe_source_excerpt_sha256": "bc4125985caf67b5ee0d50213bbf93d4869cea8242ba0abcddc66ecee748aae4",
+    "endpoints": [
+      {
+        "method": "GET",
+        "url": "https://api.hetzner.cloud/v1/server_types?per_page=50",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "https://api.hetzner.cloud/v1/locations?per_page=50",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "https://api.hetzner.cloud/v1/pricing",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "https://api.hetzner.com/v1/storage_box_types?name=bx11",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "https://api.hetzner.cloud/v1/datacenters",
+        "status": 410,
+        "limitation": "removed_endpoint_not_absence_of_regions"
+      }
+    ],
+    "currency": "EUR",
+    "returned_vat_rate_percent": 23,
+    "monthly_net": {
+      "bx11_hel1": 3.2,
+      "cpx32_nbg1": 35.49,
+      "ipv4": 0.5,
+      "new_selected_total": 39.19
+    },
+    "approximate_monthly_gross_new_total_with_returned_vat": 48.2,
+    "bx11_setup_net": 0,
+    "cpx32_nbg1_available_indicator": true,
+    "cx43_all_queried_EU_locations_available_indicator": false,
+    "available_indicator_is_not_reservation": true,
+    "account_invoice_or_purchase_verified": false
+  },
+  "public_sources_checked_on_date": [
+    "https://www.hetzner.com/storage/storage-box/bx11/",
+    "https://www.hetzner.com/cloud/cost-optimized/",
+    "https://docs.hetzner.cloud/changelog",
+    "https://posthog.com/pricing",
+    "https://www.sentry.help/en/articles/13964940-how-long-are-my-organization-s-audit-logs-stored",
+    "https://www.sentry.help/en/articles/16738709-changes-to-legacy-developer-plans-september-2026",
+    "https://healthchecks.io/pricing/",
+    "https://healthchecks.io/faq/",
+    "https://healthchecks.io/privacy/",
+    "https://healthchecks.io/docs/configuring_notifications/"
+  ],
+  "gates": {
+    "F0-G01": "PARTIAL",
+    "F0-G02": "PARTIAL",
+    "F0-G03": "FAIL_NO_RUNNING_ISOLATED_STAGING",
+    "F0-G04": "PASS_CONTRACT_DECISION_ONLY",
+    "F0-G05": "PASS_POLICY_DECISION_ONLY",
+    "F0-G06": "PASS_BUDGET_AND_METHOD_DECISION_ONLY",
+    "F0-G07": "PARTIAL_SELECTED_SCOPE_ACCOUNT_EVIDENCE_INCOMPLETE",
+    "F0-G08": "PARTIAL_DECISIONS_ACCEPTED_REAL_READINESS_AND_ROUTING_UNVERIFIED",
+    "F0-G09": "FAIL_NO_EXECUTION_EVIDENCE_FOR_COMPLETE_COPIES"
+  },
+  "formal_F0_results_accepted": false,
+  "handoff": {
+    "prompt_for_second_chat_requested": true,
+    "condition": "only_after_formal_F0_acceptance_with_evidence",
+    "F1_started": false,
+    "new_chat_created": false
+  },
+  "not_executed": [
+    "purchase",
+    "server_change",
+    "backup_configuration",
+    "staging_creation",
+    "provider_setting_change",
+    "migration",
+    "deployment",
+    "restore",
+    "real_alert",
+    "KSeF_PROD_switch",
+    "observability_F1"
+  ]
+}

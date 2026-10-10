@@ -1,0 +1,161 @@
+{
+  "schema_version": 3,
+  "date": "2026-10-06",
+  "status": "F0_OPEN",
+  "scope": "public_allowlisted_follow_up_metadata_not_raw_evidence",
+  "access_mode": "read_only",
+  "historical_runtime_evidence": "f0-2026-10-04.json",
+  "collector_revision": "80db8b49300cd41854114582cc869f5276aa6943",
+  "runtime_attempt": {
+    "observed_at_utc": "2026-10-06T20:45:46.237Z",
+    "collector_exit_code": 2,
+    "host_results": {
+      "app-1": "unverified",
+      "ops-1": "unverified",
+      "db-1": "unverified"
+    },
+    "limitations": [
+      "Trusted SSH host keys were missing for some connections.",
+      "The encrypted local user key was not unlocked in an SSH agent.",
+      "Server acceptance of the user key was not established.",
+      "No current container release, health or runtime version was measured."
+    ]
+  },
+  "cloud_measurement": {
+    "window_utc": ["2026-10-06T20:48:15Z", "2026-10-06T20:54:29Z"],
+    "provider": "Hetzner",
+    "http_statuses": {
+      "servers": 200,
+      "attached_firewalls": 200,
+      "backup_images": 200
+    },
+    "hosts": {
+      "app-1": {
+        "vm_status": "running",
+        "country": "DE",
+        "attached_firewall_rules_read_privately": true,
+        "provider_host_backup_configured": false,
+        "provider_host_backup_image_count": 0
+      },
+      "ops-1": {
+        "vm_status": "running",
+        "country": "DE",
+        "attached_firewall_rules_read_privately": true,
+        "provider_host_backup_configured": false,
+        "provider_host_backup_image_count": 0
+      },
+      "db-1": {
+        "vm_status": "running",
+        "country": "DE",
+        "attached_firewall_rules_read_privately": true,
+        "provider_host_backup_configured": true,
+        "provider_host_backup_image_count": 7,
+        "provider_host_backup_image_status": "available",
+        "latest_provider_host_backup_created_utc": "2026-10-06T02:43:59Z"
+      }
+    },
+    "limitations": [
+      "VM running does not establish container health.",
+      "Cloud firewall configuration does not establish host rules or effective traffic.",
+      "Available host backup images do not establish database consistency, storage coverage or restore success.",
+      "Disabled provider host backups do not establish absence of all other backup mechanisms."
+    ]
+  },
+  "account_measurement": {
+    "window_utc": ["2026-10-06T20:49:23Z", "2026-10-06T20:49:55Z"],
+    "sentry": {
+      "api_region": "EU",
+      "organization_http_status": 200,
+      "project_http_status": 200,
+      "feature_flags_read": true,
+      "active_plan": "unverified",
+      "retention": "unverified",
+      "limits": "unverified",
+      "interpretation": "Feature availability flags are not subscription or application delivery evidence."
+    },
+    "posthog": {
+      "api_region": "EU",
+      "organization_http_status": 200,
+      "project_http_status": 200,
+      "project_settings": {
+        "session_recording_opt_in": true,
+        "session_recording_retention_period": "30d",
+        "heatmaps_opt_in": true
+      },
+      "organization_feature_values": {
+        "product_analytics_data_retention": {"limit": 1, "unit": "year"},
+        "feature_flags_data_retention": {"limit": 1, "unit": "year"},
+        "surveys_data_retention": {"limit": 1, "unit": "year"},
+        "session_replay_data_retention": {"limit": 1, "unit": "month"},
+        "alerts": {"limit": 5, "unit": "alert"},
+        "error_tracking_destinations": {"limit": 2, "unit": "alerts"}
+      },
+      "billing_features_http_status": 403,
+      "billing_limits_http_status": 403,
+      "billing_denial_reason": "unverified_error_body_unavailable",
+      "active_plan": "unverified",
+      "billing_limits": "unverified",
+      "effective_retention_all_data": "unverified",
+      "application_session_recording_delivery": "unverified",
+      "interpretation": "Project settings and organization feature values have separate scopes; no paid plan or SDK delivery is inferred."
+    },
+    "datadog_eu_organization_and_products": "unverified"
+  },
+  "catalog_price_measurement": {
+    "window_utc": ["2026-10-06T20:52:37Z", "2026-10-06T20:53:00Z"],
+    "provider": "Hetzner",
+    "product": "BX11",
+    "source_endpoints": [
+      "https://api.hetzner.com/v1/storage_box_types?name=bx11",
+      "https://api.hetzner.cloud/v1/pricing"
+    ],
+    "capacity_bytes": 1099511627776,
+    "currency": "EUR",
+    "monthly_net": "3.2000",
+    "monthly_gross": "3.9360",
+    "vat_rate_percent": "23.000000",
+    "hourly_net": "0.0051",
+    "hourly_gross": "0.0063",
+    "setup_fee": "0.0000",
+    "billing_country": "unverified",
+    "purchase_or_backup_configuration_verified": false,
+    "interpretation": "Read-only catalog quote, not an active subscription or proof of backup execution."
+  },
+  "user_declarations": {
+    "received_on": "2026-10-06",
+    "staging_exists": false,
+    "full_database_dump_off_host_present": false,
+    "application_minio_off_host_copy_present": false,
+    "interpretation": "Statements supplied by the user; no new runtime or backup-content verification."
+  },
+  "private_evidence_integrity": [
+    {"reference": "runtime_attempt", "sha256": "e394d784b771e7cca47c179520c22a83664d955189d3a8f9b2b2422aec4c5739"},
+    {"reference": "cloud_metadata", "sha256": "186baa1a3eb0fde9e935717e83c23fb0cb9b00b93f9f44ef9abf95d248e036d4"},
+    {"reference": "cloud_backup_metadata", "sha256": "7e19038f6a2e3c7343fa51cadb82073411b614faded392692ee8a29ff22dadfd"},
+    {"reference": "firewall_rules", "sha256": "162e333d16bd860a2f5ec409b0af73c230aafead16449a929a8bd7935d92fd33"},
+    {"reference": "account_metadata", "sha256": "bcd40fed4c39aae9efc44bbd35270c8b6ef3ba39e0fc4efcc20ccd6befcbcf30"},
+    {"reference": "account_entitlements", "sha256": "2dadaa84a5b0a02a55f047f8f2137bff7ae0f3f7e475033dc394781677144775"}
+  ],
+  "gates": {
+    "F0-G01": "PARTIAL",
+    "F0-G02": "PARTIAL",
+    "F0-G03": "FAIL",
+    "F0-G04": "PENDING",
+    "F0-G05": "PENDING",
+    "F0-G06": "PENDING",
+    "F0-G07": "PARTIAL_ACCOUNT_METADATA_BLOCKED_PLAN_AND_BILLING",
+    "F0-G08": "PENDING",
+    "F0-G09": "FAIL"
+  },
+  "not_executed": [
+    "server_change",
+    "migration",
+    "deployment",
+    "restore",
+    "account_or_token_change",
+    "application_or_worker_start",
+    "business_transaction",
+    "real_alert",
+    "F1"
+  ]
+}

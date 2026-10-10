@@ -1,0 +1,87 @@
+# Dokumentacyjny manifest F0. Nie jest konfiguracją wdrożenia ani plikiem env.
+schema_version: 1
+status: measured_absent_target_proposed
+observed_utc: '2026-10-04T11:22:00Z'
+evidence_ref: docs/observability/evidence/f0-2026-10-04.json
+environment: staging
+ksef_environment: test
+source_revision: null # Nie istnieje wdrożenie staging; poniżej wyłącznie propozycja.
+target_choice_ref: docs/observability/evidence/f0-low-cost-2026-10-10.json
+host_candidate: isolated_local_linux_vm_not_created
+release:
+  web_sha: null
+  worker_sha: null
+  configuration_revision: null
+  deployment_id: null
+  web_image_digest: null
+  worker_image_digest: null
+access:
+  inventory_ref: private:staging/infra.env
+  operator_ref: ownership:runtime_operator_pending
+services:
+  web:
+    service: faktflow-web
+    docker_target: runner
+    node_env: production
+    next_public_app_env: production # Propozycja zachowania bramek ochronnych; patrz ograniczenie browser telemetry poniżej.
+    app_env: staging # Obecny server/worker Sentry czyta APP_ENV; browser czyta NEXT_PUBLIC_APP_ENV.
+    port: 3000
+    public_url_ref: private:staging/web-url
+  worker:
+    service: faktflow-worker
+    docker_target: worker
+    jobs_backend: pgboss
+    port: 8080
+    database_secret_ref: secret:staging/DATABASE_URL
+  supabase:
+    endpoint_ref: private:staging/supabase-url
+    anon_key_ref: secret:staging/NEXT_PUBLIC_SUPABASE_ANON_KEY
+    service_role_ref: secret:staging/SUPABASE_SERVICE_ROLE_KEY
+  ksef:
+    environment: test
+    credentials_encryption_key_ref: secret:staging/KSEF_CREDENTIALS_ENCRYPTION_KEY
+  storage:
+    endpoint_ref: private:staging/R2_ENDPOINT
+    bucket_ref: private:staging/R2_BUCKET_NAME
+    access_key_ref: secret:staging/R2_ACCESS_KEY_ID
+    secret_key_ref: secret:staging/R2_SECRET_ACCESS_KEY
+    force_path_style: true
+  cache:
+    provider: unverified
+    endpoint_ref: private:staging/UPSTASH_REDIS_REST_URL
+    token_ref: secret:staging/UPSTASH_REDIS_REST_TOKEN
+isolation:
+  synthetic_data_only: true
+  production_database_or_queue_allowed: false
+  production_storage_or_credentials_allowed: false
+  email_sms_push_external_delivery: blocked_except_verified_test_sink
+  stripe_mode: test
+  ksef_production_allowed: false
+  turnstile_config_ref: secret:staging/turnstile-test-config
+  verification: pending
+github:
+  scope: historical_2026_10_04_cloud_example_not_required_for_local_VM
+  environment: security-staging
+  branch: main
+  required_reviewers_observed: 1
+  required_secret_names:
+    - STAGING_SUPABASE_URL
+    - STAGING_SUPABASE_ANON_KEY
+    - STAGING_SUPABASE_SERVICE_ROLE_KEY
+    - STAGING_KSEF_CREDENTIALS_ENCRYPTION_KEY
+  required_secrets_observed: absent_on_2026_10_04
+observability:
+  new_activation_authorized: false # F1 po odbiorze F0; nie wyłącza istniejących SDK.
+  datadog_selected: false
+  export_default: disabled_or_local_test_sink # Darmowy PostHog: jeden projekt; bez kluczy produkcji.
+  # Poniższe referencje są przyszłymi opcjami testu, nie wymaganym uruchomieniem SaaS przed F1.
+  independent_heartbeat_ref: secret:staging/healthchecks-ping-url
+  pager_policy_ref: ownership:staging_delivery_policy_pending
+  sentry_project_ref: private:staging/sentry-project
+  sentry_dsn_ref: secret:staging/SENTRY_DSN
+  browser_sentry_dsn_ref: secret:staging/NEXT_PUBLIC_SENTRY_DSN
+  posthog_project_ref: null
+  required_telemetry_environment: staging
+  browser_sentry_environment_with_current_code: production
+  telemetry_env_adapter_verified: false # F1 musi rozdzielić tag od bramki lub zatwierdzić inne bezpieczne rozwiązanie.
+resource_budget_ref: docs/observability/acceptance-plan.md
