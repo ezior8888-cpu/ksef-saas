@@ -24,18 +24,36 @@ Igor koordynuje i odbiera F0; przygotowanie nie jest jego odbiorem.
 - Testy offline obejmują brak elementów, przerwany eksport, niepełne
   listowanie, różne przebiegi, błędne czasy i niepełny snapshot restic.
 
+- [Biblioteka eksportu S3](../../scripts/ops/export-backup-s3.mjs) przyjmuje
+  jawnie przekazanego klienta; nie buduje klienta produkcyjnego i nie ma CLI
+  wykonującego kopię. Testy odczytują sztuczne odpowiedzi S3 i zapisują pliki
+  wyłącznie w lokalnych katalogach testowych.
+- [Kontrola referencji](../../scripts/ops/check-backup-references.mjs) porównuje
+  znormalizowane odwołania do plików z manifestami obu magazynów. Publiczna
+  [mapa kodu](../../ops/observability/backup/storage-reference-map.json) opisuje
+  źródła i nierozstrzygnięte mapowania; nie jest odczytem danych produkcji.
+- [Adapter lokalnego eksportu](../../scripts/ops/prepare-backup-reference-input.mjs)
+  łączy dwa katalogi eksportera z przygotowanymi wcześniej referencjami DB.
+  Czyta i sprawdza długości oraz SHA-256 rzeczywistych lokalnych plików;
+  nie eksportuje danych bazy i nie potwierdza ich pochodzenia.
+- [Plan retencji](../../scripts/ops/plan-backup-retention.mjs) wybiera wspólne
+  zestawy 7/4/12. Nie usuwa snapshotów ani nie generuje poleceń usuwania;
+  poprawność zgłoszonego manifestu nie uwierzytelnia rzeczywistej kopii.
+
 To **pakiet przygotowawczy, nie gotowy automatyczny system kopii**.
-Eksporter S3, uzgadnianie referencji, wykonawca poleceń, blokada równoległych
-przebiegów, harmonogram, alarmy i retencja wymagają implementacji oraz testów
-przed osobno uzgodnionym uruchomieniem. Opis polecenia w JSON nie upoważnia
-do jego wykonania.
+Połączenie biblioteki z autoryzowanym klientem S3, rzeczywisty eksport
+referencji DB, konfiguracja odzyskiwania, wykonawca całej sekwencji, blokada
+równoległych przebiegów, harmonogram i alarmy nadal wymagają przygotowania
+oraz testów przed osobno uzgodnionym uruchomieniem. Selekcja retencji jest
+lokalnym podglądem; uwierzytelnienie wejścia i usuwanie nie są zaimplementowane.
+Opis polecenia w JSON nie upoważnia do jego wykonania.
 
 Bezpieczny podgląd przykładu z katalogu repo, Node.js 22:
 
 ```powershell
 node scripts/ops/prepare-backup-plan.mjs --config ops/observability/backup/preparation.example.json --run-id planned-20261010-001
 node scripts/ops/check-backup-set.mjs --help
-node --test scripts/ops/prepare-backup-plan.test.mjs scripts/ops/check-backup-set.test.mjs
+node --test scripts/ops/prepare-backup-plan.test.mjs scripts/ops/check-backup-set.test.mjs scripts/ops/export-backup-s3.test.mjs scripts/ops/check-backup-references.test.mjs scripts/ops/plan-backup-retention.test.mjs scripts/ops/prepare-backup-reference-input.test.mjs
 ```
 
 Generator zwraca `PREPARATION_ONLY`, `executable:false`, upoważnienia `false`
@@ -114,6 +132,52 @@ zwykłej powłoki z pipe lub uruchamianiem skryptów na Storage Box.
 [Hetzner: SSH i restic](https://docs.hetzner.com/storage/storage-box/access/access-ssh-rsync-borg/).
 Alternatywa na posiadanym urządzeniu wymaga potwierdzenia UE, pojemności,
 dostępności i separacji od stagingu; bieżący pakiet nie wybiera zakupu.
+
+## Zakres przygotowanych modułów
+
+`exportBackupS3()` wymaga jawnie przekazanego klienta AWS SDK; CLI pokazuje
+wyłącznie pomoc. Nowy prywatny katalog zawiera `payloads/`, `objects.ndjson`,
+`bucket-config.ndjson` i `export-summary.json`. Klucze S3 pozostają w mapie,
+nie stają się ścieżkami na dysku. Eksporter sprawdza paginację, długość
+pobranych danych, SHA-256 i powtórny inwentarz; nie ustanawia wspólnego
+punktu DB/S3. Podsumowanie sukcesu zostaje opublikowane dopiero po zapisie,
+synchronizacji i zamknięciu pliku tymczasowego. Błąd pozostawia materiał
+częściowy, którego nie wolno zaliczyć do pełnej kopii.
+
+Profil MinIO ma jawną listę obsługiwanych getterów S3. Nie obejmuje całości
+IAM, konfiguracji serwera, KMS ani materiału odzyskiwania. Dlatego
+`payloadComplete` i `supportedBucketProfileComplete` nie ustawiają
+`bucketConfigurationComplete` ani `overallRecoveryComplete` na true.
+Zgodność profilu z odczytanymi wersjami OSS MinIO wymaga późniejszego
+sprawdzenia. Testy używają sztucznego klienta, nie tych instalacji.
+
+Mapa referencji rozdziela przygotowywaną rewizję PR od kodu produkcji
+`face09c57f7de756546e58d092dbe6d280f93c91`, odczytanego 10.10. Zawiera także
+ścieżki archiwum Glacier i nierozstrzygnięte mapowanie fizycznego S3 dla
+`storage.objects`. Istnienie takich gałęzi w kodzie nie potwierdza danych
+w tych backendach. Niepuste, nierozstrzygnięte odwołanie blokuje kompletność;
+nie wolno przypisać go automatycznie do MinIO aplikacji. Wywołujący musi
+wyeksportować pełny zakres odwołań, właściwe liczności i oba manifesty
+obiektów. Pola `complete` pozostają zgłoszeniem, nie dowodem odczytu DB.
+Lokalny adapter czyta dwa katalogi eksportera i wcześniej przygotowany
+JSON odwołań. Strumieniowo sprawdza bajty oraz SHA-256 plików danych,
+manifestu NDJSON i konfiguracji bucketów, a następnie wywołuje checker.
+Klucze obiektów nie sterują ścieżką odczytu: plik danych ma wyłącznie
+liczbowy identyfikator nadany przez eksporter. Odczyt ma limity rozmiaru
+i liczności; większy zestaw wymaga zmiany i przeglądu limitów, nie cichego
+pominięcia obiektów. API zwraca prywatne wejście checkera i bezpieczny raport;
+CLI pokazuje tylko pomoc. Zgodność lokalnych plików nie potwierdza
+kompletnego eksportu DB, autentyczności źródła ani odczytu kopii off-host.
+
+Planner retencji przyjmuje `{schemaVersion:1, asOfUtc, manifests:[...]}`.
+Wybiera sumę ostatnich kompletnych przebiegów z 7 niepustych dni,
+4 niepustych tygodni ISO (poniedziałek) i 12 niepustych miesięcy UTC.
+Ochrona obejmuje trzy snapshoty źródeł i osobny snapshot manifestu.
+Niepełny, nieprawidłowy lub konfliktowy wpis blokuje propozycję usuwania
+oraz chroni całe wejście. CLI wypisuje tylko liczności i kody; API zwraca
+prywatne identyfikatory do przeglądu. Nie odczytuje repozytoriów ani nie
+uwierzytelnia wejścia. Krótka historia nie potwierdza rocznej retencji,
+a świeżość ostatniego pełnego przebiegu jest oddzielnym wynikiem.
 
 ## Sekwencja po ewentualnym rozszerzeniu zakresu
 

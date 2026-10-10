@@ -17,6 +17,14 @@ wcześniejszym „Tylko przygotowanie — bez zakupu i zmian”. Rekomendowanym
 zastosowaniem jest odrębny cel pełnych kopii. Lokalny pakiet przygotowania
 nie wykonuje backupów, a **G03/G09 nadal FAIL, F0_OPEN**.
 
+**Lokalne przygotowanie kopii 10.10:** dodano bibliotekę eksportu S3,
+kontrolę znormalizowanych referencji, lokalne sprawdzanie plików eksportu
+oraz wspólny podgląd retencji 7/4/12.
+[Zakres modułów i pozostałe prace](../runbooks/f0-backup-preparation.md#zakres-przygotowanych-modułów)
+oddzielają testy syntetyczne od niewykonanej kopii produkcji. Brak zakupu,
+instalacji harmonogramu, zmiany serwerów lub nowego pomiaru danych źródłowych;
+**G03/G09 FAIL, F0_OPEN** pozostają bez zmian.
+
 **Najnowszy odczyt kont 10.10 — Sentry:** transkrypcja UI zapisana
 16:30:59.5509919 UTC potwierdza właściwą organizację/projekt, storage EU,
 aktywny Developer i quota 5000 errors. Odczyt wykonano na koncie Bartosza
