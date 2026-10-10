@@ -477,3 +477,16 @@ test("remote filtering preserves release conflicts and actual Redis/Valkey versi
   assert.deepEqual(sanitizeDockerInspect(result.filtered).release, { status: "conflicting", sha: null });
   assert.deepEqual(result.versions, ["7.2.5", "8.0.1", "22.17.0", "15.8", "RELEASE.2025-01-01T00-00-00Z"]);
 });
+
+test("remote role detection distinguishes PostgreSQL from postgres-meta", (context) => {
+  let binary;
+  for (const candidate of [process.env.FAKTFLOW_TEST_PYTHON, "python3", "python"].filter(Boolean)) {
+    try { execFileSync(candidate, ["--version"], { stdio: "ignore", timeout: 5000, shell: false, windowsHide: true }); binary = candidate; break; } catch { /* Optional local interpreter. */ }
+  }
+  if (!binary) { context.skip("Python unavailable locally; no remote probes in this test"); return; }
+  const definitions = buildRemoteProgram(config).split('packet = {"host":')[0];
+  const inputs = ["supabase/postgres-meta:v0.95.0", "supabase/postgres:15.8.1", "postgres:15", "postgres@sha256:" + "a".repeat(64), "postgres-unrelated:v1"];
+  const wrapper = "import json,sys\nn={}\nexec(json.loads(sys.stdin.readline()),n)\nimages=json.loads(sys.stdin.readline())\nprint(json.dumps([n['role_for']({'Name':'/synthetic-source','Config':{'Image':image}}) for image in images]))\n";
+  const roles = JSON.parse(execFileSync(binary, ["-c", wrapper], { input: JSON.stringify(definitions) + "\n" + JSON.stringify(inputs) + "\n", encoding: "utf8", timeout: 5000, shell: false, windowsHide: true }));
+  assert.deepEqual(roles, ["supabase-meta", "postgres", "postgres", "postgres", "unclassified"]);
+});

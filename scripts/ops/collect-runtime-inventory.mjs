@@ -233,7 +233,7 @@ def role_for(raw):
     if hints.get("PGC") and name == hints["PGC"]: return "postgres"
     if hints.get("RESTC") and name == hints["RESTC"]: return "postgrest"
     matches = [
-      ("postgres", r"(?:^|/)postgres(?:[:/-]|$)|supabase/postgres"),
+      ("postgres", r"(?:^|/)postgres(?::|@|$)"),
       ("postgrest", r"postgrest"), ("gotrue", r"gotrue"),
       ("minio", r"minio"), ("valkey", r"valkey"), ("redis-rest", r"serverless-redis-http"),
       ("redis", r"(?:^|/)redis(?:[:/-]|$)"), ("coolify", r"coollabsio/coolify"),
