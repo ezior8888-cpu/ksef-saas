@@ -35,9 +35,19 @@ import { memoryClient, type MemoryTables, type Row } from './helpers/baza-w-pami
  * stały `importJobId`, identyfikatory wierszy z licznika danego testu,
  * fikstury z generatora ze stałym `generatedAt`.
  *
- * C0b (GEN-RUNDA, 5.10) zmieni migawkę ŚWIADOMIE dla `ff-zw` (VAT bez
- * ostrzeżenia), `ff-pesel`, `ff-nrinny` (NrID → identyfikator nabywcy)
- * i `ff-stopka` (`footerNote`) — z komentarzem „C0b:” przy zmienionym teście.
+ * C0b: migawka zmieniona ŚWIADOMIE, jednorazowo (GEN-RUNDA, 5.10). Specyfikacja
+ * zapowiadała zmianę tylko dla `ff-zw`, `ff-pesel`, `ff-nrinny` i `ff-stopka`, ale
+ * `fa3_data.parsed` zapisuje CAŁY `ParsedInvoice`, więc nowe pola parsera trafiają do
+ * migawki KAŻDEJ fikstury z pliku FA(3): `parsed.invoiceTypeCode` (surowe RodzajFaktury),
+ * `parsed.buyer.jst` / `parsed.buyer.gv` (z pliku; wiersz `buyer_data.jst` / `gv` dostaje
+ * je stąd) i `parsed.footerNote` (tam, gdzie plik ma Stopkę). Dodatkowo, jak zapowiedziano:
+ * `ff-zw` — brak ostrzeżenia o VAT (VAT 0, GR-4); `ff-pesel` — PESEL z NrID (`buyer_id_type`
+ * `pesel` + `buyer_pesel`, brak ostrzeżenia „brak identyfikatora”); `ff-nrinny` — NrID
+ * → NrInny: `is_b2c` true→false i `buyer_id_type` no_id→nip (gałąź NrInny/VAT-UE, GR-5
+ * „jak dziś” — FA(3) nie mówi, czy to konsument), `buyer_id_number` = NrInny,
+ * `buyer_data.nrInny`, `noIdMarker` false, bez ostrzeżenia „brak identyfikatora”;
+ * `ff-stopka` — `footerNote`.
+ * Wszystko inne — kwoty, stawki, adnotacje, daty, kolejność zapisów — bez zmian.
  * NIP fikcyjne: sprzedawca 1234567890, nabywca 1111111111.
  */
 
@@ -417,11 +427,11 @@ describe('C0: przypadki brzegowe wiersza i kolejność kluczy (dodane po sprawdz
   });
 
   /**
-   * Wyjątek od „nigdy literał `ParsedInvoice`” (razem z testem PESEL niżej):
-   * wynik `parseFa3Xml` z JAWNYMI nadpisaniami. Te gałęzie silnika nie mają wejścia z pliku
-   * zgodnego z XSD — FA(3) wymaga NIP sprzedawcy (10 cyfr), sumy faktury
-   * parser bierze z tych samych pól, z których liczy kwoty pozycji, a problem
-   * adnotacji daje tylko plik niezgodny z XSD. Przypina: `seller_data.nip`
+   * Wyjątek od „nigdy literał `ParsedInvoice`”: wynik `parseFa3Xml` z JAWNYMI
+   * nadpisaniami. Te gałęzie silnika nie mają wejścia z pliku zgodnego z XSD —
+   * FA(3) wymaga NIP sprzedawcy (10 cyfr), sumy faktury parser bierze z tych
+   * samych pól, z których liczy kwoty pozycji, a problem adnotacji daje tylko
+   * plik niezgodny z XSD. Przypina: `seller_data.nip`
    * zastępczy, obcięcie `seller_nip` do 10 cyfr, bezpiecznik „pozycje nie
    * sumują się do sum faktury” (z tolerancją VAT poniżej grosza)
    * i `fa3_data.annotationProblems`.
@@ -490,10 +500,13 @@ describe('C0: przypadki brzegowe wiersza i kolejność kluczy (dodane po sprawdz
     expect(result.warnings).toEqual([expect.stringContaining(`typ źródłowy „${rodzaj}”`)]);
   });
 
-  it('nabywca z PESEL — dziś tylko z nadpisania (parser FA(3) nie czyta PESEL z NrID; C0b to zmieni), wartości wprost', async () => {
+  // C0b: parser czyta PESEL z `KodKraju` PL + `NrID` (GR-2), więc test nie potrzebuje już nadpisania
+  // wyniku parsera — prawdziwa ścieżka plik → parser → wiersz daje to, co dotąd dawało tylko nadpisanie.
+  it('nabywca z PESEL — odczytany przez parser z NrID (C0b), wartości wprost', async () => {
     const parsed = await fromKsef('ff-pesel');
-    expect(parsed.buyer.pesel).toBeUndefined();
-    const out = await run({ ...KSEF_HISTORY_SALE, invoices: [{ ...parsed, buyer: { ...parsed.buyer, pesel: '44051401359' } }] });
+    expect(parsed.buyer.pesel).toBe('44051401359');
+    expect(parsed.warnings).toEqual([]);
+    const out = await run({ ...KSEF_HISTORY_SALE, invoices: [parsed] });
     expect(insertedInvoices(out.writes)).toMatchObject([{
       is_b2c: true, buyer_id_type: 'pesel', buyer_nip: null, buyer_pesel: '44051401359', buyer_id_number: null,
       buyer_data: { pesel: '44051401359', noIdMarker: false },

@@ -689,11 +689,21 @@ describe('GR-4: plik bez P_14_x ze stawkami bez VAT — VAT = 0 bez ostrzeżenia
     // Granica |P_15 − Σ P_13_x| = 0,01 jest włączona; porównanie na groszach (100,01 − 100 w liczbach zmiennoprzecinkowych > 0,01).
     const parsed = withP15('100.01');
     expect(parsed.warnings).toEqual([]);
-    expect(parsed.totals).toMatchObject({ netTotal: 100, vatTotal: 0 });
+    expect(parsed.totals).toEqual({ netTotal: 100, vatTotal: 0, grossTotal: 100.01 });
+  });
+
+  it('P_15 mniejsze od sumy P_13_x o 0,01 — tolerancja działa w obie strony, bez ostrzeżenia', () => {
+    const parsed = withP15('99.99');
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.totals).toEqual({ netTotal: 100, vatTotal: 0, grossTotal: 99.99 });
   });
 
   it('P_15 różni się od sumy P_13_x o 0,50 — „inaczej jak dziś”: ostrzeżenie zostaje', () => {
     expect(withP15('100.50').warnings).not.toEqual([]);
+  });
+
+  it('P_15 mniejsze od sumy P_13_x o 0,50 — poza tolerancją także w dół: ostrzeżenie zostaje', () => {
+    expect(withP15('99.50').warnings).not.toEqual([]);
   });
 });
 
@@ -910,6 +920,17 @@ describe('Pliki obcych programów (ręcznie zmieniony XML z generatora)', () => 
     let xml = replaceOnce(xmlOf('stawka 23'), '<P_14_1>23.00</P_14_1>', '');
     xml = replaceOnce(xml, '<P_15>123.00</P_15>', '<P_15>100.00</P_15>');
     expect(parseFa3Xml(xml).warnings).toContain('VAT przybliżony jako brutto − netto z pozycji');
+  });
+
+  it('GR-4: mieszane 23 + zw bez P_14_1, P_15 = Σ P_13_x → „inaczej jak dziś”: ostrzeżenie o VAT zostaje (reguła „każda pozycja bez VAT”)', () => {
+    let xml = replaceOnce(xmlOf('mieszane 23 + zw'), '<P_14_1>23.00</P_14_1>', '');
+    xml = replaceOnce(xml, '<P_15>323.00</P_15>', '<P_15>300.00</P_15>');
+    expect(parseFa3Xml(xml).warnings).toContain('VAT przybliżony jako brutto − netto z pozycji');
+  });
+
+  it('GR-4: same pozycje zw, ale z P_14_1 w nagłówku → reguła nie obejmuje pliku, ostrzeżenie o niezgodności nagłówka zostaje', () => {
+    const xml = replaceOnce(xmlOf('stawka zw z podstawą (art. 113)'), '<P_15>', '<P_14_1>23.00</P_14_1><P_15>');
+    expect(parseFa3Xml(xml).warnings).toContainEqual(expect.stringContaining('Możliwa niezgodność kwot nagłówka'));
   });
 
   it('GR-4: P_15 różni się od sumy P_13_x o 0,02 — poza tolerancją 0,01, „jak dziś”', () => {
