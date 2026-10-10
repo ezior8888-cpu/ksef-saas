@@ -216,6 +216,13 @@ export type DuplicateDecidableOffer = Extract<DuplicateOriginalOffer, 'pair' | '
 /** Oferta w widoku operatora `review` (przegląd pliku, I5R). */
 export type DuplicateReviewOffer = Extract<DuplicateOriginalOffer, 'review-pair' | 'review-record'>;
 
+/**
+ * Wstęp panelu przy ofercie `record` (5.5, `intro`): `'own'` — własna historia (JSON `ownHistory` albo
+ * baza: sesja / skrót), przed `'same'` — tylko `sameContentExceptHeader`. Panel nie widzi `ownHistoryDb`,
+ * więc `sameContent` samo nie odróżnia „własna historia + ta sama treść” od „sama ta sama treść”.
+ */
+export type DuplicateRecordIntro = 'own' | 'same';
+
 /** Dane oryginału `faktflow-original` w widoku — z `importGate.preview`, bez archiwum i klucza serwisowego. */
 export interface DuplicateOriginalViewData {
   preview: OriginalPreview | null;
@@ -252,6 +259,8 @@ export interface DuplicateDecisionReviewView {
   releasable: boolean;
   /** `preview.buyerIdKind ∉ ORIGINAL_CORRECTABLE_BUYER_ID_KINDS` — zdanie `FAKTFLOW.CORRECTION_PERSON`. */
   correctionForPerson: boolean;
+  /** Wstęp przy `review-record` — jak w widoku `decidable` (patrz tam). */
+  recordIntro?: DuplicateRecordIntro;
 }
 
 export type DuplicateDecisionView =
@@ -291,6 +300,13 @@ export type DuplicateDecisionView =
       original?: DuplicateOriginalViewData | null;
       /** `preview.buyerIdKind ∉ ORIGINAL_CORRECTABLE_BUYER_ID_KINDS` — zdanie `FAKTFLOW.CORRECTION_PERSON`. */
       correctionForPerson?: boolean;
+      /**
+       * Który wstęp pokazuje panel przy ofercie `record`: `'own'` — `FAKTFLOW.INTRO_RECORD_OWN`, gdy
+       * `ownHistory` z JSON albo z bazy (sesja / skrót); ma PIERWSZEŃSTWO przed `'same'` —
+       * `FAKTFLOW.INTRO_RECORD_SAME`, gdy tylko `sameContentExceptHeader`. `undefined` przy ofercie
+       * `pair` i `released` oraz przy powodach PR B.
+       */
+      recordIntro?: DuplicateRecordIntro;
     }
   | {
       kind: 'refused';

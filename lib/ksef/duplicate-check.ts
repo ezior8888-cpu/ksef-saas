@@ -411,7 +411,9 @@ export function originalGateOk(gate: unknown): boolean {
  * oferta (`originalGateOk`) — zły kształt → `null` (klucz pominięty w
  * `parseDuplicateCheck`, czyli `recheck-needed`); `preview` (obiekt albo
  * `null`) zostaje BEZ przebudowy; `release` w całości, gdy ma kształt
- * `KsefOriginalRelease` (`at` — data), inaczej klucz `release` pominięty.
+ * `KsefOriginalRelease` (`at` — dowolny niepusty napis, nie tylko data: SQL
+ * sprawdza sam typ, więc oferta TS z odczytanych danych zgadza się z SQL),
+ * inaczej klucz `release` pominięty.
  */
 export function parseImportGate(value: unknown): KsefOriginalImportGate | null {
   throw new Error('PR C: nie zaimplementowane');
