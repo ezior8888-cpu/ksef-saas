@@ -17,14 +17,22 @@ wcześniejszym „Tylko przygotowanie — bez zakupu i zmian”. Rekomendowanym
 zastosowaniem jest odrębny cel pełnych kopii. Lokalny pakiet przygotowania
 nie wykonuje backupów, a **G03/G09 nadal FAIL, F0_OPEN**.
 
-**Najnowszy odczyt kont 10.10 — PostHog:** właściwa organizacja/projekt
+**Najnowszy odczyt kont 10.10 — Sentry:** transkrypcja UI zapisana
+16:30:59.5509919 UTC potwierdza właściwą organizację/projekt, storage EU,
+aktywny Developer i quota 5000 errors. Odczyt wykonano na koncie Bartosza
+według deklaracji Igora; indywidualny dostęp Igora pozostaje niepotwierdzony,
+Sentry TOTP/passkey nieaktywne. [Indeks Sentry](evidence/f0-sentry-ui-2026-10-10.json)
+oddziela UI od dokumentacji retencji/PAYG i niezapisanej oferty upgrade.
+**G07/G08 PARTIAL, G03/G09 FAIL, F0_OPEN**, bez zmian kont lub F1.
+
+**Odczyt kont 10.10 — PostHog:** właściwa organizacja/projekt
 EU Cloud, badge Free, wybrane quota i indywidualny dostęp Igora jako Admin
 potwierdzono w UI; 2FA jest wyłączone. Zapis transkrypcji: 16:07:03.4311488 UTC,
 bez instrumentowanego okna obserwacji. [Indeks UI](evidence/f0-posthog-ui-2026-10-10.json)
 i [szczegóły](runtime-inventory.md#posthog--odczyt-panelu-10102026) oddzielają
 liczniki rozliczeniowe i ustawienia replay od działania SDK oraz faktycznych
-kosztów. PostHog został odczytany; odczyt właściwego panelu Sentry
-pozostaje do wykonania.
+kosztów. W chwili tego odczytu Sentry nie był jeszcze zweryfikowany;
+późniejsze uzupełnienie opisano powyżej.
 **G07/G08 PARTIAL, F0_OPEN**; bez zmian kont, kopii, stagingu lub F1.
 
 **Odczyty 10.10 po 15:20 UTC:** web i worker healthy na `face09c57f7de756546e58d092dbe6d280f93c91`;
@@ -55,8 +63,8 @@ bez zmian serwerów, migracji, wdrożeń, kopii, restore lub F1.
 **Aktualny kierunek 10.10: darmowa diagnostyka i tańsza infrastruktura.**
 Igor odrzucił wariant 73,19 EUR netto/mies.; zakupy i czynności operacyjne
 pozostają wstrzymane. Wybór: Sentry Developer EU i PostHog Free EU z budżetem
-nowych abonamentów tych narzędzi 0 USD. PostHog Free potwierdzono w UI;
-plan Sentry pozostaje do odczytu.
+nowych abonamentów tych narzędzi 0 USD. Sentry Developer i PostHog Free
+potwierdzono w UI; pozostałe parametry G07 nadal niepełne.
 Dashboard ma pomóc podczas pierwszego release: grupować błędy, pokazywać
 wpływ na faktury, retry/recovery i regresje, zachowując pełną minimalną
 historię we własnym audycie. Przyszły agent korzysta ze zredagowanych dowodów

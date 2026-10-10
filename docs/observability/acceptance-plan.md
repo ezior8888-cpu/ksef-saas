@@ -79,9 +79,20 @@ runtime/kont po 15:20 UTC i ówczesną deklarację braku dostępu Igora do panel
 badge Free, wybrane quota i dostęp Igora jako Admin. 2FA jest wyłączone,
 replay w panelu ON; nie zmieniono ustawień. [Indeks UI](evidence/f0-posthog-ui-2026-10-10.json)
 rozdziela te dowody od źródła środowiska, SDK, kosztów i retencji wszystkich
-produktów. Odczyt właściwego panelu Sentry i potwierdzenie indywidualnej
-roli Igora pozostają do wykonania.
+produktów. W chwili tego odczytu Sentry pozostawał niezweryfikowany;
+późniejszy odczyt opisano niżej, bez potwierdzenia indywidualnej roli Igora.
 **G07/G08 PARTIAL, G03/G09 FAIL; G05 PASS wyłącznie dla decyzji, F0_OPEN.**
+
+**Późniejszy odczyt UI Sentry 10.10:** transkrypcja zapisana
+16:30:59.5509919 UTC potwierdza właściwą organizację/projekt, storage EU,
+Developer i 5000 errors. Owner/Active/TeamAdmin dotyczy zalogowanego konta
+Bartosza według deklaracji Igora; nie potwierdza indywidualnego dostępu Igora.
+Sentry TOTP/passkey nieaktywne. [Indeks](evidence/f0-sentry-ui-2026-10-10.json)
+rozdziela liczniki UI, dokumentacyjne event retention 30 dni/brak PAYG
+i niezapisany upgrade. Brak testu wygaszania jest granicą tego dowodu,
+nie nowym warunkiem F0. Retencja spans/source maps, indywidualny dostęp,
+MFA i pozostałe uprawnienia pozostają niepełne.
+**G07/G08 PARTIAL, G03/G09 FAIL, G05 PASS tylko dla decyzji, F0_OPEN.**
 
 Statusy: `PASS` wymaga dowodu pełnego kryterium; `PARTIAL` to niepełny dowód;
 `FAIL` stwierdzone niespełnienie; `BLOCKED` brak dostępu do sprawdzenia;
@@ -157,7 +168,8 @@ Bartosz nie jest automatycznym wykonawcą ani adresatem nowych zleceń.
    zmierzony zapas zasobów. Sam WSL lub dev server nie zalicza G03.
 5. **G01/G02/G07/G08 i odbiór.** Zachować nowy datowany runtime 10.10,
    uzupełnić pozostałe kryteria pochodzenia obrazów, konfigurację
-   sieci/Kuma/checków oraz rzeczywiste konto/plan/retencję/quota/uprawnienia.
+   sieci/Kuma/checków oraz pozostałe parametry kont: plany/wybrane quota już
+   odczytano w UI, retencje, indywidualny dostęp i MFA nadal niepełne.
    Dla podstawowego monitorowania F0 odczytać bieżący routing i potwierdzić
    docelowy odbiór przez Igora; brakujące ustawienia kanałów/checków wymagają
    objęcia zakresem operacyjnym. Nowej instrumentacji faktur i lifecycle
@@ -196,7 +208,7 @@ restore i F1 pozostają poza zakresem.
 | F0-G04 | Zatwierdzone wyniki, korelacja, deadline, kwalifikacja populacji i klasy plików z [contracts](contracts.md). | **PASS — przyjęcie kontraktu na podstawie delegacji Igora 07.10, uzupełnienie v1.2 z 10.10.** Wybrana wersja rozstrzyga populację, terminy, klasy wejścia, różnice C-22, pełną historię zarejestrowanych błędów faktur i priorytet dashboardu release z późniejszym przygotowaniem napraw przez agenta. Nie zalicza implementacji ani TEST-01/TEST-02, które pozostają NOT RUN. |
 | F0-G05 | Zatwierdzone klasy danych, retencja, audit/source maps/holds/delete, tenant_ref, consent i uprawnienia z [data-policy](data-policy.md). | **PASS — przyjęcie polityki na podstawie delegacji Igora 07.10, uzupełnienie z 10.10.** Zasady obejmują kopie 7/4/12 oraz minimalny wpis każdego błędu w audycie faktury i ograniczony odczyt diagnostyki przez agenta. Aktywna konfiguracja, możliwości kont, zgodność eksportu i TEST-04 nie są zaliczone; TEST-04 NOT RUN. Nie uruchomiono nowego eksportu. |
 | F0-G06 | Przyjęty budżet narzutu, limity zasobów i metoda OFF/ON; baseline i klasy obciążenia określone. | **PASS — przyjęcie budżetu i metody na podstawie delegacji Igora 07.10.** Runtime ma nowy pomiar 10.10; konkretne obrazy/limity i warunki przyszłego porównania wymagają pozostałych dowodów G01/G02 oraz gotowego stagingu. Odczyt nie upoważnia testu obciążenia. Baseline i TEST-05 pozostają NOT RUN. |
-| F0-G07 | Dowód regionu istniejących usług oraz, osobno, rzeczywistego konta docelowego, planów/produktów, retencji/ingest/API, kosztów i uprawnień. | **PARTIAL.** Metadane EU/API 06.10 i historyczna deklaracja braku płatnych planów są częściowymi dowodami. Aktualny cel po odrzuceniu kosztownego wariantu 10.10: Sentry Developer EU, PostHog EU Free, Kuma i planowany Healthchecks; Datadog poza zakresem. Budżet nowych abonamentów diagnostycznych 0 USD. UI PostHog 10.10 potwierdziło właściwą organizację/projekt EU Cloud, badge Free, wybrane quota, replay 30d i indywidualny dostęp Igora jako Admin; 2FA disabled. Liczniki billing nie dowodzą źródła środowiska lub SDK, a „no spend data” nie dowodzi zerowej faktury. PAYG i pozostałe retencje/limity wymagają potwierdzenia; odczyt właściwego panelu Sentry pozostaje do wykonania. Wcześniejsze billing 403 wskazuje na wymaganą flagę API produktu; nie dowodzi zbyt wąskiego tokena. Role tożsamości API pozostają osobnym dowodem. Nie przypisywać Free uprawnień Team ani aktywnego PostHog Error Tracking na podstawie publicznego cennika. Publiczna oferta i katalog cen nie zastępują dowodów kont/usług ani zakupu. |
+| F0-G07 | Dowód regionu istniejących usług oraz, osobno, rzeczywistego konta docelowego, planów/produktów, retencji/ingest/API, kosztów i uprawnień. | **PARTIAL.** Metadane EU/API 06.10 i historyczna deklaracja braku płatnych planów są częściowymi dowodami. Aktualny cel po odrzuceniu kosztownego wariantu 10.10: Sentry Developer EU, PostHog EU Free, Kuma i planowany Healthchecks; Datadog poza zakresem. Budżet nowych abonamentów diagnostycznych 0 USD. UI PostHog 10.10 potwierdziło właściwą organizację/projekt EU Cloud, badge Free, wybrane quota, replay 30d i indywidualny dostęp Igora jako Admin; 2FA disabled. Liczniki billing nie dowodzą źródła środowiska lub SDK, a „no spend data” nie dowodzi zerowej faktury. UI Sentry potwierdziło Developer, storage EU i quota errors 5000, Owner/TeamAdmin na koncie Bartosza według deklaracji Igora. Event retention 30 dni i brak PAYG dla Developer wynikają z dokumentacji dopasowanej do planu, bez pomiaru TTL/wygaszania. Retencja spans/source maps, indywidualny dostęp Igora/MFA oraz pozostałe wymagane parametry nadal niepełne. Wcześniejsze billing 403 wskazuje na wymaganą flagę API produktu; nie dowodzi zbyt wąskiego tokena. Role tożsamości API pozostają osobnym dowodem. Nie przypisywać Free uprawnień Team ani aktywnego PostHog Error Tracking na podstawie publicznego cennika. Publiczna oferta i katalog cen nie zastępują dowodów kont/usług ani zakupu. |
 | F0-G08 | Przyjęte role, realny dyżurny, godziny i coverage gaps; odbiorca oraz okno testu telefonu; decyzja o niezależnym lifecycle alarmu. | **PARTIAL — decyzje przyjęte, realna gotowość i routing niezweryfikowane.** Igor wybrany jako główny docelowy odbiorca; Docelowo wybrano Telegram/email dla krytycznych i raport 06:00 Europe/Warsaw, lecz obecny kod krytycznych używa Slack/Telegram; email jest w raporcie dziennym. Rozbieżność i faktyczne przekierowanie do Igora pozostają otwarte. Brak gwarantowanych godzin reakcji i zastępcy pozostaje jawny. Lifecycle, watchdog i okno przyszłego testu zapisano w ownership, bez konfiguracji kont lub potwierdzonego dyżuru. Historyczny Bartosz 08:00–22:00 best effort nie staje się fallbackiem. TEST-06 NOT RUN. |
 | F0-G09 | Pełna kopia bazy i wymaganych obiektów poza hostem źródłowym; harmonogram, ostatni artifact/hash, retencja i procedura izolowanego restore obejmująca auth/storage oraz stan operacji. | **FAIL.** Pomiar 04.10 i deklaracja 06.10 wskazują brak pełnego pg_dump off-host i kopii MinIO aplikacji. Odpowiedź przekazana 07.10 przyjmuje docelowo codzienny dump całej DB, w tym auth/storage, kopie obu MinIO, szyfrowany zewnętrzny cel EU poza hostami źródłowymi, retencję 7 dziennych / 4 tygodniowe / 12 miesięcznych i comiesięczny test restore; wcześniej wskazano Bartosza jako wykonawcę, obecnie koordynuje Igor. Nie ma nowego dowodu wykonania. Siedem obrazów backupu dysku DB odczytanych 06.10 nie dowodzi pełnego zakresu, spójności ani restore. TEST-07 NOT RUN. |
 
@@ -335,11 +347,12 @@ w granicach dostępnego, autoryzowanego odczytu.
   na podstawie delegacji Igora; historycznie jego produkty pozostają
   niezweryfikowane, bez przypisywania PASS. Publiczna oferta nie dowodzi
   uprawnień konkretnego konta. Odczyt metadanych z 06.10 dostarcza części
-  dowodów kont/regionu i ustawień; nadal potrzebne są plan/koszty, retencja
-  Sentry i brakujące uprawnienia. Deklarację braku płatnych planów z 07.10
-  już zapisano; nie potwierdza konkretnego tier, zerowego kosztu ani wszystkich
-  uprawnień. Billing 403 nie rozstrzyga przyczyny odmowy. Nowy zakres nie
-  zastępuje dowodów kont i nie ustanawia płatnej subskrypcji.
+  dowodów kont/regionu i ustawień. UI 10.10 potwierdziło PostHog Free i Sentry
+  Developer oraz wybrane quota; dokumentacja Developer opisuje event retention
+  30 dni i brak PAYG, bez pomiaru TTL. Pozostałe retencje/limity, koszty i
+  indywidualny dostęp/MFA nadal wymagają dowodów. Deklaracja braku płatnych
+  planów nie dowodzi zerowej faktury. Markery billing 403 wskazują wymaganą
+  flagę API produktu, bez pełnego dowodu scopes. Nie zmieniono subskrypcji.
 - **G08 — role i alarmy:** właścicielem monitoringu, koordynacji i odbiorcą
   F0 jest Igor; Codex przegląda dostępne dowody. Wcześniejsze odbieranie
   przez Bartosza 08:00–22:00 Europe/Warsaw było zadeklarowane w miarę możliwości,

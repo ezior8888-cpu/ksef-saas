@@ -63,10 +63,10 @@ kodu i wdrożonych bundle z tą polityką pozostaje do osobnego sprawdzenia.
 | Attempts / steps | 90 dni online. | Usunięcie szczegółów nie usuwa minimalnego wyniku, wpisu błędu faktury i przejść recovery w audycie; otwarte sprawy mogą mieć jawny hold. |
 | Metryki / SLO | 13 miesięcy trendu z jawną agregacją rozdzielczości. | Dowód tier, rozdzielczości i expiry; agregat nie zastępuje pełnej historii operacji. |
 | Logi | Początkowo lokalne zredagowane logi do 7 dni, dodatkowo ograniczone rozmiarem poniżej; wybrane pakiety incydentów 90 dni. Centralny eksport logów poza wybranym zakresem. | Zastępuje propozycję 30 dni centralnych logów; nie zakłada darmowej wyszukiwarki logów. Przedłużenie tylko jako prywatny pakiet incydentu z właścicielem, powodem i terminem. |
-| Spans / trace i diagnostyczny RUM | Spans w Sentry Developer Free EU: docelowo maks. 30 dni i nie więcej niż potwierdzona efektywna retencja produktu; publiczna oferta 5 mln spanów/mies. Diagnostyczny RUM tylko w odrębnie potwierdzonym zakresie. | Retencja/query window tej klasy, aktywny tier i quota wymagają G07. Nie przenosić warunków Team na Free. Brak spanów po sampling/expiry nie oznacza braku operacji lub błędu. |
-| Error events Sentry | Sentry Developer Free EU: publiczna oferta 5 tys. błędów/mies. i retencja event data 30 dni. Aktywny tier, quota i ustawienia konta niezweryfikowane. | Publiczna oferta i wybór nie są odczytem konta. Po quota/filtracji/expiry mogą występować luki; Sentry nie zastępuje pełnej minimalnej historii błędów w audycie faktury ani lokalnych szczegółów na 90 dni. |
+| Spans / trace i diagnostyczny RUM | Spans w Sentry Developer Free EU: docelowo maks. 30 dni i nie więcej niż potwierdzona efektywna retencja produktu; publiczna oferta 5 mln spanów/mies. Diagnostyczny RUM tylko w odrębnie potwierdzonym zakresie. | Developer i wyświetlone quota spans potwierdzono w UI; retencja/query window i pełne entitlements tej klasy wymagają G07. Nie przenosić warunków Team na Free. Brak spanów po sampling/expiry nie oznacza braku operacji lub błędu. |
+| Error events Sentry | Aktywny Developer i quota 5000 errors potwierdzone w UI 10.10 ([indeks](evidence/f0-sentry-ui-2026-10-10.json)). Event data 30 dni wynika z dokumentacji dopasowanej do tego planu, bez odczytu TTL/testu wygaszania. | Odczyt UI i dokumentacja mają osobne zakresy; indywidualny dostęp/MFA i pozostałe ustawienia nadal niepełne. Po quota/filtracji/expiry mogą występować luki; Sentry nie zastępuje pełnej minimalnej historii błędów w audycie faktury ani lokalnych szczegółów na 90 dni. |
 | Source maps | Cały okres używania bundle web/worker oraz 90 dni po wycofaniu ostatniego procesu na danym SHA. | Własne prywatne archiwum artefaktów; retencja uploadu w Sentry osobno do sprawdzenia. Nie publikować map; sam upload nie dowodzi symbolikacji. |
-| Product analytics | PostHog Free EU: 1 mln events/mies., 1 projekt i retencja analytics 1 rok według publicznej oferty; replay 0, autocapture i heatmaps wyłączone. | Opt-in/opt-out; aktywny plan, retencja i workflow usuwania do potwierdzenia. Odrębna klasa od RUM i error tracking; nie kopiuje treści faktur. |
+| Product analytics | PostHog Free EU: 1 mln events/mies., 1 projekt i retencja analytics 1 rok według publicznej oferty; replay 0, autocapture i heatmaps wyłączone. | Opt-in/opt-out; Free potwierdzono w UI 10.10, retencja analytics i workflow usuwania do potwierdzenia. Odrębna klasa od RUM i error tracking; nie kopiuje treści faktur. |
 | Error tracking PostHog — warunkowo | Publiczna darmowa quota 100 tys. exceptions/mies.; przyszły zredagowany eksport dopiero po odbiorze zakresu i testu. | Efektywna retencja tej klasy i uprawnienia wymagają G07. Nie zakładać, że roczna retencja analytics rozstrzyga każdą klasę. Obecne capture_exceptions=false nie jest tutaj zmieniane. |
 | Lokalne logi / bufory | Logi: 10 MiB × 5 plików na kontener, maks. 7 dni. Bufor: maks. 64 MiB RAM i 256 MiB dysku na host, wiek do 30 min. | Pierwszy osiągnięty limit usuwa najstarszą telemetrię; drop/expiry raportowane. Sama rotacja Dockera nie realizuje limitu wieku. Required journal/audit nie korzysta z tego zawodnego bufora. Pokrycie 30 min peak wymaga pomiaru. |
 | Pakiety incydentów / dowody testów | 90 dni; dłużej tylko jawny hold. | Zredagowane dowody, przegląd aktywnych holdów, brak surowych plików prywatnych w repo. |
@@ -167,8 +167,9 @@ kopiowania błędów lub danych finansowych do dostawcy.
 człowieka rozwiązań: przyczyna, test, wersja/PR i źródło wyniku. Nie jest to
 trening modelu ani powielanie danych faktur. Hipotezy i nieudane naprawy są
 jawnie oznaczone; kolejne użycie rozwiązania wymaga sprawdzenia wersji i testu.
-Aktywne plany, quota, retencje, rozliczenia i uprawnienia pozostają
-niezweryfikowane; **G07 nadal PARTIAL**. Sentry/PostHog mogą tracić lub wygaszać
+UI 10.10 potwierdziło Sentry Developer, PostHog Free i wybrane quota;
+pozostałe retencje, rozliczenia, indywidualny dostęp i MFA nadal niepełne.
+**G07 nadal PARTIAL**. Sentry/PostHog mogą tracić lub wygaszać
 zdarzenia i nie są pełnym ledgerem. Lokalne attempts/pakiety diagnostyczne
 na 90 dni są osobną polityką, nie gwarantowaną retencją darmowego SaaS.
 
@@ -188,10 +189,13 @@ Pełny error outcome nie gwarantuje kompletu spanów odrzuconych head sampling.
 
 Pomiar z 04.10 potwierdził **region ingest EU dla istniejących Sentry i PostHog**.
 [Odczyty API z 06.10](runtime-inventory.md#odczyty-dostawców-i-próba-ssh-06102026)
-uzupełniły metadane kont i część ustawień/uprawnień PostHog. Sentry nie ujawnił
-aktywnego planu ani retencji, a billing PostHog zwrócił 403 o nieustalonej
-przyczynie. **G07 pozostaje PARTIAL, z brakującymi dowodami planów i kosztów**;
-nie jest już uzasadnione opisywanie wszystkich metadanych jako niedostępnych.
+uzupełniły metadane kont i część ustawień/uprawnień PostHog. Wtedy Sentry nie
+ujawnił planu/retencji, a przyczyna billing PostHog 403 była nieznana.
+Późniejsze UI 10.10 potwierdziło [PostHog Free](evidence/f0-posthog-ui-2026-10-10.json)
+i [Sentry Developer](evidence/f0-sentry-ui-2026-10-10.json). Markery ponownego
+odczytu 403 wskazują wymaganą flagę API produktu, bez dowodu zbyt wąskiego tokena.
+**G07 pozostaje PARTIAL:** pozostałe parametry produktów, koszty oraz indywidualny
+dostęp/MFA nie są pełne; oba plany nie są już nieznane.
 Region intake nie potwierdza regionu każdej dodatkowej funkcji, wszystkich
 subprocessors. Datadog jest jawnie poza wybranym obecnym zakresem; EU1 nie
 jest potwierdzonym kontem. Wybrana polityka nie zmienia odczytanych retencji

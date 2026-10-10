@@ -2,6 +2,42 @@
 
 Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.2026, 11:03–11:22 UTC. Odczyty API i próba SSH z 06.10 oraz decyzje/deklaracje z 07.10 mają osobne źródła. Nowy odczyt SSH/runtime i rozmiarów z 10.10 jest opisany osobno poniżej; nie nadpisuje historii. Igor prowadzi monitoring i odbiera F0, a Codex wykonuje dostępne prace techniczne. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
 
+## Sentry — odczyt panelu 10.10.2026
+
+**P — ręczna transkrypcja UI zapisana 16:30:59.5509919 UTC:** właściwa
+organizacja/projekt i storage EU, aktywny **Developer**, trial zakończony,
+brak payment/billing details. Dokładnego okna obserwacji nie instrumentowano;
+[indeks](evidence/f0-sentry-ui-2026-10-10.json) podaje hash prywatnej transkrypcji,
+nie surowego HTTP/DOM. Nie zapisano DOM ani screenshotów; dane osobowe,
+identyfikatory, tokeny i szczegółowe ACL pozostają poza publicznym pakietem.
+
+Cykl 09.10–08.11.2026: errors 40/5000, accepted 40, dropped 0, additional
+spend 0 USD dla tej kategorii; spans wyświetlone jako 3K/5M, replay 0/50.
+UI zawiera „Start trial”, więc same karty liczników nie dowodzą wszystkich
+entitlements. Uptime 1/1 i banner usage exceeded nie są dowodem awarii.
+Liczniki nie potwierdzają pełnej dostawy SDK ani zerowej faktury.
+Podgląd upgrade pozostał niezapisany; plan Developer nie został zmieniony.
+
+**U/P — tożsamość:** według deklaracji Igora zalogowano konto Bartosza.
+UI pokazuje Owner, Active, TeamAdmin, jednego członka i płatny warunek
+dodatkowych członków. Indywidualna rola/dostęp Igora nadal nie są potwierdzone.
+Sentry TOTP i passkey nieaktywne; recovery wymaga 2FA. MFA GitHub nie odczytano.
+
+**Dokumentacja + dopasowanie planu, osobno od UI:** [event data Developer](https://www.sentry.help/en/articles/13964940-how-long-are-my-organization-s-audit-logs-stored)
+ma retencję 30 dni, a [PAYG nie jest dostępne w Free Developer](https://www.sentry.help/en/articles/13965037-can-i-set-up-an-on-demand-pay-as-you-go-budget-for-my-free-developer-plan).
+Nie odczytano aktywnego TTL i nie testowano wygaszania; retencja spans
+i source maps nadal niezweryfikowana.
+
+**P — nagłówki API, 16:32:49.060–16:32:50.043 UTC:** dwa GET org/project
+zwróciły HTTP 200 bez odczytu lub zapisu body. Limit 40, Remaining 39/38,
+Reset 1791649970, ConcurrentLimit 25, ConcurrentRemaining 24. Osobny hash
+pomiaru podaje [indeks](evidence/f0-sentry-ui-2026-10-10.json).
+To limity konkretnego wywołującego i endpointów; długości okna nie zmierzono,
+nie ustala to limitu 40/s ani budżetu przyszłego agenta.
+
+**G07/G08 PARTIAL, G03/G09 FAIL,
+G05 PASS wyłącznie dla decyzji, F0_OPEN; bez zmian kont lub F1.**
+
 ## PostHog — odczyt panelu 10.10.2026
 
 **P — ręczna transkrypcja widocznego UI, zapisana 16:07:03.4311488 UTC:**
@@ -22,8 +58,8 @@ wymaganych produktów pozostają niepotwierdzone.
 Sesja Igora oznaczona jako własna ma rolę **Admin**, dostęp do projektu,
 2FA disabled i brak pending invites. To nowy dowód indywidualnego dostępu
 PostHog; nie utożsamiamy go z historyczną tożsamością API owner.
-Odczyt właściwego panelu Sentry, jego planu i indywidualnej roli Igora
-pozostaje do wykonania.
+W chwili tego odczytu panel Sentry pozostawał niezweryfikowany;
+późniejszy odczyt opisano powyżej, bez potwierdzenia indywidualnej roli Igora.
 
 Ustawienia replay: ON, console ON, network timings ON, headers/body OFF,
 maskowanie Normal inputs, sampling 100%, brak triggers i URL blocklist,
@@ -83,7 +119,7 @@ nie rozstrzygają wszystkich uprawnień ani aktywnego planu.
 
 **U — wcześniejsza deklaracja Igora:** brak dostępu do paneli w chwili
 tej odpowiedzi. Późniejszy odczyt UI PostHog opisany powyżej potwierdza jego
-dostęp; właściwy panel Sentry nadal pozostaje do odczytu.
+dostęp; późniejszy odczyt Sentry na koncie Bartosza ma osobny zapis.
 [Indeks](evidence/f0-follow-up-2026-10-10.json) zawiera hashe prywatnych
 zredagowanych dowodów. Surowe odpowiedzi z sekretami nie trafiają do Git.
 

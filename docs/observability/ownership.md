@@ -17,6 +17,23 @@ instalacji, migracji, wdrożeń, testów telefonu lub zmiany kont. Pełne dowody
 pozostają prywatne. [Inwentarz](runtime-inventory.md) rozdziela pomiar od
 deklaracji, a [plan odbioru](acceptance-plan.md) opisuje F0-G01–F0-G09.
 
+## Odczyt panelu Sentry — 10.10.2026
+
+**P — transkrypcja UI zapisana 16:30:59.5509919 UTC:** potwierdzono właściwą
+organizację/projekt, storage EU, aktywny Developer i quota 5000 errors.
+UI pokazuje Owner/Active/TeamAdmin; użycie konta Bartosza wynika z deklaracji
+Igora. Jest jeden członek, dodanie kolejnych wymaga płatnego planu.
+To nie jest dowód indywidualnej roli Igora. Sentry TOTP/passkey są nieaktywne;
+MFA GitHub nie odczytano. Nie zmieniono kont, dostępu lub planu.
+
+[Indeks Sentry](evidence/f0-sentry-ui-2026-10-10.json) i
+[inwentarz](runtime-inventory.md#sentry--odczyt-panelu-10102026) oddzielają
+liczniki UI od kompletności SDK oraz niezapisanej oferty upgrade.
+Event retention 30 dni i brak PAYG wynikają z dokumentacji dopasowanej
+do Developer, bez odczytu TTL/testu wygaszania. Pozostałe parametry produktów,
+indywidualny dostęp i MFA nadal wymagają dowodów. **G07/G08 PARTIAL,
+G03/G09 FAIL, F0_OPEN**; G05 pozostaje PASS tylko dla decyzji.
+
 ## Odczyt panelu PostHog — 10.10.2026
 
 **P — transkrypcja widocznego UI zapisana 16:07:03.4311488 UTC:** właściwa
@@ -24,7 +41,8 @@ organizacja/projekt EU Cloud, badge **Free** oraz wybrane quota i liczniki
 rozliczeniowe zostały odczytane. Igor ma indywidualny dostęp do projektu
 jako **Admin**; 2FA jest wyłączone, brak oczekujących zaproszeń. Wcześniejsza
 deklaracja braku dostępu i role tożsamości API pozostają historią.
-Nie odczytano jeszcze właściwego panelu Sentry ani indywidualnej roli Igora.
+W chwili tego odczytu Sentry był jeszcze niezweryfikowany; późniejsze
+uzupełnienie opisano powyżej. Indywidualna rola Igora nadal niepotwierdzona.
 
 [Indeks UI](evidence/f0-posthog-ui-2026-10-10.json) i
 [inwentarz](runtime-inventory.md#posthog--odczyt-panelu-10102026) rozdzielają
@@ -106,7 +124,8 @@ lub serwerów, wdrożenia, migracje, restore i F1 pozostają wstrzymane.
 - **Diagnostyka: 0 USD nowych opłat Sentry/PostHog.** Docelowo Sentry EU
   Developer i PostHog EU Free, bez płatnego quota, PAYG, trialu przechodzącego
   w abonament lub rozszerzeń. UI PostHog potwierdziło Free, wybrane quota
-  i dostęp Igora; Sentry oraz pozostałe parametry nadal wymagają dowodów G07.
+  i dostęp Igora; UI Sentry potwierdziło Developer. Pozostałe parametry,
+  indywidualny dostęp Sentry i MFA nadal wymagają dowodów G07.
   Decyzja i odczyt nie zmieniają aktywnej subskrypcji.
   Przekroczenie darmowego quota może ograniczyć telemetrię, więc brak danych
   musi być widoczny. Bezpłatna chmura nie zastępuje pełnej własnej historii.
