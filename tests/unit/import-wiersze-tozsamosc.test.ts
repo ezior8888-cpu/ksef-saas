@@ -309,8 +309,16 @@ describe('C0: fikstury', () => {
     expect([...numbers].sort()).toEqual([
       'FV/C0/BEZPLAT', 'FV/C0/OKRES', 'FV/C0/P14', 'FV/C0/P15', 'FV/C0/P15-ZLE', 'FV/C0/P6A', 'FV/C0/ROZ', 'FV/C0/STRONY', 'FV/C0/UE', 'FV/C0/ZAL',
     ]);
-    // Zmiana sprawdzana w treści pliku, bez komentarza z jej opisem.
-    const body = (name: FixtureName) => xml(name).replace(/<!--[\s\S]*?-->/, '');
+    // Zmiana sprawdzana w treści pliku, bez komentarza z jej opisem. Komentarz
+    // stoi zaraz po deklaracji XML (sprawdzone wyżej), więc treść = wszystko po
+    // jego końcu — bez wycinania wyrażeniem regularnym (CodeQL
+    // js/incomplete-multi-character-sanitization).
+    const body = (name: FixtureName) => {
+      const text = xml(name);
+      const end = text.indexOf('-->');
+      expect(end, name).toBeGreaterThan(0);
+      return text.slice(end + '-->'.length);
+    };
 
     expect(body('nabywca-ue')).toMatch(/<KodUE>DE<\/KodUE>\s*<NrVatUE>123456789<\/NrVatUE>/);
     expect(body('nabywca-ue')).not.toContain('<NIP>1111111111</NIP>');
