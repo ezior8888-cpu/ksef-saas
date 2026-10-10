@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "reference_revision": "feb5262a16ca9b420f681a09195c6b84fdeb4247",
+  "status": "F0_OPEN",
+  "scope": "read_only_PostHog_UI_manual_transcription_not_SDK_or_F0_acceptance",
+  "source": {
+    "kind": "manual_transcription_of_visible_UI",
+    "transcription_recorded_at_utc": "2026-10-10T16:07:03.4311488Z",
+    "exact_UI_observation_window_utc": "not_instrumented",
+    "private_transcription_sha256": "9a61140eb2454e8737e4f816807ca1716c111ea4bdb75ac1f2447efb5acb1fa7",
+    "hash_kind": "transcription_file_not_raw_HTTP_or_DOM",
+    "raw_DOM_saved": false,
+    "screenshots_saved": false,
+    "personal_values_or_account_resource_identifiers_published": false
+  },
+  "organization_project": {
+    "intended_organization_and_project_confirmed_in_UI": true,
+    "cloud_region_reported_in_UI": "EU"
+  },
+  "billing_UI": {
+    "plan_badge": "Free",
+    "billing_cycle_dates": {
+      "from": "2026-09-17",
+      "to": "2026-10-17"
+    },
+    "cycle_timezone": "not_recorded",
+    "product_analytics": {
+      "usage_counter_events": 944,
+      "free_quota_events": 1000000,
+      "observed_billing_limit_events": 1000000
+    },
+    "error_tracking": {
+      "usage_counter_exceptions": 0,
+      "free_quota_exceptions": 100000,
+      "observed_billing_limit_exceptions": 100000
+    },
+    "session_replay_web": {
+      "usage_counter_recordings": 2,
+      "free_quota_recordings": 5000,
+      "billing_limit": "not_recorded"
+    },
+    "spend_chart": {
+      "from_date": "2026-09-09",
+      "to_date": "2026-10-09",
+      "timezone": "UTC",
+      "displayed_state": "no_spend_data"
+    },
+    "invoice_total_or_zero_cost_verified": false,
+    "PAYG_status_verified": false,
+    "hard_stop_behavior_verified": false,
+    "counters_prove_SDK_delivery_or_environment_origin": false
+  },
+  "individual_access_UI": {
+    "signed_in_session_identified_as_Igor": true,
+    "organization_role": "Admin",
+    "intended_project_access_confirmed": true,
+    "two_factor_authentication_enabled": false,
+    "pending_invites_present": false,
+    "relation_to_historical_API_token_identity_verified": false,
+    "human_alert_delivery_or_on_call_readiness_verified": false
+  },
+  "replay_settings_UI": {
+    "recording_enabled": true,
+    "console_recording_enabled": true,
+    "network_timings_enabled": true,
+    "network_headers_capture_enabled": false,
+    "network_body_capture_enabled": false,
+    "masking_mode": "Normal_inputs",
+    "sampling_percent": 100,
+    "triggers_present": false,
+    "URL_blocklist_present": false,
+    "retention_days": 30,
+    "actual_SDK_behavior_verified": false,
+    "recording_contents_read": false,
+    "configuration_changed": false,
+    "interpretation": "UI_settings_do_not_establish_capture_privacy_or_implementation_of_selected_replay_off_policy"
+  },
+  "remaining_gaps": {
+    "Sentry_intended_panel_read": "open",
+    "Sentry_active_plan_and_Igor_individual_role": "unverified",
+    "PostHog_effective_retention_of_all_required_products": "incomplete",
+    "PostHog_PAYG_actual_costs_and_hard_stop_behavior": "unverified",
+    "effective_privacy_and_alert_delivery": "not_tested"
+  },
+  "decision_documents": {
+    "overview": "../README.md",
+    "ownership": "../ownership.md#odczyt-panelu-posthog--10102026",
+    "inventory": "../runtime-inventory.md#posthog--odczyt-panelu-10102026",
+    "acceptance": "../acceptance-plan.md"
+  },
+  "gates": {
+    "F0-G03": "FAIL_NO_RUNNING_ISOLATED_STAGING",
+    "F0-G05": "PASS_DATA_POLICY_DECISION_ONLY",
+    "F0-G07": "PARTIAL_PostHog_UI_EVIDENCE_Sentry_AND_REMAINING_PARAMETERS_OPEN",
+    "F0-G08": "PARTIAL_REAL_READINESS_AND_ROUTING_UNVERIFIED",
+    "F0-G09": "FAIL_NO_EXECUTION_EVIDENCE_FOR_COMPLETE_COPIES"
+  },
+  "formal_F0_results_accepted": false,
+  "all_TEST_01_to_07": "NOT_RUN",
+  "F1_started": false,
+  "not_executed": [
+    "account_setting_change",
+    "purchase",
+    "server_change",
+    "backup",
+    "staging",
+    "migration",
+    "deployment",
+    "restore",
+    "real_alert",
+    "F1"
+  ]
+}

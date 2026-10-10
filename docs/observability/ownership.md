@@ -17,6 +17,23 @@ instalacji, migracji, wdrożeń, testów telefonu lub zmiany kont. Pełne dowody
 pozostają prywatne. [Inwentarz](runtime-inventory.md) rozdziela pomiar od
 deklaracji, a [plan odbioru](acceptance-plan.md) opisuje F0-G01–F0-G09.
 
+## Odczyt panelu PostHog — 10.10.2026
+
+**P — transkrypcja widocznego UI zapisana 16:07:03.4311488 UTC:** właściwa
+organizacja/projekt EU Cloud, badge **Free** oraz wybrane quota i liczniki
+rozliczeniowe zostały odczytane. Igor ma indywidualny dostęp do projektu
+jako **Admin**; 2FA jest wyłączone, brak oczekujących zaproszeń. Wcześniejsza
+deklaracja braku dostępu i role tożsamości API pozostają historią.
+Nie odczytano jeszcze właściwego panelu Sentry ani indywidualnej roli Igora.
+
+[Indeks UI](evidence/f0-posthog-ui-2026-10-10.json) i
+[inwentarz](runtime-inventory.md#posthog--odczyt-panelu-10102026) rozdzielają
+Free/liczniki od niepotwierdzonych kosztów, PAYG, źródła środowiska i SDK.
+Replay w panelu pozostaje ON; nie zmieniono ustawień. Odczyt 2FA/replay
+ujawnia pozostałe różnice wobec przyjętej polityki, bez zaliczenia TEST-04.
+**G05 PASS dla decyzji, G07/G08 PARTIAL, F0_OPEN**; gotowość reakcji
+na alarmy, staging i pełne kopie nadal nie są odebrane.
+
 ## Uzupełnienie deklaracji i dostępu — 10.10.2026
 
 **U — źródło: odpowiedzi Igora w bieżącym czacie, bez odrębnego czasu UTC:**
@@ -39,12 +56,12 @@ Przed zakupem obowiązuje sprawdzenie kwoty całkowitej na koncie i limitu
 5 EUR łącznie z podatkiem. [Indeks odczytów](evidence/f0-follow-up-2026-10-10.json)
 zachowuje osobne czasy i źródła.
 
-Igor następnie odpowiedział **„Nie mam dostępu do tych kont”** na prośbę
-o lokalne zalogowanie do paneli Sentry/PostHog. Metadane odczytane przez
-istniejące tokeny opisują role ich tożsamości; nie dowodzą indywidualnego
-dostępu Igora. Potrzebny jednorazowy datowany odczyt aktualnego planu,
-limitów, retencji, PAYG/limitów wydatków i indywidualnego dostępu przez
-właściciela kont. Nie żądamy kolejnego tokena, hasła ani pełnego eksportu.
+**U — wcześniejsza deklaracja:** Igor odpowiedział **„Nie mam dostępu do
+tych kont”** na prośbę o lokalne zalogowanie do paneli Sentry/PostHog.
+Metadane istniejących tokenów opisują role ich tożsamości; nie dowodziły
+indywidualnego dostępu Igora. Późniejszy odczyt UI PostHog opisano powyżej.
+Pozostałe braki wymagają ograniczonego datowanego odczytu, bez żądania
+kolejnego tokena, hasła ani pełnego eksportu.
 
 **P — 15:20–15:24 UTC:** metadane Sentry i PostHog odczytano w EU,
 pozostawiając brak dowodu aktywnych planów. Odmowa billing PostHog wskazuje
@@ -88,8 +105,9 @@ lub serwerów, wdrożenia, migracje, restore i F1 pozostają wstrzymane.
 
 - **Diagnostyka: 0 USD nowych opłat Sentry/PostHog.** Docelowo Sentry EU
   Developer i PostHog EU Free, bez płatnego quota, PAYG, trialu przechodzącego
-  w abonament lub rozszerzeń. Rzeczywiste tier, limity, retencja i dostęp
-  kont nadal wymagają dowodów G07; decyzja nie zmienia aktywnej subskrypcji.
+  w abonament lub rozszerzeń. UI PostHog potwierdziło Free, wybrane quota
+  i dostęp Igora; Sentry oraz pozostałe parametry nadal wymagają dowodów G07.
+  Decyzja i odczyt nie zmieniają aktywnej subskrypcji.
   Przekroczenie darmowego quota może ograniczyć telemetrię, więc brak danych
   musi być widoczny. Bezpłatna chmura nie zastępuje pełnej własnej historii.
 - **Dashboard i agent w pierwszym planowanym wydaniu:** dashboard chronionej

@@ -2,6 +2,36 @@
 
 Stan: **F0 nie jest domknięty**. Historyczny pomiar runtime pochodzi z 04.10.2026, 11:03–11:22 UTC. Odczyty API i próba SSH z 06.10 oraz decyzje/deklaracje z 07.10 mają osobne źródła. Nowy odczyt SSH/runtime i rozmiarów z 10.10 jest opisany osobno poniżej; nie nadpisuje historii. Igor prowadzi monitoring i odbiera F0, a Codex wykonuje dostępne prace techniczne. Podsumowanie jest przeznaczone do publicznego repo; szczegółowy inwentarz i surowe dowody pozostają prywatne.
 
+## PostHog — odczyt panelu 10.10.2026
+
+**P — ręczna transkrypcja widocznego UI, zapisana 16:07:03.4311488 UTC:**
+potwierdzono właściwą organizację i projekt EU Cloud. Dokładnego okna
+obserwacji UI nie instrumentowano. [Osobny indeks](evidence/f0-posthog-ui-2026-10-10.json)
+zawiera hash prywatnej transkrypcji, nie surowej odpowiedzi HTTP lub DOM.
+Nie zapisano DOM ani screenshotów; identyfikatory i dane osobowe pozostają prywatne.
+
+Billing pokazuje **Free**, cykl 17.09–17.10.2026: Product Analytics
+944 zdarzenia / 1 mln darmowego quota, billing limit 1 mln; Error Tracking
+0 wyjątków / 100 tys. darmowego quota, billing limit 100 tys.; replay web
+2 nagrania, darmowe quota 5000. To liczniki rozliczeniowe, bez ustalonego
+źródła środowiska i bez dowodu działania SDK lub kompletności historii błędów.
+Wykres wydatków 09.09–09.10.2026 UTC pokazuje „no spend data”; nie dowodzi
+faktury na zero. PAYG, zachowanie limitów i efektywna retencja wszystkich
+wymaganych produktów pozostają niepotwierdzone.
+
+Sesja Igora oznaczona jako własna ma rolę **Admin**, dostęp do projektu,
+2FA disabled i brak pending invites. To nowy dowód indywidualnego dostępu
+PostHog; nie utożsamiamy go z historyczną tożsamością API owner.
+Odczyt właściwego panelu Sentry, jego planu i indywidualnej roli Igora
+pozostaje do wykonania.
+
+Ustawienia replay: ON, console ON, network timings ON, headers/body OFF,
+maskowanie Normal inputs, sampling 100%, brak triggers i URL blocklist,
+retencja 30d. Nie czytano nagrań i nie zmieniono ustawień. Zachowanie SDK
+oraz skuteczność ochrony danych pozostają UNVERIFIED; ustawienia UI nie
+potwierdzają realizacji przyjętej polityki replay OFF ani TEST-04.
+**G05 PASS tylko dla decyzji; G07/G08 PARTIAL, G03/G09 FAIL, F0_OPEN.**
+
 ## Uzupełnienie odczytów po 15:20 UTC — 10.10.2026
 
 **P — kolektor `6b1a972`, początek 15:21:45.821 UTC:** wszystkie trzy hosty
@@ -51,8 +81,9 @@ identyczny hash. W zredagowanym odczycie znaczników komunikat zawiera
 potrzeba silniejszego tokena. Nie wykonano zmiany flagi lub konta. Dowody
 nie rozstrzygają wszystkich uprawnień ani aktywnego planu.
 
-**U — Igor nie ma dostępu do paneli.** Właściciel kont musi dostarczyć
-ograniczony odczyt planów/rozliczeń lub umożliwić dostęp indywidualny.
+**U — wcześniejsza deklaracja Igora:** brak dostępu do paneli w chwili
+tej odpowiedzi. Późniejszy odczyt UI PostHog opisany powyżej potwierdza jego
+dostęp; właściwy panel Sentry nadal pozostaje do odczytu.
 [Indeks](evidence/f0-follow-up-2026-10-10.json) zawiera hashe prywatnych
 zredagowanych dowodów. Surowe odpowiedzi z sekretami nie trafiają do Git.
 
