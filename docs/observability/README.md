@@ -1,5 +1,17 @@
 # FaktFlow — pakiet F0
 
+Aktualizacja 11.10: przygotowano [granicę źródeł i wznowienia](../runbooks/f0-backup-executor.md#granica-źródeł-i-wersja-manifestu).
+Obowiązkowe zamknięcie klientów, dowód całego okna, dokładny seal z `fsync`
+i trwały zamiar poprzedzają jedno wywołanie `resumeWrites`. Dopiero
+zweryfikowany i trwale zapisany receipt `RESUMED` pozwala rozpocząć upload
+oraz pełne kontrole repozytoriów. Lock nadal obejmuje całą sekwencję;
+niepewne wznowienie wymaga uzgodnienia operatorskiego, bez automatycznego retry.
+Manifest v2 wiąże seal i receipt z kopią DB; historyczny v1 nie dowodzi
+tej nowej granicy. [Model czasu](../runbooks/f0-backup-capacity-model.md)
+rozdziela okno zapisów, lokalne I/O i cały przebieg. Produkcyjnego callbacku
+ani pipeline nie zainstalowano; nie wykonano kopii lub freeze/resume.
+**PREPARATION_ONLY, F0_OPEN, G03/G09 FAIL.**
+
 Aktualizacja 11.10: [model pojemności i czasu wykonawcy](../runbooks/f0-backup-capacity-model.md) opisuje podwójne pliki robocze, koszt pełnych kontroli historii i syntetyczne scenariusze limitów. Pomiary oraz wybór urządzeń pozostają w prywatnym raporcie operatora. F0 pozostaje OPEN.
 
 Aktualizacja 11.10: przygotowane [prywatne podłączenie klientów](../runbooks/f0-backup-private-wiring.md), osobny czytnik SSH i [procedura okna spójności](../runbooks/f0-backup-consistency-window.md). Prywatny szkic wskazuje braki; F0 pozostaje OPEN, G03/G09 FAIL.

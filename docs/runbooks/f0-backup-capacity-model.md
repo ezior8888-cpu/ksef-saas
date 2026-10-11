@@ -10,8 +10,8 @@ zakupu, freeze/resume, restore, migracji ani wdrożenia.
 
 Niech `B` oznacza rzeczywistą sumę artefaktów jednego przebiegu: oba dumpy,
 globals/TOC, oba eksporty obiektów, konfigurację odzyskiwania, ich metadane
-oraz manifest. Rozmiar baz według `pg_database_size` ani fizyczne `du`
-magazynu nie są pomiarem `B`. Kompresja dumpów oraz pełny pakiet recovery
+oraz seal, potwierdzenie wznowienia i manifest. Rozmiar baz według
+`pg_database_size` ani fizyczne `du` magazynu nie są pomiarem `B`. Kompresja dumpów oraz pełny pakiet recovery
 mogą zmienić tę relację; nie przyjmować niezmierzonego współczynnika.
 
 [Adapter restic](../../scripts/ops/backup-restic.mjs) po zapisie odczytuje
@@ -60,8 +60,9 @@ Dwie próbki nie wystarczą do prognozy rocznej lub obietnicy skutecznej dedupli
 
 ## Cztery pełne kontrole repozytoriów
 
-[Wykonawca](../../scripts/ops/run-backup-sequence.mjs) działa kolejno:
-zapis i odczyt DB, aplikacji, Supabase, następnie osobnego manifestu w repo DB.
+[Wykonawca](../../scripts/ops/run-backup-sequence.mjs) po potwierdzonym wznowieniu
+zapisów i trwałym receipt wykonuje kolejno: zapis i odczyt DB, aplikacji,
+Supabase, następnie osobnego manifestu w repo DB.
 Każdy odczyt [adaptera restic](../../scripts/ops/backup-restic.mjs) uruchamia
 `check --read-data` całego repozytorium, a potem `dump` każdego pliku snapshotu.
 Są więc **cztery pełne kontrole**, w tym **dwie kontrole repo DB**. Mały
@@ -75,28 +76,63 @@ przekazuje je do zdalnego `pg_restore --list`, co także kosztuje czas
 transferu. Wymagana ilość odczytu na tym etapie nie jest z góry równa
 rozmiarowi całego archiwum.
 
-## Wzór okna i przykłady syntetyczne
+## Lokalny odczyt i utrwalenie również kosztują czas
 
-`T_okna = T_drenaż + T_sekwencja + T_ocena_zakończenia_i_wznowienie`
+Seal ponownie odczytuje i hashuje cały zestaw źródeł — około `B` dodatkowego
+odczytu **przed resume** — oraz wykonuje `fsync` plików i katalogów. Potem
+pełna weryfikacja trzech katalogów oraz kontrole przed i po uploadzie każdej
+grupy dodają około `3 × B` lokalnego odczytu **po resume**. To narzut ponad
+wcześniejsze hashowanie, porównanie referencji, odczyt przez restic i hash
+pobranych plików. Przybliżenie `B` pomija niewielkie różnice rozmiarów
+późniejszych potwierdzeń i manifestu.
 
-Przybliżenie części transferowej, z rozmiarami w MiB, szybkościami w MiB/s
+Sama przepustowość sieci nie wystarcza do oszacowania czasu. Osobno mierzyć
+lokalne odczyty, zapis plików, opóźnienia `fsync` i konkurencję o dysk.
+Katalog seal jest zapisywany jako JSON z domyślnym limitem **1 MiB**;
+duża liczba lub długość ścieżek może przekroczyć limit niezależnie od liczby
+bajtów payloadów. Przekroczenie zatrzymuje przebieg przed resume; nie wolno
+ucinać katalogu ani uznawać istniejącego pliku za potwierdzenie sukcesu.
+
+## Dwa budżety czasu i przykłady syntetyczne
+
+`T_okna_zapisów = T_ustanowienie_i_drenaż + T_capture + T_resume`
+
+`T_sekwencja = T_preflight + T_capture + T_resume + T_receipt + T_repo + T_zakończenie`
+
+`T_capture` obejmuje dumpy i inspekcje, eksporty, recovery, referencje,
+porównanie, obowiązkowe zamknięcie klientów źródeł, dowód `after` całego
+przedziału i zakończenia operacji źródłowych, dokładną końcową weryfikację
+plików, seal z `fsync` oraz trwały zamiar wznowienia. `T_resume` kończy się
+dopiero po zweryfikowaniu receipt `RESUMED`. Jeżeli kontrole wstępne odbywają
+się już przy aktywnych blokadach, również trzeba doliczyć je do okna.
+`T_receipt` to trwały zapis potwierdzenia w części DB, wymagany przed uploadem.
+
+`T_repo` obejmuje uploady, ponowne kontrole lokalnych plików, cztery pełne
+kontrole historii i odczyty każdego pliku. Ten koszt występuje **po resume**.
+Cały czas `T_sekwencja` pozostaje objęty blokadą równoległego przebiegu.
+Nie znamy rzeczywistej długości `T_capture` ani `T_resume`; przeniesienie
+historii poza okno nie dowodzi krótkiej przerwy ani powodzenia wznowienia.
+
+Przybliżenie całej sekwencji, z rozmiarami w MiB, szybkościami w MiB/s
 oraz wynikiem w minutach:
 
-`T ≈ T_fixed + [B/u + (R_DB_przed + R_app + R_supabase + R_DB_po)/c + B/p] / 60`
+`T_sekwencja ≈ T_fixed + [B/u + (R_DB_przed + R_app + R_supabase + R_DB_po)/c + B/p] / 60`
 
 `u` oznacza upload, `c` odczyt kontroli repo, a `p` przepustowość potoku
 repo → czytnik → koordynator, ograniczoną najwolniejszym odcinkiem,
-dyskiem lub hashowaniem. Odcinki potoku nie są naiwnie dodawane jako dwa
-kolejne pełne transfery. `T_fixed` obejmuje pozostałe prace: drenaż,
-pozyskanie źródeł, dump/eksport, inspekcje, hashe, metadane, starty procesów,
-sygnalizację i wznowienie. Musi zostać zmierzone, nie zadeklarowane jako dowód.
+dyskiem lub hashowaniem. Odcinki potoku nie są dodawane jako dwa kolejne
+pełne transfery. `T_fixed` obejmuje preflight, pozyskanie źródeł, inspekcje,
+hashe, metadane, utrwalenie plików, wznowienie i jego receipt, starty procesów,
+sygnalizację oraz pozostałe kontrole. Nie obejmuje zewnętrznego drenażu.
+Składniki `T_fixed`, w tym powyższe lokalne I/O i `fsync`, trzeba zmierzyć
+osobno; jego suma nie określa okna zapisów.
 
 Poniższe **syntetyczne** rachunki zakładają bieżący zestaw 2 GiB, dominujące
 repo DB, pomijalną historię pozostałych repo, `T_fixed = 20 min` i tę samą
 szybkość wszystkich trzech etapów. To model wrażliwości, nie prognoza
 sukcesu ani długości przerwy:
 
-- Repo DB **2 GiB**, szybkość **5 MiB/s**: około **47,31 min** całości;
+- Repo DB **2 GiB**, szybkość **5 MiB/s**: około **47,31 min** sekwencji;
   pierwszy odczyt DB około **13,65 min** przed dodatkowym narzutem.
 - Repo DB **2 GiB**, szybkość **2 MiB/s**: około **88,27 min**;
   pierwszy odczyt DB około **34,13 min**, przekraczający limit kroku.
@@ -112,11 +148,20 @@ kończącą się później. Zwiększenie timeoutu nie rozwiązuje kosztu histori
 Wynik poniżej limitu też nie dowodzi powodzenia: nie uwzględnia wszystkich
 niezmierzonych narzutów i zmian obciążenia.
 
-Zgodnie z [procedurą spójności](f0-backup-consistency-window.md) podstawowe
-okno obejmuje **całą sekwencję**, wraz z uploadem i pełnymi kontrolami repo.
-`closeSourceClients` zamyka sesje źródeł; nie jest granicą bezpiecznego resume.
-Limit sekwencji nie ogranicza zewnętrznego drenażu ani wznowienia. Timeout
-nie dowodzi zatrzymania procesów zdalnych i może wymagać zachowania locka.
+Zgodnie z [procedurą spójności](f0-backup-consistency-window.md) samo
+`closeSourceClients` nie upoważnia do resume. Potrzebne są jeszcze dowód
+`after`, dokładny seal, trwały zamiar oraz zweryfikowany wynik wymaganego
+adaptera `resumeWrites`. Linux wymaga `POSIX_FSYNC` plików i katalogów;
+`SYNTHETIC_ONLY` na Windows nie jest dowodem trwałości operacyjnej.
+Ponowne kontrole plików po resume nie tworzą gwarancji ich niezmienności.
+
+Limit sekwencji nie ogranicza wcześniejszego zewnętrznego drenażu; obejmuje
+jej własny krok resume. Cztery pełne kontrole repo nie wydłużają poprawnie
+zakończonego okna zapisów, ale nadal mogą przekroczyć 30 min na odczyt lub
+3 h na przebieg i zatrzymać kopię. Przy późnym błędzie stan zapisów pozostaje
+`RESUMED`, a stan kopii i locka jest raportowany osobno. Niepewność przed
+potwierdzonym resume wymaga uzgodnienia operatorskiego, bez automatycznego
+retry. Timeout nie dowodzi zakończenia procesów zdalnych.
 
 ## Co trzeba przygotować przed wykonaniem
 
@@ -128,9 +173,9 @@ nie dowodzi zatrzymania procesów zdalnych i może wymagać zachowania locka.
   portu 22; inny port lub tunel wymaga osobnego przygotowania i testów.
 - Przygotować kontrolowane sprzątanie lokalnych artefaktów i skuteczną
   retencję, zachowując dowody oraz niepełne przebiegi do rozstrzygnięcia.
-- Rozdzielić koszt kontroli bieżącej kopii od pełnego przeglądu historii
-  oraz przygotować sprawdzoną granicę wznowienia zapisów po utrwaleniu
-  źródeł. To następna zmiana kodu/procedury, nie istniejąca funkcja.
+- Zmierzyć osobno pozyskanie i trwałe utrwalenie źródeł, wznowienie oraz
+  transfer z kontrolą całej historii. Przygotowany kontrakt nie instaluje
+  produkcyjnego dostawcy resume ani nie dowodzi czasu okna.
 - Dopiero na zweryfikowanych warunkach przygotować kartę pierwszego
   kontrolowanego przebiegu i osobno ustalić maksymalną dopuszczalną przerwę.
 

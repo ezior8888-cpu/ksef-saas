@@ -21,11 +21,11 @@ nie ładuje `.env` i nie uruchamia powłoki.
   testy nie są dowodem ochrony pliku produkcyjnego.
 - `createBackupWiring(config, { operations, command?, sourceConstructors? })`
   buduje adaptery bez połączeń. `operations` wymaga rzeczywistych dostawców
-  `preflight`, `observeConsistency`, `captureRecovery` i `notify`.
+  `preflight`, `observeConsistency`, `captureRecovery`, `resumeWrites` i `notify`.
   Nie ma domyślnych funkcji zwracających `true`.
-- Dopiero jawne `run({ runId, authorization:{backup:true}, ... })` może
-  wykonywać operacje. Pole autoryzacji jest warunkiem technicznym, nie zgodą
-  człowieka. W tej kontynuacji wywołano wyłącznie testy z fikcyjnymi klientami.
+- Dopiero jawne `run({ runId, authorization:{backup:true,resumeWrites:true}, ... })`
+  w trybie operacyjnym może wykonywać operacje. Oba pola autoryzacji są
+  warunkami technicznymi wywołania, nie zgodą człowieka. W tej kontynuacji wywołano wyłącznie testy z fikcyjnymi klientami.
   Tryb `synthetic` sam nie izoluje sieci; izolację zapewniają testowe adaptery.
 
 CLI ma tylko pomoc i sprawdzenie offline:
@@ -41,12 +41,10 @@ zawiera zamknięte kody braków, bez adresów, identyfikatorów, haseł i ście�
 ## Pliki i połączenia
 
 [Publiczny wzór](../../ops/observability/backup/private-runtime.example.json)
-ma celowo puste wartości wymagające uzupełnienia. Prywatny szkic tej sesji
-oraz odczyty kontrolne są w ignorowanym `.agents/f0-20261011/`, poza Git.
-Przypięto istniejące hosty, kontener DB i zaobserwowane metadane adresów.
-Ścieżki Linux we wzorze są propozycją; nie utworzono ich na serwerach.
-Nie kopiowano haseł ani tokenów z usług. Szkic zwraca
-`SOURCE_CLIENTS_INCOMPLETE` i `REPOSITORY_TRANSPORT_INCOMPLETE`.
+ma celowo puste wartości wymagające uzupełnienia. Prywatna konfiguracja,
+identyfikatory, pomiary i dobór urządzeń pozostają poza Git. Przykładowe
+ścieżki nie dowodzą istnienia katalogów ani instalacji narzędzi. Poprawny
+JSON nie potwierdza gotowości źródeł, repozytoriów lub operacji wznowienia.
 
 [Fabryka źródeł](../../scripts/ops/backup-source-clients.mjs) używa dwóch
 osobnych klientów `pg.Client`, bez uruchamiania pg-boss i bez migracji.
@@ -60,15 +58,17 @@ jeden attempt i własne ograniczone połączenia. Nie korzysta z domyślnego
 łańcucha haseł środowiska. TLS weryfikuje certyfikat względem skonfigurowanego
 hosta. Alternatywa `loopback-tunnel` dopuszcza wyłącznie literalny localhost
 `127.0.0.1` lub `::1`; nie tworzy ani nie poświadcza tunelu SSH.
-Zaobserwowany prywatny endpoint HTTP nie staje się automatycznie bezpiecznym
+Prywatny endpoint HTTP nie staje się automatycznie bezpiecznym
 połączeniem: trzeba przypiąć zweryfikowany transport, nie wyłączać TLS.
 
 Połączenia źródeł otwierają się leniwie przy pierwszym odczycie, po zdobyciu
-blokady całego przebiegu. Są zamykane przed pierwszym uploadem, również
-w ścieżce błędu przed zwolnieniem blokady. Niepewny timeout lub niepełne
-zamknięcie zatrzymuje przebieg i zachowuje blokadę. Zamykanie w `finally`
-jest dodatkowym zabezpieczeniem, a nie późnym sposobem unieważniania sukcesu.
-Zamknięcie lokalnego klienta nie dowodzi końca procesów na serwerze.
+blokady całego przebiegu. Obowiązkowy `closeSourceClients` zamyka je po
+ekstrakcji i sprawdzeniu referencji, **przed** `observeConsistency(after)`,
+seal i wznowieniem zapisów. Niepewny timeout lub niepełne zamknięcie
+zatrzymuje przebieg i zachowuje blokadę. Zamknięcie lokalnego klienta nie
+dowodzi końca procesów zdalnych; `after` musi osobno potwierdzić
+`sourceOperationsStopped:true` i wykluczenie mutacji przez cały przedział.
+Sprzątanie klientów po błędzie nie uruchamia `resumeWrites`.
 
 ## Osobny czytnik repozytorium
 
@@ -101,22 +101,37 @@ GET PDF i odświeżanie sesji również mogą pisać. Kod 0 po SIGTERM workera n
 potwierdza zakończenia aktywnych jobów. Trzeba zachować pierwotny oraz
 czasowy stan konfiguracji i uzgodnić skutki zewnętrzne przerwanych operacji.
 
-Wrapper nie zatrzymuje i nie wznawia usług. `closeSourceClients` zamyka
-wyłącznie jego sesje DB/S3; nie jest zezwoleniem na zdjęcie blokad zapisów.
-Zewnętrzny operator/procedura musi utrzymać zweryfikowane okno do bezpiecznego
-rozstrzygnięcia przebiegu. Nie wolno zdejmować blokad w `observeConsistency(after)`.
+Wrapper nie ustanawia blokad zapisów. Dostawca `observeConsistency` nadal
+dostarcza dowody zewnętrznej procedury i nie może zdejmować blokad w `after`.
+Nowe wymagane `operations.resumeWrites` jest osobną operacją: sekwencja
+wywołuje ją raz dopiero po zamknięciu źródeł, weryfikacji całego okna,
+dokładnym seal plików oraz trwałym zapisie zamiaru wznowienia.
+Produkcyjnego callbacku ani pipeline nie zainstalowano.
 
-W odczycie 11.10 potwierdzono zaufane SSH trzech hostów, ich listy usług,
-metadane połączeń oraz zgodność tagów obrazów web/worker z przypiętym
-`face09c57f7de756546e58d092dbe6d280f93c91`. Nie wykonano zapytań do bazy,
-odczytu faktur/obiektów ani aktualizacji mapy schematu. Na hostach nie znaleziono
-hostowych Node/restic; nie jest to inwentaryzacja wszystkich obrazów kontenerów.
-Wolne miejsce systemu plików Docker: app-1 około 19 GiB, ops-1 około 23 GiB,
-db-1 około 10 GiB. Nie zmierzono rozmiaru zestawu, przyrostu ani czasu kopii.
+Seal wiąże rzeczywiste pliki i ich hashe z przebiegiem, oknem i rewizją.
+Linux wymaga `POSIX_FSYNC` plików i katalogów; Windows dopuszcza wyłącznie
+`SYNTHETIC_ONLY` w testach. Nie jest to gwarancja niezmienności ani zastępstwo
+kontroli uprawnień i innych procesów zapisujących lokalne pliki.
+
+`resumeWrites` ma przywrócić zapisany stan pierwotny i zwrócić ograniczony
+receipt `RESUMED` związany z tym samym `runId`, `windowId`, `sourceRevision`
+i `sealSha256`. Wymaga wszystkich siedmiu writerów, zakończenia odczytów,
+potwierdzenia przywrócenia stanu, czasów UTC i niepustego dowodu dostawcy.
+Pełny [kontrakt wznowienia](f0-backup-consistency-window.md#kolejność-przyszłego-wykonania)
+nie jest uwierzytelniany przez samą poprawność JSON.
+Po walidacji receipt jest trwale zapisywany w części DB. Dopiero potem
+ruszają uploady oraz pełne kontrole repozytoriów; lock obejmuje je nadal.
+
+Błąd przy aktywnym lub niepewnym oknie zachowuje lock i stan `HELD`,
+`FREEZE_UNKNOWN` lub `RESUME_UNKNOWN` do ręcznego uzgodnienia. Nie ma
+automatycznego retry ani resume w `finally`. Po potwierdzonym `RESUMED`
+późne błędy nie wznawiają usług ponownie; błąd utrwalenia receipt zatrzymuje
+upload i zachowuje lock, lecz raport nadal wskazuje `RESUMED`.
 
 Karta pierwszego uruchomienia nadal wymaga konkretnego koordynatora i osobnego
 czytnika, potwierdzonej pojemności, bezpiecznych tras połączeń i kont, celu kopii,
-escrow, pełnego pakietu odzyskiwania oraz dowodów całego okna i kanału alarmów.
+escrow, pełnego pakietu odzyskiwania, sprawdzonego dostawcy resume oraz
+dowodów całego okna i kanału alarmów.
 Nie należy kupować zasobu ani wyłączać usług na podstawie samego poprawnego JSON.
 Cena BX11 3,20 EUR netto/mies. pozostaje obserwacją publicznej oferty z 10.10,
 nie ceną końcową konta ani zgodą zakupu; szczegóły w [poprzednim runbooku](f0-backup-executor.md).
