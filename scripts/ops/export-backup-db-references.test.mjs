@@ -216,3 +216,9 @@ test("obvious XML/PDF/UPO/document/object/blob/upload/image drift names are clas
   const marker = new RegExp(audit.values[0], "i");
   for (const name of names) assert(marker.test(name));
 });
+
+test("injected DB transport discard requirement survives sanitized SQLSTATE failure",async()=>{
+  const f=makeSyntheticBackupDbClients({onQuery:()=>{throw Object.assign(new Error("PRIVATE_TRANSPORT"),{code:"42501",discardClientRequired:true});}});
+  await assert.rejects(exportBackupDbReferences(f.options),error=>error instanceof BackupDbReferenceExportError
+    &&error.discardClientRequired===true&&!error.message.includes("PRIVATE"));
+});

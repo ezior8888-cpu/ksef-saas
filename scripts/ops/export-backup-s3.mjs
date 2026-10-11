@@ -66,11 +66,14 @@ export const HELP = "Preparation only: import exportBackupS3 and supply an expli
   + "0700/0600 are POSIX modes; Windows ACLs must be secured independently.\n";
 
 export class BackupS3ExportError extends Error {
-  constructor(code) { super("S3 export incomplete: " + code); this.name = "BackupS3ExportError"; this.code = code; }
+  constructor(code, discardClientRequired = ["ABORTED", "REQUEST_TIMEOUT", "OBJECT_TIMEOUT", "RUN_TIMEOUT"].includes(code)) {
+    super("S3 export incomplete: " + code); this.name = "BackupS3ExportError"; this.code = code;
+    this.discardClientRequired = discardClientRequired === true;
+  }
 }
 const fail = (code) => { throw new BackupS3ExportError(code); };
 function privateFailure(error, fallback) {
-  return error instanceof BackupS3ExportError ? error : new BackupS3ExportError(fallback);
+  return error instanceof BackupS3ExportError ? error : new BackupS3ExportError(fallback, error?.discardClientRequired === true);
 }
 
 /** Best-effort disposal only; never await an untrusted stalled iterator. */

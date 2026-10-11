@@ -486,3 +486,11 @@ test("caller signal during pending summary fsync cannot publish the success name
   await assert.rejects(stat(path.join(paths.destinationDir,"export-summary.json")),{code:"ENOENT"});
   assert.ok((await stat(path.join(paths.destinationDir,"export-summary.pending.json"))).isFile());
 });
+
+test("uncertain source client failure preserves discard flag and does not publish success", async (t) => {
+  const client=fake({override:()=>{throw Object.assign(new Error("PRIVATE_TRANSPORT_DETAIL"),{discardClientRequired:true});}});
+  const paths=await fixture(t);
+  await assert.rejects(exportBackupS3({client,runId:"fixture",source:"application",...paths}),error=>
+    error instanceof BackupS3ExportError&&error.code==="EXPORT_FAILED"&&error.discardClientRequired===true&&!error.message.includes("PRIVATE"));
+  await assert.rejects(stat(path.join(paths.destinationDir,"export-summary.json")),{code:"ENOENT"});
+});

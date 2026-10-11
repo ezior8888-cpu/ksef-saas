@@ -223,7 +223,7 @@ export async function exportBackupDbReferences(options) {
       if (!cleanup && remaining <= 0) throw new BackupDbReferenceExportError("DURATION_LIMIT", true);
       const timeout = cleanup ? limits.statementTimeoutMs : Math.min(limits.statementTimeoutMs, remaining);
       let timer, onAbort, settled = false;
-      const pending = Promise.resolve().then(() => client.query({ text: sql, values, query_timeout: Math.ceil(timeout) })).catch(error => { if (!/^[A-Z0-9]{5}$/.test(error?.code ?? "")) state.uncertain = true; throw error; });
+      const pending = Promise.resolve().then(() => client.query({ text: sql, values, query_timeout: Math.ceil(timeout), signal: cleanup ? undefined : signal })).catch(error => { if (!/^[A-Z0-9]{5}$/.test(error?.code ?? "")) state.uncertain = true; throw error; });
       // Rejection handler is installed by race even if the caller later times out.
       const watchdog = new Promise((resolve, reject) => {
         timer = setTimeout(() => { if (!settled) { state.uncertain = true; reject(new BackupDbReferenceExportError("QUERY_TIMEOUT", true)); } }, timeout);
