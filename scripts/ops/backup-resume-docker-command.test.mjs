@@ -255,7 +255,9 @@ test('missing remote Python is a bounded private failure without fallback or ret
 
 test('replacement of a credential pathname after open is rejected before SSH dispatch', async t => {
   const { root, config } = await fixture(t);
-  let calls = 0, replaced = false;
+  const replacementPath = path.join(root, 'replacement-identity');
+  await writeFile(replacementPath, 'SYNTHETIC_NOT_A_KEY', { flag: 'wx', mode: 0o600 });
+  let calls = 0, replaced = false, replacementVerified = false;
   const originalOpen = fsPromises.open;
   const mockedOpen = t.mock.method(fsPromises, 'open', async (filename, ...args) => {
     const handle = await originalOpen(filename, ...args);
@@ -263,7 +265,15 @@ test('replacement of a credential pathname after open is rejected before SSH dis
       replaced = true;
       try {
         await rename(filename, path.join(root, 'opened-original-identity'));
-        await writeFile(filename, 'SYNTHETIC_REPLACEMENT_KEY', { flag: 'wx', mode: 0o600 });
+        // Publish the already-created inode only if the vacated name is free.
+        // Remove our extra name before validation, so nlink is not the rejection.
+        await link(replacementPath, filename);
+        await fsPromises.unlink(replacementPath);
+        const opened = await handle.stat({ bigint: true });
+        const named = await fsPromises.lstat(filename, { bigint: true });
+        assert.equal(opened.nlink, 1n); assert.equal(named.nlink, 1n);
+        assert.notDeepEqual([opened.dev, opened.ino], [named.dev, named.ino]);
+        replacementVerified = true;
       } catch (error) {
         await handle.close(); throw error;
       }
@@ -274,7 +284,7 @@ test('replacement of a credential pathname after open is rejected before SSH dis
   try {
     const transport = createBackupResumeDockerTransport({ ...config, command: async () => { calls++; return response(snapshot()); } });
     await assert.rejects(transport.inspect({ containerId: ID }, context()), { code: 'UNSAFE_RESUME_DOCKER_SSH_FILE' });
-    assert.equal(replaced, true); assert.equal(calls, 0);
+    assert.equal(replaced, true); assert.equal(replacementVerified, true); assert.equal(calls, 0);
   } finally {
     mockedOpen.mock.restore(); syncBuiltinESMExports();
   }
