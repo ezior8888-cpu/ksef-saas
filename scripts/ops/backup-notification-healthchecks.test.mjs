@@ -42,8 +42,18 @@ test('factory is inert, captures config, and returns a contract-compatible priva
   assert.equal(validateBackupNotificationReceipt(result, { ...ctx, nowUtc: new Date().toISOString() }).deliveryVerified, false);
   const receipt = await readFile(path.join(ctx.runRoot, result.evidence.evidenceRef + '.json'), 'utf8');
   assert.equal(receipt.includes(uuid), false);
-  assert.equal(receipt.includes('hc-ping.com'), false);
-  assert.equal(JSON.parse(receipt).synthetic, true);
+  const stored = JSON.parse(receipt);
+  assert.deepEqual(stored, {
+    schemaVersion: 1, runId: ctx.runId, sourceRevision: SOURCE_REVISION,
+    startedAtUtc: result.startedAtUtc, event: ctx.event,
+    completedAtUtc: stored.completedAtUtc, provider: 'healthchecks', synthetic: true,
+    status: 'PROVIDER_ACCEPTED', httpStatus: 200,
+  });
+  assert.equal(new Date(stored.startedAtUtc).toISOString(), stored.startedAtUtc);
+  assert.equal(new Date(stored.completedAtUtc).toISOString(), stored.completedAtUtc);
+  assert.ok(Date.parse(stored.startedAtUtc) >= Date.parse(ctx.startedAtUtc));
+  assert.ok(Date.parse(stored.completedAtUtc) >= Date.parse(stored.startedAtUtc));
+  assert.ok(Date.parse(stored.completedAtUtc) <= Date.parse(result.completedAtUtc));
 });
 
 test('invalid config and synthetic native transport fail before any network', () => {
