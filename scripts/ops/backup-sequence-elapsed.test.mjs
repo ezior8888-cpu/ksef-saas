@@ -26,6 +26,7 @@ test('elapsed deadline detected after synchronous work retains scope lock before
         while (performance.now() < until) { /* synthetic blocking callback */ }
         return {};
       },
+      resumeWrites: unreachable, closeSourceClients: async () => {},
       observeConsistency: unreachable, captureRecovery: unreachable, databaseCommand: unreachable,
       database: {}, s3: { application: {}, supabase: {} },
       repositories: { backup: unreachable, read: unreachable },

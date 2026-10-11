@@ -314,3 +314,173 @@ test("module has no executor/network imports and importing leaves CLI uninvoked"
   assert.doesNotMatch(source, /from\s+["']node:(?:child_process|http|https|net|tls|dgram)["']/);
   assert.doesNotMatch(source, /\b(?:fetch|execFile|execSync|spawn)\s*\(/);
 });
+
+
+const SOURCE_REVISION_V2 = "face09c57f7de756546e58d092dbe6d280f93c91";
+const WRITERS_V2 = ["web", "worker", "crons", "database-admin", "s3-upload-delete", "s3-lifecycle", "supabase-storage"];
+function fixtureV2() {
+  const m = fixture();
+  m.schemaVersion = 2; m.mode = "synthetic"; m.sourceRevision = SOURCE_REVISION_V2;
+  const sealEvidence = { sha256: "f".repeat(64), bytes: 333, createdAtUtc: at("11:25") };
+  const resumeEvidence = { sha256: "e".repeat(64), bytes: 444, createdAtUtc: at("11:28") };
+  m.sourceBoundary = {
+    windowId: "synthetic-window",
+    seal: { runId: m.runId, windowId: "synthetic-window", sourceRevision: SOURCE_REVISION_V2,
+      status: "LOCAL_SOURCES_SEALED", closedSourceClients: true, durability: "SYNTHETIC_ONLY",
+      completedAtUtc: at("11:25"), evidence: sealEvidence },
+    resume: { runId: m.runId, windowId: "synthetic-window", sourceRevision: SOURCE_REVISION_V2,
+      sealSha256: sealEvidence.sha256, status: "RESUMED", coveredWriters: [...WRITERS_V2],
+      sourceReadsStopped: true, originalStateRestored: true, startedAtUtc: at("11:26"),
+      completedAtUtc: at("11:27"), evidence: resumeEvidence }
+  };
+  const extra = [sealEvidence, resumeEvidence].map(({ sha256, bytes }) => ({ sha256, bytes }));
+  m.snapshots[0].members.push(...extra);
+  m.snapshots[0].deepRead.verifiedMembers.push(...structuredClone(extra));
+  return m;
+}
+function rejectedV2(change, code) {
+  const m = fixtureV2(); change(m);
+  const result = check(m);
+  assert.equal(result.ok, false);
+  if (code) assert.ok(result.issues.some(issue => issue.code === code), JSON.stringify(result.issues));
+  assert.equal(result.evidenceVerified, false); assert.equal(result.g09Accepted, false);
+  return result;
+}
+
+test("v2 accepts coherent sealed-and-resumed synthetic claims without authenticating them", () => {
+  const result = check(fixtureV2());
+  assert.equal(result.ok, true, JSON.stringify(result.issues));
+  assert.equal(result.evidenceVerified, false); assert.equal(result.g09Accepted, false);
+});
+test("v2 operational mode requires POSIX durability while synthetic mode may report either supported kind", () => {
+  const m = fixtureV2(); m.mode = "separately-authorized"; m.sourceBoundary.seal.durability = "POSIX_FSYNC";
+  assert.equal(check(m).ok, true);
+  m.mode = "synthetic"; assert.equal(check(m).ok, true);
+  rejectedV2(m => { m.mode = "separately-authorized"; }, "posix_durability_required");
+  rejectedV2(m => { m.sourceBoundary.seal.durability = "PRIVATE arbitrary durability"; }, "unsupported_durability");
+  rejectedV2(m => { delete m.mode; }, "unsupported_mode");
+});
+test("v2 requires the boundary, seal and resume objects instead of booleans or missing receipts", () => {
+  for (const key of ["seal", "resume"]) for (const value of [undefined, null, true, []]) {
+    rejectedV2(m => { m.sourceBoundary[key] = value; }, "required_object");
+  }
+  rejectedV2(m => { delete m.sourceBoundary; }, "required_object");
+});
+test("v2 seal and resume identities bind the same run, window and pinned source revision", () => {
+  for (const key of ["seal", "resume"]) {
+    rejectedV2(m => { m.sourceBoundary[key].runId = "PRIVATE other run"; }, "run_id_mismatch");
+    rejectedV2(m => { m.sourceBoundary[key].windowId = "PRIVATE other window"; }, "window_id_mismatch");
+    rejectedV2(m => { m.sourceBoundary[key].sourceRevision = "a".repeat(40); }, "source_revision_mismatch");
+  }
+  rejectedV2(m => { m.sourceBoundary.windowId = ""; }, "required_string");
+  rejectedV2(m => { m.sourceBoundary.resume.sealSha256 = "d".repeat(64); }, "seal_digest_mismatch");
+  rejectedV2(m => { m.sourceBoundary.resume.sealSha256 = "PRIVATE invalid hash"; }, "invalid_sha256");
+});
+test("v2 only accepts explicitly sealed sources and a completed resume", () => {
+  for (const status of ["FAILED", "UNKNOWN", "PENDING", true, undefined]) {
+    rejectedV2(m => { m.sourceBoundary.seal.status = status; }, "sources_not_sealed");
+    rejectedV2(m => { m.sourceBoundary.resume.status = status; }, "writes_not_resumed");
+  }
+  for (const key of ["sourceReadsStopped", "originalStateRestored"]) {
+    rejectedV2(m => { m.sourceBoundary.resume[key] = false; }, "required_true");
+    rejectedV2(m => { delete m.sourceBoundary.resume[key]; }, "required_true");
+  }
+  rejectedV2(m => { m.sourceBoundary.seal.closedSourceClients = false; }, "required_true");
+});
+test("v2 resume covers each required writer exactly once", () => {
+  for (const writers of [undefined, [], WRITERS_V2.slice(1), [...WRITERS_V2, "extra"],
+    [WRITERS_V2[0], ...WRITERS_V2.slice(0, -1)]]) {
+    rejectedV2(m => { m.sourceBoundary.resume.coveredWriters = writers; }, "incomplete_or_duplicate_sources");
+  }
+});
+test("v2 sealing cannot predate stabilization, source artifacts or its own evidence", () => {
+  rejectedV2(m => { m.sourceBoundary.seal.completedAtUtc = at("11:19"); }, "seal_before_stabilization_end");
+  rejectedV2(m => { m.databases[0].restoreListCheck.evidence.createdAtUtc = at("11:26"); }, "seal_before_source_artifact");
+  rejectedV2(m => { m.sourceBoundary.seal.evidence.createdAtUtc = at("11:24"); }, "evidence_before_seal");
+  rejectedV2(m => { m.sourceBoundary.seal.evidence.createdAtUtc = at("11:27"); }, "resume_before_seal_evidence");
+});
+test("v2 resume chronology requires seal then request, completion and receipt", () => {
+  rejectedV2(m => { m.sourceBoundary.resume.startedAtUtc = at("11:24"); }, "resume_before_seal");
+  rejectedV2(m => { m.sourceBoundary.resume.completedAtUtc = at("11:25"); }, "reversed_window");
+  rejectedV2(m => { m.sourceBoundary.resume.evidence.createdAtUtc = at("11:26"); }, "evidence_before_resume");
+});
+test("v2 every boundary timestamp is valid UTC and lies within the run", () => {
+  const paths = [["seal", "completedAtUtc"], ["seal", "evidence", "createdAtUtc"],
+    ["resume", "startedAtUtc"], ["resume", "completedAtUtc"], ["resume", "evidence", "createdAtUtc"]];
+  for (const keys of paths) {
+    const change = value => m => {
+      let valueAt = m.sourceBoundary;
+      for (const key of keys.slice(0, -1)) valueAt = valueAt[key];
+      valueAt[keys.at(-1)] = value;
+    };
+    rejectedV2(change("not-a-date"), "invalid_utc_timestamp");
+    rejectedV2(change(at("12:01")), "future_timestamp");
+    rejectedV2(change(at("11:51")), "outside_window");
+  }
+});
+test("v2 every snapshot must follow the durable resume receipt", () => {
+  for (let i = 0; i < 3; i++) {
+    rejectedV2(m => { m.snapshots[i].createdAtUtc = at("11:27"); }, "snapshot_before_resume_evidence");
+  }
+});
+test("v2 seal and resume receipts are required in both database snapshot and independent read coverage", () => {
+  for (const key of ["seal", "resume"]) for (const side of ["snapshot", "read"]) {
+    rejectedV2(m => {
+      const sha = m.sourceBoundary[key].evidence.sha256;
+      if (side === "snapshot") m.snapshots[0].members = m.snapshots[0].members.filter(x => x.sha256 !== sha);
+      else m.snapshots[0].deepRead.verifiedMembers = m.snapshots[0].deepRead.verifiedMembers.filter(x => x.sha256 !== sha);
+    }, side === "snapshot" ? "artifact_coverage_mismatch" : "read_coverage_mismatch");
+  }
+});
+test("v2 zero-byte, malformed and mismatched boundary evidence cannot be accepted", () => {
+  for (const key of ["seal", "resume"]) {
+    rejectedV2(m => { m.sourceBoundary[key].evidence.bytes = 0; }, "invalid_integer");
+    rejectedV2(m => { m.sourceBoundary[key].evidence.sha256 = "PRIVATE"; }, "invalid_sha256");
+    rejectedV2(m => { m.sourceBoundary[key].evidence.bytes++; }, "artifact_coverage_mismatch");
+  }
+});
+test("legacy v1 remains readable but cannot carry v2 or alternate lifecycle claims", () => {
+  assert.equal(check(fixture()).ok, true);
+  for (const key of ["mode", "sourceBoundary", "sourceSeal", "writeResume", "writeLifecycle",
+    "sourceLifecycle", "writeWindow", "seal", "resume", "resumeReceipt", "sealReceipt", "resumed", "sealed"]) {
+    const m = fixture(); m[key] = key === "mode" ? "synthetic" : { status: "FAILED" };
+    const result = check(m);
+    assert.equal(result.ok, false, key);
+    assert.ok(result.issues.some(issue => issue.code === "v2_field_in_legacy_manifest"));
+  }
+});
+test("v2 cannot be downgraded by relabeling its schemaVersion", () => {
+  const m = fixtureV2(); m.schemaVersion = 1;
+  assert.ok(check(m).issues.some(issue => issue.code === "v2_field_in_legacy_manifest"));
+});
+test("v2 CLI uses static field codes and never prints private receipt identifiers or raw states", () => {
+  const m = fixtureV2(); m.sourceBoundary.resume.windowId = "PRIVATE_WINDOW_SECRET";
+  m.sourceBoundary.resume.status = "PRIVATE_STATUS_SECRET";
+  const stdout = output(), stderr = output();
+  cliWithFile(JSON.stringify(m), file => assert.equal(runCli([file], { now: NOW, stdout, stderr }), 1));
+  assert.ok(!stderr.parts.join("").includes("PRIVATE")); assert.equal(stdout.parts.length, 0);
+});
+test("retention supports valid mixed v1 and v2 history and protects all input for incomplete v2", async () => {
+  const { planBackupRetention } = await import("./plan-backup-retention.mjs");
+  const legacy = fixture(), current = JSON.parse(JSON.stringify(fixtureV2()).replaceAll("synthetic-run-1", "synthetic-run-2"));
+  current.snapshots.forEach((item, i) => {
+    item.snapshotId = (4096 + i).toString(16).padStart(64, "0");
+    item.deepRead.snapshotId = item.snapshotId;
+  });
+  current.manifestOffHost.snapshotId = "c".repeat(64);
+  current.manifestOffHost.independentClientRead.snapshotId = current.manifestOffHost.snapshotId;
+  const input = { schemaVersion: 1, asOfUtc: NOW.toISOString(), manifests: [legacy, current] };
+  const valid = planBackupRetention(input);
+  assert.equal(valid.deletionPlanBlocked, false, JSON.stringify(valid.issues));
+  assert.equal(valid.completeRunCount, 2);
+  delete current.sourceBoundary.resume;
+  const invalid = planBackupRetention(input);
+  assert.equal(invalid.deletionPlanBlocked, true); assert.equal(invalid.protectAllInput, true);
+});
+
+test("v2 requires the pinned top-level source revision and legacy cannot carry that declaration", () => {
+  rejectedV2(m => { delete m.sourceRevision; }, "source_revision_mismatch");
+  rejectedV2(m => { m.sourceRevision = "a".repeat(40); }, "source_revision_mismatch");
+  const legacy = fixture(); legacy.sourceRevision = SOURCE_REVISION_V2;
+  assert.ok(check(legacy).issues.some(issue => issue.code === "v2_field_in_legacy_manifest"));
+});

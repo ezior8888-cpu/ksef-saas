@@ -3,7 +3,7 @@
  * Local validation of REPORTED F0 backup evidence, never a backup executor.
  * Importing is inert. No referenced artifact, repository or service is read.
  * Digests/bytes are claims checked for shape and agreement, not truth.
- * v1 supports only Unversioned S3; version-aware backup needs a new contract.
+ * v1/v2 support only Unversioned S3; v2 adds mandatory seal/resume claims.
  */
 import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 import path from "node:path";
@@ -26,8 +26,12 @@ const INPUT_FLAGS = constants.O_RDONLY
 const COUNT_KEYS = ["bucketCount", "currentObjectCount", "currentObjectBytes", "allVersionCount", "allVersionBytes", "deleteMarkerCount", "multipartUploadCount"];
 const MINIO_HOSTS = { application: "ops-1", supabase: "db-1" };
 const EXPECTED_GROUPS = ["database", "application", "supabase"];
+const SOURCE_REVISION = "face09c57f7de756546e58d092dbe6d280f93c91";
+const REQUIRED_WRITERS = ["web", "worker", "crons", "database-admin", "s3-upload-delete", "s3-lifecycle", "supabase-storage"];
+const V2_LEGACY_FIELDS = ["mode", "sourceRevision", "sourceBoundary", "sourceSeal", "writeResume", "writeLifecycle",
+  "sourceLifecycle", "writeWindow", "seal", "resume", "resumeReceipt", "sealReceipt", "resumed", "sealed"];
 export const CONSISTENCY_NOTICE = "Manifest spójny — zgłoszone dowody nadal wymagają niezależnej weryfikacji. To nie jest potwierdzenie kopii, restore ani PASS G09.";
-export const HELP = "Użycie: node scripts/ops/check-backup-set.mjs <prywatny-manifest.json>\n       node scripts/ops/check-backup-set.mjs --help\nWyłącznie lokalny JSON (maks. 1 MiB); brak sieci, poleceń, kopii i restore.\nKontrola i odczyt używają tego samego uchwytu; O_NOFOLLOW tylko tam, gdzie dostępne.\nNa Windows nie gwarantujemy odmowy symlinków/reparse points.\nExit 0: spójność zgłoszeń, bez potwierdzenia prawdziwości/PASS G09.\nExit 1: niepełny/niespójny manifest. Exit 2: błąd argumentów lub odczytu JSON.\nv1 wymaga obu baz i obu MinIO oraz wyłącznie Unversioned S3.\n";
+export const HELP = "Użycie: node scripts/ops/check-backup-set.mjs <prywatny-manifest.json>\n       node scripts/ops/check-backup-set.mjs --help\nWyłącznie lokalny JSON (maks. 1 MiB); brak sieci, poleceń, kopii i restore.\nKontrola i odczyt używają tego samego uchwytu; O_NOFOLLOW tylko tam, gdzie dostępne.\nNa Windows nie gwarantujemy odmowy symlinków/reparse points.\nExit 0: spójność zgłoszeń, bez potwierdzenia prawdziwości/PASS G09.\nExit 1: niepełny/niespójny manifest. Exit 2: błąd argumentów lub odczytu JSON.\nv1/v2 wymagają obu baz i obu MinIO oraz wyłącznie Unversioned S3.\nv1: historyczne zgłoszenia bez dowodu wznowienia; v2: wymagany seal i receipt RESUMED.\n";
 
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const sameMembers = (a, b) => a.length === b.length && a.every((item) => b.some((other) => item.sha256 === other.sha256 && item.bytes === other.bytes));
@@ -81,7 +85,12 @@ export function validateBackupSet(manifest, { now = new Date() } = {}) {
   };
   const run = obj(manifest, "manifest");
   if (!Number.isFinite(nowMs)) issue("validation", "invalid_clock");
-  if (run.schemaVersion !== 1) issue("schemaVersion", "unsupported_schema");
+  if (![1, 2].includes(run.schemaVersion)) issue("schemaVersion", "unsupported_schema");
+  if (run.schemaVersion === 1) {
+    // Historical v1 claims remain readable, but cannot smuggle a newer lifecycle
+    // declaration past the mandatory v2 boundary checks by changing the version.
+    for (const field of V2_LEGACY_FIELDS) if (Object.hasOwn(run, field)) issue(field, "v2_field_in_legacy_manifest");
+  }
   if (typeof run.runId !== "string" || !RUN_ID.test(run.runId)) issue("runId", "invalid_run_id");
   const sameRun = (value, field) => { if (typeof value !== "string" || value !== run.runId) issue(field, "run_id_mismatch"); };
   const runWindow = window(run, "run");
@@ -188,6 +197,47 @@ export function validateBackupSet(manifest, { now = new Date() } = {}) {
   const refsEvidence = artifact(refs.evidence, "references.evidence", refsWindow);
   if (refsEvidence.at !== null && refsAt !== null && refsEvidence.at < refsAt) issue("references.evidence", "evidence_before_check");
   add("database", refsEvidence);
+  // v2 binds a completed source seal to a separately observed resume receipt.
+  // These remain claims: the pure validator neither opens nor authenticates evidence.
+  let resumeReceiptAt = null;
+  if (run.schemaVersion === 2) {
+    if (run.sourceRevision !== SOURCE_REVISION) issue("sourceRevision", "source_revision_mismatch");
+    if (!["synthetic", "separately-authorized"].includes(run.mode)) issue("mode", "unsupported_mode");
+    const boundary = obj(run.sourceBoundary, "sourceBoundary");
+    text(boundary.windowId, "sourceBoundary.windowId");
+    const seal = obj(boundary.seal, "sourceBoundary.seal");
+    const resume = obj(boundary.resume, "sourceBoundary.resume");
+    for (const [name, value] of [["seal", seal], ["resume", resume]]) {
+      sameRun(value.runId, "sourceBoundary." + name + ".runId");
+      if (typeof value.windowId !== "string" || value.windowId !== boundary.windowId) issue("sourceBoundary." + name + ".windowId", "window_id_mismatch");
+      if (value.sourceRevision !== SOURCE_REVISION) issue("sourceBoundary." + name + ".sourceRevision", "source_revision_mismatch");
+    }
+    if (seal.status !== "LOCAL_SOURCES_SEALED") issue("sourceBoundary.seal.status", "sources_not_sealed");
+    yes(seal.closedSourceClients, "sourceBoundary.seal.closedSourceClients");
+    if (!["POSIX_FSYNC", "SYNTHETIC_ONLY"].includes(seal.durability)) issue("sourceBoundary.seal.durability", "unsupported_durability");
+    if (run.mode === "separately-authorized" && seal.durability !== "POSIX_FSYNC") issue("sourceBoundary.seal.durability", "posix_durability_required");
+    const sealedAt = timestamp(seal.completedAtUtc, "sourceBoundary.seal.completedAtUtc");
+    within(sealedAt, runWindow, "sourceBoundary.seal.completedAtUtc");
+    if (stableWindow && sealedAt !== null && sealedAt < stableWindow.end) issue("sourceBoundary.seal", "seal_before_stabilization_end");
+    if (sealedAt !== null && Object.values(sourceArtifacts).some(items => items.some(item => item.at !== null && item.at > sealedAt))) issue("sourceBoundary.seal", "seal_before_source_artifact");
+    const sealEvidence = artifact(seal.evidence, "sourceBoundary.seal.evidence", runWindow);
+    if (sealedAt !== null && sealEvidence.at !== null && sealEvidence.at < sealedAt) issue("sourceBoundary.seal.evidence", "evidence_before_seal");
+
+    if (resume.status !== "RESUMED") issue("sourceBoundary.resume.status", "writes_not_resumed");
+    yes(resume.sourceReadsStopped, "sourceBoundary.resume.sourceReadsStopped");
+    yes(resume.originalStateRestored, "sourceBoundary.resume.originalStateRestored");
+    exactNames(resume.coveredWriters, REQUIRED_WRITERS, "sourceBoundary.resume.coveredWriters");
+    hash(resume.sealSha256, "sourceBoundary.resume.sealSha256");
+    if (resume.sealSha256 !== sealEvidence.sha256) issue("sourceBoundary.resume.sealSha256", "seal_digest_mismatch");
+    const resumeWindow = window(resume, "sourceBoundary.resume", runWindow);
+    if (resumeWindow && sealedAt !== null && resumeWindow.start < sealedAt) issue("sourceBoundary.resume", "resume_before_seal");
+    if (resumeWindow && sealEvidence.at !== null && resumeWindow.start < sealEvidence.at) issue("sourceBoundary.resume", "resume_before_seal_evidence");
+    const resumeEvidence = artifact(resume.evidence, "sourceBoundary.resume.evidence", runWindow);
+    if (resumeWindow && resumeEvidence.at !== null && resumeEvidence.at < resumeWindow.end) issue("sourceBoundary.resume.evidence", "evidence_before_resume");
+    resumeReceiptAt = resumeEvidence.at;
+    add("database", sealEvidence); add("database", resumeEvidence);
+  }
+
   // Shared source evidence belongs to the DB repository; each MinIO has its
   // own listings, exact-object manifest, payload export and configuration.
   const members = (value, field) => {
@@ -208,6 +258,7 @@ export function validateBackupSet(manifest, { now = new Date() } = {}) {
     zero(item.resticExitCode, `${field}.resticExitCode`);
     const createdAt = timestamp(item.createdAtUtc, `${field}.createdAtUtc`); within(createdAt, runWindow, `${field}.createdAtUtc`);
     if (createdAt !== null) snapshotProofTimes.push(createdAt);
+    if (resumeReceiptAt !== null && createdAt !== null && createdAt < resumeReceiptAt) issue(`${field}.createdAtUtc`, "snapshot_before_resume_evidence");
     if (stableWindow && createdAt !== null && createdAt < stableWindow.end) issue(`${field}.createdAtUtc`, "snapshot_before_sources_complete");
     const target = obj(item.destination, `${field}.destination`);
     for (const key of ["offSourceHosts", "independentOfStaging", "clientSideEncryption"]) yes(target[key], `${field}.destination.${key}`);

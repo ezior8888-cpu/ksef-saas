@@ -88,11 +88,11 @@ export async function readBackupPrivateConfig(filename,{maxBytes=1024*1024}={}) 
 
 export function createBackupWiring(config,{operations,command=runBackupCommand,sourceConstructors}={}) {
   if(!checkBackupWiring(config).configurationComplete)fail('WIRING_CONFIG_INCOMPLETE');
-  if(!record(operations)||['preflight','observeConsistency','captureRecovery','notify'].some(k=>typeof operations[k]!=='function'))fail('WIRING_OPERATIONS_MISSING');
+  if(!record(operations)||['preflight','observeConsistency','captureRecovery','notify','resumeWrites'].some(k=>typeof operations[k]!=='function'))fail('WIRING_OPERATIONS_MISSING');
   if(typeof command!=='function')fail('WIRING_COMMAND_INVALID');
   const saved=structuredClone(config),provided={...operations};let running=false;
   return {async run({runId,authorization,signal,mode='separately-authorized',maxDurationMs,stepTimeoutMs,history}={}) {
-    if(authorization?.backup!==true)fail('SEPARATE_AUTHORIZATION_REQUIRED');
+    if(authorization?.backup!==true||(mode==='separately-authorized'&&authorization?.resumeWrites!==true))fail('SEPARATE_AUTHORIZATION_REQUIRED');
     if(signal!==undefined&&!(signal instanceof AbortSignal))fail('WIRING_SIGNAL_INVALID');
     if(running)fail('WIRING_ALREADY_RUNNING');running=true;
     let sourcePromise,sourceBundle,closed=false,result;

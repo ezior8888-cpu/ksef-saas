@@ -21,7 +21,7 @@ async function temporary(t) {
   const root=await mkdtemp(path.join(os.tmpdir(),'f0-wiring-test-')); await chmod(root,0o700);
   t.after(async()=>{if(path.dirname(path.resolve(root))!==path.resolve(os.tmpdir())||!path.basename(root).startsWith('f0-wiring-test-'))throw Error('UNSAFE_CLEANUP');await rm(root,{recursive:true,force:true});});return root;
 }
-const operations = () => ({preflight:async()=>({}),observeConsistency:async()=>({}),captureRecovery:async()=>({}),notify:async()=>{}});
+const operations = () => ({preflight:async()=>({}),observeConsistency:async()=>({}),captureRecovery:async()=>({}),resumeWrites:async()=>({}),notify:async()=>{}});
 
 test('complete configuration check stays offline and never certifies readiness',()=>{
  const result=checkBackupWiring(config()); assert.equal(result.configurationComplete,true,JSON.stringify(result));
@@ -110,7 +110,7 @@ async function integratedWiring(t,{s3Failure=false,closeFailure=false,badConsist
    return response({message_type:'summary',snapshot_id:id});
   }
   if(verb==='snapshots')return response([stored.get(args.at(-1)).row]);
-  if(verb==='check')return response('');
+  if(verb==='check'){assert.ok(f.calls.includes('resume'));return response('');}
   if(verb==='dump'){await writeFile(spec.stdoutFile,stored.get(args[6]).payload.get(args[7]),{flag:'wx',mode:0o600});return response('');}
   assert.fail('Unexpected synthetic command');
  };
@@ -139,11 +139,17 @@ test('failed client close blocks full wiring before upload and keeps the lock',a
 test('failed consistency still closes sources under lock and retains it when cleanup fails',async t=>{
  const f=await integratedWiring(t,{badConsistency:true,closeFailure:true});
  const r=await f.runner.run({runId:'synthetic-wiring-004',authorization:{backup:true},mode:'synthetic'});
- assert.equal(r.status,'INCOMPLETE');assert.equal(r.code,'CONSISTENCY_INTERVAL_NOT_VERIFIED');assert.equal(r.lockRetained,true);
+ assert.equal(r.status,'INCOMPLETE');assert.equal(r.stage,'close-source-clients');assert.equal(r.lockRetained,true);
  assert.equal(f.stored.size,0);assert.equal(f.events.filter(x=>x==='close-db').length,2);
 });
 test('invalid caller signal cannot leave the reusable wiring permanently locked',async()=>{
  const runner=createBackupWiring(config(),{operations:operations()});
  await assert.rejects(runner.run({runId:'synthetic-wiring-005',authorization:{backup:true},signal:{}}));
  await assert.rejects(runner.run({runId:'synthetic-wiring-006',authorization:{backup:true},signal:{}}),e=>e.message!=='WIRING_ALREADY_RUNNING');
+});
+
+test('wiring requires reviewed resume operation and explicit operational resume authorization',async()=>{
+ const missing=operations();delete missing.resumeWrites;assert.throws(()=>createBackupWiring(config(),{operations:missing}),/WIRING_OPERATIONS_MISSING/);
+ const runner=createBackupWiring(config(),{operations:operations()});
+ await assert.rejects(runner.run({runId:'synthetic-wiring-010',authorization:{backup:true}}),/SEPARATE_AUTHORIZATION_REQUIRED/);
 });

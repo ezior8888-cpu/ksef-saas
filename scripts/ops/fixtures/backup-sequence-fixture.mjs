@@ -23,8 +23,12 @@ export async function fixture(t, dbOptions = {}) {
   const emptyS3 = { async send(command) { assert.equal(command.constructor.name, 'ListBucketsCommand'); return { Buckets: [] }; } };
   const adapters = {
     async preflight() { calls.push('preflight'); return structuredClone(preflight); },
-    async observeConsistency(ctx) { calls.push('consistency-' + ctx.phase); return { windowId: 'synthetic-window', mutationsExcluded: true,
+    async observeConsistency(ctx) { calls.push('consistency-' + ctx.phase); return { runId: ctx.runId, sourceRevision: SOURCE_REVISION, windowId: 'synthetic-window', mutationsExcluded: true, sourceOperationsStopped: ctx.phase === 'after',
       entireIntervalVerified: ctx.phase === 'after', coveredWriters: REQUIRED_WRITERS }; },
+    async closeSourceClients() {},
+    async resumeWrites(ctx) { calls.push('resume'); return {schemaVersion:1,status:'RESUMED',runId:ctx.runId,windowId:ctx.windowId,
+      sourceRevision:ctx.sourceRevision,sealSha256:ctx.sealSha256,coveredWriters:[...REQUIRED_WRITERS],sourceReadsStopped:true,originalStateRestored:true,
+      startedAtUtc:new Date().toISOString(),completedAtUtc:new Date().toISOString(),verificationEvidence:{synthetic:true}}; },
     async captureRecovery(ctx) { calls.push('recovery'); await writeFile(ctx.outputPath, 'SYNTHETIC ENCRYPTED RECOVERY', { flag: 'wx', mode: 0o600 });
       return { encrypted: true, configurationIncluded: true, keysIncluded: true, coverage: RECOVERY_COVERAGE, evidence: { synthetic: true } }; },
     async databaseCommand(spec) { calls.push(spec.id); await writeFile(spec.stdoutFile, 'SYNTHETIC ' + spec.id, { flag: 'wx', mode: 0o600 }); return { exitCode: 0 }; },
