@@ -213,3 +213,25 @@ test('transport discard requirement survives sanitized errors', async (t) => {
   const f = await fixture(t, () => { throw Object.assign(new Error('private details'), { code: 'COMMAND_FAILED', discardClientRequired: true }); });
   await assert.rejects(f.adapter.backup(f.backup), (error) => error.code === 'RESTIC_COMMAND_FAILED' && error.discardClientRequired === true);
 });
+test('reader bindings use separate remote credential paths without changing writer bindings', async t => {
+  const f = await fixture(t);
+  const readerRepositories = Object.fromEntries(Object.keys(kinds).map(kind => [kind, {
+    repositoryFile: '/isolated-reader/' + kind + '.repository', passwordFile: '/isolated-reader/' + kind + '.password',
+  }]));
+  const adapter = createBackupResticAdapter({ ...f.options, readerRepositories });
+  await adapter.backup(f.backup);
+  await adapter.read(f.read);
+  for (const call of f.calls) {
+    const binding = (call.side === 'reader' ? readerRepositories : f.options.repositories).database;
+    assert.equal(call.spec.args[1], binding.repositoryFile);
+    assert.equal(call.spec.args[3], binding.passwordFile);
+  }
+  assert.equal(f.calls.filter(call => call.side === 'reader').length, 5);
+});
+
+test('explicit malformed reader bindings fail closed instead of falling back to writer credentials', async t => {
+  const f = await fixture(t);
+  for (const readerRepositories of [null, {}, { ...f.options.repositories, database: undefined }, {
+    ...f.options.repositories, database: { repositoryFile: 'relative', passwordFile: '/reader/password' },
+  }]) assert.throws(() => createBackupResticAdapter({ ...f.options, readerRepositories }), /RESTIC_INVALID_INPUT/);
+});

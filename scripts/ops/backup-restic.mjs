@@ -97,16 +97,19 @@ async function hashFile(file, expected, guard) {
   } finally { await handle.close(); }
 }
 
-export function createBackupResticAdapter({ repositories, writerCommand, readerCommand, readerRoot,
+export function createBackupResticAdapter({ repositories, readerRepositories = repositories, writerCommand, readerCommand, readerRoot,
   writerClientId, readerClientId, writerEnv = {}, readerEnv = {} } = {}) {
   if (!record(repositories) || Object.keys(repositories).length !== 3 ||
       typeof writerCommand !== 'function' || typeof readerCommand !== 'function' || writerCommand === readerCommand ||
       !token(writerClientId) || !token(readerClientId) || writerClientId === readerClientId) fail('RESTIC_INVALID_INPUT');
   absolute(readerRoot);
-  const bindings = Object.fromEntries(Object.keys(SOURCES).map((kind) => {
-    const item = repositories[kind];
-    if (!record(item)) fail('RESTIC_INVALID_INPUT');
-    return [kind, { repositoryFile: absolute(item.repositoryFile), passwordFile: absolute(item.passwordFile) }];
+  const bindings = Object.fromEntries([['writer', repositories], ['reader', readerRepositories]].map(([side, configured]) => {
+    if (!record(configured) || Object.keys(configured).length !== 3) fail('RESTIC_INVALID_INPUT');
+    return [side, Object.fromEntries(Object.keys(SOURCES).map((kind) => {
+      const item = configured[kind];
+      if (!record(item)) fail('RESTIC_INVALID_INPUT');
+      return [kind, { repositoryFile: absolute(item.repositoryFile), passwordFile: absolute(item.passwordFile) }];
+    }))];
   }));
   const envs = { writer: environment(writerEnv), reader: environment(readerEnv) };
   const knownRepositories = new Map();
@@ -122,7 +125,7 @@ export function createBackupResticAdapter({ repositories, writerCommand, readerC
     const abort = () => stop(); signal?.addEventListener('abort', abort, { once: true });
     const guard = () => { if (timeout || performance.now() >= deadline) fail('RESTIC_TIMEOUT'); if (signal?.aborted || controller.signal.aborted) fail('RESTIC_ABORTED'); };
     const invoke = async (side, args, options = {}, outputLimit = JSON_LIMIT) => {
-      guard(); const config = bindings[kind];
+      guard(); const config = bindings[side][kind];
       const transport = side === 'writer' ? writerCommand : readerCommand;
       const result = await transport({ executable: 'restic', args: ['--repository-file', config.repositoryFile,
         '--password-file', config.passwordFile, '--no-cache', ...args], env: { ...envs[side] }, ...options },
