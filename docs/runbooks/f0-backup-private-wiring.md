@@ -1,5 +1,7 @@
 # F0 — prywatne podłączenie wykonawcy, 11.10.2026
 
+Aktualny [konkretny adapter wznowienia usług i kontrakty dostawców](f0-backup-service-resume.md) są przygotowane i testowane lokalnie; prywatny plan oraz rzeczywisty observer nadal wymagają sprawdzenia.
+
 **PREPARATION_ONLY, F0_OPEN, G03/G09 FAIL.** Przygotowano kompozycję klientów,
 sprawdzenie konfiguracji offline i procedurę okna spójności. Nie wykonano
 kopii, instalacji, zakupu, zmian kont lub serwerów, freeze/resume ani alarmu.
@@ -125,7 +127,7 @@ ruszają uploady oraz pełne kontrole repozytoriów; lock obejmuje je nadal.
 Błąd przy aktywnym lub niepewnym oknie zachowuje lock i stan `HELD`,
 `FREEZE_UNKNOWN` lub `RESUME_UNKNOWN` do ręcznego uzgodnienia. Nie ma
 automatycznego retry ani resume w `finally`. Po potwierdzonym `RESUMED`
-późne błędy nie wznawiają usług ponownie; błąd utrwalenia receipt zatrzymuje
+późne błędy nie wznawiają usług ponownie; błąd utrwalenia receipt przez sekwencję po odebraniu wyniku adaptera zatrzymuje
 upload i zachowuje lock, lecz raport nadal wskazuje `RESUMED`.
 
 Karta pierwszego uruchomienia nadal wymaga konkretnego koordynatora i osobnego
@@ -137,3 +139,5 @@ Cena BX11 3,20 EUR netto/mies. pozostaje obserwacją publicznej oferty z 10.10,
 nie ceną końcową konta ani zgodą zakupu; szczegóły w [poprzednim runbooku](f0-backup-executor.md).
 
 Wyniki lokalne i zakres odczytów: [indeks dowodów 11.10](../observability/evidence/f0-private-wiring-2026-10-11.json). Wynik CI nowego HEAD należy czytać w PR #225.
+
+Czytnik przyjmuje jawny całkowity port SSH 1–65535 (również port istniejącego przekierowania). Brak wartości domyślnej i konwersji stringów. Known_hosts musi odpowiadać hostowi i portowi; zmiana parametru nie tworzy tunelu ani nie dowodzi jego bezpieczeństwa lub niezależności czytnika.

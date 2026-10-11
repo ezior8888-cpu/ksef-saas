@@ -493,10 +493,13 @@ TEST-01…TEST-05 nadal nie zostały odebrane. KSeF TEST pozostaje celowym wybor
   [email reminders](https://healthchecks.io/docs/configuring_notifications/)
   są odrębną funkcją. Wybrany lifecycle wymaga późniejszego odbioru głównej
   ścieżki. Nie zakładamy SMS/voice, Pushover ani fizycznego testu telefonu.
-- Przygotowanie przyszłego TEST-06: odbiorca Igor, 30-minutowe okno w dzień
-  roboczy **10:00–16:00 Europe/Warsaw**, dokładny slot po potwierdzeniu jego
-  obecności i urządzenia. Wybór okna nie wysyła alarmu. Nadal brak dowodu
-  doręczeń, reakcji człowieka i niezależności telefonu/internetu: G08 PARTIAL.
+- Przygotowanie przyszłego TEST-06: odbiorca Igor, 30-minutowa sesja telefonu
+  w dzień roboczy **10:00–16:00 Europe/Warsaw**, dokładny slot po potwierdzeniu
+  jego obecności i urządzenia. Ta sesja nie potwierdza 60-minutowego expiry;
+  potrzebna osobna sesja obejmująca pełny czas i obserwację wyniku,
+  zgodnie z [kartą TEST-06](f0-preparation-handoff.md#osobne-sesje-przyszłego-test-06).
+  Wybór okien nie wysyła alarmu. Nadal brak dowodu doręczeń, reakcji człowieka
+  i niezależności telefonu/internetu: G08 PARTIAL.
 - Dostęp: osobne tożsamości, minimalne uprawnienia, MFA tam, gdzie dostępne;
   przegląd co **30 dni**. Nowy tymczasowy dostęp do dowodów maks. **24 h**.
   Codex korzysta z już przyznanego odczytu, Bartosz z koniecznych czynności

@@ -1,5 +1,7 @@
 # F0 — procedura okna spójności kopii, 11.10.2026
 
+Aktualny [konkretny adapter wznowienia usług i kontrakty dostawców](f0-backup-service-resume.md) są przygotowane i testowane lokalnie; prywatny plan oraz rzeczywisty observer nadal wymagają sprawdzenia.
+
 **PRZYGOTOWANA / NIE WYKONANA. PREPARATION_ONLY, F0_OPEN, G03/G09 FAIL.**
 Ten dokument nie udziela zgody na zatrzymanie ruchu, zmianę konfiguracji,
 wykonanie kopii, zakup, instalację, deploy, migrację, restore ani F1.
@@ -274,7 +276,7 @@ przywrócenie usług. Timeout lokalnego SSH nie dowodzi końca procesu zdalnego.
 Nie usuwać automatycznie locka, częściowych artefaktów ani snapshotów.
 
 Po zweryfikowanym `RESUMED` późny błąd pozostawia `writesState:RESUMED`,
-nawet gdy kopia jest niekompletna. Jeżeli nie uda się trwale zapisać receipt,
+nawet gdy kopia jest niekompletna. Jeżeli po odebraniu poprawnego wyniku adaptera sekwencja nie może trwale zapisać receipt,
 stan pozostaje `RESUMED`, ale upload nie rusza i lock zostaje do przeglądu.
 Nie wywoływać wznowienia drugi raz z powodu błędu zapisu lub transferu.
 

@@ -101,6 +101,13 @@ określił odczyt runtime jako „PASS z zastrzeżeniami”; w szerszych kryteri
 F0-G01/F0-G02 mapujemy go na PARTIAL. Nie zmieniamy warunku bramki po pomiarze.
 Biblioteka, przykład konfiguracji i zdrowy HTTP nie są odbiorem funkcji.
 
+Aktualne [karty przygotowania i granica wykonania](f0-preparation-handoff.md)
+uzupełniają poniższą kartę o staging, monitory, prywatność/dostęp i osobne
+sesje TEST-06. [Plan pełnego restore](../runbooks/f0-full-restore-plan.md)
+zastępuje wykorzystanie historycznej procedury jednej bazy jako planu całego
+zestawu. Oba dokumenty są przygotowaniem; operacje i TEST-07 są niewykonane,
+komplet konkretnych dostawców nadal wymaga potwierdzenia, F0 pozostaje OPEN.
+
 ## Karta wykonania brakujących prac F0 — 10.10.2026
 
 **Przygotowany zakres, niewykonany.** Zakupy i czynności operacyjne są

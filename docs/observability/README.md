@@ -1,5 +1,12 @@
 # FaktFlow — pakiet F0
 
+Aktualizacja przygotowania: [karty przekazania F0](f0-preparation-handoff.md)
+porządkują skończoną listę lokalnych prac, staging, monitory, prywatność i dostęp.
+[Plan pełnego izolowanego restore](../runbooks/f0-full-restore-plan.md) obejmuje
+cztery snapshoty, obie bazy i oba magazyny; jest **NIE WYKONANY**.
+Konkretny komplet dostawców i prywatnych wejść nadal wymaga potwierdzenia.
+Dokumenty nie zamykają przygotowania ani F0 i nie upoważniają operacji.
+
 Aktualizacja 11.10: przygotowano [granicę źródeł i wznowienia](../runbooks/f0-backup-executor.md#granica-źródeł-i-wersja-manifestu).
 Obowiązkowe zamknięcie klientów, dowód całego okna, dokładny seal z `fsync`
 i trwały zamiar poprzedzają jedno wywołanie `resumeWrites`. Dopiero

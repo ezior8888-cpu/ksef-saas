@@ -1,5 +1,7 @@
 # F0 — wykonawca pełnej sekwencji, przygotowanie 10.10.2026
 
+Aktualny [konkretny adapter wznowienia usług i kontrakty dostawców](f0-backup-service-resume.md) są przygotowane i testowane lokalnie; prywatny plan oraz rzeczywisty observer nadal wymagają sprawdzenia.
+
 Aktualizacja 11.10: [prywatne podłączenie klientów](f0-backup-private-wiring.md) i [procedura okna spójności](f0-backup-consistency-window.md) opisują nową granicę: utrwalenie źródeł i potwierdzone wznowienie przed uploadem. Konfiguracja i wykonanie operacyjne nadal nie są gotowe.
 
 **PREPARATION_ONLY, G03/G09 FAIL, F0_OPEN.** Moduły są napisane i sprawdzane
@@ -117,7 +119,7 @@ błędu ani w `finally`. Jedno wywołanie w przebiegu nie gwarantuje jednorazowe
 skutku zewnętrznego po utracie odpowiedzi.
 
 Po zweryfikowanym receipt stan zapisów pozostaje `RESUMED` mimo późniejszego
-błędu kopii. Nieudany trwały zapis receipt zatrzymuje upload i zachowuje lock,
+błędu kopii. Nieudany trwały zapis receipt przez sekwencję, po odebraniu poprawnego wyniku adaptera, zatrzymuje upload i zachowuje lock,
 ale raportuje `RESUMED`; nie wolno z tego powodu wznawiać usług drugi raz.
 Błąd transferu lub odczytu również nie zmienia tego stanu. Rozstrzygnięty
 błąd bez niepewnych operacji może zwolnić lock; przerwanie, timeout i niepewny
