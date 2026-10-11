@@ -263,7 +263,7 @@ test('replacement of a credential pathname after open is rejected before SSH dis
       replaced = true;
       try {
         await rename(filename, path.join(root, 'opened-original-identity'));
-        await writeFile(filename, 'SYNTHETIC_REPLACEMENT_KEY', { mode: 0o600 });
+        await writeFile(filename, 'SYNTHETIC_REPLACEMENT_KEY', { flag: 'wx', mode: 0o600 });
       } catch (error) {
         await handle.close(); throw error;
       }
