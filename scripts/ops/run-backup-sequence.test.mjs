@@ -57,7 +57,7 @@ test('a missing app object is detected by the real adapter', async t => {
 });
 test('different consistency interval is rejected after exports and before uploads', async t => {
   const f = await fixture(t), original = f.adapters.observeConsistency;
-  f.adapters.observeConsistency = async ctx => ({ ...await original(ctx), windowId: ctx.phase });
+  f.adapters.observeConsistency = async ctx => ({ ...await original(ctx), ...(ctx.phase === 'after' ? { windowId: 'different-window' } : {}) });
   const r = await runBackupSequence(f.options); assert.equal(r.code, 'CONSISTENCY_INTERVAL_NOT_VERIFIED'); assert.equal(f.snapshots.size, 0);
 });
 for (const kind of ['database','application','supabase']) test('partial restic snapshot of ' + kind + ' never signals success', async t => {

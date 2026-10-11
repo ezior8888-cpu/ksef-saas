@@ -14,28 +14,31 @@ import { exportBackupDbReferences } from './export-backup-db-references.mjs';
 import { runBackupReferenceCheck } from './backup-reference-check.mjs';
 import { validateBackupSet } from './check-backup-set.mjs';
 import { planBackupRetention } from './plan-backup-retention.mjs';
+import { validateBackupPreflight, validateBackupConsistency, validateBackupRecovery, validateBackupNotificationReceipt, validateBackupResumeReceipt, snapshotBackupOperationClaim } from './backup-operation-contracts.mjs';
 
 export const SOURCE_REVISION = 'face09c57f7de756546e58d092dbe6d280f93c91';
 export const REQUIRED_WRITERS = Object.freeze(['web', 'worker', 'crons', 'database-admin', 's3-upload-delete', 's3-lifecycle', 'supabase-storage']);
 export const RECOVERY_COVERAGE = ['runtime-images-extensions', 'app-worker-config-keys', 'supabase-auth-jwt-storage', 'pgsodium-or-confirmed-unused', 'application-minio-iam-kms', 'supabase-minio-iam-kms'];
 const GROUPS = { database: 'postgresql', application: 'app-minio', supabase: 'supabase-minio' };
-const READY = ['sourceInventoryReviewed', 'dumpPrivilegesAndVersionsVerified', 'runtimeSchemaReviewed', 'sourceMapReviewed', 'spaceVerified', 'minioProfilesVerified', 'targetEuOffHostVerified', 'targetIndependentOfStaging', 'keyEscrowVerified', 'independentReaderVerified', 'consistencyProcedureApproved'];
 const now = () => new Date().toISOString();
-const exact = (a, b) => Array.isArray(a) && a.length === b.length && b.every(v => a.filter(x => x === v).length === 1);
 class SequenceError extends Error { constructor(code) { super(code); this.sequenceCode = code; } }
 const fail = code => { throw new SequenceError(code); };
 const member = a => ({ sha256: a.sha256, bytes: a.bytes });
 const unique = items => [...new Map(items.map(a => [a.sha256, member(a)])).values()];
+function claims(validator, value, context, code) {
+  try { return validator(value, { ...context, nowUtc: now() }).value; } catch { fail(code); }
+}
 const sameFiles = (a, b) => Array.isArray(b) && a.length === b.length && a.every(x => b.filter(y => x.path === y.path && x.sha256 === y.sha256 && x.bytes === y.bytes).length === 1);
 
 export async function runBackupSequence(options) {
   const { root, runId, adapters, signal, mode, pgContainer } = options ?? {};
+  const authorization = Object.freeze({ backup: options?.authorization?.backup === true, resumeWrites: options?.authorization?.resumeWrites === true });
   const maxDurationMs = options?.maxDurationMs ?? 3 * 60 * 60 * 1000;
   const stepTimeoutMs = options?.stepTimeoutMs ?? 30 * 60 * 1000;
   if (!['synthetic', 'separately-authorized'].includes(mode) || !/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/.test(runId ?? '')
     || !Number.isSafeInteger(maxDurationMs) || maxDurationMs < 1 || maxDurationMs > 10_800_000
     || !Number.isSafeInteger(stepTimeoutMs) || stepTimeoutMs < 1 || stepTimeoutMs > maxDurationMs) fail('INVALID_SEQUENCE_OPTIONS');
-  if (mode === 'separately-authorized' && (options.authorization?.backup !== true || options.authorization?.resumeWrites !== true)) fail('SEPARATE_AUTHORIZATION_REQUIRED');
+  if (mode === 'separately-authorized' && (!authorization.backup || !authorization.resumeWrites)) fail('SEPARATE_AUTHORIZATION_REQUIRED');
   if (mode === 'separately-authorized' && process.platform !== 'linux') fail('UNSUPPORTED_SEQUENCE_PLATFORM');
   for (const name of ['preflight', 'observeConsistency', 'captureRecovery', 'databaseCommand', 'notify', 'closeSourceClients', 'resumeWrites']) {
     if (typeof adapters?.[name] !== 'function') fail('REQUIRED_ADAPTER_MISSING');
@@ -58,7 +61,8 @@ export async function runBackupSequence(options) {
     if ((!cleanup && controller.signal.aborted) || remaining <= 0) fail('RUN_ABORTED_OR_TIMED_OUT');
     const local = new AbortController();
     const combined = cleanup ? local.signal : AbortSignal.any([local.signal, controller.signal]);
-    const context = { runId, runRoot, mode, sourceRevision: SOURCE_REVISION, signal: combined, timeoutMs: remaining };
+    const context = { runId, runRoot, mode, sourceRevision: SOURCE_REVISION, signal: combined, timeoutMs: remaining,
+      authorization: { resumeWrites: authorization.resumeWrites }, startedAtUtc: now() };
     const stepStarted = Date.now(); let timer, stop;
     const token = {}; active.add(token);
     const workPromise = Promise.resolve().then(() => {
@@ -76,31 +80,30 @@ export async function runBackupSequence(options) {
       const wasInterrupted = combined.aborted; local.abort();
       // Do not free the scope lock while a client can still write. A timed-out
       // transport may also leave a remote child alive; any timeout retains it.
-      const exceededDeadline = error instanceof SequenceError && error.sequenceCode === 'RUN_ABORTED_OR_TIMED_OUT';
+      const exceededDeadline = Date.now() - stepStarted >= remaining || (!cleanup && Date.now() - started >= maxDurationMs)
+        || (error instanceof SequenceError && error.sequenceCode === 'RUN_ABORTED_OR_TIMED_OUT');
       if (active.has(token) || wasInterrupted || exceededDeadline || error?.discardClientRequired) retainLock = true;
+      if (exceededDeadline) throw new SequenceError('RUN_ABORTED_OR_TIMED_OUT');
       throw error;
     } finally { clearTimeout(timer); combined.removeEventListener('abort', stop); }
+  }
+  async function notify(context) {
+    const receipt = await adapters.notify({ ...context, authorization: { ...context.authorization } });
+    try { return validateBackupNotificationReceipt(receipt, { ...context, nowUtc: now() }); }
+    catch { fail('NOTIFICATION_RECEIPT_INVALID'); }
   }
   try {
     lock = await acquireBackupLock(root);
     runRoot = await createBackupRunDirectory(root, runId);
     const dirs = Object.fromEntries(Object.entries(GROUPS).map(([kind, name]) => [kind, path.join(runRoot, name)]));
     await mkdir(dirs.database, { mode: 0o700 });
-    const preflight = structuredClone(await step('preflight', ctx => adapters.preflight(ctx)));
-    if (preflight?.sourceRevision !== SOURCE_REVISION || READY.some(k => preflight.readiness?.[k] !== true)
-      || !exact(preflight.databaseNames, ['postgres', '_supabase']) || !exact(preflight.minioIds, ['application', 'supabase'])) fail('PREFLIGHT_INCOMPLETE');
-    for (const kind of Object.keys(GROUPS)) {
-      const destination = preflight.targets?.[kind];
-      if (destination?.region !== 'EU' || destination.offSourceHosts !== true || destination.independentOfStaging !== true
-        || destination.clientSideEncryption !== true || !destination.repositoryId || !destination.escrowEvidence) fail('TARGET_OR_ESCROW_INCOMPLETE');
-    }
-    if (new Set(Object.values(preflight.targets).map(t => t.repositoryId)).size !== 3) fail('REPOSITORIES_NOT_DISTINCT');
+    const preflight = await step('preflight', async ctx => claims(validateBackupPreflight, await adapters.preflight({ ...ctx, authorization: { ...ctx.authorization } }), ctx, 'PREFLIGHT_INCOMPLETE'));
     const stableStart = now();
     // The provider may already have fenced writers when it loses its response.
     writesState = 'FREEZE_UNKNOWN';
-    const startProof = structuredClone(await step('consistency-before', ctx => adapters.observeConsistency({ ...ctx, phase: 'before' })));
-    if (typeof startProof?.windowId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(startProof.windowId) || startProof.runId !== runId || startProof.sourceRevision !== SOURCE_REVISION
-      || startProof.mutationsExcluded !== true || !exact(startProof.coveredWriters, REQUIRED_WRITERS)) fail('CONSISTENCY_NOT_ESTABLISHED');
+    const startProof = await step('consistency-before', async ctx => claims(validateBackupConsistency,
+      await adapters.observeConsistency({ ...ctx, phase: 'before' }), { ...ctx, phase: 'before' }, 'CONSISTENCY_NOT_ESTABLISHED'));
+    const stateBinding = { windowId: startProof.windowId, originalState: startProof.originalState, heldState: startProof.heldState };
     writesState = 'HELD';
     const manifest = { schemaVersion: 2, mode, sourceRevision: SOURCE_REVISION, runId, startedAtUtc, databases: [], minio: [], snapshots: [] };
     const inventoryStart = now();
@@ -125,10 +128,13 @@ export async function runBackupSequence(options) {
       } else manifest.globals = { runId, exitCode: 0, scope: 'globals-only', rolesIncluded: true, tablespacesIncluded: true, operationWindow, artifact };
     }
     const recoveryStart = now(), recoveryPath = path.join(dirs.database, 'recovery-bundle.enc');
-    const recovery = await step('recovery', ctx => adapters.captureRecovery({ ...ctx, outputPath: recoveryPath }));
-    if (recovery?.encrypted !== true || recovery.configurationIncluded !== true || recovery.keysIncluded !== true
-      || !exact(recovery.coverage, RECOVERY_COVERAGE)) fail('RECOVERY_CONFIGURATION_INCOMPLETE');
+    const recoveryClaim = await step('recovery', async ctx => {
+      const value = await adapters.captureRecovery({ ...ctx, ...structuredClone(stateBinding), outputPath: recoveryPath });
+      try { return snapshotBackupOperationClaim(value); } catch { fail('RECOVERY_CONFIGURATION_INCOMPLETE'); }
+    });
     const recoveryArtifact = await step('hash-recovery', ctx => hashBackupArtifact(recoveryPath, ctx));
+    const recovery = claims(validateBackupRecovery, recoveryClaim, { runId, sourceRevision: SOURCE_REVISION, mode,
+      startedAtUtc: recoveryStart, ...stateBinding, outputPath: recoveryPath, artifact: recoveryArtifact }, 'RECOVERY_CONFIGURATION_INCOMPLETE');
     manifest.recoveryBundle = { runId, encrypted: true, configurationIncluded: true, keysIncluded: true,
       operationWindow: { startedAtUtc: recoveryStart, completedAtUtc: now() }, artifact: recoveryArtifact };
     const minioIndexFiles = {};
@@ -167,10 +173,9 @@ export async function runBackupSequence(options) {
       operationWindow: { startedAtUtc: referenceStart, completedAtUtc: now() }, evidence: referenceEvidence };
     try { await step('close-source-clients', ctx => { sourceCleanupStarted = true; return adapters.closeSourceClients(ctx); }); }
     catch (error) { retainLock = true; throw error; }
-    const endProof = structuredClone(await step('consistency-after', ctx => adapters.observeConsistency({ ...ctx, phase: 'after', windowId: startProof.windowId })));
-    if (endProof?.windowId !== startProof.windowId || endProof.mutationsExcluded !== true
-      || endProof.runId !== runId || endProof.sourceRevision !== SOURCE_REVISION || endProof.sourceOperationsStopped !== true
-      || endProof.entireIntervalVerified !== true || !exact(endProof.coveredWriters, REQUIRED_WRITERS)) fail('CONSISTENCY_INTERVAL_NOT_VERIFIED');
+    const endProof = await step('consistency-after', async ctx => claims(validateBackupConsistency,
+      await adapters.observeConsistency({ ...ctx, phase: 'after', ...structuredClone(stateBinding) }),
+      { ...ctx, phase: 'after', ...stateBinding }, 'CONSISTENCY_INTERVAL_NOT_VERIFIED'));
     const stableEnd = now();
     const stabilityArtifact = await writeBackupJson(path.join(dirs.database, 'consistency.json'), { before: startProof, after: endProof }, { signal: controller.signal });
     manifest.stabilization = { startedAtUtc: stableStart, completedAtUtc: stableEnd, mutationsExcluded: true, evidence: stabilityArtifact };
@@ -199,22 +204,13 @@ export async function runBackupSequence(options) {
       runId, windowId: startProof.windowId, sourceRevision: SOURCE_REVISION, sealSha256: sealed.artifact.sha256,
       status: 'RESUME_NOT_CONFIRMED', createdAtUtc: now()
     }, ctx));
-    const resumeStarted = Date.now();
     writesState = 'RESUME_UNKNOWN';
-    // Change state only after the bounded step returns. A late callback cannot
-    // publish success or trigger uploads after its timeout has already won.
-    const receipt = structuredClone(await step('resume-writes', ctx => adapters.resumeWrites({ ...ctx,
-      windowId: startProof.windowId, sealSha256: sealed.artifact.sha256,
-      seal: structuredClone(seal), requiredWriters: [...REQUIRED_WRITERS] })));
-    const isoTime = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
-      && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value ? Date.parse(value) : NaN;
-    const resumedStart = isoTime(receipt?.startedAtUtc), resumedEnd = isoTime(receipt?.completedAtUtc);
-    if (receipt?.schemaVersion !== 1 || receipt.status !== 'RESUMED' || receipt.runId !== runId
-      || receipt.windowId !== startProof.windowId || receipt.sourceRevision !== SOURCE_REVISION || receipt.sealSha256 !== sealed.artifact.sha256
-      || receipt.sourceReadsStopped !== true || receipt.originalStateRestored !== true || !exact(receipt.coveredWriters, REQUIRED_WRITERS)
-      || !Number.isFinite(resumedStart) || !Number.isFinite(resumedEnd) || resumedStart < resumeStarted || resumedEnd < resumedStart || resumedEnd > Date.now()
-      || !receipt.verificationEvidence || typeof receipt.verificationEvidence !== 'object' || Array.isArray(receipt.verificationEvidence)
-      || Object.keys(receipt.verificationEvidence).length === 0 || Buffer.byteLength(JSON.stringify(receipt)) > 65_536) fail('WRITE_RESUME_NOT_VERIFIED');
+    // Validate inside the deadline, before any caller-supplied object can be
+    // cloned/serialized. Late callbacks cannot publish state or begin uploads.
+    const receipt = await step('resume-writes', async ctx => claims(validateBackupResumeReceipt,
+      await adapters.resumeWrites({ ...ctx, ...structuredClone(stateBinding), sealSha256: sealed.artifact.sha256,
+        seal: structuredClone(seal), requiredWriters: [...REQUIRED_WRITERS] }),
+      { ...ctx, windowId: startProof.windowId, sealSha256: sealed.artifact.sha256 }, 'WRITE_RESUME_NOT_VERIFIED'));
     writesState = 'RESUMED';
     let resumeArtifact;
     try { resumeArtifact = await step('write-resume-receipt', ctx => writeDurableBackupJson(path.join(dirs.database, 'write-resume.json'), receipt, ctx)); }
@@ -260,8 +256,8 @@ export async function runBackupSequence(options) {
     const retention = planBackupRetention({ schemaVersion: 1, asOfUtc: now(), manifests: [...(options.history ?? []), manifest] });
     await writeBackupJson(path.join(runRoot, 'retention-preview.json'), retention, { signal: controller.signal });
     await writeBackupJson(path.join(runRoot, 'sequence-complete.json'), { runId, completedAtUtc: manifest.completedAtUtc, mode, writesState, signalDelivery: 'NOT_CONFIRMED_BY_LOCAL_RECEIPT', g09Accepted: false }, { signal: controller.signal });
-    await step('signal-success', ctx => adapters.notify({ ...ctx, event: mode === 'synthetic' ? 'synthetic-complete' : 'backup-complete', completedAtUtc: manifest.completedAtUtc, writesState }));
-    return finalResult = { status: 'SEQUENCE_COMPLETE_REQUIRES_ACCEPTANCE', mode, runId, writesState, manifest, retention, g09Accepted: false, evidenceVerified: false, lockRetained: false };
+    const notification = await step('signal-success', ctx => notify({ ...ctx, event: mode === 'synthetic' ? 'synthetic-complete' : 'backup-complete', completedAtUtc: manifest.completedAtUtc, writesState }));
+    return finalResult = { status: 'SEQUENCE_COMPLETE_REQUIRES_ACCEPTANCE', mode, runId, writesState, manifest, retention, notification, g09Accepted: false, evidenceVerified: false, lockRetained: false };
   } catch (error) {
     const failureStage = stage;
     const code = error instanceof SequenceError ? error.sequenceCode : 'SEQUENCE_STEP_FAILED';
@@ -275,7 +271,7 @@ export async function runBackupSequence(options) {
     }
     if (runRoot) {
       try { await writeBackupJson(path.join(runRoot, 'sequence-failed.json'), { runId, mode, stage: failureStage, code, writesState, lockRetained: retainLock, lastCompleteUnchanged: true }); } catch { retainLock = true; }
-      try { await step('signal-failure', ctx => adapters.notify({ ...ctx, event: 'backup-failed', stage: failureStage, code, writesState }), { cleanup: true }); } catch { /* external absence monitor must catch undelivered signal */ }
+      try { await step('signal-failure', ctx => notify({ ...ctx, event: 'backup-failed', stage: failureStage, code, writesState }), { cleanup: true }); } catch { /* external absence monitor must catch undelivered signal */ }
     }
     return finalResult = { status: 'INCOMPLETE', mode, runId, stage: failureStage, code, writesState, lockRetained: Boolean(lock && retainLock), g09Accepted: false, evidenceVerified: false };
   } finally {
@@ -286,7 +282,7 @@ export async function runBackupSequence(options) {
         // Backup completion and cleanup are separate facts. Never undo a sent
         // completion or hide the retained lock behind an unhandled exception.
         if (finalResult) { finalResult.lockRetained = true; finalResult.cleanupCode = 'LOCK_RELEASE_FAILED'; }
-        try { await step('signal-cleanup-failure', ctx => adapters.notify({ ...ctx, event: 'backup-cleanup-failed', code: 'LOCK_RELEASE_FAILED', writesState }), { cleanup: true }); } catch { /* absence monitor remains required */ }
+        try { await step('signal-cleanup-failure', ctx => notify({ ...ctx, event: 'backup-cleanup-failed', code: 'LOCK_RELEASE_FAILED', writesState }), { cleanup: true }); } catch { /* absence monitor remains required */ }
       }
     }
   }
