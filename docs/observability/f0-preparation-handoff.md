@@ -35,6 +35,49 @@ za zakończone**: nadal potrzebny jest potwierdzony komplet konkretnych
 dostawców operacji, ich testów i prywatnych wejść. Same callbacki, poprawny
 JSON lub syntetyczna fixture nie są konfiguracją operacyjną.
 
+## Rozliczenie pozostałego lokalnego przygotowania — 11.10.2026
+
+Konkretne połączenia DB/S3/restic i czytnika, adapter Docker wznowienia oraz
+[adapter Healthchecks](../runbooks/f0-backup-private-wiring.md#konkretny-dostawca-sygnału-pełnej-kopii)
+są przygotowane do testów syntetycznych. Kontrakty odrzucają niekompletne
+zgłoszenia; nie tworzą źródeł dowodów. Wyniki testów/CI dotyczą dokładnego
+HEAD wskazanego w PR #225. Profil portu czytnika obsługuje jawne 1–65535.
+
+Pozostałe konkretne warunki wejścia, których nie należy zastępować kolejnymi
+ogólnymi walidatorami:
+
+1. **Preflight i dostęp:** rzeczywiste źródła, docelowe repozytoria,
+   niezależny czytnik oraz sprawdzony dostęp do nich. Pojemność, wersje,
+   zakres schematu i escrow potrzebują aktualnych dowodów; nie ustawiać
+   jedenastu warunków gotowości na `true` na podstawie samego planu.
+2. **Spójność i wznowienie:** utrwalony prywatny plan stanów pierwotnego
+   i tymczasowego, wszystkie kategorie zapisujących oraz konkretny mechanizm
+   wyłączności i zakończenia pracy w toku. Dwa odczyty Docker nie dowodzą
+   braku mutacji przez cały przedział. Zmiany innych kontroli niż stan
+   usług/restart policy wymagają konkretnych procedur ich odtworzenia.
+3. **Recovery:** jawna lista źródeł sześciu zakresów konfiguracji/kluczy,
+   sposób ich spójnego odczytu, format szyfrowania lokalnego pakietu i
+   niezależny odbiorca/escrow. Wybrane szyfrowanie repo restic nie określa
+   formatu lokalnego `recovery-bundle.enc`. Syntetyczny tekst fixture nie
+   jest szyfrowaniem, a klucz zawarty wyłącznie w swoim pakiecie nie
+   umożliwia odzyskiwania. Kolektor nie może po cichu pominąć IAM/KMS.
+4. **Sygnał i monitory:** prywatna kontrola Healthchecks, odbiór konta,
+   dozwolonych metadanych i routingu; mapowanie źródeł monitorów i niezależnego
+   watchdog. Adapter nie tworzy kontroli ani nie potwierdza telefonu Igora.
+5. **Staging i konta:** przypięte osobne zasoby/klucze, następnie rzeczywiste
+   uruchomienie i izolacja; brakujące dowody indywidualnej roli/MFA,
+   parametrów usług i gotowości odbiorcy. Lista oraz checker są przygotowane,
+   lecz lokalny JSON nie dowodzi tych stanów.
+
+Dalsza implementacja `captureRecovery` i obserwatorów jest zależna od tych
+prywatnych źródeł i mechanizmów. Nie odczytywać surowych sekretów tylko po to,
+aby wypełnić wzór, ani wybierać niepotwierdzonych ścieżek jako kompletnego
+inwentarza. Przed operacją potrzebna jest konkretna karta A; obecna lista
+nie jest prośbą o ogólną zgodę na wykonanie. Zgodnie z
+[granicą odbioru](acceptance-plan.md#granica-odbioru-f0-i-późniejszych-testów)
+TEST-07 pozostaje osobnym testem; F0 wymaga kopii i procedury restore,
+bez automatycznego dopisywania pełnej próby odtworzenia do warunków F0.
+
 ## Pola prywatnej karty wykonania
 
 Przed prośbą o wykonanie karta wskazuje: ID i bramkę; dokładny zakres

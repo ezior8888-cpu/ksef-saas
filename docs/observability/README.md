@@ -1,5 +1,7 @@
 # FaktFlow — pakiet F0
 
+Aktualizacja 11.10: przygotowano [adapter sygnału Healthchecks](../runbooks/f0-backup-private-wiring.md#konkretny-dostawca-sygnału-pełnej-kopii) z testami awarii i całej sekwencji. Nie wysłano pingów ani nie zmieniono konta. Pozostałe konkretne wejścia opisuje [rozliczenie przygotowania](f0-preparation-handoff.md#rozliczenie-pozostałego-lokalnego-przygotowania--11102026). **F0_OPEN, G03/G09 FAIL.**
+
 Aktualizacja przygotowania: [karty przekazania F0](f0-preparation-handoff.md)
 porządkują skończoną listę lokalnych prac, staging, monitory, prywatność i dostęp.
 [Plan pełnego izolowanego restore](../runbooks/f0-full-restore-plan.md) obejmuje

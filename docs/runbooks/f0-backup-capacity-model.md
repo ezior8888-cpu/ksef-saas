@@ -170,7 +170,9 @@ retry. Timeout nie dowodzi zakończenia procesów zdalnych.
   mierzy dysków, dumpa, repozytorium ani pracy nocnej.
 - Zweryfikować oddzielną tożsamość i dostęp do czytnika. Obecny
   [adapter SSH](../../scripts/ops/backup-restic-reader-command.mjs) wymaga
-  portu 22; inny port lub tunel wymaga osobnego przygotowania i testów.
+  jawnego całkowitego portu 1–65535 oraz known_hosts zgodnego z hostem i portem.
+  Obsługa parametru jest przetestowana; nie tworzy tunelu ani nie poświadcza
+  bezpieczeństwa trasy lub niezależności czytnika.
 - Przygotować kontrolowane sprzątanie lokalnych artefaktów i skuteczną
   retencję, zachowując dowody oraz niepełne przebiegi do rozstrzygnięcia.
 - Zmierzyć osobno pozyskanie i trwałe utrwalenie źródeł, wznowienie oraz

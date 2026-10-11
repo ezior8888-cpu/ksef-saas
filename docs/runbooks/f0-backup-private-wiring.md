@@ -40,6 +40,60 @@ Kod wyjścia 0 oznacza poprawną strukturę; 1 brak konfiguracji lub bezpieczny
 błąd odczytu; 2 nieobsługiwane argumenty. `--execute` jest odrzucane. Wyjście
 zawiera zamknięte kody braków, bez adresów, identyfikatorów, haseł i ścieżek.
 
+## Konkretny dostawca sygnału pełnej kopii
+
+[Adapter Healthchecks](../../scripts/ops/backup-notification-healthchecks.mjs)
+realizuje wcześniej wybrany kierunek z [ownership](../observability/ownership.md#narzędzia-i-koszty).
+Fabryka `createBackupHealthchecksNotification({ checkUuid, mode, authorization, fetch?, persist? })`
+zwraca funkcję do `operations.notify`. Import i konstrukcja nie wykonują
+połączeń. UUID kontroli jest prywatnym poświadczeniem: nie trafia do Git,
+dziennika ani komunikatu błędu. Nie jest kluczem zarządzania kontem.
+
+- `synthetic` wymaga jawnej atrapy `fetch`; testy nie używają sieci.
+  Sama wstrzyknięta funkcja jest zaufanym kodem, nie piaskownicą.
+- `separately-authorized` wymaga Linuxa i osobnego
+  `authorization.sendNotifications:true` w fabryce. Flaga jest warunkiem
+  technicznym, nie zgodą człowieka na wysyłkę ani dowodem odbioru konta.
+- Sukces całej sekwencji używa stałego HTTPS UUID endpointu; niepowodzenie
+  kopii lub zwolnienia locka używa jego `/fail`. Nie ma body, query, danych
+  domenowych, runId, logów, automatycznego tworzenia kontroli, redirect lub retry.
+- Według [Pinging API](https://healthchecks.io/docs/http_api/) status 200
+  występuje także dla nieistniejącej kontroli i ograniczenia częstotliwości.
+  Dlatego adapter przyjmuje wyłącznie 200 z dokładnymi dwoma bajtami `OK`.
+  Odpowiedź dostawcy nie dowodzi doręczenia człowiekowi.
+
+Przed wysyłką powstaje prywatny, trwale zapisany
+`notification-healthchecks-<event>-intent.json`. Po potwierdzeniu dostawcy
+powstaje osobny receipt `notification-healthchecks-<event>.json`;
+zwracany hash dotyczy tego pliku. Istniejący zamiar odrzuca ponowienie tego
+samego eventu w tym samym katalogu przebiegu, również po awarii procesu.
+Nie usuwać go w celu odświeżenia starego sukcesu. To nie jest globalna
+deduplikacja dostawcy; drugi koordynator i podmiana katalogów pozostają
+zabronione przez procedurę całego przebiegu.
+
+Budżet adaptera to mniejsza z wartości: pozostały timeout kroku i 30 s.
+Timeout/abort przerywa oczekiwanie, anuluje transport/strumień i zachowuje
+lock również wtedy, gdy nadal trwa zapis zamiaru przed wysyłką. Spóźniony
+wynik nie uruchamia kolejnego kroku i nie staje się receipt zwróconym
+sekwencji. Istnienie pliku po przerwanym zapisie nie jest potwierdzeniem
+wykonania. Niepewny wynik lub błąd zapisu wymaga uzgodnienia, bez retry.
+
+Wynik sekwencji zachowuje osobno `notification` po błędzie kopii oraz
+`cleanupNotification` po błędzie zwolnienia locka. Błąd sygnału ma status
+`UNCONFIRMED` i zamknięty kod `NOTIFICATION_STEP_FAILED`; brak próby przed
+utworzeniem katalogu przebiegu ma `NOT_ATTEMPTED`. Przyjęcie sygnału ma
+`PROVIDER_ACCEPTED`, zawsze `deliveryVerified:false`. Alarm cleanup nie
+wymazuje wyniku ukończonej kopii; błąd sygnału nie wymazuje pierwotnego błędu.
+
+[Testy adaptera](../../scripts/ops/backup-notification-healthchecks.test.mjs)
+i [pełnej sekwencji](../../scripts/ops/backup-notification-sequence.test.mjs)
+sprawdzają m.in. brak sygnału sukcesu przed niezależnym odczytem manifestu,
+utratę odpowiedzi, nieistniejącą kontrolę, limity, replay, trwały zapis i
+oddzielne wyniki alarmów. Nie skonfigurowano kontroli, routingu, odbiorcy,
+harmonogramu ani konta. Potrzebne pozostają osobny monitor braku sukcesu,
+prywatne UUID i odbiór konta/metadanych oraz osobno dozwolona próba sygnału.
+Nie ustawiono monitorów i nie wysłano rzeczywistego pingu.
+
 ## Pliki i połączenia
 
 [Publiczny wzór](../../ops/observability/backup/private-runtime.example.json)
