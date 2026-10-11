@@ -7,8 +7,13 @@
 //   - każde żądanie do innej domeny niż aplikacja (metoda, host, ścieżka BEZ
 //     query stringu, typ zasobu, etap) — i PRZERYWA je (`route.abort()`),
 //   - żądania do proxy pierwszej strony, które serwer przekazałby dostawcy
-//     (`/ingest/*` → PostHog, `/monitoring` → Sentry) — też PRZERYWA,
-//     zapisując tylko nazwy zdarzeń / typy elementów koperty i nazwy pól,
+//     (`/ingest/*` → PostHog, `/monitoring` → Sentry) — NIE przekazuje ich do
+//     serwera: przeglądarka dostaje lokalnie syntetyczną odpowiedź 200 (żeby
+//     SDK nie budowały kolejek ponowień, jak przy działającym dostawcy);
+//     zapisuje tylko nazwy zdarzeń / typy elementów koperty i nazwy pól,
+//   - wszystkie żądania zgłoszone przez przeglądarkę (zdarzenia `request` /
+//     `requestfailed`) do domen zewnętrznych i proxy dostawców — także te,
+//     które nie dotarły do warstwy sieci (np. zablokowane w service workerze),
 //   - nagłówki Set-Cookie z odpowiedzi aplikacji (nazwa + atrybuty, bez wartości),
 //   - `context.cookies()`, klucze localStorage / sessionStorage (bez wartości,
 //     poza znacznikami zgody), nazwy baz IndexedDB, `caches.keys()`,
@@ -16,11 +21,19 @@
 //   - połączenia, które ominęłyby przechwytywanie (np. `<link rel=preconnect>`):
 //     Chromium dostaje jako proxy lokalny „sinkhole”, który zapisuje host
 //     i odrzuca połączenie. Dzięki temu nic nie wychodzi z maszyny.
+//   - krok kontrolny `about:blank`: ruch samej przeglądarki (usługi Google
+//     w tle), żeby nie przypisać go aplikacji.
+//
+// Emulacja zwykłej przeglądarki: `--disable-blink-features=AutomationControlled`
+// (navigator.webdriver = false) i User-Agent bez „HeadlessChrome”. Bez tego
+// posthog-js odrzuca zdarzenia jako ruch bota i test zaniża analitykę.
 //
 // Uruchomienie (aplikacja musi działać, np. `pnpm start -p 3100`):
 //   node docs/audyt/13-prywatnosc-i-zgodnosc/narzedzia/test-cookies-i-sieci.mjs
 // Zmienne (opcjonalne): BASE_URL (domyślnie http://localhost:3100),
-//   WAIT_MS (5000), OUT (ścieżka JSON), CHROMIUM_PATH (plik wykonywalny).
+//   WAIT_MS (5000), OUT (ścieżka JSON), CHROMIUM_PATH (plik wykonywalny),
+//   EGRESS_LOG (JSONL z blokada-egress-serwera.cjs) i SERVER_SINKHOLE_LOG
+//   (JSONL z sinkhole-proxy.mjs) — dołączane do wyniku jako zestawienie hostów.
 //
 // Wynik nie zawiera wartości cookies ani tokenów. Narzędzie testowe, nie
 // część aplikacji.
@@ -43,16 +56,21 @@ const CONSENT_KEY = 'ff_analytics_consent';
 const CONSENT_EVENT = 'ff:analytics-consent';
 const BANNER_TEXT = 'Analityka i pomoc w rozwoju produktu';
 
+// Ścieżki z app/: (landing)/page.tsx, (marketing)/pricing, (marketing)/legal/*,
+// (auth)/login|register|forgot-password, (marketing)/kontakt,
+// (marketing)/blog/[slug] (content/blog/*.mdx), (marketing)/pomoc/[slug]
+// (content/help/*.mdx); ostatnia pozycja to celowe 404.
 const STRONY = [
   { id: 'landing', path: '/' },
   { id: 'cennik', path: '/pricing' },
   { id: 'polityka-prywatnosci', path: '/legal/polityka-prywatnosci' },
+  { id: 'rodo', path: '/legal/rodo' },
   { id: 'login', path: '/login' },
   { id: 'register', path: '/register' },
   { id: 'forgot-password', path: '/forgot-password' },
   { id: 'kontakt', path: '/kontakt' },
   { id: 'blog-wpis', path: '/blog/ksef-2-co-warto-wiedziec' },
-  { id: 'pomoc', path: '/pomoc' },
+  { id: 'pomoc-artykul', path: '/pomoc/czym-jest-ksef' },
   { id: 'blog-404', path: '/blog/nie-istnieje-audyt-13' },
 ];
 
@@ -62,7 +80,14 @@ const setCookies = []; // nagłówki Set-Cookie z odpowiedzi aplikacji
 const migawki = []; // stan magazynów po każdym kroku
 const sinkhole = []; // połączenia, które próbowały ominąć przechwytywanie
 const uwagi = [];
-let etap = { scenariusz: 'init', krok: 'init' };
+const konsola = []; // błędy konsoli / strony (diagnostyka, skrócone)
+const widziane = []; // żądania zgłoszone przez przeglądarkę (request/requestfailed)
+const kroki = []; // oś czasu kroków — do przypisania wpisów z rejestrów serwera
+function znacz(e) {
+  kroki.push({ ts: new Date().toISOString(), ...e });
+  return e;
+}
+let etap = znacz({ scenariusz: 'init', krok: 'init' });
 
 function chromiumPath() {
   if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
@@ -96,6 +121,7 @@ function kategoria(url) {
   if (h.endsWith('sentry.io')) return 'Sentry (bezpośrednio)';
   if (h.endsWith('posthog.com')) return 'PostHog (bezpośrednio)';
   if (h.endsWith('googleusercontent.com')) return 'Google (awatary)';
+  if (/(^|\.)(gvt1|gvt2)\.com$|update\.googleapis\.com$|optimizationguide|safebrowsing|clients\d?\.google\.com$/.test(h)) return 'usługa tła Chromium (nie strona)';
   return 'inna domena zewnętrzna';
 }
 
@@ -268,8 +294,9 @@ function uruchomSinkhole() {
 }
 
 // ── kontekst z przechwytywaniem ──────────────────────────────────────────
+let USER_AGENT = undefined; // ustalany raz w main(): UA przeglądarki bez „HeadlessChrome”
 async function nowyKontekst(browser) {
-  const context = await browser.newContext({ locale: 'pl-PL', serviceWorkers: 'allow' });
+  const context = await browser.newContext({ locale: 'pl-PL', serviceWorkers: 'allow', userAgent: USER_AGENT });
   await context.route('**/*', async (route) => {
     const req = route.request();
     const url = req.url();
@@ -289,8 +316,36 @@ async function nowyKontekst(browser) {
     };
     if (kat.includes('PostHog') && req.method() === 'POST') wpis.posthog = streszczeniePostHog(req);
     if (kat.includes('Sentry') && req.method() === 'POST') wpis.sentry = streszczenieSentry(req);
+    if (kat.startsWith('proxy-1st')) {
+      // Lokalna odpowiedź syntetyczna — żądanie nie trafia do serwera ani do dostawcy.
+      wpis.obsluga = 'syntetyczne 200 w przeglądarce';
+      zadania.push(wpis);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: kat.includes('PostHog') ? '{"status":1}' : '{}' });
+    }
+    wpis.obsluga = 'przerwane';
     zadania.push(wpis);
     return route.abort('blockedbyclient');
+  });
+  context.on('request', (r) => {
+    let kat = null;
+    try { kat = /^https?:/.test(r.url()) ? kategoria(r.url()) : null; } catch { kat = null; }
+    if (kat === null) return;
+    const u = new URL(r.url());
+    widziane.push({ ...etap, zdarzenie: 'request', kategoria: kat, metoda: r.method(), host: u.host, sciezka: u.pathname, typ_zasobu: r.resourceType(), z_service_workera: Boolean(r.serviceWorker()) });
+  });
+  context.on('requestfailed', (r) => {
+    let kat = null;
+    try { kat = /^https?:/.test(r.url()) ? kategoria(r.url()) : null; } catch { kat = null; }
+    if (kat === null) return;
+    const u = new URL(r.url());
+    widziane.push({ ...etap, zdarzenie: 'requestfailed', kategoria: kat, host: u.host, sciezka: u.pathname, typ_zasobu: r.resourceType(), z_service_workera: Boolean(r.serviceWorker()), blad: r.failure()?.errorText ?? null });
+  });
+  context.on('page', (p) => {
+    p.on('console', (msg) => {
+      if (msg.type() !== 'error' && msg.type() !== 'warning') return;
+      konsola.push({ ...etap, typ: msg.type(), tekst: msg.text().replace(/[?#][^\s'"]*/g, '').slice(0, 160) });
+    });
+    p.on('pageerror', (err) => konsola.push({ ...etap, typ: 'pageerror', tekst: String(err?.message ?? err).slice(0, 160) }));
   });
   context.on('response', async (res) => {
     try {
@@ -309,8 +364,16 @@ async function nowyKontekst(browser) {
   return context;
 }
 
+// Zamknięcie kontekstu z przerwą: wysyłki przy zamykaniu strony (keepalive,
+// sendBeacon) trafiają do kroku „zamkniecie-kontekstu” tego scenariusza.
+async function zamknij(ctx) {
+  etap = znacz({ scenariusz: etap.scenariusz, krok: 'zamkniecie-kontekstu' });
+  await ctx.close();
+  await new Promise((r) => setTimeout(r, 1500));
+}
+
 async function odwiedz(page, context, scenariusz, strona) {
-  etap = { scenariusz, krok: strona.id };
+  etap = znacz({ scenariusz, krok: strona.id });
   let status = null;
   let blad = null;
   try {
@@ -349,12 +412,20 @@ async function main() {
   const browser = await chromium.launch({
     headless: true,
     executablePath: exe,
+    args: ['--disable-blink-features=AutomationControlled'],
     // Wszystko, co ominie przechwytywanie (preconnect, DNS-prefetch przez
     // proxy), trafia do lokalnego sinkhole i jest odrzucane.
     proxy: { server: `http://127.0.0.1:${proxyPort}`, bypass: 'localhost,127.0.0.1' },
   });
+  {
+    const tmp = await browser.newContext();
+    const p = await tmp.newPage();
+    USER_AGENT = (await p.evaluate(() => navigator.userAgent)).replace('HeadlessChrome', 'Chrome');
+    await tmp.close();
+  }
   const meta = {
     wygenerowano: new Date().toISOString(),
+    emulacja: { user_agent_bez_headless: true, navigator_webdriver: false },
     base_url: BASE_URL,
     wait_ms: WAIT_MS,
     chromium: browser.version(),
@@ -363,26 +434,36 @@ async function main() {
     strony: STRONY,
   };
 
+  // (k) kontrola: ruch samej przeglądarki bez żadnej strony aplikacji.
+  {
+    const ctx = await nowyKontekst(browser);
+    const page = await ctx.newPage();
+    etap = znacz({ scenariusz: 'k-kontrola-about-blank', krok: 'about:blank' });
+    await page.goto('about:blank');
+    await page.waitForTimeout(15_000);
+    await zamknij(ctx);
+  }
+
   // (a) brak wyboru — każda strona w ŚWIEŻYM kontekście (pierwsza wizyta),
   // a dodatkowo przejście po kolei w jednym kontekście (ta sama sesja).
   for (const s of STRONY) {
     const ctx = await nowyKontekst(browser);
     const page = await ctx.newPage();
     await odwiedz(page, ctx, 'a-brak-wyboru-pierwsza-wizyta', s);
-    await ctx.close();
+    await zamknij(ctx);
   }
   {
     const ctx = await nowyKontekst(browser);
     const page = await ctx.newPage();
     for (const s of STRONY) await odwiedz(page, ctx, 'a2-brak-wyboru-sesja', s);
     // (e) błąd JS bez decyzji — czy Sentry wysyła zdarzenie przed zgodą.
-    etap = { scenariusz: 'a2-brak-wyboru-sesja', krok: 'blad-js-syntetyczny' };
+    etap = znacz({ scenariusz: 'a2-brak-wyboru-sesja', krok: 'blad-js-syntetyczny' });
     await page.goto(BASE_URL + '/', { waitUntil: 'load' });
     await page.waitForTimeout(2000);
     await page.evaluate(() => setTimeout(() => { throw new Error('AUDYT_13_SYNTETYCZNY_BLAD'); }, 0));
     await page.waitForTimeout(WAIT_MS);
     await migawka(page, ctx, 'po syntetycznym błędzie JS bez decyzji');
-    await ctx.close();
+    await zamknij(ctx);
   }
 
   // (b) odmowa — „Tylko niezbędne”.
@@ -390,20 +471,20 @@ async function main() {
     const ctx = await nowyKontekst(browser);
     const page = await ctx.newPage();
     await odwiedz(page, ctx, 'b-odmowa', STRONY[0]);
-    etap = { scenariusz: 'b-odmowa', krok: 'klik-tylko-niezbedne' };
+    etap = znacz({ scenariusz: 'b-odmowa', krok: 'klik-tylko-niezbedne' });
     const btn = page.getByRole('button', { name: 'Tylko niezbędne', exact: true });
     const widoczny = await btn.isVisible().catch(() => false);
     if (widoczny) await btn.click(); else uwagi.push('b: brak przycisku „Tylko niezbędne” — banner niewidoczny');
     await page.waitForTimeout(WAIT_MS);
     await migawka(page, ctx, 'po kliknięciu „Tylko niezbędne”');
     for (const s of STRONY) await odwiedz(page, ctx, 'b-odmowa', s);
-    etap = { scenariusz: 'b-odmowa', krok: 'blad-js-syntetyczny' };
+    etap = znacz({ scenariusz: 'b-odmowa', krok: 'blad-js-syntetyczny' });
     await page.goto(BASE_URL + '/', { waitUntil: 'load' });
     await page.waitForTimeout(2000);
     await page.evaluate(() => setTimeout(() => { throw new Error('AUDYT_13_SYNTETYCZNY_BLAD'); }, 0));
     await page.waitForTimeout(WAIT_MS);
     await migawka(page, ctx, 'po syntetycznym błędzie JS po odmowie');
-    await ctx.close();
+    await zamknij(ctx);
   }
 
   // (b2) zamknięcie bannera krzyżykiem — kod traktuje to jako odmowę.
@@ -411,13 +492,13 @@ async function main() {
     const ctx = await nowyKontekst(browser);
     const page = await ctx.newPage();
     await odwiedz(page, ctx, 'b2-zamkniecie-X', STRONY[0]);
-    etap = { scenariusz: 'b2-zamkniecie-X', krok: 'klik-X' };
+    etap = znacz({ scenariusz: 'b2-zamkniecie-X', krok: 'klik-X' });
     const x = page.getByRole('button', { name: 'Zamknij — Tylko niezbędne' });
     if (await x.isVisible().catch(() => false)) await x.click(); else uwagi.push('b2: brak przycisku X');
     await page.waitForTimeout(WAIT_MS);
     await migawka(page, ctx, 'po kliknięciu X');
     await odwiedz(page, ctx, 'b2-zamkniecie-X', STRONY[1]);
-    await ctx.close();
+    await zamknij(ctx);
   }
 
   // (c) akceptacja + (d) wycofanie w tym samym kontekście.
@@ -425,7 +506,7 @@ async function main() {
     const ctx = await nowyKontekst(browser);
     const page = await ctx.newPage();
     await odwiedz(page, ctx, 'c-akceptacja', STRONY[0]);
-    etap = { scenariusz: 'c-akceptacja', krok: 'klik-akceptuje' };
+    etap = znacz({ scenariusz: 'c-akceptacja', krok: 'klik-akceptuje' });
     const ok = page.getByRole('button', { name: 'Akceptuję', exact: true });
     if (await ok.isVisible().catch(() => false)) await ok.click(); else uwagi.push('c: brak przycisku „Akceptuję”');
     await page.waitForTimeout(WAIT_MS);
@@ -435,7 +516,7 @@ async function main() {
     // (d) wycofanie — najpierw szukamy ścieżki w UI na każdej stronie.
     const kontrolki = {};
     for (const s of STRONY) {
-      etap = { scenariusz: 'd-wycofanie', krok: `szukanie-kontrolki:${s.id}` };
+      etap = znacz({ scenariusz: 'd-wycofanie', krok: `szukanie-kontrolki:${s.id}` });
       await page.goto(BASE_URL + s.path, { waitUntil: 'load' });
       await page.waitForTimeout(1500);
       kontrolki[s.path] = await szukajKontrolekZgody(page);
@@ -447,7 +528,7 @@ async function main() {
     // d1: brak kontrolki w UI → wywołujemy DOKŁADNIE to, co robi
     // setAnalyticsConsent(false) (lib/analytics/consent.ts:27-37): zapis
     // 'denied' + zdarzenie ff:analytics-consent — na otwartej stronie, bez przeładowania.
-    etap = { scenariusz: 'd-wycofanie', krok: 'd1-symulacja-programowa' };
+    etap = znacz({ scenariusz: 'd-wycofanie', krok: 'd1-symulacja-programowa' });
     await page.goto(BASE_URL + '/', { waitUntil: 'load' });
     await page.waitForTimeout(WAIT_MS);
     await migawka(page, ctx, 'przed wycofaniem (zgoda udzielona, strona /)');
@@ -464,7 +545,7 @@ async function main() {
 
     // d2: jedyna ścieżka dostępna użytkownikowi bez kodu — wyczyszczenie
     // danych witryny (tu: localStorage) → banner wraca → „Tylko niezbędne”.
-    etap = { scenariusz: 'd-wycofanie', krok: 'd2-wyczyszczenie-danych' };
+    etap = znacz({ scenariusz: 'd-wycofanie', krok: 'd2-wyczyszczenie-danych' });
     await page.evaluate(() => localStorage.clear());
     await page.goto(BASE_URL + '/', { waitUntil: 'load' });
     await page.waitForTimeout(WAIT_MS);
@@ -474,7 +555,7 @@ async function main() {
     await page.waitForTimeout(WAIT_MS);
     await migawka(page, ctx, 'd2: po „Tylko niezbędne”');
     for (const s of STRONY.slice(0, 2)) await odwiedz(page, ctx, 'd-wycofanie-d2-po', s);
-    await ctx.close();
+    await zamknij(ctx);
   }
 
   await browser.close();
@@ -489,7 +570,16 @@ async function main() {
     podsumowanie[sc] = {
       domeny_zewnetrzne: [...new Set(z.filter((r) => !r.kategoria.startsWith('proxy-1st')).map((r) => `${r.host} [${r.kategoria}]`))],
       proxy_pierwszej_strony: [...new Set(z.filter((r) => r.kategoria.startsWith('proxy-1st')).map((r) => `${r.metoda} ${r.sciezka} [${r.kategoria}]`))],
-      liczba_zadan_przerwanych: z.length,
+      liczba_zadan_przechwyconych: z.length,
+      widziane_w_przegladarce: (() => {
+        const w = widziane.filter((r) => r.scenariusz === sc);
+        const out = {};
+        for (const r of w) {
+          const k = `${r.zdarzenie} ${r.metoda ?? ''} ${r.host}${r.sciezka}${r.z_service_workera ? ' [SW]' : ''}${r.blad ? ` → ${r.blad}` : ''}`.replace(/\s+/g, ' ');
+          out[k] = (out[k] ?? 0) + 1;
+        }
+        return out;
+      })(),
       sinkhole: [...new Set(sinkhole.filter((r) => r.scenariusz === sc).map((r) => `${r.rodzaj}: ${r.host}`))],
       ciasteczka: [...new Set(ms.flatMap((m) => m.ciasteczka.map((c) => c.nazwa)))],
       set_cookie: [...new Set(setCookies.filter((c) => c.scenariusz === sc).map((c) => c.nazwa))],
@@ -502,7 +592,106 @@ async function main() {
     };
   }
 
-  const wynik = { meta, podsumowanie, uwagi, zadania_przerwane: zadania, set_cookie: setCookies, sinkhole, migawki };
+  // Macierz scenariusz × strona: stan po wejściu na stronę (migawka „po wejściu”)
+  // i żądania zewnętrzne / do proxy dostawców zarejestrowane w tym kroku.
+  const macierz = migawki
+    .filter((m) => m.opis.startsWith('po wejściu'))
+    .map((m) => {
+      const z = zadania.filter((r) => r.scenariusz === m.scenariusz && r.krok === m.krok);
+      const sh = sinkhole.filter((r) => r.scenariusz === m.scenariusz && r.krok === m.krok);
+      return {
+        scenariusz: m.scenariusz,
+        strona: m.url,
+        status_http: m.status_http,
+        banner: m.banner_widoczny,
+        zewnetrzne: [...new Set(z.filter((r) => !r.kategoria.startsWith('proxy-1st')).map((r) => r.host))],
+        widziane_niezlapane: [...new Set(widziane.filter((r) => r.scenariusz === m.scenariusz && r.krok === m.krok && r.zdarzenie === 'requestfailed' && r.blad !== 'net::ERR_BLOCKED_BY_CLIENT.Inspector').map((r) => `${r.host}${r.sciezka} → ${r.blad}`))],
+        proxy_dostawcow: [...new Set(z.filter((r) => r.kategoria.startsWith('proxy-1st')).map((r) => `${r.metoda} ${r.sciezka}`))],
+        sinkhole: [...new Set(sh.map((r) => r.host))],
+        cookies: m.ciasteczka.map((c) => c.nazwa),
+        localStorage: (Array.isArray(m.localStorage) ? m.localStorage : []).map((k) => k.klucz + (k.wartosc !== undefined ? `=${k.wartosc}` : '')),
+        sessionStorage: (Array.isArray(m.sessionStorage) ? m.sessionStorage : []).map((k) => k.klucz),
+        indexedDB: m.indexedDB,
+        cacheStorage: Array.isArray(m.cacheStorage) ? m.cacheStorage.map((c) => `${c.nazwa} (${c.wpisow})`) : m.cacheStorage,
+        serviceWorker: Array.isArray(m.serviceWorker) ? m.serviceWorker.map((r) => `${r.scope} ${r.skrypt}`) : m.serviceWorker,
+      };
+    });
+
+  // Przypisanie wpisu z rejestru serwera do kroku testu po znaczniku czasu
+  // (ostatni krok rozpoczęty przed wpisem). Przybliżenie: wysyłka przy
+  // opuszczaniu strony trafia do kroku, w którym dotarła.
+  const krokDla = (ts) => {
+    let k = kroki[0];
+    for (const x of kroki) { if (x.ts <= ts) k = x; else break; }
+    return k;
+  };
+  const opisWpisu = (w) => {
+    if (w.kind === 'incoming_vendor_proxy_request') return `przychodzące ${w.method} ${w.path}${w.sec_fetch_mode ? ` [${w.sec_fetch_mode}/${w.sec_fetch_dest}]` : ''}`;
+    if (w.kind === 'tcp_connect_blocked_loopback_proxy') return 'zablokowane: lokalne proxy wyjściowe';
+    if (w.kind === 'connect_tunnel_blocked' || w.kind === 'http_via_proxy_blocked') return `zablokowane przez sinkhole serwera: ${w.host}`;
+    return `zablokowane (${w.kind}): ${w.host}`;
+  };
+  const serwerWgKroku = {};
+  const dolicz = (w) => {
+    if (!w?.ts || ['guard_loaded', 'sinkhole_started'].includes(w.kind)) return;
+    const k = krokDla(w.ts);
+    const sc = k.scenariusz;
+    const kk = k.krok;
+    serwerWgKroku[sc] ??= {};
+    serwerWgKroku[sc][kk] ??= {};
+    const op = opisWpisu(w);
+    serwerWgKroku[sc][kk][op] = (serwerWgKroku[sc][kk][op] ?? 0) + 1;
+  };
+  for (const plik of [process.env.EGRESS_LOG, process.env.SERVER_SINKHOLE_LOG]) {
+    if (!plik || !fs.existsSync(plik)) continue;
+    for (const l of fs.readFileSync(plik, 'utf8').split('\n').filter(Boolean)) {
+      try { dolicz(JSON.parse(l)); } catch { /* pomijamy */ }
+    }
+  }
+
+  // Rejestr blokady egress serwera (jeśli podany): tylko rodzaj i host.
+  let serwer_egress = null;
+  if (process.env.EGRESS_LOG && fs.existsSync(process.env.EGRESS_LOG)) {
+    const wpisy = fs.readFileSync(process.env.EGRESS_LOG, 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    const licz = {};
+    for (const w of wpisy) {
+      if (w.kind === 'guard_loaded') continue;
+      const host = w.kind === 'tcp_connect_blocked_loopback_proxy' ? 'lokalne proxy wyjściowe (pętla zwrotna)' : w.host;
+      const k = w.kind === 'incoming_vendor_proxy_request' ? `${w.kind} ${w.method} ${w.path}` : `${w.kind} ${host}`;
+      licz[k] = (licz[k] ?? 0) + 1;
+    }
+    const stosy = {};
+    for (const w of wpisy) {
+      if (w.kind === 'guard_loaded' || !Array.isArray(w.stack)) continue;
+      const host = w.kind === 'tcp_connect_blocked_loopback_proxy' ? 'lokalne proxy wyjściowe' : w.host;
+      stosy[host] ??= w.stack.map((l) => l.replace(/:\d+:\d+\)?$/, ''));
+    }
+    serwer_egress = {
+      procesow_z_blokada: wpisy.filter((w) => w.kind === 'guard_loaded').length,
+      zablokowane: licz,
+      przykladowy_stos_na_host: stosy,
+    };
+  }
+
+  // Rejestr sinkhole serwera (narzedzia/sinkhole-proxy.mjs), jeśli podany.
+  if (process.env.SERVER_SINKHOLE_LOG && fs.existsSync(process.env.SERVER_SINKHOLE_LOG)) {
+    const licz = {};
+    for (const l of fs.readFileSync(process.env.SERVER_SINKHOLE_LOG, 'utf8').split('\n').filter(Boolean)) {
+      let w; try { w = JSON.parse(l); } catch { continue; }
+      if (w.kind === 'sinkhole_started') continue;
+      const k = `${w.kind} ${w.host}`;
+      licz[k] = (licz[k] ?? 0) + 1;
+    }
+    serwer_egress = { ...(serwer_egress ?? {}), przez_proxy_do_sinkhole: licz };
+  }
+
+  const konsolaZbiorczo = {};
+  for (const k of konsola) {
+    const key = `${k.typ}: ${k.tekst}`;
+    konsolaZbiorczo[key] = (konsolaZbiorczo[key] ?? 0) + 1;
+  }
+
+  const wynik = { meta, podsumowanie, macierz, serwer_egress, serwer_wg_kroku: serwerWgKroku, kroki, uwagi, konsola_zbiorczo: konsolaZbiorczo, zadania_przechwycone: zadania, widziane_w_przegladarce: widziane, set_cookie: setCookies, sinkhole, migawki };
   fs.writeFileSync(OUT, JSON.stringify(wynik, null, 2) + '\n');
   console.log(`Zapisano ${OUT}`);
   console.log(JSON.stringify(podsumowanie, null, 2));
