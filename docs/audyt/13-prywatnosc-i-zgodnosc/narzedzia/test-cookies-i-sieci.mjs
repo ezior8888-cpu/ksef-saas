@@ -131,7 +131,23 @@ function bezpiecznaSciezka(url) {
   return u.pathname;
 }
 
-function streszczeniePostHog(request) {
+// Adres strony z właściwości PostHog: tylko origin + ścieżka, bez query i fragmentu
+// (query mogłoby nieść token). Wartości spoza adresów (np. „$direct”) zostają.
+function bezQuery(v) {
+  try {
+    const u = new URL(v);
+    return u.origin + u.pathname;
+  } catch {
+    return v.split(/[?#]/)[0];
+  }
+}
+
+// Ostatni distinct_id widziany w danym kontekście — TYLKO w pamięci procesu,
+// do porównania „ten sam identyfikator co w poprzednim zdarzeniu?”. Wartość
+// nie trafia do wyniku.
+const ostatniDistinctId = new WeakMap();
+
+function streszczeniePostHog(request, context) {
   const buf = request.postDataBuffer();
   if (!buf || buf.length === 0) return null;
   let text = null;
@@ -149,12 +165,20 @@ function streszczeniePostHog(request) {
       const props = ev?.properties ?? {};
       const urlProps = {};
       for (const k of ['$current_url', '$pathname', '$referrer', '$initial_current_url', '$initial_referrer']) {
-        if (typeof props[k] === 'string') urlProps[k] = props[k];
+        if (typeof props[k] === 'string') urlProps[k] = bezQuery(props[k]);
+      }
+      const did = props.distinct_id ?? ev?.distinct_id;
+      let takiSamJakPoprzednio = null;
+      if (context && typeof did === 'string') {
+        const prev = ostatniDistinctId.get(context);
+        takiSamJakPoprzednio = prev === undefined ? 'pierwsze w kontekście' : prev === did;
+        ostatniDistinctId.set(context, did);
       }
       return {
         zdarzenie: ev?.event ?? null,
         pola: Object.keys(props).filter((k) => k !== 'token').sort(),
-        ma_distinct_id: 'distinct_id' in props,
+        ma_distinct_id: typeof did === 'string',
+        distinct_id_jak_w_poprzednim_zdarzeniu: takiSamJakPoprzednio,
         wartosci_url: urlProps,
       };
     });
@@ -314,7 +338,7 @@ async function nowyKontekst(browser) {
       z_service_workera: Boolean(req.serviceWorker()),
       ts: new Date().toISOString(),
     };
-    if (kat.includes('PostHog') && req.method() === 'POST') wpis.posthog = streszczeniePostHog(req);
+    if (kat.includes('PostHog') && req.method() === 'POST') wpis.posthog = streszczeniePostHog(req, context);
     if (kat.includes('Sentry') && req.method() === 'POST') wpis.sentry = streszczenieSentry(req);
     if (kat.startsWith('proxy-1st')) {
       // Lokalna odpowiedź syntetyczna — żądanie nie trafia do serwera ani do dostawcy.
@@ -431,6 +455,14 @@ async function main() {
     chromium: browser.version(),
     chromium_sciezka: exe ?? 'domyślna Playwright',
     wersja_kodu: (() => { try { return execSync('git rev-parse --short HEAD', { cwd: HERE }).toString().trim(); } catch { return null; } })(),
+    // Czy kod aplikacji (wszystko poza docs/audyt) jest identyczny z wersją audytu.
+    kod_aplikacji_jak_3e5e00d: (() => {
+      try {
+        execSync("git diff --quiet 3e5e00d HEAD -- . ':(exclude)docs/audyt'", { cwd: HERE });
+        execSync("git diff --quiet HEAD -- . ':(exclude)docs/audyt'", { cwd: HERE });
+        return true;
+      } catch { return false; }
+    })(),
     strony: STRONY,
   };
 

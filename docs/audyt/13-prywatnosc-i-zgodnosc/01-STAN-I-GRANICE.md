@@ -7,7 +7,7 @@
 | Data | 7.10.2026 (start), 10.10.2026 (wznowienie) |
 | Wersja kodu | `origin/main` @ `3e5e00d` (10.10.2026, scalenie PR #245); start audytu 7.10 na `7c0097f` |
 | Gałąź robocza | `claude/gallant-faraday-ypjokp` = `origin/main` + pliki tego audytu (scalenie `main` 10.10), brak innych lokalnych zmian |
-| Recenzja | patrz `10-REVIEW.md` (etap R1) |
+| Recenzja | R1 (niezależny agent, 10.10.2026): „wymaga poprawek”, 10 uwag do tego pliku, wszystkie przyjęte i naniesione 11.10.2026; szczegóły w `10-REVIEW.md` |
 
 ## 1. Po co ten plik
 
@@ -29,31 +29,66 @@ trzeba czytać przez pryzmat ograniczeń z sekcji 5.
 
 | PR | Tytuł (skrót) | Znaczenie dla tego audytu |
 |---|---|---|
-| #225 (Codex, niescalony, gałąź @ `686a465`, aktualizacja 10.10) | F0: wybory właściciela, dowody i bezpieczny inwentarz | **Istotny.** `docs/observability/*` na gałęzi `codex/f0-runtime-inventory` zawiera deklarowany pomiar produkcji z 4.10, odczyty API dostawców z 6.10, przyjętą (niewdrożoną) politykę danych obserwowalności oraz decyzje z 10.10 (docelowo płatny Sentry Team EU, 10-letnia historia błędów faktur we własnej bazie, przyszły agent z odczytem zredagowanej diagnostyki). Próba odczytu serwerów 10.10 nieudana. Używamy go jako dowodu pośredniego, z oznaczeniem poziomu. |
+| #225 (Codex, niescalony; raporty cytują stan @ `686a465`; 10.10 do 17:58 UTC gałąź przesunęła się do `a72b567`, 21 commitów, tytuł „F0: prepare complete backup execution with bounded adapters”) | F0: wybory właściciela, dowody i bezpieczny inwentarz | **Istotny.** `docs/observability/*` na gałęzi `codex/f0-runtime-inventory` zawiera deklarowany pomiar produkcji z 4.10, odczyty API dostawców z 6.10, przyjętą (niewdrożoną) politykę danych obserwowalności oraz decyzje z 10.10 (docelowo płatny Sentry Team EU, 10-letnia historia błędów faktur we własnej bazie, przyszły agent z odczytem zredagowanej diagnostyki). Wcześniejsze próby SSH 10.10 były nieudane; według `a72b567` od 14:23 UTC operator uzyskał dostęp SSH i wykonał odczyt runtime i rozmiarów (fakty w § 4). Używamy go jako dowodu pośredniego, z oznaczeniem poziomu. |
 | #195, #189 | KSeF: ROZ, kody błędów | Integralność przetwarzania (SOC 2 PI); nie zmieniają przetwarzania danych osobowych. |
 | #190, #193, #197 (szkice) | Bezpieczeństwo: dowody XML, obraz workera, sekrety buildu | Pośrednio SOC 2 (CC6/CC8). |
 | #236 | Plan agenta | Dokumentacja. |
+
+**Dryf wersji po zamrożeniu.** Audyt czyta `3e5e00d`. Po zamrożeniu `main`
+przesunął się 10.10 do `face09c` (PR #246, #247: przebudowa importu faktur —
+`lib/import/*`, bez nowych migracji; odczyt recenzenta R1 przez GitHub REST
+API). Według PR #225 @`a72b567` (pomiar operatora 10.10, 14:26 UTC)
+produkcja działa na `43091e7` (scalenie #246), czyli na kodzie nowszym niż
+audytowany. Odwołania `ścieżka:linia` w raportach dotyczą `3e5e00d`;
+w `lib/import/import-engine.ts` mogą nie pasować do nowszego kodu. Zmiana
+nie dotyczy zakresu danych osobowych poza przeniesieniem logiki wiersza
+importu (w tym PESEL i dokumentu nabywcy) do
+`lib/import/imported-invoice-row.ts` — do sprawdzenia w pierwszym etapie
+wykonawczym.
 
 ## 3. Co jest w aplikacji (potwierdzone w kodzie)
 
 | Obszar | Stan | Dowód |
 |---|---|---|
 | Framework | Next.js 16.3.8 App Router, React 19; `proxy.ts` zamiast `middleware.ts` | `package.json`, `proxy.ts` |
-| Rozmiar | 74 strony (`page.tsx`), 19 handlerów tras (`route.ts`), 34 pliki `'use server'` | `find app -name page.tsx`, `find app -name route.ts`, grep `'use server'` |
+| Rozmiar | 74 strony (`page.tsx`), 18 handlerów tras (`route.ts`; w tym 2 w `app/api/dev/` zamknięte na produkcji oraz 2 testowe Sentry: `sentry-test-log` na produkcji wymaga sekretu, `sentry-example-api` nie ma warunku w handlerze — `app/api/sentry-example-api/route.ts:12-17`), 44 pliki z dyrektywą `'use server'` (31 w `app/`, 10 w `components/`, 3 w `lib/`) | `find app -name page.tsx`, `find app -name route.ts`, `git grep -lE "^\s*['\"]use server['\"];?\s*$" -- '*.ts' '*.tsx'` (R1 10.10, powtórzone przez koordynatora 11.10) |
+| Trasy istotne dla prywatności | `api/gdpr/export`, `api/support/chat`, `api/stripe/webhook`, `api/email/resend-webhook`, `api/email/unsubscribe`, `api/portal/exports/generate`, `accountant/[token]/download/[invoiceId]`, `api/invoices/[id]/pdf`, `api/invoices/batch-pdf`, `share-target`, `auth/callback`, trasy `dev` i testowe Sentry | `find app -name route.ts` |
 | Uwierzytelnianie | Supabase GoTrue: e-mail/hasło, Google OAuth, MFA TOTP | `app/(auth)/login/actions.ts:102` (`signInWithOAuth`), `app/(dashboard)/settings/security/actions.ts:172` (`mfa.enroll`) |
-| Baza | Postgres z RLS, 131 plików migracji (`00001`–`00147` z lukami, `00200`) | `supabase/migrations/` |
-| Zadania w tle | pg-boss w tym samym Postgresie (schemat `pgboss`), worker jako osobny proces | `lib/jobs/boss.ts:28-36`, `lib/jobs/worker.ts` |
+| Baza | Postgres z RLS: 132 pliki migracji (`00001`–`00148` z lukami, `00200`), 70 tabel `public`, RLS włączony na 70/70 | `ls supabase/migrations/*.sql`, grep `CREATE TABLE` i `ENABLE ROW LEVEL SECURITY` (R1) |
+| Zadania w tle | pg-boss w tym samym Postgresie (schemat `pgboss`), worker jako osobny proces; 27 cronów w rejestrze (zgodne z pomiarem PR #225: 52 kolejki, 27 cronów) | `lib/jobs/boss.ts:28-36`, `lib/jobs/worker.ts`, `lib/jobs/queues.ts:88-128` |
 | Pliki | klient S3 (MinIO), zmienne `R2_*` | `lib/storage/r2.ts` |
-| Integracje (wg `.env.example` i kodu) | KSeF (MF), Stripe, Resend, Sentry, PostHog, Anthropic (support, OCR), Redis przez REST, GUS, web push (VAPID), Slack, Telegram, heartbeat, AWS (zmienne archiwum) | `.env.example`; szczegóły i potwierdzenia w `04-PROCESORZY-I-LOKALIZACJE.md` |
+| Integracje (wg `.env.example` i kodu) | KSeF (MF), Stripe, Resend, Sentry, PostHog, Anthropic (support, OCR, kategoryzacja), Redis przez REST, GUS, web push (VAPID), Slack, Telegram, heartbeat, Cloudflare Turnstile (`TURNSTILE_*`), Google OAuth (przez GoTrue), HIBP (`lib/auth/breach-check.ts`), MF biała lista, VIES, NBP, Google Fonts (`app/layout.tsx:114-124`), Cloudflare Email Routing (`ops/poczta`), Healthchecks (ping z `scripts/hetzner/db-backup.sh:19,46-49`); AWS w kodzie to archiwum faktur (Glacier), nie kopia zapasowa | `.env.example`; szczegóły i potwierdzenia w `04-PROCESORZY-I-LOKALIZACJE.md` |
 | Strony prawne | polityka prywatności, regulamin, strona RODO | `app/(marketing)/legal/*/page.tsx` |
 | Administrator w polityce | **placeholder** „[nazwa firmy], NIP [TWÓJ_NIP], z siedzibą w Poznaniu” | `app/(marketing)/legal/polityka-prywatnosci/page.tsx:20-21` |
-| Mechanizmy RODO | eksport (`app/api/gdpr/export/route.ts`), usunięcie z 14-dniowym okresem (`lib/gdpr/*`, ADR 0006), zgoda analityczna (`lib/analytics/consent.ts`) | szczegóły w `A1-…`, `A2-…` |
-| Testy | 436 plików `*.test.ts` w `tests/`, 10 specyfikacji e2e | `find tests -name '*.test.ts'`, `find e2e -name '*.spec.ts'` |
+| Mechanizmy RODO | eksport (`app/api/gdpr/export/route.ts`), usunięcie z 14-dniowym okresem (`lib/gdpr/*`, ADR 0006), zgoda analityczna (`lib/analytics/consent.ts`) | szczegóły w `A1-MECHANIZMY-MINIMALIZACJA-ZGODY.md` i `A2-MECHANIZMY-PRAWA-RETENCJA.md` |
+| Testy | 446 plików `*.test.ts` w `tests/` (w tym 8 testów na bazie `tests/rls-*.test.ts`, uruchamianych w jobie CI „RLS isolation (lokalny Supabase)”), 10 specyfikacji e2e | `find tests -name '*.test.ts'`, `find e2e -name '*.spec.ts'`, `.github/workflows/ci.yml:82-108` |
+| Środowiska | Produkcja (jedyne środowisko serwerowe; staging nie istnieje wg PR #225), lokalne środowisko deweloperskie z bazą w Supabase Cloud („pozostałość po erze Vercela”, do której według komentarza w kodzie nikt nie ma już hasła), CI z lokalnym Supabase do testów RLS. Workflow `e2e-staging.yml` (ręczny, środowisko GitHub `security-staging`) istnieje, ale według PR #225 bez sekretów i bez uruchomień. Przełączniki: `KSEF_ENV`, `APP_ENV`/`NEXT_PUBLIC_APP_ENV`, `JOBS_BACKEND`, `WORKER_DISABLE_SCHEDULES`, `LOAD_TEST_MODE` (zakomentowany, tylko test/staging). Checklista wyłączenia Vercela, Supabase Cloud, Upstash, Inngest i R2 jest niezaznaczona | `AGENTS.md` („Pułapki”: lokalny `.env.local`), `app/(dashboard)/dashboard/page.tsx:150-156`, `.github/workflows/e2e-staging.yml:4-10`, `.github/workflows/ci.yml:82-108`, `docs/migration/PRZEPROWADZKA-HETZNER.md:720-733`, `.env.example` |
 | CI | 5 workflow: `ci.yml`, `security.yml`, `e2e-staging.yml`, `agent.yml`, `agent-guard.yml` | `.github/workflows/` |
 
 `agent.yml` uruchamia agenta Claude Code (Anthropic) na treści issue
 oznaczonego `agent:napraw`. To przepływ kodu i treści zgłoszeń, nie danych
-klientów, ale treść issue trafia do zewnętrznego dostawcy (`.github/workflows/agent.yml:1-30`).
+klientów, ale treść issue trafia do zewnętrznego dostawcy
+(`.github/workflows/agent.yml:15,23` — wyzwalacz etykietą `agent:napraw`;
+`:51` — `anthropics/claude-code-action`).
+
+**Instrukcje i dokumentacja architektury.** `CLAUDE.md` zawiera wyłącznie
+import `@AGENTS.md`. `AGENTS.md` jest głównym źródłem opisu stosu
+i infrastruktury; jest nieaktualny co do lokalizacji MinIO aplikacji
+(§ 4). `docs/architecture/` ma 6 plików (`system-overview.md`,
+`billing-flow.md`, `cykl-zycia-faktury-ksef.md`, `ksef-flow.md`,
+`multi-tenant-rls.md`, `ocr-flow.md`); `system-overview.md:5` sam ostrzega,
+że opisuje stan sprzed przeprowadzki (Vercel, Supabase Cloud, Inngest, R2,
+Upstash — l. 21-25), więc nie traktujemy go jako opisu produkcji.
+Pozostałych pięciu plików nie oceniano w tym audycie pod kątem aktualności;
+opis przepływów opiera się na kodzie (`02-INWENTARZ-I-PRZEPLYWY.md`).
+
+**Struktura.** `app/` dzieli się na grupy `(auth)`, `(dashboard)`,
+`(marketing)`, `(landing)` oraz `admin`, `accountant`, `api`, `onboarding`,
+`invite`, `share-target`; logika w `lib/*` (m.in. `gdpr`, `retention`,
+`analytics`, `observability`, `audit`, `ksef`, `jobs`, `storage`, `backup`,
+`ocr`, `support`, `flo`); narzędzia operatorskie w `ops/` i `scripts/`;
+PWA: `app/sw.ts`, `app/manifest.ts`, `share-target` (opis magazynów
+przeglądarki w `02` i `A4`).
 
 ## 4. Infrastruktura (z dokumentacji — nie weryfikowana w tej sesji)
 
@@ -62,8 +97,9 @@ Hetznera w regionie NBG1 (aplikacja i worker, panel Coolify, Supabase
 self-hosted), wdrożenia ręczne przez Coolify, migracje wgrywane ręcznie
 przez SSH. Adresy i nazwy kontenerów są celowo poza repozytorium.
 
-Niescalony PR #225 (pomiar operatora z 4.10.2026, deklaracje z 6–7.10)
-koryguje `AGENTS.md` w punktach istotnych dla prywatności:
+Niescalony PR #225 (pomiar operatora z 4.10.2026, deklaracje z 6–7.10,
+odczyt SSH i paneli z 10.10 w wersji @`a72b567`) koryguje i uzupełnia
+`AGENTS.md` w punktach istotnych dla prywatności:
 
 | Teza w `AGENTS.md` | Według PR #225 | Poziom dowodu |
 |---|---|---|
@@ -72,6 +108,11 @@ koryguje `AGENTS.md` w punktach istotnych dla prywatności:
 | — | Sentry i PostHog: intake w regionie EU | pomiar 4.10 + API 6.10 |
 | — | Brak pełnej kopii bazy i MinIO poza hostem źródłowym; lokalny nocny `pg_dump`; snapshot JSON schematu `public` na drugim hoście; obrazy hosta Hetznera tylko dla `db-1` | pomiar 4.10 + API 6.10 |
 | — | Staging nie istnieje; produkcja ma `KSEF_ENV=test` | pomiar 4.10 |
+| — | Produkcja (web, worker) na `43091e7`, Redis 7.2.15 lokalnie | pomiar operatora 10.10, PR #225 @`a72b567` |
+| — | MinIO Supabase Storage: 1 bucket, 0 obiektów; MinIO aplikacji: 1 bucket, 31 obiektów (ok. 0,4 MB), bez wersjonowania | pomiar operatora 10.10, PR #225 @`a72b567` |
+| — | Druga baza `_supabase` (ok. 676 MB) obok `postgres` (ok. 190 MB); nocny `pg_dump` obejmuje tylko `postgres` | pomiar operatora 10.10, PR #225 @`a72b567` + `scripts/hetzner/db-backup.sh:77` |
+| — | PostHog (panel): replay ON, console ON, network timings ON, nagłówki i treść OFF, retencja replay 30 dni; kod nadal wyłącza replay | odczyt panelu 10.10, PR #225 @`a72b567` |
+| — | Sentry: aktywny plan Developer; retencja zdarzeń 30 dni według dokumentacji dostawcy, aktywny TTL nieodczytany | odczyt panelu 10.10, PR #225 @`a72b567` |
 
 Żadnego z tych faktów nie sprawdziliśmy sami. W raportach oznaczamy je
 jako „pomiar/deklaracja operatora z PR #225”.
@@ -119,21 +160,30 @@ wymaganiach (`00-ZADANIE.md`) i wspólnym briefie z granicami (bez
 WebSearch, bez zmian kodu, repo publiczne). Recenzentem etapu jest zawsze
 inny agent niż autor; koordynator nie zatwierdza własnych etapów.
 
-| Etap | Autor | Plik wynikowy | Recenzent |
-|---|---|---|---|
-| Rozpoznanie | koordynator | `01-STAN-I-GRANICE.md` | R1 (osobny agent) |
-| Inwentarz i przepływy | agent INWENTARZ | `02-INWENTARZ-I-PRZEPLYWY.md` | R1 |
-| Research źródeł | agent ŹRÓDŁA | `03-REJESTR-ZRODEL.md` | R2 |
-| Procesorzy i lokalizacje | agent PROCESORZY | `04-PROCESORZY-I-LOKALIZACJE.md` | R2 |
-| Mechanizmy: minimalizacja, zgody | agent MECHANIZMY-A | `A1-MECHANIZMY-MINIMALIZACJA-ZGODY.md` | R3 |
-| Mechanizmy: prawa, retencja, AI | agent MECHANIZMY-B | `A2-MECHANIZMY-PRAWA-RETENCJA.md` | R3 |
-| Dowody i testy | agent SOC2-DOWODY | `A3-DOWODY-I-TESTY.md` | R4 |
-| Test runtime cookies i sieci | agent RUNTIME | `A4-TEST-COOKIES-I-SIECI.md` + `narzedzia/` | R3 |
-| Macierz wymagań (analiza luk) | koordynator | `05-MACIERZ-WYMAGAN.md` | R3 |
-| SOC 2 | agent SOC2-DOWODY | `06-SOC2.md` | R4 |
-| Plan etapów | koordynator | `07-PLAN-ETAPOW.md` | R4 |
-| Niewiadome i review prawne | koordynator | `08-NIEWIADOME-I-REVIEW-PRAWNE.md` | R5 |
-| Kompletność całości | — | `10-REVIEW.md` | R5 (niezależny) |
+| Etap | Autor | Plik wynikowy | Recenzent | Stan |
+|---|---|---|---|---|
+| Rozpoznanie | koordynator | `01-STAN-I-GRANICE.md` | R1 (osobny agent) | gotowy, po recenzji R1 |
+| Inwentarz i przepływy | agent INWENTARZ | `02-INWENTARZ-I-PRZEPLYWY.md` | R1 | gotowy, po recenzji R1 |
+| Research źródeł | agent ŹRÓDŁA | `03-REJESTR-ZRODEL.md` | R2 | gotowy, po recenzji R2 |
+| Procesorzy i lokalizacje | agent PROCESORZY | `04-PROCESORZY-I-LOKALIZACJE.md` | R2 | gotowy, po recenzji R2 |
+| Mechanizmy: minimalizacja, zgody | agent MECHANIZMY-A | `A1-MECHANIZMY-MINIMALIZACJA-ZGODY.md` | R3 | szczegóły w `10-REVIEW.md` |
+| Mechanizmy: prawa, retencja, AI | agent MECHANIZMY-B | `A2-MECHANIZMY-PRAWA-RETENCJA.md` | R3 | szczegóły w `10-REVIEW.md` |
+| Dowody i testy | agent DOWODY | `A3-DOWODY-I-TESTY.md` | R4 | szczegóły w `10-REVIEW.md` |
+| Test runtime cookies i sieci | agent RUNTIME | `A4-TEST-COOKIES-I-SIECI.md` + `narzedzia/` | R3 | szczegóły w `10-REVIEW.md` |
+| Macierz wymagań (analiza luk) | agent syntezy | `05-MACIERZ-WYMAGAN.md` | R5 | szczegóły w `10-REVIEW.md` |
+| SOC 2 | agent SOC2 | `06-SOC2.md` | R4 | szczegóły w `10-REVIEW.md` |
+| Plan etapów | agent syntezy | `07-PLAN-ETAPOW.md` | R5 | szczegóły w `10-REVIEW.md` |
+| Niewiadome i review prawne | agent syntezy | `08-NIEWIADOME-I-REVIEW-PRAWNE.md` | R5 | szczegóły w `10-REVIEW.md` |
+| Materiały robocze (RoPA, DPIA, LIA, TIA, umowa powierzenia, procedury) | agent syntezy | `09-MATERIALY-ROBOCZE.md` | R5 | szczegóły w `10-REVIEW.md` |
+| Kompletność całości | — | `10-REVIEW.md` | R6 (niezależni krytycy) | szczegóły w `10-REVIEW.md` |
+
+Uwaga o przebiegu: limit użycia API przerwał pracę agentów 7.10 i dwukrotnie
+10.10. Przerwani agenci byli uruchamiani ponownie od zera (z dostępem do
+swoich niepełnych szkiców); od 10.10 wieczorem agenci pracują najwyżej po
+dwóch naraz, a recenzje są grupowe (R1–R4), zgodnie z pierwotnym podziałem
+w tej tabeli. Poprawki z recenzji nanosi koordynator, który nie jest
+autorem tych etapów (z wyjątkiem `01`, gdzie zatwierdzenie należy do
+recenzenta, a koordynator tylko nanosi jego tekst).
 
 Wyniki recenzji, poprawki i stan każdej bramki zapisuje `10-REVIEW.md`.
 
