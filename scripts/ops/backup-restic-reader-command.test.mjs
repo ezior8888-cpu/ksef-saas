@@ -127,3 +127,68 @@ test('world-readable SSH credentials are rejected on POSIX', {skip:process.platf
   const reader=createBackupResticReaderCommand({...config,command:async()=>assert.fail('must not run')});
   await assert.rejects(reader(spec(['cat','config']),{timeoutMs:1000}),{code:'UNSAFE_RESTIC_READER_SSH_FILE'});
 });
+
+
+test('explicit SSH ports including loopback high ports remain pinned without creating forwarding', async t => {
+  const { config } = await fixture(t);
+  for (const port of [1, 22, 1024, 49222, 65535]) {
+    await t.test('port ' + port, async () => {
+      const calls = [];
+      const reader = createBackupResticReaderCommand({
+        ...config, host: { ...config.host, hostname: '127.0.0.1', port },
+        command: async command => { calls.push(command); return { exitCode: 0 }; },
+      });
+      assert.equal(calls.length, 0);
+      await reader(spec(['cat', 'config']), { timeoutMs: 1000 });
+      assert.equal(calls.length, 1);
+      const command = calls[0];
+      assert.equal(command.executable, 'ssh');
+      assert.deepEqual(command.env, {});
+      assert.deepEqual(command.args.slice(0, 7), ['-F', '/dev/null', '-T', '-p', String(port), '-i', config.host.identityFile]);
+      assert.equal(command.args.filter(argument => argument === '-p').length, 1);
+      assert.equal(command.args.at(-2), 'backup-reader@127.0.0.1');
+      for (const option of ['StrictHostKeyChecking=yes', 'UserKnownHostsFile=' + config.host.knownHostsFile,
+        'GlobalKnownHostsFile=/dev/null', 'IdentitiesOnly=yes', 'IdentityAgent=none', 'BatchMode=yes',
+        'ForwardAgent=no', 'ClearAllForwardings=yes', 'ProxyCommand=none', 'ProxyJump=none',
+        'PermitLocalCommand=no', 'ControlMaster=no', 'ControlPath=none']) assert.ok(command.args.includes(option));
+      assert.equal(command.args.some(argument => ['-R', '-L', '-D', '-A'].includes(argument) || argument.startsWith('HostKeyAlias=')), false);
+    });
+  }
+});
+
+test('SSH port must be an explicit integer in range without coercion or option injection', async t => {
+  const { config } = await fixture(t); let calls = 0, coercions = 0;
+  const injectedObject = { toString() { coercions++; return '22 -oStrictHostKeyChecking=no'; }, valueOf() { coercions++; return 22; } };
+  const invalid = [undefined, null, false, true, '22', '49222', '22 -oStrictHostKeyChecking=no',
+    '22\nProxyCommand=id', 0, -1, 65536, 22.5, Number.NaN, Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1, 22n, [], [22], {}, injectedObject];
+  for (const port of invalid) {
+    assert.throws(() => createBackupResticReaderCommand({
+      ...config, host: { ...config.host, port }, command: async () => { calls++; },
+    }), { code: 'INVALID_RESTIC_READER_TRANSPORT' });
+  }
+  const hostWithoutPort = { ...config.host }; delete hostWithoutPort.port;
+  assert.throws(() => createBackupResticReaderCommand({ ...config, host: hostWithoutPort }), { code: 'INVALID_RESTIC_READER_TRANSPORT' });
+  assert.equal(calls, 0);
+  assert.equal(coercions, 0);
+});
+
+test('reader captures the reviewed port and host configuration before caller mutation', async t => {
+  const { config } = await fixture(t); let received;
+  const supplied = {
+    ...config, host: { ...config.host, hostname: '127.0.0.1', port: 49222 },
+    command: async command => { received = command; return { exitCode: 0 }; },
+  };
+  const reader = createBackupResticReaderCommand(supplied);
+  supplied.host.port = '22 -oStrictHostKeyChecking=no';
+  supplied.host.hostname = 'unreviewed.fixture.invalid';
+  supplied.host.user = 'other-user';
+  supplied.host.identityFile = path.join(path.dirname(config.host.identityFile), 'unreviewed-identity');
+  supplied.host.knownHostsFile = path.join(path.dirname(config.host.knownHostsFile), 'unreviewed-known-hosts');
+  supplied.command = async () => assert.fail('must keep the original injected transport');
+  await reader(spec(['cat', 'config']), { timeoutMs: 1000 });
+  assert.deepEqual(received.args.slice(0, 7), ['-F', '/dev/null', '-T', '-p', '49222', '-i', config.host.identityFile]);
+  assert.equal(received.args.at(-2), 'backup-reader@127.0.0.1');
+  assert.ok(received.args.includes('UserKnownHostsFile=' + config.host.knownHostsFile));
+  assert.ok(received.args.includes('StrictHostKeyChecking=yes'));
+});

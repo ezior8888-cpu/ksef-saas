@@ -5,6 +5,8 @@
  * credentials must already be independently provisioned and reviewed. No remote
  * file/host independence or working repository authentication is proved here.
  * In particular, SFTP requires the private remote HOME/.ssh setup to be reviewed.
+ * Explicit ports select an existing endpoint; no tunnel is created or verified.
+ * The endpoint's known_hosts entry must match its host and explicit port.
  * Private local SSH files/ancestors must remain stable while SSH reopens them.
  * Windows supports injected synthetic transports only; real runtime is Linux.
  */
@@ -44,7 +46,7 @@ function validateConfiguration(config) {
   const host=config.host;
   if (typeof host.hostname !== 'string' || host.hostname.length > 253
     || !host.hostname.split('.').every(part => /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(part))
-    || typeof host.user !== 'string' || !/^[a-z_][a-z0-9_-]{0,31}$/.test(host.user) || host.port !== 22) fail('INVALID_RESTIC_READER_TRANSPORT');
+    || typeof host.user !== 'string' || !/^[a-z_][a-z0-9_-]{0,31}$/.test(host.user) || !Number.isSafeInteger(host.port) || host.port < 1 || host.port > 65535) fail('INVALID_RESTIC_READER_TRANSPORT');
   for (const filename of [host.identityFile, host.knownHostsFile]) {
     // These values additionally pass through OpenSSH's own option parser.
     if (!localPath(filename) || /[\s'"%\x00-\x1f\x7f]/.test(filename)) fail('INVALID_RESTIC_READER_TRANSPORT');
@@ -103,7 +105,7 @@ export function createBackupResticReaderCommand(config) {
       ...Object.entries(remoteEnvironment).map(([key,value])=>key+'='+value),'/usr/bin/restic',...spec.args];
     // Same pinning and no-forwarding policy as the reviewed PostgreSQL transport.
     const args=[
-      '-F','/dev/null','-T','-p','22','-i',host.identityFile,
+      '-F','/dev/null','-T','-p',String(host.port),'-i',host.identityFile,
       '-o','BatchMode=yes','-o','StrictHostKeyChecking=yes',
       '-o','UserKnownHostsFile='+host.knownHostsFile,'-o','GlobalKnownHostsFile=/dev/null',
       '-o','IdentitiesOnly=yes','-o','IdentityAgent=none',
