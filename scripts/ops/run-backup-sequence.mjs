@@ -43,7 +43,7 @@ export async function runBackupSequence(options) {
   // Also validates the container before any injected operation can run.
   const plan = prepareBackupPlan({ schemaVersion: 1, scope: 'preparation-only', pgContainer,
     stagingRoot: '/prepared/staging', credentialRoot: '/prepared/credentials' }, runId);
-  let finalResult; let lock, runRoot, stage = 'lock', retainLock = false;
+  let finalResult; let lock, runRoot, stage = 'lock', retainLock = false, sourceCleanupStarted = false;
   const started = Date.now(), startedAtUtc = now(), controller = new AbortController();
   const active = new Set();
   const callerAbort = () => controller.abort();
@@ -174,6 +174,11 @@ export async function runBackupSequence(options) {
       if (!requiredFiles.every(a => files.some(f => f.path === a.path && f.sha256 === a.sha256 && f.bytes === a.bytes))) fail('SOURCE_ARTIFACT_CHANGED');
       sourceFiles[kind] = files;
     }
+    if (typeof adapters.closeSourceClients === 'function') {
+      sourceCleanupStarted = true;
+      try { await step('close-source-clients', ctx => adapters.closeSourceClients(ctx)); }
+      catch (error) { retainLock = true; throw error; }
+    }
     for (const kind of Object.keys(GROUPS)) {
       const files = sourceFiles[kind];
       const source = manifest.minio.find(m => m.id === kind);
@@ -215,6 +220,13 @@ export async function runBackupSequence(options) {
     const failureStage = stage;
     const code = error instanceof SequenceError ? error.sequenceCode : 'SEQUENCE_STEP_FAILED';
     if (active.size || controller.signal.aborted) retainLock = true;
+    // Close lazily opened clients on every failure while the scope lock is held.
+    // A failed or timed-out close is uncertain even if the original step settled.
+    if (lock && !sourceCleanupStarted && typeof adapters.closeSourceClients === 'function') {
+      sourceCleanupStarted = true;
+      try { await step('close-source-clients-after-failure', ctx => adapters.closeSourceClients(ctx), { cleanup: true }); }
+      catch { retainLock = true; }
+    }
     if (runRoot) {
       try { await writeBackupJson(path.join(runRoot, 'sequence-failed.json'), { runId, mode, stage: failureStage, code, lockRetained: retainLock, lastCompleteUnchanged: true }); } catch { retainLock = true; }
       try { await step('signal-failure', ctx => adapters.notify({ ...ctx, event: 'backup-failed', stage: failureStage, code }), { cleanup: true }); } catch { /* external absence monitor must catch undelivered signal */ }

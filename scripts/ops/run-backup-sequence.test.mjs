@@ -191,3 +191,15 @@ for (const source of ['app-minio', 'supabase-minio']) for (const filename of ['o
   assert.equal(r.status, 'INCOMPLETE'); assert.equal(r.code, 'SOURCE_ARTIFACT_CHANGED');
   assert.equal(f.snapshots.size, 0); assert.deepEqual(f.events, ['backup-failed']);
 });
+
+test('source client cleanup completes under scope lock before any snapshot upload', async t => {
+ const f=await fixture(t);let calls=0;
+ f.adapters.closeSourceClients=async()=>{calls++;f.calls.push('close-source-clients');assert.ok((await readdir(f.root)).includes('.backup.lock'));};
+ const r=await runBackupSequence(f.options);assert.equal(r.status,'SEQUENCE_COMPLETE_REQUIRES_ACCEPTANCE');assert.equal(calls,1);
+ assert.ok(f.calls.indexOf('close-source-clients')<f.calls.indexOf('upload-database'));
+});
+test('uncertain source cleanup blocks upload and keeps the coordinator lock', async t => {
+ const f=await fixture(t);f.adapters.closeSourceClients=async()=>{throw Object.assign(new Error('PRIVATE'),{discardClientRequired:true});};
+ const r=await runBackupSequence(f.options);assert.equal(r.status,'INCOMPLETE');assert.equal(r.stage,'close-source-clients');
+ assert.equal(r.lockRetained,true);assert.equal(f.snapshots.size,0);assert.deepEqual(f.events,['backup-failed']);
+});
