@@ -269,11 +269,13 @@ export async function runBackupSequence(options) {
       try { await step('close-source-clients-after-failure', ctx => adapters.closeSourceClients(ctx), { cleanup: true }); }
       catch { retainLock = true; }
     }
+    let notification = { status: 'NOT_ATTEMPTED', deliveryVerified: false, evidenceVerified: false };
     if (runRoot) {
       try { await writeBackupJson(path.join(runRoot, 'sequence-failed.json'), { runId, mode, stage: failureStage, code, writesState, lockRetained: retainLock, lastCompleteUnchanged: true }); } catch { retainLock = true; }
-      try { await step('signal-failure', ctx => notify({ ...ctx, event: 'backup-failed', stage: failureStage, code, writesState }), { cleanup: true }); } catch { /* external absence monitor must catch undelivered signal */ }
+      try { notification = await step('signal-failure', ctx => notify({ ...ctx, event: 'backup-failed', stage: failureStage, code, writesState }), { cleanup: true }); }
+      catch { notification = { status: 'UNCONFIRMED', event: 'backup-failed', code: 'NOTIFICATION_STEP_FAILED', deliveryVerified: false, evidenceVerified: false }; }
     }
-    return finalResult = { status: 'INCOMPLETE', mode, runId, stage: failureStage, code, writesState, lockRetained: Boolean(lock && retainLock), g09Accepted: false, evidenceVerified: false };
+    return finalResult = { status: 'INCOMPLETE', mode, runId, stage: failureStage, code, writesState, notification, lockRetained: Boolean(lock && retainLock), g09Accepted: false, evidenceVerified: false };
   } finally {
     clearTimeout(deadline); signal?.removeEventListener('abort', callerAbort);
     if (lock && !retainLock && active.size === 0) {
@@ -282,7 +284,12 @@ export async function runBackupSequence(options) {
         // Backup completion and cleanup are separate facts. Never undo a sent
         // completion or hide the retained lock behind an unhandled exception.
         if (finalResult) { finalResult.lockRetained = true; finalResult.cleanupCode = 'LOCK_RELEASE_FAILED'; }
-        try { await step('signal-cleanup-failure', ctx => notify({ ...ctx, event: 'backup-cleanup-failed', code: 'LOCK_RELEASE_FAILED', writesState }), { cleanup: true }); } catch { /* absence monitor remains required */ }
+        try {
+          const notification = await step('signal-cleanup-failure', ctx => notify({ ...ctx, event: 'backup-cleanup-failed', code: 'LOCK_RELEASE_FAILED', writesState }), { cleanup: true });
+          if (finalResult) finalResult.cleanupNotification = notification;
+        } catch {
+          if (finalResult) finalResult.cleanupNotification = { status: 'UNCONFIRMED', event: 'backup-cleanup-failed', code: 'NOTIFICATION_STEP_FAILED', deliveryVerified: false, evidenceVerified: false };
+        }
       }
     }
   }
