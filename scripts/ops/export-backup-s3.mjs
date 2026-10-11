@@ -17,7 +17,7 @@
  */
 import * as S3 from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
-import { createWriteStream, linkSync } from "node:fs";
+import { createWriteStream, linkSync, unlinkSync } from "node:fs";
 import { lstat, mkdir, open } from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
@@ -493,6 +493,9 @@ export async function exportBackupS3(options) {
     // Synchronous no-overwrite publication keeps the final abort check and
     // commit in one JS turn; no late link after a returned cancellation.
     linkSync(pendingSummary, path.join(dir, "export-summary.json"));
+    // The completed artifact must have one name/inode link before source sealing.
+    // This is our own fresh pending file; publication failures still preserve it.
+    unlinkSync(pendingSummary);
     return summary;
   } catch (error) {
     await manifestWriter?.abort(); await configWriter?.abort();

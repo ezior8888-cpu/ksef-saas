@@ -134,7 +134,8 @@ test("malicious raw keys never become paths or collide and survive exact mapping
     assert.match(row.payloadId, /^\d{16}\.bin$/);
     assert.equal(await readFile(path.join(destinationDir, "payloads", row.payloadId), "utf8"), row.key);
   }
-  assert.deepEqual((await readdir(destinationDir)).sort(), ["bucket-config.ndjson", "export-summary.json", "export-summary.pending.json", "objects.ndjson", "payloads"]);
+  assert.deepEqual((await readdir(destinationDir)).sort(), ["bucket-config.ndjson", "export-summary.json", "objects.ndjson", "payloads"]);
+  assert.equal((await stat(path.join(destinationDir, "export-summary.json"))).nlink, 1);
 });
 
 test("paginates buckets/current objects/versions with explicit markers", async (t) => {
