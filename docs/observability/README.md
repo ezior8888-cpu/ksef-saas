@@ -1,4 +1,6 @@
 # FaktFlow — pakiet F0
+
+Aktualizacja 11.10: przygotowane [prywatne podłączenie klientów](../runbooks/f0-backup-private-wiring.md), osobny czytnik SSH i [procedura okna spójności](../runbooks/f0-backup-consistency-window.md). Prywatny szkic wskazuje braki; F0 pozostaje OPEN, G03/G09 FAIL.
 **Kontynuacja wykonawcy 10.10:** [sekwencja pełnego zestawu](../runbooks/f0-backup-executor.md)
 łączy przygotowane moduły, rzeczywiste SQL referencji, adaptery SSH/restic,
 blokadę, limity, niezależny odczyt i osobny manifest. Testy są syntetyczne,

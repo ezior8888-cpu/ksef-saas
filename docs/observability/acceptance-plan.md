@@ -484,3 +484,7 @@ Testy syntetyczne nie stanowią dowodu działających kopii. Prywatne klienty,
 pełna konfiguracja odzyskiwania, procedura spójności i alarmy pozostają
 nieprzygotowane do operacyjnego odbioru. G03/G09 nadal FAIL, F0_OPEN;
 TEST-01…07 pozostają NOT RUN. Cena publiczna została odświeżona bez zakupu.
+
+## Podłączenie prywatne — aktualizacja 11.10.2026
+
+Przygotowano [walidator konfiguracji i podłączenie klientów](../runbooks/f0-backup-private-wiring.md), osobny czytnik SSH oraz [procedurę okna spójności](../runbooks/f0-backup-consistency-window.md). Prywatny szkic nadal zgłasza brak pełnych ustawień źródeł i celu/czytnika. Metadane usług i miejsca odczytano bez pobierania faktur lub sekretów. To przygotowanie i odczyt, nie wykonanie kopii albo odebranie F0; G03/G09 pozostają FAIL. [Zakres dowodów](evidence/f0-private-wiring-2026-10-11.json).

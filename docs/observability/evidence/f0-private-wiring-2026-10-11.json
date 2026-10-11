@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "kind": "PRIVATE_WIRING_PREPARATION_AND_READ_ONLY_CONNECTION_METADATA",
+  "baselineRevision": "a72b567c8e35387098935c4fa6c331379dcaa3d2",
+  "authorization": "PREPARATION_ONLY_NO_PURCHASE_OR_CHANGES",
+  "implementation": {
+    "offlinePrivateJsonCheck": true,
+    "lazyDedicatedSourceClients": true,
+    "explicitTlsAndCredentials": true,
+    "separateSshReader": true,
+    "separateReaderRepositoryPaths": true,
+    "sourceCleanupBeforeUploadAndOnFailure": true,
+    "consistencyProcedureDocumented": true,
+    "productionConfigurationComplete": false,
+    "freezeResumeImplemented": false,
+    "scheduleInstalled": false
+  },
+  "privateFiles": {
+    "location": "ignored .agents/f0-20261011",
+    "hostAndSourceBindingsPrepared": true,
+    "runtimeDraftPrepared": true,
+    "sourcePasswordsOrTokensCopied": false,
+    "privateDraftCheck": {
+      "status": "CONFIGURATION_INCOMPLETE",
+      "issues": [
+        "SOURCE_CLIENTS_INCOMPLETE",
+        "REPOSITORY_TRANSPORT_INCOMPLETE"
+      ],
+      "connectionsPerformed": false
+    }
+  },
+  "readOnlyObservations": {
+    "roles": [
+      "app-1",
+      "ops-1",
+      "db-1"
+    ],
+    "strictSshHostKeysVerified": true,
+    "containerInventoryAndConnectionMetadata": true,
+    "sourceRowsOrObjectsRead": false,
+    "databaseQueriesExecuted": false,
+    "webWorkerImageTagRevision": "face09c57f7de756546e58d092dbe6d280f93c91",
+    "runtimeSchemaReviewed": false,
+    "hostNodePresent": false,
+    "hostResticPresent": false,
+    "dockerFilesystemFreeGiBRounded": {
+      "app-1": 19,
+      "ops-1": 23,
+      "db-1": 10
+    },
+    "capacityAndDurationVerified": false
+  },
+  "verification": {
+    "tools": {
+      "total": 408,
+      "pass": 389,
+      "skip": 19,
+      "fail": 0,
+      "platform": "Windows",
+      "input": "synthetic_only"
+    },
+    "typecheck": "PASS",
+    "changedModulesEslint": "PASS",
+    "redThenGreen": [
+      "separate reader repository paths",
+      "source client cleanup before upload",
+      "cleanup after consistency rejection retains lock",
+      "invalid signal cannot latch reusable runner",
+      "S3 preserves uncertain transport flag"
+    ],
+    "fullWiringSuccessCase": "WINDOWS_SKIP_LINUX_CI_REQUIRED",
+    "newHeadGitHubChecksAtRecordTime": "PENDING_PUBLICATION_AND_VERIFICATION"
+  },
+  "gates": {
+    "F0": "OPEN",
+    "G03": "FAIL",
+    "G09": "FAIL"
+  },
+  "notExecuted": [
+    "production_backup",
+    "purchase",
+    "server_change",
+    "account_change",
+    "credential_provisioning",
+    "freeze_resume",
+    "staging",
+    "restore",
+    "migration",
+    "deployment",
+    "merge",
+    "F1"
+  ]
+}

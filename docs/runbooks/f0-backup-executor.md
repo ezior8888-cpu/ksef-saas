@@ -1,5 +1,7 @@
 # F0 — wykonawca pełnej sekwencji, przygotowanie 10.10.2026
 
+Aktualizacja 11.10: [prywatne podłączenie klientów](f0-backup-private-wiring.md) i [procedura okna spójności](f0-backup-consistency-window.md) są przygotowane; konfiguracja i wykonanie operacyjne nadal nie są gotowe.
+
 **PREPARATION_ONLY, G03/G09 FAIL, F0_OPEN.** Moduły są napisane i sprawdzane
 lokalnie na danych syntetycznych. Nie skonfigurowano wykonania produkcyjnego,
 nie uruchomiono kopii, zadania cyklicznego ani rzeczywistego alarmu. Obowiązuje
