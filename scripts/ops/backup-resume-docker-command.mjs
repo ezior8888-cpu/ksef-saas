@@ -85,15 +85,14 @@ async function privateSshFile(filename) {
       || (cursor === immediate && process.platform !== 'win32' && ((stat.mode & 0o077) !== 0 || stat.uid !== process.getuid()))) fail('UNSAFE_RESUME_DOCKER_SSH_FILE');
     const parent = path.dirname(cursor); if (parent === cursor) break; cursor = parent;
   }
-  const before = await lstat(filename);
-  privateFileStat(before);
+  // Validate the opened descriptor before checking which file the name now
+  // resolves to; never authorize a later open from a pre-open path check.
   const handle = await open(filename, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
   try {
     const opened = await handle.stat(); privateFileStat(opened);
-    if (!sameFile(before, opened)) fail('UNSAFE_RESUME_DOCKER_SSH_FILE');
+    const named = await lstat(filename); privateFileStat(named);
+    if (!sameFile(opened, named)) fail('UNSAFE_RESUME_DOCKER_SSH_FILE');
   } finally { await handle.close(); }
-  const after = await lstat(filename); privateFileStat(after);
-  if (!sameFile(before, after)) fail('UNSAFE_RESUME_DOCKER_SSH_FILE');
 }
 function policy(value) {
   return exactKeys(value, ['name', 'maximumRetryCount']) && POLICIES.has(value.name)

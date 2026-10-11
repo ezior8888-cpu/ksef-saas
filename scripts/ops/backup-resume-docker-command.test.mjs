@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { chmod, link, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import fsPromises, { chmod, link, mkdir, mkdtemp, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { createBackupResumeDockerTransport } from './backup-resume-docker-command.mjs';
@@ -249,4 +250,32 @@ test('missing remote Python is a bounded private failure without fallback or ret
     error.code === 'RESUME_DOCKER_COMMAND_FAILED' && error.discardClientRequired && error.remoteMayStillRun
     && !error.message.includes('PRIVATE_REMOTE_PATH') && error.cause === undefined);
   assert.equal(calls, 1);
+});
+
+
+test('replacement of a credential pathname after open is rejected before SSH dispatch', async t => {
+  const { root, config } = await fixture(t);
+  let calls = 0, replaced = false;
+  const originalOpen = fsPromises.open;
+  const mockedOpen = t.mock.method(fsPromises, 'open', async (filename, ...args) => {
+    const handle = await originalOpen(filename, ...args);
+    if (filename === config.host.identityFile && !replaced) {
+      replaced = true;
+      try {
+        await rename(filename, path.join(root, 'opened-original-identity'));
+        await writeFile(filename, 'SYNTHETIC_REPLACEMENT_KEY', { mode: 0o600 });
+      } catch (error) {
+        await handle.close(); throw error;
+      }
+    }
+    return handle;
+  });
+  syncBuiltinESMExports();
+  try {
+    const transport = createBackupResumeDockerTransport({ ...config, command: async () => { calls++; return response(snapshot()); } });
+    await assert.rejects(transport.inspect({ containerId: ID }, context()), { code: 'UNSAFE_RESUME_DOCKER_SSH_FILE' });
+    assert.equal(replaced, true); assert.equal(calls, 0);
+  } finally {
+    mockedOpen.mock.restore(); syncBuiltinESMExports();
+  }
 });
