@@ -8,7 +8,7 @@
 | Zakres | publiczne strony aplikacji w przeglądarce: cookies (także HttpOnly z `Set-Cookie`), localStorage, sessionStorage, IndexedDB, Cache Storage, service worker, żądania do domen zewnętrznych; scenariusze: przed wyborem, po odmowie, po akceptacji, po wycofaniu |
 | Źródła danych | lokalny build produkcyjny z syntetycznymi zmiennymi, Chromium (Playwright), kod w repo |
 | Ograniczenia | brak Supabase (strony za logowaniem niedostępne), build lokalny to nie produkcja, konfiguracja produkcyjna PostHog/Sentry nieznana, ruch zewnętrzny celowo przerwany — szczegóły w sekcji 7 |
-| Stan | gotowe do recenzji (R3) |
+| Stan | po niezależnym review R3 (werdykt: zatwierdzony z uwagami) — uwagi R3 naniesione przez redaktora poprawek 13.10.2026, miejsca oznaczone **[R3]** (lista w „Historia recenzji”) |
 
 ## 1. Środowisko i zmienne syntetyczne
 
@@ -45,7 +45,14 @@ Budowanie (`pnpm build`) działało bez blokady egress, przez proxy środowiska:
 Fraunces, Inter i IBM Plex Mono w czasie budowania (albo bierze je
 z `.next/cache`) i serwuje je potem z własnej domeny. To ruch maszyny
 budującej, nie przeglądarki użytkownika, i nie zawiera danych osobowych.
-Wtyczka Sentry nie wysyłała map źródeł (brak `SENTRY_AUTH_TOKEN`). Build
+Wtyczka Sentry nie wysyłała map źródeł (brak `SENTRY_AUTH_TOKEN`). **[R3]**
+Wtyczka domyślnie próbuje jednak wysłać do Sentry telemetrię użycia (metadane
+budowania, bez danych osobowych; `telemetry` nie jest wyłączone
+w `next.config.ts`, `@sentry/bundler-plugin-core` 5.3.0
+`dist/cjs/index.js:5127,5385-5388`). Budowanie nie było objęte blokadą —
+o wyniku tej próby decydowała polityka egress środowiska (domeny Sentry
+blokowane); nie weryfikowano. Rekomendacja (I): `telemetry: false`
+w opcjach `withSentryConfig` w `next.config.ts`. Build
 dostał zmienne w środowisku procesu; `.env.local` nie istnieje i nie został
 utworzony.
 
@@ -153,7 +160,10 @@ w service workerze, `e3` — czy ciasteczka trafiają do proxy dostawców.
 Wniosek: aplikacja **nie ustawiła żadnego ciasteczka** na żadnej stronie
 publicznej w żadnym scenariuszu (0 nagłówków `Set-Cookie` z odpowiedzi
 `localhost:3100`, `document.cookie` puste). Jedyne zapisy w przeglądarce
-przed wyborem to service worker i jego Cache Storage. `<klucz>` to
+przed wyborem to service worker i jego Cache Storage. **[R3]** Cache runtime
+SW (`app/sw.ts:30-33`, `ExpirationPlugin`) przy pierwszym użyciu tworzy też
+bazę IndexedDB `serwist-expiration` z metadanymi wygasania — w teście
+nieobserwowane (wszystkie pliki były w precache). `<klucz>` to
 syntetyczny klucz projektu PostHog.
 
 ### 3.2. Żądania do domen zewnętrznych i proxy dostawców, strona × scenariusz
@@ -273,7 +283,7 @@ wiedzy modelu, do potwierdzenia w końcowym review.
 | Service worker `/sw.js` (zakres `/`) + Cache Storage `serwist-precache-v2-…` (205 publicznych plików `_next/static`) | `@serwist/next` (rejestracja domyślna: `register` = `true`, `node_modules/@serwist/next/dist/chunks/schema-BhRhcBIb.js:8`; `next.config.ts:11-20` nie wyłącza), `app/sw.ts:16-38`, filtr `lib/security/service-worker-cache.ts:5-10` | PWA: precache statyki, push (`app/sw.ts:55+`) | precache do aktualizacji SW; cache runtime 7 dni / 128 wpisów (`app/sw.ts:31-32`, nieobserwowany) | **raczej wymaga zgody albo zawężenia**: zapis w urządzeniu każdemu odwiedzającemu stronę marketingową; offline i push to funkcje panelu, o które gość nie prosił. Brak danych osobowych w cache (tylko `localhost:3100`) — ryzyko niskie. Alternatywa: rejestracja SW dopiero w panelu po zalogowaniu | zapisane | zapisane | zapisane | zostaje |
 | Google Fonts — `GET fonts.googleapis.com/css2?family=Material+Symbols+Outlined…` (+ plik z `fonts.gstatic.com`) | aplikacja, `app/layout.tsx:114-125` | ikony Material Symbols (używane w panelu i `/pomoc`) | — (zapis tylko w pamięci podręcznej HTTP przeglądarki) | **niepotrzebne przekazanie IP/UA do Google** (USA); nie jest technologią zapisu aplikacji, ale wymaga podstawy z RODO; najprościej samohostować (pozostałe fonty już są samohostowane przez `next/font`) | pierwsza strona kontekstu | jw. | jw. | jw. (zależnie od SW — RUN-07) |
 | Cloudflare Turnstile — `challenges.cloudflare.com/turnstile/v0/api.js` (+ ramka) | aplikacja, `components/auth/turnstile-widget.tsx:28-43` na `/login`, `/forgot-password`, `/register` (`app/(auth)/register/page.tsx:152`) | ochrona formularzy przed botami | nieobserwowane (skrypt przerwany) | **ściśle niezbędne** dla bezpieczeństwa usługi żądanej przez użytkownika (logowanie) — O, [NZ]; przekazanie do Cloudflare — podstawa z RODO i informacja (jest w polityce, sekcja 8) | na stronach auth | jw. | jw. | jw. |
-| Ciasteczka sesji Supabase `sb-<pierwszy człon hosta>-auth-token` (+ części `.0`, `.1`) | `@supabase/ssr` 0.10.2 (domyślne opcje `…/@supabase/ssr/dist/main/utils/constants.js:4-11`), nazwa: `@supabase/supabase-js` 2.103.3 `dist/index.cjs:369` | uwierzytelnienie | **400 dni**, `HttpOnly` = nie, `SameSite=Lax`, bez `Secure` w opcjach domyślnych | **ściśle niezbędne** (sesja logowania) | nieobserwowane (brak Supabase) | — | — | — |
+| Ciasteczka sesji Supabase `sb-<pierwszy człon hosta>-auth-token` (+ części `.0`, `.1`) | `@supabase/ssr` 0.10.2 (domyślne opcje `…/@supabase/ssr/dist/main/utils/constants.js:4-11`), nazwa: `@supabase/supabase-js` 2.103.3 `dist/index.cjs:369` | uwierzytelnienie | **400 dni**, `HttpOnly` = nie, `SameSite=Lax`, bez `Secure` w opcjach domyślnych | **ściśle niezbędne** co do sesji; **[R3]** trwałość 400 dni bez wyboru użytkownika — do review (A1 ZGD-11, QA1-07) | nieobserwowane (brak Supabase) | — | — | — |
 | `ksef.active_org` | aplikacja, `lib/supabase/active-org.ts:16`, `lib/supabase/middleware.ts:330-338`, `app/actions/organizations.ts:34-43` | wybrana organizacja | 30 dni, `HttpOnly`, `SameSite=Lax`, `Secure` w produkcji | **ściśle niezbędne** (funkcja żądana po zalogowaniu) | nieobserwowane (za logowaniem) | — | — | — |
 | `theme` (localStorage) | aplikacja, `lib/theme/theme.ts:3,24,35`, przełącznik `components/dashboard/theme-toggle.tsx:37` (tylko panel, `app/(dashboard)/layout.tsx:102`) | preferencja motywu | bez wygaśnięcia | **niezbędne** (preferencja ustawiona przez użytkownika) | skrypt tylko odczytuje; zapis nieobserwowany | — | — | — |
 | `ff.banner.dismissed.*`, `install-prompt-dismissed-at` (localStorage), `ff:ksef-banner-dismissed` (sessionStorage) | aplikacja, `components/dashboard/dismissible-banner.tsx:5,34-63`, `hooks/use-install-prompt.ts:17,37,69`, `app/(dashboard)/_components/ksef-health-banner-client.tsx:31,73` | zapamiętanie zamknięcia komunikatów w panelu | bez wygaśnięcia / sesja karty | **niezbędne** (działanie użytkownika) | nieobserwowane (za logowaniem) | — | — | — |
@@ -283,7 +293,7 @@ wiedzy modelu, do potwierdzenia w końcowym review.
 ### RUN-01. Strony publiczne nie ustawiają ciasteczek ani identyfikatorów przed wyborem
 
 - **Stan:** potwierdzone (runtime, build lokalny). **Klasa:** P — art. 399 PKE [NZ]; I.
-- **Dowód:** 0 nagłówków `Set-Cookie` i puste `context.cookies()` we wszystkich scenariuszach `a`–`d` na 11 stronach (`wynik-test-cookies.json` → `set_cookie: []`, `podsumowanie.*.ciasteczka: []`); localStorage i sessionStorage puste przed wyborem; brak IndexedDB. Zgodne z kodem: ciasteczka ustawia tylko logowanie (Supabase, `ksef.active_org`).
+- **Dowód:** 0 nagłówków `Set-Cookie` i puste `context.cookies()` we wszystkich scenariuszach `a`–`d` na 11 stronach (`wynik-test-cookies.json` → `set_cookie: []`, `podsumowanie.*.ciasteczka: []`); localStorage i sessionStorage puste przed wyborem; brak IndexedDB na zbadanych stronach (**[R3]** cache runtime SW może utworzyć bazę `serwist-expiration` — sekcja 3.1, nieobserwowane). Zgodne z kodem: ciasteczka ustawia tylko logowanie (Supabase, `ksef.active_org`).
 - **Luka:** brak w zakresie ciasteczek. Zastrzeżenie: bez Supabase middleware (`lib/supabase/middleware.ts`) nie miał czego odświeżać — dla zalogowanego użytkownika obraz będzie inny (sekcja 7).
 - **Ryzyko:** niskie.
 - **Rekomendacja:** (I) utrzymać jako test regresji (`narzedzia/uruchom-test-runtime.sh`, scenariusz `a`).
@@ -291,7 +301,7 @@ wiedzy modelu, do potwierdzenia w końcowym review.
 ### RUN-02. PostHog: przed wyborem i po odmowie zero żądań; po akceptacji wąski zakres
 
 - **Stan:** potwierdzone (runtime). Potwierdza pierwszy i ostatni wiersz ZGD-05 w `A1-…` (dotąd tylko z kodu). **Klasa:** P — art. 399 PKE, art. 7 RODO [NZ]; I.
-- **Dowód:** sekcje 3.2 i 3.4; kod `lib/analytics/init-posthog-browser.ts:13-24` (bez zgody brak `init`), `:29` (`persistence: 'memory'`), `:36-52` (bez autocapture, nagrań, flag, doładowań, referrera, IP), redakcja ścieżek `lib/analytics/privacy.ts:18-24,110`. `distinct_id` zmienia się przy każdym pełnym przeładowaniu.
+- **Dowód:** sekcje 3.2 i 3.4; kod `lib/analytics/init-posthog-browser.ts:13-24` (bez zgody brak `init`), `:29` (`persistence: 'memory'`), `:36-52` (bez autocapture, nagrań, flag, doładowań i referrera; **[R3]** opcja `ip: false` w `:52` nie działa w SDK 1.374.3 — `@posthog/types/dist/posthog-config.d.ts:1490-1494`), redakcja ścieżek `lib/analytics/privacy.ts:18-24,110`. `distinct_id` zmienia się przy każdym pełnym przeładowaniu.
 - **Luka:** w samym działaniu nie stwierdzono. Uwaga: identyfikacja zalogowanego konta (`components/analytics/analytics-identify.tsx`) — nieobserwowana (za logowaniem).
 - **Ryzyko:** niskie.
 - **Rekomendacja:** (I) test e2e „brak wyboru/odmowa → zero `/ingest`; akceptacja → tylko `$pageview`/`$pageleave` ze zredagowaną ścieżką”.
@@ -340,8 +350,8 @@ wiedzy modelu, do potwierdzenia w końcowym review.
 
 - **Stan:** częściowe — wejście potwierdzone w runtime, przekazanie dalej potwierdzone w kodzie, nieobserwowane na łączu (blokada). Nowe — nieopisane w `A1-…`. **Klasa:** P — art. 5 ust. 1 lit. c i f, art. 28, art. 32 RODO [NZ]; S — CC6 (ochrona poświadczeń) [NZ]; I.
 - **Opis (jedno zdanie, repo publiczne):** rewrite `/ingest/*` (`next.config.ts:140-155`) i tunel Sentry `/monitoring` (`next.config.ts:189`) przekazują do PostHog i Sentry wszystkie nagłówki żądania przeglądarki, w tym `Cookie` z ciasteczkami sesji pierwszej strony.
-- **Dowód:** `e3` — wszystkie 8 żądań `/monitoring` i 7 `/ingest/e/` niosły ciasteczko pierwszej strony (`path=/`, `SameSite=Lax` — te same atrybuty co ciasteczka sesji Supabase, sekcja 4); po każdym serwer łączył się z `o0.ingest.de.sentry.io` / `eu.i.posthog.com` (zablokowane, stos `next/dist/compiled/httpxy`). Kod Next.js 16.3.8: `next/dist/server/lib/router-utils/proxy-request.js:29-41` (dodaje tylko `x-forwarded-host`), `next/dist/compiled/httpxy/index.js` → `setupOutgoing`: `e.headers={...r.headers}` (kopia wszystkich nagłówków przychodzących). Ścieżki są publiczne w middleware (`lib/supabase/middleware.ts:57,78`), więc nie ma tam filtra.
-- **Luka:** dla zalogowanego użytkownika ciasteczka sesji (dostęp i odświeżenie) oraz `ksef.active_org` mogą trafiać do dwóch dostawców przy każdym żądaniu telemetrii (Sentry — zawsze, PostHog — po zgodzie). Jeśli odwrotne proxy produkcji dopisuje `X-Forwarded-For`, dostawca dostaje też IP klienta mimo `ip: false` w SDK — niezweryfikowane.
+- **Dowód:** **[R3]** (skrócone do odwołań dowodowych) krok `e3` — wszystkie 8 żądań `/monitoring` i 7 `/ingest/e/` niosły syntetyczne ciasteczko pierwszej strony, a serwer po każdym próbował połączyć się z dostawcą (zablokowane) — sekcje 3.6–3.7, `wynik-test-cookies.json` → `serwer_wg_kroku["e3-ciasteczka-do-proxy-dostawcow"]`. Kod: Next.js 16.3.8 `next/dist/server/lib/router-utils/proxy-request.js:29-41`, `next/dist/compiled/httpxy/index.js` (`setupOutgoing`); `@sentry/nextjs` 10.53.1 `build/cjs/config/withSentryConfig/tunnel.js:49-100` (tunel jako rewrite — dowód uzupełniający R3); ścieżki publiczne w `lib/supabase/middleware.ts:57,78`.
+- **Luka:** dla zalogowanego użytkownika ciasteczka pierwszej strony, w tym sesji, mogą trafiać do dwóch dostawców przy każdym żądaniu telemetrii (Sentry — zawsze, PostHog — po zgodzie). Jeśli odwrotne proxy produkcji dopisuje `X-Forwarded-For`, dostawca dostaje też IP klienta — niezweryfikowane; **[R3]** opcja `ip: false` w SDK nie działa (`posthog-config.d.ts:1490-1494`), decyduje ustawienie projektu „Discard client IP data”. **[R3]** To ustalenie o przekazaniu danych procesorowi (prywatność), nie podatność wykorzystywalna z zewnątrz; zgodnie z zasadą repo publicznego opis ograniczono do odwołań dowodowych.
 - **Ryzyko:** wysokie — poświadczenia sesji poza systemem, bez potrzeby i bez umowy, która by to obejmowała; nie zależy od zgody (Sentry).
 - **Rekomendacja:** (I) zastąpić rewrites dwiema trasami (`app/ingest/[...path]/route.ts`, `app/monitoring/route.ts` albo filtr w `proxy.ts`), które przekazują tylko treść i `content-type` (+ dla Sentry walidacja DSN z koperty), bez `cookie`, `authorization` i `x-forwarded-*`; test regresji: uprząż `e3` musi pokazać brak nagłówka `cookie` w żądaniu do dostawcy (sprawdzone na lokalnym odbiorniku zamiast dostawcy). Po wdrożeniu: zapytać dostawców o logi nagłówków (sekcja 8).
 
@@ -404,6 +414,7 @@ bash docs/audyt/13-prywatnosc-i-zgodnosc/narzedzia/uruchom-test-runtime.sh
 | Wysyłki przy opuszczaniu strony | Część żądań `keepalive` omija `context.route`; rejestr serwera je łapie (sekcja 3.6), ale przypisanie do kroku jest przybliżone (po znaczniku czasu). |
 | Jedna przeglądarka | Chromium 141 w trybie headless z emulacją zwykłego UA; Firefox/Safari (inne zasady cache, SW i ciasteczek) nie były testowane. |
 | Przepisy | Klasyfikacja w sekcji 4 i klasy P/O oparte na wiedzy modelu — [NZ]. |
+| **[R3]** Budowanie bez blokady egress | `pnpm build` działał przez proxy środowiska; wtyczka Sentry domyślnie próbuje wysłać telemetrię użycia (metadane budowania, bez danych osobowych — sekcja 1). Czy próba wyszła z maszyny, zależało od polityki egress (domeny Sentry blokowane) — nie weryfikowano. Nie dotyczy ruchu przeglądarki ani serwera w czasie testu. |
 
 ## 8. Pytania do końcowego review prawnego
 
@@ -434,7 +445,8 @@ bash docs/audyt/13-prywatnosc-i-zgodnosc/narzedzia/uruchom-test-runtime.sh
   `sinkhole-proxy.mjs`, `test-cookies-i-sieci.mjs`) i szkic raportu;
   poprawiłem je (sekcja 2), dopisałem skrypt startowy i plik zmiennych.
 - Sprawdziłem blokadę egress osobnym testem (5 ścieżek połączeń, z proxy
-  ze zmiennych i bez) — wszystkie zatrzymane lokalnie.
+  ze zmiennych i bez) — wszystkie zatrzymane lokalnie. **[R3]** Blokada
+  obejmowała `pnpm start` i przeglądarkę, nie `pnpm build` (sekcja 1, sekcja 7).
 - Zbudowałem aplikację od zera w trybie produkcyjnym (11.10.2026, `EXIT=0`)
   i wykonałem trzy przebiegi testu; wyniki spójne. Po każdym przebiegu
   sprawdziłem, że nie zostały procesy serwera ani przeglądarki (po pierwszym
@@ -461,7 +473,31 @@ bash docs/audyt/13-prywatnosc-i-zgodnosc/narzedzia/uruchom-test-runtime.sh
   i czy zapisują ciasteczka po swojej stronie — ruch celowo przerwany;
 - treści przepisów i wytycznych w źródłach pierwotnych (egress zablokowany,
   WebSearch odrzucony przez właściciela) — oznaczenia [NZ];
-- przeglądarek innych niż Chromium.
+- przeglądarek innych niż Chromium;
+- **[R3]** wyniku próby telemetrii wtyczki Sentry w czasie budowania (sekcja 1).
 
-**Niezależna recenzja:** ten plik nie przeszedł jeszcze recenzji (R3 wg
-`01-STAN-I-GRANICE.md`, sekcja 7).
+**Niezależna recenzja:** **[R3]** plik przeszedł recenzję R3 (werdykt:
+zatwierdzony z uwagami; recenzent powtórzył skrót testu dla `/` i `/login`
+z tym samym wynikiem — `R3.md` § 5). Uwagi naniesiono 13.10.2026 — sekcja
+„Historia recenzji”.
+
+**Redakcja poprawek R3 (13.10.2026) — co sprawdzono przed naniesieniem:**
+`@posthog/types` 1.374.3 `posthog-config.d.ts:1490-1494` (opcja `ip` bez
+działania); `@sentry/bundler-plugin-core` 5.3.0 `dist/cjs/index.js:5122`
+(domyślny `url` = `https://sentry.io`), `:5127` (`telemetry ?? true`),
+`:5385-5388` (dla domyślnego `url` telemetria dozwolona); `next.config.ts`
+bez opcji `telemetry`; `@sentry/nextjs` 10.53.1 `build/cjs/config/webpack.js:343-385`
+(wtyczka tworzona, gdy moduł jest dostępny); `app/sw.ts:30-33`; zbudowany
+`public/sw.js` (poza gitem) zawiera `serwist-expiration`; klucz
+`serwer_wg_kroku["e3-ciasteczka-do-proxy-dostawcow"]` w wyniku JSON. Testu
+redaktor nie powtarzał. R3-U09: z dwóch wariantów wskazanych przez
+recenzenta wybrano skrócenie opisu w RUN-08 (bez wyliczania, które
+ciasteczka i z jakimi atrybutami trafiają do dostawców) i dopisano zdanie
+o charakterze ustalenia; opis metody w sekcji 3.7 (atrybuty syntetycznego
+ciasteczka testowego) pozostawiono bez zmian.
+
+## Historia recenzji
+
+| Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
+|---|---|---|---|---|---|---|
+| R3 — niezależny agent-recenzent (grupa: `A1` + `A2` + `A4`) | 10.10.2026 (recenzja wykonana w sesji 13.10.2026) | zatwierdzony z uwagami (22 kontrole punktowe, 21 potwierdzonych; skrót testu powtórzony przez R3 z tym samym wynikiem; narzędzia bez drogi wycieku) | 5 uwag do tego pliku i `narzedzia/` (R3-U01, R3-U09, R3-U10, R3-U21, R3-U22; 1 istotna, 4 drobne) | wszystkie 5 — naniesione przez redaktora poprawek 13.10.2026 po sprawdzeniu w kodzie i `node_modules`; miejsca oznaczone **[R3]**. U09 — wariant „skrócić opis RUN-08”. Narzędzi (`narzedzia/*`) nie zmieniano — uwagi ich nie wymagały | — | `R3.md` (scratchpad sesji; streszczenie w `10-REVIEW.md`) |

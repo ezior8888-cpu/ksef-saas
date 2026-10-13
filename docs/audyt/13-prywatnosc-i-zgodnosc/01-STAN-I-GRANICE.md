@@ -29,7 +29,7 @@ trzeba czytać przez pryzmat ograniczeń z sekcji 5.
 
 | PR | Tytuł (skrót) | Znaczenie dla tego audytu |
 |---|---|---|
-| #225 (Codex, niescalony; raporty cytują stan @ `686a465`; 10.10 do 17:58 UTC gałąź przesunęła się do `a72b567`, 21 commitów, tytuł „F0: prepare complete backup execution with bounded adapters”) | F0: wybory właściciela, dowody i bezpieczny inwentarz | **Istotny.** `docs/observability/*` na gałęzi `codex/f0-runtime-inventory` zawiera deklarowany pomiar produkcji z 4.10, odczyty API dostawców z 6.10, przyjętą (niewdrożoną) politykę danych obserwowalności oraz decyzje z 10.10 (docelowo płatny Sentry Team EU, 10-letnia historia błędów faktur we własnej bazie, przyszły agent z odczytem zredagowanej diagnostyki). Wcześniejsze próby SSH 10.10 były nieudane; według `a72b567` od 14:23 UTC operator uzyskał dostęp SSH i wykonał odczyt runtime i rozmiarów (fakty w § 4). Używamy go jako dowodu pośredniego, z oznaczeniem poziomu. |
+| #225 (Codex, niescalony; raporty cytują stan @ `686a465`; 10.10 do 17:58 UTC gałąź przesunęła się do `a72b567`, 21 commitów, tytuł „F0: prepare complete backup execution with bounded adapters”; **[R4]** 11.10 14:32 UTC gałąź przesunęła się do `c2ab6a8` (tytuł „F0: prepare full backup execution, verified resume and signals”; odczyt R4 przez GitHub API 13.10); `A3` cytuje tę wersję, `06` — @`686a465` i @`a72b567`; stany bramek F0-G03/G09 bez zmian, numery linii `acceptance-plan.md` przesunięte o 7) | F0: wybory właściciela, dowody i bezpieczny inwentarz | **Istotny.** `docs/observability/*` na gałęzi `codex/f0-runtime-inventory` zawiera deklarowany pomiar produkcji z 4.10, odczyty API dostawców z 6.10, przyjętą (niewdrożoną) politykę danych obserwowalności oraz decyzje z 10.10 (docelowo płatny Sentry Team EU, 10-letnia historia błędów faktur we własnej bazie, przyszły agent z odczytem zredagowanej diagnostyki). Wcześniejsze próby SSH 10.10 były nieudane; według `a72b567` od 14:23 UTC operator uzyskał dostęp SSH i wykonał odczyt runtime i rozmiarów (fakty w § 4). Używamy go jako dowodu pośredniego, z oznaczeniem poziomu. |
 | #195, #189 | KSeF: ROZ, kody błędów | Integralność przetwarzania (SOC 2 PI); nie zmieniają przetwarzania danych osobowych. |
 | #190, #193, #197 (szkice) | Bezpieczeństwo: dowody XML, obraz workera, sekrety buildu | Pośrednio SOC 2 (CC6/CC8). |
 | #236 | Plan agenta | Dokumentacja. |
@@ -198,3 +198,9 @@ Wyniki recenzji, poprawki i stan każdej bramki zapisuje `10-REVIEW.md`.
   gałąź i plik.
 - Repo jest publiczne: bez sekretów, adresów, nazw kontenerów; luki
   bezpieczeństwa jednym zdaniem.
+
+## Historia recenzji
+
+| Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
+|---|---|---|---|---|---|---|
+| R4 — niezależny agent-recenzent (grupa: `A3` + `06`; ten plik poza grupą) | 13.10.2026 | brak werdyktu dla tego pliku (uwaga wspólna dla grupy i `01`) | 1 uwaga do tego pliku (R4-U30, drobna: head PR #225 to `c2ab6a8` od 11.10) | R4-U30 — naniesiona przez redaktora poprawek 13.10.2026 po sprawdzeniu (`git log -1 c2ab6a8`: 11.10.2026 14:32 UTC; stany F0-G03/G09 w `acceptance-plan.md` @`c2ab6a8` bez zmian); miejsce oznaczone **[R4]** w § 2 | — | `R4.md` (scratchpad sesji; streszczenie w `10-REVIEW.md`) |

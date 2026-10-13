@@ -6,10 +6,10 @@
 | Data | 10.10.2026 |
 | Wersja kodu | `origin/main` @ `3e5e00d` (gałąź robocza bez zmian kodu poza `docs/audyt/`) |
 | Zakres | D. Prawa osób (art. 15–22 RODO), E. Retencja i usuwanie, systemy AI/OCR/support (pkt 5 D i E zadania, `00-ZADANIE.md`) |
-| Źródła danych | kod aplikacji i workera, migracje `supabase/migrations/`, testy, `node_modules/pg-boss` (wersja 12.27.0), dokumentacja w repo (`docs/security/*`, `docs/runbooks/*`, `docs/adr/*`); niescalony PR #225 (gałąź `origin/codex/f0-runtime-inventory` @ `686a465`) jako dowód pośredni; jeden test mechanizmu PostgreSQL na syntetycznej bazie lokalnej (opis w RET-03/PRA-03) |
+| Źródła danych | kod aplikacji i workera, migracje `supabase/migrations/`, testy, `node_modules/pg-boss` (wersja 12.27.0), dokumentacja w repo (`docs/security/*`, `docs/runbooks/*`, `docs/adr/*`); niescalony PR #225 (gałąź `origin/codex/f0-runtime-inventory` @ `686a465`) jako dowód pośredni; **[R3]** fakty z @`a72b567` (odczyt SSH i paneli 10.10) wg `01-STAN-I-GRANICE.md` § 4; jeden test mechanizmu PostgreSQL na syntetycznej bazie lokalnej (opis w RET-03/PRA-03) |
 | Ograniczenia | brak dostępu do produkcji (baza, Coolify, logi, kopie), paneli i umów dostawców; treść przepisów wg wiedzy modelu — egress do źródeł pierwotnych zablokowany, WebSearch odrzucony przez właściciela |
 | Powiązane | `02-INWENTARZ-I-PRZEPLYWY.md` (INW-NN), `A1-MECHANIZMY-MINIMALIZACJA-ZGODY.md` (MIN-NN, ZGD-NN), `04-PROCESORZY-I-LOKALIZACJE.md` (PRC-NN), `docs/security/audyt/REJESTR-USTALEN.md` (SEC-NN) — odwołuję się do nich, nie powtarzam |
-| Recenzja | R3 (osobny agent) — autor nie zatwierdza własnego etapu |
+| Recenzja | R3 (osobny agent) — autor nie zatwierdza własnego etapu. **[R3]** Werdykt R3: wymaga poprawek; uwagi R3-U11 – R3-U20 naniesione przez redaktora poprawek 13.10.2026, miejsca oznaczone **[R3]** (lista w „Historia recenzji”) |
 
 ## 0. Konwencje
 
@@ -102,13 +102,18 @@ z poczty) — te prawa idą e-mailem na `pomoc@faktflow.pl` bez rejestru
     nie trafiają do pliku;
   - brak tabel: `admin_user_notes` (notatki operatorów o osobie,
     `00045_admin_panel.sql:19`, zapis `app/admin/users/actions.ts:232-237`),
-    `gdpr_deletion_requests.user_email` jest, ale `failure_reason` nie;
+    **[R3]** z `gdpr_deletion_requests` eksport zawiera status, daty,
+    `cancel_reason`, IP i UA (`data-collector.ts:107-111`), bez `user_email`
+    i bez `failure_reason`; e-mail osoby jest w części `user` (`:208-214`);
     dane GoTrue (`auth.identities` — np. powiązanie z Google, czynniki MFA,
     sesje, dziennik audytu GoTrue — N-INW-01 w `02-…`);
   - dane u dostawców poza bazą (PostHog: zdarzenia pod `distinctId = user.id`,
-    `lib/analytics/server.ts:28,50`; Sentry: `user.id` po scrubbingu,
-    `lib/observability/scrub.ts:48-50`; Resend: historia wysyłek) — plik
-    o nich milczy;
+    `lib/analytics/server.ts:28,50`; **[R3]** Sentry: kod nie ustawia
+    użytkownika (`setSentryUserContext` bez wywołań — A1 MIN-12;
+    `scrub.ts:48-51` tylko przycina `user`, gdy jest); zdarzenia mogą
+    zawierać `tenant_id` w tagach/`extra` (np. `cert-expiry-alert.ts:211`,
+    `settings/billing/actions.ts:187`) i dane w treści błędu; Resend:
+    historia wysyłek) — plik o nich milczy;
   - brak części informacyjnej art. 15 ust. 1 lit. a–h (cele, kategorie
     odbiorców, okresy, źródło, prawo skargi) — `notes` opisuje tylko zakres
     pliku (`data-collector.ts:249-255`);
@@ -144,8 +149,10 @@ z poczty) — te prawa idą e-mailem na `pomoc@faktflow.pl` bez rejestru
 #### PRA-02. Usunięcie konta przez użytkownika: rdzeń poprawny, zakres i wyjątki niedomknięte
 
 - **Stan:** częściowe. **Klasa:** P — art. 17 ust. 1 i 3 lit. b, art. 12
-  ust. 3, art. 19 RODO [NZ]; O — EROD/UODO o usuwaniu w kopiach i u
-  procesorów [NZ]; S — Privacy (usuwanie); I.
+  ust. 3, art. 19 RODO [NZ]; **[R3]** I — usuwanie w kopiach i u procesorów
+  jako proponowana praktyka (WYM-72 w `03-…`; O — do potwierdzenia
+  w review, status raportu CEF 2025, ZR-45, nieznany; brak wskazanego
+  stanowiska organu); S — Privacy (usuwanie).
 - **Dowód — przebieg (ścieżka użytkownika):**
   1. żądanie wymaga zweryfikowanej sesji, MFA (gdy włączone) i aktualnego
      hasła (`settings/account/actions.ts:35-44`; `lib/auth/reauth.ts:25-80`
@@ -188,8 +195,11 @@ z poczty) — te prawa idą e-mailem na `pomoc@faktflow.pl` bez rejestru
     adresowane na e-mail osoby (wyszukiwane w eksporcie po e-mailu,
     `data-collector.ts:102-113`, ale nieusuwane);
   - wpisy audytu o osobie zapisane przez innych i `details_json` (A1 MIN-11);
-  - dane u dostawców: PostHog (osoba i zdarzenia po `distinctId`), Sentry
-    (zdarzenia z `user.id`), Resend (historia wysyłek), Stripe (klient jest
+  - dane u dostawców: PostHog (osoba i zdarzenia po `distinctId`; **[R3]**
+    przy organizacji także zdarzenia serwerowe z `distinctId = tenantId`,
+    `submit-invoice.ts:1933-1940`, i profil grupy `tenant`,
+    `analytics-identify.tsx:19`), Sentry (**[R3]** kod nie ustawia
+    użytkownika; `tenant_id` w tagach/`extra` i dane w treści błędu), Resend (historia wysyłek), Stripe (klient jest
     przypisany do firmy; e-mail rozliczeniowy może być e-mailem osoby,
     `lib/stripe/customer-email.ts:9-16`) — kod nie wywołuje żadnego API
     usuwania (grep `customers.del`, `persons`, `delete` w `lib/analytics`,
@@ -338,8 +348,11 @@ z poczty) — te prawa idą e-mailem na `pomoc@faktflow.pl` bez rejestru
   przechowywać po zakończeniu umowy, czy zwrócić klientowi i usunąć),
   reszta usuwana z plikami S3; przed usunięciem — pełny eksport (ZIP z XML,
   UPO, PDF, JSON kontrahentów/produktów/kosztów) z linkiem ważnym krótko;
-  anulowanie subskrypcji w tej samej ścieżce. Wyzwalacz audytu zablokuje
-  kaskadę `audit_logs.tenant_id` (INW-02) — rozwiązać razem.
+  anulowanie subskrypcji w tej samej ścieżce. **[R3]** Kaskadę z `tenants`
+  zablokują dwa wyzwalacze: audytu (`audit_logs.tenant_id`, INW-02)
+  i faktur (`b_guard_invoice_pending_content`, `00132…sql:63-72` — `DELETE`
+  faktury wysłanej do KSeF odrzucany dla każdej roli, RET-02) — rozwiązać
+  razem.
 
 #### PRA-05. Sprostowanie: dane firmy i kontrahentów tak, tożsamość konta nie; faktury — korekta
 
@@ -458,7 +471,9 @@ z poczty) — te prawa idą e-mailem na `pomoc@faktflow.pl` bez rejestru
   - kategorie osób bez konta i miejsca ich danych (wg `02-…`): kontrahenci
     i nabywcy (`contractors`, `invoices.buyer_data`, pliki XML/PDF w S3,
     Glacier), adresaci faktur i przypomnień (`payment_reminders`,
-    `flo_approvals`, metadane audytu), subskrybenci (`newsletter_subscribers`),
+    `flo_approvals`, metadane audytu), **[R3]** księgowe z linkiem dostępu
+    (`accountant_access` — imię/nazwa i e-mail, `export_jobs.emailed_to`
+    — adresy księgowej i CC), subskrybenci (`newsletter_subscribers`),
     zaproszeni (`organization_invitations`), adresy z odbić
     (`email_bounces`), osoby z formularza kontaktowego (nie znaleziono
     formularza — INW-14), czat bez konta (nie istnieje — czat wymaga
@@ -535,7 +550,10 @@ walidacji kontrahentów (24 h + 7 dni) i przycinanie surowych zdarzeń Stripe
 Reguła dla faktur („10 lat”) jest zaimplementowana jako „2 lata do
 archiwum + 8 lat od dnia archiwizacji”, zależy od niewdrożonego Glaciera
 i ma dwie wady, które ujawnią się przy pierwszym realnym przebiegu
-(RET-01, RET-02). Większość pozostałych danych — koszty, kontrahenci,
+(RET-01, RET-02); **[R3]** do tego wyzwalacz `b_guard_invoice_pending_content`
+(`00132…sql:63-72`) odrzuca `DELETE` każdej faktury wysłanej do KSeF dla
+każdej roli, więc usunięcie takich faktur po terminie dziś nie może się
+udać (RET-02). Większość pozostałych danych — koszty, kontrahenci,
 czat, rejestr żądań RODO, newsletter, zdjęcia dokumentów, eksporty,
 organizacje „usunięte” — **nie ma reguły ani wykonawcy** (zgodnie
 z INW-01/INW-03 w `02-…`; tu uzupełniam o dowody wykonawców i bieg okresu).
@@ -547,45 +565,57 @@ Rodzaje: **TD** — twarde usunięcie wiersza/pliku; **PS** — pseudonimizacja
 (zerowanie części kolumn); **SD** — soft delete (znacznik); **TTL** —
 wygaśnięcie klucza/linku; **brak**.
 
-| Dane / magazyn | Reguła w kodzie | Początek biegu | Rodzaj | Dowód | Stan | Luka |
-|---|---|---|---|---|---|---|
-| Faktury: wiersz `invoices` (+ kaskadą `invoice_line_items`, `ksef_submissions`, `xml_documents`) i pliki XML, próby XML, PDF, UPO, PDF wezwań, kopie w Glacier | archiwizacja XML do Glacier dla faktur z `issue_date` < dziś − 2 lata i z `xml_storage_path`; `scheduled_deletion_at = dzień archiwizacji + 8 lat`; cron 04:00 usuwa pliki, potem wiersze (paczki po 100) | **dzień wykonania joba archiwizacji** (nie koniec roku podatkowego, nie termin płatności podatku) | TD (pliki + wiersz) | `lib/jobs/runners/archive-old-invoices.ts:20-33,97-108`; `lib/jobs/runners/retention-delete.ts:26-85`; `lib/retention/invoice-files.ts:41-108`; crony `lib/jobs/queues.ts:89,123` | częściowe | `tenants.retention_years` nieużywane; faktury bez XML nigdy nie dostają terminu; bez AWS nic nie dostaje terminu; DELETE wsadowy pada na kluczach obcych (RET-01, RET-02) |
-| Faktury Stripe (sprzedaż FaktFlow) | usunięcie tylko przez serwis po terminie | jak wyżej | TD | `00079_stripe_vat_invoice_atomicity.sql:73-84` | częściowe | jak wyżej (termin ustawia ten sam job) |
-| Koszty `expenses`, `kpir_entries`, `ocr_jobs` | brak | — | brak; usunięcie kosztu przez klienta — TD wiersza | `app/actions/expenses.ts:413-444`; grep `expenses|kpir_entries` w `lib/jobs/runners/retention-delete.ts`, `lib/retention/` — brak | brak | dowody księgowe klienta bez reguły i bez terminu (RET-05) |
-| Zdjęcia/PDF dokumentów kosztowych `tenants/{t}/expenses/…` | usuwane tylko przy nieudanym zapisie | — | TD (wyjątkowo) | `app/actions/expenses.ts:171,185`; usunięcie kosztu nie woła `deleteExpensePhoto` (`:413-444`) | brak | plik zostaje po usunięciu kosztu i po „usunięciu” firmy (RET-06) |
-| Kontrahenci, produkty, płatności, importy płatności | brak (kontrahent — usunięcie ręczne przez klienta) | — | TD ręczne | `app/actions/contractors.ts:95-125`; INW-01 | brak | RET-05 |
-| Eksporty `export_jobs`, `export_files` + pliki `exports/{t}/…` | komentarz „Pliki usuwane po 90 dniach z R2”, brak kodu | — | brak | `supabase/migrations/00024_accountant_copilot.sql:211`; INW-03 | brak | deklaracja bez wykonawcy (RET-06, RET-07) |
-| Importy `imports/{t}/…` | „tymczasowe”, brak usuwania | — | brak | `lib/import/file-storage.ts:1-3`; grep `DeleteObjectCommand` — brak wywołań dla importów | brak | RET-06 |
-| Linki podpisane do plików | 300 s (domyślnie), 3600 s (zdjęcie kosztu), **7 dni** (paczka księgowa e-mailem) | wygenerowanie | TTL linku | `lib/storage/r2.ts:498-517`; `lib/storage/expenses.ts:101`; `lib/jobs/runners/co-pilot-monthly.ts:491-495` | potwierdzone (kod) | link-okaziciel 7 dni w poczcie (RET-07, INW-19) |
-| `audit_logs` | DELETE wszystkiego starszego niż 12 mies. (minimum 6), cron 1. dnia miesiąca 03:00 | `created_at` wpisu | TD | `lib/jobs/runners/cleanup-audit-logs.ts:19,38-40`; `00052_audit_logs_immutable_trigger.sql:53-74`; `queues.ts:91` | potwierdzone (kod) | jeden okres dla zdarzeń dostępowych, finansowych i RODO; sprzeczne deklaracje (RET-03) |
-| `audit_logs` — wpisy osoby przy usunięciu konta | zerowanie `user_id`, `ip_address`, `user_agent`, `metadata` | wykonanie żądania | PS | `00052…sql:95-121`; `lib/gdpr/deletion.ts:190-195` | częściowe | tylko wpisy, gdzie osoba jest aktorem; `details_json` zostaje (A1 MIN-11) |
-| `inngest_run_log` (przebiegi jobów, bez payloadu, błąd po scrubbingu) | DELETE > 3 mies. (ten sam przebieg) | `created_at` | TD | `00052…sql:77-78`; `lib/jobs/run-log.ts:2-10,33-41` | potwierdzone (kod) | — |
-| `ksef_health_log` (bez danych osobowych) | komentarz „Retencja 3mc”, brak kodu | — | brak | `00046_system_dashboard.sql:15-18,44-45`; funkcja czyszcząca nie dotyka tabeli (`00052…sql:53-86`) | brak | rozjazd komentarza i kodu (niskie) |
-| `validation_cache` (wyniki VIES/biała lista po NIP, wspólne dla klientów) | `expires_at` 24 h; DELETE 7 dni po wygaśnięciu, cron 04:00 | zapis | TD | `00022_validation_infrastructure.sql:45,110-121`; `lib/validation/cache.ts:165`; `lib/jobs/runners/nightly-validation-recheck.ts:20-24`; `queues.ts:120` | potwierdzone (kod) | — |
-| `stripe_webhook_events` | po 90 dniach od przetworzenia `payload` przycinany do id i typu; wiersz zostaje | przetworzenie | PS (minimalizacja) | `00109_stripe_webhook_retention.sql:7-10,102-123`; `cleanup-audit-logs.ts:64-81` | potwierdzone (kod) | wiersze bezterminowo; `stripe_payments.last_webhook_payload` bez reguły (INW-12); przycinanie zależy od powodzenia czyszczenia audytu w tym samym przebiegu |
-| `email_bounces` | `raw_payload = NULL` (jednorazowo i w webhooku) | — | PS jednorazowa | `00113_user_deletion_foreign_keys.sql:82-83` | częściowe | e-mail, typ, powód bez okresu (RET-12) |
-| `newsletter_subscribers` | brak | — | brak | INW-14; `app/actions/newsletter.ts:65-71` | brak | RET-12 |
-| `support_conversations`, `support_messages` | brak; po usunięciu konta `user_id = NULL` | — | brak | `00054_support_conversations.sql:43`; grep `.delete()` w `lib/support` — brak | brak | treść czatu bezterminowo (RET-12, AI-03) |
-| `flo_*` (m.in. `flo_approvals` z treścią wiadomości) | brak (poza cofaniem pojedynczych działań) | — | brak | INW-10; `lib/flo/undo.ts:310` | brak | RET-12 |
-| `gdpr_deletion_requests` | brak; pominięte w snapshocie | — | brak | `00051_gdpr_deletion_requests.sql:29-44`; `lib/backup/snapshot-tables.ts:15-20` | brak | e-mail, IP, UA osoby usuniętej bezterminowo (RET-12) |
-| `organization_invitations`, `organization_join_requests` | `expires_at` blokuje użycie; wiersze zostają | — | brak | INW-01 | brak | RET-12 |
-| `push_subscriptions` | dezaktywacja przy 404/410 i wypisie; wiersz zostaje (kaskada przy usunięciu konta) | — | SD | `lib/push/sender.ts:125-128`; `app/actions/push-subscriptions.ts:70`; `00032_push_subscriptions.sql:9` | częściowe | endpoint i UA nieaktywnych urządzeń bez okresu |
-| `mfa_recovery_codes` | usuwane przy regeneracji/wyłączeniu i kaskadą z kontem | — | TD | `lib/auth/mfa-recovery.ts:36,118`; `00050_mfa_recovery_codes.sql:17` | potwierdzone (kod) | — |
-| `tenants` (organizacja) | `deleted_at`, `hard_delete_at = +30 dni` — bez wykonawcy i bez filtrów | żądanie właściciela/operatora | SD (tylko znacznik) | `components/settings/account-actions.ts:55-65`; `app/admin/users/actions.ts:164-176`; grep `hard_delete_at` — brak czytelnika | brak | PRA-04, RET-04 |
-| Konto po anulowaniu subskrypcji | polityka: „do 30 dni po anulowaniu subskrypcji”; brak kodu | — | brak | `polityka-prywatnosci/page.tsx:229`; grep po `subscriptions` w `lib/jobs/runners` — brak usuwania kont | brak | RET-13 |
-| Konto użytkownika (`auth.users`, `public.users` i tabele z kaskadą) | żądanie + 14 dni + cron co godzinę | `scheduled_for` | TD + PS dziennika | PRA-02 | częściowe | PRA-02, PRA-03 |
-| `auth.*` (sesje, tokeny odświeżania, tożsamości, dziennik GoTrue) | zarządza GoTrue | — | ? | brak w repo (schemat GoTrue poza migracjami) | niezweryfikowane | N-INW-01 w `02-…` |
-| Kolejka pg-boss (`pgboss.job`, payloady zdarzeń, np. identyfikatory faktur) | biblioteka: zakończone (`completed/failed/cancelled`) usuwane 7 dni po `completed_on`; nieuruchomione — po `keep_until` = 14 dni; aplikacja nie nadpisuje | zakończenie zadania / utworzenie | TD | `node_modules/pg-boss/dist/plans.js:46-55,2058-2066` (wersja 12.27.0, `package.json:77`); grep `deleteAfterSeconds|retentionSeconds` w `lib/jobs` — brak | potwierdzone (kod biblioteki) | reguła nieudokumentowana w repo; stan produkcyjnej tabeli niezweryfikowany (RET-08) |
-| Redis (lokalny wg [PR225]) | TTL 60 s – 24 h; klucze NIP jawne (GUS, walidacja), limity prób — skróty | zapis | TTL | `lib/cache/keys.ts:18-37,48-52`; `lib/cache/index.ts:55`; `lib/rate-limit/index.ts:22-24` | potwierdzone (kod) | trwałość Redisa (RDB/AOF) nieznana (RET-10) |
-| Zrzut `pg_dump` całej bazy na `db-1` | 14 ostatnich kompletnych zrzutów; kopia poza serwer tylko przez `rclone crypt` | wykonanie zrzutu | TD (rotacja) | `scripts/hetzner/db-backup.sh:17-21,41,92-96,109-112`; [PR225] — off-host niewdrożony | częściowe | bez szyfrowania lokalnie, bez ponowienia usunięć po odtworzeniu (RET-09) |
-| Snapshot JSON tabel `public` w S3 (`backups/`) | dzienne 30 dni, tygodniowe 56 dni; pomija `audit_logs`, `inngest_run_log`, `ksef_health_log`, `gdpr_deletion_requests` | wykonanie snapshotu | TD (cron 04:00) | `lib/jobs/runners/cleanup-old-backups.ts:4-5,20-21`; `lib/backup/snapshot-tables.ts:15-20`; `queues.ts:92,96` | potwierdzone (kod) | RET-09 |
-| Obrazy dysku hosta (Hetzner) | 7 obrazów `db-1`, brak dla hostów aplikacji i MinIO aplikacji | — | rotacja dostawcy | [PR225] | niezweryfikowane | RET-09 |
-| MinIO aplikacji (pliki) — kopia | brak kopii | — | — | [PR225] | brak | utrata, nie retencja (PRC-14) |
-| Logi kontenerów Docker | brak konfiguracji w repo; decyzja: 10 MiB × 5, maks. 7 dni | — | ? | grep `max-size|max-file|logging:` — brak; [PR225] `data-policy.md` § „Wybrana retencja” | niezweryfikowane | RET-10 |
-| Sentry | w kodzie tylko `user.id` po scrubbingu; retencja w panelu nieodczytana; decyzja: błędy 90 dni (Team EU) | — | panel dostawcy | `lib/observability/scrub.ts:48-50`; [PR225] `data-policy.md` | niezweryfikowane | brak usuwania na żądanie (RET-10) |
-| PostHog | konto: analityka 1 rok, replay 1 mies. (odczyt 6.10); kod nie usuwa osoby | — | panel dostawcy | [PR225]; `lib/analytics/server.ts:28,50` | niezweryfikowane | RET-10 |
-| Resend | aplikacja nie przechowuje treści wysłanych e-maili; retencja u dostawcy nieznana | — | panel dostawcy | `lib/email/send.ts` (wysyłka bez zapisu treści); PRC-11 | niezweryfikowane | RET-10 |
-| Anthropic (OCR, klasyfikacja, czat) | po stronie aplikacji — jak `support_messages`, `ocr_jobs`, `expenses.ocr_extracted_data`; u dostawcy wg umowy | — | — | AI-03; `04-…` R-06 | niezweryfikowane | AI-03 |
+**[R3]** Kolumna „Podstawa” (wymóg pkt 5E zadania) podaje, co w repo
+uzasadnia regułę (deklaracja, komentarz, dokument decyzji), a gdy nic —
+„brak podstawy w repo”; podstawy proponowane są propozycją do końcowego
+review, nie ustaleniem prawnym. Wiersze `accountant_access`,
+`export_jobs.emailed_to`, `payment_reminders`, Slack i logi `_supabase`
+dopisano po recenzji R3.
+
+| Dane / magazyn | Reguła w kodzie | Podstawa (w repo / proponowana do review) **[R3]** | Początek biegu | Rodzaj | Dowód | Stan | Luka |
+|---|---|---|---|---|---|---|---|
+| Faktury: wiersz `invoices` (+ kaskadą `invoice_line_items`, `ksef_submissions`, `xml_documents`) i pliki XML, próby XML, PDF, UPO, PDF wezwań, kopie w Glacier | archiwizacja XML do Glacier dla faktur z `issue_date` < dziś − 2 lata i z `xml_storage_path`; `scheduled_deletion_at = dzień archiwizacji + 8 lat`; cron 04:00 usuwa pliki, potem wiersze (paczki po 100) | deklaracja projektu 10 lat (`AGENTS.md`) i polityka „10 lat (art. 70 § 1 OP)” (`polityka-prywatnosci/page.tsx:230`); proponowana: przepisy podatkowe klienta [NZ] — RET-01 | **dzień wykonania joba archiwizacji** (nie koniec roku podatkowego, nie termin płatności podatku) | TD (pliki + wiersz) | `lib/jobs/runners/archive-old-invoices.ts:20-33,97-108`; `lib/jobs/runners/retention-delete.ts:26-85`; `lib/retention/invoice-files.ts:41-108`; crony `lib/jobs/queues.ts:89,123` | częściowe | `tenants.retention_years` nieużywane; faktury bez XML nigdy nie dostają terminu; bez AWS nic nie dostaje terminu; DELETE wsadowy pada na kluczach obcych (RET-01, RET-02); **[R3]** `DELETE` wysłanych faktur blokowany wyzwalaczem `00132` dla każdej roli (RET-02) |
+| Faktury Stripe (sprzedaż FaktFlow) | usunięcie tylko przez serwis po terminie | jak wyżej; dla faktur sprzedaży FaktFlow — obowiązek własny FF jako podatnika [NZ] (RET-01) | jak wyżej | TD | `00079_stripe_vat_invoice_atomicity.sql:73-84` | częściowe | jak wyżej (termin ustawia ten sam job) |
+| Koszty `expenses`, `kpir_entries`, `ocr_jobs` | brak | brak reguły; deklaracja „10 lat” dotyczy „danych fakturowych” (`AGENTS.md`); proponowana: przepisy podatkowe klienta [NZ] — RET-05 | — | brak; usunięcie kosztu przez klienta — TD wiersza | `app/actions/expenses.ts:413-444`; grep `expenses|kpir_entries` w `lib/jobs/runners/retention-delete.ts`, `lib/retention/` — brak | brak | dowody księgowe klienta bez reguły i bez terminu (RET-05) |
+| Zdjęcia/PDF dokumentów kosztowych `tenants/{t}/expenses/…` | usuwane tylko przy nieudanym zapisie | jak koszty (RET-05, RET-06) | — | TD (wyjątkowo) | `app/actions/expenses.ts:171,185`; usunięcie kosztu nie woła `deleteExpensePhoto` (`:413-444`) | brak | plik zostaje po usunięciu kosztu i po „usunięciu” firmy (RET-06) |
+| Kontrahenci, produkty, płatności, importy płatności | brak (kontrahent — usunięcie ręczne przez klienta) | brak podstawy w repo | — | TD ręczne | `app/actions/contractors.ts:95-125`; INW-01 | brak | RET-05 |
+| Eksporty `export_jobs`, `export_files` + pliki `exports/{t}/…` | komentarz „Pliki usuwane po 90 dniach z R2”, brak kodu | brak podstawy w repo (komentarz o 90 dniach bez uzasadnienia) | — | brak | `supabase/migrations/00024_accountant_copilot.sql:211`; INW-03 | brak | deklaracja bez wykonawcy (RET-06, RET-07) |
+| Importy `imports/{t}/…` | „tymczasowe”, brak usuwania | brak podstawy w repo | — | brak | `lib/import/file-storage.ts:1-3`; grep `DeleteObjectCommand` — brak wywołań dla importów | brak | RET-06 |
+| Linki podpisane do plików | 300 s (domyślnie), 3600 s (zdjęcie kosztu), **7 dni** (paczka księgowa e-mailem) | techniczna (I), bez dokumentu | wygenerowanie | TTL linku | `lib/storage/r2.ts:498-517`; `lib/storage/expenses.ts:101`; `lib/jobs/runners/co-pilot-monthly.ts:491-495` | potwierdzone (kod) | link-okaziciel 7 dni w poczcie (RET-07, INW-19) |
+| `audit_logs` | DELETE wszystkiego starszego niż 12 mies. (minimum 6), cron 1. dnia miesiąca 03:00 | brak udokumentowanej; polityka 12 mies. (`polityka-prywatnosci/page.tsx:215,231`); [PR225] decyzja 13 mies./10 lat — RET-03 | `created_at` wpisu | TD | `lib/jobs/runners/cleanup-audit-logs.ts:19,38-40`; `00052_audit_logs_immutable_trigger.sql:53-74`; `queues.ts:91` | potwierdzone (kod) | jeden okres dla zdarzeń dostępowych, finansowych i RODO; sprzeczne deklaracje (RET-03) |
+| `audit_logs` — wpisy osoby przy usunięciu konta | zerowanie `user_id`, `ip_address`, `user_agent`, `metadata` | żądanie usunięcia (art. 17 RODO [NZ]); zakres pseudonimizacji — decyzja projektu bez dokumentu | wykonanie żądania | PS | `00052…sql:95-121`; `lib/gdpr/deletion.ts:190-195` | częściowe | tylko wpisy, gdzie osoba jest aktorem; `details_json` zostaje (A1 MIN-11) |
+| `inngest_run_log` (przebiegi jobów, bez payloadu, błąd po scrubbingu) | DELETE > 3 mies. (ten sam przebieg) | techniczna (I), bez dokumentu | `created_at` | TD | `00052…sql:77-78`; `lib/jobs/run-log.ts:2-10,33-41` | potwierdzone (kod) | — |
+| `ksef_health_log` (bez danych osobowych) | komentarz „Retencja 3mc”, brak kodu | techniczna (I), tylko komentarz | — | brak | `00046_system_dashboard.sql:15-18,44-45`; funkcja czyszcząca nie dotyka tabeli (`00052…sql:53-86`) | brak | rozjazd komentarza i kodu (niskie) |
+| `validation_cache` (wyniki VIES/biała lista po NIP, wspólne dla klientów) | `expires_at` 24 h; DELETE 7 dni po wygaśnięciu, cron 04:00 | techniczna (I), bez dokumentu | zapis | TD | `00022_validation_infrastructure.sql:45,110-121`; `lib/validation/cache.ts:165`; `lib/jobs/runners/nightly-validation-recheck.ts:20-24`; `queues.ts:120` | potwierdzone (kod) | — |
+| `stripe_webhook_events` | po 90 dniach od przetworzenia `payload` przycinany do id i typu; wiersz zostaje | minimalizacja (I), `00109…sql:7-10` | przetworzenie | PS (minimalizacja) | `00109_stripe_webhook_retention.sql:7-10,102-123`; `cleanup-audit-logs.ts:64-81` | potwierdzone (kod) | wiersze bezterminowo; `stripe_payments.last_webhook_payload` bez reguły (INW-12); przycinanie zależy od powodzenia czyszczenia audytu w tym samym przebiegu |
+| `email_bounces` | `raw_payload = NULL` (jednorazowo i w webhooku) | brak podstawy w repo (przycięcie `raw_payload` — minimalizacja, I) | — | PS jednorazowa | `00113_user_deletion_foreign_keys.sql:82-83` | częściowe | e-mail, typ, powód bez okresu (RET-12) |
+| `newsletter_subscribers` | brak | brak podstawy w repo | — | brak | INW-14; `app/actions/newsletter.ts:65-71` | brak | RET-12 |
+| `support_conversations`, `support_messages` | brak; po usunięciu konta `user_id = NULL` | brak podstawy w repo | — | brak | `00054_support_conversations.sql:43`; grep `.delete()` w `lib/support` — brak | brak | treść czatu bezterminowo (RET-12, AI-03) |
+| `flo_*` (m.in. `flo_approvals` z treścią wiadomości) | brak (poza cofaniem pojedynczych działań); **[R3]** propozycje po `expires_at` dostają `status = 'expired'` bez usuwania | brak podstawy w repo | — | **[R3]** SD (wygaszanie propozycji, `lib/flo/proposals.ts:243-260`, wywołanie `lib/flo/tick.ts:197`); wiersze bez usuwania | INW-10; `lib/flo/undo.ts:310` | brak | RET-12 |
+| `gdpr_deletion_requests` | brak; pominięte w snapshocie | brak podstawy w repo | — | brak | `00051_gdpr_deletion_requests.sql:29-44`; `lib/backup/snapshot-tables.ts:15-20` | brak | e-mail, IP, UA osoby usuniętej bezterminowo (RET-12) |
+| `organization_invitations`, `organization_join_requests` | `expires_at` blokuje użycie; wiersze zostają | brak podstawy w repo | — | brak | INW-01 | brak | RET-12 |
+| **[R3]** `accountant_access` (imię/nazwa i e-mail księgowej) | brak; `expires_at`/`revoked_at` blokują użycie, wiersz zostaje (odwołanie = `UPDATE revoked_at`, `components/settings/accountant-actions.ts:116`) | brak podstawy w repo | — | brak (kaskada tylko przy usunięciu organizacji) | `00001_initial_schema.sql:200-208`, `00010_accountant_access.sql:9-21` | brak | dane osoby bez konta bez okresu (RET-12) |
+| **[R3]** `export_jobs.emailed_to` (adresy księgowej i CC) | brak | brak podstawy w repo | — | brak | `00024_accountant_copilot.sql:137` | brak | RET-07, RET-12 |
+| **[R3]** `payment_reminders` (temat i treść wiadomości do dłużnika, ścieżka PDF) | kaskada z fakturą; PDF usuwany przez `retention-delete` | jak faktura | jak faktura | TD z fakturą | `00014_payments_and_reminders.sql:140-160` (`invoice_id … ON DELETE CASCADE` `:143`, treść `:151-152`); `lib/retention/invoice-files.ts:76-77` | częściowe | zależne od RET-01/RET-02 (w tym wyzwalacza `00132`) |
+| `push_subscriptions` | dezaktywacja przy 404/410 i wypisie; wiersz zostaje (kaskada przy usunięciu konta) | techniczna (I) — dezaktywacja nieważnej subskrypcji; okres wiersza — brak podstawy w repo | — | SD | `lib/push/sender.ts:125-128`; `app/actions/push-subscriptions.ts:70`; `00032_push_subscriptions.sql:9` | częściowe | endpoint i UA nieaktywnych urządzeń bez okresu |
+| `mfa_recovery_codes` | usuwane przy regeneracji/wyłączeniu i kaskadą z kontem | techniczna (I) — cykl życia funkcji MFA | — | TD | `lib/auth/mfa-recovery.ts:36,118`; `00050_mfa_recovery_codes.sql:17` | potwierdzone (kod) | — |
+| `tenants` (organizacja) | `deleted_at`, `hard_delete_at = +30 dni` — bez wykonawcy i bez filtrów | UI: „nieodwracalna po 30 dniach (zgodnie z harmonogramem retencji)” (`settings/account/page.tsx:47-52`) — harmonogramu nie ma w repo; proponowana: art. 28 ust. 3 lit. g RODO [NZ] (PRA-04) | żądanie właściciela/operatora | SD (tylko znacznik) | `components/settings/account-actions.ts:55-65`; `app/admin/users/actions.ts:164-176`; grep `hard_delete_at` — brak czytelnika | brak | PRA-04, RET-04 |
+| Konto po anulowaniu subskrypcji | polityka: „do 30 dni po anulowaniu subskrypcji”; brak kodu | polityka „do 30 dni” (`polityka-prywatnosci/page.tsx:229`) bez uzasadnienia | — | brak | `polityka-prywatnosci/page.tsx:229`; grep po `subscriptions` w `lib/jobs/runners` — brak usuwania kont | brak | RET-13 |
+| Konto użytkownika (`auth.users`, `public.users` i tabele z kaskadą) | żądanie + 14 dni + cron co godzinę | żądanie osoby (art. 17 RODO [NZ]); 14 dni na wycofanie — `docs/adr/0006-gdpr-14d-cooling-off.md` | `scheduled_for` | TD + PS dziennika | PRA-02 | częściowe | PRA-02, PRA-03 |
+| `auth.*` (sesje, tokeny odświeżania, tożsamości, dziennik GoTrue) | zarządza GoTrue | konfiguracja GoTrue (niezweryfikowana) | — | ? | brak w repo (schemat GoTrue poza migracjami) | niezweryfikowane | N-INW-01 w `02-…` |
+| Kolejka pg-boss (`pgboss.job`, payloady zdarzeń, np. identyfikatory faktur) | biblioteka: zakończone (`completed/failed/cancelled`) usuwane 7 dni po `completed_on`; nieuruchomione — po `keep_until` = 14 dni; aplikacja nie nadpisuje | domyślna biblioteki (I), nieudokumentowana | zakończenie zadania / utworzenie | TD | `node_modules/pg-boss/dist/plans.js:46-55,2058-2066` (wersja 12.27.0, `package.json:77`); grep `deleteAfterSeconds|retentionSeconds` w `lib/jobs` — brak | potwierdzone (kod biblioteki) | reguła nieudokumentowana w repo; stan produkcyjnej tabeli niezweryfikowany (RET-08) |
+| Redis (lokalny wg [PR225]) | TTL 60 s – 24 h; klucze NIP jawne (GUS, walidacja), limity prób — skróty | techniczna (I), bez dokumentu | zapis | TTL | `lib/cache/keys.ts:18-37,48-52`; `lib/cache/index.ts:55`; `lib/rate-limit/index.ts:22-24` | potwierdzone (kod) | trwałość Redisa (RDB/AOF) nieznana (RET-10) |
+| **[R3]** Zrzut `pg_dump` bazy `postgres` na `db-1` (bez bazy `_supabase` — [PR225 @a72b567], `db-backup.sh:77`) | 14 ostatnich kompletnych zrzutów; kopia poza serwer tylko przez `rclone crypt` | decyzja [PR225] `data-policy.md`, niewdrożona; obecna rotacja bez dokumentu | wykonanie zrzutu | TD (rotacja) | `scripts/hetzner/db-backup.sh:17-21,41,92-96,109-112`; [PR225] — off-host niewdrożony | częściowe | bez szyfrowania lokalnie, bez ponowienia usunięć po odtworzeniu (RET-09) |
+| Snapshot JSON tabel `public` w S3 (`backups/`) | dzienne 30 dni, tygodniowe 56 dni; pomija `audit_logs`, `inngest_run_log`, `ksef_health_log`, `gdpr_deletion_requests` | decyzja [PR225] `data-policy.md`, niewdrożona; obecne 30/56 dni bez dokumentu | wykonanie snapshotu | TD (cron 04:00) | `lib/jobs/runners/cleanup-old-backups.ts:4-5,20-21`; `lib/backup/snapshot-tables.ts:15-20`; `queues.ts:92,96` | potwierdzone (kod) | RET-09 |
+| Obrazy dysku hosta (Hetzner) | 7 obrazów `db-1`, brak dla hostów aplikacji i MinIO aplikacji | decyzja [PR225] `data-policy.md`, niewdrożona | — | rotacja dostawcy | [PR225] | niezweryfikowane | RET-09 |
+| MinIO aplikacji (pliki) — kopia | brak kopii | decyzja [PR225] `data-policy.md`, niewdrożona (kopia planowana) | — | — | [PR225] | brak | utrata, nie retencja (PRC-14) |
+| Logi kontenerów Docker | brak konfiguracji w repo; decyzja: 10 MiB × 5, maks. 7 dni | decyzja [PR225] `data-policy.md` (7 dni), niewdrożona | — | ? | grep `max-size|max-file|logging:` — brak; [PR225] `data-policy.md` § „Wybrana retencja” | niezweryfikowane | RET-10 |
+| **[R3]** Logi usług Supabase w bazie `_supabase` (Vector → Logflare; ok. 676 MB) | nieznana | brak podstawy w repo | — | ? | [PR225 @a72b567] (`01-STAN-I-GRANICE.md` § 4); stos z Logflare: `docs/migration/PRZEPROWADZKA-HETZNER.md:262,270`; `scripts/hetzner/db-backup.sh:77` (zrzut obejmuje tylko bazę `postgres`) | niezweryfikowane | zawartość (zapytania, logowania, adresy) i retencja nieznane; poza kopią (N-A2-12) |
+| Sentry | **[R3]** kod nie ustawia użytkownika (`setSentryUserContext` bez wywołań); `tenant_id` w tagach/`extra`; retencja w panelu nieodczytana; decyzja: błędy 90 dni (Team EU); **[R3]** [PR225 @a72b567]: plan Developer, retencja 30 dni wg dokumentacji dostawcy, aktywny TTL nieodczytany | decyzja [PR225] `data-policy.md`, niewdrożona; ustawienie dostawcy | — | panel dostawcy | **[R3]** `lib/observability/sentry-context.ts:24,42` (bez importów), `lib/jobs/runners/cert-expiry-alert.ts:211`, `app/(dashboard)/settings/billing/actions.ts:187`; [PR225] `data-policy.md` | niezweryfikowane | brak usuwania na żądanie (RET-10) |
+| PostHog | konto: analityka 1 rok, replay 1 mies. (odczyt 6.10); kod nie usuwa osoby; **[R3]** [PR225 @a72b567]: w panelu nagrania, konsola i czasy sieci włączone, retencja nagrań 30 dni (kod wyłącza nagrania) | decyzja [PR225] `data-policy.md` (analityka 1 rok); ustawienie dostawcy | — | panel dostawcy | [PR225]; `lib/analytics/server.ts:28,50` | niezweryfikowane | RET-10 |
+| Resend | aplikacja nie przechowuje treści wysłanych e-maili; retencja u dostawcy nieznana | brak podstawy w repo (ustawienie dostawcy) | — | panel dostawcy | `lib/email/send.ts` (wysyłka bez zapisu treści); PRC-11 | niezweryfikowane | RET-10 |
+| **[R3]** Slack (kanał zespołu: e-mail użytkownika przy prośbie o kontakt z człowiekiem, alerty operacyjne) | retencja w ustawieniach przestrzeni Slack | brak podstawy w repo (ustawienie dostawcy) | — | panel dostawcy | `lib/support/support-actions.ts:76-83`, `lib/alerts/slack.ts` | niezweryfikowane | RET-10 |
+| Anthropic (OCR, klasyfikacja, czat) | po stronie aplikacji — jak `support_messages`, `ocr_jobs`, `expenses.ocr_extracted_data`; u dostawcy wg umowy | umowa dostawcy (niezweryfikowana, `04-…` R-06) | — | — | AI-03; `04-…` R-06 | niezweryfikowane | AI-03 |
 
 ### E.2. Ustalenia RET-NN
 
@@ -630,7 +660,10 @@ wygaśnięcie klucza/linku; **brak**.
     jako „deferred … do ~2028” (`scripts/check-env.ts:132-135`); stan
     produkcji nieznany (N-INW-04);
   - faktury sprzed 2 lat mogą dziś pochodzić tylko z importu historii KSeF
-    (`02-…` § Glacier) — wtedy ten problem dotyczy ich od razu.
+    (`02-…` § Glacier) — wtedy ten problem dotyczy ich od razu;
+  - **[R3]** nawet z terminem faktura wysłana do KSeF nie zostanie usunięta:
+    wyzwalacz `b_guard_invoice_pending_content` odrzuca jej `DELETE` dla
+    każdej roli (RET-02).
 - **Luka:** jeden okres na sztywno dla wszystkich klientów, liczony od
   zdarzenia technicznego; kolumna per klient martwa; reguła zależna od
   infrastruktury, której nie ma.
@@ -647,9 +680,29 @@ wygaśnięcie klucza/linku; **brak**.
 
 #### RET-02. Usuwanie faktur po terminie: pliki znikają, zanim baza potwierdzi usunięcie wierszy
 
-- **Stan:** brak (wada uśpiona). **Klasa:** P — art. 5 ust. 1 lit. d i f
+- **Stan:** **[R3]** brak (wada pewna dla faktur wysłanych do KSeF, uśpiona
+  do pierwszego terminu). **Klasa:** P — art. 5 ust. 1 lit. d i f
   (integralność), art. 5 ust. 2 RODO [NZ]; S — Processing Integrity; I.
-- **Dowód:** job najpierw usuwa pliki każdej faktury z paczki
+- **Dowód — wyzwalacz faktur [R3]:** wyzwalacz `b_guard_invoice_pending_content`
+  (`00119_invoice_pending_content_freeze.sql:109-111`, funkcja w ostatniej
+  postaci `00132_ksef_lifecycle_guard_tighten.sql:63-72`; `00137` wspomina
+  ją tylko w komentarzu) odrzuca `DELETE` każdej faktury z
+  `submitted_to_ksef_at` lub `offline_idempotency_key` (oraz w stanie
+  `queued`/`offline_queued`/`sending`) **dla każdej roli, także
+  `service_role`** — `DELETE` w `retention-delete.ts:80` padnie dla każdej
+  faktury wysłanej do KSeF (test R3 na bazie syntetycznej z funkcją
+  skopiowaną z migracji: `ERROR: KSeF document cannot be deleted by this
+  role`, także przy kaskadzie z `tenants` — `R3.md` § 6, T1, T3). Paczka
+  jest usuwana jednym zapytaniem (`.delete().in('id', purged)`, `:80`), więc
+  jedna taka faktura blokuje usunięcie wszystkich wierszy paczki, także
+  faktur przychodzących (sprawdzenie redaktora). Te same warunki zamrażają
+  dane nabywcy (`buyer_data`, `buyer_pesel`, `buyer_id_number` —
+  `00132…sql:76-107`), więc nie da się ich też spseudonimizować bez zmiany
+  wyzwalacza. Pozostałe wyzwalacze faktur z `00132`
+  (`guard_invoice_delivery_history`, `guard_historical_ksef_invoice_lines`)
+  przepuszczają role spoza `authenticated`/`anon` (sprawdzenie redaktora,
+  `00132…sql:146-148`, `:250-251`).
+- **Dowód — kolejność kroków:** job najpierw usuwa pliki każdej faktury z paczki
   (`retention-delete.ts:46-74`), potem jednym zapytaniem usuwa wszystkie
   wiersze paczki (`:78-82`). Wiersz faktury jest wskazywany kluczami obcymi
   bez kaskady: `expenses.ksef_invoice_id REFERENCES public.invoices(id)`
@@ -668,13 +721,20 @@ wygaśnięcie klucza/linku; **brak**.
 - **Luka:** stan pośredni „wiersz faktury bez pliku XML/UPO” — przy
   obowiązku przechowania to utrata dowodu, przy jego braku — nieusunięte
   dane; blokada całej paczki.
-- **Ryzyko:** średnie (uśpione do pierwszego terminu; natychmiast przy
-  imporcie historii z kosztami).
+- **Ryzyko:** **[R3]** średnie dziś; wysokie od pierwszego terminu —
+  nieodwracalne usunięcie XML/UPO bez usunięcia wiersza z danymi nabywcy
+  i trwała blokada joba (wcześniej: „średnie, uśpione do pierwszego
+  terminu; natychmiast przy imporcie historii z kosztami”).
 - **Rekomendacja:** (I) usuwać fakturę po fakturze w transakcji
   z rekordem „do usunięcia plików” (outbox) i dopiero po zatwierdzeniu
   wiersza kasować pliki; wspólny termin dla faktury przychodzącej i jej
   kosztu oraz dla korekty i oryginału (najpóźniejszy z łańcucha); wpis
   audytu po skutku; czerwony test na bazie z kosztem z KSeF i z korektą.
+  **[R3]** Decyzja projektowa, czy FaktFlow fizycznie usuwa wiersze
+  dokumentów KSeF, czy po terminie zeruje dane osobowe (wymaga jawnej
+  ścieżki serwisowej w wyzwalaczu, np. funkcja `SECURITY DEFINER` z flagą
+  transakcji); czerwony test na bazie (`tests/rls-*`) z fakturą
+  z `submitted_to_ksef_at`.
 
 #### RET-03. Dziennik audytu: jeden okres 12 miesięcy dla wszystkiego i wyzwalacz, który blokuje usuwanie innych danych
 
@@ -686,7 +746,7 @@ wygaśnięcie klucza/linku; **brak**.
     miesięcy, bez rozróżnienia klas zdarzeń (`00052…sql:53-74`,
     `cleanup-audit-logs.ts:19,38-40`), w tym wpisy RODO (`gdpr.*`),
     retencji (`retention.*`), wystawienia i wysyłki faktur;
-  - deklaracje: komentarz tabeli „Retencja 10 lat” (`00001_initial_schema.sql:171`),
+  - deklaracje: komentarz tabeli „Retencja 10 lat” (`00001_initial_schema.sql:174` **[R3]**),
     polityka „12 miesięcy” (`polityka-prywatnosci/page.tsx:214-219,231`),
     [PR225] „audit finansowy 10 lat, dostęp/admin 13 miesięcy”
     (decyzja niewdrożona);
@@ -715,7 +775,10 @@ wygaśnięcie klucza/linku; **brak**.
 
 - **Stan:** brak. **Klasa:** P — art. 28 ust. 3 lit. g, art. 5 ust. 1
   lit. b i e RODO [NZ]; I. Dowody i rekomendacja: PRA-04 (ścieżka klienta)
-  i PRA-03 (ścieżka operatora); INW-02 w `02-…`.
+  i PRA-03 (ścieżka operatora); INW-02 w `02-…`. **[R3]** Twarde
+  usunięcie organizacji zablokuje nie tylko wyzwalacz audytu, ale też
+  wyzwalacz faktur `b_guard_invoice_pending_content` (`00132…sql:63-72`,
+  RET-02) przy kaskadzie `tenants` → `invoices`.
 - **Uzupełnienie:** organizacja, której ostatni członek usunął konto
   (PRA-02), nie dostaje nawet znacznika — zostaje aktywna bez nikogo,
   kto może wydać polecenie, a joby (np. odbiór skrzynki KSeF, jeśli
@@ -753,7 +816,7 @@ wygaśnięcie klucza/linku; **brak**.
   Dowody podstawowe: INW-03 (`02-…`). Uzupełnienie:
   - usunięcie kosztu nie usuwa zdjęcia/PDF (`app/actions/expenses.ts:413-444`
     — brak wywołania `deleteExpensePhoto`, które istnieje w
-    `lib/storage/expenses.ts:135` i jest używane tylko przy błędzie zapisu,
+    `lib/storage/expenses.ts:130` **[R3]** i jest używane tylko przy błędzie zapisu,
     `expenses.ts:171,185`); `ocr_jobs.expense_id … ON DELETE SET NULL`
     (`00034…sql:140`) zostawia ścieżkę pliku w `ocr_jobs.source_file_path`;
   - `deleteInvoiceXml` (`lib/storage/r2.ts:578-584`) nie ma wywołań;
@@ -805,9 +868,10 @@ wygaśnięcie klucza/linku; **brak**.
 #### RET-09. Kopie zapasowe: okresy znane z kodu, propagacja usunięć — brak
 
 - **Stan:** częściowe. **Klasa:** P — art. 17, art. 32 ust. 1 lit. c
-  RODO [NZ]; O — stanowiska organów o usuwaniu w kopiach (dopuszczalne
-  wygaśnięcie z rotacją przy wyłączeniu z użycia) [NZ]; S — Availability;
-  I. Dowody podstawowe: INW-04 (`02-…`), PRC-14 (`04-…`).
+  RODO [NZ]; **[R3]** I — proponowana praktyka: dopuszczalne wygaśnięcie
+  danych usuniętych w kopiach z rotacją przy wyłączeniu z użycia (WYM-72
+  w `03-…`; O — do potwierdzenia w review: status raportu CEF 2025,
+  ZR-45, nieznany; brak wskazanego stanowiska organu); S — Availability. Dowody podstawowe: INW-04 (`02-…`), PRC-14 (`04-…`).
 - **Okresy (kod):** `pg_dump` — 14 ostatnich zrzutów (`db-backup.sh:41,109-112`),
   snapshot JSON — 30/56 dni (`cleanup-old-backups.ts:20-21`), obrazy hosta
   — 7 ([PR225]); decyzja docelowa 7 dziennych/4 tygodniowe/12 miesięcznych
@@ -835,20 +899,39 @@ wygaśnięcie klucza/linku; **brak**.
 - **Stan:** niezweryfikowane (panele) / brak (usuwanie na żądanie).
   **Klasa:** P — art. 5 ust. 1 lit. e, art. 17, art. 28 ust. 3 lit. g
   RODO [NZ]; I.
-- **Dowód:** kod ogranicza identyfikację w Sentry do `user.id`
-  (`lib/observability/scrub.ts:48-50`) i wysyła do PostHog
-  `distinctId = user.id` (`lib/analytics/server.ts:28,50`); żadne
+- **Dowód:** **[R3]** kod nie ustawia użytkownika w Sentry
+  (`setSentryUserContext`, `lib/observability/sentry-context.ts:24,42`, bez
+  wywołań — A1 MIN-12); identyfikacja możliwa po `tenant_id` w tagach/`extra`
+  (np. `cert-expiry-alert.ts:211`, `settings/billing/actions.ts:187`) i po
+  treści błędu; do PostHog kod wysyła `distinctId = user.id`
+  (`lib/analytics/server.ts:28,50`), a **[R3]** zdarzenie przyjęcia faktury
+  z `distinctId = tenantId` (`submit-invoice.ts:1933-1940`) i — po zgodzie —
+  grupę `tenant` (`analytics-identify.tsx:19`); żadne
   wywołanie API usuwające osobę/zdarzenia (grep — brak); logi kontenerów
   bez konfiguracji w repo; Redis z TTL (`lib/cache/keys.ts:18-37`),
   trwałość nieznana. Odczyty [PR225]: PostHog 1 rok/replay 1 mies.,
   Sentry — nieodczytane, decyzja 90 dni; logi — decyzja 7 dni.
-- **Luka:** usunięcie konta nie dociera do PostHog i Sentry; okresy
-  logów i Sentry to decyzje, nie stan.
+  **[R3]** [PR225 @a72b567] (odczyt 10.10, `01-STAN-I-GRANICE.md` § 4):
+  Sentry — plan Developer, retencja 30 dni wg dokumentacji dostawcy
+  (aktywny TTL nieodczytany); PostHog — nagrania, konsola i czasy sieci
+  włączone w panelu, retencja nagrań 30 dni; druga baza `_supabase`
+  (logi usług Supabase, ok. 676 MB) poza nocnym `pg_dump`
+  (`db-backup.sh:77`), retencja nieznana (N-A2-12). **[R3]** Slack: przy
+  prośbie o kontakt z człowiekiem do kanału zespołu trafia e-mail
+  użytkownika (`lib/support/support-actions.ts:76-83`); retencja
+  w ustawieniach przestrzeni Slack — niezweryfikowana.
+- **Luka:** usunięcie konta nie dociera do PostHog, Sentry **[R3]** ani
+  Slacka; okresy logów i Sentry to decyzje, nie stan; **[R3]** retencja
+  logów w `_supabase` nieopisana.
 - **Ryzyko:** średnie.
 - **Rekomendacja:** (I) krok w `executeGdprRequest` (albo kolejka
-  zadań operatora z terminem) — usunięcie osoby w PostHog po `distinctId`;
-  dla Sentry — procedura wyszukania i usunięcia zdarzeń z `user.id`
-  albo okres ≤ 90 dni jako uzasadnienie wygaśnięcia; konfiguracja logów
+  zadań operatora z terminem) — usunięcie osoby w PostHog po `distinctId`
+  **[R3]** oraz — przy usunięciu organizacji — profilu i zdarzeń
+  z `distinctId = tenantId` i grupy `tenant`; dla Sentry — **[R3]**
+  procedura wyszukania zdarzeń po `tenant_id`/identyfikatorach z treści
+  albo okres ≤ 90 dni jako uzasadnienie wygaśnięcia; **[R3]** dla Slacka —
+  bez e-maila w alercie (identyfikator rozmowy wystarcza) albo retencja
+  kanału; dla `_supabase` — odczyt konfiguracji i okres zapisany jako kod; konfiguracja logów
   Docker w repo (`max-size`, `max-file`) jako kod.
 
 #### RET-11. Brak pełnego eksportu danych organizacji przed odejściem
@@ -879,7 +962,11 @@ wygaśnięcie klucza/linku; **brak**.
   `email_bounces` (adres, typ, powód), `organization_invitations` (e-mail
   zaproszonego), `support_conversations/messages` (treść czatu, także po
   usunięciu konta — `00054…sql:43`), `flo_approvals` (treść wiadomości do
-  kontrahentów, INW-10) — brak joba (lista cronów `queues.ts:89-127`).
+  kontrahentów, INW-10), **[R3]** `accountant_access` (imię/nazwa i e-mail
+  księgowej — `00001…sql:203`, `00010…sql:9`; po odwołaniu i wygaśnięciu
+  wiersz zostaje, odwołanie to `UPDATE revoked_at`,
+  `components/settings/accountant-actions.ts:116`), `export_jobs.emailed_to`
+  (`00024…sql:137`) — brak joba (lista cronów `queues.ts:89-127`).
 - **Luka:** paradoks: rejestr usunięć przechowuje dane osoby usuniętej
   dłużej niż jakiekolwiek inne jej dane.
 - **Ryzyko:** średnie (wysokie dla czatu — treść swobodna, AI-03).
@@ -887,7 +974,8 @@ wygaśnięcie klucza/linku; **brak**.
   przedawnienia roszczeń, z e-mailem zastąpionym skrótem z solą po
   wykonaniu; zaproszenia — usunięcie N dni po wygaśnięciu; odbicia —
   do czasu zmiany adresu/N miesięcy; czat — N miesięcy od zamknięcia
-  rozmowy; `flo_approvals` — treść po wysyłce skracana do metadanych.
+  rozmowy; `flo_approvals` — treść po wysyłce skracana do metadanych;
+  **[R3]** `accountant_access` — usunięcie N dni po odwołaniu/wygaśnięciu.
 
 #### RET-13. „Dane konta do 30 dni po anulowaniu subskrypcji” — deklaracja bez kodu
 
@@ -918,7 +1006,7 @@ Jeden dostawca modeli: Anthropic, klient SDK bez własnego `baseURL`
 |---|---|---|---|---|---|
 | OCR dokumentu kosztowego | użytkownik wgrywa zdjęcie/PDF | **pełny obraz/PDF** (base64) + stały prompt | plik w S3 `tenants/{t}/expenses/…` (brak reguły), `ocr_jobs` (brak), `expenses.ocr_extracted_data` (z kosztem) | tak — wynik do przeglądu (`reviewExpenseAction`, `app/actions/expenses.ts:253`) | `lib/ocr/engine.ts:144-158`; `lib/jobs/runners/process-ocr.ts:309,373` |
 | Klasyfikacja KPiR | **automatycznie**: każda faktura kosztowa z KSeF i każdy OCR, gdy reguły NIP/nazwy/słów kluczowych nie trafią i firma ma budżet AI | nazwa i NIP sprzedawcy, numer faktury, nazwy pozycji, kwota brutto (w bloku „dane, nie polecenia”) | `expenses.kpir_column`, `categorization_method`, `categorization_confidence` (z kosztem) | tak — wynik AI zawsze `is_reviewed = false` (PRA-08) | `lib/categorization/ai-classifier.ts:34-52`; `lib/categorization/index.ts:69-76`; `auto-categorize-inbox.ts:369-409` |
-| Czat pomocy | zalogowany użytkownik pisze | do 20 ostatnich tur rozmowy (treść swobodna, do 2000 znaków na wiadomość) + baza wiedzy w prompcie systemowym | `support_conversations`, `support_messages` — **bez retencji**, zostają po usunięciu konta | eskalacja do zespołu przy `ai_uncertain` (Slack: tylko ID rozmowy i kategoria) | `app/api/support/chat/route.ts:38-45,62-195`; `lib/support/chat.ts:75-84`; `00054…sql:43` |
+| Czat pomocy | zalogowany użytkownik pisze | do 20 ostatnich tur rozmowy (treść swobodna, do 2000 znaków na wiadomość) + baza wiedzy w prompcie systemowym | `support_conversations`, `support_messages` — **bez retencji**, zostają po usunięciu konta | eskalacja do zespołu przy `ai_uncertain` (**[R3]** Slack: przy eskalacji AI — ID rozmowy i kategoria, `route.ts:178-185`; przy prośbie o człowieka — także e-mail użytkownika, `lib/support/support-actions.ts:76-83`) | `app/api/support/chat/route.ts:38-45,62-195`; `lib/support/chat.ts:75-84`; `00054…sql:43` |
 | FLO — reguły (propozycje, przypomnienia) | cron `cron.flo-tick` 07:30, `cron.flo-shadow-settle` pon. 06:00 | **nic** — bez modelu | `flo_proposals`, `flo_approvals` (treść wiadomości), `flo_decisions`, `flo_shadow` — bez retencji (INW-10) | tak — wysyłka tylko z żetonem zatwierdzenia klienta (A1 ZGD-07) | `lib/jobs/queues.ts:100,104`; `lib/jobs/handlers/flo-tick.ts:14-32`; `lib/flo/tick.ts:305-306` |
 | FLO — generowanie treści modelem | brak (moduł nieaktywny) | — | — | — | `lib/flo/llm.ts:1-3`; `lib/flo/redact.ts:1-3`; `tests/unit/flo-nieaktywne.test.ts:22-41` |
 | Agent kodu w CI | issue z etykietą `agent:napraw` | treść issue i kod repo (nie dane klientów, o ile nikt ich nie wklei) | — | przegląd PR | `.github/workflows/agent.yml`; `04-…` R-23 |
@@ -1032,7 +1120,7 @@ Jeden dostawca modeli: Anthropic, klient SDK bez własnego `baseURL`
 | 2 | PRA-03 (ścieżka operatora → wspólna funkcja usuwania) + RET-03 (wyzwalacz vs klucze obce) | jedyna droga realizacji żądań e-mailowych nie działa; czerwony test na bazie najpierw |
 | 3 | PRA-02 / AI-03 / RET-12 (czat, rejestr żądań, listy e-mail, dostawcy w usunięciu konta) | kompletność art. 17 |
 | 4 | PRA-09 / PRA-11 (runbook, skrypt wyszukiwania, rejestr żądań) | osoby bez konta to największa grupa; terminy art. 12 |
-| 5 | RET-01 / RET-02 / RET-05 (termin faktur i kosztów od decyzji prawnej, kolejność plik/wiersz) | uśpione do pierwszego terminu albo importu historii; wymaga decyzji review |
+| 5 | RET-01 / RET-02 / RET-05 (termin faktur i kosztów od decyzji prawnej, kolejność plik/wiersz; **[R3]** ścieżka serwisowa w wyzwalaczu `00132` albo zerowanie danych osobowych zamiast `DELETE`) | uśpione do pierwszego terminu albo importu historii; wymaga decyzji review; **[R3]** od pierwszego terminu ryzyko wysokie — usunięcie plików bez usunięcia wiersza i trwała blokada joba |
 | 6 | PRA-01, PRA-05, RET-06, RET-07, RET-11, AI-01 | uzupełnienia zakresu i minimalizacji |
 
 ## Niewiadome i ograniczenia
@@ -1050,6 +1138,9 @@ Jeden dostawca modeli: Anthropic, klient SDK bez własnego `baseURL`
 | N-A2-09 | Retencja Sentry, Resend, trwałość Redisa, konfiguracja logów Docker | panele, serwery | odczyty operatora (kontynuacja [PR225]) | RET-10 |
 | N-A2-10 | Czy tryb „soft-deleted” organizacji blokuje logowanie/pracę członków w przeglądarce | brak testu e2e | test e2e na środowisku z danymi syntetycznymi | PRA-04 |
 | N-A2-11 | Skuteczność aktualnych wzorców `lib/flo/redact.ts` (SEC-D-03 oznaczone w rejestrze jako poprawione) | kod nieaktywny | uruchomić `scripts/security/audit-redaction.ts` (plik jest w repo; nie uruchamiałem) | AI-04 |
+| N-A2-12 **[R3]** | Zawartość i retencja drugiej bazy `_supabase` (logi usług Supabase zbierane przez Vector → Logflare; ok. 676 MB wg [PR225 @a72b567]) i to, że jest poza nocnym `pg_dump` (`db-backup.sh:77`) | konfiguracja stosu Supabase na `db-1` | odczyt konfiguracji Logflare/Vector (okres przechowania, zakres pól) i liczników tabel — bez treści logów | RET-09, RET-10, E.1 |
+| N-A2-13 **[R3]** | Czy na produkcji wyzwalacz `b_guard_invoice_pending_content` ma postać z `00132` (test R3 wykonano na bazie syntetycznej) i ile faktur z `submitted_to_ksef_at` ma już `scheduled_deletion_at` | stan `db-1`, dane produkcyjne | `pg_get_functiondef` funkcji na `db-1` i zapytanie licznikowe (bez treści) — sesja z dostępem do produkcji | RET-02, PRA-04 |
+| N-A2-14 **[R3]** | Retencja kanału Slack zespołu, do którego trafiają e-maile użytkowników przy prośbie o kontakt (`support-actions.ts:76-83`) | ustawienia przestrzeni Slack | odczyt ustawień przez operatora | RET-10 |
 
 Ograniczenia dowodowe tego pliku: brak dostępu do produkcji, paneli
 dostawców i umów (`01-STAN-I-GRANICE.md` § 5); przepisy i wytyczne
@@ -1067,7 +1158,10 @@ uruchamiałem testów repo ani aplikacji.
    wynika z innego przepisu (np. przechowywanie faktur w KSeF przez MF,
    rachunkowość) i czy dotyczy podatnika, czy tylko MF; czy FaktFlow
    jako procesor może ustalić okres sam, czy musi wynikać z umowy
-   powierzenia (art. 28 ust. 3 lit. g).
+   powierzenia (art. 28 ust. 3 lit. g). **[R3]** Czy po upływie okresu FaktFlow ma usuwać
+   wiersz faktury przesłanej do KSeF, czy wystarczy usunięcie danych
+   osobowych z kopii lokalnej (oryginał pozostaje w KSeF) — dziś usunięcie
+   wiersza jest niemożliwe przez wyzwalacz `00132` (RET-02).
 2. **Usunięcie konta a dane organizacji** (PRA-02, RET-04): kto jest
    administratorem danych firmy jednoosobowej po usunięciu konta jej
    jedynego właściciela; czy FaktFlow może (lub musi) przechowywać faktury
@@ -1105,6 +1199,11 @@ uruchamiałem testów repo ani aplikacji.
    miesiąca”, „dane konta do 30 dni po anulowaniu subskrypcji”,
    „zanonimizowane” — czy poprawić tekst do stanu faktycznego przed
    wdrożeniem mechanizmów.
+10. **[R3] Zamrożenie danych nabywcy na wysłanej fakturze** (RET-02,
+   z `R3.md` § 8): czy zamrożenie danych nabywcy (w tym PESEL) na fakturze
+   wysłanej do KSeF także dla operatora mieści się w wyjątku art. 17
+   ust. 3 lit. b RODO na cały okres przechowania i jak to opisać
+   w odpowiedzi na żądanie usunięcia [NZ].
 
 ## Co sprawdziłem / czego nie mogłem sprawdzić
 
@@ -1152,3 +1251,32 @@ skrzynki `pomoc@`, treści umów; przepisów w źródłach pierwotnych (egress
 zablokowany, WebSearch odrzucony). Nie czytałem w całości:
 `lib/jobs/runners/process-ocr.ts`, `lib/flo/**` poza wskazanymi plikami,
 `lib/exports/**`, pełnej treści polityki i regulaminu (zakres A1).
+
+**Redakcja poprawek R3 (13.10.2026) — co sprawdzono przed naniesieniem:**
+wyzwalacz `b_guard_invoice_pending_content` — `00119…sql:109-111`,
+`00132…sql:37-129` (gałąź `DELETE` `:63-72` bez warunku roli dla
+`submitted_to_ksef_at`/`offline_idempotency_key`), brak późniejszej
+redefinicji (`grep guard_invoice_pending_content supabase/migrations` →
+`00119`, `00132`, w `00137` tylko komentarz), pozostałe wyzwalacze faktur
+z `00132` przepuszczają `service_role` (`:146-148`, `:250-251`);
+`retention-delete.ts:29-36,80` (jedno zapytanie `DELETE … IN` na paczkę);
+`Sentry.setUser` tylko w `lib/observability/sentry-context.ts:24,42`, bez
+importów w `app`, `lib`, `components`, `hooks` i konfiguracjach Sentry;
+tagi `tenant_id` (`cert-expiry-alert.ts:211`, `settings/billing/actions.ts:187`);
+kolumny `accountant_access` (`00001…sql:200-208`, `00010…sql:9-21`),
+`export_jobs.emailed_to` (`00024…sql:137`), `payment_reminders`
+(`00014…sql:140-160`); PDF wezwań w `lib/retention/invoice-files.ts:76-77`
+(R3 podał `:36-37`); kolumny eksportu `gdpr_deletion_requests`
+w `data-collector.ts:107-111` (R3 podał `:104-107`); `support-actions.ts:76-83`
+(`user_email`) i `chat/route.ts:178-185`; `00001…sql:174`;
+`lib/storage/expenses.ts:130`; `lib/flo/proposals.ts:243-260`,
+`lib/flo/tick.ts:197`; `submit-invoice.ts:1933-1940`; `db-backup.sh:77`
+(`pg_dump … -d postgres`); `03-REJESTR-ZRODEL.md` WYM-72 i ZR-45 (klasa I,
+O do potwierdzenia); `01-STAN-I-GRANICE.md` § 4 (fakty @`a72b567`).
+Testu na bazie syntetycznej redaktor nie powtarzał — wynik z `R3.md` § 6.
+
+## Historia recenzji
+
+| Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
+|---|---|---|---|---|---|---|
+| R3 — niezależny agent-recenzent (grupa: `A1` + `A2` + `A4`) | 10.10.2026 (recenzja wykonana w sesji 13.10.2026) | wymaga poprawek (27 kontroli punktowych, 23 potwierdzone, 4 z błędem: `user_email` w eksporcie, linia komentarza audytu, ścieżki Slacka, `user.id` w Sentry; rdzeń potwierdzony także testem na bazie syntetycznej) | 10 uwag do tego pliku (R3-U11 – R3-U20; 5 istotnych, 5 drobnych) | wszystkie 10 — naniesione przez redaktora poprawek 13.10.2026 po sprawdzeniu w kodzie i migracjach; miejsca oznaczone **[R3]**. Korekty względem propozycji recenzenta: U13 — linie PDF wezwań `invoice-files.ts:76-77`; U16 — linie eksportu `data-collector.ts:107-111`; U11 — dopisano, że jedno zapytanie `DELETE … IN` blokuje całą paczkę. Dodano N-A2-12 – N-A2-14 i pytanie 10 do review (z `R3.md` § 8) | — | `R3.md` (scratchpad sesji; streszczenie w `10-REVIEW.md`) |
