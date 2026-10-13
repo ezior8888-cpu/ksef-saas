@@ -1,8 +1,8 @@
-import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { createScriptHarness, KONTROLA_SCRIPT, scriptSection, type ScriptHarness } from '../helpers/kontrola-skrypt';
 
 /**
  * `scripts/ops/kontrola-faktur-ksef.sh`, sekcja 12: dziennik prób wysyłki
@@ -10,32 +10,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
  * przerwane (`started` bez wyniku po 20 min, jak `/admin/centrum/bledy`)
  * i nieudane zapisy dziennika w logach.
  *
- * Uruchamiany jest PRAWDZIWY skrypt. Atrapa `ssh` pomija opcje i host,
- * a komendę zdalną wykonuje `bash -c` — tak jak sshd po stronie serwera,
- * więc SQL przechodzi przez obie powłoki jak na produkcji. Atrapa `docker`
- * zapisuje, co faktycznie dostał `psql -c`, i odpowiada na sondę tabeli.
- * Semantykę zapytań sprawdza się na bazie z 00150 (opis PR); tu: gałęzie
- * skryptu, komunikaty i to, że żadne zapytanie nie zmienia się po drodze.
+ * Uruchamiany jest PRAWDZIWY skrypt (`tests/helpers/kontrola-skrypt.ts`:
+ * atrapa `ssh` → `bash -c`, jak sshd). Atrapa `docker` zapisuje, co
+ * faktycznie dostał `psql -c`, i odpowiada na sondę tabeli. Semantykę
+ * zapytań na bazie z 00150 sprawdza `tests/rls-kontrola-dziennik-prob.test.ts`;
+ * tu: gałęzie skryptu, komunikaty i to, że żadne zapytanie nie zmienia się
+ * po drodze.
  */
 
-const SCRIPT = resolve(__dirname, '../../scripts/ops/kontrola-faktur-ksef.sh');
 const LEDGER_TABLE = 'ksef_send_attempts';
 const WORKER = 'workertest-abc123';
 const APP = 'apptest-def456';
-
-const FAKE_SSH = `#!/usr/bin/env bash
-# Atrapa ssh: opcje i host pominięte; reszta złączona spacją idzie do powłoki (jak sshd).
-while [ $# -gt 0 ]; do
-  case "$1" in
-    -i|-o|-p|-l|-F) shift 2 ;;
-    -*) shift ;;
-    *) break ;;
-  esac
-done
-host=$1; shift
-if [ -n "\${FAKE_SSH_FAIL_HOST:-}" ] && [ "$host" = "$FAKE_SSH_FAIL_HOST" ]; then exit 255; fi
-exec bash -c "$*"
-`;
 
 const FAKE_DOCKER = `#!/usr/bin/env bash
 # Atrapa docker. psql: zapisuje SQL z -c (rozdzielone NUL); sonda tabeli odpowiada
@@ -65,31 +50,16 @@ esac
 exit 0
 `;
 
+let harness: ScriptHarness;
 let dir: string;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'kontrola-'));
-  mkdirSync(join(dir, 'bin'));
-  writeFileSync(join(dir, 'bin', 'ssh'), FAKE_SSH);
-  writeFileSync(join(dir, 'bin', 'docker'), FAKE_DOCKER);
-  chmodSync(join(dir, 'bin', 'ssh'), 0o755);
-  chmodSync(join(dir, 'bin', 'docker'), 0o755);
-  writeFileSync(
-    join(dir, 'infra.env'),
-    [
-      'K=/nie/ma/klucza',
-      'APP=app.example.test',
-      'DB=db.example.test',
-      'PGC=pgc-test',
-      'RESTC=rest-test',
-      'APP_PREFIX=apptest',
-      'WORKER_PREFIX=workertest',
-    ].join('\n'),
-  );
+  harness = createScriptHarness(FAKE_DOCKER);
+  dir = harness.dir;
 });
 
 afterEach(() => {
-  rmSync(dir, { recursive: true, force: true });
+  harness.cleanup();
 });
 
 interface Run {
@@ -99,30 +69,16 @@ interface Run {
 }
 
 function runScript(env: Record<string, string> = {}): Run {
-  const result = spawnSync('bash', [SCRIPT], {
-    encoding: 'utf8',
-    timeout: 60_000,
-    env: {
-      NODE_ENV: 'test',
-      PATH: `${join(dir, 'bin')}:${process.env.PATH ?? ''}`,
-      HOME: dir,
-      LANG: 'C.UTF-8',
-      FAKTFLOW_INFRA_ENV: join(dir, 'infra.env'),
-      FAKE_DIR: dir,
-      ...env,
-    },
-  });
+  const result = harness.run(env);
   const log = join(dir, 'sql');
   const sql = existsSync(log) ? readFileSync(log, 'utf8').split('\0').slice(0, -1) : [];
   return { stdout: result.stdout, sql, status: result.status };
 }
 
-/** Część wyjścia od nagłówka sekcji 12 do następnej sekcji. */
 function section12(stdout: string): string {
-  const start = stdout.indexOf('\n=== 12.');
-  expect(start, 'brak sekcji 12 w wyjściu skryptu').toBeGreaterThanOrEqual(0);
-  const next = stdout.indexOf('\n=== ', start + 1);
-  return stdout.slice(start, next === -1 ? undefined : next);
+  const section = scriptSection(stdout, 12);
+  expect(section, 'brak sekcji 12 w wyjściu skryptu').not.toBeNull();
+  return section!;
 }
 
 const ledgerQueries = (sql: string[]) =>
@@ -220,7 +176,7 @@ describe('kontrola-faktur-ksef.sh — sekcja 12: dziennik prób wysyłki', () =>
 describe('kontrola-faktur-ksef.sh — zapytania przechodzą przez dwie powłoki bez zmian', () => {
   /** `sql "etykieta" "zapytanie"` ze źródła skryptu, w kolejności (zmienna okna sekcji 9 rozwinięta). */
   function declaredQueries(): string[] {
-    const source = readFileSync(SCRIPT, 'utf8');
+    const source = readFileSync(KONTROLA_SCRIPT, 'utf8');
     const re = /^\s*sql "(?:[^"\\]|\\.)*"\s*(?:\\\n\s*)?"((?:[^"\\]|\\.)*)"/gm;
     return [...source.matchAll(re)].map((m) => m[1].replaceAll('$A4B_HOURS', '24'));
   }
