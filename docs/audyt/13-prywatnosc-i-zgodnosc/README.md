@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Stan | **etap badawczy zakończony; zmiany w aplikacji nie zostały rozpoczęte** — czekają na osobny prompt wykonawczy |
+| Stan | **synteza gotowa; poprawki po końcowym review kompletności (R6a, R6b) w toku** — wynik w `10-REVIEW.md` § 4; zmiany w aplikacji nie zostały rozpoczęte i czekają na osobny prompt wykonawczy |
 | Wersja kodu | `origin/main` @ `3e5e00d` (dryf wersji po zamrożeniu: `01` § 2) |
 | Okres prac | 7.10–13.10.2026 (przerwy przez limity użycia API) |
 | Autor tego pliku | koordynator — streszczenie; wiążąca jest treść plików źródłowych i ich recenzji |
@@ -32,6 +32,14 @@ pierwotnych był w tej sesji zablokowany. Każda taka pozycja ma oznaczenie
 | `narzedzia/` | powtarzalny test przeglądarki (Playwright, ruch zewnętrzny przerywany) i jego wynik bez wartości ciasteczek | dowód z pkt 5.C |
 | `recenzje/` | pełne recenzje R1–R6 i brief agentów | — |
 
+**Stany.** Stan wymagania wiąże wyłącznie w `05`. Pole „Stan” w plikach
+ustaleń (`02`, `04`, `A1`–`A4`, `06`) opisuje stan wymagania, którego
+dotyczy ustalenie, a pewność dowodu (kod / runtime / pomiar operatora)
+podaje w nawiasie. Oznaczenia „D-NN” mają trzy znaczenia zależnie od pliku:
+kategorie danych w `02`, deklaracje stron prawnych w `A1`/`09`, decyzje
+etapu E-00 w `07` — w odwołaniach między plikami podajemy plik (np.
+„`07` D-16”).
+
 Wzmianki o „scratchpadzie” w plikach etapów dotyczą roboczych plików sesji
 agentów (skrypty kontrolne, listy pomocnicze), których nie przenoszono do
 repo; same recenzje są w `recenzje/`.
@@ -41,7 +49,8 @@ repo; same recenzje są w `recenzje/`.
 1. **Usuwanie danych obiecuje więcej, niż robi kod.** Usunięcie konta przez
    użytkownika ma poprawny rdzeń (14 dni, atomowe przejęcie), ale zostawia
    czat, dane osób bez konta, pliki i dane u dostawców. Ścieżka operatora
-   przerywa się na wyzwalaczu dziennika audytu, a „Usuń organizację” ustawia
+   przerywa się na wyzwalaczu dziennika audytu (potwierdzone na schemacie
+   syntetycznym; wyzwalacze produkcji — odczyt `07` D-06), a „Usuń organizację” ustawia
    tylko znacznik, którego nikt nie wykonuje — firma jest dalej
    przetwarzana (`05` WYM-24, WYM-45; `A2` PRA-02–PRA-04).
 2. **Retencja prawie nie istnieje.** Wykonawcę ma tylko kilka reguł
@@ -55,11 +64,17 @@ repo; same recenzje są w `recenzje/`.
    lokalizacje (Frankfurt, Vercel), dostawców, SCC, szyfrowanie, „audyt
    dostępu” i „brak cookies analitycznych” (`05` WYM-18, WYM-19).
 4. **Dane trafiają do odbiorców bez potrzeby lub bez wyboru.** Test runtime
-   wykazał m.in. sesje Sentry i fonty Google przed decyzją oraz przekazywanie
-   nagłówków przeglądarki z ciasteczkami przez proxy telemetrii. Panel
-   PostHog ma włączone nagrania wbrew kodowi (2 nagrania o nieustalonym
-   źródle). Kategoryzacja AI wysyła dane sprzedawców do modelu w USA bez
-   przełącznika (`A4`, `04` PRC-06, PRC-09; `05` WYM-36, WYM-34, WYM-62).
+   wykazał sesje Sentry i fonty Google przed decyzją oraz to, że ciasteczko
+   pierwszej strony dociera do proxy telemetrii `/ingest` i `/monitoring`.
+   Z kodu (`next.config.ts:140-155,189`; Next.js `proxy-request.js:29-41`)
+   wynika, że proxy przekazuje dostawcom wszystkie nagłówki, w tym `Cookie`;
+   wyjścia na łączu nie obserwowano (blokada w teście), a dla zalogowanego
+   użytkownika dotyczy to ciasteczek sesji — wniosek z kodu (`A4` RUN-08,
+   stan „częściowe”). Według odczytu panelu przez operatora [PR225
+   @a72b567] projekt PostHog ma włączone nagrania wbrew kodowi i zarejestrował
+   2 nagrania o nieustalonym źródle. Kategoryzacja AI wysyła dane
+   sprzedawców poza EOG (USA lub „global” — geografia nieodczytana) bez
+   przełącznika (`04` PRC-06, PRC-09; `05` WYM-36, WYM-34, WYM-62).
 5. **Baner zgody działa, ale bez wycofania.** Test wykazał zero żądań
    PostHog przed wyborem i po odmowie oraz brak ciasteczek na stronach
    publicznych przed wyborem (`A4` RUN-01, RUN-02); w kodzie przycisk
@@ -70,11 +85,16 @@ repo; same recenzje są w `recenzje/`.
    powierzenia, listy dalszych procesorów, rejestrów z art. 30 i procedur
    (DSAR, naruszenia) — w repo nie znaleziono tych dokumentów, co nie
    przesądza, że nie istnieją poza repo (`05` WYM-41, WYM-43, obszar G).
-7. **Produkcja działa z `KSEF_ENV=test`** (deklaracja z PR #225), a kod
-   przy pustej zmiennej wybiera środowisko testowe — pierwsze prawdziwe
-   faktury trafiłyby do testowego KSeF (`04` PRC-17).
+7. **Produkcja działa z jawnym `KSEF_ENV=test`** [PR225]. Główna ścieżka
+   wysyłki jest fail-closed przy pustej lub błędnej wartości
+   (`lib/ksef/claim-environment.ts:6-21`, `lib/ksef/submit-invoice-full.ts:86`),
+   ale nic nie blokuje jawnego `test` na produkcji — pierwsze prawdziwe
+   faktury trafiłyby do testowego KSeF (`04` PRC-17; `?? 'test'`
+   w `submit-invoice.ts:628` i `ksef-submit-enqueue.ts:127` to decyzje
+   poboczne).
 8. **SOC 2: gotowość niska, mocny projekt kontroli technicznych.** RLS
-   z testami w CI, szyfrowanie poświadczeń KSeF, wymagane kontrole PR;
+   z testami w CI (job RLS nie jest wymaganą kontrolą scalenia),
+   szyfrowanie poświadczeń KSeF, wymagane kontrole PR;
    luki głównie organizacyjne (polityki, przeglądy dostępów, kopie poza
    hostem, próby odtworzenia, dyżur). Zalecany pierwszy zakres badania:
    Security + Availability, po zamknięciu kopii i prób odtworzenia
@@ -93,19 +113,19 @@ Pełna lista z identyfikatorami: `05` § 12.2. Skrót (kolejność wg skutku):
 |---|---|---|
 | 1 | Niekompletne usunięcie konta; ścieżka operatora przerywa się po częściowych skutkach | WYM-24, WYM-73 |
 | 2 | „Usuń organizację” bez wykonawcy; dalsze przetwarzanie „usuniętej” firmy | WYM-45 |
-| 3 | Ciasteczka sesji przekazywane dostawcom telemetrii przez proxy | WYM-36, WYM-09 |
+| 3 | Ciasteczka sesji przekazywane dostawcom telemetrii przez proxy (kod; wejście potwierdzone w teście) | WYM-36, WYM-09 |
 | 4 | Brak pełnej kopii baz i plików poza hostem; jedna próba odtworzenia | WYM-51 |
 | 5 | Polityka bez administratora; nieprawdziwe deklaracje publiczne | WYM-18, WYM-19 |
 | 6 | Brak okresów i wykonawców retencji dla większości danych | WYM-08, WYM-71 |
 | 7 | Odtworzenie z kopii przywraca dane usunięte | WYM-72 |
 | 8 | Brak umowy powierzenia i listy dalszych procesorów | WYM-41, WYM-43 |
 | 9 | Brak mapy cel → podstawa, LIA i screeningu DPIA | WYM-11, WYM-12, WYM-55 |
-| 10 | `KSEF_ENV=test` na produkcji | WYM-37 |
-| 11 | Automatyczne przekazywanie danych sprzedawców do modelu w USA | WYM-62, WYM-42, WYM-60 |
+| 10 | Jawne `KSEF_ENV=test` na produkcji bez strażnika [PR225] | WYM-37 |
+| 11 | Automatyczne przekazywanie danych sprzedawców do modelu poza EOG (geografia nieodczytana) | WYM-62, WYM-42, WYM-60 |
 | 12 | Odczyty operatorów bez śladu, brak przeglądów dostępów, agenci AI z dostępem do produkcji | WYM-35, WYM-47 |
-| 13 | PostHog: nagrania włączone w panelu wbrew kodowi | WYM-34 |
+| 13 | PostHog: nagrania włączone w panelu wbrew kodowi [PR225 @a72b567, odczyt operatora] | WYM-34 |
 | 14 | Retencja faktur „10 lat” bez podstawy; usuwanie zablokuje wyzwalacz po skasowaniu plików | WYM-68, WYM-73 |
-| 15 | Osoby bez konta bez procedury, wyszukiwania i rejestru żądań | WYM-17, WYM-21, WYM-75 |
+| 15 | Osoby bez konta bez procedury, wyszukiwania i rejestru żądań; poczta pomocy według runbooka ma trafiać do prywatnych skrzynek (niezweryfikowane) | WYM-17, WYM-21, WYM-75 |
 
 ## 4. Zalecana kolejność zmian
 
@@ -115,7 +135,7 @@ przed pierwszym prawdziwym klientem).
 1. **Równolegle od razu — decyzje i dane od właściciela (E-00):** podmiot
    prawny administratora, `KSEF_ENV` przed pierwszym klientem, odczyt
    i korekta panelu PostHog (źródło 2 nagrań), ocena, czy przekazywanie
-   ciasteczek sesji dostawcom telemetrii jest naruszeniem (D-16), umowy
+   ciasteczek sesji dostawcom telemetrii jest naruszeniem (`07` D-16), umowy
    i panele dostawców, decyzje retencji (`08` — niewiadome P1).
 2. **Obietnice bez pokrycia (F1):** wycofanie nieprawdziwych deklaracji
    publicznych (E-01), wyłączenie „usuniętej” organizacji z przetwarzania
@@ -123,7 +143,7 @@ przed pierwszym prawdziwym klientem).
    wykonania (E-03, E-04).
 3. **Dane bez podstawy (F2):** proxy telemetrii bez nagłówków przeglądarki
    (E-05), Sentry i fonty bez wysyłki przed wyborem (E-06, E-07), service
-   worker tylko w panelu (E-08), KSeF bez domyślnego `test` (E-10),
+   worker tylko w panelu (E-08), strażnik środowiska KSeF na produkcji (E-10),
    minimalizacja promptów AI i informacja o AI (E-11, E-12).
 4. **Tory równoległe:** kopie poza hostem i próba odtworzenia (E-53, praca
    z PR #225), testy RLS jako wymagana kontrola scalenia (E-70), ślad

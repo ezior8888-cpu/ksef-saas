@@ -29,12 +29,14 @@ Legenda stanu bramki: **przeszła** — werdykt recenzenta „zatwierdzony” al
 „zatwierdzony z uwagami” po naniesieniu uwag; **przeszła po poprawkach** —
 werdykt „wymaga poprawek”, wszystkie uwagi naniesione albo odrzucone
 z uzasadnieniem, bez uwag blokujących; ponowna recenzja całości nie była
-wymagana przez recenzenta.
+wymagana przez recenzenta. **Kontrole (nieudane)**: liczba kontroli punktowych
+recenzenta; „nieudane” = częściowe + obalone + nieaktualne (definicja
+ujednolicona po R6b-U13).
 
 | Etap | Plik | Autor | Recenzent | Werdykt | Kontrole (nieudane) | Uwagi (istotne / drobne) | Naniesione / odrzucone | Kto naniósł | Bramka |
 |---|---|---|---|---|---|---|---|---|---|
-| Rozpoznanie | `01` | koordynator | R1 | wymaga poprawek | 20 (6) | 10 (6 / 4) | 10 / 0 | koordynator (tekst recenzenta) | przeszła po poprawkach |
-| Inwentarz, przepływy, role | `02` | agent INWENTARZ | R1 | wymaga poprawek | 25 (2) | 14 (6 / 8) | 14 / 0 | koordynator | przeszła po poprawkach |
+| Rozpoznanie | `01` | koordynator | R1 | wymaga poprawek | 20 (8) | 10 (6 / 4) | 10 / 0 | koordynator (tekst recenzenta) | przeszła po poprawkach |
+| Inwentarz, przepływy, role | `02` | agent INWENTARZ | R1 | wymaga poprawek | 25 (3) | 14 (6 / 8) | 14 / 0 — w tym R1-U13, U15, U20, U24 naniesione przez koordynatora niepełnie i uzupełnione po R6a-U01 | koordynator; uzupełnienie: redaktor R6 | przeszła po poprawkach (po R6) |
 | Research źródeł, katalog WYM | `03` | agent ŹRÓDŁA | R2 (runda 1 i 2) | z uwagami → z uwagami | 21 (2) → 22 (1) | 11 (1 / 10) → 6 (0 / 6) | 17 / 0 | koordynator | przeszła |
 | Procesorzy i lokalizacje | `04` | agent PROCESORZY | R2 (runda 1 i 2) | wymaga poprawek → z uwagami | 27 (5) → 28 (3) | 9 (3 / 6) → 10 (1 / 9) | 19 / 0 | koordynator | przeszła |
 | Minimalizacja, zgody, cookies (kod) | `A1` | agent MECHANIZMY-A | R3 | z uwagami | 27 (3) | 11 (wg R3) | 11 / 0 | redaktor R3 | przeszła |
@@ -87,5 +89,6 @@ W toku — uzupełniane po zakończeniu kontroli.
 | Limit użycia API przerwał agentów 7.10 i dwukrotnie 10.10, a także 11.10 | Przerwani agenci startowali od nowa (z dostępem do własnych szkiców); część pracy powtórzono | Od 10.10 agenci po dwóch naraz, zapisy przyrostowe, commity po każdej fazie |
 | Recenzent R2 uruchomił się ponownie po naniesieniu rundy 1 | Powstała runda 2: kontrola wierności poprawek koordynatora i 16 nowych uwag | Runda 1 zachowana (`recenzje/R2-runda1.md`); obie rundy naniesione |
 | Recenzje grupowe zamiast osobnych dla każdego pliku (R1–R4) | Recenzent oceniał 2–3 pliki naraz | Werdykt i kontrole punktowe osobno dla każdego pliku |
-| Koordynator naniósł poprawki R1 i R2 | Koordynator jest autorem `01` | Naniesiony tekst recenzenta bez własnych wniosków; wierność sprawdziła runda 2 R2 dla `03`/`04`, a dla `01`/`02` — krytycy R6 |
+| Koordynator naniósł poprawki R1 i R2 | Koordynator jest autorem `01` | Naniesiony tekst recenzenta bez własnych wniosków; wierność sprawdziła runda 2 R2 dla `03`/`04`, a dla `01`/`02` — krytycy R6. **Wynik:** R6a-U01 wykazał, że w `02` uwagi R1-U13, U15, U20 i U24 naniesiono tylko częściowo (stany w sekcjach szczegółowych, klasa INW-16, mapy § 5.1 i § 5.7); uzupełnił je redaktor R6. R6b sprawdził wyrywkowo R1-U01, U02, U09, U13, U14, U20, U22 — naniesione |
+| Wierność poprawek redaktorów R3–R5b nie była ponownie recenzowana | Redaktor mógł nanieść poprawkę w jednym pliku bez przeniesienia jej do plików zależnych | Sprawdzone tylko wyrywkowo przez R6b; R6b-U01 (teza o `KSEF_ENV` poprawiona w `04`, ale nie w `05`/`06`/`07`/`README`) i R6a-U05 pokazały takie przypadki — poprawione po R6; końcowy weryfikator R6 sprawdził naniesienie wszystkich uwag R6 (§ 4) |
 | Właściciel odrzucił WebSearch; egress do źródeł prawa i AICPA zablokowany | Źródła pierwotne nieodczytane | Wszystkie takie pozycje oznaczone [NZ]; lista do potwierdzenia w `08` |
