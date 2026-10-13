@@ -37,7 +37,7 @@ const LABELS = [
   '(e) failed/rejected z kodem OFFLINE_',
   '(f) inny ślad Offline24',
   '(g) wpisy kolejki zamknięte',
-  '(h) ostatnie przebiegi crona',
+  '(h) przebiegi crona',
 ];
 
 let harness: ScriptHarness;
@@ -95,6 +95,8 @@ describe('kontrola-faktur-ksef.sh — sekcja 4a: zaległości Offline24', () => 
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     // Pusta baza (atrapa bez wierszy): każda etykieta bez wierszy wyniku.
     for (const label of LABELS) expect(labelRows(out!, label)).toEqual([]);
+    // KSEF_ENV workera na początku sekcji (cron bierze tylko wpisy z tym środowiskiem); atrapa: brak kontenerów.
+    expect(labelRows(out!, 'KSEF_ENV workera')).toEqual(['  (brak kontenera workera)']);
     expect(run.stdout).toContain('Koniec. Skrypt niczego nie zmienił.');
   });
 
@@ -123,10 +125,14 @@ describe('kontrola-faktur-ksef.sh — sekcja 4a: zaległości Offline24', () => 
     const lateral = declared.filter((q) => q.includes('LEFT JOIN LATERAL'));
     expect(lateral.length).toBeGreaterThanOrEqual(4);
     for (const q of lateral) expect(q).toContain('ORDER BY x.created_at DESC, x.id LIMIT 1');
-    // Lista robocza ma limit, przebiegi crona też.
+    // Lista robocza ma limit i NIP firmy (kontekst wyszukiwania w KSeF).
     expect(declared[3]).toMatch(/LIMIT 50$/);
-    expect(declared[7]).toContain("name='cron.process-offline-queue'");
-    expect(declared[7]).toMatch(/LIMIT 3$/);
+    expect(declared[3]).toContain('JOIN tenants t ON t.id = i.tenant_id');
+    // Przebiegi crona z inngest_run_log (wynik i błąd handlera); pgboss.job ma zawsze completed bez wyniku (run-job.ts).
+    expect(declared[7]).toContain('FROM inngest_run_log');
+    expect(declared[7]).toContain("event_name='cron.process-offline-queue'");
+    expect(declared[7]).not.toContain('pgboss');
+    expect(declared[7]).toMatch(/LIMIT 5$/);
   });
 
   it('brak połączenia z db-1: sekcja mówi „zapytanie nieudane”, skrypt kończy się normalnie', () => {
