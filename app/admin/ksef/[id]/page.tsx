@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 function when(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('pl-PL', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
 }
 
@@ -107,7 +107,12 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-semibold text-lg">Próby wysyłki (dziennik prób)</h2>
+        <h2 className="font-semibold text-lg">
+          Próby wysyłki (dziennik prób)
+          {attempts.total !== null && attempts.total > attempts.rows.length
+            ? ` — ${attempts.rows.length} najnowszych z ${attempts.total}`
+            : ''}
+        </h2>
         <p className="text-xs text-muted-foreground">
           Każde wykonanie joba wysyłki i każda odmowa przed kolejką, także błędy sprzed wysłania pliku do KSeF.
           Dziennik działa od migracji 00150 — wcześniejsze próby są tylko w historii niżej i w audycie.

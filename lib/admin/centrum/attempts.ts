@@ -21,6 +21,7 @@ import {
   WATCHED_CRONS,
   type AttemptRow,
   type AttemptStatus,
+  type CronRun,
   type SendErrorFilters,
 } from './send-errors';
 
@@ -58,7 +59,7 @@ interface DbAttempt {
   started_at: string;
   finished_at: string | null;
   tenants?: Embed<{ name: string | null }>;
-  invoices?: Embed<{ internal_number: string | null; ksef_status: string | null }>;
+  invoices?: Embed<{ internal_number: string | null; ksef_status: string | null; submitted_to_ksef_at?: string | null }>;
 }
 
 function toAttempt(row: DbAttempt): AttemptRow {
@@ -71,6 +72,7 @@ function toAttempt(row: DbAttempt): AttemptRow {
     invoiceId: row.invoice_id,
     internalNumber: invoice?.internal_number ?? null,
     invoiceStatus: invoice?.ksef_status ?? null,
+    invoiceSubmittedAt: invoice?.submitted_to_ksef_at ?? null,
     sendAttemptId: row.send_attempt_id,
     jobId: row.job_id,
     execution: row.execution ?? 0,
@@ -88,6 +90,17 @@ function toAttempt(row: DbAttempt): AttemptRow {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
   };
+}
+
+/**
+ * Zapytanie `head` (sam licznik) o brakującą tabelę: PostgREST odpowiada 404
+ * bez treści, więc supabase-js zwraca `error: null` i `count: null` — to nie
+ * jest zero. Zamieniamy na błąd, żeby licznik pokazał „nie wiadomo”.
+ */
+function missingCount(status: number): { code: string; message: string } {
+  return status === 404
+    ? { code: 'PGRST205', message: 'brak tabeli' }
+    : { code: 'NO_COUNT', message: `brak licznika w odpowiedzi (HTTP ${status})` };
 }
 
 /**
@@ -150,6 +163,8 @@ export interface StatusCounts {
 
 export interface UpoFailure {
   invoiceId: string;
+  /** `failed` — pobranie odrzucone; `pending` — bez wyniku ponad godzinę (zapis po pobraniu padł, job wyczerpał próby). */
+  status: string;
   internalNumber: string | null;
   tenantName: string | null;
   attempts: number;
@@ -166,9 +181,9 @@ export interface SendErrorsView {
   matching: number | null;
   truncated: boolean;
   counts: StatusCounts;
-  /** Najstarszy wiersz dziennika — wcześniej tylko ostatni błąd faktury. */
-  ledgerSince: string | null;
-  crons: Map<string, string | null>;
+  /** Najstarszy wiersz dziennika; `null` — dziennik pusty, `undefined` — odczyt nieudany. */
+  ledgerSince: string | null | undefined;
+  crons: Map<string, CronRun | null>;
   /** Faktury wychodzące z błędem TERAZ (`failed`/`rejected`), także sprzed dziennika. */
   invoicesWithErrorNow: number | null;
   upoFailures: UpoFailure[];
@@ -187,21 +202,21 @@ async function countStatus(
   let query = client.from('ksef_send_attempts').select('id', { count: 'exact', head: true });
   query = applyFilters(query, filters, from);
   query = status === 'succeeded' ? query.eq('status', 'succeeded') : applyStatus(query, status, now);
-  const { count, error } = await query;
-  if (error) {
-    problems.push(describeProblem(`Licznik „${status}”`, error));
+  const { count, error, status: http } = await query;
+  if (error || count === null) {
+    problems.push(describeProblem(`Licznik „${status}”`, error ?? missingCount(http)));
     return null;
   }
-  return count ?? 0;
+  return count;
 }
 
-async function lastCronRuns(client: Client, problems: string[]): Promise<Map<string, string | null>> {
-  const out = new Map<string, string | null>();
+async function lastCronRuns(client: Client, problems: string[]): Promise<Map<string, CronRun | null>> {
+  const out = new Map<string, CronRun | null>();
   await Promise.all(
     WATCHED_CRONS.map(async (cron) => {
       const { data, error } = await client
         .from('inngest_run_log')
-        .select('created_at')
+        .select('created_at, status')
         .eq('event_name', cron.queue)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -211,7 +226,8 @@ async function lastCronRuns(client: Client, problems: string[]): Promise<Map<str
         out.set(cron.queue, null);
         return;
       }
-      out.set(cron.queue, (data as { created_at: string } | null)?.created_at ?? null);
+      const run = data as { created_at: string; status: string } | null;
+      out.set(cron.queue, run ? { at: run.created_at, status: run.status } : null);
     }),
   );
   return out;
@@ -226,7 +242,7 @@ export async function loadSendErrorsView(filters: SendErrorFilters, now: Date = 
   const listQuery = async (): Promise<{ rows: AttemptRow[]; matching: number | null; truncated: boolean }> => {
     let query = client
       .from('ksef_send_attempts')
-      .select(`${ATTEMPT_COLUMNS}, tenants(name), invoices(internal_number, ksef_status)`, { count: 'exact' });
+      .select(`${ATTEMPT_COLUMNS}, tenants(name), invoices(internal_number, ksef_status, submitted_to_ksef_at)`, { count: 'exact' });
     query = applyStatus(applyFilters(query, filters, from), filters.status, now);
     const { data, error, count } = await query.order('started_at', { ascending: false }).limit(ATTEMPTS_SCAN_LIMIT);
     if (error) {
@@ -239,7 +255,7 @@ export async function loadSendErrorsView(filters: SendErrorFilters, now: Date = 
     return { rows, matching: count, truncated };
   };
 
-  const ledgerSince = async (): Promise<string | null> => {
+  const ledgerSince = async (): Promise<string | null | undefined> => {
     const { data, error } = await client
       .from('ksef_send_attempts')
       .select('started_at')
@@ -248,29 +264,32 @@ export async function loadSendErrorsView(filters: SendErrorFilters, now: Date = 
       .maybeSingle();
     if (error) {
       problems.push(describeProblem('Początek dziennika', error));
-      return null;
+      return undefined;
     }
     return (data as { started_at: string } | null)?.started_at ?? null;
   };
 
   const invoicesWithError = async (): Promise<number | null> => {
-    const { count, error } = await client
+    const { count, error, status } = await client
       .from('invoices')
       .select('id', { count: 'exact', head: true })
       .eq('direction', 'outgoing')
       .in('ksef_status', ['failed', 'rejected']);
-    if (error) {
-      problems.push(`Faktury z błędem: ${error.message}`);
+    if (error || count === null) {
+      problems.push(`Faktury z błędem: ${error?.message ?? missingCount(status).message}`);
       return null;
     }
-    return count ?? 0;
+    return count;
   };
 
   const upo = async (): Promise<{ list: UpoFailure[]; total: number | null }> => {
+    // `pending` bez wyniku ponad godzinę też jest porażką: łańcuch ponowień joba UPO kończy się
+    // dużo wcześniej, a błąd po pobraniu (magazyn, PDF, zapis) nie ustawia `failed` (brak onExhausted).
+    const stalePending = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
     const { data, error, count } = await client
       .from('upo_receipts')
-      .select('invoice_id, download_attempts, last_error, created_at, tenants(name), invoices(internal_number)', { count: 'exact' })
-      .eq('status', 'failed')
+      .select('invoice_id, status, download_attempts, last_error, created_at, tenants(name), invoices(internal_number)', { count: 'exact' })
+      .or(`status.eq.failed,and(status.eq.pending,created_at.lt."${stalePending}")`)
       .order('created_at', { ascending: false })
       .limit(20);
     if (error) {
@@ -278,11 +297,12 @@ export async function loadSendErrorsView(filters: SendErrorFilters, now: Date = 
       return { list: [], total: null };
     }
     type Row = {
-      invoice_id: string; download_attempts: number | null; last_error: string | null; created_at: string;
+      invoice_id: string; status: string; download_attempts: number | null; last_error: string | null; created_at: string;
       tenants?: Embed<{ name: string | null }>; invoices?: Embed<{ internal_number: string | null }>;
     };
     const list = ((data ?? []) as Row[]).map((r) => ({
       invoiceId: r.invoice_id,
+      status: r.status,
       internalNumber: first(r.invoices ?? null)?.internal_number ?? null,
       tenantName: first(r.tenants ?? null)?.name ?? null,
       attempts: r.download_attempts ?? 0,
@@ -323,18 +343,18 @@ export async function loadSendErrorsView(filters: SendErrorFilters, now: Date = 
   };
 }
 
-/** Próby jednej faktury do karty `/admin/ksef/[id]` (od najnowszej). */
+/** Próby jednej faktury do karty `/admin/ksef/[id]` (od najnowszej); `total` — wszystkie, gdy lista obcięta. */
 export async function listInvoiceAttempts(
   invoiceId: string,
   limit = 50,
-): Promise<{ rows: AttemptRow[]; problem: string | null }> {
+): Promise<{ rows: AttemptRow[]; total: number | null; problem: string | null }> {
   await requireAdmin();
-  const { data, error } = await createAdminClient()
+  const { data, error, count } = await createAdminClient()
     .from('ksef_send_attempts')
-    .select(ATTEMPT_COLUMNS)
+    .select(ATTEMPT_COLUMNS, { count: 'exact' })
     .eq('invoice_id', invoiceId)
     .order('started_at', { ascending: false })
     .limit(limit);
-  if (error) return { rows: [], problem: describeProblem('Dziennik prób', error) };
-  return { rows: ((data ?? []) as DbAttempt[]).map(toAttempt), problem: null };
+  if (error) return { rows: [], total: null, problem: describeProblem('Dziennik prób', error) };
+  return { rows: ((data ?? []) as DbAttempt[]).map(toAttempt), total: count, problem: null };
 }

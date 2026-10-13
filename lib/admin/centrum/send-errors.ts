@@ -103,11 +103,12 @@ export function parseSendErrorFilters(params: Record<string, string | string[] |
   const errorClass = one(params.class);
   const stage = one(params.stage);
   return {
-    period: period && period in ERROR_PERIODS ? (period as ErrorPeriod) : DEFAULT_PERIOD,
+    // `Object.hasOwn`, nie `in` — `?period=toString` nie może przejść jako klucz prototypu.
+    period: period && Object.hasOwn(ERROR_PERIODS, period) ? (period as ErrorPeriod) : DEFAULT_PERIOD,
     status: status && (STATUS_FILTERS as readonly string[]).includes(status) ? (status as StatusFilter) : 'errors',
     code: code && CODE_RE.test(code) ? code : null,
-    errorClass: errorClass && errorClass in CLASS_LABELS ? errorClass : null,
-    stage: stage && STAGE_RE.test(stage) && stage in STAGE_LABELS ? stage : null,
+    errorClass: errorClass && Object.hasOwn(CLASS_LABELS, errorClass) ? errorClass : null,
+    stage: stage && STAGE_RE.test(stage) && Object.hasOwn(STAGE_LABELS, stage) ? stage : null,
   };
 }
 
@@ -123,6 +124,8 @@ export interface AttemptRow {
   internalNumber: string | null;
   /** Bieżący `invoices.ksef_status` — czy błąd został potem odzyskany. */
   invoiceStatus: string | null;
+  /** `invoices.submitted_to_ksef_at` — znacznik przejęcia; stary albo brak przy `sending` = utknęła (I2). */
+  invoiceSubmittedAt: string | null;
   sendAttemptId: string | null;
   jobId: string | null;
   execution: number;
@@ -145,7 +148,7 @@ export interface AttemptRow {
 export function attemptMessage(row: Pick<AttemptRow, 'status' | 'stage' | 'startedAt' | 'finishedAt' | 'errorMessage'>, now: Date): string | null {
   if (row.errorMessage) return row.errorMessage;
   if (effectiveStatus(row, now) === 'interrupted') {
-    return `Wykonanie bez wyniku od ponad ${INTERRUPTED_AFTER_MS / 60_000} min na etapie „${STAGE_LABELS[row.stage] ?? row.stage}” — worker padł albo został zatrzymany (deploy, OOM). Stan faktury rozstrzyga ponowienie albo strażnik cyklu życia.`;
+    return `Brak wyniku w dzienniku od ponad ${INTERRUPTED_AFTER_MS / 60_000} min na etapie „${STAGE_LABELS[row.stage] ?? row.stage}” — worker przerwany (deploy, OOM) albo nie udał się zapis wyniku do dziennika (Sentry: „dziennik prób wysyłki — zapis nieudany”). Bieżący stan faktury — kolumna „teraz”; faktura w „sending” ponad 30 min to „utknęła” (strażnik I2 tylko alarmuje — wtedy operator).`;
   }
   return null;
 }
@@ -167,6 +170,8 @@ export function messageTemplate(message: string | null): string {
   if (!message) return '';
   return message
     .replace(UUID_G, '<uuid>')
+    // Numer KSeF (NIP albo [NIP], data, 12 hex, 2 hex) — duplikaty 440 różnych faktur w jednym incydencie.
+    .replace(/(?:\b\d{10}|\[NIP\])-\d{8}-[0-9A-F]{12}-[0-9A-F]{2}\b/gi, '<ksef>')
     .replace(/\b\d{8}-[A-Z]{2}-[0-9A-F]{10}-[0-9A-F]{10}-[0-9A-F]{2}\b/gi, '<ref>')
     .replace(/\d+/g, '<n>')
     .replace(/(<n>[-./: ]?)+<n>/g, '<n>')
@@ -188,17 +193,28 @@ export function fingerprint(row: AttemptRow, now: Date): string {
 }
 
 /** Bieżący stan faktury po błędzie — skąd wiemy, czy automat ją odzyskał. */
-export type RecoveryState = 'accepted' | 'open' | 'in_progress' | 'draft' | 'unknown';
+export type RecoveryState = 'accepted' | 'open' | 'stuck' | 'in_progress' | 'draft' | 'unknown';
 
-export function recoveryState(invoiceStatus: string | null): RecoveryState {
+/** Warunek I2 strażnika (00148): `sending` bez znacznika przejęcia albo dłużej niż dzierżawa + 15 min. */
+export const STUCK_SENDING_AFTER_MS = 30 * 60 * 1000;
+
+export function recoveryState(
+  invoiceStatus: string | null,
+  submittedAt: string | null = null,
+  now: Date = new Date(),
+): RecoveryState {
   switch (invoiceStatus) {
     case 'accepted':
       return 'accepted';
     case 'failed':
     case 'rejected':
       return 'open';
+    case 'sending': {
+      // Nikt jej nie rozstrzygnie sam: onExhausted padł albo pg-boss wyczerpał retryLimit — operator.
+      const at = submittedAt ? Date.parse(submittedAt) : NaN;
+      return !Number.isFinite(at) || now.getTime() - at > STUCK_SENDING_AFTER_MS ? 'stuck' : 'in_progress';
+    }
     case 'queued':
-    case 'sending':
     case 'offline_queued':
       return 'in_progress';
     case 'draft':
@@ -211,6 +227,7 @@ export function recoveryState(invoiceStatus: string | null): RecoveryState {
 export const RECOVERY_LABELS: Record<RecoveryState, string> = {
   accepted: 'przyjęte',
   open: 'nadal z błędem',
+  stuck: 'utknęła w wysyłce (operator)',
   in_progress: 'w toku',
   draft: 'szkic',
   unknown: 'nieznany stan',
@@ -264,7 +281,7 @@ export function groupIncidents(rows: readonly AttemptRow[], now: Date): SendErro
           tenants: 0,
           firstAt: row.startedAt,
           lastAt: row.startedAt,
-          recovery: { accepted: 0, open: 0, in_progress: 0, draft: 0, unknown: 0 },
+          recovery: { accepted: 0, open: 0, stuck: 0, in_progress: 0, draft: 0, unknown: 0 },
         },
         invoices: new Map(),
         tenants: new Set(),
@@ -279,7 +296,7 @@ export function groupIncidents(rows: readonly AttemptRow[], now: Date): SendErro
       incident.sampleMessage = attemptMessage(row, now);
       incident.sampleInvoiceId = row.invoiceId;
     }
-    group.invoices.set(row.invoiceId, recoveryState(row.invoiceStatus));
+    group.invoices.set(row.invoiceId, recoveryState(row.invoiceStatus, row.invoiceSubmittedAt, now));
     group.tenants.add(row.tenantId);
   }
   const out: SendErrorIncident[] = [];
@@ -303,22 +320,38 @@ export const WATCHED_CRONS = [
   { queue: 'cron.ksef-lifecycle-reconcile', label: 'strażnik cyklu życia', budgetMs: 30 * 60 * 1000 },
 ] as const;
 
+/** Ostatni przebieg crona z `inngest_run_log`: kiedy i z jakim wynikiem. */
+export interface CronRun {
+  at: string;
+  status: string;
+}
+
 export interface CronFreshness {
   queue: string;
   label: string;
   lastAt: string | null;
   ageMs: number | null;
+  /** Brak przebiegu albo przebieg po terminie — worker mógł stanąć. */
   stale: boolean;
+  /** Ostatni przebieg zakończył się błędem — cron działa, ale nie robi swojej pracy. */
+  failing: boolean;
 }
 
 export function cronFreshness(
-  lastRuns: ReadonlyMap<string, string | null>,
+  lastRuns: ReadonlyMap<string, CronRun | null>,
   now: Date,
 ): CronFreshness[] {
   return WATCHED_CRONS.map((cron) => {
-    const lastAt = lastRuns.get(cron.queue) ?? null;
-    const at = lastAt ? Date.parse(lastAt) : NaN;
+    const run = lastRuns.get(cron.queue) ?? null;
+    const at = run ? Date.parse(run.at) : NaN;
     const ageMs = Number.isFinite(at) ? Math.max(0, now.getTime() - at) : null;
-    return { queue: cron.queue, label: cron.label, lastAt, ageMs, stale: ageMs === null || ageMs > cron.budgetMs };
+    return {
+      queue: cron.queue,
+      label: cron.label,
+      lastAt: run?.at ?? null,
+      ageMs,
+      stale: ageMs === null || ageMs > cron.budgetMs,
+      failing: run?.status === 'failed',
+    };
   });
 }

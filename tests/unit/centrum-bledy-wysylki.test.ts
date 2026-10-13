@@ -13,7 +13,9 @@ const db = vi.hoisted(() => ({
   ledgerError: null as { code?: string; message: string } | null,
   /** Wiersze listy i licznik pasujących (PostgREST przycina listę do `max_rows`). */
   listRows: [] as Array<Record<string, unknown>>,
-  listCount: 0,
+  listCount: 0 as number | null,
+  /** Odpowiedź `head` bez licznika (PostgREST 404 bez treści: brak tabeli albo nieprzeładowany schemat). */
+  headWithoutCount: false,
   calls: [] as Array<{ table: string; method: string; args: unknown[] }>,
 }));
 
@@ -22,11 +24,13 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
       const result = () =>
-        table === 'ksef_send_attempts' && db.ledgerError
-          ? { data: null, count: null, error: db.ledgerError }
-          : table === 'ksef_send_attempts'
-            ? { data: db.listRows, count: db.listCount, error: null }
-            : { data: [], count: 0, error: null };
+        table === 'ksef_send_attempts' && db.headWithoutCount
+          ? { data: null, count: null, error: null, status: 404 }
+          : table === 'ksef_send_attempts' && db.ledgerError
+            ? { data: null, count: null, error: db.ledgerError, status: 404 }
+            : table === 'ksef_send_attempts'
+              ? { data: db.listRows, count: db.listCount, error: null, status: 200 }
+              : { data: [], count: 0, error: null, status: 200 };
       const q: Record<string, unknown> = {};
       for (const method of ['select', 'eq', 'gte', 'lt', 'is', 'in', 'or', 'order', 'limit']) {
         q[method] = (...args: unknown[]) => { db.calls.push({ table, method, args }); return q; };
@@ -48,7 +52,9 @@ import {
   INTERRUPTED_AFTER_MS,
   messageTemplate,
   parseSendErrorFilters,
+  recoveryState,
   type AttemptRow,
+  type CronRun,
 } from '@/lib/admin/centrum/send-errors';
 
 const NOW = new Date('2026-10-13T12:00:00.000Z');
@@ -64,6 +70,7 @@ function row(patch: Partial<AttemptRow> = {}): AttemptRow {
     invoiceId: `inv-${seq}`,
     internalNumber: `FV/${seq}`,
     invoiceStatus: 'failed',
+    invoiceSubmittedAt: null,
     sendAttemptId: null,
     jobId: null,
     execution: 0,
@@ -93,6 +100,12 @@ describe('filtry z adresu', () => {
     expect(parseSendErrorFilters({
       period: '1y', status: 'drop', code: 'x),or(1.eq.1', class: 'cokolwiek', stage: 'XML;--',
     })).toEqual({ period: '7d', status: 'errors', code: null, errorClass: null, stage: null });
+  });
+
+  it('klucze prototypu (toString, __proto__, constructor) nie przechodzą jako okres, klasa ani etap', () => {
+    expect(parseSendErrorFilters({ period: 'toString', class: '__proto__', stage: 'constructor' }))
+      .toEqual({ period: '7d', status: 'errors', code: null, errorClass: null, stage: null });
+    expect(parseSendErrorFilters({ period: '__proto__', class: 'hasOwnProperty' }).period).toBe('7d');
   });
 
   it('poprawne wartości przechodzą (pierwsza z powtórzonych)', () => {
@@ -127,6 +140,13 @@ describe('odcisk wzorca', () => {
     expect(messageTemplate(a)).toBe(messageTemplate(b));
   });
 
+  it('numery KSeF różnych faktur (z NIP-em albo zamaskowane) dają jeden szablon — duplikaty 440 w jednym incydencie', () => {
+    const a = 'KSeF ma już fakturę o tym numerze — numer KSeF [NIP]-20250826-0100001AF629-AF';
+    const b = 'KSeF ma już fakturę o tym numerze — numer KSeF 1234567890-20250827-B1C2D3E4F5A6-7F';
+    expect(messageTemplate(a)).toBe(messageTemplate(b));
+    expect(fingerprint(row({ errorMessage: a }), NOW)).toBe(fingerprint(row({ errorMessage: b }), NOW));
+  });
+
   it('inny kod albo etap — inny odcisk', () => {
     expect(fingerprint(row(), NOW)).not.toBe(fingerprint(row({ errorCode: 'KSEF_RATE_LIMIT' }), NOW));
     expect(fingerprint(row(), NOW)).not.toBe(fingerprint(row({ stage: 'claim' }), NOW));
@@ -152,11 +172,22 @@ describe('incydenty', () => {
   });
 });
 
+describe('stan faktury teraz', () => {
+  it('sending bez znacznika albo starsze niż 30 min to „utknęła” (I2) — nie „w toku”', () => {
+    expect(recoveryState('sending', null, NOW)).toBe('stuck');
+    expect(recoveryState('sending', '2026-10-13T11:00:00.000Z', NOW)).toBe('stuck');
+    expect(recoveryState('sending', '2026-10-13T11:50:00.000Z', NOW)).toBe('in_progress');
+    expect(recoveryState('queued', null, NOW)).toBe('in_progress');
+    const [incident] = groupIncidents([row({ invoiceStatus: 'sending', invoiceSubmittedAt: '2026-10-13T10:00:00.000Z' })], NOW);
+    expect(incident!.recovery.stuck).toBe(1);
+  });
+});
+
 describe('świeżość cronów', () => {
   it('brak przebiegu albo przebieg po terminie = nieświeży', () => {
-    const runs = new Map<string, string | null>([
-      ['cron.ops-heartbeat', '2026-10-13T11:59:30.000Z'],
-      ['cron.critical-alerts-monitor', '2026-10-13T11:30:00.000Z'],
+    const runs = new Map<string, CronRun | null>([
+      ['cron.ops-heartbeat', { at: '2026-10-13T11:59:30.000Z', status: 'succeeded' }],
+      ['cron.critical-alerts-monitor', { at: '2026-10-13T11:30:00.000Z', status: 'succeeded' }],
     ]);
     const byQueue = Object.fromEntries(cronFreshness(runs, NOW).map((c) => [c.queue, c.stale]));
     expect(byQueue).toEqual({
@@ -164,6 +195,14 @@ describe('świeżość cronów', () => {
       'cron.critical-alerts-monitor': true,
       'cron.ksef-lifecycle-reconcile': true,
     });
+  });
+
+  it('świeży przebieg zakończony błędem to „failing” — cron żyje, ale nie robi swojej pracy', () => {
+    const runs = new Map<string, CronRun | null>([
+      ['cron.critical-alerts-monitor', { at: '2026-10-13T11:58:00.000Z', status: 'failed' }],
+    ]);
+    const monitor = cronFreshness(runs, NOW).find((c) => c.queue === 'cron.critical-alerts-monitor')!;
+    expect(monitor).toMatchObject({ stale: false, failing: true });
   });
 });
 
@@ -174,6 +213,7 @@ describe('loader', () => {
     db.calls = [];
     db.listRows = [];
     db.listCount = 0;
+    db.headWithoutCount = false;
   });
 
   it('najpierw requireAdmin, potem dane; odmowa operatora nie czyta bazy', async () => {
@@ -189,6 +229,26 @@ describe('loader', () => {
     expect(view.problems.filter((p) => p.includes('00150'))).toHaveLength(1);
     expect(view.counts).toEqual({ succeeded: null, failed: null, refused: null, waiting: null, interrupted: null });
     expect(view.rows).toEqual([]);
+  });
+
+  it('licznik bez wartości (PostgREST 404 bez treści przy head) to „nie wiadomo”, nie zero', async () => {
+    db.headWithoutCount = true;
+    const view = await loadSendErrorsView(parseSendErrorFilters({}), NOW);
+    expect(view.counts).toEqual({ succeeded: null, failed: null, refused: null, waiting: null, interrupted: null });
+    expect(view.problems.filter((p) => p.includes('00150'))).toHaveLength(1);
+  });
+
+  it('błąd odczytu początku dziennika to undefined („nie wiadomo”), pusty dziennik to null', async () => {
+    db.ledgerError = { code: 'PGRST205', message: 'brak' };
+    expect((await loadSendErrorsView(parseSendErrorFilters({}), NOW)).ledgerSince).toBeUndefined();
+    db.ledgerError = null;
+    expect((await loadSendErrorsView(parseSendErrorFilters({}), NOW)).ledgerSince).toBeNull();
+  });
+
+  it('UPO: failed oraz pending bez wyniku ponad godzinę', async () => {
+    await loadSendErrorsView(parseSendErrorFilters({}), NOW);
+    const upoOr = db.calls.find((c) => c.table === 'upo_receipts' && c.method === 'or');
+    expect(String(upoOr?.args[0])).toBe('status.eq.failed,and(status.eq.pending,created_at.lt."2026-10-13T11:00:00.000Z")');
   });
 
   it('obcięcie wykryte po liczniku, nie po długości listy (PostgREST przycina do max_rows)', async () => {

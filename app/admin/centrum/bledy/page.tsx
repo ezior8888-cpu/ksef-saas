@@ -101,6 +101,9 @@ export default async function AdminSendErrorsPage(props: {
   const incidents = groupIncidents(view.rows, now);
   const crons = cronFreshness(view.crons, now);
   const staleCrons = crons.filter((c) => c.stale);
+  const failingCrons = crons.filter((c) => c.failing && !c.stale);
+  const rowsTotal = view.matching ?? view.rows.length;
+  const rowsShown = Math.min(ROWS_SHOWN, view.rows.length);
   // Filtr kodu, klasy albo etapu wycina udane wykonania (nie mają kodu, kończą na „po przyjęciu”) —
   // licznik sukcesów i udział błędów nie miałyby wtedy sensu (zawsze 0 i 100 %).
   const narrowed = Boolean(filters.code || filters.errorClass || filters.stage);
@@ -137,7 +140,7 @@ export default async function AdminSendErrorsPage(props: {
 
       <section className="space-y-2">
         <h2 className="font-semibold text-lg flex items-center gap-2">
-          {staleCrons.length > 0 ? (
+          {staleCrons.length > 0 || failingCrons.length > 0 ? (
             <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden />
           ) : (
             <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden />
@@ -150,11 +153,11 @@ export default async function AdminSendErrorsPage(props: {
               key={c.queue}
               className={cn(
                 'rounded-xl border px-3 py-1.5',
-                c.stale ? 'border-amber-500/50 bg-amber-500/10' : 'border-glass-border bg-foreground/3',
+                c.stale || c.failing ? 'border-amber-500/50 bg-amber-500/10' : 'border-glass-border bg-foreground/3',
               )}
               title={c.queue}
             >
-              {c.label}: {ago(c.ageMs)}
+              {c.label}: {c.failing ? `ostatni przebieg z błędem ${ago(c.ageMs)}` : ago(c.ageMs)}
             </li>
           ))}
         </ul>
@@ -163,12 +166,21 @@ export default async function AdminSendErrorsPage(props: {
             Część cronów nie przebiegła w terminie — worker mógł stanąć. Pusta lista błędów nie znaczy wtedy, że wysyłka działa.
           </p>
         )}
+        {failingCrons.length > 0 && (
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            Ostatni przebieg {failingCrons.map((c) => `„${c.label}”`).join(', ')} zakończył się błędem — cron działa, ale nie wykonuje
+            swojej pracy (szczegóły: <Link href="/admin/system" className="underline">System</Link>, Sentry).
+          </p>
+        )}
         <p className="text-xs text-muted-foreground">
-          {view.ledgerSince
-            ? <>Dziennik prób od {when(view.ledgerSince)}. </>
-            : <>Dziennik prób jest pusty. </>}
-          Wcześniejsze błędy znamy tylko jako ostatni błąd faktury
-          {view.invoicesWithErrorNow !== null && <> — teraz {view.invoicesWithErrorNow} faktur wychodzących ze statusem nieudana/odrzucona</>}
+          {view.ledgerSince === undefined
+            ? <>Początek dziennika prób nieznany — odczyt nieudany (wyżej). </>
+            : view.ledgerSince
+              ? <>Dziennik prób od {when(view.ledgerSince)}. </>
+              : <>Dziennik prób jest pusty. </>}
+          Wcześniejsze błędy znamy tylko jako ostatni błąd faktury.
+          {' '}Faktury wychodzące z błędem teraz (wszystkie, także z dziennika):{' '}
+          {view.invoicesWithErrorNow === null ? 'nie wiadomo' : view.invoicesWithErrorNow}
           {' '}(<Link href="/admin/ksef" className="underline">lista w cyklu życia</Link>).
         </p>
       </section>
@@ -299,8 +311,17 @@ export default async function AdminSendErrorsPage(props: {
 
       <section className="space-y-3">
         <h2 className="font-semibold text-lg">
-          Próby ({view.rows.length > ROWS_SHOWN ? `${ROWS_SHOWN} najnowszych z ${view.rows.length}` : view.rows.length})
+          Próby (
+          {view.rows.length === 0 && view.problems.length > 0
+            ? 'nie wiadomo'
+            : rowsShown < rowsTotal
+              ? `${rowsShown} najnowszych z ${rowsTotal}`
+              : rowsTotal}
+          )
         </h2>
+        {view.rows.length === 0 && view.problems.length > 0 && (
+          <p className="text-sm text-muted-foreground">Brak danych — odczyt nieudany (wyżej).</p>
+        )}
         {view.rows.length > 0 && (
           <div className={TABLE}>
             <table className="w-full text-sm">
@@ -351,7 +372,8 @@ export default async function AdminSendErrorsPage(props: {
           UPO nieudane teraz{view.upoFailuresTotal !== null ? ` (${view.upoFailuresTotal})` : ''}
         </h2>
         <p className="text-xs text-muted-foreground">
-          Po przyjęciu faktury: pobranie potwierdzenia UPO wyczerpało próby. Niezależnie od wybranego okresu.
+          Po przyjęciu faktury: pobranie UPO odrzucone (<code>failed</code>) albo bez wyniku ponad godzinę
+          (<code>pending</code> — np. zapis do magazynu po pobraniu padł). Niezależnie od wybranego okresu.
         </p>
         {view.upoFailures.length === 0 ? (
           <p className="text-sm text-muted-foreground">{view.upoFailuresTotal === null ? 'Nie wiadomo — odczyt nieudany.' : 'Brak.'}</p>
@@ -362,6 +384,7 @@ export default async function AdminSendErrorsPage(props: {
                 <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <th className={TH}>Faktura</th>
                   <th className={TH}>Firma</th>
+                  <th className={TH}>Stan</th>
                   <th className={TH}>Próby</th>
                   <th className={TH}>Ostatni błąd</th>
                   <th className={TH}>Od</th>
@@ -374,6 +397,7 @@ export default async function AdminSendErrorsPage(props: {
                       <Link href={`/admin/ksef/${u.invoiceId}`} className="underline">{u.internalNumber ?? u.invoiceId.slice(0, 8)}</Link>
                     </td>
                     <td className={cn(TD, 'text-xs')}>{u.tenantName ?? '—'}</td>
+                    <td className={cn(TD, 'font-mono text-xs')}>{u.status === 'pending' ? 'pending (bez wyniku)' : u.status}</td>
                     <td className={TD}>{u.attempts}</td>
                     <td className={cn(TD, 'max-w-md break-words text-xs text-muted-foreground')}>{u.lastError ?? '—'}</td>
                     <td className={cn(TD, 'whitespace-nowrap text-xs')}>{when(u.createdAt)}</td>
