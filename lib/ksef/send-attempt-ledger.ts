@@ -34,7 +34,8 @@ import * as Sentry from '@sentry/nextjs';
 import type { JobContext } from '@/lib/jobs/registry';
 import type { JobStep } from '@/lib/jobs/step-shim';
 import { KsefApiError } from '@/lib/ksef/client';
-import { classifySendError } from '@/lib/ksef/send-error-codes';
+import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { classifySendError, sendErrorClassOf, type SendErrorCode } from '@/lib/ksef/send-error-codes';
 import { KsefInvoiceRejectedError } from '@/lib/ksef/submit';
 import { scrubTelemetryText } from '@/lib/observability/scrub';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -360,4 +361,59 @@ export function withSendAttemptLedger<TData, TResult>(
       throw error;
     }
   };
+}
+
+/**
+ * Kod odmowy wysyłki PRZED kolejką (`ksef-submit-enqueue.ts`). Kody z katalogu
+ * `ksef_error_codes`, gdy znaczą to samo (hamulce, certyfikat, KSeF niedostępny),
+ * plus własne odmowy kolejkowania bez odpowiednika w katalogu.
+ */
+export type SendRefusalCode =
+  | SendErrorCode
+  | 'MFA_REQUIRED'
+  | 'PAUSE_UNKNOWN'
+  | 'OFFLINE_QUEUE_ERROR'
+  | 'ENQUEUE_REFUSED'
+  | 'ENQUEUE_ERROR';
+
+/**
+ * Odmowa wysyłki przed kolejką → wiersz `refused` / `enqueue`. Fail-open:
+ * błąd zapisu kończy się ostrzeżeniem, odpowiedź dla klienta się nie zmienia.
+ */
+export async function recordSendRefusal(params: {
+  tenantId: string;
+  invoiceId: string;
+  userId: string | null;
+  code: SendRefusalCode;
+  message: string;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  try {
+    const { error } = await (await createAdminClient()).from('ksef_send_attempts').insert({
+      tenant_id: params.tenantId,
+      invoice_id: params.invoiceId,
+      user_id: uuidOrNull(params.userId),
+      ksef_environment: configuredKsefEnvironment(),
+      status: 'refused' satisfies SendAttemptStatus,
+      stage: 'enqueue' satisfies SendAttemptStage,
+      error_code: params.code,
+      error_class: sendErrorClassOf(params.code),
+      error_message: sendAttemptMessage(params.message),
+      retryable: false,
+      started_at: now,
+      finished_at: now,
+    });
+    if (error) throw new Error(error.message);
+  } catch (e) {
+    console.warn('[ksef.send-attempts] zapis odmowy przed kolejką nieudany', {
+      invoiceId: params.invoiceId,
+      code: params.code,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    Sentry.captureMessage('KSeF: dziennik prób wysyłki — zapis odmowy nieudany', {
+      level: 'warning',
+      tags: { area: 'ksef.send-attempts', op: 'refusal' },
+      extra: { invoiceId: params.invoiceId, code: params.code },
+    });
+  }
 }
