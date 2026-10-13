@@ -42,10 +42,10 @@ wymagana przez recenzenta.
 | Test runtime cookies i sieci | `A4` + `narzedzia/` | agent RUNTIME | R3 | z uwagami | 22 (1) + powtórzony skrót testu | 5 (wg R3) | 5 / 0 | redaktor R3 | przeszła |
 | Dowody, testy, ślady audytowe | `A3` | agent DOWODY | R4 | z uwagami | 32 (5) + powtórzony przebieg 49 plików testów | 15 (wg R4) | 15 / 0 (1 częściowo) | redaktor R4 | przeszła |
 | SOC 2 | `06` | agent SOC2 | R4 | wymaga poprawek | 38 (8) | 19 (wg R4) | 19 / 0 (1 częściowo) | redaktor R4 | przeszła po poprawkach |
-| Analiza luk (macierz) | `05` | agent MACIERZ | R5a | z uwagami | 32 (3, łącznie z `07`) | zob. § 3 | zob. § 3 | redaktor R5a | zob. § 3 |
-| Plan etapów | `07` | agent PLAN | R5a | wymaga poprawek | (łącznie z `05`) | zob. § 3 | zob. § 3 | redaktor R5a (+ R5b dla propozycji E-00) | zob. § 3 |
-| Niewiadome i review prawne | `08` | agent NIEWIADOME | R5b | z uwagami | 42 (7, łącznie z `09`) | zob. § 3 | zob. § 3 | redaktor R5b | zob. § 3 |
-| Materiały robocze | `09` | agent MATERIAŁY | R5b | wymaga poprawek | (łącznie z `08`) | zob. § 3 | zob. § 3 | redaktor R5b | zob. § 3 |
+| Analiza luk (macierz) | `05` | agent MACIERZ | R5a | z uwagami | 32 (3, łącznie z `07`) | zob. § 3 | wszystkie | redaktor R5a | przeszła |
+| Plan etapów | `07` | agent PLAN | R5a | wymaga poprawek | (łącznie z `05`) | zob. § 3 | wszystkie | redaktor R5a (+ R5b dla propozycji E-00) | przeszła po poprawkach |
+| Niewiadome i review prawne | `08` | agent NIEWIADOME | R5b | z uwagami | 42 (7, łącznie z `09`) | zob. § 3 | wszystkie | redaktor R5b | przeszła |
+| Materiały robocze | `09` | agent MATERIAŁY | R5b | wymaga poprawek | (łącznie z `08`) | zob. § 3 | wszystkie | redaktor R5b | przeszła po poprawkach |
 | Podsumowanie i dziennik | `README.md`, `10-REVIEW.md` | koordynator | R6a, R6b | zob. § 4 | zob. § 4 | zob. § 4 | zob. § 4 | koordynator | zob. § 4 |
 
 Liczby uwag w grupach R1–R4 (wszystkie pliki grupy): R1 — 24 (12 istotnych,
@@ -56,8 +56,8 @@ Liczby uwag w grupach R1–R4 (wszystkie pliki grupy): R1 — 24 (12 istotnych,
 
 | Recenzja | Pliki | Werdykt | Kontrole (nieudane) | Uwagi (istotne / drobne) | Naniesione / odrzucone |
 |---|---|---|---|---|---|
-| R5a | `05`, `07` | `05` z uwagami; `07` wymaga poprawek | 32 (3) | 11 (4 / 7) | w toku |
-| R5b | `08`, `09` | `08` z uwagami; `09` wymaga poprawek | 42 (7) | 20 (4 / 16) | w toku |
+| R5a | `05`, `07` | `05` z uwagami; `07` wymaga poprawek | 32 (3) | 11 (4 / 7) | 11 / 0 — redaktor R5a, 13.10.2026 |
+| R5b | `08`, `09` | `08` z uwagami; `09` wymaga poprawek | 42 (7) | 20 (4 / 16) | 20 / 0 — redaktor R5b, 13.10.2026 (U17 trafna częściowo: część miejsc już poprawna) |
 
 Najważniejsze uwagi R5a: niekompletna bramka „przed pierwszym klientem”
 (pominięte wymagania o wysokim ryzyku od pierwszego klienta), dwa ustalenia
@@ -67,6 +67,14 @@ stan WYM-29. Najważniejsze uwagi R5b: wątek współadministrowania z PostHog
 przez `/ingest` pominięty w `08`; w `09` stany spoza pięciu wartości, brak
 pozycji retencji poświadczeń i sesji KSeF, wstępna ocena DPIA przedstawiona
 jak ustalenie.
+
+Skutki poprawek: bramka A w `07` § 8 objęła wszystkie wymagania z ryzykiem
+„wysokie od pierwszego klienta” (47) — każde ma etap albo uzasadnienie;
+pokrycie kart planu: 159/159 ustaleń i 85/85 wymagań (skrypt redaktora);
+nowa decyzja D-16 w E-00 (ocena, czy przekazywanie ciasteczek sesji
+dostawcom telemetrii — RUN-08 — jest naruszeniem); WYM-29 „częściowe”;
+w `09` stany ujednolicone, dodana pozycja retencji RT-KSEF, ocena DPIA
+oznaczona jako wstępna (do review: Q-05, Q-38).
 
 ## 4. Końcowe review kompletności (R6a, R6b)
 

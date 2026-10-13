@@ -32,6 +32,10 @@ pierwotnych był w tej sesji zablokowany. Każda taka pozycja ma oznaczenie
 | `narzedzia/` | powtarzalny test przeglądarki (Playwright, ruch zewnętrzny przerywany) i jego wynik bez wartości ciasteczek | dowód z pkt 5.C |
 | `recenzje/` | pełne recenzje R1–R6 i brief agentów | — |
 
+Wzmianki o „scratchpadzie” w plikach etapów dotyczą roboczych plików sesji
+agentów (skrypty kontrolne, listy pomocnicze), których nie przenoszono do
+repo; same recenzje są w `recenzje/`.
+
 ## 2. Najważniejsze wnioski
 
 1. **Usuwanie danych obiecuje więcej, niż robi kod.** Usunięcie konta przez
@@ -76,9 +80,10 @@ pierwotnych był w tej sesji zablokowany. Każda taka pozycja ma oznaczenie
    Security + Availability, po zamknięciu kopii i prób odtworzenia
    (`06` § 9). Brak certyfikacji; SOC 2 nie potwierdza zgodności z RODO.
 
-Stan 85 wymagań w macierzy: potwierdzone 1, częściowe 43, brak 36,
-niezweryfikowane 4, nie dotyczy 1 (`05` § 12.1; liczby mogą się zmienić
-o pojedyncze pozycje po poprawkach R5a — wiążący jest `05`).
+Stan 85 wymagań w macierzy (82 z katalogu `03` i 3 dodatkowe): potwierdzone 1,
+częściowe 44, brak 36, niezweryfikowane 4, nie dotyczy 0 (`05` § 12.1, po
+poprawkach R5a). Jedyne „potwierdzone” dotyczy braku nieuprawnionych
+deklaracji SOC 2, nie wdrożonej kontroli.
 
 ## 3. Najważniejsze ryzyka
 
@@ -109,8 +114,9 @@ przed pierwszym prawdziwym klientem).
 
 1. **Równolegle od razu — decyzje i dane od właściciela (E-00):** podmiot
    prawny administratora, `KSEF_ENV` przed pierwszym klientem, odczyt
-   i korekta panelu PostHog (źródło 2 nagrań), umowy i panele dostawców,
-   decyzje retencji (`08` — niewiadome P1).
+   i korekta panelu PostHog (źródło 2 nagrań), ocena, czy przekazywanie
+   ciasteczek sesji dostawcom telemetrii jest naruszeniem (D-16), umowy
+   i panele dostawców, decyzje retencji (`08` — niewiadome P1).
 2. **Obietnice bez pokrycia (F1):** wycofanie nieprawdziwych deklaracji
    publicznych (E-01), wyłączenie „usuniętej” organizacji z przetwarzania
    (E-02), wspólna ścieżka usunięcia konta przez operatora i dowód

@@ -691,4 +691,4 @@ Każde pytanie ma odniesienie do ustalenia. Treść przepisów oznaczonych [NZ] 
 
 | Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
 |---|---|---|---|---|---|---|
-| R1 — niezależny agent-recenzent (grupa: `01` + `02`) | 10.10.2026 | wymaga poprawek (bez uwag blokujących; 22 z 25 kontroli punktowych potwierdzone) | 14 uwag do tego pliku (R1-U11 … R1-U24) | wszystkie 14 — naniesione przez koordynatora 11.10.2026, miejsca oznaczone **[R1]** | — | `R1.md` (scratchpad sesji; streszczenie w `10-REVIEW.md`) |
+| R1 — niezależny agent-recenzent (grupa: `01` + `02`) | 10.10.2026 | wymaga poprawek (bez uwag blokujących; 22 z 25 kontroli punktowych potwierdzone) | 14 uwag do tego pliku (R1-U11 … R1-U24) | wszystkie 14 — naniesione przez koordynatora 11.10.2026, miejsca oznaczone **[R1]** | — | `recenzje/R1.md` (streszczenie w `10-REVIEW.md`) |

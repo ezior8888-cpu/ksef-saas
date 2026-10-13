@@ -8,8 +8,8 @@
 | Wersja kodu | `origin/main` @ `3e5e00d` (gałąź robocza zawiera to scalenie; poza `docs/audyt/` brak różnic) |
 | Zakres | 80 etapów (E-00 – E-79) pokrywających 85 wymagań macierzy `05` (WYM-01 – WYM-75, WYM-SOC-1 – WYM-SOC-7, WYM-X-01 – WYM-X-03): decyzje i dane wejściowe właściciela (E-00), zmiany kodu i konfiguracji, migracje, treści prawne (projekt → review prawne → publikacja), etapy organizacyjne i dowody SOC 2; kolejność z uzasadnieniem; bramka przed pierwszym prawdziwym klientem; mapowanie na SOC 2; wypełnienie kolumny „Etap planu” w `05` |
 | Źródła | `00-ZADANIE.md` (pkt 7); `AGENTS.md` („Protokół naprawy błędu”, „Wgrywanie migracji”, „Wdrożenie produkcji”); `05-MACIERZ-WYMAGAN.md` (kolumny „Zmiana”, „Test”, „Zależność”, § 12–13); `09-MATERIALY-ROBOCZE.md` (§ 1–13: szkice rejestrów, DPIA, LIA, TIA, umowy, procedur, retencji, zgody); `01`, `02`, `03` (Q-ZR, N-ZR), `04` (PRC), `A1` (MIN, ZGD), `A2` (PRA, RET, AI), `A3` (DOW, testy T-01 – T-21, pytania P-01 – P-12), `A4` (RUN), `06` (SOC-01 – SOC-36, § 9 ścieżka); recenzje R1–R4 (scratchpad koordynatora); `docs/koordynacja/CLAUDE-DO-CODEXA.md` (rejestr migracji), `docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md` (blok F, bramka wydania); kontrolne odczyty kodu na `3e5e00d` (§ 13) |
-| Ograniczenia | Plan, nie decyzja: kolejność, warianty i wielkości to propozycje (I). Brak dostępu do produkcji, paneli i umów — etapy zależne od tych faktów czekają na E-00. Przepisy i wytyczne z pamięci modelu [NZ] — treść zmian prawnych zależy od końcowego review. Wielkości S/M/L to ocena orientacyjna, nie wycena. Fakty runtime z niescalonego PR #225 oznaczam [PR225] (deklaracja lub pomiar operatora, niezweryfikowane w tej sesji). Plik `08-NIEWIADOME-I-REVIEW-PRAWNE.md` był w chwili pisania w budowie — odwołuję się do niewiadomych po ID z raportów źródłowych. Plan nie przeszedł jeszcze niezależnej recenzji |
-| Stan | gotowy do recenzji; autor nie zatwierdza własnego etapu |
+| Ograniczenia | Plan, nie decyzja: kolejność, warianty i wielkości to propozycje (I). Brak dostępu do produkcji, paneli i umów — etapy zależne od tych faktów czekają na E-00. Przepisy i wytyczne z pamięci modelu [NZ] — treść zmian prawnych zależy od końcowego review. Wielkości S/M/L to ocena orientacyjna, nie wycena. Fakty runtime z niescalonego PR #225 oznaczam [PR225] (deklaracja lub pomiar operatora, niezweryfikowane w tej sesji). Plik `08-NIEWIADOME-I-REVIEW-PRAWNE.md` był w chwili pisania w budowie — odwołuję się do niewiadomych po ID z raportów źródłowych. Niezależna recenzja: R5a (13.10.2026) — „wymaga poprawek” (bez uwag blokujących); uwagi naniesione przez redaktora poprawek 13.10.2026, zob. „Historia recenzji” na końcu **[R5a]** |
+| Stan | po recenzji R5a i naniesieniu jej uwag (R5a-U01 – U11); recenzent nie wymaga ponownej recenzji — wystarcza kontrola koordynatora i ponowienie skryptów pokrycia (§ 10, wykonane 13.10.2026) **[R5a]**; autor nie zatwierdzał własnego etapu |
 
 ## 0. Zasady planu
 
@@ -24,7 +24,7 @@ pyt. n”, „`04` pyt. n”) albo inny etap.
 
 | Pkt protokołu (`AGENTS.md`) | Jak go stosuję w kartach etapów |
 |---|---|
-| 1. Jedna naprawa = jedna gałąź od `origin/main` = jeden PR | etap kodu = jedna naprawa; karta podaje proponowaną gałąź `claude/<eNN>-<ustalenie>-<temat>`. Bez refaktorów „przy okazji”. Etapy organizacyjne i prawne nie mają PR kodu, chyba że kończą się publikacją strony |
+| 1. Jedna naprawa = jedna gałąź od `origin/main` = jeden PR | etap kodu = jedna naprawa; gałąź `claude/<kod-ustalenia>-<temat>` zgodnie z `AGENTS.md`; prefiks `eNN` w kartach (np. `claude/e70-dow15-testy-rls`) to proponowane rozszerzenie (I), dopuszczalne za zgodą koordynatora **[R5a]**. Bez refaktorów „przy okazji”. Etapy organizacyjne i prawne nie mają PR kodu, chyba że kończą się publikacją strony |
 | 2. Najpierw czerwony test na prawdziwej ścieżce | pole „Test czerwony”: plik, asercja, typ (jednostkowy / RLS na bazie / e2e / ręczny dowód) i przewidywany wynik przed zmianą. Wyzwalacze, RPC, uprawnienia i przejścia statusów — `tests/rls-*.test.ts` na lokalnym Supabase (job CI „RLS isolation (lokalny Supabase)”). Gdzie `A3` § 5 zaproponował test, podaję jego ID (T-NN). Test, który przechodzi przed zmianą, nie zamyka etapu |
 | 3. Przyczyna i wszystkie wystąpienia | pole „Zakres” wymienia drugie wystąpienia, które znalazłem (np. dwa zapisy `hard_delete_at`, wiele domyślnych `?? 'test'`); wystąpienia poza zakresem są osobnym etapem, nie cichym pominięciem |
 | 4. Fail-closed musi mieć wyjście | pole „Fail-closed i ponowienie”: komunikat dla klienta z nazwą dokumentu lub obiektu i tym, co ma zrobić, oraz ścieżka operatora (akcja w `/admin`, RPC, runbook) |
@@ -50,10 +50,14 @@ pyt. n”, „`04` pyt. n”) albo inny etap.
 - **`DROP TABLE/COLUMN`, `TRUNCATE`, `DELETE FROM`** — tylko za zgodą
   właściciela; joby usuwające dane (E-44 – E-51) dostają tryb „na sucho”
   (liczniki bez usuwania) jako pierwszy przebieg po wdrożeniu.
-- **Kto wgrywa.** Tylko sesja lokalna z dostępem do `db-1`; sesja w chmurze
+- **Kto wgrywa.** Wgrywa się wyłącznie pliki z `main` (ze scalonego PR) —
+  migracji z nie-scalonej gałęzi nie wgrywa się **[R5a]**. Tylko sesja
+  lokalna z dostępem do `db-1`; sesja w chmurze
   wpisuje do opisu PR „Do wgrania: 00NNN, przed/PO wdrożeniu”. Po wgraniu:
   wpis w `schema_migrations`, `NOTIFY pgrst`, weryfikacja PostgREST,
-  regeneracja `types/database.ts` z produkcji.
+  regeneracja `types/database.ts` z produkcji. Po weryfikacji — stan
+  „wgrana na db-1 DD.MM” w rejestrze `CLAUDE-DO-CODEXA.md` przy
+  najbliższym PR **[R5a]**.
 - **Wdrożenie obu aplikacji.** Kolejność z `AGENTS.md`: migracje „przed”
   → worker (Coolify `id=2`) → aplikacja (`id=1`) → migracje „PO” →
   weryfikacja (`scripts/ops/kontrola-faktur-ksef.sh`, kontenery na nowym
@@ -144,8 +148,9 @@ D-01 podmiot ──► E-59 rejestry/podstawy/LIA/DPIA ──► E-62 umowa powi
 D-03, D-04 dostawcy ─► E-61 rejestr dostawców/TIA ──────┘          └─► E-64 informacja dla osób trzecich
 E-58 wersje i akceptacja ─────────────────────────────► E-62, E-63, E-65 (publikacja)
 E-03 ścieżka operatora ─► E-04 dowód wykonania ─► E-20 pełny zakres ─► E-21 dostawcy ─► E-55
-E-02 wyłączenie firmy ─► E-25 pełny eksport ─► E-50 wykonawca hard_delete_at
-D-05 retencja + E-40 rejestr ─► E-42 … E-47, E-51, E-52 ─► E-63 (okresy w polityce)
+E-02 wyłączenie firmy ─► E-50 wykonawca hard_delete_at ◄── E-25 pełny eksport   [R5a]
+D-05 retencja ─► E-42, E-44 … E-47, E-51, E-52 ─► E-63 (okresy w polityce)        [R5a]
+E-40 rejestr retencji ─► E-44, E-45, E-63 ;  E-50 ścieżka serwisowa ─► E-51 (albo wspólny PR migracji) [R5a]
 E-53 kopie ─► E-54 próba odtworzenia ─► E-55 ponowne usunięcia po odtworzeniu
 E-22 rejestr żądań ─► E-66 procedura DSAR ;  D-15 dyżur ─► E-67 procedura naruszeń
 E-70 RLS wymagany ─► (wszystkie etapy z testem tests/rls-*)
@@ -166,7 +171,7 @@ E-20 (`lib/gdpr/deletion.ts`); E-05 → E-06 (`next.config.ts`,
 
 | Krok | Etapy | Kto | Uzasadnienie |
 |---|---|---|---|
-| 1 | E-00: D-02, D-03 (PostHog), D-06, D-01 | właściciel, operator | rozstrzygają ryzyko „obecne” i odblokowują tor prawny; równolegle z krokami 2–6 |
+| 1 | E-00: D-02, D-03 (PostHog), D-06, D-01, D-16 (ocena RUN-08) **[R5a]** | właściciel, operator | rozstrzygają ryzyko „obecne” i odblokowują tor prawny; równolegle z krokami 2–6 |
 | 2 | E-01 | agent + akceptacja właściciela | największy spadek ekspozycji najmniejszym kosztem (tezy publiczne) |
 | 3 | E-02, E-05 | agent | przetwarzanie „usuniętych” firm i ciasteczka sesji u dostawców — ryzyko obecne W |
 | 4 | E-03 → E-04 | agent | jedyna ścieżka realizacji żądań e-mailowych nie działa |
@@ -239,7 +244,7 @@ i konfiguracja), § 6 (E-58), § 7 (organizacyjne); etapy „czeka” — § 5
 | E-48 | Payloady pg-boss z identyfikatorami; jawna retencja kolejek | F4 | kod | L | czeka | D-12 (wpływ na idempotencję KSeF) | WYM-06, WYM-71 |
 | E-49 | PESEL: jedno miejsce, maskowanie, ochrona | F4 | kod, migracja | L | czeka | D-12 (`02` pyt. 6); E-29 | WYM-X-03 |
 | E-50 | Wykonawca usunięcia organizacji (`hard_delete_at`) | F4 | kod, migracja | L | czeka | Q-ZR-01, `A2` pyt. 2; D-12; E-02, E-25 | WYM-45, WYM-73 |
-| E-51 | Retencja faktur i kosztów | F4 | kod, migracja | L | czeka | Q-ZR-01, Q-ZR-02, `A2` pyt. 1, 10; D-06 | WYM-68, WYM-69, WYM-73 |
+| E-51 | Retencja faktur i kosztów | F4 | kod, migracja | L | czeka | Q-ZR-01, Q-ZR-02, `A2` pyt. 1, 10; D-06; E-50 (ścieżka serwisowa w wyzwalaczu) albo wspólny PR migracji **[R5a]** | WYM-68, WYM-69, WYM-73 |
 | E-52 | Konta nieaktywne po końcu subskrypcji | F4 | kod | M | czeka | D-05 (RT-KONTO), `A2` pyt. 9 | WYM-70 |
 | E-53 | Kopie zaszyfrowane poza hostem; szyfrowanie lokalnych zrzutów | F4 (równolegle) | konfiguracja, skrypty | L | od razu | — (praca w PR #225) | WYM-51, WYM-50 |
 | E-54 | Próba odtworzenia z protokołem | F4 | organizacyjny | M | czeka | E-53 | WYM-51, WYM-SOC-2 |
@@ -305,10 +310,10 @@ z migracją w typie: 12 (kolejne 9 kart dopuszcza migrację addytywną
 | D-02 | **KSeF przed pierwszym klientem**: (a) odczyt licznikowy — czy na produkcji są dane prawdziwych osób i czy coś prawdziwego trafiło do KSeF TEST; (b) potwierdzenie, że do przełączenia (runbook F1 planu „zero zgubionych faktur”) produkcja działa jawnie w trybie pokazowym, bez prawdziwych klientów; (c) planowana data przełączenia | N-PRC-10; `04` PRC-17; `06` SOC-25 | E-10; bramka § 8; wartość ryzyka „obecne” w całej macierzy `05` | właściciel + operator | liczby (bez danych), decyzja z datą |
 | D-03 | **Odczyty paneli dostawców z datą**: PostHog (nagrania, konsola, czasy sieci, heatmapy, odrzucanie IP, retencja, źródło 2 nagrań), Sentry (IP, retencja, członkowie), Resend (region, śledzenie otwarć i kliknięć, retencja, kontakty), Anthropic (organizacja, retencja, region, warunki komercyjne), Stripe, Cloudflare (Email Routing, Turnstile), Slack i Telegram (retencja kanałów) | N-PRC-02, NA1-02, NA1-03, N-A2-09, N-A2-14, N-INW-08 | E-09, E-21, E-60, E-61, E-63; WYM-34 | właściciel (dostęp do kont) | zrzuty ustawień bez identyfikatorów kont, prywatnie; w repo — lista ustawień „tak/nie” z datą |
 | D-04 | **Umowy z dostawcami**: strona umowy, plan, wersja DPA, mechanizm transferu (SCC/DPF), termin powiadomienia o naruszeniu, lista dalszych procesorów i sposób informowania o zmianach | N-PRC-01, N-DOW-05, N-ZR-10, NS-09 | E-61, E-62, E-63 (lista odbiorców), E-60 | właściciel | kopie umów prywatnie; w repo — wersja i data DPA per dostawca |
-| D-05 | **Decyzje retencyjne właściciela** dla 31 pozycji `09` § 10. Część (a) — może zdecydować właściciel (minimalizacja, bez sporu prawnego): RT-ZAPR, RT-PUSH, RT-RUNLOG, RT-CACHE, RT-STRIPE, RT-PGB, RT-LINK, RT-SESJA, RT-EKSP, RT-LOGI, RT-SENTRY, RT-POSTHOG, RT-CZAT (usuwanie z kontem i okres od zamknięcia), RT-MAIL, RT-NEWS, RT-KSIEG, RT-FLO, RT-POCZTA, RT-HIST, RT-DOST (po odczycie D-03). Część (b) — wymaga review prawnego przed wdrożeniem: RT-FAKT, RT-FAKT-FF, RT-KOSZT, RT-KONTR, RT-ORG, RT-KONTO, RT-AUD, RT-DSAR, RT-ADMIN, RT-KOPIE, RT-AUTH | Q-ZR-01, Q-ZR-02, Q-ZR-13; P-05, P-12; `A2` pyt. 1, 3, 6, 9; N-ZR-06 | (a) E-41, E-42, E-44, E-45, E-46 (część), E-20; (b) E-47, E-50, E-51, E-52, E-55, E-63 | właściciel; (b) + prawnik | tabela decyzji `09` § 10 z kolumną „Decyzja” wypełnioną i datą; potem E-40 przenosi ją do kodu |
-| D-06 | **Odczyty produkcji (liczniki i stany, bez treści)**: postać wyzwalaczy `trg_audit_logs_prevent_update` i `b_guard_invoice_pending_content` oraz klucza `audit_logs.user_id` (N-A2-01, N-A2-13); stan `00072` (N-A2-02); liczba faktur z `scheduled_deletion_at` i starszych niż 2 lata (N-A2-04); organizacje z `deleted_at` lub bez aktywnego członka (N-A2-05); schemat `auth.*` (N-INW-01, N-A2-06); przebiegi cronów retencji i audytu (N-DOW-02); liczba niepustych notatek w `details_json` (N-DOW-10); bramka `/wdroz`, `00100`, wpisy `ops.deploy.*` (N-DOW-11, NS-07); cron `pg_dump`, Healthchecks, flaga MFA (NS-05); rekordy poświadczeń KSeF w formacie v1 (NS-14); konfiguracja logów `_supabase` i Docker (N-A2-12, N-INW-06, N-INW-15); nazwy zmiennych środowiska bez wartości (N-PRC-03, N-INW-04, N-A2-03) | jak w kolumnie obok | E-03 (potwierdzenie mechanizmu), E-41, E-50, E-51, E-56, E-72; ryzyko `05` | operator (sesja lokalna) | wynik skryptu `scripts/ops/` (liczby, tak/nie) z datą |
+| D-05 | **Decyzje retencyjne właściciela** dla 32 pozycji `09` § 10 (**[R5b]** po dopisaniu RT-KSEF — poświadczenia i sesje KSeF). Część (a) — może zdecydować właściciel (minimalizacja, bez sporu prawnego): **[R5b]** RT-KSEF (sesje po wygaśnięciu; poświadczenia usuwane z organizacją — jak RT-ORG w części (b)), RT-ZAPR, RT-PUSH, RT-RUNLOG, RT-CACHE, RT-STRIPE, RT-PGB, RT-LINK, RT-SESJA, RT-EKSP, RT-LOGI, RT-SENTRY, RT-POSTHOG, RT-CZAT (usuwanie z kontem i okres od zamknięcia), RT-MAIL, RT-NEWS, RT-KSIEG, RT-FLO, RT-POCZTA, RT-HIST, RT-DOST (po odczycie D-03). Część (b) — wymaga review prawnego przed wdrożeniem: RT-FAKT, RT-FAKT-FF, RT-KOSZT, RT-KONTR, RT-ORG, RT-KONTO, RT-AUD, RT-DSAR, RT-ADMIN, RT-KOPIE, RT-AUTH | Q-ZR-01, Q-ZR-02, Q-ZR-13; P-05, P-12; `A2` pyt. 1, 3, 6, 9; N-ZR-06 | (a) E-41, E-42, E-44, E-45, E-46 (część), E-20; (b) E-47, E-50, E-51, E-52, E-55, E-63 | właściciel; (b) + prawnik | tabela decyzji `09` § 10 z kolumną „Decyzja” wypełnioną i datą; potem E-40 przenosi ją do kodu |
+| D-06 | **Odczyty produkcji (liczniki i stany, bez treści)**: postać wyzwalaczy `trg_audit_logs_prevent_update` i `b_guard_invoice_pending_content` oraz klucza `audit_logs.user_id` (N-A2-01, N-A2-13); stan `00072` (N-A2-02); liczba faktur z `scheduled_deletion_at` i starszych niż 2 lata (N-A2-04); organizacje z `deleted_at` lub bez aktywnego członka (N-A2-05); schemat `auth.*` (N-INW-01, N-A2-06); przebiegi cronów retencji i audytu (N-DOW-02); liczba niepustych notatek w `details_json` (N-DOW-10); bramka `/wdroz`, `00100`, wpisy `ops.deploy.*` (N-DOW-11, NS-07); cron `pg_dump`, Healthchecks, flaga MFA (NS-05); rekordy poświadczeń KSeF w formacie v1 (NS-14); konfiguracja logów `_supabase` i Docker (N-A2-12, N-INW-06, N-INW-15); nazwy zmiennych środowiska bez wartości (N-PRC-03, N-INW-04, N-A2-03); **[R5b]** z `08` § 2.8: nagłówki dopisywane przez odwrotne proxy, w tym `X-Forwarded-For` (N-INW-07, NA1-04); szyfrowanie w spoczynku (dyski, MinIO) i TLS wewnętrzny (NA1-08, NS-08); wersje i ustawienia narzędzi na hostach, lokalizacja obrazów kopii Hetznera (N-PRC-05); niesekretne parametry GoTrue — SMTP, czasy życia tokenów, potwierdzenie e-maila (N-INW-02, N-INW-03, NA1-05); liczniki obiektów S3 (`exports/`, `imports/`, `tenants/*/expenses/`, `backups/`), wierszy FLO i `payment_imports` (N-INW-05, N-INW-10, N-INW-11); liczba wierszy `ksef_sessions` (`09` RT-KSEF) | jak w kolumnie obok | E-03 (potwierdzenie mechanizmu), E-41, E-50, E-51, E-56, E-72; ryzyko `05` | operator (sesja lokalna) | wynik skryptu `scripts/ops/` (liczby, tak/nie) z datą |
 | D-07 | **Dokumenty poza repo**: czy istnieją rejestry, umowy powierzenia, TIA, rejestr naruszeń, przeglądy dostępów, upoważnienia, szkolenia | N-DOW-01 | E-59, E-61, E-67, E-68, E-69 (start od istniejącego zamiast od zera) | właściciel | lista dokumentów z datami (bez treści) |
-| D-08 | **Inwentarz kont i dostępów**: GitHub (członkowie, wyjątki rulesetu), Coolify, konsola Hetzner, klucze SSH (imienność), liczba wpisów `ADMIN_EMAILS`, panele dostawców, Slack i Telegram | N-DOW-03, NS-03, NS-04 | E-69, E-72 | właściciel | lista kont z rolą i właścicielem, prywatnie; w repo liczby |
+| D-08 | **Inwentarz kont i dostępów**: GitHub (członkowie, wyjątki rulesetu), Coolify, konsola Hetzner, klucze SSH (imienność), liczba wpisów `ADMIN_EMAILS`, panele dostawców, Slack i Telegram; **[R5b]** kraje dostępu zdalnego operatorów i agentów AI, bez adresów (dostęp spoza EOG to transfer — `08` N-15) | N-DOW-03, NS-03, NS-04; **[R5b]** N-PRC-08 | E-69, E-72; **[R5b]** E-61 (transfery) | właściciel | lista kont z rolą i właścicielem, prywatnie; w repo liczby |
 | D-09 | **Agenci AI z dostępem do produkcji**: czy zostają, plany i warunki komercyjne dostawców, zakres dostępu (docelowo odczyt zredagowanej diagnostyki — [PR225]) | N-PRC-07; `04` pyt. 7, 8; `06` pyt. 4 | E-61, E-62 (lista dalszych procesorów), E-68 | właściciel | decyzja z datą |
 | D-10 | **Kanał żądań i kontaktu**: czy skrzynka pomocy przyjmuje pocztę (MX), dokąd trafia (prywatne skrzynki czy służbowa), czy worker `ops/poczta` działa | N-A2-08, N-DOW-09, NS-15; `04` PRC-08 | E-22, E-66, E-63 (kontakt RODO) | właściciel | odczyt DNS i test wysyłki z datą |
 | D-11 | **Magazyny historyczne**: stan i decyzja o usunięciu danych w Supabase Cloud, Inngest, Vercel, Cloudflare R2, Upstash | N-INW-16, N-PRC-06; `04` PRC-15 | E-57 | właściciel | lista z datą usunięcia albo uzasadnieniem pozostawienia |
@@ -316,11 +321,17 @@ z migracją w typie: 12 (kolejne 9 kart dopuszcza migrację addytywną
 | D-13 | **Badanie SOC 2**: czy i kiedy; kategorie (rekomendacja `06` § 9.2: Security + Availability) | NS-13 | E-79 | właściciel | decyzja z datą |
 | D-14 | **Skala docelowa**: prognoza liczby firm, kontrahentów i dokumentów OCR | N-DOW-06, N-09-05 | E-59 (screening), E-60 | właściciel | liczby orientacyjne |
 | D-15 | **Dyżur**: odbiorca alarmów, zastępca, godziny reakcji (F0-G08 PARTIAL [PR225]) | N-09-04 | E-67, E-73, E-75 | właściciel + koordynator | decyzja z datą |
+| D-16 **[R5a]** | **Ocena RUN-08** (art. 33 [NZ]): czy przekazanie ciasteczek sesji do dostawców telemetrii jest naruszeniem, kogo dotyczy (wg D-02), czy zgłaszać; pytania do dostawców o logowanie nagłówków (D-03); decyzja o unieważnieniu istniejących sesji po E-05 | `A4` pyt. 4; N-PRC-10 | E-67 (wpis do rejestru), A14 | właściciel (+ review) | decyzja z datą i uzasadnieniem, zapisana prywatnie; w repo — data i wynik tak/nie |
 
 **Pozycje pilne (przed resztą E-00):** D-02 (bo wyznacza, czy ryzyka
-„obecne” w `05` to w rzeczywistości K1), D-03 dla PostHog (E-09 — panel
-włącza nagrania wbrew kodowi), D-06 dla wyzwalaczy (potwierdza
-mechanizm, który naprawia E-03), D-01 (blokuje cały tor prawny).
+„obecne” w `05` to w rzeczywistości K1), D-03 dla PostHog (E-09 — ustawienia
+panelu przeczą kodowi; w kodzie `3e5e00d` nie włączają nagrań, bo SDK nie
+pobiera konfiguracji projektu — `A4` § 7, `08` N-08 — ale 2 nagrania mają
+nieznane źródło **[R5b]**), D-06 dla wyzwalaczy (potwierdza
+mechanizm, który naprawia E-03), D-01 (blokuje cały tor prawny), D-16
+(termin z art. 33 [NZ] biegnie od stwierdzenia naruszenia, nie od
+bramki; ocena nie może czekać na E-67, który czeka na D-01, D-15 i E-62)
+**[R5a]**.
 
 ## 4. Etapy kodu i konfiguracji, które można zacząć od razu
 
@@ -574,7 +585,10 @@ mechanizm, który naprawia E-03), D-01 (blokuje cały tor prawny).
 - **Po wdrożeniu:** worker (dla zgodności SHA), potem web; błąd testowy
   z przeglądarki widoczny w Sentry; w logu trasy brak nagłówków
   przeglądarki (log bez wartości). Pytanie do dostawców o logi nagłówków
-  sprzed zmiany — w D-03.
+  sprzed zmiany — w D-03. Decyzja właściciela o unieważnieniu istniejących
+  sesji (wymuszone ponowne logowanie) po wdrożeniu poprawki — ciasteczka
+  przekazane przed poprawką pozostają ważne do wygaśnięcia; (I), wynik
+  w D-16 **[R5a]**.
 - **Dowód SOC 2:** CC6.1, CC6.7 (ochrona poświadczeń w transmisji), P6.x
   [NZ] — wynik uprzęży przypięty do PR.
 - **Ryzyko redukowane:** WYM-36 obecne W → Ś (zostaje treść telemetrii —
@@ -1185,8 +1199,10 @@ mechanizm, który naprawia E-03), D-01 (blokuje cały tor prawny).
 - **Po wdrożeniu:** bez wdrożenia (tylko test) — wdrożenie przy
   najbliższym wydaniu.
 - **Dowód SOC 2:** PI1.3, CC8.1 [NZ].
-- **Ryzyko redukowane:** WYM-29 — utrzymanie „nie dotyczy” (ryzyko
-  pojawiłoby się przy zmianie progu albo włączeniu `payment.score`).
+- **Ryzyko redukowane:** WYM-29 — utrzymanie stanu faktycznego (brak
+  decyzji wyłącznie zautomatyzowanych; ryzyko pojawiłoby się przy zmianie
+  progu albo włączeniu `payment.score`). Stan wymagania w `05` to
+  „częściowe” do czasu zapisu oceny w E-59 (po R5a-U03) **[R5a]**.
 
 ### E-29 — PESEL: domyślnie „bez identyfikatora”
 
@@ -1272,7 +1288,12 @@ mechanizm, który naprawia E-03), D-01 (blokuje cały tor prawny).
 - **Pokrywa:** WYM-06, WYM-32; MIN-04, INW-09 (część), DOW-09 (część).
 - **Typ / wielkość / fala:** kod · M · F4.
 - **Zakres:** `select('*')` w `app/` i `components/` (16 miejsc wg `A1`;
-  na `3e5e00d` — 7 plików `app/**/page.tsx`), m.in.
+  na `3e5e00d` — 9 plików `app/**/page.tsx` zwracających pełne wiersze:
+  7 × `select('*')` i 2 × `select('*', { count: 'exact' })`
+  — `payments/overdue/page.tsx:60`, `reports/kpir/page.tsx:47`;
+  `select('*', { count: 'exact', head: true })` w `przeplywy/page.tsx:104`
+  nie zwraca wierszy i jest poza regułą; odczyt redaktora 13.10
+  potwierdza wynik R5a **[R5a]**), m.in.
   `app/(dashboard)/expenses/page.tsx:29`,
   `app/(dashboard)/settings/notifications/page.tsx:20-26` (klucze
   subskrypcji push do przeglądarki), `app/(dashboard)/settings/audit/page.tsx:34-38`
@@ -1283,8 +1304,9 @@ mechanizm, który naprawia E-03), D-01 (blokuje cały tor prawny).
   właściciela (albo maskowane); stały komunikat z identyfikatorem błędu
   zamiast tekstu z bazy.
 - **Migracje:** brak.
-- **Test czerwony:** `tests/unit/brak-select-gwiazdka.test.ts` (statyczny)
-  — przed: **czerwony** (7 plików); `tests/unit/dziennik-ip-rola.test.ts`
+- **Test czerwony:** `tests/unit/brak-select-gwiazdka.test.ts` (statyczny;
+  wzorzec `select\(\s*['"]\*['"]` z wyjątkiem wywołań z `head: true`)
+  — przed: **czerwony** (9 plików) **[R5a]**; `tests/unit/dziennik-ip-rola.test.ts`
   (strona dziennika; mock bazy): członek bez roli właściciela nie widzi
   IP — przed: **czerwony**.
 - **Fail-closed i ponowienie:** nie dotyczy.
@@ -1506,7 +1528,8 @@ mechanizm, który naprawia E-03), D-01 (blokuje cały tor prawny).
   i dostawca ma wpis (okres, zdarzenie początkowe, podstawa, wykonawca,
   dowód działania) — wejście dla jobów, polityki i wyszukiwania osoby.
 - **Pokrywa:** WYM-71, WYM-08, WYM-03 (inwentarz jako dane), WYM-SOC-5; T-08,
-  `09` § 10, `02` § 2–3.
+  `09` § 10, `02` § 2–3; SOC-34 (harmonogram retencji per kategoria
+  z wykonawcą — `06` § 8; wykonawcy w E-44 – E-47) **[R5a]**.
 - **Typ / wielkość / fala:** kod · M · F4.
 - **Zakres:** nowy moduł danych (np. `lib/retention/registry.ts`);
   lista tabel z danymi osobowymi z `02`; istniejące wykonawcy:
@@ -2035,6 +2058,12 @@ wynik zależy od decyzji (np. okres, wartość domyślna, wariant usuwania).
   eksportu przed terminem; anulowanie subskrypcji; usunięcie danych
   (poza dokumentami z decyzji) i plików S3 (outbox po zatwierdzeniu
   wierszy); wpis audytu wykonania.
+  **Podział na PR** (pkt 1 protokołu — jedna naprawa = jeden PR) **[R5a]**:
+  (a) ścieżka serwisowa w wyzwalaczu albo funkcja zerowania + test na
+  bazie (`tests/rls-cykl-wyzwalacze.test.ts` bez regresji), migracja
+  przed wdrożeniem; (b) job w trybie „na sucho” z raportem liczników;
+  (c) włączenie usuwania wierszy i plików (outbox) po akceptacji raportu.
+  Każdy PR z własnym testem czerwonym i wycofaniem.
 - **Migracje:** ścieżka serwisowa w wyzwalaczu albo funkcja zerowania —
   **przed wdrożeniem** (luźniejszy warunek tylko dla funkcji serwisowej;
   role klienckie bez zmian — sprawdzić istniejącymi `tests/rls-cykl-wyzwalacze.test.ts`);
@@ -2080,6 +2109,11 @@ wynik zależy od decyzji (np. okres, wartość domyślna, wariant usuwania).
   termin dla łańcucha (korekta i oryginał, faktura przychodząca i koszt);
   usuwanie fakturą po fakturze w transakcji z outboxem plików; koszty
   i KPiR tym samym mechanizmem; archiwizacja niezależna od terminu.
+  **Podział na PR** (pkt 1 protokołu) **[R5a]**: (a) funkcja terminu
+  + przeliczenie `scheduled_deletion_at` na sucho (licznik przed
+  `UPDATE`); (b) usuwanie z outboxem plików. Każdy PR z własnym testem
+  czerwonym i wycofaniem; ścieżka serwisowa wyzwalacza — z E-50 (a)
+  albo we wspólnym PR migracji.
 - **Migracje:** (1) **przed** — funkcja liczenia terminu; (2) przeliczenie
   `scheduled_deletion_at` dla istniejących faktur — `UPDATE` (najpierw
   zapytanie licznikowe; uwaga na wyzwalacze zamrożenia — test na bazie).
@@ -2492,9 +2526,9 @@ repo jest publiczne, więc domyślnie poza repo, a w repo tylko wpis
   `PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`.
 - **Warunki i zależności:** **czeka** na D-01 (kto zgłasza), D-15
   (dyżur), E-62 (termin dla klientów); review: Q-ZR-12, P-03, P-04,
-  N-ZR-12. Pilne niezależnie od reszty: **ocena, czy RUN-08 (ciasteczka
-  sesji u dostawców telemetrii) wymaga wpisu do rejestru naruszeń**
-  (`05` WYM-52) — po D-03 i E-05.
+  N-ZR-12. Ocena RUN-08 (ciasteczka sesji u dostawców telemetrii,
+  `05` WYM-52) — **D-16 (E-00), niezależnie od tego etapu**; E-67
+  przenosi jej wynik do rejestru naruszeń, gdy rejestr powstanie **[R5a]**.
 - **Kroki:** (1) projekt procedury, rejestru i wzorów; mały PR kodu:
   kategoria „bezpieczeństwo” w `ops/poczta` (test jednostkowy klasyfikacji
   — czerwony przed); (2) review; (3) przyjęcie + ćwiczenie co 6 miesięcy.
@@ -2765,27 +2799,36 @@ zweryfikować**, nie budować od zera.
 - **Cel:** kontrole zostawiają zapisy z okresu (Type II), zbierane
   skryptami bez danych osobowych.
 - **Pokrywa:** WYM-74, WYM-10 (część), WYM-SOC-3, WYM-46 (pakiet
-  zgodności dla klientów), WYM-SOC-1; SOC-17, SOC-26, SOC-32, N-DOW-02, DOW-14, RUN-01, RUN-02 (uprząż `A4` jako regresja), DOW-16 (testy prywatności w CI — utrzymanie).
+  zgodności dla klientów), WYM-SOC-1; SOC-17, SOC-26, SOC-32, N-DOW-02, DOW-14, RUN-01, RUN-02 (uprząż `A4` jako regresja), DOW-16 (testy prywatności w CI — utrzymanie), DOW-10 (niezmienność `audit_logs` tylko wyzwalaczem — eksport poza host) **[R5a]**.
 - **Typ / wielkość / fala:** kod + organizacyjny · M · F5 · start **od
   razu** (kalendarz i pierwsze skrypty).
-- **Warunki i zależności:** start od razu; część zapisów powstaje dopiero z etapami, których dotyczy (E-09, E-61, E-72).
+- **Warunki i zależności:** start od razu; część zapisów powstaje dopiero z etapami, których dotyczy (E-09, E-61, E-72); eksport dziennika audytu poza host — po E-53 (magazyn kopii poza hostem) **[R5a]**.
 - **Zakres:** `scripts/ops/` (dziś `kontrola-faktur-ksef.sh`,
   `dopisz-dane-specjalne.sh`): nowe skrypty — przebiegi cronów retencji
   i audytu (liczby), porównanie ustawień PostHog (E-09), rejestr dostawców
   vs CSP (E-61), dziennik wydań (SHA web i worker, migracje, wynik
   kontroli); archiwizacja dziennych wyników strażnika poza Telegramem;
   tygodniowy przebieg scenariuszy KSeF TEST w CI; uprząż `A4` per wydanie;
-  logi centralne z retencją ≥ okres badania + 3 mies. (`06` SOC-17).
+  logi centralne z retencją ≥ okres badania + 3 mies. (`06` SOC-17);
+  dzienny eksport wpisów `audit_logs` (albo skrótów łańcuchowych) do
+  magazynu kopii poza hostem bazy (cel z E-53) w trybie tylko-dopisywania;
+  poprawka komentarza `00052_audit_logs_immutable_trigger.sql:5`, który
+  przecenia ochronę (wyzwalacz omija zmienna sesji `app.allow_audit_purge`
+  — `:21-23`) — `A3` DOW-10 **[R5a]**.
 - **Kroki:** kalendarz dowodów (przegląd dostępów — kwartalnie, próba
   odtworzenia — miesięcznie, przebiegi retencji — miesięcznie, rejestr
   żądań i naruszeń — kwartalnie, polityki — rocznie); każdy skrypt jako
   osobny mały PR z testem formatu wyniku (bez wzorców danych osobowych).
+  Eksport dziennika audytu jako osobny PR z testem
+  `tests/unit/audyt-eksport-skroty.test.ts` — wpis zmieniony po eksporcie
+  wykrywany przez porównanie skrótów — przed: **czerwony** (brak
+  eksportu) **[R5a]**.
 - **Migracje:** brak.
 - **Dowód / akceptacja:** pierwszy miesiąc zapisów kompletny według
   kalendarza.
 - **Wycofanie:** revert PR skryptu; zebrane zapisy zostają.
 - **Po wdrożeniu:** pierwszy przebieg każdego skryptu z datą; wynik bez wzorców danych osobowych (test formatu).
-- **Dowód SOC 2:** CC4.1, CC7.2, PI1.3, PI1.4 [NZ].
+- **Dowód SOC 2:** CC4.1, CC7.2 (także eksport dziennika audytu — DOW-10 **[R5a]**), PI1.3, PI1.4 [NZ].
 - **Ryzyko redukowane:** WYM-74 K1 W → Ś.
 
 ### E-76 — Szablon PR: sekcja „dane osobowe”
@@ -2827,7 +2870,7 @@ zweryfikować**, nie budować od zera.
 
 - **Cel:** podatności obrazów i hostów są wykrywane; badacze wiedzą,
   dokąd zgłaszać.
-- **Pokrywa:** WYM-SOC-1; SOC-19, SOC-20.
+- **Pokrywa:** WYM-SOC-1; SOC-19, SOC-20, PRC-13 (decyzja w E-74) **[R5a]**.
 - **Typ / wielkość / fala:** kod + konfiguracja · S · F5 · start **od razu**.
 - **Warunki i zależności:** start od razu.
 - **Zakres:** skanowanie obrazów w CI; okresowe skanowanie hostów; MinIO
@@ -2835,8 +2878,15 @@ zweryfikować**, nie budować od zera.
   scalanie Renovate (`renovate.json:17-23`) a ruleset (NS-06);
   `security.txt` planowany (`PLAN-ODPORNOSCI-CYBER.md:149`).
 - **Migracje:** brak.
-- **Test czerwony:** job skanowania w CI (pierwszy przebieg — lista
-  znalezisk jako punkt odniesienia).
+- **Test czerwony:** `tests/unit/security-txt.test.ts` —
+  plik `public/.well-known/security.txt` istnieje i ma pole `Contact`,
+  a ścieżka `/.well-known/security.txt` jest publiczna (bez przekierowania
+  na `/login`): rozszerzenie `.txt` nie jest wyłączone we wzorcu `proxy.ts:29-31`,
+  więc o dostępie decyduje `isPublicPath` (`lib/supabase/middleware.ts:54-80`,
+  lista `STATIC_PUBLIC_EXACT`) — przed: **czerwony** (brak pliku i brak
+  ścieżki na liście; odczyt redaktora 13.10 na `3e5e00d`). Job skanowania
+  w CI to kontrola, nie test czerwony — pierwszy przebieg jako punkt
+  odniesienia **[R5a]**.
 - **Dowód / akceptacja:** raporty skanów miesięcznie; plik `security.txt`
   z monitorowaną skrzynką.
 - **Wycofanie:** revert PR (job skanowania).
@@ -2894,12 +2944,15 @@ wdrożony na obu aplikacjach, zweryfikowany).
 | A11 | Funkcje AI: NIP poza promptem, informacja przy użyciu, wybór klienta dla kategoryzacji (albo polecenie w umowie), DPIA | E-11, E-12, E-17, E-60 | dane kontrahentów i dokumenty kosztowe do USA bez wyboru (WYM-62 — K1 W) |
 | A12 | Rejestry art. 30, mapa podstaw, LIA, screening DPIA, ocena IOD przyjęte; rejestr dostawców z TIA | E-59, E-61 | rozliczalność (WYM-10, WYM-48, WYM-40 — K1 W) |
 | A13 | Kopie zaszyfrowane poza hostem: 7 kolejnych udanych dni; pierwsza udana próba odtworzenia z protokołem | E-53, E-54 | utrata hosta = utrata danych klientów (WYM-51 — obecne W) |
-| A14 | Procedura naruszeń z rejestrem i dyżurem z zastępcą; ocena RUN-08 zapisana | D-15, E-67 | terminy zgłoszeń; zawiadomienie klienta (WYM-52, WYM-53 — K1 W) |
+| A14 | Procedura naruszeń z rejestrem i dyżurem z zastępcą; ocena RUN-08 zapisana (D-16) **[R5a]** | D-15, D-16, E-67 | terminy zgłoszeń; zawiadomienie klienta (WYM-52, WYM-53 — K1 W) |
 | A15 | Dostęp: przegląd kont, konta imienne, MFA (w tym dla operacji wrażliwych przed KSeF PROD), upoważnienia i zobowiązania do poufności; odczyty operatora w dzienniku | E-36, E-68, E-69 | dostęp do danych wszystkich klientów bez rozliczalności (WYM-35, WYM-47 — K1 W) |
 | A16 | E-maile nietransakcyjne fail-closed; Reply-To klienta w wiadomościach do kontrahentów | E-13, E-14 | wiadomości bez wypisu; korespondencja kontrahentów u operatora (WYM-66, WYM-67) |
 | A17 | PESEL domyślnie „bez identyfikatora” | E-29 | identyfikatory konsumentów zbierane domyślnie (WYM-X-03 — K1 W) |
 | A18 | Job RLS wymagany do scalenia | E-70 | regresja izolacji firm może trafić na `main` (WYM-09) |
 | A19 | Rotacja klucza poświadczeń KSeF wykonana | E-56 | także punkt bramki PLAN-ZERO (I1) |
+| A20 **[R5a]** | Rejestr retencji w kodzie z decyzjami D-05 część (a); wykonawcy dla treści swobodnych, plików S3 poza fakturami i danych pomocniczych działają (co najmniej w trybie „na sucho” z raportem); kategorie bez decyzji mają wpis „okres do ustalenia” z datą przeglądu | D-05 (a), E-40, E-44, E-45, E-46 | dane osób bez relacji z FF zostają bezterminowo od pierwszego dnia (`05` WYM-08, WYM-71 — K1 W; ryzyko #6 w `05` § 12.2); polityka z A4 musi podać okresy (art. 13 ust. 2 lit. a [NZ]) |
+| A21 **[R5a]** | Wyszukanie NIP bez nazw organizacji; `validation_cache` tylko przez serwer; domyślny termin linku księgowej według decyzji | E-31, E-33, E-43 (po D-12 (f)) | od pierwszego klienta każdy zalogowany ustali, które firmy korzystają z FF (WYM-33 — K1 W) |
+| A22 **[R5a]** | Dane testowe bez prawdziwych NIP i domen; zasada „bez danych z produkcji w PR, issue, plikach i kontekście agentów” przyjęta; skrypty `scripts/ops/` zwracają agregaty | E-38 (zasady agentów — E-68) | pierwsze prawdziwe dane mogą trafić do publicznego repo albo dostawcy agenta — nieodwracalnie (WYM-X-02 — K1 W) |
 
 ### 8.2. Bramka B — przed zdarzeniem (nie blokuje startu, blokuje zdarzenie)
 
@@ -2923,6 +2976,9 @@ wdrożony na obu aplikacjach, zweryfikowany).
 - Ryzyko „obecne” z `05` przeliczone po D-02: jeśli odczyt pokaże
   prawdziwe dane już dziś, bramka A obowiązuje **natychmiast**, a A2,
   A6, A8, A9 są pilne w tej kolejności.
+- WYM-30 (polityki, K1 W) świadomie poza bramką A: minimalne polityki
+  powstają w E-67 (incydenty, A14) i E-69 (dostęp, A15); pełne E-74 —
+  warunek rozpoczęcia badania SOC 2 (§ 8.2) **[R5a]**.
 
 ## 9. Mapowanie na SOC 2
 
@@ -3006,6 +3062,22 @@ DOW-21 (E-61, E-79), PRA-07 (E-13, E-27), RUN-09 (E-63) oraz ustalenia
 pozytywne do utrzymania — DOW-16, RUN-01, RUN-02 (E-18, E-75: regresja
 w CI, nie naprawa).
 
+**[R5a]** Recenzja R5a wykazała, że pierwotne twierdzenie „159 ze 159
+w kartach” było nieprawdziwe: DOW-10 i SOC-34 nie występowały w żadnej
+karcie (SOC-34 tylko w tabeli § 9.2), a PRC-13 tylko w „Zakresie” E-78.
+Po recenzji R5a dopisano DOW-10 (E-75 — eksport dziennika audytu poza
+host, poprawka komentarza `00052`), SOC-34 (E-40), PRC-13 (E-78, pole
+„Pokrywa”). Skrypt ponowiony przez redaktora poprawek 13.10.2026: 159 ze
+159 ustaleń z `05` § 11 występuje w kartach § 4–7 (0 braków); 85 z 85 WYM
+w polach „Pokrywa” 79 kart.
+
+**Bramka a ryzyko K1 = W [R5a].** Każde wymaganie z ryzykiem K1 = W
+(47 w `05`) ma etap w bramce A albo zapisane uzasadnienie w § 8.3
+(sprawdzone skryptem 13.10.2026 po dopisaniu A20 – A22: 0 braków).
+Przed recenzją R5a bez etapu w bramce A były WYM-08, WYM-33, WYM-X-02
+(też bez bramki B) i WYM-30 (tylko bramka B przez E-74); WYM-71 miał
+w bramce A tylko E-09.
+
 **Testy z `A3` § 5.** T-01 – T-21 mają miejsce w kartach: T-01, T-02 —
 E-23; T-03 — E-04 (część), E-20 (pełny); T-04 — E-50; T-05 — E-51;
 T-06 — E-45, E-50; T-07 — E-47; T-08 — E-40; T-09 — E-18; T-10 — E-09;
@@ -3034,7 +3106,7 @@ E-59, E-68, E-61, E-60.
 | Uruchomienie części FLO z modelem i `payment.score` | funkcje wyłączone; wymagają DPIA i decyzji | bramka B (§ 8.2): E-28, E-60 |
 | Automatyczny eksport danych osoby z PostHog i Sentry (art. 15) | niska wartość przy obecnej skali; wystarczy procedura | E-66 (informacja i obsługa ręczna), E-21 (usuwanie) |
 | Treść szkoleń | E-68 wskazuje potrzebę i zakres, nie materiał | właściciel |
-| Ocena, czy RUN-08 było naruszeniem wymagającym zgłoszenia | ocena prawna faktów, których nie znamy (logi dostawców) | E-67 (ocena i zapis w rejestrze), review |
+| Ocena, czy RUN-08 było naruszeniem wymagającym zgłoszenia | ocena prawna faktów, których nie znamy (logi dostawców) | D-16 w E-00 (ocena, pilna) **[R5a]**; E-67 (zapis w rejestrze), review |
 
 ## 12. Niewiadome i ograniczenia
 
@@ -3051,6 +3123,7 @@ E-59, E-68, E-61, E-60.
 | NS-14 | rekordy poświadczeń KSeF w formacie v1 | zakres E-56 | D-06 (wykonuje sam E-56) |
 | N-ZR-01 – N-ZR-06, Q-ZR-01, Q-ZR-02 | brzmienie przepisów; okres faktur | E-51, E-50, E-63, E-65 | review prawne |
 | NS-02, N-ZR-11 | tekst TSC 2017 i DC 200 | identyfikatory w § 9 | odczyt AICPA przed użyciem w badaniu |
+| D-16 / `A4` pyt. 4 **[R5a]** | czy RUN-08 jest naruszeniem (art. 33 [NZ]) | wpis do rejestru (E-67), ewentualne zgłoszenie; unieważnienie sesji po E-05 | D-16 + review |
 
 **Ograniczenia tego planu:**
 
@@ -3069,10 +3142,17 @@ E-59, E-68, E-61, E-60.
 - **Kolejność i podział na etapy** to propozycja (I). Inny podział jest
   dopuszczalny, jeśli zachowuje zasadę „jedna naprawa = jeden PR” i nie
   przesuwa etapów F1–F2 za dokumenty F5.
-- `05` i `09` nie przeszły jeszcze niezależnej recenzji; `08` był
-  w chwili pisania w budowie — plan opiera się na ich obecnym brzmieniu.
-- Plan nie przeszedł niezależnej recenzji (autor nie zatwierdza własnego
-  etapu).
+- W chwili pisania planu `05` i `09` nie przeszły jeszcze niezależnej
+  recenzji, a `08` był w budowie — plan opiera się na ich ówczesnym
+  brzmieniu. `05` przeszedł później recenzję R5a (13.10.2026, zatwierdzony
+  z uwagami; zmiana stanu WYM-29 nie wymagała zmian kart — E-28, E-59);
+  stan recenzji `08` i `09` — w ich historiach recenzji **[R5a]**.
+- Niezależna recenzja planu: R5a (13.10.2026) — zob. „Historia recenzji”
+  na końcu pliku. Autor nie zatwierdzał własnego etapu **[R5a]**.
+- Recenzja R5a przeczytała w pełni § 0–3, § 7–13 i wybrane karty;
+  pozostałe karty — przez pola wyciągnięte skryptem. Redaktor
+  poprawek sprawdził w kodzie na `3e5e00d` tylko miejsca dotknięte
+  uwagami R5a (§ „Historia recenzji”) **[R5a]**.
 
 ## 13. Co sprawdziłem / czego nie
 
@@ -3124,6 +3204,12 @@ E-59, E-68, E-61, E-60.
 
 Programowo (13.10): 85 z 85 WYM pokrytych polami „Pokrywa”; 159 ze 159
 ustaleń z `05` § 11 nazwanych w planie; liczby w § 2 policzone z tabeli.
+**[R5a]** Uwaga: twierdzenie „159 ze 159 nazwanych w planie” było
+prawdziwe tylko dla całego pliku, nie dla kart — R5a wykazał brak DOW-10
+i SOC-34 w kartach. Prawdopodobna przyczyna (hipoteza redaktora poprawek;
+skryptu autora nie widziałem): SOC-34 występuje w tabeli § 9.2, a ciąg
+„DOW-10” — jako część identyfikatora niewiadomej N-DOW-10 w D-06. Po
+poprawkach skrypt ograniczony do § 4–7 daje 159/159 (§ 10).
 
 **Nie sprawdziłem / nie mogłem sprawdzić:**
 
@@ -3140,3 +3226,39 @@ ustaleń z `05` § 11 nazwanych w planie; liczby w § 2 policzone z tabeli.
 Poza tym plikiem zmieniłem wyłącznie kolumnę „Etap planu” w `05`.
 Nie zmieniałem kodu, migracji ani konfiguracji; nie commitowałem i nie
 pushowałem; nie czytałem `docs/automation/` ani `.agents/`.
+
+## Historia recenzji
+
+| Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
+|---|---|---|---|---|---|---|
+| R5a — niezależny agent-recenzent (grupa: `05` + `07`) | 13.10.2026 | wymaga poprawek, bez uwag blokujących (32 kontrole punktowe dla `05` i `07`, 29 potwierdzonych; dla `07` obalona K06 — pokrycie ustaleń w kartach, częściowa K26 — liczba plików `select('*')`, luka K31 — bramka A a K1 = W) | 9 uwag do tego pliku: R5a-U01, U02, U04 (istotne), R5a-U06, U07, U08, U09, U10 część (a), U11 (drobne; U10 i U11 wspólne z `05`); plus konsekwencja R5a-U03 (karta E-28) | wszystkie 9 — R5a-U01, U02, U04, U06, U07, U08, U09, U10 (a), U11, oraz ujednolicenie E-28 po R5a-U03; naniesione przez redaktora poprawek 13.10.2026 (miejsca oznaczone **[R5a]**). Doprecyzowania redaktora: U01 — WYM-30 był w bramce B (E-74 w zakresie „E-72 – E-75”), nie „bez bramki”, uzasadnienie w § 8.3 dopisane zgodnie z uwagą; U06 (b) — prefiks `eNN` oznaczony jako propozycja (I); U07 — łańcuch retencji rozdzielony na „D-05 ─►” i „E-40 ─►”, bo E-42, E-46, E-47 nie czekają na E-40; U10 (a) — test `security.txt` wskazuje rzeczywistą bramkę (`isPublicPath`, `lib/supabase/middleware.ts:54-80`), nie tylko wzorzec `proxy.ts` | brak | `recenzje/R5a.md` (streszczenie w `10-REVIEW.md`) |
+| R5b — niezależny agent-recenzent (grupa: `08` + `09`; `07` nie był przedmiotem recenzji R5b) | 13.10.2026 | nie dotyczy dla `07` (werdykty R5b: `08` — zatwierdzony z uwagami, `09` — wymaga poprawek); R5b sprawdził na końcowej wersji `07` E-00 (D-01 – D-15) i tytuły E-00 – E-79 — powiązania z `08` zgodne (K17) | 2 uwagi przekazane do `07`: R5b-U08 pkt (2) (niewiadome bez pozycji w E-00 → D-06, D-08), R5b-U12 (liczba pozycji `09` § 10 w D-05); plus ujednolicenie po R5b-U03/U14 (akapit „Pozycje pilne”, D-03 PostHog) | R5b-U08 (2), R5b-U12 — naniesione przez redaktora poprawek 13.10.2026 w E-00 (D-05, D-06, D-08) i w akapicie „Pozycje pilne”; miejsca oznaczone **[R5b]**. Sprawdzenia: `08` § 2.8 (propozycje), `02:55` (D-04 bez reguły czasowej), `git grep ksef_sessions` na `3e5e00d` (tylko schemat i RLS), `A4` § 7 i `lib/analytics/init-posthog-browser.ts:37,49` | — | `recenzje/R5b.md` (streszczenie w `10-REVIEW.md`) |
+
+**Sprawdzenia redaktora poprawek (13.10.2026) przed naniesieniem:**
+
+| Uwaga | Sprawdzenie | Wynik |
+|---|---|---|
+| R5a-U01 | skrypt: WYM z K1 = W w `05` (47) vs etapy w tabelach § 8.1 i § 8.2 | potwierdzone przed zmianą: WYM-08, WYM-33, WYM-X-02 bez etapu w A i B; WYM-30 tylko B; WYM-71 w A tylko przez E-09. Po dopisaniu A20 – A22 i zdania w § 8.3: 0 braków |
+| R5a-U02 | skrypt: ID ustaleń z `05` § 11 (159) vs tekst kart § 4–7; `A3:706-715` (DOW-10); `00052_audit_logs_immutable_trigger.sql:5,21-23` na `3e5e00d` | potwierdzone: brak DOW-10 i SOC-34 w kartach; PRC-13 tylko w „Zakresie” E-78; komentarz migracji (`:5`) twierdzi, że wyzwalacz „łapie nawet superuser”, a funkcja przepuszcza zmianę przy `app.allow_audit_purge` (`:21-23`). Po zmianie: 159/159 |
+| R5a-U04 | `A4:431-434` (pyt. 4), karta E-67 (warunki: D-01, D-15, E-62), § 8.1 A14 | potwierdzone: ocena RUN-08 była zamknięta w etapie czekającym |
+| R5a-U06 | `AGENTS.md` („Wgrywanie migracji”, zasada 1 i akapit o rejestrze; „Protokół naprawy błędu” pkt 1) | potwierdzone |
+| R5a-U07 | § 1.2 vs kolumna „Czeka na” § 2 (E-25, E-42, E-43, E-51) i karta E-51 | potwierdzone |
+| R5a-U08 | `git grep -nE "select\(\s*['\"]\*" 3e5e00d -- 'app/**/page.tsx'` | potwierdzone: 10 plików — 7 × `select('*')`, 2 × `{ count: 'exact' }`, 1 × `head: true` |
+| R5a-U09 | karty E-50, E-51 (pole „Zmiany”, wielkość L) | potwierdzone: kilka napraw o różnym wycofaniu w jednym etapie |
+| R5a-U10 (a) | `git ls-tree 3e5e00d` (brak `security.txt` i `.well-known`); `proxy.ts:29-31` (`.txt` poza wyłączeniami); `lib/supabase/middleware.ts:54-80` (brak ścieżki w `STATIC_PUBLIC_EXACT`) | potwierdzone: test byłby czerwony przed zmianą |
+| R5a-U11 | nagłówek (wiersze „Ograniczenia”, „Stan”), § 12 | potwierdzone; zdania zastąpione odesłaniem do tej tabeli |
+
+**Niewiadome po recenzji R5a.** Wynik oceny RUN-08 (D-16) i decyzja
+o unieważnieniu sesji należą do właściciela i review prawnego — poza
+zasięgiem tej sesji (brak dostępu do logów dostawców i produkcji); plan
+wskazuje tylko miejsce i pilność tej oceny. Nie sprawdzałem ponownie
+merytorycznie kart spoza zakresu uwag R5a; nie miałem dostępu do
+produkcji, paneli ani umów.
+
+**[R5b] Zmiany po recenzji R5b (redaktor poprawek, 13.10.2026).** Do E-00
+dopisano niewiadome, które `08` § 2.8 wskazywał jako pozbawione pozycji
+(N-15 → D-08; N-17 część, N-19 część, N-21, N-22 część, N-24 część → D-06),
+liczbę pozycji harmonogramu retencji w D-05 (32 — dodana RT-KSEF w `09` § 10)
+oraz poprawiono w akapicie „Pozycje pilne” tezę o panelu PostHog zgodnie
+z `A4` § 7. Nie sprawdzałem ponownie pozostałych kart `07`; nie miałem
+dostępu do produkcji, paneli ani umów.

@@ -15,7 +15,7 @@
 **Recenzje raportów wejściowych.** Wszystkie raporty mają naniesione
 recenzje: `02` — R1 (11.10); `03`, `04` — R2 runda 1 i 2 (11.10, 13.10);
 `A1`, `A2`, `A4` — R3 (13.10); `A3`, `06` — R4 (13.10); `01` — R1 i R4.
-Pliki recenzji w scratchpadzie zawierają uwagi R1-U01–U24, R2-U01–U36,
+Pliki recenzji (`recenzje/`) zawierają uwagi R1-U01–U24, R2-U01–U36,
 R3-U01–U23, R4-U01–U32; historie recenzji raportów wymieniają je jako
 przyjęte (R4-U07 i R4-U12 — częściowo, z uzasadnieniem w `A3`). Wyjątek
 formalny: tabela historii `01` wymienia tylko R4, ale uwagi R1-U01–U10 do
@@ -635,3 +635,31 @@ Ograniczenia tej macierzy:
 Poza tym plikiem nie zmieniałem niczego w repo; nie commitowałem i nie
 pushowałem.
 
+
+## Historia recenzji
+
+| Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
+|---|---|---|---|---|---|---|
+| R5a — niezależny agent-recenzent (grupa: `05` + `07`) | 13.10.2026 | zatwierdzony z uwagami (32 kontrole punktowe dla `05` i `07`, 29 potwierdzonych; dla `05` obalona K27 — stan WYM-29) | 4 uwagi do tego pliku: R5a-U03 (istotna), R5a-U05, R5a-U10 część (b), R5a-U11 (drobne; U10 i U11 wspólne z `07`) | wszystkie 4 — R5a-U03, U05, U10 (b), U11; naniesione przez redaktora poprawek 13.10.2026 (miejsca oznaczone **[R5a]**: nagłówek, § 1 wiersz „Etap planu”, wiersze WYM-29 i WYM-SOC-1, § 12.1, § 13) | brak | `recenzje/R5a.md` (streszczenie w `10-REVIEW.md`) |
+
+**Sprawdzenia redaktora poprawek (13.10.2026) przed naniesieniem:**
+
+- R5a-U03 — katalog `03-REJESTR-ZRODEL.md:382` brzmi „ustalić
+  i udokumentować” (art. 22); wiersz WYM-29 sam podawał lukę „brak zapisu
+  oceny”; WYM-39 odmawia „nie dotyczy” z tego samego powodu — uwaga
+  trafna. Kod potwierdza brak decyzji wyłącznie zautomatyzowanych:
+  `lib/categorization/ai-classifier.ts:91` (pewność AI stała 0.7),
+  `lib/jobs/runners/auto-categorize-inbox.ts:409` (`is_reviewed` tylko przy
+  pewności > 0.9, więc wynik AI zawsze `false`). Liczby § 12.1 przeliczone
+  parserem tabel po zmianie: częściowe 44, nie dotyczy 0, razem 85.
+- R5a-U05 — kolumna „Etap planu” wypełniona w 85/85 wierszach (parser).
+- R5a-U10 (b) — wiersz WYM-SOC-1 jedyny z ryzykiem „obecne” w formacie
+  niezgodnym z § 1.1 (parser kolumny „Ryzyko”); rozkład ryzyk w § 12.1
+  bez zmian (Ś → W).
+- R5a-U11 — zdania o braku recenzji w nagłówku i § 13 zastąpione
+  odesłaniem do tej tabeli.
+- Konsekwencja R5a-U03 w `07`: karta E-28 („utrzymanie „nie dotyczy””)
+  ujednolicona ze stanem „częściowe” (oznaczone **[R5a]** w `07`).
+
+Nie sprawdzałem ponownie merytorycznie pozostałych 84 wierszy macierzy ani dowodów
+spoza uwag R5a; nie miałem dostępu do produkcji, paneli ani umów.
