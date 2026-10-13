@@ -7,7 +7,7 @@
 | Data | 7.10.2026 (start), 10.10.2026 (wznowienie) |
 | Wersja kodu | `origin/main` @ `3e5e00d` (10.10.2026, scalenie PR #245); start audytu 7.10 na `7c0097f` |
 | Gałąź robocza | `claude/gallant-faraday-ypjokp` = `origin/main` + pliki tego audytu (scalenie `main` 10.10), brak innych lokalnych zmian |
-| Recenzja | R1 (niezależny agent, 10.10.2026): „wymaga poprawek”, 10 uwag do tego pliku, wszystkie przyjęte i naniesione 11.10.2026; szczegóły w `10-REVIEW.md` |
+| Recenzja | R1 (niezależny agent, 10.10.2026): „wymaga poprawek”, 10 uwag, wszystkie naniesione 11.10.2026; R4-U30 (drobna) naniesiona 13.10.2026; końcowa kontrola kompletności R6; historia na końcu pliku i w `10-REVIEW.md` |
 
 ## 1. Po co ten plik
 
@@ -166,24 +166,30 @@ inny agent niż autor; koordynator nie zatwierdza własnych etapów.
 | Inwentarz i przepływy | agent INWENTARZ | `02-INWENTARZ-I-PRZEPLYWY.md` | R1 | gotowy, po recenzji R1 |
 | Research źródeł | agent ŹRÓDŁA | `03-REJESTR-ZRODEL.md` | R2 | gotowy, po recenzji R2 |
 | Procesorzy i lokalizacje | agent PROCESORZY | `04-PROCESORZY-I-LOKALIZACJE.md` | R2 | gotowy, po recenzji R2 |
-| Mechanizmy: minimalizacja, zgody | agent MECHANIZMY-A | `A1-MECHANIZMY-MINIMALIZACJA-ZGODY.md` | R3 | szczegóły w `10-REVIEW.md` |
-| Mechanizmy: prawa, retencja, AI | agent MECHANIZMY-B | `A2-MECHANIZMY-PRAWA-RETENCJA.md` | R3 | szczegóły w `10-REVIEW.md` |
-| Dowody i testy | agent DOWODY | `A3-DOWODY-I-TESTY.md` | R4 | szczegóły w `10-REVIEW.md` |
-| Test runtime cookies i sieci | agent RUNTIME | `A4-TEST-COOKIES-I-SIECI.md` + `narzedzia/` | R3 | szczegóły w `10-REVIEW.md` |
-| Macierz wymagań (analiza luk) | agent syntezy | `05-MACIERZ-WYMAGAN.md` | R5 | szczegóły w `10-REVIEW.md` |
-| SOC 2 | agent SOC2 | `06-SOC2.md` | R4 | szczegóły w `10-REVIEW.md` |
-| Plan etapów | agent syntezy | `07-PLAN-ETAPOW.md` | R5 | szczegóły w `10-REVIEW.md` |
-| Niewiadome i review prawne | agent syntezy | `08-NIEWIADOME-I-REVIEW-PRAWNE.md` | R5 | szczegóły w `10-REVIEW.md` |
-| Materiały robocze (RoPA, DPIA, LIA, TIA, umowa powierzenia, procedury) | agent syntezy | `09-MATERIALY-ROBOCZE.md` | R5 | szczegóły w `10-REVIEW.md` |
-| Kompletność całości | — | `10-REVIEW.md` | R6 (niezależni krytycy) | szczegóły w `10-REVIEW.md` |
+| Mechanizmy: minimalizacja, zgody | agent MECHANIZMY-A | `A1-MECHANIZMY-MINIMALIZACJA-ZGODY.md` | R3 | gotowy, po recenzji R3 |
+| Mechanizmy: prawa, retencja, AI | agent MECHANIZMY-B | `A2-MECHANIZMY-PRAWA-RETENCJA.md` | R3 | gotowy, po recenzji R3 |
+| Dowody i testy | agent DOWODY | `A3-DOWODY-I-TESTY.md` | R4 | gotowy, po recenzji R4 |
+| Test runtime cookies i sieci | agent RUNTIME | `A4-TEST-COOKIES-I-SIECI.md` + `narzedzia/` | R3 | gotowy, po recenzji R3 |
+| Macierz wymagań (analiza luk) | agent MACIERZ | `05-MACIERZ-WYMAGAN.md` | R5a | gotowy, po recenzji R5a |
+| SOC 2 | agent SOC2 | `06-SOC2.md` | R4 | gotowy, po recenzji R4 |
+| Plan etapów | agent PLAN | `07-PLAN-ETAPOW.md` | R5a | gotowy, po recenzji R5a |
+| Niewiadome i review prawne | agent NIEWIADOME | `08-NIEWIADOME-I-REVIEW-PRAWNE.md` | R5b | gotowy, po recenzji R5b |
+| Materiały robocze (RoPA, DPIA, LIA, TIA, umowa powierzenia, procedury) | agent MATERIAŁY | `09-MATERIALY-ROBOCZE.md` | R5b | gotowy, po recenzji R5b |
+| Kompletność całości | — | `10-REVIEW.md` | R6a (pokrycie zadania), R6b (adwersaryjna kontrola dowodów) | szczegóły w `10-REVIEW.md` |
 
 Uwaga o przebiegu: limit użycia API przerwał pracę agentów 7.10 i dwukrotnie
 10.10. Przerwani agenci byli uruchamiani ponownie od zera (z dostępem do
 swoich niepełnych szkiców); od 10.10 wieczorem agenci pracują najwyżej po
 dwóch naraz, a recenzje są grupowe (R1–R4), zgodnie z pierwotnym podziałem
-w tej tabeli. Poprawki z recenzji nanosi koordynator, który nie jest
-autorem tych etapów (z wyjątkiem `01`, gdzie zatwierdzenie należy do
-recenzenta, a koordynator tylko nanosi jego tekst).
+w tej tabeli. Poprawki z recenzji R1 i R2
+(obie rundy) naniósł koordynator, który nie jest autorem tych etapów
+(z wyjątkiem `01`, gdzie zatwierdzenie należy do recenzenta, a koordynator
+tylko nanosi jego tekst). Poprawki z R3, R4, R5a i R5b naniosły osobne
+agenty-redaktorzy, które nie były ani autorami, ani recenzentami; każdy
+redaktor najpierw weryfikował uwagę w kodzie i mógł ją odrzucić
+z uzasadnieniem. Recenzent R2 został uruchomiony ponownie po poprawkach
+i wykonał rundę 2 — sprawdził wierność naniesienia rundy 1. Końcową
+kontrolę kompletności wykonali dwaj niezależni krytycy (R6a, R6b).
 
 Wyniki recenzji, poprawki i stan każdej bramki zapisuje `10-REVIEW.md`.
 
@@ -203,4 +209,5 @@ Wyniki recenzji, poprawki i stan każdej bramki zapisuje `10-REVIEW.md`.
 
 | Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
 |---|---|---|---|---|---|---|
+| R1 — niezależny agent-recenzent (grupa: `01` + `02`) | 10.10.2026 | wymaga poprawek (20 kontroli punktowych: 12 potwierdzonych, 2 częściowe, 4 obalone — liczby ze starszej wersji kodu, 2 nieaktualne) | 10 uwag do tego pliku (R1-U01 … R1-U10; 6 istotnych, 4 drobne) | wszystkie 10 — naniesione przez koordynatora 11.10.2026 (tekst recenzenta, bez własnych wniosków koordynatora); liczby powtórnie sprawdzone przez koordynatora | — | `R1.md` (scratchpad sesji; streszczenie w `10-REVIEW.md`) |
 | R4 — niezależny agent-recenzent (grupa: `A3` + `06`; ten plik poza grupą) | 13.10.2026 | brak werdyktu dla tego pliku (uwaga wspólna dla grupy i `01`) | 1 uwaga do tego pliku (R4-U30, drobna: head PR #225 to `c2ab6a8` od 11.10) | R4-U30 — naniesiona przez redaktora poprawek 13.10.2026 po sprawdzeniu (`git log -1 c2ab6a8`: 11.10.2026 14:32 UTC; stany F0-G03/G09 w `acceptance-plan.md` @`c2ab6a8` bez zmian); miejsce oznaczone **[R4]** w § 2 | — | `R4.md` (scratchpad sesji; streszczenie w `10-REVIEW.md`) |
