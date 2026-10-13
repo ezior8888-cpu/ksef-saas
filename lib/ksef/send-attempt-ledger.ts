@@ -418,9 +418,10 @@ export function withSendAttemptLedger<TData, TResult>(
 }
 
 /**
- * Kod odmowy wysyłki PRZED kolejką (`ksef-submit-enqueue.ts`). Kody z katalogu
- * `ksef_error_codes`, gdy znaczą to samo (hamulce, certyfikat, KSeF niedostępny),
- * plus własne odmowy kolejkowania bez odpowiednika w katalogu.
+ * Kod odmowy wysyłki PRZED kolejką (`ksef-submit-enqueue.ts`, akcje operatora
+ * `/admin/ksef`). Kody z katalogu `ksef_error_codes`, gdy znaczą to samo
+ * (hamulce, certyfikat, KSeF niedostępny; odmowa operatora z powodu klasy
+ * błędu faktury — jej kod), plus własne odmowy bez odpowiednika w katalogu.
  */
 export type SendRefusalCode =
   | SendErrorCode
@@ -428,7 +429,13 @@ export type SendRefusalCode =
   | 'PAUSE_UNKNOWN'
   | 'OFFLINE_QUEUE_ERROR'
   | 'ENQUEUE_REFUSED'
-  | 'ENQUEUE_ERROR';
+  | 'ENQUEUE_ERROR'
+  // Odmowy operatora (`lib/admin/ksef-operator-policy.ts`, `app/admin/ksef/actions.ts`).
+  | 'STATUS_NOT_ALLOWED'
+  | 'NO_OPEN_SUBMISSION'
+  | 'ENV_UNKNOWN'
+  | 'SEND_DATA_MISSING'
+  | 'NO_NIP';
 
 /**
  * Odmowa wysyłki przed kolejką → wiersz `refused` / `enqueue`. Fail-open:
