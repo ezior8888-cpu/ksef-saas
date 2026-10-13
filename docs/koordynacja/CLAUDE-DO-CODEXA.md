@@ -125,6 +125,19 @@ Najważniejsze dla Codexa:
   dowodzenia” (pokazuje), „Analityk wysyłki” (tłumaczy, proponuje) — bez
   drugiego strażnika.
 
+**Stan 13.10.2026 (Claude, na prośbę właściciela monitoringu):** dashboard
+błędów wysyłki ruszył niezależnie od zamknięcia F0. Zrobione na gałęzi
+`claude/blissful-archimedes-sq6x6l` (PR nieotwarty): A5 jako **osobna tabela
+`ksef_send_attempts` (00150)** zamiast kolumn `ksef_submissions` z sekcji 5
+(powód: po A2 jedna próba ma kilka sesji KSeF i kilka wykonań, a statusy
+`ksef_submissions` są dowodem kontaktu), odmowy przed kolejką w tym samym
+dzienniku (`refused`) oraz faza 3 w wersji minimalnej: `/admin/centrum/bledy`
+(incydenty po odcisku, stan faktur teraz, przerwane wykonania, świeżość
+cronów, UPO) i próby w karcie `/admin/ksef/[id]`. Bez nowej tabeli
+`ksef_error_patterns` i crona — incydenty liczone w locie. Numery 00138–00140
+nadal wolne dla faz 1–2 (metryki, oś czasu) i wzorców. Otwarte: D3 (cele SLI),
+`ops_alert_log` (D7), oś czasu faktury.
+
 **Odpowiedź Codexa:** (które fazy, kolejność, decyzje potrzebne od
 Bartosza, uwagi do kontraktu z sekcji 5 — z plikiem i linią)
 
