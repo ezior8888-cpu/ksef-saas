@@ -8,7 +8,8 @@ import { getRlsTestEnvironment } from './helpers/rls-environment';
  *
  *   - zapis i odczyt wyłącznie kluczem serwisowym; serwis nie kasuje wierszy
  *     (historia prób zostaje), klient i anon nie widzą nic,
- *   - CHECK statusu i długości treści błędu,
+ *   - CHECK statusu i długości treści błędu; brak CHECK kolejności zegarów
+ *     (zapis wyniku nie może paść przez różnicę zegara piszącego i bazy),
  *   - dziennik nie jest dowodem kontaktu z KSeF (`ksef_has_contact_evidence`):
  *     porażka sprzed POST nie blokuje powrotu do szkicu,
  *   - usunięcie faktury usuwa jej wiersze (CASCADE), mimo braku DELETE.
@@ -66,7 +67,9 @@ async function insertInvoice(): Promise<void> {
   if (error) throw new Error(`insert invoice: ${error.message}`);
 }
 
+/** Wiersz porażki; oba znaczniki z jednego zegara (jak worker), nie z bazy i z klienta naraz. */
 const failedRow = (extra: Record<string, unknown> = {}) => ({
+  started_at: new Date(Date.now() - 5000).toISOString(),
   tenant_id: ORG,
   invoice_id: INVOICE,
   send_attempt_id: ATTEMPT,
@@ -132,8 +135,17 @@ describe.skipIf(!hasDatabase)('A5 (00150): dziennik prób wysyłki — uprawnien
     expect(data).toEqual({ status: 'failed', stage: 'credentials', error_code: 'NO_CERTIFICATE' });
   });
 
+  it('zapis wyniku nie zależy od kolejności zegarów (finished_at wcześniejszy niż started_at z bazy)', async () => {
+    // Zegar piszącego o sekundę za bazą: wynik i tak musi się zapisać.
+    const { error } = await admin
+      .from('ksef_send_attempts')
+      .insert({ ...failedRow(), started_at: undefined, finished_at: new Date(Date.now() - 60_000).toISOString() });
+    expect(error).toBeNull();
+  });
+
   it('serwis nie kasuje historii prób', async () => {
-    const { data: row } = await admin.from('ksef_send_attempts').insert(failedRow()).select('id').single();
+    const { data: row, error: insertError } = await admin.from('ksef_send_attempts').insert(failedRow()).select('id').single();
+    expect(insertError).toBeNull();
     const { error } = await admin.from('ksef_send_attempts').delete().eq('id', row!.id);
     expect(error?.code).toBe('42501');
     const { count } = await admin.from('ksef_send_attempts').select('id', { count: 'exact', head: true }).eq('invoice_id', INVOICE);
@@ -141,7 +153,7 @@ describe.skipIf(!hasDatabase)('A5 (00150): dziennik prób wysyłki — uprawnien
   });
 
   it('klient firmy nie czyta i nie zapisuje dziennika', async () => {
-    await admin.from('ksef_send_attempts').insert(failedRow());
+    expect((await admin.from('ksef_send_attempts').insert(failedRow())).error).toBeNull();
     const read = await owner.from('ksef_send_attempts').select('id').eq('invoice_id', INVOICE);
     expect(read.error?.code).toBe('42501');
     const write = await owner.from('ksef_send_attempts').insert(failedRow());
@@ -156,14 +168,16 @@ describe.skipIf(!hasDatabase)('A5 (00150): dziennik prób wysyłki — uprawnien
   });
 
   it('porażka sprzed POST w dzienniku nie jest dowodem kontaktu z KSeF', async () => {
-    await admin.from('ksef_send_attempts').insert(failedRow());
+    expect((await admin.from('ksef_send_attempts').insert(failedRow())).error).toBeNull();
     const { data, error } = await admin.rpc('ksef_has_contact_evidence', { p_invoice_id: INVOICE, p_tenant_id: ORG });
     expect(error).toBeNull();
     expect(data).toBe(false);
   });
 
   it('usunięcie faktury usuwa jej wiersze dziennika (CASCADE)', async () => {
-    await admin.from('ksef_send_attempts').insert(failedRow());
+    expect((await admin.from('ksef_send_attempts').insert(failedRow())).error).toBeNull();
+    const before = await admin.from('ksef_send_attempts').select('id', { count: 'exact', head: true }).eq('tenant_id', ORG);
+    expect(before.count).toBe(1);
     await admin.from('invoices').delete().eq('id', INVOICE);
     const { count } = await admin.from('ksef_send_attempts').select('id', { count: 'exact', head: true }).eq('tenant_id', ORG);
     expect(count).toBe(0);

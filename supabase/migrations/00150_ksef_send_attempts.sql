@@ -62,9 +62,11 @@ CREATE TABLE public.ksef_send_attempts (
   -- Kto kliknął przy odmowie przed kolejką; NULL dla workera. SET NULL przy
   -- usunięciu konta (RODO), jak `audit_logs.user_id`.
   user_id uuid REFERENCES public.users(id) ON DELETE SET NULL,
+  -- Oba znaczniki z zegara piszącego (worker, akcja serwera); bez CHECK
+  -- kolejności — różnica zegarów albo korekta NTP nie może odrzucić zapisu
+  -- wyniku (wiersz bez wyniku wyglądałby jak przerwane wykonanie).
   started_at timestamptz NOT NULL DEFAULT now(),
-  finished_at timestamptz,
-  CHECK (finished_at IS NULL OR finished_at >= started_at)
+  finished_at timestamptz
 );
 
 COMMENT ON TABLE public.ksef_send_attempts IS
