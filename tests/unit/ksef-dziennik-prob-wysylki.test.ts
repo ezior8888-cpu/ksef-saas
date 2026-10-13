@@ -36,6 +36,8 @@ const mocks = vi.hoisted(() => ({
   ledger: new Map<string, Row>(),
   /** Awaria zapisu dziennika (sprawdzenie, że nie blokuje wysyłki). */
   ledgerDown: false,
+  /** Zapis dziennika wisi (blokada tabeli) — kończy go tylko przerwanie (abortSignal). */
+  ledgerHangs: false,
   nextId: 0,
 }));
 
@@ -85,7 +87,14 @@ vi.mock('@/lib/supabase/admin-queries', async (importOriginal) => {
 function ledgerQuery() {
   let pending: { op: 'insert'; row: Row } | { op: 'update'; patch: Row } | null = null;
   const filters: Row = {};
+  let signal: AbortSignal | null = null;
   const fail = () => ({ data: null, error: { message: 'fixture: dziennik niedostępny' } });
+  const settle = () => {
+    if (!mocks.ledgerHangs) return Promise.resolve(apply());
+    return new Promise((resolve) => {
+      signal?.addEventListener('abort', () => resolve({ data: null, error: { message: 'AbortError: fixture' } }));
+    });
+  };
   const apply = () => {
     if (mocks.ledgerDown) return fail();
     if (pending?.op === 'insert') {
@@ -105,9 +114,10 @@ function ledgerQuery() {
     update: (patch: Row) => { pending = { op: 'update', patch }; return q; },
     select: () => q,
     eq: (column: string, value: unknown) => { filters[column] = value; return q; },
-    single: async () => apply(),
-    maybeSingle: async () => apply(),
-    then: (resolve: (v: unknown) => unknown) => Promise.resolve(apply()).then(resolve),
+    abortSignal: (s: AbortSignal) => { signal = s; return q; },
+    single: () => settle(),
+    maybeSingle: () => settle(),
+    then: (resolve: (v: unknown) => unknown) => settle().then(resolve),
   };
   return q;
 }
@@ -151,7 +161,10 @@ vi.mock('@/lib/jobs/sentry', () => ({ reportExhaustedJob: vi.fn() }));
 
 import '@/lib/jobs/handlers/package-d';
 import { getRegisteredJobs } from '@/lib/jobs/registry';
+import { MAX_WAIT_RETRIES } from '@/lib/jobs/retry';
 import { wrapHandler } from '@/lib/jobs/run-job';
+import { runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
+import { withSendAttemptLedger } from '@/lib/ksef/send-attempt-ledger';
 import { KsefCredentialsError } from '@/lib/supabase/admin-queries';
 import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
 
@@ -171,8 +184,8 @@ function event(attempt = 0) {
   };
 }
 
-function job(id: string, attempt = 0) {
-  return { id, name: 'invoice.submit.requested', data: event(attempt), groupId: TENANT, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal };
+function job(id: string, attempt = 0, extra: Record<string, unknown> = {}) {
+  return { id, name: 'invoice.submit.requested', data: { ...event(attempt), ...extra }, groupId: TENANT, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal };
 }
 
 const rows = () => [...mocks.ledger.values()];
@@ -191,6 +204,7 @@ beforeEach(() => {
   mocks.claim = '2026-10-13T12:00:00.000000+00:00';
   mocks.ledger = new Map();
   mocks.ledgerDown = false;
+  mocks.ledgerHangs = false;
   mocks.nextId = 0;
   vi.stubEnv('KSEF_ENV', 'test');
   vi.stubEnv('SOURCE_COMMIT', 'abc1234');
@@ -275,6 +289,37 @@ describe('A5: oczekiwanie i odporność', () => {
 
     expect(rows()).toHaveLength(1);
     expect(rows()[0]).toMatchObject({ status: 'waiting', stage: 'claim', retryable: true });
+  });
+
+  it('oczekiwanie po wyczerpaniu limitu odczekań to błąd z kodem (pg-boss liczy je wtedy jako próbę)', async () => {
+    mocks.claim = null;
+
+    await run([job(JOB_1, 0, { __waits: MAX_WAIT_RETRIES })] as never);
+
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatchObject({ status: 'failed', stage: 'claim', retryable: true });
+    expect(rows()[0]!.error_code).toEqual(expect.any(String));
+  });
+
+  it('zawieszony zapis dziennika (blokada tabeli) nie zatrzymuje wysyłki — przerwanie po limicie czasu', async () => {
+    mocks.ledgerHangs = true;
+    mocks.fullFlow.mockResolvedValue({
+      ksefNumber: '1234567890-20261013-ABCDEF123456-01',
+      xmlStoragePath: 'x.xml',
+      sessionReferenceNumber: 'SES-1',
+      invoiceReferenceNumber: 'REF-1',
+      via: 'submit',
+    });
+    const fast = wrapHandler({
+      ...submitJob,
+      handler: withSendAttemptLedger((data, ctx) => runSubmitInvoice(data as never, ctx), { timeoutMs: 20 }),
+    } as never);
+
+    const results = await fast([job(JOB_1)] as never);
+
+    expect(results).toEqual([{ id: JOB_1, status: 'completed' }]);
+    expect(mocks.fullFlow).toHaveBeenCalledOnce();
+    expect(mocks.invoice.ksef_status).not.toBe('failed');
   });
 
   it('awaria zapisu dziennika nie zatrzymuje wysyłki', async () => {

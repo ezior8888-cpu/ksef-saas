@@ -58,8 +58,9 @@ CREATE TABLE public.ksef_send_attempts (
   ksef_code integer,
   -- false = bez ponowień (`NonRetriableError`); true = runner zlecił ponowienie, o ile zostały próby.
   retryable boolean,
-  -- Kto kliknął przy odmowie przed kolejką; NULL dla workera.
-  user_id uuid,
+  -- Kto kliknął przy odmowie przed kolejką; NULL dla workera. SET NULL przy
+  -- usunięciu konta (RODO), jak `audit_logs.user_id`.
+  user_id uuid REFERENCES public.users(id) ON DELETE SET NULL,
   started_at timestamptz NOT NULL DEFAULT now(),
   finished_at timestamptz,
   CHECK (finished_at IS NULL OR finished_at >= started_at)
@@ -75,7 +76,10 @@ CREATE INDEX idx_ksef_send_attempts_errors ON public.ksef_send_attempts (started
 
 ALTER TABLE public.ksef_send_attempts ENABLE ROW LEVEL SECURITY;
 
-REVOKE ALL ON public.ksef_send_attempts FROM PUBLIC, anon, authenticated;
+-- Domyślne uprawnienia Supabase dają ALL na nowej tabeli także service_role —
+-- samo GRANT niżej nie odbiera DELETE/TRUNCATE. Historia prób zostaje; wiersze
+-- znikają wyłącznie z fakturą albo firmą (CASCADE działa bez prawa DELETE).
+REVOKE ALL ON public.ksef_send_attempts FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE ON public.ksef_send_attempts TO service_role;
 
 COMMIT;

@@ -24,8 +24,12 @@ import {
   type SendErrorFilters,
 } from './send-errors';
 
-/** Ile wierszy czytamy do grupowania; więcej = wynik obcięty i jawnie oznaczony. */
-export const ATTEMPTS_SCAN_LIMIT = 2000;
+/**
+ * Ile wierszy czytamy do grupowania. Nie więcej niż `max_rows` PostgREST
+ * (1000 w `supabase/config.toml`; produkcja może mieć mniej) — obcięcie
+ * wykrywamy po dokładnym liczniku (`count: 'exact'`), nie po długości listy.
+ */
+export const ATTEMPTS_SCAN_LIMIT = 1000;
 
 const ATTEMPT_COLUMNS =
   'id, tenant_id, invoice_id, send_attempt_id, job_id, execution, ksef_environment, worker_sha, status, stage, result, error_code, error_class, error_message, ksef_http_status, ksef_code, retryable, started_at, finished_at';
@@ -158,6 +162,8 @@ export interface SendErrorsView {
   from: string;
   now: string;
   rows: AttemptRow[];
+  /** Ile wierszy pasuje do filtra (z licznika PostgREST); `rows` może mieć mniej. */
+  matching: number | null;
   truncated: boolean;
   counts: StatusCounts;
   /** Najstarszy wiersz dziennika — wcześniej tylko ostatni błąd faktury. */
@@ -217,18 +223,20 @@ export async function loadSendErrorsView(filters: SendErrorFilters, now: Date = 
   const from = periodStart(filters.period, now).toISOString();
   const problems: string[] = [];
 
-  const listQuery = async (): Promise<{ rows: AttemptRow[]; truncated: boolean }> => {
+  const listQuery = async (): Promise<{ rows: AttemptRow[]; matching: number | null; truncated: boolean }> => {
     let query = client
       .from('ksef_send_attempts')
-      .select(`${ATTEMPT_COLUMNS}, tenants(name), invoices(internal_number, ksef_status)`);
+      .select(`${ATTEMPT_COLUMNS}, tenants(name), invoices(internal_number, ksef_status)`, { count: 'exact' });
     query = applyStatus(applyFilters(query, filters, from), filters.status, now);
-    const { data, error } = await query.order('started_at', { ascending: false }).limit(ATTEMPTS_SCAN_LIMIT);
+    const { data, error, count } = await query.order('started_at', { ascending: false }).limit(ATTEMPTS_SCAN_LIMIT);
     if (error) {
       problems.push(describeProblem('Lista prób', error));
-      return { rows: [], truncated: false };
+      return { rows: [], matching: null, truncated: false };
     }
     const rows = ((data ?? []) as DbAttempt[]).map(toAttempt);
-    return { rows, truncated: rows.length >= ATTEMPTS_SCAN_LIMIT };
+    // Bez licznika nie wiemy, czy lista jest pełna — ostrożnie: obcięta, gdy doszła do limitu.
+    const truncated = count === null ? rows.length >= ATTEMPTS_SCAN_LIMIT : count > rows.length;
+    return { rows, matching: count, truncated };
   };
 
   const ledgerSince = async (): Promise<string | null> => {
@@ -302,6 +310,7 @@ export async function loadSendErrorsView(filters: SendErrorFilters, now: Date = 
     from,
     now: now.toISOString(),
     rows: list.rows,
+    matching: list.matching,
     truncated: list.truncated,
     counts: { succeeded, failed, refused, waiting, interrupted },
     ledgerSince: since,

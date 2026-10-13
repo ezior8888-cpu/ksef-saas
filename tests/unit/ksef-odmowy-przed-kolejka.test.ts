@@ -51,10 +51,13 @@ vi.mock('@/lib/supabase/server', () => ({
     from: (table: string) => {
       if (table === 'ksef_send_attempts') {
         return {
-          insert: async (row: Row) => {
-            if (mocks.ledgerDown) return { data: null, error: { message: 'fixture: dziennik niedostępny' } };
-            mocks.ledger.push(row);
-            return { data: null, error: null };
+          insert: (row: Row) => {
+            const result = async () => {
+              if (mocks.ledgerDown) return { data: null, error: { message: 'fixture: dziennik niedostępny' } };
+              mocks.ledger.push(row);
+              return { data: null, error: null };
+            };
+            return { abortSignal: () => result() };
           },
         };
       }

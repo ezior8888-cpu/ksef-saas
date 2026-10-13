@@ -70,13 +70,14 @@ function recoverySummary(recovery: Record<RecoveryState, number>): string {
     .join(' · ');
 }
 
-function Counter({ label, value, warn }: { label: string; value: number | null; warn?: boolean }) {
+function Counter({ label, value, warn, note }: { label: string; value: number | null | 'n/a'; warn?: boolean; note?: string }) {
   return (
     <div className="rounded-2xl border border-glass-border bg-foreground/3 px-4 py-3">
       <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={cn('mt-1 font-display text-2xl font-semibold', warn && value ? 'text-red-600' : '')}>
-        {value === null ? 'nie wiadomo' : value}
+      <div className={cn('mt-1 font-display text-2xl font-semibold', warn && typeof value === 'number' && value > 0 ? 'text-red-600' : '')}>
+        {value === null ? 'nie wiadomo' : value === 'n/a' ? '—' : value}
       </div>
+      {note && <div className="text-xs text-muted-foreground">{note}</div>}
     </div>
   );
 }
@@ -100,8 +101,11 @@ export default async function AdminSendErrorsPage(props: {
   const incidents = groupIncidents(view.rows, now);
   const crons = cronFreshness(view.crons, now);
   const staleCrons = crons.filter((c) => c.stale);
+  // Filtr kodu, klasy albo etapu wycina udane wykonania (nie mają kodu, kończą na „po przyjęciu”) —
+  // licznik sukcesów i udział błędów nie miałyby wtedy sensu (zawsze 0 i 100 %).
+  const narrowed = Boolean(filters.code || filters.errorClass || filters.stage);
   const executions =
-    view.counts.succeeded !== null && view.counts.failed !== null && view.counts.interrupted !== null
+    !narrowed && view.counts.succeeded !== null && view.counts.failed !== null && view.counts.interrupted !== null
       ? view.counts.succeeded + view.counts.failed + view.counts.interrupted
       : null;
   const failedShare =
@@ -211,19 +215,26 @@ export default async function AdminSendErrorsPage(props: {
         <Counter label="Przerwane" value={view.counts.interrupted} warn />
         <Counter label="Odmowy przed kolejką" value={view.counts.refused} />
         <Counter label="Oczekiwania" value={view.counts.waiting} />
-        <Counter label="Udane wykonania" value={view.counts.succeeded} />
+        <Counter
+          label="Udane wykonania"
+          value={narrowed ? 'n/a' : view.counts.succeeded}
+          note={narrowed ? 'nie dotyczy przy filtrze kodu, klasy lub etapu' : undefined}
+        />
         <div className="rounded-2xl border border-glass-border bg-foreground/3 px-4 py-3">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Wykonania z błędem</div>
           <div className="mt-1 font-display text-2xl font-semibold">
             {failedShare === null ? '—' : `${failedShare.toFixed(1)} %`}
           </div>
-          <div className="text-xs text-muted-foreground">informacyjnie, nie SLI faktur</div>
+          <div className="text-xs text-muted-foreground">
+            {narrowed ? 'nie dotyczy przy filtrze kodu, klasy lub etapu' : 'informacyjnie, nie SLI faktur'}
+          </div>
         </div>
       </section>
 
       {view.truncated && (
         <p className="text-sm text-amber-700 dark:text-amber-400">
-          Wynik obcięty do {ATTEMPTS_SCAN_LIMIT} najnowszych wierszy — incydenty liczą tylko je. Zawęź okres albo filtr.
+          Wynik obcięty: {view.matching !== null ? `${view.matching} pasujących wierszy, ` : ''}pokazujemy i grupujemy
+          {' '}{view.rows.length} najnowszych (limit {ATTEMPTS_SCAN_LIMIT}). Liczniki wyżej są pełne; incydenty — nie. Zawęź okres albo filtr.
         </p>
       )}
 

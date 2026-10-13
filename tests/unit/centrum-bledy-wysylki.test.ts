@@ -11,6 +11,9 @@ const db = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
   /** Błąd każdego zapytania o `ksef_send_attempts` (np. brak tabeli). */
   ledgerError: null as { code?: string; message: string } | null,
+  /** Wiersze listy i licznik pasujących (PostgREST przycina listę do `max_rows`). */
+  listRows: [] as Array<Record<string, unknown>>,
+  listCount: 0,
   calls: [] as Array<{ table: string; method: string; args: unknown[] }>,
 }));
 
@@ -21,7 +24,9 @@ vi.mock('@/lib/supabase/admin', () => ({
       const result = () =>
         table === 'ksef_send_attempts' && db.ledgerError
           ? { data: null, count: null, error: db.ledgerError }
-          : { data: [], count: 0, error: null };
+          : table === 'ksef_send_attempts'
+            ? { data: db.listRows, count: db.listCount, error: null }
+            : { data: [], count: 0, error: null };
       const q: Record<string, unknown> = {};
       for (const method of ['select', 'eq', 'gte', 'lt', 'is', 'in', 'or', 'order', 'limit']) {
         q[method] = (...args: unknown[]) => { db.calls.push({ table, method, args }); return q; };
@@ -167,6 +172,8 @@ describe('loader', () => {
     db.requireAdmin.mockReset();
     db.ledgerError = null;
     db.calls = [];
+    db.listRows = [];
+    db.listCount = 0;
   });
 
   it('najpierw requireAdmin, potem dane; odmowa operatora nie czyta bazy', async () => {
@@ -182,6 +189,19 @@ describe('loader', () => {
     expect(view.problems.filter((p) => p.includes('00150'))).toHaveLength(1);
     expect(view.counts).toEqual({ succeeded: null, failed: null, refused: null, waiting: null, interrupted: null });
     expect(view.rows).toEqual([]);
+  });
+
+  it('obcięcie wykryte po liczniku, nie po długości listy (PostgREST przycina do max_rows)', async () => {
+    db.listRows = Array.from({ length: 3 }, (_, k) => ({
+      id: `r${k}`, tenant_id: T, invoice_id: `i${k}`, status: 'failed', stage: 'ksef', started_at: '2026-10-13T10:00:00.000Z', finished_at: '2026-10-13T10:00:01.000Z',
+    }));
+    db.listCount = 1500;
+    const view = await loadSendErrorsView(parseSendErrorFilters({}), NOW);
+    expect(view.truncated).toBe(true);
+    expect(view.matching).toBe(1500);
+
+    db.listCount = 3;
+    expect((await loadSendErrorsView(parseSendErrorFilters({}), NOW)).truncated).toBe(false);
   });
 
   it('„wszystkie błędy” obejmują porażki, odmowy i przerwane wykonania z oknem okresu', async () => {

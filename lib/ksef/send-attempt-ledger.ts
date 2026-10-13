@@ -1,5 +1,5 @@
 /**
- * Dziennik prób wysyłki do KSeF (`ksef_send_attempts`, migracja 00149) —
+ * Dziennik prób wysyłki do KSeF (`ksef_send_attempts`, migracja 00150) —
  * sesja A5 planu „zero zgubionych faktur”, kontrakt danych centrum
  * dowodzenia (brief, sekcja 5).
  *
@@ -19,19 +19,23 @@
  *
  * Dziennik tylko opisuje: nie zmienia stanu faktury, nie decyduje
  * o ponowieniu. Każdy zapis jest fail-open — awaria dziennika nie zatrzymuje
- * wysyłki (ostrzeżenie w logu i w Sentry, raz na wykonanie).
+ * wysyłki (ostrzeżenie w logu i w Sentry, raz na wykonanie) — i ma limit
+ * czasu (`LEDGER_TIMEOUT_MS`): zawieszony zapis (np. blokada tabeli przy
+ * migracji) nie trzyma wysyłki, także między przyjęciem pliku przez KSeF
+ * a zapisem numeru.
  *
  * Etap bierzemy z nazw kroków runnera (`step.run('load-credentials-meta')`
  * itd.), więc runner wysyłki zostaje nietknięty. Odmowy PRZED kolejką
  * (hamulce, MFA, certyfikat — `ksef-submit-enqueue.ts`) zapisuje
  * `recordSendRefusal` jako `refused`; nie wchodzą do skuteczności wysyłki.
  *
- * Tylko service_role (00149) — wywołania z workera i z akcji serwera.
+ * Tylko service_role (00150) — wywołania z workera i z akcji serwera.
  */
 
 import * as Sentry from '@sentry/nextjs';
 
 import type { JobContext } from '@/lib/jobs/registry';
+import { MAX_WAIT_RETRIES, readWaits } from '@/lib/jobs/retry';
 import type { JobStep } from '@/lib/jobs/step-shim';
 import { KsefApiError } from '@/lib/ksef/client';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -146,15 +150,23 @@ export interface SendAttemptFailure {
  * faktury po wyczerpaniu prób (`classifySendError`) — zapisane w chwili
  * zdarzenia, więc późniejsza zmiana katalogu nie zmienia historii.
  * Oczekiwanie (`RetryAfterError` bez zużycia próby: dzierżawa innej próby,
- * KSeF nadal przetwarza) to `waiting` bez kodu — nie porażka.
+ * KSeF nadal przetwarza) to `waiting` bez kodu — nie porażka. Po wyczerpaniu
+ * limitu odczekań (`decideRetry`) to samo oczekiwanie zużywa próbę i może
+ * zakończyć job — wtedy jest zwykłą porażką z kodem.
  */
-export function describeSendAttemptFailure(error: unknown, stage: SendAttemptStage): SendAttemptFailure {
+export function describeSendAttemptFailure(
+  error: unknown,
+  stage: SendAttemptStage,
+  /** Licznik odczekań joba (`__waits`); po `MAX_WAIT_RETRIES` pg-boss liczy oczekiwanie jako próbę. */
+  waits = 0,
+): SendAttemptFailure {
   const errors = chain(error);
   const top = errors[0];
   const waiting =
     top !== undefined &&
     top.name === 'RetryAfterError' &&
-    (top as { countsAsAttempt?: unknown }).countsAsAttempt === false;
+    (top as { countsAsAttempt?: unknown }).countsAsAttempt === false &&
+    waits < MAX_WAIT_RETRIES;
   const retryable = !(top !== undefined && top.name === 'NonRetriableError');
   let httpStatus: number | null = null;
   let ksefCode: number | null = null;
@@ -226,9 +238,19 @@ function identityOf(data: unknown): AttemptIdentity | null {
 
 type Row = Record<string, unknown>;
 
+/** Limit czasu jednego zapisu dziennika; po nim zapis jest przerywany (fail-open). */
+export const LEDGER_TIMEOUT_MS = 3000;
+
+/** Sygnał przerwania po `ms`; `clear` zwalnia zegar po zakończeniu zapisu. */
+function deadline(ms: number): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error(`zapis dziennika przekroczył ${ms} ms`)), ms);
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
+}
+
 /**
- * Zapis jednego wykonania. Każda operacja fail-open; pierwszy błąd zapisu
- * zgłaszany raz (log + Sentry), kolejne tylko w logu.
+ * Zapis jednego wykonania. Każda operacja fail-open i z limitem czasu;
+ * pierwszy błąd zapisu zgłaszany raz (log + Sentry), kolejne tylko w logu.
  */
 class AttemptWriter {
   private rowId: string | null = null;
@@ -237,6 +259,7 @@ class AttemptWriter {
   constructor(
     private readonly base: Row,
     private readonly logger: JobContext['logger'],
+    private readonly timeoutMs: number,
   ) {}
 
   private report(op: string, detail: string): void {
@@ -251,11 +274,13 @@ class AttemptWriter {
   }
 
   async start(): Promise<void> {
+    const limit = deadline(this.timeoutMs);
     try {
       const { data, error } = await (await createAdminClient())
         .from('ksef_send_attempts')
         .insert({ ...this.base, status: 'started' satisfies SendAttemptStatus, stage: 'start' satisfies SendAttemptStage })
         .select('id')
+        .abortSignal(limit.signal)
         .single();
       if (error || !data) {
         this.report('start', error?.message ?? 'brak id wiersza');
@@ -264,33 +289,42 @@ class AttemptWriter {
       this.rowId = String((data as { id: unknown }).id);
     } catch (e) {
       this.report('start', e instanceof Error ? e.message : String(e));
+    } finally {
+      limit.clear();
     }
   }
 
   async stage(stage: SendAttemptStage): Promise<void> {
     if (!this.rowId) return;
+    const limit = deadline(this.timeoutMs);
     try {
       const { error } = await (await createAdminClient())
         .from('ksef_send_attempts')
         .update({ stage })
-        .eq('id', this.rowId);
+        .eq('id', this.rowId)
+        .abortSignal(limit.signal);
       if (error) this.report('stage', error.message);
     } catch (e) {
       this.report('stage', e instanceof Error ? e.message : String(e));
+    } finally {
+      limit.clear();
     }
   }
 
   /** Wynik wykonania. Bez wiersza startowego (awaria przy starcie) — pełny wiersz od nowa. */
   async finish(outcome: Row): Promise<void> {
     const finished = { ...outcome, finished_at: new Date().toISOString() };
+    const limit = deadline(this.timeoutMs);
     try {
       const client = await createAdminClient();
       const { error } = this.rowId
-        ? await client.from('ksef_send_attempts').update(finished).eq('id', this.rowId)
-        : await client.from('ksef_send_attempts').insert({ ...this.base, ...finished });
+        ? await client.from('ksef_send_attempts').update(finished).eq('id', this.rowId).abortSignal(limit.signal)
+        : await client.from('ksef_send_attempts').insert({ ...this.base, ...finished }).abortSignal(limit.signal);
       if (error) this.report('finish', error.message);
     } catch (e) {
       this.report('finish', e instanceof Error ? e.message : String(e));
+    } finally {
+      limit.clear();
     }
   }
 }
@@ -303,7 +337,9 @@ class AttemptWriter {
  */
 export function withSendAttemptLedger<TData, TResult>(
   handler: (data: TData, ctx: JobContext) => Promise<TResult>,
+  options: { timeoutMs?: number } = {},
 ): (data: TData, ctx: JobContext) => Promise<TResult> {
+  const timeoutMs = options.timeoutMs ?? LEDGER_TIMEOUT_MS;
   return async (data, ctx) => {
     const identity = identityOf(data);
     if (!identity) return handler(data, ctx);
@@ -319,6 +355,7 @@ export function withSendAttemptLedger<TData, TResult>(
         worker_sha: workerRevision(),
       },
       ctx.logger,
+      timeoutMs,
     );
     await writer.start();
 
@@ -348,16 +385,23 @@ export function withSendAttemptLedger<TData, TResult>(
       });
       return result;
     } catch (error) {
-      const failure = describeSendAttemptFailure(error, stage);
-      await writer.finish({ ...failure });
-      ctx.logger.info('ksef.send.attempt', {
-        invoiceId: identity.invoiceId,
-        sendAttemptId: identity.sendAttemptId,
-        status: failure.status,
-        stage: failure.stage,
-        code: failure.error_code,
-        ms: Date.now() - startedAt,
-      });
+      // Opis porażki nie może zastąpić błędu runnera — ten zawsze wychodzi bez zmian.
+      try {
+        const failure = describeSendAttemptFailure(error, stage, readWaits(data));
+        await writer.finish({ ...failure });
+        ctx.logger.info('ksef.send.attempt', {
+          invoiceId: identity.invoiceId,
+          sendAttemptId: identity.sendAttemptId,
+          status: failure.status,
+          stage: failure.stage,
+          code: failure.error_code,
+          ms: Date.now() - startedAt,
+        });
+      } catch (ledgerError) {
+        ctx.logger.warn('Dziennik prób wysyłki KSeF: opis porażki nieudany (wysyłka bez zmian)', {
+          error: ledgerError instanceof Error ? ledgerError.message : String(ledgerError),
+        });
+      }
       throw error;
     }
   };
@@ -388,6 +432,7 @@ export async function recordSendRefusal(params: {
   message: string;
 }): Promise<void> {
   const now = new Date().toISOString();
+  const limit = deadline(LEDGER_TIMEOUT_MS);
   try {
     const { error } = await (await createAdminClient()).from('ksef_send_attempts').insert({
       tenant_id: params.tenantId,
@@ -402,7 +447,7 @@ export async function recordSendRefusal(params: {
       retryable: false,
       started_at: now,
       finished_at: now,
-    });
+    }).abortSignal(limit.signal);
     if (error) throw new Error(error.message);
   } catch (e) {
     console.warn('[ksef.send-attempts] zapis odmowy przed kolejką nieudany', {
@@ -415,5 +460,7 @@ export async function recordSendRefusal(params: {
       tags: { area: 'ksef.send-attempts', op: 'refusal' },
       extra: { invoiceId: params.invoiceId, code: params.code },
     });
+  } finally {
+    limit.clear();
   }
 }
