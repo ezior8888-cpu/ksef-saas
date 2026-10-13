@@ -38,19 +38,27 @@ exec bash -c "$*"
 `;
 
 const FAKE_DOCKER = `#!/usr/bin/env bash
-# Atrapa docker: psql zapisuje SQL (rozdzielone NUL), sonda tabeli odpowiada FAKE_REGCLASS.
+# Atrapa docker. psql: zapisuje SQL z -c (rozdzielone NUL); sonda tabeli odpowiada
+# FAKE_REGCLASS w formacie prawdziwego psql (samo t/f tylko z -At).
+# logs: jak docker logs bez TTY — ostrzeżenia i błędy kontenera (console.warn/error) na stderr.
 case "$1" in
   ps) [ -n "\${FAKE_CONTAINERS:-}" ] && printf '%s\\n' $FAKE_CONTAINERS; exit 0 ;;
-  logs) name=\${!#}; [ -f "$FAKE_DIR/log-$name" ] && cat "$FAKE_DIR/log-$name"; exit 0 ;;
+  inspect) case "$*" in *State.StartedAt*) echo 2026-10-13T13:20:00Z ;; esac; exit 0 ;;
+  logs)
+    f="$FAKE_DIR/log-\${!#}"; [ -f "$f" ] || exit 0
+    grep -vE ' WARN | ERROR |^\\[ksef\\.send-attempts\\]' "$f"
+    grep -E ' WARN | ERROR |^\\[ksef\\.send-attempts\\]' "$f" >&2
+    exit 0 ;;
   exec)
     [ "$3" = psql ] || exit 0
-    sql=""; prev=""
-    for a in "$@"; do [ "$prev" = "-c" ] && sql=$a; prev=$a; done
+    sql=""; prev=""; at=0
+    for a in "$@"; do [ "$prev" = "-c" ] && sql=$a; [ "$a" = -At ] && at=1; prev=$a; done
     printf '%s\\0' "$sql" >> "$FAKE_DIR/sql"
     case "$sql" in
       *"to_regclass('public.${LEDGER_TABLE}')"*)
         [ -n "\${FAKE_REGCLASS:-}" ] || exit 1
-        printf '%s\\n' "$FAKE_REGCLASS" ;;
+        if [ $at = 1 ]; then printf '%s\\n' "$FAKE_REGCLASS"
+        else printf ' ?column? \\n----------\\n %s\\n(1 row)\\n\\n' "$FAKE_REGCLASS"; fi ;;
     esac
     exit 0 ;;
 esac
@@ -128,18 +136,26 @@ describe('kontrola-faktur-ksef.sh — sekcja 12: dziennik prób wysyłki', () =>
 
     expect(out).toContain('dziennik prób wysyłki');
     expect(out).toContain('zakres dziennika');
+    expect(out).toContain('bez wiersza w dzienniku');
     expect(out).toContain('wykonania z 24 h wg stanu');
     expect(out).toContain('błędy, odmowy i przerwane z 24 h wg kodu');
     expect(out).toContain('ostatnie błędy, odmowy i przerwane z 24 h');
     expect(out).not.toContain('BRAK TABELI');
+    expect(out).toContain('(brak kontenerów aplikacji i workera)');
 
     const queries = ledgerQueries(run.sql);
-    expect(queries).toHaveLength(4);
+    expect(queries).toHaveLength(5);
+    // Czy dziennik pisze: wykonania joba wysyłki z inngest_run_log bez wiersza w dzienniku.
+    expect(
+      queries.filter((q) => q.includes('FROM inngest_run_log') && q.includes("event_name='invoice.submit.requested'")),
+    ).toHaveLength(1);
     // Te same progi co /admin/centrum/bledy: okno 24 h, przerwane po 20 min,
     // „utknęła” po 30 min w `sending` (I2).
     for (const q of queries) expect(q).toContain("interval '24 hours'");
     expect(queries.filter((q) => q.includes("interval '20 minutes'"))).toHaveLength(3);
     expect(queries.some((q) => q.includes("interval '30 minutes'"))).toBe(true);
+    const minuteThresholds = new Set(queries.flatMap((q) => [...q.matchAll(/interval '(\d+) min/g)].map((m) => m[1])));
+    expect(minuteThresholds).toEqual(new Set(['20', '30']));
     // Tylko odczyt.
     for (const q of queries) expect(q.trimStart()).toMatch(/^SELECT /);
   });
@@ -195,8 +211,9 @@ describe('kontrola-faktur-ksef.sh — sekcja 12: dziennik prób wysyłki', () =>
     const run = runScript({ FAKE_REGCLASS: 't', FAKE_CONTAINERS: `${WORKER} ${APP}` });
     const out = section12(run.stdout);
 
-    expect(out).toContain(`${WORKER}: ksef.send.attempt 2, zapis nieudany 2`);
-    expect(out).toContain(`${APP}: ksef.send.attempt 0, zapis nieudany 1`);
+    // Okno logów to czas od startu kontenera (wdrożenie usuwa stary kontener z logami).
+    expect(out).toContain(`${WORKER} (start 2026-10-13T13:20:00Z): ksef.send.attempt 2, zapis nieudany 2`);
+    expect(out).toContain(`${APP} (start 2026-10-13T13:20:00Z): ksef.send.attempt 0, zapis nieudany 1`);
   });
 });
 
