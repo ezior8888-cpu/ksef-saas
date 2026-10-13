@@ -25,7 +25,7 @@
  * same reguły co RPC `decide_ksef_duplicate` i blokada z 00148.
  */
 
-import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
+import type { KsefRequeueRefusal, KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import type {
   DuplicateChoice,
@@ -33,7 +33,13 @@ import type {
   DuplicateDecisionView,
   DuplicateRefusalDetail,
 } from '@/lib/ksef/duplicate-decision';
-import { SEND_ERROR_CODES, sendErrorClassOf, type SendErrorCode } from '@/lib/ksef/send-error-classes';
+import {
+  SEND_ERROR_CODES,
+  isSendErrorCode,
+  sendErrorClassOf,
+  type SendErrorCode,
+  type SendRefusalCode,
+} from '@/lib/ksef/send-error-classes';
 
 /**
  * Kody klasy reconcile, przy których „Wyślij ponownie” operatora jest
@@ -247,26 +253,59 @@ function terminalRequeueRefusal(code: string | null): string {
 const off = (reason: string): OperatorButton => ({ enabled: false, reason });
 
 /**
+ * Odmowa „Wyślij ponownie” / „Tylko uzgodnij”: powód dla operatora i kod do
+ * dziennika prób (`refused`, A5). Kod z katalogu, gdy znaczy to samo (hamulce,
+ * data wystawienia); odmowa z powodu klasy błędu faktury — kod tej faktury
+ * (np. KSEF_DUPLICATE_RECONCILE: „ponowienie powtórzy 440”).
+ */
+export interface OperatorRefusal {
+  code: SendRefusalCode;
+  reason: string;
+}
+
+const refuse = (code: SendRefusalCode, reason: string): OperatorRefusal => ({ code, reason });
+const button = (refusal: OperatorRefusal | null): OperatorButton =>
+  refusal ? off(refusal.reason) : { enabled: true, reason: null };
+
+/** Kod hamulca rodzaju — jak w `operatorKindHeldMessage` (zaliczka: tylko nieznane środowisko). */
+function kindHeldCode(kind: string | null): SendRefusalCode {
+  if (kind === 'correction') return SEND_ERROR_CODES.KOR_HOLD;
+  if (kind === 'final') return SEND_ERROR_CODES.ROZ_HOLD_RECONCILE;
+  return 'ENV_UNKNOWN';
+}
+
+/**
  * „Wyślij ponownie” operatora — ta sama decyzja dla przycisku i akcji
  * (`operatorRequeueAction`); nie zależy od dowodu kontaktu ani otwartego wpisu.
  * Klasa hold zostaje dostępna (operator zdejmuje hamulce; akcja sprawdza wyłącznik).
  */
+export function operatorRequeueRefusal(
+  input: Pick<OperatorButtonsInput, 'direction' | 'status' | 'errorCode' | 'invoiceKind' | 'facts' | 'environmentKnown'>,
+): OperatorRefusal | null {
+  const errorClass = sendErrorClassOf(input.errorCode);
+  if (input.direction !== 'outgoing') return refuse('STATUS_NOT_ALLOWED', OPERATOR_MESSAGES.incoming);
+  if (input.status === 'rejected') return refuse('STATUS_NOT_ALLOWED', OPERATOR_MESSAGES.rejectedToDraft);
+  if (input.status !== 'failed') return refuse('STATUS_NOT_ALLOWED', OPERATOR_MESSAGES.onlyFailed);
+  // Klasa z katalogu → kod jest w katalogu (zawężenie tylko dla typu).
+  if (errorClass === 'terminal' && isSendErrorCode(input.errorCode)) {
+    return refuse(input.errorCode, terminalRequeueRefusal(input.errorCode));
+  }
+  if (errorClass === 'reconcile' && isSendErrorCode(input.errorCode) && !OPERATOR_REQUEUE_RECONCILE_CODES.includes(input.errorCode)) {
+    return refuse(input.errorCode, reconcileRequeueRefusal(input.errorCode));
+  }
+  if (!input.environmentKnown) return refuse('ENV_UNKNOWN', OPERATOR_MESSAGES.envUnknown);
+  if (input.facts.sendData === 'missing') return refuse('SEND_DATA_MISSING', operatorLegacyDataMessage(input.invoiceKind));
+  if (input.facts.kindHeld) return refuse(kindHeldCode(input.invoiceKind), operatorKindHeldMessage(input.invoiceKind));
+  if (input.invoiceKind !== 'regular' && input.facts.issueDatePassed) {
+    return refuse(SEND_ERROR_CODES.ISSUE_DATE_PASSED, operatorIssueDateMessage(input.invoiceKind));
+  }
+  return null;
+}
+
 export function operatorRequeueButton(
   input: Pick<OperatorButtonsInput, 'direction' | 'status' | 'errorCode' | 'invoiceKind' | 'facts' | 'environmentKnown'>,
 ): OperatorButton {
-  const errorClass = sendErrorClassOf(input.errorCode);
-  if (input.direction !== 'outgoing') return off(OPERATOR_MESSAGES.incoming);
-  if (input.status === 'rejected') return off(OPERATOR_MESSAGES.rejectedToDraft);
-  if (input.status !== 'failed') return off(OPERATOR_MESSAGES.onlyFailed);
-  if (errorClass === 'terminal') return off(terminalRequeueRefusal(input.errorCode));
-  if (errorClass === 'reconcile' && !OPERATOR_REQUEUE_RECONCILE_CODES.includes(input.errorCode as SendErrorCode)) {
-    return off(reconcileRequeueRefusal(input.errorCode));
-  }
-  if (!input.environmentKnown) return off(OPERATOR_MESSAGES.envUnknown);
-  if (input.facts.sendData === 'missing') return off(operatorLegacyDataMessage(input.invoiceKind));
-  if (input.facts.kindHeld) return off(operatorKindHeldMessage(input.invoiceKind));
-  if (input.invoiceKind !== 'regular' && input.facts.issueDatePassed) return off(operatorIssueDateMessage(input.invoiceKind));
-  return { enabled: true, reason: null };
+  return button(operatorRequeueRefusal(input));
 }
 
 /**
@@ -274,16 +313,42 @@ export function operatorRequeueButton(
  * klasy i daty (nie wysyła), ale z danymi i rodzajem: runner potrzebuje
  * kompletnego zdarzenia na granicy i zatrzymuje hamulec przed uzgodnieniem.
  */
+export function operatorReconcileRefusal(
+  input: Pick<OperatorButtonsInput, 'direction' | 'status' | 'invoiceKind' | 'facts' | 'environmentKnown' | 'openSent'>,
+): OperatorRefusal | null {
+  if (input.direction !== 'outgoing') return refuse('STATUS_NOT_ALLOWED', OPERATOR_MESSAGES.incoming);
+  if (input.status !== 'failed' && input.status !== 'rejected') {
+    return refuse('STATUS_NOT_ALLOWED', OPERATOR_MESSAGES.notFailedOrRejected);
+  }
+  if (!input.environmentKnown) return refuse('ENV_UNKNOWN', OPERATOR_MESSAGES.envUnknown);
+  if (input.facts.sendData === 'missing') return refuse('SEND_DATA_MISSING', operatorLegacyDataMessage(input.invoiceKind));
+  if (input.facts.kindHeld) return refuse(kindHeldCode(input.invoiceKind), operatorKindHeldMessage(input.invoiceKind));
+  if (!input.openSent) return refuse('NO_OPEN_SUBMISSION', OPERATOR_MESSAGES.noOpenSent);
+  return null;
+}
+
 export function operatorReconcileButton(
   input: Pick<OperatorButtonsInput, 'direction' | 'status' | 'invoiceKind' | 'facts' | 'environmentKnown' | 'openSent'>,
 ): OperatorButton {
-  if (input.direction !== 'outgoing') return off(OPERATOR_MESSAGES.incoming);
-  if (input.status !== 'failed' && input.status !== 'rejected') return off(OPERATOR_MESSAGES.notFailedOrRejected);
-  if (!input.environmentKnown) return off(OPERATOR_MESSAGES.envUnknown);
-  if (input.facts.sendData === 'missing') return off(operatorLegacyDataMessage(input.invoiceKind));
-  if (input.facts.kindHeld) return off(operatorKindHeldMessage(input.invoiceKind));
-  if (!input.openSent) return off(OPERATOR_MESSAGES.noOpenSent);
-  return { enabled: true, reason: null };
+  return button(operatorReconcileRefusal(input));
+}
+
+/**
+ * Zdarzenie z kopii na wierszu nie powstało (`buildKsefRequeueEvent`) — zwykle
+ * nieosiągalne po decyzji przycisku, chyba że minęła północ między krokami.
+ */
+export function operatorRequeueEventRefusal(reason: KsefRequeueRefusal, kind: string | null): OperatorRefusal {
+  switch (reason) {
+    case 'missing-special-data':
+    case 'incomplete':
+      return refuse('SEND_DATA_MISSING', operatorLegacyDataMessage(kind));
+    case 'kind-held':
+      return refuse(kindHeldCode(kind), operatorKindHeldMessage(kind));
+    case 'issue-date':
+      return refuse(SEND_ERROR_CODES.ISSUE_DATE_PASSED, operatorIssueDateMessage(kind));
+    default:
+      return refuse('NO_NIP', OPERATOR_MESSAGES.noNip);
+  }
 }
 
 /**
