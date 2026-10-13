@@ -125,13 +125,20 @@ export function refineStage(stage: SendAttemptStage, error: unknown): SendAttemp
 const MAX_MESSAGE = 500;
 
 /**
- * Treść błędu do dziennika: bez sekretów z adresów i tokenów
- * (`scrubTelemetryText`) i bez NIP-ów (10 cyfr), najwyżej 500 znaków.
- * Numer KSeF zawiera NIP sprzedawcy — zostaje bez niego; pełny numer jest
- * na fakturze.
+ * Treść błędu do dziennika bez danych klienta (brief C-22 §5, reguła 4):
+ * bez sekretów z adresów i tokenów (`scrubTelemetryText`), bez NIP-ów,
+ * numerów rachunków i VAT-UE, kwot i innych liczb oraz wartości pól
+ * w cudzysłowach (walidator i XSD powtarzają treść dokumentu). Zostają
+ * nazwy pól (`P_15`), klasa błędu i opis — HTTP i kod KSeF mają własne
+ * kolumny. Najwyżej 500 znaków. Pełny ostatni błąd jest na fakturze.
  */
 export function sendAttemptMessage(message: string): string {
-  return scrubTelemetryText(message).replace(/\b\d{10}\b/g, '[NIP]').slice(0, MAX_MESSAGE);
+  return scrubTelemetryText(message)
+    .replace(/\b\d{10}\b/g, '[NIP]')
+    .replace(/"[^"]*"|'[^']*'|„[^”]*”/g, '"…"')
+    .replace(/\b[A-Z]{2}\d[\d ]{7,}\d\b/g, '<rachunek>')
+    .replace(/(?<![\w])\d+(?:[ .,]\d+)*/g, '<n>')
+    .slice(0, MAX_MESSAGE);
 }
 
 export interface SendAttemptFailure {
@@ -351,6 +358,9 @@ export function withSendAttemptLedger<TData, TResult>(
         send_attempt_id: identity.sendAttemptId,
         job_id: uuidOrNull(ctx.jobId),
         execution: ctx.attempt,
+        // Zegar workera dla startu i końca: wiersz bez wyniku (zapis końca padł)
+        // nie dostaje znacznika późniejszego niż jego koniec.
+        started_at: new Date().toISOString(),
         ksef_environment: identity.environment,
         worker_sha: workerRevision(),
       },
