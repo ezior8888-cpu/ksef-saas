@@ -43,6 +43,7 @@ import {
   KSEF_MAX_RETRIES,
   KSEF_TENANT_CONCURRENCY_LIMIT,
 } from '../retry-schedule';
+import { withSendAttemptLedger } from '@/lib/ksef/send-attempt-ledger';
 import { registerJob, type JobContext } from '../registry';
 
 const DEFAULT_JOB_RETRIES = 4;
@@ -59,7 +60,8 @@ registerJob<Parameters<typeof runSubmitInvoice>[0]>({
   groupConcurrency: KSEF_TENANT_CONCURRENCY_LIMIT, // limit per tenant
   // Kilka firm naraz (AUD-36); per firma pilnuje groupConcurrency (groupId = tenantId).
   localConcurrency: 5,
-  handler: (data, ctx) => runSubmitInvoice(data, ctx),
+  // A5: każde wykonanie zostawia wiersz w dzienniku prób (`ksef_send_attempts`).
+  handler: withSendAttemptLedger((data, ctx) => runSubmitInvoice(data, ctx)),
   // Po wyczerpaniu prób: rejected / offline_queued / failed (Offline24).
   onExhausted: (error, data, ctx) => onSubmitInvoiceExhausted(error, data, ctx),
 });
