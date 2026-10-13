@@ -86,6 +86,7 @@ import {
   operatorIssueDateMessage,
   operatorKindHeldMessage,
   operatorLegacyDataMessage,
+  operatorRequeueEventRefusal,
 } from '@/lib/admin/ksef-operator-policy';
 import { KSEF_RESEND_SOURCE_COLUMNS } from '@/lib/invoices/ksef-requeue-event';
 import { sendAttemptMessage } from '@/lib/ksef/send-attempt-ledger';
@@ -665,6 +666,60 @@ describe('A5: odmowy operatora w dzienniku prób (ksef_send_attempts)', () => {
       extra: { invoiceId: ID, code: 'KSEF_PAUSED' },
     }));
     warn.mockRestore();
+  });
+
+  // Po recenzji: ROZ (hamulec we wszystkich środowiskach) i gałęzie „Tylko uzgodnij” — osobna funkcja polityki.
+  const rozRow = () => row({
+    invoice_kind: 'final', internal_number: 'ROZ/9', last_error_code: 'ROZ_HOLD_RECONCILE',
+    special_data: { finalData: { invoiceType: 'final', issueDate: TODAY }, finalAdvanceSettlementRows: [{ id: 'x' }] },
+    fa3_data: { internalNumber: 'ROZ/9', type: 'ROZ', issueDate: TODAY, lines: [{ ordinal: 1 }], seller: { nip: '5260001246' } },
+  });
+
+  it.each([
+    ['ROZ z danymi, „Wyślij ponownie”', (): void => { m.invoice = rozRow(); }, false, 'ROZ_HOLD_RECONCILE', 'hold', (): string => operatorKindHeldMessage('final')],
+    ['ROZ z danymi, „Tylko uzgodnij”', (): void => { m.invoice = rozRow(); m.openSent = [{ id: 'sub-1' }]; }, true, 'ROZ_HOLD_RECONCILE', 'hold', (): string => operatorKindHeldMessage('final')],
+    ['„Tylko uzgodnij” przy KSEF_ENV nieustawionym', (): void => { m.env.mockReturnValue(null); m.openSent = [{ id: 'sub-1' }]; }, true, 'ENV_UNKNOWN', null, (): string => OPERATOR_MESSAGES.envUnknown],
+    ['„Tylko uzgodnij” korekty bez special_data', (): void => { m.invoice = row({ invoice_kind: 'correction' }); m.openSent = [{ id: 'sub-1' }]; }, true, 'SEND_DATA_MISSING', null, (): string => operatorLegacyDataMessage('correction')],
+  ] as const)('%s → wiersz refused z kodem', async (_l, arrange, reconcileOnly, code, errorClass, message) => {
+    arrange();
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly });
+
+    expect(result).toEqual({ success: false, error: message() });
+    expect(m.attempts).toEqual([refusedRow(code, errorClass, message())]);
+  });
+
+  it('północ między decyzją a zdarzeniem (ZAL) → ISSUE_DATE_PASSED z budowniczego zdarzenia, bez zlecenia', async () => {
+    vi.setSystemTime(new Date('2026-10-03T21:59:59Z'));
+    m.invoice = row({
+      invoice_kind: 'advance', internal_number: 'ZAL/9', last_error_code: 'KSEF_UNAVAILABLE',
+      fa3_data: {
+        internalNumber: 'ZAL/9', type: 'ZAL', issueDate: TODAY, lines: [{ ordinal: 1 }], seller: { nip: '5260001246' },
+        advanceEnvelope: { invoiceType: 'advance', issueDate: TODAY },
+      },
+    });
+    // Odczyt wyłącznika to jedyne okno między faktami decyzji a budowniczym zdarzenia.
+    m.paused.mockImplementation(async () => { vi.setSystemTime(new Date('2026-10-03T22:00:01Z')); return false; });
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly: false });
+
+    expect(result).toEqual({ success: false, error: operatorIssueDateMessage('advance') });
+    expect(m.send).not.toHaveBeenCalled();
+    expect(m.attempts).toEqual([expect.objectContaining({
+      status: 'refused', stage: 'enqueue', error_code: 'ISSUE_DATE_PASSED', error_class: 'terminal',
+      error_message: sendAttemptMessage(operatorIssueDateMessage('advance')),
+    })]);
+  });
+
+  it('operatorRequeueEventRefusal: powód budowniczego → kod i komunikat (jak przycisk)', () => {
+    expect(operatorRequeueEventRefusal('missing-special-data', 'correction')).toEqual({ code: 'SEND_DATA_MISSING', reason: operatorLegacyDataMessage('correction') });
+    expect(operatorRequeueEventRefusal('incomplete', 'regular')).toEqual({ code: 'SEND_DATA_MISSING', reason: OPERATOR_MESSAGES.incomplete });
+    expect(operatorRequeueEventRefusal('kind-held', 'correction')).toEqual({ code: 'KOR_HOLD', reason: operatorKindHeldMessage('correction') });
+    expect(operatorRequeueEventRefusal('kind-held', 'final')).toEqual({ code: 'ROZ_HOLD_RECONCILE', reason: operatorKindHeldMessage('final') });
+    // Zaliczka jest wstrzymana tylko przy nieznanym środowisku — kod jak komunikat.
+    expect(operatorRequeueEventRefusal('kind-held', 'advance')).toEqual({ code: 'ENV_UNKNOWN', reason: OPERATOR_MESSAGES.envUnknown });
+    expect(operatorRequeueEventRefusal('issue-date', 'advance')).toEqual({ code: 'ISSUE_DATE_PASSED', reason: operatorIssueDateMessage('advance') });
+    expect(operatorRequeueEventRefusal('no-nip', 'regular')).toEqual({ code: 'NO_NIP', reason: OPERATOR_MESSAGES.noNip });
   });
 });
 

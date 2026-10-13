@@ -33,9 +33,13 @@ import type {
   DuplicateDecisionView,
   DuplicateRefusalDetail,
 } from '@/lib/ksef/duplicate-decision';
-import { SEND_ERROR_CODES, isSendErrorCode, sendErrorClassOf, type SendErrorCode } from '@/lib/ksef/send-error-classes';
-// Tylko typ — moduł zostaje czysty (komponent kliencki przycisków).
-import type { SendRefusalCode } from '@/lib/ksef/send-attempt-ledger';
+import {
+  SEND_ERROR_CODES,
+  isSendErrorCode,
+  sendErrorClassOf,
+  type SendErrorCode,
+  type SendRefusalCode,
+} from '@/lib/ksef/send-error-classes';
 
 /**
  * Kody klasy reconcile, przy których „Wyślij ponownie” operatora jest
