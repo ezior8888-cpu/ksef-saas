@@ -1,0 +1,448 @@
+{
+  "_note": "Celowo NIEPOPRAWNY przykład NOT_RUN. Nie jest dowodem kopii ani zgodą na wykonanie. Prywatny manifest poza Git. Hashów i bajtów walidator nie potwierdza. v1 tylko Unversioned; finalny manifest to osobny późniejszy snapshot dostarczenia, bez samoreferencyjnego hasha tego JSON.",
+  "status": "NOT_RUN",
+  "schemaVersion": 1,
+  "runId": null,
+  "startedAtUtc": null,
+  "completedAtUtc": null,
+  "stabilization": {
+    "startedAtUtc": null,
+    "completedAtUtc": null,
+    "mutationsExcluded": false,
+    "evidence": {
+      "sha256": null,
+      "bytes": null,
+      "createdAtUtc": null
+    }
+  },
+  "sourceInventory": {
+    "runId": null,
+    "complete": false,
+    "databaseNames": [
+      "postgres",
+      "_supabase"
+    ],
+    "minioIds": [
+      "application",
+      "supabase"
+    ],
+    "operationWindow": {
+      "startedAtUtc": null,
+      "completedAtUtc": null
+    },
+    "artifact": {
+      "sha256": null,
+      "bytes": null,
+      "createdAtUtc": null
+    }
+  },
+  "databases": [
+    {
+      "name": "postgres",
+      "host": "db-1",
+      "runId": null,
+      "operationWindow": {
+        "startedAtUtc": null,
+        "completedAtUtc": null
+      },
+      "dump": {
+        "format": "custom",
+        "exitCode": null,
+        "allSchemas": false,
+        "artifact": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      },
+      "restoreListCheck": {
+        "exitCode": null,
+        "checkedAtUtc": null,
+        "evidence": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      }
+    },
+    {
+      "name": "_supabase",
+      "host": "db-1",
+      "runId": null,
+      "operationWindow": {
+        "startedAtUtc": null,
+        "completedAtUtc": null
+      },
+      "dump": {
+        "format": "custom",
+        "exitCode": null,
+        "allSchemas": false,
+        "artifact": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      },
+      "restoreListCheck": {
+        "exitCode": null,
+        "checkedAtUtc": null,
+        "evidence": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      }
+    }
+  ],
+  "globals": {
+    "runId": null,
+    "scope": "globals-only",
+    "exitCode": null,
+    "rolesIncluded": false,
+    "tablespacesIncluded": false,
+    "operationWindow": {
+      "startedAtUtc": null,
+      "completedAtUtc": null
+    },
+    "artifact": {
+      "sha256": null,
+      "bytes": null,
+      "createdAtUtc": null
+    }
+  },
+  "recoveryBundle": {
+    "runId": null,
+    "encrypted": false,
+    "configurationIncluded": false,
+    "keysIncluded": false,
+    "operationWindow": {
+      "startedAtUtc": null,
+      "completedAtUtc": null
+    },
+    "artifact": {
+      "sha256": null,
+      "bytes": null,
+      "createdAtUtc": null
+    }
+  },
+  "minio": [
+    {
+      "id": "application",
+      "host": "ops-1",
+      "runId": null,
+      "operationWindow": {
+        "startedAtUtc": null,
+        "completedAtUtc": null
+      },
+      "source": {
+        "bucketCount": null,
+        "currentObjectCount": null,
+        "currentObjectBytes": null,
+        "allVersionCount": null,
+        "allVersionBytes": null,
+        "deleteMarkerCount": null,
+        "multipartUploadCount": null,
+        "versioningCounts": {
+          "Enabled": null,
+          "Suspended": null,
+          "Unversioned": null
+        }
+      },
+      "exported": {
+        "bucketCount": null,
+        "currentObjectCount": null,
+        "currentObjectBytes": null,
+        "allVersionCount": null,
+        "allVersionBytes": null,
+        "deleteMarkerCount": null,
+        "multipartUploadCount": null,
+        "versioningCounts": {
+          "Enabled": null,
+          "Suspended": null,
+          "Unversioned": null
+        }
+      },
+      "listingComplete": {
+        "buckets": false,
+        "currentObjects": false,
+        "versions": false,
+        "versioning": false,
+        "multipartUploads": false
+      },
+      "exportComplete": false,
+      "metadataComplete": false,
+      "bucketConfigurationComplete": false,
+      "objectHashManifest": {
+        "complete": false,
+        "sourceSha256": null,
+        "exportedSha256": null,
+        "artifact": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      },
+      "sourceListingArtifact": {
+        "sha256": null,
+        "bytes": null,
+        "createdAtUtc": null
+      },
+      "exportArtifact": {
+        "sha256": null,
+        "bytes": null,
+        "createdAtUtc": null
+      },
+      "metadataArtifact": {
+        "sha256": null,
+        "bytes": null,
+        "createdAtUtc": null
+      },
+      "bucketConfigurationArtifact": {
+        "sha256": null,
+        "bytes": null,
+        "createdAtUtc": null
+      }
+    },
+    {
+      "id": "supabase",
+      "host": "db-1",
+      "runId": null,
+      "operationWindow": {
+        "startedAtUtc": null,
+        "completedAtUtc": null
+      },
+      "source": {
+        "bucketCount": null,
+        "currentObjectCount": null,
+        "currentObjectBytes": null,
+        "allVersionCount": null,
+        "allVersionBytes": null,
+        "deleteMarkerCount": null,
+        "multipartUploadCount": null,
+        "versioningCounts": {
+          "Enabled": null,
+          "Suspended": null,
+          "Unversioned": null
+        }
+      },
+      "exported": {
+        "bucketCount": null,
+        "currentObjectCount": null,
+        "currentObjectBytes": null,
+        "allVersionCount": null,
+        "allVersionBytes": null,
+        "deleteMarkerCount": null,
+        "multipartUploadCount": null,
+        "versioningCounts": {
+          "Enabled": null,
+          "Suspended": null,
+          "Unversioned": null
+        }
+      },
+      "listingComplete": {
+        "buckets": false,
+        "currentObjects": false,
+        "versions": false,
+        "versioning": false,
+        "multipartUploads": false
+      },
+      "exportComplete": false,
+      "metadataComplete": false,
+      "bucketConfigurationComplete": false,
+      "objectHashManifest": {
+        "complete": false,
+        "sourceSha256": null,
+        "exportedSha256": null,
+        "artifact": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      },
+      "sourceListingArtifact": {
+        "sha256": null,
+        "bytes": null,
+        "createdAtUtc": null
+      },
+      "exportArtifact": {
+        "sha256": null,
+        "bytes": null,
+        "createdAtUtc": null
+      },
+      "metadataArtifact": {
+        "sha256": null,
+        "bytes": null,
+        "createdAtUtc": null
+      },
+      "bucketConfigurationArtifact": {
+        "sha256": null,
+        "bytes": null,
+        "createdAtUtc": null
+      }
+    }
+  ],
+  "references": {
+    "runId": null,
+    "complete": false,
+    "missing": null,
+    "unknown": null,
+    "hashMismatches": null,
+    "operationWindow": {
+      "startedAtUtc": null,
+      "completedAtUtc": null
+    },
+    "checkedAtUtc": null,
+    "evidence": {
+      "sha256": null,
+      "bytes": null,
+      "createdAtUtc": null
+    }
+  },
+  "snapshots": [
+    {
+      "kind": "database",
+      "runId": null,
+      "repositoryId": null,
+      "snapshotId": null,
+      "createdAtUtc": null,
+      "resticExitCode": null,
+      "destination": {
+        "offSourceHosts": false,
+        "independentOfStaging": false,
+        "region": "EU",
+        "clientSideEncryption": false
+      },
+      "members": [],
+      "keyEscrow": {
+        "independent": false,
+        "repositoryRecoveryKeyIncluded": false,
+        "evidence": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      },
+      "deepRead": {
+        "runId": null,
+        "repositoryId": null,
+        "snapshotId": null,
+        "exitCode": null,
+        "complete": false,
+        "independentClientRead": false,
+        "checkedAtUtc": null,
+        "verifiedMembers": [],
+        "evidence": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      }
+    },
+    {
+      "kind": "application",
+      "runId": null,
+      "repositoryId": null,
+      "snapshotId": null,
+      "createdAtUtc": null,
+      "resticExitCode": null,
+      "destination": {
+        "offSourceHosts": false,
+        "independentOfStaging": false,
+        "region": "EU",
+        "clientSideEncryption": false
+      },
+      "members": [],
+      "keyEscrow": {
+        "independent": false,
+        "repositoryRecoveryKeyIncluded": false,
+        "evidence": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      },
+      "deepRead": {
+        "runId": null,
+        "repositoryId": null,
+        "snapshotId": null,
+        "exitCode": null,
+        "complete": false,
+        "independentClientRead": false,
+        "checkedAtUtc": null,
+        "verifiedMembers": [],
+        "evidence": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      }
+    },
+    {
+      "kind": "supabase",
+      "runId": null,
+      "repositoryId": null,
+      "snapshotId": null,
+      "createdAtUtc": null,
+      "resticExitCode": null,
+      "destination": {
+        "offSourceHosts": false,
+        "independentOfStaging": false,
+        "region": "EU",
+        "clientSideEncryption": false
+      },
+      "members": [],
+      "keyEscrow": {
+        "independent": false,
+        "repositoryRecoveryKeyIncluded": false,
+        "evidence": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      },
+      "deepRead": {
+        "runId": null,
+        "repositoryId": null,
+        "snapshotId": null,
+        "exitCode": null,
+        "complete": false,
+        "independentClientRead": false,
+        "checkedAtUtc": null,
+        "verifiedMembers": [],
+        "evidence": {
+          "sha256": null,
+          "bytes": null,
+          "createdAtUtc": null
+        }
+      }
+    }
+  ],
+  "manifestOffHost": {
+    "runId": null,
+    "artifact": {
+      "sha256": null,
+      "bytes": null,
+      "createdAtUtc": null
+    },
+    "repositoryId": null,
+    "snapshotId": null,
+    "resticExitCode": null,
+    "copiedAtUtc": null,
+    "independentClientRead": {
+      "runId": null,
+      "repositoryId": null,
+      "snapshotId": null,
+      "exitCode": null,
+      "complete": false,
+      "independentClient": false,
+      "checkedAtUtc": null,
+      "sha256": null,
+      "bytes": null,
+      "evidence": {
+        "sha256": null,
+        "bytes": null,
+        "createdAtUtc": null
+      }
+    }
+  }
+}

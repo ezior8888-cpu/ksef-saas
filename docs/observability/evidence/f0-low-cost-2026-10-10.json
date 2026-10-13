@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "recorded_at_utc": "2026-10-10T11:59:56Z",
+  "status": "F0_OPEN",
+  "scope": "latest_low_cost_choices_and_local_capacity_not_runtime_or_execution_evidence",
+  "reference_revision": "686a465c7bc0c25fc2b1fdaef54db4fea9841004",
+  "supersedes_choices_in": "f0-2026-10-10.json",
+  "authority": {
+    "owner": "Igor",
+    "selection_by": "Codex",
+    "source": "current_F0_chat_user_messages",
+    "source_message_time_utc": "not_supplied",
+    "latest_direction": "free_diagnostics_lower_infrastructure_cost_release_dashboard_then_agent_prepared_fixes",
+    "previous_73_19_eur_authorization": "held_then_cost_rejected",
+    "current_authorized_work": "planning_local_document_changes_read_only_verification_and_existing_PR_update",
+    "purchases_and_operational_execution": "on_hold",
+    "new_infrastructure_spending_ceiling": null,
+    "AI_budget": null
+  },
+  "decision_documents": {
+    "overview": "../README.md",
+    "ownership": "../ownership.md#darmowa-diagnostyka-i-tańsza-infrastruktura--10102026",
+    "acceptance": "../acceptance-plan.md#karta-wykonania-brakujących-prac-f0--10102026",
+    "contracts": "../contracts.md",
+    "data_policy": "../data-policy.md"
+  },
+  "choices": {
+    "diagnostic_subscriptions_new_monthly_usd": 0,
+    "sentry": {
+      "region": "EU",
+      "target_tier": "Developer",
+      "public_offer": {
+        "users": 1,
+        "errors_per_month": 5000,
+        "spans_per_month": 5000000,
+        "custom_dashboards": 10,
+        "event_retention_days": 30
+      },
+      "paid_Team_selected": false,
+      "active_account_plan_quota_roles_and_retention_verified": false,
+      "settings_changed": false
+    },
+    "posthog": {
+      "region": "EU",
+      "target_tier": "Free",
+      "public_offer": {
+        "analytics_events_per_month": 1000000,
+        "error_tracking_exceptions_per_month": 100000,
+        "projects": 1,
+        "analytics_retention_years": 1
+      },
+      "exception_capture": "future_optional_after_redaction_scope_and_acceptance_not_enabled_here",
+      "free_limits_can_permanently_drop_events": true,
+      "active_account_plan_and_permissions_verified": false,
+      "settings_changed": false
+    },
+    "dashboard": {
+      "priority": "first_release_after_F0_acceptance_in_separate_F1_chat",
+      "source_of_complete_minimal_invoice_error_history": "protected_domain_audit_not_SaaS_quotas",
+      "required_error_capture_percent": 100,
+      "minimal_invoice_error_project_retention_years": 10,
+      "local_diagnostic_detail_days": 90,
+      "SLI_journal_months": 13,
+      "views": [
+        "grouped_incidents_with_occurrence_counts",
+        "affected_invoices_and_failed_effects",
+        "release_and_regressions_with_evidence",
+        "retry_recovery_and_open_unknown_state",
+        "coverage_freshness_and_history_gaps"
+      ],
+      "implemented": false
+    },
+    "future_agent": {
+      "diagnostic_identity": "sanitized_tenant_authorized_audited_read_only",
+      "git_access": "separately_authorized_isolated_branch_tests_patch_draft_PR",
+      "case_memory": "redacted_verified_cause_test_PR_and_review_not_model_training",
+      "raw_invoice_payloads_in_case_memory": false,
+      "automatic_merge_deploy_production_writes_or_migrations": false,
+      "AI_budget_set": false,
+      "connected_or_started": false
+    },
+    "backup": {
+      "recommended_primary": "BX11_HEL1_restic_three_separate_repositories",
+      "recommended_new_monthly_net_eur": 3.2,
+      "price_from": "f0-2026-10-10.json",
+      "local_no_new_subscription_alternative": true,
+      "local_alternative_requires": [
+        "EU_device_location",
+        "full_retention_capacity_and_headroom",
+        "daily_availability_and_freshness_monitoring",
+        "separation_from_staging",
+        "independent_recovery_keys"
+      ],
+      "scope": [
+        "full_database_and_required_globals",
+        "application_MinIO",
+        "Supabase_MinIO",
+        "required_configuration_and_recovery_materials"
+      ],
+      "retention": {
+        "daily": 7,
+        "weekly": 4,
+        "monthly": 12
+      },
+      "B2_purchased_or_selected_for_current_execution": false,
+      "ordered_or_executed": false
+    },
+    "staging": {
+      "candidate": "isolated_local_Linux_VM_on_existing_computer",
+      "new_host_subscription_monthly_eur": 0,
+      "conditions": [
+        "free_sufficient_RAM_and_measure_whole_stack_headroom",
+        "separate_DB_auth_queue_cache_storage_keys_and_network",
+        "synthetic_data_only_KSeF_TEST_Stripe_test",
+        "no_production_secrets_or_backup_repository_mounts",
+        "explicit_availability_windows"
+      ],
+      "current_free_RAM_is_readiness_proof": false,
+      "CPX42_selected_or_ordered": false,
+      "created_or_accepted": false
+    },
+    "recurring_cost_scope": "new_monitoring_subscriptions_and_proposed_backup_only_excludes_existing_production_power_network_hardware_licenses_and_AI"
+  },
+  "measurements": {
+    "local_capacity": {
+      "kind": "local_read_only_not_staging_acceptance",
+      "utc_window": {
+        "from": "2026-10-10T11:57:46.7423959Z",
+        "to": "2026-10-10T11:57:48.1693677Z"
+      },
+      "private_artifact_sha256": "3da65506f06777a9fdddb3835ab6d764f07a927f2098c6817a7bdaa388b7b36f",
+      "memory_total_gib": 31.75,
+      "memory_free_gib": 10.08,
+      "cpu_physical_cores": 12,
+      "cpu_logical_threads": 20,
+      "candidate_disk_free_gib": 641.77,
+      "device_EU_location_verified": false,
+      "production_data_size_verified": false,
+      "configuration_changed": false
+    },
+    "earlier_catalog": {
+      "kind": "public_provider_catalog_not_account",
+      "safe_source_excerpt_sha256": "03f0ca610e622ce35732d8e6cd4a371f30abd951cfd6bc3ceeea0c0a9dd6c201",
+      "reference": "f0-2026-10-10.json",
+      "observed_at_utc": "2026-10-10T07:20:56.6565929Z",
+      "BX11_HEL1_monthly_net_eur": 3.2,
+      "purchase_or_invoice_verified": false
+    },
+    "access": "latest_local_SSH_and_panel_observations_described_in_runtime_inventory_not_retried_or_unblocked"
+  },
+  "public_sources_checked_on_date": [
+    "https://sentry.io/pricing/",
+    "https://www.sentry.help/en/articles/13964940-how-long-are-my-organization-s-audit-logs-stored",
+    "https://www.sentry.help/en/articles/13965037-can-i-set-up-an-on-demand-pay-as-you-go-budget-for-my-free-developer-plan",
+    "https://posthog.com/pricing",
+    "https://api.hetzner.com/v1/storage_box_types?name=bx11"
+  ],
+  "public_sources_timing": "public_SaaS_offer_checked_2026_10_10_exact_fetch_time_not_recorded_Hetzner_timestamp_above",
+  "gates": {
+    "F0-G01": "PARTIAL",
+    "F0-G02": "PARTIAL",
+    "F0-G03": "FAIL_NO_RUNNING_ISOLATED_STAGING",
+    "F0-G04": "PASS_CONTRACT_V1_2_DECISION_ONLY",
+    "F0-G05": "PASS_DATA_POLICY_DECISION_ONLY",
+    "F0-G06": "PASS_INSTRUMENTATION_BUDGET_AND_METHOD_DECISION_ONLY",
+    "F0-G07": "PARTIAL_FREE_TARGET_SELECTED_ACTIVE_ACCOUNT_EVIDENCE_INCOMPLETE",
+    "F0-G08": "PARTIAL_REAL_READINESS_AND_ROUTING_UNVERIFIED",
+    "F0-G09": "FAIL_NO_EXECUTION_EVIDENCE_FOR_COMPLETE_COPIES"
+  },
+  "all_TEST_01_to_07": "NOT_RUN",
+  "formal_F0_results_accepted": false,
+  "handoff": {
+    "F1_started": false,
+    "prompt_for_second_chat_condition": "after_real_formal_F0_acceptance"
+  },
+  "not_executed": [
+    "purchase",
+    "local_VM_or_Docker_installation",
+    "server_change",
+    "provider_setting_change",
+    "backup",
+    "staging_creation",
+    "dashboard_implementation",
+    "agent_connection",
+    "migration",
+    "deployment",
+    "restore",
+    "real_alert",
+    "F1"
+  ]
+}

@@ -1,0 +1,91 @@
+# Dokumentacyjny zapis pomiaru F0, nie konfiguracja wdrożenia.
+# null = brak publicznego dowodu albo pole nie mające zastosowania; patrz komentarze.
+schema_version: 2
+status: measured_F0_open
+environment: production
+observed_utc: '2026-10-04T11:21:00Z'
+evidence_ref: docs/observability/evidence/f0-2026-10-04.json
+ksef_environment: test # Pomiar 04.10; intencję właściciela potwierdzono osobno 07.10.
+source_revision: ae87bdde93a636fcb2c48aef737e57a80a3315a7
+release:
+  web_sha: ae87bdde93a636fcb2c48aef737e57a80a3315a7
+  worker_sha: ae87bdde93a636fcb2c48aef737e57a80a3315a7
+  configuration_revision: null
+  deployment_id: null # Szczegółowe identyfikatory pozostają prywatne.
+  image_build: local_no_registry
+  web_image_digest: null # Brak registry manifest digest; lokalne Image ID są w prywatnym dowodzie.
+  worker_image_digest: null
+access:
+  inventory_ref: private:production/infra.env
+  operator_ref: ownership:Igor_coordination_operator_scope_pending
+host_aliases:
+  - app-1
+  - ops-1
+  - db-1
+services:
+  web:
+    service: faktflow-web
+    host: app-1
+    docker_target: runner
+    public_url: https://faktflow.pl
+    public_health: https://faktflow.pl/api/health
+    status: healthy
+    restart_count: 0
+    node_binary_version: null # Nie ustalono w przekazanym pomiarze.
+  worker:
+    service: faktflow-worker
+    host: app-1
+    docker_target: worker
+    jobs_backend: pgboss
+    status: healthy
+    restart_count: 0
+    health_queues: 52
+    health_crons: 27
+    database_schedules: 27
+    database_secret_ref: secret:production/DATABASE_URL
+  supabase:
+    host: db-1
+    endpoint_ref: private:production/NEXT_PUBLIC_SUPABASE_URL
+    service_role_ref: secret:production/SUPABASE_SERVICE_ROLE_KEY
+    detailed_versions_ref: private:f0-runtime-2026-10-04.json
+  storage:
+    provider: MinIO
+    host: ops-1
+    separate_supabase_storage_minio_host: db-1
+    endpoint_ref: private:production/R2_ENDPOINT
+    bucket_ref: private:production/R2_BUCKET_NAME
+    access_key_ref: secret:production/R2_ACCESS_KEY_ID
+    secret_key_ref: secret:production/R2_SECRET_ACCESS_KEY
+    binary_version: null # Tag latest nie dowodzi dokładnej wersji.
+  cache:
+    provider: local_Redis_with_SRH
+    image_tag: redis:7.2
+    host: app-1
+    endpoint_ref: private:production/UPSTASH_REDIS_REST_URL
+    token_ref: secret:production/UPSTASH_REDIS_REST_TOKEN
+  coolify:
+    host: ops-1
+    version_ref: private:f0-runtime-2026-10-04.json
+backups:
+  full_pg_dump_last_success_utc: '2026-10-04T01:30:00Z'
+  full_pg_dump_off_database_host: false
+  partial_public_json_snapshot_on_another_host: true
+  partial_snapshot_includes_auth_pgboss: false
+  application_minio_copy_present: false
+  hetzner_snapshots_verified: false
+  restore_drill: not_run
+observability:
+  new_activation_authorized: false # Nie zmienia historycznego pomiaru ani istniejących SDK.
+  sentry_intake_region: EU
+  posthog_intake_region: EU
+  sentry_posthog_plans: blocked_access_unavailable
+  target_choice_ref: docs/observability/evidence/f0-low-cost-2026-10-10.json
+  datadog_selected: false
+  independent_heartbeat_ref: secret:production/healthchecks-ping-url
+  pager_policy_ref: ownership:production_delivery_policy_pending
+  entitlements_verified: false
+read_only_inventory:
+  detailed_host_service_routing_config_ref: private:f0-runtime-2026-10-04.json
+  hetzner_firewall_rules_verified: false
+  kuma_monitor_config_verified: false
+resource_budget_ref: docs/observability/acceptance-plan.md

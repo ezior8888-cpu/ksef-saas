@@ -74,6 +74,7 @@
     "p-queue": "^9.1.2",
     "papaparse": "^5.5.3",
     "pdfkit": "^0.18.0",
+    "pg": "8.23.0",
     "pg-boss": "^12.27.0",
     "posthog-js": "^1.374.2",
     "posthog-node": "^5.34.6",

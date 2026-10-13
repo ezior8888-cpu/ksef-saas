@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "reference_revision": "1009583dc031fc3dd6b32a81528c22dbef2167fb",
+  "status": "F0_OPEN",
+  "scope": "read_only_Sentry_UI_and_API_headers_plus_documentation_plan_match_not_SDK_or_F0_acceptance",
+  "source": {
+    "kind": "manual_transcription_of_visible_UI",
+    "transcription_recorded_at_utc": "2026-10-10T16:30:59.5509919Z",
+    "exact_UI_observation_window_utc": "not_instrumented",
+    "private_transcription_sha256": "f6431693147b505de7c481b019938ffba93b5346250bfb7932d439ad60897a92",
+    "hash_kind": "transcription_file_not_raw_HTTP_or_DOM",
+    "raw_DOM_saved": false,
+    "screenshots_saved": false,
+    "personal_values_resource_identifiers_tokens_or_project_ACL_published": false
+  },
+  "organization_project_UI": {
+    "intended_organization_and_project_confirmed": true,
+    "storage_region_reported": "EU"
+  },
+  "subscription_UI": {
+    "active_plan": "Developer",
+    "payment_details_present": false,
+    "billing_details_present": false,
+    "trial_status": "ended",
+    "billing_cycle_dates": {
+      "from": "2026-10-09",
+      "to": "2026-11-08"
+    },
+    "cycle_timezone": "not_recorded",
+    "errors": {
+      "usage_counter": 40,
+      "quota": 5000,
+      "accepted": 40,
+      "dropped": 0,
+      "additional_spend_USD": 0
+    },
+    "spans": {
+      "usage_display": "3K",
+      "quota_display": "5M",
+      "exact_usage_count_verified": false
+    },
+    "replays": {
+      "usage_counter": 0,
+      "quota": 50
+    },
+    "Start_trial_button_seen": true,
+    "all_feature_entitlements_verified": false,
+    "uptime": {
+      "usage_counter": 1,
+      "quota": 1,
+      "usage_exceeded_banner_seen": true,
+      "banner_proves_outage": false
+    },
+    "counts_prove_complete_SDK_delivery": false,
+    "zero_invoice_total_verified": false
+  },
+  "identity_access_UI": {
+    "login_account_owner_identity_source": "user_declaration_Bartosz",
+    "observed_organization_role": "Owner",
+    "observed_membership_status": "Active",
+    "observed_team_role": "TeamAdmin",
+    "member_count": 1,
+    "additional_members_require_paid_plan_banner_seen": true,
+    "Igor_individual_access_verified": false,
+    "Sentry_TOTP_active": false,
+    "Sentry_passkey_active": false,
+    "recovery_requires_2FA": true,
+    "GitHub_MFA_read": false,
+    "human_alert_delivery_or_on_call_readiness_verified": false
+  },
+  "documentation_plan_match": {
+    "evidence_kind": "official_documentation_matched_to_UI_Developer_plan",
+    "checked_on": "2026-10-10",
+    "event_data_retention_days": 30,
+    "event_retention_source": "https://www.sentry.help/en/articles/13964940-how-long-are-my-organization-s-audit-logs-stored",
+    "PAYG_available_on_Free_Developer": false,
+    "PAYG_source": "https://www.sentry.help/en/articles/13965037-can-i-set-up-an-on-demand-pay-as-you-go-budget-for-my-free-developer-plan",
+    "active_TTL_read": false,
+    "expiration_test_run": false,
+    "spans_retention_verified": false,
+    "source_maps_retention_verified": false
+  },
+  "unsaved_upgrade_preview": {
+    "upgrade_preview_saved": false,
+    "plan_unchanged": true
+  },
+  "remaining_gaps": {
+    "individual_access_and_MFA": "incomplete",
+    "spans_source_maps_and_other_required_product_parameters": "incomplete",
+    "effective_privacy_and_alarm_delivery": "not_tested",
+    "full_token_scopes_and_future_agent_limits": "not_verified_by_UI_or_current_caller_headers"
+  },
+  "decision_documents": {
+    "overview": "../README.md",
+    "ownership": "../ownership.md#odczyt-panelu-sentry--10102026",
+    "inventory": "../runtime-inventory.md#sentry--odczyt-panelu-10102026",
+    "acceptance": "../acceptance-plan.md",
+    "data_policy": "../data-policy.md"
+  },
+  "gates": {
+    "F0-G03": "FAIL_NO_RUNNING_ISOLATED_STAGING",
+    "F0-G05": "PASS_DATA_POLICY_DECISION_ONLY",
+    "F0-G07": "PARTIAL_ACTIVE_PLANS_OBSERVED_ACCESS_MFA_AND_PARAMETERS_INCOMPLETE",
+    "F0-G08": "PARTIAL_REAL_READINESS_AND_ROUTING_UNVERIFIED",
+    "F0-G09": "FAIL_NO_EXECUTION_EVIDENCE_FOR_COMPLETE_COPIES"
+  },
+  "formal_F0_results_accepted": false,
+  "all_TEST_01_to_07": "NOT_RUN",
+  "F1_started": false,
+  "not_executed": [
+    "account_setting_change",
+    "plan_purchase_or_upgrade",
+    "server_change",
+    "backup",
+    "staging",
+    "migration",
+    "deployment",
+    "restore",
+    "real_alert",
+    "F1"
+  ],
+  "API_rate_limit_header_measurement": {
+    "kind": "measured_HTTP_response_headers_without_body",
+    "started_at_utc": "2026-10-10T16:32:49.060Z",
+    "completed_at_utc": "2026-10-10T16:32:50.043Z",
+    "private_evidence_sha256": "15765b817c72e868d8d685b206c06813437333b000729a96180310594515acfb",
+    "documented_source": "https://docs.sentry.io/api/ratelimits/",
+    "requests": [
+      {
+        "endpoint_kind": "organization_metadata",
+        "method": "GET",
+        "http_status": 200,
+        "Limit": 40,
+        "Remaining": 39,
+        "Reset": 1791649970,
+        "ConcurrentLimit": 25,
+        "ConcurrentRemaining": 24
+      },
+      {
+        "endpoint_kind": "project_metadata",
+        "method": "GET",
+        "http_status": 200,
+        "Limit": 40,
+        "Remaining": 38,
+        "Reset": 1791649970,
+        "ConcurrentLimit": 25,
+        "ConcurrentRemaining": 24
+      }
+    ],
+    "response_bodies_read_or_stored": false,
+    "scope": "specific_current_caller_and_endpoint",
+    "rate_window_length_verified": false,
+    "proves_40_requests_per_second": false,
+    "future_agent_API_budget_verified": false,
+    "resource_identifiers_published": false
+  }
+}

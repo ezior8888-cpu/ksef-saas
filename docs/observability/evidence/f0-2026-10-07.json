@@ -1,0 +1,99 @@
+{
+  "schema_version": 3,
+  "date": "2026-10-07",
+  "status": "F0_OPEN",
+  "scope": "public_allowlisted_decisions_and_declarations_not_execution_evidence",
+  "source": "user_messages_in_current_F0_continuation",
+  "material_revision": "4a0113a2bc377186161eb13bb6f43ee44d1f9dd3",
+  "decision_time_utc": "not_supplied_received_on_date_only",
+  "new_runtime_or_provider_measurement": false,
+  "historical_evidence": ["f0-2026-10-04.json", "f0-2026-10-06.json"],
+  "decisions": {
+    "ksef_environment": {
+      "intentional_test_for_production_application": true,
+      "production_switch_separate_go_live_task": true,
+      "reference": "PLAN-ZERO-ZGUBIONYCH-FAKTUR.md F1 W15 S13",
+      "go_live_task_distinct_from_observability_F1": true,
+      "environment_changed": false
+    },
+    "backup_policy": {
+      "daily_full_database_dump_including_auth_and_storage": true,
+      "minio_copy_scope": ["application", "supabase"],
+      "encrypted_destination_required": true,
+      "destination_region_required": "EU",
+      "destination_outside_source_hosts_required": true,
+      "retained_copy_counts": {"daily": 7, "weekly": 4, "monthly": 12},
+      "trial_restore_frequency": "monthly",
+      "operator_named_in_initial_answers": "Bartosz",
+      "coordination_owner_after_follow_up": "Igor",
+      "further_operator_tasks_need_separate_scope": true,
+      "destination_and_start_deadline": "not_supplied",
+      "execution_evidence_provided": false,
+      "restore_executed_in_this_continuation": false
+    },
+    "staging_scope": {
+      "separate_database_queue_storage_and_keys": true,
+      "ksef_environment": "test",
+      "stripe_mode": "test",
+      "deadline_date": "2026-10-31",
+      "sequence": ["after_full_backups", "before_closed_alpha"],
+      "operator_named_in_initial_answers": "Bartosz",
+      "coordination_owner_after_follow_up": "Igor",
+      "execution_and_isolation_evidence_provided": false
+    },
+    "work_organization_after_follow_up": {
+      "monitoring_and_F0_coordination_owner": "Igor",
+      "formal_F0_acceptance_owner": "Igor",
+      "technical_preparation_and_available_evidence_review": "Codex",
+      "bartosz_involvement": "only_necessary_operator_actions",
+      "server_changes_authorized_by_role_assignment": false,
+      "F0_results_accepted": false,
+      "alarm_recipient_changed_automatically": false
+    }
+  },
+  "declarations": {
+    "product_prelaunch": true,
+    "real_customers_present": false,
+    "sentry_and_posthog_paid_plans_present": false,
+    "specific_free_tier_names": "unverified",
+    "total_provider_costs": "unverified",
+    "remaining_retention_limits_and_entitlements": "unverified",
+    "alarm_organization": {
+      "critical_channels": ["Slack", "Telegram"],
+      "daily_report_channels": ["email", "Telegram"],
+      "daily_report_time_local": "06:00",
+      "time_zone_confirmed_by_user": "Europe/Warsaw",
+      "recipient": "Bartosz",
+      "availability_local": {"from": "08:00", "to": "22:00", "mode": "best_effort"},
+      "formal_on_call": false,
+      "substitute_present": false,
+      "guaranteed_coverage": false,
+      "known_coverage_gap": true,
+      "delivery_and_independent_lifecycle_evidence": "unverified",
+      "private_channel_and_bot_identifiers": "omitted"
+    }
+  },
+  "gates": {
+    "F0-G01": "PARTIAL",
+    "F0-G02": "PARTIAL",
+    "F0-G03": "FAIL_SCOPE_AND_DEADLINE_RECORDED_NO_EXECUTION_EVIDENCE",
+    "F0-G04": "PENDING_KSEF_TEST_INTENT_RESOLVED_REMAINING_CONTRACTS_OPEN",
+    "F0-G05": "PENDING_BACKUP_POLICY_RECORDED_REMAINING_POLICY_OPEN",
+    "F0-G06": "PENDING",
+    "F0-G07": "PARTIAL_ACCOUNT_METADATA_AND_NO_PAID_PLAN_DECLARATION",
+    "F0-G08": "PENDING_RECIPIENT_DECLARED_COVERAGE_GAP_OPEN",
+    "F0-G09": "FAIL_SCOPE_AND_RETENTION_RECORDED_NO_EXECUTION_EVIDENCE"
+  },
+  "not_executed": [
+    "server_change",
+    "backup_configuration",
+    "staging_creation",
+    "provider_setting_change",
+    "migration",
+    "deployment",
+    "restore",
+    "real_alert",
+    "KSeF_PROD_switch",
+    "observability_F1"
+  ]
+}

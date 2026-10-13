@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "recorded_at_utc": "2026-10-10T14:34:17.351Z",
+  "status": "F0_OPEN",
+  "scope": "direct_read_only_SSH_runtime_database_and_both_MinIO_sizes",
+  "reference_revision": "b8504cc3a9a88e1422526066cee68c7bd7e80b57",
+  "complements_measurements_in": [
+    "f0-2026-10-04.json",
+    "f0-2026-10-06.json",
+    "f0-2026-10-07.json",
+    "f0-2026-10-10.json",
+    "f0-low-cost-2026-10-10.json"
+  ],
+  "changes_choices_in": null,
+  "current_choices_reference": "f0-low-cost-2026-10-10.json",
+  "authority": {
+    "source": "current_F0_chat_user_authorization",
+    "authorized": "read_only_measurement_and_existing_F0_documentation_PR_update",
+    "operator_key_replacement": "reported_by_user_then_login_verified",
+    "root_access_technically_read_only": false,
+    "read_only_is_operating_scope": true,
+    "purchases_and_operational_execution": "on_hold"
+  },
+  "access": {
+    "source_kind": "SSH_tool_output",
+    "utc_window": {
+      "from": "2026-10-10T14:23:01.535Z",
+      "to": "2026-10-10T14:23:01.741Z"
+    },
+    "hosts": [
+      "app-1",
+      "ops-1",
+      "db-1"
+    ],
+    "root_login_verified": true,
+    "port": 22,
+    "ED25519_host_keys_matched_operator_fingerprints": true,
+    "operator_fingerprint_source": "Bartosz_historical_known_hosts_relayed_by_user",
+    "strict_host_key_checking": true,
+    "private_key_or_passphrase_published": false,
+    "local_known_hosts_entries_added": true,
+    "server_changes_by_this_session": false
+  },
+  "runtime": {
+    "observed_at_utc": "2026-10-10T14:26:31.836Z",
+    "private_artifact_sha256": "d6a677831d735170b3869fabbe3d4ddb100360ec62bd901f3a1c04966fc7600d",
+    "collector_exit_code": 2,
+    "web": {
+      "host": "app-1",
+      "sha": "43091e725d845084e11ac73af32750ace349bc02",
+      "health": "healthy",
+      "node_version": "22.23.3"
+    },
+    "worker": {
+      "host": "app-1",
+      "sha": "43091e725d845084e11ac73af32750ace349bc02",
+      "health": "healthy",
+      "node_version": "22.23.3"
+    },
+    "minio_versions": {
+      "application": "RELEASE.2025-09-07T16-13-09Z",
+      "supabase": "RELEASE.2025-10-15T17-29-55Z"
+    },
+    "supporting_services": {
+      "redis_on_app_1": {"version": "7.2.15", "health": "healthy"},
+      "SRH_on_app_1": {"running": true, "healthcheck_configured": false},
+      "application_MinIO_on_ops_1": {"running": true, "healthcheck_configured": false, "health": null},
+      "Supabase_MinIO_on_db_1": {"running": true, "healthcheck_configured": true, "health": "healthy"}
+    },
+    "collector_host_results": [
+      {
+        "host": "app-1",
+        "status": "observed",
+        "unverified_sections": []
+      },
+      {
+        "host": "ops-1",
+        "status": "observed",
+        "unverified_sections": []
+      },
+      {
+        "host": "db-1",
+        "status": "partially_observed",
+        "unverified_sections": [
+          {
+            "section": "runtime_version",
+            "code": "probe_failed"
+          }
+        ]
+      }
+    ],
+    "note": "One db-1 container classified as postgres lacked a readable runtime version; do not interpret this as a failed database or full inventory acceptance."
+  },
+  "databases": {
+    "host": "db-1",
+    "method": "pg_database_size_in_READ_ONLY_transaction_with_statement_timeout",
+    "utc_window": {
+      "from": "2026-10-10T14:29:01.792858+00:00",
+      "to": "2026-10-10T14:29:02.064051+00:00"
+    },
+    "private_artifact_sha256": "608d2ae0302163016d0fa27f911ed41db89eeccb0edcefc85465a7e61d518414",
+    "databases": [
+      {
+        "database": "_supabase",
+        "bytes": 676049711
+      },
+      {
+        "database": "postgres",
+        "bytes": 190346031
+      }
+    ],
+    "non_template_database_count": 2,
+    "non_template_databases_bytes": 866395742,
+    "postgres_auth_schema_present": true,
+    "postgres_storage_schema_present": true,
+    "earlier_measurement": {
+      "utc_window": {
+        "from": "2026-10-10T14:27:12.439259+00:00",
+        "to": "2026-10-10T14:27:12.648189+00:00"
+      },
+      "postgres_bytes": 190346031,
+      "non_template_databases_bytes": 866379358,
+      "private_artifact_sha256": "480d86b4f273b684ec2bb0bca64b77f40110163a375bb1a8ae99dcab85f634fe"
+    },
+    "scope_note": "postgres includes all of its schemas; _supabase is a separate database and is not included in pg_dump postgres. Sizes are not dump size, WAL, globals, recovery configuration or total PostgreSQL volume."
+  },
+  "minio": {
+    "application": {
+      "host": "ops-1",
+      "physical": {
+        "utc_window": {
+          "from": "2026-10-10T14:27:14.053731+00:00",
+          "to": "2026-10-10T14:27:14.259366+00:00"
+        },
+        "method": "du_-s_-B1_on_resolved_data_mounts",
+        "all_declared_data_paths_measured": true,
+        "allocated_bytes": 774144,
+        "filesystem": {
+          "size_bytes": 39964635136,
+          "used_bytes": 12211638272,
+          "available_bytes": 26063814656
+        },
+        "filesystem_scope": "host_filesystem_containing_data_not_capacity_reserved_for_MinIO",
+        "private_artifact_sha256": "5b0b43af92ec6b56b013c8d4049ba049b387148eb41e6027e5b0cda101f0a3bb"
+      },
+      "logical": {
+        "utc_window": {
+          "from": "2026-10-10T14:32:19.474Z",
+          "to": "2026-10-10T14:32:19.562Z"
+        },
+        "method": "signed_S3_metadata_GET_only",
+        "bucket_count": 1,
+        "current_object_count": 31,
+        "current_object_bytes": 378638,
+        "all_version_count": 31,
+        "all_version_bytes": 378638,
+        "delete_marker_count": 0,
+        "versioning_counts": {
+          "Enabled": 0,
+          "Suspended": 0,
+          "Unversioned": 1
+        },
+        "completeness": {
+          "bucket_listing": true,
+          "current_objects": true,
+          "all_versions": true,
+          "versioning": true
+        },
+        "requests_attempted": 4,
+        "listing_pages_attempted": 3,
+        "limits": {
+          "request_timeout_seconds": 10,
+          "total_seconds": 120,
+          "total_listing_pages": 100,
+          "keys_per_page": 1000,
+          "xml_bytes_per_response": 8388608
+        },
+        "atomic_snapshot": false,
+        "private_artifact_sha256": "0742f30e7d68cfea4db0b39a905247c1f6a628a12d09c4d40d5d2ee8d0699189"
+      }
+    },
+    "supabase": {
+      "host": "db-1",
+      "physical": {
+        "utc_window": {
+          "from": "2026-10-10T14:27:12.439259+00:00",
+          "to": "2026-10-10T14:27:12.648189+00:00"
+        },
+        "method": "du_-s_-B1_on_resolved_data_mounts",
+        "all_declared_data_paths_measured": true,
+        "allocated_bytes": 139264,
+        "filesystem": {
+          "size_bytes": 39973924864,
+          "used_bytes": 27313053696,
+          "available_bytes": 10976677888
+        },
+        "filesystem_scope": "host_filesystem_containing_data_not_capacity_reserved_for_MinIO",
+        "private_artifact_sha256": "480d86b4f273b684ec2bb0bca64b77f40110163a375bb1a8ae99dcab85f634fe"
+      },
+      "logical": {
+        "utc_window": {
+          "from": "2026-10-10T14:32:17.121Z",
+          "to": "2026-10-10T14:32:17.165Z"
+        },
+        "method": "signed_S3_metadata_GET_only",
+        "bucket_count": 1,
+        "current_object_count": 0,
+        "current_object_bytes": 0,
+        "all_version_count": 0,
+        "all_version_bytes": 0,
+        "delete_marker_count": 0,
+        "versioning_counts": {
+          "Enabled": 0,
+          "Suspended": 0,
+          "Unversioned": 1
+        },
+        "completeness": {
+          "bucket_listing": true,
+          "current_objects": true,
+          "all_versions": true,
+          "versioning": true
+        },
+        "requests_attempted": 4,
+        "listing_pages_attempted": 3,
+        "limits": {
+          "request_timeout_seconds": 10,
+          "total_seconds": 120,
+          "total_listing_pages": 100,
+          "keys_per_page": 1000,
+          "xml_bytes_per_response": 8388608
+        },
+        "atomic_snapshot": false,
+        "private_artifact_sha256": "361b81604e18d11a4975c2f39ed042e7798aef2ace2aaede42bfc0c642a48ead"
+      }
+    }
+  },
+  "limitations": [
+    "Measurements are separate live observations, not an atomic database-plus-object-store snapshot.",
+    "Current S3 bytes and all-version bytes overlap; do not add them.",
+    "Physical allocated bytes include filesystem and MinIO metadata and differ from logical object payload.",
+    "No object contents were downloaded; object names, bucket names, paths, addresses, container identifiers and secrets remain outside Git.",
+    "Multipart uploads and database-to-object reference coverage were not enumerated.",
+    "One sample does not establish growth, dump compression, deduplication or capacity for retention 7/4/12.",
+    "Healthy web and worker do not prove end-to-end invoice success or an accepted F0.",
+    "Active Sentry/PostHog plans, entitlements and roles were not verified by this measurement."
+  ],
+  "actions_not_performed": {
+    "backups": true,
+    "restore": true,
+    "migrations": true,
+    "deployment": true,
+    "server_configuration_changes": true,
+    "staging_creation": true,
+    "monitoring_settings_changes": true,
+    "object_PUT_or_DELETE": true,
+    "F1": true
+  },
+  "gates": {
+    "F0-G01": "PARTIAL",
+    "F0-G02": "PARTIAL",
+    "F0-G03": "FAIL_NO_RUNNING_ISOLATED_STAGING",
+    "F0-G04": "PASS_CONTRACT_V1_2_DECISION_ONLY",
+    "F0-G05": "PASS_DATA_POLICY_DECISION_ONLY",
+    "F0-G06": "PASS_INSTRUMENTATION_BUDGET_AND_METHOD_DECISION_ONLY",
+    "F0-G07": "PARTIAL_ACTIVE_ACCOUNT_EVIDENCE_INCOMPLETE",
+    "F0-G08": "PARTIAL_REAL_READINESS_AND_ROUTING_UNVERIFIED",
+    "F0-G09": "FAIL_NO_EXECUTION_EVIDENCE_FOR_COMPLETE_COPIES"
+  },
+  "formal_F0_results_accepted": false
+}
