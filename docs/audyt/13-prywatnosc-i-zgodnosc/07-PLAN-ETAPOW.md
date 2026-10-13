@@ -7,7 +7,7 @@
 | Data | 13.10.2026 |
 | Wersja kodu | `origin/main` @ `3e5e00d` (gałąź robocza zawiera to scalenie; poza `docs/audyt/` brak różnic) |
 | Zakres | 80 etapów (E-00 – E-79) pokrywających 85 wymagań macierzy `05` (WYM-01 – WYM-75, WYM-SOC-1 – WYM-SOC-7, WYM-X-01 – WYM-X-03): decyzje i dane wejściowe właściciela (E-00), zmiany kodu i konfiguracji, migracje, treści prawne (projekt → review prawne → publikacja), etapy organizacyjne i dowody SOC 2; kolejność z uzasadnieniem; bramka przed pierwszym prawdziwym klientem; mapowanie na SOC 2; wypełnienie kolumny „Etap planu” w `05` |
-| Źródła | `00-ZADANIE.md` (pkt 7); `AGENTS.md` („Protokół naprawy błędu”, „Wgrywanie migracji”, „Wdrożenie produkcji”); `05-MACIERZ-WYMAGAN.md` (kolumny „Zmiana”, „Test”, „Zależność”, § 12–13); `09-MATERIALY-ROBOCZE.md` (§ 1–13: szkice rejestrów, DPIA, LIA, TIA, umowy, procedur, retencji, zgody); `01`, `02`, `03` (Q-ZR, N-ZR), `04` (PRC), `A1` (MIN, ZGD), `A2` (PRA, RET, AI), `A3` (DOW, testy T-01 – T-21, pytania P-01 – P-12), `A4` (RUN), `06` (SOC-01 – SOC-36, § 9 ścieżka); recenzje R1–R4 (scratchpad koordynatora); `docs/koordynacja/CLAUDE-DO-CODEXA.md` (rejestr migracji), `docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md` (blok F, bramka wydania); kontrolne odczyty kodu na `3e5e00d` (§ 13) |
+| Źródła | `00-ZADANIE.md` (pkt 7); `AGENTS.md` („Protokół naprawy błędu”, „Wgrywanie migracji”, „Wdrożenie produkcji”); `05-MACIERZ-WYMAGAN.md` (kolumny „Zmiana”, „Test”, „Zależność”, § 12–13); `09-MATERIALY-ROBOCZE.md` (§ 1–13: szkice rejestrów, DPIA, LIA, TIA, umowy, procedur, retencji, zgody); `01`, `02`, `03` (Q-ZR, N-ZR), `04` (PRC), `A1` (MIN, ZGD), `A2` (PRA, RET, AI), `A3` (DOW, testy T-01 – T-21, pytania P-01 – P-12), `A4` (RUN), `06` (SOC-01 – SOC-36, § 9 ścieżka); recenzje R1–R4 (`recenzje/R1.md` … `recenzje/R4.md`); `docs/koordynacja/CLAUDE-DO-CODEXA.md` (rejestr migracji), `docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md` (blok F, bramka wydania); kontrolne odczyty kodu na `3e5e00d` (§ 13) |
 | Ograniczenia | Plan, nie decyzja: kolejność, warianty i wielkości to propozycje (I). Brak dostępu do produkcji, paneli i umów — etapy zależne od tych faktów czekają na E-00. Przepisy i wytyczne z pamięci modelu [NZ] — treść zmian prawnych zależy od końcowego review. Wielkości S/M/L to ocena orientacyjna, nie wycena. Fakty runtime z niescalonego PR #225 oznaczam [PR225] (deklaracja lub pomiar operatora, niezweryfikowane w tej sesji). Plik `08-NIEWIADOME-I-REVIEW-PRAWNE.md` był w chwili pisania w budowie — odwołuję się do niewiadomych po ID z raportów źródłowych. Niezależna recenzja: R5a (13.10.2026) — „wymaga poprawek” (bez uwag blokujących); uwagi naniesione przez redaktora poprawek 13.10.2026, zob. „Historia recenzji” na końcu **[R5a]** |
 | Stan | po recenzji R5a i naniesieniu jej uwag (R5a-U01 – U11); recenzent nie wymaga ponownej recenzji — wystarcza kontrola koordynatora i ponowienie skryptów pokrycia (§ 10, wykonane 13.10.2026) **[R5a]**; autor nie zatwierdzał własnego etapu |
 
@@ -136,7 +136,7 @@ startu pierwszych etapów — § 1.4.
   — start od razu mimo fali F4/F5: małe, bez zależności, a dają dowody
   dla wszystkich kolejnych etapów (E-70 sprawia, że czerwone testy RLS
   z F1–F4 blokują scalenie).
-- E-10 (KSeF bez domyślnego `test`) — fala F2, ale ściśle związany
+- E-10 (strażnik środowiska KSeF na produkcji **[R6]**) — fala F2, ale ściśle związany
   z blokiem F planu „zero zgubionych faktur” (`PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`,
   F1 i bramka wydania); realizować w koordynacji, nie równolegle.
 
@@ -203,7 +203,7 @@ i konfiguracja), § 6 (E-58), § 7 (organizacyjne); etapy „czeka” — § 5
 | E-07 | Material Symbols z własnego serwera | F2 | kod | S | od razu | — | WYM-63, WYM-58 |
 | E-08 | Service worker tylko w panelu | F2 | kod | S | od razu | — | WYM-63, WYM-32 |
 | E-09 | PostHog: ustawienia projektu zgodne z kodem; kontrakt konfiguracji | F2 | konfiguracja dostawcy, kod | S | od razu | — | WYM-34, WYM-71 |
-| E-10 | KSeF bez domyślnego środowiska `test` | F2 | kod | M | od razu | koordynacja z PLAN-ZERO (blok F) | WYM-37, WYM-SOC-3 |
+| E-10 | Strażnik środowiska KSeF na produkcji **[R6]** | F2 | kod | M | od razu | koordynacja z PLAN-ZERO (blok F) | WYM-37, WYM-SOC-3 |
 | E-11 | Prompt kategoryzacji AI bez NIP | F2 | kod | S | od razu | — | WYM-06, WYM-05, WYM-62 |
 | E-12 | Informacja o modelu AI przy czacie i OCR | F2 | kod, krótka treść | S | od razu | — | WYM-62, WYM-16 |
 | E-13 | E-maile nietransakcyjne fail-closed | F2 | kod | S | od razu | — | WYM-66, WYM-14, WYM-28 |
@@ -295,6 +295,12 @@ z migracją w typie: 12 (kolejne 9 kart dopuszcza migrację addytywną
   DD.MM, gdzie: prywatnie”). Odczyty produkcji — skryptem `scripts/ops/`
   (pkt 9 protokołu) zwracającym wyłącznie liczby i stany. Sam skrypt
   odczytów to mały PR kodu (S) wykonywany na początku E-00.
+- **PR skryptu odczytów (karta skrócona) [R6]:** Migracje: brak. Test
+  czerwony: `tests/unit/ops-odczyty-format.test.ts` — wynik skryptu
+  zawiera tylko liczby i stany, bez wzorców e-mail/NIP/PESEL/IP — przed:
+  **czerwony** (brak skryptu). Wycofanie: revert PR; zapisy decyzji
+  zostają. Po scaleniu: pierwszy przebieg skryptu przez sesję lokalną,
+  z datą (R6a-U07).
 - **Akceptacja:** każda pozycja D-NN ma datę, wynik i właściciela; tabela
   niżej uzupełniona w kolumnie „Wynik” (w pliku decyzji, nie w tym
   raporcie); pozycje bez wyniku mają termin.
@@ -303,6 +309,8 @@ z migracją w typie: 12 (kolejne 9 kart dopuszcza migrację addytywną
 - **Ryzyko redukowane:** decyzje podejmowane po faktach, nie po
   założeniach; zamknięcie niewiadomych, które zmieniają ryzyko „obecne”
   na „K1”.
+
+**[R6]** Identyfikatory D-NN w tej tabeli oznaczają decyzje i odczyty E-00 tego planu; ten sam prefiks ma w `02` kategorie danych (D-01 – D-31), a w `A1` i `09` § 11 — deklaracje stron prawnych, dlatego poza tym plikiem odwołujemy się do nich jako „`07` D-NN” (R6a-U08).
 
 | ID | Decyzja albo odczyt | Po co (niewiadome) | Odblokowuje | Kto | Forma wyniku |
 |---|---|---|---|---|---|
@@ -724,19 +732,31 @@ bramki; ocena nie może czekać na E-67, który czeka na D-01, D-15 i E-62)
   P3.x [NZ] — datowane wyniki skryptu.
 - **Ryzyko redukowane:** WYM-34 obecne Ś → N.
 
-### E-10 — KSeF bez domyślnego środowiska `test`
+### E-10 — Strażnik środowiska KSeF na produkcji **[R6]**
 
-- **Cel:** ścieżka wysyłki nie wybiera środowiska „po cichu”; brak albo
-  błędna wartość zatrzymuje wysyłkę z komunikatem; produkcja
-  z prawdziwymi klientami nie może działać na KSeF TEST bez jawnej decyzji.
+- **Cel:** produkcja z prawdziwymi klientami nie może wysyłać faktur do
+  KSeF TEST bez jawnej decyzji (trybu pokazowego); stan środowiska jest
+  jawny w produkcie. **[R6]** Główna ścieżka wysyłki już dziś jest
+  fail-closed przy pustej lub błędnej wartości `KSEF_ENV`
+  (`lib/ksef/claim-environment.ts:6-21` — „deliberately no implicit test
+  fallback”; `lib/ksef/submit-invoice-full.ts:86`,
+  `lib/ksef/session-cache.ts:146`, `lib/invoices/ksef-submit-enqueue.ts:200`;
+  runner przy pustej zmiennej oznacza fakturę `ENV_MISMATCH` —
+  `lib/jobs/runners/submit-invoice.ts:543-578`). Ryzyko wynika z **jawnego**
+  `KSEF_ENV=test` na produkcji [PR225], którego nic nie blokuje.
 - **Pokrywa:** WYM-37 (część), WYM-SOC-3 (część); PRC-17, SOC-25
   (część), SOC-06 (część).
 - **Typ / wielkość / fala:** kod · M · F2.
-- **Zakres:** domyślne `?? 'test'` w wysyłce — `lib/jobs/runners/submit-invoice.ts:628`,
-  `lib/invoices/ksef-submit-enqueue.ts:127`, `lib/ksef/client.ts:49, 246`;
-  wzorzec bez domyślnej wartości — `lib/ksef/claim-environment.ts`
-  (`requireConfiguredKsefEnvironment`); pozostałe odczyty z domyślnym
-  `test` (pkt 3 protokołu — ocenić w tym PR): `app/(dashboard)/_components/ksef-health-banner.tsx:7`,
+- **Zakres:** **[R6]** strażnik „wdrożenie produkcyjne + `KSEF_ENV` ≠
+  `production` bez zmiennej trybu pokazowego” w ścieżce wysyłki
+  i kolejkowania (wzorzec — `lib/ksef/claim-environment.ts`,
+  `requireConfiguredKsefEnvironment`); porządek spójności (nie przyczyna
+  ryzyka): decyzje poboczne z domyślnym `?? 'test'` —
+  `lib/jobs/runners/submit-invoice.ts:628` (Offline24, osiągalne dopiero
+  po zgodności środowiska), `lib/invoices/ksef-submit-enqueue.ts:127`
+  (wstrzymanie korekt), `lib/ksef/client.ts:49, 246`; pozostałe odczyty
+  z domyślnym `test` (pkt 3 protokołu — ocenić w tym PR):
+  `app/(dashboard)/_components/ksef-health-banner.tsx:7`,
   `app/api/ksef/health/route.ts:22`, `app/api/status/components/route.ts:80`,
   `lib/analytics/platform-metrics.ts:37`, `lib/jobs/runners/ksef-health-check.ts:24`,
   `lib/pdf/invoice-pdf.ts:197`.
@@ -747,28 +767,35 @@ bramki; ocena nie może czekać na E-67, który czeka na D-01, D-15 i E-62)
   planu obejmuje już tę zmianę, E-10 zamyka się odsyłaczem do jej PR.
   D-02 rozstrzyga jawny tryb pokazowy produkcji. Gałąź
   `claude/e10-prc17-ksef-srodowisko`.
-- **Zmiany:** `requireConfiguredKsefEnvironment()` zamiast `?? 'test'`
-  w wysyłce, kolejkowaniu i kliencie; w warstwie prezentacji — jawny stan
-  „nieskonfigurowane” zamiast domyślnego `test`; przy wdrożeniu
-  produkcyjnym (znacznik środowiska wdrożenia — `NODE_ENV` nie
-  wystarcza) wartość `KSEF_ENV` inna niż `production` wymaga jawnej
-  zmiennej trybu pokazowego, inaczej joby KSeF odmawiają wysyłki (wariant
-  „odmowa startu całej aplikacji” z `05` WYM-37 — do wyboru w PR).
+- **Zmiany:** przy wdrożeniu produkcyjnym (znacznik środowiska
+  wdrożenia — `NODE_ENV` nie wystarcza) wartość `KSEF_ENV` inna niż
+  `production` wymaga jawnej zmiennej trybu pokazowego, inaczej joby
+  i akcje KSeF odmawiają wysyłki (wariant „odmowa startu całej aplikacji”
+  z `05` WYM-37 — do wyboru w PR); w warstwie prezentacji — jawny stan
+  „nieskonfigurowane” / „tryb pokazowy” zamiast domyślnego `test`;
+  **[R6]** jako porządek spójności — `requireConfiguredKsefEnvironment()`
+  albo jawna obsługa `null` zamiast `?? 'test'` w decyzjach pobocznych
+  (`submit-invoice.ts:628`, `ksef-submit-enqueue.ts:127`, `client.ts:49,246`).
 - **Migracje:** brak.
-- **Test czerwony:** `tests/unit/ksef-srodowisko-bez-domyslnego.test.ts`
-  (runner i akcja; mock tylko HTTP i bazy): przy nieustawionym `KSEF_ENV`
-  brak wywołania HTTP do KSeF, faktura z komunikatem, zdarzenie bez
-  środowiska `test` — przed: **czerwony** (`submit-invoice.ts:628`,
-  `ksef-submit-enqueue.ts:127` wybierają `test`); przypadek „wdrożenie
-  produkcyjne + `test` bez trybu pokazowego” → odmowa — przed: **czerwony**.
+- **Test czerwony:** **[R6]** `tests/unit/ksef-srodowisko-straznik-produkcji.test.ts`
+  (runner i akcja; mock tylko HTTP i bazy): „wdrożenie produkcyjne +
+  `KSEF_ENV=test` bez zmiennej trybu pokazowego” → wysyłka odmówiona,
+  brak wywołania HTTP do KSeF, faktura z komunikatem — przed: **czerwony**
+  (dziś nic nie blokuje jawnego `test`). Przypadek „pusta zmienna → brak
+  HTTP do KSeF, `ENV_MISMATCH`” to **test-strażnik** (zielony przed i po
+  naprawie — `claim-environment.ts:6-21`, `submit-invoice.ts:543-578`),
+  dopisany, żeby porządek w decyzjach pobocznych nie cofnął fail-closed;
+  nie liczy się jako test czerwony (pkt 2 protokołu `AGENTS.md`).
 - **Fail-closed i ponowienie:** klient: „Wysyłka faktury <numer> do KSeF
-  wstrzymana — środowisko KSeF nie jest skonfigurowane. Faktura czeka;
-  powiadomimy po wznowieniu” (treść uzgodnić z tekstami PLAN-ZERO);
-  operator: ustawienie zmiennej w Coolify dla obu aplikacji + runbook F1.
-  Zdarzenie bez środowiska kończy się bez efektu zewnętrznego; ponowienie
-  po konfiguracji — istniejący mechanizm wznowień i `ENV_MISMATCH`.
-- **Akceptacja:** testy zielone; grep `?? 'test'` w ścieżce wysyłki = 0;
-  kod na `main` przeczytany przez drugą osobę.
+  wstrzymana — aplikacja jest ustawiona na testowe środowisko KSeF.
+  Faktura czeka; powiadomimy po wznowieniu” (treść uzgodnić z tekstami
+  PLAN-ZERO); operator: ustawienie `KSEF_ENV=production` albo zmiennej
+  trybu pokazowego w Coolify dla obu aplikacji + runbook F1. Odmowa
+  kończy się bez efektu zewnętrznego; ponowienie po konfiguracji —
+  istniejący mechanizm wznowień i `ENV_MISMATCH`.
+- **Akceptacja:** **[R6]** test czerwony zielony po naprawie; test-strażnik
+  pustej zmiennej zielony; grep `?? 'test'` w ścieżce wysyłki = 0
+  (porządek spójności); kod na `main` przeczytany przez drugą osobę.
 - **Wycofanie:** revert PR.
 - **Po wdrożeniu:** zmienna trybu pokazowego ustawiona w Coolify dla obu
   aplikacji **przed** wdrożeniem (inaczej wysyłka na TEST zatrzyma się —
@@ -2646,8 +2673,8 @@ zweryfikować**, nie budować od zera.
 - **Warunki i zależności:** start od razu; D-08 jest pierwszym krokiem etapu; MFA dla operacji wrażliwych — przed KSeF PROD (bramka A15).
 - **Zakres:** GitHub (członkowie, wyjątki rulesetu — NS-03), Coolify,
   konsola Hetznera, klucze SSH (imienność — NS-04), `ADMIN_EMAILS`,
-  panele dostawców (konto Sentry używane przez dwie osoby [PR225
-  @a72b567]), Telegram i Slack; flaga MFA dla operacji wrażliwych
+  panele dostawców (**[R6]** MFA na kontach dostawców telemetrii niewymuszone albo nieodczytane; jedno konto używane przez dwie osoby
+  [PR225 @a72b567]), Telegram i Slack; flaga MFA dla operacji wrażliwych
   domyślnie wyłączona (`lib/auth/sensitive-mfa.ts:8-15`), a błąd jej
   odczytu nie blokuje (`:14`).
 - **Kroki:** inwentarz kont i kluczy z właścicielem (prywatnie; w repo
@@ -2929,29 +2956,32 @@ wdrożony na obu aplikacjach, zweryfikowany).
 
 ### 8.1. Bramka A — przed pierwszym prawdziwym klientem (warunek konieczny)
 
+**[R6]** „`07` D-NN” w kolumnie „Etapy” to decyzje E-00 z § 3 (zapis
+jednoznaczny także przy cytowaniu bramki w innych plikach — R6a-U08).
+
 | # | Warunek | Etapy | Dlaczego blokuje |
 |---|---|---|---|
-| A1 | Podmiot administratora ustalony; brak placeholderów na stronach | D-01, E-63 | bez administratora nie ma kogo wskazać w informacji, umowie i zgłoszeniu naruszenia (`05` WYM-18 — ryzyko obecne W) |
+| A1 | Podmiot administratora ustalony; brak placeholderów na stronach | `07` D-01, E-63 | bez administratora nie ma kogo wskazać w informacji, umowie i zgłoszeniu naruszenia (`05` WYM-18 — ryzyko obecne W) |
 | A2 | Na stronach publicznych brak tez sprzecznych z kodem | E-01 | publiczna deklaracja wprost nieprawdziwa (WYM-19) |
 | A3 | Regulamin z umową powierzenia i listą dalszych procesorów opublikowany; akceptacja z wersją zapisywana | E-58, E-61, E-62 | każdy klient jest administratorem danych kontrahentów (WYM-41, WYM-43 — warunek sprzedaży B2B) |
 | A4 | Polityka prywatności i informacje w punktach zbierania po review | E-59, E-63 | art. 13 [NZ] wobec każdej rejestrującej się osoby |
-| A5 | Środowisko KSeF fail-closed; przełączenie TEST → PROD według runbooka F1; potwierdzenie licznikowe, że w KSeF TEST nie ma prawdziwych danych | D-02, E-10; PLAN-ZERO F1 | prawdziwe faktury w środowisku testowym (WYM-37, PRC-17) |
+| A5 | Strażnik środowiska KSeF na produkcji (jawne `test` bez trybu pokazowego odmówione; pusta wartość już dziś zatrzymuje wysyłkę) **[R6]**; przełączenie TEST → PROD według runbooka F1; potwierdzenie licznikowe, że w KSeF TEST nie ma prawdziwych danych | `07` D-02, E-10; PLAN-ZERO F1 | prawdziwe faktury w środowisku testowym (WYM-37, PRC-17) |
 | A6 | Ciasteczka sesji nie trafiają do dostawców telemetrii; sesje Sentry i fonty Google nie działają przed wyborem; panel PostHog zgodny z kodem | E-05, E-06, E-07, E-09 | przekazanie bez podstawy przy każdej wizycie (WYM-36 — obecne W; WYM-34, WYM-63) |
 | A7 | Wycofanie zgody analitycznej z interfejsu | E-18 | art. 7 ust. 3 [NZ] (WYM-14) |
 | A8 | Usunięcie konta działa dla każdej ścieżki (użytkownik, operator, konto Google), w pełnym zakresie bazy, z dowodem wykonania; dostawcy — automatycznie albo krokiem ręcznym z terminem w procedurze | E-03, E-04, E-19, E-20; E-21 albo krok w E-66 | prawo do usunięcia (WYM-24 — obecne W) |
 | A9 | „Usunięta” organizacja nie jest przetwarzana; tekst w interfejsie zgodny z kodem; pełny eksport organizacji dostępny | E-02, E-25 | obietnica w interfejsie (WYM-45 — obecne W); zwrot danych po zakończeniu (art. 28 ust. 3 lit. g [NZ]) |
-| A10 | Rejestr żądań, wyszukiwanie osoby, procedura DSAR, kanał poczty na skrzynkę służbową | D-10, E-22, E-66 | osoby bez konta to największa grupa (WYM-17, WYM-21 — K1 W) |
-| A11 | Funkcje AI: NIP poza promptem, informacja przy użyciu, wybór klienta dla kategoryzacji (albo polecenie w umowie), DPIA | E-11, E-12, E-17, E-60 | dane kontrahentów i dokumenty kosztowe do USA bez wyboru (WYM-62 — K1 W) |
+| A10 | Rejestr żądań, wyszukiwanie osoby, procedura DSAR, kanał poczty na skrzynkę służbową | `07` D-10, E-22, E-66 | osoby bez konta to największa grupa (WYM-17, WYM-21 — K1 W) |
+| A11 | Funkcje AI: NIP poza promptem, informacja przy użyciu, wybór klienta dla kategoryzacji (albo polecenie w umowie), DPIA | E-11, E-12, E-17, E-60 | dane kontrahentów i dokumenty kosztowe poza EOG (USA lub „global” — geografia nieodczytana, PRC-06) bez wyboru (WYM-62 — K1 W) |
 | A12 | Rejestry art. 30, mapa podstaw, LIA, screening DPIA, ocena IOD przyjęte; rejestr dostawców z TIA | E-59, E-61 | rozliczalność (WYM-10, WYM-48, WYM-40 — K1 W) |
 | A13 | Kopie zaszyfrowane poza hostem: 7 kolejnych udanych dni; pierwsza udana próba odtworzenia z protokołem | E-53, E-54 | utrata hosta = utrata danych klientów (WYM-51 — obecne W) |
-| A14 | Procedura naruszeń z rejestrem i dyżurem z zastępcą; ocena RUN-08 zapisana (D-16) **[R5a]** | D-15, D-16, E-67 | terminy zgłoszeń; zawiadomienie klienta (WYM-52, WYM-53 — K1 W) |
+| A14 | Procedura naruszeń z rejestrem i dyżurem z zastępcą; ocena RUN-08 zapisana (`07` D-16) **[R5a]** | `07` D-15, `07` D-16, E-67 | terminy zgłoszeń; zawiadomienie klienta (WYM-52, WYM-53 — K1 W) |
 | A15 | Dostęp: przegląd kont, konta imienne, MFA (w tym dla operacji wrażliwych przed KSeF PROD), upoważnienia i zobowiązania do poufności; odczyty operatora w dzienniku | E-36, E-68, E-69 | dostęp do danych wszystkich klientów bez rozliczalności (WYM-35, WYM-47 — K1 W) |
 | A16 | E-maile nietransakcyjne fail-closed; Reply-To klienta w wiadomościach do kontrahentów | E-13, E-14 | wiadomości bez wypisu; korespondencja kontrahentów u operatora (WYM-66, WYM-67) |
 | A17 | PESEL domyślnie „bez identyfikatora” | E-29 | identyfikatory konsumentów zbierane domyślnie (WYM-X-03 — K1 W) |
 | A18 | Job RLS wymagany do scalenia | E-70 | regresja izolacji firm może trafić na `main` (WYM-09) |
 | A19 | Rotacja klucza poświadczeń KSeF wykonana | E-56 | także punkt bramki PLAN-ZERO (I1) |
-| A20 **[R5a]** | Rejestr retencji w kodzie z decyzjami D-05 część (a); wykonawcy dla treści swobodnych, plików S3 poza fakturami i danych pomocniczych działają (co najmniej w trybie „na sucho” z raportem); kategorie bez decyzji mają wpis „okres do ustalenia” z datą przeglądu | D-05 (a), E-40, E-44, E-45, E-46 | dane osób bez relacji z FF zostają bezterminowo od pierwszego dnia (`05` WYM-08, WYM-71 — K1 W; ryzyko #6 w `05` § 12.2); polityka z A4 musi podać okresy (art. 13 ust. 2 lit. a [NZ]) |
-| A21 **[R5a]** | Wyszukanie NIP bez nazw organizacji; `validation_cache` tylko przez serwer; domyślny termin linku księgowej według decyzji | E-31, E-33, E-43 (po D-12 (f)) | od pierwszego klienta każdy zalogowany ustali, które firmy korzystają z FF (WYM-33 — K1 W) |
+| A20 **[R5a]** | Rejestr retencji w kodzie z decyzjami `07` D-05 część (a); wykonawcy dla treści swobodnych, plików S3 poza fakturami i danych pomocniczych działają (co najmniej w trybie „na sucho” z raportem); kategorie bez decyzji mają wpis „okres do ustalenia” z datą przeglądu | `07` D-05 (a), E-40, E-44, E-45, E-46 | dane osób bez relacji z FF zostają bezterminowo od pierwszego dnia (`05` WYM-08, WYM-71 — K1 W; ryzyko #6 w `05` § 12.2); polityka z A4 musi podać okresy (art. 13 ust. 2 lit. a [NZ]) |
+| A21 **[R5a]** | Wyszukanie NIP bez nazw organizacji; `validation_cache` tylko przez serwer; domyślny termin linku księgowej według decyzji | E-31, E-33, E-43 (po `07` D-12 (f)) | od pierwszego klienta każdy zalogowany ustali, które firmy korzystają z FF (WYM-33 — K1 W) |
 | A22 **[R5a]** | Dane testowe bez prawdziwych NIP i domen; zasada „bez danych z produkcji w PR, issue, plikach i kontekście agentów” przyjęta; skrypty `scripts/ops/` zwracają agregaty | E-38 (zasady agentów — E-68) | pierwsze prawdziwe dane mogą trafić do publicznego repo albo dostawcy agenta — nieodwracalnie (WYM-X-02 — K1 W) |
 
 ### 8.2. Bramka B — przed zdarzeniem (nie blokuje startu, blokuje zdarzenie)
@@ -3187,7 +3217,7 @@ E-59, E-68, E-61, E-60.
 | Sprawdzenie | Wynik | Użyte w |
 |---|---|---|
 | zapisy `hard_delete_at` | 2 (`app/admin/users/actions.ts:173`, `components/settings/account-actions.ts:62`), brak czytelnika | E-02, E-50 |
-| domyślne `KSEF_ENV ?? 'test'` | 12 miejsc — 10 w `app/` i `lib/`, 2 w `scripts/` (m.in. `submit-invoice.ts:628`, `ksef-submit-enqueue.ts:127`, `lib/ksef/client.ts:49,246`); wzorzec bez domyślnej wartości — `lib/ksef/claim-environment.ts` (`requireConfiguredKsefEnvironment`) | E-10 |
+| domyślne `KSEF_ENV ?? 'test'` | 12 miejsc — 10 w `app/` i `lib/`, 2 w `scripts/` (m.in. `submit-invoice.ts:628`, `ksef-submit-enqueue.ts:127`, `lib/ksef/client.ts:49,246`); wzorzec bez domyślnej wartości — `lib/ksef/claim-environment.ts` (`requireConfiguredKsefEnvironment`); **[R6]** główna ścieżka wysyłki fail-closed przy pustej zmiennej (`claim-environment.ts:6-21`, `submit-invoice-full.ts:86`, `submit-invoice.ts:543-578`) — domyślne `test` dotyczy decyzji pobocznych | E-10 |
 | joby wybierające firmy | 8 plików z `from('tenants')`; 0 filtrów `deleted_at` w `lib/jobs/runners`, `auth-context.ts`, `middleware.ts`, `proxy.ts` | E-02 |
 | `gdpr_deletion_requests` | brak kolumn źródła i autora (`00051`) | E-03 |
 | `logAudit` przy błędzie | tylko `console.error('[audit] write_failed')` (`lib/audit/log.ts:146-168`); `logAuditAdmin` nie istnieje | E-36, E-73 |
@@ -3233,6 +3263,7 @@ pushowałem; nie czytałem `docs/automation/` ani `.agents/`.
 |---|---|---|---|---|---|---|
 | R5a — niezależny agent-recenzent (grupa: `05` + `07`) | 13.10.2026 | wymaga poprawek, bez uwag blokujących (32 kontrole punktowe dla `05` i `07`, 29 potwierdzonych; dla `07` obalona K06 — pokrycie ustaleń w kartach, częściowa K26 — liczba plików `select('*')`, luka K31 — bramka A a K1 = W) | 9 uwag do tego pliku: R5a-U01, U02, U04 (istotne), R5a-U06, U07, U08, U09, U10 część (a), U11 (drobne; U10 i U11 wspólne z `05`); plus konsekwencja R5a-U03 (karta E-28) | wszystkie 9 — R5a-U01, U02, U04, U06, U07, U08, U09, U10 (a), U11, oraz ujednolicenie E-28 po R5a-U03; naniesione przez redaktora poprawek 13.10.2026 (miejsca oznaczone **[R5a]**). Doprecyzowania redaktora: U01 — WYM-30 był w bramce B (E-74 w zakresie „E-72 – E-75”), nie „bez bramki”, uzasadnienie w § 8.3 dopisane zgodnie z uwagą; U06 (b) — prefiks `eNN` oznaczony jako propozycja (I); U07 — łańcuch retencji rozdzielony na „D-05 ─►” i „E-40 ─►”, bo E-42, E-46, E-47 nie czekają na E-40; U10 (a) — test `security.txt` wskazuje rzeczywistą bramkę (`isPublicPath`, `lib/supabase/middleware.ts:54-80`), nie tylko wzorzec `proxy.ts` | brak | `recenzje/R5a.md` (streszczenie w `10-REVIEW.md`) |
 | R5b — niezależny agent-recenzent (grupa: `08` + `09`; `07` nie był przedmiotem recenzji R5b) | 13.10.2026 | nie dotyczy dla `07` (werdykty R5b: `08` — zatwierdzony z uwagami, `09` — wymaga poprawek); R5b sprawdził na końcowej wersji `07` E-00 (D-01 – D-15) i tytuły E-00 – E-79 — powiązania z `08` zgodne (K17) | 2 uwagi przekazane do `07`: R5b-U08 pkt (2) (niewiadome bez pozycji w E-00 → D-06, D-08), R5b-U12 (liczba pozycji `09` § 10 w D-05); plus ujednolicenie po R5b-U03/U14 (akapit „Pozycje pilne”, D-03 PostHog) | R5b-U08 (2), R5b-U12 — naniesione przez redaktora poprawek 13.10.2026 w E-00 (D-05, D-06, D-08) i w akapicie „Pozycje pilne”; miejsca oznaczone **[R5b]**. Sprawdzenia: `08` § 2.8 (propozycje), `02:55` (D-04 bez reguły czasowej), `git grep ksef_sessions` na `3e5e00d` (tylko schemat i RLS), `A4` § 7 i `lib/analytics/init-posthog-browser.ts:37,49` | — | `recenzje/R5b.md` (streszczenie w `10-REVIEW.md`) |
+| R6a/R6b — niezależni krytycy kompletności | 13.10.2026 | kompletny z uwagami | R6a-U04 (ten wpis), R6a-U07 (E-00: karta skrócona PR skryptu odczytów), R6a-U08 (wariant minimalny: zdanie o znaczeniu D-NN w § 3, „`07` D-NN” w § 8.1), R6b-U01 (E-10 „Strażnik środowiska KSeF na produkcji”: cel, zakres, zmiany, test czerwony „produkcja + `KSEF_ENV=test` bez trybu pokazowego”, pusta zmienna jako test-strażnik; § 1.1, § 2, A5, § 13), R6b-U12 (propagacja uogólnienia do karty E-69) | przyjęte (naniesione przez redaktora R6 13.10.2026) | R6a-U08 wariant docelowy (prefiks DEC-NN, oznaczenia RODO-/POL-/REG-NN) — nie naniesiony: koordynator wskazał wariant minimalny; zmiana prefiksów w wielu plikach poza zakresem tej rundy | `recenzje/R6a.md`, `recenzje/R6b.md` |
 
 **Sprawdzenia redaktora poprawek (13.10.2026) przed naniesieniem:**
 

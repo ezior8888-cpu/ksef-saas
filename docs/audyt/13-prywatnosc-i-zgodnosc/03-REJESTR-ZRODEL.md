@@ -7,7 +7,7 @@
 | Data | 10.10.2026 |
 | Wersja kodu | `origin/main` @ `3e5e00d` (gałąź robocza zawiera to scalenie; poza materiałami audytu brak zmian względem `3e5e00d`, sprawdzone `git merge-base --is-ancestor` i `git diff --stat 3e5e00d HEAD`) |
 | Zakres | Rejestr źródeł prawa UE i PL, stanowisk EROD/EDPB, WP29 i UODO, orzecznictwa, kryteriów AICPA SOC 2 oraz katalog wymagań (WYM) dla macierzy luk. Bez oceny stanu wymagań (to robią `05-MACIERZ-WYMAGAN.md` i pliki A1–A4). |
-| Źródła danych | Wiedza modelu (stan do 06.2026) — dla treści prawa, wytycznych i AICPA; jeden odczyt online (`anthropic.com/legal/commercial-terms`); kod repo na `3e5e00d` — tylko do kolumny „zastosowanie” i „punkt zaczepienia”, z dowodem `ścieżka:linia`; `01-STAN-I-GRANICE.md`; brief koordynatora (ADDENDUM 1–2, fakty z niescalonego PR #225). |
+| Źródła danych | Wiedza modelu (stan do 06.2026) — dla treści prawa, wytycznych i AICPA; jeden odczyt online źródła prawa i warunków umownych w tym pliku (`anthropic.com/legal/commercial-terms`; **[R6]** dokumentacja dostawców odczytana 10.10.2026 — `04` § 8.2, DOK-1…DOK-12); kod repo na `3e5e00d` — tylko do kolumny „zastosowanie” i „punkt zaczepienia”, z dowodem `ścieżka:linia`; `01-STAN-I-GRANICE.md`; brief koordynatora (ADDENDUM 1–2, fakty z niescalonego PR #225). |
 | Ograniczenia | Źródła pierwotne prawa, EDPB, UODO i AICPA **nieodczytane** — egress zablokowany (sekcja 1). Bez WebSearch (decyzja właściciela). Każdy przepis i dokument w tym pliku jest identyfikowany i streszczany z pamięci modelu i wymaga potwierdzenia w końcowym review. Plik nie jest opinią prawną. |
 | Recenzja | R2 (osobny agent) — patrz `10-REVIEW.md` |
 
@@ -27,7 +27,7 @@ Jedna próba na adres, bez ponowień, polecenie:
 | `https://api.sejm.gov.pl/eli/acts/DU/2024/1221` | jw. (403 na CONNECT, `000`) | jw. |
 | `https://www.uke.gov.pl` | jw. (403 na CONNECT, `000`) | jw. |
 | `https://www.aicpa-cima.com` | jw. (403 na CONNECT, `000`) | jw. |
-| `https://www.anthropic.com/legal/commercial-terms` | `200` — pobrano i przeczytano tekst | jedyne źródło odczytane online (ZR-80) |
+| `https://www.anthropic.com/legal/commercial-terms` | `200` — pobrano i przeczytano tekst | jedyne źródło **prawa i warunków umownych** odczytane online w tym pliku (ZR-80); **[R6]** dokumentacja dostawców — `04` § 8.2 (DOK-1…DOK-12) |
 
 Kod `000` znaczy, że połączenie z serwerem docelowym w ogóle nie powstało;
 odmowa padła na proxy (403 na `CONNECT`). Zgodnie z briefem nie
@@ -164,7 +164,10 @@ wskazuje wymagania z sekcji 3.
 
 UODO publikuje też poradniki i formularz elektronicznego zgłaszania
 naruszeń; ich tytułów i wersji model nie jest pewny, więc nie
-rejestruję ich jako osobnych źródeł (do uzupełnienia w review).
+rejestruję ich jako osobnych źródeł. **[R6]** Ścieżka do końcowego review:
+`08` § 4.2 część E, wiersz „poradniki i stanowiska Prezesa UODO” (privacy
+by design/default, zgoda, administrator a podmiot przetwarzający i umowa
+powierzenia, prawo dostępu, usuwanie i okresy przechowywania) oraz `08` N-38.
 
 ### 2.4. EROD/EDPB i Grupa Robocza Art. 29
 
@@ -304,7 +307,7 @@ identyfikatory trzeba zweryfikować w oryginale AICPA.
 | ID | Tytuł | Wydawca | Oficjalny URL kanoniczny | Typ | Moc | Przepisy / punkty istotne | Weryfikacja | Zastosowanie do FaktFlow |
 |---|---|---|---|---|---|---|---|---|
 | ZR-80 | Anthropic — Commercial Terms of Service, wersja „Effective June 17, 2025” (na stronie link do wersji poprzedniej) | Anthropic | https://www.anthropic.com/legal/commercial-terms | dokumentacja dostawcy (warunki umowne) | umowny — wiąże strony, jeśli FF je zaakceptował (czy i kiedy — nieznane) | sekcja B: Anthropic nie może trenować modeli na treściach klienta (Customer Content) z usług; klient zachowuje prawa do wejść i jest właścicielem wyników; sekcja C „Data Privacy”: dane przekazane przez usługi są przetwarzane zgodnie z Anthropic Data Processing Addendum, włączonym przez odesłanie (link `/legal/data-processing-addendum` — **nie pobierano**); warunki zmieniane z 30-dniowym wyprzedzeniem | **ODCZYT** — „odczyt online 2026-10-10 (https://www.anthropic.com/legal/commercial-terms)” | Dalszy procesor FF dla supportu, OCR i kategoryzacji (FLO — moduł nieaktywny, bez importera: `lib/flo/llm.ts:1-3`, `tests/unit/flo-nieaktywne.test.ts`). Retencja, lokalizacja, mechanizm transferu i dalsi procesorzy wynikają z DPA — odesłanie do `04-PROCESORZY-I-LOKALIZACJE.md`. Uwaga: polityka twierdzi, że zdjęcia „nie są przechowywane przez Anthropic” (`polityka-prywatnosci/page.tsx:106-108`) — warunki handlowe tego nie rozstrzygają. **[R2]** DPA przewiduje przechowywanie przez czas umowy (Schedule 1 B.7) — teza polityki „nie są przechowywane” wymaga sprostowania (`04` §5). |
-| ZR-81 | Dokumentacja i umowy pozostałych dostawców (Hetzner, Sentry, PostHog, Resend, Stripe, Google, Cloudflare, GitHub; MinIO i Supabase jako oprogramowanie self-hosted) | dostawcy | — | dokumentacja dostawcy | umowny / pomocniczy | — | niesprawdzane w tym pliku (domeny 403 wg briefu) | **Odesłanie do `04-PROCESORZY-I-LOKALIZACJE.md`.** |
+| ZR-81 | Dokumentacja i umowy pozostałych dostawców (Hetzner, Sentry, PostHog, Resend, Stripe, Google, Cloudflare, GitHub; MinIO i Supabase jako oprogramowanie self-hosted) | dostawcy | — | dokumentacja dostawcy | umowny / pomocniczy | — | **[R6]** częściowo ODCZYT online 10.10.2026 — DOK-1–3, DOK-5–12; DOK-4 — dokumentacja SDK z narzędzia sesji (odczyt lokalny, nie odczyt online) **[R6-wer]** (`04` § 8.2: Commercial Terms, Privacy Policy, DPA i Consumer Terms Anthropic, dokumentacja SDK Anthropic, Sentry, PostHog z DPA, Turnstile, compose Supabase, Coolify, MinIO); nieodczytane: Stripe, Resend, Hetzner, Google (Fonts, OAuth), Slack, Telegram, Cloudflare Email Routing, Healthchecks, HIBP, lista DPF (`04` § 8.3) | **Odesłanie do `04-PROCESORZY-I-LOKALIZACJE.md`.** |
 | ZR-82 | Data Privacy Framework List | Departament Handlu USA | https://www.dataprivacyframework.gov | rejestr urzędowy USA (dowód faktyczny dla art. 45) | pomocniczy (dowód certyfikacji) | aktywność i zakres certyfikacji odbiorcy | niesprawdzane w tej sesji (zakres `04-PROCESORZY`) | WYM-59. |
 | ZR-83 | Advisera — materiały o RODO, ISO 27001, SOC 2 | Advisera | — | materiał pomocniczy | **brak mocy** | wyłącznie lista zagadnień do sprawdzenia | **niepobierane** | Nie jest podstawą żadnego WYM. |
 | ZR-84 | Schneider Downs — materiały o SOC 2 | Schneider Downs | — | materiał pomocniczy | **brak mocy** | wyłącznie lista zagadnień do sprawdzenia | **niepobierane** | Nie jest podstawą żadnego WYM. |
@@ -626,3 +629,4 @@ pushowałem.
 |---|---|---|---|---|---|---|
 | R2 — niezależny agent-recenzent (grupa: `03` + `04`) | 10.10.2026 | zatwierdzony z uwagami (21 kontroli punktowych: 19 potwierdzonych, 2 częściowe — WYM-33 numer linii, ZR-80 zakres FLO, poprawione; jedyny odczyt online powtórzony — zgodny) | 11 uwag do tego pliku (R2-U01 … R2-U11; 1 istotna, 10 drobnych) | wszystkie 11 — naniesione przez koordynatora 11.10.2026, miejsca oznaczone **[R2]**; tezy recenzenta z wiedzy modelu oznaczone NZ | — | `recenzje/R2.md` (streszczenie w `10-REVIEW.md`) |
 | R2 — runda 2 (niezależny agent-recenzent; sprawdził naniesienie rundy 1) | 10.10.2026 (kontrole 11.10) | zatwierdzony z uwagami (22 kontrole: 21 potwierdzonych, 1 częściowa; wszystkie 11 uwag rundy 1 naniesione wiernie) | R2-U21 … R2-U26 (drobne) | wszystkie 6 — naniesione przez koordynatora 13.10.2026, miejsca oznaczone **[R2-r2]** | — | `R2.md` (runda 1: `R2-runda1.md`) |
+| R6a/R6b — niezależni krytycy kompletności | 13.10.2026 | kompletny z uwagami | R6a-U04 (ten wpis), R6a-U05 (§ 2.3 — odesłanie do `08` § 4.2 E i N-38), R6a-U06 (ZR-81: odczyt DOK-1–DOK-12, lista nieodczytanych), R6b-U09 (nagłówek i § 1: „jedyne źródło prawa i warunków umownych odczytane online w tym pliku”) | przyjęte (naniesione przez redaktora R6 13.10.2026) | — | `recenzje/R6a.md`, `recenzje/R6b.md` |

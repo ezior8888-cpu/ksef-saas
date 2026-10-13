@@ -50,7 +50,7 @@ Kolumna „Retencja w kodzie” podaje regułę z plikiem i linią albo „nie z
 | ID | Kategoria danych | Osoby | Kolumny / miejsca | Źródło | Cel | Magazyny | Odbiorcy (potwierdzeni w kodzie) | Dostęp | Retencja w kodzie | Dowód |
 |---|---|---|---|---|---|---|---|---|---|---|
 | D-01 | Dane konta i logowania | O-01, O-14 | `auth.users` (e-mail, hash hasła, `raw_user_meta_data.full_name` z rejestracji), `auth.identities` (Google), czynniki MFA; `public.users.name`, `last_login`, `last_active_tenant_id`; `mfa_recovery_codes.code_hash`, `code_salt` | osoba (formularz), Google OAuth | konto, uwierzytelnienie, bezpieczeństwo | DB, DUMP, HIMG (SNAP bez `auth`) | Google (OAuth), Cloudflare Turnstile (token + IP przy logowaniu, rejestracji, resecie hasła), HIBP (5 znaków SHA-1 hasła), PostHog (UUID, zdarzenia logowania/rejestracji) | `users`: własny wiersz albo wspólna organizacja (`00058`, polityka `users_select_self_or_org_member`); `mfa_recovery_codes`: tylko właściciel (`00050`); admin: `auth.admin.listUsers` (`lib/admin/users.ts:83-131`) | do usunięcia konta (`lib/gdpr/deletion.ts:196`); kody ratunkowe kasowane przy regeneracji (`lib/auth/mfa-recovery.ts:36,118`); nieaktywne konta — nie znaleziono reguły | `app/(auth)/register/actions.ts:21-71`, `app/(auth)/login/actions.ts:97-113`, `lib/security/turnstile.ts:119-124`, `lib/auth/breach-check.ts:34-41` |
-| D-02 | Dane aktywności i bezpieczeństwa (IP, user agent, zdarzenia) | O-01, O-14 | `audit_logs.ip_address`, `user_agent`, `metadata`, `action` (`00001…sql:162-172`, `00008_audit_logs_refinements.sql:9`); `gdpr_deletion_requests.user_email`, `ip_address`, `user_agent` (`00051_gdpr_deletion_requests.sql:34-43`); GoTrue: sesje i dziennik audytu (niezweryfikowane) | nagłówki HTTP, akcje | rozliczalność, bezpieczeństwo, obsługa RODO | DB, DUMP, HIMG; `audit_logs` i `gdpr_deletion_requests` **wyłączone** z SNAP (`lib/backup/snapshot-tables.ts:15-20`) | — | `audit_logs`: SELECT dla **każdego członka organizacji** (`00008`, `audit_logs_select_own_tenant`), bez zapisu klienta (`00027_lockdown_audit_xml_writes.sql:25`); `gdpr_deletion_requests`: własne (`00051`) | `audit_logs`: 12 mies., cron 1. dnia miesiąca (`00052_audit_logs_immutable_trigger.sql:53-74`, `lib/jobs/queues.ts:91`); anonimizacja przy usunięciu konta (`00052…sql:95-121`); `gdpr_deletion_requests` — nie znaleziono reguły | `lib/audit/log.ts:4-19,146-160`, `lib/audit/log-system.ts:10-25` **[R1]** Dodatkowo `audit_logs.details_json` (zapisuje go `ksef_send_audit`, `00131_ksef_send_lifecycle.sql:134`); `anonymize_user_audit_logs` czyści `metadata`, `ip_address`, `user_agent`, `user_id`, ale **nie** `details_json` (`00052…sql:106-115`). Magazyn dodatkowy: logi Supabase w bazie `_supabase` (§ 3.1). |
+| D-02 | Dane aktywności i bezpieczeństwa (IP, user agent, zdarzenia) | O-01, O-14 | `audit_logs.ip_address`, `user_agent`, `metadata`, `action` (`00001…sql:162-172`, `00008_audit_logs_refinements.sql:9`); `gdpr_deletion_requests.user_email`, `ip_address`, `user_agent` (`00051_gdpr_deletion_requests.sql:34-43`); GoTrue: sesje i dziennik audytu (niezweryfikowane) | nagłówki HTTP, akcje | rozliczalność, bezpieczeństwo, obsługa RODO | DB, DUMP, HIMG; `audit_logs` i `gdpr_deletion_requests` **wyłączone** z SNAP (`lib/backup/snapshot-tables.ts:15-20`) | — | `audit_logs`: SELECT dla **każdego członka organizacji** (`00008`, `audit_logs_select_own_tenant`), bez zapisu klienta (`00027_lockdown_audit_xml_writes.sql:25`); `gdpr_deletion_requests`: własne (`00051`) | `audit_logs`: 12 mies., cron 1. dnia miesiąca (`00052_audit_logs_immutable_trigger.sql:53-74`, `lib/jobs/queues.ts:91`); **[R6]** pseudonimizacja wpisów przy usunięciu konta (funkcja `anonymize_user_audit_logs`, `00052…sql:95-121`) — nie anonimizacja (zostają `tenant_id`, `entity_id`, `details_json` — `05` WYM-38); `gdpr_deletion_requests` — nie znaleziono reguły | `lib/audit/log.ts:4-19,146-160`, `lib/audit/log-system.ts:10-25` **[R1]** Dodatkowo `audit_logs.details_json` (zapisuje go `ksef_send_audit`, `00131_ksef_send_lifecycle.sql:134`); `anonymize_user_audit_logs` czyści `metadata`, `ip_address`, `user_agent`, `user_id`, ale **nie** `details_json` (`00052…sql:106-115`). Magazyn dodatkowy: logi Supabase w bazie `_supabase` (§ 3.1). |
 | D-03 | Dane organizacji klienta (u JDG — dane osobowe) | O-04 | `tenants.name`, `nip`, `regon`, `address_json`, `tax_office_code`, `vat_exemption_basis`, `stripe_customer_id` | osoba, GUS | świadczenie usługi, faktury (Podmiot1) | DB, SNAP, DUMP, HIMG, Redis (`ff:gus:<nip>`) | MF/KSeF (XML), Stripe, GUS (zapytanie NIP), Resend (w treści e-maili), PostHog (UUID organizacji) | członkowie (`00037`, `tenants_select_member_of`); kolumna z poświadczeniami KSeF wyłączona z odczytu klienta (`00112_tenant_credentials_column_privileges.sql`) | soft-delete `deleted_at`/`hard_delete_at` — **brak joba realizującego `hard_delete_at`** (patrz INW-02) | `types/database.ts` (Row `tenants`), `lib/stripe/customer.ts:90-101` **[R1] Retencja:** soft-delete `deleted_at`/`hard_delete_at` z dwóch ścieżek (właściciel: `components/settings/account-actions.ts:58-65`; operator: `app/admin/users/actions.ts:149-176`) — brak joba realizującego `hard_delete_at` (INW-02). |
 | D-04 | Poświadczenia i sesje KSeF | O-15 | `tenants.ksef_credentials_encrypted` (AES-256-GCM, klucz z env), `ksef_sessions.session_token_encrypted` | osoba (upload certyfikatu/tokenu) | uwierzytelnienie w KSeF w imieniu klienta | DB, SNAP (zaszyfrowany blob), DUMP, HIMG | MF/KSeF | tylko klucz serwisowy (`00112`) | do usunięcia przez klienta (`ksef.credentials_removed`); brak reguły czasowej | `lib/ksef/credentials-crypto.ts:36,126` |
 | D-05 | Członkostwa, zaproszenia, prośby o dołączenie | O-01, O-02 | `memberships`; `organization_invitations.email`, `token_hash`, `role`; `organization_join_requests.message` | owner/admin, wnioskujący | współpraca w organizacji | DB, SNAP, DUMP, HIMG | Resend (e-mail zaproszenia) | członkowie organizacji (`00058`) | nie znaleziono reguły (status `revoked`/`accepted`, wiersze zostają) | `00036_memberships_invitations.sql:16-90` |
@@ -71,7 +71,7 @@ Kolumna „Retencja w kodzie” podaje regułę z plikiem i linią albo „nie z
 | D-20 | Billing FaktFlow (subskrypcje) | O-16, O-04 | Stripe Customer: e-mail, nazwa, NIP (`description`, `metadata`, `tax_id_data`); `subscriptions.last_webhook_payload`; `stripe_payments.last_webhook_payload` (pełny obiekt faktury Stripe); `stripe_webhook_events.payload`; faktury własne w organizacji operatora (`invoices`) | Stripe, aplikacja | rozliczenie usługi, faktury VAT FaktFlow | DB, SNAP, DUMP, HIMG, Stripe | Stripe, MF/KSeF (faktura własna), Resend (e-maile billingowe), PostHog (zdarzenia billingowe z UUID) | `subscriptions`: SELECT organizacji (`00047`); zdarzenia Stripe — tylko serwer | `stripe_webhook_events.payload` przycinany po 90 dniach od przetworzenia (`00109_stripe_webhook_retention.sql:102-110`, `lib/jobs/runners/cleanup-audit-logs.ts:64-81`); `last_webhook_payload` — nie znaleziono reguły | `lib/stripe/event-mapping.ts:446`, `lib/jobs/runners/self-invoice-payment.ts:1-21,86,158` |
 | D-21 | Notatki i działania operatorów | O-14, O-01 | `admin_user_notes.body`, `author_email`; `audit_logs.metadata.adminEmail`; `global_feature_flags.updated_by` | operator | obsługa klienta, nadzór | DB, SNAP, DUMP, HIMG | — | brak polityk (tylko serwer + `requireAdmin` z MFA) | `archived_at` — nie znaleziono usuwania | `00045_admin_panel.sql:16-27`, `lib/auth/admin-guard.ts:31-48` |
 | D-22 | Agent FLO | O-04, O-05, O-06, O-09 | `flo_proposals.title`, `body`, `payload`, `evidence`; `flo_approvals.snapshot`; `flo_shadow.proposal`, `actual`; `flo_prefs.tax_profile`; `flo_decisions`, `flo_usage` | cron `flo-tick` (07:30), akcje użytkownika | propozycje działań (potwierdzenie wpłaty, brakujące dokumenty, ponaglenie) | DB, SNAP, DUMP, HIMG | Resend (wykonanie ponaglenia); model językowy FLO **nieaktywny** | SELECT organizacji (`00061`) | wygaszanie = zmiana statusu (`lib/flo/proposals.ts:251-260`); nie znaleziono usuwania | `lib/jobs/queues.ts:100-104`, `lib/flo/kind-switch.ts:16-26`, `tests/unit/flo-nieaktywne.test.ts:24-42` |
-| D-23 | Telemetria błędów (Sentry) | O-01, O-13 | zdarzenia błędów, transakcje (10% przeglądarka/serwer, 0% worker), `user.id` (po filtrze), tagi | aplikacja, przeglądarka (przez `/monitoring`) | diagnostyka | Sentry (intake EU wg [PR225]) | Sentry | — | po stronie dostawcy — nieodczytana ([PR225]) | `lib/observability/scrub.ts:4-79`, `sentry.server.config.ts:4-12`, `instrumentation-client.ts:5-20`, `lib/jobs/sentry.ts:23-37`, `next.config.ts:189` **[R1]** Po stronie dostawcy: plan Developer, retencja zdarzeń 30 dni według dokumentacji dostawcy; aktywny TTL nieodczytany [PR225 @a72b567]. |
+| D-23 | Telemetria błędów (Sentry) | O-01, O-13 | zdarzenia błędów, transakcje (10% przeglądarka/serwer, 0% worker), **[R6]** bez identyfikatora użytkownika (helpery `lib/observability/sentry-context.ts:23-63` bez wywołań w repo — R3-U12; filtr `scrub.ts` przycina `user` do `id`, gdyby go ustawiono); `tenantId` w tagach/`extra` (np. `lib/jobs/runners/inbox-polling.ts:395`) | aplikacja, przeglądarka (przez `/monitoring`) | diagnostyka | Sentry (intake EU wg [PR225]) | Sentry | — | po stronie dostawcy — nieodczytana ([PR225]) | `lib/observability/scrub.ts:4-79`, `sentry.server.config.ts:4-12`, `instrumentation-client.ts:5-20`, `lib/jobs/sentry.ts:23-37`, `next.config.ts:189` **[R1]** Po stronie dostawcy: plan Developer, retencja zdarzeń 30 dni według dokumentacji dostawcy; aktywny TTL nieodczytany [PR225 @a72b567]. |
 | D-24 | Analityka produktowa (PostHog) | O-01, O-13 | przeglądarka: zdarzenia z listy dozwolonych, `distinct_id` = UUID użytkownika, grupa `tenant` = UUID organizacji, URL sprowadzony do obszaru; serwer: logowanie, rejestracja, zdarzenia Stripe, wysyłka faktury z UUID | przeglądarka (po zgodzie), serwer (bez bramki zgody) | analityka produktu | PostHog (intake EU wg [PR225]) | PostHog (przez `/ingest` z przeglądarki, bezpośrednio z serwera) | — | po stronie dostawcy: 1 rok ([PR225]) | `lib/analytics/init-posthog-browser.ts:13-61`, `lib/analytics/privacy.ts:6-123`, `lib/analytics/server.ts:7-55`, `components/analytics/analytics-identify.tsx:13-20`, `next.config.ts:138-157` **[R1]** Ustawienia projektu PostHog (odczyt panelu 10.10): replay ON, console ON, network timings ON, nagłówki i treść OFF, retencja replay 30 dni; kod przeglądarki wyłącza nagrania (`init-posthog-browser.ts`) — włączenie po stronie projektu nie dowodzi nagrywania [PR225 @a72b567]. |
 | D-25 | Logi aplikacji i workera | O-01, O-04 (zamaskowane) | stdout kontenerów: `logger.warn/error` bez redakcji (`lib/observability/logger.ts:21-27`); logger workera maskuje NIP i e-mail po nazwie pola (`lib/jobs/logger.ts:13-46`); `inngest_run_log.error_message` (po `scrubTelemetryText`) | aplikacja | diagnostyka | logi Docker na `app-1`; `inngest_run_log` w DB | — | operator (SSH) | `inngest_run_log` 3 mies. (`00052…sql:77-78`); logi Docker — rotacja wg prywatnego pomiaru [PR225], wartości nieznane | `lib/jobs/run-log.ts:28-41` **[R1]** Dodatkowy magazyn: logi usług Supabase (Vector → Logflare) w bazie `_supabase` na `db-1` (§ 3.1, N-INW-15). |
 | D-26 | Cache i limity prób | O-01, O-05, O-13 | Redis: `ff:valid:PL:<nip>`, `ff:gus:<nip>`, `ff:rl:submit:<nip>:<minuta>` (NIP jawnie), `rl:<bucket>:<sha256(identyfikator)[0:32]>` (IP, e-mail, IP+e-mail — skrót bez soli) | aplikacja | wydajność, ochrona przed nadużyciami | Redis (lokalny wg [PR225]) | — | proces aplikacji | TTL: 24 h (rejestry), 60 s–5 min (listy, KPI), okno limitu | `lib/cache/keys.ts:18-77`, `lib/rate-limit/index.ts:24,63,131-135`, `lib/rate-limit/auth.ts:23-46` |
@@ -227,7 +227,7 @@ flowchart LR
   U["Użytkownik (przeglądarka, PWA)"] -->|HTTPS| APP["Aplikacja Next.js"]
   V["Odwiedzający stronę"] --> APP
   ACC["Księgowa (link z tokenem)"] --> APP
-  APP --> DB[("Postgres: public, auth, pgboss")]
+  APP --> DB[("Postgres — baza postgres: public, auth, storage, pgboss")]
   APP --> S3[("S3 aplikacji (MinIO)")]
   APP --> RD[("Redis")]
   APP -->|zadania| PGB[("pg-boss")]
@@ -257,7 +257,14 @@ flowchart LR
   DB --> DUMP[("pg_dump lokalnie na hoście bazy")]
   W -->|"snapshot JSON tabel public"| S3
   MAIL["Poczta na domenę (w tym odpowiedzi kontrahentów)"] --> CFE["Cloudflare Email Routing"] --> MB["Skrzynki operatorów"]
+  DB -->|"logi usług Supabase (Kong, GoTrue, PostgREST) przez Vector"| SLOG[("Logi usług Supabase — baza _supabase (poza pg_dump)")]
 ```
+
+**[R6]** Węzeł `SLOG` (R1-U13, uzupełnione po R6a-U01): logi usług Supabase
+trafiają przez Vector do Logflare w osobnej bazie `_supabase` na hoście bazy
+(`04` R-02; [PR225 @a72b567] rozmiar ok. 676 MB), której nocny `pg_dump` nie
+obejmuje (`scripts/hetzner/db-backup.sh:77`, `-d postgres`). Węzeł `DB`
+oznacza bazę `postgres` (schematy `public`, `auth`, `storage`, `pgboss`, …).
 
 ### 5.2. Rejestracja i logowanie
 
@@ -408,7 +415,7 @@ flowchart TB
   subgraph ADMIN["Usunięcie przez operatora"]
     A1["deleteUserGdprAction"] --> A2["tenants: deleted_at, hard_delete_at = +30 dni (brak wykonawcy)"]
     A2 --> A3["memberships revoked"]
-    A3 --> A4["auth.admin.deleteUser, bez anonimizacji audytu"]
+    A3 --> A4["auth.admin.deleteUser, bez pseudonimizacji audytu"]
   end
   subgraph OWNER["Usunięcie organizacji przez właściciela"]
     W1["Usuń organizację (ustawienia)"] --> W2["tenants: deleted_at, hard_delete_at = +30 dni, is_active = false (brak wykonawcy)"]
@@ -425,9 +432,10 @@ Dowody: `app/api/gdpr/export/route.ts:12-42`, `lib/gdpr/data-collector.ts:85-114
 
 ```mermaid
 flowchart LR
-  DB[("Postgres: public, auth, pgboss")] -->|"02:00, worker"| SN["Snapshot JSON public (bez audit_logs, gdpr_deletion_requests)"]
+  DB[("Postgres: baza postgres (public, auth, storage, pgboss, …)")] -->|"02:00, worker"| SN["Snapshot JSON public (bez audit_logs, gdpr_deletion_requests)"]
   SN --> S3[("S3 aplikacji: backups/db/..., 30 dni / 56 dni")]
-  DB -->|"cron na hoście bazy"| DP["pg_dump całej bazy + role, 14 zrzutów, katalog 700"]
+  DB -->|"cron na hoście bazy"| DP["pg_dump bazy postgres + role (bez _supabase), domyślnie 14 zrzutów (KEEP), katalog 700"]
+  SLOG[("Baza _supabase: logi usług Supabase")] -.->|"brak kopii — poza pg_dump"| NONE2["—"]
   DP -.->|"rclone crypt — niewdrożone wg PR 225"| SB["Storage Box (planowany)"]
   DB --> HI["Obrazy dysku Hetzner: 7"]
   S3 -.->|"brak kopii MinIO wg PR 225"| NONE["—"]
@@ -435,6 +443,8 @@ flowchart LR
   DP -->|"awaria"| RS["Odtworzenie: pg_restore, kontrola zadań pg-boss, NOTIFY, restart"]
   RS -.->|"BRAK kroku"| RG["Ponowne zastosowanie usunięć RODO wykonanych po dacie zrzutu"]
 ```
+
+**[R6]** Etykiety `DB`, `DP` i węzeł `SLOG` poprawione po R6a-U01 (R1-U13, R1-U20): zrzut obejmuje bazę `postgres` (`db-backup.sh:74-77`), nie `_supabase`; `KEEP` domyślnie 14 (`db-backup.sh:17,41`), wartość produkcyjna w `/etc/faktflow-backup.env` poza repo — niezweryfikowana.
 
 Dowody: `lib/jobs/queues.ts:96`, `lib/backup/db-snapshot.ts:64-104`, `lib/backup/snapshot-tables.ts:15-20`, `lib/jobs/runners/cleanup-old-backups.ts:20-21`, `scripts/hetzner/db-backup.sh:41,62-64,77-79,92-112`, `docs/runbooks/backup-restore.md:89-124,128-151`, [PR225] `runtime-inventory.md` § Kopie zapasowe.
 
@@ -445,7 +455,7 @@ Ryzyko oceniamy dla osób, których dane dotyczą, i dla zgodności, przy deklar
 | ID | Ustalenie (skrót) | Ryzyko | Klasa | Stan |
 |---|---|---|---|---|
 | INW-01 | Większość kategorii w bazie nie ma reguły retencji ani usuwania | wysokie | P, I | brak |
-| INW-02 | Usunięcie organizacji (właściciel albo operator): `hard_delete_at` bez wykonawcy, audyt bez anonimizacji, prawdopodobne przerwanie na wyzwalaczu audytu | wysokie | P, I | brak |
+| INW-02 | Usunięcie organizacji (właściciel albo operator): `hard_delete_at` bez wykonawcy, audyt bez pseudonimizacji (funkcja `anonymize_user_audit_logs`), prawdopodobne przerwanie na wyzwalaczu audytu | wysokie | P, I | brak |
 | INW-03 | Pliki w S3 poza fakturami bez retencji; deklaracja „90 dni” dla eksportów bez kodu | wysokie | P, I | brak |
 | INW-04 | Kopie z pełnym PII bez szyfrowania lokalnego i bez ponownego zastosowania usunięć po odtworzeniu | wysokie | P, S, I | częściowe |
 | INW-05 | PESEL i numery dokumentów nabywców B2C jawnie w wielu magazynach, widoczne dla każdego członka | średnie | P, I | częściowe |
@@ -514,7 +524,7 @@ Ryzyko oceniamy dla osób, których dane dotyczą, i dla zgodności, przy deklar
 
 ### INW-07. Odpowiedzi kontrahentów na e-mail z fakturą trafiają do FaktFlow
 
-- **Stan:** potwierdzone (kod); skrzynki docelowe niezweryfikowane. **Klasa:** P (art. 28 ust. 3 lit. a — przetwarzanie wyłącznie na polecenie [NZ]), I.
+- **Stan:** brak (pewność: kod; skrzynki docelowe niezweryfikowane) **[R6]**. **Klasa:** P (art. 28 ust. 3 lit. a — przetwarzanie wyłącznie na polecenie [NZ]), I.
 - **Dowód:** `sendViaResend` ustawia `replyTo: SUPPORT_EMAIL` dla każdej wiadomości (`lib/email/send.ts:197-200`), w tym dla faktury do nabywcy (`sendInvoiceEmail`, `send.ts:550-581`; wywołanie `components/invoices/actions-detail.ts:495-505`). Poczta na domenę przechodzi przez Cloudflare Email Routing i Worker do skrzynek `FORWARD_TO` (`ops/poczta/worker.mjs:1-12,74`), według runbooka „np. Gmail” (`docs/runbooks/skrzynka-pomoc.md:17,39`). Dla porównania przypomnienia mają Reply-To klienta (`lib/reminders/prepare-delivery.ts:93-94`).
 - **Luka:** korespondencja kontrahenta adresowana do sprzedawcy trafia do operatora i jego skrzynek; klient o niej nie wie.
 - **Ryzyko:** średnie — dane osób bez relacji z FaktFlow w prywatnych skrzynkach, przetwarzanie bez polecenia klienta.
@@ -538,7 +548,7 @@ Ryzyko oceniamy dla osób, których dane dotyczą, i dla zgodności, przy deklar
 
 ### INW-10. Agent FLO jest aktywny w kodzie i w harmonogramie; `flo_approvals` trzyma pełne wiadomości bez retencji
 
-- **Stan:** potwierdzone (kod); działanie w produkcji — pośrednio ([PR225]: 27 cronów, a lista zawiera `cron.flo-tick` i `cron.flo-shadow-settle`, `lib/jobs/queues.ts:88-128`). **Klasa:** P (art. 5 ust. 1 lit. c i e [NZ]), I.
+- **Stan:** brak — retencja `flo_approvals` (pewność: kod; aktywność w produkcji niezweryfikowana — pośrednio [PR225]: 27 cronów, a lista zawiera `cron.flo-tick` i `cron.flo-shadow-settle`, `lib/jobs/queues.ts:88-128`) **[R6]**. **Klasa:** P (art. 5 ust. 1 lit. c i e [NZ]), I.
 - **Dowód:** puls FLO codziennie 07:30 (`lib/jobs/queues.ts:100`); funkcje spoza listy zablokowanych są domyślnie włączone dla każdego konta (`lib/flo/kind-switch.ts:16-26`, `lib/flo/flags.ts:39-91`); wykonawca ponaglenia jest aktywny (`lib/flo/functions/index.ts:1-4`, `payment-chase-handler.ts:1-4`). Zatwierdzenie zapisuje w `flo_approvals.snapshot.reminderDispatch` adres kontrahenta, temat, treść i PDF wezwania w base64 (`lib/reminders/delivery-consent.ts:76`, `lib/reminders/delivery-schema.ts:31-53`). Wygasanie propozycji to zmiana statusu (`lib/flo/proposals.ts:251-260`), nie usunięcie. Model językowy FLO, maskowanie i ocena płatnicza kontrahentów są nieaktywne lub zablokowane (`tests/unit/flo-nieaktywne.test.ts:24-42`, `lib/flo/flags.ts:39-47`). `docs/audyt/blok-1/KONTEKST-REPO.md` („niewdrożony”) jest w tym punkcie nieaktualny.
 - **Luka:** kopia każdego wysłanego wezwania z załącznikiem w drugiej tabeli bez retencji; FLO nie jest opisany w dokumentach dla klienta (do potwierdzenia w A1).
 - **Ryzyko:** średnie.
@@ -546,7 +556,7 @@ Ryzyko oceniamy dla osób, których dane dotyczą, i dla zgodności, przy deklar
 
 ### INW-11. Przepływy telemetrii poza bramką zgody
 
-- **Stan:** do oceny w `A1-…` i `A4-…` (tu tylko przepływ). **Klasa:** P (art. 6 RODO; art. 399 Prawa komunikacji elektronicznej — dostęp do urządzenia [NZ]), O (wytyczne EROD 2/2023 o zakresie technicznym art. 5 ust. 3 dyrektywy ePrivacy i 05/2020 o zgodzie — `03` ZR, [NZ]) **[R1]**.
+- **Stan:** niezweryfikowane (ocena podstawy w `A1-…`, zachowania sieci w `A4-…`; tu tylko przepływ) **[R6]**. **Klasa:** P (art. 6 RODO; art. 399 Prawa komunikacji elektronicznej — dostęp do urządzenia [NZ]), O (wytyczne EROD 2/2023 o zakresie technicznym art. 5 ust. 3 dyrektywy ePrivacy i 05/2020 o zgodzie — `03` ZR, [NZ]) **[R1]**.
 - **Dowód:** PostHog po stronie serwera wysyła zdarzenia z UUID użytkownika przy logowaniu, rejestracji, zdarzeniach Stripe i wysyłce faktury bez sprawdzania zgody (`lib/analytics/server.ts:7-11,22-38`; wywołania `app/(auth)/login/actions.ts:73`, `app/(auth)/register/actions.ts:95`, `lib/stripe/webhook-handlers.ts:103,142,249,332`, `lib/jobs/runners/submit-invoice.ts:1933`). Sentry w przeglądarce startuje bez bramki zgody (`instrumentation-client.ts:5-20`), z filtrem prywatności i tunelem `/monitoring` (`next.config.ts:189`). Fonty i obrazy z serwerów Google przy każdej wizycie (`app/layout.tsx:114-124`, `components/dashboard/ff-assets.ts:3-6`). PostHog w przeglądarce dopiero po zgodzie, pamięć `memory`, bez autocapture i nagrań (`lib/analytics/init-posthog-browser.ts:13-61`), ale projekt PostHog ma według [PR225] włączone nagrania opt-in i heatmapy po stronie ustawień.
 - **Luka / ryzyko / rekomendacja:** w `A1-…` (podstawa, klasyfikacja technologii niezbędnych) i `A4-…` (zachowanie sieciowe). Ryzyko tu: średnie, bo identyfikator jest pseudonimowy, ale stały.
 
@@ -559,7 +569,7 @@ Ryzyko oceniamy dla osób, których dane dotyczą, i dla zgodności, przy deklar
 
 ### INW-13. Pola bez zasilania w kodzie, umożliwiające profilowanie lub śledzenie
 
-- **Stan:** potwierdzone (brak zapisu w kodzie). **Klasa:** P (art. 25 — domyślna ochrona danych [NZ]), I.
+- **Stan:** częściowe (pewność: kod — brak zapisu w kodzie) **[R6]**. **Klasa:** P (art. 25 — domyślna ochrona danych [NZ]), I.
 - **Dowód:** `contractors.late_payment_count`, `payment_terms_days_avg` (`00023_payment_reminder_settings.sql:104-105`) — brak zapisu i odczytu w kodzie; ocena płatnicza kontrahenta zablokowana z powodów prawnych (`lib/flo/flags.ts:39-47`). `payment_reminders.opened_at`, `opened_count`, `clicked_at`, `replied_at` (`00023…sql:115-117`), `sms_body`, `sms_message_id` (`00014…sql:153`) — brak zapisu w kodzie (grep). `payment_imports` z `provider='gocardless'` — brak zapisu (O-08).
 - **Luka:** schemat przygotowany pod profilowanie płatnicze JDG, śledzenie otwarć e-maili i SMS bez oceny; ryzyko „cichego” włączenia.
 - **Ryzyko:** niskie dziś (puste kolumny), średnie przy pierwszym użyciu.
@@ -582,14 +592,14 @@ Ryzyko oceniamy dla osób, których dane dotyczą, i dla zgodności, przy deklar
 
 ### INW-16. Dane rejestrowe wspólne dla wszystkich klientów
 
-- **Stan:** potwierdzone. **Klasa:** I.
+- **Stan:** częściowe (pewność: kod) **[R6]**. **Klasa:** I, P (podstawa wspólnej pamięci rejestrów — art. 6 ust. 1 i art. 5 ust. 1 lit. c [NZ]; § 8 pkt 3) **[R6]**.
 - **Dowód:** `validation_cache` czytelne dla każdego zalogowanego (`00022…sql:58-59`, polityka `USING (true)`) — nazwa, adres, rachunki bankowe i kolumna `raw_response` (w schemacie, `00022…sql:42`; kod jej nie zapisuje) dla każdego sprawdzonego NIP; Redis z jawnym NIP w kluczach (`lib/cache/keys.ts:46-70`). Limity prób: SHA-256 bez soli, 32 znaki (`lib/rate-limit/index.ts:131-135`) — to pseudonimizacja (skrót IPv4 da się odwrócić słownikiem), nie anonimizacja.
 - **Ryzyko:** niskie — dane pochodzą z publicznych rejestrów, ale wspólna tabela ujawnia, że ktoś sprawdzał dany NIP, a `raw_response` to nieużywana kolumna do usunięcia.
 - **Rekomendacja:** (I) odczyt `validation_cache` tylko przez serwer; skrót z kluczem (HMAC) dla limitów; ocena, czy `raw_response` jest potrzebne.
 
 ### INW-17. Polityka prywatności opisuje innych odbiorców niż kod
 
-- **Stan:** brak zgodności. **Klasa:** P (art. 13 ust. 1 lit. e i f RODO [NZ]).
+- **Stan:** brak **[R6]**. **Klasa:** P (art. 13 ust. 1 lit. e i f RODO [NZ]).
 - **Dowód:** polityka wymienia „Hetzner, Frankfurt”, Supabase (Frankfurt), Cloudflare R2, Vercel, Inngest (`app/(marketing)/legal/polityka-prywatnosci/page.tsx:76-118`); kod i [PR225] wskazują: Supabase self-hosted i MinIO u Hetznera w NBG1, pg-boss zamiast Inngest (`AGENTS.md`), brak Vercela; PostHog pojawia się tylko w części o cookies (`page.tsx:240`), a AWS Glacier jako „Backup” (`page.tsx:79`), choć w kodzie Glacier to archiwum faktur, nie kopia zapasowa; polityka nie wymienia Slack, Telegram, Google (OAuth, fonty), Cloudflare Email Routing, GUS, VIES ani skrzynek pomocy. Administrator to placeholder (`page.tsx:20-21`, `01-STAN-I-GRANICE.md` § 3).
 - **Ryzyko:** średnie — obowiązek informacyjny niespełniony co do odbiorców i lokalizacji.
 - **Rekomendacja:** aktualizacja na podstawie § 3.2 i `04-…`; szczegóły w `A1-…`.
@@ -607,7 +617,7 @@ Ryzyko oceniamy dla osób, których dane dotyczą, i dla zgodności, przy deklar
 
 ### INW-19. Paczki księgowe: załączniki i linki-okaziciele
 
-- **Stan:** potwierdzone (kod). **Klasa:** P (art. 32 [NZ]), I.
+- **Stan:** częściowe (pewność: kod) **[R6]**. **Klasa:** P (art. 32 [NZ]), I.
 - **Dowód:** paczka do 25 MB idzie w załącznikach, powyżej — linki podpisane ważne 7 dni (`lib/jobs/runners/co-pilot-monthly.ts:43,486-494`), do księgowej i do wszystkich adresów `cc_emails` (`co-pilot-monthly.ts:563-579`); paczki uruchamia cron codziennie 08:00 według dnia z ustawień (`lib/jobs/queues.ts:93`).
 - **Luka:** link działa dla każdego, kto ma e-mail (przekazanie dalej); kopia pełnych danych faktur u dostawcy poczty i w skrzynkach odbiorców; CC bez weryfikacji adresów.
 - **Ryzyko:** średnie.
@@ -692,3 +702,4 @@ Każde pytanie ma odniesienie do ustalenia. Treść przepisów oznaczonych [NZ] 
 | Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
 |---|---|---|---|---|---|---|
 | R1 — niezależny agent-recenzent (grupa: `01` + `02`) | 10.10.2026 | wymaga poprawek (bez uwag blokujących; 22 z 25 kontroli punktowych potwierdzone) | 14 uwag do tego pliku (R1-U11 … R1-U24) | wszystkie 14 — naniesione przez koordynatora 11.10.2026, miejsca oznaczone **[R1]** | — | `recenzje/R1.md` (streszczenie w `10-REVIEW.md`) |
+| R6a/R6b — niezależni krytycy kompletności | 13.10.2026 | kompletny z uwagami | R6a-U01 (stany INW-07, -10, -11, -13, -16, -17, -19 przepisane z tabeli § 6; klasa INW-16 „I, P”; węzeł `_supabase` w § 5.1; § 5.7: „pg_dump bazy `postgres` + role (bez `_supabase`), domyślnie 14 zrzutów (KEEP)” i węzeł `_supabase` „brak kopii”), R6a-U04 (ten wpis), R6b-U05 (D-23 bez identyfikatora użytkownika w Sentry), R6b-U11 (D-02: pseudonimizacja, nie anonimizacja) | przyjęte (naniesione przez redaktora R6 13.10.2026); R1: 14 przyjętych — R1-U13, U15, U20, U24 uzupełnione po R6a-U01 13.10.2026 | — (część R6a-U01 dot. `10-REVIEW.md` — poza zakresem pliku, naniósł koordynator) | `recenzje/R6a.md`, `recenzje/R6b.md` |

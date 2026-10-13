@@ -290,6 +290,12 @@ wiedzy modelu, do potwierdzenia w końcowym review.
 
 ## 5. Ustalenia RUN-NN
 
+**[R6]** Pole „Stan” w ustaleniu opisuje stan wymagania, którego dotyczy
+(potwierdzone / częściowe / brak / niezweryfikowane / nie dotyczy); pewność
+ustalenia (kod / runtime / pomiar operatora) — w nawiasie. „Potwierdzone”
+zostaje tylko przy zachowaniu zgodnym z wymaganiem (RUN-01, RUN-02, RUN-10).
+Wiążący stan wymagania jest w macierzy `05` (R6a-U02).
+
 ### RUN-01. Strony publiczne nie ustawiają ciasteczek ani identyfikatorów przed wyborem
 
 - **Stan:** potwierdzone (runtime, build lokalny). **Klasa:** P — art. 399 PKE [NZ]; I.
@@ -316,7 +322,7 @@ wiedzy modelu, do potwierdzenia w końcowym review.
 
 ### RUN-04. Sentry w przeglądarce wysyła sesje, transakcje i błędy niezależnie od decyzji
 
-- **Stan:** potwierdzone (runtime). Rozszerza ZGD-10 w `A1-…` o typy danych. **Klasa:** P — art. 6 ust. 1 lit. f, art. 13 RODO; art. 399 PKE w zakresie „dostępu” [NZ]; O — EROD 2/2023 (ZR-34) [NZ]; I.
+- **Stan:** brak (pewność: runtime) **[R6]**. Rozszerza ZGD-10 w `A1-…` o typy danych. **Klasa:** P — art. 6 ust. 1 lit. f, art. 13 RODO; art. 399 PKE w zakresie „dostępu” [NZ]; O — EROD 2/2023 (ZR-34) [NZ]; I.
 - **Dowód:** sekcja 3.3 — `session` przy każdym wczytaniu strony we wszystkich scenariuszach (także po odmowie i wycofaniu), próbkowane `transaction`/`span`, `event` przy błędzie; kod `instrumentation-client.ts:5-21` (`tracesSampleRate: 0.1`, brak bramki zgody), domyślne integracje SDK (opcje `lib/observability/scrub.ts:70-79` nie wyłączają sesji). Serwerowy SDK też wysyła (sekcja 3.6). Banner mówi tylko o PostHog (`consent-banner.tsx:47-57`); polityka wymienia Sentry jako „error tracking” (`app/(marketing)/legal/polityka-prywatnosci/page.tsx:118`), bez sesji i pomiaru wydajności.
 - **Luka:** brak udokumentowanej podstawy i klasyfikacji dla sesji i tracingu po stronie przeglądarki; brak informacji o nich.
 - **Ryzyko:** średnie — sesje i tracing to pomiar użycia, nie zabezpieczenie usługi; samo raportowanie błędów jest łatwiejsze do obrony.
@@ -324,7 +330,7 @@ wiedzy modelu, do potwierdzenia w końcowym review.
 
 ### RUN-05. Google Fonts (Material Symbols) przed jakimkolwiek wyborem
 
-- **Stan:** potwierdzone (runtime). Potwierdza ZGD-10 w `A1-…`. **Klasa:** P — art. 6 i rozdz. V RODO (przekazanie IP do USA), art. 13 RODO [NZ]; O — LG München I, 20.01.2022, 3 O 17493/20 (sąd niemiecki, znaczenie pomocnicze) [NZ]; I.
+- **Stan:** brak (pewność: runtime) **[R6]**. Potwierdza ZGD-10 w `A1-…`. **Klasa:** P — art. 6 i rozdz. V RODO (przekazanie IP do USA), art. 13 RODO [NZ]; O — LG München I, 20.01.2022, 3 O 17493/20 (sąd niemiecki, znaczenie pomocnicze) [NZ]; I.
 - **Dowód:** `GET fonts.googleapis.com/css2` na pierwszej stronie każdego kontekstu, na wszystkich 11 stronach (sekcja 3.2, `a`); źródło `app/layout.tsx:114-125` (główny układ, każda strona); CSP dopuszcza Google (`lib/security/csp.ts:30,32`). Polityka prywatności nie wymienia Google Fonts (`grep -i google` w `polityka-prywatnosci/page.tsx` — tylko Google Authenticator, `:126`).
 - **Luka:** IP i UA każdego odwiedzającego trafiają do Google bez potrzeby i bez informacji.
 - **Ryzyko:** średnie.
@@ -332,7 +338,7 @@ wiedzy modelu, do potwierdzenia w końcowym review.
 
 ### RUN-06. Service worker i Cache Storage zapisywane każdemu odwiedzającemu
 
-- **Stan:** potwierdzone (runtime). Potwierdza ZGD-10 w `A1-…`. **Klasa:** P — art. 399 PKE [NZ]; O — EROD 2/2023, WP29 04/2012 [NZ]; I.
+- **Stan:** brak (pewność: runtime) **[R6]**. Potwierdza ZGD-10 w `A1-…`. **Klasa:** P — art. 399 PKE [NZ]; O — EROD 2/2023, WP29 04/2012 [NZ]; I.
 - **Dowód:** rejestracja `/sw.js` (zakres `/`) i `serwist-precache-v2-…` z 205 plikami statycznymi na pierwszej stronie, przed wyborem, we wszystkich scenariuszach (sekcja 3.1); kod `next.config.ts:11-20`, `app/sw.ts:16-38`, domyślne `register: true` w `@serwist/next`.
 - **Luka:** zapis w urządzeniu bez zgody, bez informacji w polityce; uzasadnienie „ściśle niezbędne” słabe dla stron marketingowych.
 - **Ryzyko:** niskie — w cache wyłącznie publiczne pliki aplikacji (filtr `lib/security/service-worker-cache.ts:5-10`), brak danych osobowych.
@@ -340,7 +346,7 @@ wiedzy modelu, do potwierdzenia w końcowym review.
 
 ### RUN-07. CSP w service workerze blokuje arkusz Material Symbols
 
-- **Stan:** potwierdzone (runtime, diagnostyka `e2`). Nowe — nieopisane w `A1-…`. **Klasa:** I.
+- **Stan:** brak (runtime, diagnostyka `e2`; defekt funkcjonalny) **[R6]**. Nowe — nieopisane w `A1-…`. **Klasa:** I.
 - **Dowód:** po aktywacji SW żądanie `fonts.googleapis.com/css2` kończy się `net::ERR_FAILED` bez wyjścia do sieci (G✗ w sekcji 3.2); w SW `fetch()` do tego hosta wywołuje naruszenie `connect-src` (sekcja 3.7). Przyczyna: SW przechwytuje wszystkie żądania (`app/sw.ts:36`, `NetworkOnly`), a `fetch()` w SW podlega CSP z nagłówka `/sw.js` (nagłówki dla `/:path*`, `next.config.ts:117`), gdzie `connect-src` nie zawiera `fonts.googleapis.com` (`lib/security/csp.ts:8,33`).
 - **Luka:** ikony Material Symbols nie ładują się od drugiej strony wizyty (defekt funkcjonalny); skutek uboczny dla prywatności: do Google trafia tylko pierwsze wczytanie w przeglądarce bez aktywnego SW.
 - **Ryzyko:** niskie dla prywatności, funkcjonalnie zauważalne (panel używa Material Symbols).
@@ -357,7 +363,7 @@ wiedzy modelu, do potwierdzenia w końcowym review.
 
 ### RUN-09. Turnstile ładowany na stronach logowania niezależnie od decyzji
 
-- **Stan:** potwierdzone dla `/login` i `/forgot-password`; `/register` — niezweryfikowane (formularz niewyrenderowany bez Supabase). **Klasa:** P — art. 6 ust. 1 lit. f RODO; art. 399 PKE (wyjątek niezbędności) [NZ]; O — WP29 04/2012 [NZ].
+- **Stan:** częściowe (runtime dla `/login` i `/forgot-password`; `/register` niezweryfikowane — formularz niewyrenderowany bez Supabase) **[R6]**. **Klasa:** P — art. 6 ust. 1 lit. f RODO; art. 399 PKE (wyjątek niezbędności) [NZ]; O — WP29 04/2012 [NZ].
 - **Dowód:** `T` w sekcji 3.2 we wszystkich stanach zgody; kod `components/auth/turnstile-widget.tsx:20-43`; dla `/register` `isSignupClosed()` przy braku bazy zwraca `true` (`lib/feature-flags/signups.ts:24-30`, `app/(auth)/register/page.tsx:51-57`), więc widżet (`:152`) się nie renderuje. Polityka opisuje Turnstile (`polityka-prywatnosci/page.tsx:153-160`).
 - **Luka:** zawartości ramki Cloudflare (ewentualne ciasteczka w domenie Cloudflare) nie dało się zbadać — skrypt przerwany.
 - **Ryzyko:** niskie.
@@ -373,7 +379,7 @@ wiedzy modelu, do potwierdzenia w końcowym review.
 
 ### RUN-11. Polityka i strona „RODO” rozmijają się z obserwacją
 
-- **Stan:** potwierdzone (runtime + kod). Uzupełnia ZGD-11 i ZGD-12 w `A1-…`. **Klasa:** P — art. 12–13 RODO, art. 399 ust. 2 PKE (informacja) [NZ].
+- **Stan:** brak (runtime + kod) **[R6]**. Uzupełnia ZGD-11 i ZGD-12 w `A1-…`. **Klasa:** P — art. 12–13 RODO, art. 399 ust. 2 PKE (informacja) [NZ].
 - **Dowód (deklaracja → obserwacja):** „Cookies (sesja, preferencje)” zbierane automatycznie (`polityka-prywatnosci/page.tsx:44-50`) → na stronach publicznych 0 ciasteczek; „preferencje motywu” jako cookies, „Cookies preferencji: 1 rok” (`:226-246`) → motyw w localStorage `theme` bez wygaśnięcia, ciasteczka preferencji nie znaleziono w kodzie; „Cookies sesji: do końca sesji” (`:231`) → domyślnie 400 dni (sekcja 4, ZGD-11); „Brak cookies analitycznych” (`app/(marketing)/legal/rodo/page.tsx:47`) → formalnie prawda (PostHog w pamięci), ale analityka działa po zgodzie, a sesje Sentry bez zgody. Brak w polityce: Google Fonts, service worker i Cache Storage, klucze localStorage, sesje i tracing Sentry w przeglądarce.
 - **Luka:** informacja niepełna i miejscami nieprawdziwa.
 - **Ryzyko:** średnie.
@@ -402,6 +408,16 @@ bash docs/audyt/13-prywatnosc-i-zgodnosc/narzedzia/uruchom-test-runtime.sh
   `curl -s --noproxy '*' http://localhost:3100/robots.txt` → brak połączenia.
 - Przy zmianie wersji Next.js sprawdzić, czy blokada nadal łapie połączenia
   (sekcja 2, test kontrolny) — rejestr musi pokazać `guard_loaded` w 3 procesach.
+- **[R6] Ostrzeżenie (R6b-U14).** Zapasowe `pkill -f '^next-server \(v'`
+  (`narzedzia/uruchom-test-runtime.sh:65`) zatrzymuje **każdy** serwer
+  Next.js uruchomiony na tej maszynie, nie tylko serwer testu — nie
+  uruchamiaj skryptu obok innej pracującej aplikacji Next.js. Domyślne
+  `OUT` (`narzedzia/test-cookies-i-sieci.mjs:54`) nadpisuje zatwierdzony
+  dowód `wynik-test-cookies.json` — przy powtórzeniu ustaw `OUT` na plik
+  roboczy. Zapisany stos błędu zawiera bezwzględne ścieżki lokalne.
+  Poprawki skryptów (ograniczenie `pkill` do PID grupy, domyślne `OUT`
+  w katalogu roboczym, ścieżki względne) — etap wykonawczy; narzędzia
+  zostają bez zmian jako dowód.
 
 ## 7. Niewiadome i ograniczenia
 
@@ -501,3 +517,4 @@ ciasteczka testowego) pozostawiono bez zmian.
 | Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
 |---|---|---|---|---|---|---|
 | R3 — niezależny agent-recenzent (grupa: `A1` + `A2` + `A4`) | 10.10.2026 (recenzja wykonana w sesji 13.10.2026) | zatwierdzony z uwagami (22 kontrole punktowe, 21 potwierdzonych; skrót testu powtórzony przez R3 z tym samym wynikiem; narzędzia bez drogi wycieku) | 5 uwag do tego pliku i `narzedzia/` (R3-U01, R3-U09, R3-U10, R3-U21, R3-U22; 1 istotna, 4 drobne) | wszystkie 5 — naniesione przez redaktora poprawek 13.10.2026 po sprawdzeniu w kodzie i `node_modules`; miejsca oznaczone **[R3]**. U09 — wariant „skrócić opis RUN-08”. Narzędzi (`narzedzia/*`) nie zmieniano — uwagi ich nie wymagały | — | `recenzje/R3.md` (streszczenie w `10-REVIEW.md`) |
+| R6a/R6b — niezależni krytycy kompletności | 13.10.2026 | kompletny z uwagami | R6a-U02 (wariant pełny: (b) konwencja na początku § 5; (c) RUN-04, RUN-05, RUN-06 „brak (pewność: runtime)”, RUN-07 „brak (runtime; defekt funkcjonalny)”, RUN-09 „częściowe”, RUN-11 „brak (runtime + kod)”; RUN-01, RUN-02, RUN-10 bez zmian), R6a-U04 (ten wpis), R6b-U14 (tylko ostrzeżenie w § 6 o `pkill` i domyślnym `OUT`; skrypty bez zmian — etap wykonawczy) | przyjęte (naniesione przez redaktora R6 13.10.2026) | — | `recenzje/R6a.md`, `recenzje/R6b.md` |

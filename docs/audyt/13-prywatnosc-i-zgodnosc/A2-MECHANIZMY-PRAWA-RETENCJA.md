@@ -15,6 +15,9 @@
 
 - **Stany:** potwierdzone / częściowe / brak / niezweryfikowane / nie dotyczy
   (z uzasadnieniem). „Nie znaleziono w repo” nie znaczy „nie istnieje”.
+- **[R6] Pole „Stan” w ustaleniu** opisuje stan wymagania, którego dotyczy;
+  pewność ustalenia (kod / runtime / pomiar operatora) — w nawiasie.
+  Wiążący stan wymagania jest w macierzy `05` (R6a-U02).
 - **Klasy:** **P** obowiązek prawny, **O** interpretacja organu (EROD, UODO),
   **S** kryterium SOC 2, **I** praktyka inżynierska.
 - **[NZ]** = przepis albo wytyczna podane z pamięci modelu: „niezweryfikowane
@@ -548,8 +551,9 @@ W kodzie są **cztery działające reguły z wykonawcą**: dziennik audytu
 walidacji kontrahentów (24 h + 7 dni) i przycinanie surowych zdarzeń Stripe
 (90 dni). Do tego **biblioteczne** reguły pg-boss (7/14 dni) i TTL w Redisie.
 Reguła dla faktur („10 lat”) jest zaimplementowana jako „2 lata do
-archiwum + 8 lat od dnia archiwizacji”, zależy od niewdrożonego Glaciera
-i ma dwie wady, które ujawnią się przy pierwszym realnym przebiegu
+archiwum + 8 lat od dnia archiwizacji”, zależy od Glaciera oznaczonego
+w kodzie jako odroczony (`scripts/check-env.ts:132-134`; stan produkcji
+nieznany — N-A2-03) **[R6]** i ma dwie wady, które ujawnią się przy pierwszym realnym przebiegu
 (RET-01, RET-02); **[R3]** do tego wyzwalacz `b_guard_invoice_pending_content`
 (`00132…sql:63-72`) odrzuca `DELETE` każdej faktury wysłanej do KSeF dla
 każdej roli, więc usunięcie takich faktur po terminie dziś nie może się
@@ -846,8 +850,8 @@ dopisano po recenzji R3.
 
 #### RET-08. Kolejka pg-boss i log przebiegów: reguły działają z biblioteki, ale nie są zapisane
 
-- **Stan:** potwierdzone (kod biblioteki i migracji; produkcja
-  niezweryfikowana). **Klasa:** I; S (zarządzanie danymi w kolejkach).
+- **Stan:** częściowe (pewność: kod biblioteki i migracji; produkcja
+  niezweryfikowana) **[R6]**. **Klasa:** I; S (zarządzanie danymi w kolejkach).
 - **Dowód:** pg-boss 12.27.0 (`package.json:77`), domyślnie
   `deletion_seconds = 7 dni` i `retention_seconds = 14 dni`
   (`node_modules/pg-boss/dist/plans.js:46-55`), usuwanie
@@ -1073,7 +1077,7 @@ Jeden dostawca modeli: Anthropic, klient SDK bez własnego `baseURL`
 
 #### AI-04. FLO: część z modelem nieaktywna i strzeżona testem; część regułowa aktywna i przetwarza dane
 
-- **Stan:** potwierdzone (kod). **Klasa:** I; P — art. 25 RODO (gotowość
+- **Stan:** częściowe (kod) **[R6]**. **Klasa:** I; P — art. 25 RODO (gotowość
   przed włączeniem) [NZ].
 - **Dowód:** `llm.ts` i `redact.ts` oznaczone „NIEAKTYWNE (AUD-115)”,
   test sprawdza brak importera z kodu produkcyjnego
@@ -1280,3 +1284,4 @@ Testu na bazie syntetycznej redaktor nie powtarzał — wynik z `R3.md` § 6.
 | Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
 |---|---|---|---|---|---|---|
 | R3 — niezależny agent-recenzent (grupa: `A1` + `A2` + `A4`) | 10.10.2026 (recenzja wykonana w sesji 13.10.2026) | wymaga poprawek (27 kontroli punktowych, 23 potwierdzone, 4 z błędem: `user_email` w eksporcie, linia komentarza audytu, ścieżki Slacka, `user.id` w Sentry; rdzeń potwierdzony także testem na bazie syntetycznej) | 10 uwag do tego pliku (R3-U11 – R3-U20; 5 istotnych, 5 drobnych) | wszystkie 10 — naniesione przez redaktora poprawek 13.10.2026 po sprawdzeniu w kodzie i migracjach; miejsca oznaczone **[R3]**. Korekty względem propozycji recenzenta: U13 — linie PDF wezwań `invoice-files.ts:76-77`; U16 — linie eksportu `data-collector.ts:107-111`; U11 — dopisano, że jedno zapytanie `DELETE … IN` blokuje całą paczkę. Dodano N-A2-12 – N-A2-14 i pytanie 10 do review (z `R3.md` § 8) | — | `recenzje/R3.md` (streszczenie w `10-REVIEW.md`) |
+| R6a/R6b — niezależni krytycy kompletności | 13.10.2026 | kompletny z uwagami | R6a-U02 (wariant pełny: (b) konwencja w § 0; (c) RET-08 i AI-04 „częściowe (kod)”), R6a-U04 (ten wpis), R6b-U10 (E.0: Glacier oznaczony w kodzie jako odroczony, `scripts/check-env.ts:132-134`, N-A2-03) | przyjęte (naniesione przez redaktora R6 13.10.2026) | — | `recenzje/R6a.md`, `recenzje/R6b.md` |

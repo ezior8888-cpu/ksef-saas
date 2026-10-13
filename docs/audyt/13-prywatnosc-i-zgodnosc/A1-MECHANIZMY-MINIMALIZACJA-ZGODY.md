@@ -12,6 +12,13 @@
 | Status | Ukończony etap autora; po niezależnym review R3 (werdykt: zatwierdzony z uwagami) — uwagi R3 naniesione przez redaktora poprawek 13.10.2026, miejsca oznaczone **[R3]** (lista w „Historia recenzji”). 12 ustaleń MIN, 12 ustaleń ZGD |
 | Najważniejsze wnioski | (1) Brak podstaw dokumentacyjnych: administrator to placeholder, brak mapy celów i podstaw, brak umowy powierzenia, polityka i strona RODO opisują inny system niż kod (ZGD-01, ZGD-02, ZGD-03, ZGD-12). (2) Zgoda na analitykę działa poprawnie przed wyborem, ale **nie da się jej wycofać** z interfejsu i nie ma dowodu zgody (ZGD-05). (3) Ustawienia domyślne: PESEL domyślnie przy fakturze konsumenckiej (MIN-01), link księgowej 90 dni (MIN-06), marketing e-mail w modelu „wypis zamiast zgody” (ZGD-06). (4) Przetwarzanie poza zgodą przeglądarkową: zdarzenia serwerowe PostHog z profilem, Sentry w przeglądarce (w tym sesja przy każdym wczytaniu strony), fonty Google, service worker dla każdego odwiedzającego (MIN-08, ZGD-10); **[R3]** przekazywanie ciasteczek pierwszej strony do Sentry i PostHog przez proxy `/monitoring` i `/ingest` (A4 RUN-08). (5) SEC-D-01, SEC-D-07, SEC-D-08 — zamknięte w kodzie; SEC-D-05 — częściowe. Zalecana kolejność: podmiot i umowa powierzenia → polityka z mapą celów → wycofanie zgody i dowód → ustawienia domyślne (PESEL, marketing, link księgowej) → telemetria poza zgodą → strona RODO |
 
+## Konwencja stanów **[R6]**
+
+**[R6]** Pole „Stan” w ustaleniu opisuje stan wymagania, którego dotyczy
+(potwierdzone / częściowe / brak / niezweryfikowane / nie dotyczy); pewność
+ustalenia (kod / runtime / pomiar operatora) — w nawiasie. Wiążący stan
+wymagania jest w macierzy `05` (R6a-U02).
+
 ## Sekcja B — Minimalizacja i ustawienia domyślne (MIN-NN)
 
 Ryzyko oceniamy przy deklarowanym braku prawdziwych klientów (produkcja na
@@ -26,7 +33,7 @@ dopisujemy to, czego tam nie ma.
 |---|---|---|---|---|
 | MIN-01 | Faktura dla osoby prywatnej: interfejs domyślnie wybiera PESEL i wymaga poprawnej sumy kontrolnej | brak (ustawienie domyślne niezgodne z minimalizacją) | średnie | P, I |
 | MIN-02 | Rejestracja: „Imię i nazwisko” wymagane w formularzu, „opcjonalne” w polityce i na serwerze; dane trafiają do metadanych GoTrue, zadań i e-maili | częściowe | niskie | P, I |
-| MIN-03 | Wyszukanie NIP w onboardingu ujawnia każdemu zalogowanemu nazwy organizacji, które już używają FaktFlow pod tym NIP | potwierdzone (kod) | średnie | P, I |
+| MIN-03 | Wyszukanie NIP w onboardingu ujawnia każdemu zalogowanemu nazwy organizacji, które już używają FaktFlow pod tym NIP | brak (kod) **[R6]** | średnie | P, I |
 | MIN-04 | Zakres danych w odpowiedziach stron i akcji: `select('*')`, IP współpracowników w dzienniku, surowe komunikaty błędów | częściowe | niskie | P, I |
 | MIN-05 | Dostęp operatorów: allowlista + TOTP, brak impersonacji; wgląd w metadane faktur i dane nabywcy bez śladu odczytu | częściowe | średnie | P, S, I |
 | MIN-06 | Domyślne udostępnianie: link księgowej domyślnie 90 dni (do 365), linki do paczek 7 dni, podpisane URL 5–60 min | częściowe | średnie | P, I |
@@ -34,8 +41,8 @@ dopisujemy to, czego tam nie ma.
 | MIN-08 | PostHog: SEC-D-01/02 zamknięte w kodzie; zdarzenia serwerowe i profile osób niezależnie od decyzji w przeglądarce; ustawienia projektu niespójne z kodem | częściowe | średnie | P, O, I |
 | MIN-09 | Dane testowe: 10 numerów NIP z poprawną sumą kontrolną w testach, w tym co najmniej jeden NIP rzeczywistej spółki; adresy e-mail w realnych domenach | częściowe | niskie | I |
 | MIN-10 | Szyfrowanie i skróty: poświadczenia KSeF dobrze szyfrowane z rotacją; skróty limitów i resetu hasła bez soli (pseudonimizacja, odwracalna słownikiem) | częściowe | niskie | P (art. 32), I |
-| MIN-11 | „Anonimizacja” `audit_logs` to pseudonimizacja: zostają `tenant_id`, `entity_id`, `details_json` i wpisy o osobie zapisane przez innych | częściowe | średnie | P, I |
-| MIN-12 | Martwy kod z danymi osobowymi i korekty do inwentarza (obrazy Google, formularz newslettera, kontekst Sentry z e-mailem) | potwierdzone (kod) | niskie | I |
+| MIN-11 | „Anonimizacja” `audit_logs` to pseudonimizacja: zostają `tenant_id`, `entity_id`, `details_json` i wpisy o osobie zapisane przez innych | częściowe (kod) **[R6]** | średnie | P, I |
+| MIN-12 | Martwy kod z danymi osobowymi i korekty do inwentarza (obrazy Google, formularz newslettera, kontekst Sentry z e-mailem) | częściowe (kod) **[R6]** | niskie | I |
 
 ### B.1. Konieczność pól w formularzach i schematach
 
@@ -74,7 +81,7 @@ dopisujemy to, czego tam nie ma.
 
 ### MIN-03. Wyszukanie NIP ujawnia, które firmy korzystają z FaktFlow
 
-- **Stan:** potwierdzone (kod). **Klasa:** P — art. 5 ust. 1 lit. f i art. 25 ust. 2 RODO (domyślne nieudostępnianie danych nieokreślonej liczbie osób) [NZ]; I.
+- **Stan:** brak (kod) **[R6]**. **Klasa:** P — art. 5 ust. 1 lit. f i art. 25 ust. 2 RODO (domyślne nieudostępnianie danych nieokreślonej liczbie osób) [NZ]; I.
 - **Dowód:** `lookupNipAction` dla dowolnego poprawnego NIP zwraca listę istniejących organizacji z nazwą i informacją o weryfikacji KSeF (`components/onboarding/actions.ts:94-117`), czytaną kluczem serwisowym. Jedyne ograniczenie to limit 20 wyszukiwań na godzinę na użytkownika (`actions.ts:61-71`); komentarz AUD-59 opisuje ryzyko świadomie.
 - **Luka:** każdy zweryfikowany użytkownik (rejestracja jest otwarta) dowiaduje się, że firma o danym NIP jest klientem FaktFlow, i poznaje nazwę nadaną organizacji przez klienta. Dla JDG nazwa często zawiera imię i nazwisko — to dana osobowa i informacja o relacji handlowej.
 - **Ryzyko:** średnie — limit spowalnia, ale nie uniemożliwia ustalania, które firmy korzystają z FaktFlow; rejestracja jest otwarta. **[R3]**
@@ -173,7 +180,7 @@ dopisujemy to, czego tam nie ma.
 
 ### MIN-11. „Anonimizacja” dziennika audytu to pseudonimizacja
 
-- **Stan:** częściowe. **Klasa:** P — motyw 26 i art. 4 pkt 5 RODO (różnica pseudonimizacja/anonimizacja), art. 17 [NZ]; O (opinia WP29 05/2014 o technikach anonimizacji [NZ]); I.
+- **Stan:** częściowe (kod) **[R6]**. **Klasa:** P — motyw 26 i art. 4 pkt 5 RODO (różnica pseudonimizacja/anonimizacja), art. 17 [NZ]; O (opinia WP29 05/2014 o technikach anonimizacji [NZ]); I.
 - **Dowód:** `anonymize_user_audit_logs` ustawia `user_id`, `ip_address`, `user_agent` na NULL i zastępuje `metadata` znacznikiem czasu (`00052_audit_logs_immutable_trigger.sql:95-121`). Zostają: `tenant_id`, `entity_type`, `entity_id`, `action`, `created_at` i **`details_json`** (kolumna z `00001…sql:169`, zapisywana przez RPC `ksef_send_audit`, `00131_ksef_send_lifecycle.sql:134`). Funkcja dotyczy tylko wierszy, w których osoba była **aktorem**; wpisy o niej zapisane przez innych zostają: e-mail zaproszonego (`app/actions/organizations.ts:710`), adres odbiorcy faktury (`components/invoices/actions-detail.ts:522`), `targetUserId` w akcjach operatora (`app/admin/users/actions.ts:287`), NIP usuniętego kontrahenta (`app/actions/contractors.ts:122`), NIP i nazwa firmy (`organizations.ts:518`). Uprawnienie wywołania odebrane `anon`/`authenticated` w `00069_audit_permission_hardening.sql:23-25` (SEC-C-06; stan produkcji nieznany). Ścieżka usunięcia przez operatora funkcji nie woła (INW-02).
 - **Ocena reidentyfikacji:** w organizacji jednoosobowej (typowa JDG) `tenant_id` + czas + rodzaj akcji wskazują osobę bez `user_id`; organizacja nie jest usuwana razem z kontem, gdy zostaje inny członek albo faktury podlegają retencji. Wynik to dane spseudonimizowane, nadal osobowe.
 - **Luka:** polityka obiecuje „zanonimizowanie” (`polityka-prywatnosci/page.tsx:183-188,221-224`), kod tego nie zapewnia.
@@ -182,7 +189,7 @@ dopisujemy to, czego tam nie ma.
 
 ### MIN-12. Martwy kod z danymi osobowymi i korekty do inwentarza
 
-- **Stan:** potwierdzone (kod). **Klasa:** I.
+- **Stan:** częściowe (kod) **[R6]**. **Klasa:** I.
 - **Dowód:**
   - Obrazy z `lh3.googleusercontent.com`: stałe w `components/dashboard/ff-assets.ts:2-6` i `lib/blog-marketing-data.ts:3-10` **nie mają importerów** (grep `FF_DASHBOARD_`, `BlogArticleCard`, `enrichBlogPost` — tylko definicje). **Korekta do INW-11:** obrazy Google nie są dziś ładowane; ładowany jest tylko arkusz fontu Material Symbols (`app/layout.tsx:114-125`). `next.config.ts:92-100` nadal dopuszcza ten host w `next/image`.
   - Formularze newslettera `BlogNewsletter` i `BlogNewsletterForm` nie są osadzone na żadnej stronie (grep importów — brak); `BlogNewsletter` ma atrapę „Zapisano — sprawdź skrzynkę” bez backendu (`components/marketing/blog-newsletter.tsx:6-10,25-36`).
@@ -216,16 +223,16 @@ modelu” [NZ].
 |---|---|---|---|---|
 | ZGD-01 | Brak udokumentowanej mapy cel → podstawa; polityka podaje trzy podstawy ogólnie, bez zgody (analityka), bez marketingu, bez LIA | brak | wysokie | P, O |
 | ZGD-02 | Rola procesora nieopisana: brak umowy powierzenia w regulaminie i w repo, polityka traktuje dane kontrahentów jak „Twoje dane” | brak | wysokie | P |
-| ZGD-03 | Polityka prywatności: placeholder administratora, nieaktualni i pominięci odbiorcy, niepełne cele, sprzeczne okresy | brak zgodności | wysokie | P |
+| ZGD-03 | Polityka prywatności: placeholder administratora, nieaktualni i pominięci odbiorcy, niepełne cele, sprzeczne okresy | brak **[R6]** | wysokie | P |
 | ZGD-04 | Akceptacja regulaminu i polityki: tylko zdanie pod formularzem, brak zapisu wersji i chwili; rejestracja przez Google z ekranu logowania bez żadnej informacji; dokumenty bez wersji | brak | średnie | P, S, I |
-| ZGD-05 | Zgoda na analitykę: brak startu przed zgodą i równorzędna odmowa — tak; **brak wycofania w UI**, brak dowodu i wersji, zgoda per przeglądarka | częściowe | średnie | P, O |
+| ZGD-05 | Zgoda na analitykę: brak startu przed zgodą i odmowa na tym samym poziomie i tej samej wielkości — tak (słabszy kontrast przycisku odmowy — do oceny, `08` Q-45) **[R6-wer]**; **brak wycofania w UI**, brak dowodu i wersji, zgoda per przeglądarka | częściowe | średnie | P, O |
 | ZGD-06 | Marketing: model „wypis zamiast zgody” dla kategorii `marketing` i `product_updates`; e-maile próbne z treścią promocyjną bez linku wypisu w treści; newsletter bez potwierdzenia i bez osadzonego formularza | częściowe | średnie | P, O |
 | ZGD-07 | Zgody produktowe: „zgoda” na przypomnienia to polecenie klienta (żeton), działa zgodnie z dokumentem; push — świadome włączenie; brak przełącznika AI-kategoryzacji | częściowe | niskie | P, I |
 | ZGD-08 | Funkcje AI (czat, OCR, kategoryzacja) bez informacji przy użyciu, że treść trafia do zewnętrznego modelu | brak | średnie | P, O |
 | ZGD-09 | Osoby bez konta (nabywcy, dłużnicy, zaproszeni, księgowe): wiadomości bez żadnej informacji o przetwarzaniu i bez wsparcia klienta w obowiązku art. 14 | brak | średnie | P |
 | ZGD-10 | Technologie przeglądarkowe bez zgody: arkusz fontu Google przy każdej wizycie, Sentry w przeglądarce, service worker rejestrowany każdemu odwiedzającemu | częściowe | średnie | P, O |
-| ZGD-11 | Cookies sesji Supabase: 400 dni, dostępne dla skryptu; polityka deklaruje „do zamknięcia przeglądarki” | brak zgodności | niskie | P, I |
-| ZGD-12 | Strona „RODO i bezpieczeństwo”: **[R3]** 6 z 9 pozycji listy kontrolnej niezgodnych, nieweryfikowalnych albo mylących; 2 ocenia `A2-…` (D-04, D-05); 1 zgodna (2FA); poza listą — D-10, D-11 niezgodne lub niezweryfikowane | brak zgodności | wysokie | P |
+| ZGD-11 | Cookies sesji Supabase: 400 dni, dostępne dla skryptu; polityka deklaruje „do zamknięcia przeglądarki” | brak **[R6]** | niskie | P, I |
+| ZGD-12 | Strona „RODO i bezpieczeństwo”: **[R3]** 6 z 9 pozycji listy kontrolnej niezgodnych, nieweryfikowalnych albo mylących; 2 ocenia `A2-…` (D-04, D-05); 1 zgodna (2FA); poza listą — D-10, D-11 niezgodne lub niezweryfikowane | brak **[R6]** | wysokie | P |
 
 ### ZGD-01. Brak mapy cel → podstawa i testów uzasadnionego interesu
 
@@ -245,7 +252,7 @@ modelu” [NZ].
 
 ### ZGD-03. Polityka prywatności nie opisuje faktycznego przetwarzania
 
-- **Stan:** brak zgodności. **Klasa:** P — art. 13 ust. 1–2, art. 14 RODO (ZR-01); O — wytyczne WP260 (ZR-47) [NZ]. WYM-18, WYM-19. Rozszerza INW-17.
+- **Stan:** brak **[R6]**. **Klasa:** P — art. 13 ust. 1–2, art. 14 RODO (ZR-01); O — wytyczne WP260 (ZR-47) [NZ]. WYM-18, WYM-19. Rozszerza INW-17.
 - **Dowód (wybór; pełne zestawienie w tabeli „Deklaracje…”):** administrator „[nazwa firmy], NIP [TWÓJ_NIP]” (`page.tsx:20-21`); odbiorcy: Supabase (Frankfurt), Cloudflare R2, Vercel, Inngest (`page.tsx:85-116`) — kod: self-hosted Supabase, MinIO, pg-boss, brak Vercela (`lib/feature-flags/global-flags.ts:4` — „ostatnia zależność od Vercela” zastąpiona); brak w polityce: PostHog jako odbiorca (tylko wzmianka w sekcji cookies), Slack (eskalacja z e-mailem, `lib/support/support-actions.ts:76-83`), Telegram (alerty), Google (OAuth i fonty), Cloudflare Email Routing (INW-07), GUS/VIES/biała lista (`lib/gus/client.ts`, `lib/validation/vies-client.ts`, `whitelist-client.ts`); Anthropic opisany tylko dla OCR z twierdzeniem „nie są przechowywane przez Anthropic” (`page.tsx:106-109`) — bez czatu pomocy i klasyfikacji KPiR; okresy: „Cookies sesji: do końca sesji” (`page.tsx:232`) vs 400 dni (ZGD-11), „Dane konta: do 30 dni po anulowaniu” (`page.tsx:229`) — brak mechanizmu (INW-02), „Faktury: 10 lat (art. 70 § 1 OP)” (`page.tsx:230`) — przepis wg ZR-14 daje 5 lat (WYM-68); prawa: „Sprzeciwu (możesz w każdej chwili zrezygnować)” (`page.tsx:199`) miesza sprzeciw z wycofaniem zgody, brak informacji o prawie wycofania zgody (art. 13 ust. 2 lit. c) i o źródle danych osób trzecich (art. 14 ust. 2 lit. f). Data „Ostatnia aktualizacja: 9 maja 2026” (`page.tsx:16`); historii zmian przed 2.10.2026 nie da się odczytać (klon płytki: `git rev-parse --is-shallow-repository` → `true`).
 - **Luka:** osoby nie wiedzą, kto jest administratorem, kto dostaje ich dane i jak długo są przechowywane.
 - **Ryzyko:** wysokie — obowiązek informacyjny jest warunkiem rzetelnego przetwarzania; dziś niespełniony co do tożsamości administratora.
@@ -344,7 +351,7 @@ modelu” [NZ].
 
 ### ZGD-11. Ciasteczka sesji: okres i dostępność dla skryptu
 
-- **Stan:** brak zgodności z polityką. **Klasa:** P — art. 13 ust. 2 lit. a RODO, art. 399 PKE (informacja o okresie, Planet49 — ZR-62) [NZ]; I.
+- **Stan:** brak (deklaracja w polityce niezgodna z kodem) **[R6]**. **Klasa:** P — art. 13 ust. 2 lit. a RODO, art. 399 PKE (informacja o okresie, Planet49 — ZR-62) [NZ]; I.
 - **Dowód:** klienci Supabase nie nadpisują opcji ciasteczek (`lib/supabase/client.ts:8-19`, `lib/supabase/server.ts:32-48`, `lib/supabase/middleware.ts:134-152`), więc obowiązują domyślne `@supabase/ssr` 0.10.2: `maxAge` 400 dni, `httpOnly: false`, `sameSite: lax` (`node_modules/@supabase/ssr/dist/main/utils/constants.js:4-11`). Ciasteczko aktywnej organizacji `ksef.active_org` — 30 dni, `httpOnly` (`app/actions/organizations.ts:34-44`, `lib/supabase/middleware.ts:330-338`). Polityka: „Cookies sesji: do końca sesji (browser close)”, „Cookies preferencji: 1 rok” (`polityka-prywatnosci/page.tsx:232-233`) — preferencje (motyw) są w `localStorage` bez terminu (`lib/theme/theme.ts:3,24`).
 - **Luka:** rozjazd deklaracji; sesja dostępna dla skryptu strony zwiększa skutki ewentualnego XSS (opis jednym zdaniem — `BRIEF.md`).
 - **Ryzyko:** niskie.
@@ -352,7 +359,7 @@ modelu” [NZ].
 
 ### ZGD-12. Strona „RODO i bezpieczeństwo” — deklaracje bez pokrycia
 
-- **Stan:** brak zgodności. **Klasa:** P — art. 5 ust. 1 lit. a (rzetelność i przejrzystość), art. 12 ust. 1 RODO [NZ]; I. WYM-19.
+- **Stan:** brak **[R6]**. **Klasa:** P — art. 5 ust. 1 lit. a (rzetelność i przejrzystość), art. 12 ust. 1 RODO [NZ]; I. WYM-19.
 - **Dowód:** szczegóły w tabeli „Deklaracje ze stron prawnych vs stan faktyczny” (pozycje D-01 – D-11). Najpoważniejsze: „Frankfurt (Hetzner, Vercel)” — serwery w NBG1 (Norymberga) wg `AGENTS.md`, Vercel nieużywany; „Brak cookies analitycznych” — sprzeczne z polityką (PostHog po zgodzie); „Audit logs — kto i kiedy uzyskał dostęp do Twoich danych” — odczyty nie są audytowane (MIN-05); „72 godzin (art. 33)” — art. 33 dotyczy zgłoszenia do organu, nie powiadomienia klienta; „SCC z każdym US-based subprocesorem” i „DPA dla każdej umowy” — brak dokumentów w repo.
 - **Luka:** strona deklaruje stan, którego kod i dokumentacja nie potwierdzają; wszystkie pozycje oznaczono „✅”.
 - **Ryzyko:** wysokie — deklaracje marketingowe o zgodności, które są nieprawdziwe, wprowadzają w błąd klientów-administratorów wybierających procesora.
@@ -374,7 +381,7 @@ opisuje stan informacji i mechanizmu w kodzie.
 | 3 | Dziennik audytu z IP i user agent (FF-A i FF-P) | lit. f (rozliczalność, bezpieczeństwo); dla klienta — art. 32 | polityka sekcja 11 — retencja 12 mies.; brak informacji, że IP widzą wszyscy członkowie organizacji | `lib/audit/log.ts:4-19,146-168`, `00052…sql` | częściowe (INW-09, MIN-11) |
 | 4 | Świadczenie usługi fakturowania: dane firmy klienta (FF-A) | lit. b | polityka sekcja 2 | `components/onboarding/actions.ts`, `lib/schemas/company-profile.ts` | potwierdzone co do celu; placeholder administratora |
 | 5 | Wystawianie faktur i wysyłka do KSeF: dane nabywców (FF-P) | klient: lit. c (ustawa o VAT — obowiązek wystawienia faktury, ZR-13) | klient wobec nabywcy (art. 14 — wyjątek art. 14 ust. 5 lit. c do review); FaktFlow: umowa powierzenia — brak | `components/invoices/actions.ts`, `lib/xml/fa3-generator.ts`, `lib/jobs/runners/submit-invoice.ts` | brak umowy powierzenia (ZGD-02) |
-| 6 | Przechowywanie faktur (FF-P) | klient: lit. c (art. 112 VAT, art. 86 OP — ZR-13, ZR-14) | polityka opisuje jako obowiązek FaktFlow, z błędnym przepisem | `lib/jobs/runners/archive-old-invoices.ts`, `retention-delete.ts` | brak zgodności (INW-18, ZGD-03) |
+| 6 | Przechowywanie faktur (FF-P) | klient: lit. c (art. 112 VAT, art. 86 OP — ZR-13, ZR-14) | polityka opisuje jako obowiązek FaktFlow, z błędnym przepisem | `lib/jobs/runners/archive-old-invoices.ts`, `retention-delete.ts` | brak (INW-18, ZGD-03) **[R6]** |
 | 7 | Skrzynka KSeF — faktury zakupowe i ich kategoryzacja (FF-P) | klient: lit. c (ewidencja kosztów) | umowa powierzenia — brak | `lib/ksef/inbox.ts`, `lib/categorization/index.ts:69-75` | brak (ZGD-02, ZGD-07) |
 | 8 | OCR dokumentów kosztowych przez model AI (FF-P) | klient: lit. c; Anthropic jako dalszy procesor | polityka wymienia Anthropic dla OCR; brak informacji w UI | `lib/ocr/engine.ts:144-158` | częściowe (SEC-D-05, ZGD-08) |
 | 9 | Wysyłka faktury e-mailem do nabywcy (FF-P) | klient: lit. b wobec nabywcy (wykonanie umowy) albo lit. f | brak stopki informacyjnej; odpowiedzi nabywcy trafiają do FaktFlow | `lib/email/send.ts:550-581` | brak (ZGD-09, INW-07) |
@@ -397,7 +404,7 @@ opisuje stan informacji i mechanizmu w kodzie.
 | 26 | Prawa osób: eksport, usunięcie, rejestr żądań (FF-A) | lit. c (art. 12–22 RODO) | polityka sekcje 9–10 | `lib/gdpr/*`, `app/api/gdpr/export/route.ts` | ocena w `A2-…` |
 | 27 | Wypisy, odbicia i skargi e-mail — lista blokad (FF-A) | lit. c/f (respektowanie sprzeciwu, reputacja wysyłki) | brak | `lib/email/preferences.ts:63-80`, `app/api/email/resend-webhook/route.ts` | brak informacji |
 | 28 | Panel operatora i notatki o kliencie (FF-A; dostęp do danych FF-P) | lit. f (obsługa klienta) / polecenie klienta (art. 28 ust. 3 lit. b) | brak | `app/admin/*`, `lib/admin/*` | częściowe (MIN-05) |
-| 29 | Kopie zapasowe (FF-A i FF-P) | lit. f / art. 32 ust. 1 lit. c | polityka: „Backup: AWS Glacier” — nieprawdziwe | `scripts/hetzner/db-backup.sh`, `lib/backup/*` | brak zgodności (INW-04, ZGD-03) |
+| 29 | Kopie zapasowe (FF-A i FF-P) | lit. f / art. 32 ust. 1 lit. c | polityka: „Backup: AWS Glacier” — nieprawdziwe | `scripts/hetzner/db-backup.sh`, `lib/backup/*` | brak (INW-04, ZGD-03) **[R6]** |
 | 30 | Alerty operacyjne (Slack, Telegram, heartbeat) (FF-A) | lit. f | brak w polityce | `lib/alerts/*` | brak informacji |
 
 ## Tabela technologii przeglądarkowych
@@ -621,3 +628,4 @@ z `A4-…` i skrótu powtórzonego przez R3 (`R3.md` § 5).
 | Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
 |---|---|---|---|---|---|---|
 | R3 — niezależny agent-recenzent (grupa: `A1` + `A2` + `A4`) | 10.10.2026 (recenzja wykonana w sesji 13.10.2026) | zatwierdzony z uwagami (27 kontroli punktowych, 24 potwierdzone, 3 z błędem: `ip: false`, linie `scrub.ts`, linia `required`) | 11 uwag do tego pliku (R3-U01 – R3-U08, R3-U10, R3-U20, R3-U23; 6 istotnych, 5 drobnych) | wszystkie 11 — naniesione przez redaktora poprawek 13.10.2026 po sprawdzeniu w kodzie; miejsca oznaczone **[R3]**. U08(a): poprawiono tylko tabelę B.1 — MIN-02 cytuje zakres `:110-119` pola imienia, który jest poprawny | — | `recenzje/R3.md` (streszczenie w `10-REVIEW.md`) |
+| R6a/R6b — niezależni krytycy kompletności | 13.10.2026 | kompletny z uwagami | R6a-U02 (wariant pełny: (a) „brak zgodności” → „brak” w ZGD-03, ZGD-11, ZGD-12 i w tabeli cel → podstawa; (b) sekcja „Konwencja stanów”; (c) MIN-03 „brak (kod)”, MIN-11 „częściowe (kod)”; dodatkowo MIN-12 „częściowe (kod)” — ta sama wada słownika), R6a-U04 (ten wpis) | przyjęte (naniesione przez redaktora R6 13.10.2026) | — | `recenzje/R6a.md`, `recenzje/R6b.md` |

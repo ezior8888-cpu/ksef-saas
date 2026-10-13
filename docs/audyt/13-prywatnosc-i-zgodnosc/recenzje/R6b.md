@@ -124,7 +124,7 @@ Zakres: wszystkie 30 plików katalogu (`*.md`, `recenzje/*`, `narzedzia/*` z JSO
 | Ścieżki lokalne | `/home/user/ksef-saas/...` w stosie `wynik-test-cookies.json:2136,2140` i w briefie (`recenzje/00-BRIEF-AGENTOW.md:3`) | nieszkodliwe (ścieżka piaskownicy) — U14 |
 | Wartości ciasteczek | w JSON tylko nazwy (`audyt13_syntetyczne`), `"value"` — 0, `Bearer`/`access_token`/`sb-` — 0 | OK |
 | Opisy luk | RUN-08 skrócony do jednego zdania + odwołań (R3-U09); INW-09, DOW-10 — jedno zdanie bez kroków; format v1 poświadczeń (`07` E-56) powtarza komentarz z publicznego kodu (`credentials-crypto.ts:24-25`) | OK |
-| Szczegóły kont dostawców | `06:230` nazywa konkretne konto telemetrii „bez aktywnego TOTP/passkey” i drugie „bez 2FA”; `05:190` „konto Sentry współdzielone bez MFA” | formalnie jedno zdanie, ale ułatwia wybór celu ataku — U12 (źródło, PR #225, jest również publiczne) |
+| Szczegóły kont dostawców | `06:230` i `05:190` wskazywały, które konkretne konto dostawcy telemetrii ma jaki brak MFA [zredagowane przez koordynatora 13.10.2026 po R6b-U12/N-04: stan MFA konkretnych kont dostawców — szczegóły w PR #225] | formalnie jedno zdanie, ale ułatwia wybór celu ataku — U12 (źródło, PR #225, jest również publiczne) |
 
 **Wynik higieny:** brak sekretów, adresów, nazw kontenerów, identyfikatorów kont i danych klientów. Jedna uwaga co do szczegółowości (U12) i jedna kosmetyczna (U14).
 

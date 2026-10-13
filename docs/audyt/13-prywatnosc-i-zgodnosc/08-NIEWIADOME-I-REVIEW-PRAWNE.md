@@ -6,8 +6,8 @@
 | Autor | agent NIEWIADOME (synteza; subagent koordynatora) |
 | Data | 13.10.2026 |
 | Wersja kodu | `origin/main` @ `3e5e00d` (gałąź robocza @ `22a8ea5` różni się od `3e5e00d` wyłącznie plikami w `docs/audyt/` — `git diff --quiet 3e5e00d HEAD -- ':(top)' ':(top,exclude)docs/audyt'` = 0, sprawdzone 13.10.2026) |
-| Zakres | (1) rejestr niewiadomych N-01 – N-41, zdeduplikowany ze wszystkich raportów i recenzji, z tym, co blokują, jakim dowodem i przez kogo je rozstrzygnąć, priorytetem i wpływem na start implementacji; (2) rejestr pytań do końcowego review prawnego Q-01 – Q-44 z roboczą interpretacją (założenie do potwierdzenia), podstawami i wpływem na plan; (3) materiały dla prawnika: pliki audytu, lista kontrolna wszystkich źródeł pierwotnych oznaczonych [NZ] z tezami, które od nich zależą, projekty z `09`; (4) czego niewiadome nie blokują; (5) ograniczenia dowodowe audytu |
-| Źródła | `00-ZADANIE.md`; `01-STAN-I-GRANICE.md` § 4–7; `02-INWENTARZ-I-PRZEPLYWY.md` § 7–8; `03-REJESTR-ZRODEL.md` § 1–5; `04-PROCESORZY-I-LOKALIZACJE.md` § 2, 4–8; `A1-MECHANIZMY-MINIMALIZACJA-ZGODY.md` (niewiadome NA1, pytania QA1, MIN-03, MIN-06); `A2-MECHANIZMY-PRAWA-RETENCJA.md` (N-A2, pytania 1–10, kolejność); `A3-DOWODY-I-TESTY.md` § 6–10 (N-DOW, P-NN); `A4-TEST-COOKIES-I-SIECI.md` § 1, 7–9; `06-SOC2.md` § 8.6–12 (NS, pytania 1–5); `05-MACIERZ-WYMAGAN.md` § 1, 10, 12–14 i kolumna „Zależność” (odczyt programowy); `09-MATERIALY-ROBOCZE.md` § 0, 4, 13–14; recenzje R1–R4 (`R1.md` § 7–8, `R2.md` § 8–9, `R3.md` § 8, `R4.md` § 9–10 — scratchpad sesji); **[R5b]** `R2-runda1.md` § 6–7 (dopisane przez redaktora poprawek po R5b-U01); `BRIEF.md` z ADDENDUM 1–3; kontrolne odczyty kodu na `3e5e00d` (§ 8) |
+| Zakres | (1) rejestr niewiadomych N-01 – N-41, zdeduplikowany ze wszystkich raportów i recenzji, z tym, co blokują, jakim dowodem i przez kogo je rozstrzygnąć, priorytetem i wpływem na start implementacji; (2) rejestr pytań do końcowego review prawnego Q-01 – Q-45 (**[R6]** Q-45 dopisane po R6b-U07) z roboczą interpretacją (założenie do potwierdzenia), podstawami i wpływem na plan; (3) materiały dla prawnika: pliki audytu, lista kontrolna wszystkich źródeł pierwotnych oznaczonych [NZ] z tezami, które od nich zależą, projekty z `09`; (4) czego niewiadome nie blokują; (5) ograniczenia dowodowe audytu |
+| Źródła | `00-ZADANIE.md`; `01-STAN-I-GRANICE.md` § 4–7; `02-INWENTARZ-I-PRZEPLYWY.md` § 7–8; `03-REJESTR-ZRODEL.md` § 1–5; `04-PROCESORZY-I-LOKALIZACJE.md` § 2, 4–8; `A1-MECHANIZMY-MINIMALIZACJA-ZGODY.md` (niewiadome NA1, pytania QA1, MIN-03, MIN-06); `A2-MECHANIZMY-PRAWA-RETENCJA.md` (N-A2, pytania 1–10, kolejność); `A3-DOWODY-I-TESTY.md` § 6–10 (N-DOW, P-NN); `A4-TEST-COOKIES-I-SIECI.md` § 1, 7–9; `06-SOC2.md` § 8.6–12 (NS, pytania 1–5); `05-MACIERZ-WYMAGAN.md` § 1, 10, 12–14 i kolumna „Zależność” (odczyt programowy); `09-MATERIALY-ROBOCZE.md` § 0, 4, 13–14; recenzje R1–R4 (`recenzje/R1.md` § 7–8, `recenzje/R2.md` § 8–9, `recenzje/R3.md` § 8, `recenzje/R4.md` § 9–10); **[R5b]** `R2-runda1.md` § 6–7 (dopisane przez redaktora poprawek po R5b-U01); `BRIEF.md` z ADDENDUM 1–3; kontrolne odczyty kodu na `3e5e00d` (§ 8) |
 | Ograniczenia | Synteza raportów, nie nowe badanie. Brak dostępu do produkcji, paneli i umów dostawców. Przepisy, wytyczne i kryteria AICPA — z pamięci modelu [NZ]: „niezweryfikowane online 13.10.2026 (egress zablokowany) — treść wg wiedzy modelu, do potwierdzenia w końcowym review”. WebSearch nie był używany (decyzja właściciela z 7.10). **[R5b]** Powiązania z planem `07` (§ 2.8, § 3.11, § 5) autor oparł na wersji `07` z ok. 12:49 UTC; recenzent R5b sprawdził je na końcowej wersji `07` (13.10) — zgodne; redaktor poprawek uzupełnił § 2.8 o pozycję D-16 dodaną w `07` po recenzji R5a |
 | Stan | po recenzji R5b („zatwierdzony z uwagami”) i naniesieniu jej uwag przez redaktora poprawek 13.10.2026 — zob. „Historia recenzji” **[R5b]**; autor nie zatwierdzał własnego etapu |
 
@@ -134,7 +134,7 @@ Pełne odwzorowanie ID źródłowych na N-NN — § 2.7.
 | ID | Niewiadoma | ID źródłowe | Co blokuje (WYM, ustalenia) | Dowód rozstrzygający | Kto | Prio | Blokuje start? |
 |---|---|---|---|---|---|---|---|
 | N-37 | **Treść i status przepisów prawa UE i PL** — żadnego nie odczytano online (§ 6): RODO (polska wersja ze sprostowaniami), PKE art. 398–400 (oznaczenie Dz.U., data wejścia w życie, zgoda ustawieniami przeglądarki, organ), status art. 10 UŚUDE po PKE, ustawa o VAT (artykuł o 10-letnim przechowywaniu w KSeF — wg R2 art. 112ba [NZ]; ustępy art. 112a; harmonogram KSeF), OP art. 70, 70a, 86, ustawa o rachunkowości art. 74, rozporządzenie o KPiR, u.o.d.o., KC art. 117–118; oznaczenia publikatorów | N-ZR-01; N-ZR-03; N-ZR-04; N-ZR-05 (z dopiskiem R2); N-ZR-06 (z dopiskiem R2); N-09-02; N-R2-01; R1 § 7 (akapit o przepisach) | klasy P i kolumna „Źródło” w `05`; najsilniej WYM-63, -64, -66, -68, -69; brzmienie klauzul, okresów i podstaw w `09` | odczyt w EUR-Lex, ISAP, Dz.U. (lista kontrolna § 4.2) | prawnik | P1 dla PKE i okresów przechowywania faktur; P2 pozostałe | **częściowo** — blokuje brzmienie dokumentów i wartości okresów, nie mechanizmy |
-| N-38 | **Wersje i status wytycznych EDPB oraz materiałów UODO:** wersja ostateczna Guidelines 2/2023, status Guidelines 1/2024 i 01/2025 (konsultacyjne), raport CEF 2025 (usuwanie), daty WP29; brzmienie wykazu Prezesa UODO z 2019 r. (operacje wymagające DPIA); poradniki UODO i decyzje (ClickQuickNow, Morele.net, Virgin Mobile, Bisnode, Fortum — sygnatury, prawomocność) | N-ZR-02; N-ZR-12 (z dopiskiem R2); N-09-01 | WYM-12, -52, -55, -72 (także -38, -63); screening DPIA (`09` § 3), LIA (`09` § 4) | rejestr dokumentów EDPB, Monitor Polski, strona UODO | prawnik | P2 | **nie** |
+| N-38 | **Wersje i status wytycznych EDPB oraz materiałów UODO:** wersja ostateczna Guidelines 2/2023, status Guidelines 1/2024 i 01/2025 (konsultacyjne), raport CEF 2025 (usuwanie), daty WP29; brzmienie wykazu Prezesa UODO z 2019 r. (operacje wymagające DPIA); poradniki UODO i decyzje (ClickQuickNow, Morele.net, Virgin Mobile, Bisnode, Fortum — sygnatury, prawomocność); **[R6]** poradniki i stanowiska UODO dot. privacy by design/default, zgody, ról administratora i podmiotu przetwarzającego (umowa powierzenia), prawa dostępu, usuwania i okresów przechowywania — tytuły, daty, wersje (§ 4.2 E) | N-ZR-02; N-ZR-12 (z dopiskiem R2); N-09-01 | WYM-12, -52, -55, -72 (także -38, -63; **[R6]** -30, -13, -11, -01, -41, -20, -24, -71 — tematy poradników UODO); screening DPIA (`09` § 3), LIA (`09` § 4) | rejestr dokumentów EDPB, Monitor Polski, strona UODO | prawnik | P2 | **nie** |
 | N-39 | **Sprawy i akty w toku:** dalszy los T-553/23 (odwołanie do TSUE); terminy art. 50 AI Act po ewentualnym „Digital Omnibus” (wg wiedzy modelu art. 50 stosuje się od 2.08.2026 — jeśli bez zmian, obowiązek już działa); wycofanie wniosku o rozporządzenie ePrivacy (ZR-07); zakres Data Act rozdz. VI dla FaktFlow (ZR-08) | N-ZR-07; N-ZR-08; ZR-07; ZR-08 | WYM-59, WYM-62; Q-10, Q-33, Q-44 | curia.europa.eu, EUR-Lex | prawnik | P2 (AI Act); P3 (pozostałe) | **nie** |
 | N-40 | **Tekst kryteriów AICPA:** TSC 2017 z rewizją punktów 2022, DC 200, przewodnik SOC 2, AT-C 105/205 — identyfikatory i tytuły w `03` § 2.6a i `06` to parafrazy | N-ZR-11; NS-02; NR4-05 | brzmienie WYM-SOC-1 – WYM-SOC-7 i mapowania w `06` (nie same kontrole) | licencjonowany dostęp do publikacji AICPA albo materiały firmy audytorskiej | właściciel / firma audytorska | P3 | **nie** |
 | N-41 | **Przepisy sektorowe poza zakresem:** krajowe wdrożenie NIS2 (system cyberbezpieczeństwa), przepisy KSeF o uprawnieniach i tokenach | N-ZR-13 | żadnego obecnego wniosku (prawdopodobnie bez wpływu na prywatność — FaktFlow jako mikropodmiot, do potwierdzenia) | decyzja o rozszerzeniu zakresu; ocena prawnika | właściciel / prawnik | P3 | **nie** |
@@ -177,43 +177,46 @@ Pełne odwzorowanie ID źródłowych na N-NN — § 2.7.
 
 `07-PLAN-ETAPOW.md` powstał w trakcie pisania tego pliku; autor odczytał
 jego § 0–3 w stanie z ok. 12:49 UTC. **[R5b]** Powiązania sprawdzone przez
-R5b na końcowej wersji `07` (13.10; D-01 – D-15 i tytuły E-00 – E-79) —
-zgodne. Redaktor poprawek R5b dopisał pozycję D-16 (ocena RUN-08), którą
+R5b na końcowej wersji `07` (13.10; `07` D-01 – D-15 i tytuły E-00 – E-79) —
+zgodne. Redaktor poprawek R5b dopisał pozycję `07` D-16 (ocena RUN-08), którą
 `07` dodał po recenzji R5a, oraz przeniósł do `07` E-00 propozycje
-z kolumny „Uwagi” (N-15 → D-08; N-17, N-19, N-21, N-22, N-24 → D-06 —
+z kolumny „Uwagi” (N-15 → `07` D-08; N-17, N-19, N-21, N-22, N-24 → `07` D-06 —
 oznaczone **[R5b]** w `07`). `07` odwołuje się do niewiadomych po ID
 źródłowych; poniższa tabela łączy je z N-NN.
 „Etapy czekające” — etapy, które w `07` § 2 mają w kolumnie „Czeka na”
 odpowiednią pozycję D-NN albo zależą od niej według karty E-00.
+**[R6]** Decyzje E-00 zapisano w § 2.8 i § 3.11 jako „`07` D-NN”, bo prefiks
+D-NN ma też inne znaczenia (kategorie danych w `02`, deklaracje w `A1`
+i `09` § 11 — R6a-U08).
 
 | N | Pozycja E-00 w `07` | Etapy czekające (wg `07` § 2–3) | Uwagi |
 |---|---|---|---|
-| N-01 | D-01 | E-59, E-62, E-63, E-67, E-74, E-79 | — |
-| N-02 | D-02 | E-10; bramka `07` § 8 | — |
-| N-03 | D-07 | E-59, E-61, E-67, E-68, E-69 | — |
-| N-04 | D-14 | E-59, E-60 | — |
-| N-05 | D-13 | E-79 | — |
-| N-06 | D-15 | E-67, E-73, E-75 | — |
-| N-07 | D-04 | E-60, E-61, E-62, E-63 | — |
-| N-08 | D-03 (PostHog) | E-09, E-63 | E-09 „od razu” — odczyt panelu w ramach etapu |
-| N-09 | D-03 (Sentry); D-12 (j) | E-21, E-61, E-63 | — |
-| N-10 | D-03 (Resend, Anthropic); D-12 (i) | E-60, E-61, E-63 | — |
-| N-11 | D-03 (Slack, Telegram) | E-63 | E-16 „od razu” nie czeka |
-| N-12 | D-10 | E-22, E-66, E-63 | — |
-| N-13 | D-11 | E-57 | — |
-| N-14 | D-09 | E-61, E-62, E-68 | — |
-| N-15 | D-08 **[R5b]** (wcześniej brak pozycji w E-00) | dotyczy E-61 (transfery) | dopisane do D-08 (kraje dostępu zdalnego operatorów i agentów) **[R5b]** |
-| N-16 | D-06 (nazwy zmiennych) | E-41, E-50, E-51; E-10 (`KSEF_ENV`) | `EMAIL_UNSUBSCRIBE_SECRET` — E-13 „od razu” robi wysyłkę fail-closed niezależnie |
-| N-17 | D-16 (ocena RUN-08, pytania do dostawców o logowanie nagłówków — dodane w `07` po R5a); D-06 (nagłówki odwrotnego proxy) **[R5b]** | E-05 „od razu” usuwa przyczynę; ocena okresu przeszłego — D-16, E-67 | nagłówki odwrotnego proxy dopisane do D-06 **[R5b]** |
-| N-18 | D-06 (schemat `auth.*`) | E-20, E-63 | — |
-| N-19 | D-06 (schemat `auth.*`; parametry GoTrue **[R5b]**) | E-19 „od razu”, E-42 | parametry GoTrue (SMTP, czasy życia tokenów, potwierdzenie e-maila) dopisane do D-06 **[R5b]** |
-| N-20 | D-06 (logi `_supabase`, Docker) | E-41 (część `_supabase`) | — |
-| N-21 | D-06 **[R5b]** (wcześniej brak pozycji w E-00) | E-53 „od razu” (szyfrowanie zrzutów), E-74 | dopisane do D-06 (NA1-08, NS-08) **[R5b]** |
-| N-22 | D-06 (NS-05; N-PRC-05 i lokalizacja obrazów Hetznera **[R5b]**) | E-53, E-54 | N-PRC-05 dopisane do D-06 **[R5b]** |
-| N-23 | D-06 (wyzwalacze, `00072`, `00100`) | E-03 (potwierdzenie), E-50, E-51, E-72 | — |
-| N-24 | D-06 (liczniki) | E-50, E-51 | liczniki S3, FLO, `payment_imports` (N-INW-05, -10, -11) dopisane do D-06 **[R5b]** |
-| N-25 | D-06 (crony, `/wdroz`, poświadczenia v1) | E-56, E-72, E-75 | — |
-| N-26 | D-08 | E-69, E-72 | — |
+| N-01 | `07` D-01 | E-59, E-62, E-63, E-67, E-74, E-79 | — |
+| N-02 | `07` D-02 | E-10; bramka `07` § 8 | — |
+| N-03 | `07` D-07 | E-59, E-61, E-67, E-68, E-69 | — |
+| N-04 | `07` D-14 | E-59, E-60 | — |
+| N-05 | `07` D-13 | E-79 | — |
+| N-06 | `07` D-15 | E-67, E-73, E-75 | — |
+| N-07 | `07` D-04 | E-60, E-61, E-62, E-63 | — |
+| N-08 | `07` D-03 (PostHog) | E-09, E-63 | E-09 „od razu” — odczyt panelu w ramach etapu |
+| N-09 | `07` D-03 (Sentry); `07` D-12 (j) | E-21, E-61, E-63 | — |
+| N-10 | `07` D-03 (Resend, Anthropic); `07` D-12 (i) | E-60, E-61, E-63 | — |
+| N-11 | `07` D-03 (Slack, Telegram) | E-63 | E-16 „od razu” nie czeka |
+| N-12 | `07` D-10 | E-22, E-66, E-63 | — |
+| N-13 | `07` D-11 | E-57 | — |
+| N-14 | `07` D-09 | E-61, E-62, E-68 | — |
+| N-15 | `07` D-08 **[R5b]** (wcześniej brak pozycji w E-00) | dotyczy E-61 (transfery) | dopisane do `07` D-08 (kraje dostępu zdalnego operatorów i agentów) **[R5b]** |
+| N-16 | `07` D-06 (nazwy zmiennych) | E-41, E-50, E-51; E-10 (`KSEF_ENV`) | `EMAIL_UNSUBSCRIBE_SECRET` — E-13 „od razu” robi wysyłkę fail-closed niezależnie |
+| N-17 | `07` D-16 (ocena RUN-08, pytania do dostawców o logowanie nagłówków — dodane w `07` po R5a); `07` D-06 (nagłówki odwrotnego proxy) **[R5b]** | E-05 „od razu” usuwa przyczynę; ocena okresu przeszłego — `07` D-16, E-67 | nagłówki odwrotnego proxy dopisane do `07` D-06 **[R5b]** |
+| N-18 | `07` D-06 (schemat `auth.*`) | E-20, E-63 | — |
+| N-19 | `07` D-06 (schemat `auth.*`; parametry GoTrue **[R5b]**) | E-19 „od razu”, E-42 | parametry GoTrue (SMTP, czasy życia tokenów, potwierdzenie e-maila) dopisane do `07` D-06 **[R5b]** |
+| N-20 | `07` D-06 (logi `_supabase`, Docker) | E-41 (część `_supabase`) | — |
+| N-21 | `07` D-06 **[R5b]** (wcześniej brak pozycji w E-00) | E-53 „od razu” (szyfrowanie zrzutów), E-74 | dopisane do `07` D-06 (NA1-08, NS-08) **[R5b]** |
+| N-22 | `07` D-06 (NS-05; N-PRC-05 i lokalizacja obrazów Hetznera **[R5b]**) | E-53, E-54 | N-PRC-05 dopisane do `07` D-06 **[R5b]** |
+| N-23 | `07` D-06 (wyzwalacze, `00072`, `00100`) | E-03 (potwierdzenie), E-50, E-51, E-72 | — |
+| N-24 | `07` D-06 (liczniki) | E-50, E-51 | liczniki S3, FLO, `payment_imports` (N-INW-05, -10, -11) dopisane do `07` D-06 **[R5b]** |
+| N-25 | `07` D-06 (crony, `/wdroz`, poświadczenia v1) | E-56, E-72, E-75 | — |
+| N-26 | `07` D-08 | E-69, E-72 | — |
 | N-27 | **brak** | dotyczy E-22 (zakres wyszukiwania) | rozstrzygalne w etapie wykonawczym |
 | N-28 | **brak** | E-38 „od razu” | — |
 | N-29 | **brak** | dotyczy E-58 | — |
@@ -250,6 +253,9 @@ Q-NN się nie zmienia — pytania 1, 3, 4 miały już odpowiedniki (Q-37,
 Q-16, Q-44), a brakujący wątek pytania 2 (PostHog przy `/ingest`)
 dopisano do Q-03. Liczba pytań z interpretacją z raportów (28) i „w całości
 z tego pliku” (16) bez zmian — Q-03 już miało część „Propozycja 08”.
+**[R6]** Po końcowym review kompletności dopisano Q-45 (kontrast przycisków
+banera, R6b-U07; interpretacja „Propozycja R6”, priorytet P2). Pytań jest
+45; liczby wyżej dotyczą Q-01 – Q-44.
 
 Pełne odwzorowanie pytań źródłowych na Q-NN — § 3.10.
 
@@ -282,6 +288,7 @@ Pełne odwzorowanie pytań źródłowych na Q-NN — § 3.10.
 | Q-13 | Które technologie w urządzeniu końcowym są „ściśle niezbędne”: sesja Supabase (ciasteczko do 400 dni, bez wyboru „zapamiętaj mnie”), zapis decyzji o zgodzie w `localStorage`, motyw, ciasteczko organizacji `ksef.active_org`, service worker z precache i Cache Storage zapisywany każdemu gościowi stron marketingowych, Turnstile na stronach logowania, SDK Sentry w przeglądarce (błędy vs sesje release health i 10 % transakcji; odczyt user agent i parametrów ekranu jako „dostęp”), push? Czy sesje i transakcje Sentry w przeglądarce można oprzeć na lit. f bez zgody? | Wg Q-ZR-06, `09` L-06 i tabeli technologii `A1`: sesja i zapis zgody — niezbędne; motyw — prawdopodobnie niezbędny (funkcja żądana); Turnstile — ściśle niezbędny do logowania (propozycja `A1`/`A4`); Sentry: błędy — LIA pozytywna pod warunkami, sesje i ślady w przeglądarce — LIA negatywna na lit. f → wyłączyć albo objąć zgodą. **Propozycja 08:** ciasteczko organizacji — niezbędne (funkcja żądana przez zalogowanego); service worker — rejestrować tylko w aplikacji, nie na stronach marketingowych; sesja 400 dni — skrócić albo dodać wybór „zapamiętaj mnie” | ZR-02 art. 5 ust. 3; ZR-11 art. 399; ZR-34 (EDPB 2/2023), ZR-53 (WP194), ZR-62 (Planet49); art. 6 ust. 1 lit. f | WYM-63, WYM-64, WYM-32; RUN-04, RUN-06, RUN-09, ZGD-10, ZGD-11; zakres specyfikacji zgody (`09` § 12) | **P1** | Q-ZR-06; QA1-05; QA1-06; QA1-07; `A4` pyt. 1, 2, 5; `02` pyt. 10 (cz. 2) |
 | Q-14 | Czy dynamiczne ładowanie arkusza Material Symbols z serwerów Google przed jakimkolwiek wyborem wymaga zgody; jaka podstawa i mechanizm transferu IP odwiedzających do Google; czy samohostowanie zamyka sprawę, także dla oceny stanu historycznego? | Wg `A4` pyt. 3 i `04` PRC-10: samohostowanie jako środek techniczny — rekomendacja niezależna od odpowiedzi; ocena stanu historycznego do prawnika (LG München I, 20.01.2022, 3 O 17493/20 — sąd niemiecki, materiał pomocniczy) | art. 6, rozdz. V, art. 13; ZR-02 art. 5 ust. 3; ZR-11 art. 399; ZR-68 (C-40/17), ZR-69 (C-582/14); LG München I | WYM-63, WYM-58; RUN-05, PRC-10 — od odpowiedzi zależy tylko ocena okresu przeszłego | P2 | QA1-16; `A4` pyt. 3; `02` pyt. 10 (cz. 3) |
 | Q-15 | Jaki minimalny zakres „dowodu zgody” (wersja treści, data, zapis po stronie serwera) jest wymagany dla analityki opartej na zgodzie — dla anonimowych odwiedzających i dla zalogowanych? | **Propozycja 08** (na podstawie WYM-13): zalogowani — zapis po stronie serwera (wersja, chwila, wybór, wycofanie); anonimowi — wersja i data w `localStorage` oraz wersjonowana treść banera w repo; bez zbierania dodatkowych identyfikatorów tylko po to, by wykazać zgodę (art. 11) | art. 7 ust. 1, art. 11, motyw 42; ZR-31 | WYM-13, WYM-14; RUN-10; `09` § 12 | P2 | `A4` pyt. 6 |
+| Q-45 **[R6]** | Czy baner zgody, w którym „Akceptuję” i „Tylko niezbędne” stoją na tym samym poziomie, mają tę samą wielkość i działają jednym kliknięciem, ale „Akceptuję” jest wypełniony kontrastowo (`components/analytics/consent-banner.tsx:73`), a „Tylko niezbędne” tylko obramowany (`:80`), spełnia wymóg równorzędnej odmowy, czy jest to nierówne wyróżnienie (wzorzec zwodniczy)? | **Propozycja R6** (na podstawie WYM-65): wariant ostrożny — przycisk odmowy nie mniej widoczny niż przycisk zgody (ten sam styl albo ten sam kontrast); zmiana mała, niezależna od reszty mechanizmu | art. 4 pkt 11, art. 7 ust. 3; ZR-40 (Cookie Banner Taskforce); ZR-35 (analogia); ZR-31 | WYM-65; E-18 (styl przycisku w tym samym PR co kontrolka ustawień); `09` § 12 | P2 | R6b-U07; `05` WYM-65; `A1` ZGD-05 |
 
 ### 3.4. Prawa osób
 
@@ -299,7 +306,7 @@ Pełne odwzorowanie pytań źródłowych na Q-NN — § 3.10.
 | Q-20 | Jaki okres i jaką podstawę wpisać w polityce zamiast „Faktury: 10 lat (obowiązek prawny — art. 70 § 1 OP)” (`polityka-prywatnosci/page.tsx:230`)? Czy regułą jest „5 lat od końca roku, w którym upłynął termin płatności podatku” (art. 70 § 1 w zw. z art. 86 § 1 OP, art. 112 VAT), czy 10 lat wynika z innego przepisu (przechowywanie w KSeF przez MF — wg R2 art. 112ba; rachunkowość) i czy dotyczy podatnika, czy tylko MF? Kto ustala okres, gdy klient jest administratorem? Od jakiej daty liczyć bieg? Czy reguła obejmuje faktury kosztowe, zdjęcia paragonów i dane KPiR? Czy kopia w FaktFlow jest niezbędna, skoro MF przechowuje faktury w KSeF? | Wg Q-ZR-02: rozdzielić (a) okres obowiązku klienta (co do zasady 5 lat od końca roku płatności podatku, z możliwym wydłużeniem), (b) okres przechowywania przez FaktFlow na polecenie klienta, (c) KSeF jako odrębne repozytorium MF; nie powoływać art. 70 § 1 jako źródła 10 lat. **Propozycja 08:** bieg od daty dokumentu albo okresu rozliczeniowego, nie od dnia uruchomienia joba (RET-01); okres jako parametr ustalany w umowie | ZR-13 art. 112, 112a, przepisy o KSeF; ZR-14 art. 70, 70a, 86; ZR-15 art. 74; ZR-16; art. 5 ust. 1 lit. e, art. 28 ust. 3 lit. g | WYM-08, WYM-68, WYM-69, WYM-71; RET-01, RET-05, INW-18; wartość parametru retencji, treść polityki i umowy (mechanizm można budować bez odpowiedzi) | **P1** — polityka publiczna; mechanizm uśpiony do pierwszego terminu | Q-ZR-02; `02` pyt. 5; `A2` pyt. 1 (cz. 1); `06` pyt. 5 |
 | Q-21 | Czy po upływie okresu FaktFlow ma usuwać wiersz faktury przesłanej do KSeF (dziś niemożliwe — wyzwalacz z `00132` blokuje `DELETE` także dla roli serwisowej), czy wystarczy usunięcie danych osobowych z kopii lokalnej, skoro oryginał pozostaje w KSeF? Czy zamrożenie danych nabywcy (w tym PESEL) na wysłanej fakturze także dla operatora mieści się w wyjątku art. 17 ust. 3 lit. b na cały okres przechowania i jak to opisać w odpowiedzi na żądanie usunięcia? | **Propozycja 08** (zgodna z `A2`, kolejność pkt 5): po upływie okresu — usunięcie danych osobowych z kopii lokalnej (wiersz zostaje jako ślad techniczny bez danych osobowych) albo ścieżka serwisowa w wyzwalaczu; w okresie przechowania — zamrożenie uzasadnione obowiązkiem podatnika, a w odpowiedzi na żądanie: wskazanie wyjątku i daty końca okresu | art. 5 ust. 1 lit. e, art. 17 ust. 1, ust. 3 lit. b; ZR-13 (KSeF) | WYM-73, WYM-24, WYM-68; RET-02, SOC-29; projekt migracji wyzwalacza (ścieżka serwisowa albo zerowanie) | **P1** — przed pierwszym terminem retencji | `A2` pyt. 1 (zd. ost.), pyt. 10; R3 § 8 pkt 1–2 (naniesione do `A2`); `06` pyt. 5 (cz.) |
 | Q-22 | Czy przechowywanie przez FaktFlow elektronicznych kopii faktur w Niemczech nakłada na klienta obowiązki z art. 112a ustawy o VAT (zawiadomienie, dostęp online) i czy FaktFlow powinien o tym informować? | Wg Q-ZR-03: do ustalenia; jeśli tak — informacja w regulaminie i zapewnienie dostępu. **Propozycja 08:** niezależnie od odpowiedzi opisać w regulaminie lokalizację (Niemcy, Norymberga) i sposób dostępu | ZR-13 art. 112a (ustępy do potwierdzenia) | WYM-69; regulamin; ewentualna funkcja dostępu | P2 | Q-ZR-03 |
-| Q-23 | Dziennik audytu: jaki okres przechowywania IP i user agent jest uzasadniony i dla jakich klas zdarzeń (dostęp, finanse, KSeF, płatności, RODO); czy członkowie organizacji mogą widzieć IP i user agent pozostałych; czy pseudonimizacja wpisów po usunięciu konta (zerowanie identyfikatora i IP przy zachowaniu `tenant_id` i treści `details_json`) wystarcza wobec art. 17 — także przy organizacji jednoosobowej; czy wpisy wysyłek do KSeF i operacji płatniczych mogą być usuwane po 12 miesiącach; czy anonimizacja może usuwać całe `metadata`; czy e-mail księgowej przy każdym wejściu do portalu i e-mail odbiorcy faktury mają w audycie podstawę; czy wolny tekst notatki decyzji klienta w `details_json` może zostać po usunięciu konta? | Wg `09` L-01: IP i user agent tylko dla zdarzeń bezpieczeństwa; niewidoczne dla ról niższych; retencja per klasa zdarzeń. **Propozycja 08:** wartości okresów do decyzji ([PR225] `data-policy.md` przyjął 13 mies. dla audytu dostępu i 10 lat dla audytu finansowego — decyzja niewdrożona); pseudonimizacja musi obejmować `details_json` i `metadata` z danymi osobowymi; przy JDG `tenant_id` pozwala zidentyfikować osobę — to pseudonimizacja, nie anonimizacja (MIN-11); identyfikator zamiast e-maila osoby trzeciej | art. 5 ust. 1 lit. c, e, art. 6 ust. 1 lit. f, art. 17, art. 32, motywy 26, 49; ZR-43 (konsultacyjny), ZR-54 (WP216) | WYM-36, WYM-38, WYM-71; INW-09, MIN-11, DOW-07, DOW-09, RET-03; migracja klas retencji i funkcji anonimizacji | P2 | `02` pyt. 7; QA1-13; `A2` pyt. 3 (cz. 1–2); P-05; P-06; P-12 |
+| Q-23 | Dziennik audytu: jaki okres przechowywania IP i user agent jest uzasadniony i dla jakich klas zdarzeń (dostęp, finanse, KSeF, płatności, RODO); czy członkowie organizacji mogą widzieć IP i user agent pozostałych; czy pseudonimizacja wpisów po usunięciu konta (zerowanie identyfikatora i IP przy zachowaniu `tenant_id` i treści `details_json`) wystarcza wobec art. 17 — także przy organizacji jednoosobowej; czy wpisy wysyłek do KSeF i operacji płatniczych mogą być usuwane po 12 miesiącach; czy pseudonimizacja wpisów (funkcja `anonymize_user_audit_logs`) może nadpisywać całe `metadata`; czy e-mail księgowej przy każdym wejściu do portalu i e-mail odbiorcy faktury mają w audycie podstawę; czy wolny tekst notatki decyzji klienta w `details_json` może zostać po usunięciu konta? | Wg `09` L-01: IP i user agent tylko dla zdarzeń bezpieczeństwa; niewidoczne dla ról niższych; retencja per klasa zdarzeń. **Propozycja 08:** wartości okresów do decyzji ([PR225] `data-policy.md` przyjął 13 mies. dla audytu dostępu i 10 lat dla audytu finansowego — decyzja niewdrożona); pseudonimizacja musi obejmować `details_json` i `metadata` z danymi osobowymi; przy JDG `tenant_id` pozwala zidentyfikować osobę — to pseudonimizacja, nie anonimizacja (MIN-11); identyfikator zamiast e-maila osoby trzeciej | art. 5 ust. 1 lit. c, e, art. 6 ust. 1 lit. f, art. 17, art. 32, motywy 26, 49; ZR-43 (konsultacyjny), ZR-54 (WP216) | WYM-36, WYM-38, WYM-71; INW-09, MIN-11, DOW-07, DOW-09, RET-03; migracja klas retencji i funkcji anonimizacji | P2 | `02` pyt. 7; QA1-13; `A2` pyt. 3 (cz. 1–2); P-05; P-06; P-12 |
 | Q-24 | Jak długo przechowywać `gdpr_deletion_requests.user_email`, IP i user agent oraz rejestr wykonanych żądań po wykonaniu usunięcia (rozliczalność a minimalizacja)? | **Propozycja 08:** minimalny zapis dowodowy (identyfikator żądania, data, rodzaj, wynik, skrót adresu z kluczem) przez okres do decyzji — np. przedawnienia roszczeń związanych z żądaniem (KC art. 117–118, ZR-17) [NZ] **[R5b]**; IP i user agent usunąć po wykonaniu | art. 5 ust. 1 lit. c, e, ust. 2, art. 17 ust. 3 lit. e; ZR-17 art. 117–118 **[R5b]** | WYM-71, WYM-74, WYM-75; PRA-11, INW-01; rejestr żądań (`09` § 8.5) | P2 | `02` pyt. 11; `A2` pyt. 3 (cz. 3) |
 | Q-25 | Czy dopuszczalne jest wygasanie danych usuniętych wraz z rotacją kopii (dziś 14 dni lokalnie; po decyzji o Storage Box do ok. 12 miesięcy) przy procedurze ponownego usunięcia po odtworzeniu; jaki maksymalny okres rotacji; jak to opisać osobom? | Wg Q-ZR-13: tak, przy krótkiej, opisanej rotacji i ponownym zastosowaniu usunięć po odtworzeniu. **Propozycja 08:** 12 miesięcy kopii miesięcznych z pełnymi danymi osobowymi wymaga osobnego uzasadnienia albo skrócenia | art. 5 ust. 1 lit. e, art. 17, art. 32 ust. 1 lit. c; ZR-45 (CEF 2025 — status nieznany); WYM-72 klasa I (O do potwierdzenia) | WYM-72, WYM-51; INW-04, RET-09; parametry rotacji (7/4/12) i procedura odtworzenia | **P1** — przed wdrożeniem kopii poza hostem | Q-ZR-13; `02` pyt. 8; `A2` pyt. 6 |
 | Q-26 | Jaki okres przechowywania logów dostępu z adresami IP (Kong, GoTrue, PostgREST, baza `_supabase`, odwrotne proxy, Docker) jest uzasadniony dla bezpieczeństwa; czy logi muszą być objęte usuwaniem konta, czy wystarczy krótka retencja techniczna? | **Propozycja 08** (zgodna z [PR225] `data-policy.md`: logi lokalne do 7 dni — przyjęte, niewdrożone): krótka retencja techniczna bez usuwania per osoba; opis w polityce | art. 5 ust. 1 lit. e, art. 6 ust. 1 lit. f, art. 17, motyw 49 | WYM-36, WYM-71; RET-09, RET-10; zależy od faktów N-20 | P2 | `02` pyt. R1 (logi Supabase) |
@@ -360,6 +367,7 @@ Pełne odwzorowanie pytań źródłowych na Q-NN — § 3.10.
 | R2 § 9 (runda 2) | 1 → Q-37; 2 → Q-37; 3 → Q-30; 4 → Q-04 |
 | R3 § 8 | 1 → Q-21; 2 → Q-21 |
 | R4 § 10 | PR4-01 → Q-34; PR4-02 → Q-18; PR4-03 → Q-23 |
+| **[R6]** R6b § 6 (`recenzje/R6b.md`) | R6b-U07 → Q-45 |
 
 ### 3.11. Powiązanie z planem `07`: Q-NN → etapy
 
@@ -370,19 +378,19 @@ ostrożny), a odpowiedź może go najwyżej rozszerzyć.
 
 | Q | Etapy `07` | Q | Etapy `07` |
 |---|---|---|---|
-| Q-01 | E-17 czeka (`04` pyt. 1, D-12 a); E-62 treść | Q-23 | E-47 czeka (P-05); E-32, E-34 od razu; E-20 czeka (P-12) |
+| Q-01 | E-17 czeka (`04` pyt. 1, `07` D-12 a); E-62 treść | Q-23 | E-47 czeka (P-05); E-32, E-34 od razu; E-20 czeka (P-12) |
 | Q-02 | E-33 od razu; E-59 treść | Q-24 | E-20 czeka (RT-DSAR); E-22 od razu |
 | Q-03 | E-61, E-62 treść | Q-25 | E-53 od razu (parametr rotacji); E-55 czeka |
-| Q-04 | E-14 od razu; E-64 treść | Q-26 | E-41 od razu (część `_supabase` czeka D-06) |
+| Q-04 | E-14 od razu; E-64 treść | Q-26 | E-41 od razu (część `_supabase` czeka `07` D-06) |
 | Q-05 | E-28 od razu (strażnik); E-60 treść | Q-27 | E-21 czeka (P-07); E-52 treść |
-| Q-06 | E-27 czeka (L-03, D-12 g) | Q-28 | E-29 od razu; E-49 czeka (`02` pyt. 6) |
-| Q-07 | E-13 od razu; E-65 czeka (P-08, Q-ZR-05) | Q-29 | E-43 czeka (D-12 f) |
+| Q-06 | E-27 czeka (L-03, `07` D-12 g) | Q-28 | E-29 od razu; E-49 czeka (`02` pyt. 6) |
+| Q-07 | E-13 od razu; E-65 czeka (P-08, Q-ZR-05) | Q-29 | E-43 czeka (`07` D-12 f) |
 | Q-08 | E-58 od razu; E-62, E-63 treść | Q-30 | E-16, E-35 od razu |
 | Q-09 | E-01 od razu; E-63 treść | Q-31 | E-62 treść |
 | Q-10 | E-12 od razu; E-60, E-63 treść | Q-32 | E-62 treść; E-17 |
 | Q-11 | E-31 od razu | Q-33 | E-61 treść |
 | Q-12 | E-18 od razu; E-63 treść | Q-34 | E-68 czeka (P-10); E-61, E-62 treść |
-| Q-13 | E-06, E-08 od razu; E-42 czeka (RT-SESJA); E-63 treść | Q-35 | E-66 czeka (D-10) |
+| Q-13 | E-06, E-08 od razu; E-42 czeka (RT-SESJA); E-63 treść | Q-35 | E-66 czeka (`07` D-10) |
 | Q-14 | E-07 od razu | Q-36 | E-62, E-67 treść |
 | Q-15 | E-18 od razu | Q-37 | E-05, E-09, E-10 od razu (zatrzymanie przepływu); E-67 (rejestr naruszeń) |
 | Q-16 | E-23 częściowo czeka (`A2` pyt. 5) | Q-38 | E-59, E-60 treść |
@@ -392,6 +400,7 @@ ostrożny), a odpowiedź może go najwyżej rozszerzyć.
 | Q-20 | E-51 czeka (Q-ZR-02, `A2` pyt. 1); E-40 od razu; E-63 treść | Q-42 | E-01 od razu; E-79 |
 | Q-21 | E-51 czeka (`A2` pyt. 10) | Q-43 | E-79 |
 | Q-22 | E-62, E-63 treść | Q-44 | E-25 od razu; E-62 treść |
+| — | — | Q-45 **[R6]** | E-18 od razu |
 
 ## 4. Materiały do końcowego review prawnego
 
@@ -411,8 +420,8 @@ Wszystkie pliki leżą w `docs/audyt/13-prywatnosc-i-zgodnosc/`.
 | `04-PROCESORZY-I-LOKALIZACJE.md` | rejestr odbiorców R-NN, PRC-01 – PRC-17, projekt listy dalszych procesorów (§ 3), ocena łańcucha i potrzeby TIA (§ 4), deklaracje stron a stan faktyczny (§ 5), odczytane dokumenty dostawców DOK-1 – DOK-12 (§ 8.2) | kwalifikację odbiorców (procesor, dalszy procesor, odrębny administrator); proponowaną interpretację DPF a TIA (§ 4.2); wnioski z DPA Anthropic (SCC moduł 2/3, sprzeciw 15 dni, usunięcie 30 dni po umowie, przechowywanie przez czas umowy) | R2 runda 1 i 2 (naniesione) |
 | `05-MACIERZ-WYMAGAN.md` | macierz WYM → źródło → stan → dowód → luka → ryzyko → zmiana → test → zależność; 15 najważniejszych ryzyk (§ 12.2); sprzeczności (§ 12.3) | czy stany „brak / częściowe” są prawnie trafne dla wymagań klasy P; skalę ryzyka „obecne / K1” (§ 1.1) dla wymagań wysokiego ryzyka | **[R5b]** R5a (naniesione 13.10) |
 | `06-SOC2.md` | mapowanie pięciu kategorii TSC, SOC-NN, rekomendacja ścieżki | tylko § 11 (pytania) i komunikację o SOC 2 (Q-41 – Q-43); kryteria AICPA są dobrowolne | R4 (naniesione) |
-| `07-PLAN-ETAPOW.md` | plan 80 etapów E-00 – E-79 z kartami, E-00 — decyzje i odczyty D-01 – D-15, tor treści prawnych „projekt → review → publikacja” (`07` § 0.3) | kolejność etapów zależnych od pytań P1 (§ 3.11, § 4.4); karty etapów z treścią prawną (E-59 – E-68) | **[R5b]** kompletny (13.10, E-00 – E-79); R5a (naniesione); powiązania z tym plikiem sprawdzone przez R5b — zgodne |
-| `08-NIEWIADOME-I-REVIEW-PRAWNE.md` | ten plik | **rozstrzygnąć Q-01 – Q-44**; potwierdzić źródła z § 4.2; wskazać pytania pominięte | **[R5b]** R5b (naniesione) |
+| `07-PLAN-ETAPOW.md` | plan 80 etapów E-00 – E-79 z kartami, E-00 — decyzje i odczyty `07` D-01 – D-16 **[R6]**, tor treści prawnych „projekt → review → publikacja” (`07` § 0.3) | kolejność etapów zależnych od pytań P1 (§ 3.11, § 4.4); karty etapów z treścią prawną (E-59 – E-68) | **[R5b]** kompletny (13.10, E-00 – E-79); R5a (naniesione); powiązania z tym plikiem sprawdzone przez R5b — zgodne |
+| `08-NIEWIADOME-I-REVIEW-PRAWNE.md` | ten plik | **rozstrzygnąć Q-01 – Q-45** **[R6]**; potwierdzić źródła z § 4.2; wskazać pytania pominięte | **[R5b]** R5b (naniesione) |
 | `09-MATERIALY-ROBOCZE.md` | projekty: rejestry, screening DPIA, LIA, TIA, szkielet umowy powierzenia, lista dalszych procesorów, procedury żądań i naruszeń, harmonogram retencji, wymagania treści polityki, specyfikacja zgody | każdy projekt według § 4.3 | **[R5b]** R5b (naniesione) |
 | `A1-MECHANIZMY-MINIMALIZACJA-ZGODY.md` | MIN-01 – MIN-12, ZGD-01 – ZGD-12, tabela „cel → proponowana podstawa → obowiązek informacyjny”, tabela technologii przeglądarkowych, deklaracje stron prawnych | proponowane podstawy przetwarzania per cel; klasyfikację technologii jako niezbędnych; ocenę deklaracji stron prawnych | R3 (naniesione) |
 | `A2-MECHANIZMY-PRAWA-RETENCJA.md` | PRA-01 – PRA-11 (tabela praw D.1), RET-01 – RET-13 (tabela retencji E.1), AI-01 – AI-05 | zakres realizacji każdego prawa; proponowane wyjątki z art. 17 ust. 3; okresy i początek biegu w tabeli retencji | R3 (naniesione) |
@@ -483,12 +492,12 @@ numeru, daty i statusu, zanim teza trafi do dokumentu klienta. Kolumna
 | ZR-32 Guidelines 07/2020 (administrator i procesor), v2.0 | — | role per operacja, treść umowy powierzenia, współadministrowanie | WYM-01, WYM-39, WYM-41 – WYM-46; Q-01 – Q-03 |
 | ZR-33 Guidelines 01/2022 (prawo dostępu), v2.0 | — | zakres kopii, identyfikacja, osoby bez konta | WYM-17, WYM-21, WYM-22; Q-16, Q-18 |
 | ZR-34 Guidelines 2/2023 (zakres art. 5 ust. 3) | **wersja ostateczna** (wg modelu v2.0 z 7.10.2024) | `localStorage`, skrypty, piksele śledzące jako „dostęp” | WYM-63; Q-04, Q-13 |
-| ZR-35 Guidelines 03/2022 (wzorce zwodnicze) | zakres — platformy społecznościowe, dla FaktFlow analogia | interfejs zgody i usuwania konta | WYM-65 |
+| ZR-35 Guidelines 03/2022 (wzorce zwodnicze) | zakres — platformy społecznościowe, dla FaktFlow analogia | interfejs zgody i usuwania konta | WYM-65; Q-45 **[R6]** |
 | ZR-36 Guidelines 9/2022 (zgłaszanie naruszeń), v2.0 | — | „stwierdzenie”, 72 h, rola procesora | WYM-52 – WYM-54; Q-36, Q-37 |
 | ZR-37 Guidelines 01/2021 (przykłady naruszeń), v2.0 | data przyjęcia | scenariusze ćwiczeń | WYM-52; Q-37 |
 | ZR-38 Recommendations 01/2020 (środki uzupełniające), v2.0 | — | kroki TIA | WYM-60; Q-33 |
 | ZR-39 Guidelines 05/2021 (art. 3 a rozdz. V) | — | zdalny dostęp jako transfer | WYM-58; N-15 |
-| ZR-40 raport Cookie Banner Taskforce | data przyjęcia | opcja odrzucenia na pierwszej warstwie, klasyfikacja „niezbędnych” | WYM-65 |
+| ZR-40 raport Cookie Banner Taskforce | data przyjęcia | opcja odrzucenia na pierwszej warstwie, klasyfikacja „niezbędnych”; **[R6]** kontrast i wyróżnienie przycisków | WYM-65; Q-45 |
 | ZR-41 Opinion 22/2024 (procesorzy i dalsi procesorzy) | data | wiedza o całym łańcuchu procesorów | WYM-40, WYM-43; Q-31 |
 | ZR-42 Guidelines 1/2024 (art. 6 ust. 1 lit. f) | **status: konsultacyjny** — czy przyjęto wersję ostateczną | test trzech kroków w LIA (`09` § 4) — samodzielnym źródłem jest ZR-63 | WYM-12; Q-02, Q-06 |
 | ZR-43 Guidelines 01/2025 (pseudonimizacja) | **status: konsultacyjny** | ocena pseudonimizacji audytu i telemetrii | WYM-38; Q-23, Q-30 |
@@ -516,6 +525,7 @@ numeru, daty i statusu, zanim teza trafi do dokumentu klienta. Kolumna
 | ZR-21 decyzje Prezesa UODO: ClickQuickNow (2019), Morele.net (2019), Virgin Mobile Polska (2020) | sygnatury, daty, prawomocność | utrudnianie wycofania zgody; środki z art. 32; regularne testowanie | WYM-14, WYM-51, WYM-66; Q-07 |
 | decyzje wskazane przez R2 (`03` N-ZR-12): Bisnode Polska (2019, art. 14 przy danych z rejestrów publicznych), Fortum Marketing and Sales Polska (2022, weryfikacja procesora, art. 25, 28, 32) | istnienie, tezy, prawomocność — **nie cytować bez odczytu** | obowiązek informacyjny wobec JDG z rejestrów; nadzór nad procesorami | WYM-20, WYM-07, WYM-40, WYM-31 |
 | poradniki UODO, formularz zgłaszania naruszeń | tytuły i wersje (model ich nie zna pewnie) | procedura naruszeń | WYM-52 |
+| **[R6]** poradniki i stanowiska Prezesa UODO: privacy by design/default; zgoda; administrator a podmiot przetwarzający i umowa powierzenia; prawo dostępu; usuwanie i okresy przechowywania | tytuły, daty, wersje — odszukać i odczytać (egress do uodo.gov.pl zablokowany w tej sesji) | uwzględnianie ochrony danych w fazie projektowania i domyślne ustawienia; zgoda na analitykę i marketing; role FF-A / FF-P i treść umowy powierzenia; zakres kopii z art. 15; usuwanie i harmonogram retencji | WYM-30, WYM-13, WYM-11, WYM-01, WYM-41, WYM-20, WYM-24, WYM-71; Q-01, Q-03, Q-12, Q-15, Q-16, Q-19, Q-20, Q-21 |
 
 **F. Orzecznictwo TSUE, Sądu UE i sądów krajowych**
 
@@ -608,7 +618,7 @@ blokujących), uwagi naniesione 13.10.2026.
 | § 9 | procedura naruszeń: źródła wykrycia, triage, tory FF-A i FF-P, pola rejestru | progi oceny ryzyka, termin zawiadomienia klienta | dyżur (N-06), podmiot (N-01) | Q-36, Q-37 |
 | § 10 | harmonogram retencji — 32 pozycje (**[R5b]** dodana RT-KSEF — poświadczenia i sesje KSeF), wszystkie „do podjęcia” | okres, początek biegu i podstawa dla każdej pozycji | fakty N-16, N-18, N-20, N-24 | Q-19 – Q-27 |
 | § 11 | wymagania treści polityki (20 pozycji W-NN, 1 spełniona), strony RODO (11 pozycji), informacji w punktach zbierania (9) | kompletność wobec art. 13–14; brzmienie | podmiot (N-01) i decyzje z §§ 1, 4, 10, 12 | Q-08, Q-09, Q-10 |
-| § 12 | specyfikacja zgody na technologie w przeglądarce (13 wymagań z kryteriami akceptacji) i proponowana klasyfikacja technologii (§ 12.3) | klasyfikację „niezbędnych”, zachowanie przy braku zgody, dowód zgody | — | Q-12 – Q-15 |
+| § 12 | specyfikacja zgody na technologie w przeglądarce (13 wymagań z kryteriami akceptacji) i proponowana klasyfikacja technologii (§ 12.3) | klasyfikację „niezbędnych”, zachowanie przy braku zgody, dowód zgody; **[R6]** kontrast przycisków banera | — | Q-12 – Q-15, Q-45 |
 | § 13 | nieprzygotowane: ocena obowiązku IOD, upoważnienia, zobowiązania do poufności i szkolenia, rejestr umów z dostawcami, pełna DPIA funkcji AI | czy są potrzebne i w jakiej formie | N-03 (czy istnieją poza repo) | Q-34, Q-38, Q-39 |
 
 ### 4.4. Proponowana kolejność review
@@ -617,8 +627,9 @@ Najpierw pytania P1 (22), bo od nich zależą dokumenty publiczne, umowa
 z klientem i decyzje przed pierwszym klientem: Q-09, Q-19, Q-20, Q-21,
 Q-37 (ryzyko obecne wysokie albo możliwe naruszenie); następnie Q-01,
 Q-03, Q-04, Q-07, Q-08, Q-10, Q-12, Q-13, Q-18, Q-25, Q-28, Q-31, Q-34,
-Q-35, Q-36, Q-38, Q-40. Potem P2 (17): Q-02, Q-06, Q-11, Q-14, Q-15,
-Q-16, Q-22, Q-23, Q-24, Q-26, Q-27, Q-29, Q-30, Q-32, Q-33, Q-39, Q-41.
+Q-35, Q-36, Q-38, Q-40. Potem P2 (18 **[R6]**): Q-02, Q-06, Q-11, Q-14, Q-15,
+Q-16, Q-22, Q-23, Q-24, Q-26, Q-27, Q-29, Q-30, Q-32, Q-33, Q-39, Q-41,
+Q-45 **[R6]**.
 Na końcu P3 (5): Q-05, Q-17, Q-42, Q-43, Q-44. Równolegle — potwierdzenie
 źródeł z § 4.2, zaczynając od grup B (PKE) i C (okresy przechowywania).
 
@@ -765,7 +776,7 @@ E-30, E-37, E-39) — pełny podział „od razu / czeka” — `07` § 2.
   § 13–14 oraz wyszukanie „do review” w całym pliku; `07` § 0–3
   (linie 1–300: zasady, fale, zależności, przegląd etapów E-00 – E-79,
   karta E-00 z D-01 – D-15) — stan z ok. 12:49 UTC.
-- Recenzje (scratchpad): nagłówki wszystkich czterech plików; `R1.md`
+- Recenzje (`recenzje/`): nagłówki wszystkich czterech plików; `R1.md`
   § 7–8, `R2.md` § 8–9, `R3.md` § 8, `R4.md` § 9–10.
 
 **Sprawdziłem w repo (kod `3e5e00d`, 13.10.2026):**
@@ -816,3 +827,4 @@ każdą uwagę zweryfikowałem przed naniesieniem:
 | Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
 |---|---|---|---|---|---|---|
 | R5b — niezależny agent-recenzent (grupa: `08` + `09`) | 13.10.2026 | zatwierdzony z uwagami (42 kontrole punktowe dla `08` i `09`: 35 potwierdzonych, 6 częściowych, 1 obalona co do trybu; żaden wniosek główny nie upadł) | 10 uwag do tego pliku: R5b-U01 (istotna), R5b-U02 – U10 (drobne; U05 wspólna z `09`); plus konsekwencja R5b-U12 (§ 4.3 — liczba pozycji `09` § 10) | wszystkie 10 — R5b-U01, U02, U03, U04, U05, U06, U07, U08, U09, U10 oraz konsekwencja U12; naniesione przez redaktora poprawek 13.10.2026 (miejsca oznaczone **[R5b]**). Doprecyzowania redaktora: U01 — wątek PostHog był w `03` ZR-68 jako zastosowanie, ale bez pytania; liczniki pozycji źródłowych przeliczone (134 N, 103 Q) bez zmiany liczby N i Q; U08 pkt (2) — propozycje przeniesione bezpośrednio do `07` E-00 (D-06, D-08), a § 2.8 uzupełniony o D-16 z `07` | — | `recenzje/R5b.md` (streszczenie w `10-REVIEW.md`) |
+| R6a/R6b — niezależni krytycy kompletności | 13.10.2026 | kompletny z uwagami | R6a-U04 (ten wpis), R6a-U05 (§ 4.2 E: wiersz „poradniki i stanowiska Prezesa UODO” z WYM i Q; N-38 rozszerzone), R6a-U08 (wariant minimalny: „`07` D-NN” w § 2.8 i § 3.11), R6b-U07 (nowe Q-45 — kontrast przycisków banera; liczby, indeks § 3.10, § 3.11, § 4.1, § 4.2, § 4.3, § 4.4) | przyjęte (naniesione przez redaktora R6 13.10.2026) | R6a-U08 wariant docelowy (DEC-NN) — jak w `07` | `recenzje/R6a.md`, `recenzje/R6b.md` |

@@ -13,6 +13,9 @@
 ## 0. Konwencje
 
 - Stany: **potwierdzone / częściowe / brak / niezweryfikowane / nie dotyczy**.
+- **[R6] Pole „Stan” w ustaleniu** opisuje stan wymagania, którego dotyczy;
+  pewność ustalenia (kod / runtime / pomiar operatora) — w nawiasie.
+  Wiążący stan wymagania jest w macierzy `05` (R6a-U02).
 - Klasy: **P** obowiązek prawny, **O** interpretacja organu (EROD, UODO),
   **S** kryterium SOC 2, **I** praktyka inżynierska.
 - **Projekt kontroli** = istnieje dokument, kod albo konfiguracja.
@@ -77,7 +80,7 @@ cytowane w kolumnie „Uwagi”.
 | Przegląd dostępów (operatorzy aplikacji, SSH, Coolify, GitHub, panele dostawców) | nie znaleziono | S (CC6.2, CC6.3) [NZ]; art. 32 (P) [NZ] | — | **brak (nie znaleziono)** | `git grep -iE` fraz „przegląd dostęp”, „access review”, „recertyfik” — 0 trafień. **[R4]** Najbliższy artefakt to jednorazowy rejestr ręcznego rozliczenia 89 pozycji (z 305 zapytań kodu z kluczem `service_role`) z 16.09.2026 (`docs/security/audyt/service-role-review-20260916.json`, opis `docs/security/FAZA-03-IZOLACJA-FIRM-I-SERVICE-ROLE.md:11`) — przegląd uprawnień kodu, nie kont osób; stan wiersza bez zmian (brak) |
 | Lista operatorów aplikacji | zmienna `ADMIN_EMAILS` (`lib/auth/admin-guard.ts:9-15`, `.env.example:265`) | kto ma dostęp `service_role` między firmami | projekt | **niezweryfikowane** | wartość tylko w konfiguracji produkcji (poza repo); zmiana listy nie zostawia śladu w repo ani w `audit_logs` |
 | Dostęp do repozytorium i bramki zmian | `.github/CODEOWNERS`, `agent-guard.yml` | kontrola zmian wrażliwych ścieżek | projekt + działanie (reguły z API, § 3) | **częściowe** | to kontrola zmian, nie przegląd dostępu; listy współpracowników nie odczytano (proxy 403) |
-| Konta dostawców | [PR225] `ownership.md:20-27` | — | deklaracja operatora 10.10 | **niezweryfikowane** | według odczytu UI: Sentry ma jednego członka, z którego korzysta druga osoba, i nieaktywne TOTP/passkey; MFA GitHub nieodczytane. Wspólne konto bez MFA wyklucza rozliczalność dostępu |
+| Konta dostawców | [PR225] `ownership.md:20-27` | — | deklaracja operatora 10.10 | **niezweryfikowane** | według odczytu UI **[R6]**: MFA na kontach dostawców telemetrii niewymuszone albo nieodczytane; jedno konto używane przez dwie osoby; MFA GitHub nieodczytane. Wspólne konto bez MFA wyklucza rozliczalność dostępu (szczegóły per konto celowo pominięte — repo publiczne) |
 | **[R4]** Upoważnienia do przetwarzania, zobowiązania do poufności, szkolenia | nie znaleziono (`git grep -nliE "upoważnieni\|upowaznieni\|poufnoś\|poufnos\|\bNDA\b\|szkoleni" -- docs AGENTS.md app` poza plikami audytu — trafienia tylko w ogólnych zdaniach `docs/security/PLAN-ODPORNOSCI-CYBER.md:9`, `docs/security/rto-rpo.md:140` i na stronach porównań `app/(marketing)/vs/*`; odczyt 13.10.2026) | art. 28 ust. 3 lit. b, art. 29, art. 32 ust. 4 (P) [NZ]; S (CC1.4, C1.1) [NZ] | — | **brak (nie znaleziono)** | dotyczy osób z dostępem `service_role`, SSH, Coolify i paneli dostawców oraz sesji agentów AI z dostępem do produkcji (`04-…` PRC-07); warunek zobowiązania z art. 28 ust. 3 lit. b w umowie powierzenia (DOW-01, DOW-20); szczegóły: DOW-23 |
 
 ### 1.5. Ślady audytowe
@@ -106,7 +109,7 @@ Opisane w § 2 (mechanizm, lista akcji, luki).
 |---|---|---|---|
 | 0001 RLS jako jedyne źródło izolacji | Accepted, 2026-01-15 | izolacja firm | RLS na 70/70 tabel `public` (`01-…` § 3); testy na bazie obejmują część tabel (§ 4.3) |
 | 0005 2FA natywne MFA Supabase | Accepted, 2026-04-08 | bezpieczeństwo kont | zgodne (`01-…` § 3) |
-| 0006 usunięcie konta z 14-dniowym okresem | Accepted, 2026-04-15 | art. 17 | **częściowo**: 14 dni i anonimizacja audytu zgodne (`lib/gdpr/deletion.ts:190-195`); deklaracja „audit_logs muszą zostać do audytu (też prawo)” (`0006-…:14`) sprzeczna z usuwaniem po 12 mies. (L2); deklaracja „anonimizujemy email u Stripe (`customer.update`)” (`0006-…:30`) bez pokrycia — **[R4]** `git grep -ni stripe lib/gdpr/` daje 2 trafienia, oba w komentarzach o blokadzie subskrypcji (`lib/gdpr/deletion-blockers.ts:8, 19`); żadnego wywołania API Stripe; jedyne `customers.update` to synchronizacja adresu (`lib/stripe/customer-email.ts:16`) (DOW-18). **[R4]** Druga rozbieżność: ADR zapowiada automatyczne anulowanie subskrypcji przy usunięciu (`0006-…:45-46`), a kod blokuje usunięcie konta jedynego właściciela z płatną subskrypcją (`lib/gdpr/deletion-blockers.ts`, test `gdpr-subscription-blocker.test.ts`) |
+| 0006 usunięcie konta z 14-dniowym okresem | Accepted, 2026-04-15 | art. 17 | **częściowo**: 14 dni i „anonimizacja” audytu zgodne z ADR (`lib/gdpr/deletion.ts:190-195`; w istocie pseudonimizacja — `05` WYM-38 **[R6]**); deklaracja „audit_logs muszą zostać do audytu (też prawo)” (`0006-…:14`) sprzeczna z usuwaniem po 12 mies. (L2); deklaracja „anonimizujemy email u Stripe (`customer.update`)” (`0006-…:30`) bez pokrycia — **[R4]** `git grep -ni stripe lib/gdpr/` daje 2 trafienia, oba w komentarzach o blokadzie subskrypcji (`lib/gdpr/deletion-blockers.ts:8, 19`); żadnego wywołania API Stripe; jedyne `customers.update` to synchronizacja adresu (`lib/stripe/customer-email.ts:16`) (DOW-18). **[R4]** Druga rozbieżność: ADR zapowiada automatyczne anulowanie subskrypcji przy usunięciu (`0006-…:45-46`), a kod blokuje usunięcie konta jedynego właściciela z płatną subskrypcją (`lib/gdpr/deletion-blockers.ts`, test `gdpr-subscription-blocker.test.ts`) |
 | 0007 kopie „free tier first” | Accepted, faza 2 zastąpiona przez 0009 | dostępność, odtwarzanie | historyczne |
 | 0009 `pg_dump` na hoście bazy i Storage Box | **Proposed** (`:3`), 2026-10-01 | kopie poza hostem | niewdrożone (Storage Box „czeka na zakup”, `backup-restore.md` § 1); [PR225] decyzja 07.10 o innej lokalizacji, niewdrożona |
 
@@ -177,14 +180,14 @@ modułem, a akcje admina „wymuś wylogowanie” i „reset hasła” są wył�
 |---|---|---|---|
 | L1 | Wykonanie usunięcia konta (RODO) nie trafia do `audit_logs`; stan zapisuje tylko `gdpr_deletion_requests.status/executed_at` | `lib/gdpr/deletion.ts:196-207` (zmiana statusu); brak `logAudit*` w `lib/gdpr/` (`grep -n "logAudit\|audit" lib/gdpr/*.ts` — tylko odczyt i RPC anonimizacji) i w `lib/jobs/runners/gdpr-process-deletions.ts` | dowód realizacji żądania z art. 17 [NZ] zależy od wiersza w tabeli żądań; audyt ma tylko „zażądano” i „anulowano” |
 | L2 | Retencja 12 miesięcy dla wszystkich wpisów, także finansowych i KSeF | `00052:53-86`, `cleanup-audit-logs.ts:19` | sprzeczne z komentarzem `00001:174`, z ADR 0006 (`:14`) i z przyjętą polityką [PR225] (`data-policy.md:61-62`); po roku znika ślad wysyłek do KSeF, zmian płatności oraz stan idempotencji powiadomień (§ 2.1) |
-| L3 | Anonimizacja zastępuje całe `metadata` wpisów osoby | `00052:105-115` | wpisy o wysyłce faktur tracą numer, status i kod błędu; do decyzji, czy to zamierzone (art. 17 ust. 3 lit. b i e [NZ]) |
+| L3 | Pseudonimizacja (funkcja `anonymize_user_audit_logs`) zastępuje całe `metadata` wpisów osoby **[R6-wer]** | `00052:105-115` | wpisy o wysyłce faktur tracą numer, status i kod błędu; do decyzji, czy to zamierzone (art. 17 ust. 3 lit. b i e [NZ]) |
 | L4 | Odczyty danych przez operatora nie są logowane | `git grep -l logAudit -- 'app/admin/**/page.tsx'` — pusto; widoki `/admin/users/[userId]`, `/admin/support`, `/admin/audit` czytają dane klientów kluczem `service_role` | brak śladu, kto i kiedy przeglądał dane osoby lub rozmowy wsparcia; sprzeczne z deklaracją `rodo/page.tsx:39-40` |
 | L5 | Akcje operatora zapisywane helperem „systemowym” | `app/admin/users/actions.ts:6,49,80,199`, `app/admin/ksef/actions.ts:8,170,201,346` używają `logAuditSystem` → `ip_address: null`, `user_agent: 'inngest-job'` (`log-system.ts:23-24`); tożsamość operatora tylko w `metadata.adminEmail`/`operator` | wpis wygląda jak zdarzenie joba; brak IP i klienta operatora |
 | L6 | Utracony zapis audytu nie alarmuje | `log.ts:162-167`, `log-system.ts:27-32` | brak dowodu kompletności śladu |
 | L7 | Brak niezmienności poza bazą | wyzwalacz `00052` jest jedyną barierą; według [PR225] brak pełnej kopii bazy poza hostem | przejęcie hosta bazy pozwala zmienić albo usunąć ślad bez wykrycia |
-| L8 | `metadata` zawiera adresy e-mail osób trzecich | księgowa: `components/settings/accountant-actions.ts:62-72`, `lib/accountant/load-accountant-portal.ts:84-92` (przy **każdym** wejściu do portalu, `user_id` puste); odbiorca faktury: `components/invoices/actions-detail.ts:522`; operator: `lib/ksef/duplicate-decision-notice.ts:166`, `app/admin/**` (`adminEmail`) | anonimizacja obejmuje tylko wpisy z `user_id` usuwanej osoby (`00052:105-115`), więc te adresy zostają do 12 miesięcy; minimalizacja (art. 5 ust. 1 lit. c [NZ]) — identyfikator dostępu wystarczyłby |
+| L8 | `metadata` zawiera adresy e-mail osób trzecich | księgowa: `components/settings/accountant-actions.ts:62-72`, `lib/accountant/load-accountant-portal.ts:84-92` (przy **każdym** wejściu do portalu, `user_id` puste); odbiorca faktury: `components/invoices/actions-detail.ts:522`; operator: `lib/ksef/duplicate-decision-notice.ts:166`, `app/admin/**` (`adminEmail`) | pseudonimizacja (funkcja `anonymize_user_audit_logs`) obejmuje tylko wpisy z `user_id` usuwanej osoby (`00052:105-115`), więc te adresy zostają do 12 miesięcy; minimalizacja (art. 5 ust. 1 lit. c [NZ]) — identyfikator dostępu wystarczyłby |
 | L9 | Wszyscy członkowie firmy widzą cały dziennik z adresami IP współpracowników | `00008:48-53`; `app/(dashboard)/settings/audit/page.tsx:35-38,98` | rola członka (np. pracownika) nie ogranicza wglądu w IP i e-maile z `metadata`; do decyzji, czy dziennik ma być tylko dla właściciela/administratora |
-| L10 **[R4]** | `details_json` poza anonimizacją | `00052:105-115` (czyści `metadata`, nie `details_json`); zapisy do `details_json`: `00131:121-136` (`ksef_send_audit`), `00148:537-545` (`invoice.ksef_duplicate_decided` z wolnym tekstem `note` i aktorem) | niskie–średnie: wolny tekst notatki decyzji i treść błędów (`previous_error`) zostają po usunięciu konta do 12 miesięcy; do decyzji, czy notatka decyzji ma być wolnym tekstem; treść na produkcji nieznana (N-DOW-10) |
+| L10 **[R4]** | `details_json` poza pseudonimizacją | `00052:105-115` (czyści `metadata`, nie `details_json`); zapisy do `details_json`: `00131:121-136` (`ksef_send_audit`), `00148:537-545` (`invoice.ksef_duplicate_decided` z wolnym tekstem `note` i aktorem) | niskie–średnie: wolny tekst notatki decyzji i treść błędów (`previous_error`) zostają po usunięciu konta do 12 miesięcy; do decyzji, czy notatka decyzji ma być wolnym tekstem; treść na produkcji nieznana (N-DOW-10) |
 
 Ślad audytowy jako **projekt kontroli** istnieje i jest szeroki. Dowodu
 **działania w czasie** (liczba wpisów na produkcji, przebiegi
@@ -417,7 +420,7 @@ oczekiwany wynik wymaga rozstrzygnięcia właściciela albo review prawnego.
 |---|---|---|---|---|---|
 | T-01 | `tests/unit/rodo-eksport-schemat.test.ts` | każda tabela z migracji, która ma kolumnę wskazującą osobę (`user_id`, `*_by_user_id`, `invited_by`, `email`, `accountant_email`, `buyer_pesel`…), jest w `lib/gdpr/data-collector.ts` albo na jawnej liście wyłączeń z uzasadnieniem; nowa migracja z taką kolumną bez wpisu = czerwony | jednostkowy (statyczny odczyt migracji) | nieznane — dziś pokrycie sprawdza lista zapisana w teście (`rodo-eksport-pelny.test.ts:90-120`) | eksport RODO; `A2-…` |
 | T-02 | `tests/rls-rodo-eksport.test.ts` | na lokalnej bazie: osoba A w dwóch firmach i osoba B; eksport A zawiera wiersze A z każdej sekcji, zero wierszy B, zero skrótów tokenów i zaszyfrowanych danych KSeF; przekroczenie limitu raportowane | RLS na bazie | nieznane | eksport RODO |
-| T-03 | `tests/rls-rodo-usuniecie-konta.test.ts` | po `executeGdprRequest`: brak użytkownika w `auth.users`; zero wierszy z jego `user_id` w tabelach osobowych (członkostwa, preferencje, push, kody MFA, rozmowy wsparcia…); wpisy `audit_logs` zanonimizowane; **[R4]** po anonimizacji wpisy osoby nie zawierają wolnego tekstu w `details_json` (albo udokumentowany wyjątek — L10); faktury zostają; status `executed`; **istnieje wpis audytu `gdpr.deletion_executed`** | RLS na bazie + runner | **czerwony** w części audytu (L1: brak zapisu) i `details_json` (L10) **[R4]** | usunięcie konta; DOW-06 |
+| T-03 | `tests/rls-rodo-usuniecie-konta.test.ts` | po `executeGdprRequest`: brak użytkownika w `auth.users`; zero wierszy z jego `user_id` w tabelach osobowych (członkostwa, preferencje, push, kody MFA, rozmowy wsparcia…); wpisy `audit_logs` bez `user_id`, IP, UA i `metadata` (pseudonimizacja, nie anonimizacja — `05` WYM-38) **[R6]**; **[R4]** po pseudonimizacji wpisy osoby nie zawierają wolnego tekstu w `details_json` (albo udokumentowany wyjątek — L10); faktury zostają; status `executed`; **istnieje wpis audytu `gdpr.deletion_executed`** | RLS na bazie + runner | **czerwony** w części audytu (L1: brak zapisu) i `details_json` (L10) **[R4]** | usunięcie konta; DOW-06 |
 | T-04 | `tests/rls-usuniecie-organizacji.test.ts` | firma z `hard_delete_at` w przeszłości: po przebiegu joba retencji dane firmy usunięte (poza fakturami w okresie obowiązkowej retencji), pliki firmy usunięte, wpis audytu | RLS na bazie + runner | **czerwony**: `hard_delete_at` ustawiają tylko `app/admin/users/actions.ts:173` i `components/settings/account-actions.ts:62`; żaden job go nie czyta (`git grep hard_delete_at -- lib` — 0) | usunięcie organizacji; DOW-17 |
 | T-05 | `tests/rls-retencja-faktur-wyzwalacz.test.ts` | runner `retention-delete` dla faktury wysłanej do KSeF po okresie retencji kończy się zgodnie z przyjętą regułą (usunięcie albo jawny hold z komunikatem i ścieżką operatora) — nie cichym błędem | RLS na bazie | **czerwony** wg R1: `b_guard_invoice_pending_content` (`00132…sql:63-73`) blokuje `DELETE` także dla `service_role` | retencja; zależy od decyzji |
 | T-06 | `tests/unit/rodo-usuniecie-pliki.test.ts` | przy usunięciu konta i organizacji obiekty pod prefiksem firmy w MinIO (zdjęcia wydatków, pliki OCR, eksporty, cache PDF, XML/UPO poza retencją) są usuwane albo zachowane według reguły; magazyn S3 w pamięci; asercja na liście obiektów po przebiegu | jednostkowy (opcjonalnie integracyjny z kontenerem MinIO w CI) | **czerwony**: `lib/gdpr/*` nie odwołuje się do magazynu (`git grep -n "r2\|storage" -- lib/gdpr` — 0) | pliki MinIO; DOW-17 |
@@ -553,8 +556,8 @@ dla gotowości do badania (SOC-01).
 | DOW-15 | Testy RLS nie obejmują 14 tabel z danymi osobowymi | częściowe | średnie | I, S |
 | DOW-16 | 49 plików testów prywatności zielonych (638/638) — dowód logiki, nie produkcji | potwierdzone (projekt) | — | I |
 | DOW-17 | Usunięcie organizacji i plików bez wykonawcy i bez testów | brak | wysokie | P |
-| DOW-18 | ADR 0006 deklaruje anonimizację w Stripe — brak w kodzie | brak | średnie | P |
-| DOW-19 | Publiczny plik audytu z adresem hosta i ścieżką klucza | potwierdzone (luka) | średnie | I, S |
+| DOW-18 | ADR 0006 deklaruje anonimizację w Stripe — brak w kodzie | brak (kod) **[R6]** | średnie | P |
+| DOW-19 | Publiczny plik audytu z adresem hosta i ścieżką klucza | brak (pewność: repo) **[R6]** | średnie | I, S |
 | DOW-20 | Brak DPIA (screening), LIA i TIA | brak | wysokie | P, O |
 | DOW-21 | Brak raportów i certyfikatów; brak zebranych raportów dostawców | brak (nie znaleziono) | niskie | S |
 | DOW-22 | Odtwarzanie: jedna deklarowana próba (sama baza), brak kopii poza hostem | częściowe | **wysokie** **[R4]** (było: średnie; jak SOC-21, SOC-22) | P, S |
@@ -639,7 +642,7 @@ dla gotowości do badania (SOC-01).
 - **Stan:** brak (nie znaleziono zapisów).
 - **Dowód:** § 1.4: lista operatorów tylko w `ADMIN_EMAILS`
   (`lib/auth/admin-guard.ts:9-15`); [PR225] `ownership.md:20-27` —
-  wspólne konto Sentry bez aktywnego TOTP/passkey, MFA GitHub
+  **[R6]** MFA na kontach dostawców telemetrii niewymuszone albo nieodczytane; jedno konto używane przez dwie osoby, MFA GitHub
   nieodczytane; listy współpracowników repo nie odczytano (proxy 403).
 - **Luka:** nikt nie potwierdza okresowo, kto ma dostęp do `service_role`,
   SSH, Coolify, repo i paneli dostawców; konto współdzielone uniemożliwia
@@ -671,7 +674,7 @@ dla gotowości do badania (SOC-01).
 - **Dowód:** L2; `lib/ksef/duplicate-decision-notice.ts:6-7,88-93,153-170`.
 - **Luka:** 12 miesięcy dla wszystkich akcji, wbrew ADR 0006 (`:14`)
   i [PR225] `data-policy.md:61-62`; idempotencja powiadomień o duplikacie
-  KSeF zależy od wpisu, który cron albo anonimizacja usuwa.
+  KSeF zależy od `metadata` wpisu, które cron usuwa razem z wpisem, a pseudonimizacja nadpisuje **[R6-wer]**.
 - **Ryzyko:** średnie — po roku brak śladu operacji finansowych i KSeF;
   możliwe ponowne powiadomienie klienta.
 - **Rekomendacja:** klasy retencji audytu (dostęp/admin vs finansowe);
@@ -800,7 +803,7 @@ dla gotowości do badania (SOC-01).
 ### DOW-18 — Anonimizacja w Stripe zadeklarowana, niezaimplementowana
 
 - **Klasa:** P (art. 17, art. 19 [NZ]).
-- **Stan:** brak.
+- **Stan:** brak (kod) **[R6]**.
 - **Dowód:** `docs/adr/0006-gdpr-14d-cooling-off.md:30` („Stripe customer —
   anonimizujemy email u Stripe”); **[R4]** `git grep -ni stripe lib/gdpr/`
   — 2 trafienia, oba w komentarzach o blokadzie subskrypcji
@@ -818,7 +821,7 @@ dla gotowości do badania (SOC-01).
 ### DOW-19 — Publiczny plik audytu ujawnia adres hosta bazy
 
 - **Klasa:** I; S (CC6.1 [NZ]).
-- **Stan:** potwierdzone (luka).
+- **Stan:** brak (pewność: repo) **[R6]**.
 - **Dowód:** `docs/security/audyt/wynik-00-adres-bazy.txt:1` zawiera adres
   hosta bazy i ścieżkę lokalnego klucza z nazwą konta (treści nie
   powtarzamy).
@@ -917,7 +920,7 @@ nowszym kodzie (`01-…` § 2).
 | P-02 | Czy przy danych klientów spełnione kryteria WP248 (dane finansowe, modele językowe, łączenie zbiorów) wymagają DPIA po stronie klienta, a FaktFlow powinien przeprowadzić dobrowolną DPIA dla funkcji z modelami językowymi? Czy któraś operacja mieści się w wykazie Prezesa UODO? | § 6.1, DOW-20 |
 | P-03 | Jaki termin i treść powiadomienia klienta-administratora o naruszeniu przyjąć w umowie powierzenia, skoro strona RODO obiecuje 72 h „zgodnie z art. 33”? | DOW-03, `rodo/page.tsx:63-64` |
 | P-04 | Czy FaktFlow musi wyznaczyć IOD (art. 37), skoro runbooki odwołują się do „DPO”? | DOW-03 |
-| P-05 | Czy wpisy audytu wysyłek do KSeF i operacji płatniczych mogą być usuwane po 12 miesiącach, czy podlegają dłuższej retencji (np. jako dowód rozliczeń podatkowych)? Czy anonimizacja może usuwać całe `metadata`? | DOW-07, L2, L3 |
+| P-05 | Czy wpisy audytu wysyłek do KSeF i operacji płatniczych mogą być usuwane po 12 miesiącach, czy podlegają dłuższej retencji (np. jako dowód rozliczeń podatkowych)? Czy pseudonimizacja (funkcja `anonymize_user_audit_logs`) może nadpisywać całe `metadata`? | DOW-07, L2, L3 |
 | P-06 | Czy rejestrowanie e-maila księgowej przy każdym wejściu do portalu i e-maila odbiorcy faktury w audycie ma podstawę, czy wystarczy identyfikator? | DOW-09 |
 | P-07 | Czy dane klienta w Stripe po usunięciu konta należy anonimizować, czy zachować z powodu obowiązków rachunkowych? | DOW-18 |
 | P-08 | Czy maile sekwencji próbnej i newsletter mogą opierać się na uzasadnionym interesie, czy wymagają zgody na komunikację elektroniczną według Prawa komunikacji elektronicznej? | § 6.2 |
@@ -987,3 +990,4 @@ nowszym kodzie (`01-…` § 2).
 | Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
 |---|---|---|---|---|---|---|
 | R4 — niezależny agent-recenzent (grupa: `A3` + `06`) | 13.10.2026 | zatwierdzony z uwagami (27 z 32 kontroli punktowych potwierdzonych, 0 obalonych wniosków; przebieg testów odtworzony 49/49, 638/638) | 15 uwag do tego pliku: R4-U01 … R4-U13 (3 istotne: U01–U03; 10 drobnych) oraz wspólne R4-U16 (istotna, ryzyka względem `06`) i R4-U30 (drobna, wersja PR #225) | wszystkie 15 — R4-U01, U02, U03, U04, U05, U06, U07, U08, U09, U10, U11, U12, U13, U16, U30; naniesione przez redaktora poprawek 13.10.2026 po sprawdzeniu w kodzie, historii git i [PR225] (wyniki w § 10); trzy wskazane testy uruchomione (przebieg 3, § 4.2); nowe: DOW-23, L10, N-DOW-09…11, P-10…P-12; ryzyka DOW-05 i DOW-22 podniesione do „wysokie” | częściowo: R4-U07 — liczby 87 przypadków RLS nie przyjęto jako jedynej (zależy od wzorca: 83 dla `it(`/`test(`, 91 z wariantami; zapisano obie z komendami); R4-U12 — teza „odbiorca w `:521`” nietrafna (`actions-detail.ts:522` to `metadata: { recipient }`), więc L8 zostaje `:522`, a § 2.2 dostał zakres `:516-522` | `recenzje/R4.md` (streszczenie w `10-REVIEW.md`) |
+| R6a/R6b — niezależni krytycy kompletności | 13.10.2026 | kompletny z uwagami | R6a-U02 (wariant pełny: (b) konwencja w § 0; (c) DOW-19 „brak (pewność: repo)” — R6a wskazał DOW-18, ale cytat „potwierdzone (luka)” i linia dotyczą DOW-19; DOW-18 „brak (kod)”), R6a-U04 (ten wpis), R6b-U11 (T-03 i ADR 0006: pseudonimizacja, nie anonimizacja), R6b-U12 (propagacja uogólnienia: § 1.4 i DOW-05) | przyjęte (naniesione przez redaktora R6 13.10.2026) | — | `recenzje/R6a.md`, `recenzje/R6b.md` |

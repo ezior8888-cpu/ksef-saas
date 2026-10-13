@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| Stan | **synteza gotowa; poprawki po końcowym review kompletności (R6a, R6b) w toku** — wynik w `10-REVIEW.md` § 4; zmiany w aplikacji nie zostały rozpoczęte i czekają na osobny prompt wykonawczy |
+| Stan | **etap badawczy zakończony** (wynik końcowego review kompletności: `10-REVIEW.md` § 4); zmiany w aplikacji nie zostały rozpoczęte i czekają na osobny prompt wykonawczy |
 | Wersja kodu | `origin/main` @ `3e5e00d` (dryf wersji po zamrożeniu: `01` § 2) |
 | Okres prac | 7.10–13.10.2026 (przerwy przez limity użycia API) |
 | Autor tego pliku | koordynator — streszczenie; wiążąca jest treść plików źródłowych i ich recenzji |
-| Kontrola | każdy etap po niezależnej recenzji (`10-REVIEW.md`, `recenzje/`); całość po review kompletności R6a/R6b |
+| Kontrola | każdy etap po niezależnej recenzji (`10-REVIEW.md`, `recenzje/`); całość po review kompletności R6a/R6b i weryfikacji naniesienia uwag |
 
 Audyt nie jest opinią prawną ani raportem SOC 2. Przepisy, wytyczne
 i kryteria AICPA opisano według wiedzy modelu, bo dostęp do źródeł
@@ -30,10 +30,10 @@ pierwotnych był w tej sesji zablokowany. Każda taka pozycja ma oznaczenie
 | `10-REVIEW.md` | dziennik bramek: autor, recenzent, werdykt, kontrole, uwagi, naniesienie | dowód niezależnych recenzji |
 | `A1`–`A4` | ustalenia szczegółowe: minimalizacja i zgody (A1), prawa osób, retencja i AI (A2), dowody i testy (A3), test runtime cookies i sieci (A4) | materiał dowodowy dla 05 |
 | `narzedzia/` | powtarzalny test przeglądarki (Playwright, ruch zewnętrzny przerywany) i jego wynik bez wartości ciasteczek | dowód z pkt 5.C |
-| `recenzje/` | pełne recenzje R1–R6 i brief agentów | — |
+| `recenzje/` | pełne recenzje R1–R6, raport weryfikacji naniesienia R6 i brief agentów | — |
 
 **Stany.** Stan wymagania wiąże wyłącznie w `05`. Pole „Stan” w plikach
-ustaleń (`02`, `04`, `A1`–`A4`, `06`) opisuje stan wymagania, którego
+ustaleń (`02`, `04`, `A1`–`A4`) opisuje stan wymagania, którego
 dotyczy ustalenie, a pewność dowodu (kod / runtime / pomiar operatora)
 podaje w nawiasie. Oznaczenia „D-NN” mają trzy znaczenia zależnie od pliku:
 kategorie danych w `02`, deklaracje stron prawnych w `A1`/`09`, decyzje
@@ -179,3 +179,9 @@ Etap badawczy kończy się na tym katalogu. Wdrożenie wymaga osobnego
 prompta wykonawczego; proponowany start: E-00 (decyzje) równolegle
 z E-01–E-04, zgodnie z `07` § 1.4. Przed publikacją jakichkolwiek treści
 prawnych — końcowe review prawnika na podstawie `08` § 4 i projektów `09`.
+
+## Historia recenzji
+
+| Recenzent | Data | Werdykt | Uwagi | Przyjęte | Odrzucone | Plik recenzji |
+|---|---|---|---|---|---|---|
+| R6a, R6b — niezależni krytycy kompletności | 13.10.2026 | kompletny z uwagami | dotyczące tego pliku: R6a-U02 (wariant minimalny — zdanie o stanach), R6a-U03, R6a-U04, R6a-U08; R6b-U01–U04; weryfikator: B-01, B-03, N-01, N-02 | wszystkie — naniósł koordynator (autor pliku; odstępstwo opisane w `10-REVIEW.md` § 5), wierność sprawdził niezależny weryfikator | — | `recenzje/R6a.md`, `recenzje/R6b.md`, `recenzje/R6-weryfikacja.md` |
