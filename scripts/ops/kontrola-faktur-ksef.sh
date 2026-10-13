@@ -46,6 +46,11 @@
 #      i decyzje z audytu, decyzje known-number do sprawdzenia dokumentu Y,
 #      szkice wycofane (wpis number_taken) wg rodzaju
 #  11. ostatnie migracje w schema_migrations
+#  12. dziennik prób wysyłki (A5, 00150): zakres dziennika, wykonania z 24 h
+#      wg stanu, błędy, odmowy przed kolejką i przerwane (`started` bez
+#      wyniku po 20 min) wg kodu ze stanem faktur teraz, lista ostatnich;
+#      w logach wpisy `ksef.send.attempt` i nieudane zapisy dziennika
+#      (progi jak /admin/centrum/bledy; bez 00150 jeden komunikat)
 #
 # Błąd jednego zapytania nie przerywa reszty (np. kolumna sprzed migracji).
 # ════════════════════════════════════════════════════════════════
@@ -253,5 +258,41 @@ sql "(g) szkice z wpisem number_taken (wycofane): rodzaj | skąd (decyzja klient
 section "11. db-1: ostatnie migracje"
 sql "schema_migrations" \
   "SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5"
+
+section "12. db-1: dziennik prób wysyłki (A5, 00150) — błędy, odmowy i przerwane z 24 h"
+# Progi jak /admin/centrum/bledy (lib/admin/centrum/send-errors.ts): przerwane
+# = `started` bez wyniku po 20 min (worker padł albo zapis wyniku się nie
+# udał), „utknęła” = `sending` bez znacznika przejęcia albo starsze niż 30 min
+# (I2). Bez tabeli jeden komunikat zamiast serii „zapytanie nieudane”;
+# nieudana sonda to „nie wiadomo”, nigdy „pusty dziennik”.
+LEDGER=$("${SSH[@]}" "root@$DB" \
+  "docker exec $PGC psql -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c \"SELECT to_regclass('public.ksef_send_attempts') IS NOT NULL\"") \
+  || LEDGER=""
+case "$LEDGER" in
+  t)
+    sql "zakres dziennika: od | ostatni wpis | wierszy z 24 h (puste = dziennik pusty; stary ostatni wpis przy wysyłkach z sekcji 4 = dziennik nie pisze, patrz logi niżej)" \
+      "SELECT coalesce((SELECT min(started_at) FROM ksef_send_attempts)::text, '(pusty)') AS od, coalesce((SELECT max(started_at) FROM ksef_send_attempts)::text, '-') AS ostatni_wpis, (SELECT count(*) FROM ksef_send_attempts WHERE started_at > now() - interval '24 hours') AS z_24h"
+    sql "wykonania z 24 h wg stanu: stan | prób | faktur (przerwane = started bez wyniku po 20 min; refused = odmowa przed kolejką, poza skutecznością wysyłki)" \
+      "SELECT CASE WHEN status='started' AND finished_at IS NULL AND started_at < now() - interval '20 minutes' THEN 'przerwane' ELSE status END AS stan, count(*), count(DISTINCT invoice_id) AS faktur FROM ksef_send_attempts WHERE started_at > now() - interval '24 hours' GROUP BY 1 ORDER BY 1"
+    sql "błędy, odmowy i przerwane z 24 h wg kodu: stan | etap | kod | klasa | HTTP | kod KSeF | prób | faktur | firm | faktury teraz: przyjęte | z błędem | utknęły (operator) | w toku | inne (szkic) | ostatnio" \
+      "SELECT stan, etap, kod, klasa, http, kod_ksef, sum(prob) AS prob, count(*) AS faktur, count(DISTINCT tenant_id) AS firm, count(*) FILTER (WHERE teraz='przyjeta') AS przyjete, count(*) FILTER (WHERE teraz='z bledem') AS z_bledem, count(*) FILTER (WHERE teraz='utknela') AS utknely, count(*) FILTER (WHERE teraz='w toku') AS w_toku, count(*) FILTER (WHERE teraz='inny') AS inne, max(ostatnio) AS ostatnio FROM (SELECT CASE WHEN a.status='started' AND a.finished_at IS NULL AND a.started_at < now() - interval '20 minutes' THEN 'przerwane' ELSE a.status END AS stan, a.stage AS etap, coalesce(a.error_code,'-') AS kod, coalesce(a.error_class,'-') AS klasa, coalesce(a.ksef_http_status::text,'-') AS http, coalesce(a.ksef_code::text,'-') AS kod_ksef, a.invoice_id, a.tenant_id, count(*) AS prob, max(a.started_at) AS ostatnio, CASE WHEN i.ksef_status='accepted' THEN 'przyjeta' WHEN i.ksef_status IN ('failed','rejected') THEN 'z bledem' WHEN i.ksef_status='sending' AND (i.submitted_to_ksef_at IS NULL OR i.submitted_to_ksef_at < now() - interval '30 minutes') THEN 'utknela' WHEN i.ksef_status IN ('queued','offline_queued','sending') THEN 'w toku' ELSE 'inny' END AS teraz FROM ksef_send_attempts a JOIN invoices i ON i.id = a.invoice_id WHERE a.started_at > now() - interval '24 hours' AND (a.status IN ('failed','refused') OR (a.status='started' AND a.finished_at IS NULL AND a.started_at < now() - interval '20 minutes')) GROUP BY 1,2,3,4,5,6,7,8,11) x GROUP BY 1,2,3,4,5,6 ORDER BY 7 DESC, 1, 3 LIMIT 40"
+    sql "ostatnie błędy, odmowy i przerwane z 24 h (20): kiedy | stan | etap | kod | HTTP | kod KSeF | faktura | numer | wykonanie | stan faktury teraz | treść (zamaskowana, 120 znaków)" \
+      "SELECT a.started_at, CASE WHEN a.status='started' AND a.finished_at IS NULL AND a.started_at < now() - interval '20 minutes' THEN 'przerwane' ELSE a.status END AS stan, a.stage, coalesce(a.error_code,'-') AS kod, coalesce(a.ksef_http_status::text,'-') AS http, coalesce(a.ksef_code::text,'-') AS kod_ksef, a.invoice_id, coalesce(i.internal_number,'-') AS numer, a.execution, coalesce(i.ksef_status::text,'(null)') AS teraz, left(replace(replace(coalesce(a.error_message,'-'), chr(10), ' '), chr(13), ' '), 120) AS tresc FROM ksef_send_attempts a JOIN invoices i ON i.id = a.invoice_id WHERE a.started_at > now() - interval '24 hours' AND (a.status IN ('failed','refused') OR (a.status='started' AND a.finished_at IS NULL AND a.started_at < now() - interval '20 minutes')) ORDER BY a.started_at DESC LIMIT 20"
+    ;;
+  f)
+    echo "  BRAK TABELI ksef_send_attempts — migracja 00150 (A5) niewgrana na db-1: dziennika prób nie ma, więc nie wiadomo, czy były błędy. Wgrywanie: AGENTS.md → „Wgrywanie migracji”; stan migracji: sekcja 11."
+    ;;
+  *)
+    echo "  (nie wiadomo: nie udało się sprawdzić tabeli ksef_send_attempts — sekcja pominięta; to NIE znaczy „brak błędów”)"
+    ;;
+esac
+# Zapis do dziennika jest fail-open: nieudany zapis nie zatrzymuje wysyłki, więc
+# pusty dziennik może znaczyć „nie pisze”. Liczniki z logów to rozstrzygają.
+printf -- '--- logi z 24 h (albo od startu kontenera): ksef.send.attempt = wyniki wykonań w workerze (porównaj z sumą succeeded/failed/waiting wyżej); zapis nieudany > 0 = dziennik niepełny (Sentry: „dziennik prób wysyłki — zapis nieudany”)\n'
+"${SSH[@]}" "root@$APP" \
+  "N=0; for C in \$(docker ps --format '{{.Names}}' | grep -E '^($WORKER_PREFIX|$APP_PREFIX)'); do N=1; \
+     echo \"  \$C: ksef.send.attempt \$(docker logs --since 24h \"\$C\" 2>&1 | grep -cF 'ksef.send.attempt'), zapis nieudany \$(docker logs --since 24h \"\$C\" 2>&1 | grep -cE 'Dziennik prób wysyłki KSeF: (zapis|opis porażki) nieudany|zapis odmowy przed kolejką nieudany')\"; \
+   done; [ \$N = 1 ] || echo '  (brak kontenerów aplikacji i workera)'" \
+  || echo "  (nie udało się odczytać logów)"
 
 printf '\nKoniec. Skrypt niczego nie zmienił.\n'
