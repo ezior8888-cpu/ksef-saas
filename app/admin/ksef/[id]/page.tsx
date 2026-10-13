@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 
 import { requireAdmin } from '@/lib/auth/admin-guard';
+import { listInvoiceAttempts } from '@/lib/admin/centrum/attempts';
+import { attemptMessage, effectiveStatus, STAGE_LABELS, STATUS_LABELS } from '@/lib/admin/centrum/send-errors';
 import { getInvoiceLifecycle } from '@/lib/admin/ksef-lifecycle';
 
 import { OperatorActions } from '../_components/operator-actions';
@@ -12,7 +14,7 @@ export const dynamic = 'force-dynamic';
 function when(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('pl-PL', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
 }
 
@@ -34,6 +36,8 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
   const { id } = await props.params;
   const data = await getInvoiceLifecycle(id);
   if (!data) notFound();
+  // A5 (00150): każde wykonanie joba wysyłki i odmowa przed kolejką — także porażki sprzed wysłania pliku.
+  const attempts = await listInvoiceAttempts(id);
   const { invoice, submissions, audit, openSent, evidence, resendFacts, environment, duplicateDecision, duplicateNotice } = data;
   // Chwila odczytu dla reguły 24 h „Przypomnij klientowi” — ta sama w renderze serwera i klienta.
   const now = new Date();
@@ -100,6 +104,62 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
           duplicateNotice={duplicateNotice}
           now={now}
         />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-semibold text-lg">
+          Próby wysyłki (dziennik prób)
+          {attempts.total !== null && attempts.total > attempts.rows.length
+            ? ` — ${attempts.rows.length} najnowszych z ${attempts.total}`
+            : ''}
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Każde wykonanie joba wysyłki i każda odmowa przed kolejką, także błędy sprzed wysłania pliku do KSeF.
+          Dziennik działa od migracji 00150 — wcześniejsze próby są tylko w historii niżej i w audycie.
+        </p>
+        {attempts.problem ? (
+          <p className="text-sm text-red-700 dark:text-red-400">{attempts.problem}</p>
+        ) : attempts.rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Brak wpisów w dzienniku prób.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-glass-border bg-foreground/3 backdrop-blur-glass">
+            <table className="w-full text-sm">
+              <thead className="border-b border-glass-border">
+                <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-2.5 font-medium">Start</th>
+                  <th className="px-4 py-2.5 font-medium">Rodzaj</th>
+                  <th className="px-4 py-2.5 font-medium">Etap</th>
+                  <th className="px-4 py-2.5 font-medium">Kod</th>
+                  <th className="px-4 py-2.5 font-medium">Wykonanie</th>
+                  <th className="px-4 py-2.5 font-medium">Komunikat</th>
+                  <th className="px-4 py-2.5 font-medium">Próba / job</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attempts.rows.map((a) => (
+                  <tr key={a.id} className="border-b border-glass-border last:border-0">
+                    <td className="px-4 py-2.5 text-xs tabular-nums">{when(a.startedAt)}</td>
+                    <td className="px-4 py-2.5 text-xs">
+                      {STATUS_LABELS[effectiveStatus(a, now)]}
+                      {a.result ? <div className="font-mono text-muted-foreground">{a.result}</div> : null}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs">{STAGE_LABELS[a.stage] ?? a.stage}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs">
+                      {a.errorCode ?? '—'}
+                      {a.httpStatus ? <div className="text-muted-foreground">HTTP {a.httpStatus}</div> : null}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs">{a.status === 'refused' ? '—' : `#${a.execution + 1}`}</td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground break-words">{attemptMessage(a, now) ?? ''}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs break-all">
+                      {a.sendAttemptId ? a.sendAttemptId.slice(0, 8) : '—'}
+                      {a.jobId ? <div className="text-muted-foreground">{a.jobId.slice(0, 8)}</div> : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="space-y-3">
