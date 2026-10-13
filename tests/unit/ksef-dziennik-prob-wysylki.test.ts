@@ -164,7 +164,7 @@ import { getRegisteredJobs } from '@/lib/jobs/registry';
 import { MAX_WAIT_RETRIES } from '@/lib/jobs/retry';
 import { wrapHandler } from '@/lib/jobs/run-job';
 import { runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
-import { withSendAttemptLedger } from '@/lib/ksef/send-attempt-ledger';
+import { sendAttemptMessage, withSendAttemptLedger } from '@/lib/ksef/send-attempt-ledger';
 import { KsefCredentialsError } from '@/lib/supabase/admin-queries';
 import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
 
@@ -238,6 +238,9 @@ describe('A5: wiersz dziennika dla porażki przed wysłaniem pliku', () => {
       retryable: false,
     });
     expect(rows()[0]!.finished_at).toEqual(expect.any(String));
+    // Jeden zegar (worker) dla startu i końca — porażka zapisu wyniku nie udaje padniętego workera.
+    expect(rows()[0]!.started_at).toEqual(expect.any(String));
+    expect(String(rows()[0]!.started_at) <= String(rows()[0]!.finished_at)).toBe(true);
   });
 
   it('XML niezgodny ze schematem: etap xml, kod XSD_INVALID, bez ponowień', async () => {
@@ -247,6 +250,19 @@ describe('A5: wiersz dziennika dla porażki przed wysłaniem pliku', () => {
 
     expect(rows()).toHaveLength(1);
     expect(rows()[0]).toMatchObject({ status: 'failed', stage: 'xml', error_code: 'XSD_INVALID', error_class: 'terminal', retryable: false });
+  });
+});
+
+describe('A5: treść klienta poza dziennikiem (brief §5, reguła 4)', () => {
+  it('kwoty, numer rachunku, NIP, VAT-UE i wartości w cudzysłowach są maskowane; sens komunikatu zostaje', () => {
+    const message = sendAttemptMessage(
+      'InvoiceValidationError: Suma pozycji 1 234,56 PLN różni się od P_15 1234.57; rachunek PL61 1090 1014 0000 0712 1981 2874; ' +
+        'nabywca 1234567890, VAT-UE PL5260250995; pole P_7 = "Usługa księgowa dla Jan Kowalski" i „Pracownia Testowa”',
+    );
+    expect(message).not.toMatch(/1 ?234|0712|1981|2874|1234567890|5260250995|Kowalski|Pracownia/);
+    expect(message).toContain('InvoiceValidationError');
+    expect(message).toContain('P_15');
+    expect(message).toContain('P_7');
   });
 });
 

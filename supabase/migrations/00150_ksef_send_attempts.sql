@@ -20,8 +20,9 @@
 --
 -- Zapis wyłącznie kluczem serwisowym (worker, akcja serwera po odmowie).
 -- RLS włączony bez polityk: klient i księgowy nie czytają (widok klienta
--- to osobna faza centrum). Treść błędu po `scrubTelemetryText` i bez NIP,
--- najwyżej 500 znaków (CHECK). Retencja: wiersze żyją z fakturą (CASCADE);
+-- to osobna faza centrum). Treść błędu bez danych klienta (`sendAttemptMessage`:
+-- `scrubTelemetryText`, maskowanie NIP, rachunków, kwot i wartości pól w
+-- cudzysłowach), najwyżej 500 znaków (CHECK). Retencja: wiersze żyją z fakturą (CASCADE);
 -- osobnego czyszczenia nie ma — `cleanup_old_audit_logs` tej tabeli nie
 -- dotyka (polityka F0: minimalny ślad błędu faktury 10 lat).
 --
