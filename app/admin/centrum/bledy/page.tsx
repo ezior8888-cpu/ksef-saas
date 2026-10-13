@@ -217,7 +217,7 @@ export default async function AdminSendErrorsPage(props: {
                   <th className={TH}>Faktura</th>
                   <th className={TH}>Firma</th>
                   <th className={TH}>Stan</th>
-                  <th className={TH}>Od</th>
+                  <th className={TH} title="I1: ostatnia zmiana wiersza faktury (updated_at); I2: znacznik przejęcia wysyłki">Od (zegar strażnika)</th>
                   <th className={TH}>Co dalej</th>
                 </tr>
               </thead>

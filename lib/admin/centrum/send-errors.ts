@@ -323,14 +323,15 @@ export const STUCK_INVARIANTS = ['I1', 'I2'] as const;
 export type StuckInvariant = (typeof STUCK_INVARIANTS)[number];
 
 /**
- * I1 dłużej w kolejce = automat nie zadziałał: 15 min do naruszenia I1
- * i dwa przebiegi crona cyklu życia (co 15 min) — jeden może trafić tuż przed progiem.
+ * I1 dłużej wg zegara strażnika (`updated_at`) = automat nie zadziałał:
+ * 15 min do naruszenia I1 i dwa przebiegi crona cyklu życia (co 15 min,
+ * `lib/jobs/queues.ts`) — jeden może trafić tuż przed progiem.
  */
 export const STUCK_AUTOMAT_DEADLINE_MS = 45 * 60 * 1000;
 
 export const STUCK_HINTS: Record<StuckInvariant, string> = {
-  I1: 'Cron cyklu życia (co 15 min) wycofa ją do szkicu albo oznaczy ENQUEUE_LOST. Po 45 min w kolejce automat nie zadziałał — sprawdź „strażnik cyklu życia” wyżej, potem kartę faktury.',
-  I2: 'Automat tylko alarmuje — rozstrzyga operator na karcie faktury (runbook ksef-error-codes).',
+  I1: 'Cron cyklu życia (co 15 min) wycofa ją do szkicu albo oznaczy ENQUEUE_LOST. Po 45 min wg zegara strażnika automat nie zadziałał: sprawdź chip „strażnik cyklu życia” wyżej i Sentry („Cykl życia: I1 nieobsłużone”). Karta faktury służy do diagnozy — dla queued nie ma na niej akcji; zgłoś fakturę Bartoszowi.',
+  I2: 'Automat tylko alarmuje. Wysyłka mogła dojść do KSeF — nie ponawiaj. Karta faktury nie ma akcji dla sending: sprawdź na niej znacznik przejęcia, dziennik prób i audyt, potem stan w KSeF; zgłoś fakturę Bartoszowi (procedury operatora dla I2 jeszcze nie ma).',
 };
 
 /** Wiersz naruszenia z numerem i firmą (`listLifecycleViolations`). */
@@ -349,7 +350,10 @@ export interface StuckInvoice {
   tenantName: string | null;
   internalNumber: string | null;
   ksefStatus: string | null;
-  /** I1: wejście do kolejki (`updated_at`), I2: znacznik przejęcia; `null` — brak znacznika. */
+  /**
+   * Zegar strażnika: I1 — `updated_at` (ostatnia zmiana wiersza, np. zapis PDF;
+   * nie zawsze wejście do kolejki), I2 — znacznik przejęcia; `null` — brak znacznika.
+   */
   since: string | null;
   /** I1 po terminie automatu (albo bez daty) — cron cyklu życia nie zadziałał. */
   automatOverdue: boolean;

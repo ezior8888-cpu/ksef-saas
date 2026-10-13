@@ -235,7 +235,7 @@ describe('utknięte w wysyłce teraz (strażnik I1/I2)', () => {
     expect(out.map((s) => [s.invariant, s.invoiceId])).toEqual([['I1', 'd'], ['I2', 'b']]);
   });
 
-  it('„od kiedy”: I1 — wejście do kolejki (updated_at), I2 — znacznik przejęcia; brak znacznika = null', () => {
+  it('zegar strażnika: I1 — updated_at (ostatnia zmiana wiersza), I2 — znacznik przejęcia; brak znacznika = null', () => {
     const out = stuckInvoices([
       v('I1', 'a', { updated_at: '2026-10-13T11:40:00.000Z' }),
       v('I2', 'b', { submitted_to_ksef_at: null, owner: null }),
@@ -253,15 +253,18 @@ describe('utknięte w wysyłce teraz (strażnik I1/I2)', () => {
     const at = (minAgo: number) => new Date(NOW.getTime() - minAgo * 60_000).toISOString();
     const out = stuckInvoices([
       v('I1', 'fresh', { updated_at: at(20) }),
+      // Próg zachowaniem w całym przedziale 20–45 min, nie tylko wartością stałej.
+      v('I1', 'mid', { updated_at: at(30) }),
+      v('I1', 'edge', { updated_at: at(44) }),
       v('I1', 'old', { updated_at: at(46) }),
       v('I1', 'nodate', {}),
       v('I2', 'i2', { submitted_to_ksef_at: at(600) }),
     ], NOW);
     expect(Object.fromEntries(out.map((s) => [s.invoiceId, s.automatOverdue]))).toEqual({
-      old: true, fresh: false, nodate: true, i2: false,
+      old: true, edge: false, mid: false, fresh: false, nodate: true, i2: false,
     });
     // Najpierw I1 od najstarszego (bez znacznika na górze), potem I2.
-    expect(out.map((s) => s.invoiceId)).toEqual(['nodate', 'old', 'fresh', 'i2']);
+    expect(out.map((s) => s.invoiceId)).toEqual(['nodate', 'old', 'edge', 'mid', 'fresh', 'i2']);
   });
 });
 
