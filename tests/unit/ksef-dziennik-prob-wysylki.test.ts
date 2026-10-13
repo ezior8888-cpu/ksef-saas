@@ -261,8 +261,9 @@ describe('A5: ponowienia nie nadpisują wcześniejszych porażek', () => {
       error_code: 'KSEF_UNAVAILABLE', error_class: 'transient', ksef_http_status: 503, retryable: true,
     });
     expect(second).toMatchObject({
-      job_id: JOB_2, execution: 1, send_attempt_id: ATTEMPT, status: 'succeeded', result: 'accepted', error_code: null,
+      job_id: JOB_2, execution: 1, send_attempt_id: ATTEMPT, status: 'succeeded', result: 'accepted',
     });
+    expect(second?.error_code ?? null).toBeNull();
   });
 });
 
