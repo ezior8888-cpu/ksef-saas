@@ -53,6 +53,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-decyzja-duplikatu.test.ts',
       // 00150 (A5): dziennik prób wysyłki — tylko serwis, bez DELETE, nie jest dowodem kontaktu.
       'tests/rls-dziennik-prob-wysylki.test.ts',
+      // Sekcja 12 skryptu kontroli (dziennik prób z 00150) liczy jak /admin/centrum/bledy.
+      'tests/rls-kontrola-dziennik-prob.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
