@@ -58,6 +58,16 @@ import { createAdminClient } from '@/lib/supabase/admin';
  * Pozostałe naruszenia (I2–I4, I9 oraz I5 przy fakturze w innym stanie)
  * tylko alarmuje monitor alarmów (`checkKsefLifecycleViolations`) — tam nie
  * ma bezpiecznej akcji automatu.
+ *
+ * Ślad decyzji (A5, luka #2): I5 po limicie prób, I5 poza failed/rejected
+ * i odmowa budowy zlecenia nie zmieniają wiersza faktury, więc w bazie nie
+ * zostaje po nich nic. Log nazywa fakturę (`invoiceId`, inwariant, powód),
+ * a zbiorczy Sentry niesie obok pełnych liczników do
+ * `LIFECYCLE_SENTRY_IDS_MAX` identyfikatorów na rodzaj (`<licznik>Ids`).
+ * Zbiorczy Sentry idzie, gdy coś czeka na człowieka (`OPERATOR_COUNTERS`);
+ * stany oczekiwane (I5 czeka dobę, rodzaj wstrzymany, data minęła, inna
+ * korekta w toku) zostają w logu. ENQUEUE_LOST i TRANSIENT_EXHAUSTED
+ * zostawiają kod na wierszu (audyt tych przejść: luka #1).
  */
 
 /** Nie częściej niż raz na godzinę dla jednej faktury. */
@@ -73,6 +83,8 @@ export const LIFECYCLE_RECONCILE_MIN_GAP_MS = 24 * 60 * 60 * 1000;
 /** …i najwyżej trzy razy w tygodniu — potem operator. */
 export const LIFECYCLE_RECONCILE_MAX = 3;
 export const LIFECYCLE_RECONCILE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+/** Identyfikatorów jednego rodzaju w zbiorczym Sentry — pełna liczba jest obok, w liczniku. */
+export const LIFECYCLE_SENTRY_IDS_MAX = 20;
 /** Stany, z których `requeue_ksef_send` przyjmuje tryb uzgodnienia (00131). */
 const RECONCILABLE_STATUSES: readonly string[] = ['failed', 'rejected'];
 
@@ -96,6 +108,8 @@ export interface LifecycleReconcileReport {
   skippedHeld: number;
   /** Data wystawienia dokumentu specjalnego minęła między odczytem a zleceniem (północ). */
   skippedIssueDate: number;
+  /** Brak NIP-u sprzedawcy (ani w firmie, ani w `fa3_data`) — błąd danych. */
+  skippedNoNip: number;
   /** Odrzucona korekta czeka na inną korektę tej samej faktury pierwotnej (00135). */
   skippedConflict: number;
   /** I5: zlecone „tylko uzgodnij”. */
@@ -109,6 +123,15 @@ export interface LifecycleReconcileReport {
   errors: number;
 }
 
+type ReportCounter = Exclude<keyof LifecycleReconcileReport, 'paused'>;
+/** Liczniki decyzji bez zmiany wiersza faktury — z identyfikatorami w Sentry. */
+type IdCounter = Extract<ReportCounter,
+  'i5NeedsOperator' | 'i5Other' | 'skippedNoData' | 'skippedNoNip' | 'skippedHeld' | 'skippedIssueDate' | 'skippedConflict'>;
+/** Coś czeka na człowieka — każdy z tych liczników > 0 wysyła zbiorczy Sentry. */
+const OPERATOR_COUNTERS = [
+  'exhausted', 'i1Lost', 'i5NeedsOperator', 'i5Other', 'skippedNoData', 'skippedNoNip',
+] as const satisfies readonly ReportCounter[];
+
 interface ViolationRow {
   invariant: string;
   invoice_id: string;
@@ -120,6 +143,15 @@ type CandidateRow = KsefRequeueSourceRow & { last_error_code: string | null; kse
 const CANDIDATE_COLUMNS = `${KSEF_RESEND_SOURCE_COLUMNS}, id, tenant_id, last_error_code, tenants(nip)` as const;
 const STALE_COLUMNS = `${CANDIDATE_COLUMNS}, ksef_status` as const;
 type RequeueOutcome = 'sent' | 'conflict' | KsefRequeueRefusal;
+/** Licznik pominięcia — nowy powód odmowy buildera nie skompiluje się bez swojego licznika. */
+const SKIP_COUNTER: Record<Exclude<RequeueOutcome, 'sent'>, IdCounter> = {
+  'missing-special-data': 'skippedNoData',
+  incomplete: 'skippedNoData',
+  'kind-held': 'skippedHeld',
+  'issue-date': 'skippedIssueDate',
+  conflict: 'skippedConflict',
+  'no-nip': 'skippedNoNip',
+};
 
 /**
  * Runner joba (worker pg-boss).
@@ -130,16 +162,17 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
   const supabase = createAdminClient();
   const report: LifecycleReconcileReport = {
     paused: null, i1Released: 0, i1Lost: 0, requeued: 0, exhausted: 0, resumedAfterPause: 0,
-    skippedNoData: 0, skippedHeld: 0, skippedIssueDate: 0, skippedConflict: 0,
+    skippedNoData: 0, skippedHeld: 0, skippedIssueDate: 0, skippedNoNip: 0, skippedConflict: 0,
     i5Reconciled: 0, i5Deferred: 0, i5NeedsOperator: 0, i5Other: 0, errors: 0,
   };
-  const countSkip = (outcome: Exclude<RequeueOutcome, 'sent'>) => {
-    if (outcome === 'missing-special-data' || outcome === 'incomplete') report.skippedNoData += 1;
-    else if (outcome === 'kind-held') report.skippedHeld += 1;
-    else if (outcome === 'issue-date') report.skippedIssueDate += 1;
-    else if (outcome === 'conflict') report.skippedConflict += 1;
-    // 'no-nip' — tylko log (jak dotąd).
+  /** Identyfikatory do zbiorczego Sentry: tylko niepuste rodzaje, najwyżej LIFECYCLE_SENTRY_IDS_MAX. */
+  const invoiceIds: Partial<Record<IdCounter, string[]>> = {};
+  const count = (counter: IdCounter, invoiceId: string) => {
+    report[counter] += 1;
+    const ids = (invoiceIds[counter] ??= []);
+    if (ids.length < LIFECYCLE_SENTRY_IDS_MAX) ids.push(invoiceId);
   };
+  const countSkip = (outcome: Exclude<RequeueOutcome, 'sent'>, invoiceId: string) => count(SKIP_COUNTER[outcome], invoiceId);
   /**
    * Faktury do ponowienia: zwykłe i dokumenty specjalne osobnymi zapytaniami,
    * żeby specjalne pominięte w tym przebiegu nie zajmowały paczki zwykłych.
@@ -274,9 +307,9 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
           report.exhausted += 1;
           continue;
         }
-        const outcome = await step.run(`requeue-${row.id}`, () => requeue(row));
+        const outcome = await step.run(`requeue-${row.id}`, () => requeue(row, { invariant: 'I6' }));
         if (outcome === 'sent') report.requeued += 1;
-        else countSkip(outcome);
+        else countSkip(outcome, row.id);
       } catch (e) {
         report.errors += 1;
         logger.error('Cykl życia: ponowienie nieudane', { invoiceId: row.id, code: row.last_error_code, error: e instanceof Error ? e.message : String(e) });
@@ -291,9 +324,9 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
     ));
     for (const row of held) {
       try {
-        const outcome = await step.run(`resume-${row.id}`, () => requeue(row));
+        const outcome = await step.run(`resume-${row.id}`, () => requeue(row, { invariant: 'I7' }));
         if (outcome === 'sent') report.resumedAfterPause += 1;
-        else countSkip(outcome);
+        else countSkip(outcome, row.id);
       } catch (e) {
         report.errors += 1;
         logger.error('Cykl życia: wznowienie po hamulcu nieudane', { invoiceId: row.id, error: e instanceof Error ? e.message : String(e) });
@@ -319,8 +352,17 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
       if (error) throw new Error(`Cykl życia: nie można odczytać faktur z zalegającym wpisem: ${error.message}`);
       return (data ?? []) as unknown as CandidateRow[];
     });
-    const reconcilable = stale.filter((row) => RECONCILABLE_STATUSES.includes(row.ksef_status ?? ''));
-    report.i5Other += stale.length - reconcilable.length;
+    const reconcilable: CandidateRow[] = [];
+    for (const row of stale) {
+      if (RECONCILABLE_STATUSES.includes(row.ksef_status ?? '')) {
+        reconcilable.push(row);
+        continue;
+      }
+      count('i5Other', row.id);
+      logger.warn('Cykl życia: I5 przy fakturze poza failed/rejected — automat jej nie uzgadnia, czeka na operatora', {
+        invoiceId: row.id, status: row.ksef_status ?? null,
+      });
+    }
 
     const reconcileAttempts = reconcilable.length === 0
       ? new Map<string, string[]>()
@@ -347,16 +389,19 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
       try {
         const attempts = reconcileAttempts.get(row.id) ?? [];
         if (attempts.length >= LIFECYCLE_RECONCILE_MAX) {
-          report.i5NeedsOperator += 1;
+          count('i5NeedsOperator', row.id);
+          logger.warn('Cykl życia: I5 — limit uzgodnień z crona w tygodniu wyczerpany, faktura czeka na operatora', {
+            invoiceId: row.id, attempts: attempts.length, lastAttemptAt: attempts.reduce((a, b) => (b > a ? b : a)),
+          });
           continue;
         }
         if (attempts.some((at) => at >= recentIso)) {
           report.i5Deferred += 1;
           continue;
         }
-        const outcome = await step.run(`reconcile-${row.id}`, () => requeue(row, { reconcileOnly: true }));
+        const outcome = await step.run(`reconcile-${row.id}`, () => requeue(row, { invariant: 'I5', reconcileOnly: true }));
         if (outcome === 'sent') report.i5Reconciled += 1;
-        else countSkip(outcome);
+        else countSkip(outcome, row.id);
       } catch (e) {
         report.errors += 1;
         logger.error('Cykl życia: uzgodnienie zalegającej wysyłki nieudane', { invoiceId: row.id, error: e instanceof Error ? e.message : String(e) });
@@ -365,12 +410,16 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
     }
   }
 
-  if (report.exhausted > 0 || report.i1Lost > 0 || report.i5NeedsOperator > 0) {
+  if (OPERATOR_COUNTERS.some((counter) => report[counter] > 0)) {
     // Nie wyjątek: to decyzja dla operatora, widoczna w /admin/ksef.
     Sentry.captureMessage('Cykl życia faktury: faktury czekają na operatora', {
       level: 'warning',
       tags: { job: 'ksef-lifecycle-reconcile' },
-      extra: { ...report },
+      // Płasko (`<licznik>Ids`): Sentry zamienia na „[Array]” wszystko głębiej niż 3 poziomy `extra`.
+      extra: {
+        ...report,
+        ...Object.fromEntries(Object.entries(invoiceIds).map(([counter, ids]) => [`${counter}Ids`, ids])),
+      },
     });
   }
   logger.info('Cykl życia: przebieg zakończony', { ...report });
@@ -379,15 +428,17 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
   /**
    * Ponowienie przez RPC w transakcji ze zleceniem; aktor NULL = automat.
    * `reconcileOnly` (I5): runner tylko uzgadnia — jak „Tylko uzgodnij” operatora.
+   * `invariant` — ścieżka crona w logu (ta sama faktura może przyjść z I6/I7 albo I5).
    */
   async function requeue(
     row: CandidateRow,
-    options: { reconcileOnly: boolean } = { reconcileOnly: false },
+    options: { invariant: 'I5' | 'I6' | 'I7'; reconcileOnly?: boolean },
   ): Promise<RequeueOutcome> {
-    const built = buildKsefRequeueEvent(row, env, randomUUID(), { reconcileOnly: options.reconcileOnly });
+    const reconcileOnly = options.reconcileOnly ?? false;
+    const built = buildKsefRequeueEvent(row, env, randomUUID(), { reconcileOnly });
     if (!built.ok) {
       // Brak pozycji albo NIP-u to błąd danych; reszta to stan oczekiwany (co 15 min) — bez ostrzeżenia.
-      const context = { invoiceId: row.id, reason: built.reason };
+      const context = { invoiceId: row.id, invariant: options.invariant, reason: built.reason };
       if (built.reason === 'incomplete' || built.reason === 'no-nip') logger.warn('Cykl życia: faktury nie da się ponowić automatycznie', context);
       else logger.info('Cykl życia: faktury nie da się ponowić automatycznie', context);
       return built.reason;
@@ -395,7 +446,7 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
     try {
       await sendJobEvent(built.event, {
         inTransaction: ksefSendTransactionStep(
-          { kind: 'requeue', actorUserId: null, reconcileOnly: options.reconcileOnly },
+          { kind: 'requeue', actorUserId: null, reconcileOnly },
           { invoiceId: row.id, tenantId: row.tenant_id, attemptId: built.sendAttemptId },
         ),
       });
@@ -403,7 +454,7 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
       // 00135: inna korekta tej faktury pierwotnej w toku (I5 z rejected) — RPC wycofane
       // bez zlecenia i audytu; ponowi następny przebieg. Każdy inny błąd → errors + Sentry.
       if (isOpenCorrectionConflict(e)) {
-        logger.info('Cykl życia: korekta czeka na inną korektę tej faktury pierwotnej', { invoiceId: row.id });
+        logger.info('Cykl życia: korekta czeka na inną korektę tej faktury pierwotnej', { invoiceId: row.id, invariant: options.invariant });
         return 'conflict';
       }
       throw e;

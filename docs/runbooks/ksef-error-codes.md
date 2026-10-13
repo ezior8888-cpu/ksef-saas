@@ -602,10 +602,22 @@ wysłaniem pliku. Jeśli został otwarty, odpowiedź na wysyłkę nie dotarła
 - **Cron (A3):** przy I5 i fakturze `failed`/`rejected` cron cyklu życia sam
   zleca „Tylko uzgodnij” (aktor NULL w audycie, `reconcile_only = true`),
   najwyżej raz na dobę. Po trzech próbach w tygodniu przestaje
-  (`i5NeedsOperator` w logu crona, ostrzeżenie w Sentry) — wtedy operator:
-  karta faktury, historia wysyłek i ślad audytu pokazują, co KSeF odpowiadał.
-  I5 przy fakturze w innym stanie (np. `accepted` z niezamkniętym wpisem)
-  cron tylko liczy (`i5Other`) — to sprawa dla operatora.
+  (`i5NeedsOperator`) — wtedy operator: karta faktury, historia wysyłek
+  i ślad audytu pokazują, co KSeF odpowiadał. I5 przy fakturze w innym
+  stanie (np. `accepted` z niezamkniętym wpisem) cron nie uzgadnia
+  (`i5Other`) — to sprawa dla operatora.
+- **Która faktura (A5, luka #2):** te decyzje nie zmieniają wiersza faktury,
+  więc w bazie nie ma po nich śladu. Log workera ma ostrzeżenie z
+  `invoiceId` na każdą fakturę w każdym przebiegu (I5 po limicie: liczba
+  prób i `lastAttemptAt`; I5 poza `failed`/`rejected`: `status`). Odmowa
+  zbudowania zlecenia (brak danych, brak NIP-u, rodzaj wstrzymany, data
+  minęła) ma w logu `invoiceId`, `invariant` (I5/I6/I7) i `reason`.
+  Zbiorczy Sentry „Cykl życia faktury: faktury czekają na operatora” ma
+  obok liczników do 20 identyfikatorów na rodzaj (`i5NeedsOperatorIds`,
+  `i5OtherIds`, `skippedNoDataIds`, `skippedNoNipIds` i pozostałe
+  `skipped…Ids`). Idzie, gdy w przebiegu jest `exhausted`, `i1Lost`,
+  `i5NeedsOperator`, `i5Other`, `skippedNoData` albo `skippedNoNip`.
+  Pełna lista: `docker logs` workera, filtr po `Cykl życia:`.
 
 ---
 
