@@ -49,8 +49,10 @@ Wyłączenie: to samo z `enabled = false`.
   z błędem wysyłki (nie szkic).
 - Joby już w kolejce kończą się stanem `failed` / `KSEF_PAUSED`.
 - Wiersze Offline24 przechodzą w `failed` (zdarzenie ma
-  `manualReconciliationRequired`) — po zdjęciu wyłącznika trzeba je wysłać
-  ponownie, zanim minie termin z Offline24.
+  `manualReconciliationRequired`). Automatyczny Offline24 jest wyłączony od
+  02.10.2026, a faktura może zostać w `offline_queued` bez wyjścia —
+  sprawdź sekcję 4a `kontrola-faktur-ksef.sh` i postępuj według
+  [offline24-zalegle.md](./offline24-zalegle.md).
 - Wysyłka, która przed włączeniem doszła do KSeF, ma numery w
   `ksef_submissions`. Ponowne wysłanie po zdjęciu wyłącznika najpierw zapyta
   KSeF o jej status, więc nie powstanie duplikat.
