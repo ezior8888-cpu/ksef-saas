@@ -2,8 +2,9 @@
 // Audyt 13 „Prywatność i zgodność” — test runtime (RUN-*).
 //
 // Co robi: otwiera publiczne strony aplikacji w świeżych kontekstach Chromium
-// i dla scenariuszy (a) brak wyboru, (b) odmowa, (c) akceptacja,
-// (d) wycofanie, (e) kontrole dodatkowe zapisuje:
+// i dla scenariuszy (k) kontrola about:blank, (a) brak wyboru, (b) odmowa,
+// (c) akceptacja, (d) wycofanie, (e) kontrole dodatkowe, (e2) CSP w service
+// workerze, (e3) ciasteczka w żądaniach do proxy dostawców zapisuje:
 //   - każde żądanie do innej domeny niż aplikacja (metoda, host, ścieżka BEZ
 //     query stringu, typ zasobu, etap) — i PRZERYWA je (`route.abort()`),
 //   - żądania do proxy pierwszej strony, które serwer przekazałby dostawcy
@@ -319,7 +320,11 @@ function uruchomSinkhole() {
 
 // ── kontekst z przechwytywaniem ──────────────────────────────────────────
 let USER_AGENT = undefined; // ustalany raz w main(): UA przeglądarki bez „HeadlessChrome”
-async function nowyKontekst(browser) {
+// opcje.przepuscProxyDostawcow: żądania do /ingest i /monitoring idą do
+// lokalnego serwera (który próbuje je przekazać dostawcy — to zatrzymuje
+// blokada egress); służy do sprawdzenia, jakie nagłówki i ciasteczka dostaje
+// proxy pierwszej strony. Domyślnie przeglądarka odpowiada sama (syntetyczne 200).
+async function nowyKontekst(browser, opcje = {}) {
   const context = await browser.newContext({ locale: 'pl-PL', serviceWorkers: 'allow', userAgent: USER_AGENT });
   await context.route('**/*', async (route) => {
     const req = route.request();
@@ -340,6 +345,11 @@ async function nowyKontekst(browser) {
     };
     if (kat.includes('PostHog') && req.method() === 'POST') wpis.posthog = streszczeniePostHog(req, context);
     if (kat.includes('Sentry') && req.method() === 'POST') wpis.sentry = streszczenieSentry(req);
+    if (kat.startsWith('proxy-1st') && opcje.przepuscProxyDostawcow) {
+      wpis.obsluga = 'przepuszczone do lokalnego serwera (dalej blokada egress)';
+      zadania.push(wpis);
+      return route.continue();
+    }
     if (kat.startsWith('proxy-1st')) {
       // Lokalna odpowiedź syntetyczna — żądanie nie trafia do serwera ani do dostawcy.
       wpis.obsluga = 'syntetyczne 200 w przeglądarce';
@@ -456,10 +466,11 @@ async function main() {
     chromium_sciezka: exe ?? 'domyślna Playwright',
     wersja_kodu: (() => { try { return execSync('git rev-parse --short HEAD', { cwd: HERE }).toString().trim(); } catch { return null; } })(),
     // Czy kod aplikacji (wszystko poza docs/audyt) jest identyczny z wersją audytu.
+    // Ścieżki z magią `:(top)` liczą się od korzenia repo, niezależnie od cwd.
     kod_aplikacji_jak_3e5e00d: (() => {
       try {
-        execSync("git diff --quiet 3e5e00d HEAD -- . ':(exclude)docs/audyt'", { cwd: HERE });
-        execSync("git diff --quiet HEAD -- . ':(exclude)docs/audyt'", { cwd: HERE });
+        execSync("git diff --quiet 3e5e00d HEAD -- ':(top)' ':(top,exclude)docs/audyt'", { cwd: HERE });
+        execSync("git diff --quiet HEAD -- ':(top)' ':(top,exclude)docs/audyt'", { cwd: HERE });
         return true;
       } catch { return false; }
     })(),
@@ -590,11 +601,75 @@ async function main() {
     await zamknij(ctx);
   }
 
+  // (e2) diagnostyka: po aktywacji service workera (Serwist, `app/sw.ts`,
+  // NetworkOnly dla wszystkiego poza statyką) żądanie CSS Material Symbols
+  // z fonts.googleapis.com (app/layout.tsx) kończy się net::ERR_FAILED i nie
+  // dociera do przechwytywania. Hipoteza: fetch() wykonywany w SW podlega CSP
+  // samego `/sw.js` (nagłówki z next.config.ts dla `/:path*`), a `connect-src`
+  // (lib/security/csp.ts) nie zawiera fonts.googleapis.com. Sprawdzamy to
+  // w SW: zdarzenia `securitypolicyviolation` + próba fetch() do obu hostów.
+  // Oba żądania i tak są przerywane przez route i sinkhole — nic nie wychodzi.
+  {
+    const ctx = await nowyKontekst(browser);
+    const page = await ctx.newPage();
+    etap = znacz({ scenariusz: 'e2-diagnostyka-sw-csp', krok: 'pierwsze-wejscie' });
+    await page.goto(BASE_URL + '/', { waitUntil: 'load' });
+    await page.waitForTimeout(WAIT_MS);
+    etap = znacz({ scenariusz: 'e2-diagnostyka-sw-csp', krok: 'fetch-z-sw' });
+    const sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker', { timeout: 10_000 }).catch(() => null));
+    let wynikSw = null;
+    if (sw) {
+      wynikSw = await sw.evaluate(async () => {
+        const naruszenia = [];
+        self.addEventListener('securitypolicyviolation', (e) => {
+          let host = e.blockedURI;
+          try { host = new URL(e.blockedURI).host; } catch { /* np. „inline” */ }
+          naruszenia.push({ host, dyrektywa: e.effectiveDirective });
+        });
+        const proba = async (url) => {
+          try { await fetch(url, { mode: 'no-cors' }); return 'odpowiedź'; } catch (err) { return `błąd: ${String(err).slice(0, 60)}`; }
+        };
+        const fonts = await proba('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined');
+        const turnstile = await proba('https://challenges.cloudflare.com/turnstile/v0/api.js');
+        await new Promise((r) => setTimeout(r, 500));
+        return { fonts_googleapis: fonts, challenges_cloudflare: turnstile, naruszenia_csp_w_sw: naruszenia };
+      }).catch((e) => ({ blad: String(e?.message ?? e).slice(0, 120) }));
+    }
+    let cspSw = null;
+    try {
+      const r = await page.request.get(BASE_URL + '/sw.js');
+      const csp = r.headers()['content-security-policy'] ?? '';
+      cspSw = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('connect-src')) ?? '(brak connect-src)';
+    } catch (e) { cspSw = String(e).slice(0, 80); }
+    meta.e2_diagnostyka_sw_csp = { sw_aktywny: Boolean(sw), connect_src_naglowka_sw_js: cspSw, wynik_w_sw: wynikSw };
+    await zamknij(ctx);
+  }
+
+  // (e3) czy ciasteczka pierwszej strony trafiają do proxy dostawców.
+  // Bez Supabase nie ma ciasteczek sesji, więc ustawiamy jedno SYNTETYCZNE
+  // (nazwa audytowa, wartość „1”) z atrybutami jak ciasteczko sesji
+  // (`path=/`, `SameSite=Lax`). Żądania /ingest i /monitoring przechodzą do
+  // lokalnego serwera; blokada egress zapisuje NAZWY nagłówków i ciasteczek
+  // i przerywa połączenie serwera z dostawcą.
+  {
+    const ctx = await nowyKontekst(browser, { przepuscProxyDostawcow: true });
+    await ctx.addCookies([{ name: 'audyt13_syntetyczne', value: '1', domain: 'localhost', path: '/', httpOnly: false, sameSite: 'Lax' }]);
+    const page = await ctx.newPage();
+    await odwiedz(page, ctx, 'e3-ciasteczka-do-proxy-dostawcow', STRONY[0]);
+    etap = znacz({ scenariusz: 'e3-ciasteczka-do-proxy-dostawcow', krok: 'klik-akceptuje' });
+    const ok = page.getByRole('button', { name: 'Akceptuję', exact: true });
+    if (await ok.isVisible().catch(() => false)) await ok.click(); else uwagi.push('e3: brak przycisku „Akceptuję”');
+    await page.waitForTimeout(WAIT_MS);
+    await odwiedz(page, ctx, 'e3-ciasteczka-do-proxy-dostawcow', STRONY[1]);
+    await zamknij(ctx);
+  }
+
   await browser.close();
   proxy.close();
 
   // ── podsumowanie ──
-  const scen = [...new Set(migawki.map((m) => m.scenariusz))];
+  // Scenariusze z osi czasu (także krok kontrolny about:blank, który nie ma migawki).
+  const scen = [...new Set(kroki.map((k) => k.scenariusz))].filter((s) => s !== 'init');
   const podsumowanie = {};
   for (const sc of scen) {
     const z = zadania.filter((r) => r.scenariusz === sc);
@@ -658,7 +733,11 @@ async function main() {
     return k;
   };
   const opisWpisu = (w) => {
-    if (w.kind === 'incoming_vendor_proxy_request') return `przychodzące ${w.method} ${w.path}${w.sec_fetch_mode ? ` [${w.sec_fetch_mode}/${w.sec_fetch_dest}]` : ''}`;
+    if (w.kind === 'incoming_vendor_proxy_request') {
+      const ck = Array.isArray(w.cookie_names) && w.cookie_names.length ? ` cookie:[${w.cookie_names.join(',')}]` : ' cookie:[]';
+      const fwd = Array.isArray(w.header_names) ? ` x-forwarded-for:${w.header_names.includes('x-forwarded-for') ? 'tak' : 'nie'} user-agent:${w.header_names.includes('user-agent') ? 'tak' : 'nie'}` : '';
+      return `przychodzące ${w.method} ${w.path}${w.sec_fetch_mode ? ` [${w.sec_fetch_mode}/${w.sec_fetch_dest}]` : ''}${ck}${fwd}`;
+    }
     if (w.kind === 'tcp_connect_blocked_loopback_proxy') return 'zablokowane: lokalne proxy wyjściowe';
     if (w.kind === 'connect_tunnel_blocked' || w.kind === 'http_via_proxy_blocked') return `zablokowane przez sinkhole serwera: ${w.host}`;
     return `zablokowane (${w.kind}): ${w.host}`;
@@ -698,10 +777,25 @@ async function main() {
       const host = w.kind === 'tcp_connect_blocked_loopback_proxy' ? 'lokalne proxy wyjściowe' : w.host;
       stosy[host] ??= w.stack.map((l) => l.replace(/:\d+:\d+\)?$/, ''));
     }
+    // Nazwy nagłówków i ciasteczek (bez wartości) żądań przychodzących do proxy
+    // dostawców — zbiorczo na ścieżkę.
+    const naglowkiProxy = {};
+    for (const w of wpisy.filter((x) => x.kind === 'incoming_vendor_proxy_request')) {
+      const p = w.path.startsWith('/ingest') ? '/ingest/*' : w.path;
+      naglowkiProxy[p] ??= { naglowki: new Set(), ciasteczka: new Set(), zadan: 0 };
+      naglowkiProxy[p].zadan += 1;
+      for (const h of w.header_names ?? []) naglowkiProxy[p].naglowki.add(h);
+      for (const c of w.cookie_names ?? []) naglowkiProxy[p].ciasteczka.add(c);
+    }
+    for (const v of Object.values(naglowkiProxy)) {
+      v.naglowki = [...v.naglowki].sort();
+      v.ciasteczka = [...v.ciasteczka].sort();
+    }
     serwer_egress = {
       procesow_z_blokada: wpisy.filter((w) => w.kind === 'guard_loaded').length,
       zablokowane: licz,
       przykladowy_stos_na_host: stosy,
+      naglowki_przychodzace_proxy_dostawcow: naglowkiProxy,
     };
   }
 

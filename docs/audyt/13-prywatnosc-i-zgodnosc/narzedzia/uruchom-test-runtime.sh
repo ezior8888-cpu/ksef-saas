@@ -47,28 +47,32 @@ set -a
 set +a
 
 PIDS=()
+# Każdy proces tła startuje przez `setsid` we własnej grupie procesów, więc
+# sprzątanie zabija całą grupę (pnpm → next start → next-server). Samo
+# `kill PID` zostawiało działający `next-server` (wnuk procesu pnpm).
 cleanup() {
   for p in "${PIDS[@]:-}"; do
     [ -n "$p" ] || continue
-    pkill -TERM -P "$p" 2>/dev/null || true
-    kill -TERM "$p" 2>/dev/null || true
+    kill -TERM -- "-$p" 2>/dev/null || kill -TERM "$p" 2>/dev/null || true
   done
-  sleep 1
+  sleep 2
   for p in "${PIDS[@]:-}"; do
     [ -n "$p" ] || continue
-    pkill -KILL -P "$p" 2>/dev/null || true
-    kill -KILL "$p" 2>/dev/null || true
+    kill -KILL -- "-$p" 2>/dev/null || true
   done
+  # Zapas: tylko proces, którego wiersz poleceń ZACZYNA SIĘ od tytułu serwera
+  # Next.js (luźniejszy wzorzec trafiał też w powłoki z tym słowem w poleceniu).
+  pkill -f '^next-server \(v' 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
 SINKHOLE_PORT="$SINK_PORT" SINKHOLE_LOG="$WORK/server-sinkhole.jsonl" \
-  node "$N/sinkhole-proxy.mjs" > "$WORK/sinkhole.out" 2>&1 &
+  setsid node "$N/sinkhole-proxy.mjs" > "$WORK/sinkhole.out" 2>&1 &
 PIDS+=($!)
 
 (
   cd "$ROOT"
-  exec env \
+  exec setsid env \
     NODE_OPTIONS="--require $N/blokada-egress-serwera.cjs" \
     AUDYT_EGRESS_LOG="$WORK/egress.jsonl" \
     AUDYT_BLOCKED_PORTS="$BLOCKED_PORTS" \

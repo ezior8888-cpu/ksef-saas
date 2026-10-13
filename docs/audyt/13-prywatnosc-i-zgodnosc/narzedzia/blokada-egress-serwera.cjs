@@ -13,7 +13,9 @@
 // Wyjątek: port z AUDYT_SINKHOLE_PORT (narzedzia/sinkhole-proxy.mjs) — lokalny
 // rejestrator, który niczego nie przekazuje dalej; ustawiony jako HTTP(S)_PROXY
 // procesu serwera pozwala zobaczyć docelowy host bibliotek używających proxy.
-// Nie zapisuje treści żądań, nagłówków ani wartości zmiennych.
+// Nie zapisuje treści żądań, wartości nagłówków ani wartości zmiennych
+// (dla żądań przychodzących do /ingest i /monitoring — tylko NAZWY nagłówków
+// i ciasteczek).
 //
 // To narzędzie testowe. Nie jest częścią aplikacji i nie trafia do obrazu.
 'use strict';
@@ -127,13 +129,17 @@ dns.promises.lookup = async function auditedPromisesLookup(hostname, options) {
 // przekazuje dostawcom (`/ingest/*` → PostHog, `/monitoring` → Sentry).
 // Pozwala zobaczyć żądania, których przeglądarka nie dała przechwycić
 // (np. wysyłane przy zamykaniu strony albo przez service workera).
-// Zapisuje tylko metodę, ścieżkę BEZ query i nagłówki Sec-Fetch-*.
+// Zapisuje tylko metodę, ścieżkę BEZ query, nagłówki Sec-Fetch-*, NAZWY
+// nagłówków i NAZWY ciasteczek (bez wartości) — żeby sprawdzić, co proxy
+// pierwszej strony (httpxy kopiuje nagłówki żądania przychodzącego do żądania
+// do dostawcy) przekazałoby dalej.
 const http = require('node:http');
 const originalEmit = http.Server.prototype.emit;
 http.Server.prototype.emit = function auditedEmit(event, req) {
   if (event === 'request' && req && typeof req.url === 'string') {
     const pathname = req.url.split('?')[0];
     if (pathname.startsWith('/ingest') || pathname === '/monitoring' || pathname.startsWith('/monitoring/')) {
+      const cookieHeader = typeof req.headers.cookie === 'string' ? req.headers.cookie : '';
       record({
         kind: 'incoming_vendor_proxy_request',
         method: req.method,
@@ -141,6 +147,8 @@ http.Server.prototype.emit = function auditedEmit(event, req) {
         sec_fetch_mode: req.headers['sec-fetch-mode'] ?? null,
         sec_fetch_dest: req.headers['sec-fetch-dest'] ?? null,
         service_worker: req.headers['service-worker'] ?? null,
+        header_names: Object.keys(req.headers).sort(),
+        cookie_names: cookieHeader.split(';').map((c) => c.trim().split('=')[0]).filter(Boolean),
       });
     }
   }
