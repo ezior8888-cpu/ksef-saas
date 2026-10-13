@@ -35,6 +35,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 import { loadSendErrorsView } from '@/lib/admin/centrum/attempts';
 import {
+  attemptMessage,
   cronFreshness,
   effectiveStatus,
   fingerprint,
@@ -104,6 +105,16 @@ describe('status efektywny', () => {
   });
 });
 
+describe('komunikat wiersza', () => {
+  it('przerwane wykonanie bez zapisanego błędu dostaje opis z etapem; zwykły błąd — swój komunikat', () => {
+    const old = new Date(NOW.getTime() - INTERRUPTED_AFTER_MS - 1000).toISOString();
+    expect(attemptMessage({ status: 'started', stage: 'ksef', startedAt: old, finishedAt: null, errorMessage: null }, NOW))
+      .toContain('„odpowiedź KSeF”');
+    expect(attemptMessage({ status: 'failed', stage: 'xml', startedAt: old, finishedAt: old, errorMessage: 'XSD' }, NOW)).toBe('XSD');
+    expect(attemptMessage({ status: 'succeeded', stage: 'finalize', startedAt: old, finishedAt: old, errorMessage: null }, NOW)).toBeNull();
+  });
+});
+
 describe('odcisk wzorca', () => {
   it('komunikaty różniące się numerem faktury, sesji i UUID mają ten sam szablon', () => {
     const a = 'KSeF ma już fakturę o tym numerze — numer KSeF [NIP]-20261001-ABCDEF012345-01 (sesja 20261013-SE-0123456789-ABCDEF0123-45), próba 3f2a9c4e-1b2d-4c3e-8f9a-0123456789ab';
@@ -167,7 +178,8 @@ describe('loader', () => {
   it('brak tabeli (migracja niewgrana): jawny problem i liczniki „nie wiadomo”, nie zero', async () => {
     db.ledgerError = { code: 'PGRST205', message: "Could not find the table 'public.ksef_send_attempts'" };
     const view = await loadSendErrorsView(parseSendErrorFilters({}), NOW);
-    expect(view.problems.some((p) => p.includes('00150'))).toBe(true);
+    // Kilka zapytań o brakującą tabelę — jeden komunikat.
+    expect(view.problems.filter((p) => p.includes('00150'))).toHaveLength(1);
     expect(view.counts).toEqual({ succeeded: null, failed: null, refused: null, waiting: null, interrupted: null });
     expect(view.rows).toEqual([]);
   });

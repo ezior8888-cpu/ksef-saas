@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { listInvoiceAttempts } from '@/lib/admin/centrum/attempts';
-import { effectiveStatus, STAGE_LABELS, STATUS_LABELS } from '@/lib/admin/centrum/send-errors';
+import { attemptMessage, effectiveStatus, STAGE_LABELS, STATUS_LABELS } from '@/lib/admin/centrum/send-errors';
 import { getInvoiceLifecycle } from '@/lib/admin/ksef-lifecycle';
 
 import { OperatorActions } from '../_components/operator-actions';
@@ -144,7 +144,7 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
                       {a.httpStatus ? <div className="text-muted-foreground">HTTP {a.httpStatus}</div> : null}
                     </td>
                     <td className="px-4 py-2.5 text-xs">{a.status === 'refused' ? '—' : `#${a.execution + 1}`}</td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground break-words">{a.errorMessage ?? ''}</td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground break-words">{attemptMessage(a, now) ?? ''}</td>
                     <td className="px-4 py-2.5 font-mono text-xs break-all">
                       {a.sendAttemptId ? a.sendAttemptId.slice(0, 8) : '—'}
                       {a.jobId ? <div className="text-muted-foreground">{a.jobId.slice(0, 8)}</div> : null}

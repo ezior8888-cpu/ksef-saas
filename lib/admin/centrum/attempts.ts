@@ -86,10 +86,13 @@ function toAttempt(row: DbAttempt): AttemptRow {
   };
 }
 
-/** PGRST205 / 42P01: tabeli nie ma — migracja 00150 nie jest wgrana. */
+/**
+ * PGRST205 / 42P01: tabeli nie ma — migracja 00150 nie jest wgrana. Ten sam
+ * komunikat bez prefiksu zapytania, żeby kilka zapytań dało jeden wpis.
+ */
 function describeProblem(what: string, error: { code?: string; message: string }): string {
   if (error.code === 'PGRST205' || error.code === '42P01') {
-    return `${what}: brak tabeli ksef_send_attempts — migracja 00150 nie jest wgrana (albo PostgREST bez NOTIFY pgrst).`;
+    return 'Brak tabeli ksef_send_attempts — migracja 00150 nie jest wgrana (albo PostgREST bez NOTIFY pgrst). Dziennik prób i liczniki są niedostępne.';
   }
   return `${what}: ${error.message}`;
 }

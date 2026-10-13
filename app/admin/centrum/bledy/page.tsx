@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { ATTEMPTS_SCAN_LIMIT, loadSendErrorsView } from '@/lib/admin/centrum/attempts';
 import {
+  attemptMessage,
   CLASS_LABELS,
   cronFreshness,
   effectiveStatus,
@@ -324,7 +325,7 @@ export default async function AdminSendErrorsPage(props: {
                       {r.status === 'refused' ? '—' : `#${r.execution + 1}`}
                       {r.retryable === false && r.status === 'failed' ? <div className="text-muted-foreground">bez ponowień</div> : null}
                     </td>
-                    <td className={cn(TD, 'max-w-md break-words text-xs text-muted-foreground')}>{r.errorMessage ?? '—'}</td>
+                    <td className={cn(TD, 'max-w-md break-words text-xs text-muted-foreground')}>{attemptMessage(r, now) ?? '—'}</td>
                     <td className={cn(TD, 'font-mono text-xs')}>{r.workerSha ? r.workerSha.slice(0, 7) : '—'}</td>
                   </tr>
                 ))}

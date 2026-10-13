@@ -141,6 +141,15 @@ export interface AttemptRow {
   finishedAt: string | null;
 }
 
+/** Opis wiersza bez komunikatu: przerwane wykonanie nie zapisało błędu, więc mówimy, co wiemy. */
+export function attemptMessage(row: Pick<AttemptRow, 'status' | 'stage' | 'startedAt' | 'finishedAt' | 'errorMessage'>, now: Date): string | null {
+  if (row.errorMessage) return row.errorMessage;
+  if (effectiveStatus(row, now) === 'interrupted') {
+    return `Wykonanie bez wyniku od ponad ${INTERRUPTED_AFTER_MS / 60_000} min na etapie „${STAGE_LABELS[row.stage] ?? row.stage}” — worker padł albo został zatrzymany (deploy, OOM). Stan faktury rozstrzyga ponowienie albo strażnik cyklu życia.`;
+  }
+  return null;
+}
+
 export function effectiveStatus(row: Pick<AttemptRow, 'status' | 'startedAt' | 'finishedAt'>, now: Date): EffectiveStatus {
   if (row.status !== 'started' || row.finishedAt) return row.status;
   const started = Date.parse(row.startedAt);
@@ -248,7 +257,7 @@ export function groupIncidents(rows: readonly AttemptRow[], now: Date): SendErro
           httpStatus: row.httpStatus,
           ksefCode: row.ksefCode,
           template: messageTemplate(row.errorMessage),
-          sampleMessage: row.errorMessage,
+          sampleMessage: attemptMessage(row, now),
           sampleInvoiceId: row.invoiceId,
           count: 0,
           invoices: 0,
@@ -267,7 +276,7 @@ export function groupIncidents(rows: readonly AttemptRow[], now: Date): SendErro
     if (row.startedAt < incident.firstAt) incident.firstAt = row.startedAt;
     if (row.startedAt > incident.lastAt) {
       incident.lastAt = row.startedAt;
-      incident.sampleMessage = row.errorMessage;
+      incident.sampleMessage = attemptMessage(row, now);
       incident.sampleInvoiceId = row.invoiceId;
     }
     group.invoices.set(row.invoiceId, recoveryState(row.invoiceStatus));
