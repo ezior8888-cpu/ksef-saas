@@ -39,7 +39,8 @@
 #      środowisko KSeF workera, sonda PostgREST na kolumnę special_data;
 #      od A4b PR2a: failed KOR/ZAL/ROZ — czy automat ponowi (kod, data
 #      wystawienia, dane), zwykłe failed bez pozycji, I5 wg danych,
-#      ostatni przebieg crona
+#      ostatni przebieg crona; od A5 #2 faktury bez akcji automatu
+#      z invoiceId (I5 po limicie i poza failed/rejected, odmowy zlecenia)
 #  10. duplikaty 440 i decyzja klienta (D-A4-1b-3 PR B, 00148): failed
 #      KSEF_DUPLICATE_RECONCILE wg powodu i środowiska znacznika, wg blokady
 #      decyzji (po 00148), I5D „czeka na klienta” wg środowiska, powiadomienia
@@ -129,10 +130,14 @@ section "1. app-1: kontenery (web i worker na tym samym SHA?)"
   || echo "  (nie udało się odczytać kontenerów)"
 
 section "2. app-1: worker — crony, błędy, wyczerpane ponowienia, heartbeat (2 h)"
+# Wpisy cyklu życia o pojedynczych fakturach (I5, odmowy budowy zlecenia)
+# powtarzają się co przebieg i wypychałyby błędy z `tail -40` — pokazuje je
+# sekcja 9. Linie ERROR cyklu życia mają inne treści i zostają.
 "${SSH[@]}" "root@$APP" \
   "W=\$(docker ps --format '{{.Names}}' | grep '^$WORKER_PREFIX' | head -1); \
    if [ -z \"\$W\" ]; then echo '  (brak kontenera workera)'; exit 0; fi; \
-   docker logs --since 2h \"\$W\" 2>&1 | grep -iE 'cron|error|exhaust|heartbeat|błąd|bledy' | grep -v getSession | tail -40" \
+   docker logs --since 2h \"\$W\" 2>&1 | grep -iE 'cron|error|exhaust|heartbeat|błąd|bledy' | grep -v getSession \
+     | grep -vE 'Cykl życia: (I5 |faktury nie da się|korekta czeka)' | tail -40" \
   || echo "  (nie udało się odczytać logu workera)"
 
 section "3. app-1: /api/health"
@@ -219,6 +224,17 @@ printf -- '--- ostatni przebieg cyklu życia (worker, 30 min): skippedNoData / s
   "W=\$(docker ps --format '{{.Names}}' | grep '^$WORKER_PREFIX' | head -1); \
    if [ -z \"\$W\" ]; then echo '  (brak kontenera workera)'; exit 0; fi; \
    docker logs --since 30m \"\$W\" 2>&1 | grep 'przebieg zakończony' | tail -1" \
+  || echo "  (nie udało się odczytać logu workera)"
+# A5 #2: decyzje bez śladu w bazie (I5 po limicie i poza failed/rejected,
+# odmowy budowy zlecenia) — log jest jedynym miejscem z invoiceId; Sentry ma
+# najwyżej 20 na rodzaj. Ostrzeżenia idą na stderr kontenera: stąd 2>&1.
+# Bez znacznika czasu i numeru joba, żeby dwa przebiegi z okna dały jeden wpis.
+printf -- '--- cykl życia, 30 min: faktury bez akcji automatu (invoiceId, invariant, reason / status, attempts)\n'
+"${SSH[@]}" "root@$APP" \
+  "W=\$(docker ps --format '{{.Names}}' | grep '^$WORKER_PREFIX' | head -1); \
+   if [ -z \"\$W\" ]; then echo '  (brak kontenera workera)'; exit 0; fi; \
+   docker logs --since 30m \"\$W\" 2>&1 | grep -E 'Cykl życia: (I5 |faktury nie da się|korekta czeka)' \
+     | sed -E 's/^\[[^]]*\] \[[^]]*\] //' | sort -u | head -200 | grep . || echo '  (brak)'" \
   || echo "  (nie udało się odczytać logu workera)"
 # PATCH bez tokenu (rola anon) na nieistniejące id — niczego nie zmienia, ale
 # PostgREST sprawdza kolumny treści zapisu w swoim cache schematu. SELECT

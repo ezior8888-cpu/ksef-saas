@@ -56,18 +56,17 @@ import { createAdminClient } from '@/lib/supabase/admin';
  * I1 obsługuje zawsze, bo to porządkowanie, nie wysyłka.
  *
  * Pozostałe naruszenia (I2–I4, I9 oraz I5 przy fakturze w innym stanie)
- * tylko alarmuje monitor alarmów (`checkKsefLifecycleViolations`) — tam nie
- * ma bezpiecznej akcji automatu.
+ * alarmuje monitor alarmów (`checkKsefLifecycleViolations`) — tam nie ma
+ * bezpiecznej akcji automatu; cron I5 w innym stanie tylko liczy i loguje
+ * (`i5Other`).
  *
  * Ślad decyzji (A5, luka #2): I5 po limicie prób, I5 poza failed/rejected
  * i odmowa budowy zlecenia nie zmieniają wiersza faktury, więc w bazie nie
- * zostaje po nich nic. Log nazywa fakturę (`invoiceId`, inwariant, powód),
- * a zbiorczy Sentry niesie obok pełnych liczników do
- * `LIFECYCLE_SENTRY_IDS_MAX` identyfikatorów na rodzaj (`<licznik>Ids`).
- * Zbiorczy Sentry idzie, gdy coś czeka na człowieka (`OPERATOR_COUNTERS`);
- * stany oczekiwane (I5 czeka dobę, rodzaj wstrzymany, data minęła, inna
- * korekta w toku) zostają w logu. ENQUEUE_LOST i TRANSIENT_EXHAUSTED
- * zostawiają kod na wierszu (audyt tych przejść: luka #1).
+ * zostaje po nich nic. Log nazywa fakturę (`invoiceId`, inwariant, powód)
+ * w każdym przebiegu, który do niej dochodzi, a zbiorczy Sentry niesie obok
+ * pełnych liczników do `LIFECYCLE_SENTRY_IDS_MAX` identyfikatorów na rodzaj
+ * (`<licznik>Ids`). ENQUEUE_LOST i TRANSIENT_EXHAUSTED zostawiają kod na
+ * wierszu (audyt tych przejść: luka #1).
  */
 
 /** Nie częściej niż raz na godzinę dla jednej faktury. */
@@ -127,10 +126,14 @@ type ReportCounter = Exclude<keyof LifecycleReconcileReport, 'paused'>;
 /** Liczniki decyzji bez zmiany wiersza faktury — z identyfikatorami w Sentry. */
 type IdCounter = Extract<ReportCounter,
   'i5NeedsOperator' | 'i5Other' | 'skippedNoData' | 'skippedNoNip' | 'skippedHeld' | 'skippedIssueDate' | 'skippedConflict'>;
-/** Coś czeka na człowieka — każdy z tych liczników > 0 wysyła zbiorczy Sentry. */
-const OPERATOR_COUNTERS = [
-  'exhausted', 'i1Lost', 'i5NeedsOperator', 'i5Other', 'skippedNoData', 'skippedNoNip',
-] as const satisfies readonly ReportCounter[];
+/**
+ * Liczniki, które wysyłają zbiorczy Sentry (bez zmian od A3). Stany trwałe
+ * bez wyjścia automatu (`i5Other`, `skippedNoData`, `skippedNoNip`) go nie
+ * wysyłają: zdarzenie nie ma deduplikacji, więc jedna taka faktura dawałaby
+ * 96 zdarzeń na dobę we wspólnej kwocie Sentry (osobne ustalenie). Ich
+ * identyfikatory są w logu i w `extra`, gdy zdarzenie idzie z innego powodu.
+ */
+const OPERATOR_COUNTERS = ['exhausted', 'i1Lost', 'i5NeedsOperator'] as const satisfies readonly ReportCounter[];
 
 interface ViolationRow {
   invariant: string;

@@ -68,8 +68,12 @@ Pola raportu crona (log workera „Cykl życia: przebieg zakończony”):
 `skippedNoData` — brak danych do ponowienia (zwykła bez pozycji albo stary
 dokument specjalny); `skippedHeld` — rodzaj wstrzymany (w praktyce I5: KOR na
 PROD, ROZ); `skippedIssueDate` — północ między odczytem a zleceniem;
+`skippedNoNip` — brak NIP-u sprzedawcy (ani w firmie, ani w `fa3_data`):
+błąd danych, automat ponawia próbę co przebieg bez skutku — uzupełnij NIP
+i „Wyślij ponownie” albo „Wróć do szkicu”;
 `skippedConflict` — odrzucona korekta czeka na inną korektę tej samej faktury
-pierwotnej (00135); utrzymujące się > 0 = sprawdź tamtą korektę.
+pierwotnej (00135); utrzymujące się > 0 = sprawdź tamtą korektę. Które to
+faktury: sekcja 9 `kontrola-faktur-ksef.sh` (niżej, „Która faktura”).
 
 **Dlaczego „Wyślij ponownie” operatora przy klasie reconcile jest bezpieczne**
 (ENQUEUE_LOST, INVALID_EVENT, RESULT_UNCERTAIN): runner najpierw rozstrzyga
@@ -607,17 +611,23 @@ wysłaniem pliku. Jeśli został otwarty, odpowiedź na wysyłkę nie dotarła
   stanie (np. `accepted` z niezamkniętym wpisem) cron nie uzgadnia
   (`i5Other`) — to sprawa dla operatora.
 - **Która faktura (A5, luka #2):** te decyzje nie zmieniają wiersza faktury,
-  więc w bazie nie ma po nich śladu. Log workera ma ostrzeżenie z
-  `invoiceId` na każdą fakturę w każdym przebiegu (I5 po limicie: liczba
-  prób i `lastAttemptAt`; I5 poza `failed`/`rejected`: `status`). Odmowa
-  zbudowania zlecenia (brak danych, brak NIP-u, rodzaj wstrzymany, data
-  minęła) ma w logu `invoiceId`, `invariant` (I5/I6/I7) i `reason`.
-  Zbiorczy Sentry „Cykl życia faktury: faktury czekają na operatora” ma
-  obok liczników do 20 identyfikatorów na rodzaj (`i5NeedsOperatorIds`,
-  `i5OtherIds`, `skippedNoDataIds`, `skippedNoNipIds` i pozostałe
-  `skipped…Ids`). Idzie, gdy w przebiegu jest `exhausted`, `i1Lost`,
-  `i5NeedsOperator`, `i5Other`, `skippedNoData` albo `skippedNoNip`.
-  Pełna lista: `docker logs` workera, filtr po `Cykl życia:`.
+  więc w bazie nie ma po nich śladu — identyfikator jest tylko w logu
+  workera i w Sentry. Pełna lista z ostatnich 30 min:
+  `./scripts/ops/kontrola-faktur-ksef.sh`, sekcja 9, „faktury bez akcji
+  automatu”. Log ma ostrzeżenie z `invoiceId` w każdym przebiegu, który
+  dochodzi do I5–I7 (przy włączonym albo nieczytelnym wyłączniku wysyłek
+  cron ich nie sprawdza): I5 po limicie — liczba prób i `lastAttemptAt`;
+  I5 poza `failed`/`rejected` — `status`. Odmowa zbudowania zlecenia
+  (brak danych, brak NIP-u, rodzaj wstrzymany, data minęła) ma w logu
+  `invoiceId`, `invariant` (I5/I6/I7) i `reason`. Zbiorczy Sentry „Cykl
+  życia faktury: faktury czekają na operatora” idzie jak dotąd przy
+  `exhausted`, `i1Lost` albo `i5NeedsOperator`, a obok liczników ma do 20
+  identyfikatorów na każdy niepusty rodzaj (`i5NeedsOperatorIds`,
+  `i5OtherIds`, `skippedNoDataIds`, `skippedNoNipIds`, `skipped…Ids`).
+  Same `i5Other`, `skippedNoData` i `skippedNoNip` go nie wysyłają:
+  zdarzenie nie ma deduplikacji, a te stany trwają do decyzji człowieka
+  (96 zdarzeń na dobę na fakturę). Ręcznie z `docker logs` zawsze z
+  `2>&1` — ostrzeżenia idą na stderr kontenera.
 
 ---
 
