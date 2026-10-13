@@ -363,7 +363,7 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
       }
       count('i5Other', row.id);
       logger.warn('Cykl życia: I5 przy fakturze poza failed/rejected — automat jej nie uzgadnia, czeka na operatora', {
-        invoiceId: row.id, status: row.ksef_status ?? null,
+        invoiceId: row.id, invariant: 'I5', status: row.ksef_status ?? null,
       });
     }
 
@@ -394,7 +394,7 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
         if (attempts.length >= LIFECYCLE_RECONCILE_MAX) {
           count('i5NeedsOperator', row.id);
           logger.warn('Cykl życia: I5 — limit uzgodnień z crona w tygodniu wyczerpany, faktura czeka na operatora', {
-            invoiceId: row.id, attempts: attempts.length, lastAttemptAt: attempts.reduce((a, b) => (b > a ? b : a)),
+            invoiceId: row.id, invariant: 'I5', attempts: attempts.length, lastAttemptAt: attempts.reduce((a, b) => (b > a ? b : a)),
           });
           continue;
         }
@@ -418,7 +418,8 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
     Sentry.captureMessage('Cykl życia faktury: faktury czekają na operatora', {
       level: 'warning',
       tags: { job: 'ksef-lifecycle-reconcile' },
-      // Płasko (`<licznik>Ids`): Sentry zamienia na „[Array]” wszystko głębiej niż 3 poziomy `extra`.
+      // Płasko (`<licznik>Ids`) obok liczników — czytelne w Sentry i z zapasem względem
+      // normalizeDepth = 3 (głębsze poziomy `extra` Sentry zamienia na „[Array]”).
       extra: {
         ...report,
         ...Object.fromEntries(Object.entries(invoiceIds).map(([counter, ids]) => [`${counter}Ids`, ids])),

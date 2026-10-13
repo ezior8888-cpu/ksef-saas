@@ -228,13 +228,27 @@ printf -- '--- ostatni przebieg cyklu życia (worker, 30 min): skippedNoData / s
 # A5 #2: decyzje bez śladu w bazie (I5 po limicie i poza failed/rejected,
 # odmowy budowy zlecenia) — log jest jedynym miejscem z invoiceId; Sentry ma
 # najwyżej 20 na rodzaj. Ostrzeżenia idą na stderr kontenera: stąd 2>&1.
-# Bez znacznika czasu i numeru joba, żeby dwa przebiegi z okna dały jeden wpis.
+# Bez znacznika czasu i numeru joba, żeby dwa przebiegi z okna dały jeden
+# wpis; najpierw WARN (czeka na człowieka), potem info (stany oczekiwane).
+# Pusta lista znaczy „brak” tylko wtedy, gdy ostatni przebieg doszedł do
+# I5–I7 (`"paused":false`) — przy wyłączniku cron ich nie sprawdza.
 printf -- '--- cykl życia, 30 min: faktury bez akcji automatu (invoiceId, invariant, reason / status, attempts)\n'
 "${SSH[@]}" "root@$APP" \
   "W=\$(docker ps --format '{{.Names}}' | grep '^$WORKER_PREFIX' | head -1); \
    if [ -z \"\$W\" ]; then echo '  (brak kontenera workera)'; exit 0; fi; \
-   docker logs --since 30m \"\$W\" 2>&1 | grep -E 'Cykl życia: (I5 |faktury nie da się|korekta czeka)' \
-     | sed -E 's/^\[[^]]*\] \[[^]]*\] //' | sort -u | head -200 | grep . || echo '  (brak)'" \
+   L=\$(docker logs --since 30m \"\$W\" 2>&1) || { echo '  (nie udało się odczytać logu workera)'; exit 0; }; \
+   R=\$(printf '%s\n' \"\$L\" | grep 'przebieg zakończony' | tail -1); \
+   E=\$(printf '%s\n' \"\$L\" | grep -E 'Cykl życia: (I5 |faktury nie da się|korekta czeka)' \
+     | sed -E 's/^\[[^]]*\] \[[^]]*\] //' | sort -u | sort -s -k1,1r); \
+   N=\$(printf '%s\n' \"\$E\" | grep -c .); \
+   if [ \"\$N\" -gt 0 ]; then \
+     printf '%s\n' \"\$E\" | head -200; \
+     if [ \"\$N\" -gt 200 ]; then echo \"  (pokazano 200 z \$N; reszta: docker logs workera z 2>&1)\"; fi; \
+   else case \"\$R\" in \
+     *'\"paused\":false'*) echo '  (brak — ostatni przebieg sprawdził I5–I7)' ;; \
+     '') echo '  (brak przebiegu crona w 30 min — lista nic nie mówi)' ;; \
+     *) echo '  (pusto, ale ostatni przebieg nie sprawdzał I5–I7: wyłącznik wysyłek włączony albo nieczytelny)' ;; \
+   esac; fi" \
   || echo "  (nie udało się odczytać logu workera)"
 # PATCH bez tokenu (rola anon) na nieistniejące id — niczego nie zmienia, ale
 # PostgREST sprawdza kolumny treści zapisu w swoim cache schematu. SELECT

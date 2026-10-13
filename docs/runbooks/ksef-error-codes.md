@@ -69,8 +69,9 @@ Pola raportu crona (log workera „Cykl życia: przebieg zakończony”):
 dokument specjalny); `skippedHeld` — rodzaj wstrzymany (w praktyce I5: KOR na
 PROD, ROZ); `skippedIssueDate` — północ między odczytem a zleceniem;
 `skippedNoNip` — brak NIP-u sprzedawcy (ani w firmie, ani w `fa3_data`):
-błąd danych, automat ponawia próbę co przebieg bez skutku — uzupełnij NIP
-i „Wyślij ponownie” albo „Wróć do szkicu”;
+błąd danych, automat próbuje co przebieg bez skutku — po uzupełnieniu NIP-u
+firmy następny przebieg sam ponowi fakturę (I6/I7) albo ją uzgodni (I5);
+inaczej „Wróć do szkicu”;
 `skippedConflict` — odrzucona korekta czeka na inną korektę tej samej faktury
 pierwotnej (00135); utrzymujące się > 0 = sprawdź tamtą korektę. Które to
 faktury: sekcja 9 `kontrola-faktur-ksef.sh` (niżej, „Która faktura”).
@@ -612,7 +613,8 @@ wysłaniem pliku. Jeśli został otwarty, odpowiedź na wysyłkę nie dotarła
   (`i5Other`) — to sprawa dla operatora.
 - **Która faktura (A5, luka #2):** te decyzje nie zmieniają wiersza faktury,
   więc w bazie nie ma po nich śladu — identyfikator jest tylko w logu
-  workera i w Sentry. Pełna lista z ostatnich 30 min:
+  workera i w Sentry. Lista z ostatnich 30 min (do 200 wpisów, najpierw
+  WARN; pusta lista mówi też, czy ostatni przebieg w ogóle sprawdzał I5–I7):
   `./scripts/ops/kontrola-faktur-ksef.sh`, sekcja 9, „faktury bez akcji
   automatu”. Log ma ostrzeżenie z `invoiceId` w każdym przebiegu, który
   dochodzi do I5–I7 (przy włączonym albo nieczytelnym wyłączniku wysyłek
@@ -624,10 +626,12 @@ wysłaniem pliku. Jeśli został otwarty, odpowiedź na wysyłkę nie dotarła
   `exhausted`, `i1Lost` albo `i5NeedsOperator`, a obok liczników ma do 20
   identyfikatorów na każdy niepusty rodzaj (`i5NeedsOperatorIds`,
   `i5OtherIds`, `skippedNoDataIds`, `skippedNoNipIds`, `skipped…Ids`).
-  Same `i5Other`, `skippedNoData` i `skippedNoNip` go nie wysyłają:
-  zdarzenie nie ma deduplikacji, a te stany trwają do decyzji człowieka
-  (96 zdarzeń na dobę na fakturę). Ręcznie z `docker logs` zawsze z
-  `2>&1` — ostrzeżenia idą na stderr kontenera.
+  Pozostałe liczniki z identyfikatorami (`i5Other`, `skippedNoData`,
+  `skippedNoNip`, `skippedHeld`, `skippedIssueDate`, `skippedConflict`) go
+  nie wysyłają: zdarzenie nie ma deduplikacji, a stan trwały dawałby jedno
+  zdarzenie na przebieg, czyli 96 na dobę już przy jednej fakturze.
+  Ręcznie z `docker logs` zawsze z `2>&1` — ostrzeżenia idą na stderr
+  kontenera.
 
 ---
 

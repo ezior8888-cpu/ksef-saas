@@ -405,8 +405,11 @@ describe('I6 — automatyczne ponowienie klasy transient', () => {
 
     expect(report).toMatchObject({ requeued: 0, skippedIssueDate: 1, errors: 0 });
     expect(m.send).not.toHaveBeenCalled();
-    // A5 #2: stan oczekiwany — bez zbiorczego Sentry.
+    // A5 #2: stan oczekiwany — bez zbiorczego Sentry; log nazywa fakturę, ścieżkę i powód.
     expect(m.captureMessage).not.toHaveBeenCalled();
+    expect((ctx.logger.info as ReturnType<typeof vi.fn>).mock.calls).toContainEqual([
+      'Cykl życia: faktury nie da się ponowić automatycznie', { invoiceId: ID1, invariant: 'I6', reason: 'issue-date' },
+    ]);
   });
 
   it('KSeF produkcyjny: KOR z danymi i dzisiejszą datą odpada w zapytaniu (invoice_kind in [advance]) — bez zlecenia i bez pominięć', async () => {
@@ -702,15 +705,18 @@ describe('A5: identyfikatory faktur w logu i Sentry', () => {
   it('I5 po trzech próbach w tygodniu: ostrzeżenie z invoiceId, liczbą i datą OSTATNIEJ próby; Sentry z identyfikatorem', async () => {
     m.violations = [i5(ID1)];
     m.tables.invoices = [failedRow(ID1, 'RESULT_UNCERTAIN')];
-    // Kolejność niemonotoniczna: baza bez ORDER BY nie gwarantuje żadnej, a ostatnia próba to maksimum.
-    for (const h of [50, 26, 74]) m.tables.audit_logs.push(autoReconcileAudit(ID1, h));
+    // Kolejność niemonotoniczna: baza bez ORDER BY nie gwarantuje żadnej, a ostatnia próba to maksimum
+    // (tu w środku tablicy). Cztery próby — liczba w logu to długość listy, nie limit.
+    for (const h of [50, 74, 26, 98]) m.tables.audit_logs.push(autoReconcileAudit(ID1, h));
 
     const report = await runKsefLifecycleReconcile(ctx);
 
     expect(report.i5NeedsOperator).toBe(1);
     const [message, extra] = logFor('warn', ID1) ?? [];
     expect(message).toMatch(/I5/);
-    expect(extra).toMatchObject({ invoiceId: ID1, attempts: 3, lastAttemptAt: new Date(NOW.getTime() - 26 * 3_600_000).toISOString() });
+    expect(extra).toMatchObject({
+      invoiceId: ID1, invariant: 'I5', attempts: 4, lastAttemptAt: new Date(NOW.getTime() - 26 * 3_600_000).toISOString(),
+    });
     expect(summaryExtra()).toMatchObject({ i5NeedsOperator: 1, i5NeedsOperatorIds: [ID1] });
   });
 
@@ -725,8 +731,8 @@ describe('A5: identyfikatory faktur w logu i Sentry', () => {
 
     expect(report.i5Other).toBe(2);
     expect(logFor('warn', ID1)?.[0]).toMatch(/I5/);
-    expect(logFor('warn', ID1)?.[1]).toMatchObject({ invoiceId: ID1, status: 'accepted' });
-    expect(logFor('warn', ID2)?.[1]).toMatchObject({ invoiceId: ID2, status: 'queued' });
+    expect(logFor('warn', ID1)?.[1]).toMatchObject({ invoiceId: ID1, invariant: 'I5', status: 'accepted' });
+    expect(logFor('warn', ID2)?.[1]).toMatchObject({ invoiceId: ID2, invariant: 'I5', status: 'queued' });
   });
 
   it('odmowa „brak NIP-u” (ani w firmie, ani w fa3_data): licznik skippedNoNip, ostrzeżenie z invoiceId i inwariantem', async () => {
@@ -806,6 +812,47 @@ describe('A5: identyfikatory faktur w logu i Sentry', () => {
     // Puste rodzaje bez list.
     expect(Object.keys(extra ?? {}).filter((key) => key.endsWith('Ids')).sort())
       .toEqual(['i5NeedsOperatorIds', 'i5OtherIds', 'skippedNoDataIds', 'skippedNoNipIds']);
+  });
+
+  it('zdarzenie niesie też identyfikatory odmów ze ścieżki I5 i stanów oczekiwanych (brak danych, inna korekta w toku)', async () => {
+    needsOperator(ID1);
+    m.violations.push(i5(ID2), i5(ID3));
+    m.tables.invoices.push(
+      failedRow(ID2, 'RESULT_UNCERTAIN', { invoice_kind: 'correction' }), // stara KOR bez special_data
+      korRow(ID3, 'KSEF_REJECTED', '2026-10-01', { ksef_status: 'rejected' }),
+    );
+    m.send.mockRejectedValueOnce(Object.assign(new Error(OPEN_CORRECTION_CONFLICT), { code: '23505' }));
+
+    const report = await runKsefLifecycleReconcile(ctx);
+
+    expect(report).toMatchObject({ i5NeedsOperator: 1, skippedNoData: 1, skippedConflict: 1, errors: 0 });
+    expect(summaryExtra()).toMatchObject({ skippedNoDataIds: [ID2], skippedConflictIds: [ID3] });
+  });
+
+  it('zdarzenie niesie identyfikatory rodzaju wstrzymanego (KOR na PROD w I5)', async () => {
+    m.env.mockReturnValue('production');
+    needsOperator(ID1);
+    m.violations.push(i5(ID2));
+    m.tables.invoices.push(korRow(ID2, 'RESULT_UNCERTAIN', TODAY));
+
+    const report = await runKsefLifecycleReconcile(ctx);
+
+    expect(report).toMatchObject({ i5NeedsOperator: 1, skippedHeld: 1 });
+    expect(summaryExtra()).toMatchObject({ skippedHeld: 1, skippedHeldIds: [ID2] });
+  });
+
+  it('zdarzenie niesie identyfikatory odmowy „data minęła” (północ między odczytem a zleceniem)', async () => {
+    vi.setSystemTime(new Date('2026-10-03T21:59:59.000Z')); // 23:59:59 w Polsce
+    needsOperator(ID1);
+    m.tables.invoices.push(zalRow(ID2, 'KSEF_UNAVAILABLE', '2026-10-03'));
+    m.afterQuery = ({ filters }) => {
+      if (filters.some(([column]) => column === 'issue_date')) vi.setSystemTime(new Date('2026-10-03T22:00:01.000Z'));
+    };
+
+    const report = await runKsefLifecycleReconcile(ctx);
+
+    expect(report).toMatchObject({ i5NeedsOperator: 1, skippedIssueDate: 1 });
+    expect(summaryExtra()).toMatchObject({ skippedIssueDate: 1, skippedIssueDateIds: [ID2] });
   });
 
   it('najwyżej 20 identyfikatorów NA RODZAJ w Sentry; liczniki w raporcie i w Sentry pełne; log ma każdą fakturę', async () => {
