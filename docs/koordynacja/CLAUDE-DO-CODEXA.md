@@ -88,7 +88,9 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00146 | Claude (B4, #192) | `expense_ocr_job_identity` — najwyżej jeden wydatek na zadanie OCR w firmie (`uq_expenses_tenant_ocr_job`); preflight dubli, bez zmian danych | #238; **wgrana na db-1 06.10** |
 | 00147 | Claude (A4b, decyzja 06.10) | `ksef_error_code_issue_date_passed` — kod `ISSUE_DATE_PASSED` (terminal, bez automatu): worker nie wysyła KOR/ZAL/ROZ z datą wystawienia sprzed dzisiaj | #242; **wgrana na db-1 07.10** (przed wdrożeniem) |
 | 00148 | Claude (D-A4-1b-3 PR B, plan zero zgubionych faktur) | `ksef_duplicate_decision`: RPC `decide_ksef_duplicate` (decyzja klienta „ta sama sprzedaż” / „inna sprzedaż” przy nierozstrzygniętym 440, powody `no-own-file` i `known-number`), `ksef_duplicate_check_allows`, `ksef_duplicate_decision_blocker`, wyzwalacze `c_guard_ksef_retired_draft` (szkic z wpisem `number_taken` nie wychodzi ze stanu `draft`), `c_guard_ksef_retired_draft_delete` (klient nie usuwa szkicu wycofanego zwykłej faktury ani zaliczki; KOR/ROZ usuwalne) i `c_guard_ksef_retired_draft_number` (klient nie zmienia numeru szkicu wycofanego), `ksef_lifecycle_violations`: I5 bez faktur czekających na klienta + I5D „czeka na klienta”, UPDATE komunikatu katalogu `KSEF_NUMBER_TAKEN` | PR #245; **przed** wdrożeniem |
-| **00149** | — | następny wolny (00200 zajęte) | — |
+| 00149 | Claude (D-A4-1b-3 PR C, szkic #248) | `ksef_duplicate_original` — plik jest tylko na gałęzi szkicu `claude/d-a4-1b-3-c-oryginal-faktflow`, bez wiersza w rejestrze; wpisane tu, żeby nikt nie wziął tego numeru | szkic #248, nie w `main` |
+| 00150 | Claude (A5, plan zero zgubionych faktur; C-22) | `ksef_send_attempts` — dziennik prób wysyłki: wiersz na wykonanie joba wysyłki i na odmowę przed kolejką (etap, kod i klasa z chwili zdarzenia, job pg-boss, SHA workera); RLS bez polityk, zapis tylko `service_role`, bez DELETE | #249; **przed** wdrożeniem (addytywna) |
+| **00151** | — | następny wolny (00200 zajęte) | — |
 
 **Reguła numeracji (Bartosz, 05.10.2026):** rezerwacje sprzed bieżącej
 kolejności (00129, 00130) nie wracają „wstecz” — migracja przenoszona
