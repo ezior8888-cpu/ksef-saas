@@ -82,7 +82,7 @@ async function invoice(state: {
        id, tenant_id, direction, internal_number, invoice_type, invoice_kind, issue_date, seller_nip, buyer_nip,
        gross_total, net_total, vat_total, ksef_status, ksef_environment, last_error_code, ksef_number,
        fa3_data, seller_data, buyer_data, ksef_send_owner, submitted_to_ksef_at, updated_at)
-     VALUES ($1, $2, 'outgoing', $3, 'VAT', 'regular', '2026-10-14', '9480000014', '1234567890',
+     VALUES ($1, $2, 'outgoing', $3::text, 'VAT', 'regular', '2026-10-14', '9480000014', '1234567890',
        123, 100, 23, $4, 'test', $5, $6,
        jsonb_build_object('internalNumber', $3::text, 'type', 'VAT'), '{"nip":"9480000014"}', '{"nip":"1234567890"}',
        $7, CASE WHEN $8::int IS NULL THEN NULL ELSE now() - make_interval(mins => $8::int) END,
