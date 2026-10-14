@@ -85,6 +85,8 @@ Zasada dla klienta: **sesja użytkownika nie zmienia `ksef_status` nigdy**. Każ
 | I8 | numer faktury należy do dokładnie jednego wiersza firmy (indeks unikalny) i po resecie wraca do tego samego wiersza | bez zmian |
 | I9 | wiersz `rejected`/`failed` nie ma `ksef_number` | naruszenie = błąd krytyczny (alarm, nic automatycznie) |
 
+**Paczka crona (A5, zagłodzenie).** Cron I5/I6/I7 bierze w przebiegu najwyżej 100 faktur na zapytanie — liczy te, przy których coś zrobi (zlecenie, wyczerpanie, uzgodnienie), nie odczytane wiersze. Faktura, której automat nie ruszy (odmowa budowy zlecenia: brak pozycji, NIP-u albo danych dokumentu specjalnego, rodzaj wstrzymany; I5 poza `failed`/`rejected`, po limicie prób albo odroczone), nie zmienia wiersza i wraca w każdym przebiegu na to samo miejsce, więc nie zajmuje paczki: odczyt idzie dalej stronami (I6/I7 kursorem po `updated_at, id`, I5 po 100 identyfikatorów), najwyżej 10 stron na zapytanie. Bezpiecznik ostrzega w logu workera i liczy `scanCapped`; wtedy za ponad tysiącem takich faktur mogą czekać poprawne — odmówione trzeba naprawić albo cofnąć do szkicu.
+
 Raport dzienny strażnika na Telegram: liczba faktur per stan, naruszenia I1–I9; I5D osobno, akcje automatyczne wykonane w ciągu doby. Cel na Closed Alpha: **siedem kolejnych dni z zerem naruszeń** (bez I5D; `I5D-env` = 0) na KSeF TEST z realnym ruchem testowym.
 
 ## 6. Katalog `last_error_code`
