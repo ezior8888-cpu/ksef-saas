@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -66,6 +68,7 @@ import {
   recoveryState,
   stuckInvoices,
   STUCK_AUTOMAT_DEADLINE_MS,
+  STUCK_HINTS,
   type AttemptRow,
   type CronRun,
 } from '@/lib/admin/centrum/send-errors';
@@ -265,6 +268,19 @@ describe('utknięte w wysyłce teraz (strażnik I1/I2)', () => {
     });
     // Najpierw I1 od najstarszego (bez znacznika na górze), potem I2.
     expect(out.map((s) => s.invoiceId)).toEqual(['nodate', 'old', 'edge', 'mid', 'fresh', 'i2']);
+  });
+
+  // Operator czyta „Co dalej” na tym widoku — wskazana procedura musi istnieć
+  // w repo (#260), a podpowiedź nie może twierdzić, że jej nie ma.
+  it('podpowiedzi I1/I2 wskazują procedurę operatora z repo i runbook', () => {
+    const script = 'scripts/ops/zwolnij-utknieta-wysylke.sh';
+    expect(existsSync(script)).toBe(true);
+    for (const invariant of ['I1', 'I2'] as const) {
+      expect(STUCK_HINTS[invariant]).toContain(script);
+      expect(STUCK_HINTS[invariant]).toContain('hamulce-ksef.md');
+      expect(STUCK_HINTS[invariant]).not.toContain('jeszcze nie ma');
+    }
+    expect(readFileSync('docs/runbooks/hamulce-ksef.md', 'utf8')).toContain('## Faktura utknęła w wysyłce (I1/I2)');
   });
 });
 

@@ -330,8 +330,8 @@ export type StuckInvariant = (typeof STUCK_INVARIANTS)[number];
 export const STUCK_AUTOMAT_DEADLINE_MS = 45 * 60 * 1000;
 
 export const STUCK_HINTS: Record<StuckInvariant, string> = {
-  I1: 'Cron cyklu życia (co 15 min) wycofa ją do szkicu albo oznaczy ENQUEUE_LOST. Po 45 min wg zegara strażnika automat nie zadziałał: sprawdź chip „strażnik cyklu życia” wyżej i Sentry („Cykl życia: I1 nieobsłużone”). Karta faktury służy do diagnozy — dla queued nie ma na niej akcji; zgłoś fakturę Bartoszowi.',
-  I2: 'Automat tylko alarmuje. Wysyłka mogła dojść do KSeF — nie ponawiaj. Karta faktury nie ma akcji dla sending: sprawdź na niej znacznik przejęcia, dziennik prób i audyt, potem stan w KSeF; zgłoś fakturę Bartoszowi (procedury operatora dla I2 jeszcze nie ma).',
+  I1: 'Cron cyklu życia (co 15 min) wycofa ją do szkicu albo oznaczy ENQUEUE_LOST. Po 45 min wg zegara strażnika automat nie zadziałał: sprawdź chip „strażnik cyklu życia” wyżej i Sentry („Cykl życia: I1 nieobsłużone”). Karta faktury nie ma akcji dla queued; wyjście bez crona: scripts/ops/zwolnij-utknieta-wysylke.sh <id> — najpierw podgląd, potem --wykonaj (runbook hamulce-ksef.md, „Faktura utknęła w wysyłce”; skrypt uruchamia Bartosz).',
+  I2: 'Automat tylko alarmuje. Wysyłka mogła dojść do KSeF — nie ponawiaj. Karta faktury nie ma akcji dla sending: sprawdź na niej znacznik przejęcia, dziennik prób i audyt. Gdy w pg-boss nie ma żywego zlecenia tej faktury: scripts/ops/zwolnij-utknieta-wysylke.sh <id> — najpierw podgląd, potem --wykonaj → failed RESULT_UNCERTAIN, dalej na karcie „Tylko uzgodnij” albo „Wyślij ponownie” (runbook hamulce-ksef.md, „Faktura utknęła w wysyłce”; skrypt uruchamia Bartosz).',
 };
 
 /** Wiersz naruszenia z numerem i firmą (`listLifecycleViolations`). */

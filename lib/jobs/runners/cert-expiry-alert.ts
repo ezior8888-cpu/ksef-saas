@@ -175,10 +175,10 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
           emailReason = result.reason;
         }
 
-        // Mail już wyszedł, a jego wysyłka nie ma klucza idempotencji — wyjątek
-        // z pusha (np. PushReadError: awaria bazy) ponowiłby krok i zdublował
-        // mail. Push nieudany = niedostarczony: decyduje mail, inaczej jutro
-        // i lista dla operatora.
+        // Mail już wyszedł — wyjątek z pusha (np. PushReadError: awaria bazy)
+        // ponowiłby całe zadanie dla dodatkowego kanału (mail chroni klucz
+        // idempotencji, ale nie ma po co go ryzykować). Push nieudany =
+        // niedostarczony: decyduje mail, inaczej jutro i lista dla operatora.
         let push: { sent: number; failed: number };
         try {
           push = await sendPushToTenant(tenant.id, 'cert_expiry', {
