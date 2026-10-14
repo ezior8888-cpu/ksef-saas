@@ -76,6 +76,14 @@ inaczej „Wróć do szkicu”;
 pierwotnej (00135); utrzymujące się > 0 = sprawdź tamtą korektę. Które to
 faktury: sekcja 9 `kontrola-faktur-ksef.sh` (niżej, „Która faktura”).
 
+`scanCapped` (A5) — w tylu zapytaniach crona bezpiecznik odczytu przerwał
+szukanie: 10 stron po 100 faktur, których automat nie ruszy (odmówione,
+I5 poza `failed`/`rejected`, po limicie albo odroczone). Takie faktury nie
+zajmują paczki 100, ale za ponad tysiącem z nich poprawne nie są ponawiane.
+W logu workera obok jest ostrzeżenie „bezpiecznik odczytu” z inwariantem
+i rodzajem (`regular`/`special`). Wyjście: naprawić albo cofnąć do szkicu
+odmówione (sekcja 9 `kontrola-faktur-ksef.sh` pokazuje, które to grupy).
+
 **Dlaczego „Wyślij ponownie” operatora przy klasie reconcile jest bezpieczne**
 (ENQUEUE_LOST, INVALID_EVENT, RESULT_UNCERTAIN): runner najpierw rozstrzyga
 zamiar i uzgadnia otwarty wpis (A2), treść faktury z dowodem kontaktu jest
