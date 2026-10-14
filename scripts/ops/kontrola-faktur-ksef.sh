@@ -39,7 +39,8 @@
 #      środowisko KSeF workera, sonda PostgREST na kolumnę special_data;
 #      od A4b PR2a: failed KOR/ZAL/ROZ — czy automat ponowi (kod, data
 #      wystawienia, dane), zwykłe failed bez pozycji, I5 wg danych,
-#      ostatni przebieg crona
+#      ostatni przebieg crona; od A5 #2 faktury bez akcji automatu
+#      z invoiceId (I5 po limicie i poza failed/rejected, odmowy zlecenia)
 #  10. duplikaty 440 i decyzja klienta (D-A4-1b-3 PR B, 00148): failed
 #      KSEF_DUPLICATE_RECONCILE wg powodu i środowiska znacznika, wg blokady
 #      decyzji (po 00148), I5D „czeka na klienta” wg środowiska, powiadomienia
@@ -136,10 +137,14 @@ section "1. app-1: kontenery (web i worker na tym samym SHA?)"
   || echo "  (nie udało się odczytać kontenerów)"
 
 section "2. app-1: worker — crony, błędy, wyczerpane ponowienia, heartbeat (2 h)"
+# Wpisy cyklu życia o pojedynczych fakturach (I5, odmowy budowy zlecenia)
+# powtarzają się co przebieg i wypychałyby błędy z `tail -40` — pokazuje je
+# sekcja 9. Linie ERROR cyklu życia mają inne treści i zostają.
 "${SSH[@]}" "root@$APP" \
   "W=\$(docker ps --format '{{.Names}}' | grep '^$WORKER_PREFIX' | head -1); \
    if [ -z \"\$W\" ]; then echo '  (brak kontenera workera)'; exit 0; fi; \
-   docker logs --since 2h \"\$W\" 2>&1 | grep -iE 'cron|error|exhaust|heartbeat|błąd|bledy' | grep -v getSession | tail -40" \
+   docker logs --since 2h \"\$W\" 2>&1 | grep -iE 'cron|error|exhaust|heartbeat|błąd|bledy' | grep -v getSession \
+     | grep -vE 'Cykl życia: (I5 |faktury nie da się|korekta czeka)' | tail -40" \
   || echo "  (nie udało się odczytać logu workera)"
 
 section "3. app-1: /api/health"
@@ -221,11 +226,36 @@ sql "zwykle failed z kodem automatu bez tablicy pozycji w fa3_data (I6/I7 pomija
   "SELECT coalesce(i.last_error_code,'(brak kodu)') AS kod, count(*) FROM invoices i LEFT JOIN ksef_error_codes c ON c.code = i.last_error_code WHERE i.direction='outgoing' AND i.ksef_status='failed' AND i.invoice_kind='regular' AND (coalesce(c.auto_requeue, false) OR i.last_error_code = 'KSEF_PAUSED') AND jsonb_typeof(i.fa3_data->'lines') IS DISTINCT FROM 'array' GROUP BY 1 ORDER BY 1"
 sql "I5: failed/rejected z wpisem sent/intent starszym niz 48 h: rodzaj | stan | dane | czy automat I5 uzgodni | liczba (KOR zalezy od KSEF_ENV wyzej) (od 00148 faktury czekające na decyzję klienta to I5D — sekcja 10; ten licznik je obejmuje)" \
   "SELECT invoice_kind, ksef_status, dane, CASE WHEN invoice_kind='final' THEN 'nie - ROZ_HOLD do C4, operator' WHEN NOT dane THEN 'nie - brak danych, runbook Stary dokument specjalny' WHEN invoice_kind='correction' THEN 'tylko przy KSEF_ENV=test (production: KOR_HOLD)' ELSE 'tak - I5 raz na dobe' END AS automat, count(*) FROM (SELECT DISTINCT i.id, i.invoice_kind, i.ksef_status, (jsonb_typeof(i.fa3_data->'lines') IS NOT DISTINCT FROM 'array' AND CASE WHEN i.invoice_kind='regular' THEN true WHEN i.invoice_kind='advance' THEN jsonb_typeof(i.fa3_data->'advanceEnvelope') IS NOT DISTINCT FROM 'object' ELSE i.special_data IS NOT NULL END) AS dane FROM ksef_submissions s JOIN invoices i ON i.id = s.invoice_id WHERE s.status IN ('sent','intent') AND s.attempted_at < now() - interval '48 hours' AND i.ksef_status IN ('failed','rejected')) x GROUP BY 1,2,3,4 ORDER BY 1,2,3,4"
-printf -- '--- ostatni przebieg cyklu życia (worker, 30 min): skippedNoData / skippedHeld / skippedIssueDate / skippedConflict\n'
+printf -- '--- ostatni przebieg cyklu życia (worker, 30 min): skippedNoData / skippedNoNip / skippedHeld / skippedIssueDate / skippedConflict\n'
 "${SSH[@]}" "root@$APP" \
   "W=\$(docker ps --format '{{.Names}}' | grep '^$WORKER_PREFIX' | head -1); \
    if [ -z \"\$W\" ]; then echo '  (brak kontenera workera)'; exit 0; fi; \
    docker logs --since 30m \"\$W\" 2>&1 | grep 'przebieg zakończony' | tail -1" \
+  || echo "  (nie udało się odczytać logu workera)"
+# A5 #2: decyzje bez śladu w bazie (I5 po limicie i poza failed/rejected,
+# odmowy budowy zlecenia) — log jest jedynym miejscem z invoiceId; Sentry ma
+# najwyżej 20 na rodzaj. Ostrzeżenia idą na stderr kontenera: stąd 2>&1.
+# Bez znacznika czasu i numeru joba, żeby dwa przebiegi z okna dały jeden
+# wpis; najpierw WARN (czeka na człowieka), potem info (stany oczekiwane).
+# Pusta lista znaczy „brak” tylko wtedy, gdy ostatni przebieg doszedł do
+# I5–I7 (`"paused":false`) — przy wyłączniku cron ich nie sprawdza.
+printf -- '--- cykl życia, 30 min: faktury bez akcji automatu (invoiceId, invariant, reason / status, attempts)\n'
+"${SSH[@]}" "root@$APP" \
+  "W=\$(docker ps --format '{{.Names}}' | grep '^$WORKER_PREFIX' | head -1); \
+   if [ -z \"\$W\" ]; then echo '  (brak kontenera workera)'; exit 0; fi; \
+   L=\$(docker logs --since 30m \"\$W\" 2>&1) || { echo '  (nie udało się odczytać logu workera)'; exit 0; }; \
+   R=\$(printf '%s\n' \"\$L\" | grep 'przebieg zakończony' | tail -1); \
+   E=\$(printf '%s\n' \"\$L\" | grep -E 'Cykl życia: (I5 |faktury nie da się|korekta czeka)' \
+     | sed -E 's/^\[[^]]*\] \[[^]]*\] //' | sort -u | sort -s -k1,1r); \
+   N=\$(printf '%s\n' \"\$E\" | grep -c .); \
+   if [ \"\$N\" -gt 0 ]; then \
+     printf '%s\n' \"\$E\" | head -200; \
+     if [ \"\$N\" -gt 200 ]; then echo \"  (pokazano 200 z \$N; reszta: docker logs workera z 2>&1)\"; fi; \
+   else case \"\$R\" in \
+     *'\"paused\":false'*) echo '  (brak — ostatni przebieg sprawdził I5–I7)' ;; \
+     '') echo '  (brak przebiegu crona w 30 min — lista nic nie mówi)' ;; \
+     *) echo '  (pusto, ale ostatni przebieg nie sprawdzał I5–I7: wyłącznik wysyłek włączony albo nieczytelny)' ;; \
+   esac; fi" \
   || echo "  (nie udało się odczytać logu workera)"
 # PATCH bez tokenu (rola anon) na nieistniejące id — niczego nie zmienia, ale
 # PostgREST sprawdza kolumny treści zapisu w swoim cache schematu. SELECT
