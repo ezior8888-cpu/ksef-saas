@@ -18,6 +18,7 @@ export default defineConfig({
       'tests/rls-decyzja-duplikatu.test.ts',
       'tests/rls-dziennik-prob-wysylki.test.ts',
       'tests/rls-kontrola-dziennik-prob.test.ts',
+      'tests/rls-zwolnij-utknieta-wysylke.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

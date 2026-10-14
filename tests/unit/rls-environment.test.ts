@@ -57,6 +57,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-dziennik-prob-wysylki.test.ts',
       // Sekcja 12 skryptu kontroli (dziennik prób z 00150) liczy jak /admin/centrum/bledy.
       'tests/rls-kontrola-dziennik-prob.test.ts',
+      // A5: procedura operatora dla faktury, która utknęła w wysyłce (I2/I1) — skrypt SQL przez psql.
+      'tests/rls-zwolnij-utknieta-wysylke.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
