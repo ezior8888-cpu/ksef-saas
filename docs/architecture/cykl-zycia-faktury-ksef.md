@@ -39,7 +39,7 @@ Definicja **dowodu kontaktu** (używana przez wyzwalacze, RPC i strażnika): fak
 | `accepted` | KSeF nadał numer; dokument wystawiony | **tak** | tak, na zawsze | brak | tylko nowy dokument (KOR); UPO osobno |
 | `rejected` | KSeF odrzucił **treść** (XSD, kod statusu ≥ 400 poza 440, HTTP 4xx poza 401/403/408/429) — dokument nie został wystawiony | dla tej treści tak | tak, do resetu | brak | `draft` przez `reset_ksef_send` (klient poprawia i wysyła pod tym samym numerem) |
 | `failed` | wysyłka nie doszła do skutku albo wynik niepewny; przyczyna w `last_error_code` | **nie** | tak | zależy od kodu (sekcja 6) | `queued` przez `requeue_ksef_send` (po uzgodnieniu), `draft` przez `reset_ksef_send` (tylko bez dowodu kontaktu) |
-| `offline_queued` | tryb Offline24; na produkcji wyłączony (AUD-14), na TEST sterowany przez `process-offline-queue` | nie | tak | termin ustawowy (`idempotency.ts`) | `sending`, `failed`; na PROD nieosiągalny |
+| `offline_queued` | tryb Offline24 — od 02.10.2026 wyłączony wszędzie, także na KSeF TEST (`isOffline24Enabled` zwraca `false`, decyzja Bartosza; na PROD wyłączony już od AUD-14); zostały tylko historyczne wiersze | nie | tak | termin ustawowy (`idempotency.ts`) | **nie ma przejścia do `sending`**: odtworzenie z kolejki wyłączone, cron `process-offline-queue` nie tworzy zlecenia, tylko zamyka wpis kolejki. Jedyne wyjście: `failed OFFLINE_DEADLINE_EXCEEDED` z tego crona (termin minął, faktura nieprzejęta). Każda inna faktura w tym stanie zostaje **bez wyjścia** — `requeue_ksef_send` i `reset_ksef_send` przyjmują tylko `failed`/`rejected` (luka A5 #5; runbook `docs/runbooks/offline24-zalegle.md`, PR #257) |
 
 Faktura z dowodem kontaktu nigdy nie wraca do `draft`. Faktura bez dowodu kontaktu może wrócić do `draft` z każdego stanu błędnego, bo prawnie nie została wystawiona, a numer pozostaje jej numerem.
 
@@ -66,7 +66,9 @@ Legenda wykonawcy: **K** = sesja klienta (`authenticated`, RLS), **S** = akcja s
 | `draft` z wpisem `number_taken` → `*` | — | — | — | ✅ zablokowane (`c_guard_ksef_retired_draft`, 00148; każda rola: przejęcie, kolejkowanie, zapis porażki i akceptacji) | bez zmian |
 | `draft` z wpisem `number_taken`: zmiana numeru przez klienta | — | — | — | ✅ zablokowane (`c_guard_ksef_retired_draft_number`, 00148, 07.10 (11); serwis może za zgodą Bartosza) | bez zmian |
 | `accepted` → cokolwiek | — | — | — | ✅ zablokowane (00117) | bez zmian |
-| `*` → `offline_queued` | W | tylko gdy `isOffline24Enabled(env)` | jak dziś | ✅ na TEST, ❌ na PROD | bez zmian; stan zostaje w modelu, bo istnieją historyczne wiersze |
+| `*` → `offline_queued` | W | tylko gdy `isOffline24Enabled(env)` | jak dziś | ❌ wszędzie od 02.10.2026 (`isOffline24Enabled` = `false`; wcześniej ✅ na TEST, ❌ na PROD) | bez zmian; stan zostaje w modelu, bo istnieją historyczne wiersze |
+| `offline_queued` → `sending` | — | — | — | ❌ od 02.10.2026: job wysyłki odrzuca zdarzenie odtworzenia z kolejki, a cron kolejki zamyka wpis `queued` (`<KOD>_REQUIRES_RECONCILIATION` albo `expired`) bez zlecenia | wyjście dla faktur, które już stoją — luka A5 #5 (ścieżka operatora, zapewne z migracją) |
+| `offline_queued` → `failed` | C (`process-offline-queue`, co 5 min, niezależnie od wyłącznika wysyłek) | wpis kolejki `queued` ze środowiskiem = `KSEF_ENV` workera, termin minął, `submitted_to_ksef_at IS NULL` | wpis `expired`; faktura `failed OFFLINE_DEADLINE_EXCEEDED` — kod spoza katalogu (sekcja 6), więc alarm I4 | ✅ | bez zmian; po terminie z przejęciem, w kwarantannie, przy innym środowisku albo wpisie `sending` faktura zostaje w `offline_queued` (wiersz wyżej) |
 
 Zasada dla klienta: **sesja użytkownika nie zmienia `ksef_status` nigdy**. Każde przejście z `draft` wykonuje serwer po własnych sprawdzeniach. Dzięki temu wyzwalacze 00119 i 00122 mogą stracić wyjątek „klient pisze `queued`” i stają się prostsze: klient edytuje i usuwa wyłącznie `draft` bez dowodu kontaktu, resztę blokują.
 
