@@ -27,6 +27,12 @@
 #   4. faktury wychodzące wg statusu; `queued` i `sending` > 15 min;
 #      `failed` wg kodu; `failed`/`rejected` z przejęciem wysyłki (K3);
 #      przyjęte bez środowiska KSeF (W15)
+#  4a. Offline24 (automat wyłączony 02.10.2026): KSEF_ENV workera, kolejka
+#      ksef_offline_queue wg stanu, otwarte wpisy i co zrobi z nimi cron,
+#      faktury offline_queued wg werdyktu (BEZ WYJSCIA), lista do uzgodnienia
+#      z KSeF, failed/rejected z OFFLINE_*, inny ślad (zamrożone szkice),
+#      wpisy zamknięte, przebiegi crona z inngest_run_log — runbook
+#      docs/runbooks/offline24-zalegle.md
 #   5. UPO wg statusu i błędu (W12)
 #   6. skrzynka: przychodzące bez kosztu, bez XML, z otwartym znacznikiem (K2)
 #   7. pg-boss: joby wg (kolejka, stan), harmonogramy, polityka kolejek
@@ -169,6 +175,38 @@ sql "przyjęte bez środowiska KSeF (W15/S13: do uzgodnienia jako postgres)" \
   "SELECT direction, count(*) FROM invoices WHERE ksef_status='accepted' AND ksef_environment IS NULL GROUP BY 1"
 sql "przyjęte wg środowiska (przed przełączeniem KSEF_ENV)" \
   "SELECT direction, coalesce(ksef_environment,'(null)') AS env, count(*) FROM invoices WHERE ksef_status='accepted' GROUP BY 1,2 ORDER BY 1,2"
+
+section "4a. db-1: Offline24 — zaległości po wyłączeniu automatu 02.10 (A5 #4)"
+# Nowych wpisów nie ma (isOffline24Enabled = false), ale cron kolejki
+# (cron.process-offline-queue, co 5 min, niezależnie od wyłącznika wysyłek)
+# zamyka stare wpisy queued ze środowiskiem = KSEF_ENV workera: kwarantanna
+# i wygaśnięcie przy przejętej fakturze zostawiają fakturę w offline_queued
+# BEZ WYJŚCIA (żadne RPC ani przycisk jej nie obejmuje). Kilka wpisów na
+# fakturę jest możliwe — liczy się najnowszy. KSEF_ENV workera nie wchodzi
+# do SQL; porównaj z nim kolumnę środowiska. Co znaczy każdy wiersz i co
+# robić: docs/runbooks/offline24-zalegle.md. Danych nie zmieniaj.
+printf -- '--- KSEF_ENV workera (cron kolejki bierze tylko wpisy z tym środowiskiem)\n'
+"${SSH[@]}" "root@$APP" \
+  "W=\$(docker ps --format '{{.Names}}' | grep '^$WORKER_PREFIX' | head -1); \
+   if [ -z \"\$W\" ]; then echo '  (brak kontenera workera)'; exit 0; fi; \
+   docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' \"\$W\" | grep '^KSEF_ENV=' || echo '  (KSEF_ENV nieustawione)'" \
+  || echo "  (nie udało się odczytać środowiska workera)"
+sql "(a) kolejka ksef_offline_queue wg stanu: stan | środowisko | liczba | najstarszy wpis | najnowszy wpis | ostatnia zmiana (pusto = brak śladu Offline24; najnowszy wpis po wdrożeniu wyłączenia, 02-03.10.2026 = coś parkuje mimo wyłączenia — błąd)" \
+  "SELECT q.status::text, coalesce(q.ksef_environment,'(null)'), count(*), min(q.created_at)::date, max(q.created_at)::date, max(q.updated_at) FROM ksef_offline_queue q GROUP BY 1,2 ORDER BY 1,2"
+sql "(b) otwarte wpisy kolejki (queued/sending) — co z nimi zrobi cron (przy środowisku wpisu = KSEF_ENV): stan | środowisko | powód i skutek | stan faktury | przejęta | po terminie | liczba | najbliższy termin" \
+  "SELECT q.status::text, coalesce(q.ksef_environment,'(null)'), CASE WHEN q.status='sending' THEN 'sending: odtworzenie wylaczone od 02.10, nic go nie zamknie' WHEN q.ksef_environment IS NULL THEN 'srodowisko NULL sprzed 00117: cron pomija na zawsze' WHEN q.next_attempt_at > now() THEN 'queued: cron wezmie dopiero po next_attempt_at' WHEN greatest(q.next_attempt_at, q.updated_at) < now() - interval '15 minutes' THEN 'queued ponad 15 min do wziecia: srodowisko inne niz KSEF_ENV albo przebieg crona pada (h)' WHEN i.id IS NULL THEN 'queued: cron oznaczy wpis QUEUE_INVOICE_OWNERSHIP_MISMATCH (faktura innej firmy)' WHEN i.ksef_status='accepted' THEN 'queued: cron zamknie wpis, faktura accepted bez zmian' WHEN i.ksef_status <> 'offline_queued' THEN 'queued: cron zamknie wpis, faktura bez zmian (ma wlasne wyjscie)' WHEN q.deadline < now() AND i.submitted_to_ksef_at IS NULL THEN 'queued: cron zamknie, faktura failed OFFLINE_DEADLINE_EXCEEDED (z wyjsciem)' ELSE 'queued: cron zamknie, faktura zostanie offline_queued BEZ WYJSCIA' END, coalesce(i.ksef_status,'(brak faktury)'), (i.submitted_to_ksef_at IS NOT NULL), (q.deadline < now()), count(*), min(q.deadline) FROM ksef_offline_queue q LEFT JOIN invoices i ON i.id = q.invoice_id AND i.tenant_id = q.tenant_id WHERE q.status IN ('queued','sending') GROUP BY 1,2,3,4,5,6 ORDER BY 1,2,3,4,5,6"
+sql "(c) faktury offline_queued (najnowszy wpis kolejki): wpis | środowisko wpisu | kod faktury | werdykt | termin | przejęta | dowód kontaktu | QR offline | liczba (BEZ WYJSCIA = faktura stoi dziś bez wyjścia; co ją uwolni — runbook)" \
+  "SELECT coalesce(q.status::text,'(brak wpisu)'), coalesce(q.ksef_environment,'(null)'), coalesce(i.last_error_code,'(brak kodu)'), CASE WHEN q.status IN ('failed','expired') THEN 'BEZ WYJSCIA: wpis zamkniety przez cron' WHEN q.status IS NULL OR q.status='sent' THEN 'BEZ WYJSCIA: cron jej nie dotyka (brak wpisu albo sent)' WHEN q.status='sending' OR q.ksef_environment IS NULL THEN 'BEZ WYJSCIA: otwarty wpis, ktorego cron nie wezmie' ELSE 'BEZ WYJSCIA, jesli srodowisko wpisu inne niz KSEF_ENV; rowne = czeka na cron (b)' END, CASE WHEN q.deadline IS NULL THEN '-' WHEN q.deadline < now() THEN 'po terminie' ELSE 'w terminie' END, (i.submitted_to_ksef_at IS NOT NULL), ksef_has_contact_evidence(i.id, i.tenant_id), (i.offline_qr_offline IS NOT NULL), count(*) FROM invoices i LEFT JOIN LATERAL (SELECT x.status, x.ksef_environment, x.deadline, x.next_attempt_at FROM ksef_offline_queue x WHERE x.invoice_id = i.id AND x.tenant_id = i.tenant_id ORDER BY x.created_at DESC, x.id LIMIT 1) q ON true WHERE i.direction='outgoing' AND i.ksef_status='offline_queued' GROUP BY 1,2,3,4,5,6,7,8 ORDER BY 4,1,3"
+sql "(d) faktury offline_queued do uzgodnienia z KSeF (do 50; najpierw bez wpisu, potem wg terminu): firma | NIP firmy | faktura | numer | data wystawienia | kod | wpis | środowisko wpisu | termin | przejęta | dowód kontaktu | QR offline | ostatnia zmiana" \
+  "SELECT i.tenant_id, t.nip, i.id, i.internal_number, i.issue_date, coalesce(i.last_error_code,'-'), coalesce(q.status::text,'(brak wpisu)'), coalesce(q.ksef_environment,'(null)'), q.deadline, (i.submitted_to_ksef_at IS NOT NULL), ksef_has_contact_evidence(i.id, i.tenant_id), (i.offline_qr_offline IS NOT NULL), i.updated_at FROM invoices i JOIN tenants t ON t.id = i.tenant_id LEFT JOIN LATERAL (SELECT x.status, x.ksef_environment, x.deadline, x.next_attempt_at FROM ksef_offline_queue x WHERE x.invoice_id = i.id AND x.tenant_id = i.tenant_id ORDER BY x.created_at DESC, x.id LIMIT 1) q ON true WHERE i.direction='outgoing' AND i.ksef_status='offline_queued' ORDER BY q.deadline NULLS FIRST, i.updated_at, i.id LIMIT 50"
+sql "(e) failed/rejected z kodem OFFLINE_* (kod spoza katalogu = alarm I4): kod | stan | rodzaj | wpis | przejęta | dowód kontaktu | QR offline | w katalogu | liczba" \
+  "SELECT i.last_error_code, i.ksef_status, i.invoice_kind, coalesce(q.status::text,'(brak wpisu)'), (i.submitted_to_ksef_at IS NOT NULL), ksef_has_contact_evidence(i.id, i.tenant_id), (i.offline_qr_offline IS NOT NULL), (c.code IS NOT NULL), count(*) FROM invoices i LEFT JOIN ksef_error_codes c ON c.code = i.last_error_code LEFT JOIN LATERAL (SELECT x.status, x.ksef_environment, x.deadline, x.next_attempt_at FROM ksef_offline_queue x WHERE x.invoice_id = i.id AND x.tenant_id = i.tenant_id ORDER BY x.created_at DESC, x.id LIMIT 1) q ON true WHERE i.direction='outgoing' AND i.ksef_status IN ('failed','rejected') AND left(i.last_error_code, 8) = 'OFFLINE_' GROUP BY 1,2,3,4,5,6,7,8 ORDER BY 1,2,3,4"
+sql "(f) inny ślad Offline24 bez numeru KSeF (poza c i e): stan | kod | wpis | klucz offline (t = treść i pozycje zamrożone, reset tego nie zdejmuje) | liczba" \
+  "SELECT coalesce(i.ksef_status,'(null)'), coalesce(i.last_error_code,'(brak kodu)'), coalesce(q.status::text,'(brak wpisu)'), (i.offline_idempotency_key IS NOT NULL), count(*) FROM invoices i LEFT JOIN LATERAL (SELECT x.status, x.ksef_environment, x.deadline, x.next_attempt_at FROM ksef_offline_queue x WHERE x.invoice_id = i.id AND x.tenant_id = i.tenant_id ORDER BY x.created_at DESC, x.id LIMIT 1) q ON true WHERE i.direction='outgoing' AND i.ksef_number IS NULL AND i.ksef_status IS DISTINCT FROM 'offline_queued' AND NOT (i.ksef_status IN ('failed','rejected') AND left(coalesce(i.last_error_code,''), 8) = 'OFFLINE_') AND (i.offline_idempotency_key IS NOT NULL OR q.status IS NOT NULL) GROUP BY 1,2,3,4 ORDER BY 1,2,3"
+sql "(g) wpisy kolejki zamknięte (failed/expired): stan | powód | stan faktury | liczba | ostatnia zmiana (…_REQUIRES_RECONCILIATION albo expired przy offline_queued = kwarantanna albo wygaśnięcie bez wyjścia)" \
+  "SELECT q.status::text, left(coalesce(q.last_error,'(brak)'), 60), coalesce(i.ksef_status,'(brak faktury)'), count(*), max(q.updated_at) FROM ksef_offline_queue q LEFT JOIN invoices i ON i.id = q.invoice_id AND i.tenant_id = q.tenant_id WHERE q.status IN ('failed','expired') GROUP BY 1,2,3 ORDER BY 1,2,3"
+sql "(h) przebiegi crona cron.process-offline-queue z doby (inngest_run_log, do 5): stan | czas | ms | błąd (failed = handler rzucił wyjątek, wpis zostaje queued; brak wierszy przy działającym workerze = cron nie startuje, sekcja 7)" \
+  "SELECT status, created_at, duration_ms, left(coalesce(error_message,'-'), 160) FROM inngest_run_log WHERE event_name='cron.process-offline-queue' AND created_at > now() - interval '1 day' ORDER BY created_at DESC LIMIT 5"
 
 section "5. db-1: UPO"
 sql "statusy" "SELECT status, count(*) FROM upo_receipts GROUP BY 1 ORDER BY 1"

@@ -12,6 +12,7 @@ export default defineConfig({
       'tests/rls-cykl-faktury.test.ts',
       'tests/rls-kolejkowanie-wysylki.test.ts',
       'tests/rls-cykl-wyzwalacze.test.ts',
+      'tests/rls-kontrola-offline24.test.ts',
       'tests/rls-korekta-jedna-otwarta.test.ts',
       'tests/rls-dane-specjalne.test.ts',
       'tests/rls-decyzja-duplikatu.test.ts',
