@@ -146,15 +146,29 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
           emailReason = result.reason;
         }
 
-        const push = await sendPushToTenant(tenant.id, 'cert_expiry', {
-          title:
-            due <= LAST_THRESHOLD
-              ? 'Certyfikat KSeF — pilne'
-              : 'Certyfikat KSeF wkrótce wygaśnie',
-          body: `${tenant.name ?? 'Firma'}: ok. ${daysRemaining} dni do wygaśnięcia.`,
-          url: '/settings/ksef',
-          tag: `cert-expiry-${tenant.id}-${due}`,
-        });
+        // Mail już wyszedł, a jego wysyłka nie ma klucza idempotencji — wyjątek
+        // z pusha (np. PushReadError: awaria bazy) ponowiłby krok i zdublował
+        // mail. Push nieudany = niedostarczony: decyduje mail, inaczej jutro
+        // i lista dla operatora.
+        let push: { sent: number; failed: number };
+        try {
+          push = await sendPushToTenant(tenant.id, 'cert_expiry', {
+            title:
+              due <= LAST_THRESHOLD
+                ? 'Certyfikat KSeF — pilne'
+                : 'Certyfikat KSeF wkrótce wygaśnie',
+            body: `${tenant.name ?? 'Firma'}: ok. ${daysRemaining} dni do wygaśnięcia.`,
+            url: '/settings/ksef',
+            tag: `cert-expiry-${tenant.id}-${due}`,
+          });
+        } catch (e) {
+          logger.warn('Certyfikat: push nieudany — ostrzeżenie liczone bez niego', {
+            tenantId: tenant.id,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          Sentry.captureException(e, { tags: { job: 'cert-expiry-alert', step: 'push' }, extra: { tenantId: tenant.id } });
+          push = { sent: 0, failed: 0 };
+        }
 
         const delivered = emailed || push.sent > 0;
         // Zapis tylko po dostarczeniu: niedostarczone ostrzeżenie jutro
