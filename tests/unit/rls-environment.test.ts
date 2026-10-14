@@ -53,6 +53,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-decyzja-duplikatu.test.ts',
       // 00150 (A5): dziennik prób wysyłki — tylko serwis, bez DELETE, nie jest dowodem kontaktu.
       'tests/rls-dziennik-prob-wysylki.test.ts',
+      // A5: procedura operatora dla faktury, która utknęła w wysyłce (I2/I1) — skrypt SQL przez psql.
+      'tests/rls-zwolnij-utknieta-wysylke.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
