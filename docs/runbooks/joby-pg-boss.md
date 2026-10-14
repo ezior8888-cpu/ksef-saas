@@ -56,6 +56,7 @@ Błędy jobów idą do Sentry (worker od 01.10.2026).
 | Zadania czekają w `created` | logi workera (czy kolejka „aktywna”), limity `groupConcurrency` | jeśli worker żyje, a kolejka stoi — restart workera |
 | Faktury wiszą w „Wysyłanie” | `docs/runbooks/hamulce-ksef.md`, `ksef_submissions` | uzgodnienie po numerach referencyjnych dzieje się przy ponowieniu (#126) |
 | Wyłączyć crony (test, przełączanie) | — | `WORKER_DISABLE_SCHEDULES=true` na workerze — worker czyści też zapisany harmonogram |
+| Sentry „Powiadomienie o wyniku wysyłki faktury nie doszło do klienta” (A5 #3) | `extra`: `invoiceId`, `tenantId`, kolejka (`…succeeded.notify` = przyjęta, `…failed.notify` = odrzucona albo czeka na decyzję), `error`; trzy próby: od razu, po 5 min, po 30 min | klient nie dostał e-maila (push mógł dojść — e-mail ponawiany osobno). Daj znać klientowi ręcznie o stanie faktury; przy duplikacie 440 — „Przypomnij klientowi” w `/admin/ksef/<id>`. Ostrzeżenie „Karta FLO nieudana” w logu workera nie zatrzymuje powiadomienia |
 
 **Nie kasuj** wierszy w `pgboss.*` ręcznie bez uzgodnienia — to także historia
 przebiegów i ochrona przed podwójnym wykonaniem.
