@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@sentry/nextjs', () => ({ captureException: mocks.captureException }));
 vi.mock('@/lib/supabase/admin-queries', () => ({
-  getTenantAdminEmail: async (id: string) => `admin-${id}@firma.test`,
+  readTenantOwnerContact: async (id: string) => ({ ownerUserId: `user-${id}`, email: `admin-${id}@firma.test` }),
 }));
 vi.mock('@/lib/email/send', () => ({ sendCertExpiryAlert: mocks.email }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToTenant: mocks.push }));
