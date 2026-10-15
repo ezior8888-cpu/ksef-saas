@@ -47,9 +47,9 @@ Priorytet ocenia człowiek przy przeglądaniu eskalacji — AI go nie ustala.
   niczego nie blokują. Postępowanie:
   1. Upewnij się, że pisze właściciel: adres nadawcy = e-mail konta
      z rolą `owner` w firmie o podanym NIP.
-  2. Zaproponuj eksport danych przed usunięciem (Raporty → Eksporty).
-  3. Abonament właściciel anuluje sam: Ustawienia → Płatności → panel
-     Stripe. Bez tego opłaty idą dalej.
+  2. Zaproponuj eksport danych przed usunięciem (Księgowość → Eksport).
+  3. Abonament właściciel anuluje sam: Ustawienia → Subskrypcja
+     i rozliczenia → panel Stripe. Bez tego opłaty idą dalej.
   4. Zgłoś sprawę Bartoszowi — wyłączenie dostępu i usunięcie danych firmy
      wymaga decyzji i ręcznej procedury. Nie ustawiaj flag w bazie „na
      próbę”: dają złudzenie usunięcia, a firma działa dalej.
