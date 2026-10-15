@@ -550,6 +550,22 @@ export interface InvoiceEmailPayload {
   pdfFilename: string;
 }
 
+/**
+ * Stopka maila z fakturą do nabywcy. Do 15.10.2026: „Wiadomość wysłana przez
+ * FaktFlow” — nabywca nie wiedział, że nadawcą jest sprzedawca, a FaktFlow
+ * tylko przetwarza dane na jego zlecenie, ani że odpowiedź trafi do obsługi
+ * FaktFlow (Reply-To), nie do sprzedawcy. Art. 14 RODO jest obowiązkiem
+ * sprzedawcy; stopka mówi nabywcy, do kogo się zwrócić.
+ */
+export function invoiceEmailFooter(sellerName: string): string {
+  const seller = escapeHtml(sellerName);
+  return (
+    `Fakturę wysłał(a) ${seller} za pośrednictwem serwisu FaktFlow, który przetwarza dane na zlecenie ${seller}. ` +
+    `W sprawie faktury, płatności i Twoich danych osobowych skontaktuj się bezpośrednio z ${seller} — ` +
+    `odpowiedź na tę wiadomość trafi do obsługi FaktFlow, która przekaże ją nadawcy.`
+  );
+}
+
 export async function sendInvoiceEmail(
   payload: InvoiceEmailPayload,
 ): Promise<EmailStubResult> {
@@ -570,7 +586,7 @@ export async function sendInvoiceEmail(
         <tr><td style="color:#6b7280;padding-right:16px">${escapeHtml(payload.amountCaption)}</td><td><strong>${escapeHtml(payload.amountLabel)}</strong></td></tr>
         <tr><td style="color:#6b7280;padding-right:16px">Termin płatności</td><td>${escapeHtml(payload.dueDate)}</td></tr>
       </table>
-      <p style="color:#9ca3af;font-size:12px">Wiadomość wysłana przez FaktFlow.</p>
+      <p style="color:#9ca3af;font-size:12px">${invoiceEmailFooter(payload.sellerName)}</p>
     </div>
   `;
 
