@@ -10,11 +10,26 @@ import { Pop } from './anim';
 import { Container, Icon } from './ui';
 import { SUPPORT_EMAIL } from '@/lib/site';
 
-const DETAILS = [
-  { icon: '986463349', value: '+48 22 123 45 67' },
-  { icon: '4022663340', value: SUPPORT_EMAIL },
-  { icon: '1743809183', value: 'ul. Piękna 15/3\n00-549 Warszawa' },
-];
+// Do 15.10.2026 były tu telefon „+48 22 123 45 67” i adres „ul. Piękna 15/3,
+// Warszawa” z szablonu — zmyślone dane kontaktowe firmy (art. 5 u.ś.u.d.e.,
+// a numer i adres mogą należeć do kogoś innego). Adres i telefon wracają
+// tylko z prawdziwymi danymi usługodawcy (lib/legal/entity.ts — PR #264).
+const DETAILS = [{ icon: '4022663340', value: SUPPORT_EMAIL }];
+
+/**
+ * Formularz NIE ma backendu — do 15.10.2026 „Wyślij” tylko blokował
+ * przeładowanie strony i wiadomość przepadała bez śladu (także żądania RODO,
+ * na które mamy miesiąc). Teraz otwiera program pocztowy z gotową wiadomością
+ * i mówi o tym wprost.
+ */
+function composeMail(form: HTMLFormElement): string {
+  const data = new FormData(form);
+  const topic = String(data.get('topic') || 'Wiadomość ze strony FaktFlow');
+  const lines = [String(data.get('message') ?? ''), '', `— ${String(data.get('name') ?? '')}`.trim()];
+  const params = new URLSearchParams({ subject: topic, body: lines.join('\n') });
+  // URLSearchParams koduje spacje jako „+”, a klienty poczty pokazałyby plusy.
+  return `mailto:${SUPPORT_EMAIL}?${params.toString().replace(/\+/g, '%20')}`;
+}
 
 export function Contact() {
   return (
@@ -28,8 +43,8 @@ export function Contact() {
           </h2>
           <MaskReveal delay={0.18}>
             <p className="z-lead text-[var(--z-muted)]">
-              Odpowiadamy w ciągu jednego dnia roboczego. Bez botów
-              i bez infolinii.
+              Na e-maile odpowiada człowiek, zwykle w ciągu dwóch dni
+              roboczych. Szybkie pytania możesz zadać asystentowi AI w panelu.
             </p>
           </MaskReveal>
         </div>
@@ -65,7 +80,10 @@ export function Contact() {
             viewport={{ once: true, amount: 0.2 }}
             transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
             className="flex w-full flex-col gap-5 rounded-[20px] border border-[var(--z-300)] bg-white p-6 lg:p-8"
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              window.location.href = composeMail(e.currentTarget);
+            }}
           >
             <h3 className="z-h4">W czym możemy pomóc?</h3>
 
@@ -96,8 +114,17 @@ export function Contact() {
               type="submit"
               className="z-body inline-flex w-fit items-center rounded-[12px] bg-[var(--z-black)] px-6 py-3.5 font-medium text-white transition-transform hover:scale-[1.02]"
             >
-              Wyślij
+              Otwórz w programie pocztowym
             </button>
+            <p className="z-small text-[var(--z-muted)]">
+              Wiadomość otworzy się w Twoim programie pocztowym, zaadresowana
+              na {SUPPORT_EMAIL} — wyślesz ją stamtąd. Administratorem danych
+              z korespondencji jest usługodawca FaktFlow, szczegóły w{' '}
+              <a href="/legal/polityka-prywatnosci" className="underline underline-offset-2">
+                polityce prywatności
+              </a>
+              .
+            </p>
           </motion.form>
         </div>
       </Container>

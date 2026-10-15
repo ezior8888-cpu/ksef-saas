@@ -10,9 +10,9 @@ import { SiteFooter } from '../_components/closing';
 import { IconSprite } from '../_components/icon-sprite';
 import { MaskReveal, MaskRevealWords } from '../_components/mask-reveal';
 import { SiteNav } from '../_components/site-nav';
+import { SUPPORT_EMAIL } from '@/lib/site';
+
 import { Container } from '../_components/ui';
-import { Metrics } from './_components/metrics';
-import { TeamGrid } from './_components/team-grid';
 
 export const metadata: Metadata = {
   title: 'O nas | FaktFlow',
@@ -93,9 +93,10 @@ export default function AboutPage() {
           ))}
         </ul>
 
-        <Container>
-          <Metrics />
-        </Container>
+        {/* Metryki („1,2 mln faktur przeszło przez FaktFlow”, „8 tys. firm
+            miesięcznie”, „99,9% dostępności”) usunięte 15.10.2026: liczby
+            pochodziły z szablonu, a serwis jest przed startem. Wracają tylko
+            z danymi, które da się wykazać (art. 5 u.p.n.p.r., art. 16 u.z.n.k.). */}
       </header>
 
       {/* ── wartości: 467 obok 559 ─────────────────────────────────── */}
@@ -160,7 +161,9 @@ export default function AboutPage() {
             </MaskReveal>
           </div>
 
-          <TeamGrid />
+          {/* Siatka zespołu usunięta 15.10.2026: trzy z czterech osób
+              (z portretami z szablonu) nie istniały. Wraca z prawdziwymi
+              osobami, ich zdjęciami i zgodą na publikację wizerunku. */}
 
           {/* biała karta 946×246: film 250×150 obok tekstu, przerwa 64 */}
           <Rise>
@@ -175,18 +178,19 @@ export default function AboutPage() {
                 <div className="flex flex-col gap-3">
                   <h3 className="z-h4">Dołącz do nas</h3>
                   <p className="z-body text-[var(--z-muted)]">
-                    Szukamy ludzi, którzy lubią upraszczać skomplikowane rzeczy.
-                    Napisz, nawet jeśli nie widzisz pasującego ogłoszenia.
+                    Lubisz upraszczać skomplikowane rzeczy? Napisz do nas —
+                    nie prowadzimy teraz rekrutacji, ale chętnie poznamy
+                    ludzi, którzy chcą współtworzyć FaktFlow.
                   </p>
                 </div>
-                <Link
-                  href="https://www.linkedin.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                {/* Dawniej „Zobacz oferty na LinkedIn” → linkedin.com (strona
+                    główna, żadnych ofert). */}
+                <a
+                  href={`mailto:${SUPPORT_EMAIL}`}
                   className="z-body inline-flex w-fit items-center rounded-[12px] bg-[var(--z-black)] px-5 py-3.5 font-medium text-white transition-transform hover:scale-[1.02]"
                 >
-                  Zobacz oferty na LinkedIn
-                </Link>
+                  Napisz: {SUPPORT_EMAIL}
+                </a>
               </div>
             </div>
           </Rise>

@@ -10,7 +10,6 @@ import { DrawnVideo } from '@/components/ui/drawn-video';
 import { asset } from '../_assets';
 import { Tilt } from './anim';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
-import { Icon } from './ui';
 
 /** Krzywa i czasy zgodne z domyślnym wejściem Framera. */
 const EASE = [0.44, 0, 0.56, 1] as const;
@@ -78,27 +77,12 @@ export function Hero() {
                 </Link>
               </motion.div>
 
-              {/* Pas logotypów klientów: w oryginale <ul> 513×26 tuż pod
-                  przyciskami. Wcześniej go przeoczyłem. */}
-              <motion.ul
-                initial={{ opacity: 0, x: -30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, amount: 0.15 }}
-                transition={{ duration: 0.75, delay: 0.24, ease: [0.16, 1, 0.3, 1] }}
-                className="flex max-w-[513px] flex-wrap items-center gap-x-[5px] gap-y-3 lg:flex-nowrap"
-              >
-                {asset.hero.clientLogos.map((src) => (
-                  <li key={src} className="flex h-[26px] items-center">
-                    <Image
-                      src={src}
-                      alt="Logo klienta"
-                      width={130}
-                      height={26}
-                      className="h-[26px] w-auto object-contain opacity-70 transition-opacity hover:opacity-100"
-                    />
-                  </li>
-                ))}
-              </motion.ul>
+              {/* Pas „logotypów klientów” usunięty 15.10.2026: były to
+                  fikcyjne marki z szablonu (Pluto Inc, NovaTech…), a przed
+                  startem nie mamy klientów, których moglibyśmy pokazać.
+                  Wraca dopiero z prawdziwymi logotypami i zgodą klientów
+                  (art. 5 i 7 ustawy o przeciwdziałaniu nieuczciwym praktykom
+                  rynkowym). */}
             </div>
 
             {/* prawa kolumna — 365 px: film, opis, ocena */}
@@ -123,21 +107,10 @@ export function Hero() {
                     potwierdzenia. Zdjęcie paragonu trafia prosto do KPiR.
                   </p>
                 </MaskReveal>
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Icon
-                        key={i}
-                        id="2930526878"
-                        size={14}
-                        className="text-[var(--z-yellow)]"
-                      />
-                    ))}
-                  </div>
-                  <span className="z-small text-[var(--z-muted)]">
-                    Ocena 4,8 od księgowych i mikrofirm
-                  </span>
-                </div>
+                {/* Gwiazdki „Ocena 4,8 od księgowych i mikrofirm” usunięte
+                    15.10.2026 — nie było żadnych ocen. Zmyślona ocena to
+                    praktyka zakazana w każdych okolicznościach (art. 7
+                    pkt 23b–23c u.p.n.p.r., od 1.01.2023). */}
               </div>
             </motion.div>
           </div>
