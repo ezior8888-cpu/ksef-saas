@@ -47,6 +47,33 @@ const FORBIDDEN: Array<[file: string, phrases: string[]]> = [
   ['content/help/okres-probny-trial.mdx', ['Bez karty na starcie', 'stan ograniczony']],
   ['components/marketing/landing-calculator-emerald.tsx', ['pomiarów beta-testerów']],
   ['components/marketing/savings-calculator-preview.tsx', ['pomiarów beta-testerów']],
+  // Rewizja 15.10.2026: „zrzuty produktu” z szablonu (panel inwestycyjny
+  // „Zova AI” z Apple/Google/Meta), znak Zova AI jako nasze logo, zdjęcia
+  // obcych osób jako nasz zespół i założyciel, obietnice „10 lat”.
+  ['app/(landing)/_components/why-us.tsx', ['asset.whyUs', 'dziesięć lat', 'zostają z nami', 'sam pilnuje terminów i przepisów']],
+  ['app/(landing)/_components/process.tsx', ['asset.process']],
+  ['app/(landing)/_components/hero.tsx', ['asset.hero.dashboard']],
+  ['app/(landing)/about/page.tsx', ['asset.about.gallery', 'asset.about.founder', 'asset.hero.dashboard', 'bez podawania karty']],
+  ['app/(landing)/_assets.ts', ['licencja darmowa', 'logo: `${IMG}/oKmGzYlWFu13ruJRasum68wrh5Y.png`']],
+  ['components/auth/auth-page-shell.tsx', ['oKmGzYlWFu13ruJRasum68wrh5Y']],
+  ['app/(landing)/_components/faq.tsx', ['dziesięć lat']],
+  ['app/(landing)/_components/features-strip.tsx', ['i księgujemy']],
+  ['app/(dashboard)/settings/billing/_components/plan-cards.tsx', ['PWA mobilna']],
+  ['app/layout.tsx', ["title: 'KSeF SaaS'", "applicationName: 'KSeF SaaS'"]],
+  ['content/blog/ile-mikrofirma-traci-na-recznym-fakturowaniu.mdx', ['ankiety wśród', 'przeprowadziliśmy']],
+  ['content/blog/wkurzacz-dluznikow-jak-walczyc-z-zaleglymi.mdx', ['beta-test', 'z ~24 do ~11']],
+  ['content/blog/migracja-z-fakturownia-do-ksef-saas-w-5-min.mdx', ['beta testerzy']],
+];
+
+/**
+ * Cennik i pomoc nie mogą sprzedawać wyłączonych eksportów jako dostępnych
+ * (lib/exports/suspended-formats.ts). Nazwa wolno, tylko z „w przygotowaniu”.
+ */
+const SUSPENDED_PRODUCT_NAMES = ['Comarch Optima', 'Insert Subiekt', 'Wapro Mag', 'Symfonia'];
+const PRICE_LIST_FORBIDDEN = [
+  'Bez limitu paragonów', 'Retencja 10 lat', 'GDPR-compliant', 'Live chat', 'Bank EU',
+  'PWA installable', "'JPK_V7M'",
+  ...SUSPENDED_PRODUCT_NAMES.map((n) => `'${n}'`),
 ];
 
 describe('marketing bez fikcyjnych dowodów i obietnic', () => {
@@ -61,6 +88,22 @@ describe('marketing bez fikcyjnych dowodów i obietnic', () => {
     const source = read(file);
     for (const phrase of phrases) expect(source, phrase).not.toContain(phrase);
   });
+
+  it('cennik: tylko funkcje, które działają dziś', () => {
+    const source = read('app/(marketing)/pricing/page.tsx');
+    for (const phrase of PRICE_LIST_FORBIDDEN) expect(source, phrase).not.toContain(phrase);
+    expect(source).toContain('W przygotowaniu (jeszcze niedostępne)');
+  });
+
+  it.each(['content/help/eksport-kpir-dla-ksiegowego.mdx', 'content/help/portal-ksiegowego.mdx'])(
+    'pomoc %s nie obiecuje wyłączonych eksportów',
+    (file) => {
+      const source = read(file);
+      expect(source).not.toMatch(/Comarch Optima, Symfonia/);
+      expect(source).not.toMatch(/formatach: Comarch Optima/);
+      expect(source).toContain('przygotowaniu');
+    },
+  );
 
   it('formularz kontaktowy przekazuje wiadomość dalej, a nie ją gubi', () => {
     expect(read('app/(landing)/_components/contact.tsx')).toContain('window.location.href = composeMail(');

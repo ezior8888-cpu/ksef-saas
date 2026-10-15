@@ -1,11 +1,10 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 
 import { DrawnVideo } from '@/components/ui/drawn-video';
 
 import { asset } from '../_assets';
-import { Rise, SlideX, Tilt } from '../_components/anim';
+import { Rise, SlideX } from '../_components/anim';
 import { SiteFooter } from '../_components/closing';
 import { IconSprite } from '../_components/icon-sprite';
 import { MaskReveal, MaskRevealWords } from '../_components/mask-reveal';
@@ -74,24 +73,9 @@ export default function AboutPage() {
           </div>
         </Container>
 
-        {/* pas kadrów na pełną szerokość, przerwa 12 px */}
-        <ul className="flex gap-3 overflow-hidden px-3">
-          {asset.about.gallery.map((src, i) => (
-            <li key={src} className="min-w-0 flex-1">
-              <Rise delay={i * 0.08}>
-                <div className="overflow-hidden rounded-[16px]">
-                  <Image
-                    src={src}
-                    alt="Zespół przy pracy"
-                    width={400}
-                    height={400}
-                    className="h-auto w-full transition-transform duration-500 hover:scale-[1.04]"
-                  />
-                </div>
-              </Rise>
-            </li>
-          ))}
-        </ul>
+        {/* Pas „Zespół przy pracy” usunięty 15.10.2026: zdjęcia obcych osób
+            z szablonu podpisane jako nasz zespół (wprowadzanie w błąd,
+            a wizerunek modeli użyty w cudzym kontekście). */}
 
         {/* Metryki („1,2 mln faktur przeszło przez FaktFlow”, „8 tys. firm
             miesięcznie”, „99,9% dostępności”) usunięte 15.10.2026: liczby
@@ -114,13 +98,14 @@ export default function AboutPage() {
             </MaskReveal>
             <Rise delay={0.25}>
               <div className="flex items-center gap-4">
-                <Image
-                  src={asset.about.founder}
-                  alt="Bartosz Gierszewski"
-                  width={56}
-                  height={56}
-                  className="size-14 rounded-full object-cover"
-                />
+                {/* Inicjały zamiast portretu: zdjęcie było portretem obcej
+                    osoby z szablonu podpisanym nazwiskiem założyciela. */}
+                <span
+                  aria-hidden
+                  className="z-lead flex size-14 items-center justify-center rounded-full bg-[var(--z-blue-50)] font-medium text-[var(--z-blue)]"
+                >
+                  BG
+                </span>
                 <div className="flex flex-col gap-0.5">
                   <span className="z-lead font-medium">
                     Bartosz Gierszewski
@@ -213,9 +198,11 @@ export default function AboutPage() {
               <MaskRevealWords text="Wystaw pierwszą fakturę jeszcze dziś" />
             </h2>
             <MaskReveal delay={0.15}>
+              {/* Dawniej „bez podawania karty” — kartę podaje się przy
+                  uruchomieniu subskrypcji (regulamin § 6 ust. 3). */}
               <p className="z-lead text-[var(--z-muted)]">
-                Trzydzieści dni za darmo, bez podawania karty. Jeśli nie
-                podejdzie, po prostu odchodzisz.
+                Konto jest bezpłatne, a subskrypcja zaczyna się od 30 dni bez
+                opłat. Zrezygnujesz przed ich końcem — nie zapłacisz nic.
               </p>
             </MaskReveal>
             <Rise delay={0.25}>
@@ -236,20 +223,8 @@ export default function AboutPage() {
             </Rise>
           </div>
 
-          {/* ramka 1016 w szarości #e6e6e6, w środku pulpit 969×579 */}
-          <Tilt className="w-full">
-            <div className="mx-auto w-full max-w-[1016px] rounded-[32px] bg-[var(--z-300)] p-5">
-              <div className="relative aspect-[969/579] w-full overflow-hidden rounded-[20px] bg-white">
-                <Image
-                  src={asset.hero.dashboard}
-                  alt="Pulpit FaktFlow"
-                  fill
-                  sizes="(max-width: 1024px) 100vw, 969px"
-                  className="object-cover object-top"
-                />
-              </div>
-            </div>
-          </Tilt>
+          {/* „Pulpit FaktFlow” usunięty 15.10.2026 — był to panel
+              inwestycyjny z szablonu. Wraca tylko prawdziwy zrzut. */}
         </Container>
       </section>
 

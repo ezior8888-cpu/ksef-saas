@@ -56,10 +56,12 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: 'KSeF SaaS',
+  // Marka to FaktFlow. „KSeF SaaS” (nazwa robocza) łączyła się z nazwą
+  // państwowego systemu i mogła sugerować produkt Ministerstwa Finansów.
+  title: 'FaktFlow',
   description: 'Faktury KSeF dla mikrofirm',
   // PWA / iOS (Safari) — manifest z `app/manifest.ts` nie wystarczy na iOS
-  applicationName: 'KSeF SaaS',
+  applicationName: 'FaktFlow',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

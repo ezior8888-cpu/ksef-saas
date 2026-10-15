@@ -11,7 +11,8 @@ type AuthPageShellProps = {
   children: React.ReactNode;
 };
 
-const LOGO = '/landing/img/oKmGzYlWFu13ruJRasum68wrh5Y.png';
+// Znak FaktFlow (do 15.10.2026 — znak „Zova AI” z szablonu strony).
+const LOGO = '/brand/faktflow-mark.png';
 
 /**
  * Shell stron logowania i rejestracji w stylu landingu.

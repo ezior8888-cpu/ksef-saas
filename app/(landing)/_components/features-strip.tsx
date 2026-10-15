@@ -20,7 +20,8 @@ const ITEMS = [
   {
     icon: '1675043417',
     title: 'Paragon do KPiR',
-    body: 'Robisz zdjęcie, my odczytujemy dane i księgujemy.',
+    // Dawniej „…i księgujemy” — nie prowadzimy ksiąg za klienta (regulamin § 3 ust. 3).
+    body: 'Robisz zdjęcie, my odczytujemy dane i proponujemy wpis — Ty zatwierdzasz.',
   },
   {
     icon: '257698632',

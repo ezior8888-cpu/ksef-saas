@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
@@ -8,7 +7,6 @@ import { ArrowRight } from 'lucide-react';
 import { DrawnVideo } from '@/components/ui/drawn-video';
 
 import { asset } from '../_assets';
-import { Tilt } from './anim';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
 
 /** Krzywa i czasy zgodne z domyślnym wejściem Framera. */
@@ -22,10 +20,11 @@ const rise = (delay: number) => ({
 export function Hero() {
   return (
     <header className="relative flex flex-col pb-20">
-      {/* Panel tła: 1400×860 od góry 20 px, promień 20 — pod hero i pulpitem. */}
+      {/* Panel tła od góry 20 px, promień 20 — rozciąga się na całe hero
+          (stałe 860 px było liczone pod usunięty „zrzut pulpitu”). */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-5 top-5 h-[860px] rounded-[20px]"
+        className="pointer-events-none absolute inset-x-5 bottom-0 top-5 rounded-[20px]"
         style={{
           background:
             'linear-gradient(180deg, #fff 0%, #fff 42%, #eff5fe 78%, #dbe8fb 100%)',
@@ -116,24 +115,9 @@ export function Hero() {
           </div>
         </div>
 
-        {/* zrzut pulpitu — 969×579, wystaje poza dolną krawędź panelu */}
-        <Tilt
-          delay={0.28}
-          className="mx-auto w-full max-w-[var(--z-container)] px-5 md:px-[var(--z-gutter)]"
-        >
-          {/* Proporcje 969×579 wymuszone kadrowaniem: plik źródłowy ma
-              2880×2048 (inny stosunek boków), a oryginał go przycina. */}
-          <div className="relative mx-auto aspect-[969/579] w-full max-w-[969px] overflow-hidden rounded-[16px] bg-white shadow-[0_24px_60px_-20px_rgba(16,32,64,0.28)]">
-            <Image
-              src={asset.hero.dashboard}
-              alt="Pulpit FaktFlow"
-              fill
-              sizes="(max-width: 1024px) 100vw, 969px"
-              priority
-              className="object-cover object-top"
-            />
-          </div>
-        </Tilt>
+        {/* „Zrzut pulpitu” usunięty 15.10.2026: był to panel inwestycyjny
+            z szablonu (Apple, Google, Meta, $150,000) podpisany „Pulpit
+            FaktFlow”. Wraca tylko prawdziwy zrzut panelu FaktFlow. */}
       </div>
     </header>
   );
