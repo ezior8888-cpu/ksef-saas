@@ -1,10 +1,8 @@
 'use client';
 
-import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 
-import { asset } from '../_assets';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Container, Icon } from './ui';
 
@@ -21,24 +19,26 @@ import { Container, Icon } from './ui';
  * zmiennej `--21h8s6`, której sprite używa jako koloru kreski — w oryginale
  * to dwa nałożone SVG przenikające się przezroczystością.
  */
+// Bez obrazków od 15.10.2026: „zrzuty” z szablonu pokazywały panel
+// inwestycyjny „Zova AI” (Apple Store, $150,000), nie FaktFlow — klient
+// oglądał produkt, którego nie kupuje. Wracają tylko prawdziwe zrzuty.
+// Blok 3 obiecywał „dziesięć lat” przechowywania — regulamin i umowa
+// powierzenia mówią o czasie trwania umowy (§ 7 ust. 6, umowa powierzenia § 9).
 const BLOCKS = [
   {
     icon: '450316432',
     title: 'Wysyłka bez niespodzianek',
-    body: 'Faktura trafia do KSeF zaraz po wystawieniu, a Ty dostajesz potwierdzenie. Gdy urząd milczy, próbujemy ponownie.',
-    image: asset.whyUs.shotA,
+    body: 'Faktura trafia do KSeF zaraz po wystawieniu, a Ty widzisz jej status i numer KSeF. Gdy system ministerstwa nie odpowiada, ponawiamy wysyłkę i informujemy Cię o wyniku.',
   },
   {
     icon: '1283949305',
     title: 'Koszty bez przepisywania',
-    body: 'Zdjęcie paragonu albo faktura z maila zamienia się we wpis w książce przychodów i rozchodów.',
-    image: asset.whyUs.shotB,
+    body: 'Ze zdjęcia paragonu albo faktury z maila przygotowujemy wpis do książki przychodów i rozchodów — Ty go sprawdzasz i zatwierdzasz.',
   },
   {
     icon: '1430394497',
-    title: 'Spokój przy kontroli',
-    body: 'Trzymamy komplet dokumentów przez dziesięć lat i pokazujemy, kto i kiedy co robił.',
-    image: asset.whyUs.shotA,
+    title: 'Porządek przy kontroli',
+    body: 'Dokumenty są w jednym miejscu przez cały czas korzystania z FaktFlow, a dziennik zdarzeń pokazuje, kto i kiedy co zrobił. Eksport danych w każdej chwili.',
   },
 ];
 
@@ -96,12 +96,15 @@ export function WhyUs() {
         <div className="flex flex-col gap-10 lg:w-[376px] lg:shrink-0 lg:sticky lg:top-28 lg:self-start">
           <div className="flex flex-col gap-4">
             <h2 className="z-h2">
-              <MaskRevealWords text="Dlaczego mikrofirmy zostają z nami" />
+              <MaskRevealWords text="Dlaczego FaktFlow" />
             </h2>
             <MaskReveal delay={0.18}>
+              {/* Dawniej „mikrofirmy zostają z nami” (przed startem nie ma
+                  kogo zatrzymać) i „sam pilnuje przepisów” — za treść faktur
+                  odpowiada klient (regulamin § 7 ust. 2). */}
               <p className="z-lead text-[var(--z-muted)]">
-                Prosty program do faktur, który sam pilnuje terminów
-                i przepisów.
+                Prosty program do faktur, który pilnuje wysyłki do KSeF
+                i przypomina o terminach.
               </p>
             </MaskReveal>
           </div>
@@ -164,21 +167,6 @@ export function WhyUs() {
                   <p className="z-lead text-[var(--z-muted)]">{b.body}</p>
                 </MaskReveal>
               </div>
-              <motion.div
-                initial={{ opacity: 0, y: 28 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.2 }}
-                transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-                className="overflow-hidden rounded-[16px] bg-white"
-              >
-                <Image
-                  src={b.image}
-                  alt={b.title}
-                  width={599}
-                  height={359}
-                  className="h-auto w-full"
-                />
-              </motion.div>
             </div>
           ))}
         </div>

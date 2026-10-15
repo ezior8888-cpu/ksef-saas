@@ -25,7 +25,7 @@ Po wejściu obowiązku dla Twojej grupy **faktura VAT wystawiona poza KSeF jest 
 
 Ustawodawca wiązał KSeF z sankcjami administracyjnymi: od grzywien po ograniczenia w rozliczeniu VAT, gdy dokument nie spełnia wymogów strukturalnych FA(3) albo nie został poprawnie przyjęty przez system. W praktyce mikrofirma najczęściej „płaci” **czasem pracy** i **kosztem błędu**: cofnięcie wysyłki, poprawka NIP-u, zła stawka VAT na pozycji, brak zgodności z XSD — każda z tych rzeczy blokuje moment, w którym faktura zaczyna żyć jako dowód w sprawie o zapłatę.
 
-Dlatego sensowne podejście to nie „minimalna zgodność”, tylko **pre-walidacja przed wysyłką** i **monitoring statusu po stronie MF** (czy dokument rzeczywiście został przyjęty, a nie utknął na fałszywie pozytywnym komunikacie). W KSeF SaaS traktujemy to jako standard, nie dodatek — bo koszt jednej pomyłki często przewyższa miesięczny abonament oprogramowania.
+Dlatego sensowne podejście to nie „minimalna zgodność”, tylko **pre-walidacja przed wysyłką** i **monitoring statusu po stronie MF** (czy dokument rzeczywiście został przyjęty, a nie utknął na fałszywie pozytywnym komunikacie). W FaktFlow traktujemy to jako standard, nie dodatek — bo koszt jednej pomyłki często przewyższa miesięczny abonament oprogramowania.
 
 ## Co to znaczy w praktyce dla JDG
 
@@ -48,10 +48,10 @@ Nadal musisz je poprawnie rozliczyć w VAT i KPiR; KSeF dotyczy głównie **wyst
 
 1. **Profil Zaufany** lub kwalifikowany podpis elektroniczny dla osoby autoryzującej (zazwyczaj właściciel).
 2. **Certyfikat KSeF** — samodzielne wygenerowanie w portalu MF i bezpieczne przechowywanie (nie w mailu „na lata”).
-3. **Software KSeF-compliant** — np. KSeF SaaS, Fakturownia, inFakt; sprawdź, czy producent deklaruje pełne wsparcie FA(3) i aktualizacje przy zmianach ministerialnych.
+3. **Software KSeF-compliant** — np. FaktFlow, Fakturownia, inFakt; sprawdź, czy producent deklaruje pełne wsparcie FA(3) i aktualizacje przy zmianach ministerialnych.
 4. **Test wysyłki** w środowisku testowym MF (`ksef-test.mf.gov.pl`) — zanim pierwszy raz wyślesz dokument „na produkcję”, przejdź ścieżkę na kopii danych.
 
-## Co robi KSeF SaaS inaczej
+## Co robi FaktFlow inaczej
 
 - **Walidacja FA(3) przed wysyłką** — mniej odrzutów po stronie MF i szybsza iteracja, gdy coś jest nie tak z NIP-em lub strukturą pozycji.
 - **Magiczny Import** — start z historią z KSeF i plików z poprzedniego programu, żeby nie budować bazy kontrahentów od zera.

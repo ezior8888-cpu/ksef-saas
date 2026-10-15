@@ -18,7 +18,8 @@ const FEATURES = [
   'Wkurzacz Dłużników',
   'Magiczny import z konkurencji',
   'Co-Pilot Księgowego',
-  'PWA mobilna z OCR',
+  // Dawniej „PWA mobilna z OCR” — panel na telefonie jest wyłączony (/mobile).
+  'Odczyt paragonów (AI) z limitem dziennym i miesięcznym',
   'Wsparcie po polsku',
 ];
 
