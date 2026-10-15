@@ -5,7 +5,7 @@
 > pisze i wgrywa wyłącznie Bartosz.
 >
 > Stan sprawdzony 15.10.2026 na `origin/main` 1ded2147 oraz na gałęziach
-> #264 (`claude/prawne-dokumenty-i-zgody`, 81162c84) i #271
+> #264 (`claude/prawne-dokumenty-i-zgody`, 6f37fa78 — terminy kopii zgodne z kodem) i #271
 > (`claude/usun-firme-blokada`). Każde twierdzenie ma plik:linia — sprawdzaj
 > w kodzie, nie w tym pliku.
 >
@@ -41,7 +41,7 @@
 | **Zegar** | Pierwszy mail z wypowiedzeniem uruchamia termin: 30 dni na eksport + 30 dni na usunięcie. Mechanizm z tego projektu (co najmniej M1–M4) musi być na produkcji **w ciągu 60 dni od pierwszego zlecenia**. Do tego czasu odcięcie dostępu da się zrobić ręcznie, bez migracji (§ 7.1). |
 | **Propozycja** | Cztery stany firmy: `active` → `closing` (30 dni, dostęp jest) → `locked` (dostęp odcięty) → `purged`. Firmy **nie kasujemy** wierszem `DELETE FROM tenants`: usuwamy dane klienta tabela po tabeli funkcją `purge_tenant_data()`, a wiersz firmy zostaje jako zanonimizowany **nagrobek** (tombstone — pusty wiersz z samym identyfikatorem). Dzięki temu zostają nasze zapisy rozliczeń ze Stripe. |
 | **Wymaga migracji** | M1 stan i rejestr zamknięć, M2 helpery RLS, M3 furtka w strażniku faktur, M4 funkcja usuwająca, M5 przejścia stanów. Wszystkie addytywne, wgrywane przed wdrożeniem kodu. |
-| **Znalezione przy okazji** | (1) `DELETE FROM tenants` wywróci się na strażnikach i kluczach `RESTRICT`, a gdyby przeszedł, skasowałby nasze zapisy finansowe (§ 6.1). (2) Tygodniowe kopie bazy żyją 56 dni, ręczne bez limitu, a kopia poza serwerem (Storage Box) nie ma jeszcze retencji — umowa obiecuje cykl ≤ 30 dni (§ 6.6). (3) Panel admina przy usuwaniu **konta** ustawia flagi **firmy** — po włączeniu flag zamknąłby firmę wszystkim członkom (§ 2.2). (4) Firmy oflagowane starą akcją: po włączeniu sprawdzania flag automat mógłby je od razu usunąć (§ 2.3). |
+| **Znalezione przy okazji** | (1) `DELETE FROM tenants` wywróci się na strażnikach i kluczach `RESTRICT`, a gdyby przeszedł, skasowałby nasze zapisy finansowe (§ 6.1). (2) Kopie zapasowe: #264 dopasował umowę do kodu (cykl ≤ 60 dni), ale kopii ręcznych job nie usuwa wcale, a kopia poza serwerem (Storage Box) nie ma jeszcze retencji (§ 6.6). (3) Panel admina przy usuwaniu **konta** ustawia flagi **firmy** — po włączeniu flag zamknąłby firmę wszystkim członkom (§ 2.2). (4) Firmy oflagowane starą akcją: po włączeniu sprawdzania flag automat mógłby je od razu usunąć (§ 2.3). |
 
 ---
 
@@ -56,15 +56,15 @@ Teksty z #264 (gałąź `claude/prawne-dokumenty-i-zgody`):
 | Regulamin § 14 ust. 6 (`regulamin.ts:264`) | Po rozwiązaniu 30 dni na eksport, Organizacja **pozostaje dostępna**, chyba że klient zleci wcześniejsze usunięcie. **Informujemy e-mailem o planowanym usunięciu.** Konta Użytkowników zostają aktywne. |
 | Regulamin § 6 (`regulamin.ts:137`) | Bez zwrotu za rozpoczęty okres przy wypowiedzeniu przez klienta; zwrot za niewykorzystaną część przy naszym wypowiedzeniu z § 14 ust. 3, reklamacji, odstąpieniu i zmianie regulaminu. |
 | Regulamin § 7 (`regulamin.ts:149`) | Obowiązek przechowywania faktur ciąży na kliencie; faktury z KSeF przechowuje też KSeF. |
-| Umowa powierzenia § 9 (`lib/legal/documents/umowa-powierzenia.ts:129-133`) | 30 dni na eksport (na żądanie przekazujemy dane w formacie eksportu); potem usunięcie **w ciągu kolejnych 30 dni**; kopie zapasowe w cyklu nadpisywania **nie dłuższym niż 30 dni**; **na żądanie potwierdzamy usunięcie**; klient może polecić wcześniejsze usunięcie e-mailem. |
+| Umowa powierzenia § 9 (`lib/legal/documents/umowa-powierzenia.ts:129-136`, wersja 6f37fa78) | 30 dni na eksport (na żądanie przekazujemy dane w formacie eksportu); potem usunięcie **w ciągu kolejnych 30 dni**; kopie zapasowe w cyklu nadpisywania **nie dłuższym niż 60 dni** (dzienne do 30 dni, tygodniowe do 8 tygodni); **kopie ręczne usuwamy w tym samym terminie**; przy awarii tworzenia kopii ostatnie poprawne zostają do czasu nowych; kopie służą tylko do odtworzenia po awarii; **na żądanie potwierdzamy usunięcie**; klient może polecić wcześniejsze usunięcie e-mailem. |
 
 Oś czasu (T0 = skuteczne rozwiązanie Umowy):
 
 ```
-T0 ─────────── T0+30 dni ─────────────────── T0+60 dni ─────────── T0+90 dni
+T0 ─────────── T0+30 dni ─────────────────── T0+60 dni ─────────── T0+120 dni
 │  closing:     │  locked: dostęp odcięty,    │ najpóźniej tu dane   │ najpóźniej tu
 │  dostęp jest, │  job usuwa (zwykle tej      │ usunięte (purged)    │ znikają z kopii
-│  eksport      │  samej nocy)                │                      │ zapasowych
+│  eksport      │  samej nocy)                │                      │ (cykl ≤ 60 dni)
 └ mail: „usuniemy dane po <data>”             └ mail: potwierdzenie usunięcia
 ```
 
@@ -85,6 +85,7 @@ od razu `locked`, a 30 dni na usunięcie liczy się od polecenia.
 | joby (`lib/jobs/runners/**`), w tym `requireTenantMember` (`lib/jobs/runners/tenant-boundary.ts:43-51`) | **nie** — żaden |
 | `inbox-polling` (`lib/jobs/runners/inbox-polling.ts:136-145`) | **nie**, choć komentarz w 00004:20-22 mówi, że `is_active` dodano właśnie „do filtra” tego joba |
 | portal księgowej: `lib/accountant/load-accountant-portal.ts:49-58`, `app/accountant/[token]/download/[invoiceId]/route.ts:24-31`, `app/api/portal/exports/generate/route.ts:47-51` | **nie** — tylko `revoked_at` i `expires_at` linku |
+| `cron.retention-delete` (`lib/jobs/runners/retention-delete.ts:26-40`) | **nie** — usuwa tylko **faktury** po `invoices.scheduled_deletion_at` (retencja 10 lat). Komentarz w `app/admin/users/actions.ts:149-151` („pełne czyszczenie zrobi job `retention-delete`”) jest nieprawdziwy. |
 | `lib/flo/tick.ts:298-310` | tak (`is_active` i `deleted_at`) |
 | `lib/analytics/platform-metrics.ts:71-75`, `lib/admin/flags.ts:59`, `mv_tenant_dashboard_summary` (00044:160) | tak — liczniki i widoki |
 | Stripe | nikt nie anuluje subskrypcji z serwera; jedyna droga to portal klienta (`lib/stripe/portal.ts:38`) |
@@ -377,20 +378,27 @@ znaleźć 0). Glacier Deep Archive liczy minimum 180 dni przechowywania,
 więc wcześniejsze usunięcie i tak jest płatne — D-8 (czy archiwum jest
 w ogóle włączone na produkcji).
 
-### 6.6 Kopie zapasowe — rozjazd z umową
+### 6.6 Kopie zapasowe
 
-Umowa powierzenia § 9 ust. 2 obiecuje cykl nadpisywania kopii **≤ 30 dni**.
+#264 (6f37fa78) dopasował umowę powierzenia § 9 ust. 2 do kodu: cykl
+nadpisywania **≤ 60 dni** (dzienne do 30 dni, tygodniowe do 8 tygodni),
+kopie ręczne usuwane w tym samym terminie, przy awarii ostatnie poprawne
+kopie zostają do czasu nowych. Test `tests/unit/rodo-terminy-usuwania.test.ts`
+(w #264) pilnuje, żeby stałe w kodzie i tekst się nie rozjechały.
 Warstwy kopii według `docs/runbooks/backup-restore.md:12-17`:
 
-| Warstwa | Retencja dziś | Zgodne z ≤ 30 dni? |
+| Warstwa | Retencja dziś | Zgodne z nową umową? |
 |---|---|---|
-| A. `pg_dump` na `db-1` (`scripts/hetzner/db-backup.sh`) | 14 ostatnich **kompletnych** (`db-backup.sh:41`, `:108-110`) | tak przy codziennych zrzutach; przy serii awarii starsze zostają dłużej (bezpiecznik) — do opisania w umowie albo limit wieku |
-| B. Storage Box (kopia A poza serwerem) | `rclone copy`, nie `sync` — skasowanie na `db-1` nie kasuje kopii (`db-backup.sh:28-30`); retencja = snapshoty Storage Boxa; warstwa czeka na zakup | **nie wiadomo** — przy zakupie ustawić retencję ≤ 30 dni, inaczej kopie żyją bez końca |
-| C. snapshot JSON `public.*` (`lib/backup/db-snapshot.ts:57-60`) | dzienne 30 dni (`cleanup-old-backups.ts:20`), **tygodniowe 56 dni** (`:21`), 7 ostatnich udanych **bez względu na wiek** (`:29`), ręczne **bez limitu** (`:6`) | **nie** |
+| A. `pg_dump` na `db-1` (`scripts/hetzner/db-backup.sh`) | 14 ostatnich **kompletnych** (`db-backup.sh:41`, `:108-110`) | tak (przy codziennych zrzutach ≤ 30 dni; przy awarii starsze zostają — obejmuje to zdanie umowy o awarii) |
+| B. Storage Box (kopia A poza serwerem) | `rclone copy`, nie `sync` — skasowanie na `db-1` nie kasuje kopii (`db-backup.sh:28-30`); retencja = snapshoty Storage Boxa; warstwa czeka na zakup | **nie wiadomo** — przy zakupie ustawić retencję ≤ 60 dni, inaczej kopie żyją bez końca |
+| C. snapshot JSON `public.*` (`lib/backup/db-snapshot.ts:57-60`) | dzienne 30 dni (`cleanup-old-backups.ts:20`), tygodniowe 56 dni (`:21`), 7 ostatnich udanych bez względu na wiek (`:29`) | tak |
+| C′. ręczne snapshoty (`kind = 'manual'`) | job ich **nie usuwa** (`cleanup-old-backups.ts:6`: „admin sam zarządza”) | **nie** — umowa mówi „usuwa w tym samym terminie”, a nie ma ani kodu, ani procedury |
 | D. backup Hetznera (obraz dysku `db-1`) | 7 | tak, o ile dzienny — do sprawdzenia w konsoli |
+| inne kopie na `db-1` (WAL/PITR, ręczne `pg_dump`, migawki) | nieznane | do sprawdzenia przez Bartosza |
 
-Decyzja D-4. Zmiana w warstwie C to jedna stała i warunek w jobie — można
-ją zrobić od razu, niezależnie od reszty projektu.
+Decyzja D-4. Najtańsze domknięcie C′: `cleanup-old-backups` usuwa także
+`manual` starsze niż 60 dni — jedna gałąź w jobie, niezależnie od reszty
+projektu.
 
 ### 6.7 Dziennik audytu i inne miejsca
 
@@ -468,7 +476,7 @@ i w `tenant_closures`. Akcja serwera sprawdza `requireAdmin()` jak
 |---|---|---|---|
 | Planowane usunięcie (regulamin § 14 ust. 6) | przy `closing` | właściciele; członkowie — informacyjnie | data T0, do kiedy eksport (`export_until`), jak wyeksportować, data najpóźniejszego usunięcia, że faktury są w KSeF, że obowiązek przechowywania jest po stronie klienta, jak cofnąć uprawnienia FaktFlow w KSeF |
 | Przypomnienie | 7 dni przed `export_until` | właściciele | jw. skrótem |
-| Potwierdzenie usunięcia (umowa § 9 ust. 2) | po `purged` | zlecający (`requester_email`) i właściciele | data usunięcia, co usunięto (liczby z `tenant_closures`), co zostało i dlaczego (nasze dokumenty rozliczeń, nagrobek), kiedy znikną kopie zapasowe (data `purged_at + cykl kopii`), że faktury są w KSeF |
+| Potwierdzenie usunięcia (umowa § 9 ust. 2) | po `purged` | zlecający (`requester_email`) i właściciele | data usunięcia, co usunięto (liczby z `tenant_closures`), co zostało i dlaczego (nasze dokumenty rozliczeń, nagrobek), kiedy znikną kopie zapasowe (najpóźniej `purged_at` + 60 dni), że faktury są w KSeF |
 
 Umowa mówi „na żądanie potwierdza” — polecam wysyłać zawsze: jest tanio,
 a klient nie musi pamiętać, żeby prosić.
@@ -957,11 +965,11 @@ i `page-context` z firmą `locked`.
 | 2 | aplikacja: `lib/tenants/lifecycle.ts`, `auth-context`, `page-context`, przełącznik, baner, portal księgowej | 1 |
 | 3 | joby: `assertTenantOperational`, filtry z § 4.4, strażnik „każdy cron sklasyfikowany” | 1 |
 | 4 | M5 + akcje w `/admin` + Stripe + maile + `cron.tenant-lifecycle` (28 cronów) + alarmy + T8 | 1–3 |
-| 5 | kopie zapasowe zgodnie z D-4 | — (może iść od razu) |
+| 5 | kopie ręczne w `cleanup-old-backups` + retencja Storage Boxa (D-4) | — (może iść od razu) |
 | 6 | samoobsługa w `/settings` (zamiast „napisz do pomocy”) | 4 |
 
 Punkty 1–4 muszą zdążyć w 60 dni od pierwszego zlecenia (§ 0).
-Punkt 5 jest niezależny i najtańszy: to dziś niezgodność z umową.
+Punkt 5 jest niezależny i najtańszy: kopie ręczne to dziś niezgodność z umową w wersji z #264.
 
 ---
 
@@ -983,7 +991,7 @@ Punkt 5 jest niezależny i najtańszy: to dziś niezgodność z umową.
 | D-1 | Gdzie trzymać stan: nowa kolumna + `tenant_closures` czy stare flagi | nowa kolumna + rejestr (§ 3.2) |
 | D-2 | `closing`: (a) pełny dostęp jak w regulaminie („pozostaje dostępna”) + blokada tylko nowej wysyłki KSeF, (b) tylko odczyt w aplikacji, (c) tylko odczyt w RLS | (a) albo (b); (c) za drogie (§ 9.2) |
 | D-3 | Portal księgowej w `closing`: zostaje czy od razu odwołany | zostaje, odwołanie przy `locked` |
-| D-4 | Kopie zapasowe: skrócić (warstwa C: tygodniowe ≤ 30 dni, ręczne z datą ważności, „7 ostatnich” tylko w oknie 30 dni; warstwa B: retencja Storage Boxa ≤ 30 dni przy zakupie) czy zmienić umowę powierzenia (#264) | skrócić; sprawdzić warstwę D w konsoli Hetznera |
+| D-4 | Kopie zapasowe (umowa w #264: cykl ≤ 60 dni, ręczne w tym samym terminie): kto usuwa kopie `manual` — job czy operator; retencja Storage Boxa przy zakupie; czy na `db-1` są kopie poza opisanymi warstwami (WAL/PITR, ręczne `pg_dump`, migawki) | job usuwa `manual` po 60 dniach; Storage Box ≤ 60 dni; sprawdzić `db-1` i warstwę D w konsoli Hetznera |
 | D-5 | Dziennik audytu firmy: usunąć przy purge czy zostawić do 12-miesięcznego czyszczenia | usunąć; dowód w `tenant_closures` |
 | D-6 | Jak długo trzymamy `tenant_closures` i nasze zapisy Stripe po `purged` | zapisy Stripe — okres przedawnienia zobowiązania podatkowego; `tenant_closures` — tyle samo (dowód wykonania umowy). Do potwierdzenia z księgową/prawnikiem. |
 | D-7 | NIP na nagrobku: zostawić czy zastąpić | zastąpić (nie jest potrzebny, § 6.4); wymaga znacznika zamiast NIP i zgody strażnika NIP (funkcja `postgres` przechodzi) |
