@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Trash2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { requestAccountDeletionAction } from '@/components/settings/account-actions';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 export function DeleteAccountSection({ tenantNip }: { tenantNip: string }) {
   const [showConfirm, setShowConfirm] = useState(false);
@@ -49,22 +50,28 @@ export function DeleteAccountSection({ tenantNip }: { tenantNip: string }) {
       <div className="rounded-2xl border border-red-500/20 bg-red-500/5 backdrop-blur-glass-sm p-4 flex items-start gap-3">
         <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
         <div className="text-sm text-foreground space-y-2">
-          {/* Ten przycisk usuwa FIRMĘ (requestAccountDeletionAction oznacza
-              organizację do usunięcia za 30 dni i wylogowuje), nie konto
-              użytkownika — to robi sekcja RODO w Ustawienia → Konto i firma
-              (lib/gdpr/deletion.ts, 14 dni). Do 15.10.2026 był podpisany
-              „Usuń konto” i obiecywał „nieodwracalne po 14 dniach”.
-              Opis zgodny z umową powierzenia (§ 9) i regulaminem (§ 14). */}
+          {/* Ten przycisk dotyczy FIRMY (organizacji), nie konta użytkownika —
+              konto usuwa sekcja RODO w Ustawienia → Konto i firma
+              (lib/gdpr/deletion.ts, 14 dni). Usunięcie firmy idzie przez
+              pomoc techniczną: flag tenants.deleted_at / is_active nic nie
+              sprawdza, więc aplikacja nie umie firmy wyłączyć ani usunąć
+              (ścieżka operatora: docs/support/escalation-matrix.md).
+              Do 15.10.2026 opis obiecywał „od razu wyłączona” i usunięcie
+              danych w 30 + 30 dni. Zgodne z regulaminem § 14 i umową
+              powierzenia § 9. */}
           <p className="font-medium">
-            Usuwasz firmę i wszystkie jej dane — nie tylko swoje konto.
+            Usunięcie firmy i wszystkich jej danych zlecasz przez pomoc
+            techniczną.
           </p>
           <p className="text-muted-foreground leading-relaxed">
-            Firma zostanie od razu wyłączona, a Ty — wylogowany.{' '}
-            <strong>Najpierw pobierz kopię danych</strong> (Raporty → Eksport).
-            Przez 30 dni możesz zmienić decyzję albo poprosić o eksport, pisząc
-            do nas; potem dane firmy — faktury, kontrahenci, wydatki,
-            certyfikaty KSeF — usuwamy w ciągu kolejnych 30 dni. Swoje konto
-            użytkownika usuniesz osobno w Ustawienia → Konto i firma.
+            Napisz na {SUPPORT_EMAIL} z adresu właściciela i podaj NIP firmy.
+            Do czasu wykonania zlecenia firma i abonament działają bez zmian —
+            abonament anulujesz w Ustawienia → Subskrypcja i rozliczenia.{' '}
+            <strong>Najpierw pobierz kopię danych</strong> (Księgowość →
+            Eksport).
+            Faktury wysłane do KSeF przechowuje też Ministerstwo Finansów.
+            Swoje konto użytkownika usuniesz osobno w Ustawienia → Konto
+            i firma.
           </p>
         </div>
       </div>
@@ -108,12 +115,12 @@ export function DeleteAccountSection({ tenantNip }: { tenantNip: string }) {
           {isDeleting ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Usuwam...
+              Przetwarzanie…
             </>
           ) : (
             <>
               <Trash2 className="h-4 w-4 mr-2" />
-              Potwierdź usunięcie konta
+              Potwierdź
             </>
           )}
         </Button>

@@ -130,7 +130,7 @@ export const UMOWA_POWIERZENIA: LegalDocument = {
       ol(
         'Po rozwiązaniu Umowy Administrator może przez 30 dni wyeksportować dane z Serwisu. Na żądanie Administratora zgłoszone w tym terminie Przetwarzający przekazuje mu dane w formacie eksportu Serwisu.',
         'Po upływie terminu z ust. 1 Przetwarzający usuwa powierzone dane w ciągu kolejnych 30 dni, a ich kopie zapasowe — w cyklu nadpisywania kopii, nie dłuższym niż 30 dni, chyba że prawo Unii lub prawo polskie nakazuje ich dalsze przechowywanie. Na żądanie Administratora Przetwarzający potwierdza usunięcie danych.',
-        'Administrator może wcześniej polecić usunięcie danych, w tym przez usunięcie Organizacji lub wiadomość e-mail.',
+        'Administrator może wcześniej polecić usunięcie danych, w szczególności wiadomością e-mail.',
       ),
     ),
     section(

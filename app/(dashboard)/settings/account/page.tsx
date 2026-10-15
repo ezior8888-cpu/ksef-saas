@@ -2,6 +2,7 @@ import { DeleteAccountForm } from '@/components/settings/delete-account-form';
 import { Card } from '@/components/ui/card';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { getActiveGdprRequest } from '@/lib/gdpr/deletion';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import { GdprSection } from './_components/gdpr-section';
 
 export const dynamic = 'force-dynamic';
@@ -45,18 +46,19 @@ export default async function AccountSettingsPage() {
         <h2 className="text-lg font-semibold text-destructive mb-2">
           Usuń organizację (firmę)
         </h2>
-        {/* Opis zgodny z umową powierzenia (§ 9) i regulaminem (§ 14 ust. 2
-            i 6). Wykonanie usunięcia po terminie to osobne zadanie (memo
-            dla prawnika, „Do naprawy przed startem”). */}
+        {/* Opis zgodny z regulaminem (§ 14 ust. 2 i 6) i umową powierzenia
+            (§ 9). Usunięcie firmy idzie przez pomoc techniczną: aplikacja
+            nie umie firmy wyłączyć ani usunąć (flag tenants.deleted_at /
+            is_active nic nie sprawdza). Do 15.10.2026 opis obiecywał „od
+            razu wyłączona” i usunięcie danych w 30 + 30 dni. */}
         <p className="text-sm text-muted-foreground mb-4">
-          Usunięcie firmy rozwiązuje umowę. Firma zostanie od razu wyłączona,
-          a Ty — wylogowany. <strong>Najpierw pobierz kopię danych</strong>{' '}
-          (Raporty → Eksport). Przez 30 dni możesz zmienić decyzję albo
-          poprosić o eksport, pisząc do nas; potem dane firmy — faktury,
-          kontrahenci, wydatki, certyfikaty — usuwamy w ciągu kolejnych 30 dni.
-          Faktury wysłane do KSeF przechowuje też Ministerstwo Finansów. To nie
-          jest usunięcie Twojego konta — do tego służy sekcja &laquo;Twoje
-          dane (RODO)&raquo; powyżej.
+          Usunięcie firmy rozwiązuje umowę. Zlecasz je przez pomoc techniczną:
+          napisz na {SUPPORT_EMAIL} z adresu właściciela i podaj NIP firmy. Do
+          czasu wykonania zlecenia firma i abonament działają bez zmian.{' '}
+          <strong>Najpierw pobierz kopię danych</strong> (Księgowość →
+          Eksport). Faktury wysłane do KSeF przechowuje też Ministerstwo
+          Finansów. To nie jest usunięcie Twojego konta — do tego służy sekcja
+          &laquo;Twoje dane (RODO)&raquo; powyżej.
         </p>
         {!isOwner ? (
           <p className="text-sm text-muted-foreground">
