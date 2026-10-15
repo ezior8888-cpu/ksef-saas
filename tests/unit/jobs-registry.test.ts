@@ -44,7 +44,7 @@ describe('rejestr jobów', () => {
     expect(bezHandlera, 'kolejki zdarzeń bez zarejestrowanego joba').toEqual([]);
   });
 
-  it('paczka A: 13 cronów utrzymaniowych (bez odświeżania widoków, AUD-118; + cykl życia, PR 4b)', () => {
+  it('paczka A: 14 cronów utrzymaniowych (bez odświeżania widoków, AUD-118; + cykl życia, PR 4b; + retencja czatu)', () => {
     const packageA = [
       'cron.archive-old-invoices',
       'cron.cert-expiry-alert',
@@ -58,8 +58,10 @@ describe('rejestr jobów', () => {
       'cron.ksef-lifecycle-report',
       'cron.nightly-validation-recheck',
       'cron.retention-delete',
+      'cron.support-chat-retention',
       'cron.verify-backup',
     ];
+    expect(packageA.length).toBe(14);
     for (const q of packageA) expect(queues, `brak ${q}`).toContain(q);
   });
 
@@ -176,13 +178,15 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('billing.payment.succeeded')?.groupConcurrency).toBe(1);
   });
 
-  it('KOMPLET: 48 jobów (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia)', () => {
+  it('KOMPLET: 49 jobów (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu)', () => {
     // Alarm, gdyby któraś paczka wypadła z importów workera.
     // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych;
     // 46: od K2 (03.10.2026) z `cron.inbox-backfill`;
     // 48: od PR 4b cyklu życia (03.10.2026) z `cron.ksef-lifecycle-reconcile`
-    // i `cron.ksef-lifecycle-report`.
-    expect(registered.length).toBe(48);
+    // i `cron.ksef-lifecycle-report`;
+    // 49: od 15.10.2026 z `cron.support-chat-retention` (retencja czatu pomocy
+    // z polityki prywatności).
+    expect(registered.length).toBe(49);
   });
 
   it('parytet limitów równoległości paczki C', () => {

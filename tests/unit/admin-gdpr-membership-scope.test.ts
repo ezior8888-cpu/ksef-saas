@@ -37,9 +37,14 @@ interface Tenant {
   hard_delete_at: string | null;
 }
 
-type Table = 'memberships' | 'tenants';
+interface SupportConversation {
+  id: string;
+  user_id: string | null;
+}
+
+type Table = 'memberships' | 'tenants' | 'support_conversations';
 type Filters = Map<string, string | string[]>;
-type QueryResult = { data: Membership[] | null; error: { message: string } | null };
+type QueryResult = { data: Membership[] | null; error: { message: string } | null; count?: number | null };
 
 function fixtures(): Membership[] {
   return [
@@ -58,6 +63,11 @@ function database(memberships: Membership[] = fixtures()) {
     tenants: [activeOrg, formerOrg, memberOrg, foreignOrg].map((id): Tenant => ({
       id, is_active: true, deleted_at: null, hard_delete_at: null,
     })),
+    // Czat pomocy (00054): user_id ON DELETE SET NULL — deleteUser sam ich nie usunie.
+    supportConversations: [
+      { id: 'synthetic-chat-target', user_id: USER },
+      { id: 'synthetic-chat-other', user_id: OTHER_USER },
+    ] as SupportConversation[],
     writeAttempts: [] as Table[],
     readFailure: 'none' as 'none' | 'error' | 'missing',
     updateFailure: null as Table | null,
@@ -68,7 +78,18 @@ function database(memberships: Membership[] = fixtures()) {
   const from = vi.fn((table: Table) => {
     const filters: Filters = new Map();
     let patch: Record<string, unknown> | null = null;
+    let deleting = false;
     const execute = async (): Promise<QueryResult> => {
+      if (deleting) {
+        expect(table).toBe('support_conversations');
+        state.writeAttempts.push(table);
+        if (state.updateFailure === table) {
+          return { data: null, error: { message: 'synthetic delete failure' }, count: null };
+        }
+        const before = state.supportConversations.length;
+        state.supportConversations = state.supportConversations.filter((row) => !matches(row, filters));
+        return { data: null, error: null, count: before - state.supportConversations.length };
+      }
       if (patch === null) {
         expect(table).toBe('memberships');
         const selected = state.memberships.filter((row) => matches(row, filters));
@@ -96,6 +117,7 @@ function database(memberships: Membership[] = fixtures()) {
       eq: (column: string, value: string) => { filters.set(column, value); return query; },
       in: (column: string, value: string[]) => { filters.set(column, value); return query; },
       update: (value: Record<string, unknown>) => { patch = value; return query; },
+      delete: () => { deleting = true; return query; },
       then,
     };
     return query;
@@ -146,7 +168,8 @@ describe('admin GDPR deletion membership scope', () => {
 
     expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: true });
 
-    expect(db.writeAttempts).toEqual(['memberships']);
+    // Rozmowy z czatem pomocy usuwane tuż przed kontem (od 15.10.2026).
+    expect(db.writeAttempts).toEqual(['memberships', 'support_conversations']);
     expect(db.tenants.every((row) => row.is_active && row.deleted_at === null)).toBe(true);
     expect(mocks.deleteUser).toHaveBeenCalledExactlyOnceWith(USER);
   });
@@ -156,7 +179,7 @@ describe('admin GDPR deletion membership scope', () => {
 
     expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: true });
 
-    expect(db.writeAttempts).toEqual(['memberships']);
+    expect(db.writeAttempts).toEqual(['memberships', 'support_conversations']);
     expect(db.tenants.every((row) => row.is_active)).toBe(true);
     expect(db.memberships.find((row) => row.user_id === OTHER_USER)?.status).toBe('active');
     expect(mocks.deleteUser).toHaveBeenCalledExactlyOnceWith(USER);
@@ -185,6 +208,33 @@ describe('admin GDPR deletion membership scope', () => {
     expect(db.writeAttempts).toEqual(['tenants']);
     expect(mocks.deleteUser).not.toHaveBeenCalled();
     expect(db.tenants.every((row) => row.is_active)).toBe(true);
+    expect(db.supportConversations).toHaveLength(2);
+    expectNoSuccessEffects();
+  });
+
+  // Polityka prywatności: czat pomocy „do 24 miesięcy od ostatniej wiadomości”;
+  // FK user_id ON DELETE SET NULL zostawiał rozmowy z treścią bez właściciela.
+  it('deletes only the target user support chat, before the auth account', async () => {
+    const db = database();
+    mocks.deleteUser.mockImplementation(async () => {
+      expect(db.supportConversations.map((row) => row.id)).toEqual(['synthetic-chat-other']);
+      return { error: null };
+    });
+
+    expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: true });
+
+    expect(db.supportConversations).toEqual([{ id: 'synthetic-chat-other', user_id: OTHER_USER }]);
+    expect(mocks.deleteUser).toHaveBeenCalledExactlyOnceWith(USER);
+  });
+
+  it('does not delete the auth account when the support chat cannot be deleted', async () => {
+    const db = database();
+    db.updateFailure = 'support_conversations';
+
+    expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: false });
+
+    expect(db.writeAttempts).toEqual(['tenants', 'memberships', 'support_conversations']);
+    expect(mocks.deleteUser).not.toHaveBeenCalled();
     expectNoSuccessEffects();
   });
 
