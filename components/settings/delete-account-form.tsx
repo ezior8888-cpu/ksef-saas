@@ -22,25 +22,12 @@ export function DeleteAccountForm({ tenantNipHint }: DeleteAccountFormProps) {
       onSubmit={(e) => {
         e.preventDefault();
         setError(null);
-        const formData = new FormData(e.currentTarget);
+        // Od 15.10.2026 akcja zawsze odmawia i kieruje do pomocy technicznej
+        // (usuwanie firmy wstrzymane, NIP niczego nie odblokowuje), więc nie
+        // przekierowuje i nie ma czego łapać.
         startTransition(async () => {
-          try {
-            const result = await requestAccountDeletionAction(formData);
-            if (!result.success) setError(result.error);
-          } catch (err: unknown) {
-            if (
-              typeof err === 'object' &&
-              err !== null &&
-              'digest' in err &&
-              typeof (err as { digest?: unknown }).digest === 'string' &&
-              String((err as { digest: string }).digest).startsWith(
-                'NEXT_REDIRECT'
-              )
-            ) {
-              return;
-            }
-            throw err;
-          }
+          const result = await requestAccountDeletionAction();
+          setError(result.error);
         });
       }}
     >

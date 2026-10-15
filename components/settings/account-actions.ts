@@ -1,84 +1,40 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
-
-import { logAudit } from '@/lib/audit/log';
-import { createClient } from '@/lib/supabase/server';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import { requireOwner } from '@/lib/supabase/auth-context';
 
-export type RequestAccountDeletionResult =
-  | { success: false; error: string }
-  | { success: true };
+export type RequestAccountDeletionResult = { success: false; error: string };
 
-function normalizeNip(raw: string): string {
-  return raw.replace(/\D/g, '').slice(0, 10);
-}
+const DELETION_BY_SUPPORT_MESSAGE =
+  'Usunięcia firmy nie zlecisz na razie z aplikacji — nic nie zostało usunięte, ' +
+  'a firma i abonament działają bez zmian. ' +
+  `Napisz na ${SUPPORT_EMAIL} z adresu właściciela i podaj NIP firmy. ` +
+  'Swoje konto użytkownika usuniesz w Ustawienia → Konto i firma, w sekcji „Twoje dane (RODO)”.';
 
 /**
- * Soft-delete tenanta (30 dni do hard delete).
- * Tylko owner; wymaga wpisania NIP firmy w formularzu.
+ * Usunięcie firmy (organizacji) — samoobsługa wstrzymana 15.10.2026.
+ *
+ * Do 15.10 akcja ustawiała `tenants.deleted_at`, `hard_delete_at` (+30 dni)
+ * i `is_active = false`, po czym wylogowywała właściciela. Tych kolumn nie
+ * sprawdza logowanie, RLS (`is_member_of`, `get_current_tenant_id`) ani żaden
+ * job, a subskrypcji Stripe nikt nie anulował: firma działała dalej dla
+ * wszystkich członków, abonament się pobierał, dane nie znikały nigdy —
+ * wbrew komunikatom („trwale usunięte po 30 dniach”).
+ *
+ * Do czasu prawdziwego usuwania firmy akcja niczego nie zapisuje i kieruje
+ * właściciela do pomocy technicznej. Ścieżka operatora:
+ * `docs/support/escalation-matrix.md` („Usunięcie firmy”).
+ * Test: `tests/unit/usuwanie-firmy-wstrzymane.test.tsx`.
  */
-export async function requestAccountDeletionAction(
-  formData: FormData
-): Promise<RequestAccountDeletionResult> {
-  const nipConfirm = normalizeNip(String(formData.get('nipConfirm') ?? ''));
-  if (nipConfirm.length !== 10) {
-    return { success: false, error: 'Podaj poprawny 10-cyfrowy NIP.' };
-  }
-
-  let ctx;
+export async function requestAccountDeletionAction(): Promise<RequestAccountDeletionResult> {
   try {
-    ctx = await requireOwner();
+    await requireOwner();
   } catch (e) {
     return {
       success: false,
       error: e instanceof Error ? e.message : 'Tylko właściciel konta może zlecić usunięcie firmy.',
     };
   }
-  const { supabase, tenantId, user } = ctx;
 
-  const { data: tenantRow } = await supabase
-    .from('tenants')
-    .select('nip')
-    .eq('id', tenantId)
-    .maybeSingle();
-
-  const tenantNip = normalizeNip(String(tenantRow?.nip ?? ''));
-  if (tenantNip !== nipConfirm) {
-    return {
-      success: false,
-      error: 'NIP nie zgadza się z firmą na tym koncie.',
-    };
-  }
-
-  const now = new Date();
-  const in30days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-  const { error: updErr } = await supabase
-    .from('tenants')
-    .update({
-      deleted_at: now.toISOString(),
-      hard_delete_at: in30days.toISOString(),
-      is_active: false,
-    })
-    .eq('id', tenantId);
-
-  if (updErr) {
-    return {
-      success: false,
-      error: `Nie udało się zapisać żądania usunięcia: ${updErr.message}`,
-    };
-  }
-
-  await logAudit({
-    action: 'retention.deletion_requested',
-    tenantId,
-    userId: user.id,
-    metadata: { hardDeleteAt: in30days.toISOString() },
-  });
-
-  revalidatePath('/', 'layout');
-  await supabase.auth.signOut();
-  redirect('/login?success=account_deleted');
+  return { success: false, error: DELETION_BY_SUPPORT_MESSAGE };
 }
