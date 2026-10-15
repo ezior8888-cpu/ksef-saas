@@ -45,12 +45,18 @@ export default async function AccountSettingsPage() {
         <h2 className="text-lg font-semibold text-destructive mb-2">
           Usuń organizację (firmę)
         </h2>
+        {/* Opis zgodny z umową powierzenia (§ 9) i regulaminem (§ 14 ust. 2
+            i 6). Wykonanie usunięcia po terminie to osobne zadanie (memo
+            dla prawnika, „Do naprawy przed startem”). */}
         <p className="text-sm text-muted-foreground mb-4">
-          Operacja jest <strong>nieodwracalna po 30 dniach</strong> (zgodnie z
-          harmonogramem retencji): firma zostanie oznaczona do usunięcia, a Ty
-          zostaniesz wylogowany. W tym czasie możesz skontaktować się z
-          pomocą, jeśli to pomyłka. To NIE jest usunięcie Twojego konta — żeby
-          to zrobić użyj sekcji &laquo;Twoje dane (RODO)&raquo; powyżej.
+          Usunięcie firmy rozwiązuje umowę. Firma zostanie od razu wyłączona,
+          a Ty — wylogowany. <strong>Najpierw pobierz kopię danych</strong>{' '}
+          (Raporty → Eksport). Przez 30 dni możesz zmienić decyzję albo
+          poprosić o eksport, pisząc do nas; potem dane firmy — faktury,
+          kontrahenci, wydatki, certyfikaty — usuwamy w ciągu kolejnych 30 dni.
+          Faktury wysłane do KSeF przechowuje też Ministerstwo Finansów. To nie
+          jest usunięcie Twojego konta — do tego służy sekcja &laquo;Twoje
+          dane (RODO)&raquo; powyżej.
         </p>
         {!isOwner ? (
           <p className="text-sm text-muted-foreground">

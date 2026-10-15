@@ -39,7 +39,7 @@ export function DeleteAccountSection({ tenantNip }: { tenantNip: string }) {
         className="border-red-500/30 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500/40 dark:hover:text-red-400"
       >
         <Trash2 className="h-4 w-4 mr-2" />
-        Usuń konto
+        Usuń firmę
       </Button>
     );
   }
@@ -49,21 +49,22 @@ export function DeleteAccountSection({ tenantNip }: { tenantNip: string }) {
       <div className="rounded-2xl border border-red-500/20 bg-red-500/5 backdrop-blur-glass-sm p-4 flex items-start gap-3">
         <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
         <div className="text-sm text-foreground space-y-2">
+          {/* Ten przycisk usuwa FIRMĘ (requestAccountDeletionAction oznacza
+              organizację do usunięcia za 30 dni i wylogowuje), nie konto
+              użytkownika — to robi sekcja RODO w Ustawienia → Konto i firma
+              (lib/gdpr/deletion.ts, 14 dni). Do 15.10.2026 był podpisany
+              „Usuń konto” i obiecywał „nieodwracalne po 14 dniach”.
+              Opis zgodny z umową powierzenia (§ 9) i regulaminem (§ 14). */}
           <p className="font-medium">
-            Ta operacja jest nieodwracalna po 14 dniach.
+            Usuwasz firmę i wszystkie jej dane — nie tylko swoje konto.
           </p>
-          {/* Do 15.10.2026 tekst obiecywał usunięcie faktur, kontrahentów
-              i certyfikatów — a `lib/gdpr/deletion.ts` usuwa konto
-              użytkownika i anonimizuje jego wpisy w dzienniku; dane firmy
-              zostają w Organizacji. Opis musi mówić, co się naprawdę stanie
-              (art. 12 i 17 RODO). */}
           <p className="text-muted-foreground leading-relaxed">
-            Usuniemy Twoje konto (login, profil, dostęp do firm) i
-            zanonimizujemy Twoje wpisy w dzienniku zdarzeń. Dane firmy —
-            faktury, kontrahenci, wydatki, certyfikaty KSeF — należą do
-            Organizacji i zostają w niej, np. dla współpracowników. Jeśli
-            chcesz usunąć także dane firmy, najpierw pobierz ich kopię, a potem
-            napisz do nas z adresu tego konta.
+            Firma zostanie od razu wyłączona, a Ty — wylogowany.{' '}
+            <strong>Najpierw pobierz kopię danych</strong> (Raporty → Eksport).
+            Przez 30 dni możesz zmienić decyzję albo poprosić o eksport, pisząc
+            do nas; potem dane firmy — faktury, kontrahenci, wydatki,
+            certyfikaty KSeF — usuwamy w ciągu kolejnych 30 dni. Swoje konto
+            użytkownika usuniesz osobno w Ustawienia → Konto i firma.
           </p>
         </div>
       </div>

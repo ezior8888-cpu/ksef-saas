@@ -37,8 +37,22 @@ describe('terminy usuwania konta — kod i dokumenty mówią to samo', () => {
     expect(text).not.toContain('danych w 30 dni od żądania');
   });
 
-  it('okno usuwania konta: nieodwracalne po 14 dniach', () => {
-    const text = read('components/settings/delete-account.tsx');
-    expect(text).toContain(`nieodwracalna po ${GDPR_COOLING_OFF_DAYS} dniach`);
+  // Rewizja 15.10.2026: `components/settings/delete-account.tsx` NIE usuwa
+  // konta — woła `requestAccountDeletionAction`, które oznacza do usunięcia
+  // FIRMĘ (30 dni). Ten test wcześniej wymuszał w nim „14 dni” (termin
+  // usunięcia konta) i utrwalał pomyłkę. Konto usuwa sekcja RODO.
+  it('usuwanie konta (sekcja RODO): 14 dni na wycofanie decyzji', () => {
+    const text = read('app/(dashboard)/settings/account/_components/gdpr-section.tsx');
+    expect(text).toContain(`${GDPR_COOLING_OFF_DAYS}-dniowym okresem na wycofanie decyzji`);
+  });
+
+  it('przycisk usuwania firmy mówi, że usuwa firmę, i nie podaje terminu usunięcia konta', () => {
+    for (const file of ['components/settings/delete-account.tsx', 'components/settings/delete-account-form.tsx']) {
+      const text = read(file);
+      expect(text, file).toContain('Usuń firmę');
+      expect(text, file).not.toContain(`nieodwracalna po ${GDPR_COOLING_OFF_DAYS} dniach`);
+    }
+    const action = read('components/settings/account-actions.ts');
+    expect(action).toContain('hard_delete_at: in30days');
   });
 });

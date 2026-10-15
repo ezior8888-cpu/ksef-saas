@@ -354,9 +354,12 @@ export default async function SettingsPage() {
                 <h2 className="text-lg font-display font-semibold tracking-tighter-text">
                   Niebezpieczna strefa
                 </h2>
+                {/* Przycisk niżej usuwa FIRMĘ (organizację), nie konto —
+                    do 15.10.2026 opis mówił o „usunięciu konta”. */}
                 <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                  Trwałe usunięcie konta wraz ze wszystkimi danymi.
-                  Operacja nieodwracalna po 30 dniach.
+                  Usunięcie firmy (organizacji) i jej danych: 30 dni na zmianę
+                  decyzji, potem usuwamy dane w ciągu kolejnych 30 dni. Swoje
+                  konto użytkownika usuniesz w Ustawienia → Konto i firma.
                 </p>
               </div>
               <DeleteAccountSection tenantNip={tenant?.nip ?? ''} />

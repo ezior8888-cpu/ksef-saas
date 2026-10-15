@@ -243,12 +243,13 @@ export const REGULAMIN: LegalDocument = {
       '§ 14. Czas trwania i rozwiązanie Umowy',
       ol(
         'Umowa jest zawarta na czas nieokreślony.',
-        'Klient może w każdej chwili wypowiedzieć Subskrypcję w Serwisie (Ustawienia → Rozliczenia) — ze skutkiem na koniec bieżącego Okresu rozliczeniowego — oraz wypowiedzieć Umowę, usuwając Konto lub wysyłając oświadczenie e-mailem.',
+        'Klient może w każdej chwili wypowiedzieć Subskrypcję w Serwisie (Ustawienia → Rozliczenia) — ze skutkiem na koniec bieżącego Okresu rozliczeniowego — oraz wypowiedzieć Umowę, zlecając usunięcie Organizacji (Ustawienia → Konto i firma) albo wysyłając oświadczenie e-mailem. Usunięcie Konta Użytkownika nie rozwiązuje Umowy z Klientem: dane Organizacji pozostają do dyspozycji Klienta i innych Użytkowników z dostępem.',
         li(
           'Usługodawca może wypowiedzieć Umowę z zachowaniem 30-dniowego okresu wypowiedzenia wyłącznie z ważnych przyczyn, którymi są:',
           'zaprzestanie świadczenia Usług lub ich istotnej części dla wszystkich klientów;',
           'zmiana przepisów lub decyzja organu, która uniemożliwia albo istotnie utrudnia świadczenie Usług na dotychczasowych zasadach;',
-          'brak zapłaty za Subskrypcję przez co najmniej 30 dni od wezwania do zapłaty.',
+          'brak zapłaty za Subskrypcję przez co najmniej 30 dni od wezwania do zapłaty;',
+          'brak w Organizacji jakiegokolwiek Użytkownika z dostępem przez co najmniej 12 miesięcy — wypowiedzenie Usługodawca wysyła na ostatni znany adres e-mail Klienta.',
         ),
         li(
           'Usługodawca może wypowiedzieć Umowę ze skutkiem natychmiastowym, jeżeli Klient lub Użytkownik Organizacji mimo wezwania do zaprzestania naruszeń (a bez wezwania — gdy naruszenie jest rażące lub zagraża bezpieczeństwu Serwisu albo innych osób):',
@@ -257,7 +258,7 @@ export const REGULAMIN: LegalDocument = {
           'podał dane nieprawdziwe w zakresie istotnym dla zawarcia Umowy.',
         ),
         'Wypowiedzenie przez Usługodawcę wymaga formy elektronicznej (e-mail) i zawiera uzasadnienie.',
-        'Po rozwiązaniu Umowy Klient może przez 30 dni wyeksportować Dane Klienta. Usługodawca informuje Klienta e-mailem o planowanym usunięciu danych. Dalsze postępowanie z danymi osobowymi powierzonymi przez Klienta określa Umowa powierzenia. Konto Użytkownika, który ma dostęp do innych Organizacji, pozostaje aktywne.',
+        'Po rozwiązaniu Umowy Klient może przez 30 dni wyeksportować Dane Klienta (po zleceniu usunięcia Organizacji — po kontakcie z Usługodawcą, bo Organizacja jest od razu wyłączona). Usługodawca informuje Klienta e-mailem o planowanym usunięciu danych. Dalsze postępowanie z danymi osobowymi powierzonymi przez Klienta określa Umowa powierzenia. Konta Użytkowników pozostają aktywne.',
       ),
     ),
     section(
