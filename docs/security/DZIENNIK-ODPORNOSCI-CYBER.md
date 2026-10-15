@@ -1246,3 +1246,127 @@ właściciela. Bez merge, deploy, migracji na db-1 i uruchamiania workera.
 Praca nad kolejną fazą nie jest rozpoczęta; przygotowujemy przekazanie do
 nowego czatu zgodnie z poleceniem Igora. Cała faza 4 planu pozostaje szersza
 od tego jednego zakończonego pakietu.
+
+
+## 2026-10-03 — CYB-DOCKER-BUILD-SECRETS: token Sentry tylko w kroku builda
+
+**Faza 4 planu — CI, zależności i bezpieczne wydawanie zmian.** Jeden pakiet
+na polecenie Igora. Nowy czysty worktree
+`C:\Users\Igor\.codex\worktrees\security-docker-build-secrets\ksef-saas`,
+`codex/security-docker-build-secrets`, od świeżego `origin/main`
+`ef9bb438280aed56c638a70e4404ff4faadf09a0`. Następnie fast-forward niezmienionej
+zależności #196 do `5856d80997b33e9a38a9f18db894cd24d4a38608`: ochrona kontekstu
+#194/#196, jej harness, cztery normalizacje Windows i aktualne przekazanie.
+To jawna zależność ochrony tego samego procesu builda; nie przenoszono #190/#193.
+Główny katalog Igora i wszystkie wcześniejsze worktree, w tym Claude, zachowano.
+
+**Odświeżenie stanu:** #196 OPEN/draft na `5856d80`, 11/11 SUCCESS na dokładnym
+HEAD. #190 (`3a757df`), #193 (`f9aad70`) i #194 (`64ed5e5`) również OPEN/draft.
+To stan repo i GitHuba, nie potwierdzenie wdrożenia. 00129 nadal jest plikiem
+w #190; brak nowego potwierdzenia db-1, C-11/C-12 lub QR.
+
+**Użycie tokenu i ryzyko:** `next.config.ts` zachowuje `withSentryConfig`.
+Sprawdzono kod z lockfile: `@sentry/nextjs@10.53.1` przekazuje opcje do
+`@sentry/bundler-plugin-core@5.3.0`, który używa
+`userOptions.authToken ?? process.env.SENTRY_AUTH_TOKEN` do uploadu map/release;
+`@sentry/cli@2.58.5` dostarcza go procesowi CLI przez środowisko. Runtime
+raportowania korzysta z DSN. Nie dodano tokenu do `nextConfig.env` ani bundla.
+Dotychczasowe ARG/ENV utrwalało wartość w konfiguracji etapu build i mogło
+ujawniać ją w historii/provenance/cache. Osobny runner nie dziedziczy tego ENV,
+ale nie usuwa cache poprzednich etapów. Nie czytano rzeczywistych tokenów,
+konfiguracji Coolify ani obrazów produkcji; **nie stwierdzono wycieku**.
+
+**Zmiana i uzasadnienie:** usunięto ARG/ENV tokenu. BuildKit udostępnia go jako
+env secret mount wyłącznie dla `RUN` z `pnpm build` w repozytoryjnym Dockerfile.
+Frontend 1.10 obsługuje `env=`. Zachowano opcjonalny build bez tokenu; nowa
+niesekretna flaga `SENTRY_AUTH_TOKEN_REQUIRED=1` zatrzymuje wykonanie kroku,
+gdy token nie został dostarczony. Błędna wartość flagi również zatrzymuje build.
+To bramka obecności, nie potwierdzenie uploadu. Pluginu ani ochrony nie wyłączono.
+
+Publiczne NEXT_PUBLIC_* oraz niesekretne SENTRY_ORG/PROJECT/URL/RELEASE mają
+opcjonalne mounty plikowe oraz ARG dla zwykłego Dockera. Istniejący plik
+powoduje jawny eksport wartości; brak pliku zachowuje wartość argumentu. Jest to konieczne dla Coolify:
+sprawdzony upstream `c0d81d4` przełącza wszystkie build vars na secrets i pomija
+modyfikację RUN mającego już mount. Sama zmiana tokenu zgubiłaby te wartości.
+Nie potwierdzono wersji produkcyjnej. Zmiana wartości secret mountu (również
+publicznej lub flagi) nie unieważnia cache; odbiór wymaga przebudowania bez
+cache po zmianach konfiguracji. Szczegóły i oficjalne źródła:
+[runbook](../runbooks/docker-build-secrets.md). Historyczne zalecenie migracyjne
+poprawiono, aby nie kierowało tokenu z powrotem do build args.
+
+**Kontrola syntetyczna:** harness czyta faktyczne ARG/ENV, dyrektywę frontendu
+oraz cały RUN build z Dockerfile i wykonuje je w odrębnym kontekście z atrapą
+pnpm. Nigdy nie wysyła rzeczywistego repo ani sekretu. Fikcyjny losowy token
+mieszka poza kontekstem; stub sprawdza jego hash oraz wartości publiczne,
+a kolejny RUN sprawdza brak tokenu. Warianty obejmują publiczne args i tryb
+all-secrets, brak opcjonalnego/wymaganego tokenu oraz złą flagę. Skanowane są
+logi, konfiguracja/historia OCI, warstwy (także gzip), provenance mode=max
+oraz eksport cache mode=max. Dwie celowe regresje ARG/ENV i zapis do warstwy
+muszą wykazać konkretne utrwalenie; awaria Dockera nie zalicza kontroli.
+Nowy krok jest obowiązkowy w istniejącym jobie Next build; setup-buildx
+przypięto do SHA. Ta próba używa stubu, więc nie dowodzi rzeczywistego uploadu
+Sentry ani nie skanuje pełnego `.next` aplikacji z tokenem.
+
+**Weryfikacja:** pełne lokalne `pnpm.cmd run ci` na dostępnym Node 24.19.0
+PASS: typecheck, lint 0 błędów / 35 wcześniejszych ostrzeżeń, 72/72 Node/XML,
+424 zestawy i 5414/5414 Vitest. 12 testów nowego harnessu oraz 6 testów
+kontekstu PASS, lint obu nowych skryptów PASS. Build standalone wykonany
+kolejno po CI PASS: 82/82 strony, exit 0, `.next/standalone/server.js`,
+NEXT_OUTPUT=standalone i limit 3072 MB. Niezależna recenzja transportu,
+harnessu oraz przekazania bez blockerów; recenzent sam uruchomił 12 testów.
+Kod aplikacji/Sentry nie został zmieniony. Pierwszy commit kodu: `ddc582d`.
+Lokalnie Docker niedostępny; rzeczywista walidacja w Linux CI opisana niżej.
+Pierwsza próba GitHuba na `ddc582d` przerwała pierwszy syntetyczny build
+(bez zaliczenia kontroli); uzupełniono ograniczoną, redagowaną diagnostykę.
+Druga próba i źródła BuildKit 0.33.1 potwierdziły, że opcjonalny env mount
+bez dostarczonego sekretu nadpisuje ARG/ENV pustą wartością. Kontrola wykryła
+regresję publicznej konfiguracji; nie rozluźniono asercji. `cf9238d` używa
+mountów plikowych dla tych wartości i flagi, zachowując env mount tokenu.
+Kontrola ARG/ENV wykryła następnie fikcyjny token również w logach
+BuildKit. Rozliczenie tej celowej regresji poprawiono w `89945c5`: wymaga
+wycieku w logu oraz config/history przy udanym wykonaniu stubu, podczas gdy
+poprawne warianty nadal odrzucają każdy wyciek. Końcowo 15/15 testów harnessu
+oraz lint obu skryptów PASS; niezależna ponowna recenzja bez blockerów. Zmiany po
+pełnym lokalnym buildzie dotyczą wyłącznie Dockerfile, harnessu i dokumentacji;
+kod aplikacji i zależności są identyczne. Końcowe CI GitHuba sprawdza nowy HEAD.
+
+**Kolejka nowych niezależnych problemów:**
+- **CYB-COOLIFY-BUILD-SECRET-SCOPE:** upstream Coolify może domontować wszystkie
+  build secrets także do innych RUN. Odbiór konkretnej wersji, efektywnego
+  Dockerfile, braku fallbacku do args i zakresu sekretu jest osobnym zadaniem
+  przed wdrożeniem. Kod repo nie potwierdza ustawień serwera.
+- **CYB-SENTRY-UPLOAD-FAILURE-GATE:** istniejący bundler-plugin-core obsługuje
+  błąd uploadu przez `handleRecoverableError(e, false)`; bez custom errorHandler
+  może tylko logować i pozostawić sukces builda. `next.config.ts` nie ustawia
+  handlera. Osobno określić wymaganie udanego uploadu i sprawdzić je fikcyjnym
+  tokenem oraz lokalnym odbiornikiem odrzucającym uwierzytelnienie. Nowa flaga
+  obecności tokenu nie naprawia tej wcześniejszej własności pluginu.
+
+### Aktualny stan i następny krok — CYB-DOCKER-BUILD-SECRETS
+
+Roboczy [PR #197](https://github.com/ezior8888-cpu/ksef-saas/pull/197),
+OPEN/draft do main, zawiera niezmienione #194/#196 jako zależność.
+**Rzeczywisty Docker — PASS:** na dokładnym kodzie
+`89945c5d8cf898bc42a0bbf0bca8249c1abc31ff` krok
+`Verify Docker build secrets with synthetic values` ma COMPLETED/SUCCESS
+w [Next build](https://github.com/ezior8888-cpu/ksef-saas/actions/runs/37132692916/job/111230842333).
+Oznacza 15 testów Node, siedem rzeczywistych buildów oraz wymagane dowody
+wykonania stubu, zachowania konfiguracji, granicy pojedynczego RUN, braku
+fikcyjnego tokenu w poprawnych logach/OCI/warstwach/provenance/cache
+oraz wykrycia obu celowych regresji. Następny krok ochrony kontekstu również
+COMPLETED/SUCCESS: sześć testów, 118 wykluczonych ścieżek, 20 zachowanych,
+kontrola agents-only odrzucona. To syntetyczny dowód, nie odbiór produkcji.
+
+**Zamknięcie pakietu w fazie 4:** kod, lokalne CI i build, niezależna recenzja
+oraz rzeczywiste kontrole Docker zostały zaliczone. Dziennik, plan i C-20
+zaktualizowano. Po ostatnim commicie dokumentacji należy sprawdzić wszystkie
+kontrole GitHuba dla dokładnego HEAD; ich końcowy wynik zapisujemy w opisie
+PR #197, aby uniknąć zmieniania HEAD samym dopisywaniem wyniku. PR pozostaje
+szkicem do osobnej decyzji właściciela. Następny proponowany zakres:
+CYB-COOLIFY-BUILD-SECRET-SCOPE — odbiór efektywnego sposobu przekazania
+sekretów przez builder, nadal wyłącznie syntetycznie. Nie rozpoczęto go.
+
+Bez nowych migracji SQL, wykonania migracji, uruchamiania workera, merge do
+main i wdrożenia. C-11/C-12, QR, 00129 i produkcja pozostają poza odbiorem tego
+pakietu. Po zapisaniu końcowego stanu zatrzymujemy pracę; nie rozpoczynamy
+następnej pozycji kolejki. Cała faza 4 nie jest tym samym zamknięta.
