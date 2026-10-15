@@ -3,7 +3,9 @@ import { createAdminClient } from '@/lib/supabase/server';
 import type { createClient } from '@/lib/supabase/server';
 import { findOrganizationsBlockingDeletion, GdprDeletionBlockedError } from './deletion-blockers';
 
-export const GDPR_COOLING_OFF_DAYS = 14;
+import { GDPR_COOLING_OFF_DAYS } from './deletion-constants';
+
+export { GDPR_COOLING_OFF_DAYS };
 
 type GdprStatus = 'pending' | 'processing' | 'canceled' | 'executed' | 'failed';
 interface GdprRequestRow {

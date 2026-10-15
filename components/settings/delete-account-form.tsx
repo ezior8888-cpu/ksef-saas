@@ -74,7 +74,8 @@ export function DeleteAccountForm({ tenantNipHint }: DeleteAccountFormProps) {
         disabled={isPending}
         className="w-full max-w-xs"
       >
-        {isPending ? 'Przetwarzanie…' : 'Usuń konto'}
+        {/* Akcja usuwa firmę (organizację), nie konto użytkownika. */}
+        {isPending ? 'Przetwarzanie…' : 'Usuń firmę'}
       </Button>
     </form>
   );

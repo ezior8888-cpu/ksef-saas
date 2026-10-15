@@ -127,7 +127,13 @@ export type AuditAction =
   | 'join_request.approved'
   | 'join_request.denied'
   | 'membership.revoked'
-  | 'membership.role_changed';
+  | 'membership.role_changed'
+  // Dokumenty prawne i zgody (lib/legal/record.ts). Metadane niosą wersję
+  // dokumentu i wersję brzmienia oświadczenia (lib/legal/versions.ts).
+  | 'legal.terms_accepted'
+  | 'legal.checkout_statement_accepted'
+  | 'legal.email_consent_granted'
+  | 'legal.email_consent_withdrawn';
 
 export interface AuditLogEntry {
   action: AuditAction;

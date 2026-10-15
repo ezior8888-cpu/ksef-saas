@@ -315,6 +315,9 @@ export async function sendEmail(opts: {
   html: string;
   category?: EmailCategory;
   userId?: string;
+  /** Np. regulamin jako plik — potwierdzenie umowy na trwałym nośniku (lib/legal/record.ts). */
+  attachments?: Array<{ filename: string; content: Buffer }>;
+  idempotencyKey?: string;
 }): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
     logger.debug(`[email:stub] sendEmail → ${opts.to}: ${opts.subject}`);

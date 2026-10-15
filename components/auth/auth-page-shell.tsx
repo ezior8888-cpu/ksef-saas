@@ -68,21 +68,30 @@ export function AuthPageShell({ children }: AuthPageShellProps) {
 
           <AuthReveal delay={0.22}>
           <p className="z-small mt-8 text-[var(--z-muted)]">
-            Zakładając konto akceptujesz{' '}
+            {/* Akceptację zbiera pole wyboru w formularzu rejestracji (i bramka
+                /onboarding/zgody) — tu tylko odnośniki. Polityki prywatności
+                się nie „akceptuje”: to informacja (art. 13 RODO). */}
+            Dokumenty:{' '}
             <a
               href="/legal/regulamin"
               className="underline underline-offset-2 transition-opacity hover:opacity-70"
             >
               Regulamin
-            </a>{' '}
-            i{' '}
+            </a>
+            {' · '}
+            <a
+              href="/legal/umowa-powierzenia"
+              className="underline underline-offset-2 transition-opacity hover:opacity-70"
+            >
+              Umowa powierzenia
+            </a>
+            {' · '}
             <a
               href="/legal/polityka-prywatnosci"
               className="underline underline-offset-2 transition-opacity hover:opacity-70"
             >
-              Politykę Prywatności
+              Polityka prywatności
             </a>
-            .
           </p>
           </AuthReveal>
         </div>
