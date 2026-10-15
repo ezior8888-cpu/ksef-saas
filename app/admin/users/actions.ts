@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { deleteUserSupportConversations } from '@/lib/support/retention';
 
 /**
  * Server actions dla `/admin/users/[userId]` (Faza 24).
@@ -188,7 +189,16 @@ export async function deleteUserGdprAction(
     return { success: false, error: 'Nie udało się odwołać członkostw; konto nie zostało usunięte' };
   }
 
-  // Krok 3: usuń konto z auth.users (cascada wpieprza notki, kontrahentów
+  // Krok 3: rozmowy z czatem pomocy. FK user_id ma ON DELETE SET NULL, więc
+  // po deleteUser zostałyby z treścią bez właściciela. Tuż przed kontem —
+  // to nieodwracalne, a wcześniejsze kroki da się cofnąć.
+  try {
+    await deleteUserSupportConversations(supabase, userId);
+  } catch {
+    return { success: false, error: 'Nie udało się usunąć rozmów z czatem pomocy; konto nie zostało usunięte' };
+  }
+
+  // Krok 4: usuń konto z auth.users (cascada wpieprza notki, kontrahentów
   // gdzie user był created_by, etc.). Audyt zachowuje user_id w `audit_logs`
   // (snapshot ID po deletion).
   const { error } = await supabase.auth.admin.deleteUser(userId);
