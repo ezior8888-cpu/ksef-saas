@@ -7,6 +7,7 @@ import {
   CreditCard,
   ShieldCheck,
   History,
+  IdCard,
   UserCog,
   ChevronRight,
   AlertTriangle,
@@ -103,6 +104,14 @@ export default async function SettingsPage() {
       label: 'Bezpieczeństwo',
       description: 'Hasło, weryfikacja dwuetapowa (2FA), sesje',
       icon: Lock,
+    },
+    // Dla każdej roli: usunięcie konta (RODO art. 17) i eksport danych są
+    // prawem każdego użytkownika. Do 15.10.2026 nic tu nie linkowało.
+    {
+      href: '/settings/account',
+      label: 'Konto i firma',
+      description: 'Twoje dane (RODO): eksport i usunięcie konta',
+      icon: IdCard,
     },
     {
       href: '/settings/notifications',
