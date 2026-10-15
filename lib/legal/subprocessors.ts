@@ -83,9 +83,14 @@ export const SUBPROCESSORS: Subprocessor[] = [
     roles: ['own_data'],
   },
   {
-    name: 'Cloudflare, Inc. (Turnstile)',
+    name: 'Cloudflare, Inc.',
     seat: 'USA',
-    purpose: 'ochrona formularzy logowania i rejestracji przed botami',
+    // Poczta: rekordy MX faktflow.pl wskazują Cloudflare Email Routing
+    // (docs/runbooks/skrzynka-pomoc.md) — przez Cloudflare przechodzi każdy
+    // mail na pomoc@, także żądania RODO. Skrzynka docelowa to osobny
+    // dostawca (lista kontrolna, docs/prawne/).
+    purpose:
+      'ochrona formularzy logowania i rejestracji przed botami (Turnstile); przekazywanie poczty przychodzącej na adresy @faktflow.pl',
     location: 'globalna sieć Cloudflare',
     transfer: SCC_OR_DPF,
     roles: ['own_data'],
