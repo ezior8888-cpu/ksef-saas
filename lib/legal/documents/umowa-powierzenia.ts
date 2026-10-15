@@ -34,7 +34,7 @@ export const UMOWA_POWIERZENIA: LegalDocument = {
       '§ 1. Strony i zawarcie umowy',
       ol(
         'Umowa powierzenia przetwarzania danych osobowych (dalej „Umowa powierzenia”) zostaje zawarta między Klientem w rozumieniu Regulaminu FaktFlow, jako administratorem danych (dalej „Administrator”), a ' +
-          `${entityIdentification()} jako podmiotem przetwarzającym (dalej „Przetwarzający”).`,
+          `${entityIdentification()}, jako podmiotem przetwarzającym (dalej „Przetwarzający”).`,
         'Umowa powierzenia jest zawierana razem z Umową o świadczenie Usług na podstawie [Regulaminu](/legal/regulamin), przez akceptację w Serwisie, i obowiązuje przez czas jej trwania oraz do zakończenia czynności opisanych w § 9. Pojęcia z wielkiej litery mają znaczenie nadane w Regulaminie, a pojęcia dotyczące danych osobowych — w rozporządzeniu (UE) 2016/679 (RODO).',
         'Jeżeli Klient korzysta z Serwisu jako podmiot przetwarzający na rzecz innego administratora (np. biuro rachunkowe prowadzące Organizację klienta), Przetwarzający działa jako dalszy podmiot przetwarzający, a Klient zapewnia, że ma zgodę swojego administratora na korzystanie z Przetwarzającego.',
       ),

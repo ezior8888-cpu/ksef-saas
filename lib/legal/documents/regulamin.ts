@@ -117,7 +117,7 @@ export const REGULAMIN: LegalDocument = {
       ol(
         'Rejestracja następuje przez formularz w Serwisie (imię i nazwisko, adres e-mail, hasło) albo przez logowanie kontem Google. Warunkiem rejestracji jest akceptacja Regulaminu i Umowy powierzenia. Utworzenie Konta wymaga potwierdzenia adresu e-mail.',
         'Z chwilą utworzenia Konta zostaje zawarta nieodpłatna umowa o prowadzenie Konta, na czas nieokreślony.',
-        'Utworzenie Organizacji albo dołączenie do niej oznacza zawarcie Umowy z Klientem, którego dotyczy Organizacja. Użytkownik, który tworzy Organizację, oświadcza, że jest Klientem albo jest uprawniony do zawarcia Umowy w jego imieniu. Osoba działająca bez umocowania odpowiada na zasadach art. 103 Kodeksu cywilnego.',
+        'Utworzenie Organizacji oznacza zawarcie Umowy z Klientem, którego dotyczy Organizacja. Użytkownik, który tworzy Organizację, oświadcza, że jest Klientem albo jest uprawniony do zawarcia Umowy w jego imieniu. Osoba działająca bez umocowania odpowiada na zasadach art. 103 Kodeksu cywilnego. Użytkownik, który dołącza do istniejącej Organizacji na zaproszenie, korzysta z Usług w ramach Umowy zawartej przez Klienta.',
         'Klient i Użytkownicy podają dane prawdziwe i aktualne oraz aktualizują je w razie zmiany. Jedno Konto może być używane wyłącznie przez jedną osobę; danych logowania nie wolno udostępniać.',
         'Klient decyduje, którzy Użytkownicy (w tym biuro rachunkowe) mają dostęp do Organizacji i z jaką rolą, oraz odbiera ten dostęp. Działania Użytkowników w Organizacji uważa się za działania Klienta.',
         'Po zawarciu Umowy Klient otrzymuje e-mailem potwierdzenie wraz z treścią Regulaminu i Umowy powierzenia w postaci plików (trwały nośnik).',
@@ -231,7 +231,7 @@ export const REGULAMIN: LegalDocument = {
         'Jeśli zawierasz Umowę jako jednoosobowy przedsiębiorca, a jej przedmiot nie ma dla Ciebie charakteru zawodowego, możesz w ciągu 14 dni odstąpić od niej bez podawania przyczyny.',
       ),
       ol(
-        'Konsument i PNPK mogą odstąpić od Umowy zawartej na odległość, bez podawania przyczyny, w terminie 14 dni od dnia jej zawarcia.',
+        'Konsument i PNPK mogą odstąpić od Umowy zawartej na odległość, bez podawania przyczyny, w terminie 14 dni od dnia jej zawarcia, a od Subskrypcji — w terminie 14 dni od dnia jej rozpoczęcia.',
         `Aby odstąpić od Umowy, wystarczy przed upływem terminu wysłać jednoznaczne oświadczenie, np. e-mailem na adres ${E.email} lub pisemnie na adres ${entityAddress()}. Można skorzystać ze [wzoru formularza](#zalacznik-1), ale nie jest to obowiązkowe. Usługodawca niezwłocznie potwierdza otrzymanie oświadczenia e-mailem.`,
         'W razie odstąpienia Umowę uważa się za niezawartą. Usługodawca zwraca dokonane płatności niezwłocznie, nie później niż w terminie 14 dni od otrzymania oświadczenia, tym samym sposobem płatności, którego użyto, chyba że Konsument lub PNPK zgodzi się na inny sposób niewiążący się z kosztami.',
         `Jeżeli Konsument lub PNPK zażądał rozpoczęcia świadczenia Usług przed upływem terminu na odstąpienie, płaci za Usługi świadczone do chwili odstąpienia, proporcjonalnie do ceny Subskrypcji. Okres próbny jest bezpłatny — odstąpienie w trakcie Okresu próbnego nie powoduje żadnej opłaty.`,

@@ -94,6 +94,19 @@ describe('znaczniki w tekście dokumentu', () => {
     ]);
   });
 
+  it('nawias pola do uzupełnienia PRZED linkiem nie wciąga tekstu do linku', () => {
+    // Rewizja 15.10: § 13 ust. 2 regulaminu („adres [DO UZUPEŁNIENIA: …] … ze
+    // [wzoru formularza](#zalacznik-1)”) renderował pół zdania jako link.
+    expect(parseInline('adres [DO UZUPEŁNIENIA: ulica], ze [wzoru](#z), koniec')).toEqual([
+      { kind: 'text', value: 'adres [DO UZUPEŁNIENIA: ulica], ze ' },
+      { kind: 'link', value: 'wzoru', href: '#z' },
+      { kind: 'text', value: ', koniec' },
+    ]);
+    const t = text(REGULAMIN);
+    expect(t).not.toMatch(/adres DO UZUPEŁNIENIA/);
+    expect(t).not.toContain('ze [wzoru formularza');
+  });
+
   it('niedomknięte pogrubienie zostaje tekstem', () => {
     expect(parseInline('a **b')).toEqual([{ kind: 'text', value: 'a **b' }]);
   });

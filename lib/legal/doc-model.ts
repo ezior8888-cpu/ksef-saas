@@ -99,9 +99,13 @@ export function parseInline(text: string): InlineToken[] {
       rest = rest.slice(end + 2);
       continue;
     }
-    const closeLabel = rest.indexOf('](', at);
-    const closeHref = closeLabel < 0 ? -1 : rest.indexOf(')', closeLabel + 2);
-    if (closeLabel < 0 || closeHref < 0) {
+    // Etykieta kończy się na PIERWSZYM „]”; link tylko wtedy, gdy zaraz po
+    // nim stoi „(”. Szukanie „](” w dalszej części tekstu wciągało do linku
+    // wszystko od nawiasu pola „[DO UZUPEŁNIENIA: …]” (rewizja 15.10.2026).
+    const closeLabel = rest.indexOf(']', at);
+    const isLink = closeLabel >= 0 && rest[closeLabel + 1] === '(';
+    const closeHref = isLink ? rest.indexOf(')', closeLabel + 2) : -1;
+    if (!isLink || closeHref < 0) {
       // Zwykły nawias kwadratowy w tekście (np. „[DO UZUPEŁNIENIA: …]”).
       pushText(rest.slice(0, at + 1));
       rest = rest.slice(at + 1);
@@ -150,6 +154,8 @@ function plainInline(text: string, siteUrl: string): string {
   return parseInline(text)
     .map((t) => {
       if (t.kind !== 'link') return t.value;
+      // Kotwica w tym samym dokumencie nic nie mówi w pliku — sama etykieta.
+      if (t.href.startsWith('#')) return t.value;
       const href = t.href.startsWith('/') ? `${siteUrl}${t.href}` : t.href;
       return href === t.value ? t.value : `${t.value} (${href})`;
     })
