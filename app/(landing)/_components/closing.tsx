@@ -30,6 +30,8 @@ const COLUMNS = [
     links: [
       { label: 'Polityka prywatności', href: '/legal/polityka-prywatnosci' },
       { label: 'Regulamin', href: '/legal/regulamin' },
+      { label: 'Umowa powierzenia', href: '/legal/umowa-powierzenia' },
+      { label: 'Cookies', href: '/legal/cookies' },
     ],
   },
 ];

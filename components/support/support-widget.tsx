@@ -220,6 +220,11 @@ export function SupportWidget({
             <div className="flex items-center gap-2">
               <HelpCircle className="h-5 w-5 text-muted-foreground" />
               <span className="font-medium">Pomoc FaktFlow</span>
+              {/* Art. 50 ust. 1 AI Act (od 2.08.2026): rozmówca ma wiedzieć,
+                  że pisze z systemem AI — widoczne przez całą rozmowę. */}
+              <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                Asystent AI
+              </span>
             </div>
             <button
               type="button"
@@ -331,8 +336,18 @@ function WelcomeState({
     <div className="space-y-5">
       <div>
         <p className="text-sm">
-          Cześć! Jestem asystentem FaktFlow. Odpowiem na pytania o KSeF,
-          faktury, OCR i rozliczenia — w kilka sekund.
+          Cześć! Jestem asystentem AI FaktFlow — automatycznym programem, nie
+          człowiekiem. Odpowiem na pytania o KSeF, faktury, OCR i rozliczenia
+          w kilka sekund.
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Moje odpowiedzi mogą zawierać błędy i nie są poradą podatkową ani
+          prawną. W każdej chwili możesz poprosić o kontakt z człowiekiem.
+          Treść rozmowy przetwarza dostawca AI (Anthropic) —{' '}
+          <Link href="/legal/polityka-prywatnosci#cele" target="_blank" className="underline underline-offset-2">
+            szczegóły
+          </Link>
+          .
         </p>
       </div>
 

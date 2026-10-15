@@ -52,10 +52,18 @@ export function DeleteAccountSection({ tenantNip }: { tenantNip: string }) {
           <p className="font-medium">
             Ta operacja jest nieodwracalna po 14 dniach.
           </p>
+          {/* Do 15.10.2026 tekst obiecywał usunięcie faktur, kontrahentów
+              i certyfikatów — a `lib/gdpr/deletion.ts` usuwa konto
+              użytkownika i anonimizuje jego wpisy w dzienniku; dane firmy
+              zostają w Organizacji. Opis musi mówić, co się naprawdę stanie
+              (art. 12 i 17 RODO). */}
           <p className="text-muted-foreground leading-relaxed">
-            Wszystkie faktury, kontrahenci, certyfikaty i dane konta zostaną
-            trwale usunięte. Faktury zachowane zgodnie z polityką retencji
-            10 lat (RODO).
+            Usuniemy Twoje konto (login, profil, dostęp do firm) i
+            zanonimizujemy Twoje wpisy w dzienniku zdarzeń. Dane firmy —
+            faktury, kontrahenci, wydatki, certyfikaty KSeF — należą do
+            Organizacji i zostają w niej, np. dla współpracowników. Jeśli
+            chcesz usunąć także dane firmy, najpierw pobierz ich kopię, a potem
+            napisz do nas z adresu tego konta.
           </p>
         </div>
       </div>

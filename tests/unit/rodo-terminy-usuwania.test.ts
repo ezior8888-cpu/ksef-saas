@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/server', () => ({ createAdminClient: vi.fn() }));
 
 import { GDPR_COOLING_OFF_DAYS } from '@/lib/gdpr/deletion';
+import { renderPlainText } from '@/lib/legal/doc-model';
+import { POLITYKA_PRYWATNOSCI } from '@/lib/legal/documents';
 
 /**
  * AUD-74 (decyzja I6): konto usuwa się po 14 dniach na wycofanie decyzji,
@@ -20,7 +22,9 @@ describe('terminy usuwania konta — kod i dokumenty mówią to samo', () => {
   });
 
   it('polityka prywatności: 14 dni i „najpóźniej w ciągu miesiąca”, bez 30 dni i bez noty „docelowo”', () => {
-    const text = read('app/(marketing)/legal/polityka-prywatnosci/page.tsx');
+    // Od 15.10.2026 treść polityki żyje w lib/legal/documents (strona tylko ją
+    // renderuje) — sprawdzamy tekst, który widzi klient.
+    const text = renderPlainText(POLITYKA_PRYWATNOSCI, 'https://faktflow.example').replace(/\s+/g, ' ');
     expect(text).toContain('14 dni');
     expect(text).toContain('najpóźniej w ciągu miesiąca');
     expect(text).not.toContain('obecnie jest to 30 dni');
