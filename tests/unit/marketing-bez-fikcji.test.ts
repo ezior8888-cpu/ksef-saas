@@ -61,7 +61,8 @@ const FORBIDDEN: Array<[file: string, phrases: string[]]> = [
   ['app/(dashboard)/settings/billing/_components/plan-cards.tsx', ['PWA mobilna']],
   ['app/layout.tsx', ["title: 'KSeF SaaS'", "applicationName: 'KSeF SaaS'"]],
   ['content/blog/ile-mikrofirma-traci-na-recznym-fakturowaniu.mdx', ['ankiety wśród', 'przeprowadziliśmy']],
-  ['content/blog/wkurzacz-dluznikow-jak-walczyc-z-zaleglymi.mdx', ['beta-test', 'z ~24 do ~11']],
+  // „art. 187 KPC” to przepis o treści pozwu, nie podstawa wezwania (#268).
+  ['content/blog/wkurzacz-dluznikow-jak-walczyc-z-zaleglymi.mdx', ['beta-test', 'z ~24 do ~11', 'art. 187 KPC']],
   ['content/blog/migracja-z-fakturownia-do-ksef-saas-w-5-min.mdx', ['beta testerzy']],
 ];
 
