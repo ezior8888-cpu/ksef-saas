@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-
 import { describe, expect, it } from 'vitest';
 
 import { demandLetterConsequences, demandLetterOpening } from '@/lib/reminders/pdf-demand-letter';
@@ -64,9 +62,6 @@ describe('wezwania do zapłaty — podstawy prawne i zapowiedzi', () => {
     expect(footer).toContain('skontaktuj się bezpośrednio');
     expect(footer).not.toContain('<Test>');
   });
-
-  it('blog o przypomnieniach nie opisuje wezwania jako „opartego o art. 187 KPC”', () => {
-    const blog = readFileSync('content/blog/wkurzacz-dluznikow-jak-walczyc-z-zaleglymi.mdx', 'utf8');
-    expect(blog).not.toMatch(/art\. 187 KPC/);
-  });
+  // Wpis na blogu o „art. 187 KPC” poprawia i pilnuje #266
+  // (tests/unit/marketing-bez-fikcji.test.ts) — oba PR-y zmieniały to samo zdanie.
 });
