@@ -223,12 +223,14 @@ export async function deleteUserGdprAction(
   }
 
   // Krok 3: usuń konto z auth.users (cascada wpieprza notki, kontrahentów
-  // gdzie user był created_by, etc.). Wcześniejsze wpisy dziennika z user_id
-  // tego konta są anonimizowane; ID zostaje tylko we wpisie admina niżej.
+  // gdzie user był created_by, etc.). Audyt zachowuje user_id w `audit_logs`
+  // (snapshot ID po deletion).
   //
-  // Anonimizacja dziennika (polityka: „po usunięciu Konta wpisy są
-  // anonimizowane”) — jak w ścieżce samoobsługowej: nieodwracalna, więc po
-  // krokach, które da się cofnąć, i tuż przed deleteUser.
+  // Najpierw anonimizacja dotychczasowych wpisów dziennika (polityka: „po
+  // usunięciu Konta wpisy są anonimizowane”) — user_id, IP i przeglądarka
+  // znikają; ID konta zostaje tylko we wpisie `admin.user.deleted` niżej.
+  // Jak w ścieżce samoobsługowej: nieodwracalna, więc po krokach, które da się
+  // cofnąć, i tuż przed deleteUser.
   try {
     await anonymizeUserAuditLogs(supabase, userId);
   } catch {
