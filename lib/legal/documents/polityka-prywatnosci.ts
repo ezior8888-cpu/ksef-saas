@@ -132,6 +132,9 @@ export const POLITYKA_PRYWATNOSCI: LegalDocument = {
           ],
         ],
       ),
+      // Terminy kopii = stałe w lib/jobs/runners/cleanup-old-backups.ts
+      // (test rodo-terminy-usuwania pilnuje zgodności).
+      p('Usunięte dane mogą jeszcze pozostać w kopiach zapasowych bazy danych, dopóki ich nie nadpiszemy (kopie dzienne do 30 dni, tygodniowe do 8 tygodni). Z kopii korzystamy wyłącznie, aby odtworzyć serwis po awarii.'),
       p('Podanie danych przy rejestracji i w ustawieniach rozliczeń jest dobrowolne, ale bez nich nie możemy zawrzeć i wykonywać umowy. Zgody są w pełni dobrowolne — brak zgody nie ogranicza korzystania z serwisu.'),
     ),
     section(

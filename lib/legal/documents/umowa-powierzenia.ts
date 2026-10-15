@@ -129,7 +129,10 @@ export const UMOWA_POWIERZENIA: LegalDocument = {
       '§ 9. Zakończenie przetwarzania',
       ol(
         'Po rozwiązaniu Umowy Administrator może przez 30 dni wyeksportować dane z Serwisu. Na żądanie Administratora zgłoszone w tym terminie Przetwarzający przekazuje mu dane w formacie eksportu Serwisu.',
-        'Po upływie terminu z ust. 1 Przetwarzający usuwa powierzone dane w ciągu kolejnych 30 dni, a ich kopie zapasowe — w cyklu nadpisywania kopii, nie dłuższym niż 30 dni, chyba że prawo Unii lub prawo polskie nakazuje ich dalsze przechowywanie. Na żądanie Administratora Przetwarzający potwierdza usunięcie danych.',
+        // Terminy kopii = stałe w lib/jobs/runners/cleanup-old-backups.ts
+        // (test rodo-terminy-usuwania pilnuje zgodności). Do 15.10.2026 tekst
+        // obiecywał 30 dni, a kopie tygodniowe zostają 8 tygodni.
+        'Po upływie terminu z ust. 1 Przetwarzający usuwa powierzone dane w ciągu kolejnych 30 dni, a ich kopie zapasowe — w cyklu nadpisywania kopii, nie dłuższym niż 60 dni (kopie dzienne do 30 dni, tygodniowe do 8 tygodni), chyba że prawo Unii lub prawo polskie nakazuje ich dalsze przechowywanie. Kopie wykonane ręcznie (np. przed pracami serwisowymi) Przetwarzający usuwa w tym samym terminie. Jeżeli wykonywanie nowych kopii zawiedzie, ostatnie poprawne kopie mogą być przechowywane dłużej — do czasu wykonania nowych. Do czasu nadpisania Przetwarzający korzysta z kopii wyłącznie w celu odtworzenia Serwisu po awarii. Na żądanie Administratora Przetwarzający potwierdza usunięcie danych.',
         'Administrator może wcześniej polecić usunięcie danych, w szczególności wiadomością e-mail.',
       ),
     ),
@@ -163,7 +166,7 @@ export const UMOWA_POWIERZENIA: LegalDocument = {
         'hasła przechowywane wyłącznie jako skróty kryptograficzne; blokada haseł znanych z wycieków (k-anonimowość); ograniczenie liczby prób logowania; ochrona formularzy przed botami;',
         'dziennik istotnych zdarzeń zapisywany po stronie serwera, którego Użytkownicy nie mogą zmieniać;',
         'serwery w centrum danych w Niemczech; dostęp administracyjny wyłącznie kluczami SSH przez ograniczone grono osób; zapora sieciowa dostawcy chmury;',
-        'codzienne kopie zapasowe bazy danych z ograniczonym okresem przechowywania i procedurą odtworzenia;',
+        'codzienne kopie zapasowe bazy danych z ograniczonym okresem przechowywania (kopie dzienne do 30 dni, tygodniowe do 8 tygodni) i procedurą odtworzenia;',
         'oczyszczanie raportów błędów i zdarzeń analitycznych z danych osobowych przed wysłaniem do dostawców;',
         'przekazywanie do Funkcji AI wyłącznie danych potrzebnych do danej funkcji, z oddzieleniem treści dokumentu od poleceń dla modelu;',
         'procedura obsługi naruszeń ochrony danych i rejestr kategorii czynności przetwarzania (art. 30 ust. 2 RODO);',

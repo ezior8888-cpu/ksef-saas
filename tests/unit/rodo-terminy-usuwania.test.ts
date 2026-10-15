@@ -56,6 +56,44 @@ describe('terminy usuwania konta — kod i dokumenty mówią to samo', () => {
 });
 
 /**
+ * Kopie zapasowe: umowa powierzenia (§ 9 ust. 2) i polityka prywatności mówią,
+ * jak długo usunięte dane mogą zostać w kopiach. Do 15.10.2026 umowa obiecywała
+ * „nie dłużej niż 30 dni”, a job trzymał kopie tygodniowe 56 dni. Terminy
+ * czytamy z kodu joba, żeby zmiana retencji wymusiła zmianę dokumentów.
+ */
+describe('kopie zapasowe — dokumenty zgodne z retencją w kodzie', () => {
+  const runner = readFileSync('lib/jobs/runners/cleanup-old-backups.ts', 'utf8');
+  const constant = (name: string) => {
+    const m = runner.match(new RegExp(`const ${name} = (\\d+);`));
+    if (!m) throw new Error(`brak stałej ${name} w cleanup-old-backups.ts`);
+    return Number(m[1]);
+  };
+  const daily = constant('DAILY_RETENTION_DAYS');
+  const weekly = constant('WEEKLY_RETENTION_DAYS');
+  const plain = (doc: typeof UMOWA_POWIERZENIA) =>
+    renderPlainText(doc, 'https://faktflow.example').replace(/\s+/g, ' ');
+
+  it('kopie tygodniowe to pełne tygodnie (dokumenty podają je w tygodniach)', () => {
+    expect(weekly % 7).toBe(0);
+  });
+
+  it.each([
+    ['umowa powierzenia', UMOWA_POWIERZENIA],
+    ['polityka prywatności', POLITYKA_PRYWATNOSCI],
+  ] as const)('%s: podaje terminy kopii dziennych i tygodniowych z kodu', (_name, doc) => {
+    const text = plain(doc);
+    expect(text).toContain(`dzienne do ${daily} dni`);
+    expect(text).toContain(`tygodniowe do ${weekly / 7} tygodni`);
+  });
+
+  it('umowa powierzenia: cykl nadpisywania kopii nie krótszy niż najdłuższa retencja w kodzie', () => {
+    const m = plain(UMOWA_POWIERZENIA).match(/w cyklu nadpisywania kopii, nie dłuższym niż (\d+) dni/);
+    expect(m, 'brak zdania o cyklu nadpisywania kopii w § 9').not.toBeNull();
+    expect(Number(m![1])).toBeGreaterThanOrEqual(Math.max(daily, weekly));
+  });
+});
+
+/**
  * Usunięcie FIRMY nie działa w aplikacji: `tenants.deleted_at`, `hard_delete_at`
  * i `is_active` nie sprawdza logowanie, RLS (`is_member_of`,
  * `get_current_tenant_id`) ani żaden job, a subskrypcji nikt nie anuluje.
