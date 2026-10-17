@@ -86,7 +86,8 @@ const nextConfig: NextConfig = {
   },
 
   experimental: {
-    optimizePackageImports: ['radix-ui', 'lucide-react'],
+    // Plan Finora E1: prymitywy Base UI, ikony Remix i wykresy recharts.
+    optimizePackageImports: ['radix-ui', 'lucide-react', '@base-ui/react', '@remixicon/react', 'recharts'],
   },
 
   images: {
