@@ -260,7 +260,7 @@ describe('P-03 — pytanie', () => {
     expect(payload.primaryLabel).toBe('Wystaw fakturę');
     expect(payload.noPush).toBe(true);
     expect(payload.secondary).toEqual([
-      { label: 'Wystawiona poza FaktFlow', intent: 'dismiss' },
+      { label: 'Wystawiona poza FaktWay', intent: 'dismiss' },
       // Bez `scope` jedna zakończona współpraca zamykałaby funkcję dla
       // wszystkich klientów.
       { label: 'Skończyliśmy współpracę', intent: 'mute', scope: 'subject' },

@@ -13,7 +13,7 @@ import {
 } from './share-image';
 
 /**
- * FaktFlow Wrapped (krok 37 toru B) — siedem ekranów przewijanych palcem.
+ * FaktWay Wrapped (krok 37 toru B) — siedem ekranów przewijanych palcem.
  *
  * TO JEDYNE MIEJSCE W PRODUKCIE, GDZIE WOLNO PRZESADZIĆ Z ANIMACJĄ. Wszędzie
  * indziej agent jest rzeczowy; tutaj ma prawo się pochwalić. Ale i tu obowiązują
@@ -66,7 +66,7 @@ export function FloWrappedDeck({
       label: shown.label,
       value: shown.value,
       caption: shown.caption,
-      footer: `FaktFlow · ${result.year}`,
+      footer: `FaktWay · ${result.year}`,
     });
   }, [screen, shown.label, shown.value, shown.caption, result.year]);
 
@@ -80,7 +80,7 @@ export function FloWrappedDeck({
 
       const link = document.createElement('a');
       link.href = url;
-      link.download = `faktflow-${result.year}-${screen?.key ?? 'podsumowanie'}.png`;
+      link.download = `faktway-${result.year}-${screen?.key ?? 'podsumowanie'}.png`;
       link.click();
 
       URL.revokeObjectURL(url);

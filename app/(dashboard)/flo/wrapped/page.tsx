@@ -5,7 +5,7 @@ import { getPageContext } from '@/lib/supabase/page-context';
 import { readWrappedInput } from './data';
 
 /**
- * FaktFlow Wrapped — podsumowanie roku (krok 37 toru B).
+ * FaktWay Wrapped — podsumowanie roku (krok 37 toru B).
  *
  * Trasa `/flo` jest przekierowaniem na dashboard, ale jej DZIECI działają
  * normalnie — a to miejsce jest właściwe: podsumowanie należy do agenta,

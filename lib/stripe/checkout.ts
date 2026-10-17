@@ -34,7 +34,7 @@ export interface CreateCheckoutInput {
   tenantName?: string;
   nip?: string;
   plan: CheckoutPlan;
-  /** Base URL do redirectu — np. https://app.faktflow.pl. */
+  /** Base URL do redirectu — np. https://faktway.pl. */
   baseUrl: string;
 }
 

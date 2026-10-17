@@ -233,7 +233,7 @@ export async function produceMissingInvoice(
         // Pytanie o koniec współpracy pada RAZ W ŻYCIU PROFILU — dowodem
         // jest karta o tym kluczu, w dowolnym stanie, także zamknięta.
         endedAskedBefore: asked.has(topicKey),
-        // „Wystawiona poza FaktFlow" to odrzucenie sprawy; dwa z rzędu
+        // „Wystawiona poza FaktWay" to odrzucenie sprawy; dwa z rzędu
         // znaczą „fakturuję ich gdzie indziej", a nie zbieg okoliczności.
         elsewhereStreak:
           decisions.find((row) => row.kind === topicKey)?.dismissed ?? 0,

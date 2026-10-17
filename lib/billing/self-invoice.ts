@@ -66,6 +66,12 @@ export function paidDateInPoland(paidAt: string): string {
   }).format(new Date(paidAt));
 }
 
+// UWAGA (rebranding FaktFlow → FaktWay): napisy „FaktFlow — subskrypcja …” niżej
+// oraz `notes` w `buildSelfInvoiceDraft` NIE są tu zmienione celowo — funkcja
+// RPC z migracji 00110 (create_billing_vat_invoice) porównuje je 1:1
+// (`NOT LIKE 'FaktFlow — subskrypcja …'`, `notes IS DISTINCT FROM v_note`)
+// i odrzuci fakturę z nową nazwą. Zmiana wymaga NAJPIERW nowej migracji,
+// akceptującej oba warianty, a dopiero potem zmiany tych napisów.
 function planLineName(plan: 'monthly' | 'annual', issueDate: string): string {
   const dateLabel = new Date(issueDate).toLocaleDateString('pl-PL', {
     year: 'numeric',

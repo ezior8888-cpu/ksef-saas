@@ -1,5 +1,5 @@
 /**
- * S-03 — dane do FaktFlow Wrapped (krok 50 planu).
+ * S-03 — dane do FaktWay Wrapped (krok 50 planu).
  *
  * Siedem ekranów przewijanych palcem, każdy z jedną liczbą. Dane z
  * `mv_tenant_monthly_stats`, ZERO WYWOŁAŃ MODELU — ten plik świadomie nie

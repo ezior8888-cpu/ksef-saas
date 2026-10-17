@@ -234,7 +234,7 @@ describe('P-03 — treść i kanał', () => {
     const labels = (proposal.payload?.secondary as Array<{ label: string }>).map(
       (a) => a.label,
     );
-    expect(labels).toContain('Wystawiona poza FaktFlow');
+    expect(labels).toContain('Wystawiona poza FaktWay');
     expect(labels).toContain('Skończyliśmy współpracę');
   });
 

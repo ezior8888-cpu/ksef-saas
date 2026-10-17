@@ -87,7 +87,7 @@ export interface JpkInvoice {
    * zna powiązań korekty, zaliczek, ROZ — W9). JPK go nie wykaże poprawnie.
    */
   importedDocumentType?: 'KOR' | 'ZAL' | 'ROZ';
-  /** Faktura z importu historii KSeF (`origin = ksef_import`) — pozycje z parsera, nie z FaktFlow. */
+  /** Faktura z importu historii KSeF (`origin = ksef_import`) — pozycje z parsera, nie z FaktWay. */
   importedFromKsef?: boolean;
   /**
    * C5b: faktura z importu historii bez odczytanych adnotacji (`fa3_data.annotations`
@@ -163,7 +163,7 @@ export interface JpkInvoiceAnnotations {
   vatExemptionBasis?: string;
   /** C5b: rodzaj podstawy z pliku KSeF — JPK_FA(4) ma P_19A, P_19B i P_19C. Brak = P_19A. */
   vatExemptionBasisKind?: ExemptionBasisKind;
-  /** C5b: P_17 z pliku KSeF (FaktFlow sam nie wystawia samofaktur). */
+  /** C5b: P_17 z pliku KSeF (FaktWay sam nie wystawia samofaktur). */
   selfInvoicing?: boolean;
   /** C5b: jawne P_18 z pliku KSeF; brak = z pozycji „oo” / „np_ii”. */
   reverseCharge?: boolean;
@@ -238,7 +238,7 @@ const IMPORTED_TYPE_LABEL: Record<NonNullable<JpkInvoice['importedDocumentType']
 
 /**
  * W9 (C5a): dokument, którego JPK (FA i V7M) nie wykaże poprawnie — faktura
- * z importu historii KSeF ze stawką bez odpowiednika w FaktFlow („0 WDT”,
+ * z importu historii KSeF ze stawką bez odpowiednika w FaktWay („0 WDT”,
  * „0 EX”, „22”…, „nieznana”) albo zaimportowana korekta / zaliczka / ROZ.
  * Plik nie powstaje (lepiej niż sprzedaż pominięta albo w złym polu),
  * a komunikat nazywa dokument i mówi, co zrobić.
@@ -253,9 +253,9 @@ export class JpkDocumentNotSupportedError extends Error {
   ) {
     super(
       `${JPK_DOCUMENT_REFUSAL_PREFIX} faktura ${invoiceNumber}${ksefNumber ? ` (KSeF ${ksefNumber})` : ''} ${reason} ` +
-        'Plik nie powstał, żeby nie pominąć ani nie pomylić tej sprzedaży — JPK za ten okres trzeba przygotować poza FaktFlow ' +
+        'Plik nie powstał, żeby nie pominąć ani nie pomylić tej sprzedaży — JPK za ten okres trzeba przygotować poza FaktWay ' +
         (kpirCsvWork
-          ? '(KPiR i CSV z FaktFlow działają).'
+          ? '(KPiR i CSV z FaktWay działają).'
           : '— KPiR i CSV też nie pokażą poprawnych kwot tej faktury, wprowadźcie je ręcznie z księgową.'),
     );
     this.name = 'JpkDocumentNotSupportedError';
@@ -267,7 +267,7 @@ function unsupportedRate(inv: JpkInvoice, rate: string): JpkDocumentNotSupported
   return new JpkDocumentNotSupportedError(
     inv.invoiceNumber,
     inv.ksefNumber,
-    `ma stawkę VAT „${rate}”${label ? ` (${label})` : ''}, której FaktFlow jeszcze nie wykazuje w JPK.`,
+    `ma stawkę VAT „${rate}”${label ? ` (${label})` : ''}, której FaktWay jeszcze nie wykazuje w JPK.`,
   );
 }
 
@@ -275,7 +275,7 @@ function unsupportedImportedType(inv: JpkInvoice, type: NonNullable<JpkInvoice['
   return new JpkDocumentNotSupportedError(
     inv.invoiceNumber,
     inv.ksefNumber,
-    `to zaimportowana z KSeF faktura ${IMPORTED_TYPE_LABEL[type]} — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki), więc nie wykaże jej poprawnie w JPK.`,
+    `to zaimportowana z KSeF faktura ${IMPORTED_TYPE_LABEL[type]} — FaktWay nie zna jej powiązań (faktura pierwotna, zaliczki), więc nie wykaże jej poprawnie w JPK.`,
   );
 }
 
@@ -435,23 +435,23 @@ function linePct(vatRate: string): number {
 }
 
 /**
- * C5b: treść z pliku KSeF, której JPK FaktFlow nie wykaże albo nie zna —
+ * C5b: treść z pliku KSeF, której JPK FaktWay nie wykaże albo nie zna —
  * `null`, gdy nic nie stoi na przeszkodzie. Oznaczenia i procedury czytane
  * z faktów (każde pochodzenie wiersza); spójność zwolnienia — tylko import
- * (faktury FaktFlow sprzed #60 nie mają podstawy w adnotacjach).
+ * (faktury FaktWay sprzed #60 nie mają podstawy w adnotacjach).
  */
 function importedContentRefusal(inv: JpkInvoice): string | null {
   if (inv.importedAnnotationsMissing) {
-    return 'jest zaimportowana przed odczytem daty sprzedaży i adnotacji z pliku KSeF (metoda kasowa, MPP, zwolnienie, procedury) — ponów import historii z KSeF za ten okres, a FaktFlow uzupełni je z oryginału.';
+    return 'jest zaimportowana przed odczytem daty sprzedaży i adnotacji z pliku KSeF (metoda kasowa, MPP, zwolnienie, procedury) — ponów import historii z KSeF za ten okres, a FaktWay uzupełni je z oryginału.';
   }
   if (inv.importedAnnotationProblems?.length) {
-    return `ma w KSeF adnotacje, których import nie udało się odczytać (${inv.importedAnnotationProblems.join('; ')}) — FaktFlow nie wie, czy dotyczy jej metoda kasowa, MPP albo procedura szczególna.`;
+    return `ma w KSeF adnotacje, których import nie udało się odczytać (${inv.importedAnnotationProblems.join('; ')}) — FaktWay nie wie, czy dotyczy jej metoda kasowa, MPP albo procedura szczególna.`;
   }
   const cannot = [...annotationsJpkCannotExpress(inv.annotations), ...markersJpkCannotExpress(inv.ksefMarkers)];
-  if (cannot.length) return `ma w KSeF oznaczenie, którego FaktFlow nie wykazuje w JPK: ${cannot.join(', ')}.`;
+  if (cannot.length) return `ma w KSeF oznaczenie, którego FaktWay nie wykazuje w JPK: ${cannot.join(', ')}.`;
   if (inv.importedFromKsef && inv.annotations !== undefined &&
       exemptionMismatch(inv.annotations, inv.lines.map((l) => l.vatRate))) {
-    return 'ma zwolnienie z VAT (P_19) niezgodne ze stawkami pozycji, więc FaktFlow nie wykaże jej poprawnie w JPK.';
+    return 'ma zwolnienie z VAT (P_19) niezgodne ze stawkami pozycji, więc FaktWay nie wykaże jej poprawnie w JPK.';
   }
   if (inv.importedSaleDateUnclear) {
     return 'ma pozycje z różnymi datami sprzedaży (P_6A) albo nieczytelną datę sprzedaży, a JPK przyjmuje jedną datę sprzedaży dla dokumentu.';
@@ -463,13 +463,13 @@ export function amountsOf(inv: JpkInvoice): InvoiceAmounts {
   if (inv.importedDocumentType) throw unsupportedImportedType(inv, inv.importedDocumentType);
   const contentRefusal = importedContentRefusal(inv);
   if (contentRefusal) throw new JpkDocumentNotSupportedError(inv.invoiceNumber, inv.ksefNumber, contentRefusal);
-  // Stawka przed kwotami (C5c): dokument ze stawką spoza FaktFlow dostaje dokładny powód.
+  // Stawka przed kwotami (C5c): dokument ze stawką spoza FaktWay dostaje dokładny powód.
   const items = inv.lines.map((line) => toLineItem(line, inv));
   if (inv.importedFromKsef && inv.importedLineAmountProblems?.length) {
     throw new JpkDocumentNotSupportedError(
       inv.invoiceNumber,
       inv.ksefNumber,
-      `ma kwoty pozycji, których FaktFlow nie przeniesie wiernie z pliku KSeF (${inv.importedLineAmountProblems.join('; ')}), więc nie wykaże jej poprawnie w JPK.`,
+      `ma kwoty pozycji, których FaktWay nie przeniesie wiernie z pliku KSeF (${inv.importedLineAmountProblems.join('; ')}), więc nie wykaże jej poprawnie w JPK.`,
       !inv.importedTotalsUnknown,
     );
   }
@@ -477,7 +477,7 @@ export function amountsOf(inv: JpkInvoice): InvoiceAmounts {
     throw new JpkDocumentNotSupportedError(
       inv.invoiceNumber,
       inv.ksefNumber,
-      'ma pozycje, których netto albo VAT nie sumuje się do sum faktury z KSeF, więc FaktFlow nie wykaże jej poprawnie w JPK.',
+      'ma pozycje, których netto albo VAT nie sumuje się do sum faktury z KSeF, więc FaktWay nie wykaże jej poprawnie w JPK.',
       !inv.importedTotalsUnknown,
     );
   }
@@ -577,7 +577,7 @@ function buildFaktura(
   const exempt = rates.has('zw');
   const basis = inv.annotations?.vatExemptionBasis?.trim();
   f.ele('P_16').txt(bool(inv.annotations?.cashMethod === true));
-  // Samofakturowanie — FaktFlow nie wystawia; z importu KSeF wartość z pliku (C5b).
+  // Samofakturowanie — FaktWay nie wystawia; z importu KSeF wartość z pliku (C5b).
   f.ele('P_17').txt(bool(inv.annotations?.selfInvoicing === true));
   // Podatek rozlicza nabywca: „oo” i „np_ii” (AUD-70) — opis P_18 jak w FA(3).
   // Jawne P_18 z pliku KSeF (C5b) ma pierwszeństwo — JPK mówi to, co oryginał.

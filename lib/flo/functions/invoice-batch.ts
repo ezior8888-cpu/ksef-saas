@@ -268,7 +268,7 @@ export function buildMissingInvoiceProposal(input: {
       // Trzeci przycisk. Bez niego klient musi wybrać między „wystaw"
       // a „nie teraz", z których żaden nie jest prawdą.
       secondary: [
-        { label: 'Wystawiona poza FaktFlow', intent: 'dismiss' },
+        { label: 'Wystawiona poza FaktWay', intent: 'dismiss' },
         // `scope: 'subject'` — „skończyliśmy współpracę" dotyczy TEGO
         // kontrahenta, nie wszystkich szkiców faktur. Bez tego jedna
         // zakończona współpraca zamykałaby funkcję dla wszystkich klientów.

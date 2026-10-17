@@ -11,7 +11,7 @@
  *    i nie wraca. Reszta jest zwinięta i czeka.
  *
  * 2. SPRAWY ZASTANE OZNACZONE OSOBNO. Dokumenty sprzed rejestracji
- *    w FaktFlow to nie są zaniedbania klienta wobec nas — to jego historia,
+ *    w FaktWay to nie są zaniedbania klienta wobec nas — to jego historia,
  *    którą nam przyniósł. Mieszanie ich z bieżącymi sprawami brzmi jak
  *    zarzut wobec kogoś, kto właśnie zaufał nowemu narzędziu.
  *
@@ -40,7 +40,7 @@ export interface AuditIssue {
   label: string;
   /** Waga sprawy: 0 = najpilniejsza. */
   severity: number;
-  /** Sprawa sprzed rejestracji w FaktFlow — historia, nie zaniedbanie. */
+  /** Sprawa sprzed rejestracji w FaktWay — historia, nie zaniedbanie. */
   legacy: boolean;
   /** Czy da się to naprawić automatycznie (wyłącznie metadane). */
   repairable: boolean;

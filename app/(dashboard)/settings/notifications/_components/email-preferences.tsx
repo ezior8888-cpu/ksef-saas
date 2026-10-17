@@ -47,9 +47,9 @@ const CATEGORIES: CategoryConfig[] = [
     id: 'marketing',
     title: 'Powiadomienia marketingowe',
     description:
-      'Nowe funkcje, blog FaktFlow, kampanie re-engagement (gdy długo nieaktywny).',
+      'Nowe funkcje, blog FaktWay, kampanie re-engagement (gdy długo nieaktywny).',
     examples:
-      'Np. „Co nowego w FaktFlow w kwietniu", „Wracaj — Twoje konto czeka"',
+      'Np. „Co nowego w FaktWay w kwietniu", „Wracaj — Twoje konto czeka"',
   },
 ];
 

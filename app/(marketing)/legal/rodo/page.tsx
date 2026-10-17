@@ -5,7 +5,7 @@ import { SUPPORT_EMAIL } from '@/lib/site';
 export const revalidate = 86400;
 
 export const metadata: Metadata = {
-  title: 'RODO i bezpieczeństwo — KSeF SaaS',
+  title: 'RODO i bezpieczeństwo — FaktWay',
 };
 
 export default function GdprPage() {

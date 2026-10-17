@@ -27,7 +27,7 @@ export function VsHero({ competitorName, eyebrow, subtitle }: VsHeroProps) {
         </div>
 
         <h1 className="marketing-hero-title text-4xl md:text-6xl lg:text-7xl">
-          FaktFlow vs{' '}
+          FaktWay vs{' '}
           <span className="marketing-gradient-emerald">{competitorName}</span>
         </h1>
         <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-[var(--marketing-muted)] md:text-xl">
@@ -112,7 +112,7 @@ export function VsChooseColumns({
       </div>
       <div className="marketing-emerald-card rounded-2xl p-7">
         <h3 className="mb-5 text-lg font-semibold text-[var(--marketing-accent)]">
-          Wybierz FaktFlow, jeśli&hellip;
+          Wybierz FaktWay, jeśli&hellip;
         </h3>
         <ul className="space-y-3">
           {whenChooseUs.map((item) => (

@@ -9,7 +9,7 @@ import { SUPPORT_EMAIL } from '@/lib/site';
 export const revalidate = 86400;
 
 export const metadata: Metadata = {
-  title: 'Kontakt — KSeF SaaS',
+  title: 'Kontakt — FaktWay',
 };
 
 const cardClass =

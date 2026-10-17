@@ -156,7 +156,7 @@ function invoiceRow(patch: Row = {}): Row {
   };
 }
 
-/** Faktura Y — w FaktFlow ma numer KSeF oryginału (known-number). */
+/** Faktura Y — w FaktWay ma numer KSeF oryginału (known-number). */
 function yRow(patch: Row = {}): Row {
   return {
     id: Y_ID,
@@ -285,6 +285,7 @@ describe('decideKsefDuplicateAction — decyzja klienta przy nierozstrzygniętym
     expect(r).toEqual({ success: false, error: fill(SQL.payments, NR) });
     const error = r.success ? '' : r.error;
     expect(error).toContain(NR);
+    // Tekst odmowy „payments” to lustro RAISE z 00148 — stara domena do nowej migracji.
     expect(error).toContain('pomoc@faktflow.pl');
     expect(m.rpc).not.toHaveBeenCalled();
   });

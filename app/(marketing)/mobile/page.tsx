@@ -3,9 +3,9 @@ import Link from 'next/link';
 import { ArrowLeft, MonitorSmartphone, Smartphone } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'FaktFlow na telefon — aplikacja mobilna wkrótce',
+  title: 'FaktWay na telefon — aplikacja mobilna wkrótce',
   description:
-    'Aplikacja mobilna FaktFlow jest w przygotowaniu. Do czasu premiery korzystaj z FaktFlow na komputerze.',
+    'Aplikacja mobilna FaktWay jest w przygotowaniu. Do czasu premiery korzystaj z FaktWay na komputerze.',
   robots: { index: false },
 };
 
@@ -38,7 +38,7 @@ export default function MobilePage() {
         Aplikacja mobilna jest w przygotowaniu
       </h1>
       <p className="mt-5 max-w-md text-base leading-relaxed text-[var(--marketing-muted)]">
-        Panel FaktFlow projektujemy na telefon od nowa — dlatego na razie nie
+        Panel FaktWay projektujemy na telefon od nowa — dlatego na razie nie
         udostępniamy go w przeglądarce mobilnej. Zaloguj się z komputera, a po
         premierze pobierzesz aplikację prosto ze sklepu.
       </p>

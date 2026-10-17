@@ -17,7 +17,7 @@ import {
 
 /**
  * D-A4-1: werdykt przy cudzym 440 — czysty moduł. Kierunek bezpieczny prawnie:
- * „numer zajęty” tylko dla oryginału spoza FaktFlow; zgodność z wcześniejszą
+ * „numer zajęty” tylko dla oryginału spoza FaktWay; zgodność z wcześniejszą
  * próbą liczy się tylko przy tej samej treści co teraz.
  */
 
@@ -57,7 +57,7 @@ describe('compareDuplicate', () => {
       .toBe('operator');
   });
 
-  it('oryginał z FaktFlow, inna data wytworzenia, bez skrótu w historii → operator z informacją „treść zgodna”', () => {
+  it('oryginał z FaktWay, inna data wytworzenia, bez skrótu w historii → operator z informacją „treść zgodna”', () => {
     const cmp = compareDuplicate({ originalBytes: Buffer.from(xml({ date: '2026-08-01T00:00:00Z' })), currentHashBase64: b64(xml()), earlierHashesBase64: [], ourXml: xml() });
     expect(cmp).toMatchObject({ verdict: 'operator', reason: 'faktflow-original', sameContentExceptHeader: true });
   });
@@ -71,7 +71,7 @@ describe('compareDuplicate', () => {
     ['inny SystemInfo', xml({ systemInfo: 'Inny Program 2.0', gross: '999.99' })],
     ['bez SystemInfo', xml({ systemInfo: '', gross: '999.99' })],
     ['prefiks przestrzeni nazw', xml({ systemInfo: 'Inny', ns: 'tns', gross: '999.99' })],
-  ])('oryginał spoza FaktFlow o innej treści (%s) → foreign', (_l, original) => {
+  ])('oryginał spoza FaktWay o innej treści (%s) → foreign', (_l, original) => {
     expect(compareDuplicate({ originalBytes: Buffer.from(original), currentHashBase64: b64(xml()), earlierHashesBase64: [], ourXml: xml() }).verdict)
       .toBe('foreign');
   });
@@ -109,7 +109,7 @@ describe('dane oryginału i komunikat „numer zajęty”', () => {
       'Jeśli to inna sprzedaż — wystaw ją jako nową fakturę z nowym numerem.',
     );
     const unknownProgram = numberTakenMessage('FV 2026/10/001', 'K-OBCA', summarizeInvoiceXml(xml({ systemInfo: '', gross: '999.99' })));
-    expect(unknownProgram).toContain(', wystawiona poza FaktFlow. Tego dokumentu nie wyślesz do KSeF.');
+    expect(unknownProgram).toContain(', wystawiona poza FaktWay. Tego dokumentu nie wyślesz do KSeF.');
     expect(unknownProgram).not.toMatch(/usuń go/i);
   });
 
@@ -117,15 +117,15 @@ describe('dane oryginału i komunikat „numer zajęty”', () => {
     const known = { id: 'inna', internalNumber: 'FV/INNA/1' };
     const forClient = knownNumberVerdictMessage('K-ZNANA', known, false);
     expect(forClient).toBe(
-      'KSeF ma już fakturę o tym numerze (numer KSeF K-ZNANA), a w FaktFlow ten numer KSeF ma dokument FV/INNA/1 — ' +
+      'KSeF ma już fakturę o tym numerze (numer KSeF K-ZNANA), a w FaktWay ten numer KSeF ma dokument FV/INNA/1 — ' +
       'do rozstrzygnięcia na karcie faktury (ta sama czy inna sprzedaż); nie wystawiaj jej ponownie.',
     );
     expect(forClient).toContain('FV/INNA/1');
     expect(forClient).toContain('do rozstrzygnięcia na karcie faktury');
     const own = knownNumberVerdictMessage('K-ZNANA', known, true);
     expect(own).toBe(
-      'KSeF ma już fakturę o tym numerze (numer KSeF K-ZNANA), a w FaktFlow ten numer KSeF ma dokument FV/INNA/1; ' +
-      'faktura w KSeF może być wcześniejszą wysyłką tego dokumentu z FaktFlow — wyjaśnia to pomoc FaktFlow; nie wystawiaj jej ponownie.',
+      'KSeF ma już fakturę o tym numerze (numer KSeF K-ZNANA), a w FaktWay ten numer KSeF ma dokument FV/INNA/1; ' +
+      'faktura w KSeF może być wcześniejszą wysyłką tego dokumentu z FaktWay — wyjaśnia to pomoc FaktWay; nie wystawiaj jej ponownie.',
     );
     expect(own).toContain('wcześniejszą wysyłką');
     expect(own).not.toContain('na karcie faktury');
@@ -140,7 +140,7 @@ describe('dane oryginału i komunikat „numer zajęty”', () => {
   });
 });
 
-describe('strażnik: każdy generator FaktFlow podpisuje plik tym samym SystemInfo', () => {
+describe('strażnik: każdy generator FaktWay podpisuje plik tym samym SystemInfo', () => {
   it.each([
     'lib/xml/fa3-generator.ts',
     'lib/ksef/fa3-correction-generator.ts',

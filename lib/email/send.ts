@@ -33,11 +33,11 @@ import TrialEnding from './templates/TrialEnding';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 /**
- * Domyślny nadawca z domeny FaktFlow (AUD-97). Do 02.10 był to
+ * Domyślny nadawca z domeny FaktWay (AUD-97). Do 02.10 był to
  * `onboarding@resend.dev` — domena dostawcy, którą Resend przyjmuje tylko na
  * koncie testowym. Produkcja ustawia RESEND_FROM_* jawnie.
  */
-const DEFAULT_FROM = 'FaktFlow <no-reply@app.faktflow.pl>';
+const DEFAULT_FROM = 'FaktWay <no-reply@app.faktway.pl>';
 
 /** Pusta zmienna to brak zmiennej — `??` przepuszczał pusty napis. */
 function envSender(...names: string[]): string | undefined {
@@ -83,8 +83,8 @@ function getResend(): Resend {
  * tej samej domeny używanej dla critical alerts (faktury, hasła).
  *
  * Konwencja (oba opcjonalne — fallback do single `RESEND_FROM_EMAIL`):
- *   RESEND_FROM_TRANSACTIONAL = `FaktFlow <no-reply@app.faktflow.pl>`
- *   RESEND_FROM_MARKETING     = `FaktFlow <hello@hello.faktflow.pl>`
+ *   RESEND_FROM_TRANSACTIONAL = `FaktWay <no-reply@app.faktway.pl>`
+ *   RESEND_FROM_MARKETING     = `FaktWay <hello@hello.faktway.pl>`
  */
 function getFromEmail(category: 'transactional' | 'product_updates' | 'marketing'): string {
   if (category === 'transactional') {
@@ -381,8 +381,8 @@ export async function sendTrialEndingEmail(
   );
   const isFinalDay = payload.daysRemaining === 1;
   const subject = isFinalDay
-    ? '⏰ Twój trial FaktFlow kończy się jutro'
-    : `Twój trial FaktFlow kończy się za ${payload.daysRemaining} dni`;
+    ? '⏰ Twój trial FaktWay kończy się jutro'
+    : `Twój trial FaktWay kończy się za ${payload.daysRemaining} dni`;
   return sendViaResend({ to: email, subject, html, idempotencyKey: options.idempotencyKey });
 }
 
@@ -405,7 +405,7 @@ export async function sendPaymentFailedEmail(
   const html = await render(PaymentFailed({ ...payload, appUrl: APP_URL }));
   return sendViaResend({
     to: email,
-    subject: 'Nie udało się pobrać płatności FaktFlow',
+    subject: 'Nie udało się pobrać płatności FaktWay',
     html,
   });
 }
@@ -494,7 +494,7 @@ export async function sendAccountDeletionConfirmationEmail(
   );
   return sendViaResend({
     to: email,
-    subject: 'Potwierdzenie usunięcia konta FaktFlow',
+    subject: 'Potwierdzenie usunięcia konta FaktWay',
     html,
     category: 'transactional',
   });
@@ -524,7 +524,7 @@ export async function sendGdprDeletionScheduledEmail(
   );
   return sendViaResend({
     to: payload.userEmail,
-    subject: 'Żądanie usunięcia konta FaktFlow — możesz cofnąć (RODO)',
+    subject: 'Żądanie usunięcia konta FaktWay — możesz cofnąć (RODO)',
     html,
     category: 'transactional',
   });
@@ -567,7 +567,7 @@ export async function sendInvoiceEmail(
         <tr><td style="color:#6b7280;padding-right:16px">${escapeHtml(payload.amountCaption)}</td><td><strong>${escapeHtml(payload.amountLabel)}</strong></td></tr>
         <tr><td style="color:#6b7280;padding-right:16px">Termin płatności</td><td>${escapeHtml(payload.dueDate)}</td></tr>
       </table>
-      <p style="color:#9ca3af;font-size:12px">Wiadomość wysłana przez FaktFlow.</p>
+      <p style="color:#9ca3af;font-size:12px">Wiadomość wysłana przez FaktWay.</p>
     </div>
   `;
 

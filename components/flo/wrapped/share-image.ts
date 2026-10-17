@@ -25,7 +25,7 @@ export interface ShareImageInput {
   value: string;
   /** Podpis pod liczbą. */
   caption: string;
-  /** Stopka, np. „FaktFlow · 2026”. */
+  /** Stopka, np. „FaktWay · 2026”. */
   footer: string;
 }
 

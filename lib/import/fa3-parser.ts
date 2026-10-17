@@ -2,7 +2,7 @@
  * Parser XML faktur FA(3) — ekstrakcja kontrahentów, pozycji i kwot.
  * Dopasowany do emisji z `lib/xml/fa3-generator.ts` (wersja schemy 2025-06-25).
  *
- * C0b (GEN-RUNDA, spec D-A4-1b-3 v3, 5.10): plik z generatora FaktFlow czyta się
+ * C0b (GEN-RUNDA, spec D-A4-1b-3 v3, 5.10): plik z generatora FaktWay czyta się
  * bez strat i bez fałszywych ostrzeżeń (`tests/unit/import-runda-generator.test.ts`).
  * Dwa przypadki brzegowe identyfikatora nabywcy — FA(3) wyraża PESEL i „inny”
  * identyfikator tym samym `KodKraju` + `NrID`, więc `parseParty` odróżnia je
@@ -70,7 +70,7 @@ export interface ParsedInvoice {
   ksefAnnotations?: Fa3Annotations;
   /** Adnotacje i oznaczenia z pliku, których nie dało się odczytać. */
   annotationProblems?: string[];
-  /** FP, TP, podmiot upoważniony, GTU, Procedura — JPK FaktFlow ich nie wykazuje. */
+  /** FP, TP, podmiot upoważniony, GTU, Procedura — JPK FaktWay ich nie wykazuje. */
   ksefMarkers?: Fa3Markers;
   /**
    * C5c: surowy tekst sum nagłówka (P_13_x, P_14_1…P_14_5, P_15) — źródło
@@ -92,7 +92,7 @@ export interface ParsedParty {
   nip?: string;
   /**
    * PESEL: `NrPESEL` (inne programy) albo `NrID` z `KodKraju` brak/PL, 11 cyframi
-   * i poprawną sumą kontrolną PESEL (C0b, plik z generatora FaktFlow).
+   * i poprawną sumą kontrolną PESEL (C0b, plik z generatora FaktWay).
    */
   pesel?: string;
   /** NrVatUE + KodUE jako „DEXXXXX” (bez spacji). */
@@ -122,7 +122,7 @@ export interface ParsedLine {
   quantity: number;
   unitPriceNet: number;
   /**
-   * Stawka do zapisu: stawka FaktFlow („23”, „0”, „np_ii”…) z P_12, kod FA(3)
+   * Stawka do zapisu: stawka FaktWay („23”, „0”, „np_ii”…) z P_12, kod FA(3)
    * bez odpowiednika („0 WDT”, „0 EX”, „22”, „7”, „4”, „3”) albo „nieznana”
    * (`lib/xml/fa3-p12.ts`, W9). Nigdy surowe „0 KR” / „np I” / „np II”.
    */
@@ -313,7 +313,7 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
       unit: String(w.P_8A ?? 'szt.'),
       quantity: parseNum(w.P_8B),
       unitPriceNet: parseNum(w.P_9A),
-      // W9: stawka FaktFlow zamiast surowego P_12; bez P_12 — z nagłówka albo
+      // W9: stawka FaktWay zamiast surowego P_12; bez P_12 — z nagłówka albo
       // „nieznana”, nigdy domyślne 23%.
       vatRate: importVatRateFromFa3(p12, rateHeader),
       ...(p12 !== undefined ? { p12 } : {}),
@@ -602,8 +602,8 @@ function summarizeTotalsFromLines(lines: ParsedLine[]): {
 }
 
 /**
- * Stawki pozycji bez podatku: stawki FaktFlow (0 KR, zw, oo, np I, np II) i kody FA(3)
- * spoza FaktFlow (0 WDT, 0 EX) — plik z samymi takimi pozycjami nie ma `P_14_x`.
+ * Stawki pozycji bez podatku: stawki FaktWay (0 KR, zw, oo, np I, np II) i kody FA(3)
+ * spoza FaktWay (0 WDT, 0 EX) — plik z samymi takimi pozycjami nie ma `P_14_x`.
  */
 const NO_VAT_LINE_RATES: ReadonlySet<string> = new Set<VatRate | Fa3OnlyVatRate>([
   '0',

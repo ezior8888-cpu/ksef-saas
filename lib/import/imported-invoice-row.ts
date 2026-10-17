@@ -185,7 +185,7 @@ const IMPORTED_TYPE_LABEL: Record<'KOR' | 'ZAL' | 'ROZ', string> = {
 
 /**
  * W9 (C5a): ostrzeżenie dla klienta o zapisanym dokumencie, którego JPK nie
- * wykaże — stawka spoza FaktFlow („0 WDT”, „0 EX”, „22”…, „nieznana”) albo
+ * wykaże — stawka spoza FaktWay („0 WDT”, „0 EX”, „22”…, „nieznana”) albo
  * zaimportowana korekta / zaliczka / ROZ. `null`, gdy dokument jest zwykły.
  */
 export function heldDocumentWarning(
@@ -223,17 +223,17 @@ export function heldDocumentWarning(
   if (codes.length === 0 && !special && !mismatch && contentReasons.length === 0 && !amountReason) return null;
 
   if (status !== 'accepted') {
-    return codes.length ? `${doc}: stawka ${rates} nie ma odpowiednika w FaktFlow — szkic zapisany z tą stawką.` : null;
+    return codes.length ? `${doc}: stawka ${rates} nie ma odpowiednika w FaktWay — szkic zapisany z tą stawką.` : null;
   }
   if (direction === 'incoming') {
     return codes.length
-      ? `${doc}: stawka ${rates} — FaktFlow jej nie rozlicza; faktura jest zapisana z kwotami z KSeF, sprawdź ją z księgową.`
+      ? `${doc}: stawka ${rates} — FaktWay jej nie rozlicza; faktura jest zapisana z kwotami z KSeF, sprawdź ją z księgową.`
       : null;
   }
   // Wszystkie powody naraz (C5b) — JPK odmówi z pierwszym, klient widzi komplet.
   const what = [
-    special ? `zaimportowana faktura ${special} — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki)` : null,
-    codes.length ? `stawka VAT ${rates} — FaktFlow jej jeszcze nie wykazuje w JPK` : null,
+    special ? `zaimportowana faktura ${special} — FaktWay nie zna jej powiązań (faktura pierwotna, zaliczki)` : null,
+    codes.length ? `stawka VAT ${rates} — FaktWay jej jeszcze nie wykazuje w JPK` : null,
     ...contentReasons,
     amountReason,
     mismatch ? 'netto albo VAT pozycji nie sumuje się do sum faktury z KSeF' : null,
@@ -244,7 +244,7 @@ export function heldDocumentWarning(
     : 'przygotuj je z księgową (KPiR i CSV działają)';
   return (
     `${doc}: ${what}. Faktura jest zapisana, ale JPK_FA i JPK_V7M za ${inv.issueDate.slice(0, 7)} nie powstaną ` +
-    `w FaktFlow, dopóki ta faktura jest w okresie — ${exit}.`
+    `w FaktWay, dopóki ta faktura jest w okresie — ${exit}.`
   );
 }
 

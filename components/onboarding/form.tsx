@@ -367,7 +367,7 @@ function AcceptInvitePanel({ initialToken }: { initialToken: string }) {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-glass-border bg-foreground/3 p-4 text-sm text-muted-foreground leading-relaxed">
-        Otrzymałeś zaproszenie do organizacji w FaktFlow? Wklej token z linku
+        Otrzymałeś zaproszenie do organizacji w FaktWay? Wklej token z linku
         z maila albo kliknij link bezpośrednio — ten formularz służy jako
         backup, gdy klient pocztowy zerwał link.
       </div>
@@ -447,7 +447,7 @@ function RequestJoinPanel() {
       }
       if (r.existingOrgs.length === 0) {
         setInfo(
-          'Nie znaleziono organizacji z tym NIP-em w FaktFlow. Możesz po prostu założyć ją sam (zakładka „Załóż firmę").',
+          'Nie znaleziono organizacji z tym NIP-em w FaktWay. Możesz po prostu założyć ją sam (zakładka „Załóż firmę").',
         );
         return;
       }
@@ -489,7 +489,7 @@ function RequestJoinPanel() {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-glass-border bg-foreground/3 p-4 text-sm text-muted-foreground leading-relaxed">
-        Twoja firma jest już w FaktFlow, ale nikt Cię nie zaprosił? Wpisz NIP
+        Twoja firma jest już w FaktWay, ale nikt Cię nie zaprosił? Wpisz NIP
         — pokażemy listę organizacji z tym NIP-em i wyślemy prośbę o dostęp do
         wybranej. Prośbę zatwierdza właściciel/admin tej organizacji.
       </div>

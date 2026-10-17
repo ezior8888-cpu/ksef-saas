@@ -60,7 +60,7 @@ const SAMPLE_QUESTIONS = [
 // 5 tutoriali — user nagra je przed launchem (Fazy 41-43). Do tego czasu
 // karty są w stanie "Wkrótce". Po nagraniu wystarczy podmienić `href`.
 const VIDEO_TUTORIALS = [
-  'Pierwsze 5 minut w FaktFlow',
+  'Pierwsze 5 minut w FaktWay',
   'Skanowanie paragonu (OCR)',
   'Pierwsza faktura do KSeF',
   'Eksport KPiR dla księgowego',
@@ -219,7 +219,7 @@ export function SupportWidget({
           <div className="flex shrink-0 items-center justify-between border-b border-glass-border px-4 py-3">
             <div className="flex items-center gap-2">
               <HelpCircle className="h-5 w-5 text-muted-foreground" />
-              <span className="font-medium">Pomoc FaktFlow</span>
+              <span className="font-medium">Pomoc FaktWay</span>
             </div>
             <button
               type="button"
@@ -331,7 +331,7 @@ function WelcomeState({
     <div className="space-y-5">
       <div>
         <p className="text-sm">
-          Cześć! Jestem asystentem FaktFlow. Odpowiem na pytania o KSeF,
+          Cześć! Jestem asystentem FaktWay. Odpowiem na pytania o KSeF,
           faktury, OCR i rozliczenia — w kilka sekund.
         </p>
       </div>

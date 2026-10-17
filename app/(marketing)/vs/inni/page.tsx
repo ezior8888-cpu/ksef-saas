@@ -12,9 +12,9 @@ import {
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'FaktFlow vs Inni — porównanie KSeF 2.0, OCR, KPiR (2026)',
+  title: 'FaktWay vs Inni — porównanie KSeF 2.0, OCR, KPiR (2026)',
   description:
-    'Pełne porównanie FaktFlow z innymi apkami (Fakturownia, inFakt, wFirma, iFirma): KSeF 2.0, OCR, KPiR, mobile, ceny. 23 funkcje jeden do jednego.',
+    'Pełne porównanie FaktWay z innymi apkami (Fakturownia, inFakt, wFirma, iFirma): KSeF 2.0, OCR, KPiR, mobile, ceny. 23 funkcje jeden do jednego.',
 };
 
 const COMPARISON_ROWS = [
@@ -151,7 +151,7 @@ export default function InniPage() {
     <article>
       <VsHero
         competitorName="Inni"
-        subtitle="23 funkcje porównane jeden do jednego — Fakturownia, inFakt, wFirma, iFirma vs FaktFlow pod KSeF 2.0."
+        subtitle="23 funkcje porównane jeden do jednego — Fakturownia, inFakt, wFirma, iFirma vs FaktWay pod KSeF 2.0."
       />
 
       <VsTldr>
@@ -159,7 +159,7 @@ export default function InniPage() {
         inFakt, wFirma, iFirma) są dobre dla firm, które potrzebują klasycznego
         programu do faktur i nie mają dużo paragonów. Mają znane problemy ze
         stabilnością autoryzacji KSeF i bugi w korektach.{' '}
-        <span className="font-semibold text-[var(--marketing-accent)]">FaktFlow</span> jest
+        <span className="font-semibold text-[var(--marketing-accent)]">FaktWay</span> jest
         dla freelancerów i mikrofirm, które chcą OCR paragonów, workflow
         mobile-first i automatyczne wezwania do zapłaty — wszystko w cenie
         podstawowej, bez dodatków.

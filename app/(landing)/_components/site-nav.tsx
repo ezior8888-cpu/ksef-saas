@@ -39,7 +39,7 @@ export function SiteNav() {
         <Link href="/" className="flex shrink-0 items-center pl-1">
           <Image
             src={asset.logo}
-            alt="FaktFlow"
+            alt="FaktWay"
             width={24}
             height={24}
             priority
