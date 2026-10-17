@@ -10,11 +10,11 @@ import type { Invoice } from '@/types/invoice';
 import { getRlsTestEnvironment } from './helpers/rls-environment';
 
 /**
- * Faktura VAT za abonament pod nazwą FaktWay (00151) na prawdziwej bazie.
+ * Faktura VAT za abonament pod nazwą FaktWay (00152) na prawdziwej bazie.
  *
  * `create_billing_vat_invoice` (00110) porównywała nazwę pozycji i uwagi
  * faktury z napisem „FaktFlow” co do znaku. Kod z nazwą FaktWay dostawał
- * odmowę, a klient płacący kartą — brak faktury. Po 00151:
+ * odmowę, a klient płacący kartą — brak faktury. Po 00152:
  *
  *   - baza przyjmuje obie nazwy (worker sprzed wdrożenia wysyła jeszcze
  *     FaktFlow, nowy — FaktWay),
@@ -159,7 +159,7 @@ async function cleanup() {
   await admin.from('tenants').delete().in('id', [OPERATOR, CUSTOMER]);
 }
 
-describe.skipIf(!hasDatabase)('faktura za abonament pod nazwą FaktWay (00151)', () => {
+describe.skipIf(!hasDatabase)('faktura za abonament pod nazwą FaktWay (00152)', () => {
   beforeAll(async () => {
     const { error: tenantsError } = await admin.from('tenants').insert([
       { id: OPERATOR, nip: '1234567890', name: 'Operator Testowy' },

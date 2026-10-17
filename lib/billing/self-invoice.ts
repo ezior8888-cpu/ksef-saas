@@ -66,17 +66,16 @@ export function paidDateInPoland(paidAt: string): string {
   }).format(new Date(paidAt));
 }
 
-// Stara nazwa produktu w pozycji i w uwagach zostaje celowo (plan Finora,
-// D8): `create_billing_vat_invoice` (00110) porównuje oba teksty co do znaku
-// i odrzuca fakturę przy różnicy. Zmieniają się razem z migracją tej funkcji.
+// `create_billing_vat_invoice` (00152) przyjmuje tylko te wzorce nazwy
+// pozycji i uwag (oraz dawną nazwę produktu z okresu przejścia).
 function planLineName(plan: 'monthly' | 'annual', issueDate: string): string {
   const dateLabel = new Date(issueDate).toLocaleDateString('pl-PL', {
     year: 'numeric',
     month: 'long',
   });
   return plan === 'annual'
-    ? `FaktFlow — subskrypcja roczna (${dateLabel})`
-    : `FaktFlow — subskrypcja miesięczna (${dateLabel})`;
+    ? `FaktWay — subskrypcja roczna (${dateLabel})`
+    : `FaktWay — subskrypcja miesięczna (${dateLabel})`;
 }
 
 /**
@@ -171,7 +170,7 @@ export async function buildSelfInvoiceDraft(
       method: 'card',
       bankAccount: operator.bankAccount ?? undefined,
     },
-    notes: `Faktura za subskrypcję FaktFlow. Płatność Stripe: ${input.stripeInvoiceId}.`,
+    notes: `Faktura za subskrypcję FaktWay. Płatność Stripe: ${input.stripeInvoiceId}.`,
   };
 
   return { invoice, operator, customerTenantId };
